@@ -1,16 +1,16 @@
-import { createFileRoute, useParams, Link } from "@tanstack/react-router";
+import { createFileRoute, useParams } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { RequireAuth } from "@/components/AppShell";
+import { EditorShell } from "@/components/EditorShell";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { ArrowLeft, ArrowUp, Loader2, Sparkles, Code2, Eye } from "lucide-react";
+import { ArrowUp, Loader2, Sparkles, Code2, Eye } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/projects/$projectId")({
-  component: () => <RequireAuth><EditorPage /></RequireAuth>,
+  component: EditorPage,
 });
 
 type Msg = { id: string; role: string; parts: any[]; tool_calls: any[]; created_at: string };
