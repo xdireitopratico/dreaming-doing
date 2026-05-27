@@ -1,194 +1,304 @@
-# Lovable Clone — Plano de Construção (2 fases)
+## Posicionamento (a base de tudo)
 
-Construído como app Vite+React+TS+Tailwind+shadcn dentro do Lovable, mas com **Supabase apontando para meu próprio SUPABASE CLOUD (JÁ ESTÁ CONECTADO NO LOVABLE)** desde o primeiro deploy. Sem placeholder, sem mock. Nada de Next.js/Express/K8s — descartado o stack do README do branch porque ele não reflete como o Lovable real funciona.
+Antes de desenhar, defino o **porquê** do produto. Tudo na landing serve esta tese:
 
-## Decisões técnicas (fixas, sem perguntas)
+> **Dream Weaver** é um construtor de software por IA **soberano**: você é dono do código, do banco e da infra. Conecta seu Supabase, seu GitHub, sua chave de IA — e mantém o controle total. Tudo o que o agente faz é transparente: cada chamada de ferramenta, cada arquivo, cada custo, em tempo real.
 
+Quatro pilares (também a espinha da página):
 
-| Camada            | Escolha                                                                                                                                                          | Justificativa                                                  |
-| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
-| Frontend          | Vite + React 18 + TS + Tailwind + shadcn/ui + framer-motion + Monaco                                                                                             | Mesma stack que o Lovable usa; portável                        |
-| Backend           | **Seu Supabase CLOUD (JÁ ESTÁ CONECTADO NO LOVABLE)** (PASSAREI URL+anon+service CASO AINDA PRECISE)                                                             | Auth, Postgres+RLS, Storage, Edge Functions cobrem tudo        |
-| Agente IA         | Multi PROVIDER LOVABLE + GROK BUILD + Claude 3.5 Sonnet via Anthropic SDK, dentro de Edge Function streaming. (NÃO PEÇA CHAVES API, SERÃO INSERIDAS MANUALMENTE) | Modelo público mais alinhado a code-edits; tool-calling nativo |
-| Loop de tools     | `write_file`, `read_file`, `delete_file`, `list_dir`, `run_command`, `install_package`, `search` — implementadas em TS, persistem em `project_files`             | Réplica do loop do Lovable                                     |
-| Engine de preview | **StackBlitz WebContainers** (`@webcontainer/api`) — Node roda no browser dentro do editor                                                                       | Mesma engine do Bolt.new; zero infra; HMR real                 |
-| GitHub            | OAuth + Octokit em Edge Function (`github-sync`)                                                                                                                 | Push, criar repo, webhook bidirecional                         |
-| Auto-deploy       | Edge Function chama API Vercel/Cloudflare Pages com token do usuário                                                                                             | Lovable usa infra própria; aqui usamos provider externo        |
-| MCP               | Tabela `mcp_servers` + Edge Function `mcp-proxy` (Accept: json+SSE)                                                                                              | Mesmo contrato MCP do Lovable                                  |
-| Realtime          | Supabase Realtime nos canais `messages` e `project_files`                                                                                                        | Substitui Socket.io                                            |
+1. **Soberania** — seu Supabase, sua chave de IA, seu GitHub. Sem vendor lock-in. Exporte e suma a hora que quiser.
+2. **Transparência radical** — o agente é uma caixa de vidro: stream de tool-calls, diffs, custo por mensagem, log auditável.
+3. **MCP-nativo** — qualquer ferramenta do ecossistema MCP plugada em minutos. Sua stack, suas regras.
+4. **Português de verdade** — UX, prompts do agente e documentação pensados em PT-BR como primeira língua, não traduzidos.
 
+Esses são os **diferenciais reais frente ao Lovable**, e cada um vira uma seção da página com demonstração visual, não claim solto.
 
-## Mapa de rotas do app (espelho do Lovable)
+---
 
+## Estrutura da landing (storytelling em 9 atos)
+
+Mistura o **storytelling problema→solução** do Rig.ai, a **interatividade e portfólio** do Pixila, e o **prompt protagonista** do Lovable. Tudo em um único scroll vertical com motion ancorando cada transição.
+
+```text
+[01] Top nav fina (logo · Entrar · Começar)
+[02] HERO — manifesto + prompt protagonista + marquee de stack
+[03] O PROBLEMA — "Você não é dono do seu builder de IA" (3 cards Rig-style)
+[04] A RESPOSTA — pilares em diagrama animado (Soberania · Transparência · MCP · PT-BR)
+[05] DEMO VIVA — mini-editor estático tocando uma timeline de tool-calls reais
+[06] FEITO COM — galeria 6 projetos (Pixila-style com hover) que o próprio Dream Weaver gerou
+[07] COMO FUNCIONA — 3 passos (Descreva · Veja construir · Publique no seu domínio)
+[08] PROVA / NÚMEROS — marquee de logos de stack + métricas honestas
+[09] FAQ — perguntas reais (sou dono do código? minha chave fica onde? quanto custa?)
+[10] CTA FINAL + footer mínimo
 ```
-/                       Home — input de prompt + lista "My projects"
-/auth                   Login/signup (email+senha, Google, GitHub OAuth)
-/projects/:id           Editor — chat | file tree | Monaco | preview WebContainer
-/projects/:id/code      Toggle code/preview
-/projects/:id/history   Versões (snapshots)
-/connectors             GitHub + MCP servers + Vercel/Cloudflare tokens
-/settings               Perfil, API keys próprios (Anthropic opcional override)
+
+Cada ato a seguir com layout, conteúdo e motion concretos.
+
+---
+
+### [01] Top nav
+
+- 56px, sticky, vidro com backdrop-blur sobre o fundo.
+- Esquerda: marca-d'água `Dream Weaver` em serif + chip pequeno `beta`.
+- Direita: link sutil `Manifesto` (ancora #problema), `Entrar` (ghost), `Começar` (CTA dourado).
+- Em scroll > 100px, ganha hairline border e densidade aumenta.
+
+Nada de "Templates / Preços / Docs" agora — não existem ainda. Zero placeholder.
+
+### [02] HERO — manifesto + prompt
+
+```text
+                        ┌─ chip ─┐
+                        │ Beta privada · convide-se │
+                        └────────┘
+
+           Construa software como
+           você  pensa.  Sem  pedir
+           licença  pra  ninguém.
+
+      O primeiro construtor por IA em que o código,
+      o banco e a infra continuam seus desde o
+      primeiro prompt.
+
+      ┌────────────────────────────────────────────┐
+      │  Descreva o que você quer construir…       │
+      │                                            │
+      │  [+]                       [Modelo ▾]  ↑   │
+      └────────────────────────────────────────────┘
+        ⌘+Enter para enviar · sem cadastro pra testar
+
+      ┌─ marquee infinita, lenta ────────────────────┐
+        Supabase · TanStack · React 19 · WebContainers · 
+        Google Gemini · MCP · GitHub · Cloudflare · Vite
+      └─────────────────────────────────────────────┘
 ```
 
----
+- Headline em `Instrument Serif`, 64–84px, com **"pensa"** em itálico e **"licença"** com underline manuscrito animado (SVG path).
+- Glow radial dourado discreto atrás do prompt, pulsa devagar.
+- Prompt box é o componente protagonista — mesmo lugar central da Lovable.
+- Marquee monoespaçada embaixo, opacity 60%, pisca sutilmente.
+- **Não logado:** clicar `↑` armazena o prompt em `localStorage` e abre `/auth?next=/&prompt=…`. Após login, a Home retoma e cria o projeto.
 
-## FASE 1 — MVP funcional (sem placeholder)
+### [03] O problema — "Você não é dono do seu builder"
 
-Entrega: um usuário consegue **logar, escrever um prompt, ver o app sendo gerado ao vivo, editar via chat, ter preview rodando, persistir e fazer push pro GitHub**.
+Estrutura tipo Rig (3 cards numerados, copy direta, ícone monoline a cada um):
 
-### 1.1 Conexão com seu Supabase
+| 001 | **Seu código mora num inquilino** | "Se eles fecham, sumem com seu app. Se mudam o preço, você paga. Se mudam o modelo, sua build quebra." |
+| 002 | **Sua chave é deles** | "Você não vê o que o agente faz, não vê quanto custa, não tem como auditar." |
+| 003 | **Você está preso ao stack deles** | "Sem MCP. Sem seu Supabase. Sem suas ferramentas. Só o que eles permitirem." |
 
-- SUPABASE JÁ ESTÁ CONECTADO,  NÃO HÁ NECESSIDADE `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, AINDA SIM, SECRETS SERÃO INSERIDAS MANUALMENTE.
-- Configuro `src/integrations/supabase/client.ts` e secrets de Edge Functions.
-- Verifico que CLI Supabase consegue rodar migrations contra o endpoint da VPS.
+Background da seção vira sutilmente mais escuro, com hairlines verticais que respiram com scroll (motion `useScroll`).
 
-### 1.2 Schema + RLS (migration única)
+### [04] A resposta — os 4 pilares
 
-Tabelas em `public`:
+Diagrama central animado: um quadrado com 4 nós que se acendem em sequência quando entra no viewport. Em cada nó, ao hover, o card lateral muda mostrando a explicação. Inspirado no diagrama "Your machine, your code" do Rig.
 
-- `profiles` (id→auth.users, display_name, avatar_url, github_username)
-- `projects` (id, owner_id, name, slug, description, template, created_at, updated_at)
-- `project_files` (id, project_id, path, content, content_hash, updated_at) — unique(project_id, path)
-- `project_snapshots` (id, project_id, label, tree jsonb, created_at) — versionamento
-- `conversations` (id, project_id, title, created_at)
-- `messages` (id, conversation_id, role, parts jsonb, tool_calls jsonb, created_at)
-- `connectors` (id, owner_id, kind enum['github','vercel','cloudflare','anthropic'], token_encrypted, meta jsonb)
-- `mcp_servers` (id, owner_id, name, url, transport, auth_state, tokens_encrypted)
-- `deployments` (id, project_id, provider, url, status, logs, created_at)
-- `user_roles` + enum `app_role` + `has_role()` security-definer (padrão Lovable)
+- **Soberania** — "Conecte seu Supabase em 30s. Sua chave de IA. Seu GitHub. Você é dono." Mini-screenshot do `/connectors`.
+- **Transparência radical** — "Cada tool-call streamado em tempo real. Cada token contado. Cada arquivo diffado." Mini-screenshot do chat com tool-calls expostos.
+- **MCP-nativo** — "Plugue qualquer servidor MCP. Da Notion ao seu CRM interno." Lista de logos MCP.
+- **Português de verdade** — "Agente, prompts e documentação pensados em PT-BR. Sem tradução automática esquisita." Trecho real de output do agente em PT.
 
-Cada tabela: `GRANT` explícito + `ENABLE RLS` + policies escopadas por `auth.uid()`. Tokens nunca expostos via SELECT (view `connectors_public` esconde colunas sensíveis; base table `USING(false)` em SELECT, acesso só via Edge Function com service-role).
+### [05] Demo viva — o editor em mini
 
-### 1.3 Autenticação
+Um componente **não interativo, mas animado em loop** mostrando o editor real (mesma chrome do `/projects/$projectId`): chat à esquerda recebendo uma mensagem, o agente respondendo com tool-calls em stream (`write_file: index.html`, `write_file: app.tsx`, etc.), file tree aparecendo arquivos, preview à direita renderizando uma página. Loop de 12s, pausa em hover.
 
-- Email/senha + Google + **GitHub OAuth** (o GitHub OAuth já serve como connector para push).
-- Trigger `on_auth_user_created` cria profile automático.
-- `/auth` com tabs Login/Cadastro, recuperação de senha, `/reset-password`.
-- `onAuthStateChange` configurado em `AuthProvider`; rotas protegidas via `ProtectedRoute`.
+Mostra **o produto em funcionamento**, não um screenshot estático. É o "Watch it come to life" da Lovable, mas mais honesto.
 
-### 1.4 Home + Dashboard
+### [06] Feito com Dream Weaver — galeria
 
-- Hero com input de prompt grande (estilo Lovable), botão "Build".
-- Submit → cria `project` + `conversation` inicial + roda agente com prompt → navega para `/projects/:id`.
-- Abaixo: grid "My projects" (cards com snapshot, nome, último deploy).
-- Sidebar: Home, Search (Cmd+K), Connectors, All projects, Starred.
-- Background substituindo o degradê do Lovable: shader animado WebGL leve (via `ogl` ou canvas 2D com noise) — alta qualidade visual, performance contida.
+Inspirado no portfólio Pixila. Grid 3×2 de cards reais (mesmo que mockados nesta fase — declaramos no plano que são exemplos curados pela equipe). Cada card:
 
-### 1.5 Editor (a peça central)
+- Thumbnail `aspect-video`, borda sutil.
+- Hover: leve scale + overlay com nome do projeto e stack ("Next-style portfolio · Supabase · 3h de prompt").
+- Clique: link `/showcase/{slug}` (rota stub neste turno, só conteúdo dummy).
 
-Layout 3 colunas:
+6 exemplos iniciais que cobrem casos diferentes:
+1. **Portfólio fotógrafo** — site estático
+2. **CRM interno** — app SaaS com auth
+3. **Loja de pão artesanal** — e-commerce simples
+4. **Dashboard financeiro** — gráficos + Supabase
+5. **Blog editorial** — markdown + RLS
+6. **Apresentador de slides** — clone do Lovable Slides
 
-1. **Chat** (esquerda, 30%): histórico de mensagens com `parts[]`, tool calls colapsáveis, streaming token-a-token, input com anexos de imagem.
-2. **File tree + Monaco** (centro, oculto por padrão atrás do toggle "Code"): leitura/escrita de `project_files`.
-3. **Preview WebContainer** (direita, 70% padrão): iframe servido pelo WebContainer rodando Vite dev server do projeto gerado.
+Imagens via `imagegen` em standard quality, 16:9, paleta consistente.
 
-Fluxo:
+### [07] Como funciona — 3 passos
 
-- Ao abrir, carrega `project_files`, monta no WebContainer (`webcontainer.mount(tree)`), roda `npm install` + `npm run dev`, faz `webcontainer.on('server-ready', url => setPreviewUrl(url))`.
-- Edits do agente: cada `write_file` chama Edge Function `apply-file` (persiste no DB + emite via Realtime) e simultaneamente `webcontainer.fs.writeFile(path, content)` — preview atualiza com HMR sem reload.
+Pixila tem um bloco "3 expertises". Aqui são 3 passos do fluxo, cada um com um ícone simbólico de montanha/cordilheira (sem importar identidade visual do Pixila, mas captura a metáfora "ascensão"):
 
-### 1.6 Edge Function `agent-run` (cérebro)
+1. **Descreva** — uma frase. Em português. O agente entende.
+2. **Veja construir** — cada arquivo, cada decisão, em stream. Você intervém quando quiser.
+3. **Publique** — no seu domínio, no seu GitHub, no seu Cloudflare. Saímos do caminho.
 
-- Stream SSE. Recebe `{ projectId, conversationId, userMessage }`.
-- Carrega contexto: últimas 20 mensagens + manifesto de arquivos (paths + tamanhos, conteúdo só on-demand via tool `read_file`).
-- System prompt em PT-BR espelhando o do Lovable: parallel tool calls, edits cirúrgicos, sem reescrever arquivos inteiros, etc.
-- Loop com `stepCountIs(50)`, Claude 3.5 Sonnet via `@anthropic-ai/sdk` (npm: import no Deno).
-- Tools (todas executadas server-side, retornam JSON conciso):
-  - `read_file`, `write_file`, `delete_file`, `list_dir` — operam em `project_files`
-  - `install_package` — atualiza `package.json`
-  - `search_codebase` — `ilike` em `content`
-  - `run_command` — apenas comandos whitelisted (`npm install`, `npm run build`) reportam resultado simulado; execução real fica no WebContainer cliente
-- Persiste cada step em `messages.tool_calls`.
-- Erros 402/429/validação retornam payload tipado que o cliente renderiza como banner.
+### [08] Prova / números
 
-### 1.7 Conector GitHub (Fase 1)
+Honestidade sobre o estágio do produto:
 
-- Em `/connectors`, botão "Conectar GitHub" → OAuth (escopo `repo`).
-- Token salvo cifrado em `connectors` (Edge Function `connector-store` usa `pgsodium` ou AES via secret).
-- No editor, botão "Push to GitHub": Edge Function `github-sync` cria repo (se primeira vez), faz commit tree completo via Octokit. Salva `repo_url` em `projects.meta`.
+- **Beta privada** · **N convites/semana** · **MIT license no agente**.
+- Marquee horizontal com **logos das peças que carregamos** (Supabase, Cloudflare, React, Tailwind, MCP, Anthropic/Google/OpenAI, GitHub).
+- Bloco "Compatível com o ecossistema MCP" — lista textual dos servers oficiais suportados.
 
-### 1.8 Persistência e versionamento mínimo
+Nada de "1M projects built" sem ser verdade.
 
-- Botão "Save snapshot" cria `project_snapshots` com tree completo (jsonb).
-- Restore: sobrescreve `project_files` e remonta WebContainer.
+### [09] FAQ
 
-### 1.9 QA e validação Fase 1
+Accordion shadcn, 6 perguntas reais:
 
-- E2E manual: criar conta → prompt "todo app com Tailwind" → ver Claude gerar arquivos → preview renderiza → editar via chat → push pro GitHub → reload e abrir projeto novamente.
-- Lighthouse > 90 na home; build sem erros TS.
+1. Sou dono do código?
+2. Onde fica minha chave de IA?
+3. Meu banco fica onde?
+4. Como exporto pro GitHub?
+5. O que é MCP e por que importa?
+6. Quanto custa?
 
----
+Respostas honestas, 2–4 linhas, sem marketês.
 
-## FASE 2 — Paridade competitiva
+### [10] CTA final + footer
 
-Entrega: **MCP, auto-deploy, sync GitHub bidirecional, multi-provider, polimento de produto**.
+Mesmo prompt do hero, repetido. Headline curta: "Pare de pedir licença pra construir." Botão único: `Começar agora`.
 
-### 2.1 MCP connectors framework
-
-- UI em `/connectors` para adicionar MCP server (URL + nome + transport HTTP/SSE).
-- Edge Function `mcp-connect` faz probe (`Accept: application/json, text/event-stream`), implementa fluxo OAuth quando server expõe (CIMD se HTTPS, DCR fallback).
-- Estado: `authenticating` | `ready` | `failed` + `authUrl`.
-- Tools dos MCPs carregados sob demanda no `agent-run` via `createMCPClient` (AI SDK MCP) com namespace por connector. Fecha cliente após stream.
-- Meta-tool pattern quando >10 tools por usuário (evita inflar context).
-
-### 2.2 Auto-deploy real
-
-- `/connectors` aceita tokens Vercel e Cloudflare Pages.
-- Botão "Publish" no editor: Edge Function `deploy-trigger`:
-  - Vercel: cria project (se não existe) + upload do tree via API `/v13/deployments` (zip do `project_files`).
-  - Cloudflare Pages: equivalente via Direct Upload.
-- Status em tempo real via polling + Realtime; URL pública em `deployments`.
-- Custom domain: campo + verificação DNS (TXT record) — provider-side.
-
-### 2.3 GitHub bidirecional
-
-- Webhook `/functions/v1/github-webhook` recebe `push` events, baixa diff via Octokit, atualiza `project_files`, emite Realtime.
-- Conflict detection: se hash do arquivo no DB ≠ hash do parent commit, marca conflito e mostra diff no editor.
-- Branch switching (experimental, opt-in em Settings → Labs).
-
-### 2.4 Polimento de produto
-
-- **Visual edits** (estilo Lovable): clicar elemento no preview destaca componente, agente recebe seletor + screenshot.
-- **Command palette** Cmd+K (kbar) com ações: novo projeto, abrir, deploy, push.
-- **History timeline** (`/projects/:id/history`) com restore por snapshot, diff entre versões.
-- **Templates**: catálogo de starters (landing, dashboard, SaaS) — inicializa `project_files` a partir de um tree predefinido.
-- **Sharing**: `projects.visibility` enum (private/unlisted/public-remix) + página `/preview/:id` somente-leitura.
-- **Analytics próprio**: tabela `events`, dashboard em `/settings/usage` (créditos Anthropic, builds, deploys).
-
-### 2.5 Hardening
-
-- Rate limiting em `agent-run` (token bucket no Redis ou Postgres `pg_advisory_lock`).
-- Audit log (`audit_log` table) para escritas sensíveis.
-- Backup automatizado: pg_dump diário disparado por edge cron → bucket Storage.
-- Security scan e RLS revisitada por terceiro automatizado.
+Footer mínimo, uma única linha: marca · GitHub do projeto · status · contato.
 
 ---
 
-## Detalhes técnicos (seção dev)
+## Design system (refeito do zero, não adaptado)
 
-**Edge Functions (Deno) a criar:**  
-`agent-run`, `apply-file`, `connector-store`, `github-sync`, `github-webhook`, `mcp-connect`, `mcp-callback`, `mcp-proxy`, `deploy-trigger`, `deploy-status`, `snapshot-create`, `snapshot-restore`.
+### Paleta — dark editorial, não preto puro
 
-**Secrets necessários (você fornece):**  
-`SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `ANTHROPIC_API_KEY`, `GITHUB_OAUTH_CLIENT_ID`, `GITHUB_OAUTH_CLIENT_SECRET`, `ENCRYPTION_KEY` (32 bytes para AES de tokens), `WEBCONTAINER_API_KEY` (Fase 2, produção). Vercel/Cloudflare tokens são por-usuário, não global.
+Tokens em `src/styles.css`, todos em `oklch`. Light mode espelho.
 
-**WebContainers — observação:** licença StackBlitz é gratuita em dev; em produção pública requer plano pago (≈ US$ 0 para até X seats, depende do contrato). Documento isso em `/settings` e deixo plano B (preview estático via `vite build` + iframe) plugável caso você queira evitar.
+```css
+.dark {
+  --background:        oklch(0.155 0.005 285);   /* carvão grafite */
+  --background-elev:   oklch(0.195 0.005 285);   /* superfícies elevadas */
+  --surface:           oklch(0.225 0.006 285);   /* cards */
+  --foreground:        oklch(0.965 0.004 285);
+  --muted-foreground:  oklch(0.66 0.012 285);
+  --border:            oklch(1 0 0 / 0.08);
+  --border-strong:     oklch(1 0 0 / 0.16);
 
-**O que NÃO vai entrar:**  
+  --primary:           oklch(0.78 0.13 78);      /* dourado quente — assinatura */
+  --primary-foreground:oklch(0.18 0.02 78);
+  --accent:            oklch(0.72 0.17 295);     /* violeta — só no logotipo + halo */
+  --ring:              oklch(0.78 0.13 78 / 0.35);
 
-- Kubernetes/Docker self-managed para preview (substituído por WebContainers).
-- OpenHands (descartado, conforme você instruiu).
-- Next.js/Express/Prisma (substituídos por Vite/React + Supabase/PostgREST).
-- Stripe na Fase 1 (entra só se você pedir Fase 3).
+  --gradient-hero:     radial-gradient(60% 50% at 50% 32%,
+                          oklch(0.78 0.13 78 / 0.18), transparent 70%);
+  --shadow-soft:       0 1px 0 0 oklch(1 0 0 / 0.04) inset,
+                       0 30px 60px -30px oklch(0 0 0 / 0.55);
+  --radius:            14px;
+}
+```
 
-## Ordem de implementação imediata após você aprovar
+Light mode segue a mesma estrutura semântica. Toggle persistido em `localStorage` via `ThemeProvider`.
 
-1. Você me passa os 3 valores Supabase + Anthropic key.
-2. Configuro client + secrets + roda migration 1.2.
-3. Auth + Home + Dashboard.
-4. Editor shell + WebContainer + carregamento de tree.
-5. Edge Function `agent-run` + tools mínimas.
-6. GitHub connector + push.
-7. QA end-to-end Fase 1. Entrega. Fase 2 começa em loop separado.
+### Tipografia
 
-Aprovando este plano, o passo seguinte é você colar as credenciais para eu cravar a Fase 1 sem nenhuma camada de mock.
+- **Display**: `Instrument Serif` (h1, citações). Itálico no destaque ("pensa", "soberano").
+- **Body/UI**: `Inter`.
+- **Mono**: `JetBrains Mono` (chips `⌘+Enter`, tool-calls da demo, marquee de stack).
+- Carregadas via `<link>` no `__root.tsx` head, com `display=swap`.
+
+### Textura
+
+- SVG noise inline aplicado em `body::before` com `opacity: 0.04`, `mix-blend-mode: overlay`. Dá grão Pixila sem custo de imagem.
+- Hairlines verticais (`oklch(1 0 0 / 0.04)`) num container `1120px` que aparecem em seções selecionadas — assinatura visual recorrente.
+
+### Motion
+
+Instalar `motion` (sucessor de framer-motion). Padrões:
+
+- **Headline hero**: stagger por palavra, `y: 12 → 0`, `opacity: 0 → 1`, ease `[0.22, 1, 0.36, 1]`, duração 0.7s.
+- **Prompt box**: entra com `scale: 0.98 → 1`, delay após headline.
+- **Glow hero**: `animate` infinito de `opacity` 0.6 ↔ 1 em 8s.
+- **Marquees** (stack, depoimentos): translação CSS infinita, pausa em hover.
+- **Seções no scroll**: `whileInView` com `once: true`, threshold 30%.
+- **Diagrama dos 4 pilares**: nó acende com `pathLength` em SVG.
+- **Cards do portfólio**: hover `scale: 1.02`, sombra ganha intensidade, overlay fade-in.
+
+Tudo respeita `prefers-reduced-motion`.
+
+---
+
+## Arquitetura de shells (a correção estrutural)
+
+```text
+__root.tsx                 → sem shell global, só Theme + Auth + Toaster
+
+/  (index)                 → MarketingShell  (PÚBLICO)
+/auth                      → AuthShell       (centered, sem nav)
+/projects                  → MarketingShell  (requer auth)
+/connectors                → MarketingShell  (requer auth)
+/settings                  → MarketingShell  (requer auth)
+/projects/$projectId       → EditorShell     (sidebar colapsável EXCLUSIVA aqui)
+```
+
+- `AppShell.tsx` (sidebar lateral fixa) é **deletado**.
+- `MarketingShell.tsx` novo — só top nav + footer.
+- `EditorShell.tsx` novo — chrome atual do editor extraída.
+- `RequireAuth` continua, aplicado apenas onde precisa.
+
+---
+
+## Comportamento do prompt para não-logados
+
+Crítico: o prompt funciona para visitantes anônimos sem cadastro forçado.
+
+1. Visitante digita prompt e clica `↑`.
+2. Salvamos `prompt` em `localStorage`.
+3. Redirecionamos para `/auth?next=/`.
+4. Após login bem-sucedido, `/` lê o prompt do `localStorage`, cria o projeto, navega ao editor, limpa o storage.
+
+Isso é o "test drive" — o que falta no Lovable: poder digitar a frase antes de criar conta.
+
+---
+
+## Arquivos deste turno
+
+**Criados:**
+- `src/components/MarketingShell.tsx` — top nav + footer.
+- `src/components/EditorShell.tsx` — extrai chrome do `/projects/$projectId`.
+- `src/components/ThemeToggle.tsx` + `src/lib/theme.tsx` — provider de tema.
+- `src/components/landing/Hero.tsx`
+- `src/components/landing/StackMarquee.tsx`
+- `src/components/landing/ProblemCards.tsx`
+- `src/components/landing/PillarsDiagram.tsx`
+- `src/components/landing/LiveEditorDemo.tsx`
+- `src/components/landing/PortfolioGrid.tsx`
+- `src/components/landing/HowItWorks.tsx`
+- `src/components/landing/Numbers.tsx`
+- `src/components/landing/FAQ.tsx`
+- `src/components/landing/FinalCTA.tsx`
+- `src/components/landing/Noise.tsx` (SVG grão)
+- `src/assets/showcase/*.jpg` — 6 thumbnails do portfólio via imagegen.
+
+**Editados:**
+- `src/styles.css` — tokens, fontes, grão, gradientes, hairlines.
+- `src/routes/__root.tsx` — fontes no head, ThemeProvider, sem shell global.
+- `src/routes/index.tsx` — landing pública composta das seções acima.
+- `src/routes/auth.tsx` — sem AppShell, lê `?next=` e prompt do localStorage.
+- `src/routes/projects/index.tsx` · `connectors.tsx` · `settings.tsx` — usam `MarketingShell` com `requireAuth`.
+- `src/routes/projects/$projectId.tsx` — usa `EditorShell`.
+
+**Deletado:**
+- `src/components/AppShell.tsx`.
+
+**Dependência:**
+- `bun add motion`.
+
+Nada de mudar backend, agent, schema, edge function neste turno.
+
+---
+
+## Critérios de aceitação
+
+1. Visitante anônimo abre `/` e vê a landing inteira. Sem sidebar. Sem gate.
+2. Prompt funciona para anônimo: armazena, manda pro auth, retoma.
+3. Cada seção tem **conteúdo real** alinhado com os 4 pilares — nenhuma frase placeholder genérica.
+4. Estética claramente Pixila-grade: dark suave, dourado, serif no display, grão, marquees, motion no scroll.
+5. Sidebar aparece **apenas** em `/projects/$projectId`.
+6. Toggle de tema funciona e persiste em todas as rotas.
+7. `prefers-reduced-motion` respeitado: motion para em zero.
+8. Build TanStack passa, viewport mobile (375px) decente.
+
+Se aprovar este plano, executo em build pass único.
