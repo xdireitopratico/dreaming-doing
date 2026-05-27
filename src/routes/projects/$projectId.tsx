@@ -128,16 +128,10 @@ function EditorPage() {
   }, [files]);
 
   return (
-    <div className="h-screen flex flex-col bg-background">
-      <header className="h-12 border-b flex items-center px-4 gap-3 shrink-0">
-        <Link to="/" className="text-muted-foreground hover:text-foreground">
-          <ArrowLeft className="size-4" />
-        </Link>
-        <div className="flex items-center gap-2 min-w-0">
-          <Sparkles className="size-4 text-primary shrink-0" />
-          <span className="font-medium truncate">{project?.name ?? "Carregando…"}</span>
-        </div>
-        <div className="ml-auto flex items-center gap-1 border rounded-md p-0.5">
+    <EditorShell
+      projectName={project?.name}
+      right={
+        <div className="flex items-center gap-1 border border-border rounded-md p-0.5">
           <Button size="sm" variant={tab === "preview" ? "default" : "ghost"} onClick={() => setTab("preview")}>
             <Eye className="size-3.5 mr-1" /> Preview
           </Button>
@@ -145,25 +139,26 @@ function EditorPage() {
             <Code2 className="size-3.5 mr-1" /> Código
           </Button>
         </div>
-      </header>
-
-      <div className="flex-1 flex min-h-0">
+      }
+    >
+      <div className="h-full flex min-h-0">
         {/* Chat panel */}
-        <div className="w-[380px] border-r flex flex-col min-h-0">
+        <div className="w-[380px] border-r border-border flex flex-col min-h-0">
           <ScrollArea className="flex-1" ref={scrollRef as any}>
             <div className="p-4 space-y-4">
               {(messages ?? []).map((m) => (
                 <div key={m.id} className={m.role === "user" ? "ml-6" : "mr-6"}>
-                  <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">
-                    {m.role === "user" ? "Você" : "Lovable AI"}
+                  <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1 inline-flex items-center gap-1">
+                    {m.role !== "user" && <Sparkles className="size-3 text-primary" />}
+                    {m.role === "user" ? "Você" : "Dream Weaver"}
                   </div>
-                  <div className={`rounded-lg p-3 text-sm ${m.role === "user" ? "bg-primary text-primary-foreground" : "bg-card border"}`}>
+                  <div className={`rounded-lg p-3 text-sm ${m.role === "user" ? "bg-primary text-primary-foreground" : "bg-surface border border-border"}`}>
                     {m.parts?.map((p: any, i: number) => p.type === "text" ? <div key={i} className="whitespace-pre-wrap">{p.text}</div> : null)}
                     {m.tool_calls && m.tool_calls.length > 0 && (
                       <div className="mt-2 space-y-1">
                         {m.tool_calls.map((t: any, i: number) => (
                           <div key={i} className="text-xs font-mono px-2 py-1 rounded bg-muted text-muted-foreground">
-                            🔧 {t.name}({t.args?.path ?? ""})
+                            ▸ {t.name}({t.args?.path ?? ""})
                           </div>
                         ))}
                       </div>
@@ -178,7 +173,7 @@ function EditorPage() {
               )}
             </div>
           </ScrollArea>
-          <div className="border-t p-3">
+          <div className="border-t border-border p-3">
             <div className="relative">
               <Textarea
                 value={input} onChange={(e) => setInput(e.target.value)}
@@ -193,7 +188,7 @@ function EditorPage() {
         </div>
 
         {/* Preview / Code */}
-        <div className="flex-1 min-w-0 bg-muted/30">
+        <div className="flex-1 min-w-0 bg-surface/30">
           {tab === "preview" ? (
             previewSrc ? (
               <iframe title="preview" srcDoc={previewSrc} sandbox="allow-scripts" className="w-full h-full bg-white" />
@@ -204,7 +199,7 @@ function EditorPage() {
             )
           ) : (
             <div className="h-full flex">
-              <div className="w-64 border-r p-2 overflow-auto">
+              <div className="w-64 border-r border-border p-2 overflow-auto">
                 <div className="text-xs font-medium text-muted-foreground px-2 py-1">Arquivos</div>
                 {(files ?? []).map((f) => (
                   <div key={f.id} className="px-2 py-1 text-sm rounded hover:bg-accent cursor-default font-mono truncate">
@@ -221,6 +216,6 @@ function EditorPage() {
           )}
         </div>
       </div>
-    </div>
+    </EditorShell>
   );
 }
