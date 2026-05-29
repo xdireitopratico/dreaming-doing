@@ -1,145 +1,138 @@
+# Genesis Forge — Home Landing
 
-# Plano — Home "Intergaláctica" (Dark + Motion + Disney Magic)
+Implementação completa da visão "SpaceX × Disney × xAI". Mantém o editor (`/projects/$projectId`) intacto. Foco 100% na home pública e no design system base.
 
-Objetivo: transformar a Home numa vitrine cinematográfica que comunique soberania, magia e competência técnica. Sem flat, sem medo, sem genérico. O motor de prompt é o herói. Conectores educam, não assustam.
+## 1. Design tokens (`src/styles.css`)
 
-## 1. Design System — Dark Cinematográfico
+Substituir paleta atual pela Genesis Forge:
 
-**Paleta (substitui o dourado quente atual):**
-- `--background`: `oklch(0.08 0.005 270)` — preto profundo, azulado sutil (céu noturno)
-- `--surface`: `oklch(0.12 0.006 270)` / `--surface-elev`: `oklch(0.16 0.008 270)`
-- `--foreground`: `oklch(0.98 0.003 270)` — branco quase puro
-- `--silver`: `oklch(0.78 0.01 270)` — prata para detalhes, ícones, hairlines
-- `--primary`: `oklch(0.92 0.005 270)` — branco/prata como ação principal (Apple-like)
-- `--accent-sun`: `oklch(0.85 0.16 85)` — amarelo-sol APENAS em contraste pontual (highlight, brilho, faísca de estrela)
-- `--accent-aurora`: `oklch(0.7 0.18 230)` — azul-aurora pra gradientes de fundo
-- Gradientes: `--gradient-cosmos` (radial multi-stop preto→roxo profundo→azul-aurora), `--gradient-starlight` (linha de luz que cruza), `--gradient-sun-flare` (pontual)
+```
+Dark:
+--background: #111315 (oklch ~0.18 0.005 270)
+--surface:    #1C1F24
+--surface-2:  #24282F
+--foreground: #F2F4F7
+--muted:      #8A93A1
 
-**Tipografia:**
-- Display: `Instrument Serif` (mantém) com peso visual maior + `letter-spacing` apertado
-- Sans: `Inter Tight` (mais condensado, vibe tech)
-- Mono: `JetBrains Mono`
-- Tamanho hero: clamp(64px, 9vw, 140px)
+Light:
+--background: #F7F5F0 (creme tecnológico)
+--surface:    #FFFFFF
+--foreground: #111315
 
-**Texturas/superfícies:**
-- Grão SVG (mantém, mais sutil — opacity 0.03)
-- Vignette radial no body
-- Hairlines verticais visíveis em seções estruturais
-- `backdrop-filter: blur(20px)` em cards flutuantes (glass)
-
-## 2. Motion & Parallax (a alma do projeto)
-
-Bibliotecas: `motion` (já instalado) + `lenis` (smooth scroll) — adicionar `lenis`.
-
-**Camadas de movimento na Home:**
-
-```text
-┌─ Camada 0: Canvas cósmico (fixed, behind)
-│   └─ partículas de estrela (canvas 2D, ~200 pontos, drift lento)
-├─ Camada 1: Aurora gradient (parallax 0.2x)
-├─ Camada 2: Conteúdo (scroll normal)
-├─ Camada 3: Hairlines + grão (fixed overlay)
-└─ Camada 4: Cursor glow (radial gradient seguindo o mouse)
+Accents (compartilhados):
+--ignition:   #4F8EF7 (azul de ignição — primário)
+--depth:      #7C3AED (roxo de profundidade)
+--live:       #10B981 (emerald — estados ao vivo)
+--sun:        #F0B95C (mantido para highlights tipográficos)
 ```
 
-**Efeitos por seção:**
-- **Hero**: título entra letra-a-letra (split text + stagger), prompt box "respira" (scale 1↔1.005, 4s loop), faísca dourada que cruza o input no hover, estrelas caem ao focar
-- **Manifesto**: texto longo com `scroll-linked opacity` + palavras-chave em prata sublinhadas com SVG path drawing on view
-- **Pillars**: cards 3D com `transform-style: preserve-3d` + tilt no mouse (vanilla, sem lib pesada)
-- **Live Editor Demo**: mockup do editor com parallax interno (chat à esquerda desliza mais lento que preview à direita)
-- **Connectors Path**: trilha animada SVG (linha que se desenha conforme scrolla) ligando Supabase → GitHub → LLM → Deploy, cada nó com ícone do serviço real
-- **Portfolio Grid**: masonry com `whileInView` stagger + hover que revela metadados em prata
-- **Footer**: estrelas se condensam num único brilho dourado (último frame "Disney")
+Gradientes: `--gradient-ignition` (azul→roxo), `--gradient-aurora` (verde→azul→roxo radial), `--gradient-warp` (radial central pra transição).
 
-**Reduced motion:** todas as animações respeitam `prefers-reduced-motion`.
+Animações novas: `dw-conic-rotate` (borda gradiente girando), `dw-breath` (glassmorphism respirando), `dw-spark-burst`, `dw-warp-collapse`, `dw-grain-flicker`.
 
-## 3. Copy — De Medo para Acolhimento
+Toggle dark/light: transição 600ms com fade do cosmos.
 
-Reescrever as 6 seções abandonando o tom defensivo ("sem permissão", "sua infra, sem ninguém"). Trocar por convite e maravilhamento.
+## 2. Camada 3D — Three.js (`src/components/cosmos/`)
 
-| Seção | Antes (medo) | Depois (acolhimento) |
-|---|---|---|
-| Hero H1 | "Construa algo extraordinário" | "Sonhe. Descreva. Veja acontecer." |
-| Subhead | "Sem amarras, sem permissão" | "Um estúdio de software que cabe num prompt — e que continua seu pra sempre." |
-| Pilar 1 | "Soberania — sem permissão" | "Seu. Desde o primeiro caractere até o deploy." |
-| Pilar 2 | "Caixa de vidro" | "Transparência total: você vê cada passo, cada custo, cada arquivo." |
-| Pilar 3 | "MCP-nativo" | "Conecte tudo que você já ama: Supabase, GitHub, Anthropic, Groq, n8n." |
-| CTA principal | "Construir" | "Começar a criar" |
+Instalar: `three`, `@react-three/fiber`, `@react-three/drei`, `@react-three/postprocessing`.
 
-Tom de referência: Disney + Apple ("Hello again"). Frases curtas, sensoriais, otimistas. Zero FUD.
+Novos arquivos:
+- `Cosmos3D.tsx` — canvas R3F fixed full-screen, z-0, pointer-events-none. Substitui o `AuroraBackdrop` + `StarField` atuais.
+- `StarsLayer.tsx` — 2000+ estrelas instanciadas em 3 profundidades, drift contínuo, twinkle por shader.
+- `AuroraShader.tsx` — `ShaderMaterial` custom: ondas plasma verde-azul-roxo respirando (uniforms `uTime`, `uMouse`).
+- `Comet.tsx` — cometa periódico cruzando a cada ~15s com trail de partículas.
+- `CameraDrift.tsx` — câmera com movimento lento constante (sensação de estar *dentro*).
 
-## 4. Motor de Prompt como Protagonista
+SSR-safe: dynamic import só no cliente, fallback gradient enquanto carrega. Respeita `prefers-reduced-motion` (canvas estático).
 
-Hero box redesenhada:
-- Centralizada, ocupando ~65% da largura no desktop
-- Borda em gradiente animado (conic, rota 8s) quando focada
-- Placeholder rotativo (typewriter): "um portfólio fotográfico minimalista...", "um CRM com Supabase...", "um painel financeiro pessoal..."
-- Chips abaixo com 4 sugestões clicáveis que preenchem o prompt
-- Botão "Começar a criar" com micro-anim de faísca dourada
-- Logado: cria projeto direto. Anônimo: salva em `localStorage` (já implementado) e leva pra `/auth`.
+Remover/deprecar `StarField.tsx` (canvas 2D) e `AuroraBackdrop.tsx`. Cleanup completo de imports.
 
-## 5. Trilha de Conectores Educativa (nova seção)
+## 3. Cursor vivo (`src/components/cosmos/MagicCursor.tsx`)
 
-Substitui a defesa de "MCP" por uma trilha visual que ensina o usuário a se conectar:
+- Anel externo (16px) + ponto central (4px), `position: fixed`, `mix-blend-mode: difference`.
+- Tracking smoothed via rAF (lerp 0.12).
+- Detecta hover em `[data-magnetic]` → cursor é atraído (distância calculada, snap parcial).
+- Trilha de partículas-faísca (10 sprites) dissipando — Disney fairy dust via canvas overlay.
+- Em `(pointer: coarse)` ou `reduced-motion` → desliga, cursor nativo.
+- Substitui `CursorGlow.tsx`.
 
-```text
-[Supabase] ──── [GitHub] ──── [LLM (Anthropic/Groq/OpenAI)] ──── [Deploy (Vercel/Cloudflare)]
-   │              │                       │                              │
-   │              │                       │                              │
-"Como criar"   "Como criar"        "Onde tirar a chave"          "Como conectar"
-   │              │                       │                              │
-   └─ modal       └─ modal                └─ modal                       └─ modal
-      passo-a-       passo-a-                passo-a-                       passo-a-
-      passo          passo                   passo                          passo
+## 4. Parallax e tilt (`src/lib/parallax.ts` + `src/hooks/useTilt.ts`)
+
+- Hook `useParallaxLayer(speed)` → atualiza `--px`, `--py` via mousemove (throttle rAF).
+- Hook `useTilt3D()` → perspective transform em cards seguindo cursor dentro do elemento.
+- Aplicado em hero (4 camadas: estrelas 8%, orbs 4%, headline 2%, foreground 1%) e pillars/showcase cards.
+
+## 5. Tipografia cinética (`src/components/landing/KineticHeadline.tsx`)
+
+- Cada palavra em wrapper próprio, entra com física de queda + bounce (`motion` spring stiffness 80, damping 14 — curva Disney).
+- `CharReveal.tsx` — texto secundário caractere a caractere.
+- `AnimatedCounter.tsx` — stats 0→N com easing ao entrar viewport.
+- Marquee multi-velocidade, pause/slow on hover (mantém o atual, refina).
+
+## 6. Hero refinado (`src/components/landing/HeroPromptBox.tsx`)
+
+- Halo de energia ao focar (radial gradient escalando + opacity).
+- Ondas de luz pulsam a cada keystroke (CSS variable + transition).
+- Ao submeter: efeito **warp** — overlay full-screen com scale radial collapse pro centro, depois navega.
+- Botão primário com spark burst (10 partículas explodindo via Web Animations API).
+
+## 7. Estrutura da página (`src/routes/index.tsx`)
+
+Sequência final:
+```
+MarketingShell (nav top + dark toggle)
+├─ Cosmos3D (fixed bg)
+├─ MagicCursor
+├─ Hero            (headline cinética + prompt + parallax 4 layers)
+├─ Ticker          (marquee refinado)
+├─ HowItWorks      (NOVO — 3 steps com ícones animados scroll-triggered)
+├─ Pillars         (cards com tilt 3D + conic border)
+├─ LiveDemo        (mantém, refina com glass real)
+├─ Features        (NOVO — grid com tilt 3D)
+├─ Stats           (NOVO — 3 contadores animados)
+├─ Templates       (NOVO — carrossel horizontal drag)
+├─ ConnectorsPath  (mantém)
+├─ Showcase        (mantém, aplica tilt)
+├─ Pricing         (mantém)
+├─ FAQ             (mantém)
+└─ FinalCTA        (campo estelar intensificado)
 ```
 
-Cada nó é um botão que abre um modal/drawer com instruções ilustradas. Estética n8n (nós conectados) com SVG path animado.
+Novos componentes: `HowItWorks.tsx`, `FeatureGrid.tsx`, `StatsBlock.tsx`, `TemplateCarousel.tsx`.
 
-## 6. Estrutura da Home (ordem final)
+## 8. Glassmorphism vivo e grain
 
-1. Hero cósmico + prompt box
-2. Manifesto curto (3 linhas, scroll-linked)
-3. Live editor demo (parallax interno)
-4. Pilares (3D tilt cards)
-5. Trilha de conectores (educativa)
-6. Portfolio grid (showcase de projetos gerados)
-7. Pricing teaser (assinatura mínima + você gerencia seus créditos)
-8. FAQ
-9. Footer com "fade to starlight"
+- Surfaces: `backdrop-filter: blur(20px)` + `--breath` animation oscilando blur 18↔22px (4s ease).
+- Conic-gradient borders rotacionando 8s linear em painéis principais.
+- Grain overlay: canvas 2D gerando noise (regenerado a cada 8 frames) em `<div fixed inset-0 mix-blend-overlay opacity-[0.04]>`.
 
-## 7. Entregáveis técnicos
+## 9. Scroll choreography
 
-**Arquivos novos:**
-- `src/components/cosmos/StarField.tsx` — canvas de estrelas
-- `src/components/cosmos/AuroraBackdrop.tsx` — gradiente parallax
-- `src/components/cosmos/CursorGlow.tsx` — glow seguindo mouse
-- `src/components/landing/HeroPromptBox.tsx` — extraído, com placeholder rotativo + chips
-- `src/components/landing/Manifesto.tsx`
-- `src/components/landing/ConnectorsPath.tsx` — trilha SVG animada
-- `src/components/landing/PricingTeaser.tsx`
-- `src/lib/smooth-scroll.tsx` — provider Lenis
-- `src/lib/split-text.ts` — utilitário de letra-a-letra
+Lenis já instalado — afinar config (duration 1.2, easing exponencial).  
+Stagger via `motion` `whileInView` com `staggerChildren: 0.08` em todas as seções.  
+Cada seção com parallax vertical próprio via `useScroll` + `useTransform`.
 
-**Arquivos editados:**
-- `src/styles.css` — paleta cósmica, gradientes, vignette, fontes Inter Tight
-- `src/routes/__root.tsx` — adicionar Inter Tight, Lenis provider
-- `src/routes/index.tsx` — nova composição
-- `src/components/landing/PillarsDiagram.tsx` — 3D tilt + copy nova
-- `src/components/landing/LiveEditorDemo.tsx` — parallax interno
-- `src/components/landing/PortfolioGrid.tsx` — stagger refinado
-- `src/components/landing/FAQ.tsx` — copy nova
+## 10. Cleanup
 
-**Dependências a instalar:** `lenis`.
+- Deletar: `StarField.tsx`, `AuroraBackdrop.tsx`, `CursorGlow.tsx` (substituídos).
+- Manter intactos: `EditorShell.tsx`, `/projects/*`, `/auth`, `/connectors`, `/settings`, backend, auth.
 
-**Não escopo deste plano:** redesenhar o editor (`/projects/$projectId`) — fica pra próxima rodada como o usuário pediu. Backend/agente também intactos.
+## Dependências a instalar
 
-## 8. Critério de aceite
+```
+three @react-three/fiber @react-three/drei @react-three/postprocessing
+```
 
-- Home dá sensação de "uau, isso não é mais um site flat de IA"
-- 60fps em scroll num MacBook médio
-- Mobile (384px) mantém a essência sem parallax pesado (degrada graciosamente)
-- Copy em PT-BR, acolhedora, zero fear-mongering
-- Trilha de conectores é a primeira coisa que o usuário entende após o prompt
-- Dark é a única identidade (light mode segue como espelho, sem prioridade)
+(`motion` e `lenis` já estão.)
 
-Aprova pra eu implementar tudo numa rodada?
+## Detalhes técnicos críticos
+
+- **SSR**: todos os componentes WebGL/canvas usam `typeof window !== "undefined"` guards + dynamic import com `ssr: false` via lazy + Suspense fallback.
+- **Performance**: Cosmos3D pausa quando `document.hidden`; partículas com `frustumCulled`; postprocessing leve (bloom sutil só).
+- **A11y**: `prefers-reduced-motion` desliga 3D animado (canvas estático), cursor mágico, parallax, warp. Tudo continua funcional.
+- **Mobile (384px viewport atual)**: Cosmos3D em quality reduzida (500 estrelas, sem postprocessing, sem cometa), cursor mágico off, tilt off, parallax off. Hero compacto, marquee mantido, stats em coluna.
+- **Bundle**: Three.js é pesado (~150kb gz) — code-split via dynamic import do Cosmos3D para não bloquear LCP do hero.
+
+## Escopo desta passada
+
+Apenas a home (`/`) e o design system (`styles.css`). Editor, auth, projetos e backend permanecem inalterados.
