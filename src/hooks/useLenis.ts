@@ -1,20 +1,13 @@
 import { useEffect } from "react";
-import Lenis from "lenis";
 
+/**
+ * Tracks page scroll progress and pushes it into `window.__forgeScene.scroll`
+ * so the 3D SpaceScene can react. Smooth scrolling itself is handled
+ * elsewhere (see SmoothScroll provider) — this hook is observer-only to
+ * avoid double-initializing Lenis.
+ */
 export function useLenis() {
   useEffect(() => {
-    const lenis = new Lenis({
-      duration: 1.2,
-      easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
-      smoothWheel: true,
-    });
-    let raf = 0;
-    function frame(time: number) {
-      lenis.raf(time);
-      raf = requestAnimationFrame(frame);
-    }
-    raf = requestAnimationFrame(frame);
-
     function onScroll() {
       const max = document.documentElement.scrollHeight - window.innerHeight;
       const p = Math.min(1, Math.max(0, window.scrollY / Math.max(1, max)));
@@ -22,12 +15,8 @@ export function useLenis() {
         .__forgeScene;
       if (scene) scene.scroll = p * 1.4;
     }
-    lenis.on("scroll", onScroll);
+    window.addEventListener("scroll", onScroll, { passive: true });
     onScroll();
-
-    return () => {
-      cancelAnimationFrame(raf);
-      lenis.destroy();
-    };
+    return () => window.removeEventListener("scroll", onScroll);
   }, []);
 }
