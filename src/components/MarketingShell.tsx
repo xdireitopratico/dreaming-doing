@@ -3,10 +3,10 @@ import { Link, useNavigate } from "@tanstack/react-router";
 import { useAuth } from "@/lib/auth";
 import { Nav } from "@/components/Nav";
 
-export function Logo({ className = "" }: { className?: string }) {
+export function Logo({ className = "", size = 22 }: { className?: string; size?: number }) {
   return (
     <Link to="/" className={`flex items-center gap-2 ${className}`}>
-      <svg width="22" height="22" viewBox="0 0 24 24" className="text-[var(--primary)]">
+      <svg width={size} height={size} viewBox="0 0 24 24" className="text-[var(--primary)]">
         <polygon
           points="12,1 22,7 22,17 12,23 2,17 2,7"
           fill="none"
