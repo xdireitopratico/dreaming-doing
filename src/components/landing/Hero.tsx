@@ -4,14 +4,20 @@ import { PromptEngine } from "@/components/prompt/PromptEngine";
 
 const HEADLINE = "Construa o inimaginável.";
 
+// Deterministic pseudo-random so SSR and client agree (avoids hydration mismatch).
+function seeded(i: number, salt: number) {
+  const x = Math.sin((i + 1) * 12.9898 + salt * 78.233) * 43758.5453;
+  return x - Math.floor(x);
+}
+
 function AnimatedHeadline() {
   const letters = HEADLINE.split("");
   return (
     <h1 className="font-display font-bold text-[clamp(2.6rem,7.5vw,7.2rem)] leading-[0.95] tracking-[-0.02em]">
       {letters.map((ch, i) => {
         if (ch === " ") return <span key={i}>&nbsp;</span>;
-        const rot = (Math.random() - 0.5) * 24;
-        const y = 40 + Math.random() * 50;
+        const rot = (seeded(i, 1) - 0.5) * 24;
+        const y = 40 + seeded(i, 2) * 50;
         return (
           <motion.span
             key={i}
