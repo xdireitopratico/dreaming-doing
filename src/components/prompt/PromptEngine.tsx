@@ -1,6 +1,10 @@
 import { useNavigate } from "@tanstack/react-router";
+import { useServerFn } from "@tanstack/react-start";
 import { motion } from "framer-motion";
 import { useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
+import { createProjectFromPrompt } from "@/lib/projects.functions";
 
 const QUICK_STARTS = [
   "Landing page para um SaaS de produtividade",
@@ -19,12 +23,7 @@ type Props = {
   autoFocus?: boolean;
 };
 
-function warpToEditor(text: string, navigate: ReturnType<typeof useNavigate>) {
-  try {
-    sessionStorage.setItem("forge.initialPrompt", text);
-  } catch {
-    /* ignore */
-  }
+function playWarp() {
   const overlay = document.createElement("div");
   overlay.style.cssText =
     "position:fixed;inset:0;z-index:9999;pointer-events:none;background:radial-gradient(circle at center,transparent 0%,transparent 35%,#000 90%);opacity:0;transition:opacity 360ms ease-in";
@@ -33,21 +32,18 @@ function warpToEditor(text: string, navigate: ReturnType<typeof useNavigate>) {
   const scene = (window as unknown as { __forgeScene?: { scroll: number } })
     .__forgeScene;
   if (scene) scene.scroll = 1.4;
-  setTimeout(() => {
+  return () => {
     const flash = document.createElement("div");
     flash.style.cssText =
       "position:fixed;inset:0;z-index:10000;background:#fff;opacity:0;transition:opacity 80ms";
     document.body.appendChild(flash);
     requestAnimationFrame(() => (flash.style.opacity = "1"));
     setTimeout(() => {
-      navigate({ to: "/editor" });
-      setTimeout(() => {
-        overlay.remove();
-        flash.style.opacity = "0";
-        setTimeout(() => flash.remove(), 400);
-      }, 100);
-    }, 120);
-  }, 380);
+      overlay.remove();
+      flash.style.opacity = "0";
+      setTimeout(() => flash.remove(), 400);
+    }, 220);
+  };
 }
 
 export function PromptEngine({
