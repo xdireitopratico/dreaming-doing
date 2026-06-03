@@ -65,26 +65,43 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Dream Weaver — Construa software soberano com IA" },
+      { title: "FORGE — Construa o inimaginável" },
       {
         name: "description",
         content:
-          "Construtor de software por IA onde código, banco e infra continuam seus. Transparente, MCP-nativo, em português.",
+          "FORGE é o construtor de apps web movido a IA. Descreva a ideia. Nós escrevemos o código, configuramos o stack e fazemos o deploy.",
       },
-      { property: "og:title", content: "Dream Weaver — Construa software soberano com IA" },
+      { property: "og:type", content: "website" },
+      { property: "og:title", content: "FORGE — Construa o inimaginável" },
       {
         property: "og:description",
         content:
-          "Construtor de software por IA onde código, banco e infra continuam seus. Transparente, MCP-nativo, em português.",
+          "Construtor de apps web movido a IA. Da ideia ao deploy em segundos.",
+      },
+      { name: "twitter:card", content: "summary_large_image" },
+      { name: "twitter:title", content: "FORGE — Construa o inimaginável" },
+      {
+        name: "twitter:description",
+        content: "Construtor de apps web movido a IA. Da ideia ao deploy em segundos.",
       },
     ],
     links: [
       { rel: "stylesheet", href: appCss },
       { rel: "preconnect", href: "https://fonts.googleapis.com" },
       { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "" },
+    ],
+    scripts: [
       {
-        rel: "stylesheet",
-        href: "https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap",
+        type: "application/ld+json",
+        children: JSON.stringify({
+          "@context": "https://schema.org",
+          "@type": "WebApplication",
+          name: "FORGE",
+          applicationCategory: "DeveloperApplication",
+          operatingSystem: "Web",
+          description:
+            "Construtor de apps web movido a IA. Da ideia ao deploy em segundos.",
+        }),
       },
     ],
   }),

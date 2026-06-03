@@ -1,138 +1,114 @@
-# Genesis Forge — Home Landing
+# Lovable Clone — Replanejamento (o que falta)
 
-Implementação completa da visão "SpaceX × Disney × xAI". Mantém o editor (`/projects/$projectId`) intacto. Foco 100% na home pública e no design system base.
+Estado atual (avaliação honesta):
 
-## 1. Design tokens (`src/styles.css`)
+- ✅ Supabase conectado, schema completo (projects, project_files, conversations, messages, connectors, mcp_servers, deployments, user_roles, profiles, snapshots) com RLS e grants.
+- ✅ Auth (email + Google), rotas protegidas, `/auth`, `/projects`, `/connectors`, `/settings` existem.
+- ✅ Edge Function `agent-run` já roda (mas com Lovable AI Gateway + **HTML vanilla via srcdoc**, não WebContainer; sem Claude/Grok ainda).
+- ✅ Landing "Celestial Forge" no ar (Hero, Ticker, HowItWorks, Features, Stats, FinalCTA, SpaceScene).
+- ⚠️ Editor `/projects/$projectId` existe mas usa design antigo, preview por `srcdoc`, sem Monaco, sem file tree, sem WebContainer.
+- ❌ Multi-provider (Anthropic / xAI) não plugado — só Lovable AI Gateway.
+- ❌ GitHub connector (OAuth, push, sync) — vazio.
+- ❌ MCP, auto-deploy, snapshots UI, visual edits, command palette, history — nada.
+- ❌ Hidratação quebra (`Math.random()` no `SpaceScene` / headline).
+- ❌ Fluxo prompt da home → cria projeto real → navega: hoje só faz `warp` para `/editor` que redireciona.
 
-Substituir paleta atual pela Genesis Forge:
+Reescopei em 3 fases enxutas. Cada fase é entregável independente.
 
-```
-Dark:
---background: #111315 (oklch ~0.18 0.005 270)
---surface:    #1C1F24
---surface-2:  #24282F
---foreground: #F2F4F7
---muted:      #8A93A1
+---
 
-Light:
---background: #F7F5F0 (creme tecnológico)
---surface:    #FFFFFF
---foreground: #111315
+## FASE 1A — Fechar o MVP (o que está pela metade)
 
-Accents (compartilhados):
---ignition:   #4F8EF7 (azul de ignição — primário)
---depth:      #7C3AED (roxo de profundidade)
---live:       #10B981 (emerald — estados ao vivo)
---sun:        #F0B95C (mantido para highlights tipográficos)
-```
+Objetivo: home → prompt → projeto real → editor com preview funcional → push GitHub. Sem quebra de hidratação, com design Celestial Forge aplicado também ao editor.
 
-Gradientes: `--gradient-ignition` (azul→roxo), `--gradient-aurora` (verde→azul→roxo radial), `--gradient-warp` (radial central pra transição).
+1. **Bug de hidratação** (`SpaceScene` / KineticHeadline): mover `Math.random()` para `useEffect` ou `useMemo` client-only com guard `typeof window`.
+2. **Fluxo home → editor real** em `PromptEngine.submit`:
+   - `createServerFn` `createProjectFromPrompt({ prompt })` que insere `projects` + `conversations` + 1ª `messages` (role user) + dispara `agent-run` e retorna `projectId`.
+   - Warp transition navega para `/projects/$projectId` (não `/editor`).
+   - Remover `src/routes/editor.tsx` (redirect legado).
+3. **Editor repaginado (Celestial Forge)**:
+   - Aplicar tokens (`bg-background`, grain overlay sutil, vignette, glass cards, HUD corner brackets, mono labels).
+   - Chat à esquerda (30%), Preview/Code à direita (70%) com toggle. Tool calls colapsáveis estilizadas.
+   - **Manter preview por iframe `srcdoc` do `index.html`** (já funciona) — WebContainer fica para Fase 1B.
+   - Streaming SSE de `agent-run` no chat (hoje é só refetch via Realtime — adicionar token-a-token).
+4. **GitHub OAuth + push** (Fase 1, prometido):
+   - `/connectors` com botão "Conectar GitHub" via `lovable.auth.signInWithOAuth` **não serve** (Lovable Cloud só suporta google/apple). Caminho real: Edge Function `github-oauth-start` + `github-oauth-callback` com `GITHUB_OAUTH_CLIENT_ID/SECRET` (request secrets).
+   - Token cifrado em `connectors` (AES-GCM com `ENCRYPTION_KEY`).
+   - Botão "Push to GitHub" no editor → Edge Function `github-sync` (Octokit via esm.sh) cria repo se necessário e faz commit tree completo.
+5. **Snapshots mínimos**: botão "Save snapshot" + lista em sheet lateral; restore sobrescreve `project_files`.
+6. **SEO + OG** na home (og:image, canonical, JSON-LD WebApplication).
 
-Animações novas: `dw-conic-rotate` (borda gradiente girando), `dw-breath` (glassmorphism respirando), `dw-spark-burst`, `dw-warp-collapse`, `dw-grain-flicker`.
+Saída: usuário cria conta, descreve um app, vê código sendo escrito ao vivo, preview renderiza, dá push pro GitHub, reabre depois.
 
-Toggle dark/light: transição 600ms com fade do cosmos.
+---
 
-## 2. Camada 3D — Three.js (`src/components/cosmos/`)
+## FASE 1B — WebContainers (substituir srcdoc)
 
-Instalar: `three`, `@react-three/fiber`, `@react-three/drei`, `@react-three/postprocessing`.
+Só faz sentido depois que 1A estiver sólido, porque muda a arquitetura do preview.
 
-Novos arquivos:
-- `Cosmos3D.tsx` — canvas R3F fixed full-screen, z-0, pointer-events-none. Substitui o `AuroraBackdrop` + `StarField` atuais.
-- `StarsLayer.tsx` — 2000+ estrelas instanciadas em 3 profundidades, drift contínuo, twinkle por shader.
-- `AuroraShader.tsx` — `ShaderMaterial` custom: ondas plasma verde-azul-roxo respirando (uniforms `uTime`, `uMouse`).
-- `Comet.tsx` — cometa periódico cruzando a cada ~15s com trail de partículas.
-- `CameraDrift.tsx` — câmera com movimento lento constante (sensação de estar *dentro*).
+1. Instalar `@webcontainer/api`. Documentar em `/settings` que produção pública exige plano StackBlitz pago — em dev é gratuito.
+2. Reescrever system prompt do `agent-run` para gerar **Vite + React + TS** (não mais HTML vanilla). Templates iniciais em `project_files` quando o projeto é criado a partir de um starter.
+3. Componente `WebContainerPreview`:
+   - `webcontainer.mount(treeFromFiles)`
+   - `npm install` + `npm run dev`
+   - `on('server-ready')` → seta URL do iframe
+   - Cada `write_file` do agente: `webcontainer.fs.writeFile` para HMR sem reload + persistência no DB em paralelo.
+4. Fallback: se `crossOriginIsolated === false` (headers COOP/COEP ausentes), exibir aviso e cair pra preview estático (`vite build` server-side via Edge Function? — provavelmente não viável; melhor exigir headers no host).
+5. Monaco editor + file tree para edição manual; salvar dispara mesma rota de `apply-file`.
 
-SSR-safe: dynamic import só no cliente, fallback gradient enquanto carrega. Respeita `prefers-reduced-motion` (canvas estático).
+---
 
-Remover/deprecar `StarField.tsx` (canvas 2D) e `AuroraBackdrop.tsx`. Cleanup completo de imports.
+## FASE 2 — Paridade competitiva
 
-## 3. Cursor vivo (`src/components/cosmos/MagicCursor.tsx`)
+(mantém o que estava no plano original, só com prioridades mais limpas)
 
-- Anel externo (16px) + ponto central (4px), `position: fixed`, `mix-blend-mode: difference`.
-- Tracking smoothed via rAF (lerp 0.12).
-- Detecta hover em `[data-magnetic]` → cursor é atraído (distância calculada, snap parcial).
-- Trilha de partículas-faísca (10 sprites) dissipando — Disney fairy dust via canvas overlay.
-- Em `(pointer: coarse)` ou `reduced-motion` → desliga, cursor nativo.
-- Substitui `CursorGlow.tsx`.
+1. **MCP connectors**: tabela já existe. Faltam UI em `/connectors` (add server, OAuth flow via `mcp-connect` Edge Function com `Accept: application/json, text/event-stream`), loader de tools no `agent-run` (AI SDK MCP client com namespace e close-after-stream), meta-tool pattern quando >10 tools.
+2. **Multi-provider real**: dropdown de modelo no chat (Lovable Gateway / Anthropic / xAI). Edge Function escolhe SDK conforme `connectors.kind`. Chaves Anthropic/xAI por-usuário em `connectors`, ou globais via secret (já temos `ANTHROPIC_API_KEY`, `XAI_API_KEY`).
+3. **Auto-deploy**: Vercel + Cloudflare Pages via `deploy-trigger` (Direct Upload API). Tabela `deployments` já existe. UI no editor com badge de status + URL.
+4. **GitHub bidirecional**: Edge Function `github-webhook` (`/api/public/github-webhook` em route TanStack com verificação HMAC), diff via Octokit, atualiza `project_files`, detecta conflito por `content_hash`.
+5. **Polimento**:
+   - Visual edits (clicar elemento no preview → seletor + screenshot pro agente).
+   - Command palette Cmd+K (kbar).
+   - History timeline `/projects/$projectId/history` com diff.
+   - Templates pré-prontos (landing, dashboard, SaaS).
+   - Sharing público read-only `/preview/$projectId`.
+6. **Hardening**: rate-limit no `agent-run` (advisory lock por user), audit log, security scan.
 
-## 4. Parallax e tilt (`src/lib/parallax.ts` + `src/hooks/useTilt.ts`)
+---
 
-- Hook `useParallaxLayer(speed)` → atualiza `--px`, `--py` via mousemove (throttle rAF).
-- Hook `useTilt3D()` → perspective transform em cards seguindo cursor dentro do elemento.
-- Aplicado em hero (4 camadas: estrelas 8%, orbs 4%, headline 2%, foreground 1%) e pillars/showcase cards.
+## Detalhes técnicos relevantes
 
-## 5. Tipografia cinética (`src/components/landing/KineticHeadline.tsx`)
+**Decisões corrigidas em relação ao plano original:**
 
-- Cada palavra em wrapper próprio, entra com física de queda + bounce (`motion` spring stiffness 80, damping 14 — curva Disney).
-- `CharReveal.tsx` — texto secundário caractere a caractere.
-- `AnimatedCounter.tsx` — stats 0→N com easing ao entrar viewport.
-- Marquee multi-velocidade, pause/slow on hover (mantém o atual, refina).
+- GitHub login **não** entra como provider de auth (Lovable Cloud não suporta). Vai como connector próprio via Edge Function OAuth.
+- Agent loop **não** usa Anthropic SDK no Deno na Fase 1A — já temos Lovable AI Gateway funcionando; multi-provider entra na Fase 2 quando há valor real.
+- WebContainer adiado para 1B porque substituí-lo agora forçaria reescrever o system prompt e o template antes de validar o fluxo end-to-end.
+- Cron/backup automatizado e analytics próprio ficam para uma Fase 3 (não bloqueiam paridade).
 
-## 6. Hero refinado (`src/components/landing/HeroPromptBox.tsx`)
+**Secrets que ainda precisarão ser pedidos:**
 
-- Halo de energia ao focar (radial gradient escalando + opacity).
-- Ondas de luz pulsam a cada keystroke (CSS variable + transition).
-- Ao submeter: efeito **warp** — overlay full-screen com scale radial collapse pro centro, depois navega.
-- Botão primário com spark burst (10 partículas explodindo via Web Animations API).
+- `GITHUB_OAUTH_CLIENT_ID`, `GITHUB_OAUTH_CLIENT_SECRET` (Fase 1A passo 4).
+- `ENCRYPTION_KEY` (32 bytes base64) para cifrar tokens em `connectors`.
+- `WEBCONTAINER_API_KEY` (só Fase 1B em produção).
+- Vercel/Cloudflare: por-usuário, na Fase 2.
 
-## 7. Estrutura da página (`src/routes/index.tsx`)
+`ANTHROPIC_API_KEY`, `XAI_API_KEY`, `LOVABLE_API_KEY` já estão nos secrets.
 
-Sequência final:
-```
-MarketingShell (nav top + dark toggle)
-├─ Cosmos3D (fixed bg)
-├─ MagicCursor
-├─ Hero            (headline cinética + prompt + parallax 4 layers)
-├─ Ticker          (marquee refinado)
-├─ HowItWorks      (NOVO — 3 steps com ícones animados scroll-triggered)
-├─ Pillars         (cards com tilt 3D + conic border)
-├─ LiveDemo        (mantém, refina com glass real)
-├─ Features        (NOVO — grid com tilt 3D)
-├─ Stats           (NOVO — 3 contadores animados)
-├─ Templates       (NOVO — carrossel horizontal drag)
-├─ ConnectorsPath  (mantém)
-├─ Showcase        (mantém, aplica tilt)
-├─ Pricing         (mantém)
-├─ FAQ             (mantém)
-└─ FinalCTA        (campo estelar intensificado)
-```
+**Arquivos a tocar / criar na Fase 1A:**
 
-Novos componentes: `HowItWorks.tsx`, `FeatureGrid.tsx`, `StatsBlock.tsx`, `TemplateCarousel.tsx`.
+- `src/components/space/SpaceScene.tsx`, `src/components/landing/Hero.tsx` (fix hidratação).
+- `src/lib/projects.functions.ts` (createProjectFromPrompt).
+- `src/components/prompt/PromptEngine.tsx` (chamar serverFn + navegar para `/projects/$id`).
+- `src/routes/projects/$projectId.tsx` + `src/components/EditorShell.tsx` (redesign Celestial Forge, streaming).
+- `supabase/functions/github-oauth-start/index.ts`, `github-oauth-callback/index.ts`, `github-sync/index.ts`.
+- `src/routes/connectors.tsx` (UI GitHub).
+- `src/routes/__root.tsx` (SEO/OG).
+- `src/routes/editor.tsx` (deletar).
 
-## 8. Glassmorphism vivo e grain
+---
 
-- Surfaces: `backdrop-filter: blur(20px)` + `--breath` animation oscilando blur 18↔22px (4s ease).
-- Conic-gradient borders rotacionando 8s linear em painéis principais.
-- Grain overlay: canvas 2D gerando noise (regenerado a cada 8 frames) em `<div fixed inset-0 mix-blend-overlay opacity-[0.04]>`.
+## Recomendação de ordem
 
-## 9. Scroll choreography
+Começar pela Fase 1A, na ordem listada (1 → 6). Itens 1, 2 e 3 são rápidos e desbloqueiam ver o produto rodando. Item 4 (GitHub) precisa que você crie um GitHub OAuth App e me passe `CLIENT_ID/SECRET`.
 
-Lenis já instalado — afinar config (duration 1.2, easing exponencial).  
-Stagger via `motion` `whileInView` com `staggerChildren: 0.08` em todas as seções.  
-Cada seção com parallax vertical próprio via `useScroll` + `useTransform`.
-
-## 10. Cleanup
-
-- Deletar: `StarField.tsx`, `AuroraBackdrop.tsx`, `CursorGlow.tsx` (substituídos).
-- Manter intactos: `EditorShell.tsx`, `/projects/*`, `/auth`, `/connectors`, `/settings`, backend, auth.
-
-## Dependências a instalar
-
-```
-three @react-three/fiber @react-three/drei @react-three/postprocessing
-```
-
-(`motion` e `lenis` já estão.)
-
-## Detalhes técnicos críticos
-
-- **SSR**: todos os componentes WebGL/canvas usam `typeof window !== "undefined"` guards + dynamic import com `ssr: false` via lazy + Suspense fallback.
-- **Performance**: Cosmos3D pausa quando `document.hidden`; partículas com `frustumCulled`; postprocessing leve (bloom sutil só).
-- **A11y**: `prefers-reduced-motion` desliga 3D animado (canvas estático), cursor mágico, parallax, warp. Tudo continua funcional.
-- **Mobile (384px viewport atual)**: Cosmos3D em quality reduzida (500 estrelas, sem postprocessing, sem cometa), cursor mágico off, tilt off, parallax off. Hero compacto, marquee mantido, stats em coluna.
-- **Bundle**: Three.js é pesado (~150kb gz) — code-split via dynamic import do Cosmos3D para não bloquear LCP do hero.
-
-## Escopo desta passada
-
-Apenas a home (`/`) e o design system (`styles.css`). Editor, auth, projetos e backend permanecem inalterados.
+Se preferir, posso fazer 1A em duas entregas: **(A1)** fix hidratação + fluxo home→editor + redesign editor + snapshots; **(A2)** GitHub OAuth + push depois que você gerar as credenciais.

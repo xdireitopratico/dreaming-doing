@@ -1,14 +1,12 @@
 import { Link } from "@tanstack/react-router";
 import { ArrowLeft } from "lucide-react";
 import type { ReactNode } from "react";
-import { useAuth } from "@/lib/auth";
 import { useEffect } from "react";
-import { Logo } from "@/components/MarketingShell";
+import { useAuth } from "@/lib/auth";
 
 /**
- * EditorShell — chrome exclusiva do editor (sem sidebar lateral fixa do marketing).
- * Mantém apenas um topbar denso. A sidebar colapsável real será adicionada
- * no próximo passo dentro de `$projectId.tsx`.
+ * EditorShell — chrome cinemática do editor (Celestial Forge).
+ * Topbar com HUD style, grão sutil, glass.
  */
 export function EditorShell({
   children,
@@ -29,24 +27,38 @@ export function EditorShell({
   }, [loading, user]);
 
   return (
-    <div className="h-screen flex flex-col bg-background">
-      <header className="h-12 border-b border-border flex items-center px-4 gap-3 shrink-0 bg-background/80 backdrop-blur">
-        <Link to="/" aria-label="Voltar para home" className="text-muted-foreground hover:text-foreground">
+    <div className="relative h-screen flex flex-col bg-background text-foreground overflow-hidden">
+      <div className="grain-overlay pointer-events-none" />
+      <header className="relative z-20 h-11 border-b border-[var(--border)] flex items-center px-4 gap-3 shrink-0 bg-background/85 backdrop-blur-xl">
+        <Link
+          to="/"
+          aria-label="Voltar"
+          className="text-[var(--text-dim)] hover:text-foreground transition-colors"
+        >
           <ArrowLeft className="size-4" />
         </Link>
         <Link to="/" className="flex items-center gap-2 min-w-0">
-          <Logo size={14} />
-          <span className="font-display text-base hidden sm:inline">Dream Weaver</span>
+          <span
+            aria-hidden
+            className="inline-block size-2 rounded-full bg-[var(--primary)] shadow-[0_0_12px_var(--primary)]"
+          />
+          <span className="font-display tracking-tight text-sm">FORGE</span>
         </Link>
         {projectName && (
           <>
-            <span className="text-muted-foreground">/</span>
-            <span className="text-sm truncate">{projectName}</span>
+            <span className="text-[var(--text-ghost)] font-mono text-xs">/</span>
+            <span className="text-sm truncate text-[var(--text-dim)]">
+              {projectName}
+            </span>
           </>
         )}
+        <span className="ml-3 hidden md:inline-flex items-center gap-1.5 font-mono text-[10px] tracking-[0.3em] uppercase text-[var(--text-ghost)]">
+          <span className="size-1.5 rounded-full bg-[var(--success)] live-dot" />
+          LIVE · ORBIT
+        </span>
         <div className="ml-auto flex items-center gap-2">{right}</div>
       </header>
-      <div className="flex-1 min-h-0">{children}</div>
+      <div className="relative z-10 flex-1 min-h-0">{children}</div>
     </div>
   );
 }

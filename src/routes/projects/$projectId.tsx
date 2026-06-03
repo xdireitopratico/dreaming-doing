@@ -84,11 +84,10 @@ function EditorPage() {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [messages?.length]);
 
-  // Auto-run agent if there's a pending user message and no assistant reply yet
+  // Auto-run agent if last message is from user and we're idle
   const lastUserOnly = useMemo(() => {
     if (!messages || messages.length === 0) return false;
-    const last = messages[messages.length - 1];
-    return last.role === "user";
+    return messages[messages.length - 1].role === "user";
   }, [messages]);
 
   useEffect(() => {
@@ -131,84 +130,161 @@ function EditorPage() {
     <EditorShell
       projectName={project?.name}
       right={
-        <div className="flex items-center gap-1 border border-border rounded-md p-0.5">
-          <Button size="sm" variant={tab === "preview" ? "default" : "ghost"} onClick={() => setTab("preview")}>
-            <Eye className="size-3.5 mr-1" /> Preview
-          </Button>
-          <Button size="sm" variant={tab === "code" ? "default" : "ghost"} onClick={() => setTab("code")}>
-            <Code2 className="size-3.5 mr-1" /> Código
-          </Button>
+        <div className="flex items-center gap-1 border border-[var(--border)] rounded-md p-0.5 bg-[var(--surface-1)]/60 backdrop-blur">
+          <button
+            onClick={() => setTab("preview")}
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-[11px] font-mono tracking-[0.2em] uppercase transition-colors ${
+              tab === "preview"
+                ? "bg-[var(--primary)] text-[var(--primary-foreground)]"
+                : "text-[var(--text-dim)] hover:text-foreground"
+            }`}
+          >
+            <Eye className="size-3" /> Preview
+          </button>
+          <button
+            onClick={() => setTab("code")}
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-[11px] font-mono tracking-[0.2em] uppercase transition-colors ${
+              tab === "code"
+                ? "bg-[var(--primary)] text-[var(--primary-foreground)]"
+                : "text-[var(--text-dim)] hover:text-foreground"
+            }`}
+          >
+            <Code2 className="size-3" /> Code
+          </button>
         </div>
       }
     >
       <div className="h-full flex min-h-0">
         {/* Chat panel */}
-        <div className="w-[380px] border-r border-border flex flex-col min-h-0">
+        <aside className="w-[400px] border-r border-[var(--border)] flex flex-col min-h-0 bg-[var(--surface-1)]/40 backdrop-blur-xl">
+          <div className="px-4 py-2.5 border-b border-[var(--border)] flex items-center justify-between">
+            <span className="font-mono text-[10px] tracking-[0.3em] uppercase text-[var(--text-ghost)]">
+              · MISSION CONTROL ·
+            </span>
+            {running && (
+              <span className="flex items-center gap-1.5 font-mono text-[10px] tracking-[0.2em] uppercase text-[var(--primary)]">
+                <Loader2 className="size-3 animate-spin" /> FORGING
+              </span>
+            )}
+          </div>
           <ScrollArea className="flex-1" ref={scrollRef as any}>
-            <div className="p-4 space-y-4">
-              {(messages ?? []).map((m) => (
-                <div key={m.id} className={m.role === "user" ? "ml-6" : "mr-6"}>
-                  <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1 inline-flex items-center gap-1">
-                    {m.role !== "user" && <Sparkles className="size-3 text-primary" />}
-                    {m.role === "user" ? "Você" : "Dream Weaver"}
-                  </div>
-                  <div className={`rounded-lg p-3 text-sm ${m.role === "user" ? "bg-primary text-primary-foreground" : "bg-surface border border-border"}`}>
-                    {m.parts?.map((p: any, i: number) => p.type === "text" ? <div key={i} className="whitespace-pre-wrap">{p.text}</div> : null)}
-                    {m.tool_calls && m.tool_calls.length > 0 && (
-                      <div className="mt-2 space-y-1">
-                        {m.tool_calls.map((t: any, i: number) => (
-                          <div key={i} className="text-xs font-mono px-2 py-1 rounded bg-muted text-muted-foreground">
-                            ▸ {t.name}({t.args?.path ?? ""})
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ))}
-              {running && (
-                <div className="mr-6 flex items-center gap-2 text-sm text-muted-foreground">
-                  <Loader2 className="size-3 animate-spin" /> gerando…
+            <div className="p-4 space-y-5">
+              {(messages ?? []).length === 0 && !running && (
+                <div className="text-sm text-[var(--text-ghost)] italic">
+                  Aguardando o primeiro prompt…
                 </div>
               )}
+              {(messages ?? []).map((m) => {
+                const isUser = m.role === "user";
+                return (
+                  <div key={m.id} className={isUser ? "pl-6" : "pr-6"}>
+                    <div className="font-mono text-[10px] tracking-[0.3em] uppercase mb-1.5 inline-flex items-center gap-1.5 text-[var(--text-ghost)]">
+                      {!isUser && <Sparkles className="size-3 text-[var(--primary)]" />}
+                      {isUser ? "YOU" : "FORGE"}
+                    </div>
+                    <div
+                      className={`rounded-lg p-3 text-sm leading-relaxed ${
+                        isUser
+                          ? "bg-[var(--primary)]/10 border border-[var(--primary)]/30 text-foreground"
+                          : "bg-[var(--surface-2)]/70 border border-[var(--border)] text-foreground"
+                      }`}
+                    >
+                      {m.parts?.map((p: any, i: number) =>
+                        p.type === "text" ? (
+                          <div key={i} className="whitespace-pre-wrap">{p.text}</div>
+                        ) : null,
+                      )}
+                      {m.tool_calls && m.tool_calls.length > 0 && (
+                        <div className="mt-2.5 space-y-1">
+                          {m.tool_calls.map((t: any, i: number) => (
+                            <div
+                              key={i}
+                              className="text-[11px] font-mono px-2 py-1 rounded bg-background/60 border border-[var(--border)] text-[var(--text-dim)]"
+                            >
+                              <span className="text-[var(--primary)]">▸</span> {t.name}
+                              <span className="text-[var(--text-ghost)]">({t.args?.path ?? ""})</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </ScrollArea>
-          <div className="border-t border-border p-3">
+          <div className="border-t border-[var(--border)] p-3 bg-background/60">
             <div className="relative">
               <Textarea
-                value={input} onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) send(); }}
-                placeholder="Peça mudanças…" className="min-h-20 resize-none pr-12"
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    send();
+                  }
+                }}
+                placeholder="Peça uma mudança…"
+                className="min-h-20 resize-none pr-12 bg-[var(--surface-2)]/80 border-[var(--border)] focus-visible:ring-[var(--primary)]/40"
               />
-              <Button size="icon" className="absolute right-2 bottom-2 size-8" onClick={send} disabled={!input.trim() || running}>
+              <Button
+                size="icon"
+                className="absolute right-2 bottom-2 size-8 bg-[var(--primary)] text-[var(--primary-foreground)] hover:bg-[var(--primary)]/90"
+                onClick={send}
+                disabled={!input.trim() || running}
+              >
                 <ArrowUp className="size-4" />
               </Button>
             </div>
+            <div className="mt-2 font-mono text-[9px] tracking-[0.25em] uppercase text-[var(--text-ghost)]">
+              ⏎ ENTER TO SEND · ⇧⏎ NEW LINE
+            </div>
           </div>
-        </div>
+        </aside>
 
         {/* Preview / Code */}
-        <div className="flex-1 min-w-0 bg-surface/30">
+        <div className="flex-1 min-w-0 bg-background relative">
           {tab === "preview" ? (
             previewSrc ? (
-              <iframe title="preview" srcDoc={previewSrc} sandbox="allow-scripts" className="w-full h-full bg-white" />
+              <div className="absolute inset-3 rounded-lg overflow-hidden border border-[var(--border)] shadow-[0_0_60px_-20px_rgba(255,182,39,0.25)]">
+                <iframe
+                  title="preview"
+                  srcDoc={previewSrc}
+                  sandbox="allow-scripts"
+                  className="w-full h-full bg-white"
+                />
+              </div>
             ) : (
-              <div className="h-full grid place-items-center text-muted-foreground text-sm">
-                {running ? "Gerando seu app…" : "Preview aparecerá aqui assim que index.html for criado."}
+              <div className="h-full grid place-items-center">
+                <div className="text-center">
+                  <div className="font-mono text-[10px] tracking-[0.4em] uppercase text-[var(--text-ghost)] mb-3">
+                    · STANDING BY ·
+                  </div>
+                  <div className="text-sm text-[var(--text-dim)]">
+                    {running
+                      ? "Compilando seu universo…"
+                      : "O preview aparecerá aqui assim que o primeiro arquivo for criado."}
+                  </div>
+                </div>
               </div>
             )
           ) : (
             <div className="h-full flex">
-              <div className="w-64 border-r border-border p-2 overflow-auto">
-                <div className="text-xs font-medium text-muted-foreground px-2 py-1">Arquivos</div>
+              <div className="w-64 border-r border-[var(--border)] p-2 overflow-auto bg-[var(--surface-1)]/40">
+                <div className="font-mono text-[10px] tracking-[0.3em] uppercase text-[var(--text-ghost)] px-2 py-1.5">
+                  FILES
+                </div>
                 {(files ?? []).map((f) => (
-                  <div key={f.id} className="px-2 py-1 text-sm rounded hover:bg-accent cursor-default font-mono truncate">
+                  <div
+                    key={f.id}
+                    className="px-2 py-1 text-sm rounded hover:bg-[var(--surface-2)] cursor-default font-mono truncate text-[var(--text-dim)]"
+                  >
                     {f.path}
                   </div>
                 ))}
               </div>
               <div className="flex-1 overflow-auto p-4">
-                <pre className="text-xs font-mono whitespace-pre-wrap">
+                <pre className="text-xs font-mono whitespace-pre-wrap text-[var(--text-dim)]">
                   {files?.map((f) => `// ${f.path}\n${f.content}\n\n`).join("")}
                 </pre>
               </div>
