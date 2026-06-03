@@ -172,7 +172,7 @@ export function PromptEngine({
           <button
             type="submit"
             data-cursor="hover"
-            disabled={!value.trim()}
+            disabled={!value.trim() || busy}
             className="prompt-submit"
             aria-label="Submit prompt"
           >
