@@ -1,4 +1,4 @@
-// tools/fs.ts — 5 FileSystem tools (leitura/escrita no Supabase project_files)
+// tools/fs.ts — 7 FileSystem tools (leitura/escrita/edição no Supabase project_files)
 import type { ToolRegistry } from "../registry.ts";
 import type { FileEntry } from "../types.ts";
 
@@ -136,6 +136,119 @@ export function registerFsTools(reg: ToolRegistry, ctx: FsContext): void {
         if (results.length >= 30) break;
       }
       return { toolCallId: "", ok: true, output: results };
+    },
+  );
+
+  // ─── fs_edit: substituição cirúrgica de texto (como edit_file do Command Code) ───
+  reg.register(
+    {
+      name: "fs_edit",
+      description: `Substitui um trecho específico de texto em um arquivo. Edição cirúrgica — modifica só o necessário, não reescreve o arquivo inteiro.
+
+Parâmetros:
+- path: caminho do arquivo
+- oldText: trecho EXATO a substituir (deve bater idêntico, incluindo espaços e indentação)
+- newText: novo texto a colocar no lugar
+- replaceAll: se true, substitui todas as ocorrências (padrão: false, só a primeira)
+
+Use SEMPRE fs_edit em vez de fs_write quando só precisa mudar algumas linhas.
+Use fs_read antes para garantir que oldText bate exatamente.`,
+      parameters: {
+        type: "object",
+        properties: {
+          path: { type: "string", description: "Caminho do arquivo a editar" },
+          oldText: { type: "string", description: "Trecho exato a ser substituído (match idêntico)" },
+          newText: { type: "string", description: "Novo texto a inserir no lugar" },
+          replaceAll: { type: "boolean", description: "Substituir todas as ocorrências? Padrão: false" },
+        },
+        required: ["path", "oldText", "newText"],
+      },
+    },
+    async (args) => {
+      const path = args.path as string;
+      const oldText = args.oldText as string;
+      const newText = args.newText as string;
+      const replaceAll = args.replaceAll as boolean || false;
+
+      const { data, error } = await supabase
+        .from("project_files")
+        .select("content")
+        .eq("project_id", projectId).eq("path", path).maybeSingle();
+      if (error) return { toolCallId: "", ok: false, output: null, error: error.message };
+      if (!data) return { toolCallId: "", ok: false, output: null, error: `"${path}" não encontrado` };
+
+      const current = data.content as string;
+      if (!current.includes(oldText)) {
+        return { toolCallId: "", ok: false, output: null, error: `Texto não encontrado em "${path}". Use fs_read para ver o conteúdo atual.` };
+      }
+
+      let edited: string;
+      let count: number;
+      if (replaceAll) {
+        edited = current.split(oldText).join(newText);
+        count = current.split(oldText).length - 1;
+      } else {
+        edited = current.replace(oldText, newText);
+        count = 1;
+      }
+
+      const { error: writeErr } = await supabase.from("project_files").upsert({
+        project_id: projectId,
+        path,
+        content: edited,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: "project_id,path" });
+
+      if (writeErr) return { toolCallId: "", ok: false, output: null, error: writeErr.message };
+      return { toolCallId: "", ok: true, output: `${count} substituição(ões) em "${path}"`, artifacts: [path] };
+    },
+  );
+
+  // ─── fs_read_many: leitura em lote com glob (como read_multiple_files do Command Code) ───
+  reg.register(
+    {
+      name: "fs_read_many",
+      description: `Lê VÁRIOS arquivos de uma vez usando glob pattern. Muito mais eficiente que chamar fs_read várias vezes.
+
+Exemplos:
+- pattern: "src/**/*.tsx" → lê todos os TSX do src
+- pattern: "*.json" → lê todos os JSON da raiz
+- pattern: "src/components/*.tsx" → todos os componentes
+
+Retorna um objeto com { files: [{ path, content }] }.
+Arquivos muito grandes (>10KB) têm conteúdo truncado. Use fs_read individual para arquivos específicos grandes.`,
+      parameters: {
+        type: "object",
+        properties: {
+          pattern: { type: "string", description: "Glob pattern (ex: 'src/**/*.tsx', '*.json')" },
+          maxFiles: { type: "number", description: "Máximo de arquivos a ler. Padrão: 20. Máx: 50" },
+        },
+        required: ["pattern"],
+      },
+    },
+    async (args) => {
+      const pattern = args.pattern as string;
+      const maxFiles = Math.min((args.maxFiles as number) || 20, 50);
+
+      const { data, error } = await supabase
+        .from("project_files")
+        .select("path, content")
+        .eq("project_id", projectId);
+
+      if (error) return { toolCallId: "", ok: false, output: null, error: error.message };
+
+      const matched = (data ?? [] as FileEntry[])
+        .filter((f: FileEntry) => globMatch(pattern, f.path))
+        .slice(0, maxFiles);
+
+      const files = matched.map((f: FileEntry) => ({
+        path: f.path,
+        content: (f.content ?? "").length > 10240
+          ? (f.content ?? "").slice(0, 10240) + `\n... [truncado, ${f.content.length} bytes totais]`
+          : f.content,
+      }));
+
+      return { toolCallId: "", ok: true, output: { count: files.length, files } };
     },
   );
 }
