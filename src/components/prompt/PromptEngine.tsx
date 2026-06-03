@@ -54,8 +54,10 @@ export function PromptEngine({
 }: Props) {
   const [value, setValue] = useState("");
   const [model, setModel] = useState<"forge-1" | "forge-pro">("forge-1");
+  const [busy, setBusy] = useState(false);
   const taRef = useRef<HTMLTextAreaElement>(null);
   const navigate = useNavigate();
+  const createProject = useServerFn(createProjectFromPrompt);
 
   // auto-grow
   useEffect(() => {
@@ -70,16 +72,38 @@ export function PromptEngine({
     if (autoFocus) taRef.current?.focus();
   }, [autoFocus]);
 
-  function submit(text?: string) {
+  async function submit(text?: string) {
     const v = (text ?? value).trim();
-    if (!v) return;
+    if (!v || busy) return;
     if (onSubmit) {
       onSubmit(v);
       setValue("");
       return;
     }
-    warpToEditor(v, navigate);
+
+    // Require auth before creating a project
+    const { data: sess } = await supabase.auth.getSession();
+    if (!sess.session) {
+      try {
+        sessionStorage.setItem("forge.initialPrompt", v);
+      } catch { /* ignore */ }
+      navigate({ to: "/auth", search: { next: "/" } as never });
+      return;
+    }
+
+    setBusy(true);
+    const finishWarp = playWarp();
+    try {
+      const res = await createProject({ data: { prompt: v } });
+      navigate({ to: "/projects/$projectId", params: { projectId: res.projectId } });
+    } catch (e) {
+      finishWarp();
+      const msg = e instanceof Error ? e.message : "Falha ao criar projeto";
+      toast.error(msg);
+      setBusy(false);
+    }
   }
+
 
   const hero = size === "hero";
 
