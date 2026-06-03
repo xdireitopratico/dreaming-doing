@@ -1,5 +1,5 @@
-// index.ts — Edge Function agent-run v2
-// Ferramentas enxutas (6), loop inteligente, streaming SSE
+// index.ts — Edge Function agent-run v3 (DEFINITIVO)
+// Model Router + Compression + Parallel Exec + Runtime Observer + Skills + SSE
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 
 import { ToolRegistry } from "./registry.ts";
@@ -8,6 +8,7 @@ import { createLLMProvider } from "./adapters/llm.ts";
 import { createSandboxProvider } from "./sandbox.ts";
 import { registerFsTools } from "./tools/fs.ts";
 import { registerShellTool } from "./tools/shell.ts";
+import { SkillRegistry } from "./skills.ts";
 import { LoopPhase, type AgentState, type ChatMessage } from "./types.ts";
 
 const corsHeaders = {

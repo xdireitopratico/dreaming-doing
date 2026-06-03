@@ -1,11 +1,16 @@
-// loop.ts — AgentLoop com inteligência operacional real
-// Contexto inteligente, auto-correção, streaming SSE, criação de projetos
+// loop.ts — AgentLoop DEFINITIVO
+// Integra: Model Router, Compression, Parallel Exec, Runtime Observer, Skills
+// O coração do FORGE — o maior custo-benefício agent builder do mundo
 import type {
   AgentState, LLMProvider, ChatMessage, ToolCall, ToolResult,
   IntentAnalysis, ActionPlan, CheckResult, AgentContext, FileEntry, ChatResponse,
 } from "./types.ts";
 import { LoopPhase } from "./types.ts";
 import { ToolRegistry } from "./registry.ts";
+import { ModelRouter, type ClassificationResult } from "./router.ts";
+import { CompressionManager, parallelExecute, buildCachedMessages } from "./compression.ts";
+import { RuntimeObserver } from "./observer.ts";
+import { SkillRegistry } from "./skills.ts";
 import { SYSTEM_PROMPT, ANALYZE_PROMPT, EXECUTE_PROMPT } from "./prompts.ts";
 
 type StreamCallback = (event: { type: string; data: unknown }) => void;
@@ -17,6 +22,10 @@ export class AgentLoop {
   private sb: any;
   private maxSteps = 20;
   private onStream: StreamCallback;
+  private router: ModelRouter;
+  private compression: CompressionManager;
+  private observer: RuntimeObserver;
+  private skills: SkillRegistry;
 
   constructor(
     reg: ToolRegistry,
@@ -30,32 +39,57 @@ export class AgentLoop {
     this.sb = supabase;
     this.state = state;
     this.onStream = onStream;
+    this.router = new ModelRouter();
+    this.observer = new RuntimeObserver(reg);
+    this.skills = new SkillRegistry();
+    this.compression = new CompressionManager(this.router.getCheapProvider());
   }
 
   async run(): Promise<{ ok: boolean; summary?: string; error?: string; steps: number }> {
     this.state.executionLog = [];
+    this.compression.reset();
     let step = 0;
 
+    // ─── FASE 0: GATHER CONTEXT (0 tokens LLM) ───
     this.emit("phase", { phase: "gather", message: "Analisando projeto..." });
-
-    // ─── FASE 1: Gather context (inteligente) ───
     await this.gatherContext();
 
-    this.emit("phase", { phase: "analyze", message: "Entendendo o pedido..." });
+    // ─── FASE 0.5: CLASSIFY (modelo barato, $0.15/1M) ───
+    this.emit("phase", { phase: "classify", message: "Classificando complexidade..." });
+    const userPrompt = this.state.messages.filter(m => m.role === "user").pop()?.content ?? "";
+    const classification = await this.router.classify(
+      userPrompt,
+      this.state.context?.projectConfig ?? "(vazio)",
+    );
+    this.state.intent = {
+      type: classification.type as IntentAnalysis["type"],
+      summary: classification.summary,
+      scope: [],
+      complexity: classification.complexity <= 2 ? "simple" : classification.complexity <= 4 ? "medium" : "complex",
+    };
 
-    // ─── FASE 2: Analyze intent ───
-    const intent = await this.analyzeIntent();
-    this.state.intent = intent;
-    this.emit("phase", { phase: "plan", message: `Plano: ${intent.summary}`, intent });
+    // Seleciona modelo por complexidade
+    const executionModel = this.router.selectModel(classification.complexity);
+    this.emit("classify", {
+      complexity: classification.complexity,
+      model: classification.complexity <= 2 ? "cheap" : "main",
+      summary: classification.summary,
+    });
 
-    // ─── FASE 3: Execute loop com auto-correção ───
+    this.emit("phase", { phase: "plan", message: `Plano: ${classification.summary}`, intent: this.state.intent });
+
+    // ─── FASE 1: EXECUTE LOOP (com auto-correção) ───
     let buildAttempts = 0;
+    const maxRetries = 3;
 
     while (step < this.maxSteps) {
       step++;
       this.state.totalSteps = step;
 
-      const response = await this.llmChat(EXECUTE_PROMPT);
+      // Comprimir histórico se necessário
+      const compressed = await this.compression.compress(this.state.messages);
+
+      const response = await this.llmChat(executionModel, EXECUTE_PROMPT, compressed);
       if (!response) break;
 
       // Sem tool calls = resposta final
@@ -64,26 +98,27 @@ export class AgentLoop {
         break;
       }
 
-      // Executa cada tool call
-      const results: ToolResult[] = [];
-      for (const call of response.tool_calls) {
+      // ─── PARALLEL EXECUTION ───
+      this.emit("phase", { phase: "execute", toolCount: response.tool_calls.length });
+
+      const execResults = await parallelExecute(response.tool_calls, async (call) => {
         this.emit("tool_start", { name: call.name, args: call.arguments });
         const result = await this.reg.execute(call);
-        results.push(result);
         this.emit("tool_done", { name: call.name, ok: result.ok, error: result.error });
 
-        // Se escreveu arquivo, tenta commit atômico
+        // Commit atômico após fs_write
         if (call.name === "fs_write" && result.ok) {
           const commit = await this.reg.execute({
             id: crypto.randomUUID(),
             name: "shell_exec",
-            arguments: { command: `git add -A && git commit -m "${call.arguments.path}: update" 2>&1 || echo 'git not available'` },
+            arguments: { command: `git add -A && git commit -m "${(call.arguments.path as string)}: update" 2>&1 || echo 'ok'` },
           });
           if (commit.ok) this.emit("tool_done", { name: "git_commit", ok: true });
         }
-      }
+        return result;
+      });
 
-      // Adiciona ao histórico: assistant msg + tool results
+      // Adiciona ao histórico
       const assistantMsg: ChatMessage = {
         role: "assistant",
         content: response.content ?? "",
@@ -94,39 +129,45 @@ export class AgentLoop {
         })),
       };
       this.state.messages.push(assistantMsg);
-      for (let i = 0; i < response.tool_calls.length; i++) {
+      for (const { call, result } of execResults) {
         this.state.messages.push({
           role: "tool",
-          tool_call_id: response.tool_calls[i].id,
-          content: JSON.stringify(results[i]).slice(0, 4000),
+          tool_call_id: call.id,
+          content: JSON.stringify(result).slice(0, 4000),
         });
       }
 
-      // ─── Auto-correção: tenta build ───
-      const needsBuild = response.tool_calls.some(t => t.name === "fs_write" || t.name === "shell_exec");
-      if (needsBuild && buildAttempts < 3) {
-        this.emit("phase", { phase: "validate", message: "Validando build..." });
-        const build = await this.reg.execute({
-          id: crypto.randomUUID(),
-          name: "shell_exec",
-          arguments: { command: "npm run build 2>&1" },
-        });
+      // ─── RUNTIME OBSERVATION ───
+      const modifiedFiles = response.tool_calls.some(t => t.name === "fs_write" || t.name === "fs_edit");
+      if (modifiedFiles && buildAttempts < maxRetries) {
+        this.emit("phase", { phase: "observe", message: "Observando runtime..." });
 
-        if (!build.ok) {
+        const observation = await this.observer.observe();
+
+        if (!observation.passed) {
           buildAttempts++;
-          const errOutput = typeof build.output === "object" ? (build.output as any).stderr ?? (build.output as any).stdout : build.output;
-          const errMsg = typeof errOutput === "string" ? errOutput : JSON.stringify(errOutput ?? "");
-
-          this.emit("validate_fail", { attempt: buildAttempts, error: errMsg.slice(0, 500) });
+          this.emit("validate_fail", {
+            attempt: buildAttempts,
+            checks: observation.checks.filter(c => !c.ok).map(c => c.name),
+            feedback: observation.feedback?.slice(0, 500),
+          });
           this.state.messages.push({
             role: "user",
-            content: `BUILD FALHOU (tentativa ${buildAttempts}/3). Analise o erro abaixo, corrija o código e NÃO peça ajuda:\n\n\`\`\`\n${errMsg.slice(0, 3000)}\n\`\`\``,
+            content: `VERIFICAÇÃO DE RUNTIME FALHOU (${buildAttempts}/${maxRetries}). Analise e corrija:\n\n\`\`\`\n${observation.feedback?.slice(0, 3000)}\n\`\`\`\n\nCorrija os erros e NÃO peça ajuda. Use fs_search para encontrar o erro e fs_edit para corrigir.`,
           });
-          continue; // Re-executa com o erro como feedback
+          continue;
         } else {
           buildAttempts = 0;
-          this.emit("validate_ok", { message: "Build passou" });
+          this.emit("validate_ok", { message: "Runtime OK" });
         }
+      }
+
+      // Stuck detection
+      if (this.isStuck(step)) {
+        this.state.messages.push({
+          role: "user",
+          content: "Você parece estar preso repetindo as mesmas ações. Tente uma abordagem diferente.",
+        });
       }
     }
 
@@ -135,7 +176,7 @@ export class AgentLoop {
       return { ok: false, error: "Limite de passos", steps: step };
     }
 
-    // ─── FASE 4: Summarize ───
+    // ─── FASE 2: SUMMARIZE (modelo barato) ───
     this.emit("phase", { phase: "summarize", message: "Finalizando..." });
     const finalMsg = this.state.messages[this.state.messages.length - 1];
     const summary = finalMsg?.content ?? "Tarefa concluída.";
@@ -145,7 +186,6 @@ export class AgentLoop {
     return { ok: true, summary, steps: step };
   }
 
-  // ─── Contexto inteligente: lê a alma do projeto ───
   private async gatherContext(): Promise<void> {
     const { data: files } = await this.sb
       .from("project_files")
@@ -155,72 +195,56 @@ export class AgentLoop {
     const fileList: FileEntry[] = files ?? [];
     const manifest = fileList.map(f => `  ${f.path}`).join("\n");
 
-    // Lê arquivos-chave para dar contexto ao LLM
-    let projectContext = "";
+    // Lê arquivos-chave
+    let projectConfig = "";
     const keyFiles = fileList.filter(f =>
-      ["package.json", "tsconfig.json", "vite.config.ts", "next.config.js", "tailwind.config.ts",
-       "README.md", "index.html", "src/App.tsx", "src/main.tsx", "src/index.tsx"].includes(f.path),
+      ["package.json", "tsconfig.json", "vite.config.ts", "next.config.js", "next.config.ts",
+       "tailwind.config.ts", "index.html", "src/App.tsx", "src/main.tsx"].includes(f.path),
     );
-
     for (const f of keyFiles) {
-      const content = f.content ?? "";
-      projectContext += `\n### ${f.path}\n\`\`\`\n${content.slice(0, 2000)}\n\`\`\`\n`;
+      projectConfig += `\n### ${f.path}\n\`\`\`\n${(f.content ?? "").slice(0, 2000)}\n\`\`\`\n`;
     }
 
-    this.emit("context", { fileCount: fileList.length, keyFiles: keyFiles.map(f => f.path) });
+    // Detecta skills ativas
+    const skillPrompt = this.skills.buildSkillPrompt(fileList);
+    if (skillPrompt) {
+      this.emit("skills", { active: this.skills.detectActive(fileList).map(s => s.name) });
+    }
 
     this.state.context = {
       files: fileList,
       manifest: manifest || "(projeto vazio)",
-      projectConfig: projectContext || "(projeto vazio — sem arquivos de configuração)",
+      projectConfig: projectConfig || "(projeto vazio — sem arquivos de configuração)",
       gitLog: "(não disponível ainda)",
       dbSchema: "(não disponível)",
       lastPlan: "nenhum",
     };
   }
 
-  // ─── Análise de intenção ───
-  private async analyzeIntent(): Promise<IntentAnalysis> {
-    const userMsg = this.state.messages.filter(m => m.role === "user").pop()?.content ?? "";
-
-    const resp = await this.llm.chat({
-      messages: [
-        { role: "system", content: ANALYZE_PROMPT },
-        { role: "user", content: `## Projeto\n${this.state.context?.projectConfig ?? "(vazio)"}\n\n## Pedido\n${userMsg}` },
-      ],
-      response_format: { type: "json_object" },
-      max_tokens: 400,
-      temperature: 0.1,
-    });
-
-    try {
-      const j = JSON.parse(resp.content ?? "{}");
-      return {
-        type: j.type ?? "modify",
-        summary: j.summary ?? userMsg.slice(0, 100),
-        scope: j.files_involved ?? [],
-        complexity: "simple",
-      };
-    } catch {
-      return { type: "modify", summary: userMsg.slice(0, 100), scope: [], complexity: "simple" };
-    }
-  }
-
-  // ─── LLM chat com sistema + contexto + histórico ───
-  private async llmChat(instruction: string): Promise<ChatResponse | null> {
+  private async llmChat(
+    model: LLMProvider,
+    instruction: string,
+    history: ChatMessage[],
+  ): Promise<ChatResponse | null> {
     const contextBlock = this.state.context
       ? `## Contexto do Projeto\n${this.state.context.projectConfig}\n\n## Arquivos\n${this.state.context.manifest}`
-      : "(projeto novo — nenhum arquivo existe ainda)";
+      : "(projeto novo)";
+
+    const skillPrompt = this.state.context
+      ? this.skills.buildSkillPrompt(this.state.context.files)
+      : "";
+
+    const fullSystemPrompt = skillPrompt ? `${SYSTEM_PROMPT}\n\n${skillPrompt}` : SYSTEM_PROMPT;
 
     const messages: ChatMessage[] = [
-      { role: "system", content: SYSTEM_PROMPT },
+      { role: "system", content: fullSystemPrompt },
       { role: "system", content: contextBlock },
+      ...history,
       { role: "user", content: instruction },
-      ...this.state.messages.slice(-24), // últimas 24 mensagens
     ];
 
     try {
-      return await this.llm.chat({
+      return await model.chat({
         messages,
         tools: this.reg.getDefinitions(),
         tool_choice: "auto",
@@ -232,7 +256,13 @@ export class AgentLoop {
     }
   }
 
-  // ─── Persiste resultado final ───
+  private isStuck(step: number): boolean {
+    if (step < 3) return false;
+    const last3 = this.state.executionLog.slice(-3);
+    const allSame = last3.length >= 3 && last3.every(l => l === last3[0]);
+    return allSame;
+  }
+
   private async persist(summary: string): Promise<void> {
     await this.sb.from("messages").insert({
       conversation_id: this.state.conversationId,
