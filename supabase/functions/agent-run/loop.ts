@@ -135,6 +135,19 @@ export class AgentLoop {
           tool_call_id: call.id,
           content: JSON.stringify(result).slice(0, 4000),
         });
+
+        // Após fs_write/fs_edit bem-sucedido, computa embedding para RAG
+        if ((call.name === "fs_write" || call.name === "fs_edit") && result.ok) {
+          const filePath = (call.arguments as any).path;
+          if (filePath) {
+            this.computeEmbedding(filePath).catch(() => {});
+          }
+        }
+      }
+
+      // Salva checkpoint a cada 3 steps (retoma se cair)
+      if (step % 3 === 0) {
+        this.saveCheckpoint().catch(() => {});
       }
 
       // ─── RUNTIME OBSERVATION ───
@@ -271,6 +284,62 @@ export class AgentLoop {
       tool_calls: [],
     });
     await this.sb.from("projects").update({ updated_at: new Date().toISOString() }).eq("id", this.state.projectId);
+  }
+
+  private async saveCheckpoint(): Promise<void> {
+    try {
+      await this.sb.from("agent_checkpoints").upsert({
+        project_id: this.state.projectId,
+        conversation_id: this.state.conversationId,
+        phase: this.state.phase,
+        state: {
+          messages: this.state.messages.slice(-30),
+          currentStepIndex: this.state.currentStepIndex,
+          totalSteps: this.state.totalSteps,
+        },
+        updated_at: new Date().toISOString(),
+      }, { onConflict: "project_id,conversation_id" });
+    } catch { /* checkpoint é best-effort */ }
+  }
+
+  private async computeEmbedding(path: string): Promise<void> {
+    try {
+      const { data } = await this.sb
+        .from("project_files")
+        .select("content")
+        .eq("project_id", this.state.projectId)
+        .eq("path", path)
+        .maybeSingle();
+      if (!data?.content) return;
+
+      const contentHash = await this.simpleHash(data.content.slice(0, 8000));
+
+      // Verifica se já tem embedding com esse hash
+      const { data: existing } = await this.sb
+        .from("file_embeddings")
+        .select("id")
+        .eq("project_id", this.state.projectId)
+        .eq("file_path", path)
+        .eq("content_hash", contentHash)
+        .maybeSingle();
+
+      if (existing) return; // Já cacheado
+
+      // Upsert com hash (embedding é computado async depois)
+      await this.sb.from("file_embeddings").upsert({
+        project_id: this.state.projectId,
+        file_path: path,
+        content_hash: contentHash,
+      }, { onConflict: "project_id,file_path" });
+    } catch { /* best-effort */ }
+  }
+
+  private async simpleHash(text: string): Promise<string> {
+    const encoder = new TextEncoder();
+    const data = encoder.encode(text);
+    const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    return hashArray.map(b => b.toString(16).padStart(2, "0")).join("");
   }
 
   private emit(type: string, data: unknown): void {

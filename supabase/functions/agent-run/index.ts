@@ -71,6 +71,28 @@ Deno.serve(async (req) => {
     registerFsTools(reg, { supabase, projectId });
     registerShellTool(reg, { sandbox, projectId, supabase });
 
+    // Detecta se o cliente quer SSE ou JSON
+    const acceptSSE = (req.headers.get("Accept") ?? "").includes("text/event-stream");
+    const querySSE = new URL(req.url).searchParams.has("sse");
+    const useSSE = acceptSSE || querySSE;
+
+    if (!useSSE) {
+      // JSON fallback — compatível com supabase.functions.invoke()
+      const state: AgentState = {
+        projectId, conversationId, userId: userData.user.id,
+        messages: [...messages],
+        phase: LoopPhase.GATHER_CONTEXT,
+        currentStepIndex: 0,
+        context: null, intent: null, plan: null,
+        validationResults: [], executionLog: [], retryFeedback: null, totalSteps: 0,
+      };
+
+      const loop = new AgentLoop(reg, llm, supabase, state);
+      const result = await loop.run();
+      sandbox.destroy().catch(() => {});
+      return json(result);
+    }
+
     // ─── SSE Stream ───
     const stream = new ReadableStream({
       start(controller) {
