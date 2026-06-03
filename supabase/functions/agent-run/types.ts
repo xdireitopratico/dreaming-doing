@@ -92,7 +92,7 @@ export interface ActionPlan {
 }
 
 export interface IntentAnalysis {
-  type: "create_app" | "modify_feature" | "fix_bug" | "add_dependency" | "refactor" | "other";
+  type: "new_project" | "modify" | "fix" | "add_dep" | "other";
   scope: string[];
   complexity: "simple" | "medium" | "complex";
   summary: string;
@@ -108,6 +108,7 @@ export interface CheckResult {
 export interface AgentContext {
   files: FileEntry[];
   manifest: string;
+  projectConfig: string;
   gitLog: string;
   dbSchema: string;
   lastPlan: string;
