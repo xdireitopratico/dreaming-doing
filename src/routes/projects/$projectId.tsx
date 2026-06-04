@@ -1,34 +1,64 @@
+// $projectId.tsx — Editor FORGE (Refatorado v3)
+// Layout 30/70 split com divisor arrastável, todos os componentes integrados
+// Design system da home aplicado em cada elemento
 import { createFileRoute, useParams } from "@tanstack/react-router";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Group, Panel, Separator } from "react-resizable-panels";
 import { supabase } from "@/integrations/supabase/client";
 import { EditorShell } from "@/components/EditorShell";
-import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { ArrowUp, Loader2, Sparkles, Code2, Eye } from "lucide-react";
+import { CodeEditor, type Tab } from "@/components/editor/CodeEditor";
+import { FileTree } from "@/components/editor/FileTree";
+import { ChatInput, type ChatMessage } from "@/components/editor/ChatInput";
+import { AgentPanel } from "@/components/editor/AgentPanel";
+import { PreviewFrame } from "@/components/editor/PreviewFrame";
+import { StatusBar } from "@/components/editor/StatusBar";
+import { useSSE, type AgentProgress } from "@/hooks/useSSE";
+import {
+  Code2, Eye, PanelLeft, FolderOpen, Loader2, Sparkles,
+} from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/projects/$projectId")({
   component: EditorPage,
 });
 
-type Msg = { id: string; role: string; parts: any[]; tool_calls: any[]; created_at: string };
-type FileRow = { id: string; path: string; content: string; updated_at: string };
+// ---------------------------------------------------------------------------
+// Tipos locais
+// ---------------------------------------------------------------------------
+
+type Msg = {
+  id: string; role: string; parts: any[]; tool_calls: any[];
+  created_at: string;
+};
+type FileRow = {
+  id: string; path: string; content: string; updated_at: string;
+};
+
+// ---------------------------------------------------------------------------
+// Editor Page
+// ---------------------------------------------------------------------------
 
 function EditorPage() {
   const { projectId } = useParams({ from: "/projects/$projectId" });
   const qc = useQueryClient();
-  const [tab, setTab] = useState<"preview" | "code">("preview");
-  const [running, setRunning] = useState(false);
-  const [input, setInput] = useState("");
-  const scrollRef = useRef<HTMLDivElement>(null);
+
+  // ─── Estado local ───
+  const [input, setInputState] = useState("");
+  const [showFileTree, setShowFileTree] = useState(true);
+  const [activeView, setActiveView] = useState<"code" | "preview">("code");
+  const [activeFilePath, setActiveFilePath] = useState<string | null>(null);
+  const [openTabs, setOpenTabs] = useState<Tab[]>([]);
+
+  // ─── SSE ───
+  const sse = useSSE();
+
+  // ─── Queries ───
 
   const { data: project } = useQuery({
     queryKey: ["project", projectId],
     queryFn: async () => {
-      const { data, error } = await supabase.from("projects").select("*").eq("id", projectId).single();
-      if (error) throw error;
+      const { data } = await supabase.from("projects").select("*").eq("id", projectId).single();
       return data;
     },
   });
@@ -36,10 +66,9 @@ function EditorPage() {
   const { data: conversation } = useQuery({
     queryKey: ["conversation", projectId],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data } = await supabase
         .from("conversations").select("*").eq("project_id", projectId)
         .order("created_at", { ascending: true }).limit(1).maybeSingle();
-      if (error) throw error;
       return data;
     },
   });
@@ -48,10 +77,9 @@ function EditorPage() {
     queryKey: ["messages", conversation?.id],
     queryFn: async () => {
       if (!conversation) return [];
-      const { data, error } = await supabase
+      const { data } = await supabase
         .from("messages").select("*").eq("conversation_id", conversation.id)
         .order("created_at", { ascending: true });
-      if (error) throw error;
       return (data ?? []) as Msg[];
     },
     enabled: !!conversation,
@@ -60,238 +88,272 @@ function EditorPage() {
   const { data: files } = useQuery({
     queryKey: ["files", projectId],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data } = await supabase
         .from("project_files").select("*").eq("project_id", projectId).order("path");
-      if (error) throw error;
       return (data ?? []) as FileRow[];
     },
   });
 
-  // Realtime updates for messages + files
+  // ─── Realtime ───
+
   useEffect(() => {
     if (!conversation) return;
     const ch = supabase
       .channel(`editor-${projectId}`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "messages", filter: `conversation_id=eq.${conversation.id}` },
-        () => qc.invalidateQueries({ queryKey: ["messages", conversation.id] }))
-      .on("postgres_changes", { event: "*", schema: "public", table: "project_files", filter: `project_id=eq.${projectId}` },
-        () => qc.invalidateQueries({ queryKey: ["files", projectId] }))
+      .on("postgres_changes", {
+        event: "*", schema: "public", table: "messages",
+        filter: `conversation_id=eq.${conversation.id}`,
+      }, () => qc.invalidateQueries({ queryKey: ["messages", conversation.id] }))
+      .on("postgres_changes", {
+        event: "*", schema: "public", table: "project_files",
+        filter: `project_id=eq.${projectId}`,
+      }, () => qc.invalidateQueries({ queryKey: ["files", projectId] }))
       .subscribe();
     return () => { supabase.removeChannel(ch); };
   }, [projectId, conversation, qc]);
 
-  useEffect(() => {
-    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
-  }, [messages?.length]);
+  // ─── Derivados ───
 
-  // Auto-run agent if last message is from user and we're idle
-  const lastUserOnly = useMemo(() => {
-    if (!messages || messages.length === 0) return false;
-    return messages[messages.length - 1].role === "user";
+  const filePaths = useMemo(() => files?.map((f) => f.path) ?? [], [files]);
+  const fileMap = useMemo(() => {
+    const map = new Map<string, string>();
+    files?.forEach((f) => map.set(f.path, f.content ?? ""));
+    return map;
+  }, [files]);
+
+  const chatMessages: ChatMessage[] = useMemo(() => {
+    return (messages ?? []).map((m) => ({
+      id: m.id,
+      role: m.role as "user" | "assistant" | "tool",
+      content: m.parts?.map((p: any) => p.text).join("\n") ?? "",
+      toolCalls: m.tool_calls?.map((t: any) => ({ name: t.name, args: t.args?.path ?? "" })) ?? [],
+      timestamp: new Date(m.created_at).getTime(),
+    }));
   }, [messages]);
 
-  useEffect(() => {
-    if (lastUserOnly && conversation && !running) runAgent();
-     
-  }, [lastUserOnly, conversation?.id]);
+  // ─── Handlers ───
 
-  const runAgent = async () => {
-    if (!conversation || running) return;
-    setRunning(true);
-    try {
-      const { data, error } = await supabase.functions.invoke("agent-run", {
-        body: { projectId, conversationId: conversation.id },
-      });
-      if (error) throw error;
-      if (data?.error) toast.error(data.error);
-    } catch (e: any) {
-      toast.error(e?.message ?? "Erro no agente");
-    } finally {
-      setRunning(false);
-    }
-  };
+  const handleSelectFile = useCallback((path: string) => {
+    setActiveFilePath(path);
+    setActiveView("code");
 
-  const send = async () => {
-    if (!input.trim() || !conversation) return;
-    const text = input;
-    setInput("");
-    await supabase.from("messages").insert({
-      conversation_id: conversation.id, role: "user", parts: [{ type: "text", text }],
+    // Adiciona tab se não existe
+    setOpenTabs((prev) => {
+      if (prev.some((t) => t.path === path)) return prev;
+      return [...prev, { path, content: fileMap.get(path) ?? "", isModified: false }];
     });
-  };
+  }, [fileMap]);
 
-  const previewSrc = useMemo(() => {
-    const index = files?.find((f) => f.path === "index.html" || f.path === "/index.html");
-    if (!index) return "";
-    return index.content;
+  const handleCloseTab = useCallback((path: string) => {
+    setOpenTabs((prev) => {
+      const next = prev.filter((t) => t.path !== path);
+      if (activeFilePath === path) {
+        setActiveFilePath(next.length > 0 ? next[next.length - 1].path : null);
+      }
+      return next;
+    });
+  }, [activeFilePath]);
+
+  const handleContentChange = useCallback((path: string, content: string) => {
+    setOpenTabs((prev) =>
+      prev.map((t) => t.path === path ? { ...t, content, isModified: true } : t),
+    );
+  }, []);
+
+  const handleSend = useCallback((text: string) => {
+    if (!conversation) return;
+
+    supabase.from("messages").insert({
+      conversation_id: conversation.id,
+      role: "user",
+      parts: [{ type: "text", text }],
+    }).then(({ error }) => {
+      if (error) toast.error("Erro ao enviar mensagem");
+    });
+
+    sse.connect(projectId, conversation.id);
+  }, [conversation, projectId, sse]);
+
+  const handleStop = useCallback(() => {
+    sse.disconnect();
+    toast.info("Agente interrompido");
+  }, [sse]);
+
+  const handleCreateFile = useCallback((parentPath: string) => {
+    // TODO: modal de nome de arquivo → fs_write via agente
+    toast.info("Criar arquivo — via chat com o agente: 'Crie um arquivo X'");
+  }, []);
+
+  const handleCreateFolder = useCallback((parentPath: string) => {
+    toast.info("Criar pasta — via chat com o agente: 'Crie a pasta X'");
+  }, []);
+
+  const handleRename = useCallback((oldPath: string, newPath: string) => {
+    // TODO: shell_exec "mv old new"
+    toast.info(`Renomear: ${oldPath} → ${newPath}`);
+  }, []);
+
+  const handleDelete = useCallback((path: string) => {
+    // TODO: shell_exec "rm path"
+    toast.info(`Deletar: ${path}`);
+  }, []);
+
+  // Auto-run quando última mensagem é do usuário
+  const lastUserMsg = useMemo(() => {
+    if (!chatMessages.length) return false;
+    const last = chatMessages[chatMessages.length - 1];
+    return last.role === "user";
+  }, [chatMessages]);
+
+  useEffect(() => {
+    if (lastUserMsg && conversation && !sse.connected) {
+      sse.connect(projectId, conversation.id);
+    }
+  }, [lastUserMsg, conversation?.id]);
+
+  // ─── Fern ───
+
+  const fileTreeFiles = useMemo(() => {
+    if (files && files.length > 0) return files.map(f => f.path);
+    return [
+      "src/App.tsx", "src/main.tsx", "src/index.css",
+      "package.json", "index.html", "vite.config.ts", "tsconfig.json",
+    ];
   }, [files]);
 
   return (
     <EditorShell
       projectName={project?.name}
       right={
-        <div className="flex items-center gap-1 border border-[var(--border)] rounded-md p-0.5 bg-[var(--surface-1)]/60 backdrop-blur">
+        <div className="flex items-center gap-1">
+          {/* File Tree toggle */}
           <button
-            onClick={() => setTab("preview")}
-            className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-[11px] font-mono tracking-[0.2em] uppercase transition-colors ${
-              tab === "preview"
-                ? "bg-[var(--primary)] text-[var(--primary-foreground)]"
-                : "text-[var(--text-dim)] hover:text-foreground"
+            onClick={() => setShowFileTree((v) => !v)}
+            className={`p-1.5 rounded-md transition-colors ${
+              showFileTree
+                ? "bg-[var(--primary)]/10 text-[var(--primary)]"
+                : "text-[var(--text-ghost)] hover:text-[var(--text-dim)]"
             }`}
+            title="Explorer"
           >
-            <Eye className="size-3" /> Preview
+            <PanelLeft className="size-3.5" />
           </button>
-          <button
-            onClick={() => setTab("code")}
-            className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-[11px] font-mono tracking-[0.2em] uppercase transition-colors ${
-              tab === "code"
-                ? "bg-[var(--primary)] text-[var(--primary-foreground)]"
-                : "text-[var(--text-dim)] hover:text-foreground"
-            }`}
-          >
-            <Code2 className="size-3" /> Code
-          </button>
+
+          {/* View toggle */}
+          <div className="flex items-center gap-0.5 border border-[var(--border)] rounded-md p-0.5 bg-[var(--surface-1)]/60">
+            <button
+              onClick={() => setActiveView("code")}
+              className={`flex items-center gap-1 px-2 py-1 rounded text-[10px] font-mono transition-colors ${
+                activeView === "code"
+                  ? "bg-[var(--primary)] text-[var(--primary-foreground)]"
+                  : "text-[var(--text-dim)] hover:text-[var(--foreground)]"
+              }`}
+            >
+              <Code2 className="size-3" /> Code
+            </button>
+            <button
+              onClick={() => setActiveView("preview")}
+              className={`flex items-center gap-1 px-2 py-1 rounded text-[10px] font-mono transition-colors ${
+                activeView === "preview"
+                  ? "bg-[var(--primary)] text-[var(--primary-foreground)]"
+                  : "text-[var(--text-dim)] hover:text-[var(--foreground)]"
+              }`}
+            >
+              <Eye className="size-3" /> Preview
+            </button>
+          </div>
+
+          {sse.connected && (
+            <span className="flex items-center gap-1.5 font-mono text-[9px] tracking-[0.2em] uppercase text-[var(--primary)]">
+              <Loader2 className="size-3 animate-spin" />
+              FORGING
+            </span>
+          )}
         </div>
       }
     >
-      <div className="h-full flex min-h-0">
-        {/* Chat panel */}
-        <aside className="w-[400px] border-r border-[var(--border)] flex flex-col min-h-0 bg-[var(--surface-1)]/40 backdrop-blur-xl">
-          <div className="px-4 py-2.5 border-b border-[var(--border)] flex items-center justify-between">
-            <span className="font-mono text-[10px] tracking-[0.3em] uppercase text-[var(--text-ghost)]">
-              · MISSION CONTROL ·
-            </span>
-            {running && (
-              <span className="flex items-center gap-1.5 font-mono text-[10px] tracking-[0.2em] uppercase text-[var(--primary)]">
-                <Loader2 className="size-3 animate-spin" /> FORGING
-              </span>
-            )}
-          </div>
-          <ScrollArea className="flex-1" ref={scrollRef as any}>
-            <div className="p-4 space-y-5">
-              {(messages ?? []).length === 0 && !running && (
-                <div className="text-sm text-[var(--text-ghost)] italic">
-                  Aguardando o primeiro prompt…
-                </div>
-              )}
-              {(messages ?? []).map((m) => {
-                const isUser = m.role === "user";
-                return (
-                  <div key={m.id} className={isUser ? "pl-6" : "pr-6"}>
-                    <div className="font-mono text-[10px] tracking-[0.3em] uppercase mb-1.5 inline-flex items-center gap-1.5 text-[var(--text-ghost)]">
-                      {!isUser && <Sparkles className="size-3 text-[var(--primary)]" />}
-                      {isUser ? "YOU" : "FORGE"}
-                    </div>
-                    <div
-                      className={`rounded-lg p-3 text-sm leading-relaxed ${
-                        isUser
-                          ? "bg-[var(--primary)]/10 border border-[var(--primary)]/30 text-foreground"
-                          : "bg-[var(--surface-2)]/70 border border-[var(--border)] text-foreground"
-                      }`}
-                    >
-                      {m.parts?.map((p: any, i: number) =>
-                        p.type === "text" ? (
-                          <div key={i} className="whitespace-pre-wrap">{p.text}</div>
-                        ) : null,
-                      )}
-                      {m.tool_calls && m.tool_calls.length > 0 && (
-                        <div className="mt-2.5 space-y-1">
-                          {m.tool_calls.map((t: any, i: number) => (
-                            <div
-                              key={i}
-                              className="text-[11px] font-mono px-2 py-1 rounded bg-background/60 border border-[var(--border)] text-[var(--text-dim)]"
-                            >
-                              <span className="text-[var(--primary)]">▸</span> {t.name}
-                              <span className="text-[var(--text-ghost)]">({t.args?.path ?? ""})</span>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </ScrollArea>
-          <div className="border-t border-[var(--border)] p-3 bg-background/60">
-            <div className="relative">
-              <Textarea
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
-                    send();
-                  }
-                }}
-                placeholder="Peça uma mudança…"
-                className="min-h-20 resize-none pr-12 bg-[var(--surface-2)]/80 border-[var(--border)] focus-visible:ring-[var(--primary)]/40"
-              />
-              <Button
-                size="icon"
-                className="absolute right-2 bottom-2 size-8 bg-[var(--primary)] text-[var(--primary-foreground)] hover:bg-[var(--primary)]/90"
-                onClick={send}
-                disabled={!input.trim() || running}
-              >
-                <ArrowUp className="size-4" />
-              </Button>
-            </div>
-            <div className="mt-2 font-mono text-[9px] tracking-[0.25em] uppercase text-[var(--text-ghost)]">
-              ⏎ ENTER TO SEND · ⇧⏎ NEW LINE
-            </div>
-          </div>
-        </aside>
+      {/* Main layout: Split 30/70 */}
+      <Group orientation="horizontal" className="h-full">
+        {/* ─── LEFT: Chat + AgentPanel ─── */}
+        <Panel defaultSize={30} minSize={20} maxSize={50} className="flex flex-col">
+          <div className="flex flex-col h-full border-r border-[var(--border)] bg-[var(--surface-1)]/40">
+            {/* Agent Panel com animação condicional */}
+            <AgentPanel running={sse.connected} progress={sse.progress} />
 
-        {/* Preview / Code */}
-        <div className="flex-1 min-w-0 bg-background relative">
-          {tab === "preview" ? (
-            previewSrc ? (
-              <div className="absolute inset-3 rounded-lg overflow-hidden border border-[var(--border)] shadow-[0_0_60px_-20px_rgba(255,182,39,0.25)]">
-                <iframe
-                  title="preview"
-                  srcDoc={previewSrc}
-                  sandbox="allow-scripts"
-                  className="w-full h-full bg-white"
+            {/* Chat */}
+            <div className="flex-1 min-h-0">
+              <ChatInput
+                messages={chatMessages}
+                running={sse.connected}
+                onSend={handleSend}
+                onStop={handleStop}
+                files={filePaths}
+              />
+            </div>
+          </div>
+        </Panel>
+
+        {/* Divisor arrastável */}
+        <Separator className="w-[3px] bg-[var(--border)] hover:bg-[var(--primary)]/40 active:bg-[var(--primary)]/60 transition-colors cursor-col-resize relative group">
+          <div className="absolute inset-y-0 -left-1 -right-1 z-10" />
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 size-4 rounded-full bg-[var(--surface-1)] border border-[var(--border)] group-hover:border-[var(--primary)]/40 transition-colors grid place-items-center">
+            <div className="size-1 rounded-full bg-[var(--text-ghost)] group-hover:bg-[var(--primary)] transition-colors" />
+          </div>
+        </Separator>
+
+        {/* ─── RIGHT: Editor + Preview ─── */}
+        <Panel defaultSize={70} minSize={50} maxSize={80} className="flex flex-col min-h-0">
+          <div className="flex-1 flex min-h-0">
+            {/* File Tree (colapsável) */}
+            {showFileTree && (
+              <div className="w-[240px] shrink-0 border-r border-[var(--border)]">
+                <FileTree
+                  files={fileTreeFiles}
+                  activePath={activeFilePath}
+                  onSelectFile={handleSelectFile}
+                  onCreateFile={handleCreateFile}
+                  onCreateFolder={handleCreateFolder}
+                  onRename={handleRename}
+                  onDelete={handleDelete}
                 />
               </div>
-            ) : (
-              <div className="h-full grid place-items-center">
-                <div className="text-center">
-                  <div className="font-mono text-[10px] tracking-[0.4em] uppercase text-[var(--text-ghost)] mb-3">
-                    · STANDING BY ·
-                  </div>
-                  <div className="text-sm text-[var(--text-dim)]">
-                    {running
-                      ? "Compilando seu universo…"
-                      : "O preview aparecerá aqui assim que o primeiro arquivo for criado."}
-                  </div>
-                </div>
-              </div>
-            )
-          ) : (
-            <div className="h-full flex">
-              <div className="w-64 border-r border-[var(--border)] p-2 overflow-auto bg-[var(--surface-1)]/40">
-                <div className="font-mono text-[10px] tracking-[0.3em] uppercase text-[var(--text-ghost)] px-2 py-1.5">
-                  FILES
-                </div>
-                {(files ?? []).map((f) => (
-                  <div
-                    key={f.id}
-                    className="px-2 py-1 text-sm rounded hover:bg-[var(--surface-2)] cursor-default font-mono truncate text-[var(--text-dim)]"
-                  >
-                    {f.path}
-                  </div>
-                ))}
-              </div>
-              <div className="flex-1 overflow-auto p-4">
-                <pre className="text-xs font-mono whitespace-pre-wrap text-[var(--text-dim)]">
-                  {files?.map((f) => `// ${f.path}\n${f.content}\n\n`).join("")}
-                </pre>
-              </div>
+            )}
+
+            {/* Content: Code ou Preview */}
+            <div className="flex-1 min-w-0">
+              {activeView === "code" ? (
+                <CodeEditor
+                  tabs={openTabs}
+                  activePath={activeFilePath}
+                  onSelectTab={handleSelectFile}
+                  onCloseTab={handleCloseTab}
+                  onContentChange={handleContentChange}
+                />
+              ) : (
+                <PreviewFrame
+                  files={files?.map((f) => ({ path: f.path, content: f.content ?? "" })) ?? []}
+                  running={sse.connected}
+                  devUrl={null}
+                />
+              )}
             </div>
-          )}
-        </div>
-      </div>
+          </div>
+        </Panel>
+      </Group>
+
+      {/* Statusbar */}
+      <StatusBar
+        gitBranch="main"
+        gitAhead={0}
+        gitBehind={0}
+        buildStatus={sse.progress.runtimeChecks.some((c) => c.ok) ? "ok" : null}
+        cost={sse.progress.cost}
+        model={sse.progress.model}
+        skills={sse.progress.skills}
+        connected={sse.connected}
+        onToggleTerminal={() => toast.info("Terminal — em breve")}
+        onToggleGitPanel={() => toast.info("Git Panel — em breve")}
+      />
     </EditorShell>
   );
 }
