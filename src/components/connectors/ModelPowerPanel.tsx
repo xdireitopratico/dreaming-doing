@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { Brain, Shuffle, Zap, Info } from "lucide-react";
+import { Brain, Shuffle, Zap, Info, Mic, Globe } from "lucide-react";
 import {
   type AgentPreferences,
   type ModelPowerMode,
   type PoolProviderId,
+  type SttProviderId,
   loadAgentPreferences,
   saveAgentPreferences,
 } from "@/lib/agent-preferences";
@@ -20,23 +21,25 @@ const MODES: {
     id: "auto",
     title: "Router automático",
     description:
-      "Classifica cada pedido e usa modelo barato para tarefas simples e modelo forte para código complexo.",
+      "Classifica cada pedido e escolhe modelo barato ou forte automaticamente.",
     icon: <Brain className="size-4" />,
   },
   {
     id: "robin",
     title: "ROBIN (pool de chaves)",
     description:
-      "A cada requisição ao modelo, troca de chave no pool (ex.: 5–10 keys NVIDIA/Groq) para mitigar rate limit gratuito.",
+      "Troca de chave a cada requisição no pool (NVIDIA/Groq) para mitigar rate limit.",
     icon: <Shuffle className="size-4" />,
   },
   {
     id: "fixed",
     title: "Modelo fixo",
-    description: "Sempre usa o provedor que você escolher no editor — sem roteamento automático.",
+    description: "Sempre o mesmo modelo — sem roteamento automático.",
     icon: <Zap className="size-4" />,
   },
 ];
+
+const MODEL_OPTIONS = PROVIDER_PRESETS.filter((p) => !p.customKey);
 
 export function ModelPowerPanel() {
   const [prefs, setPrefs] = useState<AgentPreferences>(() => loadAgentPreferences());
@@ -53,14 +56,14 @@ export function ModelPowerPanel() {
     >
       <h2 className="flex items-center gap-2 font-mono text-[10px] tracking-[0.2em] uppercase text-[var(--text-dim)] mb-1">
         <Zap className="size-3 text-[var(--primary)]" />
-        Potência do modelo
+        Modelo e voz
       </h2>
       <p className="font-mono text-[9px] text-[var(--text-ghost)] mb-4 leading-relaxed">
-        Define como o agente escolhe o LLM em cada execução. Preferências salvas só neste navegador — chaves
-        continuam criptografadas no Supabase.
+        Escolha aqui como o agente e o microfone funcionam. No editor, o seletor de modelo segue estas
+        preferências.
       </p>
 
-      <div className="grid gap-3 sm:grid-cols-3 mb-4">
+      <div className="grid gap-3 sm:grid-cols-3 mb-5">
         {MODES.map((m) => {
           const active = prefs.mode === m.id;
           return (
@@ -92,47 +95,70 @@ export function ModelPowerPanel() {
         })}
       </div>
 
-      {prefs.mode === "robin" && (
-        <div className="mb-4 p-3 rounded-lg border border-amber-400/20 bg-amber-400/5">
-          <label className="font-mono text-[9px] uppercase tracking-wider text-amber-400/90">
-            Pool para rotação
-          </label>
-          <select
-            value={prefs.poolProvider ?? "groq"}
-            onChange={(e) =>
-              setPrefs((p) => ({ ...p, poolProvider: e.target.value as PoolProviderId }))
-            }
-            className="mt-2 w-full max-w-xs rounded-md border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2 font-mono text-[11px] text-[var(--foreground)]"
-          >
-            <option value="groq">Groq (gratuito, rate limit por key)</option>
-            <option value="nvidia">NVIDIA NIM (gratuito, rate limit por key)</option>
-          </select>
-          <p className="mt-2 flex items-start gap-1.5 font-mono text-[9px] text-[var(--text-ghost)]">
-            <Info className="size-3 shrink-0 mt-0.5" />
-            Adicione várias chaves do mesmo provedor com &quot;Adicionar ao pool&quot;. O ROBIN alterna a chave a
-            cada chamada ao LLM e avisa se alguma key bater no rate limit.
+      <div className="rounded-lg border border-[var(--border-strong,var(--border))] bg-[var(--surface-2)]/50 p-4 mb-4">
+        <label className="font-mono text-[9px] uppercase tracking-wider text-[var(--text-dim)]">
+          Modelo do agente (chat / código)
+        </label>
+        {prefs.mode === "auto" && (
+          <p className="mt-2 font-mono text-[10px] text-[var(--text-ghost)]">
+            Modo automático: o router escolhe entre modelos barato e forte conforme a complexidade do pedido.
+            Cadastre pelo menos uma chave abaixo (Anthropic, Groq, NVIDIA, etc.).
           </p>
-        </div>
-      )}
-
-      {prefs.mode === "fixed" && (
-        <div className="mb-2">
-          <label className="font-mono text-[9px] uppercase tracking-wider text-[var(--text-dim)]">
-            Modelo fixo
-          </label>
+        )}
+        {prefs.mode === "robin" && (
+          <div className="mt-2 space-y-2">
+            <select
+              value={prefs.poolProvider ?? "groq"}
+              onChange={(e) =>
+                setPrefs((p) => ({ ...p, poolProvider: e.target.value as PoolProviderId }))
+              }
+              className="w-full max-w-xs rounded-md border border-[var(--border)] bg-[var(--surface-1)] px-3 py-2 font-mono text-[11px]"
+            >
+              <option value="groq">Groq · Llama 3.3 (pool)</option>
+              <option value="nvidia">NVIDIA NIM · Llama 3.1 8B (pool)</option>
+            </select>
+            <p className="font-mono text-[9px] text-[var(--text-ghost)] flex items-start gap-1.5">
+              <Info className="size-3 shrink-0 mt-0.5" />
+              Use o pool do provedor selecionado. Adicione chaves na seção NVIDIA ou Groq abaixo.
+            </p>
+          </div>
+        )}
+        {prefs.mode === "fixed" && (
           <select
             value={prefs.fixedPresetId ?? "anthropic-sonnet"}
             onChange={(e) => setPrefs((p) => ({ ...p, fixedPresetId: e.target.value }))}
-            className="mt-2 w-full max-w-md rounded-md border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2 font-mono text-[11px] text-[var(--foreground)]"
+            className="mt-2 w-full max-w-md rounded-md border border-[var(--border)] bg-[var(--surface-1)] px-3 py-2 font-mono text-[11px]"
           >
-            {PROVIDER_PRESETS.filter((p) => !p.customKey).map((p) => (
+            {MODEL_OPTIONS.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.label} · {p.provider}
               </option>
             ))}
           </select>
-        </div>
-      )}
+        )}
+      </div>
+
+      <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)]/30 p-4">
+        <label className="flex items-center gap-2 font-mono text-[9px] uppercase tracking-wider text-[var(--text-dim)]">
+          <Mic className="size-3" />
+          Voz (STT) no microfone
+        </label>
+        <select
+          value={prefs.sttProvider ?? "grok"}
+          onChange={(e) =>
+            setPrefs((p) => ({ ...p, sttProvider: e.target.value as SttProviderId }))
+          }
+          className="mt-2 w-full max-w-xs rounded-md border border-[var(--border)] bg-[var(--surface-1)] px-3 py-2 font-mono text-[11px]"
+        >
+          <option value="grok">Grok STT (xAI) — recomendado</option>
+          <option value="groq">Groq Whisper (fallback)</option>
+        </select>
+        <p className="mt-2 font-mono text-[9px] text-[var(--text-ghost)] flex items-start gap-1.5">
+          <Globe className="size-3 shrink-0 mt-0.5" />
+          Cadastre a chave xAI ou Groq em &quot;Provedores de IA&quot; abaixo. Grok usa{" "}
+          <code className="text-[var(--text-dim)]">api.x.ai/v1/stt</code>.
+        </p>
+      </div>
     </motion.section>
   );
 }

@@ -18,14 +18,25 @@ function toConnectorPayload(id: AiProviderId) {
   }
 }
 
+export type PoolSlotPublic = { id: string; hint: string; addedAt: string };
+
+export type ConnectorUpsertResult = {
+  ok?: boolean;
+  error?: string;
+  poolCount?: number;
+  poolSlots?: PoolSlotPublic[];
+  connected?: boolean;
+};
+
 export async function saveAiProviderKey(id: AiProviderId, token: string) {
   const { kind, meta } = toConnectorPayload(id);
   const { data, error } = await supabase.functions.invoke("connector-upsert", {
     body: { kind, token: token.trim(), meta },
   });
   if (error) throw new Error(error.message);
-  const res = data as { error?: string };
+  const res = data as ConnectorUpsertResult;
   if (res?.error) throw new Error(res.error);
+  return res;
 }
 
 export async function appendKeyToPool(id: AiProviderId, token: string) {
@@ -34,8 +45,20 @@ export async function appendKeyToPool(id: AiProviderId, token: string) {
     body: { kind, token: token.trim(), meta, appendToPool: true },
   });
   if (error) throw new Error(error.message);
-  const res = data as { error?: string };
+  const res = data as ConnectorUpsertResult;
   if (res?.error) throw new Error(res.error);
+  return res;
+}
+
+export async function removeKeyFromPool(id: AiProviderId, keyId: string) {
+  const { kind, meta } = toConnectorPayload(id);
+  const { data, error } = await supabase.functions.invoke("connector-upsert", {
+    body: { kind, meta, removePoolKey: keyId },
+  });
+  if (error) throw new Error(error.message);
+  const res = data as ConnectorUpsertResult;
+  if (res?.error) throw new Error(res.error);
+  return res;
 }
 
 export async function disconnectAiProvider(id: AiProviderId) {

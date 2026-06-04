@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { MicButton } from "@/components/voice/MicButton";
+import { EditorModelControl } from "@/components/editor/EditorModelControl";
 import { toast } from "sonner";
 
 export type AgentComposerMode = "build" | "plan";
@@ -448,6 +449,8 @@ export function ChatInput({
             <Plus className="size-3.5" />
             Visual edits
           </button>
+
+          <EditorModelControl />
 
           <span className="forge-composer-spacer" />
 

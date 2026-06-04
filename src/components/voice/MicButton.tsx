@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Mic, Loader2, Square } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { loadAgentPreferences } from "@/lib/agent-preferences";
 
 type Props = {
   onTranscript: (text: string) => void;
@@ -11,7 +12,7 @@ type Props = {
 
 /**
  * MicButton — grava áudio do mic (MediaRecorder) e envia para
- * a Edge Function voice-transcribe (Groq Whisper Large v3 turbo).
+ * a Edge Function voice-transcribe (Grok STT ou Groq Whisper conforme /api-keys).
  */
 export function MicButton({ onTranscript, className, size = "md" }: Props) {
   const [state, setState] = useState<"idle" | "recording" | "uploading">("idle");
@@ -48,7 +49,10 @@ export function MicButton({ onTranscript, className, size = "md" }: Props) {
           const fd = new FormData();
           fd.append("file", blob, "audio.webm");
           fd.append("language", "pt");
+          fd.append("provider", loadAgentPreferences().sttProvider ?? "grok");
           const { data, error } = await supabase.functions.invoke("voice-transcribe", { body: fd });
+          const errMsg = (data as { error?: string })?.error;
+          if (errMsg) throw new Error(errMsg);
           if (error) throw new Error(error.message);
           const text = (data as any)?.text?.trim();
           if (text) onTranscript(text);
