@@ -31,7 +31,7 @@ export function SnapshotsSheet({ projectId }: { projectId: string }) {
         .eq("project_id", projectId)
         .order("created_at", { ascending: false });
       if (error) throw error;
-      return (data ?? []) as Snapshot[];
+      return (data ?? []) as unknown as Snapshot[];
     },
     enabled: open,
   });
