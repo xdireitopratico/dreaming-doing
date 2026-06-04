@@ -1,7 +1,8 @@
 // useSSE.ts — Hook para consumir streaming SSE do agent-run
-// Conecta em /agent-run?stream=true, parseia eventos text/event-stream
+// Conecta em /agent-run, parseia eventos text/event-stream
 // Expõe fase atual, tools em execução, custo, timeline de ações
 import { useState, useRef, useCallback, useEffect } from "react";
+import { parseAgentDiagnostics, pushDiagnostics, clearDiagnostics } from "@/hooks/useDiagnostics";
 
 const SUPABASE_URL = typeof import.meta !== "undefined"
   ? (import.meta as any).env?.VITE_SUPABASE_URL ?? ""
@@ -202,15 +203,27 @@ function applyEvent(prev: AgentProgress, event: SSEEvent): AgentProgress {
     }
 
     case "validate_ok":
-    case "validate_fail":
       return {
         ...prev,
         runtimeChecks: [
           ...prev.runtimeChecks,
-          ...((data.checks as Array<{ name: string; ok: boolean }>) ?? [{ name: "build", ok: type === "validate_ok" }]),
+          ...((data.checks as Array<{ name: string; ok: boolean }>) ?? [{ name: "build", ok: true }]),
         ],
         timeline: [...prev.timeline, event],
       };
+
+    case "validate_fail": {
+      const diags = parseAgentDiagnostics(data);
+      pushDiagnostics(diags);
+      return {
+        ...prev,
+        runtimeChecks: [
+          ...prev.runtimeChecks,
+          ...((data.checks as Array<{ name: string; ok: boolean }>) ?? [{ name: "build", ok: false }]),
+        ],
+        timeline: [...prev.timeline, event],
+      };
+    }
 
     case "done":
       return {

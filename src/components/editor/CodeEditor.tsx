@@ -3,6 +3,7 @@
 import { useCallback, useRef, useState } from "react";
 import Editor, { OnMount } from "@monaco-editor/react";
 import type { editor } from "monaco-editor";
+import { useDiagnostics } from "@/hooks/useDiagnostics";
 import { useMonacoTheme } from "@/hooks/useMonacoTheme";
 import { getFileIcon, getLanguageFromPath } from "./fileIcons";
 import { X, Plus } from "lucide-react";
@@ -31,14 +32,14 @@ export function CodeEditor({
   readonly = false,
 }: CodeEditorProps) {
   const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null);
-  const monacoRef = useRef<unknown>(null);
+  const { setMonaco } = useDiagnostics(editorRef, activePath);
 
   const handleMount: OnMount = useCallback((editor, monaco) => {
     editorRef.current = editor;
-    monacoRef.current = monaco;
     useMonacoTheme(monaco);
     monaco.editor.setTheme("forge");
-  }, []);
+    setMonaco(monaco);
+  }, [setMonaco]);
 
   const activeTab = tabs.find((t) => t.path === activePath);
 
