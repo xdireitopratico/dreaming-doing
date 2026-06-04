@@ -10,7 +10,7 @@ import {
 import { DashboardShell } from "@/components/dashboard/DashboardShell";
 import { ApiKeyInput } from "@/components/connectors/ApiKeyInput";
 import { ApiKeyPoolSection } from "@/components/connectors/ApiKeyPoolSection";
-import { EdgeSecretsGuide } from "@/components/connectors/EdgeSecretsGuide";
+
 import { ModelPowerPanel } from "@/components/connectors/ModelPowerPanel";
 import { useAuth } from "@/lib/auth";
 import { supabase } from "@/integrations/supabase/client";
@@ -326,8 +326,6 @@ function ApiKeysPage() {
           Conectores de plataforma →
         </Link>
       </motion.div>
-
-      <EdgeSecretsGuide />
 
       <ModelPowerPanel />
 

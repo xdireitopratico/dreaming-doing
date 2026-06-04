@@ -188,6 +188,30 @@ export type Database = {
           },
         ]
       }
+      platform_secrets: {
+        Row: {
+          hint: string
+          name: string
+          updated_at: string
+          updated_by: string | null
+          value_encrypted: string
+        }
+        Insert: {
+          hint?: string
+          name: string
+          updated_at?: string
+          updated_by?: string | null
+          value_encrypted: string
+        }
+        Update: {
+          hint?: string
+          name?: string
+          updated_at?: string
+          updated_by?: string | null
+          value_encrypted?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           avatar_url: string | null

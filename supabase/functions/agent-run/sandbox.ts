@@ -1,13 +1,17 @@
 // sandbox.ts — SandboxProvider (E2B + Noop fallback)
 import type { SandboxProvider, ExecResult, ExecOpts, FileEntry } from "./types.ts";
 
-const E2B_API_KEY = Deno.env.get("E2B_API_KEY");
-const E2B_TEMPLATE = Deno.env.get("E2B_TEMPLATE") || "nodejs";
+const E2B_TEMPLATE_DEFAULT = Deno.env.get("E2B_TEMPLATE") || "nodejs";
 
 class E2BSandbox implements SandboxProvider {
   private sandboxId: string | null = null;
   private baseUrl = "https://api.e2b.dev";
   private projectId = "";
+
+  constructor(
+    private readonly e2bApiKey: string,
+    private readonly e2bTemplate: string = E2B_TEMPLATE_DEFAULT,
+  ) {}
 
   async sync(projectId: string, files: FileEntry[]): Promise<void> {
     this.projectId = projectId;
@@ -24,7 +28,7 @@ class E2BSandbox implements SandboxProvider {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "X-API-Key": E2B_API_KEY!,
+          "X-API-Key": this.e2bApiKey,
         },
         body: JSON.stringify(body),
       },
@@ -47,7 +51,7 @@ class E2BSandbox implements SandboxProvider {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "X-API-Key": E2B_API_KEY!,
+          "X-API-Key": this.e2bApiKey,
         },
         body: JSON.stringify({
           cmd: command,
@@ -80,22 +84,22 @@ class E2BSandbox implements SandboxProvider {
     try {
       await fetch(`${this.baseUrl}/sandboxes/${this.sandboxId}`, {
         method: "DELETE",
-        headers: { "X-API-Key": E2B_API_KEY! },
+        headers: { "X-API-Key": this.e2bApiKey },
       });
     } catch { /* ignore */ }
     this.sandboxId = null;
   }
 
   private async createSandbox(): Promise<void> {
-    if (!E2B_API_KEY) throw new Error("E2B_API_KEY não configurada");
+    if (!this.e2bApiKey) throw new Error("E2B_API_KEY não configurada");
     const resp = await fetch(`${this.baseUrl}/sandboxes`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "X-API-Key": E2B_API_KEY,
+        "X-API-Key": this.e2bApiKey,
       },
       body: JSON.stringify({
-        templateID: E2B_TEMPLATE,
+        templateID: this.e2bTemplate,
         timeout_ms: 300000, // 5 min
       }),
     });
@@ -122,10 +126,12 @@ class NoopSandbox implements SandboxProvider {
   async destroy(): Promise<void> {}
 }
 
-export function createSandboxProvider(): SandboxProvider {
-  if (E2B_API_KEY) {
+export function createSandboxProvider(e2bApiKey?: string, e2bTemplate?: string): SandboxProvider {
+  const key = e2bApiKey?.trim() || Deno.env.get("E2B_API_KEY")?.trim() || "";
+  const template = e2bTemplate?.trim() || E2B_TEMPLATE_DEFAULT;
+  if (key) {
     console.log("Usando sandbox E2B");
-    return new E2BSandbox();
+    return new E2BSandbox(key, template);
   }
   console.log("Sandbox E2B não configurado - usando modo noop (tools de shell vão falhar)");
   return new NoopSandbox();

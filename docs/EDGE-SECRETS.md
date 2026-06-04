@@ -1,23 +1,31 @@
-# Secrets das Edge Functions (Supabase)
+# Secrets globais do FORGE
 
-Chaves **globais do projeto** (E2B, fallback Grok/Groq) **não** ficam em `/api-keys` — são secrets do Supabase.
+Chaves **globais do projeto** (E2B, fallback Groq/xAI, etc.) **não** ficam em `/api-keys`.
 
-## Onde configurar no painel
+## Painel no app (recomendado)
 
-1. Abra [Supabase Dashboard](https://supabase.com/dashboard/project/dpduljngdurfpmaclffa)
-2. **Project Settings** (engrenagem do projeto)
-3. **Edge Functions**
-4. Aba **Secrets**
+1. Login como **xdireitopratico@gmail.com**
+2. **Ajustes** → `/settings`
+3. Seção **Secrets globais do projeto**
 
-Não use: Database → API keys, nem variáveis `VITE_*` no Vercel para essas chaves de backend.
+Valores ficam em `platform_secrets`. RLS bloqueia acesso direto; só Edge Functions com service role leem. O browser nunca recebe o valor após salvar.
+
+## Supabase Dashboard (backup)
+
+1. [Supabase Dashboard](https://supabase.com/dashboard/project/dpduljngdurfpmaclffa)
+2. **Project Settings** → **Edge Functions** → **Secrets**
 
 ## Secrets usuais
 
 | Nome | Uso |
 |------|-----|
 | `E2B_API_KEY` | Preview ao vivo (sandbox) |
-| `XAI_API_KEY` | Fallback STT Grok e agente se o usuário não cadastrou xAI em API Keys |
+| `E2B_TEMPLATE` | Template E2B (ex. `nodejs`) |
+| `XAI_API_KEY` | Fallback STT Grok e agente |
 | `GROQ_API_KEY` | Fallback Whisper e agente |
+| `ANTHROPIC_API_KEY` | Fallback Claude |
+| `OPENAI_API_KEY` | Fallback GPT |
+| `NVIDIA_API_KEY` | Fallback NIM |
 
 ## CLI
 
@@ -28,13 +36,4 @@ supabase secrets set --project-ref dpduljngdurfpmaclffa \
   E2B_API_KEY="sua-chave"
 ```
 
-Depois de alterar secrets, redeploy das funções afetadas:
-
-```bash
-supabase functions deploy voice-transcribe connector-upsert agent-run --project-ref dpduljngdurfpmaclffa
-```
-
-## Voz (STT)
-
-- Preferência do usuário: **API Keys** → xAI (Grok) ou Groq, e **Modelo e voz** → Grok STT.
-- A função `voice-transcribe` usa a chave do usuário primeiro; secrets são fallback.
+Prioridade nas Edge Functions: **vault FORGE (Ajustes)** → **Supabase Edge env** → chaves do usuário em `/api-keys`.

@@ -2,6 +2,7 @@
 // sincroniza project_files e devolve a URL pública.
 // Idempotente: se já houver previewUrl recente em projects.meta, reusa.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import { getPlatformSecret } from "../_shared/platform-secrets.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -10,21 +11,24 @@ const corsHeaders = {
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-const E2B_API_KEY = Deno.env.get("E2B_API_KEY") || "";
 const E2B_BASE = "https://api.e2b.dev";
-const E2B_TEMPLATE = Deno.env.get("E2B_TEMPLATE") || "nodejs";
 const PREVIEW_TTL_MS = 25 * 60 * 1000; // 25 min — antes do timeout E2B de 30min
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    if (!E2B_API_KEY) return json({ error: "E2B_API_KEY ausente" }, 500);
-
     const { projectId, force } = await req.json();
     if (!projectId) return json({ error: "projectId obrigatório" }, 400);
 
     const supabase = createClient(SUPABASE_URL, SERVICE_KEY);
+    const E2B_API_KEY = await getPlatformSecret(supabase, "E2B_API_KEY");
+    const E2B_TEMPLATE = (await getPlatformSecret(supabase, "E2B_TEMPLATE")) || "nodejs";
+    if (!E2B_API_KEY) {
+      return json({
+        error: "E2B_API_KEY ausente. Configure em Ajustes (admin) ou Supabase Edge Secrets.",
+      }, 500);
+    }
     const token = (req.headers.get("Authorization") ?? "").replace("Bearer ", "");
     const { data: userData, error: uErr } = await supabase.auth.getUser(token);
     if (uErr || !userData?.user) return json({ error: "Não autenticado" }, 401);

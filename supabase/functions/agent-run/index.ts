@@ -11,6 +11,17 @@ import { loadConnectorKeys, loadConnectorPools, type AgentPreferencesPayload } f
 import { pickCheap, pickMain, type ProviderConfig } from "./providers.ts";
 import { buildChatHistory } from "./memory.ts";
 import { RobinKeyPool, ResilientLLM } from "./robin-pool.ts";
+import { getPlatformSecret, loadPlatformSecretsMap } from "../_shared/platform-secrets.ts";
+
+const PLATFORM_SECRET_NAMES = [
+  "E2B_API_KEY",
+  "E2B_TEMPLATE",
+  "XAI_API_KEY",
+  "GROQ_API_KEY",
+  "ANTHROPIC_API_KEY",
+  "OPENAI_API_KEY",
+  "NVIDIA_API_KEY",
+];
 
 const runningLocks = new Map<string, Promise<unknown>>();
 
@@ -89,6 +100,9 @@ Deno.serve(async (req) => {
 
     const messages = buildChatHistory(history ?? []);
 
+    const platformSecrets = await loadPlatformSecretsMap(supabase, PLATFORM_SECRET_NAMES);
+    const mergeKeys = (user: Record<string, string>) => ({ ...platformSecrets, ...user });
+
     const robin = isRobinMode(preferences);
     const poolProvider = preferences?.poolProvider ?? "groq";
     let robinPool: RobinKeyPool | null = null;
@@ -104,7 +118,9 @@ Deno.serve(async (req) => {
           ? { NVIDIA_API_KEY: poolKeys[0]! }
           : { GROQ_API_KEY: poolKeys[0]! };
       } else {
-        connectorKeys = await loadConnectorKeys(supabase, userData.user.id, preferences);
+        connectorKeys = mergeKeys(
+          await loadConnectorKeys(supabase, userData.user.id, preferences),
+        );
       }
 
       if (!robin) {
@@ -146,7 +162,9 @@ Deno.serve(async (req) => {
     }
 
     const reg = new ToolRegistry();
-    const sandbox = createSandboxProvider();
+    const e2bKey = await getPlatformSecret(supabase, "E2B_API_KEY");
+    const e2bTemplate = await getPlatformSecret(supabase, "E2B_TEMPLATE");
+    const sandbox = createSandboxProvider(e2bKey, e2bTemplate || undefined);
     const cleanup = () => { runningLocks.delete(projectId!); sandbox.destroy().catch(() => {}); };
     registerFsTools(reg, { supabase, projectId });
     registerShellTool(reg, { sandbox, projectId, supabase });

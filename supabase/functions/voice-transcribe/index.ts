@@ -1,6 +1,7 @@
 // voice-transcribe — STT via Grok (xAI) ou Groq Whisper; usa chave do usuário em /api-keys ou secrets do projeto.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { loadConnectorKeys, loadConnectorPools } from "../agent-run/connector-keys.ts";
+import { getPlatformSecret } from "../_shared/platform-secrets.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -25,20 +26,23 @@ async function resolveSttKey(
   const keys = await loadConnectorKeys(supabase, userId);
   const groqPool = await loadConnectorPools(supabase, userId, "groq");
 
+  const globalXai = await getPlatformSecret(supabase, "XAI_API_KEY");
+  const globalGroq = await getPlatformSecret(supabase, "GROQ_API_KEY");
+
   if (prefer === "grok") {
     if (keys.XAI_API_KEY) return { key: keys.XAI_API_KEY, provider: "grok" };
-    if (Deno.env.get("XAI_API_KEY")) return { key: Deno.env.get("XAI_API_KEY")!, provider: "grok" };
+    if (globalXai) return { key: globalXai, provider: "grok" };
   }
 
   if (groqPool[0]) return { key: groqPool[0], provider: "groq" };
   if (keys.GROQ_API_KEY) return { key: keys.GROQ_API_KEY, provider: "groq" };
-  if (Deno.env.get("GROQ_API_KEY")) return { key: Deno.env.get("GROQ_API_KEY")!, provider: "groq" };
+  if (globalGroq) return { key: globalGroq, provider: "groq" };
 
   if (keys.XAI_API_KEY) return { key: keys.XAI_API_KEY, provider: "grok" };
-  if (Deno.env.get("XAI_API_KEY")) return { key: Deno.env.get("XAI_API_KEY")!, provider: "grok" };
+  if (globalXai) return { key: globalXai, provider: "grok" };
 
   throw new Error(
-    "Nenhuma chave de voz configurada. Adicione xAI (Grok) ou Groq em API Keys, ou defina XAI_API_KEY / GROQ_API_KEY nas Secrets das Edge Functions no Supabase.",
+    "Nenhuma chave de voz configurada. Adicione xAI ou Groq em API Keys, ou configure secrets globais em Ajustes (admin).",
   );
 }
 
