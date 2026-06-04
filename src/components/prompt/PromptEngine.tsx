@@ -5,19 +5,18 @@ import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { createProjectFromPrompt } from "@/lib/projects.functions";
+import { MicButton } from "@/components/voice/MicButton";
+import { ImportRepoDialog } from "@/components/ImportRepoDialog";
 
 const QUICK_STARTS = [
   "Landing page para um SaaS de produtividade",
   "Dashboard de analytics com gráficos em tempo real",
   "Editor de fotos colaborativo no browser",
-  "Marketplace de cursos online com pagamentos",
   "App de notas com IA tipo Notion",
-  "Portfólio cinematográfico para fotógrafo",
 ];
 
 type Props = {
   size?: "hero" | "compact";
-  /** When set, submit just calls this (no navigation/warp). */
   onSubmit?: (text: string) => void;
   placeholder?: string;
   autoFocus?: boolean;
@@ -29,8 +28,7 @@ function playWarp() {
     "position:fixed;inset:0;z-index:9999;pointer-events:none;background:radial-gradient(circle at center,transparent 0%,transparent 35%,#000 90%);opacity:0;transition:opacity 360ms ease-in";
   document.body.appendChild(overlay);
   requestAnimationFrame(() => (overlay.style.opacity = "1"));
-  const scene = (window as unknown as { __forgeScene?: { scroll: number } })
-    .__forgeScene;
+  const scene = (window as unknown as { __forgeScene?: { scroll: number } }).__forgeScene;
   if (scene) scene.scroll = 1.4;
   return () => {
     const flash = document.createElement("div");
@@ -49,7 +47,7 @@ function playWarp() {
 export function PromptEngine({
   size = "hero",
   onSubmit,
-  placeholder = "Ask Forge to build…",
+  placeholder = "Peça ao Forge para construir…",
   autoFocus = false,
 }: Props) {
   const [value, setValue] = useState("");
@@ -59,7 +57,6 @@ export function PromptEngine({
   const navigate = useNavigate();
   const createProject = useServerFn(createProjectFromPrompt);
 
-  // auto-grow
   useEffect(() => {
     const el = taRef.current;
     if (!el) return;
@@ -81,12 +78,9 @@ export function PromptEngine({
       return;
     }
 
-    // Require auth before creating a project
     const { data: sess } = await supabase.auth.getSession();
     if (!sess.session) {
-      try {
-        sessionStorage.setItem("forge.initialPrompt", v);
-      } catch { /* ignore */ }
+      try { sessionStorage.setItem("forge.initialPrompt", v); } catch { /* ignore */ }
       navigate({ to: "/auth", search: { next: "/" } as never });
       return;
     }
@@ -104,7 +98,6 @@ export function PromptEngine({
     }
   }
 
-
   const hero = size === "hero";
 
   return (
@@ -115,10 +108,7 @@ export function PromptEngine({
       className={`w-full ${hero ? "max-w-2xl mx-auto mt-12" : ""}`}
     >
       <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          submit();
-        }}
+        onSubmit={(e) => { e.preventDefault(); submit(); }}
         className="prompt-card p-4 md:p-5"
       >
         <textarea
@@ -144,16 +134,6 @@ export function PromptEngine({
             <button
               type="button"
               data-cursor="hover"
-              aria-label="Attach"
-              className="p-2 rounded-full hover:bg-white/5 hover:text-[var(--foreground)] transition-colors"
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                <path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
-              </svg>
-            </button>
-            <button
-              type="button"
-              data-cursor="hover"
               onClick={() => setModel((m) => (m === "forge-1" ? "forge-pro" : "forge-1"))}
               className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-[11px] font-mono tracking-[0.15em] uppercase hover:bg-white/5 hover:text-[var(--foreground)] transition-colors"
             >
@@ -169,23 +149,29 @@ export function PromptEngine({
             </span>
           </div>
 
-          <button
-            type="submit"
-            data-cursor="hover"
-            disabled={!value.trim() || busy}
-            className="prompt-submit"
-            aria-label="Submit prompt"
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M12 19V5M5 12l7-7 7 7" />
-            </svg>
-          </button>
+          <div className="flex items-center gap-2">
+            <MicButton
+              size="sm"
+              onTranscript={(t) => setValue((cur) => (cur ? `${cur} ${t}` : t))}
+            />
+            <button
+              type="submit"
+              data-cursor="hover"
+              disabled={!value.trim() || busy}
+              className="prompt-submit"
+              aria-label="Enviar"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 19V5M5 12l7-7 7 7" />
+              </svg>
+            </button>
+          </div>
         </div>
       </form>
 
       {hero && (
-        <div className="mt-5 flex flex-wrap gap-2 justify-center">
-          {QUICK_STARTS.slice(0, 4).map((q) => (
+        <div className="mt-5 flex flex-wrap gap-2 justify-center items-center">
+          {QUICK_STARTS.slice(0, 3).map((q) => (
             <button
               key={q}
               type="button"
@@ -196,6 +182,13 @@ export function PromptEngine({
               {q}
             </button>
           ))}
+          <ImportRepoDialog
+            trigger={
+              <button type="button" data-cursor="hover" className="prompt-chip">
+                Importar do GitHub
+              </button>
+            }
+          />
         </div>
       )}
     </motion.div>
