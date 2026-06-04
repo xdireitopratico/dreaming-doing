@@ -116,13 +116,21 @@ body:has(.dashboard-workspace) {
   display: flex;
   flex-direction: column;
   overflow-y: auto;
+  /* Degradê contínuo em toda a área principal — persiste no scroll */
+  background:
+    radial-gradient(ellipse 120% 70% at 50% -5%, rgba(88, 120, 255, 0.32), transparent 52%),
+    radial-gradient(ellipse 85% 55% at 88% 45%, rgba(180, 80, 220, 0.2), transparent 54%),
+    radial-gradient(ellipse 75% 50% at 12% 65%, rgba(255, 122, 26, 0.14), transparent 48%),
+    radial-gradient(ellipse 90% 60% at 50% 100%, rgba(120, 60, 180, 0.12), transparent 50%),
+    linear-gradient(180deg, #0a0d18 0%, #12101f 38%, #1a1028 72%, #140c20 100%);
+  background-attachment: fixed;
 }
 
 .dashboard-stage {
   display: flex;
   flex-direction: column;
   flex: 1;
-  min-height: 0;
+  min-height: 100%;
 }
 
 .dashboard-hero {
@@ -131,13 +139,8 @@ body:has(.dashboard-workspace) {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  min-height: min(58vh, 560px);
-  padding: 32px 32px 40px;
-  background:
-    radial-gradient(ellipse 80% 60% at 50% 0%, rgba(88, 120, 255, 0.22), transparent 55%),
-    radial-gradient(ellipse 70% 50% at 80% 60%, rgba(180, 80, 220, 0.14), transparent 50%),
-    radial-gradient(ellipse 60% 40% at 20% 80%, rgba(255, 122, 26, 0.1), transparent 45%),
-    linear-gradient(180deg, #0a0d18 0%, #12101f 45%, #1a1028 100%);
+  min-height: min(52vh, 520px);
+  padding: 40px 32px 24px;
 }
 
 .dashboard-hero-badge {
@@ -176,13 +179,14 @@ body:has(.dashboard-workspace) {
 
 .dashboard-dock {
   flex-shrink: 0;
-  margin: 0 20px 20px;
+  margin: 8px 20px 28px;
   border-radius: 18px;
-  border: 1px solid var(--forge-border-strong);
-  background: rgba(11, 13, 18, 0.94);
-  backdrop-filter: blur(12px);
+  border: 1px solid rgba(237, 239, 242, 0.12);
+  background: rgba(8, 10, 16, 0.38);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
   padding: 16px 18px 18px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.28);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.22);
 }
 
 .dashboard-dock-header {
@@ -226,8 +230,9 @@ body:has(.dashboard-workspace) {
 .dashboard-project-card {
   flex: 0 0 200px;
   border-radius: 12px;
-  border: 1px solid var(--forge-border);
-  background: var(--forge-surface-2);
+  border: 1px solid rgba(237, 239, 242, 0.1);
+  background: rgba(11, 13, 18, 0.55);
+  backdrop-filter: blur(8px);
   overflow: hidden;
   transition: border-color 0.15s, transform 0.15s;
 }
@@ -267,7 +272,9 @@ body:has(.dashboard-workspace) {
 .dashboard-new-card {
   flex: 0 0 200px;
   border-radius: 12px;
-  border: 1px dashed var(--forge-border-strong);
+  border: 1px dashed rgba(237, 239, 242, 0.18);
+  background: rgba(8, 10, 16, 0.32);
+  backdrop-filter: blur(8px);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -276,7 +283,7 @@ body:has(.dashboard-workspace) {
   min-height: 140px;
   color: var(--forge-muted);
   font-size: 12px;
-  transition: border-color 0.15s, color 0.15s;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
 }
 
 .dashboard-new-card:hover {
@@ -289,10 +296,10 @@ body:has(.dashboard-workspace) {
     display: none;
   }
   .dashboard-hero {
-    min-height: 48vh;
-    padding: 24px 16px 28px;
+    min-height: 44vh;
+    padding: 28px 16px 16px;
   }
   .dashboard-dock {
-    margin: 0 12px 12px;
+    margin: 4px 12px 20px;
   }
 }
