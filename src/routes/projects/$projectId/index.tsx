@@ -232,6 +232,13 @@ function EditorPage() {
     }
   }, [sse.progress.timeline.length]);
 
+  useEffect(() => {
+    if (sse.progress.error && sse.progress.finished) {
+      toast.error(sse.progress.error);
+      setRunning(false);
+    }
+  }, [sse.progress.error, sse.progress.finished]);
+
   // ─── Monaco enhancements globais ────────────────────────────────────
   useEffect(() => {
     clearEnhancements();

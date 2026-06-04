@@ -1,15 +1,8 @@
-// useSSE.ts — Hook para consumir streaming SSE do agent-run
-// Conecta em /agent-run, parseia eventos text/event-stream
-// Expõe fase atual, tools em execução, custo, timeline de ações
+// useSSE.ts — Streaming SSE do agent-run (motor de prompt)
 import { useState, useRef, useCallback, useEffect } from "react";
-import { parseAgentDiagnostics, pushDiagnostics, clearDiagnostics } from "@/hooks/useDiagnostics";
-
-const SUPABASE_URL = typeof import.meta !== "undefined"
-  ? (import.meta as any).env?.VITE_SUPABASE_URL ?? ""
-  : "";
-const SUPABASE_ANON_KEY = typeof import.meta !== "undefined"
-  ? (import.meta as any).env?.VITE_SUPABASE_PUBLISHABLE_KEY ?? ""
-  : "";
+import { supabase } from "@/integrations/supabase/client";
+import { getSupabaseEnv } from "@/lib/supabase-env";
+import { parseAgentDiagnostics, pushDiagnostics } from "@/hooks/useDiagnostics";
 
 export interface SSEEvent {
   type: string;
@@ -49,7 +42,6 @@ const initialState: AgentProgress = {
   finished: false,
 };
 
-// Custo estimado por token por modelo ($/1M tokens)
 const MODEL_COSTS: Record<string, number> = {
   "claude-sonnet-4-20250514": 3.0,
   "claude-3-5-sonnet": 3.0,
@@ -62,80 +54,111 @@ const MODEL_COSTS: Record<string, number> = {
   default: 1.0,
 };
 
+async function parseErrorResponse(res: Response): Promise<string> {
+  const txt = await res.text().catch(() => "");
+  try {
+    const body = JSON.parse(txt) as { error?: string; message?: string };
+    return body.error ?? body.message ?? txt.slice(0, 280);
+  } catch {
+    return txt.slice(0, 280) || `HTTP ${res.status}`;
+  }
+}
+
 export function useSSE() {
   const [progress, setProgress] = useState<AgentProgress>(initialState);
   const [connected, setConnected] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
 
-  const connect = useCallback((projectId: string, conversationId: string) => {
-    // Reset state
+  const connect = useCallback(async (projectId: string, conversationId: string) => {
     setProgress(initialState);
     setConnected(true);
+
+    const { url, publishableKey } = getSupabaseEnv();
+    if (!url || !publishableKey) {
+      setProgress((p) => ({
+        ...p,
+        error: "Supabase não configurado. Verifique VITE_SUPABASE_URL e VITE_SUPABASE_PUBLISHABLE_KEY.",
+        finished: true,
+      }));
+      setConnected(false);
+      return;
+    }
+
+    const { data: sess } = await supabase.auth.getSession();
+    const accessToken = sess.session?.access_token;
+    if (!accessToken) {
+      setProgress((p) => ({
+        ...p,
+        error: "Sessão expirada. Faça login novamente.",
+        finished: true,
+      }));
+      setConnected(false);
+      return;
+    }
 
     const controller = new AbortController();
     abortRef.current = controller;
 
-    const functionsUrl = `${SUPABASE_URL}/functions/v1/agent-run`;
-    const url = `${functionsUrl}?stream=true&sse=true`;
+    const functionsUrl = `${url}/functions/v1/agent-run`;
 
-    fetch(url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "text/event-stream",
-        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-      },
-      body: JSON.stringify({ projectId, conversationId }),
-      signal: controller.signal,
-    })
-      .then(async (res) => {
-        if (!res.ok) {
-          setProgress((p) => ({ ...p, error: `HTTP ${res.status}`, finished: true }));
-          setConnected(false);
-          return;
-        }
+    try {
+      const res = await fetch(functionsUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "text/event-stream",
+          Authorization: `Bearer ${accessToken}`,
+          apikey: publishableKey,
+        },
+        body: JSON.stringify({ projectId, conversationId }),
+        signal: controller.signal,
+      });
 
-        const reader = res.body?.getReader();
-        if (!reader) {
-          setProgress((p) => ({ ...p, error: "No response body", finished: true }));
-          setConnected(false);
-          return;
-        }
+      if (!res.ok) {
+        const msg = await parseErrorResponse(res);
+        setProgress((p) => ({ ...p, error: msg, finished: true }));
+        setConnected(false);
+        return;
+      }
 
-        const decoder = new TextDecoder();
-        let buffer = "";
+      const reader = res.body?.getReader();
+      if (!reader) {
+        setProgress((p) => ({ ...p, error: "Resposta vazia do agent-run", finished: true }));
+        setConnected(false);
+        return;
+      }
 
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
+      const decoder = new TextDecoder();
+      let buffer = "";
 
-          buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split("\n");
-          buffer = lines.pop() ?? "";
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
 
-          for (const line of lines) {
-            if (line.startsWith("data: ")) {
-              const json = line.slice(6);
-              try {
-                const parsed = JSON.parse(json);
-                const event: SSEEvent = { ...parsed, timestamp: Date.now() };
-                setProgress((prev) => applyEvent(prev, event));
-              } catch {
-                // Linha não-JSON (heartbeat, comentário) — ignora
-              }
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? "";
+
+        for (const line of lines) {
+          if (line.startsWith("data: ")) {
+            const json = line.slice(6);
+            try {
+              const parsed = JSON.parse(json);
+              const event: SSEEvent = { ...parsed, timestamp: Date.now() };
+              setProgress((prev) => applyEvent(prev, event));
+            } catch {
+              /* heartbeat */
             }
           }
         }
-      })
-      .catch((err) => {
-        if (err.name !== "AbortError") {
-          setProgress((p) => ({ ...p, error: err.message, finished: true }));
-        }
-        setConnected(false);
-      })
-      .finally(() => {
-        setConnected(false);
-      });
+      }
+    } catch (err: unknown) {
+      if (err instanceof Error && err.name !== "AbortError") {
+        setProgress((p) => ({ ...p, error: err.message, finished: true }));
+      }
+    } finally {
+      setConnected(false);
+    }
   }, []);
 
   const disconnect = useCallback(() => {
@@ -144,7 +167,6 @@ export function useSSE() {
     setProgress((p) => ({ ...p, finished: true }));
   }, []);
 
-  // Cleanup on unmount
   useEffect(() => {
     return () => {
       abortRef.current?.abort();

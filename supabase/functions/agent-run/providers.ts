@@ -12,15 +12,18 @@ export interface ProviderConfig {
   label: string;
 }
 
-const ANTHROPIC = Deno.env.get("ANTHROPIC_API_KEY") || "";
-const XAI = Deno.env.get("XAI_API_KEY") || "";
-const GROQ = Deno.env.get("GROQ_API_KEY") || "";
-const LOVABLE = Deno.env.get("LOVABLE_API_KEY") || "";
-const OPENAI = Deno.env.get("OPENAI_API_KEY") || "";
-
 const LOVABLE_GATEWAY = "https://ai.gateway.lovable.dev/v1";
 
-export function pickMain(): ProviderConfig {
+function envKey(name: string, injected?: Record<string, string>): string {
+  return injected?.[name] || Deno.env.get(name) || "";
+}
+
+export function pickMain(injected?: Record<string, string>): ProviderConfig {
+  const ANTHROPIC = envKey("ANTHROPIC_API_KEY", injected);
+  const XAI = envKey("XAI_API_KEY", injected);
+  const GROQ = envKey("GROQ_API_KEY", injected);
+  const LOVABLE = envKey("LOVABLE_API_KEY", injected);
+  const OPENAI = envKey("OPENAI_API_KEY", injected);
   // explicit override
   const ex = Deno.env.get("LLM_PROVIDER");
   if (ex && Deno.env.get("LLM_API_KEY")) {
@@ -34,12 +37,17 @@ export function pickMain(): ProviderConfig {
   }
   if (ANTHROPIC) return { provider: "anthropic", apiKey: ANTHROPIC, model: "claude-sonnet-4-20250514", label: "Anthropic Claude Sonnet 4" };
   if (XAI) return { provider: "openai", apiKey: XAI, model: "grok-2-1212", baseUrl: "https://api.x.ai/v1", label: "xAI Grok 2" };
+  if (GROQ) return { provider: "openai", apiKey: GROQ, model: "llama-3.3-70b-versatile", baseUrl: "https://api.groq.com/openai/v1", label: "Groq · Llama 3.3 70B" };
   if (LOVABLE) return { provider: "openai", apiKey: LOVABLE, model: "google/gemini-2.5-flash", baseUrl: LOVABLE_GATEWAY, label: "Lovable AI · Gemini 2.5 Flash" };
   if (OPENAI) return { provider: "openai", apiKey: OPENAI, model: "gpt-4o", label: "OpenAI GPT-4o" };
-  throw new Error("Nenhum provider LLM configurado (ANTHROPIC/XAI/GROQ/LOVABLE/OPENAI _API_KEY).");
+  throw new Error(
+    "Nenhum modelo de IA configurado. Adicione uma chave em Conectores (/connectors) ou defina ANTHROPIC_API_KEY / GROQ_API_KEY nas Secrets do Supabase (Edge Functions).",
+  );
 }
 
-export function pickCheap(main: ProviderConfig): ProviderConfig {
+export function pickCheap(main: ProviderConfig, injected?: Record<string, string>): ProviderConfig {
+  const GROQ = envKey("GROQ_API_KEY", injected);
+  const LOVABLE = envKey("LOVABLE_API_KEY", injected);
   const exP = Deno.env.get("LLM_CHEAP_PROVIDER");
   const exK = Deno.env.get("LLM_CHEAP_API_KEY");
   if (exP && exK) {

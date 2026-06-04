@@ -8,6 +8,7 @@ import { createSandboxProvider } from "./sandbox.ts";
 import { registerFsTools } from "./tools/fs.ts";
 import { registerShellTool } from "./tools/shell.ts";
 import { LoopPhase, type AgentState, type ChatMessage } from "./types.ts";
+import { loadConnectorKeys } from "./connector-keys.ts";
 import { buildProvider, pickMain } from "./providers.ts";
 
 // Simple in-memory advisory lock per project (Edge Function realm — resets on cold start)
@@ -67,9 +68,11 @@ Deno.serve(async (req) => {
       };
     });
 
+    const connectorKeys = await loadConnectorKeys(supabase, userData.user.id);
+
     let mainCfg;
     try {
-      mainCfg = pickMain();
+      mainCfg = pickMain(connectorKeys);
     } catch (err: any) {
       return json({ error: err?.message ?? "Provider LLM não configurado" }, 500);
     }

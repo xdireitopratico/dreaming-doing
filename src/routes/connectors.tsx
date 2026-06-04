@@ -1,10 +1,16 @@
 // connectors.tsx — Página de gerenciamento de chaves API e integrações
 // UI nível 1Password: inputs mascarados, status dos providers, badges
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
+import { toast } from "sonner";
 import { MarketingShell } from "@/components/MarketingShell";
 import { ApiKeyInput } from "@/components/connectors/ApiKeyInput";
+import { useAuth } from "@/lib/auth";
+import { supabase } from "@/integrations/supabase/client";
+import { saveAiProviderKey, disconnectAiProvider, type AiProviderId } from "@/lib/save-connector";
+import { Button } from "@/components/ui/button";
 import {
   Key, Zap, Brain, Globe, Cpu, Cloud, Database, GitBranch,
   Plug, Shield, CheckCircle2, AlertCircle, ChevronRight, ExternalLink,
@@ -39,8 +45,7 @@ const spring = {
   damping: 34,
 };
 
-function Connectors() {
-  const [providers, setProviders] = useState<ProviderConfig[]>([
+const INITIAL_PROVIDERS: ProviderConfig[] = [
     {
       id: "anthropic",
       provider: "Anthropic",
@@ -51,7 +56,7 @@ function Connectors() {
       docUrl: "https://console.anthropic.com",
       keyPrefix: "sk-ant-",
       costPerM: 3.0,
-      status: "connected",
+      status: "available",
       keyValue: "",
     },
     {
@@ -77,7 +82,7 @@ function Connectors() {
       docUrl: "https://console.x.ai",
       keyPrefix: "xai-",
       costPerM: 0.5,
-      status: "connected",
+      status: "available",
       keyValue: "",
     },
     {
@@ -90,10 +95,46 @@ function Connectors() {
       docUrl: "https://console.groq.com",
       keyPrefix: "gsk_",
       costPerM: 0,
-      status: "connected",
+      status: "available",
       keyValue: "",
     },
-  ]);
+];
+
+function Connectors() {
+  const { user } = useAuth();
+  const qc = useQueryClient();
+  const [providers, setProviders] = useState<ProviderConfig[]>(INITIAL_PROVIDERS);
+  const [savingId, setSavingId] = useState<string | null>(null);
+
+  const { data: connectorRows } = useQuery({
+    queryKey: ["connectors-public", user?.id],
+    enabled: !!user?.id,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("connectors_public")
+        .select("kind, meta")
+        .eq("owner_id", user!.id);
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
+  useEffect(() => {
+    if (!connectorRows) return;
+    setProviders((prev) =>
+      prev.map((p) => {
+        const row = connectorRows.find((r) => {
+          const meta = (r.meta ?? {}) as { provider?: string };
+          if (p.id === "anthropic") return r.kind === "anthropic";
+          if (p.id === "openai") return r.kind === "openai" && (!meta.provider || meta.provider === "openai");
+          if (p.id === "groq") return r.kind === "openai" && meta.provider === "groq";
+          if (p.id === "xai") return r.kind === "openai" && meta.provider === "xai";
+          return false;
+        });
+        return row ? { ...p, status: "connected" as const } : { ...p, status: "available" as const };
+      }),
+    );
+  }, [connectorRows]);
 
   const [integrations] = useState([
     {
@@ -134,11 +175,50 @@ function Connectors() {
     );
   }, []);
 
-  const handleDeleteKey = useCallback((id: string) => {
-    setProviders((prev) =>
-      prev.map((p) => (p.id === id ? { ...p, keyValue: "" } : p)),
-    );
-  }, []);
+  const handleDeleteKey = useCallback(
+    async (id: string) => {
+      setSavingId(id);
+      try {
+        await disconnectAiProvider(id as AiProviderId);
+        setProviders((prev) =>
+          prev.map((p) =>
+            p.id === id ? { ...p, keyValue: "", status: "available" as const } : p,
+          ),
+        );
+        await qc.invalidateQueries({ queryKey: ["connectors-public"] });
+        toast.success("Chave removida");
+      } catch (e: unknown) {
+        toast.error(e instanceof Error ? e.message : "Falha ao remover");
+      } finally {
+        setSavingId(null);
+      }
+    },
+    [qc],
+  );
+
+  const handleSaveKey = useCallback(
+    async (id: string) => {
+      const p = providers.find((x) => x.id === id);
+      if (!p?.keyValue.trim()) {
+        toast.error("Cole a chave antes de salvar");
+        return;
+      }
+      setSavingId(id);
+      try {
+        await saveAiProviderKey(id as AiProviderId, p.keyValue);
+        setProviders((prev) =>
+          prev.map((x) => (x.id === id ? { ...x, status: "connected" as const } : x)),
+        );
+        await qc.invalidateQueries({ queryKey: ["connectors-public"] });
+        toast.success(`${p.label} salvo no Supabase — o agente já pode usar`);
+      } catch (e: unknown) {
+        toast.error(e instanceof Error ? e.message : "Falha ao salvar");
+      } finally {
+        setSavingId(null);
+      }
+    },
+    [providers, qc],
+  );
 
   const connectedCount = providers.filter((p) => p.status === "connected").length;
   const availableCount = providers.filter((p) => p.status === "available").length;
@@ -196,7 +276,7 @@ function Connectors() {
         <span className="text-[var(--border)]">|</span>
         <span className="flex items-center gap-1.5 font-mono text-[9px] text-[var(--text-ghost)]">
           <Info className="size-3" />
-          Suas chaves nunca saem do seu navegador
+          Chaves salvas no seu Supabase (Edge Functions / agent-run)
         </span>
       </motion.div>
 
@@ -278,16 +358,26 @@ function Connectors() {
               </div>
 
               {/* Key input */}
-              <div className="ml-16">
+              <div className="ml-16 flex flex-col gap-2">
                 <ApiKeyInput
                   label={`Chave ${p.label}`}
                   value={p.keyValue}
                   onChange={(v) => handleKeyChange(p.id, v)}
-                  onDelete={() => handleDeleteKey(p.id)}
+                  onDelete={() => void handleDeleteKey(p.id)}
                   provider={p.provider}
                   placeholder={p.keyPrefix + "..."}
                   saved={p.status === "connected"}
+                  disabled={savingId === p.id}
                 />
+                <Button
+                  type="button"
+                  size="sm"
+                  className="w-fit bg-[var(--primary)] text-[#0a0a0a] hover:bg-[var(--primary-hot)]"
+                  disabled={savingId === p.id || !p.keyValue.trim()}
+                  onClick={() => void handleSaveKey(p.id)}
+                >
+                  {savingId === p.id ? "Salvando…" : "Salvar no Supabase"}
+                </Button>
               </div>
             </motion.div>
           ))}
