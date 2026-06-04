@@ -7,15 +7,6 @@ import { supabase } from "@/integrations/supabase/client";
 import { createProjectFromPrompt } from "@/lib/projects.functions";
 import { sanitizeNext } from "@/lib/sanitize-next";
 import { MicButton } from "@/components/voice/MicButton";
-import { ImportRepoDialog } from "@/components/ImportRepoDialog";
-
-const QUICK_STARTS = [
-  "Landing page para um SaaS de produtividade",
-  "Dashboard de analytics com gráficos em tempo real",
-  "Editor de fotos colaborativo no browser",
-  "App de notas com IA tipo Notion",
-];
-
 type Props = {
   size?: "hero" | "compact";
   onSubmit?: (text: string) => void;
@@ -48,7 +39,7 @@ function playWarp() {
 export function PromptEngine({
   size = "hero",
   onSubmit,
-  placeholder = "Peça ao Forge para construir…",
+  placeholder = "Ask FORGE to build your dream…",
   autoFocus = false,
 }: Props) {
   const [value, setValue] = useState("");
@@ -105,8 +96,8 @@ export function PromptEngine({
     <motion.div
       initial={{ opacity: 0, y: 20, scale: 0.98 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
-      transition={{ delay: hero ? 1.0 : 0, type: "spring", stiffness: 90, damping: 16 }}
-      className={`w-full ${hero ? "max-w-2xl mx-auto mt-12" : ""}`}
+      transition={{ delay: hero ? 0.35 : 0, type: "spring", stiffness: 90, damping: 16 }}
+      className={`w-full ${hero ? "max-w-2xl mx-auto" : ""}`}
     >
       <form
         onSubmit={(e) => { e.preventDefault(); submit(); }}
@@ -169,29 +160,6 @@ export function PromptEngine({
           </div>
         </div>
       </form>
-
-      {hero && (
-        <div className="mt-5 flex flex-wrap gap-2 justify-center items-center">
-          {QUICK_STARTS.slice(0, 3).map((q) => (
-            <button
-              key={q}
-              type="button"
-              onClick={() => submit(q)}
-              data-cursor="hover"
-              className="prompt-chip"
-            >
-              {q}
-            </button>
-          ))}
-          <ImportRepoDialog
-            trigger={
-              <button type="button" data-cursor="hover" className="prompt-chip">
-                Importar do GitHub
-              </button>
-            }
-          />
-        </div>
-      )}
     </motion.div>
   );
 }

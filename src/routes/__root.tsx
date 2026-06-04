@@ -66,21 +66,21 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "FORGE — Construa o inimaginável" },
+      { title: "FORGE — Make Your Dream" },
       {
         name: "description",
         content:
           "FORGE é o construtor de apps web movido a IA. Descreva a ideia. Nós escrevemos o código, configuramos o stack e fazemos o deploy.",
       },
       { property: "og:type", content: "website" },
-      { property: "og:title", content: "FORGE — Construa o inimaginável" },
+      { property: "og:title", content: "FORGE — Make Your Dream" },
       {
         property: "og:description",
         content:
           "Construtor de apps web movido a IA. Da ideia ao deploy em segundos.",
       },
       { name: "twitter:card", content: "summary_large_image" },
-      { name: "twitter:title", content: "FORGE — Construa o inimaginável" },
+      { name: "twitter:title", content: "FORGE — Make Your Dream" },
       {
         name: "twitter:description",
         content: "Construtor de apps web movido a IA. Da ideia ao deploy em segundos.",

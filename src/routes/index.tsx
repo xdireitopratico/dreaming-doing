@@ -13,13 +13,13 @@ import { useLenis } from "@/hooks/useLenis";
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "FORGE — Construa o inimaginável" },
+      { title: "FORGE — Make Your Dream" },
       {
         name: "description",
         content:
-          "FORGE é a plataforma de construção de apps web movida a IA. Descreva sua ideia. Nós escrevemos o código, configuramos o stack, fazemos o deploy.",
+          "FORGE é a plataforma de construção de apps web movida a IA. Descreva seu sonho — nós construímos.",
       },
-      { property: "og:title", content: "FORGE — Construa o inimaginável" },
+      { property: "og:title", content: "FORGE — Make Your Dream" },
       {
         property: "og:description",
         content:
