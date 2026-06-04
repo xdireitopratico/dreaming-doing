@@ -1,7 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
-import { ArrowRight, FolderOpen, Plus } from "lucide-react";
+import { ChevronDown, FolderOpen, Plus } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { PromptEngine } from "@/components/prompt/PromptEngine";
 import { CreateProjectDialog } from "@/components/editor/CreateProjectDialog";
@@ -93,37 +93,46 @@ export function ProjectsDashboard() {
         aria-label="Buscar projetos"
       />
 
-      <section className="dashboard-hero">
-        <Link
-          to="/connectors"
-          className="dashboard-hero-badge hover:border-[var(--forge-primary)]/40 transition-colors"
-        >
-          <ForgeIcon variant="connect" size={14} className="text-[var(--forge-primary)]" />
-          Power your app with connectors
-          <ArrowRight className="size-3.5 opacity-60" />
-        </Link>
-
+      {/* Primeira dobra: só o motor de prompt (estilo Grok) */}
+      <section className="dashboard-hero" aria-label="Criar com IA">
         <h1 className="dashboard-hero-title">Let&apos;s Build</h1>
 
         <div className="dashboard-prompt-wrap">
           <PromptEngine
             size="hero"
-            placeholder="Ask FORGE to create a dashboard to…"
+            placeholder="Descreva o app que você quer criar…"
             autoFocus
           />
         </div>
+
+        <p className="dashboard-hero-hint">
+          O tira-gosto usa <strong>ROBIN</strong> com o pool NVIDIA do FORGE — sem configurar API Keys.
+        </p>
+
+        <a href="#dashboard-projects" className="dashboard-scroll-cue">
+          <span>Seus projetos</span>
+          <ChevronDown className="size-4" />
+        </a>
       </section>
 
-      <section className="dashboard-dock" aria-label="Meus projetos">
+      {/* Segunda dobra: projetos (abaixo da primeira tela) */}
+      <section
+        id="dashboard-projects"
+        className="dashboard-dock dashboard-dock-secondary"
+        aria-label="Meus projetos"
+      >
         <div className="dashboard-dock-header">
           <div>
-            <p className="dashboard-dock-title">Meus projetos</p>
+            <p className="dashboard-dock-title">Projetos recentes</p>
             <p className="dashboard-dock-sub">
               {filtered.length === 0 && !isLoading
-                ? "Crie algo novo com o prompt acima"
+                ? "Nada aqui ainda — use o prompt acima para começar"
                 : `${filtered.length} projeto${filtered.length !== 1 ? "s" : ""}`}
             </p>
           </div>
+          <Link to="/connectors" className="dashboard-dock-browse">
+            Conectores
+          </Link>
         </div>
 
         <div className="dashboard-projects-row">
@@ -155,8 +164,8 @@ export function ProjectsDashboard() {
             ))}
 
           {!isLoading && filtered.length === 0 && !search && (
-            <p className="self-center px-4 text-sm text-[var(--forge-muted)]">
-              Nenhum projeto ainda — descreva sua ideia no campo acima.
+            <p className="self-center px-4 text-sm text-[var(--forge-muted)] max-w-md text-center">
+              Projetos aparecem aqui depois que você criar algo no campo acima.
             </p>
           )}
 

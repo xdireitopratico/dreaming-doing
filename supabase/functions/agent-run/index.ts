@@ -7,7 +7,12 @@ import { createSandboxProvider } from "./sandbox.ts";
 import { registerFsTools } from "./tools/fs.ts";
 import { registerShellTool } from "./tools/shell.ts";
 import { LoopPhase, type AgentState } from "./types.ts";
-import { loadConnectorKeys, loadConnectorPools, type AgentPreferencesPayload } from "./connector-keys.ts";
+import {
+  loadConnectorKeys,
+  loadConnectorPools,
+  loadForgeTrialRobinPool,
+  type AgentPreferencesPayload,
+} from "./connector-keys.ts";
 import { pickCheap, pickMain, type ProviderConfig } from "./providers.ts";
 import { buildChatHistory } from "./memory.ts";
 import { RobinKeyPool, ResilientLLM } from "./robin-pool.ts";
@@ -114,12 +119,12 @@ Deno.serve(async (req) => {
     const platformSecrets = await loadPlatformSecretsMap(supabase, PLATFORM_SECRET_NAMES);
     const mergeKeys = (user: Record<string, string>) => ({ ...platformSecrets, ...user });
 
-    const robin = isRobinMode(preferences);
+    const userWantsRobin = isRobinMode(preferences);
     const poolProvider = preferences?.poolProvider ?? "groq";
     let userOnlyKeys: Record<string, string> = {};
     let hasUserLlmKey = false;
 
-    if (robin) {
+    if (userWantsRobin) {
       const poolKeys = await loadConnectorPools(supabase, userData.user.id, poolProvider);
       hasUserLlmKey = poolKeys.length > 0;
     } else {
@@ -129,20 +134,42 @@ Deno.serve(async (req) => {
       );
     }
 
-    if (!hasUserLlmKey && trialRemaining <= 0) {
+    const useTrialRobin = !hasUserLlmKey && trialRemaining > 0;
+
+    if (!hasUserLlmKey && !useTrialRobin) {
       runningLocks.delete(projectId);
       return json({
         error:
-          "Limite do tira-gosto atingido. Adicione suas chaves em API Keys ou use o modo ROBIN com pool configurado.",
+          "Limite do tira-gosto atingido. Adicione suas chaves em API Keys para continuar.",
       }, 402);
     }
 
     let robinPool: RobinKeyPool | null = null;
     let connectorKeys: Record<string, string> = {};
     let mainCfg: ProviderConfig;
+    let effectiveRobin = userWantsRobin;
 
     try {
-      if (robin) {
+      if (useTrialRobin) {
+        const poolKeys = await loadForgeTrialRobinPool(
+          supabase,
+          platformSecrets.NVIDIA_API_KEY,
+        );
+        if (poolKeys.length === 0) {
+          throw new Error(
+            "Tira-gosto: configure o pool NVIDIA ROBIN no perfil do administrador (API Keys) ou NVIDIA_API_KEY global em Ajustes.",
+          );
+        }
+        effectiveRobin = true;
+        robinPool = new RobinKeyPool(poolKeys);
+        mainCfg = robinProviderConfig("nvidia", poolKeys);
+        mainCfg.label = `Tira-gosto · ROBIN · NVIDIA NIM (${poolKeys.length} chaves FORGE)`;
+        connectorKeys = { NVIDIA_API_KEY: poolKeys[0]! };
+        await supabase
+          .from("profiles")
+          .update({ trial_messages_remaining: trialRemaining - 1 })
+          .eq("id", userData.user.id);
+      } else if (userWantsRobin) {
         const poolKeys = await loadConnectorPools(supabase, userData.user.id, poolProvider);
         robinPool = new RobinKeyPool(poolKeys);
         mainCfg = robinProviderConfig(poolProvider, poolKeys);
@@ -151,47 +178,37 @@ Deno.serve(async (req) => {
           : { GROQ_API_KEY: poolKeys[0]! };
       } else {
         connectorKeys = mergeKeys(userOnlyKeys);
-      }
-
-      if (!hasUserLlmKey && trialRemaining > 0) {
-        await supabase
-          .from("profiles")
-          .update({ trial_messages_remaining: trialRemaining - 1 })
-          .eq("id", userData.user.id);
-      }
-
-      if (!robin) {
-      if (preferences?.mode === "fixed" && preferences.fixedPresetId) {
-        const preset = preferences.fixedPresetId as string;
-        if (preset.includes("groq") && connectorKeys.GROQ_API_KEY) {
-          mainCfg = {
-            provider: "openai",
-            apiKey: connectorKeys.GROQ_API_KEY,
-            model: "llama-3.3-70b-versatile",
-            baseUrl: "https://api.groq.com/openai/v1",
-            label: "Groq (fixo)",
-          };
-        } else if (preset.includes("xai") && connectorKeys.XAI_API_KEY) {
-          mainCfg = {
-            provider: "openai",
-            apiKey: connectorKeys.XAI_API_KEY,
-            model: "grok-2-1212",
-            baseUrl: "https://api.x.ai/v1",
-            label: "xAI (fixo)",
-          };
-        } else if (preset.includes("openai") && connectorKeys.OPENAI_API_KEY) {
-          mainCfg = {
-            provider: "openai",
-            apiKey: connectorKeys.OPENAI_API_KEY,
-            model: "gpt-4o",
-            label: "OpenAI (fixo)",
-          };
+        if (preferences?.mode === "fixed" && preferences.fixedPresetId) {
+          const preset = preferences.fixedPresetId as string;
+          if (preset.includes("groq") && connectorKeys.GROQ_API_KEY) {
+            mainCfg = {
+              provider: "openai",
+              apiKey: connectorKeys.GROQ_API_KEY,
+              model: "llama-3.3-70b-versatile",
+              baseUrl: "https://api.groq.com/openai/v1",
+              label: "Groq (fixo)",
+            };
+          } else if (preset.includes("xai") && connectorKeys.XAI_API_KEY) {
+            mainCfg = {
+              provider: "openai",
+              apiKey: connectorKeys.XAI_API_KEY,
+              model: "grok-2-1212",
+              baseUrl: "https://api.x.ai/v1",
+              label: "xAI (fixo)",
+            };
+          } else if (preset.includes("openai") && connectorKeys.OPENAI_API_KEY) {
+            mainCfg = {
+              provider: "openai",
+              apiKey: connectorKeys.OPENAI_API_KEY,
+              model: "gpt-4o",
+              label: "OpenAI (fixo)",
+            };
+          } else {
+            mainCfg = pickMain(connectorKeys);
+          }
         } else {
           mainCfg = pickMain(connectorKeys);
         }
-      } else {
-        mainCfg = pickMain(connectorKeys);
-      }
       }
     } catch (err: unknown) {
       runningLocks.delete(projectId);
@@ -222,8 +239,8 @@ Deno.serve(async (req) => {
     const makeLoop = (onEvent: (type: string, data: unknown) => void) => {
       const streamEmit = (type: string, data: Record<string, unknown>) => onEvent(type, data);
       const resilientMain = new ResilientLLM(mainCfg, robinPool, streamEmit);
-      const cheapCfg = robin ? mainCfg : pickCheap(pickMain(connectorKeys), connectorKeys);
-      const resilientCheap = robin
+      const cheapCfg = effectiveRobin ? mainCfg : pickCheap(pickMain(connectorKeys), connectorKeys);
+      const resilientCheap = effectiveRobin
         ? resilientMain
         : new ResilientLLM(cheapCfg, null, streamEmit);
 
@@ -235,7 +252,7 @@ Deno.serve(async (req) => {
         (event) => onEvent(event.type, event.data),
         connectorKeys,
         { main: resilientMain, cheap: resilientCheap },
-        robin,
+        effectiveRobin,
       );
     };
 
@@ -259,7 +276,8 @@ Deno.serve(async (req) => {
           projectId,
           conversationId,
           provider: mainCfg.label,
-          robin,
+          robin: effectiveRobin,
+          trial: useTrialRobin,
           memoryMessages: messages.length,
         });
 

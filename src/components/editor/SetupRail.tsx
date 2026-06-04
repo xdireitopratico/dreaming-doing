@@ -62,7 +62,7 @@ export function SetupRail() {
         </ul>
         {trialMessagesRemaining > 0 ? (
           <p className="mt-2 font-mono text-[9px] text-[var(--forge-muted)] leading-relaxed">
-            Tira-gosto: {trialMessagesRemaining} mensagem(ns) com infra FORGE.
+            Tira-gosto: {trialMessagesRemaining} msg · ROBIN NVIDIA (pool FORGE).
           </p>
         ) : (
           <p className="mt-2 font-mono text-[9px] text-amber-400/90 leading-relaxed">

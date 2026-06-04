@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import { FORGE_ADMIN_EMAIL } from "../_shared/forge-admin.ts";
 
 export type AgentPreferencesPayload = {
   mode?: "auto" | "robin" | "rob" | "fixed";
@@ -45,6 +46,40 @@ export async function loadConnectorPools(
 
   if (error) throw new Error(`Falha ao carregar pool: ${error.message}`);
   return parseTokenField(data?.token_encrypted ?? null);
+}
+
+/** ID do usuário administrador FORGE (pool ROBIN do tira-gosto). */
+export async function resolveForgeAdminUserId(
+  supabase: SupabaseClient,
+): Promise<string | null> {
+  const { data, error } = await supabase.auth.admin.listUsers({ perPage: 500, page: 1 });
+  if (error) {
+    console.error("resolveForgeAdminUserId:", error.message);
+    return null;
+  }
+  const u = data.users.find(
+    (x) => x.email?.trim().toLowerCase() === FORGE_ADMIN_EMAIL.toLowerCase(),
+  );
+  return u?.id ?? null;
+}
+
+/**
+ * Pool ROBIN NVIDIA do admin (API Keys → pool no perfil do administrador).
+ * Fallback: secret global NVIDIA_API_KEY (uma chave ou JSON array).
+ */
+export async function loadForgeTrialRobinPool(
+  supabase: SupabaseClient,
+  platformNvidiaSecret?: string,
+): Promise<string[]> {
+  const adminId = await resolveForgeAdminUserId(supabase);
+  if (adminId) {
+    const fromAdmin = await loadConnectorPools(supabase, adminId, "nvidia");
+    if (fromAdmin.length > 0) return fromAdmin;
+  }
+  if (platformNvidiaSecret?.trim()) {
+    return parseTokenField(platformNvidiaSecret);
+  }
+  return [];
 }
 
 /** Chaves por provedor — Groq, NVIDIA, xAI e OpenAI podem coexistir. */

@@ -151,33 +151,51 @@ html:has(.dashboard-workspace) {
 }
 
 .dashboard-stage {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
+  display: block;
   min-height: 100%;
 }
 
+/* Primeira dobra = altura da área rolável (uma tela cheia de prompt) */
 .dashboard-hero {
-  flex: 1 1 auto;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  min-height: min(52vh, 520px);
-  padding: 40px 32px 24px;
+  min-height: 100dvh;
+  padding: 48px 32px 32px;
+  box-sizing: border-box;
 }
 
-.dashboard-hero-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 14px;
-  border-radius: 999px;
-  border: 1px solid var(--forge-border-strong);
-  background: rgba(5, 6, 10, 0.55);
-  font-size: 11px;
+.dashboard-hero-hint {
+  margin-top: 20px;
+  max-width: 480px;
+  text-align: center;
+  font-size: 12px;
+  line-height: 1.5;
   color: var(--forge-muted);
-  margin-bottom: 20px;
+}
+
+.dashboard-hero-hint strong {
+  color: var(--forge-primary);
+  font-weight: 600;
+}
+
+.dashboard-scroll-cue {
+  margin-top: 32px;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--forge-ghost);
+  transition: color 0.15s;
+}
+
+.dashboard-scroll-cue:hover {
+  color: var(--forge-primary);
 }
 
 .dashboard-hero-title {
@@ -202,13 +220,18 @@ html:has(.dashboard-workspace) {
 }
 
 .dashboard-dock {
-  flex-shrink: 0;
-  margin: 8px 20px 28px;
+  margin: 0 20px 48px;
   border-radius: 18px;
   border: 1px solid var(--forge-border);
   background: var(--forge-surface);
   padding: 16px 18px 18px;
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.28);
+}
+
+.dashboard-dock-secondary {
+  margin-top: 8px;
+  opacity: 0.94;
+  scroll-margin-top: 24px;
 }
 
 .dashboard-dock-header {
@@ -316,10 +339,10 @@ html:has(.dashboard-workspace) {
     display: none;
   }
   .dashboard-hero {
-    min-height: 44vh;
-    padding: 28px 16px 16px;
+    min-height: 100dvh;
+    padding: 32px 16px 24px;
   }
   .dashboard-dock {
-    margin: 4px 12px 20px;
+    margin: 0 12px 32px;
   }
 }

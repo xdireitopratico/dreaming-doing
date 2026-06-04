@@ -15,9 +15,10 @@ export const PLATFORM_SECRET_DEFINITIONS: PlatformSecretDef[] = [
   },
   {
     name: "E2B_TEMPLATE",
-    label: "E2B template",
-    description: "Template do sandbox (ex.: nodejs). Opcional.",
-    placeholder: "nodejs",
+    label: "E2B — ID do template (opcional)",
+    description:
+      "Nome do ambiente pré-montado na E2B (ex.: nodejs). Não é uma chave API — só informa qual imagem usar no sandbox. Se vazio, o FORGE usa nodejs automaticamente.",
+    placeholder: "nodejs (padrão se vazio)",
   },
   {
     name: "XAI_API_KEY",

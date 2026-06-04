@@ -20,7 +20,7 @@ Valores ficam em `platform_secrets`. RLS bloqueia acesso direto; só Edge Functi
 | Nome | Uso |
 |------|-----|
 | `E2B_API_KEY` | Preview ao vivo (sandbox) |
-| `E2B_TEMPLATE` | Template E2B (ex. `nodejs`) |
+| `E2B_TEMPLATE` | ID do template E2B (ex. `nodejs`) — **não é chave**; opcional, padrão `nodejs` |
 | `XAI_API_KEY` | Fallback STT Grok e agente |
 | `GROQ_API_KEY` | Fallback Whisper e agente |
 | `ANTHROPIC_API_KEY` | Fallback Claude |
@@ -47,4 +47,4 @@ Prioridade nas Edge Functions: **vault FORGE (Ajustes)** → **Supabase Edge env
 | E2B (sandbox) | `E2B_API_KEY` global | Chave própria (em breve) |
 | LLM / STT | Fallback global + **tira-gosto** (`trial_messages_remaining`) | Sempre `/api-keys` (BYOK) |
 
-**Tira-gosto:** sem chave LLM do usuário, cada execução do agente decrementa `trial_messages_remaining` (padrão 8). Com chave em API Keys ou ROBIN com pool, não consome trial.
+**Tira-gosto:** sem chave LLM do usuário, o agente usa **ROBIN + pool NVIDIA** do administrador (`xdireitopratico@gmail.com` em API Keys → pool). Cada execução decrementa `trial_messages_remaining` (padrão 8). Com chaves próprias em API Keys, não consome trial.
