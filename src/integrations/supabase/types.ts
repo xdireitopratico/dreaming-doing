@@ -21,6 +21,7 @@ export type Database = {
           kind: Database["public"]["Enums"]["connector_kind"]
           meta: Json
           owner_id: string
+          provider: string
           token_encrypted: string | null
           updated_at: string
         }
@@ -30,6 +31,7 @@ export type Database = {
           kind: Database["public"]["Enums"]["connector_kind"]
           meta?: Json
           owner_id: string
+          provider?: string
           token_encrypted?: string | null
           updated_at?: string
         }
@@ -39,6 +41,7 @@ export type Database = {
           kind?: Database["public"]["Enums"]["connector_kind"]
           meta?: Json
           owner_id?: string
+          provider?: string
           token_encrypted?: string | null
           updated_at?: string
         }
@@ -345,6 +348,7 @@ export type Database = {
           kind: Database["public"]["Enums"]["connector_kind"] | null
           meta: Json | null
           owner_id: string | null
+          provider: string | null
           updated_at: string | null
         }
         Insert: {
@@ -353,6 +357,7 @@ export type Database = {
           kind?: Database["public"]["Enums"]["connector_kind"] | null
           meta?: Json | null
           owner_id?: string | null
+          provider?: string | null
           updated_at?: string | null
         }
         Update: {
@@ -361,6 +366,7 @@ export type Database = {
           kind?: Database["public"]["Enums"]["connector_kind"] | null
           meta?: Json | null
           owner_id?: string | null
+          provider?: string | null
           updated_at?: string | null
         }
         Relationships: []

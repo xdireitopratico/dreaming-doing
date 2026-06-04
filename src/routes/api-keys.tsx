@@ -115,17 +115,21 @@ const INITIAL: ProviderConfig[] = [
 ];
 
 function rowForProvider(
-  rows: { kind: string; meta: Record<string, unknown> | null }[],
+  rows: { kind: string; meta: Record<string, unknown> | null; provider?: string | null }[],
   id: AiProviderId,
 ) {
+  const target =
+    id === "anthropic"
+      ? { kind: "anthropic", provider: "" }
+      : id === "openai"
+        ? { kind: "openai", provider: "openai" }
+        : { kind: "openai", provider: id };
+
   return rows.find((r) => {
     const meta = (r.meta ?? {}) as { provider?: string };
-    if (id === "anthropic") return r.kind === "anthropic";
-    if (id === "openai") return r.kind === "openai" && (!meta.provider || meta.provider === "openai");
-    if (id === "groq") return r.kind === "openai" && meta.provider === "groq";
-    if (id === "xai") return r.kind === "openai" && meta.provider === "xai";
-    if (id === "nvidia") return r.kind === "openai" && meta.provider === "nvidia";
-    return false;
+    const p = (r.provider ?? meta.provider ?? "").trim();
+    if (target.kind === "anthropic") return r.kind === "anthropic";
+    return r.kind === "openai" && p === target.provider;
   });
 }
 
@@ -143,7 +147,7 @@ function ApiKeysPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("connectors_public")
-        .select("kind, meta")
+        .select("kind, meta, provider")
         .eq("owner_id", user!.id);
       if (error) throw error;
       return data ?? [];

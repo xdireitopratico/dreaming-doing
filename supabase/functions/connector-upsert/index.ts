@@ -20,6 +20,12 @@ function json(body: unknown, status = 200) {
   });
 }
 
+function resolveProvider(kind: string, meta: Record<string, unknown>): string {
+  if (kind !== "openai") return "";
+  const p = typeof meta.provider === "string" ? meta.provider.trim() : "";
+  return p || "openai";
+}
+
 function parsePool(tokenField: string | null): string[] {
   if (!tokenField?.trim()) return [];
   const t = tokenField.trim();
@@ -80,27 +86,38 @@ Deno.serve(async (req) => {
     const admin = createClient(SUPABASE_URL, SERVICE_KEY);
     const metaIn =
       typeof body?.meta === "object" && body.meta !== null ? body.meta : {};
-    const provider = typeof metaIn.provider === "string" ? metaIn.provider : undefined;
+    const providerKey = resolveProvider(kind, metaIn);
+
+    if (kind === "openai" && !metaIn.provider) {
+      return json({ error: "meta.provider obrigatório (groq, nvidia, xai, openai)" }, 400);
+    }
 
     const loadOpenAiRow = async () => {
       const { data } = await admin
         .from("connectors")
-        .select("id, token_encrypted, meta")
+        .select("id, token_encrypted, meta, provider")
         .eq("owner_id", user.id)
         .eq("kind", "openai")
+        .eq("provider", providerKey)
         .maybeSingle();
       return data;
     };
 
     if (body?.disconnect === true) {
-      if (kind === "openai" && provider) {
-        const row = await loadOpenAiRow();
-        const rowProvider = (row?.meta as Record<string, string>)?.provider;
-        if (row && rowProvider === provider) {
-          await admin.from("connectors").delete().eq("id", row.id);
-        }
+      if (kind === "openai") {
+        await admin
+          .from("connectors")
+          .delete()
+          .eq("owner_id", user.id)
+          .eq("kind", "openai")
+          .eq("provider", providerKey);
       } else {
-        await admin.from("connectors").delete().eq("owner_id", user.id).eq("kind", kind);
+        await admin
+          .from("connectors")
+          .delete()
+          .eq("owner_id", user.id)
+          .eq("kind", kind)
+          .eq("provider", "");
       }
       if (kind === "github") {
         await admin.from("profiles").update({ github_username: null }).eq("id", user.id);
@@ -109,12 +126,11 @@ Deno.serve(async (req) => {
     }
 
     const removePoolKey = typeof body?.removePoolKey === "string" ? body.removePoolKey : null;
-    if (removePoolKey && kind === "openai" && provider) {
+    if (removePoolKey && kind === "openai") {
       const row = await loadOpenAiRow();
       if (!row) return json({ error: "Nenhum pool encontrado" }, 404);
-      const rowMeta = (row.meta ?? {}) as Record<string, unknown>;
-      if (rowMeta.provider !== provider) return json({ error: "Provedor não corresponde" }, 400);
 
+      const rowMeta = (row.meta ?? {}) as Record<string, unknown>;
       const pool = parsePool(row.token_encrypted);
       const slots = (rowMeta.poolSlots as PoolSlot[]) ?? buildPoolSlots(pool);
       const idx = slots.findIndex((s) => s.id === removePoolKey);
@@ -130,6 +146,7 @@ Deno.serve(async (req) => {
 
       const newMeta = {
         ...rowMeta,
+        provider: providerKey,
         poolCount: pool.length,
         poolSlots: newSlots,
         updatedAt: new Date().toISOString(),
@@ -154,15 +171,10 @@ Deno.serve(async (req) => {
 
     if (body?.appendToPool === true && token) {
       const existing = kind === "openai" ? await loadOpenAiRow() : null;
-      const existingProvider = (existing?.meta as Record<string, string>)?.provider;
       const prevSlots = (existing?.meta as Record<string, unknown>)?.poolSlots as PoolSlot[] | undefined;
 
       pool = parsePool(existing?.token_encrypted ?? null);
-      if (!existing || existingProvider === provider || !provider) {
-        pool.push(token);
-      } else {
-        pool = [token];
-      }
+      pool.push(token);
       poolSlots = buildPoolSlots(pool, prevSlots);
       tokenEncrypted = JSON.stringify(pool);
     } else if (token) {
@@ -174,6 +186,7 @@ Deno.serve(async (req) => {
 
     const meta: Record<string, unknown> = {
       ...metaIn,
+      provider: providerKey,
       poolCount: pool.length || (token ? 1 : 0),
       poolSlots,
       connectedAt: new Date().toISOString(),
@@ -183,13 +196,14 @@ Deno.serve(async (req) => {
     const row: Record<string, unknown> = {
       owner_id: user.id,
       kind,
+      provider: providerKey,
       meta,
       updated_at: new Date().toISOString(),
     };
     if (tokenEncrypted) row.token_encrypted = tokenEncrypted;
 
     const { error } = await admin.from("connectors").upsert(row, {
-      onConflict: "owner_id,kind",
+      onConflict: "owner_id,kind,provider",
     });
     if (error) return json({ error: error.message }, 500);
 

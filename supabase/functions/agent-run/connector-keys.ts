@@ -22,7 +22,14 @@ export function parseTokenField(tokenField: string | null): string[] {
   return [t];
 }
 
-/** Pools completos para modo ROBIN (todas as chaves, sem sortear no load). */
+function openAiProvider(row: { provider?: string | null; meta?: unknown }): string {
+  const col = row.provider?.trim();
+  if (col) return col;
+  const meta = (row.meta ?? {}) as Record<string, string>;
+  return meta.provider ?? "openai";
+}
+
+/** Pools completos para modo ROBIN (todas as chaves do provedor selecionado). */
 export async function loadConnectorPools(
   supabase: SupabaseClient,
   ownerId: string,
@@ -30,24 +37,17 @@ export async function loadConnectorPools(
 ): Promise<string[]> {
   const { data, error } = await supabase
     .from("connectors")
-    .select("kind, token_encrypted, meta")
+    .select("token_encrypted")
     .eq("owner_id", ownerId)
-    .not("token_encrypted", "is", null);
+    .eq("kind", "openai")
+    .eq("provider", poolProvider)
+    .maybeSingle();
 
-  if (error) throw new Error(`Falha ao carregar conectores: ${error.message}`);
-
-  for (const row of data ?? []) {
-    if (row.kind !== "openai") continue;
-    const meta = (row.meta ?? {}) as Record<string, string>;
-    const p = meta.provider ?? "openai";
-    if (p === poolProvider) {
-      return parseTokenField(row.token_encrypted);
-    }
-  }
-  return [];
+  if (error) throw new Error(`Falha ao carregar pool: ${error.message}`);
+  return parseTokenField(data?.token_encrypted ?? null);
 }
 
-/** Uma chave por env (modo auto/fixed) — compatibilidade. */
+/** Chaves por provedor — Groq, NVIDIA, xAI e OpenAI podem coexistir. */
 export async function loadConnectorKeys(
   supabase: SupabaseClient,
   ownerId: string,
@@ -55,7 +55,7 @@ export async function loadConnectorKeys(
 ): Promise<Record<string, string>> {
   const { data, error } = await supabase
     .from("connectors")
-    .select("kind, token_encrypted, meta")
+    .select("kind, token_encrypted, meta, provider")
     .eq("owner_id", ownerId)
     .not("token_encrypted", "is", null);
 
@@ -66,7 +66,6 @@ export async function loadConnectorKeys(
   const poolProvider = preferences?.poolProvider ?? "groq";
 
   for (const row of data ?? []) {
-    const meta = (row.meta ?? {}) as Record<string, string>;
     const tokens = parseTokenField(row.token_encrypted);
     const token = tokens[0];
     if (!token) continue;
@@ -77,7 +76,7 @@ export async function loadConnectorKeys(
     }
 
     if (row.kind === "openai") {
-      const p = meta.provider ?? "openai";
+      const p = openAiProvider(row);
       if (robinMode && p !== poolProvider) continue;
 
       if (p === "groq") keys.GROQ_API_KEY = token;

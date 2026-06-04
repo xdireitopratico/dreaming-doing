@@ -119,7 +119,8 @@ export function ModelPowerPanel() {
             </select>
             <p className="font-mono text-[9px] text-[var(--text-ghost)] flex items-start gap-1.5">
               <Info className="size-3 shrink-0 mt-0.5" />
-              Use o pool do provedor selecionado. Adicione chaves na seção NVIDIA ou Groq abaixo.
+              Use o pool do provedor selecionado. Groq e NVIDIA podem ficar conectados ao mesmo tempo —
+              adicione chaves nas seções abaixo.
             </p>
           </div>
         )}
