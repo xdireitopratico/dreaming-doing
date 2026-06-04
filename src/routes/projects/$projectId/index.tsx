@@ -18,7 +18,7 @@ import { Code2, Eye, PanelLeft, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { MicButton } from "@/components/voice/MicButton";
 
-export const Route = createFileRoute("/projects/$projectId")({
+export const Route = createFileRoute("/projects/$projectId/")({
   component: EditorPage,
 });
 

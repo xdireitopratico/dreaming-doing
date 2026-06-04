@@ -10,6 +10,9 @@ import { registerShellTool } from "./tools/shell.ts";
 import { LoopPhase, type AgentState, type ChatMessage } from "./types.ts";
 import { buildProvider, pickMain } from "./providers.ts";
 
+// Simple in-memory advisory lock per project (Edge Function realm — resets on cold start)
+const runningLocks = new Map<string, Promise<unknown>>();
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -36,6 +39,12 @@ Deno.serve(async (req) => {
     if (!project || project.owner_id !== userData.user.id) {
       return json({ error: "Projeto não encontrado" }, 404);
     }
+
+    // Advisory lock — prevents concurrent agent runs for the same project
+    if (runningLocks.has(projectId)) {
+      return json({ error: "Agente já está executando neste projeto. Aguarde a conclusão." }, 409);
+    }
+    runningLocks.set(projectId, Promise.resolve());
 
     const { data: history } = await supabase
       .from("messages")
@@ -68,6 +77,7 @@ Deno.serve(async (req) => {
 
     const reg = new ToolRegistry();
     const sandbox = createSandboxProvider();
+    const cleanup = () => { runningLocks.delete(projectId); sandbox.destroy().catch(() => {}); };
     registerFsTools(reg, { supabase, projectId });
     registerShellTool(reg, { sandbox, projectId, supabase });
 
@@ -87,7 +97,7 @@ Deno.serve(async (req) => {
     if (!useSSE) {
       const loop = new AgentLoop(reg, llm, supabase, buildState());
       const result = await loop.run();
-      sandbox.destroy().catch(() => {});
+      cleanup();
       return json(result);
     }
 
@@ -103,10 +113,11 @@ Deno.serve(async (req) => {
 
         const loop = new AgentLoop(reg, llm, supabase, buildState(), (event) => emit(event));
         loop.run().then((result) => {
+          cleanup();
           emit({ type: "finish", ...result });
-          sandbox.destroy().catch(() => {});
           try { controller.close(); } catch { /* closed */ }
         }).catch((err) => {
+          cleanup();
           emit({ type: "error", error: err?.message ?? "erro desconhecido" });
           try { controller.close(); } catch { /* closed */ }
         });
@@ -123,6 +134,7 @@ Deno.serve(async (req) => {
       },
     });
   } catch (e: any) {
+    runningLocks.delete(projectId);
     return json({ error: e?.message ?? "erro inesperado" }, 500);
   }
 });
