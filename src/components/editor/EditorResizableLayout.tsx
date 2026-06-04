@@ -1,16 +1,17 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 
 const STORAGE_KEY = "forge-editor-chat-ratio";
-const SNAP_RATIOS = [0.22, 0.38, 0.5] as const;
-const MIN_CHAT_PX = 260;
-const MAX_CHAT_RATIO = 0.55;
+const SNAP_RATIOS = [0.28, 0.36, 0.44] as const;
+const MIN_CHAT_PX = 280;
+const MAX_CHAT_RATIO = 0.48;
+const DEFAULT_RATIO = 0.32;
 
 function loadRatio(): number {
-  if (typeof window === "undefined") return SNAP_RATIOS[1];
+  if (typeof window === "undefined") return DEFAULT_RATIO;
   const raw = localStorage.getItem(STORAGE_KEY);
   const n = raw ? Number.parseFloat(raw) : NaN;
   if (Number.isFinite(n) && n >= 0.18 && n <= MAX_CHAT_RATIO) return n;
-  return SNAP_RATIOS[1];
+  return DEFAULT_RATIO;
 }
 
 function nearestSnap(ratio: number): number {

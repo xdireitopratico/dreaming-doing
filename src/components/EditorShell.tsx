@@ -13,6 +13,7 @@ export function EditorShell({
   onViewChange,
   onShare,
   onPublish,
+  onQuickPrompt,
   running,
 }: {
   children: ReactNode;
@@ -21,6 +22,7 @@ export function EditorShell({
   onViewChange: (view: EditorMainView) => void;
   onShare?: () => void;
   onPublish?: () => void;
+  onQuickPrompt?: (text: string) => void;
   running?: boolean;
 }) {
   const { user, loading } = useAuth();
@@ -47,6 +49,7 @@ export function EditorShell({
         onViewChange={onViewChange}
         onShare={onShare}
         onPublish={onPublish}
+        onQuickPrompt={onQuickPrompt}
         running={running}
       />
       <div className="min-h-0 flex-1">{children}</div>

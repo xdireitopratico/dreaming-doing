@@ -38,6 +38,8 @@ interface ChatInputProps {
   files: string[];
   composerMode?: AgentComposerMode;
   onComposerModeChange?: (mode: AgentComposerMode) => void;
+  externalPrompt?: string | null;
+  onExternalPromptConsumed?: () => void;
 }
 
 // -----------------------------------------------------------------------------------
@@ -133,6 +135,8 @@ export function ChatInput({
   files,
   composerMode: composerModeProp,
   onComposerModeChange,
+  externalPrompt,
+  onExternalPromptConsumed,
 }: ChatInputProps) {
   const [input, setInput] = useState("");
   const [composerModeLocal, setComposerModeLocal] = useState<AgentComposerMode>("build");
@@ -147,6 +151,14 @@ export function ChatInput({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const historyRef = useRef<string[]>([]);
+
+  useEffect(() => {
+    if (externalPrompt) {
+      setInput(externalPrompt);
+      onExternalPromptConsumed?.();
+      textareaRef.current?.focus();
+    }
+  }, [externalPrompt, onExternalPromptConsumed]);
 
   // Auto-scroll
   useEffect(() => {
@@ -432,12 +444,6 @@ export function ChatInput({
             <Paperclip className="size-4" />
           </button>
 
-          <MicButton
-            size="sm"
-            className="forge-composer-icon !size-8 !rounded-lg !border-0 !bg-transparent"
-            onTranscript={(t) => setInput((cur) => (cur ? `${cur} ${t}` : t))}
-          />
-
           <button type="button" className="forge-composer-chip">
             <Plus className="size-3.5" />
             Visual edits
@@ -461,6 +467,12 @@ export function ChatInput({
               Plan
             </button>
           </div>
+
+          <MicButton
+            size="sm"
+            className="forge-composer-mic"
+            onTranscript={(t) => setInput((cur) => (cur ? `${cur} ${t}` : t))}
+          />
 
           {running ? (
             <button

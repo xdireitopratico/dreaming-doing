@@ -71,6 +71,7 @@ function EditorPage() {
   const [pickMode, setPickMode] = useState(false);
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [composerMode, setComposerMode] = useState<AgentComposerMode>("build");
+  const [promptDraft, setPromptDraft] = useState<string | null>(null);
 
   // ─── Refs ────────────────────────────────────────────────────────────
   const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null);
@@ -367,6 +368,7 @@ function EditorPage() {
         activeView={mainView}
         onViewChange={handleMainViewChange}
         running={running}
+        onQuickPrompt={(text) => setPromptDraft(text)}
         onShare={() => toast.info("Share — em breve")}
         onPublish={() => toast.info("Publish — em breve")}
       >
@@ -389,6 +391,8 @@ function EditorPage() {
                   files={filePaths}
                   composerMode={composerMode}
                   onComposerModeChange={setComposerMode}
+                  externalPrompt={promptDraft}
+                  onExternalPromptConsumed={() => setPromptDraft(null)}
                 />
               </>
             }
