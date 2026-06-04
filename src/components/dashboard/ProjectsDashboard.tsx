@@ -1,11 +1,12 @@
 import { Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
-import { ArrowRight, FolderOpen, Plus, Sparkles } from "lucide-react";
+import { ArrowRight, FolderOpen, Plus } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { PromptEngine } from "@/components/prompt/PromptEngine";
 import { CreateProjectDialog } from "@/components/editor/CreateProjectDialog";
 import { ImportRepoDialog } from "@/components/ImportRepoDialog";
+import { ForgeIcon } from "@/components/icons/ForgeIcon";
 import { useAuth } from "@/lib/auth";
 import {
   removeRealtimeChannel,
@@ -22,8 +23,6 @@ type ProjectRow = {
   meta: Record<string, unknown> | null;
 };
 
-type DockTab = "mine" | "recent" | "starred";
-
 function formatRelative(dateStr: string | null) {
   if (!dateStr) return "—";
   const d = new Date(dateStr);
@@ -39,7 +38,6 @@ export function ProjectsDashboard() {
   const { user } = useAuth();
   const qc = useQueryClient();
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [dockTab, setDockTab] = useState<DockTab>("mine");
   const [search, setSearch] = useState("");
 
   const { data: projects, isLoading } = useQuery({
@@ -73,35 +71,18 @@ export function ProjectsDashboard() {
   }, [user?.id, qc]);
 
   const filtered = useMemo(() => {
-    let list = projects ?? [];
+    const list = projects ?? [];
     const q = search.trim().toLowerCase();
-    if (q) {
-      list = list.filter(
-        (p) =>
-          p.name.toLowerCase().includes(q) ||
-          (p.description ?? "").toLowerCase().includes(q),
-      );
-    }
-    if (dockTab === "recent") {
-      return [...list].sort((a, b) => {
-        const ta = new Date(a.updated_at ?? a.created_at ?? 0).getTime();
-        const tb = new Date(b.updated_at ?? b.created_at ?? 0).getTime();
-        return tb - ta;
-      });
-    }
-    if (dockTab === "starred") {
-      return list.filter((p) => Boolean((p.meta as { starred?: boolean })?.starred));
-    }
-    return list;
-  }, [projects, search, dockTab]);
-
-  const firstName =
-    (user?.user_metadata?.full_name as string | undefined)?.split(" ")[0] ??
-    user?.email?.split("@")[0] ??
-    "builder";
+    if (!q) return list;
+    return list.filter(
+      (p) =>
+        p.name.toLowerCase().includes(q) ||
+        (p.description ?? "").toLowerCase().includes(q),
+    );
+  }, [projects, search]);
 
   return (
-    <>
+    <div className="dashboard-stage">
       <input
         id="dashboard-search"
         type="search"
@@ -117,14 +98,12 @@ export function ProjectsDashboard() {
           to="/connectors"
           className="dashboard-hero-badge hover:border-[var(--forge-primary)]/40 transition-colors"
         >
-          <Sparkles className="size-3.5 text-[var(--forge-primary)]" />
+          <ForgeIcon variant="connect" size={14} className="text-[var(--forge-primary)]" />
           Power your app with connectors
           <ArrowRight className="size-3.5 opacity-60" />
         </Link>
 
-        <h1 className="dashboard-hero-title">
-          Got an idea, {firstName}?
-        </h1>
+        <h1 className="dashboard-hero-title">Let&apos;s Build</h1>
 
         <div className="dashboard-prompt-wrap">
           <PromptEngine
@@ -135,30 +114,16 @@ export function ProjectsDashboard() {
         </div>
       </section>
 
-      <section className="dashboard-dock" aria-label="Seus projetos">
-        <div className="flex items-center gap-2">
-          <div className="dashboard-dock-tabs flex-1">
-            {(
-              [
-                ["mine", "My projects"],
-                ["recent", "Recently viewed"],
-                ["starred", "Starred"],
-              ] as const
-            ).map(([id, label]) => (
-              <button
-                key={id}
-                type="button"
-                className="dashboard-dock-tab"
-                data-active={dockTab === id ? "true" : undefined}
-                onClick={() => setDockTab(id)}
-              >
-                {label}
-              </button>
-            ))}
+      <section className="dashboard-dock" aria-label="Meus projetos">
+        <div className="dashboard-dock-header">
+          <div>
+            <p className="dashboard-dock-title">Meus projetos</p>
+            <p className="dashboard-dock-sub">
+              {filtered.length === 0 && !isLoading
+                ? "Crie algo novo com o prompt acima"
+                : `${filtered.length} projeto${filtered.length !== 1 ? "s" : ""}`}
+            </p>
           </div>
-          <Link to="/projects" className="dashboard-dock-browse">
-            Browse all →
-          </Link>
         </div>
 
         <div className="dashboard-projects-row">
@@ -189,13 +154,15 @@ export function ProjectsDashboard() {
               />
             ))}
 
-          {!isLoading && filtered.length === 0 && (
+          {!isLoading && filtered.length === 0 && !search && (
             <p className="self-center px-4 text-sm text-[var(--forge-muted)]">
-              {search
-                ? "Nenhum projeto encontrado."
-                : dockTab === "starred"
-                  ? "Nenhum favorito ainda."
-                  : "Crie seu primeiro projeto acima."}
+              Nenhum projeto ainda — descreva sua ideia no campo acima.
+            </p>
+          )}
+
+          {!isLoading && filtered.length === 0 && search && (
+            <p className="self-center px-4 text-sm text-[var(--forge-muted)]">
+              Nenhum projeto encontrado para &quot;{search}&quot;.
             </p>
           )}
 
@@ -207,7 +174,7 @@ export function ProjectsDashboard() {
               className="dashboard-project-card"
             >
               <div className="dashboard-project-thumb">
-                <Sparkles className="size-5 text-[var(--forge-ghost)]" />
+                <ForgeIcon variant="project" size={22} className="text-[var(--forge-ghost)]" />
               </div>
               <div className="dashboard-project-meta">
                 <p className="dashboard-project-name">{p.name}</p>
@@ -221,6 +188,6 @@ export function ProjectsDashboard() {
       </section>
 
       <CreateProjectDialog open={dialogOpen} onClose={() => setDialogOpen(false)} />
-    </>
+    </div>
   );
 }

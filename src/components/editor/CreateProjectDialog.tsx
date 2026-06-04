@@ -4,12 +4,13 @@ import { useState, useCallback } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  X, Sparkles, FolderOpen, Loader2, ArrowRight,
+  X, FolderOpen, Loader2, ArrowRight,
   Globe, Layout, Package, Zap,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { ForgeIcon } from "@/components/icons/ForgeIcon";
 
 type Template = {
   id: string;
@@ -305,7 +306,7 @@ export function CreateProjectDialog({ open, onClose }: CreateProjectDialogProps)
                   className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[var(--primary)] text-[var(--primary-foreground)] text-xs font-mono hover:bg-[var(--primary-hot)] transition-colors disabled:opacity-30"
                   disabled={!name.trim()}
                 >
-                  <Sparkles className="size-3.5" />
+                  <ForgeIcon variant="build" size={14} />
                   Criar Projeto
                   <ArrowRight className="size-3.5" />
                 </button>

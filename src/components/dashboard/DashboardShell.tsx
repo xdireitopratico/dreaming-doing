@@ -8,12 +8,12 @@ import {
   Plug,
   Search,
   Settings,
-  Sparkles,
   Star,
   Zap,
 } from "lucide-react";
 import { type ReactNode, useEffect } from "react";
 import { ForgeLogoMark } from "@/components/editor/ForgeLogoMark";
+import { ForgeIcon } from "@/components/icons/ForgeIcon";
 import { useAuth } from "@/lib/auth";
 import { sanitizeNext } from "@/lib/sanitize-next";
 
@@ -126,7 +126,7 @@ export function DashboardShell({
 
         <div className="dashboard-sidebar-footer">
           <div className="rounded-xl border border-[var(--forge-border)] p-3 text-[11px] text-[var(--forge-muted)]">
-            <Sparkles className="size-3.5 text-[var(--forge-primary)] mb-1.5" />
+            <ForgeIcon variant="referral" size={14} className="text-[var(--forge-primary)] mb-1.5" />
             Convide amigos e ganhe créditos na beta.
           </div>
           <Link to="/connectors" className="dashboard-upgrade">

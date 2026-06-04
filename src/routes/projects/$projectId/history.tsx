@@ -12,8 +12,9 @@ import { MessageDiffCard } from "@/components/editor/MessageDiffCard";
 import { TimelineScrubber } from "@/components/editor/TimelineScrubber";
 import {
   History, ChevronLeft, ArrowLeftRight, GitCommit, Clock,
-  MessageSquare, Sparkles, CheckCircle2, AlertCircle, Loader2,
+  MessageSquare, CheckCircle2, AlertCircle, Loader2,
 } from "lucide-react";
+import { ForgeIcon } from "@/components/icons/ForgeIcon";
 
 export const Route = createFileRoute("/projects/$projectId/history")({
   component: HistoryPage,
@@ -279,7 +280,7 @@ function TimelineModeView({
       {/* Message header */}
       <div className="flex items-start gap-3">
         <div className="size-10 rounded-lg bg-[var(--primary)]/10 border border-[var(--primary)]/20 grid place-items-center shrink-0">
-          <Sparkles className="size-4 text-[var(--primary)]" />
+          <ForgeIcon variant="agent" size={18} className="text-[var(--primary)]" />
         </div>
         <div>
           <div className="font-mono text-[10px] tracking-[0.15em] uppercase text-[var(--primary)]">

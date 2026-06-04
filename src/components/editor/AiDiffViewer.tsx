@@ -7,7 +7,8 @@ import type { editor } from "monaco-editor";
 import { motion, AnimatePresence } from "framer-motion";
 import { useMonacoTheme } from "@/hooks/useMonacoTheme";
 import { getLanguageFromPath } from "./fileIcons";
-import { Check, X, ChevronDown, ChevronUp, Sparkles, GitCompare } from "lucide-react";
+import { Check, X, ChevronDown, ChevronUp, GitCompare } from "lucide-react";
+import { ForgeIcon } from "@/components/icons/ForgeIcon";
 
 export interface DiffEntry {
   /** Unique ID — typically `${filePath}::${toolCallIndex}` */
@@ -92,7 +93,7 @@ export function AiDiffViewer({
           className="flex items-center justify-between h-9 px-3 border-b border-[var(--border)] bg-gradient-to-r from-[var(--primary)]/5 to-transparent shrink-0"
         >
           <div className="flex items-center gap-2">
-            <Sparkles className="size-3.5 text-[var(--primary)]" />
+            <ForgeIcon variant="craft" size={14} className="text-[var(--primary)]" />
             <span className="font-mono text-[10px] tracking-[0.2em] uppercase text-[var(--foreground)]">
               AI DIFF ({pending.length})
             </span>

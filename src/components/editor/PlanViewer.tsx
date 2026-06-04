@@ -4,11 +4,12 @@
 import { useState, useCallback, useMemo, useRef } from "react";
 import { motion, AnimatePresence, Reorder } from "framer-motion";
 import {
-  Sparkles, CheckSquare, Square, Play, X, GripVertical,
+  CheckSquare, Square, Play, X, GripVertical,
   FilePlus, FilePen, Terminal, Package, Eye, Trash2,
   Zap, ChevronRight, Clock, DollarSign, AlertCircle,
 } from "lucide-react";
 import { toast } from "sonner";
+import { ForgeIcon } from "@/components/icons/ForgeIcon";
 
 export interface PlanStep {
   id: string;
@@ -99,7 +100,7 @@ export function PlanViewer({ plan, onExecute, onDismiss, editable = true }: Plan
       <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--border)]">
         <div className="flex items-center gap-2">
           <div className="size-7 rounded-lg bg-[var(--primary)]/10 border border-[var(--primary)]/20 grid place-items-center">
-            <Sparkles className="size-3.5 text-[var(--primary)]" />
+            <ForgeIcon variant="build" size={14} className="text-[var(--primary)]" />
           </div>
           <div>
             <span className="font-mono text-[10px] tracking-[0.1em] uppercase text-[var(--foreground)]">

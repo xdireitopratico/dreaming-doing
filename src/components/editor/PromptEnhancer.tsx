@@ -3,7 +3,7 @@
 // Inspiração: Bolt.new prompt enhancement
 import { useState, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Wand2, Sparkles, X, Check, ArrowRight, Loader2 } from "lucide-react";
+import { Wand2, X, Check, ArrowRight, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
 interface PromptEnhancerProps {
@@ -156,7 +156,7 @@ export function PromptEnhancer({ original, onAccept, onDismiss }: PromptEnhancer
               onClick={enhancePrompt}
               className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[var(--primary)]/10 border border-[var(--primary)]/20 text-[var(--primary)] hover:bg-[var(--primary)]/15 transition-colors"
             >
-              <Sparkles className="size-4" />
+              <Wand2 className="size-4" />
               <span className="font-mono text-[11px] tracking-[0.05em]">Enhance with AI</span>
               <span className="font-mono text-[9px] text-[var(--primary)]/60">gratuito</span>
             </button>
