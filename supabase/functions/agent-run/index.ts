@@ -1,15 +1,14 @@
-// index.ts — Edge Function agent-run v3 (DEFINITIVO)
-// Model Router + Compression + Parallel Exec + Runtime Observer + Skills + SSE
+// index.ts — Edge Function agent-run.
+// Auto-detecta provider (Anthropic > xAI > Lovable AI > OpenAI), SSE + JSON fallback.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 
 import { ToolRegistry } from "./registry.ts";
 import { AgentLoop } from "./loop.ts";
-import { createLLMProvider } from "./adapters/llm.ts";
 import { createSandboxProvider } from "./sandbox.ts";
 import { registerFsTools } from "./tools/fs.ts";
 import { registerShellTool } from "./tools/shell.ts";
-import { SkillRegistry } from "./skills.ts";
 import { LoopPhase, type AgentState, type ChatMessage } from "./types.ts";
+import { buildProvider, pickMain } from "./providers.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -18,10 +17,6 @@ const corsHeaders = {
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-const LLM_PROVIDER = Deno.env.get("LLM_PROVIDER") || "openai";
-const LLM_API_KEY = Deno.env.get("LLM_API_KEY") || "";
-const LLM_MODEL = Deno.env.get("LLM_MODEL") || "gpt-4o";
-const LLM_BASE_URL = Deno.env.get("LLM_BASE_URL") || undefined;
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
@@ -32,16 +27,16 @@ Deno.serve(async (req) => {
 
     const supabase = createClient(SUPABASE_URL, SERVICE_KEY);
 
-    // Auth
     const token = (req.headers.get("Authorization") ?? "").replace("Bearer ", "");
     const { data: userData, error: uErr } = await supabase.auth.getUser(token);
     if (uErr || !userData?.user) return json({ error: "Não autenticado" }, 401);
 
     const { data: project } = await supabase
       .from("projects").select("id, owner_id").eq("id", projectId).single();
-    if (!project || project.owner_id !== userData.user.id) return json({ error: "Projeto não encontrado" }, 404);
+    if (!project || project.owner_id !== userData.user.id) {
+      return json({ error: "Projeto não encontrado" }, 404);
+    }
 
-    // Histórico
     const { data: history } = await supabase
       .from("messages")
       .select("role, parts, tool_calls")
@@ -56,75 +51,76 @@ Deno.serve(async (req) => {
         role: m.role,
         content: text || "",
         tool_calls: (m.tool_calls ?? []).map((tc: any) => ({
-          id: crypto.randomUUID(),
+          id: tc.id ?? crypto.randomUUID(),
           type: "function" as const,
           function: { name: tc.name, arguments: typeof tc.args === "string" ? tc.args : JSON.stringify(tc.args ?? {}) },
         })),
       };
     });
 
-    // ─── Setup: 6 ferramentas ───
-    const reg = new ToolRegistry();
-    const llm = createLLMProvider({ provider: LLM_PROVIDER, apiKey: LLM_API_KEY, model: LLM_MODEL, baseUrl: LLM_BASE_URL });
-    const sandbox = createSandboxProvider();
+    let mainCfg;
+    try {
+      mainCfg = pickMain();
+    } catch (err: any) {
+      return json({ error: err?.message ?? "Provider LLM não configurado" }, 500);
+    }
+    const llm = buildProvider(mainCfg);
 
+    const reg = new ToolRegistry();
+    const sandbox = createSandboxProvider();
     registerFsTools(reg, { supabase, projectId });
     registerShellTool(reg, { sandbox, projectId, supabase });
 
-    // Detecta se o cliente quer SSE ou JSON
     const acceptSSE = (req.headers.get("Accept") ?? "").includes("text/event-stream");
     const querySSE = new URL(req.url).searchParams.has("sse");
     const useSSE = acceptSSE || querySSE;
 
-    if (!useSSE) {
-      // JSON fallback — compatível com supabase.functions.invoke()
-      const state: AgentState = {
-        projectId, conversationId, userId: userData.user.id,
-        messages: [...messages],
-        phase: LoopPhase.GATHER_CONTEXT,
-        currentStepIndex: 0,
-        context: null, intent: null, plan: null,
-        validationResults: [], executionLog: [], retryFeedback: null, totalSteps: 0,
-      };
+    const buildState = (): AgentState => ({
+      projectId, conversationId, userId: userData.user.id,
+      messages: [...messages],
+      phase: LoopPhase.GATHER_CONTEXT,
+      currentStepIndex: 0,
+      context: null, intent: null, plan: null,
+      validationResults: [], executionLog: [], retryFeedback: null, totalSteps: 0,
+    });
 
-      const loop = new AgentLoop(reg, llm, supabase, state);
+    if (!useSSE) {
+      const loop = new AgentLoop(reg, llm, supabase, buildState());
       const result = await loop.run();
       sandbox.destroy().catch(() => {});
       return json(result);
     }
 
-    // ─── SSE Stream ───
     const stream = new ReadableStream({
       start(controller) {
         const emit = (data: any) => {
-          controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(data)}\n\n`));
+          try {
+            controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(data)}\n\n`));
+          } catch { /* stream closed */ }
         };
 
-        const state: AgentState = {
-          projectId, conversationId, userId: userData.user.id,
-          messages: [...messages],
-          phase: LoopPhase.GATHER_CONTEXT,
-          currentStepIndex: 0,
-          context: null, intent: null, plan: null,
-          validationResults: [], executionLog: [], retryFeedback: null, totalSteps: 0,
-        };
+        emit({ type: "start", projectId, conversationId, provider: mainCfg.label });
 
-        emit({ type: "start", projectId, conversationId });
-
-        const loop = new AgentLoop(reg, llm, supabase, state, (event) => emit(event));
+        const loop = new AgentLoop(reg, llm, supabase, buildState(), (event) => emit(event));
         loop.run().then((result) => {
           emit({ type: "finish", ...result });
           sandbox.destroy().catch(() => {});
-          controller.close();
+          try { controller.close(); } catch { /* closed */ }
         }).catch((err) => {
-          emit({ type: "error", error: err.message });
-          controller.close();
+          emit({ type: "error", error: err?.message ?? "erro desconhecido" });
+          try { controller.close(); } catch { /* closed */ }
         });
       },
     });
 
     return new Response(stream, {
-      headers: { ...corsHeaders, "Content-Type": "text/event-stream", "Cache-Control": "no-cache", "Connection": "keep-alive" },
+      headers: {
+        ...corsHeaders,
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+        "Connection": "keep-alive",
+        "X-Accel-Buffering": "no",
+      },
     });
   } catch (e: any) {
     return json({ error: e?.message ?? "erro inesperado" }, 500);

@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { MarketingShell } from "@/components/MarketingShell";
 import { Card } from "@/components/ui/card";
 import { Sparkles } from "lucide-react";
+import { ImportRepoDialog } from "@/components/ImportRepoDialog";
 
 export const Route = createFileRoute("/projects/")({
   component: () => (
@@ -27,10 +28,15 @@ function ProjectsList() {
   });
   return (
     <div className="px-6 py-12 max-w-[1120px] mx-auto">
-      <h1 className="font-display text-4xl md:text-5xl mb-2">Seus projetos</h1>
-      <p className="text-muted-foreground text-sm mb-10">
-        Tudo o que você construiu até agora.
-      </p>
+      <div className="flex items-end justify-between mb-10 gap-4 flex-wrap">
+        <div>
+          <h1 className="font-display text-4xl md:text-5xl mb-2">Seus projetos</h1>
+          <p className="text-muted-foreground text-sm">
+            Tudo o que você construiu até agora.
+          </p>
+        </div>
+        <ImportRepoDialog />
+      </div>
       {data && data.length > 0 ? (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {data.map((p) => (
@@ -53,7 +59,8 @@ function ProjectsList() {
       ) : (
         <Card className="p-12 text-center border-dashed bg-surface/30">
           <p className="text-sm text-muted-foreground">
-            Nenhum projeto ainda. Volte para a home e comece com um prompt.
+            Nenhum projeto ainda. Volte para a home e comece com um prompt, ou
+            importe um repositório do GitHub.
           </p>
         </Card>
       )}

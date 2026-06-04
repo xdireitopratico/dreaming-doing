@@ -1,12 +1,11 @@
-import { Link } from "@tanstack/react-router";
-import { ArrowLeft } from "lucide-react";
+import { Link, useLocation, Navigate } from "@tanstack/react-router";
+import { ArrowLeft, Loader2 } from "lucide-react";
 import type { ReactNode } from "react";
-import { useEffect } from "react";
 import { useAuth } from "@/lib/auth";
 
 /**
  * EditorShell — chrome cinemática do editor (Celestial Forge).
- * Topbar com HUD style, grão sutil, glass.
+ * Topbar HUD, grão sutil, glass.
  */
 export function EditorShell({
   children,
@@ -18,13 +17,20 @@ export function EditorShell({
   right?: ReactNode;
 }) {
   const { user, loading } = useAuth();
+  const loc = useLocation();
 
-  useEffect(() => {
-    if (!loading && !user && typeof window !== "undefined") {
-      const next = window.location.pathname;
-      window.location.href = `/auth?next=${encodeURIComponent(next)}`;
-    }
-  }, [loading, user]);
+  if (loading) {
+    return (
+      <div className="h-screen grid place-items-center bg-background text-foreground">
+        <Loader2 className="size-5 animate-spin text-[var(--primary)]" />
+      </div>
+    );
+  }
+
+  if (!user) {
+    const next = loc.pathname + loc.searchStr;
+    return <Navigate to="/auth" search={{ next } as never} replace />;
+  }
 
   return (
     <div className="relative h-screen flex flex-col bg-background text-foreground overflow-hidden">
