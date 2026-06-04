@@ -1,17 +1,15 @@
-// loop.ts — AgentLoop DEFINITIVO
-// Integra: Model Router, Compression, Parallel Exec, Runtime Observer, Skills
-// O coração do FORGE — o maior custo-benefício agent builder do mundo
+// loop.ts — AgentLoop definitivo.
+// Model Router (cheap/main), Compression, Parallel Exec, Runtime Observer, Skills,
+// persistência incremental de tool_calls (cada step vira uma message viva no chat).
 import type {
-  AgentState, LLMProvider, ChatMessage, ToolCall, ToolResult,
-  IntentAnalysis, ActionPlan, CheckResult, AgentContext, FileEntry, ChatResponse,
+  AgentState, LLMProvider, ChatMessage, IntentAnalysis, FileEntry, ChatResponse,
 } from "./types.ts";
-import { LoopPhase } from "./types.ts";
 import { ToolRegistry } from "./registry.ts";
-import { ModelRouter, type ClassificationResult } from "./router.ts";
-import { CompressionManager, parallelExecute, buildCachedMessages } from "./compression.ts";
+import { ModelRouter } from "./router.ts";
+import { CompressionManager, parallelExecute } from "./compression.ts";
 import { RuntimeObserver } from "./observer.ts";
 import { SkillRegistry } from "./skills.ts";
-import { SYSTEM_PROMPT, ANALYZE_PROMPT, EXECUTE_PROMPT } from "./prompts.ts";
+import { SYSTEM_PROMPT, EXECUTE_PROMPT } from "./prompts.ts";
 
 type StreamCallback = (event: { type: string; data: unknown }) => void;
 
@@ -50,11 +48,9 @@ export class AgentLoop {
     this.compression.reset();
     let step = 0;
 
-    // ─── FASE 0: GATHER CONTEXT (0 tokens LLM) ───
-    this.emit("phase", { phase: "gather", message: "Analisando projeto..." });
+    this.emit("phase", { phase: "gather", message: "Lendo arquivos do projeto..." });
     await this.gatherContext();
 
-    // ─── FASE 0.5: CLASSIFY (modelo barato, $0.15/1M) ───
     this.emit("phase", { phase: "classify", message: "Classificando complexidade..." });
     const userPrompt = this.state.messages.filter(m => m.role === "user").pop()?.content ?? "";
     const classification = await this.router.classify(
@@ -68,17 +64,15 @@ export class AgentLoop {
       complexity: classification.complexity <= 2 ? "simple" : classification.complexity <= 4 ? "medium" : "complex",
     };
 
-    // Seleciona modelo por complexidade
     const executionModel = this.router.selectModel(classification.complexity);
     this.emit("classify", {
       complexity: classification.complexity,
-      model: classification.complexity <= 2 ? "cheap" : "main",
+      model: classification.complexity <= 2 ? this.router.cheapCfg.label : this.router.mainCfg.label,
       summary: classification.summary,
     });
 
-    this.emit("phase", { phase: "plan", message: `Plano: ${classification.summary}`, intent: this.state.intent });
+    this.emit("phase", { phase: "plan", message: classification.summary, intent: this.state.intent });
 
-    // ─── FASE 1: EXECUTE LOOP (com auto-correção) ───
     let buildAttempts = 0;
     const maxRetries = 3;
 
@@ -86,39 +80,37 @@ export class AgentLoop {
       step++;
       this.state.totalSteps = step;
 
-      // Comprimir histórico se necessário
       const compressed = await this.compression.compress(this.state.messages);
-
       const response = await this.llmChat(executionModel, EXECUTE_PROMPT, compressed);
       if (!response) break;
 
-      // Sem tool calls = resposta final
+      // Sem tool_calls = resposta final
       if (!response.tool_calls || response.tool_calls.length === 0) {
         this.state.messages.push({ role: "assistant", content: response.content ?? "Concluído." });
         break;
       }
 
-      // ─── PARALLEL EXECUTION ───
       this.emit("phase", { phase: "execute", toolCount: response.tool_calls.length });
+
+      // Persiste tool_calls IMEDIATAMENTE para o chat ver via Realtime,
+      // enquanto eles ainda estão executando (com status pending).
+      const liveMsgId = await this.persistAssistantStep(response);
 
       const execResults = await parallelExecute(response.tool_calls, async (call) => {
         this.emit("tool_start", { name: call.name, args: call.arguments });
         const result = await this.reg.execute(call);
         this.emit("tool_done", { name: call.name, ok: result.ok, error: result.error });
 
-        // Commit atômico após fs_write
         if (call.name === "fs_write" && result.ok) {
-          const commit = await this.reg.execute({
+          await this.reg.execute({
             id: crypto.randomUUID(),
             name: "shell_exec",
-            arguments: { command: `git add -A && git commit -m "${(call.arguments.path as string)}: update" 2>&1 || echo 'ok'` },
+            arguments: { command: `cd /home/project && git add -A && git commit -m "${(call.arguments.path as string)}: update" 2>&1 || true` },
           });
-          if (commit.ok) this.emit("tool_done", { name: "git_commit", ok: true });
         }
         return result;
       });
 
-      // Adiciona ao histórico
       const assistantMsg: ChatMessage = {
         role: "assistant",
         content: response.content ?? "",
@@ -129,34 +121,24 @@ export class AgentLoop {
         })),
       };
       this.state.messages.push(assistantMsg);
+
       for (const { call, result } of execResults) {
         this.state.messages.push({
           role: "tool",
           tool_call_id: call.id,
           content: JSON.stringify(result).slice(0, 4000),
         });
-
-        // Após fs_write/fs_edit bem-sucedido, computa embedding para RAG
-        if ((call.name === "fs_write" || call.name === "fs_edit") && result.ok) {
-          const filePath = (call.arguments as any).path;
-          if (filePath) {
-            this.computeEmbedding(filePath).catch(() => {});
-          }
-        }
       }
 
-      // Salva checkpoint a cada 3 steps (retoma se cair)
-      if (step % 3 === 0) {
-        this.saveCheckpoint().catch(() => {});
+      // Atualiza a mensagem persistida com o resultado (status, error, output curto)
+      if (liveMsgId) {
+        await this.updateAssistantStep(liveMsgId, response, execResults);
       }
 
-      // ─── RUNTIME OBSERVATION ───
       const modifiedFiles = response.tool_calls.some(t => t.name === "fs_write" || t.name === "fs_edit");
       if (modifiedFiles && buildAttempts < maxRetries) {
-        this.emit("phase", { phase: "observe", message: "Observando runtime..." });
-
+        this.emit("phase", { phase: "observe", message: "Verificando build..." });
         const observation = await this.observer.observe();
-
         if (!observation.passed) {
           buildAttempts++;
           this.emit("validate_fail", {
@@ -166,35 +148,32 @@ export class AgentLoop {
           });
           this.state.messages.push({
             role: "user",
-            content: `VERIFICAÇÃO DE RUNTIME FALHOU (${buildAttempts}/${maxRetries}). Analise e corrija:\n\n\`\`\`\n${observation.feedback?.slice(0, 3000)}\n\`\`\`\n\nCorrija os erros e NÃO peça ajuda. Use fs_search para encontrar o erro e fs_edit para corrigir.`,
+            content: `VERIFICAÇÃO FALHOU (${buildAttempts}/${maxRetries}). Analise e corrija:\n\n\`\`\`\n${observation.feedback?.slice(0, 3000)}\n\`\`\`\n\nNÃO peça ajuda. Use fs_search/fs_edit para corrigir.`,
           });
           continue;
         } else {
           buildAttempts = 0;
-          this.emit("validate_ok", { message: "Runtime OK" });
+          this.emit("validate_ok", { message: "Build OK" });
         }
       }
 
-      // Stuck detection
       if (this.isStuck(step)) {
         this.state.messages.push({
           role: "user",
-          content: "Você parece estar preso repetindo as mesmas ações. Tente uma abordagem diferente.",
+          content: "Você parece estar repetindo as mesmas ações. Tente outra abordagem.",
         });
       }
     }
 
     if (step >= this.maxSteps) {
-      await this.persist("Loop atingiu limite de passos.");
+      await this.persistFinal("Limite de passos atingido. Parei aqui — peça para continuar se quiser.");
       return { ok: false, error: "Limite de passos", steps: step };
     }
 
-    // ─── FASE 2: SUMMARIZE (modelo barato) ───
     this.emit("phase", { phase: "summarize", message: "Finalizando..." });
     const finalMsg = this.state.messages[this.state.messages.length - 1];
     const summary = finalMsg?.content ?? "Tarefa concluída.";
-
-    await this.persist(summary);
+    await this.persistFinal(summary);
     this.emit("done", { summary });
     return { ok: true, summary, steps: step };
   }
@@ -208,19 +187,16 @@ export class AgentLoop {
     const fileList: FileEntry[] = files ?? [];
     const manifest = fileList.map(f => `  ${f.path}`).join("\n");
 
-    // Lê arquivos-chave
     let projectConfig = "";
     const keyFiles = fileList.filter(f =>
-      ["package.json", "tsconfig.json", "vite.config.ts", "next.config.js", "next.config.ts",
-       "tailwind.config.ts", "index.html", "src/App.tsx", "src/main.tsx"].includes(f.path),
+      ["package.json", "tsconfig.json", "vite.config.ts", "tailwind.config.ts",
+       "index.html", "src/App.tsx", "src/main.tsx", "src/index.css"].includes(f.path),
     );
     for (const f of keyFiles) {
       projectConfig += `\n### ${f.path}\n\`\`\`\n${(f.content ?? "").slice(0, 2000)}\n\`\`\`\n`;
     }
 
-    // Detecta skills ativas
-    const skillPrompt = this.skills.buildSkillPrompt(fileList);
-    if (skillPrompt) {
+    if (this.skills.detectActive(fileList).length > 0) {
       this.emit("skills", { active: this.skills.detectActive(fileList).map(s => s.name) });
     }
 
@@ -242,11 +218,9 @@ export class AgentLoop {
     const contextBlock = this.state.context
       ? `## Contexto do Projeto\n${this.state.context.projectConfig}\n\n## Arquivos\n${this.state.context.manifest}`
       : "(projeto novo)";
-
     const skillPrompt = this.state.context
       ? this.skills.buildSkillPrompt(this.state.context.files)
       : "";
-
     const fullSystemPrompt = skillPrompt ? `${SYSTEM_PROMPT}\n\n${skillPrompt}` : SYSTEM_PROMPT;
 
     const messages: ChatMessage[] = [
@@ -272,11 +246,45 @@ export class AgentLoop {
   private isStuck(step: number): boolean {
     if (step < 3) return false;
     const last3 = this.state.executionLog.slice(-3);
-    const allSame = last3.length >= 3 && last3.every(l => l === last3[0]);
-    return allSame;
+    return last3.length >= 3 && last3.every(l => l === last3[0]);
   }
 
-  private async persist(summary: string): Promise<void> {
+  private async persistAssistantStep(response: ChatResponse): Promise<string | null> {
+    const tool_calls = (response.tool_calls ?? []).map(tc => ({
+      id: tc.id,
+      name: tc.name,
+      args: tc.arguments,
+      status: "running",
+    }));
+    const { data } = await this.sb.from("messages").insert({
+      conversation_id: this.state.conversationId,
+      role: "assistant",
+      parts: response.content ? [{ type: "text", text: response.content }] : [],
+      tool_calls,
+    }).select("id").single();
+    return data?.id ?? null;
+  }
+
+  private async updateAssistantStep(
+    msgId: string,
+    response: ChatResponse,
+    execResults: Array<{ call: any; result: any }>,
+  ): Promise<void> {
+    const tool_calls = (response.tool_calls ?? []).map(tc => {
+      const found = execResults.find(r => r.call.id === tc.id);
+      return {
+        id: tc.id,
+        name: tc.name,
+        args: tc.arguments,
+        status: found?.result.ok ? "ok" : "error",
+        error: found?.result.error ?? null,
+        artifacts: found?.result.artifacts ?? [],
+      };
+    });
+    await this.sb.from("messages").update({ tool_calls }).eq("id", msgId);
+  }
+
+  private async persistFinal(summary: string): Promise<void> {
     await this.sb.from("messages").insert({
       conversation_id: this.state.conversationId,
       role: "assistant",
@@ -284,62 +292,6 @@ export class AgentLoop {
       tool_calls: [],
     });
     await this.sb.from("projects").update({ updated_at: new Date().toISOString() }).eq("id", this.state.projectId);
-  }
-
-  private async saveCheckpoint(): Promise<void> {
-    try {
-      await this.sb.from("agent_checkpoints").upsert({
-        project_id: this.state.projectId,
-        conversation_id: this.state.conversationId,
-        phase: this.state.phase,
-        state: {
-          messages: this.state.messages.slice(-30),
-          currentStepIndex: this.state.currentStepIndex,
-          totalSteps: this.state.totalSteps,
-        },
-        updated_at: new Date().toISOString(),
-      }, { onConflict: "project_id,conversation_id" });
-    } catch { /* checkpoint é best-effort */ }
-  }
-
-  private async computeEmbedding(path: string): Promise<void> {
-    try {
-      const { data } = await this.sb
-        .from("project_files")
-        .select("content")
-        .eq("project_id", this.state.projectId)
-        .eq("path", path)
-        .maybeSingle();
-      if (!data?.content) return;
-
-      const contentHash = await this.simpleHash(data.content.slice(0, 8000));
-
-      // Verifica se já tem embedding com esse hash
-      const { data: existing } = await this.sb
-        .from("file_embeddings")
-        .select("id")
-        .eq("project_id", this.state.projectId)
-        .eq("file_path", path)
-        .eq("content_hash", contentHash)
-        .maybeSingle();
-
-      if (existing) return; // Já cacheado
-
-      // Upsert com hash (embedding é computado async depois)
-      await this.sb.from("file_embeddings").upsert({
-        project_id: this.state.projectId,
-        file_path: path,
-        content_hash: contentHash,
-      }, { onConflict: "project_id,file_path" });
-    } catch { /* best-effort */ }
-  }
-
-  private async simpleHash(text: string): Promise<string> {
-    const encoder = new TextEncoder();
-    const data = encoder.encode(text);
-    const hashBuffer = await crypto.subtle.digest("SHA-256", data);
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-    return hashArray.map(b => b.toString(16).padStart(2, "0")).join("");
   }
 
   private emit(type: string, data: unknown): void {
