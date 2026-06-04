@@ -212,13 +212,19 @@ export function ProviderSelector({ value, onChange, className = "" }: ProviderSe
             </div>
 
             {/* Footer: connector link */}
-            <div className="px-3 py-2 border-t border-[var(--border)]">
+            <div className="px-3 py-2 border-t border-[var(--border)] space-y-1">
+              <a
+                href="/api-keys"
+                className="flex items-center gap-1.5 font-mono text-[9px] text-[var(--text-ghost)] hover:text-[var(--foreground)] transition-colors"
+              >
+                <Key className="size-3" />
+                API Keys &amp; potência do modelo →
+              </a>
               <a
                 href="/connectors"
                 className="flex items-center gap-1.5 font-mono text-[9px] text-[var(--text-ghost)] hover:text-[var(--foreground)] transition-colors"
               >
-                <Key className="size-3" />
-                Conectar sua própria chave API →
+                GitHub, Vercel, Supabase →
               </a>
             </div>
           </motion.div>

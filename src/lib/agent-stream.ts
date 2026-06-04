@@ -1,6 +1,7 @@
 // agent-stream.ts — Lê o SSE da Edge Function agent-run.
 // Cada evento `data: {…}\n\n` vira um item no callback.
 import { supabase } from "@/integrations/supabase/client";
+import { loadAgentPreferences } from "@/lib/agent-preferences";
 
 export type AgentEvent =
   | { type: "start"; projectId: string; conversationId: string; provider?: string }
@@ -33,7 +34,11 @@ export async function streamAgentRun(
       "Authorization": `Bearer ${token}`,
       "apikey": import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY,
     },
-    body: JSON.stringify({ projectId: args.projectId, conversationId: args.conversationId }),
+    body: JSON.stringify({
+      projectId: args.projectId,
+      conversationId: args.conversationId,
+      preferences: loadAgentPreferences(),
+    }),
     signal: args.signal,
   });
 

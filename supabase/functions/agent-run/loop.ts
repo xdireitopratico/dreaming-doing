@@ -31,13 +31,14 @@ export class AgentLoop {
     supabase: any,
     state: AgentState,
     onStream: StreamCallback = () => {},
+    injectedKeys?: Record<string, string>,
   ) {
     this.reg = reg;
     this.llm = llm;
     this.sb = supabase;
     this.state = state;
     this.onStream = onStream;
-    this.router = new ModelRouter();
+    this.router = new ModelRouter(injectedKeys);
     this.observer = new RuntimeObserver(reg);
     this.skills = new SkillRegistry();
     this.compression = new CompressionManager(this.router.getCheapProvider());

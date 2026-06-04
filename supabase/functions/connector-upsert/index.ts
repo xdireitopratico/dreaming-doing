@@ -18,6 +18,18 @@ function json(body: unknown, status = 200) {
   });
 }
 
+function parsePool(tokenField: string | null): string[] {
+  if (!tokenField?.trim()) return [];
+  const t = tokenField.trim();
+  if (t.startsWith("[")) {
+    try {
+      const arr = JSON.parse(t) as unknown;
+      if (Array.isArray(arr)) return arr.filter((x) => typeof x === "string" && x.length > 0);
+    } catch { /* single token */ }
+  }
+  return [t];
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
@@ -39,9 +51,25 @@ Deno.serve(async (req) => {
     if (!kind || !ALLOWED.has(kind)) return json({ error: "Connector inválido" }, 400);
 
     const admin = createClient(SUPABASE_URL, SERVICE_KEY);
+    const meta =
+      typeof body?.meta === "object" && body.meta !== null ? body.meta : {};
+    const provider = typeof meta.provider === "string" ? meta.provider : undefined;
 
     if (body?.disconnect === true) {
-      await admin.from("connectors").delete().eq("owner_id", user.id).eq("kind", kind);
+      if (kind === "openai" && provider) {
+        const { data: row } = await admin
+          .from("connectors")
+          .select("id, meta")
+          .eq("owner_id", user.id)
+          .eq("kind", "openai")
+          .maybeSingle();
+        const rowProvider = (row?.meta as Record<string, string>)?.provider;
+        if (row && rowProvider === provider) {
+          await admin.from("connectors").delete().eq("id", row.id);
+        }
+      } else {
+        await admin.from("connectors").delete().eq("owner_id", user.id).eq("kind", kind);
+      }
       if (kind === "github") {
         await admin.from("profiles").update({ github_username: null }).eq("id", user.id);
       }
@@ -49,20 +77,47 @@ Deno.serve(async (req) => {
     }
 
     const token = typeof body?.token === "string" ? body.token.trim() : "";
-    const meta =
-      typeof body?.meta === "object" && body.meta !== null ? body.meta : {};
-
     if (!token && kind === "vercel") {
       return json({ error: "Token Vercel obrigatório" }, 400);
+    }
+
+    let tokenEncrypted: string | undefined;
+    let poolCount = 1;
+
+    if (body?.appendToPool === true && token) {
+      const { data: existing } = await admin
+        .from("connectors")
+        .select("token_encrypted, meta")
+        .eq("owner_id", user.id)
+        .eq("kind", kind)
+        .maybeSingle();
+
+      const existingProvider = (existing?.meta as Record<string, string>)?.provider;
+      let pool = parsePool(existing?.token_encrypted ?? null);
+      if (!existing || existingProvider === provider || !provider) {
+        pool.push(token);
+      } else {
+        pool = [token];
+      }
+      poolCount = pool.length;
+      tokenEncrypted = JSON.stringify(pool);
+    } else if (token) {
+      tokenEncrypted = token;
+      poolCount = 1;
     }
 
     const row: Record<string, unknown> = {
       owner_id: user.id,
       kind,
-      meta: { ...meta, connectedAt: new Date().toISOString(), label: meta.label ?? kind },
+      meta: {
+        ...meta,
+        poolCount,
+        connectedAt: new Date().toISOString(),
+        label: meta.label ?? kind,
+      },
       updated_at: new Date().toISOString(),
     };
-    if (token) row.token_encrypted = token;
+    if (tokenEncrypted) row.token_encrypted = tokenEncrypted;
 
     const { error } = await admin.from("connectors").upsert(row, {
       onConflict: "owner_id,kind",
@@ -76,7 +131,7 @@ Deno.serve(async (req) => {
         .eq("id", user.id);
     }
 
-    return json({ ok: true, connected: true });
+    return json({ ok: true, connected: true, poolCount });
   } catch (e) {
     return json({ error: (e as Error).message ?? "Erro interno" }, 500);
   }

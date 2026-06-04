@@ -1,8 +1,9 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { DashboardShell } from "@/components/dashboard/DashboardShell";
 import { useAuth } from "@/lib/auth";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Key, Plug } from "lucide-react";
 
 export const Route = createFileRoute("/settings")({
   component: () => (
@@ -24,6 +25,28 @@ function Settings() {
         <div className="text-[10px] uppercase tracking-widest text-muted-foreground">Email</div>
         <div className="font-medium mt-1">{user?.email}</div>
       </Card>
+      <div className="mt-6 grid gap-3 sm:grid-cols-2">
+        <Link
+          to="/connectors"
+          className="flex items-center gap-3 rounded-xl border border-[var(--border)] p-4 hover:bg-[var(--surface-1)] transition-colors"
+        >
+          <Plug className="size-5 text-[var(--primary)]" />
+          <div>
+            <div className="text-sm font-medium">Conectores</div>
+            <div className="text-xs text-muted-foreground">GitHub, Supabase, Vercel, Cloudflare</div>
+          </div>
+        </Link>
+        <Link
+          to="/api-keys"
+          className="flex items-center gap-3 rounded-xl border border-[var(--border)] p-4 hover:bg-[var(--surface-1)] transition-colors"
+        >
+          <Key className="size-5 text-[var(--primary)]" />
+          <div>
+            <div className="text-sm font-medium">API Keys</div>
+            <div className="text-xs text-muted-foreground">IA, pool Rob, potência do modelo</div>
+          </div>
+        </Link>
+      </div>
       <div className="mt-6">
         <Button variant="outline" onClick={signOut}>
           Sair da conta

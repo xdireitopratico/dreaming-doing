@@ -35,13 +35,23 @@ export function pickMain(injected?: Record<string, string>): ProviderConfig {
       label: `${ex} (override)`,
     };
   }
+  const NVIDIA = envKey("NVIDIA_API_KEY", injected);
   if (ANTHROPIC) return { provider: "anthropic", apiKey: ANTHROPIC, model: "claude-sonnet-4-20250514", label: "Anthropic Claude Sonnet 4" };
   if (XAI) return { provider: "openai", apiKey: XAI, model: "grok-2-1212", baseUrl: "https://api.x.ai/v1", label: "xAI Grok 2" };
   if (GROQ) return { provider: "openai", apiKey: GROQ, model: "llama-3.3-70b-versatile", baseUrl: "https://api.groq.com/openai/v1", label: "Groq · Llama 3.3 70B" };
+  if (NVIDIA) {
+    return {
+      provider: "openai",
+      apiKey: NVIDIA,
+      model: "meta/llama-3.1-8b-instruct",
+      baseUrl: "https://integrate.api.nvidia.com/v1",
+      label: "NVIDIA NIM · Llama 3.1 8B",
+    };
+  }
   if (LOVABLE) return { provider: "openai", apiKey: LOVABLE, model: "google/gemini-2.5-flash", baseUrl: LOVABLE_GATEWAY, label: "Lovable AI · Gemini 2.5 Flash" };
   if (OPENAI) return { provider: "openai", apiKey: OPENAI, model: "gpt-4o", label: "OpenAI GPT-4o" };
   throw new Error(
-    "Nenhum modelo de IA configurado. Adicione uma chave em Conectores (/connectors) ou defina ANTHROPIC_API_KEY / GROQ_API_KEY nas Secrets do Supabase (Edge Functions).",
+    "Nenhum modelo de IA configurado. Adicione uma chave em API Keys (/api-keys) ou defina ANTHROPIC_API_KEY / GROQ_API_KEY nas Secrets do Supabase (Edge Functions).",
   );
 }
 

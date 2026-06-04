@@ -26,7 +26,7 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    const { projectId, conversationId } = await req.json();
+    const { projectId, conversationId, preferences } = await req.json();
     if (!projectId || !conversationId) return json({ error: "projectId e conversationId obrigatórios" }, 400);
 
     const supabase = createClient(SUPABASE_URL, SERVICE_KEY);
@@ -68,11 +68,41 @@ Deno.serve(async (req) => {
       };
     });
 
-    const connectorKeys = await loadConnectorKeys(supabase, userData.user.id);
+    const connectorKeys = await loadConnectorKeys(supabase, userData.user.id, preferences);
 
     let mainCfg;
     try {
-      mainCfg = pickMain(connectorKeys);
+      if (preferences?.mode === "fixed" && preferences.fixedPresetId) {
+        const preset = preferences.fixedPresetId as string;
+        if (preset.includes("groq") && connectorKeys.GROQ_API_KEY) {
+          mainCfg = {
+            provider: "openai",
+            apiKey: connectorKeys.GROQ_API_KEY,
+            model: "llama-3.3-70b-versatile",
+            baseUrl: "https://api.groq.com/openai/v1",
+            label: "Groq (fixo)",
+          };
+        } else if (preset.includes("xai") && connectorKeys.XAI_API_KEY) {
+          mainCfg = {
+            provider: "openai",
+            apiKey: connectorKeys.XAI_API_KEY,
+            model: "grok-2-1212",
+            baseUrl: "https://api.x.ai/v1",
+            label: "xAI (fixo)",
+          };
+        } else if (preset.includes("openai") && connectorKeys.OPENAI_API_KEY) {
+          mainCfg = {
+            provider: "openai",
+            apiKey: connectorKeys.OPENAI_API_KEY,
+            model: "gpt-4o",
+            label: "OpenAI (fixo)",
+          };
+        } else {
+          mainCfg = pickMain(connectorKeys);
+        }
+      } else {
+        mainCfg = pickMain(connectorKeys);
+      }
     } catch (err: any) {
       return json({ error: err?.message ?? "Provider LLM não configurado" }, 500);
     }
@@ -98,7 +128,7 @@ Deno.serve(async (req) => {
     });
 
     if (!useSSE) {
-      const loop = new AgentLoop(reg, llm, supabase, buildState());
+      const loop = new AgentLoop(reg, llm, supabase, buildState(), () => {}, connectorKeys);
       const result = await loop.run();
       cleanup();
       return json(result);
@@ -114,7 +144,7 @@ Deno.serve(async (req) => {
 
         emit({ type: "start", projectId, conversationId, provider: mainCfg.label });
 
-        const loop = new AgentLoop(reg, llm, supabase, buildState(), (event) => emit(event));
+        const loop = new AgentLoop(reg, llm, supabase, buildState(), (event) => emit(event), connectorKeys);
         loop.run().then((result) => {
           cleanup();
           emit({ type: "finish", ...result });

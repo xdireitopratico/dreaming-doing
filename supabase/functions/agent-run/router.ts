@@ -17,9 +17,9 @@ export class ModelRouter {
   public cheapCfg: ProviderConfig;
   public mainCfg: ProviderConfig;
 
-  constructor() {
-    this.mainCfg = pickMain();
-    this.cheapCfg = pickCheap(this.mainCfg);
+  constructor(injected?: Record<string, string>) {
+    this.mainCfg = pickMain(injected);
+    this.cheapCfg = pickCheap(this.mainCfg, injected);
     this.main = buildProvider(this.mainCfg);
     this.cheap = buildProvider(this.cheapCfg);
   }

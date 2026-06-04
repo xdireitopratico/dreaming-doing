@@ -5,6 +5,7 @@ import {
   Grid3X3,
   Home,
   Loader2,
+  Key,
   Plug,
   Search,
   Settings,
@@ -17,7 +18,7 @@ import { ForgeIcon } from "@/components/icons/ForgeIcon";
 import { useAuth } from "@/lib/auth";
 import { sanitizeNext } from "@/lib/sanitize-next";
 
-type NavId = "home" | "projects" | "connectors" | "settings";
+type NavId = "home" | "projects" | "connectors" | "api-keys" | "settings";
 
 export function DashboardShell({
   children,
@@ -107,6 +108,14 @@ export function DashboardShell({
             <Plug className="size-4 shrink-0" />
             Conectores
           </Link>
+          <Link
+            to="/api-keys"
+            className="dashboard-nav-item"
+            data-active={activeNav === "api-keys" ? "true" : undefined}
+          >
+            <Key className="size-4 shrink-0" />
+            API Keys
+          </Link>
 
           <span className="dashboard-nav-label">Projetos</span>
           <Link
@@ -129,9 +138,9 @@ export function DashboardShell({
             <ForgeIcon variant="referral" size={14} className="text-[var(--forge-primary)] mb-1.5" />
             Convide amigos e ganhe créditos na beta.
           </div>
-          <Link to="/connectors" className="dashboard-upgrade">
+          <Link to="/api-keys" className="dashboard-upgrade">
             <Zap className="size-4 text-[var(--forge-primary)]" />
-            Conectores &amp; API keys
+            API Keys &amp; modelos
           </Link>
           <Link
             to="/settings"

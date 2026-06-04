@@ -3,6 +3,7 @@ import { useState, useRef, useCallback, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { getSupabaseEnv } from "@/lib/supabase-env";
 import { parseAgentDiagnostics, pushDiagnostics } from "@/hooks/useDiagnostics";
+import { loadAgentPreferences } from "@/lib/agent-preferences";
 
 export interface SSEEvent {
   type: string;
@@ -110,7 +111,11 @@ export function useSSE() {
           Authorization: `Bearer ${accessToken}`,
           apikey: publishableKey,
         },
-        body: JSON.stringify({ projectId, conversationId }),
+        body: JSON.stringify({
+          projectId,
+          conversationId,
+          preferences: loadAgentPreferences(),
+        }),
         signal: controller.signal,
       });
 
