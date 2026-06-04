@@ -10,9 +10,7 @@ import { usePlatformConnectors } from "@/hooks/usePlatformConnectors";
 export const Route = createFileRoute("/connectors")({
   component: () => (
     <DashboardShell requireAuth activeNav="connectors">
-      <div className="min-h-full overflow-y-auto">
-        <ConnectorsPage />
-      </div>
+      <ConnectorsPage />
     </DashboardShell>
   ),
 });

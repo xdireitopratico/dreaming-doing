@@ -24,9 +24,7 @@ import { Button } from "@/components/ui/button";
 export const Route = createFileRoute("/api-keys")({
   component: () => (
     <DashboardShell requireAuth activeNav="api-keys">
-      <div className="min-h-full overflow-y-auto">
-        <ApiKeysPage />
-      </div>
+      <ApiKeysPage />
     </DashboardShell>
   ),
 });

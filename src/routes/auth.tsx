@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Logo } from "@/components/MarketingShell";
+import { ForgeLogoMark } from "@/components/editor/ForgeLogoMark";
 import { Loader2, ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
 import { sanitizeNext } from "@/lib/sanitize-next";
@@ -95,78 +95,85 @@ function AuthPage() {
     if (error) toast.error(error.message);
   };
 
+  if (loading) {
+    return (
+      <div className="auth-workspace grid place-items-center" style={{ gridTemplateColumns: "1fr" }}>
+        <Loader2 className="size-6 animate-spin text-[var(--forge-primary)]" />
+      </div>
+    );
+  }
+
   return (
-    <div className="min-h-screen flex flex-col">
-      <div
-        className="pointer-events-none absolute inset-0"
-        style={{ background: "var(--gradient-hero)" }}
-        aria-hidden
-      />
+    <div className="auth-workspace">
+      <section className="auth-visual" aria-hidden={false}>
+        <div className="auth-visual-top">
+          <ForgeLogoMark linkTo="/" size={22} />
+          <Link to="/" className="text-xs text-[var(--forge-muted)] hover:text-[var(--forge-text)]">
+            Site
+          </Link>
+        </div>
 
-      <header className="relative z-10 h-14 px-6 flex items-center justify-between max-w-[1120px] w-full mx-auto">
-        <Link to="/" className="flex items-center gap-2">
-          <Logo size={16} />
-          <span className="font-display text-lg">FORGE</span>
-        </Link>
-        <Link
-          to="/"
-          className="text-sm text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5"
-        >
-          <ArrowLeft className="size-3.5" /> Voltar
-        </Link>
-      </header>
+        <div className="auth-visual-body">
+          <div className="auth-visual-eyebrow">FORGE · beta</div>
+          <h2 className="auth-visual-title">Make Your Dream.</h2>
+          <p className="auth-visual-sub">
+            O mesmo ambiente da dashboard: vibe code, preview ao vivo e deploy — com a sua conta e seus
+            conectores.
+          </p>
+        </div>
 
-      <main className="relative z-10 flex-1 flex items-center justify-center px-4 py-10">
-        <div className="w-full max-w-[420px]">
-          <div className="text-center mb-8">
-            <h1 className="font-display text-4xl md:text-5xl leading-tight">
-              Bem-vindo de volta.
-            </h1>
-            <p className="text-muted-foreground text-sm mt-2">
-              Entre para retomar onde parou.
-            </p>
+        <p className="auth-visual-footer">Código seu · dados seus</p>
+      </section>
+
+      <main className="auth-panel">
+        <div className="auth-panel-inner">
+          <Link to="/" className="auth-panel-back">
+            <ArrowLeft className="size-3.5" />
+            Voltar ao início
+          </Link>
+
+          <div className="auth-panel-heading">
+            <h1>Entrar no FORGE</h1>
+            <p>Retome seus projetos ou crie uma conta nova.</p>
           </div>
 
-          <div className="rounded-2xl border border-border bg-surface/80 backdrop-blur p-6 shadow-[var(--shadow-soft)] space-y-5">
+          <div className="auth-card">
             <Tabs defaultValue="signin" className="w-full">
-              <TabsList className="grid grid-cols-2 w-full">
-                <TabsTrigger value="signin">Entrar</TabsTrigger>
-                <TabsTrigger value="signup">Cadastrar</TabsTrigger>
+              <TabsList className="auth-tabs-list h-auto bg-transparent p-0 border-0">
+                <TabsTrigger value="signin" className="auth-tabs-trigger border-0 shadow-none">
+                  Entrar
+                </TabsTrigger>
+                <TabsTrigger value="signup" className="auth-tabs-trigger border-0 shadow-none">
+                  Cadastrar
+                </TabsTrigger>
               </TabsList>
+
               {(["signin", "signup"] as const).map((mode) => (
                 <TabsContent value={mode} key={mode} className="space-y-4 mt-5">
-                  <div className="space-y-2">
-                    <Label
-                      htmlFor={`auth-email-${mode}`}
-                      className="text-xs uppercase tracking-wider text-muted-foreground"
-                    >
-                      Email
-                    </Label>
+                  <div className="auth-field space-y-0">
+                    <Label htmlFor={`auth-email-${mode}`}>Email</Label>
                     <Input
                       id={`auth-email-${mode}`}
                       type="email"
                       autoComplete="email"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
+                      className="mt-1.5"
                     />
                   </div>
-                  <div className="space-y-2">
-                    <Label
-                      htmlFor={`auth-password-${mode}`}
-                      className="text-xs uppercase tracking-wider text-muted-foreground"
-                    >
-                      Senha
-                    </Label>
+                  <div className="auth-field space-y-0">
+                    <Label htmlFor={`auth-password-${mode}`}>Senha</Label>
                     <Input
                       id={`auth-password-${mode}`}
                       type="password"
                       autoComplete={mode === "signin" ? "current-password" : "new-password"}
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
+                      className="mt-1.5"
                     />
                   </div>
                   <Button
-                    className="w-full"
+                    className="auth-btn-primary"
                     disabled={busy || !email || !password}
                     onClick={mode === "signin" ? signIn : signUp}
                   >
@@ -177,16 +184,11 @@ function AuthPage() {
               ))}
             </Tabs>
 
-            <div className="relative">
-              <div className="absolute inset-0 flex items-center">
-                <span className="w-full border-t border-border" />
-              </div>
-              <div className="relative flex justify-center text-[10px] uppercase tracking-widest">
-                <span className="bg-surface px-3 text-muted-foreground">ou</span>
-              </div>
+            <div className="auth-divider">
+              <span>ou</span>
             </div>
 
-            <Button variant="outline" className="w-full" onClick={google} disabled={busy}>
+            <Button variant="outline" className="auth-btn-google" onClick={google} disabled={busy}>
               <svg className="size-4 mr-2" viewBox="0 0 24 24" aria-hidden>
                 <path
                   fill="currentColor"
@@ -197,8 +199,8 @@ function AuthPage() {
             </Button>
           </div>
 
-          <p className="text-center text-[11px] text-muted-foreground mt-6">
-            Ao continuar você concorda com termos básicos da beta — código seu, dados seus.
+          <p className="auth-legal">
+            Ao continuar você concorda com os termos básicos da beta — código seu, dados seus.
           </p>
         </div>
       </main>

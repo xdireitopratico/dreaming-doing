@@ -2,6 +2,7 @@
 
 body:has(.dashboard-workspace) {
   cursor: auto;
+  overflow: hidden;
 }
 
 .dashboard-workspace {
@@ -18,7 +19,9 @@ body:has(.dashboard-workspace) {
   --forge-border-strong: rgba(237, 239, 242, 0.14);
 
   display: flex;
-  min-height: 100dvh;
+  height: 100dvh;
+  max-height: 100dvh;
+  overflow: hidden;
   background: var(--forge-bg);
   color: var(--forge-text);
   font-family: var(--font-body, "Inter", system-ui, sans-serif);
@@ -27,14 +30,18 @@ body:has(.dashboard-workspace) {
 .dashboard-sidebar {
   width: 240px;
   flex-shrink: 0;
+  height: 100%;
+  max-height: 100dvh;
   display: flex;
   flex-direction: column;
   border-right: 1px solid var(--forge-border);
   background: var(--forge-surface);
   padding: 12px 10px;
+  overflow: hidden;
 }
 
 .dashboard-sidebar-brand {
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -47,6 +54,12 @@ body:has(.dashboard-workspace) {
   display: flex;
   flex-direction: column;
   gap: 2px;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 2px;
+  scrollbar-width: thin;
 }
 
 .dashboard-nav-label {
@@ -91,6 +104,7 @@ body:has(.dashboard-workspace) {
 }
 
 .dashboard-sidebar-footer {
+  flex-shrink: 0;
   margin-top: auto;
   padding-top: 12px;
   display: flex;
@@ -111,10 +125,13 @@ body:has(.dashboard-workspace) {
 }
 
 .dashboard-main {
-  flex: 1;
+  flex: 1 1 auto;
   min-width: 0;
+  min-height: 0;
+  height: 100%;
   display: flex;
   flex-direction: column;
+  overflow-x: hidden;
   overflow-y: auto;
   /* Degradê contínuo em toda a área principal — persiste no scroll */
   background:

@@ -8,9 +8,7 @@ import { Key, Plug } from "lucide-react";
 export const Route = createFileRoute("/settings")({
   component: () => (
     <DashboardShell requireAuth activeNav="settings">
-      <div className="min-h-full overflow-y-auto px-8 py-10">
-        <Settings />
-      </div>
+      <Settings />
     </DashboardShell>
   ),
 });

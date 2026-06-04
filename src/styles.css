@@ -3,6 +3,7 @@
 @import "tw-animate-css";
 @import "./styles/editor-workspace.css";
 @import "./styles/dashboard-workspace.css";
+@import "./styles/auth-workspace.css";
 
 @custom-variant dark (&:is(.dark *));
 
