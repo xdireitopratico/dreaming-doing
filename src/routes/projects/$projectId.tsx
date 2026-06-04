@@ -71,7 +71,7 @@ function EditorPage() {
         .from("messages").select("*").eq("conversation_id", conversation.id)
         .order("created_at", { ascending: true });
       if (error) throw error;
-      return (data ?? []) as Msg[];
+      return (data ?? []) as unknown as Msg[];
     },
     enabled: !!conversation,
   });
@@ -177,7 +177,7 @@ function EditorPage() {
         body: { projectId, force },
       });
       if (error) throw new Error(error.message);
-      const res = data as { url?: string; error?: string };
+      const res = data as { url?: string; error?: string; reused?: boolean };
       if (res.error) throw new Error(res.error);
       qc.invalidateQueries({ queryKey: ["project", projectId] });
       if (!res.reused) toast.success("Preview ligado");
