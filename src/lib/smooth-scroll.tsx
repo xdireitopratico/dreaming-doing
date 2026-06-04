@@ -1,15 +1,35 @@
 import { useEffect, type ReactNode } from "react";
+import { useRouterState } from "@tanstack/react-router";
+
+/** Rotas com scroll interno (body bloqueado) — Lenis no window quebra o wheel. */
+const NATIVE_SCROLL_PREFIXES = [
+  "/auth",
+  "/connectors",
+  "/api-keys",
+  "/settings",
+  "/projects",
+];
+
+function pathnameUsesNativeScroll(pathname: string): boolean {
+  return NATIVE_SCROLL_PREFIXES.some(
+    (p) => pathname === p || pathname.startsWith(`${p}/`),
+  );
+}
 
 /**
- * Lenis smooth scroll — leve, respeita reduced-motion.
- * Carregado apenas no client; SSR-safe.
+ * Lenis smooth scroll — só na landing/marketing.
+ * Dashboard, auth e editor usam overflow em containers internos.
  */
 export function SmoothScroll({ children }: { children: ReactNode }) {
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const nativeOnly = pathnameUsesNativeScroll(pathname);
+
   useEffect(() => {
     if (typeof window === "undefined") return;
+    if (nativeOnly) return;
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
 
-    let lenis: any;
+    let lenis: { raf: (time: number) => void; destroy: () => void } | undefined;
     let raf = 0;
     let cancelled = false;
 
@@ -22,7 +42,7 @@ export function SmoothScroll({ children }: { children: ReactNode }) {
         smoothWheel: true,
       });
       const loop = (time: number) => {
-        lenis.raf(time);
+        lenis?.raf(time);
         raf = requestAnimationFrame(loop);
       };
       raf = requestAnimationFrame(loop);
@@ -33,7 +53,7 @@ export function SmoothScroll({ children }: { children: ReactNode }) {
       cancelAnimationFrame(raf);
       lenis?.destroy();
     };
-  }, []);
+  }, [nativeOnly]);
 
   return <>{children}</>;
 }

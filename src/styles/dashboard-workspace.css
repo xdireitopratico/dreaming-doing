@@ -3,6 +3,12 @@
 body:has(.dashboard-workspace) {
   cursor: auto;
   overflow: hidden;
+  height: 100dvh;
+}
+
+html:has(.dashboard-workspace) {
+  overflow: hidden;
+  height: 100%;
 }
 
 .dashboard-workspace {
@@ -128,19 +134,20 @@ body:has(.dashboard-workspace) {
   flex: 1 1 auto;
   min-width: 0;
   min-height: 0;
-  height: 100%;
   display: flex;
   flex-direction: column;
   overflow-x: hidden;
   overflow-y: auto;
-  /* Degradê contínuo em toda a área principal — persiste no scroll */
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  /* Degradê no painel rolável (fixed quebrava scroll com Lenis/body locked) */
   background:
     radial-gradient(ellipse 120% 70% at 50% -5%, rgba(88, 120, 255, 0.32), transparent 52%),
     radial-gradient(ellipse 85% 55% at 88% 45%, rgba(180, 80, 220, 0.2), transparent 54%),
     radial-gradient(ellipse 75% 50% at 12% 65%, rgba(255, 122, 26, 0.14), transparent 48%),
     radial-gradient(ellipse 90% 60% at 50% 100%, rgba(120, 60, 180, 0.12), transparent 50%),
     linear-gradient(180deg, #0a0d18 0%, #12101f 38%, #1a1028 72%, #140c20 100%);
-  background-attachment: fixed;
 }
 
 .dashboard-stage {
