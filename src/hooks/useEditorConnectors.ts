@@ -81,7 +81,7 @@ export function useEditorConnectors() {
         return;
       }
 
-      const dbKind = kind === "supabase" ? "github" : kind;
+      const dbKind = kind;
       const { data, error } = await supabase.functions.invoke("connector-upsert", {
         body: {
           kind: dbKind,

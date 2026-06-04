@@ -5,6 +5,7 @@ import { motion } from "framer-motion";
 import { supabase } from "@/integrations/supabase/client";
 import { MarketingShell } from "@/components/MarketingShell";
 import { CreateProjectDialog } from "@/components/editor/CreateProjectDialog";
+import { ImportRepoDialog } from "@/components/ImportRepoDialog";
 import { Sparkles, Plus, ArrowRight, Clock, FolderOpen } from "lucide-react";
 
 export const Route = createFileRoute("/projects/")({
@@ -83,13 +84,25 @@ function ProjectsList() {
             <p className="text-sm text-[var(--text-dim)] mb-6">
               Crie seu primeiro projeto e deixe o agente construir por você.
             </p>
-            <button
-              onClick={() => setDialogOpen(true)}
-              className="inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-[var(--primary)]/10 border border-[var(--primary)]/30 text-[var(--primary)] text-sm font-mono hover:bg-[var(--primary)]/20 transition-colors"
-            >
-              <Sparkles className="size-4" />
-              Criar Primeiro Projeto
-            </button>
+            <div className="flex flex-col sm:flex-row items-center gap-3">
+              <button
+                onClick={() => setDialogOpen(true)}
+                className="inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-[var(--primary)]/10 border border-[var(--primary)]/30 text-[var(--primary)] text-sm font-mono hover:bg-[var(--primary)]/20 transition-colors"
+              >
+                <Sparkles className="size-4" />
+                Criar Primeiro Projeto
+              </button>
+              <ImportRepoDialog
+                trigger={
+                  <button
+                    type="button"
+                    className="inline-flex items-center gap-2 px-5 py-3 rounded-xl border border-[var(--border)] text-[var(--text-dim)] text-sm font-mono hover:border-[var(--primary)]/40 hover:text-[var(--foreground)] transition-colors"
+                  >
+                    Importar do GitHub
+                  </button>
+                }
+              />
+            </div>
           </div>
         </motion.div>
       )}

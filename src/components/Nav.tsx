@@ -98,9 +98,9 @@ export function Nav() {
 
         <div className="hidden md:flex items-center gap-8">
           <ScrambleLink to="/" label="MISSION" />
-          <ScrambleLink to="/" label="FEATURES" />
-          <ScrambleLink to="/" label="DOCS" />
-          <ScrambleLink to="/" label="PRICING" />
+          <ScrambleLink to="/#features" label="FEATURES" />
+          <ScrambleLink to="/#how-it-works" label="DOCS" />
+          <ScrambleLink to="/#cta" label="PRICING" />
         </div>
 
         <Link

@@ -15,7 +15,7 @@ function loadRatio(): number {
 }
 
 function nearestSnap(ratio: number): number {
-  let best = SNAP_RATIOS[0];
+  let best: number = SNAP_RATIOS[0];
   let dist = Math.abs(ratio - best);
   for (const s of SNAP_RATIOS) {
     const d = Math.abs(ratio - s);

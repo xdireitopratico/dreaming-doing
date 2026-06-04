@@ -26,6 +26,8 @@ interface EditorTopBarProps {
   onShare?: () => void;
   onPublish?: () => void;
   onQuickPrompt?: (text: string) => void;
+  onRestartPreview?: () => void;
+  previewBooting?: boolean;
   running?: boolean;
 }
 
@@ -63,6 +65,8 @@ export function EditorTopBar({
   onShare,
   onPublish,
   onQuickPrompt,
+  onRestartPreview,
+  previewBooting,
   running,
 }: EditorTopBarProps) {
   const { user } = useAuth();
@@ -115,6 +119,17 @@ export function EditorTopBar({
             <Eye className="size-3.5" />
             Preview
           </button>
+          {onRestartPreview && (
+            <button
+              type="button"
+              className="forge-mode-pill text-[10px]"
+              disabled={previewBooting}
+              onClick={onRestartPreview}
+              title="Reiniciar preview ao vivo"
+            >
+              {previewBooting ? "…" : "↻"}
+            </button>
+          )}
 
           <button
             type="button"

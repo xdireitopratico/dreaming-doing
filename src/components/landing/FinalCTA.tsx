@@ -47,8 +47,9 @@ export function FinalCTA() {
 
   return (
     <section
+      id="cta"
       ref={ref}
-      className="relative z-10 min-h-screen flex items-center justify-center px-6 overflow-hidden"
+      className="relative z-10 min-h-screen flex items-center justify-center px-6 overflow-hidden scroll-mt-24"
     >
       {/* radiating rings */}
       <div className="absolute inset-0 flex items-center justify-center pointer-events-none">

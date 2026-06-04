@@ -3,6 +3,7 @@
 // ProviderSelector, LogPanel, AiDiffViewer, RateLimitIndicator, useAgentBlame,
 // monacoEnhancements, useElementPicker, SnapshotsSheet, export ZIP, drag-drop
 import { createFileRoute, useParams, useNavigate } from "@tanstack/react-router";
+import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
@@ -26,6 +27,8 @@ import { AiDiffViewer, type DiffEntry } from "@/components/editor/AiDiffViewer";
 import { RateLimitIndicator } from "@/components/editor/RateLimitIndicator";
 import { SnapshotsSheet } from "@/components/editor/SnapshotsSheet";
 import { useSSE } from "@/hooks/useSSE";
+import { usePreviewBoot } from "@/hooks/usePreviewBoot";
+import { publishProject } from "@/lib/publish.functions";
 import { useAgentBlame, buildBlameFromTimeline } from "@/hooks/useAgentBlame";
 import { registerAiCodeLens, registerAiFolding, clearEnhancements, HEAT_MAP_CSS } from "@/lib/monacoEnhancements";
 import { useElementPicker } from "@/hooks/useElementPicker";
@@ -72,14 +75,18 @@ function EditorPage() {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [composerMode, setComposerMode] = useState<AgentComposerMode>("build");
   const [promptDraft, setPromptDraft] = useState<string | null>(null);
+  const [publishing, setPublishing] = useState(false);
 
   // ─── Refs ────────────────────────────────────────────────────────────
+  const autoAgentStarted = useRef(false);
   const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null);
   const monacoRef = useRef<typeof import("monaco-editor") | null>(null);
   const previewIframeRef = useRef<HTMLIFrameElement | null>(null);
 
   // ─── Hooks ───────────────────────────────────────────────────────────
   const sse = useSSE();
+  const previewBoot = usePreviewBoot(projectId);
+  const publishFn = useServerFn(publishProject);
   useWorkspacePresets();
 
   useEffect(() => {
@@ -144,6 +151,15 @@ function EditorPage() {
       return (data ?? []) as FileRow[];
     },
   });
+
+  const isReactProject = useMemo(
+    () => files?.some((f) => f.path === "package.json" || f.path === "/package.json") ?? false,
+    [files],
+  );
+
+  const devUrl = (project?.meta as { previewUrl?: string } | null)?.previewUrl ?? null;
+  const publishedUrl =
+    (project?.meta as { publishedUrl?: string } | null)?.publishedUrl ?? null;
 
   // ─── Realtime ────────────────────────────────────────────────────────
   useEffect(() => {
@@ -286,6 +302,31 @@ function EditorPage() {
     }
   }, [conversation, projectId, running, sse, logPanelOpen]);
 
+  // Auto-start agent when project has user message but no assistant reply yet
+  useEffect(() => {
+    if (!conversation || !messages || running || sse.connected) return;
+    if (autoAgentStarted.current) return;
+    const hasUser = messages.some((m) => m.role === "user");
+    const hasAssistant = messages.some((m) => m.role === "assistant");
+    if (hasUser && !hasAssistant) {
+      autoAgentStarted.current = true;
+      runAgent();
+    }
+  }, [conversation, messages, running, sse.connected, runAgent]);
+
+  // Boot live preview for React/Vite projects
+  useEffect(() => {
+    if (!isReactProject || devUrl || previewBoot.booting) return;
+    previewBoot.boot();
+  }, [isReactProject, devUrl, previewBoot.booting, previewBoot.boot]);
+
+  // Refresh preview after agent finishes
+  const agentFinished = sse.progress.finished;
+  useEffect(() => {
+    if (!agentFinished || sse.progress.error || !isReactProject) return;
+    previewBoot.boot(true);
+  }, [agentFinished, sse.progress.error, isReactProject, previewBoot.boot]);
+
   const handleSend = useCallback(
     (text: string, mode?: AgentComposerMode) => {
       if (!conversation) return;
@@ -318,6 +359,48 @@ function EditorPage() {
     if (!project) return;
     exportProjectZip(projectId, project.name ?? "projeto");
   }, [projectId, project]);
+
+  const handlePublish = useCallback(async () => {
+    if (!devUrl && isReactProject) {
+      toast.info("Iniciando preview antes de publicar…");
+      const url = await previewBoot.boot(true);
+      if (!url) return;
+    }
+    setPublishing(true);
+    try {
+      const res = await publishFn({ data: { projectId } });
+      if (res.needsPreview) {
+        toast.error("Inicie o preview ao vivo (E2B) antes de publicar.");
+        return;
+      }
+      if (res.url) {
+        toast.success("Publicado!", {
+          description: res.url,
+          action: {
+            label: "Abrir",
+            onClick: () => window.open(res.url!, "_blank", "noopener"),
+          },
+        });
+        qc.invalidateQueries({ queryKey: ["project", projectId] });
+      }
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Falha ao publicar");
+    } finally {
+      setPublishing(false);
+    }
+  }, [devUrl, isReactProject, previewBoot, publishFn, projectId, qc]);
+
+  const handleShare = useCallback(() => {
+    const url = publishedUrl ?? devUrl;
+    if (!url) {
+      toast.info("Publique ou inicie o preview para obter um link.");
+      return;
+    }
+    navigator.clipboard.writeText(url).then(
+      () => toast.success("Link copiado para a área de transferência"),
+      () => toast.info(url),
+    );
+  }, [publishedUrl, devUrl]);
 
   // ─── Command Palette actions ────────────────────────────────────────
   const paletteActions: PaletteAction[] = useMemo(
@@ -376,8 +459,10 @@ function EditorPage() {
         onViewChange={handleMainViewChange}
         running={running}
         onQuickPrompt={(text) => setPromptDraft(text)}
-        onShare={() => toast.info("Share — em breve")}
-        onPublish={() => toast.info("Publish — em breve")}
+        onShare={handleShare}
+        onPublish={handlePublish}
+        onRestartPreview={() => previewBoot.boot(true)}
+        previewBooting={previewBoot.booting || publishing}
       >
         <div
           className="min-h-0 w-full flex-1"
@@ -434,8 +519,9 @@ function EditorPage() {
                     {activeView === "preview" && (
                       <PreviewFrame
                         files={files?.map((f) => ({ path: f.path, content: f.content ?? "" })) ?? []}
-                        running={running}
-                        devUrl={project?.meta?.previewUrl ?? null}
+                        running={running || previewBoot.booting}
+                        devUrl={devUrl}
+                        onRefresh={() => previewBoot.boot(true)}
                       />
                     )}
 

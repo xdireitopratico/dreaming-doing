@@ -7,6 +7,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { createProjectFromPrompt } from "@/lib/projects.functions";
 import { sanitizeNext } from "@/lib/sanitize-next";
 import { MicButton } from "@/components/voice/MicButton";
+import { useAuth } from "@/lib/auth";
 type Props = {
   size?: "hero" | "compact";
   onSubmit?: (text: string) => void;
@@ -48,6 +49,8 @@ export function PromptEngine({
   const taRef = useRef<HTMLTextAreaElement>(null);
   const navigate = useNavigate();
   const createProject = useServerFn(createProjectFromPrompt);
+  const { user, loading: authLoading } = useAuth();
+  const needsAuth = !authLoading && !user;
 
   useEffect(() => {
     const el = taRef.current;
@@ -60,6 +63,20 @@ export function PromptEngine({
   useEffect(() => {
     if (autoFocus) taRef.current?.focus();
   }, [autoFocus]);
+
+  useEffect(() => {
+    if (!user) return;
+    try {
+      const saved = sessionStorage.getItem("forge.initialPrompt");
+      if (!saved?.trim()) return;
+      sessionStorage.removeItem("forge.initialPrompt");
+      setValue(saved);
+      void submit(saved);
+    } catch {
+      /* ignore */
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- run once when user becomes available
+  }, [user]);
 
   async function submit(text?: string) {
     const v = (text ?? value).trim();
@@ -151,7 +168,8 @@ export function PromptEngine({
               data-cursor="hover"
               disabled={!value.trim() || busy}
               className="prompt-submit"
-              aria-label="Enviar"
+              aria-label={needsAuth ? "Entrar para construir" : "Enviar"}
+              title={needsAuth ? "Entrar para construir" : undefined}
             >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M12 19V5M5 12l7-7 7 7" />
@@ -160,6 +178,25 @@ export function PromptEngine({
           </div>
         </div>
       </form>
+
+      {needsAuth && value.trim() && (
+        <p className="mt-2 text-center font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--text-ghost)]">
+          <button
+            type="button"
+            className="text-[var(--primary)] hover:underline"
+            onClick={() => {
+              try {
+                sessionStorage.setItem("forge.initialPrompt", value.trim());
+              } catch {
+                /* ignore */
+              }
+              navigate({ to: "/auth", search: { next: sanitizeNext("/") } });
+            }}
+          >
+            Entrar para construir →
+          </button>
+        </p>
+      )}
     </motion.div>
   );
 }

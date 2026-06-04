@@ -36,7 +36,7 @@ const STEPS = [
 
 export function HowItWorks() {
   return (
-    <section className="relative z-10 py-32 px-6">
+    <section id="how-it-works" className="relative z-10 py-32 px-6 scroll-mt-24">
       <div className="max-w-6xl mx-auto">
         <div className="mb-20 text-center">
           <p className="font-mono text-xs tracking-[0.3em] uppercase text-[var(--primary)] mb-4">

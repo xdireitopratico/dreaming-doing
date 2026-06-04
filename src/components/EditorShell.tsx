@@ -14,6 +14,8 @@ export function EditorShell({
   onShare,
   onPublish,
   onQuickPrompt,
+  onRestartPreview,
+  previewBooting,
   running,
 }: {
   children: ReactNode;
@@ -23,6 +25,8 @@ export function EditorShell({
   onShare?: () => void;
   onPublish?: () => void;
   onQuickPrompt?: (text: string) => void;
+  onRestartPreview?: () => void;
+  previewBooting?: boolean;
   running?: boolean;
 }) {
   const { user, loading } = useAuth();
@@ -50,6 +54,8 @@ export function EditorShell({
         onShare={onShare}
         onPublish={onPublish}
         onQuickPrompt={onQuickPrompt}
+        onRestartPreview={onRestartPreview}
+        previewBooting={previewBooting}
         running={running}
       />
       <div className="min-h-0 flex-1">{children}</div>

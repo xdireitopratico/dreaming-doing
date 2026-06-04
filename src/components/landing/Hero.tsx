@@ -1,6 +1,7 @@
 import { motion } from "framer-motion";
 import { useEffect } from "react";
 import { PromptEngine } from "@/components/prompt/PromptEngine";
+import { ImportRepoDialog } from "@/components/ImportRepoDialog";
 
 export function Hero() {
   useEffect(() => {
@@ -29,6 +30,18 @@ export function Hero() {
         </motion.div>
 
         <PromptEngine size="hero" />
+
+        <ImportRepoDialog
+          trigger={
+            <button
+              type="button"
+              data-cursor="hover"
+              className="font-mono text-[10px] uppercase tracking-[0.2em] text-[var(--text-ghost)] hover:text-[var(--primary)] transition-colors"
+            >
+              Importar do GitHub
+            </button>
+          }
+        />
 
         <motion.p
           initial={{ opacity: 0 }}
