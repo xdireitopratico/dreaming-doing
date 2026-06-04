@@ -5,6 +5,8 @@ import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { createProjectFromPrompt } from "@/lib/projects.functions";
+import { MicButton } from "@/components/voice/MicButton";
+import { ImportRepoDialog } from "@/components/ImportRepoDialog";
 
 const QUICK_STARTS = [
   "Landing page para um SaaS de produtividade",
