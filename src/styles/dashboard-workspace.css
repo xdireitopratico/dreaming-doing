@@ -181,12 +181,10 @@ body:has(.dashboard-workspace) {
   flex-shrink: 0;
   margin: 8px 20px 28px;
   border-radius: 18px;
-  border: 1px solid rgba(237, 239, 242, 0.12);
-  background: rgba(8, 10, 16, 0.38);
-  backdrop-filter: blur(18px);
-  -webkit-backdrop-filter: blur(18px);
+  border: 1px solid var(--forge-border);
+  background: var(--forge-surface);
   padding: 16px 18px 18px;
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.22);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.28);
 }
 
 .dashboard-dock-header {
@@ -230,9 +228,8 @@ body:has(.dashboard-workspace) {
 .dashboard-project-card {
   flex: 0 0 200px;
   border-radius: 12px;
-  border: 1px solid rgba(237, 239, 242, 0.1);
-  background: rgba(11, 13, 18, 0.55);
-  backdrop-filter: blur(8px);
+  border: 1px solid var(--forge-border);
+  background: var(--forge-surface-2);
   overflow: hidden;
   transition: border-color 0.15s, transform 0.15s;
 }
@@ -272,9 +269,8 @@ body:has(.dashboard-workspace) {
 .dashboard-new-card {
   flex: 0 0 200px;
   border-radius: 12px;
-  border: 1px dashed rgba(237, 239, 242, 0.18);
-  background: rgba(8, 10, 16, 0.32);
-  backdrop-filter: blur(8px);
+  border: 1px dashed var(--forge-border-strong);
+  background: var(--forge-surface-2);
   display: flex;
   flex-direction: column;
   align-items: center;
