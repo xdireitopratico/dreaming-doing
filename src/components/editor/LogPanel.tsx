@@ -8,7 +8,7 @@ import {
 } from "lucide-react";
 import { getDiagnostics, subscribeDiagnostics, type Diagnostic } from "@/hooks/useDiagnostics";
 
-interface LogEntry {
+export interface LogEntry {
   id: string;
   type: "info" | "success" | "error" | "warning" | "output";
   message: string;
