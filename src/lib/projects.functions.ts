@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { VITE_REACT_SEED } from "@/lib/seeds/vite-react";
 
 function slugify(input: string) {
   return input
@@ -34,11 +35,20 @@ export const createProjectFromPrompt = createServerFn({ method: "POST" })
         name,
         slug,
         description: data.prompt.slice(0, 280),
-        template: "html",
+        template: "vite-react",
       })
       .select("id")
       .single();
     if (pErr) throw new Error(pErr.message);
+
+    // Seed: Vite + React + Tailwind 4. 10 arquivos.
+    const seedRows = VITE_REACT_SEED.map((f) => ({
+      project_id: project.id,
+      path: f.path,
+      content: f.content,
+    }));
+    const { error: fErr } = await supabase.from("project_files").insert(seedRows);
+    if (fErr) throw new Error(`Falha ao semear arquivos: ${fErr.message}`);
 
     const { data: conv, error: cErr } = await supabase
       .from("conversations")
