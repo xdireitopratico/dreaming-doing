@@ -1,19 +1,22 @@
 -- Migration: embeddings + skills + rls_audit para o FORGE definitivo
 -- Adiciona tabelas para RAG context assembly e skill marketplace
 
+CREATE EXTENSION IF NOT EXISTS vector WITH SCHEMA extensions;
+
 -- Embeddings cache (para RAG context assembly)
 CREATE TABLE IF NOT EXISTS public.file_embeddings (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   project_id UUID NOT NULL REFERENCES public.projects(id) ON DELETE CASCADE,
   file_path TEXT NOT NULL,
-  embedding VECTOR(1536),
+  embedding extensions.vector(1536),
   content_hash TEXT NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE (project_id, file_path)
 );
 
 CREATE INDEX IF NOT EXISTS file_embeddings_project_idx ON public.file_embeddings(project_id);
-CREATE INDEX IF NOT EXISTS file_embeddings_vector_idx ON public.file_embeddings USING ivfflat (embedding vector_cosine_ops);
+CREATE INDEX IF NOT EXISTS file_embeddings_vector_idx ON public.file_embeddings
+  USING hnsw (embedding extensions.vector_cosine_ops);
 
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.file_embeddings TO authenticated;
 GRANT ALL ON public.file_embeddings TO service_role;
