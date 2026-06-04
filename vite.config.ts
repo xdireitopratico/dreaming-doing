@@ -6,10 +6,14 @@
 // You can pass additional config via defineConfig({ vite: { ... } }) if needed.
 import { defineConfig } from "@lovable.dev/vite-tanstack-config";
 
+const isVercel = process.env.VERCEL === "1";
+
 // Redirect TanStack Start's bundled server entry to src/server.ts (our SSR error wrapper).
 // @cloudflare/vite-plugin builds from this — wrangler.jsonc main alone is insufficient.
+// When VERCEL=1, we disable Cloudflare plugin and use a Node.js-compatible entry point.
 export default defineConfig({
+  cloudflare: isVercel ? false : undefined,
   tanstackStart: {
-    server: { entry: "server" },
+    server: { entry: isVercel ? "vercel-entry" : "server" },
   },
 });

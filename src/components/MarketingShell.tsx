@@ -41,7 +41,15 @@ export function MarketingShell({
 
   useEffect(() => {
     if (requireAuth && !loading && !user) {
-      navigate({ to: "/auth", search: { next: window.location.pathname } as never });
+      if (window.location.pathname === "/auth") return;
+      const existingNext =
+        new URLSearchParams(window.location.search).get("next") ??
+        window.location.pathname;
+      navigate({
+        to: "/auth",
+        search: { next: existingNext } as never,
+        replace: true,
+      });
     }
   }, [requireAuth, loading, user, navigate]);
 
