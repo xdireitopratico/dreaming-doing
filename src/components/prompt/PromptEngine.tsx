@@ -8,6 +8,7 @@ import { createProjectFromPrompt } from "@/lib/projects.functions";
 import { sanitizeNext } from "@/lib/sanitize-next";
 import { MicButton } from "@/components/voice/MicButton";
 import { useAuth } from "@/lib/auth";
+import { clearForgeTransitionOverlays } from "@/lib/clear-forge-overlays";
 type Props = {
   size?: "hero" | "compact";
   onSubmit?: (text: string) => void;
@@ -16,25 +17,36 @@ type Props = {
 };
 
 function playWarp() {
+  clearForgeTransitionOverlays();
   const overlay = document.createElement("div");
+  overlay.setAttribute("data-forge-transition", "vignette");
   overlay.style.cssText =
-    "position:fixed;inset:0;z-index:9999;pointer-events:none;background:radial-gradient(circle at center,transparent 0%,transparent 35%,#000 90%);opacity:0;transition:opacity 360ms ease-in";
+    "position:fixed;inset:0;z-index:9999;pointer-events:none;background:radial-gradient(circle at center,transparent 0%,transparent 35%,#000 90%);opacity:0;transition:opacity 280ms ease-in";
   document.body.appendChild(overlay);
   requestAnimationFrame(() => (overlay.style.opacity = "1"));
   const scene = (window as unknown as { __forgeScene?: { scroll: number } }).__forgeScene;
   if (scene) scene.scroll = 1.4;
-  return () => {
+
+  const cancel = () => {
+    overlay.remove();
+    clearForgeTransitionOverlays();
+  };
+
+  const finish = () => {
     const flash = document.createElement("div");
+    flash.setAttribute("data-forge-transition", "flash");
     flash.style.cssText =
       "position:fixed;inset:0;z-index:10000;background:#fff;opacity:0;transition:opacity 80ms";
     document.body.appendChild(flash);
     requestAnimationFrame(() => (flash.style.opacity = "1"));
     setTimeout(() => {
-      overlay.remove();
+      cancel();
       flash.style.opacity = "0";
       setTimeout(() => flash.remove(), 400);
-    }, 220);
+    }, 180);
   };
+
+  return { cancel, finish };
 }
 
 export function PromptEngine({
@@ -95,14 +107,17 @@ export function PromptEngine({
     }
 
     setBusy(true);
-    const finishWarp = playWarp();
+    const warp = playWarp();
     try {
       const res = await createProject({ data: { prompt: v } });
+      warp.cancel();
+      clearForgeTransitionOverlays();
       navigate({ to: "/projects/$projectId", params: { projectId: res.projectId } });
     } catch (e) {
-      finishWarp();
+      warp.finish();
       const msg = e instanceof Error ? e.message : "Falha ao criar projeto";
       toast.error(msg);
+    } finally {
       setBusy(false);
     }
   }

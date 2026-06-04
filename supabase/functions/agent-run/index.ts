@@ -20,7 +20,6 @@ import { getPlatformSecret, loadPlatformSecretsMap } from "../_shared/platform-s
 
 const PLATFORM_SECRET_NAMES = [
   "E2B_API_KEY",
-  "E2B_TEMPLATE",
   "XAI_API_KEY",
   "GROQ_API_KEY",
   "ANTHROPIC_API_KEY",
@@ -86,7 +85,7 @@ Deno.serve(async (req) => {
     if (uErr || !userData?.user) return json({ error: "Não autenticado" }, 401);
 
     const { data: project } = await supabase
-      .from("projects").select("id, owner_id").eq("id", projectId).single();
+      .from("projects").select("id, owner_id, template").eq("id", projectId).single();
     if (!project || project.owner_id !== userData.user.id) {
       return json({ error: "Projeto não encontrado" }, 404);
     }
@@ -217,8 +216,8 @@ Deno.serve(async (req) => {
 
     const reg = new ToolRegistry();
     const e2bKey = await getPlatformSecret(supabase, "E2B_API_KEY");
-    const e2bTemplate = await getPlatformSecret(supabase, "E2B_TEMPLATE");
-    const sandbox = createSandboxProvider(e2bKey, e2bTemplate || undefined);
+    const sandbox = createSandboxProvider(e2bKey);
+    const projectTemplate = (project as { template?: string }).template ?? "vite-react";
     const cleanup = () => { runningLocks.delete(projectId!); sandbox.destroy().catch(() => {}); };
     registerFsTools(reg, { supabase, projectId });
     registerShellTool(reg, { sandbox, projectId, supabase });
@@ -253,6 +252,7 @@ Deno.serve(async (req) => {
         connectorKeys,
         { main: resilientMain, cheap: resilientCheap },
         effectiveRobin,
+        projectTemplate,
       );
     };
 

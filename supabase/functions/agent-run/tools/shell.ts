@@ -35,7 +35,7 @@ Use para:
 
 Exemplos:
 - "git init && git add -A && git commit -m 'initial'"
-- "npm create vite@latest . -- --template react-ts && npm install"
+- "npm create vite@latest . -- --template react-ts && npm install" (quando o stack exigir outra base)
 - "npm run build 2>&1"
 - "npm run lint 2>&1 || true"
 - "ls -la src/"

@@ -507,23 +507,25 @@ function EditorPage() {
           <EditorResizableLayout
             workspaceCode={activeView === "code"}
             chat={
-              <>
+              <div className="forge-chat-column flex min-h-0 flex-1 flex-col">
                 <AgentPanel running={running} progress={sse.progress} onResume={runAgent} />
-                <ChatInput
-                  messages={chatMessages}
-                  running={running}
-                  onSend={handleSend}
-                  onStop={handleStop}
-                  files={filePaths}
-                  composerMode={composerMode}
-                  onComposerModeChange={setComposerMode}
-                  externalPrompt={promptDraft}
-                  onExternalPromptConsumed={() => setPromptDraft(null)}
-                  welcomeMarkdown={chatMessages.length === 0 ? FORGE_WELCOME_MARKDOWN : undefined}
-                  trialMessagesRemaining={trialMessagesRemaining}
-                />
+                <div className="min-h-0 flex-1 flex flex-col">
+                  <ChatInput
+                    messages={chatMessages}
+                    running={running}
+                    onSend={handleSend}
+                    onStop={handleStop}
+                    files={filePaths}
+                    composerMode={composerMode}
+                    onComposerModeChange={setComposerMode}
+                    externalPrompt={promptDraft}
+                    onExternalPromptConsumed={() => setPromptDraft(null)}
+                    welcomeMarkdown={chatMessages.length === 0 ? FORGE_WELCOME_MARKDOWN : undefined}
+                    trialMessagesRemaining={trialMessagesRemaining}
+                  />
+                </div>
                 <SetupRail />
-              </>
+              </div>
             }
             workspace={
               <div className="flex min-h-0 h-full w-full flex-1 flex-col">

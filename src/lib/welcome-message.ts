@@ -2,9 +2,10 @@
 export const FORGE_WELCOME_MARKDOWN = `Olá! Sou o **FORGE** — seu construtor de apps web com IA.
 
 **O que você pode fazer agora**
-- Descrever o app que quer criar (ex.: landing, dashboard, loja).
-- Ver o **preview ao vivo** à direita enquanto o código é gerado.
-- No **tira-gosto**, o agente roda em modo **ROBIN** com o pool **NVIDIA** configurado pelo administrador FORGE — você não precisa colar API Keys.
+- Descrever o app (ex.: app de voz, dashboard, loja). Se o pedido for amplo, o agente faz **perguntas curtas** antes de codificar.
+- **Design importa:** o FORGE prioriza UI polida, não só código que compila.
+- **Preview ao vivo** à direita enquanto o código é gerado.
+- **Tira-gosto:** modo **ROBIN** + pool **NVIDIA** do FORGE (sem API Keys suas).
 
 **Quando quiser independência total (self-hosted)**
 - Ícones no topo: **GitHub**, **Supabase**, **Vercel** e **Sandbox** — conecte *sua* conta ou continue com FORGE.

@@ -11,7 +11,7 @@ import { ModelRouter } from "./router.ts";
 import { CompressionManager, parallelExecute } from "./compression.ts";
 import { RuntimeObserver } from "./observer.ts";
 import { SkillRegistry } from "./skills.ts";
-import { SYSTEM_PROMPT, EXECUTE_PROMPT } from "./prompts.ts";
+import { getSystemPrompt, EXECUTE_PROMPT } from "./prompts.ts";
 import { friendlyLlmError } from "./llm-errors.ts";
 
 type StreamCallback = (event: { type: string; data: unknown }) => void;
@@ -28,6 +28,7 @@ export class AgentLoop {
   private observer: RuntimeObserver;
   private skills: SkillRegistry;
   private robinActive: boolean;
+  private projectTemplate: string;
 
   constructor(
     reg: ToolRegistry,
@@ -38,6 +39,7 @@ export class AgentLoop {
     injectedKeys?: Record<string, string>,
     routerOverrides?: RouterOverrides,
     robinActive = false,
+    projectTemplate = "vite-react",
   ) {
     this.reg = reg;
     this.llm = llm;
@@ -45,6 +47,7 @@ export class AgentLoop {
     this.state = state;
     this.onStream = onStream;
     this.robinActive = robinActive;
+    this.projectTemplate = projectTemplate;
     this.router = new ModelRouter(injectedKeys, routerOverrides);
     this.observer = new RuntimeObserver(reg);
     this.skills = new SkillRegistry();
@@ -242,7 +245,8 @@ export class AgentLoop {
     const skillPrompt = this.state.context
       ? this.skills.buildSkillPrompt(this.state.context.files)
       : "";
-    const fullSystemPrompt = skillPrompt ? `${SYSTEM_PROMPT}\n\n${skillPrompt}` : SYSTEM_PROMPT;
+    const base = getSystemPrompt(this.projectTemplate);
+    const fullSystemPrompt = skillPrompt ? `${base}\n\n${skillPrompt}` : base;
 
     const messages: ChatMessage[] = [
       { role: "system", content: fullSystemPrompt },

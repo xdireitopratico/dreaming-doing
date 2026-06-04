@@ -1,7 +1,8 @@
 import { useLocation, Navigate } from "@tanstack/react-router";
 import { Loader2 } from "lucide-react";
-import type { ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 import { useAuth } from "@/lib/auth";
+import { clearForgeTransitionOverlays } from "@/lib/clear-forge-overlays";
 import { sanitizeNext } from "@/lib/sanitize-next";
 import { EditorTopBar } from "@/components/editor/EditorTopBar";
 import type { EditorMainView } from "@/components/editor/EditorViewTabs";
@@ -31,6 +32,10 @@ export function EditorShell({
 }) {
   const { user, loading } = useAuth();
   const loc = useLocation();
+
+  useEffect(() => {
+    clearForgeTransitionOverlays();
+  }, []);
 
   if (loading) {
     return (

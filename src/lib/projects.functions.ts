@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { VITE_REACT_SEED } from "@/lib/seeds/vite-react";
+import { inferStackFromPrompt } from "@/lib/stack-router";
 
 function slugify(input: string) {
   return input
@@ -27,6 +28,7 @@ export const createProjectFromPrompt = createServerFn({ method: "POST" })
     const { supabase, userId } = context;
     const name = nameFromPrompt(data.prompt);
     const slug = `${slugify(name)}-${Math.random().toString(36).slice(2, 7)}`;
+    const stack = inferStackFromPrompt(data.prompt);
 
     const { data: project, error: pErr } = await supabase
       .from("projects")
@@ -35,7 +37,11 @@ export const createProjectFromPrompt = createServerFn({ method: "POST" })
         name,
         slug,
         description: data.prompt.slice(0, 280),
-        template: "vite-react",
+        template: stack.id,
+        meta: {
+          stackLabel: stack.label,
+          stackReason: stack.reason,
+        },
       })
       .select("id")
       .single();

@@ -23,7 +23,7 @@ Deno.serve(async (req) => {
 
     const supabase = createClient(SUPABASE_URL, SERVICE_KEY);
     const E2B_API_KEY = await getPlatformSecret(supabase, "E2B_API_KEY");
-    const E2B_TEMPLATE = (await getPlatformSecret(supabase, "E2B_TEMPLATE")) || "nodejs";
+    const E2B_TEMPLATE = "nodejs";
     if (!E2B_API_KEY) {
       return json({
         error: "E2B_API_KEY ausente. Configure em Ajustes (admin) ou Supabase Edge Secrets.",
@@ -64,6 +64,9 @@ Deno.serve(async (req) => {
     const tree: Record<string, string> = {};
     for (const f of files ?? []) tree[`/home/project/${f.path}`] = f.content ?? "";
 
+    const devPort = detectDevPort(files ?? []);
+    const devCmd = detectDevCommand(files ?? []);
+
     const writeResp = await fetch(`${E2B_BASE}/sandboxes/${sandboxId}/filesystem/write`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-API-Key": E2B_API_KEY },
@@ -73,8 +76,8 @@ Deno.serve(async (req) => {
       return json({ error: `E2B write: ${writeResp.status} ${await writeResp.text()}` }, 500);
     }
 
-    // npm install + dev server em background
-    const cmd = `cd /home/project && (npm install --no-audit --no-fund --loglevel=error 2>&1 | tail -30) && nohup npm run dev > /tmp/dev.log 2>&1 &`;
+    const cmd =
+      `cd /home/project && (npm install --no-audit --no-fund --loglevel=error 2>&1 | tail -30) && nohup ${devCmd} > /tmp/dev.log 2>&1 &`;
     const exec = await fetch(`${E2B_BASE}/sandboxes/${sandboxId}/commands`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-API-Key": E2B_API_KEY },
@@ -84,7 +87,7 @@ Deno.serve(async (req) => {
       return json({ error: `E2B exec: ${exec.status} ${await exec.text()}` }, 500);
     }
 
-    const url = `https://${sandboxId}-5173.e2b.dev`;
+    const url = `https://${sandboxId}-${devPort}.e2b.dev`;
     const expiresAt = new Date(Date.now() + PREVIEW_TTL_MS).toISOString();
 
     await supabase.from("projects").update({
@@ -99,4 +102,34 @@ Deno.serve(async (req) => {
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+}
+
+function detectDevPort(files: Array<{ path: string; content?: string | null }>): string {
+  const pkg = files.find((f) => f.path === "package.json" || f.path === "/package.json");
+  if (pkg?.content) {
+    try {
+      const scripts = (JSON.parse(pkg.content) as { scripts?: Record<string, string> }).scripts;
+      const dev = scripts?.dev ?? scripts?.start ?? "";
+      const m = dev.match(/--port\s+(\d{2,5})/) ?? dev.match(/:(\d{2,5})/);
+      if (m?.[1]) return m[1];
+    } catch { /* ignore */ }
+  }
+  const vite = files.find((f) => f.path.includes("vite.config"));
+  if (vite?.content) {
+    const m = vite.content.match(/port:\s*(\d{2,5})/);
+    if (m?.[1]) return m[1];
+  }
+  return "5173";
+}
+
+function detectDevCommand(files: Array<{ path: string; content?: string | null }>): string {
+  const pkg = files.find((f) => f.path === "package.json" || f.path === "/package.json");
+  if (pkg?.content) {
+    try {
+      const scripts = (JSON.parse(pkg.content) as { scripts?: Record<string, string> }).scripts;
+      if (scripts?.dev) return "npm run dev";
+      if (scripts?.start) return "npm start";
+    } catch { /* ignore */ }
+  }
+  return "npm run dev";
 }
