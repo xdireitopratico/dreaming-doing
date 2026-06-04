@@ -267,11 +267,15 @@ function EditorPage() {
   }, [sse.progress.timeline.length]);
 
   useEffect(() => {
-    if (sse.progress.error && sse.progress.finished) {
+    if (sse.progress.error && sse.progress.finished && !sse.progress.resumable) {
       toast.error(sse.progress.error);
       setRunning(false);
     }
-  }, [sse.progress.error, sse.progress.finished]);
+    if (sse.progress.finished && sse.progress.resumable && sse.progress.error) {
+      toast.warning(sse.progress.error, { duration: 8000 });
+      setRunning(false);
+    }
+  }, [sse.progress.error, sse.progress.finished, sse.progress.resumable]);
 
   // ─── Monaco enhancements globais ────────────────────────────────────
   useEffect(() => {
@@ -310,15 +314,23 @@ function EditorPage() {
   const runAgent = useCallback(() => {
     if (!conversation || running) return;
     setRunning(true);
-    setLogs((prev) => [...prev, createLogEntry("info", "Agente FORGE iniciado", "agent")]);
+    setLogs((prev) => [
+      ...prev,
+      createLogEntry(
+        "info",
+        sse.progress.resumable ? "Retomando agente (memória do chat)" : "Agente FORGE iniciado",
+        "agent",
+      ),
+    ]);
     if (!logPanelOpen) setLogPanelOpen(true);
+    void qc.invalidateQueries({ queryKey: ["messages", conversation.id] });
     try {
-      sse.connect(projectId, conversation.id);
-    } catch (e: any) {
-      toast.error(e?.message ?? "Erro ao iniciar agente");
+      void sse.connect(projectId, conversation.id);
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : "Erro ao iniciar agente");
       setRunning(false);
     }
-  }, [conversation, projectId, running, sse, logPanelOpen]);
+  }, [conversation, projectId, running, sse, logPanelOpen, qc, sse.progress.resumable]);
 
   // Auto-start agent when project has user message but no assistant reply yet
   useEffect(() => {
@@ -492,7 +504,7 @@ function EditorPage() {
             workspaceCode={activeView === "code"}
             chat={
               <>
-                <AgentPanel running={running} progress={sse.progress} />
+                <AgentPanel running={running} progress={sse.progress} onResume={runAgent} />
                 <ChatInput
                   messages={chatMessages}
                   running={running}

@@ -1,32 +1,53 @@
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 
 export type AgentPreferencesPayload = {
-  mode?: "auto" | "rob" | "fixed";
+  mode?: "auto" | "robin" | "rob" | "fixed";
   poolProvider?: "nvidia" | "groq";
   fixedPresetId?: string;
 };
 
-function parseTokenField(tokenField: string | null): string[] {
+function isRobinMode(preferences?: AgentPreferencesPayload): boolean {
+  return preferences?.mode === "robin" || preferences?.mode === "rob";
+}
+
+export function parseTokenField(tokenField: string | null): string[] {
   if (!tokenField?.trim()) return [];
   const t = tokenField.trim();
   if (t.startsWith("[")) {
     try {
       const arr = JSON.parse(t) as unknown;
       if (Array.isArray(arr)) return arr.filter((x) => typeof x === "string" && x.length > 0);
-    } catch { /* fallthrough */ }
+    } catch { /* single token */ }
   }
   return [t];
 }
 
-function pickToken(tokens: string[], mode?: string): string {
-  if (tokens.length === 0) return "";
-  if (mode === "rob" && tokens.length > 1) {
-    return tokens[Math.floor(Math.random() * tokens.length)]!;
+/** Pools completos para modo ROBIN (todas as chaves, sem sortear no load). */
+export async function loadConnectorPools(
+  supabase: SupabaseClient,
+  ownerId: string,
+  poolProvider: "nvidia" | "groq" = "groq",
+): Promise<string[]> {
+  const { data, error } = await supabase
+    .from("connectors")
+    .select("kind, token_encrypted, meta")
+    .eq("owner_id", ownerId)
+    .not("token_encrypted", "is", null);
+
+  if (error) throw new Error(`Falha ao carregar conectores: ${error.message}`);
+
+  for (const row of data ?? []) {
+    if (row.kind !== "openai") continue;
+    const meta = (row.meta ?? {}) as Record<string, string>;
+    const p = meta.provider ?? "openai";
+    if (p === poolProvider) {
+      return parseTokenField(row.token_encrypted);
+    }
   }
-  return tokens[0]!;
+  return [];
 }
 
-/** Carrega chaves LLM salvas na tabela connectors (service role). */
+/** Uma chave por env (modo auto/fixed) — compatibilidade. */
 export async function loadConnectorKeys(
   supabase: SupabaseClient,
   ownerId: string,
@@ -41,13 +62,13 @@ export async function loadConnectorKeys(
   if (error) throw new Error(`Falha ao carregar conectores: ${error.message}`);
 
   const keys: Record<string, string> = {};
-  const robMode = preferences?.mode === "rob";
+  const robinMode = isRobinMode(preferences);
   const poolProvider = preferences?.poolProvider ?? "groq";
 
   for (const row of data ?? []) {
     const meta = (row.meta ?? {}) as Record<string, string>;
     const tokens = parseTokenField(row.token_encrypted);
-    const token = pickToken(tokens, robMode ? "rob" : undefined);
+    const token = tokens[0];
     if (!token) continue;
 
     if (row.kind === "anthropic") {
@@ -57,7 +78,7 @@ export async function loadConnectorKeys(
 
     if (row.kind === "openai") {
       const p = meta.provider ?? "openai";
-      if (robMode && p !== poolProvider) continue;
+      if (robinMode && p !== poolProvider) continue;
 
       if (p === "groq") keys.GROQ_API_KEY = token;
       else if (p === "xai") keys.XAI_API_KEY = token;

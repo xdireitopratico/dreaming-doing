@@ -1,5 +1,5 @@
 /** Preferências de modelo/potência — persistidas localmente (sem expor chaves). */
-export type ModelPowerMode = "auto" | "rob" | "fixed";
+export type ModelPowerMode = "auto" | "robin" | "fixed";
 
 export type PoolProviderId = "nvidia" | "groq";
 
@@ -7,7 +7,7 @@ export interface AgentPreferences {
   mode: ModelPowerMode;
   /** Preset do ProviderSelector quando mode === "fixed" */
   fixedPresetId?: string;
-  /** Provedor do pool de chaves quando mode === "rob" */
+  /** Provedor do pool de chaves quando mode === "robin" */
   poolProvider?: PoolProviderId;
 }
 
@@ -24,13 +24,14 @@ export function loadAgentPreferences(): AgentPreferences {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return DEFAULT_AGENT_PREFERENCES;
-    const parsed = JSON.parse(raw) as Partial<AgentPreferences>;
+    const parsed = JSON.parse(raw) as Partial<AgentPreferences> & { mode?: string };
+    const modeRaw = parsed.mode === "rob" ? "robin" : parsed.mode;
     return {
       ...DEFAULT_AGENT_PREFERENCES,
       ...parsed,
       mode:
-        parsed.mode === "rob" || parsed.mode === "fixed" || parsed.mode === "auto"
-          ? parsed.mode
+        modeRaw === "robin" || modeRaw === "fixed" || modeRaw === "auto"
+          ? modeRaw
           : "auto",
     };
   } catch {

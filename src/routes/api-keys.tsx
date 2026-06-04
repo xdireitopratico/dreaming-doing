@@ -116,7 +116,7 @@ function ApiKeysPage() {
   const qc = useQueryClient();
   const [providers, setProviders] = useState(INITIAL);
   const [savingId, setSavingId] = useState<string | null>(null);
-  const robMode = loadAgentPreferences().mode === "rob";
+  const robinMode = loadAgentPreferences().mode === "robin";
 
   const { data: connectorRows } = useQuery({
     queryKey: ["connectors-public", user?.id],
@@ -258,9 +258,10 @@ function ApiKeysPage() {
 
       <ModelPowerPanel />
 
-      {robMode && (
+      {robinMode && (
         <p className="mb-6 font-mono text-[9px] text-amber-400/90 px-3 py-2 rounded border border-amber-400/20 bg-amber-400/5">
-          Modo Rob ativo: use &quot;Adicionar ao pool&quot; em Groq ou NVIDIA para cadastrar várias chaves gratuitas.
+          Modo ROBIN ativo: use &quot;Adicionar ao pool&quot; em Groq ou NVIDIA — o agente troca de chave a cada
+          requisição e contorna rate limit automaticamente.
         </p>
       )}
 

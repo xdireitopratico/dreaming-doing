@@ -4,12 +4,15 @@
 import type {
   AgentState, LLMProvider, ChatMessage, IntentAnalysis, FileEntry, ChatResponse,
 } from "./types.ts";
+
+type RouterOverrides = { main?: LLMProvider; cheap?: LLMProvider };
 import { ToolRegistry } from "./registry.ts";
 import { ModelRouter } from "./router.ts";
 import { CompressionManager, parallelExecute } from "./compression.ts";
 import { RuntimeObserver } from "./observer.ts";
 import { SkillRegistry } from "./skills.ts";
 import { SYSTEM_PROMPT, EXECUTE_PROMPT } from "./prompts.ts";
+import { friendlyLlmError } from "./llm-errors.ts";
 
 type StreamCallback = (event: { type: string; data: unknown }) => void;
 
@@ -24,6 +27,7 @@ export class AgentLoop {
   private compression: CompressionManager;
   private observer: RuntimeObserver;
   private skills: SkillRegistry;
+  private robinActive: boolean;
 
   constructor(
     reg: ToolRegistry,
@@ -32,13 +36,16 @@ export class AgentLoop {
     state: AgentState,
     onStream: StreamCallback = () => {},
     injectedKeys?: Record<string, string>,
+    routerOverrides?: RouterOverrides,
+    robinActive = false,
   ) {
     this.reg = reg;
     this.llm = llm;
     this.sb = supabase;
     this.state = state;
     this.onStream = onStream;
-    this.router = new ModelRouter(injectedKeys);
+    this.robinActive = robinActive;
+    this.router = new ModelRouter(injectedKeys, routerOverrides);
     this.observer = new RuntimeObserver(reg);
     this.skills = new SkillRegistry();
     this.compression = new CompressionManager(this.router.getCheapProvider());
@@ -50,6 +57,10 @@ export class AgentLoop {
     let step = 0;
 
     this.emit("phase", { phase: "gather", message: "Lendo arquivos do projeto..." });
+    this.emit("memory", {
+      message: `Memória: ${this.state.messages.length} mensagens carregadas do projeto`,
+      messageCount: this.state.messages.length,
+    });
     await this.gatherContext();
 
     this.emit("phase", { phase: "classify", message: "Classificando complexidade..." });
@@ -82,7 +93,16 @@ export class AgentLoop {
       this.state.totalSteps = step;
 
       const compressed = await this.compression.compress(this.state.messages);
-      const response = await this.llmChat(executionModel, EXECUTE_PROMPT, compressed);
+      let response: ChatResponse | null = null;
+      try {
+        response = await this.llmChat(executionModel, EXECUTE_PROMPT, compressed);
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : "Erro no modelo";
+        await this.persistFinal(
+          `Execução pausada: ${message}\n\nSeu histórico está salvo — clique em **Continuar** no editor para retomar.`,
+        );
+        return { ok: false, error: message, steps: step, resumable: true };
+      }
       if (!response) break;
 
       // Sem tool_calls = resposta final
@@ -167,8 +187,8 @@ export class AgentLoop {
     }
 
     if (step >= this.maxSteps) {
-      await this.persistFinal("Limite de passos atingido. Parei aqui — peça para continuar se quiser.");
-      return { ok: false, error: "Limite de passos", steps: step };
+      await this.persistFinal("Limite de passos atingido. Parei aqui — use Continuar no chat para retomar com a mesma memória.");
+      return { ok: false, error: "Limite de passos", steps: step, resumable: true };
     }
 
     this.emit("phase", { phase: "summarize", message: "Finalizando..." });
@@ -238,9 +258,10 @@ export class AgentLoop {
         tool_choice: "auto",
         max_tokens: 4096,
       });
-    } catch (err: any) {
-      this.emit("error", { message: err.message });
-      return null;
+    } catch (err: unknown) {
+      const message = friendlyLlmError(err, this.robinActive);
+      this.emit("error", { message, recoverable: true });
+      throw new Error(message);
     }
   }
 

@@ -24,10 +24,10 @@ const MODES: {
     icon: <Brain className="size-4" />,
   },
   {
-    id: "rob",
-    title: "Rob (pool de chaves)",
+    id: "robin",
+    title: "ROBIN (pool de chaves)",
     description:
-      "Rotaciona entre várias chaves gratuitas do mesmo provedor (ex.: 5–10 keys NVIDIA/Groq) para contornar limite por minuto.",
+      "A cada requisição ao modelo, troca de chave no pool (ex.: 5–10 keys NVIDIA/Groq) para mitigar rate limit gratuito.",
     icon: <Shuffle className="size-4" />,
   },
   {
@@ -92,7 +92,7 @@ export function ModelPowerPanel() {
         })}
       </div>
 
-      {prefs.mode === "rob" && (
+      {prefs.mode === "robin" && (
         <div className="mb-4 p-3 rounded-lg border border-amber-400/20 bg-amber-400/5">
           <label className="font-mono text-[9px] uppercase tracking-wider text-amber-400/90">
             Pool para rotação
@@ -109,8 +109,8 @@ export function ModelPowerPanel() {
           </select>
           <p className="mt-2 flex items-start gap-1.5 font-mono text-[9px] text-[var(--text-ghost)]">
             <Info className="size-3 shrink-0 mt-0.5" />
-            Adicione várias chaves do mesmo provedor abaixo com &quot;Adicionar ao pool&quot;. Cada execução do
-            agente sorteia uma chave diferente.
+            Adicione várias chaves do mesmo provedor com &quot;Adicionar ao pool&quot;. O ROBIN alterna a chave a
+            cada chamada ao LLM e avisa se alguma key bater no rate limit.
           </p>
         </div>
       )}

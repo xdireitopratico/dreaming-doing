@@ -3,7 +3,7 @@
 import type { LLMProvider, ChatMessage, ToolCall } from "./types.ts";
 
 const COMPRESSION_INTERVAL = 5;
-const MAX_CONTEXT_MESSAGES = 24;
+const MAX_CONTEXT_MESSAGES = 32;
 
 export class CompressionManager {
   private summarizing: LLMProvider;

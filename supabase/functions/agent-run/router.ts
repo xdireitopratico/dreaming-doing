@@ -1,5 +1,4 @@
 // router.ts — Model Router: classifica complexidade e roteia para o modelo certo.
-// Sem dependência de envs LLM_* específicos: usa o que provider auto-detect retornou.
 import type { LLMProvider } from "./types.ts";
 import { buildProvider, pickCheap, pickMain, type ProviderConfig } from "./providers.ts";
 
@@ -17,11 +16,14 @@ export class ModelRouter {
   public cheapCfg: ProviderConfig;
   public mainCfg: ProviderConfig;
 
-  constructor(injected?: Record<string, string>) {
+  constructor(
+    injected?: Record<string, string>,
+    overrides?: { main?: LLMProvider; cheap?: LLMProvider },
+  ) {
     this.mainCfg = pickMain(injected);
     this.cheapCfg = pickCheap(this.mainCfg, injected);
-    this.main = buildProvider(this.mainCfg);
-    this.cheap = buildProvider(this.cheapCfg);
+    this.main = overrides?.main ?? buildProvider(this.mainCfg);
+    this.cheap = overrides?.cheap ?? buildProvider(this.cheapCfg);
   }
 
   async classify(userPrompt: string, projectContext: string): Promise<ClassificationResult> {

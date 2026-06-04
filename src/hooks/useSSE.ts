@@ -25,6 +25,10 @@ export interface AgentProgress {
   summary: string | null;
   error: string | null;
   finished: boolean;
+  /** Pode retomar após queda de conexão ou rate limit */
+  resumable: boolean;
+  /** Aviso amigável (ROBIN / rate limit) */
+  statusHint: string | null;
 }
 
 const initialState: AgentProgress = {
@@ -41,6 +45,8 @@ const initialState: AgentProgress = {
   summary: null,
   error: null,
   finished: false,
+  resumable: false,
+  statusHint: null,
 };
 
 const MODEL_COSTS: Record<string, number> = {
@@ -71,8 +77,9 @@ export function useSSE() {
   const abortRef = useRef<AbortController | null>(null);
 
   const connect = useCallback(async (projectId: string, conversationId: string) => {
-    setProgress(initialState);
+    setProgress({ ...initialState });
     setConnected(true);
+    const sawFinish = { current: false };
 
     const { url, publishableKey } = getSupabaseEnv();
     if (!url || !publishableKey) {
@@ -149,7 +156,12 @@ export function useSSE() {
             const json = line.slice(6);
             try {
               const parsed = JSON.parse(json);
-              const event: SSEEvent = { ...parsed, timestamp: Date.now() };
+              const event: SSEEvent = {
+                type: (parsed.type as string) ?? "unknown",
+                data: (parsed.data as Record<string, unknown>) ?? parsed,
+                timestamp: Date.now(),
+              };
+              if (event.type === "finish" || event.type === "done") sawFinish.current = true;
               setProgress((prev) => applyEvent(prev, event));
             } catch {
               /* heartbeat */
@@ -157,9 +169,24 @@ export function useSSE() {
           }
         }
       }
+      if (!sawFinish.current) {
+        setProgress((p) => ({
+          ...p,
+          finished: true,
+          resumable: true,
+          error:
+            p.error ??
+            "Conexão com o agente foi interrompida. Seu histórico está salvo no projeto — use Continuar.",
+        }));
+      }
     } catch (err: unknown) {
       if (err instanceof Error && err.name !== "AbortError") {
-        setProgress((p) => ({ ...p, error: err.message, finished: true }));
+        setProgress((p) => ({
+          ...p,
+          error: err.message,
+          finished: true,
+          resumable: true,
+        }));
       }
     } finally {
       setConnected(false);
@@ -190,6 +217,35 @@ function applyEvent(prev: AgentProgress, event: SSEEvent): AgentProgress {
         ...prev,
         phase: (data.phase as string) ?? prev.phase,
         message: (data.message as string) ?? prev.message,
+        statusHint: null,
+        timeline: [...prev.timeline, event],
+      };
+
+    case "memory":
+      return {
+        ...prev,
+        statusHint: (data.message as string) ?? prev.statusHint,
+        timeline: [...prev.timeline, event],
+      };
+
+    case "rate_limit":
+      return {
+        ...prev,
+        statusHint: (data.message as string) ?? "Rate limit — ROBIN alternando chave…",
+        timeline: [...prev.timeline, event],
+      };
+
+    case "robin_rotate":
+      return {
+        ...prev,
+        statusHint: (data.message as string) ?? prev.statusHint,
+        timeline: [...prev.timeline, event],
+      };
+
+    case "connection_retry":
+      return {
+        ...prev,
+        statusHint: (data.message as string) ?? "Reconectando ao modelo…",
         timeline: [...prev.timeline, event],
       };
 
@@ -263,8 +319,9 @@ function applyEvent(prev: AgentProgress, event: SSEEvent): AgentProgress {
     case "error":
       return {
         ...prev,
-        error: (data.error as string) ?? "Erro desconhecido",
+        error: (data.message as string) ?? (data.error as string) ?? "Erro desconhecido",
         finished: true,
+        resumable: data.recoverable === true || prev.resumable,
         timeline: [...prev.timeline, event],
       };
 
@@ -272,6 +329,8 @@ function applyEvent(prev: AgentProgress, event: SSEEvent): AgentProgress {
       return {
         ...prev,
         finished: true,
+        resumable: data.resumable === true && data.ok === false,
+        error: data.ok === false ? ((data.error as string) ?? prev.error) : prev.error,
         timeline: [...prev.timeline, event],
       };
 
