@@ -1,11 +1,13 @@
-// Integrações de plataforma: GitHub, Supabase, Vercel, Cloudflare (separado de API Keys)
+// Integrações de plataforma: GitHub, Supabase, Vercel, Cloudflare, E2B (separado de API Keys)
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { motion } from "framer-motion";
-import { ArrowLeft, Cloud, Database, GitBranch, Plug, Shield, CheckCircle2, Key } from "lucide-react";
+import { ArrowLeft, Plug, Shield, CheckCircle2, Key } from "lucide-react";
 import { DashboardShell } from "@/components/dashboard/DashboardShell";
 import { PlatformConnectorCard } from "@/components/connectors/PlatformConnectorCard";
-import { PlatformConnectorModal } from "@/components/connectors/PlatformConnectorModal";
-import { usePlatformConnectors } from "@/hooks/usePlatformConnectors";
+import { ConnectorGuideModal } from "@/components/connectors/ConnectorGuideModal";
+import { useConnectors } from "@/hooks/useConnectors";
+import { CONNECTORS_PAGE_LIST, isConnectorActive } from "@/lib/connectors/registry";
+import type { ConnectorId } from "@/lib/connectors/integration-prefs";
 
 export const Route = createFileRoute("/connectors")({
   component: () => (
@@ -15,42 +17,12 @@ export const Route = createFileRoute("/connectors")({
   ),
 });
 
-const PLATFORMS = [
-  {
-    id: "github" as const,
-    name: "GitHub",
-    desc: "Importação de repos, sincronização e deploy via push. FORGE já aponta para xdireitopratico/dreaming-doing.",
-    icon: <GitBranch className="size-5" />,
-  },
-  {
-    id: "supabase" as const,
-    name: "Supabase",
-    desc: "Banco, auth, Realtime e Edge Functions. Projeto canônico FORGE ou instância própria.",
-    icon: <Database className="size-5" />,
-  },
-  {
-    id: "vercel" as const,
-    name: "Vercel",
-    desc: "Preview e produção. FORGE usa dreaming-doing.vercel.app; conecte o seu token para outro projeto.",
-    icon: <Cloud className="size-5" />,
-  },
-  {
-    id: "cloudflare" as const,
-    name: "Cloudflare Pages",
-    desc: "Deploy em edge global. Conecte sua conta — integração FORGE em breve.",
-    icon: <Cloud className="size-5" />,
-  },
-];
-
 function ConnectorsPage() {
-  const { status, modes, setMode, modal, openConnector, closeModal, saveConnector } =
-    usePlatformConnectors();
+  const { status, modes, setMode, modal, openConnector, closeModal, saveConnector } = useConnectors();
 
-  const activeCount = PLATFORMS.filter((p) => {
-    const s = status[p.id];
-    const mode = modes[p.id];
-    return (mode === "forge" && s.forgeAvailable) || (mode === "own" && s.connected);
-  }).length;
+  const activeCount = CONNECTORS_PAGE_LIST.filter((p) =>
+    isConnectorActive(p.id, modes[p.id], status[p.id]),
+  ).length;
 
   return (
     <div className="px-6 py-8 max-w-[960px] mx-auto">
@@ -70,7 +42,7 @@ function ConnectorsPage() {
           <div>
             <h1 className="font-display text-3xl tracking-tight">Conectores</h1>
             <p className="font-mono text-[10px] text-[var(--text-dim)] mt-0.5">
-              GitHub, Supabase, Vercel e Cloudflare — não confundir com chaves de IA
+              GitHub, Supabase, Vercel, Cloudflare e sandbox — não confundir com chaves de IA
             </p>
           </div>
         </div>
@@ -93,17 +65,14 @@ function ConnectorsPage() {
           Plataformas
         </h2>
         <div className="grid gap-3 sm:grid-cols-2">
-          {PLATFORMS.map((p) => (
+          {CONNECTORS_PAGE_LIST.map((p) => (
             <PlatformConnectorCard
               key={p.id}
-              id={p.id}
-              name={p.name}
-              description={p.desc}
-              icon={p.icon}
-              status={status[p.id]}
-              mode={modes[p.id]}
-              onModeChange={(m) => setMode(p.id, m)}
-              onConfigure={() => openConnector(p.id)}
+              id={p.id as ConnectorId}
+              status={status[p.id as ConnectorId]}
+              mode={modes[p.id as ConnectorId]}
+              onModeChange={(m) => setMode(p.id as ConnectorId, m)}
+              onConfigure={() => openConnector(p.id as ConnectorId)}
             />
           ))}
         </div>
@@ -118,7 +87,7 @@ function ConnectorsPage() {
         <div className="flex items-center gap-1.5">
           <Shield className="size-3 text-[var(--text-ghost)]" />
           <span className="font-mono text-[9px] text-[var(--text-ghost)]">
-            Tokens de plataforma ficam na tabela connectors (Supabase) — nunca no código do cliente.
+            Tokens ficam cifrados no servidor — nunca no navegador.
           </span>
         </div>
         <Link to="/api-keys" className="font-mono text-[9px] text-[var(--primary)] hover:underline">
@@ -126,11 +95,14 @@ function ConnectorsPage() {
         </Link>
       </motion.footer>
 
-      <PlatformConnectorModal
+      <ConnectorGuideModal
         connector={modal}
         status={modal ? status[modal] : null}
+        mode={modal ? modes[modal] : "forge"}
+        variant="dashboard"
         onClose={closeModal}
         onSave={saveConnector}
+        onModeChange={modal ? (m) => setMode(modal, m) : () => {}}
       />
     </div>
   );

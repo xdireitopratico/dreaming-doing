@@ -9,15 +9,14 @@ import {
   Database,
   Cloud,
   Smartphone,
+  Box,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import type { EditorMainView } from "@/components/editor/EditorViewTabs";
 import { ForgeLogoMark } from "@/components/editor/ForgeLogoMark";
-import { EditorConnectorModal } from "@/components/editor/EditorConnectorModal";
-import {
-  useEditorConnectors,
-  type ConnectorId,
-} from "@/hooks/useEditorConnectors";
+import { ConnectorGuideModal } from "@/components/connectors/ConnectorGuideModal";
+import { useConnectors, type ConnectorId } from "@/hooks/useConnectors";
+import { EDITOR_BAR_CONNECTORS, isConnectorActive } from "@/lib/connectors/registry";
 
 interface EditorTopBarProps {
   projectName?: string;
@@ -30,6 +29,13 @@ interface EditorTopBarProps {
   previewBooting?: boolean;
   running?: boolean;
 }
+
+const BAR_ICONS: Record<string, React.ReactNode> = {
+  github: <Github className="size-4" />,
+  supabase: <Database className="size-4" />,
+  vercel: <Cloud className="size-4" />,
+  e2b: <Box className="size-4" />,
+};
 
 function ConnectorButton({
   id,
@@ -48,7 +54,7 @@ function ConnectorButton({
     <button
       type="button"
       className="forge-connector-btn"
-      title={connected ? `${title} — conectado` : `${title} — conectar`}
+      title={connected ? `${title} — ativo` : `${title} — configurar`}
       data-connected={connected ? "true" : undefined}
       data-connector={id}
       onClick={onClick}
@@ -70,7 +76,7 @@ export function EditorTopBar({
   running,
 }: EditorTopBarProps) {
   const { user } = useAuth();
-  const { status, modal, openConnector, closeModal, saveConnector } = useEditorConnectors();
+  const { status, modes, setMode, modal, openConnector, closeModal, saveConnector } = useConnectors();
 
   const initials =
     user?.email?.slice(0, 2).toUpperCase() ??
@@ -143,30 +149,21 @@ export function EditorTopBar({
 
           <span className="forge-topbar-divider mx-1" aria-hidden />
 
-          <ConnectorButton
-            id="github"
-            title="GitHub"
-            connected={status.github.connected}
-            onClick={() => openConnector("github")}
-          >
-            <Github className="size-4" />
-          </ConnectorButton>
-          <ConnectorButton
-            id="supabase"
-            title="Supabase"
-            connected={status.supabase.connected}
-            onClick={() => openConnector("supabase")}
-          >
-            <Database className="size-4" />
-          </ConnectorButton>
-          <ConnectorButton
-            id="vercel"
-            title="Vercel"
-            connected={status.vercel.connected}
-            onClick={() => openConnector("vercel")}
-          >
-            <Cloud className="size-4" />
-          </ConnectorButton>
+          {EDITOR_BAR_CONNECTORS.map((entry) => {
+            const id = entry.id;
+            const active = isConnectorActive(id, modes[id], status[id]);
+            return (
+              <ConnectorButton
+                key={id}
+                id={id}
+                title={entry.name}
+                connected={active}
+                onClick={() => openConnector(id)}
+              >
+                {BAR_ICONS[id]}
+              </ConnectorButton>
+            );
+          })}
         </div>
 
         <div className="forge-topbar-right">
@@ -186,11 +183,14 @@ export function EditorTopBar({
         </div>
       </header>
 
-      <EditorConnectorModal
+      <ConnectorGuideModal
         connector={modal}
         status={modal ? status[modal] : null}
+        mode={modal ? modes[modal] : "forge"}
+        variant="editor"
         onClose={closeModal}
         onSave={saveConnector}
+        onModeChange={modal ? (m) => setMode(modal, m) : () => {}}
       />
     </>
   );

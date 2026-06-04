@@ -17,6 +17,9 @@ import type { AgentComposerMode } from "@/components/editor/ChatInput";
 import { CodeEditor, type Tab } from "@/components/editor/CodeEditor";
 import { FileTree } from "@/components/editor/FileTree";
 import { ChatInput, type ChatMessage } from "@/components/editor/ChatInput";
+import { SetupRail } from "@/components/editor/SetupRail";
+import { FORGE_WELCOME_MARKDOWN } from "@/lib/welcome-message";
+import { useConnectors } from "@/hooks/useConnectors";
 import { AgentPanel } from "@/components/editor/AgentPanel";
 import { PreviewFrame } from "@/components/editor/PreviewFrame";
 
@@ -62,6 +65,7 @@ function EditorPage() {
   const { projectId } = useParams({ from: "/projects/$projectId/" });
   const navigate = useNavigate();
   const qc = useQueryClient();
+  const { trialMessagesRemaining } = useConnectors();
 
   // ─── States ──────────────────────────────────────────────────────────
   const [showFileTree, setShowFileTree] = useState(false);
@@ -515,7 +519,10 @@ function EditorPage() {
                   onComposerModeChange={setComposerMode}
                   externalPrompt={promptDraft}
                   onExternalPromptConsumed={() => setPromptDraft(null)}
+                  welcomeMarkdown={chatMessages.length === 0 ? FORGE_WELCOME_MARKDOWN : undefined}
+                  trialMessagesRemaining={trialMessagesRemaining}
                 />
+                <SetupRail />
               </>
             }
             workspace={

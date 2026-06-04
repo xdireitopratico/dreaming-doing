@@ -86,6 +86,17 @@ Deno.serve(async (req) => {
       return json({ error: "Projeto não encontrado" }, 404);
     }
 
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("trial_messages_remaining, integration_prefs")
+      .eq("id", userData.user.id)
+      .maybeSingle();
+
+    const trialRemaining =
+      typeof profile?.trial_messages_remaining === "number"
+        ? profile.trial_messages_remaining
+        : 8;
+
     if (runningLocks.has(projectId)) {
       return json({ error: "Agente já está executando neste projeto. Aguarde a conclusão." }, 409);
     }
@@ -105,6 +116,27 @@ Deno.serve(async (req) => {
 
     const robin = isRobinMode(preferences);
     const poolProvider = preferences?.poolProvider ?? "groq";
+    let userOnlyKeys: Record<string, string> = {};
+    let hasUserLlmKey = false;
+
+    if (robin) {
+      const poolKeys = await loadConnectorPools(supabase, userData.user.id, poolProvider);
+      hasUserLlmKey = poolKeys.length > 0;
+    } else {
+      userOnlyKeys = await loadConnectorKeys(supabase, userData.user.id, preferences);
+      hasUserLlmKey = Object.keys(userOnlyKeys).some((k) =>
+        ["ANTHROPIC_API_KEY", "GROQ_API_KEY", "XAI_API_KEY", "OPENAI_API_KEY", "NVIDIA_API_KEY"].includes(k)
+      );
+    }
+
+    if (!hasUserLlmKey && trialRemaining <= 0) {
+      runningLocks.delete(projectId);
+      return json({
+        error:
+          "Limite do tira-gosto atingido. Adicione suas chaves em API Keys ou use o modo ROBIN com pool configurado.",
+      }, 402);
+    }
+
     let robinPool: RobinKeyPool | null = null;
     let connectorKeys: Record<string, string> = {};
     let mainCfg: ProviderConfig;
@@ -118,9 +150,14 @@ Deno.serve(async (req) => {
           ? { NVIDIA_API_KEY: poolKeys[0]! }
           : { GROQ_API_KEY: poolKeys[0]! };
       } else {
-        connectorKeys = mergeKeys(
-          await loadConnectorKeys(supabase, userData.user.id, preferences),
-        );
+        connectorKeys = mergeKeys(userOnlyKeys);
+      }
+
+      if (!hasUserLlmKey && trialRemaining > 0) {
+        await supabase
+          .from("profiles")
+          .update({ trial_messages_remaining: trialRemaining - 1 })
+          .eq("id", userData.user.id);
       }
 
       if (!robin) {

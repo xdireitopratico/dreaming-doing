@@ -39,7 +39,7 @@ function AuthPage() {
 
   const signIn = async () => {
     if (!isSupabaseConfigured()) {
-      toast.error("Supabase não configurado neste ambiente.");
+      toast.error("Serviço temporariamente indisponível. Tente novamente em instantes.");
       return;
     }
     setBusy(true);
@@ -51,7 +51,7 @@ function AuthPage() {
 
   const signUp = async () => {
     if (!isSupabaseConfigured()) {
-      toast.error("Supabase não configurado neste ambiente.");
+      toast.error("Serviço temporariamente indisponível. Tente novamente em instantes.");
       return;
     }
     setBusy(true);
@@ -64,12 +64,12 @@ function AuthPage() {
     });
     setBusy(false);
     if (error) toast.error(error.message);
-    else toast.success("Conta criada. Verifique seu email para confirmar.");
+    else toast.success("Conta criada. Confira seu email para confirmar o acesso.");
   };
 
   const google = async () => {
     if (!isSupabaseConfigured()) {
-      toast.error("Supabase não configurado neste ambiente.");
+      toast.error("Serviço temporariamente indisponível. Tente novamente em instantes.");
       return;
     }
 
@@ -81,7 +81,7 @@ function AuthPage() {
         redirect_uri: redirectTo,
       });
       if (res.error) {
-        toast.error(res.error.message || "Falha no login com Google");
+        toast.error(res.error.message || "Não foi possível entrar com Google");
         setBusy(false);
       }
       return;
@@ -108,8 +108,12 @@ function AuthPage() {
       <section className="auth-visual" aria-hidden={false}>
         <div className="auth-visual-top">
           <ForgeLogoMark linkTo="/" size={22} />
-          <Link to="/" className="text-xs text-[var(--forge-muted)] hover:text-[var(--forge-text)]">
-            Site
+          <Link
+            to="/"
+            className="auth-visual-back inline-flex items-center gap-1 text-xs text-[var(--forge-muted)] hover:text-[var(--forge-text)]"
+          >
+            <ArrowLeft className="size-3.5" />
+            Início
           </Link>
         </div>
 
@@ -117,24 +121,19 @@ function AuthPage() {
           <div className="auth-visual-eyebrow">FORGE · beta</div>
           <h2 className="auth-visual-title">Make Your Dream.</h2>
           <p className="auth-visual-sub">
-            O mesmo ambiente da dashboard: vibe code, preview ao vivo e deploy — com a sua conta e seus
-            conectores.
+            Construa apps web com IA: descreva a ideia, veja o preview ao vivo e publique quando estiver
+            pronto — com a infraestrutura FORGE ou com as suas próprias contas.
           </p>
         </div>
 
-        <p className="auth-visual-footer">Código seu · dados seus</p>
+        <p className="auth-visual-footer">Seu código · seus dados · sua escolha de stack</p>
       </section>
 
       <main className="auth-panel">
         <div className="auth-panel-inner">
-          <Link to="/" className="auth-panel-back">
-            <ArrowLeft className="size-3.5" />
-            Voltar ao início
-          </Link>
-
           <div className="auth-panel-heading">
-            <h1>Entrar no FORGE</h1>
-            <p>Retome seus projetos ou crie uma conta nova.</p>
+            <h1>Crie sua conta FORGE</h1>
+            <p>Entre para retomar projetos ou cadastre-se em menos de um minuto.</p>
           </div>
 
           <div className="auth-card">
@@ -200,7 +199,8 @@ function AuthPage() {
           </div>
 
           <p className="auth-legal">
-            Ao continuar você concorda com os termos básicos da beta — código seu, dados seus.
+            Ao continuar, você aceita os termos da versão beta. Seus projetos e credenciais próprias
+            permanecem sob seu controle.
           </p>
         </div>
       </main>

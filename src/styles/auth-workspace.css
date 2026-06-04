@@ -125,18 +125,8 @@ body:has(.auth-workspace) {
   padding: 40px 32px 48px;
 }
 
-.auth-panel-back {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  color: var(--forge-muted);
-  margin-bottom: 32px;
+.auth-visual-back {
   transition: color 0.15s;
-}
-
-.auth-panel-back:hover {
-  color: var(--forge-text);
 }
 
 .auth-panel-heading {

@@ -41,6 +41,9 @@ interface ChatInputProps {
   onComposerModeChange?: (mode: AgentComposerMode) => void;
   externalPrompt?: string | null;
   onExternalPromptConsumed?: () => void;
+  /** Markdown exibido quando não há mensagens (boas-vindas / tira-gosto). */
+  welcomeMarkdown?: string;
+  trialMessagesRemaining?: number;
 }
 
 // -----------------------------------------------------------------------------------
@@ -138,6 +141,8 @@ export function ChatInput({
   onComposerModeChange,
   externalPrompt,
   onExternalPromptConsumed,
+  welcomeMarkdown,
+  trialMessagesRemaining,
 }: ChatInputProps) {
   const [input, setInput] = useState("");
   const [composerModeLocal, setComposerModeLocal] = useState<AgentComposerMode>("build");
@@ -308,10 +313,25 @@ export function ChatInput({
     <div className="forge-chat-inner" onDrop={handleDrop} onDragOver={(e) => e.preventDefault()}>
       <div ref={scrollRef} className="forge-messages">
         {messages.length === 0 ? (
-          <p className="forge-msg-text">
-            Descreva o que você quer construir ou alterar. O FORGE gera o código e você vê o
-            resultado ao vivo à direita.
-          </p>
+          <div className="forge-msg-text space-y-3">
+            {welcomeMarkdown ? (
+              <MarkdownContent>{welcomeMarkdown}</MarkdownContent>
+            ) : (
+              <p>
+                Descreva o que você quer construir ou alterar. O FORGE gera o código e você vê o
+                resultado ao vivo à direita.
+              </p>
+            )}
+            {trialMessagesRemaining != null && trialMessagesRemaining <= 0 && (
+              <p className="font-mono text-[10px] text-amber-400/90 border border-amber-400/20 rounded-lg px-3 py-2">
+                Limite do tira-gosto atingido. Adicione suas chaves em{" "}
+                <a href="/api-keys" className="text-[var(--forge-primary)] underline">
+                  API Keys
+                </a>{" "}
+                para continuar.
+              </p>
+            )}
+          </div>
         ) : (
           messages.map((msg) => (
             <div key={msg.id} className="mb-4 last:mb-0">

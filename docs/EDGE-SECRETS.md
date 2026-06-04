@@ -37,3 +37,14 @@ supabase secrets set --project-ref dpduljngdurfpmaclffa \
 ```
 
 Prioridade nas Edge Functions: **vault FORGE (Ajustes)** → **Supabase Edge env** → chaves do usuário em `/api-keys`.
+
+## Modo FORGE vs conta própria (`profiles.integration_prefs`)
+
+| Conector | `forge` | `own` |
+|----------|---------|-------|
+| GitHub / Vercel / Cloudflare | Infra e tokens globais FORGE quando aplicável | Token em `connectors` via `/connectors` ou editor |
+| Supabase | Projeto FORGE do deploy | `VITE_SUPABASE_*` no deploy do usuário |
+| E2B (sandbox) | `E2B_API_KEY` global | Chave própria (em breve) |
+| LLM / STT | Fallback global + **tira-gosto** (`trial_messages_remaining`) | Sempre `/api-keys` (BYOK) |
+
+**Tira-gosto:** sem chave LLM do usuário, cada execução do agente decrementa `trial_messages_remaining` (padrão 8). Com chave em API Keys ou ROBIN com pool, não consome trial.

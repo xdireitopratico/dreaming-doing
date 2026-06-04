@@ -219,6 +219,8 @@ export type Database = {
           display_name: string | null
           github_username: string | null
           id: string
+          integration_prefs: Json
+          trial_messages_remaining: number
           updated_at: string
         }
         Insert: {
@@ -227,6 +229,8 @@ export type Database = {
           display_name?: string | null
           github_username?: string | null
           id: string
+          integration_prefs?: Json
+          trial_messages_remaining?: number
           updated_at?: string
         }
         Update: {
@@ -235,6 +239,8 @@ export type Database = {
           display_name?: string | null
           github_username?: string | null
           id?: string
+          integration_prefs?: Json
+          trial_messages_remaining?: number
           updated_at?: string
         }
         Relationships: []

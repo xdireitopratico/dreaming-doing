@@ -1,29 +1,24 @@
 import { motion } from "framer-motion";
-import { CheckCircle2, ChevronRight, Sparkles } from "lucide-react";
-import type { PlatformConnectorId, IntegrationMode, PlatformConnectorStatus } from "@/hooks/usePlatformConnectors";
+import { CheckCircle2, ChevronRight } from "lucide-react";
+import type { ConnectorId, ConnectorStatus, IntegrationMode } from "@/hooks/useConnectors";
+import { CONNECTOR_REGISTRY, isConnectorActive } from "@/lib/connectors/registry";
+import { ConnectorModeToggle } from "@/components/connectors/ConnectorModeToggle";
 
 export function PlatformConnectorCard({
   id,
-  name,
-  description,
-  icon,
   status,
   mode,
   onModeChange,
   onConfigure,
 }: {
-  id: PlatformConnectorId;
-  name: string;
-  description: string;
-  icon: React.ReactNode;
-  status: PlatformConnectorStatus;
+  id: ConnectorId;
+  status: ConnectorStatus;
   mode: IntegrationMode;
   onModeChange: (mode: IntegrationMode) => void;
   onConfigure: () => void;
 }) {
-  const forgeActive = mode === "forge" && status.forgeAvailable;
-  const ownActive = mode === "own" && status.connected;
-  const isActive = forgeActive || ownActive;
+  const entry = CONNECTOR_REGISTRY[id];
+  const isActive = isConnectorActive(id, mode, status);
 
   return (
     <motion.div
@@ -32,17 +27,17 @@ export function PlatformConnectorCard({
     >
       <div className="flex items-start gap-3">
         <div
-          className={`size-11 rounded-lg border grid place-items-center shrink-0 ${
+          className={`size-11 rounded-lg border grid place-items-center shrink-0 font-mono text-[10px] ${
             isActive
               ? "border-emerald-400/30 bg-emerald-400/10 text-emerald-400"
               : "border-[var(--border)] bg-[var(--surface-2)] text-[var(--text-ghost)]"
           }`}
         >
-          {icon}
+          {entry.name.slice(0, 2).toUpperCase()}
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="font-mono text-[12px] text-[var(--foreground)]">{name}</span>
+            <span className="font-mono text-[12px] text-[var(--foreground)]">{entry.name}</span>
             {isActive ? (
               <span className="inline-flex items-center gap-1 font-mono text-[8px] text-emerald-400 px-1.5 py-0.5 rounded bg-emerald-400/10">
                 <CheckCircle2 className="size-3" />
@@ -57,36 +52,16 @@ export function PlatformConnectorCard({
           {status.label && (
             <p className="font-mono text-[9px] text-[var(--primary)] mt-0.5">{status.label}</p>
           )}
-          <p className="font-mono text-[9px] text-[var(--text-ghost)] mt-1 leading-relaxed">{description}</p>
+          <p className="font-mono text-[9px] text-[var(--text-ghost)] mt-1 leading-relaxed">
+            {entry.description}
+          </p>
 
-          <div className="flex gap-1 mt-3 p-0.5 rounded-md bg-[var(--surface-2)]/80 border border-[var(--border)] w-fit">
-            <button
-              type="button"
-              onClick={() => onModeChange("forge")}
-              disabled={!status.forgeAvailable}
-              className={`px-2.5 py-1 rounded font-mono text-[8px] transition-colors ${
-                mode === "forge"
-                  ? "bg-[var(--primary)]/15 text-[var(--primary)]"
-                  : "text-[var(--text-ghost)] hover:text-[var(--foreground)]"
-              } ${!status.forgeAvailable ? "opacity-40 cursor-not-allowed" : ""}`}
-            >
-              <span className="inline-flex items-center gap-1">
-                <Sparkles className="size-2.5" />
-                FORGE
-              </span>
-            </button>
-            <button
-              type="button"
-              onClick={() => onModeChange("own")}
-              className={`px-2.5 py-1 rounded font-mono text-[8px] transition-colors ${
-                mode === "own"
-                  ? "bg-[var(--primary)]/15 text-[var(--primary)]"
-                  : "text-[var(--text-ghost)] hover:text-[var(--foreground)]"
-              }`}
-            >
-              Meu {name}
-            </button>
-          </div>
+          <ConnectorModeToggle
+            id={id}
+            mode={mode}
+            forgeAvailable={status.forgeAvailable}
+            onModeChange={onModeChange}
+          />
         </div>
         <button
           type="button"
@@ -100,8 +75,8 @@ export function PlatformConnectorCard({
 
       {mode === "forge" && status.forgeAvailable && id !== "cloudflare" && (
         <p className="mt-3 ml-14 font-mono text-[8px] text-[var(--text-ghost)] leading-relaxed">
-          Integração gerenciada pelo FORGE neste ambiente — basta fazer vibe code; deploy e backend já estão
-          ligados ao projeto <code className="text-[var(--text-dim)]">dreaming-doing</code>.
+          Infraestrutura FORGE — comece sem criar contas externas. Você pode migrar para &quot;Meu {entry.name}&quot;
+          quando quiser independência total.
         </p>
       )}
     </motion.div>
