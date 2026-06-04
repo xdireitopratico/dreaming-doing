@@ -95,7 +95,7 @@ export function FinalCTA() {
         <div className="mt-12 flex justify-center">
           <Link
             ref={btnRef}
-            to="/editor"
+            to="/projects"
             data-cursor="hover"
             className="inline-block font-mono text-sm tracking-[0.25em] uppercase px-10 py-5 bg-[var(--primary)] text-[#0a0408] hover:bg-[var(--tertiary)] transition-colors glow-primary"
             style={{ transition: "transform 200ms ease-out, background 200ms" }}

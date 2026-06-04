@@ -104,7 +104,7 @@ export function Nav() {
         </div>
 
         <Link
-          to="/editor"
+          to="/projects"
           className="relative group font-mono text-xs tracking-[0.2em] uppercase px-5 py-2.5 border border-[var(--primary)]/60 text-[var(--primary)] hover:text-[var(--background)] hover:bg-[var(--primary)] transition-all"
         >
           COMEÇAR →
