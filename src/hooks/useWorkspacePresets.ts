@@ -14,11 +14,11 @@ export interface WorkspacePreset {
 const PRESETS: WorkspacePreset[] = [
   {
     id: "default",
-    label: "Default",
+    label: "Chat + Preview",
     icon: "◫",
-    leftRatio: 30,
-    showFileTree: true,
-    activeView: "code",
+    leftRatio: 36,
+    showFileTree: false,
+    activeView: "preview",
   },
   {
     id: "focus-code",

@@ -3,6 +3,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { Github, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { sanitizeNext } from "@/lib/sanitize-next";
 import {
   Dialog,
   DialogContent,
@@ -33,7 +34,7 @@ export function ImportRepoDialog({ trigger }: Props) {
       const { data: sess } = await supabase.auth.getSession();
       if (!sess.session) {
         toast.error("Faça login antes.");
-        navigate({ to: "/auth", search: { next: "/projects" } as never });
+        navigate({ to: "/auth", search: { next: sanitizeNext("/projects") } });
         return;
       }
       const { data, error } = await supabase.functions.invoke("github-import", {

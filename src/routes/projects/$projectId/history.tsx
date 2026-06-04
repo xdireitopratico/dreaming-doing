@@ -1,7 +1,7 @@
 // history.tsx — Timeline visual de mudanças do agente
 // Rota: /projects/$projectId/history
 // Mostra diff por mensagem, scrubber horizontal, timeline de decisões
-import { createFileRoute, useParams, Link } from "@tanstack/react-router";
+import { createFileRoute, useParams, Link, useNavigate } from "@tanstack/react-router";
 import { useState, useMemo, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
@@ -40,6 +40,7 @@ interface FileRow {
 
 function HistoryPage() {
   const { projectId } = useParams({ from: "/projects/$projectId/history" });
+  const navigate = useNavigate();
   const [selectedMsgId, setSelectedMsgId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<"timeline" | "diff" | "list">("timeline");
 
@@ -120,39 +121,38 @@ function HistoryPage() {
   return (
     <EditorShell
       projectName={project?.name}
-      right={
-        <div className="flex items-center gap-2">
-          {/* View mode toggles */}
-          <div className="flex items-center gap-0.5 border border-[var(--border)] rounded-md p-0.5 bg-[var(--surface-1)]/60">
+      activeView="code"
+      onViewChange={(view) => {
+        if (view === "preview") {
+          navigate({ to: "/projects/$projectId", params: { projectId } });
+        }
+      }}
+    >
+      <div className="flex h-full flex-col bg-[var(--lovable-chat)]">
+        <div className="flex h-12 shrink-0 items-center gap-3 border-b border-[var(--lovable-border)] px-4">
+          <div className="lovable-view-tabs flex gap-1">
             {(["timeline", "diff", "list"] as const).map((mode) => (
               <button
                 key={mode}
+                type="button"
+                data-active={viewMode === mode}
+                className="lovable-doc-btn"
                 onClick={() => setViewMode(mode)}
-                className={`px-2.5 py-1 rounded text-[10px] font-mono tracking-[0.1em] uppercase transition-colors ${
-                  viewMode === mode
-                    ? "bg-[var(--primary)] text-[var(--primary-foreground)]"
-                    : "text-[var(--text-dim)] hover:text-[var(--foreground)]"
-                }`}
               >
                 {mode === "timeline" ? "Timeline" : mode === "diff" ? "Diff" : "Lista"}
               </button>
             ))}
           </div>
-
           <Link
             to="/projects/$projectId"
             params={{ projectId }}
-            className="flex items-center gap-1 text-[10px] font-mono text-[var(--text-dim)] hover:text-[var(--foreground)] transition-colors"
+            className="lovable-doc-btn ml-auto"
           >
-            <ChevronLeft className="size-3" />
-            EDITOR
+            <ChevronLeft className="mr-1 inline size-3" />
+            Editor
           </Link>
         </div>
-      }
-    >
-      <div className="flex flex-col h-full bg-[var(--background)]">
-        {/* Header */}
-        <div className="flex items-center gap-4 px-4 h-12 border-b border-[var(--border)] bg-[var(--surface-1)]/40 shrink-0">
+        <div className="flex items-center gap-4 px-4 h-12 border-b border-[var(--lovable-border)] shrink-0">
           <div className="flex items-center gap-2">
             <div className="size-8 rounded-lg border border-[var(--border)] bg-[var(--surface-2)] grid place-items-center">
               <History className="size-4 text-[var(--primary)]" />

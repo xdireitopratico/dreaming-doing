@@ -36,7 +36,7 @@ export function StatusBar({
   const [expandedCost, setExpandedCost] = useState(false);
 
   return (
-    <div className="flex items-center h-7 bg-[var(--background)] border-t border-[var(--border)] px-2 gap-0.5 text-[10px] font-mono select-none shrink-0">
+    <div className="flex h-8 shrink-0 select-none items-center gap-1 border-t border-[var(--border)] bg-[var(--surface-1)] px-3 text-[11px] text-[var(--text-dim)]">
       {/* Git */}
       <button
         onClick={onToggleGitPanel}

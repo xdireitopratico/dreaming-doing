@@ -11,6 +11,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { AuthProvider } from "@/lib/auth";
 import { ThemeProvider } from "@/lib/theme";
 import { SmoothScroll } from "@/lib/smooth-scroll";
+import { SupabaseConfigBanner } from "@/components/SupabaseConfigBanner";
 
 import appCss from "../styles.css?url";
 
@@ -122,6 +123,7 @@ function RootShell({ children }: { children: React.ReactNode }) {
         <HeadContent />
       </head>
       <body className="bg-background text-foreground antialiased">
+        <SupabaseConfigBanner />
         {children}
         <Scripts />
       </body>

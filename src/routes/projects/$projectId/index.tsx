@@ -2,19 +2,22 @@
 // Todos os 18+ componentes integrados: Breadcrumb, CommandPalette, ShortcutCheatsheet,
 // ProviderSelector, LogPanel, AiDiffViewer, RateLimitIndicator, useAgentBlame,
 // monacoEnhancements, useElementPicker, SnapshotsSheet, export ZIP, drag-drop
-import { createFileRoute, useParams, Link } from "@tanstack/react-router";
+import { createFileRoute, useParams, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Group, Panel, Separator } from "react-resizable-panels";
+
 import { supabase } from "@/integrations/supabase/client";
 import { EditorShell } from "@/components/EditorShell";
+import { EditorResizableLayout } from "@/components/editor/EditorResizableLayout";
+import type { EditorMainView } from "@/components/editor/EditorViewTabs";
+import type { AgentComposerMode } from "@/components/editor/ChatInput";
 import { CodeEditor, type Tab } from "@/components/editor/CodeEditor";
 import { FileTree } from "@/components/editor/FileTree";
 import { ChatInput, type ChatMessage } from "@/components/editor/ChatInput";
 import { AgentPanel } from "@/components/editor/AgentPanel";
 import { PreviewFrame } from "@/components/editor/PreviewFrame";
-import { StatusBar } from "@/components/editor/StatusBar";
-import { Breadcrumb } from "@/components/editor/Breadcrumb";
+
+
 import { CommandPalette, buildEditorActions, type PaletteAction } from "@/components/editor/CommandPalette";
 import { ShortcutCheatsheet } from "@/components/editor/ShortcutCheatsheet";
 import { ProviderSelector, type ProviderOption } from "@/components/editor/ProviderSelector";
@@ -27,12 +30,7 @@ import { useAgentBlame, buildBlameFromTimeline } from "@/hooks/useAgentBlame";
 import { registerAiCodeLens, registerAiFolding, clearEnhancements, HEAT_MAP_CSS } from "@/lib/monacoEnhancements";
 import { useElementPicker } from "@/hooks/useElementPicker";
 import { useWorkspacePresets, exportProjectZip, useFileDrop } from "@/hooks/useWorkspacePresets";
-import {
-  Code2, Eye, PanelLeft, Loader2, History, Camera, Download,
-  Terminal, Crosshair, Search, Keyboard,
-} from "lucide-react";
 import { toast } from "sonner";
-import { MicButton } from "@/components/voice/MicButton";
 import type { editor } from "monaco-editor";
 
 export const Route = createFileRoute("/projects/$projectId/")({
@@ -57,11 +55,12 @@ type FileRow = {
 
 function EditorPage() {
   const { projectId } = useParams({ from: "/projects/$projectId/" });
+  const navigate = useNavigate();
   const qc = useQueryClient();
 
   // ─── States ──────────────────────────────────────────────────────────
-  const [showFileTree, setShowFileTree] = useState(true);
-  const [activeView, setActiveView] = useState<"code" | "preview" | "diff">("code");
+  const [showFileTree, setShowFileTree] = useState(false);
+  const [activeView, setActiveView] = useState<"code" | "preview" | "diff">("preview");
   const [activeFilePath, setActiveFilePath] = useState<string | null>(null);
   const [openTabs, setOpenTabs] = useState<Tab[]>([]);
   const [running, setRunning] = useState(false);
@@ -71,6 +70,7 @@ function EditorPage() {
   const [provider, setProvider] = useState("anthropic-sonnet");
   const [pickMode, setPickMode] = useState(false);
   const [logs, setLogs] = useState<LogEntry[]>([]);
+  const [composerMode, setComposerMode] = useState<AgentComposerMode>("build");
 
   // ─── Refs ────────────────────────────────────────────────────────────
   const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null);
@@ -79,7 +79,17 @@ function EditorPage() {
 
   // ─── Hooks ───────────────────────────────────────────────────────────
   const sse = useSSE();
-  const { presets, currentPreset, applyPreset } = useWorkspacePresets();
+  useWorkspacePresets();
+
+  useEffect(() => {
+    if (activeView === "code") setShowFileTree(true);
+  }, [activeView]);
+
+  const mainView: EditorMainView = activeView === "code" ? "code" : "preview";
+
+  const handleMainViewChange = useCallback((view: EditorMainView) => {
+    setActiveView(view);
+  }, []);
   const elementPicker = useElementPicker({
     iframeRef: previewIframeRef,
     onPick: (el) => {
@@ -268,17 +278,26 @@ function EditorPage() {
     }
   }, [conversation, projectId, running, sse, logPanelOpen]);
 
-  const handleSend = useCallback((text: string) => {
-    if (!conversation) return;
-    supabase.from("messages").insert({
-      conversation_id: conversation.id,
-      role: "user",
-      parts: [{ type: "text", text }],
-    }).then(({ error }) => {
-      if (error) toast.error("Erro ao enviar mensagem");
-      else runAgent();
-    });
-  }, [conversation, runAgent]);
+  const handleSend = useCallback(
+    (text: string, mode?: AgentComposerMode) => {
+      if (!conversation) return;
+      const effectiveMode = mode ?? composerMode;
+      const body =
+        effectiveMode === "plan" ? `[Modo plano — só planejar, não executar ainda]\n${text}` : text;
+      supabase
+        .from("messages")
+        .insert({
+          conversation_id: conversation.id,
+          role: "user",
+          parts: [{ type: "text", text: body }],
+        })
+        .then(({ error }) => {
+          if (error) toast.error("Erro ao enviar mensagem");
+          else runAgent();
+        });
+    },
+    [conversation, runAgent, composerMode],
+  );
 
   const handleStop = useCallback(() => {
     sse.disconnect();
@@ -345,152 +364,52 @@ function EditorPage() {
 
       <EditorShell
         projectName={project?.name}
-        right={
-          <div className="flex items-center gap-1.5">
-            {/* File Tree toggle */}
-            <button
-              onClick={() => setShowFileTree((v) => !v)}
-              className={`p-1.5 rounded-md transition-colors ${
-                showFileTree ? "bg-[var(--primary)]/10 text-[var(--primary)]" : "text-[var(--text-ghost)] hover:text-[var(--text-dim)]"
-              }`}
-              title="Explorer (⌘B)"
-            >
-              <PanelLeft className="size-3.5" />
-            </button>
-
-            {/* View toggle: Code / Preview / Diff */}
-            <div className="flex items-center gap-0.5 border border-[var(--border)] rounded-md p-0.5 bg-[var(--surface-1)]/60">
-              {(["code", "preview", "diff"] as const).map((mode) => {
-                const icons = { code: Code2, preview: Eye, diff: History };
-                const labels = { code: "Code", preview: "Preview", diff: "Diff" };
-                const Icon = icons[mode];
-                return (
-                  <button
-                    key={mode}
-                    onClick={() => setActiveView(mode)}
-                    className={`flex items-center gap-1 px-2 py-1 rounded text-[10px] font-mono transition-colors ${
-                      activeView === mode
-                        ? "bg-[var(--primary)] text-[var(--primary-foreground)]"
-                        : "text-[var(--text-dim)] hover:text-[var(--foreground)]"
-                    }`}
-                  >
-                    <Icon className="size-3" /> {labels[mode]}
-                  </button>
-                );
-              })}
-            </div>
-
-            {/* Pick mode toggle */}
-            <button
-              onClick={() => setPickMode((v) => !v)}
-              className={`p-1.5 rounded-md transition-colors ${
-                pickMode ? "bg-[var(--primary)]/15 text-[var(--primary)] ring-1 ring-[var(--primary)]/30" : "text-[var(--text-ghost)] hover:text-[var(--text-dim)]"
-              }`}
-              title="Selecionar elemento no preview"
-            >
-              <Crosshair className="size-3.5" />
-            </button>
-
-            {/* Snapshot */}
-            <SnapshotsSheet projectId={projectId} />
-
-            {/* History link */}
-            <Link
-              to="/projects/$projectId/history"
-              params={{ projectId }}
-              className="p-1.5 rounded-md text-[var(--text-ghost)] hover:text-[var(--text-dim)] hover:bg-[var(--surface-2)] transition-colors"
-              title="Histórico de mudanças"
-            >
-              <History className="size-3.5" />
-            </Link>
-
-            {/* Export ZIP */}
-            <button
-              onClick={handleExportZip}
-              className="p-1.5 rounded-md text-[var(--text-ghost)] hover:text-[var(--text-dim)] hover:bg-[var(--surface-2)] transition-colors"
-              title="Exportar ZIP (⌘⇧E)"
-            >
-              <Download className="size-3.5" />
-            </button>
-
-            {/* Command palette trigger */}
-            <button
-              onClick={() => setPaletteOpen(true)}
-              className="p-1.5 rounded-md text-[var(--text-ghost)] hover:text-[var(--text-dim)] hover:bg-[var(--surface-2)] transition-colors"
-              title="Command Palette (⌘K)"
-            >
-              <Search className="size-3.5" />
-            </button>
-
-            {/* Mic button */}
-            <MicButton onTranscript={(t) => { if (t.trim()) handleSend(t); }} />
-
-            {running && (
-              <span className="flex items-center gap-1.5 font-mono text-[9px] tracking-[0.2em] uppercase text-[var(--primary)] animate-pulse">
-                <Loader2 className="size-3 animate-spin" />
-                FORGING
-              </span>
-            )}
-          </div>
-        }
+        activeView={mainView}
+        onViewChange={handleMainViewChange}
+        running={running}
+        onShare={() => toast.info("Share — em breve")}
+        onPublish={() => toast.info("Publish — em breve")}
       >
         <div
-          className="flex flex-col h-full"
+          className="min-h-0 w-full flex-1"
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
         >
-          <Group orientation="horizontal" className="flex-1 min-h-0">
-            {/* LEFT: Chat + AgentPanel */}
-            <Panel defaultSize={currentPreset.leftRatio} minSize={20} maxSize={50} className="flex flex-col">
-              <div className="flex flex-col h-full border-r border-[var(--border)] bg-[var(--surface-1)]/40">
+          <EditorResizableLayout
+            workspaceCode={activeView === "code"}
+            chat={
+              <>
                 <AgentPanel running={running} progress={sse.progress} />
-                <div className="flex-1 min-h-0">
-                  <ChatInput
-                    messages={chatMessages}
-                    running={running}
-                    onSend={handleSend}
-                    onStop={handleStop}
-                    files={filePaths}
-                  />
-                </div>
-              </div>
-            </Panel>
+                <ChatInput
+                  messages={chatMessages}
+                  running={running}
+                  onSend={handleSend}
+                  onStop={handleStop}
+                  files={filePaths}
+                  composerMode={composerMode}
+                  onComposerModeChange={setComposerMode}
+                />
+              </>
+            }
+            workspace={
+              <div className="flex min-h-0 h-full w-full flex-1 flex-col">
+                <div className="flex min-h-0 flex-1">
+                  {showFileTree && activeView === "code" && (
+                    <div className="w-[200px] shrink-0 border-r border-[var(--forge-border)] bg-[#1a1c22]">
+                      <FileTree
+                        files={fileTreeFiles}
+                        activePath={activeFilePath}
+                        onSelectFile={handleSelectFile}
+                        onCreateFile={() => toast.info("Criar arquivo — via chat")}
+                        onCreateFolder={() => toast.info("Criar pasta — via chat")}
+                        onRename={(old, n) => toast.info(`Renomear: ${old} → ${n}`)}
+                        onDelete={(p) => toast.info(`Deletar: ${p}`)}
+                      />
+                    </div>
+                  )}
 
-            {/* Separator */}
-            <Separator className="w-[3px] bg-[var(--border)] hover:bg-[var(--primary)]/40 active:bg-[var(--primary)]/60 transition-colors cursor-col-resize relative group">
-              <div className="absolute inset-y-0 -left-1 -right-1 z-10" />
-              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 size-4 rounded-full bg-[var(--surface-1)] border border-[var(--border)] group-hover:border-[var(--primary)]/40 transition-colors grid place-items-center">
-                <div className="size-1 rounded-full bg-[var(--text-ghost)] group-hover:bg-[var(--primary)] transition-colors" />
-              </div>
-            </Separator>
-
-            {/* RIGHT: Editor / Preview / Diff */}
-            <Panel defaultSize={100 - currentPreset.leftRatio} minSize={50} maxSize={80} className="flex flex-col min-h-0">
-              <div className="flex-1 flex min-h-0">
-                {showFileTree && (
-                  <div className="w-[240px] shrink-0 border-r border-[var(--border)]">
-                    <FileTree
-                      files={fileTreeFiles}
-                      activePath={activeFilePath}
-                      onSelectFile={handleSelectFile}
-                      onCreateFile={() => toast.info("Criar arquivo — via chat")}
-                      onCreateFolder={() => toast.info("Criar pasta — via chat")}
-                      onRename={(old, n) => toast.info(`Renomear: ${old} → ${n}`)}
-                      onDelete={(p) => toast.info(`Deletar: ${p}`)}
-                    />
-                  </div>
-                )}
-
-                <div className="flex-1 min-w-0 flex flex-col">
-                  {/* Breadcrumb */}
-                  <Breadcrumb
-                    path={activeFilePath}
-                    onNavigate={(p) => handleSelectFile(p)}
-                  />
-
-                  {/* Content area */}
-                  <div className="flex-1 min-h-0">
+                  <div className="min-h-0 min-w-0 flex-1">
                     {activeView === "code" && (
                       <CodeEditor
                         tabs={openTabs}
@@ -523,31 +442,16 @@ function EditorPage() {
                   </div>
                 </div>
               </div>
-            </Panel>
-          </Group>
-
-          {/* LogPanel (Terminal/Console/Problems) */}
-          <LogPanel
-            isOpen={logPanelOpen}
-            onClose={() => setLogPanelOpen(false)}
-            logs={logs}
-            running={running}
-          />
-
-          {/* StatusBar */}
-          <StatusBar
-            gitBranch="main"
-            gitAhead={0}
-            gitBehind={0}
-            buildStatus={sse.progress.runtimeChecks.some((c) => c.ok) ? "ok" : null}
-            cost={sse.progress.cost}
-            model={sse.progress.model}
-            skills={sse.progress.skills}
-            connected={running}
-            onToggleTerminal={() => setLogPanelOpen((v) => !v)}
-            onToggleGitPanel={() => toast.info("Git Panel — em breve")}
+            }
           />
         </div>
+
+        <LogPanel
+          isOpen={logPanelOpen}
+          onClose={() => setLogPanelOpen(false)}
+          logs={logs}
+          running={running}
+        />
       </EditorShell>
 
       {/* Overlays globais */}
@@ -566,13 +470,8 @@ function EditorPage() {
 
       {/* Drag overlay */}
       {isDragOver && (
-        <div className="fixed inset-0 z-[200] bg-[var(--background)]/60 backdrop-blur-sm border-2 border-dashed border-[var(--primary)]/40 rounded-2xl m-4 flex items-center justify-center pointer-events-none">
-          <div className="flex flex-col items-center gap-2 text-[var(--primary)]">
-            <Download className="size-8" />
-            <span className="font-mono text-[12px] tracking-[0.2em] uppercase">
-              SOLTE OS ARQUIVOS PARA IMPORTAR
-            </span>
-          </div>
+        <div className="pointer-events-none fixed inset-0 z-[200] m-3 flex items-center justify-center rounded-xl border-2 border-dashed border-[var(--primary)]/50 bg-black/70">
+          <p className="text-sm text-[var(--primary)]">Solte os arquivos para importar</p>
         </div>
       )}
     </>

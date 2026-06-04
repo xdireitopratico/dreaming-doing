@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { createProjectFromPrompt } from "@/lib/projects.functions";
+import { sanitizeNext } from "@/lib/sanitize-next";
 import { MicButton } from "@/components/voice/MicButton";
 import { ImportRepoDialog } from "@/components/ImportRepoDialog";
 
@@ -81,7 +82,7 @@ export function PromptEngine({
     const { data: sess } = await supabase.auth.getSession();
     if (!sess.session) {
       try { sessionStorage.setItem("forge.initialPrompt", v); } catch { /* ignore */ }
-      navigate({ to: "/auth", search: { next: "/" } as never });
+      navigate({ to: "/auth", search: { next: sanitizeNext("/") } });
       return;
     }
 

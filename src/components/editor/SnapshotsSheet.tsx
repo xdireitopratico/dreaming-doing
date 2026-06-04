@@ -94,10 +94,7 @@ export function SnapshotsSheet({ projectId }: { projectId: string }) {
   return (
     <Sheet open={open} onOpenChange={setOpen}>
       <SheetTrigger asChild>
-        <button
-          aria-label="Snapshots"
-          className="size-8 grid place-items-center rounded-md border border-[var(--border)] hover:bg-[var(--surface-2)] text-[var(--text-dim)] hover:text-foreground transition-colors"
-        >
+        <button type="button" aria-label="Versões" className="editor-icon-btn">
           <History className="size-4" />
         </button>
       </SheetTrigger>

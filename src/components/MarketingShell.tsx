@@ -2,6 +2,7 @@ import { useEffect, type ReactNode } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useAuth } from "@/lib/auth";
 import { Nav } from "@/components/Nav";
+import { sanitizeNext } from "@/lib/sanitize-next";
 
 export function Logo({ className = "", size = 22 }: { className?: string; size?: number }) {
   return (
@@ -42,12 +43,13 @@ export function MarketingShell({
   useEffect(() => {
     if (requireAuth && !loading && !user) {
       if (window.location.pathname === "/auth") return;
-      const existingNext =
+      const rawNext =
         new URLSearchParams(window.location.search).get("next") ??
         window.location.pathname;
+      const next = sanitizeNext(rawNext);
       navigate({
         to: "/auth",
-        search: { next: existingNext } as never,
+        search: { next },
         replace: true,
       });
     }

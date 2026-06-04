@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase, isSupabaseConfigured } from "@/integrations/supabase/client";
 import { lovable } from "@/integrations/lovable";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
@@ -10,12 +10,15 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Logo } from "@/components/MarketingShell";
 import { Loader2, ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
+import { sanitizeNext } from "@/lib/sanitize-next";
+import { navigateAfterAuth } from "@/lib/navigate-after-auth";
+import { isLovableEnvironment } from "@/lib/is-lovable";
 
 type Search = { next?: string };
 
 export const Route = createFileRoute("/auth")({
   validateSearch: (s: Record<string, unknown>): Search => ({
-    next: typeof s.next === "string" ? s.next : undefined,
+    next: typeof s.next === "string" ? sanitizeNext(s.next) : undefined,
   }),
   component: AuthPage,
 });
@@ -28,24 +31,36 @@ function AuthPage() {
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
 
+  const redirectTarget = sanitizeNext(next);
+
   useEffect(() => {
-    if (!loading && user) navigate({ to: (next ?? "/") as any });
-  }, [user, loading, navigate, next]);
+    if (!loading && user) navigateAfterAuth(navigate, redirectTarget);
+  }, [user, loading, navigate, redirectTarget]);
 
   const signIn = async () => {
+    if (!isSupabaseConfigured()) {
+      toast.error("Supabase não configurado neste ambiente.");
+      return;
+    }
     setBusy(true);
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     setBusy(false);
     if (error) toast.error(error.message);
-    else navigate({ to: (next ?? "/") as any });
+    else navigateAfterAuth(navigate, redirectTarget);
   };
 
   const signUp = async () => {
+    if (!isSupabaseConfigured()) {
+      toast.error("Supabase não configurado neste ambiente.");
+      return;
+    }
     setBusy(true);
     const { error } = await supabase.auth.signUp({
       email,
       password,
-      options: { emailRedirectTo: window.location.origin + (next ?? "/") },
+      options: {
+        emailRedirectTo: `${window.location.origin}${redirectTarget}`,
+      },
     });
     setBusy(false);
     if (error) toast.error(error.message);
@@ -53,30 +68,45 @@ function AuthPage() {
   };
 
   const google = async () => {
-    setBusy(true);
-    const res = await lovable.auth.signInWithOAuth("google", {
-      redirect_uri: window.location.origin + (next ?? "/"),
-    });
-    if (res.error) {
-      toast.error(res.error.message || "Falha no login com Google");
-      setBusy(false);
+    if (!isSupabaseConfigured()) {
+      toast.error("Supabase não configurado neste ambiente.");
+      return;
     }
+
+    setBusy(true);
+    const redirectTo = `${window.location.origin}${redirectTarget}`;
+
+    if (isLovableEnvironment()) {
+      const res = await lovable.auth.signInWithOAuth("google", {
+        redirect_uri: redirectTo,
+      });
+      if (res.error) {
+        toast.error(res.error.message || "Falha no login com Google");
+        setBusy(false);
+      }
+      return;
+    }
+
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: { redirectTo },
+    });
+    setBusy(false);
+    if (error) toast.error(error.message);
   };
 
   return (
     <div className="min-h-screen flex flex-col">
-      {/* glow */}
       <div
         className="pointer-events-none absolute inset-0"
         style={{ background: "var(--gradient-hero)" }}
         aria-hidden
       />
 
-      {/* mini header */}
       <header className="relative z-10 h-14 px-6 flex items-center justify-between max-w-[1120px] w-full mx-auto">
         <Link to="/" className="flex items-center gap-2">
           <Logo size={16} />
-          <span className="font-display text-lg">Dream Weaver</span>
+          <span className="font-display text-lg">FORGE</span>
         </Link>
         <Link
           to="/"
@@ -106,12 +136,34 @@ function AuthPage() {
               {(["signin", "signup"] as const).map((mode) => (
                 <TabsContent value={mode} key={mode} className="space-y-4 mt-5">
                   <div className="space-y-2">
-                    <Label className="text-xs uppercase tracking-wider text-muted-foreground">Email</Label>
-                    <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+                    <Label
+                      htmlFor={`auth-email-${mode}`}
+                      className="text-xs uppercase tracking-wider text-muted-foreground"
+                    >
+                      Email
+                    </Label>
+                    <Input
+                      id={`auth-email-${mode}`}
+                      type="email"
+                      autoComplete="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                    />
                   </div>
                   <div className="space-y-2">
-                    <Label className="text-xs uppercase tracking-wider text-muted-foreground">Senha</Label>
-                    <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
+                    <Label
+                      htmlFor={`auth-password-${mode}`}
+                      className="text-xs uppercase tracking-wider text-muted-foreground"
+                    >
+                      Senha
+                    </Label>
+                    <Input
+                      id={`auth-password-${mode}`}
+                      type="password"
+                      autoComplete={mode === "signin" ? "current-password" : "new-password"}
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                    />
                   </div>
                   <Button
                     className="w-full"
@@ -135,7 +187,7 @@ function AuthPage() {
             </div>
 
             <Button variant="outline" className="w-full" onClick={google} disabled={busy}>
-              <svg className="size-4 mr-2" viewBox="0 0 24 24">
+              <svg className="size-4 mr-2" viewBox="0 0 24 24" aria-hidden>
                 <path
                   fill="currentColor"
                   d="M21.35 11.1h-9.17v2.92h5.27c-.23 1.4-1.62 4.1-5.27 4.1-3.17 0-5.76-2.63-5.76-5.87s2.59-5.87 5.76-5.87c1.81 0 3.02.77 3.71 1.43L18.3 5.5C16.66 4.05 14.55 3.2 12.18 3.2c-4.92 0-8.93 4-8.93 8.93s4.01 8.93 8.93 8.93c5.16 0 8.58-3.62 8.58-8.72 0-.59-.06-1.04-.41-1.24z"

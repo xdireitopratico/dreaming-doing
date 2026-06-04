@@ -91,7 +91,7 @@ export function CreateProjectDialog({ open, onClose }: CreateProjectDialogProps)
       if (data?.error) throw new Error(data.error);
 
       const { projectId } = data;
-      navigate({ to: `/projects/${projectId}` });
+      navigate({ to: "/projects/$projectId", params: { projectId } });
     } catch (e: any) {
       toast.error(e?.message ?? "Erro ao criar projeto");
       setStep("details");

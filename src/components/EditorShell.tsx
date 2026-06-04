@@ -1,70 +1,55 @@
-import { Link, useLocation, Navigate } from "@tanstack/react-router";
-import { ArrowLeft, Loader2 } from "lucide-react";
+import { useLocation, Navigate } from "@tanstack/react-router";
+import { Loader2 } from "lucide-react";
 import type { ReactNode } from "react";
 import { useAuth } from "@/lib/auth";
+import { sanitizeNext } from "@/lib/sanitize-next";
+import { EditorTopBar } from "@/components/editor/EditorTopBar";
+import type { EditorMainView } from "@/components/editor/EditorViewTabs";
 
-/**
- * EditorShell — chrome cinemática do editor (Celestial Forge).
- * Topbar HUD, grão sutil, glass.
- */
 export function EditorShell({
   children,
   projectName,
-  right,
+  activeView,
+  onViewChange,
+  onShare,
+  onPublish,
+  running,
 }: {
   children: ReactNode;
   projectName?: string;
-  right?: ReactNode;
+  activeView: EditorMainView;
+  onViewChange: (view: EditorMainView) => void;
+  onShare?: () => void;
+  onPublish?: () => void;
+  running?: boolean;
 }) {
   const { user, loading } = useAuth();
   const loc = useLocation();
 
   if (loading) {
     return (
-      <div className="h-screen grid place-items-center bg-background text-foreground">
-        <Loader2 className="size-5 animate-spin text-[var(--primary)]" />
+      <div className="editor-workspace grid h-screen place-items-center">
+        <Loader2 className="size-5 animate-spin text-[var(--forge-primary)]" />
       </div>
     );
   }
 
   if (!user) {
-    const next = loc.pathname + loc.searchStr;
-    return <Navigate to="/auth" search={{ next } as never} replace />;
+    const next = sanitizeNext(loc.pathname);
+    return <Navigate to="/auth" search={{ next }} replace />;
   }
 
   return (
-    <div className="relative h-screen flex flex-col bg-background text-foreground overflow-hidden">
-      <div className="grain-overlay pointer-events-none" />
-      <header className="relative z-20 h-11 border-b border-[var(--border)] flex items-center px-4 gap-3 shrink-0 bg-background/85 backdrop-blur-xl">
-        <Link
-          to="/"
-          aria-label="Voltar"
-          className="text-[var(--text-dim)] hover:text-foreground transition-colors"
-        >
-          <ArrowLeft className="size-4" />
-        </Link>
-        <Link to="/" className="flex items-center gap-2 min-w-0">
-          <span
-            aria-hidden
-            className="inline-block size-2 rounded-full bg-[var(--primary)] shadow-[0_0_12px_var(--primary)]"
-          />
-          <span className="font-display tracking-tight text-sm">FORGE</span>
-        </Link>
-        {projectName && (
-          <>
-            <span className="text-[var(--text-ghost)] font-mono text-xs">/</span>
-            <span className="text-sm truncate text-[var(--text-dim)]">
-              {projectName}
-            </span>
-          </>
-        )}
-        <span className="ml-3 hidden md:inline-flex items-center gap-1.5 font-mono text-[10px] tracking-[0.3em] uppercase text-[var(--text-ghost)]">
-          <span className="size-1.5 rounded-full bg-[var(--success)] live-dot" />
-          LIVE · ORBIT
-        </span>
-        <div className="ml-auto flex items-center gap-2">{right}</div>
-      </header>
-      <div className="relative z-10 flex-1 min-h-0">{children}</div>
+    <div className="editor-workspace flex h-screen flex-col overflow-hidden">
+      <EditorTopBar
+        projectName={projectName}
+        activeView={activeView}
+        onViewChange={onViewChange}
+        onShare={onShare}
+        onPublish={onPublish}
+        running={running}
+      />
+      <div className="min-h-0 flex-1">{children}</div>
     </div>
   );
 }

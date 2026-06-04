@@ -4,8 +4,19 @@ import { useState, useRef, useCallback, useEffect, KeyboardEvent } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { ArrowUp, Square, Loader2, Sparkles } from "lucide-react";
+import {
+  ArrowUp,
+  Square,
+  Plus,
+  FileText,
+  Paperclip,
+  ImageIcon,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
+import { MicButton } from "@/components/voice/MicButton";
+import { toast } from "sonner";
+
+export type AgentComposerMode = "build" | "plan";
 
 // -----------------------------------------------------------------------------------
 // Tipos
@@ -22,9 +33,11 @@ export interface ChatMessage {
 interface ChatInputProps {
   messages: ChatMessage[];
   running: boolean;
-  onSend: (text: string) => void;
+  onSend: (text: string, mode?: AgentComposerMode) => void;
   onStop: () => void;
   files: string[];
+  composerMode?: AgentComposerMode;
+  onComposerModeChange?: (mode: AgentComposerMode) => void;
 }
 
 // -----------------------------------------------------------------------------------
@@ -118,8 +131,15 @@ export function ChatInput({
   onSend,
   onStop,
   files,
+  composerMode: composerModeProp,
+  onComposerModeChange,
 }: ChatInputProps) {
   const [input, setInput] = useState("");
+  const [composerModeLocal, setComposerModeLocal] = useState<AgentComposerMode>("build");
+  const composerMode = composerModeProp ?? composerModeLocal;
+  const setComposerMode = onComposerModeChange ?? setComposerModeLocal;
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [attachments, setAttachments] = useState<File[]>([]);
   const [showCommands, setShowCommands] = useState(false);
   const [showFileSuggest, setShowFileSuggest] = useState(false);
   const [filteredFiles, setFilteredFiles] = useState<string[]>([]);
@@ -191,7 +211,19 @@ export function ChatInput({
     historyRef.current.push(text);
     setHistoryIndex(-1);
     setInput("");
-    onSend(text);
+    if (attachments.length > 0) {
+      toast.info(`${attachments.length} anexo(s) — envio multimodal em breve`);
+      setAttachments([]);
+    }
+    onSend(text, composerMode);
+  };
+
+  const handleAttachClick = () => fileInputRef.current?.click();
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const picked = Array.from(e.target.files ?? []);
+    if (picked.length) setAttachments((prev) => [...prev, ...picked].slice(0, 8));
+    e.target.value = "";
   };
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -253,93 +285,55 @@ export function ChatInput({
     }
   };
 
-  // Drag and drop images
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
-    // TODO: image upload + paste
+    const dropped = Array.from(e.dataTransfer.files ?? []);
+    if (dropped.length) setAttachments((prev) => [...prev, ...dropped].slice(0, 8));
   };
 
   return (
-    <div className="flex flex-col h-full min-h-0 bg-[var(--surface-1)]/40">
-      {/* Messages area */}
-      <div
-        ref={scrollRef}
-        className="flex-1 overflow-y-auto px-3 py-3 space-y-4"
-      >
+    <div className="forge-chat-inner" onDrop={handleDrop} onDragOver={(e) => e.preventDefault()}>
+      <div ref={scrollRef} className="forge-messages">
         {messages.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full gap-3 text-center">
-            <div className="size-12 rounded-full bg-[var(--surface-2)] border border-[var(--border)] grid place-items-center">
-              <Sparkles className="size-5 text-[var(--primary)] opacity-50" />
-            </div>
-            <div>
-              <p className="text-sm text-[var(--text-dim)] font-display">
-                Pronto para construir
-              </p>
-              <p className="text-[10px] font-mono text-[var(--text-ghost)] mt-1">
-                Descreva sua ideia. O agente cuida do resto.
-              </p>
-            </div>
-          </div>
+          <p className="forge-msg-text">
+            Descreva o que você quer construir ou alterar. O FORGE gera o código e você vê o
+            resultado ao vivo à direita.
+          </p>
         ) : (
           messages.map((msg) => (
-            <motion.div
-              key={msg.id}
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.2 }}
-              className={cn(
-                "flex gap-2 max-w-[90%]",
-                msg.role === "user" ? "ml-auto" : "mr-auto",
+            <div key={msg.id} className="mb-4 last:mb-0">
+              {msg.role === "user" ? (
+                <p className="forge-msg-text forge-msg-user">{msg.content}</p>
+              ) : (
+                <div className="forge-msg-text">
+                  {messages[messages.length - 1]?.id === msg.id && running ? (
+                    <TypewriterText text={msg.content} />
+                  ) : (
+                    <MarkdownContent>{msg.content}</MarkdownContent>
+                  )}
+                </div>
               )}
-            >
-              {/* Avatar */}
-              <div
-                className={cn(
-                  "shrink-0 size-6 rounded-md grid place-items-center mt-0.5",
-                  msg.role === "user"
-                    ? "order-2 bg-[var(--primary)]/10 border border-[var(--primary)]/20"
-                    : "bg-[var(--surface-2)] border border-[var(--border)]",
-                )}
-              >
-                {msg.role === "user" ? (
-                  <span className="text-[10px] font-mono text-[var(--primary)]">U</span>
-                ) : (
-                  <span className="text-[10px] font-mono text-[var(--text-dim)]">AI</span>
-                )}
-              </div>
 
-              {/* Bubble */}
-              <div
-                className={cn(
-                  "rounded-lg px-3 py-2",
-                  msg.role === "user"
-                    ? "bg-[var(--primary)]/10 border border-[var(--primary)]/20 text-right"
-                    : "bg-[var(--surface-2)]/70 border border-[var(--border)]",
-                )}
-              >
-                {msg.role === "assistant" && messages[messages.length - 1]?.id === msg.id && running ? (
-                  <TypewriterText text={msg.content} />
-                ) : (
-                  <MarkdownContent>{msg.content}</MarkdownContent>
-                )}
-
-                {/* Tool calls inline */}
-                {msg.toolCalls && msg.toolCalls.length > 0 && (
-                  <div className="mt-2 space-y-0.5">
-                    {msg.toolCalls.map((tc, i) => (
-                      <div
-                        key={i}
-                        className="flex items-center gap-1.5 text-[10px] font-mono px-2 py-0.5 rounded bg-[var(--surface-1)] border border-[var(--border)] text-[var(--text-dim)]"
-                      >
-                        <Wrench className="size-2.5 text-[var(--primary)]" />
-                        <span className="text-[var(--foreground)]">{tc.name}</span>
-                        <span className="text-[var(--text-ghost)] truncate">{tc.args.slice(0, 40)}</span>
-                      </div>
-                    ))}
+              {msg.toolCalls && msg.toolCalls.length > 0 && (
+                <div className="forge-tool-inline">
+                  <div className="forge-tool-inline-title">
+                    <FileText className="size-4 text-[var(--forge-primary)]" />
+                    <span className="truncate">
+                      {msg.toolCalls[0]?.name}
+                      {msg.toolCalls[0]?.args ? `: ${msg.toolCalls[0].args.slice(0, 48)}` : ""}
+                    </span>
                   </div>
-                )}
-              </div>
-            </motion.div>
+                  <div className="forge-tool-inline-actions">
+                    <button type="button" className="forge-tool-btn">
+                      Details
+                    </button>
+                    <button type="button" className="forge-tool-btn">
+                      Preview
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
           ))
         )}
       </div>
@@ -390,76 +384,108 @@ export function ChatInput({
         )}
       </AnimatePresence>
 
-      {/* Input area */}
-      <div className="shrink-0 border-t border-[var(--border)] p-3 bg-[var(--background)]/60 backdrop-blur-xl">
-        <div className="relative" onDrop={handleDrop}>
-          <textarea
-            ref={textareaRef}
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder="Descreva o que construir..."
-            rows={1}
-            className="w-full resize-none rounded-lg bg-[var(--surface-2)]/80 border border-[var(--border)] focus:border-[var(--primary)]/40 focus:ring-1 focus:ring-[var(--primary)]/20 px-3 py-2.5 pr-12 text-sm font-body text-[var(--foreground)] placeholder:text-[var(--text-ghost)] outline-none transition-colors"
+      {attachments.length > 0 && (
+        <div className="mx-3 mb-1 flex flex-wrap gap-1.5 px-1">
+          {attachments.map((f, i) => (
+            <span
+              key={`${f.name}-${i}`}
+              className="inline-flex items-center gap-1 rounded-md border border-[var(--forge-border)] bg-[var(--forge-surface-3)] px-2 py-0.5 text-[10px] text-[var(--forge-muted)]"
+            >
+              {f.type.startsWith("image/") ? (
+                <ImageIcon className="size-3" />
+              ) : (
+                <FileText className="size-3" />
+              )}
+              <span className="max-w-[120px] truncate">{f.name}</span>
+            </span>
+          ))}
+        </div>
+      )}
+
+      <div className="forge-composer">
+        <input
+          ref={fileInputRef}
+          type="file"
+          className="hidden"
+          multiple
+          accept="image/*,.pdf,.doc,.docx,.txt,.md,.json"
+          onChange={handleFileChange}
+        />
+
+        <textarea
+          ref={textareaRef}
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={handleKeyDown}
+          placeholder="Ask FORGE…"
+          rows={1}
+          className="forge-composer-input"
+        />
+
+        <div className="forge-composer-row">
+          <button
+            type="button"
+            className="forge-composer-icon"
+            title="Anexar imagem ou documento"
+            onClick={handleAttachClick}
+          >
+            <Paperclip className="size-4" />
+          </button>
+
+          <MicButton
+            size="sm"
+            className="forge-composer-icon !size-8 !rounded-lg !border-0 !bg-transparent"
+            onTranscript={(t) => setInput((cur) => (cur ? `${cur} ${t}` : t))}
           />
 
-          {/* Send / Stop button */}
+          <button type="button" className="forge-composer-chip">
+            <Plus className="size-3.5" />
+            Visual edits
+          </button>
+
+          <span className="forge-composer-spacer" />
+
+          <div className="forge-mode-toggle" role="group" aria-label="Modo do agente">
+            <button
+              type="button"
+              data-active={composerMode === "build"}
+              onClick={() => setComposerMode("build")}
+            >
+              Build
+            </button>
+            <button
+              type="button"
+              data-active={composerMode === "plan"}
+              onClick={() => setComposerMode("plan")}
+            >
+              Plan
+            </button>
+          </div>
+
           {running ? (
             <button
+              type="button"
+              className="forge-composer-send ml-1"
               onClick={onStop}
-              className="absolute right-2 bottom-2 size-8 rounded-md bg-[var(--destructive)] text-white hover:bg-[var(--destructive)]/90 transition-colors grid place-items-center"
-              title="Parar agente"
+              title="Parar"
             >
               <Square className="size-3.5 fill-current" />
             </button>
           ) : (
             <button
+              type="button"
+              className="forge-composer-send ml-1"
               onClick={handleSend}
               disabled={!input.trim()}
-              className={cn(
-                "absolute right-2 bottom-2 size-8 rounded-md grid place-items-center transition-all",
-                input.trim()
-                  ? "bg-[var(--primary)] text-[var(--primary-foreground)] hover:bg-[var(--primary-hot)]"
-                  : "bg-[var(--surface-2)] text-[var(--text-ghost)] cursor-not-allowed",
-              )}
               title="Enviar"
             >
               <ArrowUp className="size-4" />
             </button>
           )}
         </div>
-
-        {/* Hint bar */}
-        <div className="flex items-center justify-between mt-1.5 px-1">
-          <div className="flex items-center gap-3 text-[9px] font-mono text-[var(--text-ghost)]">
-            <span>⏎ enviar</span>
-            <span>⇧⏎ nova linha</span>
-            <span>↑↓ histórico</span>
-            <span>/ comandos</span>
-            <span>@ arquivos</span>
-          </div>
-          <span className="text-[9px] font-mono text-[var(--text-ghost)]">
-            {input.length > 0 ? `${input.length} caracteres` : ""}
-          </span>
-        </div>
       </div>
     </div>
   );
 }
 
-function Wrench({ className }: { className?: string }) {
-  return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className={className}
-    >
-      <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
-    </svg>
-  );
-}
+
