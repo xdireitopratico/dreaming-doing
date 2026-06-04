@@ -8,6 +8,8 @@ import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { supabase } from "@/integrations/supabase/client";
+import { removeRealtimeChannel } from "@/lib/supabase-realtime";
+import type { RealtimeChannel } from "@supabase/supabase-js";
 import { EditorShell } from "@/components/EditorShell";
 import { EditorResizableLayout } from "@/components/editor/EditorResizableLayout";
 import type { EditorMainView } from "@/components/editor/EditorViewTabs";
@@ -161,22 +163,38 @@ function EditorPage() {
   const publishedUrl =
     (project?.meta as { publishedUrl?: string } | null)?.publishedUrl ?? null;
 
-  // ─── Realtime ────────────────────────────────────────────────────────
+  // ─── Realtime (canal editor-{projectId} + setAuth no AuthProvider) ───
   useEffect(() => {
     if (!conversation) return;
-    const ch = supabase
+    const channel: RealtimeChannel = supabase
       .channel(`editor-${projectId}`)
-      .on("postgres_changes", {
-        event: "*", schema: "public", table: "messages",
-        filter: `conversation_id=eq.${conversation.id}`,
-      }, () => qc.invalidateQueries({ queryKey: ["messages", conversation.id] }))
-      .on("postgres_changes", {
-        event: "*", schema: "public", table: "project_files",
-        filter: `project_id=eq.${projectId}`,
-      }, () => qc.invalidateQueries({ queryKey: ["files", projectId] }))
-      .subscribe();
-    return () => { supabase.removeChannel(ch); };
-  }, [projectId, conversation, qc]);
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "messages",
+          filter: `conversation_id=eq.${conversation.id}`,
+        },
+        () => qc.invalidateQueries({ queryKey: ["messages", conversation.id] }),
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "project_files",
+          filter: `project_id=eq.${projectId}`,
+        },
+        () => qc.invalidateQueries({ queryKey: ["files", projectId] }),
+      )
+      .subscribe((status, err) => {
+        if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+          console.error(`[FORGE Realtime] editor-${projectId}`, status, err);
+        }
+      });
+    return () => removeRealtimeChannel(channel);
+  }, [projectId, conversation?.id, qc]);
 
   // ─── Derivados ───────────────────────────────────────────────────────
   const filePaths = useMemo(() => files?.map((f) => f.path) ?? [], [files]);

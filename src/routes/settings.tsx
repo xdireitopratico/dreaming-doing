@@ -1,14 +1,16 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { MarketingShell } from "@/components/MarketingShell";
+import { DashboardShell } from "@/components/dashboard/DashboardShell";
 import { useAuth } from "@/lib/auth";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 
 export const Route = createFileRoute("/settings")({
   component: () => (
-    <MarketingShell requireAuth>
-      <Settings />
-    </MarketingShell>
+    <DashboardShell requireAuth activeNav="settings">
+      <div className="min-h-full overflow-y-auto px-8 py-10">
+        <Settings />
+      </div>
+    </DashboardShell>
   ),
 });
 

@@ -5,7 +5,7 @@ import { useState, useCallback, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
-import { MarketingShell } from "@/components/MarketingShell";
+import { DashboardShell } from "@/components/dashboard/DashboardShell";
 import { ApiKeyInput } from "@/components/connectors/ApiKeyInput";
 import { useAuth } from "@/lib/auth";
 import { supabase } from "@/integrations/supabase/client";
@@ -19,9 +19,11 @@ import {
 
 export const Route = createFileRoute("/connectors")({
   component: () => (
-    <MarketingShell requireAuth>
-      <Connectors />
-    </MarketingShell>
+    <DashboardShell requireAuth activeNav="connectors">
+      <div className="min-h-full overflow-y-auto">
+        <Connectors />
+      </div>
+    </DashboardShell>
   ),
 });
 

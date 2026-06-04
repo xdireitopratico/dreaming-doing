@@ -2,6 +2,7 @@
 @source "../src";
 @import "tw-animate-css";
 @import "./styles/editor-workspace.css";
+@import "./styles/dashboard-workspace.css";
 
 @custom-variant dark (&:is(.dark *));
 
