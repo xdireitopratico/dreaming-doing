@@ -11,12 +11,9 @@ import {
   Mail,
   Lock,
   LogOut,
-  ExternalLink,
 } from "lucide-react";
 import { DashboardShell } from "@/components/dashboard/DashboardShell";
-import { AdminPlatformSecretsPanel } from "@/components/settings/AdminPlatformSecretsPanel";
 import { useAuth } from "@/lib/auth";
-import { isForgeAdminEmail } from "@/lib/forge-admin";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -33,24 +30,6 @@ export const Route = createFileRoute("/settings")({
 function SettingsPage() {
   const { user, signOut } = useAuth();
   const qc = useQueryClient();
-
-  // Server-driven admin check (B12). Client-side email match is only a UX hint to avoid
-  // a request for users who clearly are not admin; the real gate is the server response.
-  const emailHint = isForgeAdminEmail(user?.email);
-  const { data: adminStatus } = useQuery({
-    queryKey: ["admin-status", user?.id],
-    enabled: !!user?.id && emailHint,
-    queryFn: async () => {
-      const { data, error } = await supabase.functions.invoke("admin-platform-secrets", {
-        body: { action: "status" },
-      });
-      if (error) return { isAdmin: false };
-      const res = data as { ok?: boolean; isAdmin?: boolean };
-      return { isAdmin: !!res?.isAdmin };
-    },
-    staleTime: 60_000,
-  });
-  const isAdmin = !!adminStatus?.isAdmin;
 
   const [displayName, setDisplayName] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -138,11 +117,10 @@ function SettingsPage() {
       <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="mb-8">
         <h1 className="font-display text-3xl tracking-tight">Ajustes</h1>
         <p className="font-mono text-[10px] text-[var(--text-dim)] mt-1">
-          Conta, integrações e — se admin — secrets globais do FORGE.
+          Conta e atalhos. Chaves de API, sandbox E2B e modelos ficam em API e Modelos.
         </p>
       </motion.div>
 
-      {/* Perfil */}
       <section className="mb-8 rounded-xl border border-[var(--border)] bg-[var(--surface-1)]/40 p-5">
         <h2 className="flex items-center gap-2 font-mono text-[10px] tracking-[0.2em] uppercase text-[var(--text-dim)] mb-4">
           <User className="size-3.5 text-[var(--primary)]" />
@@ -175,7 +153,6 @@ function SettingsPage() {
         </div>
       </section>
 
-      {/* Conta */}
       <section className="mb-8 rounded-xl border border-[var(--border)] bg-[var(--surface-1)]/40 p-5">
         <h2 className="flex items-center gap-2 font-mono text-[10px] tracking-[0.2em] uppercase text-[var(--text-dim)] mb-4">
           <Mail className="size-3.5 text-[var(--primary)]" />
@@ -200,7 +177,6 @@ function SettingsPage() {
         </div>
       </section>
 
-      {/* Senha */}
       <section className="mb-8 rounded-xl border border-[var(--border)] bg-[var(--surface-1)]/40 p-5">
         <h2 className="flex items-center gap-2 font-mono text-[10px] tracking-[0.2em] uppercase text-[var(--text-dim)] mb-4">
           <Lock className="size-3.5 text-[var(--primary)]" />
@@ -239,7 +215,6 @@ function SettingsPage() {
         </div>
       </section>
 
-      {/* Integrações */}
       <section className="mb-8 rounded-xl border border-[var(--border)] bg-[var(--surface-1)]/40 p-5">
         <h2 className="font-mono text-[10px] tracking-[0.2em] uppercase text-[var(--text-dim)] mb-4">
           Integrações
@@ -251,9 +226,9 @@ function SettingsPage() {
           >
             <Key className="size-5 text-[var(--primary)] shrink-0" />
             <div>
-              <div className="font-mono text-[11px]">API</div>
+              <div className="font-mono text-[11px]">API Keys</div>
               <div className="font-mono text-[9px] text-[var(--text-ghost)]">
-                Suas chaves de IA, pool ROBIN, voz
+                IA, pool ROBIN, E2B e voz
               </div>
             </div>
           </Link>
@@ -272,15 +247,6 @@ function SettingsPage() {
         </div>
       </section>
 
-      {/* Admin — secrets globais */}
-      {isAdmin && <AdminPlatformSecretsPanel />}
-
-      {!isAdmin && (
-        <p className="font-mono text-[9px] text-[var(--text-ghost)] mb-8">
-          Secrets globais do projeto (E2B, fallbacks de IA) são geridos pelo administrador FORGE.
-        </p>
-      )}
-
       <section className="rounded-xl border border-[var(--border)] p-5 flex flex-wrap items-center justify-between gap-4">
         <div>
           <p className="font-mono text-[11px] text-[var(--foreground)]">Sessão</p>
@@ -293,20 +259,6 @@ function SettingsPage() {
           Sair
         </Button>
       </section>
-
-      <p className="mt-6 font-mono text-[8px] text-[var(--text-ghost)]">
-        <a
-          href="https://supabase.com/dashboard/project/dpduljngdurfpmaclffa/settings/functions"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex items-center gap-1 text-[var(--primary)] hover:underline"
-        >
-          Supabase Edge Secrets (backup)
-          <ExternalLink className="size-2.5" />
-        </a>
-        {" — "}
-        opcional se preferir configurar no painel Supabase em vez do vault FORGE.
-      </p>
     </div>
   );
 }

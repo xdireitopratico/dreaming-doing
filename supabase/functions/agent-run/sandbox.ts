@@ -85,7 +85,7 @@ export function createSandboxProvider(
   supabase?: SupabaseClient,
   projectId?: string,
 ): SandboxProvider {
-  const key = e2bApiKey?.trim() || Deno.env.get("E2B_API_KEY")?.trim() || "";
+  const key = e2bApiKey?.trim() || "";
   const template = e2bTemplate?.trim() || E2B_TEMPLATE_DEFAULT;
   if (key && supabase && projectId) {
     console.log("Usando sandbox E2B (template:", template, ")");

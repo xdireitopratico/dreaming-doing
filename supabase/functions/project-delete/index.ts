@@ -1,6 +1,6 @@
 // project-delete — encerra sandbox E2B do projeto e remove o registro (CASCADE nos filhos)
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
-import { getPlatformSecret } from "../_shared/platform-secrets.ts";
+import { loadUserE2bApiKey } from "../_shared/user-e2b.ts";
 import { killProjectSandbox, readSandboxMeta } from "../_shared/project-sandbox.ts";
 
 const corsHeaders = {
@@ -34,7 +34,7 @@ Deno.serve(async (req) => {
     }
 
     const sm = readSandboxMeta((project.meta ?? {}) as Record<string, unknown>);
-    const e2bKey = await getPlatformSecret(supabase, "E2B_API_KEY");
+    const e2bKey = await loadUserE2bApiKey(supabase, userData.user.id);
     if (e2bKey && sm.previewSandboxId) {
       await killProjectSandbox(e2bKey, sm.previewSandboxId);
     }

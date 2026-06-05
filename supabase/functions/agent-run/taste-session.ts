@@ -9,14 +9,11 @@ import { buildProvider, type ProviderConfig } from "./providers.ts";
 import { ToolRegistry } from "./registry.ts";
 import { registerTasteTools, type TasteUiEmit } from "./tools/taste.ts";
 
-export async function loadTasteNvidiaConfig(
-  supabase: SupabaseClient,
-  platformNvidiaSecret?: string,
-): Promise<ProviderConfig> {
-  const poolKeys = await loadForgeTrialRobinPool(supabase, platformNvidiaSecret);
+export async function loadTasteNvidiaConfig(supabase: SupabaseClient): Promise<ProviderConfig> {
+  const poolKeys = await loadForgeTrialRobinPool(supabase);
   if (poolKeys.length === 0) {
     throw new Error(
-      "Taste: configure o pool NVIDIA do administrador em API Keys ou NVIDIA_API_KEY em secrets da plataforma.",
+      "Taste: o administrador precisa cadastrar o pool NVIDIA em API Keys (/api).",
     );
   }
   const wire = defaultRobinModel("nvidia", PLATFORM_ROBIN_TASTE_PRESET_ID);

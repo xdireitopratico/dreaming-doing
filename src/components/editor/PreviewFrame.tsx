@@ -17,8 +17,6 @@ interface PreviewFrameProps {
   onWarmComplete?: () => void;
   agentHasRun?: boolean;
   e2bConnected?: boolean;
-  onE2bSaved?: () => void;
-  onOpenE2bConnectors?: () => void;
 }
 
 export function PreviewFrame({
@@ -34,8 +32,6 @@ export function PreviewFrame({
   onWarmComplete,
   agentHasRun = false,
   e2bConnected = true,
-  onE2bSaved,
-  onOpenE2bConnectors,
 }: PreviewFrameProps) {
   const [iframeLoading, setIframeLoading] = useState(false);
 
@@ -91,11 +87,7 @@ export function PreviewFrame({
 
       <div className="forge-preview-viewport">
         {e2bBootBlocked && !running && !devUrl && (
-          <E2bSandboxPanel
-            connected={e2bConnected}
-            onSaved={onE2bSaved}
-            onOpenConnectors={onOpenE2bConnectors}
-          />
+          <E2bSandboxPanel connected={e2bConnected} />
         )}
 
         {bootError && !running && !e2bBootBlocked && (

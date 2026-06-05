@@ -23,24 +23,12 @@ import {
 import { buildStackContext, stackPromptAddon } from "../_shared/stack-context.ts";
 import { buildChatHistory } from "./memory.ts";
 import { RobinKeyPool, ResilientLLM } from "./robin-pool.ts";
-import { getPlatformSecret, loadPlatformSecretsMap } from "../_shared/platform-secrets.ts";
 import { loadUserE2bApiKey, E2B_SETUP_USER_MESSAGE } from "../_shared/user-e2b.ts";
 import {
   buildSessionExtensionsPrompt,
   normalizeIdList,
 } from "../_shared/session-extensions.ts";
 import { loadTasteNvidiaConfig, runTasteChat } from "./taste-session.ts";
-
-const PLATFORM_SECRET_NAMES = [
-  "E2B_API_KEY",
-  "XAI_API_KEY",
-  "GROQ_API_KEY",
-  "ANTHROPIC_API_KEY",
-  "OPENAI_API_KEY",
-  "NVIDIA_API_KEY",
-  "GEMINI_API_KEY",
-  "OPENROUTER_API_KEY",
-];
 
 const runningLocks = new Map<string, Promise<unknown>>();
 
@@ -62,10 +50,10 @@ function validateAgentPreferences(p?: AgentPreferencesPayload): string | null {
   }
   if (p.mode === "auto") return null;
   if (p.mode === "fixed" && !p.fixedPresetId?.trim()) {
-    return "Setup: selecione um modelo fixo em API.";
+    return "Setup: selecione um modelo fixo em Modelos (/models).";
   }
   if (isRobinMode(p) && !p.robinPoolModelId?.trim()) {
-    return "Setup: selecione o modelo do pool ROBIN em API.";
+    return "Setup: selecione o modelo do pool ROBIN em Modelos (/models).";
   }
   if (isRobinMode(p) && !p.poolProvider) {
     return "Setup: selecione o provedor do pool ROBIN (Groq ou NVIDIA).";
@@ -151,8 +139,6 @@ Deno.serve(async (req) => {
 
     const messages = buildChatHistory(history ?? []);
 
-    const platformSecrets = await loadPlatformSecretsMap(supabase, PLATFORM_SECRET_NAMES);
-
     const userOnlyKeys = await loadConnectorKeys(supabase, userData.user.id, preferences);
     const groqPool = await loadConnectorPools(supabase, userData.user.id, "groq");
     const nvidiaPool = await loadConnectorPools(supabase, userData.user.id, "nvidia");
@@ -203,7 +189,7 @@ Deno.serve(async (req) => {
     if (sessionKind === "taste_chat") {
       const cleanup = () => runningLocks.delete(projectId!);
       try {
-        const tasteCfg = await loadTasteNvidiaConfig(supabase, platformSecrets.NVIDIA_API_KEY);
+        const tasteCfg = await loadTasteNvidiaConfig(supabase);
         const run = async (emit: (type: string, data: Record<string, unknown>) => void) => {
           const result = await runTasteChat({
             supabase,
@@ -276,9 +262,9 @@ Deno.serve(async (req) => {
     try {
       if (sessionKind === "taste_start") {
         tasteStart = true;
-        const poolKeys = await loadForgeTrialRobinPool(supabase, platformSecrets.NVIDIA_API_KEY);
+        const poolKeys = await loadForgeTrialRobinPool(supabase);
         if (poolKeys.length === 0) {
-          throw new Error("Start Project: pool NVIDIA Taste não configurado no admin.");
+          throw new Error("Start Project: administrador deve configurar pool NVIDIA em API Keys (/api).");
         }
         robinPool = new RobinKeyPool(poolKeys);
         mainCfg = robinProviderConfig("nvidia", poolKeys, PLATFORM_ROBIN_TASTE_PRESET_ID);

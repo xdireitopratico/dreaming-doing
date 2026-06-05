@@ -67,23 +67,11 @@ export async function resolveForgeAdminUserId(
   return u?.id ?? null;
 }
 
-/**
- * Pool ROBIN NVIDIA do admin (API Keys → pool no perfil do administrador).
- * Fallback: secret global NVIDIA_API_KEY (uma chave ou JSON array).
- */
-export async function loadForgeTrialRobinPool(
-  supabase: SupabaseClient,
-  platformNvidiaSecret?: string,
-): Promise<string[]> {
+/** Pool ROBIN NVIDIA do administrador — salvo em API Keys (/api), sem vault global. */
+export async function loadForgeTrialRobinPool(supabase: SupabaseClient): Promise<string[]> {
   const adminId = await resolveForgeAdminUserId(supabase);
-  if (adminId) {
-    const fromAdmin = await loadConnectorPools(supabase, adminId, "nvidia");
-    if (fromAdmin.length > 0) return fromAdmin;
-  }
-  if (platformNvidiaSecret?.trim()) {
-    return parseTokenField(platformNvidiaSecret);
-  }
-  return [];
+  if (!adminId) return [];
+  return loadConnectorPools(supabase, adminId, "nvidia");
 }
 
 /** Chaves por provedor — Groq, NVIDIA, xAI e OpenAI podem coexistir. */

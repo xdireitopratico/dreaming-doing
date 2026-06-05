@@ -22,4 +22,4 @@ export async function loadUserE2bApiKey(
 }
 
 export const E2B_SETUP_USER_MESSAGE =
-  "Sandbox E2B não configurado. Cole sua chave API da E2B em Conectores → Sandbox (E2B) — o preview e o agente só rodam com a sua conta.";
+  "Sandbox E2B não configurado. Cole sua chave em API Keys (/api) — o preview e o agente só rodam com a sua conta.";

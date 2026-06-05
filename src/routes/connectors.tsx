@@ -42,7 +42,7 @@ function ConnectorsPage() {
           <div>
             <h1 className="font-display text-3xl tracking-tight">Conectores</h1>
             <p className="font-mono text-[10px] text-[var(--text-dim)] mt-0.5">
-              GitHub, Supabase, Vercel, Cloudflare e sandbox — não confundir com chaves de IA
+              GitHub, Supabase, Vercel e Cloudflare — chaves de API ficam em API Keys
             </p>
           </div>
         </div>

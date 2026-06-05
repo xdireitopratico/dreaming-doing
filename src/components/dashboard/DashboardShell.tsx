@@ -113,7 +113,7 @@ export function DashboardShell({
             data-active={activeNav === "api" ? "true" : undefined}
           >
             <Key className="size-4 shrink-0" />
-            API
+            API Keys
           </Link>
           <Link
             to="/models"
@@ -178,13 +178,13 @@ export function DashboardShell({
             <Sparkles className="size-3.5 text-[var(--forge-primary)] mb-1.5" />
             <strong className="text-[var(--forge-text)] font-medium">Taste + BYOK</strong>
             <p className="mt-1">
-              50 mensagens e 1 Start Project. Depois: API, Modelos, E2B e Skills/MCP separados no painel.
+              50 mensagens e 1 Start Project. Depois: API Keys, Modelos e Skills/MCP no painel.
             </p>
           </div>
           <div className="flex gap-1">
             <Link to="/api" className="dashboard-upgrade flex-1 text-[10px] py-2 justify-center">
               <Key className="size-3 text-[var(--forge-primary)]" />
-              API
+              API Keys
             </Link>
             <Link to="/models" className="dashboard-upgrade flex-1 text-[10px] py-2 justify-center">
               <Brain className="size-3 text-[var(--forge-primary)]" />

@@ -94,7 +94,7 @@ export const CONNECTOR_REGISTRY: Record<ConnectorId, ConnectorRegistryEntry> = {
     id: "e2b",
     name: "Sandbox (E2B)",
     description: "Ambiente isolado onde o preview ao vivo e o agente executam comandos.",
-    tagline: "Preview ao vivo e agente rodam no seu sandbox E2B — cole a chave API aqui.",
+    tagline: "Configure a chave E2B em API Keys — preview e agente usam só a sua conta.",
     forgeAvailable: false,
     tokenLabel: "API Key E2B",
     tokenPlaceholder: "e2b_...",
@@ -102,8 +102,8 @@ export const CONNECTOR_REGISTRY: Record<ConnectorId, ConnectorRegistryEntry> = {
     signupUrl: "https://e2b.dev/docs",
     docsUrl: "https://e2b.dev/docs/pricing",
     costNote: "Há tier gratuito; uso intenso de sandboxes pode gerar cobrança na E2B.",
-    showInEditorBar: true,
-    showOnConnectorsPage: true,
+    showInEditorBar: false,
+    showOnConnectorsPage: false,
   },
 };
 

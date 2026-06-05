@@ -105,11 +105,9 @@ export function ConnectorGuideModal({
           },
         });
       } else if (connector === "e2b") {
-        if (!token.trim()) {
-          toast.error("Chave E2B obrigatória");
-          return;
-        }
-        await onSave("e2b", { token: token.trim() });
+        toast.info("Configure a chave E2B em API Keys.");
+        resetAndClose();
+        window.location.assign("/api#forge-key-e2b");
       } else if (connector === "supabase") {
         toast.info(
           "Use VITE_SUPABASE_URL e VITE_SUPABASE_PUBLISHABLE_KEY no deploy do seu projeto Supabase.",
@@ -267,7 +265,7 @@ export function ConnectorGuideModal({
                 onClick={handleConnect}
                 disabled={
                   busy ||
-                  ((connector === "vercel" || connector === "netlify" || connector === "cloudflare" || connector === "e2b") &&
+                  ((connector === "vercel" || connector === "netlify" || connector === "cloudflare") &&
                     !token.trim())
                 }
               >

@@ -2,7 +2,12 @@ import type { ConnectorId } from "@/lib/connectors/integration-prefs";
 
 export type TasteUiAction =
   | { action: "open_connector"; connector: ConnectorId; reason?: string }
-  | { action: "navigate_setup"; step: "api" | "connectors" | "auth"; hash?: string; connector?: string }
+  | {
+      action: "navigate_setup";
+      step: "api" | "api-keys" | "models" | "connectors" | "auth";
+      hash?: string;
+      connector?: string;
+    }
   | { action: "lead_saved"; email: string }
   | { action: "highlight_setup"; stepId: string };
 

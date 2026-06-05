@@ -637,12 +637,6 @@ function EditorPage() {
                         onRefresh={() => previewBoot.boot()}
                         agentHasRun={agentHasRun}
                         e2bConnected={e2bConnected}
-                        onE2bSaved={() => {
-                          void qc.invalidateQueries({ queryKey: ["connectors-public"] });
-                          previewBoot.clearError();
-                          void previewBoot.boot();
-                        }}
-                        onOpenE2bConnectors={() => openConnector("e2b")}
                       />
                     )}
 

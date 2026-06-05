@@ -1,4 +1,5 @@
 import { useCallback, useState } from "react";
+import { useNavigate } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
@@ -26,6 +27,7 @@ export type { ConnectorId, IntegrationMode, IntegrationPrefs };
 export function useConnectors() {
   const { user } = useAuth();
   const qc = useQueryClient();
+  const navigate = useNavigate();
   const [modal, setModal] = useState<ConnectorId | null>(null);
 
   const { data: profile } = useQuery({
@@ -153,34 +155,9 @@ export function useConnectors() {
       const entry = CONNECTOR_REGISTRY[kind];
 
       if (kind === "e2b") {
-        if (payload.disconnect) {
-          const { data, error } = await supabase.functions.invoke("connector-upsert", {
-            body: { kind: "e2b", disconnect: true },
-          });
-          if (error) throw new Error(error.message);
-          const res = data as { error?: string };
-          if (res?.error) throw new Error(res.error);
-          await qc.invalidateQueries({ queryKey: ["connectors-public"] });
-          toast.success("Chave E2B removida");
-        } else if (payload.token?.trim()) {
-          const { data, error } = await supabase.functions.invoke("connector-upsert", {
-            body: {
-              kind: "e2b",
-              token: payload.token.trim(),
-              meta: { label: "E2B Sandbox", ...(payload.meta ?? {}) },
-            },
-          });
-          if (error) throw new Error(error.message);
-          const res = data as { error?: string };
-          if (res?.error) throw new Error(res.error);
-          await setMode("e2b", "own");
-          await qc.invalidateQueries({ queryKey: ["connectors-public"] });
-          toast.success("Sandbox E2B conectado");
-        } else {
-          toast.error("Cole sua chave E2B (e2b_...)");
-          return;
-        }
         setModal(null);
+        toast.info("Chave E2B fica em API Keys.");
+        void navigate({ to: "/api", hash: "forge-key-e2b" });
         return;
       }
 
@@ -223,7 +200,16 @@ export function useConnectors() {
     [qc, setMode],
   );
 
-  const openConnector = useCallback((id: ConnectorId) => setModal(id), []);
+  const openConnector = useCallback(
+    (id: ConnectorId) => {
+      if (id === "e2b") {
+        void navigate({ to: "/api", hash: "forge-key-e2b" });
+        return;
+      }
+      setModal(id);
+    },
+    [navigate],
+  );
   const closeModal = useCallback(() => setModal(null), []);
 
   return {

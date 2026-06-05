@@ -5,7 +5,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
 import {
-  ArrowLeft, Shield, CheckCircle2, AlertCircle, Star, ExternalLink, Plug, Zap, Brain, Globe, Cpu, Sparkles,
+  ArrowLeft, Shield, CheckCircle2, AlertCircle, Star, ExternalLink, Plug, Zap, Brain, Globe, Cpu, Sparkles, Box,
 } from "lucide-react";
 import { DashboardShell } from "@/components/dashboard/DashboardShell";
 import { ApiKeyInput } from "@/components/connectors/ApiKeyInput";
@@ -22,6 +22,7 @@ import {
   type PoolSlotPublic,
 } from "@/lib/save-connector";
 import { loadAgentPreferences } from "@/lib/agent-preferences";
+import { saveE2bApiKey, disconnectE2bApiKey } from "@/lib/save-e2b-key";
 import { Button } from "@/components/ui/button";
 
 export const Route = createFileRoute("/api")({
@@ -164,6 +165,8 @@ function ApiPage() {
   const { user } = useAuth();
   const qc = useQueryClient();
   const [providers, setProviders] = useState(INITIAL);
+  const [e2bKeyValue, setE2bKeyValue] = useState("");
+  const [e2bConnected, setE2bConnected] = useState(false);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [pulseId, setPulseId] = useState<string | null>(null);
   const robinMode = loadAgentPreferences().mode === "robin";
@@ -183,6 +186,8 @@ function ApiPage() {
 
   useEffect(() => {
     if (!connectorRows) return;
+    const hasE2b = connectorRows.some((r) => r.kind === "e2b");
+    setE2bConnected(hasE2b);
     setProviders((prev) =>
       prev.map((p) => {
         const row = rowForProvider(connectorRows, p.id);
@@ -305,7 +310,42 @@ function ApiPage() {
     [qc],
   );
 
-  const connectedCount = providers.filter((p) => p.status === "connected").length;
+  const handleSaveE2b = useCallback(async () => {
+    if (!e2bKeyValue.trim().startsWith("e2b")) {
+      toast.error("Cole uma chave E2B válida (prefixo e2b_)");
+      return;
+    }
+    setSavingId("e2b");
+    try {
+      await saveE2bApiKey(e2bKeyValue);
+      setE2bKeyValue("");
+      setE2bConnected(true);
+      await qc.invalidateQueries({ queryKey: ["connectors-public"] });
+      toast.success("Sandbox E2B conectado");
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : "Falha ao salvar E2B");
+    } finally {
+      setSavingId(null);
+    }
+  }, [e2bKeyValue, qc]);
+
+  const handleDeleteE2b = useCallback(async () => {
+    setSavingId("e2b");
+    try {
+      await disconnectE2bApiKey();
+      setE2bConnected(false);
+      setE2bKeyValue("");
+      await qc.invalidateQueries({ queryKey: ["connectors-public"] });
+      toast.success("Chave E2B removida");
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : "Falha ao remover E2B");
+    } finally {
+      setSavingId(null);
+    }
+  }, [qc]);
+
+  const connectedCount =
+    providers.filter((p) => p.status === "connected").length + (e2bConnected ? 1 : 0);
 
   return (
     <div className="px-6 py-8 max-w-[960px] mx-auto">
@@ -323,9 +363,9 @@ function ApiPage() {
             <Shield className="size-5 text-[var(--primary)]" />
           </div>
           <div>
-            <h1 className="font-display text-3xl tracking-tight">API</h1>
+            <h1 className="font-display text-3xl tracking-tight">API Keys</h1>
             <p className="font-mono text-[10px] text-[var(--text-dim)] mt-0.5">
-              Chaves dos provedores — só credenciais; modelos e STT ficam em Modelos
+              Única fonte de chaves: IA, sandbox E2B e pool ROBIN. Modelos e STT em Modelos.
             </p>
           </div>
         </div>
@@ -364,6 +404,51 @@ function ApiPage() {
           atualizam na hora. O agente troca de chave a cada requisição.
         </p>
       )}
+
+      <h2 className="flex items-center gap-2 font-mono text-[10px] tracking-[0.2em] uppercase text-[var(--text-dim)] mb-4">
+        <Box className="size-3 text-[var(--primary)]" />
+        Sandbox (E2B)
+      </h2>
+
+      <motion.div
+        id="forge-key-e2b"
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="mb-8 p-5 rounded-xl border border-[var(--border)] bg-[var(--surface-1)]/30 scroll-mt-24"
+      >
+        <p className="font-mono text-[9px] text-[var(--text-ghost)] mb-4 leading-relaxed">
+          Preview ao vivo e agente executam no seu sandbox E2B — sem chave global da plataforma.
+        </p>
+        <ApiKeyInput
+          label="Chave API E2B"
+          value={e2bKeyValue}
+          onChange={setE2bKeyValue}
+          onDelete={e2bConnected ? () => void handleDeleteE2b() : undefined}
+          provider="e2b"
+          placeholder="e2b_..."
+          saved={e2bConnected}
+          disabled={savingId === "e2b"}
+        />
+        <div className="mt-2 flex flex-wrap gap-2">
+          <Button
+            type="button"
+            size="sm"
+            className="bg-[var(--primary)] text-[#0a0a0a]"
+            disabled={savingId === "e2b" || !e2bKeyValue.trim()}
+            onClick={() => void handleSaveE2b()}
+          >
+            {savingId === "e2b" ? "Salvando…" : e2bConnected ? "Atualizar chave" : "Salvar chave E2B"}
+          </Button>
+          <a
+            href="https://e2b.dev/docs"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-mono text-[9px] text-[var(--text-ghost)] hover:text-[var(--foreground)] self-center"
+          >
+            Docs E2B <ExternalLink className="size-3 inline" />
+          </a>
+        </div>
+      </motion.div>
 
       <h2 className="flex items-center gap-2 font-mono text-[10px] tracking-[0.2em] uppercase text-[var(--text-dim)] mb-4">
         <Star className="size-3 text-[var(--primary)]" />

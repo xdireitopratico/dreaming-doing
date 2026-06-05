@@ -2,7 +2,7 @@ import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.0
 import type { ToolRegistry } from "../registry.ts";
 import type { ToolResult } from "../types.ts";
 
-const CONNECTORS = ["github", "vercel", "supabase", "netlify", "cloudflare", "e2b"] as const;
+const CONNECTORS = ["github", "vercel", "supabase", "netlify", "cloudflare"] as const;
 
 export type TasteUiEmit = (type: string, data: Record<string, unknown>) => void;
 
@@ -14,7 +14,7 @@ export function registerTasteTools(
     {
       name: "suggest_connector",
       description:
-        "Abre no editor o guia de conexão de um conector (github, vercel, supabase, netlify, cloudflare, e2b). Use quando o usuário precisar deploy, git, banco, etc.",
+        "Abre no editor o guia de conexão (github, vercel, supabase, netlify, cloudflare). E2B e chaves de IA ficam em API Keys (/api).",
       parameters: {
         type: "object",
         properties: {
@@ -43,19 +43,19 @@ export function registerTasteTools(
     {
       name: "open_setup_step",
       description:
-        "Guia o usuário a uma tela de configuração: api-keys (modelos/chaves), connectors, auth (cadastro/login).",
+        "Guia o usuário: api (API Keys — chaves IA e E2B), models (preset/STT), connectors (OAuth deploy), auth.",
       parameters: {
         type: "object",
         properties: {
-          step: { type: "string", enum: ["api-keys", "connectors", "auth"] },
-          hash: { type: "string", description: "Âncora opcional, ex: forge-ai-studio" },
-          connector: { type: "string", enum: [...CONNECTORS], description: "Com step=api-keys, foco em chave do env" },
+          step: { type: "string", enum: ["api", "api-keys", "models", "connectors", "auth"] },
+          hash: { type: "string", description: "Âncora opcional, ex: forge-key-nvidia ou forge-ai-studio" },
+          connector: { type: "string", enum: [...CONNECTORS], description: "Com step=connectors, qual integração abrir" },
         },
         required: ["step"],
       },
     },
     async (args): Promise<ToolResult> => {
-      const step = String(args.step ?? "api-keys");
+      const step = String(args.step ?? "api");
       const hash = args.hash ? String(args.hash) : undefined;
       const connector = args.connector ? String(args.connector) : undefined;
       ctx.emit("ui_action", {

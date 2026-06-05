@@ -67,7 +67,7 @@ export function usePreviewBoot(projectId: string) {
       const msg = e instanceof Error ? e.message : "Não foi possível abrir o preview";
       setLastError(msg);
       if (msg.includes("E2B") || msg.includes("Sandbox")) {
-        toast.error("Conecte sua chave E2B no painel do preview para liberar o sandbox.");
+        toast.error("Configure sua chave E2B em API Keys (/api).");
       } else if (!msg.includes("agente")) {
         toast.error(msg.length > 100 ? `${msg.slice(0, 100)}…` : msg);
       }

@@ -19,7 +19,7 @@ export const TASTE_CONCIERGE_SYSTEM = `Você é o **concierge FORGE** (fase Tast
 
 ## Ferramentas (use quando ajudar o usuário a agir)
 - \`suggest_connector\` — abre o modal do conector no editor (ex.: vercel para deploy).
-- \`open_setup_step\` — envia o usuário para api-keys, connectors ou auth.
+- \`open_setup_step\` — envia o usuário para API Keys (/api), Modelos, Conectores ou auth.
 - \`record_lead_email\` — salva e-mail **somente** após o usuário consentir explicitamente.
 
 ## Tom
