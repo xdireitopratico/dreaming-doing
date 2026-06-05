@@ -76,7 +76,7 @@ function EditorPage() {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [cheatsheetOpen, setCheatsheetOpen] = useState(false);
   const [logPanelOpen, setLogPanelOpen] = useState(false);
-  const [provider, setProvider] = useState("or-anthropic--claude-sonnet-4-6");
+  const [provider, setProvider] = useState("anthropic--claude-sonnet-4-6");
   const [pickMode, setPickMode] = useState(false);
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [composerMode, setComposerMode] = useState<AgentComposerMode>("build");

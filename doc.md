@@ -292,18 +292,21 @@ Estimativa Lovable original (~30–32/50 por sessão) **já consumiu ~12** (B7�
 
 ## 9. Lista de modelos ✅ (jun/2026)
 
-**Status:** Fase 0 concluída — 31 presets OpenRouter (#1–30 + Qwen3.5 397B).
+**Status:** Fase 0 — ranking #1–31; slugs copiados do OpenRouter só como **referência de ID**.
 
-| O quê | Arquivo |
-|-------|---------|
-| Catálogo UI + ranking | `src/lib/model-catalog.ts` |
-| Wire Edge / agente | `supabase/functions/_shared/model-presets.ts` |
-| Default | `or-anthropic--claude-sonnet-4-6` (#3) |
-| Chave | `OPENROUTER_API_KEY` (conector + vault admin `platform_secrets`) |
-| Pool ROBIN | `pool-groq-flash`, `pool-nemotron-super` (APIs nativas) |
-| Dropdown editor | Top 12 + recomendados; lista completa em `/api-keys` → Estúdio IA |
+| Roteamento | Provedores |
+|------------|------------|
+| API nativa | Anthropic, OpenAI, Gemini, xAI, NVIDIA |
+| OpenRouter | DeepSeek, Qwen, Kimi, MiniMax, Zhipu (+ slug custom) |
 
-**Próximo no doc:** Fase 1 (+1 criação projeto, +2 publish, +4 `/deploy`).
+| O quê | Onde |
+|-------|------|
+| Ranking completo | `/api-keys` → Estúdio IA (por aba de ambiente) |
+| Dropdown editor | ~10 atalhos (`editorPick`), não os 31 |
+| Default | `anthropic--claude-sonnet-4-6` |
+| Custom ID | Qualquer slug → força OpenRouter se houver chave |
+
+**Próximo:** Fase 1 (+1, +2, +4).
 
 ---
 
