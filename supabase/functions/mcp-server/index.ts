@@ -10,14 +10,55 @@ const corsHeaders = {
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+const ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY") ?? Deno.env.get("SUPABASE_PUBLISHABLE_KEY")!;
+
+// Tools that require admin role (mutating or sensitive enumeration).
+const ADMIN_ONLY_TOOLS = new Set([
+  "mcp__supabase__migrate",
+  "mcp__supabase__query",
+  "mcp__supabase__auth_users",
+]);
+
+function unauthorized(message: string, status = 401) {
+  return new Response(JSON.stringify({ error: message }), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
+
+async function authenticate(req: Request): Promise<
+  { ok: true; userId: string; email: string; isAdmin: boolean } | { ok: false; res: Response }
+> {
+  const auth = req.headers.get("Authorization");
+  if (!auth) return { ok: false, res: unauthorized("Authorization header obrigatório") };
+
+  const userClient = createClient(SUPABASE_URL, ANON_KEY, {
+    global: { headers: { Authorization: auth } },
+  });
+  const { data: { user }, error } = await userClient.auth.getUser();
+  if (error || !user) return { ok: false, res: unauthorized("Sessão inválida") };
+
+  // Check admin via user_roles (service-role read; the table's RLS now denies direct writes).
+  const admin = createClient(SUPABASE_URL, SERVICE_KEY);
+  const { data: role } = await admin
+    .from("user_roles")
+    .select("role")
+    .eq("user_id", user.id)
+    .eq("role", "admin")
+    .maybeSingle();
+
+  return { ok: true, userId: user.id, email: user.email ?? "", isAdmin: !!role };
+}
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   const url = new URL(req.url);
 
-  // MCP Protocol: GET / → capabilities
+  // Capabilities (GET /) requires auth, but is available to any signed-in user.
   if (req.method === "GET" && url.pathname === "/") {
+    const auth = await authenticate(req);
+    if (!auth.ok) return auth.res;
     return new Response(JSON.stringify({
       protocol: "mcp",
       version: "1.0",
