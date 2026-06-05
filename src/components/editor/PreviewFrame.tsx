@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
 import { Eye, Loader2 } from "lucide-react";
-import { PreviewRouteNav } from "@/components/editor/PreviewRouteNav";
 import { E2bSandboxPanel } from "@/components/editor/E2bSandboxPanel";
 import { buildPreviewUrl } from "@/lib/project-routes";
 
@@ -11,6 +10,8 @@ interface PreviewFrameProps {
   previewPath?: string;
   onPreviewPathChange?: (path: string) => void;
   onRefresh?: () => void;
+  /** Incrementa para recarregar o iframe após sync de arquivos (sem botão manual). */
+  reloadNonce?: number;
   iframeRef?: React.RefObject<HTMLIFrameElement | null>;
   bootError?: string | null;
   warming?: boolean;
@@ -26,6 +27,7 @@ export function PreviewFrame({
   previewPath = "/",
   onPreviewPathChange,
   onRefresh,
+  reloadNonce = 0,
   iframeRef,
   bootError,
   warming = false,
@@ -78,13 +80,6 @@ export function PreviewFrame({
 
   return (
     <div className="forge-preview-root">
-      <PreviewRouteNav
-        files={files}
-        activePath={previewPath}
-        onNavigate={(p) => onPreviewPathChange?.(p)}
-        devUrl={devUrl}
-      />
-
       <div className="forge-preview-viewport">
         {e2bBootBlocked && !running && !devUrl && (
           <E2bSandboxPanel connected={e2bConnected} />
@@ -123,7 +118,7 @@ export function PreviewFrame({
             )}
             <iframe
               ref={iframeRef}
-              key={iframeSrc}
+              key={`${iframeSrc}-${reloadNonce}`}
               src={iframeSrc}
               className="forge-preview-frame absolute inset-0 h-full w-full"
               sandbox="allow-scripts allow-same-origin allow-forms allow-popups"

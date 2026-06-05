@@ -161,9 +161,11 @@ body:has(.editor-workspace) {
 .lovable-topbar-center {
   display: flex;
   flex: 1;
+  min-width: 0;
   align-items: center;
   justify-content: center;
   gap: 4px;
+  overflow: hidden;
 }
 
 .forge-mode-pill,
@@ -317,6 +319,7 @@ body:has(.editor-workspace) {
 }
 
 .forge-chat-column {
+  position: relative;
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -324,6 +327,57 @@ body:has(.editor-workspace) {
   flex: 1;
   width: 100%;
   overflow: hidden;
+}
+
+.forge-chat-body {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  padding-bottom: 40px;
+  overflow: hidden;
+}
+
+.forge-setup-rail {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 24;
+  border-top: 1px solid var(--forge-border);
+  background: var(--forge-surface-2);
+  box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.35);
+}
+
+.forge-setup-rail--open .forge-setup-rail-body {
+  max-height: min(42vh, 320px);
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(237, 239, 242, 0.2) transparent;
+}
+
+.forge-preview-route-nav {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(237, 239, 242, 0.15) transparent;
+}
+
+.forge-scrollbar-dark {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(237, 239, 242, 0.18) rgba(18, 21, 28, 0.6);
+}
+
+.forge-scrollbar-dark::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.forge-scrollbar-dark::-webkit-scrollbar-thumb {
+  background: rgba(237, 239, 242, 0.2);
+  border-radius: 999px;
+}
+
+.forge-scrollbar-dark::-webkit-scrollbar-track {
+  background: rgba(18, 21, 28, 0.5);
 }
 
 .forge-resize-handle {
@@ -495,9 +549,23 @@ body:has(.editor-workspace) {
 
 .forge-composer-row {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 4px;
   margin-top: 6px;
+  min-width: 0;
+}
+
+.forge-composer-row .forge-mode-toggle,
+.forge-composer-row .forge-composer-send,
+.forge-composer-row .forge-composer-mic,
+.forge-composer-row .forge-composer-icon {
+  flex-shrink: 0;
+}
+
+.forge-composer-row .forge-composer-spacer {
+  flex: 1 1 8px;
+  min-width: 0;
 }
 
 .forge-composer-icon {

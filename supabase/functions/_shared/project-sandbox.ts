@@ -2,11 +2,11 @@
  * Um sandbox E2B por projeto — criado pelo agente, reutilizado sempre, encerrado só ao excluir o projeto.
  */
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
-import { Sandbox } from "npm:e2b@2.14.1";
 import {
   E2B_TEMPLATE_DEFAULT,
   patchProjectFilesForE2b,
 } from "./e2b.ts";
+import { getE2BSandboxApi, type E2BSandboxInstance } from "./e2b-sdk.ts";
 
 /** Renovação de lease no meta (não recria sandbox). */
 const SANDBOX_LEASE_MS = 30 * 24 * 60 * 60 * 1000;
@@ -59,7 +59,7 @@ async function touchSandboxLease(
 }
 
 export type ConnectSandboxResult = {
-  sandbox: Sandbox;
+  sandbox: E2BSandboxInstance;
   sandboxId: string;
   reused: boolean;
 };
@@ -78,6 +78,8 @@ export async function ensureAgentProjectSandbox(
   template = E2B_TEMPLATE_DEFAULT,
 ): Promise<ConnectSandboxResult> {
   const { existing, sm } = await loadProjectMeta(supabase, projectId);
+
+  const Sandbox = await getE2BSandboxApi();
 
   if (sm.previewSandboxId) {
     try {
@@ -115,6 +117,8 @@ export async function connectProjectSandboxForPreview(
     throw new Error(NO_SANDBOX_MSG);
   }
 
+  const Sandbox = await getE2BSandboxApi();
+
   try {
     const sandbox = await Sandbox.connect(sm.previewSandboxId, { apiKey });
     await touchSandboxLease(supabase, projectId, existing, sandbox.sandboxId);
@@ -132,6 +136,7 @@ export async function killProjectSandbox(
 ): Promise<void> {
   if (!sandboxId) return;
   try {
+    const Sandbox = await getE2BSandboxApi();
     const sandbox = await Sandbox.connect(sandboxId, { apiKey });
     await sandbox.kill();
   } catch {
@@ -140,14 +145,14 @@ export async function killProjectSandbox(
 }
 
 export async function syncProjectFilesToSandbox(
-  sandbox: Sandbox,
+  sandbox: E2BSandboxInstance,
   files: Array<{ path: string; content?: string | null }>,
 ): Promise<void> {
   const payload = patchProjectFilesForE2b(files);
   if (payload.length > 0) await sandbox.files.write(payload);
 }
 
-export function previewUrlFromSandbox(sandbox: Sandbox, port: number): string {
+export function previewUrlFromSandbox(sandbox: E2BSandboxInstance, port: number): string {
   const host = sandbox.getHost(port);
   return host.startsWith("http") ? host : `https://${host}`;
 }

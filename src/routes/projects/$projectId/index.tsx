@@ -101,6 +101,7 @@ function EditorPage() {
   const [promptDraft, setPromptDraft] = useState<string | null>(null);
   const [publishing, setPublishing] = useState(false);
   const [previewRoute, setPreviewRoute] = useState("/");
+  const [previewReloadNonce, setPreviewReloadNonce] = useState(0);
 
   // ─── Refs ────────────────────────────────────────────────────────────
   const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null);
@@ -272,11 +273,11 @@ function EditorPage() {
   );
   useAgentBlame({ blameMap: blameEntries, editorRef, monacoRef });
 
-  // ─── Sync running state ─────────────────────────────────────────────
+  // ─── Sync running state (SSE ativo) ───────────────────────────────────
   useEffect(() => {
-    if (!sse.connected && running) setRunning(false);
     if (sse.connected && !running) setRunning(true);
-  }, [sse.connected]);
+    if (!sse.connected && running && sse.progress.finished) setRunning(false);
+  }, [sse.connected, sse.progress.finished, running]);
 
   // ─── SSE → logs ─────────────────────────────────────────────────────
   useEffect(() => {
@@ -361,7 +362,6 @@ function EditorPage() {
         return;
       }
 
-      setRunning(true);
       const label =
         sessionKind === "taste_start"
           ? "Start Project (Taste · NVIDIA)"
@@ -373,16 +373,20 @@ function EditorPage() {
       setLogs((prev) => [...prev, createLogEntry("info", label, "agent")]);
       if (!logPanelOpen) setLogPanelOpen(true);
       void qc.invalidateQueries({ queryKey: ["messages", conversation.id] });
-      try {
-        void sse.connect(
-          projectId,
-          conversation.id,
-          sessionKind ?? (canSendTasteChat(tasteQuota) ? "taste_chat" : undefined),
-        );
-      } catch (e: unknown) {
-        toast.error(e instanceof Error ? e.message : "Erro ao iniciar agente");
-        setRunning(false);
-      }
+      void (async () => {
+        setRunning(true);
+        try {
+          await sse.connect(
+            projectId,
+            conversation.id,
+            sessionKind ?? (canSendTasteChat(tasteQuota) ? "taste_chat" : undefined),
+          );
+        } catch (e: unknown) {
+          toast.error(e instanceof Error ? e.message : "Erro ao iniciar agente");
+        } finally {
+          setRunning(false);
+        }
+      })();
     },
     [conversation, projectId, running, sse, logPanelOpen, qc, sse.progress.resumable, tasteQuota],
   );
@@ -394,12 +398,23 @@ function EditorPage() {
     void qc.invalidateQueries({ queryKey: ["profile"] });
   }, [sse.progress.finished, conversation, qc]);
 
-  // Preview ao vivo: só após o agente (sandbox já existe) ou clique manual — nunca ao abrir o editor
+  // Preview ao vivo: após o agente; recarrega iframe quando arquivos mudam (sem botão ↻ na barra)
   const agentFinished = sse.progress.finished;
   useEffect(() => {
     if (!agentFinished || sse.progress.error || !isReactProject) return;
     previewBoot.boot();
   }, [agentFinished, sse.progress.error, isReactProject, previewBoot.boot]);
+
+  const filesSyncKey = useMemo(
+    () => files?.map((f) => `${f.path}:${f.updated_at}`).join("|") ?? "",
+    [files],
+  );
+
+  useEffect(() => {
+    if (!devUrl || activeView !== "preview") return;
+    const t = window.setTimeout(() => setPreviewReloadNonce((n) => n + 1), 600);
+    return () => window.clearTimeout(t);
+  }, [filesSyncKey, devUrl, activeView]);
 
   const handleSend = useCallback(
     (text: string, mode?: AgentComposerMode) => {
@@ -552,8 +567,10 @@ function EditorPage() {
         onQuickPrompt={(text) => setPromptDraft(text)}
         onShare={handleShare}
         onPublish={handlePublish}
-        onRestartPreview={() => previewBoot.boot()}
-        previewBooting={previewBoot.booting || publishing}
+        previewFiles={files?.map((f) => ({ path: f.path, content: f.content ?? "" }))}
+        previewPath={previewRoute}
+        onPreviewPathChange={setPreviewRoute}
+        previewDevUrl={devUrl}
       >
         <div
           className="flex min-h-0 h-full w-full flex-1 flex-col overflow-hidden"
@@ -564,9 +581,9 @@ function EditorPage() {
           <EditorResizableLayout
             workspaceCode={activeView === "code"}
             chat={
-              <div className="forge-chat-column flex min-h-0 flex-1 flex-col">
+              <div className="forge-chat-column">
                 <AgentPanel running={running} progress={sse.progress} onResume={runAgent} />
-                <div className="min-h-0 flex-1 flex flex-col">
+                <div className="forge-chat-body">
                   <TastePostStartBanner />
                   <ChatInput
                     messages={chatMessages}
@@ -635,6 +652,7 @@ function EditorPage() {
                         warming={previewBoot.warming}
                         onWarmComplete={previewBoot.clearWarming}
                         onRefresh={() => previewBoot.boot()}
+                        reloadNonce={previewReloadNonce}
                         agentHasRun={agentHasRun}
                         e2bConnected={e2bConnected}
                       />

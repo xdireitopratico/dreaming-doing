@@ -6,6 +6,7 @@ import { CONNECTORS_PAGE_LIST, isConnectorActive } from "@/lib/connectors/regist
 import type { ConnectorId } from "@/lib/connectors/integration-prefs";
 import { ConnectorGuideModal } from "@/components/connectors/ConnectorGuideModal";
 import { OPEN_CONNECTOR_EVENT } from "@/hooks/useTasteUiActions";
+import { ActiveModelBadge } from "@/components/editor/ActiveModelBadge";
 
 type SetupRailProps = {
   checklist?: React.ReactNode;
@@ -43,16 +44,19 @@ export function SetupRail({ checklist }: SetupRailProps) {
 
   return (
     <>
-      <div className="forge-setup-rail shrink-0 border-t border-[var(--forge-border)] bg-[var(--forge-surface-2)]/90">
+      <div className={`forge-setup-rail${open ? " forge-setup-rail--open" : ""}`}>
         <button
           type="button"
           onClick={() => setOpen((v) => !v)}
-          className="w-full flex items-center justify-between gap-2 px-3 py-2 text-left hover:bg-[var(--forge-surface-3)] transition-colors"
+          className="forge-setup-rail-toggle w-full flex items-center justify-between gap-2 px-3 py-2 text-left hover:bg-[var(--forge-surface-3)] transition-colors"
         >
-          <span className="font-mono text-[9px] uppercase tracking-widest text-[var(--forge-muted)]">
-            Setup · {doneCount}/{items.length}
+          <span className="flex items-center gap-2 min-w-0">
+            <span className="font-mono text-[9px] uppercase tracking-widest text-[var(--forge-muted)] shrink-0">
+              Setup · {doneCount}/{items.length}
+            </span>
+            <ActiveModelBadge />
           </span>
-          <span className="flex items-center gap-2">
+          <span className="flex items-center gap-2 shrink-0">
             {tasteChatRemaining > 0 && (
               <span className="font-mono text-[8px] text-[var(--forge-ghost)]">
                 taste {tasteChatRemaining}
@@ -63,7 +67,7 @@ export function SetupRail({ checklist }: SetupRailProps) {
         </button>
 
         {open && (
-          <div className="px-3 pb-3">
+          <div className="forge-setup-rail-body px-3 pb-3">
             {checklist}
             <ul className="space-y-1 mt-2">
               {items.map((item) => (

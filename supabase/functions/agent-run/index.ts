@@ -31,13 +31,11 @@ import {
 } from "../_shared/session-extensions.ts";
 import { registerMcpForgeTools } from "./tools/mcp-forge.ts";
 import { loadTasteNvidiaConfig, runTasteChat } from "./taste-session.ts";
+import { FORGE_CORS_HEADERS, corsPreflightResponse } from "../_shared/cors.ts";
 
 const runningLocks = new Map<string, Promise<unknown>>();
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+const corsHeaders = FORGE_CORS_HEADERS;
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -84,7 +82,7 @@ function robinProviderConfig(
 }
 
 Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+  if (req.method === "OPTIONS") return corsPreflightResponse();
 
   let projectId: string | undefined;
 

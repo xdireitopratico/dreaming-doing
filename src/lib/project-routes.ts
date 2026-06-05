@@ -8,6 +8,8 @@ export interface ProjectRoute {
 const PAGE_FILE = /^(?:src\/)?pages\/([^/]+)\.(tsx|jsx|vue)$/i;
 const APP_ROUTE = /path:\s*["'`]([^"'`]+)["'`]/g;
 const ROUTE_FILE = /^(?:src\/)?routes\/([^/]+)\.(tsx|jsx)$/i;
+const TANSTACK_ROUTE = /^(?:src\/)?routes\/([^/]+)\/index\.(tsx|jsx)$/i;
+const TANSTACK_ROUTE_FLAT = /^(?:src\/)?routes\/([^./][^/]*)\.(tsx|jsx)$/i;
 
 function labelFromSegment(seg: string): string {
   if (seg === "index" || seg === "") return "Início";
@@ -42,6 +44,18 @@ export function inferProjectRoutes(
     if (routeMatch) {
       const path = pathFromPageName(routeMatch[1]);
       routes.set(path, labelFromSegment(routeMatch[1]));
+      continue;
+    }
+    const tanstackIdx = norm.match(TANSTACK_ROUTE);
+    if (tanstackIdx) {
+      const path = pathFromPageName(tanstackIdx[1]);
+      routes.set(path, labelFromSegment(tanstackIdx[1]));
+      continue;
+    }
+    const tanstackFlat = norm.match(TANSTACK_ROUTE_FLAT);
+    if (tanstackFlat && tanstackFlat[1] !== "index" && tanstackFlat[1] !== "__root") {
+      const path = pathFromPageName(tanstackFlat[1]);
+      routes.set(path, labelFromSegment(tanstackFlat[1]));
     }
   }
 

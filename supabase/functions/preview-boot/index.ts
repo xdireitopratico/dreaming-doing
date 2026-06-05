@@ -8,11 +8,9 @@ import {
   readSandboxMeta,
   syncProjectFilesToSandbox,
 } from "../_shared/project-sandbox.ts";
+import { FORGE_CORS_HEADERS, corsPreflightResponse } from "../_shared/cors.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+const corsHeaders = FORGE_CORS_HEADERS;
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -22,7 +20,7 @@ const PROBE_INTERVAL_MS = 2000;
 const PROBE_FETCH_MS = 4000;
 
 Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+  if (req.method === "OPTIONS") return corsPreflightResponse();
 
   try {
     const { projectId } = await req.json();

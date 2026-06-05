@@ -7,14 +7,12 @@ import remarkGfm from "remark-gfm";
 import {
   ArrowUp,
   Square,
-  Plus,
   FileText,
   Paperclip,
   ImageIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { MicButton } from "@/components/voice/MicButton";
-import { EditorModelControl } from "@/components/editor/EditorModelControl";
 import { toast } from "sonner";
 import { loadAgentPreferences } from "@/lib/agent-preferences";
 import {
@@ -502,13 +500,6 @@ export function ChatInput({
           >
             <Paperclip className="size-4" />
           </button>
-
-          <button type="button" className="forge-composer-chip">
-            <Plus className="size-3.5" />
-            Visual edits
-          </button>
-
-          <EditorModelControl />
 
           <span className="forge-composer-spacer" />
 

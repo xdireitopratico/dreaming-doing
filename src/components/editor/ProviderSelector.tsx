@@ -104,7 +104,7 @@ export function ProviderSelector({ value, onChange, className = "" }: ProviderSe
               </span>
             </div>
 
-            <div className="py-1 max-h-[280px] overflow-y-auto">
+            <div className="py-1 max-h-[280px] overflow-y-auto forge-scrollbar-dark">
               {Object.entries(grouped).map(([envLabel, models]) => (
                 <div key={envLabel}>
                   <div className="px-3 py-1.5 font-mono text-[7px] tracking-[0.2em] uppercase text-[var(--text-ghost)] bg-[var(--surface-2)]/40">

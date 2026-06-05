@@ -5,11 +5,11 @@ import {
   ensureAgentProjectSandbox,
   syncProjectFilesToSandbox,
 } from "../_shared/project-sandbox.ts";
-import type { Sandbox } from "npm:e2b@2.14.1";
+import type { E2BSandboxInstance } from "../_shared/e2b-sdk.ts";
 import type { SandboxProvider, ExecResult, ExecOpts, FileEntry } from "./types.ts";
 
 class E2BSandbox implements SandboxProvider {
-  private sandbox: Sandbox | null = null;
+  private sandbox: E2BSandboxInstance | null = null;
 
   constructor(
     private readonly e2bApiKey: string,
@@ -18,7 +18,7 @@ class E2BSandbox implements SandboxProvider {
     private readonly e2bTemplate: string = E2B_TEMPLATE_DEFAULT,
   ) {}
 
-  private async ensure(): Promise<Sandbox> {
+  private async ensure(): Promise<E2BSandboxInstance> {
     if (this.sandbox) return this.sandbox;
     const { sandbox, reused } = await ensureAgentProjectSandbox(
       this.supabase,

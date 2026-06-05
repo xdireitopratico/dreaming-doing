@@ -1,19 +1,4 @@
-/** Carrega SKILL.md empacotados e comprime com orçamento de tokens para o agent-run. */
-
-import { FORGE_SKILL_BUNDLES_B64 } from "./forge-skill-bundles.generated.ts";
-
-function decodeSkillBundle(id: string): string | null {
-  const b64 = FORGE_SKILL_BUNDLES_B64[id];
-  if (!b64) return null;
-  try {
-    const binary = atob(b64);
-    const bytes = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-    return new TextDecoder().decode(bytes);
-  } catch {
-    return null;
-  }
-}
+/** Carrega SKILL.md do diretório forge-skills/ (sem importar o bundle .b64 — evita crash no boot da Edge). */
 
 const SKILLS_DIR = new URL("./forge-skills/", import.meta.url);
 
@@ -109,8 +94,6 @@ export function compressSkillBody(body: string, maxChars: number): string {
 }
 
 async function readBundledSkill(id: string): Promise<string | null> {
-  const embedded = decodeSkillBundle(id);
-  if (embedded) return embedded;
   try {
     return await Deno.readTextFile(new URL(`${id}.md`, SKILLS_DIR));
   } catch {

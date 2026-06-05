@@ -15,9 +15,11 @@ export function EditorShell({
   onShare,
   onPublish,
   onQuickPrompt,
-  onRestartPreview,
-  previewBooting,
   running,
+  previewFiles,
+  previewPath,
+  onPreviewPathChange,
+  previewDevUrl,
 }: {
   children: ReactNode;
   projectName?: string;
@@ -26,9 +28,11 @@ export function EditorShell({
   onShare?: () => void;
   onPublish?: () => void;
   onQuickPrompt?: (text: string) => void;
-  onRestartPreview?: () => void;
-  previewBooting?: boolean;
   running?: boolean;
+  previewFiles?: Array<{ path: string; content?: string }>;
+  previewPath?: string;
+  onPreviewPathChange?: (path: string) => void;
+  previewDevUrl?: string | null;
 }) {
   const { user, loading } = useAuth();
   const loc = useLocation();
@@ -59,9 +63,11 @@ export function EditorShell({
         onShare={onShare}
         onPublish={onPublish}
         onQuickPrompt={onQuickPrompt}
-        onRestartPreview={onRestartPreview}
-        previewBooting={previewBooting}
         running={running}
+        previewFiles={previewFiles}
+        previewPath={previewPath}
+        onPreviewPathChange={onPreviewPathChange}
+        previewDevUrl={previewDevUrl}
       />
       <div className="min-h-0 flex-1">{children}</div>
     </div>

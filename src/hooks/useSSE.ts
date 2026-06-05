@@ -7,6 +7,7 @@ import { loadAgentPreferences } from "@/lib/agent-preferences";
 import { loadAgentSessionExtensions } from "@/lib/agent-session-extensions";
 import type { ForgeSessionKind } from "@/lib/taste";
 import { dispatchTasteUiAction, isTasteUiAction } from "@/lib/taste-ui-actions";
+import { formatAgentFetchError } from "@/lib/agent-fetch-errors";
 
 export interface SSEEvent {
   type: string;
@@ -87,7 +88,6 @@ export function useSSE() {
     sessionKind?: ForgeSessionKind,
   ) => {
     setProgress({ ...initialState });
-    setConnected(true);
     const sawFinish = { current: false };
 
     const { url, publishableKey } = getSupabaseEnv();
@@ -117,6 +117,8 @@ export function useSSE() {
     abortRef.current = controller;
 
     const functionsUrl = `${url}/functions/v1/agent-run`;
+
+    setConnected(true);
 
     try {
       const res = await fetch(functionsUrl, {
@@ -199,10 +201,10 @@ export function useSSE() {
         }));
       }
     } catch (err: unknown) {
-      if (err instanceof Error && err.name !== "AbortError") {
+      if (!(err instanceof Error && err.name === "AbortError")) {
         setProgress((p) => ({
           ...p,
-          error: err.message,
+          error: formatAgentFetchError(err),
           finished: true,
           resumable: true,
         }));
