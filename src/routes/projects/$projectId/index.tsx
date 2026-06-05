@@ -17,6 +17,7 @@ import type { AgentComposerMode } from "@/components/editor/ChatInput";
 import { CodeEditor, type Tab } from "@/components/editor/CodeEditor";
 import { FileTree } from "@/components/editor/FileTree";
 import { ChatInput, type ChatMessage } from "@/components/editor/ChatInput";
+import { AgentPanel } from "@/components/editor/AgentPanel";
 import { SetupRail } from "@/components/editor/SetupRail";
 import { TasteSetupChecklist } from "@/components/editor/TasteSetupChecklist";
 import { TastePostStartBanner } from "@/components/editor/TastePostStartBanner";
@@ -485,6 +486,48 @@ function EditorPage() {
     [conversation, projectId, running, sse, logPanelOpen, qc, sse.progress.resumable, tasteQuota],
   );
 
+  const handleResumeAgent = useCallback(() => {
+    if (!conversation || running) return;
+
+    const kind = resolveSessionKind(tasteQuota);
+    const isTaste = kind === "taste_chat" || kind === "taste_start";
+
+    if (!isTaste) {
+      const prefs = loadAgentPreferences();
+      if (!isAgentPreferencesConfigured(prefs)) {
+        toast.error(getAgentSetupBlockMessage(prefs));
+        return;
+      }
+    } else if (kind === "taste_start" && !canStartTasteProject(tasteQuota)) {
+      toast.error("Start Project já utilizado. Configure API para continuar.");
+      return;
+    } else if (kind === "taste_chat" && !canSendTasteChat(tasteQuota)) {
+      toast.error("Limite Taste Chat (50). Configure API em /api.");
+      return;
+    }
+
+    setLogs((prev) => [
+      ...prev,
+      createLogEntry("info", "Retomando agente (memória do chat)", "agent"),
+    ]);
+    if (!logPanelOpen) setLogPanelOpen(true);
+    void qc.invalidateQueries({ queryKey: ["messages", conversation.id] });
+    logEditorTelemetryEvent("agent", "resume_start", "info", kind);
+
+    void (async () => {
+      setRunning(true);
+      try {
+        await sse.connect(projectId, conversation.id, kind, { resume: true });
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : "Erro ao retomar agente";
+        logEditorTelemetryEvent("agent", "resume_fail", "error", msg.slice(0, 200));
+        toast.error(msg);
+      } finally {
+        setRunning(false);
+      }
+    })();
+  }, [conversation, projectId, running, sse, logPanelOpen, qc, tasteQuota]);
+
   useEffect(() => {
     if (!sse.progress.finished || !conversation) return;
     void qc.invalidateQueries({ queryKey: ["messages", conversation.id] });
@@ -739,11 +782,16 @@ function EditorPage() {
                     connectorRows={connectorRows}
                   />
                   <TastePostStartBanner />
+                  <AgentPanel
+                    running={running}
+                    progress={sse.progress}
+                    onResume={handleResumeAgent}
+                  />
                   <ChatInput
                     messages={chatMessages}
                     running={running}
                     agentProgress={sse.progress}
-                    onResumeAgent={() => runAgent(resolveSessionKind(tasteQuota))}
+                    onResumeAgent={handleResumeAgent}
                     onSend={handleSend}
                     onStop={handleStop}
                     onVisualEdits={handleVisualEdits}

@@ -38,6 +38,11 @@ export interface AgentProgress {
   streamText: string | null;
 }
 
+export type AgentConnectOptions = {
+  /** Retoma após queda de conexão ou limite — não reinicia o chat do zero */
+  resume?: boolean;
+};
+
 const initialState: AgentProgress = {
   phase: null,
   message: null,
@@ -90,8 +95,14 @@ export function useSSE() {
     projectId: string,
     conversationId: string,
     sessionKind?: ForgeSessionKind,
+    options?: AgentConnectOptions,
   ) => {
-    setProgress({ ...initialState });
+    const isResume = options?.resume === true;
+    setProgress({
+      ...initialState,
+      statusHint: isResume ? "Conectando para retomar o agente…" : null,
+      resumable: false,
+    });
     const sawFinish = { current: false };
 
     const { url, publishableKey } = getSupabaseEnv();
@@ -144,6 +155,7 @@ export function useSSE() {
           conversationId,
           preferences: loadAgentPreferences(),
           sessionKind,
+          resume: isResume,
           ...loadAgentSessionExtensions(),
         }),
         signal: controller.signal,
@@ -152,7 +164,13 @@ export function useSSE() {
       if (!res.ok) {
         const msg = await parseErrorResponse(res);
         logEditorTelemetryEvent("sse", "http_error", "error", `${res.status} ${msg.slice(0, 120)}`);
-        setProgress((p) => ({ ...p, error: msg, finished: true }));
+        const canRetry = res.status === 409 || res.status >= 500;
+        setProgress((p) => ({
+          ...p,
+          error: msg,
+          finished: true,
+          resumable: canRetry || isResume,
+        }));
         setConnected(false);
         return;
       }
@@ -213,7 +231,7 @@ export function useSSE() {
                   String(event.data.phase ?? ""),
                 );
               }
-              setProgress((prev) => applyEvent(prev, event));
+              setProgress((prev) => applyAgentProgressEvent(prev, event));
             } catch {
               /* heartbeat */
             }
@@ -259,10 +277,23 @@ export function useSSE() {
   return { progress, connected, connect, disconnect };
 }
 
-function applyEvent(prev: AgentProgress, event: SSEEvent): AgentProgress {
+/** Reducer puro dos eventos SSE (exportado para testes). */
+export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): AgentProgress {
   const { type, data } = event;
 
   switch (type) {
+    case "start":
+      return {
+        ...prev,
+        error: null,
+        finished: false,
+        resumable: false,
+        statusHint: data.resume
+          ? "Retomando com a memória salva no chat…"
+          : prev.statusHint,
+        timeline: [...prev.timeline, event],
+      };
+
     case "assistant_text": {
       const chunk = (data.text as string) ?? "";
       return {
@@ -278,7 +309,10 @@ function applyEvent(prev: AgentProgress, event: SSEEvent): AgentProgress {
         ...prev,
         phase: (data.phase as string) ?? prev.phase,
         message: (data.message as string) ?? prev.message,
-        statusHint: null,
+        statusHint:
+          data.phase === "resume"
+            ? ((data.message as string) ?? prev.statusHint)
+            : null,
         timeline: [...prev.timeline, event],
       };
 
@@ -374,6 +408,8 @@ function applyEvent(prev: AgentProgress, event: SSEEvent): AgentProgress {
         ...prev,
         summary: (data.summary as string) ?? prev.summary,
         finished: true,
+        resumable: false,
+        error: null,
         streamText: null,
         timeline: [...prev.timeline, event],
       };
@@ -387,15 +423,17 @@ function applyEvent(prev: AgentProgress, event: SSEEvent): AgentProgress {
         timeline: [...prev.timeline, event],
       };
 
-    case "finish":
+    case "finish": {
+      const failed = data.ok === false;
       return {
         ...prev,
         finished: true,
         streamText: null,
-        resumable: data.resumable === true && data.ok === false,
-        error: data.ok === false ? ((data.error as string) ?? prev.error) : prev.error,
+        resumable: failed && data.resumable === true,
+        error: failed ? ((data.error as string) ?? prev.error) : null,
         timeline: [...prev.timeline, event],
       };
+    }
 
     case "ui_action": {
       const payload = { ...data };

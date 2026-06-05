@@ -92,6 +92,7 @@ Deno.serve(async (req) => {
     const conversationId = body.conversationId;
     const preferences = body.preferences as AgentPreferencesPayload | undefined;
     const sessionKindRaw = body.sessionKind as string | undefined;
+    const resumeRun = body.resume === true;
     const enabledSkillIds = normalizeIdList(body.enabledSkillIds);
     const enabledMcpIds = normalizeIdList(body.enabledMcpIds);
     const sessionExt = await buildSessionExtensionsPrompt(enabledSkillIds, enabledMcpIds);
@@ -126,7 +127,11 @@ Deno.serve(async (req) => {
       typeof profile?.taste_start_remaining === "number" ? profile.taste_start_remaining : 1;
 
     if (runningLocks.has(projectId)) {
-      return json({ error: "Agente já está executando neste projeto. Aguarde a conclusão." }, 409);
+      if (resumeRun) {
+        runningLocks.delete(projectId);
+      } else {
+        return json({ error: "Agente já está executando neste projeto. Aguarde a conclusão." }, 409);
+      }
     }
     runningLocks.set(projectId, Promise.resolve());
 
@@ -395,6 +400,7 @@ Deno.serve(async (req) => {
           : {
             sessionAddon: sessionExt.addon,
             userSkillNames: sessionExt.skillNames,
+            resumeRun,
           },
       );
     };
@@ -421,6 +427,7 @@ Deno.serve(async (req) => {
           provider: mainCfg.label,
           robin: effectiveRobin,
           taste: tasteStart,
+          resume: resumeRun,
           sessionKind: tasteStart ? "taste_start" : "byok",
           memoryMessages: messages.length,
           enabledSkillIds,

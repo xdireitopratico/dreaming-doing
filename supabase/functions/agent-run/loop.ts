@@ -34,6 +34,7 @@ export class AgentLoop {
   private tasteStart: boolean;
   private sessionAddon: string;
   private userSkillNames: string[];
+  private resumeRun: boolean;
 
   constructor(
     reg: ToolRegistry,
@@ -51,6 +52,7 @@ export class AgentLoop {
       tasteStart?: boolean;
       sessionAddon?: string;
       userSkillNames?: string[];
+      resumeRun?: boolean;
     },
   ) {
     this.reg = reg;
@@ -65,16 +67,25 @@ export class AgentLoop {
     this.tasteStart = options?.tasteStart ?? false;
     this.sessionAddon = options?.sessionAddon ?? "";
     this.userSkillNames = options?.userSkillNames ?? [];
+    this.resumeRun = options?.resumeRun ?? false;
     this.router = new ModelRouter(injectedKeys, routerOverrides);
     this.observer = new RuntimeObserver(reg);
     this.skills = new SkillRegistry();
     this.compression = new CompressionManager(this.router.getCheapProvider());
   }
 
-  async run(): Promise<{ ok: boolean; summary?: string; error?: string; steps: number }> {
+  async run(): Promise<{ ok: boolean; summary?: string; error?: string; steps: number; resumable?: boolean }> {
     this.state.executionLog = [];
     this.compression.reset();
     let step = 0;
+
+    if (this.resumeRun) {
+      this.appendResumeInstruction();
+      this.emit("phase", {
+        phase: "resume",
+        message: "Retomando a partir do histórico salvo no chat…",
+      });
+    }
 
     this.emit("phase", { phase: "gather", message: "Lendo arquivos do projeto..." });
     this.emit("memory", {
@@ -293,6 +304,17 @@ export class AgentLoop {
       this.emit("error", { message, recoverable: true });
       throw new Error(message);
     }
+  }
+
+  private appendResumeInstruction(): void {
+    const last = this.state.messages[this.state.messages.length - 1];
+    if (last?.role === "user") return;
+    this.state.messages.push({
+      role: "user",
+      content:
+        "[Retomar] Continue a tarefa a partir do estado atual do projeto e do histórico acima. " +
+        "Não recomece do zero; use os arquivos já criados ou alterados.",
+    });
   }
 
   private isStuck(step: number): boolean {

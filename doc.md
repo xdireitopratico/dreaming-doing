@@ -113,7 +113,7 @@ Cada linha: **ID Lovable** · **ID auditoria** · status · observação · inte
 
 | # | IDs | St | Por quê | Proposta | Onde |
 |---|-----|-----|---------|----------|------|
-| 6 | **C14** | 🔄 | Loop já retorna `resumable: true`; UI “Continuar” incompleta | Botão no `AgentPanel` re-dispara SSE | `loop.ts`, `useSSE.ts`, `AgentPanel.tsx` |
+| 6 | **C14** | ✅ | `resume` no SSE + Edge; lock liberado ao retomar; `AgentPanel` no editor | `loop.ts`, `useSSE.ts`, `AgentPanel.tsx`, `index.tsx` |
 | 7 | **C15** | ⏳ | `executionLog` só em memória | Persistir em `messages.tool_calls` / meta | `loop.ts`, tabela `messages` |
 | 8 | **C19** | ⏳ | `isStuck` fraco | Hash últimos 3 tool calls | `loop.ts` ou `observer.ts` |
 | 9 | **C22** | ⏳ | Abort no client; Edge segue | `runs.canceled_at` + check por step | `agent-run/index.ts` |
