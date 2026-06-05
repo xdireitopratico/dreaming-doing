@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState, useEffect, useMemo } from "react";
 import { motion } from "framer-motion";
-import { ArrowLeft, Plus, Sparkles, Check } from "lucide-react";
+import { ArrowLeft, Plus, Wrench, Check } from "lucide-react";
 import { toast } from "sonner";
 import { DashboardShell } from "@/components/dashboard/DashboardShell";
 import { SKILLS_CATALOG, loadEnabledSkillIds, toggleSkillId } from "@/lib/skills-catalog";
@@ -46,7 +46,7 @@ function SkillsPage() {
       <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="mb-8">
         <div className="flex items-center gap-3">
           <div className="size-10 rounded-xl bg-[var(--primary)]/10 border border-[var(--primary)]/20 grid place-items-center">
-            <Sparkles className="size-5 text-[var(--primary)]" />
+            <Wrench className="size-5 text-[var(--primary)]" />
           </div>
           <div>
             <h1 className="font-display text-3xl tracking-tight">Skills</h1>

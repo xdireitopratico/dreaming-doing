@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router";
-import { CheckCircle2, Circle, Sparkles } from "lucide-react";
+import { CheckCircle2, Circle, ListChecks } from "lucide-react";
 import { useConnectors } from "@/hooks/useConnectors";
 import { loadAgentPreferences } from "@/lib/agent-preferences";
 import { isAgentPreferencesConfigured } from "@/lib/agent-setup";
@@ -67,7 +67,7 @@ export function TasteSetupChecklist({ userMessageCount, onOpenConnector, onStart
       className="mx-3 mb-2 rounded-lg border border-[var(--forge-primary)]/20 bg-[var(--forge-primary)]/5 px-3 py-2"
     >
       <div className="flex items-center gap-2 mb-2">
-        <Sparkles className="size-3.5 text-[var(--forge-primary)]" />
+        <ListChecks className="size-3.5 text-[var(--forge-primary)]" />
         <span className="font-mono text-[9px] uppercase tracking-widest text-[var(--forge-muted)]">
           Trilha Taste · {doneCount}/{steps.length}
         </span>

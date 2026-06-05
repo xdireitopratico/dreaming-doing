@@ -1,7 +1,7 @@
 // ProviderSelector — atalhos curados no editor (não lista os 31 inteiros)
 import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ChevronDown, Zap, Brain, Cpu, Globe, Star, Key, Sparkles } from "lucide-react";
+import { ChevronDown, Zap, Brain, Cpu, Globe, Star, Key, Gem } from "lucide-react";
 import {
   EDITOR_MODEL_PRESETS,
   AI_ENV_META,
@@ -23,7 +23,7 @@ const PRESETS: ProviderOption[] = EDITOR_MODEL_PRESETS.map(presetToProviderOptio
 
 const envIcons: Record<string, React.ReactNode> = {
   Anthropic: <Zap className="size-3.5" />,
-  "Google Gemini": <Sparkles className="size-3.5" />,
+  "Google Gemini": <Gem className="size-3.5" />,
   "xAI (Grok)": <Globe className="size-3.5" />,
   OpenAI: <Brain className="size-3.5" />,
   "NVIDIA NIM": <Cpu className="size-3.5" />,

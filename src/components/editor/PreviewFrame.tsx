@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Eye, Loader2, Sparkles } from "lucide-react";
+import { Eye, Loader2 } from "lucide-react";
 import { PreviewRouteNav } from "@/components/editor/PreviewRouteNav";
 import { E2bSandboxPanel } from "@/components/editor/E2bSandboxPanel";
 import { buildPreviewUrl } from "@/lib/project-routes";
@@ -144,7 +144,7 @@ export function PreviewFrame({
         ) : !bootError && waitingForAgent ? (
           <div className="flex h-full flex-col items-center justify-center gap-4 bg-white p-8 text-center">
             <div className="grid size-12 place-items-center rounded-2xl bg-neutral-100">
-              <Sparkles className="size-6 text-neutral-400" />
+              <Eye className="size-6 text-neutral-400" />
             </div>
             <div className="max-w-xs space-y-1">
               <p className="text-sm font-medium text-neutral-800">Preview ao vivo</p>

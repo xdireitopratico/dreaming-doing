@@ -5,7 +5,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
 import {
-  ArrowLeft, Shield, CheckCircle2, AlertCircle, Star, ExternalLink, Plug, Zap, Brain, Globe, Cpu, Sparkles, Box,
+  ArrowLeft, Shield, CheckCircle2, AlertCircle, Star, ExternalLink, Plug, Zap, Brain, Globe, Cpu, Gem, Box,
 } from "lucide-react";
 import { DashboardShell } from "@/components/dashboard/DashboardShell";
 import { ApiKeyInput } from "@/components/connectors/ApiKeyInput";
@@ -66,7 +66,7 @@ const INITIAL: ProviderConfig[] = [
     id: "gemini",
     provider: "Google",
     label: "Google Gemini",
-    icon: <Sparkles className="size-5" />,
+    icon: <Gem className="size-5" />,
     description: "Gemini 2.5 Pro / Flash — sequência Google AI Studio.",
     docUrl: "https://aistudio.google.com/apikey",
     keyPrefix: "AIza",

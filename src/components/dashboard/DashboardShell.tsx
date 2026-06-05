@@ -12,8 +12,8 @@ import {
   Puzzle,
   Search,
   Settings,
-  Sparkles,
   Star,
+  Wrench,
 } from "lucide-react";
 import { type ReactNode, useEffect } from "react";
 import { ForgeLogoMark } from "@/components/editor/ForgeLogoMark";
@@ -139,7 +139,7 @@ export function DashboardShell({
             data-active={activeNav === "skills" ? "true" : undefined}
             title="Playbooks e instruções para o LLM"
           >
-            <Sparkles className="size-4 shrink-0" />
+            <Wrench className="size-4 shrink-0" />
             Skills
           </Link>
           <Link
@@ -175,7 +175,6 @@ export function DashboardShell({
 
         <div className="dashboard-sidebar-footer">
           <div className="rounded-xl border border-[var(--forge-border)] p-3 text-[11px] leading-relaxed text-[var(--forge-muted)]">
-            <Sparkles className="size-3.5 text-[var(--forge-primary)] mb-1.5" />
             <strong className="text-[var(--forge-text)] font-medium">Taste + BYOK</strong>
             <p className="mt-1">
               50 mensagens e 1 Start Project. Depois: API Keys, Modelos e Skills/MCP no painel.
@@ -191,24 +190,26 @@ export function DashboardShell({
               Modelos
             </Link>
           </div>
-          <Link
-            to="/settings"
-            className="dashboard-nav-item dashboard-nav-item-compact"
-            data-active={activeNav === "settings" ? "true" : undefined}
-          >
-            <Settings className="size-3.5 shrink-0" />
-            Ajustes
-          </Link>
-          {user && (
-            <button
-              type="button"
-              className="dashboard-nav-item dashboard-nav-item-compact w-full text-left text-[var(--forge-ghost)]"
-              onClick={() => signOut()}
+          <div className="dashboard-footer-row">
+            <Link
+              to="/settings"
+              className="dashboard-nav-item dashboard-nav-item-compact"
+              data-active={activeNav === "settings" ? "true" : undefined}
             >
-              <LogOut className="size-3.5 shrink-0" />
-              Sair
-            </button>
-          )}
+              <Settings className="size-3.5 shrink-0" />
+              Ajustes
+            </Link>
+            {user && (
+              <button
+                type="button"
+                className="dashboard-nav-item dashboard-nav-item-compact text-left text-[var(--forge-ghost)]"
+                onClick={() => signOut()}
+              >
+                <LogOut className="size-3.5 shrink-0" />
+                Sair
+              </button>
+            )}
+          </div>
         </div>
       </aside>
 

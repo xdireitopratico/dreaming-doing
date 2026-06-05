@@ -66,6 +66,24 @@ html:has(.dashboard-workspace) {
   overflow-x: hidden;
   padding-right: 2px;
   scrollbar-width: thin;
+  scrollbar-color: var(--forge-border-strong) transparent;
+}
+
+.dashboard-nav::-webkit-scrollbar {
+  width: 6px;
+}
+
+.dashboard-nav::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.dashboard-nav::-webkit-scrollbar-thumb {
+  background: var(--forge-border-strong);
+  border-radius: 6px;
+}
+
+.dashboard-nav::-webkit-scrollbar-thumb:hover {
+  background: rgba(237, 239, 242, 0.22);
 }
 
 .dashboard-nav-label {
@@ -118,6 +136,17 @@ html:has(.dashboard-workspace) {
   gap: 8px;
 }
 
+.dashboard-footer-row {
+  display: flex;
+  gap: 6px;
+}
+
+.dashboard-footer-row .dashboard-nav-item-compact {
+  flex: 1;
+  min-width: 0;
+  justify-content: center;
+}
+
 .dashboard-upgrade {
   display: flex;
   align-items: center;
@@ -147,6 +176,7 @@ html:has(.dashboard-workspace) {
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: thin;
+  scrollbar-color: var(--forge-border-strong) transparent;
   /* Degradê no painel rolável (fixed quebrava scroll com Lenis/body locked) */
   background:
     radial-gradient(ellipse 120% 70% at 50% -5%, rgba(88, 120, 255, 0.32), transparent 52%),
@@ -154,6 +184,24 @@ html:has(.dashboard-workspace) {
     radial-gradient(ellipse 75% 50% at 12% 65%, rgba(255, 122, 26, 0.14), transparent 48%),
     radial-gradient(ellipse 90% 60% at 50% 100%, rgba(120, 60, 180, 0.12), transparent 50%),
     linear-gradient(180deg, #0a0d18 0%, #12101f 38%, #1a1028 72%, #140c20 100%);
+}
+
+.dashboard-main::-webkit-scrollbar {
+  width: 8px;
+}
+
+.dashboard-main::-webkit-scrollbar-track {
+  background: var(--forge-surface);
+}
+
+.dashboard-main::-webkit-scrollbar-thumb {
+  background: var(--forge-border-strong);
+  border-radius: 8px;
+  border: 2px solid var(--forge-surface);
+}
+
+.dashboard-main::-webkit-scrollbar-thumb:hover {
+  background: rgba(237, 239, 242, 0.22);
 }
 
 .dashboard-stage {
@@ -276,6 +324,16 @@ html:has(.dashboard-workspace) {
   overflow-x: auto;
   padding-bottom: 4px;
   scrollbar-width: thin;
+  scrollbar-color: var(--forge-border-strong) transparent;
+}
+
+.dashboard-projects-row::-webkit-scrollbar {
+  height: 6px;
+}
+
+.dashboard-projects-row::-webkit-scrollbar-thumb {
+  background: var(--forge-border-strong);
+  border-radius: 6px;
 }
 
 .dashboard-project-card {

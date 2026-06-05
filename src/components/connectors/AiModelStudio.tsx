@@ -10,7 +10,7 @@ import {
   Shuffle,
   Zap,
   Mic,
-  Sparkles,
+  Gem,
   Check,
   CheckCircle2,
   AlertCircle,
@@ -44,7 +44,7 @@ import { type ConnectorRow, connectedEnvsFromRows } from "@/lib/connector-env-st
 
 const ENV_ICONS: Record<AiEnvId, React.ReactNode> = {
   anthropic: <Zap className="size-4" />,
-  gemini: <Sparkles className="size-4" />,
+  gemini: <Gem className="size-4" />,
   openai: <Brain className="size-4" />,
   xai: <Globe className="size-4" />,
   groq: <Cpu className="size-4" />,

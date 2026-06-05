@@ -1,19 +1,9 @@
 import { useEffect, type ReactNode } from "react";
 import { useRouterState } from "@tanstack/react-router";
 
-/** Rotas com scroll interno (body bloqueado) — Lenis no window quebra o wheel. */
-const NATIVE_SCROLL_PREFIXES = [
-  "/auth",
-  "/connectors",
-  "/api",
-  "/settings",
-  "/projects",
-];
-
-function pathnameUsesNativeScroll(pathname: string): boolean {
-  return NATIVE_SCROLL_PREFIXES.some(
-    (p) => pathname === p || pathname.startsWith(`${p}/`),
-  );
+/** Lenis só na landing — no dashboard o scroll é nativo em .dashboard-main / .dashboard-nav */
+function pathnameUsesLenis(pathname: string): boolean {
+  return pathname === "/" || pathname === "";
 }
 
 /**
@@ -22,11 +12,11 @@ function pathnameUsesNativeScroll(pathname: string): boolean {
  */
 export function SmoothScroll({ children }: { children: ReactNode }) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
-  const nativeOnly = pathnameUsesNativeScroll(pathname);
+  const useLenis = pathnameUsesLenis(pathname);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    if (nativeOnly) return;
+    if (!useLenis) return;
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
 
     let lenis: { raf: (time: number) => void; destroy: () => void } | undefined;
@@ -53,7 +43,7 @@ export function SmoothScroll({ children }: { children: ReactNode }) {
       cancelAnimationFrame(raf);
       lenis?.destroy();
     };
-  }, [nativeOnly]);
+  }, [useLenis]);
 
   return <>{children}</>;
 }

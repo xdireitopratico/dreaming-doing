@@ -1,4 +1,4 @@
-import { Sparkles } from "lucide-react";
+import { Flame } from "lucide-react";
 import type { ConnectorId, IntegrationMode } from "@/lib/connectors/integration-prefs";
 import { CONNECTOR_REGISTRY } from "@/lib/connectors/registry";
 
@@ -28,7 +28,7 @@ export function ConnectorModeToggle({
         } ${!forgeAvailable ? "opacity-40 cursor-not-allowed" : ""}`}
       >
         <span className="inline-flex items-center gap-1">
-          <Sparkles className="size-2.5" />
+          <Flame className="size-2.5" />
           FORGE
         </span>
       </button>
