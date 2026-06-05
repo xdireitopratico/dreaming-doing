@@ -11,7 +11,7 @@ import { DashboardShell } from "@/components/dashboard/DashboardShell";
 import { ApiKeyInput } from "@/components/connectors/ApiKeyInput";
 import { ApiKeyPoolSection } from "@/components/connectors/ApiKeyPoolSection";
 
-import { ModelPowerPanel } from "@/components/connectors/ModelPowerPanel";
+import { AiModelStudio } from "@/components/connectors/AiModelStudio";
 import { useAuth } from "@/lib/auth";
 import { supabase } from "@/integrations/supabase/client";
 import {
@@ -341,7 +341,7 @@ function ApiKeysPage() {
         </Link>
       </motion.div>
 
-      <ModelPowerPanel />
+      <AiModelStudio connectorRows={connectorRows} />
 
       {robinMode && (
         <p className="mb-6 font-mono text-[9px] text-amber-400/90 px-3 py-2 rounded border border-amber-400/20 bg-amber-400/5">
@@ -363,10 +363,11 @@ function ApiKeysPage() {
           return (
             <motion.div
               key={p.id}
+              id={`forge-key-${p.id}`}
               initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.05 + i * 0.03 }}
-              className="p-5 rounded-xl border border-[var(--border)] bg-[var(--surface-1)]/30"
+              className="p-5 rounded-xl border border-[var(--border)] bg-[var(--surface-1)]/30 scroll-mt-24"
             >
               <div className="flex items-start gap-4 mb-4">
                 <div

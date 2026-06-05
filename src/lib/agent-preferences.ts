@@ -22,7 +22,7 @@ export interface AgentPreferences {
 const STORAGE_KEY = "forge:agent-preferences";
 
 export const DEFAULT_AGENT_PREFERENCES: AgentPreferences = {
-  mode: "auto",
+  mode: "fixed",
   fixedPresetId: "anthropic-sonnet",
   poolProvider: "groq",
   robinPoolModelId: "groq-llama70",

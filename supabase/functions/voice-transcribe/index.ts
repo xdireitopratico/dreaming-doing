@@ -1,4 +1,4 @@
-// voice-transcribe — STT via Grok (xAI) ou Groq Whisper; usa chave do usuário em /api-keys ou secrets do projeto.
+// voice-transcribe — STT estrito: usa SOMENTE o provedor escolhido (sem fallback silencioso para Groq).
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { loadConnectorKeys, loadConnectorPools } from "../agent-run/connector-keys.ts";
 import { getPlatformSecret } from "../_shared/platform-secrets.ts";
@@ -18,31 +18,30 @@ function json(body: unknown, status = 200) {
   });
 }
 
-async function resolveSttKey(
+/** Resolve chave apenas para o provedor pedido — sem trocar para outro. */
+async function resolveSttKeyStrict(
   supabase: ReturnType<typeof createClient>,
   userId: string,
   prefer: "grok" | "groq",
 ): Promise<{ key: string; provider: "grok" | "groq" }> {
   const keys = await loadConnectorKeys(supabase, userId);
-  const groqPool = await loadConnectorPools(supabase, userId, "groq");
-
-  const globalXai = await getPlatformSecret(supabase, "XAI_API_KEY");
-  const globalGroq = await getPlatformSecret(supabase, "GROQ_API_KEY");
 
   if (prefer === "grok") {
+    const globalXai = await getPlatformSecret(supabase, "XAI_API_KEY");
     if (keys.XAI_API_KEY) return { key: keys.XAI_API_KEY, provider: "grok" };
     if (globalXai) return { key: globalXai, provider: "grok" };
+    throw new Error(
+      "Você escolheu Grok STT, mas não há chave xAI. Em API Keys → xAI (Grok), cole sua chave e salve.",
+    );
   }
 
+  const groqPool = await loadConnectorPools(supabase, userId, "groq");
+  const globalGroq = await getPlatformSecret(supabase, "GROQ_API_KEY");
   if (groqPool[0]) return { key: groqPool[0], provider: "groq" };
   if (keys.GROQ_API_KEY) return { key: keys.GROQ_API_KEY, provider: "groq" };
   if (globalGroq) return { key: globalGroq, provider: "groq" };
-
-  if (keys.XAI_API_KEY) return { key: keys.XAI_API_KEY, provider: "grok" };
-  if (globalXai) return { key: globalXai, provider: "grok" };
-
   throw new Error(
-    "Nenhuma chave de voz configurada. Adicione xAI ou Groq em API Keys, ou configure secrets globais em Ajustes (admin).",
+    "Você escolheu Groq Whisper, mas não há chave Groq. Em API Keys → Groq, cole sua chave e salve.",
   );
 }
 
@@ -59,7 +58,7 @@ async function transcribeGrok(apiKey: string, file: File, language: string): Pro
 
   if (!resp.ok) {
     const txt = await resp.text();
-    throw new Error(`Grok STT ${resp.status}: ${txt.slice(0, 280)}`);
+    throw new Error(`Grok STT falhou (${resp.status}): ${txt.slice(0, 280)}`);
   }
 
   const data = await resp.json();
@@ -82,7 +81,7 @@ async function transcribeGroq(apiKey: string, file: File, language: string): Pro
 
   if (!resp.ok) {
     const txt = await resp.text();
-    throw new Error(`Groq Whisper ${resp.status}: ${txt.slice(0, 280)}`);
+    throw new Error(`Groq Whisper falhou (${resp.status}): ${txt.slice(0, 280)}`);
   }
 
   const data = await resp.json();
@@ -112,28 +111,18 @@ Deno.serve(async (req) => {
 
     const language = (inForm.get("language") as string | null) ?? "pt";
     const preferRaw = (inForm.get("provider") as string | null) ?? "grok";
-    const prefer = preferRaw === "groq" ? "groq" : "grok";
+    const requested = preferRaw === "groq" ? "groq" : "grok";
 
-    let resolved = await resolveSttKey(supabase, userData.user.id, prefer);
-    let text = "";
+    const resolved = await resolveSttKeyStrict(supabase, userData.user.id, requested);
+    const text = resolved.provider === "grok"
+      ? await transcribeGrok(resolved.key, file, language)
+      : await transcribeGroq(resolved.key, file, language);
 
-    try {
-      text = resolved.provider === "grok"
-        ? await transcribeGrok(resolved.key, file, language)
-        : await transcribeGroq(resolved.key, file, language);
-    } catch (firstErr) {
-      const fallback = prefer === "grok" ? "groq" : "grok";
-      try {
-        resolved = await resolveSttKey(supabase, userData.user.id, fallback);
-        text = resolved.provider === "grok"
-          ? await transcribeGrok(resolved.key, file, language)
-          : await transcribeGroq(resolved.key, file, language);
-      } catch {
-        throw firstErr;
-      }
-    }
-
-    return json({ text, provider: resolved.provider });
+    return json({
+      text,
+      provider: resolved.provider,
+      requested,
+    });
   } catch (e: unknown) {
     return json({ error: (e as Error).message ?? "erro inesperado" }, 500);
   }

@@ -10,10 +10,8 @@ type Props = {
   size?: "sm" | "md";
 };
 
-/**
- * MicButton — grava áudio do mic (MediaRecorder) e envia para
- * a Edge Function voice-transcribe (Grok STT ou Groq Whisper conforme /api-keys).
- */
+const STT_LABELS = { grok: "Grok STT (xAI)", groq: "Groq Whisper" } as const;
+
 export function MicButton({ onTranscript, className, size = "md" }: Props) {
   const [state, setState] = useState<"idle" | "recording" | "uploading">("idle");
   const recRef = useRef<MediaRecorder | null>(null);
@@ -25,6 +23,8 @@ export function MicButton({ onTranscript, className, size = "md" }: Props) {
   }, []);
 
   const start = useCallback(async () => {
+    const requested = loadAgentPreferences().sttProvider ?? "grok";
+
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
@@ -49,16 +49,38 @@ export function MicButton({ onTranscript, className, size = "md" }: Props) {
           const fd = new FormData();
           fd.append("file", blob, "audio.webm");
           fd.append("language", "pt");
-          fd.append("provider", loadAgentPreferences().sttProvider ?? "grok");
-          const { data, error } = await supabase.functions.invoke("voice-transcribe", { body: fd });
+          fd.append("provider", requested);
+          const { data, error } = await supabase.functions.invoke("voice-transcribe", {
+            body: fd,
+          });
           const errMsg = (data as { error?: string })?.error;
           if (errMsg) throw new Error(errMsg);
           if (error) throw new Error(error.message);
-          const text = (data as any)?.text?.trim();
-          if (text) onTranscript(text);
-          else toast.error("Não captei nada. Tenta de novo.");
-        } catch (err: any) {
-          toast.error(err?.message ?? "Falha ao transcrever");
+
+          const body = data as {
+            text?: string;
+            provider?: string;
+            requested?: string;
+          };
+          const text = body?.text?.trim();
+          const used = body?.provider ?? requested;
+
+          if (text) {
+            onTranscript(text);
+            toast.success(`Voz · ${STT_LABELS[used as keyof typeof STT_LABELS] ?? used}`, {
+              duration: 2500,
+            });
+            if (body?.requested && used !== body.requested) {
+              toast.warning(
+                `Pedido ${STT_LABELS[body.requested as keyof typeof STT_LABELS]} mas usou ${used}. Verifique API Keys.`,
+              );
+            }
+          } else {
+            toast.error("Não captei nada. Tenta de novo.");
+          }
+        } catch (err: unknown) {
+          const msg = err instanceof Error ? err.message : "Falha ao transcrever";
+          toast.error(msg, { duration: 6000 });
         } finally {
           setState("idle");
         }
@@ -66,8 +88,8 @@ export function MicButton({ onTranscript, className, size = "md" }: Props) {
       rec.start();
       recRef.current = rec;
       setState("recording");
-    } catch (err: any) {
-      toast.error(err?.message ?? "Acesso ao microfone negado");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Acesso ao microfone negado");
       setState("idle");
     }
   }, [onTranscript]);
@@ -79,6 +101,7 @@ export function MicButton({ onTranscript, className, size = "md" }: Props) {
 
   const sizeCls = size === "sm" ? "size-8" : "size-9";
   const iconCls = size === "sm" ? "size-3.5" : "size-4";
+  const stt = loadAgentPreferences().sttProvider ?? "grok";
 
   if (state === "uploading") {
     return (
@@ -86,6 +109,7 @@ export function MicButton({ onTranscript, className, size = "md" }: Props) {
         type="button"
         disabled
         aria-label="Transcrevendo"
+        title={`Transcrevendo com ${STT_LABELS[stt]}`}
         className={`${sizeCls} grid place-items-center rounded-full bg-[var(--surface-2)] border border-[var(--border)] text-[var(--text-dim)] ${className ?? ""}`}
       >
         <Loader2 className={`${iconCls} animate-spin`} />
@@ -110,7 +134,8 @@ export function MicButton({ onTranscript, className, size = "md" }: Props) {
     <button
       type="button"
       onClick={start}
-      aria-label="Gravar áudio"
+      aria-label={`Gravar áudio (${STT_LABELS[stt]})`}
+      title={`Microfone · ${STT_LABELS[stt]} — configurar em API Keys`}
       className={`${sizeCls} grid place-items-center rounded-full bg-[var(--surface-2)] hover:bg-[var(--surface-3)] border border-[var(--border)] text-[var(--text-dim)] hover:text-foreground transition-colors ${className ?? ""}`}
     >
       <Mic className={iconCls} />

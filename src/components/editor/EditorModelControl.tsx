@@ -4,12 +4,12 @@ import { Settings2 } from "lucide-react";
 import { ProviderSelector, type ProviderOption } from "@/components/editor/ProviderSelector";
 import {
   type AgentPreferences,
-  agentModeLabel,
   loadAgentPreferences,
   saveAgentPreferences,
 } from "@/lib/agent-preferences";
+import { normalizePresetId } from "@/lib/model-catalog";
 
-/** Seletor de modelo no editor — sincronizado com /api-keys (potência). */
+/** Seletor sempre visível no editor — ambiente/modelo não ficam escondidos no modo auto. */
 export function EditorModelControl() {
   const [prefs, setPrefs] = useState<AgentPreferences>(() => loadAgentPreferences());
 
@@ -24,30 +24,41 @@ export function EditorModelControl() {
     };
   }, [refresh]);
 
-  if (prefs.mode === "fixed") {
-    return (
+  const presetId =
+    prefs.mode === "robin"
+      ? normalizePresetId(prefs.robinPoolModelId)
+      : normalizePresetId(prefs.fixedPresetId);
+
+  const modeTag =
+    prefs.mode === "auto" ? "auto" : prefs.mode === "robin" ? "pool" : "fixo";
+
+  return (
+    <div className="flex items-center gap-1.5 shrink-0 min-w-0">
       <ProviderSelector
-        value={prefs.fixedPresetId ?? "anthropic-sonnet"}
+        value={presetId}
         onChange={(opt: ProviderOption) => {
-          const next = { ...prefs, fixedPresetId: opt.id };
+          const next: AgentPreferences = {
+            ...prefs,
+            mode: prefs.mode === "robin" ? "robin" : "fixed",
+            fixedPresetId: opt.id,
+            ...(prefs.mode === "robin"
+              ? { robinPoolModelId: opt.id }
+              : {}),
+          };
           setPrefs(next);
           saveAgentPreferences(next);
         }}
-        className="shrink-0"
+        className="shrink-0 max-w-[140px]"
       />
-    );
-  }
-
-  const label = agentModeLabel(prefs);
-
-  return (
-    <Link
-      to="/api-keys"
-      title="Modelo e potência — configurar em API Keys"
-      className="forge-composer-chip max-w-[160px] truncate hover:border-[var(--primary)]/40 transition-colors"
-    >
-      <Settings2 className="size-3 shrink-0 opacity-70" />
-      <span className="truncate">{label}</span>
-    </Link>
+      <Link
+        to="/api-keys"
+        hash="forge-ai-studio"
+        title={`Modo: ${modeTag} · STT: ${prefs.sttProvider ?? "grok"} — abrir estúdio completo`}
+        className="forge-composer-chip shrink-0 px-2 py-1 gap-1 hover:border-[var(--primary)]/40"
+      >
+        <Settings2 className="size-3 opacity-70" />
+        <span className="font-mono text-[9px] uppercase">{modeTag}</span>
+      </Link>
+    </div>
   );
 }
