@@ -11,7 +11,7 @@ Fluxo recomendado a cada mudança no Lovable:
 
 1. Eu aplico a migration via tool no Lovable Cloud.
 2. O arquivo `supabase/migrations/<timestamp>_*.sql` resultante entra no repo.
-3. Você roda `scripts/sync/migrate.sh` para aplicar a mesma migration na sua conta via CLI.
+3. Você roda `./scripts/sync/sync-all.sh` (ou só `migrate.sh` se não houve mudança em functions).
 
 ## Pré-requisitos
 
@@ -23,6 +23,7 @@ supabase link --project-ref dpduljngdurfpmaclffa
 
 ## Scripts
 
+- **`sync-all.sh`** — roda `migrate.sh` + `deploy-all.sh` (use após merge com mudanças em `supabase/`).
 - `migrate.sh` — `supabase db push` na sua conta (aplica todas as migrations novas).
 - `deploy-all.sh` — `supabase functions deploy <name>` para todas as edge functions atuais.
 - `secrets-checklist.md` — lista de secrets que precisam existir no seu projeto.

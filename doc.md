@@ -79,8 +79,10 @@ cd /home/rdarienzo/Projetos/dreaming-doing   # ou seu clone
 supabase login
 supabase link --project-ref dpduljngdurfpmaclffa
 
-./scripts/sync/migrate.sh      # A6 — aplica B8–B11 + profiles + netlify
-./scripts/sync/deploy-all.sh # A2 — 9 edge functions na conta canônica
+./scripts/sync/sync-all.sh     # A6 + A2 — migrations + 9 edge functions (recomendado)
+# ou separado:
+# ./scripts/sync/migrate.sh
+# ./scripts/sync/deploy-all.sh
 ```
 
 Depois: `scripts/sync/secrets-checklist.md` — marcar secrets no projeto canônico.
