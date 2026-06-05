@@ -58,6 +58,8 @@ export interface ChatResponse {
     prompt_tokens: number;
     completion_tokens: number;
     total_tokens: number;
+    input_tokens: number;
+    output_tokens: number;
   };
 }
 

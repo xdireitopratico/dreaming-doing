@@ -1,36 +1,89 @@
-// compression.ts — Conversation Compression + Prompt Cache
-// Comprime histórico a cada N turns (economia de 97% em tokens de histórico)
-import type { LLMProvider, ChatMessage, ToolCall } from "./types.ts";
+// compression.ts — Conversation Compression + token-aware context (C17)
+import type { LLMProvider, ChatMessage, ToolCall, ChatResponse } from "./types.ts";
+import {
+  estimateMessageTokens,
+  INPUT_TOKEN_FORCE,
+  INPUT_TOKEN_WARN,
+  normalizeChatUsage,
+} from "./token-usage.ts";
 
 const COMPRESSION_INTERVAL = 5;
 const MAX_CONTEXT_MESSAGES = 32;
+
+export type CompressionNotify = (type: string, data: Record<string, unknown>) => void;
 
 export class CompressionManager {
   private summarizing: LLMProvider;
   private compressedSummary = "";
   private turnCount = 0;
+  private lastInputTokens = 0;
+  private lastEstimatedTokens = 0;
+  private onNotify: CompressionNotify | null;
 
-  constructor(summarizer: LLMProvider) {
+  constructor(summarizer: LLMProvider, onNotify: CompressionNotify | null = null) {
     this.summarizing = summarizer;
+    this.onNotify = onNotify;
   }
 
   reset(): void {
     this.compressedSummary = "";
     this.turnCount = 0;
+    this.lastInputTokens = 0;
+    this.lastEstimatedTokens = 0;
+  }
+
+  /** Registra usage.input_tokens da última chamada LLM (C17). */
+  recordUsage(usage: ChatResponse["usage"] | undefined): void {
+    const normalized = normalizeChatUsage(usage);
+    if (normalized) this.lastInputTokens = normalized.input_tokens;
+  }
+
+  getLastInputTokens(): number {
+    return this.lastInputTokens;
   }
 
   async compress(messages: ChatMessage[]): Promise<ChatMessage[]> {
     this.turnCount++;
+    this.lastEstimatedTokens = estimateMessageTokens(messages);
 
-    if (this.turnCount % COMPRESSION_INTERVAL !== 0 && messages.length < MAX_CONTEXT_MESSAGES * 2) {
-      return this.buildPromptMessages(messages);
+    const effectiveTokens = Math.max(this.lastInputTokens, this.lastEstimatedTokens);
+    const pressure = effectiveTokens >= INPUT_TOKEN_WARN;
+    const force = effectiveTokens >= INPUT_TOKEN_FORCE;
+
+    if (pressure && this.onNotify) {
+      this.onNotify("context_pressure", {
+        message: `Contexto grande (~${effectiveTokens.toLocaleString()} tokens). ${
+          force ? "Comprimindo histórico agora…" : "Monitorando uso de contexto…"
+        }`,
+        inputTokens: this.lastInputTokens,
+        estimatedTokens: this.lastEstimatedTokens,
+        effectiveTokens,
+      });
     }
 
-    try {
-      this.compressedSummary = await this.summarizeHistory(messages);
-      this.turnCount = 0;
-    } catch {
-      // Se falhar, continua sem comprimir
+    const intervalHit = this.turnCount % COMPRESSION_INTERVAL === 0;
+    const messageOverflow = messages.length >= MAX_CONTEXT_MESSAGES * 2;
+    const shouldSummarize = force || intervalHit || messageOverflow;
+
+    if (shouldSummarize) {
+      try {
+        const prev = this.compressedSummary;
+        this.compressedSummary = await this.summarizeHistory(messages);
+        this.turnCount = 0;
+
+        if (this.onNotify && (force || this.compressedSummary !== prev)) {
+          this.onNotify("context_compress", {
+            message: force
+              ? `Histórico resumido após ${effectiveTokens.toLocaleString()} tokens de entrada`
+              : "Histórico resumido para economizar contexto",
+            reason: force ? "input_tokens" : intervalHit ? "interval" : "message_count",
+            inputTokens: this.lastInputTokens,
+            estimatedTokens: this.lastEstimatedTokens,
+          });
+        }
+      } catch {
+        // Se falhar, continua sem comprimir
+      }
     }
 
     return this.buildPromptMessages(messages);
@@ -40,7 +93,7 @@ export class CompressionManager {
     const relevant = messages
       .filter(m => m.content && (m.role === "user" || m.role === "assistant"))
       .slice(-20)
-      .map(m => `[${m.role}]: ${m.content!.slice(0, 300)}`)
+      .map(m => `[${m.role}]: ${String(m.content).slice(0, 300)}`)
       .join("\n");
 
     const resp = await this.summarizing.chat({
@@ -55,6 +108,7 @@ export class CompressionManager {
       temperature: 0.1,
     });
 
+    this.recordUsage(resp.usage);
     return resp.content ?? this.compressedSummary;
   }
 
@@ -111,13 +165,11 @@ export async function parallelExecute(
 
   const results: Array<{ call: ToolCall; result: { ok: boolean; output: unknown; error?: string } }> = [];
 
-  // Executa todas as reads em paralelo
   if (reads.length > 0) {
     const readResults = await Promise.all(reads.map(c => executor(c).then(r => ({ call: c, result: r }))));
     results.push(...readResults);
   }
 
-  // Executa writes sequencialmente (dependência de ordem)
   for (const c of writes) {
     const r = await executor(c);
     results.push({ call: c, result: r });

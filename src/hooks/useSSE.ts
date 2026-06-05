@@ -357,6 +357,14 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
         timeline: [...prev.timeline, event],
       };
 
+    case "context_pressure":
+    case "context_compress":
+      return {
+        ...prev,
+        statusHint: (data.message as string) ?? prev.statusHint,
+        timeline: [...prev.timeline, event],
+      };
+
     case "rate_limit":
       return {
         ...prev,

@@ -120,7 +120,7 @@ Cada linha: **ID Lovable** · **ID auditoria** · status · observação · inte
 | 10 | **C23**, **+17** | ✅ | `/history` com `agent_runs` + `AuditLog`; filtro por execução | `agent-runs.ts`, `history.tsx`, `AuditLog.tsx` | `agent_runs.meta` |
 | 11 | **+3**, **E36–E37** | ✅ | Tool `deploy_publish` invoca `deploy-publish-core` | `tools/deploy.ts`, `_shared/deploy-publish-core.ts` | `agent-run`, `deploy-publish` |
 | 12 | **C16** | ✅ | Backoff exponencial 429/529/503 em `ResilientLLM` | `llm-retry.ts`, `robin-pool.ts`, `llm-errors.ts` | `providers.ts` (re-export) |
-| 13 | **C17** | ⏳ | Context estoura silencioso | `usage.input_tokens` → `CompressionManager` | `compression.ts`, adapters LLM |
+| 13 | **C17** | ✅ | `usage.input_tokens` dispara compressão + SSE `context_pressure` | `token-usage.ts`, `compression.ts`, adapters | `loop.ts`, `useSSE.ts` |
 | 14 | **C18** | ⏳ | `shell_exec` livre | Allowlist em `tools/shell.ts` | `agent-run/tools/shell.ts` |
 | 15 | **C20** | ⏳ | Observer não roda build real | `tsc` + `vite build` no E2B | `observer.ts`, sandbox |
 | 16 | **C21**, **+21** | ⏳ | Skills só texto; tools fake | shadcn / supabase-migration / tailwind-v4 | `skills.ts` |

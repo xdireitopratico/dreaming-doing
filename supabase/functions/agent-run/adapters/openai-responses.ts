@@ -1,5 +1,6 @@
 // OpenAI Responses API — obrigatório para GPT-5.x com tools (Chat Completions → 404).
 import type { ChatMessage, ChatParams, ChatResponse, ToolCall } from "../types.ts";
+import { normalizeChatUsage } from "../token-usage.ts";
 import { formatLlmApiError } from "./api-error.ts";
 
 function normalizeBaseUrl(baseUrl: string): string {
@@ -134,16 +135,7 @@ function parseResponsesOutput(data: Record<string, unknown>): ChatResponse {
     }
   }
 
-  const usageRaw = data.usage;
-  let usage: ChatResponse["usage"];
-  if (usageRaw && typeof usageRaw === "object") {
-    const u = usageRaw as Record<string, number>;
-    usage = {
-      prompt_tokens: u.input_tokens ?? u.prompt_tokens ?? 0,
-      completion_tokens: u.output_tokens ?? u.completion_tokens ?? 0,
-      total_tokens: u.total_tokens ?? 0,
-    };
-  }
+  const usage = normalizeChatUsage(data.usage);
 
   return {
     role: "assistant",

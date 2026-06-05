@@ -79,7 +79,10 @@ export class AgentLoop {
     this.router = new ModelRouter(injectedKeys, routerOverrides);
     this.observer = new RuntimeObserver(reg);
     this.skills = new SkillRegistry();
-    this.compression = new CompressionManager(this.router.getCheapProvider());
+    this.compression = new CompressionManager(
+      this.router.getCheapProvider(),
+      (type, data) => this.emit(type, data),
+    );
   }
 
   async run(): Promise<{
@@ -166,6 +169,8 @@ export class AgentLoop {
         return { ok: false, error: message, steps: step, resumable: true, toolsUsed: [...toolsUsed] };
       }
       if (!response) break;
+
+      this.compression.recordUsage(response.usage);
 
       const assistantText = (response.content ?? "").trim();
       if (assistantText) {

@@ -2,6 +2,12 @@
 // Suporte: Claude, OpenAI, Gemini, OpenRouter, Ollama, Custom (OpenAI-compatible)
 import type { LLMProvider, ChatParams, ChatResponse, ChatMessage, ToolCall } from "../types.ts";
 import { formatLlmApiError } from "./api-error.ts";
+import { normalizeChatUsage } from "../token-usage.ts";
+import type { ChatResponse } from "../types.ts";
+
+function mapUsage(raw: unknown): ChatResponse["usage"] | undefined {
+  return normalizeChatUsage(raw);
+}
 import {
   chatOpenAiResponses,
   isOfficialOpenAiBaseUrl,
@@ -99,7 +105,7 @@ class ClaudeAdapter implements LLMProvider {
       role: "assistant",
       content: text || null,
       tool_calls: toolCalls,
-      usage: data.usage,
+      usage: mapUsage(data.usage),
     };
   }
 }
@@ -187,7 +193,7 @@ class OpenAIAdapter implements LLMProvider {
       role: "assistant",
       content: msg?.content ?? null,
       tool_calls: (msg?.tool_calls ?? []).map(toToolCall),
-      usage: data.usage,
+      usage: mapUsage(data.usage),
     };
   }
 }
@@ -279,7 +285,7 @@ class GeminiAdapter implements LLMProvider {
       role: "assistant",
       content: text || null,
       tool_calls: toolCalls,
-      usage: data.usageMetadata,
+      usage: mapUsage(data.usageMetadata),
     };
   }
 }
@@ -340,7 +346,7 @@ class OpenRouterAdapter implements LLMProvider {
       role: "assistant",
       content: msg?.content ?? null,
       tool_calls: (msg?.tool_calls ?? []).map(toToolCall),
-      usage: data.usage,
+      usage: mapUsage(data.usage),
     };
   }
 }
