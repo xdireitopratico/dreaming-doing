@@ -14,12 +14,22 @@ import {
   loadForgeTrialRobinPool,
   type AgentPreferencesPayload,
 } from "./connector-keys.ts";
-import { pickCheap, pickMain, type ProviderConfig } from "./providers.ts";
-import { defaultRobinModel, resolveFixedFromKeys, resolveModelFromPreferences } from "../_shared/model-presets.ts";
+import { pickMain, type ProviderConfig } from "./providers.ts";
+import {
+  defaultRobinModel,
+  PLATFORM_ROBIN_TASTE_PRESET_ID,
+  resolveModelFromPreferences,
+} from "../_shared/model-presets.ts";
 import { buildStackContext, stackPromptAddon } from "../_shared/stack-context.ts";
 import { buildChatHistory } from "./memory.ts";
 import { RobinKeyPool, ResilientLLM } from "./robin-pool.ts";
 import { getPlatformSecret, loadPlatformSecretsMap } from "../_shared/platform-secrets.ts";
+import { loadUserE2bApiKey, E2B_SETUP_USER_MESSAGE } from "../_shared/user-e2b.ts";
+import {
+  buildSessionExtensionsPrompt,
+  normalizeIdList,
+} from "../_shared/session-extensions.ts";
+import { loadTasteNvidiaConfig, runTasteChat } from "./taste-session.ts";
 
 const PLATFORM_SECRET_NAMES = [
   "E2B_API_KEY",
@@ -46,6 +56,23 @@ function isRobinMode(p?: AgentPreferencesPayload): boolean {
   return p?.mode === "robin" || p?.mode === "rob";
 }
 
+function validateAgentPreferences(p?: AgentPreferencesPayload): string | null {
+  if (!p?.mode) {
+    return "Setup obrigatório: configure modo e modelo em Modelos (/models).";
+  }
+  if (p.mode === "auto") return null;
+  if (p.mode === "fixed" && !p.fixedPresetId?.trim()) {
+    return "Setup: selecione um modelo fixo em API.";
+  }
+  if (isRobinMode(p) && !p.robinPoolModelId?.trim()) {
+    return "Setup: selecione o modelo do pool ROBIN em API.";
+  }
+  if (isRobinMode(p) && !p.poolProvider) {
+    return "Setup: selecione o provedor do pool ROBIN (Groq ou NVIDIA).";
+  }
+  return null;
+}
+
 function robinProviderConfig(
   poolProvider: "nvidia" | "groq",
   keys: string[],
@@ -53,7 +80,7 @@ function robinProviderConfig(
 ): ProviderConfig {
   if (keys.length === 0) {
     throw new Error(
-      `Modo ROBIN ativo, mas nenhuma chave ${poolProvider.toUpperCase()} no pool. Adicione chaves em /api-keys → Adicionar ao pool.`,
+      `Modo ROBIN ativo, mas nenhuma chave ${poolProvider.toUpperCase()} no pool. Adicione chaves em /api → Adicionar ao pool.`,
     );
   }
   const wire = defaultRobinModel(poolProvider, modelPresetId);
@@ -76,6 +103,10 @@ Deno.serve(async (req) => {
     projectId = body.projectId;
     const conversationId = body.conversationId;
     const preferences = body.preferences as AgentPreferencesPayload | undefined;
+    const sessionKindRaw = body.sessionKind as string | undefined;
+    const enabledSkillIds = normalizeIdList(body.enabledSkillIds);
+    const enabledMcpIds = normalizeIdList(body.enabledMcpIds);
+    const sessionExt = buildSessionExtensionsPrompt(enabledSkillIds, enabledMcpIds);
 
     if (!projectId || !conversationId) return json({ error: "projectId e conversationId obrigatórios" }, 400);
 
@@ -93,14 +124,18 @@ Deno.serve(async (req) => {
 
     const { data: profile } = await supabase
       .from("profiles")
-      .select("trial_messages_remaining, integration_prefs")
+      .select("trial_messages_remaining, taste_chat_remaining, taste_start_remaining, integration_prefs")
       .eq("id", userData.user.id)
       .maybeSingle();
 
-    const trialRemaining =
-      typeof profile?.trial_messages_remaining === "number"
-        ? profile.trial_messages_remaining
-        : 8;
+    const tasteChatRemaining =
+      typeof profile?.taste_chat_remaining === "number"
+        ? profile.taste_chat_remaining
+        : typeof profile?.trial_messages_remaining === "number"
+          ? profile.trial_messages_remaining
+          : 50;
+    const tasteStartRemaining =
+      typeof profile?.taste_start_remaining === "number" ? profile.taste_start_remaining : 1;
 
     if (runningLocks.has(projectId)) {
       return json({ error: "Agente já está executando neste projeto. Aguarde a conclusão." }, 409);
@@ -117,57 +152,142 @@ Deno.serve(async (req) => {
     const messages = buildChatHistory(history ?? []);
 
     const platformSecrets = await loadPlatformSecretsMap(supabase, PLATFORM_SECRET_NAMES);
-    const mergeKeys = (user: Record<string, string>) => ({ ...platformSecrets, ...user });
 
-    const userWantsRobin = isRobinMode(preferences);
-    const poolProvider = preferences?.poolProvider ?? "groq";
-    let userOnlyKeys: Record<string, string> = {};
-    let hasUserLlmKey = false;
-
-    if (userWantsRobin) {
-      const poolKeys = await loadConnectorPools(supabase, userData.user.id, poolProvider);
-      hasUserLlmKey = poolKeys.length > 0;
-    } else {
-      userOnlyKeys = await loadConnectorKeys(supabase, userData.user.id, preferences);
-      hasUserLlmKey = Object.keys(userOnlyKeys).some((k) =>
+    const userOnlyKeys = await loadConnectorKeys(supabase, userData.user.id, preferences);
+    const groqPool = await loadConnectorPools(supabase, userData.user.id, "groq");
+    const nvidiaPool = await loadConnectorPools(supabase, userData.user.id, "nvidia");
+    const hasUserLlmKey =
+      groqPool.length > 0 ||
+      nvidiaPool.length > 0 ||
+      Object.keys(userOnlyKeys).some((k) =>
         ["ANTHROPIC_API_KEY", "GROQ_API_KEY", "XAI_API_KEY", "OPENAI_API_KEY", "NVIDIA_API_KEY", "GEMINI_API_KEY", "OPENROUTER_API_KEY"].includes(k)
       );
-    }
 
-    const useTrialRobin = !hasUserLlmKey && trialRemaining > 0;
+    type SessionKind = "taste_chat" | "taste_start" | "byok";
+    let sessionKind: SessionKind = hasUserLlmKey ? "byok" : "taste_chat";
+    if (!hasUserLlmKey && sessionKindRaw === "taste_start") sessionKind = "taste_start";
+    if (!hasUserLlmKey && sessionKindRaw === "taste_chat") sessionKind = "taste_chat";
 
-    if (!hasUserLlmKey && !useTrialRobin) {
+    if (sessionKind === "taste_chat" && tasteChatRemaining <= 0) {
       runningLocks.delete(projectId);
       return json({
-        error:
-          "Limite do tira-gosto atingido. Adicione suas chaves em API Keys para continuar.",
+        error: "Limite Taste Chat (50) atingido. Configure suas API em /api para continuar.",
       }, 402);
+    }
+    if (sessionKind === "taste_start" && tasteStartRemaining <= 0) {
+      runningLocks.delete(projectId);
+      return json({
+        error: "Start Project já utilizado. Configure API para construir sem limites.",
+      }, 402);
+    }
+    if (!hasUserLlmKey && sessionKind === "byok") {
+      runningLocks.delete(projectId);
+      return json({
+        error: "Configure suas API em /api ou use o Taste Chat / Start Project.",
+      }, 402);
+    }
+
+    if (sessionKind === "byok") {
+      const prefError = validateAgentPreferences(preferences);
+      if (prefError) {
+        runningLocks.delete(projectId);
+        return json({ error: prefError }, 400);
+      }
+    }
+
+    const acceptSSE = (req.headers.get("Accept") ?? "").includes("text/event-stream");
+    const querySSE = new URL(req.url).searchParams.has("sse");
+    const useSSE = acceptSSE || querySSE;
+
+    // ─── Taste Chat: concierge NVIDIA, sem agent loop ───
+    if (sessionKind === "taste_chat") {
+      const cleanup = () => runningLocks.delete(projectId!);
+      try {
+        const tasteCfg = await loadTasteNvidiaConfig(supabase, platformSecrets.NVIDIA_API_KEY);
+        const run = async (emit: (type: string, data: Record<string, unknown>) => void) => {
+          const result = await runTasteChat({
+            supabase,
+            userId: userData.user.id,
+            conversationId,
+            cfg: tasteCfg,
+            emit,
+            sessionAddon: sessionExt.addon,
+            enabledSkillIds,
+            enabledMcpIds,
+            activeSkills: sessionExt.skillNames,
+            activeMcps: sessionExt.mcpNames,
+          });
+          await supabase
+            .from("profiles")
+            .update({ taste_chat_remaining: Math.max(0, tasteChatRemaining - 1) })
+            .eq("id", userData.user.id);
+          return result;
+        };
+
+        if (!useSSE) {
+          const r = await run(() => {});
+          cleanup();
+          return json(r);
+        }
+
+        const stream = new ReadableStream({
+          start(controller) {
+            const emit = (type: string, data: Record<string, unknown>) => {
+              try {
+                controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify({ type, ...data })}\n\n`));
+              } catch { /* closed */ }
+            };
+            run(emit)
+              .then((result) => {
+                cleanup();
+                emit("finish", { ok: result.ok, summary: result.content, taste: true, sessionKind: "taste_chat" });
+                try { controller.close(); } catch { /* */ }
+              })
+              .catch((err) => {
+                cleanup();
+                emit("error", { error: (err as Error)?.message });
+                emit("finish", { ok: false, error: (err as Error)?.message });
+                try { controller.close(); } catch { /* */ }
+              });
+          },
+        });
+        return new Response(stream, {
+          headers: {
+            ...corsHeaders,
+            "Content-Type": "text/event-stream",
+            "Cache-Control": "no-cache",
+            Connection: "keep-alive",
+          },
+        });
+      } catch (err: unknown) {
+        cleanup();
+        return json({ error: (err as Error)?.message ?? "Taste indisponível" }, 500);
+      }
     }
 
     let robinPool: RobinKeyPool | null = null;
     let connectorKeys: Record<string, string> = {};
     let mainCfg: ProviderConfig;
-    let effectiveRobin = userWantsRobin;
+    let effectiveRobin = false;
+    let tasteStart = false;
+    const userWantsRobin = isRobinMode(preferences);
+    const poolProvider = preferences?.poolProvider ?? "groq";
 
     try {
-      if (useTrialRobin) {
-        const poolKeys = await loadForgeTrialRobinPool(
-          supabase,
-          platformSecrets.NVIDIA_API_KEY,
-        );
+      if (sessionKind === "taste_start") {
+        tasteStart = true;
+        const poolKeys = await loadForgeTrialRobinPool(supabase, platformSecrets.NVIDIA_API_KEY);
         if (poolKeys.length === 0) {
-          throw new Error(
-            "Tira-gosto: configure o pool NVIDIA ROBIN no perfil do administrador (API Keys) ou NVIDIA_API_KEY global em Ajustes.",
-          );
+          throw new Error("Start Project: pool NVIDIA Taste não configurado no admin.");
         }
-        effectiveRobin = true;
         robinPool = new RobinKeyPool(poolKeys);
-        mainCfg = robinProviderConfig("nvidia", poolKeys, "nvidia-llama70");
-        mainCfg.label = `Tira-gosto · ROBIN · ${mainCfg.label.replace(/^ROBIN · /, "")} (FORGE)`;
+        mainCfg = robinProviderConfig("nvidia", poolKeys, PLATFORM_ROBIN_TASTE_PRESET_ID);
+        mainCfg.label = `Start Project · Taste · ${mainCfg.label.replace(/^ROBIN · /, "")}`;
         connectorKeys = { NVIDIA_API_KEY: poolKeys[0]! };
+        effectiveRobin = true;
         await supabase
           .from("profiles")
-          .update({ trial_messages_remaining: trialRemaining - 1 })
+          .update({ taste_start_remaining: Math.max(0, tasteStartRemaining - 1) })
           .eq("id", userData.user.id);
       } else if (userWantsRobin) {
         const poolKeys = await loadConnectorPools(supabase, userData.user.id, poolProvider);
@@ -176,23 +296,26 @@ Deno.serve(async (req) => {
         connectorKeys = poolProvider === "nvidia"
           ? { NVIDIA_API_KEY: poolKeys[0]! }
           : { GROQ_API_KEY: poolKeys[0]! };
+        effectiveRobin = true;
       } else {
-        connectorKeys = mergeKeys(userOnlyKeys);
-        if (preferences?.mode === "fixed" && preferences.fixedPresetId) {
-          const resolved = resolveModelFromPreferences(preferences, connectorKeys);
-          if (resolved) {
-            mainCfg = {
-              provider: resolved.provider,
-              apiKey: resolved.apiKey,
-              model: resolved.model,
-              baseUrl: resolved.baseUrl,
-              label: `${resolved.label} (fixo)`,
-            };
-          } else {
-            mainCfg = pickMain(connectorKeys);
-          }
+        connectorKeys = { ...userOnlyKeys };
+        if (preferences?.mode === "auto") {
+          mainCfg = pickMain(userOnlyKeys);
+          mainCfg.label = `${mainCfg.label} (router · suas chaves)`;
         } else {
-          mainCfg = pickMain(connectorKeys);
+          const resolved = resolveModelFromPreferences(preferences, userOnlyKeys);
+          if (!resolved) {
+            throw new Error(
+              "Chave ausente para o modelo escolhido. Adicione a API Key do provedor em /api.",
+            );
+          }
+          mainCfg = {
+            provider: resolved.provider,
+            apiKey: resolved.apiKey,
+            model: resolved.model,
+            baseUrl: resolved.baseUrl,
+            label: `${resolved.label} (fixo)`,
+          };
         }
       }
     } catch (err: unknown) {
@@ -201,7 +324,11 @@ Deno.serve(async (req) => {
     }
 
     const reg = new ToolRegistry();
-    const e2bKey = await getPlatformSecret(supabase, "E2B_API_KEY");
+    const e2bKey = await loadUserE2bApiKey(supabase, userData.user.id);
+    if (!e2bKey?.trim()) {
+      runningLocks.delete(projectId);
+      return json({ error: E2B_SETUP_USER_MESSAGE, code: "e2b_not_configured" }, 403);
+    }
     const sandbox = createSandboxProvider(e2bKey, undefined, supabase, projectId);
     const projectTemplate = (project as { template?: string }).template ?? "vite-react";
     const projectMeta = ((project as { meta?: Record<string, unknown> }).meta ?? {}) as Record<string, unknown>;
@@ -216,10 +343,6 @@ Deno.serve(async (req) => {
     registerFsTools(reg, { supabase, projectId });
     registerShellTool(reg, { sandbox, projectId, supabase });
 
-    const acceptSSE = (req.headers.get("Accept") ?? "").includes("text/event-stream");
-    const querySSE = new URL(req.url).searchParams.has("sse");
-    const useSSE = acceptSSE || querySSE;
-
     const buildState = (): AgentState => ({
       projectId, conversationId, userId: userData.user.id,
       messages: [...messages],
@@ -232,10 +355,7 @@ Deno.serve(async (req) => {
     const makeLoop = (onEvent: (type: string, data: unknown) => void) => {
       const streamEmit = (type: string, data: Record<string, unknown>) => onEvent(type, data);
       const resilientMain = new ResilientLLM(mainCfg, robinPool, streamEmit);
-      const cheapCfg = effectiveRobin ? mainCfg : pickCheap(pickMain(connectorKeys), connectorKeys);
-      const resilientCheap = effectiveRobin
-        ? resilientMain
-        : new ResilientLLM(cheapCfg, null, streamEmit);
+      const resilientCheap = resilientMain;
 
       return new AgentLoop(
         reg,
@@ -248,6 +368,17 @@ Deno.serve(async (req) => {
         effectiveRobin,
         projectTemplate,
         stackAddon,
+        tasteStart
+          ? {
+            maxSteps: 14,
+            tasteStart: true,
+            sessionAddon: sessionExt.addon,
+            userSkillNames: sessionExt.skillNames,
+          }
+          : {
+            sessionAddon: sessionExt.addon,
+            userSkillNames: sessionExt.skillNames,
+          },
       );
     };
 
@@ -272,8 +403,13 @@ Deno.serve(async (req) => {
           conversationId,
           provider: mainCfg.label,
           robin: effectiveRobin,
-          trial: useTrialRobin,
+          taste: tasteStart,
+          sessionKind: tasteStart ? "taste_start" : "byok",
           memoryMessages: messages.length,
+          enabledSkillIds,
+          enabledMcpIds,
+          activeSkills: sessionExt.skillNames,
+          activeMcps: sessionExt.mcpNames,
         });
 
         const loop = makeLoop((type, data) => emit({ type, data }));

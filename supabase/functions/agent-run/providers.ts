@@ -53,7 +53,7 @@ export function pickMain(injected?: Record<string, string>): ProviderConfig {
   if (LOVABLE) return { provider: "openai", apiKey: LOVABLE, model: "google/gemini-2.5-flash", baseUrl: LOVABLE_GATEWAY, label: "Lovable AI · Gemini 2.5 Flash" };
   if (OPENAI) return { provider: "openai", apiKey: OPENAI, model: "gpt-4o", label: "OpenAI GPT-4o" };
   throw new Error(
-    "Nenhum modelo de IA configurado. Adicione uma chave em API Keys (/api-keys) ou defina ANTHROPIC_API_KEY / GROQ_API_KEY nas Secrets do Supabase (Edge Functions).",
+    "Nenhum modelo de IA configurado. Adicione chaves em /api e preset em /models.",
   );
 }
 

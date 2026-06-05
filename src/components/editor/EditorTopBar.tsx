@@ -186,11 +186,9 @@ export function EditorTopBar({
       <ConnectorGuideModal
         connector={modal}
         status={modal ? status[modal] : null}
-        mode={modal ? modes[modal] : "forge"}
         variant="editor"
         onClose={closeModal}
         onSave={saveConnector}
-        onModeChange={modal ? (m) => setMode(modal, m) : () => {}}
       />
     </>
   );

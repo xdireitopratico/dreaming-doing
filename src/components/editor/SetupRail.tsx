@@ -1,15 +1,37 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { CheckCircle2, ChevronDown, ChevronRight, Circle, Key } from "lucide-react";
 import { useConnectors } from "@/hooks/useConnectors";
 import { CONNECTORS_PAGE_LIST, isConnectorActive } from "@/lib/connectors/registry";
 import type { ConnectorId } from "@/lib/connectors/integration-prefs";
 import { ConnectorGuideModal } from "@/components/connectors/ConnectorGuideModal";
+import { OPEN_CONNECTOR_EVENT } from "@/hooks/useTasteUiActions";
 
-export function SetupRail() {
+type SetupRailProps = {
+  checklist?: React.ReactNode;
+};
+
+export function SetupRail({ checklist }: SetupRailProps) {
   const [open, setOpen] = useState(false);
-  const { status, modes, setMode, modal, openConnector, closeModal, saveConnector, trialMessagesRemaining } =
-    useConnectors();
+  const {
+    status,
+    modes,
+    setMode,
+    modal,
+    openConnector,
+    closeModal,
+    saveConnector,
+    tasteChatRemaining,
+  } = useConnectors();
+
+  useEffect(() => {
+    const onOpen = (ev: Event) => {
+      const { connector } = (ev as CustomEvent<{ connector: ConnectorId }>).detail;
+      if (connector) openConnector(connector);
+    };
+    window.addEventListener(OPEN_CONNECTOR_EVENT, onOpen);
+    return () => window.removeEventListener(OPEN_CONNECTOR_EVENT, onOpen);
+  }, [openConnector]);
 
   const items = CONNECTORS_PAGE_LIST.map((entry) => ({
     id: entry.id as ConnectorId,
@@ -31,9 +53,9 @@ export function SetupRail() {
             Setup · {doneCount}/{items.length}
           </span>
           <span className="flex items-center gap-2">
-            {trialMessagesRemaining > 0 && (
+            {tasteChatRemaining > 0 && (
               <span className="font-mono text-[8px] text-[var(--forge-ghost)]">
-                trial {trialMessagesRemaining}
+                taste {tasteChatRemaining}
               </span>
             )}
             {open ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
@@ -42,7 +64,8 @@ export function SetupRail() {
 
         {open && (
           <div className="px-3 pb-3">
-            <ul className="space-y-1">
+            {checklist}
+            <ul className="space-y-1 mt-2">
               {items.map((item) => (
                 <li key={item.id}>
                   <button
@@ -61,11 +84,11 @@ export function SetupRail() {
               ))}
               <li>
                 <Link
-                  to="/api-keys"
+                  to="/api"
                   className="w-full flex items-center gap-2 rounded-md px-2 py-1.5 hover:bg-[var(--forge-surface-3)] transition-colors"
                 >
                   <Key className="size-3.5 text-[var(--forge-primary)] shrink-0" />
-                  <span className="flex-1 font-mono text-[10px] text-[var(--forge-silver)]">API Keys</span>
+                  <span className="flex-1 font-mono text-[10px] text-[var(--forge-silver)]">API</span>
                 </Link>
               </li>
             </ul>
@@ -82,11 +105,9 @@ export function SetupRail() {
       <ConnectorGuideModal
         connector={modal}
         status={modal ? status[modal] : null}
-        mode={modal ? modes[modal] : "forge"}
         variant="editor"
         onClose={closeModal}
         onSave={saveConnector}
-        onModeChange={modal ? (m) => setMode(modal, m) : () => {}}
       />
     </>
   );

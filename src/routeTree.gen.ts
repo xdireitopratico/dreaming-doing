@@ -9,18 +9,37 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as SkillsRouteImport } from './routes/skills'
 import { Route as SettingsRouteImport } from './routes/settings'
+import { Route as ModelsRouteImport } from './routes/models'
+import { Route as McpRouteImport } from './routes/mcp'
 import { Route as ConnectorsRouteImport } from './routes/connectors'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as ApiKeysRouteImport } from './routes/api-keys'
+import { Route as ApiRouteImport } from './routes/api'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ProjectsIndexRouteImport } from './routes/projects/index'
 import { Route as ProjectsProjectIdIndexRouteImport } from './routes/projects/$projectId/index'
 import { Route as ProjectsProjectIdHistoryRouteImport } from './routes/projects/$projectId/history'
 
+const SkillsRoute = SkillsRouteImport.update({
+  id: '/skills',
+  path: '/skills',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SettingsRoute = SettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ModelsRoute = ModelsRouteImport.update({
+  id: '/models',
+  path: '/models',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const McpRoute = McpRouteImport.update({
+  id: '/mcp',
+  path: '/mcp',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ConnectorsRoute = ConnectorsRouteImport.update({
@@ -36,6 +55,11 @@ const AuthRoute = AuthRouteImport.update({
 const ApiKeysRoute = ApiKeysRouteImport.update({
   id: '/api-keys',
   path: '/api-keys',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiRoute = ApiRouteImport.update({
+  id: '/api',
+  path: '/api',
   getParentRoute: () => rootRouteImport,
 } as any)
 const IndexRoute = IndexRouteImport.update({
@@ -62,20 +86,28 @@ const ProjectsProjectIdHistoryRoute =
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/api': typeof ApiRoute
   '/api-keys': typeof ApiKeysRoute
   '/auth': typeof AuthRoute
   '/connectors': typeof ConnectorsRoute
+  '/mcp': typeof McpRoute
+  '/models': typeof ModelsRoute
   '/settings': typeof SettingsRoute
+  '/skills': typeof SkillsRoute
   '/projects/': typeof ProjectsIndexRoute
   '/projects/$projectId/history': typeof ProjectsProjectIdHistoryRoute
   '/projects/$projectId/': typeof ProjectsProjectIdIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/api': typeof ApiRoute
   '/api-keys': typeof ApiKeysRoute
   '/auth': typeof AuthRoute
   '/connectors': typeof ConnectorsRoute
+  '/mcp': typeof McpRoute
+  '/models': typeof ModelsRoute
   '/settings': typeof SettingsRoute
+  '/skills': typeof SkillsRoute
   '/projects': typeof ProjectsIndexRoute
   '/projects/$projectId/history': typeof ProjectsProjectIdHistoryRoute
   '/projects/$projectId': typeof ProjectsProjectIdIndexRoute
@@ -83,10 +115,14 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/api': typeof ApiRoute
   '/api-keys': typeof ApiKeysRoute
   '/auth': typeof AuthRoute
   '/connectors': typeof ConnectorsRoute
+  '/mcp': typeof McpRoute
+  '/models': typeof ModelsRoute
   '/settings': typeof SettingsRoute
+  '/skills': typeof SkillsRoute
   '/projects/': typeof ProjectsIndexRoute
   '/projects/$projectId/history': typeof ProjectsProjectIdHistoryRoute
   '/projects/$projectId/': typeof ProjectsProjectIdIndexRoute
@@ -95,30 +131,42 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/api'
     | '/api-keys'
     | '/auth'
     | '/connectors'
+    | '/mcp'
+    | '/models'
     | '/settings'
+    | '/skills'
     | '/projects/'
     | '/projects/$projectId/history'
     | '/projects/$projectId/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/api'
     | '/api-keys'
     | '/auth'
     | '/connectors'
+    | '/mcp'
+    | '/models'
     | '/settings'
+    | '/skills'
     | '/projects'
     | '/projects/$projectId/history'
     | '/projects/$projectId'
   id:
     | '__root__'
     | '/'
+    | '/api'
     | '/api-keys'
     | '/auth'
     | '/connectors'
+    | '/mcp'
+    | '/models'
     | '/settings'
+    | '/skills'
     | '/projects/'
     | '/projects/$projectId/history'
     | '/projects/$projectId/'
@@ -126,10 +174,14 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  ApiRoute: typeof ApiRoute
   ApiKeysRoute: typeof ApiKeysRoute
   AuthRoute: typeof AuthRoute
   ConnectorsRoute: typeof ConnectorsRoute
+  McpRoute: typeof McpRoute
+  ModelsRoute: typeof ModelsRoute
   SettingsRoute: typeof SettingsRoute
+  SkillsRoute: typeof SkillsRoute
   ProjectsIndexRoute: typeof ProjectsIndexRoute
   ProjectsProjectIdHistoryRoute: typeof ProjectsProjectIdHistoryRoute
   ProjectsProjectIdIndexRoute: typeof ProjectsProjectIdIndexRoute
@@ -137,11 +189,32 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/skills': {
+      id: '/skills'
+      path: '/skills'
+      fullPath: '/skills'
+      preLoaderRoute: typeof SkillsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/settings': {
       id: '/settings'
       path: '/settings'
       fullPath: '/settings'
       preLoaderRoute: typeof SettingsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/models': {
+      id: '/models'
+      path: '/models'
+      fullPath: '/models'
+      preLoaderRoute: typeof ModelsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/mcp': {
+      id: '/mcp'
+      path: '/mcp'
+      fullPath: '/mcp'
+      preLoaderRoute: typeof McpRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/connectors': {
@@ -163,6 +236,13 @@ declare module '@tanstack/react-router' {
       path: '/api-keys'
       fullPath: '/api-keys'
       preLoaderRoute: typeof ApiKeysRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api': {
+      id: '/api'
+      path: '/api'
+      fullPath: '/api'
+      preLoaderRoute: typeof ApiRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/': {
@@ -198,10 +278,14 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  ApiRoute: ApiRoute,
   ApiKeysRoute: ApiKeysRoute,
   AuthRoute: AuthRoute,
   ConnectorsRoute: ConnectorsRoute,
+  McpRoute: McpRoute,
+  ModelsRoute: ModelsRoute,
   SettingsRoute: SettingsRoute,
+  SkillsRoute: SkillsRoute,
   ProjectsIndexRoute: ProjectsIndexRoute,
   ProjectsProjectIdHistoryRoute: ProjectsProjectIdHistoryRoute,
   ProjectsProjectIdIndexRoute: ProjectsProjectIdIndexRoute,

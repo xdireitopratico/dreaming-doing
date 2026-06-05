@@ -69,7 +69,7 @@ export class ResilientLLM implements LLMProvider {
 
     for (let attempt = 0; attempt < attempts; attempt++) {
       const apiKey = this.pool?.nextKey() ?? this.cfg.apiKey;
-      if (!apiKey) throw new Error("Nenhuma chave API no pool ROBIN. Adicione chaves em /api-keys.");
+      if (!apiKey) throw new Error("Nenhuma chave API no pool ROBIN. Adicione chaves em /api.");
 
       this.requestCount++;
       const keyHint = this.pool && this.pool.size > 1

@@ -1,4 +1,4 @@
-// Integrações de plataforma: GitHub, Supabase, Vercel, Cloudflare, E2B (separado de API Keys)
+// Integrações de plataforma: GitHub, Supabase, Vercel, Cloudflare, E2B (separado de API / Modelos)
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { motion } from "framer-motion";
 import { ArrowLeft, Plug, Shield, CheckCircle2, Key } from "lucide-react";
@@ -18,7 +18,7 @@ export const Route = createFileRoute("/connectors")({
 });
 
 function ConnectorsPage() {
-  const { status, modes, setMode, modal, openConnector, closeModal, saveConnector } = useConnectors();
+  const { status, modes, modal, openConnector, closeModal, saveConnector } = useConnectors();
 
   const activeCount = CONNECTORS_PAGE_LIST.filter((p) =>
     isConnectorActive(p.id, modes[p.id], status[p.id]),
@@ -54,9 +54,9 @@ function ConnectorsPage() {
           <span className="font-mono text-[10px]">{activeCount} integração(ões) operacional(is)</span>
         </div>
         <span className="text-[var(--border)]">|</span>
-        <Link to="/api-keys" className="flex items-center gap-1.5 font-mono text-[10px] text-[var(--primary)] hover:underline">
+        <Link to="/api" className="flex items-center gap-1.5 font-mono text-[10px] text-[var(--primary)] hover:underline">
           <Key className="size-3" />
-          Chaves de IA (API Keys) →
+          API (chaves de IA) →
         </Link>
       </div>
 
@@ -71,7 +71,7 @@ function ConnectorsPage() {
               id={p.id as ConnectorId}
               status={status[p.id as ConnectorId]}
               mode={modes[p.id as ConnectorId]}
-              onModeChange={(m) => setMode(p.id as ConnectorId, m)}
+              onModeChange={() => {}}
               onConfigure={() => openConnector(p.id as ConnectorId)}
             />
           ))}
@@ -90,19 +90,17 @@ function ConnectorsPage() {
             Tokens ficam cifrados no servidor — nunca no navegador.
           </span>
         </div>
-        <Link to="/api-keys" className="font-mono text-[9px] text-[var(--primary)] hover:underline">
-          Configurar modelos de IA →
+        <Link to="/models" className="font-mono text-[9px] text-[var(--primary)] hover:underline">
+          Modelos →
         </Link>
       </motion.footer>
 
       <ConnectorGuideModal
         connector={modal}
         status={modal ? status[modal] : null}
-        mode={modal ? modes[modal] : "forge"}
         variant="dashboard"
         onClose={closeModal}
         onSave={saveConnector}
-        onModeChange={modal ? (m) => setMode(modal, m) : () => {}}
       />
     </div>
   );

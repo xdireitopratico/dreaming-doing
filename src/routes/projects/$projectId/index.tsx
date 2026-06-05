@@ -18,8 +18,18 @@ import { CodeEditor, type Tab } from "@/components/editor/CodeEditor";
 import { FileTree } from "@/components/editor/FileTree";
 import { ChatInput, type ChatMessage } from "@/components/editor/ChatInput";
 import { SetupRail } from "@/components/editor/SetupRail";
+import { TasteSetupChecklist } from "@/components/editor/TasteSetupChecklist";
+import { TastePostStartBanner } from "@/components/editor/TastePostStartBanner";
 import { FORGE_WELCOME_MARKDOWN } from "@/lib/welcome-message";
 import { useConnectors } from "@/hooks/useConnectors";
+import { useTasteUiActions } from "@/hooks/useTasteUiActions";
+import {
+  isAgentPreferencesConfigured,
+  getAgentSetupBlockMessage,
+} from "@/lib/agent-setup";
+import { loadAgentPreferences } from "@/lib/agent-preferences";
+import type { ForgeSessionKind } from "@/lib/taste";
+import { canSendTasteChat, canStartTasteProject } from "@/lib/taste";
 import { AgentPanel } from "@/components/editor/AgentPanel";
 import { PreviewFrame } from "@/components/editor/PreviewFrame";
 
@@ -65,7 +75,15 @@ function EditorPage() {
   const { projectId } = useParams({ from: "/projects/$projectId/" });
   const navigate = useNavigate();
   const qc = useQueryClient();
-  const { trialMessagesRemaining } = useConnectors();
+  const { tasteChatRemaining, tasteStartRemaining, openConnector, status: connectorStatus } =
+    useConnectors();
+  const e2bConnected = connectorStatus.e2b.connected;
+  useTasteUiActions();
+  const tasteQuota = {
+    tasteChatRemaining,
+    tasteStartRemaining,
+    hasUserLlmKey: false,
+  };
 
   // ─── States ──────────────────────────────────────────────────────────
   const [showFileTree, setShowFileTree] = useState(false);
@@ -76,7 +94,7 @@ function EditorPage() {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [cheatsheetOpen, setCheatsheetOpen] = useState(false);
   const [logPanelOpen, setLogPanelOpen] = useState(false);
-  const [provider, setProvider] = useState("anthropic--claude-sonnet-4-6");
+  const [provider, setProvider] = useState("");
   const [pickMode, setPickMode] = useState(false);
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [composerMode, setComposerMode] = useState<AgentComposerMode>("build");
@@ -85,7 +103,6 @@ function EditorPage() {
   const [previewRoute, setPreviewRoute] = useState("/");
 
   // ─── Refs ────────────────────────────────────────────────────────────
-  const autoAgentStarted = useRef(false);
   const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null);
   const monacoRef = useRef<typeof import("monaco-editor") | null>(null);
   const previewIframeRef = useRef<HTMLIFrameElement | null>(null);
@@ -321,38 +338,61 @@ function EditorPage() {
     );
   }, []);
 
-  const runAgent = useCallback(() => {
-    if (!conversation || running) return;
-    setRunning(true);
-    setLogs((prev) => [
-      ...prev,
-      createLogEntry(
-        "info",
-        sse.progress.resumable ? "Retomando agente (memória do chat)" : "Agente FORGE iniciado",
-        "agent",
-      ),
-    ]);
-    if (!logPanelOpen) setLogPanelOpen(true);
-    void qc.invalidateQueries({ queryKey: ["messages", conversation.id] });
-    try {
-      void sse.connect(projectId, conversation.id);
-    } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : "Erro ao iniciar agente");
-      setRunning(false);
-    }
-  }, [conversation, projectId, running, sse, logPanelOpen, qc, sse.progress.resumable]);
+  const runAgent = useCallback(
+    (sessionKind?: ForgeSessionKind) => {
+      if (!conversation || running) return;
 
-  // Auto-start agent when project has user message but no assistant reply yet
+      const isTaste =
+        sessionKind === "taste_chat" ||
+        sessionKind === "taste_start" ||
+        (!sessionKind && canSendTasteChat(tasteQuota));
+
+      if (!isTaste) {
+        const prefs = loadAgentPreferences();
+        if (!isAgentPreferencesConfigured(prefs)) {
+          toast.error(getAgentSetupBlockMessage(prefs));
+          return;
+        }
+      } else if (sessionKind === "taste_start" && !canStartTasteProject(tasteQuota)) {
+        toast.error("Start Project já utilizado. Configure API para continuar.");
+        return;
+      } else if ((sessionKind === "taste_chat" || !sessionKind) && !canSendTasteChat(tasteQuota)) {
+        toast.error("Limite Taste Chat (50). Configure API em /api.");
+        return;
+      }
+
+      setRunning(true);
+      const label =
+        sessionKind === "taste_start"
+          ? "Start Project (Taste · NVIDIA)"
+          : sessionKind === "taste_chat" || isTaste
+            ? "Concierge Taste"
+            : sse.progress.resumable
+              ? "Retomando agente (memória do chat)"
+              : "Agente FORGE iniciado";
+      setLogs((prev) => [...prev, createLogEntry("info", label, "agent")]);
+      if (!logPanelOpen) setLogPanelOpen(true);
+      void qc.invalidateQueries({ queryKey: ["messages", conversation.id] });
+      try {
+        void sse.connect(
+          projectId,
+          conversation.id,
+          sessionKind ?? (canSendTasteChat(tasteQuota) ? "taste_chat" : undefined),
+        );
+      } catch (e: unknown) {
+        toast.error(e instanceof Error ? e.message : "Erro ao iniciar agente");
+        setRunning(false);
+      }
+    },
+    [conversation, projectId, running, sse, logPanelOpen, qc, sse.progress.resumable, tasteQuota],
+  );
+
   useEffect(() => {
-    if (!conversation || !messages || running || sse.connected) return;
-    if (autoAgentStarted.current) return;
-    const hasUser = messages.some((m) => m.role === "user");
-    const hasAssistant = messages.some((m) => m.role === "assistant");
-    if (hasUser && !hasAssistant) {
-      autoAgentStarted.current = true;
-      runAgent();
-    }
-  }, [conversation, messages, running, sse.connected, runAgent]);
+    if (!sse.progress.finished || !conversation) return;
+    setRunning(false);
+    void qc.invalidateQueries({ queryKey: ["messages", conversation.id] });
+    void qc.invalidateQueries({ queryKey: ["profile"] });
+  }, [sse.progress.finished, conversation, qc]);
 
   // Preview ao vivo: só após o agente (sandbox já existe) ou clique manual — nunca ao abrir o editor
   const agentFinished = sse.progress.finished;
@@ -376,11 +416,28 @@ function EditorPage() {
         })
         .then(({ error }) => {
           if (error) toast.error("Erro ao enviar mensagem");
-          else runAgent();
+          else runAgent("taste_chat");
         });
     },
     [conversation, runAgent, composerMode],
   );
+
+  const handleStartProject = useCallback(() => {
+    if (!conversation) return;
+    const seed =
+      "Start Project: apresente um plano curto (markdown) do que vai construir nesta sessão (~10–15 min), depois implemente uma primeira versão visual convincente no projeto. Ao final, diga que daqui pra frente é comigo configurando API.";
+    supabase
+      .from("messages")
+      .insert({
+        conversation_id: conversation.id,
+        role: "user",
+        parts: [{ type: "text", text: seed }],
+      })
+      .then(({ error }) => {
+        if (error) toast.error("Erro ao iniciar Start Project");
+        else runAgent("taste_start");
+      });
+  }, [conversation, runAgent]);
 
   const handleStop = useCallback(() => {
     sse.disconnect();
@@ -510,6 +567,7 @@ function EditorPage() {
               <div className="forge-chat-column flex min-h-0 flex-1 flex-col">
                 <AgentPanel running={running} progress={sse.progress} onResume={runAgent} />
                 <div className="min-h-0 flex-1 flex flex-col">
+                  <TastePostStartBanner />
                   <ChatInput
                     messages={chatMessages}
                     running={running}
@@ -521,10 +579,20 @@ function EditorPage() {
                     externalPrompt={promptDraft}
                     onExternalPromptConsumed={() => setPromptDraft(null)}
                     welcomeMarkdown={chatMessages.length === 0 ? FORGE_WELCOME_MARKDOWN : undefined}
-                    trialMessagesRemaining={trialMessagesRemaining}
+                    tasteChatRemaining={tasteChatRemaining}
+                    tasteStartRemaining={tasteStartRemaining}
+                    onStartProject={handleStartProject}
                   />
                 </div>
-                <SetupRail />
+                <SetupRail
+                  checklist={
+                    <TasteSetupChecklist
+                      userMessageCount={chatMessages.filter((m) => m.role === "user").length}
+                      onOpenConnector={openConnector}
+                      onStartProject={handleStartProject}
+                    />
+                  }
+                />
               </div>
             }
             workspace={
@@ -568,6 +636,13 @@ function EditorPage() {
                         onWarmComplete={previewBoot.clearWarming}
                         onRefresh={() => previewBoot.boot()}
                         agentHasRun={agentHasRun}
+                        e2bConnected={e2bConnected}
+                        onE2bSaved={() => {
+                          void qc.invalidateQueries({ queryKey: ["connectors-public"] });
+                          previewBoot.clearError();
+                          void previewBoot.boot();
+                        }}
+                        onOpenE2bConnectors={() => openConnector("e2b")}
                       />
                     )}
 

@@ -74,26 +74,28 @@ const PRESETS: Record<string, PresetWire> = {
     label: "Groq · Llama 3.3 70B",
     secretKey: "GROQ_API_KEY",
   },
-  "pool-nemotron-super": nvidia("nvidia/nemotron-3-super-120b", "NVIDIA · Nemotron 3 Super"),
+  "pool-nemotron-ultra-550b": nvidia("nvidia/nemotron-3-ultra-550b", "NVIDIA · Nemotron 3 Ultra (550B)"),
+  "pool-nemotron-super": nvidia("nvidia/nemotron-3-ultra-550b", "NVIDIA · Nemotron 3 Ultra (550B)"),
 };
 
-const DEFAULT_ID = "anthropic--claude-sonnet-4-6";
+/** Gosto da plataforma — único preset ROBIN NVIDIA do FORGE */
+export const PLATFORM_ROBIN_TASTE_PRESET_ID = "pool-nemotron-ultra-550b";
 
 const LEGACY: Record<string, string> = {
-  "or-anthropic--claude-sonnet-4-6": DEFAULT_ID,
-  "anthropic-sonnet": DEFAULT_ID,
-  "openrouter-custom": DEFAULT_ID,
   "groq-llama70": "pool-groq-flash",
+  "nvidia-llama70": PLATFORM_ROBIN_TASTE_PRESET_ID,
+  "pool-nemotron-super": PLATFORM_ROBIN_TASTE_PRESET_ID,
 };
 
 export function normalizePresetId(id?: string): string {
-  if (!id) return DEFAULT_ID;
+  if (!id?.trim()) return "";
   return LEGACY[id] ?? id;
 }
 
-export function getPresetWire(id?: string): PresetWire {
+export function getPresetWire(id?: string): PresetWire | null {
   const key = normalizePresetId(id);
-  return PRESETS[key] ?? PRESETS[DEFAULT_ID]!;
+  if (!key) return null;
+  return PRESETS[key] ?? null;
 }
 
 export function resolveFixedFromKeys(
@@ -101,6 +103,7 @@ export function resolveFixedFromKeys(
   keys: Record<string, string>,
 ): (PresetWire & { apiKey: string }) | null {
   const preset = getPresetWire(presetId);
+  if (!preset) return null;
   const apiKey = keys[preset.secretKey];
   if (!apiKey) return null;
   return { ...preset, apiKey };
@@ -136,8 +139,13 @@ export function resolveModelFromPreferences(
 export function defaultRobinModel(poolProvider: "nvidia" | "groq", modelPresetId?: string): PresetWire {
   if (modelPresetId) {
     const p = getPresetWire(modelPresetId);
-    if (poolProvider === "groq" && p.secretKey === "GROQ_API_KEY") return p;
-    if (poolProvider === "nvidia" && p.secretKey === "NVIDIA_API_KEY") return p;
+    if (p) {
+      if (poolProvider === "groq" && p.secretKey === "GROQ_API_KEY") return p;
+      if (poolProvider === "nvidia" && p.secretKey === "NVIDIA_API_KEY") return p;
+    }
   }
-  return poolProvider === "nvidia" ? PRESETS["pool-nemotron-super"]! : PRESETS["pool-groq-flash"]!;
+  if (poolProvider === "nvidia") return PRESETS[PLATFORM_ROBIN_TASTE_PRESET_ID]!;
+  const groq = PRESETS["pool-groq-flash"];
+  if (!groq) throw new Error("Preset pool Groq ausente");
+  return groq;
 }

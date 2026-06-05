@@ -4,6 +4,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { motion } from "framer-motion";
+import { toast } from "sonner";
 import {
   Brain,
   Shuffle,
@@ -16,6 +17,8 @@ import {
   Key,
   Globe,
   Cpu,
+  X,
+  RotateCcw,
 } from "lucide-react";
 import {
   type AgentPreferences,
@@ -33,8 +36,10 @@ import {
   presetsForEnv,
   getPresetById,
   normalizePresetId,
+  PLATFORM_ROBIN_TASTE_PRESET_ID,
   type AiEnvId,
 } from "@/lib/model-catalog";
+import { isAgentPreferencesConfigured } from "@/lib/agent-setup";
 import { type ConnectorRow, connectedEnvsFromRows } from "@/lib/connector-env-status";
 
 const ENV_ICONS: Record<AiEnvId, React.ReactNode> = {
@@ -51,7 +56,7 @@ const ENVS: AiEnvId[] = ["anthropic", "openai", "gemini", "xai", "nvidia", "open
 
 const MODES: { id: ModelPowerMode; title: string; hint: string }[] = [
   { id: "fixed", title: "Fixo", hint: "Sempre o modelo escolhido abaixo" },
-  { id: "auto", title: "Auto", hint: "Router escolhe barato vs forte" },
+  { id: "auto", title: "Auto", hint: "Router inteligente entre suas chaves ativas (barato vs forte)" },
   { id: "robin", title: "ROBIN", hint: "Pool de chaves Groq/NVIDIA" },
 ];
 
@@ -62,6 +67,7 @@ function ModelCard({
   badges,
   disabled,
   onClick,
+  onHide,
 }: {
   active: boolean;
   label: string;
@@ -69,62 +75,70 @@ function ModelCard({
   badges?: string[];
   disabled?: boolean;
   onClick: () => void;
+  onHide?: () => void;
 }) {
   return (
-    <button
-      type="button"
-      disabled={disabled}
-      onClick={onClick}
-      className={`w-full text-left p-3 rounded-lg border transition-all ${
-        disabled ? "opacity-40 cursor-not-allowed" : ""
+    <div
+      className={`relative w-full text-left p-3 rounded-lg border transition-all ${
+        disabled ? "opacity-40" : ""
       } ${
         active
           ? "border-[var(--primary)]/60 bg-[var(--primary)]/10 ring-1 ring-[var(--primary)]/25"
           : "border-[var(--border)] hover:bg-[var(--surface-2)]/80"
       }`}
     >
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <div className="font-mono text-[11px] text-[var(--foreground)]">{label}</div>
-          <p className="mt-0.5 font-mono text-[9px] text-[var(--text-ghost)] leading-relaxed">
-            {description}
-          </p>
-          {badges && badges.length > 0 && (
-            <div className="flex flex-wrap gap-1 mt-1.5">
-              {badges.map((b) => (
-                <span
-                  key={b}
-                  className="font-mono text-[7px] uppercase px-1 py-0.5 rounded bg-[var(--surface-2)] text-[var(--text-dim)]"
-                >
-                  {b}
-                </span>
-              ))}
-            </div>
-          )}
+      {onHide && (
+        <button
+          type="button"
+          title="Ocultar da biblioteca (não remove do agente se estiver ativo)"
+          onClick={(e) => {
+            e.stopPropagation();
+            onHide();
+          }}
+          className="absolute top-2 right-2 grid size-6 place-items-center rounded-md text-[var(--text-ghost)] hover:bg-[var(--surface-2)] hover:text-[var(--foreground)]"
+        >
+          <X className="size-3.5" />
+        </button>
+      )}
+      <button type="button" disabled={disabled} onClick={onClick} className="w-full text-left pr-6">
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            <div className="font-mono text-[11px] text-[var(--foreground)]">{label}</div>
+            <p className="mt-0.5 font-mono text-[9px] text-[var(--text-ghost)] leading-relaxed">
+              {description}
+            </p>
+            {badges && badges.length > 0 && (
+              <div className="flex flex-wrap gap-1 mt-1.5">
+                {badges.map((b) => (
+                  <span
+                    key={b}
+                    className="font-mono text-[7px] uppercase px-1 py-0.5 rounded bg-[var(--surface-2)] text-[var(--text-dim)]"
+                  >
+                    {b}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+          {active && <Check className="size-4 text-[var(--primary)] shrink-0" />}
         </div>
-        {active && <Check className="size-4 text-[var(--primary)] shrink-0" />}
-      </div>
-    </button>
+      </button>
+    </div>
   );
 }
 
 interface AiModelStudioProps {
   connectorRows?: ConnectorRow[];
-  /** Ancora para scroll (#forge-keys-xai) */
-  keysSectionId?: string;
+  keysSectionHref?: string;
 }
 
-export function AiModelStudio({ connectorRows }: AiModelStudioProps) {
+export function AiModelStudio({ connectorRows, keysSectionHref = "/api" }: AiModelStudioProps) {
   const [prefs, setPrefs] = useState<AgentPreferences>(() => loadAgentPreferences());
   const connected = connectedEnvsFromRows(connectorRows);
   const activePreset = getPresetById(
     prefs.mode === "robin" ? prefs.robinPoolModelId : prefs.fixedPresetId,
   );
   const [selectedEnv, setSelectedEnv] = useState<AiEnvId>(activePreset.env);
-
-  useEffect(() => {
-    saveAgentPreferences(prefs);
-  }, [prefs]);
 
   useEffect(() => {
     const p = getPresetById(
@@ -134,14 +148,37 @@ export function AiModelStudio({ connectorRows }: AiModelStudioProps) {
   }, [prefs.fixedPresetId, prefs.robinPoolModelId, prefs.mode]);
 
   const patch = (partial: Partial<AgentPreferences>) =>
-    setPrefs((p) => ({ ...p, ...partial }));
+    setPrefs((p) => {
+      const next = { ...p, ...partial };
+      saveAgentPreferences(next);
+      return next;
+    });
 
-  const envModels = presetsForEnv(selectedEnv);
+  const hidden = new Set(prefs.hiddenPresetIds ?? []);
+  const envModels = presetsForEnv(selectedEnv).filter((m) => !hidden.has(m.id));
   const poolProvider = prefs.poolProvider ?? "groq";
-  const poolModels = poolPresetsForProvider(poolProvider);
+  const poolModels = poolPresetsForProvider(poolProvider).filter((m) => !hidden.has(m.id));
   const connectedCount = ENVS.filter((e) => connected[e]).length;
-  const sttNeeds = prefs.sttProvider === "groq" ? "groq" : "xai";
+  const sttNeeds: keyof typeof connected =
+    prefs.sttProvider === "groq"
+      ? "groq"
+      : prefs.sttProvider === "openrouter"
+        ? "openrouter"
+        : "xai";
   const sttReady = connected[sttNeeds];
+
+  const hidePreset = (presetId: string) => {
+    const activeId =
+      prefs.mode === "robin" ? prefs.robinPoolModelId : prefs.fixedPresetId;
+    if (normalizePresetId(activeId) === normalizePresetId(presetId)) {
+      toast.info("Este modelo está ativo no agente — troque antes de ocultar.");
+      return;
+    }
+    patch({ hiddenPresetIds: [...(prefs.hiddenPresetIds ?? []), presetId] });
+    toast.success("Removido da biblioteca desta página");
+  };
+
+  const restoreHidden = () => patch({ hiddenPresetIds: [] });
 
   const selectModel = (presetId: string) => {
     const preset = getPresetById(presetId);
@@ -232,20 +269,36 @@ export function AiModelStudio({ connectorRows }: AiModelStudioProps) {
           <p className="mt-3 flex flex-wrap items-center gap-2 font-mono text-[10px] text-amber-400/95 rounded-lg border border-amber-400/25 bg-amber-400/8 px-3 py-2">
             <Key className="size-3.5 shrink-0" />
             {selectedEnv === "openrouter"
-              ? "DeepSeek, Qwen, Kimi, etc. usam OpenRouter — chave em API Keys ou vault admin."
+              ? "DeepSeek, Qwen, Kimi, etc. usam OpenRouter — chave em API."
               : `Cadastre a chave ${AI_ENV_META[selectedEnv].label} (${AI_ENV_META[selectedEnv].keyPrefix}…)`}
-            <a href={`#forge-key-${selectedEnv === "openrouter" ? "openrouter" : selectedEnv}`} className="text-[var(--primary)] underline">
-              ir para o campo →
-            </a>
+            <Link
+              to={keysSectionHref}
+              hash={selectedEnv === "openrouter" ? "forge-key-openrouter" : `forge-key-${selectedEnv}`}
+              className="text-[var(--primary)] underline"
+            >
+              ir para API →
+            </Link>
           </p>
         )}
       </div>
 
       {/* ─── Passo 2: Modelos do ambiente ─── */}
       <div className="mb-6">
-        <p className="font-mono text-[9px] uppercase tracking-[0.2em] text-[var(--primary)] mb-2">
-          2 · Modelo para programação — {AI_ENV_META[selectedEnv].label}
-        </p>
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+          <p className="font-mono text-[9px] uppercase tracking-[0.2em] text-[var(--primary)]">
+            2 · Modelo para programação — {AI_ENV_META[selectedEnv].label}
+          </p>
+          {(prefs.hiddenPresetIds?.length ?? 0) > 0 && (
+            <button
+              type="button"
+              onClick={restoreHidden}
+              className="inline-flex items-center gap-1 font-mono text-[9px] text-[var(--primary)] hover:underline"
+            >
+              <RotateCcw className="size-3" />
+              Restaurar ocultos ({prefs.hiddenPresetIds?.length})
+            </button>
+          )}
+        </div>
         {prefs.mode === "robin" && (selectedEnv === "groq" || selectedEnv === "nvidia") ? (
           <div className="grid gap-2 sm:grid-cols-2">
             {poolModels.map((m) => (
@@ -257,6 +310,7 @@ export function AiModelStudio({ connectorRows }: AiModelStudioProps) {
                 badges={[m.model, "pool"]}
                 disabled={!connected[m.env]}
                 onClick={() => selectModel(m.id)}
+                onHide={() => hidePreset(m.id)}
               />
             ))}
           </div>
@@ -278,6 +332,7 @@ export function AiModelStudio({ connectorRows }: AiModelStudioProps) {
                 ].filter(Boolean) as string[]}
                 disabled={!connected[m.env]}
                 onClick={() => selectModel(m.id)}
+                onHide={() => hidePreset(m.id)}
               />
             ))}
           </div>
@@ -327,7 +382,9 @@ export function AiModelStudio({ connectorRows }: AiModelStudioProps) {
                     mode: "robin",
                     poolProvider: selectedEnv === "nvidia" ? "nvidia" : "groq",
                     robinPoolModelId:
-                      selectedEnv === "nvidia" ? "pool-nemotron-super" : "pool-groq-flash",
+                      selectedEnv === "nvidia"
+                        ? PLATFORM_ROBIN_TASTE_PRESET_ID
+                        : "pool-groq-flash",
                   });
                 } else {
                   patch({ mode: m.id });
@@ -344,10 +401,10 @@ export function AiModelStudio({ connectorRows }: AiModelStudioProps) {
             </button>
           ))}
         </div>
-        {prefs.mode === "auto" && (
-          <p className="mt-3 font-mono text-[9px] text-[var(--text-ghost)] leading-relaxed">
-            Auto: prioridade Anthropic → Gemini → xAI → Groq 70B → NVIDIA → OpenAI (primeira chave
-            conectada). O modelo acima vira referência visual; o router pode escolher outro se tiver chave.
+        {!isAgentPreferencesConfigured(prefs) && (
+          <p className="mt-3 font-mono text-[9px] text-amber-400/90 leading-relaxed">
+            Setup obrigatório: escolha modo (Fixo ou ROBIN), selecione o modelo abaixo e conecte as chaves
+            necessárias. Sem isso o agente não inicia.
           </p>
         )}
         {prefs.mode === "fixed" && (
@@ -367,7 +424,7 @@ export function AiModelStudio({ connectorRows }: AiModelStudioProps) {
           <Mic className="size-3" />
           Voz (STT) — sem troca silenciosa de provedor
         </label>
-        <div className="grid gap-2 sm:grid-cols-2">
+        <div className="grid gap-2 sm:grid-cols-3">
           {STT_OPTIONS.map((opt) => (
             <ModelCard
               key={opt.id}
@@ -376,7 +433,7 @@ export function AiModelStudio({ connectorRows }: AiModelStudioProps) {
               description={opt.description}
               badges={[
                 connected[opt.requiresEnv] ? "chave OK" : "precisa chave",
-                opt.id === "grok" ? "xAI" : "Groq",
+                AI_ENV_META[opt.requiresEnv].label,
               ]}
               disabled={false}
               onClick={() => patch({ sttProvider: opt.id as SttProviderId })}
@@ -385,14 +442,18 @@ export function AiModelStudio({ connectorRows }: AiModelStudioProps) {
         </div>
         {!sttReady && (
           <p className="mt-3 font-mono text-[10px] text-amber-400/90">
-            STT em {prefs.sttProvider === "groq" ? "Groq" : "Grok"} exige chave{" "}
-            {AI_ENV_META[sttNeeds].label}. Sem chave xAI o sistema não usará Groq no lugar — você verá erro
-            claro.
+            STT em {STT_OPTIONS.find((o) => o.id === (prefs.sttProvider ?? "grok"))?.label ?? "Grok"} exige chave{" "}
+            {AI_ENV_META[sttNeeds].label} em{" "}
+            <Link to={keysSectionHref} className="text-[var(--primary)] underline">
+              API
+            </Link>
+            .
           </p>
         )}
         {sttReady && (
           <p className="mt-3 font-mono text-[10px] text-emerald-400/80">
-            Microfone usará exclusivamente {prefs.sttProvider === "groq" ? "Groq Whisper" : "Grok STT (xAI)"}.
+            Microfone usará exclusivamente{" "}
+            {STT_OPTIONS.find((o) => o.id === (prefs.sttProvider ?? "grok"))?.label}.
           </p>
         )}
       </div>
@@ -403,20 +464,24 @@ export function AiModelStudio({ connectorRows }: AiModelStudioProps) {
 /** Versão compacta no editor (link + resumo) */
 export function AiModelStudioSummary() {
   const prefs = loadAgentPreferences();
-  const preset = getPresetById(
-    prefs.mode === "robin" ? prefs.robinPoolModelId : prefs.fixedPresetId,
-  );
-  const stt = prefs.sttProvider === "groq" ? "Groq STT" : "Grok STT";
+  const preset = isAgentPreferencesConfigured(prefs)
+    ? getPresetById(prefs.mode === "robin" ? prefs.robinPoolModelId : prefs.fixedPresetId)
+    : getPresetById("");
+  const stt =
+    prefs.sttProvider === "groq"
+      ? "Groq STT"
+      : prefs.sttProvider === "openrouter"
+        ? "OpenRouter STT"
+        : "Grok STT";
 
   return (
     <Link
-      to="/api-keys"
-      hash="forge-ai-studio"
+      to="/models"
       className="forge-composer-chip max-w-[200px] hover:border-[var(--primary)]/50"
       title="Configurar ambiente e modelo"
     >
       <span className="truncate font-mono text-[10px]">
-        {preset.label} · {prefs.mode}
+        {preset.label} · {prefs.mode ?? "setup"}
       </span>
       <span className="text-[8px] opacity-60">| {stt}</span>
     </Link>

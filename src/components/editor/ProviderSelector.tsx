@@ -40,7 +40,16 @@ export function ProviderSelector({ value, onChange, className = "" }: ProviderSe
   const [isOpen, setIsOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const norm = normalizePresetId(value);
-  const selected = presetToProviderOption(getPresetById(norm));
+  const unconfigured = !norm;
+  const selected = unconfigured
+    ? {
+        id: "",
+        provider: "—",
+        model: "",
+        label: "Não configurado",
+        description: "Modelos → preset do agente",
+      }
+    : presetToProviderOption(getPresetById(norm));
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -69,7 +78,7 @@ export function ProviderSelector({ value, onChange, className = "" }: ProviderSe
         onClick={() => setIsOpen(!isOpen)}
         className="flex items-center gap-1.5 px-2 py-1 rounded-md border border-[var(--border)] bg-[var(--surface-2)]/60 hover:bg-[var(--surface-2)] transition-colors text-[var(--foreground)]"
       >
-        {selected.recommended && (
+        {"recommended" in selected && selected.recommended && (
           <Star className="size-3 text-[var(--primary)] fill-[var(--primary)]/30" />
         )}
         <span className="font-mono text-[10px] tracking-[0.05em] truncate max-w-[120px]">
@@ -135,7 +144,7 @@ export function ProviderSelector({ value, onChange, className = "" }: ProviderSe
 
             <div className="px-3 py-2 border-t border-[var(--border)]">
               <a
-                href="/api-keys#forge-ai-studio"
+                href="/models#forge-ai-studio"
                 className="flex items-center gap-1.5 font-mono text-[9px] text-[var(--text-ghost)] hover:text-[var(--foreground)]"
               >
                 <Key className="size-3" />

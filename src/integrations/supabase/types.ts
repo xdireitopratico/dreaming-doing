@@ -194,6 +194,10 @@ export type Database = {
           id: string
           integration_prefs: Json
           trial_messages_remaining: number
+          taste_chat_remaining: number
+          taste_start_remaining: number
+          taste_lead_email: string | null
+          taste_lead_consent_at: string | null
           updated_at: string
         }
         Insert: {
@@ -528,6 +532,7 @@ export const Constants = {
         "anthropic",
         "openai",
         "netlify",
+        "e2b",
       ],
       deploy_provider: ["vercel", "cloudflare", "netlify"],
       deploy_status: ["queued", "building", "ready", "error", "cancelled"],

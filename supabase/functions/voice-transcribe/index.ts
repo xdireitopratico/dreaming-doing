@@ -1,7 +1,7 @@
 // voice-transcribe — STT estrito: usa SOMENTE o provedor escolhido (sem fallback silencioso para Groq).
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { loadConnectorKeys, loadConnectorPools } from "../agent-run/connector-keys.ts";
-import { getPlatformSecret } from "../_shared/platform-secrets.ts";
+
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -22,24 +22,27 @@ function json(body: unknown, status = 200) {
 async function resolveSttKeyStrict(
   supabase: ReturnType<typeof createClient>,
   userId: string,
-  prefer: "grok" | "groq",
-): Promise<{ key: string; provider: "grok" | "groq" }> {
+  prefer: "grok" | "groq" | "openrouter",
+): Promise<{ key: string; provider: "grok" | "groq" | "openrouter" }> {
   const keys = await loadConnectorKeys(supabase, userId);
 
   if (prefer === "grok") {
-    const globalXai = await getPlatformSecret(supabase, "XAI_API_KEY");
     if (keys.XAI_API_KEY) return { key: keys.XAI_API_KEY, provider: "grok" };
-    if (globalXai) return { key: globalXai, provider: "grok" };
     throw new Error(
       "Você escolheu Grok STT, mas não há chave xAI. Em API Keys → xAI (Grok), cole sua chave e salve.",
     );
   }
 
+  if (prefer === "openrouter") {
+    if (keys.OPENROUTER_API_KEY) return { key: keys.OPENROUTER_API_KEY, provider: "openrouter" };
+    throw new Error(
+      "Você escolheu OpenRouter STT, mas não há chave OpenRouter. Em API Keys → OpenRouter, cole sua chave.",
+    );
+  }
+
   const groqPool = await loadConnectorPools(supabase, userId, "groq");
-  const globalGroq = await getPlatformSecret(supabase, "GROQ_API_KEY");
   if (groqPool[0]) return { key: groqPool[0], provider: "groq" };
   if (keys.GROQ_API_KEY) return { key: keys.GROQ_API_KEY, provider: "groq" };
-  if (globalGroq) return { key: globalGroq, provider: "groq" };
   throw new Error(
     "Você escolheu Groq Whisper, mas não há chave Groq. Em API Keys → Groq, cole sua chave e salve.",
   );
@@ -59,6 +62,31 @@ async function transcribeGrok(apiKey: string, file: File, language: string): Pro
   if (!resp.ok) {
     const txt = await resp.text();
     throw new Error(`Grok STT falhou (${resp.status}): ${txt.slice(0, 280)}`);
+  }
+
+  const data = await resp.json();
+  return String(data.text ?? "").trim();
+}
+
+async function transcribeOpenRouter(apiKey: string, file: File, language: string): Promise<string> {
+  const form = new FormData();
+  form.append("file", file, file.name || "audio.webm");
+  form.append("model", "openai/whisper-1");
+  form.append("language", language);
+
+  const resp = await fetch("https://openrouter.ai/api/v1/audio/transcriptions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "HTTP-Referer": "https://forge.app",
+      "X-Title": "FORGE",
+    },
+    body: form,
+  });
+
+  if (!resp.ok) {
+    const txt = await resp.text();
+    throw new Error(`OpenRouter STT falhou (${resp.status}): ${txt.slice(0, 280)}`);
   }
 
   const data = await resp.json();
@@ -111,12 +139,16 @@ Deno.serve(async (req) => {
 
     const language = (inForm.get("language") as string | null) ?? "pt";
     const preferRaw = (inForm.get("provider") as string | null) ?? "grok";
-    const requested = preferRaw === "groq" ? "groq" : "grok";
+    const requested =
+      preferRaw === "groq" ? "groq" : preferRaw === "openrouter" ? "openrouter" : "grok";
 
     const resolved = await resolveSttKeyStrict(supabase, userData.user.id, requested);
-    const text = resolved.provider === "grok"
-      ? await transcribeGrok(resolved.key, file, language)
-      : await transcribeGroq(resolved.key, file, language);
+    const text =
+      resolved.provider === "grok"
+        ? await transcribeGrok(resolved.key, file, language)
+        : resolved.provider === "openrouter"
+          ? await transcribeOpenRouter(resolved.key, file, language)
+          : await transcribeGroq(resolved.key, file, language);
 
     return json({
       text,

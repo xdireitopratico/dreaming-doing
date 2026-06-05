@@ -10,7 +10,11 @@ type Props = {
   size?: "sm" | "md";
 };
 
-const STT_LABELS = { grok: "Grok STT (xAI)", groq: "Groq Whisper" } as const;
+const STT_LABELS = {
+  grok: "Grok STT (xAI)",
+  groq: "Groq Whisper",
+  openrouter: "OpenRouter STT",
+} as const;
 
 export function MicButton({ onTranscript, className, size = "md" }: Props) {
   const [state, setState] = useState<"idle" | "recording" | "uploading">("idle");
@@ -72,7 +76,7 @@ export function MicButton({ onTranscript, className, size = "md" }: Props) {
             });
             if (body?.requested && used !== body.requested) {
               toast.warning(
-                `Pedido ${STT_LABELS[body.requested as keyof typeof STT_LABELS]} mas usou ${used}. Verifique API Keys.`,
+                `Pedido ${STT_LABELS[body.requested as keyof typeof STT_LABELS]} mas usou ${used}. Verifique API.`,
               );
             }
           } else {
@@ -135,7 +139,7 @@ export function MicButton({ onTranscript, className, size = "md" }: Props) {
       type="button"
       onClick={start}
       aria-label={`Gravar áudio (${STT_LABELS[stt]})`}
-      title={`Microfone · ${STT_LABELS[stt]} — configurar em API Keys`}
+      title={`Microfone · ${STT_LABELS[stt]} — configurar em API`}
       className={`${sizeCls} grid place-items-center rounded-full bg-[var(--surface-2)] hover:bg-[var(--surface-3)] border border-[var(--border)] text-[var(--text-dim)] hover:text-foreground transition-colors ${className ?? ""}`}
     >
       <Mic className={iconCls} />

@@ -15,8 +15,8 @@ export type ConnectorRegistryEntry = {
   costNote?: string;
   tokenLabel?: string;
   tokenPlaceholder?: string;
-  /** Conectável via connector-upsert (github, vercel, cloudflare). */
-  upsertKind?: "github" | "vercel" | "netlify" | "cloudflare";
+  /** Conectável via connector-upsert. */
+  upsertKind?: "github" | "vercel" | "netlify" | "cloudflare" | "e2b";
   showInEditorBar?: boolean;
   showOnConnectorsPage?: boolean;
 };
@@ -94,8 +94,11 @@ export const CONNECTOR_REGISTRY: Record<ConnectorId, ConnectorRegistryEntry> = {
     id: "e2b",
     name: "Sandbox (E2B)",
     description: "Ambiente isolado onde o preview ao vivo e o agente executam comandos.",
-    tagline: "O preview usa sandbox FORGE por padrão. Você pode usar sua chave E2B depois.",
-    forgeAvailable: true,
+    tagline: "Preview ao vivo e agente rodam no seu sandbox E2B — cole a chave API aqui.",
+    forgeAvailable: false,
+    tokenLabel: "API Key E2B",
+    tokenPlaceholder: "e2b_...",
+    upsertKind: "e2b",
     signupUrl: "https://e2b.dev/docs",
     docsUrl: "https://e2b.dev/docs/pricing",
     costNote: "Há tier gratuito; uso intenso de sandboxes pode gerar cobrança na E2B.",
@@ -112,11 +115,11 @@ export const CONNECTORS_PAGE_LIST = (
   Object.values(CONNECTOR_REGISTRY) as ConnectorRegistryEntry[]
 ).filter((c) => c.showOnConnectorsPage);
 
+/** Conector ativo = credencial do usuário salva (sem modo FORGE global). */
 export function isConnectorActive(
-  id: ConnectorId,
-  mode: IntegrationMode,
-  status: { connected: boolean; forgeAvailable: boolean },
+  _id: ConnectorId,
+  _mode: IntegrationMode,
+  status: { connected: boolean },
 ): boolean {
-  if (id === "e2b") return mode === "forge" && status.forgeAvailable;
-  return (mode === "forge" && status.forgeAvailable) || (mode === "own" && status.connected);
+  return status.connected;
 }

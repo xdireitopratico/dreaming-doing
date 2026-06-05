@@ -2,6 +2,7 @@
 // Cada evento `data: {…}\n\n` vira um item no callback.
 import { supabase } from "@/integrations/supabase/client";
 import { loadAgentPreferences } from "@/lib/agent-preferences";
+import { loadAgentSessionExtensions } from "@/lib/agent-session-extensions";
 
 export type AgentEvent =
   | { type: "start"; projectId: string; conversationId: string; provider?: string }
@@ -38,6 +39,7 @@ export async function streamAgentRun(
       projectId: args.projectId,
       conversationId: args.conversationId,
       preferences: loadAgentPreferences(),
+      ...loadAgentSessionExtensions(),
     }),
     signal: args.signal,
   });

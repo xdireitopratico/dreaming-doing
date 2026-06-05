@@ -12,6 +12,7 @@ import { CompressionManager, parallelExecute } from "./compression.ts";
 import { RuntimeObserver } from "./observer.ts";
 import { SkillRegistry } from "./skills.ts";
 import { getSystemPrompt, EXECUTE_PROMPT } from "./prompts.ts";
+import { getTasteStartSystemPrompt } from "./prompts-taste.ts";
 import { friendlyLlmError } from "./llm-errors.ts";
 
 type StreamCallback = (event: { type: string; data: unknown }) => void;
@@ -21,7 +22,6 @@ export class AgentLoop {
   private state: AgentState;
   private llm: LLMProvider;
   private sb: any;
-  private maxSteps = 20;
   private onStream: StreamCallback;
   private router: ModelRouter;
   private compression: CompressionManager;
@@ -30,6 +30,10 @@ export class AgentLoop {
   private robinActive: boolean;
   private projectTemplate: string;
   private stackAddon: string;
+  private maxStepsLimit: number;
+  private tasteStart: boolean;
+  private sessionAddon: string;
+  private userSkillNames: string[];
 
   constructor(
     reg: ToolRegistry,
@@ -42,6 +46,12 @@ export class AgentLoop {
     robinActive = false,
     projectTemplate = "vite-react",
     stackAddon = "",
+    options?: {
+      maxSteps?: number;
+      tasteStart?: boolean;
+      sessionAddon?: string;
+      userSkillNames?: string[];
+    },
   ) {
     this.reg = reg;
     this.llm = llm;
@@ -51,6 +61,10 @@ export class AgentLoop {
     this.robinActive = robinActive;
     this.projectTemplate = projectTemplate;
     this.stackAddon = stackAddon;
+    this.maxStepsLimit = options?.maxSteps ?? 20;
+    this.tasteStart = options?.tasteStart ?? false;
+    this.sessionAddon = options?.sessionAddon ?? "";
+    this.userSkillNames = options?.userSkillNames ?? [];
     this.router = new ModelRouter(injectedKeys, routerOverrides);
     this.observer = new RuntimeObserver(reg);
     this.skills = new SkillRegistry();
@@ -94,7 +108,7 @@ export class AgentLoop {
     let buildAttempts = 0;
     const maxRetries = 3;
 
-    while (step < this.maxSteps) {
+    while (step < this.maxStepsLimit) {
       step++;
       this.state.totalSteps = step;
 
@@ -192,7 +206,7 @@ export class AgentLoop {
       }
     }
 
-    if (step >= this.maxSteps) {
+    if (step >= this.maxStepsLimit) {
       await this.persistFinal("Limite de passos atingido. Parei aqui — use Continuar no chat para retomar com a mesma memória.");
       return { ok: false, error: "Limite de passos", steps: step, resumable: true };
     }
@@ -223,8 +237,10 @@ export class AgentLoop {
       projectConfig += `\n### ${f.path}\n\`\`\`\n${(f.content ?? "").slice(0, 2000)}\n\`\`\`\n`;
     }
 
-    if (this.skills.detectActive(fileList).length > 0) {
-      this.emit("skills", { active: this.skills.detectActive(fileList).map(s => s.name) });
+    const stackSkills = this.skills.detectActive(fileList).map((s) => s.name);
+    const activeSkills = [...new Set([...stackSkills, ...this.userSkillNames])];
+    if (activeSkills.length > 0) {
+      this.emit("skills", { active: activeSkills, stack: stackSkills, user: this.userSkillNames });
     }
 
     this.state.context = {
@@ -250,7 +266,8 @@ export class AgentLoop {
       : "";
     const base = getSystemPrompt(this.projectTemplate);
     const withStack = this.stackAddon ? `${base}\n\n${this.stackAddon}` : base;
-    const fullSystemPrompt = skillPrompt ? `${withStack}\n\n${skillPrompt}` : withStack;
+    const tasteWrapped = this.tasteStart ? getTasteStartSystemPrompt(withStack) : withStack;
+    const fullSystemPrompt = [tasteWrapped, skillPrompt, this.sessionAddon].filter(Boolean).join("\n\n");
 
     const messages: ChatMessage[] = [
       { role: "system", content: fullSystemPrompt },

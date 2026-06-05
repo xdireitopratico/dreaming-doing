@@ -8,6 +8,7 @@ import {
   saveAgentPreferences,
 } from "@/lib/agent-preferences";
 import { normalizePresetId } from "@/lib/model-catalog";
+import { isAgentPreferencesConfigured } from "@/lib/agent-setup";
 
 /** Seletor sempre visível no editor — ambiente/modelo não ficam escondidos no modo auto. */
 export function EditorModelControl() {
@@ -24,13 +25,18 @@ export function EditorModelControl() {
     };
   }, [refresh]);
 
-  const presetId =
-    prefs.mode === "robin"
+  const configured = isAgentPreferencesConfigured(prefs);
+  const presetId = configured
+    ? prefs.mode === "robin"
       ? normalizePresetId(prefs.robinPoolModelId)
-      : normalizePresetId(prefs.fixedPresetId);
+      : normalizePresetId(prefs.fixedPresetId)
+    : "";
 
-  const modeTag =
-    prefs.mode === "auto" ? "auto" : prefs.mode === "robin" ? "pool" : "fixo";
+  const modeTag = !configured
+    ? "setup"
+    : prefs.mode === "robin"
+      ? "pool"
+      : "fixo";
 
   return (
     <div className="flex items-center gap-1.5 shrink-0 min-w-0">
@@ -51,7 +57,7 @@ export function EditorModelControl() {
         className="shrink-0 max-w-[140px]"
       />
       <Link
-        to="/api-keys"
+        to="/api"
         hash="forge-ai-studio"
         title={`Modo: ${modeTag} · STT: ${prefs.sttProvider ?? "grok"} — abrir estúdio completo`}
         className="forge-composer-chip shrink-0 px-2 py-1 gap-1 hover:border-[var(--primary)]/40"

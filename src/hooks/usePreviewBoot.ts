@@ -66,8 +66,8 @@ export function usePreviewBoot(projectId: string) {
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Não foi possível abrir o preview";
       setLastError(msg);
-      if (msg.includes("E2B_API_KEY")) {
-        toast.error("Preview ao vivo requer E2B_API_KEY no Supabase.");
+      if (msg.includes("E2B") || msg.includes("Sandbox")) {
+        toast.error("Conecte sua chave E2B no painel do preview para liberar o sandbox.");
       } else if (!msg.includes("agente")) {
         toast.error(msg.length > 100 ? `${msg.slice(0, 100)}…` : msg);
       }

@@ -121,7 +121,7 @@ export function ProjectsDashboard() {
         </div>
 
         <p className="dashboard-hero-hint">
-          O tira-gosto usa <strong>ROBIN</strong> com o pool NVIDIA do FORGE — sem configurar API Keys.
+          <strong>Setup obrigatório</strong> em API (modo + modelo). Tira-gosto opcional: ROBIN NVIDIA · Nemotron 550B.
         </p>
 
         <a href="#dashboard-projects" className="dashboard-scroll-cue">

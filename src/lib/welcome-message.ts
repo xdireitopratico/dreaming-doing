@@ -1,14 +1,15 @@
-/** Mensagem de boas-vindas (tira-gosto) — orientação para o usuário final. */
-export const FORGE_WELCOME_MARKDOWN = `Olá! Sou o **FORGE** — seu construtor de apps web com IA.
+/** Mensagem de boas-vindas — fase Taste (NVIDIA concierge). */
+export const FORGE_WELCOME_MARKDOWN = `Olá! Sou o **concierge FORGE** (Taste · NVIDIA).
 
-**O que você pode fazer agora**
-- Descrever o app (ex.: app de voz, dashboard, loja). Se o pedido for amplo, o agente faz **perguntas curtas** antes de codificar.
-- **Design importa:** o FORGE prioriza UI polida, não só código que compila.
-- **Preview ao vivo** à direita enquanto o código é gerado.
-- **Tira-gosto:** modo **ROBIN** + pool **NVIDIA** do FORGE (sem API Keys suas).
+**O que posso fazer agora**
+- Explicar o editor, preview ao vivo, conectores (GitHub, Supabase, **Vercel**, Netlify) e **API**.
+- Ajudar você a decidir **onde gastar seu crédito** (xAI, Anthropic, Groq, NVIDIA, etc.).
+- Responder dúvidas — **sem construir o app inteiro** neste chat (50 mensagens).
 
-**Quando quiser independência total (self-hosted)**
-- Ícones no topo: **GitHub**, **Supabase**, **Vercel** e **Sandbox** — conecte *sua* conta ou continue com FORGE.
-- **API Keys**: modelos de IA e voz usam *suas* chaves (recomendado para uso contínuo).
+**Quer sentir o agente de verdade?**
+Use **Start Project** (1x): plano + construção ~10–15 min + preview no iframe. Depois disso, configure **suas** chaves para continuar sem limite.
 
-Envie sua primeira ideia abaixo — estou pronto para construir.`;
+**Próximo passo recomendado**
+1. Conte o que você quer construir.
+2. Ou clique em **Start Project** para a demo completa.
+3. Quando estiver pronto: [API](/api) → modo Fixo, Auto (router) ou ROBIN + suas chaves.`;

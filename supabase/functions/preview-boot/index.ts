@@ -1,6 +1,6 @@
 // preview-boot — Vite no sandbox E2B (reutiliza sandbox do agente quando existir)
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
-import { getPlatformSecret } from "../_shared/platform-secrets.ts";
+import { loadUserE2bApiKey, E2B_SETUP_USER_MESSAGE } from "../_shared/user-e2b.ts";
 import { E2B_PROJECT_DIR } from "../_shared/e2b.ts";
 import {
   connectProjectSandboxForPreview,
@@ -29,16 +29,15 @@ Deno.serve(async (req) => {
     if (!projectId) return json({ error: "projectId obrigatório" }, 400);
 
     const supabase = createClient(SUPABASE_URL, SERVICE_KEY);
-    const E2B_API_KEY = await getPlatformSecret(supabase, "E2B_API_KEY");
-    if (!E2B_API_KEY) {
-      return json({
-        error: "E2B_API_KEY ausente. Configure em Ajustes (admin) ou Supabase Edge Secrets.",
-      }, 500);
-    }
 
     const token = (req.headers.get("Authorization") ?? "").replace("Bearer ", "");
     const { data: userData, error: uErr } = await supabase.auth.getUser(token);
     if (uErr || !userData?.user) return json({ error: "Não autenticado" }, 401);
+
+    const E2B_API_KEY = await loadUserE2bApiKey(supabase, userData.user.id);
+    if (!E2B_API_KEY) {
+      return json({ error: E2B_SETUP_USER_MESSAGE, code: "e2b_not_configured" }, 403);
+    }
 
     const { data: project } = await supabase
       .from("projects").select("id, owner_id, meta").eq("id", projectId).single();

@@ -1,24 +1,34 @@
 import { Link, Navigate, useLocation, useNavigate } from "@tanstack/react-router";
 import {
   BookOpen,
+  Brain,
   ChevronDown,
   Grid3X3,
   Home,
-  Loader2,
   Key,
+  Loader2,
+  LogOut,
   Plug,
+  Puzzle,
   Search,
   Settings,
+  Sparkles,
   Star,
-  Zap,
 } from "lucide-react";
 import { type ReactNode, useEffect } from "react";
 import { ForgeLogoMark } from "@/components/editor/ForgeLogoMark";
-import { ForgeIcon } from "@/components/icons/ForgeIcon";
 import { useAuth } from "@/lib/auth";
 import { sanitizeNext } from "@/lib/sanitize-next";
 
-type NavId = "home" | "projects" | "connectors" | "api-keys" | "settings";
+type NavId =
+  | "home"
+  | "projects"
+  | "connectors"
+  | "api"
+  | "models"
+  | "mcp"
+  | "skills"
+  | "settings";
 
 export function DashboardShell({
   children,
@@ -37,8 +47,7 @@ export function DashboardShell({
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
-        const el = document.getElementById("dashboard-search");
-        el?.focus();
+        document.getElementById("dashboard-search")?.focus();
       }
     };
     window.addEventListener("keydown", onKey);
@@ -96,10 +105,24 @@ export function DashboardShell({
             Buscar
             <span className="dashboard-nav-kbd">Ctrl K</span>
           </button>
-          <a href="/#how-it-works" className="dashboard-nav-item">
-            <BookOpen className="size-4 shrink-0" />
-            Recursos
-          </a>
+
+          <span className="dashboard-nav-label">Configuração</span>
+          <Link
+            to="/api"
+            className="dashboard-nav-item"
+            data-active={activeNav === "api" ? "true" : undefined}
+          >
+            <Key className="size-4 shrink-0" />
+            API
+          </Link>
+          <Link
+            to="/models"
+            className="dashboard-nav-item"
+            data-active={activeNav === "models" ? "true" : undefined}
+          >
+            <Brain className="size-4 shrink-0" />
+            Modelos
+          </Link>
           <Link
             to="/connectors"
             className="dashboard-nav-item"
@@ -108,14 +131,31 @@ export function DashboardShell({
             <Plug className="size-4 shrink-0" />
             Conectores
           </Link>
+
+          <span className="dashboard-nav-label">Agente</span>
           <Link
-            to="/api-keys"
+            to="/skills"
             className="dashboard-nav-item"
-            data-active={activeNav === "api-keys" ? "true" : undefined}
+            data-active={activeNav === "skills" ? "true" : undefined}
+            title="Playbooks e instruções para o LLM"
           >
-            <Key className="size-4 shrink-0" />
-            API Keys
+            <Sparkles className="size-4 shrink-0" />
+            Skills
           </Link>
+          <Link
+            to="/mcp"
+            className="dashboard-nav-item"
+            data-active={activeNav === "mcp" ? "true" : undefined}
+            title="Servidores Model Context Protocol (ferramentas externas)"
+          >
+            <Puzzle className="size-4 shrink-0" />
+            MCP
+          </Link>
+
+          <a href="/#how-it-works" className="dashboard-nav-item">
+            <BookOpen className="size-4 shrink-0" />
+            Recursos
+          </a>
 
           <span className="dashboard-nav-label">Projetos</span>
           <Link
@@ -134,28 +174,38 @@ export function DashboardShell({
         </nav>
 
         <div className="dashboard-sidebar-footer">
-          <div className="rounded-xl border border-[var(--forge-border)] p-3 text-[11px] text-[var(--forge-muted)]">
-            <ForgeIcon variant="referral" size={14} className="text-[var(--forge-primary)] mb-1.5" />
-            Convide amigos e ganhe créditos na beta.
+          <div className="rounded-xl border border-[var(--forge-border)] p-3 text-[11px] leading-relaxed text-[var(--forge-muted)]">
+            <Sparkles className="size-3.5 text-[var(--forge-primary)] mb-1.5" />
+            <strong className="text-[var(--forge-text)] font-medium">Taste + BYOK</strong>
+            <p className="mt-1">
+              50 mensagens e 1 Start Project. Depois: API, Modelos, E2B e Skills/MCP separados no painel.
+            </p>
           </div>
-          <Link to="/api-keys" className="dashboard-upgrade">
-            <Zap className="size-4 text-[var(--forge-primary)]" />
-            API Keys &amp; modelos
-          </Link>
+          <div className="flex gap-1">
+            <Link to="/api" className="dashboard-upgrade flex-1 text-[10px] py-2 justify-center">
+              <Key className="size-3 text-[var(--forge-primary)]" />
+              API
+            </Link>
+            <Link to="/models" className="dashboard-upgrade flex-1 text-[10px] py-2 justify-center">
+              <Brain className="size-3 text-[var(--forge-primary)]" />
+              Modelos
+            </Link>
+          </div>
           <Link
             to="/settings"
-            className="dashboard-nav-item"
+            className="dashboard-nav-item dashboard-nav-item-compact"
             data-active={activeNav === "settings" ? "true" : undefined}
           >
-            <Settings className="size-4 shrink-0" />
+            <Settings className="size-3.5 shrink-0" />
             Ajustes
           </Link>
           {user && (
             <button
               type="button"
-              className="dashboard-nav-item w-full text-left text-[var(--forge-ghost)]"
+              className="dashboard-nav-item dashboard-nav-item-compact w-full text-left text-[var(--forge-ghost)]"
               onClick={() => signOut()}
             >
+              <LogOut className="size-3.5 shrink-0" />
               Sair
             </button>
           )}

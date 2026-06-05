@@ -170,7 +170,7 @@ function buildPreset(row: RankedInput): ForgeModelPreset {
 const RANKED: RankedInput[] = [
   { rank: 1, label: "Claude Opus 4.8", brand: "Anthropic", openRouterSlug: "anthropic/claude-opus-4-8", tier: "frontier", editorPick: true },
   { rank: 2, label: "Claude Opus 4.7", brand: "Anthropic", openRouterSlug: "anthropic/claude-opus-4-7", tier: "frontier" },
-  { rank: 3, label: "Claude Sonnet 4.6", brand: "Anthropic", openRouterSlug: "anthropic/claude-sonnet-4-6", tier: "frontier", recommended: true, editorPick: true },
+  { rank: 3, label: "Claude Sonnet 4.6", brand: "Anthropic", openRouterSlug: "anthropic/claude-sonnet-4-6", tier: "frontier", editorPick: true },
   { rank: 4, label: "GPT-5.5", brand: "OpenAI", openRouterSlug: "openai/gpt-5.5", tier: "frontier", editorPick: true },
   { rank: 5, label: "GPT-5.5 Instant", brand: "OpenAI", openRouterSlug: "openai/gpt-5.5-instant", tier: "frontier" },
   { rank: 6, label: "GPT-5.3 Codex", brand: "OpenAI", openRouterSlug: "openai/gpt-5.3-codex", tier: "frontier", recommended: true, editorPick: true },
@@ -189,7 +189,7 @@ const RANKED: RankedInput[] = [
   { rank: 19, label: "MiniMax M2.7", brand: "MiniMax", openRouterSlug: "minimax/minimax-m2.7", tier: "balanced" },
   { rank: 20, label: "GLM-5.1", brand: "Zhipu", openRouterSlug: "zhipu/glm-5.1", tier: "balanced" },
   { rank: 21, label: "Nemotron 3 Ultra (550B)", brand: "NVIDIA", openRouterSlug: "nvidia/nemotron-3-ultra-550b", tier: "pool" },
-  { rank: 22, label: "Nemotron 3 Super (120B)", brand: "NVIDIA", openRouterSlug: "nvidia/nemotron-3-super-120b", tier: "pool", recommended: true },
+  { rank: 22, label: "Nemotron 3 Super (120B)", brand: "NVIDIA", openRouterSlug: "nvidia/nemotron-3-super-120b", tier: "pool" },
   { rank: 23, label: "Qwen3 Coder", brand: "Qwen", openRouterSlug: "qwen/qwen3-coder", tier: "pool", recommended: true },
   { rank: 24, label: "Gemma 4 31B", brand: "Google", openRouterSlug: "google/gemma-4-31b-it", tier: "fast" },
   { rank: 25, label: "Claude Opus 4.8 Fast", brand: "Anthropic", openRouterSlug: "anthropic/claude-opus-4-8-fast", tier: "fast" },
@@ -201,10 +201,13 @@ const RANKED: RankedInput[] = [
   { rank: 31, label: "Qwen3.5 397B (NVIDIA)", brand: "Qwen", openRouterSlug: "qwen/qwen3.5-397b-a17b", tier: "pool" },
 ];
 
-/** Ranking completo — Estúdio IA em /api-keys */
+/** Ranking completo — Estúdio IA em /models */
 export const RANKED_MODEL_PRESETS: ForgeModelPreset[] = RANKED.map(buildPreset);
 
-/** Pool ROBIN — APIs nativas Groq/NVIDIA */
+/** Gosto da plataforma no pool ROBIN NVIDIA — único preset “taste” do FORGE */
+export const PLATFORM_ROBIN_TASTE_PRESET_ID = "pool-nemotron-ultra-550b";
+
+/** Pool ROBIN — APIs nativas Groq/NVIDIA (usuário escolhe; sem default silencioso) */
 const NATIVE_POOL: ForgeModelPreset[] = [
   {
     id: "pool-groq-flash",
@@ -219,22 +222,20 @@ const NATIVE_POOL: ForgeModelPreset[] = [
     llmProvider: "openai",
     baseUrl: "https://api.groq.com/openai/v1",
     secretKey: "GROQ_API_KEY",
-    recommended: true,
   },
   {
-    id: "pool-nemotron-super",
+    id: PLATFORM_ROBIN_TASTE_PRESET_ID,
     env: "nvidia",
-    model: "nvidia/nemotron-3-super-120b",
-    openRouterSlug: "nvidia/nemotron-3-super-120b",
-    label: "NVIDIA · Nemotron 3 Super",
-    description: "Pool ROBIN NVIDIA (#22)",
+    model: "nvidia/nemotron-3-ultra-550b",
+    openRouterSlug: "nvidia/nemotron-3-ultra-550b",
+    label: "NVIDIA · Nemotron 3 Ultra (550B)",
+    description: "Gosto FORGE — pool ROBIN NVIDIA",
     tier: "pool",
     brand: "NVIDIA",
     rank: 91,
     llmProvider: "openai",
     baseUrl: "https://integrate.api.nvidia.com/v1",
     secretKey: "NVIDIA_API_KEY",
-    recommended: true,
   },
 ];
 
@@ -248,17 +249,15 @@ export const POOL_MODEL_PRESETS = CODING_MODEL_PRESETS.filter((p) => p.tier === 
 /** Dropdown do editor — só atalhos, não os 31 de uma vez */
 export const EDITOR_MODEL_PRESETS = RANKED_MODEL_PRESETS.filter((p) => p.editorPick || p.recommended);
 
-const DEFAULT_PRESET_ID = slugToId("anthropic/claude-sonnet-4-6");
-
 const LEGACY_PRESET_IDS: Record<string, string> = {
-  "or-anthropic--claude-sonnet-4-6": DEFAULT_PRESET_ID,
-  "anthropic-sonnet": DEFAULT_PRESET_ID,
+  "or-anthropic--claude-sonnet-4-6": slugToId("anthropic/claude-sonnet-4-6"),
+  "anthropic-sonnet": slugToId("anthropic/claude-sonnet-4-6"),
   "anthropic-opus": slugToId("anthropic/claude-opus-4-8"),
-  "openrouter-custom": DEFAULT_PRESET_ID,
   "xai-grok3": slugToId("xai/grok-4.3"),
   "groq-llama70": "pool-groq-flash",
   "pool-groq-flash": "pool-groq-flash",
-  "nvidia-llama70": "pool-nemotron-super",
+  "nvidia-llama70": PLATFORM_ROBIN_TASTE_PRESET_ID,
+  "pool-nemotron-super": PLATFORM_ROBIN_TASTE_PRESET_ID,
 };
 
 export const STT_OPTIONS = [
@@ -272,21 +271,42 @@ export const STT_OPTIONS = [
   {
     id: "groq" as const,
     label: "Groq Whisper Large v3 Turbo",
-    description: "Fallback — exige chave Groq.",
+    description: "Whisper via Groq — exige chave Groq.",
     requiresEnv: "groq" as AiEnvId,
+  },
+  {
+    id: "openrouter" as const,
+    label: "OpenRouter STT",
+    description: "Modelos de áudio via OpenRouter (ex.: whisper).",
+    requiresEnv: "openrouter" as AiEnvId,
   },
 ];
 
 const PRESET_BY_ID = new Map(CODING_MODEL_PRESETS.map((p) => [p.id, p]));
 
+export const UNCONFIGURED_PRESET: ForgeModelPreset = {
+  id: "",
+  env: "openrouter",
+  model: "",
+  openRouterSlug: "",
+  label: "Não configurado",
+  description: "Configure em Modelos",
+  tier: "balanced",
+  brand: "—",
+  rank: 9999,
+  llmProvider: "openai",
+  secretKey: "OPENROUTER_API_KEY",
+};
+
 export function normalizePresetId(id?: string): string {
-  if (!id) return DEFAULT_PRESET_ID;
+  if (!id?.trim()) return "";
   return LEGACY_PRESET_IDS[id] ?? id;
 }
 
 export function getPresetById(id?: string): ForgeModelPreset {
   const norm = normalizePresetId(id);
-  return PRESET_BY_ID.get(norm) ?? PRESET_BY_ID.get(DEFAULT_PRESET_ID)!;
+  if (!norm) return UNCONFIGURED_PRESET;
+  return PRESET_BY_ID.get(norm) ?? UNCONFIGURED_PRESET;
 }
 
 export function presetsForEnv(env: AiEnvId): ForgeModelPreset[] {

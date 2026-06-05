@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Eye, Loader2, Sparkles } from "lucide-react";
 import { PreviewRouteNav } from "@/components/editor/PreviewRouteNav";
+import { E2bSandboxPanel } from "@/components/editor/E2bSandboxPanel";
 import { buildPreviewUrl } from "@/lib/project-routes";
 
 interface PreviewFrameProps {
@@ -15,6 +16,9 @@ interface PreviewFrameProps {
   warming?: boolean;
   onWarmComplete?: () => void;
   agentHasRun?: boolean;
+  e2bConnected?: boolean;
+  onE2bSaved?: () => void;
+  onOpenE2bConnectors?: () => void;
 }
 
 export function PreviewFrame({
@@ -29,6 +33,9 @@ export function PreviewFrame({
   warming = false,
   onWarmComplete,
   agentHasRun = false,
+  e2bConnected = true,
+  onE2bSaved,
+  onOpenE2bConnectors,
 }: PreviewFrameProps) {
   const [iframeLoading, setIframeLoading] = useState(false);
 
@@ -68,6 +75,10 @@ export function PreviewFrame({
   }, [devUrl, indexFile]);
 
   const waitingForAgent = isReactProject && !devUrl && !bootError && !running;
+  const needsE2b = !e2bConnected;
+  const e2bBootBlocked =
+    needsE2b ||
+    (!!bootError && (bootError.includes("E2B") || bootError.includes("Sandbox")));
 
   return (
     <div className="forge-preview-root">
@@ -79,7 +90,15 @@ export function PreviewFrame({
       />
 
       <div className="forge-preview-viewport">
-        {bootError && !running && (
+        {e2bBootBlocked && !running && !devUrl && (
+          <E2bSandboxPanel
+            connected={e2bConnected}
+            onSaved={onE2bSaved}
+            onOpenConnectors={onOpenE2bConnectors}
+          />
+        )}
+
+        {bootError && !running && !e2bBootBlocked && (
           <div className="flex h-full flex-col items-center justify-center gap-3 bg-white p-8 text-center">
             <p className="text-sm text-neutral-700 max-w-sm leading-relaxed">{bootError}</p>
             {onRefresh && bootError.includes("agente") && (

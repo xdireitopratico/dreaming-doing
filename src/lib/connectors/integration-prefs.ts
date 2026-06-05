@@ -5,15 +5,15 @@ export type ConnectorId = "github" | "supabase" | "vercel" | "netlify" | "cloudf
 export type IntegrationPrefs = Record<ConnectorId, IntegrationMode>;
 
 export const DEFAULT_INTEGRATION_PREFS: IntegrationPrefs = {
-  github: "forge",
-  supabase: "forge",
-  vercel: "forge",
+  github: "own",
+  supabase: "own",
+  vercel: "own",
   netlify: "own",
   cloudflare: "own",
-  e2b: "forge",
+  e2b: "own",
 };
 
-export const TRIAL_MESSAGES_DEFAULT = 8;
+export const TRIAL_MESSAGES_DEFAULT = 50;
 
 export function parseIntegrationPrefs(raw: unknown): IntegrationPrefs {
   if (!raw || typeof raw !== "object") return { ...DEFAULT_INTEGRATION_PREFS };

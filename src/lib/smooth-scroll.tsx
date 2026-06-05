@@ -5,7 +5,7 @@ import { useRouterState } from "@tanstack/react-router";
 const NATIVE_SCROLL_PREFIXES = [
   "/auth",
   "/connectors",
-  "/api-keys",
+  "/api",
   "/settings",
   "/projects",
 ];

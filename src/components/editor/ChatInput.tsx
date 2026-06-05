@@ -16,6 +16,11 @@ import { cn } from "@/lib/utils";
 import { MicButton } from "@/components/voice/MicButton";
 import { EditorModelControl } from "@/components/editor/EditorModelControl";
 import { toast } from "sonner";
+import { loadAgentPreferences } from "@/lib/agent-preferences";
+import {
+  getAgentSetupBlockMessage,
+  isAgentPreferencesConfigured,
+} from "@/lib/agent-setup";
 
 export type AgentComposerMode = "build" | "plan";
 
@@ -43,7 +48,9 @@ interface ChatInputProps {
   onExternalPromptConsumed?: () => void;
   /** Markdown exibido quando não há mensagens (boas-vindas / tira-gosto). */
   welcomeMarkdown?: string;
-  trialMessagesRemaining?: number;
+  tasteChatRemaining?: number;
+  tasteStartRemaining?: number;
+  onStartProject?: () => void;
 }
 
 // -----------------------------------------------------------------------------------
@@ -142,7 +149,9 @@ export function ChatInput({
   externalPrompt,
   onExternalPromptConsumed,
   welcomeMarkdown,
-  trialMessagesRemaining,
+  tasteChatRemaining,
+  tasteStartRemaining,
+  onStartProject,
 }: ChatInputProps) {
   const [input, setInput] = useState("");
   const [composerModeLocal, setComposerModeLocal] = useState<AgentComposerMode>("build");
@@ -225,6 +234,12 @@ export function ChatInput({
   const handleSend = () => {
     const text = input.trim();
     if (!text || running) return;
+
+    const prefs = loadAgentPreferences();
+    if (!isAgentPreferencesConfigured(prefs)) {
+      toast.error(getAgentSetupBlockMessage(prefs));
+      return;
+    }
 
     historyRef.current.push(text);
     setHistoryIndex(-1);
@@ -322,13 +337,36 @@ export function ChatInput({
                 resultado ao vivo à direita.
               </p>
             )}
-            {trialMessagesRemaining != null && trialMessagesRemaining <= 0 && (
+            <div className="flex flex-wrap gap-2 pt-1">
+              {onStartProject && (tasteStartRemaining ?? 0) > 0 && (
+                <button
+                  type="button"
+                  onClick={onStartProject}
+                  className="rounded-lg border border-[var(--forge-primary)]/50 bg-[var(--forge-primary)]/10 px-3 py-2 font-mono text-[10px] text-[var(--forge-primary)] hover:bg-[var(--forge-primary)]/20 transition-colors"
+                >
+                  Start Project · demo completa (~15 min)
+                </button>
+              )}
+              <a
+                href="/api"
+                className="rounded-lg border border-[var(--forge-border)] px-3 py-2 font-mono text-[10px] text-[var(--forge-muted)] hover:border-[var(--forge-primary)]/40 transition-colors"
+              >
+                Configurar API →
+              </a>
+            </div>
+            {tasteChatRemaining != null && tasteChatRemaining <= 0 && (
               <p className="font-mono text-[10px] text-amber-400/90 border border-amber-400/20 rounded-lg px-3 py-2">
-                Limite do tira-gosto atingido. Adicione suas chaves em{" "}
-                <a href="/api-keys" className="text-[var(--forge-primary)] underline">
-                  API Keys
+                Limite Taste Chat (50) atingido. Adicione suas chaves em{" "}
+                <a href="/api" className="text-[var(--forge-primary)] underline">
+                  API
                 </a>{" "}
                 para continuar.
+              </p>
+            )}
+            {tasteChatRemaining != null && tasteChatRemaining > 0 && (
+              <p className="font-mono text-[9px] text-[var(--forge-ghost)]">
+                Taste Chat: {tasteChatRemaining} mensagens · Concierge NVIDIA
+                {(tasteStartRemaining ?? 0) > 0 ? ` · Start Project: ${tasteStartRemaining} restante` : ""}
               </p>
             )}
           </div>

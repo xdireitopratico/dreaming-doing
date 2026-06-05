@@ -246,12 +246,12 @@ function SettingsPage() {
         </h2>
         <div className="grid gap-3 sm:grid-cols-2">
           <Link
-            to="/api-keys"
+            to="/api"
             className="flex items-center gap-3 rounded-lg border border-[var(--border)] p-4 hover:bg-[var(--surface-2)] transition-colors"
           >
             <Key className="size-5 text-[var(--primary)] shrink-0" />
             <div>
-              <div className="font-mono text-[11px]">API Keys</div>
+              <div className="font-mono text-[11px]">API</div>
               <div className="font-mono text-[9px] text-[var(--text-ghost)]">
                 Suas chaves de IA, pool ROBIN, voz
               </div>

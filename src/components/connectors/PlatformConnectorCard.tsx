@@ -2,7 +2,7 @@ import { motion } from "framer-motion";
 import { CheckCircle2, ChevronRight } from "lucide-react";
 import type { ConnectorId, ConnectorStatus, IntegrationMode } from "@/hooks/useConnectors";
 import { CONNECTOR_REGISTRY, isConnectorActive } from "@/lib/connectors/registry";
-import { ConnectorModeToggle } from "@/components/connectors/ConnectorModeToggle";
+import { ConnectorAuthStatus } from "@/components/connectors/ConnectorAuthStatus";
 
 export function PlatformConnectorCard({
   id,
@@ -56,12 +56,7 @@ export function PlatformConnectorCard({
             {entry.description}
           </p>
 
-          <ConnectorModeToggle
-            id={id}
-            mode={mode}
-            forgeAvailable={status.forgeAvailable}
-            onModeChange={onModeChange}
-          />
+          <ConnectorAuthStatus id={id} connected={isActive} label={status.label} />
         </div>
         <button
           type="button"
@@ -73,10 +68,9 @@ export function PlatformConnectorCard({
         </button>
       </div>
 
-      {mode === "forge" && status.forgeAvailable && id !== "cloudflare" && (
+      {!isActive && (
         <p className="mt-3 ml-14 font-mono text-[8px] text-[var(--text-ghost)] leading-relaxed">
-          Infraestrutura FORGE — comece sem criar contas externas. Você pode migrar para &quot;Meu {entry.name}&quot;
-          quando quiser independência total.
+          Credenciais ficam só na sua conta — configure uma vez no painel.
         </p>
       )}
     </motion.div>

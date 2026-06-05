@@ -4,6 +4,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { getSupabaseEnv } from "@/lib/supabase-env";
 import { parseAgentDiagnostics, pushDiagnostics } from "@/hooks/useDiagnostics";
 import { loadAgentPreferences } from "@/lib/agent-preferences";
+import { loadAgentSessionExtensions } from "@/lib/agent-session-extensions";
+import type { ForgeSessionKind } from "@/lib/taste";
+import { dispatchTasteUiAction, isTasteUiAction } from "@/lib/taste-ui-actions";
 
 export interface SSEEvent {
   type: string;
@@ -78,7 +81,11 @@ export function useSSE() {
   const [connected, setConnected] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
 
-  const connect = useCallback(async (projectId: string, conversationId: string) => {
+  const connect = useCallback(async (
+    projectId: string,
+    conversationId: string,
+    sessionKind?: ForgeSessionKind,
+  ) => {
     setProgress({ ...initialState });
     setConnected(true);
     const sawFinish = { current: false };
@@ -124,6 +131,8 @@ export function useSSE() {
           projectId,
           conversationId,
           preferences: loadAgentPreferences(),
+          sessionKind,
+          ...loadAgentSessionExtensions(),
         }),
         signal: controller.signal,
       });
@@ -157,12 +166,20 @@ export function useSSE() {
           if (line.startsWith("data: ")) {
             const json = line.slice(6);
             try {
-              const parsed = JSON.parse(json);
+              const parsed = JSON.parse(json) as Record<string, unknown>;
+              const eventType = (parsed.type as string) ?? "unknown";
+              const eventData =
+                parsed.data && typeof parsed.data === "object"
+                  ? (parsed.data as Record<string, unknown>)
+                  : { ...parsed, type: undefined };
               const event: SSEEvent = {
-                type: (parsed.type as string) ?? "unknown",
-                data: (parsed.data as Record<string, unknown>) ?? parsed,
+                type: eventType,
+                data: eventData,
                 timestamp: Date.now(),
               };
+              if (eventType === "ui_action" && isTasteUiAction(parsed)) {
+                dispatchTasteUiAction(parsed as Parameters<typeof dispatchTasteUiAction>[0]);
+              }
               if (event.type === "finish" || event.type === "done") sawFinish.current = true;
               setProgress((prev) => applyEvent(prev, event));
             } catch {
@@ -335,6 +352,17 @@ function applyEvent(prev: AgentProgress, event: SSEEvent): AgentProgress {
         error: data.ok === false ? ((data.error as string) ?? prev.error) : prev.error,
         timeline: [...prev.timeline, event],
       };
+
+    case "ui_action": {
+      const payload = { ...data };
+      delete (payload as { type?: string }).type;
+      if (isTasteUiAction(payload)) dispatchTasteUiAction(payload);
+      return {
+        ...prev,
+        statusHint: (data.reason as string) ?? prev.statusHint,
+        timeline: [...prev.timeline, event],
+      };
+    }
 
     default:
       return { ...prev, timeline: [...prev.timeline, event] };

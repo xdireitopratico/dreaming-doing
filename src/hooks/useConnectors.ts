@@ -34,7 +34,9 @@ export function useConnectors() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("profiles")
-        .select("github_username, integration_prefs, trial_messages_remaining")
+        .select(
+          "github_username, integration_prefs, trial_messages_remaining, taste_chat_remaining, taste_start_remaining",
+        )
         .eq("id", user!.id)
         .maybeSingle();
       if (error) throw error;
@@ -61,6 +63,7 @@ export function useConnectors() {
   const vercelRow = rows.find((r) => r.kind === "vercel");
   const netlifyRow = rows.find((r) => r.kind === "netlify");
   const cloudflareRow = rows.find((r) => r.kind === "cloudflare");
+  const e2bRow = rows.find((r) => (r.kind as string) === "e2b");
 
   const status: Record<ConnectorId, ConnectorStatus> = {
     github: {
@@ -97,16 +100,26 @@ export function useConnectors() {
     },
     e2b: {
       forgeAvailable: CONNECTOR_REGISTRY.e2b.forgeAvailable,
-      connected: false,
-      label: modes.e2b === "forge" ? "Sandbox FORGE" : undefined,
-      meta: {},
+      connected: !!e2bRow,
+      label: e2bRow ? "E2B · sua conta" : undefined,
+      meta: (e2bRow?.meta as Record<string, unknown>) ?? {},
     },
   };
 
-  const trialMessagesRemaining =
-    typeof profile?.trial_messages_remaining === "number"
-      ? profile.trial_messages_remaining
-      : TRIAL_MESSAGES_DEFAULT;
+  const tasteQuota = (() => {
+    const chat =
+      typeof profile?.taste_chat_remaining === "number"
+        ? profile.taste_chat_remaining
+        : typeof profile?.trial_messages_remaining === "number"
+          ? profile.trial_messages_remaining
+          : TRIAL_MESSAGES_DEFAULT;
+    const start =
+      typeof profile?.taste_start_remaining === "number" ? profile.taste_start_remaining : 1;
+    return { tasteChatRemaining: chat, tasteStartRemaining: start };
+  })();
+
+  /** @deprecated use tasteChatRemaining */
+  const trialMessagesRemaining = tasteQuota.tasteChatRemaining;
 
   const setMode = useCallback(
     async (id: ConnectorId, mode: IntegrationMode) => {
@@ -141,12 +154,31 @@ export function useConnectors() {
 
       if (kind === "e2b") {
         if (payload.disconnect) {
-          await setMode("e2b", "forge");
-          toast.success("Voltou ao sandbox FORGE.");
+          const { data, error } = await supabase.functions.invoke("connector-upsert", {
+            body: { kind: "e2b", disconnect: true },
+          });
+          if (error) throw new Error(error.message);
+          const res = data as { error?: string };
+          if (res?.error) throw new Error(res.error);
+          await qc.invalidateQueries({ queryKey: ["connectors-public"] });
+          toast.success("Chave E2B removida");
+        } else if (payload.token?.trim()) {
+          const { data, error } = await supabase.functions.invoke("connector-upsert", {
+            body: {
+              kind: "e2b",
+              token: payload.token.trim(),
+              meta: { label: "E2B Sandbox", ...(payload.meta ?? {}) },
+            },
+          });
+          if (error) throw new Error(error.message);
+          const res = data as { error?: string };
+          if (res?.error) throw new Error(res.error);
+          await setMode("e2b", "own");
+          await qc.invalidateQueries({ queryKey: ["connectors-public"] });
+          toast.success("Sandbox E2B conectado");
         } else {
-          toast.info(
-            "Sandbox FORGE já está ativo. Chave E2B própria será suportada em breve — cadastre-se na E2B para se preparar.",
-          );
+          toast.error("Cole sua chave E2B (e2b_...)");
+          return;
         }
         setModal(null);
         return;
@@ -203,5 +235,9 @@ export function useConnectors() {
     closeModal,
     saveConnector,
     trialMessagesRemaining,
+    tasteChatRemaining: tasteQuota.tasteChatRemaining,
+    tasteStartRemaining: tasteQuota.tasteStartRemaining,
+    /** Definido no servidor; no client assumimos false até primeira resposta BYOK */
+    hasUserLlmKey: false as boolean,
   };
 }

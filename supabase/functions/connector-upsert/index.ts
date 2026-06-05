@@ -9,7 +9,7 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
 
-const ALLOWED = new Set(["github", "vercel", "netlify", "cloudflare", "anthropic", "openai"]);
+const ALLOWED = new Set(["github", "vercel", "netlify", "cloudflare", "anthropic", "openai", "e2b"]);
 
 type PoolSlot = { id: string; hint: string; addedAt: string };
 
@@ -166,6 +166,9 @@ Deno.serve(async (req) => {
     }
     if (!token && kind === "netlify") {
       return json({ error: "Token Netlify obrigatório" }, 400);
+    }
+    if (!token && kind === "e2b") {
+      return json({ error: "Chave E2B obrigatória (e2b_...)" }, 400);
     }
 
     let tokenEncrypted: string | undefined;
