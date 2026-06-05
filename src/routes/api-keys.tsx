@@ -5,7 +5,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
 import {
-  ArrowLeft, Shield, CheckCircle2, AlertCircle, Star, ExternalLink, Plug, Zap, Brain, Globe, Cpu,
+  ArrowLeft, Shield, CheckCircle2, AlertCircle, Star, ExternalLink, Plug, Zap, Brain, Globe, Cpu, Sparkles,
 } from "lucide-react";
 import { DashboardShell } from "@/components/dashboard/DashboardShell";
 import { ApiKeyInput } from "@/components/connectors/ApiKeyInput";
@@ -55,10 +55,22 @@ const INITIAL: ProviderConfig[] = [
     provider: "Anthropic",
     label: "Anthropic",
     icon: <Zap className="size-5" />,
-    description: "Claude Sonnet 4 — melhor para código complexo.",
+    description: "Claude Sonnet 4 / Opus — modelos frontier para código.",
     docUrl: "https://console.anthropic.com",
     keyPrefix: "sk-ant-",
     costPerM: 3,
+    status: "available",
+    keyValue: "",
+  },
+  {
+    id: "gemini",
+    provider: "Google",
+    label: "Google Gemini",
+    icon: <Sparkles className="size-5" />,
+    description: "Gemini 2.5 Pro / Flash — sequência Google AI Studio.",
+    docUrl: "https://aistudio.google.com/apikey",
+    keyPrefix: "AIza",
+    costPerM: 1.25,
     status: "available",
     keyValue: "",
   },
@@ -67,7 +79,7 @@ const INITIAL: ProviderConfig[] = [
     provider: "OpenAI",
     label: "OpenAI",
     icon: <Brain className="size-5" />,
-    description: "GPT-4o multimodal.",
+    description: "GPT-4.1 / GPT-4o — código e multimodal.",
     docUrl: "https://platform.openai.com",
     keyPrefix: "sk-proj-",
     costPerM: 2.5,
@@ -79,7 +91,7 @@ const INITIAL: ProviderConfig[] = [
     provider: "xAI",
     label: "xAI",
     icon: <Globe className="size-5" />,
-    description: "Grok 3 Mini — iterações rápidas e STT (voz).",
+    description: "Grok 3 / Mini — código + STT (voz) na mesma chave.",
     docUrl: "https://console.x.ai",
     keyPrefix: "xai-",
     costPerM: 0.5,
@@ -91,7 +103,7 @@ const INITIAL: ProviderConfig[] = [
     provider: "Groq",
     label: "Groq",
     icon: <Cpu className="size-5" />,
-    description: "Llama via LPU — gratuito, ideal para pool ROBIN.",
+    description: "Llama 3.3 70B / QwQ — pool ROBIN (sem modelos 8B).",
     docUrl: "https://console.groq.com",
     keyPrefix: "gsk_",
     costPerM: 0,
@@ -104,7 +116,7 @@ const INITIAL: ProviderConfig[] = [
     provider: "NVIDIA",
     label: "NVIDIA NIM",
     icon: <Cpu className="size-5" />,
-    description: "Modelos abertos via NIM — use várias keys no modo ROBIN.",
+    description: "Llama 3.3 70B / Nemotron no NIM — pool ROBIN para código.",
     docUrl: "https://build.nvidia.com",
     keyPrefix: "nvapi-",
     costPerM: 0,
@@ -123,7 +135,9 @@ function rowForProvider(
       ? { kind: "anthropic", provider: "" }
       : id === "openai"
         ? { kind: "openai", provider: "openai" }
-        : { kind: "openai", provider: id };
+        : id === "gemini"
+          ? { kind: "openai", provider: "gemini" }
+          : { kind: "openai", provider: id };
 
   return rows.find((r) => {
     const meta = (r.meta ?? {}) as { provider?: string };

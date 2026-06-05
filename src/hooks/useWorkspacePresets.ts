@@ -16,7 +16,7 @@ const PRESETS: WorkspacePreset[] = [
     id: "default",
     label: "Chat + Preview",
     icon: "◫",
-    leftRatio: 36,
+    leftRatio: 30,
     showFileTree: false,
     activeView: "preview",
   },

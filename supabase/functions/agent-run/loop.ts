@@ -129,7 +129,7 @@ export class AgentLoop {
           await this.reg.execute({
             id: crypto.randomUUID(),
             name: "shell_exec",
-            arguments: { command: `cd /home/project && git add -A && git commit -m "${(call.arguments.path as string)}: update" 2>&1 || true` },
+            arguments: { command: `cd /home/user && git add -A && git commit -m "${(call.arguments.path as string)}: update" 2>&1 || true` },
           });
         }
         return result;

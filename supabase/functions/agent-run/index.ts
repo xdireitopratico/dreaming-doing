@@ -14,6 +14,7 @@ import {
   type AgentPreferencesPayload,
 } from "./connector-keys.ts";
 import { pickCheap, pickMain, type ProviderConfig } from "./providers.ts";
+import { defaultRobinModel, resolveFixedFromKeys } from "../_shared/model-presets.ts";
 import { buildChatHistory } from "./memory.ts";
 import { RobinKeyPool, ResilientLLM } from "./robin-pool.ts";
 import { getPlatformSecret, loadPlatformSecretsMap } from "../_shared/platform-secrets.ts";
@@ -25,6 +26,7 @@ const PLATFORM_SECRET_NAMES = [
   "ANTHROPIC_API_KEY",
   "OPENAI_API_KEY",
   "NVIDIA_API_KEY",
+  "GEMINI_API_KEY",
 ];
 
 const runningLocks = new Map<string, Promise<unknown>>();
@@ -41,27 +43,23 @@ function isRobinMode(p?: AgentPreferencesPayload): boolean {
   return p?.mode === "robin" || p?.mode === "rob";
 }
 
-function robinProviderConfig(poolProvider: "nvidia" | "groq", keys: string[]): ProviderConfig {
+function robinProviderConfig(
+  poolProvider: "nvidia" | "groq",
+  keys: string[],
+  modelPresetId?: string,
+): ProviderConfig {
   if (keys.length === 0) {
     throw new Error(
       `Modo ROBIN ativo, mas nenhuma chave ${poolProvider.toUpperCase()} no pool. Adicione chaves em /api-keys → Adicionar ao pool.`,
     );
   }
-  if (poolProvider === "nvidia") {
-    return {
-      provider: "openai",
-      apiKey: keys[0]!,
-      model: "meta/llama-3.1-8b-instruct",
-      baseUrl: "https://integrate.api.nvidia.com/v1",
-      label: `ROBIN · NVIDIA NIM (${keys.length} chaves)`,
-    };
-  }
+  const wire = defaultRobinModel(poolProvider, modelPresetId);
   return {
-    provider: "openai",
+    provider: wire.provider,
     apiKey: keys[0]!,
-    model: "llama-3.3-70b-versatile",
-    baseUrl: "https://api.groq.com/openai/v1",
-    label: `ROBIN · Groq (${keys.length} chaves)`,
+    model: wire.model,
+    baseUrl: wire.baseUrl,
+    label: `ROBIN · ${wire.label} (${keys.length} chaves)`,
   };
 }
 
@@ -129,7 +127,7 @@ Deno.serve(async (req) => {
     } else {
       userOnlyKeys = await loadConnectorKeys(supabase, userData.user.id, preferences);
       hasUserLlmKey = Object.keys(userOnlyKeys).some((k) =>
-        ["ANTHROPIC_API_KEY", "GROQ_API_KEY", "XAI_API_KEY", "OPENAI_API_KEY", "NVIDIA_API_KEY"].includes(k)
+        ["ANTHROPIC_API_KEY", "GROQ_API_KEY", "XAI_API_KEY", "OPENAI_API_KEY", "NVIDIA_API_KEY", "GEMINI_API_KEY"].includes(k)
       );
     }
 
@@ -161,8 +159,8 @@ Deno.serve(async (req) => {
         }
         effectiveRobin = true;
         robinPool = new RobinKeyPool(poolKeys);
-        mainCfg = robinProviderConfig("nvidia", poolKeys);
-        mainCfg.label = `Tira-gosto · ROBIN · NVIDIA NIM (${poolKeys.length} chaves FORGE)`;
+        mainCfg = robinProviderConfig("nvidia", poolKeys, "nvidia-llama70");
+        mainCfg.label = `Tira-gosto · ROBIN · ${mainCfg.label.replace(/^ROBIN · /, "")} (FORGE)`;
         connectorKeys = { NVIDIA_API_KEY: poolKeys[0]! };
         await supabase
           .from("profiles")
@@ -171,36 +169,21 @@ Deno.serve(async (req) => {
       } else if (userWantsRobin) {
         const poolKeys = await loadConnectorPools(supabase, userData.user.id, poolProvider);
         robinPool = new RobinKeyPool(poolKeys);
-        mainCfg = robinProviderConfig(poolProvider, poolKeys);
+        mainCfg = robinProviderConfig(poolProvider, poolKeys, preferences?.robinPoolModelId);
         connectorKeys = poolProvider === "nvidia"
           ? { NVIDIA_API_KEY: poolKeys[0]! }
           : { GROQ_API_KEY: poolKeys[0]! };
       } else {
         connectorKeys = mergeKeys(userOnlyKeys);
         if (preferences?.mode === "fixed" && preferences.fixedPresetId) {
-          const preset = preferences.fixedPresetId as string;
-          if (preset.includes("groq") && connectorKeys.GROQ_API_KEY) {
+          const resolved = resolveFixedFromKeys(preferences.fixedPresetId, connectorKeys);
+          if (resolved) {
             mainCfg = {
-              provider: "openai",
-              apiKey: connectorKeys.GROQ_API_KEY,
-              model: "llama-3.3-70b-versatile",
-              baseUrl: "https://api.groq.com/openai/v1",
-              label: "Groq (fixo)",
-            };
-          } else if (preset.includes("xai") && connectorKeys.XAI_API_KEY) {
-            mainCfg = {
-              provider: "openai",
-              apiKey: connectorKeys.XAI_API_KEY,
-              model: "grok-2-1212",
-              baseUrl: "https://api.x.ai/v1",
-              label: "xAI (fixo)",
-            };
-          } else if (preset.includes("openai") && connectorKeys.OPENAI_API_KEY) {
-            mainCfg = {
-              provider: "openai",
-              apiKey: connectorKeys.OPENAI_API_KEY,
-              model: "gpt-4o",
-              label: "OpenAI (fixo)",
+              provider: resolved.provider,
+              apiKey: resolved.apiKey,
+              model: resolved.model,
+              baseUrl: resolved.baseUrl,
+              label: `${resolved.label} (fixo)`,
             };
           } else {
             mainCfg = pickMain(connectorKeys);

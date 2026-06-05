@@ -51,13 +51,15 @@ const initialState: AgentProgress = {
 
 const MODEL_COSTS: Record<string, number> = {
   "claude-sonnet-4-20250514": 3.0,
-  "claude-3-5-sonnet": 3.0,
-  "claude-3-opus": 15.0,
-  "claude-3-haiku": 0.25,
+  "claude-opus-4-20250514": 15.0,
   "gpt-4o": 2.5,
-  "gpt-4o-mini": 0.15,
-  "gemini-1.5-pro": 1.25,
-  "gemini-1.5-flash": 0.075,
+  "gpt-4.1": 2.0,
+  "grok-3": 2.0,
+  "grok-3-mini": 0.5,
+  "gemini-2.5-pro": 1.25,
+  "gemini-2.5-flash": 0.15,
+  "llama-3.3-70b-versatile": 0,
+  "meta/llama-3.3-70b-instruct": 0,
   default: 1.0,
 };
 

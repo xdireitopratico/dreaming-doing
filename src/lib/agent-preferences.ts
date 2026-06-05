@@ -1,4 +1,6 @@
 /** Preferências de modelo/potência — persistidas localmente (sem expor chaves). */
+import { getPresetById, normalizePresetId } from "@/lib/model-catalog";
+
 export type ModelPowerMode = "auto" | "robin" | "fixed";
 
 export type PoolProviderId = "nvidia" | "groq";
@@ -7,11 +9,13 @@ export type SttProviderId = "grok" | "groq";
 
 export interface AgentPreferences {
   mode: ModelPowerMode;
-  /** Preset do ProviderSelector quando mode === "fixed" */
+  /** Preset do catálogo quando mode === "fixed" */
   fixedPresetId?: string;
-  /** Provedor do pool de chaves quando mode === "robin" */
+  /** Provedor do pool quando mode === "robin" */
   poolProvider?: PoolProviderId;
-  /** STT no microfone: Grok (xAI) ou Groq Whisper */
+  /** Preset do modelo no pool (ex.: nvidia-llama70, groq-llama70) */
+  robinPoolModelId?: string;
+  /** STT no microfone */
   sttProvider?: SttProviderId;
 }
 
@@ -21,6 +25,7 @@ export const DEFAULT_AGENT_PREFERENCES: AgentPreferences = {
   mode: "auto",
   fixedPresetId: "anthropic-sonnet",
   poolProvider: "groq",
+  robinPoolModelId: "groq-llama70",
   sttProvider: "grok",
 };
 
@@ -31,14 +36,19 @@ export function loadAgentPreferences(): AgentPreferences {
     if (!raw) return DEFAULT_AGENT_PREFERENCES;
     const parsed = JSON.parse(raw) as Partial<AgentPreferences> & { mode?: string };
     const modeRaw = parsed.mode === "rob" ? "robin" : parsed.mode;
-    return {
+    const merged: AgentPreferences = {
       ...DEFAULT_AGENT_PREFERENCES,
       ...parsed,
       mode:
         modeRaw === "robin" || modeRaw === "fixed" || modeRaw === "auto"
           ? modeRaw
           : "auto",
+      fixedPresetId: normalizePresetId(parsed.fixedPresetId),
+      robinPoolModelId: parsed.robinPoolModelId
+        ? normalizePresetId(parsed.robinPoolModelId)
+        : DEFAULT_AGENT_PREFERENCES.robinPoolModelId,
     };
+    return merged;
   } catch {
     return DEFAULT_AGENT_PREFERENCES;
   }
@@ -46,25 +56,23 @@ export function loadAgentPreferences(): AgentPreferences {
 
 export function saveAgentPreferences(prefs: AgentPreferences) {
   if (typeof window === "undefined") return;
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(prefs));
+  const normalized: AgentPreferences = {
+    ...prefs,
+    fixedPresetId: normalizePresetId(prefs.fixedPresetId),
+    robinPoolModelId: normalizePresetId(prefs.robinPoolModelId),
+  };
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(normalized));
   window.dispatchEvent(new Event("forge:prefs-updated"));
 }
 
 /** Label curto para o chip do editor conforme o modo ativo. */
 export function agentModeLabel(prefs: AgentPreferences): string {
   if (prefs.mode === "robin") {
-    const p = prefs.poolProvider === "nvidia" ? "NVIDIA NIM" : "Groq";
-    return `ROBIN · ${p}`;
+    const preset = getPresetById(prefs.robinPoolModelId);
+    return `ROBIN · ${preset.label}`;
   }
   if (prefs.mode === "fixed") {
-    const id = prefs.fixedPresetId ?? "anthropic-sonnet";
-    const names: Record<string, string> = {
-      "anthropic-sonnet": "Claude Sonnet 4",
-      "xai-grok": "Grok 3 Mini",
-      "groq-llama": "Llama 4 Scout",
-      "openai-gpt4o": "GPT-4o",
-    };
-    return names[id] ?? "Modelo fixo";
+    return getPresetById(prefs.fixedPresetId).label;
   }
   return "Router automático";
 }

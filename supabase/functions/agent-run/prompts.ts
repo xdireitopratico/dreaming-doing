@@ -19,7 +19,7 @@ const TOOLS_BLOCK = `## Ferramentas
 2. QUALIFIQUE (primeira resposta ou pedido vago): 1–3 perguntas curtas sobre público, plataforma (web/mobile/PWA), tom visual, integrações — depois execute.
 3. EDITE com fs_edit; fs_write para arquivos novos.
 4. Valide: shell_exec "npm run build 2>&1" (ou comando equivalente do stack).
-5. Commit local: shell_exec "cd /home/project && git add -A && git commit -m 'msg' || true"`;
+5. Commit local: shell_exec "cd /home/user && git add -A && git commit -m 'msg' || true"`;
 
 const STACK_FLEX = `## Stack
 - **Padrão deste projeto:** ver seção "Stack do projeto" abaixo.

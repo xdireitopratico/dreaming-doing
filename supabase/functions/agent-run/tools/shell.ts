@@ -55,7 +55,7 @@ Retorna { exitCode, stdout, stderr }. Exit code 0 = sucesso.`,
       try {
         await ensureSync();
         const result = await sandbox.exec(args.command as string, {
-          cwd: (args.cwd as string) || "/home/project",
+          cwd: (args.cwd as string) || "/home/user",
           timeout: 180000,
         });
         return {

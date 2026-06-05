@@ -5,6 +5,7 @@ export type AgentPreferencesPayload = {
   mode?: "auto" | "robin" | "rob" | "fixed";
   poolProvider?: "nvidia" | "groq";
   fixedPresetId?: string;
+  robinPoolModelId?: string;
 };
 
 function isRobinMode(preferences?: AgentPreferencesPayload): boolean {
@@ -117,6 +118,7 @@ export async function loadConnectorKeys(
       if (p === "groq") keys.GROQ_API_KEY = token;
       else if (p === "xai") keys.XAI_API_KEY = token;
       else if (p === "nvidia") keys.NVIDIA_API_KEY = token;
+      else if (p === "gemini") keys.GEMINI_API_KEY = token;
       else keys.OPENAI_API_KEY = token;
     }
   }

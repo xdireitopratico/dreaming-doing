@@ -82,6 +82,7 @@ function EditorPage() {
   const [composerMode, setComposerMode] = useState<AgentComposerMode>("build");
   const [promptDraft, setPromptDraft] = useState<string | null>(null);
   const [publishing, setPublishing] = useState(false);
+  const [previewRoute, setPreviewRoute] = useState("/");
 
   // ─── Refs ────────────────────────────────────────────────────────────
   const autoAgentStarted = useRef(false);
@@ -499,7 +500,7 @@ function EditorPage() {
         previewBooting={previewBoot.booting || publishing}
       >
         <div
-          className="min-h-0 w-full flex-1"
+          className="flex min-h-0 h-full w-full flex-1 flex-col overflow-hidden"
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
@@ -560,6 +561,10 @@ function EditorPage() {
                         files={files?.map((f) => ({ path: f.path, content: f.content ?? "" })) ?? []}
                         running={running || previewBoot.booting}
                         devUrl={devUrl}
+                        previewPath={previewRoute}
+                        onPreviewPathChange={setPreviewRoute}
+                        iframeRef={previewIframeRef}
+                        bootError={previewBoot.lastError}
                         onRefresh={() => previewBoot.boot(true)}
                       />
                     )}

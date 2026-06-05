@@ -1,16 +1,16 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 
 const STORAGE_KEY = "forge-editor-chat-ratio";
-const SNAP_RATIOS = [0.28, 0.36, 0.44] as const;
+const SNAP_RATIOS = [0.3, 0.36, 0.44] as const;
 const MIN_CHAT_PX = 280;
-const MAX_CHAT_RATIO = 0.48;
-const DEFAULT_RATIO = 0.32;
+const MAX_CHAT_RATIO = 0.5;
+const DEFAULT_RATIO = 0.3;
 
 function loadRatio(): number {
   if (typeof window === "undefined") return DEFAULT_RATIO;
   const raw = localStorage.getItem(STORAGE_KEY);
   const n = raw ? Number.parseFloat(raw) : NaN;
-  if (Number.isFinite(n) && n >= 0.18 && n <= MAX_CHAT_RATIO) return n;
+  if (Number.isFinite(n) && n >= 0.22 && n <= MAX_CHAT_RATIO) return n;
   return DEFAULT_RATIO;
 }
 
@@ -78,27 +78,29 @@ export function EditorResizableLayout({
   );
 
   const handleDoubleClick = () => {
-    setRatio((r) => {
-      const idx = SNAP_RATIOS.indexOf(nearestSnap(r) as (typeof SNAP_RATIOS)[number]);
-      const next = SNAP_RATIOS[(idx + 1) % SNAP_RATIOS.length];
-      return next;
-    });
+    setRatio(DEFAULT_RATIO);
   };
 
-  const chatPercent = `${Math.round(ratio * 1000) / 10}%`;
+  const chatPct = `${Math.round(ratio * 1000) / 10}%`;
 
   return (
-    <div ref={containerRef} className="forge-editor-canvas">
-      <section className="forge-chat-panel" style={{ width: chatPercent }}>
-        {chat}
-      </section>
+    <div
+      ref={containerRef}
+      className="forge-editor-canvas"
+      style={
+        {
+          "--forge-chat-width": chatPct,
+        } as React.CSSProperties
+      }
+    >
+      <section className="forge-chat-panel">{chat}</section>
 
       <div
         className="forge-resize-handle"
         role="separator"
         aria-orientation="vertical"
         aria-valuenow={Math.round(ratio * 100)}
-        title="Arraste para redimensionar · duplo clique para alternar"
+        title="Arraste · duplo clique = 30/70"
         onPointerDown={startDrag}
         onDoubleClick={handleDoubleClick}
       />

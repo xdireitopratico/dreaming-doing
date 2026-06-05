@@ -89,7 +89,7 @@ Deno.serve(async (req) => {
     const providerKey = resolveProvider(kind, metaIn);
 
     if (kind === "openai" && !metaIn.provider) {
-      return json({ error: "meta.provider obrigatório (groq, nvidia, xai, openai)" }, 400);
+      return json({ error: "meta.provider obrigatório (groq, nvidia, xai, openai, gemini)" }, 400);
     }
 
     const loadOpenAiRow = async () => {

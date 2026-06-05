@@ -13,24 +13,30 @@ type BootResult = {
 
 export function usePreviewBoot(projectId: string) {
   const [booting, setBooting] = useState(false);
+  const [lastError, setLastError] = useState<string | null>(null);
   const qc = useQueryClient();
 
   const boot = useCallback(
     async (force = false) => {
       const { url, publishableKey } = getSupabaseEnv();
       if (!url || !publishableKey) {
-        toast.error("Supabase não configurado para preview.");
+        const msg = "Supabase não configurado para preview.";
+        setLastError(msg);
+        toast.error(msg);
         return null;
       }
 
       const { data: sess } = await supabase.auth.getSession();
       const token = sess.session?.access_token;
       if (!token) {
-        toast.error("Faça login para iniciar o preview.");
+        const msg = "Faça login para iniciar o preview.";
+        setLastError(msg);
+        toast.error(msg);
         return null;
       }
 
       setBooting(true);
+      setLastError(null);
       try {
         const res = await fetch(`${url}/functions/v1/preview-boot`, {
           method: "POST",
@@ -54,10 +60,11 @@ export function usePreviewBoot(projectId: string) {
         return body.url ?? null;
       } catch (e) {
         const msg = e instanceof Error ? e.message : "Falha ao iniciar preview";
+        setLastError(msg);
         if (msg.includes("E2B_API_KEY")) {
           toast.error("Preview ao vivo requer E2B_API_KEY no Supabase.");
         } else {
-          toast.error(msg);
+          toast.error(msg.length > 120 ? `${msg.slice(0, 120)}…` : msg);
         }
         return null;
       } finally {
@@ -67,5 +74,5 @@ export function usePreviewBoot(projectId: string) {
     [projectId, qc],
   );
 
-  return { booting, boot };
+  return { booting, boot, lastError, clearError: () => setLastError(null) };
 }

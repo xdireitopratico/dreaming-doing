@@ -1,12 +1,15 @@
-// sandbox.ts — SandboxProvider (E2B + Noop fallback)
+// sandbox.ts — E2B via SDK v2 (api.e2b.app)
+import { Sandbox } from "npm:e2b@2.14.1";
+import {
+  E2B_PROJECT_DIR,
+  E2B_TEMPLATE_DEFAULT,
+  e2bPreviewUrl,
+  normalizeProjectPath,
+} from "../_shared/e2b.ts";
 import type { SandboxProvider, ExecResult, ExecOpts, FileEntry } from "./types.ts";
 
-const E2B_TEMPLATE_DEFAULT = Deno.env.get("E2B_TEMPLATE") || "nodejs";
-
 class E2BSandbox implements SandboxProvider {
-  private sandboxId: string | null = null;
-  private baseUrl = "https://api.e2b.dev";
-  private projectId = "";
+  private sandbox: Sandbox | null = null;
 
   constructor(
     private readonly e2bApiKey: string,
@@ -14,104 +17,58 @@ class E2BSandbox implements SandboxProvider {
   ) {}
 
   async sync(projectId: string, files: FileEntry[]): Promise<void> {
-    this.projectId = projectId;
-    if (!this.sandboxId) {
-      await this.createSandbox();
+    if (!this.sandbox) {
+      this.sandbox = await Sandbox.create(this.e2bTemplate, {
+        apiKey: this.e2bApiKey,
+        timeoutMs: 300_000,
+      });
+      console.log(`Sandbox E2B criado: ${this.sandbox.sandboxId} (projeto ${projectId})`);
     }
-    const body: any = {};
-    for (const f of files) {
-      body[f.path] = f.content;
-    }
-    const resp = await fetch(
-      `${this.baseUrl}/sandboxes/${this.sandboxId}/filesystem/write`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-API-Key": this.e2bApiKey,
-        },
-        body: JSON.stringify(body),
-      },
+
+    if (files.length === 0) return;
+
+    await this.sandbox.files.write(
+      files.map((f) => ({
+        path: normalizeProjectPath(f.path),
+        data: f.content,
+      })),
     );
-    if (!resp.ok && resp.status !== 404) {
-      const err = await resp.text();
-      console.error("E2B sync error:", resp.status, err);
-    }
   }
 
   async exec(command: string, opts?: ExecOpts): Promise<ExecResult> {
-    if (!this.sandboxId) throw new Error("Sandbox não inicializado");
-
-    const cwd = opts?.cwd || "/home/project";
-    const timeout = opts?.timeout || 60000;
-
-    const resp = await fetch(
-      `${this.baseUrl}/sandboxes/${this.sandboxId}/commands`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-API-Key": this.e2bApiKey,
-        },
-        body: JSON.stringify({
-          cmd: command,
-          cwd,
-          timeout_ms: timeout,
-        }),
-      },
-    );
-
-    if (!resp.ok) {
-      const err = await resp.text();
-      return { exitCode: 1, stdout: "", stderr: `E2B error ${resp.status}: ${err}` };
+    if (!this.sandbox) {
+      return { exitCode: 1, stdout: "", stderr: "Sandbox não inicializado" };
     }
 
-    const data = await resp.json();
-    return {
-      exitCode: data.exitCode ?? 0,
-      stdout: data.stdout ?? "",
-      stderr: data.stderr ?? "",
-    };
+    try {
+      const result = await this.sandbox.commands.run(command, {
+        cwd: opts?.cwd || E2B_PROJECT_DIR,
+        timeoutMs: opts?.timeout || 60_000,
+      });
+      return {
+        exitCode: result.exitCode ?? 0,
+        stdout: result.stdout ?? "",
+        stderr: result.stderr ?? "",
+      };
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      return { exitCode: 1, stdout: "", stderr: msg };
+    }
   }
 
   async getPreviewUrl(port: number): Promise<string> {
-    if (!this.sandboxId) throw new Error("Sandbox não inicializado");
-    return `https://${this.sandboxId}-${port}.e2b.dev`;
+    if (!this.sandbox) throw new Error("Sandbox não inicializado");
+    return e2bPreviewUrl(this.sandbox.sandboxId, port);
   }
 
   async destroy(): Promise<void> {
-    if (!this.sandboxId) return;
+    if (!this.sandbox) return;
     try {
-      await fetch(`${this.baseUrl}/sandboxes/${this.sandboxId}`, {
-        method: "DELETE",
-        headers: { "X-API-Key": this.e2bApiKey },
-      });
-    } catch { /* ignore */ }
-    this.sandboxId = null;
-  }
-
-  private async createSandbox(): Promise<void> {
-    if (!this.e2bApiKey) throw new Error("E2B_API_KEY não configurada");
-    const resp = await fetch(`${this.baseUrl}/sandboxes`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-API-Key": this.e2bApiKey,
-      },
-      body: JSON.stringify({
-        templateID: this.e2bTemplate,
-        timeout_ms: 300000, // 5 min
-      }),
-    });
-
-    if (!resp.ok) {
-      const err = await resp.text();
-      throw new Error(`Falha ao criar sandbox E2B: ${resp.status} ${err}`);
+      await this.sandbox.kill();
+    } catch {
+      /* ignore */
     }
-
-    const data = await resp.json();
-    this.sandboxId = data.sandboxID;
-    console.log(`Sandbox E2B criado: ${this.sandboxId}`);
+    this.sandbox = null;
   }
 }
 
@@ -130,9 +87,9 @@ export function createSandboxProvider(e2bApiKey?: string, e2bTemplate?: string):
   const key = e2bApiKey?.trim() || Deno.env.get("E2B_API_KEY")?.trim() || "";
   const template = e2bTemplate?.trim() || E2B_TEMPLATE_DEFAULT;
   if (key) {
-    console.log("Usando sandbox E2B");
+    console.log("Usando sandbox E2B (template:", template, ")");
     return new E2BSandbox(key, template);
   }
-  console.log("Sandbox E2B não configurado - usando modo noop (tools de shell vão falhar)");
+  console.log("Sandbox E2B não configurado - modo noop");
   return new NoopSandbox();
 }

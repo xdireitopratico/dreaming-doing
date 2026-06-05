@@ -291,22 +291,25 @@ body:has(.editor-workspace) {
 /* ─── Canvas: fundo único + painéis flutuantes arredondados ─── */
 .forge-editor-canvas,
 .lovable-body {
-  display: flex;
+  display: grid;
+  grid-template-columns: var(--forge-chat-width, 30%) 6px minmax(0, 1fr);
   min-height: 0;
   flex: 1;
-  gap: 6px;
+  height: 100%;
+  gap: 0;
   padding: 6px 8px 8px;
   background: var(--forge-bg);
+  overflow: hidden;
 }
 
 .forge-chat-panel,
 .lovable-chat-column {
   display: flex;
-  min-width: 280px;
-  max-width: 48%;
   flex-direction: column;
+  min-width: 0;
   min-height: 0;
   height: 100%;
+  max-height: 100%;
   border-radius: 14px;
   background: var(--forge-chat);
   border: 1px solid var(--forge-border);
@@ -317,8 +320,10 @@ body:has(.editor-workspace) {
   display: flex;
   flex-direction: column;
   min-height: 0;
+  min-width: 0;
   flex: 1;
   width: 100%;
+  overflow: hidden;
 }
 
 .forge-resize-handle {
@@ -352,10 +357,10 @@ body:has(.editor-workspace) {
 .lovable-workspace {
   display: flex;
   min-width: 0;
-  flex: 1;
-  flex-direction: column;
   min-height: 0;
+  flex-direction: column;
   height: 100%;
+  max-height: 100%;
   border-radius: 14px;
   overflow: hidden;
   border: 1px solid rgba(0, 0, 0, 0.08);
@@ -372,8 +377,10 @@ body:has(.editor-workspace) {
 .forge-chat-inner {
   display: flex;
   min-height: 0;
+  min-width: 0;
   flex: 1;
   flex-direction: column;
+  overflow: hidden;
 }
 
 .forge-messages,
@@ -574,6 +581,7 @@ body:has(.editor-workspace) {
 
 .forge-agent-bar,
 .lovable-agent-bar {
+  flex-shrink: 0;
   padding: 6px 14px;
   font-size: 11px;
   color: var(--forge-muted);
@@ -590,6 +598,8 @@ body:has(.editor-workspace) {
 .forge-preview-root,
 .lovable-preview-root {
   display: flex;
+  min-height: 0;
+  flex: 1;
   height: 100%;
   flex-direction: column;
   background: var(--forge-preview);
@@ -598,8 +608,10 @@ body:has(.editor-workspace) {
 .forge-preview-viewport,
 .lovable-preview-viewport {
   flex: 1;
+  min-height: 0;
   overflow: hidden;
   display: flex;
+  position: relative;
 }
 
 .forge-preview-frame,
