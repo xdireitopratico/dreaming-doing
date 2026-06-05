@@ -26,6 +26,8 @@ export interface AuditEntry {
 
 interface AuditLogProps {
   entries: AuditEntry[];
+  selectedId?: string | null;
+  onSelect?: (entry: AuditEntry) => void;
 }
 
 const spring = {
@@ -34,8 +36,10 @@ const spring = {
   damping: 34,
 };
 
-export function AuditLog({ entries }: AuditLogProps) {
-  const [filter, setFilter] = useState<"all" | "completed" | "failed" | "running">("all");
+type AuditFilter = "all" | "completed" | "failed" | "running" | "stopped";
+
+export function AuditLog({ entries, selectedId, onSelect }: AuditLogProps) {
+  const [filter, setFilter] = useState<AuditFilter>("all");
   const [search, setSearch] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
@@ -67,10 +71,11 @@ export function AuditLog({ entries }: AuditLogProps) {
     stopped: { icon: Clock, color: "text-amber-400", bg: "bg-amber-400/10", label: "INTERROMPIDO" },
   };
 
-  const filters: { id: typeof filter; label: string; count: number }[] = [
+  const filters: { id: AuditFilter; label: string; count: number }[] = [
     { id: "all", label: "Todos", count: entries.length },
     { id: "running", label: "Executando", count: entries.filter((e) => e.status === "running").length },
     { id: "completed", label: "Concluídos", count: entries.filter((e) => e.status === "completed").length },
+    { id: "stopped", label: "Interrompidos", count: entries.filter((e) => e.status === "stopped").length },
     { id: "failed", label: "Falhas", count: entries.filter((e) => e.status === "failed").length },
   ];
 
@@ -172,11 +177,15 @@ export function AuditLog({ entries }: AuditLogProps) {
                     : null;
 
                 return (
+                  <>
                   <motion.tr
                     key={entry.id}
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
-                    className="border-b border-[var(--border)]/50 hover:bg-[var(--surface-2)]/30 transition-colors"
+                    onClick={() => onSelect?.(entry)}
+                    className={`border-b border-[var(--border)]/50 hover:bg-[var(--surface-2)]/30 transition-colors ${
+                      selectedId === entry.id ? "bg-[var(--primary)]/8" : ""
+                    } ${onSelect ? "cursor-pointer" : ""}`}
                   >
                     <td className="px-4 py-2.5">
                       <div className="font-mono text-[11px] text-[var(--foreground)]">
@@ -234,58 +243,57 @@ export function AuditLog({ entries }: AuditLogProps) {
                       </button>
                     </td>
 
-                    {/* Expanded row */}
-                    {isExpanded && (
-                      <tr key={`${entry.id}-detail`}>
-                        <td colSpan={7} className="px-4 py-3 bg-[var(--surface-1)]/20">
-                          <motion.div
-                            initial={{ opacity: 0, height: 0 }}
-                            animate={{ opacity: 1, height: "auto" }}
-                            className="space-y-3"
-                          >
-                            {/* Tools used */}
+                  </motion.tr>
+                  {isExpanded && (
+                    <tr key={`${entry.id}-detail`}>
+                      <td colSpan={7} className="px-4 py-3 bg-[var(--surface-1)]/20">
+                        <motion.div
+                          initial={{ opacity: 0, height: 0 }}
+                          animate={{ opacity: 1, height: "auto" }}
+                          className="space-y-3"
+                        >
+                          <div>
+                            <span className="font-mono text-[8px] tracking-[0.15em] uppercase text-[var(--text-ghost)]">
+                              Ferramentas
+                            </span>
+                            <div className="flex flex-wrap gap-1 mt-1.5">
+                              {entry.toolsUsed.length > 0 ? entry.toolsUsed.map((tool) => (
+                                <span
+                                  key={tool}
+                                  className="flex items-center gap-1 font-mono text-[9px] px-2 py-0.5 rounded bg-[var(--surface-2)] text-[var(--text-dim)]"
+                                >
+                                  <Code2 className="size-3" />
+                                  {tool}
+                                </span>
+                              )) : (
+                                <span className="font-mono text-[9px] text-[var(--text-ghost)]">—</span>
+                              )}
+                            </div>
+                          </div>
+
+                          {entry.summary && (
                             <div>
                               <span className="font-mono text-[8px] tracking-[0.15em] uppercase text-[var(--text-ghost)]">
-                                Ferramentas
+                                Resumo
                               </span>
-                              <div className="flex flex-wrap gap-1 mt-1.5">
-                                {entry.toolsUsed.map((tool) => (
-                                  <span
-                                    key={tool}
-                                    className="flex items-center gap-1 font-mono text-[9px] px-2 py-0.5 rounded bg-[var(--surface-2)] text-[var(--text-dim)]"
-                                  >
-                                    <Code2 className="size-3" />
-                                    {tool}
-                                  </span>
-                                ))}
-                              </div>
+                              <p className="font-mono text-[10px] text-[var(--text-dim)] mt-1 leading-relaxed max-w-2xl">
+                                {entry.summary}
+                              </p>
                             </div>
+                          )}
 
-                            {/* Summary */}
-                            {entry.summary && (
-                              <div>
-                                <span className="font-mono text-[8px] tracking-[0.15em] uppercase text-[var(--text-ghost)]">
-                                  Resumo
-                                </span>
-                                <p className="font-mono text-[10px] text-[var(--text-dim)] mt-1 leading-relaxed max-w-2xl">
-                                  {entry.summary}
-                                </p>
-                              </div>
-                            )}
-
-                            {/* Link to project */}
-                            <a
-                              href={`/projects/${entry.projectId}`}
-                              className="inline-flex items-center gap-1 font-mono text-[9px] text-[var(--primary)] hover:underline"
-                            >
-                              <ExternalLink className="size-3" />
-                              Abrir projeto
-                            </a>
-                          </motion.div>
-                        </td>
-                      </tr>
-                    )}
-                  </motion.tr>
+                          <a
+                            href={`/projects/${entry.projectId}`}
+                            className="inline-flex items-center gap-1 font-mono text-[9px] text-[var(--primary)] hover:underline"
+                          >
+                            <ExternalLink className="size-3" />
+                            Abrir projeto
+                          </a>
+                        </motion.div>
+                      </td>
+                    </tr>
+                  )}
+                  </>
                 );
               })}
             </tbody>

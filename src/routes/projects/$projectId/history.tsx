@@ -2,7 +2,7 @@
 // Rota: /projects/$projectId/history
 // Mostra diff por mensagem, scrubber horizontal, timeline de decisões
 import { createFileRoute, useParams, Link, useNavigate } from "@tanstack/react-router";
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "@/integrations/supabase/client";
@@ -15,6 +15,12 @@ import {
   MessageSquare, CheckCircle2, AlertCircle, Loader2,
 } from "lucide-react";
 import { ForgeIcon } from "@/components/icons/ForgeIcon";
+import { AuditLog, type AuditEntry } from "@/components/editor/AuditLog";
+import {
+  agentRunToAuditEntry,
+  filterMessagesForRun,
+  type AgentRunRow,
+} from "@/lib/agent-runs";
 
 export const Route = createFileRoute("/projects/$projectId/history")({
   component: HistoryPage,
@@ -43,7 +49,8 @@ function HistoryPage() {
   const { projectId } = useParams({ from: "/projects/$projectId/history" });
   const navigate = useNavigate();
   const [selectedMsgId, setSelectedMsgId] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<"timeline" | "diff" | "list">("timeline");
+  const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<"runs" | "timeline" | "diff" | "list">("runs");
 
   // Load project
   const { data: project } = useQuery({
@@ -65,8 +72,31 @@ function HistoryPage() {
     },
   });
 
+  const { data: agentRuns, isLoading: runsLoading } = useQuery({
+    queryKey: ["agent-runs", projectId],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("agent_runs")
+        .select("*")
+        .eq("project_id", projectId)
+        .order("started_at", { ascending: false })
+        .limit(80);
+      return (data ?? []) as AgentRunRow[];
+    },
+  });
+
+  const auditEntries = useMemo(
+    () => (agentRuns ?? []).map((r) => agentRunToAuditEntry(r, project?.name ?? "Projeto")),
+    [agentRuns, project?.name],
+  );
+
+  const selectedRun = useMemo(
+    () => agentRuns?.find((r) => r.id === selectedRunId) ?? null,
+    [agentRuns, selectedRunId],
+  );
+
   // Load all agent messages with tool calls
-  const { data: agentMessages, isLoading } = useQuery({
+  const { data: agentMessages, isLoading: messagesLoading } = useQuery({
     queryKey: ["agent-messages", conversation?.id],
     queryFn: async () => {
       if (!conversation) return [];
@@ -80,6 +110,30 @@ function HistoryPage() {
     },
     enabled: !!conversation,
   });
+
+  const isLoading = runsLoading || messagesLoading;
+
+  const scopedMessages = useMemo(() => {
+    const all = agentMessages ?? [];
+    if (!selectedRun) return all;
+    return filterMessagesForRun(all, selectedRun);
+  }, [agentMessages, selectedRun]);
+
+  useEffect(() => {
+    if (!selectedRunId && agentRuns?.length) {
+      setSelectedRunId(agentRuns[0].id);
+    }
+  }, [agentRuns, selectedRunId]);
+
+  useEffect(() => {
+    if (scopedMessages.length === 0) {
+      setSelectedMsgId(null);
+      return;
+    }
+    if (!selectedMsgId || !scopedMessages.some((m) => m.id === selectedMsgId)) {
+      setSelectedMsgId(scopedMessages[scopedMessages.length - 1].id);
+    }
+  }, [scopedMessages, selectedMsgId]);
 
   // Load current files for diff context
   const { data: files } = useQuery({
@@ -99,12 +153,17 @@ function HistoryPage() {
   }, [files]);
 
   const selectedMessage = useMemo(
-    () => agentMessages?.find((m) => m.id === selectedMsgId),
-    [agentMessages, selectedMsgId],
+    () => scopedMessages.find((m) => m.id === selectedMsgId),
+    [scopedMessages, selectedMsgId],
   );
 
+  const handleSelectRun = (entry: AuditEntry) => {
+    setSelectedRunId(entry.id);
+    setViewMode("timeline");
+  };
+
   const timelineItems = useMemo(() => {
-    return (agentMessages ?? []).map((msg) => ({
+    return scopedMessages.map((msg) => ({
       id: msg.id,
       timestamp: new Date(msg.created_at).getTime(),
       label: msg.tool_calls.length > 0
@@ -115,9 +174,9 @@ function HistoryPage() {
       errorCount: msg.tool_calls.filter((t) => t.status === "error").length,
       runningCount: msg.tool_calls.filter((t) => t.status === "running").length,
     }));
-  }, [agentMessages]);
+  }, [scopedMessages]);
 
-  const totalChanges = agentMessages?.reduce((sum, m) => sum + m.tool_calls.length, 0) ?? 0;
+  const totalChanges = scopedMessages.reduce((sum, m) => sum + m.tool_calls.length, 0);
 
   return (
     <EditorShell
@@ -132,7 +191,7 @@ function HistoryPage() {
       <div className="flex h-full flex-col bg-[var(--lovable-chat)]">
         <div className="flex h-12 shrink-0 items-center gap-3 border-b border-[var(--lovable-border)] px-4">
           <div className="lovable-view-tabs flex gap-1">
-            {(["timeline", "diff", "list"] as const).map((mode) => (
+            {(["runs", "timeline", "diff", "list"] as const).map((mode) => (
               <button
                 key={mode}
                 type="button"
@@ -140,7 +199,13 @@ function HistoryPage() {
                 className="lovable-doc-btn"
                 onClick={() => setViewMode(mode)}
               >
-                {mode === "timeline" ? "Timeline" : mode === "diff" ? "Diff" : "Lista"}
+                {mode === "runs"
+                  ? "Execuções"
+                  : mode === "timeline"
+                    ? "Timeline"
+                    : mode === "diff"
+                      ? "Diff"
+                      : "Lista"}
               </button>
             ))}
           </div>
@@ -163,7 +228,10 @@ function HistoryPage() {
                 Histórico de Mudanças
               </h2>
               <p className="font-mono text-[9px] text-[var(--text-ghost)]">
-                {totalChanges} alterações em {agentMessages?.length ?? 0} resposta{(agentMessages?.length ?? 0) !== 1 ? "s" : ""}
+                {auditEntries.length} execuç{(auditEntries.length) !== 1 ? "ões" : "ão"} ·{" "}
+                {totalChanges} alteraç{(totalChanges) !== 1 ? "ões" : "ão"} em {scopedMessages.length} resposta
+                {scopedMessages.length !== 1 ? "s" : ""}
+                {selectedRun ? " (filtrado)" : ""}
               </p>
             </div>
           </div>
@@ -171,9 +239,11 @@ function HistoryPage() {
           <div className="flex items-center gap-3 ml-auto">
             <div className="flex items-center gap-1.5 text-[10px] font-mono text-[var(--text-ghost)]">
               <Clock className="size-3" />
-              {agentMessages?.length
-                ? new Date(agentMessages[agentMessages.length - 1].created_at).toLocaleString("pt-BR")
-                : "—"}
+              {scopedMessages.length
+                ? new Date(scopedMessages[scopedMessages.length - 1].created_at).toLocaleString("pt-BR")
+                : auditEntries[0]
+                  ? new Date(auditEntries[0].startedAt).toLocaleString("pt-BR")
+                  : "—"}
             </div>
           </div>
         </div>
@@ -187,6 +257,14 @@ function HistoryPage() {
                 CARREGANDO HISTÓRICO
               </span>
             </div>
+          </div>
+        ) : viewMode === "runs" ? (
+          <div className="flex-1 min-h-0 overflow-hidden">
+            <AuditLog
+              entries={auditEntries}
+              selectedId={selectedRunId}
+              onSelect={handleSelectRun}
+            />
           </div>
         ) : !agentMessages || agentMessages.length === 0 ? (
           <div className="flex-1 grid place-items-center">
@@ -210,10 +288,45 @@ function HistoryPage() {
               </Link>
             </div>
           </div>
+        ) : scopedMessages.length === 0 ? (
+          <div className="flex-1 grid place-items-center">
+            <div className="text-center space-y-3 max-w-md px-6">
+              <History className="size-6 text-[var(--text-ghost)] mx-auto" />
+              <p className="font-mono text-[10px] tracking-[0.15em] uppercase text-[var(--text-ghost)]">
+                NENHUMA MUDANÇA NESTA EXECUÇÃO
+              </p>
+              <p className="font-mono text-[10px] text-[var(--text-dim)]">
+                Selecione outra execução na aba Execuções ou volte ao editor.
+              </p>
+              <button
+                type="button"
+                className="lovable-doc-btn"
+                onClick={() => setViewMode("runs")}
+              >
+                Ver execuções
+              </button>
+            </div>
+          </div>
         ) : (
           <div className="flex-1 flex min-h-0 overflow-hidden">
-            {/* Sidebar: Timeline scrubber */}
             <div className="w-[300px] shrink-0 border-r border-[var(--border)] bg-[var(--surface-1)]/30 overflow-hidden flex flex-col">
+              {selectedRun && (
+                <div className="shrink-0 border-b border-[var(--border)] px-3 py-2">
+                  <p className="font-mono text-[8px] tracking-[0.15em] uppercase text-[var(--text-ghost)]">
+                    Execução selecionada
+                  </p>
+                  <p className="font-mono text-[10px] text-[var(--foreground)] mt-0.5">
+                    {new Date(selectedRun.started_at).toLocaleString("pt-BR")}
+                  </p>
+                  <button
+                    type="button"
+                    className="mt-2 font-mono text-[9px] text-[var(--primary)] hover:underline"
+                    onClick={() => setViewMode("runs")}
+                  >
+                    Trocar execução
+                  </button>
+                </div>
+              )}
               <TimelineScrubber
                 items={timelineItems}
                 selectedId={selectedMsgId}

@@ -327,6 +327,7 @@ export function buildEditorActions({
   onStopAgent,
   onToggleFileTree,
   onToggleDeviceFrame,
+  onOpenHistory,
   isRunning,
 }: {
   onNewFile: () => void;
@@ -341,6 +342,7 @@ export function buildEditorActions({
   onStopAgent: () => void;
   onToggleFileTree: () => void;
   onToggleDeviceFrame: () => void;
+  onOpenHistory: () => void;
   isRunning: boolean;
 }): PaletteAction[] {
   return [
@@ -381,6 +383,14 @@ export function buildEditorActions({
       shortcut: "⌘⇧P",
       icon: <Eye className="size-4" />,
       action: onTogglePreview,
+    },
+    {
+      id: "open-history",
+      label: "Histórico do Agente",
+      description: "Execuções e mudanças do FORGE neste projeto",
+      category: "project",
+      icon: <History className="size-4" />,
+      action: onOpenHistory,
     },
     {
       id: "toggle-file-tree",

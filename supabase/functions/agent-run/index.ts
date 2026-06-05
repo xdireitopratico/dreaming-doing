@@ -393,6 +393,15 @@ Deno.serve(async (req) => {
       context7ApiKey: Deno.env.get("CONTEXT7_API_KEY") ?? undefined,
     });
 
+    const runMetaBase = {
+      provider: mainCfg.label,
+      model: mainCfg.model,
+      sessionKind: tasteStart ? "taste_start" : "byok",
+      resume: resumeRun,
+      robin: effectiveRobin,
+      taste: tasteStart,
+    };
+
     let agentRunId: string | null = null;
     const { data: newRun } = await supabase
       .from("agent_runs")
@@ -401,13 +410,21 @@ Deno.serve(async (req) => {
         conversation_id: conversationId,
         user_id: userData.user.id,
         status: "running",
+        meta: runMetaBase,
       })
       .select("id")
       .single();
     agentRunId = newRun?.id ?? null;
 
     const finalizeRun = async (
-      result: { ok: boolean; error?: string; steps: number; canceled?: boolean },
+      result: {
+        ok: boolean;
+        error?: string;
+        steps: number;
+        canceled?: boolean;
+        summary?: string;
+        toolsUsed?: string[];
+      },
     ) => {
       if (!agentRunId) return;
       const status = result.canceled
@@ -415,6 +432,14 @@ Deno.serve(async (req) => {
         : result.ok
           ? "completed"
           : "failed";
+
+      const { data: existing } = await supabase
+        .from("agent_runs")
+        .select("meta")
+        .eq("id", agentRunId)
+        .maybeSingle();
+      const prevMeta = (existing?.meta ?? runMetaBase) as Record<string, unknown>;
+
       await supabase
         .from("agent_runs")
         .update({
@@ -422,6 +447,11 @@ Deno.serve(async (req) => {
           finished_at: new Date().toISOString(),
           steps: result.steps,
           error: result.error ?? null,
+          meta: {
+            ...prevMeta,
+            ...(result.summary ? { summary: result.summary } : {}),
+            ...(result.toolsUsed?.length ? { toolsUsed: result.toolsUsed } : {}),
+          },
           ...(result.canceled ? { canceled_at: new Date().toISOString() } : {}),
         })
         .eq("id", agentRunId);

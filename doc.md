@@ -117,7 +117,7 @@ Cada linha: **ID Lovable** · **ID auditoria** · status · observação · inte
 | 7 | **C15** | ✅ | `executionLog` persistido em `messages.meta` (até 40 entradas) | `executionLogMeta.ts`, `loop.ts` | `messages.meta` |
 | 8 | **C19** | ✅ | Hash últimos 3 tool calls (`agent-stuck.ts`) | `isExecutionStuck` no loop | `loop.ts`, `_shared/agent-stuck.ts` |
 | 9 | **C22** | ✅ | `agent_runs.canceled_at` + check por step; `stop()` no cliente | migration, `agent-cancel.ts`, `useSSE.ts` | `agent-run/index.ts` |
-| 10 | **C23**, **+17** | ⏳ | Histórico sem `agent_runs` | Migration + `/history` | migration, `history.tsx`, `AuditLog.tsx` |
+| 10 | **C23**, **+17** | ✅ | `/history` com `agent_runs` + `AuditLog`; filtro por execução | `agent-runs.ts`, `history.tsx`, `AuditLog.tsx` | `agent_runs.meta` |
 | 11 | **+3**, **E36–E37** | ⏳ | Tokens deploy no prompt, sem tool | `deploy_publish` tool | `agent-run/tools/deploy.ts` |
 | 12 | **C16** | ⏳ | 429/529 sem backoff | Retry em `providers.ts` | `providers.ts`, `robin-pool.ts` |
 | 13 | **C17** | ⏳ | Context estoura silencioso | `usage.input_tokens` → `CompressionManager` | `compression.ts`, adapters LLM |

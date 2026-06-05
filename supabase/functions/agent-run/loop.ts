@@ -89,11 +89,13 @@ export class AgentLoop {
     steps: number;
     resumable?: boolean;
     canceled?: boolean;
+    toolsUsed?: string[];
   }> {
     if (!this.resumeRun) {
       this.state.executionLog = [];
     }
     this.compression.reset();
+    const toolsUsed = new Set<string>();
     let step = 0;
 
     if (this.resumeRun) {
@@ -140,7 +142,13 @@ export class AgentLoop {
       if (await this.isCanceled()) {
         await this.persistFinal("Execução cancelada pelo usuário.");
         this.emit("canceled", { message: "Cancelado pelo usuário" });
-        return { ok: false, error: "Cancelado", steps: Math.max(0, step), canceled: true };
+        return {
+          ok: false,
+          error: "Cancelado",
+          steps: Math.max(0, step),
+          canceled: true,
+          toolsUsed: [...toolsUsed],
+        };
       }
 
       step++;
@@ -155,7 +163,7 @@ export class AgentLoop {
         await this.persistFinal(
           `Execução pausada: ${message}\n\nSeu histórico está salvo — clique em **Continuar** no editor para retomar.`,
         );
-        return { ok: false, error: message, steps: step, resumable: true };
+        return { ok: false, error: message, steps: step, resumable: true, toolsUsed: [...toolsUsed] };
       }
       if (!response) break;
 
@@ -177,6 +185,7 @@ export class AgentLoop {
       const liveMsgId = await this.persistAssistantStep(response);
 
       const execResults = await parallelExecute(response.tool_calls, async (call) => {
+        toolsUsed.add(call.name);
         this.emit("tool_start", { name: call.name, args: call.arguments });
         const result = await this.reg.execute(call);
         this.emit("tool_done", { name: call.name, ok: result.ok, error: result.error });
@@ -253,7 +262,7 @@ export class AgentLoop {
 
     if (step >= this.maxStepsLimit) {
       await this.persistFinal("Limite de passos atingido. Parei aqui — use Continuar no chat para retomar com a mesma memória.");
-      return { ok: false, error: "Limite de passos", steps: step, resumable: true };
+      return { ok: false, error: "Limite de passos", steps: step, resumable: true, toolsUsed: [...toolsUsed] };
     }
 
     this.emit("phase", { phase: "summarize", message: "Finalizando..." });
@@ -261,7 +270,7 @@ export class AgentLoop {
     const summary = finalMsg?.content ?? "Tarefa concluída.";
     await this.persistFinal(summary);
     this.emit("done", { summary });
-    return { ok: true, summary, steps: step };
+    return { ok: true, summary, steps: step, toolsUsed: [...toolsUsed] };
   }
 
   private async gatherContext(): Promise<void> {

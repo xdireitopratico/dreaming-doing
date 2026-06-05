@@ -714,9 +714,11 @@ function EditorPage() {
         onStopAgent: handleStop,
         onToggleFileTree: () => setShowFileTree((v) => !v),
         onToggleDeviceFrame: () => {},
+        onOpenHistory: () =>
+          navigate({ to: "/projects/$projectId/history", params: { projectId } }),
         isRunning: running,
       }),
-    [handleExportZip, openTabs, projectId, runAgent, handleStop, running],
+    [handleExportZip, openTabs, projectId, runAgent, handleStop, running, navigate],
   );
 
   // ─── Keyboard shortcuts ──────────────────────────────────────────────
