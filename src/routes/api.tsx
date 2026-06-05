@@ -122,7 +122,7 @@ const INITIAL: ProviderConfig[] = [
     provider: "xAI",
     label: "xAI",
     icon: <Globe className="size-5" />,
-    description: "Grok 3 / Mini — LLM. Voz (STT) usa API xAI separada (config em Modelos).",
+    description: "Grok 3 / Mini — modelos de código. Voz: configure em Modelos.",
     docUrl: "https://console.x.ai",
     keyPrefix: "xai-",
     costPerM: 0.5,

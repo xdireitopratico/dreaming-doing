@@ -1,51 +1,56 @@
-/** STT — três provedores, um modelo fixo cada (sem picker de modelo). */
+import type { AiEnvId } from "@/lib/model-catalog";
+
+/** STT: usuário só escolhe o provedor; o modelo é fixo no FORGE. */
 export type SttProviderId = "grok" | "groq" | "openrouter";
 
-/** Padrão: Groq Whisper Turbo (custo-benefício). */
 export const STT_DEFAULT_PROVIDER: SttProviderId = "groq";
+
+/** Modelo enviado à API de cada provedor (não expor como picker). */
+export const STT_MODEL_BY_PROVIDER: Record<SttProviderId, string> = {
+  groq: "whisper-large-v3-turbo",
+  grok: "grok-voice-stt",
+  openrouter: "openai/whisper-large-v3",
+};
 
 export type SttOption = {
   id: SttProviderId;
+  /** Nome curto no card — sem slug de modelo. */
   label: string;
-  description: string;
-  modelId: string;
-  requiresEnv: import("@/lib/model-catalog").AiEnvId;
+  hint: string;
+  requiresEnv: AiEnvId;
   recommended?: boolean;
 };
 
 export const STT_OPTIONS: SttOption[] = [
   {
     id: "groq",
-    label: "Groq · Whisper Large v3 Turbo",
-    description: "Padrão recomendado. Modelo fixo: whisper-large-v3-turbo.",
-    modelId: "whisper-large-v3-turbo",
+    label: "Groq",
+    hint: "Padrão · melhor custo-benefício",
     requiresEnv: "groq",
     recommended: true,
   },
   {
     id: "grok",
-    label: "xAI · Grok Voice STT",
-    description: "Melhor para português. A xAI escolhe o modelo na API (sem lista manual).",
-    modelId: "xai-stt",
+    label: "xAI",
+    hint: "Melhor para português",
     requiresEnv: "xai",
   },
   {
     id: "openrouter",
-    label: "OpenRouter · Whisper Large v3",
-    description: "Requer créditos OpenRouter. Modelo fixo: openai/whisper-large-v3.",
-    modelId: "openai/whisper-large-v3",
+    label: "OpenRouter",
+    hint: "Requer créditos na conta",
     requiresEnv: "openrouter",
   },
 ];
 
-export const STT_MODEL_BY_PROVIDER: Record<SttProviderId, string> = {
-  groq: "whisper-large-v3-turbo",
-  grok: "xai-stt",
-  openrouter: "openai/whisper-large-v3",
-};
+export function sttProviderName(id: SttProviderId): string {
+  return STT_OPTIONS.find((o) => o.id === id)?.label ?? id;
+}
 
-export const STT_LABELS: Record<SttProviderId, string> = {
-  grok: "xAI · Grok Voice STT",
-  groq: "Groq · Whisper v3 Turbo",
-  openrouter: "OpenRouter · Whisper v3",
-};
+/** Única linha de “qual modelo está ativo” — usar em um lugar só no UI. */
+export function sttActiveModelLine(id: SttProviderId): string {
+  if (id === "grok") {
+    return "Modelo de voz: API STT da xAI (sem escolha manual no FORGE).";
+  }
+  return `Modelo de voz: ${STT_MODEL_BY_PROVIDER[id]}`;
+}

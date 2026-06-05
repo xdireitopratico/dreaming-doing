@@ -571,7 +571,13 @@ const LEGACY_PRESET_IDS: Record<string, string> = {
   "pool-nemotron-super": PLATFORM_ROBIN_TASTE_PRESET_ID,
 };
 
-export { STT_OPTIONS, STT_DEFAULT_PROVIDER, STT_LABELS, STT_MODEL_BY_PROVIDER } from "@/lib/stt-config";
+export {
+  STT_OPTIONS,
+  STT_DEFAULT_PROVIDER,
+  STT_MODEL_BY_PROVIDER,
+  sttProviderName,
+  sttActiveModelLine,
+} from "@/lib/stt-config";
 export type { SttProviderId } from "@/lib/stt-config";
 
 const PRESET_BY_ID = new Map(CODING_MODEL_PRESETS.map((p) => [p.id, p]));

@@ -33,7 +33,8 @@ import {
   AI_ENVS_SORTED,
   STT_OPTIONS,
   STT_DEFAULT_PROVIDER,
-  STT_LABELS,
+  sttActiveModelLine,
+  sttProviderName,
   modelsForStudioStep,
   getPresetById,
   normalizePresetId,
@@ -615,12 +616,15 @@ export function AiModelStudio({ connectorRows, keysSectionHref = "/api" }: AiMod
         )}
       </div>
 
-      {/* Passo 5: STT */}
+      {/* Passo 5: STT — só provedor; modelo fixo (ver linha única abaixo) */}
       <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)]/30 p-4">
-        <label className="flex items-center gap-2 font-mono text-[9px] uppercase tracking-wider text-[var(--text-dim)] mb-3">
+        <label className="flex items-center gap-2 font-mono text-[9px] uppercase tracking-wider text-[var(--text-dim)] mb-1">
           <Mic className="size-3" />
           5 · Voz (STT)
         </label>
+        <p className="font-mono text-[9px] text-[var(--text-ghost)] mb-3">
+          Escolha só quem transcreve. O FORGE define o modelo automaticamente.
+        </p>
         <div className="grid gap-2 sm:grid-cols-3">
           {[...STT_OPTIONS]
             .sort((a, b) => a.label.localeCompare(b.label, "pt"))
@@ -629,10 +633,9 @@ export function AiModelStudio({ connectorRows, keysSectionHref = "/api" }: AiMod
                 key={opt.id}
                 active={(prefs.sttProvider ?? STT_DEFAULT_PROVIDER) === opt.id}
                 label={opt.label}
-                description={`${opt.description} · modelo: ${opt.modelId}`}
+                description={opt.hint}
                 badges={[
-                  connected[opt.requiresEnv] ? "chave OK" : "precisa chave",
-                  AI_ENV_META[opt.requiresEnv].label,
+                  connected[opt.requiresEnv] ? "chave OK" : "sem chave",
                   opt.recommended ? "padrão" : "",
                 ].filter(Boolean)}
                 disabled={false}
@@ -640,9 +643,12 @@ export function AiModelStudio({ connectorRows, keysSectionHref = "/api" }: AiMod
               />
             ))}
         </div>
+        <p className="mt-3 font-mono text-[10px] text-[var(--text-dim)] rounded-md border border-[var(--border)] bg-[var(--surface-1)]/60 px-3 py-2">
+          {sttActiveModelLine(prefs.sttProvider ?? STT_DEFAULT_PROVIDER)}
+        </p>
         {!sttReady && (
-          <p className="mt-3 font-mono text-[10px] text-amber-400/90">
-            STT exige chave {AI_ENV_META[sttNeeds].label} em{" "}
+          <p className="mt-2 font-mono text-[10px] text-amber-400/90">
+            Cadastre a chave em{" "}
             <Link to={keysSectionHref} className="text-[var(--primary)] underline">
               API
             </Link>
@@ -662,7 +668,7 @@ export function AiModelStudioSummary() {
         prefs.userModelEntries,
       )
     : getPresetById("");
-  const stt = STT_LABELS[prefs.sttProvider ?? STT_DEFAULT_PROVIDER];
+  const stt = sttProviderName(prefs.sttProvider ?? STT_DEFAULT_PROVIDER);
   const modeLabel =
     prefs.mode === "auto"
       ? `auto${(prefs.autoAllowedPresetIds?.length ?? 0) > 0 ? `·${prefs.autoAllowedPresetIds!.length}` : ""}`

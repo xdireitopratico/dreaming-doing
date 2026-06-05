@@ -3,7 +3,7 @@ import { Mic, Loader2, Square } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { loadAgentPreferences } from "@/lib/agent-preferences";
-import { STT_DEFAULT_PROVIDER, STT_LABELS } from "@/lib/stt-config";
+import { STT_DEFAULT_PROVIDER, sttProviderName, type SttProviderId } from "@/lib/stt-config";
 
 type Props = {
   onTranscript: (text: string) => void;
@@ -66,12 +66,10 @@ export function MicButton({ onTranscript, className, size = "md" }: Props) {
 
           if (text) {
             onTranscript(text);
-            toast.success(`Voz · ${STT_LABELS[used as keyof typeof STT_LABELS] ?? used}`, {
-              duration: 2500,
-            });
+            toast.success("Voz transcrita", { duration: 2000 });
             if (body?.requested && used !== body.requested) {
               toast.warning(
-                `Pedido ${STT_LABELS[body.requested as keyof typeof STT_LABELS]} mas usou ${used}. Verifique API.`,
+                `Pediu ${sttProviderName(body.requested as SttProviderId)} mas usou ${sttProviderName(used as SttProviderId)}.`,
               );
             }
           } else {
@@ -108,7 +106,7 @@ export function MicButton({ onTranscript, className, size = "md" }: Props) {
         type="button"
         disabled
         aria-label="Transcrevendo"
-        title={`Transcrevendo com ${STT_LABELS[stt]}`}
+        title={`Transcrevendo · ${sttProviderName(stt)}`}
         className={`${sizeCls} grid place-items-center rounded-full bg-[var(--surface-2)] border border-[var(--border)] text-[var(--text-dim)] ${className ?? ""}`}
       >
         <Loader2 className={`${iconCls} animate-spin`} />
@@ -133,8 +131,8 @@ export function MicButton({ onTranscript, className, size = "md" }: Props) {
     <button
       type="button"
       onClick={start}
-      aria-label={`Gravar áudio (${STT_LABELS[stt]})`}
-      title={`Microfone · ${STT_LABELS[stt]} — configurar em Modelos`}
+      aria-label={`Gravar áudio (${sttProviderName(stt)})`}
+      title={`Microfone · ${sttProviderName(stt)} — voz em Modelos`}
       className={`${sizeCls} grid place-items-center rounded-full bg-[var(--surface-2)] hover:bg-[var(--surface-3)] border border-[var(--border)] text-[var(--text-dim)] hover:text-foreground transition-colors ${className ?? ""}`}
     >
       <Mic className={iconCls} />
