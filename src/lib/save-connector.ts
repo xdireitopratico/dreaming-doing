@@ -6,10 +6,13 @@ export type AiProviderId =
   | "deepseek"
   | "openai"
   | "groq"
+  | "minimax"
+  | "moonshotai"
   | "xai"
   | "nvidia"
   | "gemini"
-  | "openrouter";
+  | "openrouter"
+  | "xiaomi";
 
 /** Mapeia ID da UI → kind + meta na tabela connectors. */
 function toConnectorPayload(id: AiProviderId) {
@@ -32,6 +35,12 @@ function toConnectorPayload(id: AiProviderId) {
       return { kind: "openai" as const, meta: { provider: "deepseek", label: "DeepSeek" } };
     case "alibaba":
       return { kind: "openai" as const, meta: { provider: "alibaba", label: "Alibaba DashScope" } };
+    case "minimax":
+      return { kind: "openai" as const, meta: { provider: "minimax", label: "MiniMax" } };
+    case "moonshotai":
+      return { kind: "openai" as const, meta: { provider: "moonshotai", label: "Moonshot (Kimi)" } };
+    case "xiaomi":
+      return { kind: "openai" as const, meta: { provider: "xiaomi", label: "Xiaomi MiMo" } };
   }
 }
 

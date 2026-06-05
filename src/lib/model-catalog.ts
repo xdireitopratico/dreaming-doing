@@ -2,7 +2,7 @@
  * Catálogo FORGE — ranking jun/2026.
  * Slugs no formato OpenRouter são referência de ID; cada modelo roteia para o
  * provedor nativo (Anthropic, OpenAI, Gemini, xAI, NVIDIA) quando o FORGE tem conector.
- * Só modelos sem API dedicada no app usam env openrouter (DeepSeek, Qwen, Kimi, etc.).
+ * Só modelos sem API dedicada no app usam env openrouter (ex.: Zhipu).
  */
 
 export type AiEnvId =
@@ -11,10 +11,13 @@ export type AiEnvId =
   | "deepseek"
   | "gemini"
   | "groq"
+  | "minimax"
+  | "moonshotai"
   | "nvidia"
   | "openai"
   | "openrouter"
-  | "xai";
+  | "xai"
+  | "xiaomi";
 
 export type ModelTier = "frontier" | "balanced" | "fast" | "pool";
 
@@ -47,10 +50,13 @@ export const AI_ENVS_SORTED: AiEnvId[] = [
   "deepseek",
   "gemini",
   "groq",
+  "minimax",
+  "moonshotai",
   "nvidia",
   "openai",
   "openrouter",
   "xai",
+  "xiaomi",
 ];
 
 export const AI_ENV_META: Record<
@@ -93,6 +99,16 @@ export const AI_ENV_META: Record<
     keyPrefix: "gsk_",
     supportsPool: true,
   },
+  minimax: {
+    label: "MiniMax",
+    docUrl: "https://platform.minimax.io",
+    keyPrefix: "sk-",
+  },
+  moonshotai: {
+    label: "Moonshot (Kimi)",
+    docUrl: "https://platform.kimi.ai",
+    keyPrefix: "sk-",
+  },
   nvidia: {
     label: "NVIDIA NIM",
     docUrl: "https://build.nvidia.com",
@@ -103,6 +119,11 @@ export const AI_ENV_META: Record<
     label: "OpenRouter (roteador)",
     docUrl: "https://openrouter.ai/keys",
     keyPrefix: "sk-or-",
+  },
+  xiaomi: {
+    label: "Xiaomi (MiMo)",
+    docUrl: "https://platform.xiaomimimo.com",
+    keyPrefix: "sk-",
   },
 };
 
@@ -123,8 +144,14 @@ function routeEnv(brand: string, slug: string): AiEnvId {
   if (slug.startsWith("google/")) return "gemini";
   if (slug.startsWith("xai/")) return "xai";
   if (slug.startsWith("nvidia/")) return "nvidia";
+  if (slug.startsWith("minimax/")) return "minimax";
+  if (slug.startsWith("moonshotai/")) return "moonshotai";
+  if (slug.startsWith("xiaomi/")) return "xiaomi";
   if (brand === "DeepSeek") return "deepseek";
   if (brand === "Qwen") return "alibaba";
+  if (brand === "MiniMax") return "minimax";
+  if (brand === "Moonshot") return "moonshotai";
+  if (brand === "Xiaomi") return "xiaomi";
   if (brand === "Groq") return "groq";
   return "openrouter";
 }
@@ -134,6 +161,20 @@ function apiModelForEnv(env: AiEnvId, slug: string): string {
   const bare = slash >= 0 ? slug.slice(slash + 1) : slug;
   if (env === "openrouter") return slug;
   if (env === "nvidia") return slug;
+  if (env === "minimax") {
+    if (bare.includes("m3")) return "MiniMax-M3";
+    if (bare.includes("2.7")) return "MiniMax-M2.7";
+    if (bare.includes("2.5")) return "MiniMax-M2.5";
+    return "MiniMax-M3";
+  }
+  if (env === "moonshotai") {
+    if (bare.includes("k2.6") || bare.includes("k2-6")) return "kimi-k2.6";
+    if (bare.includes("k2.5") || bare.includes("k2-5")) return "kimi-k2.5";
+    return bare.replace(/-/g, ".");
+  }
+  if (env === "xiaomi") {
+    return bare.includes("v2-5") || bare.includes("v2.5") ? "mimo-v2.5-pro" : bare;
+  }
   return bare;
 }
 
@@ -178,6 +219,24 @@ function wireForEnv(env: AiEnvId): {
         llmProvider: "openai",
         secretKey: "DASHSCOPE_API_KEY",
         baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+      };
+    case "minimax":
+      return {
+        llmProvider: "openai",
+        secretKey: "MINIMAX_API_KEY",
+        baseUrl: "https://api.minimax.io/v1",
+      };
+    case "moonshotai":
+      return {
+        llmProvider: "openai",
+        secretKey: "MOONSHOT_API_KEY",
+        baseUrl: "https://api.moonshot.ai/v1",
+      };
+    case "xiaomi":
+      return {
+        llmProvider: "openai",
+        secretKey: "MIMO_API_KEY",
+        baseUrl: "https://api.xiaomimimo.com/v1",
       };
     default:
       return {
@@ -245,6 +304,7 @@ const RANKED: RankedInput[] = [
   { rank: 29, label: "MiniMax M2.5", brand: "MiniMax", openRouterSlug: "minimax/minimax-m2.5", tier: "fast" },
   { rank: 30, label: "GLM-5", brand: "Zhipu", openRouterSlug: "zhipu/glm-5", tier: "fast" },
   { rank: 31, label: "Qwen3.5 397B (NVIDIA)", brand: "Qwen", openRouterSlug: "qwen/qwen3.5-397b-a17b", tier: "pool" },
+  { rank: 32, label: "MiMo V2.5 Pro", brand: "Xiaomi", openRouterSlug: "xiaomi/mimo-v2.5-pro", tier: "balanced", recommended: true },
 ];
 
 /** Ranking completo — Estúdio IA em /models */
@@ -367,18 +427,7 @@ export function presetsByEnvGrouped(): {
   meta: (typeof AI_ENV_META)[AiEnvId];
   models: ForgeModelPreset[];
 }[] {
-  const envs: AiEnvId[] = [
-    "alibaba",
-    "anthropic",
-    "deepseek",
-    "gemini",
-    "groq",
-    "nvidia",
-    "openai",
-    "openrouter",
-    "xai",
-  ];
-  return envs
+  return AI_ENVS_SORTED
     .map((env) => ({
       env,
       meta: AI_ENV_META[env],

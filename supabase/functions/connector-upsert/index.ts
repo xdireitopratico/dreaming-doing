@@ -89,7 +89,7 @@ Deno.serve(async (req) => {
     const providerKey = resolveProvider(kind, metaIn);
 
     if (kind === "openai" && !metaIn.provider) {
-      return json({ error: "meta.provider obrigatório (groq, nvidia, xai, openai, gemini, openrouter, deepseek, alibaba)" }, 400);
+      return json({ error: "meta.provider obrigatório (groq, nvidia, xai, openai, gemini, openrouter, deepseek, alibaba, minimax, moonshotai, xiaomi)" }, 400);
     }
 
     if (kind === "supabase" && body?.disconnect !== true) {

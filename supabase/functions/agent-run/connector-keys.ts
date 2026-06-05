@@ -114,6 +114,9 @@ export async function loadConnectorKeys(
       else if (p === "openrouter") keys.OPENROUTER_API_KEY = token;
       else if (p === "deepseek") keys.DEEPSEEK_API_KEY = token;
       else if (p === "alibaba") keys.DASHSCOPE_API_KEY = token;
+      else if (p === "minimax") keys.MINIMAX_API_KEY = token;
+      else if (p === "moonshotai") keys.MOONSHOT_API_KEY = token;
+      else if (p === "xiaomi") keys.MIMO_API_KEY = token;
       else keys.OPENAI_API_KEY = token;
     }
   }

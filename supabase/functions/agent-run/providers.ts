@@ -40,6 +40,9 @@ export function pickMain(injected?: Record<string, string>): ProviderConfig {
   const DEEPSEEK = envKey("DEEPSEEK_API_KEY", injected);
   const DASHSCOPE = envKey("DASHSCOPE_API_KEY", injected);
   const OPENROUTER = envKey("OPENROUTER_API_KEY", injected);
+  const MINIMAX = envKey("MINIMAX_API_KEY", injected);
+  const MOONSHOT = envKey("MOONSHOT_API_KEY", injected);
+  const MIMO = envKey("MIMO_API_KEY", injected);
   if (ANTHROPIC) return { provider: "anthropic", apiKey: ANTHROPIC, model: "claude-sonnet-4-20250514", label: "Anthropic Claude Sonnet 4" };
   if (GEMINI) return { provider: "gemini", apiKey: GEMINI, model: "gemini-2.5-pro", label: "Gemini 2.5 Pro" };
   if (XAI) return { provider: "openai", apiKey: XAI, model: "grok-3", baseUrl: "https://api.x.ai/v1", label: "xAI Grok 3" };
@@ -51,6 +54,33 @@ export function pickMain(injected?: Record<string, string>): ProviderConfig {
       model: "meta/llama-3.3-70b-instruct",
       baseUrl: "https://integrate.api.nvidia.com/v1",
       label: "NVIDIA NIM · Llama 3.3 70B",
+    };
+  }
+  if (MINIMAX) {
+    return {
+      provider: "openai",
+      apiKey: MINIMAX,
+      model: "MiniMax-M3",
+      baseUrl: "https://api.minimax.io/v1",
+      label: "MiniMax M3",
+    };
+  }
+  if (MOONSHOT) {
+    return {
+      provider: "openai",
+      apiKey: MOONSHOT,
+      model: "kimi-k2.6",
+      baseUrl: "https://api.moonshot.ai/v1",
+      label: "Kimi K2.6",
+    };
+  }
+  if (MIMO) {
+    return {
+      provider: "openai",
+      apiKey: MIMO,
+      model: "mimo-v2.5-pro",
+      baseUrl: "https://api.xiaomimimo.com/v1",
+      label: "Xiaomi MiMo V2.5 Pro",
     };
   }
   if (DEEPSEEK) {

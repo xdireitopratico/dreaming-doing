@@ -52,6 +52,33 @@ function dashscope(model: string, label: string): PresetWire {
     secretKey: "DASHSCOPE_API_KEY",
   };
 }
+function minimax(model: string, label: string): PresetWire {
+  return {
+    provider: "openai",
+    model,
+    baseUrl: "https://api.minimax.io/v1",
+    label,
+    secretKey: "MINIMAX_API_KEY",
+  };
+}
+function moonshot(model: string, label: string): PresetWire {
+  return {
+    provider: "openai",
+    model,
+    baseUrl: "https://api.moonshot.ai/v1",
+    label,
+    secretKey: "MOONSHOT_API_KEY",
+  };
+}
+function mimo(model: string, label: string): PresetWire {
+  return {
+    provider: "openai",
+    model,
+    baseUrl: "https://api.xiaomimimo.com/v1",
+    label,
+    secretKey: "MIMO_API_KEY",
+  };
+}
 
 const PRESETS: Record<string, PresetWire> = {
   "anthropic--claude-opus-4-8": anthropic("claude-opus-4-8", "Claude Opus 4.8"),
@@ -76,11 +103,12 @@ const PRESETS: Record<string, PresetWire> = {
   "qwen--qwen3-6-flash": dashscope("qwen-turbo", "Qwen 3.6 Flash"),
   "qwen--qwen3-coder": dashscope("qwen-coder-plus", "Qwen3 Coder"),
   "qwen--qwen3-5-397b-a17b": nvidia("qwen/qwen3.5-397b-a17b", "Qwen3.5 397B"),
-  "moonshotai--kimi-k2-6": openrouter("moonshotai/kimi-k2.6", "Kimi K2.6"),
-  "moonshotai--kimi-k2-5": openrouter("moonshotai/kimi-k2.5", "Kimi K2.5"),
-  "minimax--minimax-m3": openrouter("minimax/minimax-m3", "MiniMax M3"),
-  "minimax--minimax-m2-7": openrouter("minimax/minimax-m2.7", "MiniMax M2.7"),
-  "minimax--minimax-m2-5": openrouter("minimax/minimax-m2.5", "MiniMax M2.5"),
+  "moonshotai--kimi-k2-6": moonshot("kimi-k2.6", "Kimi K2.6"),
+  "moonshotai--kimi-k2-5": moonshot("kimi-k2.5", "Kimi K2.5"),
+  "minimax--minimax-m3": minimax("MiniMax-M3", "MiniMax M3"),
+  "minimax--minimax-m2-7": minimax("MiniMax-M2.7", "MiniMax M2.7"),
+  "minimax--minimax-m2-5": minimax("MiniMax-M2.5", "MiniMax M2.5"),
+  "xiaomi--mimo-v2-5-pro": mimo("mimo-v2.5-pro", "MiMo V2.5 Pro"),
   "zhipu--glm-5-1": openrouter("zhipu/glm-5.1", "GLM-5.1"),
   "zhipu--glm-5": openrouter("zhipu/glm-5", "GLM-5"),
   "nvidia--nemotron-3-ultra-550b": nvidia("nvidia/nemotron-3-ultra-550b", "Nemotron 3 Ultra"),

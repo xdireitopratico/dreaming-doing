@@ -9,8 +9,11 @@ const ENV_TO_PROVIDER: Record<AiEnvId, AiProviderId> = {
   openai: "openai",
   xai: "xai",
   groq: "groq",
+  minimax: "minimax",
+  moonshotai: "moonshotai",
   nvidia: "nvidia",
   openrouter: "openrouter",
+  xiaomi: "xiaomi",
 };
 
 export type ConnectorRow = {
@@ -38,8 +41,11 @@ export function connectedEnvsFromRows(
     openai: false,
     xai: false,
     groq: false,
+    minimax: false,
+    moonshotai: false,
     nvidia: false,
     openrouter: false,
+    xiaomi: false,
   };
 
   for (const row of rows ?? []) {

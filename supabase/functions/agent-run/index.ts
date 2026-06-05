@@ -158,6 +158,9 @@ Deno.serve(async (req) => {
           "OPENROUTER_API_KEY",
           "DEEPSEEK_API_KEY",
           "DASHSCOPE_API_KEY",
+          "MINIMAX_API_KEY",
+          "MOONSHOT_API_KEY",
+          "MIMO_API_KEY",
         ].includes(k)
       );
 

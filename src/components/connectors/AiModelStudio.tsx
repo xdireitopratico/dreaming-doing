@@ -47,11 +47,14 @@ const ENV_ICONS: Record<AiEnvId, React.ReactNode> = {
   anthropic: <Zap className="size-4" />,
   deepseek: <Brain className="size-4" />,
   gemini: <Gem className="size-4" />,
-  openai: <Brain className="size-4" />,
-  xai: <Globe className="size-4" />,
   groq: <Cpu className="size-4" />,
+  minimax: <Brain className="size-4" />,
+  moonshotai: <Globe className="size-4" />,
   nvidia: <Cpu className="size-4" />,
+  openai: <Brain className="size-4" />,
   openrouter: <Globe className="size-4" />,
+  xai: <Globe className="size-4" />,
+  xiaomi: <Cpu className="size-4" />,
 };
 
 const MODES: { id: ModelPowerMode; title: string; hint: string }[] = [
@@ -393,7 +396,7 @@ export function AiModelStudio({ connectorRows, keysSectionHref = "/api" }: AiMod
           <p className="mt-3 flex flex-wrap items-center gap-2 font-mono text-[10px] text-amber-400/95 rounded-lg border border-amber-400/25 bg-amber-400/8 px-3 py-2">
             <Key className="size-3.5 shrink-0" />
             {selectedEnv === "openrouter"
-              ? "Kimi, MiniMax, Zhipu, etc. — chave OpenRouter em API."
+              ? "Zhipu e outros — chave OpenRouter em API."
               : `Chave ${AI_ENV_META[selectedEnv].label} (${AI_ENV_META[selectedEnv].keyPrefix}…)`}
             <Link
               to={keysSectionHref}
@@ -495,8 +498,8 @@ export function AiModelStudio({ connectorRows, keysSectionHref = "/api" }: AiMod
             className="mt-2 w-full rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2 font-mono text-[11px] text-[var(--foreground)]"
           />
           <p className="mt-2 font-mono text-[9px] text-[var(--text-dim)] leading-relaxed">
-            No modo Fixo, substitui o preset acima. OpenRouter aceita qualquer slug; DeepSeek e Qwen
-            usam as chaves nativas em API.
+            No modo Fixo, substitui o preset acima. DeepSeek, Qwen, Kimi, MiniMax e Xiaomi usam chaves
+            nativas em API; OpenRouter para o restante.
           </p>
         </div>
       </div>
