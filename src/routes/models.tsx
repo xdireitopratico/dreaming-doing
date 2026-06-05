@@ -32,7 +32,7 @@ function ModelsPage() {
   });
 
   return (
-    <div className="px-6 py-8 max-w-[960px] mx-auto">
+    <div className="px-6 py-8 max-w-[1100px] mx-auto">
       <Link
         to="/api"
         className="inline-flex items-center gap-1.5 font-mono text-[10px] text-[var(--text-ghost)] hover:text-[var(--foreground)] mb-6"

@@ -18,6 +18,7 @@ import {
   Cpu,
   X,
   RotateCcw,
+  Plus,
 } from "lucide-react";
 import {
   type AgentPreferences,
@@ -28,16 +29,17 @@ import {
   saveAgentPreferences,
 } from "@/lib/agent-preferences";
 import {
-  CODING_MODEL_PRESETS,
   AI_ENV_META,
   AI_ENVS_SORTED,
   STT_OPTIONS,
-  poolPresetsForProvider,
-  presetsForEnv,
+  modelsForStudioStep,
   getPresetById,
   normalizePresetId,
+  inferEnvFromSlug,
+  userModelPresetId,
   PLATFORM_ROBIN_TASTE_PRESET_ID,
   type AiEnvId,
+  type UserModelEntry,
 } from "@/lib/model-catalog";
 import { isAgentPreferencesConfigured } from "@/lib/agent-setup";
 import { type ConnectorRow, connectedEnvsFromRows } from "@/lib/connector-env-status";
@@ -149,14 +151,18 @@ interface AiModelStudioProps {
 export function AiModelStudio({ connectorRows, keysSectionHref = "/api" }: AiModelStudioProps) {
   const [prefs, setPrefs] = useState<AgentPreferences>(() => loadAgentPreferences());
   const connected = connectedEnvsFromRows(connectorRows);
+  const userModels = prefs.userModelEntries;
   const activePreset = getPresetById(
     prefs.mode === "robin" ? prefs.robinPoolModelId : prefs.fixedPresetId,
+    userModels,
   );
   const [selectedEnv, setSelectedEnv] = useState<AiEnvId>(activePreset.env);
+  const [draftModelSlug, setDraftModelSlug] = useState("");
 
   useEffect(() => {
     const p = getPresetById(
       prefs.mode === "robin" ? prefs.robinPoolModelId : prefs.fixedPresetId,
+      userModels,
     );
     if (p.id) setSelectedEnv(p.env);
   }, [prefs.fixedPresetId, prefs.robinPoolModelId, prefs.mode]);
@@ -171,13 +177,10 @@ export function AiModelStudio({ connectorRows, keysSectionHref = "/api" }: AiMod
   const hidden = new Set(prefs.hiddenPresetIds ?? []);
   const envModels = useMemo(
     () =>
-      presetsForEnv(selectedEnv)
-        .filter((m) => !hidden.has(m.id))
-        .sort((a, b) => a.label.localeCompare(b.label, "pt")),
-    [selectedEnv, hidden],
+      modelsForStudioStep(selectedEnv, prefs.mode, userModels).filter((m) => !hidden.has(m.id)),
+    [selectedEnv, hidden, prefs.mode, userModels, prefs.userModelEntries],
   );
   const poolProvider = prefs.poolProvider ?? "groq";
-  const poolModels = poolPresetsForProvider(poolProvider).filter((m) => !hidden.has(m.id));
   const connectedCount = AI_ENVS_SORTED.filter((e) => connected[e]).length;
   const autoAllowed = new Set((prefs.autoAllowedPresetIds ?? []).map(normalizePresetId));
 
@@ -202,8 +205,51 @@ export function AiModelStudio({ connectorRows, keysSectionHref = "/api" }: AiMod
 
   const restoreHidden = () => patch({ hiddenPresetIds: [] });
 
+  const addUserModel = () => {
+    const raw = draftModelSlug.trim();
+    if (!raw) {
+      toast.error("Digite o ID do modelo (slug da API).");
+      return;
+    }
+    const slug = raw.includes("/") ? raw : `${selectedEnv}/${raw}`;
+    const env = inferEnvFromSlug(slug);
+    const entry: UserModelEntry = { slug, env, label: raw };
+    const id = userModelPresetId(slug);
+    if ((userModels ?? []).some((e) => userModelPresetId(e.slug) === id)) {
+      toast.info("Este ID já está na sua lista.");
+      return;
+    }
+    const entries = [...(userModels ?? []), entry];
+    const nextAllowed =
+      prefs.mode === "auto"
+        ? [...new Set([...(prefs.autoAllowedPresetIds ?? []).map(normalizePresetId), id])]
+        : prefs.autoAllowedPresetIds;
+    patch({
+      userModelEntries: entries,
+      autoAllowedPresetIds: nextAllowed,
+      useCustomModel: false,
+      customModelId: undefined,
+    });
+    setDraftModelSlug("");
+    toast.success("Modelo adicionado — aparece no passo 3 e no agente.");
+  };
+
+  const removeUserModel = (slug: string) => {
+    const id = userModelPresetId(slug);
+    const entries = (userModels ?? []).filter((e) => userModelPresetId(e.slug) !== id);
+    patch({
+      userModelEntries: entries,
+      autoAllowedPresetIds: (prefs.autoAllowedPresetIds ?? [])
+        .map(normalizePresetId)
+        .filter((x) => x !== id),
+      fixedPresetId:
+        normalizePresetId(prefs.fixedPresetId) === id ? undefined : prefs.fixedPresetId,
+    });
+    toast.success("Removido da sua lista");
+  };
+
   const selectModel = (presetId: string) => {
-    const preset = getPresetById(presetId);
+    const preset = getPresetById(presetId, userModels);
     if (!connected[preset.env]) {
       toast.error(`Cadastre a chave ${AI_ENV_META[preset.env].label} em API primeiro.`);
       return;
@@ -267,10 +313,10 @@ export function AiModelStudio({ connectorRows, keysSectionHref = "/api" }: AiMod
     patch({ mode });
   };
 
-  const modelGridClass =
-    prefs.mode === "robin"
-      ? "flex flex-wrap gap-2"
-      : "grid gap-2 sm:grid-cols-2 lg:grid-cols-3";
+  const modelGridClass = "grid gap-2 sm:grid-cols-2 lg:grid-cols-3";
+  const showCatalogGrid =
+    !(prefs.mode === "robin" && selectedEnv !== "groq" && selectedEnv !== "nvidia") &&
+    !(selectedEnv === "openrouter" && envModels.length === 0);
 
   return (
     <motion.section
@@ -286,8 +332,8 @@ export function AiModelStudio({ connectorRows, keysSectionHref = "/api" }: AiMod
             Ambiente e modelo de IA
           </h2>
           <p className="mt-1 font-mono text-[10px] text-[var(--text-dim)] max-w-xl leading-relaxed">
-            Passo 1: como o agente usa os modelos · Passo 2: ambiente · Passo 3: modelos · Voz (STT).
-            Listas em ordem alfabética.
+            1 modo · 2 ambiente · 3 catálogo (forte → fraco) · 4 IDs que você adiciona · 5 voz.
+            Ambientes em ordem alfabética; modelos do mais forte ao mais fraco.
           </p>
         </div>
         <div className="flex items-center gap-2 rounded-lg border border-[var(--border)] px-3 py-2">
@@ -335,12 +381,13 @@ export function AiModelStudio({ connectorRows, keysSectionHref = "/api" }: AiMod
         )}
         {prefs.mode === "fixed" && prefs.fixedPresetId && (
           <p className="mt-3 font-mono text-[10px] text-emerald-400/90">
-            Fixo: {getPresetById(prefs.fixedPresetId).label}
+            Fixo: {getPresetById(prefs.fixedPresetId, userModels).label}
           </p>
         )}
         {prefs.mode === "robin" && (
           <p className="mt-3 font-mono text-[10px] text-[var(--text-dim)]">
-            ROBIN: {getPresetById(prefs.robinPoolModelId).label} · pool {prefs.poolProvider ?? "groq"}
+            ROBIN: {getPresetById(prefs.robinPoolModelId, userModels).label} · pool{" "}
+            {prefs.poolProvider ?? "groq"}
           </p>
         )}
         {!isAgentPreferencesConfigured(prefs) && (
@@ -355,7 +402,7 @@ export function AiModelStudio({ connectorRows, keysSectionHref = "/api" }: AiMod
         <p className="font-mono text-[9px] uppercase tracking-[0.2em] text-[var(--primary)] mb-2">
           2 · Ambiente (provedor)
         </p>
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2">
           {AI_ENVS_SORTED.map((env) => {
             const meta = AI_ENV_META[env];
             const hasKey = connected[env];
@@ -396,7 +443,7 @@ export function AiModelStudio({ connectorRows, keysSectionHref = "/api" }: AiMod
           <p className="mt-3 flex flex-wrap items-center gap-2 font-mono text-[10px] text-amber-400/95 rounded-lg border border-amber-400/25 bg-amber-400/8 px-3 py-2">
             <Key className="size-3.5 shrink-0" />
             {selectedEnv === "openrouter"
-              ? "Zhipu e outros — chave OpenRouter em API."
+              ? "OpenRouter tem milhares de modelos — use o passo 4 para colar o slug exato."
               : `Chave ${AI_ENV_META[selectedEnv].label} (${AI_ENV_META[selectedEnv].keyPrefix}…)`}
             <Link
               to={keysSectionHref}
@@ -413,12 +460,18 @@ export function AiModelStudio({ connectorRows, keysSectionHref = "/api" }: AiMod
         )}
       </div>
 
-      {/* Passo 3: Modelos */}
+      {/* Passo 3: Catálogo */}
       <div className="mb-6">
         <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
           <p className="font-mono text-[9px] uppercase tracking-[0.2em] text-[var(--primary)]">
-            3 · Modelos — {AI_ENV_META[selectedEnv].label}
-            {prefs.mode === "auto" ? " (marque vários)" : prefs.mode === "fixed" ? " (um só)" : ""}
+            3 · Catálogo — {AI_ENV_META[selectedEnv].label}
+            {prefs.mode === "auto"
+              ? " · marque vários"
+              : prefs.mode === "fixed"
+                ? " · escolha um"
+                : prefs.mode === "robin"
+                  ? " · pool"
+                  : ""}
           </p>
           <div className="flex flex-wrap items-center gap-2">
             {prefs.mode === "auto" && (
@@ -456,12 +509,20 @@ export function AiModelStudio({ connectorRows, keysSectionHref = "/api" }: AiMod
           <p className="font-mono text-[10px] text-[var(--text-dim)] rounded-lg border border-dashed border-[var(--border)] p-3">
             ROBIN só usa Groq ou NVIDIA. Selecione um desses ambientes ou mude para Auto/Fixo.
           </p>
-        ) : (
+        ) : selectedEnv === "openrouter" && envModels.length === 0 ? (
+          <p className="font-mono text-[10px] text-[var(--text-dim)] rounded-lg border border-dashed border-[var(--border)] p-3 leading-relaxed">
+            Não listamos catálogo fixo no OpenRouter (dezenas de milhares de modelos). Use o{" "}
+            <strong className="text-[var(--foreground)]">passo 4</strong> para adicionar cada slug — ex.{" "}
+            <code className="text-[var(--primary)]">zhipu/glm-5</code>,{" "}
+            <code className="text-[var(--primary)]">qwen/qwen3.5-397b-a17b</code>.
+          </p>
+        ) : envModels.length === 0 ? (
+          <p className="font-mono text-[10px] text-[var(--text-dim)] rounded-lg border border-dashed border-[var(--border)] p-3">
+            Nenhum atalho neste ambiente — adicione IDs no passo 4.
+          </p>
+        ) : showCatalogGrid ? (
           <div className={modelGridClass}>
-            {(prefs.mode === "robin" && (selectedEnv === "groq" || selectedEnv === "nvidia")
-              ? poolModels
-              : envModels
-            ).map((m) => (
+            {envModels.map((m) => (
               <ModelCard
                 key={m.id}
                 active={isModelActive(m.id)}
@@ -470,45 +531,88 @@ export function AiModelStudio({ connectorRows, keysSectionHref = "/api" }: AiMod
                 badges={[
                   m.tier,
                   m.recommended ? "recomendado" : "",
-                  m.env === "openrouter" ? m.openRouterSlug : AI_ENV_META[m.env].label,
+                  m.openRouterSlug,
                 ].filter(Boolean) as string[]}
                 disabled={!connected[m.env]}
                 multi={prefs.mode === "auto"}
                 onClick={() => selectModel(m.id)}
-                onHide={() => hidePreset(m.id)}
+                onHide={m.id.startsWith("custom--") ? undefined : () => hidePreset(m.id)}
               />
             ))}
           </div>
-        )}
+        ) : null}
 
-        <div className="mt-4 rounded-lg border border-dashed border-[var(--border)] p-3">
-          <label className="font-mono text-[9px] uppercase tracking-wider text-[var(--text-dim)]">
-            ID do modelo (opcional — slug exato da API)
-          </label>
-          <input
-            type="text"
-            value={prefs.customModelId ?? ""}
-            onChange={(e) =>
-              patch({
-                customModelId: e.target.value,
-                useCustomModel: e.target.value.trim().length > 0,
-              })
-            }
-            placeholder="ex.: anthropic/claude-sonnet-4-6"
-            className="mt-2 w-full rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2 font-mono text-[11px] text-[var(--foreground)]"
-          />
-          <p className="mt-2 font-mono text-[9px] text-[var(--text-dim)] leading-relaxed">
-            No modo Fixo, substitui o preset acima. DeepSeek, Qwen, Kimi, MiniMax e Xiaomi usam chaves
-            nativas em API; OpenRouter para o restante.
-          </p>
-        </div>
+        <p className="mt-2 font-mono text-[9px] text-[var(--text-ghost)]">
+          Ordem: mais forte (topo/esquerda) → mais fraco. NVIDIA: Nemotron 550B → Qwen 397B → Super 120B.
+        </p>
       </div>
 
-      {/* STT */}
+      {/* Passo 4: IDs adicionados pelo usuário */}
+      <div className="mb-6 rounded-lg border border-[var(--primary)]/25 bg-[var(--primary)]/5 p-4">
+        <p className="font-mono text-[9px] uppercase tracking-[0.2em] text-[var(--primary)] mb-2">
+          4 · IDs de modelo — adicione quantos quiser
+        </p>
+        <p className="font-mono text-[10px] text-[var(--text-dim)] leading-relaxed mb-3">
+          Cole o slug exato da API (como no painel do provedor). Cada ID vira um card no passo 3 e pode ser
+          marcado no Auto ou escolhido no Fixo. A plataforma não fica desatualizada — você controla a lista.
+        </p>
+        <div className="flex flex-wrap gap-2">
+          <input
+            type="text"
+            value={draftModelSlug}
+            onChange={(e) => setDraftModelSlug(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                addUserModel();
+              }
+            }}
+            placeholder={
+              selectedEnv === "openrouter"
+                ? "ex.: zhipu/glm-5 ou deepseek/deepseek-v3"
+                : `ex.: ${selectedEnv === "nvidia" ? "qwen/qwen3.5-397b-a17b" : "anthropic/claude-opus-4-8"}`
+            }
+            className="flex-1 min-w-[200px] rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2 font-mono text-[11px] text-[var(--foreground)]"
+          />
+          <button
+            type="button"
+            onClick={addUserModel}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--primary)] bg-[var(--primary)]/15 px-4 py-2 font-mono text-[11px] text-[var(--foreground)] hover:bg-[var(--primary)]/25"
+          >
+            <Plus className="size-3.5" />
+            Adicionar modelo
+          </button>
+        </div>
+        {(userModels?.length ?? 0) > 0 && (
+          <ul className="mt-3 flex flex-wrap gap-2">
+            {(userModels ?? []).map((e) => (
+              <li
+                key={userModelPresetId(e.slug)}
+                className="inline-flex items-center gap-1 rounded-md border border-[var(--border)] bg-[var(--surface-2)] px-2 py-1 font-mono text-[10px]"
+              >
+                <span className="text-[var(--primary)]">{AI_ENV_META[e.env].label}</span>
+                <span className="text-[var(--foreground)]/90 truncate max-w-[220px]" title={e.slug}>
+                  {e.slug}
+                </span>
+                <button
+                  type="button"
+                  title="Remover"
+                  onClick={() => removeUserModel(e.slug)}
+                  className="text-[var(--text-dim)] hover:text-[var(--foreground)]"
+                >
+                  <X className="size-3" />
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      {/* Passo 5: STT */}
       <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)]/30 p-4">
         <label className="flex items-center gap-2 font-mono text-[9px] uppercase tracking-wider text-[var(--text-dim)] mb-3">
           <Mic className="size-3" />
-          Voz (STT)
+          5 · Voz (STT)
         </label>
         <div className="grid gap-2 sm:grid-cols-3">
           {[...STT_OPTIONS]
@@ -545,7 +649,10 @@ export function AiModelStudio({ connectorRows, keysSectionHref = "/api" }: AiMod
 export function AiModelStudioSummary() {
   const prefs = loadAgentPreferences();
   const preset = isAgentPreferencesConfigured(prefs)
-    ? getPresetById(prefs.mode === "robin" ? prefs.robinPoolModelId : prefs.fixedPresetId)
+    ? getPresetById(
+        prefs.mode === "robin" ? prefs.robinPoolModelId : prefs.fixedPresetId,
+        prefs.userModelEntries,
+      )
     : getPresetById("");
   const stt =
     prefs.sttProvider === "groq"

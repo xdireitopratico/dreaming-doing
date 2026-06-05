@@ -102,7 +102,7 @@ const PRESETS: Record<string, PresetWire> = {
   "qwen--qwen3-6-plus": dashscope("qwen-plus", "Qwen 3.6 Plus"),
   "qwen--qwen3-6-flash": dashscope("qwen-turbo", "Qwen 3.6 Flash"),
   "qwen--qwen3-coder": dashscope("qwen-coder-plus", "Qwen3 Coder"),
-  "qwen--qwen3-5-397b-a17b": nvidia("qwen/qwen3.5-397b-a17b", "Qwen3.5 397B"),
+  "qwen--qwen3-5-397b-a17b": nvidia("qwen/qwen3.5-397b-a17b", "Qwen3.5 397B (NVIDIA NIM)"),
   "moonshotai--kimi-k2-6": moonshot("kimi-k2.6", "Kimi K2.6"),
   "moonshotai--kimi-k2-5": moonshot("kimi-k2.5", "Kimi K2.5"),
   "minimax--minimax-m3": minimax("MiniMax-M3", "MiniMax M3"),
@@ -145,15 +145,69 @@ export function getPresetWire(id?: string): PresetWire | null {
 }
 
 /** Restringe chaves BYOK aos presets permitidos no modo Auto. */
+type UserModelEntryPayload = { slug: string; env: string; label?: string };
+
+const ENV_SECRET: Record<string, string> = {
+  anthropic: "ANTHROPIC_API_KEY",
+  openai: "OPENAI_API_KEY",
+  gemini: "GEMINI_API_KEY",
+  xai: "XAI_API_KEY",
+  groq: "GROQ_API_KEY",
+  nvidia: "NVIDIA_API_KEY",
+  openrouter: "OPENROUTER_API_KEY",
+  deepseek: "DEEPSEEK_API_KEY",
+  alibaba: "DASHSCOPE_API_KEY",
+  minimax: "MINIMAX_API_KEY",
+  moonshotai: "MOONSHOT_API_KEY",
+  xiaomi: "MIMO_API_KEY",
+};
+
+function wireFromUserEntry(entry: UserModelEntryPayload): PresetWire | null {
+  const key = ENV_SECRET[entry.env];
+  if (!key) return null;
+  const slug = entry.slug.includes("/") ? entry.slug : `${entry.env}/${entry.slug}`;
+  if (entry.env === "openrouter") {
+    return openrouter(slug, entry.label ?? slug);
+  }
+  if (entry.env === "anthropic") return anthropic(slug.split("/").pop() ?? slug, entry.label ?? slug);
+  if (entry.env === "deepseek") return deepseek("deepseek-chat", entry.label ?? slug);
+  if (entry.env === "alibaba") return dashscope("qwen-max", entry.label ?? slug);
+  if (entry.env === "minimax") return minimax("MiniMax-M3", entry.label ?? slug);
+  if (entry.env === "moonshotai") return moonshot("kimi-k2.6", entry.label ?? slug);
+  if (entry.env === "xiaomi") return mimo("mimo-v2.5-pro", entry.label ?? slug);
+  if (entry.env === "nvidia") return nvidia(slug, entry.label ?? slug);
+  return openai(slug.split("/").pop() ?? slug, entry.label ?? slug, "https://api.openai.com/v1");
+}
+
+export function resolveWireFromPresetId(
+  id: string | undefined,
+  userModels?: UserModelEntryPayload[],
+): PresetWire | null {
+  const norm = normalizePresetId(id);
+  if (!norm) return null;
+  const catalog = getPresetWire(norm);
+  if (catalog) return catalog;
+  if (norm.startsWith("custom--") && userModels?.length) {
+    const entry = userModels.find((e) => {
+      const slug = e.slug.includes("/") ? e.slug : `${e.env}/${e.slug}`;
+      const customId = `custom--${slug.replace(/\//g, "--").replace(/\./g, "-")}`;
+      return customId === norm;
+    });
+    if (entry) return wireFromUserEntry(entry);
+  }
+  return null;
+}
+
 export function filterKeysForAutoAllowlist(
   keys: Record<string, string>,
   allowedPresetIds?: string[],
+  userModels?: UserModelEntryPayload[],
 ): Record<string, string> {
   const list = allowedPresetIds?.map(normalizePresetId).filter(Boolean) ?? [];
   if (list.length === 0) return keys;
   const secretKeys = new Set<string>();
   for (const id of list) {
-    const wire = getPresetWire(id);
+    const wire = resolveWireFromPresetId(id, userModels) ?? getPresetWire(id);
     if (wire?.secretKey) secretKeys.add(wire.secretKey);
   }
   if (secretKeys.size === 0) return keys;
@@ -179,15 +233,40 @@ type PrefsLike = {
   fixedPresetId?: string;
   customModelId?: string;
   useCustomModel?: boolean;
+  userModelEntries?: UserModelEntryPayload[];
 };
+
+function wireWithKey(wire: PresetWire, keys: Record<string, string>): (PresetWire & { apiKey: string }) | null {
+  const apiKey = keys[wire.secretKey];
+  if (!apiKey) return null;
+  return { ...wire, apiKey };
+}
 
 /** Slug custom (formato OpenRouter) → sempre roteador OpenRouter se houver chave */
 export function resolveModelFromPreferences(
   preferences: PrefsLike | undefined,
   keys: Record<string, string>,
 ): (PresetWire & { apiKey: string }) | null {
+  const id = preferences?.fixedPresetId?.trim();
+  if (id) {
+    const customWire = resolveWireFromPresetId(id, preferences?.userModelEntries);
+    if (customWire) {
+      const resolved = wireWithKey(customWire, keys);
+      if (resolved) return resolved;
+    }
+    const fromCatalog = resolveFixedFromKeys(id, keys);
+    if (fromCatalog) return fromCatalog;
+  }
+
   const custom = preferences?.customModelId?.trim();
   if (preferences?.useCustomModel && custom) {
+    const env = custom.includes("/") ? custom.split("/")[0] : "openrouter";
+    const entry = { slug: custom, env };
+    const wire = wireFromUserEntry(entry);
+    if (wire) {
+      const resolved = wireWithKey(wire, keys);
+      if (resolved) return resolved;
+    }
     const orKey = keys.OPENROUTER_API_KEY;
     if (!orKey) return null;
     return {

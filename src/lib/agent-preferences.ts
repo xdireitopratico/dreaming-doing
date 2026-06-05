@@ -1,5 +1,11 @@
 /** Preferências de modelo/potência — persistidas localmente (sem expor chaves). */
-import { getPresetById, normalizePresetId } from "@/lib/model-catalog";
+import {
+  getPresetById,
+  inferEnvFromSlug,
+  normalizePresetId,
+  type UserModelEntry,
+  userModelPresetId,
+} from "@/lib/model-catalog";
 import { isAgentPreferencesConfigured } from "@/lib/agent-setup";
 
 export type ModelPowerMode = "auto" | "robin" | "fixed";
@@ -25,6 +31,8 @@ export interface AgentPreferences {
   hiddenPresetIds?: string[];
   /** Modo Auto: modelos que o router pode usar (vazio = todos com chave ativa) */
   autoAllowedPresetIds?: string[];
+  /** Slugs que o usuário adicionou manualmente (passo 4) */
+  userModelEntries?: UserModelEntry[];
 }
 
 const STORAGE_KEY = "forge:agent-preferences";
@@ -61,10 +69,33 @@ export function loadAgentPreferences(): AgentPreferences {
       autoAllowedPresetIds: Array.isArray(parsed.autoAllowedPresetIds)
         ? parsed.autoAllowedPresetIds.filter((x): x is string => typeof x === "string").map(normalizePresetId)
         : undefined,
+      userModelEntries: normalizeUserModelEntries(parsed),
     };
   } catch {
     return EMPTY_AGENT_PREFERENCES;
   }
+}
+
+function normalizeUserModelEntries(
+  parsed: Partial<AgentPreferences> & { customModelId?: string; useCustomModel?: boolean },
+): UserModelEntry[] | undefined {
+  const fromField = Array.isArray(parsed.userModelEntries)
+    ? parsed.userModelEntries
+        .filter((e): e is UserModelEntry => !!e && typeof e.slug === "string" && typeof e.env === "string")
+        .map((e) => ({
+          slug: e.slug.trim(),
+          env: e.env,
+          label: typeof e.label === "string" ? e.label.trim() : undefined,
+        }))
+    : [];
+
+  if (fromField.length > 0) return fromField;
+
+  const legacy = parsed.customModelId?.trim();
+  if (legacy && parsed.useCustomModel) {
+    return [{ slug: legacy, env: inferEnvFromSlug(legacy), label: legacy }];
+  }
+  return fromField.length > 0 ? fromField : undefined;
 }
 
 export function saveAgentPreferences(prefs: AgentPreferences) {
@@ -86,11 +117,11 @@ export function saveAgentPreferences(prefs: AgentPreferences) {
 export function agentModeLabel(prefs: AgentPreferences): string {
   if (!isAgentPreferencesConfigured(prefs)) return "setup pendente";
   if (prefs.mode === "robin") {
-    const preset = getPresetById(prefs.robinPoolModelId);
+    const preset = getPresetById(prefs.robinPoolModelId, prefs.userModelEntries);
     return `ROBIN · ${preset.label}`;
   }
   if (prefs.mode === "fixed") {
-    return getPresetById(prefs.fixedPresetId).label;
+    return getPresetById(prefs.fixedPresetId, prefs.userModelEntries).label;
   }
   return "não configurado";
 }

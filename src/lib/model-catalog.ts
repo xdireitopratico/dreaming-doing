@@ -24,6 +24,8 @@ export type ModelTier = "frontier" | "balanced" | "fast" | "pool";
 export interface ForgeModelPreset {
   id: string;
   env: AiEnvId;
+  /** Ordem de força no ambiente (menor = mais forte). */
+  envStrength?: number;
   /** ID enviado à API do provedor escolhido em `env` */
   model: string;
   /** Slug de referência (como listado no OpenRouter) — útil no campo custom */
@@ -135,7 +137,112 @@ type RankedInput = {
   tier: ModelTier;
   recommended?: boolean;
   editorPick?: boolean;
+  /** Força dentro do ambiente (1 = mais forte). Se omitido, usa ordem em ENV_DISPLAY_ORDER. */
+  envStrength?: number;
+  /** Ambiente quando o slug não basta (ex.: Qwen no NIM NVIDIA). */
+  env?: AiEnvId;
 };
+
+/** Ordem do mais forte ao mais fraco, por ambiente. */
+const ENV_DISPLAY_ORDER: Partial<Record<AiEnvId, string[]>> = {
+  anthropic: [
+    "anthropic--claude-opus-4-8",
+    "anthropic--claude-opus-4-7",
+    "anthropic--claude-sonnet-4-6",
+    "anthropic--claude-opus-4-8-fast",
+  ],
+  nvidia: [
+    "nvidia--nemotron-3-ultra-550b",
+    "qwen--qwen3-5-397b-a17b",
+    "nvidia--nemotron-3-super-120b",
+  ],
+  openai: [
+    "openai--gpt-5-5",
+    "openai--gpt-5-3-codex",
+    "openai--gpt-5-5-instant",
+    "openai--gpt-5-4",
+  ],
+  gemini: ["google--gemini-3-1-pro", "google--gemini-3-5-flash", "google--gemma-4-31b-it"],
+  xai: ["xai--grok-4-3", "xai--grok-build-0-1"],
+  deepseek: [
+    "deepseek--deepseek-v4-pro",
+    "deepseek--deepseek-v4-flash",
+    "deepseek--deepseek-v3",
+  ],
+  alibaba: [
+    "qwen--qwen3-7-max",
+    "qwen--qwen3-7-plus",
+    "qwen--qwen3-6-plus",
+    "qwen--qwen3-coder",
+    "qwen--qwen3-6-flash",
+  ],
+  moonshotai: ["moonshotai--kimi-k2-6", "moonshotai--kimi-k2-5"],
+  minimax: ["minimax--minimax-m3", "minimax--minimax-m2-7", "minimax--minimax-m2-5"],
+  openrouter: ["zhipu--glm-5-1", "zhipu--glm-5"],
+  xiaomi: ["xiaomi--mimo-v2-5-pro"],
+  groq: ["pool-groq-flash"],
+};
+
+export type UserModelEntry = {
+  slug: string;
+  env: AiEnvId;
+  label?: string;
+};
+
+export function userModelPresetId(slug: string): string {
+  const s = slug.trim();
+  return `custom--${s.replace(/\//g, "--").replace(/\./g, "-")}`;
+}
+
+export function inferEnvFromSlug(slug: string): AiEnvId {
+  const s = slug.trim();
+  if (s.startsWith("anthropic/")) return "anthropic";
+  if (s.startsWith("openai/")) return "openai";
+  if (s.startsWith("google/")) return "gemini";
+  if (s.startsWith("xai/")) return "xai";
+  if (s.startsWith("nvidia/")) return "nvidia";
+  if (s.startsWith("deepseek/")) return "deepseek";
+  if (s.startsWith("qwen/")) return "alibaba";
+  if (s.startsWith("minimax/")) return "minimax";
+  if (s.startsWith("moonshotai/")) return "moonshotai";
+  if (s.startsWith("xiaomi/")) return "xiaomi";
+  return "openrouter";
+}
+
+export function buildUserModelPreset(entry: UserModelEntry): ForgeModelPreset {
+  const slug = entry.slug.includes("/") ? entry.slug : `${entry.env}/${entry.slug}`;
+  const env = entry.env;
+  const wire = wireForEnv(env);
+  return {
+    id: userModelPresetId(slug),
+    env,
+    model: apiModelForEnv(env, slug),
+    openRouterSlug: slug,
+    label: entry.label?.trim() || slug,
+    description: `ID adicionado por você · ${AI_ENV_META[env].label}`,
+    tier: "balanced",
+    brand: "Custom",
+    rank: 5000,
+    envStrength: 5000,
+    llmProvider: wire.llmProvider,
+    baseUrl: wire.baseUrl,
+    secretKey: wire.secretKey,
+  };
+}
+
+function sortPresetsForDisplay(env: AiEnvId, presets: ForgeModelPreset[]): ForgeModelPreset[] {
+  const order = ENV_DISPLAY_ORDER[env];
+  if (order) {
+    const idx = new Map(order.map((id, i) => [id, i]));
+    return [...presets].sort(
+      (a, b) =>
+        (a.envStrength ?? idx.get(a.id) ?? 999) - (b.envStrength ?? idx.get(b.id) ?? 999),
+    );
+  }
+  return [...presets].sort(
+    (a, b) => (a.envStrength ?? a.rank) - (b.envStrength ?? b.rank),
+  );
+}
 
 /** Roteamento: provedor nativo vs OpenRouter só quando não há conector dedicado */
 function routeEnv(brand: string, slug: string): AiEnvId {
@@ -252,10 +359,12 @@ function slugToId(slug: string): string {
 }
 
 function buildPreset(row: RankedInput): ForgeModelPreset {
-  const env = routeEnv(row.brand, row.openRouterSlug);
+  const env = row.env ?? routeEnv(row.brand, row.openRouterSlug);
   const wire = wireForEnv(env);
+  const id = slugToId(row.openRouterSlug);
+  const orderIdx = ENV_DISPLAY_ORDER[env]?.indexOf(id) ?? -1;
   return {
-    id: slugToId(row.openRouterSlug),
+    id,
     env,
     model: apiModelForEnv(env, row.openRouterSlug),
     openRouterSlug: row.openRouterSlug,
@@ -264,6 +373,7 @@ function buildPreset(row: RankedInput): ForgeModelPreset {
     tier: row.tier,
     brand: row.brand,
     rank: row.rank,
+    envStrength: row.envStrength ?? (orderIdx >= 0 ? orderIdx + 1 : row.rank),
     llmProvider: wire.llmProvider,
     baseUrl: wire.baseUrl,
     secretKey: wire.secretKey,
@@ -293,8 +403,22 @@ const RANKED: RankedInput[] = [
   { rank: 18, label: "MiniMax M3", brand: "MiniMax", openRouterSlug: "minimax/minimax-m3", tier: "balanced" },
   { rank: 19, label: "MiniMax M2.7", brand: "MiniMax", openRouterSlug: "minimax/minimax-m2.7", tier: "balanced" },
   { rank: 20, label: "GLM-5.1", brand: "Zhipu", openRouterSlug: "zhipu/glm-5.1", tier: "balanced" },
-  { rank: 21, label: "Nemotron 3 Ultra (550B)", brand: "NVIDIA", openRouterSlug: "nvidia/nemotron-3-ultra-550b", tier: "pool" },
-  { rank: 22, label: "Nemotron 3 Super (120B)", brand: "NVIDIA", openRouterSlug: "nvidia/nemotron-3-super-120b", tier: "pool" },
+  {
+    rank: 21,
+    label: "Nemotron 3 Ultra (550B)",
+    brand: "NVIDIA",
+    openRouterSlug: "nvidia/nemotron-3-ultra-550b",
+    tier: "pool",
+    envStrength: 1,
+  },
+  {
+    rank: 22,
+    label: "Nemotron 3 Super (120B)",
+    brand: "NVIDIA",
+    openRouterSlug: "nvidia/nemotron-3-super-120b",
+    tier: "pool",
+    envStrength: 3,
+  },
   { rank: 23, label: "Qwen3 Coder", brand: "Qwen", openRouterSlug: "qwen/qwen3-coder", tier: "pool", recommended: true },
   { rank: 24, label: "Gemma 4 31B", brand: "Google", openRouterSlug: "google/gemma-4-31b-it", tier: "fast" },
   { rank: 25, label: "Claude Opus 4.8 Fast", brand: "Anthropic", openRouterSlug: "anthropic/claude-opus-4-8-fast", tier: "fast" },
@@ -303,7 +427,15 @@ const RANKED: RankedInput[] = [
   { rank: 28, label: "Qwen 3.6 Flash", brand: "Qwen", openRouterSlug: "qwen/qwen3.6-flash", tier: "fast" },
   { rank: 29, label: "MiniMax M2.5", brand: "MiniMax", openRouterSlug: "minimax/minimax-m2.5", tier: "fast" },
   { rank: 30, label: "GLM-5", brand: "Zhipu", openRouterSlug: "zhipu/glm-5", tier: "fast" },
-  { rank: 31, label: "Qwen3.5 397B (NVIDIA)", brand: "Qwen", openRouterSlug: "qwen/qwen3.5-397b-a17b", tier: "pool" },
+  {
+    rank: 31,
+    label: "Qwen3.5 397B (NVIDIA NIM)",
+    brand: "Qwen",
+    openRouterSlug: "qwen/qwen3.5-397b-a17b",
+    tier: "pool",
+    env: "nvidia",
+    envStrength: 2,
+  },
   { rank: 32, label: "MiMo V2.5 Pro", brand: "Xiaomi", openRouterSlug: "xiaomi/mimo-v2.5-pro", tier: "balanced", recommended: true },
 ];
 
@@ -409,17 +541,53 @@ export function normalizePresetId(id?: string): string {
   return LEGACY_PRESET_IDS[id] ?? id;
 }
 
-export function getPresetById(id?: string): ForgeModelPreset {
+export function getPresetById(id?: string, userModels?: UserModelEntry[]): ForgeModelPreset {
   const norm = normalizePresetId(id);
   if (!norm) return UNCONFIGURED_PRESET;
-  return PRESET_BY_ID.get(norm) ?? UNCONFIGURED_PRESET;
+  const catalog = PRESET_BY_ID.get(norm);
+  if (catalog) return catalog;
+  if (norm.startsWith("custom--") && userModels) {
+    const entry = userModels.find((e) => userModelPresetId(e.slug) === norm);
+    if (entry) return buildUserModelPreset(entry);
+  }
+  return UNCONFIGURED_PRESET;
 }
 
-export function presetsForEnv(env: AiEnvId): ForgeModelPreset[] {
-  if (env === "groq" || env === "nvidia") {
-    return CODING_MODEL_PRESETS.filter((p) => p.env === env).sort((a, b) => a.rank - b.rank);
+export function presetsForEnv(
+  env: AiEnvId,
+  opts?: { robinPool?: boolean; userModels?: UserModelEntry[] },
+): ForgeModelPreset[] {
+  let list: ForgeModelPreset[];
+  if (opts?.robinPool && (env === "groq" || env === "nvidia")) {
+    list = NATIVE_POOL.filter((p) => p.env === env);
+  } else if (env === "groq" || env === "nvidia") {
+    list = RANKED_MODEL_PRESETS.filter((p) => p.env === env && !p.id.startsWith("pool-"));
+  } else {
+    list = RANKED_MODEL_PRESETS.filter((p) => p.env === env);
   }
-  return RANKED_MODEL_PRESETS.filter((p) => p.env === env).sort((a, b) => a.rank - b.rank);
+  const customs = (opts?.userModels ?? [])
+    .filter((e) => e.env === env)
+    .map(buildUserModelPreset);
+  const seen = new Set<string>();
+  const merged = [...list, ...customs].filter((p) => {
+    const key = `${p.env}:${p.model}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+  return sortPresetsForDisplay(env, merged);
+}
+
+/** Modelos exibidos no passo 3 (catálogo + seus IDs, sem duplicar pool ROBIN). */
+export function modelsForStudioStep(
+  env: AiEnvId,
+  mode: "auto" | "robin" | "fixed" | undefined,
+  userModels?: UserModelEntry[],
+): ForgeModelPreset[] {
+  if (mode === "robin" && (env === "groq" || env === "nvidia")) {
+    return presetsForEnv(env, { robinPool: true, userModels });
+  }
+  return presetsForEnv(env, { userModels });
 }
 
 export function presetsByEnvGrouped(): {

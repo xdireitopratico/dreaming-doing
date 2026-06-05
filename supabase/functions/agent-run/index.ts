@@ -304,6 +304,7 @@ Deno.serve(async (req) => {
           const autoKeys = filterKeysForAutoAllowlist(
             userOnlyKeys,
             preferences?.autoAllowedPresetIds,
+            preferences?.userModelEntries,
           );
           mainCfg = pickMain(autoKeys);
           const n = preferences?.autoAllowedPresetIds?.length ?? 0;

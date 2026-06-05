@@ -10,6 +10,7 @@ export type AgentPreferencesPayload = {
   customModelId?: string;
   useCustomModel?: boolean;
   autoAllowedPresetIds?: string[];
+  userModelEntries?: { slug: string; env: string; label?: string }[];
 };
 
 function isRobinMode(preferences?: AgentPreferencesPayload): boolean {
