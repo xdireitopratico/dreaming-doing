@@ -227,8 +227,8 @@ export function buildUserModelPreset(entry: UserModelEntry): ForgeModelPreset {
     env,
     model: apiModelForEnv(env, slug),
     openRouterSlug: slug,
-    label: entry.label?.trim() || slug,
-    description: `ID adicionado por você · ${AI_ENV_META[env].label}`,
+    label: entry.label?.trim() || slug.split("/").pop() || slug,
+    description: `Você adicionou · ${slug}`,
     tier: "balanced",
     brand: "Custom",
     rank: 5000,
@@ -620,15 +620,14 @@ export function getPresetById(id?: string, userModels?: UserModelEntry[]): Forge
 
 export function presetsForEnv(
   env: AiEnvId,
-  opts?: { robinPool?: boolean; userModels?: UserModelEntry[] },
+  opts?: { userModels?: UserModelEntry[] },
 ): ForgeModelPreset[] {
-  let list: ForgeModelPreset[];
-  if (opts?.robinPool && (env === "groq" || env === "nvidia")) {
-    list = NATIVE_POOL.filter((p) => p.env === env);
-  } else if (env === "groq" || env === "nvidia") {
-    list = RANKED_MODEL_PRESETS.filter((p) => p.env === env && !p.id.startsWith("pool-"));
-  } else {
-    list = RANKED_MODEL_PRESETS.filter((p) => p.env === env);
+  const list = RANKED_MODEL_PRESETS.filter((p) => p.env === env);
+  if (env === "groq" || env === "nvidia") {
+    const ids = new Set(list.map((p) => p.id));
+    for (const p of NATIVE_POOL.filter((x) => x.env === env)) {
+      if (!ids.has(p.id)) list.push(p);
+    }
   }
   const customs = (opts?.userModels ?? [])
     .filter((e) => e.env === env)
@@ -643,15 +642,12 @@ export function presetsForEnv(
   return sortPresetsForDisplay(env, merged);
 }
 
-/** Modelos exibidos no passo 3 (catálogo + seus IDs, sem duplicar pool ROBIN). */
+/** Catálogo completo do ambiente + modelos que o usuário adicionou neste provedor. */
 export function modelsForStudioStep(
   env: AiEnvId,
-  mode: "auto" | "robin" | "fixed" | undefined,
+  _mode?: "auto" | "robin" | "fixed" | undefined,
   userModels?: UserModelEntry[],
 ): ForgeModelPreset[] {
-  if (mode === "robin" && (env === "groq" || env === "nvidia")) {
-    return presetsForEnv(env, { robinPool: true, userModels });
-  }
   return presetsForEnv(env, { userModels });
 }
 

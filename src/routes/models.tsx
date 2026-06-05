@@ -49,7 +49,7 @@ function ModelsPage() {
           <div>
             <h1 className="font-display text-3xl tracking-tight">Modelos</h1>
             <p className="font-mono text-[10px] text-[var(--text-dim)] mt-0.5">
-              Ambiente, preset, modo do agente e voz (STT) — chaves em API
+              Modo do agente, provedor, modelos (catálogo + os que você adicionar) — chaves em API
             </p>
           </div>
         </div>
