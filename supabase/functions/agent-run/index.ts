@@ -32,6 +32,7 @@ import {
 import { registerMcpForgeTools } from "./tools/mcp-forge.ts";
 import { loadTasteNvidiaConfig, runTasteChat } from "./taste-session.ts";
 import { FORGE_CORS_HEADERS, corsPreflightResponse } from "../_shared/cors.ts";
+import { restoreExecutionLogFromRows } from "./executionLogMeta.ts";
 
 const runningLocks = new Map<string, Promise<unknown>>();
 
@@ -88,6 +89,38 @@ Deno.serve(async (req) => {
 
   try {
     const body = await req.json();
+
+    const supabase = createClient(SUPABASE_URL, SERVICE_KEY);
+    const token = (req.headers.get("Authorization") ?? "").replace("Bearer ", "");
+    const { data: userData, error: uErr } = await supabase.auth.getUser(token);
+    if (uErr || !userData?.user) return json({ error: "Não autenticado" }, 401);
+
+    if (body.action === "cancel") {
+      const runId = body.runId as string | undefined;
+      if (!runId) return json({ error: "runId obrigatório" }, 400);
+
+      const { data: run } = await supabase
+        .from("agent_runs")
+        .select("id, user_id, status, canceled_at")
+        .eq("id", runId)
+        .maybeSingle();
+
+      if (!run || run.user_id !== userData.user.id) {
+        return json({ error: "Run não encontrada" }, 404);
+      }
+      if (run.status !== "running" || run.canceled_at) {
+        return json({ ok: true, already: true });
+      }
+
+      const now = new Date().toISOString();
+      await supabase
+        .from("agent_runs")
+        .update({ canceled_at: now })
+        .eq("id", runId);
+
+      return json({ ok: true });
+    }
+
     projectId = body.projectId;
     const conversationId = body.conversationId;
     const preferences = body.preferences as AgentPreferencesPayload | undefined;
@@ -98,12 +131,6 @@ Deno.serve(async (req) => {
     const sessionExt = await buildSessionExtensionsPrompt(enabledSkillIds, enabledMcpIds);
 
     if (!projectId || !conversationId) return json({ error: "projectId e conversationId obrigatórios" }, 400);
-
-    const supabase = createClient(SUPABASE_URL, SERVICE_KEY);
-
-    const token = (req.headers.get("Authorization") ?? "").replace("Bearer ", "");
-    const { data: userData, error: uErr } = await supabase.auth.getUser(token);
-    if (uErr || !userData?.user) return json({ error: "Não autenticado" }, 401);
 
     const { data: project } = await supabase
       .from("projects").select("id, owner_id, template, meta").eq("id", projectId).single();
@@ -137,12 +164,13 @@ Deno.serve(async (req) => {
 
     const { data: history } = await supabase
       .from("messages")
-      .select("role, parts, tool_calls, created_at")
+      .select("role, parts, tool_calls, meta, created_at")
       .eq("conversation_id", conversationId)
       .order("created_at", { ascending: true })
       .limit(120);
 
     const historyRows = history ?? [];
+    const restoredExecutionLog = resumeRun ? restoreExecutionLogFromRows(historyRows) : [];
 
     const userOnlyKeys = await loadConnectorKeys(supabase, userData.user.id, preferences);
     const groqPool = await loadConnectorPools(supabase, userData.user.id, "groq");
@@ -365,13 +393,50 @@ Deno.serve(async (req) => {
       context7ApiKey: Deno.env.get("CONTEXT7_API_KEY") ?? undefined,
     });
 
+    let agentRunId: string | null = null;
+    const { data: newRun } = await supabase
+      .from("agent_runs")
+      .insert({
+        project_id: projectId,
+        conversation_id: conversationId,
+        user_id: userData.user.id,
+        status: "running",
+      })
+      .select("id")
+      .single();
+    agentRunId = newRun?.id ?? null;
+
+    const finalizeRun = async (
+      result: { ok: boolean; error?: string; steps: number; canceled?: boolean },
+    ) => {
+      if (!agentRunId) return;
+      const status = result.canceled
+        ? "canceled"
+        : result.ok
+          ? "completed"
+          : "failed";
+      await supabase
+        .from("agent_runs")
+        .update({
+          status,
+          finished_at: new Date().toISOString(),
+          steps: result.steps,
+          error: result.error ?? null,
+          ...(result.canceled ? { canceled_at: new Date().toISOString() } : {}),
+        })
+        .eq("id", agentRunId);
+    };
+
     const buildState = (): AgentState => ({
       projectId, conversationId, userId: userData.user.id,
       messages: [...messages],
       phase: LoopPhase.GATHER_CONTEXT,
       currentStepIndex: 0,
       context: null, intent: null, plan: null,
-      validationResults: [], executionLog: [], retryFeedback: null, totalSteps: 0,
+      validationResults: [],
+      executionLog: [...restoredExecutionLog],
+      retryFeedback: null,
+      totalSteps: 0,
     });
 
     const makeLoop = (onEvent: (type: string, data: unknown) => void) => {
@@ -396,11 +461,13 @@ Deno.serve(async (req) => {
             tasteStart: true,
             sessionAddon: sessionExt.addon,
             userSkillNames: sessionExt.skillNames,
+            runId: agentRunId,
           }
           : {
             sessionAddon: sessionExt.addon,
             userSkillNames: sessionExt.skillNames,
             resumeRun,
+            runId: agentRunId,
           },
       );
     };
@@ -408,6 +475,7 @@ Deno.serve(async (req) => {
     if (!useSSE) {
       const loop = makeLoop(() => {});
       const result = await loop.run();
+      await finalizeRun(result);
       cleanup();
       return json(result);
     }
@@ -424,6 +492,7 @@ Deno.serve(async (req) => {
           type: "start",
           projectId,
           conversationId,
+          runId: agentRunId,
           provider: mainCfg.label,
           robin: effectiveRobin,
           taste: tasteStart,
@@ -438,11 +507,17 @@ Deno.serve(async (req) => {
 
         const loop = makeLoop((type, data) => emit({ type, data }));
 
-        loop.run().then((result) => {
+        loop.run().then(async (result) => {
+          await finalizeRun(result);
           cleanup();
-          emit({ type: "finish", ...result, resumable: !result.ok });
+          emit({
+            type: "finish",
+            ...result,
+            resumable: !result.ok && !result.canceled,
+          });
           try { controller.close(); } catch { /* closed */ }
-        }).catch((err) => {
+        }).catch(async (err) => {
+          await finalizeRun({ ok: false, error: err?.message, steps: 0 });
           cleanup();
           emit({
             type: "error",

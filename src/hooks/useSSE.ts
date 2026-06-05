@@ -9,6 +9,7 @@ import type { ForgeSessionKind } from "@/lib/taste";
 import { dispatchTasteUiAction, isTasteUiAction } from "@/lib/taste-ui-actions";
 import { formatAgentFetchError } from "@/lib/agent-fetch-errors";
 import { logEditorTelemetryEvent } from "@/lib/editor-telemetry";
+import { cancelAgentRun } from "@/lib/agent-cancel";
 
 export interface SSEEvent {
   type: string;
@@ -90,6 +91,7 @@ export function useSSE() {
   const [progress, setProgress] = useState<AgentProgress>(initialState);
   const [connected, setConnected] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
+  const runIdRef = useRef<string | null>(null);
 
   const connect = useCallback(async (
     projectId: string,
@@ -128,6 +130,7 @@ export function useSSE() {
       return;
     }
 
+    runIdRef.current = null;
     const controller = new AbortController();
     abortRef.current = controller;
 
@@ -211,8 +214,12 @@ export function useSSE() {
               if (eventType === "ui_action" && isTasteUiAction(parsed)) {
                 dispatchTasteUiAction(parsed as Parameters<typeof dispatchTasteUiAction>[0]);
               }
+              if (event.type === "start" && typeof eventData.runId === "string") {
+                runIdRef.current = eventData.runId;
+              }
               if (event.type === "finish" || event.type === "done") {
                 sawFinish.current = true;
+                runIdRef.current = null;
                 logEditorTelemetryEvent("sse", "finish", "ok");
               }
               if (event.type === "error") {
@@ -264,8 +271,26 @@ export function useSSE() {
 
   const disconnect = useCallback(() => {
     abortRef.current?.abort();
+    runIdRef.current = null;
     setConnected(false);
     setProgress((p) => ({ ...p, finished: true }));
+  }, []);
+
+  /** Aborta o SSE e solicita cancelamento server-side (C22). */
+  const stop = useCallback(async () => {
+    const runId = runIdRef.current;
+    if (runId) {
+      try {
+        await cancelAgentRun(runId);
+        logEditorTelemetryEvent("agent", "cancel_request", "info", runId.slice(0, 8));
+      } catch {
+        /* edge pode já ter encerrado */
+      }
+      runIdRef.current = null;
+    }
+    abortRef.current?.abort();
+    setConnected(false);
+    setProgress((p) => ({ ...p, finished: true, resumable: false }));
   }, []);
 
   useEffect(() => {
@@ -274,7 +299,7 @@ export function useSSE() {
     };
   }, []);
 
-  return { progress, connected, connect, disconnect };
+  return { progress, connected, connect, disconnect, stop };
 }
 
 /** Reducer puro dos eventos SSE (exportado para testes). */
@@ -291,6 +316,15 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
         statusHint: data.resume
           ? "Retomando com a memória salva no chat…"
           : prev.statusHint,
+        timeline: [...prev.timeline, event],
+      };
+
+    case "canceled":
+      return {
+        ...prev,
+        finished: true,
+        resumable: false,
+        error: (data.message as string) ?? "Cancelado pelo usuário",
         timeline: [...prev.timeline, event],
       };
 

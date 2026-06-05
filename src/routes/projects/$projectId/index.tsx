@@ -629,11 +629,13 @@ function EditorPage() {
   }, [conversation, runAgent]);
 
   const handleStop = useCallback(() => {
-    sse.disconnect();
-    setRunning(false);
-    logEditorTelemetryEvent("agent", "run_stop", "warn", "user");
-    setLogs((prev) => [...prev, createLogEntry("warning", "Agente interrompido pelo usuário", "agent")]);
-    toast.info("Agente interrompido");
+    void (async () => {
+      await sse.stop();
+      setRunning(false);
+      logEditorTelemetryEvent("agent", "run_stop", "warn", "user");
+      setLogs((prev) => [...prev, createLogEntry("warning", "Agente interrompido pelo usuário", "agent")]);
+      toast.info("Agente interrompido");
+    })();
   }, [sse]);
 
   const handleExportZip = useCallback(() => {

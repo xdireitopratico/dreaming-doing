@@ -153,11 +153,69 @@ export type Database = {
         }
         Relationships: []
       }
+      agent_runs: {
+        Row: {
+          canceled_at: string | null
+          conversation_id: string
+          error: string | null
+          finished_at: string | null
+          id: string
+          meta: Json
+          project_id: string
+          started_at: string
+          status: string
+          steps: number
+          user_id: string
+        }
+        Insert: {
+          canceled_at?: string | null
+          conversation_id: string
+          error?: string | null
+          finished_at?: string | null
+          id?: string
+          meta?: Json
+          project_id: string
+          started_at?: string
+          status?: string
+          steps?: number
+          user_id: string
+        }
+        Update: {
+          canceled_at?: string | null
+          conversation_id?: string
+          error?: string | null
+          finished_at?: string | null
+          id?: string
+          meta?: Json
+          project_id?: string
+          started_at?: string
+          status?: string
+          steps?: number
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "agent_runs_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agent_runs_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       messages: {
         Row: {
           conversation_id: string
           created_at: string
           id: string
+          meta: Json
           parts: Json
           role: Database["public"]["Enums"]["message_role"]
           tool_calls: Json
@@ -166,6 +224,7 @@ export type Database = {
           conversation_id: string
           created_at?: string
           id?: string
+          meta?: Json
           parts?: Json
           role: Database["public"]["Enums"]["message_role"]
           tool_calls?: Json
@@ -174,6 +233,7 @@ export type Database = {
           conversation_id?: string
           created_at?: string
           id?: string
+          meta?: Json
           parts?: Json
           role?: Database["public"]["Enums"]["message_role"]
           tool_calls?: Json

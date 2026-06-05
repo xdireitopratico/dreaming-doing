@@ -14,6 +14,11 @@ import { SkillRegistry } from "./skills.ts";
 import { getSystemPrompt, EXECUTE_PROMPT } from "./prompts.ts";
 import { getTasteStartSystemPrompt } from "./prompts-taste.ts";
 import { friendlyLlmError } from "./llm-errors.ts";
+import { hashToolBatch, isExecutionStuck } from "../_shared/agent-stuck.ts";
+import {
+  appendExecutionLogEntry,
+  buildExecutionLogMeta,
+} from "./executionLogMeta.ts";
 
 type StreamCallback = (event: { type: string; data: unknown }) => void;
 
@@ -35,6 +40,7 @@ export class AgentLoop {
   private sessionAddon: string;
   private userSkillNames: string[];
   private resumeRun: boolean;
+  private runId: string | null;
 
   constructor(
     reg: ToolRegistry,
@@ -53,6 +59,7 @@ export class AgentLoop {
       sessionAddon?: string;
       userSkillNames?: string[];
       resumeRun?: boolean;
+      runId?: string | null;
     },
   ) {
     this.reg = reg;
@@ -68,14 +75,24 @@ export class AgentLoop {
     this.sessionAddon = options?.sessionAddon ?? "";
     this.userSkillNames = options?.userSkillNames ?? [];
     this.resumeRun = options?.resumeRun ?? false;
+    this.runId = options?.runId ?? null;
     this.router = new ModelRouter(injectedKeys, routerOverrides);
     this.observer = new RuntimeObserver(reg);
     this.skills = new SkillRegistry();
     this.compression = new CompressionManager(this.router.getCheapProvider());
   }
 
-  async run(): Promise<{ ok: boolean; summary?: string; error?: string; steps: number; resumable?: boolean }> {
-    this.state.executionLog = [];
+  async run(): Promise<{
+    ok: boolean;
+    summary?: string;
+    error?: string;
+    steps: number;
+    resumable?: boolean;
+    canceled?: boolean;
+  }> {
+    if (!this.resumeRun) {
+      this.state.executionLog = [];
+    }
     this.compression.reset();
     let step = 0;
 
@@ -120,6 +137,12 @@ export class AgentLoop {
     const maxRetries = 3;
 
     while (step < this.maxStepsLimit) {
+      if (await this.isCanceled()) {
+        await this.persistFinal("Execução cancelada pelo usuário.");
+        this.emit("canceled", { message: "Cancelado pelo usuário" });
+        return { ok: false, error: "Cancelado", steps: Math.max(0, step), canceled: true };
+      }
+
       step++;
       this.state.totalSteps = step;
 
@@ -187,9 +210,14 @@ export class AgentLoop {
         });
       }
 
+      const stepHash = hashToolBatch(
+        response.tool_calls.map((tc) => ({ name: tc.name, arguments: tc.arguments })),
+      );
+      this.state.executionLog = appendExecutionLogEntry(this.state.executionLog, stepHash);
+
       // Atualiza a mensagem persistida com o resultado (status, error, output curto)
       if (liveMsgId) {
-        await this.updateAssistantStep(liveMsgId, response, execResults);
+        await this.updateAssistantStep(liveMsgId, response, execResults, step);
       }
 
       const modifiedFiles = response.tool_calls.some(t => t.name === "fs_write" || t.name === "fs_edit");
@@ -214,7 +242,8 @@ export class AgentLoop {
         }
       }
 
-      if (this.isStuck(step)) {
+      if (isExecutionStuck(this.state.executionLog)) {
+        this.emit("stuck", { message: "Padrão repetitivo detectado — pedindo nova abordagem" });
         this.state.messages.push({
           role: "user",
           content: "Você parece estar repetindo as mesmas ações. Tente outra abordagem.",
@@ -317,10 +346,14 @@ export class AgentLoop {
     });
   }
 
-  private isStuck(step: number): boolean {
-    if (step < 3) return false;
-    const last3 = this.state.executionLog.slice(-3);
-    return last3.length >= 3 && last3.every(l => l === last3[0]);
+  private async isCanceled(): Promise<boolean> {
+    if (!this.runId) return false;
+    const { data } = await this.sb
+      .from("agent_runs")
+      .select("canceled_at")
+      .eq("id", this.runId)
+      .maybeSingle();
+    return !!data?.canceled_at;
   }
 
   private async persistAssistantStep(response: ChatResponse): Promise<string | null> {
@@ -343,6 +376,7 @@ export class AgentLoop {
     msgId: string,
     response: ChatResponse,
     execResults: Array<{ call: any; result: any }>,
+    step: number,
   ): Promise<void> {
     const tool_calls = (response.tool_calls ?? []).map(tc => {
       const found = execResults.find(r => r.call.id === tc.id);
@@ -355,7 +389,8 @@ export class AgentLoop {
         artifacts: found?.result.artifacts ?? [],
       };
     });
-    await this.sb.from("messages").update({ tool_calls }).eq("id", msgId);
+    const meta = buildExecutionLogMeta(null, this.state.executionLog, step);
+    await this.sb.from("messages").update({ tool_calls, meta }).eq("id", msgId);
   }
 
   private async persistFinal(summary: string): Promise<void> {

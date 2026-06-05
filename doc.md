@@ -114,9 +114,9 @@ Cada linha: **ID Lovable** · **ID auditoria** · status · observação · inte
 | # | IDs | St | Por quê | Proposta | Onde |
 |---|-----|-----|---------|----------|------|
 | 6 | **C14** | ✅ | `resume` no SSE + Edge; lock liberado ao retomar; `AgentPanel` no editor | `loop.ts`, `useSSE.ts`, `AgentPanel.tsx`, `index.tsx` |
-| 7 | **C15** | ⏳ | `executionLog` só em memória | Persistir em `messages.tool_calls` / meta | `loop.ts`, tabela `messages` |
-| 8 | **C19** | ⏳ | `isStuck` fraco | Hash últimos 3 tool calls | `loop.ts` ou `observer.ts` |
-| 9 | **C22** | ⏳ | Abort no client; Edge segue | `runs.canceled_at` + check por step | `agent-run/index.ts` |
+| 7 | **C15** | ✅ | `executionLog` persistido em `messages.meta` (até 40 entradas) | `executionLogMeta.ts`, `loop.ts` | `messages.meta` |
+| 8 | **C19** | ✅ | Hash últimos 3 tool calls (`agent-stuck.ts`) | `isExecutionStuck` no loop | `loop.ts`, `_shared/agent-stuck.ts` |
+| 9 | **C22** | ✅ | `agent_runs.canceled_at` + check por step; `stop()` no cliente | migration, `agent-cancel.ts`, `useSSE.ts` | `agent-run/index.ts` |
 | 10 | **C23**, **+17** | ⏳ | Histórico sem `agent_runs` | Migration + `/history` | migration, `history.tsx`, `AuditLog.tsx` |
 | 11 | **+3**, **E36–E37** | ⏳ | Tokens deploy no prompt, sem tool | `deploy_publish` tool | `agent-run/tools/deploy.ts` |
 | 12 | **C16** | ⏳ | 429/529 sem backoff | Retry em `providers.ts` | `providers.ts`, `robin-pool.ts` |
