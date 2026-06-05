@@ -1,11 +1,10 @@
 import { useEffect, useMemo, useState, type KeyboardEvent } from "react";
 import { ChevronDown, Copy, Globe, Home, Lock, RefreshCw } from "lucide-react";
+import { DropdownMenu, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+  ForgeEditorDropdownContent,
+  ForgeEditorDropdownItem,
+} from "@/components/editor/ForgeEditorDropdown";
 import { toast } from "sonner";
 import { inferProjectRoutes, buildPreviewUrl } from "@/lib/project-routes";
 
@@ -114,26 +113,26 @@ export function PreviewRouteNav({
         onBlur={commitPath}
       />
 
-      <DropdownMenu>
+      <DropdownMenu modal={false}>
         <DropdownMenuTrigger asChild>
           <button type="button" className="forge-address-bar-pages-btn" title="Páginas do app">
             <span className="sr-only">Páginas</span>
             <ChevronDown className="size-3.5" />
           </button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent
+        <ForgeEditorDropdownContent
           align="end"
           side="bottom"
           sideOffset={6}
-          className="forge-dropdown-panel z-[200] max-h-48 min-w-[160px] overflow-y-auto border-[var(--forge-border-strong)] bg-[var(--forge-surface-2)] p-1"
+          className="max-h-48 min-w-[160px] overflow-y-auto"
         >
           {routes.map((r) => (
-            <DropdownMenuItem
+            <ForgeEditorDropdownItem
               key={r.path}
-              className={`forge-dropdown-item cursor-pointer font-mono text-[10px] focus:bg-[var(--forge-surface-3)] ${
-                activePath === r.path ? "text-[var(--forge-primary)]" : "text-[var(--forge-silver)]"
+              className={`font-mono text-[10px] ${
+                activePath === r.path ? "text-[var(--forge-primary)]" : ""
               }`}
-              onClick={() => {
+              onSelect={() => {
                 setDraft(r.path);
                 if (canNavigate) onNavigate(r.path);
               }}
@@ -141,9 +140,9 @@ export function PreviewRouteNav({
               {r.path === "/" ? <Home className="size-3 mr-1.5 shrink-0" /> : null}
               <span className="text-[var(--forge-ghost)]">{r.path}</span>
               <span className="ml-auto text-[var(--forge-muted)]">{r.label}</span>
-            </DropdownMenuItem>
+            </ForgeEditorDropdownItem>
           ))}
-        </DropdownMenuContent>
+        </ForgeEditorDropdownContent>
       </DropdownMenu>
 
       {canNavigate && iframeSrc && (

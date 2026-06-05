@@ -1,11 +1,10 @@
 import { Hammer, ListTodo, ChevronDown } from "lucide-react";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { DropdownMenu, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import type { AgentComposerMode } from "@/components/editor/ChatInput";
+import {
+  ForgeEditorDropdownContent,
+  ForgeEditorDropdownItem,
+} from "@/components/editor/ForgeEditorDropdown";
 
 export function ComposerModeSelect({
   value,
@@ -17,7 +16,7 @@ export function ComposerModeSelect({
   const isBuild = value === "build";
 
   return (
-    <DropdownMenu>
+    <DropdownMenu modal={false}>
       <DropdownMenuTrigger asChild>
         <button
           type="button"
@@ -29,31 +28,26 @@ export function ComposerModeSelect({
           ) : (
             <ListTodo className="size-3.5 shrink-0 text-[var(--forge-primary)]" />
           )}
-          <span>{isBuild ? "Build" : "Play"}</span>
+          <span>{isBuild ? "Build" : "Plan"}</span>
           <ChevronDown className="size-3 opacity-70" />
         </button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent
-        align="end"
-        side="top"
-        sideOffset={6}
-        className="forge-dropdown-panel z-[200] min-w-[120px] border-[var(--forge-border-strong)] !bg-[var(--forge-surface-2)] p-1 !text-[var(--forge-text)]"
-      >
-        <DropdownMenuItem
-          className="forge-dropdown-item font-mono text-[11px] focus:bg-[var(--forge-surface-3)] focus:text-[var(--forge-primary)]"
-          onClick={() => onChange("build")}
+      <ForgeEditorDropdownContent align="end" side="top" sideOffset={6} className="min-w-[120px]">
+        <ForgeEditorDropdownItem
+          className="font-mono text-[11px] focus:text-[var(--forge-primary)] data-[highlighted]:text-[var(--forge-primary)]"
+          onSelect={() => onChange("build")}
         >
           <Hammer className="size-3.5 mr-2 text-[var(--forge-primary)]" />
           Build
-        </DropdownMenuItem>
-        <DropdownMenuItem
-          className="forge-dropdown-item font-mono text-[11px] focus:bg-[var(--forge-surface-3)] focus:text-[var(--forge-primary)]"
-          onClick={() => onChange("plan")}
+        </ForgeEditorDropdownItem>
+        <ForgeEditorDropdownItem
+          className="font-mono text-[11px] focus:text-[var(--forge-primary)] data-[highlighted]:text-[var(--forge-primary)]"
+          onSelect={() => onChange("plan")}
         >
           <ListTodo className="size-3.5 mr-2 text-[var(--forge-primary)]" />
-          Play
-        </DropdownMenuItem>
-      </DropdownMenuContent>
+          Plan
+        </ForgeEditorDropdownItem>
+      </ForgeEditorDropdownContent>
     </DropdownMenu>
   );
 }

@@ -1,19 +1,12 @@
 import { Link } from "@tanstack/react-router";
-import {
-  ChevronDown,
-  Code2,
-  Eye,
-  Globe,
-  Moon,
-  Share2,
-  Smartphone,
-} from "lucide-react";
-import { useMemo } from "react";
+import { ChevronDown, Code2, Eye, Moon, Share2 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
-import { detectProjectKind } from "@/lib/detect-project-kind";
 import type { EditorMainView } from "@/components/editor/EditorViewTabs";
 import { ForgeLogoMark } from "@/components/editor/ForgeLogoMark";
-import { EditorIntegrationsMenu } from "@/components/editor/EditorIntegrationsMenu";
+import {
+  EditorIntegrationsMenu,
+  type EditorIntegrationsMenuProps,
+} from "@/components/editor/EditorIntegrationsMenu";
 import { PreviewRouteNav } from "@/components/editor/PreviewRouteNav";
 
 interface EditorTopBarProps {
@@ -28,6 +21,7 @@ interface EditorTopBarProps {
   onPreviewPathChange?: (path: string) => void;
   previewDevUrl?: string | null;
   onPreviewRefresh?: () => void;
+  integrations?: EditorIntegrationsMenuProps;
 }
 
 export function EditorTopBar({
@@ -42,9 +36,9 @@ export function EditorTopBar({
   onPreviewPathChange,
   previewDevUrl,
   onPreviewRefresh,
+  integrations,
 }: EditorTopBarProps) {
   const { user } = useAuth();
-  const projectKind = useMemo(() => detectProjectKind(previewFiles), [previewFiles]);
 
   const initials =
     user?.email?.slice(0, 2).toUpperCase() ??
@@ -65,28 +59,6 @@ export function EditorTopBar({
             {running ? "Construindo alterações…" : "Visualizando última versão salva"}
           </span>
         </Link>
-        {projectKind && (
-          <span
-            className="forge-project-kind-chip hidden lg:inline-flex"
-            title={
-              projectKind === "mobile"
-                ? "Projeto detectado como app mobile"
-                : "Projeto detectado como site web"
-            }
-          >
-            {projectKind === "mobile" ? (
-              <>
-                <Smartphone className="size-3" />
-                App mobile
-              </>
-            ) : (
-              <>
-                <Globe className="size-3" />
-                Web
-              </>
-            )}
-          </span>
-        )}
       </div>
 
       <div className="forge-topbar-center min-w-0">
@@ -116,8 +88,8 @@ export function EditorTopBar({
         </div>
 
         <span className="forge-topbar-divider mx-1 shrink-0 hidden sm:block" aria-hidden />
-        <EditorIntegrationsMenu />
-        {onPreviewPathChange && (
+        <EditorIntegrationsMenu {...integrations} />
+        {activeView === "code" && onPreviewPathChange && (
           <>
             <span className="forge-topbar-divider mx-1 shrink-0 hidden md:block" aria-hidden />
             <PreviewRouteNav

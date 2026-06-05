@@ -93,28 +93,6 @@ body:has(.editor-workspace) {
   flex-shrink: 0;
 }
 
-.forge-project-kind-chip {
-  display: none;
-  align-items: center;
-  gap: 5px;
-  padding: 4px 10px;
-  border-radius: 999px;
-  border: 1px solid var(--forge-border-strong);
-  background: rgba(255, 182, 39, 0.06);
-  color: var(--forge-muted);
-  font-size: 10px;
-  font-weight: 500;
-  white-space: nowrap;
-  pointer-events: none;
-  user-select: none;
-}
-
-@media (min-width: 1100px) {
-  .forge-project-kind-chip {
-    display: inline-flex;
-  }
-}
-
 .forge-address-bar {
   display: flex;
   min-width: 0;
@@ -125,7 +103,12 @@ body:has(.editor-workspace) {
   padding: 2px 6px 2px 8px;
   border-radius: 8px;
   border: 1px solid var(--forge-border-strong);
-  background: var(--forge-surface-1);
+  background: var(--forge-surface-2);
+}
+
+.forge-code-nav .forge-address-bar {
+  max-width: none;
+  width: 100%;
 }
 
 .forge-address-bar-scheme {
@@ -434,9 +417,9 @@ body:has(.editor-workspace) {
   min-height: 0;
   height: 100%;
   max-height: 100%;
-  border-radius: 14px;
+  border-radius: 0;
   background: var(--forge-chat);
-  border: 1px solid var(--forge-border);
+  border: none;
   overflow: hidden;
 }
 
@@ -719,13 +702,13 @@ body:has(.editor-workspace) {
   gap: 6px;
   padding: 4px 10px;
   border-radius: 8px;
-  border: 1px solid rgba(255, 182, 39, 0.45);
-  background: var(--forge-surface-2);
+  border: 1px solid var(--forge-border-strong);
+  background: var(--forge-surface-3);
   font-size: 11px;
   font-weight: 600;
-  color: var(--forge-primary);
+  color: var(--forge-silver);
   cursor: pointer;
-  transition: border-color 0.15s, background 0.15s;
+  transition: border-color 0.15s, background 0.15s, color 0.15s;
 }
 
 .forge-composer-mode-trigger:hover,
@@ -753,6 +736,21 @@ body:has(.editor-workspace) {
   background-color: var(--forge-surface-2) !important;
   color: var(--forge-text) !important;
   border-color: var(--forge-border-strong) !important;
+}
+
+.editor-workspace [role="menuitem"],
+.editor-workspace [data-radix-collection-item] {
+  color: var(--forge-silver) !important;
+}
+
+.editor-workspace [role="menuitem"][data-highlighted],
+.editor-workspace [role="menuitem"]:focus {
+  background-color: var(--forge-surface-3) !important;
+  color: var(--forge-text) !important;
+}
+
+.editor-workspace [role="menuitem"] svg {
+  color: inherit;
 }
 
 .forge-readiness-toggle:hover {
@@ -835,11 +833,12 @@ body:has(.editor-workspace) {
 .forge-composer,
 .lovable-composer {
   flex-shrink: 0;
-  margin: 0 8px 8px;
-  padding: 10px 10px 8px;
-  border-radius: var(--forge-radius-md);
-  background: var(--forge-surface-2);
-  border: 1px solid var(--forge-border-strong);
+  margin: 0;
+  padding: 10px 14px 12px;
+  border-radius: 0;
+  background: transparent;
+  border: none;
+  border-top: 1px solid var(--forge-border);
 }
 
 .forge-composer-input,

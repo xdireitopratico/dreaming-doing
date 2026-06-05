@@ -5,6 +5,7 @@ import { useAuth } from "@/lib/auth";
 import { clearForgeTransitionOverlays } from "@/lib/clear-forge-overlays";
 import { sanitizeNext } from "@/lib/sanitize-next";
 import { EditorTopBar } from "@/components/editor/EditorTopBar";
+import type { EditorIntegrationsMenuProps } from "@/components/editor/EditorIntegrationsMenu";
 import type { EditorMainView } from "@/components/editor/EditorViewTabs";
 
 export function EditorShell({
@@ -20,6 +21,7 @@ export function EditorShell({
   onPreviewPathChange,
   previewDevUrl,
   onPreviewRefresh,
+  integrations,
 }: {
   children: ReactNode;
   projectName?: string;
@@ -33,6 +35,7 @@ export function EditorShell({
   onPreviewPathChange?: (path: string) => void;
   previewDevUrl?: string | null;
   onPreviewRefresh?: () => void;
+  integrations?: EditorIntegrationsMenuProps;
 }) {
   const { user, loading } = useAuth();
   const loc = useLocation();
@@ -68,6 +71,7 @@ export function EditorShell({
         onPreviewPathChange={onPreviewPathChange}
         previewDevUrl={previewDevUrl}
         onPreviewRefresh={onPreviewRefresh}
+        integrations={integrations}
       />
       <div className="min-h-0 flex-1">{children}</div>
     </div>

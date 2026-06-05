@@ -38,6 +38,7 @@ import {
 import type { StoredMessagePart } from "@/lib/chat-attachments";
 
 import { PreviewFrame } from "@/components/editor/PreviewFrame";
+import { PreviewRouteNav } from "@/components/editor/PreviewRouteNav";
 
 
 import { CommandPalette, buildEditorActions, type PaletteAction } from "@/components/editor/CommandPalette";
@@ -89,6 +90,10 @@ function EditorPage() {
     hasUserLlmKey,
     openConnector,
     status: connectorStatus,
+    modes: connectorModes,
+    modal: connectorModal,
+    closeModal: closeConnectorModal,
+    saveConnector,
     rows: connectorRows,
   } = useConnectors();
   const [agentPrefs, setAgentPrefs] = useState(loadAgentPreferences);
@@ -707,6 +712,14 @@ function EditorPage() {
         onPreviewPathChange={setPreviewRoute}
         previewDevUrl={devUrl}
         onPreviewRefresh={() => previewBoot.boot()}
+        integrations={{
+          status: connectorStatus,
+          modes: connectorModes,
+          modal: connectorModal,
+          openConnector,
+          closeModal: closeConnectorModal,
+          saveConnector,
+        }}
       >
         <div
           className="flex min-h-0 h-full w-full flex-1 flex-col overflow-hidden"
@@ -774,7 +787,19 @@ function EditorPage() {
                     </div>
                   )}
 
-                  <div className="min-h-0 min-w-0 flex-1">
+                  <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+                    {activeView === "code" && (
+                      <div className="forge-code-nav shrink-0 border-b border-[var(--forge-border)] bg-[var(--forge-surface-2)] px-3 py-2">
+                        <PreviewRouteNav
+                          files={previewNavFiles}
+                          activePath={previewRoute}
+                          onNavigate={setPreviewRoute}
+                          devUrl={devUrl}
+                          onRefresh={() => previewBoot.boot()}
+                        />
+                      </div>
+                    )}
+                    <div className="min-h-0 min-w-0 flex-1">
                     {activeView === "code" && (
                       <CodeEditor
                         tabs={openTabs}
@@ -816,6 +841,7 @@ function EditorPage() {
                         onRejectAll={() => toast.info("Todas mudanças rejeitadas")}
                       />
                     )}
+                  </div>
                   </div>
                 </div>
               </div>

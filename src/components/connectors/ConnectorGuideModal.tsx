@@ -154,7 +154,9 @@ export function ConnectorGuideModal({
 
   return (
     <Dialog open={!!connector} onOpenChange={(o) => !o && resetAndClose()}>
-      <DialogContent className={`${panelClass} sm:max-w-md`}>
+      <DialogContent
+        className={`${panelClass} sm:max-w-md${isEditor ? " z-[260] border-[var(--forge-border-strong)] bg-[var(--forge-surface-2)] text-[var(--forge-text)]" : ""}`}
+      >
         <DialogHeader>
           <DialogTitle className={`flex items-center gap-2 ${isEditor ? "text-[var(--forge-text)]" : ""}`}>
             <span
