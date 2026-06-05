@@ -1,88 +1,120 @@
-# FORGE — Estado pós sessão
+# FORGE — Plano de Launch (50 tarefas) v3
 
-## Concluído nesta sessão
+## 0. Realidade dos dois Supabase (ler antes de aprovar)
 
-### Fase 1 — Render destravado
-- `src/styles.css`: removido `@import url(...)` que estourava o PostCSS (Tailwind v4).
-- `src/routes/__root.tsx`: fonts agora via `<link rel="stylesheet">` no head.
-- `src/components/EditorShell.tsx`: troca de `window.location.href` por `<Navigate>` do TanStack (sem flash branco).
-- `src/routes/editor.tsx`: já não existe (legado).
+Hoje o projeto vive em **dois Supabase**:
 
-### Fase 2 — Backend do agente (sem migration)
-- `supabase/functions/agent-run/providers.ts` **novo**: auto-detect de provider em cascata
-  `ANTHROPIC → XAI → LOVABLE_AI_GATEWAY → OPENAI`; cheap em `GROQ → LOVABLE_AI`. Honra override por env (`LLM_*` e `LLM_CHEAP_*`) — pronto para quando o usuário trouxer chaves dele.
-- `router.ts` reescrito: usa `providers.ts`, sem env obrigatória.
-- `loop.ts` reescrito:
-  - Removidas refs mortas a `agent_checkpoints` e `file_embeddings` (nada de migration).
-  - **Persistência incremental de tool_calls**: cada turn do LLM vira uma `message` viva (status `running` → `ok`/`error`) — chat acompanha em tempo real via Realtime.
-- `index.ts` reescrito: SSE com header `X-Accel-Buffering: no`, anúncio do provider no evento `start`.
-- `supabase/functions/create-project/` deletada (redundante com serverFn `createProjectFromPrompt`).
 
-### Fase 3 — Streaming + UX viva no editor
-- `src/lib/agent-stream.ts` **novo**: lê SSE da Edge Function e dispara eventos tipados.
-- `src/routes/projects/$projectId.tsx` **reescrita**:
-  - Chat com bolhas, tool-call chips coloridos (`emerald`/`red`/`primary`), trace ao vivo durante a execução.
-  - Botão **STOP** que aborta o stream (AbortController).
-  - File tree + viewer no tab "Code".
-  - Botão "Recarregar preview".
+| Ref                    | Quem usa                                                                              | Quem consigo modificar daqui                         |
+| ---------------------- | ------------------------------------------------------------------------------------- | ---------------------------------------------------- |
+| `mtcnwvzjfbvyiuhrqrlo` | **Lovable Cloud** (preview Lovable, `.env` runtime do sandbox)                        | ✅ Migrations, edge functions, secrets via tools      |
+| `dpduljngdurfpmaclffa` | **Sua conta** (Vercel, CLI local, `config.toml`, `.env.example`, `forge-supabase.ts`) | ❌ Só por SQL/CLI que você roda. Eu gero os arquivos. |
 
-### Fase 4 — Seed Vite+React + preview real via E2B
-- `src/lib/seeds/vite-react.ts` **novo**: starter Vite 7 + React 19 + TS estrito + Tailwind v4. 10 arquivos profissionais (zero placeholder, dark theme já configurado, fonte do sistema).
-- `src/lib/projects.functions.ts`: agora semeia os 10 arquivos do template ao criar projeto.
-- `supabase/functions/agent-run/prompts.ts`: prompts reescritos assumindo Vite+React+TS+Tailwind v4 (não pede mais `npm create vite`).
-- `supabase/functions/preview-boot/` **nova edge function**: cria sandbox E2B, sincroniza `project_files`, roda `npm install && npm run dev` em background, retorna URL pública e persiste em `projects.meta.previewUrl`/`previewExpiresAt` (TTL 25 min). Idempotente: reusa se ainda fresca.
-- Editor pluga essa URL no iframe (fallback "Ligar preview" se vazio/expirado).
 
-### Fase 5 — Voz no chat (Groq Whisper Large v3 turbo)
-- `supabase/functions/voice-transcribe/index.ts` **nova**: aceita `multipart/form-data`, retorna `{ text }` em PT.
-- `src/components/voice/MicButton.tsx` **novo**: MediaRecorder → POST → preenche textarea.
-- Plugado no chat do editor **e** no `PromptEngine` da home.
+**Lovable Cloud não desconecta** (documentação oficial). Então só temos dois caminhos honestos:
 
-### Fase 6 — Import de repo GitHub público
-- `supabase/functions/github-import/index.ts` **nova**: baixa zipball, filtra `node_modules`/`.git`/binários (>1MB, ext binária, null bytes), cria projeto e insere `project_files` em lotes de 50. Sem OAuth.
-- `src/components/ImportRepoDialog.tsx` **novo**: dialog em `/projects` e chip "Importar do GitHub" na home.
+1. **Canônico = sua conta (`dpduljngdurfpmaclffa`).** Lovable Cloud vira "espelho descartável" usado só pro preview interno. Toda migration e edge function que eu criar daqui pra frente eu emito **também** como arquivo `.sql`/script que você roda via CLI no seu projeto.  **Recomendado** — é o que seu Vercel já usa.  
+  
+*ESSA É A ROTA*  
 
-### Fase 9A — Snapshots
-- `src/components/editor/SnapshotsSheet.tsx` **novo**: salva snapshot (dump completo de `project_files`) e restaura sobrescrevendo. Botão no header do editor.
+2. **Canônico = Lovable Cloud (`mtcnwvzjfbvyiuhrqrlo`).** Aponta Vercel e CLI pra esse ref. Mais simples mas você perde controle CLI/billing.
 
-### Segurança
-- Migration `enable_realtime_messages_rls`: RLS em `realtime.messages` restringindo subscrição a canais `editor-<projectId>` cujo `projectId` pertence ao usuário. Bloqueia escuta cruzada entre contas.
+Vou planejar assumindo **(1)**. Se quiser **(2)**, me diz e eu reescrevo as fases 1–4.
 
 ---
 
-## Não feito (ficou para próximas sessões)
+## Eixos do plano
 
-### Fase 7 — GitHub OAuth + push bidirecional
-Bloqueado: precisa de `GITHUB_OAUTH_CLIENT_ID`/`SECRET` (você cria em github.com/settings/developers).
-
-### Fase 8 — Deploy Cloudflare Pages
-Bloqueado: precisa de `CLOUDFLARE_API_TOKEN` (global vs por-usuário a decidir).
-
-### Fase 9B — Monaco editor + edição manual
-`bun add @monaco-editor/react`; substitui `<pre>` do tab Code por editor; salvar dispara mesma rota.
-
-### Fase 9C — Command palette Cmd+K
-`bun add kbar`. Ações: novo projeto, importar GitHub, salvar snapshot, publicar.
-
-### Fase 9D — History timeline
-Rota `/projects/$projectId/history` com diff por mensagem.
-
-### Fase 10 — Multi-provider UI + MCP + Visual Edits + Hardening
-- Dropdown no chat: Lovable Gateway / Anthropic / Groq / OpenAI / Gemini / OpenRouter / **chave do usuário**.
-- Tela `/connectors`: usuário cola sua chave Anthropic/Groq/etc → serverFn persiste em `connectors.token_encrypted` (precisa de `ENCRYPTION_KEY`).
-- Edge function `agent-run` lê chave do usuário primeiro, cai pra global como fallback.
-- "Robin model router": múltiplas chaves do mesmo provider revezando.
-- MCP em `/connectors` (handshake via `mcp-connect`, tools dinâmicas no registry).
-- Visual edits: clique em elemento no preview → seletor CSS + screenshot pro próximo prompt.
-- Advisory lock por user em `agent-run` + audit log + rate limit.
+```text
+A. Sincronização Supabase (1–6)        D. Editor & UX (24–32)
+B. Segurança crítica (7–13)            E. Integrações & deploy (33–40)
+C. Agente — confiabilidade (14–23)     F. Performance, SEO, launch (41–50)
+```
 
 ---
 
-## Secrets
+## A. Sincronização Supabase  *(prioridade absoluta)*
 
-**Configuradas** (`fetch_secrets`): `ANTHROPIC_API_KEY`, `XAI_API_KEY`, `GROQ_API_KEY`, `E2B_API_KEY`, `LOVABLE_API_KEY`, todos os `SUPABASE_*`.
+1. **Diff de schema** `mtcnwvzjfbvyiuhrqrlo` ↔ `dpduljngdurfpmaclffa`. Gero `scripts/sync/schema-diff.sql` que você roda no seu projeto pra ficar idêntico.
+2. **Snapshot completo das edge functions** atuais → publico no `dpduljngdurfpmaclffa` via `supabase functions deploy` (instruções em `scripts/sync/deploy-all.sh`). Lista: `agent-run`, `admin-platform-secrets`, `connector-upsert`, `deploy-publish`, `github-import`, `mcp-server`, `preview-boot`, `project-delete`, `voice-transcribe`.
+3. **Secrets paridade**: gero `scripts/sync/secrets-checklist.md` com todas as 13 secrets que precisam existir no seu projeto (`E2B_API_KEY`, `ANTHROPIC_API_KEY`, `XAI_API_KEY`, `GROQ_API_KEY`, `LOVABLE_API_KEY`, etc.).
+4. `**supabase/config.toml**`: revisar `verify_jwt`, CORS, e timeouts por função; padronizar.
+5. **Helper `forge-supabase**`: adicionar warning visível no editor quando `VITE_SUPABASE_URL` ≠ `dpduljngdurfpmaclffa` (hoje só `console.warn`).
+6. `**scripts/sync/migrate.sh**`: wrapper que aplica qualquer migration nova nos dois refs (Lovable via tool, sua conta via `supabase db push`).
 
-**Pendentes** (na fase correspondente, não agora):
-- F7: `GITHUB_OAUTH_CLIENT_ID`, `GITHUB_OAUTH_CLIENT_SECRET`, `GITHUB_WEBHOOK_SECRET`, `ENCRYPTION_KEY` (32 bytes base64).
-- F8: `CLOUDFLARE_API_TOKEN`.
-- F10: `OPENAI_API_KEY` se você quiser que o auto-detect tenha esse fallback global.
+## B. Segurança crítica  *(corrige todas as 6 findings do painel)*
+
+7. `**mcp-server` autenticação**: bloquear `POST/GET` sem `Authorization`; opcionalmente exigir `assertForgeAdmin` pras tools `auth_users`/`query`/`migrate`. *(finding agent_security crítico)*
+8. `**realtime.messages` policy pra `project_files**`: replicar política `editor-%` para canais `project_files-<projectId>`. *(finding supabase_lov crítico)*
+9. `**deployments` policies**: adicionar `UPDATE` + `DELETE` restritas ao owner. *(warn)*
+10. `**user_roles` policies**: explicit `INSERT/UPDATE/DELETE` negando ao role `authenticated` (só `service_role` muda). *(warn — privilege escalation)*
+11. `**has_role()` SECURITY DEFINER**: `REVOKE EXECUTE ... FROM authenticated` (chamado só dentro de policies, não por client). *(warn supabase linter)*
+12. **Painel admin server-driven**: `AdminPlatformSecretsPanel` só renderiza se `admin-platform-secrets` `action: status` devolver `isAdmin: true`. Remove `isForgeAdminEmail` do client. *(warn)*
+13. **Rotacionar `SUPABASE_SERVICE_ROLE_KEY**` depois das mudanças (via `supabase--rotate_api_keys` no Lovable + CLI no seu projeto).
+
+## C. Agente — confiabilidade & qualidade
+
+14. **Resume de execução**: botão "Continuar" no editor quando `ok: false, resumable: true` (loop.ts já marca, falta UI).
+15. **Persistir `executionLog**` em `messages.tool_calls` pra histórico real (hoje fica em memória).
+16. **Backoff + retry** por provider em `providers.ts` (Anthropic 529, Groq 429).
+17. **Limite de tokens dinâmico**: medir `usage.input_tokens` do response e ajustar `CompressionManager` antes de estourar.
+18. `**shell_exec` sandboxed**: hoje `git commit` solto; mover pra `tools/shell.ts` com allowlist de comandos.
+19. **Detecção de loops**: `isStuck` hoje compara strings vazias; substituir por hash dos últimos 3 `tool_calls.name+args`.
+20. `**RuntimeObserver` real**: rodar `tsc --noEmit` e `vite build --mode=production` dentro do E2B; capturar erros e devolver pro LLM.
+21. `**SkillRegistry**`: implementar 3 skills concretas (shadcn, supabase-migration, tailwind-v4) com detecção por arquivo.
+22. **Cancelamento server-side**: `AbortController` no client cancela fetch, mas Edge Function continua. Persistir `runs.canceled_at` e checar a cada step.
+23. `**agent_runs` tabela**: id, project_id, started_at, finished_at, status, steps, provider, tokens. Dashboard simples em `/projects/$projectId/history`.
+
+## D. Editor & UX
+
+24. **Monaco editor** (`@monaco-editor/react`) no tab Code; salvar via serverFn `updateProjectFile`.
+25. **File tree com criar/renomear/deletar** + drag-drop.
+26. **Command palette** (`kbar`): Novo projeto, Importar GitHub, Snapshot, Publicar, Trocar provider, Buscar arquivo.
+27. **Diff viewer** por mensagem do assistente (mostra fs_edit aplicados).
+28. **Preview hot-reload**: WebSocket entre `project_files` change e iframe (E2B já tem HMR — só precisa invalidar).
+29. **Voice em todas as caixas de texto** (PromptEnhancer, prompt rules editor).
+30. **Visual edits**: clique em elemento no preview → seletor CSS + screenshot anexado ao próximo prompt.
+31. **Trace expandível**: collapse por padrão, abre só último step; mostra args/result completos.
+32. **Dark/light theme polido** + persistência por usuário em `profiles.meta.theme`.
+
+## E. Integrações & deploy
+
+33. **GitHub OAuth** (`github-oauth-start/callback` + `connectors.token_encrypted` AES-GCM). Requer secrets `GITHUB_OAUTH_CLIENT_ID/SECRET` + `ENCRYPTION_KEY`.
+34. `**github-push**`: commit dos `project_files` num repo do usuário (cria se não existir).
+35. **Webhook `/api/public/github-webhook**`: pull changes do GitHub → `project_files` (sync bidirecional).
+36. **Deploy Vercel**: edge function `deploy-vercel` + token do usuário; "Publicar" no editor.
+37. **Deploy Cloudflare Pages**: alternativa. Requer `CLOUDFLARE_API_TOKEN`.
+38. **Stripe billing** (opcional): plano free (3 projetos) vs pro. Já temos tabela `connectors`, falta UI + webhook.
+39. **MCP UI em `/connectors**`: adicionar/remover MCP server, listar tools, ativar no agente.
+40. **Multi-provider dropdown** no chat (lê `connectors` do usuário + fallback global).
+
+## F. Performance, SEO, launch
+
+41. **Bundle audit**: `bun run build --analyze`; remover deps não usadas (Cursor.tsx, SpaceScene se não está na landing).
+42. **Code-split**: lazy-load `Monaco`, `CodeEditor`, `AgentMemoryViewer`.
+43. **Imagens otimizadas**: converter logos PNG → SVG/WebP; `loading="lazy"` em tudo abaixo da fold.
+44. **SEO**: `head()` por rota (`/`, `/auth`, `/projects`, `/connectors`, `/settings`) com title/description únicos + og:image gerado.
+45. `**robots.txt` + `sitemap.xml**` servidos via server route.
+46. **Lighthouse ≥ 90** em LCP/CLS/INP na landing.
+47. **Rate limiting** em `agent-run` (advisory lock por user_id + max 3 runs concorrentes).
+48. **Audit log**: tabela `audit_events` (user_id, action, target, meta) + write em todas as serverFn mutadoras.
+49. **Backup automático**: `pg_dump` diário do `dpduljngdurfpmaclffa` para storage (script GitHub Actions).
+50. **Smoke test E2E** (`vitest` + `playwright`): signup → criar projeto → prompt → preview boota → snapshot → restore. Roda no CI antes do deploy.
+
+---
+
+## O que executo na próxima sessão (estimativa honesta)
+
+Com aprovação do plano, **execução em ordem**, parando só em bloqueios reais (= secrets que não tenho):
+
+- **Garantido (1 sessão)**: A1, A4, A5, B7, B8, B9, B10, B11, B12, C14, C15, C19, C22, C23, D26, D27, D31, F41, F44, F47, F48 → **≈ 21 tarefas**.
+- **Provável (mesma sessão se sobrar tempo)**: A2, A6, B13, C16, C17, C20, D24, D25, D28, F45, F46 → mais **≈ 10**.
+- **Total realista da próxima sessão**: **30–32 de 50** (60–65%).
+- **Bloqueado por secrets seus**:
+  - E33–E37 (GitHub OAuth, Vercel, Cloudflare) — precisa de tokens.
+  - E38 (Stripe) — chave + decisão de plano.
+  - F49 (backup) — precisa de bucket S3/R2.
+
+## Pergunta única antes de implementar
+
+Confirma o caminho **(1) sua conta `dpduljngdurfpmaclffa` como canônica** (Lovable Cloud vira espelho)? Se sim, aprovo o plano e na próxima sessão começo por **A1 → B7 → B8** (sincronização + as duas findings críticas), depois desço a lista.
