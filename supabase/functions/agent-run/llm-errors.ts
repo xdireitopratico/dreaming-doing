@@ -29,7 +29,24 @@ export function isConnectionError(err: unknown): boolean {
   );
 }
 
+export function isModelNotFoundError(err: unknown): boolean {
+  const msg = errorMessage(err).toLowerCase();
+  return (
+    /\b404\b/.test(msg) &&
+    (msg.includes("model") ||
+      msg.includes("does not exist") ||
+      msg.includes("not found") ||
+      msg.includes("openai api error"))
+  );
+}
+
 export function friendlyLlmError(err: unknown, robinActive: boolean): string {
+  if (isModelNotFoundError(err)) {
+    return (
+      "Modelo não encontrado na API OpenAI (404). Em Modelos, escolha GPT-5.5 com chave OpenAI válida " +
+      "ou use OpenRouter com o slug openai/gpt-5.5. Se acabou de adicionar a chave, salve de novo em /api."
+    );
+  }
   if (isRateLimitError(err)) {
     return robinActive
       ? "Limite por minuto atingido nesta chave. O modo ROBIN está tentando a próxima chave do pool…"

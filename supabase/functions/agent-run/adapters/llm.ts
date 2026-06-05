@@ -1,6 +1,12 @@
 // adapters/llm.ts — LLM Adapter model-agnostic
 // Suporte: Claude, OpenAI, Gemini, OpenRouter, Ollama, Custom (OpenAI-compatible)
 import type { LLMProvider, ChatParams, ChatResponse, ChatMessage, ToolCall } from "../types.ts";
+import {
+  chatOpenAiResponses,
+  isOfficialOpenAiBaseUrl,
+  isOpenAiModelNotFound,
+  shouldUseOpenAiResponsesApi,
+} from "./openai-responses.ts";
 
 function toToolCall(raw: any): ToolCall {
   return {
@@ -91,6 +97,21 @@ class OpenAIAdapter implements LLMProvider {
   ) {}
 
   async chat(params: ChatParams): Promise<ChatResponse> {
+    if (shouldUseOpenAiResponsesApi(this.model, this.baseUrl)) {
+      return chatOpenAiResponses(this.apiKey, this.baseUrl, this.model, params);
+    }
+
+    try {
+      return await this.chatCompletions(params);
+    } catch (err: unknown) {
+      if (isOpenAiModelNotFound(err) && isOfficialOpenAiBaseUrl(this.baseUrl)) {
+        return chatOpenAiResponses(this.apiKey, this.baseUrl, this.model, params);
+      }
+      throw err;
+    }
+  }
+
+  private async chatCompletions(params: ChatParams): Promise<ChatResponse> {
     const messages = params.messages.map(m => {
       const msg: any = { role: m.role, content: m.content ?? "" };
       if (Array.isArray(m.content)) msg.content = m.content;

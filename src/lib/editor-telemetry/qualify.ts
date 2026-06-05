@@ -97,13 +97,19 @@ export function qualifySnapshot(
   }
 
   if (snap.agent.lastError) {
+    const isOpenAi404 = /\b404\b/i.test(snap.agent.lastError) &&
+      /openai/i.test(snap.agent.lastError);
     signals.push(
       signal(
         "agent-error",
         "error",
         "agent",
         `Agente: ${truncate(snap.agent.lastError, 120)}`,
-        snap.agent.resumable ? "Tente Retomar no painel do agente." : "Veja TERMINAL e eventos abaixo.",
+        isOpenAi404
+          ? "GPT-5.x na OpenAI usa API Responses — recarregue e reenvie; ou OpenRouter em /api."
+          : snap.agent.resumable
+            ? "Tente Retomar no painel do agente."
+            : "Veja TERMINAL e eventos abaixo.",
       ),
     );
     penalize(25);
