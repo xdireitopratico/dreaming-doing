@@ -4,11 +4,12 @@
 set -euo pipefail
 
 REF="dpduljngdurfpmaclffa"
+LINKED="supabase/.temp/linked-project.json"
 echo "→ Verificando link..."
-supabase status >/dev/null 2>&1 || {
-  echo "  CLI não está linked. Rode: supabase link --project-ref $REF"
+if [[ ! -f "$LINKED" ]] || ! grep -q "\"ref\": \"$REF\"" "$LINKED" 2>/dev/null; then
+  echo "  Projeto não linked com $REF. Rode: supabase link --project-ref $REF"
   exit 1
-}
+fi
 
 echo "→ Aplicando migrations em $REF"
 supabase db push --linked
