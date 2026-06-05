@@ -305,13 +305,18 @@ function EditorPage() {
   }, [files]);
 
   const chatMessages: ChatMessage[] = useMemo(() => {
-    return (messages ?? []).map((m) => ({
+    return (messages ?? []).map((m) => {
+      const roleRaw = String(m.role ?? "").toLowerCase();
+      const role: ChatMessage["role"] =
+        roleRaw === "user" ? "user" : roleRaw === "assistant" ? "assistant" : "tool";
+      return {
       id: m.id,
-      role: m.role as "user" | "assistant" | "tool",
+      role,
       content: m.parts?.map((p: any) => p.text).join("\n") ?? "",
       toolCalls: m.tool_calls?.map((t: any) => ({ name: t.name, args: t.args?.path ?? "" })) ?? [],
       timestamp: new Date(m.created_at).getTime(),
-    }));
+    };
+    });
   }, [messages]);
 
   const fileTreeFiles = useMemo(() => {
@@ -321,6 +326,13 @@ function EditorPage() {
       "package.json", "index.html", "vite.config.ts", "tsconfig.json",
     ];
   }, [files]);
+
+  const previewNavFiles = useMemo(() => {
+    if (files && files.length > 0) {
+      return files.map((f) => ({ path: f.path, content: f.content ?? "" }));
+    }
+    return fileTreeFiles.map((path) => ({ path, content: "" }));
+  }, [files, fileTreeFiles]);
 
   // ─── Diff entries (from SSE timeline) ──────────────────────────────
   const diffEntries = useMemo((): DiffEntry[] => {
@@ -474,25 +486,14 @@ function EditorPage() {
 
   // Preview E2B: sobe quando o agente grava arquivos ou ao terminar a rodada
   const agentFinished = sse.progress.finished;
-  const agentWroteFiles = useMemo(
-    () =>
-      sse.progress.timeline.some(
-        (e) =>
-          e.type === "tool_done" &&
-          (e.data?.name === "fs_write" || e.data?.name === "fs_edit"),
-      ),
-    [sse.progress.timeline],
-  );
-
+  // Preview E2B só após o agente terminar — streaming fica 100% no chat
   useEffect(() => {
     if (!isReactProject || !e2bConnected || devUrl || previewBoot.booting) return;
-    if (!running && !agentFinished) return;
-    if (!agentWroteFiles && !agentFinished) return;
-    if (sse.progress.error) return;
+    if (running) return;
+    if (!agentFinished || sse.progress.error) return;
     void previewBoot.boot();
   }, [
     agentFinished,
-    agentWroteFiles,
     running,
     sse.progress.error,
     isReactProject,
@@ -700,6 +701,10 @@ function EditorPage() {
         onQuickPrompt={(text) => setPromptDraft(text)}
         onShare={handleShare}
         onPublish={handlePublish}
+        previewFiles={previewNavFiles}
+        previewPath={previewRoute}
+        onPreviewPathChange={setPreviewRoute}
+        previewDevUrl={devUrl}
       >
         <div
           className="flex min-h-0 h-full w-full flex-1 flex-col overflow-hidden"
@@ -780,8 +785,9 @@ function EditorPage() {
 
                     {activeView === "preview" && (
                       <PreviewFrame
-                        files={files?.map((f) => ({ path: f.path, content: f.content ?? "" })) ?? []}
+                        files={previewNavFiles}
                         booting={previewBoot.booting}
+                        agentRunning={running}
                         devUrl={devUrl}
                         previewPath={previewRoute}
                         onPreviewPathChange={setPreviewRoute}

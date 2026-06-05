@@ -6,7 +6,6 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import {
   ArrowUp,
-  ChevronDown,
   Hammer,
   Square,
   FileText,
@@ -16,12 +15,7 @@ import {
   MousePointer2,
   X,
 } from "lucide-react";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+
 import { cn } from "@/lib/utils";
 import { MicButton } from "@/components/voice/MicButton";
 import { toast } from "sonner";
@@ -128,11 +122,6 @@ function MarkdownContent({ children }: { children: string }) {
 }
 
 // -----------------------------------------------------------------------------------
-const COMPOSER_MODE_LABEL: Record<AgentComposerMode, string> = {
-  build: "Build",
-  plan: "Play",
-};
-
 // -----------------------------------------------------------------------------------
 // ChatInput
 // -----------------------------------------------------------------------------------
@@ -555,33 +544,23 @@ export function ChatInput({
 
           <span className="forge-composer-spacer" />
 
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button
-                type="button"
-                className="forge-composer-mode-trigger"
-                aria-label="Modo do agente"
-              >
-                {composerMode === "build" ? (
-                  <Hammer className="size-3.5 shrink-0" />
-                ) : (
-                  <ListTodo className="size-3.5 shrink-0" />
-                )}
-                <span>{COMPOSER_MODE_LABEL[composerMode]}</span>
-                <ChevronDown className="size-3 opacity-60" />
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="min-w-[140px]">
-              <DropdownMenuItem onClick={() => setComposerMode("build")}>
-                <Hammer className="size-3.5 mr-2" />
-                Build — implementar no projeto
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setComposerMode("plan")}>
-                <ListTodo className="size-3.5 mr-2" />
-                Play — explorar e planejar sem executar
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <label className="forge-composer-mode-select-wrap">
+            <span className="sr-only">Modo do agente</span>
+            {composerMode === "build" ? (
+              <Hammer className="size-3.5 shrink-0 text-[var(--forge-primary)]" aria-hidden />
+            ) : (
+              <ListTodo className="size-3.5 shrink-0 text-[var(--forge-primary)]" aria-hidden />
+            )}
+            <select
+              className="forge-composer-mode-select"
+              value={composerMode}
+              aria-label="Modo do agente"
+              onChange={(e) => setComposerMode(e.target.value as AgentComposerMode)}
+            >
+              <option value="build">Build</option>
+              <option value="plan">Play</option>
+            </select>
+          </label>
 
           <MicButton
             size="sm"

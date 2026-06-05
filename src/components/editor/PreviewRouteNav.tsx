@@ -24,7 +24,9 @@ export function PreviewRouteNav({
     return inferProjectRoutes(paths, contents);
   }, [files]);
 
-  if (!devUrl || routes.length === 0) return null;
+  if (routes.length === 0) return null;
+
+  const canNavigate = Boolean(devUrl);
 
   const isTopbar = variant === "topbar";
 
@@ -53,7 +55,9 @@ export function PreviewRouteNav({
           <button
             key={r.path}
             type="button"
-            onClick={() => onNavigate(r.path)}
+            disabled={!canNavigate}
+            title={canNavigate ? r.path : "Disponível quando o preview E2B subir"}
+            onClick={() => canNavigate && onNavigate(r.path)}
             className={
               isTopbar
                 ? `shrink-0 rounded-md px-2 py-0.5 font-mono text-[10px] transition-colors ${
@@ -61,7 +65,7 @@ export function PreviewRouteNav({
                       ? "bg-[var(--forge-primary)]/20 text-[var(--forge-primary)] font-medium"
                       : "text-[var(--forge-muted)] hover:bg-[var(--forge-surface-3)] hover:text-[var(--forge-silver)]"
                   }`
-                : `shrink-0 rounded-md px-2.5 py-1 font-mono text-[10px] transition-colors ${
+                : `shrink-0 rounded-md px-2.5 py-1 font-mono text-[10px] transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
                     active
                       ? "bg-[var(--forge-primary)] text-black font-medium"
                       : "text-neutral-600 hover:bg-neutral-100"

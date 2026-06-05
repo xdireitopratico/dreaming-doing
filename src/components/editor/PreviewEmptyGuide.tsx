@@ -13,7 +13,7 @@ export function PreviewEmptyGuide({
   onOpenPreview?: () => void;
 }) {
   return (
-    <div className="flex h-full min-h-[280px] flex-col items-center justify-center gap-5 bg-white p-8 text-center">
+    <div className="flex h-full min-h-[280px] flex-col items-center justify-center gap-5 bg-white p-8 text-center forge-preview-empty-single">
       <div className="grid size-14 place-items-center rounded-2xl bg-neutral-100">
         <Eye className="size-7 text-neutral-400" />
       </div>

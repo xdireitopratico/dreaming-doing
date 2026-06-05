@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Copy, Eye, Loader2, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
-import { E2bSandboxPanel } from "@/components/editor/E2bSandboxPanel";
 import { PreviewEmptyGuide } from "@/components/editor/PreviewEmptyGuide";
 import { PreviewRouteNav } from "@/components/editor/PreviewRouteNav";
 import { buildPreviewUrl } from "@/lib/project-routes";
@@ -23,6 +22,8 @@ interface PreviewFrameProps {
   agentHasRun?: boolean;
   e2bConnected?: boolean;
   projectName?: string;
+  /** Agente em execução — preview permanece estático (sem loader E2B). */
+  agentRunning?: boolean;
 }
 
 export function PreviewFrame({
@@ -40,6 +41,7 @@ export function PreviewFrame({
   agentHasRun = false,
   e2bConnected = true,
   projectName,
+  agentRunning = false,
 }: PreviewFrameProps) {
   const [iframeLoading, setIframeLoading] = useState(false);
 
@@ -94,15 +96,14 @@ export function PreviewFrame({
       () => toast.info(iframeSrc),
     );
   };
-  const needsE2b = !e2bConnected;
-  const e2bBootBlocked =
-    needsE2b ||
-    (!!bootError && (bootError.includes("E2B") || bootError.includes("Sandbox")));
+  const showRouteNav = Boolean(onPreviewPathChange && files.length > 0);
+  const showBootSpinner = booting && !agentRunning && !iframeSrc;
 
   return (
     <div className="forge-preview-root flex min-h-0 flex-1 flex-col">
-      {devUrl && onPreviewPathChange && (
+      {showRouteNav && (
         <div className="forge-preview-chrome shrink-0">
+          {devUrl && (
           <div className="forge-preview-domain" title={iframeSrc ?? devUrl}>
             <span className="font-mono text-[10px] text-neutral-500 truncate">{previewHost}</span>
             <button
@@ -124,22 +125,19 @@ export function PreviewFrame({
               </button>
             )}
           </div>
+          )}
           <PreviewRouteNav
             variant="inline"
             files={files}
             activePath={previewPath}
-            onNavigate={onPreviewPathChange}
+            onNavigate={onPreviewPathChange!}
             devUrl={devUrl}
           />
         </div>
       )}
 
       <div className="forge-preview-viewport min-h-0 flex-1">
-        {e2bBootBlocked && !booting && !devUrl && (
-          <E2bSandboxPanel connected={e2bConnected} />
-        )}
-
-        {bootError && !booting && !e2bBootBlocked && (
+        {bootError && !showBootSpinner && (
           <div className="flex h-full flex-col items-center justify-center gap-3 bg-white p-8 text-center">
             <p className="text-sm text-neutral-700 max-w-sm leading-relaxed">{bootError}</p>
             {onRefresh && bootError.includes("agente") && (
@@ -157,10 +155,13 @@ export function PreviewFrame({
           </div>
         )}
 
-        {!bootError && booting && !iframeSrc ? (
+        {!bootError && showBootSpinner ? (
           <div className="flex h-full w-full flex-col items-center justify-center gap-3 bg-white">
             <Loader2 className="size-8 animate-spin text-neutral-400" />
-            <p className="text-sm text-neutral-500">Conectando sandbox E2B…</p>
+            <p className="text-sm text-neutral-500">Conectando preview E2B…</p>
+            <p className="text-xs text-neutral-400 max-w-xs">
+              A atividade do agente aparece só no chat à esquerda.
+            </p>
           </div>
         ) : !bootError && iframeSrc ? (
           <>

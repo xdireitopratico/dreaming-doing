@@ -11,6 +11,8 @@ import { useAuth } from "@/lib/auth";
 import type { EditorMainView } from "@/components/editor/EditorViewTabs";
 import { ForgeLogoMark } from "@/components/editor/ForgeLogoMark";
 import { EditorIntegrationsMenu } from "@/components/editor/EditorIntegrationsMenu";
+import { PreviewRouteNav } from "@/components/editor/PreviewRouteNav";
+
 interface EditorTopBarProps {
   projectName?: string;
   activeView: EditorMainView;
@@ -19,6 +21,10 @@ interface EditorTopBarProps {
   onPublish?: () => void;
   onQuickPrompt?: (text: string) => void;
   running?: boolean;
+  previewFiles?: Array<{ path: string; content?: string }>;
+  previewPath?: string;
+  onPreviewPathChange?: (path: string) => void;
+  previewDevUrl?: string | null;
 }
 
 export function EditorTopBar({
@@ -29,6 +35,10 @@ export function EditorTopBar({
   onPublish,
   onQuickPrompt,
   running,
+  previewFiles,
+  previewPath = "/",
+  onPreviewPathChange,
+  previewDevUrl,
 }: EditorTopBarProps) {
   const { user } = useAuth();
 
@@ -96,6 +106,18 @@ export function EditorTopBar({
 
         <span className="forge-topbar-divider mx-1 shrink-0 hidden sm:block" aria-hidden />
         <EditorIntegrationsMenu />
+        {activeView === "preview" && previewFiles && previewFiles.length > 0 && onPreviewPathChange && (
+          <>
+            <span className="forge-topbar-divider mx-1 shrink-0" aria-hidden />
+            <PreviewRouteNav
+              variant="topbar"
+              files={previewFiles}
+              activePath={previewPath}
+              onNavigate={onPreviewPathChange}
+              devUrl={previewDevUrl}
+            />
+          </>
+        )}
       </div>
 
       <div className="forge-topbar-right">

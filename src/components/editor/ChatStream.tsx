@@ -67,6 +67,7 @@ export function ChatStream({ messages, running, progress, onResume }: ChatStream
         if (msg.role === "user") {
           return (
             <article key={msg.id} className="forge-chat-item forge-chat-item-user">
+              <span className="forge-chat-sender forge-chat-sender-user">Você</span>
               <div className="forge-msg-user-outline">
                 <p className="whitespace-pre-wrap">{msg.content}</p>
               </div>
@@ -76,6 +77,7 @@ export function ChatStream({ messages, running, progress, onResume }: ChatStream
 
         return (
           <article key={msg.id} className="forge-chat-item forge-chat-item-assistant">
+            <span className="forge-chat-sender forge-chat-sender-assistant">FORGE</span>
             {msg.content ? (
               <div className="forge-msg-assistant-body">
                 <MarkdownContent>{msg.content}</MarkdownContent>

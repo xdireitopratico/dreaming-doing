@@ -512,18 +512,41 @@ body:has(.editor-workspace) {
 
 .forge-chat-item-user {
   display: flex;
-  justify-content: flex-end;
+  flex-direction: column;
+  align-items: flex-end;
+  width: 100%;
+  margin-left: 0;
+}
+
+.forge-chat-sender {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-bottom: 4px;
+  padding: 0 6px;
+}
+
+.forge-chat-sender-user {
+  color: var(--forge-primary);
+  align-self: flex-end;
+}
+
+.forge-chat-sender-assistant {
+  color: var(--forge-muted);
+  align-self: flex-start;
 }
 
 .forge-msg-user-outline {
-  max-width: 88%;
-  padding: 10px 14px;
-  border-radius: 14px;
-  border: 1px solid rgba(255, 182, 39, 0.55);
+  max-width: min(88%, 520px);
+  padding: 12px 16px;
+  border-radius: 16px 16px 4px 16px;
+  border: 2px solid var(--forge-primary);
   background: transparent;
   color: var(--forge-text);
   font-size: 13px;
   line-height: 1.55;
+  box-shadow: 0 0 0 1px rgba(255, 182, 39, 0.15);
 }
 
 .forge-msg-user-outline p {
@@ -531,12 +554,19 @@ body:has(.editor-workspace) {
 }
 
 .forge-chat-item-assistant {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
   width: 100%;
 }
 
 .forge-msg-assistant-body {
   width: 100%;
-  padding: 0 2px;
+  max-width: 100%;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--forge-surface-2);
+  border: 1px solid var(--forge-border-strong);
 }
 
 .forge-chat-stream-draft {
@@ -610,22 +640,28 @@ body:has(.editor-workspace) {
   background: rgba(251, 191, 36, 0.06);
 }
 
-.forge-composer-mode-trigger {
+.forge-composer-mode-select-wrap {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 4px 8px;
+  gap: 6px;
+  padding: 2px 8px 2px 6px;
   border-radius: 8px;
-  border: 1px solid var(--forge-border);
+  border: 1px solid var(--forge-primary);
   background: var(--forge-surface-3);
-  font-size: 11px;
-  font-weight: 500;
-  color: var(--forge-muted);
 }
 
-.forge-composer-mode-trigger:hover {
+.forge-composer-mode-select {
+  appearance: none;
+  border: none;
+  background: transparent;
+  font-size: 11px;
+  font-weight: 600;
   color: var(--forge-text);
-  border-color: var(--forge-border-strong);
+  cursor: pointer;
+  padding: 4px 20px 4px 2px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%23ffb627' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 2px center;
 }
 
 .forge-preview-chrome {
