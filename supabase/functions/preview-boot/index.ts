@@ -4,8 +4,8 @@ import { loadUserE2bApiKey, E2B_SETUP_USER_MESSAGE } from "../_shared/user-e2b.t
 import { E2B_PROJECT_DIR } from "../_shared/e2b.ts";
 import {
   connectProjectSandboxForPreview,
+  ensureAgentProjectSandbox,
   previewUrlFromSandbox,
-  readSandboxMeta,
   syncProjectFilesToSandbox,
 } from "../_shared/project-sandbox.ts";
 import { FORGE_CORS_HEADERS, corsPreflightResponse } from "../_shared/cors.ts";
@@ -50,11 +50,26 @@ Deno.serve(async (req) => {
     const devPort = Number.parseInt(detectDevPort(files ?? []), 10) || 5173;
     const devCmd = detectDevCommand(files ?? [], devPort);
 
-    const { sandbox, sandboxId, reused } = await connectProjectSandboxForPreview(
-      supabase,
-      projectId,
-      E2B_API_KEY,
-    );
+    let sandboxResult;
+    try {
+      sandboxResult = await connectProjectSandboxForPreview(
+        supabase,
+        projectId,
+        E2B_API_KEY,
+      );
+    } catch (previewErr: unknown) {
+      const msg = previewErr instanceof Error ? previewErr.message : "";
+      if (msg.includes("Ainda não há") || msg.includes("ambiente ao vivo")) {
+        sandboxResult = await ensureAgentProjectSandbox(
+          supabase,
+          projectId,
+          E2B_API_KEY,
+        );
+      } else {
+        throw previewErr;
+      }
+    }
+    const { sandbox, sandboxId, reused } = sandboxResult;
 
     await syncProjectFilesToSandbox(sandbox, files ?? []);
 
@@ -64,7 +79,6 @@ Deno.serve(async (req) => {
     await sandbox.commands.run(installAndDev, {
       cwd: E2B_PROJECT_DIR,
       timeoutMs: 120_000,
-      background: true,
     });
 
     let url = previewUrlFromSandbox(sandbox, devPort);

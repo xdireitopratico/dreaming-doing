@@ -13,6 +13,7 @@ import {
   TRIAL_MESSAGES_DEFAULT,
 } from "@/lib/connectors/integration-prefs";
 import { CONNECTOR_REGISTRY } from "@/lib/connectors/registry";
+import { hasLlmConnectorRows } from "@/lib/connector-llm";
 
 export type ConnectorStatus = {
   connected: boolean;
@@ -53,12 +54,14 @@ export function useConnectors() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("connectors_public")
-        .select("kind, meta, updated_at")
+        .select("kind, provider, meta, updated_at")
         .eq("owner_id", user!.id);
       if (error) throw error;
       return data ?? [];
     },
   });
+
+  const hasUserLlmKey = hasLlmConnectorRows(rows);
 
   const githubRow = rows.find((r) => r.kind === "github");
   const vercelRow = rows.find((r) => r.kind === "vercel");
@@ -218,7 +221,6 @@ export function useConnectors() {
     trialMessagesRemaining,
     tasteChatRemaining: tasteQuota.tasteChatRemaining,
     tasteStartRemaining: tasteQuota.tasteStartRemaining,
-    /** Definido no servidor; no client assumimos false até primeira resposta BYOK */
-    hasUserLlmKey: false as boolean,
+    hasUserLlmKey,
   };
 }

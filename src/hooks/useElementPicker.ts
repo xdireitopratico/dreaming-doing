@@ -159,5 +159,5 @@ export function useElementPicker({ iframeRef, onPick, active, onToggle }: UseEle
     }
   }, [iframeRef, active, onPick, onToggle, buildSelector, getComputedInfo]);
 
-  return { isPicking };
+  return { isPicking: active, onToggle };
 }

@@ -29,7 +29,11 @@ import {
 } from "@/lib/agent-setup";
 import { loadAgentPreferences } from "@/lib/agent-preferences";
 import type { ForgeSessionKind } from "@/lib/taste";
-import { canSendTasteChat, canStartTasteProject } from "@/lib/taste";
+import {
+  canSendTasteChat,
+  canStartTasteProject,
+  resolveSessionKind,
+} from "@/lib/taste";
 import type { StoredMessagePart } from "@/lib/chat-attachments";
 import { AgentPanel } from "@/components/editor/AgentPanel";
 import { PreviewFrame } from "@/components/editor/PreviewFrame";
@@ -76,14 +80,19 @@ function EditorPage() {
   const { projectId } = useParams({ from: "/projects/$projectId/" });
   const navigate = useNavigate();
   const qc = useQueryClient();
-  const { tasteChatRemaining, tasteStartRemaining, openConnector, status: connectorStatus } =
-    useConnectors();
+  const {
+    tasteChatRemaining,
+    tasteStartRemaining,
+    hasUserLlmKey,
+    openConnector,
+    status: connectorStatus,
+  } = useConnectors();
   const e2bConnected = connectorStatus.e2b.connected;
   useTasteUiActions();
   const tasteQuota = {
     tasteChatRemaining,
     tasteStartRemaining,
-    hasUserLlmKey: false,
+    hasUserLlmKey,
   };
 
   // ─── States ──────────────────────────────────────────────────────────
@@ -341,13 +350,11 @@ function EditorPage() {
   }, []);
 
   const runAgent = useCallback(
-    (sessionKind?: ForgeSessionKind) => {
+    (explicitKind?: ForgeSessionKind) => {
       if (!conversation || running) return;
 
-      const isTaste =
-        sessionKind === "taste_chat" ||
-        sessionKind === "taste_start" ||
-        (!sessionKind && canSendTasteChat(tasteQuota));
+      const kind = explicitKind ?? resolveSessionKind(tasteQuota);
+      const isTaste = kind === "taste_chat" || kind === "taste_start";
 
       if (!isTaste) {
         const prefs = loadAgentPreferences();
@@ -355,18 +362,18 @@ function EditorPage() {
           toast.error(getAgentSetupBlockMessage(prefs));
           return;
         }
-      } else if (sessionKind === "taste_start" && !canStartTasteProject(tasteQuota)) {
+      } else if (kind === "taste_start" && !canStartTasteProject(tasteQuota)) {
         toast.error("Start Project já utilizado. Configure API para continuar.");
         return;
-      } else if ((sessionKind === "taste_chat" || !sessionKind) && !canSendTasteChat(tasteQuota)) {
+      } else if (kind === "taste_chat" && !canSendTasteChat(tasteQuota)) {
         toast.error("Limite Taste Chat (50). Configure API em /api.");
         return;
       }
 
       const label =
-        sessionKind === "taste_start"
+        kind === "taste_start"
           ? "Start Project (Taste · NVIDIA)"
-          : sessionKind === "taste_chat" || isTaste
+          : kind === "taste_chat"
             ? "Concierge Taste"
             : sse.progress.resumable
               ? "Retomando agente (memória do chat)"
@@ -380,7 +387,7 @@ function EditorPage() {
           await sse.connect(
             projectId,
             conversation.id,
-            sessionKind ?? (canSendTasteChat(tasteQuota) ? "taste_chat" : undefined),
+            kind === "byok" ? undefined : kind,
           );
         } catch (e: unknown) {
           toast.error(e instanceof Error ? e.message : "Erro ao iniciar agente");
@@ -441,10 +448,10 @@ function EditorPage() {
         })
         .then(({ error }) => {
           if (error) toast.error("Erro ao enviar mensagem");
-          else runAgent("taste_chat");
+          else runAgent(resolveSessionKind(tasteQuota));
         });
     },
-    [conversation, runAgent, composerMode],
+    [conversation, runAgent, composerMode, tasteQuota],
   );
 
   const handleVisualEdits = useCallback(() => {
@@ -452,8 +459,8 @@ function EditorPage() {
       setActiveView("preview");
       toast.info("Abra o Preview para selecionar um elemento.");
     }
-    elementPicker.onToggle();
-  }, [activeView, elementPicker]);
+    setPickMode((v) => !v);
+  }, [activeView]);
 
   const handleStartProject = useCallback(() => {
     if (!conversation) return;
