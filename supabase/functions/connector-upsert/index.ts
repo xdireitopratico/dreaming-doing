@@ -9,7 +9,7 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
 
-const ALLOWED = new Set(["github", "vercel", "cloudflare", "anthropic", "openai"]);
+const ALLOWED = new Set(["github", "vercel", "netlify", "cloudflare", "anthropic", "openai"]);
 
 type PoolSlot = { id: string; hint: string; addedAt: string };
 
@@ -89,7 +89,7 @@ Deno.serve(async (req) => {
     const providerKey = resolveProvider(kind, metaIn);
 
     if (kind === "openai" && !metaIn.provider) {
-      return json({ error: "meta.provider obrigatório (groq, nvidia, xai, openai, gemini)" }, 400);
+      return json({ error: "meta.provider obrigatório (groq, nvidia, xai, openai, gemini, openrouter)" }, 400);
     }
 
     const loadOpenAiRow = async () => {
@@ -163,6 +163,9 @@ Deno.serve(async (req) => {
     const token = typeof body?.token === "string" ? body.token.trim() : "";
     if (!token && kind === "vercel") {
       return json({ error: "Token Vercel obrigatório" }, 400);
+    }
+    if (!token && kind === "netlify") {
+      return json({ error: "Token Netlify obrigatório" }, 400);
     }
 
     let tokenEncrypted: string | undefined;

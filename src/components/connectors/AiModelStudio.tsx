@@ -44,9 +44,10 @@ const ENV_ICONS: Record<AiEnvId, React.ReactNode> = {
   xai: <Globe className="size-4" />,
   groq: <Cpu className="size-4" />,
   nvidia: <Cpu className="size-4" />,
+  openrouter: <Globe className="size-4" />,
 };
 
-const ENVS: AiEnvId[] = ["anthropic", "gemini", "openai", "xai", "groq", "nvidia"];
+const ENVS: AiEnvId[] = ["anthropic", "gemini", "openai", "xai", "groq", "nvidia", "openrouter"];
 
 const MODES: { id: ModelPowerMode; title: string; hint: string }[] = [
   { id: "fixed", title: "Fixo", hint: "Sempre o modelo escolhido abaixo" },
@@ -284,6 +285,32 @@ export function AiModelStudio({ connectorRows }: AiModelStudioProps) {
             Modo ROBIN só usa Groq ou NVIDIA. Selecione um desses ambientes ou mude para Fixo/Auto.
           </p>
         )}
+
+        <div className="mt-4 rounded-lg border border-dashed border-[var(--border)] p-3">
+          <label className="font-mono text-[9px] uppercase tracking-wider text-[var(--text-dim)]">
+            ID do modelo (opcional — estilo OpenRouter)
+          </label>
+          <input
+            type="text"
+            value={prefs.customModelId ?? ""}
+            onChange={(e) =>
+              patch({
+                customModelId: e.target.value,
+                useCustomModel: e.target.value.trim().length > 0,
+              })
+            }
+            placeholder={
+              selectedEnv === "openrouter"
+                ? "ex.: anthropic/claude-sonnet-4.6"
+                : "ex.: claude-sonnet-4-20250514"
+            }
+            className="mt-2 w-full rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2 font-mono text-[11px] text-[var(--foreground)]"
+          />
+          <p className="mt-2 font-mono text-[9px] text-[var(--text-ghost)] leading-relaxed">
+            Cole o slug exato da API. Quando preenchido, substitui o preset acima no modo Fixo. Atualize a lista
+            de atalhos na próxima sessão — este campo sempre aceita o ID mais novo.
+          </p>
+        </div>
       </div>
 
       {/* ─── Passo 3: Modo agente ─── */}
@@ -327,7 +354,11 @@ export function AiModelStudio({ connectorRows }: AiModelStudioProps) {
         )}
         {prefs.mode === "fixed" && (
           <p className="mt-3 font-mono text-[9px] text-emerald-400/80">
-            Fixo ativo: {getPresetById(prefs.fixedPresetId).label} ({getPresetById(prefs.fixedPresetId).model})
+            Fixo ativo: {getPresetById(prefs.fixedPresetId).label} (
+            {prefs.useCustomModel && prefs.customModelId
+              ? prefs.customModelId
+              : getPresetById(prefs.fixedPresetId).model}
+            )
           </p>
         )}
       </div>

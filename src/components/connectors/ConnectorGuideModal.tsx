@@ -310,7 +310,8 @@ export function ConnectorGuideModal({
                   onClick={handleConnectOwn}
                   disabled={
                     busy ||
-                    ((connector === "vercel" || connector === "cloudflare") && !token.trim())
+                    ((connector === "vercel" || connector === "netlify" || connector === "cloudflare") &&
+                      !token.trim())
                   }
                 >
                   {busy ? "Conectando…" : "Salvar conexão"}

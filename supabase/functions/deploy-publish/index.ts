@@ -1,6 +1,7 @@
-// deploy-publish — MVP: registra deployment e expõe previewUrl como URL pública.
-// Evolução: integração Vercel Deploy API com VERCEL_TOKEN.
+// deploy-publish — registra deployment conforme alvo (Vercel / Netlify / Cloudflare / preview E2B)
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import { buildStackContext, type DeployTarget } from "../_shared/stack-context.ts";
+import { loadDeployConnectorKeys } from "../agent-run/connector-keys.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -32,20 +33,35 @@ Deno.serve(async (req) => {
       return json({ error: "Projeto não encontrado" }, 404);
     }
 
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("integration_prefs")
+      .eq("id", userData.user.id)
+      .maybeSingle();
+
     const meta = (project.meta ?? {}) as Record<string, unknown>;
-    const previewUrl =
-      typeof meta.previewUrl === "string" ? meta.previewUrl.trim() : "";
+    const previewUrl = typeof meta.previewUrl === "string" ? meta.previewUrl.trim() : "";
+    const deployKeys = await loadDeployConnectorKeys(supabase, userData.user.id);
+    const stack = buildStackContext(profile?.integration_prefs, meta, deployKeys);
+    const provider = stack.deployTarget as DeployTarget;
+
+    const providerNote: Record<DeployTarget, string> = {
+      vercel: "Vercel — conecte token em Conectores para deploy API completo.",
+      netlify: "Netlify — conecte token em Conectores; build: npm run build && netlify deploy.",
+      cloudflare: "Cloudflare Pages — use wrangler/pages com token conectado.",
+      e2b: "Preview E2B — use preview ao vivo; deploy produção via Vercel/Netlify.",
+    };
 
     const { data: deployment, error: dErr } = await supabase
       .from("deployments")
       .insert({
         project_id: projectId,
-        provider: "vercel",
+        provider,
         status: previewUrl ? "ready" : "error",
         url: previewUrl || null,
         logs: previewUrl
-          ? "Publish MVP: URL do preview ao vivo."
-          : "Sem previewUrl — execute preview-boot antes.",
+          ? `Publish: ${providerNote[provider]} URL do preview ao vivo.`
+          : `Sem previewUrl — inicie preview E2B ou configure ${provider}.`,
       })
       .select("id, url, status")
       .single();
@@ -61,6 +77,7 @@ Deno.serve(async (req) => {
             publishedUrl: previewUrl,
             publishedAt: new Date().toISOString(),
             lastDeploymentId: deployment.id,
+            deployTarget: provider,
           },
         })
         .eq("id", projectId);
@@ -70,6 +87,7 @@ Deno.serve(async (req) => {
       deploymentId: deployment.id,
       url: deployment.url,
       status: deployment.status,
+      provider,
       needsPreview: !previewUrl,
     });
   } catch (e: unknown) {

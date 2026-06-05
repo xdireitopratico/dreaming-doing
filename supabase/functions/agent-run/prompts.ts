@@ -84,6 +84,8 @@ export function getSystemPrompt(template: string | null | undefined): string {
   return PROMPTS[id] ?? PROMPTS["vite-react"];
 }
 
+export { buildStackContext, stackPromptAddon, type DeployTarget, type StackContext } from "../_shared/stack-context.ts";
+
 export const EXECUTE_PROMPT = `EXECUTE o pedido do usuário.
 
 ## Antes de codificar (se pedido amplo ou vago)

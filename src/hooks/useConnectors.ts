@@ -59,6 +59,7 @@ export function useConnectors() {
 
   const githubRow = rows.find((r) => r.kind === "github");
   const vercelRow = rows.find((r) => r.kind === "vercel");
+  const netlifyRow = rows.find((r) => r.kind === "netlify");
   const cloudflareRow = rows.find((r) => r.kind === "cloudflare");
 
   const status: Record<ConnectorId, ConnectorStatus> = {
@@ -75,6 +76,12 @@ export function useConnectors() {
       connected: !!vercelRow,
       label: (vercelRow?.meta as { projectName?: string })?.projectName as string | undefined,
       meta: (vercelRow?.meta as Record<string, unknown>) ?? {},
+    },
+    netlify: {
+      forgeAvailable: CONNECTOR_REGISTRY.netlify.forgeAvailable,
+      connected: !!netlifyRow,
+      label: (netlifyRow?.meta as { siteName?: string })?.siteName as string | undefined,
+      meta: (netlifyRow?.meta as Record<string, unknown>) ?? {},
     },
     supabase: {
       forgeAvailable: CONNECTOR_REGISTRY.supabase.forgeAvailable,

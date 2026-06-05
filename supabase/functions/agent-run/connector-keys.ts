@@ -6,6 +6,9 @@ export type AgentPreferencesPayload = {
   poolProvider?: "nvidia" | "groq";
   fixedPresetId?: string;
   robinPoolModelId?: string;
+  /** ID exato do modelo na API (ex.: anthropic/claude-sonnet-4-6, openrouter slug) */
+  customModelId?: string;
+  useCustomModel?: boolean;
 };
 
 function isRobinMode(preferences?: AgentPreferencesPayload): boolean {
@@ -119,8 +122,39 @@ export async function loadConnectorKeys(
       else if (p === "xai") keys.XAI_API_KEY = token;
       else if (p === "nvidia") keys.NVIDIA_API_KEY = token;
       else if (p === "gemini") keys.GEMINI_API_KEY = token;
+      else if (p === "openrouter") keys.OPENROUTER_API_KEY = token;
       else keys.OPENAI_API_KEY = token;
     }
   }
   return keys;
+}
+
+const DEPLOY_KIND_TO_KEY: Record<string, string> = {
+  vercel: "VERCEL_TOKEN",
+  netlify: "NETLIFY_TOKEN",
+  cloudflare: "CLOUDFLARE_API_TOKEN",
+  github: "GITHUB_TOKEN",
+};
+
+/** Tokens de deploy (Vercel, Netlify, etc.) para o agente escolher stack. */
+export async function loadDeployConnectorKeys(
+  supabase: SupabaseClient,
+  ownerId: string,
+): Promise<Record<string, string>> {
+  const { data, error } = await supabase
+    .from("connectors")
+    .select("kind, token_encrypted")
+    .eq("owner_id", ownerId)
+    .in("kind", ["vercel", "netlify", "cloudflare", "github"]);
+
+  if (error) return {};
+
+  const out: Record<string, string> = {};
+  for (const row of data ?? []) {
+    const keyName = DEPLOY_KIND_TO_KEY[row.kind];
+    if (!keyName) continue;
+    const tokens = parseTokenField(row.token_encrypted);
+    if (tokens[0]) out[keyName] = tokens[0];
+  }
+  return out;
 }

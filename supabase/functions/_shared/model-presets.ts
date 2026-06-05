@@ -87,6 +87,13 @@ const PRESETS: Record<string, PresetWire> = {
     label: "NVIDIA · Nemotron 4 340B",
     secretKey: "NVIDIA_API_KEY",
   },
+  "openrouter-custom": {
+    provider: "openai",
+    model: "anthropic/claude-sonnet-4",
+    baseUrl: "https://openrouter.ai/api/v1",
+    label: "OpenRouter (custom)",
+    secretKey: "OPENROUTER_API_KEY",
+  },
 };
 
 const LEGACY: Record<string, string> = {
@@ -113,6 +120,26 @@ export function resolveFixedFromKeys(
   const apiKey = keys[preset.secretKey];
   if (!apiKey) return null;
   return { ...preset, apiKey };
+}
+
+type PrefsLike = {
+  fixedPresetId?: string;
+  customModelId?: string;
+  useCustomModel?: boolean;
+};
+
+/** Preset + override por ID customizado (slug OpenRouter, etc.). */
+export function resolveModelFromPreferences(
+  preferences: PrefsLike | undefined,
+  keys: Record<string, string>,
+): (PresetWire & { apiKey: string }) | null {
+  const base = resolveFixedFromKeys(preferences?.fixedPresetId, keys);
+  if (!base) return null;
+  const custom = preferences?.customModelId?.trim();
+  if (preferences?.useCustomModel && custom) {
+    return { ...base, model: custom, label: `${base.label} · ${custom}` };
+  }
+  return base;
 }
 
 /** Modelo padrão do pool ROBIN por provedor */

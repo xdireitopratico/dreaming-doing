@@ -16,7 +16,7 @@ export type ConnectorRegistryEntry = {
   tokenLabel?: string;
   tokenPlaceholder?: string;
   /** Conectável via connector-upsert (github, vercel, cloudflare). */
-  upsertKind?: "github" | "vercel" | "cloudflare";
+  upsertKind?: "github" | "vercel" | "netlify" | "cloudflare";
   showInEditorBar?: boolean;
   showOnConnectorsPage?: boolean;
 };
@@ -44,6 +44,21 @@ export const CONNECTOR_REGISTRY: Record<ConnectorId, ConnectorRegistryEntry> = {
     forgeAvailable: true,
     signupUrl: "https://supabase.com/dashboard/sign-up",
     docsUrl: "https://supabase.com/docs/guides/getting-started",
+    showInEditorBar: true,
+    showOnConnectorsPage: true,
+  },
+  netlify: {
+    id: "netlify",
+    name: "Netlify",
+    description: "Deploy estático e Jamstack na edge global Netlify.",
+    tagline: "Publique na Netlify com sua conta — alternativa forte à Vercel.",
+    forgeAvailable: false,
+    signupUrl: "https://app.netlify.com/signup",
+    docsUrl: "https://docs.netlify.com/api/get-started-with-the-netlify-api/",
+    costNote: "Plano Starter gratuito; build minutes extras podem cobrar.",
+    tokenLabel: "Personal Access Token",
+    tokenPlaceholder: "nfp_...",
+    upsertKind: "netlify",
     showInEditorBar: true,
     showOnConnectorsPage: true,
   },

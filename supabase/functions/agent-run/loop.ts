@@ -29,6 +29,7 @@ export class AgentLoop {
   private skills: SkillRegistry;
   private robinActive: boolean;
   private projectTemplate: string;
+  private stackAddon: string;
 
   constructor(
     reg: ToolRegistry,
@@ -40,6 +41,7 @@ export class AgentLoop {
     routerOverrides?: RouterOverrides,
     robinActive = false,
     projectTemplate = "vite-react",
+    stackAddon = "",
   ) {
     this.reg = reg;
     this.llm = llm;
@@ -48,6 +50,7 @@ export class AgentLoop {
     this.onStream = onStream;
     this.robinActive = robinActive;
     this.projectTemplate = projectTemplate;
+    this.stackAddon = stackAddon;
     this.router = new ModelRouter(injectedKeys, routerOverrides);
     this.observer = new RuntimeObserver(reg);
     this.skills = new SkillRegistry();
@@ -246,7 +249,8 @@ export class AgentLoop {
       ? this.skills.buildSkillPrompt(this.state.context.files)
       : "";
     const base = getSystemPrompt(this.projectTemplate);
-    const fullSystemPrompt = skillPrompt ? `${base}\n\n${skillPrompt}` : base;
+    const withStack = this.stackAddon ? `${base}\n\n${this.stackAddon}` : base;
+    const fullSystemPrompt = skillPrompt ? `${withStack}\n\n${skillPrompt}` : withStack;
 
     const messages: ChatMessage[] = [
       { role: "system", content: fullSystemPrompt },

@@ -3,7 +3,7 @@
  * Somente modelos frontier / fortes em código — sem defaults fracos (ex.: Llama 8B).
  */
 
-export type AiEnvId = "anthropic" | "gemini" | "openai" | "xai" | "groq" | "nvidia";
+export type AiEnvId = "anthropic" | "gemini" | "openai" | "xai" | "groq" | "nvidia" | "openrouter";
 
 export type ModelTier = "frontier" | "balanced" | "fast" | "pool";
 
@@ -59,6 +59,11 @@ export const AI_ENV_META: Record<
     docUrl: "https://build.nvidia.com",
     keyPrefix: "nvapi-",
     supportsPool: true,
+  },
+  openrouter: {
+    label: "OpenRouter",
+    docUrl: "https://openrouter.ai/keys",
+    keyPrefix: "sk-or-",
   },
 };
 
@@ -219,6 +224,18 @@ export const CODING_MODEL_PRESETS: ForgeModelPreset[] = [
     costPerMInput: 0,
     costPerMOutput: 0,
   },
+  {
+    id: "openrouter-custom",
+    env: "openrouter",
+    model: "anthropic/claude-sonnet-4",
+    label: "OpenRouter (cole o slug)",
+    description: "Use o ID exato do modelo em openrouter.ai/models — campo customizado abaixo.",
+    tier: "frontier",
+    llmProvider: "openai",
+    baseUrl: "https://openrouter.ai/api/v1",
+    secretKey: "OPENROUTER_API_KEY",
+    recommended: true,
+  },
 ];
 
 /** Modelos permitidos no modo ROBIN (pool) */
@@ -267,7 +284,7 @@ export function presetsForEnv(env: AiEnvId): ForgeModelPreset[] {
 }
 
 export function presetsByEnvGrouped(): { env: AiEnvId; meta: (typeof AI_ENV_META)[AiEnvId]; models: ForgeModelPreset[] }[] {
-  const envs: AiEnvId[] = ["anthropic", "gemini", "openai", "xai", "groq", "nvidia"];
+  const envs: AiEnvId[] = ["anthropic", "gemini", "openai", "xai", "groq", "nvidia", "openrouter"];
   return envs.map((env) => ({
     env,
     meta: AI_ENV_META[env],

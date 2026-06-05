@@ -349,17 +349,11 @@ function EditorPage() {
     }
   }, [conversation, messages, running, sse.connected, runAgent]);
 
-  // Boot live preview for React/Vite projects
-  useEffect(() => {
-    if (!isReactProject || devUrl || previewBoot.booting) return;
-    previewBoot.boot();
-  }, [isReactProject, devUrl, previewBoot.booting, previewBoot.boot]);
-
-  // Refresh preview after agent finishes
+  // Preview ao vivo: só após o agente (sandbox já existe) ou clique manual — nunca ao abrir o editor
   const agentFinished = sse.progress.finished;
   useEffect(() => {
     if (!agentFinished || sse.progress.error || !isReactProject) return;
-    previewBoot.boot(true);
+    previewBoot.boot(false);
   }, [agentFinished, sse.progress.error, isReactProject, previewBoot.boot]);
 
   const handleSend = useCallback(

@@ -1,6 +1,6 @@
 export type IntegrationMode = "forge" | "own";
 
-export type ConnectorId = "github" | "supabase" | "vercel" | "cloudflare" | "e2b";
+export type ConnectorId = "github" | "supabase" | "vercel" | "netlify" | "cloudflare" | "e2b";
 
 export type IntegrationPrefs = Record<ConnectorId, IntegrationMode>;
 
@@ -8,6 +8,7 @@ export const DEFAULT_INTEGRATION_PREFS: IntegrationPrefs = {
   github: "forge",
   supabase: "forge",
   vercel: "forge",
+  netlify: "own",
   cloudflare: "own",
   e2b: "forge",
 };

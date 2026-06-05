@@ -10,11 +10,13 @@ import { LoopPhase, type AgentState } from "./types.ts";
 import {
   loadConnectorKeys,
   loadConnectorPools,
+  loadDeployConnectorKeys,
   loadForgeTrialRobinPool,
   type AgentPreferencesPayload,
 } from "./connector-keys.ts";
 import { pickCheap, pickMain, type ProviderConfig } from "./providers.ts";
-import { defaultRobinModel, resolveFixedFromKeys } from "../_shared/model-presets.ts";
+import { defaultRobinModel, resolveFixedFromKeys, resolveModelFromPreferences } from "../_shared/model-presets.ts";
+import { buildStackContext, stackPromptAddon } from "../_shared/stack-context.ts";
 import { buildChatHistory } from "./memory.ts";
 import { RobinKeyPool, ResilientLLM } from "./robin-pool.ts";
 import { getPlatformSecret, loadPlatformSecretsMap } from "../_shared/platform-secrets.ts";
@@ -83,7 +85,7 @@ Deno.serve(async (req) => {
     if (uErr || !userData?.user) return json({ error: "Não autenticado" }, 401);
 
     const { data: project } = await supabase
-      .from("projects").select("id, owner_id, template").eq("id", projectId).single();
+      .from("projects").select("id, owner_id, template, meta").eq("id", projectId).single();
     if (!project || project.owner_id !== userData.user.id) {
       return json({ error: "Projeto não encontrado" }, 404);
     }
@@ -127,7 +129,7 @@ Deno.serve(async (req) => {
     } else {
       userOnlyKeys = await loadConnectorKeys(supabase, userData.user.id, preferences);
       hasUserLlmKey = Object.keys(userOnlyKeys).some((k) =>
-        ["ANTHROPIC_API_KEY", "GROQ_API_KEY", "XAI_API_KEY", "OPENAI_API_KEY", "NVIDIA_API_KEY", "GEMINI_API_KEY"].includes(k)
+        ["ANTHROPIC_API_KEY", "GROQ_API_KEY", "XAI_API_KEY", "OPENAI_API_KEY", "NVIDIA_API_KEY", "GEMINI_API_KEY", "OPENROUTER_API_KEY"].includes(k)
       );
     }
 
@@ -176,7 +178,7 @@ Deno.serve(async (req) => {
       } else {
         connectorKeys = mergeKeys(userOnlyKeys);
         if (preferences?.mode === "fixed" && preferences.fixedPresetId) {
-          const resolved = resolveFixedFromKeys(preferences.fixedPresetId, connectorKeys);
+          const resolved = resolveModelFromPreferences(preferences, connectorKeys);
           if (resolved) {
             mainCfg = {
               provider: resolved.provider,
@@ -199,8 +201,16 @@ Deno.serve(async (req) => {
 
     const reg = new ToolRegistry();
     const e2bKey = await getPlatformSecret(supabase, "E2B_API_KEY");
-    const sandbox = createSandboxProvider(e2bKey);
+    const sandbox = createSandboxProvider(e2bKey, undefined, supabase, projectId);
     const projectTemplate = (project as { template?: string }).template ?? "vite-react";
+    const projectMeta = ((project as { meta?: Record<string, unknown> }).meta ?? {}) as Record<string, unknown>;
+    const deployKeys = await loadDeployConnectorKeys(supabase, userData.user.id);
+    const stackCtx = buildStackContext(
+      profile?.integration_prefs,
+      projectMeta,
+      { ...connectorKeys, ...deployKeys },
+    );
+    const stackAddon = stackPromptAddon(stackCtx);
     const cleanup = () => { runningLocks.delete(projectId!); sandbox.destroy().catch(() => {}); };
     registerFsTools(reg, { supabase, projectId });
     registerShellTool(reg, { sandbox, projectId, supabase });
@@ -236,6 +246,7 @@ Deno.serve(async (req) => {
         { main: resilientMain, cheap: resilientCheap },
         effectiveRobin,
         projectTemplate,
+        stackAddon,
       );
     };
 

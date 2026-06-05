@@ -112,6 +112,18 @@ const INITIAL: ProviderConfig[] = [
     supportsPool: true,
   },
   {
+    id: "openrouter",
+    provider: "OpenRouter",
+    label: "OpenRouter",
+    icon: <Globe className="size-5" />,
+    description: "Qualquer modelo — cole o slug em Ambiente e modelo.",
+    docUrl: "https://openrouter.ai/keys",
+    keyPrefix: "sk-or-",
+    costPerM: 0,
+    status: "available",
+    keyValue: "",
+  },
+  {
     id: "nvidia",
     provider: "NVIDIA",
     label: "NVIDIA NIM",
@@ -137,7 +149,9 @@ function rowForProvider(
         ? { kind: "openai", provider: "openai" }
         : id === "gemini"
           ? { kind: "openai", provider: "gemini" }
-          : { kind: "openai", provider: id };
+          : id === "openrouter"
+            ? { kind: "openai", provider: "openrouter" }
+            : { kind: "openai", provider: id };
 
   return rows.find((r) => {
     const meta = (r.meta ?? {}) as { provider?: string };

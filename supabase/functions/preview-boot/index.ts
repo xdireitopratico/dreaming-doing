@@ -1,12 +1,14 @@
-// preview-boot — dev server (Vite) em sandbox E2B; URL https://{port}-{sandboxId}.e2b.app
+// preview-boot — Vite no sandbox E2B (reutiliza sandbox do agente quando existir)
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
-import { Sandbox } from "npm:e2b@2.14.1";
 import { getPlatformSecret } from "../_shared/platform-secrets.ts";
+import { E2B_PROJECT_DIR } from "../_shared/e2b.ts";
 import {
-  E2B_PROJECT_DIR,
-  E2B_TEMPLATE_DEFAULT,
-  patchProjectFilesForE2b,
-} from "../_shared/e2b.ts";
+  connectOrCreateProjectSandbox,
+  persistSandboxMeta,
+  previewUrlFromSandbox,
+  readSandboxMeta,
+  syncProjectFilesToSandbox,
+} from "../_shared/project-sandbox.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -16,15 +18,12 @@ const corsHeaders = {
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const PREVIEW_TTL_MS = 25 * 60 * 1000;
-/** Evita timeout da Edge (~60s): probe curto; o iframe pode carregar antes do Vite ficar pronto. */
 const PROBE_ATTEMPTS = 6;
 const PROBE_INTERVAL_MS = 2000;
 const PROBE_FETCH_MS = 4000;
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
-
-  let sandbox: Sandbox | null = null;
 
   try {
     const { projectId, force } = await req.json();
@@ -49,14 +48,17 @@ Deno.serve(async (req) => {
     }
 
     const existing = (project.meta ?? {}) as Record<string, unknown>;
-    if (!force && existing.previewUrl && existing.previewExpiresAt) {
-      const exp = new Date(String(existing.previewExpiresAt)).getTime();
+    const sm = readSandboxMeta(existing);
+
+    if (!force && sm.previewUrl && sm.previewExpiresAt) {
+      const exp = new Date(sm.previewExpiresAt).getTime();
       if (exp > Date.now() + 60_000) {
         return json({
-          url: existing.previewUrl,
-          expiresAt: existing.previewExpiresAt,
+          url: sm.previewUrl,
+          expiresAt: sm.previewExpiresAt,
           reused: true,
           ready: true,
+          sandboxId: sm.previewSandboxId,
         });
       }
     }
@@ -67,17 +69,14 @@ Deno.serve(async (req) => {
     const devPort = Number.parseInt(detectDevPort(files ?? []), 10) || 5173;
     const devCmd = detectDevCommand(files ?? [], devPort);
 
-    sandbox = await Sandbox.create(E2B_TEMPLATE_DEFAULT, {
-      apiKey: E2B_API_KEY,
-      timeoutMs: 30 * 60 * 1000,
-      network: { maskRequestHost: "localhost:${PORT}" },
-    });
+    const { sandbox, sandboxId, reused } = await connectOrCreateProjectSandbox(
+      supabase,
+      projectId,
+      E2B_API_KEY,
+      { forceNew: !!force },
+    );
 
-    const writePayload = patchProjectFilesForE2b(files ?? []);
-
-    if (writePayload.length > 0) {
-      await sandbox.files.write(writePayload);
-    }
+    await syncProjectFilesToSandbox(sandbox, files ?? []);
 
     const installAndDev =
       `cd ${E2B_PROJECT_DIR} && (test -f package.json && npm install --no-audit --no-fund --loglevel=error 2>&1 | tail -20 || true) && nohup ${devCmd} > /tmp/forge-dev.log 2>&1 &`;
@@ -88,8 +87,7 @@ Deno.serve(async (req) => {
       background: true,
     });
 
-    const host = sandbox.getHost(devPort);
-    let url = host.startsWith("http") ? host : `https://${host}`;
+    let url = previewUrlFromSandbox(sandbox, devPort);
     let ready = false;
 
     for (let i = 0; i < PROBE_ATTEMPTS; i++) {
@@ -99,9 +97,7 @@ Deno.serve(async (req) => {
           ready = true;
           break;
         }
-      } catch {
-        /* Vite ainda subindo */
-      }
+      } catch { /* Vite ainda subindo */ }
       await new Promise((r) => setTimeout(r, PROBE_INTERVAL_MS));
     }
 
@@ -112,19 +108,14 @@ Deno.serve(async (req) => {
         ...existing,
         previewUrl: url,
         previewExpiresAt: expiresAt,
-        previewSandboxId: sandbox.sandboxId,
+        previewSandboxId: sandboxId,
         previewPort: devPort,
         previewReady: ready,
       },
     }).eq("id", projectId);
 
-    return json({ url, expiresAt, sandboxId: sandbox.sandboxId, reused: false, ready });
+    return json({ url, expiresAt, sandboxId, reused, ready });
   } catch (e: unknown) {
-    if (sandbox) {
-      try {
-        await sandbox.kill();
-      } catch { /* ignore */ }
-    }
     const msg = e instanceof Error ? e.message : "erro inesperado";
     console.error("[preview-boot]", msg);
     return json({ error: msg }, 500);

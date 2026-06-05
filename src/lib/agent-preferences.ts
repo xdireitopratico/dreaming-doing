@@ -17,6 +17,9 @@ export interface AgentPreferences {
   robinPoolModelId?: string;
   /** STT no microfone */
   sttProvider?: SttProviderId;
+  /** ID exato na API (OpenRouter slug, etc.) — sobrescreve o preset quando useCustomModel */
+  customModelId?: string;
+  useCustomModel?: boolean;
 }
 
 const STORAGE_KEY = "forge:agent-preferences";
