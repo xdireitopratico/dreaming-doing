@@ -152,10 +152,17 @@ Deno.serve(async (req) => {
     }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
   }
 
-  // MCP Protocol: POST / → tool call
+  // MCP Protocol: POST / → tool call (auth required; admin tools gated)
   if (req.method === "POST" && url.pathname === "/") {
+    const auth = await authenticate(req);
+    if (!auth.ok) return auth.res;
+
     const body = await req.json();
     const { name, arguments: args } = body;
+
+    if (ADMIN_ONLY_TOOLS.has(name) && !auth.isAdmin) {
+      return unauthorized(`Tool '${name}' requer privilégio de admin`, 403);
+    }
 
     const supabase = createClient(SUPABASE_URL, SERVICE_KEY);
 
