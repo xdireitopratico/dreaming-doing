@@ -357,11 +357,14 @@ function EditorPage() {
   );
   useAgentBlame({ blameMap: blameEntries, editorRef, monacoRef });
 
-  // ─── Sync running state (SSE ativo) ───────────────────────────────────
+  // ─── Sync running state (SSE) — nunca deixar UI presa se o stream cair ──
   useEffect(() => {
-    if (sse.connected && !running) setRunning(true);
-    if (!sse.connected && running && sse.progress.finished) setRunning(false);
-  }, [sse.connected, sse.progress.finished, running]);
+    if (sse.connected) setRunning(true);
+  }, [sse.connected]);
+
+  useEffect(() => {
+    if (sse.progress.finished) setRunning(false);
+  }, [sse.progress.finished]);
 
   // ─── SSE → logs ─────────────────────────────────────────────────────
   useEffect(() => {
@@ -479,7 +482,6 @@ function EditorPage() {
 
   useEffect(() => {
     if (!sse.progress.finished || !conversation) return;
-    setRunning(false);
     void qc.invalidateQueries({ queryKey: ["messages", conversation.id] });
     void qc.invalidateQueries({ queryKey: ["profile"] });
   }, [sse.progress.finished, conversation, qc]);

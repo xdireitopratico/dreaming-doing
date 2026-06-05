@@ -743,6 +743,18 @@ body:has(.editor-workspace) {
   color: var(--forge-silver);
 }
 
+/* Radix menus no editor — acima do preview e sem fundo branco do tema global */
+.editor-workspace [data-radix-popper-content-wrapper] {
+  z-index: 200 !important;
+}
+
+.editor-workspace [role="menu"],
+.editor-workspace [data-radix-menu-content] {
+  background-color: var(--forge-surface-2) !important;
+  color: var(--forge-text) !important;
+  border-color: var(--forge-border-strong) !important;
+}
+
 .forge-readiness-toggle:hover {
   background: rgba(237, 239, 242, 0.04);
 }
