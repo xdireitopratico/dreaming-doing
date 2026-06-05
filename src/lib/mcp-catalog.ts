@@ -5,6 +5,9 @@ export type McpCatalogEntry = {
   transport: "stdio" | "sse" | "http";
   docsUrl?: string;
   envKeys?: string[];
+  /** Tools reais registradas no agent-run quando ativo */
+  executable: boolean;
+  toolCount: number;
 };
 
 /** MCPs sugeridos — configuração salva no perfil (enabled_mcp_ids). */
@@ -12,68 +15,59 @@ export const MCP_CATALOG: McpCatalogEntry[] = [
   {
     id: "context7",
     name: "Context7",
-    description: "Documentação atualizada de bibliotecas no contexto do agente.",
-    transport: "sse",
-    docsUrl: "https://github.com/upstash/context7",
+    description: "Documentação atualizada via API Context7 (search + context).",
+    transport: "http",
+    docsUrl: "https://context7.com/docs/api-guide",
+    executable: true,
+    toolCount: 2,
   },
   {
     id: "github",
     name: "GitHub",
-    description: "Issues, PRs e repositórios via MCP oficial.",
-    transport: "stdio",
-    envKeys: ["GITHUB_PERSONAL_ACCESS_TOKEN"],
+    description: "Repos e arquivos com token em Conectores.",
+    transport: "http",
+    envKeys: ["GITHUB_TOKEN"],
+    executable: true,
+    toolCount: 2,
   },
   {
     id: "supabase",
     name: "Supabase",
-    description: "Schema, SQL e migrações do seu projeto.",
-    transport: "stdio",
-    envKeys: ["SUPABASE_ACCESS_TOKEN"],
+    description: "Schema e SELECT read-only do banco FORGE.",
+    transport: "http",
+    executable: true,
+    toolCount: 3,
   },
   {
     id: "vercel",
     name: "Vercel",
-    description: "Deploys, logs e projetos Vercel.",
+    description: "Projetos e deployments na sua conta.",
     transport: "http",
-    docsUrl: "https://vercel.com/docs/mcp",
+    docsUrl: "https://vercel.com/docs/rest-api",
+    envKeys: ["VERCEL_TOKEN"],
+    executable: true,
+    toolCount: 2,
   },
   {
     id: "playwright",
     name: "Playwright",
-    description: "Navegação e testes E2E no browser.",
+    description: "Orientação E2E — use preview ao vivo do projeto.",
     transport: "stdio",
+    executable: false,
+    toolCount: 0,
   },
   {
     id: "filesystem",
     name: "Filesystem",
-    description: "Leitura/escrita de arquivos locais (sandbox).",
+    description: "fs_* do agente (leitura/escrita no projeto).",
     transport: "stdio",
+    executable: true,
+    toolCount: 7,
   },
 ];
 
-const STORAGE_KEY = "forge:enabled-mcp-ids";
+import { loadEnabledMcpIdsLocal } from "@/lib/agent-extensions-prefs";
 
 export function loadEnabledMcpIds(): string[] {
-  if (typeof window === "undefined") return [];
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return [];
-    const arr = JSON.parse(raw) as unknown;
-    return Array.isArray(arr) ? arr.filter((x) => typeof x === "string") : [];
-  } catch {
-    return [];
-  }
-}
-
-export function saveEnabledMcpIds(ids: string[]) {
-  if (typeof window === "undefined") return;
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(ids));
-  window.dispatchEvent(new Event("forge:mcp-updated"));
-}
-
-export function toggleMcpId(id: string): string[] {
-  const cur = loadEnabledMcpIds();
-  const next = cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id];
-  saveEnabledMcpIds(next);
-  return next;
+  return loadEnabledMcpIdsLocal();
 }

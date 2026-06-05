@@ -1,13 +1,15 @@
-import { loadEnabledMcpIds } from "@/lib/mcp-catalog";
-import { loadEnabledSkillIds } from "@/lib/skills-catalog";
+import {
+  loadEnabledMcpIdsLocal,
+  loadEnabledSkillIdsLocal,
+} from "@/lib/agent-extensions-prefs";
 
-/** Payload enviado ao agent-run com skills/MCP ativados no painel. */
+/** Payload enviado ao agent-run com skills/MCP ativados no painel (localStorage + perfil). */
 export function loadAgentSessionExtensions(): {
   enabledSkillIds: string[];
   enabledMcpIds: string[];
 } {
   return {
-    enabledSkillIds: loadEnabledSkillIds(),
-    enabledMcpIds: loadEnabledMcpIds(),
+    enabledSkillIds: loadEnabledSkillIdsLocal(),
+    enabledMcpIds: loadEnabledMcpIdsLocal(),
   };
 }

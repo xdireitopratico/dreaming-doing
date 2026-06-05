@@ -1,164 +1,58 @@
-/** Skills/MCP escolhidos no painel FORGE — injetados no system prompt do agent-run. */
+/** Skills/MCP do painel FORGE — conteúdo real + tools executáveis no agent-run. */
 
-export type ForgeSkillDef = { name: string; prompt: string };
-export type ForgeMcpDef = { name: string; prompt: string };
+import { loadForgeSkillsForSession, type LoadedForgeSkill } from "./forge-skill-loader.ts";
 
-export const FORGE_SKILL_BY_ID: Record<string, ForgeSkillDef> = {
-  brainstorming: {
-    name: "brainstorming",
-    prompt:
-      "Antes de codar, explore intenção, restrições e critérios de sucesso. Faça perguntas curtas se faltar contexto.",
-  },
-  "writing-plans": {
-    name: "writing-plans",
-    prompt:
-      "Produza plano em etapas numeradas (arquivos, ordem, riscos). Só implemente após plano visível ao usuário.",
-  },
-  "systematic-debugging": {
-    name: "systematic-debugging",
-    prompt:
-      "Debug com hipótese → evidência (logs, repro, diff). Não chute fixes sem reproduzir o erro.",
-  },
-  "test-driven-development": {
-    name: "test-driven-development",
-    prompt: "Prefira teste mínimo que falha → implementação → verde. Mencione comando de teste usado.",
-  },
-  "verification-before-completion": {
-    name: "verification-before-completion",
-    prompt:
-      "Antes de concluir: build/test/preview quando aplicável. Não afirme sucesso sem verificação.",
-  },
-  nextjs: {
-    name: "nextjs",
-    prompt:
-      "Next.js App Router: RSC por padrão, 'use client' só se necessário, cache tags, route handlers tipados.",
-  },
-  "react-best-practices": {
-    name: "react-best-practices",
-    prompt:
-      "React/Next performático: evite waterfalls, memo só com motivo, listas com keys estáveis, bundle enxuto.",
-  },
-  shadcn: {
-    name: "shadcn",
-    prompt: "UI com shadcn/ui + Tailwind: composição, acessibilidade, tokens do tema existente.",
-  },
-  "web-design-guidelines": {
-    name: "web-design-guidelines",
-    prompt: "Acessibilidade (contraste, foco, labels), hierarquia visual e estados de loading/erro claros.",
-  },
-  "deploy-to-vercel": {
-    name: "deploy-to-vercel",
-    prompt: "Deploy Vercel: build command, env vars, preview URL. Guie o usuário se faltar token Vercel.",
-  },
-  "vercel-cli": {
-    name: "vercel-cli",
-    prompt: "Vercel CLI: link, env pull, logs. Não exponha tokens no chat.",
-  },
-  "ai-sdk": {
-    name: "ai-sdk",
-    prompt: "Vercel AI SDK: streaming, tools, structured output. Use pacote `ai` do projeto.",
-  },
-  "ai-gateway": {
-    name: "ai-gateway",
-    prompt: "AI Gateway: roteamento/failover entre provedores; custos e modelos explícitos.",
-  },
-  context7: {
-    name: "context7",
-    prompt: "Consulte documentação atualizada de libs antes de APIs novas; cite versão quando relevante.",
-  },
-  xlsx: {
-    name: "xlsx",
-    prompt: "Planilhas: preserve fórmulas/formatos; entregue .xlsx quando pedido.",
-  },
-  docx: {
-    name: "docx",
-    prompt: "Word .docx: estrutura profissional (títulos, tabelas) sem quebrar estilos.",
-  },
-  pptx: {
-    name: "pptx",
-    prompt: "Slides .pptx: uma ideia por slide, layout consistente.",
-  },
-  implement: {
-    name: "implement",
-    prompt: "Implementar em passos pequenos; auto-revisar diff antes de declarar pronto.",
-  },
-  review: {
-    name: "review",
-    prompt: "Code review: bugs, segurança, regressões, nitpicks separados por severidade.",
-  },
-  design: {
-    name: "design",
-    prompt: "Design doc: problema, opções, decisão, plano de PRs, riscos.",
-  },
-  "pr-babysit": {
-    name: "pr-babysit",
-    prompt: "CI/review/merge: priorize falhas reproduzíveis e patches mínimos.",
-  },
-  "finishing-branch": {
-    name: "finishing-branch",
-    prompt: "Ao encerrar feature: testes verdes, opções merge/PR/descartar explicadas.",
-  },
-  "using-git-worktrees": {
-    name: "using-git-worktrees",
-    prompt: "Worktrees para isolar features sem poluir branch principal.",
-  },
-  "vercel-optimize": {
-    name: "vercel-optimize",
-    prompt: "Otimize custo/latência Vercel com métricas (cache, ISR, funções).",
-  },
-  "vercel-firewall": {
-    name: "vercel-firewall",
-    prompt: "Segurança edge: WAF, rate limit, regras antes de expor rotas sensíveis.",
-  },
-  "auth-clerk": {
-    name: "auth-clerk",
-    prompt: "Auth em Next: middleware, sessão, rotas protegidas — padrão marketplace Vercel.",
-  },
-  imagine: {
-    name: "imagine",
-    prompt: "Assets visuais: descreva estilo antes de gerar; consistência com design do app.",
-  },
-  "create-skill": {
-    name: "create-skill",
-    prompt: "Skills SKILL.md: frontmatter, gatilhos claros, passos acionáveis.",
-  },
-  "help-grok": {
-    name: "help-grok",
-    prompt: "Ajude setup FORGE: API Keys, E2B, modelos, conectores — sem pedir senha no chat.",
-  },
-  "check-work": {
-    name: "check-work",
-    prompt: "Verifique diff com checklist: requisitos, testes, edge cases.",
-  },
+export type ForgeMcpDef = {
+  id: string;
+  name: string;
+  description: string;
+  /** Tools registradas no agent-run quando este MCP está ativo */
+  toolNames: string[];
+  setupHint: string;
 };
 
 export const FORGE_MCP_BY_ID: Record<string, ForgeMcpDef> = {
   context7: {
-    name: "context7",
-    prompt:
-      "MCP Context7 disponível: busque docs oficiais de libs/frameworks antes de inventar APIs.",
+    id: "context7",
+    name: "Context7",
+    description: "Documentação atualizada de bibliotecas (API Context7).",
+    toolNames: ["context7_search_library", "context7_get_context"],
+    setupHint: "Opcional: CONTEXT7_API_KEY em secrets do projeto para limites maiores.",
   },
   github: {
-    name: "github",
-    prompt:
-      "MCP GitHub ativo: issues/PRs/repos — use token do usuário (Conectores), nunca vaze o token.",
+    id: "github",
+    name: "GitHub",
+    description: "Repositórios, issues e PRs com token do Conector GitHub.",
+    toolNames: ["github_list_repos", "github_get_file"],
+    setupHint: "Conecte GitHub em Conectores (token ghp_...).",
   },
   supabase: {
-    name: "supabase",
-    prompt:
-      "MCP Supabase FORGE ativo: schema, SQL read-only, auth users (admin). projectId = projeto atual.",
+    id: "supabase",
+    name: "Supabase",
+    description: "Schema e SQL read-only do projeto FORGE.",
+    toolNames: ["supabase_list_tables", "supabase_describe_table", "supabase_sql_readonly"],
+    setupHint: "Usa o banco do projeto FORGE (service role, só SELECT).",
   },
   vercel: {
-    name: "vercel",
-    prompt: "MCP Vercel: deploys e logs — requer token Vercel do usuário.",
+    id: "vercel",
+    name: "Vercel",
+    description: "Projetos e deployments na sua conta Vercel.",
+    toolNames: ["vercel_list_projects", "vercel_list_deployments"],
+    setupHint: "Conecte Vercel em Conectores.",
   },
   playwright: {
-    name: "playwright",
-    prompt: "MCP Playwright: testes E2E/browser quando validar UI for necessário.",
+    id: "playwright",
+    name: "Playwright",
+    description: "Validação visual via preview E2B (sem MCP stdio externo).",
+    toolNames: [],
+    setupHint: "Use preview ao vivo + peça ao agente para validar rotas no sandbox.",
   },
   filesystem: {
-    name: "filesystem",
-    prompt: "MCP Filesystem: leitura/escrita no sandbox do projeto via ferramentas do agente.",
+    id: "filesystem",
+    name: "Filesystem",
+    description: "Arquivos do projeto via tools fs_* do agente.",
+    toolNames: ["fs_read", "fs_write", "fs_edit", "fs_list", "fs_glob", "fs_delete", "fs_move"],
+    setupHint: "Já disponível: fs_read, fs_write, fs_edit, fs_list, etc.",
   },
 };
 
@@ -175,24 +69,34 @@ export function normalizeIdList(raw: unknown, max = 40): string[] {
   return out;
 }
 
-export function buildSessionExtensionsPrompt(
+export type SessionExtensionsResult = {
+  addon: string;
+  skillNames: string[];
+  mcpNames: string[];
+  skills: LoadedForgeSkill[];
+  mcpToolNames: string[];
+};
+
+export async function buildSessionExtensionsPrompt(
   enabledSkillIds: string[],
   enabledMcpIds: string[],
-): { addon: string; skillNames: string[]; mcpNames: string[] } {
+): Promise<SessionExtensionsResult> {
   const skillNames: string[] = [];
   const mcpNames: string[] = [];
+  const mcpToolNames: string[] = [];
   const blocks: string[] = [];
 
-  const skillLines: string[] = [];
-  for (const id of enabledSkillIds) {
-    const s = FORGE_SKILL_BY_ID[id];
-    if (!s) continue;
-    skillNames.push(s.name);
-    skillLines.push(`- **${s.name}**: ${s.prompt}`);
-  }
-  if (skillLines.length > 0) {
+  const skills = await loadForgeSkillsForSession(enabledSkillIds);
+  if (skills.length > 0) {
+    const skillBlocks = skills.map((s) => {
+      skillNames.push(s.name);
+      const tag = s.bundled ? "SKILL.md completo" : "resumo";
+      return `### Skill: ${s.name} (${s.id}) · ${tag}\n\n${s.body}`;
+    });
     blocks.push(
-      `## Skills ativas (painel FORGE)\nO usuário ativou estas skills — siga-as nesta sessão:\n${skillLines.join("\n")}`,
+      `## Skills ativas (painel FORGE)\n` +
+        `Siga estas instruções nesta sessão. Conteúdo carregado do bundle oficial (${skills.length} skill(s)):\n\n` +
+        skillBlocks.join("\n\n---\n\n"),
     );
   }
 
@@ -201,11 +105,19 @@ export function buildSessionExtensionsPrompt(
     const m = FORGE_MCP_BY_ID[id];
     if (!m) continue;
     mcpNames.push(m.name);
-    mcpLines.push(`- **${m.name}**: ${m.prompt}`);
+    for (const t of m.toolNames) {
+      if (!mcpToolNames.includes(t)) mcpToolNames.push(t);
+    }
+    const toolsNote = m.toolNames.length
+      ? `Tools: ${m.toolNames.join(", ")}.`
+      : "Sem tools extras — siga o setupHint.";
+    mcpLines.push(`- **${m.name}**: ${m.description} ${toolsNote} ${m.setupHint}`);
   }
   if (mcpLines.length > 0) {
     blocks.push(
-      `## MCPs ativos (painel FORGE)\nIntegrações habilitadas pelo usuário:\n${mcpLines.join("\n")}`,
+      `## MCPs ativos (painel FORGE)\n` +
+        `Use as tools listadas quando precisar de dados externos. Nunca invente saída de tool.\n\n` +
+        mcpLines.join("\n"),
     );
   }
 
@@ -213,5 +125,7 @@ export function buildSessionExtensionsPrompt(
     addon: blocks.join("\n\n"),
     skillNames,
     mcpNames,
+    skills,
+    mcpToolNames,
   };
 }

@@ -1,0 +1,125 @@
+{
+  "generatedAt": "2026-06-05T03:24:04.310Z",
+  "skills": [
+    {
+      "id": "brainstorming",
+      "bytes": 10634
+    },
+    {
+      "id": "writing-plans",
+      "bytes": 6100
+    },
+    {
+      "id": "systematic-debugging",
+      "bytes": 9884
+    },
+    {
+      "id": "test-driven-development",
+      "bytes": 9867
+    },
+    {
+      "id": "verification-before-completion",
+      "bytes": 4201
+    },
+    {
+      "id": "web-design-guidelines",
+      "bytes": 1231
+    },
+    {
+      "id": "deploy-to-vercel",
+      "bytes": 11786
+    },
+    {
+      "id": "vercel-cli",
+      "bytes": 10476
+    },
+    {
+      "id": "vercel-optimize",
+      "bytes": 17311
+    },
+    {
+      "id": "finishing-branch",
+      "bytes": 7061
+    },
+    {
+      "id": "using-git-worktrees",
+      "bytes": 7983
+    },
+    {
+      "id": "nextjs",
+      "bytes": 17983
+    },
+    {
+      "id": "react-best-practices",
+      "bytes": 8039
+    },
+    {
+      "id": "shadcn",
+      "bytes": 20117
+    },
+    {
+      "id": "ai-sdk",
+      "bytes": 19820
+    },
+    {
+      "id": "ai-gateway",
+      "bytes": 23772
+    },
+    {
+      "id": "vercel-firewall",
+      "bytes": 20603
+    },
+    {
+      "id": "auth-clerk",
+      "bytes": 11395
+    },
+    {
+      "id": "context7",
+      "bytes": 2124
+    },
+    {
+      "id": "xlsx",
+      "bytes": 11463
+    },
+    {
+      "id": "docx",
+      "bytes": 20084
+    },
+    {
+      "id": "pptx",
+      "bytes": 9182
+    },
+    {
+      "id": "imagine",
+      "bytes": 10206
+    },
+    {
+      "id": "create-skill",
+      "bytes": 3279
+    },
+    {
+      "id": "help-grok",
+      "bytes": 2542
+    },
+    {
+      "id": "check-work",
+      "bytes": 12820
+    },
+    {
+      "id": "implement",
+      "bytes": 69283
+    },
+    {
+      "id": "review",
+      "bytes": 38992
+    },
+    {
+      "id": "design",
+      "bytes": 18322
+    },
+    {
+      "id": "pr-babysit",
+      "bytes": 52522
+    }
+  ]
+}

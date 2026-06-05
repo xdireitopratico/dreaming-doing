@@ -28,6 +28,7 @@ import {
   buildSessionExtensionsPrompt,
   normalizeIdList,
 } from "../_shared/session-extensions.ts";
+import { registerMcpForgeTools } from "./tools/mcp-forge.ts";
 import { loadTasteNvidiaConfig, runTasteChat } from "./taste-session.ts";
 
 const runningLocks = new Map<string, Promise<unknown>>();
@@ -94,7 +95,7 @@ Deno.serve(async (req) => {
     const sessionKindRaw = body.sessionKind as string | undefined;
     const enabledSkillIds = normalizeIdList(body.enabledSkillIds);
     const enabledMcpIds = normalizeIdList(body.enabledMcpIds);
-    const sessionExt = buildSessionExtensionsPrompt(enabledSkillIds, enabledMcpIds);
+    const sessionExt = await buildSessionExtensionsPrompt(enabledSkillIds, enabledMcpIds);
 
     if (!projectId || !conversationId) return json({ error: "projectId e conversationId obrigatórios" }, 400);
 
@@ -328,6 +329,14 @@ Deno.serve(async (req) => {
     const cleanup = () => { runningLocks.delete(projectId!); sandbox.destroy().catch(() => {}); };
     registerFsTools(reg, { supabase, projectId });
     registerShellTool(reg, { sandbox, projectId, supabase });
+    registerMcpForgeTools(reg, {
+      supabase,
+      projectId,
+      userId: userData.user.id,
+      enabledMcpIds,
+      deployKeys,
+      context7ApiKey: Deno.env.get("CONTEXT7_API_KEY") ?? undefined,
+    });
 
     const buildState = (): AgentState => ({
       projectId, conversationId, userId: userData.user.id,

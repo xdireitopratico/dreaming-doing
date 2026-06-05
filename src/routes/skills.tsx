@@ -1,10 +1,17 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState, useEffect, useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
-import { ArrowLeft, Plus, Wrench, Check } from "lucide-react";
+import { ArrowLeft, Plus, Wrench, Check, BookOpen } from "lucide-react";
 import { toast } from "sonner";
 import { DashboardShell } from "@/components/dashboard/DashboardShell";
-import { SKILLS_CATALOG, loadEnabledSkillIds, toggleSkillId } from "@/lib/skills-catalog";
+import { SKILLS_CATALOG } from "@/lib/skills-catalog";
+import { useAuth } from "@/lib/auth";
+import { supabase } from "@/integrations/supabase/client";
+import {
+  mergeExtensionsFromProfile,
+  toggleSkillIdPersisted,
+} from "@/lib/agent-extensions-prefs";
 
 export const Route = createFileRoute("/skills")({
   component: () => (
@@ -15,13 +22,37 @@ export const Route = createFileRoute("/skills")({
 });
 
 function SkillsPage() {
-  const [enabled, setEnabled] = useState<string[]>(() => loadEnabledSkillIds());
+  const { user } = useAuth();
+  const { data: profile } = useQuery({
+    queryKey: ["profile", user?.id],
+    enabled: !!user?.id,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("integration_prefs")
+        .eq("id", user!.id)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const [enabled, setEnabled] = useState<string[]>([]);
 
   useEffect(() => {
-    const onUp = () => setEnabled(loadEnabledSkillIds());
+    if (!profile) return;
+    const { skillIds } = mergeExtensionsFromProfile(profile.integration_prefs);
+    setEnabled(skillIds);
+  }, [profile]);
+
+  useEffect(() => {
+    const onUp = () => {
+      if (!profile) return;
+      setEnabled(mergeExtensionsFromProfile(profile.integration_prefs).skillIds);
+    };
     window.addEventListener("forge:skills-updated", onUp);
     return () => window.removeEventListener("forge:skills-updated", onUp);
-  }, []);
+  }, [profile]);
 
   const byCategory = useMemo(() => {
     const map = new Map<string, typeof SKILLS_CATALOG>();
@@ -32,6 +63,8 @@ function SkillsPage() {
     }
     return [...map.entries()];
   }, []);
+
+  const bundledCount = SKILLS_CATALOG.filter((s) => s.bundled).length;
 
   return (
     <div className="px-6 py-8 max-w-[960px] mx-auto">
@@ -51,16 +84,19 @@ function SkillsPage() {
           <div>
             <h1 className="font-display text-3xl tracking-tight">Skills</h1>
             <p className="font-mono text-[10px] text-[var(--text-dim)] mt-0.5 max-w-xl">
-              Playbooks de comportamento do LLM ({SKILLS_CATALOG.length} no catálogo). Não é MCP — ferramentas
-              externas ficam na aba <Link to="/mcp" className="text-[var(--primary)] hover:underline">MCP</Link>.
+              {bundledCount} skills com SKILL.md no servidor — o agente recebe o playbook completo
+              (comprimido com orçamento inteligente). Não é MCP — ferramentas externas em{" "}
+              <Link to="/mcp" className="text-[var(--primary)] hover:underline">
+                MCP
+              </Link>
+              .
             </p>
           </div>
         </div>
       </motion.div>
 
       <p className="mb-6 font-mono text-[10px] text-emerald-400/90">
-        {enabled.length} skill(s) ativa(s) — enviadas automaticamente no próximo{" "}
-        <strong className="text-[var(--foreground)]">agent-run</strong>
+        {enabled.length} ativa(s) — sincronizado no perfil · próximo agent-run injeta conteúdo real
       </p>
 
       {byCategory.map(([cat, items]) => (
@@ -77,15 +113,32 @@ function SkillsPage() {
                   className="p-3 rounded-xl border border-[var(--border)] bg-[var(--surface-1)]/30 flex gap-2"
                 >
                   <div className="flex-1 min-w-0">
-                    <p className="font-mono text-[11px]">{s.name}</p>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="font-mono text-[11px]">{s.name}</p>
+                      {s.bundled ? (
+                        <span className="font-mono text-[7px] px-1 py-0.5 rounded bg-emerald-400/10 text-emerald-400 border border-emerald-400/25">
+                          SKILL.md
+                        </span>
+                      ) : (
+                        <span className="font-mono text-[7px] px-1 py-0.5 rounded bg-[var(--surface-2)] text-[var(--text-ghost)]">
+                          resumo
+                        </span>
+                      )}
+                    </div>
                     <p className="font-mono text-[9px] text-[var(--text-ghost)] mt-0.5">{s.description}</p>
                   </div>
                   <button
                     type="button"
                     onClick={() => {
-                      const next = toggleSkillId(s.id);
-                      setEnabled(next);
-                      toast.success(on ? `${s.name} removida` : `${s.name} disponível para o agente`);
+                      if (!user?.id) return;
+                      void toggleSkillIdPersisted(user.id, s.id, profile?.integration_prefs).then(
+                        (next) => {
+                          setEnabled(next);
+                          toast.success(on ? `${s.name} desativada` : `${s.name} ativa no agente`);
+                        },
+                      ).catch((e: unknown) => {
+                        toast.error(e instanceof Error ? e.message : "Falha ao salvar");
+                      });
                     }}
                     className={`shrink-0 grid size-8 place-items-center rounded-lg border ${
                       on
@@ -101,6 +154,12 @@ function SkillsPage() {
           </div>
         </section>
       ))}
+
+      <p className="font-mono text-[9px] text-[var(--text-ghost)] flex items-center gap-1.5">
+        <BookOpen className="size-3" />
+        Atualizar bundle após novas skills:{" "}
+        <code className="text-[var(--text-dim)]">node scripts/bundle-forge-skills.mjs</code>
+      </p>
     </div>
   );
 }

@@ -1,10 +1,17 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
-import { ArrowLeft, Plus, Puzzle, Check } from "lucide-react";
+import { ArrowLeft, Plus, Puzzle, Check, Zap } from "lucide-react";
 import { toast } from "sonner";
 import { DashboardShell } from "@/components/dashboard/DashboardShell";
-import { MCP_CATALOG, loadEnabledMcpIds, toggleMcpId } from "@/lib/mcp-catalog";
+import { MCP_CATALOG } from "@/lib/mcp-catalog";
+import { useAuth } from "@/lib/auth";
+import { supabase } from "@/integrations/supabase/client";
+import {
+  mergeExtensionsFromProfile,
+  toggleMcpIdPersisted,
+} from "@/lib/agent-extensions-prefs";
 
 export const Route = createFileRoute("/mcp")({
   component: () => (
@@ -15,13 +22,36 @@ export const Route = createFileRoute("/mcp")({
 });
 
 function McpPage() {
-  const [enabled, setEnabled] = useState<string[]>(() => loadEnabledMcpIds());
+  const { user } = useAuth();
+  const { data: profile } = useQuery({
+    queryKey: ["profile", user?.id],
+    enabled: !!user?.id,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("integration_prefs")
+        .eq("id", user!.id)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const [enabled, setEnabled] = useState<string[]>([]);
 
   useEffect(() => {
-    const onUp = () => setEnabled(loadEnabledMcpIds());
+    if (!profile) return;
+    setEnabled(mergeExtensionsFromProfile(profile.integration_prefs).mcpIds);
+  }, [profile]);
+
+  useEffect(() => {
+    const onUp = () => {
+      if (!profile) return;
+      setEnabled(mergeExtensionsFromProfile(profile.integration_prefs).mcpIds);
+    };
     window.addEventListener("forge:mcp-updated", onUp);
     return () => window.removeEventListener("forge:mcp-updated", onUp);
-  }, []);
+  }, [profile]);
 
   return (
     <div className="px-6 py-8 max-w-[960px] mx-auto">
@@ -41,8 +71,8 @@ function McpPage() {
           <div>
             <h1 className="font-display text-3xl tracking-tight">MCP</h1>
             <p className="font-mono text-[10px] text-[var(--text-dim)] mt-0.5 max-w-xl">
-              Servidores Model Context Protocol (ferramentas: GitHub, Supabase, browser…). Não é Skill — instruções
-              do agente ficam em <Link to="/skills" className="text-[var(--primary)] hover:underline">Skills</Link>.
+              Integrações com <strong className="text-[var(--foreground)]">tools executáveis</strong> no
+              agent-run (não só texto no prompt). Tokens em Conectores / API Keys.
             </p>
           </div>
         </div>
@@ -57,7 +87,19 @@ function McpPage() {
               className="p-4 rounded-xl border border-[var(--border)] bg-[var(--surface-1)]/40 flex gap-3"
             >
               <div className="flex-1 min-w-0">
-                <p className="font-mono text-[12px]">{m.name}</p>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <p className="font-mono text-[12px]">{m.name}</p>
+                  {m.executable && m.toolCount > 0 ? (
+                    <span className="inline-flex items-center gap-0.5 font-mono text-[7px] px-1 py-0.5 rounded bg-[var(--primary)]/10 text-[var(--primary)] border border-[var(--primary)]/25">
+                      <Zap className="size-2.5" />
+                      {m.toolCount} tools
+                    </span>
+                  ) : (
+                    <span className="font-mono text-[7px] px-1 py-0.5 rounded bg-[var(--surface-2)] text-[var(--text-ghost)]">
+                      guia
+                    </span>
+                  )}
+                </div>
                 <p className="font-mono text-[9px] text-[var(--text-ghost)] mt-1 leading-relaxed">
                   {m.description}
                 </p>
@@ -70,9 +112,15 @@ function McpPage() {
                 type="button"
                 title={on ? "Desativar" : "Ativar"}
                 onClick={() => {
-                  const next = toggleMcpId(m.id);
-                  setEnabled(next);
-                  toast.success(on ? `${m.name} desativado` : `${m.name} ativo no agente`);
+                  if (!user?.id) return;
+                  void toggleMcpIdPersisted(user.id, m.id, profile?.integration_prefs)
+                    .then((next) => {
+                      setEnabled(next);
+                      toast.success(on ? `${m.name} desativado` : `${m.name} — tools no agente`);
+                    })
+                    .catch((e: unknown) => {
+                      toast.error(e instanceof Error ? e.message : "Falha ao salvar");
+                    });
                 }}
                 className={`shrink-0 grid size-9 place-items-center rounded-lg border transition-colors ${
                   on
@@ -88,9 +136,9 @@ function McpPage() {
       </div>
 
       <p className="mt-8 font-mono text-[9px] text-[var(--text-ghost)] leading-relaxed max-w-lg">
-        Tokens sensíveis continuam em API / Conectores. MCPs ativos entram no system prompt do próximo agent-run
-        (evento SSE <code className="text-[var(--text-dim)]">start</code> lista{" "}
-        <code className="text-[var(--text-dim)]">activeMcps</code>).
+        Context7 aceita <code className="text-[var(--text-dim)]">CONTEXT7_API_KEY</code> opcional em
+        secrets do Supabase para limites maiores. GitHub e Vercel exigem Conectores. Supabase MCP usa o
+        banco FORGE (SELECT only).
       </p>
     </div>
   );

@@ -12,7 +12,8 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "bundle:skills": "node scripts/bundle-forge-skills.mjs"
   },
   "dependencies": {
     "@cloudflare/vite-plugin": "^1.25.5",

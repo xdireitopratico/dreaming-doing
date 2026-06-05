@@ -1,0 +1,36 @@
+/** Gerado por scripts/bundle-forge-skills.mjs — não editar */
+export const BUNDLED_SKILL_IDS = new Set<string>([
+  "brainstorming",
+  "writing-plans",
+  "systematic-debugging",
+  "test-driven-development",
+  "verification-before-completion",
+  "web-design-guidelines",
+  "deploy-to-vercel",
+  "vercel-cli",
+  "vercel-optimize",
+  "finishing-branch",
+  "using-git-worktrees",
+  "nextjs",
+  "react-best-practices",
+  "shadcn",
+  "ai-sdk",
+  "ai-gateway",
+  "vercel-firewall",
+  "auth-clerk",
+  "context7",
+  "xlsx",
+  "docx",
+  "pptx",
+  "imagine",
+  "create-skill",
+  "help-grok",
+  "check-work",
+  "implement",
+  "review",
+  "design",
+  "pr-babysit",
+]);
+export function isSkillBundled(id: string): boolean {
+  return BUNDLED_SKILL_IDS.has(id);
+}
