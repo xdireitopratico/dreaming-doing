@@ -118,8 +118,8 @@ Cada linha: **ID Lovable** · **ID auditoria** · status · observação · inte
 | 8 | **C19** | ✅ | Hash últimos 3 tool calls (`agent-stuck.ts`) | `isExecutionStuck` no loop | `loop.ts`, `_shared/agent-stuck.ts` |
 | 9 | **C22** | ✅ | `agent_runs.canceled_at` + check por step; `stop()` no cliente | migration, `agent-cancel.ts`, `useSSE.ts` | `agent-run/index.ts` |
 | 10 | **C23**, **+17** | ✅ | `/history` com `agent_runs` + `AuditLog`; filtro por execução | `agent-runs.ts`, `history.tsx`, `AuditLog.tsx` | `agent_runs.meta` |
-| 11 | **+3**, **E36–E37** | ⏳ | Tokens deploy no prompt, sem tool | `deploy_publish` tool | `agent-run/tools/deploy.ts` |
-| 12 | **C16** | ⏳ | 429/529 sem backoff | Retry em `providers.ts` | `providers.ts`, `robin-pool.ts` |
+| 11 | **+3**, **E36–E37** | ✅ | Tool `deploy_publish` invoca `deploy-publish-core` | `tools/deploy.ts`, `_shared/deploy-publish-core.ts` | `agent-run`, `deploy-publish` |
+| 12 | **C16** | ✅ | Backoff exponencial 429/529/503 em `ResilientLLM` | `llm-retry.ts`, `robin-pool.ts`, `llm-errors.ts` | `providers.ts` (re-export) |
 | 13 | **C17** | ⏳ | Context estoura silencioso | `usage.input_tokens` → `CompressionManager` | `compression.ts`, adapters LLM |
 | 14 | **C18** | ⏳ | `shell_exec` livre | Allowlist em `tools/shell.ts` | `agent-run/tools/shell.ts` |
 | 15 | **C20** | ⏳ | Observer não roda build real | `tsc` + `vite build` no E2B | `observer.ts`, sandbox |

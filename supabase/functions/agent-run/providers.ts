@@ -1,4 +1,5 @@
 // providers.ts — Auto-detecta provider de LLM a partir das secrets disponíveis.
+// Retry/backoff 429/529: ver llm-retry.ts + ResilientLLM em robin-pool.ts (C16).
 // Ordem de preferência: explicit override → Anthropic → xAI → Groq → Lovable AI Gateway → OpenAI.
 // Cheap: Groq → Lovable AI (flash-lite) → main.
 import { createLLMProvider } from "./adapters/llm.ts";
@@ -144,3 +145,5 @@ export function buildProvider(cfg: ProviderConfig): LLMProvider {
     baseUrl: cfg.baseUrl,
   });
 }
+
+export { MAX_LLM_RETRIES, llmBackoffMs } from "./llm-retry.ts";

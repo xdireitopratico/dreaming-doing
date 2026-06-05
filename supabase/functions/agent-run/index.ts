@@ -30,6 +30,7 @@ import {
   normalizeIdList,
 } from "../_shared/session-extensions.ts";
 import { registerMcpForgeTools } from "./tools/mcp-forge.ts";
+import { registerDeployTool } from "./tools/deploy.ts";
 import { loadTasteNvidiaConfig, runTasteChat } from "./taste-session.ts";
 import { FORGE_CORS_HEADERS, corsPreflightResponse } from "../_shared/cors.ts";
 import { restoreExecutionLogFromRows } from "./executionLogMeta.ts";
@@ -391,6 +392,21 @@ Deno.serve(async (req) => {
       enabledMcpIds,
       deployKeys,
       context7ApiKey: Deno.env.get("CONTEXT7_API_KEY") ?? undefined,
+    });
+    const deployTokenKey =
+      stackCtx.deployTarget === "vercel"
+        ? "VERCEL_TOKEN"
+        : stackCtx.deployTarget === "netlify"
+          ? "NETLIFY_TOKEN"
+          : stackCtx.deployTarget === "cloudflare"
+            ? "CLOUDFLARE_API_TOKEN"
+            : null;
+    registerDeployTool(reg, {
+      supabase,
+      projectId,
+      userId: userData.user.id,
+      deployTarget: stackCtx.deployTarget,
+      hasDeployToken: deployTokenKey ? !!deployKeys[deployTokenKey] : false,
     });
 
     const runMetaBase = {

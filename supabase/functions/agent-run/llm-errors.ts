@@ -15,6 +15,30 @@ export function isRateLimitError(err: unknown): boolean {
   );
 }
 
+export function isOverloadError(err: unknown): boolean {
+  const msg = errorMessage(err).toLowerCase();
+  return (
+    /\b529\b/.test(msg) ||
+    /\b503\b/.test(msg) ||
+    msg.includes("overloaded") ||
+    msg.includes("service unavailable") ||
+    msg.includes("temporarily unavailable")
+  );
+}
+
+export function isRetryableLlmError(err: unknown): boolean {
+  return isRateLimitError(err) || isOverloadError(err) || isConnectionError(err);
+}
+
+export function parseRetryAfterSec(err: unknown): number | null {
+  const msg = errorMessage(err);
+  const headerMatch = msg.match(/retry[- ]after[:\s]+(\d+)/i);
+  if (headerMatch) return Number(headerMatch[1]);
+  const secMatch = msg.match(/retry in (\d+(?:\.\d+)?)\s*s/i);
+  if (secMatch) return Math.ceil(Number(secMatch[1]));
+  return null;
+}
+
 export function isConnectionError(err: unknown): boolean {
   const msg = errorMessage(err).toLowerCase();
   return (
@@ -58,6 +82,9 @@ export function friendlyLlmError(err: unknown, robinActive: boolean): string {
       );
     }
     return "Modelo não encontrado no provedor (404). Ajuste em Modelos (/models) ou troque o pool ROBIN.";
+  }
+  if (isOverloadError(err)) {
+    return "Servidor do modelo sobrecarregado (529/503). O FORGE está aguardando com backoff antes de tentar de novo…";
   }
   if (isRateLimitError(err)) {
     return robinActive

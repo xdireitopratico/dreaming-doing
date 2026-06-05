@@ -1,7 +1,15 @@
 import type { ProviderConfig } from "./providers.ts";
 import { buildProvider } from "./providers.ts";
 import type { ChatParams, ChatResponse, LLMProvider } from "./types.ts";
-import { friendlyLlmError, isConnectionError, isRateLimitError } from "./llm-errors.ts";
+import {
+  friendlyLlmError,
+  isConnectionError,
+  isOverloadError,
+  isRateLimitError,
+  isRetryableLlmError,
+  parseRetryAfterSec,
+} from "./llm-errors.ts";
+import { llmBackoffMs, MAX_LLM_RETRIES, sleepMs } from "./llm-retry.ts";
 
 export type StreamEmit = (type: string, data: Record<string, unknown>) => void;
 
@@ -64,7 +72,8 @@ export class ResilientLLM implements LLMProvider {
   ) {}
 
   async chat(params: ChatParams): Promise<ChatResponse> {
-    const attempts = Math.max(1, this.pool?.size ?? 1);
+    const poolSize = this.pool?.size ?? 1;
+    const attempts = Math.max(poolSize, MAX_LLM_RETRIES);
     let lastErr: unknown = null;
 
     for (let attempt = 0; attempt < attempts; attempt++) {
@@ -91,28 +100,53 @@ export class ResilientLLM implements LLMProvider {
       } catch (err) {
         lastErr = err;
 
-        if (isRateLimitError(err) && this.pool && attempt < attempts - 1) {
-          this.pool.markRateLimited(apiKey);
-          this.emit("rate_limit", {
-            message: `Limite por minuto (${keyHint}). ROBIN troca para a próxima chave…`,
-            attempt: attempt + 1,
-            maxAttempts: attempts,
-            provider: this.cfg.label,
-          });
-          continue;
-        }
+        if (isRetryableLlmError(err) && attempt < attempts - 1) {
+          const retryAfter = parseRetryAfterSec(err);
+          const delay = llmBackoffMs(attempt, retryAfter ?? undefined);
 
-        if (isConnectionError(err) && attempt < attempts - 1) {
-          this.emit("connection_retry", {
-            message: "Conexão instável — tentando novamente em instantes…",
-            attempt: attempt + 1,
-          });
-          await new Promise((r) => setTimeout(r, 800 * (attempt + 1)));
+          if (isRateLimitError(err) && this.pool) {
+            this.pool.markRateLimited(apiKey);
+            this.emit("rate_limit", {
+              message: `Limite por minuto (${keyHint}). ROBIN troca para a próxima chave…`,
+              attempt: attempt + 1,
+              maxAttempts: attempts,
+              provider: this.cfg.label,
+              backoffMs: delay,
+            });
+            if (this.pool.size > 1) continue;
+          } else if (isOverloadError(err)) {
+            this.emit("rate_limit", {
+              message: `Servidor sobrecarregado (529/503) — backoff ${Math.round(delay / 1000)}s…`,
+              attempt: attempt + 1,
+              maxAttempts: attempts,
+              provider: this.cfg.label,
+              backoffMs: delay,
+            });
+          } else if (isRateLimitError(err)) {
+            this.emit("rate_limit", {
+              message: `Rate limit — aguardando ${Math.round(delay / 1000)}s antes de retentar…`,
+              attempt: attempt + 1,
+              maxAttempts: attempts,
+              provider: this.cfg.label,
+              backoffMs: delay,
+            });
+          } else if (isConnectionError(err)) {
+            this.emit("connection_retry", {
+              message: "Conexão instável — tentando novamente em instantes…",
+              attempt: attempt + 1,
+              backoffMs: delay,
+            });
+          }
+
+          await sleepMs(delay);
           continue;
         }
 
         const friendly = friendlyLlmError(err, !!this.pool);
-        this.emit("error", { message: friendly, recoverable: isConnectionError(err) || isRateLimitError(err) });
+        this.emit("error", {
+          message: friendly,
+          recoverable: isRetryableLlmError(err),
+        });
         throw new Error(friendly);
       }
     }
