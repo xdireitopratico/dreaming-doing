@@ -8,12 +8,14 @@ type BootResult = {
   url?: string;
   expiresAt?: string;
   reused?: boolean;
+  ready?: boolean;
   error?: string;
 };
 
 export function usePreviewBoot(projectId: string) {
   const [booting, setBooting] = useState(false);
   const [lastError, setLastError] = useState<string | null>(null);
+  const [warming, setWarming] = useState(false);
   const qc = useQueryClient();
 
   const boot = useCallback(
@@ -37,6 +39,7 @@ export function usePreviewBoot(projectId: string) {
 
       setBooting(true);
       setLastError(null);
+      setWarming(false);
       try {
         const res = await fetch(`${url}/functions/v1/preview-boot`, {
           method: "POST",
@@ -55,12 +58,23 @@ export function usePreviewBoot(projectId: string) {
 
         await qc.invalidateQueries({ queryKey: ["project", projectId] });
         if (body.url) {
-          toast.success(body.reused ? "Preview reutilizado" : "Preview ao vivo iniciado");
+          if (body.ready === false) setWarming(true);
+          toast.success(
+            body.reused
+              ? "Preview reutilizado"
+              : body.ready === false
+                ? "Sandbox pronto — aguardando Vite…"
+                : "Preview ao vivo iniciado",
+          );
         }
         return body.url ?? null;
       } catch (e) {
         const msg = e instanceof Error ? e.message : "Falha ao iniciar preview";
-        setLastError(msg);
+        const friendly =
+          msg === "Failed to fetch"
+            ? "preview-boot expirou ou não respondeu (timeout). Tente ↻ de novo."
+            : msg;
+        setLastError(friendly);
         if (msg.includes("E2B_API_KEY")) {
           toast.error("Preview ao vivo requer E2B_API_KEY no Supabase.");
         } else {
@@ -74,5 +88,12 @@ export function usePreviewBoot(projectId: string) {
     [projectId, qc],
   );
 
-  return { booting, boot, lastError, clearError: () => setLastError(null) };
+  return {
+    booting,
+    boot,
+    lastError,
+    warming,
+    clearWarming: () => setWarming(false),
+    clearError: () => setLastError(null),
+  };
 }

@@ -565,6 +565,8 @@ function EditorPage() {
                         onPreviewPathChange={setPreviewRoute}
                         iframeRef={previewIframeRef}
                         bootError={previewBoot.lastError}
+                        warming={previewBoot.warming}
+                        onWarmComplete={previewBoot.clearWarming}
                         onRefresh={() => previewBoot.boot(true)}
                       />
                     )}

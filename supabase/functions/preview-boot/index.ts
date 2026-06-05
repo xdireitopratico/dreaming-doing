@@ -5,8 +5,7 @@ import { getPlatformSecret } from "../_shared/platform-secrets.ts";
 import {
   E2B_PROJECT_DIR,
   E2B_TEMPLATE_DEFAULT,
-  e2bPreviewUrl,
-  normalizeProjectPath,
+  patchProjectFilesForE2b,
 } from "../_shared/e2b.ts";
 
 const corsHeaders = {
@@ -17,6 +16,10 @@ const corsHeaders = {
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const PREVIEW_TTL_MS = 25 * 60 * 1000;
+/** Evita timeout da Edge (~60s): probe curto; o iframe pode carregar antes do Vite ficar pronto. */
+const PROBE_ATTEMPTS = 6;
+const PROBE_INTERVAL_MS = 2000;
+const PROBE_FETCH_MS = 4000;
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
@@ -53,6 +56,7 @@ Deno.serve(async (req) => {
           url: existing.previewUrl,
           expiresAt: existing.previewExpiresAt,
           reused: true,
+          ready: true,
         });
       }
     }
@@ -61,44 +65,44 @@ Deno.serve(async (req) => {
       .from("project_files").select("path, content").eq("project_id", projectId);
 
     const devPort = Number.parseInt(detectDevPort(files ?? []), 10) || 5173;
-    const devCmd = detectDevCommand(files ?? []);
+    const devCmd = detectDevCommand(files ?? [], devPort);
 
     sandbox = await Sandbox.create(E2B_TEMPLATE_DEFAULT, {
       apiKey: E2B_API_KEY,
       timeoutMs: 30 * 60 * 1000,
+      network: { maskRequestHost: "localhost:${PORT}" },
     });
 
-    const writePayload = (files ?? []).map((f) => ({
-      path: normalizeProjectPath(f.path),
-      data: f.content ?? "",
-    }));
+    const writePayload = patchProjectFilesForE2b(files ?? []);
 
     if (writePayload.length > 0) {
       await sandbox.files.write(writePayload);
     }
 
     const installAndDev =
-      `cd ${E2B_PROJECT_DIR} && (test -f package.json && npm install --no-audit --no-fund --loglevel=error 2>&1 | tail -40 || true) && nohup env HOST=0.0.0.0 PORT=${devPort} ${devCmd} > /tmp/forge-dev.log 2>&1 &`;
+      `cd ${E2B_PROJECT_DIR} && (test -f package.json && npm install --no-audit --no-fund --loglevel=error 2>&1 | tail -20 || true) && nohup ${devCmd} > /tmp/forge-dev.log 2>&1 &`;
 
     await sandbox.commands.run(installAndDev, {
       cwd: E2B_PROJECT_DIR,
-      timeoutMs: 180_000,
+      timeoutMs: 120_000,
       background: true,
     });
 
-    // Aguarda Vite subir (até ~45s)
-    let url = e2bPreviewUrl(sandbox.sandboxId, devPort);
-    const altUrl = `https://${sandbox.getHost(devPort)}`;
-    for (let i = 0; i < 15; i++) {
+    const host = sandbox.getHost(devPort);
+    let url = host.startsWith("http") ? host : `https://${host}`;
+    let ready = false;
+
+    for (let i = 0; i < PROBE_ATTEMPTS; i++) {
       try {
-        const probe = await fetch(altUrl, { method: "GET", signal: AbortSignal.timeout(8000) });
-        if (probe.ok || probe.status < 500) {
-          url = altUrl.startsWith("https://") ? altUrl : `https://${altUrl}`;
+        const probe = await fetch(url, { method: "GET", signal: AbortSignal.timeout(PROBE_FETCH_MS) });
+        if (probe.ok || (probe.status >= 200 && probe.status < 500)) {
+          ready = true;
           break;
         }
       } catch {
-        await new Promise((r) => setTimeout(r, 3000));
+        /* Vite ainda subindo */
       }
+      await new Promise((r) => setTimeout(r, PROBE_INTERVAL_MS));
     }
 
     const expiresAt = new Date(Date.now() + PREVIEW_TTL_MS).toISOString();
@@ -110,10 +114,11 @@ Deno.serve(async (req) => {
         previewExpiresAt: expiresAt,
         previewSandboxId: sandbox.sandboxId,
         previewPort: devPort,
+        previewReady: ready,
       },
     }).eq("id", projectId);
 
-    return json({ url, expiresAt, sandboxId: sandbox.sandboxId, reused: false });
+    return json({ url, expiresAt, sandboxId: sandbox.sandboxId, reused: false, ready });
   } catch (e: unknown) {
     if (sandbox) {
       try {
@@ -151,14 +156,20 @@ function detectDevPort(files: Array<{ path: string; content?: string | null }>):
   return "5173";
 }
 
-function detectDevCommand(files: Array<{ path: string; content?: string | null }>): string {
+function detectDevCommand(files: Array<{ path: string; content?: string | null }>, port: number): string {
   const pkg = files.find((f) => f.path === "package.json" || f.path === "/package.json");
   if (pkg?.content) {
     try {
       const scripts = (JSON.parse(pkg.content) as { scripts?: Record<string, string> }).scripts;
-      if (scripts?.dev) return "npm run dev";
-      if (scripts?.start) return "npm start";
+      if (scripts?.dev) {
+        const dev = scripts.dev;
+        if (dev.includes("vite") && !dev.includes("--host")) {
+          return `npm run dev -- --host 0.0.0.0 --port ${port}`;
+        }
+        return `env HOST=0.0.0.0 PORT=${port} npm run dev`;
+      }
+      if (scripts?.start) return `env HOST=0.0.0.0 PORT=${port} npm start`;
     } catch { /* ignore */ }
   }
-  return "npm run dev";
+  return `npx vite --host 0.0.0.0 --port ${port}`;
 }

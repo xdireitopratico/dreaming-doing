@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Eye, Loader2 } from "lucide-react";
 import { PreviewRouteNav } from "@/components/editor/PreviewRouteNav";
 import { buildPreviewUrl } from "@/lib/project-routes";
@@ -12,6 +12,8 @@ interface PreviewFrameProps {
   onRefresh?: () => void;
   iframeRef?: React.RefObject<HTMLIFrameElement | null>;
   bootError?: string | null;
+  warming?: boolean;
+  onWarmComplete?: () => void;
 }
 
 export function PreviewFrame({
@@ -23,7 +25,21 @@ export function PreviewFrame({
   onRefresh,
   iframeRef,
   bootError,
+  warming = false,
+  onWarmComplete,
 }: PreviewFrameProps) {
+  const [iframeLoading, setIframeLoading] = useState(false);
+
+  useEffect(() => {
+    if (devUrl) setIframeLoading(true);
+  }, [devUrl]);
+
+  useEffect(() => {
+    if (!warming || !devUrl) return;
+    setIframeLoading(true);
+    const t = window.setTimeout(() => onWarmComplete?.(), 45_000);
+    return () => window.clearTimeout(t);
+  }, [warming, devUrl, onWarmComplete]);
   const indexFile = useMemo(() => {
     return files.find(
       (f) =>
@@ -82,14 +98,28 @@ export function PreviewFrame({
             <p className="text-sm text-neutral-500">Iniciando sandbox E2B…</p>
           </div>
         ) : !bootError && iframeSrc ? (
-          <iframe
-            ref={iframeRef}
-            key={iframeSrc}
-            src={iframeSrc}
-            className="forge-preview-frame absolute inset-0 h-full w-full"
-            sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
-            title="Preview"
-          />
+          <>
+            {(warming || iframeLoading) && (
+              <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 bg-white/90">
+                <Loader2 className="size-6 animate-spin text-[var(--forge-primary)]" />
+                <p className="text-xs text-neutral-500">
+                  {warming ? "Vite subindo no sandbox…" : "Carregando preview…"}
+                </p>
+              </div>
+            )}
+            <iframe
+              ref={iframeRef}
+              key={iframeSrc}
+              src={iframeSrc}
+              className="forge-preview-frame absolute inset-0 h-full w-full"
+              sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+              title="Preview"
+              onLoad={() => {
+                setIframeLoading(false);
+                onWarmComplete?.();
+              }}
+            />
+          </>
         ) : !bootError && previewContent ? (
           <iframe
             srcDoc={previewContent}
