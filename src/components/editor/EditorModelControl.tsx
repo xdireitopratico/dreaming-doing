@@ -64,7 +64,7 @@ export function EditorModelControl() {
       <Link
         to="/api"
         hash="forge-ai-studio"
-        title={`Modo: ${modeTag} · STT: ${prefs.sttProvider ?? "grok"} — abrir estúdio completo`}
+        title={`Modo: ${modeTag} · STT: ${prefs.sttProvider ?? "groq"} — abrir estúdio completo`}
         className="forge-composer-chip shrink-0 px-2 py-1 gap-1 hover:border-[var(--primary)]/40"
       >
         <Settings2 className="size-3 opacity-70" />

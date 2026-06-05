@@ -3,18 +3,13 @@ import { Mic, Loader2, Square } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { loadAgentPreferences } from "@/lib/agent-preferences";
+import { STT_DEFAULT_PROVIDER, STT_LABELS } from "@/lib/stt-config";
 
 type Props = {
   onTranscript: (text: string) => void;
   className?: string;
   size?: "sm" | "md";
 };
-
-const STT_LABELS = {
-  grok: "Grok STT (xAI)",
-  groq: "Groq Whisper",
-  openrouter: "OpenRouter STT",
-} as const;
 
 export function MicButton({ onTranscript, className, size = "md" }: Props) {
   const [state, setState] = useState<"idle" | "recording" | "uploading">("idle");
@@ -27,7 +22,7 @@ export function MicButton({ onTranscript, className, size = "md" }: Props) {
   }, []);
 
   const start = useCallback(async () => {
-    const requested = loadAgentPreferences().sttProvider ?? "grok";
+    const requested = loadAgentPreferences().sttProvider ?? STT_DEFAULT_PROVIDER;
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -105,7 +100,7 @@ export function MicButton({ onTranscript, className, size = "md" }: Props) {
 
   const sizeCls = size === "sm" ? "size-8" : "size-9";
   const iconCls = size === "sm" ? "size-3.5" : "size-4";
-  const stt = loadAgentPreferences().sttProvider ?? "grok";
+  const stt = loadAgentPreferences().sttProvider ?? STT_DEFAULT_PROVIDER;
 
   if (state === "uploading") {
     return (
@@ -139,7 +134,7 @@ export function MicButton({ onTranscript, className, size = "md" }: Props) {
       type="button"
       onClick={start}
       aria-label={`Gravar áudio (${STT_LABELS[stt]})`}
-      title={`Microfone · ${STT_LABELS[stt]} — configurar em API`}
+      title={`Microfone · ${STT_LABELS[stt]} — configurar em Modelos`}
       className={`${sizeCls} grid place-items-center rounded-full bg-[var(--surface-2)] hover:bg-[var(--surface-3)] border border-[var(--border)] text-[var(--text-dim)] hover:text-foreground transition-colors ${className ?? ""}`}
     >
       <Mic className={iconCls} />

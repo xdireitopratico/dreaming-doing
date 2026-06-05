@@ -161,6 +161,7 @@ Deno.serve(async (req) => {
           "MINIMAX_API_KEY",
           "MOONSHOT_API_KEY",
           "MIMO_API_KEY",
+          "OLLAMA_BASE_URL",
         ].includes(k)
       );
 

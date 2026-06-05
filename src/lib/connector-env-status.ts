@@ -12,6 +12,7 @@ const ENV_TO_PROVIDER: Record<AiEnvId, AiProviderId> = {
   minimax: "minimax",
   moonshotai: "moonshotai",
   nvidia: "nvidia",
+  ollama: "ollama",
   openrouter: "openrouter",
   xiaomi: "xiaomi",
 };
@@ -44,6 +45,7 @@ export function connectedEnvsFromRows(
     minimax: false,
     moonshotai: false,
     nvidia: false,
+    ollama: false,
     openrouter: false,
     xiaomi: false,
   };

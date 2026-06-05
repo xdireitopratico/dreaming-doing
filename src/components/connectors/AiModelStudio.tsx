@@ -32,6 +32,8 @@ import {
   AI_ENV_META,
   AI_ENVS_SORTED,
   STT_OPTIONS,
+  STT_DEFAULT_PROVIDER,
+  STT_LABELS,
   modelsForStudioStep,
   getPresetById,
   normalizePresetId,
@@ -53,6 +55,7 @@ const ENV_ICONS: Record<AiEnvId, React.ReactNode> = {
   minimax: <Brain className="size-4" />,
   moonshotai: <Globe className="size-4" />,
   nvidia: <Cpu className="size-4" />,
+  ollama: <Cpu className="size-4" />,
   openai: <Brain className="size-4" />,
   openrouter: <Globe className="size-4" />,
   xai: <Globe className="size-4" />,
@@ -444,13 +447,17 @@ export function AiModelStudio({ connectorRows, keysSectionHref = "/api" }: AiMod
             <Key className="size-3.5 shrink-0" />
             {selectedEnv === "openrouter"
               ? "OpenRouter tem milhares de modelos — use o passo 4 para colar o slug exato."
-              : `Chave ${AI_ENV_META[selectedEnv].label} (${AI_ENV_META[selectedEnv].keyPrefix}…)`}
+              : selectedEnv === "ollama"
+                ? "Ollama: URL do servidor + modelo (não é API key de nuvem)."
+                : `Chave ${AI_ENV_META[selectedEnv].label} (${AI_ENV_META[selectedEnv].keyPrefix}…)`}
             <Link
               to={keysSectionHref}
               hash={
                 selectedEnv === "openrouter"
                   ? "forge-key-openrouter"
-                  : `forge-key-${selectedEnv}`
+                  : selectedEnv === "ollama"
+                    ? "forge-key-ollama"
+                    : `forge-key-${selectedEnv}`
               }
               className="text-[var(--primary)] underline"
             >
@@ -620,13 +627,14 @@ export function AiModelStudio({ connectorRows, keysSectionHref = "/api" }: AiMod
             .map((opt) => (
               <ModelCard
                 key={opt.id}
-                active={(prefs.sttProvider ?? "grok") === opt.id}
+                active={(prefs.sttProvider ?? STT_DEFAULT_PROVIDER) === opt.id}
                 label={opt.label}
-                description={opt.description}
+                description={`${opt.description} · modelo: ${opt.modelId}`}
                 badges={[
                   connected[opt.requiresEnv] ? "chave OK" : "precisa chave",
                   AI_ENV_META[opt.requiresEnv].label,
-                ]}
+                  opt.recommended ? "padrão" : "",
+                ].filter(Boolean)}
                 disabled={false}
                 onClick={() => patch({ sttProvider: opt.id as SttProviderId })}
               />
@@ -654,12 +662,7 @@ export function AiModelStudioSummary() {
         prefs.userModelEntries,
       )
     : getPresetById("");
-  const stt =
-    prefs.sttProvider === "groq"
-      ? "Groq STT"
-      : prefs.sttProvider === "openrouter"
-        ? "OpenRouter STT"
-        : "Grok STT";
+  const stt = STT_LABELS[prefs.sttProvider ?? STT_DEFAULT_PROVIDER];
   const modeLabel =
     prefs.mode === "auto"
       ? `auto${(prefs.autoAllowedPresetIds?.length ?? 0) > 0 ? `·${prefs.autoAllowedPresetIds!.length}` : ""}`

@@ -394,6 +394,8 @@ export type Database = {
         | "anthropic"
         | "openai"
         | "netlify"
+        | "supabase"
+        | "e2b"
       deploy_provider: "vercel" | "cloudflare" | "netlify"
       deploy_status: "queued" | "building" | "ready" | "error" | "cancelled"
       message_role: "user" | "assistant" | "system" | "tool"
@@ -532,6 +534,7 @@ export const Constants = {
         "anthropic",
         "openai",
         "netlify",
+        "supabase",
         "e2b",
       ],
       deploy_provider: ["vercel", "cloudflare", "netlify"],

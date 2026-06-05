@@ -12,7 +12,8 @@ export type ModelPowerMode = "auto" | "robin" | "fixed";
 
 export type PoolProviderId = "nvidia" | "groq";
 
-export type SttProviderId = "grok" | "groq" | "openrouter";
+export type { SttProviderId } from "@/lib/stt-config";
+import type { SttProviderId } from "@/lib/stt-config";
 
 export interface AgentPreferences {
   mode?: ModelPowerMode;

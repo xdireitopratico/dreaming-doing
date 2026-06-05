@@ -118,7 +118,12 @@ export async function loadConnectorKeys(
       else if (p === "minimax") keys.MINIMAX_API_KEY = token;
       else if (p === "moonshotai") keys.MOONSHOT_API_KEY = token;
       else if (p === "xiaomi") keys.MIMO_API_KEY = token;
-      else keys.OPENAI_API_KEY = token;
+      else if (p === "ollama") {
+        const meta = (row.meta ?? {}) as { baseUrl?: string; defaultModel?: string };
+        const base = meta.baseUrl?.trim().replace(/\/$/, "");
+        if (base) keys.OLLAMA_BASE_URL = base;
+        if (meta.defaultModel?.trim()) keys.OLLAMA_MODEL = meta.defaultModel.trim();
+      } else keys.OPENAI_API_KEY = token;
     }
   }
   return keys;

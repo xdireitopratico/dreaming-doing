@@ -1,6 +1,7 @@
 // voice-transcribe — STT estrito: usa SOMENTE o provedor escolhido (sem fallback silencioso para Groq).
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { loadConnectorKeys, loadConnectorPools } from "../agent-run/connector-keys.ts";
+import { STT_MODEL_BY_PROVIDER } from "../_shared/stt-config.ts";
 
 
 const corsHeaders = {
@@ -71,7 +72,7 @@ async function transcribeGrok(apiKey: string, file: File, language: string): Pro
 async function transcribeOpenRouter(apiKey: string, file: File, language: string): Promise<string> {
   const form = new FormData();
   form.append("file", file, file.name || "audio.webm");
-  form.append("model", "openai/whisper-1");
+  form.append("model", STT_MODEL_BY_PROVIDER.openrouter);
   form.append("language", language);
 
   const resp = await fetch("https://openrouter.ai/api/v1/audio/transcriptions", {
@@ -96,7 +97,7 @@ async function transcribeOpenRouter(apiKey: string, file: File, language: string
 async function transcribeGroq(apiKey: string, file: File, language: string): Promise<string> {
   const form = new FormData();
   form.append("file", file, file.name || "audio.webm");
-  form.append("model", "whisper-large-v3-turbo");
+  form.append("model", STT_MODEL_BY_PROVIDER.groq);
   form.append("language", language);
   form.append("response_format", "json");
   form.append("temperature", "0");
@@ -138,7 +139,7 @@ Deno.serve(async (req) => {
     }
 
     const language = (inForm.get("language") as string | null) ?? "pt";
-    const preferRaw = (inForm.get("provider") as string | null) ?? "grok";
+    const preferRaw = (inForm.get("provider") as string | null) ?? "groq";
     const requested =
       preferRaw === "groq" ? "groq" : preferRaw === "openrouter" ? "openrouter" : "grok";
 
@@ -154,6 +155,7 @@ Deno.serve(async (req) => {
       text,
       provider: resolved.provider,
       requested,
+      model: STT_MODEL_BY_PROVIDER[resolved.provider],
     });
   } catch (e: unknown) {
     return json({ error: (e as Error).message ?? "erro inesperado" }, 500);

@@ -23,7 +23,14 @@ import {
 } from "@/lib/save-connector";
 import { loadAgentPreferences } from "@/lib/agent-preferences";
 import { saveE2bApiKey, disconnectE2bApiKey } from "@/lib/save-e2b-key";
+import {
+  disconnectOllamaConnector,
+  readOllamaMetaFromRows,
+  saveOllamaConnector,
+} from "@/lib/save-ollama-connector";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 export const Route = createFileRoute("/api")({
   component: () => (
@@ -115,7 +122,7 @@ const INITIAL: ProviderConfig[] = [
     provider: "xAI",
     label: "xAI",
     icon: <Globe className="size-5" />,
-    description: "Grok 3 / Mini — código + STT (voz) na mesma chave.",
+    description: "Grok 3 / Mini — LLM. Voz (STT) usa API xAI separada (config em Modelos).",
     docUrl: "https://console.x.ai",
     keyPrefix: "xai-",
     costPerM: 0.5,
@@ -227,6 +234,10 @@ function ApiPage() {
   const [providers, setProviders] = useState(INITIAL);
   const [e2bKeyValue, setE2bKeyValue] = useState("");
   const [e2bConnected, setE2bConnected] = useState(false);
+  const [ollamaBaseUrl, setOllamaBaseUrl] = useState("http://localhost:11434");
+  const [ollamaModel, setOllamaModel] = useState("llama3.2");
+  const [ollamaApiKey, setOllamaApiKey] = useState("");
+  const [ollamaConnected, setOllamaConnected] = useState(false);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [pulseId, setPulseId] = useState<string | null>(null);
   const robinMode = loadAgentPreferences().mode === "robin";
@@ -237,10 +248,14 @@ function ApiPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("connectors_public")
-        .select("kind, meta")
+        .select("kind, meta, provider")
         .eq("owner_id", user!.id);
       if (error) throw error;
-      return (data ?? []) as { kind: string; meta: Record<string, unknown> | null }[];
+      return (data ?? []) as {
+        kind: string;
+        meta: Record<string, unknown> | null;
+        provider?: string | null;
+      }[];
     },
   });
 
@@ -248,6 +263,12 @@ function ApiPage() {
     if (!connectorRows) return;
     const hasE2b = connectorRows.some((r) => r.kind === "e2b");
     setE2bConnected(hasE2b);
+    const ollamaMeta = readOllamaMetaFromRows(connectorRows);
+    setOllamaConnected(!!ollamaMeta);
+    if (ollamaMeta) {
+      setOllamaBaseUrl(ollamaMeta.baseUrl);
+      setOllamaModel(ollamaMeta.defaultModel);
+    }
     setProviders((prev) =>
       prev.map((p) => {
         const row = rowForProvider(connectorRows, p.id);
@@ -404,8 +425,43 @@ function ApiPage() {
     }
   }, [qc]);
 
+  const handleSaveOllama = useCallback(async () => {
+    setSavingId("ollama");
+    try {
+      await saveOllamaConnector({
+        baseUrl: ollamaBaseUrl,
+        defaultModel: ollamaModel,
+        apiKey: ollamaApiKey || undefined,
+      });
+      setOllamaConnected(true);
+      setOllamaApiKey("");
+      await qc.invalidateQueries({ queryKey: ["connectors-public"] });
+      toast.success("Ollama conectado — escolha o modelo em Modelos (ambiente Ollama)");
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : "Falha ao salvar Ollama");
+    } finally {
+      setSavingId(null);
+    }
+  }, [ollamaBaseUrl, ollamaModel, ollamaApiKey, qc]);
+
+  const handleDeleteOllama = useCallback(async () => {
+    setSavingId("ollama");
+    try {
+      await disconnectOllamaConnector();
+      setOllamaConnected(false);
+      await qc.invalidateQueries({ queryKey: ["connectors-public"] });
+      toast.success("Ollama desconectado");
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : "Falha ao remover Ollama");
+    } finally {
+      setSavingId(null);
+    }
+  }, [qc]);
+
   const connectedCount =
-    providers.filter((p) => p.status === "connected").length + (e2bConnected ? 1 : 0);
+    providers.filter((p) => p.status === "connected").length +
+    (e2bConnected ? 1 : 0) +
+    (ollamaConnected ? 1 : 0);
 
   return (
     <div className="px-6 py-8 max-w-[960px] mx-auto">
@@ -464,6 +520,97 @@ function ApiPage() {
           atualizam na hora. O agente troca de chave a cada requisição.
         </p>
       )}
+
+      <nav
+        aria-label="Atalhos nesta página"
+        className="mb-6 flex flex-wrap gap-2 font-mono text-[9px]"
+      >
+        <a href="#forge-key-ollama" className="px-2 py-1 rounded border border-[var(--border)] hover:border-[var(--primary)]/50">
+          Ollama
+        </a>
+        <a href="#forge-key-e2b" className="px-2 py-1 rounded border border-[var(--border)] hover:border-[var(--primary)]/50">
+          E2B
+        </a>
+        <a href="#forge-key-groq" className="px-2 py-1 rounded border border-[var(--border)] hover:border-[var(--primary)]/50">
+          Provedores IA
+        </a>
+        <Link to="/models" className="px-2 py-1 rounded border border-[var(--primary)]/30 text-[var(--primary)]">
+          Modelos + STT →
+        </Link>
+      </nav>
+
+      <h2 className="flex items-center gap-2 font-mono text-[10px] tracking-[0.2em] uppercase text-[var(--text-dim)] mb-4">
+        <Cpu className="size-3 text-[var(--primary)]" />
+        Ollama (local)
+      </h2>
+
+      <motion.div
+        id="forge-key-ollama"
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="mb-8 p-5 rounded-xl border border-[var(--border)] bg-[var(--surface-1)]/30 scroll-mt-24"
+      >
+        <p className="font-mono text-[9px] text-[var(--text-ghost)] mb-4 leading-relaxed">
+          O agente roda na nuvem (Supabase).{" "}
+          <code className="text-[var(--text-dim)]">localhost</code> só funciona se você expuser o Ollama com
+          túnel HTTPS (ngrok, Cloudflare Tunnel, etc.). Modelos em{" "}
+          <Link to="/models" className="text-[var(--primary)] underline">
+            Modelos
+          </Link>{" "}
+          → ambiente Ollama.
+        </p>
+        <div className="grid gap-3 sm:grid-cols-2 mb-3">
+          <div>
+            <Label className="font-mono text-[9px] text-[var(--text-dim)]">URL base do Ollama</Label>
+            <Input
+              value={ollamaBaseUrl}
+              onChange={(e) => setOllamaBaseUrl(e.target.value)}
+              placeholder="https://seu-tunnel.ngrok.app"
+              className="mt-1 font-mono text-xs"
+              disabled={savingId === "ollama"}
+            />
+          </div>
+          <div>
+            <Label className="font-mono text-[9px] text-[var(--text-dim)]">Modelo padrão (tag Ollama)</Label>
+            <Input
+              value={ollamaModel}
+              onChange={(e) => setOllamaModel(e.target.value)}
+              placeholder="llama3.2"
+              className="mt-1 font-mono text-xs"
+              disabled={savingId === "ollama"}
+            />
+          </div>
+        </div>
+        <ApiKeyInput
+          label="Chave API (opcional)"
+          value={ollamaApiKey}
+          onChange={setOllamaApiKey}
+          onDelete={ollamaConnected ? () => void handleDeleteOllama() : undefined}
+          provider="ollama"
+          placeholder="só se o proxy exigir auth"
+          saved={ollamaConnected}
+          disabled={savingId === "ollama"}
+        />
+        <div className="flex flex-wrap gap-2 mt-3">
+          <Button
+            type="button"
+            size="sm"
+            className="bg-[var(--primary)] text-[#0a0a0a]"
+            disabled={savingId === "ollama" || !ollamaBaseUrl.trim()}
+            onClick={() => void handleSaveOllama()}
+          >
+            {savingId === "ollama" ? "Salvando…" : ollamaConnected ? "Atualizar Ollama" : "Salvar Ollama"}
+          </Button>
+          <a
+            href="https://github.com/ollama/ollama/blob/main/docs/faq.md"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-mono text-[9px] text-[var(--text-ghost)] hover:text-[var(--foreground)] self-center"
+          >
+            Docs Ollama <ExternalLink className="size-3 inline" />
+          </a>
+        </div>
+      </motion.div>
 
       <h2 className="flex items-center gap-2 font-mono text-[10px] tracking-[0.2em] uppercase text-[var(--text-dim)] mb-4">
         <Box className="size-3 text-[var(--primary)]" />

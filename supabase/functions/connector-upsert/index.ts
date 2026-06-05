@@ -89,7 +89,10 @@ Deno.serve(async (req) => {
     const providerKey = resolveProvider(kind, metaIn);
 
     if (kind === "openai" && !metaIn.provider) {
-      return json({ error: "meta.provider obrigatório (groq, nvidia, xai, openai, gemini, openrouter, deepseek, alibaba, minimax, moonshotai, xiaomi)" }, 400);
+      return json({
+        error:
+          "meta.provider obrigatório (groq, nvidia, xai, openai, gemini, openrouter, deepseek, alibaba, minimax, moonshotai, xiaomi, ollama)",
+      }, 400);
     }
 
     if (kind === "supabase" && body?.disconnect !== true) {
@@ -189,6 +192,12 @@ Deno.serve(async (req) => {
     if (!token && kind === "supabase") {
       return json({ error: "Chave Supabase obrigatória" }, 400);
     }
+    if (!token && kind === "openai" && metaIn.provider === "ollama") {
+      const baseUrl = typeof metaIn.baseUrl === "string" ? metaIn.baseUrl.trim() : "";
+      if (!baseUrl) {
+        return json({ error: "URL do Ollama obrigatória (meta.baseUrl) — use túnel HTTPS se o agente roda na nuvem" }, 400);
+      }
+    }
 
     let tokenEncrypted: string | undefined;
     let pool: string[] = [];
@@ -207,6 +216,8 @@ Deno.serve(async (req) => {
       poolSlots = buildPoolSlots(pool);
       tokenEncrypted = token.length > 1 && token.startsWith("[") ? token : token;
       if (pool.length > 1) tokenEncrypted = JSON.stringify(pool);
+    } else if (kind === "openai" && metaIn.provider === "ollama") {
+      tokenEncrypted = "ollama";
     }
 
     const meta: Record<string, unknown> = {

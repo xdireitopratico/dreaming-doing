@@ -14,6 +14,7 @@ export type AiEnvId =
   | "minimax"
   | "moonshotai"
   | "nvidia"
+  | "ollama"
   | "openai"
   | "openrouter"
   | "xai"
@@ -35,7 +36,7 @@ export interface ForgeModelPreset {
   tier: ModelTier;
   brand: string;
   rank: number;
-  llmProvider: "anthropic" | "openai" | "gemini";
+  llmProvider: "anthropic" | "openai" | "gemini" | "ollama";
   baseUrl?: string;
   secretKey: string;
   recommended?: boolean;
@@ -55,6 +56,7 @@ export const AI_ENVS_SORTED: AiEnvId[] = [
   "minimax",
   "moonshotai",
   "nvidia",
+  "ollama",
   "openai",
   "openrouter",
   "xai",
@@ -116,6 +118,11 @@ export const AI_ENV_META: Record<
     docUrl: "https://build.nvidia.com",
     keyPrefix: "nvapi-",
     supportsPool: true,
+  },
+  ollama: {
+    label: "Ollama (local)",
+    docUrl: "https://github.com/ollama/ollama/blob/main/docs/faq.md",
+    keyPrefix: "http",
   },
   openrouter: {
     label: "OpenRouter (roteador)",
@@ -181,6 +188,7 @@ const ENV_DISPLAY_ORDER: Partial<Record<AiEnvId, string[]>> = {
   openrouter: ["zhipu--glm-5-1", "zhipu--glm-5"],
   xiaomi: ["xiaomi--mimo-v2-5-pro"],
   groq: ["pool-groq-flash"],
+  ollama: ["ollama--llama3-2", "ollama--qwen2-5-coder", "ollama--deepseek-r1-8b", "ollama--mistral"],
 };
 
 export type UserModelEntry = {
@@ -206,6 +214,7 @@ export function inferEnvFromSlug(slug: string): AiEnvId {
   if (s.startsWith("minimax/")) return "minimax";
   if (s.startsWith("moonshotai/")) return "moonshotai";
   if (s.startsWith("xiaomi/")) return "xiaomi";
+  if (s.startsWith("ollama/")) return "ollama";
   return "openrouter";
 }
 
@@ -345,6 +354,8 @@ function wireForEnv(env: AiEnvId): {
         secretKey: "MIMO_API_KEY",
         baseUrl: "https://api.xiaomimimo.com/v1",
       };
+    case "ollama":
+      return { llmProvider: "ollama", secretKey: "OLLAMA_BASE_URL" };
     default:
       return {
         llmProvider: "openai",
@@ -477,9 +488,71 @@ const NATIVE_POOL: ForgeModelPreset[] = [
   },
 ];
 
+/** Modelos locais — exige URL pública do Ollama (túnel) para o agente na nuvem. */
+const OLLAMA_NATIVE: ForgeModelPreset[] = [
+  {
+    id: "ollama--llama3-2",
+    env: "ollama",
+    model: "llama3.2",
+    openRouterSlug: "ollama/llama3.2",
+    label: "Llama 3.2",
+    description: "Meta · local via Ollama",
+    tier: "balanced",
+    brand: "Ollama",
+    rank: 200,
+    envStrength: 1,
+    llmProvider: "ollama",
+    secretKey: "OLLAMA_BASE_URL",
+    recommended: true,
+  },
+  {
+    id: "ollama--qwen2-5-coder",
+    env: "ollama",
+    model: "qwen2.5-coder:7b",
+    openRouterSlug: "ollama/qwen2.5-coder",
+    label: "Qwen 2.5 Coder 7B",
+    description: "Código · local via Ollama",
+    tier: "balanced",
+    brand: "Ollama",
+    rank: 201,
+    envStrength: 2,
+    llmProvider: "ollama",
+    secretKey: "OLLAMA_BASE_URL",
+  },
+  {
+    id: "ollama--deepseek-r1-8b",
+    env: "ollama",
+    model: "deepseek-r1:8b",
+    openRouterSlug: "ollama/deepseek-r1",
+    label: "DeepSeek R1 8B",
+    description: "Raciocínio · local via Ollama",
+    tier: "fast",
+    brand: "Ollama",
+    rank: 202,
+    envStrength: 3,
+    llmProvider: "ollama",
+    secretKey: "OLLAMA_BASE_URL",
+  },
+  {
+    id: "ollama--mistral",
+    env: "ollama",
+    model: "mistral",
+    openRouterSlug: "ollama/mistral",
+    label: "Mistral",
+    description: "Geral · local via Ollama",
+    tier: "fast",
+    brand: "Ollama",
+    rank: 203,
+    envStrength: 4,
+    llmProvider: "ollama",
+    secretKey: "OLLAMA_BASE_URL",
+  },
+];
+
 export const CODING_MODEL_PRESETS: ForgeModelPreset[] = [
   ...RANKED_MODEL_PRESETS,
   ...NATIVE_POOL,
+  ...OLLAMA_NATIVE,
 ];
 
 export const POOL_MODEL_PRESETS = CODING_MODEL_PRESETS.filter((p) => p.tier === "pool");
@@ -498,27 +571,8 @@ const LEGACY_PRESET_IDS: Record<string, string> = {
   "pool-nemotron-super": PLATFORM_ROBIN_TASTE_PRESET_ID,
 };
 
-export const STT_OPTIONS = [
-  {
-    id: "grok" as const,
-    label: "Grok STT (xAI)",
-    description: "Melhor para português — exige chave xAI.",
-    requiresEnv: "xai" as AiEnvId,
-    recommended: true,
-  },
-  {
-    id: "groq" as const,
-    label: "Groq Whisper Large v3 Turbo",
-    description: "Whisper via Groq — exige chave Groq.",
-    requiresEnv: "groq" as AiEnvId,
-  },
-  {
-    id: "openrouter" as const,
-    label: "OpenRouter STT",
-    description: "Modelos de áudio via OpenRouter (ex.: whisper).",
-    requiresEnv: "openrouter" as AiEnvId,
-  },
-];
+export { STT_OPTIONS, STT_DEFAULT_PROVIDER, STT_LABELS, STT_MODEL_BY_PROVIDER } from "@/lib/stt-config";
+export type { SttProviderId } from "@/lib/stt-config";
 
 const PRESET_BY_ID = new Map(CODING_MODEL_PRESETS.map((p) => [p.id, p]));
 

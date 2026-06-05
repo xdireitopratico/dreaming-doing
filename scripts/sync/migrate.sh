@@ -6,7 +6,7 @@ set -euo pipefail
 REF="dpduljngdurfpmaclffa"
 LINKED="supabase/.temp/linked-project.json"
 echo "→ Verificando link..."
-if [[ ! -f "$LINKED" ]] || ! grep -q "\"ref\": \"$REF\"" "$LINKED" 2>/dev/null; then
+if [[ ! -f "$LINKED" ]] || ! grep -q "\"ref\"[[:space:]]*:[[:space:]]*\"$REF\"" "$LINKED" 2>/dev/null; then
   echo "  Projeto não linked com $REF. Rode: supabase link --project-ref $REF"
   exit 1
 fi

@@ -79,6 +79,9 @@ function mimo(model: string, label: string): PresetWire {
     secretKey: "MIMO_API_KEY",
   };
 }
+function ollama(model: string, label: string): PresetWire {
+  return { provider: "ollama", model, label, secretKey: "OLLAMA_BASE_URL" };
+}
 
 const PRESETS: Record<string, PresetWire> = {
   "anthropic--claude-opus-4-8": anthropic("claude-opus-4-8", "Claude Opus 4.8"),
@@ -122,6 +125,10 @@ const PRESETS: Record<string, PresetWire> = {
   },
   "pool-nemotron-ultra-550b": nvidia("nvidia/nemotron-3-ultra-550b", "NVIDIA · Nemotron 3 Ultra (550B)"),
   "pool-nemotron-super": nvidia("nvidia/nemotron-3-ultra-550b", "NVIDIA · Nemotron 3 Ultra (550B)"),
+  "ollama--llama3-2": ollama("llama3.2", "Llama 3.2"),
+  "ollama--qwen2-5-coder": ollama("qwen2.5-coder:7b", "Qwen 2.5 Coder 7B"),
+  "ollama--deepseek-r1-8b": ollama("deepseek-r1:8b", "DeepSeek R1 8B"),
+  "ollama--mistral": ollama("mistral", "Mistral"),
 };
 
 /** Gosto da plataforma — único preset ROBIN NVIDIA do FORGE */
@@ -160,6 +167,7 @@ const ENV_SECRET: Record<string, string> = {
   minimax: "MINIMAX_API_KEY",
   moonshotai: "MOONSHOT_API_KEY",
   xiaomi: "MIMO_API_KEY",
+  ollama: "OLLAMA_BASE_URL",
 };
 
 function wireFromUserEntry(entry: UserModelEntryPayload): PresetWire | null {
@@ -176,6 +184,10 @@ function wireFromUserEntry(entry: UserModelEntryPayload): PresetWire | null {
   if (entry.env === "moonshotai") return moonshot("kimi-k2.6", entry.label ?? slug);
   if (entry.env === "xiaomi") return mimo("mimo-v2.5-pro", entry.label ?? slug);
   if (entry.env === "nvidia") return nvidia(slug, entry.label ?? slug);
+  if (entry.env === "ollama") {
+    const model = slug.includes("/") ? slug.split("/").pop() ?? slug : slug;
+    return ollama(model, entry.label ?? model);
+  }
   return openai(slug.split("/").pop() ?? slug, entry.label ?? slug, "https://api.openai.com/v1");
 }
 
@@ -224,6 +236,12 @@ export function resolveFixedFromKeys(
 ): (PresetWire & { apiKey: string }) | null {
   const preset = getPresetWire(presetId);
   if (!preset) return null;
+  if (preset.provider === "ollama" || preset.secretKey === "OLLAMA_BASE_URL") {
+    const baseUrl = keys.OLLAMA_BASE_URL;
+    if (!baseUrl) return null;
+    const model = keys.OLLAMA_MODEL || preset.model;
+    return { ...preset, model, baseUrl, apiKey: "ollama" };
+  }
   const apiKey = keys[preset.secretKey];
   if (!apiKey) return null;
   return { ...preset, apiKey };
@@ -237,6 +255,11 @@ type PrefsLike = {
 };
 
 function wireWithKey(wire: PresetWire, keys: Record<string, string>): (PresetWire & { apiKey: string }) | null {
+  if (wire.provider === "ollama" || wire.secretKey === "OLLAMA_BASE_URL") {
+    const baseUrl = keys.OLLAMA_BASE_URL;
+    if (!baseUrl) return null;
+    return { ...wire, baseUrl, model: keys.OLLAMA_MODEL || wire.model, apiKey: "ollama" };
+  }
   const apiKey = keys[wire.secretKey];
   if (!apiKey) return null;
   return { ...wire, apiKey };
