@@ -93,6 +93,7 @@ class OpenAIAdapter implements LLMProvider {
   async chat(params: ChatParams): Promise<ChatResponse> {
     const messages = params.messages.map(m => {
       const msg: any = { role: m.role, content: m.content ?? "" };
+      if (Array.isArray(m.content)) msg.content = m.content;
       if (m.tool_calls) msg.tool_calls = m.tool_calls;
       if (m.tool_call_id) { msg.tool_call_id = m.tool_call_id; msg.role = "tool"; }
       if (m.name) msg.name = m.name;
@@ -256,6 +257,7 @@ class OpenRouterAdapter implements LLMProvider {
       temperature: params.temperature ?? 0.7,
       messages: params.messages.map(m => {
         const msg: any = { role: m.role, content: m.content ?? "" };
+        if (Array.isArray(m.content)) msg.content = m.content;
         if (m.tool_calls) msg.tool_calls = m.tool_calls;
         if (m.tool_call_id) { msg.tool_call_id = m.tool_call_id; msg.role = "tool"; }
         return msg;

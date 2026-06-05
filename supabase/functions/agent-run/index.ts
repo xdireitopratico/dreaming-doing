@@ -137,7 +137,7 @@ Deno.serve(async (req) => {
       .order("created_at", { ascending: true })
       .limit(120);
 
-    const messages = buildChatHistory(history ?? []);
+    const historyRows = history ?? [];
 
     const userOnlyKeys = await loadConnectorKeys(supabase, userData.user.id, preferences);
     const groqPool = await loadConnectorPools(supabase, userData.user.id, "groq");
@@ -328,6 +328,8 @@ Deno.serve(async (req) => {
       runningLocks.delete(projectId);
       return json({ error: (err as Error)?.message ?? "Provider LLM não configurado" }, 500);
     }
+
+    const messages = await buildChatHistory(historyRows, 120, mainCfg.model);
 
     const reg = new ToolRegistry();
     const e2bKey = await loadUserE2bApiKey(supabase, userData.user.id);

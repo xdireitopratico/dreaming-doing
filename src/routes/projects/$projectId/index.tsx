@@ -30,6 +30,7 @@ import {
 import { loadAgentPreferences } from "@/lib/agent-preferences";
 import type { ForgeSessionKind } from "@/lib/taste";
 import { canSendTasteChat, canStartTasteProject } from "@/lib/taste";
+import type { StoredMessagePart } from "@/lib/chat-attachments";
 import { AgentPanel } from "@/components/editor/AgentPanel";
 import { PreviewFrame } from "@/components/editor/PreviewFrame";
 
@@ -417,17 +418,26 @@ function EditorPage() {
   }, [filesSyncKey, devUrl, activeView]);
 
   const handleSend = useCallback(
-    (text: string, mode?: AgentComposerMode) => {
+    (text: string, mode?: AgentComposerMode, parts?: StoredMessagePart[]) => {
       if (!conversation) return;
-      const effectiveMode = mode ?? composerMode;
-      const body =
-        effectiveMode === "plan" ? `[Modo plano — só planejar, não executar ainda]\n${text}` : text;
+      const messageParts =
+        parts && parts.length > 0
+          ? parts
+          : [
+              {
+                type: "text" as const,
+                text:
+                  (mode ?? composerMode) === "plan"
+                    ? `[Modo plano — só planejar, não executar ainda]\n${text}`
+                    : text,
+              },
+            ];
       supabase
         .from("messages")
         .insert({
           conversation_id: conversation.id,
           role: "user",
-          parts: [{ type: "text", text: body }],
+          parts: messageParts,
         })
         .then(({ error }) => {
           if (error) toast.error("Erro ao enviar mensagem");
@@ -436,6 +446,14 @@ function EditorPage() {
     },
     [conversation, runAgent, composerMode],
   );
+
+  const handleVisualEdits = useCallback(() => {
+    if (activeView !== "preview") {
+      setActiveView("preview");
+      toast.info("Abra o Preview para selecionar um elemento.");
+    }
+    elementPicker.onToggle();
+  }, [activeView, elementPicker]);
 
   const handleStartProject = useCallback(() => {
     if (!conversation) return;
@@ -590,6 +608,8 @@ function EditorPage() {
                     running={running}
                     onSend={handleSend}
                     onStop={handleStop}
+                    onVisualEdits={handleVisualEdits}
+                    visualEditsActive={pickMode}
                     files={filePaths}
                     composerMode={composerMode}
                     onComposerModeChange={setComposerMode}

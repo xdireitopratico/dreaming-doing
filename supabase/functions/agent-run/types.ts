@@ -32,9 +32,15 @@ export interface ChatParams {
   response_format?: { type: "json_object" } | { type: "text" };
 }
 
+export type ChatContentBlock = {
+  type: string;
+  text?: string;
+  image_url?: { url: string };
+};
+
 export interface ChatMessage {
   role: "system" | "user" | "assistant" | "tool";
-  content?: string;
+  content?: string | ChatContentBlock[];
   tool_calls?: Array<{
     id: string;
     type: "function";

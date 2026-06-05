@@ -96,7 +96,7 @@ export async function runTasteChat(params: {
     .order("created_at", { ascending: true })
     .limit(40);
 
-  const messages = buildChatHistory(history ?? []);
+  const messages = await buildChatHistory(history ?? [], 40, cfg.model);
   const llm = createLLMProvider({
     provider: cfg.provider,
     apiKey: cfg.apiKey,

@@ -10,10 +10,19 @@ import {
   FileText,
   Paperclip,
   ImageIcon,
+  MousePointer2,
+  X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { MicButton } from "@/components/voice/MicButton";
 import { toast } from "sonner";
+import {
+  buildOutgoingParts,
+  CHAT_ATTACHMENT_ACCEPT,
+  filesToMessageParts,
+  filterAcceptedFiles,
+  type StoredMessagePart,
+} from "@/lib/chat-attachments";
 import { loadAgentPreferences } from "@/lib/agent-preferences";
 import {
   getAgentSetupBlockMessage,
@@ -37,9 +46,11 @@ export interface ChatMessage {
 interface ChatInputProps {
   messages: ChatMessage[];
   running: boolean;
-  onSend: (text: string, mode?: AgentComposerMode) => void;
+  onSend: (text: string, mode?: AgentComposerMode, parts?: StoredMessagePart[]) => void;
   onStop: () => void;
   files: string[];
+  onVisualEdits?: () => void;
+  visualEditsActive?: boolean;
   composerMode?: AgentComposerMode;
   onComposerModeChange?: (mode: AgentComposerMode) => void;
   externalPrompt?: string | null;
@@ -150,6 +161,8 @@ export function ChatInput({
   tasteChatRemaining,
   tasteStartRemaining,
   onStartProject,
+  onVisualEdits,
+  visualEditsActive,
 }: ChatInputProps) {
   const [input, setInput] = useState("");
   const [composerModeLocal, setComposerModeLocal] = useState<AgentComposerMode>("build");
@@ -229,9 +242,23 @@ export function ChatInput({
     textareaRef.current?.focus();
   };
 
-  const handleSend = () => {
+  const addAttachmentFiles = useCallback((incoming: File[]) => {
+    if (!incoming.length) return;
+    const { accepted, rejected } = filterAcceptedFiles(incoming);
+    if (rejected.length) {
+      toast.warning(`Não aceito: ${rejected.slice(0, 3).join(", ")}${rejected.length > 3 ? "…" : ""}`);
+    }
+    if (!accepted.length) return;
+    setAttachments((prev) => [...prev, ...accepted].slice(0, 8));
+  }, []);
+
+  const removeAttachment = useCallback((index: number) => {
+    setAttachments((prev) => prev.filter((_, i) => i !== index));
+  }, []);
+
+  const handleSend = async () => {
     const text = input.trim();
-    if (!text || running) return;
+    if ((!text && attachments.length === 0) || running) return;
 
     const prefs = loadAgentPreferences();
     if (!isAgentPreferencesConfigured(prefs)) {
@@ -239,22 +266,46 @@ export function ChatInput({
       return;
     }
 
-    historyRef.current.push(text);
-    setHistoryIndex(-1);
-    setInput("");
+    let attachmentParts: StoredMessagePart[] = [];
     if (attachments.length > 0) {
-      toast.info(`${attachments.length} anexo(s) — envio multimodal em breve`);
-      setAttachments([]);
+      try {
+        attachmentParts = await filesToMessageParts(attachments);
+      } catch (e: unknown) {
+        toast.error(e instanceof Error ? e.message : "Erro ao ler anexos");
+        return;
+      }
     }
-    onSend(text, composerMode);
+
+    const planPrefix =
+      composerMode === "plan" ? "[Modo plano — só planejar, não executar ainda]\n" : "";
+    const outgoing = buildOutgoingParts(
+      planPrefix + text,
+      attachmentParts,
+    );
+    if (outgoing.length === 0) return;
+
+    if (text) {
+      historyRef.current.push(text);
+      setHistoryIndex(-1);
+    }
+    setInput("");
+    setAttachments([]);
+    onSend(text, composerMode, outgoing);
   };
 
   const handleAttachClick = () => fileInputRef.current?.click();
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const picked = Array.from(e.target.files ?? []);
-    if (picked.length) setAttachments((prev) => [...prev, ...picked].slice(0, 8));
+    addAttachmentFiles(Array.from(e.target.files ?? []));
     e.target.value = "";
+  };
+
+  const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const pasted = Array.from(e.clipboardData.files ?? []);
+    if (pasted.length > 0) {
+      e.preventDefault();
+      addAttachmentFiles(pasted);
+    }
   };
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -318,8 +369,7 @@ export function ChatInput({
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
-    const dropped = Array.from(e.dataTransfer.files ?? []);
-    if (dropped.length) setAttachments((prev) => [...prev, ...dropped].slice(0, 8));
+    addAttachmentFiles(Array.from(e.dataTransfer.files ?? []));
   };
 
   return (
@@ -457,15 +507,23 @@ export function ChatInput({
         <div className="mx-3 mb-1 flex flex-wrap gap-1.5 px-1">
           {attachments.map((f, i) => (
             <span
-              key={`${f.name}-${i}`}
-              className="inline-flex items-center gap-1 rounded-md border border-[var(--forge-border)] bg-[var(--forge-surface-3)] px-2 py-0.5 text-[10px] text-[var(--forge-muted)]"
+              key={`${f.name}-${f.size}-${i}`}
+              className="inline-flex items-center gap-1 rounded-md border border-[var(--forge-border)] bg-[var(--forge-surface-3)] pl-2 pr-1 py-0.5 text-[10px] text-[var(--forge-muted)]"
             >
               {f.type.startsWith("image/") ? (
-                <ImageIcon className="size-3" />
+                <ImageIcon className="size-3 shrink-0" />
               ) : (
-                <FileText className="size-3" />
+                <FileText className="size-3 shrink-0" />
               )}
               <span className="max-w-[120px] truncate">{f.name}</span>
+              <button
+                type="button"
+                className="grid size-5 place-items-center rounded hover:bg-[var(--forge-surface-2)] text-[var(--forge-silver)]"
+                title="Remover anexo"
+                onClick={() => removeAttachment(i)}
+              >
+                <X className="size-3" />
+              </button>
             </span>
           ))}
         </div>
@@ -477,7 +535,7 @@ export function ChatInput({
           type="file"
           className="hidden"
           multiple
-          accept="image/*,.pdf,.doc,.docx,.txt,.md,.json"
+          accept={CHAT_ATTACHMENT_ACCEPT}
           onChange={handleFileChange}
         />
 
@@ -486,6 +544,7 @@ export function ChatInput({
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={handleKeyDown}
+          onPaste={handlePaste}
           placeholder="Ask FORGE…"
           rows={1}
           className="forge-composer-input"
@@ -495,11 +554,22 @@ export function ChatInput({
           <button
             type="button"
             className="forge-composer-icon"
-            title="Anexar imagem ou documento"
+            title="Anexar imagem ou documento (PDF, Word, Excel, TXT)"
             onClick={handleAttachClick}
           >
             <Paperclip className="size-4" />
           </button>
+
+          {onVisualEdits && (
+            <button
+              type="button"
+              className={`forge-composer-icon${visualEditsActive ? " !bg-[var(--forge-primary)]/15 !text-[var(--forge-primary)]" : ""}`}
+              title="Visual edits — clique no preview para selecionar elemento"
+              onClick={onVisualEdits}
+            >
+              <MousePointer2 className="size-4" />
+            </button>
+          )}
 
           <span className="forge-composer-spacer" />
 
@@ -540,7 +610,7 @@ export function ChatInput({
               type="button"
               className="forge-composer-send ml-1"
               onClick={handleSend}
-              disabled={!input.trim()}
+              disabled={!input.trim() && attachments.length === 0}
               title="Enviar"
             >
               <ArrowUp className="size-4" />

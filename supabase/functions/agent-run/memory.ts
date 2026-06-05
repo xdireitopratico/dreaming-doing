@@ -1,8 +1,13 @@
 import type { ChatMessage } from "./types.ts";
+import {
+  expandPartsToOpenAIContent,
+  modelIdSupportsVision,
+  type DbMessagePart,
+} from "../_shared/message-parts.ts";
 
 type HistoryRow = {
   role: string;
-  parts?: Array<{ type?: string; text?: string }>;
+  parts?: DbMessagePart[];
   tool_calls?: Array<{
     id?: string;
     name?: string;
@@ -14,13 +19,18 @@ type HistoryRow = {
   created_at?: string;
 };
 
-/** Reconstrói histórico completo para o LLM (assistant + tool results). */
-export function buildChatHistory(rows: HistoryRow[], maxRows = 120): ChatMessage[] {
+/** Reconstrói histórico completo para o LLM (assistant + tool results + anexos). */
+export async function buildChatHistory(
+  rows: HistoryRow[],
+  maxRows = 120,
+  modelHint = "",
+): Promise<ChatMessage[]> {
   const slice = rows.slice(-maxRows);
   const out: ChatMessage[] = [];
 
   for (const m of slice) {
-    const text = (m.parts ?? [])
+    const plainText = (m.parts ?? [])
+      .filter((p) => p.type === "text")
       .map((p) => p.text)
       .filter(Boolean)
       .join("\n");
@@ -28,7 +38,7 @@ export function buildChatHistory(rows: HistoryRow[], maxRows = 120): ChatMessage
     if (m.role === "assistant" && (m.tool_calls?.length ?? 0) > 0) {
       out.push({
         role: "assistant",
-        content: text || "",
+        content: plainText || "",
         tool_calls: (m.tool_calls ?? []).map((tc) => ({
           id: tc.id ?? crypto.randomUUID(),
           type: "function" as const,
@@ -60,15 +70,27 @@ export function buildChatHistory(rows: HistoryRow[], maxRows = 120): ChatMessage
       out.push({
         role: "tool",
         tool_call_id: "",
-        content: text,
+        content: plainText,
       });
       continue;
     }
 
-    if (m.role === "user" || m.role === "assistant" || m.role === "system") {
+    if (m.role === "user") {
+      const hasRichParts = (m.parts ?? []).some(
+        (p) => p.type === "image" || p.type === "file_blob",
+      );
+      const visionCapable = modelIdSupportsVision(modelHint);
+      const content = hasRichParts
+        ? await expandPartsToOpenAIContent(m.parts, { visionCapable, modelHint })
+        : plainText || "";
+      out.push({ role: "user", content: content || "" });
+      continue;
+    }
+
+    if (m.role === "assistant" || m.role === "system") {
       out.push({
         role: m.role as ChatMessage["role"],
-        content: text || "",
+        content: plainText || "",
       });
     }
   }
