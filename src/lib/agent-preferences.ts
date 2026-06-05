@@ -37,7 +37,7 @@ export function loadAgentPreferences(): AgentPreferences {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return DEFAULT_AGENT_PREFERENCES;
-    const parsed = JSON.parse(raw) as Partial<AgentPreferences> & { mode?: string };
+    const parsed = JSON.parse(raw) as Partial<Omit<AgentPreferences, "mode">> & { mode?: string };
     const modeRaw = parsed.mode === "rob" ? "robin" : parsed.mode;
     const merged: AgentPreferences = {
       ...DEFAULT_AGENT_PREFERENCES,
