@@ -3,6 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { getSupabaseEnv } from "@/lib/supabase-env";
+import { logEditorTelemetryEvent } from "@/lib/editor-telemetry";
 
 type BootResult = {
   url?: string;
@@ -39,6 +40,7 @@ export function usePreviewBoot(projectId: string) {
     setBooting(true);
     setLastError(null);
     setWarming(false);
+    logEditorTelemetryEvent("preview", "boot_start", "info", projectId);
     try {
       const res = await fetch(`${url}/functions/v1/preview-boot`, {
         method: "POST",
@@ -61,11 +63,18 @@ export function usePreviewBoot(projectId: string) {
         if (!body.reused) {
           toast.success("Preview conectado");
         }
+        logEditorTelemetryEvent(
+          "preview",
+          "boot_ok",
+          "ok",
+          `${body.reused ? "reused" : "new"} ${body.url.slice(0, 80)}`,
+        );
       }
       return body.url ?? null;
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Não foi possível abrir o preview";
       setLastError(msg);
+      logEditorTelemetryEvent("preview", "boot_fail", "error", msg.slice(0, 240));
       if (msg.includes("E2B") || msg.includes("Sandbox")) {
         toast.error("Configure sua chave E2B em API Keys (/api).");
       } else if (!msg.includes("agente")) {

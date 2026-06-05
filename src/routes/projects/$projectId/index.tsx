@@ -48,6 +48,8 @@ import { RateLimitIndicator } from "@/components/editor/RateLimitIndicator";
 import { SnapshotsSheet } from "@/components/editor/SnapshotsSheet";
 import { useSSE } from "@/hooks/useSSE";
 import { usePreviewBoot } from "@/hooks/usePreviewBoot";
+import { useEditorTelemetry } from "@/hooks/useEditorTelemetry";
+import { logEditorTelemetryEvent } from "@/lib/editor-telemetry";
 import { publishProject } from "@/lib/publish.functions";
 import { useAgentBlame, buildBlameFromTimeline } from "@/hooks/useAgentBlame";
 import { registerAiCodeLens, registerAiFolding, clearEnhancements, HEAT_MAP_CSS } from "@/lib/monacoEnhancements";
@@ -104,6 +106,9 @@ function EditorPage() {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [cheatsheetOpen, setCheatsheetOpen] = useState(false);
   const [logPanelOpen, setLogPanelOpen] = useState(false);
+  const [logPanelTab, setLogPanelTab] = useState<"terminal" | "console" | "problems" | "shot">(
+    "terminal",
+  );
   const [provider, setProvider] = useState("");
   const [pickMode, setPickMode] = useState(false);
   const [logs, setLogs] = useState<LogEntry[]>([]);
@@ -198,6 +203,43 @@ function EditorPage() {
   );
 
   const devUrl = (project?.meta as { previewUrl?: string } | null)?.previewUrl ?? null;
+
+  const connectedKinds = useMemo(
+    () =>
+      (Object.keys(connectorStatus) as Array<keyof typeof connectorStatus>).filter(
+        (k) => connectorStatus[k].connected,
+      ),
+    [connectorStatus],
+  );
+
+  useEditorTelemetry(
+    projectId
+      ? {
+          projectId,
+          projectName: project?.name,
+          projectMeta: (project?.meta as Record<string, unknown>) ?? null,
+          conversationId: conversation?.id ?? null,
+          e2bConnected,
+          hasUserLlmKey,
+          tasteChatRemaining,
+          tasteStartRemaining,
+          connectedKinds,
+          running,
+          sseConnected: sse.connected,
+          sseProgress: sse.progress,
+          devUrl,
+          previewBooting: previewBoot.booting,
+          previewLastError: previewBoot.lastError,
+          previewWarming: previewBoot.warming,
+          isReactProject,
+          agentHasRun,
+          activeView,
+          fileCount: files?.length ?? 0,
+          messageCount: messages?.length ?? 0,
+          hasPackageJson: isReactProject,
+        }
+      : null,
+  );
   const publishedUrl =
     (project?.meta as { publishedUrl?: string } | null)?.publishedUrl ?? null;
 
@@ -229,6 +271,15 @@ function EditorPage() {
       .subscribe((status, err) => {
         if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
           console.error(`[FORGE Realtime] editor-${projectId}`, status, err);
+          logEditorTelemetryEvent(
+            "realtime",
+            status === "CHANNEL_ERROR" ? "channel_error" : "timed_out",
+            "error",
+            err?.message?.slice(0, 120),
+          );
+        }
+        if (status === "SUBSCRIBED") {
+          logEditorTelemetryEvent("realtime", "subscribed", "ok", projectId);
         }
       });
     return () => removeRealtimeChannel(channel);
@@ -381,6 +432,12 @@ function EditorPage() {
       setLogs((prev) => [...prev, createLogEntry("info", label, "agent")]);
       if (!logPanelOpen) setLogPanelOpen(true);
       void qc.invalidateQueries({ queryKey: ["messages", conversation.id] });
+      logEditorTelemetryEvent(
+        "agent",
+        "run_start",
+        "info",
+        kind === "byok" ? "byok" : kind,
+      );
       void (async () => {
         setRunning(true);
         try {
@@ -390,7 +447,9 @@ function EditorPage() {
             kind === "byok" ? undefined : kind,
           );
         } catch (e: unknown) {
-          toast.error(e instanceof Error ? e.message : "Erro ao iniciar agente");
+          const msg = e instanceof Error ? e.message : "Erro ao iniciar agente";
+          logEditorTelemetryEvent("agent", "run_fail", "error", msg.slice(0, 200));
+          toast.error(msg);
         } finally {
           setRunning(false);
         }
@@ -447,8 +506,13 @@ function EditorPage() {
           parts: messageParts,
         })
         .then(({ error }) => {
-          if (error) toast.error("Erro ao enviar mensagem");
-          else runAgent(resolveSessionKind(tasteQuota));
+          if (error) {
+            toast.error("Erro ao enviar mensagem");
+            logEditorTelemetryEvent("agent", "chat_send_fail", "error", error.message.slice(0, 200));
+          } else {
+            logEditorTelemetryEvent("agent", "chat_send", "info", mode ?? composerMode);
+            runAgent(resolveSessionKind(tasteQuota));
+          }
         });
     },
     [conversation, runAgent, composerMode, tasteQuota],
@@ -459,7 +523,11 @@ function EditorPage() {
       setActiveView("preview");
       toast.info("Abra o Preview para selecionar um elemento.");
     }
-    setPickMode((v) => !v);
+    setPickMode((v) => {
+      const next = !v;
+      logEditorTelemetryEvent("ui", next ? "visual_edits_on" : "visual_edits_off", "info");
+      return next;
+    });
   }, [activeView]);
 
   const handleStartProject = useCallback(() => {
@@ -482,6 +550,7 @@ function EditorPage() {
   const handleStop = useCallback(() => {
     sse.disconnect();
     setRunning(false);
+    logEditorTelemetryEvent("agent", "run_stop", "warn", "user");
     setLogs((prev) => [...prev, createLogEntry("warning", "Agente interrompido pelo usuário", "agent")]);
     toast.info("Agente interrompido");
   }, [sse]);
@@ -498,6 +567,7 @@ function EditorPage() {
       if (!url) return;
     }
     setPublishing(true);
+    logEditorTelemetryEvent("preview", "publish_start", "info", projectId);
     try {
       const res = await publishFn({ data: { projectId } });
       if (res.needsPreview) {
@@ -505,6 +575,7 @@ function EditorPage() {
         return;
       }
       if (res.url) {
+        logEditorTelemetryEvent("preview", "publish_ok", "ok", res.url.slice(0, 120));
         toast.success("Publicado!", {
           description: res.url,
           action: {
@@ -515,7 +586,9 @@ function EditorPage() {
         qc.invalidateQueries({ queryKey: ["project", projectId] });
       }
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Falha ao publicar");
+      const msg = e instanceof Error ? e.message : "Falha ao publicar";
+      logEditorTelemetryEvent("preview", "publish_fail", "error", msg.slice(0, 200));
+      toast.error(msg);
     } finally {
       setPublishing(false);
     }
@@ -571,6 +644,11 @@ function EditorPage() {
       if (mod && e.shiftKey && e.key === "?") { e.preventDefault(); setCheatsheetOpen((v) => !v); }
       if (mod && e.key === "p" && !e.shiftKey) { e.preventDefault(); setPaletteOpen(true); }
       if (mod && e.key === "j") { e.preventDefault(); setLogPanelOpen((v) => !v); }
+      if (mod && e.shiftKey && e.key.toLowerCase() === "d") {
+        e.preventDefault();
+        setLogPanelTab("shot");
+        setLogPanelOpen(true);
+      }
       if (mod && e.key === "b") { e.preventDefault(); setShowFileTree((v) => !v); }
       if (mod && e.key === "s") { e.preventDefault(); paletteActions.find(a => a.id === "save-all")?.action(); }
     };
@@ -708,6 +786,7 @@ function EditorPage() {
           onClose={() => setLogPanelOpen(false)}
           logs={logs}
           running={running}
+          initialTab={logPanelTab}
         />
       </EditorShell>
 

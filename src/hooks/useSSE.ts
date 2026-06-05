@@ -8,6 +8,7 @@ import { loadAgentSessionExtensions } from "@/lib/agent-session-extensions";
 import type { ForgeSessionKind } from "@/lib/taste";
 import { dispatchTasteUiAction, isTasteUiAction } from "@/lib/taste-ui-actions";
 import { formatAgentFetchError } from "@/lib/agent-fetch-errors";
+import { logEditorTelemetryEvent } from "@/lib/editor-telemetry";
 
 export interface SSEEvent {
   type: string;
@@ -119,6 +120,12 @@ export function useSSE() {
     const functionsUrl = `${url}/functions/v1/agent-run`;
 
     setConnected(true);
+    logEditorTelemetryEvent(
+      "sse",
+      "connect_start",
+      "info",
+      sessionKind ?? "auto",
+    );
 
     try {
       const res = await fetch(functionsUrl, {
@@ -141,6 +148,7 @@ export function useSSE() {
 
       if (!res.ok) {
         const msg = await parseErrorResponse(res);
+        logEditorTelemetryEvent("sse", "http_error", "error", `${res.status} ${msg.slice(0, 120)}`);
         setProgress((p) => ({ ...p, error: msg, finished: true }));
         setConnected(false);
         return;
@@ -182,7 +190,26 @@ export function useSSE() {
               if (eventType === "ui_action" && isTasteUiAction(parsed)) {
                 dispatchTasteUiAction(parsed as Parameters<typeof dispatchTasteUiAction>[0]);
               }
-              if (event.type === "finish" || event.type === "done") sawFinish.current = true;
+              if (event.type === "finish" || event.type === "done") {
+                sawFinish.current = true;
+                logEditorTelemetryEvent("sse", "finish", "ok");
+              }
+              if (event.type === "error") {
+                logEditorTelemetryEvent(
+                  "sse",
+                  "stream_error",
+                  "error",
+                  String(event.data.error ?? "").slice(0, 200),
+                );
+              }
+              if (event.type === "phase") {
+                logEditorTelemetryEvent(
+                  "agent",
+                  "phase",
+                  "info",
+                  String(event.data.phase ?? ""),
+                );
+              }
               setProgress((prev) => applyEvent(prev, event));
             } catch {
               /* heartbeat */

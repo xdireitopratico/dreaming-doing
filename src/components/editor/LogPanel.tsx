@@ -3,10 +3,15 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  Terminal, Monitor, AlertTriangle, X, Trash2, ChevronDown,
+  Terminal, Monitor, AlertTriangle, Activity, X, Trash2, ChevronDown,
   Circle, AlertCircle, CheckCircle2, Copy, Maximize2, Minimize2,
 } from "lucide-react";
 import { getDiagnostics, subscribeDiagnostics, type Diagnostic } from "@/hooks/useDiagnostics";
+import { TroubleshootingShotPanel } from "@/components/editor/TroubleshootingShotPanel";
+import {
+  getTroubleshootingShot,
+  subscribeEditorTelemetry,
+} from "@/lib/editor-telemetry";
 
 export interface LogEntry {
   id: string;
@@ -23,16 +28,29 @@ interface LogPanelProps {
   logs?: LogEntry[];
   /** Whether agent is running (shows spinner) */
   running?: boolean;
+  /** Aba inicial ao abrir (ex.: atalho de debug) */
+  initialTab?: Tab;
 }
 
-type Tab = "terminal" | "console" | "problems";
+type Tab = "terminal" | "console" | "problems" | "shot";
 
-export function LogPanel({ isOpen, onClose, logs = [], running = false }: LogPanelProps) {
-  const [activeTab, setActiveTab] = useState<Tab>("terminal");
+export function LogPanel({
+  isOpen,
+  onClose,
+  logs = [],
+  running = false,
+  initialTab,
+}: LogPanelProps) {
+  const [activeTab, setActiveTab] = useState<Tab>(initialTab ?? "terminal");
   const [diagnostics, setDiagnostics] = useState<Diagnostic[]>([]);
+  const [shotHealth, setShotHealth] = useState(() => getTroubleshootingShot().health);
   const terminalRef = useRef<HTMLDivElement>(null);
   const [autoScroll, setAutoScroll] = useState(true);
   const [maximized, setMaximized] = useState(false);
+
+  useEffect(() => {
+    if (isOpen && initialTab) setActiveTab(initialTab);
+  }, [isOpen, initialTab]);
 
   // Subscribe to diagnostics
   useEffect(() => {
@@ -42,6 +60,12 @@ export function LogPanel({ isOpen, onClose, logs = [], running = false }: LogPan
     const current = getDiagnostics();
     setDiagnostics(current.diagnostics);
     return unsub;
+  }, []);
+
+  useEffect(() => {
+    const refresh = () => setShotHealth(getTroubleshootingShot().health);
+    refresh();
+    return subscribeEditorTelemetry(refresh);
   }, []);
 
   // Auto-scroll terminal
@@ -68,6 +92,17 @@ export function LogPanel({ isOpen, onClose, logs = [], running = false }: LogPan
       label: "PROBLEMS",
       icon: <AlertTriangle className="size-3" />,
       badge: diagnostics.filter((d) => d.severity === "error").length,
+    },
+    {
+      id: "shot",
+      label: "SHOT",
+      icon: <Activity className="size-3" />,
+      badge:
+        shotHealth === "critical"
+          ? 1
+          : shotHealth === "degraded"
+            ? 1
+            : undefined,
     },
   ];
 
@@ -268,6 +303,18 @@ export function LogPanel({ isOpen, onClose, logs = [], running = false }: LogPan
             </motion.div>
           )}
 
+          {activeTab === "shot" && (
+            <motion.div
+              key="shot"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="h-full min-h-[180px]"
+            >
+              <TroubleshootingShotPanel />
+            </motion.div>
+          )}
+
           {activeTab === "problems" && (
             <motion.div
               key="problems"
@@ -330,7 +377,9 @@ export function LogPanel({ isOpen, onClose, logs = [], running = false }: LogPan
         <span className="ml-auto font-mono text-[8px] text-[var(--text-ghost)]">
           {activeTab === "problems"
             ? `${diagnostics.length} problema${diagnostics.length !== 1 ? "s" : ""}`
-            : `${logs.length} entrada${logs.length !== 1 ? "s" : ""}`}
+            : activeTab === "shot"
+              ? `health: ${getTroubleshootingShot().health} · ${getTroubleshootingShot().score}/100`
+              : `${logs.length} entrada${logs.length !== 1 ? "s" : ""}`}
         </span>
       </div>
     </motion.div>
