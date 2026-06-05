@@ -16,7 +16,7 @@ export type ConnectorRegistryEntry = {
   tokenLabel?: string;
   tokenPlaceholder?: string;
   /** Conectável via connector-upsert. */
-  upsertKind?: "github" | "vercel" | "netlify" | "cloudflare" | "e2b";
+  upsertKind?: "github" | "vercel" | "netlify" | "cloudflare" | "e2b" | "supabase";
   showInEditorBar?: boolean;
   showOnConnectorsPage?: boolean;
 };
@@ -40,10 +40,13 @@ export const CONNECTOR_REGISTRY: Record<ConnectorId, ConnectorRegistryEntry> = {
     id: "supabase",
     name: "Supabase",
     description: "Banco de dados, autenticação, Realtime e funções do seu projeto.",
-    tagline: "Use a infraestrutura FORGE ou conecte seu próprio projeto Supabase.",
-    forgeAvailable: true,
+    tagline: "Conecte seu projeto Supabase (URL + chave anon ou service role).",
+    forgeAvailable: false,
     signupUrl: "https://supabase.com/dashboard/sign-up",
     docsUrl: "https://supabase.com/docs/guides/getting-started",
+    tokenLabel: "Chave anon ou service role",
+    tokenPlaceholder: "eyJhbG…",
+    upsertKind: "supabase",
     showInEditorBar: true,
     showOnConnectorsPage: true,
   },

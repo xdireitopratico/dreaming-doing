@@ -3,8 +3,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
-import { getSupabaseEnv } from "@/lib/supabase-env";
-import { isSupabaseConfigured } from "@/integrations/supabase/client";
+
 import { toast } from "sonner";
 import {
   type ConnectorId,
@@ -65,6 +64,7 @@ export function useConnectors() {
   const vercelRow = rows.find((r) => r.kind === "vercel");
   const netlifyRow = rows.find((r) => r.kind === "netlify");
   const cloudflareRow = rows.find((r) => r.kind === "cloudflare");
+  const supabaseRow = rows.find((r) => (r.kind as string) === "supabase");
   const e2bRow = rows.find((r) => (r.kind as string) === "e2b");
 
   const status: Record<ConnectorId, ConnectorStatus> = {
@@ -90,9 +90,12 @@ export function useConnectors() {
     },
     supabase: {
       forgeAvailable: CONNECTOR_REGISTRY.supabase.forgeAvailable,
-      connected: isSupabaseConfigured(),
-      label: isSupabaseConfigured() ? "FORGE · ativo" : "Não configurado",
-      meta: { url: getSupabaseEnv().url },
+      connected: !!supabaseRow,
+      label: supabaseRow
+        ? ((supabaseRow.meta as { projectRef?: string })?.projectRef as string | undefined) ??
+          "Projeto conectado"
+        : undefined,
+      meta: (supabaseRow?.meta as Record<string, unknown>) ?? {},
     },
     cloudflare: {
       forgeAvailable: CONNECTOR_REGISTRY.cloudflare.forgeAvailable,
@@ -158,14 +161,6 @@ export function useConnectors() {
         setModal(null);
         toast.info("Chave E2B fica em API Keys.");
         void navigate({ to: "/api", hash: "forge-key-e2b" });
-        return;
-      }
-
-      if (kind === "supabase") {
-        toast.info(
-          "Modo FORGE: banco e auth já estão ativos. Modo próprio: configure VITE_SUPABASE_URL e VITE_SUPABASE_PUBLISHABLE_KEY no seu deploy.",
-        );
-        setModal(null);
         return;
       }
 

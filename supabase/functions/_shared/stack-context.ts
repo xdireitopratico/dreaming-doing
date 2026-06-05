@@ -52,7 +52,7 @@ export function stackPromptAddon(ctx: StackContext): string {
 - **Preview ao vivo (diferencial):** um sandbox por projeto (criado quando a IA começa a programar); Vite com HMR no painel Preview. Não recriar ambiente — usuário exclui o projeto para encerrar.
 - **Repositório:** ${ctx.github ? "GitHub conectado (push quando fizer sentido)" : "GitHub modo FORGE ou não conectado"}.
 - **Hospedagem alvo:** ${deployLines[ctx.deployTarget]}
-- **Supabase no app gerado:** ${ctx.supabaseOwn ? "usuário pode usar projeto Supabase próprio" : "padrão FORGE (auth/DB) salvo que peça outro backend"}.
+- **Supabase no app gerado:** ${ctx.supabaseOwn ? "usuário conectou projeto Supabase próprio em Conectores" : "usuário ainda não conectou Supabase — orientar a configurar em Conectores"}.
 
 Quando o usuário disser "tudo na Vercel" ou "só Netlify": priorize essa plataforma para deploy; não force Supabase no código gerado.`;
 }

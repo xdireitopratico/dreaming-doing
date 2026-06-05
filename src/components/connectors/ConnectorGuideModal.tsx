@@ -49,6 +49,7 @@ export function ConnectorGuideModal({
   const [githubUser, setGithubUser] = useState("");
   const [vercelProject, setVercelProject] = useState("");
   const [cfAccount, setCfAccount] = useState("");
+  const [supabaseUrl, setSupabaseUrl] = useState("");
   const [busy, setBusy] = useState(false);
 
   if (!connector || !status) return null;
@@ -109,10 +110,17 @@ export function ConnectorGuideModal({
         resetAndClose();
         window.location.assign("/api#forge-key-e2b");
       } else if (connector === "supabase") {
-        toast.info(
-          "Use VITE_SUPABASE_URL e VITE_SUPABASE_PUBLISHABLE_KEY no deploy do seu projeto Supabase.",
-        );
-        resetAndClose();
+        if (!supabaseUrl.trim() || !token.trim()) {
+          toast.error("Informe a URL do projeto e a chave anon ou service role");
+          return;
+        }
+        await onSave("supabase", {
+          token: token.trim(),
+          meta: {
+            projectUrl: supabaseUrl.trim(),
+            label: "Supabase",
+          },
+        });
       } else {
         await onSave(connector, { token: token.trim() });
       }
@@ -142,7 +150,7 @@ export function ConnectorGuideModal({
     </a>
   );
 
-  const needsToken = entry.upsertKind && connector !== "supabase";
+  const needsToken = !!entry.upsertKind;
 
   return (
     <Dialog open={!!connector} onOpenChange={(o) => !o && resetAndClose()}>
@@ -235,6 +243,17 @@ export function ConnectorGuideModal({
                 />
               </div>
             )}
+            {connector === "supabase" && (
+              <div className="space-y-2">
+                <Label className={mutedClass}>URL do projeto</Label>
+                <Input
+                  value={supabaseUrl}
+                  onChange={(e) => setSupabaseUrl(e.target.value)}
+                  placeholder="https://xxxx.supabase.co"
+                  className={isEditor ? "border-[var(--forge-border-strong)] bg-[var(--forge-surface-3)]" : ""}
+                />
+              </div>
+            )}
             {entry.tokenLabel && (
               <ApiKeyInput
                 label={entry.tokenLabel}
@@ -245,16 +264,11 @@ export function ConnectorGuideModal({
               />
             )}
           </div>
-        ) : (
-          <p className={`text-xs ${mutedClass}`}>
-            Infraestrutura do app FORGE (login e banco desta instância). Para outro Supabase, configure variáveis no
-            deploy.
-          </p>
-        )}
+        ) : null}
 
         <DialogFooter className="gap-2 flex-col sm:flex-row sm:justify-between">
           <div className="flex gap-2 flex-wrap">
-            {connected && connector !== "supabase" ? (
+            {connected ? (
               <Button type="button" variant="outline" onClick={handleDisconnect} disabled={busy}>
                 Desconectar
               </Button>
@@ -265,8 +279,12 @@ export function ConnectorGuideModal({
                 onClick={handleConnect}
                 disabled={
                   busy ||
-                  ((connector === "vercel" || connector === "netlify" || connector === "cloudflare") &&
-                    !token.trim())
+                  ((connector === "vercel" ||
+                    connector === "netlify" ||
+                    connector === "cloudflare" ||
+                    connector === "supabase") &&
+                    !token.trim()) ||
+                  (connector === "supabase" && !supabaseUrl.trim())
                 }
               >
                 {busy ? "Conectando…" : "Salvar conexão"}

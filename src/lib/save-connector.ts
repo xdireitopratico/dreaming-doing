@@ -1,6 +1,15 @@
 import { supabase } from "@/integrations/supabase/client";
 
-export type AiProviderId = "anthropic" | "openai" | "groq" | "xai" | "nvidia" | "gemini" | "openrouter";
+export type AiProviderId =
+  | "alibaba"
+  | "anthropic"
+  | "deepseek"
+  | "openai"
+  | "groq"
+  | "xai"
+  | "nvidia"
+  | "gemini"
+  | "openrouter";
 
 /** Mapeia ID da UI → kind + meta na tabela connectors. */
 function toConnectorPayload(id: AiProviderId) {
@@ -19,6 +28,10 @@ function toConnectorPayload(id: AiProviderId) {
       return { kind: "openai" as const, meta: { provider: "openai", label: "OpenAI" } };
     case "openrouter":
       return { kind: "openai" as const, meta: { provider: "openrouter", label: "OpenRouter" } };
+    case "deepseek":
+      return { kind: "openai" as const, meta: { provider: "deepseek", label: "DeepSeek" } };
+    case "alibaba":
+      return { kind: "openai" as const, meta: { provider: "alibaba", label: "Alibaba DashScope" } };
   }
 }
 

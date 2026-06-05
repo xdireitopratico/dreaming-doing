@@ -9,6 +9,7 @@ export type AgentPreferencesPayload = {
   /** ID exato do modelo na API (ex.: anthropic/claude-sonnet-4-6, openrouter slug) */
   customModelId?: string;
   useCustomModel?: boolean;
+  autoAllowedPresetIds?: string[];
 };
 
 function isRobinMode(preferences?: AgentPreferencesPayload): boolean {
@@ -111,6 +112,8 @@ export async function loadConnectorKeys(
       else if (p === "nvidia") keys.NVIDIA_API_KEY = token;
       else if (p === "gemini") keys.GEMINI_API_KEY = token;
       else if (p === "openrouter") keys.OPENROUTER_API_KEY = token;
+      else if (p === "deepseek") keys.DEEPSEEK_API_KEY = token;
+      else if (p === "alibaba") keys.DASHSCOPE_API_KEY = token;
       else keys.OPENAI_API_KEY = token;
     }
   }

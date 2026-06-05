@@ -34,6 +34,24 @@ function nvidia(model: string, label: string): PresetWire {
 function openrouter(slug: string, label: string): PresetWire {
   return { provider: "openrouter", model: slug, baseUrl: OR, label, secretKey: "OPENROUTER_API_KEY" };
 }
+function deepseek(model: string, label: string): PresetWire {
+  return {
+    provider: "openai",
+    model,
+    baseUrl: "https://api.deepseek.com",
+    label,
+    secretKey: "DEEPSEEK_API_KEY",
+  };
+}
+function dashscope(model: string, label: string): PresetWire {
+  return {
+    provider: "openai",
+    model,
+    baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+    label,
+    secretKey: "DASHSCOPE_API_KEY",
+  };
+}
 
 const PRESETS: Record<string, PresetWire> = {
   "anthropic--claude-opus-4-8": anthropic("claude-opus-4-8", "Claude Opus 4.8"),
@@ -49,15 +67,15 @@ const PRESETS: Record<string, PresetWire> = {
   "google--gemma-4-31b-it": gemini("gemma-4-31b-it", "Gemma 4 31B"),
   "xai--grok-4-3": xai("grok-4.3", "Grok 4.3"),
   "xai--grok-build-0-1": xai("grok-build-0.1", "Grok Build 0.1"),
-  "deepseek--deepseek-v4-pro": openrouter("deepseek/deepseek-v4-pro", "DeepSeek V4 Pro"),
-  "deepseek--deepseek-v4-flash": openrouter("deepseek/deepseek-v4-flash", "DeepSeek V4 Flash"),
-  "deepseek--deepseek-v3": openrouter("deepseek/deepseek-v3", "DeepSeek V3"),
-  "qwen--qwen3-7-max": openrouter("qwen/qwen3.7-max", "Qwen 3.7 Max"),
-  "qwen--qwen3-7-plus": openrouter("qwen/qwen3.7-plus", "Qwen 3.7 Plus"),
-  "qwen--qwen3-6-plus": openrouter("qwen/qwen3.6-plus", "Qwen 3.6 Plus"),
-  "qwen--qwen3-6-flash": openrouter("qwen/qwen3.6-flash", "Qwen 3.6 Flash"),
-  "qwen--qwen3-coder": openrouter("qwen/qwen3-coder", "Qwen3 Coder"),
-  "qwen--qwen3-5-397b-a17b": openrouter("qwen/qwen3.5-397b-a17b", "Qwen3.5 397B"),
+  "deepseek--deepseek-v4-pro": deepseek("deepseek-chat", "DeepSeek V4 Pro"),
+  "deepseek--deepseek-v4-flash": deepseek("deepseek-chat", "DeepSeek V4 Flash"),
+  "deepseek--deepseek-v3": deepseek("deepseek-chat", "DeepSeek V3"),
+  "qwen--qwen3-7-max": dashscope("qwen-max", "Qwen 3.7 Max"),
+  "qwen--qwen3-7-plus": dashscope("qwen-plus", "Qwen 3.7 Plus"),
+  "qwen--qwen3-6-plus": dashscope("qwen-plus", "Qwen 3.6 Plus"),
+  "qwen--qwen3-6-flash": dashscope("qwen-turbo", "Qwen 3.6 Flash"),
+  "qwen--qwen3-coder": dashscope("qwen-coder-plus", "Qwen3 Coder"),
+  "qwen--qwen3-5-397b-a17b": nvidia("qwen/qwen3.5-397b-a17b", "Qwen3.5 397B"),
   "moonshotai--kimi-k2-6": openrouter("moonshotai/kimi-k2.6", "Kimi K2.6"),
   "moonshotai--kimi-k2-5": openrouter("moonshotai/kimi-k2.5", "Kimi K2.5"),
   "minimax--minimax-m3": openrouter("minimax/minimax-m3", "MiniMax M3"),
@@ -96,6 +114,26 @@ export function getPresetWire(id?: string): PresetWire | null {
   const key = normalizePresetId(id);
   if (!key) return null;
   return PRESETS[key] ?? null;
+}
+
+/** Restringe chaves BYOK aos presets permitidos no modo Auto. */
+export function filterKeysForAutoAllowlist(
+  keys: Record<string, string>,
+  allowedPresetIds?: string[],
+): Record<string, string> {
+  const list = allowedPresetIds?.map(normalizePresetId).filter(Boolean) ?? [];
+  if (list.length === 0) return keys;
+  const secretKeys = new Set<string>();
+  for (const id of list) {
+    const wire = getPresetWire(id);
+    if (wire?.secretKey) secretKeys.add(wire.secretKey);
+  }
+  if (secretKeys.size === 0) return keys;
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(keys)) {
+    if (secretKeys.has(k)) out[k] = v;
+  }
+  return out;
 }
 
 export function resolveFixedFromKeys(

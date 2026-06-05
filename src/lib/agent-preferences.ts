@@ -23,6 +23,8 @@ export interface AgentPreferences {
   useCustomModel?: boolean;
   /** Presets ocultos na biblioteca (botão ×) — o modelo ativo não é removido automaticamente */
   hiddenPresetIds?: string[];
+  /** Modo Auto: modelos que o router pode usar (vazio = todos com chave ativa) */
+  autoAllowedPresetIds?: string[];
 }
 
 const STORAGE_KEY = "forge:agent-preferences";
@@ -55,6 +57,9 @@ export function loadAgentPreferences(): AgentPreferences {
         : undefined,
       hiddenPresetIds: Array.isArray(parsed.hiddenPresetIds)
         ? parsed.hiddenPresetIds.filter((x): x is string => typeof x === "string")
+        : undefined,
+      autoAllowedPresetIds: Array.isArray(parsed.autoAllowedPresetIds)
+        ? parsed.autoAllowedPresetIds.filter((x): x is string => typeof x === "string").map(normalizePresetId)
         : undefined,
     };
   } catch {

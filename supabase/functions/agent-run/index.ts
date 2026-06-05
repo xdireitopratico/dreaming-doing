@@ -19,6 +19,7 @@ import {
   defaultRobinModel,
   PLATFORM_ROBIN_TASTE_PRESET_ID,
   resolveModelFromPreferences,
+  filterKeysForAutoAllowlist,
 } from "../_shared/model-presets.ts";
 import { buildStackContext, stackPromptAddon } from "../_shared/stack-context.ts";
 import { buildChatHistory } from "./memory.ts";
@@ -147,7 +148,17 @@ Deno.serve(async (req) => {
       groqPool.length > 0 ||
       nvidiaPool.length > 0 ||
       Object.keys(userOnlyKeys).some((k) =>
-        ["ANTHROPIC_API_KEY", "GROQ_API_KEY", "XAI_API_KEY", "OPENAI_API_KEY", "NVIDIA_API_KEY", "GEMINI_API_KEY", "OPENROUTER_API_KEY"].includes(k)
+        [
+          "ANTHROPIC_API_KEY",
+          "GROQ_API_KEY",
+          "XAI_API_KEY",
+          "OPENAI_API_KEY",
+          "NVIDIA_API_KEY",
+          "GEMINI_API_KEY",
+          "OPENROUTER_API_KEY",
+          "DEEPSEEK_API_KEY",
+          "DASHSCOPE_API_KEY",
+        ].includes(k)
       );
 
     type SessionKind = "taste_chat" | "taste_start" | "byok";
@@ -287,8 +298,13 @@ Deno.serve(async (req) => {
       } else {
         connectorKeys = { ...userOnlyKeys };
         if (preferences?.mode === "auto") {
-          mainCfg = pickMain(userOnlyKeys);
-          mainCfg.label = `${mainCfg.label} (router · suas chaves)`;
+          const autoKeys = filterKeysForAutoAllowlist(
+            userOnlyKeys,
+            preferences?.autoAllowedPresetIds,
+          );
+          mainCfg = pickMain(autoKeys);
+          const n = preferences?.autoAllowedPresetIds?.length ?? 0;
+          mainCfg.label = `${mainCfg.label} (Auto · ${n > 0 ? `${n} modelo(s)` : "todas as chaves"})`;
         } else {
           const resolved = resolveModelFromPreferences(preferences, userOnlyKeys);
           if (!resolved) {

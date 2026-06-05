@@ -37,6 +37,9 @@ export function pickMain(injected?: Record<string, string>): ProviderConfig {
   }
   const NVIDIA = envKey("NVIDIA_API_KEY", injected);
   const GEMINI = envKey("GEMINI_API_KEY", injected);
+  const DEEPSEEK = envKey("DEEPSEEK_API_KEY", injected);
+  const DASHSCOPE = envKey("DASHSCOPE_API_KEY", injected);
+  const OPENROUTER = envKey("OPENROUTER_API_KEY", injected);
   if (ANTHROPIC) return { provider: "anthropic", apiKey: ANTHROPIC, model: "claude-sonnet-4-20250514", label: "Anthropic Claude Sonnet 4" };
   if (GEMINI) return { provider: "gemini", apiKey: GEMINI, model: "gemini-2.5-pro", label: "Gemini 2.5 Pro" };
   if (XAI) return { provider: "openai", apiKey: XAI, model: "grok-3", baseUrl: "https://api.x.ai/v1", label: "xAI Grok 3" };
@@ -48,6 +51,33 @@ export function pickMain(injected?: Record<string, string>): ProviderConfig {
       model: "meta/llama-3.3-70b-instruct",
       baseUrl: "https://integrate.api.nvidia.com/v1",
       label: "NVIDIA NIM · Llama 3.3 70B",
+    };
+  }
+  if (DEEPSEEK) {
+    return {
+      provider: "openai",
+      apiKey: DEEPSEEK,
+      model: "deepseek-chat",
+      baseUrl: "https://api.deepseek.com",
+      label: "DeepSeek",
+    };
+  }
+  if (DASHSCOPE) {
+    return {
+      provider: "openai",
+      apiKey: DASHSCOPE,
+      model: "qwen-max",
+      baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+      label: "Alibaba Qwen",
+    };
+  }
+  if (OPENROUTER) {
+    return {
+      provider: "openrouter",
+      apiKey: OPENROUTER,
+      model: "anthropic/claude-sonnet-4-6",
+      baseUrl: "https://openrouter.ai/api/v1",
+      label: "OpenRouter",
     };
   }
   if (LOVABLE) return { provider: "openai", apiKey: LOVABLE, model: "google/gemini-2.5-flash", baseUrl: LOVABLE_GATEWAY, label: "Lovable AI · Gemini 2.5 Flash" };

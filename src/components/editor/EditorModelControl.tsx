@@ -36,21 +36,26 @@ export function EditorModelControl() {
     ? "setup"
     : prefs.mode === "robin"
       ? "pool"
-      : "fixo";
+      : prefs.mode === "auto"
+        ? "auto"
+        : "fixo";
 
   return (
     <div className="flex items-center gap-1.5 shrink-0 min-w-0">
       <ProviderSelector
         value={presetId}
         onChange={(opt: ProviderOption) => {
-          const next: AgentPreferences = {
-            ...prefs,
-            mode: prefs.mode === "robin" ? "robin" : "fixed",
-            fixedPresetId: opt.id,
-            ...(prefs.mode === "robin"
-              ? { robinPoolModelId: opt.id }
-              : {}),
-          };
+          const norm = normalizePresetId(opt.id);
+          let next: AgentPreferences = { ...prefs };
+          if (prefs.mode === "robin") {
+            next = { ...next, robinPoolModelId: opt.id };
+          } else if (prefs.mode === "auto") {
+            const set = new Set((prefs.autoAllowedPresetIds ?? []).map(normalizePresetId));
+            set.add(norm);
+            next = { ...next, mode: "auto", autoAllowedPresetIds: [...set] };
+          } else {
+            next = { ...next, mode: "fixed", fixedPresetId: opt.id };
+          }
           setPrefs(next);
           saveAgentPreferences(next);
         }}

@@ -5,7 +5,16 @@
  * Só modelos sem API dedicada no app usam env openrouter (DeepSeek, Qwen, Kimi, etc.).
  */
 
-export type AiEnvId = "anthropic" | "gemini" | "openai" | "xai" | "groq" | "nvidia" | "openrouter";
+export type AiEnvId =
+  | "alibaba"
+  | "anthropic"
+  | "deepseek"
+  | "gemini"
+  | "groq"
+  | "nvidia"
+  | "openai"
+  | "openrouter"
+  | "xai";
 
 export type ModelTier = "frontier" | "balanced" | "fast" | "pool";
 
@@ -31,14 +40,37 @@ export interface ForgeModelPreset {
 
 const OPENROUTER_BASE = "https://openrouter.ai/api/v1";
 
+/** Ambientes na ordem alfabética (regra do produto). */
+export const AI_ENVS_SORTED: AiEnvId[] = [
+  "alibaba",
+  "anthropic",
+  "deepseek",
+  "gemini",
+  "groq",
+  "nvidia",
+  "openai",
+  "openrouter",
+  "xai",
+];
+
 export const AI_ENV_META: Record<
   AiEnvId,
   { label: string; docUrl: string; keyPrefix: string; supportsPool?: boolean }
 > = {
+  alibaba: {
+    label: "Alibaba (DashScope / Qwen)",
+    docUrl: "https://dashscope.console.aliyun.com",
+    keyPrefix: "sk-",
+  },
   anthropic: {
     label: "Anthropic",
     docUrl: "https://console.anthropic.com",
     keyPrefix: "sk-ant-",
+  },
+  deepseek: {
+    label: "DeepSeek",
+    docUrl: "https://platform.deepseek.com",
+    keyPrefix: "sk-",
   },
   gemini: {
     label: "Google Gemini",
@@ -91,6 +123,8 @@ function routeEnv(brand: string, slug: string): AiEnvId {
   if (slug.startsWith("google/")) return "gemini";
   if (slug.startsWith("xai/")) return "xai";
   if (slug.startsWith("nvidia/")) return "nvidia";
+  if (brand === "DeepSeek") return "deepseek";
+  if (brand === "Qwen") return "alibaba";
   if (brand === "Groq") return "groq";
   return "openrouter";
 }
@@ -132,6 +166,18 @@ function wireForEnv(env: AiEnvId): {
         llmProvider: "openai",
         secretKey: "NVIDIA_API_KEY",
         baseUrl: "https://integrate.api.nvidia.com/v1",
+      };
+    case "deepseek":
+      return {
+        llmProvider: "openai",
+        secretKey: "DEEPSEEK_API_KEY",
+        baseUrl: "https://api.deepseek.com",
+      };
+    case "alibaba":
+      return {
+        llmProvider: "openai",
+        secretKey: "DASHSCOPE_API_KEY",
+        baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
       };
     default:
       return {
@@ -321,7 +367,17 @@ export function presetsByEnvGrouped(): {
   meta: (typeof AI_ENV_META)[AiEnvId];
   models: ForgeModelPreset[];
 }[] {
-  const envs: AiEnvId[] = ["anthropic", "openai", "gemini", "xai", "nvidia", "openrouter", "groq"];
+  const envs: AiEnvId[] = [
+    "alibaba",
+    "anthropic",
+    "deepseek",
+    "gemini",
+    "groq",
+    "nvidia",
+    "openai",
+    "openrouter",
+    "xai",
+  ];
   return envs
     .map((env) => ({
       env,

@@ -2,7 +2,9 @@ import type { AiEnvId } from "@/lib/model-catalog";
 import type { AiProviderId } from "@/lib/save-connector";
 
 const ENV_TO_PROVIDER: Record<AiEnvId, AiProviderId> = {
+  alibaba: "alibaba",
   anthropic: "anthropic",
+  deepseek: "deepseek",
   gemini: "gemini",
   openai: "openai",
   xai: "xai",
@@ -29,7 +31,9 @@ export function connectedEnvsFromRows(
   rows: ConnectorRow[] | undefined,
 ): Record<AiEnvId, boolean> {
   const out: Record<AiEnvId, boolean> = {
+    alibaba: false,
     anthropic: false,
+    deepseek: false,
     gemini: false,
     openai: false,
     xai: false,

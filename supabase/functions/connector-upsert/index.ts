@@ -9,7 +9,7 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
 
-const ALLOWED = new Set(["github", "vercel", "netlify", "cloudflare", "anthropic", "openai", "e2b"]);
+const ALLOWED = new Set(["github", "vercel", "netlify", "cloudflare", "anthropic", "openai", "e2b", "supabase"]);
 
 type PoolSlot = { id: string; hint: string; addedAt: string };
 
@@ -89,7 +89,23 @@ Deno.serve(async (req) => {
     const providerKey = resolveProvider(kind, metaIn);
 
     if (kind === "openai" && !metaIn.provider) {
-      return json({ error: "meta.provider obrigatório (groq, nvidia, xai, openai, gemini, openrouter)" }, 400);
+      return json({ error: "meta.provider obrigatório (groq, nvidia, xai, openai, gemini, openrouter, deepseek, alibaba)" }, 400);
+    }
+
+    if (kind === "supabase" && body?.disconnect !== true) {
+      const projectUrl = typeof metaIn.projectUrl === "string" ? metaIn.projectUrl.trim() : "";
+      const token = typeof body?.token === "string" ? body.token.trim() : "";
+      if (!projectUrl || !token) {
+        return json({ error: "URL do projeto Supabase e chave (anon ou service role) são obrigatórios" }, 400);
+      }
+      try {
+        const host = new URL(projectUrl).hostname;
+        const ref = host.split(".")[0];
+        metaIn.projectRef = ref;
+        metaIn.label = ref;
+      } catch {
+        return json({ error: "URL do Supabase inválida (ex.: https://xxxx.supabase.co)" }, 400);
+      }
     }
 
     const loadOpenAiRow = async () => {
@@ -169,6 +185,9 @@ Deno.serve(async (req) => {
     }
     if (!token && kind === "e2b") {
       return json({ error: "Chave E2B obrigatória (e2b_...)" }, 400);
+    }
+    if (!token && kind === "supabase") {
+      return json({ error: "Chave Supabase obrigatória" }, 400);
     }
 
     let tokenEncrypted: string | undefined;
