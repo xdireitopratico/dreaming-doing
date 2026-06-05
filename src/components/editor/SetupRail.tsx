@@ -7,13 +7,38 @@ import type { ConnectorId } from "@/lib/connectors/integration-prefs";
 import { ConnectorGuideModal } from "@/components/connectors/ConnectorGuideModal";
 import { OPEN_CONNECTOR_EVENT } from "@/hooks/useTasteUiActions";
 import { ActiveModelBadge } from "@/components/editor/ActiveModelBadge";
+import { EditorReadinessStrip } from "@/components/editor/EditorReadinessStrip";
+import { loadAgentPreferences, type AgentPreferences } from "@/lib/agent-preferences";
+import { buildEditorReadiness } from "@/lib/editor-readiness";
 
 type SetupRailProps = {
   checklist?: React.ReactNode;
+  hasUserLlmKey?: boolean;
+  e2bConnected?: boolean;
+  prefs?: AgentPreferences;
+  connectorRows?: Array<{
+    kind: string | null;
+    provider?: string | null;
+    meta?: Record<string, unknown> | null;
+  }>;
 };
 
-export function SetupRail({ checklist }: SetupRailProps) {
-  const [open, setOpen] = useState(false);
+export function SetupRail({
+  checklist,
+  hasUserLlmKey = false,
+  e2bConnected = false,
+  prefs,
+  connectorRows,
+}: SetupRailProps) {
+  const resolvedPrefs = prefs ?? loadAgentPreferences();
+  const readinessItems = buildEditorReadiness({
+    hasUserLlmKey,
+    e2bConnected,
+    prefs: resolvedPrefs,
+    connectorRows,
+  });
+  const hasReadinessIssues = readinessItems.some((i) => i.level !== "ok");
+  const [open, setOpen] = useState(hasReadinessIssues);
   const {
     status,
     modes,
@@ -69,6 +94,13 @@ export function SetupRail({ checklist }: SetupRailProps) {
         {open && (
           <div className="forge-setup-rail-body px-3 pb-3">
             {checklist}
+            <EditorReadinessStrip
+              embedded
+              hasUserLlmKey={hasUserLlmKey}
+              e2bConnected={e2bConnected}
+              prefs={resolvedPrefs}
+              connectorRows={connectorRows}
+            />
             <ul className="space-y-1 mt-2">
               {items.map((item) => (
                 <li key={item.id}>

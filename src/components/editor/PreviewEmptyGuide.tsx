@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router";
-import { Eye } from "lucide-react";
+import { Box } from "lucide-react";
 
 export function PreviewEmptyGuide({
   projectName,
@@ -15,11 +15,11 @@ export function PreviewEmptyGuide({
   return (
     <div className="flex h-full min-h-[280px] flex-col items-center justify-center gap-4 bg-white p-8 text-center forge-preview-empty-single">
       <div className="grid size-14 place-items-center rounded-2xl bg-neutral-100">
-        <Eye className="size-7 text-neutral-400" />
+        <Box className="size-7 text-neutral-400" strokeWidth={1.5} />
       </div>
       <div className="max-w-sm space-y-2">
         <p className="text-base font-medium text-neutral-900">
-          Quando seu projeto for criado, ele aparecerá aqui
+          Seu projeto aparecerá aqui quando iniciado
         </p>
         <p className="text-sm text-neutral-500 leading-relaxed">
           {projectName ? (

@@ -17,13 +17,12 @@ import type { AgentComposerMode } from "@/components/editor/ChatInput";
 import { CodeEditor, type Tab } from "@/components/editor/CodeEditor";
 import { FileTree } from "@/components/editor/FileTree";
 import { ChatInput, type ChatMessage } from "@/components/editor/ChatInput";
-import { AgentPanel } from "@/components/editor/AgentPanel";
 import { SetupRail } from "@/components/editor/SetupRail";
 import { TasteSetupChecklist } from "@/components/editor/TasteSetupChecklist";
 import { TastePostStartBanner } from "@/components/editor/TastePostStartBanner";
 import { FORGE_WELCOME_BYOK_MARKDOWN, FORGE_WELCOME_MARKDOWN } from "@/lib/welcome-message";
 import { loadAgentPreferences } from "@/lib/agent-preferences";
-import { EditorReadinessStrip } from "@/components/editor/EditorReadinessStrip";
+
 import { useConnectors } from "@/hooks/useConnectors";
 import { useTasteUiActions } from "@/hooks/useTasteUiActions";
 import {
@@ -39,7 +38,7 @@ import {
 import type { StoredMessagePart } from "@/lib/chat-attachments";
 
 import { PreviewFrame } from "@/components/editor/PreviewFrame";
-import { PreviewRouteNav } from "@/components/editor/PreviewRouteNav";
+
 
 
 import { CommandPalette, buildEditorActions, type PaletteAction } from "@/components/editor/CommandPalette";
@@ -779,18 +778,7 @@ function EditorPage() {
             chat={
               <div className="forge-chat-column">
                 <div className="forge-chat-body">
-                  <EditorReadinessStrip
-                    hasUserLlmKey={hasUserLlmKey}
-                    e2bConnected={e2bConnected}
-                    prefs={agentPrefs}
-                    connectorRows={connectorRows}
-                  />
                   <TastePostStartBanner />
-                  <AgentPanel
-                    running={running}
-                    progress={sse.progress}
-                    onResume={handleResumeAgent}
-                  />
                   <ChatInput
                     messages={chatMessages}
                     running={running}
@@ -813,6 +801,10 @@ function EditorPage() {
                   />
                 </div>
                 <SetupRail
+                  hasUserLlmKey={hasUserLlmKey}
+                  e2bConnected={e2bConnected}
+                  prefs={agentPrefs}
+                  connectorRows={connectorRows}
                   checklist={
                     <TasteSetupChecklist
                       userMessageCount={chatMessages.filter((m) => m.role === "user").length}
@@ -841,17 +833,6 @@ function EditorPage() {
                   )}
 
                   <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-                    {activeView === "code" && (
-                      <div className="forge-code-nav shrink-0 border-b border-[var(--forge-border)] bg-[var(--forge-surface-2)] px-3 py-2">
-                        <PreviewRouteNav
-                          files={previewNavFiles}
-                          activePath={previewRoute}
-                          onNavigate={setPreviewRoute}
-                          devUrl={devUrl}
-                          onRefresh={() => previewBoot.boot()}
-                        />
-                      </div>
-                    )}
                     <div className="min-h-0 min-w-0 flex-1">
                     {activeView === "code" && (
                       <CodeEditor

@@ -19,6 +19,7 @@ export function EditorReadinessStrip({
   prefs,
   connectorRows,
   compact,
+  embedded,
 }: {
   hasUserLlmKey: boolean;
   e2bConnected: boolean;
@@ -29,6 +30,8 @@ export function EditorReadinessStrip({
     meta?: Record<string, unknown> | null;
   }>;
   compact?: boolean;
+  /** Lista inline dentro do SetupRail — sem segundo collapsible. */
+  embedded?: boolean;
 }) {
   const items = buildEditorReadiness({
     hasUserLlmKey,
@@ -49,6 +52,46 @@ export function EditorReadinessStrip({
     issueCount === 0
       ? "Tudo pronto para Build"
       : `${issueCount} item${issueCount === 1 ? "" : "s"} pendente${issueCount === 1 ? "" : "s"}`;
+
+  const list = (
+    <ul className="space-y-1 border-t border-[var(--forge-border)]/60 px-0 pb-0 pt-2 max-h-36 overflow-y-auto forge-scrollbar-dark">
+      {items.map((item) => (
+        <li key={item.label} className="flex items-start gap-2 text-[10px] leading-snug">
+          <Icon level={item.level} />
+          <span className="min-w-0 flex-1 text-[var(--forge-silver)]">
+            <strong className="text-[var(--forge-text)]">{item.label}</strong>
+            {" — "}
+            {item.detail}
+            {item.href && (
+              <>
+                {" "}
+                {item.href.includes("#") ? (
+                  <a href={item.href} className="text-[var(--forge-primary)] underline">
+                    Abrir
+                  </a>
+                ) : (
+                  <Link to={item.href} className="text-[var(--forge-primary)] underline">
+                    Abrir
+                  </Link>
+                )}
+              </>
+            )}
+          </span>
+        </li>
+      ))}
+    </ul>
+  );
+
+  if (embedded) {
+    return (
+      <div className="mt-2 rounded-lg border border-[var(--forge-border)] bg-[var(--forge-surface-3)]/60 px-2 py-2">
+        <p className="mb-1 font-mono text-[9px] uppercase tracking-wider text-[var(--forge-ghost)]">
+          Agente + preview · {summary}
+        </p>
+        {list}
+      </div>
+    );
+  }
 
   return (
     <div
@@ -82,34 +125,7 @@ export function EditorReadinessStrip({
           {summary}
         </span>
       </button>
-      {open && (
-        <ul className="space-y-1 border-t border-[var(--forge-border)]/60 px-3 pb-2 pt-1 max-h-36 overflow-y-auto forge-scrollbar-dark">
-          {items.map((item) => (
-            <li key={item.label} className="flex items-start gap-2 text-[10px] leading-snug">
-              <Icon level={item.level} />
-              <span className="min-w-0 flex-1 text-[var(--forge-silver)]">
-                <strong className="text-[var(--forge-text)]">{item.label}</strong>
-                {" — "}
-                {item.detail}
-                {item.href && (
-                  <>
-                    {" "}
-                    {item.href.includes("#") ? (
-                      <a href={item.href} className="text-[var(--forge-primary)] underline">
-                        Abrir
-                      </a>
-                    ) : (
-                      <Link to={item.href} className="text-[var(--forge-primary)] underline">
-                        Abrir
-                      </Link>
-                    )}
-                  </>
-                )}
-              </span>
-            </li>
-          ))}
-        </ul>
-      )}
+      {open && <div className="px-3 pb-2">{list}</div>}
     </div>
   );
 }

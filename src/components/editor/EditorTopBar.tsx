@@ -62,36 +62,38 @@ export function EditorTopBar({
       </div>
 
       <div className="forge-topbar-center min-w-0">
-        <div className="forge-view-icon-tabs" role="tablist" aria-label="Visualização">
-          <button
-            type="button"
-            role="tab"
-            aria-selected={activeView === "preview"}
-            className="forge-view-icon-tab"
-            data-active={activeView === "preview"}
-            title="Preview"
-            onClick={() => onViewChange("preview")}
-          >
-            <Eye className="size-4" />
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={activeView === "code"}
-            className="forge-view-icon-tab"
-            data-active={activeView === "code"}
-            title="Código"
-            onClick={() => onViewChange("code")}
-          >
-            <Code2 className="size-4" />
-          </button>
+        <div className="forge-topbar-center-tools">
+          <div className="forge-view-icon-tabs" role="tablist" aria-label="Visualização">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeView === "preview"}
+              className="forge-view-icon-tab"
+              data-active={activeView === "preview"}
+              title="Preview"
+              onClick={() => onViewChange("preview")}
+            >
+              <Eye className="size-4" />
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeView === "code"}
+              className="forge-view-icon-tab"
+              data-active={activeView === "code"}
+              title="Código"
+              onClick={() => onViewChange("code")}
+            >
+              <Code2 className="size-4" />
+            </button>
+          </div>
+
+          <span className="forge-topbar-divider mx-1 shrink-0 hidden sm:block" aria-hidden />
+          <EditorIntegrationsMenu {...integrations} />
         </div>
 
-        <span className="forge-topbar-divider mx-1 shrink-0 hidden sm:block" aria-hidden />
-        <EditorIntegrationsMenu {...integrations} />
-        {activeView === "code" && onPreviewPathChange && (
-          <>
-            <span className="forge-topbar-divider mx-1 shrink-0 hidden md:block" aria-hidden />
+        {onPreviewPathChange && (
+          <div className="forge-topbar-address-slot">
             <PreviewRouteNav
               files={previewFiles}
               activePath={previewPath}
@@ -99,7 +101,7 @@ export function EditorTopBar({
               devUrl={previewDevUrl}
               onRefresh={onPreviewRefresh}
             />
-          </>
+          </div>
         )}
       </div>
 

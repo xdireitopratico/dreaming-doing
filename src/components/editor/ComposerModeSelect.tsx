@@ -1,4 +1,4 @@
-import { Hammer, ListTodo, ChevronDown } from "lucide-react";
+import { Check, Hammer, ListTodo, ChevronDown } from "lucide-react";
 import { DropdownMenu, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import type { AgentComposerMode } from "@/components/editor/ChatInput";
 import {
@@ -34,18 +34,24 @@ export function ComposerModeSelect({
       </DropdownMenuTrigger>
       <ForgeEditorDropdownContent align="end" side="top" sideOffset={6} className="min-w-[120px]">
         <ForgeEditorDropdownItem
-          className="font-mono text-[11px] focus:text-[var(--forge-primary)] data-[highlighted]:text-[var(--forge-primary)]"
+          className={`font-mono text-[11px] focus:text-[var(--forge-primary)] data-[highlighted]:text-[var(--forge-primary)] ${
+            isBuild ? "bg-[var(--forge-surface-2)] text-[var(--forge-primary)]" : ""
+          }`}
           onSelect={() => onChange("build")}
         >
           <Hammer className="size-3.5 mr-2 text-[var(--forge-primary)]" />
           Build
+          {isBuild && <Check className="ml-auto size-3 text-[var(--forge-primary)]" />}
         </ForgeEditorDropdownItem>
         <ForgeEditorDropdownItem
-          className="font-mono text-[11px] focus:text-[var(--forge-primary)] data-[highlighted]:text-[var(--forge-primary)]"
+          className={`font-mono text-[11px] focus:text-[var(--forge-primary)] data-[highlighted]:text-[var(--forge-primary)] ${
+            !isBuild ? "bg-[var(--forge-surface-2)] text-[var(--forge-primary)]" : ""
+          }`}
           onSelect={() => onChange("plan")}
         >
           <ListTodo className="size-3.5 mr-2 text-[var(--forge-primary)]" />
           Plan
+          {!isBuild && <Check className="ml-auto size-3 text-[var(--forge-primary)]" />}
         </ForgeEditorDropdownItem>
       </ForgeEditorDropdownContent>
     </DropdownMenu>

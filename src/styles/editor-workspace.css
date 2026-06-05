@@ -93,6 +93,43 @@ body:has(.editor-workspace) {
   flex-shrink: 0;
 }
 
+.forge-topbar-center-tools {
+  display: flex;
+  shrink: 0;
+  align-items: center;
+  gap: 4px;
+}
+
+.forge-topbar-address-slot {
+  flex: 0 1 min(240px, 36vw);
+  min-width: 140px;
+  max-width: 240px;
+  width: 100%;
+}
+
+.forge-topbar-address-slot .forge-address-bar {
+  width: 100%;
+  max-width: 100%;
+  padding: 1px 4px 1px 6px;
+  gap: 4px;
+  border-radius: 7px;
+}
+
+.forge-topbar-address-slot .forge-address-bar-host {
+  font-size: 8px;
+  max-width: 72px;
+}
+
+.forge-topbar-address-slot .forge-address-bar-input {
+  font-size: 10px;
+}
+
+.forge-topbar-address-slot .forge-address-bar-pages-btn,
+.forge-topbar-address-slot .forge-address-bar-action {
+  width: 22px;
+  height: 22px;
+}
+
 .forge-address-bar {
   display: flex;
   min-width: 0;
@@ -104,11 +141,6 @@ body:has(.editor-workspace) {
   border-radius: 8px;
   border: 1px solid var(--forge-border-strong);
   background: var(--forge-surface-2);
-}
-
-.forge-code-nav .forge-address-bar {
-  max-width: none;
-  width: 100%;
 }
 
 .forge-address-bar-scheme {
@@ -222,7 +254,7 @@ body:has(.editor-workspace) {
   min-width: 0;
   align-items: center;
   justify-content: center;
-  gap: 4px;
+  gap: 10px;
   overflow: visible;
 }
 
@@ -733,7 +765,7 @@ body:has(.editor-workspace) {
 
 .editor-workspace [role="menu"],
 .editor-workspace [data-radix-menu-content] {
-  background-color: var(--forge-surface-2) !important;
+  background-color: var(--forge-surface-3) !important;
   color: var(--forge-text) !important;
   border-color: var(--forge-border-strong) !important;
 }
