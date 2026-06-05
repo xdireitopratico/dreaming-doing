@@ -276,7 +276,12 @@ function apiModelForEnv(env: AiEnvId, slug: string): string {
   const slash = slug.indexOf("/");
   const bare = slash >= 0 ? slug.slice(slash + 1) : slug;
   if (env === "openrouter") return slug;
-  if (env === "nvidia") return slug;
+  if (env === "nvidia") {
+    if (bare.includes("nemotron-3-ultra-550b") && !bare.includes("-a55b")) {
+      return "nvidia/nemotron-3-ultra-550b-a55b";
+    }
+    return slug.includes("/") ? slug : `nvidia/${bare}`;
+  }
   if (env === "minimax") {
     if (bare.includes("m3")) return "MiniMax-M3";
     if (bare.includes("2.7")) return "MiniMax-M2.7";
@@ -475,7 +480,7 @@ const NATIVE_POOL: ForgeModelPreset[] = [
   {
     id: PLATFORM_ROBIN_TASTE_PRESET_ID,
     env: "nvidia",
-    model: "nvidia/nemotron-3-ultra-550b",
+    model: "nvidia/nemotron-3-ultra-550b-a55b",
     openRouterSlug: "nvidia/nemotron-3-ultra-550b",
     label: "NVIDIA · Nemotron 3 Ultra (550B)",
     description: "Gosto FORGE — pool ROBIN NVIDIA",

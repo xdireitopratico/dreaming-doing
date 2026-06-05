@@ -97,17 +97,22 @@ export function qualifySnapshot(
   }
 
   if (snap.agent.lastError) {
+    const errLower = snap.agent.lastError.toLowerCase();
+    const isNvidia404 = /\b404\b/i.test(snap.agent.lastError) &&
+      (errLower.includes("nvidia") || errLower.includes("nemotron"));
     const isOpenAi404 = /\b404\b/i.test(snap.agent.lastError) &&
-      /openai/i.test(snap.agent.lastError);
+      errLower.includes("openai") && !isNvidia404;
     signals.push(
       signal(
         "agent-error",
         "error",
         "agent",
         `Agente: ${truncate(snap.agent.lastError, 120)}`,
-        isOpenAi404
-          ? "GPT-5.x na OpenAI usa API Responses — recarregue e reenvie; ou OpenRouter em /api."
-          : snap.agent.resumable
+        isNvidia404
+          ? "ROBIN NVIDIA: ID Nemotron corrigido para -a55b — recarregue e reenvie; chave em /api."
+          : isOpenAi404
+            ? "GPT-5.x na OpenAI usa API Responses — recarregue e reenvie; ou OpenRouter em /api."
+            : snap.agent.resumable
             ? "Tente Retomar no painel do agente."
             : "Veja TERMINAL e eventos abaixo.",
       ),

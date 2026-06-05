@@ -114,7 +114,10 @@ const PRESETS: Record<string, PresetWire> = {
   "xiaomi--mimo-v2-5-pro": mimo("mimo-v2.5-pro", "MiMo V2.5 Pro"),
   "zhipu--glm-5-1": openrouter("zhipu/glm-5.1", "GLM-5.1"),
   "zhipu--glm-5": openrouter("zhipu/glm-5", "GLM-5"),
-  "nvidia--nemotron-3-ultra-550b": nvidia("nvidia/nemotron-3-ultra-550b", "Nemotron 3 Ultra"),
+  "nvidia--nemotron-3-ultra-550b": nvidia(
+    "nvidia/nemotron-3-ultra-550b-a55b",
+    "Nemotron 3 Ultra (550B)",
+  ),
   "nvidia--nemotron-3-super-120b": nvidia("nvidia/nemotron-3-super-120b", "Nemotron 3 Super"),
   "pool-groq-flash": {
     provider: "openai",
@@ -123,8 +126,14 @@ const PRESETS: Record<string, PresetWire> = {
     label: "Groq · Llama 3.3 70B",
     secretKey: "GROQ_API_KEY",
   },
-  "pool-nemotron-ultra-550b": nvidia("nvidia/nemotron-3-ultra-550b", "NVIDIA · Nemotron 3 Ultra (550B)"),
-  "pool-nemotron-super": nvidia("nvidia/nemotron-3-ultra-550b", "NVIDIA · Nemotron 3 Ultra (550B)"),
+  "pool-nemotron-ultra-550b": nvidia(
+    "nvidia/nemotron-3-ultra-550b-a55b",
+    "NVIDIA · Nemotron 3 Ultra (550B)",
+  ),
+  "pool-nemotron-super": nvidia(
+    "nvidia/nemotron-3-ultra-550b-a55b",
+    "NVIDIA · Nemotron 3 Ultra (550B)",
+  ),
   "ollama--llama3-2": ollama("llama3.2", "Llama 3.2"),
   "ollama--qwen2-5-coder": ollama("qwen2.5-coder:7b", "Qwen 2.5 Coder 7B"),
   "ollama--deepseek-r1-8b": ollama("deepseek-r1:8b", "DeepSeek R1 8B"),

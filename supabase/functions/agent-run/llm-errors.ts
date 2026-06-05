@@ -36,16 +36,28 @@ export function isModelNotFoundError(err: unknown): boolean {
     (msg.includes("model") ||
       msg.includes("does not exist") ||
       msg.includes("not found") ||
-      msg.includes("openai api error"))
+      msg.includes("api error"))
   );
 }
 
 export function friendlyLlmError(err: unknown, robinActive: boolean): string {
+  const msg = errorMessage(err);
+  const lower = msg.toLowerCase();
+
   if (isModelNotFoundError(err)) {
-    return (
-      "Modelo não encontrado na API OpenAI (404). Em Modelos, escolha GPT-5.5 com chave OpenAI válida " +
-      "ou use OpenRouter com o slug openai/gpt-5.5. Se acabou de adicionar a chave, salve de novo em /api."
-    );
+    if (lower.includes("nvidia nim")) {
+      return (
+        "NVIDIA NIM retornou 404 para o Nemotron. O FORGE agora usa o ID oficial " +
+        "`nvidia/nemotron-3-ultra-550b-a55b`. Recarregue a página e reenvie; confira a chave NVIDIA em /api (pool ROBIN)."
+      );
+    }
+    if (lower.includes("openai api error") || lower.includes("openai")) {
+      return (
+        "Modelo não encontrado na API OpenAI (404). Em Modelos, escolha GPT-5.5 com chave OpenAI válida " +
+        "ou use OpenRouter com o slug openai/gpt-5.5."
+      );
+    }
+    return "Modelo não encontrado no provedor (404). Ajuste em Modelos (/models) ou troque o pool ROBIN.";
   }
   if (isRateLimitError(err)) {
     return robinActive

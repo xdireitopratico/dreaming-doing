@@ -1,5 +1,6 @@
 // OpenAI Responses API — obrigatório para GPT-5.x com tools (Chat Completions → 404).
 import type { ChatMessage, ChatParams, ChatResponse, ToolCall } from "../types.ts";
+import { formatLlmApiError } from "./api-error.ts";
 
 function normalizeBaseUrl(baseUrl: string): string {
   return baseUrl.replace(/\/$/, "");
@@ -191,7 +192,7 @@ export async function chatOpenAiResponses(
 
   if (!resp.ok) {
     const err = await resp.text();
-    throw new Error(`OpenAI API error ${resp.status}: ${err.slice(0, 300)}`);
+    throw new Error(formatLlmApiError(baseUrl, resp.status, err));
   }
 
   const data = await resp.json() as Record<string, unknown>;

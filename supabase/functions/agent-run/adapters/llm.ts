@@ -1,6 +1,7 @@
 // adapters/llm.ts — LLM Adapter model-agnostic
 // Suporte: Claude, OpenAI, Gemini, OpenRouter, Ollama, Custom (OpenAI-compatible)
 import type { LLMProvider, ChatParams, ChatResponse, ChatMessage, ToolCall } from "../types.ts";
+import { formatLlmApiError } from "./api-error.ts";
 import {
   chatOpenAiResponses,
   isOfficialOpenAiBaseUrl,
@@ -60,7 +61,7 @@ class ClaudeAdapter implements LLMProvider {
 
     if (!resp.ok) {
       const err = await resp.text();
-      throw new Error(`Claude API error ${resp.status}: ${err.slice(0, 300)}`);
+      throw new Error(formatLlmApiError(this.baseUrl, resp.status, err));
     }
 
     const data = await resp.json();
@@ -155,7 +156,7 @@ class OpenAIAdapter implements LLMProvider {
 
     if (!resp.ok) {
       const err = await resp.text();
-      throw new Error(`OpenAI API error ${resp.status}: ${err.slice(0, 300)}`);
+      throw new Error(formatLlmApiError(this.baseUrl, resp.status, err));
     }
 
     const data = await resp.json();

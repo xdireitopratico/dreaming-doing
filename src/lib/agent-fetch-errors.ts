@@ -16,10 +16,17 @@ export function formatAgentFetchError(err: unknown): string {
     return "Agente interrompido.";
   }
 
+  if (/\b404\b/.test(raw) && (lower.includes("nvidia nim") || lower.includes("nemotron"))) {
+    return (
+      "NVIDIA NIM retornou 404 (modelo Nemotron). Recarregue o editor e tente de novo — o ID correto é " +
+      "nvidia/nemotron-3-ultra-550b-a55b. Confira chave NVIDIA no pool ROBIN em /api."
+    );
+  }
+
   if (/\b404\b/.test(raw) && lower.includes("openai")) {
     return (
-      "OpenAI retornou 404 para o modelo configurado. O FORGE agora usa a API Responses para GPT-5.x — " +
-      "atualize a página, confira o modelo em /models e tente de novo. Alternativa: chave OpenRouter + openai/gpt-5.5."
+      "OpenAI retornou 404 para o modelo configurado. O FORGE usa a API Responses para GPT-5.x — " +
+      "atualize a página, confira o modelo em /models e tente de novo."
     );
   }
 
