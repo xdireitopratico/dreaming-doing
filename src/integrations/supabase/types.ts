@@ -21,7 +21,6 @@ export type Database = {
           kind: Database["public"]["Enums"]["connector_kind"]
           meta: Json
           owner_id: string
-          provider: string
           token_encrypted: string | null
           updated_at: string
         }
@@ -31,7 +30,6 @@ export type Database = {
           kind: Database["public"]["Enums"]["connector_kind"]
           meta?: Json
           owner_id: string
-          provider?: string
           token_encrypted?: string | null
           updated_at?: string
         }
@@ -41,7 +39,6 @@ export type Database = {
           kind?: Database["public"]["Enums"]["connector_kind"]
           meta?: Json
           owner_id?: string
-          provider?: string
           token_encrypted?: string | null
           updated_at?: string
         }
@@ -188,30 +185,6 @@ export type Database = {
           },
         ]
       }
-      platform_secrets: {
-        Row: {
-          hint: string
-          name: string
-          updated_at: string
-          updated_by: string | null
-          value_encrypted: string
-        }
-        Insert: {
-          hint?: string
-          name: string
-          updated_at?: string
-          updated_by?: string | null
-          value_encrypted: string
-        }
-        Update: {
-          hint?: string
-          name?: string
-          updated_at?: string
-          updated_by?: string | null
-          value_encrypted?: string
-        }
-        Relationships: []
-      }
       profiles: {
         Row: {
           avatar_url: string | null
@@ -219,8 +192,6 @@ export type Database = {
           display_name: string | null
           github_username: string | null
           id: string
-          integration_prefs: Json
-          trial_messages_remaining: number
           updated_at: string
         }
         Insert: {
@@ -229,8 +200,6 @@ export type Database = {
           display_name?: string | null
           github_username?: string | null
           id: string
-          integration_prefs?: Json
-          trial_messages_remaining?: number
           updated_at?: string
         }
         Update: {
@@ -239,8 +208,6 @@ export type Database = {
           display_name?: string | null
           github_username?: string | null
           id?: string
-          integration_prefs?: Json
-          trial_messages_remaining?: number
           updated_at?: string
         }
         Relationships: []
@@ -378,7 +345,6 @@ export type Database = {
           kind: Database["public"]["Enums"]["connector_kind"] | null
           meta: Json | null
           owner_id: string | null
-          provider: string | null
           updated_at: string | null
         }
         Insert: {
@@ -387,7 +353,6 @@ export type Database = {
           kind?: Database["public"]["Enums"]["connector_kind"] | null
           meta?: Json | null
           owner_id?: string | null
-          provider?: string | null
           updated_at?: string | null
         }
         Update: {
@@ -396,7 +361,6 @@ export type Database = {
           kind?: Database["public"]["Enums"]["connector_kind"] | null
           meta?: Json | null
           owner_id?: string | null
-          provider?: string | null
           updated_at?: string | null
         }
         Relationships: []
