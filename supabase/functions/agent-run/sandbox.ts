@@ -2,7 +2,7 @@
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { E2B_TEMPLATE_DEFAULT, e2bPreviewUrl } from "../_shared/e2b.ts";
 import {
-  connectOrCreateProjectSandbox,
+  ensureAgentProjectSandbox,
   syncProjectFilesToSandbox,
 } from "../_shared/project-sandbox.ts";
 import type { Sandbox } from "npm:e2b@2.14.1";
@@ -20,11 +20,11 @@ class E2BSandbox implements SandboxProvider {
 
   private async ensure(): Promise<Sandbox> {
     if (this.sandbox) return this.sandbox;
-    const { sandbox, reused } = await connectOrCreateProjectSandbox(
+    const { sandbox, reused } = await ensureAgentProjectSandbox(
       this.supabase,
       this.projectId,
       this.e2bApiKey,
-      { template: this.e2bTemplate },
+      this.e2bTemplate,
     );
     this.sandbox = sandbox;
     console.log(

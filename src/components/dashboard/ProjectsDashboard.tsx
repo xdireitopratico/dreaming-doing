@@ -1,7 +1,9 @@
 import { Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
-import { ChevronDown, FolderOpen, Plus } from "lucide-react";
+import { ChevronDown, FolderOpen, Plus, Trash2 } from "lucide-react";
+import { toast } from "sonner";
+import { deleteProject } from "@/lib/projects.functions";
 import { supabase } from "@/integrations/supabase/client";
 import { PromptEngine } from "@/components/prompt/PromptEngine";
 import { CreateProjectDialog } from "@/components/editor/CreateProjectDialog";
@@ -69,6 +71,19 @@ export function ProjectsDashboard() {
     void setup();
     return () => removeRealtimeChannel(channel);
   }, [user?.id, qc]);
+
+  const handleDelete = async (e: React.MouseEvent, projectId: string, name: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!confirm(`Excluir “${name}”? O ambiente ao vivo deste projeto será encerrado.`)) return;
+    try {
+      await deleteProject({ data: { projectId } });
+      toast.success("Projeto excluído");
+      void qc.invalidateQueries({ queryKey: ["projects-all"] });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Não foi possível excluir");
+    }
+  };
 
   const filtered = useMemo(() => {
     const list = projects ?? [];
@@ -180,8 +195,17 @@ export function ProjectsDashboard() {
               key={p.id}
               to="/projects/$projectId"
               params={{ projectId: p.id }}
-              className="dashboard-project-card"
+              className="dashboard-project-card group relative"
             >
+              <button
+                type="button"
+                className="absolute right-2 top-2 z-10 grid size-8 place-items-center rounded-lg text-neutral-400 opacity-0 transition-opacity hover:bg-red-50 hover:text-red-600 group-hover:opacity-100"
+                title="Excluir projeto"
+                aria-label={`Excluir ${p.name}`}
+                onClick={(e) => void handleDelete(e, p.id, p.name)}
+              >
+                <Trash2 className="size-4" />
+              </button>
               <div className="dashboard-project-thumb">
                 <ForgeIcon variant="project" size={22} className="text-[var(--forge-ghost)]" />
               </div>

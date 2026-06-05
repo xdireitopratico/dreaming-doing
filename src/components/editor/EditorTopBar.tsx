@@ -131,7 +131,7 @@ export function EditorTopBar({
               className="forge-mode-pill text-[10px]"
               disabled={previewBooting}
               onClick={onRestartPreview}
-              title="Reiniciar preview ao vivo"
+              title="Atualizar preview (mesmo ambiente)"
             >
               {previewBooting ? "…" : "↻"}
             </button>

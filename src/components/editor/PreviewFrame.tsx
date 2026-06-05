@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Eye, Loader2 } from "lucide-react";
+import { Eye, Loader2, Sparkles } from "lucide-react";
 import { PreviewRouteNav } from "@/components/editor/PreviewRouteNav";
 import { buildPreviewUrl } from "@/lib/project-routes";
 
@@ -14,6 +14,7 @@ interface PreviewFrameProps {
   bootError?: string | null;
   warming?: boolean;
   onWarmComplete?: () => void;
+  agentHasRun?: boolean;
 }
 
 export function PreviewFrame({
@@ -27,6 +28,7 @@ export function PreviewFrame({
   bootError,
   warming = false,
   onWarmComplete,
+  agentHasRun = false,
 }: PreviewFrameProps) {
   const [iframeLoading, setIframeLoading] = useState(false);
 
@@ -40,6 +42,7 @@ export function PreviewFrame({
     const t = window.setTimeout(() => onWarmComplete?.(), 45_000);
     return () => window.clearTimeout(t);
   }, [warming, devUrl, onWarmComplete]);
+
   const indexFile = useMemo(() => {
     return files.find(
       (f) =>
@@ -64,6 +67,8 @@ export function PreviewFrame({
     return null;
   }, [devUrl, indexFile]);
 
+  const waitingForAgent = isReactProject && !devUrl && !bootError && !running;
+
   return (
     <div className="forge-preview-root">
       <PreviewRouteNav
@@ -75,18 +80,18 @@ export function PreviewFrame({
 
       <div className="forge-preview-viewport">
         {bootError && !running && (
-          <div className="flex h-full flex-col items-center justify-center gap-3 bg-white p-6 text-center">
-            <p className="text-sm font-medium text-red-600">Preview E2B</p>
-            <p className="max-w-md font-mono text-[11px] text-neutral-600 leading-relaxed">
-              {bootError}
-            </p>
-            {onRefresh && (
+          <div className="flex h-full flex-col items-center justify-center gap-3 bg-white p-8 text-center">
+            <p className="text-sm text-neutral-700 max-w-sm leading-relaxed">{bootError}</p>
+            {onRefresh && bootError.includes("agente") && (
+              <p className="text-xs text-neutral-400">Peça uma alteração no chat para a IA começar.</p>
+            )}
+            {onRefresh && !bootError.includes("agente") && (
               <button
                 type="button"
                 onClick={onRefresh}
-                className="rounded-lg bg-[var(--forge-primary)] px-4 py-2 text-sm font-medium text-black"
+                className="rounded-full bg-neutral-900 px-5 py-2 text-sm font-medium text-white hover:bg-neutral-800"
               >
-                Tentar novamente
+                Tentar de novo
               </button>
             )}
           </div>
@@ -94,17 +99,15 @@ export function PreviewFrame({
 
         {!bootError && running ? (
           <div className="flex h-full w-full flex-col items-center justify-center gap-3 bg-white">
-            <Loader2 className="size-8 animate-spin text-[var(--forge-primary)]" />
-            <p className="text-sm text-neutral-500">Iniciando sandbox E2B…</p>
+            <Loader2 className="size-8 animate-spin text-neutral-400" />
+            <p className="text-sm text-neutral-500">A IA está trabalhando…</p>
           </div>
         ) : !bootError && iframeSrc ? (
           <>
             {(warming || iframeLoading) && (
               <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 bg-white/90">
-                <Loader2 className="size-6 animate-spin text-[var(--forge-primary)]" />
-                <p className="text-xs text-neutral-500">
-                  {warming ? "Vite subindo no sandbox…" : "Carregando preview…"}
-                </p>
+                <Loader2 className="size-6 animate-spin text-neutral-400" />
+                <p className="text-xs text-neutral-500">Carregando preview…</p>
               </div>
             )}
             <iframe
@@ -127,27 +130,40 @@ export function PreviewFrame({
             sandbox="allow-scripts"
             title="Preview"
           />
-        ) : !bootError && isReactProject ? (
+        ) : !bootError && waitingForAgent ? (
           <div className="flex h-full flex-col items-center justify-center gap-4 bg-white p-8 text-center">
-            <p className="text-sm text-neutral-600">
-              Projeto React — o preview ao vivo usa sandbox E2B (Vite na porta detectada).
+            <div className="grid size-12 place-items-center rounded-2xl bg-neutral-100">
+              <Sparkles className="size-6 text-neutral-400" />
+            </div>
+            <div className="max-w-xs space-y-1">
+              <p className="text-sm font-medium text-neutral-800">Preview ao vivo</p>
+              <p className="text-sm text-neutral-500 leading-relaxed">
+                Aparece aqui quando a IA começar a programar. Um ambiente por projeto — sem surpresas.
+              </p>
+            </div>
+          </div>
+        ) : !bootError && isReactProject && onRefresh ? (
+          <div className="flex h-full flex-col items-center justify-center gap-4 bg-white p-8 text-center">
+            <Eye className="size-8 text-neutral-300" />
+            <p className="text-sm text-neutral-500 max-w-xs">
+              {agentHasRun
+                ? "Sincronizando o preview com o código mais recente."
+                : "Envie um pedido no chat para abrir o preview."}
             </p>
-            {onRefresh && (
+            {agentHasRun && (
               <button
                 type="button"
                 onClick={onRefresh}
-                className="rounded-lg bg-[var(--forge-primary)] px-4 py-2 text-sm font-medium text-black"
+                className="rounded-full bg-neutral-900 px-5 py-2 text-sm font-medium text-white hover:bg-neutral-800"
               >
-                Iniciar preview
+                Abrir preview
               </button>
             )}
           </div>
         ) : !bootError ? (
           <div className="flex h-full flex-col items-center justify-center gap-3 bg-white">
             <Eye className="size-8 text-neutral-300" />
-            <p className="text-sm text-neutral-500">
-              O preview aparece quando o agente criar os arquivos ou você iniciar o sandbox.
-            </p>
+            <p className="text-sm text-neutral-500">O preview aparece quando houver algo para mostrar.</p>
           </div>
         ) : null}
       </div>

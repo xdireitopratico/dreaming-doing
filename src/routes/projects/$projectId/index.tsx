@@ -164,6 +164,11 @@ function EditorPage() {
     [files],
   );
 
+  const agentHasRun = useMemo(
+    () => messages?.some((m) => m.role === "assistant") ?? false,
+    [messages],
+  );
+
   const devUrl = (project?.meta as { previewUrl?: string } | null)?.previewUrl ?? null;
   const publishedUrl =
     (project?.meta as { publishedUrl?: string } | null)?.publishedUrl ?? null;
@@ -353,7 +358,7 @@ function EditorPage() {
   const agentFinished = sse.progress.finished;
   useEffect(() => {
     if (!agentFinished || sse.progress.error || !isReactProject) return;
-    previewBoot.boot(false);
+    previewBoot.boot();
   }, [agentFinished, sse.progress.error, isReactProject, previewBoot.boot]);
 
   const handleSend = useCallback(
@@ -392,7 +397,7 @@ function EditorPage() {
   const handlePublish = useCallback(async () => {
     if (!devUrl && isReactProject) {
       toast.info("Iniciando preview antes de publicar…");
-      const url = await previewBoot.boot(true);
+      const url = await previewBoot.boot();
       if (!url) return;
     }
     setPublishing(true);
@@ -490,7 +495,7 @@ function EditorPage() {
         onQuickPrompt={(text) => setPromptDraft(text)}
         onShare={handleShare}
         onPublish={handlePublish}
-        onRestartPreview={() => previewBoot.boot(true)}
+        onRestartPreview={() => previewBoot.boot()}
         previewBooting={previewBoot.booting || publishing}
       >
         <div
@@ -561,7 +566,8 @@ function EditorPage() {
                         bootError={previewBoot.lastError}
                         warming={previewBoot.warming}
                         onWarmComplete={previewBoot.clearWarming}
-                        onRefresh={() => previewBoot.boot(true)}
+                        onRefresh={() => previewBoot.boot()}
+                        agentHasRun={agentHasRun}
                       />
                     )}
 

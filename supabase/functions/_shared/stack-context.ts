@@ -49,7 +49,7 @@ export function stackPromptAddon(ctx: StackContext): string {
   };
 
   return `## Stack FORGE (integrações do usuário)
-- **Preview ao vivo (diferencial):** sandbox E2B + Vite — arquivos sincronizam durante o build; usuário vê HMR no painel Preview.
+- **Preview ao vivo (diferencial):** um sandbox por projeto (criado quando a IA começa a programar); Vite com HMR no painel Preview. Não recriar ambiente — usuário exclui o projeto para encerrar.
 - **Repositório:** ${ctx.github ? "GitHub conectado (push quando fizer sentido)" : "GitHub modo FORGE ou não conectado"}.
 - **Hospedagem alvo:** ${deployLines[ctx.deployTarget]}
 - **Supabase no app gerado:** ${ctx.supabaseOwn ? "usuário pode usar projeto Supabase próprio" : "padrão FORGE (auth/DB) salvo que peça outro backend"}.

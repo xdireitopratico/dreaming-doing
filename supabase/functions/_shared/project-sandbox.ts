@@ -1,13 +1,15 @@
-/** Sandbox E2B por projeto — criar no agente, reutilizar no preview (sem matar ao fim do turno). */
+/**
+ * Um sandbox E2B por projeto — criado pelo agente, reutilizado sempre, encerrado só ao excluir o projeto.
+ */
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { Sandbox } from "npm:e2b@2.14.1";
 import {
-  E2B_PROJECT_DIR,
   E2B_TEMPLATE_DEFAULT,
   patchProjectFilesForE2b,
 } from "./e2b.ts";
 
-const SANDBOX_TTL_MS = 25 * 60 * 1000;
+/** Renovação de lease no meta (não recria sandbox). */
+const SANDBOX_LEASE_MS = 30 * 24 * 60 * 60 * 1000;
 
 export type ProjectSandboxMeta = {
   previewSandboxId?: string;
@@ -26,24 +28,32 @@ export function readSandboxMeta(meta: Record<string, unknown> | null | undefined
   };
 }
 
-function isMetaValid(sm: ProjectSandboxMeta): boolean {
-  if (!sm.previewSandboxId || !sm.previewExpiresAt) return false;
-  return new Date(sm.previewExpiresAt).getTime() > Date.now() + 30_000;
+export async function loadProjectMeta(
+  supabase: SupabaseClient,
+  projectId: string,
+): Promise<{ existing: Record<string, unknown>; sm: ProjectSandboxMeta }> {
+  const { data: project } = await supabase
+    .from("projects")
+    .select("meta")
+    .eq("id", projectId)
+    .single();
+  const existing = (project?.meta ?? {}) as Record<string, unknown>;
+  return { existing, sm: readSandboxMeta(existing) };
 }
 
-export async function persistSandboxMeta(
+async function touchSandboxLease(
   supabase: SupabaseClient,
   projectId: string,
   existing: Record<string, unknown>,
-  patch: Partial<ProjectSandboxMeta>,
+  sandboxId: string,
+  extra?: Partial<ProjectSandboxMeta>,
 ): Promise<void> {
-  const expiresAt = patch.previewExpiresAt ??
-    new Date(Date.now() + SANDBOX_TTL_MS).toISOString();
   await supabase.from("projects").update({
     meta: {
       ...existing,
-      ...patch,
-      previewExpiresAt: expiresAt,
+      ...extra,
+      previewSandboxId: sandboxId,
+      previewExpiresAt: new Date(Date.now() + SANDBOX_LEASE_MS).toISOString(),
     },
   }).eq("id", projectId);
 }
@@ -54,39 +64,29 @@ export type ConnectSandboxResult = {
   reused: boolean;
 };
 
-/** Conecta sandbox existente ou cria um novo; `forceNew` encerra o anterior. */
-export async function connectOrCreateProjectSandbox(
+const NO_SANDBOX_MSG =
+  "Ainda não há ambiente ao vivo. Envie um pedido ao agente para ele começar a programar.";
+
+const SANDBOX_GONE_MSG =
+  "O ambiente deste projeto não está mais disponível. Exclua o projeto e crie outro se precisar de um ambiente novo.";
+
+/** Agente: cria sandbox uma única vez por projeto; depois só reconecta. */
+export async function ensureAgentProjectSandbox(
   supabase: SupabaseClient,
   projectId: string,
   apiKey: string,
-  opts?: { forceNew?: boolean; template?: string },
+  template = E2B_TEMPLATE_DEFAULT,
 ): Promise<ConnectSandboxResult> {
-  const { data: project } = await supabase
-    .from("projects")
-    .select("meta")
-    .eq("id", projectId)
-    .single();
+  const { existing, sm } = await loadProjectMeta(supabase, projectId);
 
-  const existing = (project?.meta ?? {}) as Record<string, unknown>;
-  const sm = readSandboxMeta(existing);
-  const template = opts?.template?.trim() || E2B_TEMPLATE_DEFAULT;
-
-  if (opts?.forceNew && sm.previewSandboxId) {
-    try {
-      const old = await Sandbox.connect(sm.previewSandboxId, { apiKey });
-      await old.kill();
-    } catch { /* já expirou */ }
-  }
-
-  if (!opts?.forceNew && isMetaValid(sm) && sm.previewSandboxId) {
+  if (sm.previewSandboxId) {
     try {
       const sandbox = await Sandbox.connect(sm.previewSandboxId, { apiKey });
-      await persistSandboxMeta(supabase, projectId, existing, {
-        previewSandboxId: sandbox.sandboxId,
-      });
+      await touchSandboxLease(supabase, projectId, existing, sandbox.sandboxId);
       return { sandbox, sandboxId: sandbox.sandboxId, reused: true };
     } catch (e) {
-      console.warn("[project-sandbox] connect failed, creating new:", e);
+      console.error("[project-sandbox] reconnect failed:", e);
+      throw new Error(SANDBOX_GONE_MSG);
     }
   }
 
@@ -96,12 +96,47 @@ export async function connectOrCreateProjectSandbox(
     network: { maskRequestHost: "localhost:${PORT}" },
   });
 
-  await persistSandboxMeta(supabase, projectId, existing, {
-    previewSandboxId: sandbox.sandboxId,
+  await touchSandboxLease(supabase, projectId, existing, sandbox.sandboxId, {
     previewUrl: undefined,
   });
 
   return { sandbox, sandboxId: sandbox.sandboxId, reused: false };
+}
+
+/** Preview: só reconecta — nunca cria sandbox (agente é dono da criação). */
+export async function connectProjectSandboxForPreview(
+  supabase: SupabaseClient,
+  projectId: string,
+  apiKey: string,
+): Promise<ConnectSandboxResult> {
+  const { existing, sm } = await loadProjectMeta(supabase, projectId);
+
+  if (!sm.previewSandboxId) {
+    throw new Error(NO_SANDBOX_MSG);
+  }
+
+  try {
+    const sandbox = await Sandbox.connect(sm.previewSandboxId, { apiKey });
+    await touchSandboxLease(supabase, projectId, existing, sandbox.sandboxId);
+    return { sandbox, sandboxId: sandbox.sandboxId, reused: true };
+  } catch (e) {
+    console.error("[project-sandbox] preview connect failed:", e);
+    throw new Error(SANDBOX_GONE_MSG);
+  }
+}
+
+/** Excluir projeto: encerra o sandbox E2B deste projeto. */
+export async function killProjectSandbox(
+  apiKey: string,
+  sandboxId: string | undefined,
+): Promise<void> {
+  if (!sandboxId) return;
+  try {
+    const sandbox = await Sandbox.connect(sandboxId, { apiKey });
+    await sandbox.kill();
+  } catch {
+    /* já expirou na E2B */
+  }
 }
 
 export async function syncProjectFilesToSandbox(

@@ -3,8 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { getPlatformSecret } from "../_shared/platform-secrets.ts";
 import { E2B_PROJECT_DIR } from "../_shared/e2b.ts";
 import {
-  connectOrCreateProjectSandbox,
-  persistSandboxMeta,
+  connectProjectSandboxForPreview,
   previewUrlFromSandbox,
   readSandboxMeta,
   syncProjectFilesToSandbox,
@@ -26,7 +25,7 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    const { projectId, force } = await req.json();
+    const { projectId } = await req.json();
     if (!projectId) return json({ error: "projectId obrigatório" }, 400);
 
     const supabase = createClient(SUPABASE_URL, SERVICE_KEY);
@@ -48,32 +47,16 @@ Deno.serve(async (req) => {
     }
 
     const existing = (project.meta ?? {}) as Record<string, unknown>;
-    const sm = readSandboxMeta(existing);
-
-    if (!force && sm.previewUrl && sm.previewExpiresAt) {
-      const exp = new Date(sm.previewExpiresAt).getTime();
-      if (exp > Date.now() + 60_000) {
-        return json({
-          url: sm.previewUrl,
-          expiresAt: sm.previewExpiresAt,
-          reused: true,
-          ready: true,
-          sandboxId: sm.previewSandboxId,
-        });
-      }
-    }
-
     const { data: files } = await supabase
       .from("project_files").select("path, content").eq("project_id", projectId);
 
     const devPort = Number.parseInt(detectDevPort(files ?? []), 10) || 5173;
     const devCmd = detectDevCommand(files ?? [], devPort);
 
-    const { sandbox, sandboxId, reused } = await connectOrCreateProjectSandbox(
+    const { sandbox, sandboxId, reused } = await connectProjectSandboxForPreview(
       supabase,
       projectId,
       E2B_API_KEY,
-      { forceNew: !!force },
     );
 
     await syncProjectFilesToSandbox(sandbox, files ?? []);

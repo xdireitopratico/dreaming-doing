@@ -4,6 +4,7 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { VITE_REACT_SEED } from "@/lib/seeds/vite-react";
 import { inferStackFromPrompt } from "@/lib/stack-router";
 
+
 function slugify(input: string) {
   return input
     .toLowerCase()
@@ -47,7 +48,6 @@ export const createProjectFromPrompt = createServerFn({ method: "POST" })
       .single();
     if (pErr) throw new Error(pErr.message);
 
-    // Seed: Vite + React + Tailwind 4. 10 arquivos.
     const seedRows = VITE_REACT_SEED.map((f) => ({
       project_id: project.id,
       path: f.path,
@@ -72,4 +72,33 @@ export const createProjectFromPrompt = createServerFn({ method: "POST" })
     if (mErr) throw new Error(mErr.message);
 
     return { projectId: project.id as string, conversationId: conv.id as string };
+  });
+
+export const deleteProject = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) =>
+    z.object({ projectId: z.string().uuid() }).parse(input),
+  )
+  .handler(async ({ data, context }) => {
+    const { supabase, userId } = context;
+
+    const { data: project } = await supabase
+      .from("projects")
+      .select("id, owner_id")
+      .eq("id", data.projectId)
+      .single();
+
+    if (!project || project.owner_id !== userId) {
+      throw new Error("Projeto não encontrado.");
+    }
+
+    const { data: res, error } = await supabase.functions.invoke("project-delete", {
+      body: { projectId: data.projectId },
+    });
+
+    if (error) throw new Error(error.message);
+    const body = res as { error?: string };
+    if (body?.error) throw new Error(body.error);
+
+    return { ok: true as const };
   });
