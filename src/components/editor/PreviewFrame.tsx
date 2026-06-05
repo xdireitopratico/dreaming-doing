@@ -1,11 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
-import { Eye, Loader2 } from "lucide-react";
+import { Copy, Eye, Loader2, RefreshCw } from "lucide-react";
+import { toast } from "sonner";
 import { E2bSandboxPanel } from "@/components/editor/E2bSandboxPanel";
+import { PreviewRouteNav } from "@/components/editor/PreviewRouteNav";
 import { buildPreviewUrl } from "@/lib/project-routes";
 
 interface PreviewFrameProps {
   files: Array<{ path: string; content: string }>;
-  running: boolean;
+  /** Só boot E2B — preview permanece estático enquanto o agente trabalha no chat. */
+  booting?: boolean;
   devUrl?: string | null;
   previewPath?: string;
   onPreviewPathChange?: (path: string) => void;
@@ -22,7 +25,7 @@ interface PreviewFrameProps {
 
 export function PreviewFrame({
   files,
-  running,
+  booting = false,
   devUrl,
   previewPath = "/",
   onPreviewPathChange,
@@ -72,20 +75,69 @@ export function PreviewFrame({
     return null;
   }, [devUrl, indexFile]);
 
-  const waitingForAgent = isReactProject && !devUrl && !bootError && !running;
+  const waitingForAgent = isReactProject && !devUrl && !bootError && !booting;
+  const previewHost = useMemo(() => {
+    if (!devUrl) return null;
+    try {
+      return new URL(devUrl).host;
+    } catch {
+      return devUrl.replace(/^https?:\/\//, "").split("/")[0] ?? devUrl;
+    }
+  }, [devUrl]);
+
+  const copyPreviewLink = () => {
+    if (!iframeSrc) return;
+    void navigator.clipboard.writeText(iframeSrc).then(
+      () => toast.success("Link do preview copiado"),
+      () => toast.info(iframeSrc),
+    );
+  };
   const needsE2b = !e2bConnected;
   const e2bBootBlocked =
     needsE2b ||
     (!!bootError && (bootError.includes("E2B") || bootError.includes("Sandbox")));
 
   return (
-    <div className="forge-preview-root">
-      <div className="forge-preview-viewport">
-        {e2bBootBlocked && !running && !devUrl && (
+    <div className="forge-preview-root flex min-h-0 flex-1 flex-col">
+      {devUrl && onPreviewPathChange && (
+        <div className="forge-preview-chrome shrink-0">
+          <div className="forge-preview-domain" title={iframeSrc ?? devUrl}>
+            <span className="font-mono text-[10px] text-neutral-500 truncate">{previewHost}</span>
+            <button
+              type="button"
+              className="grid size-6 shrink-0 place-items-center rounded-md text-neutral-500 hover:bg-neutral-100"
+              title="Copiar URL do preview"
+              onClick={copyPreviewLink}
+            >
+              <Copy className="size-3" />
+            </button>
+            {onRefresh && (
+              <button
+                type="button"
+                className="grid size-6 shrink-0 place-items-center rounded-md text-neutral-500 hover:bg-neutral-100"
+                title="Recarregar preview"
+                onClick={onRefresh}
+              >
+                <RefreshCw className="size-3" />
+              </button>
+            )}
+          </div>
+          <PreviewRouteNav
+            variant="inline"
+            files={files}
+            activePath={previewPath}
+            onNavigate={onPreviewPathChange}
+            devUrl={devUrl}
+          />
+        </div>
+      )}
+
+      <div className="forge-preview-viewport min-h-0 flex-1">
+        {e2bBootBlocked && !booting && !devUrl && (
           <E2bSandboxPanel connected={e2bConnected} />
         )}
 
-        {bootError && !running && !e2bBootBlocked && (
+        {bootError && !booting && !e2bBootBlocked && (
           <div className="flex h-full flex-col items-center justify-center gap-3 bg-white p-8 text-center">
             <p className="text-sm text-neutral-700 max-w-sm leading-relaxed">{bootError}</p>
             {onRefresh && bootError.includes("agente") && (
@@ -103,10 +155,10 @@ export function PreviewFrame({
           </div>
         )}
 
-        {!bootError && running ? (
+        {!bootError && booting && !iframeSrc ? (
           <div className="flex h-full w-full flex-col items-center justify-center gap-3 bg-white">
             <Loader2 className="size-8 animate-spin text-neutral-400" />
-            <p className="text-sm text-neutral-500">A IA está trabalhando…</p>
+            <p className="text-sm text-neutral-500">Conectando sandbox E2B…</p>
           </div>
         ) : !bootError && iframeSrc ? (
           <>

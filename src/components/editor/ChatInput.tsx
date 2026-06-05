@@ -6,13 +6,22 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import {
   ArrowUp,
+  ChevronDown,
+  Hammer,
   Square,
   FileText,
+  ListTodo,
   Paperclip,
   ImageIcon,
   MousePointer2,
   X,
 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import { MicButton } from "@/components/voice/MicButton";
 import { toast } from "sonner";
@@ -28,6 +37,8 @@ import {
   getAgentSetupBlockMessage,
   isAgentPreferencesConfigured,
 } from "@/lib/agent-setup";
+import { ChatStream } from "@/components/editor/ChatStream";
+import type { AgentProgress } from "@/hooks/useSSE";
 
 export type AgentComposerMode = "build" | "plan";
 
@@ -60,6 +71,9 @@ interface ChatInputProps {
   tasteChatRemaining?: number;
   tasteStartRemaining?: number;
   onStartProject?: () => void;
+  /** Trilha ao vivo do agente (fases, tools) — renderizada no painel de mensagens. */
+  agentProgress?: AgentProgress;
+  onResumeAgent?: () => void;
 }
 
 // -----------------------------------------------------------------------------------
@@ -114,34 +128,10 @@ function MarkdownContent({ children }: { children: string }) {
 }
 
 // -----------------------------------------------------------------------------------
-// Typewriter effect for streaming assistant messages
-// -----------------------------------------------------------------------------------
-
-function TypewriterText({ text, speed = 8 }: { text: string; speed?: number }) {
-  const [displayed, setDisplayed] = useState("");
-  const indexRef = useRef(0);
-
-  useEffect(() => {
-    indexRef.current = 0;
-    setDisplayed("");
-
-    if (text.length === 0) return;
-
-    const interval = setInterval(() => {
-      indexRef.current += 1;
-      setDisplayed(text.slice(0, indexRef.current));
-      if (indexRef.current >= text.length) {
-        clearInterval(interval);
-      }
-    }, speed);
-
-    return () => clearInterval(interval);
-  }, [text, speed]);
-
-  if (!text) return null;
-
-  return <MarkdownContent>{displayed}</MarkdownContent>;
-}
+const COMPOSER_MODE_LABEL: Record<AgentComposerMode, string> = {
+  build: "Build",
+  plan: "Play",
+};
 
 // -----------------------------------------------------------------------------------
 // ChatInput
@@ -163,6 +153,8 @@ export function ChatInput({
   onStartProject,
   onVisualEdits,
   visualEditsActive,
+  agentProgress,
+  onResumeAgent,
 }: ChatInputProps) {
   const [input, setInput] = useState("");
   const [composerModeLocal, setComposerModeLocal] = useState<AgentComposerMode>("build");
@@ -194,7 +186,7 @@ export function ChatInput({
         behavior: "smooth",
       });
     }
-  }, [messages]);
+  }, [messages, running, agentProgress?.phase, agentProgress?.tools.length]);
 
   // Auto-resize textarea
   useEffect(() => {
@@ -419,41 +411,31 @@ export function ChatInput({
             )}
           </div>
         ) : (
-          messages.map((msg) => (
-            <div key={msg.id} className="mb-4 last:mb-0">
-              {msg.role === "user" ? (
-                <p className="forge-msg-text forge-msg-user">{msg.content}</p>
-              ) : (
-                <div className="forge-msg-text">
-                  {messages[messages.length - 1]?.id === msg.id && running ? (
-                    <TypewriterText text={msg.content} />
-                  ) : (
-                    <MarkdownContent>{msg.content}</MarkdownContent>
-                  )}
-                </div>
-              )}
-
-              {msg.toolCalls && msg.toolCalls.length > 0 && (
-                <div className="forge-tool-inline">
-                  <div className="forge-tool-inline-title">
-                    <FileText className="size-4 text-[var(--forge-primary)]" />
-                    <span className="truncate">
-                      {msg.toolCalls[0]?.name}
-                      {msg.toolCalls[0]?.args ? `: ${msg.toolCalls[0].args.slice(0, 48)}` : ""}
-                    </span>
-                  </div>
-                  <div className="forge-tool-inline-actions">
-                    <button type="button" className="forge-tool-btn">
-                      Details
-                    </button>
-                    <button type="button" className="forge-tool-btn">
-                      Preview
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-          ))
+          <ChatStream
+            messages={messages}
+            running={running}
+            progress={
+              agentProgress ?? {
+                phase: null,
+                message: null,
+                currentStep: null,
+                totalSteps: null,
+                tools: [],
+                cost: 0,
+                model: null,
+                skills: [],
+                runtimeChecks: [],
+                timeline: [],
+                summary: null,
+                error: null,
+                finished: false,
+                resumable: false,
+                statusHint: null,
+                streamText: null,
+              }
+            }
+            onResume={onResumeAgent}
+          />
         )}
       </div>
 
@@ -573,22 +555,33 @@ export function ChatInput({
 
           <span className="forge-composer-spacer" />
 
-          <div className="forge-mode-toggle" role="group" aria-label="Modo do agente">
-            <button
-              type="button"
-              data-active={composerMode === "build"}
-              onClick={() => setComposerMode("build")}
-            >
-              Build
-            </button>
-            <button
-              type="button"
-              data-active={composerMode === "plan"}
-              onClick={() => setComposerMode("plan")}
-            >
-              Plan
-            </button>
-          </div>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                className="forge-composer-mode-trigger"
+                aria-label="Modo do agente"
+              >
+                {composerMode === "build" ? (
+                  <Hammer className="size-3.5 shrink-0" />
+                ) : (
+                  <ListTodo className="size-3.5 shrink-0" />
+                )}
+                <span>{COMPOSER_MODE_LABEL[composerMode]}</span>
+                <ChevronDown className="size-3 opacity-60" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="min-w-[140px]">
+              <DropdownMenuItem onClick={() => setComposerMode("build")}>
+                <Hammer className="size-3.5 mr-2" />
+                Build — implementar no projeto
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setComposerMode("plan")}>
+                <ListTodo className="size-3.5 mr-2" />
+                Play — explorar e planejar sem executar
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
 
           <MicButton
             size="sm"

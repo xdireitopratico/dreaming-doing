@@ -168,6 +168,53 @@ body:has(.editor-workspace) {
   overflow: hidden;
 }
 
+.forge-view-icon-tabs {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 8px;
+  background: var(--forge-surface-2);
+  border: 1px solid var(--forge-border);
+}
+
+.forge-view-icon-tab {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 28px;
+  border-radius: 6px;
+  color: var(--forge-muted);
+  transition: background 0.15s, color 0.15s;
+}
+
+.forge-view-icon-tab:hover {
+  color: var(--forge-silver);
+  background: rgba(237, 239, 242, 0.06);
+}
+
+.forge-view-icon-tab[data-active="true"] {
+  color: var(--forge-primary);
+  background: rgba(255, 182, 39, 0.12);
+}
+
+.forge-integrations-badge {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
+  border-radius: 999px;
+  background: var(--forge-primary);
+  color: #0a0a0a;
+  font-size: 8px;
+  font-weight: 700;
+  line-height: 14px;
+  text-align: center;
+}
+
 .forge-mode-pill,
 .lovable-preview-pill {
   display: inline-flex;
@@ -457,8 +504,144 @@ body:has(.editor-workspace) {
   margin: 0 0 10px;
 }
 
-.forge-msg-user {
+.forge-chat-stream {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.forge-chat-item-user {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.forge-msg-user-outline {
+  max-width: 88%;
+  padding: 10px 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 182, 39, 0.55);
+  background: transparent;
   color: var(--forge-text);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.forge-msg-user-outline p {
+  margin: 0;
+}
+
+.forge-chat-item-assistant {
+  width: 100%;
+}
+
+.forge-msg-assistant-body {
+  width: 100%;
+  padding: 0 2px;
+}
+
+.forge-chat-stream-draft {
+  margin-top: 4px;
+  opacity: 0.92;
+}
+
+.forge-chat-live {
+  padding: 10px 12px;
+  border-left: 2px solid rgba(255, 182, 39, 0.35);
+  margin-left: 2px;
+}
+
+.forge-chat-live-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+
+.forge-chat-live-line {
+  margin: 0 0 8px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--forge-silver);
+}
+
+.forge-chat-live-hint {
+  margin: 0 0 8px;
+  font-family: ui-monospace, monospace;
+  font-size: 10px;
+  color: rgba(251, 191, 36, 0.9);
+  line-height: 1.45;
+}
+
+.forge-chat-live-tools {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.forge-chat-live-tools li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: ui-monospace, monospace;
+  font-size: 10px;
+  color: var(--forge-muted);
+}
+
+.forge-chat-live-tools-done li[data-ok="true"] {
+  color: var(--forge-ghost);
+}
+
+.forge-chat-live-tools-done li[data-ok="false"] {
+  color: rgba(251, 191, 36, 0.85);
+}
+
+.forge-chat-resume {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: var(--forge-radius-sm);
+  border: 1px solid rgba(251, 191, 36, 0.25);
+  background: rgba(251, 191, 36, 0.06);
+}
+
+.forge-composer-mode-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border-radius: 8px;
+  border: 1px solid var(--forge-border);
+  background: var(--forge-surface-3);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--forge-muted);
+}
+
+.forge-composer-mode-trigger:hover {
+  color: var(--forge-text);
+  border-color: var(--forge-border-strong);
+}
+
+.forge-preview-chrome {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  background: #fafafa;
+}
+
+.forge-preview-domain {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 10px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
 }
 
 .forge-tool-inline,

@@ -16,10 +16,6 @@ export function EditorShell({
   onPublish,
   onQuickPrompt,
   running,
-  previewFiles,
-  previewPath,
-  onPreviewPathChange,
-  previewDevUrl,
 }: {
   children: ReactNode;
   projectName?: string;
@@ -29,10 +25,6 @@ export function EditorShell({
   onPublish?: () => void;
   onQuickPrompt?: (text: string) => void;
   running?: boolean;
-  previewFiles?: Array<{ path: string; content?: string }>;
-  previewPath?: string;
-  onPreviewPathChange?: (path: string) => void;
-  previewDevUrl?: string | null;
 }) {
   const { user, loading } = useAuth();
   const loc = useLocation();
@@ -64,10 +56,6 @@ export function EditorShell({
         onPublish={onPublish}
         onQuickPrompt={onQuickPrompt}
         running={running}
-        previewFiles={previewFiles}
-        previewPath={previewPath}
-        onPreviewPathChange={onPreviewPathChange}
-        previewDevUrl={previewDevUrl}
       />
       <div className="min-h-0 flex-1">{children}</div>
     </div>

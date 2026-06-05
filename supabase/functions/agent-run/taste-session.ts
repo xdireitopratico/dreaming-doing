@@ -129,6 +129,10 @@ export async function runTasteChat(params: {
 
   const content = await runTasteToolLoop(llm, reg, chatMessages);
 
+  if (content?.trim()) {
+    emit("assistant_text", { text: content.trim(), final: true });
+  }
+
   await supabase.from("messages").insert({
     conversation_id: conversationId,
     role: "assistant",

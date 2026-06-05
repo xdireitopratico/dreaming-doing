@@ -34,6 +34,8 @@ export interface AgentProgress {
   resumable: boolean;
   /** Aviso amigável (ROBIN / rate limit) */
   statusHint: string | null;
+  /** Texto do modelo ainda em voo (SSE assistant_text), antes de persistir no DB. */
+  streamText: string | null;
 }
 
 const initialState: AgentProgress = {
@@ -52,6 +54,7 @@ const initialState: AgentProgress = {
   finished: false,
   resumable: false,
   statusHint: null,
+  streamText: null,
 };
 
 const MODEL_COSTS: Record<string, number> = {
@@ -260,6 +263,16 @@ function applyEvent(prev: AgentProgress, event: SSEEvent): AgentProgress {
   const { type, data } = event;
 
   switch (type) {
+    case "assistant_text": {
+      const chunk = (data.text as string) ?? "";
+      const final = data.final === true;
+      return {
+        ...prev,
+        streamText: final ? chunk : (prev.streamText ? `${prev.streamText}\n\n${chunk}` : chunk),
+        timeline: [...prev.timeline, event],
+      };
+    }
+
     case "phase":
       return {
         ...prev,
@@ -361,6 +374,7 @@ function applyEvent(prev: AgentProgress, event: SSEEvent): AgentProgress {
         ...prev,
         summary: (data.summary as string) ?? prev.summary,
         finished: true,
+        streamText: null,
         timeline: [...prev.timeline, event],
       };
 
@@ -377,6 +391,7 @@ function applyEvent(prev: AgentProgress, event: SSEEvent): AgentProgress {
       return {
         ...prev,
         finished: true,
+        streamText: null,
         resumable: data.resumable === true && data.ok === false,
         error: data.ok === false ? ((data.error as string) ?? prev.error) : prev.error,
         timeline: [...prev.timeline, event],

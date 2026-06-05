@@ -9,6 +9,21 @@ import {
   shouldUseOpenAiResponsesApi,
 } from "./openai-responses.ts";
 
+function isNvidiaNimBaseUrl(baseUrl: string): boolean {
+  return baseUrl.includes("integrate.api.nvidia.com");
+}
+
+/** Parâmetros oficiais Nemotron (thinking + reasoning budget) — ver build.nvidia.com */
+function nvidiaNimChatExtras(model: string): Record<string, unknown> | undefined {
+  if (!/nemotron/i.test(model)) return undefined;
+  return {
+    chat_template_kwargs: { enable_thinking: true },
+    reasoning_budget: 16_384,
+    top_p: 0.95,
+    temperature: 1,
+  };
+}
+
 function toToolCall(raw: any): ToolCall {
   return {
     id: raw.id ?? crypto.randomUUID(),
@@ -143,6 +158,11 @@ class OpenAIAdapter implements LLMProvider {
 
     if (params.response_format) {
       body.response_format = params.response_format;
+    }
+
+    if (isNvidiaNimBaseUrl(this.baseUrl)) {
+      const extras = nvidiaNimChatExtras(this.model);
+      if (extras) Object.assign(body, extras);
     }
 
     const resp = await fetch(`${this.baseUrl}/chat/completions`, {

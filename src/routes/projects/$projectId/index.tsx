@@ -35,7 +35,7 @@ import {
   resolveSessionKind,
 } from "@/lib/taste";
 import type { StoredMessagePart } from "@/lib/chat-attachments";
-import { AgentPanel } from "@/components/editor/AgentPanel";
+
 import { PreviewFrame } from "@/components/editor/PreviewFrame";
 
 
@@ -465,12 +465,35 @@ function EditorPage() {
     void qc.invalidateQueries({ queryKey: ["profile"] });
   }, [sse.progress.finished, conversation, qc]);
 
-  // Preview ao vivo: após o agente; recarrega iframe quando arquivos mudam (sem botão ↻ na barra)
+  // Preview E2B: sobe quando o agente grava arquivos ou ao terminar a rodada
   const agentFinished = sse.progress.finished;
+  const agentWroteFiles = useMemo(
+    () =>
+      sse.progress.timeline.some(
+        (e) =>
+          e.type === "tool_done" &&
+          (e.data?.name === "fs_write" || e.data?.name === "fs_edit"),
+      ),
+    [sse.progress.timeline],
+  );
+
   useEffect(() => {
-    if (!agentFinished || sse.progress.error || !isReactProject) return;
-    previewBoot.boot();
-  }, [agentFinished, sse.progress.error, isReactProject, previewBoot.boot]);
+    if (!isReactProject || !e2bConnected || devUrl || previewBoot.booting) return;
+    if (!running && !agentFinished) return;
+    if (!agentWroteFiles && !agentFinished) return;
+    if (sse.progress.error) return;
+    void previewBoot.boot();
+  }, [
+    agentFinished,
+    agentWroteFiles,
+    running,
+    sse.progress.error,
+    isReactProject,
+    e2bConnected,
+    devUrl,
+    previewBoot.booting,
+    previewBoot.boot,
+  ]);
 
   const filesSyncKey = useMemo(
     () => files?.map((f) => `${f.path}:${f.updated_at}`).join("|") ?? "",
@@ -670,10 +693,6 @@ function EditorPage() {
         onQuickPrompt={(text) => setPromptDraft(text)}
         onShare={handleShare}
         onPublish={handlePublish}
-        previewFiles={files?.map((f) => ({ path: f.path, content: f.content ?? "" }))}
-        previewPath={previewRoute}
-        onPreviewPathChange={setPreviewRoute}
-        previewDevUrl={devUrl}
       >
         <div
           className="flex min-h-0 h-full w-full flex-1 flex-col overflow-hidden"
@@ -685,12 +704,13 @@ function EditorPage() {
             workspaceCode={activeView === "code"}
             chat={
               <div className="forge-chat-column">
-                <AgentPanel running={running} progress={sse.progress} onResume={runAgent} />
                 <div className="forge-chat-body">
                   <TastePostStartBanner />
                   <ChatInput
                     messages={chatMessages}
                     running={running}
+                    agentProgress={sse.progress}
+                    onResumeAgent={() => runAgent(resolveSessionKind(tasteQuota))}
                     onSend={handleSend}
                     onStop={handleStop}
                     onVisualEdits={handleVisualEdits}
@@ -748,7 +768,7 @@ function EditorPage() {
                     {activeView === "preview" && (
                       <PreviewFrame
                         files={files?.map((f) => ({ path: f.path, content: f.content ?? "" })) ?? []}
-                        running={running || previewBoot.booting}
+                        booting={previewBoot.booting}
                         devUrl={devUrl}
                         previewPath={previewRoute}
                         onPreviewPathChange={setPreviewRoute}

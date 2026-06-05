@@ -125,6 +125,11 @@ export class AgentLoop {
       }
       if (!response) break;
 
+      const assistantText = (response.content ?? "").trim();
+      if (assistantText) {
+        this.emit("assistant_text", { text: assistantText, final: !response.tool_calls?.length });
+      }
+
       // Sem tool_calls = resposta final
       if (!response.tool_calls || response.tool_calls.length === 0) {
         this.state.messages.push({ role: "assistant", content: response.content ?? "Concluído." });

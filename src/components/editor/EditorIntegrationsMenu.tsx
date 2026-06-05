@@ -1,5 +1,5 @@
 import { useRef, useState, useEffect } from "react";
-import { ChevronDown, Github, Database, Cloud, Globe } from "lucide-react";
+import { Github, Database, Cloud, Globe, Plug2 } from "lucide-react";
 import { useConnectors, type ConnectorId } from "@/hooks/useConnectors";
 import { CONNECTOR_REGISTRY, isConnectorActive } from "@/lib/connectors/registry";
 import { ConnectorGuideModal } from "@/components/connectors/ConnectorGuideModal";
@@ -36,14 +36,16 @@ export function EditorIntegrationsMenu() {
       <div ref={ref} className="relative">
         <button
           type="button"
-          className="forge-mode-pill gap-1.5"
+          className="forge-view-icon-tab"
+          data-active={open}
           aria-expanded={open}
           onClick={() => setOpen((v) => !v)}
-          title="GitHub, Supabase, Vercel, Netlify, Cloudflare"
+          title={`Integrações (${connectedCount}/${MENU_IDS.length} conectadas)`}
         >
-          <span className="font-mono text-[10px]">Integrações</span>
-          <span className="font-mono text-[9px] opacity-60">{connectedCount}/{MENU_IDS.length}</span>
-          <ChevronDown className={`size-3 opacity-60 transition-transform ${open ? "rotate-180" : ""}`} />
+          <Plug2 className="size-4" />
+          {connectedCount > 0 && (
+            <span className="forge-integrations-badge">{connectedCount}</span>
+          )}
         </button>
 
         {open && (

@@ -11,8 +11,6 @@ import { useAuth } from "@/lib/auth";
 import type { EditorMainView } from "@/components/editor/EditorViewTabs";
 import { ForgeLogoMark } from "@/components/editor/ForgeLogoMark";
 import { EditorIntegrationsMenu } from "@/components/editor/EditorIntegrationsMenu";
-import { PreviewRouteNav } from "@/components/editor/PreviewRouteNav";
-
 interface EditorTopBarProps {
   projectName?: string;
   activeView: EditorMainView;
@@ -21,11 +19,6 @@ interface EditorTopBarProps {
   onPublish?: () => void;
   onQuickPrompt?: (text: string) => void;
   running?: boolean;
-  /** Rotas do preview (só quando aba Preview). */
-  previewFiles?: Array<{ path: string; content?: string }>;
-  previewPath?: string;
-  onPreviewPathChange?: (path: string) => void;
-  previewDevUrl?: string | null;
 }
 
 export function EditorTopBar({
@@ -36,10 +29,6 @@ export function EditorTopBar({
   onPublish,
   onQuickPrompt,
   running,
-  previewFiles,
-  previewPath = "/",
-  onPreviewPathChange,
-  previewDevUrl,
 }: EditorTopBarProps) {
   const { user } = useAuth();
 
@@ -80,39 +69,30 @@ export function EditorTopBar({
       </div>
 
       <div className="forge-topbar-center min-w-0">
-        <div className="flex shrink-0 items-center gap-1">
+        <div className="forge-view-icon-tabs" role="tablist" aria-label="Visualização">
           <button
             type="button"
-            className="forge-mode-pill"
+            role="tab"
+            aria-selected={activeView === "preview"}
+            className="forge-view-icon-tab"
             data-active={activeView === "preview"}
+            title="Preview"
             onClick={() => onViewChange("preview")}
           >
-            <Eye className="size-3.5" />
-            Preview
+            <Eye className="size-4" />
           </button>
           <button
             type="button"
-            className="forge-mode-pill"
+            role="tab"
+            aria-selected={activeView === "code"}
+            className="forge-view-icon-tab"
             data-active={activeView === "code"}
+            title="Código"
             onClick={() => onViewChange("code")}
           >
-            <Code2 className="size-3.5" />
-            Code
+            <Code2 className="size-4" />
           </button>
         </div>
-
-        {activeView === "preview" && previewFiles && onPreviewPathChange && (
-          <>
-            <span className="forge-topbar-divider mx-1 shrink-0" aria-hidden />
-            <PreviewRouteNav
-              variant="topbar"
-              files={previewFiles}
-              activePath={previewPath}
-              onNavigate={onPreviewPathChange}
-              devUrl={previewDevUrl}
-            />
-          </>
-        )}
 
         <span className="forge-topbar-divider mx-1 shrink-0 hidden sm:block" aria-hidden />
         <EditorIntegrationsMenu />
