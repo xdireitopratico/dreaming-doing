@@ -290,15 +290,20 @@ Estimativa Lovable original (~30–32/50 por sessão) **já consumiu ~12** (B7�
 
 ---
 
-## 9. Lista de modelos (slot reservado)
+## 9. Lista de modelos ✅ (jun/2026)
 
-Quando você enviar a lista atualizada de modelos, atualizar:
+**Status:** Fase 0 concluída — 31 presets OpenRouter (#1–30 + Qwen3.5 397B).
 
-- `src/lib/model-catalog.ts`
-- `src/lib/agent-preferences.ts` (se necessário)
-- manifest / presets em `supabase/functions/_shared/model-presets.ts`
+| O quê | Arquivo |
+|-------|---------|
+| Catálogo UI + ranking | `src/lib/model-catalog.ts` |
+| Wire Edge / agente | `supabase/functions/_shared/model-presets.ts` |
+| Default | `or-anthropic--claude-sonnet-4-6` (#3) |
+| Chave | `OPENROUTER_API_KEY` (conector + vault admin `platform_secrets`) |
+| Pool ROBIN | `pool-groq-flash`, `pool-nemotron-super` (APIs nativas) |
+| Dropdown editor | Top 12 + recomendados; lista completa em `/api-keys` → Estúdio IA |
 
-*(Aguardando input do usuário — não bloqueia P0.)*
+**Próximo no doc:** Fase 1 (+1 criação projeto, +2 publish, +4 `/deploy`).
 
 ---
 

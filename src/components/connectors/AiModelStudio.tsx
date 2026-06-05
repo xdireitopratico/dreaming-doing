@@ -47,7 +47,7 @@ const ENV_ICONS: Record<AiEnvId, React.ReactNode> = {
   openrouter: <Globe className="size-4" />,
 };
 
-const ENVS: AiEnvId[] = ["anthropic", "gemini", "openai", "xai", "groq", "nvidia", "openrouter"];
+const ENVS: AiEnvId[] = ["openrouter", "anthropic", "gemini", "openai", "xai", "groq", "nvidia"];
 
 const MODES: { id: ModelPowerMode; title: string; hint: string }[] = [
   { id: "fixed", title: "Fixo", hint: "Sempre o modelo escolhido abaixo" },
@@ -228,13 +228,19 @@ export function AiModelStudio({ connectorRows }: AiModelStudioProps) {
             );
           })}
         </div>
-        {!connected[selectedEnv] && (
+        {!connected[selectedEnv] && selectedEnv !== "openrouter" && (
           <p className="mt-3 flex flex-wrap items-center gap-2 font-mono text-[10px] text-amber-400/95 rounded-lg border border-amber-400/25 bg-amber-400/8 px-3 py-2">
             <Key className="size-3.5 shrink-0" />
             Cadastre a chave {AI_ENV_META[selectedEnv].label} abaixo ({AI_ENV_META[selectedEnv].keyPrefix}…)
             <a href={`#forge-key-${selectedEnv}`} className="text-[var(--primary)] underline">
               ir para o campo →
             </a>
+          </p>
+        )}
+        {selectedEnv === "openrouter" && !connected.openrouter && (
+          <p className="mt-3 font-mono text-[10px] text-[var(--text-dim)] rounded-lg border border-[var(--border)] px-3 py-2">
+            OpenRouter pode vir da sua chave em API Keys ou do vault admin (Ajustes). O agente usa{" "}
+            <code className="text-[var(--primary)]">OPENROUTER_API_KEY</code> das platform secrets quando configurado.
           </p>
         )}
       </div>
@@ -299,11 +305,7 @@ export function AiModelStudio({ connectorRows }: AiModelStudioProps) {
                 useCustomModel: e.target.value.trim().length > 0,
               })
             }
-            placeholder={
-              selectedEnv === "openrouter"
-                ? "ex.: anthropic/claude-sonnet-4.6"
-                : "ex.: claude-sonnet-4-20250514"
-            }
+            placeholder="ex.: anthropic/claude-sonnet-4-6 (slug OpenRouter)"
             className="mt-2 w-full rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2 font-mono text-[11px] text-[var(--foreground)]"
           />
           <p className="mt-2 font-mono text-[9px] text-[var(--text-ghost)] leading-relaxed">
@@ -329,7 +331,7 @@ export function AiModelStudio({ connectorRows }: AiModelStudioProps) {
                     mode: "robin",
                     poolProvider: selectedEnv === "nvidia" ? "nvidia" : "groq",
                     robinPoolModelId:
-                      selectedEnv === "nvidia" ? "nvidia-llama70" : "groq-llama70",
+                      selectedEnv === "nvidia" ? "pool-nemotron-super" : "pool-groq-flash",
                   });
                 } else {
                   patch({ mode: m.id });

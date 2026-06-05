@@ -29,6 +29,7 @@ const PLATFORM_SECRET_NAMES = [
   "OPENAI_API_KEY",
   "NVIDIA_API_KEY",
   "GEMINI_API_KEY",
+  "OPENROUTER_API_KEY",
 ];
 
 const runningLocks = new Map<string, Promise<unknown>>();
