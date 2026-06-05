@@ -33,7 +33,24 @@ export const Route = createFileRoute("/settings")({
 function SettingsPage() {
   const { user, signOut } = useAuth();
   const qc = useQueryClient();
-  const isAdmin = isForgeAdminEmail(user?.email);
+
+  // Server-driven admin check (B12). Client-side email match is only a UX hint to avoid
+  // a request for users who clearly are not admin; the real gate is the server response.
+  const emailHint = isForgeAdminEmail(user?.email);
+  const { data: adminStatus } = useQuery({
+    queryKey: ["admin-status", user?.id],
+    enabled: !!user?.id && emailHint,
+    queryFn: async () => {
+      const { data, error } = await supabase.functions.invoke("admin-platform-secrets", {
+        body: { action: "status" },
+      });
+      if (error) return { isAdmin: false };
+      const res = data as { ok?: boolean; isAdmin?: boolean };
+      return { isAdmin: !!res?.isAdmin };
+    },
+    staleTime: 60_000,
+  });
+  const isAdmin = !!adminStatus?.isAdmin;
 
   const [displayName, setDisplayName] = useState("");
   const [newPassword, setNewPassword] = useState("");

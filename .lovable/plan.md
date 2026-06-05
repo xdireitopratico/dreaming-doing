@@ -1,88 +1,69 @@
-# FORGE — Estado pós sessão
+# FORGE — Estado pós sessão (atualizado)
 
-## Concluído nesta sessão
+## Concluído nesta sessão (segurança + sincronização)
 
-### Fase 1 — Render destravado
-- `src/styles.css`: removido `@import url(...)` que estourava o PostCSS (Tailwind v4).
-- `src/routes/__root.tsx`: fonts agora via `<link rel="stylesheet">` no head.
-- `src/components/EditorShell.tsx`: troca de `window.location.href` por `<Navigate>` do TanStack (sem flash branco).
-- `src/routes/editor.tsx`: já não existe (legado).
+### Segurança crítica (B7–B12) — 6 findings fechadas
+- **B7** `mcp-server`: agora exige `Authorization`. `authenticate()` valida sessão e checa `user_roles`. Tools sensíveis (`query`, `migrate`, `auth_users`) bloqueadas para não-admin (403).
+- **B8** `realtime.messages`: nova policy `project_files-<id>` espelhando a do canal `editor-%`. Bloqueia leak de código entre contas.
+- **B9** `deployments`: adicionados `deploy_update_own` e `deploy_delete_own` (só o dono do projeto).
+- **B10** `user_roles`: `roles_no_insert/update/delete` — qualquer mutação direta por `authenticated` retorna RLS deny. Só `service_role` muda.
+- **B11** `has_role()`: `REVOKE EXECUTE ... FROM authenticated, anon`. Função continua usável dentro de policies.
+- **B12** `AdminPlatformSecretsPanel`: gated por query server-side `admin-platform-secrets action:'status'`. `isForgeAdminEmail` virou só dica UX.
 
-### Fase 2 — Backend do agente (sem migration)
-- `supabase/functions/agent-run/providers.ts` **novo**: auto-detect de provider em cascata
-  `ANTHROPIC → XAI → LOVABLE_AI_GATEWAY → OPENAI`; cheap em `GROQ → LOVABLE_AI`. Honra override por env (`LLM_*` e `LLM_CHEAP_*`) — pronto para quando o usuário trouxer chaves dele.
-- `router.ts` reescrito: usa `providers.ts`, sem env obrigatória.
-- `loop.ts` reescrito:
-  - Removidas refs mortas a `agent_checkpoints` e `file_embeddings` (nada de migration).
-  - **Persistência incremental de tool_calls**: cada turn do LLM vira uma `message` viva (status `running` → `ok`/`error`) — chat acompanha em tempo real via Realtime.
-- `index.ts` reescrito: SSE com header `X-Accel-Buffering: no`, anúncio do provider no evento `start`.
-- `supabase/functions/create-project/` deletada (redundante com serverFn `createProjectFromPrompt`).
+### Sincronização Supabase (A1, A3, A5)
+- `scripts/sync/README.md` — fluxo de duas contas documentado.
+- `scripts/sync/migrate.sh` — `supabase db push` na sua conta.
+- `scripts/sync/deploy-all.sh` — deploy de todas as 9 edge functions.
+- `scripts/sync/secrets-checklist.md` — 14 secrets que precisam existir.
+- `SupabaseConfigBanner` agora alerta visualmente quando `VITE_SUPABASE_URL` ≠ `dpduljngdurfpmaclffa`.
 
-### Fase 3 — Streaming + UX viva no editor
-- `src/lib/agent-stream.ts` **novo**: lê SSE da Edge Function e dispara eventos tipados.
-- `src/routes/projects/$projectId.tsx` **reescrita**:
-  - Chat com bolhas, tool-call chips coloridos (`emerald`/`red`/`primary`), trace ao vivo durante a execução.
-  - Botão **STOP** que aborta o stream (AbortController).
-  - File tree + viewer no tab "Code".
-  - Botão "Recarregar preview".
+### Schema (paridade entre os dois projetos)
+- Migration: adiciona `netlify` ao enum `connector_kind`.
+- Migration: adiciona `profiles.integration_prefs jsonb` e `profiles.trial_messages_remaining int` que o app já consumia.
 
-### Fase 4 — Seed Vite+React + preview real via E2B
-- `src/lib/seeds/vite-react.ts` **novo**: starter Vite 7 + React 19 + TS estrito + Tailwind v4. 10 arquivos profissionais (zero placeholder, dark theme já configurado, fonte do sistema).
-- `src/lib/projects.functions.ts`: agora semeia os 10 arquivos do template ao criar projeto.
-- `supabase/functions/agent-run/prompts.ts`: prompts reescritos assumindo Vite+React+TS+Tailwind v4 (não pede mais `npm create vite`).
-- `supabase/functions/preview-boot/` **nova edge function**: cria sandbox E2B, sincroniza `project_files`, roda `npm install && npm run dev` em background, retorna URL pública e persiste em `projects.meta.previewUrl`/`previewExpiresAt` (TTL 25 min). Idempotente: reusa se ainda fresca.
-- Editor pluga essa URL no iframe (fallback "Ligar preview" se vazio/expirado).
+### Hot-fixes de build
+- `useConnectors.ts` / `ConnectorGuideModal.tsx` agora compilam com o novo schema.
+- `api-keys.tsx`: removida ref a `connectors_public.provider` (usa só `meta.provider`).
+- `agent-preferences.ts`: tipo do parsed legacy "rob" → "robin" sem TS narrowing error.
 
-### Fase 5 — Voz no chat (Groq Whisper Large v3 turbo)
-- `supabase/functions/voice-transcribe/index.ts` **nova**: aceita `multipart/form-data`, retorna `{ text }` em PT.
-- `src/components/voice/MicButton.tsx` **novo**: MediaRecorder → POST → preenche textarea.
-- Plugado no chat do editor **e** no `PromptEngine` da home.
+## Para fazer na próxima sessão (continuando o plano de 50)
 
-### Fase 6 — Import de repo GitHub público
-- `supabase/functions/github-import/index.ts` **nova**: baixa zipball, filtra `node_modules`/`.git`/binários (>1MB, ext binária, null bytes), cria projeto e insere `project_files` em lotes de 50. Sem OAuth.
-- `src/components/ImportRepoDialog.tsx` **novo**: dialog em `/projects` e chip "Importar do GitHub" na home.
+### Sincronização (resto de A)
+- **A2** Rodar `deploy-all.sh` localmente — eu **não posso** fazer isso daqui (não tenho seu token Supabase). É você executando o script.
+- **A4** Revisar `supabase/config.toml` por função (CORS, timeouts, verify_jwt).
+- **A6** Rodar `migrate.sh` agora para colocar a sua conta no mesmo schema.
 
-### Fase 9A — Snapshots
-- `src/components/editor/SnapshotsSheet.tsx` **novo**: salva snapshot (dump completo de `project_files`) e restaura sobrescrevendo. Botão no header do editor.
+### Segurança restante (B13)
+- Rotacionar `SUPABASE_SERVICE_ROLE_KEY` depois que a CLI tiver aplicado as policies novas.
 
-### Segurança
-- Migration `enable_realtime_messages_rls`: RLS em `realtime.messages` restringindo subscrição a canais `editor-<projectId>` cujo `projectId` pertence ao usuário. Bloqueia escuta cruzada entre contas.
+### Agente (C14–C23) — refatoração não-trivial
+14. UI "Continuar" quando `resumable: true`. 15. Persistir `executionLog`. 16. Backoff por provider. 17. Token usage tracking. 18. Allowlist de `shell_exec`. 19. Hash dos últimos calls em `isStuck`. 20. `RuntimeObserver` rodando `tsc` no E2B. 21. 3 skills concretas. 22. Cancelamento server-side via `runs.canceled_at`. 23. Tabela `agent_runs` + dashboard.
 
----
+### Editor (D24–D32)
+24. Monaco. 25. File tree CRUD. 26. kbar. 27. Diff viewer. 28. HMR via Realtime. 29. Voice global. 30. Visual edits. 31. Trace expansível. 32. Tema persistente.
 
-## Não feito (ficou para próximas sessões)
+### Integrações (E33–E40) — **bloqueadas por secrets seus**
+- E33–E35 GitHub OAuth + push + webhook: precisa `GITHUB_OAUTH_CLIENT_ID/SECRET`, `ENCRYPTION_KEY`.
+- E36 Vercel deploy: precisa `VERCEL_TOKEN`.
+- E37 Cloudflare: `CLOUDFLARE_API_TOKEN`.
+- E38 Stripe billing: chave + plano. E39 MCP UI. E40 multi-provider UI.
 
-### Fase 7 — GitHub OAuth + push bidirecional
-Bloqueado: precisa de `GITHUB_OAUTH_CLIENT_ID`/`SECRET` (você cria em github.com/settings/developers).
+### Performance & launch (F41–F50)
+41. Bundle audit. 42. Code-split (Monaco, CodeEditor). 43. Imagens. 44. SEO `head()` por rota. 45. robots/sitemap. 46. Lighthouse. 47. Rate limit em `agent-run`. 48. `audit_events`. 49. Backup. 50. E2E playwright.
 
-### Fase 8 — Deploy Cloudflare Pages
-Bloqueado: precisa de `CLOUDFLARE_API_TOKEN` (global vs por-usuário a decidir).
+## Secrets atuais (Lovable Cloud)
+`ANTHROPIC_API_KEY`, `XAI_API_KEY`, `GROQ_API_KEY`, `E2B_API_KEY`, `LOVABLE_API_KEY`, `SUPABASE_*`.
 
-### Fase 9B — Monaco editor + edição manual
-`bun add @monaco-editor/react`; substitui `<pre>` do tab Code por editor; salvar dispara mesma rota.
+Faltando para fases futuras: `GITHUB_OAUTH_CLIENT_ID/SECRET`, `GITHUB_WEBHOOK_SECRET`, `ENCRYPTION_KEY`, `VERCEL_TOKEN`, `CLOUDFLARE_API_TOKEN`, `OPENAI_API_KEY`.
 
-### Fase 9C — Command palette Cmd+K
-`bun add kbar`. Ações: novo projeto, importar GitHub, salvar snapshot, publicar.
+## Importante — paridade entre os dois Supabase
 
-### Fase 9D — History timeline
-Rota `/projects/$projectId/history` com diff por mensagem.
+Toda migration nova que eu criar daqui para frente **só vai para `mtcnwvzjfbvyiuhrqrlo` (Lovable Cloud)** via tool. Para sua conta `dpduljngdurfpmaclffa` ficar igual:
 
-### Fase 10 — Multi-provider UI + MCP + Visual Edits + Hardening
-- Dropdown no chat: Lovable Gateway / Anthropic / Groq / OpenAI / Gemini / OpenRouter / **chave do usuário**.
-- Tela `/connectors`: usuário cola sua chave Anthropic/Groq/etc → serverFn persiste em `connectors.token_encrypted` (precisa de `ENCRYPTION_KEY`).
-- Edge function `agent-run` lê chave do usuário primeiro, cai pra global como fallback.
-- "Robin model router": múltiplas chaves do mesmo provider revezando.
-- MCP em `/connectors` (handshake via `mcp-connect`, tools dinâmicas no registry).
-- Visual edits: clique em elemento no preview → seletor CSS + screenshot pro próximo prompt.
-- Advisory lock por user em `agent-run` + audit log + rate limit.
+```bash
+cd <projeto>
+./scripts/sync/migrate.sh   # aplica migrations novas
+./scripts/sync/deploy-all.sh   # republica edge functions
+```
 
----
-
-## Secrets
-
-**Configuradas** (`fetch_secrets`): `ANTHROPIC_API_KEY`, `XAI_API_KEY`, `GROQ_API_KEY`, `E2B_API_KEY`, `LOVABLE_API_KEY`, todos os `SUPABASE_*`.
-
-**Pendentes** (na fase correspondente, não agora):
-- F7: `GITHUB_OAUTH_CLIENT_ID`, `GITHUB_OAUTH_CLIENT_SECRET`, `GITHUB_WEBHOOK_SECRET`, `ENCRYPTION_KEY` (32 bytes base64).
-- F8: `CLOUDFLARE_API_TOKEN`.
-- F10: `OPENAI_API_KEY` se você quiser que o auto-detect tenha esse fallback global.
+Rode após cada sessão minha que mexer em backend.

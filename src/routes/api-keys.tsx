@@ -175,10 +175,10 @@ function ApiKeysPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("connectors_public")
-        .select("kind, meta, provider")
+        .select("kind, meta")
         .eq("owner_id", user!.id);
       if (error) throw error;
-      return data ?? [];
+      return (data ?? []) as { kind: string; meta: Record<string, unknown> | null }[];
     },
   });
 

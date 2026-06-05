@@ -192,6 +192,8 @@ export type Database = {
           display_name: string | null
           github_username: string | null
           id: string
+          integration_prefs: Json
+          trial_messages_remaining: number
           updated_at: string
         }
         Insert: {
@@ -200,6 +202,8 @@ export type Database = {
           display_name?: string | null
           github_username?: string | null
           id: string
+          integration_prefs?: Json
+          trial_messages_remaining?: number
           updated_at?: string
         }
         Update: {
@@ -208,6 +212,8 @@ export type Database = {
           display_name?: string | null
           github_username?: string | null
           id?: string
+          integration_prefs?: Json
+          trial_messages_remaining?: number
           updated_at?: string
         }
         Relationships: []
@@ -383,6 +389,7 @@ export type Database = {
         | "cloudflare"
         | "anthropic"
         | "openai"
+        | "netlify"
       deploy_provider: "vercel" | "cloudflare" | "netlify"
       deploy_status: "queued" | "building" | "ready" | "error" | "cancelled"
       message_role: "user" | "assistant" | "system" | "tool"
@@ -514,7 +521,14 @@ export const Constants = {
   public: {
     Enums: {
       app_role: ["admin", "user"],
-      connector_kind: ["github", "vercel", "cloudflare", "anthropic", "openai"],
+      connector_kind: [
+        "github",
+        "vercel",
+        "cloudflare",
+        "anthropic",
+        "openai",
+        "netlify",
+      ],
       deploy_provider: ["vercel", "cloudflare", "netlify"],
       deploy_status: ["queued", "building", "ready", "error", "cancelled"],
       message_role: ["user", "assistant", "system", "tool"],

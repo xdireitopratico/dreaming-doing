@@ -24,6 +24,7 @@ const ICONS: Record<ConnectorId, React.ReactNode> = {
   github: <span className="text-lg font-bold">GH</span>,
   supabase: <span className="text-lg">⚡</span>,
   vercel: <span className="text-lg">▲</span>,
+  netlify: <span className="text-lg font-bold">N</span>,
   cloudflare: <span className="text-lg">☁</span>,
   e2b: <span className="text-lg font-mono">SB</span>,
 };
