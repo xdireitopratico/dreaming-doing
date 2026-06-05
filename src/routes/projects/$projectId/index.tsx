@@ -698,13 +698,13 @@ function EditorPage() {
         activeView={mainView}
         onViewChange={handleMainViewChange}
         running={running}
-        onQuickPrompt={(text) => setPromptDraft(text)}
         onShare={handleShare}
         onPublish={handlePublish}
         previewFiles={previewNavFiles}
         previewPath={previewRoute}
         onPreviewPathChange={setPreviewRoute}
         previewDevUrl={devUrl}
+        onPreviewRefresh={() => previewBoot.boot()}
       >
         <div
           className="flex min-h-0 h-full w-full flex-1 flex-col overflow-hidden"

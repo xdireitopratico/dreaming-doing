@@ -3,11 +3,14 @@ import {
   ChevronDown,
   Code2,
   Eye,
+  Globe,
   Moon,
   Share2,
   Smartphone,
 } from "lucide-react";
+import { useMemo } from "react";
 import { useAuth } from "@/lib/auth";
+import { detectProjectKind } from "@/lib/detect-project-kind";
 import type { EditorMainView } from "@/components/editor/EditorViewTabs";
 import { ForgeLogoMark } from "@/components/editor/ForgeLogoMark";
 import { EditorIntegrationsMenu } from "@/components/editor/EditorIntegrationsMenu";
@@ -19,12 +22,12 @@ interface EditorTopBarProps {
   onViewChange: (view: EditorMainView) => void;
   onShare?: () => void;
   onPublish?: () => void;
-  onQuickPrompt?: (text: string) => void;
   running?: boolean;
   previewFiles?: Array<{ path: string; content?: string }>;
   previewPath?: string;
   onPreviewPathChange?: (path: string) => void;
   previewDevUrl?: string | null;
+  onPreviewRefresh?: () => void;
 }
 
 export function EditorTopBar({
@@ -33,14 +36,15 @@ export function EditorTopBar({
   onViewChange,
   onShare,
   onPublish,
-  onQuickPrompt,
   running,
-  previewFiles,
+  previewFiles = [],
   previewPath = "/",
   onPreviewPathChange,
   previewDevUrl,
+  onPreviewRefresh,
 }: EditorTopBarProps) {
   const { user } = useAuth();
+  const projectKind = useMemo(() => detectProjectKind(previewFiles), [previewFiles]);
 
   const initials =
     user?.email?.slice(0, 2).toUpperCase() ??
@@ -61,20 +65,27 @@ export function EditorTopBar({
             {running ? "Construindo alterações…" : "Visualizando última versão salva"}
           </span>
         </Link>
-        {onQuickPrompt && (
-          <button
-            type="button"
-            className="forge-voc-chip hidden lg:inline-flex"
-            title="Sugerir app mobile VOC no chat"
-            onClick={() =>
-              onQuickPrompt(
-                "Crie um app mobile VOC (voz do cliente) completo: onboarding, dashboard e fluxo principal. Design moderno, responsivo e pronto para publicar.",
-              )
+        {projectKind && (
+          <span
+            className="forge-project-kind-chip hidden lg:inline-flex"
+            title={
+              projectKind === "mobile"
+                ? "Projeto detectado como app mobile"
+                : "Projeto detectado como site web"
             }
           >
-            <Smartphone className="size-3" />
-            App mobile VOC
-          </button>
+            {projectKind === "mobile" ? (
+              <>
+                <Smartphone className="size-3" />
+                App mobile
+              </>
+            ) : (
+              <>
+                <Globe className="size-3" />
+                Web
+              </>
+            )}
+          </span>
         )}
       </div>
 
@@ -106,15 +117,15 @@ export function EditorTopBar({
 
         <span className="forge-topbar-divider mx-1 shrink-0 hidden sm:block" aria-hidden />
         <EditorIntegrationsMenu />
-        {activeView === "preview" && previewFiles && previewFiles.length > 0 && onPreviewPathChange && (
+        {onPreviewPathChange && (
           <>
-            <span className="forge-topbar-divider mx-1 shrink-0" aria-hidden />
+            <span className="forge-topbar-divider mx-1 shrink-0 hidden md:block" aria-hidden />
             <PreviewRouteNav
-              variant="topbar"
               files={previewFiles}
               activePath={previewPath}
               onNavigate={onPreviewPathChange}
               devUrl={previewDevUrl}
+              onRefresh={onPreviewRefresh}
             />
           </>
         )}

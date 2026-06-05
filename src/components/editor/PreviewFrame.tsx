@@ -1,8 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { Copy, Eye, Loader2, RefreshCw } from "lucide-react";
-import { toast } from "sonner";
+import { Loader2 } from "lucide-react";
 import { PreviewEmptyGuide } from "@/components/editor/PreviewEmptyGuide";
-import { PreviewRouteNav } from "@/components/editor/PreviewRouteNav";
 import { buildPreviewUrl } from "@/lib/project-routes";
 
 interface PreviewFrameProps {
@@ -31,7 +29,6 @@ export function PreviewFrame({
   booting = false,
   devUrl,
   previewPath = "/",
-  onPreviewPathChange,
   onRefresh,
   reloadNonce = 0,
   iframeRef,
@@ -65,10 +62,6 @@ export function PreviewFrame({
     );
   }, [files]);
 
-  const isReactProject = useMemo(() => {
-    return files.some((f) => f.path === "package.json" || f.path === "/package.json");
-  }, [files]);
-
   const iframeSrc = useMemo(() => {
     if (!devUrl) return null;
     return buildPreviewUrl(devUrl, previewPath);
@@ -80,62 +73,10 @@ export function PreviewFrame({
     return null;
   }, [devUrl, indexFile]);
 
-  const previewHost = useMemo(() => {
-    if (!devUrl) return null;
-    try {
-      return new URL(devUrl).host;
-    } catch {
-      return devUrl.replace(/^https?:\/\//, "").split("/")[0] ?? devUrl;
-    }
-  }, [devUrl]);
-
-  const copyPreviewLink = () => {
-    if (!iframeSrc) return;
-    void navigator.clipboard.writeText(iframeSrc).then(
-      () => toast.success("Link do preview copiado"),
-      () => toast.info(iframeSrc),
-    );
-  };
-  const showRouteNav = Boolean(onPreviewPathChange && files.length > 0);
   const showBootSpinner = booting && !agentRunning && !iframeSrc;
 
   return (
     <div className="forge-preview-root flex min-h-0 flex-1 flex-col">
-      {showRouteNav && (
-        <div className="forge-preview-chrome shrink-0">
-          {devUrl && (
-          <div className="forge-preview-domain" title={iframeSrc ?? devUrl}>
-            <span className="font-mono text-[10px] text-neutral-500 truncate">{previewHost}</span>
-            <button
-              type="button"
-              className="grid size-6 shrink-0 place-items-center rounded-md text-neutral-500 hover:bg-neutral-100"
-              title="Copiar URL do preview"
-              onClick={copyPreviewLink}
-            >
-              <Copy className="size-3" />
-            </button>
-            {onRefresh && (
-              <button
-                type="button"
-                className="grid size-6 shrink-0 place-items-center rounded-md text-neutral-500 hover:bg-neutral-100"
-                title="Recarregar preview"
-                onClick={onRefresh}
-              >
-                <RefreshCw className="size-3" />
-              </button>
-            )}
-          </div>
-          )}
-          <PreviewRouteNav
-            variant="inline"
-            files={files}
-            activePath={previewPath}
-            onNavigate={onPreviewPathChange!}
-            devUrl={devUrl}
-          />
-        </div>
-      )}
-
       <div className="forge-preview-viewport min-h-0 flex-1">
         {bootError && !showBootSpinner && (
           <div className="flex h-full flex-col items-center justify-center gap-3 bg-white p-8 text-center">

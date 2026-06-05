@@ -67,6 +67,9 @@ body:has(.editor-workspace) {
   padding: 0 10px 0 12px;
   background: var(--forge-bg);
   border-bottom: 1px solid var(--forge-border);
+  position: relative;
+  z-index: 40;
+  overflow: visible;
 }
 
 .forge-topbar-left {
@@ -90,28 +93,100 @@ body:has(.editor-workspace) {
   flex-shrink: 0;
 }
 
-.forge-voc-chip {
+.forge-project-kind-chip {
   display: none;
   align-items: center;
   gap: 5px;
   padding: 4px 10px;
   border-radius: 999px;
   border: 1px solid var(--forge-border-strong);
-  background: rgba(255, 182, 39, 0.08);
-  color: var(--forge-primary);
+  background: rgba(255, 182, 39, 0.06);
+  color: var(--forge-muted);
   font-size: 10px;
   font-weight: 500;
   white-space: nowrap;
+  pointer-events: none;
+  user-select: none;
 }
 
 @media (min-width: 1100px) {
-  .forge-voc-chip {
+  .forge-project-kind-chip {
     display: inline-flex;
   }
 }
 
-.forge-voc-chip:hover {
-  background: rgba(255, 182, 39, 0.16);
+.forge-address-bar {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  max-width: min(520px, 48vw);
+  align-items: center;
+  gap: 6px;
+  padding: 2px 6px 2px 8px;
+  border-radius: 8px;
+  border: 1px solid var(--forge-border-strong);
+  background: var(--forge-surface-1);
+}
+
+.forge-address-bar-scheme {
+  display: inline-flex;
+  shrink: 0;
+  align-items: center;
+  gap: 4px;
+  max-width: 120px;
+  padding-right: 6px;
+  border-right: 1px solid var(--forge-border);
+}
+
+.forge-address-bar-host {
+  font-family: ui-monospace, monospace;
+  font-size: 9px;
+  color: var(--forge-ghost);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.forge-address-bar-input {
+  min-width: 0;
+  flex: 1;
+  border: none;
+  background: transparent;
+  font-family: ui-monospace, monospace;
+  font-size: 11px;
+  color: var(--forge-text);
+  outline: none;
+}
+
+.forge-address-bar-input::placeholder {
+  color: var(--forge-ghost);
+}
+
+.forge-address-bar-input:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.forge-address-bar-pages-btn,
+.forge-address-bar-action {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  shrink: 0;
+  border-radius: 6px;
+  color: var(--forge-muted);
+  transition: background 0.15s, color 0.15s;
+}
+
+.forge-address-bar-pages-btn:hover,
+.forge-address-bar-action:hover {
+  background: var(--forge-surface-3);
+  color: var(--forge-primary);
+}
+
+.forge-address-bar-dropdown {
+  scrollbar-width: thin;
 }
 
 .forge-project-trigger,
@@ -165,7 +240,7 @@ body:has(.editor-workspace) {
   align-items: center;
   justify-content: center;
   gap: 4px;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .forge-view-icon-tabs {
@@ -560,18 +635,16 @@ body:has(.editor-workspace) {
   width: 100%;
 }
 
-.forge-msg-assistant-body {
+.forge-chat-markdown {
   width: 100%;
   max-width: 100%;
-  padding: 10px 12px;
-  border-radius: 12px;
-  background: var(--forge-surface-2);
-  border: 1px solid var(--forge-border-strong);
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
-.forge-chat-stream-draft {
-  margin-top: 4px;
-  opacity: 0.92;
+.forge-chat-item-assistant .forge-chat-markdown {
+  margin-top: 2px;
 }
 
 .forge-chat-live {
@@ -640,28 +713,38 @@ body:has(.editor-workspace) {
   background: rgba(251, 191, 36, 0.06);
 }
 
-.forge-composer-mode-select-wrap {
+.forge-composer-mode-trigger {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 2px 8px 2px 6px;
+  padding: 4px 10px;
   border-radius: 8px;
-  border: 1px solid var(--forge-primary);
+  border: 1px solid rgba(255, 182, 39, 0.45);
+  background: var(--forge-surface-2);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--forge-primary);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.forge-composer-mode-trigger:hover,
+.forge-composer-mode-trigger[data-state="open"] {
+  border-color: var(--forge-primary);
   background: var(--forge-surface-3);
 }
 
-.forge-composer-mode-select {
-  appearance: none;
-  border: none;
-  background: transparent;
-  font-size: 11px;
-  font-weight: 600;
+.forge-dropdown-panel {
   color: var(--forge-text);
-  cursor: pointer;
-  padding: 4px 20px 4px 2px;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%23ffb627' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 2px center;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+}
+
+.forge-dropdown-item {
+  color: var(--forge-silver);
+}
+
+.forge-readiness-toggle:hover {
+  background: rgba(237, 239, 242, 0.04);
 }
 
 .forge-preview-chrome {

@@ -6,10 +6,8 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import {
   ArrowUp,
-  Hammer,
   Square,
   FileText,
-  ListTodo,
   Paperclip,
   ImageIcon,
   MousePointer2,
@@ -32,6 +30,7 @@ import {
   isAgentPreferencesConfigured,
 } from "@/lib/agent-setup";
 import { ChatStream } from "@/components/editor/ChatStream";
+import { ComposerModeSelect } from "@/components/editor/ComposerModeSelect";
 import type { AgentProgress } from "@/hooks/useSSE";
 
 export type AgentComposerMode = "build" | "plan";
@@ -544,23 +543,7 @@ export function ChatInput({
 
           <span className="forge-composer-spacer" />
 
-          <label className="forge-composer-mode-select-wrap">
-            <span className="sr-only">Modo do agente</span>
-            {composerMode === "build" ? (
-              <Hammer className="size-3.5 shrink-0 text-[var(--forge-primary)]" aria-hidden />
-            ) : (
-              <ListTodo className="size-3.5 shrink-0 text-[var(--forge-primary)]" aria-hidden />
-            )}
-            <select
-              className="forge-composer-mode-select"
-              value={composerMode}
-              aria-label="Modo do agente"
-              onChange={(e) => setComposerMode(e.target.value as AgentComposerMode)}
-            >
-              <option value="build">Build</option>
-              <option value="plan">Play</option>
-            </select>
-          </label>
+          <ComposerModeSelect value={composerMode} onChange={setComposerMode} />
 
           <MicButton
             size="sm"

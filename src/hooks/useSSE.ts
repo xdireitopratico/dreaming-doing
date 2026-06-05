@@ -265,10 +265,10 @@ function applyEvent(prev: AgentProgress, event: SSEEvent): AgentProgress {
   switch (type) {
     case "assistant_text": {
       const chunk = (data.text as string) ?? "";
-      const final = data.final === true;
       return {
         ...prev,
-        streamText: final ? chunk : (prev.streamText ? `${prev.streamText}\n\n${chunk}` : chunk),
+        // Cada passo do loop substitui o rascunho — evita texto “puxando”/acumulando errado.
+        streamText: chunk,
         timeline: [...prev.timeline, event],
       };
     }

@@ -1,5 +1,6 @@
 import { Link } from "@tanstack/react-router";
-import { AlertCircle, CheckCircle2, CircleAlert } from "lucide-react";
+import { AlertCircle, CheckCircle2, ChevronDown, CircleAlert } from "lucide-react";
+import { useMemo, useState } from "react";
 import {
   buildEditorReadiness,
   type ReadinessItem,
@@ -36,46 +37,79 @@ export function EditorReadinessStrip({
     connectorRows,
   });
   const hasError = items.some((i) => i.level === "error");
+  const issueCount = useMemo(
+    () => items.filter((i) => i.level !== "ok").length,
+    [items],
+  );
+  const [open, setOpen] = useState(false);
 
   if (compact && !hasError) return null;
 
+  const summary =
+    issueCount === 0
+      ? "Tudo pronto para Build"
+      : `${issueCount} item${issueCount === 1 ? "" : "s"} pendente${issueCount === 1 ? "" : "s"}`;
+
   return (
     <div
-      className={`forge-readiness shrink-0 border-b border-[var(--forge-border)] px-3 py-2 ${
-        hasError ? "bg-red-500/5" : "bg-[var(--forge-surface-2)]/60"
+      className={`forge-readiness shrink-0 border-b border-[var(--forge-border)] ${
+        hasError ? "bg-red-500/5" : "bg-[var(--forge-surface-2)]/40"
       }`}
       role="status"
       aria-label="Status de configuração"
     >
-      <p className="mb-1.5 font-mono text-[9px] uppercase tracking-wider text-[var(--forge-ghost)]">
-        Checklist · agente + preview
-      </p>
-      <ul className={`space-y-1 ${compact ? "max-h-24 overflow-y-auto" : ""}`}>
-        {items.map((item) => (
-          <li key={item.label} className="flex items-start gap-2 text-[10px] leading-snug">
-            <Icon level={item.level} />
-            <span className="min-w-0 flex-1 text-[var(--forge-silver)]">
-              <strong className="text-[var(--forge-text)]">{item.label}</strong>
-              {" — "}
-              {item.detail}
-              {item.href && (
-                <>
-                  {" "}
-                  {item.href.includes("#") ? (
-                    <a href={item.href} className="text-[var(--forge-primary)] underline">
-                      Abrir
-                    </a>
-                  ) : (
-                    <Link to={item.href} className="text-[var(--forge-primary)] underline">
-                      Abrir
-                    </Link>
-                  )}
-                </>
-              )}
-            </span>
-          </li>
-        ))}
-      </ul>
+      <button
+        type="button"
+        className="forge-readiness-toggle flex w-full items-center gap-2 px-3 py-2 text-left"
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
+      >
+        <ChevronDown
+          className={`size-3.5 shrink-0 text-[var(--forge-ghost)] transition-transform ${open ? "rotate-180" : ""}`}
+        />
+        <span className="min-w-0 flex-1 font-mono text-[9px] uppercase tracking-wider text-[var(--forge-ghost)]">
+          Checklist · agente + preview
+        </span>
+        <span
+          className={`shrink-0 rounded-full px-2 py-0.5 font-mono text-[9px] ${
+            hasError
+              ? "bg-red-500/15 text-red-300"
+              : issueCount > 0
+                ? "bg-amber-500/15 text-amber-300"
+                : "bg-emerald-500/10 text-emerald-400/90"
+          }`}
+        >
+          {summary}
+        </span>
+      </button>
+      {open && (
+        <ul className="space-y-1 border-t border-[var(--forge-border)]/60 px-3 pb-2 pt-1 max-h-36 overflow-y-auto forge-scrollbar-dark">
+          {items.map((item) => (
+            <li key={item.label} className="flex items-start gap-2 text-[10px] leading-snug">
+              <Icon level={item.level} />
+              <span className="min-w-0 flex-1 text-[var(--forge-silver)]">
+                <strong className="text-[var(--forge-text)]">{item.label}</strong>
+                {" — "}
+                {item.detail}
+                {item.href && (
+                  <>
+                    {" "}
+                    {item.href.includes("#") ? (
+                      <a href={item.href} className="text-[var(--forge-primary)] underline">
+                        Abrir
+                      </a>
+                    ) : (
+                      <Link to={item.href} className="text-[var(--forge-primary)] underline">
+                        Abrir
+                      </Link>
+                    )}
+                  </>
+                )}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }

@@ -1,4 +1,4 @@
-// ChatStream — lista de mensagens + trilha ao vivo do agente (SSE) no mesmo painel
+// ChatStream — builder chat: mensagens sem bolha + trilha ao vivo (fases, tools, texto)
 import { FileText, Loader2, RefreshCw, AlertTriangle } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -20,12 +20,12 @@ const PHASE_LABELS: Record<string, string> = {
 function MarkdownContent({ children }: { children: string }) {
   return (
     <div
-      className="prose prose-invert max-w-none text-sm leading-relaxed
+      className="forge-chat-markdown prose prose-invert max-w-none text-sm leading-relaxed
       prose-headings:font-display prose-headings:tracking-tight
       prose-h1:text-lg prose-h2:text-base prose-h3:text-sm
       prose-p:text-[var(--forge-silver)]
       prose-code:font-mono prose-code:text-[11px] prose-code:bg-[var(--forge-surface-2)] prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:before:content-none prose-code:after:content-none
-      prose-pre:bg-[var(--forge-surface-1)] prose-pre:border prose-pre:border-[var(--forge-border)] prose-pre:rounded-lg
+      prose-pre:bg-[var(--forge-surface-1)] prose-pre:border prose-pre:border-[var(--forge-border)] prose-pre:rounded-lg prose-pre:max-w-full prose-pre:overflow-x-auto
       prose-ul:text-[var(--forge-silver)] prose-ol:text-[var(--forge-silver)]
       prose-li:my-0.5
       prose-a:text-[var(--forge-primary)] prose-a:no-underline hover:prose-a:underline
@@ -51,13 +51,13 @@ export function ChatStream({ messages, running, progress, onResume }: ChatStream
   const phaseLabel = progress.phase ? (PHASE_LABELS[progress.phase] ?? progress.phase) : null;
   const liveMessage = progress.message?.trim() || null;
   const activeTools = progress.tools.filter((t) => t.ok === undefined);
-  const doneTools = progress.tools.filter((t) => t.ok !== undefined).slice(-4);
+  const doneTools = progress.tools.filter((t) => t.ok !== undefined).slice(-6);
   const streamText = progress.streamText?.trim() || null;
   const lastAssistant = [...messages].reverse().find((m) => m.role === "assistant");
   const showStreamText =
     running &&
     streamText &&
-    (!lastAssistant?.content || lastAssistant.content !== streamText);
+    streamText !== (lastAssistant?.content?.trim() ?? "");
 
   return (
     <div className="forge-chat-stream" role="log" aria-live="polite" aria-relevant="additions text">
@@ -78,11 +78,7 @@ export function ChatStream({ messages, running, progress, onResume }: ChatStream
         return (
           <article key={msg.id} className="forge-chat-item forge-chat-item-assistant">
             <span className="forge-chat-sender forge-chat-sender-assistant">FORGE</span>
-            {msg.content ? (
-              <div className="forge-msg-assistant-body">
-                <MarkdownContent>{msg.content}</MarkdownContent>
-              </div>
-            ) : null}
+            {msg.content ? <MarkdownContent>{msg.content}</MarkdownContent> : null}
 
             {msg.toolCalls && msg.toolCalls.length > 0 && (
               <div className="forge-tool-inline">
@@ -111,18 +107,14 @@ export function ChatStream({ messages, running, progress, onResume }: ChatStream
             )}
             {progress.currentStep != null && progress.totalSteps != null && (
               <span className="font-mono text-[9px] text-[var(--forge-ghost)] ml-auto">
-                {progress.currentStep}/{progress.totalSteps}
+                passo {progress.currentStep}/{progress.totalSteps}
               </span>
             )}
           </div>
 
           {liveMessage && <p className="forge-chat-live-line">{liveMessage}</p>}
 
-          {showStreamText && (
-            <div className="forge-msg-assistant-body forge-chat-stream-draft">
-              <MarkdownContent>{streamText}</MarkdownContent>
-            </div>
-          )}
+          {showStreamText && <MarkdownContent>{streamText}</MarkdownContent>}
 
           {progress.statusHint && (
             <p className="forge-chat-live-hint">{progress.statusHint}</p>
