@@ -20,14 +20,14 @@ export function isAgentPreferencesConfigured(prefs: AgentPreferences): boolean {
 
 export function getAgentSetupBlockMessage(prefs: AgentPreferences): string {
   if (!hasStoredAgentPreferences()) {
-    return "Setup obrigatório: abra API, escolha modo (Fixo ou ROBIN), modelo e salve.";
+    return "Setup obrigatório: abra Modelos (/models), escolha Fixo ou ROBIN, Nemotron 550B e salve.";
   }
 
   if (prefs.mode === "fixed" && !prefs.fixedPresetId?.trim()) {
-    return "Setup: selecione um modelo fixo em API.";
+    return "Setup: selecione um modelo fixo em Modelos (/models) e salve.";
   }
   if (prefs.mode === "robin" && (!prefs.robinPoolModelId?.trim() || !prefs.poolProvider)) {
-    return "Setup: selecione provedor e modelo do pool ROBIN em API.";
+    return "Setup: em Modelos (/models) escolha ROBIN + pool NVIDIA + Nemotron 550B e salve.";
   }
-  return "Setup obrigatório: configure modelo e chaves em API.";
+  return "Setup obrigatório: configure modelo em /models e chave NVIDIA + E2B em /api.";
 }

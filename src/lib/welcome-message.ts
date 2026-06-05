@@ -1,15 +1,30 @@
-/** Mensagem de boas-vindas — fase Taste (NVIDIA concierge). */
+/** Mensagem de boas-vindas — fase Taste (sem chave LLM própria). */
 export const FORGE_WELCOME_MARKDOWN = `Olá! Sou o **concierge FORGE** (Taste · NVIDIA).
 
 **O que posso fazer agora**
-- Explicar o editor, preview ao vivo, conectores (GitHub, Supabase, **Vercel**, Netlify) e **API**.
-- Ajudar você a decidir **onde gastar seu crédito** (xAI, Anthropic, Groq, NVIDIA, etc.).
-- Responder dúvidas — **sem construir o app inteiro** neste chat (50 mensagens).
+- Explicar o editor, preview ao vivo, conectores e **API Keys**.
+- Ajudar a escolher provedor e modelo — **sem construir o MVP inteiro** neste chat (50 mensagens).
 
-**Quer sentir o agente de verdade?**
-Use **Start Project** (1x): plano + construção ~10–15 min + preview no iframe. Depois disso, configure **suas** chaves para continuar sem limite.
+**Quer construir de verdade?**
+Use **Start Project** (1×): plano + código + preview no painel à direita.
 
-**Próximo passo recomendado**
-1. Conte o que você quer construir.
-2. Ou clique em **Start Project** para a demo completa.
-3. Quando estiver pronto: [API](/api) → modo Fixo, Auto (router) ou ROBIN + suas chaves.`;
+**Checklist**
+1. [API Keys](/api) → chave **E2B** (sandbox) + **NVIDIA** (ou pool ROBIN).
+2. [Modelos](/models) → **ROBIN** + NVIDIA + **Nemotron 550B** (slug \`nvidia/nemotron-3-ultra-550b-a55b\`) → **Salvar**.
+3. Descreva o app no chat em modo **Build**.`;
+
+/** BYOK — chaves do usuário; agente completo. */
+export const FORGE_WELCOME_BYOK_MARKDOWN = `Projeto pronto para construir.
+
+**Checklist (acima do chat)**
+Confira E2B + modelo Nemotron — o agente só roda com os dois OK.
+
+**Preview à direita**
+Quando a IA gravar arquivos, seu site aparece aqui (rotas na barra do preview).
+
+**Para testar o 550B**
+- [Modelos](/models): **ROBIN** + pool **NVIDIA** + card Nemotron Ultra, ou **Fixo** com o mesmo slug.
+- Slug na API NIM: nvidia/nemotron-3-ultra-550b-a55b (igual Hermes / build.nvidia.com).
+- [API](/api): chave NVIDIA salva + **E2B**.
+
+Descreva o MVP no chat (**Build**) — ex.: landing + 3 páginas + dashboard.`;

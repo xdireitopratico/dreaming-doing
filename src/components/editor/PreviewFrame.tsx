@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Copy, Eye, Loader2, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { E2bSandboxPanel } from "@/components/editor/E2bSandboxPanel";
+import { PreviewEmptyGuide } from "@/components/editor/PreviewEmptyGuide";
 import { PreviewRouteNav } from "@/components/editor/PreviewRouteNav";
 import { buildPreviewUrl } from "@/lib/project-routes";
 
@@ -21,6 +22,7 @@ interface PreviewFrameProps {
   onWarmComplete?: () => void;
   agentHasRun?: boolean;
   e2bConnected?: boolean;
+  projectName?: string;
 }
 
 export function PreviewFrame({
@@ -37,6 +39,7 @@ export function PreviewFrame({
   onWarmComplete,
   agentHasRun = false,
   e2bConnected = true,
+  projectName,
 }: PreviewFrameProps) {
   const [iframeLoading, setIframeLoading] = useState(false);
 
@@ -75,7 +78,6 @@ export function PreviewFrame({
     return null;
   }, [devUrl, indexFile]);
 
-  const waitingForAgent = isReactProject && !devUrl && !bootError && !booting;
   const previewHost = useMemo(() => {
     if (!devUrl) return null;
     try {
@@ -188,41 +190,13 @@ export function PreviewFrame({
             sandbox="allow-scripts"
             title="Preview"
           />
-        ) : !bootError && waitingForAgent ? (
-          <div className="flex h-full flex-col items-center justify-center gap-4 bg-white p-8 text-center">
-            <div className="grid size-12 place-items-center rounded-2xl bg-neutral-100">
-              <Eye className="size-6 text-neutral-400" />
-            </div>
-            <div className="max-w-xs space-y-1">
-              <p className="text-sm font-medium text-neutral-800">Preview ao vivo</p>
-              <p className="text-sm text-neutral-500 leading-relaxed">
-                Aparece aqui quando a IA começar a programar. Um ambiente por projeto — sem surpresas.
-              </p>
-            </div>
-          </div>
-        ) : !bootError && isReactProject && onRefresh ? (
-          <div className="flex h-full flex-col items-center justify-center gap-4 bg-white p-8 text-center">
-            <Eye className="size-8 text-neutral-300" />
-            <p className="text-sm text-neutral-500 max-w-xs">
-              {agentHasRun
-                ? "Sincronizando o preview com o código mais recente."
-                : "Envie um pedido no chat para abrir o preview."}
-            </p>
-            {agentHasRun && (
-              <button
-                type="button"
-                onClick={onRefresh}
-                className="rounded-full bg-neutral-900 px-5 py-2 text-sm font-medium text-white hover:bg-neutral-800"
-              >
-                Abrir preview
-              </button>
-            )}
-          </div>
-        ) : !bootError ? (
-          <div className="flex h-full flex-col items-center justify-center gap-3 bg-white">
-            <Eye className="size-8 text-neutral-300" />
-            <p className="text-sm text-neutral-500">O preview aparece quando houver algo para mostrar.</p>
-          </div>
+        ) : !bootError && (!iframeSrc && !previewContent) ? (
+          <PreviewEmptyGuide
+            projectName={projectName}
+            e2bConnected={e2bConnected}
+            agentHasRun={agentHasRun}
+            onOpenPreview={onRefresh}
+          />
         ) : null}
       </div>
     </div>

@@ -213,6 +213,7 @@ export function useConnectors() {
   return {
     status,
     modes,
+    rows,
     setMode,
     modal,
     openConnector,

@@ -167,6 +167,7 @@ Deno.serve(async (req) => {
     let sessionKind: SessionKind = hasUserLlmKey ? "byok" : "taste_chat";
     if (!hasUserLlmKey && sessionKindRaw === "taste_start") sessionKind = "taste_start";
     if (!hasUserLlmKey && sessionKindRaw === "taste_chat") sessionKind = "taste_chat";
+    if (hasUserLlmKey && sessionKindRaw === "taste_start") sessionKind = "taste_start";
 
     if (sessionKind === "taste_chat" && tasteChatRemaining <= 0) {
       runningLocks.delete(projectId);

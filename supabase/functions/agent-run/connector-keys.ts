@@ -51,7 +51,14 @@ export async function loadConnectorPools(
     .maybeSingle();
 
   if (error) throw new Error(`Falha ao carregar pool: ${error.message}`);
-  return parseTokenField(data?.token_encrypted ?? null);
+  const pool = parseTokenField(data?.token_encrypted ?? null);
+  if (pool.length > 0) return pool;
+
+  // Chave salva com «Salvar chave» (token único) — reutiliza como pool de 1
+  const keys = await loadConnectorKeys(supabase, ownerId);
+  const fallback =
+    poolProvider === "nvidia" ? keys.NVIDIA_API_KEY : keys.GROQ_API_KEY;
+  return fallback ? [fallback] : [];
 }
 
 /** ID do usuário administrador FORGE (pool ROBIN do tira-gosto). */

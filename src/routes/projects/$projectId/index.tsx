@@ -20,14 +20,15 @@ import { ChatInput, type ChatMessage } from "@/components/editor/ChatInput";
 import { SetupRail } from "@/components/editor/SetupRail";
 import { TasteSetupChecklist } from "@/components/editor/TasteSetupChecklist";
 import { TastePostStartBanner } from "@/components/editor/TastePostStartBanner";
-import { FORGE_WELCOME_MARKDOWN } from "@/lib/welcome-message";
+import { FORGE_WELCOME_BYOK_MARKDOWN, FORGE_WELCOME_MARKDOWN } from "@/lib/welcome-message";
+import { loadAgentPreferences } from "@/lib/agent-preferences";
+import { EditorReadinessStrip } from "@/components/editor/EditorReadinessStrip";
 import { useConnectors } from "@/hooks/useConnectors";
 import { useTasteUiActions } from "@/hooks/useTasteUiActions";
 import {
   isAgentPreferencesConfigured,
   getAgentSetupBlockMessage,
 } from "@/lib/agent-setup";
-import { loadAgentPreferences } from "@/lib/agent-preferences";
 import type { ForgeSessionKind } from "@/lib/taste";
 import {
   canSendTasteChat,
@@ -88,7 +89,17 @@ function EditorPage() {
     hasUserLlmKey,
     openConnector,
     status: connectorStatus,
+    rows: connectorRows,
   } = useConnectors();
+  const [agentPrefs, setAgentPrefs] = useState(loadAgentPreferences);
+  useEffect(() => {
+    const refresh = () => setAgentPrefs(loadAgentPreferences());
+    window.addEventListener("forge:prefs-updated", refresh);
+    return () => window.removeEventListener("forge:prefs-updated", refresh);
+  }, []);
+  const welcomeMarkdown = hasUserLlmKey
+    ? FORGE_WELCOME_BYOK_MARKDOWN
+    : FORGE_WELCOME_MARKDOWN;
   const e2bConnected = connectorStatus.e2b.connected;
   useTasteUiActions();
   const tasteQuota = {
@@ -441,11 +452,7 @@ function EditorPage() {
       void (async () => {
         setRunning(true);
         try {
-          await sse.connect(
-            projectId,
-            conversation.id,
-            kind === "byok" ? undefined : kind,
-          );
+          await sse.connect(projectId, conversation.id, kind);
         } catch (e: unknown) {
           const msg = e instanceof Error ? e.message : "Erro ao iniciar agente";
           logEditorTelemetryEvent("agent", "run_fail", "error", msg.slice(0, 200));
@@ -705,6 +712,12 @@ function EditorPage() {
             chat={
               <div className="forge-chat-column">
                 <div className="forge-chat-body">
+                  <EditorReadinessStrip
+                    hasUserLlmKey={hasUserLlmKey}
+                    e2bConnected={e2bConnected}
+                    prefs={agentPrefs}
+                    connectorRows={connectorRows}
+                  />
                   <TastePostStartBanner />
                   <ChatInput
                     messages={chatMessages}
@@ -720,7 +733,7 @@ function EditorPage() {
                     onComposerModeChange={setComposerMode}
                     externalPrompt={promptDraft}
                     onExternalPromptConsumed={() => setPromptDraft(null)}
-                    welcomeMarkdown={chatMessages.length === 0 ? FORGE_WELCOME_MARKDOWN : undefined}
+                    welcomeMarkdown={chatMessages.length === 0 ? welcomeMarkdown : undefined}
                     tasteChatRemaining={tasteChatRemaining}
                     tasteStartRemaining={tasteStartRemaining}
                     onStartProject={handleStartProject}
@@ -780,6 +793,7 @@ function EditorPage() {
                         reloadNonce={previewReloadNonce}
                         agentHasRun={agentHasRun}
                         e2bConnected={e2bConnected}
+                        projectName={project?.name}
                       />
                     )}
 

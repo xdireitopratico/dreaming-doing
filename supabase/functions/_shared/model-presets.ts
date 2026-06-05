@@ -192,7 +192,14 @@ function wireFromUserEntry(entry: UserModelEntryPayload): PresetWire | null {
   if (entry.env === "minimax") return minimax("MiniMax-M3", entry.label ?? slug);
   if (entry.env === "moonshotai") return moonshot("kimi-k2.6", entry.label ?? slug);
   if (entry.env === "xiaomi") return mimo("mimo-v2.5-pro", entry.label ?? slug);
-  if (entry.env === "nvidia") return nvidia(slug, entry.label ?? slug);
+  if (entry.env === "nvidia") {
+    let nimSlug = slug.includes("/") ? slug : `nvidia/${slug}`;
+    const bare = nimSlug.includes("/") ? nimSlug.split("/").pop() ?? nimSlug : nimSlug;
+    if (bare.includes("nemotron-3-ultra-550b") && !bare.includes("-a55b")) {
+      nimSlug = "nvidia/nemotron-3-ultra-550b-a55b";
+    }
+    return nvidia(nimSlug, entry.label ?? nimSlug);
+  }
   if (entry.env === "ollama") {
     const model = slug.includes("/") ? slug.split("/").pop() ?? slug : slug;
     return ollama(model, entry.label ?? model);
