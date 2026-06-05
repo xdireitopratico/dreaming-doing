@@ -1,14 +1,15 @@
 // CreateProjectDialog.tsx — Modal de criação de projeto novo
-// Fluxo: input nome + descrição + template + primeiro prompt → Edge Function create-project → navega pro editor
+// Fluxo: nome + descrição + template + primeiro prompt → createProjectFromPrompt (server fn) → editor
 import { useState, useCallback } from "react";
 import { useNavigate } from "@tanstack/react-router";
+import { useServerFn } from "@tanstack/react-start";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   X, FolderOpen, Loader2, ArrowRight,
   Globe, Layout, Package, Zap,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { supabase } from "@/integrations/supabase/client";
+import { createProjectFromPrompt } from "@/lib/projects.functions";
 import { toast } from "sonner";
 import { ForgeIcon } from "@/components/icons/ForgeIcon";
 
@@ -58,6 +59,7 @@ interface CreateProjectDialogProps {
 
 export function CreateProjectDialog({ open, onClose }: CreateProjectDialogProps) {
   const navigate = useNavigate();
+  const createProject = useServerFn(createProjectFromPrompt);
   const [step, setStep] = useState<"template" | "details" | "creating">("template");
   const [selectedTemplate, setSelectedTemplate] = useState<Template | null>(null);
   const [name, setName] = useState("");
@@ -80,24 +82,23 @@ export function CreateProjectDialog({ open, onClose }: CreateProjectDialogProps)
     setStep("creating");
 
     try {
-      const { data, error } = await supabase.functions.invoke("create-project", {
-        body: {
+      const res = await createProject({
+        data: {
           name: name.trim(),
-          description: description.trim(),
-          firstPrompt: firstPrompt.trim() || selectedTemplate?.prompt || "",
+          description: description.trim() || undefined,
+          template: selectedTemplate?.id,
+          firstPrompt:
+            firstPrompt.trim() || selectedTemplate?.prompt || description.trim() || undefined,
         },
       });
 
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
-
-      const { projectId } = data;
-      navigate({ to: "/projects/$projectId", params: { projectId } });
-    } catch (e: any) {
-      toast.error(e?.message ?? "Erro ao criar projeto");
+      navigate({ to: "/projects/$projectId", params: { projectId: res.projectId } });
+      onClose();
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : "Erro ao criar projeto");
       setStep("details");
     }
-  }, [name, description, firstPrompt, selectedTemplate, navigate]);
+  }, [name, description, firstPrompt, selectedTemplate, navigate, createProject, onClose]);
 
   const handleClose = () => {
     if (step === "creating") return;

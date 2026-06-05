@@ -33,6 +33,22 @@ Ou no dashboard: **Edge Functions → Settings → Secrets**.
 - [ ] `CLOUDFLARE_API_TOKEN` — fase E37
 - [ ] `VERCEL_TOKEN` — fase E36
 
+## B13 — Rotação da service role (após migrations B8–B11)
+
+Faça **depois** de `./scripts/sync/migrate.sh` na conta canônica (`dpduljngdurfpmaclffa`).
+
+1. Dashboard Supabase → **Settings → API** → **Reset service role key** (canônica).
+2. Se ainda usar Lovable Cloud (`mtcnwvzjfbvyiuhrqrlo`): avalie rotação separada ou descontinue uso da key antiga.
+3. Atualizar secret das Edge Functions:
+   ```bash
+   supabase secrets set --project-ref dpduljngdurfpmaclffa \
+     SUPABASE_SERVICE_ROLE_KEY="<nova-key>"
+   ```
+4. Republicar functions: `./scripts/sync/deploy-all.sh`
+5. Smoke: login → abrir projeto → enviar mensagem (`agent-run` SSE) → `connector-upsert` → admin `action: status`.
+
+**Nunca** commitar a nova key no repositório.
+
 ## Verificação
 
 ```bash

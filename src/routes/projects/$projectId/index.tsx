@@ -757,6 +757,7 @@ function EditorPage() {
                     tasteChatRemaining={tasteChatRemaining}
                     tasteStartRemaining={tasteStartRemaining}
                     onStartProject={handleStartProject}
+                    onDeploy={handlePublish}
                   />
                 </div>
                 <SetupRail

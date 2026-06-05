@@ -2,8 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { VITE_REACT_SEED } from "@/lib/seeds/vite-react";
-import { inferStackFromPrompt } from "@/lib/stack-router";
-
+import { inferStackFromPrompt, type ProjectStackId } from "@/lib/stack-router";
 
 function slugify(input: string) {
   return input
@@ -20,25 +19,80 @@ function nameFromPrompt(p: string) {
   return first.length > 60 ? first.slice(0, 57) + "…" : first || "Novo projeto";
 }
 
+const VITE_STACK: ReturnType<typeof inferStackFromPrompt> = {
+  id: "vite-react",
+  label: "Vite + React 19 + TypeScript + Tailwind v4",
+  reason: "Stack web padrão FORGE — UI rica, preview ao vivo, design system.",
+};
+
+function stackFromTemplate(templateId?: string): ReturnType<typeof inferStackFromPrompt> | null {
+  if (!templateId) return null;
+  if (
+    templateId === "vite-react" ||
+    templateId === "landing-page" ||
+    templateId === "dashboard" ||
+    templateId === "fullstack-supabase"
+  ) {
+    return {
+      ...VITE_STACK,
+      reason:
+        templateId === "vite-react"
+          ? "Template React + Vite."
+          : `Template ${templateId} — seed padrão FORGE.`,
+    };
+  }
+  const known: ProjectStackId[] = ["node-api", "static-html", "custom"];
+  if (known.includes(templateId as ProjectStackId)) {
+    return inferStackFromPrompt(`scaffold ${templateId}`);
+  }
+  return null;
+}
+
+const createProjectInputSchema = z
+  .object({
+    prompt: z.string().max(8000).optional(),
+    name: z.string().min(1).max(120).optional(),
+    description: z.string().max(500).optional(),
+    template: z.string().max(64).optional(),
+    firstPrompt: z.string().max(8000).optional(),
+  })
+  .refine((d) => Boolean(d.prompt?.trim() || d.name?.trim()), {
+    message: "Informe o prompt ou o nome do projeto",
+  });
+
 export const createProjectFromPrompt = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: unknown) =>
-    z.object({ prompt: z.string().min(1).max(8000) }).parse(input),
-  )
+  .inputValidator((input: unknown) => createProjectInputSchema.parse(input))
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
-    const name = nameFromPrompt(data.prompt);
-    const slug = `${slugify(name)}-${Math.random().toString(36).slice(2, 7)}`;
-    const stack = inferStackFromPrompt(data.prompt);
+
+    const promptText =
+      data.prompt?.trim() ||
+      data.firstPrompt?.trim() ||
+      data.description?.trim() ||
+      "";
+    const projectName = data.name?.trim() || nameFromPrompt(promptText);
+    const slug = `${slugify(projectName)}-${Math.random().toString(36).slice(2, 7)}`;
+    const stack =
+      stackFromTemplate(data.template) ?? inferStackFromPrompt(promptText || projectName);
+    const description =
+      data.description?.trim() ||
+      (data.prompt?.trim() ? data.prompt.trim().slice(0, 280) : promptText.slice(0, 280));
+
+    const userMessageText =
+      data.firstPrompt?.trim() ||
+      data.prompt?.trim() ||
+      promptText ||
+      `Iniciar projeto: ${projectName}`;
 
     const { data: project, error: pErr } = await supabase
       .from("projects")
       .insert({
         owner_id: userId,
-        name,
+        name: projectName,
         slug,
-        description: data.prompt.slice(0, 280),
-        template: stack.id,
+        description: description || null,
+        template: data.template?.trim() || stack.id,
         meta: {
           stackLabel: stack.label,
           stackReason: stack.reason,
@@ -58,7 +112,7 @@ export const createProjectFromPrompt = createServerFn({ method: "POST" })
 
     const { data: conv, error: cErr } = await supabase
       .from("conversations")
-      .insert({ project_id: project.id, title: name })
+      .insert({ project_id: project.id, title: projectName })
       .select("id")
       .single();
     if (cErr) throw new Error(cErr.message);
@@ -66,7 +120,7 @@ export const createProjectFromPrompt = createServerFn({ method: "POST" })
     const { error: mErr } = await supabase.from("messages").insert({
       conversation_id: conv.id,
       role: "user",
-      parts: [{ type: "text", text: data.prompt }],
+      parts: [{ type: "text", text: userMessageText }],
       tool_calls: [],
     });
     if (mErr) throw new Error(mErr.message);

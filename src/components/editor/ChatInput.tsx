@@ -67,6 +67,8 @@ interface ChatInputProps {
   /** Trilha ao vivo do agente (fases, tools) — renderizada no painel de mensagens. */
   agentProgress?: AgentProgress;
   onResumeAgent?: () => void;
+  /** Slash /deploy — mesmo fluxo que Publicar na topbar */
+  onDeploy?: () => void | Promise<void>;
 }
 
 // -----------------------------------------------------------------------------------
@@ -143,6 +145,7 @@ export function ChatInput({
   visualEditsActive,
   agentProgress,
   onResumeAgent,
+  onDeploy,
 }: ChatInputProps) {
   const [input, setInput] = useState("");
   const [composerModeLocal, setComposerModeLocal] = useState<AgentComposerMode>("build");
@@ -209,6 +212,12 @@ export function ChatInput({
   }, [input, files]);
 
   const insertCommand = (cmd: Command) => {
+    if (cmd.id === "/deploy" && onDeploy) {
+      setInput("");
+      setShowCommands(false);
+      void onDeploy();
+      return;
+    }
     setInput(cmd.id + " ");
     setShowCommands(false);
     textareaRef.current?.focus();
@@ -239,6 +248,13 @@ export function ChatInput({
   const handleSend = async () => {
     const text = input.trim();
     if ((!text && attachments.length === 0) || running) return;
+
+    if (text.startsWith("/deploy")) {
+      setInput("");
+      setAttachments([]);
+      await onDeploy?.();
+      return;
+    }
 
     const prefs = loadAgentPreferences();
     if (!isAgentPreferencesConfigured(prefs)) {
