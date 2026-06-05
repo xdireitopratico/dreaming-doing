@@ -1,120 +1,69 @@
-# FORGE — Plano de Launch (50 tarefas) v3
+# FORGE — Estado pós sessão (atualizado)
 
-## 0. Realidade dos dois Supabase (ler antes de aprovar)
+## Concluído nesta sessão (segurança + sincronização)
 
-Hoje o projeto vive em **dois Supabase**:
+### Segurança crítica (B7–B12) — 6 findings fechadas
+- **B7** `mcp-server`: agora exige `Authorization`. `authenticate()` valida sessão e checa `user_roles`. Tools sensíveis (`query`, `migrate`, `auth_users`) bloqueadas para não-admin (403).
+- **B8** `realtime.messages`: nova policy `project_files-<id>` espelhando a do canal `editor-%`. Bloqueia leak de código entre contas.
+- **B9** `deployments`: adicionados `deploy_update_own` e `deploy_delete_own` (só o dono do projeto).
+- **B10** `user_roles`: `roles_no_insert/update/delete` — qualquer mutação direta por `authenticated` retorna RLS deny. Só `service_role` muda.
+- **B11** `has_role()`: `REVOKE EXECUTE ... FROM authenticated, anon`. Função continua usável dentro de policies.
+- **B12** `AdminPlatformSecretsPanel`: gated por query server-side `admin-platform-secrets action:'status'`. `isForgeAdminEmail` virou só dica UX.
 
+### Sincronização Supabase (A1, A3, A5)
+- `scripts/sync/README.md` — fluxo de duas contas documentado.
+- `scripts/sync/migrate.sh` — `supabase db push` na sua conta.
+- `scripts/sync/deploy-all.sh` — deploy de todas as 9 edge functions.
+- `scripts/sync/secrets-checklist.md` — 14 secrets que precisam existir.
+- `SupabaseConfigBanner` agora alerta visualmente quando `VITE_SUPABASE_URL` ≠ `dpduljngdurfpmaclffa`.
 
-| Ref                    | Quem usa                                                                              | Quem consigo modificar daqui                         |
-| ---------------------- | ------------------------------------------------------------------------------------- | ---------------------------------------------------- |
-| `mtcnwvzjfbvyiuhrqrlo` | **Lovable Cloud** (preview Lovable, `.env` runtime do sandbox)                        | ✅ Migrations, edge functions, secrets via tools      |
-| `dpduljngdurfpmaclffa` | **Sua conta** (Vercel, CLI local, `config.toml`, `.env.example`, `forge-supabase.ts`) | ❌ Só por SQL/CLI que você roda. Eu gero os arquivos. |
+### Schema (paridade entre os dois projetos)
+- Migration: adiciona `netlify` ao enum `connector_kind`.
+- Migration: adiciona `profiles.integration_prefs jsonb` e `profiles.trial_messages_remaining int` que o app já consumia.
 
+### Hot-fixes de build
+- `useConnectors.ts` / `ConnectorGuideModal.tsx` agora compilam com o novo schema.
+- `api-keys.tsx`: removida ref a `connectors_public.provider` (usa só `meta.provider`).
+- `agent-preferences.ts`: tipo do parsed legacy "rob" → "robin" sem TS narrowing error.
 
-**Lovable Cloud não desconecta** (documentação oficial). Então só temos dois caminhos honestos:
+## Para fazer na próxima sessão (continuando o plano de 50)
 
-1. **Canônico = sua conta (`dpduljngdurfpmaclffa`).** Lovable Cloud vira "espelho descartável" usado só pro preview interno. Toda migration e edge function que eu criar daqui pra frente eu emito **também** como arquivo `.sql`/script que você roda via CLI no seu projeto.  **Recomendado** — é o que seu Vercel já usa.  
-  
-*ESSA É A ROTA*  
+### Sincronização (resto de A)
+- **A2** Rodar `deploy-all.sh` localmente — eu **não posso** fazer isso daqui (não tenho seu token Supabase). É você executando o script.
+- **A4** Revisar `supabase/config.toml` por função (CORS, timeouts, verify_jwt).
+- **A6** Rodar `migrate.sh` agora para colocar a sua conta no mesmo schema.
 
-2. **Canônico = Lovable Cloud (`mtcnwvzjfbvyiuhrqrlo`).** Aponta Vercel e CLI pra esse ref. Mais simples mas você perde controle CLI/billing.
+### Segurança restante (B13)
+- Rotacionar `SUPABASE_SERVICE_ROLE_KEY` depois que a CLI tiver aplicado as policies novas.
 
-Vou planejar assumindo **(1)**. Se quiser **(2)**, me diz e eu reescrevo as fases 1–4.
+### Agente (C14–C23) — refatoração não-trivial
+14. UI "Continuar" quando `resumable: true`. 15. Persistir `executionLog`. 16. Backoff por provider. 17. Token usage tracking. 18. Allowlist de `shell_exec`. 19. Hash dos últimos calls em `isStuck`. 20. `RuntimeObserver` rodando `tsc` no E2B. 21. 3 skills concretas. 22. Cancelamento server-side via `runs.canceled_at`. 23. Tabela `agent_runs` + dashboard.
 
----
+### Editor (D24–D32)
+24. Monaco. 25. File tree CRUD. 26. kbar. 27. Diff viewer. 28. HMR via Realtime. 29. Voice global. 30. Visual edits. 31. Trace expansível. 32. Tema persistente.
 
-## Eixos do plano
+### Integrações (E33–E40) — **bloqueadas por secrets seus**
+- E33–E35 GitHub OAuth + push + webhook: precisa `GITHUB_OAUTH_CLIENT_ID/SECRET`, `ENCRYPTION_KEY`.
+- E36 Vercel deploy: precisa `VERCEL_TOKEN`.
+- E37 Cloudflare: `CLOUDFLARE_API_TOKEN`.
+- E38 Stripe billing: chave + plano. E39 MCP UI. E40 multi-provider UI.
 
-```text
-A. Sincronização Supabase (1–6)        D. Editor & UX (24–32)
-B. Segurança crítica (7–13)            E. Integrações & deploy (33–40)
-C. Agente — confiabilidade (14–23)     F. Performance, SEO, launch (41–50)
+### Performance & launch (F41–F50)
+41. Bundle audit. 42. Code-split (Monaco, CodeEditor). 43. Imagens. 44. SEO `head()` por rota. 45. robots/sitemap. 46. Lighthouse. 47. Rate limit em `agent-run`. 48. `audit_events`. 49. Backup. 50. E2E playwright.
+
+## Secrets atuais (Lovable Cloud)
+`ANTHROPIC_API_KEY`, `XAI_API_KEY`, `GROQ_API_KEY`, `E2B_API_KEY`, `LOVABLE_API_KEY`, `SUPABASE_*`.
+
+Faltando para fases futuras: `GITHUB_OAUTH_CLIENT_ID/SECRET`, `GITHUB_WEBHOOK_SECRET`, `ENCRYPTION_KEY`, `VERCEL_TOKEN`, `CLOUDFLARE_API_TOKEN`, `OPENAI_API_KEY`.
+
+## Importante — paridade entre os dois Supabase
+
+Toda migration nova que eu criar daqui para frente **só vai para `mtcnwvzjfbvyiuhrqrlo` (Lovable Cloud)** via tool. Para sua conta `dpduljngdurfpmaclffa` ficar igual:
+
+```bash
+cd <projeto>
+./scripts/sync/migrate.sh   # aplica migrations novas
+./scripts/sync/deploy-all.sh   # republica edge functions
 ```
 
----
-
-## A. Sincronização Supabase  *(prioridade absoluta)*
-
-1. **Diff de schema** `mtcnwvzjfbvyiuhrqrlo` ↔ `dpduljngdurfpmaclffa`. Gero `scripts/sync/schema-diff.sql` que você roda no seu projeto pra ficar idêntico.
-2. **Snapshot completo das edge functions** atuais → publico no `dpduljngdurfpmaclffa` via `supabase functions deploy` (instruções em `scripts/sync/deploy-all.sh`). Lista: `agent-run`, `admin-platform-secrets`, `connector-upsert`, `deploy-publish`, `github-import`, `mcp-server`, `preview-boot`, `project-delete`, `voice-transcribe`.
-3. **Secrets paridade**: gero `scripts/sync/secrets-checklist.md` com todas as 13 secrets que precisam existir no seu projeto (`E2B_API_KEY`, `ANTHROPIC_API_KEY`, `XAI_API_KEY`, `GROQ_API_KEY`, `LOVABLE_API_KEY`, etc.).
-4. `**supabase/config.toml**`: revisar `verify_jwt`, CORS, e timeouts por função; padronizar.
-5. **Helper `forge-supabase**`: adicionar warning visível no editor quando `VITE_SUPABASE_URL` ≠ `dpduljngdurfpmaclffa` (hoje só `console.warn`).
-6. `**scripts/sync/migrate.sh**`: wrapper que aplica qualquer migration nova nos dois refs (Lovable via tool, sua conta via `supabase db push`).
-
-## B. Segurança crítica  *(corrige todas as 6 findings do painel)*
-
-7. `**mcp-server` autenticação**: bloquear `POST/GET` sem `Authorization`; opcionalmente exigir `assertForgeAdmin` pras tools `auth_users`/`query`/`migrate`. *(finding agent_security crítico)*
-8. `**realtime.messages` policy pra `project_files**`: replicar política `editor-%` para canais `project_files-<projectId>`. *(finding supabase_lov crítico)*
-9. `**deployments` policies**: adicionar `UPDATE` + `DELETE` restritas ao owner. *(warn)*
-10. `**user_roles` policies**: explicit `INSERT/UPDATE/DELETE` negando ao role `authenticated` (só `service_role` muda). *(warn — privilege escalation)*
-11. `**has_role()` SECURITY DEFINER**: `REVOKE EXECUTE ... FROM authenticated` (chamado só dentro de policies, não por client). *(warn supabase linter)*
-12. **Painel admin server-driven**: `AdminPlatformSecretsPanel` só renderiza se `admin-platform-secrets` `action: status` devolver `isAdmin: true`. Remove `isForgeAdminEmail` do client. *(warn)*
-13. **Rotacionar `SUPABASE_SERVICE_ROLE_KEY**` depois das mudanças (via `supabase--rotate_api_keys` no Lovable + CLI no seu projeto).
-
-## C. Agente — confiabilidade & qualidade
-
-14. **Resume de execução**: botão "Continuar" no editor quando `ok: false, resumable: true` (loop.ts já marca, falta UI).
-15. **Persistir `executionLog**` em `messages.tool_calls` pra histórico real (hoje fica em memória).
-16. **Backoff + retry** por provider em `providers.ts` (Anthropic 529, Groq 429).
-17. **Limite de tokens dinâmico**: medir `usage.input_tokens` do response e ajustar `CompressionManager` antes de estourar.
-18. `**shell_exec` sandboxed**: hoje `git commit` solto; mover pra `tools/shell.ts` com allowlist de comandos.
-19. **Detecção de loops**: `isStuck` hoje compara strings vazias; substituir por hash dos últimos 3 `tool_calls.name+args`.
-20. `**RuntimeObserver` real**: rodar `tsc --noEmit` e `vite build --mode=production` dentro do E2B; capturar erros e devolver pro LLM.
-21. `**SkillRegistry**`: implementar 3 skills concretas (shadcn, supabase-migration, tailwind-v4) com detecção por arquivo.
-22. **Cancelamento server-side**: `AbortController` no client cancela fetch, mas Edge Function continua. Persistir `runs.canceled_at` e checar a cada step.
-23. `**agent_runs` tabela**: id, project_id, started_at, finished_at, status, steps, provider, tokens. Dashboard simples em `/projects/$projectId/history`.
-
-## D. Editor & UX
-
-24. **Monaco editor** (`@monaco-editor/react`) no tab Code; salvar via serverFn `updateProjectFile`.
-25. **File tree com criar/renomear/deletar** + drag-drop.
-26. **Command palette** (`kbar`): Novo projeto, Importar GitHub, Snapshot, Publicar, Trocar provider, Buscar arquivo.
-27. **Diff viewer** por mensagem do assistente (mostra fs_edit aplicados).
-28. **Preview hot-reload**: WebSocket entre `project_files` change e iframe (E2B já tem HMR — só precisa invalidar).
-29. **Voice em todas as caixas de texto** (PromptEnhancer, prompt rules editor).
-30. **Visual edits**: clique em elemento no preview → seletor CSS + screenshot anexado ao próximo prompt.
-31. **Trace expandível**: collapse por padrão, abre só último step; mostra args/result completos.
-32. **Dark/light theme polido** + persistência por usuário em `profiles.meta.theme`.
-
-## E. Integrações & deploy
-
-33. **GitHub OAuth** (`github-oauth-start/callback` + `connectors.token_encrypted` AES-GCM). Requer secrets `GITHUB_OAUTH_CLIENT_ID/SECRET` + `ENCRYPTION_KEY`.
-34. `**github-push**`: commit dos `project_files` num repo do usuário (cria se não existir).
-35. **Webhook `/api/public/github-webhook**`: pull changes do GitHub → `project_files` (sync bidirecional).
-36. **Deploy Vercel**: edge function `deploy-vercel` + token do usuário; "Publicar" no editor.
-37. **Deploy Cloudflare Pages**: alternativa. Requer `CLOUDFLARE_API_TOKEN`.
-38. **Stripe billing** (opcional): plano free (3 projetos) vs pro. Já temos tabela `connectors`, falta UI + webhook.
-39. **MCP UI em `/connectors**`: adicionar/remover MCP server, listar tools, ativar no agente.
-40. **Multi-provider dropdown** no chat (lê `connectors` do usuário + fallback global).
-
-## F. Performance, SEO, launch
-
-41. **Bundle audit**: `bun run build --analyze`; remover deps não usadas (Cursor.tsx, SpaceScene se não está na landing).
-42. **Code-split**: lazy-load `Monaco`, `CodeEditor`, `AgentMemoryViewer`.
-43. **Imagens otimizadas**: converter logos PNG → SVG/WebP; `loading="lazy"` em tudo abaixo da fold.
-44. **SEO**: `head()` por rota (`/`, `/auth`, `/projects`, `/connectors`, `/settings`) com title/description únicos + og:image gerado.
-45. `**robots.txt` + `sitemap.xml**` servidos via server route.
-46. **Lighthouse ≥ 90** em LCP/CLS/INP na landing.
-47. **Rate limiting** em `agent-run` (advisory lock por user_id + max 3 runs concorrentes).
-48. **Audit log**: tabela `audit_events` (user_id, action, target, meta) + write em todas as serverFn mutadoras.
-49. **Backup automático**: `pg_dump` diário do `dpduljngdurfpmaclffa` para storage (script GitHub Actions).
-50. **Smoke test E2E** (`vitest` + `playwright`): signup → criar projeto → prompt → preview boota → snapshot → restore. Roda no CI antes do deploy.
-
----
-
-## O que executo na próxima sessão (estimativa honesta)
-
-Com aprovação do plano, **execução em ordem**, parando só em bloqueios reais (= secrets que não tenho):
-
-- **Garantido (1 sessão)**: A1, A4, A5, B7, B8, B9, B10, B11, B12, C14, C15, C19, C22, C23, D26, D27, D31, F41, F44, F47, F48 → **≈ 21 tarefas**.
-- **Provável (mesma sessão se sobrar tempo)**: A2, A6, B13, C16, C17, C20, D24, D25, D28, F45, F46 → mais **≈ 10**.
-- **Total realista da próxima sessão**: **30–32 de 50** (60–65%).
-- **Bloqueado por secrets seus**:
-  - E33–E37 (GitHub OAuth, Vercel, Cloudflare) — precisa de tokens.
-  - E38 (Stripe) — chave + decisão de plano.
-  - F49 (backup) — precisa de bucket S3/R2.
-
-## Pergunta única antes de implementar
-
-Confirma o caminho **(1) sua conta `dpduljngdurfpmaclffa` como canônica** (Lovable Cloud vira espelho)? Se sim, aprovo o plano e na próxima sessão começo por **A1 → B7 → B8** (sincronização + as duas findings críticas), depois desço a lista.
+Rode após cada sessão minha que mexer em backend.
