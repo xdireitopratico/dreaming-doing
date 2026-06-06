@@ -254,8 +254,13 @@ export class AgentLoop {
 
       step++;
       this.state.currentStepIndex = step;
-      this.state.totalSteps = step;
+      this.state.totalSteps = this.maxStepsLimit;
       this.state.phase = LoopPhase.EXECUTE_STEP;
+      this.emit("step", { current: step, total: this.maxStepsLimit });
+      this.emit("phase", {
+        phase: "execute",
+        message: `Executando passo ${step}/${this.maxStepsLimit}…`,
+      });
 
       const compressed = await this.compression.compress(this.state.messages);
       let response: ChatResponse | null = null;

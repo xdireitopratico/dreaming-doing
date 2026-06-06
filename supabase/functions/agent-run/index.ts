@@ -1,4 +1,4 @@
-// index.ts — Edge Function agent-run.
+// index.ts — Edge Function agent-run (build: agentloop-only 2026-06-06).
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 
 import { ToolRegistry } from "./registry.ts";
@@ -34,10 +34,6 @@ import { registerDeployTool } from "./tools/deploy.ts";
 import { loadTasteNvidiaConfig, runTasteChat } from "./taste-session.ts";
 import { FORGE_CORS_HEADERS, corsPreflightResponse } from "../_shared/cors.ts";
 import { restoreExecutionLogFromRows } from "./executionLogMeta.ts";
-import { runAgentViaE2bWorker, supportsE2bWorker } from "./worker-run.ts";
-import { buildSandboxEnv } from "./worker-bootstrap.ts";
-import { RUNNER_SOURCE } from "./runner-source.ts";
-
 const runningLocks = new Map<string, Promise<unknown>>();
 
 const corsHeaders = FORGE_CORS_HEADERS;
@@ -127,9 +123,6 @@ Deno.serve(async (req) => {
 
     projectId = body.projectId;
     const conversationId = body.conversationId;
-    const workerRelay = body.workerRelay === true;
-    const streamOffset = typeof body.streamOffset === "number" ? body.streamOffset : 0;
-    const relayRunId = typeof body.runId === "string" ? body.runId : null;
     const preferences = body.preferences as AgentPreferencesPayload | undefined;
     const sessionKindRaw = body.sessionKind as string | undefined;
     const resumeRun = body.resume === true;
@@ -161,15 +154,13 @@ Deno.serve(async (req) => {
       typeof profile?.taste_start_remaining === "number" ? profile.taste_start_remaining : 1;
 
     if (runningLocks.has(projectId)) {
-      if (resumeRun || workerRelay) {
-        if (!workerRelay) runningLocks.delete(projectId);
+      if (resumeRun) {
+        runningLocks.delete(projectId);
       } else {
         return json({ error: "Agente já está executando neste projeto. Aguarde a conclusão." }, 409);
       }
     }
-    if (!workerRelay) {
-      runningLocks.set(projectId, Promise.resolve());
-    }
+    runningLocks.set(projectId, Promise.resolve());
 
     const { data: history } = await supabase
       .from("messages")
@@ -432,35 +423,18 @@ Deno.serve(async (req) => {
     };
 
     let agentRunId: string | null = null;
-    if (workerRelay && relayRunId) {
-      const { data: relayRun } = await supabase
-        .from("agent_runs")
-        .select("id, user_id, status, canceled_at")
-        .eq("id", relayRunId)
-        .maybeSingle();
-      if (!relayRun || relayRun.user_id !== userData.user.id) {
-        runningLocks.delete(projectId);
-        return json({ error: "Run não encontrada" }, 404);
-      }
-      if (relayRun.status !== "running" || relayRun.canceled_at) {
-        runningLocks.delete(projectId);
-        return json({ error: "Run já encerrada", code: "run_finished" }, 409);
-      }
-      agentRunId = relayRun.id;
-    } else {
-      const { data: newRun } = await supabase
-        .from("agent_runs")
-        .insert({
-          project_id: projectId,
-          conversation_id: conversationId,
-          user_id: userData.user.id,
-          status: "running",
-          meta: runMetaBase,
-        })
-        .select("id")
-        .single();
-      agentRunId = newRun?.id ?? null;
-    }
+    const { data: newRun } = await supabase
+      .from("agent_runs")
+      .insert({
+        project_id: projectId,
+        conversation_id: conversationId,
+        user_id: userData.user.id,
+        status: "running",
+        meta: runMetaBase,
+      })
+      .select("id")
+      .single();
+    agentRunId = newRun?.id ?? null;
 
     const finalizeRun = async (
       result: {
@@ -548,43 +522,9 @@ Deno.serve(async (req) => {
       );
     };
 
-    // Agente longo: worker no sandbox E2B + relay SSE em chunks (<400s por invocação Edge).
-    const useE2bWorker =
-      Deno.env.get("FORGE_DISABLE_E2B_WORKER") !== "1" &&
-      sessionKind !== "taste_chat" &&
-      supportsE2bWorker(mainCfg);
-    const userAccessToken = (req.headers.get("Authorization") ?? "").replace("Bearer ", "");
-    const supabaseAnonKey = req.headers.get("apikey") ?? Deno.env.get("SUPABASE_ANON_KEY") ?? "";
-
-    if (useSSE && useE2bWorker && userAccessToken && supabaseAnonKey) {
-      const { data: workerFiles } = await supabase
-        .from("project_files")
-        .select("path, content")
-        .eq("project_id", projectId);
-      return runAgentViaE2bWorker({
-        supabase,
-        e2bApiKey: e2bKey,
-        userId: userData.user.id,
-        accessToken: userAccessToken,
-        supabaseUrl: SUPABASE_URL,
-        supabaseAnonKey,
-        projectId,
-        conversationId,
-        agentRunId: agentRunId!,
-        resumeRun,
-        projectTemplate,
-        stackAddon,
-        sessionAddon: sessionExt.addon,
-        mainCfg,
-        connectorKeys: { ...connectorKeys, ...deployKeys },
-        deployKeys,
-        files: workerFiles ?? [],
-        runnerSource: RUNNER_SOURCE,
-        cleanup,
-        relayOnly: workerRelay,
-        streamOffset,
-      });
-    }
+    // Agente = AgentLoop na Edge (tools/MCP/deploy completos).
+    // E2B só executa shell/fs via sandbox.ts — não duplicar loop em runner.mjs.
+    // Sessões longas: checkpoint + auto-resume no cliente (useSSE, ~110s/chunk).
 
     if (!useSSE) {
       const loop = makeLoop(() => {});
