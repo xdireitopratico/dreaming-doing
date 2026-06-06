@@ -1,6 +1,6 @@
 "use client";
 
-import ReactMarkdown from "react-markdown";
+import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { CodeBlock } from "@/components/ui/code-block";
 import type { ReactElement } from "react";
@@ -27,37 +27,32 @@ const PROSE_CLASSES = `
   [&_pre]:text-[var(--forge-text)]
 `;
 
-function CodeElement({ node, ...props }: { node: any; children: React.ReactNode; className?: string }) {
-  const code = node.children?.[0]?.value ?? String(node.value ?? "");
-  const className = node.properties?.className?.[0] ?? "";
-  const language = className.replace("language-", "") || "typescript";
-  const filename = node.properties?.dataFilename as string | undefined;
-
-  return <CodeBlock code={code} language={language} filename={filename} {...props} />;
-}
-
-function PreElement({ node, ...props }: { node: any; children: React.ReactNode; className?: string }) {
-  const codeChild = node.children?.[0];
-  if (codeChild?.type === "element" && codeChild.tagName === "code") {
-    const code = codeChild.children?.[0]?.value ?? "";
-    const className = codeChild.properties?.className?.[0] ?? "";
+const components: Components = {
+  code({ node, ...props }) {
+    const code = (node as any)?.children?.[0]?.value ?? "";
+    const className = (node as any)?.properties?.className?.[0] ?? "";
     const language = className.replace("language-", "") || "typescript";
-    const filename = codeChild.properties?.dataFilename as string | undefined;
+    const filename = (node as any)?.properties?.dataFilename as string | undefined;
+
     return <CodeBlock code={code} language={language} filename={filename} {...props} />;
-  }
-  return <pre {...props} />;
-}
+  },
+  pre({ node, ...props }) {
+    const codeChild = (node as any)?.children?.[0];
+    if (codeChild?.type === "element" && codeChild.tagName === "code") {
+      const code = codeChild.children?.[0]?.value ?? "";
+      const className = codeChild.properties?.className?.[0] ?? "";
+      const language = className.replace("language-", "") || "typescript";
+      const filename = codeChild.properties?.dataFilename as string | undefined;
+      return <CodeBlock code={code} language={language} filename={filename} {...props} />;
+    }
+    return <pre {...props} />;
+  },
+};
 
 export function MarkdownRenderer({ children, className = "" }: MarkdownRendererProps) {
   return (
     <div className={`${PROSE_CLASSES} ${className}`}>
-      <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
-        components={{
-          code: CodeElement,
-          pre: PreElement,
-        }}
-      >
+      <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
         {children}
       </ReactMarkdown>
     </div>
