@@ -4,6 +4,7 @@
 @import "./styles/editor-workspace.css";
 @import "./styles/dashboard-workspace.css";
 @import "./styles/auth-workspace.css";
+@plugin "@tailwindcss/typography";
 
 @custom-variant dark (&:is(.dark *));
 
