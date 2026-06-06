@@ -116,8 +116,10 @@ export function nextStep(step: OnboardingStepId): OnboardingStepId {
   return ONBOARDING_STEPS[idx + 1]!.id;
 }
 
-/** Step anterior na ordem. */
+/** Step anterior na ordem. "done" volta para o último setup step ("deploy"). */
 export function prevStep(step: OnboardingStepId): OnboardingStepId {
+  // "done" é terminal: volta pro último setup step
+  if (step === "done") return "deploy";
   const idx = stepIndex(step);
   if (idx <= 0) return "welcome";
   return ONBOARDING_STEPS[idx - 1]!.id;
