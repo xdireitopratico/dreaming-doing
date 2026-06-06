@@ -1,5 +1,9 @@
-// router.ts — Model Router: classifica complexidade e roteia para o modelo certo.
+// router.ts — Model Router: classifica complexidade, roteia para o modelo certo
+// e produz um PLANO RICO estruturado (Fase 4.6+). O LLM é instruído a agir como
+// um colega de equipe que pensa junto — rationale amigável em PT-BR + passos
+// concretos que o usuário pode revisar antes da execução.
 import type { LLMProvider } from "./types.ts";
+import type { PlanRationale, PlanStep, PlanStepType } from "./plan-mode.ts";
 import { buildProvider, pickCheap, pickMain, type ProviderConfig } from "./providers.ts";
 
 export interface ClassificationResult {
@@ -8,6 +12,48 @@ export interface ClassificationResult {
   summary: string;
   needsBuild: boolean;
   needsDeps: boolean;
+  /** Plano estruturado produzido pelo LLM (rationale + steps). Ausente se o LLM não retornou. */
+  plan?: PlanRationale;
+}
+
+const VALID_STEP_TYPES = new Set<PlanStepType>([
+  "create_file", "edit_file", "shell_exec", "install_dep", "observe", "custom",
+]);
+
+function coercePlanStep(raw: unknown, idx: number): PlanStep | null {
+  if (!raw || typeof raw !== "object") return null;
+  const r = raw as Record<string, unknown>;
+  const type: PlanStepType = typeof r.type === "string" && VALID_STEP_TYPES.has(r.type as PlanStepType)
+    ? r.type as PlanStepType
+    : "custom";
+  const description = typeof r.description === "string" && r.description.trim()
+    ? r.description.trim()
+    : null;
+  if (!description) return null;
+  return {
+    id: typeof r.id === "string" && r.id ? r.id : `s${idx + 1}`,
+    type,
+    description,
+    filePath: typeof r.filePath === "string" ? r.filePath : undefined,
+    estimatedCost: typeof r.estimatedCost === "number" ? r.estimatedCost : 0.002,
+    enabled: r.enabled !== false,
+  };
+}
+
+function coercePlan(raw: unknown): PlanRationale | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const r = raw as Record<string, unknown>;
+  const rationale = typeof r.rationale === "string" && r.rationale.trim()
+    ? r.rationale.trim()
+    : "";
+  if (!Array.isArray(r.steps) || r.steps.length === 0) return null;
+  const steps: PlanStep[] = [];
+  for (let i = 0; i < r.steps.length; i++) {
+    const s = coercePlanStep(r.steps[i], i);
+    if (s) steps.push(s);
+  }
+  if (steps.length === 0) return null;
+  return { rationale, steps };
 }
 
 export class ModelRouter {
@@ -32,29 +78,63 @@ export class ModelRouter {
         messages: [
           {
             role: "system",
-            content: `Classifique o pedido. Retorne APENAS JSON válido:
+            content: `Você é o planejador do FORGE, um agente que constrói software junto com humanos. Sua tarefa é analisar o pedido do usuário e o contexto do projeto, e devolver APENAS um JSON válido com a classificação E um plano de ação concreto em português.
+
+Pense no pedido como se fosse de um colega de equipe. Escreva em PT-BR, tom amigável e direto, sem ser robótico. Evite frases genéricas tipo "implementar a feature" — seja específico (qual arquivo, qual lib, qual abordagem).
+
+SCHEMA (retorne exatamente esta forma):
 {
-  "complexity": 1-5 (1=trivial, 5=novo projeto/10+ arquivos),
+  "complexity": 1|2|3|4|5,
   "type": "new_project" | "modify" | "fix" | "add_dep" | "other",
-  "summary": "1 frase em português",
+  "summary": "1 frase amigável, ex: 'Vou criar um componente de Toast com 4 variantes visuais e animação de entrada'",
   "needsBuild": true|false,
-  "needsDeps": true|false
-}`,
+  "needsDeps": true|false,
+  "plan": {
+    "rationale": "1-2 frases em português explicando a abordagem escolhida e POR QUÊ. Ex: 'Vamos começar pela estrutura do componente e os tipos pra você revisar antes da lógica de animação. Depois faço os estilos e por fim a animação — assim se algo precisar mudar, ajustamos cedo.'",
+    "steps": [
+      {
+        "id": "s1",
+        "type": "create_file" | "edit_file" | "shell_exec" | "install_dep" | "observe" | "custom",
+        "description": "Descrição amigável e específica em PT-BR. ex: 'Criar src/components/Toast.tsx com props {variant, message, duration} e variants success/error/warning/info'",
+        "filePath": "src/components/Toast.tsx",
+        "estimatedCost": 0.003
+      }
+    ]
+  }
+}
+
+DIRETRIZES DE PLANEJAMENTO:
+- 2 a 7 passos. Menos é melhor; agrupar trabalho relacionado.
+- Pense na ordem natural: estrutura → tipos → implementação → validação → build.
+- Para create_file/edit_file: filePath é OBRIGATÓRIO e deve apontar pro arquivo real do projeto.
+- Para install_dep: use o nome do pacote na descrição (ex: "Instalar framer-motion").
+- Para shell_exec: mencione o comando principal (ex: "Rodar npm run typecheck pra validar").
+- Para observe: usar quando precisar ler contexto do projeto antes de editar.
+- Para custom: usar quando o passo é conversacional (ex: "Tirar dúvida com o usuário sobre o design").
+- Descrições SEMPRE em português, segunda pessoa do plural OU infinitivo ("Criar X", "Validar Y"). NUNCA primeira pessoa.
+- Se o pedido for puramente conversacional (sem código), retorne plan com 1 passo custom.
+- Se não tiver certeza do filePath, use "custom" em vez de inventar.
+- rationale SEMPRE presente (string não-vazia), mesmo que curta.
+
+Retorne APENAS o JSON. Sem markdown, sem comentários, sem texto antes/depois.`,
           },
-          { role: "user", content: `Projeto: ${projectContext.slice(0, 2000)}\n\nPedido: ${userPrompt}` },
+          { role: "user", content: `Contexto do projeto (resumo):\n${projectContext.slice(0, 2000)}\n\nPedido do usuário:\n${userPrompt}` },
         ],
         response_format: { type: "json_object" },
-        max_tokens: 200,
-        temperature: 0,
+        max_tokens: 1500,
+        temperature: 0.2,
       });
       const j = JSON.parse(resp.content ?? "{}");
-      return {
+      const result: ClassificationResult = {
         complexity: Math.min(5, Math.max(1, j.complexity ?? 3)) as 1|2|3|4|5,
         type: j.type ?? "modify",
         summary: j.summary ?? userPrompt.slice(0, 100),
         needsBuild: j.needsBuild ?? false,
         needsDeps: j.needsDeps ?? false,
       };
+      const plan = coercePlan(j.plan);
+      if (plan) result.plan = plan;
+      return result;
     } catch {
       return { complexity: 3, type: "modify", summary: userPrompt.slice(0, 100), needsBuild: true, needsDeps: false };
     }

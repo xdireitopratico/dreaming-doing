@@ -34,7 +34,7 @@ import {
   type CheckpointExtra,
 } from "./checkpoint.ts";
 import {
-  resolvePlan,
+  buildProposedPlan,
   PLAN_APPROVAL_TTL_MS,
 } from "./plan-mode.ts";
 import type { ClassificationResult } from "./router.ts";
@@ -354,6 +354,7 @@ export class AgentLoop {
         this.emit("plan_proposed", {
           planId: proposedPlan.planId,
           summary: proposedPlan.summary,
+          rationale: proposedPlan.rationale,
           steps: proposedPlan.steps,
           ttlMs: proposedPlan.ttlMs,
           runId: this.runId,
@@ -764,22 +765,18 @@ export class AgentLoop {
   }
 
   /**
-   * Constrói um ProposedPlan a partir da resposta do classificador.
-   * O classificador já extraiu um JSON estruturado; usamos o defaultPlan
-   * heurístico (alimentado pelo summary do LLM). A extração via LLM fica
-   * como hook futuro — basta o router devolver o conteúdo bruto.
+   * Constrói um ProposedPlan rico a partir da resposta do classificador.
+   * Usa a nova cadeia de prioridade:
+   *  1) classification.plan (LLM estruturado: rationale + steps) — caminho preferencial
+   *  2) rawContent (LLM seguiu parcialmente) — fallback robusto
+   *  3) deriveDefaultPlan (heurística) — último recurso
    */
   private proposePlan(classification: ClassificationResult): ProposedPlan {
-    const summary = classification.summary?.trim() || "Plano proposto";
-    const type = classification.type || "other";
-    const steps = resolvePlan(null, type, summary);
-    return {
+    return buildProposedPlan(classification, null, {
       planId: crypto.randomUUID(),
-      summary,
-      steps,
       ttlMs: PLAN_APPROVAL_TTL_MS,
       proposedAt: new Date().toISOString(),
-    };
+    });
   }
 
   /**

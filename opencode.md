@@ -50,6 +50,7 @@
 | **Resume sem reclassificar** | `agent-run` carrega checkpoint do banco e **NÃO** reroda o router/qualify — só continua o loop de onde parou |
 | **E2B worker** | `agent-worker` (Edge Function separada) roda o loop no E2B com relay de eventos pra `agent_stream_events`; cai pra `agent-run` se E2B falhar |
 | **Template E2B** | `code-interpreter-v1` (nodejs removido) — `runner.mjs` embutido na função |
+| **Plano rico (Fase 4.6+)** | Router pede plano estruturado no MESMO call do classify (LLM já pensando — só estruturar). Schema: `{plan: {rationale, steps[]}}`. rationale em PT-BR, 1-2 frases; steps 2-7 com descrições específicas. Fallback chain: structured → rawContent extract → deriveDefaultPlan. UI exibe rationale em itálico acima dos passos. |
 | **Plan mode (Fase 4.6)** | Após classificação, loop emite `plan_proposed` e pausa via `awaitPlanDecision` (5min TTL). Cliente responde com ações `plan_approve`/`plan_reject` na edge function. `agent_runs.status` ganha `awaiting_plan_approval` e `rejected`. Pending plan espelhado em `agent_checkpoints.state.pendingPlan` E `agent_runs.meta.pendingPlan`. Resume NUNCA auto-aprovа — sempre re-aguarda decisão. Two signaling: in-process Map (fast) + 1.5s poll em `agent_runs.meta.pendingPlan.decision` (cross-isolate, PGMQ-safe). |
 
 ### Frontend (TanStack Start)

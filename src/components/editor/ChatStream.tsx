@@ -212,6 +212,14 @@ export function ChatStream({
                 {planRemainingLabel}
               </span>
             </header>
+            {pendingPlan.rationale && (
+              <p
+                className="px-4 pt-2.5 pb-1 text-[12px] italic text-[var(--silver)] leading-relaxed border-b border-[var(--primary)]/10"
+                data-testid="plan-rationale"
+              >
+                {pendingPlan.rationale}
+              </p>
+            )}
             <div className="p-3">
               <PlanViewer
                 plan={pendingPlan.steps}

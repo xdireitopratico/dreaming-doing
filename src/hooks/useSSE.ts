@@ -29,6 +29,8 @@ export interface PlanStep {
 export interface PendingPlan {
   planId: string;
   summary: string;
+  /** Justificativa amigável em PT-BR (1-2 frases) — exibida acima dos passos. */
+  rationale?: string;
   steps: PlanStep[];
   ttlMs: number;
   /** ISO timestamp do agent_proposed. */
@@ -358,6 +360,9 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
       const pendingPlan: PendingPlan = {
         planId,
         summary: typeof data.summary === "string" ? data.summary : "Plano proposto",
+        rationale: typeof data.rationale === "string" && data.rationale.trim()
+          ? data.rationale.trim()
+          : undefined,
         steps,
         ttlMs: typeof data.ttlMs === "number" ? data.ttlMs : 5 * 60 * 1000,
         proposedAt: Date.now(),

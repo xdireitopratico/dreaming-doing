@@ -17,11 +17,25 @@ export interface PlanStep {
   enabled: boolean;
 }
 
+/**
+ * Plano estruturado produzido pelo LLM no classify.
+ * `rationale` é a justificativa amigável em PT-BR (1-2 frases) —
+ * o que o agente explica pra o usuário sobre a abordagem escolhida.
+ * `steps` é a sequência concreta de ações (2-7 passos).
+ */
+export interface PlanRationale {
+  rationale: string;
+  steps: PlanStep[];
+}
+
 export interface ProposedPlan {
   planId: string;
   summary: string;
+  /** Justificativa amigável em PT-BR (1-2 frases) — exibida no UI acima dos passos. */
+  rationale?: string;
   steps: PlanStep[];
   ttlMs: number;
+  proposedAt?: string;
 }
 
 export const PLAN_APPROVAL_TTL_MS = 5 * 60 * 1000; // 5min
@@ -94,6 +108,93 @@ export function extractPlanFromLlmContent(
     if (steps.length > 0) return steps;
   }
   return null;
+}
+
+/**
+ * Extrai {rationale, steps} de um conteúdo JSON do LLM, quando ele segue
+ * o schema { plan: { rationale, steps[] } }. Retorna null se não achar.
+ */
+export function extractRationaleFromLlmContent(
+  content: string | null | undefined,
+): PlanRationale | null {
+  if (!content) return null;
+  const trimmed = content.trim();
+  if (!trimmed.startsWith("{")) return null;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(trimmed);
+  } catch {
+    return null;
+  }
+  if (!parsed || typeof parsed !== "object") return null;
+  const obj = parsed as Record<string, unknown>;
+  const planObj = obj.plan && typeof obj.plan === "object" && !Array.isArray(obj.plan)
+    ? obj.plan as Record<string, unknown>
+    : null;
+  if (!planObj) return null;
+  const rationale = typeof planObj.rationale === "string" && planObj.rationale.trim()
+    ? planObj.rationale.trim()
+    : "";
+  if (Array.isArray(planObj.steps)) {
+    const steps: PlanStep[] = [];
+    for (let i = 0; i < planObj.steps.length; i++) {
+      const s = coerceStep(planObj.steps[i], i);
+      if (s) steps.push(s);
+    }
+    if (steps.length > 0) {
+      return { rationale, steps };
+    }
+  }
+  return null;
+}
+
+/**
+ * Constrói o ProposedPlan final a partir do que o router devolveu:
+ * 1. Se classification.plan (LLM estruturado) tem steps → usa direto, com rationale
+ * 2. Senão tenta extrair do rawContent (LLM seguiu parcialmente o schema)
+ * 3. Senão usa deriveDefaultPlan (heurística) e rationale genérico
+ */
+export function buildProposedPlan(
+  classification: { type: string; summary: string; plan?: PlanRationale | null },
+  rawContent: string | null | undefined,
+  options: { planId: string; ttlMs: number; proposedAt?: string },
+): ProposedPlan {
+  const summary = classification.summary?.trim() || "Plano proposto";
+
+  // Caminho 1: plan estruturado veio do router
+  if (classification.plan && classification.plan.steps.length > 0) {
+    return {
+      planId: options.planId,
+      summary,
+      rationale: classification.plan.rationale || undefined,
+      steps: classification.plan.steps,
+      ttlMs: options.ttlMs,
+      proposedAt: options.proposedAt,
+    };
+  }
+
+  // Caminho 2: extrai do rawContent
+  const fromRaw = extractRationaleFromLlmContent(rawContent);
+  if (fromRaw && fromRaw.steps.length > 0) {
+    return {
+      planId: options.planId,
+      summary,
+      rationale: fromRaw.rationale || undefined,
+      steps: fromRaw.steps,
+      ttlMs: options.ttlMs,
+      proposedAt: options.proposedAt,
+    };
+  }
+
+  // Caminho 3: heurística default
+  return {
+    planId: options.planId,
+    summary,
+    rationale: "Plano gerado automaticamente pela heurística padrão — você pode editar cada passo antes de aprovar.",
+    steps: deriveDefaultPlan(classification.type, summary),
+    ttlMs: options.ttlMs,
+    proposedAt: options.proposedAt,
+  };
 }
 
 /**
