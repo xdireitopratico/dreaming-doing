@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as SkillsRouteImport } from './routes/skills'
 import { Route as SettingsRouteImport } from './routes/settings'
+import { Route as OnboardingRouteImport } from './routes/onboarding'
 import { Route as ModelsRouteImport } from './routes/models'
 import { Route as McpRouteImport } from './routes/mcp'
 import { Route as ConnectorsRouteImport } from './routes/connectors'
@@ -30,6 +31,11 @@ const SkillsRoute = SkillsRouteImport.update({
 const SettingsRoute = SettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const OnboardingRoute = OnboardingRouteImport.update({
+  id: '/onboarding',
+  path: '/onboarding',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ModelsRoute = ModelsRouteImport.update({
@@ -92,6 +98,7 @@ export interface FileRoutesByFullPath {
   '/connectors': typeof ConnectorsRoute
   '/mcp': typeof McpRoute
   '/models': typeof ModelsRoute
+  '/onboarding': typeof OnboardingRoute
   '/settings': typeof SettingsRoute
   '/skills': typeof SkillsRoute
   '/projects/': typeof ProjectsIndexRoute
@@ -106,6 +113,7 @@ export interface FileRoutesByTo {
   '/connectors': typeof ConnectorsRoute
   '/mcp': typeof McpRoute
   '/models': typeof ModelsRoute
+  '/onboarding': typeof OnboardingRoute
   '/settings': typeof SettingsRoute
   '/skills': typeof SkillsRoute
   '/projects': typeof ProjectsIndexRoute
@@ -121,6 +129,7 @@ export interface FileRoutesById {
   '/connectors': typeof ConnectorsRoute
   '/mcp': typeof McpRoute
   '/models': typeof ModelsRoute
+  '/onboarding': typeof OnboardingRoute
   '/settings': typeof SettingsRoute
   '/skills': typeof SkillsRoute
   '/projects/': typeof ProjectsIndexRoute
@@ -137,6 +146,7 @@ export interface FileRouteTypes {
     | '/connectors'
     | '/mcp'
     | '/models'
+    | '/onboarding'
     | '/settings'
     | '/skills'
     | '/projects/'
@@ -151,6 +161,7 @@ export interface FileRouteTypes {
     | '/connectors'
     | '/mcp'
     | '/models'
+    | '/onboarding'
     | '/settings'
     | '/skills'
     | '/projects'
@@ -165,6 +176,7 @@ export interface FileRouteTypes {
     | '/connectors'
     | '/mcp'
     | '/models'
+    | '/onboarding'
     | '/settings'
     | '/skills'
     | '/projects/'
@@ -180,6 +192,7 @@ export interface RootRouteChildren {
   ConnectorsRoute: typeof ConnectorsRoute
   McpRoute: typeof McpRoute
   ModelsRoute: typeof ModelsRoute
+  OnboardingRoute: typeof OnboardingRoute
   SettingsRoute: typeof SettingsRoute
   SkillsRoute: typeof SkillsRoute
   ProjectsIndexRoute: typeof ProjectsIndexRoute
@@ -201,6 +214,13 @@ declare module '@tanstack/react-router' {
       path: '/settings'
       fullPath: '/settings'
       preLoaderRoute: typeof SettingsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/onboarding': {
+      id: '/onboarding'
+      path: '/onboarding'
+      fullPath: '/onboarding'
+      preLoaderRoute: typeof OnboardingRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/models': {
@@ -284,6 +304,7 @@ const rootRouteChildren: RootRouteChildren = {
   ConnectorsRoute: ConnectorsRoute,
   McpRoute: McpRoute,
   ModelsRoute: ModelsRoute,
+  OnboardingRoute: OnboardingRoute,
   SettingsRoute: SettingsRoute,
   SkillsRoute: SkillsRoute,
   ProjectsIndexRoute: ProjectsIndexRoute,

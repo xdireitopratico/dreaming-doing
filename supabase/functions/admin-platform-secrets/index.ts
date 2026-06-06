@@ -12,8 +12,6 @@ const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
 
 const ALLOWED_NAMES = new Set([
-  "E2B_API_KEY",
-
   "XAI_API_KEY",
   "GROQ_API_KEY",
   "ANTHROPIC_API_KEY",

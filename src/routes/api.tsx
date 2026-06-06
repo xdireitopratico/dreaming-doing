@@ -23,7 +23,8 @@ import {
 } from "@/lib/save-connector";
 import { loadAgentPreferences } from "@/lib/agent-preferences";
 import { saveE2bApiKey, disconnectE2bApiKey } from "@/lib/save-e2b-key";
-import { isE2bConfigured } from "@/lib/e2b-status";
+import { isE2bConfigured, isE2bConnected, isE2bHealthOk } from "@/lib/e2b-status";
+import { testE2bApiKey, type E2bHealthResponse } from "@/lib/test-e2b-key";
 import {
   disconnectOllamaConnector,
   readOllamaMetaFromRows,
@@ -235,6 +236,8 @@ function ApiPage() {
   const [providers, setProviders] = useState(INITIAL);
   const [e2bKeyValue, setE2bKeyValue] = useState("");
   const [e2bConnected, setE2bConnected] = useState(false);
+  const [e2bHealth, setE2bHealth] = useState<E2bHealthResponse | null>(null);
+  const [e2bTesting, setE2bTesting] = useState(false);
   const [ollamaBaseUrl, setOllamaBaseUrl] = useState("http://localhost:11434");
   const [ollamaModel, setOllamaModel] = useState("llama3.2");
   const [ollamaApiKey, setOllamaApiKey] = useState("");
@@ -262,7 +265,18 @@ function ApiPage() {
 
   useEffect(() => {
     if (!connectorRows) return;
-    setE2bConnected(isE2bConfigured(connectorRows));
+    const e2bRow = connectorRows.find((r) => r.kind === "e2b");
+    setE2bConnected(isE2bConnected(connectorRows));
+    if (isE2bHealthOk(e2bRow?.meta)) {
+      setE2bHealth({
+        ok: true,
+        templateUsed: (e2bRow?.meta as { e2bTemplate?: string })?.e2bTemplate,
+        nodeVersion: (e2bRow?.meta as { e2bNodeVersion?: string })?.e2bNodeVersion,
+        npmVersion: (e2bRow?.meta as { e2bNpmVersion?: string })?.e2bNpmVersion,
+      });
+    } else if (!isE2bConfigured(connectorRows)) {
+      setE2bHealth(null);
+    }
     const ollamaMeta = readOllamaMetaFromRows(connectorRows);
     setOllamaConnected(!!ollamaMeta);
     if (ollamaMeta) {
@@ -391,6 +405,29 @@ function ApiPage() {
     [qc],
   );
 
+  const handleTestE2b = useCallback(async () => {
+    setE2bTesting(true);
+    try {
+      const token = e2bKeyValue.trim().startsWith("e2b") ? e2bKeyValue : undefined;
+      const result = await testE2bApiKey(token);
+      setE2bHealth(result);
+      if (result.ok) {
+        toast.success(
+          `Sandbox OK — ${result.templateUsed ?? "template"} · ${result.nodeVersion ?? "node"} · ${result.npmVersion ?? "npm"}`,
+        );
+        await qc.invalidateQueries({ queryKey: ["connectors-public"] });
+        if (!token) setE2bConnected(true);
+      } else {
+        toast.error(result.error ?? "Teste E2B falhou");
+      }
+    } catch (e: unknown) {
+      setE2bHealth({ ok: false, error: e instanceof Error ? e.message : "Falha no teste" });
+      toast.error(e instanceof Error ? e.message : "Falha no teste E2B");
+    } finally {
+      setE2bTesting(false);
+    }
+  }, [e2bKeyValue, qc]);
+
   const handleSaveE2b = useCallback(async () => {
     if (!e2bKeyValue.trim().startsWith("e2b")) {
       toast.error("Cole uma chave E2B válida (prefixo e2b_)");
@@ -402,7 +439,7 @@ function ApiPage() {
       setE2bKeyValue("");
       setE2bConnected(true);
       await qc.invalidateQueries({ queryKey: ["connectors-public"] });
-      toast.success("Sandbox E2B conectado");
+      toast.success("Sandbox E2B validado e salvo (create + npm smoke OK)");
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : "Falha ao salvar E2B");
     } finally {
@@ -636,6 +673,17 @@ function ApiPage() {
           saved={e2bConnected}
           disabled={savingId === "e2b"}
         />
+        {e2bHealth && (
+          <p
+            className={`font-mono text-[9px] mb-3 ${
+              e2bHealth.ok ? "text-[var(--success)]" : "text-[var(--destructive)]"
+            }`}
+          >
+            {e2bHealth.ok
+              ? `OK · template ${e2bHealth.templateUsed ?? "?"} · ${e2bHealth.nodeVersion ?? ""} · ${e2bHealth.npmVersion ?? ""}`
+              : `Falha: ${e2bHealth.error ?? "teste não passou"}`}
+          </p>
+        )}
         <div className="mt-2 flex flex-wrap gap-2">
           <Button
             type="button"
@@ -644,7 +692,20 @@ function ApiPage() {
             disabled={savingId === "e2b" || !e2bKeyValue.trim()}
             onClick={() => void handleSaveE2b()}
           >
-            {savingId === "e2b" ? "Salvando…" : e2bConnected ? "Atualizar chave" : "Salvar chave E2B"}
+            {savingId === "e2b"
+              ? "Validando sandbox…"
+              : e2bConnected
+                ? "Atualizar chave"
+                : "Salvar e validar E2B"}
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            disabled={e2bTesting || savingId === "e2b" || (!e2bKeyValue.trim() && !e2bConnected)}
+            onClick={() => void handleTestE2b()}
+          >
+            {e2bTesting ? "Testando…" : "Testar sandbox"}
           </Button>
           <a
             href="https://e2b.dev/docs"

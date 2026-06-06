@@ -3,17 +3,19 @@
  */
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { E2B_TEMPLATE_DEFAULT, e2bDeleteSandbox, patchProjectFilesForE2b } from "./e2b.ts";
-import { e2bRestConnect, e2bRestCreate, type E2bRestSandbox } from "./e2b-rest.ts";
+import { createValidatedE2bSandbox } from "./e2b-smoke.ts";
+import { e2bRestConnect, type E2bRestSandbox } from "./e2b-rest.ts";
 
-/** Renovação de lease no meta (não recria sandbox). */
-const SANDBOX_LEASE_MS = 30 * 24 * 60 * 60 * 1000;
+/** Alinhado ao timeout real da API E2B (30 min). */
 const SANDBOX_TIMEOUT_SEC = 30 * 60;
+const SANDBOX_LEASE_MS = SANDBOX_TIMEOUT_SEC * 1000;
 
 export type ProjectSandboxMeta = {
   previewSandboxId?: string;
   previewExpiresAt?: string;
   previewUrl?: string;
   previewPort?: number;
+  e2bTemplate?: string;
 };
 
 export function readSandboxMeta(
@@ -25,6 +27,7 @@ export function readSandboxMeta(
     previewExpiresAt: typeof m.previewExpiresAt === "string" ? m.previewExpiresAt : undefined,
     previewUrl: typeof m.previewUrl === "string" ? m.previewUrl : undefined,
     previewPort: typeof m.previewPort === "number" ? m.previewPort : undefined,
+    e2bTemplate: typeof m.e2bTemplate === "string" ? m.e2bTemplate : undefined,
   };
 }
 
@@ -70,15 +73,12 @@ export type ConnectSandboxResult = {
 const NO_SANDBOX_MSG =
   "Ainda não há ambiente ao vivo. Envie um pedido ao agente para ele começar a programar.";
 
-const SANDBOX_GONE_MSG =
-  "O ambiente deste projeto não está mais disponível. Exclua o projeto e crie outro se precisar de um ambiente novo.";
-
 /** Agente: cria sandbox uma única vez por projeto; depois só reconecta. */
 export async function ensureAgentProjectSandbox(
   supabase: SupabaseClient,
   projectId: string,
   apiKey: string,
-  template = E2B_TEMPLATE_DEFAULT,
+  _template = E2B_TEMPLATE_DEFAULT,
 ): Promise<ConnectSandboxResult> {
   const { existing, sm } = await loadProjectMeta(supabase, projectId);
 
@@ -89,27 +89,22 @@ export async function ensureAgentProjectSandbox(
       return { sandbox, sandboxId: sandbox.sandboxId, reused: true };
     } catch (e) {
       console.warn("[project-sandbox] stale sandbox, recreating:", sm.previewSandboxId, e);
-      const cleared = { ...existing, previewSandboxId: undefined, previewUrl: undefined };
+      await killProjectSandbox(apiKey, sm.previewSandboxId);
+      const cleared = {
+        ...existing,
+        previewSandboxId: undefined,
+        previewUrl: undefined,
+        previewExpiresAt: undefined,
+      };
       await supabase.from("projects").update({ meta: cleared }).eq("id", projectId);
     }
   }
 
-  let sandbox;
-  const templates = [...new Set([template, E2B_TEMPLATE_DEFAULT, "code-interpreter-v1", "base"].filter(Boolean))];
-  let lastErr: unknown;
-  for (const tpl of templates) {
-    try {
-      sandbox = await e2bRestCreate(apiKey, tpl, SANDBOX_TIMEOUT_SEC);
-      if (tpl !== template) console.warn(`[project-sandbox] template fallback: ${tpl}`);
-      break;
-    } catch (e) {
-      lastErr = e;
-    }
-  }
-  if (!sandbox) throw lastErr instanceof Error ? lastErr : new Error(String(lastErr));
+  const { sandbox, templateUsed } = await createValidatedE2bSandbox(apiKey);
 
   await touchSandboxLease(supabase, projectId, existing, sandbox.sandboxId, {
     previewUrl: undefined,
+    e2bTemplate: templateUsed,
   });
 
   const { data: files } = await supabase
@@ -120,10 +115,11 @@ export async function ensureAgentProjectSandbox(
     await syncProjectFilesToSandbox(sandbox, files);
   }
 
+  console.log(`[project-sandbox] created ${sandbox.sandboxId} template=${templateUsed}`);
   return { sandbox, sandboxId: sandbox.sandboxId, reused: false };
 }
 
-/** Preview: só reconecta — nunca cria sandbox (agente é dono da criação). */
+/** Preview: reconecta; recria só se connect falhar. */
 export async function connectProjectSandboxForPreview(
   supabase: SupabaseClient,
   projectId: string,
@@ -141,6 +137,7 @@ export async function connectProjectSandboxForPreview(
     return { sandbox, sandboxId: sandbox.sandboxId, reused: true };
   } catch (e) {
     console.warn("[project-sandbox] preview connect failed, recreating:", e);
+    await killProjectSandbox(apiKey, sm.previewSandboxId);
     return ensureAgentProjectSandbox(supabase, projectId, apiKey);
   }
 }
@@ -151,8 +148,8 @@ export async function killProjectSandbox(
   sandboxId: string | undefined,
 ): Promise<void> {
   if (!sandboxId) return;
-  await e2bDeleteSandbox(apiKey, sandboxId);
-  console.log(`[project-sandbox] killed ${sandboxId}`);
+  const ok = await e2bDeleteSandbox(apiKey, sandboxId);
+  if (ok) console.log(`[project-sandbox] killed ${sandboxId}`);
 }
 
 export async function syncProjectFilesToSandbox(

@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import { runE2bSmokeTest } from "../_shared/e2b-smoke.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -218,6 +219,23 @@ Deno.serve(async (req) => {
       if (pool.length > 1) tokenEncrypted = JSON.stringify(pool);
     } else if (kind === "openai" && metaIn.provider === "ollama") {
       tokenEncrypted = "ollama";
+    }
+
+    if (kind === "e2b" && token) {
+      const smoke = await runE2bSmokeTest(token);
+      if (!smoke.ok) {
+        return json({
+          error: smoke.error ??
+            "Chave E2B inválida ou template sem Node/npm. Gere nova chave em e2b.dev.",
+          code: smoke.keyOk ? "e2b_template_failed" : "e2b_key_invalid",
+          smoke,
+        }, 400);
+      }
+      metaIn.e2bHealthOk = true;
+      metaIn.e2bHealthCheckedAt = new Date().toISOString();
+      metaIn.e2bTemplate = smoke.templateUsed;
+      metaIn.e2bNodeVersion = smoke.nodeVersion;
+      metaIn.e2bNpmVersion = smoke.npmVersion;
     }
 
     const meta: Record<string, unknown> = {

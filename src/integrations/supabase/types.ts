@@ -261,6 +261,8 @@ export type Database = {
           taste_start_remaining: number
           taste_lead_email: string | null
           taste_lead_consent_at: string | null
+          onboarding_completed_at: string | null
+          onboarding_step: string | null
           updated_at: string
         }
         Insert: {
@@ -271,6 +273,8 @@ export type Database = {
           id: string
           integration_prefs?: Json
           trial_messages_remaining?: number
+          onboarding_completed_at?: string | null
+          onboarding_step?: string | null
           updated_at?: string
         }
         Update: {
@@ -281,6 +285,8 @@ export type Database = {
           id?: string
           integration_prefs?: Json
           trial_messages_remaining?: number
+          onboarding_completed_at?: string | null
+          onboarding_step?: string | null
           updated_at?: string
         }
         Relationships: []

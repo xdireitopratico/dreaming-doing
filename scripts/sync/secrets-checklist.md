@@ -11,13 +11,17 @@ supabase secrets set --project-ref dpduljngdurfpmaclffa \
 
 Ou no dashboard: **Edge Functions → Settings → Secrets**.
 
-## Obrigatórias (núcleo do agente + sandbox)
+## Obrigatórias (núcleo do agente)
 
 - [ ] `ANTHROPIC_API_KEY` — Claude (provider principal)
 - [ ] `XAI_API_KEY` — Grok (fallback main)
 - [ ] `GROQ_API_KEY` — Llama via Groq (provider cheap)
 - [ ] `LOVABLE_API_KEY` — Lovable AI Gateway (último fallback)
-- [ ] `E2B_API_KEY` — Sandbox de preview ao vivo
+
+## E2B (usuário — não é Edge secret)
+
+- [ ] Chave `e2b_...` em **API Keys** (`/api`) — obrigatória para sandbox/preview
+- [ ] Opcional: `E2B_TEMPLATE` — override (padrão `code-interpreter-v1`)
 - [ ] `SUPABASE_URL` — Auto-injetado pela CLI; só confirme
 - [ ] `SUPABASE_ANON_KEY` — Auto-injetado
 - [ ] `SUPABASE_SERVICE_ROLE_KEY` — Auto-injetado

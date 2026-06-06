@@ -1,10 +1,12 @@
 # Secrets globais do FORGE
 
-Chaves **globais do projeto** (E2B, fallback Groq/xAI, etc.) **não** ficam em `/api-keys`.
+Chaves **globais do projeto** (fallback Groq/xAI, etc.) ficam em **Ajustes → Secrets globais**.
+
+**E2B (sandbox)** não usa secret global — somente chave do usuário em **API Keys** (`/api`).
 
 ## Painel no app (recomendado)
 
-1. Login como **xdireitopratico@gmail.com**
+1. Login como administrador FORGE
 2. **Ajustes** → `/settings`
 3. Seção **Secrets globais do projeto**
 
@@ -15,28 +17,34 @@ Valores ficam em `platform_secrets`. RLS bloqueia acesso direto; só Edge Functi
 1. [Supabase Dashboard](https://supabase.com/dashboard/project/dpduljngdurfpmaclffa)
 2. **Project Settings** → **Edge Functions** → **Secrets**
 
-## Secrets usuais
+## Secrets usuais (plataforma)
 
 | Nome | Uso |
 |------|-----|
-| `E2B_API_KEY` | Preview ao vivo (sandbox) |
-| `E2B_TEMPLATE` | ID do template E2B (ex. `nodejs`) — **não é chave**; opcional, padrão `nodejs` |
+| `E2B_TEMPLATE` | Opcional — override do template padrão (`code-interpreter-v1`) |
 | `XAI_API_KEY` | Fallback STT Grok e agente |
 | `GROQ_API_KEY` | Fallback Whisper e agente |
 | `ANTHROPIC_API_KEY` | Fallback Claude |
 | `OPENAI_API_KEY` | Fallback GPT |
 | `NVIDIA_API_KEY` | Fallback NIM |
 
+## E2B (usuário — obrigatório)
+
+| Onde | O quê |
+|------|--------|
+| `/api` → Sandbox E2B | Chave `e2b_...` do usuário |
+| `e2b-health` | Teste create + node/npm smoke ao salvar |
+| Template padrão | `code-interpreter-v1` (com Node/npm para Vite) |
+
 ## CLI
 
 ```bash
 supabase secrets set --project-ref dpduljngdurfpmaclffa \
   XAI_API_KEY="sua-chave" \
-  GROQ_API_KEY="sua-chave" \
-  E2B_API_KEY="sua-chave"
+  GROQ_API_KEY="sua-chave"
 ```
 
-Prioridade nas Edge Functions: **vault FORGE (Ajustes)** → **Supabase Edge env** → chaves do usuário em `/api-keys`.
+Prioridade nas Edge Functions: **vault FORGE (Ajustes)** → **Supabase Edge env** → chaves do usuário em `/api`.
 
 ## Modo FORGE vs conta própria (`profiles.integration_prefs`)
 
@@ -44,7 +52,5 @@ Prioridade nas Edge Functions: **vault FORGE (Ajustes)** → **Supabase Edge env
 |----------|---------|-------|
 | GitHub / Vercel / Cloudflare | Infra e tokens globais FORGE quando aplicável | Token em `connectors` via `/connectors` ou editor |
 | Supabase | Projeto FORGE do deploy | `VITE_SUPABASE_*` no deploy do usuário |
-| E2B (sandbox) | `E2B_API_KEY` global | Chave própria (em breve) |
-| LLM / STT | Fallback global + **tira-gosto** (`trial_messages_remaining`) | Sempre `/api-keys` (BYOK) |
-
-**Tira-gosto:** sem chave LLM do usuário, o agente usa **ROBIN + pool NVIDIA** do administrador (`xdireitopratico@gmail.com` em API Keys → pool). Cada execução decrementa `trial_messages_remaining` (padrão 8). Com chaves próprias em API Keys, não consome trial.
+| E2B (sandbox) | — | **Sempre** chave em `/api` (BYOK) |
+| LLM / STT | Fallback global + **tira-gosto** | Sempre `/api` (BYOK) |

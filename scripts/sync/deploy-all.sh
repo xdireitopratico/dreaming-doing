@@ -8,6 +8,7 @@ FUNCTIONS=(
   agent-worker
   admin-platform-secrets
   connector-upsert
+  e2b-health
   deploy-publish
   github-import
   mcp-server

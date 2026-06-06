@@ -1083,7 +1083,11 @@ function EditorPage() {
                         devUrl={devUrl}
                         previewPath={previewRoute}
                         iframeRef={previewIframeRef}
-                        bootError={previewBoot.lastError}
+                        bootError={
+                          previewBoot.bootLogs
+                            ? `${previewBoot.lastError ?? "Vite subindo"} — ${previewBoot.bootLogs.slice(0, 280)}`
+                            : previewBoot.lastError
+                        }
                         warming={previewBoot.warming}
                         onWarmComplete={previewBoot.clearWarming}
                         onRefresh={() => previewBoot.boot({ force: true })}

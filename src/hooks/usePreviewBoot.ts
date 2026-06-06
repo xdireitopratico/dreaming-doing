@@ -43,6 +43,7 @@ export function usePreviewBoot(projectId: string, opts?: UsePreviewBootOpts) {
   const [booting, setBooting] = useState(false);
   const [lastError, setLastError] = useState<string | null>(null);
   const [warming, setWarming] = useState(false);
+  const [bootLogs, setBootLogs] = useState<string | null>(null);
   const bootAttemptsRef = useRef(0);
   const probeFailuresRef = useRef(0);
   const qc = useQueryClient();
@@ -128,8 +129,16 @@ export function usePreviewBoot(projectId: string, opts?: UsePreviewBootOpts) {
         if (!body) return null;
 
         await qc.invalidateQueries({ queryKey: ["project", projectId] });
+        if (body.logs) setBootLogs(body.logs);
         if (body.url) {
-          if (body.ready === false) setWarming(true);
+          if (body.ready === false) {
+            setWarming(true);
+            if (body.logs && !opts?.silent) {
+              setLastError(`Vite ainda subindo. Logs: ${body.logs.slice(0, 400)}`);
+            }
+          } else {
+            setBootLogs(null);
+          }
           if (body.published && body.publishedUrl) {
             toast.success("Site no ar", { description: body.publishedUrl, duration: 5000 });
           } else if (!body.reused && !opts?.silent) {
@@ -203,6 +212,7 @@ export function usePreviewBoot(projectId: string, opts?: UsePreviewBootOpts) {
     boot,
     bootWithRetry,
     lastError,
+    bootLogs,
     warming,
     clearWarming: () => setWarming(false),
     clearError: () => setLastError(null),

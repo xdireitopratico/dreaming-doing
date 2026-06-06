@@ -2,8 +2,25 @@
 
 export const E2B_API_BASE = Deno.env.get("E2B_API_BASE") || "https://api.e2b.app";
 export const E2B_DOMAIN = Deno.env.get("E2B_DOMAIN") || "e2b.app";
-/** Template com Node/npm para Vite. Padrão alinhado com EDGE-SECRETS.md. */
-export const E2B_TEMPLATE_DEFAULT = Deno.env.get("E2B_TEMPLATE") || "base";
+/** Template preferido com Node/npm (nodejs foi removido pela E2B). */
+export const E2B_TEMPLATE_PREFERRED = "code-interpreter-v1";
+
+/** Override opcional via Edge secret E2B_TEMPLATE. */
+export const E2B_TEMPLATE_DEFAULT = Deno.env.get("E2B_TEMPLATE")?.trim() || E2B_TEMPLATE_PREFERRED;
+
+/** Ordem de tentativa na criação — só persiste sandbox após smoke npm. */
+export function e2bTemplateCandidates(requested?: string): string[] {
+  const req = requested?.trim();
+  return [...new Set([
+    req,
+    E2B_TEMPLATE_DEFAULT,
+    E2B_TEMPLATE_PREFERRED,
+    "base",
+  ].filter((t): t is string => !!t))];
+}
+
+export const E2B_TEMPLATE_CANDIDATES = e2bTemplateCandidates();
+
 export const E2B_PROJECT_DIR = "/home/user";
 
 /** URL pública do serviço no sandbox (Vite, etc.). Preferir `getHost` do SDK quando disponível. */
@@ -89,13 +106,20 @@ export async function e2bCreateSandbox(
   return { sandboxID, raw: data as Record<string, unknown> };
 }
 
-export async function e2bDeleteSandbox(apiKey: string, sandboxId: string): Promise<void> {
+export async function e2bDeleteSandbox(apiKey: string, sandboxId: string): Promise<boolean> {
   try {
-    await fetch(`${E2B_API_BASE}/sandboxes/${sandboxId}`, {
+    const resp = await fetch(`${E2B_API_BASE}/sandboxes/${sandboxId}`, {
       method: "DELETE",
       headers: { "X-API-Key": apiKey },
     });
-  } catch {
-    /* ignore */
+    if (!resp.ok) {
+      const body = await resp.text().catch(() => "");
+      console.warn(`[e2b] delete ${sandboxId} HTTP ${resp.status}: ${body.slice(0, 200)}`);
+      return false;
+    }
+    return true;
+  } catch (e) {
+    console.warn(`[e2b] delete ${sandboxId} failed:`, e);
+    return false;
   }
 }

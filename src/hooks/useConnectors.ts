@@ -14,7 +14,7 @@ import {
 } from "@/lib/connectors/integration-prefs";
 import { CONNECTOR_REGISTRY } from "@/lib/connectors/registry";
 import { hasLlmConnectorRows } from "@/lib/connector-llm";
-import { isE2bConfigured } from "@/lib/e2b-status";
+import { isE2bConfigured, isE2bConnected } from "@/lib/e2b-status";
 
 export type ConnectorStatus = {
   connected: boolean;
@@ -79,6 +79,7 @@ export function useConnectors() {
   const supabaseRow = rows.find((r) => (r.kind as string) === "supabase");
   const e2bRow = rows.find((r) => (r.kind as string) === "e2b");
   const e2bConfigured = isE2bConfigured(rows);
+  const e2bReady = isE2bConnected(rows);
 
   const status: Record<ConnectorId, ConnectorStatus> = {
     github: {
@@ -118,8 +119,12 @@ export function useConnectors() {
     },
     e2b: {
       forgeAvailable: CONNECTOR_REGISTRY.e2b.forgeAvailable,
-      connected: e2bConfigured,
-      label: e2bConfigured ? "E2B · sua conta" : undefined,
+      connected: e2bReady,
+      label: e2bReady
+        ? `E2B · ${(e2bRow?.meta as { e2bTemplate?: string })?.e2bTemplate ?? "ok"}`
+        : e2bConfigured
+          ? "E2B · teste pendente"
+          : undefined,
       meta: (e2bRow?.meta as Record<string, unknown>) ?? {},
     },
   };
