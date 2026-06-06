@@ -2,7 +2,7 @@
  * Um sandbox E2B por projeto — criado pelo agente, reutilizado sempre, encerrado só ao excluir o projeto.
  */
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
-import { E2B_TEMPLATE_DEFAULT, patchProjectFilesForE2b } from "./e2b.ts";
+import { E2B_TEMPLATE_DEFAULT, e2bDeleteSandbox, patchProjectFilesForE2b } from "./e2b.ts";
 import { e2bRestConnect, e2bRestCreate, type E2bRestSandbox } from "./e2b-rest.ts";
 
 /** Renovação de lease no meta (não recria sandbox). */
@@ -88,8 +88,9 @@ export async function ensureAgentProjectSandbox(
       await touchSandboxLease(supabase, projectId, existing, sandbox.sandboxId);
       return { sandbox, sandboxId: sandbox.sandboxId, reused: true };
     } catch (e) {
-      console.error("[project-sandbox] reconnect failed:", e);
-      throw new Error(SANDBOX_GONE_MSG);
+      console.warn("[project-sandbox] stale sandbox, recreating:", sm.previewSandboxId, e);
+      const cleared = { ...existing, previewSandboxId: undefined, previewUrl: undefined };
+      await supabase.from("projects").update({ meta: cleared }).eq("id", projectId);
     }
   }
 
@@ -98,6 +99,14 @@ export async function ensureAgentProjectSandbox(
   await touchSandboxLease(supabase, projectId, existing, sandbox.sandboxId, {
     previewUrl: undefined,
   });
+
+  const { data: files } = await supabase
+    .from("project_files")
+    .select("path, content")
+    .eq("project_id", projectId);
+  if (files?.length) {
+    await syncProjectFilesToSandbox(sandbox, files);
+  }
 
   return { sandbox, sandboxId: sandbox.sandboxId, reused: false };
 }
@@ -119,8 +128,8 @@ export async function connectProjectSandboxForPreview(
     await touchSandboxLease(supabase, projectId, existing, sandbox.sandboxId);
     return { sandbox, sandboxId: sandbox.sandboxId, reused: true };
   } catch (e) {
-    console.error("[project-sandbox] preview connect failed:", e);
-    throw new Error(SANDBOX_GONE_MSG);
+    console.warn("[project-sandbox] preview connect failed, recreating:", e);
+    return ensureAgentProjectSandbox(supabase, projectId, apiKey);
   }
 }
 
@@ -130,12 +139,8 @@ export async function killProjectSandbox(
   sandboxId: string | undefined,
 ): Promise<void> {
   if (!sandboxId) return;
-  try {
-    const sandbox = await e2bRestConnect(apiKey, sandboxId, SANDBOX_TIMEOUT_SEC);
-    await sandbox.kill();
-  } catch {
-    /* já expirou na E2B */
-  }
+  await e2bDeleteSandbox(apiKey, sandboxId);
+  console.log(`[project-sandbox] killed ${sandboxId}`);
 }
 
 export async function syncProjectFilesToSandbox(

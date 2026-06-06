@@ -429,8 +429,8 @@ function EditorPage() {
       toast.error(sse.progress.error);
       setRunning(false);
     }
-    if (sse.progress.finished && sse.progress.resumable && sse.progress.error) {
-      toast.warning(sse.progress.error, { duration: 8000 });
+    if (sse.progress.finished && sse.progress.resumable && sse.progress.error && !sse.progress.autoResuming) {
+      toast.warning(sse.progress.error, { duration: 5000 });
       setRunning(false);
     }
   }, [sse.progress.error, sse.progress.finished, sse.progress.resumable]);

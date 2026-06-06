@@ -21,7 +21,7 @@ export const TOOL_LABELS: Record<string, ToolLabel> = {
   edit_tool: { label: "Edição", icon: "Edit3", category: "code" },
   task_tool: { label: "Sub-agente", icon: "Bot", category: "code" },
   grep_tool: { label: "Buscar no código", icon: "Search", category: "code" },
-  glob_tool: { label: "Buscar arquivos", icon: "Glob", category: "code" },
+  glob_tool: { label: "Buscar arquivos", icon: "Globe", category: "code" },
   list_tool: { label: "Listar diretório", icon: "List", category: "file" },
   deploy_publish: { label: "Publicar projeto", icon: "Globe", category: "deploy" },
   deploy_preview: { label: "Preview deploy", icon: "Eye", category: "deploy" },

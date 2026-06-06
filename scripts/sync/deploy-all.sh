@@ -5,6 +5,7 @@ set -euo pipefail
 REF="dpduljngdurfpmaclffa"
 FUNCTIONS=(
   agent-run
+  agent-worker
   admin-platform-secrets
   connector-upsert
   deploy-publish

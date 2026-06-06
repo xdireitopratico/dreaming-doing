@@ -39,6 +39,9 @@ Deno.serve(async (req) => {
       await killProjectSandbox(e2bKey, sm.previewSandboxId);
     }
 
+    await supabase.from("agent_checkpoints").delete().eq("project_id", projectId);
+    await supabase.from("agent_pending_messages").delete().eq("project_id", projectId);
+
     const { error: delErr } = await supabase.from("projects").delete().eq("id", projectId);
     if (delErr) return json({ error: delErr.message }, 500);
 

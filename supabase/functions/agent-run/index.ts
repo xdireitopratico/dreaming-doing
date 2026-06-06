@@ -36,6 +36,9 @@ import { FORGE_CORS_HEADERS, corsPreflightResponse } from "../_shared/cors.ts";
 import { restoreExecutionLogFromRows } from "./executionLogMeta.ts";
 import { loadCheckpoint } from "./checkpoint.ts";
 import { buildSandboxEnv } from "./sandbox-env.ts";
+import { enqueueAgentChunk, invokeAgentWorker } from "../_shared/agent-queue.ts";
+import { fetchStreamEventsSince } from "../_shared/agent-stream.ts";
+import { executeAgentJob } from "./run-job.ts";
 const runningLocks = new Map<string, Promise<unknown>>();
 
 const corsHeaders = FORGE_CORS_HEADERS;
@@ -156,13 +159,33 @@ Deno.serve(async (req) => {
     const tasteStartRemaining =
       typeof profile?.taste_start_remaining === "number" ? profile.taste_start_remaining : 1;
 
-    if (runningLocks.has(projectId)) {
-      if (resumeRun) {
-        runningLocks.delete(projectId);
-      } else {
-        return json({ error: "Agente já está executando neste projeto. Aguarde a conclusão." }, 409);
-      }
+    const { data: activeRun } = await supabase
+      .from("agent_runs")
+      .select("id")
+      .eq("project_id", projectId)
+      .eq("status", "running")
+      .maybeSingle();
+
+    if ((runningLocks.has(projectId) || activeRun) && !resumeRun) {
+      await supabase.from("agent_pending_messages").insert({
+        project_id: projectId,
+        conversation_id: conversationId,
+        user_id: userData.user.id,
+        body: {
+          preferences,
+          sessionKind: sessionKindRaw,
+          enabledSkillIds,
+          enabledMcpIds,
+        },
+      });
+      return json({
+        ok: true,
+        queued: true,
+        message: "Mensagem na fila — o agente processará quando terminar a tarefa atual.",
+      });
     }
+
+    if (resumeRun) runningLocks.delete(projectId);
     runningLocks.set(projectId, Promise.resolve());
 
     const { data: history } = await supabase
@@ -576,18 +599,51 @@ Deno.serve(async (req) => {
       );
     };
 
-    // Agente = AgentLoop na Edge (tools/MCP/deploy completos).
-    // E2B só executa shell/fs via sandbox.ts — não duplicar loop em runner.mjs.
-    // Sessões longas: checkpoint + auto-resume no cliente (useSSE, ~110s/chunk).
+    // Canônico: AgentLoop (run-job.ts). Chunks longos: PGMQ + agent-worker (servidor).
+    // Fallback inline se PGMQ indisponível.
+
+    const jobParams = {
+      projectId,
+      conversationId,
+      userId: userData.user.id,
+      agentRunId: agentRunId!,
+      resumeRun,
+      preferences,
+      sessionKindRaw,
+      enabledSkillIds,
+      enabledMcpIds,
+    };
+
+    const queuePayload = {
+      runId: agentRunId!,
+      projectId,
+      conversationId,
+      userId: userData.user.id,
+      resume: resumeRun,
+      accessToken: token,
+      body: {
+        preferences,
+        sessionKind: tasteStart ? "taste_start" : "byok",
+        enabledSkillIds,
+        enabledMcpIds,
+      },
+    };
 
     if (!useSSE) {
-      const loop = makeLoop(() => {});
-      const result = await loop.run();
+      const result = await executeAgentJob(supabase, jobParams, () => {});
       await finalizeRun(result);
       cleanup();
       return json(result);
     }
 
+    const queued = await enqueueAgentChunk(supabase, queuePayload);
+    if (queued) {
+      await invokeAgentWorker(SUPABASE_URL, SERVICE_KEY);
+      cleanup();
+      return streamEventsResponse(supabase, agentRunId!, cleanup);
+    }
+
+    // Fallback: SSE inline (sem PGMQ)
     const stream = new ReadableStream({
       start(controller) {
         const emit = (data: Record<string, unknown>) => {
@@ -605,40 +661,26 @@ Deno.serve(async (req) => {
           robin: effectiveRobin,
           taste: tasteStart,
           resume: resumeRun,
-          autoResume,
           checkpoint: !!loadedCheckpoint,
-          resumedFromStep: loadedCheckpoint?.state.currentStepIndex ?? null,
           sessionKind: tasteStart ? "taste_start" : "byok",
           memoryMessages: loadedCheckpoint?.state.messages.length ?? messages.length,
-          enabledSkillIds,
-          enabledMcpIds,
-          activeSkills: sessionExt.skillNames,
-          activeMcps: sessionExt.mcpNames,
+          inlineFallback: true,
         });
 
-        const loop = makeLoop((type, data) => emit({ type, data }));
-
-        loop.run().then(async (result) => {
-          await finalizeRun(result);
-          cleanup();
-          emit({
-            type: "finish",
-            ...result,
-            resumable: !result.ok && !result.canceled,
+        executeAgentJob(supabase, jobParams, (type, data) => emit({ type, data }))
+          .then(async (result) => {
+            await finalizeRun(result);
+            cleanup();
+            emit({ type: "finish", ...result, resumable: !result.ok && !result.canceled });
+            try { controller.close(); } catch { /* closed */ }
+          })
+          .catch(async (err) => {
+            await finalizeRun({ ok: false, error: (err as Error)?.message, steps: 0 });
+            cleanup();
+            emit({ type: "error", error: (err as Error)?.message, recoverable: true });
+            emit({ type: "finish", ok: false, error: (err as Error)?.message, resumable: true });
+            try { controller.close(); } catch { /* closed */ }
           });
-          try { controller.close(); } catch { /* closed */ }
-        }).catch(async (err) => {
-          await finalizeRun({ ok: false, error: err?.message, steps: 0 });
-          cleanup();
-          emit({
-            type: "error",
-            error: err?.message ?? "erro desconhecido",
-            recoverable: true,
-            message: "Conexão interrompida. Histórico salvo — use Continuar no editor.",
-          });
-          emit({ type: "finish", ok: false, error: err?.message, resumable: true });
-          try { controller.close(); } catch { /* closed */ }
-        });
       },
     });
 
@@ -647,7 +689,7 @@ Deno.serve(async (req) => {
         ...corsHeaders,
         "Content-Type": "text/event-stream",
         "Cache-Control": "no-cache",
-        "Connection": "keep-alive",
+        Connection: "keep-alive",
         "X-Accel-Buffering": "no",
       },
     });
@@ -659,4 +701,49 @@ Deno.serve(async (req) => {
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+}
+
+function streamEventsResponse(
+  supabase: ReturnType<typeof createClient>,
+  runId: string,
+  cleanup: () => void,
+): Response {
+  const stream = new ReadableStream({
+    async start(controller) {
+      const enc = new TextEncoder();
+      let seq = 0;
+      let finished = false;
+      const deadline = Date.now() + 45 * 60 * 1000;
+
+      try {
+        while (!finished && Date.now() < deadline) {
+          const events = await fetchStreamEventsSince(supabase, runId, seq);
+          for (const ev of events) {
+            const payload = ev.payload?.type
+              ? ev.payload
+              : { type: ev.event_type, ...(ev.payload as Record<string, unknown>) };
+            controller.enqueue(enc.encode(`data: ${JSON.stringify(payload)}\n\n`));
+            seq = ev.seq;
+            if (ev.event_type === "finish" || ev.event_type === "done") finished = true;
+          }
+          if (!finished) await new Promise((r) => setTimeout(r, 350));
+        }
+      } catch {
+        /* stream fechado */
+      } finally {
+        cleanup();
+        try { controller.close(); } catch { /* */ }
+      }
+    },
+  });
+
+  return new Response(stream, {
+    headers: {
+      ...corsHeaders,
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      Connection: "keep-alive",
+      "X-Accel-Buffering": "no",
+    },
+  });
 }

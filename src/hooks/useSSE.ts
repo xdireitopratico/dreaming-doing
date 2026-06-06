@@ -69,10 +69,8 @@ const initialState: AgentProgress = {
   autoResuming: false,
 };
 
-/** Máximo de chunks auto-resume (~110s cada) antes de pedir intervenção. */
-export const MAX_AUTO_RESUME_CHUNKS = 48;
-
-const AUTO_RESUME_DELAY_MS = 600;
+/** Legado — retomada de chunks agora é server-side (agent-worker + PGMQ). */
+export const MAX_AUTO_RESUME_CHUNKS = 1;
 
 const MODEL_COSTS: Record<string, number> = {
   "claude-sonnet-4-20250514": 3.0,
@@ -168,6 +166,21 @@ export function useSSE() {
           }),
           signal: controller.signal,
         });
+
+        const contentType = res.headers.get("Content-Type") ?? "";
+        if (res.ok && contentType.includes("application/json")) {
+          const body = (await res.json()) as { queued?: boolean; message?: string };
+          if (body.queued) {
+            setProgress((p) => ({
+              ...p,
+              finished: true,
+              statusHint: body.message ?? "Mensagem na fila do agente.",
+              error: null,
+            }));
+            setConnected(false);
+            return { shouldAutoResume: false, aborted: false };
+          }
+        }
 
         if (!res.ok) {
           const msg = await parseErrorResponse(res);
@@ -302,48 +315,17 @@ export function useSSE() {
         autoResuming: false,
       });
 
-      let isResume = manualResume;
+      const { aborted } = await connectOnce(
+        projectId,
+        conversationId,
+        sessionKind,
+        manualResume,
+        false,
+      );
 
-      for (let chunk = 0; chunk < MAX_AUTO_RESUME_CHUNKS; chunk++) {
-        if (chunk > 0) {
-          logEditorTelemetryEvent("sse", "auto_resume_chunk", "info", String(chunk + 1));
-          setProgress((p) => ({
-            ...p,
-            autoResuming: true,
-            finished: false,
-            resumable: false,
-            error: null,
-            statusHint: "Retomando automaticamente…",
-          }));
-          await new Promise((r) => setTimeout(r, AUTO_RESUME_DELAY_MS));
-          isResume = true;
-        }
-
-        const { shouldAutoResume, aborted } = await connectOnce(
-          projectId,
-          conversationId,
-          sessionKind,
-          isResume,
-          chunk > 0,
-        );
-
-        if (aborted) return;
-
-        if (!shouldAutoResume) {
-          setProgress((p) => ({ ...p, autoResuming: false }));
-          return;
-        }
+      if (!aborted) {
+        setProgress((p) => ({ ...p, autoResuming: false }));
       }
-
-      setProgress((p) => ({
-        ...p,
-        autoResuming: false,
-        finished: true,
-        resumable: true,
-        error:
-          p.error ??
-          "Limite de retomadas automáticas atingido. Clique em Continuar para seguir.",
-      }));
     },
     [connectOnce],
   );
@@ -419,6 +401,16 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
         timeline: [...prev.timeline, event],
       };
     }
+
+    case "resume":
+      return {
+        ...prev,
+        autoResuming: true,
+        finished: false,
+        error: null,
+        statusHint: (data.message as string) ?? "Retomando automaticamente no servidor…",
+        timeline: [...prev.timeline, event],
+      };
 
     case "phase": {
       const msg = (data.message as string) ?? prev.message;

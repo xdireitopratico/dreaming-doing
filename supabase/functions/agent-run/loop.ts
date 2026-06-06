@@ -12,7 +12,14 @@ import { ModelRouter } from "./router.ts";
 import { CompressionManager, parallelExecute } from "./compression.ts";
 import { RuntimeObserver } from "./observer.ts";
 import { SkillRegistry } from "./skills.ts";
-import { getSystemPrompt, EXECUTE_PROMPT } from "./prompts.ts";
+import { getSystemPrompt, EXECUTE_RULES } from "./prompts.ts";
+import {
+  ANTI_LEAK_RULE,
+  QUALIFY_SYSTEM,
+  buildExecuteInstruction,
+  extractOriginalUserRequest,
+  needsQualify,
+} from "./qualify.ts";
 import { getTasteStartSystemPrompt } from "./prompts-taste.ts";
 import { friendlyLlmError } from "./llm-errors.ts";
 import { hashToolBatch, isExecutionStuck } from "../_shared/agent-stuck.ts";
@@ -67,6 +74,8 @@ export class AgentLoop {
   private resumePhase: LoopPhase | null;
   private complexityScore: number;
   private runId: string | null;
+  private originalUserRequest: string;
+  private toolsInvoked: boolean;
   private runStartTime: number;
   private lastCheckpointStep: number;
 
@@ -114,6 +123,8 @@ export class AgentLoop {
       this.maxStepsLimit = options.maxStepsFromCheckpoint;
     }
     this.runId = options?.runId ?? null;
+    this.originalUserRequest = extractOriginalUserRequest(state.messages);
+    this.toolsInvoked = false;
     this.runStartTime = Date.now();
     this.lastCheckpointStep = options?.hasCheckpoint ? (state.currentStepIndex ?? 0) : 0;
     this.router = new ModelRouter(injectedKeys, routerOverrides);
@@ -254,6 +265,16 @@ export class AgentLoop {
 
       this.emit("phase", { phase: "plan", message: classification.summary, intent: this.state.intent });
       await this.saveCheckpoint(LoopPhase.CREATE_PLAN);
+
+      if (this.originalUserRequest && needsQualify(this.originalUserRequest, classification)) {
+        const qualifyResult = await this.runQualifyPhase(executionModel, this.originalUserRequest);
+        if (qualifyResult.stopForUser) {
+          await this.persistFinal(qualifyResult.message);
+          await this.clearCheckpoint();
+          this.emit("done", { summary: qualifyResult.message, qualified: true });
+          return { ok: true, summary: qualifyResult.message, steps: 0, toolsUsed: [] };
+        }
+      }
     }
 
     const step = this.resumeRun && this.hasCheckpoint
@@ -267,15 +288,14 @@ export class AgentLoop {
     while (loopStep < this.maxStepsLimit) {
       if (Date.now() - this.runStartTime > EDGE_FUNCTION_TIMEOUT_MS) {
         await this.saveCheckpoint(this.state.phase, true);
-        await this.persistFinal(
-          `Limite de tempo da Edge Function atingido (~${Math.round(EDGE_FUNCTION_TIMEOUT_MS / 1000)}s). ` +
-          `Checkpoint salvo — use **Continuar** para retomar.`
-        );
+        this.emit("timeout_warning", {
+          message: "Chunk encerrado — retomada automática pelo servidor",
+          elapsedMs: Date.now() - this.runStartTime,
+        });
         return {
           ok: false,
           error:
-            `Limite de tempo da Edge Function (~${Math.round(EDGE_FUNCTION_TIMEOUT_MS / 1000)}s). ` +
-            "Checkpoint salvo — clique em Continuar para retomar.",
+            `Chunk de ~${Math.round(EDGE_FUNCTION_TIMEOUT_MS / 1000)}s — retomando automaticamente…`,
           steps: loopStep,
           resumable: true,
           toolsUsed: [...toolsUsed],
@@ -305,9 +325,13 @@ export class AgentLoop {
       });
 
       const compressed = await this.compression.compress(this.state.messages);
+      const executeInstruction = buildExecuteInstruction(this.originalUserRequest);
+      const forceTools = !this.toolsInvoked && loopStep <= 3 &&
+        (this.state.intent?.type === "modify" || this.state.intent?.type === "new_project" ||
+          this.state.intent?.type === "fix" || this.state.intent?.type === "add_dep");
       let response: ChatResponse | null = null;
       try {
-        response = await this.llmChat(executionModel, EXECUTE_PROMPT, compressed);
+        response = await this.llmChat(executionModel, executeInstruction, compressed, forceTools);
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : "Erro no modelo";
         await this.saveCheckpoint(LoopPhase.ERROR, true);
@@ -325,11 +349,22 @@ export class AgentLoop {
         this.emit("assistant_text", { text: assistantText, final: !response.tool_calls?.length });
       }
 
-      // Sem tool_calls = resposta final
+      // Sem tool_calls
       if (!response.tool_calls || response.tool_calls.length === 0) {
+        if (forceTools && assistantText) {
+          this.state.messages.push({
+            role: "user",
+            content:
+              "Use ferramentas AGORA (fs_read, fs_write, fs_edit ou shell_exec). " +
+              "Não responda só com texto — implemente o pedido.",
+          });
+          continue;
+        }
         this.state.messages.push({ role: "assistant", content: response.content ?? "Concluído." });
         break;
       }
+
+      this.toolsInvoked = true;
 
       // Proactive stuck detection: check if the same tool calls are being repeated
       if (detectRepeatedToolCalls(this.state.executionLog)) {
@@ -507,10 +542,39 @@ export class AgentLoop {
     };
   }
 
+  private async runQualifyPhase(
+    model: LLMProvider,
+    userRequest: string,
+  ): Promise<{ stopForUser: boolean; message: string }> {
+    this.emit("phase", {
+      phase: "qualify",
+      message: "Qualificando ideia antes de codar…",
+    });
+    try {
+      const resp = await model.chat({
+        messages: [
+          { role: "system", content: `${QUALIFY_SYSTEM}\n\n${ANTI_LEAK_RULE}` },
+          {
+            role: "user",
+            content: `Pedido do usuário:\n${userRequest}\n\nContexto:\n${this.state.context?.projectConfig?.slice(0, 1500) ?? "(novo)"}`,
+          },
+        ],
+        max_tokens: 800,
+        temperature: 0.4,
+      });
+      const message = (resp.content ?? "").trim() ||
+        "Ok — me conte em uma frase o que você quer construir e para quem.";
+      return { stopForUser: true, message };
+    } catch {
+      return { stopForUser: false, message: "" };
+    }
+  }
+
   private async llmChat(
     model: LLMProvider,
     instruction: string,
     history: ChatMessage[],
+    forceTools = false,
   ): Promise<ChatResponse | null> {
     const contextBlock = this.state.context
       ? `## Contexto do Projeto\n${this.state.context.projectConfig}\n\n## Arquivos\n${this.state.context.manifest}`
@@ -521,7 +585,13 @@ export class AgentLoop {
     const base = getSystemPrompt(this.projectTemplate);
     const withStack = this.stackAddon ? `${base}\n\n${this.stackAddon}` : base;
     const tasteWrapped = this.tasteStart ? getTasteStartSystemPrompt(withStack) : withStack;
-    const fullSystemPrompt = [tasteWrapped, skillPrompt, this.sessionAddon].filter(Boolean).join("\n\n");
+    const fullSystemPrompt = [
+      tasteWrapped,
+      skillPrompt,
+      this.sessionAddon,
+      EXECUTE_RULES,
+      ANTI_LEAK_RULE,
+    ].filter(Boolean).join("\n\n");
 
     const messages: ChatMessage[] = [
       { role: "system", content: fullSystemPrompt },
@@ -534,7 +604,7 @@ export class AgentLoop {
       return await model.chat({
         messages,
         tools: this.reg.getDefinitions(),
-        tool_choice: "auto",
+        tool_choice: forceTools ? "required" : "auto",
         max_tokens: 4096,
       });
     } catch (err: unknown) {

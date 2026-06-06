@@ -61,7 +61,12 @@ export function useConnectors() {
         .select("kind, provider, meta, updated_at")
         .eq("owner_id", user!.id);
       if (error) throw error;
-      return data ?? [];
+      return (data ?? []) as Array<{
+        kind: string | null;
+        provider?: string | null;
+        meta?: Record<string, unknown> | null;
+        updated_at?: string | null;
+      }>;
     },
   });
 

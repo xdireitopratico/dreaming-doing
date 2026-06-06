@@ -218,7 +218,7 @@ export function CodeBlock({ code, language, filename, showLineNumbers = true, ma
   );
 }
 
-export function CodeBlockWithHighlight({ children, ...props }: CodeBlockProps & { children: React.ReactNode }) {
+export function CodeBlockWithHighlight({ children, ...props }: Omit<CodeBlockProps, "code"> & { children: React.ReactNode }) {
   const code = typeof children === "string" ? children : String(children);
   return <CodeBlock code={code} {...props} />;
 }

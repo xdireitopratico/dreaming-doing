@@ -11,6 +11,7 @@ export type AiProviderId =
   | "xai"
   | "nvidia"
   | "gemini"
+  | "ollama"
   | "openrouter"
   | "xiaomi";
 
@@ -41,6 +42,8 @@ function toConnectorPayload(id: AiProviderId) {
       return { kind: "openai" as const, meta: { provider: "moonshotai", label: "Moonshot (Kimi)" } };
     case "xiaomi":
       return { kind: "openai" as const, meta: { provider: "xiaomi", label: "Xiaomi MiMo" } };
+    case "ollama":
+      return { kind: "openai" as const, meta: { provider: "ollama", label: "Ollama (local)" } };
   }
 }
 
