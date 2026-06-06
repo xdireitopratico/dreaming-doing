@@ -8,6 +8,8 @@ import type { ChatMessage } from "@/components/editor/ChatInput";
 import { useState, useCallback } from "react";
 import { ConsoleLogStream } from "@/components/editor/ConsoleLogStream";
 import { ChatDiffViewer } from "@/components/editor/ChatDiffViewer";
+import { ErrorHintCard } from "@/components/editor/ErrorHintCard";
+import { llmErrorHint, timeoutHint, e2bErrorHint } from "@/lib/llm-error-hints";
 
 const PHASE_LABELS: Record<string, string> = {
   gather: "Analisando projeto",
@@ -244,24 +246,38 @@ export function ChatStream({ messages, running, progress, onResume, onUndoMessag
 
       {!running && progress.resumable && !progress.autoResuming && (
         <FadeIn direction="up" distance={4}>
-          <section className="forge-chat-resume">
-            <AlertTriangle className="size-4 text-amber-400 shrink-0" />
-            <p className="flex-1 min-w-0 font-mono text-[10px] text-[var(--forge-silver)] leading-relaxed">
-              {progress.error ??
-                "Execução pausada. O histórico foi salvo — use Continuar para retomar."}
-            </p>
-            {onResume && (
-              <Button
-                type="button"
-                size="sm"
-                variant="primary"
-                onClick={onResume}
-              >
-                <RefreshCw className="size-3.5 mr-1" />
-                Continuar
-              </Button>
-            )}
-          </section>
+          <div className="space-y-2">
+            {progress.error && (() => {
+              const isTimeout = /edge.*timeout|120s|edge function.*limite/i.test(progress.error);
+              const lower = progress.error.toLowerCase();
+              const isE2b = /e2b|sandbox/i.test(lower);
+              const hint = isTimeout
+                ? timeoutHint()
+                : isE2b
+                  ? e2bErrorHint(progress.error)
+                  : llmErrorHint(progress.error, false);
+              return <ErrorHintCard hint={hint} onAction={onResume} />;
+            })()}
+            <section className="forge-chat-resume">
+              <AlertTriangle className="size-4 text-amber-400 shrink-0" />
+              <p className="flex-1 min-w-0 font-mono text-[10px] text-[var(--forge-silver)] leading-relaxed">
+                {progress.error
+                  ? "Execução pausada — histórico salvo no checkpoint."
+                  : "Execução pausada. O histórico foi salvo — use Continuar para retomar."}
+              </p>
+              {onResume && (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="primary"
+                  onClick={onResume}
+                >
+                  <RefreshCw className="size-3.5 mr-1" />
+                  Continuar
+                </Button>
+              )}
+            </section>
+          </div>
         </FadeIn>
       )}
     </div>
