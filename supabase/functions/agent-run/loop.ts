@@ -4,6 +4,7 @@
 import type {
   AgentState, LLMProvider, ChatMessage, IntentAnalysis, FileEntry, ChatResponse,
 } from "./types.ts";
+import { LoopPhase } from "./types.ts";
 
 type RouterOverrides = { main?: LLMProvider; cheap?: LLMProvider };
 import { ToolRegistry } from "./registry.ts";
@@ -21,6 +22,41 @@ import {
 } from "./executionLogMeta.ts";
 
 type StreamCallback = (event: { type: string; data: unknown }) => void;
+
+const CHECKPOINT_INTERVAL_STEPS = 2;
+const EDGE_FUNCTION_TIMEOUT_MS = 110_000;
+const STUCK_THRESHOLD = 3;
+
+function calculateMaxSteps(complexity: 1 | 2 | 3 | 4 | 5): number {
+  return complexity * 5 + 5;
+}
+
+function serializeStateForCheckpoint(state: AgentState): Record<string, unknown> {
+  return {
+    projectId: state.projectId,
+    conversationId: state.conversationId,
+    userId: state.userId,
+    messages: state.messages,
+    phase: state.phase,
+    currentStepIndex: state.currentStepIndex,
+    context: state.context,
+    intent: state.intent,
+    plan: state.plan,
+    validationResults: state.validationResults,
+    executionLog: state.executionLog,
+    retryFeedback: state.retryFeedback,
+    totalSteps: state.totalSteps,
+  };
+}
+
+function detectRepeatedToolCalls(
+  executionLog: string[],
+  threshold: number = STUCK_THRESHOLD
+): boolean {
+  if (executionLog.length < threshold) return false;
+  const recent = executionLog.slice(-threshold);
+  return recent.every((entry) => entry === recent[0]);
+}
 
 export class AgentLoop {
   private reg: ToolRegistry;
@@ -41,6 +77,8 @@ export class AgentLoop {
   private userSkillNames: string[];
   private resumeRun: boolean;
   private runId: string | null;
+  private runStartTime: number;
+  private lastCheckpointStep: number;
 
   constructor(
     reg: ToolRegistry,
@@ -76,6 +114,8 @@ export class AgentLoop {
     this.userSkillNames = options?.userSkillNames ?? [];
     this.resumeRun = options?.resumeRun ?? false;
     this.runId = options?.runId ?? null;
+    this.runStartTime = Date.now();
+    this.lastCheckpointStep = 0;
     this.router = new ModelRouter(injectedKeys, routerOverrides);
     this.observer = new RuntimeObserver(reg);
     this.skills = new SkillRegistry();
@@ -83,6 +123,43 @@ export class AgentLoop {
       this.router.getCheapProvider(),
       (type, data) => this.emit(type, data),
     );
+  }
+
+  private async saveCheckpoint(phase: LoopPhase, force = false): Promise<void> {
+    if (!this.runId) return;
+    const step = this.state.currentStepIndex;
+    if (!force && step - this.lastCheckpointStep < CHECKPOINT_INTERVAL_STEPS) return;
+    if (Date.now() - this.runStartTime > EDGE_FUNCTION_TIMEOUT_MS) {
+      this.emit("timeout_warning", {
+        message: "Próximo do limite de tempo da Edge Function — salvando checkpoint",
+        elapsedMs: Date.now() - this.runStartTime,
+      });
+    }
+    try {
+      await this.sb.from("agent_checkpoints").upsert({
+        project_id: this.state.projectId,
+        conversation_id: this.state.conversationId,
+        phase,
+        state: serializeStateForCheckpoint(this.state),
+        updated_at: new Date().toISOString(),
+      }, { onConflict: "project_id,conversation_id" });
+      this.lastCheckpointStep = step;
+    } catch (err) {
+      console.error("[checkpoint] falha ao salvar:", err);
+    }
+  }
+
+  private async rollbackLastCommit(): Promise<void> {
+    try {
+      await this.reg.execute({
+        id: crypto.randomUUID(),
+        name: "shell_exec",
+        arguments: { command: "cd /home/user && git reset --hard HEAD~1 2>&1 || true" },
+      });
+      this.emit("rollback", { message: "Rollback automático: último commit revertido após falha de build" });
+    } catch {
+      this.emit("rollback", { message: "Rollback falhou — sandbox pode não ter git" });
+    }
   }
 
   async run(): Promise<{
@@ -115,6 +192,7 @@ export class AgentLoop {
       messageCount: this.state.messages.length,
     });
     await this.gatherContext();
+    await this.saveCheckpoint(LoopPhase.GATHER_CONTEXT);
 
     this.emit("phase", { phase: "classify", message: "Classificando complexidade..." });
     const userPrompt = this.state.messages.filter(m => m.role === "user").pop()?.content ?? "";
@@ -129,19 +207,31 @@ export class AgentLoop {
       complexity: classification.complexity <= 2 ? "simple" : classification.complexity <= 4 ? "medium" : "complex",
     };
 
+    this.maxStepsLimit = calculateMaxSteps(classification.complexity);
     const executionModel = this.router.selectModel(classification.complexity);
     this.emit("classify", {
       complexity: classification.complexity,
       model: classification.complexity <= 2 ? this.router.cheapCfg.label : this.router.mainCfg.label,
       summary: classification.summary,
+      maxSteps: this.maxStepsLimit,
     });
 
     this.emit("phase", { phase: "plan", message: classification.summary, intent: this.state.intent });
+    await this.saveCheckpoint(LoopPhase.CREATE_PLAN);
 
     let buildAttempts = 0;
     const maxRetries = 3;
 
     while (step < this.maxStepsLimit) {
+      if (Date.now() - this.runStartTime > EDGE_FUNCTION_TIMEOUT_MS) {
+        await this.saveCheckpoint(this.state.phase, true);
+        await this.persistFinal(
+          `Limite de tempo da Edge Function atingido (~${Math.round(EDGE_FUNCTION_TIMEOUT_MS / 1000)}s). ` +
+          `Checkpoint salvo — use **Continuar** para retomar.`
+        );
+        return { ok: false, error: "Timeout da Edge Function", steps: step, resumable: true, toolsUsed: [...toolsUsed] };
+      }
+
       if (await this.isCanceled()) {
         await this.persistFinal("Execução cancelada pelo usuário.");
         this.emit("canceled", { message: "Cancelado pelo usuário" });
@@ -155,7 +245,9 @@ export class AgentLoop {
       }
 
       step++;
+      this.state.currentStepIndex = step;
       this.state.totalSteps = step;
+      this.state.phase = LoopPhase.EXECUTE_STEP;
 
       const compressed = await this.compression.compress(this.state.messages);
       let response: ChatResponse | null = null;
@@ -163,6 +255,7 @@ export class AgentLoop {
         response = await this.llmChat(executionModel, EXECUTE_PROMPT, compressed);
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : "Erro no modelo";
+        await this.saveCheckpoint(LoopPhase.ERROR, true);
         await this.persistFinal(
           `Execução pausada: ${message}\n\nSeu histórico está salvo — clique em **Continuar** no editor para retomar.`,
         );
@@ -183,7 +276,18 @@ export class AgentLoop {
         break;
       }
 
+      // Proactive stuck detection: check if the same tool calls are being repeated
+      if (detectRepeatedToolCalls(this.state.executionLog)) {
+        this.emit("stuck", { message: "Padrão repetitivo detectado — injetando instrução para nova abordagem" });
+        this.state.messages.push({
+          role: "user",
+          content: "ATENÇÃO: Você está repetindo as mesmas ferramentas. PARE e tente uma abordagem DIFERENTE. " +
+            "Use fs_search para entender o código atual, depois fs_edit para corrigir. Não repita fs_write no mesmo arquivo.",
+        });
+      }
+
       this.emit("phase", { phase: "execute", toolCount: response.tool_calls.length });
+      await this.saveCheckpoint(LoopPhase.EXECUTE_STEP);
 
       // Persiste tool_calls IMEDIATAMENTE para o chat ver via Realtime,
       // enquanto eles ainda estão executando (com status pending).
@@ -236,7 +340,9 @@ export class AgentLoop {
 
       const modifiedFiles = response.tool_calls.some(t => t.name === "fs_write" || t.name === "fs_edit");
       if (modifiedFiles && buildAttempts < maxRetries) {
+        this.state.phase = LoopPhase.VALIDATE_STEP;
         this.emit("phase", { phase: "observe", message: "Verificando build..." });
+        await this.saveCheckpoint(LoopPhase.VALIDATE_STEP);
         const observation = await this.observer.observe();
         if (!observation.passed) {
           buildAttempts++;
@@ -245,6 +351,10 @@ export class AgentLoop {
             checks: observation.checks.filter(c => !c.ok).map(c => c.name),
             feedback: observation.feedback?.slice(0, 500),
           });
+          // Rollback automático antes de pedir correção
+          if (buildAttempts > 1) {
+            await this.rollbackLastCommit();
+          }
           this.state.messages.push({
             role: "user",
             content: `VERIFICAÇÃO FALHOU (${buildAttempts}/${maxRetries}). Analise e corrija:\n\n\`\`\`\n${observation.feedback?.slice(0, 3000)}\n\`\`\`\n\nNÃO peça ajuda. Use fs_search/fs_edit para corrigir.`,
@@ -256,6 +366,7 @@ export class AgentLoop {
         }
       }
 
+      // Reactive stuck detection (original)
       if (isExecutionStuck(this.state.executionLog)) {
         this.emit("stuck", { message: "Padrão repetitivo detectado — pedindo nova abordagem" });
         this.state.messages.push({
@@ -263,14 +374,19 @@ export class AgentLoop {
           content: "Você parece estar repetindo as mesmas ações. Tente outra abordagem.",
         });
       }
+
+      await this.saveCheckpoint(LoopPhase.DECIDE_NEXT);
     }
 
     if (step >= this.maxStepsLimit) {
+      await this.saveCheckpoint(LoopPhase.ERROR, true);
       await this.persistFinal("Limite de passos atingido. Parei aqui — use Continuar no chat para retomar com a mesma memória.");
       return { ok: false, error: "Limite de passos", steps: step, resumable: true, toolsUsed: [...toolsUsed] };
     }
 
+    this.state.phase = LoopPhase.SUMMARIZE;
     this.emit("phase", { phase: "summarize", message: "Finalizando..." });
+    await this.saveCheckpoint(LoopPhase.SUMMARIZE, true);
     const finalMsg = this.state.messages[this.state.messages.length - 1];
     const summary = finalMsg?.content ?? "Tarefa concluída.";
     await this.persistFinal(summary);
