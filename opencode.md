@@ -1,10 +1,10 @@
 # FORGE — opencode.md (Contexto Comprimido)
 
 ## 📍 Estado Atual
-- **Branch:** `main` @ `82e6cf4`
+- **Branch:** `main` @ `1bc978e`
 - **Deploy:** Supabase `dpduljngdurfpmaclffa` (agent-run + health) + Vercel (frontend)
 - **Stack:** TanStack Start + React 19 + Tailwind v4 + Supabase + E2B
-- **Último deploy:** **Fase 4 (Observabilidade & Debug) concluída** — /healthz + structured logging + ErrorHintCard acionáveis + /costs dashboard + Agent Run Replay
+- **Último deploy:** **Fase 4.6 (Plan Mode) concluída** — agent loop emite `plan_proposed` e pausa pra aprovação do usuário; `plan_approve`/`plan_reject` actions; 5min TTL auto-rejeita; novos statuses `awaiting_plan_approval` e `rejected` em `agent_runs`; `<PlanViewer>` integrado no ChatStream com countdown
 - **Próxima fase:** Fase 5 — Arquitetura & Escala
 
 ---
@@ -50,6 +50,7 @@
 | **Resume sem reclassificar** | `agent-run` carrega checkpoint do banco e **NÃO** reroda o router/qualify — só continua o loop de onde parou |
 | **E2B worker** | `agent-worker` (Edge Function separada) roda o loop no E2B com relay de eventos pra `agent_stream_events`; cai pra `agent-run` se E2B falhar |
 | **Template E2B** | `code-interpreter-v1` (nodejs removido) — `runner.mjs` embutido na função |
+| **Plan mode (Fase 4.6)** | Após classificação, loop emite `plan_proposed` e pausa via `awaitPlanDecision` (5min TTL). Cliente responde com ações `plan_approve`/`plan_reject` na edge function. `agent_runs.status` ganha `awaiting_plan_approval` e `rejected`. Pending plan espelhado em `agent_checkpoints.state.pendingPlan` E `agent_runs.meta.pendingPlan`. Resume NUNCA auto-aprovа — sempre re-aguarda decisão. Two signaling: in-process Map (fast) + 1.5s poll em `agent_runs.meta.pendingPlan.decision` (cross-isolate, PGMQ-safe). |
 
 ### Frontend (TanStack Start)
 | Aprendizado | Detalhe |
@@ -69,7 +70,7 @@
 | Tabela | Propósito |
 |--------|-----------|
 | `projects` | Core + `meta.previewSandboxId` (E2B lease 30d) |
-| `agent_runs` | Histórico de execuções + `meta` (provider, model, robin, session_kind) |
+| `agent_runs` | Histórico de execuções + `meta` (provider, model, robin, session_kind, **pendingPlan** com decisão) — `status`: `running` / `completed` / `failed` / `canceled` / **`awaiting_plan_approval`** / **`rejected`** |
 | `agent_checkpoints` | `state` JSONB = `AgentState` serializado — resume exato |
 | `agent_plans` | Planos persistidos (realtime) |
 | `agent_chunks_queue` | PGMQ queue — chunks de até 48 steps inline, escapa 120s |
