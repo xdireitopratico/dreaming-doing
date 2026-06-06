@@ -1,11 +1,11 @@
 # FORGE — opencode.md (Contexto Comprimido)
 
 ## 📍 Estado Atual
-- **Branch:** `main` @ `6dd81f2`
+- **Branch:** `main` @ `4663170`
 - **Deploy:** Supabase `dpduljngdurfpmaclffa` (agent-run) + Vercel (frontend)
 - **Stack:** TanStack Start + React 19 + Tailwind v4 + Supabase + E2B
-- **Último deploy:** Fase 2.7 concluída (AgentLoop + Worker E2B + QUALIFY + typecheck limpo)
-- **Próxima fase:** Fase 3 — DX & Onboarding
+- **Último deploy:** **Fase 3 (DX & Onboarding) concluída** — Onboarding wizard + TASTE refactor + ConsoleLogStream + ChatDiffViewer + /skills marketplace
+- **Próxima fase:** Fase 4 — Polish & Hardening
 
 ---
 
