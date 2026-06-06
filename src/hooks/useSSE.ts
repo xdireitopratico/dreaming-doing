@@ -43,6 +43,15 @@ export interface AgentProgress {
   autoResuming: boolean;
   /** Mensagens do usuário aguardando na fila do projeto. */
   pendingQueueCount: number;
+  /** Diffs capturados durante a execução (fs_write/fs_edit). */
+  diffs: Array<{
+    id: string;
+    path: string;
+    before: string;
+    after: string;
+    op: "write" | "edit";
+    timestamp: number;
+  }>;
 }
 
 export type AgentConnectOptions = {
@@ -70,6 +79,7 @@ const initialState: AgentProgress = {
   lastFinishOk: null,
   autoResuming: false,
   pendingQueueCount: 0,
+  diffs: [],
 };
 
 /** Legado — retomada de chunks agora é server-side (agent-worker + PGMQ). */
@@ -611,6 +621,19 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
           t.name === toolName ? { ...t, ok: data.ok as boolean, error: data.error as string } : t,
         ),
         cost: prev.cost + estimateCost(prev.model ?? "default", 2000),
+        timeline: [...prev.timeline, event],
+      };
+    }
+
+    case "file_diff": {
+      const path = (data.path as string) ?? "unknown";
+      const before = (data.before as string) ?? "";
+      const after = (data.after as string) ?? "";
+      const op = (data.op as "write" | "edit") ?? "write";
+      const id = `${path}::${prev.diffs.length}::${Date.now()}`;
+      return {
+        ...prev,
+        diffs: [...prev.diffs, { id, path, before, after, op, timestamp: Date.now() }],
         timeline: [...prev.timeline, event],
       };
     }

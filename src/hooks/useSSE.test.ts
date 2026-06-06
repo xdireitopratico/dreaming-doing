@@ -22,6 +22,7 @@ const base: AgentProgress = {
   lastFinishOk: null,
   autoResuming: false,
   pendingQueueCount: 0,
+  diffs: [],
 };
 
 function ev(type: string, data: Record<string, unknown>): SSEEvent {

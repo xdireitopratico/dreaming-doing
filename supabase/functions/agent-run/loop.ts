@@ -385,9 +385,44 @@ export class AgentLoop {
 
       const execResults = await parallelExecute(response.tool_calls, async (call) => {
         toolsUsed.add(call.name);
+
+        // ─── Captura o conteúdo ANTES (para diff) antes de mutações em arquivos ───
+        let preDiff: { path: string; before: string; after: string; op: "write" | "edit" } | null = null;
+        if (call.name === "fs_write" || call.name === "fs_edit") {
+          const filePath = (call.arguments.path as string) ?? "";
+          if (filePath) {
+            try {
+              const { data: existing } = await this.sb
+                .from("project_files")
+                .select("content")
+                .eq("project_id", this.state.projectId)
+                .eq("path", filePath)
+                .maybeSingle();
+              const before = (existing?.content as string) ?? "";
+              let after = before;
+              if (call.name === "fs_write") {
+                after = (call.arguments.content as string) ?? "";
+              } else {
+                const oldText = (call.arguments.oldText as string) ?? "";
+                const newText = (call.arguments.newText as string) ?? "";
+                const replaceAll = call.arguments.replaceAll === true;
+                after = replaceAll ? before.split(oldText).join(newText) : before.replace(oldText, newText);
+              }
+              preDiff = { path: filePath, before, after, op: call.name === "fs_write" ? "write" : "edit" };
+            } catch {
+              /* não bloqueia a execução — diff é best-effort */
+            }
+          }
+        }
+
         this.emit("tool_start", { name: call.name, args: call.arguments });
         const result = await this.reg.execute(call);
         this.emit("tool_done", { name: call.name, ok: result.ok, error: result.error });
+
+        // ─── Emite o diff para o cliente APÓS tool_done (com o estado final já aplicado) ───
+        if (preDiff && result.ok) {
+          this.emit("file_diff", preDiff);
+        }
 
         if (call.name === "fs_write" && result.ok) {
           await this.reg.execute({

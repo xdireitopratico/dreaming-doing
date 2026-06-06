@@ -7,6 +7,7 @@ import type { AgentProgress } from "@/hooks/useSSE";
 import type { ChatMessage } from "@/components/editor/ChatInput";
 import { useState, useCallback } from "react";
 import { ConsoleLogStream } from "@/components/editor/ConsoleLogStream";
+import { ChatDiffViewer } from "@/components/editor/ChatDiffViewer";
 
 const PHASE_LABELS: Record<string, string> = {
   gather: "Analisando projeto",
@@ -148,6 +149,10 @@ export function ChatStream({ messages, running, progress, onResume, onUndoMessag
     <div className="forge-chat-stream" role="log" aria-live="polite" aria-relevant="additions text">
       {progress.timeline.length > 0 && (
         <ConsoleLogStream timeline={progress.timeline} />
+      )}
+
+      {progress.diffs.length > 0 && (
+        <ChatDiffViewer diffs={progress.diffs} />
       )}
 
       {messages.map((msg, idx) => {

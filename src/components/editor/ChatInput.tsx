@@ -442,6 +442,7 @@ export function ChatInput({
                   lastFinishOk: null,
                   autoResuming: false,
                   pendingQueueCount: 0,
+                  diffs: [],
                 }
               }
               onResume={onResumeAgent}
