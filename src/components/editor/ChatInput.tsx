@@ -443,6 +443,7 @@ export function ChatInput({
                   autoResuming: false,
                   pendingQueueCount: 0,
                   diffs: [],
+                  pendingPlan: null,
                 }
               }
               onResume={onResumeAgent}

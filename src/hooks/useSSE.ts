@@ -17,6 +17,28 @@ export interface SSEEvent {
   timestamp: number;
 }
 
+export interface PlanStep {
+  id: string;
+  type: "create_file" | "edit_file" | "shell_exec" | "install_dep" | "observe" | "custom";
+  description: string;
+  filePath?: string;
+  estimatedCost?: number;
+  enabled: boolean;
+}
+
+export interface PendingPlan {
+  planId: string;
+  summary: string;
+  steps: PlanStep[];
+  ttlMs: number;
+  /** ISO timestamp do agent_proposed. */
+  proposedAt: number;
+  /** ID do run (pra approve/reject). */
+  runId: string;
+  /** Project ID (pra approve/reject). */
+  projectId: string;
+}
+
 export interface AgentProgress {
   phase: string | null;
   message: string | null;
@@ -52,6 +74,8 @@ export interface AgentProgress {
     op: "write" | "edit";
     timestamp: number;
   }>;
+  /** Fase 4.6: plano aguardando aprovação do usuário. Null = sem plano pendente. */
+  pendingPlan: PendingPlan | null;
 }
 
 export type AgentConnectOptions = {
@@ -80,6 +104,7 @@ const initialState: AgentProgress = {
   autoResuming: false,
   pendingQueueCount: 0,
   diffs: [],
+  pendingPlan: null,
 };
 
 /** Legado — retomada de chunks agora é server-side (agent-worker + PGMQ). */
@@ -305,8 +330,36 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
         resumable: false,
         error: null,
         streamText: null,
+        pendingPlan: data.planRejected === true || data.planExpired === true
+          ? null
+          : prev.pendingPlan,
         timeline: [...prev.timeline, event],
       };
+
+    case "plan_proposed": {
+      const planId = typeof data.planId === "string" ? data.planId : null;
+      const steps = Array.isArray(data.steps) ? (data.steps as PlanStep[]) : [];
+      const runId = typeof data.runId === "string" ? data.runId : null;
+      const projectId = typeof data.projectId === "string" ? data.projectId : null;
+      if (!planId || steps.length === 0 || !runId || !projectId) {
+        return { ...prev, timeline: [...prev.timeline, event] };
+      }
+      const pendingPlan: PendingPlan = {
+        planId,
+        summary: typeof data.summary === "string" ? data.summary : "Plano proposto",
+        steps,
+        ttlMs: typeof data.ttlMs === "number" ? data.ttlMs : 5 * 60 * 1000,
+        proposedAt: Date.now(),
+        runId,
+        projectId,
+      };
+      return {
+        ...prev,
+        pendingPlan,
+        statusHint: "Aguardando sua aprovação do plano…",
+        timeline: [...prev.timeline, event],
+      };
+    }
 
     case "error":
       return {
@@ -356,6 +409,7 @@ export function useSSE() {
   const [connected, setConnected] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   const runIdRef = useRef<string | null>(null);
+  const projectIdRef = useRef<string | null>(null);
   type ConnectOnceOpts = {
     watchRunId?: string;
     preserveProgress?: boolean;
@@ -399,6 +453,7 @@ export function useSSE() {
       }
 
       runIdRef.current = null;
+      projectIdRef.current = projectId;
       const controller = new AbortController();
       abortRef.current = controller;
 
@@ -821,5 +876,115 @@ export function useSSE() {
     [],
   );
 
-  return { progress, connected, connect, watch, replay, queueMessage, disconnect, stop };
+  const approvePlan = useCallback(
+    async (
+      projectId: string,
+      runId: string,
+      planId: string,
+      steps: PlanStep[],
+    ): Promise<PlanApproveResult> => {
+      const { url, publishableKey } = getSupabaseEnv();
+      if (!url || !publishableKey) {
+        return { ok: false, message: "Supabase não configurado." };
+      }
+      const { data: sess } = await supabase.auth.getSession();
+      const accessToken = sess.session?.access_token;
+      if (!accessToken) {
+        return { ok: false, message: "Sessão expirada." };
+      }
+
+      try {
+        const res = await fetch(`${url}/functions/v1/agent-run`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${accessToken}`,
+            apikey: publishableKey,
+          },
+          body: JSON.stringify({ action: "plan_approve", runId, planId, steps }),
+        });
+        if (!res.ok) {
+          const msg = await parseErrorResponse(res);
+          return { ok: false, message: msg };
+        }
+        const body = (await res.json()) as {
+          ok?: boolean;
+          steps?: PlanStep[];
+          resolvedInProcess?: boolean;
+        };
+        setProgress((p) => ({ ...p, pendingPlan: null, statusHint: "Plano aprovado — executando…" }));
+        return {
+          ok: body.ok !== false,
+          resolvedInProcess: body.resolvedInProcess === true,
+          steps: body.steps,
+        };
+      } catch (err) {
+        return { ok: false, message: formatAgentFetchError(err) };
+      }
+    },
+    [],
+  );
+
+  const rejectPlan = useCallback(
+    async (
+      projectId: string,
+      runId: string,
+      planId: string,
+      reason?: string,
+    ): Promise<PlanRejectResult> => {
+      const { url, publishableKey } = getSupabaseEnv();
+      if (!url || !publishableKey) {
+        return { ok: false, message: "Supabase não configurado." };
+      }
+      const { data: sess } = await supabase.auth.getSession();
+      const accessToken = sess.session?.access_token;
+      if (!accessToken) {
+        return { ok: false, message: "Sessão expirada." };
+      }
+
+      try {
+        const res = await fetch(`${url}/functions/v1/agent-run`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${accessToken}`,
+            apikey: publishableKey,
+          },
+          body: JSON.stringify({ action: "plan_reject", runId, planId, reason }),
+        });
+        if (!res.ok) {
+          const msg = await parseErrorResponse(res);
+          return { ok: false, message: msg };
+        }
+        const body = (await res.json()) as {
+          ok?: boolean;
+          resolvedInProcess?: boolean;
+        };
+        setProgress((p) => ({
+          ...p,
+          pendingPlan: null,
+          statusHint: "Plano rejeitado.",
+          finished: true,
+        }));
+        return { ok: body.ok !== false, resolvedInProcess: body.resolvedInProcess === true };
+      } catch (err) {
+        return { ok: false, message: formatAgentFetchError(err) };
+      }
+    },
+    [],
+  );
+
+  return { progress, connected, connect, watch, replay, queueMessage, disconnect, stop, approvePlan, rejectPlan };
 }
+
+/** Resposta do plan_approve/plan_reject edge function. */
+export type PlanDecisionResult = {
+  ok: boolean;
+  message?: string;
+  /** true se o resolver in-process foi disparado (vs polling cross-process). */
+  resolvedInProcess?: boolean;
+};
+
+/** Resposta do plan_approve/plan_reject edge function (alias semântico). */
+export type PlanApproveResult = PlanDecisionResult & { steps?: PlanStep[] };
+export type PlanRejectResult = PlanDecisionResult;
