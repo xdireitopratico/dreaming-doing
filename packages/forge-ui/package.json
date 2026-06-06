@@ -8,6 +8,8 @@
   "exports": {
     ".": "./src/index.ts",
     "./components": "./src/components/index.ts",
+    "./composites": "./src/composites/index.ts",
+    "./patterns": "./src/patterns/index.ts",
     "./hooks": "./src/hooks/index.ts",
     "./utils": "./src/utils/index.ts",
     "./tokens": "./src/tokens/index.ts"
@@ -26,6 +28,9 @@
     "@radix-ui/react-dropdown-menu": "^2.1.0",
     "@radix-ui/react-tooltip": "^1.1.0",
     "@radix-ui/react-toast": "^1.2.0",
+    "@radix-ui/react-avatar": "^1.1.0",
+    "@radix-ui/react-separator": "^1.1.0",
+    "sonner": "^2.0.0",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.0",
     "tailwind-merge": "^2.4.0"

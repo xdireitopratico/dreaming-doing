@@ -10,15 +10,76 @@ export type ProjectTemplateId =
   | "static-html"
   | "custom";
 
-const DESIGN_DISCIPLINE = `## Design (prioridade máxima)
-- Trate UI/UX como produto publicável: hierarquia clara, espaçamento generoso, tipografia consistente, contraste acessível (WCAG AA quando possível).
-- Paleta coesa (2 cores de marca + neutros + 1 accent). Evite cinza genérico sem identidade.
-- Componentes com estados hover/focus/disabled/loading. Micro-interações sutis (transitions 150–250ms).
-- Layout responsivo mobile-first. Nada de layout quebrado ou "placeholder feio".
-- Ícones e copy em português do Brasil quando o usuário fala em PT.
-- Antes de codificar telas novas: imagine o fluxo (onboarding → ação principal → feedback).
-- Use tokens de design via @theme no CSS (Tailwind v4) — nada de valores hardcoded.
-- Acessibilidade: labels em inputs, aria-labels em botões icon-only, focus-visible visível, contraste 4.5:1.`;
+const DESIGN_DISCIPLINE = `## Design (prioridade máxima) — ENFORÇADO PELO OBSERVER
+
+**MISSÃO:** O usuário recebe, sem esforço, design absurdamente único — multi-componente de altíssima complexidade. **PROIBIDO:** página branca + CTA azul genérico.
+
+### 1. USE @FORGE/UI — PRIMITIVOS + COMPOSITES (OBRIGATÓRIO)
+**IMPORTE SEMPRE de @forge/ui** — NÃO crie UI base do zero:
+\`\`\`tsx
+import {
+  Button, Input, Card, Badge, Dialog, toast,
+  FadeIn, StaggerContainer, StaggerItem, HoverLift,
+  HeroSignature, BentoGrid, FeatureMatrix, CTASignature,
+  NavShell, StatsRibbon, FooterColumns, PricingTiers, TestimonialCarousel,
+} from "@forge/ui";
+\`\`\`
+
+**Primitives:** Button, Input, Card, Badge, Avatar, Separator, Skeleton, Tooltip, Dialog, Toast, Motion
+
+**Composites (use em TODA landing/página marketing — mínimo 3):**
+- **HeroSignature**: eyebrow + h1 display + dual CTA + variant aurora/mesh — NUNCA hero com só um botão azul
+- **BentoGrid**: grid assimétrico (preset showcase/editorial) — células com spans variados
+- **FeatureMatrix**: matriz de features com ícones e motion
+- **CTASignature**: painel gradiente com par de ações — NUNCA CTA solto
+- **NavShell** + **FooterColumns**: layout completo
+- **StatsRibbon**, **PricingTiers**, **TestimonialCarousel**: prova social e conversão
+
+### 2. TOKENS VIA @THEME (Tailwind v4) — em src/index.css:
+@theme {
+  --color-brand-500: #FFB627; --color-brand-600: #FF7A1A; --color-accent-500: #22C55E;
+  --spacing-*: ...; --radius-*: ...; --shadow-*: ...; --font-*: ...;
+}
+**NÃO use valores hardcoded** (px, rem arbitrários, hex colors) — use tokens semânticos:
+- Cores: bg-brand-500, text-brand-600, border-brand-500, ring-brand-500
+- Espaçamento: p-4, m-6, gap-4 (usa scale do @theme)
+- Radius: rounded-lg, rounded-xl, rounded-2xl
+- Shadows: shadow-glow, shadow-glow-silver, shadow-lg
+- Fontes: font-display, font-body, font-mono
+
+### 3. MOTION & MICRO-INTERAÇÕES (OBRIGATÓRIO PARA UI PROFISSIONAL):
+- **FadeIn/SlideIn/ScaleIn** para entrada de elementos
+- **StaggerContainer + StaggerItem** para listas
+- **HoverScale** (1.02) em botões e cards interativos
+- **HoverLift** (y: -4px + shadow-xl) em cards
+- **Pulse** para estados de loading/atenção
+- **Shimmer** para skeleton loading
+- Transitions: 150-250ms ease-out (tokens: transition-fast, transition-normal)
+- Respeita prefers-reduced-motion automaticamente
+
+### 4. ACESSIBILIDADE (WCAG AA) — ENFORÇADA PELOS COMPONENTES:
+- Contraste 4.5:1 (texto), 3:1 (UI elements) — tokens garantem
+- Focus-visible SEMPRE visível (ring-2 ring-offset-2 ring-brand-500) — built-in
+- Labels em TODOS inputs — Input component exige label
+- aria-label/aria-labelledby em botões icon-only — Button component suporta
+- Semantic HTML: <main>, <nav>, <section>, <article>, <header>, <footer>
+- Heading hierarchy: h1 → h2 → h3 (não pule níveis)
+
+### 5. RESPONSIVO MOBILE-FIRST:
+- Breakpoints: sm: 640px, md: 768px, lg: 1024px, xl: 1280px, 2xl: 1536px
+- Container: max-w-7xl mx-auto px-4 sm:px-6 lg:px-8
+- Grid/Flex com gap, não margin
+
+### 6. PROIBIDO (Observer REJEITA — corrija antes de finalizar):
+- **bg-white** ou fundo claro dominante — use bg-background, bg-surface-*
+- **bg-blue-600/500**, CTAs azuis Tailwind — use Button variant primary (brand amber)
+- Landing com <3 composites @forge/ui
+- Landing sem motion (FadeIn, StaggerContainer, HoverLift)
+- Classes raw: bg-gray-*, bg-zinc-*, text-blue-*, rounded-[12px]
+- Hex hardcoded em TSX
+- <button> estilizado manual — use Button
+- Componentes base reimplementados (cva, radix direto)
+- Inputs sem label`;
 
 const TOOLS_BLOCK = `## Ferramentas
 - fs_read, fs_read_many, fs_list, fs_search, fs_edit, fs_write, fs_delete

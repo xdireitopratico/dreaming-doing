@@ -125,6 +125,53 @@ export const designTokens = {
 
 export type DesignTokens = typeof designTokens;
 
+export * from "./anti-generic";
+
+/** Bloco @theme completo para colar em src/index.css (Tailwind v4). */
+export const forgeThemeBlock = `@theme {
+  --color-brand-50: ${designTokens.colors.brand[50]};
+  --color-brand-100: ${designTokens.colors.brand[100]};
+  --color-brand-200: ${designTokens.colors.brand[200]};
+  --color-brand-300: ${designTokens.colors.brand[300]};
+  --color-brand-400: ${designTokens.colors.brand[400]};
+  --color-brand-500: ${designTokens.colors.brand[500]};
+  --color-brand-600: ${designTokens.colors.brand[600]};
+  --color-brand-700: ${designTokens.colors.brand[700]};
+  --color-brand-800: ${designTokens.colors.brand[800]};
+  --color-brand-900: ${designTokens.colors.brand[900]};
+  --color-brand-500-foreground: #0B0D12;
+  --color-accent-500: ${designTokens.colors.accent[500]};
+  --color-accent-600: ${designTokens.colors.accent[600]};
+  --color-surface-1: ${designTokens.colors.surface[1]};
+  --color-surface-2: ${designTokens.colors.surface[2]};
+  --color-surface-3: ${designTokens.colors.surface[3]};
+  --color-surface-4: ${designTokens.colors.surface[4]};
+  --color-background: ${designTokens.colors.background};
+  --color-foreground: ${designTokens.colors.foreground};
+  --color-muted-foreground: #94A3B8;
+  --color-border: color-mix(in srgb, ${designTokens.colors.foreground} 8%, transparent);
+  --color-destructive: #E5484D;
+  --color-destructive-foreground: #FAFAFA;
+  --color-success: #22C55E;
+  --color-ring: ${designTokens.colors.ring};
+  --radius-sm: ${designTokens.radius.sm};
+  --radius-md: ${designTokens.radius.md};
+  --radius-lg: ${designTokens.radius.lg};
+  --radius-xl: ${designTokens.radius.xl};
+  --radius-2xl: ${designTokens.radius["2xl"]};
+  --radius-full: ${designTokens.radius.full};
+  --shadow-sm: ${designTokens.shadows.sm};
+  --shadow-md: ${designTokens.shadows.md};
+  --shadow-lg: ${designTokens.shadows.lg};
+  --shadow-xl: ${designTokens.shadows.xl};
+  --shadow-2xl: ${designTokens.shadows["2xl"]};
+  --shadow-glow: ${designTokens.shadows.glow};
+  --shadow-glow-silver: ${designTokens.shadows["glow-silver"]};
+  --font-display: ${designTokens.fonts.display};
+  --font-body: ${designTokens.fonts.body};
+  --font-mono: ${designTokens.fonts.mono};
+}`;
+
 export function getToken<K extends keyof DesignTokens>(category: K, path: string): string {
   const keys = path.split('.');
   let value: unknown = designTokens[category];

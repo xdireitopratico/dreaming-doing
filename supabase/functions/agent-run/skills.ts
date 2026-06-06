@@ -135,35 +135,59 @@ Vitest para testes. @vitejs/plugin-react para Fast Refresh.`,
         systemPrompt: `
 ## Design System Enforcement (OBRIGATÓRIO)
 
-TOKENS VIA @THEME (Tailwind v4) — em src/index.css ou global.css:
+**MISSÃO:** Design absurdamente único, multi-componente, alta complexidade — NUNCA página branca + CTA azul.
+
+### 1. USE @FORGE/UI — PRIMITIVOS + COMPOSITES
+\`\`\`tsx
+import { HeroSignature, BentoGrid, CTASignature, NavShell, FeatureMatrix, Button, FadeIn } from "@forge/ui";
+\`\`\`
+
+**Composites obrigatórios em landings (≥3):** HeroSignature, BentoGrid, FeatureMatrix, CTASignature, NavShell, FooterColumns, StatsRibbon, PricingTiers, TestimonialCarousel
+
+**Primitives:** Button, Input, Card, Badge, Avatar, Dialog, Toast, Motion
+
+### 2. TOKENS VIA @THEME (Tailwind v4) — em src/index.css ou global.css:
 @theme {
-  --color-brand-500: #...; --color-brand-600: #...; --color-accent-500: #...;
+  --color-brand-500: #FFB627; --color-brand-600: #FF7A1A; --color-accent-500: #22C55E;
   --spacing-*: ...; --radius-*: ...; --shadow-*: ...; --font-*: ...;
 }
-NÃO use valores hardcoded (px, rem arbitrários, hex colors) — use tokens semânticos.
+**NÃO use valores hardcoded** (px, rem arbitrários, hex colors) — use tokens semânticos:
+- Cores: bg-brand-500, text-brand-600, border-brand-500, ring-brand-500
+- Espaçamento: p-4, m-6, gap-4 (usa scale do @theme)
+- Radius: rounded-lg, rounded-xl, rounded-2xl
+- Shadows: shadow-glow, shadow-glow-silver, shadow-lg
+- Fontes: font-display, font-body, font-mono
 
-COMPONENTES BASE (crie em src/components/ui/ se não existirem):
-- Button: variants (primary, secondary, ghost, destructive), sizes, loading, disabled
-- Input: label, error, hint, required, aria-describedby
-- Card: header, content, footer, hover border
-- Dialog/Sheet: Portal, focus trap, ESC close, backdrop blur
-- Toast/Sonner: success, error, warning, info, action button
-
-ACESSIBILIDADE (WCAG AA):
-- Contraste 4.5:1 (texto), 3:1 (UI elements)
-- Focus-visible SEMPRE visível (ring-2 ring-offset-2 ring-brand-500)
-- Labels em TODOS inputs (visuais ou sr-only)
-- aria-label/aria-labelledby em botões icon-only
+### 3. ACESSIBILIDADE (WCAG AA) — ENFORÇADA PELOS COMPONENTES @FORGE/UI:
+- Contraste 4.5:1 (texto), 3:1 (UI elements) — tokens garantem
+- Focus-visible SEMPRE visível (ring-2 ring-offset-2 ring-brand-500) — built-in
+- Labels em TODOS inputs — Input component exige label
+- aria-label/aria-labelledby em botões icon-only — Button component suporta
 - Semantic HTML: <main>, <nav>, <section>, <article>, <header>, <footer>
 - Heading hierarchy: h1 → h2 → h3 (não pule níveis)
-- Reduced motion: @media (prefers-reduced-motion) { transition: none }
+- Reduced motion: @media (prefers-reduced-motion) { transition: none } — respeitado por Motion components
 
-RESPONSIVO MOBILE-FIRST:
+### 4. MOTION & MICRO-INTERAÇÕES (OBRIGATÓRIO PARA UI PROFISSIONAL):
+- **FadeIn/SlideIn/ScaleIn** para entrada de elementos
+- **StaggerContainer + StaggerItem** para listas
+- **HoverScale** (1.02) em botões e cards interativos
+- **HoverLift** (y: -4px + shadow-xl) em cards
+- **Pulse** para estados de loading/atenção
+- **Shimmer** para skeleton loading
+- Transitions: 150-250ms ease-out (tokens: transition-fast, transition-normal)
+- Respeita prefers-reduced-motion automaticamente
+
+### 5. RESPONSIVO MOBILE-FIRST:
 - Breakpoints: sm: 640px, md: 768px, lg: 1024px, xl: 1280px, 2xl: 1536px
 - Container: max-w-7xl mx-auto px-4 sm:px-6 lg:px-8
-- Grid/Flex com gap, não margin`, 
+- Grid/Flex com gap, não margin
+
+### 6. PROIBIDO (Observer rejeita):
+- bg-white, bg-blue-600/500, landing <3 composites, sem motion
+- Tailwind raw (bg-zinc-*, text-blue-*), hex hardcoded, <button> manual
+- Reimplementar Button/Card/Dialog — importe @forge/ui`, 
         tools: [],
-        validate: (files) => files.some(f => f.path.includes("tailwind.config") || f.path.includes("index.css") || f.path.includes("global.css")),
+        validate: (files) => files.some(f => f.path.includes("tailwind.config") || f.path.includes("index.css") || f.path.includes("global.css") || f.path.includes("@forge/ui")),
       },
       {
         name: "testing",

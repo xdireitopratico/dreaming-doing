@@ -1,0 +1,1 @@
+export type SeedFile = { path: string; content: string };

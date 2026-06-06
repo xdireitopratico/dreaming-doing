@@ -41,3 +41,6 @@ export function textGradient(colors: string[] = ["#FFB627", "#FF7A1A"]): string 
 export function gradientBorder(colors: string[] = ["#FFB627", "#FF7A1A"], width: string = "1px"): string {
   return `relative before:absolute before:inset-0 before:rounded-[inherit] before:bg-[linear-gradient(135deg,${colors.join(",")})] before:-z-10 before:p-[${width}]`;
 }
+
+export * from "./contrast";
+export * from "./compose-classes";

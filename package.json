@@ -3,6 +3,9 @@
   "private": true,
   "sideEffects": false,
   "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
   "scripts": {
     "dev": "vite dev",
     "build": "vite build",
@@ -13,10 +16,12 @@
     "format": "prettier --write .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "bundle:skills": "node scripts/bundle-forge-skills.mjs"
+    "bundle:skills": "node scripts/bundle-forge-skills.mjs",
+    "bundle:forge-ui": "node scripts/bundle-forge-ui-seed.mjs"
   },
   "dependencies": {
     "@cloudflare/vite-plugin": "^1.25.5",
+    "@forge/ui": "workspace:*",
     "@hookform/resolvers": "^5.2.2",
     "@lovable.dev/cloud-auth-js": "^1.1.2",
     "@monaco-editor/react": "^4.7.0",

@@ -1,6 +1,12 @@
 // observer.ts — Runtime Observation Loop
 // Observa build, typecheck, console errors e auto-corrige
 import type { ToolRegistry } from "./registry.ts";
+import {
+  formatDesignFeedback,
+  scanFileForViolations,
+  scanProjectForLandingQuality,
+  type DesignViolation,
+} from "./design-enforcement.ts";
 
 export interface ObservationResult {
   passed: boolean;
@@ -44,6 +50,13 @@ export class RuntimeObserver {
       }
     } catch {
       checks.push({ name: "install", ok: true, output: "(sandbox não disponível)" });
+    }
+
+    // 0.5. Design System Check — enforça @forge/ui + tokens
+    const designCheck = await this.checkDesignSystem();
+    checks.push(designCheck);
+    if (!designCheck.ok) {
+      return { passed: false, checks, feedback: `[design-system] ${designCheck.output}` };
     }
 
     // 1. Build check
@@ -181,6 +194,86 @@ export class RuntimeObserver {
       };
     } catch {
       return { ok: true, errors: [], output: "(quick type-check indisponível)" };
+    }
+  }
+
+  /** Design System Check — valida uso de @forge/ui + tokens @theme */
+  async checkDesignSystem(): Promise<{ name: string; ok: boolean; output: string }> {
+    try {
+      // 1. Verifica se @forge/ui está instalado
+      const pkg = await this.reg.execute({
+        id: crypto.randomUUID(),
+        name: "fs_read",
+        arguments: { path: "package.json" },
+      });
+      let hasForgeUI = false;
+      if (pkg.ok && pkg.output) {
+        const pkgJson = JSON.parse(String(pkg.output));
+        hasForgeUI = !!pkgJson.dependencies?.["@forge/ui"] || !!pkgJson.devDependencies?.["@forge/ui"];
+      }
+
+      // 2. Scan arquivos .tsx/.ts para violações
+      const scan = await this.reg.execute({
+        id: crypto.randomUUID(),
+        name: "shell_exec",
+        arguments: {
+          command: `find . -type f \\( -name "*.tsx" -o -name "*.ts" \\) ! -path "*/node_modules/*" ! -path "*/.git/*" -exec grep -l "\\.tsx\\|\\.ts$" {} \\; 2>/dev/null | head -50`,
+        },
+      });
+
+      const designViolations: DesignViolation[] = [];
+      const fileContents = new Map<string, string>();
+
+      if (scan.ok && scan.output) {
+        const files = String(scan.output).trim().split("\n").filter(Boolean);
+        for (const file of files.slice(0, 40)) {
+          const normalized = file.replace("./", "");
+          const content = await this.reg.execute({
+            id: crypto.randomUUID(),
+            name: "fs_read",
+            arguments: { path: normalized },
+          });
+          if (!content.ok || !content.output) continue;
+          const code = String(content.output);
+          fileContents.set(normalized, code);
+          designViolations.push(...scanFileForViolations(normalized, code));
+        }
+      }
+
+      designViolations.push(...scanProjectForLandingQuality(fileContents));
+
+      // 3. Verifica tokens @theme no CSS
+      const cssCheck = await this.reg.execute({
+        id: crypto.randomUUID(),
+        name: "shell_exec",
+        arguments: { command: `grep -r "@theme" --include="*.css" . 2>/dev/null | head -5` },
+      });
+      const hasThemeTokens = cssCheck.ok && cssCheck.output && String(cssCheck.output).trim().length > 0;
+
+      if (!hasForgeUI) {
+        designViolations.unshift({
+          file: "package.json",
+          message: "@forge/ui não instalado — adicione \"@forge/ui\": \"file:./packages/forge-ui\" e dependências peer",
+        });
+      }
+      if (!hasThemeTokens) {
+        designViolations.unshift({
+          file: "src/index.css",
+          message: "Nenhum @theme encontrado — use forgeThemeBlock tokens (brand, surface, shadow-glow)",
+        });
+      }
+
+      if (designViolations.length > 0) {
+        return {
+          name: "design-system",
+          ok: false,
+          output: formatDesignFeedback(designViolations),
+        };
+      }
+
+      return { name: "design-system", ok: true, output: formatDesignFeedback([]) };
+    } catch {
+      return { name: "design-system", ok: true, output: "(design-system check indisponível)" };
     }
   }
 
