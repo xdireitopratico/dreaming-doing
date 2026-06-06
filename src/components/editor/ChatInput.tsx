@@ -31,7 +31,7 @@ import {
 } from "@/lib/agent-setup";
 import { ChatStream } from "@/components/editor/ChatStream";
 import { ComposerModeSelect } from "@/components/editor/ComposerModeSelect";
-import type { AgentProgress } from "@/hooks/useSSE";
+import type { AgentProgress, PlanStep } from "@/hooks/useSSE";
 
 export type AgentComposerMode = "build" | "plan";
 
@@ -66,6 +66,9 @@ interface ChatInputProps {
   onStartProject?: () => void;
   /** Trilha ao vivo do agente (fases, tools) — renderizada no painel de mensagens. */
   agentProgress?: AgentProgress;
+  /** Fase 4.6: plano aguardando aprovação. */
+  onPlanApprove?: (steps: PlanStep[]) => void;
+  onPlanReject?: (reason?: string) => void;
   onResumeAgent?: () => void;
   /** Slash /deploy — mesmo fluxo que Publicar na topbar */
   onDeploy?: () => void | Promise<void>;
@@ -149,6 +152,8 @@ export function ChatInput({
   onResumeAgent,
   onDeploy,
   onUndoMessage,
+  onPlanApprove,
+  onPlanReject,
 }: ChatInputProps) {
   const [input, setInput] = useState("");
   const [composerModeLocal, setComposerModeLocal] = useState<AgentComposerMode>("build");
@@ -448,6 +453,8 @@ export function ChatInput({
               }
               onResume={onResumeAgent}
               onUndoMessage={onUndoMessage}
+              onPlanApprove={onPlanApprove}
+              onPlanReject={onPlanReject}
             />
         )}
       </div>

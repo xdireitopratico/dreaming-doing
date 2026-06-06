@@ -886,6 +886,54 @@ function EditorPage() {
     exportProjectZip(projectId, project.name ?? "projeto");
   }, [projectId, project]);
 
+  const handlePlanApprove = useCallback(
+    async (steps: { id: string; enabled: boolean }[]) => {
+      const pp = sse.progress.pendingPlan;
+      if (!pp) return;
+      // Filtra só os enabled — o PlanViewer já envia filtrado, mas re-filtra
+      // por segurança caso o componente mude.
+      const enabled = steps.filter((s) => s.enabled !== false);
+      if (enabled.length === 0) {
+        toast.warning("Selecione ao menos um passo para executar.");
+        return;
+      }
+      // Re-mapeia para PlanStep com todos os campos (PlanViewer pode ter
+      // enviado só {id, enabled}).
+      const full = enabled
+        .map((s) => pp.steps.find((p) => p.id === s.id))
+        .filter((s): s is NonNullable<typeof s> => s != null);
+      if (full.length === 0) {
+        toast.warning("Passos selecionados não correspondem ao plano.");
+        return;
+      }
+      const result = await sse.approvePlan(projectId, pp.runId, pp.planId, full);
+      if (result.ok) {
+        toast.success(
+          result.resolvedInProcess
+            ? "Plano aprovado — agente executando…"
+            : "Plano aprovado — retomando no servidor…",
+        );
+      } else {
+        toast.error(result.message ?? "Falha ao aprovar plano");
+      }
+    },
+    [sse, projectId],
+  );
+
+  const handlePlanReject = useCallback(
+    async (reason?: string) => {
+      const pp = sse.progress.pendingPlan;
+      if (!pp) return;
+      const result = await sse.rejectPlan(projectId, pp.runId, pp.planId, reason);
+      if (result.ok) {
+        toast.info("Plano rejeitado.");
+      } else {
+        toast.error(result.message ?? "Falha ao rejeitar plano");
+      }
+    },
+    [sse, projectId],
+  );
+
   const liveSiteUrl = useMemo(() => {
     const base = publishedUrl ?? devUrl;
     if (!base) return null;
@@ -1051,6 +1099,8 @@ function EditorPage() {
                     onStartProject={handleStartProject}
                     onDeploy={handleOpenLiveSite}
                     onUndoMessage={handleUndoMessage}
+                    onPlanApprove={handlePlanApprove}
+                    onPlanReject={handlePlanReject}
                   />
                 </div>
                 <SetupRail
