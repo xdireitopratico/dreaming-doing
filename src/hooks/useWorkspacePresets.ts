@@ -1,6 +1,12 @@
 // useWorkspacePresets.ts — Hook de layout presets: salva/restaura configuração de painéis
 // Layout presets: "default" (30/70), "focus-code" (0/100), "review" (50/50)
 import { useState, useCallback, useEffect } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
+import JSZip from "jszip";
+import fileSaver from "file-saver";
+
+const { saveAs } = fileSaver;
 
 export interface WorkspacePreset {
   id: string;
@@ -70,11 +76,6 @@ export function useWorkspacePresets() {
 // ---------------------------------------------------------------------------
 // Export/Import project as ZIP
 // ---------------------------------------------------------------------------
-
-import { supabase } from "@/integrations/supabase/client";
-import { toast } from "sonner";
-import JSZip from "jszip";
-import { saveAs } from "file-saver";
 
 /** Download all project files as a ZIP */
 export async function exportProjectZip(projectId: string, projectName: string) {

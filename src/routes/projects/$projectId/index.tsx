@@ -202,16 +202,6 @@ function EditorPage() {
     },
   });
 
-  // ─── Replay: se ?replay=runId veio da history page, dispara replay no mount ─────
-  useEffect(() => {
-    if (!search.replay) return;
-    const runId = search.replay;
-    const conv = conversation?.id;
-    if (!conv) return;
-    void sse.replay(projectId, conv, runId);
-    navigate({ to: "/projects/$projectId", params: { projectId }, search: {} });
-  }, [search.replay, conversation?.id, projectId, navigate, sse]);
-
   const { data: messages } = useQuery({
     queryKey: ["messages", conversation?.id],
     queryFn: async () => {
@@ -232,6 +222,16 @@ function EditorPage() {
       return (data ?? []) as FileRow[];
     },
   });
+
+  // ─── Replay: se ?replay=runId veio da history page, dispara replay no mount ─────
+  useEffect(() => {
+    if (!search.replay) return;
+    const runId = search.replay;
+    const conv = conversation?.id;
+    if (!conv) return;
+    void sse.replay(projectId, conv, runId);
+    navigate({ to: "/projects/$projectId", params: { projectId }, search: {} });
+  }, [search.replay, conversation?.id, projectId, navigate, sse]);
 
   const isReactProject = useMemo(
     () => files?.some((f) => f.path === "package.json" || f.path === "/package.json") ?? false,

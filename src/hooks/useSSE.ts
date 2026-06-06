@@ -110,6 +110,247 @@ async function parseErrorResponse(res: Response): Promise<string> {
   }
 }
 
+function estimateCost(model: string, tokens: number): number {
+  const costPerM = MODEL_COSTS[model] ?? MODEL_COSTS.default;
+  return (tokens / 1_000_000) * costPerM;
+}
+
+/** Reducer puro dos eventos SSE (exportado para testes). */
+export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): AgentProgress {
+  const { type, data } = event;
+
+  switch (type) {
+    case "start":
+      return {
+        ...prev,
+        error: null,
+        finished: false,
+        resumable: false,
+        autoResuming: data.autoResume === true,
+        statusHint: data.autoResume
+          ? "Retomando automaticamente…"
+          : data.resume
+            ? "Retomando com a memória salva no chat…"
+            : "Trabalhando no projeto…",
+        timeline: [...prev.timeline, event],
+      };
+
+    case "canceled":
+      return {
+        ...prev,
+        finished: true,
+        resumable: false,
+        error: (data.message as string) ?? "Cancelado pelo usuário",
+        timeline: [...prev.timeline, event],
+      };
+
+    case "assistant_text": {
+      const chunk = (data.text as string) ?? "";
+      return {
+        ...prev,
+        streamText: chunk,
+        timeline: [...prev.timeline, event],
+      };
+    }
+
+    case "resume":
+      return {
+        ...prev,
+        autoResuming: true,
+        finished: false,
+        error: null,
+        statusHint: (data.message as string) ?? "Retomando automaticamente no servidor…",
+        timeline: [...prev.timeline, event],
+      };
+
+    case "phase": {
+      const msg = (data.message as string) ?? prev.message;
+      return {
+        ...prev,
+        phase: (data.phase as string) ?? prev.phase,
+        message: msg,
+        statusHint: msg ?? prev.statusHint,
+        timeline: [...prev.timeline, event],
+      };
+    }
+
+    case "step":
+      return {
+        ...prev,
+        currentStep: typeof data.current === "number" ? data.current : prev.currentStep,
+        totalSteps: typeof data.total === "number" ? data.total : prev.totalSteps,
+        timeline: [...prev.timeline, event],
+      };
+
+    case "memory":
+      return {
+        ...prev,
+        statusHint: (data.message as string) ?? prev.statusHint,
+        timeline: [...prev.timeline, event],
+      };
+
+    case "context_pressure":
+    case "context_compress":
+      return {
+        ...prev,
+        statusHint: (data.message as string) ?? prev.statusHint,
+        timeline: [...prev.timeline, event],
+      };
+
+    case "rate_limit":
+      return {
+        ...prev,
+        statusHint: (data.message as string) ?? "Rate limit — ROBIN alternando chave…",
+        timeline: [...prev.timeline, event],
+      };
+
+    case "robin_rotate":
+      return {
+        ...prev,
+        statusHint: (data.message as string) ?? prev.statusHint,
+        timeline: [...prev.timeline, event],
+      };
+
+    case "connection_retry":
+      return {
+        ...prev,
+        statusHint: (data.message as string) ?? "Reconectando ao modelo…",
+        timeline: [...prev.timeline, event],
+      };
+
+    case "classify":
+      return {
+        ...prev,
+        model: (data.model as string) ?? prev.model,
+        timeline: [...prev.timeline, event],
+      };
+
+    case "skills":
+      return {
+        ...prev,
+        skills: (data.active as string[]) ?? prev.skills,
+        timeline: [...prev.timeline, event],
+      };
+
+    case "tool_start":
+      return {
+        ...prev,
+        tools: [
+          ...prev.tools,
+          {
+            name: (data.name as string) ?? "?",
+            args: (data.args as Record<string, unknown>) ?? {},
+          },
+        ],
+        timeline: [...prev.timeline, event],
+      };
+
+    case "tool_done": {
+      const toolName = data.name as string;
+      return {
+        ...prev,
+        tools: prev.tools.map((t) =>
+          t.name === toolName ? { ...t, ok: data.ok as boolean, error: data.error as string } : t,
+        ),
+        cost: prev.cost + estimateCost(prev.model ?? "default", 2000),
+        timeline: [...prev.timeline, event],
+      };
+    }
+
+    case "file_diff": {
+      const path = (data.path as string) ?? "unknown";
+      const before = (data.before as string) ?? "";
+      const after = (data.after as string) ?? "";
+      const op = (data.op as "write" | "edit") ?? "write";
+      const id = `${path}::${prev.diffs.length}::${Date.now()}`;
+      return {
+        ...prev,
+        diffs: [...prev.diffs, { id, path, before, after, op, timestamp: Date.now() }],
+        timeline: [...prev.timeline, event],
+      };
+    }
+
+    case "validate_ok":
+      return {
+        ...prev,
+        runtimeChecks: [
+          ...prev.runtimeChecks,
+          ...((data.checks as Array<{ name: string; ok: boolean }>) ?? [
+            { name: "build", ok: true },
+          ]),
+        ],
+        timeline: [...prev.timeline, event],
+      };
+
+    case "validate_fail": {
+      const diags = parseAgentDiagnostics(data);
+      pushDiagnostics(diags);
+      return {
+        ...prev,
+        runtimeChecks: [
+          ...prev.runtimeChecks,
+          ...((data.checks as Array<{ name: string; ok: boolean }>) ?? [
+            { name: "build", ok: false },
+          ]),
+        ],
+        timeline: [...prev.timeline, event],
+      };
+    }
+
+    case "done":
+      return {
+        ...prev,
+        summary: (data.summary as string) ?? prev.summary,
+        finished: true,
+        resumable: false,
+        error: null,
+        streamText: null,
+        timeline: [...prev.timeline, event],
+      };
+
+    case "error":
+      return {
+        ...prev,
+        error: (data.message as string) ?? (data.error as string) ?? "Erro desconhecido",
+        finished: true,
+        resumable: data.recoverable === true || prev.resumable,
+        timeline: [...prev.timeline, event],
+      };
+
+    case "finish": {
+      const failed = data.ok === false;
+      return {
+        ...prev,
+        finished: true,
+        streamText: null,
+        autoResuming: false,
+        lastFinishOk: !failed,
+        resumable: failed && data.resumable === true,
+        error: failed ? ((data.error as string) ?? prev.error) : null,
+        pendingQueueCount:
+          !failed && prev.pendingQueueCount > 0
+            ? prev.pendingQueueCount - 1
+            : prev.pendingQueueCount,
+        timeline: [...prev.timeline, event],
+      };
+    }
+
+    case "ui_action": {
+      const payload = { ...data };
+      delete (payload as { type?: string }).type;
+      if (isTasteUiAction(payload)) dispatchTasteUiAction(payload);
+      return {
+        ...prev,
+        statusHint: (data.reason as string) ?? prev.statusHint,
+        timeline: [...prev.timeline, event],
+      };
+    }
+
+    default:
+      return { ...prev, timeline: [...prev.timeline, event] };
+  }
+}
+
 export function useSSE() {
   const [progress, setProgress] = useState<AgentProgress>(initialState);
   const [connected, setConnected] = useState(false);
@@ -581,246 +822,4 @@ export function useSSE() {
   );
 
   return { progress, connected, connect, watch, replay, queueMessage, disconnect, stop };
-}
-
-/** Reducer puro dos eventos SSE (exportado para testes). */
-export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): AgentProgress {
-  const { type, data } = event;
-
-  switch (type) {
-    case "start":
-      return {
-        ...prev,
-        error: null,
-        finished: false,
-        resumable: false,
-        autoResuming: data.autoResume === true,
-        statusHint: data.autoResume
-          ? "Retomando automaticamente…"
-          : data.resume
-            ? "Retomando com a memória salva no chat…"
-            : "Trabalhando no projeto…",
-        timeline: [...prev.timeline, event],
-      };
-
-    case "canceled":
-      return {
-        ...prev,
-        finished: true,
-        resumable: false,
-        error: (data.message as string) ?? "Cancelado pelo usuário",
-        timeline: [...prev.timeline, event],
-      };
-
-    case "assistant_text": {
-      const chunk = (data.text as string) ?? "";
-      return {
-        ...prev,
-        // Cada passo do loop substitui o rascunho — evita texto “puxando”/acumulando errado.
-        streamText: chunk,
-        timeline: [...prev.timeline, event],
-      };
-    }
-
-    case "resume":
-      return {
-        ...prev,
-        autoResuming: true,
-        finished: false,
-        error: null,
-        statusHint: (data.message as string) ?? "Retomando automaticamente no servidor…",
-        timeline: [...prev.timeline, event],
-      };
-
-    case "phase": {
-      const msg = (data.message as string) ?? prev.message;
-      return {
-        ...prev,
-        phase: (data.phase as string) ?? prev.phase,
-        message: msg,
-        statusHint: msg ?? prev.statusHint,
-        timeline: [...prev.timeline, event],
-      };
-    }
-
-    case "step":
-      return {
-        ...prev,
-        currentStep: typeof data.current === "number" ? data.current : prev.currentStep,
-        totalSteps: typeof data.total === "number" ? data.total : prev.totalSteps,
-        timeline: [...prev.timeline, event],
-      };
-
-    case "memory":
-      return {
-        ...prev,
-        statusHint: (data.message as string) ?? prev.statusHint,
-        timeline: [...prev.timeline, event],
-      };
-
-    case "context_pressure":
-    case "context_compress":
-      return {
-        ...prev,
-        statusHint: (data.message as string) ?? prev.statusHint,
-        timeline: [...prev.timeline, event],
-      };
-
-    case "rate_limit":
-      return {
-        ...prev,
-        statusHint: (data.message as string) ?? "Rate limit — ROBIN alternando chave…",
-        timeline: [...prev.timeline, event],
-      };
-
-    case "robin_rotate":
-      return {
-        ...prev,
-        statusHint: (data.message as string) ?? prev.statusHint,
-        timeline: [...prev.timeline, event],
-      };
-
-    case "connection_retry":
-      return {
-        ...prev,
-        statusHint: (data.message as string) ?? "Reconectando ao modelo…",
-        timeline: [...prev.timeline, event],
-      };
-
-    case "classify":
-      return {
-        ...prev,
-        model: (data.model as string) ?? prev.model,
-        timeline: [...prev.timeline, event],
-      };
-
-    case "skills":
-      return {
-        ...prev,
-        skills: (data.active as string[]) ?? prev.skills,
-        timeline: [...prev.timeline, event],
-      };
-
-    case "tool_start":
-      return {
-        ...prev,
-        tools: [
-          ...prev.tools,
-          {
-            name: (data.name as string) ?? "?",
-            args: (data.args as Record<string, unknown>) ?? {},
-          },
-        ],
-        timeline: [...prev.timeline, event],
-      };
-
-    case "tool_done": {
-      const toolName = data.name as string;
-      return {
-        ...prev,
-        tools: prev.tools.map((t) =>
-          t.name === toolName ? { ...t, ok: data.ok as boolean, error: data.error as string } : t,
-        ),
-        cost: prev.cost + estimateCost(prev.model ?? "default", 2000),
-        timeline: [...prev.timeline, event],
-      };
-    }
-
-    case "file_diff": {
-      const path = (data.path as string) ?? "unknown";
-      const before = (data.before as string) ?? "";
-      const after = (data.after as string) ?? "";
-      const op = (data.op as "write" | "edit") ?? "write";
-      const id = `${path}::${prev.diffs.length}::${Date.now()}`;
-      return {
-        ...prev,
-        diffs: [...prev.diffs, { id, path, before, after, op, timestamp: Date.now() }],
-        timeline: [...prev.timeline, event],
-      };
-    }
-
-    case "validate_ok":
-      return {
-        ...prev,
-        runtimeChecks: [
-          ...prev.runtimeChecks,
-          ...((data.checks as Array<{ name: string; ok: boolean }>) ?? [
-            { name: "build", ok: true },
-          ]),
-        ],
-        timeline: [...prev.timeline, event],
-      };
-
-    case "validate_fail": {
-      const diags = parseAgentDiagnostics(data);
-      pushDiagnostics(diags);
-      return {
-        ...prev,
-        runtimeChecks: [
-          ...prev.runtimeChecks,
-          ...((data.checks as Array<{ name: string; ok: boolean }>) ?? [
-            { name: "build", ok: false },
-          ]),
-        ],
-        timeline: [...prev.timeline, event],
-      };
-    }
-
-    case "done":
-      return {
-        ...prev,
-        summary: (data.summary as string) ?? prev.summary,
-        finished: true,
-        resumable: false,
-        error: null,
-        streamText: null,
-        timeline: [...prev.timeline, event],
-      };
-
-    case "error":
-      return {
-        ...prev,
-        error: (data.message as string) ?? (data.error as string) ?? "Erro desconhecido",
-        finished: true,
-        resumable: data.recoverable === true || prev.resumable,
-        timeline: [...prev.timeline, event],
-      };
-
-    case "finish": {
-      const failed = data.ok === false;
-      return {
-        ...prev,
-        finished: true,
-        streamText: null,
-        autoResuming: false,
-        lastFinishOk: !failed,
-        resumable: failed && data.resumable === true,
-        error: failed ? ((data.error as string) ?? prev.error) : null,
-        pendingQueueCount:
-          !failed && prev.pendingQueueCount > 0
-            ? prev.pendingQueueCount - 1
-            : prev.pendingQueueCount,
-        timeline: [...prev.timeline, event],
-      };
-    }
-
-    case "ui_action": {
-      const payload = { ...data };
-      delete (payload as { type?: string }).type;
-      if (isTasteUiAction(payload)) dispatchTasteUiAction(payload);
-      return {
-        ...prev,
-        statusHint: (data.reason as string) ?? prev.statusHint,
-        timeline: [...prev.timeline, event],
-      };
-    }
-
-    default:
-      return { ...prev, timeline: [...prev.timeline, event] };
-  }
-}
-
-function estimateCost(model: string, tokens: number): number {
-  const costPerM = MODEL_COSTS[model] ?? MODEL_COSTS.default;
-  return (tokens / 1_000_000) * costPerM;
 }
