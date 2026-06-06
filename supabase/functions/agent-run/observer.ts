@@ -8,6 +8,12 @@ export interface ObservationResult {
   feedback?: string;
 }
 
+export interface TypeCheckResult {
+  ok: boolean;
+  errors: Array<{ file: string; line: number; column: number; message: string; code: string }>;
+  output: string;
+}
+
 export class RuntimeObserver {
   private reg: ToolRegistry;
 
@@ -124,6 +130,58 @@ export class RuntimeObserver {
       checks,
       feedback,
     };
+  }
+
+  /** Type-check incremental — roda tsc apenas nos arquivos modificados (rápido) */
+  async quickTypeCheck(modifiedFiles: string[]): Promise<TypeCheckResult> {
+    const hasTs = await this.hasFile("tsconfig.json");
+    if (!hasTs || modifiedFiles.length === 0) {
+      return { ok: true, errors: [], output: "" };
+    }
+
+    // Filtra apenas arquivos TypeScript/TSX
+    const tsFiles = modifiedFiles.filter(f => f.endsWith(".ts") || f.endsWith(".tsx"));
+    if (tsFiles.length === 0) {
+      return { ok: true, errors: [], output: "" };
+    }
+
+    try {
+      // tsc com --noEmit e lista de arquivos (mais rápido que projeto inteiro)
+      const fileArgs = tsFiles.map(f => `"${f}"`).join(" ");
+      const tsc = await this.reg.execute({
+        id: crypto.randomUUID(),
+        name: "shell_exec",
+        arguments: { command: `npx tsc --noEmit ${fileArgs} 2>&1 || true` },
+      });
+      const tscOutput = typeof tsc.output === "object"
+        ? (tsc.output as any).stderr ?? (tsc.output as any).stdout ?? ""
+        : String(tsc.output ?? "");
+
+      const errors: TypeCheckResult["errors"] = [];
+      if (tscOutput.includes("error TS")) {
+        // Parse simples de erros TypeScript
+        for (const line of tscOutput.split("\n")) {
+          const match = line.match(/^(.+\.(ts|tsx))\((\d+),(\d+)\):\s+error\s+(TS\d+):\s+(.+)$/);
+          if (match) {
+            errors.push({
+              file: match[1],
+              line: parseInt(match[3], 10),
+              column: parseInt(match[4], 10),
+              code: match[5],
+              message: match[6],
+            });
+          }
+        }
+      }
+
+      return {
+        ok: errors.length === 0,
+        errors,
+        output: tscOutput.slice(0, 2000),
+      };
+    } catch {
+      return { ok: true, errors: [], output: "(quick type-check indisponível)" };
+    }
   }
 
   async hasFile(path: string): Promise<boolean> {

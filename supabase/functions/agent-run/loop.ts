@@ -333,12 +333,35 @@ export class AgentLoop {
       );
       this.state.executionLog = appendExecutionLogEntry(this.state.executionLog, stepHash);
 
+      // Coleta arquivos modificados para type-check incremental
+      const modifiedFilePaths = response.tool_calls
+        .filter(t => t.name === "fs_write" || t.name === "fs_edit")
+        .map(t => t.arguments.path as string)
+        .filter(Boolean);
+
       // Atualiza a mensagem persistida com o resultado (status, error, output curto)
       if (liveMsgId) {
         await this.updateAssistantStep(liveMsgId, response, execResults, step);
       }
 
-      const modifiedFiles = response.tool_calls.some(t => t.name === "fs_write" || t.name === "fs_edit");
+      // Quick TypeScript check incremental (rápido, apenas arquivos modificados)
+      if (modifiedFilePaths.length > 0) {
+        const typeCheck = await this.observer.quickTypeCheck(modifiedFilePaths);
+        if (!typeCheck.ok) {
+          this.emit("typecheck_fail", {
+            errors: typeCheck.errors,
+            files: modifiedFilePaths,
+          });
+          this.state.messages.push({
+            role: "user",
+            content: `TYPECHECK FALHOU nos arquivos modificados:\n\n${typeCheck.errors.map(e =>
+              `${e.file}:${e.line}:${e.column} - ${e.code}: ${e.message}`).join("\n")}\n\nCorrija os erros acima com fs_edit antes de continuar.`,
+          });
+          continue;
+        }
+      }
+
+      const modifiedFiles = modifiedFilePaths.length > 0;
       if (modifiedFiles && buildAttempts < maxRetries) {
         this.state.phase = LoopPhase.VALIDATE_STEP;
         this.emit("phase", { phase: "observe", message: "Verificando build..." });
