@@ -1,6 +1,17 @@
 import { assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
-import { e2bPreviewUrl, normalizeProjectPath, patchViteConfigForE2b } from "./e2b.ts";
-import { parseConnectProcessStream } from "./e2b-rest.ts";
+import {
+  FORGE_E2B_APP,
+  FORGE_PROJECT_META_KEY,
+  e2bPreviewUrl,
+  forgeSandboxMetadata,
+  normalizeProjectPath,
+  patchViteConfigForE2b,
+} from "./e2b.ts";
+import {
+  decodeConnectJsonStream,
+  encodeConnectEnvelope,
+  parseConnectProcessStream,
+} from "./e2b-rest.ts";
 import {
   detectDevCommand,
   detectDevPort,
@@ -14,6 +25,12 @@ Deno.test("patchViteConfigForE2b adds allowedHosts", () => {
 });`;
   const out = patchViteConfigForE2b(input);
   assertEquals(out.includes("allowedHosts: true"), true);
+});
+
+Deno.test("forgeSandboxMetadata tags project for cleanup", () => {
+  const meta = forgeSandboxMetadata("550e8400-e29b-41d4-a716-446655440000");
+  assertEquals(meta.forge_app, FORGE_E2B_APP);
+  assertEquals(meta[FORGE_PROJECT_META_KEY], "550e8400-e29b-41d4-a716-446655440000");
 });
 
 Deno.test("e2bPreviewUrl uses port-sandboxId format", () => {
@@ -79,4 +96,34 @@ Deno.test("parseConnectProcessStream background stops at start", () => {
   const result = parseConnectProcessStream(stream, { background: true });
   assertEquals(result.exitCode, 0);
   assertEquals(result.stdout, "");
+});
+
+Deno.test("parseConnectProcessStream fails without end event", () => {
+  const stream = `{"event":{"start":{"pid":1}}}`;
+  const result = parseConnectProcessStream(stream);
+  assertEquals(result.exitCode, 1);
+  assertEquals((result.stderr ?? "").includes("sem evento end"), true);
+});
+
+Deno.test("parseConnectProcessStream reads connect+json envelope stream", () => {
+  const stdout = btoa("v20.0.0\n");
+  const frames = [
+    `{"event":{"start":{"pid":42}}}`,
+    `{"event":{"data":{"stdout":"${stdout}"}}}`,
+    `{"event":{"end":{"exited":true,"status":"exit status 0"}}}`,
+  ];
+
+  const chunks = [...frames.map((frame) => encodeConnectEnvelope(frame)), encodeConnectEnvelope("{}", true)];
+  const packed = new Uint8Array(chunks.reduce((sum, chunk) => sum + chunk.length, 0));
+  let offset = 0;
+  for (const chunk of chunks) {
+    packed.set(chunk, offset);
+    offset += chunk.length;
+  }
+
+  assertEquals(decodeConnectJsonStream(packed).length, 3);
+
+  const result = parseConnectProcessStream(packed);
+  assertEquals(result.exitCode, 0);
+  assertEquals(result.stdout, "v20.0.0\n");
 });

@@ -28,52 +28,83 @@ export type E2bSmokeResult = {
   error?: string;
 };
 
+function parseToolchainOutput(stdout: string): Pick<E2bToolchainProbe, "nodeOk" | "npmOk" | "nodeVersion" | "npmVersion"> {
+  const lines = stdout.trim().split("\n").map((l) => l.trim()).filter(Boolean);
+  const nodeLine = lines.find((l) => /^v\d/.test(l)) ?? lines.find((l) => l.includes("node"));
+  const npmLine = lines.find((l) => /^\d+\.\d+/.test(l)) ?? lines.find((l) => l.includes("npm"));
+  return {
+    nodeOk: !!nodeLine,
+    npmOk: !!npmLine,
+    nodeVersion: nodeLine,
+    npmVersion: npmLine,
+  };
+}
+
 export async function probeSandboxToolchain(
   sandbox: E2bRestSandbox,
+  attempts = 3,
 ): Promise<E2bToolchainProbe> {
-  try {
-    const result = await sandbox.commands.run("node -v && npm -v", {
-      cwd: E2B_PROJECT_DIR,
-      timeoutMs: 45_000,
-    });
-    if (result.exitCode !== 0) {
-      return {
-        nodeOk: false,
-        npmOk: false,
-        error: (result.stderr || result.stdout || "node/npm indisponível").slice(0, 300),
-      };
+  let lastError = "node/npm indisponível";
+
+  for (let i = 0; i < attempts; i++) {
+    try {
+      const result = await sandbox.commands.run(
+        "export PATH=\"/usr/local/bin:/usr/bin:/bin:$PATH\"; node -v && npm -v",
+        { cwd: E2B_PROJECT_DIR, timeoutMs: 45_000 },
+      );
+
+      if (result.exitCode === 0) {
+        const parsed = parseToolchainOutput(result.stdout ?? "");
+        if (parsed.nodeOk && parsed.npmOk) return parsed;
+        lastError = `stdout vazio ou incompleto: "${(result.stdout ?? "").slice(0, 120)}"`;
+      } else {
+        lastError = (result.stderr || result.stdout || `exit ${result.exitCode}`).slice(0, 300);
+      }
+    } catch (e) {
+      lastError = (e instanceof Error ? e.message : String(e)).slice(0, 300);
     }
-    const lines = (result.stdout ?? "").trim().split("\n").map((l) => l.trim()).filter(Boolean);
-    const nodeLine = lines.find((l) => l.startsWith("v")) ?? lines[0];
-    const npmLine = lines.find((l) => /^\d/.test(l)) ?? lines[1];
-    return {
-      nodeOk: !!nodeLine,
-      npmOk: !!npmLine,
-      nodeVersion: nodeLine,
-      npmVersion: npmLine,
-    };
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    return { nodeOk: false, npmOk: false, error: msg.slice(0, 300) };
+
+    if (i < attempts - 1) await new Promise((r) => setTimeout(r, 1500));
   }
+
+  return { nodeOk: false, npmOk: false, error: lastError };
+}
+
+function isExecStreamError(msg: string): boolean {
+  return msg.includes("sem evento end") || msg.includes("stream Connect incompleto");
 }
 
 /** Cria sandbox com template que passa smoke npm (não deleta). */
 export async function createValidatedE2bSandbox(
   apiKey: string,
+  metadata?: Record<string, string>,
 ): Promise<{ sandbox: E2bRestSandbox; templateUsed: string }> {
   let lastErr: unknown;
+  let lastProbeErr = "";
+  let templatesTried: string[] = [];
+
   for (const tpl of E2B_TEMPLATE_CANDIDATES) {
     let sandbox: E2bRestSandbox | null = null;
+    templatesTried.push(tpl);
     try {
-      sandbox = await e2bRestCreate(apiKey, tpl);
+      sandbox = await e2bRestCreate(apiKey, tpl, undefined, metadata);
       const probe = await probeSandboxToolchain(sandbox);
       if (probe.npmOk && probe.nodeOk) {
         return { sandbox, templateUsed: tpl };
       }
-      const err = probe.error ?? "Template sem Node/npm";
-      console.warn(`[e2b-smoke] template ${tpl} sem toolchain:`, err);
+      const err = probe.error ?? "node/npm indisponível";
+      lastProbeErr = err;
+      console.warn(`[e2b-smoke] template ${tpl} falhou toolchain:`, err);
       await e2bDeleteSandbox(apiKey, sandbox.sandboxId);
+
+      if (isExecStreamError(err)) {
+        lastErr = new Error(
+          `E2B exec falhou (${err}). Templates testados: ${templatesTried.join(", ")}. ` +
+            "Isso costuma ser protocolo Connect/envd, não falta de Node no template.",
+        );
+        break;
+      }
+
       lastErr = new Error(
         `Template "${tpl}" sem Node/npm (${err}). ` +
           "Confira templates disponíveis na sua conta E2B (recomendado: code-interpreter-v1).",
@@ -82,12 +113,23 @@ export async function createValidatedE2bSandbox(
       if (sandbox) {
         await e2bDeleteSandbox(apiKey, sandbox.sandboxId);
       }
+      const msg = e instanceof Error ? e.message : String(e);
+      if (isExecStreamError(msg)) {
+        lastErr = new Error(
+          `E2B exec falhou (${msg}). Templates testados: ${templatesTried.join(", ")}.`,
+        );
+        break;
+      }
       lastErr = e;
     }
   }
-  throw lastErr instanceof Error
-    ? lastErr
-    : new Error("Nenhum template E2B disponível com Node/npm na sua conta.");
+
+  if (lastErr instanceof Error) throw lastErr;
+  throw new Error(
+    lastProbeErr
+      ? `Nenhum template E2B passou no smoke (${lastProbeErr}). Tentados: ${templatesTried.join(", ")}.`
+      : "Nenhum template E2B disponível com Node/npm na sua conta.",
+  );
 }
 
 /** Teste completo (cria → smoke → deleta). Usado em e2b-health e save de chave. */

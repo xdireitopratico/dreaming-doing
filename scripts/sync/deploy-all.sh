@@ -9,6 +9,7 @@ FUNCTIONS=(
   admin-platform-secrets
   connector-upsert
   e2b-health
+  e2b-cleanup
   deploy-publish
   github-import
   mcp-server

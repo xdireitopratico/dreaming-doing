@@ -1,7 +1,7 @@
 // project-delete — encerra sandbox E2B do projeto e remove o registro (CASCADE nos filhos)
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { loadUserE2bApiKey } from "../_shared/user-e2b.ts";
-import { killProjectSandbox, readSandboxMeta } from "../_shared/project-sandbox.ts";
+import { killAllProjectSandboxes, readSandboxMeta } from "../_shared/project-sandbox.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -35,8 +35,24 @@ Deno.serve(async (req) => {
 
     const sm = readSandboxMeta((project.meta ?? {}) as Record<string, unknown>);
     const e2bKey = await loadUserE2bApiKey(supabase, userData.user.id);
-    if (e2bKey && sm.previewSandboxId) {
-      await killProjectSandbox(e2bKey, sm.previewSandboxId);
+
+    let sandboxCleanup: { killed: string[]; failed: string[]; listed: string[] } | null = null;
+    if (e2bKey) {
+      sandboxCleanup = await killAllProjectSandboxes(
+        e2bKey,
+        projectId,
+        sm.previewSandboxId,
+      );
+      if (sandboxCleanup.failed.length > 0) {
+        console.error(
+          `[project-delete] sandbox kill incomplete project=${projectId}`,
+          sandboxCleanup,
+        );
+      }
+    } else if (sm.previewSandboxId) {
+      console.warn(
+        `[project-delete] previewSandboxId=${sm.previewSandboxId} but no E2B key — sandbox may remain`,
+      );
     }
 
     await supabase.from("agent_checkpoints").delete().eq("project_id", projectId);
@@ -45,7 +61,10 @@ Deno.serve(async (req) => {
     const { error: delErr } = await supabase.from("projects").delete().eq("id", projectId);
     if (delErr) return json({ error: delErr.message }, 500);
 
-    return json({ ok: true });
+    return json({
+      ok: true,
+      sandboxCleanup: sandboxCleanup ?? { killed: [], failed: [], listed: [] },
+    });
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : "erro inesperado";
     return json({ error: msg }, 500);

@@ -225,11 +225,13 @@ Deno.serve(async (req) => {
       const smoke = await runE2bSmokeTest(token);
       if (!smoke.ok) {
         return json({
+          ok: false,
+          connected: false,
           error: smoke.error ??
             "Chave E2B inválida ou template sem Node/npm. Gere nova chave em e2b.dev.",
           code: smoke.keyOk ? "e2b_template_failed" : "e2b_key_invalid",
           smoke,
-        }, 400);
+        });
       }
       metaIn.e2bHealthOk = true;
       metaIn.e2bHealthCheckedAt = new Date().toISOString();

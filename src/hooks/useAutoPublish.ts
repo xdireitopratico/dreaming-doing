@@ -32,6 +32,7 @@ export function useAutoPublish({
 }: AutoPublishOpts) {
   const [publishing, setPublishing] = useState(false);
   const attemptedRef = useRef<string | null>(null);
+  const publishedToastUrlRef = useRef<string | null>(null);
   const qc = useQueryClient();
 
   const publishNow = useCallback(async (): Promise<string | null> => {
@@ -48,7 +49,10 @@ export function useAutoPublish({
       if (res.url) {
         await qc.invalidateQueries({ queryKey: ["project", projectId] });
         logEditorTelemetryEvent("preview", "auto_publish_ok", "ok", res.url.slice(0, 120));
-        toast.success("Site no ar", { description: res.url, duration: 5000 });
+        if (publishedToastUrlRef.current !== res.url) {
+          publishedToastUrlRef.current = res.url;
+          toast.success("Site no ar", { description: res.url, duration: 5000 });
+        }
         return res.url;
       }
       return null;

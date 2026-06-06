@@ -1,5 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 import { formatE2bUserError } from "@/lib/e2b-status";
+import { assertEdgeFunctionOk } from "@/lib/edge-function-response";
 
 export type E2bHealthResponse = {
   ok: boolean;
@@ -15,12 +16,16 @@ export type E2bHealthResponse = {
 };
 
 export async function testE2bApiKey(token?: string): Promise<E2bHealthResponse> {
-  const { data, error } = await supabase.functions.invoke("e2b-health", {
+  const { data, error, response } = await supabase.functions.invoke("e2b-health", {
     body: token?.trim() ? { token: token.trim() } : {},
   });
-  if (error) throw new Error(error.message);
-  const res = (data ?? {}) as E2bHealthResponse & { error?: string; code?: string };
-  if (res.error && !res.ok) {
+  const res = await assertEdgeFunctionOk(
+    (data ?? {}) as E2bHealthResponse & { error?: string; code?: string },
+    error,
+    formatE2bUserError,
+    response,
+  );
+  if (!res.ok && res.error) {
     throw new Error(formatE2bUserError(res.error, res.code));
   }
   return res;

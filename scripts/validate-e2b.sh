@@ -17,6 +17,11 @@ grep -q 'createValidatedE2bSandbox' supabase/functions/_shared/project-sandbox.t
 echo "→ connector-upsert smoke hook"
 grep -q 'runE2bSmokeTest' supabase/functions/connector-upsert/index.ts
 
+echo "→ project-delete killAll + metadata"
+grep -q 'killAllProjectSandboxes' supabase/functions/project-delete/index.ts
+grep -q 'forgeSandboxMetadata' supabase/functions/_shared/project-sandbox.ts
+grep -q 'e2b-cleanup' scripts/sync/deploy-all.sh
+
 echo "→ vitest e2b-status"
 npm test -- --run src/lib/e2b-status.test.ts >/dev/null
 
