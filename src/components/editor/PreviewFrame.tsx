@@ -1,6 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { PreviewEmptyGuide } from "@/components/editor/PreviewEmptyGuide";
+import {
+  PreviewViewportChrome,
+  previewDeviceWidth,
+  type PreviewDevice,
+} from "@/components/editor/PreviewViewportChrome";
 import { buildPreviewUrl } from "@/lib/project-routes";
 
 interface PreviewFrameProps {
@@ -41,6 +46,8 @@ export function PreviewFrame({
   agentRunning = false,
 }: PreviewFrameProps) {
   const [iframeLoading, setIframeLoading] = useState(false);
+  const [device, setDevice] = useState<PreviewDevice>("desktop");
+  const deviceWidth = previewDeviceWidth(device);
 
   useEffect(() => {
     if (devUrl) setIframeLoading(true);
@@ -75,9 +82,30 @@ export function PreviewFrame({
 
   const showBootSpinner = booting && !agentRunning && !iframeSrc;
 
+  const handleRefresh = () => {
+    if (iframeRef?.current?.contentWindow) {
+      iframeRef.current.contentWindow.location.reload();
+      return;
+    }
+    onRefresh?.();
+  };
+
   return (
     <div className="forge-preview-root flex min-h-0 flex-1 flex-col">
-      <div className="forge-preview-viewport min-h-0 flex-1">
+      <PreviewViewportChrome
+        files={files}
+        activePath={previewPath}
+        onNavigate={onPreviewPathChange ?? (() => {})}
+        devUrl={devUrl}
+        onRefresh={handleRefresh}
+        device={device}
+        onDeviceChange={setDevice}
+      />
+      <div
+        className="forge-preview-viewport min-h-0 flex-1"
+        data-device={device}
+        style={deviceWidth ? ({ "--forge-preview-device-width": deviceWidth } as React.CSSProperties) : undefined}
+      >
         {bootError && !showBootSpinner && (
           <div className="flex h-full flex-col items-center justify-center gap-3 bg-white p-8 text-center">
             <p className="text-sm text-neutral-700 max-w-sm leading-relaxed">{bootError}</p>
@@ -116,7 +144,7 @@ export function PreviewFrame({
               ref={iframeRef}
               key={`${iframeSrc}-${reloadNonce}`}
               src={iframeSrc}
-              className="forge-preview-frame absolute inset-0 h-full w-full"
+              className="forge-preview-frame forge-preview-frame--sized"
               sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
               title="Preview"
               onLoad={() => {
@@ -128,7 +156,7 @@ export function PreviewFrame({
         ) : !bootError && previewContent ? (
           <iframe
             srcDoc={previewContent}
-            className="forge-preview-frame absolute inset-0 h-full w-full"
+            className="forge-preview-frame forge-preview-frame--sized"
             sandbox="allow-scripts"
             title="Preview"
           />

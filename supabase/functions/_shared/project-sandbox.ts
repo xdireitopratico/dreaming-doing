@@ -2,14 +2,12 @@
  * Um sandbox E2B por projeto — criado pelo agente, reutilizado sempre, encerrado só ao excluir o projeto.
  */
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
-import {
-  E2B_TEMPLATE_DEFAULT,
-  patchProjectFilesForE2b,
-} from "./e2b.ts";
-import { getE2BSandboxApi, type E2BSandboxInstance } from "./e2b-sdk.ts";
+import { E2B_TEMPLATE_DEFAULT, patchProjectFilesForE2b } from "./e2b.ts";
+import { e2bRestConnect, e2bRestCreate, type E2bRestSandbox } from "./e2b-rest.ts";
 
 /** Renovação de lease no meta (não recria sandbox). */
 const SANDBOX_LEASE_MS = 30 * 24 * 60 * 60 * 1000;
+const SANDBOX_TIMEOUT_SEC = 30 * 60;
 
 export type ProjectSandboxMeta = {
   previewSandboxId?: string;
@@ -18,7 +16,9 @@ export type ProjectSandboxMeta = {
   previewPort?: number;
 };
 
-export function readSandboxMeta(meta: Record<string, unknown> | null | undefined): ProjectSandboxMeta {
+export function readSandboxMeta(
+  meta: Record<string, unknown> | null | undefined,
+): ProjectSandboxMeta {
   const m = meta ?? {};
   return {
     previewSandboxId: typeof m.previewSandboxId === "string" ? m.previewSandboxId : undefined,
@@ -48,18 +48,21 @@ async function touchSandboxLease(
   sandboxId: string,
   extra?: Partial<ProjectSandboxMeta>,
 ): Promise<void> {
-  await supabase.from("projects").update({
-    meta: {
-      ...existing,
-      ...extra,
-      previewSandboxId: sandboxId,
-      previewExpiresAt: new Date(Date.now() + SANDBOX_LEASE_MS).toISOString(),
-    },
-  }).eq("id", projectId);
+  await supabase
+    .from("projects")
+    .update({
+      meta: {
+        ...existing,
+        ...extra,
+        previewSandboxId: sandboxId,
+        previewExpiresAt: new Date(Date.now() + SANDBOX_LEASE_MS).toISOString(),
+      },
+    })
+    .eq("id", projectId);
 }
 
 export type ConnectSandboxResult = {
-  sandbox: E2BSandboxInstance;
+  sandbox: E2bRestSandbox;
   sandboxId: string;
   reused: boolean;
 };
@@ -79,11 +82,9 @@ export async function ensureAgentProjectSandbox(
 ): Promise<ConnectSandboxResult> {
   const { existing, sm } = await loadProjectMeta(supabase, projectId);
 
-  const Sandbox = await getE2BSandboxApi();
-
   if (sm.previewSandboxId) {
     try {
-      const sandbox = await Sandbox.connect(sm.previewSandboxId, { apiKey });
+      const sandbox = await e2bRestConnect(apiKey, sm.previewSandboxId, SANDBOX_TIMEOUT_SEC);
       await touchSandboxLease(supabase, projectId, existing, sandbox.sandboxId);
       return { sandbox, sandboxId: sandbox.sandboxId, reused: true };
     } catch (e) {
@@ -92,11 +93,7 @@ export async function ensureAgentProjectSandbox(
     }
   }
 
-  const sandbox = await Sandbox.create(template, {
-    apiKey,
-    timeoutMs: 30 * 60 * 1000,
-    network: { maskRequestHost: "localhost:${PORT}" },
-  });
+  const sandbox = await e2bRestCreate(apiKey, template, SANDBOX_TIMEOUT_SEC);
 
   await touchSandboxLease(supabase, projectId, existing, sandbox.sandboxId, {
     previewUrl: undefined,
@@ -117,10 +114,8 @@ export async function connectProjectSandboxForPreview(
     throw new Error(NO_SANDBOX_MSG);
   }
 
-  const Sandbox = await getE2BSandboxApi();
-
   try {
-    const sandbox = await Sandbox.connect(sm.previewSandboxId, { apiKey });
+    const sandbox = await e2bRestConnect(apiKey, sm.previewSandboxId, SANDBOX_TIMEOUT_SEC);
     await touchSandboxLease(supabase, projectId, existing, sandbox.sandboxId);
     return { sandbox, sandboxId: sandbox.sandboxId, reused: true };
   } catch (e) {
@@ -136,8 +131,7 @@ export async function killProjectSandbox(
 ): Promise<void> {
   if (!sandboxId) return;
   try {
-    const Sandbox = await getE2BSandboxApi();
-    const sandbox = await Sandbox.connect(sandboxId, { apiKey });
+    const sandbox = await e2bRestConnect(apiKey, sandboxId, SANDBOX_TIMEOUT_SEC);
     await sandbox.kill();
   } catch {
     /* já expirou na E2B */
@@ -145,14 +139,14 @@ export async function killProjectSandbox(
 }
 
 export async function syncProjectFilesToSandbox(
-  sandbox: E2BSandboxInstance,
+  sandbox: E2bRestSandbox,
   files: Array<{ path: string; content?: string | null }>,
 ): Promise<void> {
   const payload = patchProjectFilesForE2b(files);
   if (payload.length > 0) await sandbox.files.write(payload);
 }
 
-export function previewUrlFromSandbox(sandbox: E2BSandboxInstance, port: number): string {
+export function previewUrlFromSandbox(sandbox: E2bRestSandbox, port: number): string {
   const host = sandbox.getHost(port);
   return host.startsWith("http") ? host : `https://${host}`;
 }

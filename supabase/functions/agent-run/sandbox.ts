@@ -1,15 +1,15 @@
-// sandbox.ts — E2B via SDK v2; sandbox nasce no 1º sync do agente e permanece para o preview.
+// sandbox.ts — E2B via REST; sandbox nasce no 1º sync do agente e permanece para o preview.
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { E2B_TEMPLATE_DEFAULT, e2bPreviewUrl } from "../_shared/e2b.ts";
 import {
   ensureAgentProjectSandbox,
   syncProjectFilesToSandbox,
 } from "../_shared/project-sandbox.ts";
-import type { E2BSandboxInstance } from "../_shared/e2b-sdk.ts";
+import type { E2bRestSandbox } from "../_shared/e2b-rest.ts";
 import type { SandboxProvider, ExecResult, ExecOpts, FileEntry } from "./types.ts";
 
 class E2BSandbox implements SandboxProvider {
-  private sandbox: E2BSandboxInstance | null = null;
+  private sandbox: E2bRestSandbox | null = null;
 
   constructor(
     private readonly e2bApiKey: string,
@@ -18,7 +18,7 @@ class E2BSandbox implements SandboxProvider {
     private readonly e2bTemplate: string = E2B_TEMPLATE_DEFAULT,
   ) {}
 
-  private async ensure(): Promise<E2BSandboxInstance> {
+  private async ensure(): Promise<E2bRestSandbox> {
     if (this.sandbox) return this.sandbox;
     const { sandbox, reused } = await ensureAgentProjectSandbox(
       this.supabase,
@@ -88,7 +88,7 @@ export function createSandboxProvider(
   const key = e2bApiKey?.trim() || "";
   const template = e2bTemplate?.trim() || E2B_TEMPLATE_DEFAULT;
   if (key && supabase && projectId) {
-    console.log("Usando sandbox E2B (template:", template, ")");
+    console.log("Usando sandbox E2B REST (template:", template, ")");
     return new E2BSandbox(key, supabase, projectId, template);
   }
   console.log("Sandbox E2B não configurado - modo noop");

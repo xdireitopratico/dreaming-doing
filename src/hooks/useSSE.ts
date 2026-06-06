@@ -37,6 +37,8 @@ export interface AgentProgress {
   statusHint: string | null;
   /** Texto do modelo ainda em voo (SSE assistant_text), antes de persistir no DB. */
   streamText: string | null;
+  /** Último evento finish: true = agente concluiu com sucesso. */
+  lastFinishOk: boolean | null;
 }
 
 export type AgentConnectOptions = {
@@ -61,6 +63,7 @@ const initialState: AgentProgress = {
   resumable: false,
   statusHint: null,
   streamText: null,
+  lastFinishOk: null,
 };
 
 const MODEL_COSTS: Record<string, number> = {
@@ -93,181 +96,180 @@ export function useSSE() {
   const abortRef = useRef<AbortController | null>(null);
   const runIdRef = useRef<string | null>(null);
 
-  const connect = useCallback(async (
-    projectId: string,
-    conversationId: string,
-    sessionKind?: ForgeSessionKind,
-    options?: AgentConnectOptions,
-  ) => {
-    const isResume = options?.resume === true;
-    setProgress({
-      ...initialState,
-      statusHint: isResume ? "Conectando para retomar o agente…" : null,
-      resumable: false,
-    });
-    const sawFinish = { current: false };
-
-    const { url, publishableKey } = getSupabaseEnv();
-    if (!url || !publishableKey) {
-      setProgress((p) => ({
-        ...p,
-        error: "Supabase não configurado. Verifique VITE_SUPABASE_URL e VITE_SUPABASE_PUBLISHABLE_KEY.",
-        finished: true,
-      }));
-      setConnected(false);
-      return;
-    }
-
-    const { data: sess } = await supabase.auth.getSession();
-    const accessToken = sess.session?.access_token;
-    if (!accessToken) {
-      setProgress((p) => ({
-        ...p,
-        error: "Sessão expirada. Faça login novamente.",
-        finished: true,
-      }));
-      setConnected(false);
-      return;
-    }
-
-    runIdRef.current = null;
-    const controller = new AbortController();
-    abortRef.current = controller;
-
-    const functionsUrl = `${url}/functions/v1/agent-run`;
-
-    setConnected(true);
-    logEditorTelemetryEvent(
-      "sse",
-      "connect_start",
-      "info",
-      sessionKind ?? "auto",
-    );
-
-    try {
-      const res = await fetch(functionsUrl, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "text/event-stream",
-          Authorization: `Bearer ${accessToken}`,
-          apikey: publishableKey,
-        },
-        body: JSON.stringify({
-          projectId,
-          conversationId,
-          preferences: loadAgentPreferences(),
-          sessionKind,
-          resume: isResume,
-          ...loadAgentSessionExtensions(),
-        }),
-        signal: controller.signal,
+  const connect = useCallback(
+    async (
+      projectId: string,
+      conversationId: string,
+      sessionKind?: ForgeSessionKind,
+      options?: AgentConnectOptions,
+    ) => {
+      const isResume = options?.resume === true;
+      setProgress({
+        ...initialState,
+        statusHint: isResume ? "Conectando para retomar o agente…" : null,
+        resumable: false,
       });
+      const sawFinish = { current: false };
 
-      if (!res.ok) {
-        const msg = await parseErrorResponse(res);
-        logEditorTelemetryEvent("sse", "http_error", "error", `${res.status} ${msg.slice(0, 120)}`);
-        const canRetry = res.status === 409 || res.status >= 500;
+      const { url, publishableKey } = getSupabaseEnv();
+      if (!url || !publishableKey) {
         setProgress((p) => ({
           ...p,
-          error: msg,
+          error:
+            "Supabase não configurado. Verifique VITE_SUPABASE_URL e VITE_SUPABASE_PUBLISHABLE_KEY.",
           finished: true,
-          resumable: canRetry || isResume,
         }));
         setConnected(false);
         return;
       }
 
-      const reader = res.body?.getReader();
-      if (!reader) {
-        setProgress((p) => ({ ...p, error: "Resposta vazia do agent-run", finished: true }));
+      const { data: sess } = await supabase.auth.getSession();
+      const accessToken = sess.session?.access_token;
+      if (!accessToken) {
+        setProgress((p) => ({
+          ...p,
+          error: "Sessão expirada. Faça login novamente.",
+          finished: true,
+        }));
         setConnected(false);
         return;
       }
 
-      const decoder = new TextDecoder();
-      let buffer = "";
+      runIdRef.current = null;
+      const controller = new AbortController();
+      abortRef.current = controller;
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
+      const functionsUrl = `${url}/functions/v1/agent-run`;
 
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() ?? "";
+      setConnected(true);
+      logEditorTelemetryEvent("sse", "connect_start", "info", sessionKind ?? "auto");
 
-        for (const line of lines) {
-          if (line.startsWith("data: ")) {
-            const json = line.slice(6);
-            try {
-              const parsed = JSON.parse(json) as Record<string, unknown>;
-              const eventType = (parsed.type as string) ?? "unknown";
-              const eventData =
-                parsed.data && typeof parsed.data === "object"
-                  ? (parsed.data as Record<string, unknown>)
-                  : { ...parsed, type: undefined };
-              const event: SSEEvent = {
-                type: eventType,
-                data: eventData,
-                timestamp: Date.now(),
-              };
-              if (eventType === "ui_action" && isTasteUiAction(parsed)) {
-                dispatchTasteUiAction(parsed as Parameters<typeof dispatchTasteUiAction>[0]);
+      try {
+        const res = await fetch(functionsUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "text/event-stream",
+            Authorization: `Bearer ${accessToken}`,
+            apikey: publishableKey,
+          },
+          body: JSON.stringify({
+            projectId,
+            conversationId,
+            preferences: loadAgentPreferences(),
+            sessionKind,
+            resume: isResume,
+            ...loadAgentSessionExtensions(),
+          }),
+          signal: controller.signal,
+        });
+
+        if (!res.ok) {
+          const msg = await parseErrorResponse(res);
+          logEditorTelemetryEvent(
+            "sse",
+            "http_error",
+            "error",
+            `${res.status} ${msg.slice(0, 120)}`,
+          );
+          const canRetry = res.status === 409 || res.status >= 500;
+          setProgress((p) => ({
+            ...p,
+            error: msg,
+            finished: true,
+            resumable: canRetry || isResume,
+          }));
+          setConnected(false);
+          return;
+        }
+
+        const reader = res.body?.getReader();
+        if (!reader) {
+          setProgress((p) => ({ ...p, error: "Resposta vazia do agent-run", finished: true }));
+          setConnected(false);
+          return;
+        }
+
+        const decoder = new TextDecoder();
+        let buffer = "";
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split("\n");
+          buffer = lines.pop() ?? "";
+
+          for (const line of lines) {
+            if (line.startsWith("data: ")) {
+              const json = line.slice(6);
+              try {
+                const parsed = JSON.parse(json) as Record<string, unknown>;
+                const eventType = (parsed.type as string) ?? "unknown";
+                const eventData =
+                  parsed.data && typeof parsed.data === "object"
+                    ? (parsed.data as Record<string, unknown>)
+                    : { ...parsed, type: undefined };
+                const event: SSEEvent = {
+                  type: eventType,
+                  data: eventData,
+                  timestamp: Date.now(),
+                };
+                if (eventType === "ui_action" && isTasteUiAction(parsed)) {
+                  dispatchTasteUiAction(parsed as Parameters<typeof dispatchTasteUiAction>[0]);
+                }
+                if (event.type === "start" && typeof eventData.runId === "string") {
+                  runIdRef.current = eventData.runId;
+                }
+                if (event.type === "finish" || event.type === "done") {
+                  sawFinish.current = true;
+                  runIdRef.current = null;
+                  logEditorTelemetryEvent("sse", "finish", "ok");
+                }
+                if (event.type === "error") {
+                  logEditorTelemetryEvent(
+                    "sse",
+                    "stream_error",
+                    "error",
+                    String(event.data.error ?? "").slice(0, 200),
+                  );
+                }
+                if (event.type === "phase") {
+                  logEditorTelemetryEvent("agent", "phase", "info", String(event.data.phase ?? ""));
+                }
+                setProgress((prev) => applyAgentProgressEvent(prev, event));
+              } catch {
+                /* heartbeat */
               }
-              if (event.type === "start" && typeof eventData.runId === "string") {
-                runIdRef.current = eventData.runId;
-              }
-              if (event.type === "finish" || event.type === "done") {
-                sawFinish.current = true;
-                runIdRef.current = null;
-                logEditorTelemetryEvent("sse", "finish", "ok");
-              }
-              if (event.type === "error") {
-                logEditorTelemetryEvent(
-                  "sse",
-                  "stream_error",
-                  "error",
-                  String(event.data.error ?? "").slice(0, 200),
-                );
-              }
-              if (event.type === "phase") {
-                logEditorTelemetryEvent(
-                  "agent",
-                  "phase",
-                  "info",
-                  String(event.data.phase ?? ""),
-                );
-              }
-              setProgress((prev) => applyAgentProgressEvent(prev, event));
-            } catch {
-              /* heartbeat */
             }
           }
         }
+        if (!sawFinish.current) {
+          setProgress((p) => ({
+            ...p,
+            finished: true,
+            resumable: true,
+            error:
+              p.error ??
+              "Conexão com o agente foi interrompida. Seu histórico está salvo no projeto — use Continuar.",
+          }));
+        }
+      } catch (err: unknown) {
+        if (!(err instanceof Error && err.name === "AbortError")) {
+          setProgress((p) => ({
+            ...p,
+            error: formatAgentFetchError(err),
+            finished: true,
+            resumable: true,
+          }));
+        }
+      } finally {
+        setConnected(false);
       }
-      if (!sawFinish.current) {
-        setProgress((p) => ({
-          ...p,
-          finished: true,
-          resumable: true,
-          error:
-            p.error ??
-            "Conexão com o agente foi interrompida. Seu histórico está salvo no projeto — use Continuar.",
-        }));
-      }
-    } catch (err: unknown) {
-      if (!(err instanceof Error && err.name === "AbortError")) {
-        setProgress((p) => ({
-          ...p,
-          error: formatAgentFetchError(err),
-          finished: true,
-          resumable: true,
-        }));
-      }
-    } finally {
-      setConnected(false);
-    }
-  }, []);
+    },
+    [],
+  );
 
   const disconnect = useCallback(() => {
     abortRef.current?.abort();
@@ -313,9 +315,7 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
         error: null,
         finished: false,
         resumable: false,
-        statusHint: data.resume
-          ? "Retomando com a memória salva no chat…"
-          : prev.statusHint,
+        statusHint: data.resume ? "Retomando com a memória salva no chat…" : prev.statusHint,
         timeline: [...prev.timeline, event],
       };
 
@@ -343,10 +343,7 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
         ...prev,
         phase: (data.phase as string) ?? prev.phase,
         message: (data.message as string) ?? prev.message,
-        statusHint:
-          data.phase === "resume"
-            ? ((data.message as string) ?? prev.statusHint)
-            : null,
+        statusHint: data.phase === "resume" ? ((data.message as string) ?? prev.statusHint) : null,
         timeline: [...prev.timeline, event],
       };
 
@@ -405,7 +402,10 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
         ...prev,
         tools: [
           ...prev.tools,
-          { name: (data.name as string) ?? "?", args: (data.args as Record<string, unknown>) ?? {} },
+          {
+            name: (data.name as string) ?? "?",
+            args: (data.args as Record<string, unknown>) ?? {},
+          },
         ],
         timeline: [...prev.timeline, event],
       };
@@ -427,7 +427,9 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
         ...prev,
         runtimeChecks: [
           ...prev.runtimeChecks,
-          ...((data.checks as Array<{ name: string; ok: boolean }>) ?? [{ name: "build", ok: true }]),
+          ...((data.checks as Array<{ name: string; ok: boolean }>) ?? [
+            { name: "build", ok: true },
+          ]),
         ],
         timeline: [...prev.timeline, event],
       };
@@ -439,7 +441,9 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
         ...prev,
         runtimeChecks: [
           ...prev.runtimeChecks,
-          ...((data.checks as Array<{ name: string; ok: boolean }>) ?? [{ name: "build", ok: false }]),
+          ...((data.checks as Array<{ name: string; ok: boolean }>) ?? [
+            { name: "build", ok: false },
+          ]),
         ],
         timeline: [...prev.timeline, event],
       };
@@ -471,6 +475,7 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
         ...prev,
         finished: true,
         streamText: null,
+        lastFinishOk: !failed,
         resumable: failed && data.resumable === true,
         error: failed ? ((data.error as string) ?? prev.error) : null,
         timeline: [...prev.timeline, event],

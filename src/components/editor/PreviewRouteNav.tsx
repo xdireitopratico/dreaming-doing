@@ -14,6 +14,8 @@ interface PreviewRouteNavProps {
   onNavigate: (path: string) => void;
   devUrl?: string | null;
   onRefresh?: () => void;
+  /** Barra compacta no chrome do preview (refresh fica fora). */
+  variant?: "default" | "chrome";
 }
 
 function normalizeRouteInput(raw: string): string {
@@ -35,6 +37,7 @@ export function PreviewRouteNav({
   onNavigate,
   devUrl,
   onRefresh,
+  variant = "default",
 }: PreviewRouteNavProps) {
   const routes = useMemo(() => {
     const paths = files.map((f) => f.path);
@@ -84,8 +87,14 @@ export function PreviewRouteNav({
     );
   };
 
+  const chrome = variant === "chrome";
+
   return (
-    <div className="forge-address-bar" role="navigation" aria-label="Navegação do preview">
+    <div
+      className={`forge-address-bar${chrome ? " forge-address-bar--chrome" : ""}`}
+      role="navigation"
+      aria-label="Navegação do preview"
+    >
       <span className="forge-address-bar-scheme" title={canNavigate ? previewHost : "Preview local"}>
         {canNavigate ? (
           <Lock className="size-3 text-[var(--forge-primary)]/80" aria-hidden />
@@ -145,7 +154,7 @@ export function PreviewRouteNav({
         </ForgeEditorDropdownContent>
       </DropdownMenu>
 
-      {canNavigate && iframeSrc && (
+      {!chrome && canNavigate && iframeSrc && (
         <button
           type="button"
           className="forge-address-bar-action"
@@ -155,7 +164,7 @@ export function PreviewRouteNav({
           <Copy className="size-3.5" />
         </button>
       )}
-      {canNavigate && onRefresh && (
+      {!chrome && canNavigate && onRefresh && (
         <button
           type="button"
           className="forge-address-bar-action"

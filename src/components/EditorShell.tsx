@@ -22,6 +22,7 @@ export function EditorShell({
   previewDevUrl,
   onPreviewRefresh,
   integrations,
+  topBar = "full",
 }: {
   children: ReactNode;
   projectName?: string;
@@ -36,6 +37,8 @@ export function EditorShell({
   previewDevUrl?: string | null;
   onPreviewRefresh?: () => void;
   integrations?: EditorIntegrationsMenuProps;
+  /** Editor principal usa headers no grid do canvas; history mantém barra full. */
+  topBar?: "full" | "none";
 }) {
   const { user, loading } = useAuth();
   const loc = useLocation();
@@ -59,20 +62,22 @@ export function EditorShell({
 
   return (
     <div className="editor-workspace flex h-screen flex-col overflow-hidden">
-      <EditorTopBar
-        projectName={projectName}
-        activeView={activeView}
-        onViewChange={onViewChange}
-        onShare={onShare}
-        onPublish={onPublish}
-        running={running}
-        previewFiles={previewFiles}
-        previewPath={previewPath}
-        onPreviewPathChange={onPreviewPathChange}
-        previewDevUrl={previewDevUrl}
-        onPreviewRefresh={onPreviewRefresh}
-        integrations={integrations}
-      />
+      {topBar === "full" && (
+        <EditorTopBar
+          projectName={projectName}
+          activeView={activeView}
+          onViewChange={onViewChange}
+          onShare={onShare}
+          onPublish={onPublish}
+          running={running}
+          previewFiles={previewFiles}
+          previewPath={previewPath}
+          onPreviewPathChange={onPreviewPathChange}
+          previewDevUrl={previewDevUrl}
+          onPreviewRefresh={onPreviewRefresh}
+          integrations={integrations}
+        />
+      )}
       <div className="min-h-0 flex-1">{children}</div>
     </div>
   );

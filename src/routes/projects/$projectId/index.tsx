@@ -12,6 +12,8 @@ import { removeRealtimeChannel } from "@/lib/supabase-realtime";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { EditorShell } from "@/components/EditorShell";
 import { EditorResizableLayout } from "@/components/editor/EditorResizableLayout";
+import { EditorChatHeader } from "@/components/editor/EditorChatHeader";
+import { EditorWorkspaceHeader } from "@/components/editor/EditorWorkspaceHeader";
 import type { EditorMainView } from "@/components/editor/EditorViewTabs";
 import type { AgentComposerMode } from "@/components/editor/ChatInput";
 import { CodeEditor, type Tab } from "@/components/editor/CodeEditor";
@@ -533,23 +535,25 @@ function EditorPage() {
     void qc.invalidateQueries({ queryKey: ["profile"] });
   }, [sse.progress.finished, conversation, qc]);
 
-  // Preview E2B: sobe quando o agente grava arquivos ou ao terminar a rodada
   const agentFinished = sse.progress.finished;
-  // Preview E2B só após o agente terminar — streaming fica 100% no chat
+  const agentCompletedOk =
+    agentFinished &&
+    (sse.progress.lastFinishOk === true ||
+      (sse.progress.lastFinishOk === null && agentHasRun && !sse.progress.error));
+
   useEffect(() => {
     if (!isReactProject || !e2bConnected || devUrl || previewBoot.booting) return;
     if (running) return;
-    if (!agentFinished || sse.progress.error) return;
-    void previewBoot.boot();
+    if (!agentCompletedOk) return;
+    void previewBoot.bootWithRetry();
   }, [
-    agentFinished,
+    agentCompletedOk,
     running,
-    sse.progress.error,
     isReactProject,
     e2bConnected,
     devUrl,
     previewBoot.booting,
-    previewBoot.boot,
+    previewBoot.bootWithRetry,
   ]);
 
   const filesSyncKey = useMemo(
@@ -645,7 +649,7 @@ function EditorPage() {
   const handlePublish = useCallback(async () => {
     if (!devUrl && isReactProject) {
       toast.info("Iniciando preview antes de publicar…");
-      const url = await previewBoot.boot();
+      const url = await previewBoot.bootWithRetry();
       if (!url) return;
     }
     setPublishing(true);
@@ -746,27 +750,7 @@ function EditorPage() {
       {/* Inject heat map CSS */}
       <style>{HEAT_MAP_CSS}</style>
 
-      <EditorShell
-        projectName={project?.name}
-        activeView={mainView}
-        onViewChange={handleMainViewChange}
-        running={running}
-        onShare={handleShare}
-        onPublish={handlePublish}
-        previewFiles={previewNavFiles}
-        previewPath={previewRoute}
-        onPreviewPathChange={setPreviewRoute}
-        previewDevUrl={devUrl}
-        onPreviewRefresh={() => previewBoot.boot()}
-        integrations={{
-          status: connectorStatus,
-          modes: connectorModes,
-          modal: connectorModal,
-          openConnector,
-          closeModal: closeConnectorModal,
-          saveConnector,
-        }}
-      >
+      <EditorShell topBar="none">
         <div
           className="flex min-h-0 h-full w-full flex-1 flex-col overflow-hidden"
           onDragOver={handleDragOver}
@@ -775,6 +759,25 @@ function EditorPage() {
         >
           <EditorResizableLayout
             workspaceCode={activeView === "code"}
+            chatHeader={
+              <EditorChatHeader projectName={project?.name} running={running} />
+            }
+            workspaceHeader={
+              <EditorWorkspaceHeader
+                activeView={mainView}
+                onViewChange={handleMainViewChange}
+                onShare={handleShare}
+                onPublish={handlePublish}
+                integrations={{
+                  status: connectorStatus,
+                  modes: connectorModes,
+                  modal: connectorModal,
+                  openConnector,
+                  closeModal: closeConnectorModal,
+                  saveConnector,
+                }}
+              />
+            }
             chat={
               <div className="forge-chat-column">
                 <div className="forge-chat-body">
@@ -856,7 +859,7 @@ function EditorPage() {
                         bootError={previewBoot.lastError}
                         warming={previewBoot.warming}
                         onWarmComplete={previewBoot.clearWarming}
-                        onRefresh={() => previewBoot.boot()}
+                        onRefresh={() => previewBoot.boot({ force: true })}
                         reloadNonce={previewReloadNonce}
                         agentHasRun={agentHasRun}
                         e2bConnected={e2bConnected}

@@ -12,9 +12,10 @@ export function ForgeEditorDropdownContent({
   return (
     <DropdownMenuContent
       className={cn(
-        "forge-dropdown-panel z-[200] border-[var(--forge-border-strong)] bg-[var(--forge-surface-3)] p-1 text-[var(--forge-text)] shadow-[0_12px_32px_rgba(0,0,0,0.45)]",
+        "forge-dropdown-panel z-[200] !border-[var(--forge-border-strong)] !bg-[#1a1e27] p-1 !text-[var(--forge-text)] shadow-[0_12px_32px_rgba(0,0,0,0.55)]",
         className,
       )}
+      style={{ backgroundColor: "#1a1e27", opacity: 1 }}
       {...props}
     />
   );
@@ -27,7 +28,7 @@ export function ForgeEditorDropdownItem({
   return (
     <DropdownMenuItem
       className={cn(
-        "forge-dropdown-item cursor-pointer rounded-md text-[var(--forge-silver)] focus:bg-[var(--forge-surface-3)] focus:text-[var(--forge-text)] data-[highlighted]:bg-[var(--forge-surface-3)] data-[highlighted]:text-[var(--forge-text)]",
+        "forge-dropdown-item cursor-pointer rounded-md text-[var(--forge-silver)] focus:!bg-[#252a36] focus:text-[var(--forge-text)] data-[highlighted]:!bg-[#252a36] data-[highlighted]:text-[var(--forge-text)]",
         className,
       )}
       {...props}

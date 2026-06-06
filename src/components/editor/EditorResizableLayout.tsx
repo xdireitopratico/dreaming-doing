@@ -30,12 +30,16 @@ function nearestSnap(ratio: number): number {
 interface EditorResizableLayoutProps {
   chat: ReactNode;
   workspace: ReactNode;
+  chatHeader?: ReactNode;
+  workspaceHeader?: ReactNode;
   workspaceCode?: boolean;
 }
 
 export function EditorResizableLayout({
   chat,
   workspace,
+  chatHeader,
+  workspaceHeader,
   workspaceCode,
 }: EditorResizableLayoutProps) {
   const [ratio, setRatio] = useState(loadRatio);
@@ -86,13 +90,15 @@ export function EditorResizableLayout({
   return (
     <div
       ref={containerRef}
-      className="forge-editor-canvas"
+      className={`forge-editor-canvas${chatHeader || workspaceHeader ? " forge-editor-canvas--split-header" : ""}`}
       style={
         {
           "--forge-chat-width": chatPct,
         } as React.CSSProperties
       }
     >
+      {chatHeader && <header className="forge-chat-header">{chatHeader}</header>}
+      {workspaceHeader && <header className="forge-workspace-header">{workspaceHeader}</header>}
       <section className="forge-chat-panel">{chat}</section>
 
       <div

@@ -440,3 +440,18 @@
   color: #0A0A0A;
   box-shadow: 0 0 16px rgba(255, 182, 39, 0.35);
 }
+
+/* Radix dropdowns do editor (portal no body — fora de .editor-workspace) */
+.forge-dropdown-panel {
+  background-color: #1a1e27 !important;
+  opacity: 1 !important;
+  backdrop-filter: none !important;
+  border-color: rgba(237, 239, 242, 0.14) !important;
+  color: #edeff2 !important;
+}
+
+.forge-dropdown-panel .forge-dropdown-item[data-highlighted],
+.forge-dropdown-panel .forge-dropdown-item:focus {
+  background-color: #252a36 !important;
+  color: #edeff2 !important;
+}
