@@ -69,6 +69,8 @@ interface ChatInputProps {
   onResumeAgent?: () => void;
   /** Slash /deploy — mesmo fluxo que Publicar na topbar */
   onDeploy?: () => void | Promise<void>;
+  /** Undo última mensagem do assistente + mensagem do usuário anterior */
+  onUndoMessage?: (assistantMsgId: string) => void;
 }
 
 // -----------------------------------------------------------------------------------
@@ -146,6 +148,7 @@ export function ChatInput({
   agentProgress,
   onResumeAgent,
   onDeploy,
+  onUndoMessage,
 }: ChatInputProps) {
   const [input, setInput] = useState("");
   const [composerModeLocal, setComposerModeLocal] = useState<AgentComposerMode>("build");
@@ -415,31 +418,32 @@ export function ChatInput({
             )}
           </div>
         ) : (
-          <ChatStream
-            messages={messages}
-            running={running}
-            progress={
-              agentProgress ?? {
-                phase: null,
-                message: null,
-                currentStep: null,
-                totalSteps: null,
-                tools: [],
-                cost: 0,
-                model: null,
-                skills: [],
-                runtimeChecks: [],
-                timeline: [],
-                summary: null,
-                error: null,
-                finished: false,
-                resumable: false,
-                statusHint: null,
-                streamText: null,
+            <ChatStream
+              messages={messages}
+              running={running}
+              progress={
+                agentProgress ?? {
+                  phase: null,
+                  message: null,
+                  currentStep: null,
+                  totalSteps: null,
+                  tools: [],
+                  cost: 0,
+                  model: null,
+                  skills: [],
+                  runtimeChecks: [],
+                  timeline: [],
+                  summary: null,
+                  error: null,
+                  finished: false,
+                  resumable: false,
+                  statusHint: null,
+                  streamText: null,
+                }
               }
-            }
-            onResume={onResumeAgent}
-          />
+              onResume={onResumeAgent}
+              onUndoMessage={onUndoMessage}
+            />
         )}
       </div>
 

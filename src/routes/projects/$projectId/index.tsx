@@ -658,6 +658,31 @@ function EditorPage() {
     })();
   }, [sse]);
 
+  const handleUndoMessage = useCallback((assistantMsgId: string) => {
+    if (!conversation) return;
+    // Find the assistant message and the user message before it
+    const msgIndex = chatMessages.findIndex(m => m.id === assistantMsgId && m.role === "assistant");
+    if (msgIndex === -1) return;
+    const userMsg = chatMessages[msgIndex - 1];
+    if (!userMsg || userMsg.role !== "user") return;
+
+    // Delete both messages from the database (newest first)
+    supabase
+      .from("messages")
+      .delete()
+      .in("id", [assistantMsgId, userMsg.id])
+      .then(({ error }) => {
+        if (error) {
+          toast.error("Erro ao desfazer");
+        } else {
+          toast.success("Desfeito: última resposta do agente + sua mensagem anterior");
+          logEditorTelemetryEvent("agent", "undo", "info", assistantMsgId.slice(0, 8));
+        }
+      });
+    // Invalidate queries to refetch
+    void qc.invalidateQueries({ queryKey: ["messages", conversation.id] });
+  }, [chatMessages, conversation, qc]);
+
   const handleExportZip = useCallback(() => {
     if (!project) return;
     exportProjectZip(projectId, project.name ?? "projeto");
@@ -827,6 +852,7 @@ function EditorPage() {
                     tasteStartRemaining={tasteStartRemaining}
                     onStartProject={handleStartProject}
                     onDeploy={handleOpenLiveSite}
+                    onUndoMessage={handleUndoMessage}
                   />
                 </div>
                 <SetupRail
