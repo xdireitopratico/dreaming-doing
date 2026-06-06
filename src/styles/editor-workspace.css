@@ -289,6 +289,20 @@ body:has(.editor-workspace) {
   background: rgba(255, 182, 39, 0.12);
 }
 
+/* Integrações (ícone de tomada) — trigger de dropdown, sem role="tab" */
+.forge-view-icon-tab:not([role="tab"]) {
+  border: 1px solid var(--forge-primary);
+  color: var(--forge-primary);
+  background: rgba(255, 182, 39, 0.06);
+}
+
+.forge-view-icon-tab:not([role="tab"]):hover,
+.forge-view-icon-tab:not([role="tab"])[data-state="open"] {
+  color: var(--forge-primary);
+  background: rgba(255, 182, 39, 0.12);
+  border-color: var(--forge-primary);
+}
+
 .forge-integrations-badge {
   position: absolute;
   top: 2px;
@@ -807,11 +821,11 @@ body:has(.editor-workspace) {
   gap: 6px;
   padding: 4px 10px;
   border-radius: 8px;
-  border: 1px solid var(--forge-border-strong);
+  border: 1px solid var(--forge-primary);
   background: var(--forge-surface-3);
   font-size: 11px;
   font-weight: 600;
-  color: var(--forge-silver);
+  color: var(--forge-primary);
   cursor: pointer;
   transition: border-color 0.15s, background 0.15s, color 0.15s;
 }
@@ -820,6 +834,7 @@ body:has(.editor-workspace) {
 .forge-composer-mode-trigger[data-state="open"] {
   border-color: var(--forge-primary);
   background: var(--forge-surface-3);
+  color: var(--forge-primary);
 }
 
 .forge-dropdown-panel {
@@ -840,7 +855,7 @@ body:has(.editor-workspace) {
 .editor-workspace [data-radix-menu-content] {
   background-color: var(--forge-surface-3) !important;
   color: var(--forge-text) !important;
-  border-color: var(--forge-border-strong) !important;
+  border-color: var(--forge-primary) !important;
 }
 
 .editor-workspace [role="menuitem"],
@@ -1430,7 +1445,7 @@ body:has(.editor-workspace) {
 [data-radix-popper-content-wrapper] .forge-dropdown-panel {
   background-color: #1a1e27 !important;
   color: var(--forge-text) !important;
-  border-color: var(--forge-border-strong) !important;
+  border-color: var(--forge-primary) !important;
   opacity: 1 !important;
 }
 
@@ -1447,5 +1462,6 @@ body:has(.editor-workspace) {
 /* Composer mode trigger — ensure border visible + selected highlight in trigger */
 .forge-composer-mode-trigger {
   background: var(--forge-surface-2);
-  border-color: var(--forge-border-strong);
+  border-color: var(--forge-primary);
+  color: var(--forge-primary);
 }

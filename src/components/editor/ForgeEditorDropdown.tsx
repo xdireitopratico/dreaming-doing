@@ -12,7 +12,7 @@ export function ForgeEditorDropdownContent({
   return (
     <DropdownMenuContent
       className={cn(
-        "forge-dropdown-panel z-[200] !border-[var(--forge-border-strong)] !bg-[#1a1e27] p-1 !text-[var(--forge-text)] shadow-[0_12px_32px_rgba(0,0,0,0.55)]",
+        "forge-dropdown-panel z-[200] !border-[var(--forge-primary)] !bg-[#1a1e27] p-1 !text-[var(--forge-text)] shadow-[0_12px_32px_rgba(0,0,0,0.55)]",
         className,
       )}
       style={{ backgroundColor: "#1a1e27", opacity: 1 }}
