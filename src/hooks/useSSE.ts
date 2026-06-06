@@ -104,6 +104,8 @@ export function useSSE() {
   const [connected, setConnected] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   const runIdRef = useRef<string | null>(null);
+  const streamOffsetRef = useRef(0);
+  const workerRelayRef = useRef(false);
 
   const connectOnce = useCallback(
     async (
@@ -140,7 +142,9 @@ export function useSSE() {
         return { shouldAutoResume: false, aborted: false };
       }
 
-      runIdRef.current = null;
+      if (!workerRelayRef.current) {
+        runIdRef.current = null;
+      }
       const controller = new AbortController();
       abortRef.current = controller;
 
@@ -165,7 +169,9 @@ export function useSSE() {
             sessionKind,
             resume: isResume,
             autoResume,
-            worker: true,
+            workerRelay: workerRelayRef.current,
+            streamOffset: streamOffsetRef.current,
+            runId: workerRelayRef.current ? runIdRef.current : undefined,
             ...loadAgentSessionExtensions(),
           }),
           signal: controller.signal,
@@ -199,6 +205,7 @@ export function useSSE() {
 
         const decoder = new TextDecoder();
         let buffer = "";
+        let relayHandoff = false;
 
         while (true) {
           const { done, value } = await reader.read();
@@ -229,9 +236,18 @@ export function useSSE() {
                 if (event.type === "start" && typeof eventData.runId === "string") {
                   runIdRef.current = eventData.runId;
                 }
+                if (event.type === "relay_handoff") {
+                  streamOffsetRef.current =
+                    typeof eventData.offset === "number" ? eventData.offset : 0;
+                  workerRelayRef.current = true;
+                  relayHandoff = true;
+                  break;
+                }
                 if (event.type === "finish" || event.type === "done") {
                   sawFinish.current = true;
                   runIdRef.current = null;
+                  workerRelayRef.current = false;
+                  streamOffsetRef.current = 0;
                   finishMeta.ok = eventData.ok !== false;
                   finishMeta.resumable = eventData.resumable === true;
                   logEditorTelemetryEvent("sse", "finish", "ok");
@@ -247,14 +263,23 @@ export function useSSE() {
                 if (event.type === "phase") {
                   logEditorTelemetryEvent("agent", "phase", "info", String(event.data.phase ?? ""));
                 }
-                setProgress((prev) => applyAgentProgressEvent(prev, event));
+                if (event.type !== "relay_resume") {
+                  setProgress((prev) => applyAgentProgressEvent(prev, event));
+                }
               } catch {
                 /* heartbeat */
               }
             }
           }
+          if (relayHandoff) break;
+        }
+        if (relayHandoff) {
+          return { shouldAutoResume: true, aborted: false };
         }
         if (!sawFinish.current) {
+          if (workerRelayRef.current && runIdRef.current) {
+            return { shouldAutoResume: true, aborted: false };
+          }
           setProgress((p) => ({
             ...p,
             finished: true,
@@ -298,6 +323,10 @@ export function useSSE() {
       options?: AgentConnectOptions,
     ) => {
       const manualResume = options?.resume === true;
+      if (!manualResume) {
+        workerRelayRef.current = false;
+        streamOffsetRef.current = 0;
+      }
       setProgress({
         ...initialState,
         statusHint: manualResume ? "Conectando para retomar o agente…" : null,
@@ -319,7 +348,9 @@ export function useSSE() {
             statusHint: "Retomando automaticamente…",
           }));
           await new Promise((r) => setTimeout(r, AUTO_RESUME_DELAY_MS));
-          isResume = true;
+          if (!workerRelayRef.current) {
+            isResume = true;
+          }
         }
 
         const { shouldAutoResume, aborted } = await connectOnce(
@@ -400,9 +431,7 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
           ? "Retomando automaticamente…"
           : data.resume
             ? "Retomando com a memória salva no chat…"
-            : data.worker
-              ? "Trabalhando no projeto…"
-              : "Conectando ao agente…",
+            : "Trabalhando no projeto…",
         timeline: [...prev.timeline, event],
       };
 

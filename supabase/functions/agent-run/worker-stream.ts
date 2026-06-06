@@ -5,30 +5,49 @@ const FORGE_DIR = `${E2B_PROJECT_DIR}/.forge`;
 const EVENTS_PATH = `${FORGE_DIR}/events.ndjson`;
 const RUNNER_LOG_PATH = `${FORGE_DIR}/runner.log`;
 const POLL_MS = 450;
-const MAX_STREAM_MS = 28 * 60 * 1000;
+/** Cada invocação Edge relay fica abaixo do wall-clock (400s) com margem. */
+export const WORKER_RELAY_MS = 85_000;
 const WORKER_START_GRACE_MS = 8_000;
+
+export type StreamWorkerResult = {
+  ok: boolean;
+  steps: number;
+  error?: string;
+  resumable?: boolean;
+  canceled?: boolean;
+  handoff?: boolean;
+  offset: number;
+};
+
+export type StreamWorkerOptions = {
+  startOffset?: number;
+  maxRelayMs?: number;
+};
 
 export async function streamWorkerEvents(
   sandbox: E2bRestSandbox,
   emit: (payload: Record<string, unknown>) => void,
   isCanceled: () => Promise<boolean>,
-): Promise<{ ok: boolean; steps: number; error?: string; resumable?: boolean; canceled?: boolean }> {
-  let offset = 0;
+  options?: StreamWorkerOptions,
+): Promise<StreamWorkerResult> {
+  let offset = options?.startOffset ?? 0;
+  const maxRelayMs = options?.maxRelayMs ?? WORKER_RELAY_MS;
   let steps = 0;
-  let result: { ok: boolean; steps: number; error?: string; resumable?: boolean; canceled?: boolean } = {
+  let result: StreamWorkerResult = {
     ok: false,
     steps: 0,
     resumable: true,
+    offset,
   };
   const started = Date.now();
 
-  while (Date.now() - started < MAX_STREAM_MS) {
+  while (Date.now() - started < maxRelayMs) {
     if (await isCanceled()) {
       await sandbox.commands.run("pkill -f 'runner.mjs' 2>/dev/null || true", {
         cwd: E2B_PROJECT_DIR,
         timeoutMs: 5_000,
       });
-      return { ok: false, steps, error: "Cancelado", canceled: true, resumable: false };
+      return { ok: false, steps, error: "Cancelado", canceled: true, resumable: false, offset };
     }
 
     const tail = await sandbox.commands.run(
@@ -60,6 +79,7 @@ export async function streamWorkerEvents(
               error: typeof rest.error === "string" ? rest.error : undefined,
               resumable: rest.resumable === true,
               canceled: rest.canceled === true,
+              offset,
             };
             return result;
           }
@@ -79,21 +99,21 @@ export async function streamWorkerEvents(
           { cwd: E2B_PROJECT_DIR, timeoutMs: 8_000 },
         );
         const tail = (log.stdout ?? "").trim().slice(-400);
-        return result.ok
-          ? result
-          : {
-            ok: false,
-            steps,
-            error: tail
-              ? `Agente parou: ${tail}`
-              : "Agente parou antes de responder — tente Continuar no chat.",
-            resumable: true,
-          };
+        return {
+          ok: false,
+          steps,
+          error: tail
+            ? `Agente parou: ${tail}`
+            : "Agente parou antes de responder — tente Continuar no chat.",
+          resumable: true,
+          offset,
+        };
       }
     }
 
     await new Promise((r) => setTimeout(r, POLL_MS));
   }
 
-  return { ok: false, steps, error: "Timeout aguardando worker", resumable: true };
+  emit({ type: "relay_handoff", offset, message: "Continuando…" });
+  return { ok: false, steps, handoff: true, resumable: true, offset };
 }

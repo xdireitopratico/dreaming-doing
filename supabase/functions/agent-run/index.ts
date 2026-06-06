@@ -127,6 +127,9 @@ Deno.serve(async (req) => {
 
     projectId = body.projectId;
     const conversationId = body.conversationId;
+    const workerRelay = body.workerRelay === true;
+    const streamOffset = typeof body.streamOffset === "number" ? body.streamOffset : 0;
+    const relayRunId = typeof body.runId === "string" ? body.runId : null;
     const preferences = body.preferences as AgentPreferencesPayload | undefined;
     const sessionKindRaw = body.sessionKind as string | undefined;
     const resumeRun = body.resume === true;
@@ -158,13 +161,15 @@ Deno.serve(async (req) => {
       typeof profile?.taste_start_remaining === "number" ? profile.taste_start_remaining : 1;
 
     if (runningLocks.has(projectId)) {
-      if (resumeRun) {
-        runningLocks.delete(projectId);
+      if (resumeRun || workerRelay) {
+        if (!workerRelay) runningLocks.delete(projectId);
       } else {
         return json({ error: "Agente já está executando neste projeto. Aguarde a conclusão." }, 409);
       }
     }
-    runningLocks.set(projectId, Promise.resolve());
+    if (!workerRelay) {
+      runningLocks.set(projectId, Promise.resolve());
+    }
 
     const { data: history } = await supabase
       .from("messages")
@@ -427,18 +432,35 @@ Deno.serve(async (req) => {
     };
 
     let agentRunId: string | null = null;
-    const { data: newRun } = await supabase
-      .from("agent_runs")
-      .insert({
-        project_id: projectId,
-        conversation_id: conversationId,
-        user_id: userData.user.id,
-        status: "running",
-        meta: runMetaBase,
-      })
-      .select("id")
-      .single();
-    agentRunId = newRun?.id ?? null;
+    if (workerRelay && relayRunId) {
+      const { data: relayRun } = await supabase
+        .from("agent_runs")
+        .select("id, user_id, status, canceled_at")
+        .eq("id", relayRunId)
+        .maybeSingle();
+      if (!relayRun || relayRun.user_id !== userData.user.id) {
+        runningLocks.delete(projectId);
+        return json({ error: "Run não encontrada" }, 404);
+      }
+      if (relayRun.status !== "running" || relayRun.canceled_at) {
+        runningLocks.delete(projectId);
+        return json({ error: "Run já encerrada", code: "run_finished" }, 409);
+      }
+      agentRunId = relayRun.id;
+    } else {
+      const { data: newRun } = await supabase
+        .from("agent_runs")
+        .insert({
+          project_id: projectId,
+          conversation_id: conversationId,
+          user_id: userData.user.id,
+          status: "running",
+          meta: runMetaBase,
+        })
+        .select("id")
+        .single();
+      agentRunId = newRun?.id ?? null;
+    }
 
     const finalizeRun = async (
       result: {
@@ -526,9 +548,9 @@ Deno.serve(async (req) => {
       );
     };
 
-    // Worker E2B só com opt-in explícito — o loop na Edge é o caminho estável.
+    // Agente longo: worker no sandbox E2B + relay SSE em chunks (<400s por invocação Edge).
     const useE2bWorker =
-      Deno.env.get("FORGE_USE_E2B_WORKER") === "1" &&
+      Deno.env.get("FORGE_DISABLE_E2B_WORKER") !== "1" &&
       sessionKind !== "taste_chat" &&
       supportsE2bWorker(mainCfg);
     const userAccessToken = (req.headers.get("Authorization") ?? "").replace("Bearer ", "");
@@ -559,6 +581,8 @@ Deno.serve(async (req) => {
         files: workerFiles ?? [],
         runnerSource: RUNNER_SOURCE,
         cleanup,
+        relayOnly: workerRelay,
+        streamOffset,
       });
     }
 

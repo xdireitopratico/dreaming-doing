@@ -3,7 +3,7 @@ import { ensureAgentProjectSandbox, syncProjectFilesToSandbox } from "../_shared
 import { getSystemPrompt, EXECUTE_PROMPT } from "./prompts.ts";
 import type { ProviderConfig } from "./providers.ts";
 import { bootstrapE2bWorker, buildSandboxEnv, type WorkerRunConfig } from "./worker-bootstrap.ts";
-import { streamWorkerEvents } from "./worker-stream.ts";
+import { streamWorkerEvents, WORKER_RELAY_MS } from "./worker-stream.ts";
 import { FORGE_CORS_HEADERS } from "../_shared/cors.ts";
 
 const corsHeaders = FORGE_CORS_HEADERS;
@@ -33,6 +33,9 @@ type WorkerRunParams = {
   files: Array<{ path: string; content?: string | null }>;
   runnerSource: string;
   cleanup: () => void;
+  /** Continuação do relay SSE — worker já está rodando no sandbox. */
+  relayOnly?: boolean;
+  streamOffset?: number;
 };
 
 export function runAgentViaE2bWorker(params: WorkerRunParams): Response {
@@ -45,52 +48,62 @@ export function runAgentViaE2bWorker(params: WorkerRunParams): Response {
       };
 
       (async () => {
+        let releaseLock = true;
         try {
           const { sandbox } = await ensureAgentProjectSandbox(
             params.supabase,
             params.projectId,
             params.e2bApiKey,
           );
-          await syncProjectFilesToSandbox(sandbox, params.files);
 
-          const systemPrompt = [
-            getSystemPrompt(params.projectTemplate),
-            params.stackAddon,
-            params.sessionAddon,
-            EXECUTE_PROMPT,
-          ].filter(Boolean).join("\n\n");
+          if (!params.relayOnly) {
+            await syncProjectFilesToSandbox(sandbox, params.files);
 
-          const workerConfig: WorkerRunConfig = {
-            runId: params.agentRunId,
-            projectId: params.projectId,
-            conversationId: params.conversationId,
-            supabaseUrl: params.supabaseUrl,
-            supabaseAnonKey: params.supabaseAnonKey,
-            accessToken: params.accessToken,
-            resume: params.resumeRun,
-            maxSteps: 48,
-            workerMaxMs: 25 * 60 * 1000,
-            systemPrompt,
-            llm: {
-              provider: params.mainCfg.provider,
-              apiKey: params.mainCfg.apiKey,
-              model: params.mainCfg.model,
-              baseUrl: params.mainCfg.baseUrl,
-            },
-            env: buildSandboxEnv(params.connectorKeys, params.deployKeys),
-          };
+            const systemPrompt = [
+              getSystemPrompt(params.projectTemplate),
+              params.stackAddon,
+              params.sessionAddon,
+              EXECUTE_PROMPT,
+            ].filter(Boolean).join("\n\n");
 
-          await bootstrapE2bWorker(sandbox, params.runnerSource, workerConfig);
+            const workerConfig: WorkerRunConfig = {
+              runId: params.agentRunId,
+              projectId: params.projectId,
+              conversationId: params.conversationId,
+              supabaseUrl: params.supabaseUrl,
+              supabaseAnonKey: params.supabaseAnonKey,
+              accessToken: params.accessToken,
+              resume: params.resumeRun,
+              maxSteps: 48,
+              workerMaxMs: 25 * 60 * 1000,
+              systemPrompt,
+              llm: {
+                provider: params.mainCfg.provider,
+                apiKey: params.mainCfg.apiKey,
+                model: params.mainCfg.model,
+                baseUrl: params.mainCfg.baseUrl,
+              },
+              env: buildSandboxEnv(params.connectorKeys, params.deployKeys),
+            };
 
-          emit({
-            type: "start",
-            projectId: params.projectId,
-            conversationId: params.conversationId,
-            runId: params.agentRunId,
-            provider: params.mainCfg.label,
-            worker: true,
-            resume: params.resumeRun,
-          });
+            await bootstrapE2bWorker(sandbox, params.runnerSource, workerConfig);
+
+            emit({
+              type: "start",
+              projectId: params.projectId,
+              conversationId: params.conversationId,
+              runId: params.agentRunId,
+              provider: params.mainCfg.label,
+              worker: true,
+              resume: params.resumeRun,
+            });
+          } else {
+            emit({
+              type: "relay_resume",
+              runId: params.agentRunId,
+              offset: params.streamOffset ?? 0,
+            });
+          }
 
           const isCanceled = async () => {
             const { data } = await params.supabase
@@ -101,7 +114,20 @@ export function runAgentViaE2bWorker(params: WorkerRunParams): Response {
             return data?.status === "canceled" || !!data?.canceled_at;
           };
 
-          const result = await streamWorkerEvents(sandbox, emit, isCanceled);
+          const result = await streamWorkerEvents(
+            sandbox,
+            emit,
+            isCanceled,
+            {
+              startOffset: params.streamOffset ?? 0,
+              maxRelayMs: WORKER_RELAY_MS,
+            },
+          );
+
+          if (result.handoff) {
+            releaseLock = false;
+            return;
+          }
 
           await params.supabase
             .from("agent_runs")
@@ -120,11 +146,11 @@ export function runAgentViaE2bWorker(params: WorkerRunParams): Response {
             resumable: !result.ok && !result.canceled,
           });
         } catch (err: unknown) {
-          const msg = err instanceof Error ? err.message : "erro no worker";
+          const msg = err instanceof Error ? err.message : "erro no agente";
           emit({ type: "error", error: msg, recoverable: true });
           emit({ type: "finish", ok: false, error: msg, steps: 0, resumable: true });
         } finally {
-          params.cleanup();
+          if (releaseLock) params.cleanup();
           try { controller.close(); } catch { /* */ }
         }
       })();

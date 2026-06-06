@@ -70,4 +70,22 @@ export async function bootstrapE2bWorker(
     timeoutMs: 15_000,
     background: true,
   });
+
+  await new Promise((r) => setTimeout(r, 2_000));
+  const alive = await sandbox.commands.run(
+    "pgrep -f 'runner.mjs' >/dev/null && echo alive || echo dead",
+    { cwd: E2B_PROJECT_DIR, timeoutMs: 5_000 },
+  );
+  if ((alive.stdout ?? "").includes("dead")) {
+    const log = await sandbox.commands.run(
+      `tail -40 ${FORGE_DIR}/runner.log 2>/dev/null || echo '(sem log)'`,
+      { cwd: E2B_PROJECT_DIR, timeoutMs: 8_000 },
+    );
+    const tail = (log.stdout ?? "").trim().slice(-500);
+    throw new Error(
+      tail
+        ? `Agente não iniciou no sandbox: ${tail}`
+        : "Agente não iniciou no sandbox — verifique Node/npm no template E2B.",
+    );
+  }
 }
