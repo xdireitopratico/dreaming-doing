@@ -1,10 +1,10 @@
 # FORGE — opencode.md (Contexto Comprimido)
 
 ## 📍 Estado Atual
-- **Branch:** `main` @ `cb244e9`
+- **Branch:** `main` @ `9ba4932`
 - **Deploy:** Supabase `dpduljngdurfpmaclffa` (agent-run) + Vercel (frontend)
 - **Stack:** TanStack Start + React 19 + Tailwind v4 + Supabase + E2B
-- **Último deploy:** Fase 2 concluída (code quality)
+- **Último deploy:** Fase 2.5 concluída (Design System + Visual Features)
 
 ---
 
@@ -67,6 +67,18 @@
 | Quick TypeCheck incremental (`tsc` só arquivos modificados) | `observer.ts:140-200` | ✅ |
 | Loop integra quickTypeCheck pós `fs_write/fs_edit` | `loop.ts:341-365` | ✅ |
 | EXECUTE_PROMPT exige geração de testes | `prompts.ts:227` | ✅ |
+
+### Fase 2.5 — Design System Enforcement + Visual Features (Commit `9ba4932`)
+| Task | Arquivo | Status |
+|------|---------|--------|
+| **@forge/ui package** criado: tokens, Button, Input, Card, Dialog, Toast, Motion (FadeIn, SlideIn, ScaleIn, Stagger, HoverScale, HoverLift, Pulse, Shimmer), hooks | `packages/forge-ui/` | ✅ |
+| **skills.ts**: design-system skill enforça @forge/ui — proíbe reimplementar Button/Input/Card/Dialog/Toast | `skills.ts:133-167` | ✅ |
+| **observer.ts**: checkDesignSystem() valida @forge/ui instalado, tokens @theme, rejeita classes Tailwind raw/hardcoded | `observer.ts:49-54, 205-280` | ✅ |
+| **prompts.ts**: DESIGN_DISCIPLINE expandido com regras obrigatórias @forge/ui + motion + tokens + proibidos | `prompts.ts:13-70` | ✅ |
+| **ChatStream**: copy message button, token usage display (~tokens), undo (apaga última msg assistente + usuário anterior) | `ChatStream.tsx` | ✅ |
+| **AgentPanel**: FadeIn animation + @forge/ui Button | `AgentPanel.tsx` | ✅ |
+| **ChatStream**: FadeIn on messages (staggered), @forge/ui Button | `ChatStream.tsx` | ✅ |
+| **Editor page**: handleUndoMessage() deleta msg assistente + usuário do DB + invalida queries | `index.tsx:660-680` | ✅ |
 
 ---
 
@@ -132,10 +144,7 @@
 
 1. **Background Jobs vs Chunked Runs**: Mover `agent-run` para queue (pg_cron/Redis) quebra SSE streaming. Alternativa: *chunked runs* (checkpoint a cada N steps, resume via nova invocação). Qual prefere?
 
-2. **Design System Enforcement**:
-   - A: Tailwind v4 `@theme` tokens gerados pelo agente + validação no Observer
-   - B: Component Library própria (shadcn/radix wrappers) que agente *deve* usar
-   - C: Prompt-only (atual) + lint rules customizadas
+2. **Design System Enforcement** — **RESOLVIDO**: Opção B implementada (@forge/ui component library + Observer enforcement + Prompt enforcement)
 
 3. **Skills Marketplace**: Lançar com skills built-in instaláveis (privado) ou abrir para publicação comunitária dia 1?
 
@@ -161,6 +170,7 @@
 | Observer/Build | `supabase/functions/agent-run/observer.ts` |
 | Prompts/Skills | `supabase/functions/agent-run/prompts.ts` + `skills.ts` |
 | Router/Classifier | `supabase/functions/agent-run/router.ts` |
+| **Design System (@forge/ui)** | `packages/forge-ui/src/` |
 | Frontend Routes | `src/routes/projects/$projectId/index.tsx` |
 | SSE Hook | `src/hooks/useSSE.ts` |
 | Auth | `src/lib/auth.tsx` |
@@ -168,4 +178,4 @@
 
 ---
 
-*Atualizado: 2026-06-06 | Commit: cb244e9 | Fases 1-2 concluídas*
+*Atualizado: 2026-06-06 | Commit: 9ba4932 | Fases 1-2.5 concluídas*
