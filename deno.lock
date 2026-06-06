@@ -159,6 +159,17 @@
         "npm:vitest@^3.2.6",
         "npm:zod@^3.24.2"
       ]
+    },
+    "members": {
+      "packages/forge-ui": {
+        "packageJson": {
+          "dependencies": [
+            "npm:@types/react-dom@19",
+            "npm:@types/react@19",
+            "npm:typescript@^5.6.0"
+          ]
+        }
+      }
     }
   }
 }
