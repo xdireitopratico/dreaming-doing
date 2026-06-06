@@ -20,6 +20,11 @@ import {
   appendExecutionLogEntry,
   buildExecutionLogMeta,
 } from "./executionLogMeta.ts";
+import {
+  resumeStepStart,
+  serializeCheckpointPayload,
+  type CheckpointExtra,
+} from "./checkpoint.ts";
 
 type StreamCallback = (event: { type: string; data: unknown }) => void;
 
@@ -29,24 +34,6 @@ const STUCK_THRESHOLD = 3;
 
 function calculateMaxSteps(complexity: 1 | 2 | 3 | 4 | 5): number {
   return complexity * 5 + 5;
-}
-
-function serializeStateForCheckpoint(state: AgentState): Record<string, unknown> {
-  return {
-    projectId: state.projectId,
-    conversationId: state.conversationId,
-    userId: state.userId,
-    messages: state.messages,
-    phase: state.phase,
-    currentStepIndex: state.currentStepIndex,
-    context: state.context,
-    intent: state.intent,
-    plan: state.plan,
-    validationResults: state.validationResults,
-    executionLog: state.executionLog,
-    retryFeedback: state.retryFeedback,
-    totalSteps: state.totalSteps,
-  };
 }
 
 function detectRepeatedToolCalls(
@@ -76,6 +63,9 @@ export class AgentLoop {
   private sessionAddon: string;
   private userSkillNames: string[];
   private resumeRun: boolean;
+  private hasCheckpoint: boolean;
+  private resumePhase: LoopPhase | null;
+  private complexityScore: number;
   private runId: string | null;
   private runStartTime: number;
   private lastCheckpointStep: number;
@@ -97,6 +87,10 @@ export class AgentLoop {
       sessionAddon?: string;
       userSkillNames?: string[];
       resumeRun?: boolean;
+      hasCheckpoint?: boolean;
+      resumePhase?: LoopPhase | null;
+      complexityScore?: number;
+      maxStepsFromCheckpoint?: number;
       runId?: string | null;
     },
   ) {
@@ -113,9 +107,15 @@ export class AgentLoop {
     this.sessionAddon = options?.sessionAddon ?? "";
     this.userSkillNames = options?.userSkillNames ?? [];
     this.resumeRun = options?.resumeRun ?? false;
+    this.hasCheckpoint = options?.hasCheckpoint ?? false;
+    this.resumePhase = options?.resumePhase ?? null;
+    this.complexityScore = options?.complexityScore ?? 3;
+    if (options?.maxStepsFromCheckpoint && options.maxStepsFromCheckpoint > 0) {
+      this.maxStepsLimit = options.maxStepsFromCheckpoint;
+    }
     this.runId = options?.runId ?? null;
     this.runStartTime = Date.now();
-    this.lastCheckpointStep = 0;
+    this.lastCheckpointStep = options?.hasCheckpoint ? (state.currentStepIndex ?? 0) : 0;
     this.router = new ModelRouter(injectedKeys, routerOverrides);
     this.observer = new RuntimeObserver(reg);
     this.skills = new SkillRegistry();
@@ -123,6 +123,18 @@ export class AgentLoop {
       this.router.getCheapProvider(),
       (type, data) => this.emit(type, data),
     );
+  }
+
+  private async clearCheckpoint(): Promise<void> {
+    try {
+      await this.sb
+        .from("agent_checkpoints")
+        .delete()
+        .eq("project_id", this.state.projectId)
+        .eq("conversation_id", this.state.conversationId);
+    } catch {
+      /* não bloqueia conclusão */
+    }
   }
 
   private async saveCheckpoint(phase: LoopPhase, force = false): Promise<void> {
@@ -136,11 +148,15 @@ export class AgentLoop {
       });
     }
     try {
+      const extra: CheckpointExtra = {
+        complexityScore: this.complexityScore,
+        maxStepsLimit: this.maxStepsLimit,
+      };
       await this.sb.from("agent_checkpoints").upsert({
         project_id: this.state.projectId,
         conversation_id: this.state.conversationId,
         phase,
-        state: serializeStateForCheckpoint(this.state),
+        state: serializeCheckpointPayload(this.state, extra),
         updated_at: new Date().toISOString(),
       }, { onConflict: "project_id,conversation_id" });
       this.lastCheckpointStep = step;
@@ -176,53 +192,79 @@ export class AgentLoop {
     }
     this.compression.reset();
     const toolsUsed = new Set<string>();
-    let step = 0;
+    let executionModel = this.router.selectModel(this.complexityScore);
 
-    if (this.resumeRun) {
-      this.appendResumeInstruction();
+    if (this.resumeRun && this.hasCheckpoint) {
       this.emit("phase", {
         phase: "resume",
-        message: "Retomando a partir do histórico salvo no chat…",
+        message:
+          `Retomando do passo ${this.state.currentStepIndex}/${this.maxStepsLimit} ` +
+          "(checkpoint restaurado — sem reclassificar)",
       });
+      this.emit("memory", {
+        message: `Checkpoint: ${this.state.messages.length} mensagens, fase ${this.resumePhase ?? this.state.phase}`,
+        messageCount: this.state.messages.length,
+      });
+      this.emit("classify", {
+        complexity: this.complexityScore,
+        model: this.complexityScore <= 2 ? this.router.cheapCfg.label : this.router.mainCfg.label,
+        summary: this.state.intent?.summary ?? "Retomada",
+        maxSteps: this.maxStepsLimit,
+        restored: true,
+      });
+    } else {
+      if (this.resumeRun) {
+        this.appendResumeInstruction();
+        this.emit("phase", {
+          phase: "resume",
+          message: "Retomando a partir do histórico salvo no chat…",
+        });
+      }
+
+      this.emit("phase", { phase: "gather", message: "Lendo arquivos do projeto..." });
+      this.emit("memory", {
+        message: `Memória: ${this.state.messages.length} mensagens carregadas do projeto`,
+        messageCount: this.state.messages.length,
+      });
+      await this.gatherContext();
+      await this.saveCheckpoint(LoopPhase.GATHER_CONTEXT);
+
+      this.emit("phase", { phase: "classify", message: "Classificando complexidade..." });
+      const userPrompt = this.state.messages.filter(m => m.role === "user").pop()?.content ?? "";
+      const classification = await this.router.classify(
+        userPrompt,
+        this.state.context?.projectConfig ?? "(vazio)",
+      );
+      this.complexityScore = classification.complexity;
+      this.state.intent = {
+        type: classification.type as IntentAnalysis["type"],
+        summary: classification.summary,
+        scope: [],
+        complexity: classification.complexity <= 2 ? "simple" : classification.complexity <= 4 ? "medium" : "complex",
+      };
+
+      this.maxStepsLimit = calculateMaxSteps(classification.complexity);
+      executionModel = this.router.selectModel(classification.complexity);
+      this.emit("classify", {
+        complexity: classification.complexity,
+        model: classification.complexity <= 2 ? this.router.cheapCfg.label : this.router.mainCfg.label,
+        summary: classification.summary,
+        maxSteps: this.maxStepsLimit,
+      });
+
+      this.emit("phase", { phase: "plan", message: classification.summary, intent: this.state.intent });
+      await this.saveCheckpoint(LoopPhase.CREATE_PLAN);
     }
 
-    this.emit("phase", { phase: "gather", message: "Lendo arquivos do projeto..." });
-    this.emit("memory", {
-      message: `Memória: ${this.state.messages.length} mensagens carregadas do projeto`,
-      messageCount: this.state.messages.length,
-    });
-    await this.gatherContext();
-    await this.saveCheckpoint(LoopPhase.GATHER_CONTEXT);
-
-    this.emit("phase", { phase: "classify", message: "Classificando complexidade..." });
-    const userPrompt = this.state.messages.filter(m => m.role === "user").pop()?.content ?? "";
-    const classification = await this.router.classify(
-      userPrompt,
-      this.state.context?.projectConfig ?? "(vazio)",
-    );
-    this.state.intent = {
-      type: classification.type as IntentAnalysis["type"],
-      summary: classification.summary,
-      scope: [],
-      complexity: classification.complexity <= 2 ? "simple" : classification.complexity <= 4 ? "medium" : "complex",
-    };
-
-    this.maxStepsLimit = calculateMaxSteps(classification.complexity);
-    const executionModel = this.router.selectModel(classification.complexity);
-    this.emit("classify", {
-      complexity: classification.complexity,
-      model: classification.complexity <= 2 ? this.router.cheapCfg.label : this.router.mainCfg.label,
-      summary: classification.summary,
-      maxSteps: this.maxStepsLimit,
-    });
-
-    this.emit("phase", { phase: "plan", message: classification.summary, intent: this.state.intent });
-    await this.saveCheckpoint(LoopPhase.CREATE_PLAN);
+    const step = this.resumeRun && this.hasCheckpoint
+      ? resumeStepStart(this.resumePhase ?? this.state.phase, this.state.currentStepIndex)
+      : 0;
 
     let buildAttempts = 0;
     const maxRetries = 3;
+    let loopStep = step;
 
-    while (step < this.maxStepsLimit) {
+    while (loopStep < this.maxStepsLimit) {
       if (Date.now() - this.runStartTime > EDGE_FUNCTION_TIMEOUT_MS) {
         await this.saveCheckpoint(this.state.phase, true);
         await this.persistFinal(
@@ -234,7 +276,7 @@ export class AgentLoop {
           error:
             `Limite de tempo da Edge Function (~${Math.round(EDGE_FUNCTION_TIMEOUT_MS / 1000)}s). ` +
             "Checkpoint salvo — clique em Continuar para retomar.",
-          steps: step,
+          steps: loopStep,
           resumable: true,
           toolsUsed: [...toolsUsed],
         };
@@ -246,20 +288,20 @@ export class AgentLoop {
         return {
           ok: false,
           error: "Cancelado",
-          steps: Math.max(0, step),
+          steps: Math.max(0, loopStep),
           canceled: true,
           toolsUsed: [...toolsUsed],
         };
       }
 
-      step++;
-      this.state.currentStepIndex = step;
+      loopStep++;
+      this.state.currentStepIndex = loopStep;
       this.state.totalSteps = this.maxStepsLimit;
       this.state.phase = LoopPhase.EXECUTE_STEP;
-      this.emit("step", { current: step, total: this.maxStepsLimit });
+      this.emit("step", { current: loopStep, total: this.maxStepsLimit });
       this.emit("phase", {
         phase: "execute",
-        message: `Executando passo ${step}/${this.maxStepsLimit}…`,
+        message: `Executando passo ${loopStep}/${this.maxStepsLimit}…`,
       });
 
       const compressed = await this.compression.compress(this.state.messages);
@@ -272,7 +314,7 @@ export class AgentLoop {
         await this.persistFinal(
           `Execução pausada: ${message}\n\nSeu histórico está salvo — clique em **Continuar** no editor para retomar.`,
         );
-        return { ok: false, error: message, steps: step, resumable: true, toolsUsed: [...toolsUsed] };
+        return { ok: false, error: message, steps: loopStep, resumable: true, toolsUsed: [...toolsUsed] };
       }
       if (!response) break;
 
@@ -354,7 +396,7 @@ export class AgentLoop {
 
       // Atualiza a mensagem persistida com o resultado (status, error, output curto)
       if (liveMsgId) {
-        await this.updateAssistantStep(liveMsgId, response, execResults, step);
+        await this.updateAssistantStep(liveMsgId, response, execResults, loopStep);
       }
 
       // Quick TypeScript check incremental (rápido, apenas arquivos modificados)
@@ -414,10 +456,10 @@ export class AgentLoop {
       await this.saveCheckpoint(LoopPhase.DECIDE_NEXT);
     }
 
-    if (step >= this.maxStepsLimit) {
+    if (loopStep >= this.maxStepsLimit) {
       await this.saveCheckpoint(LoopPhase.ERROR, true);
       await this.persistFinal("Limite de passos atingido. Parei aqui — use Continuar no chat para retomar com a mesma memória.");
-      return { ok: false, error: "Limite de passos", steps: step, resumable: true, toolsUsed: [...toolsUsed] };
+      return { ok: false, error: "Limite de passos", steps: loopStep, resumable: true, toolsUsed: [...toolsUsed] };
     }
 
     this.state.phase = LoopPhase.SUMMARIZE;
@@ -426,8 +468,9 @@ export class AgentLoop {
     const finalMsg = this.state.messages[this.state.messages.length - 1];
     const summary = finalMsg?.content ?? "Tarefa concluída.";
     await this.persistFinal(summary);
+    await this.clearCheckpoint();
     this.emit("done", { summary });
-    return { ok: true, summary, steps: step, toolsUsed: [...toolsUsed] };
+    return { ok: true, summary, steps: loopStep, toolsUsed: [...toolsUsed] };
   }
 
   private async gatherContext(): Promise<void> {

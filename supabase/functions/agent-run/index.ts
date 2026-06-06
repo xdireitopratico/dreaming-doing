@@ -34,6 +34,8 @@ import { registerDeployTool } from "./tools/deploy.ts";
 import { loadTasteNvidiaConfig, runTasteChat } from "./taste-session.ts";
 import { FORGE_CORS_HEADERS, corsPreflightResponse } from "../_shared/cors.ts";
 import { restoreExecutionLogFromRows } from "./executionLogMeta.ts";
+import { loadCheckpoint } from "./checkpoint.ts";
+import { buildSandboxEnv } from "./sandbox-env.ts";
 const runningLocks = new Map<string, Promise<unknown>>();
 
 const corsHeaders = FORGE_CORS_HEADERS;
@@ -126,6 +128,7 @@ Deno.serve(async (req) => {
     const preferences = body.preferences as AgentPreferencesPayload | undefined;
     const sessionKindRaw = body.sessionKind as string | undefined;
     const resumeRun = body.resume === true;
+    const autoResume = body.autoResume === true;
     const enabledSkillIds = normalizeIdList(body.enabledSkillIds);
     const enabledMcpIds = normalizeIdList(body.enabledMcpIds);
     const sessionExt = await buildSessionExtensionsPrompt(enabledSkillIds, enabledMcpIds);
@@ -171,6 +174,9 @@ Deno.serve(async (req) => {
 
     const historyRows = history ?? [];
     const restoredExecutionLog = resumeRun ? restoreExecutionLogFromRows(historyRows) : [];
+    const loadedCheckpoint = resumeRun
+      ? await loadCheckpoint(supabase, projectId, conversationId)
+      : null;
 
     const userOnlyKeys = await loadConnectorKeys(supabase, userData.user.id, preferences);
     const groqPool = await loadConnectorPools(supabase, userData.user.id, "groq");
@@ -418,23 +424,54 @@ Deno.serve(async (req) => {
       model: mainCfg.model,
       sessionKind: tasteStart ? "taste_start" : "byok",
       resume: resumeRun,
+      autoResume,
+      checkpoint: !!loadedCheckpoint,
       robin: effectiveRobin,
       taste: tasteStart,
     };
 
     let agentRunId: string | null = null;
-    const { data: newRun } = await supabase
-      .from("agent_runs")
-      .insert({
-        project_id: projectId,
-        conversation_id: conversationId,
-        user_id: userData.user.id,
-        status: "running",
-        meta: runMetaBase,
-      })
-      .select("id")
-      .single();
-    agentRunId = newRun?.id ?? null;
+    if (resumeRun) {
+      const { data: existingRun } = await supabase
+        .from("agent_runs")
+        .select("id, status, meta")
+        .eq("conversation_id", conversationId)
+        .eq("project_id", projectId)
+        .eq("user_id", userData.user.id)
+        .in("status", ["running", "failed"])
+        .order("started_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (existingRun?.id) {
+        agentRunId = existingRun.id;
+        const prevMeta = (existingRun.meta ?? {}) as Record<string, unknown>;
+        await supabase
+          .from("agent_runs")
+          .update({
+            status: "running",
+            finished_at: null,
+            error: null,
+            meta: { ...prevMeta, ...runMetaBase, resumedAt: new Date().toISOString() },
+          })
+          .eq("id", agentRunId);
+      }
+    }
+
+    if (!agentRunId) {
+      const { data: newRun } = await supabase
+        .from("agent_runs")
+        .insert({
+          project_id: projectId,
+          conversation_id: conversationId,
+          user_id: userData.user.id,
+          status: "running",
+          meta: runMetaBase,
+        })
+        .select("id")
+        .single();
+      agentRunId = newRun?.id ?? null;
+    }
 
     const finalizeRun = async (
       result: {
@@ -477,17 +514,30 @@ Deno.serve(async (req) => {
         .eq("id", agentRunId);
     };
 
-    const buildState = (): AgentState => ({
-      projectId, conversationId, userId: userData.user.id,
-      messages: [...messages],
-      phase: LoopPhase.GATHER_CONTEXT,
-      currentStepIndex: 0,
-      context: null, intent: null, plan: null,
-      validationResults: [],
-      executionLog: [...restoredExecutionLog],
-      retryFeedback: null,
-      totalSteps: 0,
-    });
+    const buildState = (): AgentState => {
+      if (loadedCheckpoint) {
+        const cp = loadedCheckpoint.state;
+        return {
+          ...cp,
+          projectId,
+          conversationId,
+          userId: userData.user.id,
+          messages: cp.messages.length >= messages.length ? cp.messages : [...messages],
+          executionLog: cp.executionLog.length > 0 ? cp.executionLog : [...restoredExecutionLog],
+        };
+      }
+      return {
+        projectId, conversationId, userId: userData.user.id,
+        messages: [...messages],
+        phase: LoopPhase.GATHER_CONTEXT,
+        currentStepIndex: 0,
+        context: null, intent: null, plan: null,
+        validationResults: [],
+        executionLog: [...restoredExecutionLog],
+        retryFeedback: null,
+        totalSteps: 0,
+      };
+    };
 
     const makeLoop = (onEvent: (type: string, data: unknown) => void) => {
       const streamEmit = (type: string, data: Record<string, unknown>) => onEvent(type, data);
@@ -517,6 +567,10 @@ Deno.serve(async (req) => {
             sessionAddon: sessionExt.addon,
             userSkillNames: sessionExt.skillNames,
             resumeRun,
+            hasCheckpoint: !!loadedCheckpoint,
+            resumePhase: loadedCheckpoint?.phase ?? null,
+            complexityScore: loadedCheckpoint?.extra.complexityScore,
+            maxStepsFromCheckpoint: loadedCheckpoint?.extra.maxStepsLimit,
             runId: agentRunId,
           },
       );
@@ -551,8 +605,11 @@ Deno.serve(async (req) => {
           robin: effectiveRobin,
           taste: tasteStart,
           resume: resumeRun,
+          autoResume,
+          checkpoint: !!loadedCheckpoint,
+          resumedFromStep: loadedCheckpoint?.state.currentStepIndex ?? null,
           sessionKind: tasteStart ? "taste_start" : "byok",
-          memoryMessages: messages.length,
+          memoryMessages: loadedCheckpoint?.state.messages.length ?? messages.length,
           enabledSkillIds,
           enabledMcpIds,
           activeSkills: sessionExt.skillNames,
