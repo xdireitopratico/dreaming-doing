@@ -2,7 +2,7 @@
 // Todos os 18+ componentes integrados: Breadcrumb, CommandPalette, ShortcutCheatsheet,
 // ProviderSelector, LogPanel, AiDiffViewer, RateLimitIndicator, useAgentBlame,
 // monacoEnhancements, useElementPicker, SnapshotsSheet, export ZIP, drag-drop
-import { createFileRoute, useParams, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, useParams, useNavigate, useSearch } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -72,6 +72,10 @@ import type { editor } from "monaco-editor";
 
 export const Route = createFileRoute("/projects/$projectId/")({
   component: EditorPage,
+  validateSearch: (search: Record<string, unknown>) => {
+    const replay = typeof search.replay === "string" ? search.replay : undefined;
+    return replay ? { replay } : {};
+  },
 });
 
 // ---------------------------------------------------------------------------
@@ -93,6 +97,7 @@ type FileRow = {
 function EditorPage() {
   const { projectId } = useParams({ from: "/projects/$projectId/" });
   const navigate = useNavigate();
+  const search = useSearch({ from: "/projects/$projectId/" });
   const qc = useQueryClient();
   const {
     tasteChatRemaining,
@@ -197,6 +202,16 @@ function EditorPage() {
     },
   });
 
+  // ─── Replay: se ?replay=runId veio da history page, dispara replay no mount ─────
+  useEffect(() => {
+    if (!search.replay) return;
+    const runId = search.replay;
+    const conv = conversation?.id;
+    if (!conv) return;
+    void sse.replay(projectId, conv, runId);
+    navigate({ to: "/projects/$projectId", params: { projectId }, search: {} });
+  }, [search.replay, conversation?.id, projectId, navigate, sse]);
+
   const { data: messages } = useQuery({
     queryKey: ["messages", conversation?.id],
     queryFn: async () => {
@@ -237,6 +252,8 @@ function EditorPage() {
   }, [conversation?.id, messages]);
 
   const autoAgentRunAttemptedRef = useRef<string | null>(null);
+  /** Evita boot duplicado do preview entre fim do agente e refetch do previewUrl. */
+  const previewBootAfterAgentRef = useRef(false);
 
   const devUrl = (project?.meta as { previewUrl?: string } | null)?.previewUrl ?? null;
 
@@ -719,9 +736,14 @@ function EditorPage() {
       (sse.progress.lastFinishOk === null && agentHasRun && !sse.progress.error));
 
   useEffect(() => {
+    if (running) {
+      previewBootAfterAgentRef.current = false;
+      return;
+    }
     if (!isReactProject || !e2bConnected || devUrl || previewBoot.booting) return;
-    if (running) return;
     if (!agentShouldBootPreview) return;
+    if (previewBootAfterAgentRef.current) return;
+    previewBootAfterAgentRef.current = true;
     void previewBoot.bootWithRetry();
   }, [
     agentShouldBootPreview,

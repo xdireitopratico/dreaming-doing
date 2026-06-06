@@ -174,6 +174,63 @@ Deno.serve(async (req) => {
       return streamEventsResponse(supabase, runId, () => {});
     }
 
+    if (body.action === "replay") {
+      const runId = body.runId as string | undefined;
+      if (!runId) return json({ error: "runId obrigatório" }, 400);
+      const { data: run } = await supabase
+        .from("agent_runs")
+        .select("id, user_id, project_id, status, error, steps, meta")
+        .eq("id", runId)
+        .maybeSingle();
+      if (!run || run.user_id !== userData.user.id || run.project_id !== projectId) {
+        return json({ error: "Run não encontrada" }, 404);
+      }
+      if (!useSSE) return json({ error: "Accept: text/event-stream obrigatório" }, 400);
+
+      // Re-emite todos os eventos do run em ordem, com pequeno delay pra simular live.
+      // Útil pra debug sem rerun (LLM é não-determinístico — replay fiel de I/O, não de inferência).
+      const { data: events } = await supabase
+        .from("agent_stream_events")
+        .select("seq, event_type, payload")
+        .eq("run_id", runId)
+        .order("seq", { ascending: true })
+        .limit(2000);
+
+      const stream = new ReadableStream({
+        async start(controller) {
+          const enc = new TextEncoder();
+          const write = (data: unknown) => controller.enqueue(enc.encode(`data: ${JSON.stringify(data)}\n\n`));
+          write({ type: "replay_start", runId, totalEvents: events?.length ?? 0 });
+
+          for (const evt of events ?? []) {
+            write({ type: evt.event_type, data: evt.payload, seq: evt.seq, replayed: true });
+            // Throttle: 10ms entre eventos pra não saturar o browser
+            await new Promise((r) => setTimeout(r, 10));
+          }
+
+          write({
+            type: "finish",
+            ok: run.status === "completed",
+            error: run.error ?? null,
+            resumable: false,
+            replayed: true,
+          });
+          controller.close();
+        },
+      });
+
+      logger.event("agent_run.replay", { runId, eventsCount: events?.length ?? 0 });
+      return new Response(stream, {
+        headers: {
+          ...corsHeaders,
+          "Content-Type": "text/event-stream",
+          "Cache-Control": "no-cache",
+          Connection: "keep-alive",
+          "X-Accel-Buffering": "no",
+        },
+      });
+    }
+
     if (body.action === "pending_count") {
       const { count } = await supabase
         .from("agent_pending_messages")

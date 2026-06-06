@@ -479,7 +479,108 @@ export function useSSE() {
     };
   }, []);
 
-  return { progress, connected, connect, watch, queueMessage, disconnect, stop };
+  const replay = useCallback(
+    async (projectId: string, conversationId: string, runId: string) => {
+      setProgress({
+        ...initialState,
+        statusHint: `Replaying run ${runId.slice(0, 8)}…`,
+        resumable: false,
+        autoResuming: false,
+      });
+
+      const { url, publishableKey } = getSupabaseEnv();
+      if (!url || !publishableKey) {
+        setProgress((p) => ({ ...p, error: "Supabase não configurado", finished: true }));
+        return;
+      }
+      const { data: sess } = await supabase.auth.getSession();
+      const accessToken = sess.session?.access_token;
+      if (!accessToken) {
+        setProgress((p) => ({ ...p, error: "Sessão expirada", finished: true }));
+        return;
+      }
+
+      const controller = new AbortController();
+      abortRef.current = controller;
+      setConnected(true);
+
+      try {
+        const res = await fetch(`${url}/functions/v1/agent-run`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "text/event-stream",
+            Authorization: `Bearer ${accessToken}`,
+            apikey: publishableKey,
+          },
+          body: JSON.stringify({ action: "replay", runId, projectId, conversationId }),
+          signal: controller.signal,
+        });
+
+        if (!res.ok) {
+          const msg = await parseErrorResponse(res);
+          setProgress((p) => ({ ...p, error: msg, finished: true }));
+          setConnected(false);
+          return;
+        }
+
+        const reader = res.body?.getReader();
+        if (!reader) {
+          setProgress((p) => ({ ...p, error: "Replay vazio", finished: true }));
+          return;
+        }
+
+        const decoder = new TextDecoder();
+        let buffer = "";
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split("\n");
+          buffer = lines.pop() ?? "";
+          for (const line of lines) {
+            if (line.startsWith("data: ")) {
+              try {
+                const parsed = JSON.parse(line.slice(6)) as Record<string, unknown>;
+                const eventType = (parsed.type as string) ?? "unknown";
+                const eventData =
+                  parsed.data && typeof parsed.data === "object"
+                    ? (parsed.data as Record<string, unknown>)
+                    : { ...parsed, type: undefined };
+                const event: SSEEvent = {
+                  type: eventType,
+                  data: eventData,
+                  timestamp: Date.now(),
+                };
+                if (eventType === "replay_start") {
+                  setProgress((p) => ({
+                    ...p,
+                    statusHint: `Replaying ${(eventData.totalEvents as number) ?? 0} eventos…`,
+                  }));
+                } else {
+                  setProgress((prev) => applyAgentProgressEvent(prev, event));
+                }
+              } catch {
+                /* heartbeat */
+              }
+            }
+          }
+        }
+      } catch (err: unknown) {
+        if (err instanceof Error && err.name === "AbortError") return;
+        setProgress((p) => ({
+          ...p,
+          error: formatAgentFetchError(err),
+          finished: true,
+        }));
+      } finally {
+        setConnected(false);
+      }
+    },
+    [],
+  );
+
+  return { progress, connected, connect, watch, replay, queueMessage, disconnect, stop };
 }
 
 /** Reducer puro dos eventos SSE (exportado para testes). */

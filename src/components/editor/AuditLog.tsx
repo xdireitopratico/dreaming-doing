@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   History, Search, Filter, ChevronDown, ChevronUp, ExternalLink,
   CheckCircle2, AlertCircle, Clock, Zap, DollarSign, Activity,
-  Layers, Code2, BarChart3,
+  Layers, Code2, BarChart3, RotateCcw,
 } from "lucide-react";
 
 export interface AuditEntry {
@@ -28,6 +28,7 @@ interface AuditLogProps {
   entries: AuditEntry[];
   selectedId?: string | null;
   onSelect?: (entry: AuditEntry) => void;
+  onReplay?: (entry: AuditEntry) => void;
 }
 
 const spring = {
@@ -38,7 +39,7 @@ const spring = {
 
 type AuditFilter = "all" | "completed" | "failed" | "running" | "stopped";
 
-export function AuditLog({ entries, selectedId, onSelect }: AuditLogProps) {
+export function AuditLog({ entries, selectedId, onSelect, onReplay }: AuditLogProps) {
   const [filter, setFilter] = useState<AuditFilter>("all");
   const [search, setSearch] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -229,18 +230,33 @@ export function AuditLog({ entries, selectedId, onSelect }: AuditLogProps) {
                       {duration !== null ? `${duration.toFixed(1)}s` : "—"}
                     </td>
                     <td className="px-2 py-2.5">
-                      <button
-                        onClick={() =>
-                          setExpandedId(isExpanded ? null : entry.id)
-                        }
-                        className="p-1 rounded hover:bg-[var(--surface-2)] text-[var(--text-ghost)] transition-colors"
-                      >
-                        {isExpanded ? (
-                          <ChevronUp className="size-3.5" />
-                        ) : (
-                          <ChevronDown className="size-3.5" />
+                      <div className="flex items-center gap-1">
+                        {onReplay && entry.status !== "running" && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onReplay(entry);
+                            }}
+                            title="Replay (re-ver I/O do run sem rerun)"
+                            data-testid="replay-run"
+                            className="p-1 rounded hover:bg-[var(--primary)]/10 text-[var(--text-ghost)] hover:text-[var(--primary)] transition-colors"
+                          >
+                            <RotateCcw className="size-3.5" />
+                          </button>
                         )}
-                      </button>
+                        <button
+                          onClick={() =>
+                            setExpandedId(isExpanded ? null : entry.id)
+                          }
+                          className="p-1 rounded hover:bg-[var(--surface-2)] text-[var(--text-ghost)] transition-colors"
+                        >
+                          {isExpanded ? (
+                            <ChevronUp className="size-3.5" />
+                          ) : (
+                            <ChevronDown className="size-3.5" />
+                          )}
+                        </button>
+                      </div>
                     </td>
 
                   </motion.tr>
