@@ -98,6 +98,19 @@ export async function toggleSkillIdPersisted(
   return next;
 }
 
+/** Substitui o conjunto completo de skills ativas (bulk: ativar/desativar várias de uma vez). */
+export async function setSkillIdsPersisted(
+  userId: string,
+  nextSkillIds: string[],
+  currentPrefs: unknown,
+): Promise<string[]> {
+  const { mcpIds } = mergeExtensionsFromProfile(currentPrefs);
+  const deduped = Array.from(new Set(nextSkillIds));
+  saveLocalSkills(deduped);
+  await persistAgentExtensions(userId, deduped, mcpIds, currentPrefs);
+  return deduped;
+}
+
 export async function toggleMcpIdPersisted(
   userId: string,
   id: string,
