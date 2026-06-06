@@ -41,8 +41,15 @@ class E2BSandbox implements SandboxProvider {
 
   async exec(command: string, opts?: ExecOpts): Promise<ExecResult> {
     const sb = await this.ensure();
+    let cmd = command;
+    if (opts?.env && Object.keys(opts.env).length > 0) {
+      const exports = Object.entries(opts.env)
+        .map(([k, v]) => `export ${k}='${String(v).replace(/'/g, `'\\''`)}'`)
+        .join("; ");
+      cmd = `${exports}; ${command}`;
+    }
     try {
-      const result = await sb.commands.run(command, {
+      const result = await sb.commands.run(cmd, {
         cwd: opts?.cwd || "/home/user",
         timeoutMs: opts?.timeout || 60_000,
       });

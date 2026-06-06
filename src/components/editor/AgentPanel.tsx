@@ -41,7 +41,7 @@ export function AgentPanel({ running, progress, onResume }: AgentPanelProps) {
         <p className="font-mono text-[10px] text-amber-400/90 leading-relaxed">{progress.statusHint}</p>
       )}
 
-      {!running && progress.resumable && (
+      {!running && progress.resumable && !progress.autoResuming && (
         <div className="flex flex-wrap items-center gap-2 rounded-lg border border-amber-400/25 bg-amber-400/10 px-3 py-2">
           <AlertTriangle className="size-4 text-amber-400 shrink-0" />
           <p className="flex-1 min-w-[200px] font-mono text-[10px] text-[var(--forge-silver)] leading-relaxed">

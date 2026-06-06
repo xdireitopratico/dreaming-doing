@@ -39,6 +39,8 @@ export interface AgentProgress {
   streamText: string | null;
   /** Último evento finish: true = agente concluiu com sucesso. */
   lastFinishOk: boolean | null;
+  /** Retomada automática em andamento (Fase A — sem botão Continuar). */
+  autoResuming: boolean;
 }
 
 export type AgentConnectOptions = {
@@ -64,7 +66,13 @@ const initialState: AgentProgress = {
   statusHint: null,
   streamText: null,
   lastFinishOk: null,
+  autoResuming: false,
 };
+
+/** Máximo de chunks auto-resume (~110s cada) antes de pedir intervenção. */
+export const MAX_AUTO_RESUME_CHUNKS = 48;
+
+const AUTO_RESUME_DELAY_MS = 600;
 
 const MODEL_COSTS: Record<string, number> = {
   "claude-sonnet-4-20250514": 3.0,
@@ -96,20 +104,16 @@ export function useSSE() {
   const abortRef = useRef<AbortController | null>(null);
   const runIdRef = useRef<string | null>(null);
 
-  const connect = useCallback(
+  const connectOnce = useCallback(
     async (
       projectId: string,
       conversationId: string,
-      sessionKind?: ForgeSessionKind,
-      options?: AgentConnectOptions,
-    ) => {
-      const isResume = options?.resume === true;
-      setProgress({
-        ...initialState,
-        statusHint: isResume ? "Conectando para retomar o agente…" : null,
-        resumable: false,
-      });
+      sessionKind: ForgeSessionKind | undefined,
+      isResume: boolean,
+      autoResume: boolean,
+    ): Promise<{ shouldAutoResume: boolean; aborted: boolean }> => {
       const sawFinish = { current: false };
+      const finishMeta = { resumable: false, ok: true };
 
       const { url, publishableKey } = getSupabaseEnv();
       if (!url || !publishableKey) {
@@ -120,7 +124,7 @@ export function useSSE() {
           finished: true,
         }));
         setConnected(false);
-        return;
+        return { shouldAutoResume: false, aborted: false };
       }
 
       const { data: sess } = await supabase.auth.getSession();
@@ -132,7 +136,7 @@ export function useSSE() {
           finished: true,
         }));
         setConnected(false);
-        return;
+        return { shouldAutoResume: false, aborted: false };
       }
 
       runIdRef.current = null;
@@ -159,6 +163,8 @@ export function useSSE() {
             preferences: loadAgentPreferences(),
             sessionKind,
             resume: isResume,
+            autoResume,
+            worker: true,
             ...loadAgentSessionExtensions(),
           }),
           signal: controller.signal,
@@ -180,14 +186,14 @@ export function useSSE() {
             resumable: canRetry || isResume,
           }));
           setConnected(false);
-          return;
+          return { shouldAutoResume: canRetry, aborted: false };
         }
 
         const reader = res.body?.getReader();
         if (!reader) {
           setProgress((p) => ({ ...p, error: "Resposta vazia do agent-run", finished: true }));
           setConnected(false);
-          return;
+          return { shouldAutoResume: false, aborted: false };
         }
 
         const decoder = new TextDecoder();
@@ -225,6 +231,8 @@ export function useSSE() {
                 if (event.type === "finish" || event.type === "done") {
                   sawFinish.current = true;
                   runIdRef.current = null;
+                  finishMeta.ok = eventData.ok !== false;
+                  finishMeta.resumable = eventData.resumable === true;
                   logEditorTelemetryEvent("sse", "finish", "ok");
                 }
                 if (event.type === "error") {
@@ -249,26 +257,97 @@ export function useSSE() {
           setProgress((p) => ({
             ...p,
             finished: true,
+            autoResuming: false,
             resumable: true,
             error:
               p.error ??
-              "Conexão com o agente foi interrompida. Seu histórico está salvo no projeto — use Continuar.",
+              "Conexão com o agente foi interrompida. Retomando automaticamente…",
           }));
+          return { shouldAutoResume: true, aborted: false };
         }
+
+        return {
+          shouldAutoResume: !finishMeta.ok && finishMeta.resumable,
+          aborted: false,
+        };
       } catch (err: unknown) {
-        if (!(err instanceof Error && err.name === "AbortError")) {
-          setProgress((p) => ({
-            ...p,
-            error: formatAgentFetchError(err),
-            finished: true,
-            resumable: true,
-          }));
+        if (err instanceof Error && err.name === "AbortError") {
+          return { shouldAutoResume: false, aborted: true };
         }
+        setProgress((p) => ({
+          ...p,
+          error: formatAgentFetchError(err),
+          finished: true,
+          autoResuming: false,
+          resumable: true,
+        }));
+        return { shouldAutoResume: true, aborted: false };
       } finally {
         setConnected(false);
       }
     },
     [],
+  );
+
+  const connect = useCallback(
+    async (
+      projectId: string,
+      conversationId: string,
+      sessionKind?: ForgeSessionKind,
+      options?: AgentConnectOptions,
+    ) => {
+      const manualResume = options?.resume === true;
+      setProgress({
+        ...initialState,
+        statusHint: manualResume ? "Conectando para retomar o agente…" : null,
+        resumable: false,
+        autoResuming: false,
+      });
+
+      let isResume = manualResume;
+
+      for (let chunk = 0; chunk < MAX_AUTO_RESUME_CHUNKS; chunk++) {
+        if (chunk > 0) {
+          logEditorTelemetryEvent("sse", "auto_resume_chunk", "info", String(chunk + 1));
+          setProgress((p) => ({
+            ...p,
+            autoResuming: true,
+            finished: false,
+            resumable: false,
+            error: null,
+            statusHint: "Retomando automaticamente…",
+          }));
+          await new Promise((r) => setTimeout(r, AUTO_RESUME_DELAY_MS));
+          isResume = true;
+        }
+
+        const { shouldAutoResume, aborted } = await connectOnce(
+          projectId,
+          conversationId,
+          sessionKind,
+          isResume,
+          chunk > 0,
+        );
+
+        if (aborted) return;
+
+        if (!shouldAutoResume) {
+          setProgress((p) => ({ ...p, autoResuming: false }));
+          return;
+        }
+      }
+
+      setProgress((p) => ({
+        ...p,
+        autoResuming: false,
+        finished: true,
+        resumable: true,
+        error:
+          p.error ??
+          "Limite de retomadas automáticas atingido. Clique em Continuar para seguir.",
+      }));
+    },
+    [connectOnce],
   );
 
   const disconnect = useCallback(() => {
@@ -315,7 +394,14 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
         error: null,
         finished: false,
         resumable: false,
-        statusHint: data.resume ? "Retomando com a memória salva no chat…" : prev.statusHint,
+        autoResuming: data.autoResume === true,
+        statusHint: data.autoResume
+          ? "Retomando automaticamente…"
+          : data.resume
+            ? "Retomando com a memória salva no chat…"
+            : data.worker
+              ? "Agente no sandbox E2B (sessão longa)…"
+              : prev.statusHint,
         timeline: [...prev.timeline, event],
       };
 
@@ -475,6 +561,7 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
         ...prev,
         finished: true,
         streamText: null,
+        autoResuming: false,
         lastFinishOk: !failed,
         resumable: failed && data.resumable === true,
         error: failed ? ((data.error as string) ?? prev.error) : null,

@@ -7,10 +7,12 @@ export interface ShellContext {
   sandbox: SandboxProvider;
   projectId: string;
   supabase: any;
+  /** Env injetado no sandbox (VERCEL_TOKEN, etc.) */
+  sandboxEnv?: Record<string, string>;
 }
 
 export function registerShellTool(reg: ToolRegistry, ctx: ShellContext): void {
-  const { sandbox, projectId, supabase } = ctx;
+  const { sandbox, projectId, supabase, sandboxEnv } = ctx;
 
   async function ensureSync(): Promise<void> {
     const { data } = await supabase
@@ -57,6 +59,7 @@ Retorna { exitCode, stdout, stderr }. Exit code 0 = sucesso.`,
         const result = await sandbox.exec(args.command as string, {
           cwd: (args.cwd as string) || "/home/user",
           timeout: 180000,
+          env: sandboxEnv,
         });
         return {
           toolCallId: "",

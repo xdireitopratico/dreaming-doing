@@ -19,6 +19,8 @@ const base: AgentProgress = {
   resumable: true,
   statusHint: null,
   streamText: null,
+  lastFinishOk: null,
+  autoResuming: false,
 };
 
 function ev(type: string, data: Record<string, unknown>): SSEEvent {

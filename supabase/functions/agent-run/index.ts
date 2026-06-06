@@ -34,8 +34,14 @@ import { registerDeployTool } from "./tools/deploy.ts";
 import { loadTasteNvidiaConfig, runTasteChat } from "./taste-session.ts";
 import { FORGE_CORS_HEADERS, corsPreflightResponse } from "../_shared/cors.ts";
 import { restoreExecutionLogFromRows } from "./executionLogMeta.ts";
+import { runAgentViaE2bWorker, supportsE2bWorker } from "./worker-run.ts";
+import { buildSandboxEnv } from "./worker-bootstrap.ts";
 
 const runningLocks = new Map<string, Promise<unknown>>();
+
+const RUNNER_SOURCE = await Deno.readTextFile(
+  new URL("./worker/runner.mjs", import.meta.url),
+);
 
 const corsHeaders = FORGE_CORS_HEADERS;
 
@@ -384,7 +390,12 @@ Deno.serve(async (req) => {
     const stackAddon = stackPromptAddon(stackCtx);
     const cleanup = () => { runningLocks.delete(projectId!); sandbox.destroy().catch(() => {}); };
     registerFsTools(reg, { supabase, projectId });
-    registerShellTool(reg, { sandbox, projectId, supabase });
+    registerShellTool(reg, {
+      sandbox,
+      projectId,
+      supabase,
+      sandboxEnv: buildSandboxEnv(connectorKeys, deployKeys),
+    });
     registerMcpForgeTools(reg, {
       supabase,
       projectId,
@@ -517,6 +528,38 @@ Deno.serve(async (req) => {
           },
       );
     };
+
+    const useE2bWorker = sessionKind !== "taste_chat" && supportsE2bWorker(mainCfg);
+    const userAccessToken = (req.headers.get("Authorization") ?? "").replace("Bearer ", "");
+    const supabaseAnonKey = req.headers.get("apikey") ?? Deno.env.get("SUPABASE_ANON_KEY") ?? "";
+
+    if (useSSE && useE2bWorker && userAccessToken && supabaseAnonKey) {
+      const { data: workerFiles } = await supabase
+        .from("project_files")
+        .select("path, content")
+        .eq("project_id", projectId);
+      return runAgentViaE2bWorker({
+        supabase,
+        e2bApiKey: e2bKey,
+        userId: userData.user.id,
+        accessToken: userAccessToken,
+        supabaseUrl: SUPABASE_URL,
+        supabaseAnonKey,
+        projectId,
+        conversationId,
+        agentRunId: agentRunId!,
+        resumeRun,
+        projectTemplate,
+        stackAddon,
+        sessionAddon: sessionExt.addon,
+        mainCfg,
+        connectorKeys: { ...connectorKeys, ...deployKeys },
+        deployKeys,
+        files: workerFiles ?? [],
+        runnerSource: RUNNER_SOURCE,
+        cleanup,
+      });
+    }
 
     if (!useSSE) {
       const loop = makeLoop(() => {});

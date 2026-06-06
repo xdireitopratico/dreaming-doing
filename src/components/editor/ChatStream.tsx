@@ -146,7 +146,7 @@ export function ChatStream({ messages, running, progress, onResume }: ChatStream
         </section>
       )}
 
-      {!running && progress.resumable && (
+      {!running && progress.resumable && !progress.autoResuming && (
         <section className="forge-chat-resume">
           <AlertTriangle className="size-4 text-amber-400 shrink-0" />
           <p className="flex-1 min-w-0 font-mono text-[10px] text-[var(--forge-silver)] leading-relaxed">

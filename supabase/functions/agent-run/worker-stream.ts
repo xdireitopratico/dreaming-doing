@@ -1,0 +1,83 @@
+import { E2B_PROJECT_DIR } from "../_shared/e2b.ts";
+import type { E2bRestSandbox } from "../_shared/e2b-rest.ts";
+
+const EVENTS_PATH = `${E2B_PROJECT_DIR}/.forge/events.ndjson`;
+const POLL_MS = 450;
+const MAX_STREAM_MS = 28 * 60 * 1000;
+
+export async function streamWorkerEvents(
+  sandbox: E2bRestSandbox,
+  emit: (payload: Record<string, unknown>) => void,
+  isCanceled: () => Promise<boolean>,
+): Promise<{ ok: boolean; steps: number; error?: string; resumable?: boolean; canceled?: boolean }> {
+  let offset = 0;
+  let steps = 0;
+  let result: { ok: boolean; steps: number; error?: string; resumable?: boolean; canceled?: boolean } = {
+    ok: false,
+    steps: 0,
+    resumable: true,
+  };
+  const started = Date.now();
+
+  while (Date.now() - started < MAX_STREAM_MS) {
+    if (await isCanceled()) {
+      await sandbox.commands.run("pkill -f 'runner.mjs' 2>/dev/null || true", {
+        cwd: E2B_PROJECT_DIR,
+        timeoutMs: 5_000,
+      });
+      return { ok: false, steps, error: "Cancelado", canceled: true, resumable: false };
+    }
+
+    const tail = await sandbox.commands.run(
+      `wc -c < ${EVENTS_PATH} 2>/dev/null || echo 0`,
+      { cwd: E2B_PROJECT_DIR, timeoutMs: 8_000 },
+    );
+    const size = Number.parseInt((tail.stdout ?? "0").trim(), 10) || 0;
+
+    if (size > offset) {
+      const chunk = await sandbox.commands.run(
+        `tail -c +${offset + 1} ${EVENTS_PATH}`,
+        { cwd: E2B_PROJECT_DIR, timeoutMs: 12_000 },
+      );
+      offset = size;
+      const lines = (chunk.stdout ?? "").split("\n").filter((l) => l.trim());
+      for (const line of lines) {
+        try {
+          const parsed = JSON.parse(line) as Record<string, unknown>;
+          const { type, ts: _ts, ...rest } = parsed;
+          const eventType = String(type ?? "unknown");
+          emit({ type: eventType, ...rest });
+          if (eventType === "step" && typeof rest.current === "number") {
+            steps = rest.current;
+          }
+          if (eventType === "finish") {
+            result = {
+              ok: rest.ok === true,
+              steps: typeof rest.steps === "number" ? rest.steps : steps,
+              error: typeof rest.error === "string" ? rest.error : undefined,
+              resumable: rest.resumable === true,
+              canceled: rest.canceled === true,
+            };
+            return result;
+          }
+        } catch {
+          /* linha parcial */
+        }
+      }
+    } else {
+      const alive = await sandbox.commands.run(
+        "pgrep -f 'runner.mjs' >/dev/null && echo alive || echo dead",
+        { cwd: E2B_PROJECT_DIR, timeoutMs: 5_000 },
+      );
+      if ((alive.stdout ?? "").includes("dead") && offset > 0) {
+        return result.ok
+          ? result
+          : { ok: false, steps, error: "Worker encerrou inesperadamente", resumable: true };
+      }
+    }
+
+    await new Promise((r) => setTimeout(r, POLL_MS));
+  }
+
+  return { ok: false, steps, error: "Timeout aguardando worker", resumable: true };
+}
