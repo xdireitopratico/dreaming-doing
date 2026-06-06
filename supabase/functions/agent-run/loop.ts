@@ -23,6 +23,7 @@ import {
 import { getTasteStartSystemPrompt } from "./prompts-taste.ts";
 import { friendlyLlmError } from "./llm-errors.ts";
 import { hashToolBatch, isExecutionStuck } from "../_shared/agent-stuck.ts";
+import { logger } from "../_shared/logger.ts";
 import {
   appendExecutionLogEntry,
   buildExecutionLogMeta,
@@ -172,7 +173,12 @@ export class AgentLoop {
       }, { onConflict: "project_id,conversation_id" });
       this.lastCheckpointStep = step;
     } catch (err) {
-      console.error("[checkpoint] falha ao salvar:", err);
+      logger.error("agent.checkpoint_save_failed", {
+        runId: this.runId ?? undefined,
+        step,
+        phase: phase as string,
+        error: (err as Error)?.message,
+      });
     }
   }
 

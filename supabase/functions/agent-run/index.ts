@@ -33,6 +33,7 @@ import { registerMcpForgeTools } from "./tools/mcp-forge.ts";
 import { registerDeployTool } from "./tools/deploy.ts";
 import { loadTasteNvidiaConfig, runTasteChat } from "./taste-session.ts";
 import { FORGE_CORS_HEADERS, corsPreflightResponse } from "../_shared/cors.ts";
+import { logger, withCorrelationId, correlationIdFromRequest, currentCorrelationId } from "../_shared/logger.ts";
 import { restoreExecutionLogFromRows } from "./executionLogMeta.ts";
 import { loadCheckpoint } from "./checkpoint.ts";
 import { buildSandboxEnv } from "./sandbox-env.ts";
@@ -89,7 +90,9 @@ function robinProviderConfig(
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return corsPreflightResponse();
+  const correlationId = correlationIdFromRequest(req);
 
+  return await withCorrelationId(correlationId, async () => {
   let projectId: string | undefined;
 
   try {
@@ -99,6 +102,13 @@ Deno.serve(async (req) => {
     const token = (req.headers.get("Authorization") ?? "").replace("Bearer ", "");
     const { data: userData, error: uErr } = await supabase.auth.getUser(token);
     if (uErr || !userData?.user) return json({ error: "Não autenticado" }, 401);
+
+    projectId = typeof body.projectId === "string" ? body.projectId : undefined;
+    logger.info("agent_run.request", {
+      projectId,
+      userId: userData.user.id,
+      action: typeof body.action === "string" ? body.action : "run",
+    });
 
     if (body.action === "cancel") {
       const runId = body.runId as string | undefined;
@@ -126,7 +136,7 @@ Deno.serve(async (req) => {
       return json({ ok: true });
     }
 
-    projectId = body.projectId;
+    projectId = typeof body.projectId === "string" ? body.projectId : undefined;
     const conversationId = body.conversationId;
     const preferences = body.preferences as AgentPreferencesPayload | undefined;
     const sessionKindRaw = body.sessionKind as string | undefined;
@@ -782,12 +792,25 @@ Deno.serve(async (req) => {
     });
   } catch (e: unknown) {
     if (projectId) runningLocks.delete(projectId);
+    logger.error("agent_run.unhandled_error", {
+      error: (e as Error)?.message,
+      stack: (e as Error)?.stack,
+      projectId,
+    });
     return json({ error: (e as Error)?.message ?? "erro inesperado" }, 500);
   }
+  });
 });
 
 function json(body: unknown, status = 200) {
-  return new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: {
+      ...corsHeaders,
+      "Content-Type": "application/json",
+      "X-Correlation-Id": currentCorrelationId() ?? "",
+    },
+  });
 }
 
 function streamEventsResponse(

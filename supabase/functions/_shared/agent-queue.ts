@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import { logger } from "./logger.ts";
 
 export const AGENT_CHUNKS_QUEUE = "agent_chunks";
 
@@ -28,12 +29,12 @@ export async function enqueueAgentChunk(
       sleep_seconds: 0,
     });
     if (error) {
-      console.warn("[agent-queue] send failed:", error.message);
+      logger.warn("agent_queue.send_failed", { runId: message.runId, error: error.message });
       return false;
     }
     return true;
   } catch (e) {
-    console.warn("[agent-queue] PGMQ unavailable:", e);
+    logger.warn("agent_queue.pgmq_unavailable", { runId: message.runId, error: (e as Error).message });
     return false;
   }
 }
@@ -81,6 +82,6 @@ export async function invokeAgentWorker(supabaseUrl: string, serviceKey: string)
       body: JSON.stringify({ tick: true }),
     });
   } catch (e) {
-    console.warn("[agent-queue] worker invoke failed:", e);
+    logger.warn("agent_queue.worker_invoke_failed", { error: (e as Error).message });
   }
 }
