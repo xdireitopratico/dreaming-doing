@@ -17,5 +17,6 @@ describe("e2b-status", () => {
     expect(formatE2bUserError("Sandbox E2B não configurado", "e2b_not_configured")).toContain(
       "salve de novo",
     );
+    expect(formatE2bUserError("E2B create 404: template 'nodejs' not found")).toContain("Template");
   });
 });

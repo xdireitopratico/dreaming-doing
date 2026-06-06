@@ -2,8 +2,8 @@
 
 export const E2B_API_BASE = Deno.env.get("E2B_API_BASE") || "https://api.e2b.app";
 export const E2B_DOMAIN = Deno.env.get("E2B_DOMAIN") || "e2b.app";
-/** Template com Node/npm (não usar `base` — sem toolchain para Vite). */
-export const E2B_TEMPLATE_DEFAULT = Deno.env.get("E2B_TEMPLATE") || "nodejs";
+/** Template com Node/npm para Vite (alias E2B: code-interpreter-v1). */
+export const E2B_TEMPLATE_DEFAULT = Deno.env.get("E2B_TEMPLATE") || "code-interpreter-v1";
 export const E2B_PROJECT_DIR = "/home/user";
 
 /** URL pública do serviço no sandbox (Vite, etc.). Preferir `getHost` do SDK quando disponível. */

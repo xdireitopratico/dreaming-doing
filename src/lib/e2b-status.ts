@@ -28,6 +28,9 @@ export function formatE2bUserError(message: string, code?: string): string {
   }
 
   const lower = message.toLowerCase();
+  if (message.includes("template") && message.includes("not found")) {
+    return "Template E2B indisponível na sua conta. O FORGE usa code-interpreter-v1 — recarregue o editor; se persistir, avise o suporte.";
+  }
   if (lower.includes("e2b connect 401") || lower.includes("e2b create 401")) {
     return "Chave E2B recusada pela E2B (401). Gere uma nova em e2b.dev e atualize em API Keys (/api).";
   }
