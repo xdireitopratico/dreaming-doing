@@ -236,7 +236,7 @@ async function main() {
     worker: true,
     resume: !!cfg.resume,
   });
-  emit("phase", { phase: "worker", message: "Agente no sandbox E2B (sessão longa)…" });
+  emit("phase", { phase: "execute", message: "Trabalhando no projeto…" });
 
   const history = await loadMessages(cfg);
   const messages = [

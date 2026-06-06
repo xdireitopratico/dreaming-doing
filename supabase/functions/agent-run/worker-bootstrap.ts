@@ -62,8 +62,8 @@ export async function bootstrapE2bWorker(
     .join("; ");
 
   const startCmd = exports
-    ? `${exports}; cd ${E2B_PROJECT_DIR} && nohup node ${FORGE_DIR}/runner.mjs >> ${FORGE_DIR}/events.ndjson 2>&1 &`
-    : `cd ${E2B_PROJECT_DIR} && nohup node ${FORGE_DIR}/runner.mjs >> ${FORGE_DIR}/events.ndjson 2>&1 &`;
+    ? `${exports}; cd ${E2B_PROJECT_DIR} && nohup node ${FORGE_DIR}/runner.mjs >> ${FORGE_DIR}/runner.log 2>&1 &`
+    : `cd ${E2B_PROJECT_DIR} && nohup node ${FORGE_DIR}/runner.mjs >> ${FORGE_DIR}/runner.log 2>&1 &`;
 
   await sandbox.commands.run(startCmd, {
     cwd: E2B_PROJECT_DIR,

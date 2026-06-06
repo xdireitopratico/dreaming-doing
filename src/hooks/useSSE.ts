@@ -401,8 +401,8 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
           : data.resume
             ? "Retomando com a memória salva no chat…"
             : data.worker
-              ? "Agente no sandbox E2B (sessão longa)…"
-              : prev.statusHint,
+              ? "Trabalhando no projeto…"
+              : "Conectando ao agente…",
         timeline: [...prev.timeline, event],
       };
 

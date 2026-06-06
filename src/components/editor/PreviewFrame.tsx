@@ -121,7 +121,7 @@ export function PreviewFrame({
         {!bootError && showBootSpinner ? (
           <div className="flex h-full w-full flex-col items-center justify-center gap-3 bg-white">
             <Loader2 className="size-8 animate-spin text-neutral-400" />
-            <p className="text-sm text-neutral-500">Conectando preview E2B…</p>
+            <p className="text-sm text-neutral-500">Conectando preview…</p>
             <p className="text-xs text-neutral-400 max-w-xs">
               A atividade do agente aparece só no chat à esquerda.
             </p>
@@ -130,7 +130,7 @@ export function PreviewFrame({
           <div className="flex h-full flex-col items-center justify-center gap-3 bg-neutral-50 p-8 text-center">
             <p className="text-sm font-medium text-neutral-800">Preview em repouso</p>
             <p className="text-sm text-neutral-500 max-w-sm leading-relaxed">
-              Sem interação por 10 minutos — o iframe foi pausado para reduzir consumo E2B.
+              Sem interação por 10 minutos — o preview foi pausado para economizar recursos.
               Mova o mouse ou clique para reativar.
             </p>
           </div>

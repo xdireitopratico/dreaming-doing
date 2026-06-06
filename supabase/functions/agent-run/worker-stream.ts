@@ -1,9 +1,12 @@
 import { E2B_PROJECT_DIR } from "../_shared/e2b.ts";
 import type { E2bRestSandbox } from "../_shared/e2b-rest.ts";
 
-const EVENTS_PATH = `${E2B_PROJECT_DIR}/.forge/events.ndjson`;
+const FORGE_DIR = `${E2B_PROJECT_DIR}/.forge`;
+const EVENTS_PATH = `${FORGE_DIR}/events.ndjson`;
+const RUNNER_LOG_PATH = `${FORGE_DIR}/runner.log`;
 const POLL_MS = 450;
 const MAX_STREAM_MS = 28 * 60 * 1000;
+const WORKER_START_GRACE_MS = 8_000;
 
 export async function streamWorkerEvents(
   sandbox: E2bRestSandbox,
@@ -69,10 +72,23 @@ export async function streamWorkerEvents(
         "pgrep -f 'runner.mjs' >/dev/null && echo alive || echo dead",
         { cwd: E2B_PROJECT_DIR, timeoutMs: 5_000 },
       );
-      if ((alive.stdout ?? "").includes("dead") && offset > 0) {
+      const workerDead = (alive.stdout ?? "").includes("dead");
+      if (workerDead && (offset > 0 || Date.now() - started > WORKER_START_GRACE_MS)) {
+        const log = await sandbox.commands.run(
+          `tail -30 ${RUNNER_LOG_PATH} 2>/dev/null || echo '(sem log do agente)'`,
+          { cwd: E2B_PROJECT_DIR, timeoutMs: 8_000 },
+        );
+        const tail = (log.stdout ?? "").trim().slice(-400);
         return result.ok
           ? result
-          : { ok: false, steps, error: "Worker encerrou inesperadamente", resumable: true };
+          : {
+            ok: false,
+            steps,
+            error: tail
+              ? `Agente parou: ${tail}`
+              : "Agente parou antes de responder — tente Continuar no chat.",
+            resumable: true,
+          };
       }
     }
 

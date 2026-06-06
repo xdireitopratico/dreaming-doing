@@ -526,7 +526,11 @@ Deno.serve(async (req) => {
       );
     };
 
-    const useE2bWorker = sessionKind !== "taste_chat" && supportsE2bWorker(mainCfg);
+    // Worker E2B só com opt-in explícito — o loop na Edge é o caminho estável.
+    const useE2bWorker =
+      Deno.env.get("FORGE_USE_E2B_WORKER") === "1" &&
+      sessionKind !== "taste_chat" &&
+      supportsE2bWorker(mainCfg);
     const userAccessToken = (req.headers.get("Authorization") ?? "").replace("Bearer ", "");
     const supabaseAnonKey = req.headers.get("apikey") ?? Deno.env.get("SUPABASE_ANON_KEY") ?? "";
 
