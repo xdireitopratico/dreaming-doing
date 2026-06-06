@@ -1,69 +1,83 @@
-# FORGE — Estado pós sessão (atualizado)
+## Objetivo
+Corrigir 8 problemas de UX/visual no editor (`/projects/$projectId`) usando o Lovable como referência visual, sem mexer em lógica de negócio.
 
-## Concluído nesta sessão (segurança + sincronização)
+## Problemas e correções
 
-### Segurança crítica (B7–B12) — 6 findings fechadas
-- **B7** `mcp-server`: agora exige `Authorization`. `authenticate()` valida sessão e checa `user_roles`. Tools sensíveis (`query`, `migrate`, `auth_users`) bloqueadas para não-admin (403).
-- **B8** `realtime.messages`: nova policy `project_files-<id>` espelhando a do canal `editor-%`. Bloqueia leak de código entre contas.
-- **B9** `deployments`: adicionados `deploy_update_own` e `deploy_delete_own` (só o dono do projeto).
-- **B10** `user_roles`: `roles_no_insert/update/delete` — qualquer mutação direta por `authenticated` retorna RLS deny. Só `service_role` muda.
-- **B11** `has_role()`: `REVOKE EXECUTE ... FROM authenticated, anon`. Função continua usável dentro de policies.
-- **B12** `AdminPlatformSecretsPanel`: gated por query server-side `admin-platform-secrets action:'status'`. `isForgeAdminEmail` virou só dica UX.
+### 1. Header — Preview/Code "ancorados" ao painel de preview
+Hoje o `EditorWorkspaceHeader` ocupa toda a faixa do workspace e os ícones Preview/Code ficam colados no lado esquerdo do header (logo após o resize handle). No Lovable, esses ícones ficam **alinhados à borda esquerda do painel de preview** e permanecem ali ao arrastar o divisor.
 
-### Sincronização Supabase (A1, A3, A5)
-- `scripts/sync/README.md` — fluxo de duas contas documentado.
-- `scripts/sync/migrate.sh` — `supabase db push` na sua conta.
-- `scripts/sync/deploy-all.sh` — deploy de todas as 9 edge functions.
-- `scripts/sync/secrets-checklist.md` — 14 secrets que precisam existir.
-- `SupabaseConfigBanner` agora alerta visualmente quando `VITE_SUPABASE_URL` ≠ `dpduljngdurfpmaclffa`.
+- Mover o cluster `[Preview | Code] + divisor + Conectores` para começar exatamente na borda esquerda do workspace panel (já é o caso) **e travar a posição via grid do `EditorResizableLayout`** para que não "dance" com o resize.
+- Garantir que o cluster fique colado na borda do preview frame, com o mesmo padding interno do conteúdo do preview.
 
-### Schema (paridade entre os dois projetos)
-- Migration: adiciona `netlify` ao enum `connector_kind`.
-- Migration: adiciona `profiles.integration_prefs jsonb` e `profiles.trial_messages_remaining int` que o app já consumia.
+### 2. Dropdown de Conectores com fundo branco
+No print, o menu de integrações abre branco com texto cinza claro — deveria seguir o tema do header (fundo preto/grafite, texto branco).
 
-### Hot-fixes de build
-- `useConnectors.ts` / `ConnectorGuideModal.tsx` agora compilam com o novo schema.
-- `api-keys.tsx`: removida ref a `connectors_public.provider` (usa só `meta.provider`).
-- `agent-preferences.ts`: tipo do parsed legacy "rob" → "robin" sem TS narrowing error.
+- Ajustar `EditorIntegrationsMenu` (e/ou o `ForgeEditorDropdownContent` usado por ele) para usar tokens `--surface-panel` / `--text-strong` em vez de cores padrão do `dropdown-menu` shadcn.
+- Itens com hover sutil em `--surface-hover`, separadores em `--border-subtle`.
 
-## Para fazer na próxima sessão (continuando o plano de 50)
+### 3. Barra de navegação do preview centralizada
+A `PreviewRouteNav` (variante `chrome`) hoje fica encostada à esquerda do header. No Lovable, a barra de URL fica **centralizada com o painel de preview** e acompanha o resize.
 
-### Sincronização (resto de A)
-- **A2** Rodar `deploy-all.sh` localmente — eu **não posso** fazer isso daqui (não tenho seu token Supabase). É você executando o script.
-- **A4** Revisar `supabase/config.toml` por função (CORS, timeouts, verify_jwt).
-- **A6** Rodar `migrate.sh` agora para colocar a sua conta no mesmo schema.
+- Reestruturar `EditorWorkspaceHeader` / chrome para colocar a `PreviewRouteNav` em uma faixa central com `justify-self: center` e `max-width` proporcional ao preview.
+- Quando o painel é estreito, encurtar a barra (mas mantê-la centralizada).
 
-### Segurança restante (B13)
-- Rotacionar `SUPABASE_SERVICE_ROLE_KEY` depois que a CLI tiver aplicado as policies novas.
+### 4. Device toggle (desktop/tablet/mobile) + Refresh no header do preview
+O `PreviewViewportChrome` já existe mas não está sendo usado no header consolidado. Faltam os 3 botões de viewport e o botão de hard refresh.
 
-### Agente (C14–C23) — refatoração não-trivial
-14. UI "Continuar" quando `resumable: true`. 15. Persistir `executionLog`. 16. Backoff por provider. 17. Token usage tracking. 18. Allowlist de `shell_exec`. 19. Hash dos últimos calls em `isStuck`. 20. `RuntimeObserver` rodando `tsc` no E2B. 21. 3 skills concretas. 22. Cancelamento server-side via `runs.canceled_at`. 23. Tabela `agent_runs` + dashboard.
+- Integrar `PreviewViewportChrome` (device toggle + refresh) ao `EditorWorkspaceHeader`, à direita da `PreviewRouteNav` centralizada.
+- O refresh deve disparar um hard reload do `PreviewFrame` (bump de `key` + `?t=` no src).
+- Estado do device persistido em `localStorage` (`forge-preview-device`).
 
-### Editor (D24–D32)
-24. Monaco. 25. File tree CRUD. 26. kbar. 27. Diff viewer. 28. HMR via Realtime. 29. Voice global. 30. Visual edits. 31. Trace expansível. 32. Tema persistente.
+### 5. Dropdown Build/Plan — tema escuro + estado selecionado
+O `ComposerModeSelect` abre com fundo transparente/branco e não marca a opção ativa.
 
-### Integrações (E33–E40) — **bloqueadas por secrets seus**
-- E33–E35 GitHub OAuth + push + webhook: precisa `GITHUB_OAUTH_CLIENT_ID/SECRET`, `ENCRYPTION_KEY`.
-- E36 Vercel deploy: precisa `VERCEL_TOKEN`.
-- E37 Cloudflare: `CLOUDFLARE_API_TOKEN`.
-- E38 Stripe billing: chave + plano. E39 MCP UI. E40 multi-provider UI.
+- Aplicar o mesmo tratamento do item 2: fundo `--surface-panel`, borda `--border-subtle`, texto `--text-strong`.
+- Renderizar check (`Check` do lucide) ao lado da opção atualmente selecionada (`Build` ou `Plan`) e destacar via `data-state=checked`.
 
-### Performance & launch (F41–F50)
-41. Bundle audit. 42. Code-split (Monaco, CodeEditor). 43. Imagens. 44. SEO `head()` por rota. 45. robots/sitemap. 46. Lighthouse. 47. Rate limit em `agent-run`. 48. `audit_events`. 49. Backup. 50. E2E playwright.
+### 6. Estado vazio do preview — onboarding útil
+Quando o preview está em branco/erro, hoje só aparece "Preview has not been built yet" ou "Expected to resolve main module".
 
-## Secrets atuais (Lovable Cloud)
-`ANTHROPIC_API_KEY`, `XAI_API_KEY`, `GROQ_API_KEY`, `E2B_API_KEY`, `LOVABLE_API_KEY`, `SUPABASE_*`.
+Redesenhar `PreviewEmptyGuide` (e o estado de erro do `PreviewFrame`) com:
+- Mensagem clara do estado (sem sandbox / em build / erro).
+- **Campo de input** "Cole o link do seu repositório GitHub" → dispara `github-import` e, se Vercel estiver conectado, encaminha para deploy.
+- CTA secundário "Ou descreva sua ideia no chat" focando o composer.
+- Visual centralizado, com o logo Forge e os passos mínimos.
 
-Faltando para fases futuras: `GITHUB_OAUTH_CLIENT_ID/SECRET`, `GITHUB_WEBHOOK_SECRET`, `ENCRYPTION_KEY`, `VERCEL_TOKEN`, `CLOUDFLARE_API_TOKEN`, `OPENAI_API_KEY`.
+### 7. SetupRail — expandir em tela cheia do chat e reorganizar
+O `SetupRail` hoje aparece como um "tijolo" no meio do chat, misturando trilha de taste + configuração + status. Quando expandido deve **ocupar todo o chat panel** (sobrepor a thread) e ser visualmente organizado.
 
-## Importante — paridade entre os dois Supabase
+- Quando `expanded`, renderizar como overlay do `forge-chat-panel` (position absolute, full height) com botão de fechar.
+- Reorganizar em **3 seções colapsáveis** com hierarquia clara:
+  1. **Trilha** (passos do taste — checklist linear)
+  2. **Modelo & API** (provider ativo, BYOK status, link para `/models`)
+  3. **Integrações** (Sandbox E2B, GitHub, Vercel, MCP, Skills — com badges de status)
+- Tipografia consistente, espaçamento de 16px entre blocos, sem mistura de fontes mono/sans no mesmo nível.
 
-Toda migration nova que eu criar daqui para frente **só vai para `mtcnwvzjfbvyiuhrqrlo` (Lovable Cloud)** via tool. Para sua conta `dpduljngdurfpmaclffa` ficar igual:
+### 8. Colapsar o chat (full preview)
+Hoje o `EditorResizableLayout` limita o chat a `MIN_CHAT_PX = 280` e não permite colapsar.
 
-```bash
-cd <projeto>
-./scripts/sync/migrate.sh   # aplica migrations novas
-./scripts/sync/deploy-all.sh   # republica edge functions
-```
+- Adicionar botão de colapso no header do chat (`EditorChatHeader`) — ícone `PanelLeftClose`/`PanelLeftOpen`.
+- Estado `chatCollapsed` no `EditorResizableLayout`: quando true, ratio = 0, handle vira um botão fino no canto esquerdo do workspace que reexpande para o último ratio salvo.
+- Persistir em `localStorage` (`forge-editor-chat-collapsed`).
 
-Rode após cada sessão minha que mexer em backend.
+## Arquivos afetados (apenas frontend/CSS)
+- `src/components/editor/EditorResizableLayout.tsx` — colapso do chat + ancoragem do header
+- `src/components/editor/EditorWorkspaceHeader.tsx` — reorganização (esquerda: Preview/Code+Conectores, centro: URL nav, direita: device+refresh+share/publish)
+- `src/components/editor/EditorChatHeader.tsx` — botão colapsar
+- `src/components/editor/EditorIntegrationsMenu.tsx` — tema do dropdown
+- `src/components/editor/ComposerModeSelect.tsx` — tema + selected state
+- `src/components/editor/ForgeEditorDropdown.tsx` — base de tokens dark
+- `src/components/editor/PreviewViewportChrome.tsx` — reuso no header
+- `src/components/editor/PreviewFrame.tsx` — hook de hard refresh + device width
+- `src/components/editor/PreviewEmptyGuide.tsx` — redesign + input repo
+- `src/components/editor/SetupRail.tsx` — overlay full-chat + 3 seções
+- `src/routes/projects/$projectId/index.tsx` — fiação dos novos props
+- `src/styles/editor-workspace.css` — grid do header, overlay do setup, tokens do dropdown
+
+## Fora de escopo
+- Lógica de deploy/import do GitHub além de chamar handlers existentes (`github-import`, `deploy-publish`).
+- Mudanças no agente, edge functions, schema ou migrations.
+- Refatorar a thread de mensagens.
+
+## Verificação
+Após implementar: abrir `/projects/$projectId`, validar via browser tools em 916px e 1440px que (a) os ícones Preview/Code ficam ancorados à borda do preview ao arrastar o divisor, (b) dropdowns abrem escuros com selected state, (c) device toggle + refresh funcionam, (d) chat colapsa/expande, (e) SetupRail expande full-chat organizado, (f) estado vazio mostra input de repo.
