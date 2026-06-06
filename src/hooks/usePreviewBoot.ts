@@ -31,10 +31,15 @@ const PROBE_FAIL_BEFORE_FORCE = 4;
 type UsePreviewBootOpts = {
   /** Preview em repouso — não faz polling probeOnly. */
   idle?: boolean;
+  /** Aba preview aberta com URL — verifica saúde da porta e reboota Vite se morreu. */
+  watchHealth?: boolean;
 };
+
+const HEALTH_PROBE_MS = 45_000;
 
 export function usePreviewBoot(projectId: string, opts?: UsePreviewBootOpts) {
   const idle = opts?.idle ?? false;
+  const watchHealth = opts?.watchHealth ?? false;
   const [booting, setBooting] = useState(false);
   const [lastError, setLastError] = useState<string | null>(null);
   const [warming, setWarming] = useState(false);
@@ -184,6 +189,14 @@ export function usePreviewBoot(projectId: string, opts?: UsePreviewBootOpts) {
       window.clearTimeout(timeout);
     };
   }, [warming, boot, idle]);
+
+  useEffect(() => {
+    if (!watchHealth || idle) return;
+    const interval = window.setInterval(() => {
+      void boot({ probeOnly: true, silent: true });
+    }, HEALTH_PROBE_MS);
+    return () => window.clearInterval(interval);
+  }, [watchHealth, idle, boot]);
 
   return {
     booting,

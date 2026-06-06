@@ -240,7 +240,10 @@ function EditorPage() {
   const devUrl = (project?.meta as { previewUrl?: string } | null)?.previewUrl ?? null;
 
   const { idle: previewIdle } = usePreviewIdle(activeView === "preview" && !!devUrl);
-  const previewBoot = usePreviewBoot(projectId, { idle: previewIdle });
+  const previewBoot = usePreviewBoot(projectId, {
+    idle: previewIdle,
+    watchHealth: activeView === "preview" && !!devUrl,
+  });
 
   const connectedKinds = useMemo(
     () =>
