@@ -21,6 +21,7 @@ export type Database = {
           kind: Database["public"]["Enums"]["connector_kind"]
           meta: Json
           owner_id: string
+          provider: string
           token_encrypted: string | null
           updated_at: string
         }
@@ -30,6 +31,7 @@ export type Database = {
           kind: Database["public"]["Enums"]["connector_kind"]
           meta?: Json
           owner_id: string
+          provider?: string
           token_encrypted?: string | null
           updated_at?: string
         }
@@ -39,6 +41,7 @@ export type Database = {
           kind?: Database["public"]["Enums"]["connector_kind"]
           meta?: Json
           owner_id?: string
+          provider?: string
           token_encrypted?: string | null
           updated_at?: string
         }
@@ -150,11 +153,69 @@ export type Database = {
         }
         Relationships: []
       }
+      agent_runs: {
+        Row: {
+          canceled_at: string | null
+          conversation_id: string
+          error: string | null
+          finished_at: string | null
+          id: string
+          meta: Json
+          project_id: string
+          started_at: string
+          status: string
+          steps: number
+          user_id: string
+        }
+        Insert: {
+          canceled_at?: string | null
+          conversation_id: string
+          error?: string | null
+          finished_at?: string | null
+          id?: string
+          meta?: Json
+          project_id: string
+          started_at?: string
+          status?: string
+          steps?: number
+          user_id: string
+        }
+        Update: {
+          canceled_at?: string | null
+          conversation_id?: string
+          error?: string | null
+          finished_at?: string | null
+          id?: string
+          meta?: Json
+          project_id?: string
+          started_at?: string
+          status?: string
+          steps?: number
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "agent_runs_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agent_runs_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       messages: {
         Row: {
           conversation_id: string
           created_at: string
           id: string
+          meta: Json
           parts: Json
           role: Database["public"]["Enums"]["message_role"]
           tool_calls: Json
@@ -163,6 +224,7 @@ export type Database = {
           conversation_id: string
           created_at?: string
           id?: string
+          meta?: Json
           parts?: Json
           role: Database["public"]["Enums"]["message_role"]
           tool_calls?: Json
@@ -171,6 +233,7 @@ export type Database = {
           conversation_id?: string
           created_at?: string
           id?: string
+          meta?: Json
           parts?: Json
           role?: Database["public"]["Enums"]["message_role"]
           tool_calls?: Json
@@ -194,6 +257,10 @@ export type Database = {
           id: string
           integration_prefs: Json
           trial_messages_remaining: number
+          taste_chat_remaining: number
+          taste_start_remaining: number
+          taste_lead_email: string | null
+          taste_lead_consent_at: string | null
           updated_at: string
         }
         Insert: {
@@ -351,6 +418,7 @@ export type Database = {
           kind: Database["public"]["Enums"]["connector_kind"] | null
           meta: Json | null
           owner_id: string | null
+          provider: string | null
           updated_at: string | null
         }
         Insert: {
@@ -359,6 +427,7 @@ export type Database = {
           kind?: Database["public"]["Enums"]["connector_kind"] | null
           meta?: Json | null
           owner_id?: string | null
+          provider?: string | null
           updated_at?: string | null
         }
         Update: {
@@ -367,6 +436,7 @@ export type Database = {
           kind?: Database["public"]["Enums"]["connector_kind"] | null
           meta?: Json | null
           owner_id?: string | null
+          provider?: string | null
           updated_at?: string | null
         }
         Relationships: []
@@ -390,6 +460,8 @@ export type Database = {
         | "anthropic"
         | "openai"
         | "netlify"
+        | "supabase"
+        | "e2b"
       deploy_provider: "vercel" | "cloudflare" | "netlify"
       deploy_status: "queued" | "building" | "ready" | "error" | "cancelled"
       message_role: "user" | "assistant" | "system" | "tool"
@@ -528,6 +600,8 @@ export const Constants = {
         "anthropic",
         "openai",
         "netlify",
+        "supabase",
+        "e2b",
       ],
       deploy_provider: ["vercel", "cloudflare", "netlify"],
       deploy_status: ["queued", "building", "ready", "error", "cancelled"],
