@@ -135,6 +135,7 @@ function EditorPage() {
   const [publishing, setPublishing] = useState(false);
   const [previewRoute, setPreviewRoute] = useState("/");
   const [previewReloadNonce, setPreviewReloadNonce] = useState(0);
+  const [previewDevice, setPreviewDevice] = useState<"desktop" | "tablet" | "mobile">("desktop");
 
   // ─── Refs ────────────────────────────────────────────────────────────
   const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null);
@@ -776,6 +777,22 @@ function EditorPage() {
                   closeModal: closeConnectorModal,
                   saveConnector,
                 }}
+                preview={{
+                  files: previewNavFiles,
+                  activePath: previewRoute,
+                  onNavigate: setPreviewRoute,
+                  devUrl,
+                  onRefresh: () => {
+                    if (previewIframeRef.current?.contentWindow) {
+                      previewIframeRef.current.contentWindow.location.reload();
+                    } else {
+                      void previewBoot.boot({ force: true });
+                    }
+                    setPreviewReloadNonce((n) => n + 1);
+                  },
+                  device: previewDevice,
+                  onDeviceChange: setPreviewDevice,
+                }}
               />
             }
             chat={
@@ -854,7 +871,6 @@ function EditorPage() {
                         agentRunning={running}
                         devUrl={devUrl}
                         previewPath={previewRoute}
-                        onPreviewPathChange={setPreviewRoute}
                         iframeRef={previewIframeRef}
                         bootError={previewBoot.lastError}
                         warming={previewBoot.warming}
@@ -864,6 +880,17 @@ function EditorPage() {
                         agentHasRun={agentHasRun}
                         e2bConnected={e2bConnected}
                         projectName={project?.name}
+                        device={previewDevice}
+                        onImportRepo={(url) => {
+                          toast.info(`Importando repositório: ${url}`);
+                          openConnector("github");
+                        }}
+                        onFocusChat={() => {
+                          const el = document.querySelector<HTMLTextAreaElement>(
+                            ".forge-composer-input",
+                          );
+                          el?.focus();
+                        }}
                       />
                     )}
 

@@ -1,10 +1,16 @@
-import { Code2, Eye, Moon, Share2 } from "lucide-react";
+import { Code2, Eye, Moon, RefreshCw, Share2 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import type { EditorMainView } from "@/components/editor/EditorViewTabs";
 import {
   EditorIntegrationsMenu,
   type EditorIntegrationsMenuProps,
 } from "@/components/editor/EditorIntegrationsMenu";
+import { PreviewRouteNav } from "@/components/editor/PreviewRouteNav";
+import {
+  previewDeviceWidth,
+  type PreviewDevice,
+} from "@/components/editor/PreviewViewportChrome";
+import { Monitor, Smartphone, Tablet } from "lucide-react";
 
 interface EditorWorkspaceHeaderProps {
   activeView: EditorMainView;
@@ -12,7 +18,23 @@ interface EditorWorkspaceHeaderProps {
   onShare?: () => void;
   onPublish?: () => void;
   integrations?: EditorIntegrationsMenuProps;
+  /** Preview navigation controls — only rendered when activeView === "preview". */
+  preview?: {
+    files: Array<{ path: string; content?: string }>;
+    activePath: string;
+    onNavigate: (path: string) => void;
+    devUrl?: string | null;
+    onRefresh?: () => void;
+    device: PreviewDevice;
+    onDeviceChange: (device: PreviewDevice) => void;
+  };
 }
+
+const DEVICES: Array<{ id: PreviewDevice; label: string; icon: typeof Monitor }> = [
+  { id: "desktop", label: "Desktop", icon: Monitor },
+  { id: "tablet", label: "Tablet", icon: Tablet },
+  { id: "mobile", label: "Mobile", icon: Smartphone },
+];
 
 export function EditorWorkspaceHeader({
   activeView,
@@ -20,6 +42,7 @@ export function EditorWorkspaceHeader({
   onShare,
   onPublish,
   integrations,
+  preview,
 }: EditorWorkspaceHeaderProps) {
   const { user } = useAuth();
 
@@ -27,6 +50,8 @@ export function EditorWorkspaceHeader({
     user?.email?.slice(0, 2).toUpperCase() ??
     user?.user_metadata?.full_name?.slice(0, 2)?.toUpperCase() ??
     "U";
+
+  const showPreviewControls = activeView === "preview" && preview;
 
   return (
     <div className="forge-workspace-header-inner">
@@ -60,6 +85,51 @@ export function EditorWorkspaceHeader({
         <EditorIntegrationsMenu {...integrations} />
       </div>
 
+      {showPreviewControls ? (
+        <div className="forge-workspace-header-center">
+          <div className="forge-preview-device-toggle" role="group" aria-label="Tamanho do preview">
+            {DEVICES.map(({ id, label, icon: Icon }) => {
+              const active = preview!.device === id;
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  title={label}
+                  aria-pressed={active}
+                  className="forge-preview-device-btn"
+                  data-active={active}
+                  onClick={() => preview!.onDeviceChange(id)}
+                >
+                  <Icon className="size-3.5" />
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="forge-workspace-header-url">
+            <PreviewRouteNav
+              variant="chrome"
+              files={preview!.files}
+              activePath={preview!.activePath}
+              onNavigate={preview!.onNavigate}
+              devUrl={preview!.devUrl}
+            />
+          </div>
+
+          <button
+            type="button"
+            className="forge-preview-refresh-btn forge-preview-refresh-btn--dark"
+            title="Recarregar página"
+            onClick={preview!.onRefresh}
+            disabled={!preview!.onRefresh}
+          >
+            <RefreshCw className="size-3.5" />
+          </button>
+        </div>
+      ) : (
+        <div className="forge-workspace-header-center" aria-hidden />
+      )}
+
       <div className="forge-workspace-header-actions">
         <span className="forge-avatar" title={user?.email ?? ""}>
           {initials}
@@ -78,3 +148,7 @@ export function EditorWorkspaceHeader({
     </div>
   );
 }
+
+// Re-export so route doesn't need to also import PreviewViewportChrome
+export { previewDeviceWidth };
+export type { PreviewDevice };
