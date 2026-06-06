@@ -409,6 +409,83 @@ export type Database = {
         }
         Relationships: []
       }
+      agent_stream_events: {
+        Row: {
+          id: string
+          run_id: string
+          seq: number
+          event_type: string
+          payload: Json
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          run_id: string
+          seq: number
+          event_type: string
+          payload?: Json
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          run_id?: string
+          seq?: number
+          event_type?: string
+          payload?: Json
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "agent_stream_events_run_id_fkey"
+            columns: ["run_id"]
+            isOneToOne: false
+            referencedRelation: "agent_runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      agent_pending_messages: {
+        Row: {
+          id: string
+          project_id: string
+          conversation_id: string
+          user_id: string
+          body: Json
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          project_id: string
+          conversation_id: string
+          user_id: string
+          body?: Json
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          project_id?: string
+          conversation_id?: string
+          user_id?: string
+          body?: Json
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "agent_pending_messages_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agent_pending_messages_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "conversations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       connectors_public: {

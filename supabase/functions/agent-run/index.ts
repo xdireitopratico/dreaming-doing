@@ -130,6 +130,7 @@ Deno.serve(async (req) => {
     const conversationId = body.conversationId;
     const preferences = body.preferences as AgentPreferencesPayload | undefined;
     const sessionKindRaw = body.sessionKind as string | undefined;
+    const tasteActionRaw = body.tasteAction as string | undefined;
     const resumeRun = body.resume === true;
     const autoResume = body.autoResume === true;
     const enabledSkillIds = normalizeIdList(body.enabledSkillIds);
@@ -268,10 +269,21 @@ Deno.serve(async (req) => {
       );
 
     type SessionKind = "taste_chat" | "taste_start" | "byok";
+    /**
+     * Resolve o SessionKind interno (legado: 3 valores) a partir do payload.
+     * - "taste" + tasteAction="chat" → "taste_chat"
+     * - "taste" + tasteAction="start" → "taste_start"
+     * - "taste" sem action → "taste_chat" (default)
+     * - "byok" → "byok" (exige hasUserLlmKey)
+     * - Legacy: "taste_chat" / "taste_start" são aceitos como estão
+     */
     let sessionKind: SessionKind = hasUserLlmKey ? "byok" : "taste_chat";
-    if (!hasUserLlmKey && sessionKindRaw === "taste_start") sessionKind = "taste_start";
-    if (!hasUserLlmKey && sessionKindRaw === "taste_chat") sessionKind = "taste_chat";
-    if (hasUserLlmKey && sessionKindRaw === "taste_start") sessionKind = "taste_start";
+    if (sessionKindRaw === "byok") sessionKind = "byok";
+    if (sessionKindRaw === "taste") {
+      sessionKind = tasteActionRaw === "start" ? "taste_start" : "taste_chat";
+    }
+    if (sessionKindRaw === "taste_start") sessionKind = "taste_start";
+    if (sessionKindRaw === "taste_chat") sessionKind = "taste_chat";
 
     if (sessionKind === "taste_chat" && tasteChatRemaining <= 0) {
       runningLocks.delete(projectId);

@@ -31,10 +31,11 @@ import {
   isAgentPreferencesConfigured,
   getAgentSetupBlockMessage,
 } from "@/lib/agent-setup";
-import type { ForgeSessionKind } from "@/lib/taste";
+import type { ForgeSessionKind, TasteAction } from "@/lib/taste";
 import {
   canSendTasteChat,
   canStartTasteProject,
+  isInTaste,
   resolveSessionKind,
 } from "@/lib/taste";
 import type { StoredMessagePart } from "@/lib/chat-attachments";
@@ -470,30 +471,35 @@ function EditorPage() {
   }, []);
 
   const runAgent = useCallback(
-    (explicitKind?: ForgeSessionKind): boolean => {
+    (
+      explicitKind?: ForgeSessionKind,
+      explicitAction?: TasteAction,
+    ): boolean => {
       if (!conversation || running) return false;
 
       const kind = explicitKind ?? resolveSessionKind(tasteQuota);
-      const isTaste = kind === "taste_chat" || kind === "taste_start";
+      const tasteAction: TasteAction | undefined =
+        explicitAction ?? (kind === "taste" ? "chat" : undefined);
+      const inTaste = kind === "taste";
 
-      if (!isTaste) {
+      if (!inTaste) {
         const prefs = loadAgentPreferences();
         if (!isAgentPreferencesConfigured(prefs)) {
           toast.error(getAgentSetupBlockMessage(prefs));
           return false;
         }
-      } else if (kind === "taste_start" && !canStartTasteProject(tasteQuota)) {
+      } else if (tasteAction === "start" && !canStartTasteProject(tasteQuota)) {
         toast.error("Start Project já utilizado. Configure API para continuar.");
         return false;
-      } else if (kind === "taste_chat" && !canSendTasteChat(tasteQuota)) {
+      } else if (tasteAction === "chat" && !canSendTasteChat(tasteQuota)) {
         toast.error("Limite Taste Chat (50). Configure API em /api.");
         return false;
       }
 
       const label =
-        kind === "taste_start"
+        kind === "taste" && tasteAction === "start"
           ? "Start Project (Taste · NVIDIA)"
-          : kind === "taste_chat"
+          : kind === "taste"
             ? "Concierge Taste"
             : sse.progress.resumable
               ? "Retomando agente (memória do chat)"
@@ -505,12 +511,12 @@ function EditorPage() {
         "agent",
         "run_start",
         "info",
-        kind === "byok" ? "byok" : kind,
+        kind === "byok" ? "byok" : `${kind}.${tasteAction ?? "chat"}`,
       );
       void (async () => {
         setRunning(true);
         try {
-          await sse.connect(projectId, conversation.id, kind);
+          await sse.connect(projectId, conversation.id, kind, { tasteAction });
         } catch (e: unknown) {
           const msg = e instanceof Error ? e.message : "Erro ao iniciar agente";
           logEditorTelemetryEvent("agent", "run_fail", "error", msg.slice(0, 200));
@@ -612,19 +618,17 @@ function EditorPage() {
     if (!conversation || running) return;
 
     const kind = resolveSessionKind(tasteQuota);
-    const isTaste = kind === "taste_chat" || kind === "taste_start";
+    const inTaste = kind === "taste";
+    const tasteAction: TasteAction = "chat";
 
-    if (!isTaste) {
+    if (!inTaste) {
       const prefs = loadAgentPreferences();
       if (!isAgentPreferencesConfigured(prefs)) {
         toast.error(getAgentSetupBlockMessage(prefs));
         return;
       }
-    } else if (kind === "taste_start" && !canStartTasteProject(tasteQuota)) {
-      toast.error("Start Project já utilizado. Configure API para continuar.");
-      return;
-    } else if (kind === "taste_chat" && !canSendTasteChat(tasteQuota)) {
-      toast.error("Limite Taste Chat (50). Configure API em /api.");
+    } else if (!canSendTasteChat(tasteQuota)) {
+      toast.error("Limite Taste Chat. Configure API em /api.");
       return;
     }
 
@@ -816,7 +820,7 @@ function EditorPage() {
       })
       .then(({ error }) => {
         if (error) toast.error("Erro ao iniciar Start Project");
-        else runAgent("taste_start");
+        else runAgent("taste", "start");
       });
   }, [conversation, runAgent]);
 

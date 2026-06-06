@@ -117,6 +117,7 @@ export async function executeAgentJob(
   type SessionKind = "taste_start" | "byok";
   let sessionKind: SessionKind = "byok";
   if (sessionKindRaw === "taste_start") sessionKind = "taste_start";
+  if (sessionKindRaw === "taste") sessionKind = "taste_start";
 
   let robinPool: RobinKeyPool | null = null;
   let connectorKeys: Record<string, string> = {};

@@ -441,6 +441,7 @@ export function ChatInput({
                   streamText: null,
                   lastFinishOk: null,
                   autoResuming: false,
+                  pendingQueueCount: 0,
                 }
               }
               onResume={onResumeAgent}

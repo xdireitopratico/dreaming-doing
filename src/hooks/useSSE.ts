@@ -5,7 +5,7 @@ import { getSupabaseEnv } from "@/lib/supabase-env";
 import { parseAgentDiagnostics, pushDiagnostics } from "@/hooks/useDiagnostics";
 import { loadAgentPreferences } from "@/lib/agent-preferences";
 import { loadAgentSessionExtensions } from "@/lib/agent-session-extensions";
-import type { ForgeSessionKind } from "@/lib/taste";
+import type { ForgeSessionKind, TasteAction } from "@/lib/taste";
 import { dispatchTasteUiAction, isTasteUiAction } from "@/lib/taste-ui-actions";
 import { formatAgentFetchError, formatAgentHttpError } from "@/lib/agent-fetch-errors";
 import { logEditorTelemetryEvent } from "@/lib/editor-telemetry";
@@ -115,6 +115,7 @@ export function useSSE() {
       projectId: string,
       conversationId: string,
       sessionKind: ForgeSessionKind | undefined,
+      tasteAction: TasteAction | undefined,
       isResume: boolean,
       autoResume: boolean,
       opts?: ConnectOnceOpts,
@@ -177,6 +178,7 @@ export function useSSE() {
                   conversationId,
                   preferences: loadAgentPreferences(),
                   sessionKind,
+                  ...(sessionKind === "taste" && tasteAction ? { tasteAction } : {}),
                   resume: isResume,
                   autoResume,
                   ...loadAgentSessionExtensions(),
@@ -328,7 +330,7 @@ export function useSSE() {
       projectId: string,
       conversationId: string,
       sessionKind?: ForgeSessionKind,
-      options?: AgentConnectOptions,
+      options?: AgentConnectOptions & { tasteAction?: TasteAction },
     ) => {
       const manualResume = options?.resume === true;
       setProgress({
@@ -342,6 +344,7 @@ export function useSSE() {
         projectId,
         conversationId,
         sessionKind,
+        options?.tasteAction,
         manualResume,
         false,
       );
@@ -367,6 +370,7 @@ export function useSSE() {
         projectId,
         conversationId,
         undefined,
+        undefined,
         false,
         false,
         { watchRunId: runId },
@@ -384,6 +388,7 @@ export function useSSE() {
       projectId: string,
       conversationId: string,
       sessionKind?: ForgeSessionKind,
+      tasteAction?: TasteAction,
     ): Promise<{ ok: boolean; pendingCount?: number; message?: string }> => {
       const { url, publishableKey } = getSupabaseEnv();
       if (!url || !publishableKey) {
@@ -406,6 +411,7 @@ export function useSSE() {
           conversationId,
           preferences: loadAgentPreferences(),
           sessionKind,
+          ...(sessionKind === "taste" && tasteAction ? { tasteAction } : {}),
           ...loadAgentSessionExtensions(),
         }),
       });
