@@ -41,6 +41,8 @@ export interface AgentProgress {
   lastFinishOk: boolean | null;
   /** Retomada automática em andamento (Fase A — sem botão Continuar). */
   autoResuming: boolean;
+  /** Mensagens do usuário aguardando na fila do projeto. */
+  pendingQueueCount: number;
 }
 
 export type AgentConnectOptions = {
@@ -67,6 +69,7 @@ const initialState: AgentProgress = {
   streamText: null,
   lastFinishOk: null,
   autoResuming: false,
+  pendingQueueCount: 0,
 };
 
 /** Legado — retomada de chunks agora é server-side (agent-worker + PGMQ). */
@@ -102,6 +105,11 @@ export function useSSE() {
   const [connected, setConnected] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   const runIdRef = useRef<string | null>(null);
+  type ConnectOnceOpts = {
+    watchRunId?: string;
+    preserveProgress?: boolean;
+  };
+
   const connectOnce = useCallback(
     async (
       projectId: string,
@@ -109,6 +117,7 @@ export function useSSE() {
       sessionKind: ForgeSessionKind | undefined,
       isResume: boolean,
       autoResume: boolean,
+      opts?: ConnectOnceOpts,
     ): Promise<{ shouldAutoResume: boolean; aborted: boolean }> => {
       const sawFinish = { current: false };
       const finishMeta = { resumable: false, ok: true };
@@ -155,25 +164,39 @@ export function useSSE() {
             Authorization: `Bearer ${accessToken}`,
             apikey: publishableKey,
           },
-          body: JSON.stringify({
-            projectId,
-            conversationId,
-            preferences: loadAgentPreferences(),
-            sessionKind,
-            resume: isResume,
-            autoResume,
-            ...loadAgentSessionExtensions(),
-          }),
+          body: JSON.stringify(
+            opts?.watchRunId
+              ? {
+                  action: "watch",
+                  runId: opts.watchRunId,
+                  projectId,
+                  conversationId,
+                }
+              : {
+                  projectId,
+                  conversationId,
+                  preferences: loadAgentPreferences(),
+                  sessionKind,
+                  resume: isResume,
+                  autoResume,
+                  ...loadAgentSessionExtensions(),
+                },
+          ),
           signal: controller.signal,
         });
 
         const contentType = res.headers.get("Content-Type") ?? "";
         if (res.ok && contentType.includes("application/json")) {
-          const body = (await res.json()) as { queued?: boolean; message?: string };
+          const body = (await res.json()) as {
+            queued?: boolean;
+            message?: string;
+            pendingCount?: number;
+          };
           if (body.queued) {
             setProgress((p) => ({
               ...p,
-              finished: true,
+              finished: opts?.preserveProgress ? p.finished : true,
+              pendingQueueCount: body.pendingCount ?? p.pendingQueueCount + 1,
               statusHint: body.message ?? "Mensagem na fila do agente.",
               error: null,
             }));
@@ -324,10 +347,90 @@ export function useSSE() {
       );
 
       if (!aborted) {
+        setProgress((p) => ({ ...p, autoResuming: false, pendingQueueCount: 0 }));
+      }
+    },
+    [connectOnce],
+  );
+
+  const watch = useCallback(
+    async (projectId: string, conversationId: string, runId: string) => {
+      setProgress((p) => ({
+        ...p,
+        finished: false,
+        error: null,
+        resumable: false,
+        statusHint: "Conectando ao agente em execução…",
+      }));
+
+      const { aborted } = await connectOnce(
+        projectId,
+        conversationId,
+        undefined,
+        false,
+        false,
+        { watchRunId: runId },
+      );
+
+      if (!aborted) {
         setProgress((p) => ({ ...p, autoResuming: false }));
       }
     },
     [connectOnce],
+  );
+
+  const queueMessage = useCallback(
+    async (
+      projectId: string,
+      conversationId: string,
+      sessionKind?: ForgeSessionKind,
+    ): Promise<{ ok: boolean; pendingCount?: number; message?: string }> => {
+      const { url, publishableKey } = getSupabaseEnv();
+      if (!url || !publishableKey) {
+        return { ok: false, message: "Supabase não configurado." };
+      }
+      const { data: sess } = await supabase.auth.getSession();
+      const accessToken = sess.session?.access_token;
+      if (!accessToken) return { ok: false, message: "Sessão expirada." };
+
+      const res = await fetch(`${url}/functions/v1/agent-run`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+          Authorization: `Bearer ${accessToken}`,
+          apikey: publishableKey,
+        },
+        body: JSON.stringify({
+          projectId,
+          conversationId,
+          preferences: loadAgentPreferences(),
+          sessionKind,
+          ...loadAgentSessionExtensions(),
+        }),
+      });
+
+      if (!res.ok) {
+        const msg = await parseErrorResponse(res);
+        return { ok: false, message: msg };
+      }
+
+      const body = (await res.json()) as {
+        queued?: boolean;
+        pendingCount?: number;
+        message?: string;
+      };
+      if (body.queued) {
+        setProgress((p) => ({
+          ...p,
+          pendingQueueCount: body.pendingCount ?? p.pendingQueueCount + 1,
+          statusHint: body.message ?? "Mensagem na fila do agente.",
+        }));
+        return { ok: true, pendingCount: body.pendingCount, message: body.message };
+      }
+      return { ok: false, message: "Agente livre — use run normal." };
+    },
+    [],
   );
 
   const disconnect = useCallback(() => {
@@ -360,7 +463,7 @@ export function useSSE() {
     };
   }, []);
 
-  return { progress, connected, connect, disconnect, stop };
+  return { progress, connected, connect, watch, queueMessage, disconnect, stop };
 }
 
 /** Reducer puro dos eventos SSE (exportado para testes). */
@@ -563,6 +666,10 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
         lastFinishOk: !failed,
         resumable: failed && data.resumable === true,
         error: failed ? ((data.error as string) ?? prev.error) : null,
+        pendingQueueCount:
+          !failed && prev.pendingQueueCount > 0
+            ? prev.pendingQueueCount - 1
+            : prev.pendingQueueCount,
         timeline: [...prev.timeline, event],
       };
     }

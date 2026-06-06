@@ -28,6 +28,30 @@ if [[ -f "$TOKEN_FILE" ]]; then
     -d '{"query":"select extname from pg_extension where extname = '\''pgmq'\''"}')
   if echo "$PGMQ" | grep -q pgmq; then
     echo "  PGMQ: habilitado"
+    QUEUES=$(curl -sf "https://api.supabase.com/v1/projects/${REF}/database/query" \
+      -H "Authorization: Bearer ${API_TOKEN}" \
+      -H "Content-Type: application/json" \
+      -d '{"query":"select queue_name from pgmq.meta"}')
+    if echo "$QUEUES" | grep -q agent_chunks; then
+      echo "  Fila agent_chunks: OK"
+    else
+      echo "  Fila agent_chunks: ausente — criando…"
+      curl -sf "https://api.supabase.com/v1/projects/${REF}/database/query" \
+        -H "Authorization: Bearer ${API_TOKEN}" \
+        -H "Content-Type: application/json" \
+        -d '{"query":"SELECT pgmq.create('\''agent_chunks'\'');"}' >/dev/null
+      echo "  Fila agent_chunks: criada"
+    fi
+    echo "→ PGMQ send/read smoke"
+    curl -sf "https://api.supabase.com/v1/projects/${REF}/database/query" \
+      -H "Authorization: Bearer ${API_TOKEN}" \
+      -H "Content-Type: application/json" \
+      -d '{"query":"SELECT pgmq.send('\''agent_chunks'\'', '\''{\"smoke\":true}'\''::jsonb);"}' | grep -q '"send"'
+    curl -sf "https://api.supabase.com/v1/projects/${REF}/database/query" \
+      -H "Authorization: Bearer ${API_TOKEN}" \
+      -H "Content-Type: application/json" \
+      -d '{"query":"SELECT pgmq.delete('\''agent_chunks'\'', (SELECT msg_id FROM pgmq.read('\''agent_chunks'\'', 0, 1) LIMIT 1));"}' >/dev/null
+    echo "  PGMQ roundtrip: OK"
   else
     echo "  PGMQ: OFF (usa fallback inline com chunks no servidor)"
   fi

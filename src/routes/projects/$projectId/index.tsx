@@ -533,12 +533,39 @@ function EditorPage() {
     let attempts = 0;
     const maxAttempts = 12;
 
-    const tryAutoRun = () => {
+    const tryAutoRun = async () => {
       if (cancelled || attempts >= maxAttempts) return;
       attempts += 1;
 
       if (running || sse.connected) {
         window.setTimeout(tryAutoRun, 250);
+        return;
+      }
+
+      const { data: activeRun } = await supabase
+        .from("agent_runs")
+        .select("id")
+        .eq("project_id", projectId)
+        .eq("status", "running")
+        .maybeSingle();
+
+      if (activeRun?.id) {
+        setRunning(true);
+        try {
+          await sse.watch(projectId, conversation.id, activeRun.id);
+        } finally {
+          setRunning(false);
+        }
+        return;
+      }
+
+      const { count: pendingQueue } = await supabase
+        .from("agent_pending_messages")
+        .select("id", { count: "exact", head: true })
+        .eq("project_id", projectId);
+
+      if ((pendingQueue ?? 0) > 0) {
+        window.setTimeout(tryAutoRun, 500);
         return;
       }
 
@@ -629,6 +656,57 @@ function EditorPage() {
     void qc.invalidateQueries({ queryKey: ["profile"] });
   }, [sse.progress.finished, conversation, qc]);
 
+  // Segue run enfileirado pelo worker (PGMQ) sem criar run duplicado
+  useEffect(() => {
+    if (!sse.progress.finished || !conversation || running || sse.connected) return;
+
+    let cancelled = false;
+    const followQueuedRun = async (attempt = 0) => {
+      if (cancelled || attempt > 30) return;
+
+      const { data: activeRun } = await supabase
+        .from("agent_runs")
+        .select("id")
+        .eq("project_id", projectId)
+        .eq("status", "running")
+        .maybeSingle();
+
+      if (activeRun?.id) {
+        setRunning(true);
+        try {
+          await sse.watch(projectId, conversation.id, activeRun.id);
+        } finally {
+          setRunning(false);
+        }
+        return;
+      }
+
+      const { count } = await supabase
+        .from("agent_pending_messages")
+        .select("id", { count: "exact", head: true })
+        .eq("project_id", projectId);
+
+      if ((count ?? 0) > 0 || sse.progress.pendingQueueCount > 0 || pendingAgentRunKey) {
+        await new Promise((r) => window.setTimeout(r, 500));
+        return followQueuedRun(attempt + 1);
+      }
+    };
+
+    void followQueuedRun();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    sse.progress.finished,
+    sse.progress.pendingQueueCount,
+    conversation,
+    projectId,
+    running,
+    sse.connected,
+    sse,
+    pendingAgentRunKey,
+  ]);
+
   const agentFinished = sse.progress.finished;
   const agentShouldBootPreview =
     agentFinished &&
@@ -684,17 +762,33 @@ function EditorPage() {
           role: "user",
           parts: messageParts,
         })
-        .then(({ error }) => {
+        .then(async ({ error }) => {
           if (error) {
             toast.error("Erro ao enviar mensagem");
             logEditorTelemetryEvent("agent", "chat_send_fail", "error", error.message.slice(0, 200));
-          } else {
-            logEditorTelemetryEvent("agent", "chat_send", "info", mode ?? composerMode);
-            runAgent(resolveSessionKind(tasteQuota));
+            return;
           }
+          logEditorTelemetryEvent("agent", "chat_send", "info", mode ?? composerMode);
+          void qc.invalidateQueries({ queryKey: ["messages", conversation.id] });
+
+          const kind = resolveSessionKind(tasteQuota);
+          if (running || sse.connected) {
+            const queued = await sse.queueMessage(projectId, conversation.id, kind);
+            if (queued.ok) {
+              toast.info(
+                queued.pendingCount && queued.pendingCount > 1
+                  ? `${queued.pendingCount} mensagens na fila`
+                  : "Mensagem na fila — o agente processará em seguida",
+              );
+            } else {
+              toast.error(queued.message ?? "Erro ao enfileirar mensagem");
+            }
+            return;
+          }
+          runAgent(kind);
         });
     },
-    [conversation, runAgent, composerMode, tasteQuota],
+    [conversation, runAgent, composerMode, tasteQuota, running, sse, projectId, qc],
   );
 
   const handleVisualEdits = useCallback(() => {

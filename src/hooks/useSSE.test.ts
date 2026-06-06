@@ -21,6 +21,7 @@ const base: AgentProgress = {
   streamText: null,
   lastFinishOk: null,
   autoResuming: false,
+  pendingQueueCount: 0,
 };
 
 function ev(type: string, data: Record<string, unknown>): SSEEvent {

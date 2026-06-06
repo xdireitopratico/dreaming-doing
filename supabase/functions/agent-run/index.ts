@@ -37,7 +37,7 @@ import { restoreExecutionLogFromRows } from "./executionLogMeta.ts";
 import { loadCheckpoint } from "./checkpoint.ts";
 import { buildSandboxEnv } from "./sandbox-env.ts";
 import { enqueueAgentChunk, invokeAgentWorker } from "../_shared/agent-queue.ts";
-import { fetchStreamEventsSince } from "../_shared/agent-stream.ts";
+import { appendStreamEvent, fetchStreamEventsSince } from "../_shared/agent-stream.ts";
 import { executeAgentJob } from "./run-job.ts";
 const runningLocks = new Map<string, Promise<unknown>>();
 
@@ -138,10 +138,38 @@ Deno.serve(async (req) => {
 
     if (!projectId || !conversationId) return json({ error: "projectId e conversationId obrigatórios" }, 400);
 
+    const acceptSSE = (req.headers.get("Accept") ?? "").includes("text/event-stream");
+    const querySSE = new URL(req.url).searchParams.has("sse");
+    const useSSE = acceptSSE || querySSE;
+
     const { data: project } = await supabase
       .from("projects").select("id, owner_id, template, meta").eq("id", projectId).single();
     if (!project || project.owner_id !== userData.user.id) {
       return json({ error: "Projeto não encontrado" }, 404);
+    }
+
+    if (body.action === "watch") {
+      const runId = body.runId as string | undefined;
+      if (!runId) return json({ error: "runId obrigatório" }, 400);
+      const { data: run } = await supabase
+        .from("agent_runs")
+        .select("id, user_id, project_id, status")
+        .eq("id", runId)
+        .maybeSingle();
+      if (!run || run.user_id !== userData.user.id || run.project_id !== projectId) {
+        return json({ error: "Run não encontrada" }, 404);
+      }
+      if (!useSSE) return json({ error: "Accept: text/event-stream obrigatório" }, 400);
+      return streamEventsResponse(supabase, runId, () => {});
+    }
+
+    if (body.action === "pending_count") {
+      const { count } = await supabase
+        .from("agent_pending_messages")
+        .select("id", { count: "exact", head: true })
+        .eq("project_id", projectId)
+        .eq("user_id", userData.user.id);
+      return json({ pendingCount: count ?? 0 });
     }
 
     const { data: profile } = await supabase
@@ -178,10 +206,24 @@ Deno.serve(async (req) => {
           enabledMcpIds,
         },
       });
+      const { count } = await supabase
+        .from("agent_pending_messages")
+        .select("id", { count: "exact", head: true })
+        .eq("project_id", projectId)
+        .eq("user_id", userData.user.id);
+      const pendingCount = count ?? 1;
+      const queueMsg = pendingCount === 1
+        ? "Mensagem na fila — o agente processará quando terminar a tarefa atual."
+        : `${pendingCount} mensagens na fila — processando em ordem.`;
+      if (useSSE && activeRun?.id) {
+        return streamEventsResponse(supabase, activeRun.id, () => {});
+      }
       return json({
         ok: true,
         queued: true,
-        message: "Mensagem na fila — o agente processará quando terminar a tarefa atual.",
+        pendingCount,
+        activeRunId: activeRun?.id ?? null,
+        message: queueMsg,
       });
     }
 
@@ -257,10 +299,6 @@ Deno.serve(async (req) => {
         return json({ error: prefError }, 400);
       }
     }
-
-    const acceptSSE = (req.headers.get("Accept") ?? "").includes("text/event-stream");
-    const querySSE = new URL(req.url).searchParams.has("sse");
-    const useSSE = acceptSSE || querySSE;
 
     // ─── Taste Chat: concierge NVIDIA, sem agent loop ───
     if (sessionKind === "taste_chat") {
@@ -661,6 +699,20 @@ Deno.serve(async (req) => {
 
     const queued = await enqueueAgentChunk(supabase, queuePayload);
     if (queued) {
+      await appendStreamEvent(supabase, agentRunId!, "start", {
+        type: "start",
+        runId: agentRunId,
+        projectId,
+        conversationId,
+        provider: mainCfg.label,
+        robin: effectiveRobin,
+        taste: tasteStart,
+        resume: resumeRun,
+        checkpoint: !!loadedCheckpoint,
+        sessionKind: tasteStart ? "taste_start" : "byok",
+        memoryMessages: loadedCheckpoint?.state.messages.length ?? messages.length,
+        queued: true,
+      });
       await invokeAgentWorker(SUPABASE_URL, SERVICE_KEY);
       cleanup();
       return streamEventsResponse(supabase, agentRunId!, cleanup);

@@ -89,14 +89,23 @@ async function processOneChunk(msg: AgentChunkMessage, msgId: number): Promise<v
   const body = msg.body ?? {};
   const preferences = body.preferences as AgentPreferencesPayload | undefined;
 
-  await appendStreamEvent(supabase, msg.runId, "start", {
-    type: "start",
-    runId: msg.runId,
-    projectId: msg.projectId,
-    conversationId: msg.conversationId,
-    resume: msg.resume,
-    serverChunk: true,
-  });
+  const { data: existingStart } = await supabase
+    .from("agent_stream_events")
+    .select("id")
+    .eq("run_id", msg.runId)
+    .eq("event_type", "start")
+    .limit(1)
+    .maybeSingle();
+  if (!existingStart) {
+    await appendStreamEvent(supabase, msg.runId, "start", {
+      type: "start",
+      runId: msg.runId,
+      projectId: msg.projectId,
+      conversationId: msg.conversationId,
+      resume: msg.resume,
+      serverChunk: true,
+    });
+  }
 
   const onEvent = (type: string, data: Record<string, unknown>) => {
     appendStreamEvent(supabase, msg.runId, type, { type, ...data }).catch(() => {});
@@ -142,6 +151,7 @@ async function processOneChunk(msg: AgentChunkMessage, msgId: number): Promise<v
 
   if (result.ok || result.canceled) {
     await drainPendingMessage(supabase, msg.projectId);
+    await invokeAgentWorker(SUPABASE_URL, SERVICE_KEY);
   }
 }
 
