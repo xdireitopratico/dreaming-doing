@@ -6,6 +6,7 @@ import { Button, FadeIn } from "@forge/ui";
 import type { AgentProgress } from "@/hooks/useSSE";
 import type { ChatMessage } from "@/components/editor/ChatInput";
 import { useState, useCallback } from "react";
+import { ConsoleLogStream } from "@/components/editor/ConsoleLogStream";
 
 const PHASE_LABELS: Record<string, string> = {
   gather: "Analisando projeto",
@@ -145,6 +146,10 @@ export function ChatStream({ messages, running, progress, onResume, onUndoMessag
 
   return (
     <div className="forge-chat-stream" role="log" aria-live="polite" aria-relevant="additions text">
+      {progress.timeline.length > 0 && (
+        <ConsoleLogStream timeline={progress.timeline} />
+      )}
+
       {messages.map((msg, idx) => {
         if (msg.role === "tool") return null;
 
