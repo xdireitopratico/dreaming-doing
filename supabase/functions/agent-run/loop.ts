@@ -356,6 +356,8 @@ export class AgentLoop {
           summary: proposedPlan.summary,
           steps: proposedPlan.steps,
           ttlMs: proposedPlan.ttlMs,
+          runId: this.runId,
+          projectId: this.state.projectId,
         });
         logger.event("agent_run.plan_proposed", {
           runId: this.runId ?? undefined,
@@ -404,7 +406,18 @@ export class AgentLoop {
         if (qualifyResult.stopForUser) {
           await this.persistFinal(qualifyResult.message);
           await this.clearCheckpoint();
-          this.emit("done", { summary: qualifyResult.message, qualified: true });
+          // Mark awaiting so start guards and UI treat this as a gate (not auto-execute on history)
+          if (this.runId) {
+            try {
+              const { data: r } = await this.sb.from("agent_runs").select("meta").eq("id", this.runId).maybeSingle();
+              const prev = (r?.meta ?? {}) as Record<string, unknown>;
+              await this.sb.from("agent_runs").update({
+                status: "awaiting_user",
+                meta: { ...prev, awaitingUser: { type: "qualify", message: qualifyResult.message?.slice(0, 200) } },
+              }).eq("id", this.runId);
+            } catch {}
+          }
+          this.emit("done", { summary: qualifyResult.message, qualified: true, awaiting: true });
           return { ok: true, summary: qualifyResult.message, steps: 0, toolsUsed: [] };
         }
       }
@@ -584,6 +597,20 @@ export class AgentLoop {
           tool_call_id: call.id,
           content: JSON.stringify(result).slice(0, 4000),
         });
+      }
+
+      // Extra cancel check after potentially long tool execution (shell, writes, observer).
+      // Combined with per-step check this makes stop responsive without full AbortSignal everywhere.
+      if (await this.isCanceled()) {
+        await this.persistFinal("Execução cancelada pelo usuário.");
+        this.emit("canceled", { message: "Cancelado pelo usuário" });
+        return {
+          ok: false,
+          error: "Cancelado",
+          steps: Math.max(0, loopStep),
+          canceled: true,
+          toolsUsed: [...toolsUsed],
+        };
       }
 
       const stepHash = hashToolBatch(

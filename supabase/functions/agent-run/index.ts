@@ -134,6 +134,14 @@ Deno.serve(async (req) => {
         .update({ canceled_at: now })
         .eq("id", runId);
 
+      // Also clear any queued pending messages for this project so stop truly stops the chain
+      // (worker will no longer auto-drain on canceled results).
+      await supabase
+        .from("agent_pending_messages")
+        .delete()
+        .eq("project_id", run.project_id ?? projectId) // projectId may be in scope from outer
+        .eq("user_id", userData.user.id);
+
       return json({ ok: true });
     }
 
@@ -350,12 +358,17 @@ Deno.serve(async (req) => {
 
     const { data: activeRun } = await supabase
       .from("agent_runs")
-      .select("id")
+      .select("id, status, meta")
       .eq("project_id", projectId)
-      .eq("status", "running")
+      .in("status", ["running", "awaiting_user"])
+      .order("started_at", { ascending: false })
+      .limit(1)
       .maybeSingle();
 
-    if ((runningLocks.has(projectId) || activeRun) && !resumeRun) {
+    const latestMeta = (activeRun?.meta ?? {}) as Record<string, unknown>;
+    const isAwaiting = activeRun?.status === "awaiting_user" || !!latestMeta.awaitingUser;
+
+    if ((runningLocks.has(projectId) || activeRun || isAwaiting) && !resumeRun) {
       await supabase.from("agent_pending_messages").insert({
         project_id: projectId,
         conversation_id: conversationId,

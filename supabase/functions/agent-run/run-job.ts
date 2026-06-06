@@ -85,6 +85,12 @@ export async function executeAgentJob(
     planMode = false,
   } = params;
 
+  // Fast cancel check (covers both inline fallback in agent-run and worker chunks)
+  const { data: pre } = await supabase.from("agent_runs").select("canceled_at, status").eq("id", agentRunId).maybeSingle();
+  if (pre?.canceled_at || pre?.status === "canceled") {
+    return { ok: false, error: "Cancelado", steps: 0, canceled: true };
+  }
+
   const { data: project } = await supabase
     .from("projects").select("id, owner_id, template, meta").eq("id", projectId).single();
   if (!project || project.owner_id !== userId) {

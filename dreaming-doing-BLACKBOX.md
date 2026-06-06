@@ -319,6 +319,13 @@ From package.json:
 
 ## Architecture Summary
 
+**2026-06 validation note (from plan execution):** The three recurring vibe-coding breaks were addressed with architecturally robust changes:
+- E2B preview creation: list-first + circuit breaker in meta (cooldown + attempts) + FE backoff/isCircuit. No more infinite creation errors/retries.
+- Autonomy after questions: qualify early-returns now also mark awaiting in run meta; start guards queue on awaiting/running; worker only drains on clean !canceled ok.
+- Stop: pre-checks in run-job/worker, extra isCanceled after tools in loop, **critical** removal of drain on canceled (was auto-starting next), cancel also clears pendings. FE running sync now reacts to .canceled + awaiting in progress. UI should no longer stay "working".
+
+See the approved plan at the session plan.md for full rationale, files changed, and verification steps. These changes were made after reading code, greps, and Supabase CLI attempts (db query hit pooler circuit; functions list confirmed active services).
+
 The Dream Doing (FORGE) platform implements a sophisticated AI-powered web application builder with:
 
 1. **Intelligent Agent Core** - A self-correcting, tool-using LLM agent that can read, write, edit, and execute commands to build applications

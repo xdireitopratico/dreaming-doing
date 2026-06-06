@@ -263,6 +263,9 @@ function EditorPage() {
     watchHealth: activeView === "preview" && !!devUrl,
   });
 
+  // Expose for chrome / panels to render circuit-specific errors (no more infinite creation spinners)
+  const previewE2bCircuit = previewBoot.isE2bCircuit;
+
   const connectedKinds = useMemo(
     () =>
       (Object.keys(connectorStatus) as Array<keyof typeof connectorStatus>).filter(
@@ -418,14 +421,15 @@ function EditorPage() {
   );
   useAgentBlame({ blameMap: blameEntries, editorRef, monacoRef });
 
-  // ─── Sync running state (SSE) — nunca deixar UI presa se o stream cair ──
+  // ─── Sync running state (SSE) — nunca deixar UI presa se o stream cair ou cancel ──
+  // Single convergence: connected starts, finished OR canceled (from stop or gate) stops.
   useEffect(() => {
     if (sse.connected) setRunning(true);
   }, [sse.connected]);
 
   useEffect(() => {
-    if (sse.progress.finished) setRunning(false);
-  }, [sse.progress.finished]);
+    if (sse.progress.finished || sse.progress.canceled) setRunning(false);
+  }, [sse.progress.finished, sse.progress.canceled]);
 
   // ─── SSE → logs ─────────────────────────────────────────────────────
   useEffect(() => {
@@ -731,6 +735,8 @@ function EditorPage() {
   const agentFinished = sse.progress.finished;
   const agentShouldBootPreview =
     agentFinished &&
+    !sse.progress.canceled &&
+    !sse.progress.awaiting && // do not auto-boot preview (and thus E2B create) right after a qualify/plan gate
     (sse.progress.lastFinishOk === true ||
       sse.progress.resumable === true ||
       (sse.progress.lastFinishOk === null && agentHasRun && !sse.progress.error));
@@ -740,7 +746,7 @@ function EditorPage() {
       previewBootAfterAgentRef.current = false;
       return;
     }
-    if (!isReactProject || !e2bConnected || devUrl || previewBoot.booting) return;
+    if (!isReactProject || !e2bConnected || devUrl || previewBoot.booting || previewE2bCircuit) return;
     if (!agentShouldBootPreview) return;
     if (previewBootAfterAgentRef.current) return;
     previewBootAfterAgentRef.current = true;

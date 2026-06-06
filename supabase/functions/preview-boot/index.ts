@@ -256,8 +256,9 @@ Deno.serve(async (req) => {
     });
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : "erro inesperado";
+    const code = (e as any)?.code || (msg.includes("circuit") || msg.includes("cooling") || msg.includes("E2B creation") ? "e2b_creation_circuit" : undefined);
     console.error("[preview-boot]", msg);
-    return json({ error: msg }, 500);
+    return json({ error: msg, code }, 500);
   }
 });
 

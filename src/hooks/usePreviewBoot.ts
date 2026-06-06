@@ -27,6 +27,7 @@ type BootOpts = {
 
 const RETRY_DELAYS_MS = [0, 5_000, 15_000, 30_000];
 const PROBE_FAIL_BEFORE_FORCE = 4;
+const E2B_CIRCUIT_BACKOFF_MS = 120_000; // long backoff when server reports creation circuit (stops infinite creation spam)
 
 type UsePreviewBootOpts = {
   /** Preview em repouso — não faz polling probeOnly. */
@@ -46,7 +47,16 @@ export function usePreviewBoot(projectId: string, opts?: UsePreviewBootOpts) {
   const [bootLogs, setBootLogs] = useState<string | null>(null);
   const bootAttemptsRef = useRef(0);
   const probeFailuresRef = useRef(0);
+  const bootInFlightRef = useRef(false);
+  /** Evita toast repetido para a mesma URL de preview na sessão. */
+  const connectedToastUrlRef = useRef<string | null>(null);
   const qc = useQueryClient();
+
+  const toastPreviewConnected = useCallback((url: string) => {
+    if (connectedToastUrlRef.current === url) return;
+    connectedToastUrlRef.current = url;
+    toast.success("Preview conectado");
+  }, []);
 
   const callPreviewBoot = useCallback(
     async (opts?: BootOpts): Promise<BootResult | null> => {
@@ -103,9 +113,7 @@ export function usePreviewBoot(projectId: string, opts?: UsePreviewBootOpts) {
             probeFailuresRef.current = 0;
             setWarming(false);
             await qc.invalidateQueries({ queryKey: ["project", projectId] });
-            if (body.published && body.publishedUrl) {
-              toast.success("Site no ar", { description: body.publishedUrl, duration: 5000 });
-            }
+            if (body.url) toastPreviewConnected(body.url);
           } else if (body?.url) {
             probeFailuresRef.current += 1;
             if (probeFailuresRef.current >= PROBE_FAIL_BEFORE_FORCE) {
@@ -120,6 +128,8 @@ export function usePreviewBoot(projectId: string, opts?: UsePreviewBootOpts) {
         }
       }
 
+      if (bootInFlightRef.current) return null;
+      bootInFlightRef.current = true;
       setBooting(true);
       setLastError(null);
       if (!opts?.silent) setWarming(false);
@@ -138,11 +148,7 @@ export function usePreviewBoot(projectId: string, opts?: UsePreviewBootOpts) {
             }
           } else {
             setBootLogs(null);
-          }
-          if (body.published && body.publishedUrl) {
-            toast.success("Site no ar", { description: body.publishedUrl, duration: 5000 });
-          } else if (!body.reused && !opts?.silent) {
-            toast.success("Preview conectado");
+            if (!opts?.silent) toastPreviewConnected(body.url);
           }
           logEditorTelemetryEvent(
             "preview",
@@ -155,25 +161,35 @@ export function usePreviewBoot(projectId: string, opts?: UsePreviewBootOpts) {
         return body.url ?? null;
       } catch (e) {
         const msg = e instanceof Error ? e.message : "Não foi possível abrir o preview";
-        setLastError(msg);
-        logEditorTelemetryEvent("preview", "boot_fail", "error", msg.slice(0, 240));
-        if (!opts?.silent && !msg.includes("agente")) {
+        const code = (e as any)?.code;
+        const isCircuit = code === "e2b_creation_circuit" || /circuit|cooling|e2b_creation_circuit/i.test(msg);
+        setLastError(isCircuit ? `E2B creation blocked (circuit open). ${msg}` : msg);
+        logEditorTelemetryEvent("preview", "boot_fail", "error", (isCircuit ? "circuit:" : "") + msg.slice(0, 240));
+        if (!opts?.silent && !msg.includes("agente") && !isCircuit) {
+          // For circuit, show once via the returned lastError (UI decides banner/toast); avoid spam
           toast.error(msg.length > 140 ? `${msg.slice(0, 140)}…` : msg);
         }
         return null;
       } finally {
+        bootInFlightRef.current = false;
         setBooting(false);
       }
     },
-    [callPreviewBoot, projectId, qc, idle],
+    [callPreviewBoot, projectId, qc, idle, toastPreviewConnected],
   );
 
   const bootWithRetry = useCallback(
     async (opts?: BootOpts) => {
+      // If last known error was circuit, do not hammer — force user to explicit retry after fixing key or waiting
+      if (lastError && /circuit|cooling|e2b_creation_circuit/i.test(lastError) && !opts?.force) {
+        return null;
+      }
       const maxAttempts = RETRY_DELAYS_MS.length;
       for (let attempt = 0; attempt < maxAttempts; attempt++) {
         if (attempt > 0) {
-          await new Promise((r) => setTimeout(r, RETRY_DELAYS_MS[attempt]));
+          // extra backoff on repeated failures; circuit path already short-circuits above
+          const delay = RETRY_DELAYS_MS[attempt] + (lastError && /circuit/i.test(lastError) ? E2B_CIRCUIT_BACKOFF_MS : 0);
+          await new Promise((r) => setTimeout(r, delay));
         }
         bootAttemptsRef.current = attempt + 1;
         const url = await boot({ ...opts, silent: attempt > 0 });
@@ -181,12 +197,21 @@ export function usePreviewBoot(projectId: string, opts?: UsePreviewBootOpts) {
       }
       return null;
     },
-    [boot],
+    [boot, lastError],
   );
+
+  useEffect(() => {
+    connectedToastUrlRef.current = null;
+    bootInFlightRef.current = false;
+  }, [projectId]);
 
   useEffect(() => {
     if (!warming || idle) {
       if (idle) setWarming(false);
+      return;
+    }
+    // Skip auto probes while in circuit (prevents infinite creation attempts on bad/transient E2B)
+    if (lastError && /circuit|cooling|e2b_creation_circuit/i.test(lastError)) {
       return;
     }
     const interval = window.setInterval(() => {
@@ -197,15 +222,20 @@ export function usePreviewBoot(projectId: string, opts?: UsePreviewBootOpts) {
       window.clearInterval(interval);
       window.clearTimeout(timeout);
     };
-  }, [warming, boot, idle]);
+  }, [warming, boot, idle, lastError]);
 
   useEffect(() => {
     if (!watchHealth || idle) return;
+    if (lastError && /circuit|cooling|e2b_creation_circuit/i.test(lastError)) {
+      return; // health probes also respect circuit
+    }
     const interval = window.setInterval(() => {
       void boot({ probeOnly: true, silent: true });
     }, HEALTH_PROBE_MS);
     return () => window.clearInterval(interval);
-  }, [watchHealth, idle, boot]);
+  }, [watchHealth, idle, boot, lastError]);
+
+  const isE2bCircuit = !!(lastError && /circuit|cooling|e2b_creation_circuit/i.test(lastError));
 
   return {
     booting,
@@ -214,6 +244,7 @@ export function usePreviewBoot(projectId: string, opts?: UsePreviewBootOpts) {
     lastError,
     bootLogs,
     warming,
+    isE2bCircuit,
     clearWarming: () => setWarming(false),
     clearError: () => setLastError(null),
   };

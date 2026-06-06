@@ -1,7 +1,5 @@
 // plan-mode.ts — Plan mode (Fase 4.6): tipos + extração de plano a partir da classificação.
 // Espelha src/components/editor/PlanViewer.tsx (PlanStep) — não altera o componente client.
-import type { ChatResponse } from "./types.ts";
-
 export type PlanStepType =
   | "create_file"
   | "edit_file"
@@ -140,15 +138,15 @@ export function deriveDefaultPlan(
 
 /**
  * Resolve o plano final: usa o extraído do LLM se houver, senão aplica o
- * default. Aceita a classification completa (cr() no test produz
- * { content, tool_calls, usage }).
+ * default. Aceita o conteúdo bruto do classificador (string JSON) + o
+ * ClassificationResult já parseado.
  */
 export function resolvePlan(
-  classification: ChatResponse,
+  rawContent: string | null | undefined,
   classificationType: string,
   summary: string,
 ): PlanStep[] {
-  const fromLlm = extractPlanFromLlmContent(classification.content);
+  const fromLlm = extractPlanFromLlmContent(rawContent);
   if (fromLlm && fromLlm.length > 0) return fromLlm;
   return deriveDefaultPlan(classificationType, summary);
 }

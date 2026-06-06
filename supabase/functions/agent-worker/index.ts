@@ -111,6 +111,18 @@ async function processOneChunk(msg: AgentChunkMessage, msgId: number): Promise<v
     appendStreamEvent(supabase, msg.runId, type, { type, ...data }).catch(() => {});
   };
 
+  // Pre-check: if already canceled (e.g. user hit stop between enqueue and worker pick), short-circuit without running
+  const { data: preRun } = await supabase.from("agent_runs").select("canceled_at, status").eq("id", msg.runId).maybeSingle();
+  if (preRun?.canceled_at || preRun?.status === "canceled") {
+    await deleteAgentChunk(supabase, msgId);
+    const canceledResult = { ok: false, error: "Canceled before execution", steps: 0, canceled: true };
+    await finalizeRun(supabase, msg.runId, canceledResult);
+    await appendStreamEvent(supabase, msg.runId, "canceled", { message: "Cancelado antes de iniciar chunk" });
+    await appendStreamEvent(supabase, msg.runId, "finish", { ...canceledResult, resumable: false });
+    // IMPORTANT: do NOT drain pending on cancel — this was causing "stop doesn't stop, next msg auto-starts"
+    return;
+  }
+
   const result = await executeAgentJob(supabase, {
     projectId: msg.projectId,
     conversationId: msg.conversationId,
@@ -149,7 +161,9 @@ async function processOneChunk(msg: AgentChunkMessage, msgId: number): Promise<v
     resumable: !result.ok && !result.canceled,
   });
 
-  if (result.ok || result.canceled) {
+  // Only drain (auto-start next queued) on clean successful completion that was not a gate/await.
+  // Cancel must never auto-drain — this fixes "stop agent" continuing the chain.
+  if (result.ok && !result.canceled) {
     await drainPendingMessage(supabase, msg.projectId);
     await invokeAgentWorker(SUPABASE_URL, SERVICE_KEY);
   }

@@ -76,6 +76,10 @@ export interface AgentProgress {
   }>;
   /** Fase 4.6: plano aguardando aprovação do usuário. Null = sem plano pendente. */
   pendingPlan: PendingPlan | null;
+  /** Stop/cancel signal for UI convergence (from "canceled" event or finish{canceled:true}). */
+  canceled?: boolean;
+  /** Gate active (qualify or plan) — do not auto-execute or auto-preview-boot. */
+  awaiting?: boolean;
 }
 
 export type AgentConnectOptions = {
@@ -105,6 +109,8 @@ const initialState: AgentProgress = {
   pendingQueueCount: 0,
   diffs: [],
   pendingPlan: null,
+  canceled: false,
+  awaiting: false,
 };
 
 /** Legado — retomada de chunks agora é server-side (agent-worker + PGMQ). */
@@ -164,6 +170,7 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
       return {
         ...prev,
         finished: true,
+        canceled: true,
         resumable: false,
         error: (data.message as string) ?? "Cancelado pelo usuário",
         timeline: [...prev.timeline, event],
@@ -327,6 +334,7 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
         ...prev,
         summary: (data.summary as string) ?? prev.summary,
         finished: true,
+        awaiting: !!(data.awaiting || data.qualified), // qualify gate or similar
         resumable: false,
         error: null,
         streamText: null,
@@ -355,6 +363,7 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
       };
       return {
         ...prev,
+        awaiting: true,
         pendingPlan,
         statusHint: "Aguardando sua aprovação do plano…",
         timeline: [...prev.timeline, event],
@@ -372,16 +381,19 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
 
     case "finish": {
       const failed = data.ok === false;
+      const canceled = !!data.canceled || prev.canceled;
       return {
         ...prev,
         finished: true,
+        canceled,
+        awaiting: !!(data.awaiting || prev.awaiting),
         streamText: null,
         autoResuming: false,
-        lastFinishOk: !failed,
-        resumable: failed && data.resumable === true,
-        error: failed ? ((data.error as string) ?? prev.error) : null,
+        lastFinishOk: !failed && !canceled,
+        resumable: failed && data.resumable === true && !canceled,
+        error: failed || canceled ? ((data.error as string) ?? prev.error) : null,
         pendingQueueCount:
-          !failed && prev.pendingQueueCount > 0
+          !failed && !canceled && prev.pendingQueueCount > 0
             ? prev.pendingQueueCount - 1
             : prev.pendingQueueCount,
         timeline: [...prev.timeline, event],
