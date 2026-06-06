@@ -45,6 +45,13 @@ export type AgentJobParams = {
   enabledMcpIds: string[];
   /** Fase 4.6 plan mode: emite plan_proposed + pausa pra aprovação. */
   planMode?: boolean;
+  /**
+   * Se false: caminho leve de conversa/qualify.
+   * NÃO carrega chave E2B, NÃO cria SandboxProvider, NÃO registra shell tool.
+   * Usado para o "caminho barato primeiro" (só LLM de qualify sem container).
+   * Default true para não quebrar chamadas existentes.
+   */
+  allocateSandbox?: boolean;
 };
 
 function isRobinMode(p?: AgentPreferencesPayload): boolean {
@@ -177,11 +184,9 @@ export async function executeAgentJob(
   const messages = await buildChatHistory(historyRows, 120, mainCfg.model);
   const sessionExt = await buildSessionExtensionsPrompt(enabledSkillIds, enabledMcpIds);
 
-  const e2bKey = await loadUserE2bApiKey(supabase, userId);
-  if (!e2bKey?.trim()) throw new Error("Sandbox E2B não configurado");
+  const allocateSandbox = params.allocateSandbox !== false; // default true (backward compat)
 
   const reg = new ToolRegistry();
-  const sandbox = createSandboxProvider(e2bKey, undefined, supabase, projectId);
   const projectTemplate = (project as { template?: string }).template ?? "vite-react";
   const projectMeta = ((project as { meta?: Record<string, unknown> }).meta ?? {}) as Record<string, unknown>;
   const deployKeys = await loadDeployConnectorKeys(supabase, userId);
@@ -189,12 +194,28 @@ export async function executeAgentJob(
   const stackAddon = stackPromptAddon(stackCtx);
 
   registerFsTools(reg, { supabase, projectId });
-  registerShellTool(reg, {
-    sandbox,
-    projectId,
-    supabase,
-    sandboxEnv: buildSandboxEnv(connectorKeys, deployKeys),
-  });
+
+  // CRÍTICO para o "caminho barato primeiro":
+  // Só aloca E2B/sandbox (e registra shell) quando realmente vamos construir.
+  // Qualify/conversa pura NUNCA deve carregar chave nem criar container.
+  let sandbox: { destroy: () => Promise<void> };
+  if (allocateSandbox) {
+    const e2bKey = await loadUserE2bApiKey(supabase, userId);
+    if (!e2bKey?.trim()) throw new Error("Sandbox E2B não configurado");
+    const realSandbox = createSandboxProvider(e2bKey, undefined, supabase, projectId);
+    sandbox = realSandbox;
+    registerShellTool(reg, {
+      sandbox: realSandbox,
+      projectId,
+      supabase,
+      sandboxEnv: buildSandboxEnv(connectorKeys, deployKeys),
+    });
+  } else {
+    // Dummy para finally e para o caso de o loop ser chamado em modo conversa (deve early-return antes de tools).
+    sandbox = { destroy: async () => {} };
+    // Não registramos shell tool. Qualify não usa ferramentas de FS/shell.
+  }
+
   registerMcpForgeTools(reg, {
     supabase,
     projectId,
@@ -256,7 +277,7 @@ export async function executeAgentJob(
     projectTemplate,
     stackAddon,
     tasteStart
-      ? { maxSteps: 14, tasteStart: true, sessionAddon: sessionExt.addon, userSkillNames: sessionExt.skillNames, runId: agentRunId, planMode }
+      ? { maxSteps: 14, tasteStart: true, sessionAddon: sessionExt.addon, userSkillNames: sessionExt.skillNames, runId: agentRunId, planMode, allocateSandbox }
       : {
         sessionAddon: sessionExt.addon,
         userSkillNames: sessionExt.skillNames,
@@ -267,6 +288,7 @@ export async function executeAgentJob(
         maxStepsFromCheckpoint: loadedCheckpoint?.extra.maxStepsLimit,
         runId: agentRunId,
         planMode,
+        allocateSandbox,
       },
   );
 

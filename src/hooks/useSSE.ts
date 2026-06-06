@@ -80,6 +80,8 @@ export interface AgentProgress {
   canceled?: boolean;
   /** Gate active (qualify or plan) — do not auto-execute or auto-preview-boot. */
   awaiting?: boolean;
+  /** Última decisão de gate (para mostrar ao usuário por que parou em conversa ou foi pra build). */
+  lastGateDecision?: { phase: string; reason: string; at: number } | null;
 }
 
 export type AgentConnectOptions = {
@@ -98,6 +100,7 @@ const initialState: AgentProgress = {
   skills: [],
   runtimeChecks: [],
   timeline: [],
+  lastGateDecision: null,
   summary: null,
   error: null,
   finished: false,
@@ -366,6 +369,24 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
         awaiting: true,
         pendingPlan,
         statusHint: "Aguardando sua aprovação do plano…",
+        timeline: [...prev.timeline, event],
+      };
+    }
+
+    case "gate_decision": {
+      // Registra a decisão (qualify vs build) para o UI poder mostrar "Agent está perguntando..." vs "construindo".
+      const phase = (data.phase as string) || "unknown";
+      const reason = (data.reason as string) || "";
+      return {
+        ...prev,
+        awaiting: phase === "qualify" || !!data.awaiting || prev.awaiting,
+        // Store last decision so components can surface it (e.g. small caption or log).
+        // We extend the interface lightly via the existing timeline + a custom field.
+        // For strong typing later we can extend AgentProgress.
+        lastGateDecision: { phase, reason, at: Date.now() },
+        statusHint: phase === "qualify"
+          ? (reason.includes("interaction") ? "Aguardando sua resposta para continuar a conversa..." : "Qualificando a ideia...")
+          : prev.statusHint,
         timeline: [...prev.timeline, event],
       };
     }

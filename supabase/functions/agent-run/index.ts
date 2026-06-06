@@ -369,6 +369,9 @@ Deno.serve(async (req) => {
     const isAwaiting = activeRun?.status === "awaiting_user" || !!latestMeta.awaitingUser;
 
     if ((runningLocks.has(projectId) || activeRun || isAwaiting) && !resumeRun) {
+      // Nota: para pendings de qualify ainda não temos a var allocateSandboxLocal (definida mais abaixo).
+      // Usamos um default conservador (true) aqui; o caminho principal de "primeira mensagem de interação"
+      // é pego pela decisão posterior + run-job protection.
       await supabase.from("agent_pending_messages").insert({
         project_id: projectId,
         conversation_id: conversationId,
@@ -378,6 +381,7 @@ Deno.serve(async (req) => {
           sessionKind: sessionKindRaw,
           enabledSkillIds,
           enabledMcpIds,
+          allocateSandbox: true,
         },
       });
       const { count } = await supabase
@@ -617,13 +621,28 @@ Deno.serve(async (req) => {
 
     const messages = await buildChatHistory(historyRows, 120, mainCfg.model);
 
+    // === Decisão "caminho barato primeiro" (o que o usuário pediu) ===
+    // Se o prompt parece pedido explícito de interação/perguntas ("quero uma mensagem claramente de interação, não de execução")
+    // ou é curto/vago, e ainda não existe sandbox alocado para o projeto, NÃO alocamos E2B para este run.
+    // O qualify dentro do loop (ou um futuro lightweight) vai responder e marcar awaiting sem container.
+    const lastUserContent = (() => {
+      const fromBody = (body as any).prompt || (body as any).message || "";
+      if (fromBody) return String(fromBody);
+      const lastUser = [...historyRows].reverse().find((m: any) => m.role === "user");
+      const parts = lastUser?.parts || [];
+      const textPart = parts.find((p: any) => p?.type === "text" || typeof p?.text === "string");
+      return textPart?.text || textPart?.content || "";
+    })();
+    const looksLikeInteraction = /quero (só |apenas |uma )?(mensagem|conversa|intera|pergunt|discut|qualif|ideia|brainstorm)|me faz (perguntas|uma pergunta|pergunta)|não (começa|codar|construir|executar|trabalhar) ainda|só conversar|quero (conversar|discutir a ideia)/i.test(lastUserContent)
+      || lastUserContent.trim().length < 90;
+    const projectHasSandbox = !!(((project as any).meta || {})?.previewSandboxId || ((project as any).meta || {})?.previewReady);
+    const allocateSandboxLocal = !looksLikeInteraction || projectHasSandbox;
+
+    // IMPORTANTE: a partir daqui o código ainda cria provider local para compat com paths diretos/cleanup.
+    // O verdadeiro "nunca carregar E2B em conversa" vem do short-circuit decide + run-job com allocateSandbox=false.
+    // Aqui também tornamos condicional para reduzir surface de criação prematura.
+
     const reg = new ToolRegistry();
-    const e2bKey = await loadUserE2bApiKey(supabase, userData.user.id);
-    if (!e2bKey?.trim()) {
-      runningLocks.delete(projectId);
-      return json({ error: E2B_SETUP_USER_MESSAGE, code: "e2b_not_configured" }, 403);
-    }
-    const sandbox = createSandboxProvider(e2bKey, undefined, supabase, projectId);
     const projectTemplate = (project as { template?: string }).template ?? "vite-react";
     const projectMeta = ((project as { meta?: Record<string, unknown> }).meta ?? {}) as Record<string, unknown>;
     const deployKeys = await loadDeployConnectorKeys(supabase, userData.user.id);
@@ -633,14 +652,27 @@ Deno.serve(async (req) => {
       { ...connectorKeys, ...deployKeys },
     );
     const stackAddon = stackPromptAddon(stackCtx);
+
+    let sandbox: { destroy: () => Promise<void> };
+    if (allocateSandboxLocal) {
+      const e2bKey = await loadUserE2bApiKey(supabase, userData.user.id);
+      if (!e2bKey?.trim()) {
+        runningLocks.delete(projectId);
+        return json({ error: E2B_SETUP_USER_MESSAGE, code: "e2b_not_configured" }, 403);
+      }
+      sandbox = createSandboxProvider(e2bKey, undefined, supabase, projectId);
+      registerShellTool(reg, {
+        sandbox,
+        projectId,
+        supabase,
+        sandboxEnv: buildSandboxEnv(connectorKeys, deployKeys),
+      });
+    } else {
+      sandbox = { destroy: async () => {} };
+    }
+
     const cleanup = () => { runningLocks.delete(projectId!); sandbox.destroy().catch(() => {}); };
     registerFsTools(reg, { supabase, projectId });
-    registerShellTool(reg, {
-      sandbox,
-      projectId,
-      supabase,
-      sandboxEnv: buildSandboxEnv(connectorKeys, deployKeys),
-    });
     registerMcpForgeTools(reg, {
       supabase,
       projectId,
@@ -844,6 +876,10 @@ Deno.serve(async (req) => {
       enabledSkillIds,
       enabledMcpIds,
       planMode,
+      // Usa a decisão barata calculada acima (heuristic "looksLikeInteraction").
+      // Para prompts de "quero só interação/perguntas" em projeto sem sandbox ainda → false.
+      // Isso + a proteção em run-job.ts = zero load de E2B para esses casos.
+      allocateSandbox: allocateSandboxLocal,
     };
 
     const queuePayload = {
@@ -858,6 +894,8 @@ Deno.serve(async (req) => {
         sessionKind: tasteStart ? "taste_start" : "byok",
         enabledSkillIds,
         enabledMcpIds,
+        // Importante para o caminho barato: o worker vai repassar allocateSandbox para executeAgentJob.
+        allocateSandbox: allocateSandboxLocal,
       },
     };
 

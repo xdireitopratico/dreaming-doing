@@ -172,6 +172,8 @@ export async function ensureAgentProjectSandbox(
         previewSandboxId: undefined,
         previewUrl: undefined,
         previewExpiresAt: undefined,
+        // also clear bad template if it was recorded
+        e2bTemplate: undefined,
       };
       await supabase.from("projects").update({ meta: cleared }).eq("id", projectId);
       // fallthrough to (re)create below
@@ -179,25 +181,42 @@ export async function ensureAgentProjectSandbox(
   }
 
   // List-first: reuse any sandbox tagged with this project's metadata (idempotent, avoids duplicates on races/meta drift)
+  // Never reuse sandboxes that were created with a known-bad template (e.g. "base" without Node/envd).
+  const isBadTemplate = (tpl?: string) => {
+    const t = (tpl || "").toLowerCase().trim();
+    return !t || ["base", "minimal", "empty", "nodejs", "node"].includes(t);
+  };
+
   try {
     const listed = await e2bListSandboxes(apiKey, forgeSandboxMetadata(projectId));
     if (listed.length > 0) {
       // pick first (most recent from E2B side tends to be last created)
       const candidate = listed[0];
-      try {
-        const sb = await e2bRestConnect(apiKey, candidate.sandboxID, SANDBOX_TIMEOUT_SEC);
-        await touchSandboxLease(supabase, projectId, existing, sb.sandboxId, { e2bTemplate: candidate.templateID });
-        // success reuse also clears any prior circuit
-        await recordE2bCreationOutcome(supabase, projectId, existing, true);
-        console.log(`[project-sandbox] reused listed ${candidate.sandboxID}`);
-        return { sandbox: sb, sandboxId: sb.sandboxId, reused: true };
-      } catch (connErr) {
-        console.warn("[project-sandbox] listed sandbox connect failed, will create fresh:", candidate.sandboxID, connErr);
+      if (isBadTemplate(candidate.templateID)) {
+        console.warn(`[project-sandbox] listed sandbox has bad template ${candidate.templateID}, killing and recreating`);
         await killProjectSandbox(apiKey, candidate.sandboxID);
+      } else {
+        try {
+          const sb = await e2bRestConnect(apiKey, candidate.sandboxID, SANDBOX_TIMEOUT_SEC);
+          await touchSandboxLease(supabase, projectId, existing, sb.sandboxId, { e2bTemplate: candidate.templateID });
+          // success reuse also clears any prior circuit
+          await recordE2bCreationOutcome(supabase, projectId, existing, true);
+          console.log(`[project-sandbox] reused listed ${candidate.sandboxID}`);
+          return { sandbox: sb, sandboxId: sb.sandboxId, reused: true };
+        } catch (connErr) {
+          console.warn("[project-sandbox] listed sandbox connect failed, will create fresh:", candidate.sandboxID, connErr);
+          await killProjectSandbox(apiKey, candidate.sandboxID);
+        }
       }
     }
   } catch (listErr) {
     console.warn("[project-sandbox] list by metadata failed (proceeding to create):", listErr);
+  }
+
+  // If meta itself records a bad template, clear it so we don't keep trying to reconnect to ghosts.
+  if (isBadTemplate(sm.e2bTemplate) && sm.previewSandboxId) {
+    const cleared = { ...existing, previewSandboxId: undefined, e2bTemplate: undefined, previewUrl: undefined, previewExpiresAt: undefined };
+    await supabase.from("projects").update({ meta: cleared }).eq("id", projectId);
   }
 
   let created: { sandbox: E2bRestSandbox; templateUsed: string } | null = null;

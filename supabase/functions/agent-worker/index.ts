@@ -129,6 +129,8 @@ async function processOneChunk(msg: AgentChunkMessage, msgId: number): Promise<v
     sessionKindRaw: body.sessionKind as string | undefined,
     enabledSkillIds: normalizeIdList(body.enabledSkillIds),
     enabledMcpIds: normalizeIdList(body.enabledMcpIds),
+    // Propaga o flag do caminho barato (se o chunk foi enfileirado com allocateSandbox:false para qualify).
+    allocateSandbox: (body as any).allocateSandbox !== false,
   }, onEvent);
 
   const meta = await supabase.from("agent_runs").select("meta").eq("id", msg.runId).maybeSingle();

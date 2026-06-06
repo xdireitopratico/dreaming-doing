@@ -324,7 +324,21 @@ From package.json:
 - Autonomy after questions: qualify early-returns now also mark awaiting in run meta; start guards queue on awaiting/running; worker only drains on clean !canceled ok.
 - Stop: pre-checks in run-job/worker, extra isCanceled after tools in loop, **critical** removal of drain on canceled (was auto-starting next), cancel also clears pendings. FE running sync now reacts to .canceled + awaiting in progress. UI should no longer stay "working".
 
-See the approved plan at the session plan.md for full rationale, files changed, and verification steps. These changes were made after reading code, greps, and Supabase CLI attempts (db query hit pooler circuit; functions list confirmed active services).
+**Follow-up root cause + mitigation (caminho barato primeiro):** Even after the above, the core symptoms (chat auto-starts "working" on interaction messages + E2B containers created at wrong time / quota burn) persisted because sandbox provider + E2B key load happened unconditionally in agent-run/index.ts and (more importantly) in the shared executeAgentJob (run-job.ts) *before* any qualify/plan gate or user intent decision. "Send message" was structurally equivalent to "allocate container-capable run".
+
+Approved direction (user selected): qualify/conversation is a zero-E2B phase. Only after crossing an explicit build gate (strong classification after interaction, plan approve, or explicit "build") do we load E2B key / create provider.
+
+Implemented in this round:
+- allocateSandbox?: boolean threaded through job params, enqueues, pendings, worker.
+- Both creation sites now conditional: if false, skip loadUserE2bApiKey + createSandboxProvider + shell registration entirely (dummy for finally).
+- Heuristic in index.ts (catches "quero uma mensagem claramente de interação, não de execução", "me faz perguntas", short/vague, explicit "não construir ainda" etc.) sets allocate=false for fresh interaction messages on projects without prior sandbox. Result: those runs never attempt container creation.
+- Worker/drain respect the flag from body.
+
+See updated plan.md (RAIZ DO PROBLEMA section in PT + revised approach) for exact lines and full verification matrix (interaction-only test case must create 0 containers).
+
+Next: stronger decide in qualify.ts, explicit gate_decision events, FE states that clearly distinguish "qualify awaiting" vs "build running", composer affordance for "só perguntar".
+
+This + the previous gates/circuit should finally break the tail-chasing.
 
 The Dream Doing (FORGE) platform implements a sophisticated AI-powered web application builder with:
 

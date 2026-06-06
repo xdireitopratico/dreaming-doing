@@ -36,10 +36,20 @@ export function buildExecuteInstruction(userRequest: string): string {
 }
 
 export function needsQualify(userRequest: string, classification: ClassificationResult): boolean {
-  const len = userRequest.trim().length;
+  const text = userRequest.trim();
+  const len = text.length;
   if (!len) return true;
+
+  // Explicit user signals for "just talk / ask questions first" — always qualify, never auto-build.
+  const wantsInteraction = /quero (só |apenas |uma )?(mensagem|conversa|intera|pergunt|discut|qualif|ideia|brainstorm|conversar)|me faz (perguntas|uma pergunta)|não (começa|codar|construir|executar|trabalhar) ainda|só conversar|quero (conversar|discutir a ideia)/i.test(text);
+  if (wantsInteraction) return true;
+
   if (classification.type === "other" && len < 180) return true;
   if (len < 50 && classification.complexity <= 2) return true;
+
+  // For very first interactions on a project (short/medium prompts), prefer qualify to avoid surprise execution.
+  if (len < 140 && classification.complexity <= 3) return true;
+
   return false;
 }
 

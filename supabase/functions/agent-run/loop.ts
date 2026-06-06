@@ -404,7 +404,16 @@ export class AgentLoop {
       if (this.originalUserRequest && needsQualify(this.originalUserRequest, classification)) {
         const qualifyResult = await this.runQualifyPhase(executionModel, this.originalUserRequest);
         if (qualifyResult.stopForUser) {
-          await this.persistFinal(qualifyResult.message);
+          const q = qualifyResult.message || "Me conte mais sobre o que você quer construir.";
+          // Emit the question as visible assistant text so the chat advances immediately.
+          this.emit("assistant_text", { text: q, final: true });
+          // Visível para o usuário (e futuro UI) saber exatamente por que parou em conversa.
+          this.emit("gate_decision", {
+            phase: "qualify",
+            reason: "needsQualify triggered (explicit interaction request or vague/short prompt)",
+            awaiting: true,
+          });
+          await this.persistFinal(q);
           await this.clearCheckpoint();
           // Mark awaiting so start guards and UI treat this as a gate (not auto-execute on history)
           if (this.runId) {
@@ -413,12 +422,12 @@ export class AgentLoop {
               const prev = (r?.meta ?? {}) as Record<string, unknown>;
               await this.sb.from("agent_runs").update({
                 status: "awaiting_user",
-                meta: { ...prev, awaitingUser: { type: "qualify", message: qualifyResult.message?.slice(0, 200) } },
+                meta: { ...prev, awaitingUser: { type: "qualify", message: q.slice(0, 200) } },
               }).eq("id", this.runId);
             } catch {}
           }
-          this.emit("done", { summary: qualifyResult.message, qualified: true, awaiting: true });
-          return { ok: true, summary: qualifyResult.message, steps: 0, toolsUsed: [] };
+          this.emit("done", { summary: q, qualified: true, awaiting: true });
+          return { ok: true, summary: q, steps: 0, toolsUsed: [] };
         }
       }
     }

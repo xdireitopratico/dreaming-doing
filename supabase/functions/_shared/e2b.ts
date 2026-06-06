@@ -8,15 +8,15 @@ export const E2B_TEMPLATE_PREFERRED = "code-interpreter-v1";
 /** Override opcional via Edge secret E2B_TEMPLATE. */
 export const E2B_TEMPLATE_DEFAULT = Deno.env.get("E2B_TEMPLATE")?.trim() || E2B_TEMPLATE_PREFERRED;
 
-/** Ordem de tentativa na criação — só persiste sandbox após smoke npm. */
+/** Templates ruins/minimais que não têm Node completo + envd para nosso uso (evitar "base", "nodejs" deprecated etc). */
+const BAD_E2B_TEMPLATES = new Set(["base", "minimal", "empty", "nodejs", "node"]);
+
+/** Ordem de tentativa na criação — só persiste sandbox após smoke npm. Nunca usa templates ruins. */
 export function e2bTemplateCandidates(requested?: string): string[] {
   const req = requested?.trim();
-  return [...new Set([
-    req,
-    E2B_TEMPLATE_DEFAULT,
-    E2B_TEMPLATE_PREFERRED,
-    "code-interpreter",
-  ].filter((t): t is string => !!t))];
+  const cands = [req, E2B_TEMPLATE_DEFAULT, E2B_TEMPLATE_PREFERRED, "code-interpreter", "code-interpreter-v1"]
+    .filter((t): t is string => !!t && !BAD_E2B_TEMPLATES.has(t.toLowerCase()));
+  return [...new Set(cands)];
 }
 
 export const E2B_TEMPLATE_CANDIDATES = e2bTemplateCandidates();
