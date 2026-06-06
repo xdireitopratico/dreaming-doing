@@ -223,6 +223,16 @@ function EditorPage() {
     [messages],
   );
 
+  /** Última mensagem é do usuário sem resposta do agente — ex.: projeto novo com firstPrompt. */
+  const pendingAgentRunKey = useMemo(() => {
+    if (!conversation?.id || !messages?.length) return null;
+    const last = messages[messages.length - 1];
+    if (String(last.role).toLowerCase() !== "user") return null;
+    return `${conversation.id}:${last.id}`;
+  }, [conversation?.id, messages]);
+
+  const autoAgentRunAttemptedRef = useRef<string | null>(null);
+
   const devUrl = (project?.meta as { previewUrl?: string } | null)?.previewUrl ?? null;
 
   const connectedKinds = useMemo(
@@ -450,8 +460,8 @@ function EditorPage() {
   }, []);
 
   const runAgent = useCallback(
-    (explicitKind?: ForgeSessionKind) => {
-      if (!conversation || running) return;
+    (explicitKind?: ForgeSessionKind): boolean => {
+      if (!conversation || running) return false;
 
       const kind = explicitKind ?? resolveSessionKind(tasteQuota);
       const isTaste = kind === "taste_chat" || kind === "taste_start";
@@ -460,14 +470,14 @@ function EditorPage() {
         const prefs = loadAgentPreferences();
         if (!isAgentPreferencesConfigured(prefs)) {
           toast.error(getAgentSetupBlockMessage(prefs));
-          return;
+          return false;
         }
       } else if (kind === "taste_start" && !canStartTasteProject(tasteQuota)) {
         toast.error("Start Project já utilizado. Configure API para continuar.");
-        return;
+        return false;
       } else if (kind === "taste_chat" && !canSendTasteChat(tasteQuota)) {
         toast.error("Limite Taste Chat (50). Configure API em /api.");
-        return;
+        return false;
       }
 
       const label =
@@ -499,9 +509,22 @@ function EditorPage() {
           setRunning(false);
         }
       })();
+      return true;
     },
     [conversation, projectId, running, sse, logPanelOpen, qc, sse.progress.resumable, tasteQuota],
   );
+
+  // ─── Auto-run: projeto novo / mensagem user pendente → inicia SSE sem clique extra
+  useEffect(() => {
+    if (!pendingAgentRunKey) return;
+    if (running || sse.connected) return;
+    if (autoAgentRunAttemptedRef.current === pendingAgentRunKey) return;
+
+    logEditorTelemetryEvent("agent", "auto_run_pending_user", "info", pendingAgentRunKey.slice(0, 24));
+    if (runAgent(resolveSessionKind(tasteQuota))) {
+      autoAgentRunAttemptedRef.current = pendingAgentRunKey;
+    }
+  }, [pendingAgentRunKey, running, sse.connected, runAgent, tasteQuota]);
 
   const handleResumeAgent = useCallback(() => {
     if (!conversation || running) return;
