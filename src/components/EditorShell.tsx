@@ -26,8 +26,8 @@ export function EditorShell({
 }: {
   children: ReactNode;
   projectName?: string;
-  activeView: EditorMainView;
-  onViewChange: (view: EditorMainView) => void;
+  activeView?: EditorMainView;
+  onViewChange?: (view: EditorMainView) => void;
   onShare?: () => void;
   onPublish?: () => void;
   running?: boolean;
@@ -62,7 +62,7 @@ export function EditorShell({
 
   return (
     <div className="editor-workspace flex h-screen flex-col overflow-hidden">
-      {topBar === "full" && (
+      {topBar === "full" && activeView && onViewChange && (
         <EditorTopBar
           projectName={projectName}
           activeView={activeView}
