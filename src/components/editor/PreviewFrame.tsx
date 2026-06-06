@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { PreviewEmptyGuide } from "@/components/editor/PreviewEmptyGuide";
 import {
-  PreviewViewportChrome,
   previewDeviceWidth,
   type PreviewDevice,
 } from "@/components/editor/PreviewViewportChrome";
@@ -14,7 +13,6 @@ interface PreviewFrameProps {
   booting?: boolean;
   devUrl?: string | null;
   previewPath?: string;
-  onPreviewPathChange?: (path: string) => void;
   onRefresh?: () => void;
   /** Incrementa para recarregar o iframe após sync de arquivos (sem botão manual). */
   reloadNonce?: number;
@@ -27,6 +25,14 @@ interface PreviewFrameProps {
   projectName?: string;
   /** Agente em execução — preview permanece estático (sem loader E2B). */
   agentRunning?: boolean;
+  /** Device viewport controlado pelo header. */
+  device?: PreviewDevice;
+  /** Quando true, esconde a chrome interna (URL/device/refresh) — usado quando o header já provê. */
+  hideChrome?: boolean;
+  /** Callback para importar repositório do GitHub a partir do estado vazio. */
+  onImportRepo?: (repoUrl: string) => void;
+  /** Callback para focar o chat a partir do estado vazio. */
+  onFocusChat?: () => void;
 }
 
 export function PreviewFrame({
@@ -44,9 +50,11 @@ export function PreviewFrame({
   e2bConnected = true,
   projectName,
   agentRunning = false,
+  device = "desktop",
+  onImportRepo,
+  onFocusChat,
 }: PreviewFrameProps) {
   const [iframeLoading, setIframeLoading] = useState(false);
-  const [device, setDevice] = useState<PreviewDevice>("desktop");
   const deviceWidth = previewDeviceWidth(device);
 
   useEffect(() => {
@@ -82,25 +90,8 @@ export function PreviewFrame({
 
   const showBootSpinner = booting && !agentRunning && !iframeSrc;
 
-  const handleRefresh = () => {
-    if (iframeRef?.current?.contentWindow) {
-      iframeRef.current.contentWindow.location.reload();
-      return;
-    }
-    onRefresh?.();
-  };
-
   return (
     <div className="forge-preview-root flex min-h-0 flex-1 flex-col">
-      <PreviewViewportChrome
-        files={files}
-        activePath={previewPath}
-        onNavigate={onPreviewPathChange ?? (() => {})}
-        devUrl={devUrl}
-        onRefresh={handleRefresh}
-        device={device}
-        onDeviceChange={setDevice}
-      />
       <div
         className="forge-preview-viewport min-h-0 flex-1"
         data-device={device}
@@ -166,6 +157,8 @@ export function PreviewFrame({
             e2bConnected={e2bConnected}
             agentHasRun={agentHasRun}
             onOpenPreview={onRefresh}
+            onImportRepo={onImportRepo}
+            onFocusChat={onFocusChat}
           />
         ) : null}
       </div>
