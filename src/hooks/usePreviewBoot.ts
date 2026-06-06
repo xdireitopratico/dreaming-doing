@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { getSupabaseEnv } from "@/lib/supabase-env";
 import { logEditorTelemetryEvent } from "@/lib/editor-telemetry";
+import { formatE2bUserError } from "@/lib/e2b-status";
 
 type BootResult = {
   url?: string;
@@ -15,6 +16,7 @@ type BootResult = {
   publishedUrl?: string | null;
   logs?: string;
   error?: string;
+  code?: string;
 };
 
 type BootOpts = {
@@ -67,7 +69,10 @@ export function usePreviewBoot(projectId: string) {
 
       const body = (await res.json()) as BootResult;
       if (!res.ok) {
-        throw new Error(body.error ?? `preview-boot HTTP ${res.status}`);
+        const raw = body.error ?? `preview-boot HTTP ${res.status}`;
+        const err = new Error(formatE2bUserError(raw, body.code)) as Error & { code?: string };
+        err.code = body.code;
+        throw err;
       }
       return body;
     },
@@ -121,12 +126,8 @@ export function usePreviewBoot(projectId: string) {
         const msg = e instanceof Error ? e.message : "Não foi possível abrir o preview";
         setLastError(msg);
         logEditorTelemetryEvent("preview", "boot_fail", "error", msg.slice(0, 240));
-        if (!opts?.silent) {
-          if (msg.includes("E2B") || msg.includes("Sandbox") || msg.includes("Import instead")) {
-            toast.error("Configure sua chave E2B em API Keys (/api).");
-          } else if (!msg.includes("agente")) {
-            toast.error(msg.length > 100 ? `${msg.slice(0, 100)}…` : msg);
-          }
+        if (!opts?.silent && !msg.includes("agente")) {
+          toast.error(msg.length > 140 ? `${msg.slice(0, 140)}…` : msg);
         }
         return null;
       } finally {

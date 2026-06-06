@@ -1,3 +1,5 @@
+import { formatE2bUserError } from "@/lib/e2b-status";
+
 /** Mensagens amigáveis para falhas de rede no agent-run / SSE. */
 
 export function formatAgentFetchError(err: unknown): string {
@@ -34,5 +36,18 @@ export function formatAgentFetchError(err: unknown): string {
     return "Modelo não encontrado no provedor. Ajuste em Modelos (/models) ou troque para Groq/NVIDIA no modo ROBIN.";
   }
 
+  if (raw.includes("Sandbox E2B não configurado") || raw.includes("e2b_not_configured")) {
+    return formatE2bUserError(raw, "e2b_not_configured");
+  }
+
+  if (raw.includes("E2B connect") || raw.includes("E2B create")) {
+    return formatE2bUserError(raw);
+  }
+
   return raw || "Erro ao conectar ao agente.";
+}
+
+/** Erro HTTP do agent-run (JSON body). */
+export function formatAgentHttpError(message: string, code?: string): string {
+  return formatE2bUserError(message, code) || message || "Erro ao conectar ao agente.";
 }

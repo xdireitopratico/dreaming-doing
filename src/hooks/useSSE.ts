@@ -7,7 +7,7 @@ import { loadAgentPreferences } from "@/lib/agent-preferences";
 import { loadAgentSessionExtensions } from "@/lib/agent-session-extensions";
 import type { ForgeSessionKind } from "@/lib/taste";
 import { dispatchTasteUiAction, isTasteUiAction } from "@/lib/taste-ui-actions";
-import { formatAgentFetchError } from "@/lib/agent-fetch-errors";
+import { formatAgentFetchError, formatAgentHttpError } from "@/lib/agent-fetch-errors";
 import { logEditorTelemetryEvent } from "@/lib/editor-telemetry";
 import { cancelAgentRun } from "@/lib/agent-cancel";
 
@@ -91,8 +91,9 @@ const MODEL_COSTS: Record<string, number> = {
 async function parseErrorResponse(res: Response): Promise<string> {
   const txt = await res.text().catch(() => "");
   try {
-    const body = JSON.parse(txt) as { error?: string; message?: string };
-    return body.error ?? body.message ?? txt.slice(0, 280);
+    const body = JSON.parse(txt) as { error?: string; message?: string; code?: string };
+    const raw = body.error ?? body.message ?? txt.slice(0, 280);
+    return formatAgentHttpError(raw, body.code);
   } catch {
     return txt.slice(0, 280) || `HTTP ${res.status}`;
   }

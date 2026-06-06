@@ -23,6 +23,7 @@ import {
 } from "@/lib/save-connector";
 import { loadAgentPreferences } from "@/lib/agent-preferences";
 import { saveE2bApiKey, disconnectE2bApiKey } from "@/lib/save-e2b-key";
+import { isE2bConfigured } from "@/lib/e2b-status";
 import {
   disconnectOllamaConnector,
   readOllamaMetaFromRows,
@@ -261,8 +262,7 @@ function ApiPage() {
 
   useEffect(() => {
     if (!connectorRows) return;
-    const hasE2b = connectorRows.some((r) => r.kind === "e2b");
-    setE2bConnected(hasE2b);
+    setE2bConnected(isE2bConfigured(connectorRows));
     const ollamaMeta = readOllamaMetaFromRows(connectorRows);
     setOllamaConnected(!!ollamaMeta);
     if (ollamaMeta) {
