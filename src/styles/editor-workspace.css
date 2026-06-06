@@ -1213,3 +1213,239 @@ body:has(.editor-workspace) {
   border-radius: 10px;
   overflow: hidden;
 }
+/* ===== Editor UX upgrades (header center, chat collapse, setup overlay) ===== */
+
+/* Three-zone workspace header */
+.forge-workspace-header-inner {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
+.forge-workspace-header-tools {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.forge-workspace-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.forge-workspace-header-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 0 12px;
+}
+
+.forge-workspace-header-url {
+  flex: 0 1 460px;
+  min-width: 180px;
+}
+
+.forge-workspace-header-url .forge-address-bar--chrome {
+  width: 100%;
+  max-width: 100%;
+  background: var(--forge-surface-2);
+  border-color: var(--forge-border-strong);
+  padding: 2px 6px 2px 8px;
+}
+
+.forge-workspace-header-url .forge-address-bar-host,
+.forge-workspace-header-url .forge-address-bar-input {
+  color: var(--forge-text);
+}
+
+.forge-workspace-header-url .forge-address-bar-input::placeholder {
+  color: var(--forge-ghost);
+}
+
+/* Dark header refresh + device-toggle variants */
+.forge-workspace-header-center .forge-preview-device-toggle {
+  background: var(--forge-surface-2);
+  border-color: var(--forge-border-strong);
+}
+
+.forge-workspace-header-center .forge-preview-device-btn {
+  color: var(--forge-muted);
+}
+
+.forge-workspace-header-center .forge-preview-device-btn:hover {
+  color: var(--forge-text);
+  background: rgba(237, 239, 242, 0.06);
+}
+
+.forge-workspace-header-center .forge-preview-device-btn[data-active="true"] {
+  color: var(--forge-primary);
+  background: rgba(255, 182, 39, 0.12);
+}
+
+.forge-preview-refresh-btn--dark {
+  background: var(--forge-surface-2);
+  border-color: var(--forge-border-strong);
+  color: var(--forge-muted);
+}
+
+.forge-preview-refresh-btn--dark:hover:not(:disabled) {
+  background: rgba(237, 239, 242, 0.06);
+  color: var(--forge-text);
+}
+
+/* Chat collapse / expand buttons */
+.forge-chat-collapse-btn,
+.forge-chat-expand-btn {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  color: var(--forge-muted);
+  transition: background 0.15s, color 0.15s;
+  flex-shrink: 0;
+}
+
+.forge-chat-collapse-btn:hover,
+.forge-chat-expand-btn:hover {
+  background: rgba(237, 239, 242, 0.08);
+  color: var(--forge-text);
+}
+
+.forge-chat-expand-btn {
+  margin-right: 6px;
+}
+
+/* When chat is collapsed: workspace header spans full width, chat panel removed */
+.forge-editor-canvas--collapsed {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.forge-editor-canvas--collapsed .forge-workspace-header {
+  grid-column: 1;
+}
+
+.forge-editor-canvas--collapsed .forge-workspace-panel {
+  grid-column: 1;
+}
+
+/* ===== Setup overlay (full chat) ===== */
+.forge-setup-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 50;
+  background: var(--forge-chat);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  animation: forge-setup-in 180ms ease-out;
+}
+
+@keyframes forge-setup-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.forge-setup-overlay-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--forge-border);
+  flex-shrink: 0;
+}
+
+.forge-setup-overlay-close {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  color: var(--forge-muted);
+  transition: background 0.15s, color 0.15s;
+}
+
+.forge-setup-overlay-close:hover {
+  background: rgba(237, 239, 242, 0.08);
+  color: var(--forge-text);
+}
+
+.forge-setup-overlay-tabs {
+  display: flex;
+  gap: 0;
+  padding: 0 14px;
+  border-bottom: 1px solid var(--forge-border);
+  flex-shrink: 0;
+}
+
+.forge-setup-overlay-tab {
+  padding: 10px 14px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--forge-muted);
+  border-bottom: 2px solid transparent;
+  transition: color 0.15s, border-color 0.15s;
+  font-family: ui-monospace, monospace;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.forge-setup-overlay-tab:hover {
+  color: var(--forge-silver);
+}
+
+.forge-setup-overlay-tab[data-active="true"] {
+  color: var(--forge-primary);
+  border-bottom-color: var(--forge-primary);
+}
+
+.forge-setup-overlay-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 18px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(237, 239, 242, 0.18) transparent;
+}
+
+.forge-setup-card {
+  padding: 14px;
+  border-radius: 10px;
+  border: 1px solid var(--forge-border);
+  background: var(--forge-surface-2);
+}
+
+/* Ensure dropdowns over preview have solid dark bg (fix screenshot bug) */
+[data-radix-popper-content-wrapper] .forge-dropdown-panel {
+  background-color: #1a1e27 !important;
+  color: var(--forge-text) !important;
+  border-color: var(--forge-border-strong) !important;
+  opacity: 1 !important;
+}
+
+[data-radix-popper-content-wrapper] .forge-dropdown-item {
+  color: var(--forge-silver) !important;
+}
+
+[data-radix-popper-content-wrapper] .forge-dropdown-item:focus,
+[data-radix-popper-content-wrapper] .forge-dropdown-item[data-highlighted] {
+  background-color: #252a36 !important;
+  color: var(--forge-text) !important;
+}
+
+/* Composer mode trigger — ensure border visible + selected highlight in trigger */
+.forge-composer-mode-trigger {
+  background: var(--forge-surface-2);
+  border-color: var(--forge-border-strong);
+}
