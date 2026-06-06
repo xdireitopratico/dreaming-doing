@@ -537,18 +537,19 @@ function EditorPage() {
   }, [sse.progress.finished, conversation, qc]);
 
   const agentFinished = sse.progress.finished;
-  const agentCompletedOk =
+  const agentShouldBootPreview =
     agentFinished &&
     (sse.progress.lastFinishOk === true ||
+      sse.progress.resumable === true ||
       (sse.progress.lastFinishOk === null && agentHasRun && !sse.progress.error));
 
   useEffect(() => {
     if (!isReactProject || !e2bConnected || devUrl || previewBoot.booting) return;
     if (running) return;
-    if (!agentCompletedOk) return;
+    if (!agentShouldBootPreview) return;
     void previewBoot.bootWithRetry();
   }, [
-    agentCompletedOk,
+    agentShouldBootPreview,
     running,
     isReactProject,
     e2bConnected,

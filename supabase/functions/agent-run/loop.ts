@@ -229,7 +229,15 @@ export class AgentLoop {
           `Limite de tempo da Edge Function atingido (~${Math.round(EDGE_FUNCTION_TIMEOUT_MS / 1000)}s). ` +
           `Checkpoint salvo — use **Continuar** para retomar.`
         );
-        return { ok: false, error: "Timeout da Edge Function", steps: step, resumable: true, toolsUsed: [...toolsUsed] };
+        return {
+          ok: false,
+          error:
+            `Limite de tempo da Edge Function (~${Math.round(EDGE_FUNCTION_TIMEOUT_MS / 1000)}s). ` +
+            "Checkpoint salvo — clique em Continuar para retomar.",
+          steps: step,
+          resumable: true,
+          toolsUsed: [...toolsUsed],
+        };
       }
 
       if (await this.isCanceled()) {

@@ -13,7 +13,6 @@ import {
   isCachedPreviewValid,
   PREVIEW_TTL_MS,
   probePreviewUrl,
-  readDevLogTail,
 } from "../_shared/preview-dev.ts";
 import { FORGE_CORS_HEADERS, corsPreflightResponse } from "../_shared/cors.ts";
 
@@ -109,11 +108,12 @@ Deno.serve(async (req) => {
 
     const { installOk } = await bootDevServerInSandbox(sandbox, files ?? [], devPort);
 
-    let url = previewUrlFromSandbox(sandbox, devPort);
-    let ready = await probePreviewUrl(url);
+    const url = previewUrlFromSandbox(sandbox, devPort);
+    // Não bloqueia na probe — evita timeout da Edge Function; o cliente faz polling (probeOnly).
+    const ready = false;
 
     const expiresAt = new Date(Date.now() + PREVIEW_TTL_MS).toISOString();
-    const logs = ready ? undefined : await readDevLogTail(sandbox);
+    const logs = undefined;
 
     await supabase
       .from("projects")

@@ -96,11 +96,18 @@ export async function bootDevServerInSandbox(
 
   let installOk = true;
   if (hasPkg) {
-    const install = await sandbox.commands.run(
-      `cd ${E2B_PROJECT_DIR} && npm install --no-audit --no-fund --loglevel=error 2>&1 | tail -30`,
-      { cwd: E2B_PROJECT_DIR, timeoutMs: 90_000 },
+    const modulesCheck = await sandbox.commands.run(
+      `test -d ${E2B_PROJECT_DIR}/node_modules && echo has_modules || echo missing`,
+      { cwd: E2B_PROJECT_DIR, timeoutMs: 5_000 },
     );
-    installOk = (install.exitCode ?? 1) === 0;
+    const hasModules = (modulesCheck.stdout ?? "").includes("has_modules");
+    if (!hasModules) {
+      const install = await sandbox.commands.run(
+        `cd ${E2B_PROJECT_DIR} && npm install --no-audit --no-fund --loglevel=error 2>&1 | tail -30`,
+        { cwd: E2B_PROJECT_DIR, timeoutMs: 90_000 },
+      );
+      installOk = (install.exitCode ?? 1) === 0;
+    }
   }
 
   await sandbox.commands.run(
