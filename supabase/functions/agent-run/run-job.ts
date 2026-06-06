@@ -198,7 +198,7 @@ export async function executeAgentJob(
   // CRÍTICO para o "caminho barato primeiro":
   // Só aloca E2B/sandbox (e registra shell) quando realmente vamos construir.
   // Qualify/conversa pura NUNCA deve carregar chave nem criar container.
-  let sandbox: { destroy: () => Promise<void> };
+  let sandbox: { destroy: () => Promise<void>; kill: () => Promise<void> };
   if (allocateSandbox) {
     const e2bKey = await loadUserE2bApiKey(supabase, userId);
     if (!e2bKey?.trim()) throw new Error("Sandbox E2B não configurado");
@@ -212,7 +212,7 @@ export async function executeAgentJob(
     });
   } else {
     // Dummy para finally e para o caso de o loop ser chamado em modo conversa (deve early-return antes de tools).
-    sandbox = { destroy: async () => {} };
+    sandbox = { destroy: async () => {}, kill: async () => {} };
     // Não registramos shell tool. Qualify não usa ferramentas de FS/shell.
   }
 
@@ -277,7 +277,7 @@ export async function executeAgentJob(
     projectTemplate,
     stackAddon,
     tasteStart
-      ? { maxSteps: 14, tasteStart: true, sessionAddon: sessionExt.addon, userSkillNames: sessionExt.skillNames, runId: agentRunId, planMode, allocateSandbox }
+      ? { maxSteps: 14, tasteStart: true, sessionAddon: sessionExt.addon, userSkillNames: sessionExt.skillNames, runId: agentRunId, planMode }
       : {
         sessionAddon: sessionExt.addon,
         userSkillNames: sessionExt.skillNames,
@@ -288,13 +288,28 @@ export async function executeAgentJob(
         maxStepsFromCheckpoint: loadedCheckpoint?.extra.maxStepsLimit,
         runId: agentRunId,
         planMode,
-        allocateSandbox,
       },
   );
 
+  let result: {
+    ok: boolean;
+    summary?: string;
+    error?: string;
+    steps: number;
+    resumable?: boolean;
+    canceled?: boolean;
+    toolsUsed?: string[];
+  };
   try {
-    return await loop.run();
-  } finally {
-    await sandbox.destroy().catch(() => {});
+    result = await loop.run();
+  } catch (e) {
+    await sandbox.kill().catch(() => {});
+    throw e;
   }
+  if (result.ok) {
+    await sandbox.destroy().catch(() => {});
+  } else {
+    await sandbox.kill().catch(() => {});
+  }
+  return result;
 }

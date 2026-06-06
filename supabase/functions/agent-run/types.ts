@@ -91,6 +91,7 @@ export interface SandboxProvider {
   exec(command: string, opts?: ExecOpts): Promise<ExecResult>;
   getPreviewUrl(port: number): Promise<string>;
   destroy(): Promise<void>;
+  kill(): Promise<void>;
 }
 
 export interface ActionPlan {

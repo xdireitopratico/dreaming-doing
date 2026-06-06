@@ -34,9 +34,9 @@ class E2BSandbox implements SandboxProvider {
   }
 
   async sync(_projectId: string, files: FileEntry[]): Promise<void> {
-    const sb = await this.ensure();
+    if (!this.sandbox) return;
     if (files.length === 0) return;
-    await syncProjectFilesToSandbox(sb, files);
+    await syncProjectFilesToSandbox(this.sandbox, files);
   }
 
   async exec(command: string, opts?: ExecOpts): Promise<ExecResult> {
@@ -69,8 +69,19 @@ class E2BSandbox implements SandboxProvider {
     return e2bPreviewUrl(sb.sandboxId, port);
   }
 
-  /** Não mata o sandbox — preview ao vivo reutiliza a mesma instância. */
+  /** Mantém sandbox vivo para preview (caso feliz). */
   async destroy(): Promise<void> {
+    this.sandbox = null;
+  }
+
+  /** Mata o sandbox de fato — chamado em falha/cancelamento para evitar leaking. */
+  async kill(): Promise<void> {
+    if (!this.sandbox) return;
+    try {
+      await this.sandbox.kill();
+    } catch (e) {
+      console.warn("[sandbox] kill failed:", (e as Error).message);
+    }
     this.sandbox = null;
   }
 }
@@ -84,6 +95,7 @@ class NoopSandbox implements SandboxProvider {
     return "[sandbox não disponível]";
   }
   async destroy(): Promise<void> {}
+  async kill(): Promise<void> {}
 }
 
 export function createSandboxProvider(

@@ -192,8 +192,10 @@ Deno.serve(async (req) => {
     });
   } catch (e) {
     const err = e instanceof Error ? e.message : "erro worker";
-    await appendStreamEvent(supabase, item.message.runId, "error", { error: err, recoverable: true });
-    await appendStreamEvent(supabase, item.message.runId, "finish", { ok: false, error: err, resumable: true });
+    const result = { ok: false, error: err, steps: 0 };
+    await finalizeRun(supabase, item.message.runId, result);
+    await appendStreamEvent(supabase, item.message.runId, "error", { error: err, recoverable: false });
+    await appendStreamEvent(supabase, item.message.runId, "finish", { ...result, resumable: false });
     await deleteAgentChunk(supabase, item.msgId);
     return new Response(JSON.stringify({ ok: false, error: err }), { status: 500 });
   }

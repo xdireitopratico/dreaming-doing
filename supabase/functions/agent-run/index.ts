@@ -737,18 +737,59 @@ Deno.serve(async (req) => {
     }
 
     if (!agentRunId) {
-      const { data: newRun } = await supabase
+      const { data: lockedId, error: lockErr } = await supabase
+        .rpc("acquire_agent_run_lock", {
+          p_project_id: projectId,
+          p_conversation_id: conversationId,
+          p_user_id: userData.user.id,
+        });
+
+      if (lockErr || !lockedId) {
+        runningLocks.delete(projectId);
+        return json({ error: "Erro ao iniciar agente — tente novamente." }, 500);
+      }
+
+      agentRunId = lockedId;
+
+      // Pode ter sido criado por outra instância (lock já existia), ou por nós.
+      // Se a conversation não bater, o run pertence a outra conversa → enfileirar.
+      const { data: createdRun } = await supabase
         .from("agent_runs")
-        .insert({
+        .select("id, conversation_id, meta")
+        .eq("id", agentRunId)
+        .single();
+
+      if (createdRun && createdRun.conversation_id !== conversationId) {
+        await supabase.from("agent_pending_messages").insert({
           project_id: projectId,
           conversation_id: conversationId,
           user_id: userData.user.id,
-          status: "running",
-          meta: runMetaBase,
-        })
-        .select("id")
-        .single();
-      agentRunId = newRun?.id ?? null;
+          body: {
+            preferences,
+            sessionKind: sessionKindRaw,
+            enabledSkillIds,
+            enabledMcpIds,
+            allocateSandbox: true,
+          },
+        });
+        runningLocks.delete(projectId);
+        return json({
+          ok: true,
+          queued: true,
+          pendingCount: 1,
+          activeRunId: agentRunId,
+          message: "Agente ocupado — sua mensagem foi enfileirada.",
+        });
+      }
+
+      // Ensure meta is set on newly created runs
+      const currentMeta = (createdRun?.meta ?? {}) as Record<string, unknown>;
+      if (!currentMeta.provider || !currentMeta.model) {
+        await supabase
+          .from("agent_runs")
+          .update({ meta: { ...currentMeta, ...runMetaBase } })
+          .eq("id", agentRunId);
+      }
     }
 
     const finalizeRun = async (
