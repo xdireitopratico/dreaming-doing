@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { createProjectFromPrompt } from "@/lib/projects.functions";
+import { markPendingAgentRun } from "@/lib/agent-auto-run";
 import { sanitizeNext } from "@/lib/sanitize-next";
 import { MicButton } from "@/components/voice/MicButton";
 import { useAuth } from "@/lib/auth";
@@ -112,6 +113,7 @@ export function PromptEngine({
       const res = await createProject({ data: { prompt: v } });
       warp.cancel();
       clearForgeTransitionOverlays();
+      markPendingAgentRun(res.projectId, res.conversationId);
       navigate({ to: "/projects/$projectId", params: { projectId: res.projectId } });
     } catch (e) {
       warp.finish();

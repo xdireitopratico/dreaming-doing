@@ -56,6 +56,10 @@ import { useAutoPublish } from "@/hooks/useAutoPublish";
 import { buildPreviewUrl } from "@/lib/project-routes";
 import { useEditorTelemetry } from "@/hooks/useEditorTelemetry";
 import { logEditorTelemetryEvent } from "@/lib/editor-telemetry";
+import {
+  clearPendingAgentRun,
+  peekPendingAgentRun,
+} from "@/lib/agent-auto-run";
 import { publishProject } from "@/lib/publish.functions";
 import { useAgentBlame, buildBlameFromTimeline } from "@/hooks/useAgentBlame";
 import { registerAiCodeLens, registerAiFolding, clearEnhancements, HEAT_MAP_CSS } from "@/lib/monacoEnhancements";
@@ -514,17 +518,62 @@ function EditorPage() {
     [conversation, projectId, running, sse, logPanelOpen, qc, sse.progress.resumable, tasteQuota],
   );
 
-  // ─── Auto-run: projeto novo / mensagem user pendente → inicia SSE sem clique extra
+  // ─── Auto-run: projeto recém-criado (flag) ou última msg user sem resposta
+  // Não espera messages no client — evita race read-after-write após createProject.
   useEffect(() => {
-    if (!pendingAgentRunKey) return;
-    if (running || sse.connected) return;
-    if (autoAgentRunAttemptedRef.current === pendingAgentRunKey) return;
+    if (!conversation?.id) return;
 
-    logEditorTelemetryEvent("agent", "auto_run_pending_user", "info", pendingAgentRunKey.slice(0, 24));
-    if (runAgent(resolveSessionKind(tasteQuota))) {
-      autoAgentRunAttemptedRef.current = pendingAgentRunKey;
-    }
-  }, [pendingAgentRunKey, running, sse.connected, runAgent, tasteQuota]);
+    let cancelled = false;
+    let attempts = 0;
+    const maxAttempts = 12;
+
+    const tryAutoRun = () => {
+      if (cancelled || attempts >= maxAttempts) return;
+      attempts += 1;
+
+      if (running || sse.connected) {
+        window.setTimeout(tryAutoRun, 250);
+        return;
+      }
+
+      const flagged = peekPendingAgentRun(projectId, conversation.id);
+      const pending = pendingAgentRunKey;
+      if (!flagged && !pending) return;
+
+      const attemptKey = pending ?? `flag:${conversation.id}`;
+      if (autoAgentRunAttemptedRef.current === attemptKey) return;
+
+      logEditorTelemetryEvent(
+        "agent",
+        flagged ? "auto_run_flagged" : "auto_run_pending_user",
+        "info",
+        attemptKey.slice(0, 24),
+      );
+
+      if (runAgent(resolveSessionKind(tasteQuota))) {
+        autoAgentRunAttemptedRef.current = attemptKey;
+        if (flagged) clearPendingAgentRun(projectId);
+        return;
+      }
+
+      if (flagged) {
+        window.setTimeout(tryAutoRun, 400);
+      }
+    };
+
+    tryAutoRun();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    conversation?.id,
+    projectId,
+    pendingAgentRunKey,
+    running,
+    sse.connected,
+    runAgent,
+    tasteQuota,
+  ]);
 
   const handleResumeAgent = useCallback(() => {
     if (!conversation || running) return;

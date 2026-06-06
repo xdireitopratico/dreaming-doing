@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { createProjectFromPrompt } from "@/lib/projects.functions";
+import { markPendingAgentRun } from "@/lib/agent-auto-run";
 import { toast } from "sonner";
 import { ForgeIcon } from "@/components/icons/ForgeIcon";
 
@@ -92,6 +93,7 @@ export function CreateProjectDialog({ open, onClose }: CreateProjectDialogProps)
         },
       });
 
+      markPendingAgentRun(res.projectId, res.conversationId);
       navigate({ to: "/projects/$projectId", params: { projectId: res.projectId } });
       onClose();
     } catch (e: unknown) {
