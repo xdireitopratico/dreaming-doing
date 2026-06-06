@@ -42,17 +42,21 @@ export class RobinKeyPool {
         return key;
       }
     }
-    // Todas em cooldown — usa a que expira primeiro
-    let best = this.keys[0]!;
-    let bestUntil = this.cooldownUntil.get(best) ?? 0;
-    for (const k of this.keys) {
-      const u = this.cooldownUntil.get(k) ?? 0;
-      if (u < bestUntil) {
-        best = k;
-        bestUntil = u;
+    // Todas em cooldown — retorna null para sinalizar que deve aguardar
+    return null;
+  }
+
+  /** Tempo em ms até a próxima chave ficar disponível. */
+  timeUntilNextAvailable(): number {
+    const now = Date.now();
+    let minWait = Infinity;
+    for (const key of this.keys) {
+      const until = this.cooldownUntil.get(key) ?? 0;
+      if (until > now) {
+        minWait = Math.min(minWait, until - now);
       }
     }
-    return best;
+    return minWait === Infinity ? 0 : minWait;
   }
 
   markRateLimited(key: string): void {
@@ -77,7 +81,20 @@ export class ResilientLLM implements LLMProvider {
     let lastErr: unknown = null;
 
     for (let attempt = 0; attempt < attempts; attempt++) {
-      const apiKey = this.pool?.nextKey() ?? this.cfg.apiKey;
+      let apiKey = this.pool?.nextKey() ?? this.cfg.apiKey;
+
+      if (!apiKey && this.pool) {
+        const waitMs = this.pool.timeUntilNextAvailable();
+        if (waitMs > 0 && waitMs < 60_000) {
+          this.emit("robin_wait", {
+            message: `Todas as chaves em cooldown. Aguardando ${Math.ceil(waitMs / 1000)}s para a próxima ficar disponível…`,
+            waitMs,
+          });
+          await sleepMs(waitMs);
+          apiKey = this.pool.nextKey() ?? this.cfg.apiKey;
+        }
+      }
+
       if (!apiKey) throw new Error("Nenhuma chave API no pool ROBIN. Adicione chaves em /api.");
 
       this.requestCount++;

@@ -18,6 +18,28 @@ export class RuntimeObserver {
   async observe(): Promise<ObservationResult> {
     const checks: Array<{ name: string; ok: boolean; output: string }> = [];
 
+    // 0. Ensure dependencies are installed
+    try {
+      const hasNodeModules = await this.hasFile("node_modules");
+      const hasPackageJson = await this.hasFile("package.json");
+      if (hasPackageJson && !hasNodeModules) {
+        const install = await this.reg.execute({
+          id: crypto.randomUUID(),
+          name: "shell_exec",
+          arguments: { command: "npm install 2>&1" },
+        });
+        const installOutput = typeof install.output === "object"
+          ? (install.output as any).stderr ?? (install.output as any).stdout ?? ""
+          : String(install.output ?? "");
+        checks.push({ name: "install", ok: install.ok, output: installOutput.slice(0, 3000) });
+        if (!install.ok) {
+          return { passed: false, checks, feedback: `[install] ${installOutput.slice(0, 2000)}` };
+        }
+      }
+    } catch {
+      checks.push({ name: "install", ok: true, output: "(sandbox não disponível)" });
+    }
+
     // 1. Build check
     try {
       const build = await this.reg.execute({
