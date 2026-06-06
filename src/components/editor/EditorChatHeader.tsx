@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, PanelLeftClose } from "lucide-react";
 import { ForgeLogoMark } from "@/components/editor/ForgeLogoMark";
 
 interface EditorChatHeaderProps {
@@ -8,6 +8,10 @@ interface EditorChatHeaderProps {
 }
 
 export function EditorChatHeader({ projectName, running }: EditorChatHeaderProps) {
+  const toggleCollapse = () => {
+    window.dispatchEvent(new CustomEvent("forge:toggle-chat-collapsed"));
+  };
+
   return (
     <div className="forge-chat-header-inner">
       <ForgeLogoMark size={18} linkTo="/projects" />
@@ -21,6 +25,15 @@ export function EditorChatHeader({ projectName, running }: EditorChatHeaderProps
           {running ? "Construindo alterações…" : "Visualizando última versão salva"}
         </span>
       </Link>
+      <button
+        type="button"
+        className="forge-chat-collapse-btn ml-auto"
+        title="Colapsar chat"
+        aria-label="Colapsar chat"
+        onClick={toggleCollapse}
+      >
+        <PanelLeftClose className="size-4" />
+      </button>
     </div>
   );
 }
