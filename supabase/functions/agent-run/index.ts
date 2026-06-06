@@ -629,8 +629,31 @@ Deno.serve(async (req) => {
       },
     };
 
+    const runChunkedJob = async (
+      onEvent: (type: string, data: Record<string, unknown>) => void,
+    ) => {
+      const MAX_INLINE_CHUNKS = 48;
+      let chunkResume = resumeRun;
+      let result = await executeAgentJob(supabase, { ...jobParams, resumeRun: chunkResume }, onEvent);
+      let chunk = 1;
+      while (!result.ok && result.resumable && !result.canceled && chunk < MAX_INLINE_CHUNKS) {
+        onEvent("resume", {
+          chunk: chunk + 1,
+          message: "Retomando automaticamente no servidor…",
+        });
+        chunkResume = true;
+        result = await executeAgentJob(
+          supabase,
+          { ...jobParams, resumeRun: true },
+          onEvent,
+        );
+        chunk++;
+      }
+      return result;
+    };
+
     if (!useSSE) {
-      const result = await executeAgentJob(supabase, jobParams, () => {});
+      const result = await runChunkedJob(() => {});
       await finalizeRun(result);
       cleanup();
       return json(result);
@@ -667,7 +690,7 @@ Deno.serve(async (req) => {
           inlineFallback: true,
         });
 
-        executeAgentJob(supabase, jobParams, (type, data) => emit({ type, data }))
+        runChunkedJob((type, data) => emit({ type, data }))
           .then(async (result) => {
             await finalizeRun(result);
             cleanup();

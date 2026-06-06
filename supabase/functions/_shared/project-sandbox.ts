@@ -94,7 +94,19 @@ export async function ensureAgentProjectSandbox(
     }
   }
 
-  const sandbox = await e2bRestCreate(apiKey, template, SANDBOX_TIMEOUT_SEC);
+  let sandbox;
+  const templates = [...new Set([template, E2B_TEMPLATE_DEFAULT, "code-interpreter-v1", "base"].filter(Boolean))];
+  let lastErr: unknown;
+  for (const tpl of templates) {
+    try {
+      sandbox = await e2bRestCreate(apiKey, tpl, SANDBOX_TIMEOUT_SEC);
+      if (tpl !== template) console.warn(`[project-sandbox] template fallback: ${tpl}`);
+      break;
+    } catch (e) {
+      lastErr = e;
+    }
+  }
+  if (!sandbox) throw lastErr instanceof Error ? lastErr : new Error(String(lastErr));
 
   await touchSandboxLease(supabase, projectId, existing, sandbox.sandboxId, {
     previewUrl: undefined,
