@@ -12,7 +12,9 @@ import {
   detectDevPort,
   isCachedPreviewValid,
   PREVIEW_TTL_MS,
+  PROBE_ATTEMPTS_AFTER_BOOT,
   probePreviewUrl,
+  readDevLogTail,
 } from "../_shared/preview-dev.ts";
 import { autoPublishIfNeeded } from "../_shared/auto-publish.ts";
 import { FORGE_CORS_HEADERS, corsPreflightResponse } from "../_shared/cors.ts";
@@ -21,6 +23,45 @@ const corsHeaders = FORGE_CORS_HEADERS;
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+
+type ProjectFile = { path: string; content?: string | null };
+
+async function connectSandboxForPreview(
+  supabase: ReturnType<typeof createClient>,
+  projectId: string,
+  apiKey: string,
+) {
+  try {
+    return await connectProjectSandboxForPreview(supabase, projectId, apiKey);
+  } catch (previewErr: unknown) {
+    const msg = previewErr instanceof Error ? previewErr.message : "";
+    if (msg.includes("Ainda não há") || msg.includes("ambiente ao vivo")) {
+      return await ensureAgentProjectSandbox(supabase, projectId, apiKey);
+    }
+    throw previewErr;
+  }
+}
+
+/** Reconecta sandbox, sync e sobe Vite quando a porta (ex. 5173) morreu. */
+async function rebootPreviewDevServer(
+  supabase: ReturnType<typeof createClient>,
+  projectId: string,
+  apiKey: string,
+  files: ProjectFile[],
+  devPort: number,
+  previewUrl: string,
+): Promise<{ ready: boolean; sandboxId: string; installOk: boolean; logs?: string }> {
+  const { sandbox, sandboxId } = await connectSandboxForPreview(supabase, projectId, apiKey);
+  await syncProjectFilesToSandbox(sandbox, files);
+  const { installOk } = await bootDevServerInSandbox(sandbox, files, devPort);
+  const ready = await probePreviewUrl(previewUrl, PROBE_ATTEMPTS_AFTER_BOOT);
+  let logs: string | undefined;
+  if (!ready) {
+    logs = await readDevLogTail(sandbox);
+    console.warn("[preview-boot] Vite ainda não respondeu:", logs.slice(0, 400));
+  }
+  return { ready, sandboxId, installOk, logs };
+}
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return corsPreflightResponse();
@@ -57,16 +98,46 @@ Deno.serve(async (req) => {
     const existing = (project.meta ?? {}) as Record<string, unknown>;
     const cached = isCachedPreviewValid(existing, force);
 
+    const devPortFromMeta =
+      typeof existing.previewPort === "number" ? existing.previewPort : null;
+
     if (probeOnly && cached) {
-      const ready = await probePreviewUrl(cached.url, 2);
+      let ready = await probePreviewUrl(cached.url, 3);
+      let rebootLogs: string | undefined;
+      let sandboxId =
+        typeof existing.previewSandboxId === "string" ? existing.previewSandboxId : undefined;
+
+      if (!ready) {
+        const { data: files } = await supabase
+          .from("project_files")
+          .select("path, content")
+          .eq("project_id", projectId);
+        const devPort = devPortFromMeta ??
+          (Number.parseInt(detectDevPort(files ?? []), 10) || 5173);
+        const reboot = await rebootPreviewDevServer(
+          supabase,
+          projectId,
+          E2B_API_KEY,
+          files ?? [],
+          devPort,
+          cached.url,
+        );
+        ready = reboot.ready;
+        sandboxId = reboot.sandboxId;
+        rebootLogs = reboot.logs;
+      }
+
       let published = false;
       let publishedUrl: string | null = null;
+      const nextMeta = {
+        ...existing,
+        previewReady: ready,
+        previewUrl: cached.url,
+        ...(sandboxId ? { previewSandboxId: sandboxId } : {}),
+      };
+      await supabase.from("projects").update({ meta: nextMeta }).eq("id", projectId);
+
       if (ready) {
-        const nextMeta = { ...existing, previewReady: true, previewUrl: cached.url };
-        await supabase
-          .from("projects")
-          .update({ meta: nextMeta })
-          .eq("id", projectId);
         const pub = await autoPublishIfNeeded(
           supabase,
           projectId,
@@ -84,11 +155,39 @@ Deno.serve(async (req) => {
         probeOnly: true,
         published,
         publishedUrl,
+        logs: rebootLogs,
       });
     }
 
     if (cached && !force) {
-      const ready = existing.previewReady === true;
+      let ready = await probePreviewUrl(cached.url, 2);
+      if (!ready && existing.previewReady === true) {
+        const { data: files } = await supabase
+          .from("project_files")
+          .select("path, content")
+          .eq("project_id", projectId);
+        const devPort = devPortFromMeta ??
+          (Number.parseInt(detectDevPort(files ?? []), 10) || 5173);
+        const reboot = await rebootPreviewDevServer(
+          supabase,
+          projectId,
+          E2B_API_KEY,
+          files ?? [],
+          devPort,
+          cached.url,
+        );
+        ready = reboot.ready;
+        await supabase
+          .from("projects")
+          .update({
+            meta: {
+              ...existing,
+              previewReady: ready,
+              previewSandboxId: reboot.sandboxId,
+            },
+          })
+          .eq("id", projectId);
+      }
       let published = false;
       let publishedUrl: string | null =
         typeof existing.publishedUrl === "string" ? existing.publishedUrl : null;
@@ -97,7 +196,7 @@ Deno.serve(async (req) => {
           supabase,
           projectId,
           userData.user.id,
-          { ...existing, previewUrl: cached.url },
+          { ...existing, previewUrl: cached.url, previewReady: true },
         );
         published = pub.published;
         if (pub.url) publishedUrl = pub.url;
@@ -119,17 +218,7 @@ Deno.serve(async (req) => {
 
     const devPort = Number.parseInt(detectDevPort(files ?? []), 10) || 5173;
 
-    let sandboxResult;
-    try {
-      sandboxResult = await connectProjectSandboxForPreview(supabase, projectId, E2B_API_KEY);
-    } catch (previewErr: unknown) {
-      const msg = previewErr instanceof Error ? previewErr.message : "";
-      if (msg.includes("Ainda não há") || msg.includes("ambiente ao vivo")) {
-        sandboxResult = await ensureAgentProjectSandbox(supabase, projectId, E2B_API_KEY);
-      } else {
-        throw previewErr;
-      }
-    }
+    const sandboxResult = await connectSandboxForPreview(supabase, projectId, E2B_API_KEY);
     const { sandbox, sandboxId, reused } = sandboxResult;
 
     await syncProjectFilesToSandbox(sandbox, files ?? []);
@@ -137,11 +226,10 @@ Deno.serve(async (req) => {
     const { installOk } = await bootDevServerInSandbox(sandbox, files ?? [], devPort);
 
     const url = previewUrlFromSandbox(sandbox, devPort);
-    // Não bloqueia na probe — evita timeout da Edge Function; o cliente faz polling (probeOnly).
-    const ready = false;
+    const ready = await probePreviewUrl(url, PROBE_ATTEMPTS_AFTER_BOOT);
+    const logs = ready ? undefined : await readDevLogTail(sandbox);
 
     const expiresAt = new Date(Date.now() + PREVIEW_TTL_MS).toISOString();
-    const logs = undefined;
 
     await supabase
       .from("projects")

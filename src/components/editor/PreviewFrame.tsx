@@ -33,6 +33,8 @@ interface PreviewFrameProps {
   onImportRepo?: (repoUrl: string) => void;
   /** Callback para focar o chat a partir do estado vazio. */
   onFocusChat?: () => void;
+  /** Repouso após inatividade — iframe descarregado para economizar E2B. */
+  previewIdle?: boolean;
 }
 
 export function PreviewFrame({
@@ -53,6 +55,7 @@ export function PreviewFrame({
   device = "desktop",
   onImportRepo,
   onFocusChat,
+  previewIdle = false,
 }: PreviewFrameProps) {
   const [iframeLoading, setIframeLoading] = useState(false);
   const deviceWidth = previewDeviceWidth(device);
@@ -78,9 +81,9 @@ export function PreviewFrame({
   }, [files]);
 
   const iframeSrc = useMemo(() => {
-    if (!devUrl) return null;
+    if (!devUrl || previewIdle) return null;
     return buildPreviewUrl(devUrl, previewPath);
-  }, [devUrl, previewPath]);
+  }, [devUrl, previewPath, previewIdle]);
 
   const previewContent = useMemo(() => {
     if (devUrl) return null;
@@ -121,6 +124,14 @@ export function PreviewFrame({
             <p className="text-sm text-neutral-500">Conectando preview E2B…</p>
             <p className="text-xs text-neutral-400 max-w-xs">
               A atividade do agente aparece só no chat à esquerda.
+            </p>
+          </div>
+        ) : !bootError && previewIdle && devUrl ? (
+          <div className="flex h-full flex-col items-center justify-center gap-3 bg-neutral-50 p-8 text-center">
+            <p className="text-sm font-medium text-neutral-800">Preview em repouso</p>
+            <p className="text-sm text-neutral-500 max-w-sm leading-relaxed">
+              Sem interação por 10 minutos — o iframe foi pausado para reduzir consumo E2B.
+              Mova o mouse ou clique para reativar.
             </p>
           </div>
         ) : !bootError && iframeSrc ? (

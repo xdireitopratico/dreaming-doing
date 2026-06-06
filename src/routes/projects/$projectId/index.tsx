@@ -52,6 +52,7 @@ import { RateLimitIndicator } from "@/components/editor/RateLimitIndicator";
 import { SnapshotsSheet } from "@/components/editor/SnapshotsSheet";
 import { useSSE } from "@/hooks/useSSE";
 import { usePreviewBoot } from "@/hooks/usePreviewBoot";
+import { usePreviewIdle } from "@/hooks/usePreviewIdle";
 import { useAutoPublish } from "@/hooks/useAutoPublish";
 import { buildPreviewUrl } from "@/lib/project-routes";
 import { useEditorTelemetry } from "@/hooks/useEditorTelemetry";
@@ -150,7 +151,6 @@ function EditorPage() {
 
   // ─── Hooks ───────────────────────────────────────────────────────────
   const sse = useSSE();
-  const previewBoot = usePreviewBoot(projectId);
   const publishFn = useServerFn(publishProject);
   useWorkspacePresets();
 
@@ -238,6 +238,9 @@ function EditorPage() {
   const autoAgentRunAttemptedRef = useRef<string | null>(null);
 
   const devUrl = (project?.meta as { previewUrl?: string } | null)?.previewUrl ?? null;
+
+  const { idle: previewIdle } = usePreviewIdle(activeView === "preview" && !!devUrl);
+  const previewBoot = usePreviewBoot(projectId, { idle: previewIdle });
 
   const connectedKinds = useMemo(
     () =>
@@ -986,6 +989,7 @@ function EditorPage() {
                         reloadNonce={previewReloadNonce}
                         agentHasRun={agentHasRun}
                         e2bConnected={e2bConnected}
+                        previewIdle={previewIdle}
                         projectName={project?.name}
                         device={previewDevice}
                         onImportRepo={(url) => {

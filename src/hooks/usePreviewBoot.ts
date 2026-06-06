@@ -26,12 +26,20 @@ type BootOpts = {
 };
 
 const RETRY_DELAYS_MS = [0, 5_000, 15_000, 30_000];
+const PROBE_FAIL_BEFORE_FORCE = 4;
 
-export function usePreviewBoot(projectId: string) {
+type UsePreviewBootOpts = {
+  /** Preview em repouso — não faz polling probeOnly. */
+  idle?: boolean;
+};
+
+export function usePreviewBoot(projectId: string, opts?: UsePreviewBootOpts) {
+  const idle = opts?.idle ?? false;
   const [booting, setBooting] = useState(false);
   const [lastError, setLastError] = useState<string | null>(null);
   const [warming, setWarming] = useState(false);
   const bootAttemptsRef = useRef(0);
+  const probeFailuresRef = useRef(0);
   const qc = useQueryClient();
 
   const callPreviewBoot = useCallback(
@@ -82,13 +90,22 @@ export function usePreviewBoot(projectId: string) {
   const boot = useCallback(
     async (opts?: BootOpts) => {
       if (opts?.probeOnly) {
+        if (idle) return null;
         try {
           const body = await callPreviewBoot({ ...opts, silent: true });
           if (body?.ready) {
+            probeFailuresRef.current = 0;
             setWarming(false);
             await qc.invalidateQueries({ queryKey: ["project", projectId] });
             if (body.published && body.publishedUrl) {
               toast.success("Site no ar", { description: body.publishedUrl, duration: 5000 });
+            }
+          } else if (body?.url) {
+            probeFailuresRef.current += 1;
+            if (probeFailuresRef.current >= PROBE_FAIL_BEFORE_FORCE) {
+              probeFailuresRef.current = 0;
+              logEditorTelemetryEvent("preview", "probe_reboot", "info", projectId);
+              void boot({ force: true, silent: true });
             }
           }
           return body?.url ?? null;
@@ -134,7 +151,7 @@ export function usePreviewBoot(projectId: string) {
         setBooting(false);
       }
     },
-    [callPreviewBoot, projectId, qc],
+    [callPreviewBoot, projectId, qc, idle],
   );
 
   const bootWithRetry = useCallback(
@@ -154,7 +171,10 @@ export function usePreviewBoot(projectId: string) {
   );
 
   useEffect(() => {
-    if (!warming) return;
+    if (!warming || idle) {
+      if (idle) setWarming(false);
+      return;
+    }
     const interval = window.setInterval(() => {
       void boot({ probeOnly: true, silent: true });
     }, 5_000);
@@ -163,7 +183,7 @@ export function usePreviewBoot(projectId: string) {
       window.clearInterval(interval);
       window.clearTimeout(timeout);
     };
-  }, [warming, boot]);
+  }, [warming, boot, idle]);
 
   return {
     booting,

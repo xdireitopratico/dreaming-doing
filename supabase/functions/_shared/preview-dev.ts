@@ -4,6 +4,7 @@ import type { E2bRestSandbox } from "./e2b-rest.ts";
 
 export const PREVIEW_TTL_MS = 25 * 60 * 1000;
 export const PROBE_ATTEMPTS = 3;
+export const PROBE_ATTEMPTS_AFTER_BOOT = 10;
 export const PROBE_INTERVAL_MS = 2000;
 export const PROBE_FETCH_MS = 4000;
 

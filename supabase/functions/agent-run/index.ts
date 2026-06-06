@@ -36,12 +36,9 @@ import { FORGE_CORS_HEADERS, corsPreflightResponse } from "../_shared/cors.ts";
 import { restoreExecutionLogFromRows } from "./executionLogMeta.ts";
 import { runAgentViaE2bWorker, supportsE2bWorker } from "./worker-run.ts";
 import { buildSandboxEnv } from "./worker-bootstrap.ts";
+import { RUNNER_SOURCE } from "./runner-source.ts";
 
 const runningLocks = new Map<string, Promise<unknown>>();
-
-const RUNNER_SOURCE = await Deno.readTextFile(
-  new URL("./worker/runner.mjs", import.meta.url),
-);
 
 const corsHeaders = FORGE_CORS_HEADERS;
 
