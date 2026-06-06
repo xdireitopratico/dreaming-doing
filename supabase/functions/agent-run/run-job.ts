@@ -43,6 +43,8 @@ export type AgentJobParams = {
   sessionKindRaw?: string;
   enabledSkillIds: string[];
   enabledMcpIds: string[];
+  /** Fase 4.6 plan mode: emite plan_proposed + pausa pra aprovação. */
+  planMode?: boolean;
 };
 
 function isRobinMode(p?: AgentPreferencesPayload): boolean {
@@ -80,6 +82,7 @@ export async function executeAgentJob(
   const {
     projectId, conversationId, userId, agentRunId, resumeRun,
     preferences, sessionKindRaw, enabledSkillIds, enabledMcpIds,
+    planMode = false,
   } = params;
 
   const { data: project } = await supabase
@@ -247,7 +250,7 @@ export async function executeAgentJob(
     projectTemplate,
     stackAddon,
     tasteStart
-      ? { maxSteps: 14, tasteStart: true, sessionAddon: sessionExt.addon, userSkillNames: sessionExt.skillNames, runId: agentRunId }
+      ? { maxSteps: 14, tasteStart: true, sessionAddon: sessionExt.addon, userSkillNames: sessionExt.skillNames, runId: agentRunId, planMode }
       : {
         sessionAddon: sessionExt.addon,
         userSkillNames: sessionExt.skillNames,
@@ -257,6 +260,7 @@ export async function executeAgentJob(
         complexityScore: loadedCheckpoint?.extra.complexityScore,
         maxStepsFromCheckpoint: loadedCheckpoint?.extra.maxStepsLimit,
         runId: agentRunId,
+        planMode,
       },
   );
 

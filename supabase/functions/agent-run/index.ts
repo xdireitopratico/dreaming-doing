@@ -2,7 +2,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 
 import { ToolRegistry } from "./registry.ts";
-import { AgentLoop } from "./loop.ts";
+import { AgentLoop, resolvePlanDecision } from "./loop.ts";
 import { createSandboxProvider } from "./sandbox.ts";
 import { registerFsTools } from "./tools/fs.ts";
 import { registerShellTool } from "./tools/shell.ts";
@@ -40,6 +40,7 @@ import { buildSandboxEnv } from "./sandbox-env.ts";
 import { enqueueAgentChunk, invokeAgentWorker } from "../_shared/agent-queue.ts";
 import { appendStreamEvent, fetchStreamEventsSince } from "../_shared/agent-stream.ts";
 import { executeAgentJob } from "./run-job.ts";
+import { validateApprovedSteps } from "./plan-mode.ts";
 const runningLocks = new Map<string, Promise<unknown>>();
 
 const corsHeaders = FORGE_CORS_HEADERS;
@@ -136,6 +137,97 @@ Deno.serve(async (req) => {
       return json({ ok: true });
     }
 
+    if (body.action === "plan_approve" || body.action === "plan_reject") {
+      const runId = body.runId as string | undefined;
+      const planId = body.planId as string | undefined;
+      if (!runId || !planId) {
+        return json({ error: "runId e planId obrigatórios" }, 400);
+      }
+
+      const { data: run } = await supabase
+        .from("agent_runs")
+        .select("id, user_id, project_id, status, meta")
+        .eq("id", runId)
+        .maybeSingle();
+
+      if (!run || run.user_id !== userData.user.id) {
+        return json({ error: "Run não encontrada" }, 404);
+      }
+
+      const meta = (run.meta ?? {}) as Record<string, unknown>;
+      const pendingPlan = meta.pendingPlan as Record<string, unknown> | null;
+      if (!pendingPlan || pendingPlan.planId !== planId) {
+        return json({ error: "Plano não corresponde (stale ou já decidido)" }, 409);
+      }
+      if (pendingPlan.decision) {
+        return json({ error: "Plano já decidido", already: true }, 409);
+      }
+
+      if (body.action === "plan_reject") {
+        const reason = typeof body.reason === "string" ? body.reason : "";
+        const decision = { action: "reject" as const, reason };
+        // Sinaliza o resolver in-process (fast path) e o poll cross-process.
+        const resolvedInProcess = resolvePlanDecision(runId, planId, decision);
+        const now = new Date().toISOString();
+        const updatedMeta: Record<string, unknown> = {
+          ...meta,
+          pendingPlan: { ...pendingPlan, decision, decidedAt: now },
+          planMode: true,
+        };
+        await supabase
+          .from("agent_runs")
+          .update({ status: "rejected", finished_at: now, meta: updatedMeta })
+          .eq("id", runId);
+        logger.event("agent_run.plan_rejected", {
+          runId,
+          planId,
+          reason: reason.slice(0, 200),
+          inProcess: resolvedInProcess,
+        });
+        return json({ ok: true, resolvedInProcess });
+      }
+
+      // plan_approve
+      const originalSteps = (pendingPlan.steps as unknown[]) ?? [];
+      const approvedValidation = validateApprovedSteps(
+        // O validador espera PlanStep[] mas só usa .id; rebuild a partir de pendingPlan.steps
+        originalSteps.map((s) => {
+          const r = (s ?? {}) as Record<string, unknown>;
+          return {
+            id: String(r.id ?? ""),
+            type: (r.type as never) ?? "custom",
+            description: String(r.description ?? ""),
+            filePath: typeof r.filePath === "string" ? r.filePath : undefined,
+            estimatedCost: typeof r.estimatedCost === "number" ? r.estimatedCost : 0.002,
+            enabled: r.enabled !== false,
+          };
+        }),
+        body.steps,
+      );
+      if (!approvedValidation.ok) {
+        return json({ error: approvedValidation.reason }, 400);
+      }
+      const decision = { action: "approve" as const, steps: approvedValidation.steps };
+      const resolvedInProcess = resolvePlanDecision(runId, planId, decision);
+      const now = new Date().toISOString();
+      const updatedMeta: Record<string, unknown> = {
+        ...meta,
+        pendingPlan: { ...pendingPlan, decision, decidedAt: now },
+        planMode: true,
+      };
+      await supabase
+        .from("agent_runs")
+        .update({ status: "running", meta: updatedMeta })
+        .eq("id", runId);
+      logger.event("agent_run.plan_approved", {
+        runId,
+        planId,
+        stepCount: approvedValidation.steps.length,
+        inProcess: resolvedInProcess,
+      });
+      return json({ ok: true, resolvedInProcess, steps: approvedValidation.steps });
+    }
+
     projectId = typeof body.projectId === "string" ? body.projectId : undefined;
     const conversationId = body.conversationId;
     const preferences = body.preferences as AgentPreferencesPayload | undefined;
@@ -143,6 +235,7 @@ Deno.serve(async (req) => {
     const tasteActionRaw = body.tasteAction as string | undefined;
     const resumeRun = body.resume === true;
     const autoResume = body.autoResume === true;
+    const planMode = body.planMode !== false; // Fase 4.6: default ON; opt-out com planMode=false
     const enabledSkillIds = normalizeIdList(body.enabledSkillIds);
     const enabledMcpIds = normalizeIdList(body.enabledMcpIds);
     const sessionExt = await buildSessionExtensionsPrompt(enabledSkillIds, enabledMcpIds);
@@ -737,6 +830,7 @@ Deno.serve(async (req) => {
       sessionKindRaw,
       enabledSkillIds,
       enabledMcpIds,
+      planMode,
     };
 
     const queuePayload = {
