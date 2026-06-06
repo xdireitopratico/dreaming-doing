@@ -564,6 +564,10 @@ Deno.serve(async (req) => {
         canceled?: boolean;
         summary?: string;
         toolsUsed?: string[];
+        totalInputTokens?: number;
+        totalOutputTokens?: number;
+        totalTokens?: number;
+        costUsd?: number;
       },
     ) => {
       if (!agentRunId) return;
@@ -591,6 +595,10 @@ Deno.serve(async (req) => {
             ...prevMeta,
             ...(result.summary ? { summary: result.summary } : {}),
             ...(result.toolsUsed?.length ? { toolsUsed: result.toolsUsed } : {}),
+            ...(typeof result.totalTokens === "number" ? { totalTokens: result.totalTokens } : {}),
+            ...(typeof result.totalInputTokens === "number" ? { totalInputTokens: result.totalInputTokens } : {}),
+            ...(typeof result.totalOutputTokens === "number" ? { totalOutputTokens: result.totalOutputTokens } : {}),
+            ...(typeof result.costUsd === "number" ? { costUsd: result.costUsd } : {}),
           },
           ...(result.canceled ? { canceled_at: new Date().toISOString() } : {}),
         })

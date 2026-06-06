@@ -203,6 +203,10 @@ export class AgentLoop {
     resumable?: boolean;
     canceled?: boolean;
     toolsUsed?: string[];
+    totalInputTokens?: number;
+    totalOutputTokens?: number;
+    totalTokens?: number;
+    costUsd?: number;
   }> {
     if (!this.resumeRun) {
       this.state.executionLog = [];
@@ -545,8 +549,25 @@ export class AgentLoop {
     const summary = finalMsg?.content ?? "Tarefa concluída.";
     await this.persistFinal(summary);
     await this.clearCheckpoint();
-    this.emit("done", { summary });
-    return { ok: true, summary, steps: loopStep, toolsUsed: [...toolsUsed] };
+    const tokens = this.compression.getTotalTokens();
+    const costUsd = this.compression.getEstimatedCostUsd(this.router.mainCfg.model);
+    this.emit("done", {
+      summary,
+      totalInputTokens: tokens.input,
+      totalOutputTokens: tokens.output,
+      totalTokens: tokens.total,
+      costUsd,
+    });
+    return {
+      ok: true,
+      summary,
+      steps: loopStep,
+      toolsUsed: [...toolsUsed],
+      totalInputTokens: tokens.input,
+      totalOutputTokens: tokens.output,
+      totalTokens: tokens.total,
+      costUsd,
+    };
   }
 
   private async gatherContext(): Promise<void> {

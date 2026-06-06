@@ -18,6 +18,8 @@ export class CompressionManager {
   private turnCount = 0;
   private lastInputTokens = 0;
   private lastEstimatedTokens = 0;
+  private totalInputTokens = 0;
+  private totalOutputTokens = 0;
   private onNotify: CompressionNotify | null;
 
   constructor(summarizer: LLMProvider, onNotify: CompressionNotify | null = null) {
@@ -30,12 +32,54 @@ export class CompressionManager {
     this.turnCount = 0;
     this.lastInputTokens = 0;
     this.lastEstimatedTokens = 0;
+    this.totalInputTokens = 0;
+    this.totalOutputTokens = 0;
   }
 
-  /** Registra usage.input_tokens da última chamada LLM (C17). */
+  /** Custo estimado em USD por 1M tokens (input/output separados). Espelha useSSE.ts MODEL_COSTS. */
+  private static readonly MODEL_COSTS: Record<string, { input: number; output: number }> = {
+    "claude-sonnet-4-20250514": { input: 3, output: 15 },
+    "claude-opus-4-20250514": { input: 15, output: 75 },
+    "gpt-4o": { input: 2.5, output: 10 },
+    "gpt-4.1": { input: 2, output: 8 },
+    "grok-3": { input: 3, output: 15 },
+    "grok-3-mini": { input: 0.3, output: 0.5 },
+    "gemini-2.5-pro": { input: 1.25, output: 10 },
+    "gemini-2.5-flash": { input: 0.15, output: 0.6 },
+    "llama-3.3-70b-versatile": { input: 0, output: 0 },
+    "meta/llama-3.3-70b-instruct": { input: 0, output: 0 },
+    default: { input: 1, output: 3 },
+  };
+
+  /** Registra usage.input_tokens da última chamada LLM (C17) + acumula totais. */
   recordUsage(usage: ChatResponse["usage"] | undefined): void {
     const normalized = normalizeChatUsage(usage);
-    if (normalized) this.lastInputTokens = normalized.input_tokens;
+    if (normalized) {
+      this.lastInputTokens = normalized.input_tokens;
+      this.totalInputTokens += normalized.input_tokens;
+      this.totalOutputTokens += normalized.output_tokens;
+    }
+  }
+
+  getLastInputTokens(): number {
+    return this.lastInputTokens;
+  }
+
+  /** Total de tokens consumidos nesta run (input + output). */
+  getTotalTokens(): { input: number; output: number; total: number } {
+    return {
+      input: this.totalInputTokens,
+      output: this.totalOutputTokens,
+      total: this.totalInputTokens + this.totalOutputTokens,
+    };
+  }
+
+  /** Custo estimado em USD baseado no modelo principal. */
+  getEstimatedCostUsd(model: string | null): number {
+    const costs = CompressionManager.MODEL_COSTS[model ?? "default"] ?? CompressionManager.MODEL_COSTS.default;
+    const inCost = (this.totalInputTokens / 1_000_000) * costs.input;
+    const outCost = (this.totalOutputTokens / 1_000_000) * costs.output;
+    return Number((inCost + outCost).toFixed(6));
   }
 
   getLastInputTokens(): number {

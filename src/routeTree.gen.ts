@@ -15,6 +15,7 @@ import { Route as OnboardingRouteImport } from './routes/onboarding'
 import { Route as ModelsRouteImport } from './routes/models'
 import { Route as McpRouteImport } from './routes/mcp'
 import { Route as HealthzRouteImport } from './routes/healthz'
+import { Route as CostsRouteImport } from './routes/costs'
 import { Route as ConnectorsRouteImport } from './routes/connectors'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as ApiKeysRouteImport } from './routes/api-keys'
@@ -52,6 +53,11 @@ const McpRoute = McpRouteImport.update({
 const HealthzRoute = HealthzRouteImport.update({
   id: '/healthz',
   path: '/healthz',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CostsRoute = CostsRouteImport.update({
+  id: '/costs',
+  path: '/costs',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ConnectorsRoute = ConnectorsRouteImport.update({
@@ -102,6 +108,7 @@ export interface FileRoutesByFullPath {
   '/api-keys': typeof ApiKeysRoute
   '/auth': typeof AuthRoute
   '/connectors': typeof ConnectorsRoute
+  '/costs': typeof CostsRoute
   '/healthz': typeof HealthzRoute
   '/mcp': typeof McpRoute
   '/models': typeof ModelsRoute
@@ -118,6 +125,7 @@ export interface FileRoutesByTo {
   '/api-keys': typeof ApiKeysRoute
   '/auth': typeof AuthRoute
   '/connectors': typeof ConnectorsRoute
+  '/costs': typeof CostsRoute
   '/healthz': typeof HealthzRoute
   '/mcp': typeof McpRoute
   '/models': typeof ModelsRoute
@@ -135,6 +143,7 @@ export interface FileRoutesById {
   '/api-keys': typeof ApiKeysRoute
   '/auth': typeof AuthRoute
   '/connectors': typeof ConnectorsRoute
+  '/costs': typeof CostsRoute
   '/healthz': typeof HealthzRoute
   '/mcp': typeof McpRoute
   '/models': typeof ModelsRoute
@@ -153,6 +162,7 @@ export interface FileRouteTypes {
     | '/api-keys'
     | '/auth'
     | '/connectors'
+    | '/costs'
     | '/healthz'
     | '/mcp'
     | '/models'
@@ -169,6 +179,7 @@ export interface FileRouteTypes {
     | '/api-keys'
     | '/auth'
     | '/connectors'
+    | '/costs'
     | '/healthz'
     | '/mcp'
     | '/models'
@@ -185,6 +196,7 @@ export interface FileRouteTypes {
     | '/api-keys'
     | '/auth'
     | '/connectors'
+    | '/costs'
     | '/healthz'
     | '/mcp'
     | '/models'
@@ -202,6 +214,7 @@ export interface RootRouteChildren {
   ApiKeysRoute: typeof ApiKeysRoute
   AuthRoute: typeof AuthRoute
   ConnectorsRoute: typeof ConnectorsRoute
+  CostsRoute: typeof CostsRoute
   HealthzRoute: typeof HealthzRoute
   McpRoute: typeof McpRoute
   ModelsRoute: typeof ModelsRoute
@@ -255,6 +268,13 @@ declare module '@tanstack/react-router' {
       path: '/healthz'
       fullPath: '/healthz'
       preLoaderRoute: typeof HealthzRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/costs': {
+      id: '/costs'
+      path: '/costs'
+      fullPath: '/costs'
+      preLoaderRoute: typeof CostsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/connectors': {
@@ -322,6 +342,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiKeysRoute: ApiKeysRoute,
   AuthRoute: AuthRoute,
   ConnectorsRoute: ConnectorsRoute,
+  CostsRoute: CostsRoute,
   HealthzRoute: HealthzRoute,
   McpRoute: McpRoute,
   ModelsRoute: ModelsRoute,
