@@ -106,6 +106,34 @@ export interface IntentAnalysis {
   summary: string;
 }
 
+export type PlanStepType =
+  | "create_file"
+  | "edit_file"
+  | "shell_exec"
+  | "install_dep"
+  | "observe"
+  | "custom";
+
+export interface PlanStep {
+  id: string;
+  type: PlanStepType;
+  description: string;
+  filePath?: string;
+  estimatedCost?: number;
+  enabled: boolean;
+}
+
+export interface ProposedPlan {
+  planId: string;
+  summary: string;
+  steps: PlanStep[];
+  ttlMs: number;
+  /** Decisão do cliente (preenchida quando aprovada/rejeitada). */
+  decision?: { action: "approve"; steps: PlanStep[] } | { action: "reject"; reason?: string };
+  /** ISO timestamp em que o plano foi proposto. */
+  proposedAt: string;
+}
+
 export interface CheckResult {
   name: string;
   ok: boolean;
@@ -136,6 +164,8 @@ export interface AgentState {
   executionLog: string[];
   retryFeedback: string | null;
   totalSteps: number;
+  /** Plano pendente aguardando aprovação do usuário (Fase 4.6 plan mode). */
+  pendingPlan?: ProposedPlan | null;
 }
 
 export enum LoopPhase {
