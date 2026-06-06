@@ -111,15 +111,11 @@ async function processOneChunk(msg: AgentChunkMessage, msgId: number): Promise<v
     appendStreamEvent(supabase, msg.runId, type, { type, ...data }).catch(() => {});
   };
 
-  // Pre-check: if already canceled (e.g. user hit stop between enqueue and worker pick), short-circuit without running
+  // Pre-check: if already finalized (canceled, completed, failed), short-circuit without running.
+  // This prevents re-execution when PGMQ delete fails silently and the message re-appears.
   const { data: preRun } = await supabase.from("agent_runs").select("canceled_at, status").eq("id", msg.runId).maybeSingle();
-  if (preRun?.canceled_at || preRun?.status === "canceled") {
+  if (preRun?.canceled_at || preRun?.status === "canceled" || preRun?.status === "completed" || preRun?.status === "failed") {
     await deleteAgentChunk(supabase, msgId);
-    const canceledResult = { ok: false, error: "Canceled before execution", steps: 0, canceled: true };
-    await finalizeRun(supabase, msg.runId, canceledResult);
-    await appendStreamEvent(supabase, msg.runId, "canceled", { message: "Cancelado antes de iniciar chunk" });
-    await appendStreamEvent(supabase, msg.runId, "finish", { ...canceledResult, resumable: false });
-    // IMPORTANT: do NOT drain pending on cancel — this was causing "stop doesn't stop, next msg auto-starts"
     return;
   }
 
@@ -139,7 +135,11 @@ async function processOneChunk(msg: AgentChunkMessage, msgId: number): Promise<v
   const chunkCount = ((meta.data?.meta as Record<string, unknown>)?.serverChunks as number) ?? 0;
 
   if (!result.ok && result.resumable && !result.canceled && chunkCount < MAX_SERVER_CHUNKS) {
-    await deleteAgentChunk(supabase, msgId);
+    const deleted = await deleteAgentChunk(supabase, msgId);
+    if (!deleted) {
+      await finalizeRun(supabase, msg.runId, { ok: false, error: "PGMQ delete failed", steps: result.steps });
+      return;
+    }
     await supabase.from("agent_runs").update({
       meta: { ...(meta.data?.meta as object ?? {}), serverChunks: chunkCount + 1 },
     }).eq("id", msg.runId);
@@ -153,7 +153,11 @@ async function processOneChunk(msg: AgentChunkMessage, msgId: number): Promise<v
     return;
   }
 
-  await deleteAgentChunk(supabase, msgId);
+  const deleted = await deleteAgentChunk(supabase, msgId);
+  if (!deleted) {
+    await finalizeRun(supabase, msg.runId, { ok: false, error: "PGMQ delete failed", steps: result.steps });
+    return;
+  }
   await finalizeRun(supabase, msg.runId, result);
   await appendStreamEvent(supabase, msg.runId, "finish", {
     type: "finish",
@@ -161,8 +165,6 @@ async function processOneChunk(msg: AgentChunkMessage, msgId: number): Promise<v
     resumable: !result.ok && !result.canceled,
   });
 
-  // Only drain (auto-start next queued) on clean successful completion that was not a gate/await.
-  // Cancel must never auto-drain — this fixes "stop agent" continuing the chain.
   if (result.ok && !result.canceled) {
     await drainPendingMessage(supabase, msg.projectId);
     await invokeAgentWorker(SUPABASE_URL, SERVICE_KEY);

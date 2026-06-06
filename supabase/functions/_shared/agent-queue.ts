@@ -60,14 +60,20 @@ export async function readAgentChunk(
 export async function deleteAgentChunk(
   supabase: SupabaseClient,
   msgId: number,
-): Promise<void> {
+): Promise<boolean> {
   try {
-    await supabase.schema("pgmq_public").rpc("delete", {
+    const { error } = await supabase.schema("pgmq_public").rpc("delete", {
       queue_name: AGENT_CHUNKS_QUEUE,
       msg_id: msgId,
     });
-  } catch {
-    /* fila indisponível */
+    if (error) {
+      logger.warn("agent_queue.delete_failed", { msgId, error: error.message });
+      return false;
+    }
+    return true;
+  } catch (e) {
+    logger.warn("agent_queue.delete_error", { msgId, error: (e as Error).message });
+    return false;
   }
 }
 
