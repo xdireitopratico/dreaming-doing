@@ -11,6 +11,8 @@ type BootResult = {
   reused?: boolean;
   ready?: boolean;
   probeOnly?: boolean;
+  published?: boolean;
+  publishedUrl?: string | null;
   logs?: string;
   error?: string;
 };
@@ -80,6 +82,9 @@ export function usePreviewBoot(projectId: string) {
           if (body?.ready) {
             setWarming(false);
             await qc.invalidateQueries({ queryKey: ["project", projectId] });
+            if (body.published && body.publishedUrl) {
+              toast.success("Site no ar", { description: body.publishedUrl, duration: 5000 });
+            }
           }
           return body?.url ?? null;
         } catch {
@@ -98,7 +103,9 @@ export function usePreviewBoot(projectId: string) {
         await qc.invalidateQueries({ queryKey: ["project", projectId] });
         if (body.url) {
           if (body.ready === false) setWarming(true);
-          if (!body.reused && !opts?.silent) {
+          if (body.published && body.publishedUrl) {
+            toast.success("Site no ar", { description: body.publishedUrl, duration: 5000 });
+          } else if (!body.reused && !opts?.silent) {
             toast.success("Preview conectado");
           }
           logEditorTelemetryEvent(

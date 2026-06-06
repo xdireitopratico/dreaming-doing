@@ -17,6 +17,8 @@ interface EditorWorkspaceHeaderProps {
   onViewChange: (view: EditorMainView) => void;
   onShare?: () => void;
   onPublish?: () => void;
+  publishLabel?: string;
+  publishDisabled?: boolean;
   integrations?: EditorIntegrationsMenuProps;
   /** Preview navigation controls — only rendered when activeView === "preview". */
   preview?: {
@@ -41,6 +43,8 @@ export function EditorWorkspaceHeader({
   onViewChange,
   onShare,
   onPublish,
+  publishLabel = "Abrir site",
+  publishDisabled = false,
   integrations,
   preview,
 }: EditorWorkspaceHeaderProps) {
@@ -141,8 +145,14 @@ export function EditorWorkspaceHeader({
           <Share2 className="size-3.5" />
           Share
         </button>
-        <button type="button" className="forge-btn-publish" onClick={onPublish}>
-          Publish
+        <button
+          type="button"
+          className="forge-btn-publish"
+          onClick={onPublish}
+          disabled={publishDisabled || !onPublish}
+          title={publishDisabled ? "Aguardando preview ficar pronto" : "Abrir site publicado"}
+        >
+          {publishLabel}
         </button>
       </div>
     </div>

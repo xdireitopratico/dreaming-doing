@@ -14,6 +14,7 @@ import {
   PREVIEW_TTL_MS,
   probePreviewUrl,
 } from "../_shared/preview-dev.ts";
+import { autoPublishIfNeeded } from "../_shared/auto-publish.ts";
 import { FORGE_CORS_HEADERS, corsPreflightResponse } from "../_shared/cors.ts";
 
 const corsHeaders = FORGE_CORS_HEADERS;
@@ -58,13 +59,22 @@ Deno.serve(async (req) => {
 
     if (probeOnly && cached) {
       const ready = await probePreviewUrl(cached.url, 2);
+      let published = false;
+      let publishedUrl: string | null = null;
       if (ready) {
+        const nextMeta = { ...existing, previewReady: true, previewUrl: cached.url };
         await supabase
           .from("projects")
-          .update({
-            meta: { ...existing, previewReady: true },
-          })
+          .update({ meta: nextMeta })
           .eq("id", projectId);
+        const pub = await autoPublishIfNeeded(
+          supabase,
+          projectId,
+          userData.user.id,
+          nextMeta,
+        );
+        published = pub.published;
+        publishedUrl = pub.url ?? null;
       }
       return json({
         url: cached.url,
@@ -72,15 +82,33 @@ Deno.serve(async (req) => {
         reused: true,
         ready,
         probeOnly: true,
+        published,
+        publishedUrl,
       });
     }
 
     if (cached && !force) {
+      const ready = existing.previewReady === true;
+      let published = false;
+      let publishedUrl: string | null =
+        typeof existing.publishedUrl === "string" ? existing.publishedUrl : null;
+      if (ready) {
+        const pub = await autoPublishIfNeeded(
+          supabase,
+          projectId,
+          userData.user.id,
+          { ...existing, previewUrl: cached.url },
+        );
+        published = pub.published;
+        if (pub.url) publishedUrl = pub.url;
+      }
       return json({
         url: cached.url,
         expiresAt: cached.expiresAt,
         reused: true,
-        ready: existing.previewReady === true,
+        ready,
+        published,
+        publishedUrl,
       });
     }
 

@@ -52,6 +52,8 @@ import { RateLimitIndicator } from "@/components/editor/RateLimitIndicator";
 import { SnapshotsSheet } from "@/components/editor/SnapshotsSheet";
 import { useSSE } from "@/hooks/useSSE";
 import { usePreviewBoot } from "@/hooks/usePreviewBoot";
+import { useAutoPublish } from "@/hooks/useAutoPublish";
+import { buildPreviewUrl } from "@/lib/project-routes";
 import { useEditorTelemetry } from "@/hooks/useEditorTelemetry";
 import { logEditorTelemetryEvent } from "@/lib/editor-telemetry";
 import { publishProject } from "@/lib/publish.functions";
@@ -132,7 +134,7 @@ function EditorPage() {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [composerMode, setComposerMode] = useState<AgentComposerMode>("build");
   const [promptDraft, setPromptDraft] = useState<string | null>(null);
-  const [publishing, setPublishing] = useState(false);
+
   const [previewRoute, setPreviewRoute] = useState("/");
   const [previewReloadNonce, setPreviewReloadNonce] = useState(0);
   const [previewDevice, setPreviewDevice] = useState<"desktop" | "tablet" | "mobile">("desktop");
@@ -259,8 +261,21 @@ function EditorPage() {
         }
       : null,
   );
+  const projectMeta = (project?.meta as Record<string, unknown> | null) ?? null;
   const publishedUrl =
-    (project?.meta as { publishedUrl?: string } | null)?.publishedUrl ?? null;
+    typeof projectMeta?.publishedUrl === "string" ? projectMeta.publishedUrl : null;
+  const previewReady = projectMeta?.previewReady === true;
+
+  const autoPublish = useAutoPublish({
+    projectId,
+    devUrl,
+    publishedUrl,
+    previewReady,
+    enabled: isReactProject && e2bConnected,
+    booting: previewBoot.booting,
+    warming: previewBoot.warming,
+    publishFn,
+  });
 
   // ─── Realtime (canal editor-{projectId} + setAuth no AuthProvider) ───
   useEffect(() => {
@@ -648,51 +663,42 @@ function EditorPage() {
     exportProjectZip(projectId, project.name ?? "projeto");
   }, [projectId, project]);
 
-  const handlePublish = useCallback(async () => {
-    if (!devUrl && isReactProject) {
-      toast.info("Iniciando preview antes de publicar…");
-      const url = await previewBoot.bootWithRetry();
-      if (!url) return;
-    }
-    setPublishing(true);
-    logEditorTelemetryEvent("preview", "publish_start", "info", projectId);
-    try {
-      const res = await publishFn({ data: { projectId } });
-      if (res.needsPreview) {
-        toast.error("Inicie o preview ao vivo (E2B) antes de publicar.");
-        return;
-      }
-      if (res.url) {
-        logEditorTelemetryEvent("preview", "publish_ok", "ok", res.url.slice(0, 120));
-        toast.success("Publicado!", {
-          description: res.url,
-          action: {
-            label: "Abrir",
-            onClick: () => window.open(res.url!, "_blank", "noopener"),
-          },
-        });
-        qc.invalidateQueries({ queryKey: ["project", projectId] });
-      }
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : "Falha ao publicar";
-      logEditorTelemetryEvent("preview", "publish_fail", "error", msg.slice(0, 200));
-      toast.error(msg);
-    } finally {
-      setPublishing(false);
-    }
-  }, [devUrl, isReactProject, previewBoot, publishFn, projectId, qc]);
+  const liveSiteUrl = useMemo(() => {
+    const base = publishedUrl ?? devUrl;
+    if (!base) return null;
+    return buildPreviewUrl(base, previewRoute);
+  }, [publishedUrl, devUrl, previewRoute]);
 
-  const handleShare = useCallback(() => {
-    const url = publishedUrl ?? devUrl;
-    if (!url) {
-      toast.info("Publique ou inicie o preview para obter um link.");
+  const handleOpenLiveSite = useCallback(async () => {
+    if (liveSiteUrl) {
+      window.open(liveSiteUrl, "_blank", "noopener");
       return;
     }
-    navigator.clipboard.writeText(url).then(
+    if (isReactProject) {
+      toast.info("Subindo preview…");
+      const url = await previewBoot.bootWithRetry();
+      if (url) window.open(buildPreviewUrl(url, previewRoute), "_blank", "noopener");
+    }
+  }, [liveSiteUrl, isReactProject, previewBoot, previewRoute]);
+
+  const handleShare = useCallback(() => {
+    if (!liveSiteUrl) {
+      toast.info("O link ficará disponível quando o preview subir.");
+      return;
+    }
+    navigator.clipboard.writeText(liveSiteUrl).then(
       () => toast.success("Link copiado para a área de transferência"),
-      () => toast.info(url),
+      () => toast.info(liveSiteUrl),
     );
-  }, [publishedUrl, devUrl]);
+  }, [liveSiteUrl]);
+
+  const publishButtonLabel = autoPublish.publishing
+    ? "Publicando…"
+    : autoPublish.isLive || liveSiteUrl
+      ? "Abrir site"
+      : previewBoot.booting || previewBoot.warming
+        ? "Subindo…"
+        : "Abrir site";
 
   // ─── Command Palette actions ────────────────────────────────────────
   const paletteActions: PaletteAction[] = useMemo(
@@ -769,7 +775,9 @@ function EditorPage() {
                 activeView={mainView}
                 onViewChange={handleMainViewChange}
                 onShare={handleShare}
-                onPublish={handlePublish}
+                onPublish={handleOpenLiveSite}
+                publishLabel={publishButtonLabel}
+                publishDisabled={!liveSiteUrl && (previewBoot.booting || previewBoot.warming || autoPublish.publishing)}
                 integrations={{
                   status: connectorStatus,
                   modes: connectorModes,
@@ -818,7 +826,7 @@ function EditorPage() {
                     tasteChatRemaining={tasteChatRemaining}
                     tasteStartRemaining={tasteStartRemaining}
                     onStartProject={handleStartProject}
-                    onDeploy={handlePublish}
+                    onDeploy={handleOpenLiveSite}
                   />
                 </div>
                 <SetupRail
