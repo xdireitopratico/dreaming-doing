@@ -143,7 +143,6 @@ export function EditorWorkspaceHeader({
         </button>
         <button type="button" className="forge-btn-share flex items-center gap-1.5" onClick={onShare}>
           <Share2 className="size-3.5" />
-          Share
         </button>
         <button
           type="button"
