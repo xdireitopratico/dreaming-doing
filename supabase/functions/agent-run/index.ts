@@ -22,6 +22,7 @@ import { logger, withCorrelationId, correlationIdFromRequest, currentCorrelation
 import { restoreExecutionLogFromRows } from "./executionLogMeta.ts";
 import { loadCheckpoint } from "./checkpoint.ts";
 import { appendStreamEvent } from "../_shared/agent-stream.ts";
+import { isServiceRoleRequest } from "../_shared/service-auth.ts";
 import type { ExecuteParams } from "./run-executor.ts";
 const runningLocks = new Map<string, Promise<unknown>>();
 
@@ -43,7 +44,7 @@ Deno.serve(async (req) => {
 
     const supabase = createClient(SUPABASE_URL, SERVICE_KEY);
     const token = (req.headers.get("Authorization") ?? "").replace("Bearer ", "");
-    const isServiceCall = token === SERVICE_KEY;
+    const isServiceCall = isServiceRoleRequest(token, SERVICE_KEY);
 
     // P0: Inngest → execute bypasses user auth (service role).
     if (body.action === "execute") {

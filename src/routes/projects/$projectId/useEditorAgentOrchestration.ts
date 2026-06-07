@@ -89,8 +89,6 @@ export function useEditorAgentOrchestration({
   previewIdle,
 }: UseEditorAgentOrchestrationParams) {
   const autoAgentRunAttemptedRef = useRef<string | null>(null);
-  const lastQueueDrainAtRef = useRef(0);
-  const QUEUE_DRAIN_COOLDOWN_MS = 10_000;
   /** Evita boot duplicado do preview entre fim do agente e refetch do previewUrl. */
   const previewBootAfterAgentRef = useRef(false);
 
@@ -218,21 +216,6 @@ export function useEditorAgentOrchestration({
 
       if (activeRun?.id) {
         await agent.watch(projectId, conversation.id, activeRun.id);
-        return;
-      }
-
-      const { count: pendingQueue } = await supabase
-        .from("agent_pending_messages")
-        .select("id", { count: "exact", head: true })
-        .eq("project_id", projectId);
-
-      if ((pendingQueue ?? 0) > 0) {
-        const now = Date.now();
-        if (now - lastQueueDrainAtRef.current >= QUEUE_DRAIN_COOLDOWN_MS) {
-          lastQueueDrainAtRef.current = now;
-          logEditorTelemetryEvent("agent", "queue_drain_request", "info", String(pendingQueue));
-          void agent.drainQueue(projectId, conversation.id, "build");
-        }
         return;
       }
 

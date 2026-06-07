@@ -1,4 +1,4 @@
-import { createClient } from "@supabase/supabase-js";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 export type AgentRunStatus =
   | "pending"
@@ -34,22 +34,32 @@ export type ExecuteResponse = {
 
 export type ExecuteRequest = AgentRunRequest & { action: "execute" };
 
-const supabaseUrl = process.env.SUPABASE_URL ?? "";
-const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
-
-if (!supabaseUrl || !serviceKey) {
-  throw new Error(
-    "SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required for Inngest functions",
-  );
+function requireEnv(): { url: string; serviceKey: string } {
+  const url = process.env.SUPABASE_URL ?? process.env.VITE_SUPABASE_URL ?? "";
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
+  if (!url || !serviceKey) {
+    throw new Error(
+      "SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required for Inngest functions",
+    );
+  }
+  return { url, serviceKey };
 }
 
-export const supabaseAdmin = createClient(supabaseUrl, serviceKey, {
-  auth: { autoRefreshToken: false, persistSession: false },
-});
+let adminClient: SupabaseClient | null = null;
+
+function getSupabaseAdmin(): SupabaseClient {
+  if (!adminClient) {
+    const { url, serviceKey } = requireEnv();
+    adminClient = createClient(url, serviceKey, {
+      auth: { autoRefreshToken: false, persistSession: false },
+    });
+  }
+  return adminClient;
+}
 
 export async function callAgentRunExecutor(payload: ExecuteRequest): Promise<ExecuteResponse> {
-  const url = `${supabaseUrl}/functions/v1/agent-run`;
-  const response = await fetch(url, {
+  const { url, serviceKey } = requireEnv();
+  const response = await fetch(`${url}/functions/v1/agent-run`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -79,7 +89,7 @@ export async function callAgentRunExecutor(payload: ExecuteRequest): Promise<Exe
 }
 
 export async function getRunStatus(runId: string): Promise<AgentRunStatus | null> {
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await getSupabaseAdmin()
     .from("agent_runs")
     .select("status")
     .eq("id", runId)
@@ -98,7 +108,7 @@ export async function markRunFinal(
   if (status === "completed" || status === "failed" || status === "canceled") {
     patch.finished_at = new Date().toISOString();
   }
-  const { error } = await supabaseAdmin.from("agent_runs").update(patch).eq("id", runId);
+  const { error } = await getSupabaseAdmin().from("agent_runs").update(patch).eq("id", runId);
   if (error) throw new Error(`Failed to mark run ${runId} as ${status}: ${error.message}`);
 }
 
@@ -113,7 +123,8 @@ export type ContinueQueueResponse = {
 export async function drainPendingQueue(
   payload: AgentRunRequest,
 ): Promise<ContinueQueueResponse> {
-  const response = await fetch(`${supabaseUrl}/functions/v1/agent-run`, {
+  const { url, serviceKey } = requireEnv();
+  const response = await fetch(`${url}/functions/v1/agent-run`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
