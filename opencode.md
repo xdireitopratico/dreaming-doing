@@ -1,10 +1,10 @@
 # FORGE — opencode.md (Contexto Comprimido)
 
 ## 📍 Estado Atual
-- **Branch:** `main` @ `722c731`
-- **Deploy:** Supabase `dpduljngdurfpmaclffa` (agent-run + health) + Vercel (frontend)
+- **Branch:** `main` @ `ceba4f0`
+- **Deploy:** Supabase `dpduljngdurfpmaclffa` (agent-run + agent-worker + health) + Vercel (frontend)
 - **Stack:** TanStack Start + React 19 + Tailwind v4 + Supabase + E2B
-- **Último deploy:** **Fase 4.7 (Vibe Coding Saneado) concluída** — 3 fixes que destravam o uso real: (1) plan mode agora é opt-in via dropdown Chat/Plan/Build (default Chat), (2) E2B sandbox só nasce DEPOIS do agente criar arquivos (3 guardas: `getPreviewUrl` lazy, `ensure()` recusa projeto vazio, `allocateSandboxLocal` exige `project_files.count > 0`), (3) `qualify.ts` heuristic relaxada (3 regras, sem `len < 140` que travava 14 testes). Mais: migração `20260608000001` conserta CHECK do `agent_runs.status` que esquecia `awaiting_user`; cleanup matou 100 linhas de dead code em `index.ts`; 0 typecheck errors Deno + 0 tsc errors + 65/65 vitest + 51/51 deno test.
+- **Último deploy:** **Fase 4.7 (Vibe Coding Saneado) concluída** — 3 fixes que destravam o uso real: (1) plan mode agora é opt-in via dropdown Chat/Plan/Build (default Chat), (2) E2B sandbox só nasce DEPOIS do agente criar arquivos (3 guardas: `getPreviewUrl` lazy, `ensure()` recusa projeto vazio, `allocateSandboxLocal` exige `project_files.count > 0`), (3) `qualify.ts` heuristic relaxada (3 regras, sem `len < 140` que travava 14 testes). Mais: migração `20260608000002` (idempotente, com DO block) conserta CHECK do `agent_runs.status` que esquecia `awaiting_user`; cleanup matou 100 linhas de dead code em `index.ts`; 0 typecheck errors Deno + 0 tsc errors + 65/65 vitest + 51/51 deno test. 3 functions + 1 migration deployadas via `supabase functions deploy` + `supabase db push` (CLI auth token cached).
 - **Próxima fase:** Fase 5 — Arquitetura & Escala
 
 ---
