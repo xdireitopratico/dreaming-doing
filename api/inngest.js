@@ -1,7 +1,24 @@
 import { inngestHandler as handler } from "../dist/server/inngest-handler.js";
 
+function buildRequestUrl(req) {
+  const raw = req.url ?? "/api/inngest";
+  if (typeof raw === "string" && (raw.startsWith("http://") || raw.startsWith("https://"))) {
+    return raw;
+  }
+  const host = req.headers["x-forwarded-host"] || req.headers["host"] || "localhost";
+  const proto = req.headers["x-forwarded-proto"] || "https";
+  const path = String(raw).startsWith("/") ? String(raw) : `/${raw}`;
+  return `${proto}://${host}${path}`;
+}
+
 export default async function inngestHandler(req, res) {
-  const url = `${req.headers["x-forwarded-proto"] || "https"}://${req.headers["host"] || "localhost"}${req.url}`;
+  const host =
+    req.headers["x-forwarded-host"] ||
+    req.headers["host"] ||
+    process.env.VERCEL_URL ||
+    "dreaming-doing.vercel.app";
+  const proto = req.headers["x-forwarded-proto"] || "https";
+  const url = buildRequestUrl(req);
 
   const chunks = [];
   for await (const chunk of req) {
@@ -14,6 +31,8 @@ export default async function inngestHandler(req, res) {
     if (value == null) continue;
     headers.set(key, Array.isArray(value) ? value.join(", ") : String(value));
   }
+  // Inngest: new URL(req.url, `https://${host}`) — host vazio => base "https://" => crash
+  headers.set("host", String(host).split(",")[0].trim());
 
   const request = new Request(url, {
     method: req.method,
