@@ -1,12 +1,8 @@
 // index.ts — Edge Function agent-run (build: agentloop-only 2026-06-06).
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 
-import { ToolRegistry } from "./registry.ts";
-import { AgentLoop, resolvePlanDecision } from "./loop.ts";
+import { resolvePlanDecision } from "./loop.ts";
 import { createSandboxProvider } from "./sandbox.ts";
-import { registerFsTools } from "./tools/fs.ts";
-import { registerShellTool } from "./tools/shell.ts";
-import { LoopPhase, type AgentState } from "./types.ts";
 import {
   loadConnectorKeys,
   loadConnectorPools,
@@ -37,16 +33,17 @@ import { logger, withCorrelationId, correlationIdFromRequest, currentCorrelation
 import { restoreExecutionLogFromRows } from "./executionLogMeta.ts";
 import { loadCheckpoint } from "./checkpoint.ts";
 import { buildSandboxEnv } from "./sandbox-env.ts";
-import { enqueueAgentChunk, invokeAgentWorker } from "../_shared/agent-queue.ts";
 import { appendStreamEvent, fetchStreamEventsSince } from "../_shared/agent-stream.ts";
 import { executeAgentJob } from "./run-job.ts";
 import { validateApprovedSteps } from "./plan-mode.ts";
+import type { ExecuteParams } from "./run-executor.ts";
 const runningLocks = new Map<string, Promise<unknown>>();
 
 const corsHeaders = FORGE_CORS_HEADERS;
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+const INNGEST_EVENT_KEY = Deno.env.get("INNGEST_EVENT_KEY") ?? "";
 
 function isRobinMode(p?: AgentPreferencesPayload): boolean {
   return p?.mode === "robin" || p?.mode === "rob";
@@ -101,6 +98,59 @@ Deno.serve(async (req) => {
 
     const supabase = createClient(SUPABASE_URL, SERVICE_KEY);
     const token = (req.headers.get("Authorization") ?? "").replace("Bearer ", "");
+    const isServiceCall = token === SERVICE_KEY;
+
+    // P0: Inngest → execute bypasses user auth (service role).
+    if (body.action === "execute") {
+      if (!isServiceCall) {
+        return json({ error: "execute requer service role" }, 403);
+      }
+      const { executeAgentRun } = await import("./run-executor.ts");
+      const {
+        runId: eRunId,
+        projectId: eProjectId,
+        conversationId: eConvId,
+        userId: eUserId,
+        preferences: ePrefs,
+        sessionKind: eSession,
+        enabledSkillIds: eSkills,
+        enabledMcpIds: eMcps,
+        planMode: ePlanMode,
+        plan: ePlan,
+        planSourceRunId: ePlanSrc,
+        resume: eResume,
+      } = body as Record<string, unknown>;
+
+      if (!eRunId || !eProjectId || !eConvId || !eUserId) {
+        return json({ error: "runId, projectId, conversationId, userId obrigatórios" }, 400);
+      }
+
+      projectId = String(eProjectId);
+      logger.info("agent_run.execute", {
+        runId: String(eRunId),
+        projectId,
+        userId: String(eUserId),
+        planMode: ePlanMode === true,
+      });
+
+      const result = await executeAgentRun(supabase, {
+        runId: String(eRunId),
+        projectId: String(eProjectId),
+        conversationId: String(eConvId),
+        userId: String(eUserId),
+        preferences: (ePrefs as ExecuteParams["preferences"]) ?? null,
+        sessionKindRaw: typeof eSession === "string" ? eSession : null,
+        enabledSkillIds: Array.isArray(eSkills) ? (eSkills as string[]) : [],
+        enabledMcpIds: Array.isArray(eMcps) ? (eMcps as string[]) : [],
+        resume: eResume === true,
+        planMode: ePlanMode === true,
+        plan: typeof ePlan === "string" ? ePlan : undefined,
+        planSourceRunId: typeof ePlanSrc === "string" ? ePlanSrc : undefined,
+      });
+
+      return json(result);
+    }
+
     const { data: userData, error: uErr } = await supabase.auth.getUser(token);
     if (uErr || !userData?.user) return json({ error: "Não autenticado" }, 401);
 
@@ -124,22 +174,28 @@ Deno.serve(async (req) => {
       if (!run || run.user_id !== userData.user.id) {
         return json({ error: "Run não encontrada" }, 404);
       }
-      if (run.status !== "running" || run.canceled_at) {
+      if (run.status === "canceled" || run.canceled_at) {
         return json({ ok: true, already: true });
+      }
+      if (run.status === "completed" || run.status === "failed") {
+        return json({ ok: true, already: true, status: run.status });
       }
 
       const now = new Date().toISOString();
       await supabase
         .from("agent_runs")
-        .update({ canceled_at: now })
+        .update({
+          status: "canceled",
+          canceled_at: now,
+          finished_at: now,
+        })
         .eq("id", runId);
 
       // Also clear any queued pending messages for this project so stop truly stops the chain
-      // (worker will no longer auto-drain on canceled results).
       await supabase
         .from("agent_pending_messages")
         .delete()
-        .eq("project_id", run.project_id ?? projectId) // projectId may be in scope from outer
+        .eq("project_id", run.project_id ?? projectId)
         .eq("user_id", userData.user.id);
 
       return json({ ok: true });
@@ -389,13 +445,38 @@ Deno.serve(async (req) => {
       .limit(1)
       .maybeSingle();
 
-    const latestMeta = (activeRun?.meta ?? {}) as Record<string, unknown>;
-    const isAwaiting = activeRun?.status === "awaiting_user" || !!latestMeta.awaitingUser;
+    // Fallback: buscar runs completed que têm awaitingUser no meta
+    // (cobre dados históricos corrompidos pelo bug do finalizeRun)
+    let awaitingRun = activeRun;
+    if (!awaitingRun) {
+      const { data: completedAwaiting } = await supabase
+        .from("agent_runs")
+        .select("id, status, meta")
+        .eq("project_id", projectId)
+        .eq("status", "completed")
+        .not("meta->awaitingUser", "is", null)
+        .order("started_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (completedAwaiting) {
+        awaitingRun = completedAwaiting;
+        // Corrigir o status para refletir a realidade
+        await supabase.from("agent_runs")
+          .update({ status: "awaiting_user", finished_at: null })
+          .eq("id", completedAwaiting.id);
+      }
+    }
 
-    if ((runningLocks.has(projectId) || activeRun || isAwaiting) && !resumeRun) {
-      // Nota: para pendings de qualify ainda não temos a var allocateSandboxLocal (definida mais abaixo).
-      // Usamos um default conservador (true) aqui; o caminho principal de "primeira mensagem de interação"
-      // é pego pela decisão posterior + run-job protection.
+    const latestMeta = (awaitingRun?.meta ?? {}) as Record<string, unknown>;
+    const isAwaiting = awaitingRun?.status === "awaiting_user"
+      || awaitingRun?.status === "awaiting_plan_approval"
+      || !!latestMeta.awaitingUser;
+
+    // Se o run está ativamente rodando (não apenas esperando), enfileira.
+    // Se está awaiting_user/awaiting_plan_approval, NÃO enfileira — cria run de continuação.
+    const isRunning = awaitingRun?.status === "running" || runningLocks.has(projectId);
+
+    if (isRunning && !resumeRun && !isAwaiting) {
       await supabase.from("agent_pending_messages").insert({
         project_id: projectId,
         conversation_id: conversationId,
@@ -417,14 +498,14 @@ Deno.serve(async (req) => {
       const queueMsg = pendingCount === 1
         ? "Mensagem na fila — o agente processará quando terminar a tarefa atual."
         : `${pendingCount} mensagens na fila — processando em ordem.`;
-      if (useSSE && activeRun?.id) {
-        return streamEventsResponse(supabase, activeRun.id, () => {});
+      if (useSSE && awaitingRun?.id) {
+        return streamEventsResponse(supabase, awaitingRun.id, () => {});
       }
       return json({
         ok: true,
         queued: true,
         pendingCount,
-        activeRunId: activeRun?.id ?? null,
+        activeRunId: awaitingRun?.id ?? null,
         message: queueMsg,
       });
     }
@@ -804,24 +885,36 @@ Deno.serve(async (req) => {
       },
     ) => {
       if (!agentRunId) return;
-      const status = result.canceled
-        ? "canceled"
-        : result.ok
-          ? "completed"
-          : "failed";
 
-      const { data: existing } = await supabase
+      // Lê estado atual para NÃO sobrescrever status de espera
+      const { data: current } = await supabase
         .from("agent_runs")
-        .select("meta")
+        .select("status, meta")
         .eq("id", agentRunId)
         .maybeSingle();
-      const prevMeta = (existing?.meta ?? runMetaBase) as Record<string, unknown>;
+      const currentStatus = current?.status as string | undefined;
+      const currentMeta = (current?.meta ?? {}) as Record<string, unknown>;
+      const awaitingStates = ["awaiting_user", "awaiting_plan_approval"];
+      const isAwaiting = awaitingStates.includes(currentStatus ?? "") || !!currentMeta.awaitingUser || !!currentMeta.pendingPlan;
+
+      let status: string;
+      if (result.canceled) {
+        status = "canceled";
+      } else if (isAwaiting) {
+        status = currentStatus!; // Preserva awaiting_user ou awaiting_plan_approval
+      } else if (result.ok) {
+        status = "completed";
+      } else {
+        status = "failed";
+      }
+
+      const prevMeta = (current?.meta ?? runMetaBase) as Record<string, unknown>;
 
       await supabase
         .from("agent_runs")
         .update({
           status,
-          finished_at: new Date().toISOString(),
+          finished_at: isAwaiting ? null : new Date().toISOString(),
           steps: result.steps,
           error: result.error ?? null,
           meta: {
@@ -838,75 +931,7 @@ Deno.serve(async (req) => {
         .eq("id", agentRunId);
     };
 
-    const buildState = (): AgentState => {
-      if (loadedCheckpoint) {
-        const cp = loadedCheckpoint.state;
-        return {
-          ...cp,
-          projectId: projectId!,
-          conversationId: conversationId!,
-          userId: userData.user.id,
-          messages: cp.messages.length >= messages.length ? cp.messages : [...messages],
-          executionLog: cp.executionLog.length > 0 ? cp.executionLog : [...restoredExecutionLog],
-        };
-      }
-      return {
-        projectId: projectId!, conversationId: conversationId!, userId: userData.user.id,
-        messages: [...messages],
-        phase: LoopPhase.GATHER_CONTEXT,
-        currentStepIndex: 0,
-        context: null, intent: null, plan: null,
-        validationResults: [],
-        executionLog: [...restoredExecutionLog],
-        retryFeedback: null,
-        totalSteps: 0,
-      };
-    };
-
-    const makeLoop = (onEvent: (type: string, data: unknown) => void) => {
-      const streamEmit = (type: string, data: Record<string, unknown>) => onEvent(type, data);
-      const resilientMain = new ResilientLLM(mainCfg, robinPool, streamEmit);
-      const resilientCheap = resilientMain;
-      // Fase 4.7: o AgentLoop precisa de um ToolRegistry. O executeAgentJob
-      // (run-job.ts) cria o registry real e registra as tools. Aqui criamos
-      // um registry vazio só pra satisfazer o construtor — as tools só são
-      // usadas em run-job.ts.
-      const stubReg = new ToolRegistry();
-
-      return new AgentLoop(
-        stubReg,
-        resilientMain,
-        supabase,
-        buildState(),
-        (event) => onEvent(event.type, event.data),
-        connectorKeys,
-        { main: resilientMain, cheap: resilientCheap },
-        effectiveRobin,
-        projectTemplate,
-        stackAddon,
-        tasteStart
-          ? {
-            maxSteps: 14,
-            tasteStart: true,
-            sessionAddon: sessionExt.addon,
-            userSkillNames: sessionExt.skillNames,
-            runId: agentRunId,
-          }
-          : {
-            sessionAddon: sessionExt.addon,
-            userSkillNames: sessionExt.skillNames,
-            resumeRun,
-            hasCheckpoint: !!loadedCheckpoint,
-            resumePhase: loadedCheckpoint?.phase ?? null,
-            complexityScore: loadedCheckpoint?.extra.complexityScore,
-            maxStepsFromCheckpoint: loadedCheckpoint?.extra.maxStepsLimit,
-            runId: agentRunId,
-          },
-      );
-    };
-
-    // Canônico: AgentLoop (run-job.ts). Chunks longos: PGMQ + agent-worker (servidor).
-    // Fallback inline se PGMQ indisponível.
+    // --- jobParams segue abaixo ---
 
     const jobParams = {
       projectId,
@@ -923,23 +948,6 @@ Deno.serve(async (req) => {
       // Para prompts de "quero só interação/perguntas" em projeto sem sandbox ainda → false.
       // Isso + a proteção em run-job.ts = zero load de E2B para esses casos.
       allocateSandbox: allocateSandboxLocal,
-    };
-
-    const queuePayload = {
-      runId: agentRunId!,
-      projectId,
-      conversationId,
-      userId: userData.user.id,
-      resume: resumeRun,
-      accessToken: token,
-      body: {
-        preferences,
-        sessionKind: tasteStart ? "taste_start" : "byok",
-        enabledSkillIds,
-        enabledMcpIds,
-        // Importante para o caminho barato: o worker vai repassar allocateSandbox para executeAgentJob.
-        allocateSandbox: allocateSandboxLocal,
-      },
     };
 
     const runChunkedJob = async (
@@ -972,76 +980,63 @@ Deno.serve(async (req) => {
       return json(result);
     }
 
-    const queued = await enqueueAgentChunk(supabase, queuePayload);
-    if (queued) {
-      await appendStreamEvent(supabase, agentRunId!, "start", {
-        type: "start",
-        runId: agentRunId,
-        projectId,
-        conversationId,
-        provider: mainCfg.label,
-        robin: effectiveRobin,
-        taste: tasteStart,
-        resume: resumeRun,
-        checkpoint: !!loadedCheckpoint,
-        sessionKind: tasteStart ? "taste_start" : "byok",
-        memoryMessages: loadedCheckpoint?.state.messages.length ?? messages.length,
-        queued: true,
+    // P0: Inngest handles durable execution. The "run" action is now a thin
+    // dispatcher: enqueue the run + send Inngest event + return <1s.
+    const eventName: InngestEventName = planMode
+      ? "agent/plan.requested"
+      : "agent/build.requested";
+    const eventPayload = {
+      runId: agentRunId,
+      projectId,
+      conversationId,
+      userId: userData.user.id,
+      sessionKind: tasteStart ? "taste_start" : (hasUserLlmKey ? "byok" : "taste_chat"),
+      preferences: preferences ?? {},
+      planMode,
+      resume: resumeRun,
+    };
+
+    const eventResult = await sendInngestEvent(eventName, eventPayload);
+    if (!eventResult.ok) {
+      logger.error("inngest.send_failed_fatal", {
+        runId: agentRunId!,
+        eventName,
+        error: eventResult.error,
       });
-      await invokeAgentWorker(SUPABASE_URL, SERVICE_KEY);
+      await finalizeRun({
+        ok: false,
+        error: `Inngest send failed: ${eventResult.error ?? "unknown"}`,
+        steps: 0,
+      });
       cleanup();
-      return streamEventsResponse(supabase, agentRunId!, cleanup);
+      return json({ error: "Falha ao iniciar agente (Inngest)" }, 500);
     }
 
-    // Fallback: SSE inline (sem PGMQ)
-    const stream = new ReadableStream({
-      start(controller) {
-        const emit = (data: Record<string, unknown>) => {
-          try {
-            controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(data)}\n\n`));
-          } catch { /* stream closed */ }
-        };
-
-        emit({
-          type: "start",
-          projectId,
-          conversationId,
-          runId: agentRunId,
-          provider: mainCfg.label,
-          robin: effectiveRobin,
-          taste: tasteStart,
-          resume: resumeRun,
-          checkpoint: !!loadedCheckpoint,
-          sessionKind: tasteStart ? "taste_start" : "byok",
-          memoryMessages: loadedCheckpoint?.state.messages.length ?? messages.length,
-          inlineFallback: true,
-        });
-
-        runChunkedJob((type, data) => emit({ type, data }))
-          .then(async (result) => {
-            await finalizeRun(result);
-            cleanup();
-            emit({ type: "finish", ...result, resumable: !result.ok && !result.canceled });
-            try { controller.close(); } catch { /* closed */ }
-          })
-          .catch(async (err) => {
-            await finalizeRun({ ok: false, error: (err as Error)?.message, steps: 0 });
-            cleanup();
-            emit({ type: "error", error: (err as Error)?.message, recoverable: true });
-            emit({ type: "finish", ok: false, error: (err as Error)?.message, resumable: true });
-            try { controller.close(); } catch { /* closed */ }
-          });
-      },
+    // Emit initial stream event so any reconnecting client sees the start.
+    await appendStreamEvent(supabase, agentRunId!, "start", {
+      type: "start",
+      runId: agentRunId,
+      projectId,
+      conversationId,
+      provider: mainCfg.label,
+      model: mainCfg.model,
+      robin: effectiveRobin,
+      taste: tasteStart,
+      resume: resumeRun,
+      checkpoint: !!loadedCheckpoint,
+      sessionKind: tasteStart ? "taste_start" : (hasUserLlmKey ? "byok" : "taste_chat"),
+      memoryMessages: loadedCheckpoint?.state.messages.length ?? messages.length,
+      mode: planMode ? "plan" : "build",
+      eventId: eventResult.ids?.[0] ?? null,
     });
 
-    return new Response(stream, {
-      headers: {
-        ...corsHeaders,
-        "Content-Type": "text/event-stream",
-        "Cache-Control": "no-cache",
-        Connection: "keep-alive",
-        "X-Accel-Buffering": "no",
-      },
+    cleanup();
+    return json({
+      ok: true,
+      runId: agentRunId,
+      mode: planMode ? "plan" : "build",
+      eventId: eventResult.ids?.[0] ?? null,
+      queued: false,
     });
   } catch (e: unknown) {
     if (projectId) runningLocks.delete(projectId);
@@ -1064,6 +1059,35 @@ function json(body: unknown, status = 200) {
       "X-Correlation-Id": currentCorrelationId() ?? "",
     },
   });
+}
+
+type InngestEventName = "agent/plan.requested" | "agent/build.requested";
+
+async function sendInngestEvent(
+  name: InngestEventName,
+  data: Record<string, unknown>,
+): Promise<{ ok: boolean; ids?: string[]; error?: string }> {
+  if (!INNGEST_EVENT_KEY) {
+    return { ok: false, error: "INNGEST_EVENT_KEY not configured" };
+  }
+  try {
+    const res = await fetch("https://inn.gs/e/" + INNGEST_EVENT_KEY, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, data, ts: Date.now() }),
+    });
+    if (!res.ok) {
+      const text = await res.text();
+      logger.warn("inngest.send_failed", { name, status: res.status, text: text.slice(0, 200) });
+      return { ok: false, error: `Inngest returned ${res.status}` };
+    }
+    const body = (await res.json()) as { ids?: string[] };
+    return { ok: true, ids: body.ids };
+  } catch (e) {
+    const msg = (e as Error)?.message ?? String(e);
+    logger.warn("inngest.send_exception", { name, error: msg });
+    return { ok: false, error: msg };
+  }
 }
 
 function streamEventsResponse(

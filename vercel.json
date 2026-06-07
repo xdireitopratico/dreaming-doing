@@ -3,11 +3,16 @@
   "installCommand": "npm install",
   "outputDirectory": "dist/client",
   "rewrites": [
+    { "source": "/api/inngest/:path*", "destination": "/api/inngest" },
     { "source": "/((?!assets/).*)", "destination": "/api/server" }
   ],
   "functions": {
     "api/server.js": {
       "includeFiles": "dist/server/**"
+    },
+    "api/inngest.js": {
+      "includeFiles": "dist/server/**",
+      "maxDuration": 1800
     }
   }
 }
