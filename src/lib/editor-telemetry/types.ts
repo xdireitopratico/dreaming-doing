@@ -57,7 +57,7 @@ export type EditorTelemetrySnapshot = {
     preferencesConfigured: boolean;
     mode: string | null;
     running: boolean;
-    sseConnected: boolean;
+    agentConnected: boolean;
     phase: string | null;
     lastError: string | null;
     finished: boolean;

@@ -3,7 +3,7 @@ import { FileText, Loader2, RefreshCw, AlertTriangle, Copy, RotateCcw, Zap } fro
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Button, FadeIn } from "@forge/ui";
-import type { AgentProgress, PlanStep } from "@/hooks/useSSE";
+import type { AgentProgress, PlanStep } from "@/lib/agent-progress";
 import type { ChatMessage } from "@/components/editor/ChatInput";
 import { useState, useCallback, useEffect } from "react";
 import { ConsoleLogStream } from "@/components/editor/ConsoleLogStream";

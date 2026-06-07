@@ -24,7 +24,7 @@ function base(): EditorTelemetrySnapshot {
       preferencesConfigured: true,
       mode: "auto",
       running: false,
-      sseConnected: false,
+      agentConnected: false,
       phase: null,
       lastError: null,
       finished: true,

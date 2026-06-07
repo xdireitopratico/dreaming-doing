@@ -1,5 +1,5 @@
 /**
- * Núcleo de execução compartilhado entre agent-run (fallback inline) e agent-worker (PGMQ).
+ * Núcleo de execução do agent loop — chamado por agent-run (action execute via Inngest).
  */
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { ToolRegistry } from "./registry.ts";

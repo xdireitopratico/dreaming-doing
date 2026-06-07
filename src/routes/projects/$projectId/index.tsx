@@ -46,12 +46,9 @@ import { PreviewFrame } from "@/components/editor/PreviewFrame";
 
 import { CommandPalette, buildEditorActions, type PaletteAction } from "@/components/editor/CommandPalette";
 import { ShortcutCheatsheet } from "@/components/editor/ShortcutCheatsheet";
-import { ProviderSelector, type ProviderOption } from "@/components/editor/ProviderSelector";
 import { LogPanel, createLogEntry, type LogEntry } from "@/components/editor/LogPanel";
 import { AiDiffViewer, type DiffEntry } from "@/components/editor/AiDiffViewer";
-import { RateLimitIndicator } from "@/components/editor/RateLimitIndicator";
-import { SnapshotsSheet } from "@/components/editor/SnapshotsSheet";
-import { useSSE } from "@/hooks/useSSE";
+import { useAgentRun } from "@/hooks/useAgentRun";
 import { usePreviewBoot } from "@/hooks/usePreviewBoot";
 import { usePreviewIdle } from "@/hooks/usePreviewIdle";
 import { useAutoPublish } from "@/hooks/useAutoPublish";
@@ -141,7 +138,6 @@ function EditorPage() {
   const [logPanelTab, setLogPanelTab] = useState<"terminal" | "console" | "problems" | "shot">(
     "terminal",
   );
-  const [provider, setProvider] = useState("");
   const [pickMode, setPickMode] = useState(false);
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [composerMode, setComposerMode] = useState<AgentComposerMode>("plan");
@@ -157,7 +153,7 @@ function EditorPage() {
   const previewIframeRef = useRef<HTMLIFrameElement | null>(null);
 
   // ─── Hooks ───────────────────────────────────────────────────────────
-  const sse = useSSE();
+  const agent = useAgentRun();
   const publishFn = useServerFn(publishProject);
   const planApproveFn = useServerFn(planApprove);
   const planRejectFn = useServerFn(planReject);
@@ -232,9 +228,9 @@ function EditorPage() {
     const runId = search.replay;
     const conv = conversation?.id;
     if (!conv) return;
-    void sse.replay(projectId, conv, runId);
+    void agent.replay(projectId, conv, runId);
     navigate({ to: "/projects/$projectId", params: { projectId }, search: {} });
-  }, [search.replay, conversation?.id, projectId, navigate, sse]);
+  }, [search.replay, conversation?.id, projectId, navigate, agent]);
 
   const isReactProject = useMemo(
     () => files?.some((f) => f.path === "package.json" || f.path === "/package.json") ?? false,
@@ -290,8 +286,8 @@ function EditorPage() {
           tasteStartRemaining,
           connectedKinds,
           running,
-          sseConnected: sse.connected,
-          sseProgress: sse.progress,
+          agentConnected: agent.connected,
+          agentProgress: agent.progress,
           devUrl,
           previewBooting: previewBoot.booting,
           previewLastError: previewBoot.lastError,
@@ -401,42 +397,36 @@ function EditorPage() {
     return fileTreeFiles.map((path) => ({ path, content: "" }));
   }, [files, fileTreeFiles]);
 
-  // ─── Diff entries (from SSE timeline) ──────────────────────────────
+  // ─── Diff entries (from file_diff stream events) ───────────────────
   const diffEntries = useMemo((): DiffEntry[] => {
-    const timeline = sse.progress.timeline;
-    return timeline
-      .filter((e) => e.type === "tool_done" && (e.data?.name === "fs_write" || e.data?.name === "fs_edit"))
-      .map((e, i) => ({
-        id: `diff-${i}`,
-        path: (e.data.args as any)?.path ?? "unknown",
-        before: "",
-        after: (e.data.args as any)?.content ?? "",
-        author: "FORGE Agent",
-        timestamp: e.timestamp,
-        reviewed: false,
-      }));
-  }, [sse.progress.timeline]);
+    return agent.progress.diffs.map((d) => ({
+      id: d.id,
+      path: d.path,
+      before: d.before,
+      after: d.after,
+      author: "FORGE Agent",
+      timestamp: d.timestamp,
+      reviewed: false,
+    }));
+  }, [agent.progress.diffs]);
 
   // ─── Agent blame ────────────────────────────────────────────────────
   const blameEntries = useMemo(
-    () => buildBlameFromTimeline(sse.progress.timeline),
-    [sse.progress.timeline],
+    () => buildBlameFromTimeline(agent.progress.timeline),
+    [agent.progress.timeline],
   );
   useAgentBlame({ blameMap: blameEntries, editorRef, monacoRef });
 
-  // ─── Sync running state (SSE) — nunca deixar UI presa se o stream cair ou cancel ──
-  // Single convergence: connected starts, finished OR canceled (from stop or gate) stops.
+  // ─── Sync running state — uma única fonte de verdade ──
   useEffect(() => {
-    if (sse.connected) setRunning(true);
-  }, [sse.connected]);
-
-  useEffect(() => {
-    if (sse.progress.finished || sse.progress.canceled) setRunning(false);
-  }, [sse.progress.finished, sse.progress.canceled]);
+    const active =
+      agent.connected && !agent.progress.finished && !agent.progress.canceled;
+    setRunning(active);
+  }, [agent.connected, agent.progress.finished, agent.progress.canceled]);
 
   // ─── SSE → logs ─────────────────────────────────────────────────────
   useEffect(() => {
-    const last = sse.progress.timeline.at(-1);
+    const last = agent.progress.timeline.at(-1);
     if (!last) return;
     if (last.type === "phase") {
       setLogs((prev) => [...prev, createLogEntry("info", `Fase: ${last.data.phase ?? ""} — ${last.data.message ?? ""}`, "agent")]);
@@ -447,18 +437,18 @@ function EditorPage() {
     if (last.type === "error") {
       setLogs((prev) => [...prev, createLogEntry("error", last.data.error as string ?? "Erro", "agent")]);
     }
-  }, [sse.progress.timeline.length]);
+  }, [agent.progress.timeline.length]);
 
   useEffect(() => {
-    if (sse.progress.error && sse.progress.finished && !sse.progress.resumable) {
-      toast.error(sse.progress.error);
+    if (agent.progress.error && agent.progress.finished && !agent.progress.resumable) {
+      toast.error(agent.progress.error);
       setRunning(false);
     }
-    if (sse.progress.finished && sse.progress.resumable && sse.progress.error && !sse.progress.autoResuming) {
-      toast.warning(sse.progress.error, { duration: 5000 });
+    if (agent.progress.finished && agent.progress.resumable && agent.progress.error && !agent.progress.autoResuming) {
+      toast.warning(agent.progress.error, { duration: 5000 });
       setRunning(false);
     }
-  }, [sse.progress.error, sse.progress.finished, sse.progress.resumable]);
+  }, [agent.progress.error, agent.progress.finished, agent.progress.resumable]);
 
   // ─── Monaco enhancements globais ────────────────────────────────────
   useEffect(() => {
@@ -525,7 +515,7 @@ function EditorPage() {
           ? "Start Project (Taste · NVIDIA)"
           : kind === "taste"
             ? "Concierge Taste"
-            : sse.progress.resumable
+            : agent.progress.resumable
               ? "Retomando agente (memória do chat)"
               : "Agente FORGE iniciado";
       setLogs((prev) => [...prev, createLogEntry("info", label, "agent")]);
@@ -538,20 +528,17 @@ function EditorPage() {
         kind === "byok" ? "byok" : `${kind}.${tasteAction ?? "chat"}`,
       );
       void (async () => {
-        setRunning(true);
         try {
-          await sse.connect(projectId, conversation.id, kind, { tasteAction, mode: composerMode });
+          await agent.connect(projectId, conversation.id, kind, { tasteAction, mode: composerMode });
         } catch (e: unknown) {
           const msg = e instanceof Error ? e.message : "Erro ao iniciar agente";
           logEditorTelemetryEvent("agent", "run_fail", "error", msg.slice(0, 200));
           toast.error(msg);
-        } finally {
-          setRunning(false);
         }
       })();
       return true;
     },
-    [conversation, projectId, running, sse, logPanelOpen, qc, sse.progress.resumable, tasteQuota],
+    [conversation, projectId, running, agent, logPanelOpen, qc, agent.progress.resumable, tasteQuota],
   );
 
   // ─── Auto-run: projeto recém-criado (flag) ou última msg user sem resposta
@@ -567,7 +554,7 @@ function EditorPage() {
       if (cancelled || attempts >= maxAttempts) return;
       attempts += 1;
 
-      if (running || sse.connected) {
+      if (running || agent.connected) {
         window.setTimeout(tryAutoRun, 250);
         return;
       }
@@ -580,12 +567,7 @@ function EditorPage() {
         .maybeSingle();
 
       if (activeRun?.id) {
-        setRunning(true);
-        try {
-          await sse.watch(projectId, conversation.id, activeRun.id);
-        } finally {
-          setRunning(false);
-        }
+        await agent.watch(projectId, conversation.id, activeRun.id);
         return;
       }
 
@@ -633,7 +615,7 @@ function EditorPage() {
     projectId,
     pendingAgentRunKey,
     running,
-    sse.connected,
+    agent.connected,
     runAgent,
     tasteQuota,
   ]);
@@ -665,28 +647,25 @@ function EditorPage() {
     logEditorTelemetryEvent("agent", "resume_start", "info", kind);
 
     void (async () => {
-      setRunning(true);
       try {
-        await sse.connect(projectId, conversation.id, kind, { resume: true });
+        await agent.connect(projectId, conversation.id, kind, { resume: true });
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : "Erro ao retomar agente";
         logEditorTelemetryEvent("agent", "resume_fail", "error", msg.slice(0, 200));
         toast.error(msg);
-      } finally {
-        setRunning(false);
       }
     })();
-  }, [conversation, projectId, running, sse, logPanelOpen, qc, tasteQuota]);
+  }, [conversation, projectId, running, agent, logPanelOpen, qc, tasteQuota]);
 
   useEffect(() => {
-    if (!sse.progress.finished || !conversation) return;
+    if (!agent.progress.finished || !conversation) return;
     void qc.invalidateQueries({ queryKey: ["messages", conversation.id] });
     void qc.invalidateQueries({ queryKey: ["profile"] });
-  }, [sse.progress.finished, conversation, qc]);
+  }, [agent.progress.finished, conversation, qc]);
 
-  // Segue run enfileirado pelo worker (PGMQ) sem criar run duplicado
+  // Reconecta a um run em execução (ex.: após refresh ou plan approve)
   useEffect(() => {
-    if (!sse.progress.finished || !conversation || running || sse.connected) return;
+    if (!agent.progress.finished || !conversation || running || agent.connected) return;
 
     let cancelled = false;
     const followQueuedRun = async (attempt = 0) => {
@@ -700,12 +679,7 @@ function EditorPage() {
         .maybeSingle();
 
       if (activeRun?.id) {
-        setRunning(true);
-        try {
-          await sse.watch(projectId, conversation.id, activeRun.id);
-        } finally {
-          setRunning(false);
-        }
+        await agent.watch(projectId, conversation.id, activeRun.id);
         return;
       }
 
@@ -714,7 +688,7 @@ function EditorPage() {
         .select("id", { count: "exact", head: true })
         .eq("project_id", projectId);
 
-      if ((count ?? 0) > 0 || sse.progress.pendingQueueCount > 0 || pendingAgentRunKey) {
+      if ((count ?? 0) > 0 || agent.progress.pendingQueueCount > 0 || pendingAgentRunKey) {
         await new Promise((r) => window.setTimeout(r, 500));
         return followQueuedRun(attempt + 1);
       }
@@ -725,24 +699,24 @@ function EditorPage() {
       cancelled = true;
     };
   }, [
-    sse.progress.finished,
-    sse.progress.pendingQueueCount,
+    agent.progress.finished,
+    agent.progress.pendingQueueCount,
     conversation,
     projectId,
     running,
-    sse.connected,
-    sse,
+    agent.connected,
+    agent,
     pendingAgentRunKey,
   ]);
 
-  const agentFinished = sse.progress.finished;
+  const agentFinished = agent.progress.finished;
   const agentShouldBootPreview =
     agentFinished &&
-    !sse.progress.canceled &&
-    !sse.progress.awaiting && // do not auto-boot preview (and thus E2B create) right after a qualify/plan gate
-    (sse.progress.lastFinishOk === true ||
-      sse.progress.resumable === true ||
-      (sse.progress.lastFinishOk === null && agentHasRun && !sse.progress.error));
+    !agent.progress.canceled &&
+    !agent.progress.awaiting && // do not auto-boot preview (and thus E2B create) right after a qualify/plan gate
+    (agent.progress.lastFinishOk === true ||
+      agent.progress.resumable === true ||
+      (agent.progress.lastFinishOk === null && agentHasRun && !agent.progress.error));
 
   useEffect(() => {
     if (running) {
@@ -806,8 +780,8 @@ function EditorPage() {
           void qc.invalidateQueries({ queryKey: ["messages", conversation.id] });
 
           const kind = resolveSessionKind(tasteQuota);
-          if (running || sse.connected) {
-            const queued = await sse.queueMessage(projectId, conversation.id, kind);
+          if (running || agent.connected) {
+            const queued = await agent.queueMessage(projectId, conversation.id, kind);
             if (queued.ok) {
               toast.info(
                 queued.pendingCount && queued.pendingCount > 1
@@ -822,7 +796,7 @@ function EditorPage() {
           runAgent(kind);
         });
     },
-    [conversation, runAgent, composerMode, tasteQuota, running, sse, projectId, qc],
+    [conversation, runAgent, composerMode, tasteQuota, running, agent, projectId, qc],
   );
 
   const handleVisualEdits = useCallback(() => {
@@ -856,13 +830,12 @@ function EditorPage() {
 
   const handleStop = useCallback(() => {
     void (async () => {
-      await sse.stop();
-      setRunning(false);
+      await agent.stop();
       logEditorTelemetryEvent("agent", "run_stop", "warn", "user");
       setLogs((prev) => [...prev, createLogEntry("warning", "Agente interrompido pelo usuário", "agent")]);
       toast.info("Agente interrompido");
     })();
-  }, [sse]);
+  }, [agent]);
 
   const handleUndoMessage = useCallback((assistantMsgId: string) => {
     if (!conversation) return;
@@ -896,7 +869,7 @@ function EditorPage() {
 
   const handlePlanApprove = useCallback(
     async (steps: { id: string; enabled: boolean }[]) => {
-      const pp = sse.progress.pendingPlan;
+      const pp = agent.progress.pendingPlan;
       if (!pp) return;
       const enabled = steps.filter((s) => s.enabled !== false);
       if (enabled.length === 0) {
@@ -919,6 +892,7 @@ function EditorPage() {
             steps: full,
           },
         });
+        agent.clearPendingPlan();
         toast.success(
           result.eventId
             ? "Plano aprovado — agente executando…"
@@ -926,21 +900,25 @@ function EditorPage() {
         );
         qc.invalidateQueries({ queryKey: ["conversation", projectId] });
         qc.invalidateQueries({ queryKey: ["agent-runs", projectId] });
+        if (result.newRunId && conversation) {
+          await agent.watch(projectId, conversation.id, result.newRunId);
+        }
       } catch (e) {
         toast.error((e as Error)?.message ?? "Falha ao aprovar plano");
       }
     },
-    [sse.progress.pendingPlan, projectId, qc],
+    [agent, agent.progress.pendingPlan, conversation, projectId, qc, planApproveFn],
   );
 
   const handlePlanReject = useCallback(
     async (reason?: string) => {
-      const pp = sse.progress.pendingPlan;
+      const pp = agent.progress.pendingPlan;
       if (!pp) return;
       try {
         await planRejectFn({
           data: { runId: pp.runId, planId: pp.planId, reason },
         });
+        agent.clearPendingPlan();
         toast.info("Plano rejeitado.");
         qc.invalidateQueries({ queryKey: ["conversation", projectId] });
         qc.invalidateQueries({ queryKey: ["agent-runs", projectId] });
@@ -948,7 +926,7 @@ function EditorPage() {
         toast.error((e as Error)?.message ?? "Falha ao rejeitar plano");
       }
     },
-    [sse.progress.pendingPlan, projectId, qc],
+    [agent, agent.progress.pendingPlan, projectId, qc, planRejectFn],
   );
 
   const liveSiteUrl = useMemo(() => {
@@ -1099,7 +1077,7 @@ function EditorPage() {
                   <ChatInput
                     messages={chatMessages}
                     running={running}
-                    agentProgress={sse.progress}
+                    agentProgress={agent.progress}
                     onResumeAgent={handleResumeAgent}
                     onSend={handleSend}
                     onStop={handleStop}

@@ -1,13 +1,8 @@
 /**
- * useAgentRun — Realtime-based hook for the new P0 architecture.
+ * useAgentRun — Realtime + polling for agent_stream_events (P0).
  *
- * P0 architecture: frontend calls agent-run (Edge Function) which sends an
- * Inngest event and returns runId in <1s. The frontend subscribes to Supabase
- * Realtime to receive events and status changes for the run.
- *
- * This hook is a parallel implementation to useSSE — the existing useSSE is
- * kept working for now (P2.5 will deprecate it; P3 will remove). The new
- * hook is the recommended path for new code.
+ * Realtime alone is unreliable in production; polling every 350ms is the
+ * primary delivery path (same as the legacy SSE watch loop).
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
@@ -15,77 +10,66 @@ import { getSupabaseEnv } from "@/lib/supabase-env";
 import { loadAgentPreferences } from "@/lib/agent-preferences";
 import { loadAgentSessionExtensions } from "@/lib/agent-session-extensions";
 import type { ForgeSessionKind, TasteAction } from "@/lib/taste";
-import {
-  formatAgentFetchError,
-  formatAgentHttpError,
-} from "@/lib/agent-fetch-errors";
+import { formatAgentFetchError, formatAgentHttpError } from "@/lib/agent-fetch-errors";
 import { logEditorTelemetryEvent } from "@/lib/editor-telemetry";
 import { cancelAgentRun } from "@/lib/agent-cancel";
+import {
+  applyAgentProgressEvent,
+  initialAgentProgress,
+  streamRowToSSEEvent,
+  type AgentConnectOptions,
+  type AgentProgress,
+} from "@/lib/agent-progress";
 
-export type AgentRunEvent = {
-  seq: number;
-  runId: string;
-  eventType: string;
-  payload: Record<string, unknown>;
-  createdAt: string;
-};
+const POLL_MS = 350;
+const TERMINAL_STATUSES = new Set(["completed", "failed", "canceled", "awaiting_user"]);
 
-export type AgentRunStatus = {
-  id: string;
-  status: "pending" | "running" | "awaiting_user" | "completed" | "failed" | "canceled";
-  steps: number;
-  error: string | null;
-  meta: Record<string, unknown>;
-  startedAt: string;
-  finishedAt: string | null;
-  canceledAt: string | null;
-};
+async function parseErrorResponse(res: Response): Promise<string> {
+  const txt = await res.text().catch(() => "");
+  try {
+    const body = JSON.parse(txt) as { error?: string; message?: string; code?: string };
+    const raw = body.error ?? body.message ?? txt.slice(0, 280);
+    return formatAgentHttpError(raw, body.code);
+  } catch {
+    return txt.slice(0, 280) || `HTTP ${res.status}`;
+  }
+}
 
-export type StartRunResponse = {
-  ok: boolean;
-  runId: string;
-  mode: "plan" | "build";
-  eventId: string | null;
-  queued: boolean;
-};
+export type { AgentProgress, AgentConnectOptions, PlanStep, PendingPlan } from "@/lib/agent-progress";
 
-export type ConnectOptions = {
-  resume?: boolean;
-  mode: "plan" | "build";
-};
-
-export type UseAgentRunReturn = {
-  runId: string | null;
-  status: AgentRunStatus["status"] | null;
-  events: AgentRunEvent[];
-  finished: boolean;
-  error: string | null;
-  connected: boolean;
-  start: (params: {
-    projectId: string;
-    conversationId: string;
-    sessionKind: ForgeSessionKind | undefined;
-    tasteAction: TasteAction | undefined;
-    message: string;
-    options?: ConnectOptions;
-  }) => Promise<StartRunResponse | null>;
-  watch: (runId: string) => void;
-  cancel: (runId: string) => Promise<void>;
-  reset: () => void;
-};
-
-export function useAgentRun(): UseAgentRunReturn {
-  const [runId, setRunId] = useState<string | null>(null);
-  const [status, setStatus] = useState<AgentRunStatus["status"] | null>(null);
-  const [events, setEvents] = useState<AgentRunEvent[]>([]);
-  const [finished, setFinished] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+export function useAgentRun() {
+  const [progress, setProgress] = useState<AgentProgress>(initialAgentProgress);
   const [connected, setConnected] = useState(false);
 
+  const runIdRef = useRef<string | null>(null);
+  const lastSeqRef = useRef(0);
+  const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const eventChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const statusChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
+  const stopPolling = useCallback(() => {
+    if (pollTimerRef.current) {
+      clearInterval(pollTimerRef.current);
+      pollTimerRef.current = null;
+    }
+  }, []);
+
+  const applyStreamRow = useCallback((row: {
+    seq: number;
+    event_type: string;
+    payload: Record<string, unknown>;
+    created_at?: string;
+  }): boolean => {
+    if (row.seq <= lastSeqRef.current) return false;
+    lastSeqRef.current = row.seq;
+    const event = streamRowToSSEEvent(row);
+    setProgress((prev) => applyAgentProgressEvent(prev, event));
+    const t = event.type;
+    return t === "finish" || t === "done" || t === "canceled" || t === "error";
+  }, []);
+
   const teardownChannels = useCallback(() => {
+    stopPolling();
     if (eventChannelRef.current) {
       void supabase.removeChannel(eventChannelRef.current);
       eventChannelRef.current = null;
@@ -95,64 +79,162 @@ export function useAgentRun(): UseAgentRunReturn {
       statusChannelRef.current = null;
     }
     setConnected(false);
-  }, []);
+  }, [stopPolling]);
+
+  const syncRunStatus = useCallback((status: string, error: string | null) => {
+    if (status === "awaiting_user") {
+      setProgress((p) => ({ ...p, finished: true, awaiting: true, autoResuming: false }));
+      teardownChannels();
+      return;
+    }
+    if (status === "canceled") {
+      setProgress((p) => ({
+        ...p,
+        finished: true,
+        canceled: true,
+        resumable: false,
+        autoResuming: false,
+        error: error ?? p.error,
+      }));
+      teardownChannels();
+      return;
+    }
+    if (status === "completed") {
+      setProgress((p) => ({
+        ...p,
+        finished: true,
+        lastFinishOk: p.lastFinishOk ?? true,
+        resumable: false,
+        autoResuming: false,
+      }));
+      teardownChannels();
+      return;
+    }
+    if (status === "failed") {
+      setProgress((p) => ({
+        ...p,
+        finished: true,
+        lastFinishOk: false,
+        error: error ?? p.error ?? "Agente falhou",
+        resumable: false,
+        autoResuming: false,
+      }));
+      teardownChannels();
+    }
+  }, [teardownChannels]);
+
+  const pollOnce = useCallback(
+    async (runId: string): Promise<boolean> => {
+      const { data: rows, error } = await supabase
+        .from("agent_stream_events")
+        .select("seq, event_type, payload, created_at")
+        .eq("run_id", runId)
+        .gt("seq", lastSeqRef.current)
+        .order("seq", { ascending: true });
+
+      if (error) {
+        logEditorTelemetryEvent("agent_run", "poll_error", "warn", error.message.slice(0, 120));
+      }
+
+      let terminal = false;
+      for (const row of rows ?? []) {
+        if (applyStreamRow({
+          seq: row.seq as number,
+          event_type: row.event_type as string,
+          payload: (row.payload ?? {}) as Record<string, unknown>,
+          created_at: row.created_at as string | undefined,
+        })) {
+          terminal = true;
+        }
+      }
+
+      const { data: run } = await supabase
+        .from("agent_runs")
+        .select("status, error, canceled_at")
+        .eq("id", runId)
+        .maybeSingle();
+
+      if (run?.canceled_at || run?.status === "canceled") {
+        syncRunStatus("canceled", run.error);
+        return true;
+      }
+      if (run?.status && TERMINAL_STATUSES.has(run.status)) {
+        syncRunStatus(run.status, run.error);
+        return true;
+      }
+
+      return terminal;
+    },
+    [applyStreamRow, syncRunStatus],
+  );
+
+  const startPolling = useCallback(
+    (runId: string) => {
+      stopPolling();
+      void pollOnce(runId);
+      pollTimerRef.current = setInterval(() => {
+        void pollOnce(runId).then((done) => {
+          if (done) stopPolling();
+        });
+      }, POLL_MS);
+    },
+    [pollOnce, stopPolling],
+  );
 
   const subscribeToRun = useCallback(
-    (id: string) => {
+    async (runId: string, opts?: { resetProgress?: boolean }) => {
       teardownChannels();
+      runIdRef.current = runId;
+      if (opts?.resetProgress !== false) {
+        lastSeqRef.current = 0;
+        setProgress({
+          ...initialAgentProgress,
+          statusHint: "Conectando ao agente…",
+        });
+      }
+
+      setConnected(true);
+      startPolling(runId);
 
       const eventChannel = supabase
-        .channel(`agent-events-${id}`)
+        .channel(`agent-events-${runId}`)
         .on(
           "postgres_changes",
-          { event: "INSERT", schema: "public", table: "agent_stream_events", filter: `run_id=eq.${id}` },
+          { event: "INSERT", schema: "public", table: "agent_stream_events", filter: `run_id=eq.${runId}` },
           (payload) => {
             const row = payload.new as {
               seq: number;
-              run_id: string;
               event_type: string;
               payload: Record<string, unknown>;
-              created_at: string;
+              created_at?: string;
             };
-            setEvents((prev) => [
-              ...prev,
-              {
-                seq: row.seq,
-                runId: row.run_id,
-                eventType: row.event_type,
-                payload: row.payload,
-                createdAt: row.created_at,
-              },
-            ]);
-            if (row.event_type === "finish" || row.event_type === "done") {
-              setFinished(true);
+            if (applyStreamRow(row)) {
+              stopPolling();
+              teardownChannels();
             }
           },
         )
-        .subscribe((s) => {
-          if (s === "SUBSCRIBED") setConnected(true);
-          else if (s === "CLOSED" || s === "CHANNEL_ERROR") setConnected(false);
-        });
+        .subscribe();
       eventChannelRef.current = eventChannel;
 
       const statusChannel = supabase
-        .channel(`agent-status-${id}`)
+        .channel(`agent-status-${runId}`)
         .on(
           "postgres_changes",
-          { event: "UPDATE", schema: "public", table: "agent_runs", filter: `id=eq.${id}` },
+          { event: "UPDATE", schema: "public", table: "agent_runs", filter: `id=eq.${runId}` },
           (payload) => {
-            const row = payload.new as { status: AgentRunStatus["status"]; error: string | null };
-            setStatus(row.status);
-            if (row.status === "completed" || row.status === "failed" || row.status === "canceled") {
-              setFinished(true);
-              if (row.error) setError(row.error);
+            const row = payload.new as { status: string; error: string | null; canceled_at: string | null };
+            if (row.canceled_at || row.status === "canceled") {
+              syncRunStatus("canceled", row.error);
+            } else if (TERMINAL_STATUSES.has(row.status)) {
+              syncRunStatus(row.status, row.error);
             }
           },
         )
         .subscribe();
       statusChannelRef.current = statusChannel;
     },
-    [teardownChannels],
+    [applyStreamRow, startPolling, stopPolling, syncRunStatus, teardownChannels],
   );
 
   useEffect(() => {
@@ -161,118 +243,268 @@ export function useAgentRun(): UseAgentRunReturn {
     };
   }, [teardownChannels]);
 
-  const start: UseAgentRunReturn["start"] = useCallback(
-    async ({ projectId, conversationId, sessionKind, tasteAction, message, options }) => {
+  const postAgentRun = useCallback(
+    async (body: Record<string, unknown>): Promise<Response> => {
       const { url, publishableKey } = getSupabaseEnv();
       if (!url || !publishableKey) {
-        setError("Supabase não configurado. Verifique VITE_SUPABASE_URL e VITE_SUPABASE_PUBLISHABLE_KEY.");
-        setFinished(true);
-        return null;
+        throw new Error(
+          "Supabase não configurado. Verifique VITE_SUPABASE_URL e VITE_SUPABASE_PUBLISHABLE_KEY.",
+        );
       }
-
       const { data: sess } = await supabase.auth.getSession();
       const accessToken = sess.session?.access_token;
       if (!accessToken) {
-        setError("Sessão expirada. Faça login novamente.");
-        setFinished(true);
-        return null;
+        throw new Error("Sessão expirada. Faça login novamente.");
       }
 
-      const enabledSkillIds = loadAgentSessionExtensions().enabledSkillIds;
-      const enabledMcpIds = loadAgentSessionExtensions().enabledMcpIds;
+      return fetch(`${url}/functions/v1/agent-run`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+          apikey: publishableKey,
+        },
+        body: JSON.stringify(body),
+      });
+    },
+    [],
+  );
 
-      setEvents([]);
-      setFinished(false);
-      setError(null);
-      setStatus("pending");
+  const connect = useCallback(
+    async (
+      projectId: string,
+      conversationId: string,
+      sessionKind?: ForgeSessionKind,
+      options?: AgentConnectOptions & { tasteAction?: TasteAction },
+    ) => {
+      const manualResume = options?.resume === true;
+      teardownChannels();
+      setProgress({
+        ...initialAgentProgress,
+        statusHint: manualResume ? "Conectando para retomar o agente…" : "Iniciando agente…",
+        resumable: false,
+        autoResuming: false,
+      });
 
-      logEditorTelemetryEvent("agent_run", "start_request", "info", sessionKind ?? "auto");
-      void options;
+      logEditorTelemetryEvent("agent_run", "connect_start", "info", sessionKind ?? "auto");
 
       try {
-        const res = await fetch(`${url}/functions/v1/agent-run`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${accessToken}`,
-            apikey: publishableKey,
-          },
-          body: JSON.stringify({
-            projectId,
-            conversationId,
-            preferences: loadAgentPreferences(),
-            sessionKind,
-            tasteAction,
-            message,
-            enabledSkillIds,
-            enabledMcpIds,
-            mode: options?.mode ?? "build",
-            resume: options?.resume ?? false,
-          }),
+        const res = await postAgentRun({
+          projectId,
+          conversationId,
+          preferences: loadAgentPreferences(),
+          sessionKind,
+          ...(sessionKind === "taste" && options?.tasteAction ? { tasteAction: options.tasteAction } : {}),
+          resume: manualResume,
+          autoResume: false,
+          mode: options?.mode ?? "build",
+          ...loadAgentSessionExtensions(),
         });
 
         if (!res.ok) {
-          const text = await res.text();
-          let errMsg: string;
-          try {
-            const body = JSON.parse(text) as { error?: string; code?: string };
-            errMsg = formatAgentHttpError(body.error ?? text, body.code);
-          } catch {
-            errMsg = formatAgentHttpError(text);
-          }
-          setError(errMsg);
-          setFinished(true);
-          logEditorTelemetryEvent("agent_run", "start_failed", "error", sessionKind ?? "auto");
-          return null;
+          const msg = await parseErrorResponse(res);
+          setProgress((p) => ({ ...p, error: msg, finished: true }));
+          return;
         }
 
-        const data = (await res.json()) as StartRunResponse;
-        if (!data.ok || !data.runId) {
-          setError("Resposta inválida do servidor");
-          setFinished(true);
-          return null;
+        const body = (await res.json()) as {
+          ok?: boolean;
+          runId?: string;
+          queued?: boolean;
+          pendingCount?: number;
+          message?: string;
+        };
+
+        if (body.queued) {
+          setProgress((p) => ({
+            ...p,
+            finished: true,
+            pendingQueueCount: body.pendingCount ?? p.pendingQueueCount + 1,
+            statusHint: body.message ?? "Mensagem na fila do agente.",
+            error: null,
+          }));
+          return;
         }
 
-        setRunId(data.runId);
-        subscribeToRun(data.runId);
-        logEditorTelemetryEvent("agent_run", "start_ok", "info", sessionKind ?? "auto");
-        return data;
+        if (!body.runId) {
+          setProgress((p) => ({ ...p, error: "Resposta inválida do servidor", finished: true }));
+          return;
+        }
+
+        await subscribeToRun(body.runId);
+        logEditorTelemetryEvent("agent_run", "connect_ok", "info", body.runId.slice(0, 8));
       } catch (e) {
-        setError(formatAgentFetchError(e));
-        setFinished(true);
-        logEditorTelemetryEvent("agent_run", "start_exception", "error", sessionKind ?? "auto");
-        return null;
+        teardownChannels();
+        setProgress((p) => ({
+          ...p,
+          error: formatAgentFetchError(e),
+          finished: true,
+        }));
       }
     },
-    [subscribeToRun],
+    [postAgentRun, subscribeToRun, teardownChannels],
   );
 
   const watch = useCallback(
-    (id: string) => {
-      setRunId(id);
-      setEvents([]);
-      setFinished(false);
-      setError(null);
-      subscribeToRun(id);
+    async (projectId: string, conversationId: string, runId: string) => {
+      void projectId;
+      void conversationId;
+      await subscribeToRun(runId, { resetProgress: false });
     },
     [subscribeToRun],
   );
 
-  const cancel = useCallback(async (id: string) => {
-    await cancelAgentRun(id);
-    setStatus("canceled");
-    setFinished(true);
-  }, []);
+  const queueMessage = useCallback(
+    async (
+      projectId: string,
+      conversationId: string,
+      sessionKind?: ForgeSessionKind,
+      tasteAction?: TasteAction,
+    ): Promise<{ ok: boolean; pendingCount?: number; message?: string }> => {
+      try {
+        const res = await postAgentRun({
+          projectId,
+          conversationId,
+          preferences: loadAgentPreferences(),
+          sessionKind,
+          ...(sessionKind === "taste" && tasteAction ? { tasteAction } : {}),
+          ...loadAgentSessionExtensions(),
+        });
 
-  const reset = useCallback(() => {
-    teardownChannels();
-    setRunId(null);
-    setStatus(null);
-    setEvents([]);
-    setFinished(false);
-    setError(null);
+        if (!res.ok) {
+          const msg = await parseErrorResponse(res);
+          return { ok: false, message: msg };
+        }
+
+        const body = (await res.json()) as {
+          queued?: boolean;
+          pendingCount?: number;
+          message?: string;
+        };
+        if (body.queued) {
+          setProgress((p) => ({
+            ...p,
+            pendingQueueCount: body.pendingCount ?? p.pendingQueueCount + 1,
+            statusHint: body.message ?? "Mensagem na fila do agente.",
+          }));
+          return { ok: true, pendingCount: body.pendingCount, message: body.message };
+        }
+        return { ok: false, message: "Agente livre — use run normal." };
+      } catch (e) {
+        return { ok: false, message: formatAgentFetchError(e) };
+      }
+    },
+    [postAgentRun],
+  );
+
+  const stop = useCallback(async () => {
+    const runId = runIdRef.current;
+    stopPolling();
+
+    setProgress((p) => ({
+      ...p,
+      finished: true,
+      canceled: true,
+      resumable: false,
+      autoResuming: false,
+      statusHint: "Cancelando…",
+    }));
     setConnected(false);
+
+    if (runId) {
+      try {
+        await cancelAgentRun(runId);
+        logEditorTelemetryEvent("agent", "cancel_request", "info", runId.slice(0, 8));
+        setProgress((p) => ({
+          ...p,
+          error: null,
+          statusHint: "Cancelado pelo usuário",
+        }));
+      } catch (e) {
+        setProgress((p) => ({
+          ...p,
+          error: formatAgentFetchError(e),
+          statusHint: "Falha ao cancelar — tente novamente",
+          finished: true,
+          canceled: false,
+          resumable: true,
+        }));
+      }
+    }
+
+    runIdRef.current = null;
+    if (eventChannelRef.current) {
+      void supabase.removeChannel(eventChannelRef.current);
+      eventChannelRef.current = null;
+    }
+    if (statusChannelRef.current) {
+      void supabase.removeChannel(statusChannelRef.current);
+      statusChannelRef.current = null;
+    }
+  }, [stopPolling]);
+
+  const disconnect = useCallback(() => {
+    runIdRef.current = null;
+    teardownChannels();
+    setProgress((p) => ({ ...p, finished: true }));
   }, [teardownChannels]);
 
-  return { runId, status, events, finished, error, connected, start, watch, cancel, reset };
+  const replay = useCallback(
+    async (projectId: string, conversationId: string, runId: string) => {
+      void projectId;
+      void conversationId;
+      teardownChannels();
+      setProgress({
+        ...initialAgentProgress,
+        statusHint: `Replaying run ${runId.slice(0, 8)}…`,
+      });
+      runIdRef.current = runId;
+      lastSeqRef.current = 0;
+
+      try {
+        const { data, error } = await supabase
+          .from("agent_stream_events")
+          .select("seq, event_type, payload, created_at")
+          .eq("run_id", runId)
+          .order("seq", { ascending: true });
+
+        if (error) {
+          setProgress((p) => ({ ...p, error: error.message, finished: true }));
+          return;
+        }
+
+        let next = initialAgentProgress;
+        for (const row of data ?? []) {
+          const event = streamRowToSSEEvent({
+            event_type: row.event_type as string,
+            payload: (row.payload ?? {}) as Record<string, unknown>,
+            created_at: row.created_at as string | undefined,
+            seq: row.seq as number,
+          });
+          next = applyAgentProgressEvent(next, event);
+          lastSeqRef.current = row.seq as number;
+        }
+        setProgress(next);
+      } finally {
+        setConnected(false);
+      }
+    },
+    [teardownChannels],
+  );
+
+  const clearPendingPlan = useCallback(() => {
+    setProgress((p) => ({ ...p, pendingPlan: null, awaiting: false }));
+  }, []);
+
+  return {
+    progress,
+    connected,
+    connect,
+    watch,
+    replay,
+    queueMessage,
+    disconnect,
+    stop,
+    clearPendingPlan,
+  };
 }

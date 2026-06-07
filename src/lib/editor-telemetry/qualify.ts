@@ -162,7 +162,7 @@ export function qualifySnapshot(
     penalize(10);
   }
 
-  if (snap.agent.running && !snap.agent.sseConnected) {
+  if (snap.agent.running && !snap.agent.agentConnected) {
     signals.push(
       signal(
         "sse-stale",

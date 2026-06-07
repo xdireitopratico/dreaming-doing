@@ -17,7 +17,7 @@ import {
   ChevronUp,
   X,
 } from "lucide-react";
-import type { SSEEvent } from "@/hooks/useSSE";
+import type { SSEEvent } from "@/lib/agent-progress";
 
 interface ConsoleLogStreamProps {
   /** Timeline crua de eventos SSE do agent-run */

@@ -293,16 +293,25 @@ export async function executeAgentRun(
     allocateSandbox: allocateSandboxLocal,
   };
 
+  const onEvent = (type: string, data: Record<string, unknown>) => {
+    appendStreamEvent(supabase, runId, type, { type, ...data }).catch(() => {});
+  };
+
   // In-process chunking — same as the previous runChunkedJob logic
   let chunkResume = resumeRun;
   let result: Awaited<ReturnType<typeof executeAgentJob>>;
   let chunks = 0;
   try {
-    result = await executeAgentJob(supabase, { ...jobParams, resumeRun: chunkResume }, () => {});
+    result = await executeAgentJob(supabase, { ...jobParams, resumeRun: chunkResume }, onEvent);
     chunks = 1;
     while (!result.ok && result.resumable && !result.canceled && chunks < MAX_INLINE_CHUNKS) {
       chunkResume = true;
-      result = await executeAgentJob(supabase, { ...jobParams, resumeRun: true }, () => {});
+      await appendStreamEvent(supabase, runId, "resume", {
+        type: "resume",
+        chunk: chunks + 1,
+        message: "Retomando automaticamente no servidor…",
+      });
+      result = await executeAgentJob(supabase, { ...jobParams, resumeRun: true }, onEvent);
       chunks++;
     }
   } catch (err: unknown) {
@@ -353,6 +362,17 @@ export async function executeAgentRun(
       ...(result.canceled ? { canceled_at: new Date().toISOString() } : {}),
     })
     .eq("id", runId);
+
+  await appendStreamEvent(supabase, runId, "finish", {
+    type: "finish",
+    ok: result.ok,
+    canceled: result.canceled,
+    resumable: !result.ok && !!result.resumable && !result.canceled,
+    error: result.error ?? null,
+    awaiting: isAwaiting,
+    steps: result.steps,
+    summary: result.summary ?? null,
+  });
 
   logger.info("agent_run.executed", {
     runId,

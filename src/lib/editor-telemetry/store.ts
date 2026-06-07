@@ -47,7 +47,7 @@ function emptySnapshot(): EditorTelemetrySnapshot {
       preferencesConfigured: false,
       mode: null,
       running: false,
-      sseConnected: false,
+      agentConnected: false,
       phase: null,
       lastError: null,
       finished: false,

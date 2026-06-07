@@ -10,7 +10,7 @@ import {
   logEditorTelemetryEvent,
   patchEditorTelemetrySnapshot,
 } from "@/lib/editor-telemetry";
-import type { AgentProgress } from "@/hooks/useSSE";
+import type { AgentProgress } from "@/lib/agent-progress";
 import type { ForgeSessionKind } from "@/lib/taste";
 
 export type EditorTelemetryInput = {
@@ -24,8 +24,8 @@ export type EditorTelemetryInput = {
   tasteStartRemaining: number;
   connectedKinds: string[];
   running: boolean;
-  sseConnected: boolean;
-  sseProgress: AgentProgress;
+  agentConnected: boolean;
+  agentProgress: AgentProgress;
   devUrl: string | null;
   previewBooting: boolean;
   previewLastError: string | null;
@@ -87,13 +87,13 @@ export function useEditorTelemetry(input: EditorTelemetryInput | null): void {
         preferencesConfigured: isAgentPreferencesConfigured(prefs),
         mode: prefs.mode ?? null,
         running: input.running,
-        sseConnected: input.sseConnected,
-        phase: input.sseProgress.phase,
-        lastError: input.sseProgress.error,
-        finished: input.sseProgress.finished,
-        resumable: input.sseProgress.resumable,
+        agentConnected: input.agentConnected,
+        phase: input.agentProgress.phase,
+        lastError: input.agentProgress.error,
+        finished: input.agentProgress.finished,
+        resumable: input.agentProgress.resumable,
         sessionKindResolved: sessionResolved,
-        toolCount: input.sseProgress.tools.length,
+        toolCount: input.agentProgress.tools.length,
       },
       preview: {
         devUrl: input.devUrl,
@@ -120,10 +120,10 @@ export function useEditorTelemetry(input: EditorTelemetryInput | null): void {
       realtime: { conversationId: input.conversationId ?? null },
     });
 
-    const err = input.sseProgress.error;
+    const err = input.agentProgress.error;
     if (err && err !== prevError.current) {
       prevError.current = err;
-      logEditorTelemetryEvent("agent", "sse_error", "error", err.slice(0, 240));
+      logEditorTelemetryEvent("agent", "agent_error", "error", err.slice(0, 240));
     }
     if (!err) prevError.current = null;
 

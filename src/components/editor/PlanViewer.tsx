@@ -5,7 +5,7 @@ import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Check, X, ListTodo, Maximize2, Loader2 } from "lucide-react";
 import { PlanModal } from "@/components/editor/PlanModal";
-import type { PendingPlan, PlanStep } from "@/hooks/useSSE";
+import type { PendingPlan, PlanStep } from "@/lib/agent-progress";
 
 interface PlanViewerProps {
   plan: PendingPlan;

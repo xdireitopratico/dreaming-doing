@@ -189,6 +189,17 @@ Deno.serve(async (req) => {
         })
         .eq("id", runId);
 
+      await appendStreamEvent(supabase, runId, "canceled", {
+        type: "canceled",
+        message: "Cancelado pelo usuário",
+      });
+      await appendStreamEvent(supabase, runId, "finish", {
+        type: "finish",
+        ok: false,
+        canceled: true,
+        resumable: false,
+      });
+
       // Also clear any queued pending messages for this project so stop truly stops the chain
       await supabase
         .from("agent_pending_messages")
@@ -878,14 +889,7 @@ Deno.serve(async (req) => {
       return result;
     };
 
-    if (!useSSE) {
-      const result = await runChunkedJob(() => {});
-      await finalizeRun(result);
-      cleanup();
-      return json(result);
-    }
-
-    // P0: Inngest handles durable execution. The "run" action is now a thin
+    // P0: Inngest handles durable execution. The "run" action is a thin
     // dispatcher: enqueue the run + send Inngest event + return <1s.
     const eventName: InngestEventName = planMode
       ? "agent/plan.requested"

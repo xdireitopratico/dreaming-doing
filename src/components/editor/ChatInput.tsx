@@ -31,7 +31,7 @@ import {
 } from "@/lib/agent-setup";
 import { ChatStream } from "@/components/editor/ChatStream";
 import { ComposerModeSelect } from "@/components/editor/ComposerModeSelect";
-import type { AgentProgress, PlanStep } from "@/hooks/useSSE";
+import type { AgentProgress, PlanStep } from "@/lib/agent-progress";
 
 export type AgentComposerMode = "plan" | "build";
 

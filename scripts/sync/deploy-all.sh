@@ -5,7 +5,7 @@ set -euo pipefail
 REF="dpduljngdurfpmaclffa"
 FUNCTIONS=(
   agent-run
-  agent-worker
+  health
   admin-platform-secrets
   connector-upsert
   e2b-health

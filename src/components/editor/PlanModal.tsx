@@ -8,7 +8,7 @@ import {
   Clock, DollarSign, Loader2, ListTodo, CheckSquare, Square,
 } from "lucide-react";
 import { ForgeIcon } from "@/components/icons/ForgeIcon";
-import type { PendingPlan, PlanStep } from "@/hooks/useSSE";
+import type { PendingPlan, PlanStep } from "@/lib/agent-progress";
 
 interface PlanModalProps {
   plan: PendingPlan;

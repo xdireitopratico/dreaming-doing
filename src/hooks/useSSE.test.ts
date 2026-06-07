@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { applyAgentProgressEvent } from "@/hooks/useSSE";
-import type { AgentProgress, SSEEvent } from "@/hooks/useSSE";
+import { applyAgentProgressEvent } from "@/lib/agent-progress";
+import type { AgentProgress, SSEEvent } from "@/lib/agent-progress";
 
 const base: AgentProgress = {
   phase: null,

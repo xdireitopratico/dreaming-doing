@@ -85,7 +85,7 @@ export const agentPlanFunction = inngest.createFunction(
     if (final.ok) {
       await step.run("mark-completed", async () => {
         const status = await getRunStatus(runId);
-        if (status === "canceled") return;
+        if (status === "canceled" || status === "awaiting_user") return;
         await markRunFinal(runId, "completed", { plan: final.plan ?? null });
       });
     }
