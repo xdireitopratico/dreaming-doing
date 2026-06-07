@@ -1,114 +1,43 @@
-// ChatStream — builder chat: mensagens sem bolha + trilha ao vivo (fases, tools, texto)
-import { FileText, Loader2, RefreshCw, AlertTriangle, Copy, RotateCcw, Zap, MessageCircle } from "lucide-react";
-import { MarkdownRenderer } from "@/components/ui/markdown-renderer";
-import { Button, FadeIn } from "@forge/ui";
-import type { AgentProgress, PlanStep } from "@/lib/agent-progress";
+// ChatStream — thread Lovable: user → FORGE (narrativa + detalhes inline por turno)
+import { RefreshCw, AlertTriangle, MessageCircle } from "lucide-react";
+import { Button } from "@forge/ui";
+import type { AgentProgress, PlanStep, PendingPlan } from "@/lib/agent-progress";
 import type { ChatMessage } from "@/components/editor/ChatInput";
-import { useState, useCallback, useEffect } from "react";
-import { AgentTimeline } from "@/components/editor/AgentTimeline";
-import { ConsoleLogStream } from "@/components/editor/ConsoleLogStream";
-import { ChatDiffViewer } from "@/components/editor/ChatDiffViewer";
+import { useState, useCallback, useMemo } from "react";
 import { ErrorHintCard } from "@/components/editor/ErrorHintCard";
 import { llmErrorHint, timeoutHint, e2bErrorHint } from "@/lib/llm-error-hints";
-import { PlanViewer } from "@/components/editor/PlanViewer";
-
-const PHASE_LABELS: Record<string, string> = {
-  gather: "Analisando projeto",
-  classify: "Classificando",
-  plan: "Planejando",
-  execute: "Gerando código",
-  observe: "Verificando build",
-  summarize: "Finalizando",
-  taste: "Concierge",
-  taste_chat: "Concierge",
-  done: "Concluído",
-};
-
-interface AssistantMessageProps {
-  msg: ChatMessage;
-  index: number;
-  totalTokens: number;
-  onCopy: (text: string, msgId: string) => void;
-  onUndo: (msgId: string) => void;
-  copiedIds: Set<string>;
-}
-
-function AssistantMessage({ msg, index, totalTokens, onCopy, onUndo, copiedIds }: AssistantMessageProps) {
-  const isCopied = copiedIds.has(msg.id);
-  const showTokens = index === 0 && totalTokens > 0; // Show tokens on latest assistant message
-
-  return (
-    <article key={msg.id} className="forge-chat-item forge-chat-item-assistant relative group">
-      <div className="flex items-start justify-between gap-2">
-        <span className="forge-chat-sender forge-chat-sender-assistant shrink-0">FORGE</span>
-        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-          {showTokens && (
-            <div className="flex items-center gap-1 px-2 py-0.5 rounded bg-[var(--forge-surface-2)] border border-[var(--forge-border)] text-[10px] font-mono text-[var(--forge-primary)]">
-              <Zap className="size-3" />
-              <span>~{totalTokens.toLocaleString()} tokens</span>
-            </div>
-          )}
-          <button
-            onClick={() => onCopy(msg.content ?? "", msg.id)}
-            className="p-1.5 rounded hover:bg-[var(--forge-surface-2)] transition-colors text-[var(--forge-muted)] hover:text-[var(--forge-foreground)]"
-            aria-label={isCopied ? "Copiado!" : "Copiar mensagem"}
-            title={isCopied ? "Copiado!" : "Copiar"}
-          >
-            <Copy className={isCopied ? "size-4 text-[var(--forge-primary)]" : "size-4"} />
-          </button>
-          <button
-            onClick={() => onUndo(msg.id)}
-            className="p-1.5 rounded hover:bg-[var(--forge-surface-2)] transition-colors text-[var(--forge-muted)] hover:text-[var(--forge-destructive)]"
-            aria-label="Desfazer esta e a mensagem anterior do usuário"
-            title="Desfazer"
-          >
-            <RotateCcw className="size-4" />
-          </button>
-        </div>
-      </div>
-      {msg.content ? <MarkdownRenderer className="forge-chat-markdown">{msg.content}</MarkdownRenderer> : null}
-
-      {msg.toolCalls && msg.toolCalls.length > 0 && (
-        <div className="forge-tool-inline mt-2">
-          <div className="forge-tool-inline-title">
-            <FileText className="size-4 text-[var(--forge-primary)]" />
-            <span className="truncate">
-              {msg.toolCalls[0]?.name}
-              {msg.toolCalls[0]?.args ? `: ${msg.toolCalls[0].args.slice(0, 48)}` : ""}
-            </span>
-          </div>
-        </div>
-      )}
-    </article>
-  );
-}
+import { ForgeAssistantBlock } from "@/components/editor/ForgeAssistantBlock";
+import {
+  buildLovableThread,
+  resolveAssistantProgress,
+  type FrozenRunSnapshot,
+} from "@/lib/lovable-thread";
 
 export interface ChatStreamProps {
   messages: ChatMessage[];
   running: boolean;
   progress: AgentProgress;
+  activeRunId?: string | null;
+  frozenRuns?: ReadonlyMap<string, FrozenRunSnapshot>;
   onResume?: () => void;
   onUndoMessage?: (assistantMsgId: string) => void;
-  /** Fase 4.6: aprovação/rejeição do plano proposto. */
   onPlanApprove?: (steps: PlanStep[]) => void;
   onPlanReject?: (reason?: string) => void;
 }
 
 export function ChatStream({
-  messages, running, progress, onResume, onUndoMessage,
-  onPlanApprove, onPlanReject,
+  messages,
+  running,
+  progress,
+  activeRunId,
+  frozenRuns,
+  onResume,
+  onUndoMessage,
+  onPlanApprove,
+  onPlanReject,
 }: ChatStreamProps) {
-  const phaseLabel = progress.phase ? (PHASE_LABELS[progress.phase] ?? progress.phase) : null;
   const pendingPlan = progress.pendingPlan;
-  const liveMessage = progress.message?.trim() || null;
-  const activeTools = progress.tools.filter((t) => t.ok === undefined);
-  const doneTools = progress.tools.filter((t) => t.ok !== undefined).slice(-6);
-  const streamText = progress.streamText?.trim() || null;
-  const lastAssistant = [...messages].reverse().find((m) => m.role === "assistant");
-  const showStreamText =
-    running &&
-    streamText &&
-    streamText !== (lastAssistant?.content?.trim() ?? "");
+  const awaitingReply = progress.awaiting && !pendingPlan;
 
   const [copiedIds, setCopiedIds] = useState<Set<string>>(new Set());
 
@@ -123,216 +52,114 @@ export function ChatStream({
     onUndoMessage?.(assistantMsgId);
   }, [onUndoMessage]);
 
-  // Calculate total tokens from progress
-  const totalTokens = progress.cost > 0 ? Math.round(progress.cost * 1_000_000 / (progress.model ? 1 : 1)) : 0;
-  // Better: estimate from model cost
-  const estimatedTokens = progress.model && progress.cost > 0
-    ? Math.round(progress.cost / ({ "claude-sonnet-4-20250514": 3, "gpt-4o": 2.5, "gpt-4.1": 2, "gemini-2.5-pro": 1.25, "default": 1 } as Record<string, number>)[progress.model] * 1_000_000)
-    : 0;
+  const estimatedTokens =
+    progress.model && progress.cost > 0
+      ? Math.round(
+          progress.cost /
+            ({ "claude-sonnet-4-20250514": 3, "gpt-4o": 2.5, "gpt-4.1": 2, "gemini-2.5-pro": 1.25, default: 1 } as Record<
+              string,
+              number
+            >)[progress.model] *
+            1_000_000,
+        )
+      : 0;
 
-  const assistantMessages = messages.filter(m => m.role === "assistant");
-  const awaitingReply = progress.awaiting && !pendingPlan;
+  const assistantMessages = messages.filter((m) => m.role === "assistant");
+
+  const thread = useMemo(
+    () =>
+      buildLovableThread(messages, progress, {
+        activeRunId,
+        running,
+        frozenRuns,
+      }),
+    [messages, progress, activeRunId, running, frozenRuns],
+  );
 
   return (
     <div className="forge-chat-stream" role="log" aria-live="polite" aria-relevant="additions text">
       {awaitingReply && (
-        <FadeIn direction="up" distance={4}>
-          <section
-            className="my-2 rounded-lg border border-amber-400/35 bg-amber-400/8 px-3 py-2.5 flex items-start gap-2"
-            aria-label="Aguardando sua resposta"
-            data-testid="awaiting-user-banner"
-          >
-            <MessageCircle className="size-4 shrink-0 text-amber-400 mt-0.5" />
-            <div className="min-w-0">
-              <p className="font-mono text-[10px] uppercase tracking-wider text-amber-400">
-                Aguardando você
-              </p>
-              <p className="text-[12px] text-[var(--forge-silver)] leading-relaxed mt-0.5">
-                O FORGE fez uma pergunta acima. Responda no campo de mensagem abaixo para continuar.
-              </p>
-            </div>
-          </section>
-        </FadeIn>
-      )}
-
-      {progress.pendingQueueCount > 0 && (
-        <p
-          className="font-mono text-[9px] text-[var(--forge-ghost)] px-1 mb-1"
-          data-testid="pending-queue-hint"
+        <section
+          className="my-2 rounded-lg border border-amber-400/35 bg-amber-400/8 px-3 py-2.5 flex items-start gap-2"
+          aria-label="Aguardando sua resposta"
+          data-testid="awaiting-user-banner"
         >
-          {progress.pendingQueueCount} mensagem{progress.pendingQueueCount !== 1 ? "s" : ""} na fila — serão enviadas quando o agente liberar
-        </p>
-      )}
-
-      {(running || progress.timeline.length > 0) && (
-        <AgentTimeline timeline={progress.timeline} running={running} />
-      )}
-
-      {progress.timeline.length > 0 && (
-        <ConsoleLogStream timeline={progress.timeline} initiallyExpanded={false} />
-      )}
-
-      {progress.diffs.length > 0 && (
-        <ChatDiffViewer diffs={progress.diffs} />
-      )}
-
-      {pendingPlan && onPlanApprove && onPlanReject && (
-        <FadeIn direction="up" distance={4}>
-          <section
-            className="my-3 rounded-lg border border-[var(--primary)]/30 bg-[var(--primary)]/5 overflow-hidden"
-            aria-label="Plano aguardando aprovação"
-            data-testid="plan-panel"
-          >
-            <header className="flex items-center gap-2 px-4 py-2.5 border-b border-[var(--primary)]/20">
-              <span className="size-1.5 rounded-full bg-[var(--primary)] animate-pulse" />
-              <span className="font-mono text-[10px] uppercase tracking-[0.1em] text-[var(--primary)]">
-                Plano proposto — aguardando sua decisão
-              </span>
-            </header>
-            {pendingPlan.rationale && (
-              <p
-                className="px-4 pt-2.5 pb-1 text-[12px] italic text-[var(--silver)] leading-relaxed border-b border-[var(--primary)]/10"
-                data-testid="plan-rationale"
-              >
-                {pendingPlan.rationale}
-              </p>
-            )}
-            <div className="p-3">
-              <PlanViewer
-                plan={pendingPlan}
-                onApprove={onPlanApprove}
-                onReject={() => onPlanReject("Cancelado pelo usuário")}
-              />
-            </div>
-            <footer className="px-4 py-2 border-t border-[var(--primary)]/20 text-[10px] font-mono text-[var(--text-ghost)]">
-              {pendingPlan.summary}
-            </footer>
-          </section>
-        </FadeIn>
-      )}
-
-      {messages.map((msg, idx) => {
-        if (msg.role === "tool") return null;
-
-        if (msg.role === "user") {
-          return (
-            <FadeIn key={msg.id} direction="up" distance={4} delay={idx * 0.03}>
-              <article className="forge-chat-item forge-chat-item-user">
-                <span className="forge-chat-sender forge-chat-sender-user">Você</span>
-                <div className="forge-msg-user-outline">
-                  <p className="whitespace-pre-wrap">{msg.content}</p>
-                </div>
-              </article>
-            </FadeIn>
-          );
-        }
-
-        const assistantIndex = assistantMessages.findIndex(m => m.id === msg.id);
-        return (
-          <FadeIn key={msg.id} direction="up" distance={4} delay={idx * 0.03}>
-            <AssistantMessage
-              msg={msg}
-              index={assistantIndex}
-              totalTokens={estimatedTokens}
-              onCopy={handleCopy}
-              onUndo={handleUndo}
-              copiedIds={copiedIds}
-            />
-          </FadeIn>
-        );
-      })}
-
-      {running && (
-        <section className="forge-chat-live" aria-label="Atividade do agente">
-          <div className="forge-chat-live-header">
-            <Loader2 className="size-3.5 shrink-0 animate-spin text-[var(--forge-primary)]" />
-            <span className="font-mono text-[10px] uppercase tracking-wider text-[var(--forge-primary)]">
-              FORGE
-            </span>
-            {phaseLabel && (
-              <span className="font-mono text-[10px] text-[var(--forge-muted)]">· {phaseLabel}</span>
-            )}
-            {progress.currentStep != null && progress.totalSteps != null && (
-              <span className="font-mono text-[9px] text-[var(--forge-ghost)] ml-auto">
-                passo {progress.currentStep}/{progress.totalSteps}
-              </span>
-            )}
-            {progress.model && estimatedTokens > 0 && (
-              <span className="font-mono text-[9px] text-[var(--forge-primary)] ml-2">
-                ~{estimatedTokens.toLocaleString()} tokens
-              </span>
-            )}
+          <MessageCircle className="size-4 shrink-0 text-amber-400 mt-0.5" />
+          <div className="min-w-0">
+            <p className="font-mono text-[10px] uppercase tracking-wider text-amber-400">
+              Aguardando você
+            </p>
+            <p className="text-[12px] text-[var(--forge-silver)] leading-relaxed mt-0.5">
+              O FORGE fez uma pergunta acima. Responda no campo de mensagem abaixo para continuar.
+            </p>
           </div>
-
-          {liveMessage && <p className="forge-chat-live-line">{liveMessage}</p>}
-
-          {showStreamText && <MarkdownRenderer className="forge-chat-markdown">{streamText}</MarkdownRenderer>}
-
-          {progress.statusHint && (
-            <p className="forge-chat-live-hint">{progress.statusHint}</p>
-          )}
-
-          {activeTools.length > 0 && (
-            <ul className="forge-chat-live-tools">
-              {activeTools.map((t, i) => (
-                <li key={`${t.name}-${i}`}>
-                  <Loader2 className="size-3 animate-spin shrink-0" />
-                  <span>{t.name}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-
-          {doneTools.length > 0 && (
-            <ul className="forge-chat-live-tools forge-chat-live-tools-done">
-              {doneTools.map((t, i) => (
-                <li key={`done-${t.name}-${i}`} data-ok={t.ok ? "true" : "false"}>
-                  <span>{t.name}</span>
-                  {t.ok === false && t.error && (
-                    <span className="text-amber-400/90 truncate">{t.error.slice(0, 80)}</span>
-                  )}
-                </li>
-              ))}
-            </ul>
-          )}
         </section>
       )}
 
+      {thread.map((item, idx) => {
+        if (item.kind === "user") {
+          return (
+            <article key={item.message.id} className="forge-chat-item forge-chat-item-user">
+              <span className="forge-chat-sender forge-chat-sender-user">Você</span>
+              <div className="forge-msg-user-outline">
+                <p className="whitespace-pre-wrap">{item.message.content}</p>
+              </div>
+            </article>
+          );
+        }
+
+        const resolved = resolveAssistantProgress(item);
+        const assistantIndex = item.message
+          ? assistantMessages.findIndex((m) => m.id === item.message!.id)
+          : -1;
+
+        return (
+          <ForgeAssistantBlock
+            key={item.message?.id ?? `live-${item.runId ?? idx}`}
+            message={item.message}
+            progress={resolved}
+            isActive={item.isActive}
+            runId={item.runId}
+            pendingPlan={pendingPlan}
+            onCopy={handleCopy}
+            onUndo={handleUndo}
+            copiedIds={copiedIds}
+            estimatedTokens={estimatedTokens}
+            showTokens={assistantIndex === 0}
+            onPlanApprove={onPlanApprove}
+            onPlanReject={onPlanReject}
+          />
+        );
+      })}
+
       {!running && progress.resumable && !progress.autoResuming && (
-        <FadeIn direction="up" distance={4}>
-          <div className="space-y-2">
-            {progress.error && (() => {
-              const isTimeout = /edge.*timeout|120s|edge function.*limite/i.test(progress.error);
-              const lower = progress.error.toLowerCase();
-              const isE2b = /e2b|sandbox/i.test(lower);
-              const hint = isTimeout
-                ? timeoutHint()
-                : isE2b
-                  ? e2bErrorHint(progress.error)
-                  : llmErrorHint(progress.error, false);
-              return <ErrorHintCard hint={hint} onAction={onResume} />;
-            })()}
-            <section className="forge-chat-resume">
-              <AlertTriangle className="size-4 text-amber-400 shrink-0" />
-              <p className="flex-1 min-w-0 font-mono text-[10px] text-[var(--forge-silver)] leading-relaxed">
-                {progress.error
-                  ? "Execução pausada — histórico salvo no checkpoint."
-                  : "Execução pausada. O histórico foi salvo — use Continuar para retomar."}
-              </p>
-              {onResume && (
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="primary"
-                  onClick={onResume}
-                >
-                  <RefreshCw className="size-3.5 mr-1" />
-                  Continuar
-                </Button>
-              )}
-            </section>
-          </div>
-        </FadeIn>
+        <div className="space-y-2">
+          {progress.error && (() => {
+            const isTimeout = /edge.*timeout|120s|edge function.*limite/i.test(progress.error);
+            const lower = progress.error.toLowerCase();
+            const isE2b = /e2b|sandbox/i.test(lower);
+            const hint = isTimeout
+              ? timeoutHint()
+              : isE2b
+                ? e2bErrorHint(progress.error)
+                : llmErrorHint(progress.error, false);
+            return <ErrorHintCard hint={hint} onAction={onResume} />;
+          })()}
+          <section className="forge-chat-resume">
+            <AlertTriangle className="size-4 text-amber-400 shrink-0" />
+            <p className="flex-1 min-w-0 font-mono text-[10px] text-[var(--forge-silver)] leading-relaxed">
+              {progress.error
+                ? "Execução pausada — histórico salvo no checkpoint."
+                : "Execução pausada. O histórico foi salvo — use Continuar para retomar."}
+            </p>
+            {onResume && (
+              <Button type="button" size="sm" variant="primary" onClick={onResume}>
+                <RefreshCw className="size-3.5 mr-1" />
+                Continuar
+              </Button>
+            )}
+          </section>
+        </div>
       )}
     </div>
   );

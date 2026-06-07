@@ -857,11 +857,17 @@ export class AgentLoop {
   }
 
   private async persistFinal(summary: string): Promise<void> {
+    const meta: Record<string, unknown> = {
+      runId: this.runId ?? undefined,
+      executionLog: this.state.executionLog,
+      finishedAt: new Date().toISOString(),
+    };
     await this.sb.from("messages").insert({
       conversation_id: this.state.conversationId,
       role: "assistant",
       parts: [{ type: "text", text: summary }],
       tool_calls: [],
+      meta,
     });
     await this.sb.from("projects").update({ updated_at: new Date().toISOString() }).eq("id", this.state.projectId);
   }

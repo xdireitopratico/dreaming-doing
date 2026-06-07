@@ -5,6 +5,7 @@ export type Msg = {
   role: string;
   parts: any[];
   tool_calls: any[];
+  meta?: Record<string, unknown> | null;
   created_at: string;
 };
 

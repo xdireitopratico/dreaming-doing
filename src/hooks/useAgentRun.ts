@@ -21,6 +21,7 @@ import {
   type AgentConnectOptions,
   type AgentProgress,
 } from "@/lib/agent-progress";
+import { freezeSnapshot, type FrozenRunSnapshot } from "@/lib/lovable-thread";
 
 const TERMINAL_STATUSES = new Set(["completed", "failed", "canceled", "awaiting_user"]);
 
@@ -40,6 +41,8 @@ export type { AgentProgress, AgentConnectOptions, PlanStep, PendingPlan } from "
 export function useAgentRun() {
   const [progress, setProgress] = useState<AgentProgress>(initialAgentProgress);
   const [connected, setConnected] = useState(false);
+  const [activeRunId, setActiveRunId] = useState<string | null>(null);
+  const [frozenRuns, setFrozenRuns] = useState<Map<string, FrozenRunSnapshot>>(new Map());
 
   const runIdRef = useRef<string | null>(null);
   const lastSeqRef = useRef(0);
@@ -55,9 +58,25 @@ export function useAgentRun() {
     if (row.seq <= lastSeqRef.current) return false;
     lastSeqRef.current = row.seq;
     const event = streamRowToSSEEvent(row);
-    setProgress((prev) => applyAgentProgressEvent(prev, event));
     const t = event.type;
-    return t === "finish" || t === "done" || t === "canceled" || t === "error";
+    const terminal = t === "finish" || t === "done" || t === "canceled" || t === "error";
+    setProgress((prev) => {
+      const next = applyAgentProgressEvent(prev, event);
+      const rid = runIdRef.current;
+      if (terminal && rid) {
+        const snap = freezeSnapshot({
+          ...next,
+          streamText: next.streamText ?? prev.streamText,
+        });
+        setFrozenRuns((m) => {
+          const copy = new Map(m);
+          copy.set(rid, snap);
+          return copy;
+        });
+      }
+      return next;
+    });
+    return terminal;
   }, []);
 
   const teardownChannels = useCallback(() => {
@@ -163,6 +182,7 @@ export function useAgentRun() {
     async (runId: string, opts?: { resetProgress?: boolean }) => {
       teardownChannels();
       runIdRef.current = runId;
+      setActiveRunId(runId);
       if (opts?.resetProgress !== false) {
         lastSeqRef.current = 0;
         setProgress({
@@ -428,7 +448,7 @@ export function useAgentRun() {
     async (projectId: string, conversationId: string, runId: string) => {
       void projectId;
       void conversationId;
-      await subscribeToRun(runId, { resetProgress: false });
+      await subscribeToRun(runId, { resetProgress: runIdRef.current !== runId });
     },
     [subscribeToRun],
   );
@@ -512,11 +532,13 @@ export function useAgentRun() {
     }
 
     runIdRef.current = null;
+    setActiveRunId(null);
     teardownChannels();
   }, [teardownChannels]);
 
   const disconnect = useCallback(() => {
     runIdRef.current = null;
+    setActiveRunId(null);
     teardownChannels();
     setProgress((p) => ({ ...p, finished: true }));
   }, [teardownChannels]);
@@ -571,6 +593,8 @@ export function useAgentRun() {
   return {
     progress,
     connected,
+    activeRunId,
+    frozenRuns,
     connect,
     watch,
     replay,

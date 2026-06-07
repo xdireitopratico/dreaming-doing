@@ -162,9 +162,10 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
 
     case "assistant_text": {
       const chunk = (data.text as string) ?? "";
+      const append = data.append === true || data.delta === true;
       return {
         ...prev,
-        streamText: chunk,
+        streamText: append ? `${prev.streamText ?? ""}${chunk}` : chunk,
         timeline: [...prev.timeline, event],
       };
     }
@@ -305,7 +306,7 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
         awaiting: !!(data.awaiting || data.qualified),
         resumable: false,
         error: null,
-        streamText: null,
+        streamText: prev.streamText,
         pendingPlan: data.planRejected === true ? null : prev.pendingPlan,
         timeline: [...prev.timeline, event],
       };
@@ -357,7 +358,7 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
         finished: true,
         canceled,
         awaiting: !!(data.awaiting || prev.awaiting),
-        streamText: null,
+        streamText: prev.streamText,
         autoResuming: false,
         lastFinishOk: !failed && !canceled,
         resumable: failed && data.resumable === true && !canceled,

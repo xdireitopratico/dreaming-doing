@@ -1,0 +1,202 @@
+import { useEffect, useState } from "react";
+import {
+  ChevronDown,
+  ChevronRight,
+  Copy,
+  Loader2,
+  RotateCcw,
+  Zap,
+} from "lucide-react";
+import { MarkdownRenderer } from "@/components/ui/markdown-renderer";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import type { ChatMessage } from "@/components/editor/ChatInput";
+import { initialAgentProgress, type AgentProgress, type PlanStep, type PendingPlan } from "@/lib/agent-progress";
+import { buildAgentNarrative } from "@/lib/agent-narrative";
+import { AgentTimeline } from "@/components/editor/AgentTimeline";
+import { ChatDiffViewer } from "@/components/editor/ChatDiffViewer";
+import { PlanViewer } from "@/components/editor/PlanViewer";
+
+interface ForgeAssistantBlockProps {
+  message?: ChatMessage;
+  progress: AgentProgress | null;
+  isActive: boolean;
+  runId?: string;
+  pendingPlan?: PendingPlan | null;
+  onCopy?: (text: string, msgId: string) => void;
+  onUndo?: (msgId: string) => void;
+  copiedIds?: Set<string>;
+  estimatedTokens?: number;
+  showTokens?: boolean;
+  onPlanApprove?: (steps: PlanStep[]) => void;
+  onPlanReject?: (reason?: string) => void;
+}
+
+export function ForgeAssistantBlock({
+  message,
+  progress,
+  isActive,
+  runId,
+  pendingPlan,
+  onCopy,
+  onUndo,
+  copiedIds,
+  estimatedTokens = 0,
+  showTokens = false,
+  onPlanApprove,
+  onPlanReject,
+}: ForgeAssistantBlockProps) {
+  const [detailsOpen, setDetailsOpen] = useState(isActive);
+  const msgId = message?.id ?? `live-${runId ?? "forge"}`;
+  const isCopied = copiedIds?.has(msgId) ?? false;
+
+  useEffect(() => {
+    setDetailsOpen(isActive);
+  }, [isActive]);
+
+  const narrative = buildAgentNarrative(progress ?? initialAgentProgress, {
+    running: isActive,
+    persistedText: message?.content,
+  });
+
+  const effectiveProgress = progress;
+  const planForRun =
+    pendingPlan && (!runId || pendingPlan.runId === runId) ? pendingPlan : null;
+  const diffs = effectiveProgress?.diffs ?? [];
+  const executionLog = Array.isArray(message?.meta?.executionLog)
+    ? (message!.meta!.executionLog as string[])
+    : [];
+  const hasDetails =
+    (effectiveProgress?.timeline.length ?? 0) > 0 ||
+    (effectiveProgress?.tools.length ?? 0) > 0 ||
+    executionLog.length > 0;
+
+  const displayText = narrative.body ?? message?.content ?? null;
+
+  return (
+    <article className="forge-chat-item forge-chat-item-assistant relative group">
+      <div className="flex items-start justify-between gap-2">
+        <span className="forge-chat-sender forge-chat-sender-assistant shrink-0">FORGE</span>
+        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+          {showTokens && estimatedTokens > 0 && (
+            <div className="flex items-center gap-1 px-2 py-0.5 rounded bg-[var(--forge-surface-2)] border border-[var(--forge-border)] text-[10px] font-mono text-[var(--forge-primary)]">
+              <Zap className="size-3" />
+              <span>~{estimatedTokens.toLocaleString()} tokens</span>
+            </div>
+          )}
+          {displayText && onCopy && (
+            <button
+              type="button"
+              onClick={() => onCopy(displayText, msgId)}
+              className="p-1.5 rounded hover:bg-[var(--forge-surface-2)] transition-colors text-[var(--forge-muted)] hover:text-[var(--forge-foreground)]"
+              aria-label={isCopied ? "Copiado!" : "Copiar mensagem"}
+            >
+              <Copy className={isCopied ? "size-4 text-[var(--forge-primary)]" : "size-4"} />
+            </button>
+          )}
+          {message && onUndo && (
+            <button
+              type="button"
+              onClick={() => onUndo(message.id)}
+              className="p-1.5 rounded hover:bg-[var(--forge-surface-2)] transition-colors text-[var(--forge-muted)] hover:text-[var(--forge-destructive)]"
+              aria-label="Desfazer"
+            >
+              <RotateCcw className="size-4" />
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Camada de comunicação — sempre visível durante run */}
+      {isActive && narrative.headline && (
+        <div
+          className="flex items-center gap-2 mt-1 mb-2 min-w-0"
+          data-testid="agent-narrative-headline"
+        >
+          <Loader2 className="size-3.5 shrink-0 animate-spin text-[var(--forge-primary)]" />
+          <p className="font-mono text-[11px] text-[var(--forge-silver)] leading-snug truncate">
+            {narrative.headline}
+          </p>
+        </div>
+      )}
+
+      {isActive && narrative.subhint && (
+        <p className="forge-chat-live-hint mb-2">{narrative.subhint}</p>
+      )}
+
+      {isActive && narrative.showTyping && !displayText && (
+        <p className="forge-chat-live-line flex items-center gap-1.5" aria-live="polite">
+          <span className="inline-flex gap-0.5">
+            <span className="size-1 rounded-full bg-[var(--forge-primary)] animate-pulse" />
+            <span className="size-1 rounded-full bg-[var(--forge-primary)] animate-pulse [animation-delay:120ms]" />
+            <span className="size-1 rounded-full bg-[var(--forge-primary)] animate-pulse [animation-delay:240ms]" />
+          </span>
+          Preparando resposta…
+        </p>
+      )}
+
+      {displayText ? (
+        <MarkdownRenderer className="forge-chat-markdown">{displayText}</MarkdownRenderer>
+      ) : null}
+
+      {hasDetails && effectiveProgress && (
+        <Collapsible
+          open={detailsOpen}
+          onOpenChange={setDetailsOpen}
+          className="mt-3 rounded-lg border border-[var(--forge-border)] bg-[var(--forge-bg)]/30"
+        >
+          <CollapsibleTrigger className="flex w-full items-center gap-2 px-3 py-2 text-left font-mono text-[10px] uppercase tracking-wider text-[var(--forge-ghost)] hover:text-[var(--forge-muted)]">
+            {detailsOpen ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
+            Detalhes da execução
+            {!isActive && (
+              <span className="ml-auto normal-case tracking-normal text-[var(--forge-ghost)]">
+                {effectiveProgress.tools.filter((t) => t.ok === true).length} tools
+              </span>
+            )}
+          </CollapsibleTrigger>
+          <CollapsibleContent className="px-2 pb-2">
+            {effectiveProgress && effectiveProgress.timeline.length > 0 ? (
+              <AgentTimeline timeline={effectiveProgress.timeline} running={isActive} />
+            ) : executionLog.length > 0 ? (
+              <ul className="space-y-1 font-mono text-[10px] text-[var(--forge-muted)]">
+                {executionLog.slice(-12).map((line, i) => (
+                  <li key={`${line.slice(0, 24)}-${i}`} className="truncate">
+                    {line}
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+          </CollapsibleContent>
+        </Collapsible>
+      )}
+
+      {planForRun && onPlanApprove && onPlanReject && (
+        <section
+          className="my-3 rounded-lg border border-[var(--primary)]/30 bg-[var(--primary)]/5 overflow-hidden"
+          aria-label="Plano aguardando aprovação"
+          data-testid="plan-panel"
+        >
+          <header className="flex items-center gap-2 px-4 py-2.5 border-b border-[var(--primary)]/20">
+            <span className="size-1.5 rounded-full bg-[var(--primary)] animate-pulse" />
+            <span className="font-mono text-[10px] uppercase tracking-[0.1em] text-[var(--primary)]">
+              Plano proposto — aguardando sua decisão
+            </span>
+          </header>
+          {planForRun.rationale && (
+            <p className="px-4 pt-2.5 pb-1 text-[12px] italic text-[var(--silver)] leading-relaxed border-b border-[var(--primary)]/10">
+              {planForRun.rationale}
+            </p>
+          )}
+          <div className="p-3">
+            <PlanViewer
+              plan={planForRun}
+              onApprove={onPlanApprove}
+              onReject={() => onPlanReject("Cancelado pelo usuário")}
+            />
+          </div>
+        </section>
+      )}
+
+      {diffs.length > 0 && <ChatDiffViewer diffs={diffs} />}
+    </article>
+  );
+}

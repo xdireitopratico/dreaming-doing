@@ -165,11 +165,16 @@ export function useEditorPageData({
       const roleRaw = String(m.role ?? "").toLowerCase();
       const role: ChatMessage["role"] =
         roleRaw === "user" ? "user" : roleRaw === "assistant" ? "assistant" : "tool";
+      const meta = m.meta ?? null;
+      const runId =
+        meta && typeof meta.runId === "string" ? meta.runId : undefined;
       return {
         id: m.id,
         role,
         content: m.parts?.map((p: any) => p.text).join("\n") ?? "",
         toolCalls: m.tool_calls?.map((t: any) => ({ name: t.name, args: t.args?.path ?? "" })) ?? [],
+        meta,
+        runId,
         timestamp: new Date(m.created_at).getTime(),
       };
     });

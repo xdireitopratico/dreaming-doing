@@ -2,7 +2,7 @@
 
 Plataforma de construção de apps web movida a IA. Descreva sua ideia e o agente gera código, configura o stack e faz deploy.
 
-> **Agentes LLM:** leia **[FORGE.md](./FORGE.md)** (fonte de verdade). Arquitetura: [`.commandcode/ARCHITECTURE.md`](./.commandcode/ARCHITECTURE.md).
+> **Agentes LLM:** leia **[FORGE.md](./FORGE.md)** (fonte de verdade).
 
 ## Stack
 

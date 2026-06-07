@@ -271,8 +271,29 @@ export function useEditorPageHandlers({
   }, [conversation, projectId, isAgentBusy, agent, logPanelOpen, qc, tasteQuota, setLogs, setLogPanelOpen]);
 
   const handleSend = useCallback(
-    (text: string, mode?: AgentComposerMode, parts?: StoredMessagePart[]) => {
+    async (text: string, mode?: AgentComposerMode, parts?: StoredMessagePart[]) => {
       if (!conversation) return;
+
+      const pp = agent.progress.pendingPlan;
+      if (pp) {
+        try {
+          await planRejectFn({
+            data: {
+              runId: pp.runId,
+              planId: pp.planId,
+              reason: "Nova mensagem — plano ignorado",
+            },
+          });
+          agent.clearPendingPlan();
+          toast.info("Plano anterior ignorado — seguindo com sua nova mensagem.");
+          qc.invalidateQueries({ queryKey: ["conversation", projectId] });
+          qc.invalidateQueries({ queryKey: ["agent-runs", projectId] });
+        } catch (e) {
+          toast.error((e as Error)?.message ?? "Falha ao ignorar plano pendente");
+          return;
+        }
+      }
+
       const messageParts =
         parts && parts.length > 0
           ? parts
@@ -282,40 +303,49 @@ export function useEditorPageHandlers({
                 text,
               },
             ];
-      supabase
-        .from("messages")
-        .insert({
-          conversation_id: conversation.id,
-          role: "user",
-          parts: messageParts,
-        })
-        .then(async ({ error }) => {
-          if (error) {
-            toast.error("Erro ao enviar mensagem");
-            logEditorTelemetryEvent("agent", "chat_send_fail", "error", error.message.slice(0, 200));
-            return;
-          }
-          logEditorTelemetryEvent("agent", "chat_send", "info", mode ?? composerMode);
-          void qc.invalidateQueries({ queryKey: ["messages", conversation.id] });
 
-          const kind = resolveSessionKind(tasteQuota);
-          if (isAgentBusy()) {
-            const queued = await agent.queueMessage(projectId, conversation.id, kind);
-            if (queued.ok) {
-              toast.info(
-                queued.pendingCount && queued.pendingCount > 1
-                  ? `${queued.pendingCount} mensagens na fila`
-                  : "Mensagem na fila — o agente processará em seguida",
-              );
-            } else {
-              toast.error(queued.message ?? "Erro ao enfileirar mensagem");
-            }
-            return;
-          }
-          runAgent(kind);
-        });
+      const { error } = await supabase.from("messages").insert({
+        conversation_id: conversation.id,
+        role: "user",
+        parts: messageParts,
+      });
+
+      if (error) {
+        toast.error("Erro ao enviar mensagem");
+        logEditorTelemetryEvent("agent", "chat_send_fail", "error", error.message.slice(0, 200));
+        return;
+      }
+
+      logEditorTelemetryEvent("agent", "chat_send", "info", mode ?? composerMode);
+      void qc.invalidateQueries({ queryKey: ["messages", conversation.id] });
+
+      const kind = resolveSessionKind(tasteQuota);
+      if (isAgentBusy()) {
+        const queued = await agent.queueMessage(projectId, conversation.id, kind);
+        if (queued.ok) {
+          toast.info(
+            queued.pendingCount && queued.pendingCount > 1
+              ? `${queued.pendingCount} mensagens na fila`
+              : "Mensagem na fila — o agente processará em seguida",
+          );
+        } else {
+          toast.error(queued.message ?? "Erro ao enfileirar mensagem");
+        }
+        return;
+      }
+      runAgent(kind);
     },
-    [conversation, runAgent, composerMode, tasteQuota, isAgentBusy, agent, projectId, qc],
+    [
+      conversation,
+      runAgent,
+      composerMode,
+      tasteQuota,
+      isAgentBusy,
+      agent,
+      projectId,
+      qc,
+      planRejectFn,
+    ],
   );
 
   const handleVisualEdits = useCallback(() => {

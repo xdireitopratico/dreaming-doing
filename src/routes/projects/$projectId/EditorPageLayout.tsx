@@ -248,6 +248,8 @@ export function EditorPageLayout({
                     messages={chatMessages}
                     running={running}
                     agentProgress={agent.progress}
+                    activeRunId={agent.activeRunId}
+                    frozenRuns={agent.frozenRuns}
                     onResumeAgent={handleResumeAgent}
                     onSend={handleSend}
                     onStop={handleStop}

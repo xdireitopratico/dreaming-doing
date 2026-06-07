@@ -43,6 +43,8 @@ export interface ChatMessage {
   role: "user" | "assistant" | "tool";
   content: string;
   toolCalls?: Array<{ name: string; args: string }>;
+  meta?: Record<string, unknown> | null;
+  runId?: string;
   timestamp: number;
 }
 
@@ -65,6 +67,8 @@ interface ChatInputProps {
   onStartProject?: () => void;
   /** Trilha ao vivo do agente (fases, tools) — renderizada no painel de mensagens. */
   agentProgress?: AgentProgress;
+  activeRunId?: string | null;
+  frozenRuns?: ReadonlyMap<string, import("@/lib/lovable-thread").FrozenRunSnapshot>;
   /** Fase 4.6: plano aguardando aprovação. */
   onPlanApprove?: (steps: PlanStep[]) => void;
   onPlanReject?: (reason?: string) => void;
@@ -120,6 +124,8 @@ export function ChatInput({
   onVisualEdits,
   visualEditsActive,
   agentProgress,
+  activeRunId,
+  frozenRuns,
   onResumeAgent,
   onDeploy,
   onUndoMessage,
@@ -397,6 +403,8 @@ export function ChatInput({
             <ChatStream
               messages={messages}
               running={running}
+              activeRunId={activeRunId}
+              frozenRuns={frozenRuns}
               progress={
                 agentProgress ?? {
                   phase: null,
@@ -502,7 +510,18 @@ export function ChatInput({
         </div>
       )}
 
-      <div className="forge-composer">
+      {(agentProgress?.pendingQueueCount ?? 0) > 0 && (
+        <div
+          className="forge-agent-bar lovable-agent-bar border-t border-[var(--forge-border)]"
+          data-testid="pending-queue-hint"
+        >
+          <strong>{agentProgress!.pendingQueueCount}</strong> mensagem
+          {agentProgress!.pendingQueueCount !== 1 ? "s" : ""} na fila — serão enviadas quando o
+          agente liberar
+        </div>
+      )}
+
+      <div className="forge-composer lovable-composer">
         <input
           ref={fileInputRef}
           type="file"

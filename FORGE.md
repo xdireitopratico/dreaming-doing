@@ -1,13 +1,12 @@
 # FORGE — Fonte de Verdade (LLM)
 
-> **Leia só isto** para operar no repo. Detalhe técnico: [`.commandcode/ARCHITECTURE.md`](.commandcode/ARCHITECTURE.md)
+> **Leia só isto** para operar no repo.
 
 ## Hierarquia de docs
 
 | Arquivo | Quem lê | Conteúdo |
 |---------|---------|----------|
 | **FORGE.md** | LLM / agente | Caminho único, arquivos críticos, deploy, debug |
-| **ARCHITECTURE.md** | LLM aprofundando | Backend ↔ frontend, tabelas |
 | **README.md** | Humano | Produto, `bun run dev`, link para FORGE |
 | `AGENT.md` / `CLAUDE.md` / `GEMINI.md` / `AGENTS.md` | IDEs | Ponte de 3 linhas → FORGE |
 
@@ -30,12 +29,12 @@ ChatInput → useAgentRun.connect()
   → run-executor → run-job → loop.ts
   → appendStreamEvent → agent_stream_events
   → Supabase Realtime (INSERT events + UPDATE agent_runs)
-  → useAgentRun → agent-progress → ChatStream
+  → useAgentRun → agent-progress → lovable-thread → ChatStream / ForgeAssistantBlock
 ```
 
 ### Fila ativa (não é legado)
 
-Quando o projeto já tem run ocupado, novas mensagens vão para **`agent_pending_messages`** via `useAgentRun.queueMessage()`. UI: contador no header do chat + hint no `ChatStream`.
+Quando o projeto já tem run ocupado, novas mensagens vão para **`agent_pending_messages`** via `useAgentRun.queueMessage()`. UI: contador no header + barra acima do composer.
 
 Ao terminar um run, Inngest chama `agent-run { action: "continue_queue" }` (service role) para consumir a fila. O frontend usa `drain_queue` (nunca `connect`/`runAgent`) para recuperar fila órfã. **Enqueue só com `enqueue: true`** (via `queueMessage` após mensagem do usuário) — `connect` concorrente retorna `busy` sem INSERT fantasma.
 
@@ -127,7 +126,8 @@ SELECT count(*) FROM agent_pending_messages WHERE project_id = 'PROJECT_ID';
 | B10 | Docs + comentários — sem referências SSE/PGMQ ativas | ✅ |
 | R1 | Migration drop PGMQ `agent_chunks` + funções purge/drain | ✅ |
 | R2 | Editor split: `useEditorPageData`, handlers, `EditorPageLayout` | ✅ |
-| R3 | `AgentTimeline.tsx` no ChatStream | ✅ |
+| R3 | `AgentTimeline.tsx` inline em `ForgeAssistantBlock` | ✅ |
+| R5 | Chat Lovable: `lovable-thread`, `agent-narrative`, auto-reject plano | ✅ |
 | R4 | `E2bStatusBadge` no workspace header | ✅ |
 
 ## Restante
