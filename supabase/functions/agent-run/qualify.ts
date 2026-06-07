@@ -47,9 +47,6 @@ export function needsQualify(userRequest: string, classification: Classification
   if (classification.type === "other" && len < 180) return true;
   if (len < 50 && classification.complexity <= 2) return true;
 
-  // For very first interactions on a project (short/medium prompts), prefer qualify to avoid surprise execution.
-  if (len < 140 && classification.complexity <= 3) return true;
-
   return false;
 }
 
