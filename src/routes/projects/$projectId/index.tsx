@@ -63,6 +63,7 @@ import {
   peekPendingAgentRun,
 } from "@/lib/agent-auto-run";
 import { publishProject } from "@/lib/publish.functions";
+import { planApprove, planReject } from "@/lib/plan-decide.functions";
 import { useAgentBlame, buildBlameFromTimeline } from "@/hooks/useAgentBlame";
 import { registerAiCodeLens, registerAiFolding, clearEnhancements, HEAT_MAP_CSS } from "@/lib/monacoEnhancements";
 import { useElementPicker } from "@/hooks/useElementPicker";
@@ -143,7 +144,7 @@ function EditorPage() {
   const [provider, setProvider] = useState("");
   const [pickMode, setPickMode] = useState(false);
   const [logs, setLogs] = useState<LogEntry[]>([]);
-  const [composerMode, setComposerMode] = useState<AgentComposerMode>("chat");
+  const [composerMode, setComposerMode] = useState<AgentComposerMode>("plan");
   const [promptDraft, setPromptDraft] = useState<string | null>(null);
 
   const [previewRoute, setPreviewRoute] = useState("/");
@@ -158,6 +159,8 @@ function EditorPage() {
   // ─── Hooks ───────────────────────────────────────────────────────────
   const sse = useSSE();
   const publishFn = useServerFn(publishProject);
+  const planApproveFn = useServerFn(planApprove);
+  const planRejectFn = useServerFn(planReject);
   useWorkspacePresets();
 
   useEffect(() => {
@@ -537,7 +540,7 @@ function EditorPage() {
       void (async () => {
         setRunning(true);
         try {
-          await sse.connect(projectId, conversation.id, kind, { tasteAction, mode: composerMode === "plan" ? "plan" : composerMode === "build" ? "build" : "chat" });
+          await sse.connect(projectId, conversation.id, kind, { tasteAction, mode: composerMode });
         } catch (e: unknown) {
           const msg = e instanceof Error ? e.message : "Erro ao iniciar agente";
           logEditorTelemetryEvent("agent", "run_fail", "error", msg.slice(0, 200));
@@ -895,15 +898,11 @@ function EditorPage() {
     async (steps: { id: string; enabled: boolean }[]) => {
       const pp = sse.progress.pendingPlan;
       if (!pp) return;
-      // Filtra só os enabled — o PlanViewer já envia filtrado, mas re-filtra
-      // por segurança caso o componente mude.
       const enabled = steps.filter((s) => s.enabled !== false);
       if (enabled.length === 0) {
         toast.warning("Selecione ao menos um passo para executar.");
         return;
       }
-      // Re-mapeia para PlanStep com todos os campos (PlanViewer pode ter
-      // enviado só {id, enabled}).
       const full = enabled
         .map((s) => pp.steps.find((p) => p.id === s.id))
         .filter((s): s is NonNullable<typeof s> => s != null);
@@ -911,32 +910,45 @@ function EditorPage() {
         toast.warning("Passos selecionados não correspondem ao plano.");
         return;
       }
-      const result = await sse.approvePlan(projectId, pp.runId, pp.planId, full);
-      if (result.ok) {
+      try {
+        const result = await planApproveFn({
+          data: {
+            runId: pp.runId,
+            planId: pp.planId,
+            plan: pp.summary,
+            steps: full,
+          },
+        });
         toast.success(
-          result.resolvedInProcess
+          result.eventId
             ? "Plano aprovado — agente executando…"
-            : "Plano aprovado — retomando no servidor…",
+            : "Plano aprovado — agente na fila.",
         );
-      } else {
-        toast.error(result.message ?? "Falha ao aprovar plano");
+        qc.invalidateQueries({ queryKey: ["conversation", projectId] });
+        qc.invalidateQueries({ queryKey: ["agent-runs", projectId] });
+      } catch (e) {
+        toast.error((e as Error)?.message ?? "Falha ao aprovar plano");
       }
     },
-    [sse, projectId],
+    [sse.progress.pendingPlan, projectId, qc],
   );
 
   const handlePlanReject = useCallback(
     async (reason?: string) => {
       const pp = sse.progress.pendingPlan;
       if (!pp) return;
-      const result = await sse.rejectPlan(projectId, pp.runId, pp.planId, reason);
-      if (result.ok) {
+      try {
+        await planRejectFn({
+          data: { runId: pp.runId, planId: pp.planId, reason },
+        });
         toast.info("Plano rejeitado.");
-      } else {
-        toast.error(result.message ?? "Falha ao rejeitar plano");
+        qc.invalidateQueries({ queryKey: ["conversation", projectId] });
+        qc.invalidateQueries({ queryKey: ["agent-runs", projectId] });
+      } catch (e) {
+        toast.error((e as Error)?.message ?? "Falha ao rejeitar plano");
       }
     },
-    [sse, projectId],
+    [sse.progress.pendingPlan, projectId, qc],
   );
 
   const liveSiteUrl = useMemo(() => {

@@ -33,7 +33,7 @@ import { ChatStream } from "@/components/editor/ChatStream";
 import { ComposerModeSelect } from "@/components/editor/ComposerModeSelect";
 import type { AgentProgress, PlanStep } from "@/hooks/useSSE";
 
-export type AgentComposerMode = "chat" | "plan" | "build";
+export type AgentComposerMode = "plan" | "build";
 
 // -----------------------------------------------------------------------------------
 // Tipos
@@ -156,7 +156,7 @@ export function ChatInput({
   onPlanReject,
 }: ChatInputProps) {
   const [input, setInput] = useState("");
-  const [composerModeLocal, setComposerModeLocal] = useState<AgentComposerMode>("chat");
+  const [composerModeLocal, setComposerModeLocal] = useState<AgentComposerMode>("plan");
   const composerMode = composerModeProp ?? composerModeLocal;
   const setComposerMode = onComposerModeChange ?? setComposerModeLocal;
   const fileInputRef = useRef<HTMLInputElement>(null);

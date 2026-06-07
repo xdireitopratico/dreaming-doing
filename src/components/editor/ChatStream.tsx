@@ -222,11 +222,9 @@ export function ChatStream({
             )}
             <div className="p-3">
               <PlanViewer
-                plan={pendingPlan.steps}
-                projectId={pendingPlan.projectId}
-                onExecute={onPlanApprove}
-                onDismiss={() => onPlanReject("Cancelado pelo usuário")}
-                editable
+                plan={pendingPlan}
+                onApprove={onPlanApprove}
+                onReject={() => onPlanReject("Cancelado pelo usuário")}
               />
             </div>
             <footer className="px-4 py-2 border-t border-[var(--primary)]/20 text-[10px] font-mono text-[var(--text-ghost)]">

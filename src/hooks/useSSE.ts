@@ -1,4 +1,12 @@
 // useSSE.ts — Streaming SSE do agent-run (motor de prompt)
+/**
+ * @deprecated This hook is the legacy SSE-based implementation. The P0
+ * architecture replaces SSE with Supabase Realtime (Inngest triggers the
+ * work; the client subscribes to agent_stream_events + agent_runs channels).
+ * New code should use `useAgentRun` from `@/hooks/useAgentRun`.
+ * This hook is kept working for the transition period (P2.5 cleanup;
+ * P3 will remove it entirely).
+ */
 import { useState, useRef, useCallback, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { getSupabaseEnv } from "@/lib/supabase-env";

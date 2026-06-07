@@ -1,20 +1,16 @@
-import { Check, Hammer, ListTodo, MessageCircle, ChevronDown } from "lucide-react";
-import { DropdownMenu, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import type { AgentComposerMode } from "@/components/editor/ChatInput";
+import { Check, Hammer, ListTodo } from "lucide-react";
 import {
   ForgeEditorDropdownContent,
   ForgeEditorDropdownItem,
 } from "@/components/editor/ForgeEditorDropdown";
+import { DropdownMenu, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import type { AgentComposerMode } from "@/components/editor/ChatInput";
 
 /**
- * Fase 4.7: dropdown opt-in de modo do agente. 3 opções:
- *  - Chat (default): agente decide, sem gate, sem plano
- *  - Plan: agente propõe plano, usuário aprova/rejeita
- *  - Build: sinônimo de Plan no momento (UX)
- *
- * Sem defaults mágicos no servidor: o cliente envia `mode` no body e o
- * servidor decide se liga o planMode ou não. Sem isso, o agente fica
- * "trilhando" de gate em gate.
+ * P1.1: dropdown simplificado para 2 modos (Plan/Build), default Plan.
+ *  - Plan: agente propõe plano e pausa pra aprovação.
+ *  - Build: agente executa o pedido direto (sem gate).
+ * Sem modo "chat" — toda mensagem do composer vira run de agente.
  */
 export function ComposerModeSelect({
   value,
@@ -23,8 +19,7 @@ export function ComposerModeSelect({
   value: AgentComposerMode;
   onChange: (mode: AgentComposerMode) => void;
 }) {
-  const opts: { key: AgentComposerMode; label: string; icon: typeof MessageCircle }[] = [
-    { key: "chat", label: "Chat", icon: MessageCircle },
+  const opts: { key: AgentComposerMode; label: string; icon: typeof ListTodo }[] = [
     { key: "plan", label: "Plan", icon: ListTodo },
     { key: "build", label: "Build", icon: Hammer },
   ];
@@ -41,10 +36,9 @@ export function ComposerModeSelect({
         >
           <CurrentIcon className="size-3.5 shrink-0 text-[var(--forge-primary)]" />
           <span>{current.label}</span>
-          <ChevronDown className="size-3 opacity-70" />
         </button>
       </DropdownMenuTrigger>
-      <ForgeEditorDropdownContent align="end" side="top" sideOffset={6} className="min-w-[140px]">
+      <ForgeEditorDropdownContent align="end" side="top" sideOffset={6} className="min-w-[120px]">
         {opts.map(({ key, label, icon: Icon }) => {
           const isCurrent = key === value;
           return (
