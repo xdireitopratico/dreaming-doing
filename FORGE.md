@@ -1,53 +1,90 @@
-# FORGE — Guia para Agentes (LLM)
+# FORGE — Fonte de Verdade (LLM)
 
-> Leia isto primeiro. Arquitetura: [`.commandcode/ARCHITECTURE.md`](.commandcode/ARCHITECTURE.md) · Higienização: [HYGIENE-TASKS.md](HYGIENE-TASKS.md)
+> **Leia só isto** para operar no repo. Detalhe técnico: [`.commandcode/ARCHITECTURE.md`](.commandcode/ARCHITECTURE.md)
+
+## Hierarquia de docs
+
+| Arquivo | Quem lê | Conteúdo |
+|---------|---------|----------|
+| **FORGE.md** | LLM / agente | Caminho único, arquivos críticos, deploy, debug |
+| **ARCHITECTURE.md** | LLM aprofundando | Backend ↔ frontend, tabelas, bugs pendentes |
+| **README.md** | Humano | Produto, `bun run dev`, link para FORGE |
+| `AGENT.md` / `CLAUDE.md` / `GEMINI.md` / `AGENTS.md` | IDEs | Ponte de 3 linhas → FORGE |
+
+**Ignorar (redirecionam para cá):** `opencode.md`, `doc.md`
 
 ## Stack
 
 - **Frontend:** TanStack Start + React + Vite → Vercel
-- **Backend:** Supabase Edge Functions + Postgres + Realtime
-- **Durabilidade do agente:** Inngest (`/api/inngest` no Vercel)
-- **Sandbox:** E2B (preview-boot)
+- **Backend:** Supabase Edge Functions + Postgres + **Realtime**
+- **Durabilidade:** Inngest (`/api/inngest`)
+- **Sandbox:** E2B (`preview-boot`)
 
-## Caminho de execução do agente (único)
+## Caminho do agente (único — sem alternativas)
 
 ```
-ChatInput → useAgentRun → POST /functions/v1/agent-run
+ChatInput → useAgentRun.connect()
+  → POST /functions/v1/agent-run  →  { runId }  (< 1s)
   → Inngest (agent/plan.requested | agent/build.requested)
-  → POST agent-run { action: "execute" } → run-executor → loop.ts
+  → POST agent-run { action: "execute" }  (service role)
+  → run-executor → run-job → loop.ts
   → appendStreamEvent → agent_stream_events
-  → Supabase Realtime → useAgentRun → AgentProgress → ChatStream
+  → Supabase Realtime (INSERT events + UPDATE agent_runs)
+  → useAgentRun → agent-progress → ChatStream
 ```
 
-**Não usar:** PGMQ, `agent-worker` (removido), Trigger.dev (removido), `useSSE` (removido).
+### Removido — não reintroduzir
+
+| Legado | Substituto |
+|--------|------------|
+| `useSSE.ts`, SSE watch/replay | `useAgentRun.ts` + Realtime |
+| Polling 350ms (`streamEventsResponse`, `followQueuedRun`) | Realtime + catch-up único ao subscribe |
+| `agent-worker`, PGMQ dispatch | Inngest |
+| Trigger.dev | Inngest |
+| `runChunkedJob` inline no Edge | Inngest execute |
 
 ## Arquivos críticos
 
 | Arquivo | Papel |
 |---------|-------|
-| `src/hooks/useAgentRun.ts` | Hook do editor — Realtime only (sem polling/SSE) |
-| `src/lib/agent-progress.ts` | Tipos + `applyAgentProgressEvent` |
-| `src/inngest/functions/agent-*.ts` | Jobs duráveis plan/build |
-| `supabase/functions/agent-run/` | Entrypoint Edge (run, execute, cancel) |
-| `supabase/functions/agent-run/run-executor.ts` | Execução + streaming persistido |
+| `src/hooks/useAgentRun.ts` | Hook do editor — Realtime only |
+| `src/lib/agent-progress.ts` | Reducer `applyAgentProgressEvent` |
+| `src/routes/projects/$projectId/index.tsx` | Editor, plan approve → `watch(newRunId)` |
+| `src/inngest/functions/agent-*.ts` | Jobs duráveis |
+| `supabase/functions/agent-run/index.ts` | `run`, `execute`, `cancel` |
+| `supabase/functions/agent-run/run-executor.ts` | Execução + `appendStreamEvent` |
 | `supabase/functions/agent-run/loop.ts` | Loop do agente |
-| `src/routes/projects/$projectId/index.tsx` | Editor principal |
+| `supabase/functions/_shared/agent-stream.ts` | `appendStreamEvent` (Edge) |
 
 ## Deploy
 
-- Supabase ref canônico: `dpduljngdurfpmaclffa`
-- Scripts: `scripts/sync/deploy-all.sh`, `scripts/sync/migrate.sh`
-- Build Vercel: `npm run build && npm run build:inngest`
+- Supabase ref: `dpduljngdurfpmaclffa`
+- `./scripts/sync/migrate.sh` → `./scripts/sync/deploy-all.sh`
+- Vercel: `npm run build && npm run build:inngest`
 
-## Debug checklist
+Edge functions deployadas: `agent-run`, `health`, `preview-boot`, `e2b-*`, `connector-upsert`, `deploy-publish`, `github-import`, `mcp-server`, `voice-transcribe`, `project-delete`, `admin-platform-secrets`
 
-1. `agent_runs.status` — pending → running → completed | awaiting_user | failed
-2. `SELECT count(*) FROM agent_stream_events WHERE run_id = '...'` — deve ser > 1
-3. Inngest dashboard — evento `agent/plan.requested` ou `agent/build.requested` disparou?
-4. Frontend — `useAgentRun.connected` e `progress.timeline` crescendo?
+## Debug (ordem)
+
+1. `agent_runs.status` para o `runId` — `running` → terminal?
+2. `SELECT count(*) FROM agent_stream_events WHERE run_id = '…'` — deve crescer (> 1)
+3. Inngest dashboard — evento disparou e step `execute` ok?
+4. Browser — `useAgentRun.connected` e `progress.timeline.length` crescem?
+5. Realtime — migration `agent_runs` + `agent_stream_events` com `REPLICA IDENTITY FULL`
 
 ## Convenções
 
-- Status de espera: `awaiting_user` — Inngest **não** deve marcar `completed` por cima
-- Streaming: todo `onEvent` no executor deve chamar `appendStreamEvent`
-- Plan mode: approve via `plan-decide.functions.ts` → novo run + `agent/build.requested`
+- `awaiting_user`: Inngest **não** marca `completed` por cima (`agent-build.ts` / `agent-plan.ts`)
+- Todo `onEvent` no executor → `appendStreamEvent`
+- Plan: `plan-decide.functions.ts` → novo run → `useAgentRun.watch(newRunId)`
+- Taste chat (sem chave): JSON `{ ok, content }` — mensagem já no DB, sem `runId`
+
+## Backlog (único — pós-higiene)
+
+| # | Item | Prioridade |
+|---|------|------------|
+| B1 | Extrair `run-setup.ts` (setup duplicado index/executor/job) | P1 |
+| B5 | `observer.ts` — npm install cache, tsc `--project` | P2 |
+| B6 | `loop.ts` — forceTools, checkpoint resume | P2 |
+| D19 | `AiDiffViewer` — usar `progress.diffs` (before vazio) | P2 |
+| E1 | `ui/markdown-renderer.tsx` no ChatStream/ChatInput | P3 |
