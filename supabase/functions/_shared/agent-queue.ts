@@ -18,6 +18,14 @@ type QueueRow = {
   message: AgentChunkMessage;
 };
 
+type QueueResult = {
+  msg_id: number;
+  read_ct: number;
+  enqueued_at: string;
+  vt: string;
+  message: AgentChunkMessage;
+};
+
 export async function enqueueAgentChunk(
   supabase: SupabaseClient,
   message: AgentChunkMessage,
@@ -43,13 +51,13 @@ export async function readAgentChunk(
   supabase: SupabaseClient,
 ): Promise<{ msgId: number; message: AgentChunkMessage } | null> {
   try {
-    const { data, error } = await supabase.schema("pgmq_public").rpc("read", {
+    const { data, error } = await supabase.schema("pgmq_public").rpc("pop", {
       queue_name: AGENT_CHUNKS_QUEUE,
-      sleep_seconds: 0,
-      n: 1,
     });
-    if (error || !data?.length) return null;
-    const row = data[0] as QueueRow;
+    if (error || !data) return null;
+    const msg = data[0] || data;
+    if (!msg?.message) return null;
+    const row = msg as QueueResult;
     const msgId = typeof row.msg_id === "string" ? Number.parseInt(row.msg_id, 10) : row.msg_id;
     return { msgId, message: row.message as AgentChunkMessage };
   } catch {
