@@ -37,7 +37,7 @@ ChatInput → useAgentRun.connect()
 
 Quando o projeto já tem run ocupado, novas mensagens vão para **`agent_pending_messages`** via `useAgentRun.queueMessage()`. UI: contador no header do chat + hint no `ChatStream`.
 
-Ao terminar um run, Inngest chama `agent-run { action: "continue_queue" }` (service role) para consumir a fila e disparar o próximo run. O frontend sincroniza o contador via `pending_count` e, se a fila ficar órfã sem run ativo, dispara `runAgent()` como fallback.
+Ao terminar um run, Inngest chama `agent-run { action: "continue_queue" }` (service role) para consumir a fila. O frontend usa `drain_queue` (nunca `connect`/`runAgent`) para recuperar fila órfã. **Enqueue só com `enqueue: true`** (via `queueMessage` após mensagem do usuário) — `connect` concorrente retorna `busy` sem INSERT fantasma.
 
 ### Removido — não reintroduzir
 

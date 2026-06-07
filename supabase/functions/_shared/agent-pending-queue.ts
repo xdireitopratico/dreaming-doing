@@ -117,6 +117,39 @@ export type QueueDrainDecision = {
   blockingRunId: string | null;
 };
 
+/**
+ * Remove fila fantasma: inserts duplicados de connect() concorrente (sem mensagem nova).
+ * - Sem última msg user → limpa tudo.
+ * - Com msg user → mantém só a entrada mais recente (snapshot de prefs).
+ */
+export async function sanitizePendingQueue(
+  supabase: SupabaseClient,
+  projectId: string,
+  userId: string,
+  conversationId: string,
+): Promise<number> {
+  const needsResponse = await conversationNeedsAgentResponse(supabase, conversationId);
+  if (!needsResponse) {
+    return await clearPendingMessages(supabase, projectId, userId);
+  }
+
+  const { data: rows } = await supabase
+    .from("agent_pending_messages")
+    .select("id")
+    .eq("project_id", projectId)
+    .eq("user_id", userId)
+    .order("created_at", { ascending: true });
+
+  if (!rows || rows.length <= 1) return rows?.length ?? 0;
+
+  const keepId = rows[rows.length - 1]!.id;
+  const staleIds = rows.filter((r) => r.id !== keepId).map((r) => r.id);
+  if (staleIds.length > 0) {
+    await supabase.from("agent_pending_messages").delete().in("id", staleIds);
+  }
+  return 1;
+}
+
 export async function evaluateQueueDrain(
   supabase: SupabaseClient,
   projectId: string,
@@ -124,6 +157,7 @@ export async function evaluateQueueDrain(
   userId: string,
 ): Promise<QueueDrainDecision> {
   await expireStaleRuns(supabase, projectId);
+  await sanitizePendingQueue(supabase, projectId, userId, conversationId);
 
   const pendingCount = await countPendingMessages(supabase, projectId, userId);
   const needsResponse = await conversationNeedsAgentResponse(supabase, conversationId);

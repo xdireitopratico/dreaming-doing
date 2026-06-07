@@ -199,8 +199,11 @@ Deno.serve(async (req) => {
 
     if (!projectId || !conversationId) return json({ error: "projectId e conversationId obrigatórios" }, 400);
 
-    const { expireStaleRuns } = await import("../_shared/agent-pending-queue.ts");
+    const { expireStaleRuns, sanitizePendingQueue } = await import(
+      "../_shared/agent-pending-queue.ts"
+    );
     await expireStaleRuns(supabase, projectId);
+    await sanitizePendingQueue(supabase, projectId, userData.user.id, conversationId);
 
     const { data: project } = await supabase
       .from("projects").select("id, owner_id, template, meta").eq("id", projectId).single();
@@ -225,12 +228,38 @@ Deno.serve(async (req) => {
     }
 
     if (body.action === "pending_count") {
-      const { count } = await supabase
-        .from("agent_pending_messages")
-        .select("id", { count: "exact", head: true })
-        .eq("project_id", projectId)
-        .eq("user_id", userData.user.id);
-      return json({ pendingCount: count ?? 0 });
+      const { sanitizePendingQueue, countPendingMessages } = await import(
+        "../_shared/agent-pending-queue.ts"
+      );
+      await sanitizePendingQueue(supabase, projectId, userData.user.id, conversationId);
+      const pendingCount = await countPendingMessages(supabase, projectId, userData.user.id);
+      return json({ pendingCount });
+    }
+
+    if (body.action === "drain_queue") {
+      const { handleContinueQueue } = await import("./continue-queue.ts");
+      const { sanitizePendingQueue } = await import("../_shared/agent-pending-queue.ts");
+      await sanitizePendingQueue(supabase, projectId, userData.user.id, conversationId);
+      const drainResult = await handleContinueQueue(supabase, INNGEST_EVENT_KEY, {
+        projectId,
+        conversationId,
+        userId: userData.user.id,
+        planMode: planMode,
+      });
+      if (drainResult.continued && drainResult.runId) {
+        return json({
+          ok: true,
+          runId: drainResult.runId,
+          pendingCount: drainResult.pendingCount ?? 0,
+          continued: true,
+        });
+      }
+      return json({
+        ok: true,
+        continued: false,
+        pendingCount: drainResult.pendingCount ?? 0,
+        reason: drainResult.reason,
+      });
     }
 
     const { data: profile } = await supabase
@@ -289,7 +318,26 @@ Deno.serve(async (req) => {
       awaitingRun?.status === "pending" ||
       runningLocks.has(projectId);
 
+    const enqueueIntent = body.enqueue === true;
+
     if (isRunning && !resumeRun && !isAwaiting) {
+      if (!enqueueIntent) {
+        const { countPendingMessages } = await import("../_shared/agent-pending-queue.ts");
+        const pendingCount = await countPendingMessages(supabase, projectId, userData.user.id);
+        logger.info("agent_run.busy_no_enqueue", {
+          projectId,
+          pendingCount,
+          activeRunId: awaitingRun?.id ?? null,
+        });
+        return json({
+          ok: true,
+          busy: true,
+          pendingCount,
+          activeRunId: awaitingRun?.id ?? null,
+          message: "Agente ocupado — aguarde ou envie mensagem com o agente ativo.",
+        });
+      }
+
       await supabase.from("agent_pending_messages").insert({
         project_id: projectId,
         conversation_id: conversationId,
@@ -302,12 +350,8 @@ Deno.serve(async (req) => {
           allocateSandbox: true,
         },
       });
-      const { count } = await supabase
-        .from("agent_pending_messages")
-        .select("id", { count: "exact", head: true })
-        .eq("project_id", projectId)
-        .eq("user_id", userData.user.id);
-      const pendingCount = count ?? 1;
+      const { countPendingMessages } = await import("../_shared/agent-pending-queue.ts");
+      const pendingCount = await countPendingMessages(supabase, projectId, userData.user.id);
       const queueMsg = pendingCount === 1
         ? "Mensagem na fila — o agente processará quando terminar a tarefa atual."
         : `${pendingCount} mensagens na fila — processando em ordem.`;
@@ -560,6 +604,18 @@ Deno.serve(async (req) => {
         .single();
 
       if (createdRun && createdRun.conversation_id !== conversationId) {
+        runningLocks.delete(projectId);
+        if (!enqueueIntent) {
+          const { countPendingMessages } = await import("../_shared/agent-pending-queue.ts");
+          const pendingCount = await countPendingMessages(supabase, projectId, userData.user.id);
+          return json({
+            ok: true,
+            busy: true,
+            pendingCount,
+            activeRunId: agentRunId,
+            message: "Agente ocupado em outra conversa.",
+          });
+        }
         await supabase.from("agent_pending_messages").insert({
           project_id: projectId,
           conversation_id: conversationId,
@@ -572,11 +628,12 @@ Deno.serve(async (req) => {
             allocateSandbox: true,
           },
         });
-        runningLocks.delete(projectId);
+        const { countPendingMessages } = await import("../_shared/agent-pending-queue.ts");
+        const pendingCount = await countPendingMessages(supabase, projectId, userData.user.id);
         return json({
           ok: true,
           queued: true,
-          pendingCount: 1,
+          pendingCount,
           activeRunId: agentRunId,
           message: "Agente ocupado — sua mensagem foi enfileirada.",
         });

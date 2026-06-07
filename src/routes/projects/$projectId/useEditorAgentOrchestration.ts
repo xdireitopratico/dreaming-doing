@@ -89,7 +89,8 @@ export function useEditorAgentOrchestration({
   previewIdle,
 }: UseEditorAgentOrchestrationParams) {
   const autoAgentRunAttemptedRef = useRef<string | null>(null);
-  const queueDrainAttemptedRef = useRef(false);
+  const lastQueueDrainAtRef = useRef(0);
+  const QUEUE_DRAIN_COOLDOWN_MS = 10_000;
   /** Evita boot duplicado do preview entre fim do agente e refetch do previewUrl. */
   const previewBootAfterAgentRef = useRef(false);
 
@@ -193,8 +194,6 @@ export function useEditorAgentOrchestration({
   useEffect(() => {
     if (!conversation?.id) return;
 
-    queueDrainAttemptedRef.current = false;
-
     let cancelled = false;
     let attempts = 0;
     const maxAttempts = 12;
@@ -228,9 +227,11 @@ export function useEditorAgentOrchestration({
         .eq("project_id", projectId);
 
       if ((pendingQueue ?? 0) > 0) {
-        if (!queueDrainAttemptedRef.current && runAgent(resolveSessionKind(tasteQuota))) {
-          queueDrainAttemptedRef.current = true;
-          logEditorTelemetryEvent("agent", "auto_run_queue_drain", "info", String(pendingQueue));
+        const now = Date.now();
+        if (now - lastQueueDrainAtRef.current >= QUEUE_DRAIN_COOLDOWN_MS) {
+          lastQueueDrainAtRef.current = now;
+          logEditorTelemetryEvent("agent", "queue_drain_request", "info", String(pendingQueue));
+          void agent.drainQueue(projectId, conversation.id, "build");
         }
         return;
       }

@@ -309,10 +309,22 @@ export function useAgentRun() {
           ok?: boolean;
           runId?: string;
           queued?: boolean;
+          busy?: boolean;
           pendingCount?: number;
           message?: string;
           content?: string;
         };
+
+        if (body.busy) {
+          setProgress((p) => ({
+            ...p,
+            finished: true,
+            pendingQueueCount: body.pendingCount ?? p.pendingQueueCount,
+            statusHint: body.message ?? "Agente ocupado.",
+            error: null,
+          }));
+          return;
+        }
 
         if (body.queued) {
           setProgress((p) => ({
@@ -356,6 +368,50 @@ export function useAgentRun() {
     [postAgentRun, subscribeToRun, teardownChannels],
   );
 
+  const drainQueue = useCallback(
+    async (
+      projectId: string,
+      conversationId: string,
+      mode?: "plan" | "build" | "chat",
+    ): Promise<{ ok: boolean; runId?: string; pendingCount?: number; reason?: string }> => {
+      try {
+        const res = await postAgentRun({
+          action: "drain_queue",
+          projectId,
+          conversationId,
+          mode: mode ?? "build",
+        });
+        if (!res.ok) {
+          const msg = await parseErrorResponse(res);
+          return { ok: false, reason: msg };
+        }
+        const body = (await res.json()) as {
+          ok?: boolean;
+          runId?: string;
+          continued?: boolean;
+          pendingCount?: number;
+          reason?: string;
+        };
+        if (typeof body.pendingCount === "number") {
+          setProgress((p) => ({ ...p, pendingQueueCount: body.pendingCount! }));
+        }
+        if (body.runId) {
+          await subscribeToRun(body.runId);
+          logEditorTelemetryEvent("agent_run", "drain_ok", "info", body.runId.slice(0, 8));
+          return { ok: true, runId: body.runId, pendingCount: body.pendingCount };
+        }
+        return {
+          ok: body.continued === true,
+          pendingCount: body.pendingCount,
+          reason: body.reason,
+        };
+      } catch (e) {
+        return { ok: false, reason: formatAgentFetchError(e) };
+      }
+    },
+    [postAgentRun, subscribeToRun],
+  );
+
   const watch = useCallback(
     async (projectId: string, conversationId: string, runId: string) => {
       void projectId;
@@ -378,6 +434,7 @@ export function useAgentRun() {
           conversationId,
           preferences: loadAgentPreferences(),
           sessionKind,
+          enqueue: true,
           ...(sessionKind === "taste" && tasteAction ? { tasteAction } : {}),
           ...loadAgentSessionExtensions(),
         });
@@ -506,6 +563,7 @@ export function useAgentRun() {
     watch,
     replay,
     queueMessage,
+    drainQueue,
     syncPendingCount,
     disconnect,
     stop,
