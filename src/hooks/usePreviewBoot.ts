@@ -107,6 +107,8 @@ export function usePreviewBoot(projectId: string, opts?: UsePreviewBootOpts) {
     async (opts?: BootOpts) => {
       if (opts?.probeOnly) {
         if (idle) return null;
+        // Never probe when project has no files — don't hammer backend
+        if (lastError && /sem arquivos|ainda não gerou|no_files/i.test(lastError)) return null;
         try {
           const body = await callPreviewBoot({ ...opts, silent: true });
           if (body?.ready) {
@@ -129,6 +131,7 @@ export function usePreviewBoot(projectId: string, opts?: UsePreviewBootOpts) {
       }
 
       if (bootInFlightRef.current) return null;
+      if (lastError && /sem arquivos|ainda não gerou|no_files/i.test(lastError)) return null;
       bootInFlightRef.current = true;
       setBooting(true);
       setLastError(null);
@@ -242,6 +245,8 @@ export function usePreviewBoot(projectId: string, opts?: UsePreviewBootOpts) {
 
   const isE2bCircuit = !!(lastError && /circuit|cooling|e2b_creation_circuit/i.test(lastError));
 
+  const isNoFiles = !!(lastError && /sem arquivos|ainda não gerou|no_files/i.test(lastError));
+
   return {
     booting,
     boot,
@@ -250,6 +255,7 @@ export function usePreviewBoot(projectId: string, opts?: UsePreviewBootOpts) {
     bootLogs,
     warming,
     isE2bCircuit,
+    isNoFiles,
     clearWarming: () => setWarming(false),
     clearError: () => setLastError(null),
   };

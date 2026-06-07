@@ -35,6 +35,8 @@ interface PreviewFrameProps {
   onFocusChat?: () => void;
   /** Repouso após inatividade — iframe descarregado para economizar E2B. */
   previewIdle?: boolean;
+  /** Projeto sem arquivos — não tenta criar sandbox, mostra placeholder limpo. */
+  isNoFiles?: boolean;
 }
 
 export function PreviewFrame({
@@ -56,6 +58,7 @@ export function PreviewFrame({
   onImportRepo,
   onFocusChat,
   previewIdle = false,
+  isNoFiles = false,
 }: PreviewFrameProps) {
   const [iframeLoading, setIframeLoading] = useState(false);
   const deviceWidth = previewDeviceWidth(device);
@@ -91,7 +94,7 @@ export function PreviewFrame({
     return null;
   }, [devUrl, indexFile]);
 
-  const showBootSpinner = booting && !agentRunning && !iframeSrc;
+  const showBootSpinner = booting && !agentRunning && !iframeSrc && !isNoFiles;
 
   return (
     <div className="forge-preview-root flex min-h-0 flex-1 flex-col">

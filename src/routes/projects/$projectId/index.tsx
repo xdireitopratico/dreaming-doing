@@ -1172,6 +1172,7 @@ function EditorPage() {
                         agentHasRun={agentHasRun}
                         e2bConnected={e2bConnected}
                         previewIdle={previewIdle}
+                        isNoFiles={previewBoot.isNoFiles}
                         projectName={project?.name}
                         device={previewDevice}
                         onImportRepo={(url) => {

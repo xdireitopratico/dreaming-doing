@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { Link } from "@tanstack/react-router";
-import { ArrowRight, Github, MessageSquare, Sparkles } from "lucide-react";
+import { ArrowRight, Github, Hammer, MessageSquare } from "lucide-react";
 
 interface PreviewEmptyGuideProps {
   projectName?: string;
@@ -31,7 +31,7 @@ export function PreviewEmptyGuide({
   return (
     <div className="flex h-full min-h-[280px] flex-col items-center justify-center gap-6 bg-white p-8 text-center forge-preview-empty-single">
       <div className="grid size-14 place-items-center rounded-2xl bg-neutral-900 text-[var(--forge-primary)]">
-        <Sparkles className="size-7" strokeWidth={1.5} />
+        <Hammer className="size-7" strokeWidth={1.5} />
       </div>
 
       <div className="max-w-md space-y-2">
@@ -43,6 +43,8 @@ export function PreviewEmptyGuide({
           para o agente começar.
         </p>
       </div>
+
+      <p className="text-xs font-bold tracking-[0.15em] uppercase text-neutral-300">Let's Build</p>
 
       <form onSubmit={submit} className="w-full max-w-md flex items-center gap-2">
         <div className="relative flex-1">
