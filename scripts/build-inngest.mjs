@@ -11,6 +11,7 @@ const result = await esbuild.build({
   minify: false,
   sourcemap: false,
   legalComments: "none",
+  packages: "external",
   external: ["node:*"],
   logLevel: "info",
 });
