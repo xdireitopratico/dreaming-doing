@@ -26,6 +26,27 @@ const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
 type ProjectFile = { path: string; content?: string | null };
 
+function clearedPreviewMeta(existing: Record<string, unknown>): Record<string, unknown> {
+  const next = { ...existing };
+  delete next.previewUrl;
+  delete next.previewExpiresAt;
+  delete next.previewSandboxId;
+  delete next.previewReady;
+  delete next.previewPort;
+  return next;
+}
+
+async function loadProjectFiles(
+  supabase: ReturnType<typeof createClient>,
+  projectId: string,
+): Promise<ProjectFile[]> {
+  const { data: files } = await supabase
+    .from("project_files")
+    .select("path, content")
+    .eq("project_id", projectId);
+  return files ?? [];
+}
+
 async function connectSandboxForPreview(
   supabase: ReturnType<typeof createClient>,
   projectId: string,
@@ -36,6 +57,10 @@ async function connectSandboxForPreview(
   } catch (previewErr: unknown) {
     const msg = previewErr instanceof Error ? previewErr.message : "";
     if (msg.includes("Ainda não há") || msg.includes("ambiente ao vivo")) {
+      const files = await loadProjectFiles(supabase, projectId);
+      if (files.length === 0) {
+        throw new Error("Projeto sem arquivos — o agente ainda não gerou código.");
+      }
       return await ensureAgentProjectSandbox(supabase, projectId, apiKey);
     }
     throw previewErr;
@@ -102,23 +127,35 @@ Deno.serve(async (req) => {
       typeof existing.previewPort === "number" ? existing.previewPort : null;
 
     if (probeOnly && cached) {
+      const projectFiles = await loadProjectFiles(supabase, projectId);
+      if (projectFiles.length === 0) {
+        await supabase
+          .from("projects")
+          .update({ meta: clearedPreviewMeta(existing) })
+          .eq("id", projectId);
+        return json({
+          url: null,
+          ready: false,
+          reused: false,
+          probeOnly: true,
+          error: "Projeto sem arquivos — o agente ainda não gerou código.",
+          code: "no_files",
+        }, 200);
+      }
+
       let ready = await probePreviewUrl(cached.url, 3);
       let rebootLogs: string | undefined;
       let sandboxId =
         typeof existing.previewSandboxId === "string" ? existing.previewSandboxId : undefined;
 
       if (!ready) {
-        const { data: files } = await supabase
-          .from("project_files")
-          .select("path, content")
-          .eq("project_id", projectId);
         const devPort = devPortFromMeta ??
-          (Number.parseInt(detectDevPort(files ?? []), 10) || 5173);
+          (Number.parseInt(detectDevPort(projectFiles), 10) || 5173);
         const reboot = await rebootPreviewDevServer(
           supabase,
           projectId,
           E2B_API_KEY,
-          files ?? [],
+          projectFiles,
           devPort,
           cached.url,
         );
@@ -160,19 +197,30 @@ Deno.serve(async (req) => {
     }
 
     if (cached && !force) {
+      const projectFiles = await loadProjectFiles(supabase, projectId);
+      if (projectFiles.length === 0) {
+        await supabase
+          .from("projects")
+          .update({ meta: clearedPreviewMeta(existing) })
+          .eq("id", projectId);
+        return json({
+          url: null,
+          ready: false,
+          reused: false,
+          error: "Projeto sem arquivos — o agente ainda não gerou código.",
+          code: "no_files",
+        }, 200);
+      }
+
       let ready = await probePreviewUrl(cached.url, 2);
       if (!ready && existing.previewReady === true) {
-        const { data: files } = await supabase
-          .from("project_files")
-          .select("path, content")
-          .eq("project_id", projectId);
         const devPort = devPortFromMeta ??
-          (Number.parseInt(detectDevPort(files ?? []), 10) || 5173);
+          (Number.parseInt(detectDevPort(projectFiles), 10) || 5173);
         const reboot = await rebootPreviewDevServer(
           supabase,
           projectId,
           E2B_API_KEY,
-          files ?? [],
+          projectFiles,
           devPort,
           cached.url,
         );
@@ -211,12 +259,15 @@ Deno.serve(async (req) => {
       });
     }
 
-    const { data: files } = await supabase
-      .from("project_files")
-      .select("path, content")
-      .eq("project_id", projectId);
+    const files = await loadProjectFiles(supabase, projectId);
 
-    if (!files || files.length === 0) {
+    if (files.length === 0) {
+      if (existing.previewUrl || existing.previewSandboxId) {
+        await supabase
+          .from("projects")
+          .update({ meta: clearedPreviewMeta(existing) })
+          .eq("id", projectId);
+      }
       return json({
         url: null,
         ready: false,

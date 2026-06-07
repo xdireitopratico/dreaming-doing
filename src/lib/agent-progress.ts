@@ -362,10 +362,6 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
         lastFinishOk: !failed && !canceled,
         resumable: failed && data.resumable === true && !canceled,
         error: failed || canceled ? ((data.error as string) ?? prev.error) : null,
-        pendingQueueCount:
-          !failed && !canceled && prev.pendingQueueCount > 0
-            ? prev.pendingQueueCount - 1
-            : prev.pendingQueueCount,
         timeline: [...prev.timeline, event],
       };
     }

@@ -37,6 +37,8 @@ ChatInput → useAgentRun.connect()
 
 Quando o projeto já tem run ocupado, novas mensagens vão para **`agent_pending_messages`** via `useAgentRun.queueMessage()`. UI: contador no header do chat + hint no `ChatStream`.
 
+Ao terminar um run, Inngest chama `agent-run { action: "continue_queue" }` (service role) para consumir a fila e disparar o próximo run. O frontend sincroniza o contador via `pending_count` e, se a fila ficar órfã sem run ativo, dispara `runAgent()` como fallback.
+
 ### Removido — não reintroduzir
 
 | Legado | Substituto |
@@ -57,7 +59,9 @@ Schema PGMQ no DB + check em `/health` = **legado** (sem dispatch no agente).
 | `src/lib/agent-progress.ts` | Reducer `applyAgentProgressEvent` |
 | `src/routes/projects/$projectId/index.tsx` | Editor, plan approve → `watch(newRunId)` |
 | `src/inngest/functions/agent-*.ts` | Jobs duráveis |
-| `supabase/functions/agent-run/index.ts` | `run`, `execute`, `cancel`, `pending_count` |
+| `supabase/functions/agent-run/index.ts` | `run`, `execute`, `cancel`, `pending_count`, `continue_queue` |
+| `supabase/functions/agent-run/continue-queue.ts` | Drain da fila após run completar |
+| `supabase/functions/_shared/agent-pending-queue.ts` | Enqueue, expire stale runs, evaluate drain |
 | `supabase/functions/agent-run/run-setup.ts` | Provider/keys — fonte única |
 | `supabase/functions/agent-run/run-executor.ts` | Execução + `appendStreamEvent` |
 | `supabase/functions/agent-run/loop.ts` | Loop do agente |
@@ -78,6 +82,27 @@ Edge functions deployadas: `agent-run`, `health`, `preview-boot`, `e2b-*`, `conn
 3. Inngest dashboard — evento disparou e step `execute` ok?
 4. Browser — `useAgentRun.connected` e `progress.timeline.length` crescem?
 5. Realtime — migration `agent_runs` + `agent_stream_events` com `REPLICA IDENTITY FULL`
+
+### Fila presa / agente não roda
+
+1. **Secret Edge:** `INNGEST_EVENT_KEY` em Supabase → Edge Functions secrets (não só `.env.local`). Sem ela, `continue_queue` falha com `inngest_failed` nos logs.
+2. **Runs zumbis:** `expireStaleRuns` marca `running`/`pending` > 15 min como `failed` no próximo `agent-run`.
+3. **SQL de limpeza** (substitua `PROJECT_ID`):
+
+```sql
+-- Fila órfã
+DELETE FROM agent_pending_messages WHERE project_id = 'PROJECT_ID';
+
+-- Runs presos
+UPDATE agent_runs
+SET status = 'failed', finished_at = now(), error = 'manual cleanup'
+WHERE project_id = 'PROJECT_ID' AND status IN ('running', 'pending');
+
+-- Contagem
+SELECT count(*) FROM agent_pending_messages WHERE project_id = 'PROJECT_ID';
+```
+
+4. Logs Edge: `inngest.send_failed_fatal` ou `continue_queue` com `reason: inngest_failed`.
 
 ## Convenções
 

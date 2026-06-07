@@ -89,8 +89,11 @@ export function useEditorAgentOrchestration({
   previewIdle,
 }: UseEditorAgentOrchestrationParams) {
   const autoAgentRunAttemptedRef = useRef<string | null>(null);
+  const queueDrainAttemptedRef = useRef(false);
   /** Evita boot duplicado do preview entre fim do agente e refetch do previewUrl. */
   const previewBootAfterAgentRef = useRef(false);
+
+  const fileCount = files?.length ?? 0;
 
   const previewE2bCircuit = previewBoot.isE2bCircuit;
 
@@ -179,10 +182,18 @@ export function useEditorAgentOrchestration({
     return () => clearEnhancements();
   }, []);
 
+  // ─── Sincroniza contador da fila com o servidor ao abrir o editor
+  useEffect(() => {
+    if (!conversation?.id) return;
+    void agent.syncPendingCount(projectId, conversation.id);
+  }, [conversation?.id, projectId, agent]);
+
   // ─── Auto-run: projeto recém-criado (flag) ou última msg user sem resposta
   // Não espera messages no client — evita race read-after-write após createProject.
   useEffect(() => {
     if (!conversation?.id) return;
+
+    queueDrainAttemptedRef.current = false;
 
     let cancelled = false;
     let attempts = 0;
@@ -199,9 +210,11 @@ export function useEditorAgentOrchestration({
 
       const { data: activeRun } = await supabase
         .from("agent_runs")
-        .select("id")
+        .select("id, status")
         .eq("project_id", projectId)
-        .eq("status", "running")
+        .in("status", ["running", "pending"])
+        .order("started_at", { ascending: false })
+        .limit(1)
         .maybeSingle();
 
       if (activeRun?.id) {
@@ -215,7 +228,10 @@ export function useEditorAgentOrchestration({
         .eq("project_id", projectId);
 
       if ((pendingQueue ?? 0) > 0) {
-        window.setTimeout(tryAutoRun, 500);
+        if (!queueDrainAttemptedRef.current && runAgent(resolveSessionKind(tasteQuota))) {
+          queueDrainAttemptedRef.current = true;
+          logEditorTelemetryEvent("agent", "auto_run_queue_drain", "info", String(pendingQueue));
+        }
         return;
       }
 
@@ -263,7 +279,8 @@ export function useEditorAgentOrchestration({
     if (!agent.progress.finished || !conversation) return;
     void qc.invalidateQueries({ queryKey: ["messages", conversation.id] });
     void qc.invalidateQueries({ queryKey: ["profile"] });
-  }, [agent.progress.finished, conversation, qc]);
+    void agent.syncPendingCount(projectId, conversation.id);
+  }, [agent.progress.finished, conversation, projectId, qc, agent]);
 
   // Reconecta a run ativo via Realtime (refresh, fila, plan approve) — sem polling.
   useEffect(() => {
@@ -335,6 +352,7 @@ export function useEditorAgentOrchestration({
       return;
     }
     if (!isReactProject || !e2bConnected || devUrl || previewBoot.booting || previewE2bCircuit) return;
+    if (fileCount === 0) return;
     if (!agentShouldBootPreview) return;
     if (previewBootAfterAgentRef.current) return;
     previewBootAfterAgentRef.current = true;
@@ -348,6 +366,7 @@ export function useEditorAgentOrchestration({
     previewBoot.booting,
     previewBoot.bootWithRetry,
     previewE2bCircuit,
+    fileCount,
   ]);
 
   const filesSyncKey = useMemo(

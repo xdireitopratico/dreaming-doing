@@ -248,6 +248,26 @@ export function useAgentRun() {
     [],
   );
 
+  const syncPendingCount = useCallback(
+    async (projectId: string, conversationId: string) => {
+      try {
+        const res = await postAgentRun({
+          action: "pending_count",
+          projectId,
+          conversationId,
+        });
+        if (!res.ok) return;
+        const body = (await res.json()) as { pendingCount?: number };
+        if (typeof body.pendingCount === "number") {
+          setProgress((p) => ({ ...p, pendingQueueCount: body.pendingCount! }));
+        }
+      } catch {
+        // best-effort — contador atualiza no próximo mount/finish
+      }
+    },
+    [postAgentRun],
+  );
+
   const connect = useCallback(
     async (
       projectId: string,
@@ -298,7 +318,7 @@ export function useAgentRun() {
           setProgress((p) => ({
             ...p,
             finished: true,
-            pendingQueueCount: body.pendingCount ?? p.pendingQueueCount + 1,
+            pendingQueueCount: body.pendingCount ?? 0,
             statusHint: body.message ?? "Mensagem na fila do agente.",
             error: null,
           }));
@@ -375,7 +395,7 @@ export function useAgentRun() {
         if (body.queued) {
           setProgress((p) => ({
             ...p,
-            pendingQueueCount: body.pendingCount ?? p.pendingQueueCount + 1,
+            pendingQueueCount: body.pendingCount ?? 0,
             statusHint: body.message ?? "Mensagem na fila do agente.",
           }));
           return { ok: true, pendingCount: body.pendingCount, message: body.message };
@@ -486,6 +506,7 @@ export function useAgentRun() {
     watch,
     replay,
     queueMessage,
+    syncPendingCount,
     disconnect,
     stop,
     clearPendingPlan,

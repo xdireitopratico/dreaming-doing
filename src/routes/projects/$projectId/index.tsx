@@ -123,7 +123,7 @@ function EditorPage() {
   const { idle: previewIdle } = usePreviewIdle(activeView === "preview" && !!devUrl);
   const previewBoot = usePreviewBoot(projectId, {
     idle: previewIdle,
-    watchHealth: activeView === "preview" && !!devUrl,
+    watchHealth: activeView === "preview" && !!devUrl && (files?.length ?? 0) > 0,
   });
 
   const handlers = useEditorPageHandlers({

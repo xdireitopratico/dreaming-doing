@@ -1,6 +1,7 @@
 import { inngest } from "../client";
 import {
   callAgentRunExecutor,
+  drainPendingQueue,
   getRunStatus,
   markRunFinal,
   type AgentRunRequest,
@@ -87,6 +88,12 @@ export const agentPlanFunction = inngest.createFunction(
         const status = await getRunStatus(runId);
         if (status === "canceled" || status === "awaiting_user") return;
         await markRunFinal(runId, "completed", { plan: final.plan ?? null });
+      });
+
+      await step.run("drain-pending-queue", async () => {
+        const status = await getRunStatus(runId);
+        if (status === "awaiting_user") return { continued: false };
+        return await drainPendingQueue(payload);
       });
     }
 

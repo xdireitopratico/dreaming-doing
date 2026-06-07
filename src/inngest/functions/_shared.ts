@@ -101,3 +101,38 @@ export async function markRunFinal(
   const { error } = await supabaseAdmin.from("agent_runs").update(patch).eq("id", runId);
   if (error) throw new Error(`Failed to mark run ${runId} as ${status}: ${error.message}`);
 }
+
+export type ContinueQueueResponse = {
+  continued: boolean;
+  runId?: string;
+  pendingCount?: number;
+  reason?: string;
+};
+
+/** Após run completar: consome fila e dispara continuação se houver mensagens pendentes. */
+export async function drainPendingQueue(
+  payload: AgentRunRequest,
+): Promise<ContinueQueueResponse> {
+  const response = await fetch(`${supabaseUrl}/functions/v1/agent-run`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${serviceKey}`,
+      apikey: serviceKey,
+    },
+    body: JSON.stringify({
+      action: "continue_queue",
+      projectId: payload.projectId,
+      conversationId: payload.conversationId,
+      userId: payload.userId,
+      planMode: payload.planMode,
+    }),
+  });
+
+  const text = await response.text();
+  try {
+    return JSON.parse(text) as ContinueQueueResponse;
+  } catch {
+    return { continued: false, reason: text.slice(0, 200) || `HTTP ${response.status}` };
+  }
+}

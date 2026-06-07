@@ -96,6 +96,26 @@ Deno.serve(async (req) => {
       return json(result);
     }
 
+    if (body.action === "continue_queue") {
+      if (!isServiceCall) {
+        return json({ error: "continue_queue requer service role" }, 403);
+      }
+      const cProjectId = body.projectId as string | undefined;
+      const cConversationId = body.conversationId as string | undefined;
+      const cUserId = body.userId as string | undefined;
+      if (!cProjectId || !cConversationId || !cUserId) {
+        return json({ error: "projectId, conversationId, userId obrigatórios" }, 400);
+      }
+      const { handleContinueQueue } = await import("./continue-queue.ts");
+      const drainResult = await handleContinueQueue(supabase, INNGEST_EVENT_KEY, {
+        projectId: cProjectId,
+        conversationId: cConversationId,
+        userId: cUserId,
+        planMode: body.planMode === true,
+      });
+      return json(drainResult);
+    }
+
     const { data: userData, error: uErr } = await supabase.auth.getUser(token);
     if (uErr || !userData?.user) return json({ error: "Não autenticado" }, 401);
 
@@ -179,6 +199,9 @@ Deno.serve(async (req) => {
 
     if (!projectId || !conversationId) return json({ error: "projectId e conversationId obrigatórios" }, 400);
 
+    const { expireStaleRuns } = await import("../_shared/agent-pending-queue.ts");
+    await expireStaleRuns(supabase, projectId);
+
     const { data: project } = await supabase
       .from("projects").select("id, owner_id, template, meta").eq("id", projectId).single();
     if (!project || project.owner_id !== userData.user.id) {
@@ -229,7 +252,7 @@ Deno.serve(async (req) => {
       .from("agent_runs")
       .select("id, status, meta")
       .eq("project_id", projectId)
-      .in("status", ["running", "awaiting_user"])
+      .in("status", ["running", "awaiting_user", "pending"])
       .order("started_at", { ascending: false })
       .limit(1)
       .maybeSingle();
@@ -261,7 +284,10 @@ Deno.serve(async (req) => {
 
     // Se o run está ativamente rodando (não apenas esperando), enfileira.
     // Se está awaiting_user, NÃO enfileira — cria run de continuação.
-    const isRunning = awaitingRun?.status === "running" || runningLocks.has(projectId);
+    const isRunning =
+      awaitingRun?.status === "running" ||
+      awaitingRun?.status === "pending" ||
+      runningLocks.has(projectId);
 
     if (isRunning && !resumeRun && !isAwaiting) {
       await supabase.from("agent_pending_messages").insert({
