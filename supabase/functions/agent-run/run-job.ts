@@ -306,10 +306,15 @@ export async function executeAgentJob(
     await sandbox.kill().catch(() => {});
     throw e;
   }
-  if (result.ok) {
-    await sandbox.destroy().catch(() => {});
-  } else {
+  // Só mata sandbox se falhou ou não produziu nada.
+  // Se criou/alterou arquivos, mantém vivo para preview.
+  const hasOutput = (result.toolsUsed ?? []).some((t) =>
+    ["fs_write", "fs_edit", "shell_exec"].includes(t)
+  );
+  if (!result.ok || !hasOutput) {
     await sandbox.kill().catch(() => {});
+  } else {
+    await sandbox.destroy().catch(() => {});
   }
   return result;
 }

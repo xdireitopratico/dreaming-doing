@@ -33,7 +33,7 @@ import { ChatStream } from "@/components/editor/ChatStream";
 import { ComposerModeSelect } from "@/components/editor/ComposerModeSelect";
 import type { AgentProgress, PlanStep } from "@/hooks/useSSE";
 
-export type AgentComposerMode = "build" | "plan";
+export type AgentComposerMode = "chat" | "plan" | "build";
 
 // -----------------------------------------------------------------------------------
 // Tipos
@@ -156,7 +156,7 @@ export function ChatInput({
   onPlanReject,
 }: ChatInputProps) {
   const [input, setInput] = useState("");
-  const [composerModeLocal, setComposerModeLocal] = useState<AgentComposerMode>("build");
+  const [composerModeLocal, setComposerModeLocal] = useState<AgentComposerMode>("chat");
   const composerMode = composerModeProp ?? composerModeLocal;
   const setComposerMode = onComposerModeChange ?? setComposerModeLocal;
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -280,10 +280,10 @@ export function ChatInput({
       }
     }
 
-    const planPrefix =
-      composerMode === "plan" ? "[Modo plano — só planejar, não executar ainda]\n" : "";
+    // Fase 4.7: o modo é enviado separadamente via onSend(text, mode).
+    // Sem prefix textual — servidor decide se liga planMode ou não.
     const outgoing = buildOutgoingParts(
-      planPrefix + text,
+      text,
       attachmentParts,
     );
     if (outgoing.length === 0) return;

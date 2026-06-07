@@ -143,7 +143,7 @@ function EditorPage() {
   const [provider, setProvider] = useState("");
   const [pickMode, setPickMode] = useState(false);
   const [logs, setLogs] = useState<LogEntry[]>([]);
-  const [composerMode, setComposerMode] = useState<AgentComposerMode>("build");
+  const [composerMode, setComposerMode] = useState<AgentComposerMode>("chat");
   const [promptDraft, setPromptDraft] = useState<string | null>(null);
 
   const [previewRoute, setPreviewRoute] = useState("/");
@@ -537,7 +537,7 @@ function EditorPage() {
       void (async () => {
         setRunning(true);
         try {
-          await sse.connect(projectId, conversation.id, kind, { tasteAction });
+          await sse.connect(projectId, conversation.id, kind, { tasteAction, mode: composerMode === "plan" ? "plan" : composerMode === "build" ? "build" : "chat" });
         } catch (e: unknown) {
           const msg = e instanceof Error ? e.message : "Erro ao iniciar agente";
           logEditorTelemetryEvent("agent", "run_fail", "error", msg.slice(0, 200));
@@ -775,16 +775,15 @@ function EditorPage() {
   const handleSend = useCallback(
     (text: string, mode?: AgentComposerMode, parts?: StoredMessagePart[]) => {
       if (!conversation) return;
+      // Fase 4.7: o modo é enviado via `mode` no body pro servidor.
+      // Sem prefix de texto — o servidor decide se liga planMode ou não.
       const messageParts =
         parts && parts.length > 0
           ? parts
           : [
               {
                 type: "text" as const,
-                text:
-                  (mode ?? composerMode) === "plan"
-                    ? `[Modo plano — só planejar, não executar ainda]\n${text}`
-                    : text,
+                text,
               },
             ];
       supabase

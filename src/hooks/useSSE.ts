@@ -89,6 +89,8 @@ export interface AgentProgress {
 export type AgentConnectOptions = {
   /** Retoma após queda de conexão ou limite — não reinicia o chat do zero */
   resume?: boolean;
+  /** Fase 4.7: modo escolhido pelo usuário no dropdown (Chat/Plan/Build). */
+  mode?: "chat" | "plan" | "build";
 };
 
 const initialState: AgentProgress = {
@@ -461,7 +463,7 @@ export function useSSE() {
       tasteAction: TasteAction | undefined,
       isResume: boolean,
       autoResume: boolean,
-      opts?: ConnectOnceOpts,
+      opts?: ConnectOnceOpts & { mode?: "chat" | "plan" | "build" },
     ): Promise<{ shouldAutoResume: boolean; aborted: boolean }> => {
       const sawFinish = { current: false };
       const finishMeta = { resumable: false, ok: true };
@@ -525,6 +527,8 @@ export function useSSE() {
                   ...(sessionKind === "taste" && tasteAction ? { tasteAction } : {}),
                   resume: isResume,
                   autoResume,
+                  // Fase 4.7: modo opt-in via dropdown (chat/plan/build). Default 'chat' se ausente.
+                  mode: opts?.mode ?? "chat",
                   ...loadAgentSessionExtensions(),
                 },
           ),
@@ -691,6 +695,7 @@ export function useSSE() {
         options?.tasteAction,
         manualResume,
         false,
+        { mode: options?.mode },
       );
 
       if (!aborted) {
