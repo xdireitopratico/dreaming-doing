@@ -1,8 +1,4 @@
-import { serve } from "inngest/edge";
-import { inngest } from "../src/inngest/client";
-import { inngestFunctions } from "../src/inngest";
-
-const handler = serve({ client: inngest, functions: inngestFunctions });
+import { inngestHandler as handler } from "../dist/server/inngest-handler.js";
 
 export default async function inngestHandler(req, res) {
   const url = `${req.headers["x-forwarded-proto"] || "https"}://${req.headers["host"] || "localhost"}${req.url}`;
