@@ -20,6 +20,19 @@ class E2BSandbox implements SandboxProvider {
 
   private async ensure(): Promise<E2bRestSandbox> {
     if (this.sandbox) return this.sandbox;
+
+    // Só cria sandbox se o projeto tem arquivos para sincronizar.
+    // Projeto vazio = não há o que rodar nem renderizar.
+    const { count } = await this.supabase
+      .from("project_files")
+      .select("*", { count: "exact", head: true })
+      .eq("project_id", this.projectId);
+    if (!count || count === 0) {
+      throw new Error(
+        "Nenhum arquivo no projeto. Crie arquivos com fs_write antes de usar shell_exec."
+      );
+    }
+
     const { sandbox, reused } = await ensureAgentProjectSandbox(
       this.supabase,
       this.projectId,
@@ -64,9 +77,12 @@ class E2BSandbox implements SandboxProvider {
     }
   }
 
-  async getPreviewUrl(port: number): Promise<string> {
-    const sb = await this.ensure();
-    return e2bPreviewUrl(sb.sandboxId, port);
+  async getPreviewUrl(port: number): Promise<string | null> {
+    // LAZY: só retorna URL se a sandbox já foi alocada por um exec() anterior.
+    // Nunca chama ensure() aqui — E2B só nasce DEPOIS do 1º shell_exec do run,
+    // que é quando o agente de fato precisa executar algo.
+    if (!this.sandbox) return null;
+    return e2bPreviewUrl(this.sandbox.sandboxId, port);
   }
 
   /** Mantém sandbox vivo para preview (caso feliz). */
@@ -91,8 +107,8 @@ class NoopSandbox implements SandboxProvider {
   async exec(_command: string, _opts?: ExecOpts): Promise<ExecResult> {
     return { exitCode: 0, stdout: "[sandbox não disponível - execução simulada]", stderr: "" };
   }
-  async getPreviewUrl(_port: number): Promise<string> {
-    return "[sandbox não disponível]";
+  async getPreviewUrl(_port: number): Promise<string | null> {
+    return null;
   }
   async destroy(): Promise<void> {}
   async kill(): Promise<void> {}

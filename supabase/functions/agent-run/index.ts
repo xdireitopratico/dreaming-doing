@@ -260,6 +260,22 @@ Deno.serve(async (req) => {
       return json({ error: "Projeto não encontrado" }, 404);
     }
 
+    // Fase 4.7: checa se o projeto tem arquivos ANTES de alocar E2B.
+    // Sandbox E2B só nasce DEPOIS do agente criar o primeiro arquivo (ou seja,
+    // DEPOIS de pelo menos um fs_write/fs_edit ter acontecido). Projeto vazio
+    // => conversa pura => sem sandbox => sem preview iframe.
+    let projectFileCount = 0;
+    try {
+      const { count } = await supabase
+        .from("project_files")
+        .select("id", { count: "exact", head: true })
+        .eq("project_id", projectId);
+      projectFileCount = count ?? 0;
+    } catch {
+      // Se a tabela não tem RLS adequado, fallback = 0 (não aloca).
+      projectFileCount = 0;
+    }
+
     if (body.action === "watch") {
       const runId = body.runId as string | undefined;
       if (!runId) return json({ error: "runId obrigatório" }, 400);
@@ -636,7 +652,11 @@ Deno.serve(async (req) => {
     const looksLikeInteraction = /quero (só |apenas |uma )?(mensagem|conversa|intera|pergunt|discut|qualif|ideia|brainstorm)|me faz (perguntas|uma pergunta|pergunta)|não (começa|codar|construir|executar|trabalhar) ainda|só conversar|quero (conversar|discutir a ideia)/i.test(lastUserContent)
       || lastUserContent.trim().length < 90;
     const projectHasSandbox = !!(((project as any).meta || {})?.previewSandboxId || ((project as any).meta || {})?.previewReady);
-    const allocateSandboxLocal = !looksLikeInteraction || projectHasSandbox;
+    // Fase 4.7: 3 guardas — (1) interação explícita não aloca, (2) projeto SEM
+    // arquivos não aloca (E2B só nasce depois do agente criar algo), (3) projeto
+    // com sandbox pré-existente pode reusar.
+    const allocateSandboxLocal =
+      (!looksLikeInteraction && projectFileCount > 0) || projectHasSandbox;
 
     // IMPORTANTE: a partir daqui o código ainda cria provider local para compat com paths diretos/cleanup.
     // O verdadeiro "nunca carregar E2B em conversa" vem do short-circuit decide + run-job com allocateSandbox=false.

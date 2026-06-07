@@ -89,7 +89,9 @@ export interface ExecOpts {
 export interface SandboxProvider {
   sync(projectId: string, files: FileEntry[]): Promise<void>;
   exec(command: string, opts?: ExecOpts): Promise<ExecResult>;
-  getPreviewUrl(port: number): Promise<string>;
+  /** Retorna URL do preview OU null se a sandbox ainda não foi alocada
+   *  (1º shell_exec do run). E2B só nasce DEPOIS do agente criar arquivos. */
+  getPreviewUrl(port: number): Promise<string | null>;
   destroy(): Promise<void>;
   kill(): Promise<void>;
 }
