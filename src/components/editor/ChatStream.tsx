@@ -1,5 +1,5 @@
 // ChatStream — builder chat: mensagens sem bolha + trilha ao vivo (fases, tools, texto)
-import { FileText, Loader2, RefreshCw, AlertTriangle, Copy, RotateCcw, Zap } from "lucide-react";
+import { FileText, Loader2, RefreshCw, AlertTriangle, Copy, RotateCcw, Zap, MessageCircle } from "lucide-react";
 import { MarkdownRenderer } from "@/components/ui/markdown-renderer";
 import { Button, FadeIn } from "@forge/ui";
 import type { AgentProgress, PlanStep } from "@/lib/agent-progress";
@@ -130,9 +130,39 @@ export function ChatStream({
     : 0;
 
   const assistantMessages = messages.filter(m => m.role === "assistant");
+  const awaitingReply = progress.awaiting && !pendingPlan;
 
   return (
     <div className="forge-chat-stream" role="log" aria-live="polite" aria-relevant="additions text">
+      {awaitingReply && (
+        <FadeIn direction="up" distance={4}>
+          <section
+            className="my-2 rounded-lg border border-amber-400/35 bg-amber-400/8 px-3 py-2.5 flex items-start gap-2"
+            aria-label="Aguardando sua resposta"
+            data-testid="awaiting-user-banner"
+          >
+            <MessageCircle className="size-4 shrink-0 text-amber-400 mt-0.5" />
+            <div className="min-w-0">
+              <p className="font-mono text-[10px] uppercase tracking-wider text-amber-400">
+                Aguardando você
+              </p>
+              <p className="text-[12px] text-[var(--forge-silver)] leading-relaxed mt-0.5">
+                O FORGE fez uma pergunta acima. Responda no campo de mensagem abaixo para continuar.
+              </p>
+            </div>
+          </section>
+        </FadeIn>
+      )}
+
+      {progress.pendingQueueCount > 0 && (
+        <p
+          className="font-mono text-[9px] text-[var(--forge-ghost)] px-1 mb-1"
+          data-testid="pending-queue-hint"
+        >
+          {progress.pendingQueueCount} mensagem{progress.pendingQueueCount !== 1 ? "s" : ""} na fila — serão enviadas quando o agente liberar
+        </p>
+      )}
+
       {progress.timeline.length > 0 && (
         <ConsoleLogStream timeline={progress.timeline} />
       )}

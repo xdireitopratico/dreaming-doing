@@ -198,7 +198,7 @@ function HealthPage() {
               </h2>
               <div className="grid gap-2 sm:grid-cols-2">
                 <CheckRow icon={Server} label="E2B" result={report.checks.e2b} />
-                <CheckRow icon={Layers} label="PGMQ" result={report.checks.pgmq} />
+                <CheckRow icon={Layers} label="PGMQ (legado)" result={report.checks.pgmq} />
               </div>
             </section>
 

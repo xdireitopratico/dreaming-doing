@@ -1,6 +1,6 @@
 import { formatE2bUserError } from "@/lib/e2b-status";
 
-/** Mensagens amigáveis para falhas de rede no agent-run / SSE. */
+/** Mensagens amigáveis para falhas de rede no agent-run. */
 
 export function formatAgentFetchError(err: unknown): string {
   const raw = err instanceof Error ? err.message : String(err);

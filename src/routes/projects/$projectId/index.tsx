@@ -424,7 +424,7 @@ function EditorPage() {
     setRunning(active);
   }, [agent.connected, agent.progress.finished, agent.progress.canceled]);
 
-  // ─── SSE → logs ─────────────────────────────────────────────────────
+  // ─── Realtime events → logs ─────────────────────────────────────────
   useEffect(() => {
     const last = agent.progress.timeline.at(-1);
     if (!last) return;
@@ -1043,7 +1043,12 @@ function EditorPage() {
           <EditorResizableLayout
             workspaceCode={activeView === "code"}
             chatHeader={
-              <EditorChatHeader projectName={project?.name} running={running} />
+              <EditorChatHeader
+                projectName={project?.name}
+                running={running}
+                awaitingUser={agent.progress.awaiting}
+                pendingQueueCount={agent.progress.pendingQueueCount}
+              />
             }
             workspaceHeader={
               <EditorWorkspaceHeader

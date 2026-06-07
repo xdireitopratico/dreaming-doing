@@ -52,7 +52,7 @@
 | `agent-run/index.ts`: dispatch Inngest event + retorna { runId } | `useAgentRun.ts`: subscribe Realtime, `connected=true` |
 | `run-executor.ts` → `executeAgentJob()` → loop executa | `useAgentRun.ts`: Realtime → `applyAgentProgressEvent()` |
 | `loop.ts`: emite eventos (phase, tool_start, tool_done, assistant_text, done, finish) | `AgentProgress` state → `ChatStream.tsx` renderiza inline |
-| `loop.ts`: markRunStatus("awaiting_user") — **preservado pelo finalizeRun corrigido** | ❌ Nenhum modal — atualmente o chat só mostra a mensagem |
+| `loop.ts`: markRunStatus("awaiting_user") — **preservado pelo finalizeRun corrigido** | ✅ Banner `awaiting-user` no ChatStream + subtítulo no header |
 | `loop.ts`: plan_proposed → emit evento | `PlanViewer.tsx` ← `ChatStream.tsx` renderiza aprovação inline |
 
 ### 2.2 Streaming / Eventos
@@ -72,7 +72,7 @@
 | `e2b-smoke.ts`: createValidatedE2bSandbox() — smoke test Node/npm | `PreviewEmptyGuide.tsx`: estado vazio (Hammer + "LET'S BUILD") |
 | `sandbox.ts`: E2BSandbox.ensure() — lazy init no 1º shell_exec | `PreviewFrame` / `usePreviewBoot` |
 | `preview-boot/index.ts`: bootDevServerInSandbox() — sobe Vite | `PreviewFrame.tsx`: recebe `devUrl`, `bootError`, `warming`, `isNoFiles` |
-| `e2b-health/index.ts`: smoke test de chave do usuário | ❌ Nenhum indicador visual de saúde do E2B |
+| `e2b-health/index.ts`: smoke test de chave do usuário | SetupRail + `/api` (smoke ao salvar); badge live no editor = opcional (R4) |
 
 ### 2.4 Plan Mode
 
@@ -87,10 +87,10 @@
 
 | BACKEND | FRONTEND |
 |---------|----------|
-| `qualify.ts`: needsQualify() — detecta prompt vago/conversacional | ❌ Nenhum modal de decisão — atualmente a pergunta aparece como texto no chat |
-| `qualify.ts`: padrões em português. **Inglês adicionado na refatoração**. | ❌ Chat comum — usuário precisa digitar resposta no input |
-| `loop.ts`: runQualifyPhase() → stopForUser=true → awaiting_user | ❌ Status awaiting_user visível só no reducer, sem UI específica |
-| `loop.ts`: **BUG CORRIGIDO** — finalizeRun não sobrescreve mais awaiting_user com completed | `AgentProgress.awaiting`: campo existe mas **nenhum componente lê** |
+| `qualify.ts`: needsQualify() — detecta prompt vago/conversacional | Pergunta no chat + banner “Aguardando você” (resposta no input) |
+| `qualify.ts`: padrões em português e inglês | Mesmo fluxo — sem modal Sim/Não (by design) |
+| `loop.ts`: runQualifyPhase() → stopForUser=true → awaiting_user | Header: “Aguardando sua resposta”; `progress.awaiting` no reducer |
+| `loop.ts`: finalizeRun não sobrescreve `awaiting_user` com completed | `index.tsx` não auto-boota preview quando `awaiting` |
 
 ### 2.6 Timeline de Execução
 
@@ -98,9 +98,9 @@
 |---------|----------|
 | `loop.ts`: emite tool_start/tool_done com nome, args, resultado | `ConsoleLogStream.tsx`: log colapsável de tool calls |
 | `loop.ts`: emite file_diff com before/after | `ChatDiffViewer.tsx`: diff inline no chat — ✅ funciona |
-| `executionLogMeta.ts`: persiste hashes de tool calls | ❌ Nenhum componente de timeline — `AgentTimeline.tsx` **NÃO EXISTE** |
+| `executionLogMeta.ts`: persiste hashes de tool calls | `ConsoleLogStream` no chat; `AuditLog` + replay na rota histórico |
 | `observer.ts`: build, lint, tsc, design check | `ConsoleLogStream.tsx`: mostra `validate_fail` como log |
-| `observer.ts`: **BUG** npm install todo ciclo (hasFile consulta Supabase, não sandbox FS) | — |
+| `observer.ts`: `npm install` só se `package.json` existe e `node_modules` ausente no **sandbox FS** | ✅ `sandboxPathExists` |
 
 ---
 
@@ -120,14 +120,14 @@ agent_stream_events        -- Eventos persistidos (Realtime)
   ├── (run_id, seq) UNIQUE
   └── REPLICA IDENTITY FULL (realtime)
 
-agent_pending_messages     -- Fila quando agente ocupado
+agent_pending_messages     -- Fila ATIVA quando agente ocupado (queueMessage)
 agent_plans                 -- Planos faseados (steps JSONB)
 agent_checkpoints           -- Persistência do estado do loop
   └── UNIQUE (project_id, conversation_id)
 
 -- Funções
 acquire_agent_run_lock()   -- pg_try_advisory_xact_lock — evita runs duplicadas
-purge_agent_chunks_queue() -- Legado PGMQ (schema mantido, sem dispatch)
+purge_agent_chunks_queue() -- Legado PGMQ (schema no DB, sem dispatch no agente)
 ```
 
 ### 3.2 Edge Functions (12 deployadas)
@@ -214,22 +214,16 @@ EditorPage → EditorShell → EditorResizableLayout
 
 ## 6. BUGS PENDENTES
 
-Nenhum crítico em aberto (2026-06-07).
-
-| # | Severidade | Arquivo | Resolução |
-|---|-----------|---------|-----------|
-| ~~1~~ | Média | `loop.ts` | ✅ Stuck detection única — reativa após `executionLog`, sem bloco proativo |
-| ~~2~~ | Média | `sandbox.ts` | ✅ `kill()` → E2B + `clearProjectSandboxMeta`; `destroy()` só drop ref local (preview feliz) |
-
-Corrigidos em 2026-06-07: `run-setup.ts`, observer sandbox paths, loop forceTools, checkpoint resume, AiDiffViewer before, MarkdownRenderer unificado, stuck dedup, sandbox meta on kill.
+**Nenhum.** Fechados em 2026-06-07/08.
 
 ---
 
-## 7. CÓDIGO MORTO RESTANTE
+## 7. LEGADO NO DB (não é caminho paralelo)
 
 | Item | Ação |
 |------|------|
-| Schema PGMQ no DB | Mantido; sem código que dispatch |
+| Schema PGMQ | Mantido; `/health` checa reachability; **sem dispatch** no agente (opcional R1: dropar) |
+| `agent_pending_messages` | **Ativo** — fila de mensagens; UI: header + ChatStream |
 
 ---
 
@@ -245,4 +239,5 @@ Corrigidos em 2026-06-07: `run-setup.ts`, observer sandbox paths, loop forceTool
 
 ## 9. BACKLOG
 
-Ver seção **Backlog** em [FORGE.md](../FORGE.md) — lista única de pendências.
+- **Concluído:** seção Backlog em [FORGE.md](../FORGE.md)
+- **Opcional (R1–R4):** seção Restante em [FORGE.md](../FORGE.md) — não bloqueia operação

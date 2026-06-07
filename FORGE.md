@@ -7,7 +7,7 @@
 | Arquivo | Quem lê | Conteúdo |
 |---------|---------|----------|
 | **FORGE.md** | LLM / agente | Caminho único, arquivos críticos, deploy, debug |
-| **ARCHITECTURE.md** | LLM aprofundando | Backend ↔ frontend, tabelas, bugs pendentes |
+| **ARCHITECTURE.md** | LLM aprofundando | Backend ↔ frontend, tabelas |
 | **README.md** | Humano | Produto, `bun run dev`, link para FORGE |
 | `AGENT.md` / `CLAUDE.md` / `GEMINI.md` / `AGENTS.md` | IDEs | Ponte de 3 linhas → FORGE |
 
@@ -33,15 +33,21 @@ ChatInput → useAgentRun.connect()
   → useAgentRun → agent-progress → ChatStream
 ```
 
+### Fila ativa (não é legado)
+
+Quando o projeto já tem run ocupado, novas mensagens vão para **`agent_pending_messages`** via `useAgentRun.queueMessage()`. UI: contador no header do chat + hint no `ChatStream`.
+
 ### Removido — não reintroduzir
 
 | Legado | Substituto |
 |--------|------------|
-| `useSSE.ts`, SSE watch/replay | `useAgentRun.ts` + Realtime |
+| `useSSE.ts`, SSE watch/replay no Edge | `useAgentRun.ts` + Realtime |
 | Polling 350ms (`streamEventsResponse`, `followQueuedRun`) | Realtime + catch-up único ao subscribe |
-| `agent-worker`, PGMQ dispatch | Inngest |
+| `agent-worker`, PGMQ **dispatch** | Inngest |
 | Trigger.dev | Inngest |
 | `runChunkedJob` inline no Edge | Inngest execute |
+
+Schema PGMQ no DB + check em `/health` = **legado** (sem dispatch no agente).
 
 ## Arquivos críticos
 
@@ -51,7 +57,7 @@ ChatInput → useAgentRun.connect()
 | `src/lib/agent-progress.ts` | Reducer `applyAgentProgressEvent` |
 | `src/routes/projects/$projectId/index.tsx` | Editor, plan approve → `watch(newRunId)` |
 | `src/inngest/functions/agent-*.ts` | Jobs duráveis |
-| `supabase/functions/agent-run/index.ts` | `run`, `execute`, `cancel` |
+| `supabase/functions/agent-run/index.ts` | `run`, `execute`, `cancel`, `pending_count` |
 | `supabase/functions/agent-run/run-setup.ts` | Provider/keys — fonte única |
 | `supabase/functions/agent-run/run-executor.ts` | Execução + `appendStreamEvent` |
 | `supabase/functions/agent-run/loop.ts` | Loop do agente |
@@ -79,8 +85,9 @@ Edge functions deployadas: `agent-run`, `health`, `preview-boot`, `e2b-*`, `conn
 - Todo `onEvent` no executor → `appendStreamEvent`
 - Plan: `plan-decide.functions.ts` → novo run → `useAgentRun.watch(newRunId)`
 - Taste chat (sem chave): JSON `{ ok, content }` — mensagem já no DB, sem `runId`
+- Qualify / `awaiting_user`: banner no `ChatStream` + subtítulo no header — resposta no input
 
-## Backlog
+## Backlog (concluído)
 
 | # | Item | Status |
 |---|------|--------|
@@ -91,3 +98,14 @@ Edge functions deployadas: `agent-run`, `health`, `preview-boot`, `e2b-*`, `conn
 | E1 | `MarkdownRenderer` em ChatStream/ChatInput | ✅ |
 | B7 | `loop.ts` — stuck detection única (reativa após exec) | ✅ |
 | B8 | `sandbox.ts` `kill()` limpa meta preview no projeto | ✅ |
+| B9 | UX qualify — banner `awaiting_user` + fila no header/chat | ✅ |
+| B10 | Docs + comentários — sem referências SSE/PGMQ ativas | ✅ |
+
+## Restante (opcional — não bloqueia operação)
+
+| # | Item | Esforço |
+|---|------|---------|
+| R1 | Migration: dropar schema PGMQ quando não houver dependência | Baixo |
+| R2 | Dividir `index.tsx` do editor (~1250 linhas) | Médio |
+| R3 | Timeline visual dedicada no editor (hoje: `ConsoleLogStream` + histórico) | Baixo |
+| R4 | Badge E2B live no editor (hoje: SetupRail + `/api` smoke) | Baixo |

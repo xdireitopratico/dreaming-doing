@@ -20,7 +20,7 @@ import {
 import type { SSEEvent } from "@/lib/agent-progress";
 
 interface ConsoleLogStreamProps {
-  /** Timeline crua de eventos SSE do agent-run */
+  /** Timeline de eventos do agente (Realtime / replay do DB) */
   timeline: SSEEvent[];
   /** Se true, força expandir (ex: quando agente inicia) */
   initiallyExpanded?: boolean;

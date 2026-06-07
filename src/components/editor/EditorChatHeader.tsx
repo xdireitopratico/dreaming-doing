@@ -5,9 +5,23 @@ import { ForgeLogoMark } from "@/components/editor/ForgeLogoMark";
 interface EditorChatHeaderProps {
   projectName?: string;
   running?: boolean;
+  awaitingUser?: boolean;
+  pendingQueueCount?: number;
 }
 
-export function EditorChatHeader({ projectName, running }: EditorChatHeaderProps) {
+export function EditorChatHeader({
+  projectName,
+  running,
+  awaitingUser,
+  pendingQueueCount = 0,
+}: EditorChatHeaderProps) {
+  const subLabel = running
+    ? "Construindo alterações…"
+    : awaitingUser
+      ? "Aguardando sua resposta"
+      : pendingQueueCount > 0
+        ? `${pendingQueueCount} na fila`
+        : "Visualizando última versão salva";
   const toggleCollapse = () => {
     window.dispatchEvent(new CustomEvent("forge:toggle-chat-collapsed"));
   };
@@ -21,9 +35,7 @@ export function EditorChatHeader({ projectName, running }: EditorChatHeaderProps
           {projectName ?? "Projeto"}
           <ChevronDown className="size-3 shrink-0 opacity-50" />
         </span>
-        <span className="forge-project-sub">
-          {running ? "Construindo alterações…" : "Visualizando última versão salva"}
-        </span>
+        <span className="forge-project-sub">{subLabel}</span>
       </Link>
       <button
         type="button"

@@ -7,8 +7,7 @@
  * immediately (and the user must see status="pending" → "running" transition
  * without delay).
  *
- * P0: replaces the PGMQ + invokeAgentWorker pattern. Durability is now
- * provided by Inngest; this function is called synchronously from a step.
+ * Durabilidade via Inngest; chamado sincronamente de um step.
  */
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { executeAgentJob, type AgentJobParams } from "./run-job.ts";
