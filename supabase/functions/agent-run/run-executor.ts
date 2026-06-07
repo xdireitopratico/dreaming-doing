@@ -323,8 +323,8 @@ export async function executeAgentRun(
     .maybeSingle();
   const finalStatus = finalRun?.status as string | undefined;
   const finalMeta = (finalRun?.meta ?? {}) as Record<string, unknown>;
-  const awaitingStates = ["awaiting_user", "awaiting_plan_approval"];
-  const isAwaiting = awaitingStates.includes(finalStatus ?? "") || !!finalMeta.awaitingUser || !!finalMeta.pendingPlan;
+  const awaitingStates = ["awaiting_user"];
+  const isAwaiting = awaitingStates.includes(finalStatus ?? "") || !!finalMeta.awaitingUser;
 
   let status: string;
   if (result.canceled) {

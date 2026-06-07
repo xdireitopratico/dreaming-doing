@@ -44,27 +44,6 @@ type StreamCallback = (event: { type: string; data: unknown }) => void;
 const CHECKPOINT_INTERVAL_STEPS = 2;
 const EDGE_FUNCTION_TIMEOUT_MS = 110_000;
 const STUCK_THRESHOLD = 3;
-const PLAN_POLL_INTERVAL_MS = 1500;
-
-/** Resolvers ativos do plan mode (Fase 4.6). Chave: runId. */
-const planDecisionResolvers = new Map<string, {
-  resolve: (decision: ProposedPlan["decision"]) => void;
-  reject: (reason: string) => void;
-  planId: string;
-  proposedAt: number;
-}>();
-
-/** API chamada pelo index.ts quando o cliente envia plan_approve/plan_reject. */
-export function resolvePlanDecision(
-  runId: string,
-  planId: string,
-  decision: ProposedPlan["decision"],
-): boolean {
-  const entry = planDecisionResolvers.get(runId);
-  if (!entry || entry.planId !== planId) return false;
-  entry.resolve(decision);
-  return true;
-}
 
 function calculateMaxSteps(complexity: 1 | 2 | 3 | 4 | 5): number {
   return complexity * 5 + 5;
@@ -264,46 +243,9 @@ export class AgentLoop {
         restored: true,
       });
 
-      // Fase 4.6 plan mode: se o checkpoint tinha pendingPlan sem decisão,
-      // re-aguardamos a decisão do usuário (NUNCA auto-aprovamos em resume).
-      if (this.state.pendingPlan && !this.state.pendingPlan.decision) {
-        if (!this.planMode) {
-          // Stale state: planMode foi desligado depois do pendingPlan ter sido
-          // gravado. Limpa o pendingPlan e continua normalmente.
-          this.state.pendingPlan = null;
-        } else {
-          this.emit("phase", {
-            phase: "plan",
-            message: `Aguardando aprovação do plano proposto (${this.state.pendingPlan.steps.length} passos)…`,
-          });
-          const planDecision = await this.awaitPlanDecision(this.state.pendingPlan);
-          if (!planDecision) {
-            await this.persistFinal(
-              `Plano expirado ou rejeitado durante a retomada. Use o chat para tentar de novo.`,
-            );
-            await this.clearCheckpoint();
-            this.emit("done", { summary: "Plano expirado durante retomada", planExpired: true });
-            return { ok: false, error: "Plano expirado", steps: 0, toolsUsed: [] };
-          }
-          if (planDecision.action === "reject") {
-            const reason = planDecision.reason?.trim() || "sem motivo informado";
-            await this.persistFinal(`Plano rejeitado pelo usuário: ${reason}`);
-            await this.clearCheckpoint();
-            await this.markRunStatus("rejected");
-            this.emit("done", { summary: `Plano rejeitado: ${reason}`, planRejected: true });
-            return { ok: false, error: "Plano rejeitado", steps: 0, toolsUsed: [] };
-          }
-          // Approved: anexa o plano como instrução e segue para execute.
-          this.state.messages.push({
-            role: "user",
-            content: `[Plano aprovado] Execute os passos a seguir: ${
-              planDecision.steps.map((s, i) => `\n${i + 1}. ${s.description}${s.filePath ? ` (${s.filePath})` : ""}`).join("")
-            }`,
-          });
-          this.state.pendingPlan = null;
-          await this.saveCheckpoint(LoopPhase.EXECUTE_STEP, true);
-        }
-      }
+      // Plan runs terminate after proposing (no in-memory decision wait).
+      // The plan is emitted to the client via Realtime; approval/rejection
+      // creates a new build run via the plan-decide server action.
     } else {
       if (this.resumeRun) {
         this.appendResumeInstruction();
@@ -348,16 +290,16 @@ export class AgentLoop {
       this.emit("phase", { phase: "plan", message: classification.summary, intent: this.state.intent });
       await this.saveCheckpoint(LoopPhase.CREATE_PLAN);
 
-      // Fase 4.6 plan mode: extrai plano, emite plan_proposed, espera decisão.
+      // Plan mode: extrai plano, emite plan_proposed, marca run como completed.
+      // O run termina aqui — o cliente recebe o plano via Realtime e
+      // dispara uma nova run de build via plan-decide server action.
       if (this.planMode) {
         const proposedPlan = this.proposePlan(classification);
-        this.state.pendingPlan = proposedPlan;
         this.emit("plan_proposed", {
           planId: proposedPlan.planId,
           summary: proposedPlan.summary,
           rationale: proposedPlan.rationale,
           steps: proposedPlan.steps,
-          ttlMs: proposedPlan.ttlMs,
           runId: this.runId,
           projectId: this.state.projectId,
         });
@@ -367,40 +309,18 @@ export class AgentLoop {
           stepCount: proposedPlan.steps.length,
         });
         await this.saveCheckpoint(LoopPhase.CREATE_PLAN, true);
-        await this.markRunStatus("awaiting_plan_approval", { pendingPlan: proposedPlan });
-
-        const planDecision = await this.awaitPlanDecision(proposedPlan);
-        if (!planDecision) {
-          await this.persistFinal(
-            `Plano expirado (TTL ${Math.round(PLAN_APPROVAL_TTL_MS / 1000)}s). ` +
-            `Envie outra mensagem para gerar um novo plano.`,
-          );
-          await this.clearCheckpoint();
-          this.emit("done", { summary: "Plano expirado", planExpired: true });
-          return { ok: false, error: "Plano expirado", steps: 0, toolsUsed: [] };
-        }
-        if (planDecision.action === "reject") {
-          const reason = planDecision.reason?.trim() || "sem motivo informado";
-          await this.persistFinal(`Plano rejeitado pelo usuário: ${reason}`);
-          await this.clearCheckpoint();
-          await this.markRunStatus("rejected", {
-            pendingPlan: { ...proposedPlan, decision: planDecision },
-          });
-          this.emit("done", { summary: `Plano rejeitado: ${reason}`, planRejected: true });
-          return { ok: false, error: "Plano rejeitado", steps: 0, toolsUsed: [] };
-        }
-        // Aprovado: segue para execução com os passos do usuário.
-        this.state.messages.push({
-          role: "user",
-          content: `[Plano aprovado] Execute os passos a seguir: ${
-            planDecision.steps.map((s, i) => `\n${i + 1}. ${s.description}${s.filePath ? ` (${s.filePath})` : ""}`).join("")
-          }`,
+        await this.markRunStatus("completed", { plan: proposedPlan });
+        this.emit("done", {
+          summary: proposedPlan.summary,
+          plan: proposedPlan,
+          planProposed: true,
         });
-        this.state.pendingPlan = null;
-        await this.markRunStatus("running", {
-          pendingPlan: { ...proposedPlan, decision: planDecision },
-        });
-        await this.saveCheckpoint(LoopPhase.EXECUTE_STEP, true);
+        return {
+          ok: true,
+          summary: proposedPlan.summary,
+          steps: 0,
+          toolsUsed: [],
+        };
       }
 
       if (this.originalUserRequest && needsQualify(this.originalUserRequest, classification)) {
@@ -781,85 +701,13 @@ export class AgentLoop {
   }
 
   /**
-   * Bloqueia até o cliente chamar plan_approve/plan_reject OU o TTL expirar.
-   * - Em processo: usa o Map `planDecisionResolvers` (index.ts chama resolvePlanDecision).
-   * - Cross-processo: faz polling em agent_runs.meta.pendingPlan.decision a cada 1.5s
-   *   (cobre o caso PGMQ onde o loop roda em outro isolate).
-   * Retorna null se timeout/expirado.
+   * Atualiza agent_runs.status e meta. Best-effort.
+   * Status possíveis: running, completed, awaiting_user.
+   * Em plan mode, marca a run como completed com `plan` em meta.
    */
-  async awaitPlanDecision(plan: ProposedPlan): Promise<ProposedPlan["decision"] | null> {
-    if (!this.runId) {
-      // sem runId não tem como cross-process — só in-process Map
-      return await this.awaitPlanDecisionInProcess(plan);
-    }
-
-    const runId = this.runId;
-    const planId = plan.planId;
-    const deadline = Date.now() + plan.ttlMs;
-
-    // 1) In-process resolver (fast path — mesmo Deno isolate do action)
-    const inProcessPromise = this.awaitPlanDecisionInProcess(plan);
-
-    // 2) Cross-process: poll agent_runs.meta.pendingPlan.decision
-    const crossProcessPromise = (async (): Promise<ProposedPlan["decision"] | null> => {
-      while (Date.now() < deadline) {
-        try {
-          const { data } = await this.sb
-            .from("agent_runs")
-            .select("meta")
-            .eq("id", runId)
-            .maybeSingle();
-          const meta = (data?.meta ?? {}) as Record<string, unknown>;
-          const pp = meta.pendingPlan as Record<string, unknown> | null;
-          if (pp && pp.planId === planId && pp.decision) {
-            return pp.decision as ProposedPlan["decision"];
-          }
-        } catch (err) {
-          logger.error("agent_run.plan_poll_failed", {
-            runId,
-            planId,
-            error: (err as Error)?.message,
-          });
-        }
-        await new Promise((r) => setTimeout(r, PLAN_POLL_INTERVAL_MS));
-      }
-      return null;
-    })();
-
-    return await Promise.race([inProcessPromise, crossProcessPromise]).finally(() => {
-      planDecisionResolvers.delete(runId);
-    });
-  }
-
-  private awaitPlanDecisionInProcess(plan: ProposedPlan): Promise<ProposedPlan["decision"] | null> {
-    return new Promise((resolve) => {
-      if (!this.runId) {
-        // sem runId: in-process Map não funciona; cai no poll
-        return resolve(null);
-      }
-      const timer = setTimeout(() => {
-        planDecisionResolvers.delete(this.runId!);
-        resolve(null);
-      }, plan.ttlMs);
-      planDecisionResolvers.set(this.runId, {
-        planId: plan.planId,
-        proposedAt: Date.now(),
-        resolve: (decision) => {
-          clearTimeout(timer);
-          resolve(decision);
-        },
-        reject: (_reason) => {
-          clearTimeout(timer);
-          resolve({ action: "reject", reason: _reason });
-        },
-      });
-    });
-  }
-
-  /** Atualiza agent_runs.status e meta.pendingPlan. Best-effort. */
   private async markRunStatus(
-    status: "running" | "rejected" | "awaiting_plan_approval" | "awaiting_user",
-    extra?: { pendingPlan?: ProposedPlan | null; awaitingUser?: Record<string, unknown> },
+    status: "running" | "completed" | "awaiting_user",
+    extra?: { plan?: ProposedPlan | null; awaitingUser?: Record<string, unknown> },
   ): Promise<void> {
     if (!this.runId) return;
     try {
@@ -869,20 +717,24 @@ export class AgentLoop {
         .eq("id", this.runId)
         .maybeSingle();
       const prevMeta = (existing?.meta ?? {}) as Record<string, unknown>;
-      const nextMeta: Record<string, unknown> = { ...prevMeta, planMode: true };
-      if (extra && Object.prototype.hasOwnProperty.call(extra, "pendingPlan")) {
-        if (extra.pendingPlan === null) {
-          delete nextMeta.pendingPlan;
-        } else if (extra.pendingPlan) {
-          nextMeta.pendingPlan = extra.pendingPlan;
+      const nextMeta: Record<string, unknown> = { ...prevMeta, planMode: this.planMode };
+      if (extra && Object.prototype.hasOwnProperty.call(extra, "plan")) {
+        if (extra.plan === null) {
+          delete nextMeta.plan;
+        } else if (extra.plan) {
+          nextMeta.plan = extra.plan;
         }
       }
       if (extra?.awaitingUser) {
         nextMeta.awaitingUser = extra.awaitingUser;
       }
+      const updateFields: Record<string, unknown> = { status, meta: nextMeta };
+      if (status === "completed" || status === "running") {
+        updateFields.finished_at = new Date().toISOString();
+      }
       await this.sb
         .from("agent_runs")
-        .update({ status, meta: nextMeta })
+        .update(updateFields)
         .eq("id", this.runId);
     } catch (err) {
       logger.error("agent_run.mark_status_failed", {

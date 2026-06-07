@@ -1,5 +1,5 @@
 // ChatStream — builder chat: mensagens sem bolha + trilha ao vivo (fases, tools, texto)
-import { FileText, Loader2, RefreshCw, AlertTriangle, Copy, RotateCcw, Zap, Clock } from "lucide-react";
+import { FileText, Loader2, RefreshCw, AlertTriangle, Copy, RotateCcw, Zap } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Button, FadeIn } from "@forge/ui";
@@ -123,30 +123,6 @@ export function ChatStream({
 }: ChatStreamProps) {
   const phaseLabel = progress.phase ? (PHASE_LABELS[progress.phase] ?? progress.phase) : null;
   const pendingPlan = progress.pendingPlan;
-  const [now, setNow] = useState(() => Date.now());
-
-  useEffect(() => {
-    if (!pendingPlan) return;
-    const id = window.setInterval(() => setNow(Date.now()), 1000);
-    return () => window.clearInterval(id);
-  }, [pendingPlan]);
-
-  // Auto-reject client-side quando o TTL expira (servidor também valida).
-  useEffect(() => {
-    if (!pendingPlan || !onPlanReject) return;
-    const remaining = pendingPlan.proposedAt + pendingPlan.ttlMs - now;
-    if (remaining <= 0) {
-      onPlanReject("Tempo esgotado");
-    }
-  }, [pendingPlan, now, onPlanReject]);
-
-  const planRemainingMs = pendingPlan
-    ? Math.max(0, pendingPlan.proposedAt + pendingPlan.ttlMs - now)
-    : 0;
-  const planRemainingSec = Math.ceil(planRemainingMs / 1000);
-  const planRemainingLabel = planRemainingSec >= 60
-    ? `${Math.floor(planRemainingSec / 60)}m${String(planRemainingSec % 60).padStart(2, "0")}s`
-    : `${planRemainingSec}s`;
   const liveMessage = progress.message?.trim() || null;
   const activeTools = progress.tools.filter((t) => t.ok === undefined);
   const doneTools = progress.tools.filter((t) => t.ok !== undefined).slice(-6);
@@ -201,16 +177,6 @@ export function ChatStream({
               <span className="font-mono text-[10px] uppercase tracking-[0.1em] text-[var(--primary)]">
                 Plano proposto — aguardando sua decisão
               </span>
-              <span
-                className={`ml-auto flex items-center gap-1 font-mono text-[10px] ${
-                  planRemainingSec <= 30 ? "text-amber-400" : "text-[var(--text-dim)]"
-                }`}
-                aria-live="polite"
-                data-testid="plan-remaining"
-              >
-                <Clock className="size-3" />
-                {planRemainingLabel}
-              </span>
             </header>
             {pendingPlan.rationale && (
               <p
@@ -228,7 +194,7 @@ export function ChatStream({
               />
             </div>
             <footer className="px-4 py-2 border-t border-[var(--primary)]/20 text-[10px] font-mono text-[var(--text-ghost)]">
-              {pendingPlan.summary} · TTL 5min — expira e rejeita automaticamente se você não agir.
+              {pendingPlan.summary}
             </footer>
           </section>
         </FadeIn>

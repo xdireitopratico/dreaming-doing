@@ -11,6 +11,7 @@ import {
 import { appendStreamEvent } from "../_shared/agent-stream.ts";
 import { executeAgentJob } from "../agent-run/run-job.ts";
 import { normalizeIdList } from "../_shared/session-extensions.ts";
+import { logger } from "../_shared/logger.ts";
 import type { AgentPreferencesPayload } from "../agent-run/connector-keys.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
@@ -19,7 +20,8 @@ const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const MAX_SERVER_CHUNKS = 64;
 
 async function finalizeRun(
-  supabase: ReturnType<typeof createClient>,
+  // deno-lint-ignore no-explicit-any
+  supabase: any,
   runId: string,
   result: {
     ok: boolean;
@@ -30,13 +32,35 @@ async function finalizeRun(
     toolsUsed?: string[];
   },
 ): Promise<void> {
-  const status = result.canceled ? "canceled" : result.ok ? "completed" : "failed";
+  // Lê estado atual para NÃO sobrescrever status de espera
+  const { data: current } = await supabase
+    .from("agent_runs")
+    .select("status, meta")
+    .eq("id", runId)
+    .maybeSingle();
+  const currentStatus = current?.status as string | undefined;
+  const currentMeta = (current?.meta ?? {}) as Record<string, unknown>;
+  const awaitingStates = ["awaiting_user"];
+  const isAwaiting = awaitingStates.includes(currentStatus ?? "") || !!currentMeta.awaitingUser;
+
+  let status: string;
+  if (result.canceled) {
+    status = "canceled";
+  } else if (isAwaiting) {
+    status = currentStatus!;
+  } else if (result.ok) {
+    status = "completed";
+  } else {
+    status = "failed";
+  }
+
   await supabase.from("agent_runs").update({
     status,
-    finished_at: new Date().toISOString(),
+    finished_at: isAwaiting ? null : new Date().toISOString(),
     steps: result.steps,
     error: result.error ?? null,
     meta: {
+      ...currentMeta,
       summary: result.summary ?? null,
       toolsUsed: result.toolsUsed ?? [],
     },
@@ -45,7 +69,8 @@ async function finalizeRun(
 }
 
 async function drainPendingMessage(
-  supabase: ReturnType<typeof createClient>,
+  // deno-lint-ignore no-explicit-any
+  supabase: any,
   projectId: string,
 ): Promise<void> {
   const { data: pending } = await supabase
@@ -59,18 +84,22 @@ async function drainPendingMessage(
   if (!pending) return;
 
   const body = (pending.body ?? {}) as Record<string, unknown>;
-  const { data: newRun } = await supabase.from("agent_runs").insert({
-    project_id: projectId,
-    conversation_id: pending.conversation_id,
-    user_id: pending.user_id,
-    status: "running",
-    meta: { queued: true },
-  }).select("id").single();
 
-  if (!newRun?.id) return;
+  // Usa acquire_agent_run_lock em vez de INSERT direto
+  const { data: lock } = await supabase.rpc("acquire_agent_run_lock", {
+    p_project_id: projectId,
+    p_conversation_id: pending.conversation_id,
+    p_user_id: pending.user_id,
+  });
+  const lockResult = lock as { acquired?: boolean; run_id?: string } | null;
+
+  if (!lockResult?.acquired || !lockResult?.run_id) {
+    logger.warn("agent.drain_lock_failed", { projectId });
+    return;
+  }
 
   const msg: AgentChunkMessage = {
-    runId: newRun.id,
+    runId: lockResult.run_id,
     projectId,
     conversationId: pending.conversation_id as string,
     userId: pending.user_id as string,
@@ -80,8 +109,11 @@ async function drainPendingMessage(
   };
 
   const queued = await enqueueAgentChunk(supabase, msg);
-  await supabase.from("agent_pending_messages").delete().eq("id", pending.id);
-  if (queued) await invokeAgentWorker(SUPABASE_URL, SERVICE_KEY);
+  // Só deleta pending se enfileirou com sucesso
+  if (queued) {
+    await supabase.from("agent_pending_messages").delete().eq("id", pending.id as string);
+    invokeAgentWorker(SUPABASE_URL, SERVICE_KEY).catch(() => {});
+  }
 }
 
 async function processOneChunk(msg: AgentChunkMessage, msgId: number): Promise<void> {
@@ -146,7 +178,18 @@ async function processOneChunk(msg: AgentChunkMessage, msgId: number): Promise<v
       message: "Retomando automaticamente no servidor…",
     });
     const requeued = await enqueueAgentChunk(supabase, { ...msg, resume: true });
-    if (requeued) await invokeAgentWorker(SUPABASE_URL, SERVICE_KEY);
+    if (requeued) {
+      invokeAgentWorker(SUPABASE_URL, SERVICE_KEY).catch(() => {});
+    } else {
+      logger.error("agent.requeue_failed", { runId: msg.runId });
+      await finalizeRun(supabase, msg.runId, {
+        ok: false, error: "Fila indisponível para continuar execução.", steps: result.steps,
+      });
+      await appendStreamEvent(supabase, msg.runId, "finish", {
+        type: "finish", ok: false, error: "Fila indisponível", resumable: false,
+      });
+    }
+    await deleteAgentChunk(supabase, msgId);
     return;
   }
 
@@ -157,10 +200,22 @@ async function processOneChunk(msg: AgentChunkMessage, msgId: number): Promise<v
     resumable: !result.ok && !result.canceled,
   });
 
+  // Heartbeat
+  await supabase.from("agent_runs").update({
+    heartbeat_at: new Date().toISOString(),
+  }).eq("id", msg.runId);
+
   if (result.ok && !result.canceled) {
-    await drainPendingMessage(supabase, msg.projectId);
-    await invokeAgentWorker(SUPABASE_URL, SERVICE_KEY);
+    try {
+      await drainPendingMessage(supabase, msg.projectId);
+    } catch (e) {
+      logger.warn("agent.drain_failed", { runId: msg.runId, error: (e as Error).message });
+    }
+    invokeAgentWorker(SUPABASE_URL, SERVICE_KEY).catch(() => {});
   }
+
+  // Commit: delete chunk after successful processing (read+delete pattern)
+  await deleteAgentChunk(supabase, msgId);
 }
 
 Deno.serve(async (req) => {
@@ -181,11 +236,24 @@ Deno.serve(async (req) => {
       headers: { ...FORGE_CORS_HEADERS, "Content-Type": "application/json" },
     });
   } catch (e) {
+    // Verificar se o run foi cancelado antes de sobrescrever
+    const runId = item.message.runId;
+    const { data: current } = await supabase.from("agent_runs")
+      .select("canceled_at, status").eq("id", runId).maybeSingle();
+
+    if (current?.canceled_at || current?.status === "canceled") {
+      logger.info("agent.run_canceled_during_error", { runId });
+      await deleteAgentChunk(supabase, item.msgId);
+      return new Response(JSON.stringify({ ok: true, canceled: true }), {
+        headers: { ...FORGE_CORS_HEADERS, "Content-Type": "application/json" },
+      });
+    }
+
     const err = e instanceof Error ? e.message : "erro worker";
     const result = { ok: false, error: err, steps: 0 };
-    await finalizeRun(supabase, item.message.runId, result);
-    await appendStreamEvent(supabase, item.message.runId, "error", { error: err, recoverable: false });
-    await appendStreamEvent(supabase, item.message.runId, "finish", { ...result, resumable: false });
+    await finalizeRun(supabase, runId, result);
+    await appendStreamEvent(supabase, runId, "error", { error: err, recoverable: false });
+    await appendStreamEvent(supabase, runId, "finish", { ...result, resumable: false });
     await deleteAgentChunk(supabase, item.msgId);
     return new Response(JSON.stringify({ ok: false, error: err }), { status: 500 });
   }

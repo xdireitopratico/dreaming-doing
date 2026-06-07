@@ -88,10 +88,8 @@ export interface AgentProgress {
   pendingPlan: PendingPlan | null;
   /** Stop/cancel signal for UI convergence (from "canceled" event or finish{canceled:true}). */
   canceled?: boolean;
-  /** Gate active (qualify or plan) — do not auto-execute or auto-preview-boot. */
+  /** Gate active (qualify) — do not auto-execute or auto-preview-boot. */
   awaiting?: boolean;
-  /** Última decisão de gate (para mostrar ao usuário por que parou em conversa ou foi pra build). */
-  lastGateDecision?: { phase: string; reason: string; at: number } | null;
 }
 
 export type AgentConnectOptions = {
@@ -112,7 +110,6 @@ const initialState: AgentProgress = {
   skills: [],
   runtimeChecks: [],
   timeline: [],
-  lastGateDecision: null,
   summary: null,
   error: null,
   finished: false,
@@ -353,7 +350,7 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
         resumable: false,
         error: null,
         streamText: null,
-        pendingPlan: data.planRejected === true || data.planExpired === true
+        pendingPlan: data.planRejected === true
           ? null
           : prev.pendingPlan,
         timeline: [...prev.timeline, event],
@@ -384,24 +381,6 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
         awaiting: true,
         pendingPlan,
         statusHint: "Aguardando sua aprovação do plano…",
-        timeline: [...prev.timeline, event],
-      };
-    }
-
-    case "gate_decision": {
-      // Registra a decisão (qualify vs build) para o UI poder mostrar "Agent está perguntando..." vs "construindo".
-      const phase = (data.phase as string) || "unknown";
-      const reason = (data.reason as string) || "";
-      return {
-        ...prev,
-        awaiting: phase === "qualify" || !!data.awaiting || prev.awaiting,
-        // Store last decision so components can surface it (e.g. small caption or log).
-        // We extend the interface lightly via the existing timeline + a custom field.
-        // For strong typing later we can extend AgentProgress.
-        lastGateDecision: { phase, reason, at: Date.now() },
-        statusHint: phase === "qualify"
-          ? (reason.includes("interaction") ? "Aguardando sua resposta para continuar a conversa..." : "Qualificando a ideia...")
-          : prev.statusHint,
         timeline: [...prev.timeline, event],
       };
     }
@@ -927,115 +906,5 @@ export function useSSE() {
     [],
   );
 
-  const approvePlan = useCallback(
-    async (
-      projectId: string,
-      runId: string,
-      planId: string,
-      steps: PlanStep[],
-    ): Promise<PlanApproveResult> => {
-      const { url, publishableKey } = getSupabaseEnv();
-      if (!url || !publishableKey) {
-        return { ok: false, message: "Supabase não configurado." };
-      }
-      const { data: sess } = await supabase.auth.getSession();
-      const accessToken = sess.session?.access_token;
-      if (!accessToken) {
-        return { ok: false, message: "Sessão expirada." };
-      }
-
-      try {
-        const res = await fetch(`${url}/functions/v1/agent-run`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${accessToken}`,
-            apikey: publishableKey,
-          },
-          body: JSON.stringify({ action: "plan_approve", runId, planId, steps }),
-        });
-        if (!res.ok) {
-          const msg = await parseErrorResponse(res);
-          return { ok: false, message: msg };
-        }
-        const body = (await res.json()) as {
-          ok?: boolean;
-          steps?: PlanStep[];
-          resolvedInProcess?: boolean;
-        };
-        setProgress((p) => ({ ...p, pendingPlan: null, statusHint: "Plano aprovado — executando…" }));
-        return {
-          ok: body.ok !== false,
-          resolvedInProcess: body.resolvedInProcess === true,
-          steps: body.steps,
-        };
-      } catch (err) {
-        return { ok: false, message: formatAgentFetchError(err) };
-      }
-    },
-    [],
-  );
-
-  const rejectPlan = useCallback(
-    async (
-      projectId: string,
-      runId: string,
-      planId: string,
-      reason?: string,
-    ): Promise<PlanRejectResult> => {
-      const { url, publishableKey } = getSupabaseEnv();
-      if (!url || !publishableKey) {
-        return { ok: false, message: "Supabase não configurado." };
-      }
-      const { data: sess } = await supabase.auth.getSession();
-      const accessToken = sess.session?.access_token;
-      if (!accessToken) {
-        return { ok: false, message: "Sessão expirada." };
-      }
-
-      try {
-        const res = await fetch(`${url}/functions/v1/agent-run`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${accessToken}`,
-            apikey: publishableKey,
-          },
-          body: JSON.stringify({ action: "plan_reject", runId, planId, reason }),
-        });
-        if (!res.ok) {
-          const msg = await parseErrorResponse(res);
-          return { ok: false, message: msg };
-        }
-        const body = (await res.json()) as {
-          ok?: boolean;
-          resolvedInProcess?: boolean;
-        };
-        setProgress((p) => ({
-          ...p,
-          pendingPlan: null,
-          statusHint: "Plano rejeitado.",
-          finished: true,
-        }));
-        return { ok: body.ok !== false, resolvedInProcess: body.resolvedInProcess === true };
-      } catch (err) {
-        return { ok: false, message: formatAgentFetchError(err) };
-      }
-    },
-    [],
-  );
-
-  return { progress, connected, connect, watch, replay, queueMessage, disconnect, stop, approvePlan, rejectPlan };
+  return { progress, connected, connect, watch, replay, queueMessage, disconnect, stop };
 }
-
-/** Resposta do plan_approve/plan_reject edge function. */
-export type PlanDecisionResult = {
-  ok: boolean;
-  message?: string;
-  /** true se o resolver in-process foi disparado (vs polling cross-process). */
-  resolvedInProcess?: boolean;
-};
-
-/** Resposta do plan_approve/plan_reject edge function (alias semântico). */
-export type PlanApproveResult = PlanDecisionResult & { steps?: PlanStep[] };
-export type PlanRejectResult = PlanDecisionResult;

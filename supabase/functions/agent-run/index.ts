@@ -1,7 +1,6 @@
 // index.ts — Edge Function agent-run (build: agentloop-only 2026-06-06).
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 
-import { resolvePlanDecision } from "./loop.ts";
 import { createSandboxProvider } from "./sandbox.ts";
 import {
   loadConnectorKeys,
@@ -35,7 +34,6 @@ import { loadCheckpoint } from "./checkpoint.ts";
 import { buildSandboxEnv } from "./sandbox-env.ts";
 import { appendStreamEvent, fetchStreamEventsSince } from "../_shared/agent-stream.ts";
 import { executeAgentJob } from "./run-job.ts";
-import { validateApprovedSteps } from "./plan-mode.ts";
 import type { ExecuteParams } from "./run-executor.ts";
 const runningLocks = new Map<string, Promise<unknown>>();
 
@@ -199,97 +197,6 @@ Deno.serve(async (req) => {
         .eq("user_id", userData.user.id);
 
       return json({ ok: true });
-    }
-
-    if (body.action === "plan_approve" || body.action === "plan_reject") {
-      const runId = body.runId as string | undefined;
-      const planId = body.planId as string | undefined;
-      if (!runId || !planId) {
-        return json({ error: "runId e planId obrigatórios" }, 400);
-      }
-
-      const { data: run } = await supabase
-        .from("agent_runs")
-        .select("id, user_id, project_id, status, meta")
-        .eq("id", runId)
-        .maybeSingle();
-
-      if (!run || run.user_id !== userData.user.id) {
-        return json({ error: "Run não encontrada" }, 404);
-      }
-
-      const meta = (run.meta ?? {}) as Record<string, unknown>;
-      const pendingPlan = meta.pendingPlan as Record<string, unknown> | null;
-      if (!pendingPlan || pendingPlan.planId !== planId) {
-        return json({ error: "Plano não corresponde (stale ou já decidido)" }, 409);
-      }
-      if (pendingPlan.decision) {
-        return json({ error: "Plano já decidido", already: true }, 409);
-      }
-
-      if (body.action === "plan_reject") {
-        const reason = typeof body.reason === "string" ? body.reason : "";
-        const decision = { action: "reject" as const, reason };
-        // Sinaliza o resolver in-process (fast path) e o poll cross-process.
-        const resolvedInProcess = resolvePlanDecision(runId, planId, decision);
-        const now = new Date().toISOString();
-        const updatedMeta: Record<string, unknown> = {
-          ...meta,
-          pendingPlan: { ...pendingPlan, decision, decidedAt: now },
-          planMode: true,
-        };
-        await supabase
-          .from("agent_runs")
-          .update({ status: "rejected", finished_at: now, meta: updatedMeta })
-          .eq("id", runId);
-        logger.event("agent_run.plan_rejected", {
-          runId,
-          planId,
-          reason: reason.slice(0, 200),
-          inProcess: resolvedInProcess,
-        });
-        return json({ ok: true, resolvedInProcess });
-      }
-
-      // plan_approve
-      const originalSteps = (pendingPlan.steps as unknown[]) ?? [];
-      const approvedValidation = validateApprovedSteps(
-        // O validador espera PlanStep[] mas só usa .id; rebuild a partir de pendingPlan.steps
-        originalSteps.map((s) => {
-          const r = (s ?? {}) as Record<string, unknown>;
-          return {
-            id: String(r.id ?? ""),
-            type: (r.type as never) ?? "custom",
-            description: String(r.description ?? ""),
-            filePath: typeof r.filePath === "string" ? r.filePath : undefined,
-            estimatedCost: typeof r.estimatedCost === "number" ? r.estimatedCost : 0.002,
-            enabled: r.enabled !== false,
-          };
-        }),
-        body.steps,
-      );
-      if (!approvedValidation.ok) {
-        return json({ error: approvedValidation.reason }, 400);
-      }
-      const decision = { action: "approve" as const, steps: approvedValidation.steps };
-      const resolvedInProcess = resolvePlanDecision(runId, planId, decision);
-      const now = new Date().toISOString();
-      const updatedMeta: Record<string, unknown> = {
-        ...meta,
-        pendingPlan: { ...pendingPlan, decision, decidedAt: now },
-        planMode: true,
-      };
-      await supabase
-        .from("agent_runs")
-        .update({ status: "running", meta: updatedMeta })
-        .eq("id", runId);
-      logger.event("agent_run.plan_approved", {
-        runId,
-        planId,
-        stepCount: approvedValidation.steps.length,
-        inProcess: resolvedInProcess,
-      });
-      return json({ ok: true, resolvedInProcess, steps: approvedValidation.steps });
     }
 
     projectId = typeof body.projectId === "string" ? body.projectId : undefined;
@@ -468,12 +375,10 @@ Deno.serve(async (req) => {
     }
 
     const latestMeta = (awaitingRun?.meta ?? {}) as Record<string, unknown>;
-    const isAwaiting = awaitingRun?.status === "awaiting_user"
-      || awaitingRun?.status === "awaiting_plan_approval"
-      || !!latestMeta.awaitingUser;
+    const isAwaiting = awaitingRun?.status === "awaiting_user" || !!latestMeta.awaitingUser;
 
     // Se o run está ativamente rodando (não apenas esperando), enfileira.
-    // Se está awaiting_user/awaiting_plan_approval, NÃO enfileira — cria run de continuação.
+    // Se está awaiting_user, NÃO enfileira — cria run de continuação.
     const isRunning = awaitingRun?.status === "running" || runningLocks.has(projectId);
 
     if (isRunning && !resumeRun && !isAwaiting) {
@@ -894,14 +799,14 @@ Deno.serve(async (req) => {
         .maybeSingle();
       const currentStatus = current?.status as string | undefined;
       const currentMeta = (current?.meta ?? {}) as Record<string, unknown>;
-      const awaitingStates = ["awaiting_user", "awaiting_plan_approval"];
-      const isAwaiting = awaitingStates.includes(currentStatus ?? "") || !!currentMeta.awaitingUser || !!currentMeta.pendingPlan;
+      const awaitingStates = ["awaiting_user"];
+      const isAwaiting = awaitingStates.includes(currentStatus ?? "") || !!currentMeta.awaitingUser;
 
       let status: string;
       if (result.canceled) {
         status = "canceled";
       } else if (isAwaiting) {
-        status = currentStatus!; // Preserva awaiting_user ou awaiting_plan_approval
+        status = currentStatus!; // Preserva awaiting_user
       } else if (result.ok) {
         status = "completed";
       } else {

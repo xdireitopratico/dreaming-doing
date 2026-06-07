@@ -4,7 +4,7 @@ import {
   assertEquals, assertExists, assertArrayIncludes, assertNotEquals, assert,
 } from "https://deno.land/std@0.224.0/assert/mod.ts";
 
-import { AgentLoop, resolvePlanDecision } from "./loop.ts";
+import { AgentLoop } from "./loop.ts";
 import { ToolRegistry } from "./registry.ts";
 import { LoopPhase } from "./types.ts";
 import type { AgentState, LLMProvider, ChatMessage, ChatResponse, ChatParams, ToolResult, ProposedPlan, PlanStep } from "./types.ts";
@@ -463,59 +463,7 @@ Deno.test("appendExecutionLogEntry max 40", () => {
   assertEquals(r.length, 40); assertEquals(r[0], "e1"); assertEquals(r[39], "e40");
 });
 
-// ===== FASE 4.6 — PLAN MODE =====
-Deno.test("plan-mode — awaitPlanDecision retorna null no timeout (TTL curto)", async () => {
-  const { loop, sb } = f({ files: [], runId: "plan-timeout", maxSteps: 1 });
-  // Sem agent_runs meta → poll nunca acha decisão → só sobra o TTL
-  sb.set("agent_runs", { data: null });
-  const plan: ProposedPlan = {
-    planId: "p1",
-    summary: "Plano de teste",
-    steps: [{ id: "s1", type: "custom", description: "x", enabled: true }],
-    ttlMs: 60,
-    proposedAt: new Date().toISOString(),
-  };
-  const t0 = Date.now();
-  const decision = await loop.awaitPlanDecision(plan);
-  const elapsed = Date.now() - t0;
-  assertEquals(decision, null, "timeout deve retornar null");
-  assert(elapsed >= 50 && elapsed < 800, `TTL curto: elapsed=${elapsed}ms`);
-});
-
-Deno.test("plan-mode — awaitPlanDecision resolve via resolvePlanDecision (in-process)", async () => {
-  const { loop, sb } = f({ files: [], runId: "plan-approve", maxSteps: 1 });
-  sb.set("agent_runs", { data: null });
-  const plan: ProposedPlan = {
-    planId: "p2",
-    summary: "Aprovar",
-    steps: [
-      { id: "s1", type: "create_file", description: "criar", filePath: "a.tsx", enabled: true },
-      { id: "s2", type: "shell_exec", description: "build", enabled: true },
-    ],
-    ttlMs: 5_000,
-    proposedAt: new Date().toISOString(),
-  };
-  const stepsApproved: PlanStep[] = [plan.steps[0]!];
-  const decisionPromise = loop.awaitPlanDecision(plan);
-  // dispara o resolver in-process após um tick
-  setTimeout(() => {
-    const ok = resolvePlanDecision("plan-approve", "p2", { action: "approve", steps: stepsApproved });
-    assertEquals(ok, true, "resolvePlanDecision deve retornar true");
-  }, 30);
-  const decision = await decisionPromise;
-  assertExists(decision);
-  assertEquals(decision!.action, "approve");
-  if (decision!.action === "approve") {
-    assertEquals(decision!.steps.length, 1);
-    assertEquals(decision!.steps[0]!.id, "s1");
-  }
-});
-
-Deno.test("plan-mode — resolvePlanDecision retorna false pra runId/planId errado", () => {
-  const ok = resolvePlanDecision("nao-existe", "qualquer", { action: "reject", reason: "x" });
-  assertEquals(ok, false);
-});
-
+// ===== FASE 4.7 — PLAN MODE (sem blocking: loop termina após propor) =====
 Deno.test("plan-mode — validateApprovedSteps rejeita id desconhecido", () => {
   const original: PlanStep[] = [
     { id: "s1", type: "create_file", description: "a", enabled: true },
