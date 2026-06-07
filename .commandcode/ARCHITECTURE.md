@@ -195,7 +195,7 @@ EditorPage → EditorShell → EditorResizableLayout
 |------|---------|
 | **AiDiffViewer** | `before` vazio — usar `progress.diffs` de eventos `file_diff` |
 | **Markdown** | `ChatStream` / `ChatInput` duplicam renderer; `ui/markdown-renderer.tsx` não usado |
-| **Setup duplicado** | `index.ts` + `run-executor.ts` + `run-job.ts` (~300 linhas) → extrair `run-setup.ts` |
+| ~~Setup duplicado~~ | ✅ `run-setup.ts` |
 
 ### 4.4 Removidos na higienização 2026-06-07
 
@@ -214,23 +214,12 @@ EditorPage → EditorShell → EditorResizableLayout
 
 ## 6. BUGS PENDENTES
 
-### Backend
-
 | # | Severidade | Arquivo | Bug |
 |---|-----------|---------|-----|
-| 1 | Alta | `observer.ts` | `npm install` todo ciclo (`hasFile` consulta Supabase, não FS do sandbox) |
-| 2 | Alta | `observer.ts` | `tsc --noEmit` sem `--project tsconfig.json` |
-| 3 | Alta | `loop.ts` | `forceTools` descarta resposta do assistant |
-| 4 | Média | `loop.ts` | Stuck detection duplicada (reativo + proativo) |
-| 5 | Média | `checkpoint.ts` | `resumeStepStart` pode re-executar step |
-| 6 | Média | `sandbox.ts` | `destroy()` / `kill()` incompletos vs meta do projeto |
+| 1 | Média | `loop.ts` | Stuck detection duplicada (reativo + proativo) |
+| 2 | Média | `sandbox.ts` | `destroy()` / `kill()` incompletos vs meta do projeto |
 
-### Frontend
-
-| # | Severidade | Arquivo | Bug |
-|---|-----------|---------|-----|
-| 7 | Alta | `index.tsx` / `AiDiffViewer` | `before` vazio nos diffs |
-| 8 | Média | `ChatStream`, `ChatInput` | Markdown inline duplicado |
+Corrigidos em 2026-06-07: `run-setup.ts`, observer sandbox paths, loop forceTools, checkpoint resume, AiDiffViewer before, MarkdownRenderer unificado.
 
 ---
 
@@ -238,7 +227,6 @@ EditorPage → EditorShell → EditorResizableLayout
 
 | Item | Ação |
 |------|------|
-| Setup triplicado (`index` + `run-executor` + `run-job`) | Extrair `run-setup.ts` (backlog B1) |
 | Schema PGMQ no DB | Mantido; sem código que dispatch |
 
 ---

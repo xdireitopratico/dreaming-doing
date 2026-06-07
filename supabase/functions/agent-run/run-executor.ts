@@ -13,20 +13,9 @@
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { executeAgentJob, type AgentJobParams } from "./run-job.ts";
 import { buildSessionExtensionsPrompt, normalizeIdList } from "../_shared/session-extensions.ts";
-import {
-  loadConnectorKeys,
-  loadConnectorPools,
-  loadDeployConnectorKeys,
-  loadForgeTrialRobinPool,
-  type AgentPreferencesPayload,
-} from "./connector-keys.ts";
-import { pickMain, type ProviderConfig } from "./providers.ts";
-import {
-  defaultRobinModel,
-  PLATFORM_ROBIN_TASTE_PRESET_ID,
-  resolveModelFromPreferences,
-  filterKeysForAutoAllowlist,
-} from "../_shared/model-presets.ts";
+import { loadDeployConnectorKeys, type AgentPreferencesPayload } from "./connector-keys.ts";
+import type { ProviderConfig } from "./providers.ts";
+import { loadUserLlmContext, resolveAgentProvider } from "./run-setup.ts";
 import { buildStackContext, stackPromptAddon } from "../_shared/stack-context.ts";
 import { buildChatHistory } from "./memory.ts";
 import { RobinKeyPool } from "./robin-pool.ts";
@@ -64,30 +53,6 @@ export type ExecuteResult = {
   stepsCompleted: number;
   durationMs: number;
 };
-
-function isRobinMode(p?: AgentPreferencesPayload | null): boolean {
-  return p?.mode === "robin" || p?.mode === "rob";
-}
-
-function robinProviderConfig(
-  poolProvider: "nvidia" | "groq",
-  keys: string[],
-  modelPresetId?: string,
-): ProviderConfig {
-  if (keys.length === 0) {
-    throw new Error(
-      `Modo ROBIN ativo, mas nenhuma chave ${poolProvider.toUpperCase()} no pool. Adicione chaves em /api → Adicionar ao pool.`,
-    );
-  }
-  const wire = defaultRobinModel(poolProvider, modelPresetId);
-  return {
-    provider: wire.provider,
-    apiKey: keys[0]!,
-    model: wire.model,
-    baseUrl: wire.baseUrl,
-    label: `ROBIN · ${wire.label} (${keys.length} chaves)`,
-  };
-}
 
 export async function executeAgentRun(
   supabase: SupabaseClient,
@@ -135,92 +100,38 @@ export async function executeAgentRun(
     ? await loadCheckpoint(supabase, projectId, conversationId)
     : null;
 
-  // Load connector keys
-  const userOnlyKeys = await loadConnectorKeys(supabase, userId, params.preferences ?? undefined);
-  const groqPool = await loadConnectorPools(supabase, userId, "groq");
-  const nvidiaPool = await loadConnectorPools(supabase, userId, "nvidia");
-  const hasUserLlmKey =
-    groqPool.length > 0 ||
-    nvidiaPool.length > 0 ||
-    Object.keys(userOnlyKeys).some((k) =>
-      [
-        "ANTHROPIC_API_KEY",
-        "GROQ_API_KEY",
-        "XAI_API_KEY",
-        "OPENAI_API_KEY",
-        "NVIDIA_API_KEY",
-        "GEMINI_API_KEY",
-        "OPENROUTER_API_KEY",
-        "DEEPSEEK_API_KEY",
-        "DASHSCOPE_API_KEY",
-        "MINIMAX_API_KEY",
-        "MOONSHOT_API_KEY",
-        "MIMO_API_KEY",
-        "OLLAMA_BASE_URL",
-      ].includes(k)
-    );
+  const { userOnlyKeys, hasUserLlmKey } = await loadUserLlmContext(
+    supabase,
+    userId,
+    params.preferences ?? undefined,
+  );
 
-  // Resolve session kind
   type SessionKind = "taste_chat" | "taste_start" | "byok";
   let sessionKind: SessionKind = hasUserLlmKey ? "byok" : "taste_chat";
   if (params.sessionKindRaw === "byok") sessionKind = "byok";
   if (params.sessionKindRaw === "taste_start") sessionKind = "taste_start";
   if (params.sessionKindRaw === "taste_chat") sessionKind = "taste_chat";
 
-  // Setup provider
   let robinPool: RobinKeyPool | null = null;
   let connectorKeys: Record<string, string> = {};
   let mainCfg: ProviderConfig;
   let effectiveRobin = false;
   let tasteStart = false;
-  const userWantsRobin = isRobinMode(params.preferences);
-  const poolProvider = params.preferences?.poolProvider ?? "groq";
 
   try {
-    if (sessionKind === "taste_start") {
-      tasteStart = true;
-      const poolKeys = await loadForgeTrialRobinPool(supabase);
-      if (poolKeys.length === 0) {
-        throw new Error("Start Project: administrador deve configurar pool NVIDIA em API Keys (/api).");
-      }
-      robinPool = new RobinKeyPool(poolKeys);
-      mainCfg = robinProviderConfig("nvidia", poolKeys, PLATFORM_ROBIN_TASTE_PRESET_ID);
-      mainCfg.label = `Start Project · Taste · ${mainCfg.label.replace(/^ROBIN · /, "")}`;
-      connectorKeys = { NVIDIA_API_KEY: poolKeys[0]! };
-      effectiveRobin = true;
-    } else if (userWantsRobin) {
-      const poolKeys = await loadConnectorPools(supabase, userId, poolProvider);
-      robinPool = new RobinKeyPool(poolKeys);
-      mainCfg = robinProviderConfig(poolProvider, poolKeys, params.preferences?.robinPoolModelId);
-      connectorKeys = poolProvider === "nvidia"
-        ? { NVIDIA_API_KEY: poolKeys[0]! }
-        : { GROQ_API_KEY: poolKeys[0]! };
-      effectiveRobin = true;
-    } else {
-      connectorKeys = { ...userOnlyKeys };
-      if (params.preferences?.mode === "auto") {
-        const autoKeys = filterKeysForAutoAllowlist(
-          userOnlyKeys,
-          params.preferences?.autoAllowedPresetIds,
-          params.preferences?.userModelEntries,
-        );
-        mainCfg = pickMain(autoKeys);
-        const n = params.preferences?.autoAllowedPresetIds?.length ?? 0;
-        mainCfg.label = `${mainCfg.label} (Auto · ${n > 0 ? `${n} modelo(s)` : "todas as chaves"})`;
-      } else {
-        const resolved = resolveModelFromPreferences(params.preferences ?? undefined, userOnlyKeys);
-        if (!resolved) {
-          throw new Error("Chave ausente para o modelo escolhido. Adicione a API Key do provedor em /api.");
-        }
-        mainCfg = {
-          provider: resolved.provider,
-          apiKey: resolved.apiKey,
-          model: resolved.model,
-          baseUrl: resolved.baseUrl,
-          label: `${resolved.label} (fixo)`,
-        };
-      }
-    }
+    const setup = await resolveAgentProvider({
+      supabase,
+      userId,
+      preferences: params.preferences ?? undefined,
+      sessionKind: sessionKind === "taste_start" ? "taste_start" : "byok",
+      userOnlyKeys,
+      tasteStartLabelPrefix: sessionKind === "taste_start",
+    });
+    mainCfg = setup.mainCfg;
+    connectorKeys = setup.connectorKeys;
+    robinPool = setup.robinPool;
+    effectiveRobin = setup.effectiveRobin;
+    tasteStart = setup.tasteStart;
   } catch (err: unknown) {
     const msg = (err as Error)?.message ?? "Provider LLM não configurado";
     await supabase.from("agent_runs").update({

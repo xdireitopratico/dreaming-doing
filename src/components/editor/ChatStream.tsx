@@ -1,7 +1,6 @@
 // ChatStream — builder chat: mensagens sem bolha + trilha ao vivo (fases, tools, texto)
 import { FileText, Loader2, RefreshCw, AlertTriangle, Copy, RotateCcw, Zap } from "lucide-react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
+import { MarkdownRenderer } from "@/components/ui/markdown-renderer";
 import { Button, FadeIn } from "@forge/ui";
 import type { AgentProgress, PlanStep } from "@/lib/agent-progress";
 import type { ChatMessage } from "@/components/editor/ChatInput";
@@ -23,29 +22,6 @@ const PHASE_LABELS: Record<string, string> = {
   taste_chat: "Concierge",
   done: "Concluído",
 };
-
-function MarkdownContent({ children }: { children: string }) {
-  return (
-    <div
-      className="forge-chat-markdown prose prose-invert max-w-none text-sm leading-relaxed
-      prose-headings:font-display prose-headings:tracking-tight
-      prose-h1:text-lg prose-h2:text-base prose-h3:text-sm
-      prose-p:text-[var(--forge-silver)]
-      prose-code:font-mono prose-code:text-[11px] prose-code:bg-[var(--forge-surface-2)] prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:before:content-none prose-code:after:content-none
-      prose-pre:bg-[var(--forge-surface-1)] prose-pre:border prose-pre:border-[var(--forge-border)] prose-pre:rounded-lg prose-pre:max-w-full prose-pre:overflow-x-auto
-      prose-ul:text-[var(--forge-silver)] prose-ol:text-[var(--forge-silver)]
-      prose-li:my-0.5
-      prose-a:text-[var(--forge-primary)] prose-a:no-underline hover:prose-a:underline
-      prose-strong:text-[var(--forge-text)]
-      prose-blockquote:border-l-[var(--forge-primary)] prose-blockquote:text-[var(--forge-silver)]
-      prose-hr:border-[var(--forge-border)]
-      [&_pre_code]:bg-transparent [&_pre_code]:p-0 [&_pre_code]:text-[11px]
-      [&_pre]:text-[var(--forge-text)]"
-    >
-      <ReactMarkdown remarkPlugins={[remarkGfm]}>{children}</ReactMarkdown>
-    </div>
-  );
-}
 
 interface AssistantMessageProps {
   msg: ChatMessage;
@@ -89,7 +65,7 @@ function AssistantMessage({ msg, index, totalTokens, onCopy, onUndo, copiedIds }
           </button>
         </div>
       </div>
-      {msg.content ? <MarkdownContent>{msg.content}</MarkdownContent> : null}
+      {msg.content ? <MarkdownRenderer className="forge-chat-markdown">{msg.content}</MarkdownRenderer> : null}
 
       {msg.toolCalls && msg.toolCalls.length > 0 && (
         <div className="forge-tool-inline mt-2">
@@ -255,7 +231,7 @@ export function ChatStream({
 
           {liveMessage && <p className="forge-chat-live-line">{liveMessage}</p>}
 
-          {showStreamText && <MarkdownContent>{streamText}</MarkdownContent>}
+          {showStreamText && <MarkdownRenderer className="forge-chat-markdown">{streamText}</MarkdownRenderer>}
 
           {progress.statusHint && (
             <p className="forge-chat-live-hint">{progress.statusHint}</p>

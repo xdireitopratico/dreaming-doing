@@ -1,20 +1,13 @@
 // index.ts — Edge Function agent-run (build: agentloop-only 2026-06-06).
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 
+import { loadDeployConnectorKeys, type AgentPreferencesPayload } from "./connector-keys.ts";
+import type { ProviderConfig } from "./providers.ts";
 import {
-  loadConnectorKeys,
-  loadConnectorPools,
-  loadDeployConnectorKeys,
-  loadForgeTrialRobinPool,
-  type AgentPreferencesPayload,
-} from "./connector-keys.ts";
-import { pickMain, type ProviderConfig } from "./providers.ts";
-import {
-  defaultRobinModel,
-  PLATFORM_ROBIN_TASTE_PRESET_ID,
-  resolveModelFromPreferences,
-  filterKeysForAutoAllowlist,
-} from "../_shared/model-presets.ts";
+  loadUserLlmContext,
+  resolveAgentProvider,
+  validateAgentPreferences,
+} from "./run-setup.ts";
 import { buildStackContext, stackPromptAddon } from "../_shared/stack-context.ts";
 import { buildChatHistory } from "./memory.ts";
 import { RobinKeyPool } from "./robin-pool.ts";
@@ -37,47 +30,6 @@ const corsHeaders = FORGE_CORS_HEADERS;
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const INNGEST_EVENT_KEY = Deno.env.get("INNGEST_EVENT_KEY") ?? "";
-
-function isRobinMode(p?: AgentPreferencesPayload): boolean {
-  return p?.mode === "robin" || p?.mode === "rob";
-}
-
-function validateAgentPreferences(p?: AgentPreferencesPayload): string | null {
-  if (!p?.mode) {
-    return "Setup obrigatório: configure modo e modelo em Modelos (/models).";
-  }
-  if (p.mode === "auto") return null;
-  if (p.mode === "fixed" && !p.fixedPresetId?.trim()) {
-    return "Setup: selecione um modelo fixo em Modelos (/models).";
-  }
-  if (isRobinMode(p) && !p.robinPoolModelId?.trim()) {
-    return "Setup: selecione o modelo do pool ROBIN em Modelos (/models).";
-  }
-  if (isRobinMode(p) && !p.poolProvider) {
-    return "Setup: selecione o provedor do pool ROBIN (Groq ou NVIDIA).";
-  }
-  return null;
-}
-
-function robinProviderConfig(
-  poolProvider: "nvidia" | "groq",
-  keys: string[],
-  modelPresetId?: string,
-): ProviderConfig {
-  if (keys.length === 0) {
-    throw new Error(
-      `Modo ROBIN ativo, mas nenhuma chave ${poolProvider.toUpperCase()} no pool. Adicione chaves em /api → Adicionar ao pool.`,
-    );
-  }
-  const wire = defaultRobinModel(poolProvider, modelPresetId);
-  return {
-    provider: wire.provider,
-    apiKey: keys[0]!,
-    model: wire.model,
-    baseUrl: wire.baseUrl,
-    label: `ROBIN · ${wire.label} (${keys.length} chaves)`,
-  };
-}
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return corsPreflightResponse();
@@ -358,29 +310,11 @@ Deno.serve(async (req) => {
       ? await loadCheckpoint(supabase, projectId, conversationId)
       : null;
 
-    const userOnlyKeys = await loadConnectorKeys(supabase, userData.user.id, preferences);
-    const groqPool = await loadConnectorPools(supabase, userData.user.id, "groq");
-    const nvidiaPool = await loadConnectorPools(supabase, userData.user.id, "nvidia");
-    const hasUserLlmKey =
-      groqPool.length > 0 ||
-      nvidiaPool.length > 0 ||
-      Object.keys(userOnlyKeys).some((k) =>
-        [
-          "ANTHROPIC_API_KEY",
-          "GROQ_API_KEY",
-          "XAI_API_KEY",
-          "OPENAI_API_KEY",
-          "NVIDIA_API_KEY",
-          "GEMINI_API_KEY",
-          "OPENROUTER_API_KEY",
-          "DEEPSEEK_API_KEY",
-          "DASHSCOPE_API_KEY",
-          "MINIMAX_API_KEY",
-          "MOONSHOT_API_KEY",
-          "MIMO_API_KEY",
-          "OLLAMA_BASE_URL",
-        ].includes(k)
-      );
+    const { userOnlyKeys, hasUserLlmKey } = await loadUserLlmContext(
+      supabase,
+      userData.user.id,
+      preferences,
+    );
 
     type SessionKind = "taste_chat" | "taste_start" | "byok";
     /**
@@ -460,60 +394,27 @@ Deno.serve(async (req) => {
     let mainCfg: ProviderConfig;
     let effectiveRobin = false;
     let tasteStart = false;
-    const userWantsRobin = isRobinMode(preferences);
-    const poolProvider = preferences?.poolProvider ?? "groq";
 
     try {
       if (sessionKind === "taste_start") {
-        tasteStart = true;
-        const poolKeys = await loadForgeTrialRobinPool(supabase);
-        if (poolKeys.length === 0) {
-          throw new Error("Start Project: administrador deve configurar pool NVIDIA em API Keys (/api).");
-        }
-        robinPool = new RobinKeyPool(poolKeys);
-        mainCfg = robinProviderConfig("nvidia", poolKeys, PLATFORM_ROBIN_TASTE_PRESET_ID);
-        mainCfg.label = `Start Project · Taste · ${mainCfg.label.replace(/^ROBIN · /, "")}`;
-        connectorKeys = { NVIDIA_API_KEY: poolKeys[0]! };
-        effectiveRobin = true;
         await supabase
           .from("profiles")
           .update({ taste_start_remaining: Math.max(0, tasteStartRemaining - 1) })
           .eq("id", userData.user.id);
-      } else if (userWantsRobin) {
-        const poolKeys = await loadConnectorPools(supabase, userData.user.id, poolProvider);
-        robinPool = new RobinKeyPool(poolKeys);
-        mainCfg = robinProviderConfig(poolProvider, poolKeys, preferences?.robinPoolModelId);
-        connectorKeys = poolProvider === "nvidia"
-          ? { NVIDIA_API_KEY: poolKeys[0]! }
-          : { GROQ_API_KEY: poolKeys[0]! };
-        effectiveRobin = true;
-      } else {
-        connectorKeys = { ...userOnlyKeys };
-        if (preferences?.mode === "auto") {
-          const autoKeys = filterKeysForAutoAllowlist(
-            userOnlyKeys,
-            preferences?.autoAllowedPresetIds,
-            preferences?.userModelEntries,
-          );
-          mainCfg = pickMain(autoKeys);
-          const n = preferences?.autoAllowedPresetIds?.length ?? 0;
-          mainCfg.label = `${mainCfg.label} (Auto · ${n > 0 ? `${n} modelo(s)` : "todas as chaves"})`;
-        } else {
-          const resolved = resolveModelFromPreferences(preferences, userOnlyKeys);
-          if (!resolved) {
-            throw new Error(
-              "Chave ausente para o modelo escolhido. Adicione a API Key do provedor em /api.",
-            );
-          }
-          mainCfg = {
-            provider: resolved.provider,
-            apiKey: resolved.apiKey,
-            model: resolved.model,
-            baseUrl: resolved.baseUrl,
-            label: `${resolved.label} (fixo)`,
-          };
-        }
       }
+      const setup = await resolveAgentProvider({
+        supabase,
+        userId: userData.user.id,
+        preferences,
+        sessionKind: sessionKind === "taste_start" ? "taste_start" : "byok",
+        userOnlyKeys,
+        tasteStartLabelPrefix: sessionKind === "taste_start",
+      });
+      mainCfg = setup.mainCfg;
+      connectorKeys = setup.connectorKeys;
+      robinPool = setup.robinPool;
+      effectiveRobin = setup.effectiveRobin;
+      tasteStart = setup.tasteStart;
     } catch (err: unknown) {
       runningLocks.delete(projectId);
       return json({ error: (err as Error)?.message ?? "Provider LLM não configurado" }, 500);

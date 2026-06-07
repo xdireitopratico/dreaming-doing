@@ -423,6 +423,7 @@ export class AgentLoop {
       // Sem tool_calls
       if (!response.tool_calls || response.tool_calls.length === 0) {
         if (forceTools && assistantText) {
+          this.state.messages.push({ role: "assistant", content: response.content ?? assistantText });
           this.state.messages.push({
             role: "user",
             content:

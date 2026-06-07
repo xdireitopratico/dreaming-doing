@@ -402,13 +402,13 @@ function EditorPage() {
     return agent.progress.diffs.map((d) => ({
       id: d.id,
       path: d.path,
-      before: d.before,
+      before: d.before || (fileMap.get(d.path) ?? ""),
       after: d.after,
       author: "FORGE Agent",
       timestamp: d.timestamp,
       reviewed: false,
     }));
-  }, [agent.progress.diffs]);
+  }, [agent.progress.diffs, fileMap]);
 
   // ─── Agent blame ────────────────────────────────────────────────────
   const blameEntries = useMemo(

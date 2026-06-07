@@ -8,20 +8,9 @@ import { createSandboxProvider } from "./sandbox.ts";
 import { registerFsTools } from "./tools/fs.ts";
 import { registerShellTool } from "./tools/shell.ts";
 import { LoopPhase, type AgentState } from "./types.ts";
-import {
-  loadConnectorKeys,
-  loadConnectorPools,
-  loadDeployConnectorKeys,
-  loadForgeTrialRobinPool,
-  type AgentPreferencesPayload,
-} from "./connector-keys.ts";
-import { pickMain, type ProviderConfig } from "./providers.ts";
-import {
-  defaultRobinModel,
-  PLATFORM_ROBIN_TASTE_PRESET_ID,
-  resolveModelFromPreferences,
-  filterKeysForAutoAllowlist,
-} from "../_shared/model-presets.ts";
+import { loadDeployConnectorKeys, type AgentPreferencesPayload } from "./connector-keys.ts";
+import type { ProviderConfig } from "./providers.ts";
+import { loadUserLlmContext, resolveAgentProvider } from "./run-setup.ts";
 import { buildStackContext, stackPromptAddon } from "../_shared/stack-context.ts";
 import { buildChatHistory } from "./memory.ts";
 import { RobinKeyPool, ResilientLLM } from "./robin-pool.ts";
@@ -55,25 +44,6 @@ export type AgentJobParams = {
    */
   allocateSandbox?: boolean;
 };
-
-function isRobinMode(p?: AgentPreferencesPayload): boolean {
-  return p?.mode === "robin" || p?.mode === "rob";
-}
-
-function robinProviderConfig(
-  poolProvider: "nvidia" | "groq",
-  keys: string[],
-  modelPresetId?: string,
-): ProviderConfig {
-  const wire = defaultRobinModel(poolProvider, modelPresetId);
-  return {
-    provider: wire.provider,
-    apiKey: keys[0]!,
-    model: wire.model,
-    baseUrl: wire.baseUrl,
-    label: `ROBIN · ${wire.label} (${keys.length} chaves)`,
-  };
-}
 
 /**
  * Quando uma build run é disparada via plan-decide:planApprove, o run.meta
@@ -179,63 +149,26 @@ export async function executeAgentJob(
     ? await loadCheckpoint(supabase, projectId, conversationId)
     : null;
 
-  const userOnlyKeys = await loadConnectorKeys(supabase, userId, preferences);
-  const groqPool = await loadConnectorPools(supabase, userId, "groq");
-  const nvidiaPool = await loadConnectorPools(supabase, userId, "nvidia");
-  const hasUserLlmKey =
-    groqPool.length > 0 || nvidiaPool.length > 0 ||
-    Object.keys(userOnlyKeys).length > 0;
+  const { userOnlyKeys } = await loadUserLlmContext(supabase, userId, preferences);
 
   type SessionKind = "taste_start" | "byok";
   let sessionKind: SessionKind = "byok";
   if (sessionKindRaw === "taste_start") sessionKind = "taste_start";
   if (sessionKindRaw === "taste") sessionKind = "taste_start";
 
-  let robinPool: RobinKeyPool | null = null;
-  let connectorKeys: Record<string, string> = {};
-  let mainCfg: ProviderConfig;
-  let effectiveRobin = false;
-  let tasteStart = false;
-  const userWantsRobin = isRobinMode(preferences);
-  const poolProvider = preferences?.poolProvider ?? "groq";
-
-  if (sessionKind === "taste_start") {
-    tasteStart = true;
-    const poolKeys = await loadForgeTrialRobinPool(supabase);
-    if (poolKeys.length === 0) throw new Error("Start Project: pool NVIDIA ausente.");
-    robinPool = new RobinKeyPool(poolKeys);
-    mainCfg = robinProviderConfig("nvidia", poolKeys, PLATFORM_ROBIN_TASTE_PRESET_ID);
-    connectorKeys = { NVIDIA_API_KEY: poolKeys[0]! };
-    effectiveRobin = true;
-  } else if (userWantsRobin) {
-    const poolKeys = await loadConnectorPools(supabase, userId, poolProvider);
-    robinPool = new RobinKeyPool(poolKeys);
-    mainCfg = robinProviderConfig(poolProvider, poolKeys, preferences?.robinPoolModelId);
-    connectorKeys = poolProvider === "nvidia"
-      ? { NVIDIA_API_KEY: poolKeys[0]! }
-      : { GROQ_API_KEY: poolKeys[0]! };
-    effectiveRobin = true;
-  } else {
-    connectorKeys = { ...userOnlyKeys };
-    if (preferences?.mode === "auto") {
-      const autoKeys = filterKeysForAutoAllowlist(
-        userOnlyKeys,
-        preferences?.autoAllowedPresetIds,
-        preferences?.userModelEntries,
-      );
-      mainCfg = pickMain(autoKeys);
-    } else {
-      const resolved = resolveModelFromPreferences(preferences, userOnlyKeys);
-      if (!resolved) throw new Error("Chave ausente para o modelo escolhido.");
-      mainCfg = {
-        provider: resolved.provider,
-        apiKey: resolved.apiKey,
-        model: resolved.model,
-        baseUrl: resolved.baseUrl,
-        label: resolved.label,
-      };
-    }
-  }
+  const {
+    mainCfg,
+    connectorKeys,
+    robinPool,
+    effectiveRobin,
+    tasteStart,
+  } = await resolveAgentProvider({
+    supabase,
+    userId,
+    preferences,
+    sessionKind,
+    userOnlyKeys,
+  });
 
   const messages = await buildChatHistory(historyRows, 120, mainCfg.model);
   const sessionExt = await buildSessionExtensionsPrompt(enabledSkillIds, enabledMcpIds);

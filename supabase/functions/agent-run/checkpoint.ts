@@ -96,11 +96,9 @@ export function deserializeCheckpointState(
   };
 }
 
-/** Passo inicial ao retomar: não pula step incompleto nem repete step já concluído. */
+/** Passo inicial ao retomar: continua no step salvo (não repete o anterior). */
 export function resumeStepStart(phase: LoopPhase, currentStepIndex: number): number {
-  if (phase === LoopPhase.EXECUTE_STEP || phase === LoopPhase.VALIDATE_STEP) {
-    return Math.max(0, currentStepIndex - 1);
-  }
+  void phase;
   return Math.max(0, currentStepIndex);
 }
 

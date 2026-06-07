@@ -30,10 +30,10 @@ export class RuntimeObserver {
   async observe(): Promise<ObservationResult> {
     const checks: Array<{ name: string; ok: boolean; output: string }> = [];
 
-    // 0. Ensure dependencies are installed
+    // 0. Ensure dependencies are installed (sandbox FS — not Supabase project_files)
     try {
-      const hasNodeModules = await this.hasFile("node_modules");
-      const hasPackageJson = await this.hasFile("package.json");
+      const hasNodeModules = await this.sandboxPathExists("node_modules");
+      const hasPackageJson = await this.sandboxPathExists("package.json");
       if (hasPackageJson && !hasNodeModules) {
         const install = await this.reg.execute({
           id: crypto.randomUUID(),
@@ -75,13 +75,13 @@ export class RuntimeObserver {
     }
 
     // 2. TypeScript check (se existir tsconfig)
-    const hasTs = await this.hasFile("tsconfig.json");
+    const hasTs = await this.sandboxPathExists("tsconfig.json");
     if (hasTs) {
       try {
         const tsc = await this.reg.execute({
           id: crypto.randomUUID(),
           name: "shell_exec",
-          arguments: { command: "npx tsc --noEmit 2>&1 || true" },
+          arguments: { command: "npx tsc --noEmit --project tsconfig.json 2>&1 || true" },
         });
         const tscOutput = typeof tsc.output === "object"
           ? (tsc.output as any).stderr ?? (tsc.output as any).stdout ?? ""
@@ -94,10 +94,10 @@ export class RuntimeObserver {
     }
 
     // 3. Lint check (se existir eslint config)
-    const hasLint = await this.hasFile(".eslintrc") ||
-      await this.hasFile(".eslintrc.json") ||
-      await this.hasFile("eslint.config.js") ||
-      await this.hasFile(".eslintrc.js");
+    const hasLint = await this.sandboxPathExists(".eslintrc") ||
+      await this.sandboxPathExists(".eslintrc.json") ||
+      await this.sandboxPathExists("eslint.config.js") ||
+      await this.sandboxPathExists(".eslintrc.js");
     if (hasLint) {
       try {
         const lint = await this.reg.execute({
@@ -147,7 +147,7 @@ export class RuntimeObserver {
 
   /** Type-check incremental — roda tsc apenas nos arquivos modificados (rápido) */
   async quickTypeCheck(modifiedFiles: string[]): Promise<TypeCheckResult> {
-    const hasTs = await this.hasFile("tsconfig.json");
+    const hasTs = await this.sandboxPathExists("tsconfig.json");
     if (!hasTs || modifiedFiles.length === 0) {
       return { ok: true, errors: [], output: "" };
     }
@@ -164,7 +164,7 @@ export class RuntimeObserver {
       const tsc = await this.reg.execute({
         id: crypto.randomUUID(),
         name: "shell_exec",
-        arguments: { command: `npx tsc --noEmit ${fileArgs} 2>&1 || true` },
+        arguments: { command: `npx tsc --noEmit --project tsconfig.json ${fileArgs} 2>&1 || true` },
       });
       const tscOutput = typeof tsc.output === "object"
         ? (tsc.output as any).stderr ?? (tsc.output as any).stdout ?? ""
@@ -277,12 +277,16 @@ export class RuntimeObserver {
     }
   }
 
-  async hasFile(path: string): Promise<boolean> {
+  /** Check path in sandbox filesystem (files or directories). */
+  async sandboxPathExists(path: string): Promise<boolean> {
     const result = await this.reg.execute({
       id: crypto.randomUUID(),
-      name: "fs_read",
-      arguments: { path },
+      name: "shell_exec",
+      arguments: { command: `test -e "${path.replace(/"/g, '\\"')}" && echo yes || echo no` },
     });
-    return result.ok;
+    const output = typeof result.output === "object"
+      ? (result.output as { stdout?: string }).stdout ?? ""
+      : String(result.output ?? "");
+    return output.trim().endsWith("yes");
   }
 }

@@ -52,6 +52,7 @@ ChatInput → useAgentRun.connect()
 | `src/routes/projects/$projectId/index.tsx` | Editor, plan approve → `watch(newRunId)` |
 | `src/inngest/functions/agent-*.ts` | Jobs duráveis |
 | `supabase/functions/agent-run/index.ts` | `run`, `execute`, `cancel` |
+| `supabase/functions/agent-run/run-setup.ts` | Provider/keys — fonte única |
 | `supabase/functions/agent-run/run-executor.ts` | Execução + `appendStreamEvent` |
 | `supabase/functions/agent-run/loop.ts` | Loop do agente |
 | `supabase/functions/_shared/agent-stream.ts` | `appendStreamEvent` (Edge) |
@@ -79,12 +80,12 @@ Edge functions deployadas: `agent-run`, `health`, `preview-boot`, `e2b-*`, `conn
 - Plan: `plan-decide.functions.ts` → novo run → `useAgentRun.watch(newRunId)`
 - Taste chat (sem chave): JSON `{ ok, content }` — mensagem já no DB, sem `runId`
 
-## Backlog (único — pós-higiene)
+## Backlog
 
-| # | Item | Prioridade |
-|---|------|------------|
-| B1 | Extrair `run-setup.ts` (setup duplicado index/executor/job) | P1 |
-| B5 | `observer.ts` — npm install cache, tsc `--project` | P2 |
-| B6 | `loop.ts` — forceTools, checkpoint resume | P2 |
-| D19 | `AiDiffViewer` — usar `progress.diffs` (before vazio) | P2 |
-| E1 | `ui/markdown-renderer.tsx` no ChatStream/ChatInput | P3 |
+| # | Item | Status |
+|---|------|--------|
+| B1 | `run-setup.ts` — provider/keys únicos | ✅ |
+| B5 | `observer.ts` — sandbox `test -e`, tsc `--project` | ✅ |
+| B6 | `loop.ts` — forceTools preserva assistant msg; checkpoint resume | ✅ |
+| D19 | `AiDiffViewer` — `before` fallback via `fileMap` | ✅ |
+| E1 | `MarkdownRenderer` em ChatStream/ChatInput | ✅ |

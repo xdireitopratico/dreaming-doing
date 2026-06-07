@@ -2,8 +2,7 @@
 // Botão de parar visível durante execução, drag de imagens, typewriter nas respostas
 import { useState, useRef, useCallback, useEffect, KeyboardEvent } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
+import { MarkdownRenderer } from "@/components/ui/markdown-renderer";
 import {
   ArrowUp,
   Square,
@@ -97,35 +96,7 @@ const COMMANDS: Command[] = [
   { id: "/settings", label: "/settings", description: "Configurações do projeto", icon: "⚙" },
 ];
 
-// -----------------------------------------------------------------------------------
-// Markdown renderer customizado com tokens do design system
-// -----------------------------------------------------------------------------------
 
-function MarkdownContent({ children }: { children: string }) {
-  return (
-    <div className="prose prose-invert max-w-none text-sm leading-relaxed 
-      prose-headings:font-display prose-headings:tracking-tight
-      prose-h1:text-lg prose-h2:text-base prose-h3:text-sm
-      prose-p:text-[var(--text-dim)]
-      prose-code:font-mono prose-code:text-[11px] prose-code:bg-[var(--surface-2)] prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:before:content-none prose-code:after:content-none
-      prose-pre:bg-[var(--surface-1)] prose-pre:border prose-pre:border-[var(--border)] prose-pre:rounded-lg
-      prose-ul:text-[var(--text-dim)] prose-ol:text-[var(--text-dim)]
-      prose-li:my-0.5
-      prose-a:text-[var(--primary)] prose-a:no-underline hover:prose-a:underline
-      prose-strong:text-[var(--foreground)]
-      prose-blockquote:border-l-[var(--primary)] prose-blockquote:text-[var(--text-dim)]
-      prose-hr:border-[var(--border)]
-      prose-table:border-[var(--border)] prose-th:border-[var(--border)] prose-td:border-[var(--border)]
-      [&_pre_code]:bg-transparent [&_pre_code]:p-0 [&_pre_code]:text-[11px]
-      [&_pre]:text-[var(--foreground)]
-      [&_input]:bg-[var(--surface-2)] [&_input]:text-[var(--foreground)]
-    ">
-      <ReactMarkdown remarkPlugins={[remarkGfm]}>
-        {children}
-      </ReactMarkdown>
-    </div>
-  );
-}
 
 // -----------------------------------------------------------------------------------
 // -----------------------------------------------------------------------------------
@@ -382,7 +353,7 @@ export function ChatInput({
         {messages.length === 0 ? (
           <div className="forge-msg-text space-y-3">
             {welcomeMarkdown ? (
-              <MarkdownContent>{welcomeMarkdown}</MarkdownContent>
+              <MarkdownRenderer>{welcomeMarkdown}</MarkdownRenderer>
             ) : (
               <p>
                 Descreva o que você quer construir ou alterar. O FORGE gera o código e você vê o
