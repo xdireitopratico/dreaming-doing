@@ -1,4 +1,4 @@
-// health — diagnóstico FORGE: DB, Auth, LLM providers, E2B, PGMQ
+// health — diagnóstico FORGE: DB, Auth, LLM providers, E2B
 // Endpoint PÚBLICO (sem auth) para health checks externos (Vercel, Datadog, status pages).
 // Retorna sempre 200 — o `ok` no body indica saúde; nunca falha o monitor externo com 5xx.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
@@ -33,7 +33,6 @@ type HealthReport = {
       groq: CheckResult;
     };
     e2b: CheckResult;
-    pgmq: CheckResult;
   };
 };
 
@@ -147,42 +146,20 @@ async function checkE2b(): Promise<CheckResult> {
   }
 }
 
-async function checkPgmq(): Promise<CheckResult> {
-  const start = Date.now();
-  try {
-    const supabase = createClient(SUPABASE_URL, SERVICE_KEY, {
-      auth: { persistSession: false, autoRefreshToken: false },
-    });
-    const { error } = await withTimeoutOn(
-      () => supabase.rpc("pg_list_queues" as never),
-      TIMEOUT_MS,
-      "pgmq.list",
-    );
-    const latencyMs = Date.now() - start;
-    if (error && !String(error.message).toLowerCase().includes("does not exist")) {
-      return { ok: false, latencyMs, error: error.message };
-    }
-    return { ok: true, latencyMs, detail: "pgmq reachable" };
-  } catch (e) {
-    return { ok: false, latencyMs: Date.now() - start, error: (e as Error).message };
-  }
-}
-
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return corsPreflightResponse();
   const startedAt = Date.now();
 
-  const [db, auth, nvidia, groq, e2b, pgmq] = await Promise.all([
+  const [db, auth, nvidia, groq, e2b] = await Promise.all([
     checkDb(),
     checkAuth(),
     pingProvider("nvidia", "https://integrate.api.nvidia.com/v1", "NVIDIA_API_KEY"),
     pingProvider("groq", "https://api.groq.com/openai/v1", "GROQ_API_KEY"),
     checkE2b(),
-    checkPgmq(),
   ]);
 
   const criticalOk = db.ok && auth.ok;
-  const allChecks = { db, auth, llm: { nvidia, groq }, e2b, pgmq };
+  const allChecks = { db, auth, llm: { nvidia, groq }, e2b };
   const llmAnyOk = nvidia.ok || groq.ok;
   const ok = criticalOk && llmAnyOk && e2b.ok;
 

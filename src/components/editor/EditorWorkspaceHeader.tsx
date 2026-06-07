@@ -11,6 +11,7 @@ import {
   type PreviewDevice,
 } from "@/components/editor/PreviewViewportChrome";
 import { Monitor, Smartphone, Tablet } from "lucide-react";
+import { E2bStatusBadge } from "@/components/editor/E2bStatusBadge";
 
 interface EditorWorkspaceHeaderProps {
   activeView: EditorMainView;
@@ -30,6 +31,7 @@ interface EditorWorkspaceHeaderProps {
     device: PreviewDevice;
     onDeviceChange: (device: PreviewDevice) => void;
   };
+  e2bConnected?: boolean;
 }
 
 const DEVICES: Array<{ id: PreviewDevice; label: string; icon: typeof Monitor }> = [
@@ -47,6 +49,7 @@ export function EditorWorkspaceHeader({
   publishDisabled = false,
   integrations,
   preview,
+  e2bConnected = false,
 }: EditorWorkspaceHeaderProps) {
   const { user } = useAuth();
 
@@ -87,6 +90,7 @@ export function EditorWorkspaceHeader({
 
         <span className="forge-topbar-divider mx-1 shrink-0" aria-hidden />
         <EditorIntegrationsMenu {...integrations} />
+        <E2bStatusBadge e2bConnected={e2bConnected} />
       </div>
 
       {showPreviewControls ? (

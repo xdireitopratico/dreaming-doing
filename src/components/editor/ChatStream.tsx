@@ -5,6 +5,7 @@ import { Button, FadeIn } from "@forge/ui";
 import type { AgentProgress, PlanStep } from "@/lib/agent-progress";
 import type { ChatMessage } from "@/components/editor/ChatInput";
 import { useState, useCallback, useEffect } from "react";
+import { AgentTimeline } from "@/components/editor/AgentTimeline";
 import { ConsoleLogStream } from "@/components/editor/ConsoleLogStream";
 import { ChatDiffViewer } from "@/components/editor/ChatDiffViewer";
 import { ErrorHintCard } from "@/components/editor/ErrorHintCard";
@@ -163,8 +164,12 @@ export function ChatStream({
         </p>
       )}
 
+      {(running || progress.timeline.length > 0) && (
+        <AgentTimeline timeline={progress.timeline} running={running} />
+      )}
+
       {progress.timeline.length > 0 && (
-        <ConsoleLogStream timeline={progress.timeline} />
+        <ConsoleLogStream timeline={progress.timeline} initiallyExpanded={false} />
       )}
 
       {progress.diffs.length > 0 && (

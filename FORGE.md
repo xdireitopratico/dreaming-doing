@@ -100,12 +100,11 @@ Edge functions deployadas: `agent-run`, `health`, `preview-boot`, `e2b-*`, `conn
 | B8 | `sandbox.ts` `kill()` limpa meta preview no projeto | ✅ |
 | B9 | UX qualify — banner `awaiting_user` + fila no header/chat | ✅ |
 | B10 | Docs + comentários — sem referências SSE/PGMQ ativas | ✅ |
+| R1 | Migration drop PGMQ `agent_chunks` + funções purge/drain | ✅ |
+| R2 | Editor split: `useEditorPageData`, handlers, `EditorPageLayout` | ✅ |
+| R3 | `AgentTimeline.tsx` no ChatStream | ✅ |
+| R4 | `E2bStatusBadge` no workspace header | ✅ |
 
-## Restante (opcional — não bloqueia operação)
+## Restante
 
-| # | Item | Esforço |
-|---|------|---------|
-| R1 | Migration: dropar schema PGMQ quando não houver dependência | Baixo |
-| R2 | Dividir `index.tsx` do editor (~1250 linhas) | Médio |
-| R3 | Timeline visual dedicada no editor (hoje: `ConsoleLogStream` + histórico) | Baixo |
-| R4 | Badge E2B live no editor (hoje: SetupRail + `/api` smoke) | Baixo |
+Nenhum item obrigatório. Melhorias futuras são discricionárias (ex.: refinar `AgentTimeline`, testes E2E).

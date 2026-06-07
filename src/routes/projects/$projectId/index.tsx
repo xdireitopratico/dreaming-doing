@@ -1,72 +1,29 @@
 // $projectId/index.tsx — Editor FORGE Definitivo (Fase 4 — Integração total)
-// Todos os 18+ componentes integrados: Breadcrumb, CommandPalette, ShortcutCheatsheet,
-// ProviderSelector, LogPanel, AiDiffViewer, RateLimitIndicator, useAgentBlame,
-// monacoEnhancements, useElementPicker, SnapshotsSheet, export ZIP, drag-drop
 import { createFileRoute, useParams, useNavigate, useSearch } from "@tanstack/react-router";
-import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { supabase } from "@/integrations/supabase/client";
-import { removeRealtimeChannel } from "@/lib/supabase-realtime";
-import type { RealtimeChannel } from "@supabase/supabase-js";
-import { EditorShell } from "@/components/EditorShell";
-import { EditorResizableLayout } from "@/components/editor/EditorResizableLayout";
-import { EditorChatHeader } from "@/components/editor/EditorChatHeader";
-import { EditorWorkspaceHeader } from "@/components/editor/EditorWorkspaceHeader";
-import type { EditorMainView } from "@/components/editor/editor-views";
-import type { AgentComposerMode } from "@/components/editor/ChatInput";
-import { CodeEditor, type Tab } from "@/components/editor/CodeEditor";
-import { FileTree } from "@/components/editor/FileTree";
-import { ChatInput, type ChatMessage } from "@/components/editor/ChatInput";
-import { SetupRail } from "@/components/editor/SetupRail";
-import { TasteSetupChecklist } from "@/components/editor/TasteSetupChecklist";
-import { TastePostStartBanner } from "@/components/editor/TastePostStartBanner";
 import { FORGE_WELCOME_BYOK_MARKDOWN, FORGE_WELCOME_MARKDOWN } from "@/lib/welcome-message";
 import { loadAgentPreferences } from "@/lib/agent-preferences";
 
 import { useConnectors } from "@/hooks/useConnectors";
 import { useTasteUiActions } from "@/hooks/useTasteUiActions";
-import {
-  isAgentPreferencesConfigured,
-  getAgentSetupBlockMessage,
-} from "@/lib/agent-setup";
-import type { ForgeSessionKind, TasteAction } from "@/lib/taste";
-import {
-  canSendTasteChat,
-  canStartTasteProject,
-  isInTaste,
-  resolveSessionKind,
-} from "@/lib/taste";
-import type { StoredMessagePart } from "@/lib/chat-attachments";
-
-import { PreviewFrame } from "@/components/editor/PreviewFrame";
-
-
-
-import { CommandPalette, buildEditorActions, type PaletteAction } from "@/components/editor/CommandPalette";
-import { ShortcutCheatsheet } from "@/components/editor/ShortcutCheatsheet";
-import { LogPanel, createLogEntry, type LogEntry } from "@/components/editor/LogPanel";
-import { AiDiffViewer, type DiffEntry } from "@/components/editor/AiDiffViewer";
+import type { EditorMainView } from "@/components/editor/editor-views";
+import type { AgentComposerMode } from "@/components/editor/ChatInput";
+import type { Tab } from "@/components/editor/CodeEditor";
+import type { LogEntry } from "@/components/editor/LogPanel";
 import { useAgentRun } from "@/hooks/useAgentRun";
 import { usePreviewBoot } from "@/hooks/usePreviewBoot";
 import { usePreviewIdle } from "@/hooks/usePreviewIdle";
-import { useAutoPublish } from "@/hooks/useAutoPublish";
-import { buildPreviewUrl } from "@/lib/project-routes";
 import { useEditorTelemetry } from "@/hooks/useEditorTelemetry";
-import { logEditorTelemetryEvent } from "@/lib/editor-telemetry";
-import {
-  clearPendingAgentRun,
-  peekPendingAgentRun,
-} from "@/lib/agent-auto-run";
-import { publishProject } from "@/lib/publish.functions";
-import { planApprove, planReject } from "@/lib/plan-decide.functions";
-import { useAgentBlame, buildBlameFromTimeline } from "@/hooks/useAgentBlame";
-import { registerAiCodeLens, registerAiFolding, clearEnhancements, HEAT_MAP_CSS } from "@/lib/monacoEnhancements";
 import { useElementPicker } from "@/hooks/useElementPicker";
-import { useWorkspacePresets, exportProjectZip, useFileDrop } from "@/hooks/useWorkspacePresets";
+import { useWorkspacePresets, useFileDrop } from "@/hooks/useWorkspacePresets";
 import { toast } from "sonner";
 import type { editor } from "monaco-editor";
+
+import { useEditorPageData } from "./useEditorPageData";
+import { useEditorPageHandlers } from "./useEditorPageHandlers";
+import { useEditorAgentOrchestration } from "./useEditorAgentOrchestration";
+import { EditorPageLayout } from "./EditorPageLayout";
 
 export const Route = createFileRoute("/projects/$projectId/")({
   component: EditorPage,
@@ -76,27 +33,11 @@ export const Route = createFileRoute("/projects/$projectId/")({
   },
 });
 
-// ---------------------------------------------------------------------------
-// Tipos
-// ---------------------------------------------------------------------------
-
-type Msg = {
-  id: string; role: string; parts: any[]; tool_calls: any[];
-  created_at: string;
-};
-type FileRow = {
-  id: string; path: string; content: string; updated_at: string;
-};
-
-// ---------------------------------------------------------------------------
-// Editor Page — Integração Definitiva
-// ---------------------------------------------------------------------------
-
 function EditorPage() {
   const { projectId } = useParams({ from: "/projects/$projectId/" });
   const navigate = useNavigate();
   const search = useSearch({ from: "/projects/$projectId/" });
-  const qc = useQueryClient();
+
   const {
     tasteChatRemaining,
     tasteStartRemaining,
@@ -109,12 +50,14 @@ function EditorPage() {
     saveConnector,
     rows: connectorRows,
   } = useConnectors();
+
   const [agentPrefs, setAgentPrefs] = useState(loadAgentPreferences);
   useEffect(() => {
     const refresh = () => setAgentPrefs(loadAgentPreferences());
     window.addEventListener("forge:prefs-updated", refresh);
     return () => window.removeEventListener("forge:prefs-updated", refresh);
   }, []);
+
   const welcomeMarkdown = hasUserLlmKey
     ? FORGE_WELCOME_BYOK_MARKDOWN
     : FORGE_WELCOME_MARKDOWN;
@@ -126,7 +69,6 @@ function EditorPage() {
     hasUserLlmKey,
   };
 
-  // ─── States ──────────────────────────────────────────────────────────
   const [showFileTree, setShowFileTree] = useState(false);
   const [activeView, setActiveView] = useState<"code" | "preview" | "diff">("preview");
   const [activeFilePath, setActiveFilePath] = useState<string | null>(null);
@@ -142,33 +84,123 @@ function EditorPage() {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [composerMode, setComposerMode] = useState<AgentComposerMode>("plan");
   const [promptDraft, setPromptDraft] = useState<string | null>(null);
-
   const [previewRoute, setPreviewRoute] = useState("/");
   const [previewReloadNonce, setPreviewReloadNonce] = useState(0);
   const [previewDevice, setPreviewDevice] = useState<"desktop" | "tablet" | "mobile">("desktop");
 
-  // ─── Refs ────────────────────────────────────────────────────────────
   const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null);
   const monacoRef = useRef<typeof import("monaco-editor") | null>(null);
   const previewIframeRef = useRef<HTMLIFrameElement | null>(null);
 
-  // ─── Hooks ───────────────────────────────────────────────────────────
   const agent = useAgentRun();
-  const publishFn = useServerFn(publishProject);
-  const planApproveFn = useServerFn(planApprove);
-  const planRejectFn = useServerFn(planReject);
   useWorkspacePresets();
+
+  const pageData = useEditorPageData({
+    projectId,
+    search,
+    agent,
+    navigate,
+  });
+
+  const {
+    project,
+    conversation,
+    messages,
+    files,
+    filePaths,
+    fileMap,
+    chatMessages,
+    fileTreeFiles,
+    previewNavFiles,
+    isReactProject,
+    agentHasRun,
+    pendingAgentRunKey,
+    devUrl,
+    publishedUrl,
+    previewReady,
+  } = pageData;
+
+  const { idle: previewIdle } = usePreviewIdle(activeView === "preview" && !!devUrl);
+  const previewBoot = usePreviewBoot(projectId, {
+    idle: previewIdle,
+    watchHealth: activeView === "preview" && !!devUrl,
+  });
+
+  const handlers = useEditorPageHandlers({
+    projectId,
+    project,
+    conversation,
+    agent,
+    qc: pageData.qc,
+    navigate,
+    tasteQuota,
+    fileMap,
+    filePaths,
+    chatMessages,
+    isReactProject,
+    devUrl,
+    publishedUrl,
+    previewReady,
+    e2bConnected,
+    previewBoot,
+    running,
+    activeView,
+    setActiveView,
+    activeFilePath,
+    setActiveFilePath,
+    openTabs,
+    setOpenTabs,
+    composerMode,
+    setComposerMode,
+    logPanelOpen,
+    setLogPanelOpen,
+    setLogPanelTab,
+    setLogs,
+    setShowFileTree,
+    setPaletteOpen,
+    setCheatsheetOpen,
+    setPickMode,
+    previewRoute,
+  });
+
+  const orchestration = useEditorAgentOrchestration({
+    projectId,
+    conversation,
+    files,
+    agent,
+    qc: pageData.qc,
+    running,
+    setRunning,
+    logs,
+    setLogs,
+    logPanelOpen,
+    setLogPanelOpen,
+    e2bConnected,
+    isReactProject,
+    agentHasRun,
+    pendingAgentRunKey,
+    devUrl,
+    activeView,
+    setPreviewReloadNonce,
+    tasteQuota,
+    runAgent: handlers.runAgent,
+    fileMap,
+    editorRef,
+    monacoRef,
+    previewBoot,
+    previewIdle,
+  });
 
   useEffect(() => {
     if (activeView === "code") setShowFileTree(true);
   }, [activeView]);
 
   const mainView: EditorMainView = activeView === "code" ? "code" : "preview";
-
   const handleMainViewChange = useCallback((view: EditorMainView) => {
     setActiveView(view);
   }, []);
-  const elementPicker = useElementPicker({
+
+  useElementPicker({
     iframeRef: previewIframeRef,
     onPick: (el) => {
       toast.success(`Elemento: ${el.selector}`);
@@ -179,91 +211,11 @@ function EditorPage() {
   });
 
   const { isDragOver, handleDragOver, handleDragLeave, handleDrop } = useFileDrop(
-    (files) => toast.info(`${files.length} arquivo${files.length !== 1 ? "s" : ""} recebido${files.length !== 1 ? "s" : ""}`),
+    (files) =>
+      toast.info(
+        `${files.length} arquivo${files.length !== 1 ? "s" : ""} recebido${files.length !== 1 ? "s" : ""}`,
+      ),
   );
-
-  // ─── Queries ─────────────────────────────────────────────────────────
-  const { data: project } = useQuery({
-    queryKey: ["project", projectId],
-    queryFn: async () => {
-      const { data } = await supabase.from("projects").select("*").eq("id", projectId).single();
-      return data as any;
-    },
-  });
-
-  const { data: conversation } = useQuery({
-    queryKey: ["conversation", projectId],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from("conversations").select("*").eq("project_id", projectId)
-        .order("created_at", { ascending: true }).limit(1).maybeSingle();
-      return data;
-    },
-  });
-
-  const { data: messages } = useQuery({
-    queryKey: ["messages", conversation?.id],
-    queryFn: async () => {
-      if (!conversation) return [];
-      const { data } = await supabase
-        .from("messages").select("*").eq("conversation_id", conversation.id)
-        .order("created_at", { ascending: true });
-      return (data ?? []) as Msg[];
-    },
-    enabled: !!conversation,
-  });
-
-  const { data: files } = useQuery({
-    queryKey: ["files", projectId],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from("project_files").select("*").eq("project_id", projectId).order("path");
-      return (data ?? []) as FileRow[];
-    },
-  });
-
-  // ─── Replay: se ?replay=runId veio da history page, dispara replay no mount ─────
-  useEffect(() => {
-    if (!search.replay) return;
-    const runId = search.replay;
-    const conv = conversation?.id;
-    if (!conv) return;
-    void agent.replay(projectId, conv, runId);
-    navigate({ to: "/projects/$projectId", params: { projectId }, search: {} });
-  }, [search.replay, conversation?.id, projectId, navigate, agent]);
-
-  const isReactProject = useMemo(
-    () => files?.some((f) => f.path === "package.json" || f.path === "/package.json") ?? false,
-    [files],
-  );
-
-  const agentHasRun = useMemo(
-    () => messages?.some((m) => m.role === "assistant") ?? false,
-    [messages],
-  );
-
-  /** Última mensagem é do usuário sem resposta do agente — ex.: projeto novo com firstPrompt. */
-  const pendingAgentRunKey = useMemo(() => {
-    if (!conversation?.id || !messages?.length) return null;
-    const last = messages[messages.length - 1];
-    if (String(last.role).toLowerCase() !== "user") return null;
-    return `${conversation.id}:${last.id}`;
-  }, [conversation?.id, messages]);
-
-  const autoAgentRunAttemptedRef = useRef<string | null>(null);
-  /** Evita boot duplicado do preview entre fim do agente e refetch do previewUrl. */
-  const previewBootAfterAgentRef = useRef(false);
-
-  const devUrl = (project?.meta as { previewUrl?: string } | null)?.previewUrl ?? null;
-
-  const { idle: previewIdle } = usePreviewIdle(activeView === "preview" && !!devUrl);
-  const previewBoot = usePreviewBoot(projectId, {
-    idle: previewIdle,
-    watchHealth: activeView === "preview" && !!devUrl,
-  });
-
-  // Expose for chrome / panels to render circuit-specific errors (no more infinite creation spinners)
-  const previewE2bCircuit = previewBoot.isE2bCircuit;
 
   const connectedKinds = useMemo(
     () =>
@@ -301,945 +253,81 @@ function EditorPage() {
         }
       : null,
   );
-  const projectMeta = (project?.meta as Record<string, unknown> | null) ?? null;
-  const publishedUrl =
-    typeof projectMeta?.publishedUrl === "string" ? projectMeta.publishedUrl : null;
-  const previewReady = projectMeta?.previewReady === true;
 
-  const autoPublish = useAutoPublish({
-    projectId,
-    devUrl,
-    publishedUrl,
-    previewReady,
-    enabled: isReactProject && e2bConnected,
-    booting: previewBoot.booting,
-    warming: previewBoot.warming,
-    publishFn,
-  });
-
-  // ─── Realtime (canal editor-{projectId} + setAuth no AuthProvider) ───
-  useEffect(() => {
-    if (!conversation) return;
-    const channel: RealtimeChannel = supabase
-      .channel(`editor-${projectId}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "messages",
-          filter: `conversation_id=eq.${conversation.id}`,
-        },
-        () => qc.invalidateQueries({ queryKey: ["messages", conversation.id] }),
-      )
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "project_files",
-          filter: `project_id=eq.${projectId}`,
-        },
-        () => qc.invalidateQueries({ queryKey: ["files", projectId] }),
-      )
-      .subscribe((status, err) => {
-        if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
-          console.error(`[FORGE Realtime] editor-${projectId}`, status, err);
-          logEditorTelemetryEvent(
-            "realtime",
-            status === "CHANNEL_ERROR" ? "channel_error" : "timed_out",
-            "error",
-            err?.message?.slice(0, 120),
-          );
-        }
-        if (status === "SUBSCRIBED") {
-          logEditorTelemetryEvent("realtime", "subscribed", "ok", projectId);
-        }
-      });
-    return () => removeRealtimeChannel(channel);
-  }, [projectId, conversation?.id, qc]);
-
-  // ─── Derivados ───────────────────────────────────────────────────────
-  const filePaths = useMemo(() => files?.map((f) => f.path) ?? [], [files]);
-  const fileMap = useMemo(() => {
-    const map = new Map<string, string>();
-    files?.forEach((f) => map.set(f.path, f.content ?? ""));
-    return map;
-  }, [files]);
-
-  const chatMessages: ChatMessage[] = useMemo(() => {
-    return (messages ?? []).map((m) => {
-      const roleRaw = String(m.role ?? "").toLowerCase();
-      const role: ChatMessage["role"] =
-        roleRaw === "user" ? "user" : roleRaw === "assistant" ? "assistant" : "tool";
-      return {
-      id: m.id,
-      role,
-      content: m.parts?.map((p: any) => p.text).join("\n") ?? "",
-      toolCalls: m.tool_calls?.map((t: any) => ({ name: t.name, args: t.args?.path ?? "" })) ?? [],
-      timestamp: new Date(m.created_at).getTime(),
-    };
-    });
-  }, [messages]);
-
-  const fileTreeFiles = useMemo(() => {
-    if (files && files.length > 0) return files.map(f => f.path);
-    return [
-      "src/App.tsx", "src/main.tsx", "src/index.css",
-      "package.json", "index.html", "vite.config.ts", "tsconfig.json",
-    ];
-  }, [files]);
-
-  const previewNavFiles = useMemo(() => {
-    if (files && files.length > 0) {
-      return files.map((f) => ({ path: f.path, content: f.content ?? "" }));
-    }
-    return fileTreeFiles.map((path) => ({ path, content: "" }));
-  }, [files, fileTreeFiles]);
-
-  // ─── Diff entries (from file_diff stream events) ───────────────────
-  const diffEntries = useMemo((): DiffEntry[] => {
-    return agent.progress.diffs.map((d) => ({
-      id: d.id,
-      path: d.path,
-      before: d.before || (fileMap.get(d.path) ?? ""),
-      after: d.after,
-      author: "FORGE Agent",
-      timestamp: d.timestamp,
-      reviewed: false,
-    }));
-  }, [agent.progress.diffs, fileMap]);
-
-  // ─── Agent blame ────────────────────────────────────────────────────
-  const blameEntries = useMemo(
-    () => buildBlameFromTimeline(agent.progress.timeline),
-    [agent.progress.timeline],
-  );
-  useAgentBlame({ blameMap: blameEntries, editorRef, monacoRef });
-
-  // ─── Sync running state — uma única fonte de verdade ──
-  useEffect(() => {
-    const active =
-      agent.connected && !agent.progress.finished && !agent.progress.canceled;
-    setRunning(active);
-  }, [agent.connected, agent.progress.finished, agent.progress.canceled]);
-
-  // ─── Realtime events → logs ─────────────────────────────────────────
-  useEffect(() => {
-    const last = agent.progress.timeline.at(-1);
-    if (!last) return;
-    if (last.type === "phase") {
-      setLogs((prev) => [...prev, createLogEntry("info", `Fase: ${last.data.phase ?? ""} — ${last.data.message ?? ""}`, "agent")]);
-    }
-    if (last.type === "tool_done") {
-      setLogs((prev) => [...prev, createLogEntry(last.data.ok ? "success" : "error", `${last.data.name}: ${last.data.ok ? "ok" : last.data.error ?? "erro"}`, "agent")]);
-    }
-    if (last.type === "error") {
-      setLogs((prev) => [...prev, createLogEntry("error", last.data.error as string ?? "Erro", "agent")]);
-    }
-  }, [agent.progress.timeline.length]);
-
-  useEffect(() => {
-    if (agent.progress.error && agent.progress.finished && !agent.progress.resumable) {
-      toast.error(agent.progress.error);
-      setRunning(false);
-    }
-    if (agent.progress.finished && agent.progress.resumable && agent.progress.error && !agent.progress.autoResuming) {
-      toast.warning(agent.progress.error, { duration: 5000 });
-      setRunning(false);
-    }
-  }, [agent.progress.error, agent.progress.finished, agent.progress.resumable]);
-
-  // ─── Monaco enhancements globais ────────────────────────────────────
-  useEffect(() => {
-    clearEnhancements();
-    // These would be registered in CodeEditor onMount, but doing it here ensures
-    // they're ready regardless of mount order
-    return () => clearEnhancements();
-  }, []);
-
-  // ─── Handlers ───────────────────────────────────────────────────────
-  const handleSelectFile = useCallback((path: string) => {
-    setActiveFilePath(path);
-    if (activeView === "diff") setActiveView("code");
-    setOpenTabs((prev) => {
-      if (prev.some((t) => t.path === path)) return prev;
-      return [...prev, { path, content: fileMap.get(path) ?? "", isModified: false }];
-    });
-  }, [fileMap, activeView]);
-
-  const handleCloseTab = useCallback((path: string) => {
-    setOpenTabs((prev) => {
-      const next = prev.filter((t) => t.path !== path);
-      if (activeFilePath === path) {
-        setActiveFilePath(next.length > 0 ? next[next.length - 1].path : null);
-      }
-      return next;
-    });
-  }, [activeFilePath]);
-
-  const handleContentChange = useCallback((path: string, content: string) => {
-    setOpenTabs((prev) =>
-      prev.map((t) => t.path === path ? { ...t, content, isModified: true } : t),
-    );
-  }, []);
-
-  const runAgent = useCallback(
-    (
-      explicitKind?: ForgeSessionKind,
-      explicitAction?: TasteAction,
-    ): boolean => {
-      if (!conversation || running) return false;
-
-      const kind = explicitKind ?? resolveSessionKind(tasteQuota);
-      const tasteAction: TasteAction | undefined =
-        explicitAction ?? (kind === "taste" ? "chat" : undefined);
-      const inTaste = kind === "taste";
-
-      if (!inTaste) {
-        const prefs = loadAgentPreferences();
-        if (!isAgentPreferencesConfigured(prefs)) {
-          toast.error(getAgentSetupBlockMessage(prefs));
-          return false;
-        }
-      } else if (tasteAction === "start" && !canStartTasteProject(tasteQuota)) {
-        toast.error("Start Project já utilizado. Configure API para continuar.");
-        return false;
-      } else if (tasteAction === "chat" && !canSendTasteChat(tasteQuota)) {
-        toast.error("Limite Taste Chat (50). Configure API em /api.");
-        return false;
-      }
-
-      const label =
-        kind === "taste" && tasteAction === "start"
-          ? "Start Project (Taste · NVIDIA)"
-          : kind === "taste"
-            ? "Concierge Taste"
-            : agent.progress.resumable
-              ? "Retomando agente (memória do chat)"
-              : "Agente FORGE iniciado";
-      setLogs((prev) => [...prev, createLogEntry("info", label, "agent")]);
-      if (!logPanelOpen) setLogPanelOpen(true);
-      void qc.invalidateQueries({ queryKey: ["messages", conversation.id] });
-      logEditorTelemetryEvent(
-        "agent",
-        "run_start",
-        "info",
-        kind === "byok" ? "byok" : `${kind}.${tasteAction ?? "chat"}`,
-      );
-      void (async () => {
-        try {
-          await agent.connect(projectId, conversation.id, kind, { tasteAction, mode: composerMode });
-        } catch (e: unknown) {
-          const msg = e instanceof Error ? e.message : "Erro ao iniciar agente";
-          logEditorTelemetryEvent("agent", "run_fail", "error", msg.slice(0, 200));
-          toast.error(msg);
-        }
-      })();
-      return true;
-    },
-    [conversation, projectId, running, agent, logPanelOpen, qc, agent.progress.resumable, tasteQuota],
-  );
-
-  // ─── Auto-run: projeto recém-criado (flag) ou última msg user sem resposta
-  // Não espera messages no client — evita race read-after-write após createProject.
-  useEffect(() => {
-    if (!conversation?.id) return;
-
-    let cancelled = false;
-    let attempts = 0;
-    const maxAttempts = 12;
-
-    const tryAutoRun = async () => {
-      if (cancelled || attempts >= maxAttempts) return;
-      attempts += 1;
-
-      if (running || agent.connected) {
-        window.setTimeout(tryAutoRun, 250);
-        return;
-      }
-
-      const { data: activeRun } = await supabase
-        .from("agent_runs")
-        .select("id")
-        .eq("project_id", projectId)
-        .eq("status", "running")
-        .maybeSingle();
-
-      if (activeRun?.id) {
-        await agent.watch(projectId, conversation.id, activeRun.id);
-        return;
-      }
-
-      const { count: pendingQueue } = await supabase
-        .from("agent_pending_messages")
-        .select("id", { count: "exact", head: true })
-        .eq("project_id", projectId);
-
-      if ((pendingQueue ?? 0) > 0) {
-        window.setTimeout(tryAutoRun, 500);
-        return;
-      }
-
-      const flagged = peekPendingAgentRun(projectId, conversation.id);
-      const pending = pendingAgentRunKey;
-      if (!flagged && !pending) return;
-
-      const attemptKey = pending ?? `flag:${conversation.id}`;
-      if (autoAgentRunAttemptedRef.current === attemptKey) return;
-
-      logEditorTelemetryEvent(
-        "agent",
-        flagged ? "auto_run_flagged" : "auto_run_pending_user",
-        "info",
-        attemptKey.slice(0, 24),
-      );
-
-      if (runAgent(resolveSessionKind(tasteQuota))) {
-        autoAgentRunAttemptedRef.current = attemptKey;
-        if (flagged) clearPendingAgentRun(projectId);
-        return;
-      }
-
-      if (flagged) {
-        window.setTimeout(tryAutoRun, 400);
-      }
-    };
-
-    tryAutoRun();
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    conversation?.id,
-    projectId,
-    pendingAgentRunKey,
-    running,
-    agent.connected,
-    runAgent,
-    tasteQuota,
-  ]);
-
-  const handleResumeAgent = useCallback(() => {
-    if (!conversation || running) return;
-
-    const kind = resolveSessionKind(tasteQuota);
-    const inTaste = kind === "taste";
-    const tasteAction: TasteAction = "chat";
-
-    if (!inTaste) {
-      const prefs = loadAgentPreferences();
-      if (!isAgentPreferencesConfigured(prefs)) {
-        toast.error(getAgentSetupBlockMessage(prefs));
-        return;
-      }
-    } else if (!canSendTasteChat(tasteQuota)) {
-      toast.error("Limite Taste Chat. Configure API em /api.");
-      return;
-    }
-
-    setLogs((prev) => [
-      ...prev,
-      createLogEntry("info", "Retomando agente (memória do chat)", "agent"),
-    ]);
-    if (!logPanelOpen) setLogPanelOpen(true);
-    void qc.invalidateQueries({ queryKey: ["messages", conversation.id] });
-    logEditorTelemetryEvent("agent", "resume_start", "info", kind);
-
-    void (async () => {
-      try {
-        await agent.connect(projectId, conversation.id, kind, { resume: true });
-      } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : "Erro ao retomar agente";
-        logEditorTelemetryEvent("agent", "resume_fail", "error", msg.slice(0, 200));
-        toast.error(msg);
-      }
-    })();
-  }, [conversation, projectId, running, agent, logPanelOpen, qc, tasteQuota]);
-
-  useEffect(() => {
-    if (!agent.progress.finished || !conversation) return;
-    void qc.invalidateQueries({ queryKey: ["messages", conversation.id] });
-    void qc.invalidateQueries({ queryKey: ["profile"] });
-  }, [agent.progress.finished, conversation, qc]);
-
-  // Reconecta a run ativo via Realtime (refresh, fila, plan approve) — sem polling.
-  useEffect(() => {
-    if (!conversation || running || agent.connected) return;
-
-    let channel: RealtimeChannel | null = null;
-
-    const attachIfRunning = async (runId: string) => {
-      if (agent.connected) return;
-      await agent.watch(projectId, conversation.id, runId);
-    };
-
-    void (async () => {
-      const { data: activeRun } = await supabase
-        .from("agent_runs")
-        .select("id, status")
-        .eq("project_id", projectId)
-        .in("status", ["running", "awaiting_user"])
-        .order("started_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      if (activeRun?.id) {
-        await attachIfRunning(activeRun.id);
-      }
-    })();
-
-    channel = supabase
-      .channel(`project-runs-${projectId}`)
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "agent_runs", filter: `project_id=eq.${projectId}` },
-        (payload) => {
-          const row = payload.new as { id?: string; status?: string };
-          if (row.id && row.status === "running") {
-            void attachIfRunning(row.id);
-          }
-        },
-      )
-      .on(
-        "postgres_changes",
-        { event: "UPDATE", schema: "public", table: "agent_runs", filter: `project_id=eq.${projectId}` },
-        (payload) => {
-          const row = payload.new as { id?: string; status?: string };
-          if (row.id && (row.status === "running" || row.status === "awaiting_user")) {
-            void attachIfRunning(row.id);
-          }
-        },
-      )
-      .subscribe();
-
-    return () => {
-      if (channel) void removeRealtimeChannel(channel);
-    };
-  }, [conversation, projectId, running, agent.connected, agent]);
-
-  const agentFinished = agent.progress.finished;
-  const agentShouldBootPreview =
-    agentFinished &&
-    !agent.progress.canceled &&
-    !agent.progress.awaiting && // do not auto-boot preview (and thus E2B create) right after a qualify/plan gate
-    (agent.progress.lastFinishOk === true ||
-      agent.progress.resumable === true ||
-      (agent.progress.lastFinishOk === null && agentHasRun && !agent.progress.error));
-
-  useEffect(() => {
-    if (running) {
-      previewBootAfterAgentRef.current = false;
-      return;
-    }
-    if (!isReactProject || !e2bConnected || devUrl || previewBoot.booting || previewE2bCircuit) return;
-    if (!agentShouldBootPreview) return;
-    if (previewBootAfterAgentRef.current) return;
-    previewBootAfterAgentRef.current = true;
-    void previewBoot.bootWithRetry();
-  }, [
-    agentShouldBootPreview,
-    running,
-    isReactProject,
-    e2bConnected,
-    devUrl,
-    previewBoot.booting,
-    previewBoot.bootWithRetry,
-  ]);
-
-  const filesSyncKey = useMemo(
-    () => files?.map((f) => `${f.path}:${f.updated_at}`).join("|") ?? "",
-    [files],
-  );
-
-  useEffect(() => {
-    if (!devUrl || activeView !== "preview") return;
-    const t = window.setTimeout(() => setPreviewReloadNonce((n) => n + 1), 600);
-    return () => window.clearTimeout(t);
-  }, [filesSyncKey, devUrl, activeView]);
-
-  const handleSend = useCallback(
-    (text: string, mode?: AgentComposerMode, parts?: StoredMessagePart[]) => {
-      if (!conversation) return;
-      // Fase 4.7: o modo é enviado via `mode` no body pro servidor.
-      // Sem prefix de texto — o servidor decide se liga planMode ou não.
-      const messageParts =
-        parts && parts.length > 0
-          ? parts
-          : [
-              {
-                type: "text" as const,
-                text,
-              },
-            ];
-      supabase
-        .from("messages")
-        .insert({
-          conversation_id: conversation.id,
-          role: "user",
-          parts: messageParts,
-        })
-        .then(async ({ error }) => {
-          if (error) {
-            toast.error("Erro ao enviar mensagem");
-            logEditorTelemetryEvent("agent", "chat_send_fail", "error", error.message.slice(0, 200));
-            return;
-          }
-          logEditorTelemetryEvent("agent", "chat_send", "info", mode ?? composerMode);
-          void qc.invalidateQueries({ queryKey: ["messages", conversation.id] });
-
-          const kind = resolveSessionKind(tasteQuota);
-          if (running || agent.connected) {
-            const queued = await agent.queueMessage(projectId, conversation.id, kind);
-            if (queued.ok) {
-              toast.info(
-                queued.pendingCount && queued.pendingCount > 1
-                  ? `${queued.pendingCount} mensagens na fila`
-                  : "Mensagem na fila — o agente processará em seguida",
-              );
-            } else {
-              toast.error(queued.message ?? "Erro ao enfileirar mensagem");
-            }
-            return;
-          }
-          runAgent(kind);
-        });
-    },
-    [conversation, runAgent, composerMode, tasteQuota, running, agent, projectId, qc],
-  );
-
-  const handleVisualEdits = useCallback(() => {
-    if (activeView !== "preview") {
-      setActiveView("preview");
-      toast.info("Abra o Preview para selecionar um elemento.");
-    }
-    setPickMode((v) => {
-      const next = !v;
-      logEditorTelemetryEvent("ui", next ? "visual_edits_on" : "visual_edits_off", "info");
-      return next;
-    });
-  }, [activeView]);
-
-  const handleStartProject = useCallback(() => {
-    if (!conversation) return;
-    const seed =
-      "Start Project: apresente um plano curto (markdown) do que vai construir nesta sessão (~10–15 min), depois implemente uma primeira versão visual convincente no projeto. Ao final, diga que daqui pra frente é comigo configurando API.";
-    supabase
-      .from("messages")
-      .insert({
-        conversation_id: conversation.id,
-        role: "user",
-        parts: [{ type: "text", text: seed }],
-      })
-      .then(({ error }) => {
-        if (error) toast.error("Erro ao iniciar Start Project");
-        else runAgent("taste", "start");
-      });
-  }, [conversation, runAgent]);
-
-  const handleStop = useCallback(() => {
-    void (async () => {
-      await agent.stop();
-      logEditorTelemetryEvent("agent", "run_stop", "warn", "user");
-      setLogs((prev) => [...prev, createLogEntry("warning", "Agente interrompido pelo usuário", "agent")]);
-      toast.info("Agente interrompido");
-    })();
-  }, [agent]);
-
-  const handleUndoMessage = useCallback((assistantMsgId: string) => {
-    if (!conversation) return;
-    // Find the assistant message and the user message before it
-    const msgIndex = chatMessages.findIndex(m => m.id === assistantMsgId && m.role === "assistant");
-    if (msgIndex === -1) return;
-    const userMsg = chatMessages[msgIndex - 1];
-    if (!userMsg || userMsg.role !== "user") return;
-
-    // Delete both messages from the database (newest first)
-    supabase
-      .from("messages")
-      .delete()
-      .in("id", [assistantMsgId, userMsg.id])
-      .then(({ error }) => {
-        if (error) {
-          toast.error("Erro ao desfazer");
-        } else {
-          toast.success("Desfeito: última resposta do agente + sua mensagem anterior");
-          logEditorTelemetryEvent("agent", "undo", "info", assistantMsgId.slice(0, 8));
-        }
-      });
-    // Invalidate queries to refetch
-    void qc.invalidateQueries({ queryKey: ["messages", conversation.id] });
-  }, [chatMessages, conversation, qc]);
-
-  const handleExportZip = useCallback(() => {
-    if (!project) return;
-    exportProjectZip(projectId, project.name ?? "projeto");
-  }, [projectId, project]);
-
-  const handlePlanApprove = useCallback(
-    async (steps: { id: string; enabled: boolean }[]) => {
-      const pp = agent.progress.pendingPlan;
-      if (!pp) return;
-      const enabled = steps.filter((s) => s.enabled !== false);
-      if (enabled.length === 0) {
-        toast.warning("Selecione ao menos um passo para executar.");
-        return;
-      }
-      const full = enabled
-        .map((s) => pp.steps.find((p) => p.id === s.id))
-        .filter((s): s is NonNullable<typeof s> => s != null);
-      if (full.length === 0) {
-        toast.warning("Passos selecionados não correspondem ao plano.");
-        return;
-      }
-      try {
-        const result = await planApproveFn({
-          data: {
-            runId: pp.runId,
-            planId: pp.planId,
-            plan: pp.summary,
-            steps: full,
-          },
-        });
-        agent.clearPendingPlan();
-        toast.success(
-          result.eventId
-            ? "Plano aprovado — agente executando…"
-            : "Plano aprovado — agente na fila.",
-        );
-        qc.invalidateQueries({ queryKey: ["conversation", projectId] });
-        qc.invalidateQueries({ queryKey: ["agent-runs", projectId] });
-        if (result.newRunId && conversation) {
-          await agent.watch(projectId, conversation.id, result.newRunId);
-        }
-      } catch (e) {
-        toast.error((e as Error)?.message ?? "Falha ao aprovar plano");
-      }
-    },
-    [agent, agent.progress.pendingPlan, conversation, projectId, qc, planApproveFn],
-  );
-
-  const handlePlanReject = useCallback(
-    async (reason?: string) => {
-      const pp = agent.progress.pendingPlan;
-      if (!pp) return;
-      try {
-        await planRejectFn({
-          data: { runId: pp.runId, planId: pp.planId, reason },
-        });
-        agent.clearPendingPlan();
-        toast.info("Plano rejeitado.");
-        qc.invalidateQueries({ queryKey: ["conversation", projectId] });
-        qc.invalidateQueries({ queryKey: ["agent-runs", projectId] });
-      } catch (e) {
-        toast.error((e as Error)?.message ?? "Falha ao rejeitar plano");
-      }
-    },
-    [agent, agent.progress.pendingPlan, projectId, qc, planRejectFn],
-  );
-
-  const liveSiteUrl = useMemo(() => {
-    const base = publishedUrl ?? devUrl;
-    if (!base) return null;
-    return buildPreviewUrl(base, previewRoute);
-  }, [publishedUrl, devUrl, previewRoute]);
-
-  const handleOpenLiveSite = useCallback(async () => {
-    if (liveSiteUrl) {
-      window.open(liveSiteUrl, "_blank", "noopener");
-      return;
-    }
-    if (isReactProject) {
-      toast.info("Subindo preview…");
-      const url = await previewBoot.bootWithRetry();
-      if (url) window.open(buildPreviewUrl(url, previewRoute), "_blank", "noopener");
-    }
-  }, [liveSiteUrl, isReactProject, previewBoot, previewRoute]);
-
-  const handleShare = useCallback(() => {
-    if (!liveSiteUrl) {
-      toast.info("O link ficará disponível quando o preview subir.");
-      return;
-    }
-    navigator.clipboard.writeText(liveSiteUrl).then(
-      () => toast.success("Link copiado para a área de transferência"),
-      () => toast.info(liveSiteUrl),
-    );
-  }, [liveSiteUrl]);
-
-  const publishButtonLabel = autoPublish.publishing
-    ? "Publicando…"
-    : autoPublish.isLive || liveSiteUrl
-      ? "Abrir site"
-      : previewBoot.booting || previewBoot.warming
-        ? "Subindo…"
-        : "Abrir site";
-
-  // ─── Command Palette actions ────────────────────────────────────────
-  const paletteActions: PaletteAction[] = useMemo(
-    () =>
-      buildEditorActions({
-        onNewFile: () => toast.info("Arquivo — via chat"),
-        onNewFolder: () => toast.info("Pasta — via chat"),
-        onTogglePreview: () => setActiveView((v) => (v === "preview" ? "code" : "preview")),
-        onToggleTerminal: () => setLogPanelOpen((v) => !v),
-        onToggleGit: () => toast.info("Git Panel — em breve"),
-        onExportZip: handleExportZip,
-        onImportFiles: () => toast.info("Arraste arquivos para importar"),
-        onSaveAll: () => {
-          openTabs.forEach((t) => {
-            if (t.isModified && t.path) {
-              supabase.from("project_files").upsert({ project_id: projectId, path: t.path, content: t.content }).then(() => {
-                setOpenTabs((prev) => prev.map((pt) => pt.path === t.path ? { ...pt, isModified: false } : pt));
-              });
-            }
-          });
-          toast.success("Arquivos salvos");
-        },
-        onRunAgent: runAgent,
-        onStopAgent: handleStop,
-        onToggleFileTree: () => setShowFileTree((v) => !v),
-        onToggleDeviceFrame: () => {},
-        onOpenHistory: () =>
-          navigate({ to: "/projects/$projectId/history", params: { projectId } }),
-        isRunning: running,
-      }),
-    [handleExportZip, openTabs, projectId, runAgent, handleStop, running, navigate],
-  );
-
-  // ─── Keyboard shortcuts ──────────────────────────────────────────────
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      const mod = e.metaKey || e.ctrlKey;
-      if (mod && e.key === "k") { e.preventDefault(); setPaletteOpen((v) => !v); }
-      if (mod && e.shiftKey && e.key === "?") { e.preventDefault(); setCheatsheetOpen((v) => !v); }
-      if (mod && e.key === "p" && !e.shiftKey) { e.preventDefault(); setPaletteOpen(true); }
-      if (mod && e.key === "j") { e.preventDefault(); setLogPanelOpen((v) => !v); }
-      if (mod && e.shiftKey && e.key.toLowerCase() === "d") {
-        e.preventDefault();
-        setLogPanelTab("shot");
-        setLogPanelOpen(true);
-      }
-      if (mod && e.key === "b") { e.preventDefault(); setShowFileTree((v) => !v); }
-      if (mod && e.key === "s") { e.preventDefault(); paletteActions.find(a => a.id === "save-all")?.action(); }
-    };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [paletteActions]);
-
-  // ─── Render ──────────────────────────────────────────────────────────
   return (
-    <>
-      {/* Inject heat map CSS */}
-      <style>{HEAT_MAP_CSS}</style>
-
-      <EditorShell topBar="none">
-        <div
-          className="flex min-h-0 h-full w-full flex-1 flex-col overflow-hidden"
-          onDragOver={handleDragOver}
-          onDragLeave={handleDragLeave}
-          onDrop={handleDrop}
-        >
-          <EditorResizableLayout
-            workspaceCode={activeView === "code"}
-            chatHeader={
-              <EditorChatHeader
-                projectName={project?.name}
-                running={running}
-                awaitingUser={agent.progress.awaiting}
-                pendingQueueCount={agent.progress.pendingQueueCount}
-              />
-            }
-            workspaceHeader={
-              <EditorWorkspaceHeader
-                activeView={mainView}
-                onViewChange={handleMainViewChange}
-                onShare={handleShare}
-                onPublish={handleOpenLiveSite}
-                publishLabel={publishButtonLabel}
-                publishDisabled={!liveSiteUrl && (previewBoot.booting || previewBoot.warming || autoPublish.publishing)}
-                integrations={{
-                  status: connectorStatus,
-                  modes: connectorModes,
-                  modal: connectorModal,
-                  openConnector,
-                  closeModal: closeConnectorModal,
-                  saveConnector,
-                }}
-                preview={{
-                  files: previewNavFiles,
-                  activePath: previewRoute,
-                  onNavigate: setPreviewRoute,
-                  devUrl,
-                  onRefresh: () => {
-                    if (previewIframeRef.current?.contentWindow) {
-                      previewIframeRef.current.contentWindow.location.reload();
-                    } else {
-                      void previewBoot.boot({ force: true });
-                    }
-                    setPreviewReloadNonce((n) => n + 1);
-                  },
-                  device: previewDevice,
-                  onDeviceChange: setPreviewDevice,
-                }}
-              />
-            }
-            chat={
-              <div className="forge-chat-column">
-                <div className="forge-chat-body">
-                  <TastePostStartBanner />
-                  <ChatInput
-                    messages={chatMessages}
-                    running={running}
-                    agentProgress={agent.progress}
-                    onResumeAgent={handleResumeAgent}
-                    onSend={handleSend}
-                    onStop={handleStop}
-                    onVisualEdits={handleVisualEdits}
-                    visualEditsActive={pickMode}
-                    files={filePaths}
-                    composerMode={composerMode}
-                    onComposerModeChange={setComposerMode}
-                    externalPrompt={promptDraft}
-                    onExternalPromptConsumed={() => setPromptDraft(null)}
-                    welcomeMarkdown={chatMessages.length === 0 ? welcomeMarkdown : undefined}
-                    tasteChatRemaining={tasteChatRemaining}
-                    tasteStartRemaining={tasteStartRemaining}
-                    onStartProject={handleStartProject}
-                    onDeploy={handleOpenLiveSite}
-                    onUndoMessage={handleUndoMessage}
-                    onPlanApprove={handlePlanApprove}
-                    onPlanReject={handlePlanReject}
-                  />
-                </div>
-                <SetupRail
-                  hasUserLlmKey={hasUserLlmKey}
-                  e2bConnected={e2bConnected}
-                  prefs={agentPrefs}
-                  connectorRows={connectorRows}
-                  checklist={
-                    <TasteSetupChecklist
-                      userMessageCount={chatMessages.filter((m) => m.role === "user").length}
-                      onOpenConnector={openConnector}
-                      onStartProject={handleStartProject}
-                    />
-                  }
-                />
-              </div>
-            }
-            workspace={
-              <div className="flex min-h-0 h-full w-full flex-1 flex-col">
-                <div className="flex min-h-0 flex-1">
-                  {showFileTree && activeView === "code" && (
-                    <div className="w-[200px] shrink-0 border-r border-[var(--forge-border)] bg-[#1a1c22]">
-                      <FileTree
-                        files={fileTreeFiles}
-                        activePath={activeFilePath}
-                        onSelectFile={handleSelectFile}
-                        onCreateFile={() => toast.info("Criar arquivo — via chat")}
-                        onCreateFolder={() => toast.info("Criar pasta — via chat")}
-                        onRename={(old, n) => toast.info(`Renomear: ${old} → ${n}`)}
-                        onDelete={(p) => toast.info(`Deletar: ${p}`)}
-                      />
-                    </div>
-                  )}
-
-                  <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-                    <div className="min-h-0 min-w-0 flex-1">
-                    {activeView === "code" && (
-                      <CodeEditor
-                        tabs={openTabs}
-                        activePath={activeFilePath}
-                        onSelectTab={handleSelectFile}
-                        onCloseTab={handleCloseTab}
-                        onContentChange={handleContentChange}
-                      />
-                    )}
-
-                    {activeView === "preview" && (
-                      <PreviewFrame
-                        files={previewNavFiles}
-                        booting={previewBoot.booting}
-                        agentRunning={running}
-                        devUrl={devUrl}
-                        previewPath={previewRoute}
-                        iframeRef={previewIframeRef}
-                        bootError={
-                          previewBoot.bootLogs
-                            ? `${previewBoot.lastError ?? "Vite subindo"} — ${previewBoot.bootLogs.slice(0, 280)}`
-                            : previewBoot.lastError
-                        }
-                        warming={previewBoot.warming}
-                        onWarmComplete={previewBoot.clearWarming}
-                        onRefresh={() => previewBoot.boot({ force: true })}
-                        reloadNonce={previewReloadNonce}
-                        agentHasRun={agentHasRun}
-                        e2bConnected={e2bConnected}
-                        previewIdle={previewIdle}
-                        isNoFiles={previewBoot.isNoFiles}
-                        projectName={project?.name}
-                        device={previewDevice}
-                        onImportRepo={(url) => {
-                          toast.info(`Importando repositório: ${url}`);
-                          openConnector("github");
-                        }}
-                        onFocusChat={() => {
-                          const el = document.querySelector<HTMLTextAreaElement>(
-                            ".forge-composer-input",
-                          );
-                          el?.focus();
-                        }}
-                      />
-                    )}
-
-                    {activeView === "diff" && (
-                      <AiDiffViewer
-                        diffs={diffEntries}
-                        activeDiffId={diffEntries[0]?.id ?? null}
-                        onSelectDiff={() => {}}
-                        onAccept={() => toast.success("Mudança aceita")}
-                        onReject={() => toast.info("Mudança rejeitada")}
-                        onAcceptAll={() => toast.success("Todas mudanças aceitas")}
-                        onRejectAll={() => toast.info("Todas mudanças rejeitadas")}
-                      />
-                    )}
-                  </div>
-                  </div>
-                </div>
-              </div>
-            }
-          />
-        </div>
-
-        <LogPanel
-          isOpen={logPanelOpen}
-          onClose={() => setLogPanelOpen(false)}
-          logs={logs}
-          running={running}
-          initialTab={logPanelTab}
-        />
-      </EditorShell>
-
-      {/* Overlays globais */}
-      <CommandPalette
-        isOpen={paletteOpen}
-        onClose={() => setPaletteOpen(false)}
-        actions={paletteActions}
-        files={filePaths}
-        onOpenFile={handleSelectFile}
-      />
-
-      <ShortcutCheatsheet
-        isOpen={cheatsheetOpen}
-        onClose={() => setCheatsheetOpen(false)}
-      />
-
-      {/* Drag overlay */}
-      {isDragOver && (
-        <div className="pointer-events-none fixed inset-0 z-[200] m-3 flex items-center justify-center rounded-xl border-2 border-dashed border-[var(--primary)]/50 bg-black/70">
-          <p className="text-sm text-[var(--primary)]">Solte os arquivos para importar</p>
-        </div>
-      )}
-    </>
+    <EditorPageLayout
+      projectName={project?.name}
+      running={running}
+      agent={agent}
+      mainView={mainView}
+      onMainViewChange={handleMainViewChange}
+      handleShare={handlers.handleShare}
+      handleOpenLiveSite={handlers.handleOpenLiveSite}
+      publishButtonLabel={handlers.publishButtonLabel}
+      liveSiteUrl={handlers.liveSiteUrl}
+      previewBoot={previewBoot}
+      autoPublishPublishing={handlers.autoPublish.publishing}
+      connectorStatus={connectorStatus}
+      connectorModes={connectorModes}
+      connectorModal={connectorModal}
+      openConnector={openConnector}
+      closeConnectorModal={closeConnectorModal}
+      saveConnector={saveConnector}
+      previewNavFiles={previewNavFiles}
+      previewRoute={previewRoute}
+      setPreviewRoute={setPreviewRoute}
+      devUrl={devUrl}
+      previewIframeRef={previewIframeRef}
+      setPreviewReloadNonce={setPreviewReloadNonce}
+      previewDevice={previewDevice}
+      setPreviewDevice={setPreviewDevice}
+      e2bConnected={e2bConnected}
+      chatMessages={chatMessages}
+      handleResumeAgent={handlers.handleResumeAgent}
+      handleSend={handlers.handleSend}
+      handleStop={handlers.handleStop}
+      handleVisualEdits={handlers.handleVisualEdits}
+      pickMode={pickMode}
+      filePaths={filePaths}
+      composerMode={composerMode}
+      setComposerMode={setComposerMode}
+      promptDraft={promptDraft}
+      setPromptDraft={setPromptDraft}
+      welcomeMarkdown={welcomeMarkdown}
+      tasteChatRemaining={tasteChatRemaining}
+      tasteStartRemaining={tasteStartRemaining}
+      handleStartProject={handlers.handleStartProject}
+      handleUndoMessage={handlers.handleUndoMessage}
+      handlePlanApprove={handlers.handlePlanApprove}
+      handlePlanReject={handlers.handlePlanReject}
+      hasUserLlmKey={hasUserLlmKey}
+      agentPrefs={agentPrefs}
+      connectorRows={connectorRows}
+      showFileTree={showFileTree}
+      activeView={activeView}
+      fileTreeFiles={fileTreeFiles}
+      activeFilePath={activeFilePath}
+      handleSelectFile={handlers.handleSelectFile}
+      openTabs={openTabs}
+      handleCloseTab={handlers.handleCloseTab}
+      handleContentChange={handlers.handleContentChange}
+      previewIdle={previewIdle}
+      agentHasRun={agentHasRun}
+      previewReloadNonce={previewReloadNonce}
+      diffEntries={orchestration.diffEntries}
+      logPanelOpen={logPanelOpen}
+      setLogPanelOpen={setLogPanelOpen}
+      logs={logs}
+      logPanelTab={logPanelTab}
+      paletteOpen={paletteOpen}
+      setPaletteOpen={setPaletteOpen}
+      paletteActions={handlers.paletteActions}
+      cheatsheetOpen={cheatsheetOpen}
+      setCheatsheetOpen={setCheatsheetOpen}
+      isDragOver={isDragOver}
+      handleDragOver={handleDragOver}
+      handleDragLeave={handleDragLeave}
+      handleDrop={handleDrop}
+    />
   );
 }

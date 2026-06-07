@@ -1,0 +1,597 @@
+import { useCallback, useEffect, useMemo } from "react";
+import type { QueryClient } from "@tanstack/react-query";
+import type { NavigateOptions } from "@tanstack/react-router";
+import { useServerFn } from "@tanstack/react-start";
+
+import { supabase } from "@/integrations/supabase/client";
+import type { Tab } from "@/components/editor/CodeEditor";
+import type { AgentComposerMode } from "@/components/editor/ChatInput";
+import type { ChatMessage } from "@/components/editor/ChatInput";
+import { buildEditorActions, type PaletteAction } from "@/components/editor/CommandPalette";
+import { createLogEntry, type LogEntry } from "@/components/editor/LogPanel";
+import { loadAgentPreferences } from "@/lib/agent-preferences";
+import {
+  isAgentPreferencesConfigured,
+  getAgentSetupBlockMessage,
+} from "@/lib/agent-setup";
+import type { ForgeSessionKind, TasteAction } from "@/lib/taste";
+import {
+  canSendTasteChat,
+  canStartTasteProject,
+  resolveSessionKind,
+} from "@/lib/taste";
+import type { StoredMessagePart } from "@/lib/chat-attachments";
+import { buildPreviewUrl } from "@/lib/project-routes";
+import { logEditorTelemetryEvent } from "@/lib/editor-telemetry";
+import { publishProject } from "@/lib/publish.functions";
+import { planApprove, planReject } from "@/lib/plan-decide.functions";
+import { exportProjectZip } from "@/hooks/useWorkspacePresets";
+import { useAutoPublish } from "@/hooks/useAutoPublish";
+import type { useAgentRun } from "@/hooks/useAgentRun";
+import type { usePreviewBoot } from "@/hooks/usePreviewBoot";
+import { toast } from "sonner";
+
+type AgentRun = ReturnType<typeof useAgentRun>;
+type PreviewBoot = ReturnType<typeof usePreviewBoot>;
+
+type TasteQuota = {
+  tasteChatRemaining: number;
+  tasteStartRemaining: number;
+  hasUserLlmKey: boolean;
+};
+
+type UseEditorPageHandlersParams = {
+  projectId: string;
+  project: { name?: string | null } | null | undefined;
+  conversation: { id: string } | null | undefined;
+  agent: AgentRun;
+  qc: QueryClient;
+  navigate: (options: NavigateOptions) => void;
+  tasteQuota: TasteQuota;
+  fileMap: Map<string, string>;
+  filePaths: string[];
+  chatMessages: ChatMessage[];
+  isReactProject: boolean;
+  devUrl: string | null;
+  publishedUrl: string | null;
+  previewReady: boolean;
+  e2bConnected: boolean;
+  previewBoot: PreviewBoot;
+  running: boolean;
+  activeView: "code" | "preview" | "diff";
+  setActiveView: (value: "code" | "preview" | "diff" | ((prev: "code" | "preview" | "diff") => "code" | "preview" | "diff")) => void;
+  activeFilePath: string | null;
+  setActiveFilePath: (value: string | null | ((prev: string | null) => string | null)) => void;
+  openTabs: Tab[];
+  setOpenTabs: (value: Tab[] | ((prev: Tab[]) => Tab[])) => void;
+  composerMode: AgentComposerMode;
+  setComposerMode: (value: AgentComposerMode | ((prev: AgentComposerMode) => AgentComposerMode)) => void;
+  logPanelOpen: boolean;
+  setLogPanelOpen: (value: boolean | ((prev: boolean) => boolean)) => void;
+  setLogPanelTab: (value: "terminal" | "console" | "problems" | "shot" | ((prev: "terminal" | "console" | "problems" | "shot") => "terminal" | "console" | "problems" | "shot")) => void;
+  setLogs: (value: LogEntry[] | ((prev: LogEntry[]) => LogEntry[])) => void;
+  setShowFileTree: (value: boolean | ((prev: boolean) => boolean)) => void;
+  setPaletteOpen: (value: boolean | ((prev: boolean) => boolean)) => void;
+  setCheatsheetOpen: (value: boolean | ((prev: boolean) => boolean)) => void;
+  setPickMode: (value: boolean | ((prev: boolean) => boolean)) => void;
+  previewRoute: string;
+};
+
+export function useEditorPageHandlers({
+  projectId,
+  project,
+  conversation,
+  agent,
+  qc,
+  navigate,
+  tasteQuota,
+  fileMap,
+  filePaths,
+  chatMessages,
+  isReactProject,
+  devUrl,
+  publishedUrl,
+  previewReady,
+  e2bConnected,
+  previewBoot,
+  running,
+  activeView,
+  setActiveView,
+  activeFilePath,
+  setActiveFilePath,
+  openTabs,
+  setOpenTabs,
+  composerMode,
+  logPanelOpen,
+  setLogPanelOpen,
+  setLogPanelTab,
+  setLogs,
+  setShowFileTree,
+  setPaletteOpen,
+  setCheatsheetOpen,
+  setPickMode,
+  previewRoute,
+}: UseEditorPageHandlersParams) {
+  const publishFn = useServerFn(publishProject);
+  const planApproveFn = useServerFn(planApprove);
+  const planRejectFn = useServerFn(planReject);
+
+  const autoPublish = useAutoPublish({
+    projectId,
+    devUrl,
+    publishedUrl,
+    previewReady,
+    enabled: isReactProject && e2bConnected,
+    booting: previewBoot.booting,
+    warming: previewBoot.warming,
+    publishFn,
+  });
+
+  const handleSelectFile = useCallback(
+    (path: string) => {
+      setActiveFilePath(path);
+      if (activeView === "diff") setActiveView("code");
+      setOpenTabs((prev) => {
+        if (prev.some((t) => t.path === path)) return prev;
+        return [...prev, { path, content: fileMap.get(path) ?? "", isModified: false }];
+      });
+    },
+    [fileMap, activeView, setActiveFilePath, setActiveView, setOpenTabs],
+  );
+
+  const handleCloseTab = useCallback(
+    (path: string) => {
+      setOpenTabs((prev) => {
+        const next = prev.filter((t) => t.path !== path);
+        if (activeFilePath === path) {
+          setActiveFilePath(next.length > 0 ? next[next.length - 1].path : null);
+        }
+        return next;
+      });
+    },
+    [activeFilePath, setActiveFilePath, setOpenTabs],
+  );
+
+  const handleContentChange = useCallback(
+    (path: string, content: string) => {
+      setOpenTabs((prev) =>
+        prev.map((t) => (t.path === path ? { ...t, content, isModified: true } : t)),
+      );
+    },
+    [setOpenTabs],
+  );
+
+  const runAgent = useCallback(
+    (explicitKind?: ForgeSessionKind, explicitAction?: TasteAction): boolean => {
+      if (!conversation || running) return false;
+
+      const kind = explicitKind ?? resolveSessionKind(tasteQuota);
+      const tasteAction: TasteAction | undefined =
+        explicitAction ?? (kind === "taste" ? "chat" : undefined);
+      const inTaste = kind === "taste";
+
+      if (!inTaste) {
+        const prefs = loadAgentPreferences();
+        if (!isAgentPreferencesConfigured(prefs)) {
+          toast.error(getAgentSetupBlockMessage(prefs));
+          return false;
+        }
+      } else if (tasteAction === "start" && !canStartTasteProject(tasteQuota)) {
+        toast.error("Start Project já utilizado. Configure API para continuar.");
+        return false;
+      } else if (tasteAction === "chat" && !canSendTasteChat(tasteQuota)) {
+        toast.error("Limite Taste Chat (50). Configure API em /api.");
+        return false;
+      }
+
+      const label =
+        kind === "taste" && tasteAction === "start"
+          ? "Start Project (Taste · NVIDIA)"
+          : kind === "taste"
+            ? "Concierge Taste"
+            : agent.progress.resumable
+              ? "Retomando agente (memória do chat)"
+              : "Agente FORGE iniciado";
+      setLogs((prev) => [...prev, createLogEntry("info", label, "agent")]);
+      if (!logPanelOpen) setLogPanelOpen(true);
+      void qc.invalidateQueries({ queryKey: ["messages", conversation.id] });
+      logEditorTelemetryEvent(
+        "agent",
+        "run_start",
+        "info",
+        kind === "byok" ? "byok" : `${kind}.${tasteAction ?? "chat"}`,
+      );
+      void (async () => {
+        try {
+          await agent.connect(projectId, conversation.id, kind, { tasteAction, mode: composerMode });
+        } catch (e: unknown) {
+          const msg = e instanceof Error ? e.message : "Erro ao iniciar agente";
+          logEditorTelemetryEvent("agent", "run_fail", "error", msg.slice(0, 200));
+          toast.error(msg);
+        }
+      })();
+      return true;
+    },
+    [
+      conversation,
+      projectId,
+      running,
+      agent,
+      logPanelOpen,
+      qc,
+      agent.progress.resumable,
+      tasteQuota,
+      composerMode,
+      setLogs,
+      setLogPanelOpen,
+    ],
+  );
+
+  const handleResumeAgent = useCallback(() => {
+    if (!conversation || running) return;
+
+    const kind = resolveSessionKind(tasteQuota);
+    const inTaste = kind === "taste";
+    const tasteAction: TasteAction = "chat";
+
+    if (!inTaste) {
+      const prefs = loadAgentPreferences();
+      if (!isAgentPreferencesConfigured(prefs)) {
+        toast.error(getAgentSetupBlockMessage(prefs));
+        return;
+      }
+    } else if (!canSendTasteChat(tasteQuota)) {
+      toast.error("Limite Taste Chat. Configure API em /api.");
+      return;
+    }
+
+    setLogs((prev) => [
+      ...prev,
+      createLogEntry("info", "Retomando agente (memória do chat)", "agent"),
+    ]);
+    if (!logPanelOpen) setLogPanelOpen(true);
+    void qc.invalidateQueries({ queryKey: ["messages", conversation.id] });
+    logEditorTelemetryEvent("agent", "resume_start", "info", kind);
+
+    void (async () => {
+      try {
+        await agent.connect(projectId, conversation.id, kind, { resume: true });
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : "Erro ao retomar agente";
+        logEditorTelemetryEvent("agent", "resume_fail", "error", msg.slice(0, 200));
+        toast.error(msg);
+      }
+    })();
+  }, [conversation, projectId, running, agent, logPanelOpen, qc, tasteQuota, setLogs, setLogPanelOpen]);
+
+  const handleSend = useCallback(
+    (text: string, mode?: AgentComposerMode, parts?: StoredMessagePart[]) => {
+      if (!conversation) return;
+      const messageParts =
+        parts && parts.length > 0
+          ? parts
+          : [
+              {
+                type: "text" as const,
+                text,
+              },
+            ];
+      supabase
+        .from("messages")
+        .insert({
+          conversation_id: conversation.id,
+          role: "user",
+          parts: messageParts,
+        })
+        .then(async ({ error }) => {
+          if (error) {
+            toast.error("Erro ao enviar mensagem");
+            logEditorTelemetryEvent("agent", "chat_send_fail", "error", error.message.slice(0, 200));
+            return;
+          }
+          logEditorTelemetryEvent("agent", "chat_send", "info", mode ?? composerMode);
+          void qc.invalidateQueries({ queryKey: ["messages", conversation.id] });
+
+          const kind = resolveSessionKind(tasteQuota);
+          if (running || agent.connected) {
+            const queued = await agent.queueMessage(projectId, conversation.id, kind);
+            if (queued.ok) {
+              toast.info(
+                queued.pendingCount && queued.pendingCount > 1
+                  ? `${queued.pendingCount} mensagens na fila`
+                  : "Mensagem na fila — o agente processará em seguida",
+              );
+            } else {
+              toast.error(queued.message ?? "Erro ao enfileirar mensagem");
+            }
+            return;
+          }
+          runAgent(kind);
+        });
+    },
+    [conversation, runAgent, composerMode, tasteQuota, running, agent, projectId, qc],
+  );
+
+  const handleVisualEdits = useCallback(() => {
+    if (activeView !== "preview") {
+      setActiveView("preview");
+      toast.info("Abra o Preview para selecionar um elemento.");
+    }
+    setPickMode((v) => {
+      const next = !v;
+      logEditorTelemetryEvent("ui", next ? "visual_edits_on" : "visual_edits_off", "info");
+      return next;
+    });
+  }, [activeView, setActiveView, setPickMode]);
+
+  const handleStartProject = useCallback(() => {
+    if (!conversation) return;
+    const seed =
+      "Start Project: apresente um plano curto (markdown) do que vai construir nesta sessão (~10–15 min), depois implemente uma primeira versão visual convincente no projeto. Ao final, diga que daqui pra frente é comigo configurando API.";
+    supabase
+      .from("messages")
+      .insert({
+        conversation_id: conversation.id,
+        role: "user",
+        parts: [{ type: "text", text: seed }],
+      })
+      .then(({ error }) => {
+        if (error) toast.error("Erro ao iniciar Start Project");
+        else runAgent("taste", "start");
+      });
+  }, [conversation, runAgent]);
+
+  const handleStop = useCallback(() => {
+    void (async () => {
+      await agent.stop();
+      logEditorTelemetryEvent("agent", "run_stop", "warn", "user");
+      setLogs((prev) => [...prev, createLogEntry("warning", "Agente interrompido pelo usuário", "agent")]);
+      toast.info("Agente interrompido");
+    })();
+  }, [agent, setLogs]);
+
+  const handleUndoMessage = useCallback(
+    (assistantMsgId: string) => {
+      if (!conversation) return;
+      const msgIndex = chatMessages.findIndex(
+        (m) => m.id === assistantMsgId && m.role === "assistant",
+      );
+      if (msgIndex === -1) return;
+      const userMsg = chatMessages[msgIndex - 1];
+      if (!userMsg || userMsg.role !== "user") return;
+
+      supabase
+        .from("messages")
+        .delete()
+        .in("id", [assistantMsgId, userMsg.id])
+        .then(({ error }) => {
+          if (error) {
+            toast.error("Erro ao desfazer");
+          } else {
+            toast.success("Desfeito: última resposta do agente + sua mensagem anterior");
+            logEditorTelemetryEvent("agent", "undo", "info", assistantMsgId.slice(0, 8));
+          }
+        });
+      void qc.invalidateQueries({ queryKey: ["messages", conversation.id] });
+    },
+    [chatMessages, conversation, qc],
+  );
+
+  const handleExportZip = useCallback(() => {
+    if (!project) return;
+    exportProjectZip(projectId, project.name ?? "projeto");
+  }, [projectId, project]);
+
+  const handlePlanApprove = useCallback(
+    async (steps: { id: string; enabled: boolean }[]) => {
+      const pp = agent.progress.pendingPlan;
+      if (!pp) return;
+      const enabled = steps.filter((s) => s.enabled !== false);
+      if (enabled.length === 0) {
+        toast.warning("Selecione ao menos um passo para executar.");
+        return;
+      }
+      const full = enabled
+        .map((s) => pp.steps.find((p) => p.id === s.id))
+        .filter((s): s is NonNullable<typeof s> => s != null);
+      if (full.length === 0) {
+        toast.warning("Passos selecionados não correspondem ao plano.");
+        return;
+      }
+      try {
+        const result = await planApproveFn({
+          data: {
+            runId: pp.runId,
+            planId: pp.planId,
+            plan: pp.summary,
+            steps: full,
+          },
+        });
+        agent.clearPendingPlan();
+        toast.success(
+          result.eventId
+            ? "Plano aprovado — agente executando…"
+            : "Plano aprovado — agente na fila.",
+        );
+        qc.invalidateQueries({ queryKey: ["conversation", projectId] });
+        qc.invalidateQueries({ queryKey: ["agent-runs", projectId] });
+        if (result.newRunId && conversation) {
+          await agent.watch(projectId, conversation.id, result.newRunId);
+        }
+      } catch (e) {
+        toast.error((e as Error)?.message ?? "Falha ao aprovar plano");
+      }
+    },
+    [agent, agent.progress.pendingPlan, conversation, projectId, qc, planApproveFn],
+  );
+
+  const handlePlanReject = useCallback(
+    async (reason?: string) => {
+      const pp = agent.progress.pendingPlan;
+      if (!pp) return;
+      try {
+        await planRejectFn({
+          data: { runId: pp.runId, planId: pp.planId, reason },
+        });
+        agent.clearPendingPlan();
+        toast.info("Plano rejeitado.");
+        qc.invalidateQueries({ queryKey: ["conversation", projectId] });
+        qc.invalidateQueries({ queryKey: ["agent-runs", projectId] });
+      } catch (e) {
+        toast.error((e as Error)?.message ?? "Falha ao rejeitar plano");
+      }
+    },
+    [agent, agent.progress.pendingPlan, projectId, qc, planRejectFn],
+  );
+
+  const liveSiteUrl = useMemo(() => {
+    const base = publishedUrl ?? devUrl;
+    if (!base) return null;
+    return buildPreviewUrl(base, previewRoute);
+  }, [publishedUrl, devUrl, previewRoute]);
+
+  const handleOpenLiveSite = useCallback(async () => {
+    if (liveSiteUrl) {
+      window.open(liveSiteUrl, "_blank", "noopener");
+      return;
+    }
+    if (isReactProject) {
+      toast.info("Subindo preview…");
+      const url = await previewBoot.bootWithRetry();
+      if (url) window.open(buildPreviewUrl(url, previewRoute), "_blank", "noopener");
+    }
+  }, [liveSiteUrl, isReactProject, previewBoot, previewRoute]);
+
+  const handleShare = useCallback(() => {
+    if (!liveSiteUrl) {
+      toast.info("O link ficará disponível quando o preview subir.");
+      return;
+    }
+    navigator.clipboard.writeText(liveSiteUrl).then(
+      () => toast.success("Link copiado para a área de transferência"),
+      () => toast.info(liveSiteUrl),
+    );
+  }, [liveSiteUrl]);
+
+  const publishButtonLabel = autoPublish.publishing
+    ? "Publicando…"
+    : autoPublish.isLive || liveSiteUrl
+      ? "Abrir site"
+      : previewBoot.booting || previewBoot.warming
+        ? "Subindo…"
+        : "Abrir site";
+
+  const paletteActions: PaletteAction[] = useMemo(
+    () =>
+      buildEditorActions({
+        onNewFile: () => toast.info("Arquivo — via chat"),
+        onNewFolder: () => toast.info("Pasta — via chat"),
+        onTogglePreview: () => setActiveView((v) => (v === "preview" ? "code" : "preview")),
+        onToggleTerminal: () => setLogPanelOpen((v) => !v),
+        onToggleGit: () => toast.info("Git Panel — em breve"),
+        onExportZip: handleExportZip,
+        onImportFiles: () => toast.info("Arraste arquivos para importar"),
+        onSaveAll: () => {
+          openTabs.forEach((t) => {
+            if (t.isModified && t.path) {
+              supabase
+                .from("project_files")
+                .upsert({ project_id: projectId, path: t.path, content: t.content })
+                .then(() => {
+                  setOpenTabs((prev) =>
+                    prev.map((pt) => (pt.path === t.path ? { ...pt, isModified: false } : pt)),
+                  );
+                });
+            }
+          });
+          toast.success("Arquivos salvos");
+        },
+        onRunAgent: runAgent,
+        onStopAgent: handleStop,
+        onToggleFileTree: () => setShowFileTree((v) => !v),
+        onToggleDeviceFrame: () => {},
+        onOpenHistory: () =>
+          navigate({ to: "/projects/$projectId/history", params: { projectId } }),
+        isRunning: running,
+      }),
+    [
+      handleExportZip,
+      openTabs,
+      projectId,
+      runAgent,
+      handleStop,
+      running,
+      navigate,
+      setActiveView,
+      setLogPanelOpen,
+      setOpenTabs,
+      setShowFileTree,
+    ],
+  );
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      const mod = e.metaKey || e.ctrlKey;
+      if (mod && e.key === "k") {
+        e.preventDefault();
+        setPaletteOpen((v) => !v);
+      }
+      if (mod && e.shiftKey && e.key === "?") {
+        e.preventDefault();
+        setCheatsheetOpen((v) => !v);
+      }
+      if (mod && e.key === "p" && !e.shiftKey) {
+        e.preventDefault();
+        setPaletteOpen(true);
+      }
+      if (mod && e.key === "j") {
+        e.preventDefault();
+        setLogPanelOpen((v) => !v);
+      }
+      if (mod && e.shiftKey && e.key.toLowerCase() === "d") {
+        e.preventDefault();
+        setLogPanelTab("shot");
+        setLogPanelOpen(true);
+      }
+      if (mod && e.key === "b") {
+        e.preventDefault();
+        setShowFileTree((v) => !v);
+      }
+      if (mod && e.key === "s") {
+        e.preventDefault();
+        paletteActions.find((a) => a.id === "save-all")?.action();
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [
+    paletteActions,
+    setPaletteOpen,
+    setCheatsheetOpen,
+    setLogPanelOpen,
+    setLogPanelTab,
+    setShowFileTree,
+  ]);
+
+  return {
+    runAgent,
+    handleSelectFile,
+    handleCloseTab,
+    handleContentChange,
+    handleResumeAgent,
+    handleSend,
+    handleVisualEdits,
+    handleStartProject,
+    handleStop,
+    handleUndoMessage,
+    handleExportZip,
+    handlePlanApprove,
+    handlePlanReject,
+    handleOpenLiveSite,
+    handleShare,
+    liveSiteUrl,
+    publishButtonLabel,
+    paletteActions,
+    autoPublish,
+  };
+}

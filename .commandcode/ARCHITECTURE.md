@@ -218,11 +218,11 @@ EditorPage → EditorShell → EditorResizableLayout
 
 ---
 
-## 7. LEGADO NO DB (não é caminho paralelo)
+## 7. LEGADO NO DB
 
 | Item | Ação |
 |------|------|
-| Schema PGMQ | Mantido; `/health` checa reachability; **sem dispatch** no agente (opcional R1: dropar) |
+| ~~PGMQ agent_chunks~~ | ✅ Removido (migration `20260611000000`) |
 | `agent_pending_messages` | **Ativo** — fila de mensagens; UI: header + ChatStream |
 
 ---
@@ -239,5 +239,4 @@ EditorPage → EditorShell → EditorResizableLayout
 
 ## 9. BACKLOG
 
-- **Concluído:** seção Backlog em [FORGE.md](../FORGE.md)
-- **Opcional (R1–R4):** seção Restante em [FORGE.md](../FORGE.md) — não bloqueia operação
+Tudo concluído — ver [FORGE.md](../FORGE.md). Editor modular: `useEditorPageData`, `useEditorPageHandlers`, `useEditorAgentOrchestration`, `EditorPageLayout`.

@@ -1,9 +1,9 @@
 // /healthz — Status page pública (sem auth). Mostra resultado do /functions/v1/health
-// Atualiza a cada 30s. Mostra cada check (db, auth, llm, e2b, pgmq) com latência e erro.
+// Atualiza a cada 30s. Mostra cada check (db, auth, llm, e2b) com latência e erro.
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState, useCallback } from "react";
 import { motion } from "framer-motion";
-import { Activity, Database, KeyRound, Cpu, Server, Layers, RefreshCw } from "lucide-react";
+import { Activity, Database, KeyRound, Cpu, Server, RefreshCw } from "lucide-react";
 import { getSupabaseEnv } from "@/lib/supabase-env";
 
 type CheckResult = { ok: boolean; latencyMs: number; detail?: string; error?: string };
@@ -19,7 +19,6 @@ type HealthReport = {
     auth: CheckResult;
     llm: { nvidia: CheckResult; groq: CheckResult };
     e2b: CheckResult;
-    pgmq: CheckResult;
   };
 };
 
@@ -198,7 +197,6 @@ function HealthPage() {
               </h2>
               <div className="grid gap-2 sm:grid-cols-2">
                 <CheckRow icon={Server} label="E2B" result={report.checks.e2b} />
-                <CheckRow icon={Layers} label="PGMQ (legado)" result={report.checks.pgmq} />
               </div>
             </section>
 
