@@ -82,10 +82,6 @@ export class CompressionManager {
     return Number((inCost + outCost).toFixed(6));
   }
 
-  getLastInputTokens(): number {
-    return this.lastInputTokens;
-  }
-
   async compress(messages: ChatMessage[]): Promise<ChatMessage[]> {
     this.turnCount++;
     this.lastEstimatedTokens = estimateMessageTokens(messages);

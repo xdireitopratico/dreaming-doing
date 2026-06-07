@@ -3,7 +3,6 @@
 import type { LLMProvider, ChatParams, ChatResponse, ChatMessage, ToolCall } from "../types.ts";
 import { formatLlmApiError } from "./api-error.ts";
 import { normalizeChatUsage } from "../token-usage.ts";
-import type { ChatResponse } from "../types.ts";
 
 function mapUsage(raw: unknown): ChatResponse["usage"] | undefined {
   return normalizeChatUsage(raw);

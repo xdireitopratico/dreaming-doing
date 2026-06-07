@@ -129,12 +129,14 @@ export interface PlanStep {
 export interface ProposedPlan {
   planId: string;
   summary: string;
+  /** Justificativa amigável em PT-BR (1-2 frases) — exibida no UI acima dos passos. */
+  rationale?: string;
   steps: PlanStep[];
   ttlMs: number;
   /** Decisão do cliente (preenchida quando aprovada/rejeitada). */
   decision?: { action: "approve"; steps: PlanStep[] } | { action: "reject"; reason?: string };
   /** ISO timestamp em que o plano foi proposto. */
-  proposedAt: string;
+  proposedAt?: string;
 }
 
 export interface CheckResult {

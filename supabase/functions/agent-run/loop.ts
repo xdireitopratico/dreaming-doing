@@ -322,7 +322,8 @@ export class AgentLoop {
       await this.saveCheckpoint(LoopPhase.GATHER_CONTEXT);
 
       this.emit("phase", { phase: "classify", message: "Classificando complexidade..." });
-      const userPrompt = this.state.messages.filter(m => m.role === "user").pop()?.content ?? "";
+      const lastUserContent = this.state.messages.filter(m => m.role === "user").pop()?.content ?? "";
+      const userPrompt = typeof lastUserContent === "string" ? lastUserContent : "";
       const classification = await this.router.classify(
         userPrompt,
         this.state.context?.projectConfig ?? "(vazio)",
@@ -416,17 +417,11 @@ export class AgentLoop {
           });
           await this.persistFinal(q);
           await this.clearCheckpoint();
-          // Mark awaiting so start guards and UI treat this as a gate (not auto-execute on history)
-          if (this.runId) {
-            try {
-              const { data: r } = await this.sb.from("agent_runs").select("meta").eq("id", this.runId).maybeSingle();
-              const prev = (r?.meta ?? {}) as Record<string, unknown>;
-              await this.sb.from("agent_runs").update({
-                status: "awaiting_user",
-                meta: { ...prev, awaitingUser: { type: "qualify", message: q.slice(0, 200) } },
-              }).eq("id", this.runId);
-            } catch {}
-          }
+          // Mark awaiting so start guards and UI treat this as a gate (not auto-execute on history).
+          // Usa markRunStatus que valida o status no CHECK constraint (awaiting_user).
+          await this.markRunStatus("awaiting_user", {
+            awaitingUser: { type: "qualify", message: q.slice(0, 200) },
+          });
           this.emit("done", { summary: q, qualified: true, awaiting: true });
           return { ok: true, summary: q, steps: 0, toolsUsed: [] };
         }
@@ -706,7 +701,13 @@ export class AgentLoop {
     this.emit("phase", { phase: "summarize", message: "Finalizando..." });
     await this.saveCheckpoint(LoopPhase.SUMMARIZE, true);
     const finalMsg = this.state.messages[this.state.messages.length - 1];
-    const summary = finalMsg?.content ?? "Tarefa concluída.";
+    const rawSummary = finalMsg?.content;
+    const summary = typeof rawSummary === "string"
+      ? rawSummary
+      : Array.isArray(rawSummary)
+        ? rawSummary.filter((b): b is { type: string; text?: string } => !!(b as any)?.text)
+            .map((b) => (b as any).text).join("\n")
+        : "Tarefa concluída.";
     await this.persistFinal(summary);
     await this.clearCheckpoint();
     const tokens = this.compression.getTotalTokens();
@@ -857,8 +858,8 @@ export class AgentLoop {
 
   /** Atualiza agent_runs.status e meta.pendingPlan. Best-effort. */
   private async markRunStatus(
-    status: "running" | "rejected" | "awaiting_plan_approval",
-    extra?: { pendingPlan?: ProposedPlan | null },
+    status: "running" | "rejected" | "awaiting_plan_approval" | "awaiting_user",
+    extra?: { pendingPlan?: ProposedPlan | null; awaitingUser?: Record<string, unknown> },
   ): Promise<void> {
     if (!this.runId) return;
     try {
@@ -868,16 +869,16 @@ export class AgentLoop {
         .eq("id", this.runId)
         .maybeSingle();
       const prevMeta = (existing?.meta ?? {}) as Record<string, unknown>;
-      const nextMeta: Record<string, unknown> = {
-        ...prevMeta,
-        planMode: true,
-      };
+      const nextMeta: Record<string, unknown> = { ...prevMeta, planMode: true };
       if (extra && Object.prototype.hasOwnProperty.call(extra, "pendingPlan")) {
         if (extra.pendingPlan === null) {
           delete nextMeta.pendingPlan;
         } else if (extra.pendingPlan) {
           nextMeta.pendingPlan = extra.pendingPlan;
         }
+      }
+      if (extra?.awaitingUser) {
+        nextMeta.awaitingUser = extra.awaitingUser;
       }
       await this.sb
         .from("agent_runs")

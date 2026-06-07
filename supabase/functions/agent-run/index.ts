@@ -1,5 +1,5 @@
 // index.ts — Edge Function agent-run (build: agentloop-only 2026-06-06).
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 
 import { ToolRegistry } from "./registry.ts";
 import { AgentLoop, resolvePlanDecision } from "./loop.ts";
@@ -117,7 +117,7 @@ Deno.serve(async (req) => {
 
       const { data: run } = await supabase
         .from("agent_runs")
-        .select("id, user_id, status, canceled_at")
+        .select("id, user_id, status, canceled_at, project_id")
         .eq("id", runId)
         .maybeSingle();
 
@@ -666,11 +666,13 @@ Deno.serve(async (req) => {
     const allocateSandboxLocal =
       (!looksLikeInteraction && projectFileCount > 0) || projectHasSandbox;
 
-    // IMPORTANTE: a partir daqui o código ainda cria provider local para compat com paths diretos/cleanup.
-    // O verdadeiro "nunca carregar E2B em conversa" vem do short-circuit decide + run-job com allocateSandbox=false.
-    // Aqui também tornamos condicional para reduzir surface de criação prematura.
+    // Fase 4.7: o código abaixo (reg + sandbox local) era DEAD CODE — o
+    // executeAgentJob em run-job.ts cria seu próprio ToolRegistry e sandbox.
+    // A única coisa útil era a checagem antecipada de e2bKey (early 403 antes
+    // de gastar tempo de loop), que mantemos como validação rápida.
 
-    const reg = new ToolRegistry();
+    const cleanup = () => runningLocks.delete(projectId!);
+
     const projectTemplate = (project as { template?: string }).template ?? "vite-react";
     const projectMeta = ((project as { meta?: Record<string, unknown> }).meta ?? {}) as Record<string, unknown>;
     const deployKeys = await loadDeployConnectorKeys(supabase, userData.user.id);
@@ -681,49 +683,16 @@ Deno.serve(async (req) => {
     );
     const stackAddon = stackPromptAddon(stackCtx);
 
-    let sandbox: { destroy: () => Promise<void> };
+    // Early e2bKey check: se vamos alocar E2B mas o usuário não tem chave,
+    // retornamos 403 AGORA (sem gastar tempo com classify/loop). É duplicado
+    // com o check em run-job.ts:204 mas falha mais rápido e com mensagem clara.
     if (allocateSandboxLocal) {
       const e2bKey = await loadUserE2bApiKey(supabase, userData.user.id);
       if (!e2bKey?.trim()) {
         runningLocks.delete(projectId);
         return json({ error: E2B_SETUP_USER_MESSAGE, code: "e2b_not_configured" }, 403);
       }
-      sandbox = createSandboxProvider(e2bKey, undefined, supabase, projectId);
-      registerShellTool(reg, {
-        sandbox,
-        projectId,
-        supabase,
-        sandboxEnv: buildSandboxEnv(connectorKeys, deployKeys),
-      });
-    } else {
-      sandbox = { destroy: async () => {} };
     }
-
-    const cleanup = () => { runningLocks.delete(projectId!); sandbox.destroy().catch(() => {}); };
-    registerFsTools(reg, { supabase, projectId });
-    registerMcpForgeTools(reg, {
-      supabase,
-      projectId,
-      userId: userData.user.id,
-      enabledMcpIds,
-      deployKeys,
-      context7ApiKey: Deno.env.get("CONTEXT7_API_KEY") ?? undefined,
-    });
-    const deployTokenKey =
-      stackCtx.deployTarget === "vercel"
-        ? "VERCEL_TOKEN"
-        : stackCtx.deployTarget === "netlify"
-          ? "NETLIFY_TOKEN"
-          : stackCtx.deployTarget === "cloudflare"
-            ? "CLOUDFLARE_API_TOKEN"
-            : null;
-    registerDeployTool(reg, {
-      supabase,
-      projectId,
-      userId: userData.user.id,
-      deployTarget: stackCtx.deployTarget,
-      hasDeployToken: deployTokenKey ? !!deployKeys[deployTokenKey] : false,
-    });
 
     const runMetaBase = {
       provider: mainCfg.label,
@@ -874,15 +843,15 @@ Deno.serve(async (req) => {
         const cp = loadedCheckpoint.state;
         return {
           ...cp,
-          projectId,
-          conversationId,
+          projectId: projectId!,
+          conversationId: conversationId!,
           userId: userData.user.id,
           messages: cp.messages.length >= messages.length ? cp.messages : [...messages],
           executionLog: cp.executionLog.length > 0 ? cp.executionLog : [...restoredExecutionLog],
         };
       }
       return {
-        projectId, conversationId, userId: userData.user.id,
+        projectId: projectId!, conversationId: conversationId!, userId: userData.user.id,
         messages: [...messages],
         phase: LoopPhase.GATHER_CONTEXT,
         currentStepIndex: 0,
@@ -898,9 +867,14 @@ Deno.serve(async (req) => {
       const streamEmit = (type: string, data: Record<string, unknown>) => onEvent(type, data);
       const resilientMain = new ResilientLLM(mainCfg, robinPool, streamEmit);
       const resilientCheap = resilientMain;
+      // Fase 4.7: o AgentLoop precisa de um ToolRegistry. O executeAgentJob
+      // (run-job.ts) cria o registry real e registra as tools. Aqui criamos
+      // um registry vazio só pra satisfazer o construtor — as tools só são
+      // usadas em run-job.ts.
+      const stubReg = new ToolRegistry();
 
       return new AgentLoop(
-        reg,
+        stubReg,
         resilientMain,
         supabase,
         buildState(),
@@ -1093,7 +1067,7 @@ function json(body: unknown, status = 200) {
 }
 
 function streamEventsResponse(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
   runId: string,
   cleanup: () => void,
 ): Response {

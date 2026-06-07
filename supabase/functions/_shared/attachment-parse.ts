@@ -59,8 +59,9 @@ async function parsePdf(bytes: Uint8Array, name: string): Promise<string> {
 async function parseDocx(bytes: Uint8Array, name: string): Promise<string> {
   try {
     const mammoth = await import("https://esm.sh/mammoth@1.8.0");
+    const m = (mammoth as unknown as { default?: typeof mammoth }).default ?? mammoth;
     const ab = toArrayBuffer(bytes);
-    const res = await mammoth.convertToMarkdown({ arrayBuffer: ab });
+    const res = await (m as unknown as { convertToMarkdown: (opts: { arrayBuffer: ArrayBuffer }) => Promise<{ value: string }> }).convertToMarkdown({ arrayBuffer: ab });
     const raw = (res.value ?? "").trim();
     if (!raw) {
       return wrapDocument(name, "_Documento Word vazio._");

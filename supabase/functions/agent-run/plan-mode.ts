@@ -1,5 +1,7 @@
 // plan-mode.ts — Plan mode (Fase 4.6): tipos + extração de plano a partir da classificação.
 // Espelha src/components/editor/PlanViewer.tsx (PlanStep) — não altera o componente client.
+import type { ProposedPlan } from "./types.ts";
+
 export type PlanStepType =
   | "create_file"
   | "edit_file"
@@ -28,15 +30,7 @@ export interface PlanRationale {
   steps: PlanStep[];
 }
 
-export interface ProposedPlan {
-  planId: string;
-  summary: string;
-  /** Justificativa amigável em PT-BR (1-2 frases) — exibida no UI acima dos passos. */
-  rationale?: string;
-  steps: PlanStep[];
-  ttlMs: number;
-  proposedAt?: string;
-}
+export type { ProposedPlan } from "./types.ts";
 
 export const PLAN_APPROVAL_TTL_MS = 5 * 60 * 1000; // 5min
 
