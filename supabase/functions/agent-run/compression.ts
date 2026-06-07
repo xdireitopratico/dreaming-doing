@@ -36,7 +36,7 @@ export class CompressionManager {
     this.totalOutputTokens = 0;
   }
 
-  /** Custo estimado em USD por 1M tokens (input/output separados). Espelha useSSE.ts MODEL_COSTS. */
+  /** Custo estimado em USD por 1M tokens (input/output separados). Espelha agent-progress MODEL_COSTS. */
   private static readonly MODEL_COSTS: Record<string, { input: number; output: number }> = {
     "claude-sonnet-4-20250514": { input: 3, output: 15 },
     "claude-opus-4-20250514": { input: 15, output: 75 },

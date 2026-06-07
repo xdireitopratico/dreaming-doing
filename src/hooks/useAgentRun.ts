@@ -1,8 +1,8 @@
 /**
- * useAgentRun — Realtime + polling for agent_stream_events (P0).
+ * useAgentRun — Supabase Realtime for agent_stream_events + agent_runs (P0).
  *
- * Realtime alone is unreliable in production; polling every 350ms is the
- * primary delivery path (same as the legacy SSE watch loop).
+ * Flow: POST agent-run → { runId } → subscribe postgres_changes.
+ * One-time catch-up on subscribe; no polling.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
@@ -21,7 +21,6 @@ import {
   type AgentProgress,
 } from "@/lib/agent-progress";
 
-const POLL_MS = 350;
 const TERMINAL_STATUSES = new Set(["completed", "failed", "canceled", "awaiting_user"]);
 
 async function parseErrorResponse(res: Response): Promise<string> {
@@ -43,16 +42,8 @@ export function useAgentRun() {
 
   const runIdRef = useRef<string | null>(null);
   const lastSeqRef = useRef(0);
-  const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const eventChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const statusChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
-
-  const stopPolling = useCallback(() => {
-    if (pollTimerRef.current) {
-      clearInterval(pollTimerRef.current);
-      pollTimerRef.current = null;
-    }
-  }, []);
 
   const applyStreamRow = useCallback((row: {
     seq: number;
@@ -69,7 +60,6 @@ export function useAgentRun() {
   }, []);
 
   const teardownChannels = useCallback(() => {
-    stopPolling();
     if (eventChannelRef.current) {
       void supabase.removeChannel(eventChannelRef.current);
       eventChannelRef.current = null;
@@ -79,7 +69,7 @@ export function useAgentRun() {
       statusChannelRef.current = null;
     }
     setConnected(false);
-  }, [stopPolling]);
+  }, []);
 
   const syncRunStatus = useCallback((status: string, error: string | null) => {
     if (status === "awaiting_user") {
@@ -123,7 +113,7 @@ export function useAgentRun() {
     }
   }, [teardownChannels]);
 
-  const pollOnce = useCallback(
+  const catchUpRun = useCallback(
     async (runId: string): Promise<boolean> => {
       const { data: rows, error } = await supabase
         .from("agent_stream_events")
@@ -133,7 +123,7 @@ export function useAgentRun() {
         .order("seq", { ascending: true });
 
       if (error) {
-        logEditorTelemetryEvent("agent_run", "poll_error", "warn", error.message.slice(0, 120));
+        logEditorTelemetryEvent("agent_run", "catchup_error", "warn", error.message.slice(0, 120));
       }
 
       let terminal = false;
@@ -168,19 +158,6 @@ export function useAgentRun() {
     [applyStreamRow, syncRunStatus],
   );
 
-  const startPolling = useCallback(
-    (runId: string) => {
-      stopPolling();
-      void pollOnce(runId);
-      pollTimerRef.current = setInterval(() => {
-        void pollOnce(runId).then((done) => {
-          if (done) stopPolling();
-        });
-      }, POLL_MS);
-    },
-    [pollOnce, stopPolling],
-  );
-
   const subscribeToRun = useCallback(
     async (runId: string, opts?: { resetProgress?: boolean }) => {
       teardownChannels();
@@ -194,7 +171,9 @@ export function useAgentRun() {
       }
 
       setConnected(true);
-      startPolling(runId);
+
+      const terminal = await catchUpRun(runId);
+      if (terminal) return;
 
       const eventChannel = supabase
         .channel(`agent-events-${runId}`)
@@ -209,7 +188,6 @@ export function useAgentRun() {
               created_at?: string;
             };
             if (applyStreamRow(row)) {
-              stopPolling();
               teardownChannels();
             }
           },
@@ -234,7 +212,7 @@ export function useAgentRun() {
         .subscribe();
       statusChannelRef.current = statusChannel;
     },
-    [applyStreamRow, startPolling, stopPolling, syncRunStatus, teardownChannels],
+    [applyStreamRow, catchUpRun, syncRunStatus, teardownChannels],
   );
 
   useEffect(() => {
@@ -313,6 +291,7 @@ export function useAgentRun() {
           queued?: boolean;
           pendingCount?: number;
           message?: string;
+          content?: string;
         };
 
         if (body.queued) {
@@ -322,6 +301,18 @@ export function useAgentRun() {
             pendingQueueCount: body.pendingCount ?? p.pendingQueueCount + 1,
             statusHint: body.message ?? "Mensagem na fila do agente.",
             error: null,
+          }));
+          return;
+        }
+
+        // Taste Chat concierge — JSON inline, sem runId (mensagem já salva no DB).
+        if (body.ok && body.content && !body.runId) {
+          setProgress((p) => ({
+            ...p,
+            finished: true,
+            lastFinishOk: true,
+            streamText: body.content ?? null,
+            statusHint: "Resposta Taste enviada.",
           }));
           return;
         }
@@ -399,7 +390,6 @@ export function useAgentRun() {
 
   const stop = useCallback(async () => {
     const runId = runIdRef.current;
-    stopPolling();
 
     setProgress((p) => ({
       ...p,
@@ -433,15 +423,8 @@ export function useAgentRun() {
     }
 
     runIdRef.current = null;
-    if (eventChannelRef.current) {
-      void supabase.removeChannel(eventChannelRef.current);
-      eventChannelRef.current = null;
-    }
-    if (statusChannelRef.current) {
-      void supabase.removeChannel(statusChannelRef.current);
-      statusChannelRef.current = null;
-    }
-  }, [stopPolling]);
+    teardownChannels();
+  }, [teardownChannels]);
 
   const disconnect = useCallback(() => {
     runIdRef.current = null;

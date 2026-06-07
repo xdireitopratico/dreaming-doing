@@ -14,7 +14,7 @@ import { EditorShell } from "@/components/EditorShell";
 import { EditorResizableLayout } from "@/components/editor/EditorResizableLayout";
 import { EditorChatHeader } from "@/components/editor/EditorChatHeader";
 import { EditorWorkspaceHeader } from "@/components/editor/EditorWorkspaceHeader";
-import type { EditorMainView } from "@/components/editor/EditorViewTabs";
+import type { EditorMainView } from "@/components/editor/editor-views";
 import type { AgentComposerMode } from "@/components/editor/ChatInput";
 import { CodeEditor, type Tab } from "@/components/editor/CodeEditor";
 import { FileTree } from "@/components/editor/FileTree";
@@ -663,51 +663,60 @@ function EditorPage() {
     void qc.invalidateQueries({ queryKey: ["profile"] });
   }, [agent.progress.finished, conversation, qc]);
 
-  // Reconecta a um run em execução (ex.: após refresh ou plan approve)
+  // Reconecta a run ativo via Realtime (refresh, fila, plan approve) — sem polling.
   useEffect(() => {
-    if (!agent.progress.finished || !conversation || running || agent.connected) return;
+    if (!conversation || running || agent.connected) return;
 
-    let cancelled = false;
-    const followQueuedRun = async (attempt = 0) => {
-      if (cancelled || attempt > 30) return;
+    let channel: RealtimeChannel | null = null;
 
+    const attachIfRunning = async (runId: string) => {
+      if (agent.connected) return;
+      await agent.watch(projectId, conversation.id, runId);
+    };
+
+    void (async () => {
       const { data: activeRun } = await supabase
         .from("agent_runs")
-        .select("id")
+        .select("id, status")
         .eq("project_id", projectId)
-        .eq("status", "running")
+        .in("status", ["running", "awaiting_user"])
+        .order("started_at", { ascending: false })
+        .limit(1)
         .maybeSingle();
 
       if (activeRun?.id) {
-        await agent.watch(projectId, conversation.id, activeRun.id);
-        return;
+        await attachIfRunning(activeRun.id);
       }
+    })();
 
-      const { count } = await supabase
-        .from("agent_pending_messages")
-        .select("id", { count: "exact", head: true })
-        .eq("project_id", projectId);
+    channel = supabase
+      .channel(`project-runs-${projectId}`)
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "agent_runs", filter: `project_id=eq.${projectId}` },
+        (payload) => {
+          const row = payload.new as { id?: string; status?: string };
+          if (row.id && row.status === "running") {
+            void attachIfRunning(row.id);
+          }
+        },
+      )
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "agent_runs", filter: `project_id=eq.${projectId}` },
+        (payload) => {
+          const row = payload.new as { id?: string; status?: string };
+          if (row.id && (row.status === "running" || row.status === "awaiting_user")) {
+            void attachIfRunning(row.id);
+          }
+        },
+      )
+      .subscribe();
 
-      if ((count ?? 0) > 0 || agent.progress.pendingQueueCount > 0 || pendingAgentRunKey) {
-        await new Promise((r) => window.setTimeout(r, 500));
-        return followQueuedRun(attempt + 1);
-      }
-    };
-
-    void followQueuedRun();
     return () => {
-      cancelled = true;
+      if (channel) void removeRealtimeChannel(channel);
     };
-  }, [
-    agent.progress.finished,
-    agent.progress.pendingQueueCount,
-    conversation,
-    projectId,
-    running,
-    agent.connected,
-    agent,
-    pendingAgentRunKey,
-  ]);
+  }, [conversation, projectId, running, agent.connected, agent]);
 
   const agentFinished = agent.progress.finished;
   const agentShouldBootPreview =

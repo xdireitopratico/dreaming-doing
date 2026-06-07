@@ -1,7 +1,6 @@
 // index.ts — Edge Function agent-run (build: agentloop-only 2026-06-06).
-import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 
-import { createSandboxProvider } from "./sandbox.ts";
 import {
   loadConnectorKeys,
   loadConnectorPools,
@@ -18,22 +17,18 @@ import {
 } from "../_shared/model-presets.ts";
 import { buildStackContext, stackPromptAddon } from "../_shared/stack-context.ts";
 import { buildChatHistory } from "./memory.ts";
-import { RobinKeyPool, ResilientLLM } from "./robin-pool.ts";
+import { RobinKeyPool } from "./robin-pool.ts";
 import { loadUserE2bApiKey, E2B_SETUP_USER_MESSAGE } from "../_shared/user-e2b.ts";
 import {
   buildSessionExtensionsPrompt,
   normalizeIdList,
 } from "../_shared/session-extensions.ts";
-import { registerMcpForgeTools } from "./tools/mcp-forge.ts";
-import { registerDeployTool } from "./tools/deploy.ts";
 import { loadTasteNvidiaConfig, runTasteChat } from "./taste-session.ts";
 import { FORGE_CORS_HEADERS, corsPreflightResponse } from "../_shared/cors.ts";
 import { logger, withCorrelationId, correlationIdFromRequest, currentCorrelationId } from "../_shared/logger.ts";
 import { restoreExecutionLogFromRows } from "./executionLogMeta.ts";
 import { loadCheckpoint } from "./checkpoint.ts";
-import { buildSandboxEnv } from "./sandbox-env.ts";
-import { appendStreamEvent, fetchStreamEventsSince } from "../_shared/agent-stream.ts";
-import { executeAgentJob } from "./run-job.ts";
+import { appendStreamEvent } from "../_shared/agent-stream.ts";
 import type { ExecuteParams } from "./run-executor.ts";
 const runningLocks = new Map<string, Promise<unknown>>();
 
@@ -232,10 +227,6 @@ Deno.serve(async (req) => {
 
     if (!projectId || !conversationId) return json({ error: "projectId e conversationId obrigatórios" }, 400);
 
-    const acceptSSE = (req.headers.get("Accept") ?? "").includes("text/event-stream");
-    const querySSE = new URL(req.url).searchParams.has("sse");
-    const useSSE = acceptSSE || querySSE;
-
     const { data: project } = await supabase
       .from("projects").select("id, owner_id, template, meta").eq("id", projectId).single();
     if (!project || project.owner_id !== userData.user.id) {
@@ -256,78 +247,6 @@ Deno.serve(async (req) => {
     } catch {
       // Se a tabela não tem RLS adequado, fallback = 0 (não aloca).
       projectFileCount = 0;
-    }
-
-    if (body.action === "watch") {
-      const runId = body.runId as string | undefined;
-      if (!runId) return json({ error: "runId obrigatório" }, 400);
-      const { data: run } = await supabase
-        .from("agent_runs")
-        .select("id, user_id, project_id, status")
-        .eq("id", runId)
-        .maybeSingle();
-      if (!run || run.user_id !== userData.user.id || run.project_id !== projectId) {
-        return json({ error: "Run não encontrada" }, 404);
-      }
-      if (!useSSE) return json({ error: "Accept: text/event-stream obrigatório" }, 400);
-      return streamEventsResponse(supabase, runId, () => {});
-    }
-
-    if (body.action === "replay") {
-      const runId = body.runId as string | undefined;
-      if (!runId) return json({ error: "runId obrigatório" }, 400);
-      const { data: run } = await supabase
-        .from("agent_runs")
-        .select("id, user_id, project_id, status, error, steps, meta")
-        .eq("id", runId)
-        .maybeSingle();
-      if (!run || run.user_id !== userData.user.id || run.project_id !== projectId) {
-        return json({ error: "Run não encontrada" }, 404);
-      }
-      if (!useSSE) return json({ error: "Accept: text/event-stream obrigatório" }, 400);
-
-      // Re-emite todos os eventos do run em ordem, com pequeno delay pra simular live.
-      // Útil pra debug sem rerun (LLM é não-determinístico — replay fiel de I/O, não de inferência).
-      const { data: events } = await supabase
-        .from("agent_stream_events")
-        .select("seq, event_type, payload")
-        .eq("run_id", runId)
-        .order("seq", { ascending: true })
-        .limit(2000);
-
-      const stream = new ReadableStream({
-        async start(controller) {
-          const enc = new TextEncoder();
-          const write = (data: unknown) => controller.enqueue(enc.encode(`data: ${JSON.stringify(data)}\n\n`));
-          write({ type: "replay_start", runId, totalEvents: events?.length ?? 0 });
-
-          for (const evt of events ?? []) {
-            write({ type: evt.event_type, data: evt.payload, seq: evt.seq, replayed: true });
-            // Throttle: 10ms entre eventos pra não saturar o browser
-            await new Promise((r) => setTimeout(r, 10));
-          }
-
-          write({
-            type: "finish",
-            ok: run.status === "completed",
-            error: run.error ?? null,
-            resumable: false,
-            replayed: true,
-          });
-          controller.close();
-        },
-      });
-
-      logger.event("agent_run.replay", { runId, eventsCount: events?.length ?? 0 });
-      return new Response(stream, {
-        headers: {
-          ...corsHeaders,
-          "Content-Type": "text/event-stream",
-          "Cache-Control": "no-cache",
-          Connection: "keep-alive",
-          "X-Accel-Buffering": "no",
-        },
-      });
     }
 
     if (body.action === "pending_count") {
@@ -414,9 +333,6 @@ Deno.serve(async (req) => {
       const queueMsg = pendingCount === 1
         ? "Mensagem na fila — o agente processará quando terminar a tarefa atual."
         : `${pendingCount} mensagens na fila — processando em ordem.`;
-      if (useSSE && awaitingRun?.id) {
-        return streamEventsResponse(supabase, awaitingRun.id, () => {});
-      }
       return json({
         ok: true,
         queued: true,
@@ -510,66 +426,29 @@ Deno.serve(async (req) => {
       }
     }
 
-    // ─── Taste Chat: concierge NVIDIA, sem agent loop ───
+    // ─── Taste Chat: concierge NVIDIA, sem agent loop (JSON; mensagem salva no DB) ───
     if (sessionKind === "taste_chat") {
       const cleanup = () => runningLocks.delete(projectId!);
       try {
         const tasteCfg = await loadTasteNvidiaConfig(supabase);
-        const run = async (emit: (type: string, data: Record<string, unknown>) => void) => {
-          const result = await runTasteChat({
-            supabase,
-            userId: userData.user.id,
-            conversationId,
-            cfg: tasteCfg,
-            emit,
-            sessionAddon: sessionExt.addon,
-            enabledSkillIds,
-            enabledMcpIds,
-            activeSkills: sessionExt.skillNames,
-            activeMcps: sessionExt.mcpNames,
-          });
-          await supabase
-            .from("profiles")
-            .update({ taste_chat_remaining: Math.max(0, tasteChatRemaining - 1) })
-            .eq("id", userData.user.id);
-          return result;
-        };
-
-        if (!useSSE) {
-          const r = await run(() => {});
-          cleanup();
-          return json(r);
-        }
-
-        const stream = new ReadableStream({
-          start(controller) {
-            const emit = (type: string, data: Record<string, unknown>) => {
-              try {
-                controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify({ type, ...data })}\n\n`));
-              } catch { /* closed */ }
-            };
-            run(emit)
-              .then((result) => {
-                cleanup();
-                emit("finish", { ok: result.ok, summary: result.content, taste: true, sessionKind: "taste_chat" });
-                try { controller.close(); } catch { /* */ }
-              })
-              .catch((err) => {
-                cleanup();
-                emit("error", { error: (err as Error)?.message });
-                emit("finish", { ok: false, error: (err as Error)?.message });
-                try { controller.close(); } catch { /* */ }
-              });
-          },
+        const result = await runTasteChat({
+          supabase,
+          userId: userData.user.id,
+          conversationId,
+          cfg: tasteCfg,
+          emit: () => {},
+          sessionAddon: sessionExt.addon,
+          enabledSkillIds,
+          enabledMcpIds,
+          activeSkills: sessionExt.skillNames,
+          activeMcps: sessionExt.mcpNames,
         });
-        return new Response(stream, {
-          headers: {
-            ...corsHeaders,
-            "Content-Type": "text/event-stream",
-            "Cache-Control": "no-cache",
-            Connection: "keep-alive",
-          },
-        });
+        await supabase
+          .from("profiles")
+          .update({ taste_chat_remaining: Math.max(0, tasteChatRemaining - 1) })
+          .eq("id", userData.user.id);
+        cleanup();
+        return json(result);
       } catch (err: unknown) {
         cleanup();
         return json({ error: (err as Error)?.message ?? "Taste indisponível" }, 500);
@@ -847,48 +726,6 @@ Deno.serve(async (req) => {
         .eq("id", agentRunId);
     };
 
-    // --- jobParams segue abaixo ---
-
-    const jobParams = {
-      projectId,
-      conversationId,
-      userId: userData.user.id,
-      agentRunId: agentRunId!,
-      resumeRun,
-      preferences,
-      sessionKindRaw,
-      enabledSkillIds,
-      enabledMcpIds,
-      planMode,
-      // Usa a decisão barata calculada acima (heuristic "looksLikeInteraction").
-      // Para prompts de "quero só interação/perguntas" em projeto sem sandbox ainda → false.
-      // Isso + a proteção em run-job.ts = zero load de E2B para esses casos.
-      allocateSandbox: allocateSandboxLocal,
-    };
-
-    const runChunkedJob = async (
-      onEvent: (type: string, data: Record<string, unknown>) => void,
-    ) => {
-      const MAX_INLINE_CHUNKS = 48;
-      let chunkResume = resumeRun;
-      let result = await executeAgentJob(supabase, { ...jobParams, resumeRun: chunkResume }, onEvent);
-      let chunk = 1;
-      while (!result.ok && result.resumable && !result.canceled && chunk < MAX_INLINE_CHUNKS) {
-        onEvent("resume", {
-          chunk: chunk + 1,
-          message: "Retomando automaticamente no servidor…",
-        });
-        chunkResume = true;
-        result = await executeAgentJob(
-          supabase,
-          { ...jobParams, resumeRun: true },
-          onEvent,
-        );
-        chunk++;
-      }
-      return result;
-    };
-
     // P0: Inngest handles durable execution. The "run" action is a thin
     // dispatcher: enqueue the run + send Inngest event + return <1s.
     const eventName: InngestEventName = planMode
@@ -999,47 +836,3 @@ async function sendInngestEvent(
   }
 }
 
-function streamEventsResponse(
-  supabase: SupabaseClient,
-  runId: string,
-  cleanup: () => void,
-): Response {
-  const stream = new ReadableStream({
-    async start(controller) {
-      const enc = new TextEncoder();
-      let seq = 0;
-      let finished = false;
-      const deadline = Date.now() + 45 * 60 * 1000;
-
-      try {
-        while (!finished && Date.now() < deadline) {
-          const events = await fetchStreamEventsSince(supabase, runId, seq);
-          for (const ev of events) {
-            const payload = ev.payload?.type
-              ? ev.payload
-              : { type: ev.event_type, ...(ev.payload as Record<string, unknown>) };
-            controller.enqueue(enc.encode(`data: ${JSON.stringify(payload)}\n\n`));
-            seq = ev.seq;
-            if (ev.event_type === "finish" || ev.event_type === "done") finished = true;
-          }
-          if (!finished) await new Promise((r) => setTimeout(r, 350));
-        }
-      } catch {
-        /* stream fechado */
-      } finally {
-        cleanup();
-        try { controller.close(); } catch { /* */ }
-      }
-    },
-  });
-
-  return new Response(stream, {
-    headers: {
-      ...corsHeaders,
-      "Content-Type": "text/event-stream",
-      "Cache-Control": "no-cache",
-      Connection: "keep-alive",
-      "X-Accel-Buffering": "no",
-    },
-  });
-}

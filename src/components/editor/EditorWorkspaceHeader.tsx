@@ -1,6 +1,6 @@
 import { Code2, Eye, Moon, RefreshCw, Share2 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
-import type { EditorMainView } from "@/components/editor/EditorViewTabs";
+import type { EditorMainView } from "@/components/editor/editor-views";
 import {
   EditorIntegrationsMenu,
   type EditorIntegrationsMenuProps,

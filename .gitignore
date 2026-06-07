@@ -42,3 +42,12 @@ supabase/.temp
 deno.lock
 
 .trigger
+
+# IDE rule spam (Trigger.dev — ver HYGIENE-TASKS G3)
+.claude/
+.clinerules/
+.kilocode/
+.ruler/
+.windsurf/
+.github/instructions/
+.cursor/

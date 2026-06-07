@@ -5,47 +5,39 @@
 
 ---
 
-## 1. VISÃO GERAL: 3 CAMINHOS DE EXECUÇÃO
+## 1. VISÃO GERAL: CAMINHO ÚNICO (P0)
 
 ```
 ┌──────────────────────────────────────────────────────────────────────┐
 │                        FRONTEND (React + TanStack Router)             │
 │                                                                      │
-│  ChatInput → useSSE.connect() → POST /agent-run                      │
+│  ChatInput → useAgentRun.connect() → POST /agent-run                 │
 │       │                                                              │
-│       ├─ Retorno imediato: { runId, mode, eventId }  (< 1s)          │
-│       └─ SSE Fallback (se Inngest indisponível)                      │
+│       ├─ Retorno imediato: { runId }  (< 1s)                         │
+│       └─ Supabase Realtime em agent_stream_events + agent_runs       │
 └──────────────────────────────────────────────────────────────────────┘
         │ POST /agent-run
         ▼
 ┌──────────────────────────────────────────────────────────────────────┐
-│              agent-run/index.ts (ENTRYPOINT) — 1041 linhas            │
+│              agent-run/index.ts (ENTRYPOINT)                          │
 │                                                                      │
-│  actions: run, execute, cancel, watch, replay, pending_count         │
+│  actions: run, execute, cancel, pending_count                        │
 │                                                                      │
-│  PATH 1 (P0): Inngest dispatch                                       │
+│  Inngest dispatch (único executor durável)                           │
 │    → POST /agent-run { action: "run" }                               │
-│    → Dispatch Inngest event (agent/build.requested)                  │
-│    → Inngest chama POST /agent-run { action: "execute" }             │
+│    → Inngest event (agent/build.requested | agent/plan.requested)    │
+│    → POST /agent-run { action: "execute" } (service role)          │
 │    → run-executor.ts → executeAgentRun()                             │
 │    → run-job.ts → executeAgentJob() → AgentLoop.run()                │
-│                                                                      │
-│  PATH 2: Fallback inline (DEPRECATED mas ativo)                      │
-│    → Se Inngest falhar: runChunkedJob() inline                       │
-│    → MAX_INLINE_CHUNKS=48                                            │
-│                                                                      │
-│  PATH 3: PGMQ + agent-worker (LEGADO, coexiste)                      │
-│    → enqueueAgentChunk() → PGMQ agent_chunks                         │
-│    → invokeAgentWorker() → POST /agent-worker                        │
-│    → agent-worker/index.ts → processOneChunk()                       │
+│    → appendStreamEvent → agent_stream_events                         │
 └──────────────────────────────────────────────────────────────────────┘
 ```
 
 | Caminho | Status | Latência | Durabilidade |
 |---------|--------|----------|--------------|
-| Inngest (P0) | ✅ ATIVO | Retorno < 1s, execução background | Background job durável |
-| Fallback Inline | ⚠️ Deprecated | Bloqueante | Timeout 110s (Edge Function) |
-| PGMQ + Worker | ⚠️ Legado | Polling 350ms | Chunks ilimitados (MAX=64) |
+| Inngest + Realtime | ✅ ÚNICO | Retorno < 1s, execução background | Job durável, eventos no DB |
+
+**Removidos:** PGMQ/agent-worker, Trigger.dev, useSSE, runChunkedJob inline, streamEventsResponse (poll 350ms).
 
 ---
 
@@ -55,10 +47,10 @@
 
 | BACKEND | FRONTEND |
 |---------|----------|
-| `agent-run/index.ts`: auth, valida preferences, decide sessionKind | `ChatInput.tsx`: handleSend → useSSE.connect() |
-| `agent-run/index.ts`: acquire_agent_run_lock() — INSERT atômico | `useSSE.ts`: POST /agent-run, aguarda resposta |
-| `agent-run/index.ts`: dispatch Inngest event + retorna { runId } | `useSSE.ts`: armazena runId, marca connected=true |
-| `run-executor.ts` → `executeAgentJob()` → loop executa | `useSSE.ts`: SSE polling ou Realtime → `applyAgentProgressEvent()` |
+| `agent-run/index.ts`: auth, valida preferences, decide sessionKind | `ChatInput.tsx`: handleSend → useAgentRun.connect() |
+| `agent-run/index.ts`: acquire_agent_run_lock() — INSERT atômico | `useAgentRun.ts`: POST /agent-run, recebe `{ runId }` |
+| `agent-run/index.ts`: dispatch Inngest event + retorna { runId } | `useAgentRun.ts`: subscribe Realtime, `connected=true` |
+| `run-executor.ts` → `executeAgentJob()` → loop executa | `useAgentRun.ts`: Realtime → `applyAgentProgressEvent()` |
 | `loop.ts`: emite eventos (phase, tool_start, tool_done, assistant_text, done, finish) | `AgentProgress` state → `ChatStream.tsx` renderiza inline |
 | `loop.ts`: markRunStatus("awaiting_user") — **preservado pelo finalizeRun corrigido** | ❌ Nenhum modal — atualmente o chat só mostra a mensagem |
 | `loop.ts`: plan_proposed → emit evento | `PlanViewer.tsx` ← `ChatStream.tsx` renderiza aprovação inline |
@@ -67,10 +59,9 @@
 
 | BACKEND | FRONTEND |
 |---------|----------|
-| `agent-stream.ts`: appendStreamEvent() → agent_stream_events (DB) | `useSSE.ts`: watch() → fetchStreamEventsSince() cada 350ms |
-| `agent-stream.ts`: fetchStreamEventsSince(runId, afterSeq) | `useSSE.ts`: parse SSE, normaliza formato flat |
-| **BUG**: polling eterno por 45min sem idle detection | `useSSE.ts`: `reader.read()` retorna `done:true` após 45min |
-| **BUG**: sem detecção de awaiting_user no poll | `useSSE.ts`: `sawFinish=false` → `shouldAutoResume:true` sem reconectar |
+| `agent-stream.ts`: appendStreamEvent() → agent_stream_events (DB) | `useAgentRun.ts`: postgres_changes INSERT em `agent_stream_events` |
+| Catch-up uma vez ao subscribe (seq > lastSeq) | `agent-progress.ts`: reducer compartilhado |
+| `agent_runs` UPDATE → status terminal | `useAgentRun.ts`: channel em `agent_runs` |
 | Formato SSE: sempre FLAT `{ type, phase, message, ... }` | `applyAgentProgressEvent`: espera formato flat |
 
 ### 2.3 Sandbox E2B

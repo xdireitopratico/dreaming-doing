@@ -1,6 +1,6 @@
 # FORGE — Guia para Agentes (LLM)
 
-> Leia isto primeiro. Arquitetura profunda: [`.commandcode/ARCHITECTURE.md`](.commandcode/ARCHITECTURE.md)
+> Leia isto primeiro. Arquitetura: [`.commandcode/ARCHITECTURE.md`](.commandcode/ARCHITECTURE.md) · Higienização: [HYGIENE-TASKS.md](HYGIENE-TASKS.md)
 
 ## Stack
 
@@ -25,10 +25,10 @@ ChatInput → useAgentRun → POST /functions/v1/agent-run
 
 | Arquivo | Papel |
 |---------|-------|
-| `src/hooks/useAgentRun.ts` | Hook do editor — Realtime + reducer |
+| `src/hooks/useAgentRun.ts` | Hook do editor — Realtime only (sem polling/SSE) |
 | `src/lib/agent-progress.ts` | Tipos + `applyAgentProgressEvent` |
 | `src/inngest/functions/agent-*.ts` | Jobs duráveis plan/build |
-| `supabase/functions/agent-run/` | Entrypoint Edge (run, execute, cancel, replay) |
+| `supabase/functions/agent-run/` | Entrypoint Edge (run, execute, cancel) |
 | `supabase/functions/agent-run/run-executor.ts` | Execução + streaming persistido |
 | `supabase/functions/agent-run/loop.ts` | Loop do agente |
 | `src/routes/projects/$projectId/index.tsx` | Editor principal |

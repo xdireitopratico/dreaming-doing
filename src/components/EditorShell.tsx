@@ -6,7 +6,7 @@ import { clearForgeTransitionOverlays } from "@/lib/clear-forge-overlays";
 import { sanitizeNext } from "@/lib/sanitize-next";
 import { EditorTopBar } from "@/components/editor/EditorTopBar";
 import type { EditorIntegrationsMenuProps } from "@/components/editor/EditorIntegrationsMenu";
-import type { EditorMainView } from "@/components/editor/EditorViewTabs";
+import type { EditorMainView } from "@/components/editor/editor-views";
 
 export function EditorShell({
   children,

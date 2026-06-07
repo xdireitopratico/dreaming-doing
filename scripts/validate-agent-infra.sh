@@ -23,6 +23,6 @@ if [[ -f "$TOKEN_FILE" ]]; then
 fi
 
 echo "→ vitest agent-progress"
-npm test -- --run src/hooks/useSSE.test.ts >/dev/null
+npm test -- --run src/hooks/agent-progress.test.ts >/dev/null
 
 echo "✓ Infra do agente OK"

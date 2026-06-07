@@ -1,7 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import { ChevronDown, Code2, Eye, Moon, Share2 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
-import type { EditorMainView } from "@/components/editor/EditorViewTabs";
+import type { EditorMainView } from "@/components/editor/editor-views";
 import { ForgeLogoMark } from "@/components/editor/ForgeLogoMark";
 import {
   EditorIntegrationsMenu,
