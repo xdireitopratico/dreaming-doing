@@ -87,6 +87,43 @@ export function hasUserLlmKeyFromKeys(
   );
 }
 
+/** Inngest execute may arrive without preferences — fall back to run meta from connect. */
+export function resolveExecutePreferences(
+  eventPrefs: AgentPreferencesPayload | null | undefined,
+  runMeta: Record<string, unknown> | null | undefined,
+): AgentPreferencesPayload | undefined {
+  const metaPrefs =
+    runMeta?.preferences &&
+    typeof runMeta.preferences === "object" &&
+    !Array.isArray(runMeta.preferences)
+      ? (runMeta.preferences as AgentPreferencesPayload)
+      : undefined;
+  const evt = eventPrefs ?? undefined;
+  if (evt?.mode) return { ...metaPrefs, ...evt };
+  if (metaPrefs?.mode) return metaPrefs;
+  return evt ?? metaPrefs;
+}
+
+export function resolveExecuteIdList(
+  eventIds: string[] | undefined,
+  runMeta: Record<string, unknown> | null | undefined,
+  metaKey: "enabledSkillIds" | "enabledMcpIds",
+): string[] {
+  if (eventIds?.length) return eventIds;
+  const fromMeta = runMeta?.[metaKey];
+  if (!Array.isArray(fromMeta)) return [];
+  return fromMeta.filter((x): x is string => typeof x === "string");
+}
+
+export function resolveExecuteSessionKindRaw(
+  eventKind: string | null | undefined,
+  runMeta: Record<string, unknown> | null | undefined,
+): string | null {
+  if (eventKind) return eventKind;
+  const sk = runMeta?.sessionKind;
+  return typeof sk === "string" ? sk : null;
+}
+
 export async function loadUserLlmContext(
   supabase: SupabaseClient,
   userId: string,

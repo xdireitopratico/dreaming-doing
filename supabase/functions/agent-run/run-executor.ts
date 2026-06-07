@@ -14,7 +14,13 @@ import { executeAgentJob, type AgentJobParams } from "./run-job.ts";
 import { buildSessionExtensionsPrompt, normalizeIdList } from "../_shared/session-extensions.ts";
 import { loadDeployConnectorKeys, type AgentPreferencesPayload } from "./connector-keys.ts";
 import type { ProviderConfig } from "./providers.ts";
-import { loadUserLlmContext, resolveAgentProvider } from "./run-setup.ts";
+import {
+  loadUserLlmContext,
+  resolveAgentProvider,
+  resolveExecuteIdList,
+  resolveExecutePreferences,
+  resolveExecuteSessionKindRaw,
+} from "./run-setup.ts";
 import { buildStackContext, stackPromptAddon } from "../_shared/stack-context.ts";
 import { buildChatHistory } from "./memory.ts";
 import { RobinKeyPool } from "./robin-pool.ts";
@@ -64,9 +70,15 @@ export async function executeAgentRun(
   // and this call, exit early without touching state.
   const { data: preCheck } = await supabase
     .from("agent_runs")
-    .select("status, canceled_at")
+    .select("status, canceled_at, meta")
     .eq("id", runId)
     .maybeSingle();
+  const runMeta = (preCheck?.meta ?? {}) as Record<string, unknown>;
+  const effectivePreferences = resolveExecutePreferences(params.preferences, runMeta);
+  const effectiveSkillIds = resolveExecuteIdList(params.enabledSkillIds, runMeta, "enabledSkillIds");
+  const effectiveMcpIds = resolveExecuteIdList(params.enabledMcpIds, runMeta, "enabledMcpIds");
+  const effectiveSessionKindRaw = resolveExecuteSessionKindRaw(params.sessionKindRaw, runMeta);
+
   if (preCheck?.status === "canceled" || preCheck?.canceled_at) {
     return { ok: false, runId, mode: planMode ? "plan" : "build", resumable: false, canceled: true, error: "Cancelado", stepsCompleted: 0, durationMs: Date.now() - startMs };
   }
@@ -102,14 +114,14 @@ export async function executeAgentRun(
   const { userOnlyKeys, hasUserLlmKey } = await loadUserLlmContext(
     supabase,
     userId,
-    params.preferences ?? undefined,
+    effectivePreferences,
   );
 
   type SessionKind = "taste_chat" | "taste_start" | "byok";
   let sessionKind: SessionKind = hasUserLlmKey ? "byok" : "taste_chat";
-  if (params.sessionKindRaw === "byok") sessionKind = "byok";
-  if (params.sessionKindRaw === "taste_start") sessionKind = "taste_start";
-  if (params.sessionKindRaw === "taste_chat") sessionKind = "taste_chat";
+  if (effectiveSessionKindRaw === "byok") sessionKind = "byok";
+  if (effectiveSessionKindRaw === "taste_start") sessionKind = "taste_start";
+  if (effectiveSessionKindRaw === "taste_chat") sessionKind = "taste_chat";
 
   let robinPool: RobinKeyPool | null = null;
   let connectorKeys: Record<string, string> = {};
@@ -121,7 +133,7 @@ export async function executeAgentRun(
     const setup = await resolveAgentProvider({
       supabase,
       userId,
-      preferences: params.preferences ?? undefined,
+      preferences: effectivePreferences,
       sessionKind: sessionKind === "taste_start" ? "taste_start" : "byok",
       userOnlyKeys,
       tasteStartLabelPrefix: sessionKind === "taste_start",
@@ -174,6 +186,9 @@ export async function executeAgentRun(
     checkpoint: !!loadedCheckpoint,
     robin: effectiveRobin,
     taste: tasteStart,
+    preferences: effectivePreferences ?? {},
+    enabledSkillIds: effectiveSkillIds,
+    enabledMcpIds: effectiveMcpIds,
   };
   const { data: currentRun } = await supabase
     .from("agent_runs")
@@ -195,10 +210,10 @@ export async function executeAgentRun(
     userId,
     agentRunId: runId,
     resumeRun,
-    preferences: params.preferences ?? undefined,
-    sessionKindRaw: params.sessionKindRaw ?? undefined,
-    enabledSkillIds: params.enabledSkillIds,
-    enabledMcpIds: params.enabledMcpIds,
+    preferences: effectivePreferences,
+    sessionKindRaw: effectiveSessionKindRaw ?? undefined,
+    enabledSkillIds: effectiveSkillIds,
+    enabledMcpIds: effectiveMcpIds,
     planMode,
     allocateSandbox: allocateSandboxLocal,
   };

@@ -13,11 +13,14 @@ export type AgentRunRequest = {
   projectId: string;
   conversationId: string;
   userId: string;
-  sessionKind: "taste" | "byok";
+  sessionKind: "taste" | "byok" | "taste_start" | "taste_chat";
   preferences: Record<string, unknown>;
+  enabledSkillIds?: string[];
+  enabledMcpIds?: string[];
   planMode: boolean;
   plan?: string;
   planSourceRunId?: string;
+  resume?: boolean;
 };
 
 export type ExecuteResponse = {

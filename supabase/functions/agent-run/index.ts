@@ -551,6 +551,9 @@ Deno.serve(async (req) => {
       checkpoint: !!loadedCheckpoint,
       robin: effectiveRobin,
       taste: tasteStart,
+      preferences: preferences ?? {},
+      enabledSkillIds,
+      enabledMcpIds,
     };
 
     let agentRunId: string | null = null;
@@ -723,6 +726,8 @@ Deno.serve(async (req) => {
       userId: userData.user.id,
       sessionKind: tasteStart ? "taste_start" : (hasUserLlmKey ? "byok" : "taste_chat"),
       preferences: preferences ?? {},
+      enabledSkillIds,
+      enabledMcpIds,
       planMode,
       resume: resumeRun,
     };
