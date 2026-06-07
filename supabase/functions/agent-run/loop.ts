@@ -43,19 +43,8 @@ type StreamCallback = (event: { type: string; data: unknown }) => void;
 
 const CHECKPOINT_INTERVAL_STEPS = 2;
 const EDGE_FUNCTION_TIMEOUT_MS = 110_000;
-const STUCK_THRESHOLD = 3;
-
 function calculateMaxSteps(complexity: 1 | 2 | 3 | 4 | 5): number {
   return complexity * 5 + 5;
-}
-
-function detectRepeatedToolCalls(
-  executionLog: string[],
-  threshold: number = STUCK_THRESHOLD
-): boolean {
-  if (executionLog.length < threshold) return false;
-  const recent = executionLog.slice(-threshold);
-  return recent.every((entry) => entry === recent[0]);
 }
 
 export class AgentLoop {
@@ -438,16 +427,6 @@ export class AgentLoop {
 
       this.toolsInvoked = true;
 
-      // Proactive stuck detection: check if the same tool calls are being repeated
-      if (detectRepeatedToolCalls(this.state.executionLog)) {
-        this.emit("stuck", { message: "Padrão repetitivo detectado — injetando instrução para nova abordagem" });
-        this.state.messages.push({
-          role: "user",
-          content: "ATENÇÃO: Você está repetindo as mesmas ferramentas. PARE e tente uma abordagem DIFERENTE. " +
-            "Use fs_search para entender o código atual, depois fs_edit para corrigir. Não repita fs_write no mesmo arquivo.",
-        });
-      }
-
       this.emit("phase", { phase: "execute", toolCount: response.tool_calls.length });
       await this.saveCheckpoint(LoopPhase.EXECUTE_STEP);
 
@@ -600,12 +579,13 @@ export class AgentLoop {
         }
       }
 
-      // Reactive stuck detection (original)
       if (isExecutionStuck(this.state.executionLog)) {
-        this.emit("stuck", { message: "Padrão repetitivo detectado — pedindo nova abordagem" });
+        this.emit("stuck", { message: "Padrão repetitivo detectado — injetando instrução para nova abordagem" });
         this.state.messages.push({
           role: "user",
-          content: "Você parece estar repetindo as mesmas ações. Tente outra abordagem.",
+          content:
+            "ATENÇÃO: Você está repetindo as mesmas ferramentas. PARE e tente uma abordagem DIFERENTE. " +
+            "Use fs_search para entender o código atual, depois fs_edit para corrigir. Não repita fs_write no mesmo arquivo.",
         });
       }
 

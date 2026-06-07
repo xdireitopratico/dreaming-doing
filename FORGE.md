@@ -89,3 +89,5 @@ Edge functions deployadas: `agent-run`, `health`, `preview-boot`, `e2b-*`, `conn
 | B6 | `loop.ts` — forceTools preserva assistant msg; checkpoint resume | ✅ |
 | D19 | `AiDiffViewer` — `before` fallback via `fileMap` | ✅ |
 | E1 | `MarkdownRenderer` em ChatStream/ChatInput | ✅ |
+| B7 | `loop.ts` — stuck detection única (reativa após exec) | ✅ |
+| B8 | `sandbox.ts` `kill()` limpa meta preview no projeto | ✅ |

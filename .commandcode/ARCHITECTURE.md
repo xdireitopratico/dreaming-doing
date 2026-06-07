@@ -193,8 +193,8 @@ EditorPage → EditorShell → EditorResizableLayout
 
 | Item | Detalhe |
 |------|---------|
-| **AiDiffViewer** | `before` vazio — usar `progress.diffs` de eventos `file_diff` |
-| **Markdown** | `ChatStream` / `ChatInput` duplicam renderer; `ui/markdown-renderer.tsx` não usado |
+| ~~AiDiffViewer~~ | ✅ `before` via `progress.diffs` + `fileMap` |
+| ~~Markdown~~ | ✅ `MarkdownRenderer` em ChatStream/ChatInput |
 | ~~Setup duplicado~~ | ✅ `run-setup.ts` |
 
 ### 4.4 Removidos na higienização 2026-06-07
@@ -214,12 +214,14 @@ EditorPage → EditorShell → EditorResizableLayout
 
 ## 6. BUGS PENDENTES
 
-| # | Severidade | Arquivo | Bug |
-|---|-----------|---------|-----|
-| 1 | Média | `loop.ts` | Stuck detection duplicada (reativo + proativo) |
-| 2 | Média | `sandbox.ts` | `destroy()` / `kill()` incompletos vs meta do projeto |
+Nenhum crítico em aberto (2026-06-07).
 
-Corrigidos em 2026-06-07: `run-setup.ts`, observer sandbox paths, loop forceTools, checkpoint resume, AiDiffViewer before, MarkdownRenderer unificado.
+| # | Severidade | Arquivo | Resolução |
+|---|-----------|---------|-----------|
+| ~~1~~ | Média | `loop.ts` | ✅ Stuck detection única — reativa após `executionLog`, sem bloco proativo |
+| ~~2~~ | Média | `sandbox.ts` | ✅ `kill()` → E2B + `clearProjectSandboxMeta`; `destroy()` só drop ref local (preview feliz) |
+
+Corrigidos em 2026-06-07: `run-setup.ts`, observer sandbox paths, loop forceTools, checkpoint resume, AiDiffViewer before, MarkdownRenderer unificado, stuck dedup, sandbox meta on kill.
 
 ---
 

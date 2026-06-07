@@ -2,7 +2,9 @@
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { E2B_TEMPLATE_DEFAULT, e2bPreviewUrl } from "../_shared/e2b.ts";
 import {
+  clearProjectSandboxMeta,
   ensureAgentProjectSandbox,
+  killProjectSandbox,
   syncProjectFilesToSandbox,
 } from "../_shared/project-sandbox.ts";
 import type { E2bRestSandbox } from "../_shared/e2b-rest.ts";
@@ -93,12 +95,19 @@ class E2BSandbox implements SandboxProvider {
   /** Mata o sandbox de fato — chamado em falha/cancelamento para evitar leaking. */
   async kill(): Promise<void> {
     if (!this.sandbox) return;
+    const sandboxId = this.sandbox.sandboxId;
     try {
       await this.sandbox.kill();
     } catch (e) {
       console.warn("[sandbox] kill failed:", (e as Error).message);
+      await killProjectSandbox(this.e2bApiKey, sandboxId).catch(() => {});
     }
     this.sandbox = null;
+    try {
+      await clearProjectSandboxMeta(this.supabase, this.projectId);
+    } catch (e) {
+      console.warn("[sandbox] failed to clear project sandbox meta:", e);
+    }
   }
 }
 

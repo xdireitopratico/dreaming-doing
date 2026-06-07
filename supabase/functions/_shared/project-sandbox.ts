@@ -99,6 +99,32 @@ async function recordE2bCreationOutcome(
   }
 }
 
+/** Remove campos de preview/sandbox do meta — após kill E2B ou sandbox stale. */
+export function clearedSandboxMetaFields(
+  existing: Record<string, unknown>,
+): Record<string, unknown> {
+  return {
+    ...existing,
+    previewSandboxId: undefined,
+    previewUrl: undefined,
+    previewExpiresAt: undefined,
+    previewReady: undefined,
+    previewPort: undefined,
+    e2bTemplate: undefined,
+  };
+}
+
+export async function clearProjectSandboxMeta(
+  supabase: SupabaseClient,
+  projectId: string,
+): Promise<void> {
+  const { existing } = await loadProjectMeta(supabase, projectId);
+  await supabase
+    .from("projects")
+    .update({ meta: clearedSandboxMetaFields(existing) })
+    .eq("id", projectId);
+}
+
 export async function loadProjectMeta(
   supabase: SupabaseClient,
   projectId: string,
