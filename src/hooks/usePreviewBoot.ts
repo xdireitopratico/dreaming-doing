@@ -163,11 +163,16 @@ export function usePreviewBoot(projectId: string, opts?: UsePreviewBootOpts) {
         const msg = e instanceof Error ? e.message : "Não foi possível abrir o preview";
         const code = (e as any)?.code;
         const isCircuit = code === "e2b_creation_circuit" || /circuit|cooling|e2b_creation_circuit/i.test(msg);
+        const isNoFiles = code === "no_files" || /sem arquivos|ainda não gerou|sem projeto/i.test(msg);
         setLastError(isCircuit ? `E2B creation blocked (circuit open). ${msg}` : msg);
-        logEditorTelemetryEvent("preview", "boot_fail", "error", (isCircuit ? "circuit:" : "") + msg.slice(0, 240));
-        if (!opts?.silent && !msg.includes("agente") && !isCircuit) {
-          // For circuit, show once via the returned lastError (UI decides banner/toast); avoid spam
+        logEditorTelemetryEvent("preview", "boot_fail", "error", (isCircuit ? "circuit:" : isNoFiles ? "nofiles:" : "") + msg.slice(0, 240));
+        // No files: silently show empty guide, never spam toasts or retry loops
+        if (!opts?.silent && !isNoFiles && !msg.includes("agente") && !isCircuit) {
           toast.error(msg.length > 140 ? `${msg.slice(0, 140)}…` : msg);
+        }
+        if (isNoFiles) {
+          setBooting(false);
+          setWarming(false);
         }
         return null;
       } finally {

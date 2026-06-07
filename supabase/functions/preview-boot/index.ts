@@ -216,6 +216,16 @@ Deno.serve(async (req) => {
       .select("path, content")
       .eq("project_id", projectId);
 
+    if (!files || files.length === 0) {
+      return json({
+        url: null,
+        ready: false,
+        reused: false,
+        error: "Projeto sem arquivos — o agente ainda não gerou código.",
+        code: "no_files",
+      }, 200);
+    }
+
     const devPort = Number.parseInt(detectDevPort(files ?? []), 10) || 5173;
 
     const sandboxResult = await connectSandboxForPreview(supabase, projectId, E2B_API_KEY);
