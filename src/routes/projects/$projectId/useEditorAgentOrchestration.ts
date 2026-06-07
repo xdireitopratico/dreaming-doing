@@ -3,21 +3,14 @@ import type { QueryClient } from "@tanstack/react-query";
 import type { RefObject } from "react";
 import type { editor } from "monaco-editor";
 
-import { supabase } from "@/integrations/supabase/client";
-import { removeRealtimeChannel } from "@/lib/supabase-realtime";
-import type { RealtimeChannel } from "@supabase/supabase-js";
+
 import { createLogEntry, type LogEntry } from "@/components/editor/LogPanel";
 import type { DiffEntry } from "@/components/editor/AiDiffViewer";
 import { useAgentBlame, buildBlameFromTimeline } from "@/hooks/useAgentBlame";
 import type { usePreviewBoot } from "@/hooks/usePreviewBoot";
 import { clearEnhancements } from "@/lib/monacoEnhancements";
-import {
-  clearPendingAgentRun,
-  peekPendingAgentRun,
-} from "@/lib/agent-auto-run";
-import { logEditorTelemetryEvent } from "@/lib/editor-telemetry";
-import { resolveSessionKind } from "@/lib/taste";
 import { toast } from "sonner";
+import { useAgentSessionCoordinator } from "./useAgentSessionCoordinator";
 import type { useAgentRun } from "@/hooks/useAgentRun";
 
 import type { FileRow } from "./editor-page-types";
@@ -88,9 +81,18 @@ export function useEditorAgentOrchestration({
   previewBoot,
   previewIdle,
 }: UseEditorAgentOrchestrationParams) {
-  const autoAgentRunAttemptedRef = useRef<string | null>(null);
   /** Evita boot duplicado do preview entre fim do agente e refetch do previewUrl. */
   const previewBootAfterAgentRef = useRef(false);
+
+  useAgentSessionCoordinator({
+    projectId,
+    conversation,
+    agent,
+    running,
+    pendingAgentRunKey,
+    tasteQuota,
+    runAgent,
+  });
 
   const fileCount = files?.length ?? 0;
 
@@ -181,145 +183,11 @@ export function useEditorAgentOrchestration({
     return () => clearEnhancements();
   }, []);
 
-  // ─── Sincroniza contador da fila com o servidor ao abrir o editor
-  useEffect(() => {
-    if (!conversation?.id) return;
-    void agent.syncPendingCount(projectId, conversation.id);
-  }, [conversation?.id, projectId, agent]);
-
-  // ─── Auto-run: projeto recém-criado (flag) ou última msg user sem resposta
-  // Não espera messages no client — evita race read-after-write após createProject.
-  useEffect(() => {
-    if (!conversation?.id) return;
-
-    let cancelled = false;
-    let attempts = 0;
-    const maxAttempts = 12;
-
-    const tryAutoRun = async () => {
-      if (cancelled || attempts >= maxAttempts) return;
-      attempts += 1;
-
-      if (running || agent.connected) {
-        window.setTimeout(tryAutoRun, 250);
-        return;
-      }
-
-      const { data: activeRun } = await supabase
-        .from("agent_runs")
-        .select("id, status")
-        .eq("project_id", projectId)
-        .in("status", ["running", "pending"])
-        .order("started_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      if (activeRun?.id) {
-        await agent.watch(projectId, conversation.id, activeRun.id);
-        return;
-      }
-
-      const flagged = peekPendingAgentRun(projectId, conversation.id);
-      const pending = pendingAgentRunKey;
-      if (!flagged && !pending) return;
-
-      const attemptKey = pending ?? `flag:${conversation.id}`;
-      if (autoAgentRunAttemptedRef.current === attemptKey) return;
-
-      logEditorTelemetryEvent(
-        "agent",
-        flagged ? "auto_run_flagged" : "auto_run_pending_user",
-        "info",
-        attemptKey.slice(0, 24),
-      );
-
-      if (runAgent(resolveSessionKind(tasteQuota))) {
-        autoAgentRunAttemptedRef.current = attemptKey;
-        if (flagged) clearPendingAgentRun(projectId);
-        return;
-      }
-
-      if (flagged) {
-        window.setTimeout(tryAutoRun, 400);
-      }
-    };
-
-    tryAutoRun();
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    conversation?.id,
-    projectId,
-    pendingAgentRunKey,
-    running,
-    agent.connected,
-    runAgent,
-    tasteQuota,
-    agent,
-  ]);
-
   useEffect(() => {
     if (!agent.progress.finished || !conversation) return;
     void qc.invalidateQueries({ queryKey: ["messages", conversation.id] });
     void qc.invalidateQueries({ queryKey: ["profile"] });
-    void agent.syncPendingCount(projectId, conversation.id);
-  }, [agent.progress.finished, conversation, projectId, qc, agent]);
-
-  // Reconecta a run ativo via Realtime (refresh, fila, plan approve) — sem polling.
-  useEffect(() => {
-    if (!conversation || running || agent.connected) return;
-
-    let channel: RealtimeChannel | null = null;
-
-    const attachIfRunning = async (runId: string) => {
-      if (agent.connected) return;
-      await agent.watch(projectId, conversation.id, runId);
-    };
-
-    void (async () => {
-      const { data: activeRun } = await supabase
-        .from("agent_runs")
-        .select("id, status")
-        .eq("project_id", projectId)
-        .in("status", ["running", "awaiting_user"])
-        .order("started_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      if (activeRun?.id) {
-        await attachIfRunning(activeRun.id);
-      }
-    })();
-
-    channel = supabase
-      .channel(`project-runs-${projectId}`)
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "agent_runs", filter: `project_id=eq.${projectId}` },
-        (payload) => {
-          const row = payload.new as { id?: string; status?: string };
-          if (row.id && row.status === "running") {
-            void attachIfRunning(row.id);
-          }
-        },
-      )
-      .on(
-        "postgres_changes",
-        { event: "UPDATE", schema: "public", table: "agent_runs", filter: `project_id=eq.${projectId}` },
-        (payload) => {
-          const row = payload.new as { id?: string; status?: string };
-          if (row.id && (row.status === "running" || row.status === "awaiting_user")) {
-            void attachIfRunning(row.id);
-          }
-        },
-      )
-      .subscribe();
-
-    return () => {
-      if (channel) void removeRealtimeChannel(channel);
-    };
-  }, [conversation, projectId, running, agent.connected, agent]);
+  }, [agent.progress.finished, conversation, qc]);
 
   const agentFinished = agent.progress.finished;
   const agentShouldBootPreview =

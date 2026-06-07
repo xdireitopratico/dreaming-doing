@@ -23,6 +23,7 @@ import {
 import type { StoredMessagePart } from "@/lib/chat-attachments";
 import { buildPreviewUrl } from "@/lib/project-routes";
 import { logEditorTelemetryEvent } from "@/lib/editor-telemetry";
+import { isAgentConnectInFlight } from "@/lib/agent-session-guards";
 import { publishProject } from "@/lib/publish.functions";
 import { planApprove, planReject } from "@/lib/plan-decide.functions";
 import { exportProjectZip } from "@/hooks/useWorkspacePresets";
@@ -161,9 +162,14 @@ export function useEditorPageHandlers({
     [setOpenTabs],
   );
 
+  const isAgentBusy = useCallback(
+    () => running || agent.connected || isAgentConnectInFlight(),
+    [running, agent.connected],
+  );
+
   const runAgent = useCallback(
     (explicitKind?: ForgeSessionKind, explicitAction?: TasteAction): boolean => {
-      if (!conversation || running) return false;
+      if (!conversation || isAgentBusy()) return false;
 
       const kind = explicitKind ?? resolveSessionKind(tasteQuota);
       const tasteAction: TasteAction | undefined =
@@ -215,7 +221,7 @@ export function useEditorPageHandlers({
     [
       conversation,
       projectId,
-      running,
+      isAgentBusy,
       agent,
       logPanelOpen,
       qc,
@@ -228,7 +234,7 @@ export function useEditorPageHandlers({
   );
 
   const handleResumeAgent = useCallback(() => {
-    if (!conversation || running) return;
+    if (!conversation || isAgentBusy()) return;
 
     const kind = resolveSessionKind(tasteQuota);
     const inTaste = kind === "taste";
@@ -262,7 +268,7 @@ export function useEditorPageHandlers({
         toast.error(msg);
       }
     })();
-  }, [conversation, projectId, running, agent, logPanelOpen, qc, tasteQuota, setLogs, setLogPanelOpen]);
+  }, [conversation, projectId, isAgentBusy, agent, logPanelOpen, qc, tasteQuota, setLogs, setLogPanelOpen]);
 
   const handleSend = useCallback(
     (text: string, mode?: AgentComposerMode, parts?: StoredMessagePart[]) => {
@@ -293,7 +299,7 @@ export function useEditorPageHandlers({
           void qc.invalidateQueries({ queryKey: ["messages", conversation.id] });
 
           const kind = resolveSessionKind(tasteQuota);
-          if (running || agent.connected) {
+          if (isAgentBusy()) {
             const queued = await agent.queueMessage(projectId, conversation.id, kind);
             if (queued.ok) {
               toast.info(
@@ -309,7 +315,7 @@ export function useEditorPageHandlers({
           runAgent(kind);
         });
     },
-    [conversation, runAgent, composerMode, tasteQuota, running, agent, projectId, qc],
+    [conversation, runAgent, composerMode, tasteQuota, isAgentBusy, agent, projectId, qc],
   );
 
   const handleVisualEdits = useCallback(() => {

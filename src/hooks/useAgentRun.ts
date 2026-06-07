@@ -11,6 +11,7 @@ import { loadAgentPreferences } from "@/lib/agent-preferences";
 import { loadAgentSessionExtensions } from "@/lib/agent-session-extensions";
 import type { ForgeSessionKind, TasteAction } from "@/lib/taste";
 import { formatAgentFetchError, formatAgentHttpError } from "@/lib/agent-fetch-errors";
+import { releaseAgentConnect, tryAcquireAgentConnect } from "@/lib/agent-session-guards";
 import { logEditorTelemetryEvent } from "@/lib/editor-telemetry";
 import { cancelAgentRun } from "@/lib/agent-cancel";
 import {
@@ -275,6 +276,10 @@ export function useAgentRun() {
       sessionKind?: ForgeSessionKind,
       options?: AgentConnectOptions & { tasteAction?: TasteAction },
     ) => {
+      if (!tryAcquireAgentConnect()) {
+        logEditorTelemetryEvent("agent_run", "connect_skipped_inflight", "warn");
+        return;
+      }
       const manualResume = options?.resume === true;
       teardownChannels();
       setProgress({
@@ -302,6 +307,7 @@ export function useAgentRun() {
         if (!res.ok) {
           const msg = await parseErrorResponse(res);
           setProgress((p) => ({ ...p, error: msg, finished: true }));
+          releaseAgentConnect();
           return;
         }
 
@@ -323,6 +329,7 @@ export function useAgentRun() {
             statusHint: body.message ?? "Agente ocupado.",
             error: null,
           }));
+          releaseAgentConnect();
           return;
         }
 
@@ -334,6 +341,7 @@ export function useAgentRun() {
             statusHint: body.message ?? "Mensagem na fila do agente.",
             error: null,
           }));
+          releaseAgentConnect();
           return;
         }
 
@@ -346,11 +354,13 @@ export function useAgentRun() {
             streamText: body.content ?? null,
             statusHint: "Resposta Taste enviada.",
           }));
+          releaseAgentConnect();
           return;
         }
 
         if (!body.runId) {
           setProgress((p) => ({ ...p, error: "Resposta inválida do servidor", finished: true }));
+          releaseAgentConnect();
           return;
         }
 
@@ -363,6 +373,8 @@ export function useAgentRun() {
           error: formatAgentFetchError(e),
           finished: true,
         }));
+      } finally {
+        releaseAgentConnect();
       }
     },
     [postAgentRun, subscribeToRun, teardownChannels],
