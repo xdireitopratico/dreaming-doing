@@ -37,7 +37,7 @@ import { buildSandboxEnv } from "./sandbox-env.ts";
 import { logger } from "../_shared/logger.ts";
 import { appendStreamEvent } from "../_shared/agent-stream.ts";
 
-const MAX_INLINE_CHUNKS = 12;
+const MAX_INLINE_CHUNKS = 8;
 
 export type ExecuteParams = {
   runId: string;

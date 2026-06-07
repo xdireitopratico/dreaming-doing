@@ -19,7 +19,7 @@ export const agentPlanFunction = inngest.createFunction(
     name: "Agent: Plan Mode",
     retries: 2,
     concurrency: { limit: 5 },
-    timeouts: { finish: "30m" },
+    timeouts: { finish: "14m" },
     triggers: [{ event: "agent/plan.requested" }],
   },
   async ({ event, step }) => {

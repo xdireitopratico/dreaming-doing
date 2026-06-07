@@ -169,8 +169,6 @@ export interface AgentState {
   executionLog: string[];
   retryFeedback: string | null;
   totalSteps: number;
-  /** Plano pendente aguardando aprovação do usuário (Fase 4.6 plan mode). */
-  pendingPlan?: ProposedPlan | null;
 }
 
 export enum LoopPhase {

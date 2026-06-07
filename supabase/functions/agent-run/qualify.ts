@@ -2,6 +2,7 @@ import type { ChatMessage } from "./types.ts";
 import type { ClassificationResult } from "./router.ts";
 
 const RESUME_PREFIX = "[Retomar]";
+export const PLAN_APPROVED_PREFIX = "[Plano aprovado]";
 const POLLUTION_MARKERS = [
   "Checkpoint salvo",
   "Limite de tempo da Edge",
@@ -9,7 +10,7 @@ const POLLUTION_MARKERS = [
   "Execução cancelada",
 ];
 
-/** Última mensagem real do usuário (ignora retomada e ruído de timeout). */
+/** Última mensagem real do usuário (ignora retomada, plano aprovado e ruído de timeout). */
 export function extractOriginalUserRequest(messages: ChatMessage[]): string {
   for (let i = messages.length - 1; i >= 0; i--) {
     const m = messages[i];
@@ -17,6 +18,7 @@ export function extractOriginalUserRequest(messages: ChatMessage[]): string {
     const text = typeof m.content === "string" ? m.content.trim() : "";
     if (!text) continue;
     if (text.startsWith(RESUME_PREFIX)) continue;
+    if (text.startsWith(PLAN_APPROVED_PREFIX)) continue;
     if (POLLUTION_MARKERS.some((mark) => text.includes(mark))) continue;
     return text;
   }

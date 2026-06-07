@@ -34,7 +34,6 @@ export function serializeCheckpointPayload(
     executionLog: state.executionLog,
     retryFeedback: state.retryFeedback,
     totalSteps: state.totalSteps,
-    pendingPlan: state.pendingPlan ?? null,
     complexityScore: extra.complexityScore,
     maxStepsLimit: extra.maxStepsLimit,
   };
@@ -88,9 +87,6 @@ export function deserializeCheckpointState(
       : [],
     retryFeedback: typeof raw.retryFeedback === "string" ? raw.retryFeedback : null,
     totalSteps: typeof raw.totalSteps === "number" ? raw.totalSteps : maxStepsLimit,
-    pendingPlan: raw.pendingPlan && typeof raw.pendingPlan === "object"
-      ? (raw.pendingPlan as AgentState["pendingPlan"])
-      : null,
   };
 
   return {

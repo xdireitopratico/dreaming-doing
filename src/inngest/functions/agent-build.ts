@@ -19,7 +19,7 @@ export const agentBuildFunction = inngest.createFunction(
     name: "Agent: Build Mode",
     retries: 2,
     concurrency: { limit: 5 },
-    timeouts: { finish: "30m" },
+    timeouts: { finish: "14m" },
     triggers: [{ event: "agent/build.requested" }],
   },
   async ({ event, step }) => {

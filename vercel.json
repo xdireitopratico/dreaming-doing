@@ -12,7 +12,7 @@
     },
     "api/inngest.js": {
       "includeFiles": "dist/server/**",
-      "maxDuration": 1800
+      "maxDuration": 900
     }
   }
 }

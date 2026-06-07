@@ -32,6 +32,8 @@ import { registerDeployTool } from "./tools/deploy.ts";
 import { restoreExecutionLogFromRows } from "./executionLogMeta.ts";
 import { loadCheckpoint } from "./checkpoint.ts";
 import { buildSandboxEnv } from "./sandbox-env.ts";
+import { PLAN_APPROVED_PREFIX } from "./qualify.ts";
+import type { ChatMessage } from "./types.ts";
 
 export type AgentJobParams = {
   projectId: string;
@@ -73,6 +75,59 @@ function robinProviderConfig(
   };
 }
 
+/**
+ * Quando uma build run é disparada via plan-decide:planApprove, o run.meta
+ * traz `planSummary` (texto curto) e `steps` (passos aprovados). Para que o
+ * LLM entenda o contexto sem re-classificar do zero, injetamos UMA mensagem
+ * sintética no final do histórico:
+ *
+ *   [Plano aprovado] Segue o plano abaixo.
+ *
+ *   <planSummary>
+ *
+ *   1. <step 1 description> (filePath)
+ *   2. <step 2 description> (filePath)
+ *   ...
+ *
+ *   Execute os passos acima na ordem indicada.
+ *
+ * A mensagem é marcada com o prefixo [Plano aprovado] — `extractOriginalUserRequest`
+ * (qualify.ts) a ignora ao buscar o pedido original do usuário, evitando que
+ * essa mensagem sintética seja confundida com a requisição real.
+ */
+function injectPlanApprovalMessage(
+  baseMessages: ChatMessage[],
+  meta: Record<string, unknown>,
+  planMode: boolean,
+): ChatMessage[] {
+  if (planMode) return baseMessages;
+  const planSummary = typeof meta.planSummary === "string" ? meta.planSummary.trim() : "";
+  const steps = Array.isArray(meta.steps) ? (meta.steps as unknown[]) : [];
+  if (!planSummary && steps.length === 0) return baseMessages;
+
+  const stepsList = steps
+    .map((s, i) => {
+      const step = (s ?? {}) as Record<string, unknown>;
+      const desc = String(step.description ?? "").trim();
+      const filePath = typeof step.filePath === "string" ? step.filePath : "";
+      if (!desc) return null;
+      return `${i + 1}. ${desc}${filePath ? ` (${filePath})` : ""}`;
+    })
+    .filter((line): line is string => line !== null)
+    .join("\n");
+
+  const planBlock = planSummary ? `${planSummary}\n\n` : "";
+  const stepsBlock = stepsList ? `${stepsList}\n\n` : "";
+  const content = [
+    `${PLAN_APPROVED_PREFIX} Segue o plano abaixo.`,
+    "",
+    `${planBlock}${stepsBlock}Execute os passos acima na ordem indicada.`,
+  ].join("\n").trim();
+
+  const injected: ChatMessage = { role: "user", content };
+  return [...baseMessages, injected];
+}
+
 export async function executeAgentJob(
   supabase: SupabaseClient,
   params: AgentJobParams,
@@ -93,10 +148,11 @@ export async function executeAgentJob(
   } = params;
 
   // Fast cancel check (covers both inline fallback in agent-run and worker chunks)
-  const { data: pre } = await supabase.from("agent_runs").select("canceled_at, status").eq("id", agentRunId).maybeSingle();
+  const { data: pre } = await supabase.from("agent_runs").select("canceled_at, status, meta").eq("id", agentRunId).maybeSingle();
   if (pre?.canceled_at || pre?.status === "canceled") {
     return { ok: false, error: "Cancelado", steps: 0, canceled: true };
   }
+  const preMeta = (pre?.meta ?? {}) as Record<string, unknown>;
 
   const { data: project } = await supabase
     .from("projects").select("id, owner_id, template, meta").eq("id", projectId).single();
@@ -251,7 +307,7 @@ export async function executeAgentJob(
     }
     return {
       projectId, conversationId, userId,
-      messages: [...messages],
+      messages: injectPlanApprovalMessage([...messages], preMeta, planMode),
       phase: LoopPhase.GATHER_CONTEXT,
       currentStepIndex: 0,
       context: null, intent: null, plan: null,
