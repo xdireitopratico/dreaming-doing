@@ -1,10 +1,10 @@
 # FORGE — opencode.md (Contexto Comprimido)
 
 ## 📍 Estado Atual
-- **Branch:** `main` @ `1bc978e`
+- **Branch:** `main` @ `722c731`
 - **Deploy:** Supabase `dpduljngdurfpmaclffa` (agent-run + health) + Vercel (frontend)
 - **Stack:** TanStack Start + React 19 + Tailwind v4 + Supabase + E2B
-- **Último deploy:** **Fase 4.6 (Plan Mode) concluída** — agent loop emite `plan_proposed` e pausa pra aprovação do usuário; `plan_approve`/`plan_reject` actions; 5min TTL auto-rejeita; novos statuses `awaiting_plan_approval` e `rejected` em `agent_runs`; `<PlanViewer>` integrado no ChatStream com countdown
+- **Último deploy:** **Fase 4.7 (Vibe Coding Saneado) concluída** — 3 fixes que destravam o uso real: (1) plan mode agora é opt-in via dropdown Chat/Plan/Build (default Chat), (2) E2B sandbox só nasce DEPOIS do agente criar arquivos (3 guardas: `getPreviewUrl` lazy, `ensure()` recusa projeto vazio, `allocateSandboxLocal` exige `project_files.count > 0`), (3) `qualify.ts` heuristic relaxada (3 regras, sem `len < 140` que travava 14 testes). Mais: migração `20260608000001` conserta CHECK do `agent_runs.status` que esquecia `awaiting_user`; cleanup matou 100 linhas de dead code em `index.ts`; 0 typecheck errors Deno + 0 tsc errors + 65/65 vitest + 51/51 deno test.
 - **Próxima fase:** Fase 5 — Arquitetura & Escala
 
 ---
@@ -149,6 +149,20 @@
 | `project-sandbox` fallback (templates alternativos) | `supabase/functions/_shared/project-sandbox.ts` | ✅ |
 | **Editor dropdowns amarelos**: borda/fonte Build/Plan + Integrações | `ForgeEditorDropdown.tsx`, `editor-workspace.css` | ✅ |
 | **40 → 0 erros TS**: tool-icons desatualizados, `Omit<...>`, cast, `Components` react-markdown | `tool-icons.tsx`, `code-block.tsx`, `useConnectors.ts`, `markdown-renderer.tsx` | ✅ |
+
+### Fase 4.7 — Vibe Coding Saneado (Commits `c621d39`, `31ea985`, `248ea1b`, `722c731`)
+| Task | Arquivo | Status |
+|------|---------|--------|
+| **`needsQualify` relaxado** (3 regras, sem `len < 140` que travava 14 testes) | `supabase/functions/agent-run/qualify.ts` | ✅ |
+| **E2B lazy 3 camadas**: `getPreviewUrl` não chama `ensure()`; `ensure()` recusa projeto vazio; `allocateSandboxLocal` exige `project_files.count > 0` | `supabase/functions/agent-run/sandbox.ts`, `index.ts` | ✅ |
+| **Plan mode opt-in via dropdown** (default Chat, cliente envia `mode: "chat"\|"plan"\|"build"`) | `src/hooks/useSSE.ts`, `src/components/editor/ComposerModeSelect.tsx`, `index.ts:246` | ✅ |
+| **Container só preservado com output** (`fs_write`/`fs_edit`/`shell_exec` nos toolsUsed) | `supabase/functions/agent-run/run-job.ts` | ✅ |
+| **Plano rico estruturado** no mesmo call do classify (rationale + steps) | `router.ts`, `plan-mode.ts`, `types.ts` | ✅ |
+| **CHECK constraint `agent_runs.status`** incluindo `awaiting_user` | `supabase/migrations/20260608000001_agent_runs_check_awaiting_user.sql` | ✅ |
+| **Dead code cleanup**: 100 linhas mortas em `index.ts` (reg + sandbox local + cleanup callback) | `supabase/functions/agent-run/index.ts` | ✅ |
+| **`qualify.ts` usa `markRunStatus`** (validação de tipos, não mais try/catch vazio engolindo CHECK violation) | `supabase/functions/agent-run/loop.ts:421-428` | ✅ |
+| **5 typecheck errors eliminados**: mammoth ESM, ChatResponse dup, getLastInputTokens dup, ProposedPlan dup, content-blocks em classify/persistFinal | `_shared/attachment-parse.ts`, `adapters/llm.ts`, `compression.ts`, `plan-mode.ts`, `loop.ts` | ✅ |
+| **0 typecheck + 65/65 vitest + 51/51 deno test** | `npx tsc --noEmit`, `npx vitest run`, `deno test` | ✅ |
 
 ---
 
