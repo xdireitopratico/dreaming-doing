@@ -2,6 +2,8 @@
  * Fila agent_pending_messages — enqueue no agent-run; drain via continue_queue.
  */
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import { appendStreamEvent } from "./agent-stream.ts";
+import { logger } from "./logger.ts";
 
 const STALE_RUN_MS = 15 * 60 * 1000;
 
@@ -10,26 +12,68 @@ export async function expireStaleRuns(
   projectId: string,
 ): Promise<number> {
   const cutoff = new Date(Date.now() - STALE_RUN_MS).toISOString();
-  const { data: stale } = await supabase
+  const { data: candidates } = await supabase
     .from("agent_runs")
-    .select("id")
+    .select("id, meta, started_at, heartbeat_at")
     .eq("project_id", projectId)
-    .in("status", ["running", "pending"])
-    .lt("started_at", cutoff);
+    .in("status", ["running", "pending"]);
 
-  if (!stale?.length) return 0;
+  if (!candidates?.length) return 0;
 
-  const ids = stale.map((r) => r.id);
-  await supabase
-    .from("agent_runs")
-    .update({
-      status: "failed",
-      finished_at: new Date().toISOString(),
-      error: "Run expirado (zumbi) — tente enviar de novo.",
-    })
-    .in("id", ids);
+  const staleIds: string[] = [];
+  for (const run of candidates) {
+    const heartbeat = (run.heartbeat_at ?? run.started_at) as string | null;
+    if (heartbeat && heartbeat < cutoff) {
+      staleIds.push(run.id as string);
+      continue;
+    }
 
-  return ids.length;
+    const { data: lastEv } = await supabase
+      .from("agent_stream_events")
+      .select("created_at")
+      .eq("run_id", run.id)
+      .order("seq", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    const lastActivity = (lastEv?.created_at ?? run.started_at) as string | null;
+    if (lastActivity && lastActivity < cutoff) {
+      staleIds.push(run.id as string);
+    }
+  }
+
+  if (!staleIds.length) return 0;
+
+  for (const id of staleIds) {
+    const run = candidates.find((r) => r.id === id);
+    const meta = (run?.meta ?? {}) as Record<string, unknown>;
+    const resumable = meta.checkpoint === true || meta.resume === true;
+    const error = resumable
+      ? "Execução interrompida (worker expirou). Clique em **Continuar** para retomar do checkpoint."
+      : "Run expirado (zumbi) — tente enviar de novo.";
+
+    await supabase
+      .from("agent_runs")
+      .update({
+        status: "failed",
+        finished_at: new Date().toISOString(),
+        error,
+        meta: { ...meta, staleExpired: true, resumable },
+      })
+      .eq("id", id);
+
+    await appendStreamEvent(supabase, id, "finish", {
+      type: "finish",
+      ok: false,
+      resumable,
+      error,
+      stale: true,
+    });
+
+    logger.warn("agent_run.stale_expired", { runId: id, projectId, resumable });
+  }
+
+  return staleIds.length;
 }
 
 export async function countPendingMessages(

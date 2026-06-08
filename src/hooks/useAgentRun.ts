@@ -24,6 +24,7 @@ import {
 import { freezeSnapshot, type FrozenRunSnapshot } from "@/lib/lovable-thread";
 
 const TERMINAL_STATUSES = new Set(["completed", "failed", "canceled", "awaiting_user"]);
+const STALE_STREAM_MS = 15 * 60 * 1000;
 
 async function parseErrorResponse(res: Response): Promise<string> {
   const txt = await res.text().catch(() => "");
@@ -176,7 +177,7 @@ export function useAgentRun() {
 
       const { data: run } = await supabase
         .from("agent_runs")
-        .select("status, error, canceled_at")
+        .select("status, error, canceled_at, meta, heartbeat_at, started_at")
         .eq("id", runId)
         .maybeSingle();
 
@@ -189,9 +190,42 @@ export function useAgentRun() {
         return true;
       }
 
+      if (run?.status === "running") {
+        const lastRow = rows?.[rows.length - 1];
+        const lastActivity =
+          (lastRow?.created_at as string | undefined) ??
+          (run.heartbeat_at as string | null) ??
+          (run.started_at as string | null);
+        const stale =
+          lastActivity &&
+          Date.now() - new Date(lastActivity).getTime() > STALE_STREAM_MS;
+        if (stale) {
+          const meta = (run.meta ?? {}) as Record<string, unknown>;
+          const resumable = meta.checkpoint === true || meta.resume === true;
+          const error =
+            (run.error as string | null) ??
+            (resumable
+              ? "Execução interrompida — use Continuar para retomar do checkpoint."
+              : "Execução interrompida — envie outra mensagem para tentar de novo.");
+          logEditorTelemetryEvent("agent_run", "stale_stream_detected", "warn", runId.slice(0, 8));
+          const finishEvent = {
+            type: "finish",
+            data: { ok: false, resumable, error, stale: true },
+            timestamp: Date.now(),
+          };
+          setProgress((p) => {
+            const next = applyAgentProgressEvent(p, finishEvent);
+            persistFrozen(next);
+            return next;
+          });
+          teardownChannels();
+          return true;
+        }
+      }
+
       return terminal;
     },
-    [applyStreamRow, syncRunStatus],
+    [applyStreamRow, syncRunStatus, persistFrozen, teardownChannels],
   );
 
   const subscribeToRun = useCallback(
