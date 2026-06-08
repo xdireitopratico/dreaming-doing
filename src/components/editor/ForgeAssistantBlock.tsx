@@ -29,6 +29,7 @@ interface ForgeAssistantBlockProps {
   showTokens?: boolean;
   onPlanApprove?: (steps: PlanStep[]) => void;
   onPlanReject?: (reason?: string) => void;
+  onResume?: () => void;
 }
 
 export function ForgeAssistantBlock({
@@ -44,6 +45,7 @@ export function ForgeAssistantBlock({
   showTokens = false,
   onPlanApprove,
   onPlanReject,
+  onResume,
 }: ForgeAssistantBlockProps) {
   const [detailsOpen, setDetailsOpen] = useState(isActive);
   const msgId = message?.id ?? `live-${runId ?? "forge"}`;
@@ -137,6 +139,35 @@ export function ForgeAssistantBlock({
       {displayText ? (
         <MarkdownRenderer className="forge-chat-markdown">{displayText}</MarkdownRenderer>
       ) : null}
+
+      {effectiveProgress?.finished && effectiveProgress.error && (
+        <section
+          className="my-2 rounded-lg border border-amber-400/35 bg-amber-400/8 px-3 py-2.5"
+          data-testid="assistant-turn-error"
+        >
+          <p className="text-[12px] text-[var(--forge-silver)] leading-relaxed">
+            {effectiveProgress.error}
+          </p>
+          {effectiveProgress.resumable && onResume && (
+            <button
+              type="button"
+              className="mt-2 font-mono text-[10px] text-[var(--forge-primary)] hover:underline"
+              onClick={onResume}
+            >
+              Continuar execução
+            </button>
+          )}
+        </section>
+      )}
+
+      {effectiveProgress?.finished && !displayText && !effectiveProgress.error && (
+        <p
+          className="forge-chat-live-line text-[var(--forge-muted)]"
+          data-testid="assistant-turn-empty"
+        >
+          Resposta não gerada neste turno. Envie outra mensagem ou use Continuar no chat.
+        </p>
+      )}
 
       {hasDetails && effectiveProgress && (
         <Collapsible

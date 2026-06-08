@@ -155,11 +155,14 @@ export type Database = {
       }
       agent_runs: {
         Row: {
+          awaiting_user_type: string | null
           canceled_at: string | null
           conversation_id: string
           error: string | null
           finished_at: string | null
+          heartbeat_at: string | null
           id: string
+          last_error_code: string | null
           meta: Json
           project_id: string
           started_at: string
@@ -168,11 +171,14 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          awaiting_user_type?: string | null
           canceled_at?: string | null
           conversation_id: string
           error?: string | null
           finished_at?: string | null
+          heartbeat_at?: string | null
           id?: string
+          last_error_code?: string | null
           meta?: Json
           project_id: string
           started_at?: string
@@ -181,11 +187,14 @@ export type Database = {
           user_id: string
         }
         Update: {
+          awaiting_user_type?: string | null
           canceled_at?: string | null
           conversation_id?: string
           error?: string | null
           finished_at?: string | null
+          heartbeat_at?: string | null
           id?: string
+          last_error_code?: string | null
           meta?: Json
           project_id?: string
           started_at?: string

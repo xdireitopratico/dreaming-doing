@@ -163,6 +163,14 @@ function EditorPage() {
     previewRoute,
   });
 
+  useEffect(() => {
+    for (const m of chatMessages) {
+      if (m.role === "assistant" && m.runId) {
+        agent.acknowledgeMaterializedRun(m.runId);
+      }
+    }
+  }, [chatMessages, agent]);
+
   const orchestration = useEditorAgentOrchestration({
     projectId,
     conversation,
@@ -178,7 +186,6 @@ function EditorPage() {
     e2bConnected,
     isReactProject,
     agentHasRun,
-    pendingAgentRunKey,
     devUrl,
     activeView,
     setPreviewReloadNonce,

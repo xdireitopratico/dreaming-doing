@@ -5,6 +5,8 @@ import { removeRealtimeChannel } from "@/lib/supabase-realtime";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import {
   clearPendingAgentRun,
+  hasAutoRunAttempted,
+  markAutoRunAttempted,
   peekPendingAgentRun,
 } from "@/lib/agent-auto-run";
 import { isAgentConnectInFlight } from "@/lib/agent-session-guards";
@@ -26,7 +28,6 @@ type UseAgentSessionCoordinatorParams = {
   conversation: { id: string } | null | undefined;
   agent: AgentRun;
   running: boolean;
-  pendingAgentRunKey: string | null;
   tasteQuota: TasteQuota;
   runAgent: (
     explicitKind?: ForgeSessionKind,
@@ -34,32 +35,26 @@ type UseAgentSessionCoordinatorParams = {
   ) => boolean;
 };
 
-const ACTIVE_RUN_STATUSES = ["running", "pending", "awaiting_user"] as const;
+/** Runs que podem receber watch/reconnect com stream. */
+const WATCH_RUN_STATUSES = ["running", "pending"] as const;
+
+const STALE_RUN_MS = 15 * 60 * 1000;
 
 /**
- * Single coordinator for agent session lifecycle:
- * sync pending → watch active run → drain queue → one-shot auto-run.
+ * Coordinator: sync pending → watch run ativo (mesma conversa) → drain → auto-run só com flag de projeto novo.
  */
 export function useAgentSessionCoordinator({
   projectId,
   conversation,
   agent,
   running,
-  pendingAgentRunKey,
   tasteQuota,
   runAgent,
 }: UseAgentSessionCoordinatorParams) {
-  const autoAgentRunAttemptedRef = useRef<string | null>(null);
   const watchedRunIdRef = useRef<string | null>(null);
   const reconcileInFlightRef = useRef(false);
 
-  const {
-    syncPendingCount,
-    watch,
-    drainQueue,
-    connected,
-    progress,
-  } = agent;
+  const { syncPendingCount, watch, drainQueue, connected, progress } = agent;
 
   useEffect(() => {
     if (!conversation?.id) return;
@@ -80,15 +75,20 @@ export function useAgentSessionCoordinator({
       try {
         const { data: activeRun } = await supabase
           .from("agent_runs")
-          .select("id, status")
+          .select("id, status, heartbeat_at, started_at")
           .eq("project_id", projectId)
-          .in("status", [...ACTIVE_RUN_STATUSES])
+          .eq("conversation_id", conversation.id)
+          .in("status", [...WATCH_RUN_STATUSES])
           .order("started_at", { ascending: false })
           .limit(1)
           .maybeSingle();
 
         if (activeRun?.id) {
-          if (watchedRunIdRef.current !== activeRun.id) {
+          const heartbeat = activeRun.heartbeat_at ?? activeRun.started_at;
+          const stale =
+            heartbeat &&
+            Date.now() - new Date(heartbeat).getTime() > STALE_RUN_MS;
+          if (!stale && watchedRunIdRef.current !== activeRun.id) {
             watchedRunIdRef.current = activeRun.id;
             await watch(projectId, conversation.id, activeRun.id);
           }
@@ -104,23 +104,15 @@ export function useAgentSessionCoordinator({
         }
 
         const flagged = peekPendingAgentRun(projectId, conversation.id);
-        const pending = pendingAgentRunKey;
-        if (!flagged && !pending) return;
+        if (!flagged) return;
+        if (hasAutoRunAttempted(projectId, conversation.id)) return;
 
-        const attemptKey = pending ?? `flag:${conversation.id}`;
-        if (autoAgentRunAttemptedRef.current === attemptKey) return;
+        logEditorTelemetryEvent("agent", "auto_run_flagged", "info", conversation.id.slice(0, 8));
 
-        logEditorTelemetryEvent(
-          "agent",
-          flagged ? "auto_run_flagged" : "auto_run_pending_user",
-          "info",
-          attemptKey.slice(0, 24),
-        );
+        markAutoRunAttempted(projectId, conversation.id);
+        clearPendingAgentRun(projectId);
 
-        if (runAgent(resolveSessionKind(tasteQuota))) {
-          autoAgentRunAttemptedRef.current = attemptKey;
-          if (flagged) clearPendingAgentRun(projectId);
-        }
+        runAgent(resolveSessionKind(tasteQuota));
       } finally {
         reconcileInFlightRef.current = false;
       }
@@ -139,8 +131,13 @@ export function useAgentSessionCoordinator({
           filter: `project_id=eq.${projectId}`,
         },
         (payload) => {
-          const row = payload.new as { id?: string; status?: string };
-          if (row.id && row.status && ACTIVE_RUN_STATUSES.includes(row.status as (typeof ACTIVE_RUN_STATUSES)[number])) {
+          const row = payload.new as { id?: string; status?: string; conversation_id?: string };
+          if (
+            row.conversation_id === conversation.id &&
+            row.id &&
+            row.status &&
+            WATCH_RUN_STATUSES.includes(row.status as (typeof WATCH_RUN_STATUSES)[number])
+          ) {
             void reconcile();
           }
         },
@@ -154,8 +151,13 @@ export function useAgentSessionCoordinator({
           filter: `project_id=eq.${projectId}`,
         },
         (payload) => {
-          const row = payload.new as { id?: string; status?: string };
-          if (row.id && row.status && ACTIVE_RUN_STATUSES.includes(row.status as (typeof ACTIVE_RUN_STATUSES)[number])) {
+          const row = payload.new as { id?: string; status?: string; conversation_id?: string };
+          if (
+            row.conversation_id === conversation.id &&
+            row.id &&
+            row.status &&
+            WATCH_RUN_STATUSES.includes(row.status as (typeof WATCH_RUN_STATUSES)[number])
+          ) {
             void reconcile();
           }
         },
@@ -169,7 +171,6 @@ export function useAgentSessionCoordinator({
   }, [
     conversation?.id,
     projectId,
-    pendingAgentRunKey,
     running,
     connected,
     runAgent,

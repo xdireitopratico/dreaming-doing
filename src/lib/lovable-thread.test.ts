@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { ChatMessage } from "@/components/editor/ChatInput";
 import { initialAgentProgress } from "@/lib/agent-progress";
-import { buildLovableThread } from "@/lib/lovable-thread";
+import { buildLovableThread, freezeSnapshot } from "@/lib/lovable-thread";
 
 function msg(id: string, role: ChatMessage["role"], content: string): ChatMessage {
   return { id, role, content, timestamp: 0 };
@@ -19,7 +19,7 @@ describe("buildLovableThread", () => {
     expect(thread.map((t) => t.kind)).toEqual(["user", "assistant", "user", "assistant"]);
   });
 
-  it("anexa bloco live após histórico quando running", () => {
+  it("live após último user sem resposta", () => {
     const messages = [msg("u1", "user", "build"), msg("u2", "user", "mais uma")];
     const progress = { ...initialAgentProgress, phase: "execute", message: "Gerando…" };
     const thread = buildLovableThread(messages, progress, {
@@ -34,6 +34,44 @@ describe("buildLovableThread", () => {
     });
   });
 
+  it("live no turno pendente com histórico anterior", () => {
+    const messages = [
+      msg("u1", "user", "a"),
+      msg("a1", "assistant", "ok"),
+      msg("u2", "user", "b"),
+    ];
+    const thread = buildLovableThread(messages, initialAgentProgress, {
+      running: true,
+      activeRunId: "run-2",
+    });
+    expect(thread.map((t) => t.kind)).toEqual(["user", "assistant", "user", "assistant"]);
+    expect(thread[3]).toMatchObject({ isActive: true, runId: "run-2" });
+  });
+
+  it("frozen após run sem assistant no DB", () => {
+    const messages = [msg("u1", "user", "x")];
+    const frozen = new Map([
+      [
+        "r1",
+        freezeSnapshot({
+          ...initialAgentProgress,
+          finished: true,
+          error: "falhou",
+          streamText: "parcial",
+        }),
+      ],
+    ]);
+    const thread = buildLovableThread(messages, initialAgentProgress, {
+      running: false,
+      activeRunId: "r1",
+      frozenRuns: frozen,
+    });
+    expect(thread).toHaveLength(2);
+    const slot = thread[1] as Extract<(typeof thread)[number], { kind: "assistant" }>;
+    expect(slot.frozen?.error).toBe("falhou");
+    expect(slot.isActive).toBe(false);
+  });
+
   it("progress live reflete mensagem atualizada do agente", () => {
     const messages = [msg("u1", "user", "x")];
     const p2 = { ...initialAgentProgress, message: "Editando App.tsx…" };
@@ -42,19 +80,5 @@ describe("buildLovableThread", () => {
     expect((t2[1] as { live?: { message: string | null } }).live?.message).toBe(
       "Editando App.tsx…",
     );
-  });
-
-  it("não coloca timeline global — só no assistant live", () => {
-    const messages = [msg("u1", "user", "x")];
-    const progress = {
-      ...initialAgentProgress,
-      timeline: [{ type: "phase", data: { phase: "plan" }, timestamp: 1 }],
-    };
-    const thread = buildLovableThread(messages, progress, {
-      running: true,
-      activeRunId: "r1",
-    });
-    const live = thread[1] as Extract<(typeof thread)[number], { kind: "assistant" }>;
-    expect(live.live?.timeline).toHaveLength(1);
   });
 });

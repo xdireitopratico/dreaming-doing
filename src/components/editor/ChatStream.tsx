@@ -128,6 +128,7 @@ export function ChatStream({
             showTokens={assistantIndex === 0}
             onPlanApprove={onPlanApprove}
             onPlanReject={onPlanReject}
+            onResume={onResume}
           />
         );
       })}

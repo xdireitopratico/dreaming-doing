@@ -39,7 +39,6 @@ type UseEditorAgentOrchestrationParams = {
   e2bConnected: boolean;
   isReactProject: boolean;
   agentHasRun: boolean;
-  pendingAgentRunKey: string | null;
   devUrl: string | null;
   activeView: "code" | "preview" | "diff";
   setPreviewReloadNonce: (value: number | ((prev: number) => number)) => void;
@@ -69,7 +68,6 @@ export function useEditorAgentOrchestration({
   e2bConnected,
   isReactProject,
   agentHasRun,
-  pendingAgentRunKey,
   devUrl,
   activeView,
   setPreviewReloadNonce,
@@ -89,7 +87,6 @@ export function useEditorAgentOrchestration({
     conversation,
     agent,
     running,
-    pendingAgentRunKey,
     tasteQuota,
     runAgent,
   });

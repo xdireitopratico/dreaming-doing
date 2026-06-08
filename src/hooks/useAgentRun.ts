@@ -91,47 +91,58 @@ export function useAgentRun() {
     setConnected(false);
   }, []);
 
-  const syncRunStatus = useCallback((status: string, error: string | null) => {
-    if (status === "awaiting_user") {
-      setProgress((p) => ({ ...p, finished: true, awaiting: true, autoResuming: false }));
+  const persistFrozen = useCallback((snap: AgentProgress) => {
+    const rid = runIdRef.current;
+    if (!rid) return;
+    setFrozenRuns((m) => {
+      const copy = new Map(m);
+      copy.set(rid, freezeSnapshot(snap));
+      return copy;
+    });
+  }, []);
+
+  const syncRunStatus = useCallback(
+    (status: string, error: string | null) => {
+      setProgress((p) => {
+        let next: AgentProgress;
+        if (status === "awaiting_user") {
+          next = { ...p, finished: true, awaiting: true, autoResuming: false };
+        } else if (status === "canceled") {
+          next = {
+            ...p,
+            finished: true,
+            canceled: true,
+            resumable: false,
+            autoResuming: false,
+            error: error ?? p.error,
+          };
+        } else if (status === "completed") {
+          next = {
+            ...p,
+            finished: true,
+            lastFinishOk: p.lastFinishOk ?? true,
+            resumable: false,
+            autoResuming: false,
+          };
+        } else if (status === "failed") {
+          next = {
+            ...p,
+            finished: true,
+            lastFinishOk: false,
+            error: error ?? p.error ?? "Agente falhou",
+            resumable: false,
+            autoResuming: false,
+          };
+        } else {
+          return p;
+        }
+        persistFrozen({ ...next, streamText: next.streamText ?? p.streamText });
+        return next;
+      });
       teardownChannels();
-      return;
-    }
-    if (status === "canceled") {
-      setProgress((p) => ({
-        ...p,
-        finished: true,
-        canceled: true,
-        resumable: false,
-        autoResuming: false,
-        error: error ?? p.error,
-      }));
-      teardownChannels();
-      return;
-    }
-    if (status === "completed") {
-      setProgress((p) => ({
-        ...p,
-        finished: true,
-        lastFinishOk: p.lastFinishOk ?? true,
-        resumable: false,
-        autoResuming: false,
-      }));
-      teardownChannels();
-      return;
-    }
-    if (status === "failed") {
-      setProgress((p) => ({
-        ...p,
-        finished: true,
-        lastFinishOk: false,
-        error: error ?? p.error ?? "Agente falhou",
-        resumable: false,
-        autoResuming: false,
-      }));
-      teardownChannels();
-    }
-  }, [teardownChannels]);
+    },
+    [persistFrozen, teardownChannels],
+  );
 
   const catchUpRun = useCallback(
     async (runId: string): Promise<boolean> => {
@@ -590,6 +601,22 @@ export function useAgentRun() {
     setProgress((p) => ({ ...p, pendingPlan: null, awaiting: false }));
   }, []);
 
+  const acknowledgeMaterializedRun = useCallback((runId: string) => {
+    setFrozenRuns((m) => {
+      if (!m.has(runId)) return m;
+      const copy = new Map(m);
+      copy.delete(runId);
+      return copy;
+    });
+    setActiveRunId((cur) => {
+      if (cur === runId) {
+        runIdRef.current = null;
+        return null;
+      }
+      return cur;
+    });
+  }, []);
+
   return {
     progress,
     connected,
@@ -604,5 +631,6 @@ export function useAgentRun() {
     disconnect,
     stop,
     clearPendingPlan,
+    acknowledgeMaterializedRun,
   };
 }

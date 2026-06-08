@@ -1,11 +1,13 @@
 /** Sinaliza que o editor deve iniciar o agente ao abrir (projeto recém-criado). */
 
-const key = (projectId: string) => `forge:auto-run:${projectId}`;
+const flagKey = (projectId: string) => `forge:auto-run:${projectId}`;
+const attemptedKey = (projectId: string, conversationId: string) =>
+  `forge:auto-run-attempted:${projectId}:${conversationId}`;
 
 export function markPendingAgentRun(projectId: string, conversationId: string): void {
   if (typeof sessionStorage === "undefined") return;
   try {
-    sessionStorage.setItem(key(projectId), conversationId);
+    sessionStorage.setItem(flagKey(projectId), conversationId);
   } catch {
     /* quota / private mode */
   }
@@ -14,7 +16,7 @@ export function markPendingAgentRun(projectId: string, conversationId: string): 
 export function peekPendingAgentRun(projectId: string, conversationId: string): boolean {
   if (typeof sessionStorage === "undefined") return false;
   try {
-    return sessionStorage.getItem(key(projectId)) === conversationId;
+    return sessionStorage.getItem(flagKey(projectId)) === conversationId;
   } catch {
     return false;
   }
@@ -23,7 +25,26 @@ export function peekPendingAgentRun(projectId: string, conversationId: string): 
 export function clearPendingAgentRun(projectId: string): void {
   if (typeof sessionStorage === "undefined") return;
   try {
-    sessionStorage.removeItem(key(projectId));
+    sessionStorage.removeItem(flagKey(projectId));
+  } catch {
+    /* ignore */
+  }
+}
+
+/** Evita re-disparar auto-run no F5/remount para o mesmo projeto. */
+export function hasAutoRunAttempted(projectId: string, conversationId: string): boolean {
+  if (typeof sessionStorage === "undefined") return false;
+  try {
+    return sessionStorage.getItem(attemptedKey(projectId, conversationId)) === "1";
+  } catch {
+    return false;
+  }
+}
+
+export function markAutoRunAttempted(projectId: string, conversationId: string): void {
+  if (typeof sessionStorage === "undefined") return;
+  try {
+    sessionStorage.setItem(attemptedKey(projectId, conversationId), "1");
   } catch {
     /* ignore */
   }
