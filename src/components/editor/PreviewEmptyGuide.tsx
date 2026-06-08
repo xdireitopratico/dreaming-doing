@@ -2,6 +2,16 @@ import { useState, type FormEvent } from "react";
 import { Link } from "@tanstack/react-router";
 import { ArrowRight, Github, Hammer, MessageSquare } from "lucide-react";
 
+/** Nomes de projeto vindos do 1º prompt costumam ser frases longas — não usar como título. */
+function previewDisplayName(projectName?: string): string | null {
+  const raw = projectName?.trim();
+  if (!raw) return null;
+  if (raw.length > 42 || /\b(landing|crie|faça|faz|por favor|porfavor)\b/i.test(raw)) {
+    return null;
+  }
+  return raw;
+}
+
 interface PreviewEmptyGuideProps {
   projectName?: string;
   e2bConnected: boolean;
@@ -23,6 +33,8 @@ export function PreviewEmptyGuide({
   onFocusChat,
 }: PreviewEmptyGuideProps) {
   const [repo, setRepo] = useState("");
+  const displayName = previewDisplayName(projectName);
+  const showOnboarding = !agentHasRun && !staleSandbox;
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
@@ -41,20 +53,26 @@ export function PreviewEmptyGuide({
         <h2 className="text-lg font-semibold text-neutral-900">
           {staleSandbox
             ? "Preview desconectado"
-            : projectName
-              ? <>Vamos construir <strong>{projectName}</strong></>
-              : <>Seu projeto aparecerá aqui</>}
+            : displayName
+              ? <>Vamos construir <strong>{displayName}</strong></>
+              : agentHasRun
+                ? "Aguardando preview ao vivo"
+                : "Seu app aparecerá aqui"}
         </h2>
         <p className="text-sm text-neutral-500 leading-relaxed">
           {staleSandbox
             ? "O ambiente E2B expirou (normal após ~30 min). O FORGE reconecta automaticamente — ou clique abaixo."
-            : "Cole a URL de um repositório GitHub para importar, ou descreva sua ideia no chat para o agente começar."}
+            : agentHasRun
+              ? "O agente já trabalhou neste projeto. Use Reconectar abaixo para subir o preview no sandbox."
+              : "Descreva sua ideia no chat à esquerda, ou importe um repositório GitHub."}
         </p>
       </div>
 
-      <p className="text-xs font-bold tracking-[0.15em] uppercase text-neutral-300">Let's Build</p>
+      {showOnboarding ? (
+        <p className="text-xs font-bold tracking-[0.15em] uppercase text-neutral-300">Let's Build</p>
+      ) : null}
 
-      {!staleSandbox && (
+      {showOnboarding && (
       <form onSubmit={submit} className="w-full max-w-md flex items-center gap-2">
         <div className="relative flex-1">
           <Github className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-neutral-400" />
@@ -77,7 +95,7 @@ export function PreviewEmptyGuide({
       </form>
       )}
 
-      {!staleSandbox && (
+      {showOnboarding && (
       <button
         type="button"
         onClick={onFocusChat}

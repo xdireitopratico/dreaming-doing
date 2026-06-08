@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { PreviewEmptyGuide } from "@/components/editor/PreviewEmptyGuide";
 import {
@@ -86,6 +86,7 @@ export function PreviewFrame({
   agentProgress = null,
 }: PreviewFrameProps) {
   const [iframeLoading, setIframeLoading] = useState(false);
+  const autoBootAttemptedRef = useRef(false);
   const deviceWidth = previewDeviceWidth(device);
 
   useEffect(() => {
@@ -120,11 +121,12 @@ export function PreviewFrame({
     return null;
   }, [devUrl, indexFile, isReactProject]);
 
+  const hasBuiltApp = agentHasRun && !isNoFiles;
+
   const showConnecting =
     isReactProject &&
-    agentHasRun &&
+    hasBuiltApp &&
     !devUrl &&
-    !isNoFiles &&
     (booting || warming || previewSyncing);
 
   const showBootSpinner =
@@ -134,15 +136,32 @@ export function PreviewFrame({
 
   const showStaleGuide = sandboxStale && !showReconnecting;
 
+  /** Agente já gerou código mas o sandbox Vite ainda não subiu — nunca mostrar onboarding Let's Build. */
+  const showBuiltAppPending =
+    hasBuiltApp &&
+    !devUrl &&
+    !previewContent &&
+    !booting &&
+    !warming &&
+    !showReconnecting &&
+    !showStaleGuide;
+
   const showLetsBuild =
-    showStaleGuide ||
-    isNoFiles ||
-    (!iframeSrc && !previewContent && !booting && !warming && !showReconnecting);
+    !hasBuiltApp &&
+    (showStaleGuide ||
+      isNoFiles ||
+      (!iframeSrc && !previewContent && !booting && !warming && !showReconnecting));
 
   const canShowIframe =
     !nativeBuildPreview && Boolean(iframeSrc) && !sandboxStale && !isNoFiles;
 
   const showNativeConsole = nativeBuildPreview && projectStack === "android-native";
+
+  useEffect(() => {
+    if (!showBuiltAppPending || !onRefresh || autoBootAttemptedRef.current) return;
+    autoBootAttemptedRef.current = true;
+    onRefresh();
+  }, [showBuiltAppPending, onRefresh]);
 
   return (
     <div className="forge-preview-root flex min-h-0 flex-1 flex-col">
@@ -245,6 +264,30 @@ export function PreviewFrame({
             sandbox="allow-scripts"
             title="Preview"
           />
+        ) : !showNativeConsole && !bootError && showBuiltAppPending ? (
+          <div className="flex h-full w-full flex-col items-center justify-center gap-4 bg-neutral-50 p-8 text-center">
+            <Loader2 className="size-8 text-neutral-400" />
+            <div className="max-w-sm space-y-2">
+              <p className="text-sm font-medium text-neutral-900">Preview do app construído</p>
+              <p className="text-sm text-neutral-500 leading-relaxed">
+                O agente já alterou arquivos neste projeto. O preview ao vivo precisa subir no sandbox
+                E2B antes de mostrar a landing aqui.
+              </p>
+            </div>
+            {onRefresh && (
+              <button
+                type="button"
+                onClick={onRefresh}
+                className="rounded-full bg-neutral-900 px-5 py-2.5 text-sm font-medium text-white hover:bg-neutral-800"
+                data-testid="preview-boot-built-app"
+              >
+                Subir preview agora
+              </button>
+            )}
+            {bootError && (
+              <p className="text-xs text-amber-800/90 max-w-md">{bootError}</p>
+            )}
+          </div>
         ) : !showNativeConsole && !bootError && showLetsBuild ? (
           <PreviewEmptyGuide
             projectName={projectName}
