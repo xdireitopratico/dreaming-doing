@@ -313,6 +313,9 @@ export class AgentLoop {
           planId: proposedPlan.planId,
           summary: proposedPlan.summary,
           rationale: proposedPlan.rationale,
+          markdown: proposedPlan.markdown,
+          mission: proposedPlan.mission,
+          objective: proposedPlan.objective,
           steps: proposedPlan.steps,
           runId: this.runId,
           projectId: this.state.projectId,
@@ -859,19 +862,12 @@ export class AgentLoop {
   }
 
   private buildPlanChatMessage(plan: ProposedPlan): string {
-    const lines = [
-      `## Plano proposto`,
+    return [
+      `**${plan.summary}**`,
       "",
-      plan.summary,
-    ];
-    if (plan.rationale?.trim()) {
-      lines.push("", plan.rationale.trim());
-    }
-    lines.push(
-      "",
-      "Revise o plano na visualização e clique em **Aprovar** para eu começar a construir.",
-    );
-    return lines.join("\n");
+      "Abri o **plano completo** para você revisar (Missão, Objetivo, Fases e Fora do escopo).",
+      "Edite se quiser e clique em **Aprovar e construir** quando estiver pronto.",
+    ].join("\n");
   }
 
   private async persistFinal(summary: string): Promise<void> {
@@ -899,6 +895,12 @@ export class AgentLoop {
       planId: plan.planId,
       planSummary: plan.summary,
       planRationale: plan.rationale ?? null,
+      planMission: plan.mission ?? null,
+      planObjective: plan.objective ?? null,
+      planMarkdown: plan.markdown ?? null,
+      planAssumptions: plan.assumptions ?? null,
+      planOutOfScope: plan.outOfScope ?? null,
+      planPhases: plan.phases ?? null,
       planSteps: plan.steps,
       finishedAt: new Date().toISOString(),
     };

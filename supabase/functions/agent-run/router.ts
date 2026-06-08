@@ -40,6 +40,33 @@ function coercePlanStep(raw: unknown, idx: number): PlanStep | null {
   };
 }
 
+function coerceStringList(raw: unknown): string[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const list = raw.filter((x): x is string => typeof x === "string" && x.trim().length > 0).map((x) => x.trim());
+  return list.length ? list : undefined;
+}
+
+function coercePhases(raw: unknown): PlanRationale["phases"] {
+  if (!Array.isArray(raw)) return undefined;
+  const phases: NonNullable<PlanRationale["phases"]> = [];
+  for (let i = 0; i < raw.length; i++) {
+    const p = raw[i];
+    if (!p || typeof p !== "object") continue;
+    const r = p as Record<string, unknown>;
+    const title = typeof r.title === "string" && r.title.trim() ? r.title.trim() : `Fase ${i + 1}`;
+    const goal = typeof r.goal === "string" ? r.goal.trim() : "";
+    const tasks = coerceStringList(r.tasks) ?? [];
+    if (!goal && tasks.length === 0) continue;
+    phases.push({
+      id: typeof r.id === "string" && r.id ? r.id : `p${i + 1}`,
+      title,
+      goal: goal || title,
+      tasks: tasks.length ? tasks : [goal || title],
+    });
+  }
+  return phases.length ? phases : undefined;
+}
+
 function coercePlan(raw: unknown): PlanRationale | null {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
   const r = raw as Record<string, unknown>;
@@ -53,7 +80,15 @@ function coercePlan(raw: unknown): PlanRationale | null {
     if (s) steps.push(s);
   }
   if (steps.length === 0) return null;
-  return { rationale, steps };
+  return {
+    rationale,
+    steps,
+    mission: typeof r.mission === "string" ? r.mission.trim() : undefined,
+    objective: typeof r.objective === "string" ? r.objective.trim() : undefined,
+    assumptions: coerceStringList(r.assumptions),
+    outOfScope: coerceStringList(r.outOfScope),
+    phases: coercePhases(r.phases),
+  };
 }
 
 export class ModelRouter {
@@ -90,7 +125,19 @@ SCHEMA (retorne exatamente esta forma):
   "needsBuild": true|false,
   "needsDeps": true|false,
   "plan": {
-    "rationale": "1-2 frases em português explicando a abordagem escolhida e POR QUÊ. Ex: 'Vamos começar pela estrutura do componente e os tipos pra você revisar antes da lógica de animação. Depois faço os estilos e por fim a animação — assim se algo precisar mudar, ajustamos cedo.'",
+    "mission": "1 frase: missão do trabalho (O QUE vamos entregar)",
+    "objective": "1-2 frases: objetivo mensurável",
+    "rationale": "Abordagem escolhida e POR QUÊ (2-3 frases legíveis)",
+    "assumptions": ["premissa 1", "premissa 2"],
+    "outOfScope": ["o que NÃO faremos neste plano"],
+    "phases": [
+      {
+        "id": "p1",
+        "title": "Fase 1 — Nome",
+        "goal": "objetivo da fase",
+        "tasks": ["tarefa legível em PT", "outra tarefa"]
+      }
+    ],
     "steps": [
       {
         "id": "s1",

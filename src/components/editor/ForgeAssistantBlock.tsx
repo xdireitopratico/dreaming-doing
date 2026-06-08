@@ -10,11 +10,12 @@ import {
 import { MarkdownRenderer } from "@/components/ui/markdown-renderer";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import type { ChatMessage } from "@/components/editor/ChatInput";
-import { initialAgentProgress, type AgentProgress, type PlanStep, type PendingPlan } from "@/lib/agent-progress";
+import { initialAgentProgress, type AgentProgress, type PendingPlan } from "@/lib/agent-progress";
 import { buildAgentNarrative } from "@/lib/agent-narrative";
 import { AgentTimeline } from "@/components/editor/AgentTimeline";
 import { ChatDiffViewer } from "@/components/editor/ChatDiffViewer";
 import { PlanViewer } from "@/components/editor/PlanViewer";
+import { PlanDocumentView } from "@/components/editor/PlanDocumentView";
 import { storedPlanFromMessage } from "@/lib/plan-message-meta";
 
 interface ForgeAssistantBlockProps {
@@ -28,8 +29,7 @@ interface ForgeAssistantBlockProps {
   copiedIds?: Set<string>;
   estimatedTokens?: number;
   showTokens?: boolean;
-  onPlanApprove?: (steps: PlanStep[]) => void;
-  onPlanReject?: (reason?: string) => void;
+  onReopenPlan?: () => void;
   onResume?: () => void;
 }
 
@@ -44,8 +44,7 @@ export function ForgeAssistantBlock({
   copiedIds,
   estimatedTokens = 0,
   showTokens = false,
-  onPlanApprove,
-  onPlanReject,
+  onReopenPlan,
   onResume,
 }: ForgeAssistantBlockProps) {
   const [detailsOpen, setDetailsOpen] = useState(isActive);
@@ -181,23 +180,16 @@ export function ForgeAssistantBlock({
 
       {rejectedPlan && !planForRun && (
         <section
-          className="my-3 rounded-lg border border-[var(--border)] bg-[var(--surface-2)]/50 overflow-hidden opacity-80"
+          className="my-3 rounded-lg border border-[var(--border)] bg-[var(--surface-2)]/60 overflow-hidden"
           aria-label="Plano rejeitado"
           data-testid="plan-rejected-history"
         >
           <header className="flex items-center gap-2 px-4 py-2 border-b border-[var(--border)]">
-            <span className="font-mono text-[10px] uppercase tracking-[0.1em] text-[var(--text-dim)]">
-              Plano rejeitado
-            </span>
+            <span className="text-xs font-medium text-[var(--foreground)]">Plano rejeitado</span>
           </header>
-          <p className="px-4 py-2.5 text-[12px] text-[var(--silver)] leading-relaxed">
-            {rejectedPlan.summary}
-          </p>
-          {rejectedPlan.rationale && (
-            <p className="px-4 pb-2.5 text-[11px] italic text-[var(--text-dim)] leading-relaxed">
-              {rejectedPlan.rationale}
-            </p>
-          )}
+          <div className="max-h-[360px] overflow-hidden">
+            <PlanDocumentView plan={rejectedPlan} editable={false} />
+          </div>
         </section>
       )}
 
@@ -232,31 +224,10 @@ export function ForgeAssistantBlock({
         </Collapsible>
       )}
 
-      {planForRun && onPlanApprove && onPlanReject && (
-        <section
-          className="my-3 rounded-lg border border-[var(--primary)]/30 bg-[var(--primary)]/5 overflow-hidden"
-          aria-label="Plano aguardando aprovação"
-          data-testid="plan-panel"
-        >
-          <header className="flex items-center gap-2 px-4 py-2.5 border-b border-[var(--primary)]/20">
-            <span className="size-1.5 rounded-full bg-[var(--primary)] animate-pulse" />
-            <span className="font-mono text-[10px] uppercase tracking-[0.1em] text-[var(--primary)]">
-              Plano proposto — aguardando sua decisão
-            </span>
-          </header>
-          {planForRun.rationale && (
-            <p className="px-4 pt-2.5 pb-1 text-[12px] italic text-[var(--silver)] leading-relaxed border-b border-[var(--primary)]/10">
-              {planForRun.rationale}
-            </p>
-          )}
-          <div className="p-3">
-            <PlanViewer
-              plan={planForRun}
-              onApprove={onPlanApprove}
-              onReject={() => onPlanReject("Cancelado pelo usuário")}
-            />
-          </div>
-        </section>
+      {planForRun && onReopenPlan && (
+        <div className="my-3" data-testid="plan-panel">
+          <PlanViewer plan={planForRun} onOpen={onReopenPlan} />
+        </div>
       )}
 
       {diffs.length > 0 && <ChatDiffViewer diffs={diffs} />}

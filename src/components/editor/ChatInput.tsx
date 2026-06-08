@@ -1,6 +1,6 @@
 // ChatInput.tsx — Input aprimorado com /commands, @file autocomplete, markdown render, auto-resize
 // Botão de parar visível durante execução, drag de imagens, typewriter nas respostas
-import { useState, useRef, useCallback, useEffect, KeyboardEvent } from "react";
+import { useState, useRef, useCallback, useEffect, useMemo, KeyboardEvent } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { MarkdownRenderer } from "@/components/ui/markdown-renderer";
 import {
@@ -30,7 +30,9 @@ import {
 } from "@/lib/agent-setup";
 import { ChatStream } from "@/components/editor/ChatStream";
 import { ComposerModeSelect } from "@/components/editor/ComposerModeSelect";
+import { PlanPendingBar } from "@/components/editor/PlanPendingBar";
 import type { AgentProgress, PlanStep } from "@/lib/agent-progress";
+import { resolveEffectiveAgentProgress } from "@/lib/resolve-agent-progress";
 
 export type AgentComposerMode = "plan" | "build";
 
@@ -72,6 +74,7 @@ interface ChatInputProps {
   /** Fase 4.6: plano aguardando aprovação. */
   onPlanApprove?: (steps: PlanStep[]) => void;
   onPlanReject?: (reason?: string) => void;
+  onReopenPlan?: () => void;
   onResumeAgent?: () => void;
   /** Slash /deploy — mesmo fluxo que Publicar na topbar */
   onDeploy?: () => void | Promise<void>;
@@ -131,6 +134,7 @@ export function ChatInput({
   onUndoMessage,
   onPlanApprove,
   onPlanReject,
+  onReopenPlan,
 }: ChatInputProps) {
   const [input, setInput] = useState("");
   const [composerModeLocal, setComposerModeLocal] = useState<AgentComposerMode>("plan");
@@ -145,6 +149,13 @@ export function ChatInput({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const historyRef = useRef<string[]>([]);
+  const [planActionBusy, setPlanActionBusy] = useState(false);
+
+  const effectiveProgress = useMemo(
+    () => resolveEffectiveAgentProgress(agentProgress, messages),
+    [agentProgress, messages],
+  );
+  const pendingPlan = effectiveProgress.pendingPlan;
 
   useEffect(() => {
     if (externalPrompt) {
@@ -405,35 +416,10 @@ export function ChatInput({
               running={running}
               activeRunId={activeRunId}
               frozenRuns={frozenRuns}
-              progress={
-                agentProgress ?? {
-                  phase: null,
-                  message: null,
-                  currentStep: null,
-                  totalSteps: null,
-                  tools: [],
-                  cost: 0,
-                  model: null,
-                  skills: [],
-                  runtimeChecks: [],
-                  timeline: [],
-                  summary: null,
-                  error: null,
-                  finished: false,
-                  resumable: false,
-                  statusHint: null,
-                  streamText: null,
-                  lastFinishOk: null,
-                  autoResuming: false,
-                  pendingQueueCount: 0,
-                  diffs: [],
-                  pendingPlan: null,
-                }
-              }
+              progress={effectiveProgress}
               onResume={onResumeAgent}
               onUndoMessage={onUndoMessage}
-              onPlanApprove={onPlanApprove}
-              onPlanReject={onPlanReject}
+              onReopenPlan={onReopenPlan}
             />
         )}
       </div>
@@ -508,6 +494,30 @@ export function ChatInput({
             </span>
           ))}
         </div>
+      )}
+
+      {pendingPlan && !running && onPlanApprove && onPlanReject && onReopenPlan && (
+        <PlanPendingBar
+          plan={pendingPlan}
+          busy={planActionBusy}
+          onOpen={onReopenPlan}
+          onApprove={async () => {
+            setPlanActionBusy(true);
+            try {
+              await onPlanApprove(pendingPlan.steps.filter((s) => s.enabled));
+            } finally {
+              setPlanActionBusy(false);
+            }
+          }}
+          onReject={async () => {
+            setPlanActionBusy(true);
+            try {
+              await onPlanReject();
+            } finally {
+              setPlanActionBusy(false);
+            }
+          }}
+        />
       )}
 
       {(agentProgress?.pendingQueueCount ?? 0) > 0 && (

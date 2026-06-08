@@ -126,11 +126,25 @@ export interface PlanStep {
   enabled: boolean;
 }
 
+export interface ForgePlanPhase {
+  id: string;
+  title: string;
+  goal: string;
+  tasks: string[];
+}
+
 export interface ProposedPlan {
   planId: string;
   summary: string;
   /** Justificativa amigável em PT-BR (1-2 frases) — exibida no UI acima dos passos. */
   rationale?: string;
+  mission?: string;
+  objective?: string;
+  assumptions?: string[];
+  outOfScope?: string[];
+  phases?: ForgePlanPhase[];
+  /** Documento markdown estilo Lovable (Missão, Objetivo, Fases, Fora do escopo). */
+  markdown?: string;
   steps: PlanStep[];
   ttlMs: number;
   /** Decisão do cliente (preenchida quando aprovada/rejeitada). */

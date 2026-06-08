@@ -16,10 +16,15 @@ export interface PlanStep {
   enabled: boolean;
 }
 
+export type AwaitingKind = "qualify" | "plan_approval" | null;
+
 export interface PendingPlan {
   planId: string;
   summary: string;
   rationale?: string;
+  markdown?: string;
+  mission?: string;
+  objective?: string;
   steps: PlanStep[];
   ttlMs: number;
   proposedAt: number;
@@ -58,6 +63,7 @@ export interface AgentProgress {
   pendingPlan: PendingPlan | null;
   canceled?: boolean;
   awaiting?: boolean;
+  awaitingKind?: AwaitingKind;
 }
 
 export type AgentConnectOptions = {
@@ -87,6 +93,7 @@ export const initialAgentProgress: AgentProgress = {
   pendingQueueCount: 0,
   diffs: [],
   pendingPlan: null,
+  awaitingKind: null,
   canceled: false,
   awaiting: false,
 };
@@ -303,7 +310,12 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
         ...prev,
         summary: (data.summary as string) ?? prev.summary,
         finished: true,
-        awaiting: !!(data.awaiting || data.qualified),
+        awaiting: !!(data.awaiting || data.qualified) || (data.planProposed === true && !!prev.pendingPlan),
+        awaitingKind: data.qualified || data.awaiting
+          ? "qualify"
+          : data.planProposed === true && prev.pendingPlan
+            ? "plan_approval"
+            : null,
         resumable: false,
         error: null,
         streamText: prev.streamText,
@@ -326,6 +338,12 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
           typeof data.rationale === "string" && data.rationale.trim()
             ? data.rationale.trim()
             : undefined,
+        markdown:
+          typeof data.markdown === "string" && data.markdown.trim()
+            ? data.markdown.trim()
+            : undefined,
+        mission: typeof data.mission === "string" ? data.mission : undefined,
+        objective: typeof data.objective === "string" ? data.objective : undefined,
         steps,
         ttlMs: typeof data.ttlMs === "number" ? data.ttlMs : 5 * 60 * 1000,
         proposedAt: Date.now(),
@@ -335,8 +353,9 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
       return {
         ...prev,
         awaiting: true,
+        awaitingKind: "plan_approval",
         pendingPlan,
-        statusHint: "Aguardando sua aprovação do plano…",
+        statusHint: "Plano aguardando aprovação…",
         timeline: [...prev.timeline, event],
       };
     }

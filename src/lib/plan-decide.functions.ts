@@ -85,6 +85,25 @@ export const planApprove = createServerFn({ method: "POST" })
       throw new Error(`Falha ao criar run de build: ${insertErr?.message ?? "unknown"}`);
     }
 
+    const { data: planMsgs } = await supabase
+      .from("messages")
+      .select("id, meta")
+      .eq("conversation_id", run.conversation_id)
+      .eq("role", "assistant")
+      .order("created_at", { ascending: false })
+      .limit(30);
+    const planMsg = (planMsgs ?? []).find((m) => {
+      const meta = (m.meta ?? {}) as Record<string, unknown>;
+      return meta.runId === runId && meta.planId === planId;
+    });
+    if (planMsg) {
+      const prev = (planMsg.meta ?? {}) as Record<string, unknown>;
+      await supabase
+        .from("messages")
+        .update({ meta: { ...prev, planStatus: "approved", planApprovedAt: now } })
+        .eq("id", planMsg.id);
+    }
+
     const { data: profile } = await supabase
       .from("profiles")
       .select("integration_prefs")

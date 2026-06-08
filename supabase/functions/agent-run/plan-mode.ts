@@ -25,9 +25,21 @@ export interface PlanStep {
  * o que o agente explica pra o usuário sobre a abordagem escolhida.
  * `steps` é a sequência concreta de ações (2-7 passos).
  */
+export interface ForgePlanPhase {
+  id: string;
+  title: string;
+  goal: string;
+  tasks: string[];
+}
+
 export interface PlanRationale {
   rationale: string;
   steps: PlanStep[];
+  mission?: string;
+  objective?: string;
+  assumptions?: string[];
+  outOfScope?: string[];
+  phases?: ForgePlanPhase[];
 }
 
 export type { ProposedPlan } from "./types.ts";
@@ -142,6 +154,94 @@ export function extractRationaleFromLlmContent(
   return null;
 }
 
+function coercePhases(raw: unknown): ForgePlanPhase[] {
+  if (!Array.isArray(raw)) return [];
+  const out: ForgePlanPhase[] = [];
+  for (let i = 0; i < raw.length; i++) {
+    const p = raw[i];
+    if (!p || typeof p !== "object") continue;
+    const r = p as Record<string, unknown>;
+    const title = typeof r.title === "string" && r.title.trim() ? r.title.trim() : `Fase ${i + 1}`;
+    const goal = typeof r.goal === "string" ? r.goal.trim() : "";
+    const tasks = Array.isArray(r.tasks)
+      ? r.tasks.filter((t): t is string => typeof t === "string" && t.trim().length > 0).map((t) => t.trim())
+      : [];
+    if (tasks.length === 0 && !goal) continue;
+    out.push({
+      id: typeof r.id === "string" && r.id ? r.id : `phase-${i + 1}`,
+      title,
+      goal: goal || title,
+      tasks: tasks.length ? tasks : [goal || title],
+    });
+  }
+  return out;
+}
+
+export function buildPlanDocumentMarkdown(input: {
+  summary: string;
+  rationale?: string;
+  mission?: string;
+  objective?: string;
+  assumptions?: string[];
+  outOfScope?: string[];
+  phases?: ForgePlanPhase[];
+  steps?: PlanStep[];
+}): { markdown: string; mission: string; objective: string; phases: ForgePlanPhase[]; outOfScope: string[] } {
+  const mission = input.mission?.trim() || input.summary.trim() || "Entregar o pedido do usuário";
+  const objective = input.objective?.trim() || input.rationale?.trim() || "Versão funcional alinhada ao pedido.";
+  const approach = input.rationale?.trim() || "Implementação incremental com validação.";
+  const assumptions = input.assumptions?.length ? input.assumptions : ["Stack React/Vite do projeto."];
+  const outOfScope = input.outOfScope?.length
+    ? input.outOfScope
+    : ["Não alterar arquivos fora do escopo.", "Não mudar auth/billing sem pedido explícito."];
+
+  let phases = input.phases?.length ? input.phases : [];
+  if (phases.length === 0 && input.steps?.length) {
+    const mid = Math.ceil(input.steps.length / 2);
+    const a = input.steps.slice(0, mid).map((s) => s.description);
+    const b = input.steps.slice(mid).map((s) => s.description);
+    if (a.length) phases.push({ id: "p1", title: "Fase 1 — Preparação", goal: "Base e contexto.", tasks: a });
+    if (b.length) phases.push({ id: "p2", title: "Fase 2 — Implementação", goal: "Mudanças principais.", tasks: b });
+  }
+  if (phases.length === 0) {
+    phases = [{ id: "p1", title: "Fase 1 — Execução", goal: "Implementar e validar.", tasks: ["Analisar", "Implementar", "Validar"] }];
+  }
+
+  const lines = [
+    "## Missão", mission, "", "## Objetivo", objective, "", "## Abordagem", approach, "",
+    "## Premissas", ...assumptions.map((x) => `- ${x}`), "", "## Fases",
+  ];
+  for (const ph of phases) {
+    lines.push(`### ${ph.title}`, ph.goal, "");
+    for (const t of ph.tasks) lines.push(`- [ ] ${t}`);
+    lines.push("");
+  }
+  lines.push("## Fora do escopo", ...outOfScope.map((x) => `- ${x}`));
+  return { markdown: lines.join("\n").trim(), mission, objective, phases, outOfScope };
+}
+
+function attachDocument(plan: ProposedPlan, src: PlanRationale | null, summary: string): ProposedPlan {
+  const doc = buildPlanDocumentMarkdown({
+    summary,
+    rationale: src?.rationale ?? plan.rationale,
+    mission: src?.mission,
+    objective: src?.objective,
+    assumptions: src?.assumptions,
+    outOfScope: src?.outOfScope,
+    phases: src?.phases,
+    steps: plan.steps,
+  });
+  return {
+    ...plan,
+    mission: doc.mission,
+    objective: doc.objective,
+    assumptions: src?.assumptions,
+    outOfScope: doc.outOfScope,
+    phases: doc.phases,
+    markdown: doc.markdown,
+  };
+}
+
 /**
  * Constrói o ProposedPlan final a partir do que o router devolveu:
  * 1. Se classification.plan (LLM estruturado) tem steps → usa direto, com rationale
@@ -157,38 +257,38 @@ export function buildProposedPlan(
 
   // Caminho 1: plan estruturado veio do router
   if (classification.plan && classification.plan.steps.length > 0) {
-    return {
+    return attachDocument({
       planId: options.planId,
       summary,
       rationale: classification.plan.rationale || undefined,
       steps: classification.plan.steps,
       ttlMs: options.ttlMs,
       proposedAt: options.proposedAt,
-    };
+    }, classification.plan, summary);
   }
 
   // Caminho 2: extrai do rawContent
   const fromRaw = extractRationaleFromLlmContent(rawContent);
   if (fromRaw && fromRaw.steps.length > 0) {
-    return {
+    return attachDocument({
       planId: options.planId,
       summary,
       rationale: fromRaw.rationale || undefined,
       steps: fromRaw.steps,
       ttlMs: options.ttlMs,
       proposedAt: options.proposedAt,
-    };
+    }, fromRaw, summary);
   }
 
   // Caminho 3: heurística default
-  return {
+  return attachDocument({
     planId: options.planId,
     summary,
-    rationale: "Plano gerado automaticamente pela heurística padrão — você pode editar cada passo antes de aprovar.",
+    rationale: "Plano gerado automaticamente — revise as fases antes de aprovar.",
     steps: deriveDefaultPlan(classification.type, summary),
     ttlMs: options.ttlMs,
     proposedAt: options.proposedAt,
-  };
+  }, null, summary);
 }
 
 /**

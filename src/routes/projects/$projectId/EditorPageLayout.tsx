@@ -1,4 +1,4 @@
-import { useEffect, useState, type RefObject } from "react";
+import { useEffect, useMemo, useState, type RefObject } from "react";
 import { AnimatePresence } from "framer-motion";
 
 import { EditorShell } from "@/components/EditorShell";
@@ -19,6 +19,7 @@ import { ShortcutCheatsheet } from "@/components/editor/ShortcutCheatsheet";
 import { LogPanel, type LogEntry } from "@/components/editor/LogPanel";
 import { AiDiffViewer, type DiffEntry } from "@/components/editor/AiDiffViewer";
 import { PlanModal } from "@/components/editor/PlanModal";
+import { resolvePendingPlan } from "@/lib/plan-message-meta";
 import type { useAgentRun } from "@/hooks/useAgentRun";
 import type { usePreviewBoot } from "@/hooks/usePreviewBoot";
 import type { useConnectors } from "@/hooks/useConnectors";
@@ -77,7 +78,7 @@ export type EditorPageLayoutProps = {
   tasteStartRemaining: number;
   handleStartProject: () => void;
   handleUndoMessage: (assistantMsgId: string) => void;
-  handlePlanApprove: (steps: { id: string; enabled: boolean }[]) => Promise<void>;
+  handlePlanApprove: (steps: { id: string; enabled: boolean }[], markdown?: string) => Promise<void>;
   handlePlanReject: (reason?: string) => Promise<void>;
   hasUserLlmKey: boolean;
   agentPrefs: AgentPreferences;
@@ -185,17 +186,33 @@ export function EditorPageLayout({
   handleDragLeave,
   handleDrop,
 }: EditorPageLayoutProps) {
-  const pendingPlan = agent.progress.pendingPlan;
+  const pendingPlan = useMemo(
+    () => resolvePendingPlan(agent.progress.pendingPlan, chatMessages),
+    [agent.progress.pendingPlan, chatMessages],
+  );
   const [dismissedPlanId, setDismissedPlanId] = useState<string | null>(null);
+  const [forcePlanOpen, setForcePlanOpen] = useState(false);
 
   useEffect(() => {
     if (!pendingPlan) {
       setDismissedPlanId(null);
+      setForcePlanOpen(false);
     }
-  }, [pendingPlan]);
+  }, [pendingPlan?.planId]);
+
+  useEffect(() => {
+    if (pendingPlan && !agent.progress.pendingPlan) {
+      agent.hydratePendingPlan(pendingPlan);
+    }
+  }, [pendingPlan, agent.progress.pendingPlan, agent.hydratePendingPlan]);
 
   const showPlanModal =
-    pendingPlan != null && pendingPlan.planId !== dismissedPlanId;
+    pendingPlan != null && (pendingPlan.planId !== dismissedPlanId || forcePlanOpen);
+
+  const handleReopenPlan = () => {
+    setDismissedPlanId(null);
+    setForcePlanOpen(true);
+  };
 
   return (
     <>
@@ -214,7 +231,8 @@ export function EditorPageLayout({
               <EditorChatHeader
                 projectName={projectName ?? undefined}
                 running={running}
-                awaitingUser={agent.progress.awaiting}
+                awaitingUser={agent.progress.awaitingKind === "qualify" && !pendingPlan}
+                planPending={!!pendingPlan}
                 pendingQueueCount={agent.progress.pendingQueueCount}
               />
             }
@@ -284,6 +302,7 @@ export function EditorPageLayout({
                     onUndoMessage={handleUndoMessage}
                     onPlanApprove={handlePlanApprove}
                     onPlanReject={handlePlanReject}
+                    onReopenPlan={handleReopenPlan}
                   />
                 </div>
                 <SetupRail
@@ -419,9 +438,10 @@ export function EditorPageLayout({
           <PlanModal
             plan={pendingPlan}
             onClose={() => setDismissedPlanId(pendingPlan.planId)}
-            onApprove={async (steps) => {
-              await handlePlanApprove(steps);
+            onApprove={async (steps, markdown) => {
+              await handlePlanApprove(steps, markdown);
               setDismissedPlanId(pendingPlan.planId);
+              setForcePlanOpen(false);
             }}
             onReject={async (reason) => {
               await handlePlanReject(reason);

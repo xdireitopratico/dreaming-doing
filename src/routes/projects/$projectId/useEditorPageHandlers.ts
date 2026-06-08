@@ -26,6 +26,8 @@ import { logEditorTelemetryEvent } from "@/lib/editor-telemetry";
 import { isAgentConnectInFlight } from "@/lib/agent-session-guards";
 import { publishProject } from "@/lib/publish.functions";
 import { planApprove, planReject } from "@/lib/plan-decide.functions";
+import { resolvePendingPlan } from "@/lib/plan-message-meta";
+import type { PendingPlan } from "@/lib/agent-progress";
 import { exportProjectZip } from "@/hooks/useWorkspacePresets";
 import { useAutoPublish } from "@/hooks/useAutoPublish";
 import type { useAgentRun } from "@/hooks/useAgentRun";
@@ -275,7 +277,7 @@ export function useEditorPageHandlers({
     async (text: string, mode?: AgentComposerMode, parts?: StoredMessagePart[]) => {
       if (!conversation) return;
 
-      const pp = agent.progress.pendingPlan;
+      const pp = resolvePendingPlan(agent.progress.pendingPlan, chatMessages);
       if (pp) {
         try {
           await planRejectFn({
@@ -346,6 +348,7 @@ export function useEditorPageHandlers({
       projectId,
       qc,
       planRejectFn,
+      chatMessages,
     ],
   );
 
@@ -419,10 +422,17 @@ export function useEditorPageHandlers({
     exportProjectZip(projectId, project.name ?? "projeto");
   }, [projectId, project]);
 
+  const getPendingPlan = useCallback((): PendingPlan | null => {
+    return resolvePendingPlan(agent.progress.pendingPlan, chatMessages);
+  }, [agent.progress.pendingPlan, chatMessages]);
+
   const handlePlanApprove = useCallback(
-    async (steps: { id: string; enabled: boolean }[]) => {
-      const pp = agent.progress.pendingPlan;
-      if (!pp) return;
+    async (steps: { id: string; enabled: boolean }[], _markdown?: string) => {
+      const pp = getPendingPlan();
+      if (!pp) {
+        toast.error("Plano não encontrado — gere um novo plano no modo Plan.");
+        return;
+      }
       const enabled = steps.filter((s) => s.enabled !== false);
       if (enabled.length === 0) {
         toast.warning("Selecione ao menos um passo para executar.");
@@ -461,13 +471,16 @@ export function useEditorPageHandlers({
         toast.error((e as Error)?.message ?? "Falha ao aprovar plano");
       }
     },
-    [agent, agent.progress.pendingPlan, conversation, projectId, qc, planApproveFn, setComposerMode],
+    [getPendingPlan, conversation, projectId, qc, planApproveFn, setComposerMode, agent],
   );
 
   const handlePlanReject = useCallback(
     async (reason?: string) => {
-      const pp = agent.progress.pendingPlan;
-      if (!pp) return;
+      const pp = getPendingPlan();
+      if (!pp) {
+        toast.error("Plano não encontrado.");
+        return;
+      }
       try {
         await planRejectFn({
           data: { runId: pp.runId, planId: pp.planId, reason },
@@ -481,7 +494,7 @@ export function useEditorPageHandlers({
         toast.error((e as Error)?.message ?? "Falha ao rejeitar plano");
       }
     },
-    [agent, agent.progress.pendingPlan, projectId, qc, planRejectFn],
+    [agent, getPendingPlan, conversation?.id, projectId, qc, planRejectFn],
   );
 
   const liveSiteUrl = useMemo(() => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { storedPlanFromMessage } from "@/lib/plan-message-meta";
+import { resolvePendingPlan, storedPlanFromMessage } from "@/lib/plan-message-meta";
 import type { ChatMessage } from "@/components/editor/ChatInput";
 
 describe("storedPlanFromMessage", () => {
@@ -25,5 +25,26 @@ describe("storedPlanFromMessage", () => {
 
   it("retorna null sem steps", () => {
     expect(storedPlanFromMessage({ ...base, meta: { runId: "r", planId: "p" } })).toBeNull();
+  });
+
+  it("resolvePendingPlan prioriza live e cai no histórico", () => {
+    const pending: ChatMessage = {
+      ...base,
+      meta: {
+        ...base.meta,
+        planStatus: "pending",
+      },
+    };
+    const live = {
+      planId: "live",
+      summary: "Live",
+      steps: [{ id: "s1", type: "custom" as const, description: "x", enabled: true }],
+      ttlMs: 60_000,
+      proposedAt: Date.now(),
+      runId: "r-live",
+      projectId: "p1",
+    };
+    expect(resolvePendingPlan(live, [pending])?.planId).toBe("live");
+    expect(resolvePendingPlan(null, [pending])?.planId).toBe("plan-1");
   });
 });

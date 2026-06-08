@@ -6,6 +6,7 @@ interface EditorChatHeaderProps {
   projectName?: string;
   running?: boolean;
   awaitingUser?: boolean;
+  planPending?: boolean;
   pendingQueueCount?: number;
 }
 
@@ -13,13 +14,16 @@ export function EditorChatHeader({
   projectName,
   running,
   awaitingUser,
+  planPending,
   pendingQueueCount = 0,
 }: EditorChatHeaderProps) {
   const subLabel = running
     ? "Construindo alterações…"
-    : awaitingUser
-      ? "Aguardando sua resposta"
-      : pendingQueueCount > 0
+    : planPending
+      ? "Plano aguardando aprovação"
+      : awaitingUser
+        ? "Aguardando sua resposta"
+        : pendingQueueCount > 0
         ? `${pendingQueueCount} na fila`
         : "Visualizando última versão salva";
   const toggleCollapse = () => {

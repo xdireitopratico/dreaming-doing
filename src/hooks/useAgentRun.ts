@@ -106,7 +106,7 @@ export function useAgentRun() {
       setProgress((p) => {
         let next: AgentProgress;
         if (status === "awaiting_user") {
-          next = { ...p, finished: true, awaiting: true, autoResuming: false };
+          next = { ...p, finished: true, awaiting: true, awaitingKind: "qualify", autoResuming: false };
         } else if (status === "canceled") {
           next = {
             ...p,
@@ -598,7 +598,17 @@ export function useAgentRun() {
   );
 
   const clearPendingPlan = useCallback(() => {
-    setProgress((p) => ({ ...p, pendingPlan: null, awaiting: false }));
+    setProgress((p) => ({ ...p, pendingPlan: null, awaiting: false, awaitingKind: null }));
+  }, []);
+
+  const hydratePendingPlan = useCallback((plan: import("@/lib/agent-progress").PendingPlan) => {
+    setProgress((p) => ({
+      ...p,
+      pendingPlan: plan,
+      awaiting: true,
+      awaitingKind: "plan_approval",
+      statusHint: "Plano aguardando aprovação…",
+    }));
   }, []);
 
   const acknowledgeMaterializedRun = useCallback((runId: string) => {
@@ -631,6 +641,7 @@ export function useAgentRun() {
     disconnect,
     stop,
     clearPendingPlan,
+    hydratePendingPlan,
     acknowledgeMaterializedRun,
   };
 }

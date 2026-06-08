@@ -1,7 +1,7 @@
 // ChatStream — thread Lovable: user → FORGE (narrativa + detalhes inline por turno)
 import { RefreshCw, AlertTriangle, MessageCircle } from "lucide-react";
 import { Button } from "@forge/ui";
-import type { AgentProgress, PlanStep, PendingPlan } from "@/lib/agent-progress";
+import type { AgentProgress } from "@/lib/agent-progress";
 import type { ChatMessage } from "@/components/editor/ChatInput";
 import { useState, useCallback, useMemo } from "react";
 import { ErrorHintCard } from "@/components/editor/ErrorHintCard";
@@ -21,8 +21,7 @@ export interface ChatStreamProps {
   frozenRuns?: ReadonlyMap<string, FrozenRunSnapshot>;
   onResume?: () => void;
   onUndoMessage?: (assistantMsgId: string) => void;
-  onPlanApprove?: (steps: PlanStep[]) => void;
-  onPlanReject?: (reason?: string) => void;
+  onReopenPlan?: () => void;
 }
 
 export function ChatStream({
@@ -33,11 +32,10 @@ export function ChatStream({
   frozenRuns,
   onResume,
   onUndoMessage,
-  onPlanApprove,
-  onPlanReject,
+  onReopenPlan,
 }: ChatStreamProps) {
   const pendingPlan = progress.pendingPlan;
-  const awaitingReply = progress.awaiting && !pendingPlan;
+  const awaitingQualify = progress.awaitingKind === "qualify" && !pendingPlan;
 
   const [copiedIds, setCopiedIds] = useState<Set<string>>(new Set());
 
@@ -78,19 +76,17 @@ export function ChatStream({
 
   return (
     <div className="forge-chat-stream" role="log" aria-live="polite" aria-relevant="additions text">
-      {awaitingReply && (
+      {awaitingQualify && (
         <section
           className="my-2 rounded-lg border border-amber-400/35 bg-amber-400/8 px-3 py-2.5 flex items-start gap-2"
-          aria-label="Aguardando sua resposta"
+          aria-label="Aguardando detalhes"
           data-testid="awaiting-user-banner"
         >
           <MessageCircle className="size-4 shrink-0 text-amber-400 mt-0.5" />
           <div className="min-w-0">
-            <p className="font-mono text-[10px] uppercase tracking-wider text-amber-400">
-              Aguardando você
-            </p>
-            <p className="text-[12px] text-[var(--forge-silver)] leading-relaxed mt-0.5">
-              O FORGE fez uma pergunta acima. Responda no campo de mensagem abaixo para continuar.
+            <p className="text-xs font-medium text-amber-400">Preciso de mais detalhes</p>
+            <p className="text-sm text-[var(--forge-foreground)] leading-relaxed mt-0.5">
+              Responda à pergunta do FORGE no campo abaixo para continuar.
             </p>
           </div>
         </section>
@@ -126,8 +122,7 @@ export function ChatStream({
             copiedIds={copiedIds}
             estimatedTokens={estimatedTokens}
             showTokens={assistantIndex === 0}
-            onPlanApprove={onPlanApprove}
-            onPlanReject={onPlanReject}
+            onReopenPlan={onReopenPlan}
             onResume={onResume}
           />
         );
