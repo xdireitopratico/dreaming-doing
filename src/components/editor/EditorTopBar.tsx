@@ -10,6 +10,7 @@ import {
 import { PreviewRouteNav } from "@/components/editor/PreviewRouteNav";
 
 interface EditorTopBarProps {
+  projectId?: string;
   projectName?: string;
   activeView: EditorMainView;
   onViewChange: (view: EditorMainView) => void;
@@ -25,6 +26,7 @@ interface EditorTopBarProps {
 }
 
 export function EditorTopBar({
+  projectId,
   projectName,
   activeView,
   onViewChange,
@@ -48,17 +50,29 @@ export function EditorTopBar({
   return (
     <header className="forge-topbar">
       <div className="forge-topbar-left">
-        <ForgeLogoMark size={18} linkTo="/projects" />
+        <ForgeLogoMark size={18} linkTo="/projects" title="Todos os projetos" />
         <span className="forge-topbar-divider" aria-hidden />
-        <Link to="/projects" className="forge-project-trigger">
-          <span className="forge-project-name" title={projectName ?? "Projeto"}>
-            {projectName ?? "Projeto"}
-            <ChevronDown className="size-3 shrink-0 opacity-50" />
-          </span>
-          <span className="forge-project-sub">
-            {running ? "Construindo alterações…" : "Visualizando última versão salva"}
-          </span>
-        </Link>
+        {projectId ? (
+          <Link to="/projects/$projectId" params={{ projectId }} className="forge-project-trigger">
+            <span className="forge-project-name" title={projectName ?? "Projeto"}>
+              {projectName ?? "Projeto"}
+              <ChevronDown className="size-3 shrink-0 opacity-50" />
+            </span>
+            <span className="forge-project-sub">
+              {running ? "Construindo alterações…" : "Visualizando última versão salva"}
+            </span>
+          </Link>
+        ) : (
+          <Link to="/projects" className="forge-project-trigger">
+            <span className="forge-project-name" title={projectName ?? "Projeto"}>
+              {projectName ?? "Projeto"}
+              <ChevronDown className="size-3 shrink-0 opacity-50" />
+            </span>
+            <span className="forge-project-sub">
+              {running ? "Construindo alterações…" : "Visualizando última versão salva"}
+            </span>
+          </Link>
+        )}
       </div>
 
       <div className="forge-topbar-center min-w-0">

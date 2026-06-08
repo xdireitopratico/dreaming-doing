@@ -5,10 +5,12 @@ export function ForgeLogoMark({
   showWordmark = true,
   size = 20,
   linkTo = "/projects",
+  title = "FORGE",
 }: {
   showWordmark?: boolean;
   size?: number;
   linkTo?: string | false;
+  title?: string;
 }) {
   const mark = (
     <>
@@ -44,7 +46,7 @@ export function ForgeLogoMark({
   }
 
   return (
-    <Link to={linkTo} className="forge-logo-mark" title="FORGE">
+    <Link to={linkTo} className="forge-logo-mark" title={title}>
       {mark}
     </Link>
   );

@@ -180,6 +180,7 @@ function HistoryPage() {
 
   return (
     <EditorShell
+      projectId={projectId}
       projectName={project?.name}
       activeView="code"
       onViewChange={(view) => {

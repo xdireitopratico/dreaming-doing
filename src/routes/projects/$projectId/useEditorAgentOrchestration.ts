@@ -9,6 +9,8 @@ import type { DiffEntry } from "@/components/editor/AiDiffViewer";
 import { useAgentBlame, buildBlameFromTimeline } from "@/hooks/useAgentBlame";
 import type { usePreviewBoot } from "@/hooks/usePreviewBoot";
 import { clearEnhancements } from "@/lib/monacoEnhancements";
+import { isAgentConnectInFlight } from "@/lib/agent-session-guards";
+import { logEditorTelemetryEvent } from "@/lib/editor-telemetry";
 import { useAgentSessionCoordinator } from "./useAgentSessionCoordinator";
 import type { useAgentRun } from "@/hooks/useAgentRun";
 
@@ -42,6 +44,8 @@ type UseEditorAgentOrchestrationParams = {
   activeView: "code" | "preview" | "diff";
   setPreviewReloadNonce: (value: number | ((prev: number) => number)) => void;
   tasteQuota: TasteQuota;
+  /** `${conversationId}:${lastUserMessageId}` quando a última msg é do user sem resposta. */
+  pendingAgentRunKey: string | null;
   runAgent: (
     explicitKind?: import("@/lib/taste").ForgeSessionKind,
     explicitAction?: import("@/lib/taste").TasteAction,
@@ -71,6 +75,7 @@ export function useEditorAgentOrchestration({
   activeView,
   setPreviewReloadNonce,
   tasteQuota,
+  pendingAgentRunKey,
   runAgent,
   fileMap,
   editorRef,
@@ -83,6 +88,7 @@ export function useEditorAgentOrchestration({
   const lastSyncedFilesKeyRef = useRef("");
   const lastPreviewSyncTickRef = useRef(0);
   const previewSyncInFlightRef = useRef(false);
+  const lastPendingAgentRunRef = useRef<string | null>(null);
 
   useAgentSessionCoordinator({
     projectId,
@@ -92,6 +98,23 @@ export function useEditorAgentOrchestration({
     tasteQuota,
     runAgent,
   });
+
+  // Mensagem user sem resposta (ex.: 1º send antes da conversa carregar, ou auto-run perdido).
+  useEffect(() => {
+    if (!pendingAgentRunKey || !conversation?.id) return;
+    if (running || agent.connected || isAgentConnectInFlight()) return;
+    if (lastPendingAgentRunRef.current === pendingAgentRunKey) return;
+
+    lastPendingAgentRunRef.current = pendingAgentRunKey;
+    logEditorTelemetryEvent("agent", "pending_user_run", "info", pendingAgentRunKey.slice(0, 16));
+    runAgent();
+  }, [
+    pendingAgentRunKey,
+    conversation?.id,
+    running,
+    agent.connected,
+    runAgent,
+  ]);
 
   const fileCount = files?.length ?? 0;
 

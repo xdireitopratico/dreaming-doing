@@ -32,6 +32,7 @@ type PreviewBoot = ReturnType<typeof usePreviewBoot>;
 type Connectors = ReturnType<typeof useConnectors>;
 
 export type EditorPageLayoutProps = {
+  projectId: string;
   projectName?: string | null;
   running: boolean;
   agent: AgentRun;
@@ -113,6 +114,7 @@ export type EditorPageLayoutProps = {
 };
 
 export function EditorPageLayout({
+  projectId,
   projectName,
   running,
   agent,
@@ -241,6 +243,7 @@ export function EditorPageLayout({
             workspaceCode={activeView === "code"}
             chatHeader={
               <EditorChatHeader
+                projectId={projectId}
                 projectName={projectName ?? undefined}
                 running={running}
                 awaitingUser={agent.progress.awaitingKind === "qualify" && !pendingPlan}

@@ -90,10 +90,10 @@ export const FORGE_THEME: editor.IStandaloneThemeData = {
     { token: "number.float", foreground: "#FFB627" },
 
     // ─── Comments ─── (fundo, não atrapalha)
-    { token: "comment", foreground: "rgba(237, 239, 242, 0.30)", fontStyle: "italic" },
-    { token: "comment.line", foreground: "rgba(237, 239, 242, 0.30)", fontStyle: "italic" },
-    { token: "comment.block", foreground: "rgba(237, 239, 242, 0.30)", fontStyle: "italic" },
-    { token: "comment.documentation", foreground: "rgba(237, 239, 242, 0.35)", fontStyle: "italic" },
+    { token: "comment", foreground: "#4A4E56", fontStyle: "italic" },
+    { token: "comment.line", foreground: "#4A4E56", fontStyle: "italic" },
+    { token: "comment.block", foreground: "#4A4E56", fontStyle: "italic" },
+    { token: "comment.documentation", foreground: "#535861", fontStyle: "italic" },
 
     // ─── Types & Classes ─── (laranja hot — distinto, importante)
     { token: "type", foreground: "#FF7A1A" },
@@ -111,7 +111,7 @@ export const FORGE_THEME: editor.IStandaloneThemeData = {
 
     // ─── Variables ─── (foreground padrão)
     { token: "variable", foreground: "#EDEFF2" },
-    { token: "variable.parameter", foreground: "rgba(237, 239, 242, 0.75)" },
+    { token: "variable.parameter", foreground: "#C2C5CA" },
     { token: "variable.member", foreground: "#C9CED6" },
     { token: "variable.other", foreground: "#EDEFF2" },
 
@@ -139,9 +139,9 @@ export const FORGE_THEME: editor.IStandaloneThemeData = {
     { token: "tag.decorator", foreground: "#FFB627" },
 
     // ─── Punctuation ───
-    { token: "delimiter", foreground: "rgba(237, 239, 242, 0.40)" },
-    { token: "delimiter.bracket", foreground: "rgba(237, 239, 242, 0.45)" },
-    { token: "delimiter.parenthesis", foreground: "rgba(237, 239, 242, 0.40)" },
+    { token: "delimiter", foreground: "#5C6169" },
+    { token: "delimiter.bracket", foreground: "#656A72" },
+    { token: "delimiter.parenthesis", foreground: "#5C6169" },
 
     // ─── Emphasis ───
     { token: "emphasis", fontStyle: "italic" },

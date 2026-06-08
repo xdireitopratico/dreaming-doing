@@ -34,6 +34,11 @@ import { useAutoPublish } from "@/hooks/useAutoPublish";
 import type { useAgentRun } from "@/hooks/useAgentRun";
 import type { usePreviewBoot } from "@/hooks/usePreviewBoot";
 import { toast } from "@/lib/toast";
+import {
+  FORGE_UI_BUNDLED_MARKER,
+  bundledMarkerContent,
+  isForgeUiBundlePath,
+} from "@/lib/file-tree-display";
 
 type AgentRun = ReturnType<typeof useAgentRun>;
 type PreviewBoot = ReturnType<typeof usePreviewBoot>;
@@ -134,11 +139,18 @@ export function useEditorPageHandlers({
 
   const handleSelectFile = useCallback(
     (path: string) => {
+      if (isForgeUiBundlePath(path) && path !== FORGE_UI_BUNDLED_MARKER) {
+        path = FORGE_UI_BUNDLED_MARKER;
+      }
+      const content =
+        path === FORGE_UI_BUNDLED_MARKER
+          ? bundledMarkerContent()
+          : (fileMap.get(path) ?? "");
       setActiveFilePath(path);
       if (activeView === "diff") setActiveView("code");
       setOpenTabs((prev) => {
         if (prev.some((t) => t.path === path)) return prev;
-        return [...prev, { path, content: fileMap.get(path) ?? "", isModified: false }];
+        return [...prev, { path, content, isModified: false }];
       });
     },
     [fileMap, activeView, setActiveFilePath, setActiveView, setOpenTabs],
@@ -274,7 +286,10 @@ export function useEditorPageHandlers({
 
   const handleSend = useCallback(
     async (text: string, mode?: AgentComposerMode, parts?: StoredMessagePart[]) => {
-      if (!conversation) return;
+      if (!conversation) {
+        toast.error("Conversa ainda carregando — tente de novo em instantes.");
+        return;
+      }
 
       const pp = resolvePendingPlan(agent.progress.pendingPlan, chatMessages);
       if (pp) {
@@ -382,7 +397,10 @@ export function useEditorPageHandlers({
 
   const handleUndoMessage = useCallback(
     (assistantMsgId: string) => {
-      if (!conversation) return;
+      if (!conversation) {
+        toast.error("Conversa ainda carregando — tente de novo em instantes.");
+        return;
+      }
       const msgIndex = chatMessages.findIndex(
         (m) => m.id === assistantMsgId && m.role === "assistant",
       );

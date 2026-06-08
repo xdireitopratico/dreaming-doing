@@ -3,6 +3,7 @@ import { ChevronDown, PanelLeftClose } from "lucide-react";
 import { ForgeLogoMark } from "@/components/editor/ForgeLogoMark";
 
 interface EditorChatHeaderProps {
+  projectId: string;
   projectName?: string;
   running?: boolean;
   awaitingUser?: boolean;
@@ -11,6 +12,7 @@ interface EditorChatHeaderProps {
 }
 
 export function EditorChatHeader({
+  projectId,
   projectName,
   running,
   awaitingUser,
@@ -42,9 +44,9 @@ export function EditorChatHeader({
 
   return (
     <div className="forge-chat-header-inner">
-      <ForgeLogoMark size={18} linkTo="/projects" />
+      <ForgeLogoMark size={18} linkTo="/projects" title="Todos os projetos" />
       <span className="forge-topbar-divider" aria-hidden />
-      <Link to="/projects" className="forge-project-trigger">
+      <Link to="/projects/$projectId" params={{ projectId }} className="forge-project-trigger">
         <span className="forge-project-name" title={projectName ?? "Projeto"}>
           {projectName ?? "Projeto"}
           <ChevronDown className="size-3 shrink-0 opacity-50" />

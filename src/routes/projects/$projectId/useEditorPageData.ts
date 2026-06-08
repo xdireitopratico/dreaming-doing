@@ -7,6 +7,7 @@ import { removeRealtimeChannel } from "@/lib/supabase-realtime";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import type { ChatMessage } from "@/components/editor/ChatInput";
 import { logEditorTelemetryEvent } from "@/lib/editor-telemetry";
+import { collapseForgeUiBundle } from "@/lib/file-tree-display";
 import type { useAgentRun } from "@/hooks/useAgentRun";
 
 import type { FileRow, Msg } from "./editor-page-types";
@@ -180,7 +181,10 @@ export function useEditorPageData({
     });
   }, [messages]);
 
-  const fileTreeFiles = useMemo(() => files?.map((f) => f.path) ?? [], [files]);
+  const fileTreeFiles = useMemo(
+    () => collapseForgeUiBundle(files?.map((f) => f.path) ?? []),
+    [files],
+  );
 
   const previewNavFiles = useMemo(() => {
     if (files && files.length > 0) {

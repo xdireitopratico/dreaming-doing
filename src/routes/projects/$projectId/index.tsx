@@ -191,6 +191,7 @@ function EditorPage() {
     activeView,
     setPreviewReloadNonce,
     tasteQuota,
+    pendingAgentRunKey,
     runAgent: handlers.runAgent,
     fileMap,
     editorRef,
@@ -258,6 +259,7 @@ function EditorPage() {
 
   return (
     <EditorPageLayout
+      projectId={projectId}
       projectName={project?.name}
       running={running}
       agent={agent}

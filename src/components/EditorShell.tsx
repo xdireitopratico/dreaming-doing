@@ -10,6 +10,7 @@ import type { EditorMainView } from "@/components/editor/editor-views";
 
 export function EditorShell({
   children,
+  projectId,
   projectName,
   activeView,
   onViewChange,
@@ -25,6 +26,7 @@ export function EditorShell({
   topBar = "full",
 }: {
   children: ReactNode;
+  projectId?: string;
   projectName?: string;
   activeView?: EditorMainView;
   onViewChange?: (view: EditorMainView) => void;
@@ -64,6 +66,7 @@ export function EditorShell({
     <div className="editor-workspace flex h-screen flex-col overflow-hidden">
       {topBar === "full" && activeView && onViewChange && (
         <EditorTopBar
+          projectId={projectId}
           projectName={projectName}
           activeView={activeView}
           onViewChange={onViewChange}

@@ -109,10 +109,11 @@ export function useAgentSessionCoordinator({
 
         logEditorTelemetryEvent("agent", "auto_run_flagged", "info", conversation.id.slice(0, 8));
 
-        markAutoRunAttempted(projectId, conversation.id);
-        clearPendingAgentRun(projectId);
-
-        runAgent(resolveSessionKind(tasteQuota));
+        const started = runAgent(resolveSessionKind(tasteQuota));
+        if (started) {
+          markAutoRunAttempted(projectId, conversation.id);
+          clearPendingAgentRun(projectId);
+        }
       } finally {
         reconcileInFlightRef.current = false;
       }
