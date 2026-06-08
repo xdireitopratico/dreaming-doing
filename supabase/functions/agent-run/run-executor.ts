@@ -24,6 +24,10 @@ import { buildSandboxEnv } from "./sandbox-env.ts";
 import { looksLikeInteractionOnly } from "./qualify.ts";
 import { logger } from "../_shared/logger.ts";
 import { appendStreamEvent } from "../_shared/agent-stream.ts";
+import {
+  chunkCapErrorMessage,
+  evaluateChunkLimits,
+} from "../_shared/agent-chunk-limits.ts";
 
 export type ExecuteParams = {
   runId: string;
@@ -76,6 +80,33 @@ export async function executeAgentRun(
   }
   if (preCheck?.status === "completed" || preCheck?.status === "failed") {
     return { ok: true, runId, mode: planMode ? "plan" : "build", resumable: false, canceled: false, stepsCompleted: 0, durationMs: Date.now() - startMs };
+  }
+
+  const { data: duplicateRuns } = await supabase
+    .from("agent_runs")
+    .select("id")
+    .eq("project_id", projectId)
+    .in("status", ["running", "pending"])
+    .neq("id", runId);
+  for (const dupe of duplicateRuns ?? []) {
+    const dupeId = dupe.id as string;
+    await supabase
+      .from("agent_runs")
+      .update({
+        status: "failed",
+        finished_at: new Date().toISOString(),
+        error: "Run duplicado cancelado — outra execução assumiu.",
+        meta: { duplicateCanceled: true },
+      })
+      .eq("id", dupeId);
+    await appendStreamEvent(supabase, dupeId, "finish", {
+      type: "finish",
+      ok: false,
+      resumable: false,
+      error: "Run duplicado cancelado — outra execução assumiu.",
+      duplicate: true,
+    });
+    logger.warn("agent_run.duplicate_canceled", { runId: dupeId, activeRunId: runId, projectId });
   }
 
   // Mark running + set full meta (provider, model, etc.)
@@ -193,7 +224,13 @@ export async function executeAgentRun(
     .from("agent_runs")
     .update({
       status: "running",
-      meta: { ...currentMeta, ...runMetaBase, plan: params.plan ?? currentMeta.plan ?? null, planSourceRunId: params.planSourceRunId ?? currentMeta.planSourceRunId ?? null },
+      meta: {
+        ...currentMeta,
+        ...runMetaBase,
+        betweenChunks: false,
+        plan: params.plan ?? currentMeta.plan ?? null,
+        planSourceRunId: params.planSourceRunId ?? currentMeta.planSourceRunId ?? null,
+      },
     })
     .eq("id", runId);
 
@@ -231,7 +268,7 @@ export async function executeAgentRun(
 
   const { data: finalRun } = await supabase
     .from("agent_runs")
-    .select("status, meta")
+    .select("status, meta, started_at")
     .eq("id", runId)
     .maybeSingle();
   const finalStatus = finalRun?.status as string | undefined;
@@ -242,6 +279,58 @@ export async function executeAgentRun(
 
   // Chunk resumable: Inngest chama execute de novo — não finalizar a run.
   if (!result.ok && result.resumable && !result.canceled && !isAwaiting) {
+    const chunkLimits = evaluateChunkLimits(
+      prevMeta,
+      finalRun?.started_at as string | undefined,
+    );
+
+    if (chunkLimits.exceeded) {
+      const capError = chunkCapErrorMessage(chunkLimits.reason);
+      await supabase
+        .from("agent_runs")
+        .update({
+          status: "failed",
+          finished_at: new Date().toISOString(),
+          steps: result.steps,
+          error: capError,
+          heartbeat_at: new Date().toISOString(),
+          meta: {
+            ...prevMeta,
+            chunkGeneration: chunkLimits.chunkGeneration,
+            chunkCapExceeded: true,
+            chunkCapReason: chunkLimits.reason ?? null,
+          },
+        })
+        .eq("id", runId);
+
+      await appendStreamEvent(supabase, runId, "finish", {
+        type: "finish",
+        ok: false,
+        resumable: false,
+        error: capError,
+        chunkCap: true,
+        steps: result.steps,
+      });
+
+      logger.warn("agent_run.chunk_cap_exceeded", {
+        runId,
+        reason: chunkLimits.reason,
+        chunkGeneration: chunkLimits.chunkGeneration,
+        mode: planMode ? "plan" : "build",
+      });
+
+      return {
+        ok: false,
+        runId,
+        mode: planMode ? "plan" : "build",
+        resumable: false,
+        canceled: false,
+        error: capError,
+        stepsCompleted: result.steps,
+        durationMs: Date.now() - startMs,
+      };
+    }
+
     await supabase
       .from("agent_runs")
       .update({
@@ -251,8 +340,10 @@ export async function executeAgentRun(
         heartbeat_at: new Date().toISOString(),
         meta: {
           ...prevMeta,
+          chunkGeneration: chunkLimits.chunkGeneration,
           lastChunkAt: new Date().toISOString(),
           lastChunkMessage: result.error ?? null,
+          betweenChunks: true,
         },
       })
       .eq("id", runId);
@@ -261,6 +352,7 @@ export async function executeAgentRun(
       runId,
       mode: planMode ? "plan" : "build",
       steps: result.steps,
+      chunkGeneration: chunkLimits.chunkGeneration,
       durationMs: Date.now() - startMs,
     });
 

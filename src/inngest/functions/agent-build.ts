@@ -1,5 +1,6 @@
 import { inngest } from "../client";
 import {
+  cancelDuplicateRuns,
   drainPendingQueue,
   getRunStatus,
   markRunFinal,
@@ -53,19 +54,29 @@ export const agentBuildFunction = inngest.createFunction(
       await step.run("mark-failed", async () => {
         await markRunFinal(runId, "failed", { error: final.error ?? "agent failed" });
       });
+      await step.run("drain-pending-queue-after-fail", async () => {
+        return await drainPendingQueue(payload);
+      });
       return { runId, ok: false, error: final.error };
     }
 
     if (!final.ok && final.resumable) {
       await step.run("re-enqueue-resumable-chunk", async () => {
+        await cancelDuplicateRuns(payload.projectId, runId);
         const status = await getRunStatus(runId);
         if (status === "failed") {
           await markRunFinal(runId, "running", {
             error: final.error ?? "loop budget exhausted",
-            meta: { checkpoint: true, resume: true },
+            meta: { checkpoint: true, resume: true, betweenChunks: true },
           });
         }
-        await inngest.send({ name: "agent/build.requested", data: payload });
+        try {
+          await inngest.send({ name: "agent/build.requested", data: payload });
+        } catch (sendErr) {
+          const msg = sendErr instanceof Error ? sendErr.message : "Inngest re-enqueue failed";
+          await markRunFinal(runId, "failed", { error: msg });
+          throw sendErr;
+        }
       });
       return { runId, ok: false, resumable: true, error: final.error ?? "loop budget exhausted" };
     }

@@ -43,6 +43,7 @@ function formatQueueBlockReason(reason?: string): string | null {
 
 const TERMINAL_STATUSES = new Set(["completed", "failed", "canceled", "awaiting_user"]);
 const STALE_STREAM_MS = 15 * 60 * 1000;
+const STALE_STREAM_WITH_QUEUE_MS = 5 * 60 * 1000;
 
 async function parseErrorResponse(res: Response): Promise<string> {
   const txt = await res.text().catch(() => "");
@@ -59,6 +60,11 @@ export type { AgentProgress, AgentConnectOptions, PlanStep, PendingPlan } from "
 
 export function useAgentRun() {
   const [progress, setProgress] = useState<AgentProgress>(initialAgentProgress);
+
+  useEffect(() => {
+    pendingQueueCountRef.current = progress.pendingQueueCount ?? 0;
+  }, [progress.pendingQueueCount]);
+
   const [connected, setConnected] = useState(false);
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const [frozenRuns, setFrozenRuns] = useState<Map<string, FrozenRunSnapshot>>(new Map());
@@ -66,6 +72,7 @@ export function useAgentRun() {
   const [queueBlockingReason, setQueueBlockingReason] = useState<string | null>(null);
 
   const runIdRef = useRef<string | null>(null);
+  const pendingQueueCountRef = useRef(0);
   const lastSeqRef = useRef(0);
   const eventChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const statusChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
@@ -216,9 +223,11 @@ export function useAgentRun() {
           (lastRow?.created_at as string | undefined) ??
           (run.heartbeat_at as string | null) ??
           (run.started_at as string | null);
+        const staleMs =
+          pendingQueueCountRef.current > 0 ? STALE_STREAM_WITH_QUEUE_MS : STALE_STREAM_MS;
         const stale =
           lastActivity &&
-          Date.now() - new Date(lastActivity).getTime() > STALE_STREAM_MS;
+          Date.now() - new Date(lastActivity).getTime() > staleMs;
         if (stale) {
           const meta = (run.meta ?? {}) as Record<string, unknown>;
           const resumable = meta.checkpoint === true || meta.resume === true;

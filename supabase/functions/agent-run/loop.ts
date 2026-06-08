@@ -55,6 +55,7 @@ import {
 type StreamCallback = (event: { type: string; data: unknown }) => void;
 
 const CHECKPOINT_INTERVAL_STEPS = 2;
+const MAX_LLM_RETRIES = 3;
 
 const ANDROID_NATIVE_PATH_RE =
   /(^|\/)(build\.gradle(\.kts)?|settings\.gradle(\.kts)?|gradle\.properties|gradlew|app\/src\/main\/|\.kt$|AndroidManifest\.xml)/i;
@@ -253,6 +254,45 @@ export class AgentLoop {
       /* best-effort */
     }
     this.lastActivityAt = Date.now();
+  }
+
+  private async bumpLlmRetries(): Promise<number> {
+    if (!this.runId) return MAX_LLM_RETRIES;
+    try {
+      const { data: row } = await this.sb
+        .from("agent_runs")
+        .select("meta")
+        .eq("id", this.runId)
+        .maybeSingle();
+      const meta = (row?.meta ?? {}) as Record<string, unknown>;
+      const next = (typeof meta.llmRetries === "number" ? meta.llmRetries : 0) + 1;
+      await this.sb
+        .from("agent_runs")
+        .update({ meta: { ...meta, llmRetries: next } })
+        .eq("id", this.runId);
+      return next;
+    } catch {
+      return MAX_LLM_RETRIES;
+    }
+  }
+
+  private async resetLlmRetries(): Promise<void> {
+    if (!this.runId) return;
+    try {
+      const { data: row } = await this.sb
+        .from("agent_runs")
+        .select("meta")
+        .eq("id", this.runId)
+        .maybeSingle();
+      const meta = (row?.meta ?? {}) as Record<string, unknown>;
+      if (typeof meta.llmRetries !== "number" || meta.llmRetries === 0) return;
+      await this.sb
+        .from("agent_runs")
+        .update({ meta: { ...meta, llmRetries: 0 } })
+        .eq("id", this.runId);
+    } catch {
+      /* best-effort */
+    }
   }
 
   private maybeEmitSilenceHeartbeat(): void {
@@ -622,6 +662,18 @@ export class AgentLoop {
         response = await this.llmChat(executionModel, executeInstruction, compressed, forceTools);
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : "Erro no modelo";
+        const retries = await this.bumpLlmRetries();
+        if (retries >= MAX_LLM_RETRIES) {
+          const failMsg = `Erro no modelo após ${retries} tentativas: ${message}`;
+          await this.persistFinal(failMsg);
+          return {
+            ok: false,
+            error: failMsg,
+            steps: loopStep,
+            resumable: false,
+            toolsUsed: [...toolsUsed],
+          };
+        }
         await this.saveCheckpoint(LoopPhase.ERROR, true);
         this.streamNarration(
           `Encontrei um problema no modelo (${message}) — vou tentar de novo em instantes.`,
@@ -630,6 +682,7 @@ export class AgentLoop {
       }
       if (!response) break;
 
+      await this.resetLlmRetries();
       this.compression.recordUsage(response.usage);
 
       const assistantText = (response.content ?? "").trim();

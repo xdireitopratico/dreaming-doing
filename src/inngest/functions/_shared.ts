@@ -112,6 +112,30 @@ export async function markRunFinal(
   if (error) throw new Error(`Failed to mark run ${runId} as ${status}: ${error.message}`);
 }
 
+/** Cancela outras runs ativas no mesmo projeto (evita 2× running na mesma conversa). */
+export async function cancelDuplicateRuns(
+  projectId: string,
+  activeRunId: string,
+): Promise<number> {
+  const { data: dupes } = await getSupabaseAdmin()
+    .from("agent_runs")
+    .select("id")
+    .eq("project_id", projectId)
+    .in("status", ["running", "pending"])
+    .neq("id", activeRunId);
+
+  let canceled = 0;
+  for (const row of dupes ?? []) {
+    const dupeId = row.id as string;
+    await markRunFinal(dupeId, "failed", {
+      error: "Run duplicado cancelado — outra execução assumiu.",
+      meta: { duplicateCanceled: true },
+    });
+    canceled++;
+  }
+  return canceled;
+}
+
 export type ContinueQueueResponse = {
   continued: boolean;
   runId?: string;

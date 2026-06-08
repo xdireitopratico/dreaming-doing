@@ -59,6 +59,7 @@ export function useAgentSessionCoordinator({
   const reconcileInFlightRef = useRef(false);
 
   const { syncPendingCount, watch, drainQueue, connected, progress, refreshPendingQueue } = agent;
+  const pendingQueueCount = progress.pendingQueueCount ?? 0;
 
   const drainUntilEmpty = async (conversationId: string) => {
     for (let attempt = 0; attempt < 5; attempt++) {
@@ -87,7 +88,8 @@ export function useAgentSessionCoordinator({
 
     const reconcile = async () => {
       if (cancelled || reconcileInFlightRef.current) return;
-      if (isAgentConnectInFlight() || running || connected) return;
+      if (isAgentConnectInFlight() || connected) return;
+      if (running && pendingQueueCount === 0) return;
 
       reconcileInFlightRef.current = true;
       try {
@@ -203,6 +205,7 @@ export function useAgentSessionCoordinator({
     projectId,
     running,
     connected,
+    pendingQueueCount,
     runAgent,
     tasteQuota,
     watch,
@@ -215,7 +218,8 @@ export function useAgentSessionCoordinator({
     void (async () => {
       await syncPendingCount(projectId, conversation.id);
       if (progress.awaiting || progress.canceled) return;
-      if (running || connected || isAgentConnectInFlight()) return;
+      if (connected || isAgentConnectInFlight()) return;
+      if (running && pendingQueueCount === 0) return;
       await refreshPendingQueue(projectId, conversation.id);
       const drain = await drainUntilEmpty(conversation.id);
       if (drain.runId) return;
@@ -228,6 +232,7 @@ export function useAgentSessionCoordinator({
     projectId,
     running,
     connected,
+    pendingQueueCount,
     syncPendingCount,
     drainQueue,
     refreshPendingQueue,

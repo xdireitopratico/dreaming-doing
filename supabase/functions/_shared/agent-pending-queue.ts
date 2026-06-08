@@ -2,6 +2,7 @@
  * Fila agent_pending_messages — enqueue no agent-run; drain via continue_queue.
  */
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import { CHUNK_HANDOFF_GAP_MS } from "./agent-chunk-limits.ts";
 import { appendStreamEvent } from "./agent-stream.ts";
 import { logger } from "./logger.ts";
 
@@ -130,19 +131,49 @@ export async function conversationNeedsAgentResponse(
   return (count ?? 0) > 0;
 }
 
+const CHUNK_HANDOFF_EVENT_TYPES = new Set(["delivery_checkpoint", "timeout_warning"]);
+
 export async function hasBlockingActiveRun(
   supabase: SupabaseClient,
   projectId: string,
 ): Promise<string | null> {
   const { data } = await supabase
     .from("agent_runs")
-    .select("id")
+    .select("id, status, meta")
     .eq("project_id", projectId)
     .in("status", ["running", "pending", "awaiting_user"])
     .order("started_at", { ascending: false })
     .limit(1)
     .maybeSingle();
-  return data?.id ?? null;
+
+  if (!data?.id) return null;
+  if (data.status === "awaiting_user") return data.id;
+
+  const meta = (data.meta ?? {}) as Record<string, unknown>;
+  const lastChunkAt = meta.lastChunkAt as string | undefined;
+  if (!lastChunkAt && meta.betweenChunks !== true) return data.id;
+
+  const { data: lastEv } = await supabase
+    .from("agent_stream_events")
+    .select("created_at, event_type")
+    .eq("run_id", data.id)
+    .order("seq", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const lastEvTime = (lastEv?.created_at ?? lastChunkAt) as string | undefined;
+  if (!lastEvTime) return data.id;
+
+  const gapMs = Date.now() - new Date(lastEvTime).getTime();
+  const handoff =
+    !!lastEv &&
+    CHUNK_HANDOFF_EVENT_TYPES.has(lastEv.event_type as string);
+
+  if (handoff && gapMs > CHUNK_HANDOFF_GAP_MS) {
+    return null;
+  }
+
+  return data.id;
 }
 
 export async function clearPendingMessages(
