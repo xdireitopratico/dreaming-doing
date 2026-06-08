@@ -136,6 +136,77 @@ Deno.serve(async (req) => {
       return json({ ok: true });
     }
 
+    if (body.action === "dispatch_build") {
+      const runId = body.runId as string | undefined;
+      if (!runId) return json({ error: "runId obrigatório" }, 400);
+
+      const { data: run, error: rErr } = await supabase
+        .from("agent_runs")
+        .select("id, user_id, project_id, conversation_id, status, meta")
+        .eq("id", runId)
+        .single();
+      if (rErr || !run || run.user_id !== userData.user.id) {
+        return json({ error: "Run não encontrada" }, 404);
+      }
+      if (run.status !== "pending") {
+        return json({ error: `Run em status inválido: ${run.status}` }, 400);
+      }
+
+      const runMeta = (run.meta ?? {}) as Record<string, unknown>;
+      const preferences = (runMeta.preferences && typeof runMeta.preferences === "object"
+        ? runMeta.preferences
+        : {}) as Record<string, unknown>;
+      const sessionKind = typeof runMeta.sessionKind === "string" ? runMeta.sessionKind : "byok";
+      const enabledSkillIds = Array.isArray(runMeta.enabledSkillIds)
+        ? (runMeta.enabledSkillIds as string[])
+        : [];
+      const enabledMcpIds = Array.isArray(runMeta.enabledMcpIds)
+        ? (runMeta.enabledMcpIds as string[])
+        : [];
+      const planSummary = typeof runMeta.planSummary === "string" ? runMeta.planSummary : "";
+      const planSourceRunId = typeof runMeta.planSourceRunId === "string"
+        ? runMeta.planSourceRunId
+        : undefined;
+
+      const eventPayload = {
+        runId,
+        projectId: run.project_id,
+        conversationId: run.conversation_id,
+        userId: userData.user.id,
+        sessionKind,
+        preferences,
+        enabledSkillIds,
+        enabledMcpIds,
+        planMode: false,
+        plan: planSummary || undefined,
+        planSourceRunId,
+      };
+
+      const eventResult = await sendInngestEvent("agent/build.requested", eventPayload);
+      if (!eventResult.ok) {
+        logger.error("dispatch_build.inngest_failed", {
+          runId,
+          error: eventResult.error,
+        });
+        return json(
+          { error: `Falha ao iniciar build: ${eventResult.error ?? "unknown"}` },
+          500,
+        );
+      }
+
+      await appendStreamEvent(supabase, runId, "start", {
+        type: "start",
+        runId,
+        projectId: run.project_id,
+        conversationId: run.conversation_id,
+        mode: "build",
+        planSourceRunId: planSourceRunId ?? null,
+        eventId: eventResult.ids?.[0] ?? null,
+      });
+
+      return json({ ok: true, eventId: eventResult.ids?.[0] ?? null });
+    }
+
     projectId = typeof body.projectId === "string" ? body.projectId : undefined;
     const conversationId = body.conversationId;
     const preferences = body.preferences as AgentPreferencesPayload | undefined;

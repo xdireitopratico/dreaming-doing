@@ -93,6 +93,7 @@ export class AgentLoop {
   private runStartTime: number;
   private lastCheckpointStep: number;
   private planMode: boolean;
+  private approvedPlanBuild: boolean;
 
   constructor(
     reg: ToolRegistry,
@@ -118,6 +119,9 @@ export class AgentLoop {
       runId?: string | null;
       /** Fase 4.6 plan mode: emite plan_proposed + pausa pra aprovação do usuário. */
       planMode?: boolean;
+      /** Run de build disparada por planApprove — pula qualify e usa planSummary. */
+      approvedPlanBuild?: boolean;
+      planSummary?: string;
     },
   ) {
     this.reg = reg;
@@ -141,7 +145,12 @@ export class AgentLoop {
     }
     this.runId = options?.runId ?? null;
     this.planMode = options?.planMode ?? false;
-    this.originalUserRequest = extractOriginalUserRequest(state.messages);
+    this.approvedPlanBuild = options?.approvedPlanBuild ?? false;
+    const extracted = extractOriginalUserRequest(state.messages);
+    const planSummary = options?.planSummary?.trim() ?? "";
+    this.originalUserRequest = this.approvedPlanBuild && planSummary
+      ? planSummary
+      : extracted;
     this.toolsInvoked = false;
     this.runStartTime = Date.now();
     this.lastCheckpointStep = options?.hasCheckpoint ? (state.currentStepIndex ?? 0) : 0;
@@ -355,8 +364,17 @@ export class AgentLoop {
         return { ok: true, summary: inv, steps: 0, toolsUsed: [] };
       }
 
+      // Build pós-approve: nunca qualify — executar plano aprovado.
+      if (this.approvedPlanBuild) {
+        this.emit("phase", {
+          phase: "build",
+          message: "Executando plano aprovado…",
+        });
+      }
+
       // Lovable-style: pedido vago → pergunta no chat (Plan e Build).
       if (
+        !this.approvedPlanBuild &&
         this.originalUserRequest &&
         needsQualify(this.originalUserRequest, classification, { isSeedPlaceholder })
       ) {

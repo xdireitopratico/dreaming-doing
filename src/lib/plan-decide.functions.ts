@@ -56,6 +56,8 @@ const agentPreferencesSchema = z
 const INNGEST_GRACIOSA_MESSAGE =
   "Ok. Vejo que rejeitou o plano atual. Como posso melhora-lo?";
 
+const PLAN_APPROVED_PREFIX = "[Plano aprovado]";
+
 type DecideResponse = {
   ok: true;
   rejectedRunId?: string;
@@ -64,7 +66,6 @@ type DecideResponse = {
   eventId?: string | null;
   graciosaMessageId?: string;
   approveUserMessageId?: string;
-  queueWarningMessageId?: string;
 };
 
 const planApproveSchema = z.object({
@@ -170,8 +171,8 @@ export const planApprove = createServerFn({ method: "POST" })
       .filter(Boolean);
     const approveText =
       stepLabels.length > 0
-        ? `Plano aprovado — executar em modo Build:\n${stepLabels.map((t) => `• ${t}`).join("\n")}`
-        : "Plano aprovado — executar em modo Build.";
+        ? `${PLAN_APPROVED_PREFIX} Plano aprovado — executar em modo Build:\n${stepLabels.map((t) => `• ${t}`).join("\n")}`
+        : `${PLAN_APPROVED_PREFIX} Plano aprovado — executar em modo Build.`;
 
     const { data: approveUserMsg, error: approveUserErr } = await supabase
       .from("messages")
@@ -192,65 +193,27 @@ export const planApprove = createServerFn({ method: "POST" })
       throw new Error(`Falha ao registrar aprovação no chat: ${approveUserErr.message}`);
     }
 
-    const eventKey = process.env.INNGEST_EVENT_KEY;
-    let eventId: string | null = null;
-    if (eventKey) {
-      try {
-        const res = await fetch("https://inn.gs/e/" + eventKey, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            name: "agent/build.requested",
-            data: {
-              runId: newRun.id,
-              projectId: run.project_id,
-              conversationId: run.conversation_id,
-              userId,
-              sessionKind,
-              preferences: preferences ?? {},
-              enabledSkillIds,
-              enabledMcpIds,
-              planMode: false,
-              plan,
-              planSourceRunId: runId,
-            },
-            ts: Date.now(),
-          }),
-        });
-        if (res.ok) {
-          const body = (await res.json()) as { ids?: string[] };
-          eventId = body.ids?.[0] ?? null;
-        }
-      } catch {
-        // Inngest send failure is non-fatal — the run row exists with status=pending.
-      }
+    const { data: dispatchResult, error: dispatchErr } = await supabase.functions.invoke(
+      "agent-run",
+      { body: { action: "dispatch_build", runId: newRun.id } },
+    );
+    if (dispatchErr) {
+      await supabase.from("agent_runs").delete().eq("id", newRun.id);
+      throw new Error(`Falha ao disparar build: ${dispatchErr.message}`);
     }
 
-    let queueWarningMessageId: string | undefined;
+    const dispatchBody = (dispatchResult ?? {}) as { error?: string; eventId?: string | null };
+    if (dispatchBody.error) {
+      await supabase.from("agent_runs").delete().eq("id", newRun.id);
+      throw new Error(dispatchBody.error);
+    }
+
+    const eventId = dispatchBody.eventId ?? null;
     if (!eventId) {
-      const { data: queueMsg, error: queueErr } = await supabase
-        .from("messages")
-        .insert({
-          conversation_id: run.conversation_id,
-          role: "assistant",
-          parts: [
-            {
-              type: "text",
-              text: "Plano aprovado. O build está na fila — se não iniciar em instantes, envie «continuar» no chat.",
-            },
-          ],
-          meta: {
-            buildRunId: newRun.id,
-            queueWarning: true,
-            planSourceRunId: runId,
-            planId,
-          },
-        })
-        .select("id")
-        .single();
-      if (!queueErr && queueMsg) {
-        queueWarningMessageId = queueMsg.id;
-      }
+      await supabase.from("agent_runs").delete().eq("id", newRun.id);
+      throw new Error(
+        "Build não iniciou — configure INNGEST_EVENT_KEY nas secrets da Edge (docs/EDGE-SECRETS.md).",
+      );
     }
 
     return {
@@ -259,7 +222,6 @@ export const planApprove = createServerFn({ method: "POST" })
       newRunId: newRun.id,
       eventId,
       approveUserMessageId: approveUserMsg?.id,
-      queueWarningMessageId,
     };
   });
 

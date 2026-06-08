@@ -165,7 +165,10 @@ export async function executeAgentRun(
   } catch {
     projectFileCount = 0;
   }
-  const allocateSandboxLocal = (!looksLikeInteraction && projectFileCount > 0) || projectHasSandbox;
+  const isApprovedPlanBuild = !!(runMeta.planSourceRunId ?? params.planSourceRunId);
+  const allocateSandboxLocal = isApprovedPlanBuild ||
+    (!looksLikeInteraction && projectFileCount > 0) ||
+    projectHasSandbox;
 
   // Build runMetaBase + update run
   const runMetaBase = {

@@ -277,6 +277,8 @@ export async function executeAgentJob(
         maxStepsFromCheckpoint: loadedCheckpoint?.extra.maxStepsLimit,
         runId: agentRunId,
         planMode,
+        approvedPlanBuild: !planMode && !!preMeta.planSourceRunId,
+        planSummary: typeof preMeta.planSummary === "string" ? preMeta.planSummary : undefined,
       },
   );
 

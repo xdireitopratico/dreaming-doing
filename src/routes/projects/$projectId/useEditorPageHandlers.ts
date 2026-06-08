@@ -477,11 +477,11 @@ export function useEditorPageHandlers({
         await qc.invalidateQueries({ queryKey: ["conversation", projectId] });
         await qc.invalidateQueries({ queryKey: ["messages", conversation?.id] });
         qc.invalidateQueries({ queryKey: ["agent-runs", projectId] });
+        setComposerMode("build");
+        agent.clearPendingPlan();
         if (result.newRunId && conversation) {
           await agent.watch(projectId, conversation.id, result.newRunId);
         }
-        agent.clearPendingPlan();
-        setComposerMode("build");
       } catch (e) {
         toast.error((e as Error)?.message ?? "Falha ao aprovar plano");
       }

@@ -22,6 +22,9 @@ export function looksLikeInteractionOnly(text: string): boolean {
   if (isPreviewActionRequest(trimmed)) return false;
   return INTERACTION_ONLY_RE.test(trimmed) || trimmed.length < 90;
 }
+const PLAN_APPROVE_BOILERPLATE_RE =
+  /^Plano aprovado — executar em modo Build/i;
+
 const POLLUTION_MARKERS = [
   "Checkpoint salvo",
   "Limite de tempo da Edge",
@@ -38,6 +41,7 @@ export function extractOriginalUserRequest(messages: ChatMessage[]): string {
     if (!text) continue;
     if (text.startsWith(RESUME_PREFIX)) continue;
     if (text.startsWith(PLAN_APPROVED_PREFIX)) continue;
+    if (PLAN_APPROVE_BOILERPLATE_RE.test(text)) continue;
     if (POLLUTION_MARKERS.some((mark) => text.includes(mark))) continue;
     return text;
   }

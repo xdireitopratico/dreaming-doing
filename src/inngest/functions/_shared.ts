@@ -136,7 +136,7 @@ export async function drainPendingQueue(
       projectId: payload.projectId,
       conversationId: payload.conversationId,
       userId: payload.userId,
-      planMode: payload.planMode,
+      planMode: false,
     }),
   });
 

@@ -9,6 +9,16 @@ import {
   needsQualify,
 } from "./qualify.ts";
 
+Deno.test("extractOriginalUserRequest ignora mensagem de plano aprovado", () => {
+  const req = extractOriginalUserRequest([
+    { role: "user", content: "Crie uma landing de café" },
+    { role: "assistant", content: "ok" },
+    { role: "user", content: "Plano aprovado — executar em modo Build." },
+    { role: "user", content: "[Plano aprovado] Plano aprovado — executar em modo Build:\n• Hero" },
+  ]);
+  assertEquals(req, "Crie uma landing de café");
+});
+
 Deno.test("extractOriginalUserRequest ignora retomada e ruído", () => {
   const req = extractOriginalUserRequest([
     { role: "user", content: "Crie uma landing de café" },
