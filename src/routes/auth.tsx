@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ForgeLogoMark } from "@/components/editor/ForgeLogoMark";
 import { Loader2, ArrowLeft } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import { sanitizeNext } from "@/lib/sanitize-next";
 import { navigateAfterAuth } from "@/lib/navigate-after-auth";
 import { isLovableEnvironment } from "@/lib/is-lovable";
@@ -64,7 +64,6 @@ function AuthPage() {
     });
     setBusy(false);
     if (error) toast.error(error.message);
-    else toast.success("Conta criada. Confira seu email para confirmar o acesso.");
   };
 
   const google = async () => {

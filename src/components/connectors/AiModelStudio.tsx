@@ -4,7 +4,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { motion } from "framer-motion";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import {
   Brain,
   Zap,
@@ -249,11 +249,10 @@ export function AiModelStudio({ connectorRows, keysSectionHref = "/api" }: AiMod
     const activeId =
       prefs.mode === "robin" ? prefs.robinPoolModelId : prefs.fixedPresetId;
     if (normalizePresetId(activeId) === normalizePresetId(presetId)) {
-      toast.info("Este modelo está ativo — troque antes de ocultar.");
+      toast.error("Este modelo está ativo — troque antes de ocultar.");
       return;
     }
     patch({ hiddenPresetIds: [...(prefs.hiddenPresetIds ?? []), presetId] });
-    toast.success("Oculto da lista (use Restaurar ocultos para trazer de volta)");
   };
 
   const restoreHidden = () => patch({ hiddenPresetIds: [] });
@@ -272,7 +271,6 @@ export function AiModelStudio({ connectorRows, keysSectionHref = "/api" }: AiMod
     };
     const id = userModelPresetId(slug);
     if ((userModels ?? []).some((e) => userModelPresetId(e.slug) === id)) {
-      toast.info("Este modelo já está na lista deste provedor.");
       return;
     }
     const entries = [...(userModels ?? []), entry];
@@ -287,7 +285,6 @@ export function AiModelStudio({ connectorRows, keysSectionHref = "/api" }: AiMod
       customModelId: undefined,
     });
     setDraftModelSlug("");
-    toast.success(`Modelo adicionado em ${AI_ENV_META[selectedEnv].label} — aparece como card abaixo.`);
   };
 
   const removeUserModel = (slug: string) => {
@@ -303,7 +300,6 @@ export function AiModelStudio({ connectorRows, keysSectionHref = "/api" }: AiMod
       robinPoolModelId:
         normalizePresetId(prefs.robinPoolModelId) === id ? undefined : prefs.robinPoolModelId,
     });
-    toast.success("Removido");
   };
 
   const selectModel = (presetId: string) => {
@@ -314,7 +310,7 @@ export function AiModelStudio({ connectorRows, keysSectionHref = "/api" }: AiMod
     }
     if (prefs.mode === "robin") {
       if (!robinCanSelect(preset)) {
-        toast.info("ROBIN só seleciona modelos Groq ou NVIDIA. Use Automático ou Fixo para este provedor.");
+        toast.error("ROBIN só seleciona modelos Groq ou NVIDIA. Use Automático ou Fixo para este provedor.");
         return;
       }
       patch({

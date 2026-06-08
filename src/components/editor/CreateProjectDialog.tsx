@@ -11,7 +11,7 @@ import {
 import { cn } from "@/lib/utils";
 import { createProjectFromPrompt } from "@/lib/projects.functions";
 import { markPendingAgentRun } from "@/lib/agent-auto-run";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import { ForgeIcon } from "@/components/icons/ForgeIcon";
 
 type Template = {

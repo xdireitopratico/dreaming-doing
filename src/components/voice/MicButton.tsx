@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Mic, Loader2, Square } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import { supabase } from "@/integrations/supabase/client";
 import { loadAgentPreferences } from "@/lib/agent-preferences";
 import { STT_DEFAULT_PROVIDER, sttProviderName, type SttProviderId } from "@/lib/stt-config";
@@ -66,12 +66,6 @@ export function MicButton({ onTranscript, className, size = "md" }: Props) {
 
           if (text) {
             onTranscript(text);
-            toast.success("Voz transcrita", { duration: 2000 });
-            if (body?.requested && used !== body.requested) {
-              toast.warning(
-                `Pediu ${sttProviderName(body.requested as SttProviderId)} mas usou ${sttProviderName(used as SttProviderId)}.`,
-              );
-            }
           } else {
             toast.error("Não captei nada. Tenta de novo.");
           }

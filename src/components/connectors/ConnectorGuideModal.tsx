@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { CheckCircle2, ExternalLink } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import {
   Dialog,
   DialogContent,
@@ -106,7 +106,6 @@ export function ConnectorGuideModal({
           },
         });
       } else if (connector === "e2b") {
-        toast.info("Configure a chave E2B em API Keys.");
         resetAndClose();
         window.location.assign("/api#forge-key-e2b");
       } else if (connector === "supabase") {

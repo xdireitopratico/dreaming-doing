@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { Github, Loader2 } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import { supabase } from "@/integrations/supabase/client";
 import { sanitizeNext } from "@/lib/sanitize-next";
 import {
@@ -45,7 +45,7 @@ export function ImportRepoDialog({ trigger }: Props) {
       if (res.error) throw new Error(res.error);
       if (!res.projectId) throw new Error("Resposta inválida do servidor");
 
-      toast.success(`Importados ${res.fileCount ?? 0} arquivos.`);
+
       setOpen(false);
       navigate({ to: "/projects/$projectId", params: { projectId: res.projectId } });
     } catch (err: any) {

@@ -3,7 +3,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState, useCallback, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import {
   ArrowLeft, Shield, CheckCircle2, AlertCircle, Star, ExternalLink, Plug, Zap, Brain, Globe, Cpu, Gem, Box,
 } from "lucide-react";
@@ -340,15 +340,9 @@ function ApiPage() {
         if (appendPool && p.supportsPool) {
           const res = await appendKeyToPool(id, p.keyValue);
           applyPoolResult(id, res);
-          toast.success(`Chave #${res.poolCount ?? "?"} adicionada ao pool ${p.label}`);
         } else {
           const res = await saveAiProviderKey(id, p.keyValue);
           applyPoolResult(id, res);
-          toast.success(
-            p.supportsPool && (p.poolCount ?? 0) > 0
-              ? `${p.label}: pool substituído por 1 chave`
-              : `${p.label} salvo — agente pode usar`,
-          );
         }
         await qc.invalidateQueries({ queryKey: ["connectors-public"] });
       } catch (e: unknown) {
@@ -374,7 +368,6 @@ function ApiPage() {
           );
         }
         await qc.invalidateQueries({ queryKey: ["connectors-public"] });
-        toast.success("Chave removida do pool");
       } catch (e: unknown) {
         toast.error(e instanceof Error ? e.message : "Falha ao remover");
       } finally {
@@ -395,7 +388,6 @@ function ApiPage() {
           ),
         );
         await qc.invalidateQueries({ queryKey: ["connectors-public"] });
-        toast.success("Chave removida");
       } catch (e: unknown) {
         toast.error(e instanceof Error ? e.message : "Falha ao remover");
       } finally {
@@ -412,9 +404,6 @@ function ApiPage() {
       const result = await testE2bApiKey(token);
       setE2bHealth(result);
       if (result.ok) {
-        toast.success(
-          `Sandbox OK — ${result.templateUsed ?? "template"} · ${result.nodeVersion ?? "node"} · ${result.npmVersion ?? "npm"}`,
-        );
         await qc.invalidateQueries({ queryKey: ["connectors-public"] });
         if (!token) setE2bConnected(true);
       } else {
@@ -439,7 +428,6 @@ function ApiPage() {
       setE2bKeyValue("");
       setE2bConnected(true);
       await qc.invalidateQueries({ queryKey: ["connectors-public"] });
-      toast.success("Sandbox E2B validado e salvo (create + npm smoke OK)");
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : "Falha ao salvar E2B");
     } finally {
@@ -454,7 +442,6 @@ function ApiPage() {
       setE2bConnected(false);
       setE2bKeyValue("");
       await qc.invalidateQueries({ queryKey: ["connectors-public"] });
-      toast.success("Chave E2B removida");
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : "Falha ao remover E2B");
     } finally {
@@ -473,7 +460,6 @@ function ApiPage() {
       setOllamaConnected(true);
       setOllamaApiKey("");
       await qc.invalidateQueries({ queryKey: ["connectors-public"] });
-      toast.success("Ollama conectado — escolha o modelo em Modelos (ambiente Ollama)");
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : "Falha ao salvar Ollama");
     } finally {
@@ -487,7 +473,6 @@ function ApiPage() {
       await disconnectOllamaConnector();
       setOllamaConnected(false);
       await qc.invalidateQueries({ queryKey: ["connectors-public"] });
-      toast.success("Ollama desconectado");
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : "Falha ao remover Ollama");
     } finally {

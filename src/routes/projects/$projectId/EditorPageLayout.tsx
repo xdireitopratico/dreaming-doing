@@ -25,7 +25,7 @@ import type { usePreviewBoot } from "@/hooks/usePreviewBoot";
 import type { useConnectors } from "@/hooks/useConnectors";
 import type { AgentPreferences } from "@/lib/agent-preferences";
 import { HEAT_MAP_CSS } from "@/lib/monacoEnhancements";
-import { toast } from "sonner";
+
 
 type AgentRun = ReturnType<typeof useAgentRun>;
 type PreviewBoot = ReturnType<typeof usePreviewBoot>;
@@ -339,10 +339,10 @@ export function EditorPageLayout({
                         files={fileTreeFiles}
                         activePath={activeFilePath}
                         onSelectFile={handleSelectFile}
-                        onCreateFile={() => toast.info("Criar arquivo — via chat")}
-                        onCreateFolder={() => toast.info("Criar pasta — via chat")}
-                        onRename={(old, n) => toast.info(`Renomear: ${old} → ${n}`)}
-                        onDelete={(p) => toast.info(`Deletar: ${p}`)}
+                        onCreateFile={() => {}}
+                        onCreateFolder={() => {}}
+                        onRename={() => {}}
+                        onDelete={() => {}}
                       />
                     </div>
                   )}
@@ -383,8 +383,7 @@ export function EditorPageLayout({
                           isReactProject={isReactProject}
                           projectName={projectName ?? undefined}
                           device={previewDevice}
-                          onImportRepo={(url) => {
-                            toast.info(`Importando repositório: ${url}`);
+                          onImportRepo={() => {
                             openConnector("github");
                           }}
                           onFocusChat={() => {
@@ -401,10 +400,10 @@ export function EditorPageLayout({
                           diffs={diffEntries}
                           activeDiffId={diffEntries[0]?.id ?? null}
                           onSelectDiff={() => {}}
-                          onAccept={() => toast.success("Mudança aceita")}
-                          onReject={() => toast.info("Mudança rejeitada")}
-                          onAcceptAll={() => toast.success("Todas mudanças aceitas")}
-                          onRejectAll={() => toast.info("Todas mudanças rejeitadas")}
+                          onAccept={() => {}}
+                          onReject={() => {}}
+                          onAcceptAll={() => {}}
+                          onRejectAll={() => {}}
                         />
                       )}
                     </div>

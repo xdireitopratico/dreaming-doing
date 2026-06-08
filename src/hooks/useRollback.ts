@@ -2,7 +2,7 @@
 // Cria snapshot após cada resposta do agente, permite restaurar via UI
 import { useCallback, useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 
 interface RollbackPoint {
   id: string;
@@ -125,7 +125,7 @@ export function useRollback({ projectId, enabled }: UseRollbackOptions) {
 
         if (error) throw error;
 
-        toast.success(`Restaurado para: ${point.label}`);
+
         return true;
       } catch (e: any) {
         toast.error(`Erro ao restaurar: ${e.message}`);

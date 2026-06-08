@@ -4,7 +4,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import {
   type ConnectorId,
   type IntegrationMode,
@@ -177,7 +177,6 @@ export function useConnectors() {
 
       if (kind === "e2b") {
         setModal(null);
-        toast.info("Chave E2B fica em API Keys.");
         void navigate({ to: "/api", hash: "forge-key-e2b" });
         return;
       }
@@ -207,7 +206,6 @@ export function useConnectors() {
 
       await qc.invalidateQueries({ queryKey: ["connectors-public"] });
       await qc.invalidateQueries({ queryKey: ["profile"] });
-      toast.success(payload.disconnect ? "Desconectado" : "Conectado com sucesso");
       setModal(null);
     },
     [qc, setMode],

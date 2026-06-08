@@ -3,7 +3,7 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import { ArrowLeft, Plus, Wrench, Check, BookOpen, Search, X, Sparkles } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import { DashboardShell } from "@/components/dashboard/DashboardShell";
 import { SKILLS_CATALOG } from "@/lib/skills-catalog";
 import { useAuth } from "@/lib/auth";
@@ -86,12 +86,11 @@ function SkillsPage() {
   const hasFilter = query.trim() !== "" || onlyBundled;
 
   const persist = useCallback(
-    async (nextIds: string[], successMessage: string) => {
+    async (nextIds: string[]) => {
       if (!user?.id) return;
       try {
         const next = await setSkillIdsPersisted(user.id, nextIds, profile?.integration_prefs);
         setEnabled(next);
-        toast.success(successMessage);
       } catch (e) {
         toast.error(e instanceof Error ? e.message : "Falha ao salvar");
       }
@@ -102,7 +101,7 @@ function SkillsPage() {
   const toggle = useCallback(
     (id: string, name: string, wasOn: boolean) => {
       const next = wasOn ? enabled.filter((x) => x !== id) : [...enabled, id];
-      void persist(next, wasOn ? `${name} desativada` : `${name} ativa no agente`);
+      void persist(next);
     },
     [enabled, persist],
   );
@@ -110,13 +109,13 @@ function SkillsPage() {
   const activateAllVisible = useCallback(() => {
     const ids = filtered.map((s) => s.id);
     const next = Array.from(new Set([...enabled, ...ids]));
-    void persist(next, `${ids.length} skill(s) ativadas no agente`);
+    void persist(next);
   }, [filtered, enabled, persist]);
 
   const deactivateAllVisible = useCallback(() => {
     const ids = new Set(filtered.map((s) => s.id));
     const next = enabled.filter((id) => !ids.has(id));
-    void persist(next, "Skills visíveis desativadas");
+    void persist(next);
   }, [filtered, enabled, persist]);
 
   const hasVisibleOn = filtered.some((s) => enabled.includes(s.id));

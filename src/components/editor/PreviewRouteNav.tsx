@@ -5,7 +5,7 @@ import {
   ForgeEditorDropdownContent,
   ForgeEditorDropdownItem,
 } from "@/components/editor/ForgeEditorDropdown";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import { inferProjectRoutes, buildPreviewUrl } from "@/lib/project-routes";
 
 interface PreviewRouteNavProps {
@@ -81,10 +81,9 @@ export function PreviewRouteNav({
 
   const copyPreviewLink = () => {
     if (!iframeSrc) return;
-    void navigator.clipboard.writeText(iframeSrc).then(
-      () => toast.success("Link do preview copiado"),
-      () => toast.info(iframeSrc),
-    );
+    void navigator.clipboard.writeText(iframeSrc).catch(() => {
+      toast.error("Não foi possível copiar o link do preview");
+    });
   };
 
   const chrome = variant === "chrome";

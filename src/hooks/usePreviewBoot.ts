@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import { supabase } from "@/integrations/supabase/client";
 import { getSupabaseEnv } from "@/lib/supabase-env";
 import { logEditorTelemetryEvent } from "@/lib/editor-telemetry";
@@ -48,15 +48,7 @@ export function usePreviewBoot(projectId: string, opts?: UsePreviewBootOpts) {
   const bootAttemptsRef = useRef(0);
   const probeFailuresRef = useRef(0);
   const bootInFlightRef = useRef(false);
-  /** Evita toast repetido para a mesma URL de preview na sessão. */
-  const connectedToastUrlRef = useRef<string | null>(null);
   const qc = useQueryClient();
-
-  const toastPreviewConnected = useCallback((url: string) => {
-    if (connectedToastUrlRef.current === url) return;
-    connectedToastUrlRef.current = url;
-    toast.success("Preview conectado");
-  }, []);
 
   const callPreviewBoot = useCallback(
     async (opts?: BootOpts): Promise<BootResult | null> => {
@@ -115,7 +107,7 @@ export function usePreviewBoot(projectId: string, opts?: UsePreviewBootOpts) {
             probeFailuresRef.current = 0;
             setWarming(false);
             await qc.invalidateQueries({ queryKey: ["project", projectId] });
-            if (body.url) toastPreviewConnected(body.url);
+
           } else if (body?.url) {
             probeFailuresRef.current += 1;
             if (probeFailuresRef.current >= PROBE_FAIL_BEFORE_FORCE) {
@@ -151,7 +143,7 @@ export function usePreviewBoot(projectId: string, opts?: UsePreviewBootOpts) {
             }
           } else {
             setBootLogs(null);
-            if (!opts?.silent) toastPreviewConnected(body.url);
+
           }
           logEditorTelemetryEvent(
             "preview",
@@ -183,7 +175,7 @@ export function usePreviewBoot(projectId: string, opts?: UsePreviewBootOpts) {
         setBooting(false);
       }
     },
-    [callPreviewBoot, projectId, qc, idle, toastPreviewConnected],
+    [callPreviewBoot, projectId, qc, idle],
   );
 
   const bootWithRetry = useCallback(
@@ -209,7 +201,6 @@ export function usePreviewBoot(projectId: string, opts?: UsePreviewBootOpts) {
   );
 
   useEffect(() => {
-    connectedToastUrlRef.current = null;
     bootInFlightRef.current = false;
   }, [projectId]);
 

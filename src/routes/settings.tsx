@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useCallback, useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import {
   ArrowLeft,
   Key,
@@ -73,7 +73,7 @@ function SettingsPage() {
         });
       if (error) throw error;
       await qc.invalidateQueries({ queryKey: ["profile", user.id] });
-      toast.success("Perfil atualizado");
+
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : "Falha ao salvar perfil");
     } finally {
@@ -96,7 +96,7 @@ function SettingsPage() {
       if (error) throw error;
       setNewPassword("");
       setConfirmPassword("");
-      toast.success("Senha alterada");
+
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : "Falha ao alterar senha");
     } finally {

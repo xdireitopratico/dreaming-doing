@@ -3,7 +3,7 @@ import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import { ArrowLeft, Plus, Puzzle, Check, Zap } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import { DashboardShell } from "@/components/dashboard/DashboardShell";
 import { MCP_CATALOG } from "@/lib/mcp-catalog";
 import { useAuth } from "@/lib/auth";
@@ -116,7 +116,6 @@ function McpPage() {
                   void toggleMcpIdPersisted(user.id, m.id, profile?.integration_prefs)
                     .then((next) => {
                       setEnabled(next);
-                      toast.success(on ? `${m.name} desativado` : `${m.name} — tools no agente`);
                     })
                     .catch((e: unknown) => {
                       toast.error(e instanceof Error ? e.message : "Falha ao salvar");

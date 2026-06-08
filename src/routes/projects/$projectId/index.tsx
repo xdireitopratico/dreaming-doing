@@ -17,7 +17,7 @@ import { usePreviewIdle } from "@/hooks/usePreviewIdle";
 import { useEditorTelemetry } from "@/hooks/useEditorTelemetry";
 import { useElementPicker } from "@/hooks/useElementPicker";
 import { useWorkspacePresets, useFileDrop } from "@/hooks/useWorkspacePresets";
-import { toast } from "sonner";
+
 import type { editor } from "monaco-editor";
 
 import { useEditorPageData } from "./useEditorPageData";
@@ -209,20 +209,14 @@ function EditorPage() {
 
   useElementPicker({
     iframeRef: previewIframeRef,
-    onPick: (el) => {
-      toast.success(`Elemento: ${el.selector}`);
+    onPick: () => {
       setPickMode(false);
     },
     active: pickMode,
     onToggle: () => setPickMode(!pickMode),
   });
 
-  const { isDragOver, handleDragOver, handleDragLeave, handleDrop } = useFileDrop(
-    (files) =>
-      toast.info(
-        `${files.length} arquivo${files.length !== 1 ? "s" : ""} recebido${files.length !== 1 ? "s" : ""}`,
-      ),
-  );
+  const { isDragOver, handleDragOver, handleDragLeave, handleDrop } = useFileDrop(() => {});
 
   const connectedKinds = useMemo(
     () =>

@@ -33,7 +33,7 @@ import { exportProjectZip } from "@/hooks/useWorkspacePresets";
 import { useAutoPublish } from "@/hooks/useAutoPublish";
 import type { useAgentRun } from "@/hooks/useAgentRun";
 import type { usePreviewBoot } from "@/hooks/usePreviewBoot";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 
 type AgentRun = ReturnType<typeof useAgentRun>;
 type PreviewBoot = ReturnType<typeof usePreviewBoot>;
@@ -347,7 +347,6 @@ export function useEditorPageHandlers({
   const handleVisualEdits = useCallback(() => {
     if (activeView !== "preview") {
       setActiveView("preview");
-      toast.info("Abra o Preview para selecionar um elemento.");
     }
     setPickMode((v) => {
       const next = !v;
@@ -399,7 +398,6 @@ export function useEditorPageHandlers({
           if (error) {
             toast.error("Erro ao desfazer");
           } else {
-            toast.success("Desfeito: última resposta do agente + sua mensagem anterior");
             logEditorTelemetryEvent("agent", "undo", "info", assistantMsgId.slice(0, 8));
           }
         });
@@ -426,14 +424,14 @@ export function useEditorPageHandlers({
       }
       const enabled = steps.filter((s) => s.enabled !== false);
       if (enabled.length === 0) {
-        toast.warning("Selecione ao menos um passo para executar.");
+        toast.error("Selecione ao menos um passo para executar.");
         return;
       }
       const full = enabled
         .map((s) => pp.steps.find((p) => p.id === s.id))
         .filter((s): s is NonNullable<typeof s> => s != null);
       if (full.length === 0) {
-        toast.warning("Passos selecionados não correspondem ao plano.");
+        toast.error("Passos selecionados não correspondem ao plano.");
         return;
       }
 
@@ -507,21 +505,16 @@ export function useEditorPageHandlers({
       return;
     }
     if (isReactProject) {
-      toast.info("Subindo preview…");
       const url = await previewBoot.bootWithRetry();
       if (url) window.open(buildPreviewUrl(url, previewRoute), "_blank", "noopener");
     }
   }, [liveSiteUrl, isReactProject, previewBoot, previewRoute]);
 
   const handleShare = useCallback(() => {
-    if (!liveSiteUrl) {
-      toast.info("O link ficará disponível quando o preview subir.");
-      return;
-    }
-    navigator.clipboard.writeText(liveSiteUrl).then(
-      () => toast.success("Link copiado para a área de transferência"),
-      () => toast.info(liveSiteUrl),
-    );
+    if (!liveSiteUrl) return;
+    void navigator.clipboard.writeText(liveSiteUrl).catch(() => {
+      toast.error("Não foi possível copiar o link");
+    });
   }, [liveSiteUrl]);
 
   const publishButtonLabel = autoPublish.publishing
@@ -535,13 +528,13 @@ export function useEditorPageHandlers({
   const paletteActions: PaletteAction[] = useMemo(
     () =>
       buildEditorActions({
-        onNewFile: () => toast.info("Arquivo — via chat"),
-        onNewFolder: () => toast.info("Pasta — via chat"),
+        onNewFile: () => {},
+        onNewFolder: () => {},
         onTogglePreview: () => setActiveView((v) => (v === "preview" ? "code" : "preview")),
         onToggleTerminal: () => setLogPanelOpen((v) => !v),
-        onToggleGit: () => toast.info("Git Panel — em breve"),
+        onToggleGit: () => {},
         onExportZip: handleExportZip,
-        onImportFiles: () => toast.info("Arraste arquivos para importar"),
+        onImportFiles: () => {},
         onSaveAll: () => {
           openTabs.forEach((t) => {
             if (t.isModified && t.path) {
@@ -555,7 +548,6 @@ export function useEditorPageHandlers({
                 });
             }
           });
-          toast.success("Arquivos salvos");
         },
         onRunAgent: runAgent,
         onStopAgent: handleStop,

@@ -2,7 +2,7 @@ import { Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { ChevronDown, FolderOpen, Plus, Trash2 } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import { deleteProject } from "@/lib/projects.functions";
 import { supabase } from "@/integrations/supabase/client";
 import { PromptEngine } from "@/components/prompt/PromptEngine";
@@ -78,7 +78,7 @@ export function ProjectsDashboard() {
     if (!confirm(`Excluir “${name}”? O ambiente ao vivo deste projeto será encerrado.`)) return;
     try {
       await deleteProject({ data: { projectId } });
-      toast.success("Projeto excluído");
+
       void qc.invalidateQueries({ queryKey: ["projects-all"] });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Não foi possível excluir");

@@ -2,7 +2,7 @@
 // Layout presets: "default" (30/70), "focus-code" (0/100), "review" (50/50)
 import { useState, useCallback, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import JSZip from "jszip";
 import fileSaver from "file-saver";
 
@@ -86,7 +86,7 @@ export async function exportProjectZip(projectId: string, projectName: string) {
       .eq("project_id", projectId);
 
     if (!files || files.length === 0) {
-      toast.warning("Nenhum arquivo para exportar");
+      toast.error("Nenhum arquivo para exportar");
       return;
     }
 
@@ -97,7 +97,7 @@ export async function exportProjectZip(projectId: string, projectName: string) {
 
     const blob = await zip.generateAsync({ type: "blob" });
     saveAs(blob, `${projectName || "projeto"}.zip`);
-    toast.success("Projeto exportado como ZIP");
+
   } catch (e: any) {
     toast.error(`Erro ao exportar: ${e.message}`);
   }

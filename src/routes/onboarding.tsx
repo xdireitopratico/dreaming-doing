@@ -16,7 +16,7 @@ import {
   AlertCircle,
   Loader2,
 } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import { Button, FadeIn } from "@forge/ui";
 import { DashboardShell } from "@/components/dashboard/DashboardShell";
 import { useAuth } from "@/lib/auth";
@@ -171,7 +171,7 @@ function OnboardingPage() {
         completed: [...state.completed, "done"],
         highestReached: "done",
       });
-      toast.success("Onboarding concluído! Bem-vindo ao FORGE de verdade.");
+
       void navigate({ to: "/projects" });
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Erro ao finalizar onboarding");

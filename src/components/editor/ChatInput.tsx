@@ -15,7 +15,7 @@ import {
 
 import { cn } from "@/lib/utils";
 import { MicButton } from "@/components/voice/MicButton";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import {
   buildOutgoingParts,
   CHAT_ATTACHMENT_ACCEPT,
@@ -226,7 +226,7 @@ export function ChatInput({
     if (!incoming.length) return;
     const { accepted, rejected } = filterAcceptedFiles(incoming);
     if (rejected.length) {
-      toast.warning(`Não aceito: ${rejected.slice(0, 3).join(", ")}${rejected.length > 3 ? "…" : ""}`);
+      toast.error(`Não aceito: ${rejected.slice(0, 3).join(", ")}${rejected.length > 3 ? "…" : ""}`);
     }
     if (!accepted.length) return;
     setAttachments((prev) => [...prev, ...accepted].slice(0, 8));

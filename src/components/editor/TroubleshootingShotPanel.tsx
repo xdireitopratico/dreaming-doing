@@ -6,7 +6,7 @@ import {
   Copy,
   RefreshCw,
 } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import {
   formatShotForClipboard,
   getTroubleshootingShot,
@@ -84,7 +84,7 @@ export function TroubleshootingShotPanel() {
     const text = formatShotForClipboard(getTroubleshootingShot());
     try {
       await navigator.clipboard.writeText(text);
-      toast.success("Troubleshooting shot copiado");
+
     } catch {
       toast.error("Não foi possível copiar");
     }
@@ -95,7 +95,7 @@ export function TroubleshootingShotPanel() {
       await navigator.clipboard.writeText(
         JSON.stringify(getTroubleshootingShot(), null, 2),
       );
-      toast.success("JSON copiado");
+
     } catch {
       toast.error("Não foi possível copiar JSON");
     }
