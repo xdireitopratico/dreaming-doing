@@ -134,7 +134,7 @@ export async function executeDeployPublish(
     };
   }
 
-  const url = deployResult.url ?? previewUrl || null;
+  const url = deployResult.url ?? (previewUrl || null);
   const nextMeta: Record<string, unknown> = {
     ...meta,
     publishedUrl: url,
