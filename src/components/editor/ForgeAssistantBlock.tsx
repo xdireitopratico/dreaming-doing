@@ -229,7 +229,7 @@ export function ForgeAssistantBlock({
       )}
 
       {planForRun && onReopenPlan && onPlanApprove && onPlanReject && (
-        <div className="my-3 inline-block max-w-fit" data-testid="plan-panel">
+        <div className="forge-plan-panel my-3 w-full max-w-full min-w-0" data-testid="plan-panel">
           <PlanViewer
             plan={planForRun}
             onOpen={onReopenPlan}

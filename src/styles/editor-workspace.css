@@ -737,6 +737,19 @@ body:has(.editor-workspace) {
   width: 100%;
 }
 
+.forge-plan-panel {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.forge-plan-mini-card {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
 .forge-chat-markdown {
   width: 100%;
   max-width: 100%;

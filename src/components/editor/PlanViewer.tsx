@@ -44,7 +44,7 @@ export function PlanViewer({ plan, onOpen, onApprove, onReject }: PlanViewerProp
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: 6 }}
       transition={{ type: "spring", stiffness: 400, damping: 34 }}
-      className="w-[200px] h-[80px] border border-[var(--border)] rounded-lg bg-[var(--surface-1)] p-2.5 flex flex-col gap-1.5 cursor-pointer hover:bg-[var(--surface-2)] transition-colors"
+      className="forge-plan-mini-card w-full min-h-[72px] border border-[var(--border)] rounded-lg bg-[var(--surface-1)] p-2.5 sm:p-3 flex flex-col gap-1.5 cursor-pointer hover:bg-[var(--surface-2)] transition-colors"
       onClick={onOpen}
       role="button"
       tabIndex={0}
@@ -67,15 +67,15 @@ export function PlanViewer({ plan, onOpen, onApprove, onReject }: PlanViewerProp
         <Maximize2 className="size-3 text-[var(--forge-muted)] shrink-0" />
       </div>
 
-      <p className="font-mono text-[10px] leading-snug text-[var(--foreground)] line-clamp-2">
+      <p className="font-mono text-[10px] sm:text-[11px] leading-snug text-[var(--foreground)] line-clamp-2 sm:line-clamp-3">
         {plan.mission ?? plan.summary}
       </p>
 
-      <div className="flex items-center gap-1.5 mt-auto">
-        <span className="font-mono text-[8px] text-[var(--forge-muted)]">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 mt-auto w-full">
+        <span className="font-mono text-[8px] sm:text-[9px] text-[var(--forge-muted)] shrink-0">
           {enabledCount}/{stepCount} passo{stepCount !== 1 ? "s" : ""}
         </span>
-        <div className="flex items-center gap-1 ml-auto">
+        <div className="flex flex-wrap items-center gap-1 ml-auto justify-end">
           <button
             type="button"
             onClick={(e) => {
