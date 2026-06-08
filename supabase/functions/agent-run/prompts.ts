@@ -303,6 +303,45 @@ export function getSystemPrompt(template: string | null | undefined): string {
 
 export { buildStackContext, stackPromptAddon, type DeployTarget, type StackContext } from "../_shared/stack-context.ts";
 
+const STACK_ENFORCEMENT_LABELS: Record<string, { name: string; constraint: string }> = {
+  "vite-react": {
+    name: "Vite + React + TypeScript + Tailwind v4",
+    constraint: "Todo código DEVE ser React/TypeScript. Use src/App.tsx como entry. NÃO gere Android/Kotlin, Swift, Flutter ou qualquer stack não-web a menos que o usuário peça EXPLICITAMENTE a troca.",
+  },
+  "expo": {
+    name: "Expo (React Native + Web)",
+    constraint: "Todo código DEVE ser Expo/React Native. Use app/ directory (Expo Router). NÃO gere Vite-only, Android/Kotlin nativo, ou Flutter a menos que o usuário peça EXPLICITAMENTE a troca.",
+  },
+  "android-native": {
+    name: "Android Nativo (Kotlin/Gradle)",
+    constraint: "Todo código DEVE ser Kotlin/Gradle (app/src/main). NÃO gere React, Vite, Expo, ou qualquer framework web como stack principal a menos que o usuário peça EXPLICITAMENTE a troca.",
+  },
+  "nextjs-app-router": {
+    name: "Next.js 15 App Router",
+    constraint: "Todo código DEVE usar Next.js App Router (app/ directory). NÃO gere Vite-only, Expo, ou Android nativo a menos que o usuário peça EXPLICITAMENTE a troca.",
+  },
+  "tanstack-start": {
+    name: "TanStack Start (React + SSR)",
+    constraint: "Todo código DEVE usar TanStack Start/Router. NÃO gere Next.js, Expo, ou Android nativo a menos que o usuário peça EXPLICITAMENTE a troca.",
+  },
+  "astro": {
+    name: "Astro (Content-first)",
+    constraint: "Todo código DEVE usar Astro (.astro files, islands). NÃO gere Next.js, Vite puro, ou Android nativo a menos que o usuário peça EXPLICITAMENTE a troca.",
+  },
+};
+
+/** Gera bloco de enforcement que força o agente a respeitar o stack do projeto. */
+export function buildStackEnforcement(template: string): string {
+  const entry = STACK_ENFORCEMENT_LABELS[template];
+  if (!entry) return "";
+  return `## Stack enforcement (RÍGIDO — não ignore)
+**Stack configurado deste projeto:** ${entry.name}
+${entry.constraint}
+
+Quando o usuário disser "crie um app", "faça um aplicativo" ou similar SEM especificar outra plataforma, use o stack configurado acima.
+Se o usuário pedir EXPLICITAMENTE outra plataforma (ex.: "quero em Flutter"), confirme a troca antes de mudar o stack.`;
+}
+
 /** @deprecated Use buildExecuteInstruction() com o pedido literal do usuário. */
 export const EXECUTE_PROMPT = `Implemente usando ferramentas. Não responda só com texto.`;
 

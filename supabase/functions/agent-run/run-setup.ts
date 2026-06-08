@@ -167,10 +167,42 @@ export type ResolveProviderInput = {
  * Resolve mainCfg + connector keys for agent execution.
  * taste_start uses platform NVIDIA trial pool; byok uses user prefs / robin / auto / fixed.
  */
+/** Quando prefs vazias (smoke/Inngest) mas o usuário tem chaves — inferir modo. */
+export function coalesceAgentPreferences(
+  preferences: AgentPreferencesPayload | undefined,
+  userOnlyKeys: Record<string, string>,
+  groqPool: string[],
+  nvidiaPool: string[],
+): AgentPreferencesPayload {
+  if (preferences?.mode) return preferences;
+  if (nvidiaPool.length > 0) {
+    return {
+      mode: "robin",
+      poolProvider: "nvidia",
+      robinPoolModelId: "nvidia--nemotron-3-ultra-550b",
+    };
+  }
+  if (groqPool.length > 0) {
+    return { mode: "robin", poolProvider: "groq", robinPoolModelId: "pool-groq-flash" };
+  }
+  if (Object.keys(userOnlyKeys).length > 0) {
+    return { mode: "auto" };
+  }
+  return preferences ?? {};
+}
+
 export async function resolveAgentProvider(
   input: ResolveProviderInput,
 ): Promise<AgentProviderSetup> {
-  const { supabase, userId, preferences, sessionKind, userOnlyKeys } = input;
+  const { supabase, userId, sessionKind, userOnlyKeys } = input;
+  const groqPool = await loadConnectorPools(supabase, userId, "groq");
+  const nvidiaPool = await loadConnectorPools(supabase, userId, "nvidia");
+  const preferences = coalesceAgentPreferences(
+    input.preferences,
+    userOnlyKeys,
+    groqPool,
+    nvidiaPool,
+  );
   const userWantsRobin = isRobinMode(preferences);
   const poolProvider = preferences?.poolProvider ?? "groq";
 
@@ -194,7 +226,7 @@ export async function resolveAgentProvider(
   }
 
   if (userWantsRobin) {
-    const poolKeys = await loadConnectorPools(supabase, userId, poolProvider);
+    const poolKeys = poolProvider === "nvidia" ? nvidiaPool : groqPool;
     const robinPool = new RobinKeyPool(poolKeys);
     const mainCfg = robinProviderConfig(poolProvider, poolKeys, preferences?.robinPoolModelId);
     return {

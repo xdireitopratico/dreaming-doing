@@ -88,6 +88,8 @@ type UseEditorPageHandlersParams = {
   setCheatsheetOpen: (value: boolean | ((prev: boolean) => boolean)) => void;
   setPickMode: (value: boolean | ((prev: boolean) => boolean)) => void;
   previewRoute: string;
+  markDiffReviewed: (diffId: string, decision: "accept" | "reject") => void;
+  reviewedDiffs: Record<string, "accept" | "reject">;
 };
 
 export function useEditorPageHandlers({
@@ -127,6 +129,8 @@ export function useEditorPageHandlers({
   setCheatsheetOpen,
   setPickMode,
   previewRoute,
+  markDiffReviewed,
+  reviewedDiffs,
 }: UseEditorPageHandlersParams) {
   const publishFn = useServerFn(publishProject);
   const planApproveFn = useServerFn(planApprove);
@@ -660,6 +664,67 @@ export function useEditorPageHandlers({
     setShowFileTree,
   ]);
 
+  const handleDiffAccept = useCallback(
+    (diffId: string) => {
+      markDiffReviewed(diffId, "accept");
+      logEditorTelemetryEvent("diff", "accept", "info", diffId.slice(0, 16));
+    },
+    [markDiffReviewed],
+  );
+
+  const handleDiffReject = useCallback(
+    async (diffId: string) => {
+      const diff = agent.progress.diffs.find((d) => d.id === diffId);
+      if (!diff) return;
+
+      const { error } = await supabase.from("project_files").upsert({
+        project_id: projectId,
+        path: diff.path,
+        content: diff.before,
+      });
+
+      if (error) {
+        toast.error("Erro ao reverter arquivo");
+        return;
+      }
+
+      markDiffReviewed(diffId, "reject");
+      logEditorTelemetryEvent("diff", "reject", "info", diffId.slice(0, 16));
+      await qc.invalidateQueries({ queryKey: ["files", projectId] });
+      void previewBoot.boot({ force: true });
+    },
+    [agent.progress.diffs, projectId, qc, previewBoot, markDiffReviewed],
+  );
+
+  const handleDiffAcceptAll = useCallback(() => {
+    const pending = agent.progress.diffs.filter((d) => !reviewedDiffs[d.id]);
+    for (const d of pending) markDiffReviewed(d.id, "accept");
+    logEditorTelemetryEvent("diff", "accept_all", "info", String(pending.length));
+  }, [agent.progress.diffs, markDiffReviewed, reviewedDiffs]);
+
+  const handleDiffRejectAll = useCallback(async () => {
+    const pending = agent.progress.diffs.filter((d) => !reviewedDiffs[d.id]);
+    if (pending.length === 0) return;
+
+    const upserts = pending.map((d) => ({
+      project_id: projectId,
+      path: d.path,
+      content: d.before,
+    }));
+
+    const { error } = await supabase.from("project_files").upsert(upserts);
+
+    if (error) {
+      toast.error("Erro ao reverter arquivos");
+      return;
+    }
+
+    for (const d of pending) markDiffReviewed(d.id, "reject");
+    logEditorTelemetryEvent("diff", "reject_all", "info", String(pending.length));
+    await qc.invalidateQueries({ queryKey: ["files", projectId] });
+    void previewBoot.boot({ force: true });
+  }, [agent.progress.diffs, projectId, qc, previewBoot, markDiffReviewed, reviewedDiffs]);
+
   return {
     runAgent,
     handleSelectFile,
@@ -674,6 +739,10 @@ export function useEditorPageHandlers({
     handleExportZip,
     handlePlanApprove,
     handlePlanReject,
+    handleDiffAccept,
+    handleDiffReject,
+    handleDiffAcceptAll,
+    handleDiffRejectAll,
     handleOpenLiveSite,
     handleShare,
     liveSiteUrl,

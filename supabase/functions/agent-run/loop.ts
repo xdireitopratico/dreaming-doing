@@ -12,7 +12,7 @@ import { ModelRouter } from "./router.ts";
 import { CompressionManager, parallelExecute } from "./compression.ts";
 import { RuntimeObserver } from "./observer.ts";
 import { SkillRegistry } from "./skills.ts";
-import { getSystemPrompt, EXECUTE_RULES } from "./prompts.ts";
+import { getSystemPrompt, EXECUTE_RULES, buildStackEnforcement } from "./prompts.ts";
 import {
   ANTI_LEAK_RULE,
   INVENTORY_SYSTEM,
@@ -516,9 +516,12 @@ export class AgentLoop {
       }
 
       // Mobile ambíguo em Build — perguntar Expo vs Kotlin antes de codar.
+      // Skip se o projeto já tem stack mobile configurado.
+      const hasMobileTemplate = this.projectTemplate === "expo" || this.projectTemplate === "android-native";
       if (
         !this.planMode &&
         !this.approvedPlanBuild &&
+        !hasMobileTemplate &&
         this.originalUserRequest &&
         isAmbiguousMobileRequest(this.originalUserRequest)
       ) {
@@ -754,8 +757,12 @@ export class AgentLoop {
         if (preDiff && result.ok) {
           this.recordTouchedPath(preDiff.path);
           this.emit("file_diff", preDiff);
+          const hasGradleScaffold = (this.state.context?.files ?? []).some((f) =>
+            /build\.gradle|settings\.gradle/i.test(f.path.replace(/^\//, ""))
+          );
           if (
             isAndroidNativePath(preDiff.path) &&
+            !hasGradleScaffold &&
             (this.projectTemplate === "vite-react" || this.projectTemplate === "landing-page")
           ) {
             this.emit("stack_fork_suggested", {
@@ -1105,7 +1112,11 @@ export class AgentLoop {
       phase: "qualify",
       message: "Qualificando ideia antes de codar…",
     });
-    if (isAmbiguousMobileRequest(userRequest)) {
+    if (
+      this.projectTemplate !== "expo" &&
+      this.projectTemplate !== "android-native" &&
+      isAmbiguousMobileRequest(userRequest)
+    ) {
       return { stopForUser: true, message: buildMobileStackQualifyMessage() };
     }
     try {
@@ -1141,8 +1152,10 @@ export class AgentLoop {
       ? this.skills.buildSkillPrompt(this.state.context.files)
       : "";
     const base = getSystemPrompt(this.projectTemplate);
+    const stackEnforcement = buildStackEnforcement(this.projectTemplate);
     const withStack = this.stackAddon ? `${base}\n\n${this.stackAddon}` : base;
-    const tasteWrapped = this.tasteStart ? getTasteStartSystemPrompt(withStack) : withStack;
+    const withEnforcement = stackEnforcement ? `${withStack}\n\n${stackEnforcement}` : withStack;
+    const tasteWrapped = this.tasteStart ? getTasteStartSystemPrompt(withEnforcement) : withEnforcement;
     const fullSystemPrompt = [
       tasteWrapped,
       skillPrompt,

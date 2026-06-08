@@ -103,6 +103,10 @@ export type EditorPageLayoutProps = {
   previewSyncing?: boolean;
   previewLiveUpdating?: boolean;
   diffEntries: DiffEntry[];
+  handleDiffAccept: (diffId: string) => void;
+  handleDiffReject: (diffId: string) => void;
+  handleDiffAcceptAll: () => void;
+  handleDiffRejectAll: () => void;
   logPanelOpen: boolean;
   setLogPanelOpen: (value: boolean | ((prev: boolean) => boolean)) => void;
   logs: LogEntry[];
@@ -185,6 +189,10 @@ export function EditorPageLayout({
   previewSyncing = false,
   previewLiveUpdating = false,
   diffEntries,
+  handleDiffAccept,
+  handleDiffReject,
+  handleDiffAcceptAll,
+  handleDiffRejectAll,
   logPanelOpen,
   setLogPanelOpen,
   logs,
@@ -433,10 +441,10 @@ export function EditorPageLayout({
                           diffs={diffEntries}
                           activeDiffId={diffEntries[0]?.id ?? null}
                           onSelectDiff={() => {}}
-                          onAccept={() => {}}
-                          onReject={() => {}}
-                          onAcceptAll={() => {}}
-                          onRejectAll={() => {}}
+                          onAccept={handleDiffAccept}
+                          onReject={handleDiffReject}
+                          onAcceptAll={handleDiffAcceptAll}
+                          onRejectAll={handleDiffRejectAll}
                         />
                       )}
                     </div>

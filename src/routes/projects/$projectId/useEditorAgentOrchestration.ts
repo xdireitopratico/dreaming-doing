@@ -56,6 +56,7 @@ type UseEditorAgentOrchestrationParams = {
   monacoRef: RefObject<typeof import("monaco-editor") | null>;
   previewBoot: PreviewBoot;
   previewIdle: boolean;
+  reviewedDiffs: Record<string, "accept" | "reject">;
 };
 
 export function useEditorAgentOrchestration({
@@ -84,6 +85,7 @@ export function useEditorAgentOrchestration({
   monacoRef,
   previewBoot,
   previewIdle,
+  reviewedDiffs,
 }: UseEditorAgentOrchestrationParams) {
   /** Evita boot duplicado do preview entre fim do agente e refetch do previewUrl. */
   const previewBootAfterAgentRef = useRef(false);
@@ -134,9 +136,10 @@ export function useEditorAgentOrchestration({
       after: d.after,
       author: "FORGE Agent",
       timestamp: d.timestamp,
-      reviewed: false,
+      reviewed: reviewedDiffs[d.id] != null,
+      decision: reviewedDiffs[d.id] ?? null,
     }));
-  }, [agent.progress.diffs, fileMap]);
+  }, [agent.progress.diffs, fileMap, reviewedDiffs]);
 
   const blameEntries = useMemo(
     () => buildBlameFromTimeline(agent.progress.timeline),

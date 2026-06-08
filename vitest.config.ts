@@ -4,14 +4,14 @@ import tsconfigPaths from "vite-tsconfig-paths";
 export default defineConfig({
   plugins: [tsconfigPaths()],
   test: {
-    environment: "node",
-    include: ["src/**/*.test.ts"],
     projects: [
       {
+        root: ".",
+        plugins: [tsconfigPaths()],
         test: {
           name: "forge",
-          include: ["src/**/*.test.ts"],
           environment: "node",
+          include: ["src/**/*.test.ts"],
         },
       },
     ],

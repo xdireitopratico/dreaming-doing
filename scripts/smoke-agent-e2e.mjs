@@ -40,9 +40,12 @@ const SUPABASE_URL =
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
 const INNGEST_EVENT_KEY = process.env.INNGEST_EVENT_KEY ?? "";
 
-const DEFAULT_PROJECT = "75490fba-d7ba-4fcd-8269-da739a287f5a";
-const DEFAULT_CONVERSATION = "ef2c2e01-e2f9-4823-8fea-61f03f1d6445";
-const DEFAULT_USER = "2e8aca9f-1161-4246-9b33-3f2ca6c247d2";
+const DEFAULT_PROJECT =
+  process.env.SMOKE_PROJECT_ID ?? "27d4fd0c-9783-44ac-9446-70bd931620ac";
+const DEFAULT_CONVERSATION =
+  process.env.SMOKE_CONVERSATION_ID ?? "2bfca54a-3170-4a4d-9289-e8acab4d413f";
+const DEFAULT_USER =
+  process.env.SMOKE_USER_ID ?? "2e8aca9f-1161-4246-9b33-3f2ca6c247d2";
 
 function arg(name, fallback) {
   const hit = process.argv.find((a) => a.startsWith(`--${name}=`));
@@ -82,6 +85,14 @@ async function main() {
   const runId = crypto.randomUUID();
   console.log(`Smoke run ${runId.slice(0, 8)} project=${projectId.slice(0, 8)}`);
 
+  const prefsRes = await rest(
+    `agent_runs?user_id=eq.${userId}&status=eq.completed&order=started_at.desc&limit=1&select=meta`,
+  );
+  const [lastRun] = await prefsRes.json();
+  const smokePreferences = lastRun?.meta?.preferences?.mode
+    ? lastRun.meta.preferences
+    : { mode: "robin", poolProvider: "nvidia", robinPoolModelId: "nvidia--nemotron-3-ultra-550b" };
+
   const insertRes = await rest("agent_runs", {
     method: "POST",
     body: JSON.stringify({
@@ -90,7 +101,7 @@ async function main() {
       conversation_id: conversationId,
       user_id: userId,
       status: "pending",
-      meta: { sessionKind: "byok", smoke: true },
+      meta: { sessionKind: "byok", smoke: true, preferences: smokePreferences },
     }),
   });
   if (!insertRes.ok) {
@@ -105,7 +116,7 @@ async function main() {
     conversationId,
     userId,
     sessionKind: "byok",
-    preferences: {},
+    preferences: smokePreferences,
     planMode: false,
     resume: false,
   };

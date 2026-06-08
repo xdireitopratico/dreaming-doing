@@ -88,6 +88,11 @@ function EditorPage() {
   const [previewRoute, setPreviewRoute] = useState("/");
   const [previewReloadNonce, setPreviewReloadNonce] = useState(0);
   const [previewDevice, setPreviewDevice] = useState<"desktop" | "tablet" | "mobile">("desktop");
+  const [reviewedDiffs, setReviewedDiffs] = useState<Record<string, "accept" | "reject">>({});
+
+  const markDiffReviewed = useCallback((diffId: string, decision: "accept" | "reject") => {
+    setReviewedDiffs((prev) => ({ ...prev, [diffId]: decision }));
+  }, []);
 
   const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null);
   const monacoRef = useRef<typeof import("monaco-editor") | null>(null);
@@ -167,6 +172,8 @@ function EditorPage() {
     setCheatsheetOpen,
     setPickMode,
     previewRoute,
+    markDiffReviewed,
+    reviewedDiffs,
   });
 
   useEffect(() => {
@@ -204,6 +211,7 @@ function EditorPage() {
     monacoRef,
     previewBoot,
     previewIdle,
+    reviewedDiffs,
   });
 
   useEffect(() => {
@@ -331,6 +339,10 @@ function EditorPage() {
       previewSyncing={orchestration.previewSyncing}
       previewLiveUpdating={orchestration.previewLiveUpdating}
       diffEntries={orchestration.diffEntries}
+      handleDiffAccept={handlers.handleDiffAccept}
+      handleDiffReject={handlers.handleDiffReject}
+      handleDiffAcceptAll={handlers.handleDiffAcceptAll}
+      handleDiffRejectAll={handlers.handleDiffRejectAll}
       logPanelOpen={logPanelOpen}
       setLogPanelOpen={setLogPanelOpen}
       logs={logs}
