@@ -21,6 +21,10 @@ import { LogPanel, type LogEntry } from "@/components/editor/LogPanel";
 import { AiDiffViewer, type DiffEntry } from "@/components/editor/AiDiffViewer";
 import { PlanModal } from "@/components/editor/PlanModal";
 import { resolvePendingPlan } from "@/lib/plan-message-meta";
+import { resolveAssistantProgress } from "@/lib/lovable-thread";
+import type { AgentProgress } from "@/lib/agent-progress";
+import { useJobWorkspaceFocus } from "@/hooks/useJobWorkspaceFocus";
+import { JobWorkspacePanel } from "@/components/editor/JobWorkspacePanel";
 import type { useAgentRun } from "@/hooks/useAgentRun";
 import type { usePreviewBoot } from "@/hooks/usePreviewBoot";
 import type { useConnectors } from "@/hooks/useConnectors";
@@ -237,6 +241,45 @@ export function EditorPageLayout({
 
   const showPlanModal = pendingPlan != null && forcePlanOpen;
 
+  const {
+    jobWorkspaceFocus,
+    openJobWorkspace,
+    closeJobWorkspace,
+    setJobTab,
+    isJobFocused,
+  } = useJobWorkspaceFocus();
+
+  const handleOpenJobWorkspace = (runId: string) => {
+    openJobWorkspace(runId, "timeline");
+    onMainViewChange("preview");
+  };
+
+  const focusedJobProgress = useMemo((): AgentProgress | null => {
+    if (!jobWorkspaceFocus) return null;
+    const { runId } = jobWorkspaceFocus;
+    if (agent.activeRunId === runId) return agent.progress;
+    const frozen = agent.frozenRuns.get(runId);
+    if (frozen) {
+      return (
+        resolveAssistantProgress({
+          kind: "assistant",
+          frozen,
+          runId,
+          isActive: false,
+        }) ?? null
+      );
+    }
+    return null;
+  }, [jobWorkspaceFocus, agent.activeRunId, agent.progress, agent.frozenRuns]);
+
+  const previewStatusLabel = useMemo(() => {
+    if (isJobFocused) return "Job inspector";
+    if (running && previewLiveUpdating) return "Live updating…";
+    if (devUrl) return "Previewing last saved version";
+    if (running) return "Agent working — clique o job no chat";
+    return null;
+  }, [isJobFocused, running, previewLiveUpdating, devUrl]);
+
   const closePlanModal = () => {
     if (pendingPlan) setDismissedPlanId(pendingPlan.planId);
     setForcePlanOpen(false);
@@ -309,6 +352,8 @@ export function EditorPageLayout({
                   device: previewDevice,
                   onDeviceChange: setPreviewDevice,
                 }}
+                previewStatusLabel={previewStatusLabel}
+                jobInspectorActive={isJobFocused}
               />
             }
             chat={
@@ -356,6 +401,8 @@ export function EditorPageLayout({
                       if (!conversationId) return;
                       await agent.drainQueue(projectId, conversationId, composerMode);
                     }}
+                    onOpenJobWorkspace={handleOpenJobWorkspace}
+                    jobWorkspaceRunId={jobWorkspaceFocus?.runId ?? null}
                   />
                 </div>
                 <SetupRail
@@ -411,7 +458,20 @@ export function EditorPageLayout({
                         />
                       )}
 
-                      {activeView === "preview" && (
+                      {activeView === "preview" && isJobFocused && jobWorkspaceFocus && focusedJobProgress && (
+                        <JobWorkspacePanel
+                          progress={focusedJobProgress}
+                          runId={jobWorkspaceFocus.runId}
+                          running={
+                            running && agent.activeRunId === jobWorkspaceFocus.runId
+                          }
+                          activeTab={jobWorkspaceFocus.tab}
+                          onTabChange={setJobTab}
+                          onBackToLatest={closeJobWorkspace}
+                        />
+                      )}
+
+                      {activeView === "preview" && !(isJobFocused && focusedJobProgress) && (
                         <PreviewFrame
                           files={previewNavFiles}
                           booting={previewBoot.booting}

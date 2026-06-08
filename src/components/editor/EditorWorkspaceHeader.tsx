@@ -32,6 +32,8 @@ interface EditorWorkspaceHeaderProps {
     onDeviceChange: (device: PreviewDevice) => void;
   };
   e2bConnected?: boolean;
+  previewStatusLabel?: string | null;
+  jobInspectorActive?: boolean;
 }
 
 const DEVICES: Array<{ id: PreviewDevice; label: string; icon: typeof Monitor }> = [
@@ -50,6 +52,8 @@ export function EditorWorkspaceHeader({
   integrations,
   preview,
   e2bConnected = false,
+  previewStatusLabel,
+  jobInspectorActive = false,
 }: EditorWorkspaceHeaderProps) {
   const { user } = useAuth();
 
@@ -58,7 +62,7 @@ export function EditorWorkspaceHeader({
     user?.user_metadata?.full_name?.slice(0, 2)?.toUpperCase() ??
     "U";
 
-  const showPreviewControls = activeView === "preview" && preview;
+  const showPreviewControls = activeView === "preview" && preview && !jobInspectorActive;
 
   return (
     <div className="forge-workspace-header-inner">
@@ -91,6 +95,9 @@ export function EditorWorkspaceHeader({
         <span className="forge-topbar-divider mx-1 shrink-0" aria-hidden />
         <EditorIntegrationsMenu {...integrations} />
         <E2bStatusBadge e2bConnected={e2bConnected} />
+        {previewStatusLabel && activeView === "preview" && (
+          <span className="lovable-preview-status-pill">{previewStatusLabel}</span>
+        )}
       </div>
 
       {showPreviewControls ? (

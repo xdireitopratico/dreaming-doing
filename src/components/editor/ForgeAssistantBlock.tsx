@@ -1,20 +1,12 @@
-import { useState } from "react";
-import {
-  ChevronDown,
-  ChevronRight,
-  Copy,
-  RotateCcw,
-  Zap,
-} from "lucide-react";
+import { Copy, RotateCcw, Zap } from "lucide-react";
 import { MarkdownRenderer } from "@/components/ui/markdown-renderer";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import type { ChatMessage } from "@/components/editor/ChatInput";
 import { initialAgentProgress, type AgentProgress, type PendingPlan, type PlanStep } from "@/lib/agent-progress";
 import { buildAgentNarrative } from "@/lib/agent-narrative";
-import { AgentTimeline } from "@/components/editor/AgentTimeline";
 import { ChatDiffViewer } from "@/components/editor/ChatDiffViewer";
 import { PlanViewer } from "@/components/editor/PlanViewer";
 import { PlanDocumentView } from "@/components/editor/PlanDocumentView";
+import { AgentJobMiniCard } from "@/components/editor/AgentJobMiniCard";
 import { AgentActivityCard } from "@/components/editor/AgentActivityCard";
 import { AgentStepBar } from "@/components/editor/AgentStepBar";
 import { TurnReceipt } from "@/components/editor/TurnReceipt";
@@ -35,6 +27,8 @@ interface ForgeAssistantBlockProps {
   onPlanApprove?: (steps: PlanStep[]) => void;
   onPlanReject?: (reason?: string) => void;
   onResume?: () => void;
+  onOpenJobWorkspace?: (runId: string) => void;
+  jobWorkspaceRunId?: string | null;
 }
 
 export function ForgeAssistantBlock({
@@ -52,8 +46,9 @@ export function ForgeAssistantBlock({
   onPlanApprove,
   onPlanReject,
   onResume,
+  onOpenJobWorkspace,
+  jobWorkspaceRunId,
 }: ForgeAssistantBlockProps) {
-  const [detailsOpen, setDetailsOpen] = useState(false);
   const msgId = message?.id ?? `live-${runId ?? "forge"}`;
   const isCopied = copiedIds?.has(msgId) ?? false;
 
@@ -79,7 +74,18 @@ export function ForgeAssistantBlock({
     (effectiveProgress?.tools.length ?? 0) > 0 ||
     executionLog.length > 0;
 
-  const displayText = narrative.body ?? message?.content ?? null;
+  const showMiniJob =
+    effectiveProgress &&
+    (isActive ||
+      (effectiveProgress.timeline.length > 0 || effectiveProgress.tools.length > 0) ||
+      !effectiveProgress.finished);
+
+  const displayText =
+    isActive && effectiveProgress?.autoResuming
+      ? null
+      : isActive && showMiniJob
+        ? null
+        : narrative.body ?? message?.content ?? null;
 
   return (
     <article className="forge-chat-item forge-chat-item-assistant relative group">
@@ -117,7 +123,17 @@ export function ForgeAssistantBlock({
         </p>
       ) : null}
 
-      {effectiveProgress && (
+      {effectiveProgress && showMiniJob && (
+        <AgentJobMiniCard
+          progress={effectiveProgress}
+          runId={runId}
+          isActive={isActive}
+          isFocused={!!runId && jobWorkspaceRunId === runId}
+          onOpen={onOpenJobWorkspace}
+        />
+      )}
+
+      {effectiveProgress && !showMiniJob && (
         <AgentActivityCard
           progress={effectiveProgress}
           isActive={isActive}
@@ -181,35 +197,14 @@ export function ForgeAssistantBlock({
         </section>
       )}
 
-      {hasDetails && effectiveProgress && (
-        <Collapsible
-          open={detailsOpen}
-          onOpenChange={setDetailsOpen}
-          className="mt-3 rounded-lg border border-[var(--forge-border)] bg-[var(--forge-bg)]/30"
+      {!isActive && hasDetails && effectiveProgress && onOpenJobWorkspace && runId && (
+        <button
+          type="button"
+          className="mt-2 font-mono text-[10px] text-[var(--forge-primary)] hover:underline"
+          onClick={() => onOpenJobWorkspace(runId)}
         >
-          <CollapsibleTrigger className="flex w-full items-center gap-2 px-3 py-2 text-left font-mono text-[10px] uppercase tracking-wider text-[var(--forge-ghost)] hover:text-[var(--forge-muted)]">
-            {detailsOpen ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
-            Detalhes técnicos
-            {!isActive && (
-              <span className="ml-auto normal-case tracking-normal text-[var(--forge-ghost)]">
-                {effectiveProgress.tools.filter((t) => t.ok === true).length} tools
-              </span>
-            )}
-          </CollapsibleTrigger>
-          <CollapsibleContent className="px-2 pb-2">
-            {effectiveProgress && effectiveProgress.timeline.length > 0 ? (
-              <AgentTimeline timeline={effectiveProgress.timeline} running={isActive} />
-            ) : executionLog.length > 0 ? (
-              <ul className="space-y-1 font-mono text-[10px] text-[var(--forge-muted)]">
-                {executionLog.slice(-12).map((line, i) => (
-                  <li key={`${line.slice(0, 24)}-${i}`} className="truncate">
-                    {line}
-                  </li>
-                ))}
-              </ul>
-            ) : null}
-          </CollapsibleContent>
-        </Collapsible>
+          Ver timeline no preview →
+        </button>
       )}
 
       {planForRun && onReopenPlan && onPlanApprove && onPlanReject && (

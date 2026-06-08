@@ -30,6 +30,8 @@ export interface ChatStreamProps {
   onReopenPlan?: () => void;
   onPlanApprove?: (steps: PlanStep[]) => void;
   onPlanReject?: (reason?: string) => void;
+  onOpenJobWorkspace?: (runId: string) => void;
+  jobWorkspaceRunId?: string | null;
 }
 
 export function ChatStream({
@@ -43,6 +45,8 @@ export function ChatStream({
   onReopenPlan,
   onPlanApprove,
   onPlanReject,
+  onOpenJobWorkspace,
+  jobWorkspaceRunId,
 }: ChatStreamProps) {
   const pendingPlan = progress.pendingPlan;
   const awaitingQualify = progress.awaitingKind === "qualify" && !pendingPlan;
@@ -148,6 +152,8 @@ export function ChatStream({
             onPlanApprove={onPlanApprove}
             onPlanReject={onPlanReject}
             onResume={onResume}
+            onOpenJobWorkspace={onOpenJobWorkspace}
+            jobWorkspaceRunId={jobWorkspaceRunId}
           />
         );
       })}

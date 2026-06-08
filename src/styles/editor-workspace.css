@@ -937,6 +937,256 @@ body:has(.editor-workspace) {
   color: var(--forge-muted);
 }
 
+/* Mini job card — chat (clique abre inspector no preview) */
+.lovable-job-mini-card {
+  display: block;
+  width: 100%;
+  margin: 8px 0 12px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--forge-border);
+  background: rgba(14, 16, 22, 0.85);
+  cursor: pointer;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  text-align: left;
+}
+
+.lovable-job-mini-card:hover {
+  border-color: rgba(99, 130, 255, 0.45);
+}
+
+.lovable-job-mini-card--working {
+  border-color: rgba(59, 130, 246, 0.55);
+  box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.12);
+}
+
+.lovable-job-mini-card--focused {
+  border-color: rgba(255, 182, 39, 0.5);
+  box-shadow: 0 0 0 1px rgba(255, 182, 39, 0.15);
+}
+
+.lovable-job-mini-card-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.lovable-job-mini-card-badge-working {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: rgba(96, 165, 250, 0.95);
+}
+
+.lovable-job-mini-card-badge-edited {
+  font-size: 10px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--forge-silver);
+}
+
+.lovable-job-mini-card-title {
+  margin: 0 0 8px;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.4;
+  color: var(--forge-foreground);
+}
+
+.lovable-job-mini-card-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.lovable-job-mini-card-chip {
+  font-size: 10px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--forge-border);
+  color: var(--forge-muted);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.lovable-job-mini-card-steps {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.lovable-job-mini-card-step {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.lovable-job-mini-card-hint {
+  margin: 10px 0 0;
+  font-size: 10px;
+  color: var(--forge-ghost);
+}
+
+.lovable-preview-status-pill {
+  margin-left: 8px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  color: var(--forge-muted);
+  border: 1px solid var(--forge-border);
+  background: rgba(255, 255, 255, 0.04);
+  white-space: nowrap;
+}
+
+/* Job inspector — painel direito (preview workspace) */
+.lovable-job-workspace {
+  background: #0a0b0f;
+  border-left: 1px solid var(--forge-border);
+}
+
+.lovable-job-workspace-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--forge-border);
+  flex-shrink: 0;
+}
+
+.lovable-job-back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--forge-silver);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 6px;
+}
+
+.lovable-job-back-btn:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--forge-foreground);
+}
+
+.lovable-job-tabs {
+  display: flex;
+  gap: 4px;
+  margin-left: auto;
+}
+
+.lovable-job-tab {
+  font-size: 12px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+  color: var(--forge-muted);
+  cursor: pointer;
+}
+
+.lovable-job-tab[data-active="true"] {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--forge-foreground);
+}
+
+.lovable-job-workspace-body {
+  font-size: 13px;
+  color: var(--forge-silver);
+}
+
+.lovable-job-thought-block {
+  margin-bottom: 20px;
+}
+
+.lovable-job-thought-label {
+  margin: 0 0 8px;
+  font-size: 11px;
+  color: var(--forge-ghost);
+}
+
+.lovable-job-thought-text {
+  margin: 0 0 6px;
+  line-height: 1.55;
+  color: var(--forge-foreground);
+}
+
+.lovable-job-edited-block {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--forge-border);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.lovable-job-edited-badge {
+  font-size: 10px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--forge-muted);
+}
+
+.lovable-job-log {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.lovable-job-log-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.lovable-job-log-label {
+  margin: 0;
+  font-size: 13px;
+  color: var(--forge-foreground);
+}
+
+.lovable-job-log-detail {
+  margin: 2px 0 0;
+  font-size: 11px;
+  color: var(--forge-ghost);
+}
+
+.lovable-job-empty {
+  margin: 24px 0;
+  text-align: center;
+  font-size: 12px;
+  color: var(--forge-ghost);
+}
+
+.lovable-job-section-label {
+  margin: 0 0 8px;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--forge-ghost);
+}
+
+.lovable-job-delivered-list {
+  margin: 0;
+  padding-left: 16px;
+}
+
 .lovable-step-bar {
   display: flex;
   align-items: center;

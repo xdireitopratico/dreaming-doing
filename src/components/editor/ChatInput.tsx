@@ -89,6 +89,8 @@ interface ChatInputProps {
   onClearPendingItem?: (id: string) => Promise<void>;
   onClearAllPending?: () => Promise<void>;
   onDrainQueue?: () => Promise<void>;
+  onOpenJobWorkspace?: (runId: string) => void;
+  jobWorkspaceRunId?: string | null;
 }
 
 // -----------------------------------------------------------------------------------
@@ -149,6 +151,8 @@ export function ChatInput({
   onClearPendingItem,
   onClearAllPending,
   onDrainQueue,
+  onOpenJobWorkspace,
+  jobWorkspaceRunId,
 }: ChatInputProps) {
   const [input, setInput] = useState("");
   const [composerModeLocal, setComposerModeLocal] = useState<AgentComposerMode>("build");
@@ -459,6 +463,8 @@ export function ChatInput({
               onReopenPlan={onReopenPlan}
               onPlanApprove={onPlanApprove}
               onPlanReject={onPlanReject}
+              onOpenJobWorkspace={onOpenJobWorkspace}
+              jobWorkspaceRunId={jobWorkspaceRunId}
             />
         )}
         {showNewMessagesPill && (
@@ -579,7 +585,11 @@ export function ChatInput({
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={handleKeyDown}
           onPaste={handlePaste}
-          placeholder="Descreva o que quer construir ou alterar…"
+          placeholder={
+            running || (agentProgress && !agentProgress.finished)
+              ? "Queue follow-up…"
+              : "Descreva o que quer construir ou alterar…"
+          }
           rows={1}
           className="forge-composer-input"
         />
