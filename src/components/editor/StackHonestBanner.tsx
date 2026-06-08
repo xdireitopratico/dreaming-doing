@@ -10,7 +10,8 @@ type StackHonestBannerProps = {
   onFocusChat?: () => void;
 };
 
-const BANNER_KINDS = new Set<ProjectStackKind>(["android-native", "mixed"]);
+/** Mixed mantém iframe Vite — sem banner. Android puro usa BuildConsole no preview. */
+const BANNER_KINDS = new Set<ProjectStackKind>([]);
 
 export function StackHonestBanner({ files, onFocusChat }: StackHonestBannerProps) {
   const stack = detectProjectStack(files);

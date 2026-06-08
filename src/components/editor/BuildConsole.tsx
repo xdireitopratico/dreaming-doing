@@ -46,7 +46,7 @@ export function BuildConsole({
             {stackKindLabel(stackKind)}
           </p>
           <p className="text-[11px] text-[var(--forge-muted)]">
-            Preview nativo — acompanhe arquivos e logs de build aqui (sem iframe web).
+            Projeto só Android — acompanhe arquivos e logs de build aqui.
           </p>
         </div>
         {step && (
@@ -88,7 +88,7 @@ export function BuildConsole({
           </ul>
         ) : (
           <p className="forge-build-console-empty">
-            Nenhum arquivo Gradle/Kotlin ainda — o agente adiciona a cada chunk.
+            Nenhum arquivo Gradle/Kotlin ainda — o agente vai criar conforme avança.
           </p>
         )}
       </section>

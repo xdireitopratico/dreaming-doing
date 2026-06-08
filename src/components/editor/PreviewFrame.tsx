@@ -142,8 +142,7 @@ export function PreviewFrame({
   const canShowIframe =
     !nativeBuildPreview && Boolean(iframeSrc) && !sandboxStale && !isNoFiles;
 
-  const showNativeConsole =
-    nativeBuildPreview && (projectStack === "android-native" || projectStack === "mixed");
+  const showNativeConsole = nativeBuildPreview && projectStack === "android-native";
 
   return (
     <div className="forge-preview-root flex min-h-0 flex-1 flex-col">

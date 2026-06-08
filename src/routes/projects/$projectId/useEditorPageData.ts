@@ -98,8 +98,9 @@ export function useEditorPageData({
     return detectProjectStack(files.map((f) => ({ path: f.path, content: f.content ?? "" })));
   }, [files]);
 
+  /** Só substitui o iframe quando não há app web — projetos mistos mantêm preview Vite. */
   const nativeBuildPreview = useMemo(
-    () => projectStack === "android-native" || projectStack === "mixed",
+    () => projectStack === "android-native",
     [projectStack],
   );
 
