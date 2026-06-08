@@ -192,7 +192,7 @@ export function usePreviewBoot(projectId: string, opts?: UsePreviewBootOpts) {
           await new Promise((r) => setTimeout(r, delay));
         }
         bootAttemptsRef.current = attempt + 1;
-        const url = await boot({ ...opts, silent: attempt > 0 });
+        const url = await boot({ ...opts, silent: opts?.silent ?? true });
         if (url) return url;
       }
       return null;

@@ -96,6 +96,22 @@ export function qualifySnapshot(
     penalize(10);
   }
 
+  if (
+    snap.agent.lastError &&
+    /inngest|continue_queue|inngest_failed|inngest_event_key/i.test(snap.agent.lastError)
+  ) {
+    signals.push(
+      signal(
+        "inngest-queue",
+        "error",
+        "agent",
+        "Fila/agente: Inngest não configurado ou falhou ao disparar",
+        "Defina INNGEST_EVENT_KEY em Supabase Edge secrets (docs/EDGE-SECRETS.md).",
+      ),
+    );
+    penalize(30);
+  }
+
   if (snap.agent.lastError) {
     const errLower = snap.agent.lastError.toLowerCase();
     const isNvidia404 = /\b404\b/i.test(snap.agent.lastError) &&
@@ -165,10 +181,10 @@ export function qualifySnapshot(
   if (snap.agent.running && !snap.agent.agentConnected) {
     signals.push(
       signal(
-        "sse-stale",
+        "realtime-stale",
         "warn",
-        "sse",
-        "UI marca agente rodando mas SSE desconectado",
+        "agent",
+        "UI marca agente rodando mas Realtime desconectado",
         "Pode ser queda de rede; tente parar e reenviar mensagem.",
       ),
     );

@@ -132,6 +132,52 @@ SELECT count(*) FROM agent_pending_messages WHERE project_id = 'PROJECT_ID';
 | R5 | Chat Lovable: `lovable-thread`, `agent-narrative`, auto-reject plano | ✅ |
 | R4 | `E2bStatusBadge` no workspace header | ✅ |
 
-## Restante
+## Release checklist (projeto maduro)
 
-Nenhum item obrigatório. Melhorias futuras são discricionárias (ex.: refinar `AgentTimeline`, testes E2E).
+Gate antes de considerar produção **confiável**. Todos devem passar em `dreaming-doing.vercel.app`.
+
+### P0 — Infra
+
+- [ ] `VERCEL=1 npm run build && npm run build:inngest` passa (CI + Vercel)
+- [ ] `INNGEST_EVENT_KEY` em Supabase Edge secrets (`docs/EDGE-SECRETS.md`)
+- [ ] `node scripts/smoke-agent-e2e.mjs` → PASS (stream > 1 evento phase/tool)
+- [ ] `node scripts/smoke-queue-e2e.mjs` → PASS (fila drena)
+- [ ] `node scripts/check-stale-runs.mjs` → 0 runs zumbis
+
+### P1 — Agente + fila
+
+- [ ] Mensagem → `runId` &lt; 2s → Realtime cresce → terminal em &lt; 5 min (prompt simples BYOK)
+- [ ] 3 mensagens com agente ocupado → fila 3→0; header = composer hint
+- [ ] `awaiting_user` → banner no chat + subtítulo no header
+- [ ] Cancel mid-run → status `canceled`; fila não trava
+
+### P2 — Preview
+
+- [ ] Após `fs_write`/`fs_edit` → preview atualiza (force boot se `devUrl` existe)
+- [ ] "envia para o preview" → agente usa tools (não só texto)
+- [ ] Erro E2B → inline no frame (sem toast de sucesso/info)
+- [ ] Preview idle após 10 min → reativa com interação
+
+### P3 — Plan + UX
+
+- [ ] Plan mode → mini-card → approve → novo run; plano persiste após F5
+- [ ] Copy/Undo só no rodapé da mensagem assistente
+- [ ] Zero toasts informativos (`src/lib/toast.ts` — só `error`)
+- [ ] Turno vazio → mensagem explícita + recovery (Continuar/Reenviar)
+
+### Comandos rápidos
+
+```bash
+npm run test
+npm run typecheck
+VERCEL=1 npm run build && npm run build:inngest
+node scripts/smoke-agent-e2e.mjs
+node scripts/smoke-queue-e2e.mjs
+node scripts/check-stale-runs.mjs
+```
+
+### Melhorias discricionárias (pós-release)
+
+- Playwright browser E2E no editor
+- Refinar `AgentTimeline` (agrupamento de tools)
+- Métricas Inngest dashboard automatizadas

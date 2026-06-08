@@ -17,6 +17,9 @@
     "format": "prettier --write .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "smoke:agent": "node scripts/smoke-agent-e2e.mjs",
+    "smoke:queue": "node scripts/smoke-queue-e2e.mjs",
+    "check:stale-runs": "node scripts/check-stale-runs.mjs",
     "bundle:skills": "node scripts/bundle-forge-skills.mjs",
     "bundle:forge-ui": "node scripts/bundle-forge-ui-seed.mjs"
   },

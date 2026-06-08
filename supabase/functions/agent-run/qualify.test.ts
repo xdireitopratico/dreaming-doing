@@ -40,6 +40,29 @@ Deno.test("preview action não é conversa vaga nem qualify", () => {
   assertEquals(instr.includes("shell_exec"), true);
 });
 
+Deno.test("variantes de preview action", () => {
+  const samples = [
+    "mostra no preview",
+    "atualiza o preview",
+    "sincroniza preview",
+    "manda pro preview",
+  ];
+  for (const s of samples) {
+    assertEquals(isPreviewActionRequest(s), true);
+    assertEquals(looksLikeInteractionOnly(s), false);
+    assertEquals(
+      needsQualify(s, {
+        complexity: 1,
+        type: "other",
+        summary: "x",
+        needsBuild: false,
+        needsDeps: false,
+      }),
+      false,
+    );
+  }
+});
+
 Deno.test("needsQualify para pedido curto", () => {
   assertEquals(
     needsQualify("site", { complexity: 2, type: "other", summary: "x", needsBuild: false, needsDeps: false }),

@@ -62,6 +62,14 @@ describe("qualifySnapshot", () => {
     expect(r.health).toBe("critical");
     expect(r.signals.some((s) => s.id === "e2b-missing")).toBe(true);
   });
+
+  it("flags inngest queue errors", () => {
+    const snap = base();
+    snap.agent.lastError = "continue_queue reason: inngest_failed";
+    const r = qualifySnapshot(snap);
+    expect(r.signals.some((s) => s.id === "inngest-queue")).toBe(true);
+    expect(r.health).toBe("critical");
+  });
 });
 
 describe("buildShotHeadline", () => {

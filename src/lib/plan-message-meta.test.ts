@@ -27,6 +27,23 @@ describe("storedPlanFromMessage", () => {
     expect(storedPlanFromMessage({ ...base, meta: { runId: "r", planId: "p" } })).toBeNull();
   });
 
+  it("plano pending persiste no meta (simula F5)", () => {
+    const pending: ChatMessage = {
+      ...base,
+      meta: {
+        runId: "run-f5",
+        planId: "plan-f5",
+        planSummary: "Landing café",
+        planSteps: [{ id: "s1", type: "custom", description: "Hero", enabled: true }],
+        planStatus: "pending",
+      },
+    };
+    const stored = storedPlanFromMessage(pending);
+    expect(stored?.status).toBe("pending");
+    expect(stored?.plan.steps).toHaveLength(1);
+    expect(resolvePendingPlan(null, [pending])?.summary).toBe("Landing café");
+  });
+
   it("resolvePendingPlan prioriza live e cai no histórico", () => {
     const pending: ChatMessage = {
       ...base,

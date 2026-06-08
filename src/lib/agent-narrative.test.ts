@@ -16,6 +16,18 @@ describe("buildAgentNarrative", () => {
     expect(n.showTyping).toBe(true);
   });
 
+  it("fallback headline quando run ativo sem fase/tool", () => {
+    const progress = {
+      ...initialAgentProgress,
+      finished: false,
+      phase: null,
+      message: null,
+      statusHint: null,
+    };
+    const n = buildAgentNarrative(progress, { running: true });
+    expect(n.headline).toBe("Trabalhando no seu pedido…");
+  });
+
   it("prioriza streamText como body", () => {
     const progress = {
       ...initialAgentProgress,

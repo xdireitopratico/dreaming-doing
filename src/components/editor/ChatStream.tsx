@@ -5,7 +5,13 @@ import type { AgentProgress, PlanStep } from "@/lib/agent-progress";
 import type { ChatMessage } from "@/components/editor/ChatInput";
 import { useState, useCallback, useMemo } from "react";
 import { ErrorHintCard } from "@/components/editor/ErrorHintCard";
-import { llmErrorHint, timeoutHint, e2bErrorHint } from "@/lib/llm-error-hints";
+import {
+  llmErrorHint,
+  timeoutHint,
+  e2bErrorHint,
+  zombieRunHint,
+  inngestQueueHint,
+} from "@/lib/llm-error-hints";
 import { ForgeAssistantBlock } from "@/components/editor/ForgeAssistantBlock";
 import {
   buildLovableThread,
@@ -78,6 +84,22 @@ export function ChatStream({
     [messages, progress, activeRunId, running, frozenRuns],
   );
 
+  const resolveErrorHint = useCallback((error: string) => {
+    const lower = error.toLowerCase();
+    if (/zumbi|expirado/i.test(error)) return zombieRunHint();
+    if (/inngest|continue_queue|inngest_failed/i.test(lower)) return inngestQueueHint();
+    if (/edge.*timeout|120s|edge function.*limite/i.test(error)) return timeoutHint();
+    if (/e2b|sandbox/i.test(lower)) return e2bErrorHint(error);
+    return llmErrorHint(error, false);
+  }, []);
+
+  const showGlobalError =
+    !running &&
+    progress.finished &&
+    progress.error &&
+    !progress.resumable &&
+    !progress.autoResuming;
+
   return (
     <div className="forge-chat-stream" role="log" aria-live="polite" aria-relevant="additions text">
       {awaitingQualify && (
@@ -134,19 +156,17 @@ export function ChatStream({
         );
       })}
 
+      {showGlobalError && (
+        <section data-testid="agent-global-error">
+          <ErrorHintCard hint={resolveErrorHint(progress.error!)} />
+        </section>
+      )}
+
       {!running && progress.resumable && !progress.autoResuming && (
         <div className="space-y-2">
-          {progress.error && (() => {
-            const isTimeout = /edge.*timeout|120s|edge function.*limite/i.test(progress.error);
-            const lower = progress.error.toLowerCase();
-            const isE2b = /e2b|sandbox/i.test(lower);
-            const hint = isTimeout
-              ? timeoutHint()
-              : isE2b
-                ? e2bErrorHint(progress.error)
-                : llmErrorHint(progress.error, false);
-            return <ErrorHintCard hint={hint} onAction={onResume} />;
-          })()}
+          {progress.error && (
+            <ErrorHintCard hint={resolveErrorHint(progress.error)} onAction={onResume} />
+          )}
           <section className="forge-chat-resume">
             <AlertTriangle className="size-4 text-amber-400 shrink-0" />
             <p className="flex-1 min-w-0 font-mono text-[10px] text-[var(--forge-silver)] leading-relaxed">

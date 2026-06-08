@@ -21,6 +21,7 @@ Valores ficam em `platform_secrets`. RLS bloqueia acesso direto; só Edge Functi
 
 | Nome | Uso |
 |------|-----|
+| `INNGEST_EVENT_KEY` | **Obrigatório** — dispara jobs do agente e `continue_queue` (fila). Sem ela, runs e fila param com `inngest_failed` nos logs Edge. |
 | `E2B_TEMPLATE` | Opcional — override do template padrão (`code-interpreter-v1`) |
 | `XAI_API_KEY` | Fallback STT Grok e agente |
 | `GROQ_API_KEY` | Fallback Whisper e agente |

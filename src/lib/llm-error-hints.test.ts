@@ -1,6 +1,12 @@
 // llm-error-hints.test.ts — cobertura do mapeamento de erros
 import { describe, expect, it } from "vitest";
-import { llmErrorHint, e2bErrorHint, timeoutHint } from "@/lib/llm-error-hints";
+import {
+  llmErrorHint,
+  e2bErrorHint,
+  timeoutHint,
+  zombieRunHint,
+  inngestQueueHint,
+} from "@/lib/llm-error-hints";
 
 describe("llmErrorHint", () => {
   it("returns auth.invalid_key for 401", () => {
@@ -93,5 +99,17 @@ describe("timeoutHint", () => {
     const hint = timeoutHint();
     expect(hint.code).toBe("edge.timeout");
     expect(hint.link).toBeNull();
+  });
+});
+
+describe("zombieRunHint", () => {
+  it("returns agent.zombie_run", () => {
+    expect(zombieRunHint().code).toBe("agent.zombie_run");
+  });
+});
+
+describe("inngestQueueHint", () => {
+  it("returns inngest.queue_failed", () => {
+    expect(inngestQueueHint().code).toBe("inngest.queue_failed");
   });
 });

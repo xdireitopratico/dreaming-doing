@@ -17,6 +17,16 @@ export function EditorChatHeader({
   planPending,
   pendingQueueCount = 0,
 }: EditorChatHeaderProps) {
+  const headerState = running
+    ? "running"
+    : planPending
+      ? "plan-pending"
+      : awaitingUser
+        ? "awaiting-user"
+        : pendingQueueCount > 0
+          ? "queued"
+          : "idle";
+
   const subLabel = running
     ? "Construindo alterações…"
     : planPending
@@ -39,7 +49,13 @@ export function EditorChatHeader({
           {projectName ?? "Projeto"}
           <ChevronDown className="size-3 shrink-0 opacity-50" />
         </span>
-        <span className="forge-project-sub">{subLabel}</span>
+        <span
+          className="forge-project-sub"
+          data-testid="forge-header-state"
+          data-state={headerState}
+        >
+          {subLabel}
+        </span>
       </Link>
       <button
         type="button"

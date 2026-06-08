@@ -204,3 +204,25 @@ export function timeoutHint(): ErrorHint {
     tip: "O estado foi salvo em checkpoint — Continue retoma sem perder trabalho.",
   };
 }
+
+export function zombieRunHint(): ErrorHint {
+  return {
+    message: "A execução expirou (run zumbi) — o servidor marcou como falha após 15 minutos.",
+    action: "Reenviar mensagem",
+    link: null,
+    severity: "warning",
+    code: "agent.zombie_run",
+    tip: "Envie o pedido de novo no chat. Se a fila estava presa, ela deve drenar no próximo agent-run.",
+  };
+}
+
+export function inngestQueueHint(): ErrorHint {
+  return {
+    message: "A fila do agente não conseguiu disparar o Inngest (secret ausente ou inválido).",
+    action: "Verificar INNGEST_EVENT_KEY",
+    link: null,
+    severity: "error",
+    code: "inngest.queue_failed",
+    tip: "Configure INNGEST_EVENT_KEY em Supabase → Edge Functions → Secrets. Ver docs/EDGE-SECRETS.md.",
+  };
+}
