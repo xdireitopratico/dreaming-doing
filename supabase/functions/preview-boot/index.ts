@@ -96,8 +96,9 @@ Deno.serve(async (req) => {
       projectId?: string;
       force?: boolean;
       probeOnly?: boolean;
+      syncOnly?: boolean;
     };
-    const { projectId, force, probeOnly } = body;
+    const { projectId, force, probeOnly, syncOnly } = body;
     if (!projectId) return json({ error: "projectId obrigatório" }, 400);
 
     const supabase = createClient(SUPABASE_URL, SERVICE_KEY);
@@ -121,10 +122,105 @@ Deno.serve(async (req) => {
     }
 
     const existing = (project.meta ?? {}) as Record<string, unknown>;
-    const cached = isCachedPreviewValid(existing, force);
+    let cached = isCachedPreviewValid(existing, force);
 
     const devPortFromMeta =
       typeof existing.previewPort === "number" ? existing.previewPort : null;
+
+    let syncOnlyMissedSandbox = false;
+
+    if (syncOnly) {
+      const projectFiles = await loadProjectFiles(supabase, projectId);
+      if (projectFiles.length === 0) {
+        return json({
+          url: null,
+          ready: false,
+          reused: false,
+          error: "Projeto sem arquivos — o agente ainda não gerou código.",
+          code: "no_files",
+        }, 200);
+      }
+
+      const devPort = devPortFromMeta ??
+        (Number.parseInt(detectDevPort(projectFiles), 10) || 5173);
+
+      try {
+        const { sandbox, sandboxId } = await connectSandboxForPreview(
+          supabase,
+          projectId,
+          E2B_API_KEY,
+        );
+        await syncProjectFilesToSandbox(sandbox, projectFiles);
+
+        const url =
+          (typeof existing.previewUrl === "string" && existing.previewUrl.trim()) ||
+          previewUrlFromSandbox(sandbox, devPort);
+
+        let ready = await probePreviewUrl(url, 3);
+        let rebootLogs: string | undefined;
+        let activeSandboxId = sandboxId;
+
+        if (!ready) {
+          const reboot = await rebootPreviewDevServer(
+            supabase,
+            projectId,
+            E2B_API_KEY,
+            projectFiles,
+            devPort,
+            url,
+          );
+          ready = reboot.ready;
+          activeSandboxId = reboot.sandboxId;
+          rebootLogs = reboot.logs;
+        }
+
+        const expiresAt = new Date(Date.now() + PREVIEW_TTL_MS).toISOString();
+        const nextMeta = {
+          ...existing,
+          previewUrl: url,
+          previewExpiresAt: expiresAt,
+          previewSandboxId: activeSandboxId,
+          previewPort: devPort,
+          previewReady: ready,
+        };
+        await supabase.from("projects").update({ meta: nextMeta }).eq("id", projectId);
+
+        let published = false;
+        let publishedUrl: string | null = null;
+        if (ready) {
+          const pub = await autoPublishIfNeeded(
+            supabase,
+            projectId,
+            userData.user.id,
+            nextMeta,
+          );
+          published = pub.published;
+          publishedUrl = pub.url ?? null;
+        }
+
+        return json({
+          url,
+          expiresAt,
+          ready,
+          reused: true,
+          synced: true,
+          published,
+          publishedUrl,
+          logs: rebootLogs,
+        });
+      } catch (syncErr: unknown) {
+        const msg = syncErr instanceof Error ? syncErr.message : String(syncErr);
+        if (!msg.includes("Ainda não há") && !msg.includes("ambiente ao vivo")) {
+          throw syncErr;
+        }
+        syncOnlyMissedSandbox = true;
+      }
+    }
+
+    const effectiveForce = force || syncOnlyMissedSandbox;
+    if (syncOnlyMissedSandbox) {
+      cached = null;
+    }
 
     if (probeOnly && cached) {
       const projectFiles = await loadProjectFiles(supabase, projectId);
@@ -196,7 +292,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    if (cached && !force) {
+    if (cached && !effectiveForce) {
       const projectFiles = await loadProjectFiles(supabase, projectId);
       if (projectFiles.length === 0) {
         await supabase

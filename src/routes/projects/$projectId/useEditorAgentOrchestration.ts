@@ -192,7 +192,11 @@ export function useEditorAgentOrchestration({
     if (!agentShouldBootPreview) return;
     if (previewBootAfterAgentRef.current) return;
     previewBootAfterAgentRef.current = true;
-    void previewBoot.bootWithRetry(devUrl ? { force: true } : undefined);
+    void previewBoot.bootWithRetry(
+      devUrl
+        ? { syncOnly: true, silent: true }
+        : { force: true, silent: true },
+    );
   }, [
     agentShouldBootPreview,
     running,
@@ -213,11 +217,15 @@ export function useEditorAgentOrchestration({
   const syncPreviewToSandbox = useCallback(
     async (reload: boolean) => {
       if (!isReactProject || !e2bConnected || previewBoot.booting || previewE2bCircuit) return;
+      if (fileCount === 0) return;
       if (previewSyncInFlightRef.current) return;
       previewSyncInFlightRef.current = true;
       try {
-        await previewBoot.boot({ force: true, silent: true });
-        if (reload && devUrl) {
+        const url = await previewBoot.boot({
+          ...(devUrl ? { syncOnly: true } : { force: true }),
+          silent: true,
+        });
+        if (reload && (devUrl || url)) {
           setPreviewReloadNonce((n) => n + 1);
         }
       } finally {
@@ -231,13 +239,14 @@ export function useEditorAgentOrchestration({
       previewBoot.boot,
       previewE2bCircuit,
       devUrl,
+      fileCount,
       setPreviewReloadNonce,
     ],
   );
 
   useEffect(() => {
     if (!filesSyncKey || filesSyncKey === lastSyncedFilesKeyRef.current) return;
-    if (!devUrl || !isReactProject || !e2bConnected || previewE2bCircuit) return;
+    if (!isReactProject || !e2bConnected || previewE2bCircuit || fileCount === 0) return;
     lastSyncedFilesKeyRef.current = filesSyncKey;
     const t = window.setTimeout(() => {
       void syncPreviewToSandbox(activeView === "preview");
@@ -245,7 +254,7 @@ export function useEditorAgentOrchestration({
     return () => window.clearTimeout(t);
   }, [
     filesSyncKey,
-    devUrl,
+    fileCount,
     isReactProject,
     e2bConnected,
     previewE2bCircuit,
@@ -256,18 +265,17 @@ export function useEditorAgentOrchestration({
   useEffect(() => {
     const tick = agent.progress.previewSyncTick ?? 0;
     if (tick <= lastPreviewSyncTickRef.current) return;
-    if (!devUrl || !e2bConnected || previewE2bCircuit) return;
+    if (!e2bConnected || previewE2bCircuit || fileCount === 0) return;
     lastPreviewSyncTickRef.current = tick;
     const t = window.setTimeout(() => {
-      void syncPreviewToSandbox(activeView === "preview");
+      void syncPreviewToSandbox(true);
     }, 800);
     return () => window.clearTimeout(t);
   }, [
     agent.progress.previewSyncTick,
-    devUrl,
+    fileCount,
     e2bConnected,
     previewE2bCircuit,
-    activeView,
     syncPreviewToSandbox,
   ]);
 

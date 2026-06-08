@@ -124,6 +124,7 @@ function EditorPage() {
   const previewBoot = usePreviewBoot(projectId, {
     idle: previewIdle,
     watchHealth: activeView === "preview" && !!devUrl && (files?.length ?? 0) > 0,
+    fileCount: files?.length ?? 0,
   });
 
   const handlers = useEditorPageHandlers({

@@ -5,6 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { getSupabaseEnv } from "@/lib/supabase-env";
 import { logEditorTelemetryEvent } from "@/lib/editor-telemetry";
 import { formatE2bUserError } from "@/lib/e2b-status";
+import { isNoFilesPreviewError } from "@/lib/preview-boot-guards";
 
 type BootResult = {
   url?: string;
@@ -22,8 +23,12 @@ type BootResult = {
 type BootOpts = {
   force?: boolean;
   probeOnly?: boolean;
+  /** Sincroniza ficheiros no sandbox sem reiniciar Vite (quando já há previewUrl). */
+  syncOnly?: boolean;
   silent?: boolean;
 };
+
+
 
 const RETRY_DELAYS_MS = [0, 5_000, 15_000, 30_000];
 const PROBE_FAIL_BEFORE_FORCE = 4;
@@ -34,6 +39,8 @@ type UsePreviewBootOpts = {
   idle?: boolean;
   /** Aba preview aberta com URL — verifica saúde da porta e reboota Vite se morreu. */
   watchHealth?: boolean;
+  /** Arquivos no projeto — limpa bloqueio no_files quando o agente já gerou código. */
+  fileCount?: number;
 };
 
 const HEALTH_PROBE_MS = 45_000;
@@ -41,6 +48,7 @@ const HEALTH_PROBE_MS = 45_000;
 export function usePreviewBoot(projectId: string, opts?: UsePreviewBootOpts) {
   const idle = opts?.idle ?? false;
   const watchHealth = opts?.watchHealth ?? false;
+  const fileCount = opts?.fileCount ?? 0;
   const [booting, setBooting] = useState(false);
   const [lastError, setLastError] = useState<string | null>(null);
   const [warming, setWarming] = useState(false);
@@ -80,6 +88,7 @@ export function usePreviewBoot(projectId: string, opts?: UsePreviewBootOpts) {
           projectId,
           force: opts?.force ?? false,
           probeOnly: opts?.probeOnly ?? false,
+          syncOnly: opts?.syncOnly ?? false,
         }),
       });
 
@@ -99,8 +108,7 @@ export function usePreviewBoot(projectId: string, opts?: UsePreviewBootOpts) {
     async (opts?: BootOpts) => {
       if (opts?.probeOnly) {
         if (idle) return null;
-        // Never probe when project has no files — don't hammer backend
-        if (lastError && /sem arquivos|ainda não gerou|no_files/i.test(lastError)) return null;
+        if (fileCount === 0 && isNoFilesPreviewError(lastError)) return null;
         try {
           const body = await callPreviewBoot({ ...opts, silent: true });
           if (body?.ready) {
@@ -123,7 +131,9 @@ export function usePreviewBoot(projectId: string, opts?: UsePreviewBootOpts) {
       }
 
       if (bootInFlightRef.current) return null;
-      if (lastError && /sem arquivos|ainda não gerou|no_files/i.test(lastError)) return null;
+      if (fileCount === 0 && isNoFilesPreviewError(lastError) && !opts?.force && !opts?.syncOnly) {
+        return null;
+      }
       bootInFlightRef.current = true;
       setBooting(true);
       setLastError(null);
@@ -175,8 +185,14 @@ export function usePreviewBoot(projectId: string, opts?: UsePreviewBootOpts) {
         setBooting(false);
       }
     },
-    [callPreviewBoot, projectId, qc, idle],
+    [callPreviewBoot, projectId, qc, idle, fileCount],
   );
+
+  useEffect(() => {
+    if (fileCount > 0 && isNoFilesPreviewError(lastError)) {
+      setLastError(null);
+    }
+  }, [fileCount, lastError]);
 
   const bootWithRetry = useCallback(
     async (opts?: BootOpts) => {
@@ -236,7 +252,7 @@ export function usePreviewBoot(projectId: string, opts?: UsePreviewBootOpts) {
 
   const isE2bCircuit = !!(lastError && /circuit|cooling|e2b_creation_circuit/i.test(lastError));
 
-  const isNoFiles = !!(lastError && /sem arquivos|ainda não gerou|no_files/i.test(lastError));
+  const isNoFiles = fileCount === 0 && isNoFilesPreviewError(lastError);
 
   return {
     booting,
