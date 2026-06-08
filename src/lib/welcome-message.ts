@@ -11,7 +11,7 @@ Use **Start Project** (1×): plano + código + preview no painel à direita.
 **Checklist**
 1. [API Keys](/api) → chave **E2B** (sandbox) + **NVIDIA** (ou pool ROBIN).
 2. [Modelos](/models) → **ROBIN** + NVIDIA + **Nemotron 550B** (slug \`nvidia/nemotron-3-ultra-550b-a55b\`) → **Salvar**.
-3. Descreva o app no chat em modo **Build**.`;
+3. O chat já abre em modo **Build** — descreva o app e o agente edita \`src/App.tsx\` no preview.`;
 
 /** BYOK — chaves do usuário; agente completo. */
 export const FORGE_WELCOME_BYOK_MARKDOWN = `Projeto pronto para construir.
@@ -27,4 +27,4 @@ Quando a IA gravar arquivos, seu site aparece aqui (rotas na barra do preview).
 - Slug na API NIM: nvidia/nemotron-3-ultra-550b-a55b (igual Hermes / build.nvidia.com).
 - [API](/api): chave NVIDIA salva + **E2B**.
 
-Descreva o MVP no chat (**Build**) — ex.: landing + 3 páginas + dashboard.`;
+O chat já abre em **Build** — descreva o MVP (ex.: landing + dashboard) e a interface aparece no preview.`;

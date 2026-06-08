@@ -136,7 +136,7 @@ export function ChatInput({
   onReopenPlan,
 }: ChatInputProps) {
   const [input, setInput] = useState("");
-  const [composerModeLocal, setComposerModeLocal] = useState<AgentComposerMode>("plan");
+  const [composerModeLocal, setComposerModeLocal] = useState<AgentComposerMode>("build");
   const composerMode = composerModeProp ?? composerModeLocal;
   const setComposerMode = onComposerModeChange ?? setComposerModeLocal;
   const fileInputRef = useRef<HTMLInputElement>(null);

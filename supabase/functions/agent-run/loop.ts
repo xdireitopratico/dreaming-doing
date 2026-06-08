@@ -15,9 +15,12 @@ import { SkillRegistry } from "./skills.ts";
 import { getSystemPrompt, EXECUTE_RULES } from "./prompts.ts";
 import {
   ANTI_LEAK_RULE,
+  INVENTORY_SYSTEM,
   QUALIFY_SYSTEM,
   buildExecuteInstruction,
   extractOriginalUserRequest,
+  isProjectInventoryQuestion,
+  isSeedPlaceholderAppContent,
   needsQualify,
 } from "./qualify.ts";
 import { getTasteStartSystemPrompt } from "./prompts-taste.ts";
@@ -334,8 +337,29 @@ export class AgentLoop {
       });
       await this.saveCheckpoint(LoopPhase.CREATE_PLAN);
 
+      const appFile = this.state.context?.files?.find((f) => f.path === "src/App.tsx");
+      const isSeedPlaceholder = isSeedPlaceholderAppContent(appFile?.content);
+
+      // Inventário do projeto — responde com contexto real, sem fs_write nem qualify vago.
+      if (
+        this.originalUserRequest &&
+        isProjectInventoryQuestion(this.originalUserRequest) &&
+        !this.planMode
+      ) {
+        const inv = await this.runInventoryPhase(executionModel);
+        this.emit("assistant_text", { text: inv, final: true });
+        await this.persistFinal(inv);
+        await this.clearCheckpoint();
+        await this.markRunStatus("completed");
+        this.emit("done", { summary: inv, inventory: true });
+        return { ok: true, summary: inv, steps: 0, toolsUsed: [] };
+      }
+
       // Lovable-style: pedido vago → pergunta no chat (Plan e Build).
-      if (this.originalUserRequest && needsQualify(this.originalUserRequest, classification)) {
+      if (
+        this.originalUserRequest &&
+        needsQualify(this.originalUserRequest, classification, { isSeedPlaceholder })
+      ) {
         const qualifyResult = await this.runQualifyPhase(executionModel, this.originalUserRequest);
         if (qualifyResult.stopForUser) {
           const q = qualifyResult.message || "Me conte mais sobre o que você quer construir.";
@@ -769,6 +793,32 @@ export class AgentLoop {
         status,
         error: (err as Error)?.message,
       });
+    }
+  }
+
+  private async runInventoryPhase(model: LLMProvider): Promise<string> {
+    this.emit("phase", {
+      phase: "qualify",
+      message: "Resumindo estado do projeto…",
+    });
+    const ctx = this.state.context?.projectConfig?.slice(0, 4000) ?? "(sem arquivos)";
+    const manifest = this.state.context?.manifest?.slice(0, 2000) ?? "";
+    try {
+      const resp = await model.chat({
+        messages: [
+          { role: "system", content: `${INVENTORY_SYSTEM}\n\n${ANTI_LEAK_RULE}` },
+          {
+            role: "user",
+            content: `Contexto de arquivos:\n${ctx}\n\nLista:\n${manifest}`,
+          },
+        ],
+        max_tokens: 900,
+        temperature: 0.2,
+      });
+      return (resp.content ?? "").trim() ||
+        "Scaffold Vite+React pronto; `src/App.tsx` ainda é placeholder. Descreva o app em modo Build.";
+    } catch {
+      return "Scaffold Vite+React pronto; `src/App.tsx` ainda é placeholder. Descreva o app em modo Build.";
     }
   }
 

@@ -210,6 +210,11 @@ const VITE_REACT_PROMPT = `Você é o Dream Weaver do FORGE — engenheiro sêni
 - Entry: src/main.tsx → src/App.tsx
 - O seed já existe; evite "npm create vite" salvo reestruturação total pedida pelo usuário.
 
+## Estado inicial (seed)
+- \`src/App.tsx\` começa como **canvas vazio** (placeholder) — isso NÃO é bug.
+- Quando o usuário descreve o app em modo **Build**, você DEVE editar \`src/App.tsx\` (e arquivos relacionados) com UI real usando @forge/ui.
+- Perguntas "o que temos pronto?" = inventário honesto (scaffold + placeholder), não alucinar app pronto.
+
 ${DESIGN_DISCIPLINE}
 
 ${TOOLS_BLOCK}

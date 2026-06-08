@@ -3,6 +3,8 @@ import {
   buildExecuteInstruction,
   extractOriginalUserRequest,
   isPreviewActionRequest,
+  isProjectInventoryQuestion,
+  isSeedPlaceholderAppContent,
   looksLikeInteractionOnly,
   needsQualify,
 } from "./qualify.ts";
@@ -61,6 +63,51 @@ Deno.test("variantes de preview action", () => {
       false,
     );
   }
+});
+
+Deno.test("pergunta de inventário não entra em needsQualify", () => {
+  assertEquals(isProjectInventoryQuestion("o que temos pronto no projeto?"), true);
+  assertEquals(
+    needsQualify("o que temos pronto no projeto?", {
+      complexity: 1,
+      type: "other",
+      summary: "x",
+      needsBuild: false,
+      needsDeps: false,
+    }),
+    false,
+  );
+});
+
+Deno.test("needsBuild pula qualify", () => {
+  assertEquals(
+    needsQualify("site", {
+      complexity: 2,
+      type: "other",
+      summary: "x",
+      needsBuild: true,
+      needsDeps: false,
+    }),
+    false,
+  );
+});
+
+Deno.test("seed placeholder + new_project pula qualify", () => {
+  assertEquals(
+    needsQualify("landing de café", {
+      complexity: 3,
+      type: "new_project",
+      summary: "x",
+      needsBuild: false,
+      needsDeps: false,
+    }, { isSeedPlaceholder: true }),
+    false,
+  );
+});
+
+Deno.test("isSeedPlaceholderAppContent detecta canvas vazio", () => {
+  assertEquals(isSeedPlaceholderAppContent('export default () => <p>Canvas vazio</p>'), true);
+  assertEquals(isSeedPlaceholderAppContent("export default function App() { return <Hero/> }"), false);
 });
 
 Deno.test("needsQualify para pedido curto", () => {

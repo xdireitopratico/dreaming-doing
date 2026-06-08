@@ -82,7 +82,7 @@ function EditorPage() {
   );
   const [pickMode, setPickMode] = useState(false);
   const [logs, setLogs] = useState<LogEntry[]>([]);
-  const [composerMode, setComposerMode] = useState<AgentComposerMode>("plan");
+  const [composerMode, setComposerMode] = useState<AgentComposerMode>("build");
   const [promptDraft, setPromptDraft] = useState<string | null>(null);
   const [previewRoute, setPreviewRoute] = useState("/");
   const [previewReloadNonce, setPreviewReloadNonce] = useState(0);
