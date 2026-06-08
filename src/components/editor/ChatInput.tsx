@@ -168,7 +168,14 @@ export function ChatInput({
         behavior: "smooth",
       });
     }
-  }, [messages, running, agentProgress?.phase, agentProgress?.tools.length]);
+  }, [
+    messages,
+    running,
+    agentProgress?.phase,
+    agentProgress?.tools.length,
+    agentProgress?.streamText,
+    agentProgress?.diffs.length,
+  ]);
 
   // Auto-resize textarea
   useEffect(() => {
@@ -520,7 +527,7 @@ export function ChatInput({
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={handleKeyDown}
           onPaste={handlePaste}
-          placeholder="Ask FORGE…"
+          placeholder="Descreva o que quer construir ou alterar…"
           rows={1}
           className="forge-composer-input"
         />

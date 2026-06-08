@@ -104,17 +104,14 @@ export function ChatStream({
     <div className="forge-chat-stream" role="log" aria-live="polite" aria-relevant="additions text">
       {awaitingQualify && (
         <section
-          className="my-2 rounded-lg border border-amber-400/35 bg-amber-400/8 px-3 py-2.5 flex items-start gap-2"
+          className="my-2 rounded-lg border border-[var(--forge-border)] bg-[var(--forge-surface-2)]/40 px-3 py-2.5 flex items-start gap-2"
           aria-label="Aguardando detalhes"
           data-testid="awaiting-user-banner"
         >
-          <MessageCircle className="size-4 shrink-0 text-amber-400 mt-0.5" />
-          <div className="min-w-0">
-            <p className="text-xs font-medium text-amber-400">Preciso de mais detalhes</p>
-            <p className="text-sm text-[var(--forge-foreground)] leading-relaxed mt-0.5">
-              Responda à pergunta do FORGE no campo abaixo para continuar.
-            </p>
-          </div>
+          <MessageCircle className="size-4 shrink-0 text-[var(--forge-primary)] mt-0.5" />
+          <p className="text-sm text-[var(--forge-foreground)] leading-relaxed">
+            Uma pergunta rápida antes de continuar — responda no campo abaixo.
+          </p>
         </section>
       )}
 
@@ -122,7 +119,6 @@ export function ChatStream({
         if (item.kind === "user") {
           return (
             <article key={item.message.id} className="forge-chat-item forge-chat-item-user">
-              <span className="forge-chat-sender forge-chat-sender-user">Você</span>
               <div className="forge-msg-user-outline">
                 <p className="whitespace-pre-wrap">{item.message.content}</p>
               </div>

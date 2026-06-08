@@ -1,9 +1,8 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import {
   ChevronDown,
   ChevronRight,
   Copy,
-  Loader2,
   RotateCcw,
   Zap,
 } from "lucide-react";
@@ -16,6 +15,7 @@ import { AgentTimeline } from "@/components/editor/AgentTimeline";
 import { ChatDiffViewer } from "@/components/editor/ChatDiffViewer";
 import { PlanViewer } from "@/components/editor/PlanViewer";
 import { PlanDocumentView } from "@/components/editor/PlanDocumentView";
+import { AgentActivityCard } from "@/components/editor/AgentActivityCard";
 import { storedPlanFromMessage } from "@/lib/plan-message-meta";
 
 interface ForgeAssistantBlockProps {
@@ -51,13 +51,9 @@ export function ForgeAssistantBlock({
   onPlanReject,
   onResume,
 }: ForgeAssistantBlockProps) {
-  const [detailsOpen, setDetailsOpen] = useState(isActive);
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const msgId = message?.id ?? `live-${runId ?? "forge"}`;
   const isCopied = copiedIds?.has(msgId) ?? false;
-
-  useEffect(() => {
-    setDetailsOpen(isActive);
-  }, [isActive]);
 
   const narrative = buildAgentNarrative(progress ?? initialAgentProgress, {
     running: isActive,
@@ -95,24 +91,15 @@ export function ForgeAssistantBlock({
         )}
       </div>
 
-      {/* Camada de comunicação — sempre visível durante run */}
-      {isActive && narrative.headline && (
-        <div
-          className="flex items-center gap-2 mt-1 mb-2 min-w-0"
-          data-testid="agent-narrative-headline"
-        >
-          <Loader2 className="size-3.5 shrink-0 animate-spin text-[var(--forge-primary)]" />
-          <p className="font-mono text-[11px] text-[var(--forge-silver)] leading-snug truncate">
-            {narrative.headline}
-          </p>
-        </div>
+      {effectiveProgress && (
+        <AgentActivityCard
+          progress={effectiveProgress}
+          isActive={isActive}
+          persistedText={message?.content}
+        />
       )}
 
-      {isActive && narrative.subhint && (
-        <p className="forge-chat-live-hint mb-2">{narrative.subhint}</p>
-      )}
-
-      {isActive && narrative.showTyping && !displayText && (
+      {isActive && !effectiveProgress && narrative.showTyping && !displayText && (
         <p className="forge-chat-live-line flex items-center gap-1.5" aria-live="polite">
           <span className="inline-flex gap-0.5">
             <span className="size-1 rounded-full bg-[var(--forge-primary)] animate-pulse" />
@@ -183,7 +170,7 @@ export function ForgeAssistantBlock({
         >
           <CollapsibleTrigger className="flex w-full items-center gap-2 px-3 py-2 text-left font-mono text-[10px] uppercase tracking-wider text-[var(--forge-ghost)] hover:text-[var(--forge-muted)]">
             {detailsOpen ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
-            Detalhes da execução
+            Detalhes técnicos
             {!isActive && (
               <span className="ml-auto normal-case tracking-normal text-[var(--forge-ghost)]">
                 {effectiveProgress.tools.filter((t) => t.ok === true).length} tools
@@ -217,7 +204,7 @@ export function ForgeAssistantBlock({
         </div>
       )}
 
-      {diffs.length > 0 && <ChatDiffViewer diffs={diffs} />}
+      {!isActive && diffs.length > 0 && <ChatDiffViewer diffs={diffs} />}
 
       {(displayText && onCopy) || (message && onUndo) ? (
         <footer className="forge-chat-item-assistant-footer mt-2 flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
