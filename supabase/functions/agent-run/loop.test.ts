@@ -23,7 +23,8 @@ class MockLLM implements LLMProvider {
   constructor(r: (ChatResponse | Error)[] = []) { this.q = [...r]; }
   queue(...r: (ChatResponse | Error)[]) { this.q.push(...r); }
   async chat(p: ChatParams): Promise<ChatResponse> {
-    this.calls.push(structuredClone(p));
+    const { onTokenDelta: _stream, ...serializable } = p;
+    this.calls.push(structuredClone(serializable));
     const r = this.q.shift();
     if (!r) throw new Error("MockLLM: sem respostas");
     if (r instanceof Error) throw r;
@@ -200,6 +201,22 @@ Deno.test("3 qualify phase — só em Plan mode", async () => {
   assertEquals(r.steps, 0);
   const de = ef(events, "done")[0]?.data as { qualified?: boolean };
   assertEquals(de?.qualified, true);
+});
+
+Deno.test("3c Build mode — mobile ambíguo para em qualify", async () => {
+  const { loop, cheap, main, events } = f({
+    msgs: [{ role: "user", content: "app de voz para celular" }],
+    files: [{ path: "src/App.tsx", content: 'export default () => <p>Canvas vazio</p>' }],
+    maxSteps: 2,
+  });
+  cheap.queue(cr(3, "new_project", "App de voz"));
+  const r = await loop.run();
+  assertEquals(r.ok, true);
+  assertEquals(r.steps, 0);
+  assertEquals(main.calls.length, 0);
+  const de = ef(events, "done")[0]?.data as { qualified?: boolean; awaiting?: boolean };
+  assertEquals(de?.qualified, true);
+  assertEquals(de?.awaiting, true);
 });
 
 Deno.test("3b Build mode — prompt vago não para em qualify", async () => {

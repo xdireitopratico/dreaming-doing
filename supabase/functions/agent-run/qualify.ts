@@ -89,6 +89,36 @@ export function isSeedPlaceholderAppContent(content: string | undefined | null):
   return /canvas vazio/i.test(content);
 }
 
+/** Entry do seed — web: App.tsx; Expo: app/index.tsx */
+export function projectEntryPathFromFiles(
+  files: Array<{ path: string; content?: string | null }>,
+): string {
+  const hasExpo = files.some((f) => {
+    const p = f.path.replace(/^\//, "");
+    if (p === "app.json") return true;
+    if (p === "package.json" && f.content?.includes('"expo"')) return true;
+    return false;
+  });
+  return hasExpo ? "app/index.tsx" : "src/App.tsx";
+}
+
+export function findProjectEntryFile(
+  files: Array<{ path: string; content?: string | null }>,
+): { path: string; content?: string | null } | undefined {
+  const entry = projectEntryPathFromFiles(files);
+  return files.find(
+    (f) => f.path === entry || f.path === `/${entry}` || f.path.endsWith(`/${entry}`),
+  );
+}
+
+export function isProjectSeedPlaceholder(
+  files: Array<{ path: string; content?: string | null }>,
+): boolean {
+  const entry = findProjectEntryFile(files);
+  if (!entry?.content?.trim()) return true;
+  return isSeedPlaceholderAppContent(entry.content);
+}
+
 /** Re-exportado para o loop — qualify mobile sem depender do bundle frontend. */
 export function isAmbiguousMobileRequest(prompt: string): boolean {
   const p = prompt.trim();

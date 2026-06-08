@@ -20,7 +20,7 @@ import {
   buildExecuteInstruction,
   extractOriginalUserRequest,
   isProjectInventoryQuestion,
-  isSeedPlaceholderAppContent,
+  isProjectSeedPlaceholder,
   needsQualify,
   isAmbiguousMobileRequest,
   buildMobileStackQualifyMessage,
@@ -489,8 +489,8 @@ export class AgentLoop {
 
       await this.saveCheckpoint(LoopPhase.CREATE_PLAN);
 
-      const appFile = this.state.context?.files?.find((f) => f.path === "src/App.tsx");
-      const isSeedPlaceholder = isSeedPlaceholderAppContent(appFile?.content);
+      const projectFiles = this.state.context?.files ?? [];
+      const isSeedPlaceholder = isProjectSeedPlaceholder(projectFiles);
 
       // Inventário do projeto — responde com contexto real, sem fs_write nem qualify vago.
       if (
@@ -513,6 +513,29 @@ export class AgentLoop {
           phase: "build",
           message: "Executando plano aprovado…",
         });
+      }
+
+      // Mobile ambíguo em Build — perguntar Expo vs Kotlin antes de codar.
+      if (
+        !this.planMode &&
+        !this.approvedPlanBuild &&
+        this.originalUserRequest &&
+        isAmbiguousMobileRequest(this.originalUserRequest)
+      ) {
+        const mobileQ = buildMobileStackQualifyMessage();
+        this.emit("assistant_text", { text: mobileQ, final: true });
+        this.emit("gate_decision", {
+          phase: "qualify",
+          reason: "ambiguous mobile request",
+          awaiting: true,
+        });
+        await this.persistFinal(mobileQ);
+        await this.clearCheckpoint();
+        await this.markRunStatus("awaiting_user", {
+          awaitingUser: { type: "qualify", message: mobileQ.slice(0, 200) },
+        });
+        this.emit("done", { summary: mobileQ, qualified: true, awaiting: true });
+        return { ok: true, summary: mobileQ, steps: 0, toolsUsed: [] };
       }
 
       // Qualify só em Plan — Build vai direto ao loop de ferramentas (estilo Lovable Agent).

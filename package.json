@@ -15,7 +15,7 @@
     "preview": "vite preview",
     "lint": "eslint .",
     "format": "prettier --write .",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit --project tsconfig.json",
     "test": "vitest run",
     "smoke:agent": "node scripts/smoke-agent-e2e.mjs",
     "smoke:queue": "node scripts/smoke-queue-e2e.mjs",

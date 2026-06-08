@@ -45,6 +45,7 @@ export interface ChatMessage {
   content: string;
   toolCalls?: Array<{ name: string; args: string }>;
   meta?: Record<string, unknown> | null;
+  parts?: import("@/lib/chat-attachments").StoredMessagePart[];
   runId?: string;
   timestamp: number;
 }

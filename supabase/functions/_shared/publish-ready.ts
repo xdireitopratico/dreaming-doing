@@ -1,17 +1,23 @@
-import { isSeedPlaceholderAppContent } from "../agent-run/qualify.ts";
+import {
+  findProjectEntryFile,
+  isSeedPlaceholderAppContent,
+} from "../agent-run/qualify.ts";
 
 type StackKind = "web" | "expo" | "android-native" | "mixed" | null;
 
-function entryPath(stack: StackKind): string {
-  return stack === "expo" ? "app/index.tsx" : "src/App.tsx";
-}
-
-function detectStackFromPaths(paths: string[]): StackKind {
-  const normalized = paths.map((p) => p.replace(/^\//, "").toLowerCase());
-  const hasExpo = normalized.some((p) => p === "app.json" || p.startsWith("app/"));
+function detectStackFromFiles(
+  files: Array<{ path: string; content: string }>,
+): StackKind {
+  const normalized = files.map((f) => f.path.replace(/^\//, "").toLowerCase());
   const hasAndroid = normalized.some(
     (p) => p.includes("build.gradle") || p.includes("app/src/main"),
   );
+  const hasExpo = files.some((f) => {
+    const p = f.path.replace(/^\//, "");
+    if (p === "app.json") return true;
+    if (p === "package.json" && f.content.includes('"expo"')) return true;
+    return false;
+  });
   const hasWeb = normalized.some((p) => p === "src/app.tsx" || p === "index.html");
   if (hasAndroid && hasWeb) return "mixed";
   if (hasAndroid) return "android-native";
@@ -23,15 +29,9 @@ function detectStackFromPaths(paths: string[]): StackKind {
 export function isProjectPublishReadyFromFiles(
   files: Array<{ path: string; content: string }>,
 ): boolean {
-  const stack = detectStackFromPaths(files.map((f) => f.path));
+  const stack = detectStackFromFiles(files);
   if (stack === "android-native" || stack === "mixed") return false;
-  const target = entryPath(stack);
-  const entry = files.find(
-    (f) =>
-      f.path === target ||
-      f.path === `/${target}` ||
-      f.path.endsWith(`/${target}`),
-  );
+  const entry = findProjectEntryFile(files);
   if (!entry?.content?.trim()) return false;
   return !isSeedPlaceholderAppContent(entry.content);
 }

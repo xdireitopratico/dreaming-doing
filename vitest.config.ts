@@ -8,9 +8,10 @@ export default defineConfig({
     include: ["src/**/*.test.ts"],
     projects: [
       {
-        extends: true,
         test: {
+          name: "forge",
           include: ["src/**/*.test.ts"],
+          environment: "node",
         },
       },
     ],

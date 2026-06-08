@@ -6,7 +6,9 @@ import {
   isAmbiguousMobileRequest,
   isPreviewActionRequest,
   isProjectInventoryQuestion,
+  isProjectSeedPlaceholder,
   isSeedPlaceholderAppContent,
+  projectEntryPathFromFiles,
   looksLikeInteractionOnly,
   needsQualify,
 } from "./qualify.ts";
@@ -113,6 +115,34 @@ Deno.test("seed placeholder + new_project pula qualify", () => {
       needsBuild: false,
       needsDeps: false,
     }, { isSeedPlaceholder: true }),
+    false,
+  );
+});
+
+Deno.test("projectEntryPathFromFiles expo vs web", () => {
+  assertEquals(
+    projectEntryPathFromFiles([{ path: "app.json", content: "{}" }]),
+    "app/index.tsx",
+  );
+  assertEquals(
+    projectEntryPathFromFiles([{ path: "src/App.tsx", content: "x" }]),
+    "src/App.tsx",
+  );
+});
+
+Deno.test("isProjectSeedPlaceholder expo entry", () => {
+  assertEquals(
+    isProjectSeedPlaceholder([
+      { path: "app.json", content: "{}" },
+      { path: "app/index.tsx", content: "Canvas vazio — descreva" },
+    ]),
+    true,
+  );
+  assertEquals(
+    isProjectSeedPlaceholder([
+      { path: "app.json", content: "{}" },
+      { path: "app/index.tsx", content: "export default function Home() {}" },
+    ]),
     false,
   );
 });
