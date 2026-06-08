@@ -21,11 +21,11 @@ export function PlanDocumentView({ plan, editable = true, onMarkdownChange }: Pl
       }).markdown;
 
   const [markdown, setMarkdown] = useState(initial);
-  const [preview, setPreview] = useState(false);
+  const [editing, setEditing] = useState(false);
 
   useEffect(() => {
     setMarkdown(initial);
-    setPreview(false);
+    setEditing(false);
   }, [initial, plan.planId]);
 
   useEffect(() => {
@@ -40,19 +40,15 @@ export function PlanDocumentView({ plan, editable = true, onMarkdownChange }: Pl
           <button
             type="button"
             className="shrink-0 text-xs text-[var(--primary)] hover:underline"
-            onClick={() => setPreview((v) => !v)}
+            onClick={() => setEditing((v) => !v)}
           >
-            {preview ? "Editar" : "Visualizar"}
+            {editing ? "Visualizar" : "Editar"}
           </button>
         )}
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto p-4">
-        {preview || !editable ? (
-          <MarkdownRenderer className="prose prose-sm max-w-none text-[var(--foreground)] [&_h2]:text-base [&_h2]:font-semibold [&_h2]:mt-4 [&_h3]:text-sm [&_h3]:font-medium [&_li]:text-sm [&_p]:text-sm [&_p]:leading-relaxed">
-            {markdown}
-          </MarkdownRenderer>
-        ) : (
+        {editing && editable ? (
           <textarea
             value={markdown}
             onChange={(e) => setMarkdown(e.target.value)}
@@ -60,6 +56,10 @@ export function PlanDocumentView({ plan, editable = true, onMarkdownChange }: Pl
             spellCheck={false}
             aria-label="Editar plano em markdown"
           />
+        ) : (
+          <MarkdownRenderer className="prose prose-sm max-w-none text-[var(--foreground)] [&_h2]:text-base [&_h2]:font-semibold [&_h2]:mt-4 [&_h3]:text-sm [&_h3]:font-medium [&_li]:text-sm [&_p]:text-sm [&_p]:leading-relaxed">
+            {markdown}
+          </MarkdownRenderer>
         )}
       </div>
     </div>
