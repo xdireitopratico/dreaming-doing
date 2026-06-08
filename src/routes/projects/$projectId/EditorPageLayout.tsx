@@ -206,8 +206,18 @@ export function EditorPageLayout({
     }
   }, [pendingPlan, agent.progress.pendingPlan, agent.hydratePendingPlan]);
 
-  const showPlanModal =
-    pendingPlan != null && (pendingPlan.planId !== dismissedPlanId || forcePlanOpen);
+  useEffect(() => {
+    if (pendingPlan && pendingPlan.planId !== dismissedPlanId) {
+      setForcePlanOpen(true);
+    }
+  }, [pendingPlan?.planId, dismissedPlanId]);
+
+  const showPlanModal = pendingPlan != null && forcePlanOpen;
+
+  const closePlanModal = () => {
+    if (pendingPlan) setDismissedPlanId(pendingPlan.planId);
+    setForcePlanOpen(false);
+  };
 
   const handleReopenPlan = () => {
     setDismissedPlanId(null);
@@ -437,15 +447,14 @@ export function EditorPageLayout({
         {showPlanModal && pendingPlan && (
           <PlanModal
             plan={pendingPlan}
-            onClose={() => setDismissedPlanId(pendingPlan.planId)}
+            onClose={closePlanModal}
             onApprove={async (steps, markdown) => {
               await handlePlanApprove(steps, markdown);
-              setDismissedPlanId(pendingPlan.planId);
-              setForcePlanOpen(false);
+              closePlanModal();
             }}
             onReject={async (reason) => {
               await handlePlanReject(reason);
-              setDismissedPlanId(pendingPlan.planId);
+              closePlanModal();
             }}
           />
         )}

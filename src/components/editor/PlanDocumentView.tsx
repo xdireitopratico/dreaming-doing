@@ -21,10 +21,11 @@ export function PlanDocumentView({ plan, editable = true, onMarkdownChange }: Pl
       }).markdown;
 
   const [markdown, setMarkdown] = useState(initial);
-  const [preview, setPreview] = useState(!editable);
+  const [preview, setPreview] = useState(false);
 
   useEffect(() => {
     setMarkdown(initial);
+    setPreview(false);
   }, [initial, plan.planId]);
 
   useEffect(() => {

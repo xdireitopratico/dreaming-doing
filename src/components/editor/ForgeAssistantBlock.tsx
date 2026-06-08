@@ -10,7 +10,7 @@ import {
 import { MarkdownRenderer } from "@/components/ui/markdown-renderer";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import type { ChatMessage } from "@/components/editor/ChatInput";
-import { initialAgentProgress, type AgentProgress, type PendingPlan } from "@/lib/agent-progress";
+import { initialAgentProgress, type AgentProgress, type PendingPlan, type PlanStep } from "@/lib/agent-progress";
 import { buildAgentNarrative } from "@/lib/agent-narrative";
 import { AgentTimeline } from "@/components/editor/AgentTimeline";
 import { ChatDiffViewer } from "@/components/editor/ChatDiffViewer";
@@ -30,6 +30,8 @@ interface ForgeAssistantBlockProps {
   estimatedTokens?: number;
   showTokens?: boolean;
   onReopenPlan?: () => void;
+  onPlanApprove?: (steps: PlanStep[]) => void;
+  onPlanReject?: (reason?: string) => void;
   onResume?: () => void;
 }
 
@@ -45,6 +47,8 @@ export function ForgeAssistantBlock({
   estimatedTokens = 0,
   showTokens = false,
   onReopenPlan,
+  onPlanApprove,
+  onPlanReject,
   onResume,
 }: ForgeAssistantBlockProps) {
   const [detailsOpen, setDetailsOpen] = useState(isActive);
@@ -224,9 +228,14 @@ export function ForgeAssistantBlock({
         </Collapsible>
       )}
 
-      {planForRun && onReopenPlan && (
-        <div className="my-3" data-testid="plan-panel">
-          <PlanViewer plan={planForRun} onOpen={onReopenPlan} />
+      {planForRun && onReopenPlan && onPlanApprove && onPlanReject && (
+        <div className="my-3 inline-block max-w-fit" data-testid="plan-panel">
+          <PlanViewer
+            plan={planForRun}
+            onOpen={onReopenPlan}
+            onApprove={onPlanApprove}
+            onReject={onPlanReject}
+          />
         </div>
       )}
 

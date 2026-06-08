@@ -1,7 +1,7 @@
 // ChatStream — thread Lovable: user → FORGE (narrativa + detalhes inline por turno)
 import { RefreshCw, AlertTriangle, MessageCircle } from "lucide-react";
 import { Button } from "@forge/ui";
-import type { AgentProgress } from "@/lib/agent-progress";
+import type { AgentProgress, PlanStep } from "@/lib/agent-progress";
 import type { ChatMessage } from "@/components/editor/ChatInput";
 import { useState, useCallback, useMemo } from "react";
 import { ErrorHintCard } from "@/components/editor/ErrorHintCard";
@@ -22,6 +22,8 @@ export interface ChatStreamProps {
   onResume?: () => void;
   onUndoMessage?: (assistantMsgId: string) => void;
   onReopenPlan?: () => void;
+  onPlanApprove?: (steps: PlanStep[]) => void;
+  onPlanReject?: (reason?: string) => void;
 }
 
 export function ChatStream({
@@ -33,6 +35,8 @@ export function ChatStream({
   onResume,
   onUndoMessage,
   onReopenPlan,
+  onPlanApprove,
+  onPlanReject,
 }: ChatStreamProps) {
   const pendingPlan = progress.pendingPlan;
   const awaitingQualify = progress.awaitingKind === "qualify" && !pendingPlan;
@@ -123,6 +127,8 @@ export function ChatStream({
             estimatedTokens={estimatedTokens}
             showTokens={assistantIndex === 0}
             onReopenPlan={onReopenPlan}
+            onPlanApprove={onPlanApprove}
+            onPlanReject={onPlanReject}
             onResume={onResume}
           />
         );

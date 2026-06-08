@@ -427,7 +427,7 @@ export function useEditorPageHandlers({
   }, [agent.progress.pendingPlan, chatMessages]);
 
   const handlePlanApprove = useCallback(
-    async (steps: { id: string; enabled: boolean }[], _markdown?: string) => {
+    async (steps: { id: string; enabled: boolean }[], markdown?: string) => {
       const pp = getPendingPlan();
       if (!pp) {
         toast.error("Plano não encontrado — gere um novo plano no modo Plan.");
@@ -450,7 +450,7 @@ export function useEditorPageHandlers({
           data: {
             runId: pp.runId,
             planId: pp.planId,
-            plan: pp.summary,
+            plan: markdown?.trim() || pp.summary,
             steps: full,
           },
         });

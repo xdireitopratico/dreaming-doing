@@ -30,7 +30,6 @@ import {
 } from "@/lib/agent-setup";
 import { ChatStream } from "@/components/editor/ChatStream";
 import { ComposerModeSelect } from "@/components/editor/ComposerModeSelect";
-import { PlanPendingBar } from "@/components/editor/PlanPendingBar";
 import type { AgentProgress, PlanStep } from "@/lib/agent-progress";
 import { resolveEffectiveAgentProgress } from "@/lib/resolve-agent-progress";
 
@@ -149,14 +148,10 @@ export function ChatInput({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const historyRef = useRef<string[]>([]);
-  const [planActionBusy, setPlanActionBusy] = useState(false);
-
   const effectiveProgress = useMemo(
     () => resolveEffectiveAgentProgress(agentProgress, messages),
     [agentProgress, messages],
   );
-  const pendingPlan = effectiveProgress.pendingPlan;
-
   useEffect(() => {
     if (externalPrompt) {
       setInput(externalPrompt);
@@ -420,6 +415,8 @@ export function ChatInput({
               onResume={onResumeAgent}
               onUndoMessage={onUndoMessage}
               onReopenPlan={onReopenPlan}
+              onPlanApprove={onPlanApprove}
+              onPlanReject={onPlanReject}
             />
         )}
       </div>
@@ -494,30 +491,6 @@ export function ChatInput({
             </span>
           ))}
         </div>
-      )}
-
-      {pendingPlan && !running && onPlanApprove && onPlanReject && onReopenPlan && (
-        <PlanPendingBar
-          plan={pendingPlan}
-          busy={planActionBusy}
-          onOpen={onReopenPlan}
-          onApprove={async () => {
-            setPlanActionBusy(true);
-            try {
-              await onPlanApprove(pendingPlan.steps.filter((s) => s.enabled));
-            } finally {
-              setPlanActionBusy(false);
-            }
-          }}
-          onReject={async () => {
-            setPlanActionBusy(true);
-            try {
-              await onPlanReject();
-            } finally {
-              setPlanActionBusy(false);
-            }
-          }}
-        />
       )}
 
       {(agentProgress?.pendingQueueCount ?? 0) > 0 && (
