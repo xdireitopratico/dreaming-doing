@@ -116,14 +116,18 @@ export function usePreviewBoot(projectId: string, opts?: UsePreviewBootOpts) {
         try {
           const body = await callPreviewBoot({ ...opts, silent: true });
           if (body?.stale || body?.code === "e2b_sandbox_stale") {
-            setSandboxStale(true);
-            await qc.invalidateQueries({ queryKey: ["project", projectId] });
             if (!staleRebootRef.current && fileCount > 0) {
               staleRebootRef.current = true;
+              setSandboxStale(true);
               logEditorTelemetryEvent("preview", "stale_reboot", "info", projectId);
-              void boot({ force: true, silent: true }).finally(() => {
-                staleRebootRef.current = false;
-              });
+              void boot({ force: true, silent: true })
+                .then(() => {
+                  setSandboxStale(false);
+                  void qc.invalidateQueries({ queryKey: ["project", projectId] });
+                })
+                .finally(() => {
+                  staleRebootRef.current = false;
+                });
             }
             return null;
           }
@@ -279,6 +283,8 @@ export function usePreviewBoot(projectId: string, opts?: UsePreviewBootOpts) {
 
   const isNoFiles = fileCount === 0 && isNoFilesPreviewError(lastError);
 
+  const reconnecting = sandboxStale && (booting || warming);
+
   return {
     booting,
     boot,
@@ -289,6 +295,7 @@ export function usePreviewBoot(projectId: string, opts?: UsePreviewBootOpts) {
     isE2bCircuit,
     isNoFiles,
     sandboxStale,
+    reconnecting,
     clearWarming: () => setWarming(false),
     clearError: () => setLastError(null),
     clearSandboxStale: () => setSandboxStale(false),

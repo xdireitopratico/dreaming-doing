@@ -242,14 +242,11 @@ Deno.serve(async (req) => {
 
       const probeStatus = await probePreviewUrlStatus(cached.url, 3);
       if (probeStatus === "stale") {
-        await supabase
-          .from("projects")
-          .update({ meta: clearedPreviewMeta(existing) })
-          .eq("id", projectId);
+        // Não limpa meta aqui — evita flash de devUrl no cliente; force boot atualiza atomically.
         return json({
-          url: null,
+          url: cached.url,
           ready: false,
-          reused: false,
+          reused: true,
           stale: true,
           probeOnly: true,
           code: "e2b_sandbox_stale",

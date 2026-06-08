@@ -53,7 +53,6 @@ export type EditorPageLayoutProps = {
   previewRoute: string;
   setPreviewRoute: (path: string) => void;
   devUrl: string | null;
-  previewReady: boolean;
   previewIframeRef: RefObject<HTMLIFrameElement | null>;
   setPreviewReloadNonce: (value: number | ((prev: number) => number)) => void;
   previewDevice: "desktop" | "tablet" | "mobile";
@@ -135,7 +134,6 @@ export function EditorPageLayout({
   previewRoute,
   setPreviewRoute,
   devUrl,
-  previewReady,
   previewIframeRef,
   setPreviewReloadNonce,
   previewDevice,
@@ -386,7 +384,7 @@ export function EditorPageLayout({
                           previewIdle={previewIdle}
                           isNoFiles={previewBoot.isNoFiles}
                           sandboxStale={previewBoot.sandboxStale}
-                          previewReady={previewReady}
+                          reconnecting={previewBoot.reconnecting}
                           isReactProject={isReactProject}
                           projectName={projectName ?? undefined}
                           device={previewDevice}

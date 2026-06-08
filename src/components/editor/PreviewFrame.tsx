@@ -43,7 +43,8 @@ interface PreviewFrameProps {
   isReactProject?: boolean;
   /** Sandbox E2B expirou — não mostrar iframe com erro cru da E2B. */
   sandboxStale?: boolean;
-  previewReady?: boolean;
+  /** Reconexão em curso após sandbox expirado — spinner, não Let's Build. */
+  reconnecting?: boolean;
 }
 
 export function PreviewFrame({
@@ -69,7 +70,7 @@ export function PreviewFrame({
   isReactProject = false,
   previewSyncing = false,
   sandboxStale = false,
-  previewReady = false,
+  reconnecting = false,
 }: PreviewFrameProps) {
   const [iframeLoading, setIframeLoading] = useState(false);
   const deviceWidth = previewDeviceWidth(device);
@@ -106,15 +107,27 @@ export function PreviewFrame({
     return null;
   }, [devUrl, indexFile, isReactProject]);
 
-  const showBootSpinner = booting && !agentRunning && !iframeSrc && !isNoFiles;
+  const showConnecting =
+    isReactProject &&
+    agentHasRun &&
+    !devUrl &&
+    !isNoFiles &&
+    (booting || warming || previewSyncing);
+
+  const showBootSpinner =
+    (booting && !agentRunning && !iframeSrc && !isNoFiles) || showConnecting;
+
+  const showReconnecting = reconnecting || (sandboxStale && (booting || warming || previewSyncing));
+
+  const showStaleGuide = sandboxStale && !showReconnecting;
 
   const showLetsBuild =
-    sandboxStale ||
+    showStaleGuide ||
     isNoFiles ||
-    (!iframeSrc && !previewContent) ||
-    (Boolean(iframeSrc) && !previewReady && !booting && !warming && !previewSyncing && !iframeLoading);
+    (!iframeSrc && !previewContent && !booting && !warming && !showReconnecting);
 
-  const canShowIframe = Boolean(iframeSrc) && !sandboxStale && !showLetsBuild;
+  const canShowIframe =
+    Boolean(iframeSrc) && !sandboxStale && !isNoFiles;
 
   return (
     <div className="forge-preview-root flex min-h-0 flex-1 flex-col">
@@ -142,12 +155,16 @@ export function PreviewFrame({
           </div>
         )}
 
-        {!bootError && showBootSpinner ? (
+        {!bootError && (showBootSpinner || showReconnecting) ? (
           <div className="flex h-full w-full flex-col items-center justify-center gap-3 bg-white">
             <Loader2 className="size-8 animate-spin text-neutral-400" />
-            <p className="text-sm text-neutral-500">Conectando preview…</p>
+            <p className="text-sm text-neutral-500">
+              {showReconnecting ? "Reconectando preview…" : "Conectando preview…"}
+            </p>
             <p className="text-xs text-neutral-400 max-w-xs">
-              A atividade do agente aparece só no chat à esquerda.
+              {showReconnecting
+                ? "O ambiente E2B expirou — estamos a subir um novo."
+                : "A atividade do agente aparece só no chat à esquerda."}
             </p>
           </div>
         ) : !bootError && previewIdle && devUrl ? (
