@@ -28,7 +28,7 @@ Deno.test("buildClassifyBriefing — build com passos", () => {
   assertStringIncludes(text, "criar algo novo");
   assertStringIncludes(text, "Landing de cafeteria");
   assertStringIncludes(text, "Criar Hero.tsx");
-  assertStringIncludes(text, "20 passos");
+  assertStringIncludes(text, "validar o resultado");
 });
 
 Deno.test("buildGatherNarration — arquivos-chave", () => {

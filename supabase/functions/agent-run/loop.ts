@@ -121,6 +121,7 @@ export class AgentLoop {
   private llmResponseWasStreamed: boolean;
   private touchedPaths: Set<string>;
   private lastActivityAt: number;
+  private lastRunMessageId: string | null;
 
   constructor(
     reg: ToolRegistry,
@@ -186,6 +187,7 @@ export class AgentLoop {
     this.llmResponseWasStreamed = false;
     this.touchedPaths = new Set();
     this.lastActivityAt = Date.now();
+    this.lastRunMessageId = null;
     this.runStartTime = Date.now();
     this.lastCheckpointStep = options?.hasCheckpoint ? (state.currentStepIndex ?? 0) : 0;
     this.router = new ModelRouter(injectedKeys, routerOverrides);
@@ -215,13 +217,12 @@ export class AgentLoop {
     await this.emitDeliveryCheckpoint(steps);
     await this.touchHeartbeat();
     this.emit("timeout_warning", {
-      message: "Chunk encerrado — Inngest retoma no próximo passo",
+      message: "Retomando automaticamente no servidor",
       elapsedMs: Date.now() - this.runStartTime,
     });
     return {
       ok: false,
-      error:
-        `Chunk de ~${Math.round(LOOP_BUDGET_MS / 1000)}s — retomando automaticamente…`,
+      error: "Retomando automaticamente…",
       steps,
       resumable: true,
       toolsUsed: [...toolsUsed],
@@ -272,43 +273,11 @@ export class AgentLoop {
       deliveryFiles,
       narration: narration.slice(0, 4000),
       resumable: true,
+      silent: true,
       message: deliveryFiles.length > 0
-        ? `Entrega parcial: ${deliveryFiles.length} arquivo(s) neste chunk`
-        : "Checkpoint de entrega parcial",
+        ? `${deliveryFiles.length} arquivo(s) prontos — continuo em seguida`
+        : "Continuo em seguida",
     });
-    await this.persistPartial();
-  }
-
-  private async persistPartial(): Promise<void> {
-    const text = this.narrationBuffer.trim();
-    if (!text && this.touchedPaths.size === 0) return;
-
-    const deliveryFiles = [...this.touchedPaths];
-    const summary = text ||
-      (deliveryFiles.length > 0
-        ? `Entrega parcial — ${deliveryFiles.length} arquivo(s) alterado(s) neste chunk.`
-        : "Entrega parcial registrada.");
-    const fileFooter = deliveryFiles.length > 0
-      ? `\n\n**Arquivos neste chunk:** ${deliveryFiles.map((p) => `\`${p}\``).join(", ")}`
-      : "";
-
-    const meta: Record<string, unknown> = {
-      runId: this.runId ?? undefined,
-      partial: true,
-      deliveryFiles,
-      executionLog: this.state.executionLog,
-      currentStep: this.state.currentStepIndex,
-      totalSteps: this.maxStepsLimit,
-    };
-
-    await this.sb.from("messages").insert({
-      conversation_id: this.state.conversationId,
-      role: "assistant",
-      parts: [{ type: "text", text: `${summary}${fileFooter}` }],
-      tool_calls: [],
-      meta,
-    });
-    await this.sb.from("projects").update({ updated_at: new Date().toISOString() }).eq("id", this.state.projectId);
   }
 
   private async clearCheckpoint(): Promise<void> {
@@ -408,8 +377,7 @@ export class AgentLoop {
         restored: true,
       });
       this.streamNarration(
-        `Retomando de onde parei (**passo ${this.state.currentStepIndex}/${this.maxStepsLimit}**). ` +
-          "Vou narrar cada etapa enquanto continuo.",
+        `Retomando de onde parei (**passo ${this.state.currentStepIndex}/${this.maxStepsLimit}**).`,
       );
 
       // Plan runs terminate after proposing (no in-memory decision wait).
@@ -655,10 +623,10 @@ export class AgentLoop {
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : "Erro no modelo";
         await this.saveCheckpoint(LoopPhase.ERROR, true);
-        await this.persistFinal(
-          `Execução pausada: ${message}\n\nSeu histórico está salvo — clique em **Continuar** no editor para retomar.`,
+        this.streamNarration(
+          `Encontrei um problema no modelo (${message}) — vou tentar de novo em instantes.`,
         );
-        return { ok: false, error: message, steps: loopStep, resumable: true, toolsUsed: [...toolsUsed] };
+        return this.returnResumableChunk(loopStep, toolsUsed);
       }
       if (!response) break;
 
@@ -908,19 +876,8 @@ export class AgentLoop {
     }
 
     if (loopStep >= this.maxStepsLimit) {
-      const limitWrapUp = buildFinalWrapUp({
-        stepsCompleted: loopStep,
-        totalSteps: this.maxStepsLimit,
-        touchedPaths: [...this.touchedPaths],
-        toolsUsed: [...toolsUsed],
-        resumable: true,
-        partial: true,
-        errorMessage: "Limite de passos atingido neste chunk.",
-      });
-      this.streamNarration(limitWrapUp, true);
-      await this.saveCheckpoint(LoopPhase.ERROR, true);
-      await this.persistFinal(limitWrapUp);
-      return { ok: false, error: "Limite de passos", steps: loopStep, resumable: true, toolsUsed: [...toolsUsed] };
+      await this.saveCheckpoint(LoopPhase.DECIDE_NEXT, true);
+      return this.returnResumableChunk(loopStep, toolsUsed);
     }
 
     this.state.phase = LoopPhase.SUMMARIZE;
@@ -1228,13 +1185,48 @@ export class AgentLoop {
       args: tc.arguments,
       status: "running",
     }));
+    const meta: Record<string, unknown> = {
+      runId: this.runId ?? undefined,
+      step: this.state.currentStepIndex,
+    };
     const { data } = await this.sb.from("messages").insert({
       conversation_id: this.state.conversationId,
       role: "assistant",
       parts: response.content ? [{ type: "text", text: response.content }] : [],
       tool_calls,
+      meta,
     }).select("id").single();
-    return data?.id ?? null;
+    const id = data?.id ?? null;
+    if (id) this.lastRunMessageId = id;
+    return id;
+  }
+
+  private async resolveExistingRunMessageId(): Promise<string | null> {
+    if (this.lastRunMessageId) return this.lastRunMessageId;
+    if (!this.runId) return null;
+    try {
+      const query = this.sb
+        .from("messages")
+        .select("id")
+        .eq("conversation_id", this.state.conversationId)
+        .eq("role", "assistant");
+      const filtered =
+        typeof query.filter === "function"
+          ? query.filter("meta->>runId", "eq", this.runId)
+          : query;
+      const ordered =
+        typeof filtered.order === "function"
+          ? filtered.order("created_at", { ascending: false })
+          : filtered;
+      const limited =
+        typeof ordered.limit === "function" ? ordered.limit(1) : ordered;
+      const { data: existing } = await limited.maybeSingle();
+      const id = (existing as { id?: string } | null)?.id ?? null;
+      if (id) this.lastRunMessageId = id;
+      return id;
+    } catch {
+      return null;
+    }
   }
 
   private async updateAssistantStep(
@@ -1274,6 +1266,7 @@ export class AgentLoop {
     const fileFooter = deliveryFiles.length > 0
       ? `\n\n**Arquivos alterados:** ${deliveryFiles.map((p) => `\`${p}\``).join(", ")}`
       : "";
+    const text = `${body}${fileFooter}`;
     const meta: Record<string, unknown> = {
       runId: this.runId ?? undefined,
       deliveryFiles,
@@ -1282,10 +1275,22 @@ export class AgentLoop {
       currentStep: this.state.currentStepIndex,
       totalSteps: this.maxStepsLimit,
     };
+
+    const existingId = await this.resolveExistingRunMessageId();
+    if (existingId) {
+      await this.sb.from("messages").update({
+        parts: [{ type: "text", text }],
+        tool_calls: [],
+        meta,
+      }).eq("id", existingId);
+      await this.sb.from("projects").update({ updated_at: new Date().toISOString() }).eq("id", this.state.projectId);
+      return;
+    }
+
     await this.sb.from("messages").insert({
       conversation_id: this.state.conversationId,
       role: "assistant",
-      parts: [{ type: "text", text: `${body}${fileFooter}` }],
+      parts: [{ type: "text", text }],
       tool_calls: [],
       meta,
     });

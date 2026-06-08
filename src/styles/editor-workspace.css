@@ -663,11 +663,37 @@ body:has(.editor-workspace) {
 
 .forge-messages,
 .lovable-messages {
+  position: relative;
   flex: 1;
   overflow-y: auto;
   padding: 14px 16px 8px;
   scrollbar-width: thin;
   scrollbar-color: rgba(237, 239, 242, 0.15) transparent;
+}
+
+.forge-new-messages-pill {
+  position: sticky;
+  bottom: 10px;
+  z-index: 2;
+  display: block;
+  width: fit-content;
+  margin: 12px auto 0;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--forge-primary) 45%, transparent);
+  background: color-mix(in srgb, var(--forge-chat) 88%, var(--forge-primary) 12%);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--forge-primary);
+  cursor: pointer;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.forge-new-messages-pill:hover {
+  background: color-mix(in srgb, var(--forge-chat) 75%, var(--forge-primary) 25%);
+  border-color: var(--forge-primary);
 }
 
 .forge-msg-text,

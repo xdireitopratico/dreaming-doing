@@ -87,7 +87,7 @@ export function buildClassifyBriefing(
   if (!opts.planMode) {
     lines.push(
       "",
-      `Vou trabalhar em até **${opts.maxSteps} passos**, narrando cada etapa enquanto leio, edito e valido o projeto.`,
+      "Vou ler o projeto, implementar as mudanças e validar o resultado.",
     );
   }
 
@@ -124,11 +124,11 @@ export function buildApprovedPlanBriefing(planSummary: string, steps?: PlanStep[
     }
   }
 
-  lines.push("", "Vou narrar cada etapa enquanto implemento.");
+  lines.push("", "Começando a implementar agora.");
   return lines.join("\n").trim();
 }
 
-/** Narração após um lote de ferramentas — reality show entre passos. */
+/** Atualização curta após um lote de ferramentas. */
 export function buildToolBatchNarration(
   calls: ToolCallLike[],
   opts?: { step?: number; total?: number; allOk?: boolean },
@@ -163,20 +163,27 @@ export type FinalWrapUpOpts = {
   resumable?: boolean;
   partial?: boolean;
   errorMessage?: string;
+  /** Pausa interna (auto-resume) — sem pedir ação ao usuário. */
+  silentResume?: boolean;
 };
 
-/** Wrap-up final Lovable-style — resumo honesto do que foi entregue. */
+/** Wrap-up final — resumo honesto do que foi entregue. */
 export function buildFinalWrapUp(opts: FinalWrapUpOpts): string {
   const lines: string[] = [];
   const fileCount = opts.touchedPaths.length;
-  const stepLabel = `**Passo ${opts.stepsCompleted}/${opts.totalSteps}**`;
 
   if (opts.errorMessage?.trim()) {
-    lines.push("**Execução pausada.**", "", opts.errorMessage.trim());
-  } else if (opts.partial || opts.resumable) {
-    lines.push("**Entrega parcial neste chunk.**");
+    lines.push(opts.errorMessage.trim());
+  } else if (opts.silentResume) {
+    if (fileCount > 0) {
+      lines.push("Ainda estou trabalhando — já deixei parte do pedido pronta.");
+    } else {
+      lines.push("Ainda estou trabalhando no seu pedido.");
+    }
+  } else if (opts.partial) {
+    lines.push("**Até aqui:**");
   } else {
-    lines.push("**Pronto!** Resumo do que fiz nesta rodada:");
+    lines.push("**Pronto!** Resumo do que fiz:");
   }
 
   if (fileCount > 0) {
@@ -188,20 +195,16 @@ export function buildFinalWrapUp(opts: FinalWrapUpOpts): string {
         ? `Alterei **1 arquivo**: ${shown}.`
         : `Alterei **${fileCount} arquivos**: ${shown}${extra}.`,
     );
-  } else if (!opts.errorMessage) {
-    lines.push("", "Nenhum arquivo foi alterado nesta rodada — revise o pedido ou use **Continuar**.");
+  } else if (!opts.errorMessage && !opts.silentResume) {
+    lines.push("", "Nenhum arquivo foi alterado nesta rodada.");
   }
 
   const tools = [...new Set(opts.toolsUsed)].filter(Boolean);
-  if (tools.length > 0) {
+  if (tools.length > 0 && !opts.silentResume) {
     lines.push("", `Ferramentas usadas: ${tools.slice(0, 6).join(", ")}${tools.length > 6 ? "…" : ""}.`);
   }
 
-  lines.push("", stepLabel);
-
-  if (opts.resumable && !opts.errorMessage) {
-    lines.push("", "Use **Continuar** no chat para retomar de onde parei.");
-  } else if (!opts.partial && !opts.errorMessage && fileCount > 0) {
+  if (!opts.silentResume && !opts.errorMessage && !opts.partial && fileCount > 0) {
     lines.push("", "Confira o **preview** à direita — se algo faltar, descreva o próximo ajuste.");
   }
 

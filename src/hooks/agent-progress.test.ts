@@ -154,7 +154,7 @@ describe("applyAgentProgressEvent", () => {
     expect(first.streamText).toBe("Olá mundo");
   });
 
-  it("delivery_checkpoint atualiza passo, streamText e deliveryFiles", () => {
+  it("delivery_checkpoint silencioso marca autoResuming sem pausar", () => {
     const next = applyAgentProgressEvent(
       { ...base, finished: false, streamText: null },
       ev("delivery_checkpoint", {
@@ -163,13 +163,16 @@ describe("applyAgentProgressEvent", () => {
         deliveryFiles: ["app/build.gradle.kts", "src/App.tsx"],
         narration: "Gradle configurado.",
         resumable: true,
+        silent: true,
       }),
     );
     expect(next.currentStep).toBe(3);
     expect(next.totalSteps).toBe(10);
     expect(next.streamText).toBe("Gradle configurado.");
     expect(next.deliveryFiles).toEqual(["app/build.gradle.kts", "src/App.tsx"]);
-    expect(next.resumable).toBe(true);
+    expect(next.autoResuming).toBe(true);
+    expect(next.resumable).toBe(false);
+    expect(next.finished).toBe(false);
   });
 
   it("heartbeat atualiza statusHint", () => {

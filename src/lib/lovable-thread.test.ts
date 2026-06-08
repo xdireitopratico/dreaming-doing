@@ -131,6 +131,21 @@ describe("buildLovableThread", () => {
     expect(resolved?.deliveryFiles).toEqual(["app/build.gradle.kts"]);
   });
 
+  it("merge assistants consecutivos com mesmo runId", () => {
+    const messages: ChatMessage[] = [
+      msg("u1", "user", "build app"),
+      { ...msg("a1", "assistant", "Passo 1"), runId: "run-x" },
+      { ...msg("a2", "assistant", "Passo 2"), runId: "run-x" },
+      { ...msg("a3", "assistant", "Pronto!"), runId: "run-x" },
+    ];
+    const thread = buildLovableThread(messages, initialAgentProgress, {});
+    expect(thread.map((t) => t.kind)).toEqual(["user", "assistant"]);
+    const slot = thread[1] as Extract<(typeof thread)[number], { kind: "assistant" }>;
+    expect(slot.runId).toBe("run-x");
+    expect(slot.message?.content).toContain("Passo 1");
+    expect(slot.message?.content).toContain("Pronto!");
+  });
+
   it("erro de connect sem runId aparece no turno pendente", () => {
     const messages = [msg("u1", "user", "build")];
     const progress = {

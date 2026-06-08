@@ -148,7 +148,10 @@ export function ChatInput({
   const [historyIndex, setHistoryIndex] = useState(-1);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const pinnedToBottomRef = useRef(true);
+  const [showNewMessagesPill, setShowNewMessagesPill] = useState(false);
   const historyRef = useRef<string[]>([]);
+  const PIN_THRESHOLD_PX = 100;
   const effectiveProgress = useMemo(
     () => resolveEffectiveAgentProgress(agentProgress, messages),
     [agentProgress, messages],
@@ -161,13 +164,29 @@ export function ChatInput({
     }
   }, [externalPrompt, onExternalPromptConsumed]);
 
-  // Auto-scroll
+  const scrollToBottom = useCallback((behavior: ScrollBehavior = "auto") => {
+    const el = scrollRef.current;
+    if (!el) return;
+    el.scrollTo({ top: el.scrollHeight, behavior });
+    pinnedToBottomRef.current = true;
+    setShowNewMessagesPill(false);
+  }, []);
+
+  const handleMessagesScroll = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    const pinned = distanceFromBottom <= PIN_THRESHOLD_PX;
+    pinnedToBottomRef.current = pinned;
+    if (pinned) setShowNewMessagesPill(false);
+  }, []);
+
+  // Pin-to-bottom: só desce se o usuário já estava no fim
   useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTo({
-        top: scrollRef.current.scrollHeight,
-        behavior: "smooth",
-      });
+    if (pinnedToBottomRef.current) {
+      scrollToBottom("auto");
+    } else {
+      setShowNewMessagesPill(true);
     }
   }, [
     messages,
@@ -176,6 +195,7 @@ export function ChatInput({
     agentProgress?.tools.length,
     agentProgress?.streamText,
     agentProgress?.diffs.length,
+    scrollToBottom,
   ]);
 
   // Auto-resize textarea
@@ -369,7 +389,7 @@ export function ChatInput({
 
   return (
     <div className="forge-chat-inner" onDrop={handleDrop} onDragOver={(e) => e.preventDefault()}>
-      <div ref={scrollRef} className="forge-messages">
+      <div ref={scrollRef} className="forge-messages" onScroll={handleMessagesScroll}>
         {messages.length === 0 ? (
           <div className="forge-msg-text space-y-3">
             {welcomeMarkdown ? (
@@ -426,6 +446,15 @@ export function ChatInput({
               onPlanApprove={onPlanApprove}
               onPlanReject={onPlanReject}
             />
+        )}
+        {showNewMessagesPill && (
+          <button
+            type="button"
+            className="forge-new-messages-pill"
+            onClick={() => scrollToBottom("smooth")}
+          >
+            Novas mensagens
+          </button>
         )}
       </div>
 

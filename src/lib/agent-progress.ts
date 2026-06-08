@@ -294,14 +294,18 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
       const deliveryFiles = Array.isArray(data.deliveryFiles)
         ? (data.deliveryFiles as string[]).filter((p) => typeof p === "string")
         : prev.deliveryFiles;
+      const silent = data.silent === true;
       return {
         ...prev,
+        finished: false,
+        error: null,
         currentStep: typeof data.step === "number" ? data.step : prev.currentStep,
         totalSteps: typeof data.totalSteps === "number" ? data.totalSteps : prev.totalSteps,
         streamText: narration || prev.streamText,
         deliveryFiles,
-        resumable: data.resumable === true || prev.resumable,
-        statusHint: (data.message as string) ?? prev.statusHint ?? "Entrega parcial registrada…",
+        resumable: silent ? false : data.resumable === true || prev.resumable,
+        autoResuming: silent || data.resumable === true,
+        statusHint: (data.message as string) ?? prev.statusHint ?? "Continuando…",
         timeline: [...prev.timeline, event],
       };
     }

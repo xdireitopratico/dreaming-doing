@@ -104,6 +104,55 @@ function insertIndexForActiveRun(
   return null;
 }
 
+function assistantRunId(msg: ChatMessage): string | undefined {
+  return (
+    msg.runId ??
+    (typeof msg.meta?.buildRunId === "string" ? msg.meta.buildRunId : undefined) ??
+    (typeof msg.meta?.runId === "string" ? msg.meta.runId : undefined)
+  );
+}
+
+function mergeAssistantIntoItems(
+  items: LovableThreadItem[],
+  msg: ChatMessage,
+  runId?: string,
+): LovableThreadItem[] {
+  const last = items[items.length - 1];
+  if (
+    last?.kind === "assistant" &&
+    runId &&
+    last.runId === runId &&
+    !last.isActive &&
+    !last.live &&
+    !last.frozen
+  ) {
+    const prev = last.message;
+    const mergedContent = [prev?.content, msg.content]
+      .filter((c) => c?.trim())
+      .join("\n\n") || msg.content;
+    const next = [...items];
+    next[items.length - 1] = {
+      ...last,
+      message: {
+        ...msg,
+        content: mergedContent,
+        toolCalls: msg.toolCalls?.length ? msg.toolCalls : prev?.toolCalls,
+      },
+      runId,
+    };
+    return next;
+  }
+  return [
+    ...items,
+    {
+      kind: "assistant" as const,
+      message: msg,
+      runId,
+      isActive: false,
+    },
+  ];
+}
+
 function insertAssistantSlot(
   items: LovableThreadItem[],
   insertAt: number,
@@ -141,38 +190,16 @@ export function buildLovableThread(
   const { activeRunId, running = false, frozenRuns } = opts;
   let items: LovableThreadItem[] = [];
 
-  for (let i = 0; i < messages.length; i++) {
-    const msg = messages[i]!;
+  for (const msg of messages) {
     if (msg.role === "tool") continue;
 
     if (msg.role === "user") {
       items.push({ kind: "user", message: msg });
-      const next = messages[i + 1];
-      if (next?.role === "assistant") {
-        const nextRunId =
-          next.runId ??
-          (typeof next.meta?.buildRunId === "string" ? next.meta.buildRunId : undefined);
-        items.push({
-          kind: "assistant",
-          message: next,
-          runId: nextRunId,
-          isActive: false,
-        });
-        i++;
-      }
       continue;
     }
 
     if (msg.role === "assistant") {
-      const assistantRunId =
-        msg.runId ??
-        (typeof msg.meta?.buildRunId === "string" ? msg.meta.buildRunId : undefined);
-      items.push({
-        kind: "assistant",
-        message: msg,
-        runId: assistantRunId,
-        isActive: false,
-      });
+      items = mergeAssistantIntoItems(items, msg, assistantRunId(msg));
     }
   }
 
