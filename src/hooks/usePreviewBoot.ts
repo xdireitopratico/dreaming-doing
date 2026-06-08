@@ -6,6 +6,7 @@ import { getSupabaseEnv } from "@/lib/supabase-env";
 import { logEditorTelemetryEvent } from "@/lib/editor-telemetry";
 import { formatE2bUserError } from "@/lib/e2b-status";
 import { isNoFilesPreviewError } from "@/lib/preview-boot-guards";
+import { isStaleE2bPreviewError } from "@/lib/e2b-preview-stale";
 
 type BootResult = {
   url?: string;
@@ -18,6 +19,7 @@ type BootResult = {
   logs?: string;
   error?: string;
   code?: string;
+  stale?: boolean;
 };
 
 type BootOpts = {
@@ -53,6 +55,8 @@ export function usePreviewBoot(projectId: string, opts?: UsePreviewBootOpts) {
   const [lastError, setLastError] = useState<string | null>(null);
   const [warming, setWarming] = useState(false);
   const [bootLogs, setBootLogs] = useState<string | null>(null);
+  const [sandboxStale, setSandboxStale] = useState(false);
+  const staleRebootRef = useRef(false);
   const bootAttemptsRef = useRef(0);
   const probeFailuresRef = useRef(0);
   const bootInFlightRef = useRef(false);
@@ -111,11 +115,23 @@ export function usePreviewBoot(projectId: string, opts?: UsePreviewBootOpts) {
         if (fileCount === 0 && isNoFilesPreviewError(lastError)) return null;
         try {
           const body = await callPreviewBoot({ ...opts, silent: true });
+          if (body?.stale || body?.code === "e2b_sandbox_stale") {
+            setSandboxStale(true);
+            await qc.invalidateQueries({ queryKey: ["project", projectId] });
+            if (!staleRebootRef.current && fileCount > 0) {
+              staleRebootRef.current = true;
+              logEditorTelemetryEvent("preview", "stale_reboot", "info", projectId);
+              void boot({ force: true, silent: true }).finally(() => {
+                staleRebootRef.current = false;
+              });
+            }
+            return null;
+          }
           if (body?.ready) {
             probeFailuresRef.current = 0;
+            setSandboxStale(false);
             setWarming(false);
             await qc.invalidateQueries({ queryKey: ["project", projectId] });
-
           } else if (body?.url) {
             probeFailuresRef.current += 1;
             if (probeFailuresRef.current >= PROBE_FAIL_BEFORE_FORCE) {
@@ -137,6 +153,7 @@ export function usePreviewBoot(projectId: string, opts?: UsePreviewBootOpts) {
       bootInFlightRef.current = true;
       setBooting(true);
       setLastError(null);
+      setSandboxStale(false);
       if (!opts?.silent) setWarming(false);
       logEditorTelemetryEvent("preview", "boot_start", "info", projectId);
       try {
@@ -169,10 +186,16 @@ export function usePreviewBoot(projectId: string, opts?: UsePreviewBootOpts) {
         const code = (e as any)?.code;
         const isCircuit = code === "e2b_creation_circuit" || /circuit|cooling|e2b_creation_circuit/i.test(msg);
         const isNoFiles = code === "no_files" || /sem arquivos|ainda não gerou|sem projeto/i.test(msg);
-        setLastError(isCircuit ? `E2B creation blocked (circuit open). ${msg}` : msg);
+        const isStale = isStaleE2bPreviewError(msg, code);
+        if (isStale) setSandboxStale(true);
+        setLastError(
+          isCircuit
+            ? `E2B creation blocked (circuit open). ${msg}`
+            : formatE2bUserError(msg, code),
+        );
         logEditorTelemetryEvent("preview", "boot_fail", "error", (isCircuit ? "circuit:" : isNoFiles ? "nofiles:" : "") + msg.slice(0, 240));
         // No files: silently show empty guide, never spam toasts or retry loops
-        if (!opts?.silent && !isNoFiles && !msg.includes("agente") && !isCircuit) {
+        if (!opts?.silent && !isNoFiles && !isStale && !msg.includes("agente") && !isCircuit) {
           toast.error(msg.length > 140 ? `${msg.slice(0, 140)}…` : msg);
         }
         if (isNoFiles) {
@@ -218,6 +241,8 @@ export function usePreviewBoot(projectId: string, opts?: UsePreviewBootOpts) {
 
   useEffect(() => {
     bootInFlightRef.current = false;
+    setSandboxStale(false);
+    staleRebootRef.current = false;
   }, [projectId]);
 
   useEffect(() => {
@@ -263,7 +288,9 @@ export function usePreviewBoot(projectId: string, opts?: UsePreviewBootOpts) {
     warming,
     isE2bCircuit,
     isNoFiles,
+    sandboxStale,
     clearWarming: () => setWarming(false),
     clearError: () => setLastError(null),
+    clearSandboxStale: () => setSandboxStale(false),
   };
 }

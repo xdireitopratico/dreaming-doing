@@ -1,3 +1,5 @@
+import { isStaleE2bPreviewError, STALE_SANDBOX_USER_MESSAGE } from "@/lib/e2b-preview-stale";
+
 /** Linha pública do conector E2B (connectors_public). */
 export type E2bConnectorRow = {
   kind: string | null;
@@ -35,6 +37,9 @@ export function isE2bNotConfiguredError(message: string, code?: string): boolean
 
 /** Erros de preview-boot / sandbox — não confundir falha da API E2B com chave ausente. */
 export function formatE2bUserError(message: string, code?: string): string {
+  if (isStaleE2bPreviewError(message, code)) {
+    return STALE_SANDBOX_USER_MESSAGE;
+  }
   if (isE2bNotConfiguredError(message, code)) {
     return "Chave E2B não encontrada no servidor. Abra API Keys (/api), salve de novo e recarregue o editor.";
   }

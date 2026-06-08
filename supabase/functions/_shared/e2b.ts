@@ -23,6 +23,17 @@ export const E2B_TEMPLATE_CANDIDATES = e2bTemplateCandidates();
 
 export const E2B_PROJECT_DIR = "/home/user";
 
+/** Página de erro da E2B quando o sandbox expirou ou foi removido (HTTP 200). */
+export function isStaleE2bPreviewBody(html: string): boolean {
+  const lower = html.toLowerCase();
+  return (
+    lower.includes("sandbox not found") ||
+    lower.includes("wasn't found") ||
+    lower.includes("wasn&#39;t found") ||
+    lower.includes("sandbox wasn't found")
+  );
+}
+
 /** Metadata E2B para rastrear sandboxes por projeto (cleanup no project-delete). */
 export const FORGE_E2B_APP = "dreaming-doing";
 export const FORGE_PROJECT_META_KEY = "forge_project_id";

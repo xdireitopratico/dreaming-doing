@@ -14,6 +14,7 @@ import {
   PREVIEW_TTL_MS,
   PROBE_ATTEMPTS_AFTER_BOOT,
   probePreviewUrl,
+  probePreviewUrlStatus,
   readDevLogTail,
 } from "../_shared/preview-dev.ts";
 import { autoPublishIfNeeded } from "../_shared/auto-publish.ts";
@@ -75,17 +76,18 @@ async function rebootPreviewDevServer(
   files: ProjectFile[],
   devPort: number,
   previewUrl: string,
-): Promise<{ ready: boolean; sandboxId: string; installOk: boolean; logs?: string }> {
+): Promise<{ ready: boolean; sandboxId: string; url: string; installOk: boolean; logs?: string }> {
   const { sandbox, sandboxId } = await connectSandboxForPreview(supabase, projectId, apiKey);
   await syncProjectFilesToSandbox(sandbox, files);
   const { installOk } = await bootDevServerInSandbox(sandbox, files, devPort);
-  const ready = await probePreviewUrl(previewUrl, PROBE_ATTEMPTS_AFTER_BOOT);
+  const freshUrl = previewUrlFromSandbox(sandbox, devPort);
+  const ready = await probePreviewUrl(freshUrl, PROBE_ATTEMPTS_AFTER_BOOT);
   let logs: string | undefined;
   if (!ready) {
     logs = await readDevLogTail(sandbox);
     console.warn("[preview-boot] Vite ainda não respondeu:", logs.slice(0, 400));
   }
-  return { ready, sandboxId, installOk, logs };
+  return { ready, sandboxId, url: freshUrl, installOk, logs };
 }
 
 Deno.serve(async (req) => {
@@ -152,11 +154,9 @@ Deno.serve(async (req) => {
         );
         await syncProjectFilesToSandbox(sandbox, projectFiles);
 
-        const url =
-          (typeof existing.previewUrl === "string" && existing.previewUrl.trim()) ||
-          previewUrlFromSandbox(sandbox, devPort);
-
-        let ready = await probePreviewUrl(url, 3);
+        let url = previewUrlFromSandbox(sandbox, devPort);
+        const probeStatus = await probePreviewUrlStatus(url, 3);
+        let ready = probeStatus === "live";
         let rebootLogs: string | undefined;
         let activeSandboxId = sandboxId;
 
@@ -170,6 +170,7 @@ Deno.serve(async (req) => {
             url,
           );
           ready = reboot.ready;
+          url = reboot.url;
           activeSandboxId = reboot.sandboxId;
           rebootLogs = reboot.logs;
         }
@@ -239,7 +240,24 @@ Deno.serve(async (req) => {
         }, 200);
       }
 
-      let ready = await probePreviewUrl(cached.url, 3);
+      const probeStatus = await probePreviewUrlStatus(cached.url, 3);
+      if (probeStatus === "stale") {
+        await supabase
+          .from("projects")
+          .update({ meta: clearedPreviewMeta(existing) })
+          .eq("id", projectId);
+        return json({
+          url: null,
+          ready: false,
+          reused: false,
+          stale: true,
+          probeOnly: true,
+          code: "e2b_sandbox_stale",
+        }, 200);
+      }
+
+      let activeUrl = cached.url;
+      let ready = probeStatus === "live";
       let rebootLogs: string | undefined;
       let sandboxId =
         typeof existing.previewSandboxId === "string" ? existing.previewSandboxId : undefined;
@@ -256,6 +274,7 @@ Deno.serve(async (req) => {
           cached.url,
         );
         ready = reboot.ready;
+        activeUrl = reboot.url;
         sandboxId = reboot.sandboxId;
         rebootLogs = reboot.logs;
       }
@@ -265,7 +284,7 @@ Deno.serve(async (req) => {
       const nextMeta = {
         ...existing,
         previewReady: ready,
-        previewUrl: cached.url,
+        previewUrl: activeUrl,
         ...(sandboxId ? { previewSandboxId: sandboxId } : {}),
       };
       await supabase.from("projects").update({ meta: nextMeta }).eq("id", projectId);
@@ -281,7 +300,7 @@ Deno.serve(async (req) => {
         publishedUrl = pub.url ?? null;
       }
       return json({
-        url: cached.url,
+        url: activeUrl,
         expiresAt: cached.expiresAt,
         reused: true,
         ready,
@@ -308,51 +327,62 @@ Deno.serve(async (req) => {
         }, 200);
       }
 
-      let ready = await probePreviewUrl(cached.url, 2);
-      if (!ready && existing.previewReady === true) {
-        const devPort = devPortFromMeta ??
-          (Number.parseInt(detectDevPort(projectFiles), 10) || 5173);
-        const reboot = await rebootPreviewDevServer(
-          supabase,
-          projectId,
-          E2B_API_KEY,
-          projectFiles,
-          devPort,
-          cached.url,
-        );
-        ready = reboot.ready;
+      const probeStatus = await probePreviewUrlStatus(cached.url, 2);
+      if (probeStatus === "stale") {
         await supabase
           .from("projects")
-          .update({
-            meta: {
-              ...existing,
-              previewReady: ready,
-              previewSandboxId: reboot.sandboxId,
-            },
-          })
+          .update({ meta: clearedPreviewMeta(existing) })
           .eq("id", projectId);
+      } else {
+        let activeUrl = cached.url;
+        let ready = probeStatus === "live";
+        if (!ready && existing.previewReady === true) {
+          const devPort = devPortFromMeta ??
+            (Number.parseInt(detectDevPort(projectFiles), 10) || 5173);
+          const reboot = await rebootPreviewDevServer(
+            supabase,
+            projectId,
+            E2B_API_KEY,
+            projectFiles,
+            devPort,
+            cached.url,
+          );
+          ready = reboot.ready;
+          activeUrl = reboot.url;
+          await supabase
+            .from("projects")
+            .update({
+              meta: {
+                ...existing,
+                previewReady: ready,
+                previewUrl: activeUrl,
+                previewSandboxId: reboot.sandboxId,
+              },
+            })
+            .eq("id", projectId);
+        }
+        let published = false;
+        let publishedUrl: string | null =
+          typeof existing.publishedUrl === "string" ? existing.publishedUrl : null;
+        if (ready) {
+          const pub = await autoPublishIfNeeded(
+            supabase,
+            projectId,
+            userData.user.id,
+            { ...existing, previewUrl: activeUrl, previewReady: true },
+          );
+          published = pub.published;
+          if (pub.url) publishedUrl = pub.url;
+        }
+        return json({
+          url: activeUrl,
+          expiresAt: cached.expiresAt,
+          reused: true,
+          ready,
+          published,
+          publishedUrl,
+        });
       }
-      let published = false;
-      let publishedUrl: string | null =
-        typeof existing.publishedUrl === "string" ? existing.publishedUrl : null;
-      if (ready) {
-        const pub = await autoPublishIfNeeded(
-          supabase,
-          projectId,
-          userData.user.id,
-          { ...existing, previewUrl: cached.url, previewReady: true },
-        );
-        published = pub.published;
-        if (pub.url) publishedUrl = pub.url;
-      }
-      return json({
-        url: cached.url,
-        expiresAt: cached.expiresAt,
-        reused: true,
-        ready,
-        published,
-        publishedUrl,
-      });
     }
 
     const files = await loadProjectFiles(supabase, projectId);

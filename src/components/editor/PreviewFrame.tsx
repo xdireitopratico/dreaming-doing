@@ -41,6 +41,9 @@ interface PreviewFrameProps {
   isNoFiles?: boolean;
   /** Vite/React: srcDoc do seed é inútil sem bundler — mostrar Let's Build até devUrl. */
   isReactProject?: boolean;
+  /** Sandbox E2B expirou — não mostrar iframe com erro cru da E2B. */
+  sandboxStale?: boolean;
+  previewReady?: boolean;
 }
 
 export function PreviewFrame({
@@ -65,6 +68,8 @@ export function PreviewFrame({
   isNoFiles = false,
   isReactProject = false,
   previewSyncing = false,
+  sandboxStale = false,
+  previewReady = false,
 }: PreviewFrameProps) {
   const [iframeLoading, setIframeLoading] = useState(false);
   const deviceWidth = previewDeviceWidth(device);
@@ -102,6 +107,14 @@ export function PreviewFrame({
   }, [devUrl, indexFile, isReactProject]);
 
   const showBootSpinner = booting && !agentRunning && !iframeSrc && !isNoFiles;
+
+  const showLetsBuild =
+    sandboxStale ||
+    isNoFiles ||
+    (!iframeSrc && !previewContent) ||
+    (Boolean(iframeSrc) && !previewReady && !booting && !warming && !previewSyncing && !iframeLoading);
+
+  const canShowIframe = Boolean(iframeSrc) && !sandboxStale && !showLetsBuild;
 
   return (
     <div className="forge-preview-root flex min-h-0 flex-1 flex-col">
@@ -145,7 +158,7 @@ export function PreviewFrame({
               Mova o mouse ou clique para reativar.
             </p>
           </div>
-        ) : !bootError && iframeSrc ? (
+        ) : !bootError && canShowIframe && iframeSrc ? (
           <>
             {(warming || iframeLoading || previewSyncing) && (
               <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 bg-white/90">
@@ -175,11 +188,12 @@ export function PreviewFrame({
             sandbox="allow-scripts"
             title="Preview"
           />
-        ) : !bootError && (!iframeSrc && !previewContent) ? (
+        ) : !bootError && showLetsBuild ? (
           <PreviewEmptyGuide
             projectName={projectName}
             e2bConnected={e2bConnected}
             agentHasRun={agentHasRun}
+            staleSandbox={sandboxStale}
             onOpenPreview={onRefresh}
             onImportRepo={onImportRepo}
             onFocusChat={onFocusChat}

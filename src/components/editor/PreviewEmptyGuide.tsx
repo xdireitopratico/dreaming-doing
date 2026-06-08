@@ -6,6 +6,8 @@ interface PreviewEmptyGuideProps {
   projectName?: string;
   e2bConnected: boolean;
   agentHasRun: boolean;
+  /** Sandbox E2B expirou — mensagem de reconexão em vez do estado vazio padrão. */
+  staleSandbox?: boolean;
   onOpenPreview?: () => void;
   onImportRepo?: (repoUrl: string) => void;
   onFocusChat?: () => void;
@@ -15,6 +17,7 @@ export function PreviewEmptyGuide({
   projectName,
   e2bConnected,
   agentHasRun,
+  staleSandbox = false,
   onOpenPreview,
   onImportRepo,
   onFocusChat,
@@ -36,16 +39,22 @@ export function PreviewEmptyGuide({
 
       <div className="max-w-md space-y-2">
         <h2 className="text-lg font-semibold text-neutral-900">
-          {projectName ? <>Vamos construir <strong>{projectName}</strong></> : <>Seu projeto aparecerá aqui</>}
+          {staleSandbox
+            ? "Preview desconectado"
+            : projectName
+              ? <>Vamos construir <strong>{projectName}</strong></>
+              : <>Seu projeto aparecerá aqui</>}
         </h2>
         <p className="text-sm text-neutral-500 leading-relaxed">
-          Cole a URL de um repositório GitHub para importar, ou descreva sua ideia no chat
-          para o agente começar.
+          {staleSandbox
+            ? "O ambiente E2B expirou (normal após ~30 min). O FORGE reconecta automaticamente — ou clique abaixo."
+            : "Cole a URL de um repositório GitHub para importar, ou descreva sua ideia no chat para o agente começar."}
         </p>
       </div>
 
       <p className="text-xs font-bold tracking-[0.15em] uppercase text-neutral-300">Let's Build</p>
 
+      {!staleSandbox && (
       <form onSubmit={submit} className="w-full max-w-md flex items-center gap-2">
         <div className="relative flex-1">
           <Github className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-neutral-400" />
@@ -66,7 +75,9 @@ export function PreviewEmptyGuide({
           <ArrowRight className="size-3.5" />
         </button>
       </form>
+      )}
 
+      {!staleSandbox && (
       <button
         type="button"
         onClick={onFocusChat}
@@ -75,6 +86,18 @@ export function PreviewEmptyGuide({
         <MessageSquare className="size-4" />
         Ou descreva sua ideia no chat
       </button>
+      )}
+
+      {staleSandbox && onOpenPreview && (
+        <button
+          type="button"
+          onClick={onOpenPreview}
+          className="rounded-full bg-neutral-900 px-5 py-2.5 text-sm font-medium text-white hover:bg-neutral-800"
+          data-testid="preview-stale-reconnect"
+        >
+          Reconectar preview
+        </button>
+      )}
 
       {!e2bConnected && (
         <p className="text-xs text-amber-800/90 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 max-w-md">

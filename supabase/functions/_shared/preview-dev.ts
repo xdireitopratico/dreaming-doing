@@ -1,6 +1,8 @@
 /** Detecção de porta/comando dev e boot do Vite no sandbox E2B. */
-import { E2B_PROJECT_DIR } from "./e2b.ts";
+import { E2B_PROJECT_DIR, isStaleE2bPreviewBody } from "./e2b.ts";
 import type { E2bRestSandbox } from "./e2b-rest.ts";
+
+export type PreviewProbeStatus = "live" | "stale" | "down";
 
 export const PREVIEW_TTL_MS = 25 * 60 * 1000;
 export const PROBE_ATTEMPTS = 3;
@@ -66,15 +68,20 @@ export function isCachedPreviewValid(
   return null;
 }
 
-export async function probePreviewUrl(url: string, attempts = PROBE_ATTEMPTS): Promise<boolean> {
+export async function probePreviewUrlStatus(
+  url: string,
+  attempts = PROBE_ATTEMPTS,
+): Promise<PreviewProbeStatus> {
   for (let i = 0; i < attempts; i++) {
     try {
       const probe = await fetch(url, {
         method: "GET",
         signal: AbortSignal.timeout(PROBE_FETCH_MS),
       });
+      const snippet = await probe.text().then((t) => t.slice(0, 12_000)).catch(() => "");
+      if (isStaleE2bPreviewBody(snippet)) return "stale";
       if (probe.ok || (probe.status >= 200 && probe.status < 500)) {
-        return true;
+        return "live";
       }
     } catch {
       /* Vite ainda subindo */
@@ -83,7 +90,11 @@ export async function probePreviewUrl(url: string, attempts = PROBE_ATTEMPTS): P
       await new Promise((r) => setTimeout(r, PROBE_INTERVAL_MS));
     }
   }
-  return false;
+  return "down";
+}
+
+export async function probePreviewUrl(url: string, attempts = PROBE_ATTEMPTS): Promise<boolean> {
+  return (await probePreviewUrlStatus(url, attempts)) === "live";
 }
 
 /** Instala deps (se necessário), mata Vite antigo e sobe dev server em background. */

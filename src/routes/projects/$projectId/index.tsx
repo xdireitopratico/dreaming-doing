@@ -279,6 +279,7 @@ function EditorPage() {
       previewRoute={previewRoute}
       setPreviewRoute={setPreviewRoute}
       devUrl={devUrl}
+      previewReady={previewReady}
       previewIframeRef={previewIframeRef}
       setPreviewReloadNonce={setPreviewReloadNonce}
       previewDevice={previewDevice}
