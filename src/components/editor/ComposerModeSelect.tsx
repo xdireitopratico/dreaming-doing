@@ -7,10 +7,9 @@ import { DropdownMenu, DropdownMenuTrigger } from "@/components/ui/dropdown-menu
 import type { AgentComposerMode } from "@/components/editor/ChatInput";
 
 /**
- * P1.1: dropdown simplificado para 2 modos (Plan/Build), default Plan.
- *  - Plan: agente propõe plano e pausa pra aprovação.
- *  - Build: agente executa o pedido direto (sem gate).
- * Sem modo "chat" — toda mensagem do composer vira run de agente.
+ * Modos estilo Lovable (docs.lovable.dev/features/plan-mode + agent-mode).
+ *  - Plan: pensar, perguntar, propor plano — sem mexer no código.
+ *  - Build: implementar direto quando o pedido for claro.
  */
 export function ComposerModeSelect({
   value,

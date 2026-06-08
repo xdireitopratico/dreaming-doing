@@ -37,6 +37,8 @@ interface PreviewFrameProps {
   previewIdle?: boolean;
   /** Projeto sem arquivos — não tenta criar sandbox, mostra placeholder limpo. */
   isNoFiles?: boolean;
+  /** Vite/React: srcDoc do seed é inútil sem bundler — mostrar Let's Build até devUrl. */
+  isReactProject?: boolean;
 }
 
 export function PreviewFrame({
@@ -59,6 +61,7 @@ export function PreviewFrame({
   onFocusChat,
   previewIdle = false,
   isNoFiles = false,
+  isReactProject = false,
 }: PreviewFrameProps) {
   const [iframeLoading, setIframeLoading] = useState(false);
   const deviceWidth = previewDeviceWidth(device);
@@ -90,9 +93,10 @@ export function PreviewFrame({
 
   const previewContent = useMemo(() => {
     if (devUrl) return null;
+    if (isReactProject) return null;
     if (indexFile) return indexFile.content;
     return null;
-  }, [devUrl, indexFile]);
+  }, [devUrl, indexFile, isReactProject]);
 
   const showBootSpinner = booting && !agentRunning && !iframeSrc && !isNoFiles;
 

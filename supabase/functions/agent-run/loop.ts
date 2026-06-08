@@ -276,14 +276,39 @@ export class AgentLoop {
         maxSteps: this.maxStepsLimit,
       });
 
-      this.emit("phase", { phase: "plan", message: classification.summary, intent: this.state.intent });
+      this.emit("phase", {
+        phase: this.planMode ? "plan" : "build",
+        message: classification.summary,
+        intent: this.state.intent,
+      });
       await this.saveCheckpoint(LoopPhase.CREATE_PLAN);
 
-      // Plan mode: extrai plano, emite plan_proposed, marca run como completed.
-      // O run termina aqui — o cliente recebe o plano via Realtime e
-      // dispara uma nova run de build via plan-decide server action.
+      // Lovable-style: pedido vago → pergunta no chat (Plan e Build).
+      if (this.originalUserRequest && needsQualify(this.originalUserRequest, classification)) {
+        const qualifyResult = await this.runQualifyPhase(executionModel, this.originalUserRequest);
+        if (qualifyResult.stopForUser) {
+          const q = qualifyResult.message || "Me conte mais sobre o que você quer construir.";
+          this.emit("assistant_text", { text: q, final: true });
+          this.emit("gate_decision", {
+            phase: "qualify",
+            reason: "needsQualify triggered (explicit interaction request or vague/short prompt)",
+            awaiting: true,
+          });
+          await this.persistFinal(q);
+          await this.clearCheckpoint();
+          await this.markRunStatus("awaiting_user", {
+            awaitingUser: { type: "qualify", message: q.slice(0, 200) },
+          });
+          this.emit("done", { summary: q, qualified: true, awaiting: true });
+          return { ok: true, summary: q, steps: 0, toolsUsed: [] };
+        }
+      }
+
+      // Plan mode: plano na Plan view + mensagem no chat; código só após aprovação.
       if (this.planMode) {
         const proposedPlan = this.proposePlan(classification);
+        const planChatText = this.buildPlanChatMessage(proposedPlan);
+        this.emit("assistant_text", { text: planChatText, final: true });
         this.emit("plan_proposed", {
           planId: proposedPlan.planId,
           summary: proposedPlan.summary,
@@ -297,6 +322,7 @@ export class AgentLoop {
           planId: proposedPlan.planId,
           stepCount: proposedPlan.steps.length,
         });
+        await this.persistPlanFinal(planChatText, proposedPlan);
         await this.saveCheckpoint(LoopPhase.CREATE_PLAN, true);
         await this.markRunStatus("completed", { plan: proposedPlan });
         this.emit("done", {
@@ -310,30 +336,6 @@ export class AgentLoop {
           steps: 0,
           toolsUsed: [],
         };
-      }
-
-      if (this.originalUserRequest && needsQualify(this.originalUserRequest, classification)) {
-        const qualifyResult = await this.runQualifyPhase(executionModel, this.originalUserRequest);
-        if (qualifyResult.stopForUser) {
-          const q = qualifyResult.message || "Me conte mais sobre o que você quer construir.";
-          // Emit the question as visible assistant text so the chat advances immediately.
-          this.emit("assistant_text", { text: q, final: true });
-          // Visível para o usuário (e futuro UI) saber exatamente por que parou em conversa.
-          this.emit("gate_decision", {
-            phase: "qualify",
-            reason: "needsQualify triggered (explicit interaction request or vague/short prompt)",
-            awaiting: true,
-          });
-          await this.persistFinal(q);
-          await this.clearCheckpoint();
-          // Mark awaiting so start guards and UI treat this as a gate (not auto-execute on history).
-          // Usa markRunStatus que valida o status no CHECK constraint (awaiting_user).
-          await this.markRunStatus("awaiting_user", {
-            awaitingUser: { type: "qualify", message: q.slice(0, 200) },
-          });
-          this.emit("done", { summary: q, qualified: true, awaiting: true });
-          return { ok: true, summary: q, steps: 0, toolsUsed: [] };
-        }
       }
     }
 
@@ -856,10 +858,48 @@ export class AgentLoop {
     await this.sb.from("messages").update({ tool_calls, meta }).eq("id", msgId);
   }
 
+  private buildPlanChatMessage(plan: ProposedPlan): string {
+    const lines = [
+      `## Plano proposto`,
+      "",
+      plan.summary,
+    ];
+    if (plan.rationale?.trim()) {
+      lines.push("", plan.rationale.trim());
+    }
+    lines.push(
+      "",
+      "Revise o plano na visualização e clique em **Aprovar** para eu começar a construir.",
+    );
+    return lines.join("\n");
+  }
+
   private async persistFinal(summary: string): Promise<void> {
     const meta: Record<string, unknown> = {
       runId: this.runId ?? undefined,
       executionLog: this.state.executionLog,
+      finishedAt: new Date().toISOString(),
+    };
+    await this.sb.from("messages").insert({
+      conversation_id: this.state.conversationId,
+      role: "assistant",
+      parts: [{ type: "text", text: summary }],
+      tool_calls: [],
+      meta,
+    });
+    await this.sb.from("projects").update({ updated_at: new Date().toISOString() }).eq("id", this.state.projectId);
+  }
+
+  private async persistPlanFinal(summary: string, plan: ProposedPlan): Promise<void> {
+    const meta: Record<string, unknown> = {
+      runId: this.runId ?? undefined,
+      projectId: this.state.projectId,
+      planMode: true,
+      planStatus: "pending",
+      planId: plan.planId,
+      planSummary: plan.summary,
+      planRationale: plan.rationale ?? null,
+      planSteps: plan.steps,
       finishedAt: new Date().toISOString(),
     };
     await this.sb.from("messages").insert({

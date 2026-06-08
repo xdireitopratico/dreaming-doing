@@ -15,6 +15,7 @@ import { buildAgentNarrative } from "@/lib/agent-narrative";
 import { AgentTimeline } from "@/components/editor/AgentTimeline";
 import { ChatDiffViewer } from "@/components/editor/ChatDiffViewer";
 import { PlanViewer } from "@/components/editor/PlanViewer";
+import { storedPlanFromMessage } from "@/lib/plan-message-meta";
 
 interface ForgeAssistantBlockProps {
   message?: ChatMessage;
@@ -61,8 +62,13 @@ export function ForgeAssistantBlock({
   });
 
   const effectiveProgress = progress;
-  const planForRun =
+  const storedPlan = storedPlanFromMessage(message);
+  const livePlan =
     pendingPlan && (!runId || pendingPlan.runId === runId) ? pendingPlan : null;
+  const planForRun =
+    livePlan ??
+    (storedPlan?.status === "pending" ? storedPlan.plan : null);
+  const rejectedPlan = storedPlan?.status === "rejected" ? storedPlan.plan : null;
   const diffs = effectiveProgress?.diffs ?? [];
   const executionLog = Array.isArray(message?.meta?.executionLog)
     ? (message!.meta!.executionLog as string[])
@@ -160,13 +166,39 @@ export function ForgeAssistantBlock({
         </section>
       )}
 
-      {effectiveProgress?.finished && !displayText && !effectiveProgress.error && (
+      {effectiveProgress?.finished &&
+        !displayText &&
+        !effectiveProgress.error &&
+        !planForRun &&
+        !rejectedPlan && (
         <p
           className="forge-chat-live-line text-[var(--forge-muted)]"
           data-testid="assistant-turn-empty"
         >
           Resposta não gerada neste turno. Envie outra mensagem ou use Continuar no chat.
         </p>
+      )}
+
+      {rejectedPlan && !planForRun && (
+        <section
+          className="my-3 rounded-lg border border-[var(--border)] bg-[var(--surface-2)]/50 overflow-hidden opacity-80"
+          aria-label="Plano rejeitado"
+          data-testid="plan-rejected-history"
+        >
+          <header className="flex items-center gap-2 px-4 py-2 border-b border-[var(--border)]">
+            <span className="font-mono text-[10px] uppercase tracking-[0.1em] text-[var(--text-dim)]">
+              Plano rejeitado
+            </span>
+          </header>
+          <p className="px-4 py-2.5 text-[12px] text-[var(--silver)] leading-relaxed">
+            {rejectedPlan.summary}
+          </p>
+          {rejectedPlan.rationale && (
+            <p className="px-4 pb-2.5 text-[11px] italic text-[var(--text-dim)] leading-relaxed">
+              {rejectedPlan.rationale}
+            </p>
+          )}
+        </section>
       )}
 
       {hasDetails && effectiveProgress && (

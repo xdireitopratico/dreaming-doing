@@ -1,4 +1,5 @@
-import type { RefObject } from "react";
+import { useEffect, useState, type RefObject } from "react";
+import { AnimatePresence } from "framer-motion";
 
 import { EditorShell } from "@/components/EditorShell";
 import { EditorResizableLayout } from "@/components/editor/EditorResizableLayout";
@@ -17,6 +18,7 @@ import { CommandPalette, type PaletteAction } from "@/components/editor/CommandP
 import { ShortcutCheatsheet } from "@/components/editor/ShortcutCheatsheet";
 import { LogPanel, type LogEntry } from "@/components/editor/LogPanel";
 import { AiDiffViewer, type DiffEntry } from "@/components/editor/AiDiffViewer";
+import { PlanModal } from "@/components/editor/PlanModal";
 import type { useAgentRun } from "@/hooks/useAgentRun";
 import type { usePreviewBoot } from "@/hooks/usePreviewBoot";
 import type { useConnectors } from "@/hooks/useConnectors";
@@ -90,6 +92,7 @@ export type EditorPageLayoutProps = {
   handleContentChange: (path: string, content: string) => void;
   previewIdle: boolean;
   agentHasRun: boolean;
+  isReactProject: boolean;
   previewReloadNonce: number;
   diffEntries: DiffEntry[];
   logPanelOpen: boolean;
@@ -165,6 +168,7 @@ export function EditorPageLayout({
   handleContentChange,
   previewIdle,
   agentHasRun,
+  isReactProject,
   previewReloadNonce,
   diffEntries,
   logPanelOpen,
@@ -181,6 +185,18 @@ export function EditorPageLayout({
   handleDragLeave,
   handleDrop,
 }: EditorPageLayoutProps) {
+  const pendingPlan = agent.progress.pendingPlan;
+  const [dismissedPlanId, setDismissedPlanId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!pendingPlan) {
+      setDismissedPlanId(null);
+    }
+  }, [pendingPlan]);
+
+  const showPlanModal =
+    pendingPlan != null && pendingPlan.planId !== dismissedPlanId;
+
   return (
     <>
       <style>{HEAT_MAP_CSS}</style>
@@ -335,6 +351,7 @@ export function EditorPageLayout({
                           e2bConnected={e2bConnected}
                           previewIdle={previewIdle}
                           isNoFiles={previewBoot.isNoFiles}
+                          isReactProject={isReactProject}
                           projectName={projectName ?? undefined}
                           device={previewDevice}
                           onImportRepo={(url) => {
@@ -396,6 +413,23 @@ export function EditorPageLayout({
           <p className="text-sm text-[var(--primary)]">Solte os arquivos para importar</p>
         </div>
       )}
+
+      <AnimatePresence>
+        {showPlanModal && pendingPlan && (
+          <PlanModal
+            plan={pendingPlan}
+            onClose={() => setDismissedPlanId(pendingPlan.planId)}
+            onApprove={async (steps) => {
+              await handlePlanApprove(steps);
+              setDismissedPlanId(pendingPlan.planId);
+            }}
+            onReject={async (reason) => {
+              await handlePlanReject(reason);
+              setDismissedPlanId(pendingPlan.planId);
+            }}
+          />
+        )}
+      </AnimatePresence>
     </>
   );
 }

@@ -185,15 +185,13 @@ Deno.serve(async (req) => {
     const tasteActionRaw = body.tasteAction as string | undefined;
     const resumeRun = body.resume === true;
     const autoResume = body.autoResume === true;
-    // Fase 4.7: modo vem do dropdown do cliente (Chat/Plan/Build).
-    // - "chat" (default): sem plano, sem gate, agente decide
-    // - "plan": agente propõe plano e pausa pra aprovação
-    // - "build": sinônimo de plan neste momento (UX)
-    // Sem magic defaults: se o cliente não mandar 'mode', é 'chat'.
+    // Modo vem do dropdown (estilo Lovable): Plan = pensar/plano; Build = executar.
+    // - "plan": propõe plano, não mexe em código até aprovação
+    // - "build": loop de ferramentas (implementação direta quando pedido claro)
     const modeRaw = typeof body.mode === "string" ? body.mode.toLowerCase() : "chat";
     const mode: "chat" | "plan" | "build" =
       modeRaw === "plan" || modeRaw === "build" ? modeRaw : "chat";
-    const planMode = mode !== "chat";
+    const planMode = mode === "plan";
     const enabledSkillIds = normalizeIdList(body.enabledSkillIds);
     const enabledMcpIds = normalizeIdList(body.enabledMcpIds);
     const sessionExt = await buildSessionExtensionsPrompt(enabledSkillIds, enabledMcpIds);

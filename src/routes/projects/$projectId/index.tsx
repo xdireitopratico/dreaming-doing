@@ -320,6 +320,7 @@ function EditorPage() {
       handleContentChange={handlers.handleContentChange}
       previewIdle={previewIdle}
       agentHasRun={agentHasRun}
+      isReactProject={isReactProject}
       previewReloadNonce={previewReloadNonce}
       diffEntries={orchestration.diffEntries}
       logPanelOpen={logPanelOpen}

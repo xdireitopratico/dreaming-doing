@@ -103,6 +103,7 @@ export function useEditorPageHandlers({
   openTabs,
   setOpenTabs,
   composerMode,
+  setComposerMode,
   logPanelOpen,
   setLogPanelOpen,
   setLogPanelTab,
@@ -444,12 +445,14 @@ export function useEditorPageHandlers({
           },
         });
         agent.clearPendingPlan();
+        setComposerMode("build");
         toast.success(
           result.eventId
-            ? "Plano aprovado — agente executando…"
-            : "Plano aprovado — agente na fila.",
+            ? "Plano aprovado — modo Build, agente executando…"
+            : "Plano aprovado — modo Build, agente na fila.",
         );
         qc.invalidateQueries({ queryKey: ["conversation", projectId] });
+        qc.invalidateQueries({ queryKey: ["messages", conversation?.id] });
         qc.invalidateQueries({ queryKey: ["agent-runs", projectId] });
         if (result.newRunId && conversation) {
           await agent.watch(projectId, conversation.id, result.newRunId);
@@ -458,7 +461,7 @@ export function useEditorPageHandlers({
         toast.error((e as Error)?.message ?? "Falha ao aprovar plano");
       }
     },
-    [agent, agent.progress.pendingPlan, conversation, projectId, qc, planApproveFn],
+    [agent, agent.progress.pendingPlan, conversation, projectId, qc, planApproveFn, setComposerMode],
   );
 
   const handlePlanReject = useCallback(
@@ -469,10 +472,11 @@ export function useEditorPageHandlers({
         await planRejectFn({
           data: { runId: pp.runId, planId: pp.planId, reason },
         });
-        agent.clearPendingPlan();
-        toast.info("Plano rejeitado.");
+        await qc.invalidateQueries({ queryKey: ["messages", conversation?.id] });
         qc.invalidateQueries({ queryKey: ["conversation", projectId] });
         qc.invalidateQueries({ queryKey: ["agent-runs", projectId] });
+        agent.clearPendingPlan();
+        toast.info("Plano rejeitado — histórico mantido no chat.");
       } catch (e) {
         toast.error((e as Error)?.message ?? "Falha ao rejeitar plano");
       }

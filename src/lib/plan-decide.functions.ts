@@ -167,6 +167,29 @@ export const planReject = createServerFn({ method: "POST" })
       throw new Error(`Falha ao atualizar run: ${updErr.message}`);
     }
 
+    const { data: planMsgs } = await supabase
+      .from("messages")
+      .select("id, meta")
+      .eq("conversation_id", run.conversation_id)
+      .eq("role", "assistant")
+      .order("created_at", { ascending: false })
+      .limit(30);
+
+    const planMsg = (planMsgs ?? []).find((m) => {
+      const meta = (m.meta ?? {}) as Record<string, unknown>;
+      return meta.runId === runId && meta.planId === planId;
+    });
+
+    if (planMsg) {
+      const prev = (planMsg.meta ?? {}) as Record<string, unknown>;
+      await supabase
+        .from("messages")
+        .update({
+          meta: { ...prev, planStatus: "rejected", planRejectedAt: now },
+        })
+        .eq("id", planMsg.id);
+    }
+
     const { data: msg, error: msgErr } = await supabase
       .from("messages")
       .insert({
