@@ -91,15 +91,9 @@ export function ForgeAssistantBlock({
         )}
       </div>
 
-      {effectiveProgress && (
-        <AgentActivityCard
-          progress={effectiveProgress}
-          isActive={isActive}
-          persistedText={message?.content}
-        />
-      )}
-
-      {isActive && !effectiveProgress && narrative.showTyping && !displayText && (
+      {displayText ? (
+        <MarkdownRenderer className="forge-chat-markdown">{displayText}</MarkdownRenderer>
+      ) : isActive && narrative.showTyping ? (
         <p className="forge-chat-live-line flex items-center gap-1.5" aria-live="polite">
           <span className="inline-flex gap-0.5">
             <span className="size-1 rounded-full bg-[var(--forge-primary)] animate-pulse" />
@@ -108,11 +102,15 @@ export function ForgeAssistantBlock({
           </span>
           Preparando resposta…
         </p>
-      )}
-
-      {displayText ? (
-        <MarkdownRenderer className="forge-chat-markdown">{displayText}</MarkdownRenderer>
       ) : null}
+
+      {effectiveProgress && (
+        <AgentActivityCard
+          progress={effectiveProgress}
+          isActive={isActive}
+          persistedText={message?.content}
+        />
+      )}
 
       {effectiveProgress?.finished && effectiveProgress.error && (
         <section

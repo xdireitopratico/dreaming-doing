@@ -3,7 +3,7 @@ import { initialAgentProgress } from "@/lib/agent-progress";
 import { buildAgentNarrative } from "@/lib/agent-narrative";
 
 describe("buildAgentNarrative", () => {
-  it("mostra headline com tool ativa durante run", () => {
+  it("headline prioriza fase; tool ativa fica no subhint do activity card", () => {
     const progress = {
       ...initialAgentProgress,
       finished: false,
@@ -12,7 +12,7 @@ describe("buildAgentNarrative", () => {
       message: "Executando passo 1…",
     };
     const n = buildAgentNarrative(progress, { running: true });
-    expect(n.headline).toContain("Editando src/App.tsx");
+    expect(n.headline).toContain("Executando passo 1");
     expect(n.showTyping).toBe(true);
   });
 

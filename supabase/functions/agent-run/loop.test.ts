@@ -64,7 +64,8 @@ class MockReg extends ToolRegistry {
     this.conds.push({ name, ok, out, match });
   }
   pass() {
-    // All shell_exec succeed (observer passes)
+    // sandboxPathExists (observer) + build/typecheck commands
+    this.add("shell_exec", true, { stdout: "yes\n", stderr: "" }, a => String(a.command ?? "").includes("test -e"));
     this.add("shell_exec", true, { stdout: "", stderr: "" }, a => { const c = String(a.command ?? ""); return c.includes("npm ") || c.includes("npx ") || c.includes("find ") || c.includes("grep ") || c.includes("git "); });
   }
   failBuild() {
@@ -258,7 +259,7 @@ Deno.test("7 stuck proativa", async () => {
     resume: true,
   });
   cheap.queue(cr(3, "fix", "Corrigir"));
-  main.queue(er("Corrigindo...", tc("t1", "fs_write", { path: "src/App.tsx", content: "// new" })));
+  main.queue(er("Corrigindo...", tc("t1", "fs_write", { path: "src/App.tsx", content: "test" })));
   main.queue(tr("Pronto."));
   await loop.run();
   assert(ef(events, "stuck").length > 0, `Eventos: ${events.map(e => e.type).join(",")}`);
@@ -272,7 +273,7 @@ Deno.test("8 stuck unit tests", () => {
 });
 
 Deno.test("9 forceTools — LLM retorna texto sem tools", async () => {
-  const { loop, cheap, main } = f({
+  const { loop, cheap, main, events } = f({
     msgs: [{ role: "user", content: "Crie um header component" }], files: [],
     intent: { type: "new_project", scope: [], complexity: "medium", summary: "Header" },
   });
@@ -282,8 +283,10 @@ Deno.test("9 forceTools — LLM retorna texto sem tools", async () => {
   main.queue(tr("Pronto!"));
   const r = await loop.run();
   assertEquals(r.ok, true);
-  const force = main.calls.find(c => c.messages.some(m => typeof m.content === "string" && m.content.includes("Use ferramentas AGORA")));
+  const force = main.calls.find(c => c.messages.some(m => typeof m.content === "string" && m.content.includes("agora use ferramentas")));
   assertExists(force);
+  const narration = events.filter(e => e.type === "assistant_text");
+  assert(narration.length > 0, "deve emitir assistant_text (briefing/narração)");
 });
 
 Deno.test("10 git commit automático após fs_write", async () => {

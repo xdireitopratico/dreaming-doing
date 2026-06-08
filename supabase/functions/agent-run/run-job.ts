@@ -22,7 +22,7 @@ import { restoreExecutionLogFromRows } from "./executionLogMeta.ts";
 import { loadCheckpoint } from "./checkpoint.ts";
 import { buildSandboxEnv } from "./sandbox-env.ts";
 import { PLAN_APPROVED_PREFIX } from "./qualify.ts";
-import type { ChatMessage } from "./types.ts";
+import type { ChatMessage, PlanStep } from "./types.ts";
 
 export type AgentJobParams = {
   projectId: string;
@@ -96,6 +96,27 @@ function injectPlanApprovalMessage(
 
   const injected: ChatMessage = { role: "user", content };
   return [...baseMessages, injected];
+}
+
+function coercePlanStepsFromMeta(raw: unknown): PlanStep[] {
+  if (!Array.isArray(raw)) return [];
+  const steps: PlanStep[] = [];
+  for (let i = 0; i < raw.length; i++) {
+    const s = raw[i];
+    if (!s || typeof s !== "object") continue;
+    const r = s as Record<string, unknown>;
+    const description = typeof r.description === "string" ? r.description.trim() : "";
+    if (!description) continue;
+    steps.push({
+      id: typeof r.id === "string" && r.id ? r.id : `s${i + 1}`,
+      type: typeof r.type === "string" ? r.type as PlanStep["type"] : "custom",
+      description,
+      filePath: typeof r.filePath === "string" ? r.filePath : undefined,
+      estimatedCost: typeof r.estimatedCost === "number" ? r.estimatedCost : 0.002,
+      enabled: r.enabled !== false,
+    });
+  }
+  return steps;
 }
 
 export async function executeAgentJob(
@@ -279,6 +300,7 @@ export async function executeAgentJob(
         planMode,
         approvedPlanBuild: !planMode && !!preMeta.planSourceRunId,
         planSummary: typeof preMeta.planSummary === "string" ? preMeta.planSummary : undefined,
+        planSteps: coercePlanStepsFromMeta(preMeta.steps),
       },
   );
 

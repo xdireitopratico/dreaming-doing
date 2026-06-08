@@ -111,6 +111,15 @@ describe("applyAgentProgressEvent", () => {
     expect(state.tools[1]?.ok).toBe(true);
   });
 
+  it("classify popula streamText quando ainda vazio", () => {
+    const next = applyAgentProgressEvent(
+      { ...base, finished: false, streamText: null },
+      ev("classify", { summary: "Landing de cafeteria", model: "gpt-4" }),
+    );
+    expect(next.streamText).toBe("Landing de cafeteria");
+    expect(next.model).toBe("gpt-4");
+  });
+
   it("explore atualiza fase gather", () => {
     const next = applyAgentProgressEvent(
       { ...base, finished: false },

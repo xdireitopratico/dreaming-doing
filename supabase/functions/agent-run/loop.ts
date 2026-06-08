@@ -41,6 +41,13 @@ import {
   PLAN_APPROVAL_TTL_MS,
 } from "./plan-mode.ts";
 import type { ClassificationResult } from "./router.ts";
+import {
+  buildApprovedPlanBriefing,
+  buildClassifyBriefing,
+  buildGatherNarration,
+  buildObserveNarration,
+  buildToolBatchNarration,
+} from "./narration.ts";
 
 type StreamCallback = (event: { type: string; data: unknown }) => void;
 
@@ -94,6 +101,8 @@ export class AgentLoop {
   private lastCheckpointStep: number;
   private planMode: boolean;
   private approvedPlanBuild: boolean;
+  private approvedPlanSteps: PlanStep[];
+  private narrationStarted: boolean;
 
   constructor(
     reg: ToolRegistry,
@@ -122,6 +131,7 @@ export class AgentLoop {
       /** Run de build disparada por planApprove — pula qualify e usa planSummary. */
       approvedPlanBuild?: boolean;
       planSummary?: string;
+      planSteps?: PlanStep[];
     },
   ) {
     this.reg = reg;
@@ -146,12 +156,14 @@ export class AgentLoop {
     this.runId = options?.runId ?? null;
     this.planMode = options?.planMode ?? false;
     this.approvedPlanBuild = options?.approvedPlanBuild ?? false;
+    this.approvedPlanSteps = options?.planSteps ?? [];
     const extracted = extractOriginalUserRequest(state.messages);
     const planSummary = options?.planSummary?.trim() ?? "";
     this.originalUserRequest = this.approvedPlanBuild && planSummary
       ? planSummary
       : extracted;
     this.toolsInvoked = false;
+    this.narrationStarted = false;
     this.runStartTime = Date.now();
     this.lastCheckpointStep = options?.hasCheckpoint ? (state.currentStepIndex ?? 0) : 0;
     this.router = new ModelRouter(injectedKeys, routerOverrides);
@@ -288,6 +300,10 @@ export class AgentLoop {
         maxSteps: this.maxStepsLimit,
         restored: true,
       });
+      this.streamNarration(
+        `Retomando de onde parei (**passo ${this.state.currentStepIndex}/${this.maxStepsLimit}**). ` +
+          "Vou narrar cada etapa enquanto continuo.",
+      );
 
       // Plan runs terminate after proposing (no in-memory decision wait).
       // The plan is emitted to the client via Realtime; approval/rejection
@@ -344,6 +360,26 @@ export class AgentLoop {
         message: classification.summary,
         intent: this.state.intent,
       });
+
+      if (this.planMode) {
+        const planBriefing = buildClassifyBriefing(classification, {
+          maxSteps: this.maxStepsLimit,
+          planMode: true,
+        });
+        this.streamNarration(planBriefing);
+      } else if (this.approvedPlanBuild) {
+        this.streamNarration(
+          buildApprovedPlanBriefing(this.originalUserRequest, this.approvedPlanSteps),
+        );
+      } else {
+        this.streamNarration(
+          buildClassifyBriefing(classification, {
+            maxSteps: this.maxStepsLimit,
+            planMode: false,
+          }),
+        );
+      }
+
       await this.saveCheckpoint(LoopPhase.CREATE_PLAN);
 
       const appFile = this.state.context?.files?.find((f) => f.path === "src/App.tsx");
@@ -472,9 +508,11 @@ export class AgentLoop {
 
       const compressed = await this.compression.compress(this.state.messages);
       const executeInstruction = buildExecuteInstruction(this.originalUserRequest);
-      const forceTools = !this.toolsInvoked && loopStep <= 3 &&
-        (this.state.intent?.type === "modify" || this.state.intent?.type === "new_project" ||
-          this.state.intent?.type === "fix" || this.state.intent?.type === "add_dep");
+      const actionableIntent =
+        this.state.intent?.type === "modify" || this.state.intent?.type === "new_project" ||
+        this.state.intent?.type === "fix" || this.state.intent?.type === "add_dep";
+      const forceTools = !this.toolsInvoked && loopStep >= 2 && loopStep <= 4 && actionableIntent;
+      const narrationOnlyStep = !this.toolsInvoked && loopStep === 1 && actionableIntent;
       let response: ChatResponse | null = null;
       try {
         response = await this.llmChat(executionModel, executeInstruction, compressed, forceTools);
@@ -492,18 +530,23 @@ export class AgentLoop {
 
       const assistantText = (response.content ?? "").trim();
       if (assistantText) {
-        this.emit("assistant_text", { text: assistantText, final: !response.tool_calls?.length });
+        this.emit("assistant_text", {
+          text: assistantText,
+          append: this.narrationStarted,
+          final: !response.tool_calls?.length,
+        });
+        this.narrationStarted = true;
       }
 
       // Sem tool_calls
       if (!response.tool_calls || response.tool_calls.length === 0) {
-        if (forceTools && assistantText) {
+        if ((forceTools || narrationOnlyStep) && assistantText) {
           this.state.messages.push({ role: "assistant", content: response.content ?? assistantText });
           this.state.messages.push({
             role: "user",
             content:
-              "Use ferramentas AGORA (fs_read, fs_write, fs_edit ou shell_exec). " +
-              "Não responda só com texto — implemente o pedido.",
+              "Ótimo — agora use ferramentas (fs_read, fs_write, fs_edit ou shell_exec) para implementar. " +
+              "Pode manter 1 frase curta de narração junto com as tool_calls.",
           });
           continue;
         }
@@ -592,6 +635,16 @@ export class AgentLoop {
         });
       }
 
+      const batchNarration = buildToolBatchNarration(
+        response.tool_calls.map((tc) => ({ name: tc.name, arguments: tc.arguments })),
+        {
+          step: loopStep,
+          total: this.maxStepsLimit,
+          allOk: execResults.every(({ result }) => result.ok),
+        },
+      );
+      if (batchNarration) this.streamNarration(batchNarration);
+
       // Extra cancel check after potentially long tool execution (shell, writes, observer).
       // Combined with per-step check this makes stop responsive without full AbortSignal everywhere.
       if (await this.isCanceled()) {
@@ -626,6 +679,7 @@ export class AgentLoop {
       if (modifiedFilePaths.length > 0) {
         const typeCheck = await this.observer.quickTypeCheck(modifiedFilePaths);
         if (!typeCheck.ok) {
+          this.streamNarration(buildObserveNarration("typecheck"));
           this.emit("typecheck_fail", {
             errors: typeCheck.errors,
             files: modifiedFilePaths,
@@ -642,6 +696,7 @@ export class AgentLoop {
       const modifiedFiles = modifiedFilePaths.length > 0;
       if (modifiedFiles && buildAttempts < maxRetries) {
         this.state.phase = LoopPhase.VALIDATE_STEP;
+        this.streamNarration(buildObserveNarration("build"));
         this.emit("phase", { phase: "observe", message: "Verificando build..." });
         await this.saveCheckpoint(LoopPhase.VALIDATE_STEP);
         const observation = await this.observer.observe();
@@ -663,11 +718,13 @@ export class AgentLoop {
           continue;
         } else {
           buildAttempts = 0;
+          this.streamNarration(buildObserveNarration("validate_ok"));
           this.emit("validate_ok", { message: "Build OK" });
         }
       }
 
       if (isExecutionStuck(this.state.executionLog)) {
+        this.streamNarration(buildObserveNarration("stuck"));
         this.emit("stuck", { message: "Padrão repetitivo detectado — injetando instrução para nova abordagem" });
         this.state.messages.push({
           role: "user",
@@ -753,6 +810,9 @@ export class AgentLoop {
           ? `Explorando ${paths.length} arquivo${paths.length === 1 ? "" : "s"}-chave…`
           : `Explorando ${fileList.length} arquivo${fileList.length === 1 ? "" : "s"}…`,
       });
+      this.streamNarration(buildGatherNarration(fileList.length, paths));
+    } else {
+      this.streamNarration(buildGatherNarration(0, []));
     }
 
     const stackSkills = this.skills.detectActive(fileList).map((s) => s.name);
@@ -1038,6 +1098,19 @@ export class AgentLoop {
       meta,
     });
     await this.sb.from("projects").update({ updated_at: new Date().toISOString() }).eq("id", this.state.projectId);
+  }
+
+  /** Checkpoint de comunicação — alimenta streamText no chat (markdown acima do activity card). */
+  private streamNarration(text: string, append?: boolean): void {
+    const chunk = text.trim();
+    if (!chunk) return;
+    const shouldAppend = append ?? this.narrationStarted;
+    this.emit("assistant_text", {
+      text: shouldAppend ? `\n\n${chunk}` : chunk,
+      append: shouldAppend,
+      final: false,
+    });
+    this.narrationStarted = true;
   }
 
   private emit(type: string, data: unknown): void {

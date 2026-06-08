@@ -243,12 +243,15 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
         timeline: [...prev.timeline, event],
       };
 
-    case "classify":
+    case "classify": {
+      const summary = typeof data.summary === "string" ? data.summary.trim() : "";
       return {
         ...prev,
         model: (data.model as string) ?? prev.model,
+        streamText: summary && !prev.streamText?.trim() ? summary : prev.streamText,
         timeline: [...prev.timeline, event],
       };
+    }
 
     case "skills":
       return {
