@@ -372,9 +372,9 @@ export class AgentLoop {
         });
       }
 
-      // Lovable-style: pedido vago → pergunta no chat (Plan e Build).
+      // Qualify só em Plan — Build vai direto ao loop de ferramentas (estilo Lovable Agent).
       if (
-        !this.approvedPlanBuild &&
+        this.planMode &&
         this.originalUserRequest &&
         needsQualify(this.originalUserRequest, classification, { isSeedPlaceholder })
       ) {
@@ -729,13 +729,22 @@ export class AgentLoop {
     const fileList: FileEntry[] = files ?? [];
     const manifest = fileList.map(f => `  ${f.path}`).join("\n");
 
+    if (fileList.length > 0) {
+      this.emit("phase", {
+        phase: "gather",
+        message: `Explorando ${fileList.length} arquivo${fileList.length === 1 ? "" : "s"} do projeto…`,
+      });
+    }
+
     let projectConfig = "";
     const keyFiles = fileList.filter(f =>
       ["package.json", "tsconfig.json", "vite.config.ts", "tailwind.config.ts",
        "index.html", "src/App.tsx", "src/main.tsx", "src/index.css"].includes(f.path),
     );
     for (const f of keyFiles) {
+      this.emit("tool_start", { name: "fs_read", args: { path: f.path } });
       projectConfig += `\n### ${f.path}\n\`\`\`\n${(f.content ?? "").slice(0, 2000)}\n\`\`\`\n`;
+      this.emit("tool_done", { name: "fs_read", ok: true });
     }
 
     const stackSkills = this.skills.detectActive(fileList).map((s) => s.name);

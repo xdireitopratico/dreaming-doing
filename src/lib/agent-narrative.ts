@@ -14,6 +14,13 @@ const PHASE_LABELS: Record<string, string> = {
 
 const TOOL_LABELS: Record<string, (args?: Record<string, unknown>) => string> = {
   fs_read: (a) => `Lendo ${String(a?.path ?? "arquivo")}…`,
+  fs_read_many: (a) => {
+    const pattern = String(a?.pattern ?? a?.glob ?? "").trim();
+    return pattern ? `Lendo arquivos (${pattern})…` : "Lendo vários arquivos…";
+  },
+  fs_list: () => "Listando arquivos do projeto…",
+  fs_search: (a) => `Buscando «${String(a?.regex ?? a?.query ?? "…").slice(0, 40)}»…`,
+  fs_glob: (a) => `Buscando ${String(a?.pattern ?? "arquivos")}…`,
   fs_write: (a) => `Criando ${String(a?.path ?? "arquivo")}…`,
   fs_edit: (a) => `Editando ${String(a?.path ?? "arquivo")}…`,
   shell_exec: (a) => {

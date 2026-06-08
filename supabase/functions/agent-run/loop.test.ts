@@ -122,7 +122,7 @@ function f(opts: {
   msgs?: ChatMessage[]; files?: Array<{ path: string; content: string }>; maxSteps?: number;
   resume?: boolean; checkpoint?: boolean; resumePhase?: LoopPhase | null;
   score?: number; maxFromCk?: number; runId?: string; intent?: AgentState["intent"];
-  log?: string[]; stepIdx?: number;
+  log?: string[]; stepIdx?: number; planMode?: boolean;
 } = {}): F {
   const sb = new MockSB();
   const reg = new MockReg(); reg.init(); reg.pass();
@@ -147,7 +147,8 @@ function f(opts: {
     false, "vite-react", "",
     { maxSteps: opts.maxSteps, resumeRun: opts.resume, hasCheckpoint: opts.checkpoint,
       resumePhase: opts.resumePhase ?? null, complexityScore: opts.score,
-      maxStepsFromCheckpoint: opts.maxFromCk, runId: opts.runId ?? "r1" });
+      maxStepsFromCheckpoint: opts.maxFromCk, runId: opts.runId ?? "r1",
+      planMode: opts.planMode ?? false });
   return { sb, reg, cheap, main, loop, events };
 }
 function ef(ev: Array<{ type: string; data: unknown }>, type: string) { return ev.filter(e => e.type === type); }
@@ -180,16 +181,37 @@ Deno.test("2 resume checkpoint — restaura estado, pula classificação", async
   assertEquals(cv?.restored, true);
 });
 
-Deno.test("3 qualify phase — prompt vago interrompe", async () => {
-  // needsQualify triggers when prompt is short + type=other → stops execution
-  // qualify phase uses executionModel (selectModel based on complexity)
-  // complexity=1 → cheap model, so queue query response on cheap
-  const { loop, cheap, events } = f({ msgs: [{ role: "user", content: "site" }], files: [] });
-  cheap.queue(cr(1, "other", "x"));
+Deno.test("3 qualify phase — só em Plan mode", async () => {
+  const { loop, cheap, events } = f({
+    msgs: [{ role: "user", content: "site" }],
+    files: [],
+    planMode: true,
+  });
+  cheap.queue({
+    role: "assistant",
+    content: JSON.stringify({ complexity: 1, type: "other", summary: "x", needsBuild: false, needsDeps: false }),
+    tool_calls: [],
+    usage: { prompt_tokens: 100, completion_tokens: 20, total_tokens: 120, input_tokens: 100, output_tokens: 20 },
+  });
   cheap.queue(tr("Me conte mais sobre o que você quer construir..."));
   const r = await loop.run();
-  assertEquals(r.ok, true); assertEquals(r.steps, 0);
+  assertEquals(r.ok, true);
+  assertEquals(r.steps, 0);
   const de = ef(events, "done")[0]?.data as { qualified?: boolean };
+  assertEquals(de?.qualified, true);
+});
+
+Deno.test("3b Build mode — prompt vago não para em qualify", async () => {
+  const { loop, cheap, main, events } = f({
+    msgs: [{ role: "user", content: "site" }],
+    files: [{ path: "src/App.tsx", content: "export default () => <p>Hi</p>" }],
+    maxSteps: 2,
+  });
+  cheap.queue(cr(1, "other", "x"));
+  main.queue(tr("ok"));
+  const r = await loop.run();
+  assertEquals(ef(events, "gate_decision").length, 0);
+  assertEquals(r.steps >= 1, true);
 });
 
 Deno.test("4 cancelamento via evento emitido no loop", async () => {
