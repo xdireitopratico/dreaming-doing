@@ -49,6 +49,7 @@ export function AgentJobMiniCard({
   };
 
   const showWorking = running || (!progress.finished && isActive);
+  const showDone = progress.finished && !progress.canceled && progress.lastFinishOk !== false;
 
   return (
     <button
@@ -56,6 +57,7 @@ export function AgentJobMiniCard({
       className={cn(
         "lovable-job-mini-card w-full text-left",
         showWorking && "lovable-job-mini-card--working",
+        showDone && "lovable-job-mini-card--done",
         isFocused && "lovable-job-mini-card--focused",
       )}
       data-testid="agent-job-mini-card"
@@ -66,6 +68,12 @@ export function AgentJobMiniCard({
       <div className="lovable-job-mini-card-header">
         {showWorking && (
           <span className="lovable-job-mini-card-badge-working">Working…</span>
+        )}
+        {showDone && !showWorking && (
+          <span className="lovable-job-mini-card-badge-done">Concluído</span>
+        )}
+        {progress.finished && progress.lastFinishOk === false && !progress.canceled && (
+          <span className="lovable-job-mini-card-badge-partial">Entrega parcial</span>
         )}
         {edited && (
           <span className="lovable-job-mini-card-badge-edited">

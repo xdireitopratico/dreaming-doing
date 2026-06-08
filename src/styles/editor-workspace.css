@@ -965,6 +965,38 @@ body:has(.editor-workspace) {
   box-shadow: 0 0 0 1px rgba(255, 182, 39, 0.15);
 }
 
+.lovable-job-mini-card--done {
+  border-color: rgba(52, 211, 153, 0.35);
+  box-shadow: none;
+}
+
+.lovable-job-mini-card-badge-done {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: rgba(52, 211, 153, 0.95);
+}
+
+.lovable-job-mini-card-badge-partial {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: rgba(251, 191, 36, 0.95);
+}
+
+.lovable-job-delivery {
+  margin-top: 12px;
+}
+
+.lovable-turn-timestamp {
+  display: block;
+  margin-top: 10px;
+  font-size: 11px;
+  color: var(--forge-ghost);
+}
+
 .lovable-job-mini-card-header {
   display: flex;
   flex-wrap: wrap;

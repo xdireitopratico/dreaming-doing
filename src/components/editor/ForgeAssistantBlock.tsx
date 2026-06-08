@@ -77,15 +77,28 @@ export function ForgeAssistantBlock({
   const showMiniJob =
     effectiveProgress &&
     (isActive ||
-      (effectiveProgress.timeline.length > 0 || effectiveProgress.tools.length > 0) ||
+      effectiveProgress.timeline.length > 0 ||
+      effectiveProgress.tools.length > 0 ||
       !effectiveProgress.finished);
+
+  const deliveryText =
+    effectiveProgress?.finished && !isActive
+      ? (
+          message?.content?.trim() ||
+          effectiveProgress.summary?.trim() ||
+          effectiveProgress.streamText?.trim() ||
+          null
+        )
+      : null;
 
   const displayText =
     isActive && effectiveProgress?.autoResuming
       ? null
       : isActive && showMiniJob
         ? null
-        : narrative.body ?? message?.content ?? null;
+        : deliveryText ?? narrative.body ?? message?.content ?? null;
+
+  const turnTimestamp = message?.timestamp;
 
   return (
     <article className="forge-chat-item forge-chat-item-assistant relative group">
@@ -110,7 +123,21 @@ export function ForgeAssistantBlock({
           />
         )}
 
-      {displayText ? (
+      {effectiveProgress && showMiniJob && (
+        <AgentJobMiniCard
+          progress={effectiveProgress}
+          runId={runId}
+          isActive={isActive}
+          isFocused={!!runId && jobWorkspaceRunId === runId}
+          onOpen={onOpenJobWorkspace}
+        />
+      )}
+
+      {deliveryText && !isActive && showMiniJob ? (
+        <MarkdownRenderer className="forge-chat-markdown lovable-job-delivery">
+          {deliveryText}
+        </MarkdownRenderer>
+      ) : displayText && !(showMiniJob && !isActive) ? (
         <MarkdownRenderer className="forge-chat-markdown">{displayText}</MarkdownRenderer>
       ) : isActive && narrative.showTyping ? (
         <p className="forge-chat-live-line flex items-center gap-1.5" aria-live="polite">
@@ -123,16 +150,6 @@ export function ForgeAssistantBlock({
         </p>
       ) : null}
 
-      {effectiveProgress && showMiniJob && (
-        <AgentJobMiniCard
-          progress={effectiveProgress}
-          runId={runId}
-          isActive={isActive}
-          isFocused={!!runId && jobWorkspaceRunId === runId}
-          onOpen={onOpenJobWorkspace}
-        />
-      )}
-
       {effectiveProgress && !showMiniJob && (
         <AgentActivityCard
           progress={effectiveProgress}
@@ -141,12 +158,26 @@ export function ForgeAssistantBlock({
         />
       )}
 
-      {effectiveProgress && !isActive && effectiveProgress.finished && (
+      {effectiveProgress && !isActive && effectiveProgress.finished && !deliveryText && (
         <TurnReceipt
           progress={effectiveProgress}
           runId={runId}
           onResume={effectiveProgress.resumable ? onResume : undefined}
         />
+      )}
+
+      {turnTimestamp && effectiveProgress?.finished && !isActive && (
+        <time
+          className="lovable-turn-timestamp"
+          dateTime={new Date(turnTimestamp).toISOString()}
+        >
+          {new Date(turnTimestamp).toLocaleString("pt-BR", {
+            day: "numeric",
+            month: "short",
+            hour: "2-digit",
+            minute: "2-digit",
+          })}
+        </time>
       )}
 
       {effectiveProgress?.finished && effectiveProgress.error && (
@@ -171,6 +202,7 @@ export function ForgeAssistantBlock({
 
       {effectiveProgress?.finished &&
         !displayText &&
+        !deliveryText &&
         !effectiveProgress.error &&
         !planForRun &&
         !rejectedPlan && (
