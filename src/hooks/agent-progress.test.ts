@@ -97,6 +97,29 @@ describe("applyAgentProgressEvent", () => {
     expect(next.pendingPlan).toBeNull();
   });
 
+  it("tool_done fecha só a última tool pendente do mesmo nome", () => {
+    let state = applyAgentProgressEvent(
+      { ...base, finished: false },
+      ev("tool_start", { name: "fs_read", args: { path: "a.ts" } }),
+    );
+    state = applyAgentProgressEvent(
+      state,
+      ev("tool_start", { name: "fs_read", args: { path: "b.ts" } }),
+    );
+    state = applyAgentProgressEvent(state, ev("tool_done", { name: "fs_read", ok: true }));
+    expect(state.tools[0]?.ok).toBeUndefined();
+    expect(state.tools[1]?.ok).toBe(true);
+  });
+
+  it("explore atualiza fase gather", () => {
+    const next = applyAgentProgressEvent(
+      { ...base, finished: false },
+      ev("explore", { message: "Lendo package.json, src/App.tsx…", paths: ["package.json"] }),
+    );
+    expect(next.phase).toBe("gather");
+    expect(next.message).toContain("package.json");
+  });
+
   it("done com planRejected limpa pendingPlan", () => {
     const withPlan = applyAgentProgressEvent(
       base,

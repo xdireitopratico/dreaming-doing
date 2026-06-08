@@ -729,22 +729,30 @@ export class AgentLoop {
     const fileList: FileEntry[] = files ?? [];
     const manifest = fileList.map(f => `  ${f.path}`).join("\n");
 
-    if (fileList.length > 0) {
-      this.emit("phase", {
-        phase: "gather",
-        message: `Explorando ${fileList.length} arquivo${fileList.length === 1 ? "" : "s"} do projeto…`,
-      });
-    }
-
     let projectConfig = "";
     const keyFiles = fileList.filter(f =>
       ["package.json", "tsconfig.json", "vite.config.ts", "tailwind.config.ts",
        "index.html", "src/App.tsx", "src/main.tsx", "src/index.css"].includes(f.path),
     );
     for (const f of keyFiles) {
-      this.emit("tool_start", { name: "fs_read", args: { path: f.path } });
       projectConfig += `\n### ${f.path}\n\`\`\`\n${(f.content ?? "").slice(0, 2000)}\n\`\`\`\n`;
-      this.emit("tool_done", { name: "fs_read", ok: true });
+    }
+
+    if (fileList.length > 0) {
+      const paths = keyFiles.map((f) => f.path);
+      this.emit("explore", {
+        totalFiles: fileList.length,
+        paths,
+        message: paths.length > 0
+          ? `Lendo ${paths.join(", ")}…`
+          : `Indexando ${fileList.length} arquivo${fileList.length === 1 ? "" : "s"}…`,
+      });
+      this.emit("phase", {
+        phase: "gather",
+        message: paths.length > 0
+          ? `Explorando ${paths.length} arquivo${paths.length === 1 ? "" : "s"}-chave…`
+          : `Explorando ${fileList.length} arquivo${fileList.length === 1 ? "" : "s"}…`,
+      });
     }
 
     const stackSkills = this.skills.detectActive(fileList).map((s) => s.name);

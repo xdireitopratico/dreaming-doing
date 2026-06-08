@@ -200,6 +200,17 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
       };
     }
 
+    case "explore": {
+      const msg = (data.message as string) ?? prev.message;
+      return {
+        ...prev,
+        phase: "gather",
+        message: msg ?? prev.message,
+        statusHint: msg ?? prev.statusHint,
+        timeline: [...prev.timeline, event],
+      };
+    }
+
     case "step":
       return {
         ...prev,
@@ -261,11 +272,21 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
 
     case "tool_done": {
       const toolName = data.name as string;
+      const tools = [...prev.tools];
+      for (let i = tools.length - 1; i >= 0; i--) {
+        const t = tools[i];
+        if (t.name === toolName && t.ok === undefined) {
+          tools[i] = {
+            ...t,
+            ok: data.ok as boolean,
+            error: data.error as string,
+          };
+          break;
+        }
+      }
       return {
         ...prev,
-        tools: prev.tools.map((t) =>
-          t.name === toolName ? { ...t, ok: data.ok as boolean, error: data.error as string } : t,
-        ),
+        tools,
         cost: prev.cost + estimateCost(prev.model ?? "default", 2000),
         timeline: [...prev.timeline, event],
       };

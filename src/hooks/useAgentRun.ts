@@ -48,6 +48,7 @@ export function useAgentRun() {
   const lastSeqRef = useRef(0);
   const eventChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const statusChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+  const stalePollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const applyStreamRow = useCallback((row: {
     seq: number;
@@ -80,6 +81,10 @@ export function useAgentRun() {
   }, []);
 
   const teardownChannels = useCallback(() => {
+    if (stalePollRef.current) {
+      clearInterval(stalePollRef.current);
+      stalePollRef.current = null;
+    }
     if (eventChannelRef.current) {
       void supabase.removeChannel(eventChannelRef.current);
       eventChannelRef.current = null;
@@ -243,6 +248,12 @@ export function useAgentRun() {
         )
         .subscribe();
       statusChannelRef.current = statusChannel;
+
+      if (stalePollRef.current) clearInterval(stalePollRef.current);
+      stalePollRef.current = setInterval(() => {
+        if (!runIdRef.current) return;
+        void catchUpRun(runIdRef.current);
+      }, 12_000);
     },
     [applyStreamRow, catchUpRun, syncRunStatus, teardownChannels],
   );

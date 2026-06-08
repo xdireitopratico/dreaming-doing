@@ -91,8 +91,8 @@ export function buildAgentNarrative(
 
   const headline =
     (connecting ? progress.statusHint?.trim() : null) ??
-    toolLine ??
     phaseLine ??
+    toolLine ??
     progress.message?.trim() ??
     progress.statusHint ??
     "Trabalhando no seu pedido…";

@@ -212,7 +212,7 @@ export async function executeAgentRun(
   };
 
   const onEvent = (type: string, data: Record<string, unknown>) => {
-    appendStreamEvent(supabase, runId, type, { type, ...data }).catch(() => {});
+    void appendStreamEvent(supabase, runId, type, { type, ...data });
   };
 
   // Inngest executa o loop in-process; resume só se o budget do step expirar.
