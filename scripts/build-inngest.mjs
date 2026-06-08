@@ -12,7 +12,7 @@ const result = await esbuild.build({
   sourcemap: false,
   legalComments: "none",
   packages: "external",
-  external: ["node:*"],
+  external: ["node:*", "./agent-executor.js"],
   logLevel: "info",
 });
 

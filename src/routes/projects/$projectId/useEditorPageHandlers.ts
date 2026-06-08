@@ -217,7 +217,6 @@ export function useEditorPageHandlers({
         } catch (e: unknown) {
           const msg = e instanceof Error ? e.message : "Erro ao iniciar agente";
           logEditorTelemetryEvent("agent", "run_fail", "error", msg.slice(0, 200));
-          toast.error(msg);
         }
       })();
       return true;
@@ -269,7 +268,6 @@ export function useEditorPageHandlers({
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : "Erro ao retomar agente";
         logEditorTelemetryEvent("agent", "resume_fail", "error", msg.slice(0, 200));
-        toast.error(msg);
       }
     })();
   }, [conversation, projectId, isAgentBusy, agent, logPanelOpen, qc, tasteQuota, setLogs, setLogPanelOpen]);
@@ -289,7 +287,6 @@ export function useEditorPageHandlers({
             },
           });
           agent.clearPendingPlan();
-          toast.info("Plano anterior ignorado — seguindo com sua nova mensagem.");
           qc.invalidateQueries({ queryKey: ["conversation", projectId] });
           qc.invalidateQueries({ queryKey: ["agent-runs", projectId] });
         } catch (e) {
@@ -326,13 +323,7 @@ export function useEditorPageHandlers({
       const kind = resolveSessionKind(tasteQuota);
       if (isAgentBusy()) {
         const queued = await agent.queueMessage(projectId, conversation.id, kind);
-        if (queued.ok) {
-          toast.info(
-            queued.pendingCount && queued.pendingCount > 1
-              ? `${queued.pendingCount} mensagens na fila`
-              : "Mensagem na fila — o agente processará em seguida",
-          );
-        } else {
+        if (!queued.ok) {
           toast.error(queued.message ?? "Erro ao enfileirar mensagem");
         }
         return;
@@ -387,7 +378,6 @@ export function useEditorPageHandlers({
       await agent.stop();
       logEditorTelemetryEvent("agent", "run_stop", "warn", "user");
       setLogs((prev) => [...prev, createLogEntry("warning", "Agente interrompido pelo usuário", "agent")]);
-      toast.info("Agente interrompido");
     })();
   }, [agent, setLogs]);
 
@@ -468,19 +458,14 @@ export function useEditorPageHandlers({
             enabledMcpIds,
           },
         });
-        agent.clearPendingPlan();
-        setComposerMode("build");
-        toast.success(
-          result.eventId
-            ? "Plano aprovado — modo Build, agente executando…"
-            : "Plano aprovado — modo Build, agente na fila.",
-        );
-        qc.invalidateQueries({ queryKey: ["conversation", projectId] });
-        qc.invalidateQueries({ queryKey: ["messages", conversation?.id] });
+        await qc.invalidateQueries({ queryKey: ["conversation", projectId] });
+        await qc.invalidateQueries({ queryKey: ["messages", conversation?.id] });
         qc.invalidateQueries({ queryKey: ["agent-runs", projectId] });
         if (result.newRunId && conversation) {
           await agent.watch(projectId, conversation.id, result.newRunId);
         }
+        agent.clearPendingPlan();
+        setComposerMode("build");
       } catch (e) {
         toast.error((e as Error)?.message ?? "Falha ao aprovar plano");
       }
@@ -503,7 +488,6 @@ export function useEditorPageHandlers({
         qc.invalidateQueries({ queryKey: ["conversation", projectId] });
         qc.invalidateQueries({ queryKey: ["agent-runs", projectId] });
         agent.clearPendingPlan();
-        toast.info("Plano rejeitado — histórico mantido no chat.");
       } catch (e) {
         toast.error((e as Error)?.message ?? "Falha ao rejeitar plano");
       }

@@ -65,6 +65,16 @@ export function buildAgentNarrative(
     };
   }
 
+  const queueHint =
+    progress.pendingQueueCount > 0
+      ? `${progress.pendingQueueCount} mensagem${progress.pendingQueueCount > 1 ? "ns" : ""} na fila`
+      : null;
+
+  const connecting =
+    !progress.phase &&
+    !progress.streamText?.trim() &&
+    /conectando|iniciando|na fila/i.test(progress.statusHint ?? "");
+
   const toolLine = activeToolLabel(progress);
   const phaseLine = progress.phase
     ? progress.message?.trim() ||
@@ -73,6 +83,7 @@ export function buildAgentNarrative(
     : null;
 
   const headline =
+    (connecting ? progress.statusHint?.trim() : null) ??
     toolLine ??
     phaseLine ??
     progress.message?.trim() ??
@@ -80,7 +91,8 @@ export function buildAgentNarrative(
     "Trabalhando no seu pedido…";
 
   const subhint =
-    toolLine && phaseLine && phaseLine !== headline ? phaseLine : progress.statusHint;
+    queueHint ??
+    (toolLine && phaseLine && phaseLine !== headline ? phaseLine : progress.statusHint);
 
   return {
     headline,

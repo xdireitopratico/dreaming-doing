@@ -25,8 +25,8 @@
 ChatInput → useAgentRun.connect()
   → POST /functions/v1/agent-run  →  { runId }  (< 1s)
   → Inngest (agent/plan.requested | agent/build.requested)
-  → POST agent-run { action: "execute" }  (service role)
-  → run-executor → run-job → loop.ts
+  → step.run execute-loop (handler Vercel /api/inngest)
+  → run-executor → run-job → loop.ts  (in-process Node, sem HTTP Edge)
   → appendStreamEvent → agent_stream_events
   → Supabase Realtime (INSERT events + UPDATE agent_runs)
   → useAgentRun → agent-progress → lovable-thread → ChatStream / ForgeAssistantBlock
@@ -46,7 +46,8 @@ Ao terminar um run, Inngest chama `agent-run { action: "continue_queue" }` (serv
 | Polling 350ms (`streamEventsResponse`, `followQueuedRun`) | Realtime + catch-up único ao subscribe |
 | `agent-worker`, PGMQ **dispatch** | Inngest |
 | Trigger.dev | Inngest |
-| `runChunkedJob` inline no Edge | Inngest execute |
+| `runChunkedJob` inline no Edge | Inngest loop in-process |
+| `agent-run { action: "execute" }` | `src/inngest/executor/run-agent-loop.ts` |
 
 Schema PGMQ no DB + check em `/health` = **legado** (sem dispatch no agente).
 
@@ -58,7 +59,8 @@ Schema PGMQ no DB + check em `/health` = **legado** (sem dispatch no agente).
 | `src/lib/agent-progress.ts` | Reducer `applyAgentProgressEvent` |
 | `src/routes/projects/$projectId/index.tsx` | Editor, plan approve → `watch(newRunId)` |
 | `src/inngest/functions/agent-*.ts` | Jobs duráveis |
-| `supabase/functions/agent-run/index.ts` | `run`, `execute`, `cancel`, `pending_count`, `continue_queue` |
+| `src/inngest/executor/run-agent-loop.ts` | Loop in-process no Vercel |
+| `supabase/functions/agent-run/index.ts` | `run`, `cancel`, `pending_count`, `continue_queue` |
 | `supabase/functions/agent-run/continue-queue.ts` | Drain da fila após run completar |
 | `supabase/functions/_shared/agent-pending-queue.ts` | Enqueue, expire stale runs, evaluate drain |
 | `supabase/functions/agent-run/run-setup.ts` | Provider/keys — fonte única |

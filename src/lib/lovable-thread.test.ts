@@ -81,4 +81,47 @@ describe("buildLovableThread", () => {
       "Editando App.tsx…",
     );
   });
+
+  it("plan approve: live build após user com meta.buildRunId", () => {
+    const messages: ChatMessage[] = [
+      msg("u1", "user", "crie um app"),
+      { ...msg("a1", "assistant", "## Plano"), runId: "plan-run" },
+      {
+        id: "u2",
+        role: "user",
+        content: "Plano aprovado — executar em modo Build.",
+        timestamp: 0,
+        meta: { kind: "plan_approved", buildRunId: "build-run", planId: "p1" },
+      },
+    ];
+    const progress = { ...initialAgentProgress, phase: "execute", message: "Implementando…" };
+    const thread = buildLovableThread(messages, progress, {
+      running: true,
+      activeRunId: "build-run",
+    });
+    expect(thread.map((t) => t.kind)).toEqual([
+      "user",
+      "assistant",
+      "user",
+      "assistant",
+    ]);
+    expect(thread[3]).toMatchObject({
+      kind: "assistant",
+      isActive: true,
+      runId: "build-run",
+    });
+  });
+
+  it("erro de connect sem runId aparece no turno pendente", () => {
+    const messages = [msg("u1", "user", "build")];
+    const progress = {
+      ...initialAgentProgress,
+      finished: true,
+      error: "Chave API inválida",
+    };
+    const thread = buildLovableThread(messages, progress, {});
+    expect(thread).toHaveLength(2);
+    const slot = thread[1] as Extract<(typeof thread)[number], { kind: "assistant" }>;
+    expect(slot.live?.error).toBe("Chave API inválida");
+  });
 });

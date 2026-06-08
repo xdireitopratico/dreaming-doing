@@ -40,6 +40,13 @@ function freezeSnapshot(progress: AgentProgress): FrozenRunSnapshot {
   };
 }
 
+function buildRunIdFromUser(msg: ChatMessage): string | null {
+  const meta = msg.meta;
+  if (!meta || typeof meta !== "object") return null;
+  if (typeof meta.buildRunId === "string") return meta.buildRunId;
+  return null;
+}
+
 /** Índice onde inserir assistant live/frozen: após último user sem resposta no DB. */
 function pendingAssistantInsertIndex(items: LovableThreadItem[]): number {
   for (let i = items.length - 1; i >= 0; i--) {
@@ -53,6 +60,29 @@ function pendingAssistantInsertIndex(items: LovableThreadItem[]): number {
   return items.length;
 }
 
+/** Ancora run ativa ao turno user (ex.: plan_approved com meta.buildRunId). */
+function insertIndexForActiveRun(
+  items: LovableThreadItem[],
+  activeRunId: string,
+): number | null {
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
+    if (item?.kind !== "user") continue;
+    if (buildRunIdFromUser(item.message) === activeRunId) {
+      return i + 1;
+    }
+  }
+
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
+    if (item?.kind === "assistant" && item.runId === activeRunId) {
+      return i;
+    }
+  }
+
+  return null;
+}
+
 function insertAssistantSlot(
   items: LovableThreadItem[],
   insertAt: number,
@@ -60,13 +90,20 @@ function insertAssistantSlot(
 ): LovableThreadItem[] {
   const next = [...items];
   const existing = next[insertAt];
-  if (
-    existing?.kind === "assistant" &&
-    (existing.isActive || existing.frozen) &&
-    !existing.message?.content?.trim()
-  ) {
-    next[insertAt] = { ...existing, ...slot, message: existing.message ?? slot.message };
-    return next;
+  if (existing?.kind === "assistant") {
+    if (
+      existing.runId === slot.runId ||
+      (existing.isActive || existing.frozen) ||
+      !existing.message?.content?.trim()
+    ) {
+      next[insertAt] = {
+        ...existing,
+        ...slot,
+        message: existing.message ?? slot.message,
+        runId: slot.runId ?? existing.runId,
+      };
+      return next;
+    }
   }
   next.splice(insertAt, 0, slot);
   return next;
@@ -91,10 +128,13 @@ export function buildLovableThread(
       items.push({ kind: "user", message: msg });
       const next = messages[i + 1];
       if (next?.role === "assistant") {
+        const nextRunId =
+          next.runId ??
+          (typeof next.meta?.buildRunId === "string" ? next.meta.buildRunId : undefined);
         items.push({
           kind: "assistant",
           message: next,
-          runId: next.runId,
+          runId: nextRunId,
           isActive: false,
         });
         i++;
@@ -103,18 +143,38 @@ export function buildLovableThread(
     }
 
     if (msg.role === "assistant") {
+      const assistantRunId =
+        msg.runId ??
+        (typeof msg.meta?.buildRunId === "string" ? msg.meta.buildRunId : undefined);
       items.push({
         kind: "assistant",
         message: msg,
-        runId: msg.runId,
+        runId: assistantRunId,
         isActive: false,
       });
     }
   }
 
-  if (!activeRunId) return items;
+  if (!activeRunId) {
+    if (progress.error && progress.finished && !progress.canceled) {
+      const insertAt = pendingAssistantInsertIndex(items);
+      const existing = items[insertAt];
+      if (
+        existing?.kind !== "assistant" ||
+        !existing.message?.content?.trim()
+      ) {
+        items = insertAssistantSlot(items, insertAt, {
+          kind: "assistant",
+          live: progress,
+          isActive: false,
+        });
+      }
+    }
+    return items;
+  }
 
-  const insertAt = pendingAssistantInsertIndex(items);
+  const anchored = insertIndexForActiveRun(items, activeRunId);
+  const insertAt = anchored ?? pendingAssistantInsertIndex(items);
 
   if (running) {
     items = insertAssistantSlot(items, insertAt, {

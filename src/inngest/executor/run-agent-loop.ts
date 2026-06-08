@@ -1,0 +1,60 @@
+import { createClient } from "@supabase/supabase-js";
+import type { AgentRunRequest, ExecuteResponse } from "../functions/_shared.ts";
+
+const INNGEST_LOOP_BUDGET_MS = "270000";
+
+type AgentPreferencesPayload = {
+  mode?: "auto" | "robin" | "rob" | "fixed";
+  poolProvider?: "nvidia" | "groq";
+  fixedPresetId?: string;
+  robinPoolModelId?: string;
+  customModelId?: string;
+  useCustomModel?: boolean;
+  autoAllowedPresetIds?: string[];
+  userModelEntries?: { slug: string; env: string; label?: string }[];
+};
+
+function requireEnv(): { url: string; serviceKey: string } {
+  const url = process.env.SUPABASE_URL ?? process.env.VITE_SUPABASE_URL ?? "";
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
+  if (!url || !serviceKey) {
+    throw new Error("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required for agent loop");
+  }
+  return { url, serviceKey };
+}
+
+/** Executa o agent loop in-process no handler Inngest (Node/Vercel). */
+export async function runAgentLoop(
+  payload: AgentRunRequest & { planMode: boolean; resume?: boolean },
+): Promise<ExecuteResponse> {
+  process.env.INNGEST_EXECUTOR = "1";
+  process.env.AGENT_LOOP_BUDGET_MS = INNGEST_LOOP_BUDGET_MS;
+
+  const executorHref = new URL("./agent-executor.js", import.meta.url).href;
+  const { executeAgentRun } = (await import(executorHref)) as {
+    executeAgentRun: (
+      supabase: ReturnType<typeof createClient>,
+      params: Record<string, unknown>,
+    ) => Promise<ExecuteResponse>;
+  };
+
+  const { url, serviceKey } = requireEnv();
+  const supabase = createClient(url, serviceKey, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+
+  return await executeAgentRun(supabase as never, {
+    runId: payload.runId,
+    projectId: payload.projectId,
+    conversationId: payload.conversationId,
+    userId: payload.userId,
+    preferences: (payload.preferences ?? {}) as AgentPreferencesPayload,
+    sessionKindRaw: payload.sessionKind ?? null,
+    enabledSkillIds: payload.enabledSkillIds ?? [],
+    enabledMcpIds: payload.enabledMcpIds ?? [],
+    resume: payload.resume === true,
+    planMode: payload.planMode,
+    plan: payload.plan,
+    planSourceRunId: payload.planSourceRunId,
+  });
+}

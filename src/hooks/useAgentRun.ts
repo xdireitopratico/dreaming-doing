@@ -459,7 +459,16 @@ export function useAgentRun() {
     async (projectId: string, conversationId: string, runId: string) => {
       void projectId;
       void conversationId;
-      await subscribeToRun(runId, { resetProgress: runIdRef.current !== runId });
+      const isNew = runIdRef.current !== runId;
+      if (isNew) {
+        runIdRef.current = runId;
+        setActiveRunId(runId);
+        setProgress({
+          ...initialAgentProgress,
+          statusHint: "Conectando ao agente…",
+        });
+      }
+      await subscribeToRun(runId, { resetProgress: isNew });
     },
     [subscribeToRun],
   );

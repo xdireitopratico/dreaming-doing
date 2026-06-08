@@ -1,13 +1,6 @@
 /**
- * Execute the agent for a given run. Used by:
- *  - "execute" action: called by Inngest function (Node → HTTP → Deno)
- *  - "run" action: thin dispatcher that creates the row and triggers Inngest
- *
- * The setup is intentionally heavy because the Inngest trigger may not happen
- * immediately (and the user must see status="pending" → "running" transition
- * without delay).
- *
- * Durabilidade via Inngest; chamado sincronamente de um step.
+ * Execute the agent for a given run. Used by Inngest handler (Node/Vercel in-process).
+ * Edge `agent-run` só dispara o evento — não chama mais execute via HTTP.
  */
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { executeAgentJob, type AgentJobParams } from "./run-job.ts";
@@ -30,8 +23,6 @@ import { loadCheckpoint } from "./checkpoint.ts";
 import { buildSandboxEnv } from "./sandbox-env.ts";
 import { logger } from "../_shared/logger.ts";
 import { appendStreamEvent } from "../_shared/agent-stream.ts";
-
-const MAX_INLINE_CHUNKS = 8;
 
 export type ExecuteParams = {
   runId: string;
@@ -64,7 +55,7 @@ export async function executeAgentRun(
   params: ExecuteParams,
 ): Promise<ExecuteResult> {
   const startMs = Date.now();
-  const { runId, projectId, conversationId, userId, resume: resumeRun, planMode } = params;
+  const { runId, projectId, conversationId, userId, resume: resumeParam, planMode } = params;
 
   // Race-safe cancel check: if the user canceled between Inngest's check
   // and this call, exit early without touching state.
@@ -106,10 +97,9 @@ export async function executeAgentRun(
     .limit(120);
   const historyRows = history ?? [];
 
+  const loadedCheckpoint = await loadCheckpoint(supabase, projectId, conversationId);
+  const resumeRun = resumeParam === true || !!loadedCheckpoint;
   const restoredExecutionLog = resumeRun ? restoreExecutionLogFromRows(historyRows) : [];
-  const loadedCheckpoint = resumeRun
-    ? await loadCheckpoint(supabase, projectId, conversationId)
-    : null;
 
   const { userOnlyKeys, hasUserLlmKey } = await loadUserLlmContext(
     supabase,
@@ -222,23 +212,10 @@ export async function executeAgentRun(
     appendStreamEvent(supabase, runId, type, { type, ...data }).catch(() => {});
   };
 
-  // In-process chunking — same as the previous runChunkedJob logic
-  let chunkResume = resumeRun;
+  // Inngest executa o loop in-process; resume só se o budget do step expirar.
   let result: Awaited<ReturnType<typeof executeAgentJob>>;
-  let chunks = 0;
   try {
-    result = await executeAgentJob(supabase, { ...jobParams, resumeRun: chunkResume }, onEvent);
-    chunks = 1;
-    while (!result.ok && result.resumable && !result.canceled && chunks < MAX_INLINE_CHUNKS) {
-      chunkResume = true;
-      await appendStreamEvent(supabase, runId, "resume", {
-        type: "resume",
-        chunk: chunks + 1,
-        message: "Retomando automaticamente no servidor…",
-      });
-      result = await executeAgentJob(supabase, { ...jobParams, resumeRun: true }, onEvent);
-      chunks++;
-    }
+    result = await executeAgentJob(supabase, { ...jobParams, resumeRun }, onEvent);
   } catch (err: unknown) {
     const msg = (err as Error)?.message ?? "Agent execution failed";
     await supabase.from("agent_runs").update({
@@ -249,7 +226,6 @@ export async function executeAgentRun(
     return { ok: false, runId, mode: planMode ? "plan" : "build", resumable: false, canceled: false, error: msg, stepsCompleted: 0, durationMs: Date.now() - startMs };
   }
 
-  // Finalize run
   const { data: finalRun } = await supabase
     .from("agent_runs")
     .select("status, meta")
@@ -259,6 +235,43 @@ export async function executeAgentRun(
   const finalMeta = (finalRun?.meta ?? {}) as Record<string, unknown>;
   const awaitingStates = ["awaiting_user"];
   const isAwaiting = awaitingStates.includes(finalStatus ?? "") || !!finalMeta.awaitingUser;
+  const prevMeta = (finalRun?.meta ?? runMetaBase) as Record<string, unknown>;
+
+  // Chunk resumable: Inngest chama execute de novo — não finalizar a run.
+  if (!result.ok && result.resumable && !result.canceled && !isAwaiting) {
+    await supabase
+      .from("agent_runs")
+      .update({
+        status: "running",
+        steps: result.steps,
+        error: null,
+        heartbeat_at: new Date().toISOString(),
+        meta: {
+          ...prevMeta,
+          lastChunkAt: new Date().toISOString(),
+          lastChunkMessage: result.error ?? null,
+        },
+      })
+      .eq("id", runId);
+
+    logger.info("agent_run.chunk_resumable", {
+      runId,
+      mode: planMode ? "plan" : "build",
+      steps: result.steps,
+      durationMs: Date.now() - startMs,
+    });
+
+    return {
+      ok: false,
+      runId,
+      mode: planMode ? "plan" : "build",
+      resumable: true,
+      canceled: false,
+      error: result.error,
+      stepsCompleted: result.steps,
+      durationMs: Date.now() - startMs,
+    };
+  }
 
   let status: string;
   if (result.canceled) {
@@ -271,7 +284,6 @@ export async function executeAgentRun(
     status = "failed";
   }
 
-  const prevMeta = (finalRun?.meta ?? runMetaBase) as Record<string, unknown>;
   await supabase
     .from("agent_runs")
     .update({
@@ -279,6 +291,7 @@ export async function executeAgentRun(
       finished_at: isAwaiting ? null : new Date().toISOString(),
       steps: result.steps,
       error: result.error ?? null,
+      heartbeat_at: new Date().toISOString(),
       meta: {
         ...prevMeta,
         ...(result.summary ? { summary: result.summary } : {}),
@@ -292,7 +305,7 @@ export async function executeAgentRun(
     type: "finish",
     ok: result.ok,
     canceled: result.canceled,
-    resumable: !result.ok && !!result.resumable && !result.canceled,
+    resumable: false,
     error: result.error ?? null,
     awaiting: isAwaiting,
     steps: result.steps,
@@ -305,7 +318,6 @@ export async function executeAgentRun(
     ok: result.ok,
     resumable: result.resumable,
     canceled: result.canceled,
-    chunks,
     durationMs: Date.now() - startMs,
   });
 

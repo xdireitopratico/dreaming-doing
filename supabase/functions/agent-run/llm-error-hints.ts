@@ -207,7 +207,7 @@ export function e2bErrorHint(err: unknown): ErrorHint {
 /** Hint de erro de timeout do edge function (120s). */
 export function timeoutHint(): ErrorHint {
   return {
-    message: "O agente atingiu o tempo limite da Edge Function (120s).",
+    message: "O agente atingiu o tempo limite da Edge Function (~90s por chunk).",
     action: "Continuar run",
     link: null,
     severity: "warning",

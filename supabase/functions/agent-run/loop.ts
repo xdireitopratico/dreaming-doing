@@ -42,7 +42,23 @@ import type { ClassificationResult } from "./router.ts";
 type StreamCallback = (event: { type: string; data: unknown }) => void;
 
 const CHECKPOINT_INTERVAL_STEPS = 2;
-const EDGE_FUNCTION_TIMEOUT_MS = 110_000;
+
+function resolveLoopBudgetMs(): number {
+  const raw =
+    (typeof globalThis.Deno !== "undefined" ? Deno.env.get("AGENT_LOOP_BUDGET_MS") : undefined) ??
+    (typeof process !== "undefined" ? process.env.AGENT_LOOP_BUDGET_MS : undefined);
+  if (raw) {
+    const parsed = Number(raw);
+    if (Number.isFinite(parsed) && parsed > 0) return parsed;
+  }
+  const inngest =
+    (typeof process !== "undefined" && process.env.INNGEST_EXECUTOR === "1") ||
+    (typeof globalThis.Deno !== "undefined" && Deno.env.get("INNGEST_EXECUTOR") === "1");
+  // Edge: ~90s; Inngest/Vercel step: ~4.5m (fits vercel maxDuration 300s).
+  return inngest ? 270_000 : 90_000;
+}
+
+const LOOP_BUDGET_MS = resolveLoopBudgetMs();
 function calculateMaxSteps(complexity: 1 | 2 | 3 | 4 | 5): number {
   return complexity * 5 + 5;
 }
@@ -135,6 +151,35 @@ export class AgentLoop {
     );
   }
 
+  private loopBudgetExceeded(): boolean {
+    return Date.now() - this.runStartTime > LOOP_BUDGET_MS;
+  }
+
+  private async returnResumableChunk(
+    steps: number,
+    toolsUsed: Set<string>,
+  ): Promise<{
+    ok: false;
+    error: string;
+    steps: number;
+    resumable: true;
+    toolsUsed: string[];
+  }> {
+    await this.saveCheckpoint(this.state.phase, true);
+    this.emit("timeout_warning", {
+      message: "Chunk encerrado — Inngest retoma no próximo passo",
+      elapsedMs: Date.now() - this.runStartTime,
+    });
+    return {
+      ok: false,
+      error:
+        `Chunk de ~${Math.round(LOOP_BUDGET_MS / 1000)}s — retomando automaticamente…`,
+      steps,
+      resumable: true,
+      toolsUsed: [...toolsUsed],
+    };
+  }
+
   private async clearCheckpoint(): Promise<void> {
     try {
       await this.sb
@@ -151,7 +196,7 @@ export class AgentLoop {
     if (!this.runId) return;
     const step = this.state.currentStepIndex;
     if (!force && step - this.lastCheckpointStep < CHECKPOINT_INTERVAL_STEPS) return;
-    if (Date.now() - this.runStartTime > EDGE_FUNCTION_TIMEOUT_MS) {
+    if (Date.now() - this.runStartTime > LOOP_BUDGET_MS) {
       this.emit("timeout_warning", {
         message: "Próximo do limite de tempo da Edge Function — salvando checkpoint",
         elapsedMs: Date.now() - this.runStartTime,
@@ -250,6 +295,9 @@ export class AgentLoop {
         messageCount: this.state.messages.length,
       });
       await this.gatherContext();
+      if (this.loopBudgetExceeded()) {
+        return this.returnResumableChunk(0, toolsUsed);
+      }
       await this.saveCheckpoint(LoopPhase.GATHER_CONTEXT);
 
       this.emit("phase", { phase: "classify", message: "Classificando complexidade..." });
@@ -259,6 +307,9 @@ export class AgentLoop {
         userPrompt,
         this.state.context?.projectConfig ?? "(vazio)",
       );
+      if (this.loopBudgetExceeded()) {
+        return this.returnResumableChunk(0, toolsUsed);
+      }
       this.complexityScore = classification.complexity;
       this.state.intent = {
         type: classification.type as IntentAnalysis["type"],
@@ -351,20 +402,8 @@ export class AgentLoop {
     let loopStep = step;
 
     while (loopStep < this.maxStepsLimit) {
-      if (Date.now() - this.runStartTime > EDGE_FUNCTION_TIMEOUT_MS) {
-        await this.saveCheckpoint(this.state.phase, true);
-        this.emit("timeout_warning", {
-          message: "Chunk encerrado — retomada automática pelo servidor",
-          elapsedMs: Date.now() - this.runStartTime,
-        });
-        return {
-          ok: false,
-          error:
-            `Chunk de ~${Math.round(EDGE_FUNCTION_TIMEOUT_MS / 1000)}s — retomando automaticamente…`,
-          steps: loopStep,
-          resumable: true,
-          toolsUsed: [...toolsUsed],
-        };
+      if (this.loopBudgetExceeded()) {
+        return this.returnResumableChunk(loopStep, toolsUsed);
       }
 
       if (await this.isCanceled()) {

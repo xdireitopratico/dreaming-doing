@@ -23,7 +23,7 @@ import { restoreExecutionLogFromRows } from "./executionLogMeta.ts";
 import { loadCheckpoint } from "./checkpoint.ts";
 import { appendStreamEvent } from "../_shared/agent-stream.ts";
 import { isServiceRoleRequest } from "../_shared/service-auth.ts";
-import type { ExecuteParams } from "./run-executor.ts";
+
 const runningLocks = new Map<string, Promise<unknown>>();
 
 const corsHeaders = FORGE_CORS_HEADERS;
@@ -46,55 +46,12 @@ Deno.serve(async (req) => {
     const token = (req.headers.get("Authorization") ?? "").replace("Bearer ", "");
     const isServiceCall = isServiceRoleRequest(token, SERVICE_KEY);
 
-    // P0: Inngest → execute bypasses user auth (service role).
+    // Loop executa no handler Inngest (Vercel) — Edge não roda execute.
     if (body.action === "execute") {
-      if (!isServiceCall) {
-        return json({ error: "execute requer service role" }, 403);
-      }
-      const { executeAgentRun } = await import("./run-executor.ts");
-      const {
-        runId: eRunId,
-        projectId: eProjectId,
-        conversationId: eConvId,
-        userId: eUserId,
-        preferences: ePrefs,
-        sessionKind: eSession,
-        enabledSkillIds: eSkills,
-        enabledMcpIds: eMcps,
-        planMode: ePlanMode,
-        plan: ePlan,
-        planSourceRunId: ePlanSrc,
-        resume: eResume,
-      } = body as Record<string, unknown>;
-
-      if (!eRunId || !eProjectId || !eConvId || !eUserId) {
-        return json({ error: "runId, projectId, conversationId, userId obrigatórios" }, 400);
-      }
-
-      projectId = String(eProjectId);
-      logger.info("agent_run.execute", {
-        runId: String(eRunId),
-        projectId,
-        userId: String(eUserId),
-        planMode: ePlanMode === true,
-      });
-
-      const result = await executeAgentRun(supabase, {
-        runId: String(eRunId),
-        projectId: String(eProjectId),
-        conversationId: String(eConvId),
-        userId: String(eUserId),
-        preferences: (ePrefs as ExecuteParams["preferences"]) ?? null,
-        sessionKindRaw: typeof eSession === "string" ? eSession : null,
-        enabledSkillIds: Array.isArray(eSkills) ? (eSkills as string[]) : [],
-        enabledMcpIds: Array.isArray(eMcps) ? (eMcps as string[]) : [],
-        resume: eResume === true,
-        planMode: ePlanMode === true,
-        plan: typeof ePlan === "string" ? ePlan : undefined,
-        planSourceRunId: typeof ePlanSrc === "string" ? ePlanSrc : undefined,
-      });
-
-      return json(result);
+      return json(
+        { error: "execute movido para Inngest — use evento agent/build.requested ou agent/plan.requested" },
+        410,
+      );
     }
 
     if (body.action === "continue_queue") {

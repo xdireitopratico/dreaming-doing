@@ -35,8 +35,6 @@ export type ExecuteResponse = {
   durationMs: number;
 };
 
-export type ExecuteRequest = AgentRunRequest & { action: "execute" };
-
 function requireEnv(): { url: string; serviceKey: string } {
   const url = process.env.SUPABASE_URL ?? process.env.VITE_SUPABASE_URL ?? "";
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
@@ -60,35 +58,34 @@ function getSupabaseAdmin(): SupabaseClient {
   return adminClient;
 }
 
-export async function callAgentRunExecutor(payload: ExecuteRequest): Promise<ExecuteResponse> {
-  const { url, serviceKey } = requireEnv();
-  const response = await fetch(`${url}/functions/v1/agent-run`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${serviceKey}`,
-      apikey: serviceKey,
-    },
-    body: JSON.stringify(payload),
-  });
+import { runAgentLoop } from "../executor/run-agent-loop.ts";
 
-  const text = await response.text();
-  let body: unknown = null;
-  try {
-    body = text ? JSON.parse(text) : null;
-  } catch {
-    body = { error: text };
+const MAX_LOOP_RESUME_STEPS = 3;
+
+type InngestStep = {
+  run: <T>(id: string, fn: () => Promise<T> | T) => Promise<T>;
+};
+
+/** Executa o loop no handler Inngest; retoma no máximo 3 vezes se o budget expirar. */
+export async function runAgentLoopWithResume(
+  step: InngestStep,
+  payload: AgentRunRequest,
+  planMode: boolean,
+): Promise<ExecuteResponse> {
+  let lastResult: ExecuteResponse | null = null;
+
+  for (let i = 0; i < MAX_LOOP_RESUME_STEPS; i++) {
+    const result = await step.run(`execute-loop-${i}`, async () => {
+      return await runAgentLoop({ ...payload, planMode, resume: i > 0 });
+    });
+    lastResult = result;
+    if (result.ok || result.canceled || !result.resumable) break;
   }
 
-  if (!response.ok) {
-    const errMsg =
-      typeof body === "object" && body && "error" in body
-        ? String((body as { error: unknown }).error)
-        : `agent-run returned ${response.status}`;
-    throw new Error(errMsg);
+  if (!lastResult) {
+    throw new Error(`No result produced for run ${payload.runId}`);
   }
-
-  return body as ExecuteResponse;
+  return lastResult;
 }
 
 export async function getRunStatus(runId: string): Promise<AgentRunStatus | null> {

@@ -63,6 +63,8 @@ type DecideResponse = {
   newRunId?: string;
   eventId?: string | null;
   graciosaMessageId?: string;
+  approveUserMessageId?: string;
+  queueWarningMessageId?: string;
 };
 
 const planApproveSchema = z.object({
@@ -163,6 +165,33 @@ export const planApprove = createServerFn({ method: "POST" })
         .eq("id", planMsg.id);
     }
 
+    const stepLabels = (steps ?? [])
+      .map((s) => (typeof s === "object" && s && "title" in s ? String((s as { title?: string }).title ?? "") : ""))
+      .filter(Boolean);
+    const approveText =
+      stepLabels.length > 0
+        ? `Plano aprovado — executar em modo Build:\n${stepLabels.map((t) => `• ${t}`).join("\n")}`
+        : "Plano aprovado — executar em modo Build.";
+
+    const { data: approveUserMsg, error: approveUserErr } = await supabase
+      .from("messages")
+      .insert({
+        conversation_id: run.conversation_id,
+        role: "user",
+        parts: [{ type: "text", text: approveText }],
+        meta: {
+          kind: "plan_approved",
+          planSourceRunId: runId,
+          planId,
+          buildRunId: newRun.id,
+        },
+      })
+      .select("id")
+      .single();
+    if (approveUserErr) {
+      throw new Error(`Falha ao registrar aprovação no chat: ${approveUserErr.message}`);
+    }
+
     const eventKey = process.env.INNGEST_EVENT_KEY;
     let eventId: string | null = null;
     if (eventKey) {
@@ -193,8 +222,34 @@ export const planApprove = createServerFn({ method: "POST" })
           eventId = body.ids?.[0] ?? null;
         }
       } catch {
-        // Inngest send failure is non-fatal — the run row exists with status=pending,
-        // the user can re-trigger via chat.
+        // Inngest send failure is non-fatal — the run row exists with status=pending.
+      }
+    }
+
+    let queueWarningMessageId: string | undefined;
+    if (!eventId) {
+      const { data: queueMsg, error: queueErr } = await supabase
+        .from("messages")
+        .insert({
+          conversation_id: run.conversation_id,
+          role: "assistant",
+          parts: [
+            {
+              type: "text",
+              text: "Plano aprovado. O build está na fila — se não iniciar em instantes, envie «continuar» no chat.",
+            },
+          ],
+          meta: {
+            buildRunId: newRun.id,
+            queueWarning: true,
+            planSourceRunId: runId,
+            planId,
+          },
+        })
+        .select("id")
+        .single();
+      if (!queueErr && queueMsg) {
+        queueWarningMessageId = queueMsg.id;
       }
     }
 
@@ -203,6 +258,8 @@ export const planApprove = createServerFn({ method: "POST" })
       approvedRunId: runId,
       newRunId: newRun.id,
       eventId,
+      approveUserMessageId: approveUserMsg?.id,
+      queueWarningMessageId,
     };
   });
 

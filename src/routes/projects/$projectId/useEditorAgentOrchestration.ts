@@ -9,7 +9,6 @@ import type { DiffEntry } from "@/components/editor/AiDiffViewer";
 import { useAgentBlame, buildBlameFromTimeline } from "@/hooks/useAgentBlame";
 import type { usePreviewBoot } from "@/hooks/usePreviewBoot";
 import { clearEnhancements } from "@/lib/monacoEnhancements";
-import { toast } from "sonner";
 import { useAgentSessionCoordinator } from "./useAgentSessionCoordinator";
 import type { useAgentRun } from "@/hooks/useAgentRun";
 
@@ -113,12 +112,19 @@ export function useEditorAgentOrchestration({
   );
   useAgentBlame({ blameMap: blameEntries, editorRef, monacoRef });
 
-  // ─── Sync running state — uma única fonte de verdade ──
+  // ─── Sync running state — slot live enquanto há run ativa (mesmo antes do realtime conectar) ──
   useEffect(() => {
     const active =
-      agent.connected && !agent.progress.finished && !agent.progress.canceled;
+      agent.activeRunId != null &&
+      !agent.progress.finished &&
+      !agent.progress.canceled;
     setRunning(active);
-  }, [agent.connected, agent.progress.finished, agent.progress.canceled, setRunning]);
+  }, [
+    agent.activeRunId,
+    agent.progress.finished,
+    agent.progress.canceled,
+    setRunning,
+  ]);
 
   // ─── Realtime events → logs ─────────────────────────────────────────
   useEffect(() => {
@@ -151,28 +157,6 @@ export function useEditorAgentOrchestration({
       ]);
     }
   }, [agent.progress.timeline.length, setLogs]);
-
-  useEffect(() => {
-    if (agent.progress.error && agent.progress.finished && !agent.progress.resumable) {
-      toast.error(agent.progress.error);
-      setRunning(false);
-    }
-    if (
-      agent.progress.finished &&
-      agent.progress.resumable &&
-      agent.progress.error &&
-      !agent.progress.autoResuming
-    ) {
-      toast.warning(agent.progress.error, { duration: 5000 });
-      setRunning(false);
-    }
-  }, [
-    agent.progress.error,
-    agent.progress.finished,
-    agent.progress.resumable,
-    agent.progress.autoResuming,
-    setRunning,
-  ]);
 
   // ─── Monaco enhancements globais ────────────────────────────────────
   useEffect(() => {
