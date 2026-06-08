@@ -117,95 +117,14 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
 );
 `;
 
-const APP_TSX = `import { Sparkles, Zap, Layers, Shield, Gauge } from "lucide-react";
-import {
-  NavShell,
-  HeroSignature,
-  StatsRibbon,
-  BentoGrid,
-  FeatureMatrix,
-  CTASignature,
-  FooterColumns,
-  ForgeToaster,
-} from "@forge/ui";
-
-export default function App() {
+/** Canvas vazio — o agente gera a UI; sem mockup de marketing no seed. */
+const APP_TSX = `export default function App() {
   return (
-    <div className="min-h-dvh bg-background text-foreground font-body">
-      <ForgeToaster />
-      <NavShell
-        logo={<span className="text-brand-500">◆ FORGE</span>}
-        links={[
-          { label: "Recursos", href: "#features" },
-          { label: "Bento", href: "#bento" },
-          { label: "Preços", href: "#pricing" },
-        ]}
-        ctaLabel="Começar"
-      />
-      <main>
-        <HeroSignature
-          eyebrow="Design System · Live"
-          title="Construa interfaces que ninguém esquece."
-          subtitle="O Forge entrega composição visual de altíssima complexidade — Hero, Bento, CTA assinatura — sem página branca genérica."
-          primaryCta={{ label: "Abrir no chat", variant: "primary" }}
-          secondaryCta={{ label: "Ver composição", variant: "outline" }}
-          variant="aurora"
-        >
-          <StatsRibbon
-            variant="cards"
-            stats={[
-              { value: "9", label: "Composites prontos" },
-              { value: "100", suffix: "%", label: "Tokens @theme" },
-              { value: "<1s", label: "HMR no preview" },
-              { value: "0", label: "CTAs azuis genéricos" },
-            ]}
-          />
-        </HeroSignature>
-
-        <section id="bento" className="py-16 md:py-24 mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <BentoGrid
-            eyebrow="Assinatura visual"
-            title="Bento assimétrico — não é grid clone"
-            preset="showcase"
-            cells={[
-              { title: "HeroSignature", description: "Aurora mesh + dual CTA + proof strip", icon: Sparkles, accent: true },
-              { title: "Motion nativo", description: "FadeIn, Stagger, HoverLift com reduced-motion", icon: Zap },
-              { title: "Tokens semânticos", description: "brand, surface, shadow-glow — zero hex em TSX", icon: Layers },
-              { title: "Observer enforcement", description: "Build falha em UI genérica", icon: Shield, span: "md:col-span-2" },
-              { title: "Performance", description: "Vite 7 + React 19", icon: Gauge },
-            ]}
-          />
-        </section>
-
-        <section id="features">
-          <FeatureMatrix
-            title="Matriz de features"
-            subtitle="Composição multi-camada obrigatória em todo projeto FORGE"
-            features={[
-              { icon: Sparkles, title: "Composites", description: "Hero, Bento, CTA, Nav, Footer — prontos para compor." },
-              { icon: Layers, title: "Camadas surface", description: "Profundidade visual com bg-surface-* e bordas sutis." },
-              { icon: Shield, title: "Anti-genérico", description: "Sem bg-white, sem bg-blue-600, sem botão solto." },
-            ]}
-          />
-        </section>
-
-        <CTASignature
-          title="Descreva no chat. Receba design único."
-          description="O agente usa @forge/ui e o Observer garante qualidade — você só edita se quiser."
-          primaryLabel="Continuar no Forge"
-          secondaryLabel="Explorar código"
-        />
-      </main>
-
-      <FooterColumns
-        brand={<p className="font-display font-semibold text-brand-500">FORGE</p>}
-        columns={[
-          { title: "Produto", links: [{ label: "Recursos", href: "#" }, { label: "Preços", href: "#" }] },
-          { title: "Dev", links: [{ label: "Docs", href: "#" }, { label: "GitHub", href: "#" }] },
-        ]}
-        copyright="© FORGE — seed com @forge/ui embutido"
-      />
-    </div>
+    <main className="min-h-dvh bg-background text-foreground font-body flex items-center justify-center p-8">
+      <p className="text-muted-foreground text-center max-w-md text-sm leading-relaxed">
+        Canvas vazio — descreva o app no chat do FORGE para gerar a interface aqui.
+      </p>
+    </main>
   );
 }
 `;

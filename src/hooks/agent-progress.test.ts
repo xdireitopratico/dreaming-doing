@@ -110,6 +110,15 @@ describe("applyAgentProgressEvent", () => {
       }),
     );
     expect(withPlan.pendingPlan).not.toBeNull();
+    const withDiff = applyAgentProgressEvent(
+      base,
+      ev("file_diff", { path: "src/App.tsx", before: "", after: "x", op: "write" }),
+    );
+    expect(withDiff.previewSyncTick).toBe(1);
+
+    const withSync = applyAgentProgressEvent(withDiff, ev("preview_sync", { reason: "fs_change" }));
+    expect(withSync.previewSyncTick).toBe(2);
+
     const cleared = applyAgentProgressEvent(
       withPlan,
       ev("done", { planRejected: true }),

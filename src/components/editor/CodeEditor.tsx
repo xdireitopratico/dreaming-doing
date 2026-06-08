@@ -4,7 +4,7 @@ import { useCallback, useRef, useState } from "react";
 import Editor, { OnMount } from "@monaco-editor/react";
 import type { editor } from "monaco-editor";
 import { useDiagnostics } from "@/hooks/useDiagnostics";
-import { useMonacoTheme } from "@/hooks/useMonacoTheme";
+import { registerForgeTheme } from "@/lib/monaco-theme";
 import { getFileIcon, getLanguageFromPath } from "./fileIcons";
 import { X, Plus } from "lucide-react";
 
@@ -36,7 +36,7 @@ export function CodeEditor({
 
   const handleMount: OnMount = useCallback((editor, monaco) => {
     editorRef.current = editor;
-    useMonacoTheme(monaco);
+    registerForgeTheme(monaco);
     monaco.editor.setTheme("forge");
     setMonaco(monaco);
   }, [setMonaco]);

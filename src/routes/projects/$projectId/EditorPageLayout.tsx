@@ -95,6 +95,7 @@ export type EditorPageLayoutProps = {
   agentHasRun: boolean;
   isReactProject: boolean;
   previewReloadNonce: number;
+  previewSyncing?: boolean;
   diffEntries: DiffEntry[];
   logPanelOpen: boolean;
   setLogPanelOpen: (value: boolean | ((prev: boolean) => boolean)) => void;
@@ -171,6 +172,7 @@ export function EditorPageLayout({
   agentHasRun,
   isReactProject,
   previewReloadNonce,
+  previewSyncing = false,
   diffEntries,
   logPanelOpen,
   setLogPanelOpen,
@@ -376,6 +378,7 @@ export function EditorPageLayout({
                           onWarmComplete={previewBoot.clearWarming}
                           onRefresh={() => previewBoot.boot({ force: true })}
                           reloadNonce={previewReloadNonce}
+                          previewSyncing={previewSyncing}
                           agentHasRun={agentHasRun}
                           e2bConnected={e2bConnected}
                           previewIdle={previewIdle}

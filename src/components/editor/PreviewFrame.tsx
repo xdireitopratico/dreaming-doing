@@ -35,6 +35,8 @@ interface PreviewFrameProps {
   onFocusChat?: () => void;
   /** Repouso após inatividade — iframe descarregado para economizar E2B. */
   previewIdle?: boolean;
+  /** Re-sync E2B em curso (ficheiros mudaram, devUrl já existe). */
+  previewSyncing?: boolean;
   /** Projeto sem arquivos — não tenta criar sandbox, mostra placeholder limpo. */
   isNoFiles?: boolean;
   /** Vite/React: srcDoc do seed é inútil sem bundler — mostrar Let's Build até devUrl. */
@@ -62,6 +64,7 @@ export function PreviewFrame({
   previewIdle = false,
   isNoFiles = false,
   isReactProject = false,
+  previewSyncing = false,
 }: PreviewFrameProps) {
   const [iframeLoading, setIframeLoading] = useState(false);
   const deviceWidth = previewDeviceWidth(device);
@@ -144,10 +147,12 @@ export function PreviewFrame({
           </div>
         ) : !bootError && iframeSrc ? (
           <>
-            {(warming || iframeLoading) && (
+            {(warming || iframeLoading || previewSyncing) && (
               <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 bg-white/90">
                 <Loader2 className="size-6 animate-spin text-neutral-400" />
-                <p className="text-xs text-neutral-500">Carregando preview…</p>
+                <p className="text-xs text-neutral-500">
+                  {previewSyncing ? "Sincronizando preview…" : "Carregando preview…"}
+                </p>
               </div>
             )}
             <iframe

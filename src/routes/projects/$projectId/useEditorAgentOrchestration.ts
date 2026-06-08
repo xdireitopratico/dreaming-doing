@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import type { QueryClient } from "@tanstack/react-query";
 import type { RefObject } from "react";
 import type { editor } from "monaco-editor";
@@ -80,6 +80,9 @@ export function useEditorAgentOrchestration({
 }: UseEditorAgentOrchestrationParams) {
   /** Evita boot duplicado do preview entre fim do agente e refetch do previewUrl. */
   const previewBootAfterAgentRef = useRef(false);
+  const lastSyncedFilesKeyRef = useRef("");
+  const lastPreviewSyncTickRef = useRef(0);
+  const previewSyncInFlightRef = useRef(false);
 
   useAgentSessionCoordinator({
     projectId,
@@ -207,16 +210,72 @@ export function useEditorAgentOrchestration({
     [files],
   );
 
+  const syncPreviewToSandbox = useCallback(
+    async (reload: boolean) => {
+      if (!isReactProject || !e2bConnected || previewBoot.booting || previewE2bCircuit) return;
+      if (previewSyncInFlightRef.current) return;
+      previewSyncInFlightRef.current = true;
+      try {
+        await previewBoot.boot({ force: true, silent: true });
+        if (reload && devUrl) {
+          setPreviewReloadNonce((n) => n + 1);
+        }
+      } finally {
+        previewSyncInFlightRef.current = false;
+      }
+    },
+    [
+      isReactProject,
+      e2bConnected,
+      previewBoot.booting,
+      previewBoot.boot,
+      previewE2bCircuit,
+      devUrl,
+      setPreviewReloadNonce,
+    ],
+  );
+
   useEffect(() => {
-    if (!devUrl || activeView !== "preview" || running) return;
-    const t = window.setTimeout(() => setPreviewReloadNonce((n) => n + 1), 600);
+    if (!filesSyncKey || filesSyncKey === lastSyncedFilesKeyRef.current) return;
+    if (!devUrl || !isReactProject || !e2bConnected || previewE2bCircuit) return;
+    lastSyncedFilesKeyRef.current = filesSyncKey;
+    const t = window.setTimeout(() => {
+      void syncPreviewToSandbox(activeView === "preview");
+    }, 600);
     return () => window.clearTimeout(t);
-  }, [filesSyncKey, devUrl, activeView, running, setPreviewReloadNonce]);
+  }, [
+    filesSyncKey,
+    devUrl,
+    isReactProject,
+    e2bConnected,
+    previewE2bCircuit,
+    activeView,
+    syncPreviewToSandbox,
+  ]);
+
+  useEffect(() => {
+    const tick = agent.progress.previewSyncTick ?? 0;
+    if (tick <= lastPreviewSyncTickRef.current) return;
+    if (!devUrl || !e2bConnected || previewE2bCircuit) return;
+    lastPreviewSyncTickRef.current = tick;
+    const t = window.setTimeout(() => {
+      void syncPreviewToSandbox(activeView === "preview");
+    }, 800);
+    return () => window.clearTimeout(t);
+  }, [
+    agent.progress.previewSyncTick,
+    devUrl,
+    e2bConnected,
+    previewE2bCircuit,
+    activeView,
+    syncPreviewToSandbox,
+  ]);
 
   return {
     previewE2bCircuit,
     diffEntries,
     blameEntries,
     filesSyncKey,
+    previewSyncing: previewBoot.booting && !!devUrl,
   };
 }

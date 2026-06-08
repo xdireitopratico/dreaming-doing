@@ -5,7 +5,7 @@ import { useState, useCallback, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { DiffEditor, type DiffOnMount } from "@monaco-editor/react";
 import type { editor } from "monaco-editor";
-import { useMonacoTheme } from "@/hooks/useMonacoTheme";
+import { registerForgeTheme } from "@/lib/monaco-theme";
 import { getLanguageFromPath } from "./fileIcons";
 import { ChevronDown, ChevronUp, GitCompare, FilePlus, FileEdit } from "lucide-react";
 
@@ -38,7 +38,7 @@ export function ChatDiffViewer({ diffs, onDismiss }: ChatDiffViewerProps) {
   }, [diffs.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleDiffMount: DiffOnMount = useCallback((_e, monaco) => {
-    useMonacoTheme(monaco);
+    registerForgeTheme(monaco);
     monaco.editor.setTheme("forge");
   }, []);
 

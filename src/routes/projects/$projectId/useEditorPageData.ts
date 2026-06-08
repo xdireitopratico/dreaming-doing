@@ -180,18 +180,7 @@ export function useEditorPageData({
     });
   }, [messages]);
 
-  const fileTreeFiles = useMemo(() => {
-    if (files && files.length > 0) return files.map((f) => f.path);
-    return [
-      "src/App.tsx",
-      "src/main.tsx",
-      "src/index.css",
-      "package.json",
-      "index.html",
-      "vite.config.ts",
-      "tsconfig.json",
-    ];
-  }, [files]);
+  const fileTreeFiles = useMemo(() => files?.map((f) => f.path) ?? [], [files]);
 
   const previewNavFiles = useMemo(() => {
     if (files && files.length > 0) {

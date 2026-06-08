@@ -153,7 +153,7 @@ Gate antes de considerar produção **confiável**. Todos devem passar em `dream
 
 ### P2 — Preview
 
-- [ ] Após `fs_write`/`fs_edit` → preview atualiza (force boot se `devUrl` existe)
+- [ ] Após `fs_write`/`fs_edit` → preview atualiza (`preview-boot` force + evento `preview_sync`)
 - [ ] "envia para o preview" → agente usa tools (não só texto)
 - [ ] Erro E2B → inline no frame (sem toast de sucesso/info)
 - [ ] Preview idle após 10 min → reativa com interação

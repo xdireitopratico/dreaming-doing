@@ -64,6 +64,8 @@ export interface AgentProgress {
   canceled?: boolean;
   awaiting?: boolean;
   awaitingKind?: AwaitingKind;
+  /** Incrementado quando o agente altera ficheiros — cliente deve force-sync preview. */
+  previewSyncTick?: number;
 }
 
 export type AgentConnectOptions = {
@@ -278,9 +280,17 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
       return {
         ...prev,
         diffs: [...prev.diffs, { id, path, before, after, op, timestamp: Date.now() }],
+        previewSyncTick: (prev.previewSyncTick ?? 0) + 1,
         timeline: [...prev.timeline, event],
       };
     }
+
+    case "preview_sync":
+      return {
+        ...prev,
+        previewSyncTick: (prev.previewSyncTick ?? 0) + 1,
+        timeline: [...prev.timeline, event],
+      };
 
     case "validate_ok":
       return {

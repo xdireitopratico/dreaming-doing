@@ -316,6 +316,7 @@ function EditorPage() {
       agentHasRun={agentHasRun}
       isReactProject={isReactProject}
       previewReloadNonce={previewReloadNonce}
+      previewSyncing={orchestration.previewSyncing}
       diffEntries={orchestration.diffEntries}
       logPanelOpen={logPanelOpen}
       setLogPanelOpen={setLogPanelOpen}

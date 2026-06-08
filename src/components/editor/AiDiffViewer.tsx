@@ -5,7 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { DiffEditor, type DiffOnMount } from "@monaco-editor/react";
 import type { editor } from "monaco-editor";
 import { motion, AnimatePresence } from "framer-motion";
-import { useMonacoTheme } from "@/hooks/useMonacoTheme";
+import { registerForgeTheme } from "@/lib/monaco-theme";
 import { getLanguageFromPath } from "./fileIcons";
 import { Check, X, ChevronDown, ChevronUp, GitCompare } from "lucide-react";
 import { ForgeIcon } from "@/components/icons/ForgeIcon";
@@ -64,8 +64,8 @@ export function AiDiffViewer({
 }: AiDiffViewerProps) {
   const [expandedDiffs, setExpandedDiffs] = useState<Set<string>>(new Set());
 
-  const handleDiffMount: DiffOnMount = useCallback((editor, monaco) => {
-    useMonacoTheme(monaco);
+  const handleDiffMount: DiffOnMount = useCallback((_editor, monaco) => {
+    registerForgeTheme(monaco);
     monaco.editor.setTheme("forge");
   }, []);
 

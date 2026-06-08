@@ -526,6 +526,7 @@ export class AgentLoop {
             name: "shell_exec",
             arguments: { command: `cd /home/user && git add -A && git commit -m "${pathArg}: update" 2>&1 || true` },
           });
+          this.emit("preview_sync", { path: pathArg, reason: "fs_change" });
         }
         return result;
       });
