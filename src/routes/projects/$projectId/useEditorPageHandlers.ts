@@ -24,6 +24,7 @@ import type { StoredMessagePart } from "@/lib/chat-attachments";
 import { buildPreviewUrl } from "@/lib/project-routes";
 import { logEditorTelemetryEvent } from "@/lib/editor-telemetry";
 import { isAgentConnectInFlight } from "@/lib/agent-session-guards";
+import { loadAgentSessionExtensions } from "@/lib/agent-session-extensions";
 import { publishProject } from "@/lib/publish.functions";
 import { planApprove, planReject } from "@/lib/plan-decide.functions";
 import { resolvePendingPlan } from "@/lib/plan-message-meta";
@@ -445,6 +446,15 @@ export function useEditorPageHandlers({
         toast.warning("Passos selecionados não correspondem ao plano.");
         return;
       }
+
+      const prefs = loadAgentPreferences();
+      const sessionKind = resolveSessionKind(tasteQuota);
+      if (sessionKind === "byok" && !isAgentPreferencesConfigured(prefs)) {
+        toast.error(getAgentSetupBlockMessage(prefs));
+        return;
+      }
+      const { enabledSkillIds, enabledMcpIds } = loadAgentSessionExtensions();
+
       try {
         const result = await planApproveFn({
           data: {
@@ -452,6 +462,10 @@ export function useEditorPageHandlers({
             planId: pp.planId,
             plan: markdown?.trim() || pp.summary,
             steps: full,
+            preferences: prefs,
+            sessionKind,
+            enabledSkillIds,
+            enabledMcpIds,
           },
         });
         agent.clearPendingPlan();
@@ -471,7 +485,7 @@ export function useEditorPageHandlers({
         toast.error((e as Error)?.message ?? "Falha ao aprovar plano");
       }
     },
-    [getPendingPlan, conversation, projectId, qc, planApproveFn, setComposerMode, agent],
+    [getPendingPlan, conversation, projectId, qc, planApproveFn, setComposerMode, agent, tasteQuota],
   );
 
   const handlePlanReject = useCallback(

@@ -16,7 +16,42 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import type { AgentPreferences } from "@/lib/agent-preferences";
-import type { ForgeSessionKind, TasteAction } from "@/lib/taste";
+import type { ForgeSessionKind } from "@/lib/taste";
+
+function prefsFromRunMeta(meta: Record<string, unknown>): AgentPreferences | undefined {
+  const raw = meta.preferences;
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
+  const p = raw as AgentPreferences;
+  return p.mode ? p : undefined;
+}
+
+function sessionKindFromRunMeta(meta: Record<string, unknown>): ForgeSessionKind | undefined {
+  const sk = meta.sessionKind;
+  if (sk === "byok") return "byok";
+  if (sk === "taste" || sk === "taste_chat" || sk === "taste_start") return "taste";
+  return undefined;
+}
+
+const agentPreferencesSchema = z
+  .object({
+    mode: z.enum(["auto", "robin", "fixed"]).optional(),
+    fixedPresetId: z.string().optional(),
+    poolProvider: z.enum(["nvidia", "groq"]).optional(),
+    robinPoolModelId: z.string().optional(),
+    customModelId: z.string().optional(),
+    useCustomModel: z.boolean().optional(),
+    autoAllowedPresetIds: z.array(z.string()).optional(),
+    userModelEntries: z
+      .array(
+        z.object({
+          slug: z.string(),
+          env: z.string(),
+          label: z.string().optional(),
+        }),
+      )
+      .optional(),
+  })
+  .passthrough();
 
 const INNGEST_GRACIOSA_MESSAGE =
   "Ok. Vejo que rejeitou o plano atual. Como posso melhora-lo?";
@@ -35,6 +70,10 @@ const planApproveSchema = z.object({
   planId: z.string().min(1),
   plan: z.string().min(1),
   steps: z.array(z.unknown()).optional(),
+  preferences: agentPreferencesSchema.optional(),
+  sessionKind: z.enum(["byok", "taste"]).optional(),
+  enabledSkillIds: z.array(z.string()).optional(),
+  enabledMcpIds: z.array(z.string()).optional(),
 });
 
 const planRejectSchema = z.object({
@@ -62,6 +101,22 @@ export const planApprove = createServerFn({ method: "POST" })
       throw new Error(`Run em status inválido: ${run.status}`);
     }
 
+    const sourceMeta = (run.meta ?? {}) as Record<string, unknown>;
+    const preferences: AgentPreferences | null =
+      (data.preferences?.mode ? (data.preferences as AgentPreferences) : undefined) ??
+      prefsFromRunMeta(sourceMeta) ??
+      null;
+    const sessionKind: ForgeSessionKind =
+      data.sessionKind ?? sessionKindFromRunMeta(sourceMeta) ?? (preferences?.mode ? "byok" : "taste");
+    const enabledSkillIds =
+      data.enabledSkillIds ??
+      (Array.isArray(sourceMeta.enabledSkillIds)
+        ? (sourceMeta.enabledSkillIds as string[])
+        : []);
+    const enabledMcpIds =
+      data.enabledMcpIds ??
+      (Array.isArray(sourceMeta.enabledMcpIds) ? (sourceMeta.enabledMcpIds as string[]) : []);
+
     const now = new Date().toISOString();
     const { data: newRun, error: insertErr } = await supabase
       .from("agent_runs")
@@ -77,7 +132,11 @@ export const planApprove = createServerFn({ method: "POST" })
           planId,
           planSummary: plan,
           steps: (steps ?? []) as unknown as never,
-        },
+          preferences: (preferences ?? {}) as Record<string, unknown>,
+          sessionKind,
+          enabledSkillIds,
+          enabledMcpIds,
+        } as unknown as never,
       })
       .select("id")
       .single();
@@ -104,15 +163,6 @@ export const planApprove = createServerFn({ method: "POST" })
         .eq("id", planMsg.id);
     }
 
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("integration_prefs")
-      .eq("id", userId)
-      .maybeSingle();
-    const preferences = ((profile?.integration_prefs ?? {}) as { agent?: AgentPreferences }).agent ?? null;
-    const sessionKind: ForgeSessionKind = preferences?.mode ? "byok" : "taste";
-    const tasteAction: TasteAction | undefined = undefined;
-
     const eventKey = process.env.INNGEST_EVENT_KEY;
     let eventId: string | null = null;
     if (eventKey) {
@@ -128,8 +178,9 @@ export const planApprove = createServerFn({ method: "POST" })
               conversationId: run.conversation_id,
               userId,
               sessionKind,
-              tasteAction,
               preferences: preferences ?? {},
+              enabledSkillIds,
+              enabledMcpIds,
               planMode: false,
               plan,
               planSourceRunId: runId,
