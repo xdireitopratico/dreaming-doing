@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { detectProjectKind } from "./detect-project-kind";
+import { detectProjectKind, detectProjectStack } from "./detect-project-kind";
 
 describe("detectProjectKind", () => {
   it("returns null when empty", () => {
@@ -21,5 +21,25 @@ describe("detectProjectKind", () => {
         { path: "src/App.tsx", content: "" },
       ]),
     ).toBe("web");
+  });
+
+  it("detects android-native from gradle paths", () => {
+    expect(
+      detectProjectStack([
+        { path: "app/build.gradle.kts", content: "" },
+        { path: "app/src/main/java/com/example/MainActivity.kt", content: "" },
+      ]),
+    ).toBe("android-native");
+  });
+
+  it("detects mixed web + android-native", () => {
+    expect(
+      detectProjectStack([
+        { path: "package.json", content: '{"dependencies":{"vite":"^6"}}' },
+        { path: "vite.config.ts", content: "" },
+        { path: "app/build.gradle.kts", content: "" },
+        { path: "app/src/main/AndroidManifest.xml", content: "" },
+      ]),
+    ).toBe("mixed");
   });
 });

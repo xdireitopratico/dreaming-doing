@@ -6,6 +6,9 @@ import {
   type PreviewDevice,
 } from "@/components/editor/PreviewViewportChrome";
 import { buildPreviewUrl } from "@/lib/project-routes";
+import { BuildConsole } from "@/components/editor/BuildConsole";
+import type { AgentProgress } from "@/lib/agent-progress";
+import type { ProjectStackKind } from "@/lib/detect-project-kind";
 
 interface PreviewFrameProps {
   files: Array<{ path: string; content: string }>;
@@ -23,8 +26,10 @@ interface PreviewFrameProps {
   agentHasRun?: boolean;
   e2bConnected?: boolean;
   projectName?: string;
-  /** Agente em execução — preview permanece estático (sem loader E2B). */
+  /** Agente em execução — iframe atualiza ao vivo quando devUrl existe. */
   agentRunning?: boolean;
+  /** Badge/overlay de preview ao vivo durante run (web/expo). */
+  previewLiveUpdating?: boolean;
   /** Device viewport controlado pelo header. */
   device?: PreviewDevice;
   /** Quando true, esconde a chrome interna (URL/device/refresh) — usado quando o header já provê. */
@@ -45,6 +50,10 @@ interface PreviewFrameProps {
   sandboxStale?: boolean;
   /** Reconexão em curso após sandbox expirado — spinner, não Let's Build. */
   reconnecting?: boolean;
+  /** android-native / mixed — painel de build em vez de iframe Vite. */
+  nativeBuildPreview?: boolean;
+  projectStack?: ProjectStackKind | null;
+  agentProgress?: AgentProgress | null;
 }
 
 export function PreviewFrame({
@@ -62,6 +71,7 @@ export function PreviewFrame({
   e2bConnected = true,
   projectName,
   agentRunning = false,
+  previewLiveUpdating = false,
   device = "desktop",
   onImportRepo,
   onFocusChat,
@@ -71,6 +81,9 @@ export function PreviewFrame({
   previewSyncing = false,
   sandboxStale = false,
   reconnecting = false,
+  nativeBuildPreview = false,
+  projectStack = null,
+  agentProgress = null,
 }: PreviewFrameProps) {
   const [iframeLoading, setIframeLoading] = useState(false);
   const deviceWidth = previewDeviceWidth(device);
@@ -115,7 +128,7 @@ export function PreviewFrame({
     (booting || warming || previewSyncing);
 
   const showBootSpinner =
-    (booting && !agentRunning && !iframeSrc && !isNoFiles) || showConnecting;
+    (booting && !iframeSrc && !isNoFiles && (!agentRunning || showConnecting)) || showConnecting;
 
   const showReconnecting = reconnecting || (sandboxStale && (booting || warming || previewSyncing));
 
@@ -127,7 +140,10 @@ export function PreviewFrame({
     (!iframeSrc && !previewContent && !booting && !warming && !showReconnecting);
 
   const canShowIframe =
-    Boolean(iframeSrc) && !sandboxStale && !isNoFiles;
+    !nativeBuildPreview && Boolean(iframeSrc) && !sandboxStale && !isNoFiles;
+
+  const showNativeConsole =
+    nativeBuildPreview && (projectStack === "android-native" || projectStack === "mixed");
 
   return (
     <div className="forge-preview-root flex min-h-0 flex-1 flex-col">
@@ -136,7 +152,17 @@ export function PreviewFrame({
         data-device={device}
         style={deviceWidth ? ({ "--forge-preview-device-width": deviceWidth } as React.CSSProperties) : undefined}
       >
-        {bootError && !showBootSpinner && (
+        {showNativeConsole ? (
+          <BuildConsole
+            files={files}
+            progress={agentProgress}
+            stackKind={projectStack ?? "android-native"}
+            agentRunning={agentRunning}
+            onFocusChat={onFocusChat}
+          />
+        ) : null}
+
+        {!showNativeConsole && bootError && !showBootSpinner && (
           <div className="flex h-full flex-col items-center justify-center gap-3 bg-white p-8 text-center">
             <p className="text-sm text-neutral-700 max-w-sm leading-relaxed">{bootError}</p>
             {onRefresh && bootError.includes("agente") && (
@@ -155,19 +181,25 @@ export function PreviewFrame({
           </div>
         )}
 
-        {!bootError && (showBootSpinner || showReconnecting) ? (
+        {!showNativeConsole && !bootError && (showBootSpinner || showReconnecting) ? (
           <div className="flex h-full w-full flex-col items-center justify-center gap-3 bg-white">
             <Loader2 className="size-8 animate-spin text-neutral-400" />
             <p className="text-sm text-neutral-500">
-              {showReconnecting ? "Reconectando preview…" : "Conectando preview…"}
+              {showReconnecting
+                ? "Reconectando preview…"
+                : agentRunning
+                  ? "Subindo preview ao vivo…"
+                  : "Conectando preview…"}
             </p>
             <p className="text-xs text-neutral-400 max-w-xs">
               {showReconnecting
                 ? "O ambiente E2B expirou — estamos a subir um novo."
-                : "A atividade do agente aparece só no chat à esquerda."}
+                : agentRunning
+                  ? "O iframe atualiza conforme o agente edita os arquivos."
+                  : "A atividade do agente aparece só no chat à esquerda."}
             </p>
           </div>
-        ) : !bootError && previewIdle && devUrl ? (
+        ) : !showNativeConsole && !bootError && previewIdle && devUrl ? (
           <div className="flex h-full flex-col items-center justify-center gap-3 bg-neutral-50 p-8 text-center">
             <p className="text-sm font-medium text-neutral-800">Preview em repouso</p>
             <p className="text-sm text-neutral-500 max-w-sm leading-relaxed">
@@ -175,13 +207,22 @@ export function PreviewFrame({
               Mova o mouse ou clique para reativar.
             </p>
           </div>
-        ) : !bootError && canShowIframe && iframeSrc ? (
+        ) : !showNativeConsole && !bootError && canShowIframe && iframeSrc ? (
           <>
+            {previewLiveUpdating && !previewSyncing && !warming && !iframeLoading ? (
+              <div className="pointer-events-none absolute right-3 top-3 z-20 rounded-full bg-neutral-900/85 px-3 py-1 text-xs font-medium text-white shadow-sm">
+                Preview ao vivo
+              </div>
+            ) : null}
             {(warming || iframeLoading || previewSyncing) && (
               <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 bg-white/90">
                 <Loader2 className="size-6 animate-spin text-neutral-400" />
                 <p className="text-xs text-neutral-500">
-                  {previewSyncing ? "Sincronizando preview…" : "Carregando preview…"}
+                  {previewSyncing
+                    ? agentRunning
+                      ? "Atualizando preview ao vivo…"
+                      : "Sincronizando preview…"
+                    : "Carregando preview…"}
                 </p>
               </div>
             )}
@@ -198,14 +239,14 @@ export function PreviewFrame({
               }}
             />
           </>
-        ) : !bootError && previewContent ? (
+        ) : !showNativeConsole && !bootError && previewContent ? (
           <iframe
             srcDoc={previewContent}
             className="forge-preview-frame forge-preview-frame--sized"
             sandbox="allow-scripts"
             title="Preview"
           />
-        ) : !bootError && showLetsBuild ? (
+        ) : !showNativeConsole && !bootError && showLetsBuild ? (
           <PreviewEmptyGuide
             projectName={projectName}
             e2bConnected={e2bConnected}

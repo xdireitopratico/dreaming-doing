@@ -1,6 +1,7 @@
 // project-delete — encerra sandbox E2B do projeto e remove o registro (CASCADE nos filhos)
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { loadUserE2bApiKey } from "../_shared/user-e2b.ts";
+import { snapshotProjectFilesToCorpus } from "../_shared/code-corpus.ts";
 import { killAllProjectSandboxes, readSandboxMeta } from "../_shared/project-sandbox.ts";
 
 const corsHeaders = {
@@ -25,7 +26,7 @@ Deno.serve(async (req) => {
 
     const { data: project } = await supabase
       .from("projects")
-      .select("id, owner_id, meta")
+      .select("id, owner_id, meta, template")
       .eq("id", projectId)
       .single();
 
@@ -55,6 +56,18 @@ Deno.serve(async (req) => {
       );
     }
 
+    const corpusSnapshot = await snapshotProjectFilesToCorpus(supabase, {
+      projectId,
+      userId: userData.user.id,
+      projectTemplate: (project as { template?: string }).template ?? "vite-react",
+    });
+    if (corpusSnapshot.error) {
+      console.warn(
+        `[project-delete] code_corpus snapshot partial/failed project=${projectId}`,
+        corpusSnapshot.error,
+      );
+    }
+
     await supabase.from("agent_checkpoints").delete().eq("project_id", projectId);
     await supabase.from("agent_pending_messages").delete().eq("project_id", projectId);
 
@@ -63,6 +76,7 @@ Deno.serve(async (req) => {
 
     return json({
       ok: true,
+      corpusCaptured: corpusSnapshot.captured,
       sandboxCleanup: sandboxCleanup ?? { killed: [], failed: [], listed: [] },
     });
   } catch (e: unknown) {

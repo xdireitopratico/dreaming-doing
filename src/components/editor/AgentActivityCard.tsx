@@ -56,7 +56,14 @@ export function AgentActivityCard({
   const doneFileCount = progress.diffs.length;
   const showSummary = !isActive && doneFileCount > 0 && !narrative.body?.includes("arquivo");
 
-  if (!isActive && !files.length && !showSummary && !progress.skills.length) {
+  const showReceipt =
+    !isActive &&
+    progress.finished &&
+    ((progress.currentStep != null && progress.totalSteps != null) ||
+      (progress.deliveryFiles?.length ?? 0) > 0 ||
+      progress.resumable);
+
+  if (!isActive && !files.length && !showSummary && !progress.skills.length && !showReceipt) {
     return null;
   }
 

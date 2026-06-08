@@ -1,7 +1,9 @@
 import { assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import {
   buildExecuteInstruction,
+  buildMobileStackQualifyMessage,
   extractOriginalUserRequest,
+  isAmbiguousMobileRequest,
   isPreviewActionRequest,
   isProjectInventoryQuestion,
   isSeedPlaceholderAppContent,
@@ -135,4 +137,16 @@ Deno.test("needsQualify para pedido curto", () => {
     }),
     false,
   );
+});
+
+Deno.test("isAmbiguousMobileRequest para app de voz sem stack", () => {
+  assertEquals(isAmbiguousMobileRequest("app de voz para celular"), true);
+  assertEquals(isAmbiguousMobileRequest("app expo de voz"), false);
+  assertEquals(isAmbiguousMobileRequest("app android kotlin"), false);
+});
+
+Deno.test("buildMobileStackQualifyMessage oferece Expo e Kotlin", () => {
+  const msg = buildMobileStackQualifyMessage();
+  assertEquals(msg.includes("Expo"), true);
+  assertEquals(msg.includes("Kotlin"), true);
 });

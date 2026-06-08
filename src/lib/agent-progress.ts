@@ -66,6 +66,16 @@ export interface AgentProgress {
   awaitingKind?: AwaitingKind;
   /** Incrementado quando o agente altera ficheiros — cliente deve force-sync preview. */
   previewSyncTick?: number;
+  /** Paths entregues no último delivery_checkpoint (contrato parcial). */
+  deliveryFiles?: string[];
+  /** Linhas de saída Gradle/shell (preview nativo). */
+  buildLogLines?: Array<{ command: string; line: string; ok: boolean; ts: number }>;
+  /** Sugestão de fork quando mobile nativo aparece em projeto web. */
+  stackForkSuggested?: {
+    path: string;
+    suggestedStack: string;
+    message: string;
+  } | null;
 }
 
 export type AgentConnectOptions = {
@@ -237,11 +247,64 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
 
     case "robin_rotate":
     case "connection_retry":
+    case "heartbeat":
       return {
         ...prev,
         statusHint: (data.message as string) ?? prev.statusHint,
         timeline: [...prev.timeline, event],
       };
+
+    case "build_log": {
+      const command = typeof data.command === "string" ? data.command : "gradle";
+      const ok = data.ok !== false;
+      const rawLines = Array.isArray(data.lines)
+        ? (data.lines as string[]).filter((l) => typeof l === "string" && l.trim())
+        : typeof data.output === "string"
+          ? data.output.split("\n").filter((l) => l.trim())
+          : [];
+      const ts = Date.now();
+      const appended = rawLines.map((line) => ({
+        command,
+        line: line.trim(),
+        ok,
+        ts,
+      }));
+      return {
+        ...prev,
+        buildLogLines: [...(prev.buildLogLines ?? []), ...appended].slice(-120),
+        timeline: [...prev.timeline, event],
+      };
+    }
+
+    case "stack_fork_suggested":
+      return {
+        ...prev,
+        stackForkSuggested: {
+          path: String(data.path ?? "app/build.gradle.kts"),
+          suggestedStack: String(data.suggestedStack ?? "android-native"),
+          message:
+            (data.message as string) ??
+            "Isso é mobile nativo. Criar projeto Android dedicado?",
+        },
+        timeline: [...prev.timeline, event],
+      };
+
+    case "delivery_checkpoint": {
+      const narration = typeof data.narration === "string" ? data.narration.trim() : "";
+      const deliveryFiles = Array.isArray(data.deliveryFiles)
+        ? (data.deliveryFiles as string[]).filter((p) => typeof p === "string")
+        : prev.deliveryFiles;
+      return {
+        ...prev,
+        currentStep: typeof data.step === "number" ? data.step : prev.currentStep,
+        totalSteps: typeof data.totalSteps === "number" ? data.totalSteps : prev.totalSteps,
+        streamText: narration || prev.streamText,
+        deliveryFiles,
+        resumable: data.resumable === true || prev.resumable,
+        statusHint: (data.message as string) ?? prev.statusHint ?? "Entrega parcial registrada…",
+        timeline: [...prev.timeline, event],
+      };
+    }
 
     case "classify": {
       const summary = typeof data.summary === "string" ? data.summary.trim() : "";

@@ -57,10 +57,17 @@ export const agentPlanFunction = inngest.createFunction(
     }
 
     if (!final.ok && final.resumable) {
-      await step.run("mark-failed-budget", async () => {
-        await markRunFinal(runId, "failed", { error: final.error ?? "loop budget exhausted" });
+      await step.run("re-enqueue-resumable-chunk", async () => {
+        const status = await getRunStatus(runId);
+        if (status === "failed") {
+          await markRunFinal(runId, "running", {
+            error: final.error ?? "loop budget exhausted",
+            meta: { checkpoint: true, resume: true },
+          });
+        }
+        await inngest.send({ name: "agent/plan.requested", data: payload });
       });
-      return { runId, ok: false, error: final.error ?? "loop budget exhausted" };
+      return { runId, ok: false, resumable: true, error: final.error ?? "loop budget exhausted" };
     }
 
     await step.run("mark-completed", async () => {

@@ -5,6 +5,7 @@ export type ProjectTemplateId =
   | "nextjs-app-router"
   | "tanstack-start"
   | "expo"
+  | "android-native"
   | "astro"
   | "node-api"
   | "static-html"
@@ -256,6 +257,22 @@ ${TOOLS_BLOCK}
 
 ${STACK_FLEX}`;
 
+const ANDROID_NATIVE_PROMPT = `Você é o Dream Weaver do FORGE — engenheiro Android nativo (Kotlin/Gradle).
+
+## Stack do projeto (base atual)
+- Gradle Kotlin DSL + app/src/main (Activity Kotlin)
+- Sem preview iframe Vite — entregas parciais via arquivos + logs de build
+- Use fs_write/fs_edit em app/src/main, build.gradle.kts, AndroidManifest.xml
+- shell_exec: ./gradlew assembleDebug (pode levar vários chunks)
+
+## Estado inicial (seed)
+- MainActivity vazia — placeholder até o agente implementar UI e lógica
+- Narre cada entrega parcial (N arquivos + passo do build)
+
+${TOOLS_BLOCK}
+
+${STACK_FLEX}`;
+
 const CUSTOM_PROMPT = `Você é o Dream Weaver do FORGE — engenheiro full-stack sem limite artificial de framework.
 
 ## Stack do projeto
@@ -272,6 +289,7 @@ const PROMPTS: Record<ProjectTemplateId, string> = {
   "nextjs-app-router": NEXTJS_APP_ROUTER_PROMPT,
   "tanstack-start": TANSTACK_START_PROMPT,
   "expo": EXPO_PROMPT,
+  "android-native": ANDROID_NATIVE_PROMPT,
   "astro": ASTRO_PROMPT,
   "node-api": NODE_API_PROMPT,
   "static-html": STATIC_HTML_PROMPT,

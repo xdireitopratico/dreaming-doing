@@ -155,6 +155,59 @@ export function buildToolBatchNarration(
   return `${prefix}Concluí: ${joined}. ${status}`;
 }
 
+export type FinalWrapUpOpts = {
+  stepsCompleted: number;
+  totalSteps: number;
+  touchedPaths: string[];
+  toolsUsed: string[];
+  resumable?: boolean;
+  partial?: boolean;
+  errorMessage?: string;
+};
+
+/** Wrap-up final Lovable-style — resumo honesto do que foi entregue. */
+export function buildFinalWrapUp(opts: FinalWrapUpOpts): string {
+  const lines: string[] = [];
+  const fileCount = opts.touchedPaths.length;
+  const stepLabel = `**Passo ${opts.stepsCompleted}/${opts.totalSteps}**`;
+
+  if (opts.errorMessage?.trim()) {
+    lines.push("**Execução pausada.**", "", opts.errorMessage.trim());
+  } else if (opts.partial || opts.resumable) {
+    lines.push("**Entrega parcial neste chunk.**");
+  } else {
+    lines.push("**Pronto!** Resumo do que fiz nesta rodada:");
+  }
+
+  if (fileCount > 0) {
+    const shown = opts.touchedPaths.slice(-8).map((p) => `\`${p}\``).join(", ");
+    const extra = fileCount > 8 ? ` e mais ${fileCount - 8}` : "";
+    lines.push(
+      "",
+      fileCount === 1
+        ? `Alterei **1 arquivo**: ${shown}.`
+        : `Alterei **${fileCount} arquivos**: ${shown}${extra}.`,
+    );
+  } else if (!opts.errorMessage) {
+    lines.push("", "Nenhum arquivo foi alterado nesta rodada — revise o pedido ou use **Continuar**.");
+  }
+
+  const tools = [...new Set(opts.toolsUsed)].filter(Boolean);
+  if (tools.length > 0) {
+    lines.push("", `Ferramentas usadas: ${tools.slice(0, 6).join(", ")}${tools.length > 6 ? "…" : ""}.`);
+  }
+
+  lines.push("", stepLabel);
+
+  if (opts.resumable && !opts.errorMessage) {
+    lines.push("", "Use **Continuar** no chat para retomar de onde parei.");
+  } else if (!opts.partial && !opts.errorMessage && fileCount > 0) {
+    lines.push("", "Confira o **preview** à direita — se algo faltar, descreva o próximo ajuste.");
+  }
+
+  return lines.join("\n").trim();
+}
+
 /** Narração curta para validação/observe. */
 export function buildObserveNarration(kind: "typecheck" | "build" | "stuck" | "validate_ok"): string {
   switch (kind) {

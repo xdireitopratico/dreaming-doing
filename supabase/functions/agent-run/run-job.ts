@@ -203,7 +203,13 @@ export async function executeAgentJob(
   const stackCtx = buildStackContext(profile?.integration_prefs, projectMeta, { ...connectorKeys, ...deployKeys });
   const stackAddon = stackPromptAddon(stackCtx);
 
-  registerFsTools(reg, { supabase, projectId });
+  registerFsTools(reg, {
+    supabase,
+    projectId,
+    userId,
+    runId: agentRunId,
+    stackKind: projectTemplate,
+  });
 
   // CRÍTICO para o "caminho barato primeiro":
   // Só aloca E2B/sandbox (e registra shell) quando realmente vamos construir.

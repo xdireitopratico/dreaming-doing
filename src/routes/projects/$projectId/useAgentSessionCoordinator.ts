@@ -40,6 +40,10 @@ const WATCH_RUN_STATUSES = ["running", "pending"] as const;
 
 const STALE_RUN_MS = 15 * 60 * 1000;
 
+function pendingBuildRunKey(projectId: string): string {
+  return `forge:pending-build-run:${projectId}`;
+}
+
 /**
  * Coordinator: sync pending → watch run ativo (mesma conversa) → drain → auto-run só com flag de projeto novo.
  */
@@ -73,6 +77,20 @@ export function useAgentSessionCoordinator({
 
       reconcileInFlightRef.current = true;
       try {
+        const pendingBuildRunId = sessionStorage.getItem(pendingBuildRunKey(projectId));
+        if (pendingBuildRunId) {
+          watchedRunIdRef.current = pendingBuildRunId;
+          logEditorTelemetryEvent(
+            "agent",
+            "pending_build_watch",
+            "info",
+            pendingBuildRunId.slice(0, 8),
+          );
+          await watch(projectId, conversation.id, pendingBuildRunId);
+          sessionStorage.removeItem(pendingBuildRunKey(projectId));
+          return;
+        }
+
         const { data: activeRun } = await supabase
           .from("agent_runs")
           .select("id, status, heartbeat_at, started_at")

@@ -31,6 +31,8 @@ import { resolvePendingPlan } from "@/lib/plan-message-meta";
 import type { PendingPlan } from "@/lib/agent-progress";
 import { exportProjectZip } from "@/hooks/useWorkspacePresets";
 import { useAutoPublish } from "@/hooks/useAutoPublish";
+import { isProjectPublishReady } from "@/lib/publish-ready";
+import type { ProjectStackKind } from "@/lib/detect-project-kind";
 import type { useAgentRun } from "@/hooks/useAgentRun";
 import type { usePreviewBoot } from "@/hooks/usePreviewBoot";
 import { toast } from "@/lib/toast";
@@ -59,6 +61,8 @@ type UseEditorPageHandlersParams = {
   tasteQuota: TasteQuota;
   fileMap: Map<string, string>;
   filePaths: string[];
+  files: Array<{ path: string; content?: string }> | undefined;
+  projectStack: ProjectStackKind | null;
   chatMessages: ChatMessage[];
   isReactProject: boolean;
   devUrl: string | null;
@@ -96,6 +100,8 @@ export function useEditorPageHandlers({
   tasteQuota,
   fileMap,
   filePaths,
+  files,
+  projectStack,
   chatMessages,
   isReactProject,
   devUrl,
@@ -126,11 +132,17 @@ export function useEditorPageHandlers({
   const planApproveFn = useServerFn(planApprove);
   const planRejectFn = useServerFn(planReject);
 
+  const contentPublishReady = useMemo(
+    () => isProjectPublishReady(files ?? [], projectStack),
+    [files, projectStack],
+  );
+
   const autoPublish = useAutoPublish({
     projectId,
     devUrl,
     publishedUrl,
     previewReady,
+    contentPublishReady,
     enabled: isReactProject && e2bConnected,
     booting: previewBoot.booting,
     warming: previewBoot.warming,
@@ -474,13 +486,25 @@ export function useEditorPageHandlers({
             enabledMcpIds,
           },
         });
+        setComposerMode("build");
+        agent.clearPendingPlan();
         await qc.invalidateQueries({ queryKey: ["conversation", projectId] });
         await qc.invalidateQueries({ queryKey: ["messages", conversation?.id] });
         qc.invalidateQueries({ queryKey: ["agent-runs", projectId] });
-        setComposerMode("build");
-        agent.clearPendingPlan();
         if (result.newRunId && conversation) {
-          await agent.watch(projectId, conversation.id, result.newRunId);
+          const pendingKey = `forge:pending-build-run:${projectId}`;
+          try {
+            sessionStorage.setItem(pendingKey, result.newRunId);
+            await agent.watch(projectId, conversation.id, result.newRunId);
+            sessionStorage.removeItem(pendingKey);
+          } catch (watchErr) {
+            logEditorTelemetryEvent(
+              "agent",
+              "plan_approve_watch_fail",
+              "warn",
+              watchErr instanceof Error ? watchErr.message.slice(0, 120) : "watch failed",
+            );
+          }
         }
       } catch (e) {
         toast.error((e as Error)?.message ?? "Falha ao aprovar plano");
@@ -539,9 +563,11 @@ export function useEditorPageHandlers({
     ? "Publicando…"
     : autoPublish.isLive || liveSiteUrl
       ? "Abrir site"
-      : previewBoot.booting || previewBoot.warming
-        ? "Subindo…"
-        : "Abrir site";
+      : !contentPublishReady
+        ? "Aguardando app"
+        : previewBoot.booting || previewBoot.warming
+          ? "Subindo…"
+          : "Abrir site";
 
   const paletteActions: PaletteAction[] = useMemo(
     () =>
@@ -652,6 +678,7 @@ export function useEditorPageHandlers({
     handleShare,
     liveSiteUrl,
     publishButtonLabel,
+    contentPublishReady,
     paletteActions,
     autoPublish,
   };

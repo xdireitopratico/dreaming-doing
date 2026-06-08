@@ -24,6 +24,7 @@ import { useEditorPageData } from "./useEditorPageData";
 import { useEditorPageHandlers } from "./useEditorPageHandlers";
 import { useEditorAgentOrchestration } from "./useEditorAgentOrchestration";
 import { EditorPageLayout } from "./EditorPageLayout";
+import { isAssistantRunMaterialized } from "@/lib/assistant-materialized";
 
 export const Route = createFileRoute("/projects/$projectId/")({
   component: EditorPage,
@@ -113,6 +114,8 @@ function EditorPage() {
     fileTreeFiles,
     previewNavFiles,
     isReactProject,
+    projectStack,
+    nativeBuildPreview,
     agentHasRun,
     pendingAgentRunKey,
     devUrl,
@@ -137,6 +140,8 @@ function EditorPage() {
     tasteQuota,
     fileMap,
     filePaths,
+    files,
+    projectStack,
     chatMessages,
     isReactProject,
     devUrl,
@@ -166,7 +171,7 @@ function EditorPage() {
 
   useEffect(() => {
     for (const m of chatMessages) {
-      if (m.role === "assistant" && m.runId) {
+      if (m.role === "assistant" && m.runId && isAssistantRunMaterialized(m)) {
         agent.acknowledgeMaterializedRun(m.runId);
       }
     }
@@ -186,6 +191,7 @@ function EditorPage() {
     setLogPanelOpen,
     e2bConnected,
     isReactProject,
+    nativeBuildPreview,
     agentHasRun,
     devUrl,
     activeView,
@@ -268,6 +274,7 @@ function EditorPage() {
       handleShare={handlers.handleShare}
       handleOpenLiveSite={handlers.handleOpenLiveSite}
       publishButtonLabel={handlers.publishButtonLabel}
+      contentPublishReady={handlers.contentPublishReady}
       liveSiteUrl={handlers.liveSiteUrl}
       previewBoot={previewBoot}
       autoPublishPublishing={handlers.autoPublish.publishing}
@@ -318,8 +325,11 @@ function EditorPage() {
       previewIdle={previewIdle}
       agentHasRun={agentHasRun}
       isReactProject={isReactProject}
+      projectStack={projectStack}
+      nativeBuildPreview={nativeBuildPreview}
       previewReloadNonce={previewReloadNonce}
       previewSyncing={orchestration.previewSyncing}
+      previewLiveUpdating={orchestration.previewLiveUpdating}
       diffEntries={orchestration.diffEntries}
       logPanelOpen={logPanelOpen}
       setLogPanelOpen={setLogPanelOpen}

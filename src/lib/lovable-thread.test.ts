@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { ChatMessage } from "@/components/editor/ChatInput";
 import { initialAgentProgress } from "@/lib/agent-progress";
-import { buildLovableThread, freezeSnapshot } from "@/lib/lovable-thread";
+import { buildLovableThread, freezeSnapshot, resolveAssistantProgress } from "@/lib/lovable-thread";
 
 function msg(id: string, role: ChatMessage["role"], content: string): ChatMessage {
   return { id, role, content, timestamp: 0 };
@@ -110,6 +110,25 @@ describe("buildLovableThread", () => {
       isActive: true,
       runId: "build-run",
     });
+  });
+
+  it("frozen preserva currentStep e deliveryFiles no resolve", () => {
+    const frozen = freezeSnapshot({
+      ...initialAgentProgress,
+      finished: true,
+      currentStep: 5,
+      totalSteps: 10,
+      deliveryFiles: ["app/build.gradle.kts"],
+      streamText: "Chunk entregue",
+    });
+    const resolved = resolveAssistantProgress({
+      kind: "assistant",
+      frozen,
+      isActive: false,
+    });
+    expect(resolved?.currentStep).toBe(5);
+    expect(resolved?.totalSteps).toBe(10);
+    expect(resolved?.deliveryFiles).toEqual(["app/build.gradle.kts"]);
   });
 
   it("erro de connect sem runId aparece no turno pendente", () => {

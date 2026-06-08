@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { executeDeployPublish } from "./deploy-publish-core.ts";
+import { isProjectPublishReadyFromFiles } from "./publish-ready.ts";
 
 /** Publica automaticamente quando há previewUrl novo e ainda não foi registrado como publishedUrl. */
 export async function autoPublishIfNeeded(
@@ -12,6 +13,14 @@ export async function autoPublishIfNeeded(
   const publishedUrl = typeof meta.publishedUrl === "string" ? meta.publishedUrl.trim() : "";
   if (!previewUrl || publishedUrl === previewUrl) {
     return { published: false };
+  }
+
+  const { data: projectFiles } = await supabase
+    .from("project_files")
+    .select("path, content")
+    .eq("project_id", projectId);
+  if (!isProjectPublishReadyFromFiles((projectFiles ?? []) as Array<{ path: string; content: string }>)) {
+    return { published: false, error: "Entry ainda no placeholder do seed" };
   }
 
   const result = await executeDeployPublish(supabase, projectId, userId);

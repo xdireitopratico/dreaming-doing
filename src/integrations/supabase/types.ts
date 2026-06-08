@@ -47,6 +47,45 @@ export type Database = {
         }
         Relationships: []
       }
+      code_corpus: {
+        Row: {
+          capture_reason: string
+          captured_at: string
+          content: string
+          content_hash: string | null
+          id: string
+          path: string
+          run_id: string | null
+          source_project_id: string
+          source_user_id: string | null
+          stack_kind: string | null
+        }
+        Insert: {
+          capture_reason?: string
+          captured_at?: string
+          content?: string
+          content_hash?: string | null
+          id?: string
+          path: string
+          run_id?: string | null
+          source_project_id: string
+          source_user_id?: string | null
+          stack_kind?: string | null
+        }
+        Update: {
+          capture_reason?: string
+          captured_at?: string
+          content?: string
+          content_hash?: string | null
+          id?: string
+          path?: string
+          run_id?: string | null
+          source_project_id?: string
+          source_user_id?: string | null
+          stack_kind?: string | null
+        }
+        Relationships: []
+      }
       conversations: {
         Row: {
           created_at: string

@@ -133,6 +133,10 @@ class OpenAIAdapter implements LLMProvider {
   }
 
   private async chatCompletions(params: ChatParams): Promise<ChatResponse> {
+    if (params.onTokenDelta) {
+      return this.chatCompletionsStream(params);
+    }
+
     const messages = params.messages.map(m => {
       const msg: any = { role: m.role, content: m.content ?? "" };
       if (Array.isArray(m.content)) msg.content = m.content;
@@ -193,6 +197,135 @@ class OpenAIAdapter implements LLMProvider {
       content: msg?.content ?? null,
       tool_calls: (msg?.tool_calls ?? []).map(toToolCall),
       usage: mapUsage(data.usage),
+    };
+  }
+
+  private async chatCompletionsStream(params: ChatParams): Promise<ChatResponse> {
+    const messages = params.messages.map(m => {
+      const msg: any = { role: m.role, content: m.content ?? "" };
+      if (Array.isArray(m.content)) msg.content = m.content;
+      if (m.tool_calls) msg.tool_calls = m.tool_calls;
+      if (m.tool_call_id) { msg.tool_call_id = m.tool_call_id; msg.role = "tool"; }
+      if (m.name) msg.name = m.name;
+      return msg;
+    });
+
+    const body: any = {
+      model: this.model,
+      max_tokens: params.max_tokens ?? 4096,
+      temperature: params.temperature ?? 0.7,
+      messages,
+      stream: true,
+    };
+
+    if (params.tools?.length) {
+      body.tools = params.tools.map(t => ({
+        type: "function",
+        function: {
+          name: t.name,
+          description: t.description,
+          parameters: t.parameters,
+        },
+      }));
+      body.tool_choice = params.tool_choice ?? "auto";
+    }
+
+    if (params.response_format) {
+      body.response_format = params.response_format;
+    }
+
+    if (isNvidiaNimBaseUrl(this.baseUrl)) {
+      const extras = nvidiaNimChatExtras(this.model);
+      if (extras) Object.assign(body, extras);
+    }
+
+    const resp = await fetch(`${this.baseUrl}/chat/completions`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${this.apiKey}`,
+      },
+      body: JSON.stringify(body),
+    });
+
+    if (!resp.ok) {
+      const err = await resp.text();
+      throw new Error(formatLlmApiError(this.baseUrl, resp.status, err));
+    }
+
+    const reader = resp.body?.getReader();
+    if (!reader) {
+      throw new Error("Stream indisponível na resposta do modelo");
+    }
+
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let text = "";
+    const toolCalls = new Map<number, { id: string; name: string; arguments: string }>();
+    let usage: ChatResponse["usage"];
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+
+      const lines = buffer.split("\n");
+      buffer = lines.pop() ?? "";
+
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed.startsWith("data:")) continue;
+        const payload = trimmed.slice(5).trim();
+        if (!payload || payload === "[DONE]") continue;
+
+        let parsed: any;
+        try {
+          parsed = JSON.parse(payload);
+        } catch {
+          continue;
+        }
+
+        if (parsed.usage) {
+          usage = mapUsage(parsed.usage);
+        }
+
+        const delta = parsed.choices?.[0]?.delta;
+        if (!delta) continue;
+
+        if (delta.content) {
+          text += delta.content;
+          params.onTokenDelta?.(delta.content);
+        }
+
+        if (Array.isArray(delta.tool_calls)) {
+          for (const raw of delta.tool_calls) {
+            const idx = typeof raw.index === "number" ? raw.index : 0;
+            const existing = toolCalls.get(idx) ?? {
+              id: raw.id ?? crypto.randomUUID(),
+              name: "",
+              arguments: "",
+            };
+            if (raw.id) existing.id = raw.id;
+            if (raw.function?.name) existing.name = raw.function.name;
+            if (raw.function?.arguments) existing.arguments += raw.function.arguments;
+            toolCalls.set(idx, existing);
+          }
+        }
+      }
+    }
+
+    const parsedToolCalls = [...toolCalls.values()]
+      .filter((tc) => tc.name)
+      .map((tc) => toToolCall({
+        id: tc.id,
+        function: { name: tc.name, arguments: tc.arguments },
+      }));
+
+    return {
+      role: "assistant",
+      content: text || null,
+      tool_calls: parsedToolCalls,
+      usage,
     };
   }
 }
@@ -298,6 +431,11 @@ class OpenRouterAdapter implements LLMProvider {
   ) {}
 
   async chat(params: ChatParams): Promise<ChatResponse> {
+    if (params.onTokenDelta) {
+      const adapter = new OpenAIAdapter(this.apiKey, this.baseUrl, this.model);
+      return adapter.chat(params);
+    }
+
     const body: any = {
       model: this.model,
       max_tokens: params.max_tokens ?? 4096,

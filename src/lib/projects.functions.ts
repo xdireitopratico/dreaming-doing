@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { VITE_REACT_SEED } from "@/lib/seeds/vite-react";
+import { seedForStack } from "@/lib/seeds";
 import { inferStackFromPrompt, type ProjectStackId } from "@/lib/stack-router";
 
 function slugify(input: string) {
@@ -39,6 +39,20 @@ function stackFromTemplate(templateId?: string): ReturnType<typeof inferStackFro
         templateId === "vite-react"
           ? "Template React + Vite."
           : `Template ${templateId} — seed padrão FORGE.`,
+    };
+  }
+  if (templateId === "expo") {
+    return {
+      id: "expo",
+      label: "Expo + React Native (web + celular)",
+      reason: "Template Expo — preview web + mobile.",
+    };
+  }
+  if (templateId === "android-native") {
+    return {
+      id: "android-native",
+      label: "Android nativo (Kotlin/Gradle)",
+      reason: "Template Android nativo.",
     };
   }
   const known: ProjectStackId[] = ["node-api", "static-html", "custom"];
@@ -102,7 +116,8 @@ export const createProjectFromPrompt = createServerFn({ method: "POST" })
       .single();
     if (pErr) throw new Error(pErr.message);
 
-    const seedRows = VITE_REACT_SEED.map((f) => ({
+    const seedFiles = seedForStack(stack.id);
+    const seedRows = seedFiles.map((f) => ({
       project_id: project.id,
       path: f.path,
       content: f.content,

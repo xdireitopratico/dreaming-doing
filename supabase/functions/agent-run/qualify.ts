@@ -89,6 +89,31 @@ export function isSeedPlaceholderAppContent(content: string | undefined | null):
   return /canvas vazio/i.test(content);
 }
 
+/** Re-exportado para o loop — qualify mobile sem depender do bundle frontend. */
+export function isAmbiguousMobileRequest(prompt: string): boolean {
+  const p = prompt.trim();
+  if (!p) return false;
+  if (/\b(expo|expo-router|react native|react-native|kotlin|gradle|android nativo|swift)\b/i.test(p)) {
+    return false;
+  }
+  return (
+    /\b(app mobile|aplicativo mobile|app de celular|mobile app|app android|app ios|app de voz|voice app|hermes)\b/i.test(p)
+  );
+}
+
+export function buildMobileStackQualifyMessage(): string {
+  return [
+    "Entendi que você quer um **app mobile**.",
+    "",
+    "Antes de codar, qual caminho prefere?",
+    "",
+    "- **Expo (recomendado)** — preview web imediato no FORGE + QR para testar no celular",
+    "- **Nativo Kotlin** — build Gradle mais longo; progresso no chat e arquivos, sem iframe bonito",
+    "",
+    "Responda com *Expo* ou *Kotlin nativo* (ou descreva em uma frase o app e a plataforma).",
+  ].join("\n");
+}
+
 export function needsQualify(
   userRequest: string,
   classification: ClassificationResult,

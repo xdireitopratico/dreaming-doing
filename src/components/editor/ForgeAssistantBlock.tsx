@@ -16,6 +16,8 @@ import { ChatDiffViewer } from "@/components/editor/ChatDiffViewer";
 import { PlanViewer } from "@/components/editor/PlanViewer";
 import { PlanDocumentView } from "@/components/editor/PlanDocumentView";
 import { AgentActivityCard } from "@/components/editor/AgentActivityCard";
+import { AgentStepBar } from "@/components/editor/AgentStepBar";
+import { TurnReceipt } from "@/components/editor/TurnReceipt";
 import { storedPlanFromMessage } from "@/lib/plan-message-meta";
 
 interface ForgeAssistantBlockProps {
@@ -91,6 +93,17 @@ export function ForgeAssistantBlock({
         )}
       </div>
 
+      {isActive &&
+        effectiveProgress?.currentStep != null &&
+        effectiveProgress?.totalSteps != null &&
+        effectiveProgress.totalSteps > 0 && (
+          <AgentStepBar
+            current={effectiveProgress.currentStep}
+            total={effectiveProgress.totalSteps}
+            active={isActive}
+          />
+        )}
+
       {displayText ? (
         <MarkdownRenderer className="forge-chat-markdown">{displayText}</MarkdownRenderer>
       ) : isActive && narrative.showTyping ? (
@@ -108,7 +121,15 @@ export function ForgeAssistantBlock({
         <AgentActivityCard
           progress={effectiveProgress}
           isActive={isActive}
-          persistedText={message?.content}
+          persistedText={message?.content ?? effectiveProgress.streamText}
+        />
+      )}
+
+      {effectiveProgress && !isActive && effectiveProgress.finished && (
+        <TurnReceipt
+          progress={effectiveProgress}
+          runId={runId}
+          onResume={effectiveProgress.resumable ? onResume : undefined}
         />
       )}
 

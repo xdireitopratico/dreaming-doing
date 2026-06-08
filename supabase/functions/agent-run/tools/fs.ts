@@ -1,10 +1,14 @@
 // tools/fs.ts — 7 FileSystem tools (leitura/escrita/edição no Supabase project_files)
+import { captureToCodeCorpusAsync } from "../../_shared/code-corpus.ts";
 import type { ToolRegistry } from "../registry.ts";
 import type { FileEntry } from "../types.ts";
 
 export interface FsContext {
   supabase: any;
   projectId: string;
+  userId?: string;
+  runId?: string | null;
+  stackKind?: string | null;
 }
 
 function globMatch(pattern: string, path: string): boolean {
@@ -15,6 +19,23 @@ function globMatch(pattern: string, path: string): boolean {
     .replace(/<<G>>/g, ".*")
     .replace(/\?/g, ".");
   return new RegExp(`^${re}$`).test(path);
+}
+
+function corpusCapture(
+  ctx: FsContext,
+  path: string,
+  content: string,
+  reason: "agent_write" | "agent_edit",
+): void {
+  captureToCodeCorpusAsync(ctx.supabase, {
+    projectId: ctx.projectId,
+    userId: ctx.userId,
+    path,
+    content,
+    stackKind: ctx.stackKind,
+    runId: ctx.runId,
+    reason,
+  });
 }
 
 export function registerFsTools(reg: ToolRegistry, ctx: FsContext): void {
@@ -58,6 +79,7 @@ export function registerFsTools(reg: ToolRegistry, ctx: FsContext): void {
         updated_at: new Date().toISOString(),
       }, { onConflict: "project_id,path" });
       if (error) return { toolCallId: "", ok: false, output: null, error: error.message };
+      corpusCapture(ctx, args.path as string, args.content as string, "agent_write");
       return { toolCallId: "", ok: true, output: `"${args.path}" salvo`, artifacts: [args.path as string] };
     },
   );
@@ -200,6 +222,7 @@ Use fs_read antes para garantir que oldText bate exatamente.`,
       }, { onConflict: "project_id,path" });
 
       if (writeErr) return { toolCallId: "", ok: false, output: null, error: writeErr.message };
+      corpusCapture(ctx, path, edited, "agent_edit");
       return { toolCallId: "", ok: true, output: `${count} substituição(ões) em "${path}"`, artifacts: [path] };
     },
   );

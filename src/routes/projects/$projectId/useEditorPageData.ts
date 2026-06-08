@@ -8,6 +8,7 @@ import type { RealtimeChannel } from "@supabase/supabase-js";
 import type { ChatMessage } from "@/components/editor/ChatInput";
 import { logEditorTelemetryEvent } from "@/lib/editor-telemetry";
 import { collapseForgeUiBundle } from "@/lib/file-tree-display";
+import { detectProjectStack, type ProjectStackKind } from "@/lib/detect-project-kind";
 import type { useAgentRun } from "@/hooks/useAgentRun";
 
 import type { FileRow, Msg } from "./editor-page-types";
@@ -90,6 +91,16 @@ export function useEditorPageData({
   const isReactProject = useMemo(
     () => files?.some((f) => f.path === "package.json" || f.path === "/package.json") ?? false,
     [files],
+  );
+
+  const projectStack = useMemo((): ProjectStackKind | null => {
+    if (!files?.length) return null;
+    return detectProjectStack(files.map((f) => ({ path: f.path, content: f.content ?? "" })));
+  }, [files]);
+
+  const nativeBuildPreview = useMemo(
+    () => projectStack === "android-native" || projectStack === "mixed",
+    [projectStack],
   );
 
   const agentHasRun = useMemo(
@@ -205,6 +216,8 @@ export function useEditorPageData({
     fileTreeFiles,
     previewNavFiles,
     isReactProject,
+    projectStack,
+    nativeBuildPreview,
     agentHasRun,
     pendingAgentRunKey,
     devUrl,

@@ -120,6 +120,66 @@ describe("applyAgentProgressEvent", () => {
     expect(next.model).toBe("gpt-4");
   });
 
+  it("build_log acumula linhas no progress", () => {
+    const next = applyAgentProgressEvent(
+      { ...base, finished: false },
+      ev("build_log", {
+        command: "./gradlew assembleDebug",
+        lines: ["> Task :app:compileDebugKotlin", "BUILD SUCCESSFUL"],
+        ok: true,
+      }),
+    );
+    expect(next.buildLogLines).toHaveLength(2);
+    expect(next.buildLogLines?.[1]?.line).toBe("BUILD SUCCESSFUL");
+  });
+
+  it("stack_fork_suggested popula stackForkSuggested", () => {
+    const next = applyAgentProgressEvent(
+      { ...base, finished: false },
+      ev("stack_fork_suggested", {
+        path: "app/build.gradle.kts",
+        suggestedStack: "android-native",
+        message: "Fork sugerido",
+      }),
+    );
+    expect(next.stackForkSuggested?.path).toBe("app/build.gradle.kts");
+    expect(next.stackForkSuggested?.message).toBe("Fork sugerido");
+  });
+
+  it("assistant_text com delta faz append token a token", () => {
+    const first = applyAgentProgressEvent(
+      { ...base, finished: false, streamText: "Olá" },
+      ev("assistant_text", { text: " mundo", delta: true }),
+    );
+    expect(first.streamText).toBe("Olá mundo");
+  });
+
+  it("delivery_checkpoint atualiza passo, streamText e deliveryFiles", () => {
+    const next = applyAgentProgressEvent(
+      { ...base, finished: false, streamText: null },
+      ev("delivery_checkpoint", {
+        step: 3,
+        totalSteps: 10,
+        deliveryFiles: ["app/build.gradle.kts", "src/App.tsx"],
+        narration: "Gradle configurado.",
+        resumable: true,
+      }),
+    );
+    expect(next.currentStep).toBe(3);
+    expect(next.totalSteps).toBe(10);
+    expect(next.streamText).toBe("Gradle configurado.");
+    expect(next.deliveryFiles).toEqual(["app/build.gradle.kts", "src/App.tsx"]);
+    expect(next.resumable).toBe(true);
+  });
+
+  it("heartbeat atualiza statusHint", () => {
+    const next = applyAgentProgressEvent(
+      { ...base, finished: false },
+      ev("heartbeat", { message: "Ainda processando o modelo…" }),
+    );
+    expect(next.statusHint).toContain("processando");
+  });
+
   it("explore atualiza fase gather", () => {
     const next = applyAgentProgressEvent(
       { ...base, finished: false },

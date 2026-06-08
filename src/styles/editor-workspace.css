@@ -872,6 +872,220 @@ body:has(.editor-workspace) {
   color: var(--forge-muted);
 }
 
+.lovable-step-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 10px;
+  width: 100%;
+}
+
+.lovable-step-bar-track {
+  flex: 1;
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(255, 182, 39, 0.12);
+  overflow: hidden;
+}
+
+.lovable-step-bar-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--forge-primary), rgba(255, 182, 39, 0.75));
+  transition: width 0.35s ease;
+}
+
+.lovable-step-bar-label {
+  flex-shrink: 0;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--forge-primary);
+}
+
+.lovable-turn-receipt {
+  width: 100%;
+  margin: 8px 0 10px;
+  padding: 10px 12px;
+  border-radius: var(--forge-radius-sm);
+  border: 1px solid rgba(255, 182, 39, 0.28);
+  background: rgba(255, 182, 39, 0.05);
+}
+
+.lovable-turn-receipt-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.lovable-turn-receipt-step {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--forge-primary);
+}
+
+.lovable-turn-receipt-status {
+  font-size: 11px;
+  color: var(--forge-muted);
+}
+
+.lovable-turn-receipt-resume {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
+  padding: 0;
+  border: none;
+  background: none;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 10px;
+  color: var(--forge-primary);
+  cursor: pointer;
+}
+
+.lovable-turn-receipt-resume:hover {
+  text-decoration: underline;
+}
+
+.forge-stack-honest-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 0;
+  padding: 10px 14px;
+  border-bottom: 1px solid rgba(251, 191, 36, 0.22);
+  background: rgba(251, 191, 36, 0.06);
+}
+
+.forge-stack-honest-action {
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--forge-border);
+  background: var(--forge-surface-2);
+  font-size: 11px;
+  color: var(--forge-foreground);
+  cursor: pointer;
+}
+
+.forge-stack-honest-action:hover {
+  border-color: var(--forge-primary);
+}
+
+.forge-stack-honest-hint {
+  font-size: 10px;
+  color: var(--forge-ghost);
+}
+
+.forge-build-console {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  height: 100%;
+  padding: 14px 16px;
+  background: #0f1116;
+  overflow: auto;
+}
+
+.forge-build-console-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.forge-build-console-step {
+  margin-left: auto;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--forge-primary);
+}
+
+.forge-build-console-fork {
+  padding: 10px 12px;
+  border-radius: var(--forge-radius-sm);
+  border: 1px solid rgba(251, 191, 36, 0.28);
+  background: rgba(251, 191, 36, 0.06);
+}
+
+.forge-build-console-section {
+  border: 1px solid var(--forge-border);
+  border-radius: var(--forge-radius-sm);
+  background: rgba(18, 21, 28, 0.65);
+  padding: 10px 12px;
+}
+
+.forge-build-console-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 8px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--forge-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.forge-build-console-files {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 180px;
+  overflow: auto;
+}
+
+.forge-build-console-files li {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 12px;
+  color: var(--forge-foreground);
+}
+
+.forge-build-console-file-path {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 10px;
+  color: var(--forge-ghost);
+}
+
+.forge-build-console-empty {
+  margin: 0;
+  font-size: 12px;
+  color: var(--forge-muted);
+  line-height: 1.45;
+}
+
+.forge-build-console-commands {
+  margin-bottom: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.forge-build-console-log {
+  flex: 1;
+  min-height: 120px;
+}
+
+.forge-build-console-pre {
+  margin: 0;
+  max-height: 280px;
+  overflow: auto;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 10px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 .lovable-activity-tip {
   margin: 10px 0 0;
   padding-top: 8px;

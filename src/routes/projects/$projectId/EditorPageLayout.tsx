@@ -14,6 +14,7 @@ import { SetupRail } from "@/components/editor/SetupRail";
 import { TasteSetupChecklist } from "@/components/editor/TasteSetupChecklist";
 import { TastePostStartBanner } from "@/components/editor/TastePostStartBanner";
 import { PreviewFrame } from "@/components/editor/PreviewFrame";
+import { StackHonestBanner } from "@/components/editor/StackHonestBanner";
 import { CommandPalette, type PaletteAction } from "@/components/editor/CommandPalette";
 import { ShortcutCheatsheet } from "@/components/editor/ShortcutCheatsheet";
 import { LogPanel, type LogEntry } from "@/components/editor/LogPanel";
@@ -41,6 +42,7 @@ export type EditorPageLayoutProps = {
   handleShare: () => void;
   handleOpenLiveSite: () => void;
   publishButtonLabel: string;
+  contentPublishReady?: boolean;
   liveSiteUrl: string | null;
   previewBoot: PreviewBoot;
   autoPublishPublishing: boolean;
@@ -95,8 +97,11 @@ export type EditorPageLayoutProps = {
   previewIdle: boolean;
   agentHasRun: boolean;
   isReactProject: boolean;
+  projectStack?: import("@/lib/detect-project-kind").ProjectStackKind | null;
+  nativeBuildPreview?: boolean;
   previewReloadNonce: number;
   previewSyncing?: boolean;
+  previewLiveUpdating?: boolean;
   diffEntries: DiffEntry[];
   logPanelOpen: boolean;
   setLogPanelOpen: (value: boolean | ((prev: boolean) => boolean)) => void;
@@ -123,6 +128,7 @@ export function EditorPageLayout({
   handleShare,
   handleOpenLiveSite,
   publishButtonLabel,
+  contentPublishReady = false,
   liveSiteUrl,
   previewBoot,
   autoPublishPublishing,
@@ -173,8 +179,11 @@ export function EditorPageLayout({
   previewIdle,
   agentHasRun,
   isReactProject,
+  projectStack = null,
+  nativeBuildPreview = false,
   previewReloadNonce,
   previewSyncing = false,
+  previewLiveUpdating = false,
   diffEntries,
   logPanelOpen,
   setLogPanelOpen,
@@ -260,7 +269,10 @@ export function EditorPageLayout({
                 publishLabel={publishButtonLabel}
                 publishDisabled={
                   !liveSiteUrl &&
-                  (previewBoot.booting || previewBoot.warming || autoPublishPublishing)
+                  (!contentPublishReady ||
+                    previewBoot.booting ||
+                    previewBoot.warming ||
+                    autoPublishPublishing)
                 }
                 e2bConnected={e2bConnected}
                 integrations={{
@@ -353,6 +365,15 @@ export function EditorPageLayout({
                   )}
 
                   <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+                    <StackHonestBanner
+                      files={previewNavFiles}
+                      onFocusChat={() => {
+                        const el = document.querySelector<HTMLTextAreaElement>(
+                          ".forge-composer-input",
+                        );
+                        el?.focus();
+                      }}
+                    />
                     <div className="min-h-0 min-w-0 flex-1">
                       {activeView === "code" && (
                         <CodeEditor
@@ -369,6 +390,7 @@ export function EditorPageLayout({
                           files={previewNavFiles}
                           booting={previewBoot.booting}
                           agentRunning={running}
+                          previewLiveUpdating={previewLiveUpdating}
                           devUrl={devUrl}
                           previewPath={previewRoute}
                           iframeRef={previewIframeRef}
@@ -389,6 +411,9 @@ export function EditorPageLayout({
                           sandboxStale={previewBoot.sandboxStale}
                           reconnecting={previewBoot.reconnecting}
                           isReactProject={isReactProject}
+                          nativeBuildPreview={nativeBuildPreview}
+                          projectStack={projectStack}
+                          agentProgress={agent.progress}
                           projectName={projectName ?? undefined}
                           device={previewDevice}
                           onImportRepo={() => {

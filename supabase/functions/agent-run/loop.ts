@@ -22,6 +22,8 @@ import {
   isProjectInventoryQuestion,
   isSeedPlaceholderAppContent,
   needsQualify,
+  isAmbiguousMobileRequest,
+  buildMobileStackQualifyMessage,
 } from "./qualify.ts";
 import { getTasteStartSystemPrompt } from "./prompts-taste.ts";
 import { friendlyLlmError } from "./llm-errors.ts";
@@ -44,6 +46,7 @@ import type { ClassificationResult } from "./router.ts";
 import {
   buildApprovedPlanBriefing,
   buildClassifyBriefing,
+  buildFinalWrapUp,
   buildGatherNarration,
   buildObserveNarration,
   buildToolBatchNarration,
@@ -52,6 +55,17 @@ import {
 type StreamCallback = (event: { type: string; data: unknown }) => void;
 
 const CHECKPOINT_INTERVAL_STEPS = 2;
+
+const ANDROID_NATIVE_PATH_RE =
+  /(^|\/)(build\.gradle(\.kts)?|settings\.gradle(\.kts)?|gradle\.properties|gradlew|app\/src\/main\/|\.kt$|AndroidManifest\.xml)/i;
+
+function isAndroidNativePath(path: string): boolean {
+  return ANDROID_NATIVE_PATH_RE.test(path.replace(/^\//, ""));
+}
+
+function isGradleCommand(command: string): boolean {
+  return /gradle|gradlew|assembleDebug|assembleRelease/i.test(command);
+}
 
 function resolveLoopBudgetMs(): number {
   const raw =
@@ -103,6 +117,10 @@ export class AgentLoop {
   private approvedPlanBuild: boolean;
   private approvedPlanSteps: PlanStep[];
   private narrationStarted: boolean;
+  private narrationBuffer: string;
+  private llmResponseWasStreamed: boolean;
+  private touchedPaths: Set<string>;
+  private lastActivityAt: number;
 
   constructor(
     reg: ToolRegistry,
@@ -164,6 +182,10 @@ export class AgentLoop {
       : extracted;
     this.toolsInvoked = false;
     this.narrationStarted = false;
+    this.narrationBuffer = "";
+    this.llmResponseWasStreamed = false;
+    this.touchedPaths = new Set();
+    this.lastActivityAt = Date.now();
     this.runStartTime = Date.now();
     this.lastCheckpointStep = options?.hasCheckpoint ? (state.currentStepIndex ?? 0) : 0;
     this.router = new ModelRouter(injectedKeys, routerOverrides);
@@ -190,6 +212,8 @@ export class AgentLoop {
     toolsUsed: string[];
   }> {
     await this.saveCheckpoint(this.state.phase, true);
+    await this.emitDeliveryCheckpoint(steps);
+    await this.touchHeartbeat();
     this.emit("timeout_warning", {
       message: "Chunk encerrado — Inngest retoma no próximo passo",
       elapsedMs: Date.now() - this.runStartTime,
@@ -202,6 +226,89 @@ export class AgentLoop {
       resumable: true,
       toolsUsed: [...toolsUsed],
     };
+  }
+
+  private appendToNarration(text: string): void {
+    const chunk = text.trim();
+    if (!chunk) return;
+    this.narrationBuffer = this.narrationBuffer
+      ? `${this.narrationBuffer}\n\n${chunk}`
+      : chunk;
+    this.lastActivityAt = Date.now();
+  }
+
+  private recordTouchedPath(path: string): void {
+    if (path) this.touchedPaths.add(path);
+  }
+
+  private async touchHeartbeat(): Promise<void> {
+    if (!this.runId) return;
+    try {
+      await this.sb
+        .from("agent_runs")
+        .update({ heartbeat_at: new Date().toISOString() })
+        .eq("id", this.runId);
+    } catch {
+      /* best-effort */
+    }
+    this.lastActivityAt = Date.now();
+  }
+
+  private maybeEmitSilenceHeartbeat(): void {
+    if (Date.now() - this.lastActivityAt < 90_000) return;
+    this.emit("heartbeat", {
+      message: "Ainda processando o modelo…",
+      silentMs: Date.now() - this.lastActivityAt,
+    });
+    this.streamNarration("Ainda processando o modelo — já volto com a próxima entrega.");
+  }
+
+  private async emitDeliveryCheckpoint(step: number): Promise<void> {
+    const deliveryFiles = [...this.touchedPaths];
+    const narration = this.narrationBuffer.trim();
+    this.emit("delivery_checkpoint", {
+      step,
+      totalSteps: this.maxStepsLimit,
+      deliveryFiles,
+      narration: narration.slice(0, 4000),
+      resumable: true,
+      message: deliveryFiles.length > 0
+        ? `Entrega parcial: ${deliveryFiles.length} arquivo(s) neste chunk`
+        : "Checkpoint de entrega parcial",
+    });
+    await this.persistPartial();
+  }
+
+  private async persistPartial(): Promise<void> {
+    const text = this.narrationBuffer.trim();
+    if (!text && this.touchedPaths.size === 0) return;
+
+    const deliveryFiles = [...this.touchedPaths];
+    const summary = text ||
+      (deliveryFiles.length > 0
+        ? `Entrega parcial — ${deliveryFiles.length} arquivo(s) alterado(s) neste chunk.`
+        : "Entrega parcial registrada.");
+    const fileFooter = deliveryFiles.length > 0
+      ? `\n\n**Arquivos neste chunk:** ${deliveryFiles.map((p) => `\`${p}\``).join(", ")}`
+      : "";
+
+    const meta: Record<string, unknown> = {
+      runId: this.runId ?? undefined,
+      partial: true,
+      deliveryFiles,
+      executionLog: this.state.executionLog,
+      currentStep: this.state.currentStepIndex,
+      totalSteps: this.maxStepsLimit,
+    };
+
+    await this.sb.from("messages").insert({
+      conversation_id: this.state.conversationId,
+      role: "assistant",
+      parts: [{ type: "text", text: `${summary}${fileFooter}` }],
+      tool_calls: [],
+      meta,
+    });
+    await this.sb.from("projects").update({ updated_at: new Date().toISOString() }).eq("id", this.state.projectId);
   }
 
   private async clearCheckpoint(): Promise<void> {
@@ -500,6 +607,7 @@ export class AgentLoop {
       this.state.currentStepIndex = loopStep;
       this.state.totalSteps = this.maxStepsLimit;
       this.state.phase = LoopPhase.EXECUTE_STEP;
+      await this.touchHeartbeat();
       this.emit("step", { current: loopStep, total: this.maxStepsLimit });
       this.emit("phase", {
         phase: "execute",
@@ -515,6 +623,8 @@ export class AgentLoop {
       const narrationOnlyStep = !this.toolsInvoked && loopStep === 1 && actionableIntent;
       let response: ChatResponse | null = null;
       try {
+        this.maybeEmitSilenceHeartbeat();
+        await this.touchHeartbeat();
         response = await this.llmChat(executionModel, executeInstruction, compressed, forceTools);
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : "Erro no modelo";
@@ -529,13 +639,16 @@ export class AgentLoop {
       this.compression.recordUsage(response.usage);
 
       const assistantText = (response.content ?? "").trim();
-      if (assistantText) {
+      if (assistantText && !this.llmResponseWasStreamed) {
+        this.appendToNarration(assistantText);
         this.emit("assistant_text", {
           text: assistantText,
           append: this.narrationStarted,
           final: !response.tool_calls?.length,
         });
         this.narrationStarted = true;
+      } else if (assistantText && this.llmResponseWasStreamed && !this.narrationBuffer.includes(assistantText)) {
+        this.appendToNarration(assistantText);
       }
 
       // Sem tool_calls
@@ -599,9 +712,36 @@ export class AgentLoop {
         const result = await this.reg.execute(call);
         this.emit("tool_done", { name: call.name, ok: result.ok, error: result.error });
 
+        if (call.name === "shell_exec" && isGradleCommand(String(call.arguments.command ?? ""))) {
+          const output =
+            typeof result.output === "string"
+              ? result.output
+              : result.output != null
+                ? JSON.stringify(result.output)
+                : result.error ?? "";
+          this.emit("build_log", {
+            command: String(call.arguments.command ?? "").slice(0, 240),
+            lines: output.split("\n").map((l) => l.trim()).filter(Boolean).slice(-40),
+            ok: result.ok,
+            output: output.slice(0, 4000),
+          });
+        }
+
         // ─── Emite o diff para o cliente APÓS tool_done (com o estado final já aplicado) ───
         if (preDiff && result.ok) {
+          this.recordTouchedPath(preDiff.path);
           this.emit("file_diff", preDiff);
+          if (
+            isAndroidNativePath(preDiff.path) &&
+            (this.projectTemplate === "vite-react" || this.projectTemplate === "landing-page")
+          ) {
+            this.emit("stack_fork_suggested", {
+              path: preDiff.path,
+              suggestedStack: "android-native",
+              message:
+                "Detectamos código **mobile nativo** neste projeto web. Quer criar um projeto Android dedicado? (O arquivo foi mantido — nada foi apagado.)",
+            });
+          }
         }
 
         if ((call.name === "fs_write" || call.name === "fs_edit") && result.ok) {
@@ -738,28 +878,44 @@ export class AgentLoop {
     }
 
     if (loopStep >= this.maxStepsLimit) {
+      const limitWrapUp = buildFinalWrapUp({
+        stepsCompleted: loopStep,
+        totalSteps: this.maxStepsLimit,
+        touchedPaths: [...this.touchedPaths],
+        toolsUsed: [...toolsUsed],
+        resumable: true,
+        partial: true,
+        errorMessage: "Limite de passos atingido neste chunk.",
+      });
+      this.streamNarration(limitWrapUp, true);
       await this.saveCheckpoint(LoopPhase.ERROR, true);
-      await this.persistFinal("Limite de passos atingido. Parei aqui — use Continuar no chat para retomar com a mesma memória.");
+      await this.persistFinal(limitWrapUp);
       return { ok: false, error: "Limite de passos", steps: loopStep, resumable: true, toolsUsed: [...toolsUsed] };
     }
 
     this.state.phase = LoopPhase.SUMMARIZE;
     this.emit("phase", { phase: "summarize", message: "Finalizando..." });
     await this.saveCheckpoint(LoopPhase.SUMMARIZE, true);
-    const finalMsg = this.state.messages[this.state.messages.length - 1];
-    const rawSummary = finalMsg?.content;
-    const summary = typeof rawSummary === "string"
-      ? rawSummary
-      : Array.isArray(rawSummary)
-        ? rawSummary.filter((b): b is { type: string; text?: string } => !!(b as any)?.text)
-            .map((b) => (b as any).text).join("\n")
-        : "Tarefa concluída.";
-    await this.persistFinal(summary);
+    const wrapUp = buildFinalWrapUp({
+      stepsCompleted: loopStep,
+      totalSteps: this.maxStepsLimit,
+      touchedPaths: [...this.touchedPaths],
+      toolsUsed: [...toolsUsed],
+      resumable: false,
+    });
+    this.emit("assistant_text", {
+      text: this.narrationStarted ? `\n\n${wrapUp}` : wrapUp,
+      append: this.narrationStarted,
+      final: true,
+    });
+    this.appendToNarration(wrapUp);
+    this.narrationStarted = true;
+    await this.persistFinal(wrapUp);
     await this.clearCheckpoint();
     const tokens = this.compression.getTotalTokens();
     const costUsd = this.compression.getEstimatedCostUsd(this.router.mainCfg.model);
     this.emit("done", {
-      summary,
+      summary: wrapUp,
       totalInputTokens: tokens.input,
       totalOutputTokens: tokens.output,
       totalTokens: tokens.total,
@@ -767,7 +923,7 @@ export class AgentLoop {
     });
     return {
       ok: true,
-      summary,
+      summary: wrapUp,
       steps: loopStep,
       toolsUsed: [...toolsUsed],
       totalInputTokens: tokens.input,
@@ -778,6 +934,7 @@ export class AgentLoop {
   }
 
   private async gatherContext(): Promise<void> {
+    await this.touchHeartbeat();
     const { data: files } = await this.sb
       .from("project_files")
       .select("path, content, updated_at")
@@ -925,6 +1082,9 @@ export class AgentLoop {
       phase: "qualify",
       message: "Qualificando ideia antes de codar…",
     });
+    if (isAmbiguousMobileRequest(userRequest)) {
+      return { stopForUser: true, message: buildMobileStackQualifyMessage() };
+    }
     try {
       const resp = await model.chat({
         messages: [
@@ -975,12 +1135,27 @@ export class AgentLoop {
       { role: "user", content: instruction },
     ];
 
+    this.llmResponseWasStreamed = false;
     try {
       return await model.chat({
         messages,
         tools: this.reg.getDefinitions(),
         tool_choice: forceTools ? "required" : "auto",
         max_tokens: 4096,
+        onTokenDelta: forceTools
+          ? undefined
+          : (delta) => {
+            if (!delta) return;
+            this.llmResponseWasStreamed = true;
+            this.emit("assistant_text", {
+              text: delta,
+              append: this.narrationStarted,
+              delta: true,
+              final: false,
+            });
+            this.narrationStarted = true;
+            this.appendToNarration(delta);
+          },
       });
     } catch (err: unknown) {
       const message = friendlyLlmError(err, this.robinActive);
@@ -1057,15 +1232,24 @@ export class AgentLoop {
   }
 
   private async persistFinal(summary: string): Promise<void> {
+    const narration = this.narrationBuffer.trim();
+    const deliveryFiles = [...this.touchedPaths];
+    const body = narration || summary;
+    const fileFooter = deliveryFiles.length > 0
+      ? `\n\n**Arquivos alterados:** ${deliveryFiles.map((p) => `\`${p}\``).join(", ")}`
+      : "";
     const meta: Record<string, unknown> = {
       runId: this.runId ?? undefined,
+      deliveryFiles,
       executionLog: this.state.executionLog,
       finishedAt: new Date().toISOString(),
+      currentStep: this.state.currentStepIndex,
+      totalSteps: this.maxStepsLimit,
     };
     await this.sb.from("messages").insert({
       conversation_id: this.state.conversationId,
       role: "assistant",
-      parts: [{ type: "text", text: summary }],
+      parts: [{ type: "text", text: `${body}${fileFooter}` }],
       tool_calls: [],
       meta,
     });
@@ -1104,6 +1288,7 @@ export class AgentLoop {
   private streamNarration(text: string, append?: boolean): void {
     const chunk = text.trim();
     if (!chunk) return;
+    this.appendToNarration(chunk);
     const shouldAppend = append ?? this.narrationStarted;
     this.emit("assistant_text", {
       text: shouldAppend ? `\n\n${chunk}` : chunk,

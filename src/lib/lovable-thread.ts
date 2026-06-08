@@ -3,7 +3,23 @@ import type { AgentProgress } from "@/lib/agent-progress";
 
 export type FrozenRunSnapshot = Pick<
   AgentProgress,
-  "timeline" | "tools" | "diffs" | "pendingPlan" | "streamText" | "phase" | "message" | "summary" | "error" | "finished" | "resumable" | "lastFinishOk"
+  | "timeline"
+  | "tools"
+  | "diffs"
+  | "pendingPlan"
+  | "streamText"
+  | "phase"
+  | "message"
+  | "summary"
+  | "error"
+  | "finished"
+  | "resumable"
+  | "lastFinishOk"
+  | "currentStep"
+  | "totalSteps"
+  | "deliveryFiles"
+  | "buildLogLines"
+  | "stackForkSuggested"
 >;
 
 export type LovableThreadItem =
@@ -37,6 +53,11 @@ function freezeSnapshot(progress: AgentProgress): FrozenRunSnapshot {
     finished: progress.finished,
     resumable: progress.resumable,
     lastFinishOk: progress.lastFinishOk,
+    currentStep: progress.currentStep,
+    totalSteps: progress.totalSteps,
+    deliveryFiles: progress.deliveryFiles,
+    buildLogLines: progress.buildLogLines,
+    stackForkSuggested: progress.stackForkSuggested,
   };
 }
 
@@ -207,8 +228,8 @@ export function resolveAssistantProgress(
   return {
     phase: f.phase,
     message: f.message,
-    currentStep: null,
-    totalSteps: null,
+    currentStep: f.currentStep ?? null,
+    totalSteps: f.totalSteps ?? null,
     tools: f.tools,
     cost: 0,
     model: null,
@@ -226,5 +247,8 @@ export function resolveAssistantProgress(
     pendingQueueCount: 0,
     diffs: f.diffs,
     pendingPlan: f.pendingPlan,
+    deliveryFiles: f.deliveryFiles,
+    buildLogLines: f.buildLogLines,
+    stackForkSuggested: f.stackForkSuggested,
   };
 }

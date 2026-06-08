@@ -10,12 +10,31 @@ export const PROBE_ATTEMPTS_AFTER_BOOT = 10;
 export const PROBE_INTERVAL_MS = 2000;
 export const PROBE_FETCH_MS = 4000;
 
+const EXPO_DEFAULT_PORT = "8081";
+
+function isExpoProject(files: Array<{ path: string; content?: string | null }>): boolean {
+  const pkg = files.find((f) => f.path === "package.json" || f.path === "/package.json");
+  if (!pkg?.content) return false;
+  try {
+    const parsed = JSON.parse(pkg.content) as {
+      dependencies?: Record<string, string>;
+      devDependencies?: Record<string, string>;
+    };
+    const deps = { ...parsed.dependencies, ...parsed.devDependencies };
+    return !!deps.expo;
+  } catch {
+    return pkg.content.includes('"expo"');
+  }
+}
+
 export function detectDevPort(files: Array<{ path: string; content?: string | null }>): string {
+  if (isExpoProject(files)) return EXPO_DEFAULT_PORT;
+
   const pkg = files.find((f) => f.path === "package.json" || f.path === "/package.json");
   if (pkg?.content) {
     try {
       const scripts = (JSON.parse(pkg.content) as { scripts?: Record<string, string> }).scripts;
-      const dev = scripts?.dev ?? scripts?.start ?? "";
+      const dev = scripts?.dev ?? scripts?.start ?? scripts?.web ?? "";
       const m = dev.match(/--port\s+(\d{2,5})/) ?? dev.match(/:(\d{2,5})/);
       if (m?.[1]) return m[1];
     } catch {
@@ -34,10 +53,17 @@ export function detectDevCommand(
   files: Array<{ path: string; content?: string | null }>,
   port: number,
 ): string {
+  if (isExpoProject(files)) {
+    return `CI=1 EXPO_NO_TELEMETRY=1 npx expo start --web --port ${port} --non-interactive`;
+  }
+
   const pkg = files.find((f) => f.path === "package.json" || f.path === "/package.json");
   if (pkg?.content) {
     try {
       const scripts = (JSON.parse(pkg.content) as { scripts?: Record<string, string> }).scripts;
+      if (scripts?.web?.includes("expo")) {
+        return `CI=1 EXPO_NO_TELEMETRY=1 npm run web -- --port ${port} --non-interactive`;
+      }
       if (scripts?.dev) {
         const dev = scripts.dev;
         if (dev.includes("vite") && !dev.includes("--host")) {
@@ -123,7 +149,7 @@ export async function bootDevServerInSandbox(
   }
 
   await sandbox.commands.run(
-    `pkill -f "vite.*${devPort}" 2>/dev/null || pkill -f "node.*vite" 2>/dev/null || true`,
+    `pkill -f "vite.*${devPort}" 2>/dev/null || pkill -f "node.*vite" 2>/dev/null || pkill -f "expo start" 2>/dev/null || true`,
     { cwd: E2B_PROJECT_DIR, timeoutMs: 5_000 },
   );
 

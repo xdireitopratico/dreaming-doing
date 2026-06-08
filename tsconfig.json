@@ -3,8 +3,8 @@
     "src/**/*.ts",
     "src/**/*.tsx",
     "vite.config.ts",
-    "eslint.config.js",
-    "trigger.config.ts"
+    "vitest.config.ts",
+    "eslint.config.js"
   ],
   "compilerOptions": {
     "target": "ES2022",

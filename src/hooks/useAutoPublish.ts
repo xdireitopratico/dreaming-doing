@@ -12,6 +12,8 @@ type AutoPublishOpts = {
   devUrl: string | null;
   publishedUrl: string | null;
   previewReady: boolean;
+  /** Entry do app saiu do placeholder do seed (web/expo). */
+  contentPublishReady: boolean;
   enabled: boolean;
   booting: boolean;
   warming: boolean;
@@ -24,6 +26,7 @@ export function useAutoPublish({
   devUrl,
   publishedUrl,
   previewReady,
+  contentPublishReady,
   enabled,
   booting,
   warming,
@@ -61,7 +64,7 @@ export function useAutoPublish({
   }, [devUrl, publishedUrl, projectId, publishFn, qc]);
 
   useEffect(() => {
-    if (!enabled || !devUrl || !previewReady) return;
+    if (!enabled || !devUrl || !previewReady || !contentPublishReady) return;
     if (booting || warming || publishing) return;
     if (publishedUrl === devUrl) return;
     void publishNow();
@@ -69,6 +72,7 @@ export function useAutoPublish({
     enabled,
     devUrl,
     previewReady,
+    contentPublishReady,
     booting,
     warming,
     publishing,

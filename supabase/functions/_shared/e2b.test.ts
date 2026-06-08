@@ -61,6 +61,24 @@ Deno.test("detectDevCommand adds host for vite projects", () => {
   assertEquals(cmd.includes("5173"), true);
 });
 
+Deno.test("detectDevPort uses 8081 for expo projects", () => {
+  const files = [{
+    path: "package.json",
+    content: JSON.stringify({ dependencies: { expo: "~52.0.0" } }),
+  }];
+  assertEquals(detectDevPort(files), "8081");
+});
+
+Deno.test("detectDevCommand starts expo web for expo projects", () => {
+  const files = [{
+    path: "package.json",
+    content: JSON.stringify({ dependencies: { expo: "~52.0.0" } }),
+  }];
+  const cmd = detectDevCommand(files, 8081);
+  assertEquals(cmd.includes("expo start --web"), true);
+  assertEquals(cmd.includes("8081"), true);
+});
+
 Deno.test("isCachedPreviewValid returns url when not expired", () => {
   const future = new Date(Date.now() + 600_000).toISOString();
   const hit = isCachedPreviewValid({

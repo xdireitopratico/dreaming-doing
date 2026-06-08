@@ -1,6 +1,12 @@
 /** Inferência leve de stack a partir do prompt (expandível com LLM depois). */
 
-export type ProjectStackId = "vite-react" | "node-api" | "static-html" | "custom";
+export type ProjectStackId =
+  | "vite-react"
+  | "expo"
+  | "android-native"
+  | "node-api"
+  | "static-html"
+  | "custom";
 
 export type StackDecision = {
   id: ProjectStackId;
@@ -14,8 +20,41 @@ const DEFAULT: StackDecision = {
   reason: "Stack web padrão FORGE — UI rica, preview ao vivo, design system.",
 };
 
+const EXPO_STACK: StackDecision = {
+  id: "expo",
+  label: "Expo + React Native (web + celular)",
+  reason: "App mobile com preview web imediato no FORGE e QR para Expo Go.",
+};
+
+const ANDROID_NATIVE_STACK: StackDecision = {
+  id: "android-native",
+  label: "Android nativo (Kotlin/Gradle)",
+  reason: "Build nativo — progresso no file tree e console; sem iframe Vite.",
+};
+
+const EXPO_RE =
+  /\b(expo|expo-router|react native|react-native|expo go)\b/i;
+
+const ANDROID_NATIVE_RE =
+  /\b(android nativo|kotlin|gradle|\.kt\b|swift\b|ios nativo|app nativo)\b/i;
+
+const MOBILE_GENERIC_RE =
+  /\b(app mobile|aplicativo mobile|app de celular|mobile app|app android|app ios)\b/i;
+
 export function inferStackFromPrompt(prompt: string): StackDecision {
   const p = prompt.toLowerCase();
+
+  if (EXPO_RE.test(p)) {
+    return EXPO_STACK;
+  }
+
+  if (ANDROID_NATIVE_RE.test(p) && !EXPO_RE.test(p)) {
+    return ANDROID_NATIVE_STACK;
+  }
+
+  if (MOBILE_GENERIC_RE.test(p) && !/\b(web|landing|site|dashboard)\b/.test(p)) {
+    return EXPO_STACK;
+  }
 
   if (
     /\b(api|backend|rest|graphql|webhook|fastify|express|hono)\b/.test(p) &&
@@ -39,7 +78,7 @@ export function inferStackFromPrompt(prompt: string): StackDecision {
     };
   }
 
-  if (/\b(python|django|flask|rust|go |golang|mobile nativo|swift|kotlin)\b/.test(p)) {
+  if (/\b(python|django|flask|rust|go |golang)\b/.test(p)) {
     return {
       id: "custom",
       label: "Stack sob medida",
@@ -48,4 +87,25 @@ export function inferStackFromPrompt(prompt: string): StackDecision {
   }
 
   return DEFAULT;
+}
+
+/** Pedido mobile sem stack explícita — qualify deve perguntar Expo vs nativo. */
+export function isAmbiguousMobileRequest(prompt: string): boolean {
+  const p = prompt.trim();
+  if (!p) return false;
+  if (EXPO_RE.test(p) || ANDROID_NATIVE_RE.test(p)) return false;
+  return MOBILE_GENERIC_RE.test(p) || /\b(app de voz|voice app|hermes)\b/i.test(p);
+}
+
+export function buildMobileStackQualifyMessage(): string {
+  return [
+    "Entendi que você quer um **app mobile**.",
+    "",
+    "Antes de codar, qual caminho prefere?",
+    "",
+    "- **Expo (recomendado)** — preview web imediato no FORGE + QR para testar no celular",
+    "- **Nativo Kotlin** — build Gradle mais longo; progresso no chat e arquivos, sem iframe bonito",
+    "",
+    "Responda com *Expo* ou *Kotlin nativo* (ou descreva em uma frase o app e a plataforma).",
+  ].join("\n");
 }

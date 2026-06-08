@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { QueryClient } from "@tanstack/react-query";
 import type { RefObject } from "react";
 import type { editor } from "monaco-editor";
@@ -39,6 +39,7 @@ type UseEditorAgentOrchestrationParams = {
   setLogPanelOpen: (value: boolean | ((prev: boolean) => boolean)) => void;
   e2bConnected: boolean;
   isReactProject: boolean;
+  nativeBuildPreview: boolean;
   agentHasRun: boolean;
   devUrl: string | null;
   activeView: "code" | "preview" | "diff";
@@ -70,6 +71,7 @@ export function useEditorAgentOrchestration({
   setLogPanelOpen,
   e2bConnected,
   isReactProject,
+  nativeBuildPreview,
   agentHasRun,
   devUrl,
   activeView,
@@ -85,10 +87,14 @@ export function useEditorAgentOrchestration({
 }: UseEditorAgentOrchestrationParams) {
   /** Evita boot duplicado do preview entre fim do agente e refetch do previewUrl. */
   const previewBootAfterAgentRef = useRef(false);
+  const previewBootDuringRunRef = useRef(false);
   const lastSyncedFilesKeyRef = useRef("");
   const lastPreviewSyncTickRef = useRef(0);
   const previewSyncInFlightRef = useRef(false);
+  const [previewSyncInFlight, setPreviewSyncInFlight] = useState(false);
   const lastPendingAgentRunRef = useRef<string | null>(null);
+
+  const supportsLivePreview = isReactProject && !nativeBuildPreview;
 
   useAgentSessionCoordinator({
     projectId,
@@ -205,12 +211,34 @@ export function useEditorAgentOrchestration({
       agent.progress.resumable === true ||
       (agent.progress.lastFinishOk === null && agentHasRun && !agent.progress.error));
 
+  // Boot sandbox durante run (web/expo) para preview ao vivo enquanto o agente edita.
+  useEffect(() => {
+    if (!running) {
+      previewBootDuringRunRef.current = false;
+      return;
+    }
+    if (!supportsLivePreview || !e2bConnected || previewBoot.booting || previewE2bCircuit) return;
+    if (fileCount === 0 || devUrl) return;
+    if (previewBootDuringRunRef.current) return;
+    previewBootDuringRunRef.current = true;
+    void previewBoot.bootWithRetry({ force: true, silent: true });
+  }, [
+    running,
+    supportsLivePreview,
+    e2bConnected,
+    devUrl,
+    previewBoot.booting,
+    previewBoot.bootWithRetry,
+    previewE2bCircuit,
+    fileCount,
+  ]);
+
   useEffect(() => {
     if (running) {
       previewBootAfterAgentRef.current = false;
       return;
     }
-    if (!isReactProject || !e2bConnected || previewBoot.booting || previewE2bCircuit) return;
+    if (!supportsLivePreview || !e2bConnected || previewBoot.booting || previewE2bCircuit) return;
     if (fileCount === 0) return;
     if (!agentShouldBootPreview) return;
     if (previewBootAfterAgentRef.current) return;
@@ -223,7 +251,7 @@ export function useEditorAgentOrchestration({
   }, [
     agentShouldBootPreview,
     running,
-    isReactProject,
+    supportsLivePreview,
     e2bConnected,
     devUrl,
     previewBoot.booting,
@@ -239,10 +267,11 @@ export function useEditorAgentOrchestration({
 
   const syncPreviewToSandbox = useCallback(
     async (reload: boolean) => {
-      if (!isReactProject || !e2bConnected || previewBoot.booting || previewE2bCircuit) return;
+      if (!supportsLivePreview || !e2bConnected || previewE2bCircuit) return;
       if (fileCount === 0) return;
       if (previewSyncInFlightRef.current) return;
       previewSyncInFlightRef.current = true;
+      setPreviewSyncInFlight(true);
       try {
         const url = await previewBoot.boot({
           ...(devUrl ? { syncOnly: true } : { force: true }),
@@ -253,12 +282,12 @@ export function useEditorAgentOrchestration({
         }
       } finally {
         previewSyncInFlightRef.current = false;
+        setPreviewSyncInFlight(false);
       }
     },
     [
-      isReactProject,
+      supportsLivePreview,
       e2bConnected,
-      previewBoot.booting,
       previewBoot.boot,
       previewE2bCircuit,
       devUrl,
@@ -267,46 +296,56 @@ export function useEditorAgentOrchestration({
     ],
   );
 
+  const fileSyncDebounceMs = running ? 300 : 600;
+  const previewTickDebounceMs = running ? 400 : 800;
+
   useEffect(() => {
     if (!filesSyncKey || filesSyncKey === lastSyncedFilesKeyRef.current) return;
-    if (!isReactProject || !e2bConnected || previewE2bCircuit || fileCount === 0) return;
+    if (!supportsLivePreview || !e2bConnected || previewE2bCircuit || fileCount === 0) return;
     lastSyncedFilesKeyRef.current = filesSyncKey;
     const t = window.setTimeout(() => {
-      void syncPreviewToSandbox(activeView === "preview");
-    }, 600);
+      void syncPreviewToSandbox(activeView === "preview" || running);
+    }, fileSyncDebounceMs);
     return () => window.clearTimeout(t);
   }, [
     filesSyncKey,
     fileCount,
-    isReactProject,
+    supportsLivePreview,
     e2bConnected,
     previewE2bCircuit,
     activeView,
+    running,
+    fileSyncDebounceMs,
     syncPreviewToSandbox,
   ]);
 
   useEffect(() => {
     const tick = agent.progress.previewSyncTick ?? 0;
     if (tick <= lastPreviewSyncTickRef.current) return;
-    if (!e2bConnected || previewE2bCircuit || fileCount === 0) return;
+    if (!supportsLivePreview || !e2bConnected || previewE2bCircuit || fileCount === 0) return;
     lastPreviewSyncTickRef.current = tick;
     const t = window.setTimeout(() => {
       void syncPreviewToSandbox(true);
-    }, 800);
+    }, previewTickDebounceMs);
     return () => window.clearTimeout(t);
   }, [
     agent.progress.previewSyncTick,
     fileCount,
+    supportsLivePreview,
     e2bConnected,
     previewE2bCircuit,
+    previewTickDebounceMs,
     syncPreviewToSandbox,
   ]);
+
+  const previewSyncing = previewSyncInFlight || (previewBoot.booting && !!devUrl);
 
   return {
     previewE2bCircuit,
     diffEntries,
     blameEntries,
     filesSyncKey,
-    previewSyncing: previewBoot.booting && !!devUrl,
+    previewSyncing,
+    previewLiveUpdating: running && supportsLivePreview && (previewSyncing || !!devUrl),
   };
 }

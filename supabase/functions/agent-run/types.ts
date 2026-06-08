@@ -30,6 +30,8 @@ export interface ChatParams {
   max_tokens?: number;
   temperature?: number;
   response_format?: { type: "json_object" } | { type: "text" };
+  /** Quando definido, adapters compatíveis emitem deltas de texto durante a geração. */
+  onTokenDelta?: (delta: string) => void;
 }
 
 export type ChatContentBlock = {
