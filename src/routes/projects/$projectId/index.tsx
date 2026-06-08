@@ -274,6 +274,7 @@ function EditorPage() {
   return (
     <EditorPageLayout
       projectId={projectId}
+      conversationId={conversation?.id ?? null}
       projectName={project?.name}
       running={running}
       agent={agent}

@@ -29,6 +29,10 @@ import {
   isAgentPreferencesConfigured,
 } from "@/lib/agent-setup";
 import { ChatStream } from "@/components/editor/ChatStream";
+import {
+  PendingQueuePanel,
+  type PendingQueueItem,
+} from "@/components/editor/PendingQueuePanel";
 import { ComposerModeSelect } from "@/components/editor/ComposerModeSelect";
 import type { AgentProgress, PlanStep } from "@/lib/agent-progress";
 import { resolveEffectiveAgentProgress } from "@/lib/resolve-agent-progress";
@@ -80,6 +84,11 @@ interface ChatInputProps {
   onDeploy?: () => void | Promise<void>;
   /** Undo última mensagem do assistente + mensagem do usuário anterior */
   onUndoMessage?: (assistantMsgId: string) => void;
+  pendingQueueItems?: PendingQueueItem[];
+  queueBlockingReason?: string | null;
+  onClearPendingItem?: (id: string) => Promise<void>;
+  onClearAllPending?: () => Promise<void>;
+  onDrainQueue?: () => Promise<void>;
 }
 
 // -----------------------------------------------------------------------------------
@@ -135,6 +144,11 @@ export function ChatInput({
   onPlanApprove,
   onPlanReject,
   onReopenPlan,
+  pendingQueueItems = [],
+  queueBlockingReason,
+  onClearPendingItem,
+  onClearAllPending,
+  onDrainQueue,
 }: ChatInputProps) {
   const [input, setInput] = useState("");
   const [composerModeLocal, setComposerModeLocal] = useState<AgentComposerMode>("build");
@@ -530,16 +544,24 @@ export function ChatInput({
         </div>
       )}
 
-      {(agentProgress?.pendingQueueCount ?? 0) > 0 && (
-        <div
-          className="forge-agent-bar lovable-agent-bar border-t border-[var(--forge-border)]"
-          data-testid="pending-queue-hint"
-        >
-          <strong>{agentProgress!.pendingQueueCount}</strong> mensagem
-          {agentProgress!.pendingQueueCount !== 1 ? "s" : ""} na fila — serão enviadas quando o
-          agente liberar
-        </div>
-      )}
+      {(agentProgress?.pendingQueueCount ?? 0) > 0 || queueBlockingReason ? (
+        <PendingQueuePanel
+          items={pendingQueueItems}
+          pendingCount={agentProgress?.pendingQueueCount ?? 0}
+          running={running}
+          blockingReason={queueBlockingReason}
+          onCopy={(text) => void navigator.clipboard.writeText(text)}
+          onRemove={async (id) => {
+            if (onClearPendingItem) await onClearPendingItem(id);
+          }}
+          onClearAll={async () => {
+            if (onClearAllPending) await onClearAllPending();
+          }}
+          onDrain={async () => {
+            if (onDrainQueue) await onDrainQueue();
+          }}
+        />
+      ) : null}
 
       <div className="forge-composer lovable-composer">
         <input

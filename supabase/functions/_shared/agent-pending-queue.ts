@@ -6,12 +6,22 @@ import { appendStreamEvent } from "./agent-stream.ts";
 import { logger } from "./logger.ts";
 
 const STALE_RUN_MS = 15 * 60 * 1000;
+/** Com itens na fila, runs sem heartbeat expiram mais cedo para destravar drain. */
+const QUEUE_STALE_RUN_MS = 5 * 60 * 1000;
+
+export type PendingQueueItem = {
+  id: string;
+  createdAt: string;
+  preview: string;
+  body: Record<string, unknown>;
+};
 
 export async function expireStaleRuns(
   supabase: SupabaseClient,
   projectId: string,
+  maxAgeMs: number = STALE_RUN_MS,
 ): Promise<number> {
-  const cutoff = new Date(Date.now() - STALE_RUN_MS).toISOString();
+  const cutoff = new Date(Date.now() - maxAgeMs).toISOString();
   const { data: candidates } = await supabase
     .from("agent_runs")
     .select("id, meta, started_at, heartbeat_at")
@@ -89,20 +99,35 @@ export async function countPendingMessages(
   return count ?? 0;
 }
 
+/**
+ * Precisa de resposta se há mensagem user mais nova que o último assistant.
+ * (Evita apagar fila quando user enfileirou durante run e assistant terminou depois.)
+ */
 export async function conversationNeedsAgentResponse(
   supabase: SupabaseClient,
   conversationId: string,
 ): Promise<boolean> {
-  const { data: rows } = await supabase
+  const { data: lastAssistant } = await supabase
     .from("messages")
-    .select("role")
+    .select("created_at")
     .eq("conversation_id", conversationId)
+    .eq("role", "assistant")
     .order("created_at", { ascending: false })
-    .limit(1);
+    .limit(1)
+    .maybeSingle();
 
-  const last = rows?.[0];
-  if (!last) return false;
-  return String(last.role ?? "").toLowerCase() === "user";
+  let query = supabase
+    .from("messages")
+    .select("id", { count: "exact", head: true })
+    .eq("conversation_id", conversationId)
+    .eq("role", "user");
+
+  if (lastAssistant?.created_at) {
+    query = query.gt("created_at", lastAssistant.created_at);
+  }
+
+  const { count } = await query;
+  return (count ?? 0) > 0;
 }
 
 export async function hasBlockingActiveRun(
@@ -124,14 +149,90 @@ export async function clearPendingMessages(
   supabase: SupabaseClient,
   projectId: string,
   userId: string,
+  messageId?: string,
 ): Promise<number> {
-  const { data } = await supabase
+  let query = supabase
     .from("agent_pending_messages")
     .delete()
     .eq("project_id", projectId)
-    .eq("user_id", userId)
-    .select("id");
+    .eq("user_id", userId);
+
+  if (messageId) {
+    query = query.eq("id", messageId);
+  }
+
+  const { data } = await query.select("id");
   return data?.length ?? 0;
+}
+
+export function previewFromQueueBody(body: Record<string, unknown>): string {
+  if (typeof body.text === "string" && body.text.trim()) {
+    return body.text.trim().slice(0, 280);
+  }
+  const parts = body.parts;
+  if (Array.isArray(parts)) {
+    const text = parts
+      .filter((p) => p && typeof p === "object" && (p as { type?: string }).type === "text")
+      .map((p) => String((p as { text?: string }).text ?? "").trim())
+      .filter(Boolean)
+      .join("\n");
+    if (text) return text.slice(0, 280);
+  }
+  return "Pedido enfileirado (snapshot de preferências)";
+}
+
+export async function listPendingMessages(
+  supabase: SupabaseClient,
+  projectId: string,
+  userId: string,
+): Promise<PendingQueueItem[]> {
+  const { data } = await supabase
+    .from("agent_pending_messages")
+    .select("id, body, created_at")
+    .eq("project_id", projectId)
+    .eq("user_id", userId)
+    .order("created_at", { ascending: true });
+
+  return (data ?? []).map((row) => {
+    const body = (row.body ?? {}) as Record<string, unknown>;
+    return {
+      id: row.id as string,
+      createdAt: row.created_at as string,
+      preview: previewFromQueueBody(body),
+      body,
+    };
+  });
+}
+
+/** Snapshot da última mensagem user para exibir/copiar na fila. */
+export async function latestUserMessageSnapshot(
+  supabase: SupabaseClient,
+  conversationId: string,
+): Promise<Record<string, unknown> | null> {
+  const { data: row } = await supabase
+    .from("messages")
+    .select("id, parts, created_at")
+    .eq("conversation_id", conversationId)
+    .eq("role", "user")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (!row?.id) return null;
+
+  const parts = Array.isArray(row.parts) ? row.parts : [];
+  const text = parts
+    .filter((p) => p && typeof p === "object" && (p as { type?: string }).type === "text")
+    .map((p) => String((p as { text?: string }).text ?? "").trim())
+    .filter(Boolean)
+    .join("\n");
+
+  return {
+    messageId: row.id,
+    text: text || undefined,
+    parts,
+    createdAt: row.created_at,
+  };
 }
 
 export async function popOldestPendingMessage(
@@ -162,9 +263,8 @@ export type QueueDrainDecision = {
 };
 
 /**
- * Remove fila fantasma: inserts duplicados de connect() concorrente (sem mensagem nova).
- * - Sem última msg user → limpa tudo.
- * - Com msg user → mantém só a entrada mais recente (snapshot de prefs).
+ * Remove apenas entradas prefs-only duplicadas consecutivas (connect concorrente).
+ * Não colapsa mensagens distintas do usuário.
  */
 export async function sanitizePendingQueue(
   supabase: SupabaseClient,
@@ -179,19 +279,45 @@ export async function sanitizePendingQueue(
 
   const { data: rows } = await supabase
     .from("agent_pending_messages")
-    .select("id")
+    .select("id, body, created_at")
     .eq("project_id", projectId)
     .eq("user_id", userId)
     .order("created_at", { ascending: true });
 
   if (!rows || rows.length <= 1) return rows?.length ?? 0;
 
-  const keepId = rows[rows.length - 1]!.id;
-  const staleIds = rows.filter((r) => r.id !== keepId).map((r) => r.id);
-  if (staleIds.length > 0) {
-    await supabase.from("agent_pending_messages").delete().in("id", staleIds);
+  const seenMessageIds = new Set<string>();
+  const staleIds: string[] = [];
+
+  for (const row of rows) {
+    const body = (row.body ?? {}) as Record<string, unknown>;
+    const messageId = typeof body.messageId === "string" ? body.messageId : null;
+    if (!messageId) continue;
+    if (seenMessageIds.has(messageId)) {
+      staleIds.push(row.id as string);
+    } else {
+      seenMessageIds.add(messageId);
+    }
   }
-  return 1;
+
+  const prefsOnly = rows.filter((r) => {
+    const body = (r.body ?? {}) as Record<string, unknown>;
+    if (typeof body.messageId === "string") return false;
+    return !(typeof body.text === "string" && body.text.trim());
+  });
+  if (prefsOnly.length > 1) {
+    const keepId = prefsOnly[prefsOnly.length - 1]!.id as string;
+    for (const row of prefsOnly) {
+      if (row.id !== keepId) staleIds.push(row.id as string);
+    }
+  }
+
+  const uniqueStale = [...new Set(staleIds)];
+  if (uniqueStale.length > 0) {
+    await supabase.from("agent_pending_messages").delete().in("id", uniqueStale);
+  }
+
+  return await countPendingMessages(supabase, projectId, userId);
 }
 
 export async function evaluateQueueDrain(
@@ -200,7 +326,9 @@ export async function evaluateQueueDrain(
   conversationId: string,
   userId: string,
 ): Promise<QueueDrainDecision> {
-  await expireStaleRuns(supabase, projectId);
+  const pendingBefore = await countPendingMessages(supabase, projectId, userId);
+  const staleMs = pendingBefore > 0 ? QUEUE_STALE_RUN_MS : STALE_RUN_MS;
+  await expireStaleRuns(supabase, projectId, staleMs);
   await sanitizePendingQueue(supabase, projectId, userId, conversationId);
 
   const pendingCount = await countPendingMessages(supabase, projectId, userId);
@@ -212,4 +340,15 @@ export async function evaluateQueueDrain(
     !blockingRunId;
 
   return { shouldContinue, pendingCount, needsResponse, blockingRunId };
+}
+
+/** Corpo da fila: prefs + snapshot da última mensagem user (texto para UI/drain). */
+export async function buildQueueInsertBody(
+  supabase: SupabaseClient,
+  conversationId: string,
+  base: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  const snap = await latestUserMessageSnapshot(supabase, conversationId);
+  if (!snap) return base;
+  return { ...base, ...snap };
 }

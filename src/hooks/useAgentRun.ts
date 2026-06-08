@@ -22,6 +22,24 @@ import {
   type AgentProgress,
 } from "@/lib/agent-progress";
 import { freezeSnapshot, type FrozenRunSnapshot } from "@/lib/lovable-thread";
+import type { PendingQueueItem } from "@/components/editor/PendingQueuePanel";
+
+function formatQueueBlockReason(reason?: string): string | null {
+  if (!reason) return null;
+  if (reason.startsWith("blocking_run:")) {
+    return "Agente ainda em execução — a fila processa quando liberar (ou após ~5 min sem atividade).";
+  }
+  if (reason === "inngest_failed") {
+    return "Falha ao disparar o worker — verifique INNGEST_EVENT_KEY no servidor.";
+  }
+  if (reason === "lock_failed") {
+    return "Não foi possível adquirir lock do agente — tente Processar de novo.";
+  }
+  if (reason === "taste_limit") {
+    return "Limite Taste Chat atingido — configure API em /api.";
+  }
+  return reason;
+}
 
 const TERMINAL_STATUSES = new Set(["completed", "failed", "canceled", "awaiting_user"]);
 const STALE_STREAM_MS = 15 * 60 * 1000;
@@ -44,6 +62,8 @@ export function useAgentRun() {
   const [connected, setConnected] = useState(false);
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const [frozenRuns, setFrozenRuns] = useState<Map<string, FrozenRunSnapshot>>(new Map());
+  const [pendingQueueItems, setPendingQueueItems] = useState<PendingQueueItem[]>([]);
+  const [queueBlockingReason, setQueueBlockingReason] = useState<string | null>(null);
 
   const runIdRef = useRef<string | null>(null);
   const lastSeqRef = useRef(0);
@@ -325,24 +345,61 @@ export function useAgentRun() {
     [],
   );
 
-  const syncPendingCount = useCallback(
+  const refreshPendingQueue = useCallback(
     async (projectId: string, conversationId: string) => {
       try {
         const res = await postAgentRun({
-          action: "pending_count",
+          action: "list_pending",
           projectId,
           conversationId,
         });
         if (!res.ok) return;
-        const body = (await res.json()) as { pendingCount?: number };
+        const body = (await res.json()) as {
+          pendingCount?: number;
+          items?: PendingQueueItem[];
+        };
         if (typeof body.pendingCount === "number") {
           setProgress((p) => ({ ...p, pendingQueueCount: body.pendingCount! }));
+        }
+        setPendingQueueItems(body.items ?? []);
+        if ((body.pendingCount ?? 0) === 0) {
+          setQueueBlockingReason(null);
         }
       } catch {
         // best-effort — contador atualiza no próximo mount/finish
       }
     },
     [postAgentRun],
+  );
+
+  const syncPendingCount = refreshPendingQueue;
+
+  const clearPendingItem = useCallback(
+    async (projectId: string, conversationId: string, messageId: string) => {
+      const res = await postAgentRun({
+        action: "clear_pending",
+        projectId,
+        conversationId,
+        messageId,
+      });
+      if (!res.ok) return;
+      await refreshPendingQueue(projectId, conversationId);
+    },
+    [postAgentRun, refreshPendingQueue],
+  );
+
+  const clearAllPending = useCallback(
+    async (projectId: string, conversationId: string) => {
+      const res = await postAgentRun({
+        action: "clear_pending",
+        projectId,
+        conversationId,
+      });
+      if (!res.ok) return;
+      setQueueBlockingReason(null);
+      await refreshPendingQueue(projectId, conversationId);
+    },
+    [postAgentRun, refreshPendingQueue],
   );
 
   const connect = useCallback(
@@ -483,7 +540,9 @@ export function useAgentRun() {
         if (typeof body.pendingCount === "number") {
           setProgress((p) => ({ ...p, pendingQueueCount: body.pendingCount! }));
         }
+        setQueueBlockingReason(formatQueueBlockReason(body.reason));
         if (body.runId) {
+          setQueueBlockingReason(null);
           await subscribeToRun(body.runId);
           logEditorTelemetryEvent("agent_run", "drain_ok", "info", body.runId.slice(0, 8));
           return { ok: true, runId: body.runId, pendingCount: body.pendingCount };
@@ -552,6 +611,7 @@ export function useAgentRun() {
             pendingQueueCount: body.pendingCount ?? 0,
             statusHint: body.message ?? "Mensagem na fila do agente.",
           }));
+          void refreshPendingQueue(projectId, conversationId);
           return { ok: true, pendingCount: body.pendingCount, message: body.message };
         }
         return { ok: false, message: "Agente livre — use run normal." };
@@ -559,7 +619,7 @@ export function useAgentRun() {
         return { ok: false, message: formatAgentFetchError(e) };
       }
     },
-    [postAgentRun],
+    [postAgentRun, refreshPendingQueue],
   );
 
   const stop = useCallback(async () => {
@@ -692,6 +752,11 @@ export function useAgentRun() {
     queueMessage,
     drainQueue,
     syncPendingCount,
+    refreshPendingQueue,
+    pendingQueueItems,
+    queueBlockingReason,
+    clearPendingItem,
+    clearAllPending,
     disconnect,
     stop,
     clearPendingPlan,

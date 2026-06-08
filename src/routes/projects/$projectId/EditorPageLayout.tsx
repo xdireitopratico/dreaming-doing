@@ -34,6 +34,7 @@ type Connectors = ReturnType<typeof useConnectors>;
 
 export type EditorPageLayoutProps = {
   projectId: string;
+  conversationId?: string | null;
   projectName?: string | null;
   running: boolean;
   agent: AgentRun;
@@ -124,6 +125,7 @@ export type EditorPageLayoutProps = {
 
 export function EditorPageLayout({
   projectId,
+  conversationId,
   projectName,
   running,
   agent,
@@ -338,6 +340,22 @@ export function EditorPageLayout({
                     onPlanApprove={handlePlanApprove}
                     onPlanReject={handlePlanReject}
                     onReopenPlan={handleReopenPlan}
+                    pendingQueueItems={agent.pendingQueueItems}
+                    queueBlockingReason={agent.queueBlockingReason}
+                    onClearPendingItem={(id) =>
+                      conversationId
+                        ? agent.clearPendingItem(projectId, conversationId, id)
+                        : Promise.resolve()
+                    }
+                    onClearAllPending={() =>
+                      conversationId
+                        ? agent.clearAllPending(projectId, conversationId)
+                        : Promise.resolve()
+                    }
+                    onDrainQueue={async () => {
+                      if (!conversationId) return;
+                      await agent.drainQueue(projectId, conversationId, composerMode);
+                    }}
                   />
                 </div>
                 <SetupRail

@@ -264,6 +264,31 @@ Deno.serve(async (req) => {
       return json({ pendingCount });
     }
 
+    if (body.action === "list_pending") {
+      const { sanitizePendingQueue, listPendingMessages, countPendingMessages } = await import(
+        "../_shared/agent-pending-queue.ts"
+      );
+      await sanitizePendingQueue(supabase, projectId, userData.user.id, conversationId);
+      const items = await listPendingMessages(supabase, projectId, userData.user.id);
+      const pendingCount = await countPendingMessages(supabase, projectId, userData.user.id);
+      return json({ pendingCount, items });
+    }
+
+    if (body.action === "clear_pending") {
+      const { clearPendingMessages, countPendingMessages } = await import(
+        "../_shared/agent-pending-queue.ts"
+      );
+      const messageId = typeof body.messageId === "string" ? body.messageId : undefined;
+      const removed = await clearPendingMessages(
+        supabase,
+        projectId,
+        userData.user.id,
+        messageId,
+      );
+      const pendingCount = await countPendingMessages(supabase, projectId, userData.user.id);
+      return json({ ok: true, removed, pendingCount });
+    }
+
     if (body.action === "drain_queue") {
       const { handleContinueQueue } = await import("./continue-queue.ts");
       const { sanitizePendingQueue } = await import("../_shared/agent-pending-queue.ts");
@@ -366,20 +391,26 @@ Deno.serve(async (req) => {
         });
       }
 
+      const { buildQueueInsertBody, countPendingMessages } = await import(
+        "../_shared/agent-pending-queue.ts"
+      );
+      const queueBody = await buildQueueInsertBody(supabase, conversationId, {
+        preferences,
+        sessionKind: sessionKindRaw,
+        enabledSkillIds,
+        enabledMcpIds,
+        allocateSandbox: true,
+        mode: body.mode ?? "build",
+      });
       await supabase.from("agent_pending_messages").insert({
         project_id: projectId,
         conversation_id: conversationId,
         user_id: userData.user.id,
-        body: {
-          preferences,
-          sessionKind: sessionKindRaw,
-          enabledSkillIds,
-          enabledMcpIds,
-          allocateSandbox: true,
-        },
+        body: queueBody,
       });
-      const { countPendingMessages } = await import("../_shared/agent-pending-queue.ts");
       const pendingCount = await countPendingMessages(supabase, projectId, userData.user.id);
+      const preview =
+        typeof queueBody.text === "string" ? queueBody.text.slice(0, 120) : null;
       const queueMsg = pendingCount === 1
         ? "Mensagem na fila — o agente processará quando terminar a tarefa atual."
         : `${pendingCount} mensagens na fila — processando em ordem.`;
@@ -387,6 +418,7 @@ Deno.serve(async (req) => {
         ok: true,
         queued: true,
         pendingCount,
+        preview,
         activeRunId: awaitingRun?.id ?? null,
         message: queueMsg,
       });
@@ -646,24 +678,29 @@ Deno.serve(async (req) => {
             message: "Agente ocupado em outra conversa.",
           });
         }
+        const { buildQueueInsertBody, countPendingMessages } = await import(
+          "../_shared/agent-pending-queue.ts"
+        );
+        const queueBody = await buildQueueInsertBody(supabase, conversationId, {
+          preferences,
+          sessionKind: sessionKindRaw,
+          enabledSkillIds,
+          enabledMcpIds,
+          allocateSandbox: true,
+          mode: body.mode ?? "build",
+        });
         await supabase.from("agent_pending_messages").insert({
           project_id: projectId,
           conversation_id: conversationId,
           user_id: userData.user.id,
-          body: {
-            preferences,
-            sessionKind: sessionKindRaw,
-            enabledSkillIds,
-            enabledMcpIds,
-            allocateSandbox: true,
-          },
+          body: queueBody,
         });
-        const { countPendingMessages } = await import("../_shared/agent-pending-queue.ts");
         const pendingCount = await countPendingMessages(supabase, projectId, userData.user.id);
         return json({
           ok: true,
           queued: true,
           pendingCount,
+          preview: typeof queueBody.text === "string" ? queueBody.text.slice(0, 120) : null,
           activeRunId: agentRunId,
           message: "Agente ocupado — sua mensagem foi enfileirada.",
         });

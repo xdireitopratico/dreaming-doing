@@ -58,7 +58,21 @@ export function useAgentSessionCoordinator({
   const watchedRunIdRef = useRef<string | null>(null);
   const reconcileInFlightRef = useRef(false);
 
-  const { syncPendingCount, watch, drainQueue, connected, progress } = agent;
+  const { syncPendingCount, watch, drainQueue, connected, progress, refreshPendingQueue } = agent;
+
+  const drainUntilEmpty = async (conversationId: string) => {
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const drain = await drainQueue(projectId, conversationId);
+      if (drain.runId) {
+        watchedRunIdRef.current = drain.runId;
+        return drain;
+      }
+      if ((drain.pendingCount ?? 0) === 0) return drain;
+      if (drain.reason?.startsWith("blocking_run")) return drain;
+      await new Promise((r) => setTimeout(r, 400));
+    }
+    return { ok: false as const, reason: "drain_retries_exhausted" };
+  };
 
   useEffect(() => {
     if (!conversation?.id) return;
@@ -115,11 +129,8 @@ export function useAgentSessionCoordinator({
 
         watchedRunIdRef.current = null;
 
-        const drain = await drainQueue(projectId, conversation.id);
-        if (drain.runId) {
-          watchedRunIdRef.current = drain.runId;
-          return;
-        }
+        const drain = await drainUntilEmpty(conversation.id);
+        if (drain.runId) return;
 
         const flagged = peekPendingAgentRun(projectId, conversation.id);
         if (!flagged) return;
@@ -205,10 +216,9 @@ export function useAgentSessionCoordinator({
       await syncPendingCount(projectId, conversation.id);
       if (progress.awaiting || progress.canceled) return;
       if (running || connected || isAgentConnectInFlight()) return;
-      const drain = await drainQueue(projectId, conversation.id);
-      if (drain.runId) {
-        watchedRunIdRef.current = drain.runId;
-      }
+      await refreshPendingQueue(projectId, conversation.id);
+      const drain = await drainUntilEmpty(conversation.id);
+      if (drain.runId) return;
     })();
   }, [
     progress.finished,
@@ -220,5 +230,6 @@ export function useAgentSessionCoordinator({
     connected,
     syncPendingCount,
     drainQueue,
+    refreshPendingQueue,
   ]);
 }

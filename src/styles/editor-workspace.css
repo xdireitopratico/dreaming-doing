@@ -696,6 +696,45 @@ body:has(.editor-workspace) {
   border-color: var(--forge-primary);
 }
 
+.forge-pending-queue-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--forge-border);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 9px;
+  color: var(--forge-silver);
+  background: var(--forge-surface-3);
+  cursor: pointer;
+}
+
+.forge-pending-queue-action:hover:not(:disabled) {
+  border-color: var(--forge-primary);
+  color: var(--forge-primary);
+}
+
+.forge-pending-queue-action:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.forge-pending-queue-icon {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  color: var(--forge-muted);
+  cursor: pointer;
+}
+
+.forge-pending-queue-icon:hover:not(:disabled) {
+  background: var(--forge-surface-2);
+  color: var(--forge-primary);
+}
+
 .forge-msg-text,
 .lovable-msg-text {
   font-size: 13px;
