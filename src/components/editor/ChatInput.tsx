@@ -550,7 +550,9 @@ export function ChatInput({
         </div>
       )}
 
-      {(agentProgress?.pendingQueueCount ?? 0) > 0 || queueBlockingReason ? (
+      {((agentProgress?.pendingQueueCount ?? 0) > 0 &&
+        pendingQueueItems.length > 0) ||
+      (queueBlockingReason && running) ? (
         <PendingQueuePanel
           items={pendingQueueItems}
           pendingCount={agentProgress?.pendingQueueCount ?? 0}

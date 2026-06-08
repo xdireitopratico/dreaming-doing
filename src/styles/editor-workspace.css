@@ -827,6 +827,11 @@ body:has(.editor-workspace) {
   margin-top: 2px;
 }
 
+.forge-chat-item-assistant-footer {
+  width: 100%;
+  align-self: stretch;
+}
+
 .forge-chat-live {
   padding: 10px 12px;
   border-left: 2px solid rgba(255, 182, 39, 0.35);

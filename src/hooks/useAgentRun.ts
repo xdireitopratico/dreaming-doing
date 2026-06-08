@@ -262,6 +262,7 @@ export function useAgentRun() {
       teardownChannels();
       runIdRef.current = runId;
       setActiveRunId(runId);
+      setQueueBlockingReason(null);
       if (opts?.resetProgress !== false) {
         lastSeqRef.current = 0;
         setProgress({
@@ -424,6 +425,7 @@ export function useAgentRun() {
       }
       const manualResume = options?.resume === true;
       teardownChannels();
+      setQueueBlockingReason(null);
       setProgress({
         ...initialAgentProgress,
         statusHint: manualResume ? "Conectando para retomar o agente…" : "Iniciando agente…",
@@ -735,12 +737,7 @@ export function useAgentRun() {
   }, []);
 
   const acknowledgeMaterializedRun = useCallback((runId: string) => {
-    setFrozenRuns((m) => {
-      if (!m.has(runId)) return m;
-      const copy = new Map(m);
-      copy.delete(runId);
-      return copy;
-    });
+    // Mantém frozen no mapa — mini-cards Lovable persistem no thread após materializar no DB.
     setActiveRunId((cur) => {
       if (cur === runId) {
         runIdRef.current = null;

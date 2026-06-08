@@ -35,25 +35,73 @@ class MockLLM implements LLMProvider {
 // ===== MOCK SUPABASE =====
 class QB {
   private op = "select";
+  private payload: unknown = null;
+  private lastWriteOp: "insert" | "update" | "delete" | "upsert" | null = null;
   constructor(private p: MockSB, private t: string) {}
   select(_?: string): this { this.op = "select"; return this; }
-  insert(..._a: unknown[]): this { this.op = "insert"; return this; }
-  update(..._a: unknown[]): this { this.op = "update"; return this; }
+  insert(...a: unknown[]): this {
+    this.op = "insert";
+    this.lastWriteOp = "insert";
+    this.payload = a[0];
+    this.p.noteMessageWrite(this.t, "insert", a[0]);
+    return this;
+  }
+  update(...a: unknown[]): this {
+    this.op = "update";
+    this.lastWriteOp = "update";
+    this.payload = a[0];
+    this.p.noteMessageWrite(this.t, "update", a[0]);
+    return this;
+  }
   delete(): this { this.op = "delete"; return this; }
   upsert(..._a: unknown[]): this { this.op = "upsert"; return this; }
   eq(..._a: unknown[]): this { return this; }
+  filter(..._a: unknown[]): this { return this; }
+  order(..._a: unknown[]): this { return this; }
+  limit(..._a: unknown[]): this { return this; }
   maybeSingle(): Promise<{ data: unknown; error: null }> { return Promise.resolve(this.p.resolve(this)); }
   single(): Promise<{ data: unknown; error: null }> { return Promise.resolve(this.p.resolve(this)); }
   getTable() { return this.t; }
   getOperation() { return this.op; }
+  getWriteOperation() { return this.lastWriteOp; }
+  getPayload() { return this.payload; }
 }
 
 class MockSB {
   private r = new Map<string, { data: unknown }>();
   queries: QB[] = [];
+  messageInserts = 0;
+  messageUpdates = 0;
+  private messageRow: { id: string; parts?: Array<{ type: string; text: string }> } | null = null;
+  noteMessageWrite(table: string, op: "insert" | "update", payload: unknown) {
+    if (table !== "messages") return;
+    if (op === "insert") {
+      this.messageInserts++;
+      this.messageRow = { id: "msg-live" };
+      return;
+    }
+    this.messageUpdates++;
+    const parts = (payload as { parts?: Array<{ type: string; text: string }> } | null)?.parts;
+    if (!this.messageRow) this.messageRow = { id: "msg-live" };
+    if (parts) this.messageRow.parts = parts;
+  }
   set(table: string, data: unknown) { this.r.set(table, { data }); }
   from(table: string): QB { const q = new QB(this, table); this.queries.push(q); return q; }
-  resolve(b: QB) { return this.r.get(b.getTable()) ?? { data: null }; }
+  resolve(b: QB) {
+    if (b.getTable() === "messages") {
+      const writeOp = b.getWriteOperation();
+      if (writeOp === "insert") {
+        return { data: { id: this.messageRow?.id ?? "msg-live" } };
+      }
+      if (writeOp === "update") {
+        return { data: null };
+      }
+      if (b.getOperation() === "select") {
+        return { data: this.messageRow };
+      }
+    }
+    return this.r.get(b.getTable()) ?? { data: null };
+  }
 }
 
 // ===== MOCK TOOL REGISTRY =====
@@ -326,7 +374,20 @@ Deno.test("11 projeto vazio sem crash", async () => {
   assertEquals(r.ok, true);
 });
 
-Deno.test("12 skills detectadas", async () => {
+Deno.test("12 persistAssistantStep reutiliza uma mensagem por run", async () => {
+  const { loop, cheap, main, sb } = f({ msgs: [{ role: "user", content: "Crie landing de padaria" }], files: [] });
+  cheap.queue(cr(3, "new_project", "Landing padaria"));
+  main.queue(er("Lendo componentes...", tc("t1", "fs_read", { path: "src/App.tsx" })));
+  main.queue(er("Criando hero...", tc("t2", "fs_write", { path: "src/Hero.tsx", content: "// hero" })));
+  main.queue(er("Ajustando estilos...", tc("t3", "fs_edit", { path: "src/App.tsx", oldText: "a", newText: "b" })));
+  main.queue(tr("Pronto!"));
+  const r = await loop.run();
+  assertEquals(r.ok, true);
+  assertEquals(sb.messageInserts, 1, `inserts=${sb.messageInserts}`);
+  assert(sb.messageUpdates >= 2, `updates=${sb.messageUpdates}`);
+});
+
+Deno.test("13 skills detectadas", async () => {
   const { loop, cheap, main, events } = f({
     msgs: [{ role: "user", content: "Adicione uma página next.js ao projeto existente" }],
     files: [

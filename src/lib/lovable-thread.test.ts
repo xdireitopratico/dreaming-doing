@@ -146,6 +146,78 @@ describe("buildLovableThread", () => {
     expect(slot.message?.content).toContain("Pronto!");
   });
 
+  it("colapsa múltiplos assistants do mesmo runId com slot live", () => {
+    const messages: ChatMessage[] = [
+      msg("u1", "user", "build padaria"),
+      { ...msg("a1", "assistant", "Passo 1"), runId: "run-x", meta: { runId: "run-x" } },
+      { ...msg("a2", "assistant", "Passo 2"), runId: "run-x", meta: { runId: "run-x" } },
+      { ...msg("a3", "assistant", "Passo 3"), runId: "run-x", meta: { runId: "run-x" } },
+    ];
+    const progress = { ...initialAgentProgress, phase: "execute", message: "Trabalhando…" };
+    const thread = buildLovableThread(messages, progress, {
+      running: true,
+      activeRunId: "run-x",
+    });
+    const assistants = thread.filter((t) => t.kind === "assistant");
+    expect(assistants).toHaveLength(1);
+    expect(assistants[0]).toMatchObject({ isActive: true, runId: "run-x" });
+  });
+
+  it("mini-card persiste: frozen histórico em turnos anteriores enquanto novo run ativo", () => {
+    const messages: ChatMessage[] = [
+      msg("u1", "user", "padaria"),
+      {
+        ...msg("a1", "assistant", "Entrega 1"),
+        runId: "run-1",
+        meta: { runId: "run-1", finishedAt: "2026-01-01T00:00:00Z" },
+      },
+      msg("u2", "user", "adicione footer"),
+    ];
+    const frozen = new Map([
+      [
+        "run-1",
+        freezeSnapshot({
+          ...initialAgentProgress,
+          finished: true,
+          lastFinishOk: true,
+          deliveryFiles: ["src/App.tsx"],
+        }),
+      ],
+    ]);
+    const progress = { ...initialAgentProgress, phase: "execute", message: "Trabalhando…" };
+    const thread = buildLovableThread(messages, progress, {
+      running: true,
+      activeRunId: "run-2",
+      frozenRuns: frozen,
+    });
+    expect(thread.map((t) => t.kind)).toEqual(["user", "assistant", "user", "assistant"]);
+    const first = thread[1] as Extract<(typeof thread)[number], { kind: "assistant" }>;
+    const second = thread[3] as Extract<(typeof thread)[number], { kind: "assistant" }>;
+    expect(first.runId).toBe("run-1");
+    expect(first.frozen?.deliveryFiles).toEqual(["src/App.tsx"]);
+    expect(resolveAssistantProgress(first)?.finished).toBe(true);
+    expect(second.isActive).toBe(true);
+    expect(second.runId).toBe("run-2");
+  });
+
+  it("resolve progresso do DB quando não há frozen", () => {
+    const slot = {
+      kind: "assistant" as const,
+      isActive: false,
+      runId: "run-z",
+      message: {
+        id: "a1",
+        role: "assistant" as const,
+        content: "Feito.",
+        timestamp: 0,
+        meta: { runId: "run-z", finishedAt: "2026-01-01T00:00:00Z" },
+      },
+    };
+    const resolved = resolveAssistantProgress(slot);
+    expect(resolved?.finished).toBe(true);
+    expect(resolved?.summary).toBe("Feito.");
+  });
+
   it("erro de connect sem runId aparece no turno pendente", () => {
     const messages = [msg("u1", "user", "build")];
     const progress = {

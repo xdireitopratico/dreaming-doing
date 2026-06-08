@@ -1,5 +1,6 @@
 import type { ChatMessage } from "@/components/editor/ChatInput";
 import type { AgentProgress } from "@/lib/agent-progress";
+import { progressFromAssistantMessage } from "@/lib/assistant-run-progress";
 
 export type FrozenRunSnapshot = Pick<
   AgentProgress,
@@ -153,6 +154,88 @@ function mergeAssistantIntoItems(
   ];
 }
 
+function mergeAssistantMessages(
+  a?: ChatMessage,
+  b?: ChatMessage,
+): ChatMessage | undefined {
+  if (!a) return b;
+  if (!b) return a;
+  const merged =
+    [a.content, b.content].filter((c) => c?.trim()).join("\n\n") || b.content;
+  return {
+    ...b,
+    content: merged,
+    toolCalls: b.toolCalls?.length ? b.toolCalls : a.toolCalls,
+  };
+}
+
+/** No máximo 1 bloco assistant por runId — evita FORGE duplicado no chat. */
+function dedupeThreadByRunId(items: LovableThreadItem[]): LovableThreadItem[] {
+  const out: LovableThreadItem[] = [];
+  const slotByRunId = new Map<string, number>();
+
+  for (const item of items) {
+    if (item.kind === "user") {
+      out.push(item);
+      continue;
+    }
+
+    const runId = item.runId;
+    if (!runId) {
+      out.push(item);
+      continue;
+    }
+
+    const existingIdx = slotByRunId.get(runId);
+    if (existingIdx === undefined) {
+      slotByRunId.set(runId, out.length);
+      out.push(item);
+      continue;
+    }
+
+    const existing = out[existingIdx] as Extract<LovableThreadItem, { kind: "assistant" }>;
+    const preferIncoming = item.live || item.frozen || item.isActive;
+    const preferExisting = existing.live || existing.frozen || existing.isActive;
+
+    out[existingIdx] = {
+      ...existing,
+      ...item,
+      message: mergeAssistantMessages(existing.message, item.message),
+      live: preferIncoming ? (item.live ?? existing.live) : existing.live,
+      frozen: preferIncoming ? (item.frozen ?? existing.frozen) : existing.frozen,
+      isActive: existing.isActive || item.isActive,
+      runId,
+    };
+
+    if (preferIncoming && !preferExisting) {
+      out[existingIdx] = {
+        ...out[existingIdx],
+        live: item.live,
+        frozen: item.frozen,
+        isActive: item.isActive,
+      };
+    }
+  }
+
+  return out;
+}
+
+/** Liga frozen histórico a cada turno assistant — mini-cards acumulam no thread. */
+function attachFrozenToHistoricalItems(
+  items: LovableThreadItem[],
+  frozenRuns?: ReadonlyMap<string, FrozenRunSnapshot>,
+): LovableThreadItem[] {
+  if (!frozenRuns?.size) return items;
+  return items.map((item) => {
+    if (item.kind !== "assistant" || item.live || item.isActive || item.frozen) {
+      return item;
+    }
+    const rid = item.runId;
+    if (!rid || !frozenRuns.has(rid)) return item;
+    return { ...item, frozen: frozenRuns.get(rid) };
+  });
+}
+
 function insertAssistantSlot(
   items: LovableThreadItem[],
   insertAt: number,
@@ -218,7 +301,7 @@ export function buildLovableThread(
         });
       }
     }
-    return items;
+    return dedupeThreadByRunId(attachFrozenToHistoricalItems(items, frozenRuns));
   }
 
   const anchored = insertIndexForActiveRun(items, activeRunId);
@@ -240,17 +323,19 @@ export function buildLovableThread(
     });
   }
 
-  return items;
+  return dedupeThreadByRunId(attachFrozenToHistoricalItems(items, frozenRuns));
 }
 
 export { freezeSnapshot };
 
-/** Progress efetivo para render: live > frozen > null */
+/** Progress efetivo para render: live > frozen > reidratação do DB */
 export function resolveAssistantProgress(
   item: Extract<LovableThreadItem, { kind: "assistant" }>,
 ): AgentProgress | null {
   if (item.live) return item.live;
-  if (!item.frozen) return null;
+  if (!item.frozen) {
+    return item.message ? progressFromAssistantMessage(item.message) : null;
+  }
   const f = item.frozen;
   return {
     phase: f.phase,

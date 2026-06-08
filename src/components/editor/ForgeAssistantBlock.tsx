@@ -11,6 +11,7 @@ import { AgentActivityCard } from "@/components/editor/AgentActivityCard";
 import { AgentStepBar } from "@/components/editor/AgentStepBar";
 import { TurnReceipt } from "@/components/editor/TurnReceipt";
 import { storedPlanFromMessage } from "@/lib/plan-message-meta";
+import { isAgentJobMessage } from "@/lib/assistant-run-progress";
 
 interface ForgeAssistantBlockProps {
   message?: ChatMessage;
@@ -74,12 +75,8 @@ export function ForgeAssistantBlock({
     (effectiveProgress?.tools.length ?? 0) > 0 ||
     executionLog.length > 0;
 
-  const showMiniJob =
-    effectiveProgress &&
-    (isActive ||
-      effectiveProgress.timeline.length > 0 ||
-      effectiveProgress.tools.length > 0 ||
-      !effectiveProgress.finished);
+  const isAgentJobTurn = !!runId || isAgentJobMessage(message);
+  const showMiniJob = isAgentJobTurn && !!effectiveProgress;
 
   const deliveryText =
     effectiveProgress?.finished && !isActive
@@ -91,12 +88,25 @@ export function ForgeAssistantBlock({
         )
       : null;
 
+  const headlineDuringRun =
+    isActive && showMiniJob
+      ? narrative.headline ?? narrative.body?.slice(0, 160) ?? null
+      : null;
+
   const displayText =
     isActive && effectiveProgress?.autoResuming
       ? null
       : isActive && showMiniJob
-        ? null
+        ? headlineDuringRun
         : deliveryText ?? narrative.body ?? message?.content ?? null;
+
+  const isPersistedMessage =
+    !!message?.id && !String(message.id).startsWith("live-");
+  const canShowFooter =
+    !!effectiveProgress?.finished &&
+    !isActive &&
+    isPersistedMessage &&
+    !!(displayText || deliveryText);
 
   const turnTimestamp = message?.timestamp;
 
@@ -229,16 +239,6 @@ export function ForgeAssistantBlock({
         </section>
       )}
 
-      {!isActive && hasDetails && effectiveProgress && onOpenJobWorkspace && runId && (
-        <button
-          type="button"
-          className="mt-2 font-mono text-[10px] text-[var(--forge-primary)] hover:underline"
-          onClick={() => onOpenJobWorkspace(runId)}
-        >
-          Ver timeline no preview →
-        </button>
-      )}
-
       {planForRun && onReopenPlan && onPlanApprove && onPlanReject && (
         <div className="forge-plan-panel my-3 w-full max-w-full min-w-0" data-testid="plan-panel">
           <PlanViewer
@@ -252,8 +252,18 @@ export function ForgeAssistantBlock({
 
       {!isActive && diffs.length > 0 && <ChatDiffViewer diffs={diffs} />}
 
-      {(displayText && onCopy) || (message && onUndo) ? (
+      {canShowFooter && (onCopy || onUndo) ? (
         <footer className="forge-chat-item-assistant-footer mt-2 flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+          {onUndo && message && (
+            <button
+              type="button"
+              onClick={() => onUndo(message.id)}
+              className="p-1.5 rounded hover:bg-[var(--forge-surface-2)] transition-colors text-[var(--forge-muted)] hover:text-[var(--forge-destructive)]"
+              aria-label="Desfazer"
+            >
+              <RotateCcw className="size-4" />
+            </button>
+          )}
           {displayText && onCopy && (
             <button
               type="button"
@@ -262,16 +272,6 @@ export function ForgeAssistantBlock({
               aria-label={isCopied ? "Copiado!" : "Copiar mensagem"}
             >
               <Copy className={isCopied ? "size-4 text-[var(--forge-primary)]" : "size-4"} />
-            </button>
-          )}
-          {message && onUndo && (
-            <button
-              type="button"
-              onClick={() => onUndo(message.id)}
-              className="p-1.5 rounded hover:bg-[var(--forge-surface-2)] transition-colors text-[var(--forge-muted)] hover:text-[var(--forge-destructive)]"
-              aria-label="Desfazer"
-            >
-              <RotateCcw className="size-4" />
             </button>
           )}
         </footer>

@@ -1242,10 +1242,41 @@ export class AgentLoop {
       runId: this.runId ?? undefined,
       step: this.state.currentStepIndex,
     };
+    const stepText = (response.content ?? "").trim();
+
+    const existingId = await this.resolveExistingRunMessageId();
+    if (existingId) {
+      let parts: Array<{ type: string; text: string }> = [];
+      if (stepText) {
+        const { data: existing } = await this.sb
+          .from("messages")
+          .select("parts")
+          .eq("id", existingId)
+          .maybeSingle();
+        const prevParts = (existing as { parts?: Array<{ type?: string; text?: string }> } | null)?.parts ?? [];
+        const prevText = prevParts
+          .filter((p) => p?.type === "text" && typeof p.text === "string")
+          .map((p) => p.text!.trim())
+          .filter(Boolean)
+          .join("\n\n");
+        const merged = [prevText, stepText].filter(Boolean).join("\n\n");
+        parts = merged ? [{ type: "text", text: merged }] : [];
+      }
+      await this.sb
+        .from("messages")
+        .update({
+          ...(parts.length > 0 ? { parts } : {}),
+          tool_calls,
+          meta,
+        })
+        .eq("id", existingId);
+      return existingId;
+    }
+
     const { data } = await this.sb.from("messages").insert({
       conversation_id: this.state.conversationId,
       role: "assistant",
-      parts: response.content ? [{ type: "text", text: response.content }] : [],
+      parts: stepText ? [{ type: "text", text: stepText }] : [],
       tool_calls,
       meta,
     }).select("id").single();

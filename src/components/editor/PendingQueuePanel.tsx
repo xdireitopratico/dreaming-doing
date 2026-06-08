@@ -45,19 +45,9 @@ export function PendingQueuePanel({
   );
 
   if (pendingCount <= 0 && !blockingReason) return null;
+  if (pendingCount > 0 && items.length === 0 && !blockingReason) return null;
 
-  const displayItems =
-    items.length > 0
-      ? items
-      : pendingCount > 0
-        ? [
-            {
-              id: "phantom",
-              createdAt: "",
-              preview: "Mensagem na fila (recarregando detalhes…)",
-            },
-          ]
-        : [];
+  const displayItems = items;
 
   return (
     <div

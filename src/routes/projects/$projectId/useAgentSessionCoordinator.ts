@@ -39,6 +39,7 @@ type UseAgentSessionCoordinatorParams = {
 const WATCH_RUN_STATUSES = ["running", "pending"] as const;
 
 const STALE_RUN_MS = 15 * 60 * 1000;
+const RECONCILE_DEBOUNCE_MS = 400;
 
 function pendingBuildRunKey(projectId: string): string {
   return `forge:pending-build-run:${projectId}`;
@@ -57,9 +58,15 @@ export function useAgentSessionCoordinator({
 }: UseAgentSessionCoordinatorParams) {
   const watchedRunIdRef = useRef<string | null>(null);
   const reconcileInFlightRef = useRef(false);
+  const pendingQueueCountRef = useRef(0);
+  const reconcileTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const { syncPendingCount, watch, drainQueue, connected, progress, refreshPendingQueue } = agent;
   const pendingQueueCount = progress.pendingQueueCount ?? 0;
+
+  useEffect(() => {
+    pendingQueueCountRef.current = pendingQueueCount;
+  }, [pendingQueueCount]);
 
   const drainUntilEmpty = async (conversationId: string) => {
     for (let attempt = 0; attempt < 5; attempt++) {
@@ -89,7 +96,7 @@ export function useAgentSessionCoordinator({
     const reconcile = async () => {
       if (cancelled || reconcileInFlightRef.current) return;
       if (isAgentConnectInFlight() || connected) return;
-      if (running && pendingQueueCount === 0) return;
+      if (running && pendingQueueCountRef.current === 0) return;
 
       reconcileInFlightRef.current = true;
       try {
@@ -131,8 +138,10 @@ export function useAgentSessionCoordinator({
 
         watchedRunIdRef.current = null;
 
-        const drain = await drainUntilEmpty(conversation.id);
-        if (drain.runId) return;
+        if (pendingQueueCountRef.current > 0) {
+          const drain = await drainUntilEmpty(conversation.id);
+          if (drain.runId) return;
+        }
 
         const flagged = peekPendingAgentRun(projectId, conversation.id);
         if (!flagged) return;
@@ -150,7 +159,15 @@ export function useAgentSessionCoordinator({
       }
     };
 
-    void reconcile();
+    const scheduleReconcile = () => {
+      if (reconcileTimerRef.current) clearTimeout(reconcileTimerRef.current);
+      reconcileTimerRef.current = setTimeout(() => {
+        reconcileTimerRef.current = null;
+        void reconcile();
+      }, RECONCILE_DEBOUNCE_MS);
+    };
+
+    scheduleReconcile();
 
     channel = supabase
       .channel(`agent-coordinator-${projectId}`)
@@ -170,7 +187,7 @@ export function useAgentSessionCoordinator({
             row.status &&
             WATCH_RUN_STATUSES.includes(row.status as (typeof WATCH_RUN_STATUSES)[number])
           ) {
-            void reconcile();
+            scheduleReconcile();
           }
         },
       )
@@ -190,7 +207,7 @@ export function useAgentSessionCoordinator({
             row.status &&
             WATCH_RUN_STATUSES.includes(row.status as (typeof WATCH_RUN_STATUSES)[number])
           ) {
-            void reconcile();
+            scheduleReconcile();
           }
         },
       )
@@ -198,6 +215,7 @@ export function useAgentSessionCoordinator({
 
     return () => {
       cancelled = true;
+      if (reconcileTimerRef.current) clearTimeout(reconcileTimerRef.current);
       if (channel) void removeRealtimeChannel(channel);
     };
   }, [
@@ -205,7 +223,6 @@ export function useAgentSessionCoordinator({
     projectId,
     running,
     connected,
-    pendingQueueCount,
     runAgent,
     tasteQuota,
     watch,
@@ -216,11 +233,12 @@ export function useAgentSessionCoordinator({
     if (!conversation?.id || !progress.finished) return;
 
     void (async () => {
-      await syncPendingCount(projectId, conversation.id);
+      await refreshPendingQueue(projectId, conversation.id);
       if (progress.awaiting || progress.canceled) return;
       if (connected || isAgentConnectInFlight()) return;
-      if (running && pendingQueueCount === 0) return;
-      await refreshPendingQueue(projectId, conversation.id);
+      if (running) return;
+      if (pendingQueueCountRef.current === 0) return;
+
       const drain = await drainUntilEmpty(conversation.id);
       if (drain.runId) return;
     })();
@@ -232,8 +250,6 @@ export function useAgentSessionCoordinator({
     projectId,
     running,
     connected,
-    pendingQueueCount,
-    syncPendingCount,
     drainQueue,
     refreshPendingQueue,
   ]);
