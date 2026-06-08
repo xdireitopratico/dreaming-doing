@@ -87,34 +87,12 @@ export function ForgeAssistantBlock({
     <article className="forge-chat-item forge-chat-item-assistant relative group">
       <div className="flex items-start justify-between gap-2">
         <span className="forge-chat-sender forge-chat-sender-assistant shrink-0">FORGE</span>
-        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-          {showTokens && estimatedTokens > 0 && (
-            <div className="flex items-center gap-1 px-2 py-0.5 rounded bg-[var(--forge-surface-2)] border border-[var(--forge-border)] text-[10px] font-mono text-[var(--forge-primary)]">
-              <Zap className="size-3" />
-              <span>~{estimatedTokens.toLocaleString()} tokens</span>
-            </div>
-          )}
-          {displayText && onCopy && (
-            <button
-              type="button"
-              onClick={() => onCopy(displayText, msgId)}
-              className="p-1.5 rounded hover:bg-[var(--forge-surface-2)] transition-colors text-[var(--forge-muted)] hover:text-[var(--forge-foreground)]"
-              aria-label={isCopied ? "Copiado!" : "Copiar mensagem"}
-            >
-              <Copy className={isCopied ? "size-4 text-[var(--forge-primary)]" : "size-4"} />
-            </button>
-          )}
-          {message && onUndo && (
-            <button
-              type="button"
-              onClick={() => onUndo(message.id)}
-              className="p-1.5 rounded hover:bg-[var(--forge-surface-2)] transition-colors text-[var(--forge-muted)] hover:text-[var(--forge-destructive)]"
-              aria-label="Desfazer"
-            >
-              <RotateCcw className="size-4" />
-            </button>
-          )}
-        </div>
+        {showTokens && estimatedTokens > 0 && (
+          <div className="flex items-center gap-1 px-2 py-0.5 rounded bg-[var(--forge-surface-2)] border border-[var(--forge-border)] text-[10px] font-mono text-[var(--forge-primary)]">
+            <Zap className="size-3" />
+            <span>~{estimatedTokens.toLocaleString()} tokens</span>
+          </div>
+        )}
       </div>
 
       {/* Camada de comunicação — sempre visível durante run */}
@@ -240,6 +218,31 @@ export function ForgeAssistantBlock({
       )}
 
       {diffs.length > 0 && <ChatDiffViewer diffs={diffs} />}
+
+      {(displayText && onCopy) || (message && onUndo) ? (
+        <footer className="forge-chat-item-assistant-footer mt-2 flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+          {displayText && onCopy && (
+            <button
+              type="button"
+              onClick={() => onCopy(displayText, msgId)}
+              className="p-1.5 rounded hover:bg-[var(--forge-surface-2)] transition-colors text-[var(--forge-muted)] hover:text-[var(--forge-foreground)]"
+              aria-label={isCopied ? "Copiado!" : "Copiar mensagem"}
+            >
+              <Copy className={isCopied ? "size-4 text-[var(--forge-primary)]" : "size-4"} />
+            </button>
+          )}
+          {message && onUndo && (
+            <button
+              type="button"
+              onClick={() => onUndo(message.id)}
+              className="p-1.5 rounded hover:bg-[var(--forge-surface-2)] transition-colors text-[var(--forge-muted)] hover:text-[var(--forge-destructive)]"
+              aria-label="Desfazer"
+            >
+              <RotateCcw className="size-4" />
+            </button>
+          )}
+        </footer>
+      ) : null}
     </article>
   );
 }

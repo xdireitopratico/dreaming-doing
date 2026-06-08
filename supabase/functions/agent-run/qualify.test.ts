@@ -2,6 +2,8 @@ import { assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import {
   buildExecuteInstruction,
   extractOriginalUserRequest,
+  isPreviewActionRequest,
+  looksLikeInteractionOnly,
   needsQualify,
 } from "./qualify.ts";
 
@@ -19,6 +21,23 @@ Deno.test("buildExecuteInstruction inclui pedido literal", () => {
   const text = buildExecuteInstruction("Adicione botão azul no hero");
   assertEquals(text.includes("Adicione botão azul no hero"), true);
   assertEquals(text.includes("fs_write"), true);
+});
+
+Deno.test("preview action não é conversa vaga nem qualify", () => {
+  assertEquals(isPreviewActionRequest("envia para o preview"), true);
+  assertEquals(looksLikeInteractionOnly("envia para o preview"), false);
+  assertEquals(
+    needsQualify("envia para o preview", {
+      complexity: 2,
+      type: "other",
+      summary: "x",
+      needsBuild: false,
+      needsDeps: false,
+    }),
+    false,
+  );
+  const instr = buildExecuteInstruction("envia para o preview");
+  assertEquals(instr.includes("shell_exec"), true);
 });
 
 Deno.test("needsQualify para pedido curto", () => {

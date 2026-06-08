@@ -23,6 +23,7 @@ import { restoreExecutionLogFromRows } from "./executionLogMeta.ts";
 import { loadCheckpoint } from "./checkpoint.ts";
 import { appendStreamEvent } from "../_shared/agent-stream.ts";
 import { isServiceRoleRequest } from "../_shared/service-auth.ts";
+import { looksLikeInteractionOnly } from "./qualify.ts";
 
 const runningLocks = new Map<string, Promise<unknown>>();
 
@@ -460,8 +461,7 @@ Deno.serve(async (req) => {
       const textPart = parts.find((p: any) => p?.type === "text" || typeof p?.text === "string");
       return textPart?.text || textPart?.content || "";
     })();
-    const looksLikeInteraction = /quero (só |apenas |uma )?(mensagem|conversa|intera|pergunt|discut|qualif|ideia|brainstorm)|me faz (perguntas|uma pergunta|pergunta)|não (começa|codar|construir|executar|trabalhar) ainda|só conversar|quero (conversar|discutir a ideia)/i.test(lastUserContent)
-      || lastUserContent.trim().length < 90;
+    const looksLikeInteraction = looksLikeInteractionOnly(lastUserContent);
     const projectHasSandbox = !!(((project as any).meta || {})?.previewSandboxId || ((project as any).meta || {})?.previewReady);
     // Fase 4.7: 3 guardas — (1) interação explícita não aloca, (2) projeto SEM
     // arquivos não aloca (E2B só nasce depois do agente criar algo), (3) projeto

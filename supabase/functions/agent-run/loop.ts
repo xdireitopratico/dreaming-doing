@@ -519,11 +519,12 @@ export class AgentLoop {
           this.emit("file_diff", preDiff);
         }
 
-        if (call.name === "fs_write" && result.ok) {
+        if ((call.name === "fs_write" || call.name === "fs_edit") && result.ok) {
+          const pathArg = (call.arguments.path as string) ?? call.name;
           await this.reg.execute({
             id: crypto.randomUUID(),
             name: "shell_exec",
-            arguments: { command: `cd /home/user && git add -A && git commit -m "${(call.arguments.path as string)}: update" 2>&1 || true` },
+            arguments: { command: `cd /home/user && git add -A && git commit -m "${pathArg}: update" 2>&1 || true` },
           });
         }
         return result;

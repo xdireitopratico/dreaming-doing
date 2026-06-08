@@ -184,12 +184,12 @@ export function useEditorAgentOrchestration({
       previewBootAfterAgentRef.current = false;
       return;
     }
-    if (!isReactProject || !e2bConnected || devUrl || previewBoot.booting || previewE2bCircuit) return;
+    if (!isReactProject || !e2bConnected || previewBoot.booting || previewE2bCircuit) return;
     if (fileCount === 0) return;
     if (!agentShouldBootPreview) return;
     if (previewBootAfterAgentRef.current) return;
     previewBootAfterAgentRef.current = true;
-    void previewBoot.bootWithRetry();
+    void previewBoot.bootWithRetry(devUrl ? { force: true } : undefined);
   }, [
     agentShouldBootPreview,
     running,
@@ -208,10 +208,10 @@ export function useEditorAgentOrchestration({
   );
 
   useEffect(() => {
-    if (!devUrl || activeView !== "preview") return;
+    if (!devUrl || activeView !== "preview" || running) return;
     const t = window.setTimeout(() => setPreviewReloadNonce((n) => n + 1), 600);
     return () => window.clearTimeout(t);
-  }, [filesSyncKey, devUrl, activeView, setPreviewReloadNonce]);
+  }, [filesSyncKey, devUrl, activeView, running, setPreviewReloadNonce]);
 
   return {
     previewE2bCircuit,
