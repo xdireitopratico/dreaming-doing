@@ -55,7 +55,7 @@ export function AgentJobMiniCard({
       className={cn(
         "lovable-job-mini-card w-full text-left",
         view.cardStatus === "working" && "lovable-job-mini-card--working",
-        view.cardStatus === "done" && "lovable-job-mini-card--done",
+
         isFocused && "lovable-job-mini-card--focused",
       )}
       data-testid="agent-job-mini-card"
@@ -83,7 +83,7 @@ export function AgentJobMiniCard({
 
       <p className="lovable-job-mini-card-title">{view.title}</p>
 
-      <JobInlineTimeline nodes={nodes} variant="mini" />
+      <JobInlineTimeline nodes={nodes} variant="chat" />
     </button>
   );
 }

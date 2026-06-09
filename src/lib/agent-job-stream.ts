@@ -415,7 +415,11 @@ function deriveMomentumTitle(
   }
 
   if (cardStatus === "done") {
-    return editedFile ? `Pronto · ${editedFile}` : "Concluído";
+    const lastStep = [...nodes].reverse().find((n) => n.kind === "step");
+    if (lastStep) return lastStep.expectation;
+    const lastTask = [...nodes].reverse().find((n) => n.kind === "task");
+    if (lastTask) return truncateMomentum(lastTask.title);
+    if (editedFile) return `Pronto · ${editedFile}`;
   }
   if (cardStatus === "failed") {
     const lastResult = [...nodes].reverse().find((n) => n.kind === "result");
@@ -505,6 +509,11 @@ export function miniVisibleNodes(nodes: JobStreamNode[]): JobStreamNode[] {
   if (active.kind === "thought") return [active];
   if (active.kind === "step") return [active];
   return [];
+}
+
+/** Chat: árvore completa permanece após finish (nunca esvazia como mini). */
+export function chatPersistedNodes(nodes: JobStreamNode[]): JobStreamNode[] {
+  return nodes;
 }
 
 /** Reidrata timeline mínima a partir de executionLog persistido no DB. */

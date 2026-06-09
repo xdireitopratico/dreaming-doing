@@ -41,6 +41,14 @@ function resolveClosingText(
   return message?.content?.trim() || null;
 }
 
+function JobDoneBubble() {
+  return (
+    <div className="lovable-done-bubble" data-testid="assistant-done-footer">
+      <span className="lovable-done-bubble-label">Done</span>
+    </div>
+  );
+}
+
 export function ForgeAssistantBlock({
   message,
   progress,
@@ -69,20 +77,25 @@ export function ForgeAssistantBlock({
   const planForRun =
     livePlan ?? (storedPlan?.status === "pending" ? storedPlan.plan : null);
   const rejectedPlan = storedPlan?.status === "rejected" ? storedPlan.plan : null;
+  const approvedPlan = storedPlan?.status === "approved" ? storedPlan.plan : null;
   const diffs = effectiveProgress?.diffs ?? [];
 
   const isAgentJobTurn = !!runId || isAgentJobMessage(message);
-  const showMiniJob = isAgentJobTurn && !!effectiveProgress;
+  const showJobBubble =
+    !!effectiveProgress &&
+    isAgentJobTurn &&
+    (!!runId ||
+      (effectiveProgress.timeline?.length ?? 0) > 0 ||
+      effectiveProgress.finished);
 
-  const closingText = resolveClosingText(effectiveProgress, message, showMiniJob);
+  const closingText = resolveClosingText(effectiveProgress, message, showJobBubble);
 
-  const showDoneFooter =
+  const showDoneBubble =
     !!effectiveProgress?.finished &&
     !isActive &&
-    showMiniJob &&
+    showJobBubble &&
     effectiveProgress.lastFinishOk === true &&
-    !effectiveProgress.canceled &&
-    !!closingText;
+    !effectiveProgress.canceled;
 
   const isPersistedMessage =
     !!message?.id && !String(message.id).startsWith("live-");
@@ -106,7 +119,7 @@ export function ForgeAssistantBlock({
         )}
       </div>
 
-      {effectiveProgress && showMiniJob && (
+      {showJobBubble && effectiveProgress && (
         <AgentJobMiniCard
           progress={effectiveProgress}
           runId={runId}
@@ -114,6 +127,21 @@ export function ForgeAssistantBlock({
           isFocused={!!runId && jobWorkspaceRunId === runId}
           onOpen={onOpenJobWorkspace}
         />
+      )}
+
+      {approvedPlan && !planForRun && (
+        <section
+          className="my-3 rounded-lg border border-[var(--border)] bg-[var(--surface-2)]/60 overflow-hidden"
+          aria-label="Plano aprovado"
+          data-testid="plan-approved-history"
+        >
+          <header className="flex items-center gap-2 px-4 py-2 border-b border-[var(--border)]">
+            <span className="text-xs font-medium text-[var(--foreground)]">Plano aprovado</span>
+          </header>
+          <div className="max-h-[360px] overflow-hidden">
+            <PlanDocumentView plan={approvedPlan} editable={false} />
+          </div>
+        </section>
       )}
 
       {closingText ? (
@@ -125,11 +153,7 @@ export function ForgeAssistantBlock({
         </p>
       ) : null}
 
-      {showDoneFooter && (
-        <p className="lovable-job-done-footer" data-testid="assistant-done-footer">
-          Done
-        </p>
-      )}
+      {showDoneBubble && <JobDoneBubble />}
 
       {turnTimestamp && effectiveProgress?.finished && !isActive && (
         <time
@@ -179,7 +203,7 @@ export function ForgeAssistantBlock({
         !effectiveProgress.error &&
         !planForRun &&
         !rejectedPlan &&
-        !showMiniJob && (
+        !showJobBubble && (
         <p
           className="forge-chat-live-line text-[var(--forge-muted)]"
           data-testid="assistant-turn-empty"

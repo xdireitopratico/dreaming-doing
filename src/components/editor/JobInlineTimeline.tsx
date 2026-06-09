@@ -2,10 +2,10 @@ import { useState } from "react";
 import { ChevronDown, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { JobStreamNode } from "@/lib/agent-job-stream";
-import { miniVisibleNodes } from "@/lib/agent-job-stream";
+import { chatPersistedNodes, miniVisibleNodes } from "@/lib/agent-job-stream";
 import { FileRefChip } from "@/components/editor/FileRefChip";
 
-type TimelineVariant = "full" | "mini";
+type TimelineVariant = "full" | "mini" | "chat";
 
 type JobInlineTimelineProps = {
   nodes: JobStreamNode[];
@@ -22,11 +22,16 @@ function JobThoughtBlock({
 }) {
   const [open, setOpen] = useState(variant === "full");
   const isMini = variant === "mini";
+  const isChat = variant === "chat";
   const label = `Thought for ${node.thoughtSec}s`;
 
   return (
     <div
-      className={cn("lovable-thought-block", isMini && "lovable-thought-block--mini")}
+      className={cn(
+        "lovable-thought-block",
+        isMini && "lovable-thought-block--mini",
+        isChat && "lovable-thought-block--chat",
+      )}
       data-status={node.status}
     >
       <button
@@ -46,7 +51,7 @@ function JobThoughtBlock({
           )}
         />
       </button>
-      {(open || isMini) && node.prose && (
+      {(open || isMini || isChat) && node.prose && (
         <p className="lovable-thought-block-prose">{node.prose}</p>
       )}
     </div>
@@ -65,6 +70,7 @@ function JobTaskBubble({
       className={cn(
         "lovable-task-bubble",
         variant === "mini" && "lovable-task-bubble--mini",
+        variant === "chat" && "lovable-task-bubble--chat",
       )}
     >
       <span className="lovable-task-bubble-label">Task</span>
@@ -90,6 +96,7 @@ function JobStepBubble({
         node.status === "done" && "lovable-step-bubble--done",
         node.status === "failed" && "lovable-step-bubble--failed",
         variant === "mini" && "lovable-step-bubble--mini",
+        variant === "chat" && "lovable-step-bubble--chat",
       )}
       data-technical={node.technicalLabel}
     >
@@ -106,7 +113,7 @@ function JobStepBubble({
               key={f.path}
               file={f}
               onOpenFile={onOpenFile}
-              variant={variant}
+              variant={variant === "chat" ? "mini" : variant}
             />
           ))}
         </div>
@@ -128,11 +135,12 @@ function JobResultBubble({
         "lovable-result-bubble",
         node.status === "failed" && "lovable-result-bubble--failed",
         variant === "mini" && "lovable-result-bubble--mini",
+        variant === "chat" && "lovable-result-bubble--chat",
       )}
     >
       <span className="lovable-result-bubble-label">Result</span>
       <p className="lovable-result-bubble-summary">{node.summary}</p>
-      {node.evidence.length > 0 && variant === "full" && (
+      {node.evidence.length > 0 && (variant === "full" || variant === "chat") && (
         <ol className="lovable-result-bubble-evidence">
           {node.evidence.map((item, i) => (
             <li key={`${node.id}-ev-${i}`}>{item}</li>
@@ -177,7 +185,12 @@ export function JobInlineTimeline({
   variant = "full",
   onOpenFile,
 }: JobInlineTimelineProps) {
-  const displayNodes = variant === "mini" ? miniVisibleNodes(nodes) : nodes;
+  const displayNodes =
+    variant === "mini"
+      ? miniVisibleNodes(nodes)
+      : variant === "chat"
+        ? chatPersistedNodes(nodes)
+        : nodes;
 
   if (displayNodes.length === 0) return null;
 
@@ -186,15 +199,24 @@ export function JobInlineTimeline({
       className={cn(
         "lovable-inline-timeline",
         variant === "mini" && "lovable-inline-timeline--mini",
+        variant === "chat" && "lovable-inline-timeline--chat",
       )}
-      data-testid={variant === "mini" ? "job-inline-timeline-mini" : "job-inline-timeline-full"}
+      data-testid={
+        variant === "chat"
+          ? "job-inline-timeline-chat"
+          : variant === "mini"
+            ? "job-inline-timeline-mini"
+            : "job-inline-timeline-full"
+      }
     >
       {displayNodes.map((node, index) => (
         <TimelineNode
           key={node.id}
           node={node}
           variant={variant}
-          showConnector={variant === "full" && index < displayNodes.length - 1}
+          showConnector={
+            (variant === "full" || variant === "chat") && index < displayNodes.length - 1
+          }
           onOpenFile={onOpenFile}
         />
       ))}

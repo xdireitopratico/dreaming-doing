@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 import type { SSEEvent } from "@/lib/agent-progress";
 import {
   buildJobStreamTree,
+  chatPersistedNodes,
   deriveCardView,
   deriveInspectorView,
+  miniVisibleNodes,
   normalizeThoughtProse,
 } from "@/lib/agent-job-stream";
 
@@ -133,6 +135,40 @@ describe("agent-job-stream tree", () => {
     expect(insp.nodes.length).toBeGreaterThan(2);
     expect(insp.thoughts.length).toBeGreaterThan(0);
     expect(insp.errors.length).toBeGreaterThan(0);
+  });
+
+  it("chatPersistedNodes mantém árvore completa após finish", () => {
+    const timeline: SSEEvent[] = [
+      ev("phase", { phase: "gather", task_title: "Entender o projeto" }, 1),
+      ev("tool_start", { name: "fs_read", args: { path: "src/App.tsx" } }, 2),
+      ev("tool_done", { name: "fs_read", ok: true }, 3),
+      ev("validate_ok", {}, 4),
+    ];
+    const nodes = buildJobStreamTree(timeline, { running: false });
+    expect(nodes.length).toBeGreaterThan(2);
+    expect(chatPersistedNodes(nodes)).toEqual(nodes);
+    expect(miniVisibleNodes(nodes).length).toBeLessThan(nodes.length);
+  });
+
+  it("deriveCardView done nunca usa Concluído no título", () => {
+    const timeline: SSEEvent[] = [
+      ev("phase", { phase: "gather", task_title: "Entender o projeto" }, 1),
+      ev("tool_start", { name: "fs_edit", args: { path: "src/Hero.tsx" } }, 2),
+      ev("tool_done", { name: "fs_edit", ok: true }, 3),
+    ];
+    const nodes = buildJobStreamTree(timeline, { running: false });
+    const view = deriveCardView(nodes, {
+      finished: true,
+      lastFinishOk: true,
+      canceled: false,
+      autoResuming: false,
+      message: null,
+      statusHint: null,
+      phase: null,
+    });
+    expect(view.cardStatus).toBe("done");
+    expect(view.title).not.toBe("Concluído");
+    expect(view.title.length).toBeGreaterThan(0);
   });
 
   it("step_result cria result node com evidence", () => {

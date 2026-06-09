@@ -1004,13 +1004,21 @@ body:has(.editor-workspace) {
   color: var(--forge-ghost);
 }
 
-.lovable-job-done-footer {
+.lovable-done-bubble {
   margin: 10px 0 0;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(52, 211, 153, 0.28);
+  background: rgba(52, 211, 153, 0.06);
+}
+
+.lovable-done-bubble-label {
   font-size: 10px;
   font-weight: 600;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   color: rgba(52, 211, 153, 0.95);
+  font-family: ui-monospace, monospace;
 }
 
 .lovable-job-mini-card-header {
@@ -1226,6 +1234,13 @@ body:has(.editor-workspace) {
   padding: 0;
 }
 
+.lovable-inline-timeline--chat {
+  gap: 6px;
+  padding: 0;
+  max-height: 420px;
+  overflow-y: auto;
+}
+
 .lovable-inline-timeline-node {
   position: relative;
   display: flex;
@@ -1301,6 +1316,17 @@ body:has(.editor-workspace) {
 
 .lovable-thought-block--mini .lovable-thought-block-prose {
   padding: 0;
+  font-size: 11px;
+  color: var(--forge-ghost);
+}
+
+.lovable-thought-block--chat {
+  border: none;
+  background: transparent;
+}
+
+.lovable-thought-block--chat .lovable-thought-block-prose {
+  padding: 0 12px 8px;
   font-size: 11px;
   color: var(--forge-ghost);
 }
@@ -1408,6 +1434,13 @@ body:has(.editor-workspace) {
 
 .lovable-result-bubble--mini {
   display: none;
+}
+
+.lovable-task-bubble--chat,
+.lovable-step-bubble--chat,
+.lovable-result-bubble--chat {
+  padding: 8px 10px;
+  border-radius: 10px;
 }
 
 .lovable-result-bubble-label {
