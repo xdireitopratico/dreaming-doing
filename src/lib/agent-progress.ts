@@ -91,6 +91,8 @@ export interface AgentProgress {
     suggestedStack: string;
     message: string;
   } | null;
+  /** Texto de narração do agente (briefing inicial, wrap-up final) — separado de streamText para não poluir tool calls. */
+  narrationText?: string | null;
 }
 
 export type AgentConnectOptions = {
@@ -115,6 +117,7 @@ export const initialAgentProgress: AgentProgress = {
   resumable: false,
   statusHint: null,
   streamText: null,
+  narrationText: null,
   lastFinishOk: null,
   autoResuming: false,
   pendingQueueCount: 0,
@@ -209,6 +212,11 @@ export function applyAgentProgressEvent(
           : append
           ? `${prev.streamText ?? ""}${chunk}`
           : chunk,
+        narrationText: narration
+          ? append
+            ? `${prev.narrationText ?? ""}${chunk}`
+            : chunk
+          : prev.narrationText,
         timeline: [...prev.timeline, event],
       };
     }

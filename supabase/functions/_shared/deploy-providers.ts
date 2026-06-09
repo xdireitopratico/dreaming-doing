@@ -124,6 +124,8 @@ export async function deployToVercel(
     };
   }
 
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 60_000);
   const res = await fetch("https://api.vercel.com/v13/deployments", {
     method: "POST",
     headers: {
@@ -131,7 +133,9 @@ export async function deployToVercel(
       "Content-Type": "application/json",
     },
     body: JSON.stringify(body),
+    signal: controller.signal,
   });
+  clearTimeout(timeoutId);
 
   const payload = await res.json().catch(() => ({})) as {
     url?: string;
@@ -173,14 +177,18 @@ export async function deployToNetlify(
 
   let siteId = existingSiteId?.trim();
   if (!siteId) {
-    const createRes = await fetch("https://api.netlify.com/api/v1/sites", {
+    const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 60_000);
+  const createRes = await fetch("https://api.netlify.com/api/v1/sites", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${token}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({ name: `forge-${slugify(projectSlug)}` }),
+      signal: controller.signal,
     });
+  clearTimeout(timeoutId);
     const created = await createRes.json().catch(() => ({})) as { id?: string; message?: string };
     if (!createRes.ok || !created.id) {
       return {
@@ -192,6 +200,8 @@ export async function deployToNetlify(
   }
 
   const zipBytes = await buildZip(files);
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 60_000);
   const deployRes = await fetch(`https://api.netlify.com/api/v1/sites/${siteId}/deploys`, {
     method: "POST",
     headers: {
@@ -199,7 +209,9 @@ export async function deployToNetlify(
       "Content-Type": "application/zip",
     },
     body: zipBytes,
+    signal: controller.signal,
   });
+  clearTimeout(timeoutId);
 
   const deployed = await deployRes.json().catch(() => ({})) as {
     id?: string;
@@ -230,9 +242,13 @@ async function resolveCloudflareAccountId(
   storedAccountId?: string,
 ): Promise<string> {
   if (storedAccountId?.trim()) return storedAccountId.trim();
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 60_000);
   const res = await fetch("https://api.cloudflare.com/client/v4/accounts", {
     headers: { Authorization: `Bearer ${token}` },
+    signal: controller.signal,
   });
+  clearTimeout(timeoutId);
   const body = await res.json().catch(() => ({})) as {
     result?: { id: string }[];
     errors?: { message?: string }[];
@@ -259,6 +275,8 @@ export async function deployToCloudflare(
   const cfAccountId = await resolveCloudflareAccountId(token, accountId);
   const projectName = existingProjectName?.trim() || `forge-${slugify(projectSlug)}`;
 
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 60_000);
   const createRes = await fetch(
     `https://api.cloudflare.com/client/v4/accounts/${cfAccountId}/pages/projects`,
     {
@@ -271,8 +289,10 @@ export async function deployToCloudflare(
         name: projectName,
         production_branch: "main",
       }),
+      signal: controller.signal,
     },
   );
+  clearTimeout(timeoutId);
   if (!createRes.ok && createRes.status !== 409) {
     const errBody = await createRes.json().catch(() => ({})) as {
       errors?: { message?: string }[];
@@ -291,14 +311,18 @@ export async function deployToCloudflare(
     "deploy.zip",
   );
 
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 60_000);
   const deployRes = await fetch(
     `https://api.cloudflare.com/client/v4/accounts/${cfAccountId}/pages/projects/${projectName}/deployments`,
     {
       method: "POST",
       headers: { Authorization: `Bearer ${token}` },
       body: form,
+      signal: controller.signal,
     },
   );
+  clearTimeout(timeoutId);
 
   const deployed = await deployRes.json().catch(() => ({})) as {
     result?: { url?: string; id?: string };

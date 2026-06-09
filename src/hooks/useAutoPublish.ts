@@ -7,6 +7,8 @@ type PublishFn = (opts: { data: { projectId: string } }) => Promise<{
   needsPreview?: boolean;
 }>;
 
+const PUBLISH_TIMEOUT_MS = 30_000;
+
 type AutoPublishOpts = {
   projectId: string;
   devUrl: string | null;
@@ -44,8 +46,20 @@ export function useAutoPublish({
     attemptedRef.current = devUrl;
     logEditorTelemetryEvent("preview", "auto_publish_start", "info", projectId);
 
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), PUBLISH_TIMEOUT_MS);
+
     try {
-      const res = await publishFn({ data: { projectId } });
+      // publishFn é server fn do TanStack — não suporta signal nativamente.
+      // Envolvemos em Promise.race com timeout manual.
+      const res = await Promise.race([
+        publishFn({ data: { projectId } }),
+        new Promise<never>((_, reject) => {
+          controller.signal.addEventListener("abort", () => {
+            reject(new Error("Publish timeout (30s)"));
+          });
+        }),
+      ]);
       if (res.needsPreview) return null;
       if (res.url) {
         await qc.invalidateQueries({ queryKey: ["project", projectId] });
@@ -59,6 +73,7 @@ export function useAutoPublish({
       attemptedRef.current = null;
       return null;
     } finally {
+      clearTimeout(timeoutId);
       setPublishing(false);
     }
   }, [devUrl, publishedUrl, projectId, publishFn, qc]);

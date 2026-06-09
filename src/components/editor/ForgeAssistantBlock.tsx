@@ -39,6 +39,17 @@ function resolveClosingText(
   return messageText;
 }
 
+function resolveNarrationText(
+  progress: AgentProgress | null,
+  closingText: string | null,
+): string | null {
+  if (!progress?.narrationText?.trim()) return null;
+  const narration = progress.narrationText.trim();
+  // Não duplicar se a narração for igual ao texto de fechamento
+  if (closingText && narration === closingText) return null;
+  return narration;
+}
+
 function JobDoneBubble() {
   return (
     <div className="lovable-done-bubble" data-testid="assistant-done-footer">
@@ -85,6 +96,7 @@ export function ForgeAssistantBlock({
       (effectiveProgress.tools?.length ?? 0) > 0);
 
   const closingText = resolveClosingText(effectiveProgress, message, showJobBubble);
+  const narrationText = resolveNarrationText(effectiveProgress, closingText);
 
   const showDoneBubble =
     !!runId &&
@@ -138,6 +150,16 @@ export function ForgeAssistantBlock({
           </div>
         </section>
       )}
+
+      {/* Texto de narração (briefing inicial, wrap-up) — separado do streamText */}
+      {narrationText ? (
+        <p
+          className="forge-chat-live-line forge-chat-narration-text text-[var(--forge-primary)]/90 text-[13px] leading-relaxed whitespace-pre-wrap"
+          data-testid="assistant-narration-text"
+        >
+          {narrationText}
+        </p>
+      ) : null}
 
       {/* Texto de fechamento / narração */}
       {closingText ? (
