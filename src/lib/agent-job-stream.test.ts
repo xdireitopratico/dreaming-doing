@@ -4,6 +4,7 @@ import {
   buildJobStreamTree,
   deriveCardView,
   deriveInspectorView,
+  normalizeThoughtProse,
 } from "@/lib/agent-job-stream";
 
 function ev(type: string, data: Record<string, unknown>, ts: number): SSEEvent {
@@ -49,6 +50,22 @@ describe("agent-job-stream tree", () => {
     const nodes = buildJobStreamTree(timeline, { running: true });
     expect(nodes.filter((n) => n.kind === "thought")).toHaveLength(1);
     expect(nodes[0]?.kind === "thought" && nodes[0].prose).toContain("Vou criar");
+  });
+
+  it("deltas token-a-token não quebram 1 palavra por linha", () => {
+    const timeline: SSEEvent[] = [
+      ev("assistant_text", { text: "Vou", delta: true, thinking: true }, 1),
+      ev("assistant_text", { text: " criar", delta: true, thinking: true }, 2),
+      ev("assistant_text", { text: " a landing", delta: true, thinking: true }, 3),
+    ];
+    const nodes = buildJobStreamTree(timeline, { running: false });
+    const thought = nodes.find((n) => n.kind === "thought");
+    expect(thought?.kind === "thought" && thought.prose).toBe("Vou criar a landing");
+    expect(thought?.kind === "thought" && thought.prose.split("\n")).toHaveLength(1);
+  });
+
+  it("normalizeThoughtProse colapsa streaming legado", () => {
+    expect(normalizeThoughtProse("Vou\ncriar\na")).toBe("Vou criar a");
   });
 
   it("narration não entra na árvore", () => {

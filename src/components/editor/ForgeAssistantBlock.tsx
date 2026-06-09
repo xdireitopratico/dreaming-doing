@@ -1,6 +1,6 @@
 import { Copy, RotateCcw, Zap } from "lucide-react";
 import type { ChatMessage } from "@/components/editor/ChatInput";
-import { initialAgentProgress, type AgentProgress, type PendingPlan, type PlanStep } from "@/lib/agent-progress";
+import type { AgentProgress, PendingPlan, PlanStep } from "@/lib/agent-progress";
 import { ChatDiffViewer } from "@/components/editor/ChatDiffViewer";
 import { PlanViewer } from "@/components/editor/PlanViewer";
 import { PlanDocumentView } from "@/components/editor/PlanDocumentView";
@@ -25,6 +25,20 @@ interface ForgeAssistantBlockProps {
   onResume?: () => void;
   onOpenJobWorkspace?: (runId: string) => void;
   jobWorkspaceRunId?: string | null;
+}
+
+function resolveClosingText(
+  progress: AgentProgress | null,
+  message?: ChatMessage,
+  showMiniJob?: boolean,
+): string | null {
+  if (showMiniJob && progress) {
+    const fromStream = progress.streamText?.trim();
+    if (fromStream) return fromStream;
+    const fromSummary = progress.summary?.trim();
+    if (fromSummary) return fromSummary;
+  }
+  return message?.content?.trim() || null;
 }
 
 export function ForgeAssistantBlock({
@@ -60,22 +74,15 @@ export function ForgeAssistantBlock({
   const isAgentJobTurn = !!runId || isAgentJobMessage(message);
   const showMiniJob = isAgentJobTurn && !!effectiveProgress;
 
-  const shortSummary =
-    effectiveProgress?.finished &&
-    !isActive &&
-    showMiniJob
-      ? (effectiveProgress.summary?.trim() ||
-          (effectiveProgress.streamText?.trim()
-            ? effectiveProgress.streamText.trim().split("\n")[0]?.slice(0, 160)
-            : null))
-      : null;
+  const closingText = resolveClosingText(effectiveProgress, message, showMiniJob);
 
-  const displayText =
-    isActive && showMiniJob
-      ? null
-      : !showMiniJob
-        ? message?.content?.trim() || null
-        : shortSummary;
+  const showDoneFooter =
+    !!effectiveProgress?.finished &&
+    !isActive &&
+    showMiniJob &&
+    effectiveProgress.lastFinishOk === true &&
+    !effectiveProgress.canceled &&
+    !!closingText;
 
   const isPersistedMessage =
     !!message?.id && !String(message.id).startsWith("live-");
@@ -83,7 +90,7 @@ export function ForgeAssistantBlock({
     !!effectiveProgress?.finished &&
     !isActive &&
     isPersistedMessage &&
-    !!displayText;
+    !!closingText;
 
   const turnTimestamp = message?.timestamp;
 
@@ -109,11 +116,20 @@ export function ForgeAssistantBlock({
         />
       )}
 
-      {displayText && !isActive ? (
-        <p className="forge-chat-live-line text-[var(--forge-silver)] text-[13px] leading-relaxed">
-          {displayText}
+      {closingText ? (
+        <p
+          className="forge-chat-live-line forge-chat-closing-text text-[var(--forge-silver)] text-[13px] leading-relaxed whitespace-pre-wrap"
+          data-testid="assistant-closing-text"
+        >
+          {closingText}
         </p>
       ) : null}
+
+      {showDoneFooter && (
+        <p className="lovable-job-done-footer" data-testid="assistant-done-footer">
+          Done
+        </p>
+      )}
 
       {turnTimestamp && effectiveProgress?.finished && !isActive && (
         <time
@@ -159,7 +175,7 @@ export function ForgeAssistantBlock({
       )}
 
       {effectiveProgress?.finished &&
-        !displayText &&
+        !closingText &&
         !effectiveProgress.error &&
         !planForRun &&
         !rejectedPlan &&
@@ -212,10 +228,10 @@ export function ForgeAssistantBlock({
               <RotateCcw className="size-4" />
             </button>
           )}
-          {displayText && onCopy && (
+          {closingText && onCopy && (
             <button
               type="button"
-              onClick={() => onCopy(displayText, msgId)}
+              onClick={() => onCopy(closingText, msgId)}
               className="p-1.5 rounded hover:bg-[var(--forge-surface-2)] transition-colors text-[var(--forge-muted)] hover:text-[var(--forge-foreground)]"
               aria-label={isCopied ? "Copiado!" : "Copiar mensagem"}
             >

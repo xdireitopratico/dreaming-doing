@@ -194,27 +194,16 @@ function dedupeThreadByRunId(items: LovableThreadItem[]): LovableThreadItem[] {
     }
 
     const existing = out[existingIdx] as Extract<LovableThreadItem, { kind: "assistant" }>;
-    const preferIncoming = item.live || item.frozen || item.isActive;
-    const preferExisting = existing.live || existing.frozen || existing.isActive;
 
     out[existingIdx] = {
       ...existing,
       ...item,
       message: mergeAssistantMessages(existing.message, item.message),
-      live: preferIncoming ? (item.live ?? existing.live) : existing.live,
-      frozen: preferIncoming ? (item.frozen ?? existing.frozen) : existing.frozen,
+      live: item.live ?? existing.live,
+      frozen: item.frozen ?? existing.frozen,
       isActive: existing.isActive || item.isActive,
       runId,
     };
-
-    if (preferIncoming && !preferExisting) {
-      out[existingIdx] = {
-        ...out[existingIdx],
-        live: item.live,
-        frozen: item.frozen,
-        isActive: item.isActive,
-      };
-    }
   }
 
   return out;
@@ -234,6 +223,34 @@ function attachFrozenToHistoricalItems(
     if (!rid || !frozenRuns.has(rid)) return item;
     return { ...item, frozen: frozenRuns.get(rid) };
   });
+}
+
+/** Garante slot assistant para cada frozen — append-only, nunca some do chat. */
+function ensureFrozenRunSlots(
+  items: LovableThreadItem[],
+  frozenRuns?: ReadonlyMap<string, FrozenRunSnapshot>,
+): LovableThreadItem[] {
+  if (!frozenRuns?.size) return items;
+
+  const covered = new Set<string>();
+  for (const item of items) {
+    if (item.kind === "assistant" && item.runId) covered.add(item.runId);
+  }
+
+  let next = items;
+  for (const [runId, frozen] of frozenRuns) {
+    if (covered.has(runId)) continue;
+    const insertAt =
+      insertIndexForActiveRun(next, runId) ?? pendingAssistantInsertIndex(next);
+    next = insertAssistantSlot(next, insertAt, {
+      kind: "assistant",
+      frozen,
+      runId,
+      isActive: false,
+    });
+    covered.add(runId);
+  }
+  return next;
 }
 
 function insertAssistantSlot(
@@ -308,7 +325,9 @@ export function buildLovableThread(
         });
       }
     }
-    return dedupeThreadByRunId(attachFrozenToHistoricalItems(items, frozenRuns));
+    return dedupeThreadByRunId(
+      ensureFrozenRunSlots(attachFrozenToHistoricalItems(items, frozenRuns), frozenRuns),
+    );
   }
 
   const anchored = insertIndexForActiveRun(items, activeRunId);
@@ -330,7 +349,9 @@ export function buildLovableThread(
     });
   }
 
-  return dedupeThreadByRunId(attachFrozenToHistoricalItems(items, frozenRuns));
+  return dedupeThreadByRunId(
+    ensureFrozenRunSlots(attachFrozenToHistoricalItems(items, frozenRuns), frozenRuns),
+  );
 }
 
 export { freezeSnapshot };

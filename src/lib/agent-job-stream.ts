@@ -97,22 +97,34 @@ function isNarration(data: Record<string, unknown>): boolean {
   return data.narration === true;
 }
 
+/** Colapsa artefato legado de streaming (1 token por linha). */
+export function normalizeThoughtProse(prose: string): string {
+  const lines = prose.split("\n");
+  if (lines.length <= 1) return prose.trim();
+  const allShort = lines.every((l) => l.trim().length <= 24);
+  if (allShort && lines.length >= 3) {
+    return lines.map((l) => l.trim()).join(" ").replace(/\s{2,}/g, " ").trim();
+  }
+  return prose.trim();
+}
+
 function pushThought(nodes: JobStreamNode[], text: string, ts: number): void {
-  const trimmed = text.trim();
-  if (!trimmed) return;
+  if (!text) return;
   const last = nodes[nodes.length - 1];
   if (last?.kind === "thought" && last.status === "active") {
-    last.prose = `${last.prose}\n${trimmed}`.trim();
+    last.prose = (last.prose ?? "") + text;
     last.thoughtSec = Math.max(1, Math.round((ts - last.ts) / 1000));
     return;
   }
+  const seed = text.trim();
+  if (!seed) return;
   nodes.push({
     kind: "thought",
     id: `thought-${ts}`,
     ts,
     status: "active",
     thoughtSec: 1,
-    prose: trimmed,
+    prose: text,
   });
 }
 
@@ -349,6 +361,9 @@ export function buildJobStreamTree(
       if (n.kind === "step" && n.status === "active") {
         nodes[i] = { ...n, status: "done" };
       }
+      if (n.kind === "thought") {
+        nodes[i] = { ...n, prose: normalizeThoughtProse(n.prose) };
+      }
     }
   }
 
@@ -454,7 +469,7 @@ export function deriveCardView(
     headerBadge = "failed";
   } else if (progress.finished && progress.lastFinishOk === true) {
     cardStatus = "done";
-    headerBadge = "done";
+    headerBadge = null;
   } else if (progress.finished && nodes.length > 0) {
     cardStatus = "working";
     headerBadge = "working";

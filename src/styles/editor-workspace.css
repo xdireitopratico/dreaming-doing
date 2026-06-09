@@ -1004,6 +1004,15 @@ body:has(.editor-workspace) {
   color: var(--forge-ghost);
 }
 
+.lovable-job-done-footer {
+  margin: 10px 0 0;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(52, 211, 153, 0.95);
+}
+
 .lovable-job-mini-card-header {
   display: flex;
   flex-wrap: wrap;

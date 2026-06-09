@@ -218,6 +218,33 @@ describe("buildLovableThread", () => {
     expect(resolved?.summary).toBe("Feito.");
   });
 
+  it("frozen persiste sem activeRunId e sem msg DB (append-only)", () => {
+    const messages = [msg("u1", "user", "padaria")];
+    const frozen = new Map([
+      [
+        "run-gone",
+        freezeSnapshot({
+          ...initialAgentProgress,
+          finished: true,
+          lastFinishOk: true,
+          timeline: [
+            { type: "tool_start", data: { name: "fs_read" }, timestamp: 1 },
+          ],
+        }),
+      ],
+    ]);
+    const thread = buildLovableThread(messages, initialAgentProgress, {
+      running: false,
+      activeRunId: null,
+      frozenRuns: frozen,
+    });
+    expect(thread).toHaveLength(2);
+    const slot = thread[1] as Extract<(typeof thread)[number], { kind: "assistant" }>;
+    expect(slot.runId).toBe("run-gone");
+    expect(slot.frozen?.finished).toBe(true);
+    expect(resolveAssistantProgress(slot)?.timeline.length).toBeGreaterThan(0);
+  });
+
   it("erro de connect sem runId aparece no turno pendente", () => {
     const messages = [msg("u1", "user", "build")];
     const progress = {

@@ -129,6 +129,11 @@ export class AgentLoop {
   private lastActivityAt: number;
   private lastRunMessageId: string | null;
   private buildFixResume: boolean;
+  private streamTailBuffer: Array<{
+    type: string;
+    data: Record<string, unknown>;
+    timestamp: number;
+  }>;
 
   constructor(
     reg: ToolRegistry,
@@ -198,6 +203,7 @@ export class AgentLoop {
     this.lastActivityAt = Date.now();
     this.lastRunMessageId = null;
     this.buildFixResume = options?.buildFixResume ?? false;
+    this.streamTailBuffer = [];
     this.runStartTime = Date.now();
     this.lastCheckpointStep = options?.hasCheckpoint ? (state.currentStepIndex ?? 0) : 0;
     this.router = new ModelRouter(injectedKeys, routerOverrides);
@@ -1450,6 +1456,7 @@ export class AgentLoop {
       totalSteps: this.maxStepsLimit,
       lastFinishOk,
       buildFailed: opts?.buildFailed === true || lastFinishOk === false,
+      streamTail: this.streamTailBuffer.slice(-120),
     };
 
     const existingId = await this.resolveExistingRunMessageId();
@@ -1575,6 +1582,33 @@ export class AgentLoop {
         });
       }
     }
+    const timelineTypes = new Set([
+      "phase",
+      "explore",
+      "memory",
+      "classify",
+      "skills",
+      "tool_start",
+      "tool_done",
+      "step_result",
+      "assistant_text",
+      "validate_ok",
+      "validate_fail",
+      "delivery_checkpoint",
+      "done",
+      "finish",
+    ]);
+    if (timelineTypes.has(type) && payload && typeof payload === "object") {
+      this.streamTailBuffer.push({
+        type,
+        data: { ...(payload as Record<string, unknown>) },
+        timestamp: Date.now(),
+      });
+      if (this.streamTailBuffer.length > 200) {
+        this.streamTailBuffer.shift();
+      }
+    }
+
     this.onStream({ type, data: payload });
   }
 }

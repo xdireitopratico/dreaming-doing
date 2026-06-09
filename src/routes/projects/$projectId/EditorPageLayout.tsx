@@ -22,6 +22,7 @@ import { AiDiffViewer, type DiffEntry } from "@/components/editor/AiDiffViewer";
 import { PlanModal } from "@/components/editor/PlanModal";
 import { resolvePendingPlan } from "@/lib/plan-message-meta";
 import { resolveAssistantProgress } from "@/lib/lovable-thread";
+import { progressFromAssistantMessage } from "@/lib/assistant-run-progress";
 import type { AgentProgress } from "@/lib/agent-progress";
 import { useJobWorkspaceFocus } from "@/hooks/useJobWorkspaceFocus";
 import { JobWorkspacePanel } from "@/components/editor/JobWorkspacePanel";
@@ -286,8 +287,16 @@ export function EditorPageLayout({
         }) ?? null
       );
     }
+    const historical = chatMessages.find(
+      (m) =>
+        m.role === "assistant" &&
+        (m.runId === runId ||
+          (typeof m.meta?.runId === "string" && m.meta.runId === runId) ||
+          (typeof m.meta?.buildRunId === "string" && m.meta.buildRunId === runId)),
+    );
+    if (historical) return progressFromAssistantMessage(historical);
     return null;
-  }, [jobWorkspaceFocus, agent.activeRunId, agent.progress, agent.frozenRuns]);
+  }, [jobWorkspaceFocus, agent.activeRunId, agent.progress, agent.frozenRuns, chatMessages]);
 
   const previewStatusLabel = useMemo(() => {
     if (isJobFocused) return "Job inspector";

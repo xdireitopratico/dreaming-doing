@@ -154,6 +154,27 @@ describe("applyAgentProgressEvent", () => {
     expect(first.streamText).toBe("Olá mundo");
   });
 
+  it("assistant_text narration não polui streamText", () => {
+    const next = applyAgentProgressEvent(
+      { ...base, finished: false, streamText: "Resposta real" },
+      ev("assistant_text", { text: "Primeiro passo…", narration: true }),
+    );
+    expect(next.streamText).toBe("Resposta real");
+  });
+
+  it("done preserva streamText completo", () => {
+    const next = applyAgentProgressEvent(
+      {
+        ...base,
+        finished: false,
+        streamText: "Vou criar a landing completa.",
+      },
+      ev("done", { summary: "**Pronto!** Resumo do que fiz:\n\nNenhum arquivo." }),
+    );
+    expect(next.streamText).toBe("Vou criar a landing completa.");
+    expect(next.summary).toContain("Pronto");
+  });
+
   it("delivery_checkpoint silencioso marca autoResuming sem pausar", () => {
     const next = applyAgentProgressEvent(
       { ...base, finished: false, streamText: null },

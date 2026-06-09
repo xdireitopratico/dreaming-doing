@@ -71,9 +71,6 @@ export function AgentJobMiniCard({
         {view.headerBadge === "working" && (
           <span className="lovable-job-mini-card-badge-working">Working…</span>
         )}
-        {view.headerBadge === "done" && (
-          <span className="lovable-job-mini-card-badge-done">Done</span>
-        )}
         {view.headerBadge === "failed" && (
           <span className="lovable-job-mini-card-badge-partial">Failed</span>
         )}

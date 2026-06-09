@@ -182,9 +182,14 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
     case "assistant_text": {
       const chunk = (data.text as string) ?? "";
       const append = data.append === true || data.delta === true;
+      const narration = data.narration === true;
       return {
         ...prev,
-        streamText: append ? `${prev.streamText ?? ""}${chunk}` : chunk,
+        streamText: narration
+          ? prev.streamText
+          : append
+            ? `${prev.streamText ?? ""}${chunk}`
+            : chunk,
         timeline: [...prev.timeline, event],
       };
     }
@@ -414,7 +419,10 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
 
     case "done": {
       const summary = (data.summary as string) ?? prev.summary;
-      const shortSummary = summary?.split("\n")[0]?.trim();
+      const streamText =
+        prev.streamText?.trim()
+          ? prev.streamText
+          : summary?.trim() || prev.streamText;
       return {
         ...prev,
         summary,
@@ -428,7 +436,7 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
             : null,
         resumable: false,
         error: null,
-        streamText: shortSummary || prev.streamText,
+        streamText,
         pendingPlan: data.planRejected === true ? null : prev.pendingPlan,
         timeline: [...prev.timeline, event],
       };
