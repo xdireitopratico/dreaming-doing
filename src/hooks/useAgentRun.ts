@@ -15,11 +15,11 @@ import { releaseAgentConnect, tryAcquireAgentConnect } from "@/lib/agent-session
 import { logEditorTelemetryEvent } from "@/lib/editor-telemetry";
 import { cancelAgentRun } from "@/lib/agent-cancel";
 import {
+  type AgentConnectOptions,
+  type AgentProgress,
   applyAgentProgressEvent,
   initialAgentProgress,
   streamRowToSSEEvent,
-  type AgentConnectOptions,
-  type AgentProgress,
 } from "@/lib/agent-progress";
 import { freezeSnapshot, type FrozenRunSnapshot } from "@/lib/lovable-thread";
 import type { PendingQueueItem } from "@/components/editor/PendingQueuePanel";
@@ -42,13 +42,19 @@ function formatQueueBlockReason(reason?: string): string | null {
 }
 
 const TERMINAL_STATUSES = new Set(["completed", "failed", "canceled", "awaiting_user"]);
-const STALE_STREAM_MS = 15 * 60 * 1000;
-const STALE_STREAM_WITH_QUEUE_MS = 5 * 60 * 1000;
+// Longer/conditional stale thresholds when Inngest is authoritative (PR1 dispatch foundation; avoids
+// synthesizing stale finish on still-running Inngest step with ~4.5m budget + gaps between events/heartbeats).
+const STALE_STREAM_MS = 30 * 60 * 1000;
+const STALE_STREAM_WITH_QUEUE_MS = 10 * 60 * 1000;
 
 async function parseErrorResponse(res: Response): Promise<string> {
   const txt = await res.text().catch(() => "");
   try {
-    const body = JSON.parse(txt) as { error?: string; message?: string; code?: string };
+    const body = JSON.parse(txt) as {
+      error?: string;
+      message?: string;
+      code?: string;
+    };
     const raw = body.error ?? body.message ?? txt.slice(0, 280);
     return formatAgentHttpError(raw, body.code);
   } catch {
@@ -57,10 +63,10 @@ async function parseErrorResponse(res: Response): Promise<string> {
 }
 
 export type {
-  AgentProgress,
   AgentConnectOptions,
-  PlanStep,
+  AgentProgress,
   PendingPlan,
+  PlanStep,
 } from "@/lib/agent-progress";
 
 export function useAgentRun() {
@@ -90,10 +96,13 @@ export function useAgentRun() {
       payload: Record<string, unknown>;
       created_at?: string;
     }): boolean => {
-      if (row.seq <= lastSeqRef.current) return false;
-      lastSeqRef.current = row.seq;
       const event = streamRowToSSEEvent(row);
       const t = event.type;
+      // Process "start" even out-of-seq on fresh subscribe (rapid successive runs; catchup may set seq
+      // but late realtime "start" for the new runId must still initialize progress flags).
+      const isFreshForStart = t === "start" && lastSeqRef.current === 0;
+      if (row.seq <= lastSeqRef.current && !isFreshForStart) return false;
+      lastSeqRef.current = row.seq;
       const terminal = t === "finish" || t === "canceled" || t === "error";
       const freezeTerminal = t === "finish" || t === "done" || t === "canceled" || t === "error";
       setProgress((prev) => {
@@ -198,6 +207,7 @@ export function useAgentRun() {
       if (status !== "awaiting_user") {
         runIdRef.current = null;
         setActiveRunId(null);
+        setConnected(false);
       }
       teardownChannels();
     },
@@ -274,6 +284,12 @@ export function useAgentRun() {
             persistFrozen(next);
             return next;
           });
+          // Clear only the right runId state on terminal (stale synth path) before teardown.
+          if (runIdRef.current === runId) {
+            runIdRef.current = null;
+            setActiveRunId(null);
+            setConnected(false);
+          }
           teardownChannels();
           return true;
         }
@@ -286,11 +302,29 @@ export function useAgentRun() {
 
   const subscribeToRun = useCallback(
     async (runId: string, opts?: { resetProgress?: boolean }) => {
-      teardownChannels();
+      const isSame = runIdRef.current === runId;
+      if (isSame && eventChannelRef.current) {
+        // Idempotent channels per runId for rapid successive runs (no teardown/reset on re-sub for same;
+        // avoids losing events or resetting seq on coordinator/orchestration re-watch).
+        setConnected(true);
+        setQueueBlockingReason(null);
+        return;
+      }
+      if (!isSame) {
+        teardownChannels();
+      }
       runIdRef.current = runId;
       setActiveRunId(runId);
+      // Prune old/stale frozen for this (new) active runId so live always wins cleanly on (re)subscribe;
+      // historical frozen for prior runs preserved for Lovable multi-turn anchoring.
+      setFrozenRuns((m) => {
+        if (!m.has(runId)) return m;
+        const copy = new Map(m);
+        copy.delete(runId);
+        return copy;
+      });
       setQueueBlockingReason(null);
-      if (opts?.resetProgress !== false) {
+      if (!isSame && opts?.resetProgress !== false) {
         lastSeqRef.current = 0;
         setProgress({
           ...initialAgentProgress,
@@ -321,6 +355,12 @@ export function useAgentRun() {
               created_at?: string;
             };
             if (applyStreamRow(row)) {
+              // Clear only the right runId state on terminal (before teardown); consistent with PR3 clears.
+              if (runIdRef.current === runId) {
+                runIdRef.current = null;
+                setActiveRunId(null);
+                setConnected(false);
+              }
               teardownChannels();
             }
           },
@@ -332,7 +372,12 @@ export function useAgentRun() {
         .channel(`agent-status-${runId}`)
         .on(
           "postgres_changes",
-          { event: "UPDATE", schema: "public", table: "agent_runs", filter: `id=eq.${runId}` },
+          {
+            event: "UPDATE",
+            schema: "public",
+            table: "agent_runs",
+            filter: `id=eq.${runId}`,
+          },
           async (payload) => {
             const row = payload.new as {
               status: string;
@@ -540,7 +585,11 @@ export function useAgentRun() {
         }
 
         if (!body.runId) {
-          setProgress((p) => ({ ...p, error: "Resposta inválida do servidor", finished: true }));
+          setProgress((p) => ({
+            ...p,
+            error: "Resposta inválida do servidor",
+            finished: true,
+          }));
           releaseAgentConnect();
           return;
         }
@@ -594,7 +643,11 @@ export function useAgentRun() {
           setQueueBlockingReason(null);
           await subscribeToRun(body.runId);
           logEditorTelemetryEvent("agent_run", "drain_ok", "info", body.runId.slice(0, 8));
-          return { ok: true, runId: body.runId, pendingCount: body.pendingCount };
+          return {
+            ok: true,
+            runId: body.runId,
+            pendingCount: body.pendingCount,
+          };
         }
         return {
           ok: body.continued === true,
@@ -663,7 +716,11 @@ export function useAgentRun() {
             statusHint: body.message ?? "Mensagem na fila do agente.",
           }));
           void refreshPendingQueue(projectId, conversationId);
-          return { ok: true, pendingCount: body.pendingCount, message: body.message };
+          return {
+            ok: true,
+            pendingCount: body.pendingCount,
+            message: body.message,
+          };
         }
         return { ok: false, message: "Agente livre — use run normal." };
       } catch (e) {
@@ -778,7 +835,12 @@ export function useAgentRun() {
   );
 
   const clearPendingPlan = useCallback(() => {
-    setProgress((p) => ({ ...p, pendingPlan: null, awaiting: false, awaitingKind: null }));
+    setProgress((p) => ({
+      ...p,
+      pendingPlan: null,
+      awaiting: false,
+      awaitingKind: null,
+    }));
   }, []);
 
   const hydratePendingPlan = useCallback((plan: import("@/lib/agent-progress").PendingPlan) => {

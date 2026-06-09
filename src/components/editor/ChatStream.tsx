@@ -1,22 +1,22 @@
 // ChatStream — thread Lovable: user → FORGE (narrativa + detalhes inline por turno)
-import { RefreshCw, AlertTriangle, MessageCircle } from "lucide-react";
+import { AlertTriangle, MessageCircle, RefreshCw } from "lucide-react";
 import { Button } from "@forge/ui";
 import type { AgentProgress, PlanStep } from "@/lib/agent-progress";
 import type { ChatMessage } from "@/components/editor/ChatInput";
-import { useState, useCallback, useMemo } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { ErrorHintCard } from "@/components/editor/ErrorHintCard";
 import {
+  e2bErrorHint,
+  inngestQueueHint,
   llmErrorHint,
   timeoutHint,
-  e2bErrorHint,
   zombieRunHint,
-  inngestQueueHint,
 } from "@/lib/llm-error-hints";
 import { ForgeAssistantBlock } from "@/components/editor/ForgeAssistantBlock";
 import {
   buildLovableThread,
-  resolveAssistantProgress,
   type FrozenRunSnapshot,
+  resolveAssistantProgress,
 } from "@/lib/lovable-thread";
 
 export interface ChatStreamProps {
@@ -56,22 +56,38 @@ export function ChatStream({
   const handleCopy = useCallback((text: string, msgId: string) => {
     navigator.clipboard.writeText(text).then(() => {
       setCopiedIds((prev) => new Set(prev).add(msgId));
-      setTimeout(() => setCopiedIds((prev) => { const n = new Set(prev); n.delete(msgId); return n; }), 2000);
+      setTimeout(
+        () =>
+          setCopiedIds((prev) => {
+            const n = new Set(prev);
+            n.delete(msgId);
+            return n;
+          }),
+        2000,
+      );
     });
   }, []);
 
-  const handleUndo = useCallback((assistantMsgId: string) => {
-    onUndoMessage?.(assistantMsgId);
-  }, [onUndoMessage]);
+  const handleUndo = useCallback(
+    (assistantMsgId: string) => {
+      onUndoMessage?.(assistantMsgId);
+    },
+    [onUndoMessage],
+  );
 
   const estimatedTokens =
     progress.model && progress.cost > 0
       ? Math.round(
-          progress.cost /
-            ({ "claude-sonnet-4-20250514": 3, "gpt-4o": 2.5, "gpt-4.1": 2, "gemini-2.5-pro": 1.25, default: 1 } as Record<
-              string,
-              number
-            >)[progress.model] *
+          (progress.cost /
+            (
+              {
+                "claude-sonnet-4-20250514": 3,
+                "gpt-4o": 2.5,
+                "gpt-4.1": 2,
+                "gemini-2.5-pro": 1.25,
+                default: 1,
+              } as Record<string, number>
+            )[progress.model]) *
             1_000_000,
         )
       : 0;
@@ -87,12 +103,17 @@ export function ChatStream({
       }),
     [messages, progress, activeRunId, running, frozenRuns],
   );
+  // build now guarantees exactly 1 live/frozen ass per runId (anchored) for reliable first+second turn visibility.
 
   const resolveErrorHint = useCallback((error: string) => {
     const lower = error.toLowerCase();
     if (/zumbi|expirado/i.test(error)) return zombieRunHint();
-    if (/inngest|continue_queue|inngest_failed/i.test(lower)) return inngestQueueHint();
-    if (/edge.*timeout|120s|edge function.*limite/i.test(error)) return timeoutHint();
+    if (/inngest|continue_queue|inngest_failed/i.test(lower)) {
+      return inngestQueueHint();
+    }
+    if (/edge.*timeout|120s|edge function.*limite/i.test(error)) {
+      return timeoutHint();
+    }
     if (/e2b|sandbox/i.test(lower)) return e2bErrorHint(error);
     return llmErrorHint(error, false);
   }, []);
@@ -122,7 +143,10 @@ export function ChatStream({
       {thread.map((item, idx) => {
         if (item.kind === "user") {
           return (
-            <article key={`user-${item.message.id}`} className="forge-chat-item forge-chat-item-user">
+            <article
+              key={`user-${item.message.id}`}
+              className="forge-chat-item forge-chat-item-user"
+            >
               <div className="forge-msg-user-outline">
                 <p className="whitespace-pre-wrap">{item.message.content}</p>
               </div>

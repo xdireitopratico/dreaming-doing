@@ -3,10 +3,9 @@ import type { QueryClient } from "@tanstack/react-query";
 import type { RefObject } from "react";
 import type { editor } from "monaco-editor";
 
-
 import { createLogEntry, type LogEntry } from "@/components/editor/LogPanel";
 import type { DiffEntry } from "@/components/editor/AiDiffViewer";
-import { useAgentBlame, buildBlameFromTimeline } from "@/hooks/useAgentBlame";
+import { buildBlameFromTimeline, useAgentBlame } from "@/hooks/useAgentBlame";
 import type { usePreviewBoot } from "@/hooks/usePreviewBoot";
 import { clearEnhancements } from "@/lib/monacoEnhancements";
 import { isAgentConnectInFlight } from "@/lib/agent-session-guards";
@@ -116,13 +115,7 @@ export function useEditorAgentOrchestration({
     lastPendingAgentRunRef.current = pendingAgentRunKey;
     logEditorTelemetryEvent("agent", "pending_user_run", "info", pendingAgentRunKey.slice(0, 16));
     runAgent();
-  }, [
-    pendingAgentRunKey,
-    conversation?.id,
-    running,
-    agent.connected,
-    runAgent,
-  ]);
+  }, [pendingAgentRunKey, conversation?.id, running, agent.connected, runAgent]);
 
   const fileCount = files?.length ?? 0;
 
@@ -150,16 +143,9 @@ export function useEditorAgentOrchestration({
   // ─── Sync running state — slot live enquanto há run ativa (mesmo antes do realtime conectar) ──
   useEffect(() => {
     const active =
-      agent.activeRunId != null &&
-      !agent.progress.finished &&
-      !agent.progress.canceled;
+      agent.activeRunId != null && !agent.progress.finished && !agent.progress.canceled;
     setRunning(active);
-  }, [
-    agent.activeRunId,
-    agent.progress.finished,
-    agent.progress.canceled,
-    setRunning,
-  ]);
+  }, [agent.activeRunId, agent.progress.finished, agent.progress.canceled, setRunning]);
 
   // ─── Realtime events → logs ─────────────────────────────────────────
   useEffect(() => {
@@ -180,7 +166,7 @@ export function useEditorAgentOrchestration({
         ...prev,
         createLogEntry(
           last.data.ok ? "success" : "error",
-          `${last.data.name}: ${last.data.ok ? "ok" : last.data.error ?? "erro"}`,
+          `${last.data.name}: ${last.data.ok ? "ok" : (last.data.error ?? "erro")}`,
           "agent",
         ),
       ]);
@@ -201,9 +187,13 @@ export function useEditorAgentOrchestration({
 
   useEffect(() => {
     if (!agent.progress.finished || !conversation) return;
+    // Defensive invalidates on terminal (single source for "after terminal, next action" alongside
+    // coordinator's post-finish effect + PR3 serialization guards/inFlight/refresh-before-decide).
+    // Ensures messages are fresh for Lovable thread anchoring on rapid successive runs (second msg).
     void qc.invalidateQueries({ queryKey: ["messages", conversation.id] });
     void qc.invalidateQueries({ queryKey: ["profile"] });
-  }, [agent.progress.finished, conversation, qc]);
+    void qc.invalidateQueries({ queryKey: ["agent-runs", projectId] });
+  }, [agent.progress.finished, conversation, qc, projectId]);
 
   const agentFinished = agent.progress.finished;
   const agentShouldBootPreview =
@@ -245,9 +235,7 @@ export function useEditorAgentOrchestration({
     if (previewBootAfterAgentRef.current) return;
     previewBootAfterAgentRef.current = true;
     void previewBoot.bootWithRetry(
-      devUrl
-        ? { syncOnly: true, silent: true }
-        : { force: true, silent: true },
+      devUrl ? { syncOnly: true, silent: true } : { force: true, silent: true },
     );
   }, [
     agentShouldBootPreview,

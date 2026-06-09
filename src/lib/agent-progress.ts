@@ -9,7 +9,13 @@ export interface SSEEvent {
 
 export interface PlanStep {
   id: string;
-  type: "create_file" | "edit_file" | "shell_exec" | "install_dep" | "observe" | "custom";
+  type:
+    | "create_file"
+    | "edit_file"
+    | "shell_exec"
+    | "install_dep"
+    | "observe"
+    | "custom";
   description: string;
   filePath?: string;
   estimatedCost?: number;
@@ -37,7 +43,14 @@ export interface AgentProgress {
   message: string | null;
   currentStep: number | null;
   totalSteps: number | null;
-  tools: Array<{ name: string; args: Record<string, unknown>; ok?: boolean; error?: string }>;
+  tools: Array<
+    {
+      name: string;
+      args: Record<string, unknown>;
+      ok?: boolean;
+      error?: string;
+    }
+  >;
   cost: number;
   model: string | null;
   skills: string[];
@@ -69,7 +82,9 @@ export interface AgentProgress {
   /** Paths entregues no último delivery_checkpoint (contrato parcial). */
   deliveryFiles?: string[];
   /** Linhas de saída Gradle/shell (preview nativo). */
-  buildLogLines?: Array<{ command: string; line: string; ok: boolean; ts: number }>;
+  buildLogLines?: Array<
+    { command: string; line: string; ok: boolean; ts: number }
+  >;
   /** Sugestão de fork quando mobile nativo aparece em projeto web. */
   stackForkSuggested?: {
     path: string;
@@ -138,10 +153,9 @@ export function streamRowToSSEEvent(row: {
 }): SSEEvent {
   const payload = row.payload ?? {};
   const eventType = (payload.type as string) ?? row.event_type;
-  const eventData =
-    payload.data && typeof payload.data === "object"
-      ? (payload.data as Record<string, unknown>)
-      : { ...payload, type: undefined };
+  const eventData = payload.data && typeof payload.data === "object"
+    ? (payload.data as Record<string, unknown>)
+    : { ...payload, type: undefined };
   return {
     type: eventType,
     data: eventData,
@@ -150,7 +164,10 @@ export function streamRowToSSEEvent(row: {
 }
 
 /** Reducer puro dos eventos do agente (exportado para testes). */
-export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): AgentProgress {
+export function applyAgentProgressEvent(
+  prev: AgentProgress,
+  event: SSEEvent,
+): AgentProgress {
   const { type, data } = event;
 
   switch (type) {
@@ -164,8 +181,8 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
         statusHint: data.autoResume
           ? "Retomando automaticamente…"
           : data.resume
-            ? "Retomando com a memória salva no chat…"
-            : "Trabalhando no projeto…",
+          ? "Retomando com a memória salva no chat…"
+          : "Trabalhando no projeto…",
         timeline: [...prev.timeline, event],
       };
 
@@ -190,8 +207,8 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
         streamText: skipStream
           ? prev.streamText
           : append
-            ? `${prev.streamText ?? ""}${chunk}`
-            : chunk,
+          ? `${prev.streamText ?? ""}${chunk}`
+          : chunk,
         timeline: [...prev.timeline, event],
       };
     }
@@ -202,7 +219,8 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
         autoResuming: true,
         finished: false,
         error: null,
-        statusHint: (data.message as string) ?? "Retomando automaticamente no servidor…",
+        statusHint: (data.message as string) ??
+          "Retomando automaticamente no servidor…",
         timeline: [...prev.timeline, event],
       };
 
@@ -237,8 +255,12 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
     case "step":
       return {
         ...prev,
-        currentStep: typeof data.current === "number" ? data.current : prev.currentStep,
-        totalSteps: typeof data.total === "number" ? data.total : prev.totalSteps,
+        currentStep: typeof data.current === "number"
+          ? data.current
+          : prev.currentStep,
+        totalSteps: typeof data.total === "number"
+          ? data.total
+          : prev.totalSteps,
         timeline: [...prev.timeline, event],
       };
 
@@ -254,7 +276,8 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
     case "rate_limit":
       return {
         ...prev,
-        statusHint: (data.message as string) ?? "Rate limit — ROBIN alternando chave…",
+        statusHint: (data.message as string) ??
+          "Rate limit — ROBIN alternando chave…",
         timeline: [...prev.timeline, event],
       };
 
@@ -268,13 +291,17 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
       };
 
     case "build_log": {
-      const command = typeof data.command === "string" ? data.command : "gradle";
+      const command = typeof data.command === "string"
+        ? data.command
+        : "gradle";
       const ok = data.ok !== false;
       const rawLines = Array.isArray(data.lines)
-        ? (data.lines as string[]).filter((l) => typeof l === "string" && l.trim())
+        ? (data.lines as string[]).filter((l) =>
+          typeof l === "string" && l.trim()
+        )
         : typeof data.output === "string"
-          ? data.output.split("\n").filter((l) => l.trim())
-          : [];
+        ? data.output.split("\n").filter((l) => l.trim())
+        : [];
       const ts = Date.now();
       const appended = rawLines.map((line) => ({
         command,
@@ -295,15 +322,16 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
         stackForkSuggested: {
           path: String(data.path ?? "app/build.gradle.kts"),
           suggestedStack: String(data.suggestedStack ?? "android-native"),
-          message:
-            (data.message as string) ??
+          message: (data.message as string) ??
             "Isso é mobile nativo. Criar projeto Android dedicado?",
         },
         timeline: [...prev.timeline, event],
       };
 
     case "delivery_checkpoint": {
-      const narration = typeof data.narration === "string" ? data.narration.trim() : "";
+      const narration = typeof data.narration === "string"
+        ? data.narration.trim()
+        : "";
       const deliveryFiles = Array.isArray(data.deliveryFiles)
         ? (data.deliveryFiles as string[]).filter((p) => typeof p === "string")
         : prev.deliveryFiles;
@@ -312,23 +340,32 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
         ...prev,
         finished: false,
         error: null,
-        currentStep: typeof data.step === "number" ? data.step : prev.currentStep,
-        totalSteps: typeof data.totalSteps === "number" ? data.totalSteps : prev.totalSteps,
+        currentStep: typeof data.step === "number"
+          ? data.step
+          : prev.currentStep,
+        totalSteps: typeof data.totalSteps === "number"
+          ? data.totalSteps
+          : prev.totalSteps,
         streamText: narration || prev.streamText,
         deliveryFiles,
         resumable: silent ? false : data.resumable === true || prev.resumable,
         autoResuming: silent || data.resumable === true,
-        statusHint: (data.message as string) ?? prev.statusHint ?? "Continuando…",
+        statusHint: (data.message as string) ?? prev.statusHint ??
+          "Continuando…",
         timeline: [...prev.timeline, event],
       };
     }
 
     case "classify": {
-      const summary = typeof data.summary === "string" ? data.summary.trim() : "";
+      const summary = typeof data.summary === "string"
+        ? data.summary.trim()
+        : "";
       return {
         ...prev,
         model: (data.model as string) ?? prev.model,
-        streamText: summary && !prev.streamText?.trim() ? summary : prev.streamText,
+        streamText: summary && !prev.streamText?.trim()
+          ? summary
+          : prev.streamText,
         timeline: [...prev.timeline, event],
       };
     }
@@ -383,7 +420,14 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
       const id = `${path}::${prev.diffs.length}::${Date.now()}`;
       return {
         ...prev,
-        diffs: [...prev.diffs, { id, path, before, after, op, timestamp: Date.now() }],
+        diffs: [...prev.diffs, {
+          id,
+          path,
+          before,
+          after,
+          op,
+          timestamp: Date.now(),
+        }],
         previewSyncTick: (prev.previewSyncTick ?? 0) + 1,
         timeline: [...prev.timeline, event],
       };
@@ -401,7 +445,9 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
         ...prev,
         runtimeChecks: [
           ...prev.runtimeChecks,
-          ...((data.checks as Array<{ name: string; ok: boolean }>) ?? [{ name: "build", ok: true }]),
+          ...((data.checks as Array<{ name: string; ok: boolean }>) ?? [
+            { name: "build", ok: true },
+          ]),
         ],
         timeline: [...prev.timeline, event],
       };
@@ -413,7 +459,9 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
         ...prev,
         runtimeChecks: [
           ...prev.runtimeChecks,
-          ...((data.checks as Array<{ name: string; ok: boolean }>) ?? [{ name: "build", ok: false }]),
+          ...((data.checks as Array<{ name: string; ok: boolean }>) ?? [
+            { name: "build", ok: false },
+          ]),
         ],
         timeline: [...prev.timeline, event],
       };
@@ -421,21 +469,21 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
 
     case "done": {
       const summary = (data.summary as string) ?? prev.summary;
-      const streamText =
-        prev.streamText?.trim()
-          ? prev.streamText
-          : summary?.trim() || prev.streamText;
+      const streamText = prev.streamText?.trim()
+        ? prev.streamText
+        : summary?.trim() || prev.streamText;
       return {
         ...prev,
         summary,
         finished: true,
         lastFinishOk: true,
-        awaiting: !!(data.awaiting || data.qualified) || (data.planProposed === true && !!prev.pendingPlan),
+        awaiting: !!(data.awaiting || data.qualified) ||
+          (data.planProposed === true && !!prev.pendingPlan),
         awaitingKind: data.qualified || data.awaiting
           ? "qualify"
           : data.planProposed === true && prev.pendingPlan
-            ? "plan_approval"
-            : null,
+          ? "plan_approval"
+          : null,
         resumable: false,
         error: null,
         streamText,
@@ -448,23 +496,27 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
       const planId = typeof data.planId === "string" ? data.planId : null;
       const steps = Array.isArray(data.steps) ? (data.steps as PlanStep[]) : [];
       const runId = typeof data.runId === "string" ? data.runId : null;
-      const projectId = typeof data.projectId === "string" ? data.projectId : null;
+      const projectId = typeof data.projectId === "string"
+        ? data.projectId
+        : null;
       if (!planId || steps.length === 0 || !runId || !projectId) {
         return { ...prev, timeline: [...prev.timeline, event] };
       }
       const pendingPlan: PendingPlan = {
         planId,
-        summary: typeof data.summary === "string" ? data.summary : "Plano proposto",
-        rationale:
-          typeof data.rationale === "string" && data.rationale.trim()
-            ? data.rationale.trim()
-            : undefined,
-        markdown:
-          typeof data.markdown === "string" && data.markdown.trim()
-            ? data.markdown.trim()
-            : undefined,
+        summary: typeof data.summary === "string"
+          ? data.summary
+          : "Plano proposto",
+        rationale: typeof data.rationale === "string" && data.rationale.trim()
+          ? data.rationale.trim()
+          : undefined,
+        markdown: typeof data.markdown === "string" && data.markdown.trim()
+          ? data.markdown.trim()
+          : undefined,
         mission: typeof data.mission === "string" ? data.mission : undefined,
-        objective: typeof data.objective === "string" ? data.objective : undefined,
+        objective: typeof data.objective === "string"
+          ? data.objective
+          : undefined,
         steps,
         ttlMs: typeof data.ttlMs === "number" ? data.ttlMs : 5 * 60 * 1000,
         proposedAt: Date.now(),
@@ -484,7 +536,8 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
     case "error":
       return {
         ...prev,
-        error: (data.message as string) ?? (data.error as string) ?? "Erro desconhecido",
+        error: (data.message as string) ?? (data.error as string) ??
+          "Erro desconhecido",
         finished: true,
         resumable: data.recoverable === true || prev.resumable,
         timeline: [...prev.timeline, event],
@@ -502,7 +555,9 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
         autoResuming: false,
         lastFinishOk: !failed && !canceled,
         resumable: failed && data.resumable === true && !canceled,
-        error: failed || canceled ? ((data.error as string) ?? prev.error) : null,
+        error: failed || canceled
+          ? ((data.error as string) ?? prev.error)
+          : null,
         timeline: [...prev.timeline, event],
       };
     }

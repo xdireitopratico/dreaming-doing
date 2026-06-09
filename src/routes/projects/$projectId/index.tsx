@@ -1,6 +1,6 @@
 // $projectId/index.tsx — Editor FORGE Definitivo (Fase 4 — Integração total)
-import { createFileRoute, useParams, useNavigate, useSearch } from "@tanstack/react-router";
-import { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import { createFileRoute, useNavigate, useParams, useSearch } from "@tanstack/react-router";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { FORGE_WELCOME_BYOK_MARKDOWN, FORGE_WELCOME_MARKDOWN } from "@/lib/welcome-message";
 import { loadAgentPreferences } from "@/lib/agent-preferences";
@@ -16,7 +16,7 @@ import { usePreviewBoot } from "@/hooks/usePreviewBoot";
 import { usePreviewIdle } from "@/hooks/usePreviewIdle";
 import { useEditorTelemetry } from "@/hooks/useEditorTelemetry";
 import { useElementPicker } from "@/hooks/useElementPicker";
-import { useWorkspacePresets, useFileDrop } from "@/hooks/useWorkspacePresets";
+import { useFileDrop, useWorkspacePresets } from "@/hooks/useWorkspacePresets";
 
 import type { editor } from "monaco-editor";
 
@@ -59,9 +59,7 @@ function EditorPage() {
     return () => window.removeEventListener("forge:prefs-updated", refresh);
   }, []);
 
-  const welcomeMarkdown = hasUserLlmKey
-    ? FORGE_WELCOME_BYOK_MARKDOWN
-    : FORGE_WELCOME_MARKDOWN;
+  const welcomeMarkdown = hasUserLlmKey ? FORGE_WELCOME_BYOK_MARKDOWN : FORGE_WELCOME_MARKDOWN;
   const e2bConnected = connectorStatus.e2b.connected;
   useTasteUiActions();
   const tasteQuota = {
@@ -189,6 +187,18 @@ function EditorPage() {
       }
     }
   }, [chatMessages, agent]);
+
+  // Defensive invalidate (single source post-terminal path) for messages on activeRunId clear or
+  // finished transitions — complements orchestration/coordinator; ensures buildLovableThread sees
+  // latest DB assistants for anchoring (multi-turn, no mismatch after second msg).
+  useEffect(() => {
+    if (!pageData.qc || !conversation?.id) return;
+    if (agent.progress.finished || !agent.activeRunId) {
+      void pageData.qc.invalidateQueries({
+        queryKey: ["messages", conversation.id],
+      });
+    }
+  }, [agent.progress.finished, agent.activeRunId, conversation?.id, pageData.qc]);
 
   const orchestration = useEditorAgentOrchestration({
     projectId,

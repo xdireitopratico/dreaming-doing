@@ -203,7 +203,11 @@ export function useAgentSessionCoordinator({
           filter: `project_id=eq.${projectId}`,
         },
         (payload) => {
-          const row = payload.new as { id?: string; status?: string; conversation_id?: string };
+          const row = payload.new as {
+            id?: string;
+            status?: string;
+            conversation_id?: string;
+          };
           if (
             row.conversation_id === conversation.id &&
             row.id &&
@@ -223,7 +227,11 @@ export function useAgentSessionCoordinator({
           filter: `project_id=eq.${projectId}`,
         },
         (payload) => {
-          const row = payload.new as { id?: string; status?: string; conversation_id?: string };
+          const row = payload.new as {
+            id?: string;
+            status?: string;
+            conversation_id?: string;
+          };
           if (
             row.conversation_id === conversation.id &&
             row.id &&
@@ -260,6 +268,7 @@ export function useAgentSessionCoordinator({
     void (async () => {
       // Refetch before busy/pending decisions + use shared inFlight guard to serialize
       // all post-finish "process next" (drain or auto-run) to single path (avoid races on derived running/connected).
+      // (defensive invalidates centralized in orchestration + index for single-source post-terminal; reuses PR3 inFlight/refresh guards here)
       await refreshPendingQueue(projectId, conversation.id);
       if (progress.awaiting || progress.canceled) return;
       if (connected || isAgentConnectInFlight()) return;

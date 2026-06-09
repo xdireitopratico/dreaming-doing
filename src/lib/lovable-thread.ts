@@ -75,18 +75,17 @@ function pendingAssistantInsertIndex(items: LovableThreadItem[]): number {
     const item = items[i];
     if (item?.kind !== "user") continue;
     const next = items[i + 1];
-    const hasReply =
-      next?.kind === "assistant" && !!next.message?.content?.trim();
+    const hasReply = next?.kind === "assistant" && !!next.message?.content?.trim();
     if (!hasReply) return i + 1;
   }
   return items.length;
 }
 
-/** Ancora run ativa ao turno user (ex.: plan_approved com meta.buildRunId). */
-function insertIndexForActiveRun(
-  items: LovableThreadItem[],
-  activeRunId: string,
-): number | null {
+/** Ancora run ativa ao turno user (ex.: plan_approved com meta.buildRunId).
+ * Strengthened: prefers exact runId match from user meta or existing assistant slot for correct
+ * anchoring even on late DB materialization of assistant after subscribe for the run.
+ */
+function insertIndexForActiveRun(items: LovableThreadItem[], activeRunId: string): number | null {
   for (let i = 0; i < items.length; i++) {
     const item = items[i];
     if (item?.kind !== "user") continue;
@@ -128,9 +127,8 @@ function mergeAssistantIntoItems(
     !last.frozen
   ) {
     const prev = last.message;
-    const mergedContent = [prev?.content, msg.content]
-      .filter((c) => c?.trim())
-      .join("\n\n") || msg.content;
+    const mergedContent =
+      [prev?.content, msg.content].filter((c) => c?.trim()).join("\n\n") || msg.content;
     const next = [...items];
     next[items.length - 1] = {
       ...last,
@@ -154,14 +152,10 @@ function mergeAssistantIntoItems(
   ];
 }
 
-function mergeAssistantMessages(
-  a?: ChatMessage,
-  b?: ChatMessage,
-): ChatMessage | undefined {
+function mergeAssistantMessages(a?: ChatMessage, b?: ChatMessage): ChatMessage | undefined {
   if (!a) return b;
   if (!b) return a;
-  const merged =
-    [a.content, b.content].filter((c) => c?.trim()).join("\n\n") || b.content;
+  const merged = [a.content, b.content].filter((c) => c?.trim()).join("\n\n") || b.content;
   return {
     ...b,
     content: merged,
@@ -169,7 +163,10 @@ function mergeAssistantMessages(
   };
 }
 
-/** No máximo 1 bloco assistant por runId — evita FORGE duplicado no chat. */
+/** No máximo 1 bloco assistant por runId — evita FORGE duplicado no chat.
+ * Strengthened for multi-turn: always exactly one live/frozen per runId, even if DB assistant
+ * materializes after subscribe (dedupe merges live/frozen/message regardless of insertion order).
+ */
 function dedupeThreadByRunId(items: LovableThreadItem[]): LovableThreadItem[] {
   const out: LovableThreadItem[] = [];
   const slotByRunId = new Map<string, number>();
@@ -225,7 +222,10 @@ function attachFrozenToHistoricalItems(
   });
 }
 
-/** Garante slot assistant para cada frozen — append-only, nunca some do chat. */
+/** Garante slot assistant para cada frozen — append-only, nunca some do chat.
+ * Strengthened dedupe/ensure: produces exactly one frozen/live per runId (covered check + insert
+ * merge prevents dups even with concurrent active + historical on multi-turn).
+ */
 function ensureFrozenRunSlots(
   items: LovableThreadItem[],
   frozenRuns?: ReadonlyMap<string, FrozenRunSnapshot>,
@@ -240,8 +240,7 @@ function ensureFrozenRunSlots(
   let next = items;
   for (const [runId, frozen] of frozenRuns) {
     if (covered.has(runId)) continue;
-    const insertAt =
-      insertIndexForActiveRun(next, runId) ?? pendingAssistantInsertIndex(next);
+    const insertAt = insertIndexForActiveRun(next, runId) ?? pendingAssistantInsertIndex(next);
     next = insertAssistantSlot(next, insertAt, {
       kind: "assistant",
       frozen,
@@ -259,17 +258,29 @@ function insertAssistantSlot(
   slot: Extract<LovableThreadItem, { kind: "assistant" }>,
 ): LovableThreadItem[] {
   const next = [...items];
+  // Strengthened: first collapse any prior same-runId slot anywhere (guarantees exactly 1 per runId
+  // for anchoring + live/frozen when DB materializes late or rapid runs).
+  if (slot.runId) {
+    for (let i = 0; i < next.length; i++) {
+      const ex = next[i];
+      if (ex?.kind === "assistant" && ex.runId === slot.runId) {
+        next[i] = {
+          ...ex,
+          ...slot,
+          message: mergeAssistantMessages(ex.message, slot.message),
+          runId: slot.runId,
+          live: slot.live ?? ex.live,
+          frozen: slot.frozen ?? ex.frozen,
+          isActive: ex.isActive || slot.isActive,
+        };
+        return next;
+      }
+    }
+  }
   const existing = next[insertAt];
   if (existing?.kind === "assistant") {
-    const sameRun =
-      !!slot.runId &&
-      !!existing.runId &&
-      slot.runId === existing.runId;
-    if (
-      sameRun ||
-      (existing.isActive || existing.frozen) ||
-      !existing.message?.content?.trim()
-    ) {
+    const sameRun = !!slot.runId && !!existing.runId && slot.runId === existing.runId;
+    if (sameRun || existing.isActive || existing.frozen || !existing.message?.content?.trim()) {
       next[insertAt] = {
         ...existing,
         ...slot,
@@ -295,6 +306,16 @@ export function buildLovableThread(
   opts: BuildLovableThreadOptions = {},
 ): LovableThreadItem[] {
   const { activeRunId, running = false, frozenRuns } = opts;
+  // Prune active's frozen defensively here (on new active) so ensure/attach never surfaces stale
+  // frozen for the live slot; other historical frozen preserved (exactly one per runId).
+  const effectiveFrozen =
+    activeRunId && running && frozenRuns?.has(activeRunId)
+      ? (() => {
+          const c = new Map(frozenRuns);
+          c.delete(activeRunId);
+          return c;
+        })()
+      : frozenRuns;
   let items: LovableThreadItem[] = [];
 
   for (const msg of messages) {
@@ -319,10 +340,7 @@ export function buildLovableThread(
     if (needsLiveSlot) {
       const insertAt = pendingAssistantInsertIndex(items);
       const existing = items[insertAt];
-      if (
-        existing?.kind !== "assistant" ||
-        !existing.message?.content?.trim()
-      ) {
+      if (existing?.kind !== "assistant" || !existing.message?.content?.trim()) {
         items = insertAssistantSlot(items, insertAt, {
           kind: "assistant",
           live: progress,
@@ -331,7 +349,7 @@ export function buildLovableThread(
       }
     }
     return dedupeThreadByRunId(
-      ensureFrozenRunSlots(attachFrozenToHistoricalItems(items, frozenRuns), frozenRuns),
+      ensureFrozenRunSlots(attachFrozenToHistoricalItems(items, effectiveFrozen), effectiveFrozen),
     );
   }
 
@@ -345,23 +363,26 @@ export function buildLovableThread(
       runId: activeRunId,
       isActive: true,
     });
-  } else if (frozenRuns?.has(activeRunId)) {
+  } else if (effectiveFrozen?.has(activeRunId)) {
     items = insertAssistantSlot(items, insertAt, {
       kind: "assistant",
-      frozen: frozenRuns.get(activeRunId),
+      frozen: effectiveFrozen.get(activeRunId),
       runId: activeRunId,
       isActive: false,
     });
   }
 
   return dedupeThreadByRunId(
-    ensureFrozenRunSlots(attachFrozenToHistoricalItems(items, frozenRuns), frozenRuns),
+    ensureFrozenRunSlots(attachFrozenToHistoricalItems(items, effectiveFrozen), effectiveFrozen),
   );
 }
 
 export { freezeSnapshot };
 
-/** Progress efetivo para render: live > frozen > reidratação do DB */
+/** Progress efetivo para render: live > frozen > reidratação do DB.
+ * Strengthened: single source for live/frozen per anchored runId slot (ensures correct isActive/frozen/Done
+ * for multi-turn without empty/duplicate blocks).
+ */
 export function resolveAssistantProgress(
   item: Extract<LovableThreadItem, { kind: "assistant" }>,
 ): AgentProgress | null {

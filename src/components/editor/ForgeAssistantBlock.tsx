@@ -37,11 +37,7 @@ function resolveClosingText(
     return progress?.streamText?.trim() || messageText;
   }
   if (progress) {
-    return (
-      progress.streamText?.trim() ||
-      progress.summary?.trim() ||
-      messageText
-    );
+    return progress.streamText?.trim() || progress.summary?.trim() || messageText;
   }
   return messageText;
 }
@@ -77,10 +73,8 @@ export function ForgeAssistantBlock({
 
   const effectiveProgress = progress;
   const storedPlan = storedPlanFromMessage(message);
-  const livePlan =
-    pendingPlan && (!runId || pendingPlan.runId === runId) ? pendingPlan : null;
-  const planForRun =
-    livePlan ?? (storedPlan?.status === "pending" ? storedPlan.plan : null);
+  const livePlan = pendingPlan && (!runId || pendingPlan.runId === runId) ? pendingPlan : null;
+  const planForRun = livePlan ?? (storedPlan?.status === "pending" ? storedPlan.plan : null);
   const rejectedPlan = storedPlan?.status === "rejected" ? storedPlan.plan : null;
   const approvedPlan = storedPlan?.status === "approved" ? storedPlan.plan : null;
   const diffs = effectiveProgress?.diffs ?? [];
@@ -89,12 +83,10 @@ export function ForgeAssistantBlock({
   const showJobBubble =
     isBuildRun &&
     !!effectiveProgress &&
-    (
-      !!runId ||
+    (!!runId ||
       isActive ||
       (effectiveProgress.timeline?.length ?? 0) > 0 ||
-      (effectiveProgress.tools?.length ?? 0) > 0
-    );
+      (effectiveProgress.tools?.length ?? 0) > 0);
 
   const closingText = resolveClosingText(effectiveProgress, message, showJobBubble);
 
@@ -105,14 +97,11 @@ export function ForgeAssistantBlock({
     showJobBubble &&
     effectiveProgress.lastFinishOk === true &&
     !effectiveProgress.canceled;
+  // (per-runId anchoring + resolve from hardened lovable-thread ensures correct Done for frozen historical on multi-turn)
 
-  const isPersistedMessage =
-    !!message?.id && !String(message.id).startsWith("live-");
+  const isPersistedMessage = !!message?.id && !String(message.id).startsWith("live-");
   const canShowFooter =
-    !!effectiveProgress?.finished &&
-    !isActive &&
-    isPersistedMessage &&
-    !!closingText;
+    !!effectiveProgress?.finished && !isActive && isPersistedMessage && !!closingText;
 
   const turnTimestamp = message?.timestamp;
 
@@ -165,10 +154,7 @@ export function ForgeAssistantBlock({
       {showDoneBubble && <JobDoneBubble />}
 
       {turnTimestamp && effectiveProgress?.finished && !isActive && (
-        <time
-          className="lovable-turn-timestamp"
-          dateTime={new Date(turnTimestamp).toISOString()}
-        >
+        <time className="lovable-turn-timestamp" dateTime={new Date(turnTimestamp).toISOString()}>
           {new Date(turnTimestamp).toLocaleString("pt-BR", {
             day: "numeric",
             month: "short",
@@ -213,13 +199,13 @@ export function ForgeAssistantBlock({
         !planForRun &&
         !rejectedPlan &&
         !showJobBubble && (
-        <p
-          className="forge-chat-live-line text-[var(--forge-muted)]"
-          data-testid="assistant-turn-empty"
-        >
-          Resposta não gerada neste turno. Envie outra mensagem ou use Continuar no chat.
-        </p>
-      )}
+          <p
+            className="forge-chat-live-line text-[var(--forge-muted)]"
+            data-testid="assistant-turn-empty"
+          >
+            Resposta não gerada neste turno. Envie outra mensagem ou use Continuar no chat.
+          </p>
+        )}
 
       {rejectedPlan && !planForRun && (
         <section

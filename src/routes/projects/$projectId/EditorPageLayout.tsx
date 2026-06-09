@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
+import { type RefObject, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence } from "framer-motion";
 
 import { EditorShell } from "@/components/EditorShell";
@@ -17,7 +17,7 @@ import { PreviewFrame } from "@/components/editor/PreviewFrame";
 import { StackHonestBanner } from "@/components/editor/StackHonestBanner";
 import { CommandPalette, type PaletteAction } from "@/components/editor/CommandPalette";
 import { ShortcutCheatsheet } from "@/components/editor/ShortcutCheatsheet";
-import { LogPanel, type LogEntry } from "@/components/editor/LogPanel";
+import { type LogEntry, LogPanel } from "@/components/editor/LogPanel";
 import { AiDiffViewer, type DiffEntry } from "@/components/editor/AiDiffViewer";
 import { PlanModal } from "@/components/editor/PlanModal";
 import { resolvePendingPlan } from "@/lib/plan-message-meta";
@@ -294,6 +294,7 @@ export function EditorPageLayout({
     if (historical) return progressFromAssistantMessage(historical);
     return null;
   }, [jobWorkspaceFocus, agent.activeRunId, agent.progress, agent.frozenRuns, chatMessages]);
+  // (defensive resolve via lovable-thread strengthening for correct frozen per runId on multi-turn)
 
   const previewStatusLabel = useMemo(() => {
     if (isJobFocused) return "Job inspector";
@@ -510,7 +511,10 @@ export function EditorPageLayout({
                           iframeRef={previewIframeRef}
                           bootError={
                             previewBoot.bootLogs
-                              ? `${previewBoot.lastError ?? "Vite subindo"} — ${previewBoot.bootLogs.slice(0, 280)}`
+                              ? `${previewBoot.lastError ?? "Vite subindo"} — ${previewBoot.bootLogs.slice(
+                                  0,
+                                  280,
+                                )}`
                               : previewBoot.lastError
                           }
                           warming={previewBoot.warming}
