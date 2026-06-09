@@ -207,7 +207,8 @@ export class AgentLoop {
     this.runId = options?.runId ?? null;
     this.planMode = options?.planMode ?? false;
     this.approvedPlanBuild = options?.approvedPlanBuild ?? false;
-    this.skipQualify = options?.skipQualify ?? this.approvedPlanBuild ?? false;
+    this.skipQualify = options?.skipQualify ??
+      (options?.approvedPlanBuild ?? false);
     this.approvedPlanSteps = options?.planSteps ?? [];
     const extracted = extractOriginalUserRequest(state.messages);
     const planSummary = options?.planSummary?.trim() ?? "";
