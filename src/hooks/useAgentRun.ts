@@ -348,6 +348,7 @@ export function useAgentRun() {
             filter: `run_id=eq.${runId}`,
           },
           (payload) => {
+            if (runIdRef.current !== runId) return; // stale callback from prior subscription's channel (rapid run switch/terminal-while-second); closed-over runId is per-listener subscribe value. Prevents old listener apply/teardown stomping current run's live state or refs.
             const row = payload.new as {
               seq: number;
               event_type: string;
@@ -379,6 +380,7 @@ export function useAgentRun() {
             filter: `id=eq.${runId}`,
           },
           async (payload) => {
+            if (runIdRef.current !== runId) return; // stale callback from prior subscription's channel (rapid successive runs, terminal on first while second running); closed-over runId per this listener. Prevents cross-run catchUp (on live ref) or sync of old row's terminal status (which would stomp progress for new runId).
             const row = payload.new as {
               status: string;
               error: string | null;
@@ -667,7 +669,17 @@ export function useAgentRun() {
       void conversationId;
       const isNew = runIdRef.current !== runId;
       if (isNew) {
-        runIdRef.current = runId;
+        // Do not pre-mutate runIdRef before subscribe (watch is the coordinator/reconcile/drain/pendingBuild
+        // path for new runIds on realtime INSERT/UPDATE and rapid successive turns). Pre-set made isSame=true
+        // inside subscribe, skipping !isSame teardown + lastSeqRef=0 + setProgress(initial) even when
+        // resetProgress:isNew. Result: high lastSeq from prior run → catchUp .gt() gets 0 rows for new
+        // low-seq events (incl start), realtime apply skips via seq guard (fresh bypass requires ===0).
+        // This re-introduced the "no visible execution" root cause (99% subagent: watch:668/subscribe:305/327
+        // + shared lastSeq + catchup-before-channels) for the primary multi-turn subscribe path.
+        // Fix: snapshot isNew from pre-call ref value; subscribe's isSame (still seeing prior) drives
+        // correct !isSame path (teardown old, set ref, lastSeq=0 since !isSame && opts.reset, fresh start).
+        // Matches direct connect/drain (no pre-set) + idempotent guard + existing ref/reset ownership in subscribe.
+        // Ensures "start" out-of-seq + catchUp for new run from watch (core to "realtime subscribe" title + double msg).
         setActiveRunId(runId);
         setProgress({
           ...initialAgentProgress,
