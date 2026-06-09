@@ -162,6 +162,14 @@ describe("applyAgentProgressEvent", () => {
     expect(next.streamText).toBe("Resposta real");
   });
 
+  it("assistant_text thinking não polui streamText", () => {
+    const next = applyAgentProgressEvent(
+      { ...base, finished: false, streamText: "Resposta real" },
+      ev("assistant_text", { text: "Vou", delta: true, thinking: true }),
+    );
+    expect(next.streamText).toBe("Resposta real");
+  });
+
   it("done preserva streamText completo", () => {
     const next = applyAgentProgressEvent(
       {

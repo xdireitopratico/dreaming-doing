@@ -17,11 +17,11 @@ describe("isAssistantRunMaterialized", () => {
     expect(isAssistantRunMaterialized(msg({ runId: "r1" }))).toBe(false);
   });
 
-  it("aceita content preenchido", () => {
-    expect(isAssistantRunMaterialized(msg({ runId: "r1", content: "Pronto." }))).toBe(true);
+  it("rejeita content sem finishedAt (passo intermediário)", () => {
+    expect(isAssistantRunMaterialized(msg({ runId: "r1", content: "Passo 1" }))).toBe(false);
   });
 
-  it("aceita meta com finishedAt como materializado", () => {
+  it("aceita content com finishedAt como materializado", () => {
     expect(
       isAssistantRunMaterialized(
         msg({
@@ -33,13 +33,25 @@ describe("isAssistantRunMaterialized", () => {
     ).toBe(true);
   });
 
-  it("rejeita mensagem partial mesmo com texto", () => {
+  it("rejeita mensagem partial mesmo com texto e finishedAt ausente", () => {
     expect(
       isAssistantRunMaterialized(
         msg({
           runId: "r1",
           content: "Chunk 1",
           meta: { partial: true, runId: "r1" },
+        }),
+      ),
+    ).toBe(false);
+  });
+
+  it("rejeita partial com finishedAt se partial ainda true", () => {
+    expect(
+      isAssistantRunMaterialized(
+        msg({
+          runId: "r1",
+          content: "Chunk",
+          meta: { partial: true, finishedAt: "2026-06-08T00:00:00Z", runId: "r1" },
         }),
       ),
     ).toBe(false);

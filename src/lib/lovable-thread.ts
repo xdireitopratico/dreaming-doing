@@ -311,7 +311,12 @@ export function buildLovableThread(
   }
 
   if (!activeRunId) {
-    if (progress.error && progress.finished && !progress.canceled) {
+    const pendingText = progress.streamText?.trim();
+    const needsLiveSlot =
+      (progress.error && progress.finished && !progress.canceled) ||
+      (!!pendingText && progress.finished && progress.lastFinishOk === true);
+
+    if (needsLiveSlot) {
       const insertAt = pendingAssistantInsertIndex(items);
       const existing = items[insertAt];
       if (

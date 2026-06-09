@@ -1,12 +1,6 @@
 import type { ChatMessage } from "@/components/editor/ChatInput";
 
-/** Só libera acknowledge/frozen quando a mensagem assistant tem texto final no DB. */
-export function isAssistantRunMaterialized(message: ChatMessage): boolean {
-  const meta = message.meta;
-  if (meta && typeof meta === "object" && (meta as Record<string, unknown>).partial === true) {
-    return false;
-  }
-
+function hasVisibleText(message: ChatMessage): boolean {
   if (message.content?.trim()) return true;
 
   const parts = message.parts;
@@ -22,4 +16,16 @@ export function isAssistantRunMaterialized(message: ChatMessage): boolean {
   }
 
   return false;
+}
+
+/** Só libera acknowledge/frozen quando a mensagem assistant é terminal no DB (finishedAt, não partial). */
+export function isAssistantRunMaterialized(message: ChatMessage): boolean {
+  const meta = message.meta;
+  if (!meta || typeof meta !== "object") return false;
+
+  const m = meta as Record<string, unknown>;
+  if (m.partial === true) return false;
+  if (typeof m.finishedAt !== "string" || !m.finishedAt.trim()) return false;
+
+  return hasVisibleText(message);
 }

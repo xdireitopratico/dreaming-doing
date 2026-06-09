@@ -178,7 +178,13 @@ function EditorPage() {
 
   useEffect(() => {
     for (const m of chatMessages) {
-      if (m.role === "assistant" && m.runId && isAssistantRunMaterialized(m)) {
+      if (m.role !== "assistant" || !m.runId) continue;
+      const finishedAt =
+        m.meta && typeof m.meta === "object"
+          ? (m.meta as Record<string, unknown>).finishedAt
+          : undefined;
+      if (typeof finishedAt !== "string" || !finishedAt.trim()) continue;
+      if (isAssistantRunMaterialized(m)) {
         agent.acknowledgeMaterializedRun(m.runId);
       }
     }

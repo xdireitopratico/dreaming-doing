@@ -1355,6 +1355,7 @@ export class AgentLoop {
     const meta: Record<string, unknown> = {
       runId: this.runId ?? undefined,
       step: this.state.currentStepIndex,
+      partial: true,
     };
     const stepText = (response.content ?? "").trim();
 
@@ -1471,6 +1472,7 @@ export class AgentLoop {
     const lastFinishOk = opts?.lastFinishOk ?? true;
     const meta: Record<string, unknown> = {
       runId: this.runId ?? undefined,
+      partial: false,
       deliveryFiles,
       executionLog: this.state.executionLog,
       finishedAt: new Date().toISOString(),
@@ -1505,6 +1507,7 @@ export class AgentLoop {
   private async persistPlanFinal(summary: string, plan: ProposedPlan): Promise<void> {
     const meta: Record<string, unknown> = {
       runId: this.runId ?? undefined,
+      partial: false,
       projectId: this.state.projectId,
       planMode: true,
       planStatus: "pending",
