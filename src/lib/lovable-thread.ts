@@ -354,7 +354,7 @@ export function resolveAssistantProgress(
     resumable: f.resumable ?? false,
     statusHint: null,
     streamText: f.streamText,
-    lastFinishOk: f.lastFinishOk ?? true,
+    lastFinishOk: f.lastFinishOk ?? null,
     autoResuming: false,
     pendingQueueCount: 0,
     diffs: f.diffs,

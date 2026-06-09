@@ -210,9 +210,7 @@ export function useEditorAgentOrchestration({
     agentFinished &&
     !agent.progress.canceled &&
     !agent.progress.awaiting &&
-    (agent.progress.lastFinishOk === true ||
-      agent.progress.resumable === true ||
-      (agent.progress.lastFinishOk === null && agentHasRun && !agent.progress.error));
+    (agent.progress.lastFinishOk === true || agent.progress.resumable === true);
 
   // Boot sandbox durante run (web/expo) para preview ao vivo enquanto o agente edita.
   useEffect(() => {

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type RefObject } from "react";
+import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { AnimatePresence } from "framer-motion";
 
 import { EditorShell } from "@/components/EditorShell";
@@ -253,6 +253,23 @@ export function EditorPageLayout({
     openJobWorkspace(runId, "timeline");
     onMainViewChange("preview");
   };
+
+  const autoOpenedRunRef = useRef<string | null>(null);
+  useEffect(() => {
+    const runId = agent.activeRunId;
+    if (!running || !runId) return;
+    if (agent.progress.timeline.length === 0) return;
+    if (autoOpenedRunRef.current === runId) return;
+    autoOpenedRunRef.current = runId;
+    openJobWorkspace(runId, "timeline");
+    onMainViewChange("preview");
+  }, [
+    running,
+    agent.activeRunId,
+    agent.progress.timeline.length,
+    openJobWorkspace,
+    onMainViewChange,
+  ]);
 
   const focusedJobProgress = useMemo((): AgentProgress | null => {
     if (!jobWorkspaceFocus) return null;

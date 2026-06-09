@@ -1,12 +1,12 @@
+import { useMemo } from "react";
 import { Check, Circle, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { AgentProgress } from "@/lib/agent-progress";
 import {
-  buildStatusChips,
-  buildWorkingSteps,
-  buildWorkingTitle,
-  lastEditedPath,
-} from "@/lib/agent-working-steps";
+  buildJobStream,
+  deriveCardView,
+  type AtomStatus,
+} from "@/lib/agent-job-stream";
 
 type AgentJobMiniCardProps = {
   progress: AgentProgress;
@@ -16,16 +16,13 @@ type AgentJobMiniCardProps = {
   onOpen?: (runId: string) => void;
 };
 
-function fileBase(path: string): string {
-  const p = path.replace(/^\/+/, "");
-  const i = p.lastIndexOf("/");
-  return i >= 0 ? p.slice(i + 1) : p;
-}
-
-function StepIcon({ state }: { state: "pending" | "active" | "done" }) {
+function StepIcon({ state }: { state: AtomStatus }) {
   if (state === "done") return <Check className="size-3.5 shrink-0 text-emerald-400/90" />;
   if (state === "active") {
     return <Loader2 className="size-3.5 shrink-0 animate-spin text-[var(--forge-primary)]" />;
+  }
+  if (state === "failed") {
+    return <Circle className="size-3.5 shrink-0 text-amber-400/90 fill-amber-400/20" />;
   }
   return <Circle className="size-3 shrink-0 text-[var(--forge-ghost)]" />;
 }
@@ -38,82 +35,73 @@ export function AgentJobMiniCard({
   onOpen,
 }: AgentJobMiniCardProps) {
   const running = isActive && !progress.finished;
-  const title = buildWorkingTitle(progress, running || !progress.finished);
-  const steps = buildWorkingSteps(progress, { running: running || !progress.finished });
-  const chips = buildStatusChips(progress, running);
-  const edited = lastEditedPath(progress);
   const resolvedRunId = runId ?? "live";
+
+  const view = useMemo(() => {
+    const atoms = buildJobStream(progress.timeline, { running: running || !progress.finished });
+    return deriveCardView(atoms, progress, { running: running || !progress.finished });
+  }, [progress.timeline, progress.finished, progress.lastFinishOk, progress.canceled, progress.autoResuming, running]);
 
   const handleClick = () => {
     onOpen?.(resolvedRunId);
   };
-
-  const showWorking = running || (!progress.finished && isActive);
-  const showDone = progress.finished && !progress.canceled && progress.lastFinishOk !== false;
 
   return (
     <button
       type="button"
       className={cn(
         "lovable-job-mini-card w-full text-left",
-        showWorking && "lovable-job-mini-card--working",
-        showDone && "lovable-job-mini-card--done",
+        view.cardStatus === "working" && "lovable-job-mini-card--working",
+        view.cardStatus === "done" && "lovable-job-mini-card--done",
         isFocused && "lovable-job-mini-card--focused",
       )}
       data-testid="agent-job-mini-card"
       data-run-id={resolvedRunId}
       onClick={handleClick}
-      aria-label={showWorking ? `Job em andamento: ${title}. Clique para ver timeline.` : `Job: ${title}. Clique para ver detalhes.`}
+      aria-label={
+        view.cardStatus === "working"
+          ? `Job em andamento: ${view.title}`
+          : `Job: ${view.title}`
+      }
     >
       <div className="lovable-job-mini-card-header">
-        {showWorking && (
+        {view.headerBadge === "working" && (
           <span className="lovable-job-mini-card-badge-working">Working…</span>
         )}
-        {showDone && !showWorking && (
-          <span className="lovable-job-mini-card-badge-done">Concluído</span>
+        {view.headerBadge === "done" && (
+          <span className="lovable-job-mini-card-badge-done">Done</span>
         )}
-        {progress.finished && progress.lastFinishOk === false && !progress.canceled && (
-          <span className="lovable-job-mini-card-badge-partial">Entrega parcial</span>
+        {view.headerBadge === "failed" && (
+          <span className="lovable-job-mini-card-badge-partial">Failed</span>
         )}
-        {edited && (
+        {view.editedFile && (
           <span className="lovable-job-mini-card-badge-edited">
-            Edited <span className="font-mono">{fileBase(edited)}</span>
+            Edited <span className="font-mono">{view.editedFile}</span>
           </span>
         )}
       </div>
 
-      <p className="lovable-job-mini-card-title">{title}</p>
+      <p className="lovable-job-mini-card-title">{view.title}</p>
 
-      {chips.length > 0 && (
-        <div className="lovable-job-mini-card-chips">
-          {chips.map((chip) => (
-            <span key={chip} className="lovable-job-mini-card-chip">
-              {chip}
-            </span>
+      {view.tailSteps.length > 0 && (
+        <ul className="lovable-job-mini-card-steps" aria-label="Job stream">
+          {view.tailSteps.map((step) => (
+            <li key={step.id} className="lovable-job-mini-card-step">
+              <StepIcon state={step.status} />
+              <span
+                className={cn(
+                  step.status === "done" && "text-[var(--forge-muted)]",
+                  step.status === "active" && "text-[var(--forge-foreground)]",
+                  step.status === "pending" && "text-[var(--forge-ghost)]",
+                  step.status === "failed" && "text-amber-400/90",
+                )}
+              >
+                {step.label}
+              </span>
+            </li>
           ))}
-        </div>
+        </ul>
       )}
-
-      <ul className="lovable-job-mini-card-steps" aria-label="Passos do job">
-        {steps.map((step) => (
-          <li key={step.id} className="lovable-job-mini-card-step">
-            <StepIcon state={step.state} />
-            <span
-              className={cn(
-                step.state === "done" && "text-[var(--forge-muted)]",
-                step.state === "active" && "text-[var(--forge-foreground)]",
-                step.state === "pending" && "text-[var(--forge-ghost)]",
-              )}
-            >
-              {step.label}
-            </span>
-          </li>
-        ))}
-      </ul>
-
-      <p className="lovable-job-mini-card-hint">
-        {isFocused ? "Timeline aberta no preview" : "Clique para ver timeline no preview →"}
-      </p>
     </button>
   );
 }

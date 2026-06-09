@@ -1,33 +1,19 @@
-import { useState } from "react";
-import {
-  ChevronDown,
-  ChevronRight,
-  Copy,
-  RotateCcw,
-  Zap,
-} from "lucide-react";
+import { Copy, RotateCcw, Zap } from "lucide-react";
 import { MarkdownRenderer } from "@/components/ui/markdown-renderer";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import type { ChatMessage } from "@/components/editor/ChatInput";
 import { initialAgentProgress, type AgentProgress, type PendingPlan, type PlanStep } from "@/lib/agent-progress";
-import { buildAgentNarrative } from "@/lib/agent-narrative";
-import { AgentTimeline } from "@/components/editor/AgentTimeline";
 import { ChatDiffViewer } from "@/components/editor/ChatDiffViewer";
 import { PlanViewer } from "@/components/editor/PlanViewer";
 import { PlanDocumentView } from "@/components/editor/PlanDocumentView";
-import { AgentActivityCard } from "@/components/editor/AgentActivityCard";
 import { AgentJobMiniCard } from "@/components/editor/AgentJobMiniCard";
-import { AgentStepBar } from "@/components/editor/AgentStepBar";
-import { TurnReceipt } from "@/components/editor/TurnReceipt";
 import { storedPlanFromMessage } from "@/lib/plan-message-meta";
+import { isAgentJobMessage } from "@/lib/assistant-run-progress";
 
 interface ForgeAssistantBlockProps {
   message?: ChatMessage;
   progress: AgentProgress | null;
   isActive: boolean;
   runId?: string;
-  jobWorkspaceRunId?: string;
-  onOpenJobWorkspace?: (runId: string) => void;
   pendingPlan?: PendingPlan | null;
   onCopy?: (text: string, msgId: string) => void;
   onUndo?: (msgId: string) => void;
@@ -38,7 +24,8 @@ interface ForgeAssistantBlockProps {
   onPlanApprove?: (steps: PlanStep[]) => void;
   onPlanReject?: (reason?: string) => void;
   onResume?: () => void;
-  showMiniJob?: boolean;
+  onOpenJobWorkspace?: (runId: string) => void;
+  jobWorkspaceRunId?: string | null;
 }
 
 export function ForgeAssistantBlock({
@@ -46,8 +33,6 @@ export function ForgeAssistantBlock({
   progress,
   isActive,
   runId,
-  jobWorkspaceRunId,
-  onOpenJobWorkspace,
   pendingPlan,
   onCopy,
   onUndo,
@@ -58,16 +43,11 @@ export function ForgeAssistantBlock({
   onPlanApprove,
   onPlanReject,
   onResume,
-  showMiniJob = true,
+  onOpenJobWorkspace,
+  jobWorkspaceRunId,
 }: ForgeAssistantBlockProps) {
-  const [detailsOpen, setDetailsOpen] = useState(false);
   const msgId = message?.id ?? `live-${runId ?? "forge"}`;
   const isCopied = copiedIds?.has(msgId) ?? false;
-
-  const narrative = buildAgentNarrative(progress ?? initialAgentProgress, {
-    running: isActive,
-    persistedText: message?.content,
-  });
 
   const effectiveProgress = progress;
   const storedPlan = storedPlanFromMessage(message);
@@ -77,16 +57,36 @@ export function ForgeAssistantBlock({
     livePlan ?? (storedPlan?.status === "pending" ? storedPlan.plan : null);
   const rejectedPlan = storedPlan?.status === "rejected" ? storedPlan.plan : null;
   const diffs = effectiveProgress?.diffs ?? [];
-  const executionLog = Array.isArray(message?.meta?.executionLog)
-    ? (message!.meta!.executionLog as string[])
-    : [];
-  const hasDetails =
-    (effectiveProgress?.timeline.length ?? 0) > 0 ||
-    (effectiveProgress?.tools.length ?? 0) > 0 ||
-    executionLog.length > 0;
 
-  const displayText = narrative.body ?? message?.content ?? null;
-  const deliveryText = narrative.delivery ?? null;
+  const isAgentJobTurn = !!runId || isAgentJobMessage(message);
+  const showMiniJob = isAgentJobTurn && !!effectiveProgress;
+
+  const deliveryText =
+    effectiveProgress?.finished &&
+    !isActive &&
+    effectiveProgress.lastFinishOk === true
+      ? (
+          message?.content?.trim() ||
+          effectiveProgress.summary?.trim() ||
+          effectiveProgress.streamText?.trim() ||
+          null
+        )
+      : null;
+
+  const displayText =
+    isActive && showMiniJob
+      ? null
+      : deliveryText ?? (!showMiniJob ? message?.content?.trim() : null) ?? null;
+
+  const isPersistedMessage =
+    !!message?.id && !String(message.id).startsWith("live-");
+  const canShowFooter =
+    !!effectiveProgress?.finished &&
+    !isActive &&
+    isPersistedMessage &&
+    !!displayText;
+
+  const turnTimestamp = message?.timestamp;
 
   return (
     <article className="forge-chat-item forge-chat-item-assistant relative group">
@@ -99,17 +99,6 @@ export function ForgeAssistantBlock({
           </div>
         )}
       </div>
-
-      {isActive &&
-        effectiveProgress?.currentStep != null &&
-        effectiveProgress?.totalSteps != null &&
-        effectiveProgress.totalSteps > 0 && (
-          <AgentStepBar
-            current={effectiveProgress.currentStep}
-            total={effectiveProgress.totalSteps}
-            active={isActive}
-          />
-        )}
 
       {effectiveProgress && showMiniJob && (
         <AgentJobMiniCard
@@ -127,33 +116,29 @@ export function ForgeAssistantBlock({
         </MarkdownRenderer>
       ) : displayText ? (
         <MarkdownRenderer className="forge-chat-markdown">{displayText}</MarkdownRenderer>
-      ) : isActive && narrative.showTyping ? (
-        <div className="forge-chat-live mt-1" aria-live="polite">
-          <p className="forge-chat-live-line flex items-center gap-1.5 m-0">
-            <span className="inline-flex gap-0.5">
-              <span className="size-1 rounded-full bg-[var(--forge-primary)] animate-pulse" />
-              <span className="size-1 rounded-full bg-[var(--forge-primary)] animate-pulse [animation-delay:120ms]" />
-              <span className="size-1 rounded-full bg-[var(--forge-primary)] animate-pulse [animation-delay:240ms]" />
-            </span>
-            Preparando resposta…
-          </p>
-        </div>
+      ) : isActive && showMiniJob ? (
+        <p className="forge-chat-live-line flex items-center gap-1.5" aria-live="polite">
+          <span className="inline-flex gap-0.5">
+            <span className="size-1 rounded-full bg-[var(--forge-primary)] animate-pulse" />
+            <span className="size-1 rounded-full bg-[var(--forge-primary)] animate-pulse [animation-delay:120ms]" />
+            <span className="size-1 rounded-full bg-[var(--forge-primary)] animate-pulse [animation-delay:240ms]" />
+          </span>
+          Preparando…
+        </p>
       ) : null}
 
-      {effectiveProgress && !showMiniJob && (
-        <AgentActivityCard
-          progress={effectiveProgress}
-          isActive={isActive}
-          persistedText={message?.content ?? effectiveProgress.streamText}
-        />
-      )}
-
-      {effectiveProgress && !isActive && effectiveProgress.finished && (
-        <TurnReceipt
-          progress={effectiveProgress}
-          runId={runId}
-          onResume={effectiveProgress.resumable ? onResume : undefined}
-        />
+      {turnTimestamp && effectiveProgress?.finished && !isActive && (
+        <time
+          className="lovable-turn-timestamp"
+          dateTime={new Date(turnTimestamp).toISOString()}
+        >
+          {new Date(turnTimestamp).toLocaleString("pt-BR", {
+            day: "numeric",
+            month: "short",
+            hour: "2-digit",
+            minute: "2-digit",
+          })}
+        </time>
       )}
 
       {effectiveProgress?.finished && effectiveProgress.error && (
@@ -173,14 +158,25 @@ export function ForgeAssistantBlock({
               Continuar execução
             </button>
           )}
+          {onOpenJobWorkspace && runId && (
+            <button
+              type="button"
+              className="mt-2 ml-3 font-mono text-[10px] text-[var(--forge-primary)] hover:underline"
+              onClick={() => onOpenJobWorkspace(runId)}
+            >
+              Ver detalhes no inspector
+            </button>
+          )}
         </section>
       )}
 
       {effectiveProgress?.finished &&
         !displayText &&
+        !deliveryText &&
         !effectiveProgress.error &&
         !planForRun &&
-        !rejectedPlan && (
+        !rejectedPlan &&
+        !showMiniJob && (
         <p
           className="forge-chat-live-line text-[var(--forge-muted)]"
           data-testid="assistant-turn-empty"
@@ -204,36 +200,43 @@ export function ForgeAssistantBlock({
         </section>
       )}
 
-      {hasDetails && effectiveProgress && (
-        <Collapsible
-          open={detailsOpen}
-          onOpenChange={setDetailsOpen}
-          className="mt-3 rounded-lg border border-[var(--forge-border)] bg-[var(--forge-bg)]/30"
-        >
-          <CollapsibleTrigger className="flex w-full items-center gap-2 px-3 py-2 text-left font-mono text-[10px] uppercase tracking-wider text-[var(--forge-ghost)] hover:text-[var(--forge-muted)]">
-            {detailsOpen ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
-            Detalhes técnicos
-            {!isActive && (
-              <span className="ml-auto normal-case tracking-normal text-[var(--forge-ghost)]">
-                {effectiveProgress.tools.filter((t) => t.ok === true).length} tools
-              </span>
-            )}
-          </CollapsibleTrigger>
-          <CollapsibleContent className="px-2 pb-2">
-            {effectiveProgress && effectiveProgress.timeline.length > 0 ? (
-              <AgentTimeline timeline={effectiveProgress.timeline} running={isActive} />
-            ) : executionLog.length > 0 ? (
-              <ul className="space-y-1 font-mono text-[10px] text-[var(--forge-muted)]">
-                {executionLog.slice(-12).map((line, i) => (
-                  <li key={`${line.slice(0, 24)}-${i}`} className="truncate">
-                    {line}
-                  </li>
-                ))}
-              </ul>
-            ) : null}
-          </CollapsibleContent>
-        </Collapsible>
+      {planForRun && onReopenPlan && onPlanApprove && onPlanReject && (
+        <div className="forge-plan-panel my-3 w-full max-w-full min-w-0" data-testid="plan-panel">
+          <PlanViewer
+            plan={planForRun}
+            onOpen={onReopenPlan}
+            onApprove={onPlanApprove}
+            onReject={onPlanReject}
+          />
+        </div>
       )}
 
-      {planForRun && onReopenPlan && onPlanApprove && onPlanReject && (
-        <div className="forge-plan-panel my-3
+      {!isActive && diffs.length > 0 && <ChatDiffViewer diffs={diffs} />}
+
+      {canShowFooter && (onCopy || onUndo) ? (
+        <footer className="forge-chat-item-assistant-footer mt-2 flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+          {onUndo && message && (
+            <button
+              type="button"
+              onClick={() => onUndo(message.id)}
+              className="p-1.5 rounded hover:bg-[var(--forge-surface-2)] transition-colors text-[var(--forge-muted)] hover:text-[var(--forge-destructive)]"
+              aria-label="Desfazer"
+            >
+              <RotateCcw className="size-4" />
+            </button>
+          )}
+          {displayText && onCopy && (
+            <button
+              type="button"
+              onClick={() => onCopy(displayText, msgId)}
+              className="p-1.5 rounded hover:bg-[var(--forge-surface-2)] transition-colors text-[var(--forge-muted)] hover:text-[var(--forge-foreground)]"
+              aria-label={isCopied ? "Copiado!" : "Copiar mensagem"}
+            >
+              <Copy className={isCopied ? "size-4 text-[var(--forge-primary)]" : "size-4"} />
+            </button>
+          )}
+        </footer>
+      ) : null}
+    </article>
+  );
+}

@@ -1,5 +1,6 @@
 import type { ChatMessage } from "@/components/editor/ChatInput";
-import { initialAgentProgress, type AgentProgress } from "@/lib/agent-progress";
+import { initialAgentProgress, type AgentProgress, type SSEEvent } from "@/lib/agent-progress";
+import { timelineFromExecutionLog } from "@/lib/agent-job-stream";
 
 export function runIdFromAssistantMessage(msg: ChatMessage): string | undefined {
   return (
@@ -22,6 +23,18 @@ export function isAgentJobMessage(msg?: ChatMessage): boolean {
   return false;
 }
 
+function timelineFromMeta(meta: Record<string, unknown>): SSEEvent[] {
+  const streamTail = meta.streamTail;
+  if (Array.isArray(streamTail) && streamTail.length > 0) {
+    return streamTail as SSEEvent[];
+  }
+  const executionLog = meta.executionLog;
+  if (Array.isArray(executionLog) && executionLog.length > 0) {
+    return timelineFromExecutionLog(executionLog as string[]);
+  }
+  return [];
+}
+
 /** Reidrata progresso mínimo a partir do DB — mini-card persiste após reload/acknowledge. */
 export function progressFromAssistantMessage(msg: ChatMessage): AgentProgress | null {
   if (!isAgentJobMessage(msg)) return null;
@@ -35,6 +48,15 @@ export function progressFromAssistantMessage(msg: ChatMessage): AgentProgress | 
   const totalSteps = typeof meta.totalSteps === "number" ? meta.totalSteps : null;
   const body = msg.content?.trim() || null;
 
+  const lastFinishOk =
+    typeof meta.lastFinishOk === "boolean"
+      ? meta.lastFinishOk
+      : meta.buildFailed === true
+        ? false
+        : finishedAt
+          ? null
+          : null;
+
   const tools = (msg.toolCalls ?? []).map((tc) => ({
     name: tc.name,
     args:
@@ -44,7 +66,8 @@ export function progressFromAssistantMessage(msg: ChatMessage): AgentProgress | 
     ok: true as const,
   }));
 
-  const finished = finishedAt || !!body;
+  const finished = finishedAt || lastFinishOk === true || lastFinishOk === false;
+  const timeline = timelineFromMeta(meta);
 
   return {
     ...initialAgentProgress,
@@ -52,8 +75,9 @@ export function progressFromAssistantMessage(msg: ChatMessage): AgentProgress | 
     currentStep,
     totalSteps,
     tools,
+    timeline,
     finished,
-    lastFinishOk: finished ? true : null,
+    lastFinishOk,
     streamText: body,
     summary: body,
     deliveryFiles,

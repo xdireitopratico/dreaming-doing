@@ -28,9 +28,11 @@ describe("assistant-run-progress", () => {
       meta: {
         runId: "run-1",
         finishedAt: "2026-01-01T00:00:00Z",
+        lastFinishOk: true,
         deliveryFiles: ["src/App.tsx"],
         currentStep: 3,
         totalSteps: 5,
+        executionLog: ["Edited src/App.tsx"],
       },
       toolCalls: [{ name: "fs_write", args: "src/App.tsx" }],
     };

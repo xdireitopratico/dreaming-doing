@@ -691,7 +691,7 @@ export class AgentLoop {
         const retries = await this.bumpLlmRetries();
         if (retries >= MAX_LLM_RETRIES) {
           const failMsg = `Erro no modelo após ${retries} tentativas: ${message}`;
-          await this.persistFinal(failMsg);
+          await this.persistFinal(failMsg, { lastFinishOk: false, buildFailed: true });
           return {
             ok: false,
             error: failMsg,
@@ -989,7 +989,7 @@ export class AgentLoop {
       const failMsg =
         `Build não passou após ${maxRetries} tentativas.\n\n` +
         `${finalObservation.feedback?.slice(0, 2000) ?? "Erros de compilação no sandbox."}`;
-      await this.persistFinal(failMsg);
+      await this.persistFinal(failMsg, { lastFinishOk: false, buildFailed: true });
       return {
         ok: false,
         error: failMsg,
@@ -1030,7 +1030,7 @@ export class AgentLoop {
     });
     this.appendToNarration(wrapUp);
     this.narrationStarted = true;
-    await this.persistFinal(wrapUp);
+    await this.persistFinal(wrapUp, { lastFinishOk: true });
     await this.clearCheckpoint();
     const tokens = this.compression.getTotalTokens();
     const costUsd = this.compression.getEstimatedCostUsd(this.router.mainCfg.model);
@@ -1423,7 +1423,10 @@ export class AgentLoop {
     ].join("\n");
   }
 
-  private async persistFinal(summary: string): Promise<void> {
+  private async persistFinal(
+    summary: string,
+    opts?: { lastFinishOk?: boolean; buildFailed?: boolean },
+  ): Promise<void> {
     const narration = this.narrationBuffer.trim();
     const deliveryFiles = [...this.touchedPaths];
     const body = narration || summary;
@@ -1431,6 +1434,7 @@ export class AgentLoop {
       ? `\n\n**Arquivos alterados:** ${deliveryFiles.map((p) => `\`${p}\``).join(", ")}`
       : "";
     const text = `${body}${fileFooter}`;
+    const lastFinishOk = opts?.lastFinishOk ?? true;
     const meta: Record<string, unknown> = {
       runId: this.runId ?? undefined,
       deliveryFiles,
@@ -1438,6 +1442,8 @@ export class AgentLoop {
       finishedAt: new Date().toISOString(),
       currentStep: this.state.currentStepIndex,
       totalSteps: this.maxStepsLimit,
+      lastFinishOk,
+      buildFailed: opts?.buildFailed === true || lastFinishOk === false,
     };
 
     const existingId = await this.resolveExistingRunMessageId();

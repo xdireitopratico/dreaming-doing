@@ -30,6 +30,7 @@ export function PendingQueuePanel({
   blockingReason,
 }: PendingQueuePanelProps) {
   const [busy, setBusy] = useState(false);
+  const [expanded, setExpanded] = useState(false);
 
   const wrap = useCallback(
     async (fn: () => Promise<void>) => {
@@ -55,10 +56,15 @@ export function PendingQueuePanel({
       data-testid="pending-queue-panel"
     >
       <div className="flex items-center justify-between gap-2 px-3 py-2">
-        <p className="font-mono text-[10px] text-[var(--forge-silver)]">
+        <button
+          type="button"
+          className="font-mono text-[10px] text-[var(--forge-silver)] text-left hover:text-[var(--forge-foreground)]"
+          onClick={() => setExpanded((v) => !v)}
+        >
           <strong className="text-[var(--forge-primary)]">{pendingCount}</strong> na fila
           {running ? " · agente ocupado" : ""}
-        </p>
+          <span className="ml-1 opacity-60">{expanded ? "▾" : "▸"}</span>
+        </button>
         <div className="flex items-center gap-1">
           {!running && pendingCount > 0 && (
             <button
@@ -87,12 +93,13 @@ export function PendingQueuePanel({
         </div>
       </div>
 
-      {blockingReason && (
+      {expanded && blockingReason && (
         <p className="px-3 pb-2 font-mono text-[9px] text-amber-400/90 leading-relaxed">
           {blockingReason}
         </p>
       )}
 
+      {expanded && (
       <ul className="max-h-32 overflow-y-auto px-2 pb-2 space-y-1">
         {displayItems.map((item) => (
           <li
@@ -129,6 +136,7 @@ export function PendingQueuePanel({
           </li>
         ))}
       </ul>
+      )}
     </div>
   );
 }

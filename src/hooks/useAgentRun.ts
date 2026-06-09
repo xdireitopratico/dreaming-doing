@@ -153,7 +153,7 @@ export function useAgentRun() {
           next = {
             ...p,
             finished: true,
-            lastFinishOk: p.lastFinishOk ?? true,
+            lastFinishOk: p.lastFinishOk === false ? false : p.lastFinishOk ?? true,
             resumable: false,
             autoResuming: false,
           };

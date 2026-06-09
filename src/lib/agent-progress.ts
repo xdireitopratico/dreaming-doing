@@ -411,6 +411,7 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
         ...prev,
         summary: (data.summary as string) ?? prev.summary,
         finished: true,
+        lastFinishOk: true,
         awaiting: !!(data.awaiting || data.qualified) || (data.planProposed === true && !!prev.pendingPlan),
         awaitingKind: data.qualified || data.awaiting
           ? "qualify"
