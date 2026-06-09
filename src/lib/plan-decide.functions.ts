@@ -55,7 +55,7 @@ const agentPreferencesSchema = z
 
 const INNGEST_GRACIOSA_MESSAGE = "Ok. Vejo que rejeitou o plano atual. Como posso melhora-lo?";
 
-const PLAN_APPROVED_PREFIX = "[Plano aprovado]";
+// PLAN_APPROVED_PREFIX source of truth is qualify.ts (exported); here use literal for cross-runtime (minor alignment, no dupe const).
 
 type DecideResponse = {
   ok: true;
@@ -179,8 +179,8 @@ export const planApprove = createServerFn({ method: "POST" })
       .filter(Boolean);
     const approveText =
       stepLabels.length > 0
-        ? `${PLAN_APPROVED_PREFIX} Plano aprovado — executar em modo Build:\n${stepLabels.map((t) => `• ${t}`).join("\n")}`
-        : `${PLAN_APPROVED_PREFIX} Plano aprovado — executar em modo Build.`;
+        ? `[Plano aprovado] Plano aprovado — executar em modo Build:\n${stepLabels.map((t) => `• ${t}`).join("\n")}`
+        : `[Plano aprovado] Plano aprovado — executar em modo Build.`;
 
     const { data: approveUserMsg, error: approveUserErr } = await supabase
       .from("messages")

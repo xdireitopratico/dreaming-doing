@@ -21,7 +21,9 @@ export interface ToolResult {
   artifacts?: string[];
 }
 
-export type ToolHandler = (args: Record<string, unknown>) => Promise<ToolResult>;
+export type ToolHandler = (
+  args: Record<string, unknown>,
+) => Promise<ToolResult>;
 
 export interface ChatParams {
   messages: ChatMessage[];
@@ -50,6 +52,8 @@ export interface ChatMessage {
   }>;
   tool_call_id?: string;
   name?: string;
+  /** Carries DB meta (e.g. { kind: "plan_approved", planSourceRunId }) for meta-aware extract/qualify in plan+follow-up flows. */
+  meta?: Record<string, unknown>;
 }
 
 export interface ChatResponse {
@@ -150,7 +154,10 @@ export interface ProposedPlan {
   steps: PlanStep[];
   ttlMs: number;
   /** Decisão do cliente (preenchida quando aprovada/rejeitada). */
-  decision?: { action: "approve"; steps: PlanStep[] } | { action: "reject"; reason?: string };
+  decision?: { action: "approve"; steps: PlanStep[] } | {
+    action: "reject";
+    reason?: string;
+  };
   /** ISO timestamp em que o plano foi proposto. */
   proposedAt?: string;
 }

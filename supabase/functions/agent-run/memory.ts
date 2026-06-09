@@ -1,8 +1,8 @@
 import type { ChatMessage } from "./types.ts";
 import {
+  type DbMessagePart,
   expandPartsToOpenAIContent,
   modelIdSupportsVision,
-  type DbMessagePart,
 } from "../_shared/message-parts.ts";
 
 type HistoryRow = {
@@ -17,6 +17,7 @@ type HistoryRow = {
     artifacts?: unknown[];
   }>;
   created_at?: string;
+  meta?: Record<string, unknown> | null;
 };
 
 /** Reconstrói histórico completo para o LLM (assistant + tool results + anexos). */
@@ -50,7 +51,9 @@ export async function buildChatHistory(
           type: "function" as const,
           function: {
             name: tc.name ?? "",
-            arguments: typeof tc.args === "string" ? tc.args : JSON.stringify(tc.args ?? {}),
+            arguments: typeof tc.args === "string"
+              ? tc.args
+              : JSON.stringify(tc.args ?? {}),
           },
         })),
       });
@@ -86,9 +89,14 @@ export async function buildChatHistory(
       );
       const visionCapable = modelIdSupportsVision(modelHint);
       const content = hasRichParts
-        ? await expandPartsToOpenAIContent(m.parts, { visionCapable, modelHint })
+        ? await expandPartsToOpenAIContent(m.parts, {
+          visionCapable,
+          modelHint,
+        })
         : plainText || "";
-      out.push({ role: "user", content: content || "" });
+      const userMsg: ChatMessage = { role: "user", content: content || "" };
+      if (m.meta) userMsg.meta = m.meta;
+      out.push(userMsg);
       continue;
     }
 

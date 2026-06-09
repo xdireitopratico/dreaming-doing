@@ -37,7 +37,10 @@ import { restoreExecutionLogFromRows } from "./executionLogMeta.ts";
 import { loadCheckpoint } from "./checkpoint.ts";
 import { appendStreamEvent } from "../_shared/agent-stream.ts";
 import { isServiceRoleRequest } from "../_shared/service-auth.ts";
-import { looksLikeInteractionOnly } from "./qualify.ts";
+import {
+  extractOriginalUserRequest,
+  looksLikeInteractionOnly,
+} from "./qualify.ts";
 
 const runningLocks = new Map<string, Promise<unknown>>();
 
@@ -720,26 +723,27 @@ Deno.serve(async (req) => {
       // Se o prompt parece pedido explícito de interação/perguntas ("quero uma mensagem claramente de interação, não de execução")
       // ou é curto/vago, e ainda não existe sandbox alocado para o projeto, NÃO alocamos E2B para este run.
       // O qualify dentro do loop (ou um futuro lightweight) vai responder e marcar awaiting sem container.
-      const lastUserContent = (() => {
-        const fromBody = (body as any).prompt || (body as any).message || "";
-        if (fromBody) return String(fromBody);
-        const lastUser = [...historyRows].reverse().find((m: any) =>
-          m.role === "user"
-        );
-        const parts = lastUser?.parts || [];
-        const textPart = parts.find((p: any) =>
-          p?.type === "text" || typeof p?.text === "string"
-        );
-        return textPart?.text || textPart?.content || "";
-      })();
+      // Use meta-aware extract (prefers skipping plan_approved meta) for the triggering user request; force allocate
+      // if history contains prior plan_approved (makes follow-up "add X" after approve allocate sandbox reliably).
+      const fromBody = (body as any).prompt || (body as any).message || "";
+      const lastUserContent = fromBody
+        ? String(fromBody)
+        : extractOriginalUserRequest(messages);
       const looksLikeInteraction = looksLikeInteractionOnly(lastUserContent);
       const projectHasSandbox =
         !!(((project as any).meta || {})?.previewSandboxId ||
           ((project as any).meta || {})?.previewReady);
+      const hasApprovedPlanInHistory = messages.some((m) => {
+        const meta = (m?.meta ?? {}) as Record<string, unknown>;
+        return m?.role === "user" &&
+          (meta.kind === "plan_approved" ||
+            typeof meta.planSourceRunId === "string");
+      });
       // Fase 4.7: 3 guardas — (1) interação explícita não aloca, (2) projeto SEM
       // arquivos não aloca (E2B só nasce depois do agente criar algo), (3) projeto
       // com sandbox pré-existente pode reusar.
-      const allocateSandboxLocal =
+      // + hasApproved for plan+follow-up proof.
+      const allocateSandboxLocal = hasApprovedPlanInHistory ||
         (!looksLikeInteraction && projectFileCount > 0) || projectHasSandbox;
 
       // Fase 4.7: o código abaixo (reg + sandbox local) era DEAD CODE — o

@@ -8,9 +8,9 @@ import {
   isProjectInventoryQuestion,
   isProjectSeedPlaceholder,
   isSeedPlaceholderAppContent,
-  projectEntryPathFromFiles,
   looksLikeInteractionOnly,
   needsQualify,
+  projectEntryPathFromFiles,
 } from "./qualify.ts";
 
 Deno.test("extractOriginalUserRequest ignora mensagem de plano aprovado", () => {
@@ -18,7 +18,11 @@ Deno.test("extractOriginalUserRequest ignora mensagem de plano aprovado", () => 
     { role: "user", content: "Crie uma landing de café" },
     { role: "assistant", content: "ok" },
     { role: "user", content: "Plano aprovado — executar em modo Build." },
-    { role: "user", content: "[Plano aprovado] Plano aprovado — executar em modo Build:\n• Hero" },
+    {
+      role: "user",
+      content:
+        "[Plano aprovado] Plano aprovado — executar em modo Build:\n• Hero",
+    },
   ]);
   assertEquals(req, "Crie uma landing de café");
 });
@@ -80,7 +84,10 @@ Deno.test("variantes de preview action", () => {
 });
 
 Deno.test("pergunta de inventário não entra em needsQualify", () => {
-  assertEquals(isProjectInventoryQuestion("o que temos pronto no projeto?"), true);
+  assertEquals(
+    isProjectInventoryQuestion("o que temos pronto no projeto?"),
+    true,
+  );
   assertEquals(
     needsQualify("o que temos pronto no projeto?", {
       complexity: 1,
@@ -148,23 +155,40 @@ Deno.test("isProjectSeedPlaceholder expo entry", () => {
 });
 
 Deno.test("isSeedPlaceholderAppContent detecta canvas vazio", () => {
-  assertEquals(isSeedPlaceholderAppContent('export default () => <p>Canvas vazio</p>'), true);
-  assertEquals(isSeedPlaceholderAppContent("export default function App() { return <Hero/> }"), false);
+  assertEquals(
+    isSeedPlaceholderAppContent("export default () => <p>Canvas vazio</p>"),
+    true,
+  );
+  assertEquals(
+    isSeedPlaceholderAppContent(
+      "export default function App() { return <Hero/> }",
+    ),
+    false,
+  );
 });
 
 Deno.test("needsQualify para pedido curto", () => {
   assertEquals(
-    needsQualify("site", { complexity: 2, type: "other", summary: "x", needsBuild: false, needsDeps: false }),
+    needsQualify("site", {
+      complexity: 2,
+      type: "other",
+      summary: "x",
+      needsBuild: false,
+      needsDeps: false,
+    }),
     true,
   );
   assertEquals(
-    needsQualify("Crie landing completa para cafeteria artesanal em SP com menu e reservas", {
-      complexity: 4,
-      type: "new_project",
-      summary: "x",
-      needsBuild: true,
-      needsDeps: false,
-    }),
+    needsQualify(
+      "Crie landing completa para cafeteria artesanal em SP com menu e reservas",
+      {
+        complexity: 4,
+        type: "new_project",
+        summary: "x",
+        needsBuild: true,
+        needsDeps: false,
+      },
+    ),
     false,
   );
 });
@@ -179,4 +203,72 @@ Deno.test("buildMobileStackQualifyMessage oferece Expo e Kotlin", () => {
   const msg = buildMobileStackQualifyMessage();
   assertEquals(msg.includes("Expo"), true);
   assertEquals(msg.includes("Kotlin"), true);
+});
+
+// === PR2 exhaustive cases for meta-aware extract + approve-proof (landing + approve + short follow-up) ===
+Deno.test("extractOriginalUserRequest landing + approve(with meta) + short follow-up 'add X' returns follow-up", () => {
+  const req = extractOriginalUserRequest([
+    { role: "user", content: "Crie uma landing de café com hero" },
+    { role: "assistant", content: "Plano proposto..." },
+    {
+      role: "user",
+      content:
+        "[Plano aprovado] Plano aprovado — executar em modo Build:\n• Hero",
+      meta: { kind: "plan_approved", planSourceRunId: "run-plan-123" },
+    },
+    { role: "user", content: "add X" },
+  ]);
+  assertEquals(req, "add X");
+});
+
+Deno.test("extractOriginalUserRequest prefers meta.kind=plan_approved even without prefix in content", () => {
+  const req = extractOriginalUserRequest([
+    { role: "user", content: "landing prompt" },
+    {
+      role: "user",
+      content: "Plano sem prefixo mas meta",
+      meta: { kind: "plan_approved" },
+    },
+    { role: "user", content: "add footer now" },
+  ]);
+  assertEquals(req, "add footer now");
+});
+
+Deno.test("extractOriginalUserRequest prefers meta.planSourceRunId over string heuristics", () => {
+  const req = extractOriginalUserRequest([
+    { role: "user", content: "initial request for app" },
+    {
+      role: "user",
+      content: "random text",
+      meta: { planSourceRunId: "src-xyz" },
+    },
+    { role: "user", content: "add dark mode" },
+  ]);
+  assertEquals(req, "add dark mode");
+});
+
+Deno.test("extractOriginalUserRequest with mixed history returns planSummary equiv for pure approve (no followup)", () => {
+  // In approve run, extract (used for fallback) returns prior; ctor overrides with planSummary.
+  const req = extractOriginalUserRequest([
+    { role: "user", content: "landing de cafeteria" },
+    {
+      role: "user",
+      content: "[Plano aprovado] Segue o plano abaixo.\nFazer X",
+      meta: { kind: "plan_approved", planSourceRunId: "r42" },
+    },
+  ]);
+  assertEquals(req, "landing de cafeteria");
+});
+
+Deno.test("needsQualify on plan-like summary with needsBuild=false does not gate (approved path)", () => {
+  assertEquals(
+    needsQualify("landing com hero, menu e preview", {
+      complexity: 3,
+      type: "modify",
+      summary: "x",
+      needsBuild: true,
+      needsDeps: false,
+    }),
+    false,
+  );
 });

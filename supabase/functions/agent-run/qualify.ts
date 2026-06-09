@@ -22,7 +22,7 @@ export function looksLikeInteractionOnly(text: string): boolean {
   if (isPreviewActionRequest(trimmed)) return false;
   return INTERACTION_ONLY_RE.test(trimmed) || trimmed.length < 90;
 }
-const PLAN_APPROVE_BOILERPLATE_RE =
+export const PLAN_APPROVE_BOILERPLATE_RE =
   /^Plano aprovado — executar em modo Build/i;
 
 const POLLUTION_MARKERS = [
@@ -32,11 +32,19 @@ const POLLUTION_MARKERS = [
   "Execução cancelada",
 ];
 
-/** Última mensagem real do usuário (ignora retomada, plano aprovado e ruído de timeout). */
+/** Última mensagem real do usuário (ignora retomada, plano aprovado e ruído de timeout).
+ * Prefere meta (kind === "plan_approved" ou planSourceRunId) para aprovações — fallback em string prefix para compat.
+ */
 export function extractOriginalUserRequest(messages: ChatMessage[]): string {
   for (let i = messages.length - 1; i >= 0; i--) {
     const m = messages[i];
     if (m.role !== "user") continue;
+    const meta = m.meta as Record<string, unknown> | undefined;
+    if (
+      meta &&
+      (meta.kind === "plan_approved" ||
+        typeof meta.planSourceRunId === "string")
+    ) continue;
     const text = typeof m.content === "string" ? m.content.trim() : "";
     if (!text) continue;
     if (text.startsWith(RESUME_PREFIX)) continue;
@@ -49,7 +57,8 @@ export function extractOriginalUserRequest(messages: ChatMessage[]): string {
 }
 
 export function buildExecuteInstruction(userRequest: string): string {
-  const task = userRequest.trim() || "Continue a implementação com base no histórico acima.";
+  const task = userRequest.trim() ||
+    "Continue a implementação com base no histórico acima.";
   if (isPreviewActionRequest(task)) {
     return [
       "O usuário quer ver o projeto no preview (sandbox E2B + Vite).",
@@ -84,7 +93,9 @@ export function isProjectInventoryQuestion(text: string): boolean {
   return INVENTORY_QUESTION_RE.test(text.trim());
 }
 
-export function isSeedPlaceholderAppContent(content: string | undefined | null): boolean {
+export function isSeedPlaceholderAppContent(
+  content: string | undefined | null,
+): boolean {
   if (!content) return false;
   return /canvas vazio/i.test(content);
 }
@@ -107,7 +118,9 @@ export function findProjectEntryFile(
 ): { path: string; content?: string | null } | undefined {
   const entry = projectEntryPathFromFiles(files);
   return files.find(
-    (f) => f.path === entry || f.path === `/${entry}` || f.path.endsWith(`/${entry}`),
+    (f) =>
+      f.path === entry || f.path === `/${entry}` ||
+      f.path.endsWith(`/${entry}`),
   );
 }
 
@@ -123,11 +136,15 @@ export function isProjectSeedPlaceholder(
 export function isAmbiguousMobileRequest(prompt: string): boolean {
   const p = prompt.trim();
   if (!p) return false;
-  if (/\b(expo|expo-router|react native|react-native|kotlin|gradle|android nativo|swift)\b/i.test(p)) {
+  if (
+    /\b(expo|expo-router|react native|react-native|kotlin|gradle|android nativo|swift)\b/i
+      .test(p)
+  ) {
     return false;
   }
   return (
-    /\b(app mobile|aplicativo mobile|app de celular|mobile app|app android|app ios|app de voz|voice app|hermes)\b/i.test(p)
+    /\b(app mobile|aplicativo mobile|app de celular|mobile app|app android|app ios|app de voz|voice app|hermes)\b/i
+      .test(p)
   );
 }
 
@@ -168,7 +185,9 @@ export function needsQualify(
   }
 
   // Explicit user signals for "just talk / ask questions first" — always qualify, never auto-build.
-  const wantsInteraction = /quero (só |apenas |uma )?(mensagem|conversa|intera|pergunt|discut|qualif|ideia|brainstorm|conversar)|me faz (perguntas|uma pergunta)|não (começa|codar|construir|executar|trabalhar) ainda|só conversar|quero (conversar|discutir a ideia)/i.test(text);
+  const wantsInteraction =
+    /quero (só |apenas |uma )?(mensagem|conversa|intera|pergunt|discut|qualif|ideia|brainstorm|conversar)|me faz (perguntas|uma pergunta)|não (começa|codar|construir|executar|trabalhar) ainda|só conversar|quero (conversar|discutir a ideia)/i
+      .test(text);
   if (wantsInteraction) return true;
 
   if (classification.type === "other" && len < 180) return true;
@@ -177,7 +196,8 @@ export function needsQualify(
   return false;
 }
 
-export const INVENTORY_SYSTEM = `Você é o concierge FORGE. O usuário quer saber o ESTADO ATUAL do projeto — não pediu para codar ainda.
+export const INVENTORY_SYSTEM =
+  `Você é o concierge FORGE. O usuário quer saber o ESTADO ATUAL do projeto — não pediu para codar ainda.
 
 Responda em português, markdown curto e honesto:
 1. **Scaffold:** Vite + React + TypeScript + Tailwind v4 + pacote @forge/ui embutido (design system).
