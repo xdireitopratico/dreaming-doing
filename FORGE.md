@@ -104,6 +104,7 @@ SELECT count(*) FROM agent_pending_messages WHERE project_id = 'PROJECT_ID';
 ```
 
 4. Logs Edge: `inngest.send_failed_fatal` / `dispatch_build.inngest_failed` (hardened paths now append finish + cleanup).
+5. Internal chunk re-enqueues (for resumable plan/build budget exhaustion) continue to use the inngest client `send` directly inside the durable handlers (post initial trigger + after start event). Core first-message/plan-approve/queue dispatches are centralized in Edge.
 
 ## Convenções
 

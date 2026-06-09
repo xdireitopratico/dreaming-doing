@@ -1119,6 +1119,13 @@ async function sendInngestEvent(
       return { ok: false, error: `Inngest returned ${res.status}` };
     }
     const body = (await res.json()) as { ids?: string[] };
+    if (!body.ids || body.ids.length === 0) {
+      // Centralize: treat HTTP 200 + empty ids from inn.gs as dispatch failure.
+      // This makes !eventId loud-fail + append finish uniform across main run,
+      // dispatch_build, and continue-queue (all hit their existing !ok hardened paths).
+      // Avoids asymmetry on edge case of successful response with no ids.
+      return { ok: false, error: "Inngest returned no event ids" };
+    }
     return { ok: true, ids: body.ids };
   } catch (e) {
     const msg = (e as Error)?.message ?? String(e);
