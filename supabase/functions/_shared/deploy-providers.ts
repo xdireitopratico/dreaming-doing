@@ -289,10 +289,10 @@ export async function deployToCloudflare(
         name: projectName,
         production_branch: "main",
       }),
-      signal: controller.signal,
+      signal: deployController.signal,
     },
   );
-  clearTimeout(timeoutId);
+  clearTimeout(deployTimeoutId);
   if (!createRes.ok && createRes.status !== 409) {
     const errBody = await createRes.json().catch(() => ({})) as {
       errors?: { message?: string }[];
@@ -311,8 +311,8 @@ export async function deployToCloudflare(
     "deploy.zip",
   );
 
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 60_000);
+  const deployController = new AbortController();
+  const deployTimeoutId = setTimeout(() => deployController.abort(), 60_000);
   const deployRes = await fetch(
     `https://api.cloudflare.com/client/v4/accounts/${cfAccountId}/pages/projects/${projectName}/deployments`,
     {
