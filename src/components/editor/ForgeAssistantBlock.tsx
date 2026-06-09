@@ -1,5 +1,4 @@
 import { Copy, RotateCcw, Zap } from "lucide-react";
-import { MarkdownRenderer } from "@/components/ui/markdown-renderer";
 import type { ChatMessage } from "@/components/editor/ChatInput";
 import { initialAgentProgress, type AgentProgress, type PendingPlan, type PlanStep } from "@/lib/agent-progress";
 import { ChatDiffViewer } from "@/components/editor/ChatDiffViewer";
@@ -61,22 +60,22 @@ export function ForgeAssistantBlock({
   const isAgentJobTurn = !!runId || isAgentJobMessage(message);
   const showMiniJob = isAgentJobTurn && !!effectiveProgress;
 
-  const deliveryText =
+  const shortSummary =
     effectiveProgress?.finished &&
     !isActive &&
-    effectiveProgress.lastFinishOk === true
-      ? (
-          message?.content?.trim() ||
-          effectiveProgress.summary?.trim() ||
-          effectiveProgress.streamText?.trim() ||
-          null
-        )
+    showMiniJob
+      ? (effectiveProgress.summary?.trim() ||
+          (effectiveProgress.streamText?.trim()
+            ? effectiveProgress.streamText.trim().split("\n")[0]?.slice(0, 160)
+            : null))
       : null;
 
   const displayText =
     isActive && showMiniJob
       ? null
-      : deliveryText ?? (!showMiniJob ? message?.content?.trim() : null) ?? null;
+      : !showMiniJob
+        ? message?.content?.trim() || null
+        : shortSummary;
 
   const isPersistedMessage =
     !!message?.id && !String(message.id).startsWith("live-");
@@ -110,20 +109,9 @@ export function ForgeAssistantBlock({
         />
       )}
 
-      {deliveryText && !isActive && showMiniJob ? (
-        <MarkdownRenderer className="forge-chat-markdown lovable-job-delivery">
-          {deliveryText}
-        </MarkdownRenderer>
-      ) : displayText ? (
-        <MarkdownRenderer className="forge-chat-markdown">{displayText}</MarkdownRenderer>
-      ) : isActive && showMiniJob ? (
-        <p className="forge-chat-live-line flex items-center gap-1.5" aria-live="polite">
-          <span className="inline-flex gap-0.5">
-            <span className="size-1 rounded-full bg-[var(--forge-primary)] animate-pulse" />
-            <span className="size-1 rounded-full bg-[var(--forge-primary)] animate-pulse [animation-delay:120ms]" />
-            <span className="size-1 rounded-full bg-[var(--forge-primary)] animate-pulse [animation-delay:240ms]" />
-          </span>
-          Preparando…
+      {displayText && !isActive ? (
+        <p className="forge-chat-live-line text-[var(--forge-silver)] text-[13px] leading-relaxed">
+          {displayText}
         </p>
       ) : null}
 
@@ -172,7 +160,6 @@ export function ForgeAssistantBlock({
 
       {effectiveProgress?.finished &&
         !displayText &&
-        !deliveryText &&
         !effectiveProgress.error &&
         !planForRun &&
         !rejectedPlan &&

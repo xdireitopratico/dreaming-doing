@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useRef } from "react";
-import { FileText, Loader2 } from "lucide-react";
 import type { AgentProgress } from "@/lib/agent-progress";
 import type { JobWorkspaceTab } from "@/hooks/useJobWorkspaceFocus";
 import { JobWorkspaceHeader } from "@/components/editor/JobWorkspaceHeader";
 import { ChatDiffViewer } from "@/components/editor/ChatDiffViewer";
+import { JobInlineTimeline } from "@/components/editor/JobInlineTimeline";
 import {
-  buildJobStream,
+  buildJobStreamTree,
   deriveInspectorView,
 } from "@/lib/agent-job-stream";
 
@@ -16,87 +16,54 @@ type JobWorkspacePanelProps = {
   activeTab: JobWorkspaceTab;
   onTabChange: (tab: JobWorkspaceTab) => void;
   onBackToLatest: () => void;
+  onOpenFile?: (path: string) => void;
 };
 
-function DetailsTab({ progress, running }: { progress: AgentProgress; running: boolean }) {
-  const atoms = useMemo(
-    () => buildJobStream(progress.timeline, { running }),
+function TimelineTab({
+  progress,
+  running,
+  onOpenFile,
+}: {
+  progress: AgentProgress;
+  running: boolean;
+  onOpenFile?: (path: string) => void;
+}) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const nodes = useMemo(
+    () => buildJobStreamTree(progress.timeline, { running }),
     [progress.timeline, running],
   );
-  const { thoughts, errors } = useMemo(() => deriveInspectorView(atoms), [atoms]);
+  const { errors } = useMemo(() => deriveInspectorView(nodes), [nodes]);
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el || !running) return;
+    el.scrollTop = el.scrollHeight;
+  }, [nodes.length, running]);
 
   return (
-    <div className="lovable-job-details" data-testid="job-tab-details">
+    <div className="lovable-job-timeline" ref={scrollRef} data-testid="job-tab-timeline">
       {errors.map((err) => (
         <section
           key={err.id}
           className="my-2 rounded-lg border border-red-400/35 bg-red-400/8 px-3 py-2.5"
           data-testid="job-build-error"
         >
-          <p className="text-[12px] font-medium text-red-300">{err.label}</p>
-          {err.detail && (
+          <p className="text-[12px] font-medium text-red-300">
+            {err.kind === "result" ? err.summary : "Erro no passo"}
+          </p>
+          {err.kind === "result" && err.evidence[0] && (
             <p className="mt-1 font-mono text-[10px] text-[var(--forge-silver)] whitespace-pre-wrap">
-              {err.detail}
+              {err.evidence[0]}
             </p>
           )}
         </section>
       ))}
 
-      {thoughts.map((block) => (
-        <section key={block.id} className="lovable-job-thought-block">
-          <p className="lovable-job-thought-label">Thought for {block.thoughtSec}s</p>
-          {block.lines.map((line, i) => (
-            <p key={`${block.id}-${i}`} className="lovable-job-thought-text">
-              {line}
-            </p>
-          ))}
-        </section>
-      ))}
-
-      {!thoughts.length && !errors.length && (
-        <p className="lovable-job-empty">Aguardando atividade do agente…</p>
-      )}
-    </div>
-  );
-}
-
-function TimelineTab({ progress, running }: { progress: AgentProgress; running: boolean }) {
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const atoms = useMemo(
-    () => buildJobStream(progress.timeline, { running }),
-    [progress.timeline, running],
-  );
-  const { log } = useMemo(() => deriveInspectorView(atoms), [atoms]);
-
-  useEffect(() => {
-    const el = scrollRef.current;
-    if (!el || !running) return;
-    el.scrollTop = el.scrollHeight;
-  }, [log.length, running]);
-
-  return (
-    <div className="lovable-job-timeline" ref={scrollRef} data-testid="job-tab-timeline">
-      {log.length > 0 ? (
-        <ul className="lovable-job-log">
-          {log.map((entry) => (
-            <li key={entry.id} className="lovable-job-log-item">
-              <FileText className="size-3.5 shrink-0 opacity-60" />
-              <div className="min-w-0 flex-1">
-                <p className="lovable-job-log-label">
-                  {entry.status === "active" && (
-                    <Loader2 className="inline size-3 mr-1 animate-spin" />
-                  )}
-                  {entry.label}
-                </p>
-                {entry.detail && (
-                  <p className="lovable-job-log-detail truncate">{entry.detail}</p>
-                )}
-              </div>
-            </li>
-          ))}
-        </ul>
+      {nodes.length > 0 ? (
+        <JobInlineTimeline nodes={nodes} variant="full" onOpenFile={onOpenFile} />
       ) : (
-        <p className="lovable-job-empty">Nenhum evento ainda.</p>
+        <p className="lovable-job-empty">Aguardando atividade do agente…</p>
       )}
     </div>
   );
@@ -124,7 +91,7 @@ function ChangesTab({ progress }: { progress: AgentProgress }) {
           </ul>
         </section>
       )}
-      {diffs.length > 0 && <ChatDiffViewer diffs={diffs} />}
+      {diffs.length > 0 && <ChatDiffViewer diffs={diffs} variant="inspector" />}
     </div>
   );
 }
@@ -136,6 +103,7 @@ export function JobWorkspacePanel({
   activeTab,
   onTabChange,
   onBackToLatest,
+  onOpenFile,
 }: JobWorkspacePanelProps) {
   return (
     <div className="lovable-job-workspace flex min-h-0 h-full w-full flex-col" data-testid="job-workspace-panel">
@@ -150,8 +118,9 @@ export function JobWorkspacePanel({
           Run {runId.slice(0, 8)}…
         </p>
 
-        {activeTab === "details" && <DetailsTab progress={progress} running={running} />}
-        {activeTab === "timeline" && <TimelineTab progress={progress} running={running} />}
+        {activeTab === "timeline" && (
+          <TimelineTab progress={progress} running={running} onOpenFile={onOpenFile} />
+        )}
         {activeTab === "changes" && <ChangesTab progress={progress} />}
       </div>
     </div>

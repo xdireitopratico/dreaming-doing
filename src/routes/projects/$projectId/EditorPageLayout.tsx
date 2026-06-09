@@ -485,6 +485,10 @@ export function EditorPageLayout({
                           activeTab={jobWorkspaceFocus.tab}
                           onTabChange={setJobTab}
                           onBackToLatest={closeJobWorkspace}
+                          onOpenFile={(path) => {
+                            handleSelectFile(path);
+                            onMainViewChange("code");
+                          }}
                         />
                       )}
 

@@ -1052,6 +1052,135 @@ body:has(.editor-workspace) {
   background: rgba(255, 255, 255, 0.03);
 }
 
+.lovable-job-mini-card-bubbles {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.lovable-stream-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: 4px 0 12px;
+}
+
+.lovable-stream-step {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+.lovable-stream-step--connected {
+  padding-bottom: 4px;
+}
+
+.lovable-stream-connector {
+  position: absolute;
+  left: 15px;
+  top: 36px;
+  bottom: -4px;
+  width: 1px;
+  background: linear-gradient(
+    to bottom,
+    rgba(99, 130, 255, 0.35),
+    rgba(99, 130, 255, 0.08)
+  );
+}
+
+.lovable-stream-bubble {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.03);
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.lovable-stream-bubble--active {
+  border-color: rgba(59, 130, 246, 0.45);
+  background: rgba(59, 130, 246, 0.08);
+  box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.1);
+}
+
+.lovable-stream-bubble--done {
+  border-color: rgba(255, 255, 255, 0.05);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.lovable-stream-bubble--failed {
+  border-color: rgba(251, 191, 36, 0.35);
+  background: rgba(251, 191, 36, 0.06);
+}
+
+.lovable-stream-bubble--mini {
+  padding: 8px 10px;
+  border-radius: 10px;
+}
+
+.lovable-stream-bubble-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  flex-shrink: 0;
+}
+
+.lovable-stream-bubble--mini .lovable-stream-bubble-icon {
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+}
+
+.lovable-stream-bubble-intent {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.45;
+  font-weight: 500;
+  color: var(--forge-foreground);
+}
+
+.lovable-stream-bubble--mini .lovable-stream-bubble-intent {
+  font-size: 12px;
+  font-weight: 450;
+}
+
+.lovable-stream-bubble-detail {
+  margin: 4px 0 0;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--forge-ghost);
+}
+
+.lovable-stream-bubble-thought {
+  white-space: pre-wrap;
+  color: var(--forge-silver);
+  font-weight: 400;
+}
+
+.lovable-stream-bubble-link {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  text-align: left;
+  color: var(--forge-primary);
+  cursor: pointer;
+}
+
+.lovable-stream-bubble-link:hover {
+  text-decoration: underline;
+  color: var(--forge-foreground);
+}
+
 .lovable-job-mini-card-steps {
   margin: 0;
   padding: 0;
@@ -1073,6 +1202,287 @@ body:has(.editor-workspace) {
   margin: 10px 0 0;
   font-size: 10px;
   color: var(--forge-ghost);
+}
+
+/* Inline timeline — Thought → Task → Step → Result */
+.lovable-inline-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 4px 0 8px;
+}
+
+.lovable-inline-timeline--mini {
+  gap: 6px;
+  padding: 0;
+}
+
+.lovable-inline-timeline-node {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+.lovable-inline-timeline-node--connected {
+  padding-bottom: 4px;
+}
+
+.lovable-inline-timeline-connector {
+  position: absolute;
+  left: 18px;
+  top: 40px;
+  bottom: -4px;
+  width: 1px;
+  background: linear-gradient(
+    to bottom,
+    rgba(255, 182, 39, 0.35),
+    rgba(255, 182, 39, 0.06)
+  );
+}
+
+.lovable-thought-block {
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.02);
+  overflow: hidden;
+}
+
+.lovable-thought-block--mini {
+  border: none;
+  background: transparent;
+}
+
+.lovable-thought-block-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 12px;
+  border: none;
+  background: none;
+  color: var(--forge-muted);
+  font-size: 12px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.lovable-thought-block-label {
+  font-weight: 500;
+  color: var(--forge-silver);
+}
+
+.lovable-thought-block-chevron {
+  margin-left: auto;
+  opacity: 0.6;
+  transition: transform 0.15s ease;
+}
+
+.lovable-thought-block-chevron--open {
+  transform: rotate(180deg);
+}
+
+.lovable-thought-block-prose {
+  margin: 0;
+  padding: 0 12px 10px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--forge-silver);
+  white-space: pre-wrap;
+}
+
+.lovable-thought-block--mini .lovable-thought-block-prose {
+  padding: 0;
+  font-size: 11px;
+  color: var(--forge-ghost);
+}
+
+.lovable-task-bubble {
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 182, 39, 0.22);
+  background: rgba(255, 182, 39, 0.05);
+}
+
+.lovable-task-bubble--mini {
+  display: none;
+}
+
+.lovable-task-bubble-label {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255, 182, 39, 0.85);
+  font-family: ui-monospace, monospace;
+}
+
+.lovable-task-bubble-title {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.45;
+  font-weight: 500;
+  color: var(--forge-foreground);
+}
+
+.lovable-step-bubble {
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: var(--forge-surface-1, rgba(255, 255, 255, 0.03));
+}
+
+.lovable-step-bubble--active {
+  border-color: rgba(59, 130, 246, 0.45);
+  background: rgba(59, 130, 246, 0.08);
+  box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.1);
+}
+
+.lovable-step-bubble--done {
+  border-color: rgba(255, 255, 255, 0.05);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.lovable-step-bubble--failed {
+  border-color: rgba(251, 191, 36, 0.35);
+  background: rgba(251, 191, 36, 0.06);
+}
+
+.lovable-step-bubble--mini {
+  padding: 8px 10px;
+  border-radius: 10px;
+}
+
+.lovable-step-bubble-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.lovable-step-bubble-spinner {
+  margin-top: 2px;
+  color: var(--forge-primary);
+}
+
+.lovable-step-bubble-expectation {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.45;
+  font-weight: 500;
+  color: var(--forge-foreground);
+}
+
+.lovable-step-bubble--mini .lovable-step-bubble-expectation {
+  font-size: 12px;
+  font-weight: 450;
+}
+
+.lovable-step-bubble-files {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.lovable-result-bubble {
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(52, 211, 153, 0.25);
+  background: rgba(52, 211, 153, 0.06);
+}
+
+.lovable-result-bubble--failed {
+  border-color: rgba(251, 191, 36, 0.35);
+  background: rgba(251, 191, 36, 0.06);
+}
+
+.lovable-result-bubble--mini {
+  display: none;
+}
+
+.lovable-result-bubble-label {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(52, 211, 153, 0.9);
+  font-family: ui-monospace, monospace;
+}
+
+.lovable-result-bubble--failed .lovable-result-bubble-label {
+  color: rgba(251, 191, 36, 0.9);
+}
+
+.lovable-result-bubble-summary {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.45;
+  font-weight: 500;
+  color: var(--forge-foreground);
+}
+
+.lovable-result-bubble-evidence {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--forge-muted);
+}
+
+.lovable-file-ref-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  padding: 4px 8px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 182, 39, 0.2);
+  background: rgba(255, 182, 39, 0.05);
+  font-size: 10px;
+  color: var(--forge-silver);
+  cursor: default;
+}
+
+button.lovable-file-ref-chip {
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+}
+
+button.lovable-file-ref-chip:hover {
+  border-color: rgba(255, 182, 39, 0.4);
+  background: rgba(255, 182, 39, 0.1);
+}
+
+.lovable-file-ref-chip--mini {
+  padding: 3px 6px;
+  font-size: 9px;
+}
+
+.lovable-file-ref-chip-kind {
+  color: var(--forge-ghost);
+  text-transform: lowercase;
+}
+
+.lovable-file-ref-chip-sep {
+  color: var(--forge-ghost);
+  opacity: 0.5;
+}
+
+.lovable-file-ref-chip-lang {
+  font-weight: 600;
+  font-size: 9px;
+  letter-spacing: 0.04em;
+}
+
+.lovable-file-ref-chip-name {
+  color: var(--forge-foreground);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .lovable-preview-status-pill {
@@ -1204,6 +1614,38 @@ body:has(.editor-workspace) {
   margin: 2px 0 0;
   font-size: 11px;
   color: var(--forge-ghost);
+}
+
+.lovable-job-log-link {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  color: var(--forge-primary);
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.lovable-job-log-link:hover {
+  text-decoration: underline;
+  color: var(--forge-foreground);
+}
+
+.lovable-job-log-item[data-kind="thought"] .lovable-job-thought-text {
+  font-size: 12px;
+  color: var(--forge-silver);
+  white-space: pre-wrap;
+}
+
+.forge-chat-diffs--inspector {
+  border-color: var(--forge-border);
+  background: var(--forge-surface-1);
+}
+
+.forge-chat-diffs--inspector .monaco-diff-editor .diffOverview {
+  background: var(--forge-surface-2);
 }
 
 .lovable-job-empty {

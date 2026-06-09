@@ -135,7 +135,7 @@ export function useAgentRun() {
   }, []);
 
   const syncRunStatus = useCallback(
-    (status: string, error: string | null) => {
+    (status: string, error: string | null, streamText?: string | null) => {
       setProgress((p) => {
         let next: AgentProgress;
         if (status === "awaiting_user") {
@@ -169,8 +169,14 @@ export function useAgentRun() {
         } else {
           return p;
         }
-        persistFrozen({ ...next, streamText: next.streamText ?? p.streamText });
-        return next;
+        persistFrozen({
+          ...next,
+          streamText: streamText ?? next.streamText ?? next.summary ?? p.streamText,
+        });
+        return {
+          ...next,
+          streamText: streamText ?? next.streamText ?? next.summary ?? p.streamText,
+        };
       });
       teardownChannels();
     },
@@ -301,8 +307,10 @@ export function useAgentRun() {
         .on(
           "postgres_changes",
           { event: "UPDATE", schema: "public", table: "agent_runs", filter: `id=eq.${runId}` },
-          (payload) => {
+          async (payload) => {
             const row = payload.new as { status: string; error: string | null; canceled_at: string | null };
+            if (!runIdRef.current) return;
+            await catchUpRun(runIdRef.current);
             if (row.canceled_at || row.status === "canceled") {
               syncRunStatus("canceled", row.error);
             } else if (TERMINAL_STATUSES.has(row.status)) {
@@ -636,41 +644,56 @@ export function useAgentRun() {
   const stop = useCallback(async () => {
     const runId = runIdRef.current;
 
-    setProgress((p) => ({
-      ...p,
-      finished: true,
-      canceled: true,
-      resumable: false,
-      autoResuming: false,
-      statusHint: "Cancelando…",
-    }));
+    let frozenSnap: AgentProgress | null = null;
+    setProgress((p) => {
+      frozenSnap = {
+        ...p,
+        finished: true,
+        canceled: true,
+        resumable: false,
+        autoResuming: false,
+        statusHint: "Cancelando…",
+      };
+      return frozenSnap;
+    });
+    if (frozenSnap) persistFrozen(frozenSnap);
     setConnected(false);
 
     if (runId) {
       try {
         await cancelAgentRun(runId);
         logEditorTelemetryEvent("agent", "cancel_request", "info", runId.slice(0, 8));
-        setProgress((p) => ({
-          ...p,
-          error: null,
-          statusHint: "Cancelado pelo usuário",
-        }));
+        setProgress((p) => {
+          const next = {
+            ...p,
+            error: null,
+            statusHint: "Cancelado pelo usuário",
+            finished: true,
+            canceled: true,
+          };
+          persistFrozen(next);
+          return next;
+        });
       } catch (e) {
-        setProgress((p) => ({
-          ...p,
-          error: formatAgentFetchError(e),
-          statusHint: "Falha ao cancelar — tente novamente",
-          finished: true,
-          canceled: false,
-          resumable: true,
-        }));
+        setProgress((p) => {
+          const next = {
+            ...p,
+            error: formatAgentFetchError(e),
+            statusHint: "Falha ao cancelar — tente novamente",
+            finished: true,
+            canceled: false,
+            resumable: true,
+          };
+          persistFrozen(next);
+          return next;
+        });
       }
     }
 
     runIdRef.current = null;
     setActiveRunId(null);
     teardownChannels();
-  }, [teardownChannels]);
+  }, [persistFrozen, teardownChannels]);
 
   const disconnect = useCallback(() => {
     runIdRef.current = null;

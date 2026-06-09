@@ -62,9 +62,13 @@ export const FORGE_THEME: editor.IStandaloneThemeData = {
     "editorWarning.foreground": "#FFB627",
     "editorInfo.foreground": "#9FB4C7",
 
-    // Diff editor
-    "diffEditor.insertedTextBackground": "rgba(91, 214, 166, 0.10)",
-    "diffEditor.removedTextBackground": "rgba(229, 72, 77, 0.10)",
+    // Diff editor — paleta FORGE (âmbar / verde suave / vermelho contido)
+    "diffEditor.insertedTextBackground": "rgba(91, 214, 166, 0.14)",
+    "diffEditor.removedTextBackground": "rgba(229, 72, 77, 0.14)",
+    "diffEditor.insertedLineBackground": "rgba(91, 214, 166, 0.06)",
+    "diffEditor.removedLineBackground": "rgba(229, 72, 77, 0.06)",
+    "diffEditor.border": "rgba(237, 239, 242, 0.08)",
+    "diffEditor.diagonalFill": "rgba(237, 239, 242, 0.04)",
   },
   rules: [
     // ─── Keywords ─── (cold blue metallic — técnico, calmo)

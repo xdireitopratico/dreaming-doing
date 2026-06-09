@@ -51,6 +51,11 @@ import {
   buildObserveNarration,
   buildToolBatchNarration,
 } from "./narration.ts";
+import {
+  buildPhaseTaskTitle,
+  describeStepExpectation,
+  extractStepFilePaths,
+} from "../_shared/step-intent.ts";
 
 type StreamCallback = (event: { type: string; data: unknown }) => void;
 
@@ -1277,6 +1282,7 @@ export class AgentLoop {
               text: delta,
               append: this.narrationStarted,
               delta: true,
+              thinking: true,
               final: false,
             });
             this.narrationStarted = true;
@@ -1429,7 +1435,7 @@ export class AgentLoop {
   ): Promise<void> {
     const narration = this.narrationBuffer.trim();
     const deliveryFiles = [...this.touchedPaths];
-    const body = narration || summary;
+    const body = summary.trim() || narration.split("\n").slice(-1)[0]?.trim() || summary;
     const fileFooter = deliveryFiles.length > 0
       ? `\n\n**Arquivos alterados:** ${deliveryFiles.map((p) => `\`${p}\``).join(", ")}`
       : "";
@@ -1519,11 +1525,56 @@ export class AgentLoop {
       text: shouldAppend ? `\n\n${chunk}` : chunk,
       append: shouldAppend,
       final: false,
+      narration: true,
     });
     this.narrationStarted = true;
   }
 
   private emit(type: string, data: unknown): void {
-    this.onStream({ type, data });
+    let payload = data;
+    if (payload && typeof payload === "object") {
+      const d = { ...(payload as Record<string, unknown>) };
+      if (type === "phase" && typeof d.phase === "string") {
+        d.task_title = d.task_title ?? buildPhaseTaskTitle(
+          String(d.phase),
+          typeof d.message === "string" ? d.message : undefined,
+        );
+        payload = d;
+      }
+      if (type === "tool_start" && typeof d.name === "string") {
+        const args = (d.args as Record<string, unknown> | undefined) ?? {};
+        d.step_intent = d.step_intent ?? describeStepExpectation(String(d.name), args);
+        d.task_phase = d.task_phase ?? this.state.phase;
+        d.file_paths = d.file_paths ?? extractStepFilePaths(String(d.name), args);
+        payload = d;
+      }
+      if (type === "validate_ok") {
+        this.onStream({
+          type: "step_result",
+          data: {
+            summary: typeof d.message === "string" ? d.message : "Build passou",
+            evidence: ["Compilação OK", "Preview pronto para abrir"],
+            ok: true,
+          },
+        });
+      }
+      if (type === "validate_fail") {
+        this.onStream({
+          type: "step_result",
+          data: {
+            summary: "Build falhou — corrigindo antes de entregar",
+            evidence: [
+              typeof d.feedback === "string"
+                ? d.feedback.slice(0, 120)
+                : typeof d.message === "string"
+                  ? d.message.slice(0, 120)
+                  : "Erro de compilação",
+            ],
+            ok: false,
+          },
+        });
+      }
+    }
+    this.onStream({ type, data: payload });
   }
 }

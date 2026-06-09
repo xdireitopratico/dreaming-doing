@@ -104,7 +104,7 @@ export function buildGatherNarration(totalFiles: number, paths: string[]): strin
   }
   const shown = paths.slice(0, 5).map((p) => `\`${p}\``).join(", ");
   const extra = paths.length > 5 ? ` e mais ${paths.length - 5}` : "";
-  return `Primeiro passo: entender o que já existe. Vou ler ${shown}${extra} (${totalFiles} arquivo${totalFiles === 1 ? "" : "s"} no total).`;
+  return `Explorando o projeto (${totalFiles} arquivo${totalFiles === 1 ? "" : "s"})…`;
 }
 
 /** Briefing quando o build vem de plano aprovado. */

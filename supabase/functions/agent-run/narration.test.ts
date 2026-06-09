@@ -33,7 +33,7 @@ Deno.test("buildClassifyBriefing — build com passos", () => {
 
 Deno.test("buildGatherNarration — arquivos-chave", () => {
   const text = buildGatherNarration(12, ["package.json", "src/App.tsx"]);
-  assertStringIncludes(text, "package.json");
+  assertStringIncludes(text, "Explorando o projeto");
   assertStringIncludes(text, "12 arquivos");
 });
 

@@ -114,17 +114,20 @@ export function useAgentSessionCoordinator({
           return;
         }
 
+        if (progress.canceled) return;
+
         const { data: activeRun } = await supabase
           .from("agent_runs")
-          .select("id, status, heartbeat_at, started_at")
+          .select("id, status, heartbeat_at, started_at, canceled_at")
           .eq("project_id", projectId)
           .eq("conversation_id", conversation.id)
           .in("status", [...WATCH_RUN_STATUSES])
+          .is("canceled_at", null)
           .order("started_at", { ascending: false })
           .limit(1)
           .maybeSingle();
 
-        if (activeRun?.id) {
+        if (activeRun?.id && !activeRun.canceled_at) {
           const heartbeat = activeRun.heartbeat_at ?? activeRun.started_at;
           const stale =
             heartbeat &&
@@ -223,6 +226,7 @@ export function useAgentSessionCoordinator({
     projectId,
     running,
     connected,
+    progress.canceled,
     runAgent,
     tasteQuota,
     watch,

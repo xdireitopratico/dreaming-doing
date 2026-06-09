@@ -8,7 +8,6 @@ type JobWorkspaceHeaderProps = {
 };
 
 const TABS: { id: JobWorkspaceTab; label: string }[] = [
-  { id: "details", label: "Details" },
   { id: "timeline", label: "Timeline" },
   { id: "changes", label: "Changes" },
 ];

@@ -21,9 +21,11 @@ export interface ChatDiff {
 interface ChatDiffViewerProps {
   diffs: ChatDiff[];
   onDismiss?: (id: string) => void;
+  /** inspector = paleta FORGE completa; chat = compacto no thread */
+  variant?: "chat" | "inspector";
 }
 
-export function ChatDiffViewer({ diffs, onDismiss }: ChatDiffViewerProps) {
+export function ChatDiffViewer({ diffs, onDismiss, variant = "chat" }: ChatDiffViewerProps) {
   const [expanded, setExpanded] = useState(false);
   const [openIds, setOpenIds] = useState<Set<string>>(new Set());
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -61,7 +63,11 @@ export function ChatDiffViewer({ diffs, onDismiss }: ChatDiffViewerProps) {
       initial={{ opacity: 0, y: -4 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.18 }}
-      className="forge-chat-diffs border border-[var(--forge-border)] rounded-lg overflow-hidden bg-[var(--forge-bg)]/40 mb-3"
+      className={`forge-chat-diffs border border-[var(--forge-border)] rounded-lg overflow-hidden mb-3 ${
+        variant === "inspector"
+          ? "bg-[var(--forge-surface-1)] forge-chat-diffs--inspector"
+          : "bg-[var(--forge-bg)]/40"
+      }`}
     >
       <button
         type="button"

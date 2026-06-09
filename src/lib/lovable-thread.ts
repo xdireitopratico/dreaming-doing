@@ -244,16 +244,23 @@ function insertAssistantSlot(
   const next = [...items];
   const existing = next[insertAt];
   if (existing?.kind === "assistant") {
+    const sameRun =
+      !!slot.runId &&
+      !!existing.runId &&
+      slot.runId === existing.runId;
     if (
-      existing.runId === slot.runId ||
+      sameRun ||
       (existing.isActive || existing.frozen) ||
       !existing.message?.content?.trim()
     ) {
       next[insertAt] = {
         ...existing,
         ...slot,
-        message: existing.message ?? slot.message,
+        message: mergeAssistantMessages(existing.message, slot.message),
         runId: slot.runId ?? existing.runId,
+        live: slot.live ?? existing.live,
+        frozen: slot.frozen ?? existing.frozen,
+        isActive: slot.isActive ?? existing.isActive,
       };
       return next;
     }

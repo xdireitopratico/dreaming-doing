@@ -1,6 +1,6 @@
 import { useCallback, useState } from "react";
 
-export type JobWorkspaceTab = "details" | "timeline" | "changes";
+export type JobWorkspaceTab = "timeline" | "changes";
 
 export type JobWorkspaceFocus = {
   runId: string;

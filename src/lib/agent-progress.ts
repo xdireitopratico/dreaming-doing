@@ -221,6 +221,12 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
       };
     }
 
+    case "step_result":
+      return {
+        ...prev,
+        timeline: [...prev.timeline, event],
+      };
+
     case "step":
       return {
         ...prev,
@@ -406,10 +412,12 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
       };
     }
 
-    case "done":
+    case "done": {
+      const summary = (data.summary as string) ?? prev.summary;
+      const shortSummary = summary?.split("\n")[0]?.trim();
       return {
         ...prev,
-        summary: (data.summary as string) ?? prev.summary,
+        summary,
         finished: true,
         lastFinishOk: true,
         awaiting: !!(data.awaiting || data.qualified) || (data.planProposed === true && !!prev.pendingPlan),
@@ -420,10 +428,11 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
             : null,
         resumable: false,
         error: null,
-        streamText: prev.streamText,
+        streamText: shortSummary || prev.streamText,
         pendingPlan: data.planRejected === true ? null : prev.pendingPlan,
         timeline: [...prev.timeline, event],
       };
+    }
 
     case "plan_proposed": {
       const planId = typeof data.planId === "string" ? data.planId : null;

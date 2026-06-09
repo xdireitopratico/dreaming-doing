@@ -1,12 +1,11 @@
 import { useMemo } from "react";
-import { Check, Circle, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { AgentProgress } from "@/lib/agent-progress";
 import {
-  buildJobStream,
+  buildJobStreamTree,
   deriveCardView,
-  type AtomStatus,
 } from "@/lib/agent-job-stream";
+import { JobInlineTimeline } from "@/components/editor/JobInlineTimeline";
 
 type AgentJobMiniCardProps = {
   progress: AgentProgress;
@@ -15,17 +14,6 @@ type AgentJobMiniCardProps = {
   isFocused?: boolean;
   onOpen?: (runId: string) => void;
 };
-
-function StepIcon({ state }: { state: AtomStatus }) {
-  if (state === "done") return <Check className="size-3.5 shrink-0 text-emerald-400/90" />;
-  if (state === "active") {
-    return <Loader2 className="size-3.5 shrink-0 animate-spin text-[var(--forge-primary)]" />;
-  }
-  if (state === "failed") {
-    return <Circle className="size-3.5 shrink-0 text-amber-400/90 fill-amber-400/20" />;
-  }
-  return <Circle className="size-3 shrink-0 text-[var(--forge-ghost)]" />;
-}
 
 export function AgentJobMiniCard({
   progress,
@@ -37,10 +25,25 @@ export function AgentJobMiniCard({
   const running = isActive && !progress.finished;
   const resolvedRunId = runId ?? "live";
 
-  const view = useMemo(() => {
-    const atoms = buildJobStream(progress.timeline, { running: running || !progress.finished });
-    return deriveCardView(atoms, progress, { running: running || !progress.finished });
-  }, [progress.timeline, progress.finished, progress.lastFinishOk, progress.canceled, progress.autoResuming, running]);
+  const { view, nodes } = useMemo(() => {
+    const tree = buildJobStreamTree(progress.timeline, {
+      running: running || !progress.finished,
+    });
+    const cardView = deriveCardView(tree, progress, {
+      running: running || !progress.finished,
+    });
+    return { view: cardView, nodes: tree };
+  }, [
+    progress.timeline,
+    progress.finished,
+    progress.lastFinishOk,
+    progress.canceled,
+    progress.autoResuming,
+    progress.message,
+    progress.statusHint,
+    progress.phase,
+    running,
+  ]);
 
   const handleClick = () => {
     onOpen?.(resolvedRunId);
@@ -83,25 +86,7 @@ export function AgentJobMiniCard({
 
       <p className="lovable-job-mini-card-title">{view.title}</p>
 
-      {view.tailSteps.length > 0 && (
-        <ul className="lovable-job-mini-card-steps" aria-label="Job stream">
-          {view.tailSteps.map((step) => (
-            <li key={step.id} className="lovable-job-mini-card-step">
-              <StepIcon state={step.status} />
-              <span
-                className={cn(
-                  step.status === "done" && "text-[var(--forge-muted)]",
-                  step.status === "active" && "text-[var(--forge-foreground)]",
-                  step.status === "pending" && "text-[var(--forge-ghost)]",
-                  step.status === "failed" && "text-amber-400/90",
-                )}
-              >
-                {step.label}
-              </span>
-            </li>
-          ))}
-        </ul>
-      )}
+      <JobInlineTimeline nodes={nodes} variant="mini" />
     </button>
   );
 }

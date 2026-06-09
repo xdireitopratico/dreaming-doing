@@ -1,55 +1,67 @@
 import type { AgentProgress, SSEEvent } from "@/lib/agent-progress";
+import { getLanguageFromPath } from "@/components/editor/fileIcons";
+import {
+  buildPhaseTaskTitle,
+  describeStepExpectation,
+  extractStepFilePaths,
+} from "@/lib/step-intent";
 
-export type AtomKind =
-  | "thought"
-  | "read"
-  | "edited"
-  | "shell"
-  | "listed"
-  | "validate_ok"
-  | "validate_fail"
-  | "delivery"
-  | "error"
-  | "resume";
+export type NodeStatus = "active" | "done" | "failed";
 
-export type AtomStatus = "pending" | "active" | "done" | "failed";
-
-export interface JobStreamAtom {
-  id: string;
-  kind: AtomKind;
-  label: string;
-  detail?: string;
-  status: AtomStatus;
-  ts: number;
-  thoughtSec?: number;
+export interface StepFileRef {
+  path: string;
+  langLabel: string;
+  fileName: string;
 }
 
-export type CardStatus = "working" | "done" | "failed" | "idle";
+export type JobStreamNode =
+  | {
+      kind: "thought";
+      id: string;
+      ts: number;
+      status: "active" | "done";
+      thoughtSec: number;
+      prose: string;
+    }
+  | {
+      kind: "task";
+      id: string;
+      ts: number;
+      title: string;
+      phase?: string;
+    }
+  | {
+      kind: "step";
+      id: string;
+      ts: number;
+      expectation: string;
+      files: StepFileRef[];
+      status: NodeStatus;
+      technicalLabel: string;
+    }
+  | {
+      kind: "result";
+      id: string;
+      ts: number;
+      summary: string;
+      evidence: string[];
+      status: "done" | "failed";
+    };
 
-export type CardTailStep = {
-  id: string;
-  label: string;
-  status: AtomStatus;
-};
+export type CardStatus = "working" | "done" | "failed" | "idle";
 
 export type CardView = {
   cardStatus: CardStatus;
   headerBadge: "working" | "done" | "failed" | null;
   editedFile: string | null;
   title: string;
-  tailSteps: CardTailStep[];
-};
-
-export type InspectorThought = {
-  id: string;
-  thoughtSec: number;
-  lines: string[];
+  activeNode: JobStreamNode | null;
 };
 
 export type InspectorView = {
-  thoughts: InspectorThought[];
-  log: JobStreamAtom[];
-  errors: JobStreamAtom[];
+  nodes: JobStreamNode[];
+  thoughts: { id: string; thoughtSec: number; lines: string[] }[];
+  errors: JobStreamNode[];
 };
 
 function fileBase(path: string): string {
@@ -58,261 +70,371 @@ function fileBase(path: string): string {
   return i >= 0 ? p.slice(i + 1) : p;
 }
 
+function truncateMomentum(text: string, max = 72): string {
+  const t = text.trim();
+  if (!t) return "";
+  return t.length > max ? `${t.slice(0, max - 1)}…` : t;
+}
+
+function toFileRefs(paths: string[]): StepFileRef[] {
+  return paths.map((path) => ({
+    path,
+    langLabel: getLanguageFromPath(path).toUpperCase(),
+    fileName: fileBase(path),
+  }));
+}
+
 function pathFromArgs(args: Record<string, unknown> | undefined): string {
   if (!args) return "";
   return String(args.path ?? args.filePath ?? args.file ?? "");
 }
 
-function pushThoughtAtom(atoms: JobStreamAtom[], text: string, ts: number): void {
+function isRealLlmThinking(data: Record<string, unknown>): boolean {
+  return data.delta === true || data.thinking === true;
+}
+
+function isNarration(data: Record<string, unknown>): boolean {
+  return data.narration === true;
+}
+
+function pushThought(nodes: JobStreamNode[], text: string, ts: number): void {
   const trimmed = text.trim();
   if (!trimmed) return;
-  const last = atoms[atoms.length - 1];
+  const last = nodes[nodes.length - 1];
   if (last?.kind === "thought" && last.status === "active") {
-    const lines = [...(last.detail?.split("\n") ?? []), trimmed].filter(Boolean);
-    last.detail = lines.join("\n");
-    last.label = `Thought for ${Math.max(1, Math.round((ts - last.ts) / 1000))}s`;
+    last.prose = `${last.prose}\n${trimmed}`.trim();
     last.thoughtSec = Math.max(1, Math.round((ts - last.ts) / 1000));
     return;
   }
-  atoms.push({
-    id: `thought-${ts}`,
+  nodes.push({
     kind: "thought",
-    label: "Thinking…",
-    detail: trimmed,
-    status: "active",
+    id: `thought-${ts}`,
     ts,
+    status: "active",
     thoughtSec: 1,
+    prose: trimmed,
   });
 }
 
-function flushThoughts(atoms: JobStreamAtom[], endTs: number): void {
-  const last = atoms[atoms.length - 1];
+function flushThought(nodes: JobStreamNode[], endTs: number): void {
+  const last = nodes[nodes.length - 1];
   if (last?.kind === "thought" && last.status === "active") {
-    const sec = Math.max(1, Math.round((endTs - last.ts) / 1000));
     last.status = "done";
-    last.label = `Thought for ${sec}s`;
-    last.thoughtSec = sec;
+    last.thoughtSec = Math.max(1, Math.round((endTs - last.ts) / 1000));
   }
 }
 
-function closeActiveTool(
-  atoms: JobStreamAtom[],
-  name: string,
-  ok: boolean,
-  error?: string,
+function pushTask(
+  nodes: JobStreamNode[],
+  title: string,
+  ts: number,
+  phase?: string,
 ): void {
-  for (let i = atoms.length - 1; i >= 0; i--) {
-    const a = atoms[i]!;
-    if (a.status !== "active") continue;
-    if (a.kind === "read" && name.startsWith("fs_read")) {
-      atoms[i] = { ...a, status: ok ? "done" : "failed", detail: error ?? a.detail };
-      return;
-    }
-    if (a.kind === "edited" && (name === "fs_write" || name === "fs_edit")) {
-      atoms[i] = { ...a, status: ok ? "done" : "failed", detail: error ?? a.detail };
-      return;
-    }
-    if (a.kind === "shell" && name === "shell_exec") {
-      atoms[i] = { ...a, status: ok ? "done" : "failed", detail: error ?? a.detail };
-      return;
-    }
-    if (a.kind === "listed" && name === "fs_list") {
-      atoms[i] = { ...a, status: ok ? "done" : "failed" };
+  const trimmed = title.trim();
+  if (!trimmed) return;
+  const last = nodes[nodes.length - 1];
+  if (last?.kind === "task" && last.title === trimmed) return;
+  nodes.push({
+    kind: "task",
+    id: `task-${ts}-${nodes.length}`,
+    ts,
+    title: trimmed,
+    phase,
+  });
+}
+
+function ensureTask(nodes: JobStreamNode[], ts: number, phase?: string): void {
+  const lastTask = [...nodes].reverse().find((n) => n.kind === "task");
+  if (!lastTask) {
+    pushTask(nodes, buildPhaseTaskTitle(phase ?? "execute"), ts, phase);
+  }
+}
+
+function closeActiveStep(nodes: JobStreamNode[], ok: boolean, error?: string): void {
+  for (let i = nodes.length - 1; i >= 0; i--) {
+    const n = nodes[i]!;
+    if (n.kind === "step" && n.status === "active") {
+      nodes[i] = {
+        ...n,
+        status: ok ? "done" : "failed",
+        ...(error ? { technicalLabel: `${n.technicalLabel} · ${error.slice(0, 80)}` } : {}),
+      };
       return;
     }
   }
 }
 
-export function buildJobStream(
+function technicalLabel(name: string, args: Record<string, unknown>): string {
+  const path = pathFromArgs(args);
+  if (path) return `${name} ${fileBase(path)}`;
+  return name;
+}
+
+export function buildJobStreamTree(
   timeline: SSEEvent[],
   opts?: { running?: boolean },
-): JobStreamAtom[] {
-  const atoms: JobStreamAtom[] = [];
+): JobStreamNode[] {
+  const nodes: JobStreamNode[] = [];
   const running = opts?.running ?? false;
+  let lastResultTs = 0;
 
   for (const ev of timeline) {
     const ts = ev.timestamp ?? Date.now();
     const data = ev.data ?? {};
 
     if (ev.type === "assistant_text" && typeof data.text === "string") {
-      pushThoughtAtom(atoms, data.text, ts);
+      if (isNarration(data)) continue;
+      if (isRealLlmThinking(data)) {
+        pushThought(nodes, String(data.text), ts);
+      } else if (data.final === true) {
+        flushThought(nodes, ts);
+        pushThought(nodes, String(data.text), ts);
+        flushThought(nodes, ts + 1);
+      }
       continue;
     }
 
-    if (ev.type === "phase" && typeof data.message === "string") {
-      pushThoughtAtom(atoms, String(data.message), ts);
+    if (
+      ev.type === "phase" ||
+      ev.type === "memory" ||
+      ev.type === "classify" ||
+      ev.type === "skills" ||
+      ev.type === "explore"
+    ) {
+      flushThought(nodes, ts);
+      const phase = typeof data.phase === "string" ? data.phase : ev.type;
+      const title =
+        (data.task_title as string) ??
+        buildPhaseTaskTitle(
+          phase,
+          (data.message as string) ?? undefined,
+        );
+      pushTask(nodes, title, ts, phase);
       continue;
     }
 
-    if (atoms.length && atoms[atoms.length - 1]?.kind === "thought") {
-      flushThoughts(atoms, ts);
+    if (nodes.length && nodes[nodes.length - 1]?.kind === "thought") {
+      flushThought(nodes, ts);
     }
 
     if (ev.type === "tool_start") {
       const name = String(data.name ?? "tool");
       const args = (data.args as Record<string, unknown> | undefined) ?? {};
-      const path = pathFromArgs(args);
+      const phase = typeof data.task_phase === "string" ? data.task_phase : undefined;
+      ensureTask(nodes, ts, phase);
 
-      if (name === "fs_read" || name === "fs_read_many") {
-        atoms.push({
-          id: `read-${ts}-${atoms.length}`,
-          kind: "read",
-          label: path ? `Read ${fileBase(path)}` : "Read files",
-          detail: path || undefined,
-          status: "active",
-          ts,
-        });
-      } else if (name === "fs_write" || name === "fs_edit") {
-        atoms.push({
-          id: `edited-${ts}-${atoms.length}`,
-          kind: "edited",
-          label: path ? `Edited ${fileBase(path)}` : "Edited file",
-          detail: path || undefined,
-          status: "active",
-          ts,
-        });
-      } else if (name === "fs_list" || name === "fs_glob") {
-        atoms.push({
-          id: `listed-${ts}-${atoms.length}`,
-          kind: "listed",
-          label: "Listed project files",
-          status: "active",
-          ts,
-        });
-      } else if (name === "shell_exec") {
-        const cmd = String(args.command ?? "").slice(0, 48);
-        atoms.push({
-          id: `shell-${ts}-${atoms.length}`,
-          kind: "shell",
-          label: cmd ? `Ran ${cmd}` : "Ran command",
-          detail: cmd || undefined,
-          status: "active",
-          ts,
-        });
-      } else {
-        atoms.push({
-          id: `tool-${ts}-${atoms.length}`,
-          kind: "shell",
-          label: name,
-          status: "active",
-          ts,
-        });
-      }
+      const rawPaths = Array.isArray(data.file_paths)
+        ? (data.file_paths as string[])
+        : extractStepFilePaths(name, args);
+      const expectation =
+        (data.step_intent as string) ?? describeStepExpectation(name, args);
+
+      nodes.push({
+        kind: "step",
+        id: `step-${ts}-${nodes.length}`,
+        ts,
+        expectation,
+        files: toFileRefs(rawPaths),
+        status: "active",
+        technicalLabel: technicalLabel(name, args),
+      });
       continue;
     }
 
     if (ev.type === "tool_done") {
-      const name = String(data.name ?? "");
       const ok = data.ok === true;
       const err = typeof data.error === "string" ? data.error : undefined;
-      closeActiveTool(atoms, name, ok, err);
+      closeActiveStep(nodes, ok, err);
+      continue;
+    }
+
+    if (ev.type === "step_result") {
+      const summary = String(data.summary ?? "Resultado");
+      const evidence = Array.isArray(data.evidence)
+        ? (data.evidence as string[])
+        : [];
+      const ok = data.ok !== false;
+      nodes.push({
+        kind: "result",
+        id: `result-${ts}`,
+        ts,
+        summary,
+        evidence,
+        status: ok ? "done" : "failed",
+      });
+      lastResultTs = ts;
       continue;
     }
 
     if (ev.type === "validate_ok") {
-      atoms.push({
-        id: `validate-ok-${ts}`,
-        kind: "validate_ok",
-        label: "Build passed",
-        status: "done",
+      if (lastResultTs > 0 && ts - lastResultTs < 50) continue;
+      nodes.push({
+        kind: "result",
+        id: `result-${ts}`,
         ts,
+        summary: "Build passou",
+        evidence: ["Compilação OK", "Preview pronto para abrir"],
+        status: "done",
       });
+      lastResultTs = ts;
       continue;
     }
 
     if (ev.type === "validate_fail") {
-      atoms.push({
-        id: `validate-fail-${ts}`,
-        kind: "validate_fail",
-        label: "Build failed",
-        detail: typeof data.feedback === "string"
-          ? data.feedback.slice(0, 200)
+      if (lastResultTs > 0 && ts - lastResultTs < 50) continue;
+      const feedback =
+        typeof data.feedback === "string"
+          ? data.feedback.slice(0, 120)
           : typeof data.message === "string"
-            ? data.message.slice(0, 200)
-            : undefined,
-        status: "failed",
+            ? data.message.slice(0, 120)
+            : "Erro de compilação";
+      nodes.push({
+        kind: "result",
+        id: `result-${ts}`,
         ts,
+        summary: "Build falhou — corrigindo antes de entregar",
+        evidence: [feedback],
+        status: "failed",
       });
+      lastResultTs = ts;
       continue;
     }
 
     if (ev.type === "delivery_checkpoint") {
-      const files = Array.isArray(data.deliveryFiles) ? (data.deliveryFiles as string[]) : [];
-      atoms.push({
-        id: `delivery-${ts}`,
-        kind: "delivery",
-        label: files.length ? `Checkpoint · ${files.length} file(s)` : "Checkpoint",
-        detail: files.map(fileBase).join(", ") || undefined,
-        status: "done",
+      const files = Array.isArray(data.deliveryFiles)
+        ? (data.deliveryFiles as string[])
+        : [];
+      nodes.push({
+        kind: "result",
+        id: `result-${ts}`,
         ts,
+        summary: files.length
+          ? `Checkpoint · ${files.length} arquivo(s)`
+          : "Checkpoint salvo",
+        evidence: files.map(fileBase),
+        status: "done",
       });
       continue;
     }
 
     if (ev.type === "delivery_checkpoint_silent" || ev.type === "checkpoint_resume") {
-      atoms.push({
-        id: `resume-${ts}`,
-        kind: "resume",
-        label: "Resuming on server…",
-        status: "active",
-        ts,
-      });
+      pushTask(nodes, buildPhaseTaskTitle("resume"), ts, "resume");
       continue;
     }
 
     if (ev.type === "error") {
-      atoms.push({
+      nodes.push({
+        kind: "result",
         id: `error-${ts}`,
-        kind: "error",
-        label: typeof data.message === "string" ? data.message.slice(0, 120) : "Agent error",
-        status: "failed",
         ts,
+        summary:
+          typeof data.message === "string"
+            ? data.message.slice(0, 120)
+            : "Erro na execução",
+        evidence: [],
+        status: "failed",
       });
     }
   }
 
   if (running) {
-    const last = atoms[atoms.length - 1];
+    const last = nodes[nodes.length - 1];
     if (last?.kind === "thought" && last.status === "active") {
-      const sec = Math.max(1, Math.round((Date.now() - last.ts) / 1000));
-      last.label = `Thought for ${sec}s`;
-      last.thoughtSec = sec;
+      last.thoughtSec = Math.max(1, Math.round((Date.now() - last.ts) / 1000));
     }
   } else {
-    flushThoughts(atoms, Date.now());
-    for (let i = 0; i < atoms.length; i++) {
-      if (atoms[i]!.status === "active") {
-        atoms[i] = { ...atoms[i]!, status: "done" };
+    flushThought(nodes, Date.now());
+    for (let i = 0; i < nodes.length; i++) {
+      const n = nodes[i]!;
+      if (n.kind === "step" && n.status === "active") {
+        nodes[i] = { ...n, status: "done" };
       }
     }
   }
 
-  return atoms;
+  return nodes;
 }
 
-export function lastEditedFileFromAtoms(atoms: JobStreamAtom[]): string | null {
-  for (let i = atoms.length - 1; i >= 0; i--) {
-    const a = atoms[i]!;
-    if (a.kind === "edited" && a.status === "done" && a.detail) {
-      return fileBase(a.detail);
+/** @deprecated Use buildJobStreamTree */
+export const buildJobStream = buildJobStreamTree;
+
+export function lastEditedFileFromNodes(nodes: JobStreamNode[]): string | null {
+  for (let i = nodes.length - 1; i >= 0; i--) {
+    const n = nodes[i]!;
+    if (n.kind === "step" && n.status === "done" && n.files[0]) {
+      return n.files[0].fileName;
     }
   }
   return null;
 }
 
+function findActiveNode(nodes: JobStreamNode[]): JobStreamNode | null {
+  for (let i = nodes.length - 1; i >= 0; i--) {
+    const n = nodes[i]!;
+    if (n.kind === "step" && n.status === "active") return n;
+  }
+  for (let i = nodes.length - 1; i >= 0; i--) {
+    const n = nodes[i]!;
+    if (n.kind === "thought" && n.status === "active") return n;
+  }
+  const lastStep = [...nodes].reverse().find((n) => n.kind === "step");
+  if (lastStep) return lastStep;
+  const lastThought = [...nodes].reverse().find((n) => n.kind === "thought");
+  return lastThought ?? null;
+}
+
+function deriveMomentumTitle(
+  nodes: JobStreamNode[],
+  progress: Pick<AgentProgress, "message" | "statusHint" | "phase">,
+  cardStatus: CardStatus,
+  editedFile: string | null,
+): string {
+  const active = findActiveNode(nodes);
+
+  if (active?.kind === "thought") {
+    const line = active.prose.split("\n").filter(Boolean).pop() ?? "";
+    return truncateMomentum(line) || "Pensando…";
+  }
+  if (active?.kind === "step") {
+    return active.expectation;
+  }
+
+  if (cardStatus === "done") {
+    return editedFile ? `Pronto · ${editedFile}` : "Concluído";
+  }
+  if (cardStatus === "failed") {
+    const lastResult = [...nodes].reverse().find((n) => n.kind === "result");
+    if (lastResult?.status === "failed") return "Corrigindo build…";
+    return "Falhou";
+  }
+
+  const lastStep = [...nodes].reverse().find((n) => n.kind === "step");
+  if (lastStep) return lastStep.expectation;
+
+  const lastTask = [...nodes].reverse().find((n) => n.kind === "task");
+  if (lastTask) return truncateMomentum(lastTask.title);
+
+  if (progress.message) return truncateMomentum(progress.message);
+  if (progress.statusHint) return truncateMomentum(progress.statusHint);
+  if (progress.phase) return truncateMomentum(progress.phase);
+
+  return cardStatus === "working" ? "Trabalhando…" : "Aguardando…";
+}
+
 export function deriveCardView(
-  atoms: JobStreamAtom[],
-  progress: Pick<AgentProgress, "finished" | "lastFinishOk" | "canceled" | "autoResuming">,
-  opts?: { running?: boolean; tailCount?: number },
+  nodes: JobStreamNode[],
+  progress: Pick<
+    AgentProgress,
+    "finished" | "lastFinishOk" | "canceled" | "autoResuming" | "message" | "statusHint" | "phase"
+  >,
+  opts?: { running?: boolean },
 ): CardView {
   const running = opts?.running ?? !progress.finished;
-  const tailCount = opts?.tailCount ?? 5;
-  const last = atoms[atoms.length - 1];
+  const last = nodes[nodes.length - 1];
   const hasFailedTerminal =
-    last?.status === "failed" ||
-    last?.kind === "validate_fail" ||
-    last?.kind === "error";
-  const editedFile = lastEditedFileFromAtoms(atoms);
+    (last?.kind === "result" && last.status === "failed") ||
+    (last?.kind === "step" && last.status === "failed");
+  const editedFile = lastEditedFileFromNodes(nodes);
 
   let cardStatus: CardStatus = "idle";
   let headerBadge: CardView["headerBadge"] = null;
@@ -320,7 +442,11 @@ export function deriveCardView(
   if (progress.canceled) {
     cardStatus = "failed";
     headerBadge = "failed";
-  } else if (running || progress.autoResuming || last?.status === "active") {
+  } else if (
+    running ||
+    progress.autoResuming ||
+    nodes.some((n) => (n.kind === "step" || n.kind === "thought") && n.status === "active")
+  ) {
     cardStatus = "working";
     headerBadge = "working";
   } else if (hasFailedTerminal || progress.lastFinishOk === false) {
@@ -329,52 +455,41 @@ export function deriveCardView(
   } else if (progress.finished && progress.lastFinishOk === true) {
     cardStatus = "done";
     headerBadge = "done";
-  } else if (progress.finished && atoms.length > 0) {
+  } else if (progress.finished && nodes.length > 0) {
     cardStatus = "working";
     headerBadge = "working";
   }
 
-  let title = "Working on your request";
-  if (last?.status === "active") {
-    title = last.label;
-  } else if (editedFile) {
-    title = `Edited ${editedFile}`;
-  } else if (last?.kind === "validate_fail") {
-    title = "Fixing build errors";
-  } else if (cardStatus === "done") {
-    title = "Done";
-  } else if (cardStatus === "failed") {
-    title = "Run failed";
-  }
+  const title = deriveMomentumTitle(nodes, progress, cardStatus, editedFile);
+  const activeNode = running ? findActiveNode(nodes) : null;
 
-  const tailSteps: CardTailStep[] = atoms.slice(-tailCount).map((a) => ({
-    id: a.id,
-    label: a.label,
-    status: a.status,
-  }));
-
-  return { cardStatus, headerBadge, editedFile, title, tailSteps };
+  return { cardStatus, headerBadge, editedFile, title, activeNode };
 }
 
-export function deriveInspectorView(atoms: JobStreamAtom[]): InspectorView {
-  const thoughts: InspectorThought[] = [];
-  for (const a of atoms) {
-    if (a.kind !== "thought") continue;
-    const lines = (a.detail ?? "").split("\n").filter(Boolean);
+export function deriveInspectorView(nodes: JobStreamNode[]): InspectorView {
+  const thoughts: InspectorView["thoughts"] = [];
+  for (const n of nodes) {
+    if (n.kind !== "thought") continue;
+    const lines = n.prose.split("\n").filter(Boolean);
     if (!lines.length) continue;
-    thoughts.push({
-      id: a.id,
-      thoughtSec: a.thoughtSec ?? 1,
-      lines,
-    });
+    thoughts.push({ id: n.id, thoughtSec: n.thoughtSec, lines });
   }
 
-  const log = atoms.filter((a) => a.kind !== "thought");
-  const errors = atoms.filter(
-    (a) => a.status === "failed" || a.kind === "validate_fail" || a.kind === "error",
+  const errors = nodes.filter(
+    (n) =>
+      (n.kind === "result" && n.status === "failed") ||
+      (n.kind === "step" && n.status === "failed"),
   );
 
-  return { thoughts, log, errors };
+  return { nodes, thoughts, errors };
+}
+
+export function miniVisibleNodes(nodes: JobStreamNode[]): JobStreamNode[] {
+  const active = findActiveNode(nodes);
+  if (!active) return [];
+  if (active.kind === "thought") return [active];
+  if (active.kind === "step") return [active];
+  return [];
 }
 
 /** Reidrata timeline mínima a partir de executionLog persistido no DB. */
@@ -389,7 +504,13 @@ export function timelineFromExecutionLog(lines: string[]): SSEEvent[] {
       out.push({
         type: "tool_start",
         timestamp: t,
-        data: { name: "fs_read", args: { path: trimmed.replace(/^read\s+/i, "") } },
+        data: {
+          name: "fs_read",
+          args: { path: trimmed.replace(/^read\s+/i, "") },
+          step_intent: describeStepExpectation("fs_read", {
+            path: trimmed.replace(/^read\s+/i, ""),
+          }),
+        },
       });
       out.push({ type: "tool_done", timestamp: t + 1, data: { name: "fs_read", ok: true } });
     } else if (/^edit/i.test(trimmed) || /editou|edited/i.test(trimmed)) {
@@ -400,7 +521,11 @@ export function timelineFromExecutionLog(lines: string[]): SSEEvent[] {
       });
       out.push({ type: "tool_done", timestamp: t + 1, data: { name: "fs_edit", ok: true } });
     } else {
-      out.push({ type: "assistant_text", timestamp: t, data: { text: trimmed } });
+      out.push({
+        type: "assistant_text",
+        timestamp: t,
+        data: { text: trimmed, delta: true },
+      });
     }
   }
   return out;
