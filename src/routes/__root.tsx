@@ -11,6 +11,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { AuthProvider } from "@/lib/auth";
 import { ThemeProvider } from "@/lib/theme";
 import { SmoothScroll } from "@/lib/smooth-scroll";
+import { Analytics } from "@vercel/analytics/react";
 import { SupabaseConfigBanner } from "@/components/SupabaseConfigBanner";
 
 import appCss from "../styles.css?url";
@@ -141,6 +142,7 @@ function RootComponent() {
             <Outlet />
           </SmoothScroll>
           <Toaster richColors position="top-right" />
+          <Analytics />
         </AuthProvider>
       </ThemeProvider>
     </QueryClientProvider>
