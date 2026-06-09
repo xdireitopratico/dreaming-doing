@@ -1012,6 +1012,11 @@ export class AgentLoop {
                 `cd /home/user && git add -A && git commit -m "${commitMsg}" 2>&1 || true`,
             },
           });
+          // unconditional preview_sync + tick drive on every successful fs_* (live during first-gen seed + follow-up edits)
+          this.emit("preview_sync", {
+            path: modifiedPaths[0],
+            reason: "fs_success",
+          });
         }
 
         const assistantMsg: ChatMessage = {

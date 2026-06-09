@@ -765,7 +765,7 @@ Deno.serve(async (req) => {
       // com sandbox pré-existente pode reusar.
       // + hasApproved for plan+follow-up proof.
       const allocateSandboxLocal = hasApprovedPlanInHistory ||
-        (!looksLikeInteraction && projectFileCount > 0) ||
+        !looksLikeInteraction ||
         projectHasSandbox;
 
       // Fase 4.7: o código abaixo (reg + sandbox local) era DEAD CODE — o

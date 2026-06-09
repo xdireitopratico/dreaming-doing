@@ -1,10 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { PreviewEmptyGuide } from "@/components/editor/PreviewEmptyGuide";
-import {
-  previewDeviceWidth,
-  type PreviewDevice,
-} from "@/components/editor/PreviewViewportChrome";
+import { previewDeviceWidth, type PreviewDevice } from "@/components/editor/PreviewViewportChrome";
 import { buildPreviewUrl } from "@/lib/project-routes";
 import { BuildConsole } from "@/components/editor/BuildConsole";
 import type { AgentProgress } from "@/lib/agent-progress";
@@ -102,10 +99,7 @@ export function PreviewFrame({
 
   const indexFile = useMemo(() => {
     return files.find(
-      (f) =>
-        f.path === "index.html" ||
-        f.path === "/index.html" ||
-        f.path.endsWith("/index.html"),
+      (f) => f.path === "index.html" || f.path === "/index.html" || f.path.endsWith("/index.html"),
     );
   }, [files]);
 
@@ -121,16 +115,12 @@ export function PreviewFrame({
     return null;
   }, [devUrl, indexFile, isReactProject]);
 
-  const hasBuiltApp = agentHasRun && !isNoFiles;
+  const hasBuiltApp = (agentHasRun || agentRunning) && !isNoFiles;
 
   const showConnecting =
-    isReactProject &&
-    hasBuiltApp &&
-    !devUrl &&
-    (booting || warming || previewSyncing);
+    isReactProject && hasBuiltApp && !devUrl && (booting || warming || previewSyncing);
 
-  const showBootSpinner =
-    (booting && !iframeSrc && !isNoFiles && (!agentRunning || showConnecting)) || showConnecting;
+  const showBootSpinner = (booting && !iframeSrc && (!isNoFiles || agentRunning)) || showConnecting;
 
   const showReconnecting = reconnecting || (sandboxStale && (booting || warming || previewSyncing));
 
@@ -148,12 +138,13 @@ export function PreviewFrame({
 
   const showLetsBuild =
     !hasBuiltApp &&
+    !agentRunning &&
     (showStaleGuide ||
       isNoFiles ||
       (!iframeSrc && !previewContent && !booting && !warming && !showReconnecting));
 
   const canShowIframe =
-    !nativeBuildPreview && Boolean(iframeSrc) && !sandboxStale && !isNoFiles;
+    !nativeBuildPreview && Boolean(iframeSrc) && !sandboxStale && (!isNoFiles || agentRunning);
 
   const showNativeConsole = nativeBuildPreview && projectStack === "android-native";
 
@@ -168,7 +159,11 @@ export function PreviewFrame({
       <div
         className="forge-preview-viewport min-h-0 flex-1"
         data-device={device}
-        style={deviceWidth ? ({ "--forge-preview-device-width": deviceWidth } as React.CSSProperties) : undefined}
+        style={
+          deviceWidth
+            ? ({ "--forge-preview-device-width": deviceWidth } as React.CSSProperties)
+            : undefined
+        }
       >
         {showNativeConsole ? (
           <BuildConsole
@@ -184,7 +179,9 @@ export function PreviewFrame({
           <div className="flex h-full flex-col items-center justify-center gap-3 bg-white p-8 text-center">
             <p className="text-sm text-neutral-700 max-w-sm leading-relaxed">{bootError}</p>
             {onRefresh && bootError.includes("agente") && (
-              <p className="text-xs text-neutral-400">Peça uma alteração no chat para a IA começar.</p>
+              <p className="text-xs text-neutral-400">
+                Peça uma alteração no chat para a IA começar.
+              </p>
             )}
             {onRefresh && !bootError.includes("agente") && (
               <button
@@ -221,8 +218,8 @@ export function PreviewFrame({
           <div className="flex h-full flex-col items-center justify-center gap-3 bg-neutral-50 p-8 text-center">
             <p className="text-sm font-medium text-neutral-800">Preview em repouso</p>
             <p className="text-sm text-neutral-500 max-w-sm leading-relaxed">
-              Sem interação por 10 minutos — o preview foi pausado para economizar recursos.
-              Mova o mouse ou clique para reativar.
+              Sem interação por 10 minutos — o preview foi pausado para economizar recursos. Mova o
+              mouse ou clique para reativar.
             </p>
           </div>
         ) : !showNativeConsole && !bootError && canShowIframe && iframeSrc ? (
@@ -270,8 +267,8 @@ export function PreviewFrame({
             <div className="max-w-sm space-y-2">
               <p className="text-sm font-medium text-neutral-900">Preview do app construído</p>
               <p className="text-sm text-neutral-500 leading-relaxed">
-                O agente já alterou arquivos neste projeto. O preview ao vivo precisa subir no sandbox
-                E2B antes de mostrar a landing aqui.
+                O agente já alterou arquivos neste projeto. O preview ao vivo precisa subir no
+                sandbox E2B antes de mostrar a landing aqui.
               </p>
             </div>
             {onRefresh && (
@@ -284,9 +281,7 @@ export function PreviewFrame({
                 Subir preview agora
               </button>
             )}
-            {bootError && (
-              <p className="text-xs text-amber-800/90 max-w-md">{bootError}</p>
-            )}
+            {bootError && <p className="text-xs text-amber-800/90 max-w-md">{bootError}</p>}
           </div>
         ) : !showNativeConsole && !bootError && showLetsBuild ? (
           <PreviewEmptyGuide

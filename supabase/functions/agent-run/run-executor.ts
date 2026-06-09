@@ -293,8 +293,7 @@ export async function executeAgentRun(
     } catch {
       projectFileCount = 0;
     }
-    allocateSandboxLocal = (!looksLikeInteraction && projectFileCount > 0) ||
-      projectHasSandbox;
+    allocateSandboxLocal = !looksLikeInteraction || projectHasSandbox;
   }
 
   // Build runMetaBase + update run

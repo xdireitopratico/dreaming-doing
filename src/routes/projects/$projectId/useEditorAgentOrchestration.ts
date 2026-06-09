@@ -209,7 +209,7 @@ export function useEditorAgentOrchestration({
       return;
     }
     if (!supportsLivePreview || !e2bConnected || previewBoot.booting || previewE2bCircuit) return;
-    if (fileCount === 0 || devUrl) return;
+    if (devUrl) return;
     if (previewBootDuringRunRef.current) return;
     previewBootDuringRunRef.current = true;
     void previewBoot.bootWithRetry({ force: true, silent: true });
@@ -257,7 +257,7 @@ export function useEditorAgentOrchestration({
   const syncPreviewToSandbox = useCallback(
     async (reload: boolean) => {
       if (!supportsLivePreview || !e2bConnected || previewE2bCircuit) return;
-      if (fileCount === 0) return;
+      if (fileCount === 0 && !running) return;
       if (previewSyncInFlightRef.current) return;
       previewSyncInFlightRef.current = true;
       setPreviewSyncInFlight(true);
@@ -290,11 +290,15 @@ export function useEditorAgentOrchestration({
 
   useEffect(() => {
     if (!filesSyncKey || filesSyncKey === lastSyncedFilesKeyRef.current) return;
-    if (!supportsLivePreview || !e2bConnected || previewE2bCircuit || fileCount === 0) return;
+    if (!supportsLivePreview || !e2bConnected || previewE2bCircuit || (fileCount === 0 && !running))
+      return;
     lastSyncedFilesKeyRef.current = filesSyncKey;
-    const t = window.setTimeout(() => {
-      void syncPreviewToSandbox(activeView === "preview" || running);
-    }, fileSyncDebounceMs);
+    const t = window.setTimeout(
+      () => {
+        void syncPreviewToSandbox(activeView === "preview" || running);
+      },
+      running ? 0 : fileSyncDebounceMs,
+    );
     return () => window.clearTimeout(t);
   }, [
     filesSyncKey,
@@ -311,11 +315,15 @@ export function useEditorAgentOrchestration({
   useEffect(() => {
     const tick = agent.progress.previewSyncTick ?? 0;
     if (tick <= lastPreviewSyncTickRef.current) return;
-    if (!supportsLivePreview || !e2bConnected || previewE2bCircuit || fileCount === 0) return;
+    if (!supportsLivePreview || !e2bConnected || previewE2bCircuit || (fileCount === 0 && !running))
+      return;
     lastPreviewSyncTickRef.current = tick;
-    const t = window.setTimeout(() => {
-      void syncPreviewToSandbox(true);
-    }, previewTickDebounceMs);
+    const t = window.setTimeout(
+      () => {
+        void syncPreviewToSandbox(true);
+      },
+      running ? 0 : previewTickDebounceMs,
+    );
     return () => window.clearTimeout(t);
   }, [
     agent.progress.previewSyncTick,

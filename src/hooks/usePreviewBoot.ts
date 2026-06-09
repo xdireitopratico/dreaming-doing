@@ -30,8 +30,6 @@ type BootOpts = {
   silent?: boolean;
 };
 
-
-
 const RETRY_DELAYS_MS = [0, 5_000, 15_000, 30_000];
 const PROBE_FAIL_BEFORE_FORCE = 4;
 const E2B_CIRCUIT_BACKOFF_MS = 120_000; // long backoff when server reports creation circuit (stops infinite creation spam)
@@ -112,7 +110,8 @@ export function usePreviewBoot(projectId: string, opts?: UsePreviewBootOpts) {
     async (opts?: BootOpts) => {
       if (opts?.probeOnly) {
         if (idle) return null;
-        if (fileCount === 0 && isNoFilesPreviewError(lastError)) return null;
+        if (fileCount === 0 && isNoFilesPreviewError(lastError) && !opts?.force && !opts?.syncOnly)
+          return null;
         try {
           const body = await callPreviewBoot({ ...opts, silent: true });
           if (body?.stale || body?.code === "e2b_sandbox_stale") {
@@ -174,7 +173,6 @@ export function usePreviewBoot(projectId: string, opts?: UsePreviewBootOpts) {
             }
           } else {
             setBootLogs(null);
-
           }
           logEditorTelemetryEvent(
             "preview",
@@ -188,16 +186,21 @@ export function usePreviewBoot(projectId: string, opts?: UsePreviewBootOpts) {
       } catch (e) {
         const msg = e instanceof Error ? e.message : "Não foi possível abrir o preview";
         const code = (e as any)?.code;
-        const isCircuit = code === "e2b_creation_circuit" || /circuit|cooling|e2b_creation_circuit/i.test(msg);
-        const isNoFiles = code === "no_files" || /sem arquivos|ainda não gerou|sem projeto/i.test(msg);
+        const isCircuit =
+          code === "e2b_creation_circuit" || /circuit|cooling|e2b_creation_circuit/i.test(msg);
+        const isNoFiles =
+          code === "no_files" || /sem arquivos|ainda não gerou|sem projeto/i.test(msg);
         const isStale = isStaleE2bPreviewError(msg, code);
         if (isStale) setSandboxStale(true);
         setLastError(
-          isCircuit
-            ? `E2B creation blocked (circuit open). ${msg}`
-            : formatE2bUserError(msg, code),
+          isCircuit ? `E2B creation blocked (circuit open). ${msg}` : formatE2bUserError(msg, code),
         );
-        logEditorTelemetryEvent("preview", "boot_fail", "error", (isCircuit ? "circuit:" : isNoFiles ? "nofiles:" : "") + msg.slice(0, 240));
+        logEditorTelemetryEvent(
+          "preview",
+          "boot_fail",
+          "error",
+          (isCircuit ? "circuit:" : isNoFiles ? "nofiles:" : "") + msg.slice(0, 240),
+        );
         // No files: silently show empty guide, never spam toasts or retry loops
         if (!opts?.silent && !isNoFiles && !isStale && !msg.includes("agente") && !isCircuit) {
           toast.error(msg.length > 140 ? `${msg.slice(0, 140)}…` : msg);
@@ -231,7 +234,9 @@ export function usePreviewBoot(projectId: string, opts?: UsePreviewBootOpts) {
       for (let attempt = 0; attempt < maxAttempts; attempt++) {
         if (attempt > 0) {
           // extra backoff on repeated failures; circuit path already short-circuits above
-          const delay = RETRY_DELAYS_MS[attempt] + (lastError && /circuit/i.test(lastError) ? E2B_CIRCUIT_BACKOFF_MS : 0);
+          const delay =
+            RETRY_DELAYS_MS[attempt] +
+            (lastError && /circuit/i.test(lastError) ? E2B_CIRCUIT_BACKOFF_MS : 0);
           await new Promise((r) => setTimeout(r, delay));
         }
         bootAttemptsRef.current = attempt + 1;
