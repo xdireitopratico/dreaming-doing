@@ -72,18 +72,26 @@ class MockSB {
   queries: QB[] = [];
   messageInserts = 0;
   messageUpdates = 0;
-  private messageRow: { id: string; parts?: Array<{ type: string; text: string }> } | null = null;
+  private messageRow: {
+    id: string;
+    parts?: Array<{ type: string; text: string }>;
+    meta?: Record<string, unknown>;
+  } | null = null;
+  messageWriteMetas: Array<Record<string, unknown> | undefined> = [];
   noteMessageWrite(table: string, op: "insert" | "update", payload: unknown) {
     if (table !== "messages") return;
+    const p = payload as { parts?: Array<{ type: string; text: string }>; meta?: Record<string, unknown> } | null;
+    if (p?.meta) this.messageWriteMetas.push(p.meta);
     if (op === "insert") {
       this.messageInserts++;
-      this.messageRow = { id: "msg-live" };
+      this.messageRow = { id: "msg-live", meta: p?.meta };
       return;
     }
     this.messageUpdates++;
-    const parts = (payload as { parts?: Array<{ type: string; text: string }> } | null)?.parts;
+    const parts = p?.parts;
     if (!this.messageRow) this.messageRow = { id: "msg-live" };
     if (parts) this.messageRow.parts = parts;
+    if (p?.meta) this.messageRow.meta = p.meta;
   }
   set(table: string, data: unknown) { this.r.set(table, { data }); }
   from(table: string): QB { const q = new QB(this, table); this.queries.push(q); return q; }
@@ -396,6 +404,24 @@ Deno.test("12 persistAssistantStep reutiliza uma mensagem por run", async () => 
   assertEquals(r.ok, true);
   assertEquals(sb.messageInserts, 1, `inserts=${sb.messageInserts}`);
   assert(sb.messageUpdates >= 2, `updates=${sb.messageUpdates}`);
+  const stepMetas = sb.messageWriteMetas.filter((m) => m?.partial === true);
+  assert(stepMetas.length >= 2, `step metas with partial=true: ${stepMetas.length}`);
+  const finalMeta = sb.messageWriteMetas.find((m) => typeof m?.finishedAt === "string");
+  assertExists(finalMeta);
+  assertEquals(finalMeta?.partial, false);
+});
+
+Deno.test("12b persistAssistantStep meta.partial=true em cada step", async () => {
+  const { loop, cheap, main, sb } = f({ msgs: [{ role: "user", content: "Crie landing" }], files: [] });
+  cheap.queue(cr(3, "new_project", "Landing"));
+  main.queue(er("Lendo...", tc("t1", "fs_read", { path: "src/App.tsx" })));
+  main.queue(tr("Pronto!"));
+  const r = await loop.run();
+  assertEquals(r.ok, true);
+  for (const meta of sb.messageWriteMetas) {
+    if (meta?.finishedAt) continue;
+    if (meta?.step !== undefined) assertEquals(meta.partial, true);
+  }
 });
 
 Deno.test("13 skills detectadas", async () => {

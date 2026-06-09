@@ -948,17 +948,34 @@ body:has(.editor-workspace) {
 .lovable-job-mini-card {
   display: block;
   width: 100%;
+  align-self: stretch;
   margin: 8px 0 12px;
-  padding: 12px 14px;
   border-radius: 12px;
   border: 1px solid var(--forge-border);
   background: rgba(14, 16, 22, 0.85);
-  cursor: pointer;
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
   text-align: left;
 }
 
-.lovable-job-mini-card:hover {
+.lovable-job-mini-card-body {
+  display: block;
+  width: 100%;
+  padding: 12px 14px;
+  border: none;
+  border-radius: inherit;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+}
+
+.lovable-job-mini-card-body:hover {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.lovable-job-mini-card:hover,
+.lovable-job-mini-card:has(.lovable-job-mini-card-body:hover) {
   border-color: rgba(99, 130, 255, 0.45);
 }
 
@@ -1005,6 +1022,10 @@ body:has(.editor-workspace) {
 }
 
 .lovable-done-bubble {
+  display: block;
+  width: 100%;
+  align-self: stretch;
+  box-sizing: border-box;
   margin: 10px 0 0;
   padding: 10px 12px;
   border-radius: 12px;
@@ -1046,7 +1067,7 @@ body:has(.editor-workspace) {
 }
 
 .lovable-job-mini-card-title {
-  margin: 0 0 8px;
+  margin: 0;
   font-size: 14px;
   font-weight: 500;
   line-height: 1.4;

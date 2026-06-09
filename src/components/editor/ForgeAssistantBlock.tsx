@@ -30,15 +30,20 @@ interface ForgeAssistantBlockProps {
 function resolveClosingText(
   progress: AgentProgress | null,
   message?: ChatMessage,
-  showMiniJob?: boolean,
+  isBuildRun?: boolean,
 ): string | null {
-  if (showMiniJob && progress) {
-    const fromStream = progress.streamText?.trim();
-    if (fromStream) return fromStream;
-    const fromSummary = progress.summary?.trim();
-    if (fromSummary) return fromSummary;
+  const messageText = message?.content?.trim() || null;
+  if (!isBuildRun) {
+    return progress?.streamText?.trim() || messageText;
   }
-  return message?.content?.trim() || null;
+  if (progress) {
+    return (
+      progress.streamText?.trim() ||
+      progress.summary?.trim() ||
+      messageText
+    );
+  }
+  return messageText;
 }
 
 function JobDoneBubble() {
@@ -80,17 +85,21 @@ export function ForgeAssistantBlock({
   const approvedPlan = storedPlan?.status === "approved" ? storedPlan.plan : null;
   const diffs = effectiveProgress?.diffs ?? [];
 
-  const isAgentJobTurn = !!runId || isAgentJobMessage(message);
+  const isBuildRun = !!runId || isAgentJobMessage(message);
   const showJobBubble =
+    isBuildRun &&
     !!effectiveProgress &&
-    isAgentJobTurn &&
-    (!!runId ||
+    (
+      !!runId ||
+      isActive ||
       (effectiveProgress.timeline?.length ?? 0) > 0 ||
-      effectiveProgress.finished);
+      (effectiveProgress.tools?.length ?? 0) > 0
+    );
 
   const closingText = resolveClosingText(effectiveProgress, message, showJobBubble);
 
   const showDoneBubble =
+    !!runId &&
     !!effectiveProgress?.finished &&
     !isActive &&
     showJobBubble &&

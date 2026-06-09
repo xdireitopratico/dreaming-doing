@@ -183,9 +183,11 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
       const chunk = (data.text as string) ?? "";
       const append = data.append === true || data.delta === true;
       const narration = data.narration === true;
+      const thinking = data.thinking === true;
+      const skipStream = narration || thinking;
       return {
         ...prev,
-        streamText: narration
+        streamText: skipStream
           ? prev.streamText
           : append
             ? `${prev.streamText ?? ""}${chunk}`

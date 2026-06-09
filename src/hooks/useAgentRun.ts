@@ -88,11 +88,12 @@ export function useAgentRun() {
     lastSeqRef.current = row.seq;
     const event = streamRowToSSEEvent(row);
     const t = event.type;
-    const terminal = t === "finish" || t === "done" || t === "canceled" || t === "error";
+    const terminal = t === "finish" || t === "canceled" || t === "error";
+    const freezeTerminal = t === "finish" || t === "done" || t === "canceled" || t === "error";
     setProgress((prev) => {
       const next = applyAgentProgressEvent(prev, event);
       const rid = runIdRef.current;
-      if (terminal && rid) {
+      if (freezeTerminal && rid) {
         const snap = freezeSnapshot({
           ...next,
           streamText: next.streamText ?? prev.streamText,

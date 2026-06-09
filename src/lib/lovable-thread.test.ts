@@ -245,6 +245,21 @@ describe("buildLovableThread", () => {
     expect(resolveAssistantProgress(slot)?.timeline.length).toBeGreaterThan(0);
   });
 
+  it("concierge sem runId: resposta live aparece no turno pendente", () => {
+    const messages = [msg("u1", "user", "quero uma landing de cafeteria")];
+    const progress = {
+      ...initialAgentProgress,
+      finished: true,
+      lastFinishOk: true,
+      streamText: "Ótimo! Me conta o estilo visual que você imagina.",
+    };
+    const thread = buildLovableThread(messages, progress, {});
+    expect(thread).toHaveLength(2);
+    const slot = thread[1] as Extract<(typeof thread)[number], { kind: "assistant" }>;
+    expect(slot.live?.streamText).toContain("estilo visual");
+    expect(resolveAssistantProgress(slot)?.streamText).toContain("estilo visual");
+  });
+
   it("erro de connect sem runId aparece no turno pendente", () => {
     const messages = [msg("u1", "user", "build")];
     const progress = {
