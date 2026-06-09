@@ -282,6 +282,8 @@ export async function executeAgentRun(
     const chunkLimits = evaluateChunkLimits(
       prevMeta,
       finalRun?.started_at as string | undefined,
+      Date.now(),
+      { buildFix: result.buildFix === true || prevMeta.buildFix === true },
     );
 
     if (chunkLimits.exceeded) {
@@ -341,6 +343,10 @@ export async function executeAgentRun(
         meta: {
           ...prevMeta,
           chunkGeneration: chunkLimits.chunkGeneration,
+          ...(chunkLimits.buildFixAttempts != null
+            ? { buildFixAttempts: chunkLimits.buildFixAttempts }
+            : {}),
+          buildFix: result.buildFix === true || prevMeta.buildFix === true,
           lastChunkAt: new Date().toISOString(),
           lastChunkMessage: result.error ?? null,
           betweenChunks: true,

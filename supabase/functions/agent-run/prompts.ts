@@ -26,6 +26,10 @@ import {
 } from "@forge/ui";
 \`\`\`
 
+**PROIBIDO** importar paths profundos que não existem no bundle:
+- \`@forge/ui/components/Motion\`, \`@forge/ui/composites/HeroSignature\`, etc.
+- Use **somente** \`from "@forge/ui"\` (re-exporta FadeIn, HeroSignature, Button, etc.)
+
 **Primitives:** Button, Input, Card, Badge, Avatar, Separator, Skeleton, Tooltip, Dialog, Toast, Motion
 
 **Composites (use em TODA landing/página marketing — mínimo 3):**

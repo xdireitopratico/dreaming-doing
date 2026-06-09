@@ -307,6 +307,7 @@ export async function executeAgentJob(
         approvedPlanBuild: !planMode && !!preMeta.planSourceRunId,
         planSummary: typeof preMeta.planSummary === "string" ? preMeta.planSummary : undefined,
         planSteps: coercePlanStepsFromMeta(preMeta.steps),
+        buildFixResume: preMeta.buildFix === true,
       },
   );
 
@@ -316,6 +317,7 @@ export async function executeAgentJob(
     error?: string;
     steps: number;
     resumable?: boolean;
+    buildFix?: boolean;
     canceled?: boolean;
     toolsUsed?: string[];
   };

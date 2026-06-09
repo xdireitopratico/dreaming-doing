@@ -20,6 +20,27 @@ export interface TypeCheckResult {
   output: string;
 }
 
+function outputIndicatesBuildFailure(output: string): boolean {
+  const o = output.toLowerCase();
+  return (
+    o.includes("error ts") ||
+    o.includes("failed to resolve import") ||
+    o.includes("could not resolve") ||
+    o.includes("module not found") ||
+    o.includes("build failed") ||
+    o.includes("rollup failed") ||
+    o.includes("✘ [") ||
+    o.includes("[plugin:vite")
+  );
+}
+
+function shellOutput(result: { output?: unknown }): string {
+  return typeof result.output === "object"
+    ? (result.output as { stderr?: string; stdout?: string }).stderr ??
+      (result.output as { stderr?: string; stdout?: string }).stdout ?? ""
+    : String(result.output ?? "");
+}
+
 export class RuntimeObserver {
   private reg: ToolRegistry;
 
@@ -40,16 +61,16 @@ export class RuntimeObserver {
           name: "shell_exec",
           arguments: { command: "npm install 2>&1" },
         });
-        const installOutput = typeof install.output === "object"
-          ? (install.output as any).stderr ?? (install.output as any).stdout ?? ""
-          : String(install.output ?? "");
+        const installOutput = shellOutput(install);
         checks.push({ name: "install", ok: install.ok, output: installOutput.slice(0, 3000) });
         if (!install.ok) {
           return { passed: false, checks, feedback: `[install] ${installOutput.slice(0, 2000)}` };
         }
       }
-    } catch {
-      checks.push({ name: "install", ok: true, output: "(sandbox não disponível)" });
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "install check falhou";
+      checks.push({ name: "install", ok: false, output: msg });
+      return { passed: false, checks, feedback: `[install] ${msg}` };
     }
 
     // 0.5. Design System Check — enforça @forge/ui + tokens
@@ -66,12 +87,12 @@ export class RuntimeObserver {
         name: "shell_exec",
         arguments: { command: "npm run build 2>&1" },
       });
-      const buildOutput = typeof build.output === "object"
-        ? (build.output as any).stderr ?? (build.output as any).stdout ?? ""
-        : String(build.output ?? "");
-      checks.push({ name: "build", ok: build.ok, output: buildOutput.slice(0, 3000) });
-    } catch (e: any) {
-      checks.push({ name: "build", ok: true, output: "(sandbox não disponível)" });
+      const buildOutput = shellOutput(build);
+      const buildOk = build.ok && !outputIndicatesBuildFailure(buildOutput);
+      checks.push({ name: "build", ok: buildOk, output: buildOutput.slice(0, 3000) });
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "build check falhou";
+      checks.push({ name: "build", ok: false, output: msg });
     }
 
     // 2. TypeScript check (se existir tsconfig)
@@ -83,13 +104,12 @@ export class RuntimeObserver {
           name: "shell_exec",
           arguments: { command: "npx tsc --noEmit --project tsconfig.json 2>&1 || true" },
         });
-        const tscOutput = typeof tsc.output === "object"
-          ? (tsc.output as any).stderr ?? (tsc.output as any).stdout ?? ""
-          : String(tsc.output ?? "");
-        const ok = tscOutput.length < 10 || tscOutput.includes("error TS") === false;
+        const tscOutput = shellOutput(tsc);
+        const ok = !outputIndicatesBuildFailure(tscOutput);
         checks.push({ name: "typescript", ok, output: tscOutput.slice(0, 2000) });
-      } catch {
-        checks.push({ name: "typescript", ok: true, output: "(npx tsc indisponível)" });
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : "typescript check falhou";
+        checks.push({ name: "typescript", ok: false, output: msg });
       }
     }
 
@@ -166,12 +186,10 @@ export class RuntimeObserver {
         name: "shell_exec",
         arguments: { command: `npx tsc --noEmit --project tsconfig.json ${fileArgs} 2>&1 || true` },
       });
-      const tscOutput = typeof tsc.output === "object"
-        ? (tsc.output as any).stderr ?? (tsc.output as any).stdout ?? ""
-        : String(tsc.output ?? "");
+      const tscOutput = shellOutput(tsc);
 
       const errors: TypeCheckResult["errors"] = [];
-      if (tscOutput.includes("error TS")) {
+      if (outputIndicatesBuildFailure(tscOutput)) {
         // Parse simples de erros TypeScript
         for (const line of tscOutput.split("\n")) {
           const match = line.match(/^(.+\.(ts|tsx))\((\d+),(\d+)\):\s+error\s+(TS\d+):\s+(.+)$/);
@@ -188,12 +206,13 @@ export class RuntimeObserver {
       }
 
       return {
-        ok: errors.length === 0,
+        ok: errors.length === 0 && !outputIndicatesBuildFailure(tscOutput),
         errors,
         output: tscOutput.slice(0, 2000),
       };
-    } catch {
-      return { ok: true, errors: [], output: "(quick type-check indisponível)" };
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "quick type-check falhou";
+      return { ok: false, errors: [], output: msg };
     }
   }
 
@@ -272,8 +291,9 @@ export class RuntimeObserver {
       }
 
       return { name: "design-system", ok: true, output: formatDesignFeedback([]) };
-    } catch {
-      return { name: "design-system", ok: true, output: "(design-system check indisponível)" };
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "design-system check falhou";
+      return { name: "design-system", ok: false, output: msg };
     }
   }
 

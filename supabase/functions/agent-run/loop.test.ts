@@ -113,9 +113,20 @@ class MockReg extends ToolRegistry {
     this.conds.push({ name, ok, out, match });
   }
   pass() {
-    // sandboxPathExists (observer) + build/typecheck commands
+    const landingApp =
+      'import { HeroSignature, BentoGrid, CTASignature, FadeIn, NavShell, FooterColumns, StatsRibbon } from "@forge/ui";\n' +
+      'export default function App() { return <main><HeroSignature title="x" primaryCta={{ label: "Go" }} /><BentoGrid cells={[]} /><CTASignature title="t" primaryLabel="p" /></main>; }';
+    // sandboxPathExists (observer)
     this.add("shell_exec", true, { stdout: "yes\n", stderr: "" }, a => String(a.command ?? "").includes("test -e"));
-    this.add("shell_exec", true, { stdout: "", stderr: "" }, a => { const c = String(a.command ?? ""); return c.includes("npm ") || c.includes("npx ") || c.includes("find ") || c.includes("grep ") || c.includes("git "); });
+    this.add("fs_read", true, JSON.stringify({ dependencies: { "@forge/ui": "file:./packages/forge-ui" } }), a => a.path === "package.json");
+    this.add("fs_read", true, landingApp, a => /\.(tsx|ts)$/.test(String(a.path ?? "")));
+    this.add("shell_exec", true, { stdout: "./src/App.tsx\n", stderr: "" }, a => String(a.command ?? "").includes("find "));
+    this.add("shell_exec", true, { stdout: "src/index.css:@theme { --color-brand-500: #000; }\n", stderr: "" }, a => String(a.command ?? "").includes("grep"));
+    this.add("shell_exec", true, { stdout: "", stderr: "" }, a => String(a.command ?? "").includes("npm run build"));
+    this.add("shell_exec", true, { stdout: "", stderr: "" }, a => {
+      const c = String(a.command ?? "");
+      return c.includes("npm install") || c.includes("npx ") || c.includes("git ");
+    });
   }
   failBuild() {
     // npm build fails, everything else ok

@@ -40,6 +40,13 @@ export const FORBIDDEN_REIMPLEMENT = [
   /\bbuttonVariants\s*=/,
 ];
 
+/** Paths profundos não exportados pelo pacote seed — só "@forge/ui" ou "@forge/ui/components" (index). */
+export const INVALID_FORGE_UI_DEEP_IMPORT =
+  /from\s+["']@forge\/ui\/(components|composites|patterns|hooks|tokens|utils)\/[^"']+["']/g;
+
+export const INVALID_FORGE_UI_IMPORT_MESSAGE =
+  'Importe apenas de "@forge/ui" — paths como @forge/ui/components/Motion não existem no bundle';
+
 export interface DesignViolation {
   file: string;
   message: string;
@@ -69,6 +76,11 @@ export function scanFileForViolations(file: string, code: string): DesignViolati
       violations.push({ file, message: "Reimplementando componente base — importe de @forge/ui" });
       break;
     }
+  }
+
+  if (INVALID_FORGE_UI_DEEP_IMPORT.test(code)) {
+    violations.push({ file, message: INVALID_FORGE_UI_IMPORT_MESSAGE });
+    INVALID_FORGE_UI_DEEP_IMPORT.lastIndex = 0;
   }
 
   const hasUIComponents = /<(Button|Input|Card|Dialog|HeroSignature|BentoGrid|CTASignature)/.test(code);

@@ -123,6 +123,7 @@ export class AgentLoop {
   private touchedPaths: Set<string>;
   private lastActivityAt: number;
   private lastRunMessageId: string | null;
+  private buildFixResume: boolean;
 
   constructor(
     reg: ToolRegistry,
@@ -152,6 +153,8 @@ export class AgentLoop {
       approvedPlanBuild?: boolean;
       planSummary?: string;
       planSteps?: PlanStep[];
+      /** Retomada após falha de build — pula re-narração de intenção. */
+      buildFixResume?: boolean;
     },
   ) {
     this.reg = reg;
@@ -189,6 +192,7 @@ export class AgentLoop {
     this.touchedPaths = new Set();
     this.lastActivityAt = Date.now();
     this.lastRunMessageId = null;
+    this.buildFixResume = options?.buildFixResume ?? false;
     this.runStartTime = Date.now();
     this.lastCheckpointStep = options?.hasCheckpoint ? (state.currentStepIndex ?? 0) : 0;
     this.router = new ModelRouter(injectedKeys, routerOverrides);
@@ -204,28 +208,43 @@ export class AgentLoop {
     return Date.now() - this.runStartTime > LOOP_BUDGET_MS;
   }
 
+  private requiresFinalBuildGate(): boolean {
+    if (this.planMode || this.tasteStart) return false;
+    if (this.touchedPaths.size > 0) return true;
+    const webTemplates = ["vite-react", "nextjs-app-router", "tanstack-start", "astro"];
+    return webTemplates.includes(this.projectTemplate) && this.toolsInvoked;
+  }
+
   private async returnResumableChunk(
     steps: number,
     toolsUsed: Set<string>,
+    options?: { buildFix?: boolean },
   ): Promise<{
     ok: false;
     error: string;
     steps: number;
     resumable: true;
+    buildFix?: boolean;
     toolsUsed: string[];
   }> {
     await this.saveCheckpoint(this.state.phase, true);
     await this.emitDeliveryCheckpoint(steps);
     await this.touchHeartbeat();
     this.emit("timeout_warning", {
-      message: "Retomando automaticamente no servidor",
+      message: options?.buildFix
+        ? "Corrigindo erros de build no servidor"
+        : "Retomando automaticamente no servidor",
       elapsedMs: Date.now() - this.runStartTime,
+      buildFix: options?.buildFix === true,
     });
     return {
       ok: false,
-      error: "Retomando automaticamente…",
+      error: options?.buildFix
+        ? "Corrigindo erros de build…"
+        : "Retomando automaticamente…",
       steps,
       resumable: true,
+      buildFix: options?.buildFix === true,
       toolsUsed: [...toolsUsed],
     };
   }
@@ -417,7 +436,9 @@ export class AgentLoop {
         restored: true,
       });
       this.streamNarration(
-        `Retomando de onde parei (**passo ${this.state.currentStepIndex}/${this.maxStepsLimit}**).`,
+        this.buildFixResume
+          ? "Corrigindo erros de build…"
+          : `Retomando de onde parei (**passo ${this.state.currentStepIndex}/${this.maxStepsLimit}**).`,
       );
 
       // Plan runs terminate after proposing (no in-memory decision wait).
@@ -476,23 +497,26 @@ export class AgentLoop {
         intent: this.state.intent,
       });
 
-      if (this.planMode) {
-        const planBriefing = buildClassifyBriefing(classification, {
-          maxSteps: this.maxStepsLimit,
-          planMode: true,
-        });
-        this.streamNarration(planBriefing);
-      } else if (this.approvedPlanBuild) {
-        this.streamNarration(
-          buildApprovedPlanBriefing(this.originalUserRequest, this.approvedPlanSteps),
-        );
-      } else {
-        this.streamNarration(
-          buildClassifyBriefing(classification, {
+      const skipIntentNarration = this.buildFixResume;
+      if (!skipIntentNarration) {
+        if (this.planMode) {
+          const planBriefing = buildClassifyBriefing(classification, {
             maxSteps: this.maxStepsLimit,
-            planMode: false,
-          }),
-        );
+            planMode: true,
+          });
+          this.streamNarration(planBriefing);
+        } else if (this.approvedPlanBuild) {
+          this.streamNarration(
+            buildApprovedPlanBriefing(this.originalUserRequest, this.approvedPlanSteps),
+          );
+        } else {
+          this.streamNarration(
+            buildClassifyBriefing(classification, {
+              maxSteps: this.maxStepsLimit,
+              planMode: false,
+            }),
+          );
+        }
       }
 
       await this.saveCheckpoint(LoopPhase.CREATE_PLAN);
@@ -619,7 +643,9 @@ export class AgentLoop {
     let buildAttempts = 0;
     const maxRetries = 3;
     let loopStep = step;
+    let finalGateOk = false;
 
+    while (!finalGateOk) {
     while (loopStep < this.maxStepsLimit) {
       if (this.loopBudgetExceeded()) {
         return this.returnResumableChunk(loopStep, toolsUsed);
@@ -930,7 +956,61 @@ export class AgentLoop {
 
     if (loopStep >= this.maxStepsLimit) {
       await this.saveCheckpoint(LoopPhase.DECIDE_NEXT, true);
-      return this.returnResumableChunk(loopStep, toolsUsed);
+      return this.returnResumableChunk(loopStep, toolsUsed, {
+        buildFix: this.requiresFinalBuildGate(),
+      });
+    }
+
+    if (!this.requiresFinalBuildGate()) {
+      finalGateOk = true;
+      continue;
+    }
+
+    this.state.phase = LoopPhase.VALIDATE_STEP;
+    this.emit("phase", { phase: "observe", message: "Verificação final de build..." });
+    await this.saveCheckpoint(LoopPhase.VALIDATE_STEP);
+    const finalObservation = await this.observer.observe();
+    if (finalObservation.passed) {
+      this.streamNarration(buildObserveNarration("validate_ok"));
+      this.emit("validate_ok", { message: "Build OK (gate final)" });
+      finalGateOk = true;
+      continue;
+    }
+
+    buildAttempts++;
+    this.emit("validate_fail", {
+      attempt: buildAttempts,
+      checks: finalObservation.checks.filter((c) => !c.ok).map((c) => c.name),
+      feedback: finalObservation.feedback?.slice(0, 500),
+      finalGate: true,
+    });
+
+    if (buildAttempts > maxRetries) {
+      const failMsg =
+        `Build não passou após ${maxRetries} tentativas.\n\n` +
+        `${finalObservation.feedback?.slice(0, 2000) ?? "Erros de compilação no sandbox."}`;
+      await this.persistFinal(failMsg);
+      return {
+        ok: false,
+        error: failMsg,
+        steps: loopStep,
+        resumable: false,
+        toolsUsed: [...toolsUsed],
+      };
+    }
+
+    if (this.loopBudgetExceeded()) {
+      return this.returnResumableChunk(loopStep, toolsUsed, { buildFix: true });
+    }
+
+    this.state.messages.push({
+      role: "user",
+      content:
+        `BUILD GATE FINAL FALHOU (${buildAttempts}/${maxRetries}). Corrija antes de finalizar:\n\n` +
+        `\`\`\`\n${finalObservation.feedback?.slice(0, 3000) ?? ""}\n\`\`\`\n\n` +
+        `Use fs_edit para corrigir imports (@forge/ui apenas) e erros de compilação.`,
+    });
+    this.streamNarration("Corrigindo erros de build antes de entregar…");
     }
 
     this.state.phase = LoopPhase.SUMMARIZE;
@@ -1399,13 +1479,27 @@ export class AgentLoop {
       planSteps: plan.steps,
       finishedAt: new Date().toISOString(),
     };
-    await this.sb.from("messages").insert({
+
+    const existingId = await this.resolveExistingRunMessageId();
+    if (existingId) {
+      await this.sb.from("messages").update({
+        parts: [{ type: "text", text: summary }],
+        tool_calls: [],
+        meta,
+      }).eq("id", existingId);
+      await this.sb.from("projects").update({ updated_at: new Date().toISOString() }).eq("id", this.state.projectId);
+      return;
+    }
+
+    const { data } = await this.sb.from("messages").insert({
       conversation_id: this.state.conversationId,
       role: "assistant",
       parts: [{ type: "text", text: summary }],
       tool_calls: [],
       meta,
-    });
+    }).select("id").single();
+    const id = data?.id ?? null;
+    if (id) this.lastRunMessageId = id;
     await this.sb.from("projects").update({ updated_at: new Date().toISOString() }).eq("id", this.state.projectId);
   }
 
