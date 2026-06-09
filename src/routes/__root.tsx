@@ -12,6 +12,7 @@ import { AuthProvider } from "@/lib/auth";
 import { ThemeProvider } from "@/lib/theme";
 import { SmoothScroll } from "@/lib/smooth-scroll";
 import { Analytics } from "@vercel/analytics/react";
+import { SpeedInsights } from "@vercel/speed-insights/react";
 import { SupabaseConfigBanner } from "@/components/SupabaseConfigBanner";
 
 import appCss from "../styles.css?url";
@@ -143,6 +144,7 @@ function RootComponent() {
           </SmoothScroll>
           <Toaster richColors position="top-right" />
           <Analytics />
+          <SpeedInsights />
         </AuthProvider>
       </ThemeProvider>
     </QueryClientProvider>
