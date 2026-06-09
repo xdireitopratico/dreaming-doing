@@ -14,7 +14,7 @@ function modelLabel(prefs: AgentPreferences): string {
     prefs.mode === "robin"
       ? normalizePresetId(prefs.robinPoolModelId)
       : normalizePresetId(prefs.fixedPresetId);
-  return getPresetById(id).label;
+  return getPresetById(id, prefs.userModelEntries).label;
 }
 
 /** Modelo ativo — só leitura; edição completa em /models. */
