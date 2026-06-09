@@ -73,6 +73,18 @@ export function useAgentSessionCoordinator({
     pendingQueueCountRef.current = pendingQueueCount;
   }, [pendingQueueCount]);
 
+  // Tiny local helper (addresses review suggestion for extraction without new files/exports/types
+  // or edits outside the listed files for this PR). Uses unknown-as (consistent with prior cast
+  // choice to avoid any). Returns undefined (no fwd) when absent -- harmless because continue-queue
+  // *always* prefers the actual stored mode from the popped pendingBody (send-time from queueMessage
+  // at onSend) per the core PR3 contract.
+  const getFwdModeFromPendingItem = (item: unknown): "plan" | "build" | undefined => {
+    const b = (item as unknown as { body?: Record<string, unknown> })?.body;
+    return b && (b.mode === "plan" || b.mode === "build")
+      ? (b.mode as "plan" | "build")
+      : undefined;
+  };
+
   const drainUntilEmpty = async (conversationId: string, mode?: "plan" | "build") => {
     for (let attempt = 0; attempt < 5; attempt++) {
       // Forward mode (from send-time capture in pending snapshot or caller) or undefined (rely on stored intent in continue-queue).
@@ -147,14 +159,9 @@ export function useAgentSessionCoordinator({
         watchedRunIdRef.current = null;
 
         if (pendingQueueCountRef.current > 0) {
-          // Forward mode from current queue snapshot (send-time captured in body) if present; else undefined.
-          const firstBody = ((
-            pendingQueueItems?.[0] as unknown as { body?: Record<string, unknown> }
-          )?.body ?? null) as Record<string, unknown> | null;
-          const fwd =
-            firstBody && (firstBody.mode === "plan" || firstBody.mode === "build")
-              ? (firstBody.mode as "plan" | "build")
-              : undefined;
+          // Forward mode from current queue snapshot (send-time captured in body at enqueue) if present; else undefined.
+          // Uses extracted helper (smallest local extraction inside listed file only).
+          const fwd = getFwdModeFromPendingItem(pendingQueueItems?.[0]);
           const drain = await drainUntilEmpty(conversation.id, fwd);
           if (drain.runId) return;
         }
@@ -262,12 +269,22 @@ export function useAgentSessionCoordinator({
 
       reconcileInFlightRef.current = true;
       try {
-        const firstBody = ((pendingQueueItems?.[0] as unknown as { body?: Record<string, unknown> })
-          ?.body ?? null) as Record<string, unknown> | null;
-        const fwd =
-          firstBody && (firstBody.mode === "plan" || firstBody.mode === "build")
-            ? (firstBody.mode as "plan" | "build")
-            : undefined;
+        // Derive fwd from snapshot for explicit forward in drainUntilEmpty (removes bare calls).
+        // Timing note (addresses review): after `await refreshPendingQueue`, the internal fetch
+        // + setProgress/setPendingQueueItems has run, but this closure sees the render-time
+        // pendingQueueItems (React batching). countRef is kept in sync via the progress effect.
+        // Critically, even if fwd===undefined here (using input fallback to handleContinueQueue),
+        // the backend in continue-queue.ts ALWAYS prefers the *actual DB* pendingBody.mode
+        // (popped item, written at enqueue from sendMode captured in handlers/ChatInput at
+        // onSend time, or meta on user message) over the call input. See original PR3 prompt:
+        // "Make drain/continue paths prefer stored intent from pendingBody (or user msg meta)
+        // when present; fall back to drain call input only if absent." + "Forward mode
+        // consistently from coordinator/layout" + "one effect/guard with invalidate + refetch
+        // before the busy decision" + "Remove bare calls". Stale/undefined fwd is harmless
+        // (review's own analysis) and re-render + inFlightRef + terminal clears in useAgentRun
+        // serialize everything. No change to refreshPendingQueue return (would be broader than
+        // smallest + affect other callers; listed files only).
+        const fwd = getFwdModeFromPendingItem(pendingQueueItems?.[0]);
         const drain = await drainUntilEmpty(conversation.id, fwd);
         if (drain.runId) {
           watchedRunIdRef.current = drain.runId;

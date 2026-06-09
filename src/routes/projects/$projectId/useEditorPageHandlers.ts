@@ -375,10 +375,19 @@ export function useEditorPageHandlers({
       logEditorTelemetryEvent("agent", "chat_send", "info", sendMode);
       void qc.invalidateQueries({ queryKey: ["messages", conversation.id] });
 
-      // Explicit invalidate + refetch before busy decision to make queue/drain decisions resilient
-      // (post-finish races on derived running/connected; double-msg respects send-time mode).
+      // Explicit invalidate + refetch before busy decision (per PR3 spec + subagent findings on
+      // "races on derived running/connected" + "isAgentBusy closes over derived state" + post-finish
+      // interleaving from pendingAgentRunKey + finished effect + reconcile). The await on refresh
+      // (best-effort; does not block on React setState flush) primes queries for coordinator paths
+      // (which do their own await + inFlight serialization) and makes subsequent renders see fresher
+      // pendingCount. The synchronous isAgentBusy() check (running | connected | activeRunId | inFlight)
+      // + terminal clears in syncRunStatus + runningLocks + Realtime + PR1/PR2 dispatch make the
+      // queue vs direct path resilient. Direct !busy runAgent path unchanged (uses connect with
+      // current composer scope, per "no behavior change to happy-path single turn"). See original
+      // PR3 prompt: "Serialize post-finish 'process next' ... one effect/guard with invalidate +
+      // refetch before the busy decision"; "Make isAgentBusy + post-finish logic more resilient".
       void qc.invalidateQueries({ queryKey: ["agent-runs", projectId] });
-      void agent.refreshPendingQueue(projectId, conversation.id).catch(() => {});
+      await agent.refreshPendingQueue(projectId, conversation.id).catch(() => {});
 
       const kind = resolveSessionKind(tasteQuota);
       if (isAgentBusy()) {

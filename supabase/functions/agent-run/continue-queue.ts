@@ -70,7 +70,7 @@ export async function handleContinueQueue(
     : null;
   const planMode = storedMode === "plan"
     ? true
-    : storedMode === "build"
+    : storedMode === "build" || storedMode === "chat"
     ? false
     : input.planMode === true;
 
