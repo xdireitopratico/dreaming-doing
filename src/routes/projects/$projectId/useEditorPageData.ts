@@ -109,14 +109,6 @@ export function useEditorPageData({
     [messages],
   );
 
-  /** Última mensagem é do usuário sem resposta do agente — ex.: projeto novo com firstPrompt. */
-  const pendingAgentRunKey = useMemo(() => {
-    if (!conversation?.id || !messages?.length) return null;
-    const last = messages[messages.length - 1];
-    if (String(last.role).toLowerCase() !== "user") return null;
-    return `${conversation.id}:${last.id}`;
-  }, [conversation?.id, messages]);
-
   const devUrl = (project?.meta as { previewUrl?: string } | null)?.previewUrl ?? null;
   const projectMeta = (project?.meta as Record<string, unknown> | null) ?? null;
   const publishedUrl =
@@ -220,7 +212,6 @@ export function useEditorPageData({
     projectStack,
     nativeBuildPreview,
     agentHasRun,
-    pendingAgentRunKey,
     devUrl,
     projectMeta,
     publishedUrl,
