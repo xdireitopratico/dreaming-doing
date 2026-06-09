@@ -113,10 +113,7 @@ export async function markRunFinal(
 }
 
 /** Cancela outras runs ativas no mesmo projeto (evita 2× running na mesma conversa). */
-export async function cancelDuplicateRuns(
-  projectId: string,
-  activeRunId: string,
-): Promise<number> {
+export async function cancelDuplicateRuns(projectId: string, activeRunId: string): Promise<number> {
   const { data: dupes } = await getSupabaseAdmin()
     .from("agent_runs")
     .select("id")
@@ -143,10 +140,12 @@ export type ContinueQueueResponse = {
   reason?: string;
 };
 
-/** Após run completar: consome fila e dispara continuação se houver mensagens pendentes. */
-export async function drainPendingQueue(
-  payload: AgentRunRequest,
-): Promise<ContinueQueueResponse> {
+/** Após run completar: consome fila e dispara continuação se houver mensagens pendentes.
+ * All Inngest dispatches (normal, plan-approve via dispatch_build, queue/continue) are now
+ * centralized + hardened in Edge `agent-run` (owns INNGEST_EVENT_KEY + send + loud fail + finish append).
+ * Never leaves `pending` run if dispatch cannot be guaranteed.
+ */
+export async function drainPendingQueue(payload: AgentRunRequest): Promise<ContinueQueueResponse> {
   const { url, serviceKey } = requireEnv();
   const response = await fetch(`${url}/functions/v1/agent-run`, {
     method: "POST",

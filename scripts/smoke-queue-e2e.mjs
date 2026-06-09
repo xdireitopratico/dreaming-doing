@@ -35,17 +35,14 @@ function loadEnvLocal() {
 
 loadEnvLocal();
 
-const SUPABASE_URL =
-  process.env.SUPABASE_URL ?? process.env.VITE_SUPABASE_URL ?? "";
+const SUPABASE_URL = process.env.SUPABASE_URL ?? process.env.VITE_SUPABASE_URL ?? "";
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
 const INNGEST_EVENT_KEY = process.env.INNGEST_EVENT_KEY ?? "";
 
-const DEFAULT_PROJECT =
-  process.env.SMOKE_PROJECT_ID ?? "27d4fd0c-9783-44ac-9446-70bd931620ac";
+const DEFAULT_PROJECT = process.env.SMOKE_PROJECT_ID ?? "27d4fd0c-9783-44ac-9446-70bd931620ac";
 const DEFAULT_CONVERSATION =
   process.env.SMOKE_CONVERSATION_ID ?? "2bfca54a-3170-4a4d-9289-e8acab4d413f";
-const DEFAULT_USER =
-  process.env.SMOKE_USER_ID ?? "2e8aca9f-1161-4246-9b33-3f2ca6c247d2";
+const DEFAULT_USER = process.env.SMOKE_USER_ID ?? "2e8aca9f-1161-4246-9b33-3f2ca6c247d2";
 
 function arg(name, fallback) {
   const hit = process.argv.find((a) => a.startsWith(`--${name}=`));
@@ -85,17 +82,14 @@ async function countPending() {
 }
 
 async function clearBlockingRuns() {
-  await rest(
-    `agent_runs?project_id=eq.${projectId}&status=in.(running,pending,awaiting_user)`,
-    {
-      method: "PATCH",
-      body: JSON.stringify({
-        status: "failed",
-        finished_at: new Date().toISOString(),
-        error: "smoke-queue cleanup",
-      }),
-    },
-  );
+  await rest(`agent_runs?project_id=eq.${projectId}&status=in.(running,pending,awaiting_user)`, {
+    method: "PATCH",
+    body: JSON.stringify({
+      status: "failed",
+      finished_at: new Date().toISOString(),
+      error: "smoke-queue cleanup",
+    }),
+  });
 }
 
 async function main() {
@@ -104,16 +98,17 @@ async function main() {
     process.exit(1);
   }
   if (!INNGEST_EVENT_KEY) {
-    console.warn("WARN: INNGEST_EVENT_KEY missing — continue_queue may return inngest_failed");
+    console.warn(
+      "WARN: INNGEST_EVENT_KEY missing — must be in Supabase Edge secrets for agent-run/continue_queue (see docs/EDGE-SECRETS.md); hardened path will early-fail with finish append instead of silent pending",
+    );
   }
 
   console.log(`Smoke queue project=${projectId.slice(0, 8)}`);
 
   await clearBlockingRuns();
-  await rest(
-    `agent_pending_messages?project_id=eq.${projectId}&user_id=eq.${userId}`,
-    { method: "DELETE" },
-  );
+  await rest(`agent_pending_messages?project_id=eq.${projectId}&user_id=eq.${userId}`, {
+    method: "DELETE",
+  });
 
   const payloads = [
     { text: "[smoke] fila mensagem 1", sessionKind: "byok" },
@@ -166,7 +161,9 @@ async function main() {
   console.log("continue_queue:", JSON.stringify(edgeBody));
 
   if (edgeBody.reason === "inngest_failed") {
-    console.error("FAIL: INNGEST_EVENT_KEY not configured on Edge");
+    console.error(
+      "FAIL: INNGEST_EVENT_KEY not configured on Edge (centralized dispatch in agent-run now prevents pending-without-events)",
+    );
     process.exit(1);
   }
 

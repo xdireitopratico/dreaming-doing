@@ -35,17 +35,14 @@ function loadEnvLocal() {
 
 loadEnvLocal();
 
-const SUPABASE_URL =
-  process.env.SUPABASE_URL ?? process.env.VITE_SUPABASE_URL ?? "";
+const SUPABASE_URL = process.env.SUPABASE_URL ?? process.env.VITE_SUPABASE_URL ?? "";
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
 const INNGEST_EVENT_KEY = process.env.INNGEST_EVENT_KEY ?? "";
 
-const DEFAULT_PROJECT =
-  process.env.SMOKE_PROJECT_ID ?? "27d4fd0c-9783-44ac-9446-70bd931620ac";
+const DEFAULT_PROJECT = process.env.SMOKE_PROJECT_ID ?? "27d4fd0c-9783-44ac-9446-70bd931620ac";
 const DEFAULT_CONVERSATION =
   process.env.SMOKE_CONVERSATION_ID ?? "2bfca54a-3170-4a4d-9289-e8acab4d413f";
-const DEFAULT_USER =
-  process.env.SMOKE_USER_ID ?? "2e8aca9f-1161-4246-9b33-3f2ca6c247d2";
+const DEFAULT_USER = process.env.SMOKE_USER_ID ?? "2e8aca9f-1161-4246-9b33-3f2ca6c247d2";
 
 function arg(name, fallback) {
   const hit = process.argv.find((a) => a.startsWith(`--${name}=`));
@@ -78,7 +75,9 @@ function sleep(ms) {
 
 async function main() {
   if (!SUPABASE_URL || !SERVICE_KEY || !INNGEST_EVENT_KEY) {
-    console.error("FAIL: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, INNGEST_EVENT_KEY required");
+    console.error(
+      "FAIL: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, INNGEST_EVENT_KEY required (must be set in Supabase Edge secrets; see docs/EDGE-SECRETS.md)",
+    );
     process.exit(1);
   }
 
@@ -149,9 +148,7 @@ async function main() {
     const rich = types.some((t) => t === "phase" || t.startsWith("tool_") || t === "text_delta");
 
     if (lastEvents.length > 1 && rich) {
-      const runRes = await rest(
-        `agent_runs?id=eq.${runId}&select=status,error,finished_at`,
-      );
+      const runRes = await rest(`agent_runs?id=eq.${runId}&select=status,error,finished_at`);
       const [run] = await runRes.json();
       console.log("PASS: stream events", lastEvents.length, "types:", types.join(", "));
       console.log("Run status:", run?.status, run?.error ?? "");

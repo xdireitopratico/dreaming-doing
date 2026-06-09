@@ -53,8 +53,7 @@ const agentPreferencesSchema = z
   })
   .passthrough();
 
-const INNGEST_GRACIOSA_MESSAGE =
-  "Ok. Vejo que rejeitou o plano atual. Como posso melhora-lo?";
+const INNGEST_GRACIOSA_MESSAGE = "Ok. Vejo que rejeitou o plano atual. Como posso melhora-lo?";
 
 const PLAN_APPROVED_PREFIX = "[Plano aprovado]";
 
@@ -100,7 +99,12 @@ export const planApprove = createServerFn({ method: "POST" })
     if (rErr || !run || run.user_id !== userId) {
       throw new Error("Run não encontrada");
     }
-    if (run.status !== "completed" && run.status !== "awaiting_user" && run.status !== "pending" && run.status !== "running") {
+    if (
+      run.status !== "completed" &&
+      run.status !== "awaiting_user" &&
+      run.status !== "pending" &&
+      run.status !== "running"
+    ) {
       throw new Error(`Run em status inválido: ${run.status}`);
     }
 
@@ -110,12 +114,12 @@ export const planApprove = createServerFn({ method: "POST" })
       prefsFromRunMeta(sourceMeta) ??
       null;
     const sessionKind: ForgeSessionKind =
-      data.sessionKind ?? sessionKindFromRunMeta(sourceMeta) ?? (preferences?.mode ? "byok" : "taste");
+      data.sessionKind ??
+      sessionKindFromRunMeta(sourceMeta) ??
+      (preferences?.mode ? "byok" : "taste");
     const enabledSkillIds =
       data.enabledSkillIds ??
-      (Array.isArray(sourceMeta.enabledSkillIds)
-        ? (sourceMeta.enabledSkillIds as string[])
-        : []);
+      (Array.isArray(sourceMeta.enabledSkillIds) ? (sourceMeta.enabledSkillIds as string[]) : []);
     const enabledMcpIds =
       data.enabledMcpIds ??
       (Array.isArray(sourceMeta.enabledMcpIds) ? (sourceMeta.enabledMcpIds as string[]) : []);
@@ -167,7 +171,11 @@ export const planApprove = createServerFn({ method: "POST" })
     }
 
     const stepLabels = (steps ?? [])
-      .map((s) => (typeof s === "object" && s && "title" in s ? String((s as { title?: string }).title ?? "") : ""))
+      .map((s) =>
+        typeof s === "object" && s && "title" in s
+          ? String((s as { title?: string }).title ?? "")
+          : "",
+      )
       .filter(Boolean);
     const approveText =
       stepLabels.length > 0
@@ -193,6 +201,9 @@ export const planApprove = createServerFn({ method: "POST" })
       throw new Error(`Falha ao registrar aprovação no chat: ${approveUserErr.message}`);
     }
 
+    // Use hardened dispatch_build action in Edge (single owner of INNGEST_EVENT_KEY check+send).
+    // On failure the action appends "finish", deletes the pending run (no orphan pending-without-events),
+    // and returns loud error. We keep defensive deletes here for invoke-level failures.
     const { data: dispatchResult, error: dispatchErr } = await supabase.functions.invoke(
       "agent-run",
       { body: { action: "dispatch_build", runId: newRun.id } },
@@ -209,6 +220,7 @@ export const planApprove = createServerFn({ method: "POST" })
     }
 
     const eventId = dispatchBody.eventId ?? null;
+    // ensure !eventId throws loud (no silent ok path) — required by hardened central dispatch contract
     if (!eventId) {
       await supabase.from("agent_runs").delete().eq("id", newRun.id);
       throw new Error(
@@ -249,7 +261,13 @@ export const planReject = createServerFn({ method: "POST" })
       .update({
         status: "completed",
         finished_at: now,
-        meta: { ...prevMeta, planMode: true, planRejected: true, rejectedAt: now, rejectedPlanId: planId },
+        meta: {
+          ...prevMeta,
+          planMode: true,
+          planRejected: true,
+          rejectedAt: now,
+          rejectedPlanId: planId,
+        },
       })
       .eq("id", runId);
     if (updErr) {

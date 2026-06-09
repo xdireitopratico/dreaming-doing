@@ -4,11 +4,11 @@
 
 ## Hierarquia de docs
 
-| Arquivo | Quem lê | Conteúdo |
-|---------|---------|----------|
-| **FORGE.md** | LLM / agente | Caminho único, arquivos críticos, deploy, debug |
-| **README.md** | Humano | Produto, `bun run dev`, link para FORGE |
-| `AGENT.md` / `CLAUDE.md` / `GEMINI.md` / `AGENTS.md` | IDEs | Ponte de 3 linhas → FORGE |
+| Arquivo                                              | Quem lê      | Conteúdo                                        |
+| ---------------------------------------------------- | ------------ | ----------------------------------------------- |
+| **FORGE.md**                                         | LLM / agente | Caminho único, arquivos críticos, deploy, debug |
+| **README.md**                                        | Humano       | Produto, `bun run dev`, link para FORGE         |
+| `AGENT.md` / `CLAUDE.md` / `GEMINI.md` / `AGENTS.md` | IDEs         | Ponte de 3 linhas → FORGE                       |
 
 **Ignorar (redirecionam para cá):** `opencode.md`, `doc.md`
 
@@ -40,33 +40,33 @@ Ao terminar um run, Inngest chama `agent-run { action: "continue_queue" }` (serv
 
 ### Removido — não reintroduzir
 
-| Legado | Substituto |
-|--------|------------|
-| `useSSE.ts`, SSE watch/replay no Edge | `useAgentRun.ts` + Realtime |
-| Polling 350ms (`streamEventsResponse`, `followQueuedRun`) | Realtime + catch-up único ao subscribe |
-| `agent-worker`, PGMQ **dispatch** | Inngest |
-| Trigger.dev | Inngest |
-| `runChunkedJob` inline no Edge | Inngest loop in-process |
-| `agent-run { action: "execute" }` | `src/inngest/executor/run-agent-loop.ts` |
+| Legado                                                    | Substituto                               |
+| --------------------------------------------------------- | ---------------------------------------- |
+| `useSSE.ts`, SSE watch/replay no Edge                     | `useAgentRun.ts` + Realtime              |
+| Polling 350ms (`streamEventsResponse`, `followQueuedRun`) | Realtime + catch-up único ao subscribe   |
+| `agent-worker`, PGMQ **dispatch**                         | Inngest                                  |
+| Trigger.dev                                               | Inngest                                  |
+| `runChunkedJob` inline no Edge                            | Inngest loop in-process                  |
+| `agent-run { action: "execute" }`                         | `src/inngest/executor/run-agent-loop.ts` |
 
 Schema PGMQ no DB + check em `/health` = **legado** (sem dispatch no agente).
 
 ## Arquivos críticos
 
-| Arquivo | Papel |
-|---------|-------|
-| `src/hooks/useAgentRun.ts` | Hook do editor — Realtime only |
-| `src/lib/agent-progress.ts` | Reducer `applyAgentProgressEvent` |
-| `src/routes/projects/$projectId/index.tsx` | Editor, plan approve → `watch(newRunId)` |
-| `src/inngest/functions/agent-*.ts` | Jobs duráveis |
-| `src/inngest/executor/run-agent-loop.ts` | Loop in-process no Vercel |
-| `supabase/functions/agent-run/index.ts` | `run`, `cancel`, `pending_count`, `continue_queue` |
-| `supabase/functions/agent-run/continue-queue.ts` | Drain da fila após run completar |
-| `supabase/functions/_shared/agent-pending-queue.ts` | Enqueue, expire stale runs, evaluate drain |
-| `supabase/functions/agent-run/run-setup.ts` | Provider/keys — fonte única |
-| `supabase/functions/agent-run/run-executor.ts` | Execução + `appendStreamEvent` |
-| `supabase/functions/agent-run/loop.ts` | Loop do agente |
-| `supabase/functions/_shared/agent-stream.ts` | `appendStreamEvent` (Edge) |
+| Arquivo                                             | Papel                                              |
+| --------------------------------------------------- | -------------------------------------------------- |
+| `src/hooks/useAgentRun.ts`                          | Hook do editor — Realtime only                     |
+| `src/lib/agent-progress.ts`                         | Reducer `applyAgentProgressEvent`                  |
+| `src/routes/projects/$projectId/index.tsx`          | Editor, plan approve → `watch(newRunId)`           |
+| `src/inngest/functions/agent-*.ts`                  | Jobs duráveis                                      |
+| `src/inngest/executor/run-agent-loop.ts`            | Loop in-process no Vercel                          |
+| `supabase/functions/agent-run/index.ts`             | `run`, `cancel`, `pending_count`, `continue_queue` |
+| `supabase/functions/agent-run/continue-queue.ts`    | Drain da fila após run completar                   |
+| `supabase/functions/_shared/agent-pending-queue.ts` | Enqueue, expire stale runs, evaluate drain         |
+| `supabase/functions/agent-run/run-setup.ts`         | Provider/keys — fonte única                        |
+| `supabase/functions/agent-run/run-executor.ts`      | Execução + `appendStreamEvent`                     |
+| `supabase/functions/agent-run/loop.ts`              | Loop do agente                                     |
+| `supabase/functions/_shared/agent-stream.ts`        | `appendStreamEvent` (Edge)                         |
 
 ## Deploy
 
@@ -86,7 +86,7 @@ Edge functions deployadas: `agent-run`, `health`, `preview-boot`, `e2b-*`, `conn
 
 ### Fila presa / agente não roda
 
-1. **Secret Edge:** `INNGEST_EVENT_KEY` em Supabase → Edge Functions secrets (não só `.env.local`). Sem ela, `continue_queue` falha com `inngest_failed` nos logs.
+1. **Secret Edge:** `INNGEST_EVENT_KEY` em Supabase → Edge Functions secrets (não só `.env.local`). Centralizado em `supabase/functions/agent-run/index.ts` (send helper + dispatch_build + continue-queue). Sem ela: early loud error + append `finish` (nunca pending run sem evento terminal; mata "inngest_failed" symptom).
 2. **Runs zumbis:** `expireStaleRuns` marca `running`/`pending` > 15 min como `failed` no próximo `agent-run`.
 3. **SQL de limpeza** (substitua `PROJECT_ID`):
 
@@ -103,7 +103,7 @@ WHERE project_id = 'PROJECT_ID' AND status IN ('running', 'pending');
 SELECT count(*) FROM agent_pending_messages WHERE project_id = 'PROJECT_ID';
 ```
 
-4. Logs Edge: `inngest.send_failed_fatal` ou `continue_queue` com `reason: inngest_failed`.
+4. Logs Edge: `inngest.send_failed_fatal` / `dispatch_build.inngest_failed` (hardened paths now append finish + cleanup).
 
 ## Convenções
 
@@ -115,22 +115,22 @@ SELECT count(*) FROM agent_pending_messages WHERE project_id = 'PROJECT_ID';
 
 ## Backlog (concluído)
 
-| # | Item | Status |
-|---|------|--------|
-| B1 | `run-setup.ts` — provider/keys únicos | ✅ |
-| B5 | `observer.ts` — sandbox `test -e`, tsc `--project` | ✅ |
-| B6 | `loop.ts` — forceTools preserva assistant msg; checkpoint resume | ✅ |
-| D19 | `AiDiffViewer` — `before` fallback via `fileMap` | ✅ |
-| E1 | `MarkdownRenderer` em ChatStream/ChatInput | ✅ |
-| B7 | `loop.ts` — stuck detection única (reativa após exec) | ✅ |
-| B8 | `sandbox.ts` `kill()` limpa meta preview no projeto | ✅ |
-| B9 | UX qualify — banner `awaiting_user` + fila no header/chat | ✅ |
-| B10 | Docs + comentários — sem referências SSE/PGMQ ativas | ✅ |
-| R1 | Migration drop PGMQ `agent_chunks` + funções purge/drain | ✅ |
-| R2 | Editor split: `useEditorPageData`, handlers, `EditorPageLayout` | ✅ |
-| R3 | `AgentTimeline.tsx` inline em `ForgeAssistantBlock` | ✅ |
-| R5 | Chat Lovable: `lovable-thread`, `agent-narrative`, auto-reject plano | ✅ |
-| R4 | `E2bStatusBadge` no workspace header | ✅ |
+| #   | Item                                                                 | Status |
+| --- | -------------------------------------------------------------------- | ------ |
+| B1  | `run-setup.ts` — provider/keys únicos                                | ✅     |
+| B5  | `observer.ts` — sandbox `test -e`, tsc `--project`                   | ✅     |
+| B6  | `loop.ts` — forceTools preserva assistant msg; checkpoint resume     | ✅     |
+| D19 | `AiDiffViewer` — `before` fallback via `fileMap`                     | ✅     |
+| E1  | `MarkdownRenderer` em ChatStream/ChatInput                           | ✅     |
+| B7  | `loop.ts` — stuck detection única (reativa após exec)                | ✅     |
+| B8  | `sandbox.ts` `kill()` limpa meta preview no projeto                  | ✅     |
+| B9  | UX qualify — banner `awaiting_user` + fila no header/chat            | ✅     |
+| B10 | Docs + comentários — sem referências SSE/PGMQ ativas                 | ✅     |
+| R1  | Migration drop PGMQ `agent_chunks` + funções purge/drain             | ✅     |
+| R2  | Editor split: `useEditorPageData`, handlers, `EditorPageLayout`      | ✅     |
+| R3  | `AgentTimeline.tsx` inline em `ForgeAssistantBlock`                  | ✅     |
+| R5  | Chat Lovable: `lovable-thread`, `agent-narrative`, auto-reject plano | ✅     |
+| R4  | `E2bStatusBadge` no workspace header                                 | ✅     |
 
 ## Release checklist (projeto maduro)
 

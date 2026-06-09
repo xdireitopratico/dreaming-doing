@@ -41,7 +41,11 @@ export const agentBuildFunction = inngest.createFunction(
       await markRunFinal(runId, "running");
     });
 
-    const final = await runAgentLoopWithResume(step as Parameters<typeof runAgentLoopWithResume>[0], payload, false);
+    const final = await runAgentLoopWithResume(
+      step as Parameters<typeof runAgentLoopWithResume>[0],
+      payload,
+      false,
+    );
 
     if (final.canceled) {
       await step.run("mark-canceled", async () => {
@@ -71,6 +75,8 @@ export const agentBuildFunction = inngest.createFunction(
           });
         }
         try {
+          // Internal re-enqueue (Inngest client path); core first-message/plan-approve/queue dispatches
+          // are centralized through hardened Edge agent-run action (see index.ts + continue-queue.ts).
           await inngest.send({ name: "agent/build.requested", data: payload });
         } catch (sendErr) {
           const msg = sendErr instanceof Error ? sendErr.message : "Inngest re-enqueue failed";
