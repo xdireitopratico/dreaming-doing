@@ -47,6 +47,49 @@ const TERMINAL_STATUSES = new Set(["completed", "failed", "canceled", "awaiting_
 const STALE_STREAM_MS = 30 * 60 * 1000;
 const STALE_STREAM_WITH_QUEUE_MS = 10 * 60 * 1000;
 
+const SESSION_STORAGE_KEY = "forge:agent-snapshot";
+const SNAPSHOT_MAX_AGE_MS = 30 * 60 * 1000;
+
+function saveAgentSnapshot(snapshot: {
+  activeRunId: string | null;
+  lastSeq: number;
+  progress: AgentProgress;
+  frozenRuns: [string, FrozenRunSnapshot][];
+}) {
+  try {
+    const payload = JSON.stringify({ ...snapshot, timestamp: Date.now() });
+    sessionStorage.setItem(SESSION_STORAGE_KEY, payload);
+  } catch {
+    // ignore quota exceeded
+  }
+}
+
+function loadAgentSnapshot(): {
+  activeRunId: string | null;
+  lastSeq: number;
+  progress: AgentProgress;
+  frozenRuns: [string, FrozenRunSnapshot][];
+  timestamp: number;
+} | null {
+  try {
+    const raw = sessionStorage.getItem(SESSION_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as ReturnType<typeof loadAgentSnapshot>;
+    if (!parsed || typeof parsed.timestamp !== "number") return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function clearAgentSnapshot() {
+  try {
+    sessionStorage.removeItem(SESSION_STORAGE_KEY);
+  } catch {
+    // ignore
+  }
+}
+
 async function parseErrorResponse(res: Response): Promise<string> {
   const txt = await res.text().catch(() => "");
   try {
@@ -88,6 +131,49 @@ export function useAgentRun() {
   const eventChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const statusChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const stalePollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // ─── Persistência de estado em sessionStorage ─────────────────────────
+  const saveSnapshot = useCallback(() => {
+    saveAgentSnapshot({
+      activeRunId: runIdRef.current,
+      lastSeq: lastSeqRef.current,
+      progress,
+      frozenRuns: Array.from(frozenRuns.entries()),
+    });
+  }, [progress, frozenRuns]);
+
+  // Salva snapshot debounced a cada 500ms quando progress muda
+  useEffect(() => {
+    const timer = setTimeout(saveSnapshot, 500);
+    return () => clearTimeout(timer);
+  }, [progress, frozenRuns, saveSnapshot]);
+
+  // Recupera snapshot ao montar (sobrevive a F5 / hot-reload)
+  useEffect(() => {
+    const snap = loadAgentSnapshot();
+    if (!snap) return;
+    const age = Date.now() - snap.timestamp;
+    if (age > SNAPSHOT_MAX_AGE_MS) {
+      clearAgentSnapshot();
+      return;
+    }
+    if (snap.activeRunId) {
+      runIdRef.current = snap.activeRunId;
+      setActiveRunId(snap.activeRunId);
+      lastSeqRef.current = snap.lastSeq;
+      if (snap.frozenRuns.length > 0) {
+        setFrozenRuns(new Map(snap.frozenRuns));
+      }
+      // Restaura progress apenas se ainda está no estado inicial (evita stomp)
+      setProgress((prev) => {
+        if (prev !== initialAgentProgress && prev.streamText != null) return prev;
+        return snap.progress;
+      });
+      // Reconecta no run para catch-up de eventos que chegaram durante o reload
+      void subscribeToRun(snap.activeRunId, { resetProgress: false });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const applyStreamRow = useCallback(
     (row: {
@@ -208,6 +294,7 @@ export function useAgentRun() {
         runIdRef.current = null;
         setActiveRunId(null);
         setConnected(false);
+        clearAgentSnapshot();
       }
       teardownChannels();
     },
@@ -794,6 +881,7 @@ export function useAgentRun() {
     runIdRef.current = null;
     setActiveRunId(null);
     teardownChannels();
+    clearAgentSnapshot();
   }, [persistFrozen, teardownChannels]);
 
   const disconnect = useCallback(() => {
@@ -801,6 +889,7 @@ export function useAgentRun() {
     setActiveRunId(null);
     teardownChannels();
     setProgress((p) => ({ ...p, finished: true }));
+    clearAgentSnapshot();
   }, [teardownChannels]);
 
   const replay = useCallback(

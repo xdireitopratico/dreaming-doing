@@ -161,6 +161,44 @@ export function ChatInput({
   const [showNewMessagesPill, setShowNewMessagesPill] = useState(false);
   const historyRef = useRef<string[]>([]);
   const PIN_THRESHOLD_PX = 100;
+
+  // ─── Auto-save do textarea em sessionStorage ────────────────────────────
+  const CHAT_DRAFT_KEY = "forge:chat-draft";
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (input.trim()) {
+        try {
+          sessionStorage.setItem(
+            CHAT_DRAFT_KEY,
+            JSON.stringify({ input, timestamp: Date.now() }),
+          );
+        } catch {
+          // ignore quota exceeded
+        }
+      } else {
+        sessionStorage.removeItem(CHAT_DRAFT_KEY);
+      }
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [input]);
+
+  // Recupera draft ao montar
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem(CHAT_DRAFT_KEY);
+      if (raw) {
+        const draft = JSON.parse(raw) as { input: string; timestamp: number };
+        if (Date.now() - draft.timestamp < 24 * 60 * 60 * 1000) {
+          setInput(draft.input);
+        } else {
+          sessionStorage.removeItem(CHAT_DRAFT_KEY);
+        }
+      }
+    } catch {
+      sessionStorage.removeItem(CHAT_DRAFT_KEY);
+    }
+  }, []);
   const effectiveProgress = useMemo(
     () => resolveEffectiveAgentProgress(agentProgress, messages),
     [agentProgress, messages],
@@ -314,6 +352,11 @@ export function ChatInput({
     }
     setInput("");
     setAttachments([]);
+    try {
+      sessionStorage.removeItem(CHAT_DRAFT_KEY);
+    } catch {
+      // ignore
+    }
     onSend(text, modeAtSend, outgoing);
     // Reset textarea height e foco
     requestAnimationFrame(() => {

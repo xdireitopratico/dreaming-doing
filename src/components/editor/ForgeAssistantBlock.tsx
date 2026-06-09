@@ -1,9 +1,6 @@
-import { Copy, RotateCcw, Zap } from "lucide-react";
+import { Copy, RotateCcw } from "lucide-react";
 import type { ChatMessage } from "@/components/editor/ChatInput";
 import type { AgentProgress, PendingPlan, PlanStep } from "@/lib/agent-progress";
-import { ChatDiffViewer } from "@/components/editor/ChatDiffViewer";
-import { PlanViewer } from "@/components/editor/PlanViewer";
-import { PlanDocumentView } from "@/components/editor/PlanDocumentView";
 import { AgentJobMiniCard } from "@/components/editor/AgentJobMiniCard";
 import { storedPlanFromMessage } from "@/lib/plan-message-meta";
 import { isAgentJobMessage } from "@/lib/assistant-run-progress";
@@ -77,7 +74,6 @@ export function ForgeAssistantBlock({
   const planForRun = livePlan ?? (storedPlan?.status === "pending" ? storedPlan.plan : null);
   const rejectedPlan = storedPlan?.status === "rejected" ? storedPlan.plan : null;
   const approvedPlan = storedPlan?.status === "approved" ? storedPlan.plan : null;
-  const diffs = effectiveProgress?.diffs ?? [];
 
   const isBuildRun = !!runId || isAgentJobMessage(message);
   const showJobBubble =
@@ -97,7 +93,6 @@ export function ForgeAssistantBlock({
     showJobBubble &&
     effectiveProgress.lastFinishOk === true &&
     !effectiveProgress.canceled;
-  // (per-runId anchoring + resolve from hardened lovable-thread ensures correct Done for frozen historical on multi-turn)
 
   const isPersistedMessage = !!message?.id && !String(message.id).startsWith("live-");
   const canShowFooter =
@@ -111,22 +106,24 @@ export function ForgeAssistantBlock({
         <span className="forge-chat-sender forge-chat-sender-assistant shrink-0">FORGE</span>
         {showTokens && estimatedTokens > 0 && (
           <div className="flex items-center gap-1 px-2 py-0.5 rounded bg-[var(--forge-surface-2)] border border-[var(--forge-border)] text-[10px] font-mono text-[var(--forge-primary)]">
-            <Zap className="size-3" />
             <span>~{estimatedTokens.toLocaleString()} tokens</span>
           </div>
         )}
       </div>
 
+      {/* Mini card com lista atômica de tarefas */}
       {showJobBubble && effectiveProgress && (
         <AgentJobMiniCard
           progress={effectiveProgress}
           runId={runId}
           isActive={isActive}
           isFocused={!!runId && jobWorkspaceRunId === runId}
+          pendingPlan={planForRun}
           onOpen={onOpenJobWorkspace}
         />
       )}
 
+      {/* Plano aprovado (histórico) */}
       {approvedPlan && !planForRun && (
         <section
           className="my-3 rounded-lg border border-[var(--border)] bg-[var(--surface-2)]/60 overflow-hidden"
@@ -137,11 +134,12 @@ export function ForgeAssistantBlock({
             <span className="text-xs font-medium text-[var(--foreground)]">Plano aprovado</span>
           </header>
           <div className="max-h-[360px] overflow-hidden">
-            <PlanDocumentView plan={approvedPlan} editable={false} />
+            <p className="p-4 text-sm text-[var(--forge-silver)]">{approvedPlan.mission ?? approvedPlan.summary}</p>
           </div>
         </section>
       )}
 
+      {/* Texto de fechamento / narração */}
       {closingText ? (
         <p
           className="forge-chat-live-line forge-chat-closing-text text-[var(--forge-silver)] text-[13px] leading-relaxed whitespace-pre-wrap"
@@ -164,6 +162,7 @@ export function ForgeAssistantBlock({
         </time>
       )}
 
+      {/* Erro */}
       {effectiveProgress?.finished && effectiveProgress.error && (
         <section
           className="my-2 rounded-lg border border-amber-400/35 bg-amber-400/8 px-3 py-2.5"
@@ -193,6 +192,7 @@ export function ForgeAssistantBlock({
         </section>
       )}
 
+      {/* Estado vazio */}
       {effectiveProgress?.finished &&
         !closingText &&
         !effectiveProgress.error &&
@@ -207,6 +207,7 @@ export function ForgeAssistantBlock({
           </p>
         )}
 
+      {/* Plano rejeitado (histórico) */}
       {rejectedPlan && !planForRun && (
         <section
           className="my-3 rounded-lg border border-[var(--border)] bg-[var(--surface-2)]/60 overflow-hidden"
@@ -217,26 +218,14 @@ export function ForgeAssistantBlock({
             <span className="text-xs font-medium text-[var(--foreground)]">Plano rejeitado</span>
           </header>
           <div className="max-h-[360px] overflow-hidden">
-            <PlanDocumentView plan={rejectedPlan} editable={false} />
+            <p className="p-4 text-sm text-[var(--forge-silver)]">{rejectedPlan.mission ?? rejectedPlan.summary}</p>
           </div>
         </section>
       )}
 
-      {planForRun && onReopenPlan && onPlanApprove && onPlanReject && (
-        <div className="forge-plan-panel my-3 w-full max-w-full min-w-0" data-testid="plan-panel">
-          <PlanViewer
-            plan={planForRun}
-            onOpen={onReopenPlan}
-            onApprove={onPlanApprove}
-            onReject={onPlanReject}
-          />
-        </div>
-      )}
-
-      {!isActive && diffs.length > 0 && <ChatDiffViewer diffs={diffs} />}
-
+      {/* Footer: Copiar / Desfazer */}
       {canShowFooter && (onCopy || onUndo) ? (
-        <footer className="forge-chat-item-assistant-footer mt-2 flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+        <footer className="forge-chat-item-assistant-footer mt-2 flex items-center justify-end gap-1 opacity-60 hover:opacity-100 transition-opacity">
           {onUndo && message && (
             <button
               type="button"

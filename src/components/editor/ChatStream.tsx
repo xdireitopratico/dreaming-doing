@@ -19,12 +19,15 @@ import {
   resolveAssistantProgress,
 } from "@/lib/lovable-thread";
 
+import type { PendingQueueItem } from "@/components/editor/PendingQueuePanel";
+
 export interface ChatStreamProps {
   messages: ChatMessage[];
   running: boolean;
   progress: AgentProgress;
   activeRunId?: string | null;
   frozenRuns?: ReadonlyMap<string, FrozenRunSnapshot>;
+  pendingQueueItems?: PendingQueueItem[];
   onResume?: () => void;
   onUndoMessage?: (assistantMsgId: string) => void;
   onReopenPlan?: () => void;
@@ -40,6 +43,7 @@ export function ChatStream({
   progress,
   activeRunId,
   frozenRuns,
+  pendingQueueItems = [],
   onResume,
   onUndoMessage,
   onReopenPlan,

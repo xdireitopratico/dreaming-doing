@@ -518,7 +518,7 @@ export function applyAgentProgressEvent(
           ? data.objective
           : undefined,
         steps,
-        ttlMs: typeof data.ttlMs === "number" ? data.ttlMs : 5 * 60 * 1000,
+        ttlMs: typeof data.ttlMs === "number" ? data.ttlMs : Number.MAX_SAFE_INTEGER,
         proposedAt: Date.now(),
         runId,
         projectId,

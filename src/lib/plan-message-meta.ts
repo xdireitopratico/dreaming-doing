@@ -63,7 +63,7 @@ export function storedPlanFromMessage(message?: ChatMessage): StoredPlanMeta | n
       mission: typeof meta.planMission === "string" ? meta.planMission : undefined,
       objective: typeof meta.planObjective === "string" ? meta.planObjective : undefined,
       steps,
-      ttlMs: 5 * 60 * 1000,
+      ttlMs: Number.MAX_SAFE_INTEGER,
       proposedAt: Date.now(),
       runId,
       projectId: typeof meta.projectId === "string" ? meta.projectId : "",

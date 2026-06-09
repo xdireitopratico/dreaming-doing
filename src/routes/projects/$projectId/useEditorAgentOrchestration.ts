@@ -285,13 +285,12 @@ export function useEditorAgentOrchestration({
     ],
   );
 
-  const fileSyncDebounceMs = running ? 300 : 600;
-  const previewTickDebounceMs = running ? 400 : 800;
+  const fileSyncDebounceMs = running ? 0 : 600;
+  const previewTickDebounceMs = running ? 100 : 800;
 
   useEffect(() => {
     if (!filesSyncKey || filesSyncKey === lastSyncedFilesKeyRef.current) return;
-    if (!supportsLivePreview || !e2bConnected || previewE2bCircuit || (fileCount === 0 && !running))
-      return;
+    if (!supportsLivePreview || !e2bConnected || previewE2bCircuit) return;
     lastSyncedFilesKeyRef.current = filesSyncKey;
     const t = window.setTimeout(
       () => {
@@ -315,8 +314,7 @@ export function useEditorAgentOrchestration({
   useEffect(() => {
     const tick = agent.progress.previewSyncTick ?? 0;
     if (tick <= lastPreviewSyncTickRef.current) return;
-    if (!supportsLivePreview || !e2bConnected || previewE2bCircuit || (fileCount === 0 && !running))
-      return;
+    if (!supportsLivePreview || !e2bConnected || previewE2bCircuit) return;
     lastPreviewSyncTickRef.current = tick;
     const t = window.setTimeout(
       () => {
