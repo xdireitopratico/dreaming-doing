@@ -122,7 +122,7 @@ export function ChatStream({
       {thread.map((item, idx) => {
         if (item.kind === "user") {
           return (
-            <article key={item.message.id} className="forge-chat-item forge-chat-item-user">
+            <article key={`user-${item.message.id}`} className="forge-chat-item forge-chat-item-user">
               <div className="forge-msg-user-outline">
                 <p className="whitespace-pre-wrap">{item.message.content}</p>
               </div>
@@ -135,9 +135,15 @@ export function ChatStream({
           ? assistantMessages.findIndex((m) => m.id === item.message!.id)
           : -1;
 
+        const stableKey = item.message?.id
+          ? `assistant-${item.message.id}`
+          : item.runId
+            ? `live-${item.runId}`
+            : `slot-${idx}`;
+
         return (
           <ForgeAssistantBlock
-            key={item.message?.id ?? `live-${item.runId ?? idx}`}
+            key={stableKey}
             message={item.message}
             progress={resolved}
             isActive={item.isActive}

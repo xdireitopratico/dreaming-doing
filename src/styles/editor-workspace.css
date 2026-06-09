@@ -784,11 +784,12 @@ body:has(.editor-workspace) {
   padding: 12px 16px;
   border-radius: 16px 16px 4px 16px;
   border: 2px solid var(--forge-primary);
-  background: transparent;
+  background: rgba(255, 182, 39, 0.08);
   color: var(--forge-text);
   font-size: 13px;
   line-height: 1.55;
   box-shadow: 0 0 0 1px rgba(255, 182, 39, 0.15);
+  transition: background 0.2s ease, border-color 0.2s ease;
 }
 
 .forge-msg-user-outline p {
@@ -869,6 +870,7 @@ body:has(.editor-workspace) {
   border-radius: var(--forge-radius-sm);
   border: 1px solid var(--forge-border);
   background: rgba(18, 21, 28, 0.55);
+  transition: opacity 0.2s ease, min-height 0.2s ease;
 }
 
 .lovable-activity-status {

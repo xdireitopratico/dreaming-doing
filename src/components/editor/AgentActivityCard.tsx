@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import { FileEdit, FilePlus, Loader2 } from "lucide-react";
 import type { AgentProgress } from "@/lib/agent-progress";
 import { buildAgentNarrative } from "@/lib/agent-narrative";
@@ -35,18 +35,11 @@ export function AgentActivityCard({
   isActive,
   persistedText,
 }: AgentActivityCardProps) {
-  const [tipSeed, setTipSeed] = useState(0);
-
-  useEffect(() => {
-    if (!isActive) return;
-    const id = window.setInterval(() => setTipSeed((n) => n + 1), 5000);
-    return () => window.clearInterval(id);
-  }, [isActive]);
-
   const narrative = buildAgentNarrative(progress, { running: isActive, persistedText });
   const files = useMemo(() => collectActivityFiles(progress), [progress.diffs, progress.tools]);
   const activeTool = progress.tools.filter((t) => t.ok === undefined).at(-1);
   const showTip = isActive && !narrative.body && !files.length;
+  const tipSeed = useMemo(() => (progress.phase?.length ?? 0) + progress.tools.length, [progress.phase, progress.tools.length]);
   const tip = showTip ? pickChatResponseTip(tipSeed) : null;
 
   const statusLine =
@@ -63,8 +56,10 @@ export function AgentActivityCard({
       (progress.deliveryFiles?.length ?? 0) > 0 ||
       progress.resumable);
 
-  if (!isActive && !files.length && !showSummary && !progress.skills.length && !showReceipt) {
-    return null;
+  const hasContent = isActive || files.length || showSummary || progress.skills.length || showReceipt || tip;
+
+  if (!hasContent) {
+    return <div className="lovable-activity-card min-h-[4px] opacity-0" aria-hidden="true" />;
   }
 
   return (

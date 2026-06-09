@@ -163,6 +163,8 @@ export function ChatInput({
   const [showCommands, setShowCommands] = useState(false);
   const [showFileSuggest, setShowFileSuggest] = useState(false);
   const [filteredFiles, setFilteredFiles] = useState<string[]>([]);
+  const [commandIndex, setCommandIndex] = useState(0);
+  const [fileIndex, setFileIndex] = useState(0);
   const [historyIndex, setHistoryIndex] = useState(-1);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -202,19 +204,12 @@ export function ChatInput({
   // Pin-to-bottom: só desce se o usuário já estava no fim
   useEffect(() => {
     if (pinnedToBottomRef.current) {
-      scrollToBottom("auto");
+      const raf = requestAnimationFrame(() => scrollToBottom("auto"));
+      return () => cancelAnimationFrame(raf);
     } else {
       setShowNewMessagesPill(true);
     }
-  }, [
-    messages,
-    running,
-    agentProgress?.phase,
-    agentProgress?.tools.length,
-    agentProgress?.streamText,
-    agentProgress?.diffs.length,
-    scrollToBottom,
-  ]);
+  }, [messages.length, running, scrollToBottom]);
 
   // Auto-resize textarea
   useEffect(() => {
@@ -228,6 +223,7 @@ export function ChatInput({
   useEffect(() => {
     if (input.startsWith("/") && !input.includes(" ")) {
       setShowCommands(true);
+      setCommandIndex(0);
       setShowFileSuggest(false);
     } else {
       setShowCommands(false);
@@ -237,12 +233,12 @@ export function ChatInput({
     const lastAt = input.lastIndexOf("@");
     if (lastAt >= 0) {
       const query = input.slice(lastAt + 1).toLowerCase();
-      setFilteredFiles(
-        files
-          .filter((f) => f.toLowerCase().includes(query))
-          .slice(0, 5),
-      );
-      setShowFileSuggest(true);
+      const matches = files
+        .filter((f) => f.toLowerCase().includes(query))
+        .slice(0, 5);
+      setFilteredFiles(matches);
+      setFileIndex(0);
+      setShowFileSuggest(matches.length > 0);
     } else {
       setShowFileSuggest(false);
     }
@@ -262,7 +258,10 @@ export function ChatInput({
 
   const insertFile = (filePath: string) => {
     const lastAt = input.lastIndexOf("@");
-    const newInput = input.slice(0, lastAt) + filePath + input.slice(lastAt + filePath.length + 1);
+    const afterAt = input.slice(lastAt + 1);
+    const queryEnd = afterAt.search(/[\s]/);
+    const rest = queryEnd >= 0 ? afterAt.slice(queryEnd) : "";
+    const newInput = input.slice(0, lastAt) + "@" + filePath + " " + rest;
     setInput(newInput);
     setShowFileSuggest(false);
     textareaRef.current?.focus();
@@ -318,12 +317,22 @@ export function ChatInput({
     if (outgoing.length === 0) return;
 
     if (text) {
-      historyRef.current.push(text);
+      // Deduplica history consecutivo
+      if (historyRef.current[historyRef.current.length - 1] !== text) {
+        historyRef.current.push(text);
+      }
       setHistoryIndex(-1);
     }
     setInput("");
     setAttachments([]);
     onSend(text, composerMode, outgoing);
+    // Reset textarea height e foco
+    requestAnimationFrame(() => {
+      if (textareaRef.current) {
+        textareaRef.current.style.height = "auto";
+        textareaRef.current.focus();
+      }
+    });
   };
 
   const handleAttachClick = () => fileInputRef.current?.click();
@@ -344,30 +353,50 @@ export function ChatInput({
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     // Commands navigation
     if (showCommands) {
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setCommandIndex((i) => (i + 1) % COMMANDS.length);
+        return;
+      }
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setCommandIndex((i) => (i - 1 + COMMANDS.length) % COMMANDS.length);
+        return;
+      }
       if (e.key === "Enter" || e.key === "Tab") {
         e.preventDefault();
-        if (COMMANDS.length > 0) {
-          insertCommand(COMMANDS[0]);
-        }
+        const cmd = COMMANDS[commandIndex];
+        if (cmd) insertCommand(cmd);
         return;
       }
       if (e.key === "Escape") {
         setShowCommands(false);
+        textareaRef.current?.focus();
         return;
       }
     }
 
     // File suggest navigation
     if (showFileSuggest) {
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setFileIndex((i) => (i + 1) % filteredFiles.length);
+        return;
+      }
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setFileIndex((i) => (i - 1 + filteredFiles.length) % filteredFiles.length);
+        return;
+      }
       if (e.key === "Enter" || e.key === "Tab") {
         e.preventDefault();
-        if (filteredFiles.length > 0) {
-          insertFile(filteredFiles[0]);
-        }
+        const file = filteredFiles[fileIndex];
+        if (file) insertFile(file);
         return;
       }
       if (e.key === "Escape") {
         setShowFileSuggest(false);
+        textareaRef.current?.focus();
         return;
       }
     }
@@ -379,8 +408,8 @@ export function ChatInput({
       return;
     }
 
-    // History navigation
-    if (e.key === "ArrowUp" && input === "") {
+    // History navigation (only when not in dropdowns)
+    if (e.key === "ArrowUp" && input === "" && !showCommands && !showFileSuggest) {
       e.preventDefault();
       if (historyIndex < historyRef.current.length - 1) {
         const newIndex = historyIndex + 1;
@@ -388,7 +417,7 @@ export function ChatInput({
         setInput(historyRef.current[historyRef.current.length - 1 - newIndex] ?? "");
       }
     }
-    if (e.key === "ArrowDown" && historyIndex >= 0) {
+    if (e.key === "ArrowDown" && historyIndex >= 0 && !showCommands && !showFileSuggest) {
       e.preventDefault();
       const newIndex = historyIndex - 1;
       setHistoryIndex(newIndex);
@@ -487,11 +516,14 @@ export function ChatInput({
             exit={{ opacity: 0, y: 4, height: 0 }}
             className="mx-3 mb-1 bg-[var(--surface-1)] border border-[var(--border)] rounded-lg overflow-hidden shadow-xl"
           >
-            {COMMANDS.map((cmd) => (
+            {COMMANDS.map((cmd, i) => (
               <button
                 key={cmd.id}
                 onClick={() => insertCommand(cmd)}
-                className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-[var(--surface-2)] transition-colors"
+                onMouseEnter={() => setCommandIndex(i)}
+                className={`w-full flex items-center gap-2 px-3 py-2 text-left transition-colors ${
+                  i === commandIndex ? "bg-[var(--surface-2)]" : "hover:bg-[var(--surface-2)]"
+                }`}
               >
                 <span className="text-sm">{cmd.icon}</span>
                 <span className="font-mono text-[11px] text-[var(--foreground)]">{cmd.label}</span>
@@ -511,11 +543,14 @@ export function ChatInput({
             exit={{ opacity: 0, y: 4, height: 0 }}
             className="mx-3 mb-1 bg-[var(--surface-1)] border border-[var(--border)] rounded-lg overflow-hidden shadow-xl"
           >
-            {filteredFiles.map((file) => (
+            {filteredFiles.map((file, i) => (
               <button
                 key={file}
                 onClick={() => insertFile(file)}
-                className="w-full flex items-center gap-2 px-3 py-1.5 text-left hover:bg-[var(--surface-2)] transition-colors"
+                onMouseEnter={() => setFileIndex(i)}
+                className={`w-full flex items-center gap-2 px-3 py-1.5 text-left transition-colors ${
+                  i === fileIndex ? "bg-[var(--surface-2)]" : "hover:bg-[var(--surface-2)]"
+                }`}
               >
                 <span className="font-mono text-[11px] text-[var(--foreground)]">{file}</span>
               </button>
