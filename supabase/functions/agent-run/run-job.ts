@@ -181,25 +181,26 @@ export async function executeAgentJob(
   }
   const preMeta = (pre?.meta ?? {}) as Record<string, unknown>;
 
-  const { data: project } = await supabase
-    .from("projects").select("id, owner_id, template, meta").eq("id", projectId)
-    .single();
+  // Paraleliza queries independentes de inicialização (reduz cold-start)
+  const [projectResult, profileResult, historyResult, userLlmResult] = await Promise.all([
+    supabase.from("projects").select("id, owner_id, template, meta").eq("id", projectId).single(),
+    supabase.from("profiles").select("integration_prefs").eq("id", userId).maybeSingle(),
+    supabase.from("messages")
+      .select("role, parts, tool_calls, meta, created_at")
+      .eq("conversation_id", conversationId)
+      .order("created_at", { ascending: true })
+      .limit(120),
+    loadUserLlmContext(supabase, userId, preferences),
+  ]);
+
+  const { data: project } = projectResult;
   if (!project || project.owner_id !== userId) {
     throw new Error("Projeto não encontrado");
   }
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("integration_prefs")
-    .eq("id", userId)
-    .maybeSingle();
-
-  const { data: history } = await supabase
-    .from("messages")
-    .select("role, parts, tool_calls, meta, created_at")
-    .eq("conversation_id", conversationId)
-    .order("created_at", { ascending: true })
-    .limit(120);
+  const { data: profile } = profileResult;
+  const { data: history } = historyResult;
+  const { userOnlyKeys } = userLlmResult;
 
   const historyRows = history ?? [];
   const restoredExecutionLog = resumeRun
@@ -208,12 +209,6 @@ export async function executeAgentJob(
   const loadedCheckpoint = resumeRun
     ? await loadCheckpoint(supabase, projectId, conversationId)
     : null;
-
-  const { userOnlyKeys } = await loadUserLlmContext(
-    supabase,
-    userId,
-    preferences,
-  );
 
   type SessionKind = "taste_start" | "byok";
   let sessionKind: SessionKind = "byok";
