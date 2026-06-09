@@ -86,9 +86,12 @@ Deno.serve(async (req) => {
         const cConversationId = body.conversationId as string | undefined;
         const cUserId = body.userId as string | undefined;
         if (!cProjectId || !cConversationId || !cUserId) {
-          return json({
-            error: "projectId, conversationId, userId obrigatórios",
-          }, 400);
+          return json(
+            {
+              error: "projectId, conversationId, userId obrigatórios",
+            },
+            400,
+          );
         }
         const { handleContinueQueue } = await import("./continue-queue.ts");
         const drainResult = await handleContinueQueue(
@@ -100,7 +103,7 @@ Deno.serve(async (req) => {
             userId: cUserId,
             planMode: body.planMode === true,
           },
-        );
+        ); // Inngest continue passes prior run's planMode (if any); stored pending intent wins inside handle (no inherit)
         return json(drainResult);
       }
 
@@ -188,10 +191,11 @@ Deno.serve(async (req) => {
         }
 
         const runMeta = (run.meta ?? {}) as Record<string, unknown>;
-        const preferences =
-          (runMeta.preferences && typeof runMeta.preferences === "object"
+        const preferences = (
+          runMeta.preferences && typeof runMeta.preferences === "object"
             ? runMeta.preferences
-            : {}) as Record<string, unknown>;
+            : {}
+        ) as Record<string, unknown>;
         const sessionKind = typeof runMeta.sessionKind === "string"
           ? runMeta.sessionKind
           : "byok";
@@ -326,10 +330,10 @@ Deno.serve(async (req) => {
       );
 
       const { data: project } = await supabase
-        .from("projects").select("id, owner_id, template, meta").eq(
-          "id",
-          projectId,
-        ).single();
+        .from("projects")
+        .select("id, owner_id, template, meta")
+        .eq("id", projectId)
+        .single();
       if (!project || project.owner_id !== userData.user.id) {
         return json({ error: "Projeto não encontrado" }, 404);
       }
@@ -373,9 +377,7 @@ Deno.serve(async (req) => {
           sanitizePendingQueue,
           listPendingMessages,
           countPendingMessages,
-        } = await import(
-          "../_shared/agent-pending-queue.ts"
-        );
+        } = await import("../_shared/agent-pending-queue.ts");
         await sanitizePendingQueue(
           supabase,
           projectId,
@@ -436,7 +438,7 @@ Deno.serve(async (req) => {
             userId: userData.user.id,
             planMode: planMode,
           },
-        );
+        ); // planMode here is call-time fallback; continue-queue prefers pendingBody.mode (send-time) if present (PR3)
         if (drainResult.continued && drainResult.runId) {
           return json({
             ok: true,
@@ -497,7 +499,8 @@ Deno.serve(async (req) => {
         if (completedAwaiting) {
           awaitingRun = completedAwaiting;
           // Corrigir o status para refletir a realidade
-          await supabase.from("agent_runs")
+          await supabase
+            .from("agent_runs")
             .update({ status: "awaiting_user", finished_at: null })
             .eq("id", completedAwaiting.id);
         }
@@ -621,24 +624,33 @@ Deno.serve(async (req) => {
 
       if (sessionKind === "taste_chat" && tasteChatRemaining <= 0) {
         runningLocks.delete(projectId);
-        return json({
-          error:
-            "Limite Taste Chat (50) atingido. Configure suas API em /api para continuar.",
-        }, 402);
+        return json(
+          {
+            error:
+              "Limite Taste Chat (50) atingido. Configure suas API em /api para continuar.",
+          },
+          402,
+        );
       }
       if (sessionKind === "taste_start" && tasteStartRemaining <= 0) {
         runningLocks.delete(projectId);
-        return json({
-          error:
-            "Start Project já utilizado. Configure API para construir sem limites.",
-        }, 402);
+        return json(
+          {
+            error:
+              "Start Project já utilizado. Configure API para construir sem limites.",
+          },
+          402,
+        );
       }
       if (!hasUserLlmKey && sessionKind === "byok") {
         runningLocks.delete(projectId);
-        return json({
-          error:
-            "Configure suas API em /api ou use o Taste Chat / Start Project.",
-        }, 402);
+        return json(
+          {
+            error:
+              "Configure suas API em /api ou use o Taste Chat / Start Project.",
+          },
+          402,
+        );
       }
 
       if (sessionKind === "byok") {
@@ -676,9 +688,12 @@ Deno.serve(async (req) => {
           return json(result);
         } catch (err: unknown) {
           cleanup();
-          return json({
-            error: (err as Error)?.message ?? "Taste indisponível",
-          }, 500);
+          return json(
+            {
+              error: (err as Error)?.message ?? "Taste indisponível",
+            },
+            500,
+          );
         }
       }
 
@@ -712,9 +727,12 @@ Deno.serve(async (req) => {
         tasteStart = setup.tasteStart;
       } catch (err: unknown) {
         runningLocks.delete(projectId);
-        return json({
-          error: (err as Error)?.message ?? "Provider LLM não configurado",
-        }, 500);
+        return json(
+          {
+            error: (err as Error)?.message ?? "Provider LLM não configurado",
+          },
+          500,
+        );
       }
 
       const messages = await buildChatHistory(historyRows, 120, mainCfg.model);
@@ -730,21 +748,25 @@ Deno.serve(async (req) => {
         ? String(fromBody)
         : extractOriginalUserRequest(messages);
       const looksLikeInteraction = looksLikeInteractionOnly(lastUserContent);
-      const projectHasSandbox =
-        !!(((project as any).meta || {})?.previewSandboxId ||
-          ((project as any).meta || {})?.previewReady);
+      const projectHasSandbox = !!(
+        ((project as any).meta || {})?.previewSandboxId ||
+        ((project as any).meta || {})?.previewReady
+      );
       const hasApprovedPlanInHistory = messages.some((m) => {
         const meta = (m?.meta ?? {}) as Record<string, unknown>;
-        return m?.role === "user" &&
+        return (
+          m?.role === "user" &&
           (meta.kind === "plan_approved" ||
-            typeof meta.planSourceRunId === "string");
+            typeof meta.planSourceRunId === "string")
+        );
       });
       // Fase 4.7: 3 guardas — (1) interação explícita não aloca, (2) projeto SEM
       // arquivos não aloca (E2B só nasce depois do agente criar algo), (3) projeto
       // com sandbox pré-existente pode reusar.
       // + hasApproved for plan+follow-up proof.
       const allocateSandboxLocal = hasApprovedPlanInHistory ||
-        (!looksLikeInteraction && projectFileCount > 0) || projectHasSandbox;
+        (!looksLikeInteraction && projectFileCount > 0) ||
+        projectHasSandbox;
 
       // Fase 4.7: o código abaixo (reg + sandbox local) era DEAD CODE — o
       // executeAgentJob em run-job.ts cria seu próprio ToolRegistry e sandbox.
@@ -767,7 +789,10 @@ Deno.serve(async (req) => {
       const stackCtx = buildStackContext(
         profile?.integration_prefs,
         projectMeta,
-        { ...connectorKeys, ...deployKeys },
+        {
+          ...connectorKeys,
+          ...deployKeys,
+        },
       );
       const stackAddon = stackPromptAddon(stackCtx);
 
@@ -778,10 +803,13 @@ Deno.serve(async (req) => {
         const e2bKey = await loadUserE2bApiKey(supabase, userData.user.id);
         if (!e2bKey?.trim()) {
           runningLocks.delete(projectId);
-          return json({
-            error: E2B_SETUP_USER_MESSAGE,
-            code: "e2b_not_configured",
-          }, 403);
+          return json(
+            {
+              error: E2B_SETUP_USER_MESSAGE,
+              code: "e2b_not_configured",
+            },
+            403,
+          );
         }
       }
 
@@ -832,12 +860,14 @@ Deno.serve(async (req) => {
       }
 
       if (!agentRunId) {
-        const { data: lockedId, error: lockErr } = await supabase
-          .rpc("acquire_agent_run_lock", {
+        const { data: lockedId, error: lockErr } = await supabase.rpc(
+          "acquire_agent_run_lock",
+          {
             p_project_id: projectId,
             p_conversation_id: conversationId,
             p_user_id: userData.user.id,
-          });
+          },
+        );
 
         if (lockErr || !lockedId) {
           runningLocks.delete(projectId);
@@ -924,20 +954,18 @@ Deno.serve(async (req) => {
         }
       }
 
-      const finalizeRun = async (
-        result: {
-          ok: boolean;
-          error?: string;
-          steps: number;
-          canceled?: boolean;
-          summary?: string;
-          toolsUsed?: string[];
-          totalInputTokens?: number;
-          totalOutputTokens?: number;
-          totalTokens?: number;
-          costUsd?: number;
-        },
-      ) => {
+      const finalizeRun = async (result: {
+        ok: boolean;
+        error?: string;
+        steps: number;
+        canceled?: boolean;
+        summary?: string;
+        toolsUsed?: string[];
+        totalInputTokens?: number;
+        totalOutputTokens?: number;
+        totalTokens?: number;
+        costUsd?: number;
+      }) => {
         if (!agentRunId) return;
 
         // Lê estado atual para NÃO sobrescrever status de espera
@@ -1013,7 +1041,9 @@ Deno.serve(async (req) => {
         userId: userData.user.id,
         sessionKind: tasteStart
           ? "taste_start"
-          : (hasUserLlmKey ? "byok" : "taste_chat"),
+          : hasUserLlmKey
+          ? "byok"
+          : "taste_chat",
         preferences: preferences ?? {},
         enabledSkillIds,
         enabledMcpIds,
@@ -1058,7 +1088,9 @@ Deno.serve(async (req) => {
         checkpoint: !!loadedCheckpoint,
         sessionKind: tasteStart
           ? "taste_start"
-          : (hasUserLlmKey ? "byok" : "taste_chat"),
+          : hasUserLlmKey
+          ? "byok"
+          : "taste_chat",
         memoryMessages: loadedCheckpoint?.state.messages.length ??
           messages.length,
         mode: planMode ? "plan" : "build",

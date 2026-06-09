@@ -32,7 +32,6 @@ import type { useConnectors } from "@/hooks/useConnectors";
 import type { AgentPreferences } from "@/lib/agent-preferences";
 import { HEAT_MAP_CSS } from "@/lib/monacoEnhancements";
 
-
 type AgentRun = ReturnType<typeof useAgentRun>;
 type PreviewBoot = ReturnType<typeof usePreviewBoot>;
 type Connectors = ReturnType<typeof useConnectors>;
@@ -87,7 +86,10 @@ export type EditorPageLayoutProps = {
   tasteStartRemaining: number;
   handleStartProject: () => void;
   handleUndoMessage: (assistantMsgId: string) => void;
-  handlePlanApprove: (steps: { id: string; enabled: boolean }[], markdown?: string) => Promise<void>;
+  handlePlanApprove: (
+    steps: { id: string; enabled: boolean }[],
+    markdown?: string,
+  ) => Promise<void>;
   handlePlanReject: (reason?: string) => Promise<void>;
   hasUserLlmKey: boolean;
   agentPrefs: AgentPreferences;
@@ -242,13 +244,8 @@ export function EditorPageLayout({
 
   const showPlanModal = pendingPlan != null && forcePlanOpen;
 
-  const {
-    jobWorkspaceFocus,
-    openJobWorkspace,
-    closeJobWorkspace,
-    setJobTab,
-    isJobFocused,
-  } = useJobWorkspaceFocus();
+  const { jobWorkspaceFocus, openJobWorkspace, closeJobWorkspace, setJobTab, isJobFocused } =
+    useJobWorkspaceFocus();
 
   const handleOpenJobWorkspace = (runId: string) => {
     openJobWorkspace(runId, "timeline");
@@ -425,6 +422,7 @@ export function EditorPageLayout({
                     }
                     onDrainQueue={async () => {
                       if (!conversationId) return;
+                      // Forward current composerMode as drain intent (fallback); continue-queue will prefer stored mode from the pendingBody (send-time capture) if present.
                       await agent.drainQueue(projectId, conversationId, composerMode);
                     }}
                     onOpenJobWorkspace={handleOpenJobWorkspace}
@@ -467,9 +465,8 @@ export function EditorPageLayout({
                     <StackHonestBanner
                       files={previewNavFiles}
                       onFocusChat={() => {
-                        const el = document.querySelector<HTMLTextAreaElement>(
-                          ".forge-composer-input",
-                        );
+                        const el =
+                          document.querySelector<HTMLTextAreaElement>(".forge-composer-input");
                         el?.focus();
                       }}
                     />
@@ -484,22 +481,23 @@ export function EditorPageLayout({
                         />
                       )}
 
-                      {activeView === "preview" && isJobFocused && jobWorkspaceFocus && focusedJobProgress && (
-                        <JobWorkspacePanel
-                          progress={focusedJobProgress}
-                          runId={jobWorkspaceFocus.runId}
-                          running={
-                            running && agent.activeRunId === jobWorkspaceFocus.runId
-                          }
-                          activeTab={jobWorkspaceFocus.tab}
-                          onTabChange={setJobTab}
-                          onBackToLatest={closeJobWorkspace}
-                          onOpenFile={(path) => {
-                            handleSelectFile(path);
-                            onMainViewChange("code");
-                          }}
-                        />
-                      )}
+                      {activeView === "preview" &&
+                        isJobFocused &&
+                        jobWorkspaceFocus &&
+                        focusedJobProgress && (
+                          <JobWorkspacePanel
+                            progress={focusedJobProgress}
+                            runId={jobWorkspaceFocus.runId}
+                            running={running && agent.activeRunId === jobWorkspaceFocus.runId}
+                            activeTab={jobWorkspaceFocus.tab}
+                            onTabChange={setJobTab}
+                            onBackToLatest={closeJobWorkspace}
+                            onOpenFile={(path) => {
+                              handleSelectFile(path);
+                              onMainViewChange("code");
+                            }}
+                          />
+                        )}
 
                       {activeView === "preview" && !(isJobFocused && focusedJobProgress) && (
                         <PreviewFrame
@@ -536,9 +534,8 @@ export function EditorPageLayout({
                             openConnector("github");
                           }}
                           onFocusChat={() => {
-                            const el = document.querySelector<HTMLTextAreaElement>(
-                              ".forge-composer-input",
-                            );
+                            const el =
+                              document.querySelector<HTMLTextAreaElement>(".forge-composer-input");
                             el?.focus();
                           }}
                         />
@@ -580,10 +577,7 @@ export function EditorPageLayout({
         onOpenFile={handleSelectFile}
       />
 
-      <ShortcutCheatsheet
-        isOpen={cheatsheetOpen}
-        onClose={() => setCheatsheetOpen(false)}
-      />
+      <ShortcutCheatsheet isOpen={cheatsheetOpen} onClose={() => setCheatsheetOpen(false)} />
 
       {isDragOver && (
         <div className="pointer-events-none fixed inset-0 z-[200] m-3 flex items-center justify-center rounded-xl border-2 border-dashed border-[var(--primary)]/50 bg-black/70">

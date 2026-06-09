@@ -10,16 +10,9 @@ import type { ChatMessage } from "@/components/editor/ChatInput";
 import { buildEditorActions, type PaletteAction } from "@/components/editor/CommandPalette";
 import { createLogEntry, type LogEntry } from "@/components/editor/LogPanel";
 import { loadAgentPreferences } from "@/lib/agent-preferences";
-import {
-  isAgentPreferencesConfigured,
-  getAgentSetupBlockMessage,
-} from "@/lib/agent-setup";
+import { isAgentPreferencesConfigured, getAgentSetupBlockMessage } from "@/lib/agent-setup";
 import type { ForgeSessionKind, TasteAction } from "@/lib/taste";
-import {
-  canSendTasteChat,
-  canStartTasteProject,
-  resolveSessionKind,
-} from "@/lib/taste";
+import { canSendTasteChat, canStartTasteProject, resolveSessionKind } from "@/lib/taste";
 import type { StoredMessagePart } from "@/lib/chat-attachments";
 import { buildPreviewUrl } from "@/lib/project-routes";
 import { logEditorTelemetryEvent } from "@/lib/editor-telemetry";
@@ -72,16 +65,33 @@ type UseEditorPageHandlersParams = {
   previewBoot: PreviewBoot;
   running: boolean;
   activeView: "code" | "preview" | "diff";
-  setActiveView: (value: "code" | "preview" | "diff" | ((prev: "code" | "preview" | "diff") => "code" | "preview" | "diff")) => void;
+  setActiveView: (
+    value:
+      | "code"
+      | "preview"
+      | "diff"
+      | ((prev: "code" | "preview" | "diff") => "code" | "preview" | "diff"),
+  ) => void;
   activeFilePath: string | null;
   setActiveFilePath: (value: string | null | ((prev: string | null) => string | null)) => void;
   openTabs: Tab[];
   setOpenTabs: (value: Tab[] | ((prev: Tab[]) => Tab[])) => void;
   composerMode: AgentComposerMode;
-  setComposerMode: (value: AgentComposerMode | ((prev: AgentComposerMode) => AgentComposerMode)) => void;
+  setComposerMode: (
+    value: AgentComposerMode | ((prev: AgentComposerMode) => AgentComposerMode),
+  ) => void;
   logPanelOpen: boolean;
   setLogPanelOpen: (value: boolean | ((prev: boolean) => boolean)) => void;
-  setLogPanelTab: (value: "terminal" | "console" | "problems" | "shot" | ((prev: "terminal" | "console" | "problems" | "shot") => "terminal" | "console" | "problems" | "shot")) => void;
+  setLogPanelTab: (
+    value:
+      | "terminal"
+      | "console"
+      | "problems"
+      | "shot"
+      | ((
+          prev: "terminal" | "console" | "problems" | "shot",
+        ) => "terminal" | "console" | "problems" | "shot"),
+  ) => void;
   setLogs: (value: LogEntry[] | ((prev: LogEntry[]) => LogEntry[])) => void;
   setShowFileTree: (value: boolean | ((prev: boolean) => boolean)) => void;
   setPaletteOpen: (value: boolean | ((prev: boolean) => boolean)) => void;
@@ -159,9 +169,7 @@ export function useEditorPageHandlers({
         path = FORGE_UI_BUNDLED_MARKER;
       }
       const content =
-        path === FORGE_UI_BUNDLED_MARKER
-          ? bundledMarkerContent()
-          : (fileMap.get(path) ?? "");
+        path === FORGE_UI_BUNDLED_MARKER ? bundledMarkerContent() : (fileMap.get(path) ?? "");
       setActiveFilePath(path);
       if (activeView === "diff") setActiveView("code");
       setOpenTabs((prev) => {
@@ -195,8 +203,8 @@ export function useEditorPageHandlers({
   );
 
   const isAgentBusy = useCallback(
-    () => running || agent.connected || isAgentConnectInFlight(),
-    [running, agent.connected],
+    () => running || agent.connected || agent.activeRunId != null || isAgentConnectInFlight(),
+    [running, agent.connected, agent.activeRunId],
   );
 
   const runAgent = useCallback(
@@ -241,7 +249,10 @@ export function useEditorPageHandlers({
       );
       void (async () => {
         try {
-          await agent.connect(projectId, conversation.id, kind, { tasteAction, mode: composerMode });
+          await agent.connect(projectId, conversation.id, kind, {
+            tasteAction,
+            mode: composerMode,
+          });
         } catch (e: unknown) {
           const msg = e instanceof Error ? e.message : "Erro ao iniciar agente";
           logEditorTelemetryEvent("agent", "run_fail", "error", msg.slice(0, 200));
@@ -298,7 +309,17 @@ export function useEditorPageHandlers({
         logEditorTelemetryEvent("agent", "resume_fail", "error", msg.slice(0, 200));
       }
     })();
-  }, [conversation, projectId, isAgentBusy, agent, logPanelOpen, qc, tasteQuota, setLogs, setLogPanelOpen]);
+  }, [
+    conversation,
+    projectId,
+    isAgentBusy,
+    agent,
+    logPanelOpen,
+    qc,
+    tasteQuota,
+    setLogs,
+    setLogPanelOpen,
+  ]);
 
   const handleSend = useCallback(
     async (text: string, mode?: AgentComposerMode, parts?: StoredMessagePart[]) => {
@@ -336,10 +357,13 @@ export function useEditorPageHandlers({
               },
             ];
 
+      const sendMode = (mode ?? composerMode) as AgentComposerMode;
+
       const { error } = await supabase.from("messages").insert({
         conversation_id: conversation.id,
         role: "user",
         parts: messageParts,
+        meta: { mode: sendMode }, // capture send-time intent (plan|build) for pendingBody + drain + PR2 history/qualify
       });
 
       if (error) {
@@ -348,12 +372,23 @@ export function useEditorPageHandlers({
         return;
       }
 
-      logEditorTelemetryEvent("agent", "chat_send", "info", mode ?? composerMode);
+      logEditorTelemetryEvent("agent", "chat_send", "info", sendMode);
       void qc.invalidateQueries({ queryKey: ["messages", conversation.id] });
+
+      // Explicit invalidate + refetch before busy decision to make queue/drain decisions resilient
+      // (post-finish races on derived running/connected; double-msg respects send-time mode).
+      void qc.invalidateQueries({ queryKey: ["agent-runs", projectId] });
+      void agent.refreshPendingQueue(projectId, conversation.id).catch(() => {});
 
       const kind = resolveSessionKind(tasteQuota);
       if (isAgentBusy()) {
-        const queued = await agent.queueMessage(projectId, conversation.id, kind);
+        const queued = await agent.queueMessage(
+          projectId,
+          conversation.id,
+          kind,
+          undefined,
+          sendMode,
+        );
         if (!queued.ok) {
           toast.error(queued.message ?? "Erro ao enfileirar mensagem");
         }
@@ -407,7 +442,10 @@ export function useEditorPageHandlers({
     void (async () => {
       await agent.stop();
       logEditorTelemetryEvent("agent", "run_stop", "warn", "user");
-      setLogs((prev) => [...prev, createLogEntry("warning", "Agente interrompido pelo usuário", "agent")]);
+      setLogs((prev) => [
+        ...prev,
+        createLogEntry("warning", "Agente interrompido pelo usuário", "agent"),
+      ]);
     })();
   }, [agent, setLogs]);
 
@@ -514,7 +552,16 @@ export function useEditorPageHandlers({
         toast.error((e as Error)?.message ?? "Falha ao aprovar plano");
       }
     },
-    [getPendingPlan, conversation, projectId, qc, planApproveFn, setComposerMode, agent, tasteQuota],
+    [
+      getPendingPlan,
+      conversation,
+      projectId,
+      qc,
+      planApproveFn,
+      setComposerMode,
+      agent,
+      tasteQuota,
+    ],
   );
 
   const handlePlanReject = useCallback(

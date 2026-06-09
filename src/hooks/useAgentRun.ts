@@ -56,7 +56,12 @@ async function parseErrorResponse(res: Response): Promise<string> {
   }
 }
 
-export type { AgentProgress, AgentConnectOptions, PlanStep, PendingPlan } from "@/lib/agent-progress";
+export type {
+  AgentProgress,
+  AgentConnectOptions,
+  PlanStep,
+  PendingPlan,
+} from "@/lib/agent-progress";
 
 export function useAgentRun() {
   const [progress, setProgress] = useState<AgentProgress>(initialAgentProgress);
@@ -78,36 +83,39 @@ export function useAgentRun() {
   const statusChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const stalePollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const applyStreamRow = useCallback((row: {
-    seq: number;
-    event_type: string;
-    payload: Record<string, unknown>;
-    created_at?: string;
-  }): boolean => {
-    if (row.seq <= lastSeqRef.current) return false;
-    lastSeqRef.current = row.seq;
-    const event = streamRowToSSEEvent(row);
-    const t = event.type;
-    const terminal = t === "finish" || t === "canceled" || t === "error";
-    const freezeTerminal = t === "finish" || t === "done" || t === "canceled" || t === "error";
-    setProgress((prev) => {
-      const next = applyAgentProgressEvent(prev, event);
-      const rid = runIdRef.current;
-      if (freezeTerminal && rid) {
-        const snap = freezeSnapshot({
-          ...next,
-          streamText: next.streamText ?? prev.streamText,
-        });
-        setFrozenRuns((m) => {
-          const copy = new Map(m);
-          copy.set(rid, snap);
-          return copy;
-        });
-      }
-      return next;
-    });
-    return terminal;
-  }, []);
+  const applyStreamRow = useCallback(
+    (row: {
+      seq: number;
+      event_type: string;
+      payload: Record<string, unknown>;
+      created_at?: string;
+    }): boolean => {
+      if (row.seq <= lastSeqRef.current) return false;
+      lastSeqRef.current = row.seq;
+      const event = streamRowToSSEEvent(row);
+      const t = event.type;
+      const terminal = t === "finish" || t === "canceled" || t === "error";
+      const freezeTerminal = t === "finish" || t === "done" || t === "canceled" || t === "error";
+      setProgress((prev) => {
+        const next = applyAgentProgressEvent(prev, event);
+        const rid = runIdRef.current;
+        if (freezeTerminal && rid) {
+          const snap = freezeSnapshot({
+            ...next,
+            streamText: next.streamText ?? prev.streamText,
+          });
+          setFrozenRuns((m) => {
+            const copy = new Map(m);
+            copy.set(rid, snap);
+            return copy;
+          });
+        }
+        return next;
+      });
+      return terminal;
+    },
+    [],
+  );
 
   const teardownChannels = useCallback(() => {
     if (stalePollRef.current) {
@@ -140,7 +148,13 @@ export function useAgentRun() {
       setProgress((p) => {
         let next: AgentProgress;
         if (status === "awaiting_user") {
-          next = { ...p, finished: true, awaiting: true, awaitingKind: "qualify", autoResuming: false };
+          next = {
+            ...p,
+            finished: true,
+            awaiting: true,
+            awaitingKind: "qualify",
+            autoResuming: false,
+          };
         } else if (status === "canceled") {
           next = {
             ...p,
@@ -154,7 +168,7 @@ export function useAgentRun() {
           next = {
             ...p,
             finished: true,
-            lastFinishOk: p.lastFinishOk === false ? false : p.lastFinishOk ?? true,
+            lastFinishOk: p.lastFinishOk === false ? false : (p.lastFinishOk ?? true),
             resumable: false,
             autoResuming: false,
           };
@@ -179,6 +193,12 @@ export function useAgentRun() {
           streamText: streamText ?? next.streamText ?? next.summary ?? p.streamText,
         };
       });
+      // Clear active/connected consistently on terminal (except awaiting which may retain run for qualify UI).
+      // Makes isAgentBusy() and post-finish reconcile resilient (no stale connected/running derived state).
+      if (status !== "awaiting_user") {
+        runIdRef.current = null;
+        setActiveRunId(null);
+      }
       teardownChannels();
     },
     [persistFrozen, teardownChannels],
@@ -199,12 +219,14 @@ export function useAgentRun() {
 
       let terminal = false;
       for (const row of rows ?? []) {
-        if (applyStreamRow({
-          seq: row.seq as number,
-          event_type: row.event_type as string,
-          payload: (row.payload ?? {}) as Record<string, unknown>,
-          created_at: row.created_at as string | undefined,
-        })) {
+        if (
+          applyStreamRow({
+            seq: row.seq as number,
+            event_type: row.event_type as string,
+            payload: (row.payload ?? {}) as Record<string, unknown>,
+            created_at: row.created_at as string | undefined,
+          })
+        ) {
           terminal = true;
         }
       }
@@ -232,9 +254,7 @@ export function useAgentRun() {
           (run.started_at as string | null);
         const staleMs =
           pendingQueueCountRef.current > 0 ? STALE_STREAM_WITH_QUEUE_MS : STALE_STREAM_MS;
-        const stale =
-          lastActivity &&
-          Date.now() - new Date(lastActivity).getTime() > staleMs;
+        const stale = lastActivity && Date.now() - new Date(lastActivity).getTime() > staleMs;
         if (stale) {
           const meta = (run.meta ?? {}) as Record<string, unknown>;
           const resumable = meta.checkpoint === true || meta.resume === true;
@@ -287,7 +307,12 @@ export function useAgentRun() {
         .channel(`agent-events-${runId}`)
         .on(
           "postgres_changes",
-          { event: "INSERT", schema: "public", table: "agent_stream_events", filter: `run_id=eq.${runId}` },
+          {
+            event: "INSERT",
+            schema: "public",
+            table: "agent_stream_events",
+            filter: `run_id=eq.${runId}`,
+          },
           (payload) => {
             const row = payload.new as {
               seq: number;
@@ -309,7 +334,11 @@ export function useAgentRun() {
           "postgres_changes",
           { event: "UPDATE", schema: "public", table: "agent_runs", filter: `id=eq.${runId}` },
           async (payload) => {
-            const row = payload.new as { status: string; error: string | null; canceled_at: string | null };
+            const row = payload.new as {
+              status: string;
+              error: string | null;
+              canceled_at: string | null;
+            };
             if (!runIdRef.current) return;
             await catchUpRun(runIdRef.current);
             if (row.canceled_at || row.status === "canceled") {
@@ -337,32 +366,29 @@ export function useAgentRun() {
     };
   }, [teardownChannels]);
 
-  const postAgentRun = useCallback(
-    async (body: Record<string, unknown>): Promise<Response> => {
-      const { url, publishableKey } = getSupabaseEnv();
-      if (!url || !publishableKey) {
-        throw new Error(
-          "Supabase não configurado. Verifique VITE_SUPABASE_URL e VITE_SUPABASE_PUBLISHABLE_KEY.",
-        );
-      }
-      const { data: sess } = await supabase.auth.getSession();
-      const accessToken = sess.session?.access_token;
-      if (!accessToken) {
-        throw new Error("Sessão expirada. Faça login novamente.");
-      }
+  const postAgentRun = useCallback(async (body: Record<string, unknown>): Promise<Response> => {
+    const { url, publishableKey } = getSupabaseEnv();
+    if (!url || !publishableKey) {
+      throw new Error(
+        "Supabase não configurado. Verifique VITE_SUPABASE_URL e VITE_SUPABASE_PUBLISHABLE_KEY.",
+      );
+    }
+    const { data: sess } = await supabase.auth.getSession();
+    const accessToken = sess.session?.access_token;
+    if (!accessToken) {
+      throw new Error("Sessão expirada. Faça login novamente.");
+    }
 
-      return fetch(`${url}/functions/v1/agent-run`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${accessToken}`,
-          apikey: publishableKey,
-        },
-        body: JSON.stringify(body),
-      });
-    },
-    [],
-  );
+    return fetch(`${url}/functions/v1/agent-run`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`,
+        apikey: publishableKey,
+      },
+      body: JSON.stringify(body),
+    });
+  }, []);
 
   const refreshPendingQueue = useCallback(
     async (projectId: string, conversationId: string) => {
@@ -450,7 +476,9 @@ export function useAgentRun() {
           conversationId,
           preferences: loadAgentPreferences(),
           sessionKind,
-          ...(sessionKind === "taste" && options?.tasteAction ? { tasteAction: options.tasteAction } : {}),
+          ...(sessionKind === "taste" && options?.tasteAction
+            ? { tasteAction: options.tasteAction }
+            : {}),
           resume: manualResume,
           autoResume: false,
           mode: options?.mode ?? "build",
@@ -540,12 +568,13 @@ export function useAgentRun() {
       mode?: "plan" | "build" | "chat",
     ): Promise<{ ok: boolean; runId?: string; pendingCount?: number; reason?: string }> => {
       try {
-        const res = await postAgentRun({
+        const payload: Record<string, unknown> = {
           action: "drain_queue",
           projectId,
           conversationId,
-          mode: mode ?? "build",
-        });
+        };
+        if (mode != null) payload.mode = mode; // forward explicit (from layout/coordinator or undefined); omit => backend defaults to build fallback, continue-queue prefers stored from pendingBody
+        const res = await postAgentRun(payload);
         if (!res.ok) {
           const msg = await parseErrorResponse(res);
           return { ok: false, reason: msg };
@@ -603,6 +632,7 @@ export function useAgentRun() {
       conversationId: string,
       sessionKind?: ForgeSessionKind,
       tasteAction?: TasteAction,
+      mode?: "plan" | "build" | "chat",
     ): Promise<{ ok: boolean; pendingCount?: number; message?: string }> => {
       try {
         const res = await postAgentRun({
@@ -611,6 +641,7 @@ export function useAgentRun() {
           preferences: loadAgentPreferences(),
           sessionKind,
           enqueue: true,
+          mode: mode ?? "build",
           ...(sessionKind === "taste" && tasteAction ? { tasteAction } : {}),
           ...loadAgentSessionExtensions(),
         });

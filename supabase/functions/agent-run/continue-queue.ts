@@ -26,11 +26,10 @@ export async function handleContinueQueue(
     projectId: string;
     conversationId: string;
     userId: string;
-    planMode?: boolean;
+    planMode?: boolean; // fallback only; prefer pendingBody.mode (send-time from queueMessage)
   },
 ): Promise<ContinueQueueResult> {
   const { projectId, conversationId, userId } = input;
-  const planMode = input.planMode === true;
 
   const decision = await evaluateQueueDrain(
     supabase,
@@ -62,6 +61,18 @@ export async function handleContinueQueue(
   const pendingSessionKind = typeof pendingBody?.sessionKind === "string"
     ? pendingBody.sessionKind
     : null;
+
+  // PR3: prefer send-time mode captured at onSend (stored in pendingBody at enqueue time, or user msg meta)
+  // over the drain/continue call input (which may come from prior run's planMode or current composer).
+  // Fall back to input only if absent (keeps legacy queues as "build").
+  const storedMode = typeof (pendingBody as any)?.mode === "string"
+    ? String((pendingBody as any).mode).toLowerCase()
+    : null;
+  const planMode = storedMode === "plan"
+    ? true
+    : storedMode === "build"
+    ? false
+    : input.planMode === true;
 
   const { hasUserLlmKey, userOnlyKeys } = await loadUserLlmContext(
     supabase,

@@ -29,10 +29,7 @@ type UseAgentSessionCoordinatorParams = {
   agent: AgentRun;
   running: boolean;
   tasteQuota: TasteQuota;
-  runAgent: (
-    explicitKind?: ForgeSessionKind,
-    explicitAction?: TasteAction,
-  ) => boolean;
+  runAgent: (explicitKind?: ForgeSessionKind, explicitAction?: TasteAction) => boolean;
 };
 
 /** Runs que podem receber watch/reconnect com stream. */
@@ -61,16 +58,26 @@ export function useAgentSessionCoordinator({
   const pendingQueueCountRef = useRef(0);
   const reconcileTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const { syncPendingCount, watch, drainQueue, connected, progress, refreshPendingQueue } = agent;
+  const {
+    syncPendingCount,
+    watch,
+    drainQueue,
+    connected,
+    progress,
+    refreshPendingQueue,
+    pendingQueueItems,
+  } = agent;
   const pendingQueueCount = progress.pendingQueueCount ?? 0;
 
   useEffect(() => {
     pendingQueueCountRef.current = pendingQueueCount;
   }, [pendingQueueCount]);
 
-  const drainUntilEmpty = async (conversationId: string) => {
+  const drainUntilEmpty = async (conversationId: string, mode?: "plan" | "build") => {
     for (let attempt = 0; attempt < 5; attempt++) {
-      const drain = await drainQueue(projectId, conversationId);
+      // Forward mode (from send-time capture in pending snapshot or caller) or undefined (rely on stored intent in continue-queue).
+      // Removes bare drain calls; stored pendingBody.mode always preferred over call input.
+      const drain = await drainQueue(projectId, conversationId, mode);
       if (drain.runId) {
         watchedRunIdRef.current = drain.runId;
         return drain;
@@ -129,9 +136,7 @@ export function useAgentSessionCoordinator({
 
         if (activeRun?.id && !activeRun.canceled_at) {
           const heartbeat = activeRun.heartbeat_at ?? activeRun.started_at;
-          const stale =
-            heartbeat &&
-            Date.now() - new Date(heartbeat).getTime() > STALE_RUN_MS;
+          const stale = heartbeat && Date.now() - new Date(heartbeat).getTime() > STALE_RUN_MS;
           if (!stale && watchedRunIdRef.current !== activeRun.id) {
             watchedRunIdRef.current = activeRun.id;
             await watch(projectId, conversation.id, activeRun.id);
@@ -142,7 +147,15 @@ export function useAgentSessionCoordinator({
         watchedRunIdRef.current = null;
 
         if (pendingQueueCountRef.current > 0) {
-          const drain = await drainUntilEmpty(conversation.id);
+          // Forward mode from current queue snapshot (send-time captured in body) if present; else undefined.
+          const firstBody = ((
+            pendingQueueItems?.[0] as unknown as { body?: Record<string, unknown> }
+          )?.body ?? null) as Record<string, unknown> | null;
+          const fwd =
+            firstBody && (firstBody.mode === "plan" || firstBody.mode === "build")
+              ? (firstBody.mode as "plan" | "build")
+              : undefined;
+          const drain = await drainUntilEmpty(conversation.id, fwd);
           if (drain.runId) return;
         }
 
@@ -231,20 +244,37 @@ export function useAgentSessionCoordinator({
     tasteQuota,
     watch,
     drainQueue,
+    pendingQueueItems,
   ]);
 
   useEffect(() => {
     if (!conversation?.id || !progress.finished) return;
 
     void (async () => {
+      // Refetch before busy/pending decisions + use shared inFlight guard to serialize
+      // all post-finish "process next" (drain or auto-run) to single path (avoid races on derived running/connected).
       await refreshPendingQueue(projectId, conversation.id);
       if (progress.awaiting || progress.canceled) return;
       if (connected || isAgentConnectInFlight()) return;
       if (running) return;
       if (pendingQueueCountRef.current === 0) return;
+      if (reconcileInFlightRef.current) return;
 
-      const drain = await drainUntilEmpty(conversation.id);
-      if (drain.runId) return;
+      reconcileInFlightRef.current = true;
+      try {
+        const firstBody = ((pendingQueueItems?.[0] as unknown as { body?: Record<string, unknown> })
+          ?.body ?? null) as Record<string, unknown> | null;
+        const fwd =
+          firstBody && (firstBody.mode === "plan" || firstBody.mode === "build")
+            ? (firstBody.mode as "plan" | "build")
+            : undefined;
+        const drain = await drainUntilEmpty(conversation.id, fwd);
+        if (drain.runId) {
+          watchedRunIdRef.current = drain.runId;
+        }
+      } finally {
+        reconcileInFlightRef.current = false;
+      }
     })();
   }, [
     progress.finished,
@@ -256,5 +286,6 @@ export function useAgentSessionCoordinator({
     connected,
     drainQueue,
     refreshPendingQueue,
+    pendingQueueItems,
   ]);
 }

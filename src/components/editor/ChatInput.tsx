@@ -3,15 +3,7 @@
 import { useState, useRef, useCallback, useEffect, useMemo, KeyboardEvent } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { MarkdownRenderer } from "@/components/ui/markdown-renderer";
-import {
-  ArrowUp,
-  Square,
-  FileText,
-  Paperclip,
-  ImageIcon,
-  MousePointer2,
-  X,
-} from "lucide-react";
+import { ArrowUp, Square, FileText, Paperclip, ImageIcon, MousePointer2, X } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { MicButton } from "@/components/voice/MicButton";
@@ -24,15 +16,9 @@ import {
   type StoredMessagePart,
 } from "@/lib/chat-attachments";
 import { loadAgentPreferences } from "@/lib/agent-preferences";
-import {
-  getAgentSetupBlockMessage,
-  isAgentPreferencesConfigured,
-} from "@/lib/agent-setup";
+import { getAgentSetupBlockMessage, isAgentPreferencesConfigured } from "@/lib/agent-setup";
 import { ChatStream } from "@/components/editor/ChatStream";
-import {
-  PendingQueuePanel,
-  type PendingQueueItem,
-} from "@/components/editor/PendingQueuePanel";
+import { PendingQueuePanel, type PendingQueueItem } from "@/components/editor/PendingQueuePanel";
 import { ComposerModeSelect } from "@/components/editor/ComposerModeSelect";
 import type { AgentProgress, PlanStep } from "@/lib/agent-progress";
 import { resolveEffectiveAgentProgress } from "@/lib/resolve-agent-progress";
@@ -107,14 +93,17 @@ interface Command {
 const COMMANDS: Command[] = [
   { id: "/fix", label: "/fix", description: "Corrigir erros do build atual", icon: "🔧" },
   { id: "/deploy", label: "/deploy", description: "Publicar o projeto", icon: "🚀" },
-  { id: "/explain", label: "/explain", description: "Explicar o que o agente está fazendo", icon: "💡" },
+  {
+    id: "/explain",
+    label: "/explain",
+    description: "Explicar o que o agente está fazendo",
+    icon: "💡",
+  },
   { id: "/undo", label: "/undo", description: "Reverter última ação", icon: "↩" },
   { id: "/retry", label: "/retry", description: "Tentar abordagem diferente", icon: "🔄" },
   { id: "/skills", label: "/skills", description: "Gerenciar skills do projeto", icon: "🧩" },
   { id: "/settings", label: "/settings", description: "Configurações do projeto", icon: "⚙" },
 ];
-
-
 
 // -----------------------------------------------------------------------------------
 // -----------------------------------------------------------------------------------
@@ -233,9 +222,7 @@ export function ChatInput({
     const lastAt = input.lastIndexOf("@");
     if (lastAt >= 0) {
       const query = input.slice(lastAt + 1).toLowerCase();
-      const matches = files
-        .filter((f) => f.toLowerCase().includes(query))
-        .slice(0, 5);
+      const matches = files.filter((f) => f.toLowerCase().includes(query)).slice(0, 5);
       setFilteredFiles(matches);
       setFileIndex(0);
       setShowFileSuggest(matches.length > 0);
@@ -271,7 +258,9 @@ export function ChatInput({
     if (!incoming.length) return;
     const { accepted, rejected } = filterAcceptedFiles(incoming);
     if (rejected.length) {
-      toast.error(`Não aceito: ${rejected.slice(0, 3).join(", ")}${rejected.length > 3 ? "…" : ""}`);
+      toast.error(
+        `Não aceito: ${rejected.slice(0, 3).join(", ")}${rejected.length > 3 ? "…" : ""}`,
+      );
     }
     if (!accepted.length) return;
     setAttachments((prev) => [...prev, ...accepted].slice(0, 8));
@@ -284,6 +273,9 @@ export function ChatInput({
   const handleSend = async () => {
     const text = input.trim();
     if ((!text && attachments.length === 0) || running) return;
+
+    // Capture composer mode at the exact send instant (closed-over value for onSend call).
+    const modeAtSend = composerMode;
 
     if (text.startsWith("/deploy")) {
       setInput("");
@@ -310,10 +302,7 @@ export function ChatInput({
 
     // Fase 4.7: o modo é enviado separadamente via onSend(text, mode).
     // Sem prefix textual — servidor decide se liga planMode ou não.
-    const outgoing = buildOutgoingParts(
-      text,
-      attachmentParts,
-    );
+    const outgoing = buildOutgoingParts(text, attachmentParts);
     if (outgoing.length === 0) return;
 
     if (text) {
@@ -325,7 +314,7 @@ export function ChatInput({
     }
     setInput("");
     setAttachments([]);
-    onSend(text, composerMode, outgoing);
+    onSend(text, modeAtSend, outgoing);
     // Reset textarea height e foco
     requestAnimationFrame(() => {
       if (textareaRef.current) {
@@ -476,25 +465,27 @@ export function ChatInput({
             {tasteChatRemaining != null && tasteChatRemaining > 0 && (
               <p className="font-mono text-[9px] text-[var(--forge-ghost)]">
                 Taste Chat: {tasteChatRemaining} mensagens · Concierge NVIDIA
-                {(tasteStartRemaining ?? 0) > 0 ? ` · Start Project: ${tasteStartRemaining} restante` : ""}
+                {(tasteStartRemaining ?? 0) > 0
+                  ? ` · Start Project: ${tasteStartRemaining} restante`
+                  : ""}
               </p>
             )}
           </div>
         ) : (
-            <ChatStream
-              messages={messages}
-              running={running}
-              activeRunId={activeRunId}
-              frozenRuns={frozenRuns}
-              progress={effectiveProgress}
-              onResume={onResumeAgent}
-              onUndoMessage={onUndoMessage}
-              onReopenPlan={onReopenPlan}
-              onPlanApprove={onPlanApprove}
-              onPlanReject={onPlanReject}
-              onOpenJobWorkspace={onOpenJobWorkspace}
-              jobWorkspaceRunId={jobWorkspaceRunId}
-            />
+          <ChatStream
+            messages={messages}
+            running={running}
+            activeRunId={activeRunId}
+            frozenRuns={frozenRuns}
+            progress={effectiveProgress}
+            onResume={onResumeAgent}
+            onUndoMessage={onUndoMessage}
+            onReopenPlan={onReopenPlan}
+            onPlanApprove={onPlanApprove}
+            onPlanReject={onPlanReject}
+            onOpenJobWorkspace={onOpenJobWorkspace}
+            jobWorkspaceRunId={jobWorkspaceRunId}
+          />
         )}
         {showNewMessagesPill && (
           <button
@@ -527,7 +518,9 @@ export function ChatInput({
               >
                 <span className="text-sm">{cmd.icon}</span>
                 <span className="font-mono text-[11px] text-[var(--foreground)]">{cmd.label}</span>
-                <span className="text-[10px] text-[var(--text-ghost)] ml-auto">{cmd.description}</span>
+                <span className="text-[10px] text-[var(--text-ghost)] ml-auto">
+                  {cmd.description}
+                </span>
               </button>
             ))}
           </motion.div>
@@ -585,8 +578,7 @@ export function ChatInput({
         </div>
       )}
 
-      {((agentProgress?.pendingQueueCount ?? 0) > 0 &&
-        pendingQueueItems.length > 0) ||
+      {((agentProgress?.pendingQueueCount ?? 0) > 0 && pendingQueueItems.length > 0) ||
       (queueBlockingReason && running) ? (
         <PendingQueuePanel
           items={pendingQueueItems}
@@ -687,5 +679,3 @@ export function ChatInput({
     </div>
   );
 }
-
-
