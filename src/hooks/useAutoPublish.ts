@@ -70,7 +70,6 @@ export function useAutoPublish({
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Falha ao publicar";
       logEditorTelemetryEvent("preview", "auto_publish_fail", "error", msg.slice(0, 200));
-      attemptedRef.current = null;
       return null;
     } finally {
       clearTimeout(timeoutId);
@@ -83,6 +82,8 @@ export function useAutoPublish({
     if (booting || warming || publishing) return;
     if (publishedUrl === devUrl) return;
     void publishNow();
+  // publishing é guard de concorrência, não trigger — removido intencionalmente das deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     enabled,
     devUrl,
@@ -90,7 +91,6 @@ export function useAutoPublish({
     contentPublishReady,
     booting,
     warming,
-    publishing,
     publishedUrl,
     publishNow,
   ]);
