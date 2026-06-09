@@ -136,12 +136,14 @@ export class CompressionManager {
       .map(m => `[${m.role}]: ${String(m.content).slice(0, 300)}`)
       .join("\n");
 
+    const prevSummary = this.compressedSummary;
+    const prompt = prevSummary
+      ? `Resumo anterior:\n${prevSummary}\n\nNovas mensagens desde o último resumo:\n${relevant}\n\nAtualize o resumo incorporando as novas mensagens. Máximo 300 palavras. Preserve nomes de arquivos e decisões arquiteturais críticas.`
+      : `Resuma em português o que foi feito até agora na conversa. Máximo 300 palavras. Mencione arquivos criados/modificados e decisões importantes.`;
+
     const resp = await this.summarizing.chat({
       messages: [
-        {
-          role: "system",
-          content: "Resuma em português o que foi feito até agora na conversa. Máximo 300 palavras. Mencione arquivos criados/modificados e decisões importantes.",
-        },
+        { role: "system", content: prompt },
         { role: "user", content: relevant },
       ],
       max_tokens: 500,

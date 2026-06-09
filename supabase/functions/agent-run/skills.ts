@@ -229,7 +229,25 @@ PATTERNS:
   }
 
   detectActive(files: FileEntry[]): Skill[] {
-    return this.skills.filter(s => s.validate(files));
+    const active = this.skills.filter(s => s.validate(files));
+    // Grupos mutuamente exclusivos: skills mais específicas têm precedência
+    const exclusivityGroups = [
+      ["nextjs-app-router", "tanstack-start", "expo", "android-native", "astro", "vite-react"],
+      ["react-tailwind", "vite-react"],
+    ];
+    for (const group of exclusivityGroups) {
+      const groupActive = active.filter(s => group.includes(s.name));
+      if (groupActive.length > 1) {
+        // Mantém apenas a primeira (mais específica) do grupo
+        const keep = groupActive[0];
+        for (let i = active.length - 1; i >= 0; i--) {
+          if (groupActive.includes(active[i]) && active[i] !== keep) {
+            active.splice(i, 1);
+          }
+        }
+      }
+    }
+    return active;
   }
 
   buildSkillPrompt(files: FileEntry[]): string {

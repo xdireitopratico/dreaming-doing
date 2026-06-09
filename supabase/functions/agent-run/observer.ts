@@ -128,9 +128,10 @@ export class RuntimeObserver {
         const lintOutput = typeof lint.output === "object"
           ? (lint.output as any).stderr ?? (lint.output as any).stdout ?? ""
           : String(lint.output ?? "");
-        checks.push({ name: "lint", ok: true, output: lintOutput.slice(0, 2000) });
+        const lintOk = lint.ok && !outputIndicatesBuildFailure(lintOutput);
+        checks.push({ name: "lint", ok: lintOk, output: lintOutput.slice(0, 2000) });
       } catch {
-        // lint é sempre opcional
+        checks.push({ name: "lint", ok: true, output: "(lint não disponível)" });
       }
     }
 
@@ -236,7 +237,7 @@ export class RuntimeObserver {
         id: crypto.randomUUID(),
         name: "shell_exec",
         arguments: {
-          command: `find . -type f \\( -name "*.tsx" -o -name "*.ts" \\) ! -path "*/node_modules/*" ! -path "*/.git/*" -exec grep -l "\\.tsx\\|\\.ts$" {} \\; 2>/dev/null | head -50`,
+          command: `find . -type f \\( -name "*.tsx" -o -name "*.ts" \\) ! -path "*/node_modules/*" ! -path "*/.git/*" 2>/dev/null | head -50`,
         },
       });
 

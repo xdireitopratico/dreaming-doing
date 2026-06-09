@@ -36,11 +36,17 @@ export async function buildChatHistory(
       .join("\n");
 
     if (m.role === "assistant" && (m.tool_calls?.length ?? 0) > 0) {
+      // Gera IDs estáveis para tool calls (evita mismatch entre assistant e tool results)
+      const toolCallsWithIds = (m.tool_calls ?? []).map((tc, idx) => {
+        const stableId = tc.id || `tc-${m.created_at ?? idx}-${idx}`;
+        return { ...tc, id: stableId };
+      });
+
       out.push({
         role: "assistant",
         content: plainText || "",
-        tool_calls: (m.tool_calls ?? []).map((tc) => ({
-          id: tc.id ?? crypto.randomUUID(),
+        tool_calls: toolCallsWithIds.map((tc) => ({
+          id: tc.id,
           type: "function" as const,
           function: {
             name: tc.name ?? "",
@@ -49,8 +55,7 @@ export async function buildChatHistory(
         })),
       });
 
-      for (const tc of m.tool_calls ?? []) {
-        if (!tc.id) continue;
+      for (const tc of toolCallsWithIds) {
         const payload = {
           ok: tc.status === "ok",
           status: tc.status ?? "unknown",

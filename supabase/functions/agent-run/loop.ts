@@ -134,6 +134,8 @@ export class AgentLoop {
     data: Record<string, unknown>;
     timestamp: number;
   }>;
+  /** Cache de conteúdo de arquivos para evitar N+1 queries ao Supabase durante execução */
+  private fileContentCache: Map<string, string>;
 
   constructor(
     reg: ToolRegistry,
@@ -204,6 +206,7 @@ export class AgentLoop {
     this.lastRunMessageId = null;
     this.buildFixResume = options?.buildFixResume ?? false;
     this.streamTailBuffer = [];
+    this.fileContentCache = new Map();
     this.runStartTime = Date.now();
     this.lastCheckpointStep = options?.hasCheckpoint ? (state.currentStepIndex ?? 0) : 0;
     this.router = new ModelRouter(injectedKeys, routerOverrides);
@@ -769,13 +772,8 @@ export class AgentLoop {
           const filePath = (call.arguments.path as string) ?? "";
           if (filePath) {
             try {
-              const { data: existing } = await this.sb
-                .from("project_files")
-                .select("content")
-                .eq("project_id", this.state.projectId)
-                .eq("path", filePath)
-                .maybeSingle();
-              const before = (existing?.content as string) ?? "";
+              // Usa cache para evitar N+1 queries ao Supabase
+              const before = this.fileContentCache.get(filePath) ?? "";
               let after = before;
               if (call.name === "fs_write") {
                 after = (call.arguments.content as string) ?? "";
@@ -783,9 +781,16 @@ export class AgentLoop {
                 const oldText = (call.arguments.oldText as string) ?? "";
                 const newText = (call.arguments.newText as string) ?? "";
                 const replaceAll = call.arguments.replaceAll === true;
-                after = replaceAll ? before.split(oldText).join(newText) : before.replace(oldText, newText);
+                // Validação: oldText vazio causaria estouro de memória
+                if (!oldText) {
+                  after = before + newText; // Append como fallback seguro
+                } else {
+                  after = replaceAll ? before.split(oldText).join(newText) : before.replace(oldText, newText);
+                }
               }
               preDiff = { path: filePath, before, after, op: call.name === "fs_write" ? "write" : "edit" };
+              // Atualiza cache com o novo conteúdo
+              this.fileContentCache.set(filePath, after);
             } catch {
               /* não bloqueia a execução — diff é best-effort */
             }
@@ -834,15 +839,26 @@ export class AgentLoop {
 
         if ((call.name === "fs_write" || call.name === "fs_edit") && result.ok) {
           const pathArg = (call.arguments.path as string) ?? call.name;
-          await this.reg.execute({
-            id: crypto.randomUUID(),
-            name: "shell_exec",
-            arguments: { command: `cd /home/user && git add -A && git commit -m "${pathArg}: update" 2>&1 || true` },
-          });
           this.emit("preview_sync", { path: pathArg, reason: "fs_change" });
         }
         return result;
       });
+
+      // Git commit único por step (não por arquivo) — após todas as tools executarem
+      const modifiedPaths = execResults
+        .filter(({ call }) => call.name === "fs_write" || call.name === "fs_edit")
+        .map(({ call }) => (call.arguments.path as string) ?? call.name)
+        .filter(Boolean);
+      if (modifiedPaths.length > 0) {
+        const commitMsg = modifiedPaths.length === 1
+          ? `${modifiedPaths[0]}: update`
+          : `update ${modifiedPaths.length} files`;
+        await this.reg.execute({
+          id: crypto.randomUUID(),
+          name: "shell_exec",
+          arguments: { command: `cd /home/user && git add -A && git commit -m "${commitMsg}" 2>&1 || true` },
+        });
+      }
 
       const assistantMsg: ChatMessage = {
         role: "assistant",
@@ -1072,6 +1088,12 @@ export class AgentLoop {
       .eq("project_id", this.state.projectId);
 
     const fileList: FileEntry[] = files ?? [];
+    // Preenche cache de arquivos para evitar N+1 queries durante execução
+    for (const f of fileList) {
+      if (f.content != null) {
+        this.fileContentCache.set(f.path, f.content);
+      }
+    }
     const manifest = fileList.map(f => `  ${f.path}`).join("\n");
 
     let projectConfig = "";

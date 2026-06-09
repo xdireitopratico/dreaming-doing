@@ -111,7 +111,7 @@ export function pickMain(injected?: Record<string, string>): ProviderConfig {
       label: "OpenRouter",
     };
   }
-  if (LOVABLE) return { provider: "openai", apiKey: LOVABLE, model: "google/gemini-2.5-flash", baseUrl: LOVABLE_GATEWAY, label: "Lovable AI · Gemini 2.5 Flash" };
+  if (LOVABLE) return { provider: "openai", apiKey: LOVABLE, model: "gemini-2.5-flash-preview-04-17", baseUrl: LOVABLE_GATEWAY, label: "Lovable AI · Gemini 2.5 Flash" };
   if (OPENAI) return { provider: "openai", apiKey: OPENAI, model: "gpt-4o", label: "OpenAI GPT-4o" };
   throw new Error(
     "Nenhum modelo de IA configurado. Adicione chaves em /api e preset em /models.",
@@ -133,7 +133,7 @@ export function pickCheap(main: ProviderConfig, injected?: Record<string, string
     };
   }
   if (GROQ) return { provider: "openai", apiKey: GROQ, model: "llama-3.3-70b-versatile", baseUrl: "https://api.groq.com/openai/v1", label: "Groq · Llama 3.3 70B" };
-  if (LOVABLE) return { provider: "openai", apiKey: LOVABLE, model: "google/gemini-2.5-flash-lite", baseUrl: LOVABLE_GATEWAY, label: "Lovable AI · Gemini Flash Lite" };
+  if (LOVABLE) return { provider: "openai", apiKey: LOVABLE, model: "gemini-2.5-flash-preview-04-17", baseUrl: LOVABLE_GATEWAY, label: "Lovable AI · Gemini Flash Lite" };
   return main;
 }
 

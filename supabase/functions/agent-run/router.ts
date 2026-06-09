@@ -171,7 +171,10 @@ Retorne APENAS o JSON. Sem markdown, sem comentários, sem texto antes/depois.`,
         max_tokens: 1500,
         temperature: 0.2,
       });
-      const j = JSON.parse(resp.content ?? "{}");
+      const rawContent = resp.content ?? "{}";
+      // Strip markdown code blocks que alguns providers retornam mesmo com json_object
+      const stripped = rawContent.replace(/```json\s*|\s*```/g, "").trim();
+      const j = JSON.parse(stripped || "{}");
       const result: ClassificationResult = {
         complexity: Math.min(5, Math.max(1, j.complexity ?? 3)) as 1|2|3|4|5,
         type: j.type ?? "modify",
