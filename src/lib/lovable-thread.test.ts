@@ -214,6 +214,45 @@ describe("buildLovableThread", () => {
     expect(second.runId).toBe("run-2");
   });
 
+  it("DB materializado (cardSnapshot) vence frozen stale no resolve", () => {
+    const staleFrozen = freezeSnapshot({
+      ...initialAgentProgress,
+      finished: true,
+      streamText: "stale",
+      deliveryFiles: [],
+    });
+    const message: ChatMessage = {
+      id: "a1",
+      role: "assistant",
+      content: "Feito.",
+      timestamp: 0,
+      meta: {
+        runId: "run-z",
+        partial: false,
+        finishedAt: "2026-01-01T00:00:00Z",
+        cardSnapshot: {
+          streamText: "Do banco.",
+          finished: true,
+          lastFinishOk: true,
+          deliveryFiles: ["src/App.tsx"],
+          timeline: [],
+          tools: [],
+          diffs: [],
+          phase: "done",
+        },
+      },
+    };
+    const resolved = resolveAssistantProgress({
+      kind: "assistant",
+      isActive: false,
+      runId: "run-z",
+      message,
+      frozen: staleFrozen,
+    });
+    expect(resolved?.streamText).toBe("Do banco.");
+    expect(resolved?.deliveryFiles).toEqual(["src/App.tsx"]);
+  });
+
   it("resolve progresso do DB quando não há frozen", () => {
     const slot = {
       kind: "assistant" as const,

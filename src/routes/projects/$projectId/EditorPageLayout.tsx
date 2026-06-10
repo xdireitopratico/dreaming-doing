@@ -20,7 +20,10 @@ import { type LogEntry, LogPanel } from "@/components/editor/LogPanel";
 import { AiDiffViewer, type DiffEntry } from "@/components/editor/AiDiffViewer";
 import { resolvePendingPlan } from "@/lib/plan-message-meta";
 import { resolveAssistantProgress } from "@/lib/lovable-thread";
-import { progressFromAssistantMessage } from "@/lib/assistant-run-progress";
+import {
+  hasMaterializedCardSnapshot,
+  progressFromAssistantMessage,
+} from "@/lib/assistant-run-progress";
 import type { AgentProgress } from "@/lib/agent-progress";
 import { useJobWorkspaceFocus } from "@/hooks/useJobWorkspaceFocus";
 import { JobInspector } from "@/components/editor/JobInspector";
@@ -247,6 +250,8 @@ export function EditorPageLayout({
     return () => window.removeEventListener(OPEN_CONNECTOR_EVENT, onOpenConnector);
   }, [openConnector]);
 
+  const prevPendingPlanRef = useRef(pendingPlan);
+
   useEffect(() => {
     if (!pendingPlan) return;
     const runId = pendingPlan.runId || agent.activeRunId;
@@ -255,10 +260,37 @@ export function EditorPageLayout({
     onMainViewChange("preview");
   }, [pendingPlan?.planId, pendingPlan?.runId, agent.activeRunId, openJobWorkspace, onMainViewChange]);
 
+  useEffect(() => {
+    const hadPlan = !!prevPendingPlanRef.current;
+    prevPendingPlanRef.current = pendingPlan;
+    if (hadPlan && !pendingPlan && agent.activeRunId) {
+      openJobWorkspace(agent.activeRunId, "timeline");
+      onMainViewChange("preview");
+    }
+  }, [pendingPlan, agent.activeRunId, openJobWorkspace, onMainViewChange]);
+
+  useEffect(() => {
+    if (!pendingPlan && jobWorkspaceFocus?.tab === "plan") {
+      setJobTab("timeline");
+    }
+  }, [pendingPlan, jobWorkspaceFocus?.tab, setJobTab]);
+
   const focusedJobProgress = useMemo((): AgentProgress | null => {
     if (!jobWorkspaceFocus) return null;
     const { runId } = jobWorkspaceFocus;
     if (agent.activeRunId === runId) return agent.progress;
+
+    const historical = chatMessages.find(
+      (m) =>
+        m.role === "assistant" &&
+        (m.runId === runId ||
+          (typeof m.meta?.runId === "string" && m.meta.runId === runId) ||
+          (typeof m.meta?.buildRunId === "string" && m.meta.buildRunId === runId)),
+    );
+    if (historical && hasMaterializedCardSnapshot(historical)) {
+      return progressFromAssistantMessage(historical);
+    }
+
     const frozen = agent.frozenRuns.get(runId);
     if (frozen) {
       return (
@@ -270,13 +302,6 @@ export function EditorPageLayout({
         }) ?? null
       );
     }
-    const historical = chatMessages.find(
-      (m) =>
-        m.role === "assistant" &&
-        (m.runId === runId ||
-          (typeof m.meta?.runId === "string" && m.meta.runId === runId) ||
-          (typeof m.meta?.buildRunId === "string" && m.meta.buildRunId === runId)),
-    );
     if (historical) return progressFromAssistantMessage(historical);
     return null;
   }, [jobWorkspaceFocus, agent.activeRunId, agent.progress, agent.frozenRuns, chatMessages]);

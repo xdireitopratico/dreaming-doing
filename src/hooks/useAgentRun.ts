@@ -51,6 +51,18 @@ const STALE_STREAM_WITH_QUEUE_MS = 10 * 60 * 1000;
 
 const SESSION_STORAGE_KEY = "forge:agent-snapshot";
 const SNAPSHOT_MAX_AGE_MS = 30 * 60 * 1000;
+const MAX_FROZEN_RUNS = 5;
+
+function pruneFrozenRuns(m: Map<string, FrozenRunSnapshot>): Map<string, FrozenRunSnapshot> {
+  if (m.size <= MAX_FROZEN_RUNS) return m;
+  const copy = new Map(m);
+  const keys = [...copy.keys()];
+  while (copy.size > MAX_FROZEN_RUNS) {
+    const oldest = keys.shift();
+    if (oldest) copy.delete(oldest);
+  }
+  return copy;
+}
 
 function saveAgentSnapshot(snapshot: {
   activeRunId: string | null;
@@ -182,20 +194,24 @@ export function useAgentRun() {
       clearAgentSnapshot();
       return;
     }
+    const restoreProgress = () => {
+      setProgress((prev) => {
+        if (prev !== initialAgentProgress && prev.streamText != null) return prev;
+        return snap!.progress;
+      });
+    };
+
     if (snap.activeRunId) {
       runIdRef.current = snap.activeRunId;
       setActiveRunId(snap.activeRunId);
       lastSeqRef.current = snap.lastSeq;
       if (snap.frozenRuns.length > 0) {
-        setFrozenRuns(new Map(snap.frozenRuns));
+        setFrozenRuns(pruneFrozenRuns(new Map(snap.frozenRuns)));
       }
-      // Restaura progress apenas se ainda está no estado inicial (evita stomp)
-      setProgress((prev) => {
-        if (prev !== initialAgentProgress && prev.streamText != null) return prev;
-        return snap.progress;
-      });
-      // Reconecta no run para catch-up de eventos que chegaram durante o reload
+      restoreProgress();
       void subscribeToRun(snap.activeRunId, { resetProgress: false });
+    } else if (snap.progress.awaiting && snap.progress.awaitingKind === "qualify") {
+      restoreProgress();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -227,7 +243,7 @@ export function useAgentRun() {
           setFrozenRuns((m) => {
             const copy = new Map(m);
             copy.set(rid, snap);
-            return copy;
+            return pruneFrozenRuns(copy);
           });
         }
         return next;
@@ -259,7 +275,7 @@ export function useAgentRun() {
     setFrozenRuns((m) => {
       const copy = new Map(m);
       copy.set(rid, freezeSnapshot(snap));
-      return copy;
+      return pruneFrozenRuns(copy);
     });
   }, []);
 

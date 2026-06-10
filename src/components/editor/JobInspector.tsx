@@ -65,9 +65,11 @@ export function JobInspector({
           <InspectorTimeline progress={run} running={running} onOpenFile={onOpenFile} />
         )}
         {activeTab === "changes" && <InspectorChanges progress={run} />}
-        {activeTab === "plan" && pendingPlan && onPlanApprove && onPlanReject && (
+        {activeTab === "plan" && pendingPlan && onPlanApprove && onPlanReject ? (
           <InspectorPlan plan={pendingPlan} onApprove={onPlanApprove} onReject={onPlanReject} />
-        )}
+        ) : activeTab === "plan" ? (
+          <InspectorTimeline progress={run} running={running} onOpenFile={onOpenFile} />
+        ) : null}
       </div>
     </div>
   );

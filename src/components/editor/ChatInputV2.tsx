@@ -16,6 +16,8 @@ const CHAT_DRAFT_KEY = "forge:chat-draft-v2";
 export type ChatInputV2Props = {
   running: boolean;
   agentBusy?: boolean;
+  /** Plano aguardando aprovação — bloqueia envio. */
+  planPending?: boolean;
   composerMode: AgentComposerMode;
   onComposerModeChange: (mode: AgentComposerMode) => void;
   onSend: (text: string, mode?: AgentComposerMode, parts?: StoredMessagePart[]) => void;
@@ -29,6 +31,7 @@ export type ChatInputV2Props = {
 export function ChatInputV2({
   running,
   agentBusy = false,
+  planPending = false,
   composerMode,
   onComposerModeChange,
   onSend,
@@ -45,9 +48,12 @@ export function ChatInputV2({
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const isRunning = running || agentBusy;
-  const placeholder = isRunning
-    ? "Queue follow-up…"
-    : "Descreva o que quer construir...";
+  const canSend = !planPending;
+  const placeholder = planPending
+    ? "Aprove ou rejeite o plano no inspector antes de enviar…"
+    : isRunning
+      ? "Enfileirar mensagem de acompanhamento…"
+      : "Descreva o que quer construir...";
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -119,7 +125,7 @@ export function ChatInputV2({
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      if (!isRunning) void handleSend();
+      if (canSend) void handleSend();
     }
   };
 
@@ -190,6 +196,7 @@ export function ChatInputV2({
         onKeyDown={handleKeyDown}
         placeholder={placeholder}
         rows={1}
+        disabled={planPending}
         className="forge-composer-input"
       />
 
@@ -224,7 +231,7 @@ export function ChatInputV2({
           onTranscript={(t) => setInput((cur) => (cur ? `${cur} ${t}` : t))}
         />
 
-        {isRunning ? (
+        {isRunning && (
           <button
             type="button"
             className="forge-composer-send ml-1"
@@ -233,17 +240,16 @@ export function ChatInputV2({
           >
             <Square className="size-3.5 fill-current" />
           </button>
-        ) : (
-          <button
-            type="button"
-            className="forge-composer-send ml-1"
-            onClick={() => void handleSend()}
-            disabled={!input.trim() && attachments.length === 0}
-            title="Enviar"
-          >
-            <ArrowUp className="size-4" />
-          </button>
         )}
+        <button
+          type="button"
+          className="forge-composer-send ml-1"
+          onClick={() => void handleSend()}
+          disabled={!canSend || (!input.trim() && attachments.length === 0)}
+          title={isRunning ? "Enfileirar" : "Enviar"}
+        >
+          <ArrowUp className="size-4" />
+        </button>
       </div>
     </div>
   );

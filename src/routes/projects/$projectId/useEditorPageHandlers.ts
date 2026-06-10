@@ -355,7 +355,7 @@ export function useEditorPageHandlers({
       const pp = resolvePendingPlan(agent.progress.pendingPlan, chatMessages);
       if (pp) {
         toast.error(
-          "Há um plano aguardando revisão — abra o preview, Aprovar ou Rejeitar antes de enviar outra mensagem.",
+          "Há um plano aguardando revisão — use Aprovar ou Rejeitar no inspector antes de enviar outra mensagem.",
         );
         return;
       }
@@ -372,11 +372,17 @@ export function useEditorPageHandlers({
 
       const sendMode = (mode ?? composerMode) as AgentComposerMode;
 
+      void qc.invalidateQueries({ queryKey: ["agent-runs", projectId] });
+      await agent.refreshPendingQueue(projectId, conversation.id).catch(() => {});
+
+      const kind = resolveSessionKind(tasteQuota);
+      const busy = isAgentBusy();
+
       const { error } = await supabase.from("messages").insert({
         conversation_id: conversation.id,
         role: "user",
         parts: messageParts,
-        meta: { mode: sendMode }, // capture send-time intent (plan|build) for pendingBody + drain + PR2 history/qualify
+        meta: busy ? { mode: sendMode, queued: true } : { mode: sendMode },
       });
 
       if (error) {
@@ -388,22 +394,7 @@ export function useEditorPageHandlers({
       logEditorTelemetryEvent("agent", "chat_send", "info", sendMode);
       void qc.invalidateQueries({ queryKey: ["messages", conversation.id] });
 
-      // Explicit invalidate + refetch before busy decision (per PR3 spec + subagent findings on
-      // "races on derived running/connected" + "isAgentBusy closes over derived state" + post-finish
-      // interleaving from pendingAgentRunKey + finished effect + reconcile). The await on refresh
-      // (best-effort; does not block on React setState flush) primes queries for coordinator paths
-      // (which do their own await + inFlight serialization) and makes subsequent renders see fresher
-      // pendingCount. The synchronous isAgentBusy() check (running | connected | activeRunId | inFlight)
-      // + terminal clears in syncRunStatus + runningLocks + Realtime + PR1/PR2 dispatch make the
-      // queue vs direct path resilient. Direct !busy runAgent path unchanged (uses connect with
-      // current composer scope, per "no behavior change to happy-path single turn"). See original
-      // PR3 prompt: "Serialize post-finish 'process next' ... one effect/guard with invalidate +
-      // refetch before the busy decision"; "Make isAgentBusy + post-finish logic more resilient".
-      void qc.invalidateQueries({ queryKey: ["agent-runs", projectId] });
-      await agent.refreshPendingQueue(projectId, conversation.id).catch(() => {});
-
-      const kind = resolveSessionKind(tasteQuota);
-      if (isAgentBusy()) {
+      if (busy) {
         const queued = await agent.queueMessage(
           projectId,
           conversation.id,
@@ -413,6 +404,10 @@ export function useEditorPageHandlers({
         );
         if (!queued.ok) {
           toast.error(queued.message ?? "Erro ao enfileirar mensagem");
+        } else {
+          toast.success(
+            queued.message ?? "Mensagem na fila — o agente processará quando terminar.",
+          );
         }
         return;
       }
@@ -572,6 +567,7 @@ export function useEditorPageHandlers({
         });
         setComposerMode("build");
         agent.clearPendingPlan();
+        toast.success("Build iniciado — acompanhe o progresso no inspector.");
         await qc.invalidateQueries({ queryKey: ["conversation", projectId] });
         await qc.invalidateQueries({ queryKey: ["messages", conversation?.id] });
         qc.invalidateQueries({ queryKey: ["agent-runs", projectId] });

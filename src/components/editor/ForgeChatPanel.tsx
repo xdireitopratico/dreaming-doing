@@ -115,7 +115,13 @@ export function ForgeChatPanel({
       return () => cancelAnimationFrame(raf);
     }
     setShowNewMessagesPill(true);
-  }, [messages.length, running, effectiveProgress.timeline.length, scrollToBottom]);
+  }, [
+    messages.length,
+    running,
+    effectiveProgress.timeline.length,
+    pendingQueueItems.length,
+    scrollToBottom,
+  ]);
 
   const handleSend = useCallback(
     async (text: string, mode?: AgentComposerMode, parts?: StoredMessagePart[]) => {
@@ -220,6 +226,7 @@ export function ForgeChatPanel({
       <ChatInputV2
         running={running}
         agentBusy={agentBusy}
+        planPending={!!pendingPlan}
         composerMode={composerMode}
         onComposerModeChange={setComposerMode}
         onSend={handleSend}

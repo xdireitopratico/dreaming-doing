@@ -427,6 +427,11 @@ Deno.test("12 persistAssistantStep reutiliza uma mensagem por run", async () => 
   const finalMeta = sb.messageWriteMetas.find((m) => typeof m?.finishedAt === "string");
   assertExists(finalMeta);
   assertEquals(finalMeta?.partial, false);
+  const cardSnapshot = finalMeta?.cardSnapshot as Record<string, unknown> | undefined;
+  assertExists(cardSnapshot);
+  assertEquals(cardSnapshot?.finished, true);
+  assert(Array.isArray(cardSnapshot?.timeline));
+  assert(Array.isArray(cardSnapshot?.tools));
 });
 
 Deno.test("12b persistAssistantStep meta.partial=true em cada step", async () => {

@@ -666,7 +666,10 @@ export class AgentLoop {
           reason: "ambiguous mobile request",
           awaiting: true,
         });
-        await this.persistFinal(mobileQ);
+        await this.persistFinal(mobileQ, {
+          awaiting: true,
+          awaitingKind: "qualify",
+        });
         await this.clearCheckpoint();
         await this.markRunStatus("awaiting_user", {
           awaitingUser: { type: "qualify", message: mobileQ.slice(0, 200) },
@@ -701,7 +704,10 @@ export class AgentLoop {
               "needsQualify triggered (explicit interaction request or vague/short prompt)",
             awaiting: true,
           });
-          await this.persistFinal(q);
+          await this.persistFinal(q, {
+            awaiting: true,
+            awaitingKind: "qualify",
+          });
           await this.clearCheckpoint();
           await this.markRunStatus("awaiting_user", {
             awaitingUser: { type: "qualify", message: q.slice(0, 200) },
@@ -1766,9 +1772,147 @@ export class AgentLoop {
     ].join("\n");
   }
 
+  private toolsFromTimeline(
+    timeline: Array<{ type: string; data: Record<string, unknown> }>,
+  ): Array<{ name: string; args: Record<string, unknown>; ok?: boolean; error?: string }> {
+    const tools: Array<{
+      name: string;
+      args: Record<string, unknown>;
+      ok?: boolean;
+      error?: string;
+    }> = [];
+    for (const ev of timeline) {
+      if (ev.type === "tool_start") {
+        tools.push({
+          name: typeof ev.data.name === "string" ? ev.data.name : "?",
+          args: (ev.data.args as Record<string, unknown> | undefined) ?? {},
+        });
+        continue;
+      }
+      if (ev.type === "tool_done") {
+        const toolName = typeof ev.data.name === "string" ? ev.data.name : "?";
+        for (let i = tools.length - 1; i >= 0; i--) {
+          if (tools[i].name === toolName && tools[i].ok === undefined) {
+            tools[i] = {
+              ...tools[i],
+              ok: ev.data.ok === true,
+              error: typeof ev.data.error === "string" ? ev.data.error : undefined,
+            };
+            break;
+          }
+        }
+      }
+    }
+    return tools;
+  }
+
+  private diffsFromTimeline(
+    timeline: Array<{ type: string; data: Record<string, unknown>; timestamp?: number }>,
+  ): Array<{
+    id: string;
+    path: string;
+    before: string;
+    after: string;
+    op: "write" | "edit";
+    timestamp: number;
+  }> {
+    const diffs: Array<{
+      id: string;
+      path: string;
+      before: string;
+      after: string;
+      op: "write" | "edit";
+      timestamp: number;
+    }> = [];
+    for (const ev of timeline) {
+      if (ev.type !== "file_diff") continue;
+      const path = typeof ev.data.path === "string" ? ev.data.path : "unknown";
+      const before = typeof ev.data.before === "string" ? ev.data.before : "";
+      const after = typeof ev.data.after === "string" ? ev.data.after : "";
+      const op = ev.data.op === "edit" ? "edit" : "write";
+      const ts = typeof ev.timestamp === "number" ? ev.timestamp : Date.now();
+      diffs.push({
+        id: `${path}::${diffs.length}::${ts}`,
+        path,
+        before,
+        after,
+        op,
+        timestamp: ts,
+      });
+    }
+    return diffs;
+  }
+
+  private buildCardSnapshot(opts: {
+    streamText: string;
+    deliveryFiles: string[];
+    finished?: boolean;
+    lastFinishOk?: boolean | null;
+    awaiting?: boolean;
+    awaitingKind?: "qualify" | "plan_approval" | null;
+    pendingPlan?: ProposedPlan | null;
+    phase?: string | null;
+    currentStep?: number | null;
+    totalSteps?: number | null;
+    error?: string | null;
+    resumable?: boolean;
+  }): Record<string, unknown> {
+    const timeline = this.streamTailBuffer.slice();
+    const tools = this.toolsFromTimeline(timeline);
+    const diffs = this.diffsFromTimeline(timeline);
+    const finished = opts.finished ?? true;
+    const lastFinishOk = opts.lastFinishOk ?? (finished ? true : null);
+
+    const snapshot: Record<string, unknown> = {
+      timeline,
+      tools,
+      diffs,
+      streamText: opts.streamText,
+      phase: opts.phase ?? (finished ? "done" : null),
+      message: null,
+      summary: null,
+      error: opts.error ?? null,
+      finished,
+      resumable: opts.resumable ?? false,
+      lastFinishOk,
+      currentStep: opts.currentStep ?? this.state.currentStepIndex,
+      totalSteps: opts.totalSteps ?? this.maxStepsLimit,
+      deliveryFiles: opts.deliveryFiles,
+      buildLogLines: [],
+      stackForkSuggested: null,
+      awaiting: opts.awaiting ?? false,
+      awaitingKind: opts.awaitingKind ?? null,
+    };
+
+    if (opts.pendingPlan) {
+      const plan = opts.pendingPlan;
+      snapshot.pendingPlan = {
+        planId: plan.planId,
+        summary: plan.summary,
+        rationale: plan.rationale ?? undefined,
+        markdown: plan.markdown ?? undefined,
+        mission: plan.mission ?? undefined,
+        objective: plan.objective ?? undefined,
+        steps: plan.steps,
+        ttlMs: Number.MAX_SAFE_INTEGER,
+        proposedAt: Date.now(),
+        runId: this.runId,
+        projectId: this.state.projectId,
+      };
+      snapshot.planSummary = plan.summary;
+    }
+
+    return snapshot;
+  }
+
   private async persistFinal(
     summary: string,
-    opts?: { lastFinishOk?: boolean; buildFailed?: boolean },
+    opts?: {
+      lastFinishOk?: boolean;
+      buildFailed?: boolean;
+      awaiting?: boolean;
+      awaitingKind?: "qualify" | "plan_approval" | null;
+    },
   ): Promise<void> {
     const narration = this.narrationBuffer.trim();
     const deliveryFiles = [...this.touchedPaths];
@@ -1780,6 +1924,15 @@ export class AgentLoop {
       : "";
     const text = `${body}${fileFooter}`;
     const lastFinishOk = opts?.lastFinishOk ?? true;
+    const cardSnapshot = this.buildCardSnapshot({
+      streamText: text,
+      deliveryFiles,
+      finished: true,
+      lastFinishOk,
+      awaiting: opts?.awaiting,
+      awaitingKind: opts?.awaitingKind,
+      phase: opts?.awaiting ? null : "done",
+    });
     const meta: Record<string, unknown> = {
       runId: this.runId ?? undefined,
       partial: false,
@@ -1791,6 +1944,7 @@ export class AgentLoop {
       lastFinishOk,
       buildFailed: opts?.buildFailed === true || lastFinishOk === false,
       streamTail: this.streamTailBuffer.slice(-120),
+      cardSnapshot,
     };
 
     const existingId = await this.resolveExistingRunMessageId();
@@ -1822,6 +1976,16 @@ export class AgentLoop {
     summary: string,
     plan: ProposedPlan,
   ): Promise<void> {
+    const cardSnapshot = this.buildCardSnapshot({
+      streamText: summary,
+      deliveryFiles: [],
+      finished: true,
+      lastFinishOk: true,
+      awaiting: true,
+      awaitingKind: "plan_approval",
+      pendingPlan: plan,
+      phase: null,
+    });
     const meta: Record<string, unknown> = {
       runId: this.runId ?? undefined,
       partial: false,
@@ -1839,6 +2003,7 @@ export class AgentLoop {
       planPhases: plan.phases ?? null,
       planSteps: plan.steps,
       finishedAt: new Date().toISOString(),
+      cardSnapshot,
     };
 
     const existingId = await this.resolveExistingRunMessageId();
@@ -1943,6 +2108,7 @@ export class AgentLoop {
       "validate_ok",
       "validate_fail",
       "delivery_checkpoint",
+      "file_diff",
       "done",
       "finish",
     ]);

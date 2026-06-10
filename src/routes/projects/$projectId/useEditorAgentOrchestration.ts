@@ -87,6 +87,7 @@ export function useEditorAgentOrchestration({
   const lastSyncedFilesKeyRef = useRef("");
   const lastPreviewSyncTickRef = useRef(0);
   const previewSyncInFlightRef = useRef(false);
+  const previewSyncPendingReloadRef = useRef(false);
   const [previewSyncInFlight, setPreviewSyncInFlight] = useState(false);
 
   const supportsLivePreview = isReactProject && !nativeBuildPreview;
@@ -250,17 +251,25 @@ export function useEditorAgentOrchestration({
     async (reload: boolean) => {
       if (!supportsLivePreview || !e2bConnected || previewE2bCircuit) return;
       if (fileCount === 0 && !running) return;
-      if (previewSyncInFlightRef.current) return;
+      if (previewSyncInFlightRef.current) {
+        if (reload) previewSyncPendingReloadRef.current = true;
+        return;
+      }
       previewSyncInFlightRef.current = true;
       setPreviewSyncInFlight(true);
+      let shouldReload = reload;
       try {
-        const url = await previewBoot.boot({
-          ...(devUrl ? { syncOnly: true } : { force: true }),
-          silent: true,
-        });
-        if (reload && (devUrl || url)) {
-          setPreviewReloadNonce((n) => n + 1);
-        }
+        do {
+          previewSyncPendingReloadRef.current = false;
+          const url = await previewBoot.boot({
+            ...(devUrl ? { syncOnly: true } : { force: true }),
+            silent: true,
+          });
+          if (shouldReload && url) {
+            setPreviewReloadNonce((n) => n + 1);
+          }
+          shouldReload = previewSyncPendingReloadRef.current;
+        } while (previewSyncPendingReloadRef.current);
       } finally {
         previewSyncInFlightRef.current = false;
         setPreviewSyncInFlight(false);
@@ -273,6 +282,7 @@ export function useEditorAgentOrchestration({
       previewE2bCircuit,
       devUrl,
       fileCount,
+      running,
       setPreviewReloadNonce,
     ],
   );

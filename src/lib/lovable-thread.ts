@@ -1,6 +1,9 @@
 import type { ChatMessage } from "@/lib/chat-types";
 import type { AgentProgress } from "@/lib/agent-progress";
-import { progressFromAssistantMessage } from "@/lib/assistant-run-progress";
+import {
+  hasMaterializedCardSnapshot,
+  progressFromAssistantMessage,
+} from "@/lib/assistant-run-progress";
 
 export type FrozenRunSnapshot = Pick<
   AgentProgress,
@@ -334,6 +337,7 @@ export function buildLovableThread(
     if (msg.role === "tool") continue;
 
     if (msg.role === "user") {
+      if (msg.meta?.queued === true) continue;
       items.push({ kind: "user", message: msg });
       continue;
     }
@@ -405,7 +409,7 @@ export function buildLovableThread(
 
 export { freezeSnapshot };
 
-/** Progress efetivo para render: live > frozen > reidratação do DB.
+/** Progress efetivo para render: live > DB materializado (cardSnapshot) > frozen > DB fraco.
  * Strengthened: single source for live/frozen per anchored runId slot (ensures correct isActive/frozen/Done
  * for multi-turn without empty/duplicate blocks).
  */
@@ -413,6 +417,10 @@ export function resolveAssistantProgress(
   item: Extract<LovableThreadItem, { kind: "assistant" }>,
 ): AgentProgress | null {
   if (item.live) return item.live;
+  if (item.message && hasMaterializedCardSnapshot(item.message)) {
+    const db = progressFromAssistantMessage(item.message);
+    if (db) return db;
+  }
   if (!item.frozen) {
     return item.message ? progressFromAssistantMessage(item.message) : null;
   }

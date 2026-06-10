@@ -46,8 +46,8 @@ describe("agent-job-stream tree", () => {
 
   it("assistant_text delta vira thought real do LLM", () => {
     const timeline: SSEEvent[] = [
-      ev("assistant_text", { text: "Vou criar", delta: true }, 1),
-      ev("assistant_text", { text: " a landing.", delta: true }, 2),
+      ev("assistant_text", { text: "Vou criar", delta: true, thinking: true }, 1),
+      ev("assistant_text", { text: " a landing.", delta: true, thinking: true }, 2),
     ];
     const nodes = buildJobStreamTree(timeline, { running: true });
     expect(nodes.filter((n) => n.kind === "thought")).toHaveLength(1);
@@ -126,7 +126,7 @@ describe("agent-job-stream tree", () => {
 
   it("deriveInspectorView inclui thoughts, steps e errors", () => {
     const timeline: SSEEvent[] = [
-      ev("assistant_text", { text: "Planning layout", delta: true }, 1),
+      ev("assistant_text", { text: "Planning layout", delta: true, thinking: true }, 1),
       ev("tool_start", { name: "fs_read", args: { path: "x.ts" } }, 2),
       ev("validate_fail", { feedback: "boom" }, 3),
     ];
