@@ -47,16 +47,28 @@ export function ForgeMiniCard({
       >
         <div className="forge-mini-card-header">
           {data.status === "working" && (
-            <span className="forge-mini-card-badge forge-mini-card-badge--working">Working…</span>
+            <>
+              <span className="forge-mini-card-dot forge-mini-card-dot--working" aria-hidden />
+              <span className="forge-mini-card-badge forge-mini-card-badge--working">Working…</span>
+            </>
           )}
           {data.status === "thinking" && (
-            <span className="forge-mini-card-badge forge-mini-card-badge--thinking">Thinking…</span>
+            <>
+              <span className="forge-mini-card-dot forge-mini-card-dot--thinking" aria-hidden />
+              <span className="forge-mini-card-badge forge-mini-card-badge--thinking">Thinking…</span>
+            </>
           )}
           {data.status === "done" && (
-            <span className="forge-mini-card-badge forge-mini-card-badge--done">Done</span>
+            <>
+              <span className="forge-mini-card-dot forge-mini-card-dot--done" aria-hidden />
+              <span className="forge-mini-card-badge forge-mini-card-badge--done">Done</span>
+            </>
           )}
           {data.status === "failed" && (
-            <span className="forge-mini-card-badge forge-mini-card-badge--failed">Failed</span>
+            <>
+              <span className="forge-mini-card-dot forge-mini-card-dot--failed" aria-hidden />
+              <span className="forge-mini-card-badge forge-mini-card-badge--failed">Failed</span>
+            </>
           )}
           {data.editedFile && (
             <span className="forge-mini-card-badge forge-mini-card-badge--edited">

@@ -48,16 +48,13 @@ export function InspectorPlan({ plan, onApprove, onReject }: InspectorPlanProps)
     <div className="forge-inspector-plan" data-testid="inspector-plan">
       <header className="mb-3">
         <p className="forge-inspector-section-label">Plano FORGE</p>
-        <h3 className="text-sm font-semibold mt-1" style={{ color: "var(--text-primary)" }}>
-          {plan.mission ?? plan.summary}
-        </h3>
+        <h3 className="forge-inspector-plan-mission">{plan.mission ?? plan.summary}</h3>
       </header>
 
       <div className="forge-inspector-plan-doc">
         {editing ? (
           <textarea
-            className="w-full min-h-[240px] bg-transparent text-sm resize-y outline-none"
-            style={{ color: "var(--text-primary)", fontFamily: "JetBrains Mono, ui-monospace, monospace" }}
+            className="forge-inspector-plan-textarea w-full min-h-[240px] bg-transparent resize-y outline-none"
             value={markdown}
             onChange={(e) => setMarkdown(e.target.value)}
           />

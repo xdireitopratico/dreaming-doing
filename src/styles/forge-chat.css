@@ -254,6 +254,30 @@
   margin-bottom: var(--space-sm);
 }
 
+.forge-mini-card-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.forge-mini-card-dot--working {
+  background: var(--status-working);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--status-working) 50%, transparent);
+}
+
+.forge-mini-card-dot--thinking {
+  background: var(--status-thinking);
+}
+
+.forge-mini-card-dot--done {
+  background: var(--status-done);
+}
+
+.forge-mini-card-dot--failed {
+  background: var(--status-failed);
+}
+
 .forge-mini-card-badge {
   font-size: 10px;
   font-weight: 600;

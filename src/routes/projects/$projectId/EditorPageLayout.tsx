@@ -252,23 +252,6 @@ export function EditorPageLayout({
     onMainViewChange("preview");
   }, [pendingPlan?.planId, pendingPlan?.runId, agent.activeRunId, openJobWorkspace, onMainViewChange]);
 
-  const autoOpenedRunRef = useRef<string | null>(null);
-  useEffect(() => {
-    const runId = agent.activeRunId;
-    if (!running || !runId) return;
-    if (agent.progress.timeline.length === 0) return;
-    if (autoOpenedRunRef.current === runId) return;
-    autoOpenedRunRef.current = runId;
-    openJobWorkspace(runId, "timeline");
-    onMainViewChange("preview");
-  }, [
-    running,
-    agent.activeRunId,
-    agent.progress.timeline.length,
-    openJobWorkspace,
-    onMainViewChange,
-  ]);
-
   const focusedJobProgress = useMemo((): AgentProgress | null => {
     if (!jobWorkspaceFocus) return null;
     const { runId } = jobWorkspaceFocus;

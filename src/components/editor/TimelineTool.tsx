@@ -8,9 +8,18 @@ type TimelineToolProps = {
   onOpenFile?: (path: string) => void;
 };
 
+function toolHeadline(item: Extract<ForgeTimelineItem, { type: "TOOL" }>): string {
+  if (item.path) {
+    const file = item.path.split("/").pop() ?? item.path;
+    const isEdit = /write|edit|patch|create/i.test(item.name);
+    return isEdit ? `Edited  ${file}` : `${item.name}  ${item.path}`;
+  }
+  return item.name;
+}
+
 export function TimelineTool({ item, onOpenFile }: TimelineToolProps) {
   const [open, setOpen] = useState(false);
-  const label = item.path ? `${item.name}  ${item.path}` : item.name;
+  const headline = toolHeadline(item);
 
   return (
     <div className="forge-timeline-tool forge-inspector-timeline-entry" data-testid="timeline-tool">
@@ -20,18 +29,17 @@ export function TimelineTool({ item, onOpenFile }: TimelineToolProps) {
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
       >
-        <span className="forge-timeline-tool-badge">Tool</span>
-        <span className="forge-timeline-tool-name">{label}</span>
-        <ChevronDown className={cn("ml-auto size-3.5 shrink-0 opacity-60", open && "rotate-180")} />
+        <span className="forge-timeline-tool-headline">{headline}</span>
+        <ChevronDown className={cn("forge-timeline-tool-chevron size-3.5", open && "forge-timeline-tool-chevron--open")} />
       </button>
       {open && (
-        <div className="mt-2 w-full">
+        <div className="forge-timeline-tool-body">
           {item.path && onOpenFile && (
             <button type="button" className="forge-timeline-tool-link" onClick={() => onOpenFile(item.path!)}>
               Abrir {item.path}
             </button>
           )}
-          {item.detail && <pre className="forge-timeline-tool-detail mt-1">{item.detail}</pre>}
+          {item.detail && <pre className="forge-timeline-tool-detail">{item.detail}</pre>}
         </div>
       )}
     </div>

@@ -1,4 +1,3 @@
-import { ArrowLeft } from "lucide-react";
 import type { AgentProgress, PendingPlan, PlanStep } from "@/lib/agent-progress";
 import type { JobInspectorTab } from "@/hooks/useJobWorkspaceFocus";
 import { InspectorTimeline } from "@/components/editor/InspectorTimeline";
@@ -26,7 +25,7 @@ const TABS: { id: JobInspectorTab; label: string }[] = [
 
 export function JobInspector({
   run,
-  runId,
+  runId: _runId,
   running,
   activeTab,
   pendingPlan,
@@ -41,11 +40,6 @@ export function JobInspector({
   return (
     <div className="forge-inspector" data-testid="job-inspector">
       <div className="forge-inspector-header">
-        <button type="button" className="forge-inspector-back-btn" onClick={onBackToLatest}>
-          <ArrowLeft className="size-3.5" />
-          Back to latest
-        </button>
-
         <div className="forge-inspector-tabs" role="tablist" aria-label="Job inspector">
           {TABS.filter((t) => t.id !== "plan" || showPlanTab).map((tab) => (
             <button
@@ -61,11 +55,12 @@ export function JobInspector({
             </button>
           ))}
         </div>
+        <button type="button" className="forge-inspector-close-btn" onClick={onBackToLatest}>
+          Fechar inspector
+        </button>
       </div>
 
       <div className="forge-inspector-body forge-scrollbar-dark">
-        <p className="forge-inspector-run-id">Run {runId.slice(0, 8)}…</p>
-
         {activeTab === "timeline" && (
           <InspectorTimeline progress={run} running={running} onOpenFile={onOpenFile} />
         )}

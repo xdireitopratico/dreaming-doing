@@ -96,7 +96,7 @@ export function EditorWorkspaceHeader({
         <EditorIntegrationsMenu {...integrations} />
         <E2bStatusBadge e2bConnected={e2bConnected} />
         {previewStatusLabel && activeView === "preview" && (
-          <span className="lovable-preview-status-pill">{previewStatusLabel}</span>
+          <span className="forge-preview-status-pill">{previewStatusLabel}</span>
         )}
       </div>
 

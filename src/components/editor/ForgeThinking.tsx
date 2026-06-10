@@ -17,6 +17,7 @@ export function ForgeThinking({ durationMs, active = false }: ForgeThinkingProps
       className={cn("forge-chat-thought-line", active && "forge-animate-thinking")}
       data-testid="forge-thinking"
     >
+      <span aria-hidden>💡</span>
       <span>{formatDuration(durationMs)}</span>
       {active && <Loader2 className="size-3 animate-spin" />}
     </p>

@@ -1,4 +1,4 @@
-/* FORGE 2.0 — Inspector (timeline, changes, plan) */
+/* FORGE 2.0 — Inspector (timeline Lovable: labels mono + corpo limpo) */
 
 .forge-inspector {
   display: flex;
@@ -7,40 +7,21 @@
   width: 100%;
   flex-direction: column;
   background: var(--bg-chat);
-  border-left: 1px solid var(--border-forge);
 }
 
 .forge-inspector-header {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: var(--space-lg);
   padding: 10px var(--inspector-padding);
   border-bottom: 1px solid var(--border-forge);
   flex-shrink: 0;
 }
 
-.forge-inspector-back-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  color: var(--text-secondary);
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  padding: var(--space-xs) var(--space-sm);
-  border-radius: 6px;
-}
-
-.forge-inspector-back-btn:hover {
-  background: var(--bg-hover);
-  color: var(--text-primary);
-}
-
 .forge-inspector-tabs {
   display: flex;
   gap: var(--space-xs);
-  margin-left: auto;
 }
 
 .forge-inspector-tab {
@@ -58,21 +39,28 @@
   color: var(--text-primary);
 }
 
+.forge-inspector-close-btn {
+  font-size: 11px;
+  color: var(--text-muted);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: var(--space-xs) var(--space-sm);
+  border-radius: 6px;
+}
+
+.forge-inspector-close-btn:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+
 .forge-inspector-body {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: var(--space-md) var(--inspector-padding);
+  padding: var(--inspector-padding);
   font: var(--font-task-body);
   color: var(--text-secondary);
-}
-
-.forge-inspector-run-id {
-  display: block;
-  margin-bottom: var(--space-md);
-  font: var(--font-tool);
-  font-size: 9px;
-  color: var(--text-muted);
 }
 
 .forge-inspector-empty {
@@ -92,27 +80,22 @@
 .forge-inspector-timeline {
   display: flex;
   flex-direction: column;
-  gap: var(--item-gap);
+  gap: var(--space-lg);
 }
 
-.forge-inspector-timeline-entry + .forge-inspector-timeline-entry {
-  margin-top: var(--item-gap);
+.forge-inspector-timeline-entry {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
 }
 
-/* TASK */
-.forge-timeline-task {
-  padding: var(--item-padding);
-  border-radius: 12px;
-  border: 1px solid color-mix(in srgb, var(--text-accent) 22%, transparent);
-  background: color-mix(in srgb, var(--text-accent) 5%, transparent);
-}
-
+/* TASK — label mono + título (sem card âmbar) */
 .forge-timeline-task-label {
   display: block;
-  margin-bottom: var(--space-xs);
   font: var(--font-task-label);
   text-transform: uppercase;
-  color: color-mix(in srgb, var(--text-accent) 85%, white);
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
 }
 
 .forge-timeline-task-title {
@@ -122,12 +105,10 @@
   color: var(--text-primary);
 }
 
-/* THOUGHT (colapsável) */
+/* THOUGHT — colapsável */
 .forge-timeline-thought {
-  border-radius: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  background: rgba(255, 255, 255, 0.02);
-  overflow: hidden;
+  border: none;
+  background: transparent;
 }
 
 .forge-timeline-thought-header {
@@ -135,23 +116,22 @@
   align-items: center;
   gap: var(--space-sm);
   width: 100%;
-  padding: var(--space-sm) var(--space-md);
+  padding: 0;
   border: none;
   background: none;
-  color: var(--text-muted);
-  font-size: 12px;
+  color: var(--text-secondary);
+  font: var(--font-thought);
   cursor: pointer;
   text-align: left;
 }
 
 .forge-timeline-thought-label {
-  font-weight: 500;
   color: var(--text-secondary);
 }
 
 .forge-timeline-thought-chevron {
   margin-left: auto;
-  opacity: 0.6;
+  opacity: 0.5;
   transition: transform 0.15s ease;
 }
 
@@ -160,21 +140,20 @@
 }
 
 .forge-timeline-thought-prose {
-  margin: 0;
-  padding: 0 var(--space-md) 10px;
+  margin: var(--space-xs) 0 0;
+  padding: 0;
   font-size: 12px;
-  line-height: 1.5;
+  line-height: 1.55;
   color: var(--text-secondary);
   white-space: pre-wrap;
 }
 
-/* TOOL (colapsável) */
+/* TOOL — "Edited index.ts" colapsável */
 .forge-timeline-tool {
-  margin-bottom: var(--space-md);
-  padding: var(--item-padding);
-  border-radius: 10px;
-  border: 1px solid var(--border-forge);
-  background: rgba(255, 255, 255, 0.03);
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
 }
 
 .forge-timeline-tool-header {
@@ -185,31 +164,30 @@
   border: none;
   background: none;
   color: inherit;
-  font: inherit;
+  font: var(--font-tool);
   cursor: pointer;
   text-align: left;
   padding: 0;
 }
 
-.forge-timeline-tool-badge {
-  font-size: 10px;
-  padding: 2px var(--space-sm);
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.1);
-  color: var(--text-muted);
-  font: var(--font-task-label);
-  text-transform: uppercase;
+.forge-timeline-tool-headline {
+  color: var(--text-secondary);
 }
 
-.forge-timeline-tool-name {
-  font: var(--font-tool);
-  font-size: 11px;
-  color: var(--text-secondary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  flex: 1;
-  min-width: 0;
+.forge-timeline-tool-chevron {
+  margin-left: auto;
+  opacity: 0.5;
+  transition: transform 0.15s ease;
+}
+
+.forge-timeline-tool-chevron--open {
+  transform: rotate(180deg);
+}
+
+.forge-timeline-tool-body {
+  margin-top: var(--space-sm);
+  padding-left: var(--space-sm);
+  border-left: 1px solid var(--border-forge);
 }
 
 .forge-timeline-tool-link {
@@ -222,15 +200,15 @@
   color: var(--text-accent);
   cursor: pointer;
   text-align: left;
+  margin-bottom: var(--space-xs);
 }
 
 .forge-timeline-tool-link:hover {
   text-decoration: underline;
-  color: var(--text-primary);
 }
 
 .forge-timeline-tool-detail {
-  margin: var(--space-xs) 0 0;
+  margin: 0;
   font: var(--font-tool);
   font-size: 11px;
   color: var(--text-muted);
@@ -239,29 +217,17 @@
   overflow: auto;
 }
 
-/* RESULT */
-.forge-timeline-result {
-  padding: var(--item-padding);
-  border-radius: 12px;
-  border: 1px solid color-mix(in srgb, var(--status-done) 25%, transparent);
-  background: color-mix(in srgb, var(--status-done) 6%, transparent);
-}
-
-.forge-timeline-result--failed {
-  border-color: color-mix(in srgb, var(--status-failed) 35%, transparent);
-  background: color-mix(in srgb, var(--status-failed) 6%, transparent);
-}
-
+/* RESULT — label mono + texto */
 .forge-timeline-result-label {
   display: block;
-  margin-bottom: var(--space-xs);
   font: var(--font-task-label);
   text-transform: uppercase;
-  color: color-mix(in srgb, var(--status-done) 90%, white);
+  letter-spacing: 0.06em;
+  color: var(--status-done);
 }
 
 .forge-timeline-result--failed .forge-timeline-result-label {
-  color: color-mix(in srgb, var(--status-failed) 90%, white);
+  color: var(--status-failed);
 }
 
 .forge-timeline-result-summary {
@@ -281,7 +247,6 @@
   color: var(--text-secondary);
 }
 
-/* Changes */
 .forge-inspector-changes {
   display: flex;
   flex-direction: column;
@@ -293,7 +258,7 @@
   padding: var(--item-padding);
   border-radius: 10px;
   border: 1px solid var(--border-forge);
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--bg-card);
 }
 
 .forge-inspector-diff-toggle {
@@ -319,11 +284,24 @@
   white-space: nowrap;
 }
 
-/* Plan */
 .forge-inspector-plan {
   display: flex;
   flex-direction: column;
   min-height: 0;
+  height: 100%;
+}
+
+.forge-inspector-plan-mission {
+  margin: var(--space-xs) 0 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.forge-inspector-plan-textarea {
+  font: var(--font-tool);
+  font-size: 13px;
+  color: var(--text-primary);
 }
 
 .forge-inspector-plan-doc {
@@ -332,7 +310,7 @@
   overflow-y: auto;
   border-radius: 12px;
   border: 1px solid var(--border-forge);
-  background: color-mix(in srgb, var(--bg-card) 40%, transparent);
+  background: var(--bg-card);
   padding: var(--space-lg);
 }
 
@@ -366,10 +344,6 @@
   color: color-mix(in srgb, var(--status-failed) 85%, white);
 }
 
-.forge-inspector-plan-btn--danger:hover {
-  border-color: color-mix(in srgb, var(--status-failed) 50%, transparent);
-}
-
 .forge-inspector-plan-approve {
   margin-left: auto;
   display: inline-flex;
@@ -391,10 +365,6 @@
   cursor: not-allowed;
 }
 
-.forge-inspector-plan-approve:hover:not(:disabled) {
-  filter: brightness(1.08);
-}
-
 .forge-chat-markdown {
   width: 100%;
   max-width: 100%;
@@ -404,4 +374,14 @@
   font-size: 14px;
   line-height: 1.6;
   color: var(--text-primary);
+}
+
+.forge-preview-status-pill {
+  font-size: 11px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border-forge);
+  background: var(--bg-card);
+  color: var(--text-muted);
+  white-space: nowrap;
 }
