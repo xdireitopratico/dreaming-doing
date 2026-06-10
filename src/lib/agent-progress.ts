@@ -478,9 +478,15 @@ export function applyAgentProgressEvent(
 
     case "done": {
       const summary = (data.summary as string) ?? prev.summary;
+      const summaryTrim = summary?.trim() ?? "";
+      const summaryIsRobotic = /pronto!?\s*resumo do que fiz|nenhum arquivo foi alterado/i.test(
+        summaryTrim.replace(/\*+/g, ""),
+      );
       const streamText = prev.streamText?.trim()
         ? prev.streamText
-        : summary?.trim() || prev.streamText;
+        : summaryTrim && !summaryIsRobotic
+          ? summaryTrim
+          : prev.streamText;
       return {
         ...prev,
         summary,

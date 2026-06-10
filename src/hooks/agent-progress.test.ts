@@ -183,6 +183,16 @@ describe("applyAgentProgressEvent", () => {
     expect(next.summary).toContain("Pronto");
   });
 
+  it("done não injeta template robótico no streamText quando vazio", () => {
+    const next = applyAgentProgressEvent(
+      { ...base, finished: false, streamText: null },
+      ev("done", {
+        summary: "**Pronto!** Resumo do que fiz:\n\nNenhum arquivo foi alterado nesta rodada.",
+      }),
+    );
+    expect(next.streamText).toBeNull();
+  });
+
   it("delivery_checkpoint silencioso marca autoResuming sem pausar", () => {
     const next = applyAgentProgressEvent(
       { ...base, finished: false, streamText: null },

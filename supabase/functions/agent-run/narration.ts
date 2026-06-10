@@ -167,48 +167,95 @@ export type FinalWrapUpOpts = {
   silentResume?: boolean;
 };
 
-/** Wrap-up final — resumo honesto do que foi entregue. */
-export function buildFinalWrapUp(opts: FinalWrapUpOpts): string {
-  const lines: string[] = [];
+export type ResolveFinalChatOpts = FinalWrapUpOpts & {
+  /** Texto já produzido pelo LLM durante a run (stream/narração). */
+  narration?: string;
+};
+
+export type ResolvedFinalChat = {
+  text: string;
+  /** Texto extra a emitir além do que já foi streamado. */
+  emitExtra: boolean;
+  extraText?: string;
+};
+
+function mentionsDelivery(text: string): boolean {
+  return /preview|arquivo|alterei|entreguei|confere|mexi em|pronto —/i.test(text);
+}
+
+function buildDeliveryClosing(fileCount: number, paths: string[]): string {
+  const shown = paths.slice(-3).map((p) => `\`${p}\``).join(", ");
+  const extra = fileCount > 3 ? ` e mais ${fileCount - 3}` : "";
+  if (fileCount === 1) {
+    return `Mexi em ${shown} — confere o preview. Quer refinar algo?`;
+  }
+  return `Entreguei em **${fileCount} arquivos** (${shown}${extra}). Dá uma olhada no preview; se quiser ajustar, é só falar.`;
+}
+
+function buildPartialClosing(fileCount: number, paths: string[]): string {
+  if (fileCount === 0) {
+    return "Até aqui — continuo na próxima rodada. Quer priorizar algo específico?";
+  }
+  const shown = paths.slice(-2).map((p) => `\`${p}\``).join(", ");
+  return `Até aqui mexi em ${shown}${fileCount > 2 ? ` (+${fileCount - 2})` : ""}. Posso seguir quando quiser.`;
+}
+
+/**
+ * Mensagem final do chat — conversa do LLM em primeiro lugar; zero template robótico.
+ * «Pronto! Resumo do que fiz» e «Nenhum arquivo alterado» foram removidos de propósito.
+ */
+export function resolveFinalChatMessage(opts: ResolveFinalChatOpts): ResolvedFinalChat {
+  const narration = opts.narration?.trim() ?? "";
   const fileCount = opts.touchedPaths.length;
 
   if (opts.errorMessage?.trim()) {
-    lines.push(opts.errorMessage.trim());
-  } else if (opts.silentResume) {
-    if (fileCount > 0) {
-      lines.push("Ainda estou trabalhando — já deixei parte do pedido pronta.");
-    } else {
-      lines.push("Ainda estou trabalhando no seu pedido.");
+    const err = opts.errorMessage.trim();
+    return narration && !narration.includes(err.slice(0, 24))
+      ? { text: `${narration}\n\n${err}`, emitExtra: true, extraText: err }
+      : { text: err, emitExtra: !narration };
+  }
+
+  if (opts.silentResume) {
+    const note = fileCount > 0
+      ? "Ainda estou trabalhando — já deixei parte do pedido pronta."
+      : "Ainda estou trabalhando no seu pedido.";
+    if (narration) return { text: narration, emitExtra: false };
+    return { text: note, emitExtra: true };
+  }
+
+  if (opts.partial) {
+    const note = buildPartialClosing(fileCount, opts.touchedPaths);
+    if (narration) {
+      return { text: `${narration}\n\n${note}`, emitExtra: true, extraText: note };
     }
-  } else if (opts.partial) {
-    lines.push("**Até aqui:**");
-  } else {
-    lines.push("**Pronto!** Resumo do que fiz:");
+    return { text: note, emitExtra: true };
   }
 
-  if (fileCount > 0) {
-    const shown = opts.touchedPaths.slice(-8).map((p) => `\`${p}\``).join(", ");
-    const extra = fileCount > 8 ? ` e mais ${fileCount - 8}` : "";
-    lines.push(
-      "",
-      fileCount === 1
-        ? `Alterei **1 arquivo**: ${shown}.`
-        : `Alterei **${fileCount} arquivos**: ${shown}${extra}.`,
-    );
-  } else if (!opts.errorMessage && !opts.silentResume) {
-    lines.push("", "Nenhum arquivo foi alterado nesta rodada.");
+  if (fileCount === 0) {
+    if (narration) return { text: narration, emitExtra: false };
+    return {
+      text: "Me conta o que você quer construir ou ajustar — estou aqui pra ajudar.",
+      emitExtra: true,
+    };
   }
 
-  const tools = [...new Set(opts.toolsUsed)].filter(Boolean);
-  if (tools.length > 0 && !opts.silentResume) {
-    lines.push("", `Ferramentas usadas: ${tools.slice(0, 6).join(", ")}${tools.length > 6 ? "…" : ""}.`);
+  const deliveryNote = buildDeliveryClosing(fileCount, opts.touchedPaths);
+  if (narration) {
+    if (mentionsDelivery(narration)) {
+      return { text: narration, emitExtra: false };
+    }
+    return {
+      text: `${narration}\n\n${deliveryNote}`,
+      emitExtra: true,
+      extraText: deliveryNote,
+    };
   }
+  return { text: deliveryNote, emitExtra: true };
+}
 
-  if (!opts.silentResume && !opts.errorMessage && !opts.partial && fileCount > 0) {
-    lines.push("", "Confira o **preview** à direita — se algo faltar, descreva o próximo ajuste.");
-  }
-
-  return lines.join("\n").trim();
+/** @deprecated Use resolveFinalChatMessage — mantido para testes legados. */
+export function buildFinalWrapUp(opts: FinalWrapUpOpts): string {
+  return resolveFinalChatMessage({ ...opts }).text;
 }
 
 /** Narração curta para validação/observe. */

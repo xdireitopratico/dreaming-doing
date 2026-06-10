@@ -55,7 +55,7 @@ import type { ClassificationResult } from "./router.ts";
 import {
   buildApprovedPlanBriefing,
   buildClassifyBriefing,
-  buildFinalWrapUp,
+  resolveFinalChatMessage,
   buildGatherNarration,
   buildObserveNarration,
   buildToolBatchNarration,
@@ -1291,28 +1291,38 @@ export class AgentLoop {
     await this.emitTransition("delivered");
     this.emit("phase", { phase: "summarize", message: "Finalizando..." });
     await this.saveCheckpoint(LoopPhase.SUMMARIZE, true);
-    const wrapUp = buildFinalWrapUp({
+    const narration = this.narrationBuffer.trim();
+    const finalChat = resolveFinalChatMessage({
       stepsCompleted: loopStep,
       totalSteps: this.maxStepsLimit,
       touchedPaths: [...this.touchedPaths],
       toolsUsed: [...toolsUsed],
       resumable: false,
+      narration,
     });
-    this.emit("assistant_text", {
-      text: this.narrationStarted ? `\n\n${wrapUp}` : wrapUp,
-      append: this.narrationStarted,
-      final: true,
-    });
-    this.appendToNarration(wrapUp);
-    this.narrationStarted = true;
-    await this.persistFinal(wrapUp, { lastFinishOk: true });
+    const finalText = finalChat.text;
+
+    if (finalChat.emitExtra) {
+      const extra = finalChat.extraText ?? finalText;
+      if (extra.trim()) {
+        this.emit("assistant_text", {
+          text: this.narrationStarted ? `\n\n${extra}` : extra,
+          append: this.narrationStarted,
+          final: true,
+        });
+        this.appendToNarration(extra);
+        this.narrationStarted = true;
+      }
+    }
+
+    await this.persistFinal(finalText, { lastFinishOk: true });
     await this.clearCheckpoint();
     const tokens = this.compression.getTotalTokens();
     const costUsd = this.compression.getEstimatedCostUsd(
       this.router.mainCfg.model,
     );
     this.emit("done", {
-      summary: wrapUp,
+      summary: finalText.slice(0, 2000),
       totalInputTokens: tokens.input,
       totalOutputTokens: tokens.output,
       totalTokens: tokens.total,
@@ -1320,7 +1330,7 @@ export class AgentLoop {
     });
     return {
       ok: true,
-      summary: wrapUp,
+      summary: finalText.slice(0, 2000),
       steps: loopStep,
       toolsUsed: [...toolsUsed],
       totalInputTokens: tokens.input,

@@ -515,10 +515,13 @@ export function buildAgentRunView(
 
   const streamBody = progress.streamText?.trim() || null;
   const narrationBody = progress.narrationText?.trim() || null;
+  const summaryBody = progress.summary?.trim();
+  const safeSummary =
+    summaryBody && !isWrapUpPhrase(summaryBody) ? summaryBody : null;
   const closingText =
     streamBody ||
     (running ? narrationBody : null) ||
-    progress.summary?.trim() ||
+    safeSummary ||
     null;
 
   const liveNarration =
