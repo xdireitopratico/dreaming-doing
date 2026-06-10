@@ -12,23 +12,23 @@ export function TimelineThought({ item }: TimelineThoughtProps) {
   const sec = Math.max(1, Math.round(item.durationMs / 1000));
 
   return (
-    <div className="lovable-thought-block forge-inspector-timeline-entry" data-testid="timeline-thought">
+    <div className="forge-timeline-thought forge-inspector-timeline-entry" data-testid="timeline-thought">
       <button
         type="button"
-        className="lovable-thought-block-header"
+        className="forge-timeline-thought-header"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
       >
-        <span className="lovable-thought-block-label">Thought for {sec}s</span>
-        {item.active && <Loader2 className="size-3 animate-spin text-[var(--forge-primary)]" />}
+        <span className="forge-timeline-thought-label">Thought for {sec}s</span>
+        {item.active && <Loader2 className="size-3 animate-spin" style={{ color: "var(--text-accent)" }} />}
         <ChevronDown
           className={cn(
-            "lovable-thought-block-chevron size-3.5",
-            open && "lovable-thought-block-chevron--open",
+            "forge-timeline-thought-chevron size-3.5",
+            open && "forge-timeline-thought-chevron--open",
           )}
         />
       </button>
-      {open && item.text && <p className="lovable-thought-block-prose">{item.text}</p>}
+      {open && item.text && <p className="forge-timeline-thought-prose">{item.text}</p>}
     </div>
   );
 }

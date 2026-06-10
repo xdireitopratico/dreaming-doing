@@ -3,16 +3,14 @@ import { ForgeTaskItem } from "@/components/editor/ForgeTaskItem";
 
 type ForgeTaskListProps = {
   tasks: TaskItem[];
-  maxVisible?: number;
 };
 
-export function ForgeTaskList({ tasks, maxVisible = 6 }: ForgeTaskListProps) {
-  const visible = tasks.slice(0, maxVisible);
-  if (!visible.length) return null;
+export function ForgeTaskList({ tasks }: ForgeTaskListProps) {
+  if (!tasks.length) return null;
 
   return (
-    <ul className="lovable-job-mini-card-steps mt-2" data-testid="forge-task-list">
-      {visible.map((task) => (
+    <ul className="forge-task-list" data-testid="forge-task-list">
+      {tasks.slice(0, 6).map((task) => (
         <ForgeTaskItem key={task.id} task={task} />
       ))}
     </ul>

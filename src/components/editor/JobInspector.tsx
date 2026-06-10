@@ -39,21 +39,21 @@ export function JobInspector({
   const showPlanTab = !!pendingPlan;
 
   return (
-    <div className="lovable-job-workspace flex min-h-0 h-full w-full flex-col" data-testid="job-inspector">
-      <div className="lovable-job-workspace-header">
-        <button type="button" className="lovable-job-back-btn" onClick={onBackToLatest}>
+    <div className="forge-inspector" data-testid="job-inspector">
+      <div className="forge-inspector-header">
+        <button type="button" className="forge-inspector-back-btn" onClick={onBackToLatest}>
           <ArrowLeft className="size-3.5" />
           Back to latest
         </button>
 
-        <div className="lovable-job-tabs" role="tablist" aria-label="Job inspector">
+        <div className="forge-inspector-tabs" role="tablist" aria-label="Job inspector">
           {TABS.filter((t) => t.id !== "plan" || showPlanTab).map((tab) => (
             <button
               key={tab.id}
               type="button"
               role="tab"
               aria-selected={activeTab === tab.id}
-              className="lovable-job-tab"
+              className="forge-inspector-tab"
               data-active={activeTab === tab.id}
               onClick={() => onTabChange(tab.id)}
             >
@@ -63,10 +63,8 @@ export function JobInspector({
         </div>
       </div>
 
-      <div className="lovable-job-workspace-body min-h-0 flex-1 overflow-y-auto px-4 py-3 forge-scrollbar-dark">
-        <p className="lovable-job-run-id font-mono text-[9px] text-[var(--forge-ghost)] mb-3">
-          Run {runId.slice(0, 8)}…
-        </p>
+      <div className="forge-inspector-body forge-scrollbar-dark">
+        <p className="forge-inspector-run-id">Run {runId.slice(0, 8)}…</p>
 
         {activeTab === "timeline" && (
           <InspectorTimeline progress={run} running={running} onOpenFile={onOpenFile} />

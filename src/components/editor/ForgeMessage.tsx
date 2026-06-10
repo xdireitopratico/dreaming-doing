@@ -99,7 +99,7 @@ export function ForgeMessage({
       )}
 
       {message?.timestamp && runView?.finished && !isActive && (
-        <time className="lovable-turn-timestamp" dateTime={new Date(message.timestamp).toISOString()}>
+        <time className="forge-turn-timestamp" dateTime={new Date(message.timestamp).toISOString()}>
           {new Date(message.timestamp).toLocaleString("pt-BR", {
             day: "numeric",
             month: "short",

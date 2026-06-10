@@ -19,19 +19,17 @@ function DiffBlock({
   const [open, setOpen] = useState(false);
 
   return (
-    <div className="lovable-job-edited-block mb-2">
+    <div className="forge-inspector-diff-block">
       <button
         type="button"
-        className="flex w-full items-center gap-2 text-left"
+        className="forge-inspector-diff-toggle"
         onClick={() => setOpen((v) => !v)}
       >
         <ChevronDown className={cn("size-3.5 shrink-0 transition-transform", open && "rotate-180")} />
-        <span className="font-mono text-[11px] text-[var(--forge-foreground)] truncate">{path}</span>
+        <span className="forge-inspector-diff-path">{path}</span>
       </button>
       {open && (
-        <pre className="lovable-job-log-detail mt-2 max-h-64 overflow-auto whitespace-pre-wrap">
-          {after || before || "(vazio)"}
-        </pre>
+        <pre className="forge-timeline-tool-detail mt-2">{after || before || "(vazio)"}</pre>
       )}
     </div>
   );
@@ -43,26 +41,24 @@ export function InspectorChanges({ progress }: InspectorChangesProps) {
 
   if (!diffs.length && !delivered.length) {
     return (
-      <p className="lovable-job-empty" data-testid="inspector-changes-empty">
+      <p className="forge-inspector-empty" data-testid="inspector-changes-empty">
         Nenhuma alteração registrada ainda.
       </p>
     );
   }
 
   return (
-    <div className="lovable-job-changes" data-testid="inspector-changes">
-      <p className="lovable-job-section-label">
+    <div className="forge-inspector-changes" data-testid="inspector-changes">
+      <p className="forge-inspector-section-label">
         {diffs.length} arquivo{diffs.length !== 1 ? "s" : ""} alterado{diffs.length !== 1 ? "s" : ""}
       </p>
 
       {delivered.length > 0 && (
         <section className="mb-4">
-          <p className="lovable-job-section-label">Arquivos entregues</p>
-          <ul className="lovable-job-delivered-list">
+          <p className="forge-inspector-section-label">Arquivos entregues</p>
+          <ul className="forge-inspector-delivered-list">
             {delivered.map((p) => (
-              <li key={p} className="font-mono text-[11px] text-[var(--forge-silver)]">
-                {p}
-              </li>
+              <li key={p}>{p}</li>
             ))}
           </ul>
         </section>

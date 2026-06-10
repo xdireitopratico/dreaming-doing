@@ -24,54 +24,52 @@ export function ForgeMiniCard({
 
   const statusClass =
     data.status === "working"
-      ? "lovable-job-mini-card--working"
+      ? "forge-mini-card--working"
       : data.status === "done"
-        ? "lovable-job-mini-card--done"
-        : data.status === "failed"
-          ? ""
-          : "";
+        ? "forge-mini-card--done"
+        : "";
 
   return (
     <div
       className={cn(
-        "lovable-job-mini-card w-full forge-animate-card-appear",
+        "forge-mini-card w-full forge-animate-card-appear",
         statusClass,
-        isFocused && "lovable-job-mini-card--focused",
+        isFocused && "forge-mini-card--focused",
       )}
       data-testid="forge-mini-card"
       data-run-id={runId}
     >
       <button
         type="button"
-        className="lovable-job-mini-card-body"
+        className="forge-mini-card-body"
         onClick={() => onOpenInspector(runId, data.hasPlan ? "plan" : "timeline")}
         aria-label={`Job: ${data.title}`}
       >
-        <div className="lovable-job-mini-card-header">
+        <div className="forge-mini-card-header">
           {data.status === "working" && (
-            <span className="lovable-job-mini-card-badge-working">Working…</span>
+            <span className="forge-mini-card-badge forge-mini-card-badge--working">Working…</span>
           )}
           {data.status === "thinking" && (
-            <span className="lovable-job-mini-card-badge-working">Thinking…</span>
+            <span className="forge-mini-card-badge forge-mini-card-badge--thinking">Thinking…</span>
           )}
           {data.status === "done" && (
-            <span className="lovable-job-mini-card-badge-done">Done</span>
+            <span className="forge-mini-card-badge forge-mini-card-badge--done">Done</span>
           )}
           {data.status === "failed" && (
-            <span className="lovable-job-mini-card-badge-partial">Failed</span>
+            <span className="forge-mini-card-badge forge-mini-card-badge--failed">Failed</span>
           )}
           {data.editedFile && (
-            <span className="lovable-job-mini-card-badge-edited">
+            <span className="forge-mini-card-badge forge-mini-card-badge--edited">
               Edited <span className="font-mono">{data.editedFile}</span>
             </span>
           )}
         </div>
 
-        <p className="lovable-job-mini-card-title">{data.title}</p>
+        <p className="forge-mini-card-title">{data.title}</p>
 
         <ForgeTaskList tasks={data.tasks} />
 
-        <p className="lovable-job-mini-card-hint">{hint}</p>
+        <p className="forge-mini-card-hint">{hint}</p>
       </button>
     </div>
   );

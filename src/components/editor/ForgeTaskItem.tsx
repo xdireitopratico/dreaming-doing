@@ -7,7 +7,7 @@ type ForgeTaskItemProps = {
 
 export function ForgeTaskItem({ task }: ForgeTaskItemProps) {
   return (
-    <li className="lovable-job-mini-card-step" data-status={task.status}>
+    <li className="forge-task-item" data-status={task.status}>
       <span className="shrink-0">
         {task.status === "done" ? (
           <CheckCircle2 className="size-3.5 forge-animate-task-check" />

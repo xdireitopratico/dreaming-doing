@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type DragEvent, type KeyboardEvent } from "react";
 import { ArrowUp, FileText, ImageIcon, MousePointer2, Paperclip, Square, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { MicButton } from "@/components/voice/MicButton";
@@ -40,6 +40,7 @@ export function ChatInputV2({
 }: ChatInputV2Props) {
   const [input, setInput] = useState("");
   const [attachments, setAttachments] = useState<File[]>([]);
+  const [dragOver, setDragOver] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -96,6 +97,11 @@ export function ChatInputV2({
     el.style.height = `${Math.min(el.scrollHeight, 140)}px`;
   }, [input]);
 
+  const addFiles = useCallback((files: File[]) => {
+    const { accepted } = filterAcceptedFiles(files);
+    if (accepted.length) setAttachments((prev) => [...prev, ...accepted].slice(0, 8));
+  }, []);
+
   const handleSend = useCallback(async () => {
     const text = input.trim();
     if (!text && attachments.length === 0) return;
@@ -118,13 +124,34 @@ export function ChatInputV2({
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { accepted } = filterAcceptedFiles(Array.from(e.target.files ?? []));
-    if (accepted.length) setAttachments((prev) => [...prev, ...accepted].slice(0, 8));
+    addFiles(Array.from(e.target.files ?? []));
     e.target.value = "";
   };
 
+  const handleDragOver = (e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setDragOver(true);
+  };
+
+  const handleDragLeave = (e: DragEvent<HTMLDivElement>) => {
+    if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+    setDragOver(false);
+  };
+
+  const handleDrop = (e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setDragOver(false);
+    addFiles(Array.from(e.dataTransfer.files));
+  };
+
   return (
-    <div className="forge-composer lovable-composer" data-testid="chat-input-v2">
+    <div
+      className={cn("forge-composer", dragOver && "forge-composer--drag-over")}
+      data-testid="chat-input-v2"
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
       <input
         ref={fileInputRef}
         type="file"
@@ -135,12 +162,9 @@ export function ChatInputV2({
       />
 
       {attachments.length > 0 && (
-        <div className="mx-1 mb-1 flex flex-wrap gap-1.5">
+        <div className="forge-composer-attachments">
           {attachments.map((f, i) => (
-            <span
-              key={`${f.name}-${i}`}
-              className="inline-flex items-center gap-1 rounded-md border border-[var(--forge-border)] bg-[var(--forge-surface-3)] pl-2 pr-1 py-0.5 text-[10px] text-[var(--forge-muted)]"
-            >
+            <span key={`${f.name}-${i}`} className="forge-composer-attachment">
               {f.type.startsWith("image/") ? (
                 <ImageIcon className="size-3 shrink-0" />
               ) : (
@@ -149,7 +173,7 @@ export function ChatInputV2({
               <span className="max-w-[120px] truncate">{f.name}</span>
               <button
                 type="button"
-                className="grid size-5 place-items-center rounded hover:bg-[var(--forge-surface-2)]"
+                className="forge-composer-attachment-remove"
                 onClick={() => setAttachments((a) => a.filter((_, j) => j !== i))}
               >
                 <X className="size-3" />
@@ -182,10 +206,7 @@ export function ChatInputV2({
         {onVisualEdits && (
           <button
             type="button"
-            className={cn(
-              "forge-composer-icon",
-              visualEditsActive && "!bg-[var(--forge-primary)]/15 !text-[var(--forge-primary)]",
-            )}
+            className={cn("forge-composer-icon", visualEditsActive && "forge-composer-icon--active")}
             title="Visual edits"
             onClick={onVisualEdits}
           >

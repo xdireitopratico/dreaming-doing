@@ -3,6 +3,8 @@
 @import "tw-animate-css";
 @import "./styles/forge-tokens.css";
 @import "./styles/forge-animations.css";
+@import "./styles/forge-chat.css";
+@import "./styles/forge-inspector.css";
 @import "./styles/editor-workspace.css";
 @import "./styles/forge-ui.css";
 @import "./styles/dashboard-workspace.css";
