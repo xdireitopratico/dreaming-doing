@@ -93,6 +93,10 @@ export interface AgentProgress {
   } | null;
   /** Texto de narração do agente (briefing inicial, wrap-up final) — separado de streamText para não poluir tool calls. */
   narrationText?: string | null;
+  /** Estado atual da FSM do agente (FORGE 2.0). */
+  fsmState?: string | null;
+  /** Sumário do último plano proposto (FORGE 2.0). */
+  planSummary?: string | null;
 }
 
 export type AgentConnectOptions = {
@@ -126,6 +130,8 @@ export const initialAgentProgress: AgentProgress = {
   awaitingKind: null,
   canceled: false,
   awaiting: false,
+  fsmState: null,
+  planSummary: null,
 };
 
 const MODEL_COSTS: Record<string, number> = {
@@ -580,6 +586,20 @@ export function applyAgentProgressEvent(
         timeline: [...prev.timeline, event],
       };
     }
+
+    case "fsm_transition":
+      return {
+        ...prev,
+        fsmState: (data.stateName as string) ?? prev.fsmState,
+        timeline: [...prev.timeline, event],
+      };
+
+    case "plan_proposed":
+      return {
+        ...prev,
+        planSummary: (data.summary as string) ?? prev.planSummary,
+        timeline: [...prev.timeline, event],
+      };
 
     default:
       return { ...prev, timeline: [...prev.timeline, event] };
