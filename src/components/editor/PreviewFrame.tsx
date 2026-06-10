@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Loader2 } from "lucide-react";
-import { PreviewEmptyGuide } from "@/components/editor/PreviewEmptyGuide";
 import { previewDeviceWidth, type PreviewDevice } from "@/components/editor/PreviewViewportChrome";
 import { buildPreviewUrl } from "@/lib/project-routes";
 import { BuildConsole } from "@/components/editor/BuildConsole";
@@ -21,8 +20,6 @@ interface PreviewFrameProps {
   warming?: boolean;
   onWarmComplete?: () => void;
   agentHasRun?: boolean;
-  e2bConnected?: boolean;
-  projectName?: string;
   /** Agente em execução — iframe atualiza ao vivo quando devUrl existe. */
   agentRunning?: boolean;
   /** Badge/overlay de preview ao vivo durante run (web/expo). */
@@ -31,9 +28,7 @@ interface PreviewFrameProps {
   device?: PreviewDevice;
   /** Quando true, esconde a chrome interna (URL/device/refresh) — usado quando o header já provê. */
   hideChrome?: boolean;
-  /** Callback para importar repositório do GitHub a partir do estado vazio. */
-  onImportRepo?: (repoUrl: string) => void;
-  /** Callback para focar o chat a partir do estado vazio. */
+  /** Callback para focar o chat (ex.: build nativo). */
   onFocusChat?: () => void;
   /** Repouso após inatividade — iframe descarregado para economizar E2B. */
   previewIdle?: boolean;
@@ -65,12 +60,9 @@ export function PreviewFrame({
   warming = false,
   onWarmComplete,
   agentHasRun = false,
-  e2bConnected = true,
-  projectName,
   agentRunning = false,
   previewLiveUpdating = false,
   device = "desktop",
-  onImportRepo,
   onFocusChat,
   previewIdle = false,
   isNoFiles = false,
@@ -284,15 +276,21 @@ export function PreviewFrame({
             {bootError && <p className="text-xs text-amber-800/90 max-w-md">{bootError}</p>}
           </div>
         ) : !showNativeConsole && !bootError && showLetsBuild ? (
-          <PreviewEmptyGuide
-            projectName={projectName}
-            e2bConnected={e2bConnected}
-            agentHasRun={agentHasRun}
-            staleSandbox={sandboxStale}
-            onOpenPreview={onRefresh}
-            onImportRepo={onImportRepo}
-            onFocusChat={onFocusChat}
-          />
+          showStaleGuide && onRefresh ? (
+            <div className="flex h-full flex-col items-center justify-center gap-3 bg-neutral-50 p-8 text-center">
+              <p className="text-sm text-neutral-500">Preview desconectado</p>
+              <button
+                type="button"
+                onClick={onRefresh}
+                className="rounded-full bg-neutral-900 px-5 py-2.5 text-sm font-medium text-white hover:bg-neutral-800"
+                data-testid="preview-stale-reconnect"
+              >
+                Reconectar preview
+              </button>
+            </div>
+          ) : (
+            <div className="h-full bg-neutral-50" aria-hidden />
+          )
         ) : null}
       </div>
     </div>

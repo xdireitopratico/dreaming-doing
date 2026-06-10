@@ -480,7 +480,6 @@ export function EditorPageLayout({
                           reloadNonce={previewReloadNonce}
                           previewSyncing={previewSyncing}
                           agentHasRun={agentHasRun}
-                          e2bConnected={e2bConnected}
                           previewIdle={previewIdle}
                           isNoFiles={previewBoot.isNoFiles}
                           sandboxStale={previewBoot.sandboxStale}
@@ -489,11 +488,7 @@ export function EditorPageLayout({
                           nativeBuildPreview={nativeBuildPreview}
                           projectStack={projectStack}
                           agentProgress={agent.progress}
-                          projectName={projectName ?? undefined}
                           device={previewDevice}
-                          onImportRepo={() => {
-                            openConnector("github");
-                          }}
                           onFocusChat={() => {
                             const el =
                               document.querySelector<HTMLTextAreaElement>(".forge-composer-input");
