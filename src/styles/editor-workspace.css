@@ -24,6 +24,18 @@ body:has(.editor-workspace) {
   --forge-radius-md: 12px;
   --forge-radius-sm: 10px;
 
+  /* ─── Status tokens (Forge 2.0) ─── */
+  --forge-status-thinking: #f59e0b;
+  --forge-status-working: #3b82f6;
+  --forge-status-done: #10b981;
+  --forge-status-failed: #ef4444;
+  --forge-status-pending: #6b7280;
+
+  /* ─── Animation tokens ─── */
+  --forge-transition-fast: 150ms ease;
+  --forge-transition-base: 250ms ease;
+  --forge-transition-slow: 400ms ease;
+
   --background: var(--forge-bg);
   --foreground: var(--forge-text);
   --surface-1: var(--forge-chat);
