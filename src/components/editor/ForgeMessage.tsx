@@ -2,6 +2,8 @@ import { MarkdownRenderer } from "@/components/ui/markdown-renderer";
 import type { ChatMessage } from "@/lib/chat-types";
 import type { AgentRunView } from "@/lib/forge-run";
 import { ForgeMiniCard } from "@/components/editor/ForgeMiniCard";
+import { ForgeThinking } from "@/components/editor/ForgeThinking";
+import { ForgeNarration } from "@/components/editor/ForgeNarration";
 import { ForgeDoneBubble } from "@/components/editor/ForgeDoneBubble";
 import { ForgeErrorCard } from "@/components/editor/ForgeErrorCard";
 import { ForgeQualifyPrompt } from "@/components/editor/ForgeQualifyPrompt";
@@ -73,15 +75,21 @@ export function ForgeMessage({
     );
   }
 
+  const sessionTitle = runView?.miniCard.title?.trim() ?? null;
   const responseText = runView?.closingText ?? message?.content?.trim() ?? null;
   const qualifyPrompt = responseText ? parseQualifyChoices(responseText) : null;
   const showQualifyPrompt =
     !!qualifyPrompt && qualifyInteractive && !!onQualifySelect;
 
+  const showThinking =
+    !!runView?.thinking &&
+    (isActive || runView.thinking.active || !!runView.thinking.text);
+  const showNarration = !!runView?.narration && isActive;
+
   const showResponse =
     !!responseText &&
     !showQualifyPrompt &&
-    (!showJobCard || (!isActive && !!runView?.finished));
+    responseText !== sessionTitle;
 
   const showDone =
     !!runView?.finished && !isActive && runView.lastFinishOk === true && showJobCard;
@@ -91,6 +99,17 @@ export function ForgeMessage({
       className="forge-chat-item forge-chat-item-assistant group"
       data-testid="forge-message-assistant"
     >
+      {showThinking && runView?.thinking && (
+        <ForgeThinking
+          durationMs={runView.thinking.durationMs}
+          active={runView.thinking.active}
+        />
+      )}
+
+      {showNarration && runView?.narration && (
+        <ForgeNarration text={runView.narration} />
+      )}
+
       {showJobCard && runView && onOpenInspector && (
         <ForgeMiniCard
           data={runView.miniCard}

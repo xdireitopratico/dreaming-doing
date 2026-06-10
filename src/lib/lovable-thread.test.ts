@@ -229,7 +229,8 @@ describe("buildLovableThread", () => {
     };
     const resolved = resolveAssistantProgress(slot);
     expect(resolved?.finished).toBe(true);
-    expect(resolved?.summary).toBe("Feito.");
+    expect(resolved?.streamText).toBe("Feito.");
+    expect(resolved?.summary).toBeNull();
   });
 
   it("frozen persiste sem activeRunId e sem msg DB (append-only)", () => {

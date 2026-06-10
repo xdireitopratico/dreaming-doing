@@ -111,12 +111,12 @@ describe("applyAgentProgressEvent", () => {
     expect(state.tools[1]?.ok).toBe(true);
   });
 
-  it("classify popula streamText quando ainda vazio", () => {
+  it("classify não polui streamText (planejamento interno)", () => {
     const next = applyAgentProgressEvent(
       { ...base, finished: false, streamText: null },
       ev("classify", { summary: "Landing de cafeteria", model: "gpt-4" }),
     );
-    expect(next.streamText).toBe("Landing de cafeteria");
+    expect(next.streamText).toBeNull();
     expect(next.model).toBe("gpt-4");
   });
 
@@ -197,7 +197,8 @@ describe("applyAgentProgressEvent", () => {
     );
     expect(next.currentStep).toBe(3);
     expect(next.totalSteps).toBe(10);
-    expect(next.streamText).toBe("Gradle configurado.");
+    expect(next.streamText).toBeNull();
+    expect(next.narrationText).toBe("Gradle configurado.");
     expect(next.deliveryFiles).toEqual(["app/build.gradle.kts", "src/App.tsx"]);
     expect(next.autoResuming).toBe(true);
     expect(next.resumable).toBe(false);

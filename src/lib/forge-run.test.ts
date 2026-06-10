@@ -145,10 +145,41 @@ describe("forge-run terminal state", () => {
     });
 
     expect(view.miniCard.status).toBe("done");
-    expect(view.thinking?.active).toBe(false);
+    expect(view.thinking?.active ?? false).toBe(false);
     const thought = buildForgeTimeline(progress.timeline, false).at(-1);
-    expect(thought).toMatchObject({ type: "THOUGHT" });
-    expect(thought && "active" in thought && thought.active).not.toBe(true);
+    expect(thought).toBeUndefined();
+  });
+
+  it("delta sem thinking não vira THOUGHT no inspector", () => {
+    const items = buildForgeTimeline(
+      [
+        {
+          type: "assistant_text",
+          data: { delta: true, text: "O Expo roda melhor nesta plataforma…" },
+          timestamp: 1,
+        },
+      ],
+      true,
+    );
+    expect(items.some((i) => i.type === "THOUGHT")).toBe(false);
+  });
+
+  it("deriveSessionTitle não repete wrap-up do chat", () => {
+    const wrapUp = "**Pronto!** Resumo do que fiz:\n\nNenhum arquivo foi alterado.";
+    const title = deriveSessionTitle(
+      {
+        ...initialAgentProgress,
+        finished: true,
+        summary: wrapUp,
+        streamText: wrapUp,
+        planSummary: wrapUp,
+      },
+      { ...samplePlan, summary: wrapUp, mission: wrapUp },
+      "app mobile com voz",
+    );
+    expect(title).not.toContain("Pronto");
+    expect(title).not.toContain("Resumo do que fiz");
+    expect(title).toMatch(/Brainstorm|app mobile|Sessão/i);
   });
 
   it("mini-card done mesmo com slotActive stale após finish", () => {

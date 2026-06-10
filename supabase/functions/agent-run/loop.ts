@@ -1591,11 +1591,11 @@ export class AgentLoop {
         onTokenDelta: forceTools ? undefined : (delta) => {
           if (!delta) return;
           this.llmResponseWasStreamed = true;
+          // Resposta user-facing → streamText no chat (não THOUGHT no inspector).
           this.emit("assistant_text", {
             text: delta,
             append: this.narrationStarted,
             delta: true,
-            thinking: true,
             final: false,
           });
           this.narrationStarted = true;
@@ -1752,8 +1752,7 @@ export class AgentLoop {
   ): Promise<void> {
     const narration = this.narrationBuffer.trim();
     const deliveryFiles = [...this.touchedPaths];
-    const body = summary.trim() || narration.split("\n").slice(-1)[0]?.trim() ||
-      summary;
+    const body = narration || summary.trim() || "Concluído.";
     const fileFooter = deliveryFiles.length > 0
       ? `\n\n**Arquivos alterados:** ${
         deliveryFiles.map((p) => `\`${p}\``).join(", ")

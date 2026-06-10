@@ -62,8 +62,9 @@ function truncate(text: string, max = 72): string {
   return t.length > max ? `${t.slice(0, max - 1)}…` : t;
 }
 
-function isThinkingDelta(data: Record<string, unknown>): boolean {
-  return data.delta === true || data.thinking === true;
+/** Só raciocínio interno vai ao inspector — delta/final sem thinking ficam no chat. */
+function isInspectorThought(data: Record<string, unknown>): boolean {
+  return data.thinking === true;
 }
 
 function isNarration(data: Record<string, unknown>): boolean {
@@ -106,14 +107,17 @@ export function buildForgeTimeline(
     const data = ev.data ?? {};
     const ts = ev.timestamp;
 
-    if (ev.type === "assistant_text" && isThinkingDelta(data)) {
-      const chunk = String(data.text ?? "");
-      if (!thoughtId) {
-        thoughtId = `thought-${ts}`;
-        thoughtStart = ts;
-        thoughtText = chunk;
-      } else {
-        thoughtText += chunk;
+    if (ev.type === "assistant_text") {
+      if (isNarration(data)) continue;
+      if (isInspectorThought(data)) {
+        const chunk = String(data.text ?? "");
+        if (!thoughtId) {
+          thoughtId = `thought-${ts}`;
+          thoughtStart = ts;
+          thoughtText = chunk;
+        } else {
+          thoughtText += chunk;
+        }
       }
       continue;
     }
@@ -229,7 +233,7 @@ function deriveMiniCardStatus(progress: AgentProgress, running: boolean): MiniCa
   if (progress.finished) return "done";
   if (running || progress.autoResuming) return "working";
   const lastThought = [...progress.timeline].reverse().find(
-    (e) => e.type === "assistant_text" && isThinkingDelta(e.data),
+    (e) => e.type === "assistant_text" && isInspectorThought(e.data ?? {}),
   );
   if (lastThought && !progress.finished) return "thinking";
   return "working";
@@ -281,9 +285,6 @@ export function collectMiniCardBriefings(
   for (const item of [...timeline].reverse()) {
     if (item.type === "TOOL") push(toolBriefing(item.name, item.path));
     if (item.type === "TASK") push(item.label);
-    if (item.type === "THOUGHT" && item.text && !item.active) {
-      push(item.text);
-    }
     if (item.type === "RESULT" && item.ok && item.text) push(item.text);
   }
 
@@ -304,34 +305,41 @@ function isQualifyLikePhase(progress: AgentProgress): boolean {
   );
 }
 
+function isWrapUpPhrase(text: string): boolean {
+  const normalized = text.replace(/\*+/g, "").trim();
+  return /pronto!?\s*resumo do que fiz/i.test(normalized);
+}
+
 /** Título curto da sessão ao terminar — não repetir o corpo do chat. */
 export function deriveSessionTitle(
   progress: AgentProgress,
   jobPlan?: PendingPlan | null,
   userPrompt?: string | null,
 ): string {
-  if (jobPlan?.mission?.trim()) return jobPlan.mission.trim();
-  if (jobPlan?.summary?.trim()) return jobPlan.summary.trim();
-  if (progress.planSummary?.trim()) return progress.planSummary.trim();
+  const mission = jobPlan?.mission?.trim();
+  if (mission && !isWrapUpPhrase(mission)) return mission;
+  const planSummary = jobPlan?.summary?.trim();
+  if (planSummary && !isWrapUpPhrase(planSummary)) return planSummary;
+  const planSummaryProgress = progress.planSummary?.trim();
+  if (planSummaryProgress && !isWrapUpPhrase(planSummaryProgress)) {
+    return planSummaryProgress;
+  }
 
   if (isQualifyLikePhase(progress) || progress.awaiting) {
     return deriveBrainstormTitle(userPrompt);
   }
 
-  const summary = progress.summary?.trim();
-  if (summary) {
-    const firstLine = summary
-      .split("\n")[0]
-      ?.replace(/^#+\s*/, "")
-      .replace(/\*\*/g, "")
-      .trim();
-    if (firstLine && firstLine.length <= 72 && !firstLine.endsWith("?")) {
-      return firstLine;
-    }
+  if (progress.diffs.length > 0) {
+    return `Entrega · ${progress.diffs.length} arquivo(s)`;
   }
 
   if (progress.deliveryFiles?.length) {
     return `Entrega · ${progress.deliveryFiles.length} arquivo(s)`;
+  }
+
+  if (progress.finished && userPrompt?.trim()) {
+    const titled = deriveBrainstormTitle(userPrompt);
+    if (titled !== "Brainstorm") return titled;
   }
 
   return progress.finished ? "Sessão concluída" : "Trabalhando no projeto…";
@@ -441,10 +449,16 @@ export function buildAgentRunView(
     };
   }
 
+  const streamBody = progress.streamText?.trim() || null;
+  const narrationBody = progress.narrationText?.trim() || null;
   const closingText =
-    progress.streamText?.trim() ||
+    streamBody ||
+    (running ? narrationBody : null) ||
     progress.summary?.trim() ||
     null;
+
+  const liveNarration =
+    running && narrationBody && narrationBody !== streamBody ? narrationBody : null;
 
   return {
     runId,
@@ -459,7 +473,7 @@ export function buildAgentRunView(
       hasPlan: !!jobPlan?.steps?.length,
     },
     thinking,
-    narration: null,
+    narration: liveNarration,
     closingText,
     timeline: forgeTimeline,
     error: progress.error,

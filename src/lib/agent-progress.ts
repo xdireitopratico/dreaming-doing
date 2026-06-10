@@ -360,7 +360,8 @@ export function applyAgentProgressEvent(
         totalSteps: typeof data.totalSteps === "number"
           ? data.totalSteps
           : prev.totalSteps,
-        streamText: narration || prev.streamText,
+        streamText: prev.streamText,
+        narrationText: narration || prev.narrationText,
         deliveryFiles,
         resumable: silent ? false : data.resumable === true || prev.resumable,
         autoResuming: silent || data.resumable === true,
@@ -371,15 +372,9 @@ export function applyAgentProgressEvent(
     }
 
     case "classify": {
-      const summary = typeof data.summary === "string"
-        ? data.summary.trim()
-        : "";
       return {
         ...prev,
         model: (data.model as string) ?? prev.model,
-        streamText: summary && !prev.streamText?.trim()
-          ? summary
-          : prev.streamText,
         timeline: [...prev.timeline, event],
       };
     }

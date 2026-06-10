@@ -79,7 +79,7 @@ export function progressFromAssistantMessage(msg: ChatMessage): AgentProgress | 
     finished,
     lastFinishOk,
     streamText: body,
-    summary: body,
+    summary: null,
     deliveryFiles,
   };
 }

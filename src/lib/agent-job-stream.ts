@@ -100,7 +100,7 @@ function pathFromArgs(args: Record<string, unknown> | undefined): string {
 }
 
 function isRealLlmThinking(data: Record<string, unknown>): boolean {
-  return data.delta === true || data.thinking === true;
+  return data.thinking === true;
 }
 
 function isNarration(data: Record<string, unknown>): boolean {
@@ -208,10 +208,6 @@ export function buildJobStreamTree(
       if (isNarration(data)) continue;
       if (isRealLlmThinking(data)) {
         pushThought(nodes, String(data.text), ts);
-      } else if (data.final === true) {
-        flushThought(nodes, ts);
-        pushThought(nodes, String(data.text), ts);
-        flushThought(nodes, ts + 1);
       }
       continue;
     }
@@ -576,7 +572,7 @@ export function timelineFromExecutionLog(lines: string[]): SSEEvent[] {
       out.push({
         type: "assistant_text",
         timestamp: t,
-        data: { text: trimmed, delta: true },
+        data: { text: trimmed, delta: true, thinking: true },
       });
     }
   }
