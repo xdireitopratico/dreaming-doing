@@ -83,7 +83,10 @@ export type EditorPageLayoutProps = {
   tasteChatRemaining: number;
   tasteStartRemaining: number;
   handleStartProject: () => void;
-  handleUndoMessage: (assistantMsgId: string) => void;
+  handleRollbackMessage: (
+    messageId: string,
+    role: "user" | "assistant",
+  ) => Promise<{ ok: boolean; error?: string }>;
   handlePlanApprove: (
     steps: { id: string; enabled: boolean }[],
     markdown?: string,
@@ -173,7 +176,7 @@ export function EditorPageLayout({
   tasteChatRemaining,
   tasteStartRemaining,
   handleStartProject,
-  handleUndoMessage,
+  handleRollbackMessage,
   handlePlanApprove,
   handlePlanReject,
   hasUserLlmKey: _hasUserLlmKey,
@@ -375,7 +378,7 @@ export function EditorPageLayout({
                   tasteStartRemaining={tasteStartRemaining}
                   onStartProject={handleStartProject}
                   onDeploy={handleOpenLiveSite}
-                  onUndoMessage={handleUndoMessage}
+                  onRollbackMessage={handleRollbackMessage}
                   pendingQueueItems={agent.pendingQueueItems}
                   queueBlockingReason={agent.queueBlockingReason}
                   onClearPendingItem={(id) =>

@@ -7,8 +7,10 @@ import { resolvePendingPlan } from "@/lib/plan-message-meta";
 import { resolveEffectiveAgentProgress } from "@/lib/resolve-agent-progress";
 import { buildOutgoingParts, type StoredMessagePart } from "@/lib/chat-attachments";
 import { ForgeChat } from "@/components/editor/ForgeChat";
+import { ForgeRollbackFlow } from "@/components/editor/ForgeRollbackFlow";
 import { ChatInputV2 } from "@/components/editor/ChatInputV2";
 import { PendingQueuePanel, type PendingQueueItem } from "@/components/editor/PendingQueuePanel";
+import { TooltipProvider } from "@/components/ui/tooltip";
 
 export type ForgeChatPanelProps = {
   messages: ChatMessage[];
@@ -30,7 +32,10 @@ export type ForgeChatPanelProps = {
   frozenRuns?: ReadonlyMap<string, FrozenRunSnapshot>;
   onResumeAgent?: () => void;
   onDeploy?: () => void | Promise<void>;
-  onUndoMessage?: (assistantMsgId: string) => void;
+  onRollbackMessage?: (
+    messageId: string,
+    role: "user" | "assistant",
+  ) => Promise<{ ok: boolean; error?: string }>;
   pendingQueueItems?: PendingQueueItem[];
   queueBlockingReason?: string | null;
   onClearPendingItem?: (id: string) => Promise<void>;
@@ -60,7 +65,7 @@ export function ForgeChatPanel({
   frozenRuns,
   onResumeAgent,
   onDeploy,
-  onUndoMessage,
+  onRollbackMessage,
   pendingQueueItems = [],
   queueBlockingReason,
   onClearPendingItem,
@@ -135,6 +140,9 @@ export function ForgeChatPanel({
   );
 
   return (
+    <TooltipProvider delayDuration={300}>
+      <ForgeRollbackFlow disabled={running || agentBusy} onRollback={onRollbackMessage ?? (async () => ({ ok: false, error: "Rollback indisponível." }))}>
+        {(requestRollback) => (
     <div className="forge-chat-inner">
       <div ref={scrollRef} className="forge-messages" onScroll={handleMessagesScroll}>
         {messages.length === 0 ? (
@@ -171,7 +179,7 @@ export function ForgeChatPanel({
             pendingQueueItems={pendingQueueItems}
             pendingPlan={pendingPlan}
             onResume={onResumeAgent}
-            onUndoMessage={onUndoMessage}
+            onRollbackRequest={onRollbackMessage ? requestRollback : undefined}
             onOpenInspector={onOpenInspector}
             focusedRunId={focusedRunId}
             onQualifySelect={(text) => void onSend(text, composerMode)}
@@ -222,6 +230,9 @@ export function ForgeChatPanel({
         onExternalPromptConsumed={onExternalPromptConsumed}
       />
     </div>
+        )}
+      </ForgeRollbackFlow>
+    </TooltipProvider>
   );
 }
 

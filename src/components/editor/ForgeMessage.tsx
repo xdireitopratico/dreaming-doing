@@ -1,4 +1,3 @@
-import { Copy, RotateCcw } from "lucide-react";
 import { MarkdownRenderer } from "@/components/ui/markdown-renderer";
 import type { ChatMessage } from "@/lib/chat-types";
 import type { AgentRunView } from "@/lib/forge-run";
@@ -6,7 +5,9 @@ import { ForgeMiniCard } from "@/components/editor/ForgeMiniCard";
 import { ForgeDoneBubble } from "@/components/editor/ForgeDoneBubble";
 import { ForgeErrorCard } from "@/components/editor/ForgeErrorCard";
 import { ForgeQualifyPrompt } from "@/components/editor/ForgeQualifyPrompt";
+import { ForgeMessageToolbar } from "@/components/editor/ForgeMessageToolbar";
 import { formatQualifyChoiceReply, parseQualifyChoices } from "@/lib/qualify-choices";
+import type { RollbackRequest } from "@/components/editor/ForgeRollbackFlow";
 
 type ForgeMessageProps = {
   role: "user" | "assistant";
@@ -16,9 +17,10 @@ type ForgeMessageProps = {
   isFocused?: boolean;
   showJobCard?: boolean;
   qualifyInteractive?: boolean;
+  running?: boolean;
   onQualifySelect?: (text: string) => void;
   onCopy?: (text: string, msgId: string) => void;
-  onUndo?: (msgId: string) => void;
+  onRollbackRequest?: (req: RollbackRequest) => void;
   copiedIds?: Set<string>;
   onResume?: () => void;
   onOpenInspector?: (runId: string, tab?: "timeline" | "changes" | "plan") => void;
@@ -32,25 +34,45 @@ export function ForgeMessage({
   isFocused = false,
   showJobCard = false,
   qualifyInteractive = false,
+  running = false,
   onQualifySelect,
   onCopy,
-  onUndo,
+  onRollbackRequest,
   copiedIds,
   onResume,
   onOpenInspector,
 }: ForgeMessageProps) {
+  const msgId = message?.id ?? `live-${runView?.runId ?? "forge"}`;
+  const isCopied = copiedIds?.has(msgId) ?? false;
+  const rollbackDisabled = running || isActive || !message?.id;
+  const canRollback = !!onRollbackRequest && !!message?.id;
+
   if (role === "user" && message) {
+    const copyText = message.content?.trim() ?? "";
     return (
       <article className="forge-chat-item forge-chat-item-user" data-testid="forge-message-user">
         <div className="forge-msg-user">
           <p className="whitespace-pre-wrap">{message.content}</p>
         </div>
+        {onCopy && (
+          <ForgeMessageToolbar
+            copyText={copyText}
+            msgId={msgId}
+            copied={isCopied}
+            align="end"
+            rollbackDisabled={rollbackDisabled}
+            onCopy={onCopy}
+            onRollback={
+              canRollback
+                ? () => onRollbackRequest({ messageId: message.id, role: "user" })
+                : undefined
+            }
+          />
+        )}
       </article>
     );
   }
 
-  const msgId = message?.id ?? `live-${runView?.runId ?? "forge"}`;
-  const isCopied = copiedIds?.has(msgId) ?? false;
   const responseText = runView?.closingText ?? message?.content?.trim() ?? null;
   const qualifyPrompt = responseText ? parseQualifyChoices(responseText) : null;
   const showQualifyPrompt =
@@ -109,35 +131,20 @@ export function ForgeMessage({
         />
       )}
 
-      {runView?.finished &&
-        !isActive &&
-        responseText &&
-        !showQualifyPrompt &&
-        (onCopy || onUndo) &&
-        message?.id && (
-        <footer className="forge-chat-item-assistant-footer">
-          {onUndo && (
-            <button
-              type="button"
-              onClick={() => onUndo(message.id)}
-              className="forge-message-action"
-              aria-label="Desfazer"
-            >
-              <RotateCcw className="size-4" />
-            </button>
-          )}
-          {onCopy && (
-            <button
-              type="button"
-              onClick={() => onCopy(responseText, msgId)}
-              className="forge-message-action"
-              data-copied={isCopied}
-              aria-label={isCopied ? "Copiado!" : "Copiar"}
-            >
-              <Copy className="size-4" />
-            </button>
-          )}
-        </footer>
+      {onCopy && responseText && (
+        <ForgeMessageToolbar
+          copyText={responseText}
+          msgId={msgId}
+          copied={isCopied}
+          align="start"
+          rollbackDisabled={rollbackDisabled}
+          onCopy={onCopy}
+          onRollback={
+            canRollback
+              ? () => onRollbackRequest({ messageId: message!.id, role: "assistant" })
+              : undefined
+          }
+        />
       )}
     </article>
   );

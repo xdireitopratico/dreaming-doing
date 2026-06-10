@@ -1,6 +1,7 @@
 /* FORGE 2.0 — Chat (mensagens, mini card, composer) */
 
 .forge-chat-inner {
+  position: relative;
   display: flex;
   min-height: 0;
   min-width: 0;
@@ -231,20 +232,23 @@
   color: var(--text-secondary);
 }
 
-.forge-chat-item-assistant-footer {
+.forge-message-toolbar {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
   gap: var(--space-xs);
-  width: 100%;
-  margin-top: var(--space-sm);
-  opacity: 0;
-  transition: opacity 0.15s ease;
+  margin-top: var(--space-xs);
+  opacity: 1;
 }
 
-.forge-chat-item-assistant:hover .forge-chat-item-assistant-footer,
-.forge-chat-item-assistant:focus-within .forge-chat-item-assistant-footer {
-  opacity: 1;
+.forge-message-toolbar--end {
+  justify-content: flex-end;
+  width: 100%;
+  max-width: min(88%, 520px);
+}
+
+.forge-message-toolbar--start {
+  justify-content: flex-start;
+  width: 100%;
 }
 
 .forge-message-action {
@@ -267,6 +271,50 @@
 
 .forge-message-action[data-copied="true"] {
   color: var(--text-accent);
+}
+
+.forge-message-action:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.forge-rollback-lock {
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--bg-chat) 55%, transparent);
+  backdrop-filter: blur(4px);
+}
+
+.forge-rollback-lock-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-sm);
+  max-width: 280px;
+  padding: var(--space-lg) var(--space-xl);
+  border-radius: 12px;
+  border: 1px solid var(--border-forge);
+  background: var(--bg-card);
+  text-align: center;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.25);
+}
+
+.forge-rollback-lock-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.forge-rollback-lock-desc {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-secondary);
 }
 
 .forge-awaiting-banner {

@@ -331,7 +331,7 @@ function EditorPage() {
       tasteChatRemaining={tasteChatRemaining}
       tasteStartRemaining={tasteStartRemaining}
       handleStartProject={handlers.handleStartProject}
-      handleUndoMessage={handlers.handleUndoMessage}
+      handleRollbackMessage={handlers.handleRollbackMessage}
       handlePlanApprove={handlers.handlePlanApprove}
       handlePlanReject={handlers.handlePlanReject}
       hasUserLlmKey={hasUserLlmKey}

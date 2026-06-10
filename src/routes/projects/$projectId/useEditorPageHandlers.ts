@@ -21,6 +21,7 @@ import { loadAgentSessionExtensions } from "@/lib/agent-session-extensions";
 import { publishProject } from "@/lib/publish.functions";
 import { planApprove, planReject } from "@/lib/plan-decide.functions";
 import { resolvePendingPlan } from "@/lib/plan-message-meta";
+import { rollbackChatTurn } from "@/lib/rollback-chat-turn";
 import type { PendingPlan } from "@/lib/agent-progress";
 import { exportProjectZip } from "@/hooks/useWorkspacePresets";
 import { useAutoPublish } from "@/hooks/useAutoPublish";
@@ -498,33 +499,36 @@ export function useEditorPageHandlers({
     })();
   }, [agent, setLogs]);
 
-  const handleUndoMessage = useCallback(
-    (assistantMsgId: string) => {
+  const handleRollbackMessage = useCallback(
+    async (
+      messageId: string,
+      role: "user" | "assistant",
+    ): Promise<{ ok: boolean; error?: string }> => {
       if (!conversation) {
-        toast.error("Conversa ainda carregando — tente de novo em instantes.");
-        return;
+        return { ok: false, error: "Conversa ainda carregando — tente de novo em instantes." };
       }
-      const msgIndex = chatMessages.findIndex(
-        (m) => m.id === assistantMsgId && m.role === "assistant",
-      );
-      if (msgIndex === -1) return;
-      const userMsg = chatMessages[msgIndex - 1];
-      if (!userMsg || userMsg.role !== "user") return;
+      if (running) {
+        return { ok: false, error: "Aguarde o agente terminar antes do rollback." };
+      }
 
-      supabase
-        .from("messages")
-        .delete()
-        .in("id", [assistantMsgId, userMsg.id])
-        .then(({ error }) => {
-          if (error) {
-            toast.error("Erro ao desfazer");
-          } else {
-            logEditorTelemetryEvent("agent", "undo", "info", assistantMsgId.slice(0, 8));
-          }
-        });
-      void qc.invalidateQueries({ queryKey: ["messages", conversation.id] });
+      const result = await rollbackChatTurn({
+        projectId,
+        conversationId: conversation.id,
+        messageId,
+        role,
+        messages: chatMessages,
+      });
+
+      if (result.ok) {
+        logEditorTelemetryEvent("agent", "rollback", "info", messageId.slice(0, 8));
+        await qc.invalidateQueries({ queryKey: ["messages", conversation.id] });
+        await qc.invalidateQueries({ queryKey: ["files", projectId] });
+        await qc.invalidateQueries({ queryKey: ["agent-runs", projectId] });
+      }
+
+      return result.ok ? { ok: true } : { ok: false, error: result.error };
     },
-    [chatMessages, conversation, qc],
+    [chatMessages, conversation, projectId, qc, running],
   );
 
   const handleExportZip = useCallback(() => {
@@ -831,7 +835,7 @@ export function useEditorPageHandlers({
     handleVisualEdits,
     handleStartProject,
     handleStop,
-    handleUndoMessage,
+    handleRollbackMessage,
     handleExportZip,
     handlePlanApprove,
     handlePlanReject,

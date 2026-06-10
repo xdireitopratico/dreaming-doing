@@ -22,6 +22,7 @@ import { buildAgentRunView, isRunEffectivelyActive } from "@/lib/forge-run";
 import { isAgentJobMessage } from "@/lib/assistant-run-progress";
 import { resolveJobPlanForRun } from "@/lib/plan-message-meta";
 import { parseQualifyChoices } from "@/lib/qualify-choices";
+import type { RollbackRequest } from "@/components/editor/ForgeRollbackFlow";
 
 export type ForgeChatProps = {
   messages: ChatMessage[];
@@ -32,7 +33,7 @@ export type ForgeChatProps = {
   pendingQueueItems?: PendingQueueItem[];
   pendingPlan?: PendingPlan | null;
   onResume?: () => void;
-  onUndoMessage?: (assistantMsgId: string) => void;
+  onRollbackRequest?: (req: RollbackRequest) => void;
   onOpenInspector?: (runId: string, tab?: "timeline" | "changes" | "plan") => void;
   focusedRunId?: string | null;
   onQualifySelect?: (text: string) => void;
@@ -47,7 +48,7 @@ export function ForgeChat({
   pendingQueueItems = [],
   pendingPlan,
   onResume,
-  onUndoMessage,
+  onRollbackRequest,
   onOpenInspector,
   focusedRunId,
   onQualifySelect,
@@ -93,7 +94,17 @@ export function ForgeChat({
     <div className="forge-chat-stream" role="log" aria-live="polite" data-testid="forge-chat">
       {thread.map((item, idx) => {
         if (item.kind === "user") {
-          return <ForgeMessage key={`user-${item.message.id}`} role="user" message={item.message} />;
+          return (
+            <ForgeMessage
+              key={`user-${item.message.id}`}
+              role="user"
+              message={item.message}
+              running={running}
+              onCopy={handleCopy}
+              onRollbackRequest={onRollbackRequest}
+              copiedIds={copiedIds}
+            />
+          );
         }
 
         let userPrompt: string | null = null;
@@ -189,8 +200,9 @@ export function ForgeChat({
             showJobCard={showJobCard}
             qualifyInteractive={qualifyInteractive}
             onQualifySelect={onQualifySelect}
+            running={running}
             onCopy={handleCopy}
-            onUndo={onUndoMessage}
+            onRollbackRequest={onRollbackRequest}
             copiedIds={copiedIds}
             onResume={onResume}
             onOpenInspector={onOpenInspector}
