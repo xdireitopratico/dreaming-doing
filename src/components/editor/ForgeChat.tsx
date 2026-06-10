@@ -101,6 +101,15 @@ export function ForgeChat({
           return <ForgeMessage key={`user-${item.message.id}`} role="user" message={item.message} />;
         }
 
+        let userPrompt: string | null = null;
+        for (let j = idx - 1; j >= 0; j--) {
+          const prev = thread[j];
+          if (prev?.kind === "user") {
+            userPrompt = prev.message.content?.trim() ?? null;
+            break;
+          }
+        }
+
         const resolved = resolveAssistantProgress(item);
         const runId = item.runId ?? activeRunId ?? `slot-${idx}`;
         const isBuildRun =
@@ -131,6 +140,7 @@ export function ForgeChat({
             ? buildAgentRunView(runId, resolved, {
                 running: slotActive,
                 jobPlan,
+                userPrompt,
               })
             : null;
 

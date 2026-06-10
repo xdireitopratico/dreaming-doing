@@ -3,6 +3,9 @@ import { initialAgentProgress, type PendingPlan } from "@/lib/agent-progress";
 import {
   buildAgentRunView,
   buildForgeTimeline,
+  collectMiniCardBriefings,
+  deriveBrainstormTitle,
+  deriveSessionTitle,
   deriveTasksFromPlan,
   isRunEffectivelyActive,
 } from "@/lib/forge-run";
@@ -120,5 +123,59 @@ describe("forge-run terminal state", () => {
 
     expect(view.miniCard.status).toBe("done");
     expect(view.miniCard.tasks.every((t) => t.status === "done")).toBe(true);
+  });
+});
+
+describe("forge-run mini card briefing e título", () => {
+  it("briefings vêm da timeline, não do streamText do chat", () => {
+    const progress = {
+      ...initialAgentProgress,
+      phase: "execute",
+      streamText: "Entendi que você quer um app mobile. Antes de codar, qual caminho prefere?",
+      message: "Gerando código",
+      timeline: [
+        { type: "phase", data: { phase: "execute", message: "Implementando layout" }, timestamp: 1 },
+        { type: "tool_start", data: { name: "fs_read", args: { path: "src/App.tsx" } }, timestamp: 2 },
+      ],
+    };
+    const timeline = buildForgeTimeline(progress.timeline, true);
+    const briefings = collectMiniCardBriefings(progress, timeline, [], true);
+
+    expect(briefings.some((b) => b.includes("Lendo App.tsx"))).toBe(true);
+    expect(briefings.some((b) => b.includes("Entendi que você quer"))).toBe(false);
+  });
+
+  it("título de sessão qualify vira brainstorm, não repete pergunta", () => {
+    const progress = {
+      ...initialAgentProgress,
+      finished: true,
+      lastFinishOk: true,
+      awaitingKind: "qualify" as const,
+      phase: "classify",
+      streamText: "Entendi que você quer um app mobile. Antes de codar, qual caminho prefere?",
+    };
+
+    expect(deriveBrainstormTitle("quero um app mobile para padaria")).toBe(
+      "Brainstorm de app mobile para padaria",
+    );
+    expect(deriveSessionTitle(progress, null, "quero um app mobile")).toBe(
+      "Brainstorm de app mobile",
+    );
+  });
+
+  it("run ativo expõe liveBriefings no mini card", () => {
+    const progress = {
+      ...initialAgentProgress,
+      phase: "gather",
+      message: "Analisando estrutura",
+      timeline: [
+        { type: "memory", data: { message: "Lendo package.json" }, timestamp: 1 },
+      ],
+    };
+    const view = buildAgentRunView("run-1", progress, { running: true });
+    expect(view.miniCard.liveBriefings.length).toBeGreaterThan(0);
+    expect(view.miniCard.liveBriefings.some((b) => /package\.json|Analisando/i.test(b))).toBe(
+      true,
+    );
   });
 });

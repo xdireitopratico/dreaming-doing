@@ -138,9 +138,11 @@ export function ForgeChatPanel({
   );
 
   const agentBusy = !!(
+    activeRunId &&
     agentProgress &&
     !agentProgress.finished &&
-    !agentProgress.canceled
+    !agentProgress.canceled &&
+    !agentProgress.awaiting
   );
 
   return (

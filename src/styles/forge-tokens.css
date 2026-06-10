@@ -26,10 +26,10 @@
   --border-active: #3b82f6;
 
   /* Tipografia */
-  --font-chat: 14px/1.6 "Inter", system-ui, sans-serif;
-  --font-narration: 14px/1.6 "Inter", system-ui, sans-serif;
+  --font-chat: 15px/1.65 "Inter", system-ui, sans-serif;
+  --font-narration: 15px/1.65 "Inter", system-ui, sans-serif;
   --font-thought: 12px/1.4 "JetBrains Mono", ui-monospace, monospace;
-  --font-card-title: 13px/1.4 "Inter", system-ui, sans-serif;
+  --font-card-title: 14px/1.45 "Inter", system-ui, sans-serif;
   --font-task: 12px/1.4 "Inter", system-ui, sans-serif;
   --font-task-label: 11px/1.2 "JetBrains Mono", ui-monospace, monospace;
   --font-task-body: 13px/1.5 "Inter", system-ui, sans-serif;

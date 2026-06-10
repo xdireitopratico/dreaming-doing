@@ -127,8 +127,41 @@
 .forge-chat-closing-line {
   margin: 0 0 var(--space-sm);
   font: var(--font-chat);
+  color: var(--text-primary);
+  width: 100%;
+}
+
+.forge-chat-prose {
+  max-width: min(100%, 640px);
+}
+
+.forge-chat-prose .prose {
+  font-size: 15px;
+  line-height: 1.65;
+  color: var(--text-primary);
+}
+
+.forge-chat-prose .prose p {
+  margin: 0 0 10px;
+  color: var(--text-primary);
+}
+
+.forge-chat-prose .prose p:last-child {
+  margin-bottom: 0;
+}
+
+.forge-chat-prose .prose strong {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.forge-chat-prose .prose ul,
+.forge-chat-prose .prose ol {
   color: var(--text-secondary);
-  white-space: pre-wrap;
+}
+
+.forge-mini-card-title--live {
+  transition: opacity 0.25s ease;
 }
 
 .forge-chat-item-assistant-footer {

@@ -1,4 +1,5 @@
 import { Copy, RotateCcw } from "lucide-react";
+import { MarkdownRenderer } from "@/components/ui/markdown-renderer";
 import type { ChatMessage } from "@/lib/chat-types";
 import type { AgentRunView } from "@/lib/forge-run";
 import { ForgeThinking } from "@/components/editor/ForgeThinking";
@@ -50,6 +51,10 @@ export function ForgeMessage({
   const showDone =
     !!runView?.finished && !isActive && runView.lastFinishOk === true && showJobCard;
 
+  const showClosingText =
+    !!closingText &&
+    (!showJobCard || (!isActive && (runView?.finished || !runView?.thinking?.active)));
+
   return (
     <article
       className="forge-chat-item forge-chat-item-assistant group"
@@ -70,10 +75,10 @@ export function ForgeMessage({
         />
       )}
 
-      {closingText && (
-        <p className="forge-chat-closing-line" data-testid="assistant-closing-text">
-          {closingText}
-        </p>
+      {showClosingText && (
+        <div className="forge-chat-closing-line forge-chat-prose" data-testid="assistant-closing-text">
+          <MarkdownRenderer>{closingText}</MarkdownRenderer>
+        </div>
       )}
 
       {showDone && <ForgeDoneBubble />}

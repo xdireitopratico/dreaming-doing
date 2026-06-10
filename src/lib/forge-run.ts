@@ -1,4 +1,5 @@
 import type { AgentProgress, PendingPlan, PlanStep, SSEEvent } from "@/lib/agent-progress";
+import { buildAgentNarrative } from "@/lib/agent-narrative";
 
 export type TaskStatus = "pending" | "active" | "done" | "failed";
 
@@ -11,7 +12,10 @@ export type ForgeTaskItem = {
 export type MiniCardStatus = "thinking" | "working" | "done" | "failed";
 
 export type ForgeMiniCardData = {
+  /** Título da sessão quando terminal (ex.: «Brainstorm de app mobile»). */
   title: string;
+  /** Briefings rotativos enquanto o job está ativo — resumo miniatura da timeline. */
+  liveBriefings: string[];
   status: MiniCardStatus;
   tasks: ForgeTaskItem[];
   currentTaskIndex: number;
@@ -231,19 +235,118 @@ function deriveMiniCardStatus(progress: AgentProgress, running: boolean): MiniCa
   return "working";
 }
 
-function deriveMiniCardTitle(
+const TOOL_BRIEF_VERBS: Record<string, string> = {
+  fs_read: "Lendo",
+  fs_read_many: "Lendo arquivos",
+  fs_list: "Listando",
+  fs_search: "Buscando em",
+  fs_glob: "Buscando",
+  fs_write: "Criando",
+  fs_edit: "Editando",
+  shell_exec: "Executando",
+  web_search: "Pesquisando",
+  web_fetch: "Consultando",
+};
+
+function toolBriefing(name: string, path?: string): string {
+  const verb = TOOL_BRIEF_VERBS[name] ?? `Usando ${name}`;
+  const file = path ? fileBase(path) : "";
+  return file ? `${verb} ${file}…` : `${verb}…`;
+}
+
+/** Briefings humanos derivados da timeline — miniatura sem expansão (inspector). */
+export function collectMiniCardBriefings(
   progress: AgentProgress,
+  timeline: ForgeTimelineItem[],
   tasks: ForgeTaskItem[],
+  running: boolean,
+): string[] {
+  const lines: string[] = [];
+  const seen = new Set<string>();
+
+  const push = (line: string) => {
+    const t = truncate(line.trim(), 80);
+    if (!t || seen.has(t)) return;
+    seen.add(t);
+    lines.push(t);
+  };
+
+  const activeTask = tasks.find((t) => t.status === "active");
+  if (activeTask) push(activeTask.label);
+
+  const narrative = buildAgentNarrative(progress, { running });
+  if (narrative.headline) push(narrative.headline);
+  if (narrative.subhint) push(narrative.subhint);
+
+  for (const item of [...timeline].reverse()) {
+    if (item.type === "TOOL") push(toolBriefing(item.name, item.path));
+    if (item.type === "TASK") push(item.label);
+    if (item.type === "THOUGHT" && item.text && !item.active) {
+      push(item.text);
+    }
+    if (item.type === "RESULT" && item.ok && item.text) push(item.text);
+  }
+
+  if (progress.message) push(progress.message);
+  if (progress.statusHint && !/conectando|iniciando/i.test(progress.statusHint)) {
+    push(progress.statusHint);
+  }
+
+  return lines.length > 0 ? lines : ["Trabalhando no projeto…"];
+}
+
+function isQualifyLikePhase(progress: AgentProgress): boolean {
+  return (
+    progress.awaitingKind === "qualify" ||
+    progress.phase === "classify" ||
+    progress.phase === "taste" ||
+    progress.phase === "taste_chat"
+  );
+}
+
+/** Título curto da sessão ao terminar — não repetir o corpo do chat. */
+export function deriveSessionTitle(
+  progress: AgentProgress,
   jobPlan?: PendingPlan | null,
+  userPrompt?: string | null,
 ): string {
-  if (jobPlan?.mission) return jobPlan.mission;
-  if (jobPlan?.summary) return jobPlan.summary;
-  const active = tasks.find((t) => t.status === "active");
-  if (active) return active.label;
-  if (progress.summary) return truncate(progress.summary, 80);
-  if (progress.message) return truncate(progress.message, 80);
-  if (progress.finished) return "Concluído";
-  return "Trabalhando no projeto…";
+  if (jobPlan?.mission?.trim()) return jobPlan.mission.trim();
+  if (jobPlan?.summary?.trim()) return jobPlan.summary.trim();
+  if (progress.planSummary?.trim()) return progress.planSummary.trim();
+
+  if (isQualifyLikePhase(progress) || progress.awaiting) {
+    return deriveBrainstormTitle(userPrompt);
+  }
+
+  const summary = progress.summary?.trim();
+  if (summary) {
+    const firstLine = summary
+      .split("\n")[0]
+      ?.replace(/^#+\s*/, "")
+      .replace(/\*\*/g, "")
+      .trim();
+    if (firstLine && firstLine.length <= 72 && !firstLine.endsWith("?")) {
+      return firstLine;
+    }
+  }
+
+  if (progress.deliveryFiles?.length) {
+    return `Entrega · ${progress.deliveryFiles.length} arquivo(s)`;
+  }
+
+  return progress.finished ? "Sessão concluída" : "Trabalhando no projeto…";
+}
+
+export function deriveBrainstormTitle(userPrompt?: string | null): string {
+  const raw = userPrompt?.trim();
+  if (!raw) return "Brainstorm";
+  let topic = raw
+    .replace(/^(quero|preciso|crie|criar|faz|faça|monte|montar)\s+(um|uma)?\s*/i, "")
+    .replace(/[.?!].*$/s, "")
+    .trim();
+  if (!topic) return "Brainstorm";
+  topic = topic.charAt(0).toLowerCase() + topic.slice(1);
+  return `Brainstorm de ${truncate(topic, 48)}`;
 }
 
 function lastEditedFile(progress: AgentProgress): string | null {
@@ -264,7 +367,7 @@ export function isRunEffectivelyActive(
 export function buildAgentRunView(
   runId: string,
   progress: AgentProgress,
-  opts?: { running?: boolean; jobPlan?: PendingPlan | null },
+  opts?: { running?: boolean; jobPlan?: PendingPlan | null; userPrompt?: string | null },
 ): AgentRunView {
   const running = isRunEffectivelyActive(progress, opts?.running);
   const jobPlan = opts?.jobPlan ?? progress.pendingPlan;
@@ -281,6 +384,13 @@ export function buildAgentRunView(
 
   const status = deriveMiniCardStatus(progress, running);
   const editedFile = lastEditedFile(progress);
+  const liveBriefings = collectMiniCardBriefings(
+    progress,
+    forgeTimeline,
+    tasks,
+    running,
+  );
+  const sessionTitle = deriveSessionTitle(progress, jobPlan, opts?.userPrompt);
 
   let thinking: AgentRunView["thinking"] = null;
   const activeThought = [...forgeTimeline].reverse().find((i) => i.type === "THOUGHT");
@@ -309,7 +419,8 @@ export function buildAgentRunView(
   return {
     runId,
     miniCard: {
-      title: deriveMiniCardTitle(progress, tasks, jobPlan),
+      title: sessionTitle,
+      liveBriefings,
       status,
       tasks,
       currentTaskIndex: currentTaskIndex >= 0 ? currentTaskIndex : 0,

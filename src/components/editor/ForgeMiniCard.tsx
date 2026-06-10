@@ -1,6 +1,9 @@
+import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 import type { ForgeMiniCardData } from "@/lib/forge-run";
 import { ForgeTaskList } from "@/components/editor/ForgeTaskList";
+
+const BRIEFING_ROTATE_MS = 3500;
 
 type ForgeMiniCardProps = {
   data: ForgeMiniCardData;
@@ -15,6 +18,26 @@ export function ForgeMiniCard({
   isFocused,
   onOpenInspector,
 }: ForgeMiniCardProps) {
+  const isLive = data.status === "working" || data.status === "thinking";
+  const briefings =
+    data.liveBriefings.length > 0 ? data.liveBriefings : [data.title];
+  const [briefingIndex, setBriefingIndex] = useState(0);
+
+  useEffect(() => {
+    if (!isLive) {
+      setBriefingIndex(0);
+      return;
+    }
+    const id = window.setInterval(() => {
+      setBriefingIndex((i) => (i + 1) % briefings.length);
+    }, BRIEFING_ROTATE_MS);
+    return () => window.clearInterval(id);
+  }, [isLive, briefings.length, briefings.join("\u0000")]);
+
+  const displayTitle = isLive
+    ? briefings[briefingIndex % briefings.length] ?? data.title
+    : data.title;
+
   const hint =
     data.status === "done" && data.fileCount
       ? `${data.fileCount} arquivos alterados →`
@@ -43,7 +66,7 @@ export function ForgeMiniCard({
         type="button"
         className="forge-mini-card-body"
         onClick={() => onOpenInspector(runId, data.hasPlan ? "plan" : "timeline")}
-        aria-label={`Job: ${data.title}`}
+        aria-label={`Job: ${displayTitle}`}
       >
         <div className="forge-mini-card-header">
           {data.status === "working" && (
@@ -77,7 +100,12 @@ export function ForgeMiniCard({
           )}
         </div>
 
-        <p className="forge-mini-card-title">{data.title}</p>
+        <p
+          key={isLive ? `${briefingIndex}-${displayTitle}` : data.title}
+          className={cn("forge-mini-card-title", isLive && "forge-mini-card-title--live")}
+        >
+          {displayTitle}
+        </p>
 
         <ForgeTaskList tasks={data.tasks} />
 
