@@ -2,8 +2,6 @@ import { Copy, RotateCcw } from "lucide-react";
 import { MarkdownRenderer } from "@/components/ui/markdown-renderer";
 import type { ChatMessage } from "@/lib/chat-types";
 import type { AgentRunView } from "@/lib/forge-run";
-import { ForgeThinking } from "@/components/editor/ForgeThinking";
-import { ForgeNarration } from "@/components/editor/ForgeNarration";
 import { ForgeMiniCard } from "@/components/editor/ForgeMiniCard";
 import { ForgeDoneBubble } from "@/components/editor/ForgeDoneBubble";
 import { ForgeErrorCard } from "@/components/editor/ForgeErrorCard";
@@ -47,25 +45,20 @@ export function ForgeMessage({
 
   const msgId = message?.id ?? `live-${runView?.runId ?? "forge"}`;
   const isCopied = copiedIds?.has(msgId) ?? false;
-  const closingText = runView?.closingText ?? message?.content?.trim() ?? null;
+  const responseText = runView?.closingText ?? message?.content?.trim() ?? null;
+
+  const showResponse =
+    !!responseText &&
+    (!showJobCard || (!isActive && !!runView?.finished));
+
   const showDone =
     !!runView?.finished && !isActive && runView.lastFinishOk === true && showJobCard;
-
-  const showClosingText =
-    !!closingText &&
-    (!showJobCard || (!isActive && (runView?.finished || !runView?.thinking?.active)));
 
   return (
     <article
       className="forge-chat-item forge-chat-item-assistant group"
       data-testid="forge-message-assistant"
     >
-      {runView?.thinking && (isActive || runView.thinking.active) && (
-        <ForgeThinking durationMs={runView.thinking.durationMs} active={runView.thinking.active} />
-      )}
-
-      {runView?.narration && <ForgeNarration text={runView.narration} />}
-
       {showJobCard && runView && onOpenInspector && (
         <ForgeMiniCard
           data={runView.miniCard}
@@ -75,9 +68,9 @@ export function ForgeMessage({
         />
       )}
 
-      {showClosingText && (
+      {showResponse && (
         <div className="forge-chat-closing-line forge-chat-prose" data-testid="assistant-closing-text">
-          <MarkdownRenderer>{closingText}</MarkdownRenderer>
+          <MarkdownRenderer>{responseText}</MarkdownRenderer>
         </div>
       )}
 
@@ -95,18 +88,7 @@ export function ForgeMessage({
         />
       )}
 
-      {message?.timestamp && runView?.finished && !isActive && (
-        <time className="forge-turn-timestamp" dateTime={new Date(message.timestamp).toISOString()}>
-          {new Date(message.timestamp).toLocaleString("pt-BR", {
-            day: "numeric",
-            month: "short",
-            hour: "2-digit",
-            minute: "2-digit",
-          })}
-        </time>
-      )}
-
-      {runView?.finished && !isActive && closingText && (onCopy || onUndo) && message?.id && (
+      {runView?.finished && !isActive && responseText && (onCopy || onUndo) && message?.id && (
         <footer className="forge-chat-item-assistant-footer">
           {onUndo && (
             <button
@@ -121,7 +103,7 @@ export function ForgeMessage({
           {onCopy && (
             <button
               type="button"
-              onClick={() => onCopy(closingText, msgId)}
+              onClick={() => onCopy(responseText, msgId)}
               className="forge-message-action"
               data-copied={isCopied}
               aria-label={isCopied ? "Copiado!" : "Copiar"}

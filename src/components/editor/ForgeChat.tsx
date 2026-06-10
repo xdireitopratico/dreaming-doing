@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
-import { AlertTriangle, MessageCircle, RefreshCw } from "lucide-react";
+import { AlertTriangle, RefreshCw } from "lucide-react";
 import { Button } from "@forge/ui";
 import type { AgentProgress, PendingPlan } from "@/lib/agent-progress";
 import type { ChatMessage } from "@/lib/chat-types";
@@ -49,7 +49,6 @@ export function ForgeChat({
   onOpenInspector,
   focusedRunId,
 }: ForgeChatProps) {
-  const awaitingQualify = progress.awaitingKind === "qualify" && !pendingPlan;
   const [copiedIds, setCopiedIds] = useState<Set<string>>(new Set());
 
   const handleCopy = useCallback((text: string, msgId: string) => {
@@ -89,13 +88,6 @@ export function ForgeChat({
 
   return (
     <div className="forge-chat-stream" role="log" aria-live="polite" data-testid="forge-chat">
-      {awaitingQualify && (
-        <section className="forge-awaiting-banner" data-testid="awaiting-user-banner">
-          <MessageCircle className="size-4" />
-          <p>Uma pergunta rápida antes de continuar — responda no campo abaixo.</p>
-        </section>
-      )}
-
       {thread.map((item, idx) => {
         if (item.kind === "user") {
           return <ForgeMessage key={`user-${item.message.id}`} role="user" message={item.message} />;
@@ -112,15 +104,33 @@ export function ForgeChat({
 
         const resolved = resolveAssistantProgress(item);
         const runId = item.runId ?? activeRunId ?? `slot-${idx}`;
-        const isBuildRun =
-          !!item.runId || isAgentJobMessage(item.message) || (resolved?.timeline?.length ?? 0) > 0;
-        const showJobCard =
-          isBuildRun &&
+
+        const isQualifyOnly =
           !!resolved &&
-          (!!item.runId ||
-            item.isActive ||
-            (resolved.timeline?.length ?? 0) > 0 ||
-            (resolved.tools?.length ?? 0) > 0);
+          (resolved.awaitingKind === "qualify" ||
+            resolved.phase === "classify" ||
+            resolved.phase === "taste" ||
+            resolved.phase === "taste_chat") &&
+          (resolved.tools?.length ?? 0) === 0 &&
+          (resolved.diffs?.length ?? 0) === 0 &&
+          (resolved.deliveryFiles?.length ?? 0) === 0;
+
+        const hasExecutionEvidence =
+          !!resolved &&
+          ((resolved.timeline?.length ?? 0) > 0 ||
+            (resolved.tools?.length ?? 0) > 0 ||
+            (resolved.diffs?.length ?? 0) > 0 ||
+            (resolved.deliveryFiles?.length ?? 0) > 0 ||
+            resolved.phase === "execute" ||
+            resolved.phase === "observe");
+
+        const showJobCard =
+          !!item.runId &&
+          !!resolved &&
+          !isQualifyOnly &&
+          (isAgentJobMessage(item.message) ||
+            hasExecutionEvidence ||
+            (item.isActive && running && resolved.phase !== "classify"));
 
         const jobPlan = item.runId
           ? resolveJobPlanForRun(item.runId, messages, {
@@ -135,14 +145,13 @@ export function ForgeChat({
           ? isRunEffectivelyActive(resolved, item.isActive)
           : item.isActive;
 
-        const runView =
-          resolved && showJobCard
-            ? buildAgentRunView(runId, resolved, {
-                running: slotActive,
-                jobPlan,
-                userPrompt,
-              })
-            : null;
+        const runView = resolved
+          ? buildAgentRunView(runId, resolved, {
+              running: slotActive,
+              jobPlan,
+              userPrompt,
+            })
+          : null;
 
         const stableKey = item.message?.id
           ? `assistant-${item.message.id}`

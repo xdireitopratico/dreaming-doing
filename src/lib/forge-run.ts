@@ -410,7 +410,6 @@ export function buildAgentRunView(
     };
   }
 
-  const narration = progress.narrationText?.trim() || null;
   const closingText =
     progress.streamText?.trim() ||
     progress.summary?.trim() ||
@@ -429,8 +428,7 @@ export function buildAgentRunView(
       hasPlan: !!jobPlan?.steps?.length,
     },
     thinking,
-    narration:
-      narration && narration !== closingText ? narration : null,
+    narration: null,
     closingText,
     timeline: forgeTimeline,
     error: progress.error,
