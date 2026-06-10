@@ -546,29 +546,20 @@ body:has(.editor-workspace) {
   min-height: 0;
   height: 100%;
   max-height: 100%;
-  border-radius: 0;
+  border-radius: 14px;
   background: var(--forge-chat);
-  border: none;
+  border: 1px solid var(--forge-border);
   overflow: hidden;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.03) inset;
 }
 
 .forge-chat-column {
-  position: relative;
   display: flex;
   flex-direction: column;
   min-height: 0;
   min-width: 0;
   flex: 1;
   width: 100%;
-  overflow: hidden;
-}
-
-.forge-chat-body {
-  display: flex;
-  min-height: 0;
-  flex: 1;
-  flex-direction: column;
-  padding-bottom: 40px;
   overflow: hidden;
 }
 
@@ -2230,9 +2221,9 @@ button.lovable-file-ref-chip:hover {
 .lovable-composer {
   flex-shrink: 0;
   margin: 0;
-  padding: 10px 14px 12px;
-  border-radius: 0;
-  background: transparent;
+  padding: 10px 14px 14px;
+  border-radius: 0 0 14px 14px;
+  background: var(--forge-chat);
   border: none;
   border-top: 1px solid var(--forge-border);
 }

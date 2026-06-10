@@ -9,9 +9,9 @@ import { CodeEditor, type Tab } from "@/components/editor/CodeEditor";
 import { FileTree } from "@/components/editor/FileTree";
 import { ForgeChatPanel } from "@/components/editor/ForgeChatPanel";
 import type { ChatMessage } from "@/lib/chat-types";
-import { SetupRail } from "@/components/editor/SetupRail";
-import { TasteSetupChecklist } from "@/components/editor/TasteSetupChecklist";
 import { TastePostStartBanner } from "@/components/editor/TastePostStartBanner";
+import { OPEN_CONNECTOR_EVENT } from "@/hooks/useTasteUiActions";
+import type { ConnectorId } from "@/lib/connectors/integration-prefs";
 import { PreviewFrame } from "@/components/editor/PreviewFrame";
 import { StackHonestBanner } from "@/components/editor/StackHonestBanner";
 import { CommandPalette, type PaletteAction } from "@/components/editor/CommandPalette";
@@ -176,9 +176,9 @@ export function EditorPageLayout({
   handleUndoMessage,
   handlePlanApprove,
   handlePlanReject,
-  hasUserLlmKey,
-  agentPrefs,
-  connectorRows,
+  hasUserLlmKey: _hasUserLlmKey,
+  agentPrefs: _agentPrefs,
+  connectorRows: _connectorRows,
   showFileTree,
   activeView,
   fileTreeFiles,
@@ -234,6 +234,15 @@ export function EditorPageLayout({
     openJobWorkspace(runId, tab);
     onMainViewChange("preview");
   };
+
+  useEffect(() => {
+    const onOpenConnector = (ev: Event) => {
+      const { connector } = (ev as CustomEvent<{ connector: ConnectorId }>).detail;
+      if (connector) openConnector(connector);
+    };
+    window.addEventListener(OPEN_CONNECTOR_EVENT, onOpenConnector);
+    return () => window.removeEventListener(OPEN_CONNECTOR_EVENT, onOpenConnector);
+  }, [openConnector]);
 
   useEffect(() => {
     if (!pendingPlan) return;
@@ -363,61 +372,46 @@ export function EditorPageLayout({
             }
             chat={
               <div className="forge-chat-column">
-                <div className="forge-chat-body">
-                  <TastePostStartBanner />
-                  <ForgeChatPanel
-                    messages={chatMessages}
-                    running={running}
-                    agentProgress={agent.progress}
-                    activeRunId={agent.activeRunId}
-                    frozenRuns={agent.frozenRuns}
-                    onResumeAgent={handleResumeAgent}
-                    onSend={handleSend}
-                    onStop={handleStop}
-                    onVisualEdits={handleVisualEdits}
-                    visualEditsActive={pickMode}
-                    composerMode={composerMode}
-                    onComposerModeChange={setComposerMode}
-                    externalPrompt={promptDraft}
-                    onExternalPromptConsumed={() => setPromptDraft(null)}
-                    welcomeMarkdown={chatMessages.length === 0 ? welcomeMarkdown : undefined}
-                    tasteChatRemaining={tasteChatRemaining}
-                    tasteStartRemaining={tasteStartRemaining}
-                    onStartProject={handleStartProject}
-                    onDeploy={handleOpenLiveSite}
-                    onUndoMessage={handleUndoMessage}
-                    pendingQueueItems={agent.pendingQueueItems}
-                    queueBlockingReason={agent.queueBlockingReason}
-                    onClearPendingItem={(id) =>
-                      conversationId
-                        ? agent.clearPendingItem(projectId, conversationId, id)
-                        : Promise.resolve()
-                    }
-                    onClearAllPending={() =>
-                      conversationId
-                        ? agent.clearAllPending(projectId, conversationId)
-                        : Promise.resolve()
-                    }
-                    onDrainQueue={async () => {
-                      if (!conversationId) return;
-                      await agent.drainQueue(projectId, conversationId, composerMode);
-                    }}
-                    onOpenInspector={handleOpenInspector}
-                    focusedRunId={jobWorkspaceFocus?.runId ?? null}
-                  />
-                </div>
-                <SetupRail
-                  hasUserLlmKey={hasUserLlmKey}
-                  e2bConnected={e2bConnected}
-                  prefs={agentPrefs}
-                  connectorRows={connectorRows}
-                  checklist={
-                    <TasteSetupChecklist
-                      userMessageCount={chatMessages.filter((m) => m.role === "user").length}
-                      onOpenConnector={openConnector}
-                      onStartProject={handleStartProject}
-                    />
+                <TastePostStartBanner />
+                <ForgeChatPanel
+                  messages={chatMessages}
+                  running={running}
+                  agentProgress={agent.progress}
+                  activeRunId={agent.activeRunId}
+                  frozenRuns={agent.frozenRuns}
+                  onResumeAgent={handleResumeAgent}
+                  onSend={handleSend}
+                  onStop={handleStop}
+                  onVisualEdits={handleVisualEdits}
+                  visualEditsActive={pickMode}
+                  composerMode={composerMode}
+                  onComposerModeChange={setComposerMode}
+                  externalPrompt={promptDraft}
+                  onExternalPromptConsumed={() => setPromptDraft(null)}
+                  welcomeMarkdown={chatMessages.length === 0 ? welcomeMarkdown : undefined}
+                  tasteChatRemaining={tasteChatRemaining}
+                  tasteStartRemaining={tasteStartRemaining}
+                  onStartProject={handleStartProject}
+                  onDeploy={handleOpenLiveSite}
+                  onUndoMessage={handleUndoMessage}
+                  pendingQueueItems={agent.pendingQueueItems}
+                  queueBlockingReason={agent.queueBlockingReason}
+                  onClearPendingItem={(id) =>
+                    conversationId
+                      ? agent.clearPendingItem(projectId, conversationId, id)
+                      : Promise.resolve()
                   }
+                  onClearAllPending={() =>
+                    conversationId
+                      ? agent.clearAllPending(projectId, conversationId)
+                      : Promise.resolve()
+                  }
+                  onDrainQueue={async () => {
+                    if (!conversationId) return;
+                    await agent.drainQueue(projectId, conversationId, composerMode);
+                  }}
+                  onOpenInspector={handleOpenInspector}
+                  focusedRunId={jobWorkspaceFocus?.runId ?? null}
                 />
               </div>
             }

@@ -1,5 +1,9 @@
 /* FORGE 2.0 — componentes novos plugados no skin Lovable existente */
 
+.forge-chat-inner {
+  border-radius: 0 0 14px 14px;
+}
+
 .forge-chat-thought-line {
   display: flex;
   align-items: center;
