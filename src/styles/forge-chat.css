@@ -32,6 +32,32 @@
   margin: 0 0 10px;
 }
 
+.forge-welcome-btn {
+  padding: var(--space-sm) var(--space-md);
+  border-radius: var(--space-sm);
+  border: 1px solid var(--border-forge);
+  background: var(--bg-input);
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 10px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.forge-welcome-btn:hover {
+  border-color: var(--border-active);
+  color: var(--text-primary);
+}
+
+.forge-welcome-limit {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 10px;
+  color: var(--status-thinking);
+  border: 1px solid color-mix(in srgb, var(--status-thinking) 25%, transparent);
+  border-radius: var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+}
+
 .forge-chat-stream {
   display: flex;
   flex-direction: column;
@@ -52,34 +78,34 @@
   width: 100%;
 }
 
-.forge-chat-sender {
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  margin-bottom: var(--space-xs);
-  padding: 0 6px;
-}
-
-.forge-chat-sender-assistant {
-  color: var(--text-muted);
-  align-self: flex-start;
-}
-
-.forge-msg-user-outline {
+/* User message — bolha neutra (Lovable), sem outline âmbar */
+.forge-msg-user {
   max-width: min(88%, 520px);
   padding: var(--space-md) var(--space-lg);
-  border-radius: 16px 16px 4px 16px;
-  border: 2px solid var(--text-accent);
-  background: color-mix(in srgb, var(--text-accent) 8%, transparent);
+  border-radius: 12px 12px 4px 12px;
+  border: 1px solid var(--border-forge);
+  background: var(--bg-card);
   color: var(--text-primary);
   font-size: 14px;
   line-height: 1.6;
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--text-accent) 15%, transparent);
 }
 
-.forge-msg-user-outline p {
+.forge-msg-user p {
   margin: 0;
+}
+
+.forge-msg-user--queued {
+  border-style: dashed;
+  opacity: 0.65;
+  background: var(--bg-hover);
+}
+
+.forge-msg-user--queued .forge-msg-queued-label {
+  display: block;
+  margin-top: var(--space-xs);
+  font: var(--font-thought);
+  font-size: 10px;
+  color: var(--text-muted);
 }
 
 .forge-chat-thought-line {
@@ -106,8 +132,61 @@
 }
 
 .forge-chat-item-assistant-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-xs);
   width: 100%;
-  align-self: stretch;
+  margin-top: var(--space-sm);
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.forge-chat-item-assistant:hover .forge-chat-item-assistant-footer,
+.forge-chat-item-assistant:focus-within .forge-chat-item-assistant-footer {
+  opacity: 1;
+}
+
+.forge-message-action {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.forge-message-action:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.forge-message-action[data-copied="true"] {
+  color: var(--text-accent);
+}
+
+.forge-awaiting-banner {
+  margin: var(--space-sm) 0;
+  padding: 10px var(--space-md);
+  border-radius: 10px;
+  border: 1px solid var(--border-forge);
+  background: var(--bg-card);
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-sm);
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text-secondary);
+}
+
+.forge-awaiting-banner svg {
+  color: var(--text-accent);
+  flex-shrink: 0;
+  margin-top: 2px;
 }
 
 .forge-turn-timestamp {
@@ -439,16 +518,85 @@
   color: var(--text-primary) !important;
 }
 
+.forge-composer-mode-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: var(--space-sm);
+  border: 1px solid var(--border-forge);
+  background: var(--bg-input);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s, color 0.15s;
+}
+
+.forge-composer-mode-trigger:hover,
+.forge-composer-mode-trigger[data-state="open"] {
+  border-color: var(--border-active);
+  color: var(--text-primary);
+}
+
+.forge-pending-queue-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px var(--space-sm);
+  border-radius: 6px;
+  border: 1px solid var(--border-forge);
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 9px;
+  color: var(--text-secondary);
+  background: var(--bg-input);
+  cursor: pointer;
+}
+
+.forge-pending-queue-action:hover:not(:disabled) {
+  border-color: var(--border-active);
+  color: var(--text-primary);
+}
+
+.forge-pending-queue-action:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.forge-pending-queue-icon {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  color: var(--text-muted);
+  cursor: pointer;
+  border: none;
+  background: transparent;
+}
+
+.forge-pending-queue-icon:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--text-accent);
+}
+
 .forge-composer-send {
   display: grid;
   place-items: center;
   width: 32px;
   height: 32px;
   border-radius: 10px;
+  background: var(--bg-input);
+  color: var(--text-primary);
+  border: 1px solid var(--border-forge);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.forge-composer-send:not(:disabled) {
   background: var(--text-accent);
   color: #0a0a0a;
-  border: none;
-  cursor: pointer;
+  border-color: transparent;
 }
 
 .forge-composer-send:disabled {

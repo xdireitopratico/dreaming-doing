@@ -47,7 +47,7 @@ export function ChatInputV2({
   const isRunning = running || agentBusy;
   const placeholder = isRunning
     ? "Queue follow-up…"
-    : "Descreva o que quer construir ou alterar…";
+    : "Descreva o que quer construir...";
 
   useEffect(() => {
     const timer = setTimeout(() => {

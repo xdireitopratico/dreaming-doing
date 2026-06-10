@@ -89,14 +89,9 @@ export function ForgeChat({
   return (
     <div className="forge-chat-stream" role="log" aria-live="polite" data-testid="forge-chat">
       {awaitingQualify && (
-        <section
-          className="my-2 rounded-lg border border-[var(--forge-border)] bg-[var(--forge-surface-2)]/40 px-3 py-2.5 flex items-start gap-2"
-          data-testid="awaiting-user-banner"
-        >
-          <MessageCircle className="size-4 shrink-0 text-[var(--forge-primary)] mt-0.5" />
-          <p className="text-sm text-[var(--forge-foreground)] leading-relaxed">
-            Uma pergunta rápida antes de continuar — responda no campo abaixo.
-          </p>
+        <section className="forge-awaiting-banner" data-testid="awaiting-user-banner">
+          <MessageCircle className="size-4" />
+          <p>Uma pergunta rápida antes de continuar — responda no campo abaixo.</p>
         </section>
       )}
 
@@ -155,10 +150,10 @@ export function ForgeChat({
       {pendingQueueItems.length > 0 && (
         <div className="space-y-2" data-testid="pending-queue-messages">
           {pendingQueueItems.map((item) => (
-            <article key={`pending-${item.id}`} className="forge-chat-item forge-chat-item-user opacity-60">
-              <div className="forge-msg-user-outline border-dashed bg-[var(--forge-surface-2)]">
-                <p className="whitespace-pre-wrap text-[var(--forge-muted)]">{item.preview}</p>
-                <span className="text-[10px] text-[var(--forge-ghost)] mt-1 block">Na fila…</span>
+            <article key={`pending-${item.id}`} className="forge-chat-item forge-chat-item-user">
+              <div className="forge-msg-user forge-msg-user--queued">
+                <p className="whitespace-pre-wrap">{item.preview}</p>
+                <span className="forge-msg-queued-label">Na fila…</span>
               </div>
             </article>
           ))}
@@ -177,8 +172,8 @@ export function ForgeChat({
             <ErrorHintCard hint={resolveErrorHint(progress.error)} onAction={onResume} />
           )}
           <section className="forge-chat-resume">
-            <AlertTriangle className="size-4 text-amber-400 shrink-0" />
-            <p className="flex-1 min-w-0 font-mono text-[10px] text-[var(--forge-silver)] leading-relaxed">
+            <AlertTriangle className="size-4 shrink-0" style={{ color: "var(--status-thinking)" }} />
+            <p className="flex-1 min-w-0" style={{ font: "var(--font-thought)", fontSize: "10px" }}>
               Execução pausada — use Continuar para retomar.
             </p>
             {onResume && (

@@ -20,7 +20,7 @@ export function ForgeMiniCard({
       ? `${data.fileCount} arquivos alterados →`
       : data.hasPlan
         ? "Ver plano no inspector →"
-        : "Timeline completa no inspector →";
+        : "Timeline completa →";
 
   const statusClass =
     data.status === "working"

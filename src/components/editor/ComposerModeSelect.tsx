@@ -33,7 +33,7 @@ export function ComposerModeSelect({
           className="forge-composer-mode-trigger"
           aria-label="Modo do agente"
         >
-          <CurrentIcon className="size-3.5 shrink-0 text-[var(--forge-primary)]" />
+          <CurrentIcon className="size-3.5 shrink-0" />
           <span>{current.label}</span>
         </button>
       </DropdownMenuTrigger>
@@ -43,14 +43,12 @@ export function ComposerModeSelect({
           return (
             <ForgeEditorDropdownItem
               key={key}
-              className={`font-mono text-[11px] focus:text-[var(--forge-primary)] data-[highlighted]:text-[var(--forge-primary)] ${
-                isCurrent ? "bg-[var(--forge-surface-2)] text-[var(--forge-primary)]" : ""
-              }`}
+              className={`font-mono text-[11px] ${isCurrent ? "font-semibold" : ""}`}
               onSelect={() => onChange(key)}
             >
-              <Icon className="size-3.5 mr-2 text-[var(--forge-primary)]" />
+              <Icon className="size-3.5 mr-2" />
               {label}
-              {isCurrent && <Check className="ml-auto size-3 text-[var(--forge-primary)]" />}
+              {isCurrent && <Check className="ml-auto size-3" />}
             </ForgeEditorDropdownItem>
           );
         })}

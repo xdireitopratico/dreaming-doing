@@ -147,24 +147,21 @@ export function ForgeChatPanel({
             {welcomeMarkdown ? (
               <MarkdownRenderer>{welcomeMarkdown}</MarkdownRenderer>
             ) : (
-              <p>
-                Descreva o que você quer construir ou alterar. O FORGE gera o código e você vê o
-                resultado ao vivo à direita.
-              </p>
+              <p>Descreva o que quer construir. O agente gera o código e você vê o resultado à direita.</p>
             )}
             <div className="flex flex-wrap gap-2 pt-1">
               {onStartProject && (tasteStartRemaining ?? 0) > 0 && (
                 <button
                   type="button"
                   onClick={onStartProject}
-                  className="rounded-lg border border-[var(--forge-primary)]/50 bg-[var(--forge-primary)]/10 px-3 py-2 font-mono text-[10px] text-[var(--forge-primary)] hover:bg-[var(--forge-primary)]/20 transition-colors"
+                  className="forge-welcome-btn"
                 >
                   Start Project · demo completa (~15 min)
                 </button>
               )}
             </div>
             {tasteChatRemaining != null && tasteChatRemaining <= 0 && (
-              <p className="font-mono text-[10px] text-amber-400/90 border border-amber-400/20 rounded-lg px-3 py-2">
+              <p className="forge-welcome-limit">
                 Limite Taste Chat atingido. Configure chaves em API para continuar.
               </p>
             )}

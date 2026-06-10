@@ -20,8 +20,9 @@
   --text-muted: #64748b;
   --text-accent: #fbbf24;
 
-  /* Borda */
-  --border-forge: #27273a;
+  /* Borda (plano: --border) */
+  --border: #27273a;
+  --border-forge: var(--border);
   --border-active: #3b82f6;
 
   /* Tipografia */
