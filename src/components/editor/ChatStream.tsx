@@ -192,6 +192,23 @@ export function ChatStream({
         );
       })}
 
+      {/* Mensagens pendentes na fila — visíveis no chat como bubbles cinzas */}
+      {pendingQueueItems.length > 0 && (
+        <div className="space-y-2 mt-2" data-testid="pending-queue-messages">
+          {pendingQueueItems.map((item) => (
+            <article
+              key={`pending-${item.id}`}
+              className="forge-chat-item forge-chat-item-user opacity-60"
+            >
+              <div className="forge-msg-user-outline bg-[var(--forge-surface-2)] border-dashed">
+                <p className="whitespace-pre-wrap text-[var(--forge-muted)]">{item.text}</p>
+                <span className="text-[10px] text-[var(--forge-ghost)] mt-1 block">Na fila…</span>
+              </div>
+            </article>
+          ))}
+        </div>
+      )}
+
       {showGlobalError && (
         <section data-testid="agent-global-error">
           <ErrorHintCard hint={resolveErrorHint(progress.error!)} />

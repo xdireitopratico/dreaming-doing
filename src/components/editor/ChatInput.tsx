@@ -520,6 +520,7 @@ export function ChatInput({
             running={running}
             activeRunId={activeRunId}
             frozenRuns={frozenRuns}
+            pendingQueueItems={pendingQueueItems}
             progress={effectiveProgress}
             onResume={onResumeAgent}
             onUndoMessage={onUndoMessage}

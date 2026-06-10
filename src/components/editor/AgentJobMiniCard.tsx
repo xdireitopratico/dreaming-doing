@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { cn } from "@/lib/utils";
 import { CheckCircle2, Circle, Loader2, XCircle } from "lucide-react";
-import type { AgentProgress, PendingPlan, PlanStep } from "@/lib/agent-progress";
+import type { AgentProgress, PendingPlan } from "@/lib/agent-progress";
 import {
   buildJobStreamTree,
   deriveCardView,
