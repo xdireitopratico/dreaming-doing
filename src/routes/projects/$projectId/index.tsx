@@ -62,11 +62,11 @@ function EditorPage() {
   const welcomeMarkdown = hasUserLlmKey ? FORGE_WELCOME_BYOK_MARKDOWN : FORGE_WELCOME_MARKDOWN;
   const e2bConnected = connectorStatus.e2b.connected;
   useTasteUiActions();
-  const tasteQuota = {
+  const tasteQuota = useMemo(() => ({
     tasteChatRemaining,
     tasteStartRemaining,
     hasUserLlmKey,
-  };
+  }), [tasteChatRemaining, tasteStartRemaining, hasUserLlmKey]);
 
   const [showFileTree, setShowFileTree] = useState(false);
   const [activeView, setActiveView] = useState<"code" | "preview" | "diff">("preview");
