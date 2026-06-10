@@ -5,8 +5,8 @@ import { useServerFn } from "@tanstack/react-start";
 
 import { supabase } from "@/integrations/supabase/client";
 import type { Tab } from "@/components/editor/CodeEditor";
-import type { AgentComposerMode } from "@/components/editor/ChatInput";
-import type { ChatMessage } from "@/components/editor/ChatInput";
+import type { AgentComposerMode } from "@/lib/chat-types";
+import type { ChatMessage } from "@/lib/chat-types";
 import { buildEditorActions, type PaletteAction } from "@/components/editor/CommandPalette";
 import { createLogEntry, type LogEntry } from "@/components/editor/LogPanel";
 import { loadAgentPreferences } from "@/lib/agent-preferences";

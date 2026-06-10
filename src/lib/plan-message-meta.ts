@@ -1,4 +1,4 @@
-import type { ChatMessage } from "@/components/editor/ChatInput";
+import type { ChatMessage } from "@/lib/chat-types";
 import type { PendingPlan, PlanStep } from "@/lib/agent-progress";
 
 /** Último plano pendente persistido no histórico (sobrevive a F5). */

@@ -5,7 +5,7 @@ import type { NavigateOptions } from "@tanstack/react-router";
 import { supabase } from "@/integrations/supabase/client";
 import { removeRealtimeChannel } from "@/lib/supabase-realtime";
 import type { RealtimeChannel } from "@supabase/supabase-js";
-import type { ChatMessage } from "@/components/editor/ChatInput";
+import type { ChatMessage } from "@/lib/chat-types";
 import { logEditorTelemetryEvent } from "@/lib/editor-telemetry";
 import { collapseForgeUiBundle } from "@/lib/file-tree-display";
 import { detectProjectStack, type ProjectStackKind } from "@/lib/detect-project-kind";

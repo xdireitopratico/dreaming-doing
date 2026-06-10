@@ -1,4 +1,4 @@
-import type { ChatMessage } from "@/components/editor/ChatInput";
+import type { ChatMessage } from "@/lib/chat-types";
 import type { AgentProgress } from "@/lib/agent-progress";
 import { progressFromAssistantMessage } from "@/lib/assistant-run-progress";
 
