@@ -1034,10 +1034,46 @@ export class AgentLoop {
         this.state.messages.push(assistantMsg);
 
         for (const { call, result } of execResults) {
+          const raw = JSON.stringify(result);
+          let structured = raw;
+          if (!result.ok) {
+            const toolName = call.name;
+            const args = call.arguments;
+            const path = String(args.path ?? args.filePath ?? args.file ?? "");
+            const errorMsg = String(result.error ?? "unknown error");
+            const outputSample = typeof result.output === "string"
+              ? result.output.slice(0, 200)
+              : typeof result.output === "object"
+                ? JSON.stringify(result.output).slice(0, 200)
+                : "";
+
+            const hints: string[] = [];
+            if (toolName === "fs_write" || toolName === "fs_edit") {
+              hints.push(`Verifique se o diretório de ${path ? path.split("/").slice(0, -1).join("/") : "destino"} existe antes de escrever.`);
+              hints.push("Use shell_exec com `mkdir -p` ou `test -d` para garantir o caminho.");
+            } else if (toolName === "shell_exec") {
+              const cmd = String(args.command ?? "").slice(0, 120);
+              if (/npm (install|add)\b/.test(cmd)) hints.push("Tente `npm install --legacy-peer-deps` ou limpe node_modules primeiro.");
+              if (/npx tsc/.test(cmd)) hints.push("Verifique se tsconfig.json está correto e os tipos estão instalados.");
+              if (/npm run build/.test(cmd) && outputSample) hints.push(`Build falhou: ${outputSample.slice(0, 120)}`);
+              if (!outputSample) hints.push("Comando não produziu saída — verifique se o binário existe.");
+            } else if (toolName === "fs_search" || toolName === "fs_read") {
+              hints.push(`O caminho ${path || "<vazio>"} pode não existir. Verifique com shell_exec + test -e.`);
+            }
+
+            structured = JSON.stringify({
+              ok: false,
+              tool: toolName,
+              error: errorMsg,
+              ...(path ? { path } : {}),
+              ...(outputSample ? { output: outputSample.slice(0, 500) } : {}),
+              hint: hints.length > 0 ? hints.join(" ") : undefined,
+            });
+          }
           this.state.messages.push({
             role: "tool",
             tool_call_id: call.id,
-            content: JSON.stringify(result).slice(0, 4000),
+            content: structured.slice(0, 4000),
           });
         }
 
