@@ -31,10 +31,10 @@ Deno.test("buildClassifyBriefing — build com passos", () => {
   assertStringIncludes(text, "validar o resultado");
 });
 
-Deno.test("buildGatherNarration — arquivos-chave", () => {
-  const text = buildGatherNarration(12, ["package.json", "src/App.tsx"]);
-  assertStringIncludes(text, "Explorando o projeto");
-  assertStringIncludes(text, "12 arquivos");
+Deno.test("buildGatherNarration — sem contagem de arquivos", () => {
+  const text = buildGatherNarration(48, ["package.json", "src/App.tsx"]);
+  assertEquals(text, "Explorando o projeto…");
+  assertEquals(text.includes("48"), false);
 });
 
 Deno.test("buildApprovedPlanBriefing — passos", () => {

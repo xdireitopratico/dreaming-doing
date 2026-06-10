@@ -1388,13 +1388,7 @@ export class AgentLoop {
       });
       this.emit("phase", {
         phase: "gather",
-        message: paths.length > 0
-          ? `Explorando ${paths.length} arquivo${
-            paths.length === 1 ? "" : "s"
-          }-chave…`
-          : `Explorando ${fileList.length} arquivo${
-            fileList.length === 1 ? "" : "s"
-          }…`,
+        message: "Explorando o projeto…",
       });
       this.streamNarration(buildGatherNarration(fileList.length, paths));
     } else {

@@ -144,12 +144,20 @@ export function ForgeChat({
         const resolved = resolveAssistantProgress(item);
         const runId = item.runId ?? activeRunId ?? `slot-${idx}`;
 
+        const anchoredLive =
+          !!running &&
+          !!activeRunId &&
+          !!item.runId &&
+          item.runId === activeRunId &&
+          !!resolved &&
+          !resolved.finished &&
+          !resolved.canceled;
+
         const isQualifyOnly =
           !!resolved &&
-          (resolved.awaitingKind === "qualify" ||
-            resolved.phase === "classify" ||
-            resolved.phase === "taste" ||
-            resolved.phase === "taste_chat") &&
+          resolved.awaitingKind === "qualify" &&
+          !!resolved.awaiting &&
+          !anchoredLive &&
           (resolved.tools?.length ?? 0) === 0 &&
           (resolved.diffs?.length ?? 0) === 0 &&
           (resolved.deliveryFiles?.length ?? 0) === 0;
@@ -160,12 +168,16 @@ export function ForgeChat({
             (resolved.tools?.length ?? 0) > 0 ||
             (resolved.diffs?.length ?? 0) > 0 ||
             (resolved.deliveryFiles?.length ?? 0) > 0 ||
+            resolved.phase === "gather" ||
+            resolved.phase === "classify" ||
+            resolved.phase === "plan" ||
             resolved.phase === "execute" ||
-            resolved.phase === "observe");
+            resolved.phase === "observe" ||
+            resolved.phase === "summarize");
 
         const slotActive = resolved
-          ? isRunEffectivelyActive(resolved, item.isActive)
-          : item.isActive;
+          ? isRunEffectivelyActive(resolved, item.isActive || anchoredLive)
+          : item.isActive || anchoredLive;
 
         const showJobCard = shouldShowJobCard({
           runId: item.runId,

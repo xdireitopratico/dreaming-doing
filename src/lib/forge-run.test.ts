@@ -4,6 +4,7 @@ import {
   buildAgentRunView,
   buildForgeTimeline,
   collectMiniCardBriefings,
+  normalizeMiniCardBriefing,
   deriveBrainstormTitle,
   deriveSessionTitle,
   deriveTasksFromPlan,
@@ -105,6 +106,7 @@ describe("shouldShowJobCard", () => {
       ...initialAgentProgress,
       phase: "classify",
       awaitingKind: "qualify" as const,
+      awaiting: true,
       finished: true,
     };
 
@@ -119,6 +121,27 @@ describe("shouldShowJobCard", () => {
         activeRunId: null,
       }),
     ).toBe(false);
+  });
+
+  it("mantém mini card na fase classify de run ativa (plan/build)", () => {
+    const progress = {
+      ...initialAgentProgress,
+      phase: "classify",
+      finished: false,
+      timeline: [{ type: "phase", data: { phase: "classify" }, timestamp: 1 }],
+    };
+
+    expect(
+      shouldShowJobCard({
+        runId: "run-1",
+        progress,
+        isQualifyOnly: false,
+        isAgentJobMessage: false,
+        hasExecutionEvidence: true,
+        slotActive: false,
+        activeRunId: "run-1",
+      }),
+    ).toBe(true);
   });
 });
 
@@ -282,7 +305,16 @@ describe("forge-run mini card briefing e título", () => {
     expect(withReasoning.latencyThinking).toBeNull();
   });
 
-  it("briefings incluem tool pendente e Pensando…", () => {
+  it("normaliza explorando sem contagem de arquivos", () => {
+    expect(normalizeMiniCardBriefing("Explorando 48 arquivos…")).toBe(
+      "Explorando o projeto…",
+    );
+    expect(normalizeMiniCardBriefing("Analisando o projeto")).toBe(
+      "Explorando o projeto…",
+    );
+  });
+
+  it("briefings incluem tool pendente na fase gather", () => {
     const progress = {
       ...initialAgentProgress,
       phase: "execute",
@@ -293,7 +325,7 @@ describe("forge-run mini card briefing e título", () => {
       userPrompt: "landing page",
     });
     expect(briefings.some((b) => b.includes("Lendo App.tsx"))).toBe(true);
-    expect(briefings.some((b) => b.includes("Pensando"))).toBe(true);
+    expect(briefings.some((b) => b.includes("Lendo App.tsx"))).toBe(true);
   });
 
   it("run ativo expõe liveBriefings no mini card", () => {

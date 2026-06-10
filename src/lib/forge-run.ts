@@ -246,17 +246,6 @@ function deriveMiniCardStatus(progress: AgentProgress, running: boolean): MiniCa
   }
   if (progress.finished && progress.error && progress.resumable) return "failed";
   if (progress.finished) return "done";
-  const internalThought = [...progress.timeline].reverse().find(
-    (e) => e.type === "assistant_text" && isInspectorThought(e.data ?? {}),
-  );
-  if (internalThought && !progress.finished) return "thinking";
-  if (
-    running &&
-    !hasFirstResponseToken(progress) &&
-    progress.tools.length === 0
-  ) {
-    return "thinking";
-  }
   if (running || progress.autoResuming) return "working";
   return "working";
 }
@@ -285,6 +274,18 @@ function hasFirstResponseToken(progress: AgentProgress): boolean {
   return !!(progress.streamText?.trim() || progress.narrationText?.trim());
 }
 
+/** Briefing do mini card — sem contagem de arquivos nem duplicata de fase. */
+export function normalizeMiniCardBriefing(line: string): string | null {
+  const t = line.trim();
+  if (!t) return null;
+  if (/^explorando/i.test(t)) return "Explorando o projeto…";
+  if (/^indexando/i.test(t)) return "Explorando o projeto…";
+  if (/analisando o projeto/i.test(t)) return "Explorando o projeto…";
+  if (/entendendo o que já existe/i.test(t)) return "Explorando o projeto…";
+  if (/^pensando[.…]*$/i.test(t)) return "Pensando…";
+  return truncate(t, 80);
+}
+
 /** Briefings humanos derivados da timeline — rotacionam no mini card durante a run. */
 export function collectMiniCardBriefings(
   progress: AgentProgress,
@@ -297,7 +298,7 @@ export function collectMiniCardBriefings(
   const seen = new Set<string>();
 
   const push = (line: string) => {
-    const t = truncate(line.trim(), 80);
+    const t = normalizeMiniCardBriefing(line);
     if (!t || seen.has(t)) return;
     seen.add(t);
     lines.push(t);
@@ -326,16 +327,18 @@ export function collectMiniCardBriefings(
   if (narrative.headline) push(narrative.headline);
   if (narrative.subhint) push(narrative.subhint);
 
+  if (progress.narrationText?.trim()) push(progress.narrationText);
   if (progress.message) push(progress.message);
   if (progress.statusHint && !/conectando|iniciando/i.test(progress.statusHint)) {
     push(progress.statusHint);
   }
 
-  if (running) {
-    push("Pensando…");
-    if (opts?.sessionTitle) push(opts.sessionTitle);
-    else if (opts?.userPrompt) push(deriveBrainstormTitle(opts.userPrompt));
-  }
+  if (progress.phase === "gather") push("Explorando o projeto…");
+  if (progress.phase === "classify") push("Avaliando o escopo…");
+  if (progress.phase === "plan") push("Montando o plano…");
+
+  if (running && opts?.sessionTitle) push(opts.sessionTitle);
+  else if (running && opts?.userPrompt) push(deriveBrainstormTitle(opts.userPrompt));
 
   return lines.length > 0 ? lines : ["Trabalhando no projeto…"];
 }
@@ -496,8 +499,7 @@ export function buildAgentRunView(
   let latencyThinking: LatencyThinking | null = null;
   const runStartedAtMs = opts?.runStartedAtMs;
   if (running && runStartedAtMs && !reasoningThought?.active) {
-    const hideLatency =
-      hasFirstResponseToken(progress) || !!reasoningThought;
+    const hideLatency = !!progress.streamText?.trim() || !!reasoningThought;
     if (!hideLatency) {
       latencyThinking = { active: true, startedAtMs: runStartedAtMs };
     }
@@ -514,18 +516,10 @@ export function buildAgentRunView(
       : null;
 
   const streamBody = progress.streamText?.trim() || null;
-  const narrationBody = progress.narrationText?.trim() || null;
   const summaryBody = progress.summary?.trim();
   const safeSummary =
     summaryBody && !isWrapUpPhrase(summaryBody) ? summaryBody : null;
-  const closingText =
-    streamBody ||
-    (running ? narrationBody : null) ||
-    safeSummary ||
-    null;
-
-  const liveNarration =
-    running && narrationBody && narrationBody !== streamBody ? narrationBody : null;
+  const closingText = streamBody || (!running ? safeSummary : null) || null;
 
   return {
     runId,
@@ -542,7 +536,7 @@ export function buildAgentRunView(
     thinking,
     latencyThinking,
     reasoningThought,
-    narration: liveNarration,
+    narration: null,
     closingText,
     timeline: forgeTimeline,
     error: progress.error,

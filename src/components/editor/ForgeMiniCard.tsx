@@ -19,6 +19,7 @@ export function ForgeMiniCard({
   onOpenInspector,
 }: ForgeMiniCardProps) {
   const isLive = data.status === "working" || data.status === "thinking";
+  const showWorkingBadge = isLive;
   const briefings =
     data.liveBriefings.length > 0 ? data.liveBriefings : [data.title];
   const [briefingIndex, setBriefingIndex] = useState(0);
@@ -46,7 +47,7 @@ export function ForgeMiniCard({
         : "Timeline completa →";
 
   const statusClass =
-    data.status === "working"
+    showWorkingBadge
       ? "forge-mini-card--working"
       : data.status === "done"
         ? "forge-mini-card--done"
@@ -69,16 +70,10 @@ export function ForgeMiniCard({
         aria-label={`Job: ${displayTitle}`}
       >
         <div className="forge-mini-card-header">
-          {data.status === "working" && (
+          {showWorkingBadge && (
             <>
               <span className="forge-mini-card-dot forge-mini-card-dot--working" aria-hidden />
               <span className="forge-mini-card-badge forge-mini-card-badge--working">Working…</span>
-            </>
-          )}
-          {data.status === "thinking" && (
-            <>
-              <span className="forge-mini-card-dot forge-mini-card-dot--thinking" aria-hidden />
-              <span className="forge-mini-card-badge forge-mini-card-badge--thinking">Thinking…</span>
             </>
           )}
           {data.status === "done" && (

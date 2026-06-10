@@ -94,17 +94,9 @@ export function buildClassifyBriefing(
   return lines.join("\n").trim();
 }
 
-/** Narração ao explorar o projeto (gather). */
-export function buildGatherNarration(totalFiles: number, paths: string[]): string {
-  if (totalFiles === 0) {
-    return "O projeto está vazio — vou começar pela estrutura base (config, entrada e primeiro componente).";
-  }
-  if (paths.length === 0) {
-    return `Encontrei **${totalFiles} arquivo${totalFiles === 1 ? "" : "s"}** — vou mapear a estrutura antes de alterar qualquer coisa.`;
-  }
-  const shown = paths.slice(0, 5).map((p) => `\`${p}\``).join(", ");
-  const extra = paths.length > 5 ? ` e mais ${paths.length - 5}` : "";
-  return `Explorando o projeto (${totalFiles} arquivo${totalFiles === 1 ? "" : "s"})…`;
+/** Narração ao explorar o projeto (gather) — só mini card, sem contagem. */
+export function buildGatherNarration(_totalFiles?: number, _paths?: string[]): string {
+  return "Explorando o projeto…";
 }
 
 /** Briefing quando o build vem de plano aprovado. */

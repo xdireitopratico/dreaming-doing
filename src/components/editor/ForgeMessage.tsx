@@ -3,7 +3,7 @@ import type { ChatMessage } from "@/lib/chat-types";
 import type { AgentRunView } from "@/lib/forge-run";
 import { ForgeMiniCard } from "@/components/editor/ForgeMiniCard";
 import { ForgeThinking } from "@/components/editor/ForgeThinking";
-import { ForgeNarration } from "@/components/editor/ForgeNarration";
+
 import { ForgeDoneBubble } from "@/components/editor/ForgeDoneBubble";
 import { ForgeErrorCard } from "@/components/editor/ForgeErrorCard";
 import { ForgeQualifyPrompt } from "@/components/editor/ForgeQualifyPrompt";
@@ -83,9 +83,6 @@ export function ForgeMessage({
 
   const showLatencyThinking =
     isActive && !!runView?.latencyThinking?.active;
-  const showReasoningThought = !!runView?.reasoningThought;
-  const showNarration = !!runView?.narration && isActive;
-
   const showResponse =
     !!responseText &&
     !showQualifyPrompt &&
@@ -105,18 +102,6 @@ export function ForgeMessage({
           startedAtMs={runView.latencyThinking.startedAtMs}
           active
         />
-      )}
-
-      {showReasoningThought && runView?.reasoningThought && (
-        <ForgeThinking
-          variant="reasoning"
-          durationMs={runView.reasoningThought.durationMs}
-          active={runView.reasoningThought.active}
-        />
-      )}
-
-      {showNarration && runView?.narration && (
-        <ForgeNarration text={runView.narration} />
       )}
 
       {showJobCard && runView && onOpenInspector && (
