@@ -368,24 +368,31 @@ export function buildLovableThread(
   const anchored = insertIndexForActiveRun(items, activeRunId);
   const insertAt = anchored ?? pendingAssistantInsertIndex(items);
 
-  if (running && !progress.finished && !progress.canceled) {
+  const frozenSnap = activeRunId ? effectiveFrozen?.get(activeRunId) : undefined;
+  const isLiveRun =
+    !!activeRunId &&
+    !progress.finished &&
+    !progress.canceled &&
+    (running || !frozenSnap);
+
+  if (isLiveRun) {
     items = insertAssistantSlot(items, insertAt, {
       kind: "assistant",
       live: progress,
       runId: activeRunId,
-      isActive: true,
+      isActive: running,
     });
-  } else if (running && progress.finished) {
+  } else if (activeRunId && frozenSnap) {
     items = insertAssistantSlot(items, insertAt, {
       kind: "assistant",
-      live: progress,
+      frozen: frozenSnap,
       runId: activeRunId,
       isActive: false,
     });
-  } else if (effectiveFrozen?.has(activeRunId)) {
+  } else if (activeRunId && progress.finished) {
     items = insertAssistantSlot(items, insertAt, {
       kind: "assistant",
-      frozen: effectiveFrozen.get(activeRunId),
+      live: progress,
       runId: activeRunId,
       isActive: false,
     });

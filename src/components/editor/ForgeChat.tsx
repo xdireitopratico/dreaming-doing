@@ -18,7 +18,11 @@ import {
   type FrozenRunSnapshot,
   resolveAssistantProgress,
 } from "@/lib/lovable-thread";
-import { buildAgentRunView, isRunEffectivelyActive } from "@/lib/forge-run";
+import {
+  buildAgentRunView,
+  isRunEffectivelyActive,
+  shouldShowJobCard,
+} from "@/lib/forge-run";
 import { isAgentJobMessage } from "@/lib/assistant-run-progress";
 import { resolveJobPlanForRun } from "@/lib/plan-message-meta";
 import { parseQualifyChoices } from "@/lib/qualify-choices";
@@ -138,13 +142,19 @@ export function ForgeChat({
             resolved.phase === "execute" ||
             resolved.phase === "observe");
 
-        const showJobCard =
-          !!item.runId &&
-          !!resolved &&
-          !isQualifyOnly &&
-          (isAgentJobMessage(item.message) ||
-            hasExecutionEvidence ||
-            (item.isActive && running && resolved.phase !== "classify"));
+        const slotActive = resolved
+          ? isRunEffectivelyActive(resolved, item.isActive)
+          : item.isActive;
+
+        const showJobCard = shouldShowJobCard({
+          runId: item.runId,
+          progress: resolved,
+          isQualifyOnly,
+          isAgentJobMessage: isAgentJobMessage(item.message),
+          hasExecutionEvidence,
+          slotActive,
+          activeRunId,
+        });
 
         const jobPlan = item.runId
           ? resolveJobPlanForRun(item.runId, messages, {
@@ -154,10 +164,6 @@ export function ForgeChat({
               assistantMessage: item.message,
             })
           : null;
-
-        const slotActive = resolved
-          ? isRunEffectivelyActive(resolved, item.isActive)
-          : item.isActive;
 
         const runView = resolved
           ? buildAgentRunView(runId, resolved, {

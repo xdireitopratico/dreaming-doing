@@ -72,6 +72,20 @@ describe("buildLovableThread", () => {
     expect(slot.isActive).toBe(false);
   });
 
+  it("insere slot live com activeRunId mesmo se running=false (desync transitório)", () => {
+    const messages = [msg("u1", "user", "x")];
+    const progress = { ...initialAgentProgress, phase: "classify", message: "Classificando…" };
+    const thread = buildLovableThread(messages, progress, {
+      running: false,
+      activeRunId: "r1",
+    });
+    expect(thread).toHaveLength(2);
+    const slot = thread[1] as Extract<(typeof thread)[number], { kind: "assistant" }>;
+    expect(slot.runId).toBe("r1");
+    expect(slot.live?.phase).toBe("classify");
+    expect(slot.isActive).toBe(false);
+  });
+
   it("progress live reflete mensagem atualizada do agente", () => {
     const messages = [msg("u1", "user", "x")];
     const p2 = { ...initialAgentProgress, message: "Editando App.tsx…" };

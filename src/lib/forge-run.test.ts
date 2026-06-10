@@ -8,6 +8,7 @@ import {
   deriveSessionTitle,
   deriveTasksFromPlan,
   isRunEffectivelyActive,
+  shouldShowJobCard,
 } from "@/lib/forge-run";
 
 const samplePlan: PendingPlan = {
@@ -75,6 +76,49 @@ describe("forge-run job requirements", () => {
 
     const tasks = deriveTasksFromPlan(samplePlan, progress);
     expect(tasks.every((t) => t.status === "done")).toBe(true);
+  });
+});
+
+describe("shouldShowJobCard", () => {
+  it("mantém mini card na fase classify enquanto a run está ativa", () => {
+    const progress = {
+      ...initialAgentProgress,
+      phase: "classify",
+      finished: false,
+    };
+
+    expect(
+      shouldShowJobCard({
+        runId: "run-1",
+        progress,
+        isQualifyOnly: false,
+        isAgentJobMessage: false,
+        hasExecutionEvidence: false,
+        slotActive: false,
+        activeRunId: "run-1",
+      }),
+    ).toBe(true);
+  });
+
+  it("oculta mini card em turno qualify-only", () => {
+    const progress = {
+      ...initialAgentProgress,
+      phase: "classify",
+      awaitingKind: "qualify" as const,
+      finished: true,
+    };
+
+    expect(
+      shouldShowJobCard({
+        runId: "run-1",
+        progress,
+        isQualifyOnly: true,
+        isAgentJobMessage: false,
+        hasExecutionEvidence: false,
+        slotActive: false,
+        activeRunId: null,
+      }),
+    ).toBe(false);
   });
 });
 

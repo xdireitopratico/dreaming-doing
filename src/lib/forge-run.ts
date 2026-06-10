@@ -364,6 +364,37 @@ export function isRunEffectivelyActive(
   return !!slotActive && !progress.finished && !progress.canceled;
 }
 
+/** Mini card visível durante toda a run ativa — inclusive classify/gather antes de tools. */
+export function shouldShowJobCard(opts: {
+  runId?: string;
+  progress: AgentProgress | null;
+  isQualifyOnly: boolean;
+  isAgentJobMessage: boolean;
+  hasExecutionEvidence: boolean;
+  slotActive: boolean;
+  activeRunId?: string | null;
+}): boolean {
+  const {
+    runId,
+    progress,
+    isQualifyOnly,
+    isAgentJobMessage: isJobMsg,
+    hasExecutionEvidence,
+    slotActive,
+    activeRunId,
+  } = opts;
+
+  if (!runId || !progress || isQualifyOnly) return false;
+
+  const isAnchoredLiveRun =
+    !!activeRunId &&
+    runId === activeRunId &&
+    !progress.finished &&
+    !progress.canceled;
+
+  return isJobMsg || hasExecutionEvidence || slotActive || isAnchoredLiveRun;
+}
+
 export function buildAgentRunView(
   runId: string,
   progress: AgentProgress,
