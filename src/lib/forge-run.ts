@@ -32,10 +32,25 @@ export type ForgeTimelineItem =
   | { type: "TOOL"; id: string; name: string; path?: string; detail?: string; active?: boolean }
   | { type: "RESULT"; id: string; ok: boolean; text: string; evidence?: string[] };
 
+/** Timer imediato ao enviar mensagem — mitiga latência antes do 1º token. */
+export type LatencyThinking = {
+  active: boolean;
+  startedAtMs: number;
+};
+
+/** Raciocínio interno (thinking:true SSE) — «Thought for Xs» no chat. */
+export type ReasoningThought = {
+  active: boolean;
+  durationMs: number;
+};
+
 export type AgentRunView = {
   runId: string;
   miniCard: ForgeMiniCardData;
+  /** @deprecated use latencyThinking / reasoningThought */
   thinking: { active: boolean; durationMs: number; text?: string } | null;
+  latencyThinking: LatencyThinking | null;
+  reasoningThought: ReasoningThought | null;
   narration: string | null;
   closingText: string | null;
   timeline: ForgeTimelineItem[];
@@ -231,11 +246,18 @@ function deriveMiniCardStatus(progress: AgentProgress, running: boolean): MiniCa
   }
   if (progress.finished && progress.error && progress.resumable) return "failed";
   if (progress.finished) return "done";
-  if (running || progress.autoResuming) return "working";
-  const lastThought = [...progress.timeline].reverse().find(
+  const internalThought = [...progress.timeline].reverse().find(
     (e) => e.type === "assistant_text" && isInspectorThought(e.data ?? {}),
   );
-  if (lastThought && !progress.finished) return "thinking";
+  if (internalThought && !progress.finished) return "thinking";
+  if (
+    running &&
+    !hasFirstResponseToken(progress) &&
+    progress.tools.length === 0
+  ) {
+    return "thinking";
+  }
+  if (running || progress.autoResuming) return "working";
   return "working";
 }
 
@@ -252,18 +274,24 @@ const TOOL_BRIEF_VERBS: Record<string, string> = {
   web_fetch: "Consultando",
 };
 
-function toolBriefing(name: string, path?: string): string {
+export function toolBriefing(name: string, path?: string): string {
   const verb = TOOL_BRIEF_VERBS[name] ?? `Usando ${name}`;
   const file = path ? fileBase(path) : "";
+  if (name === "shell_exec") return file ? `Executando ${file}…` : "Executando comando…";
   return file ? `${verb} ${file}…` : `${verb}…`;
 }
 
-/** Briefings humanos derivados da timeline — miniatura sem expansão (inspector). */
+function hasFirstResponseToken(progress: AgentProgress): boolean {
+  return !!(progress.streamText?.trim() || progress.narrationText?.trim());
+}
+
+/** Briefings humanos derivados da timeline — rotacionam no mini card durante a run. */
 export function collectMiniCardBriefings(
   progress: AgentProgress,
   timeline: ForgeTimelineItem[],
   tasks: ForgeTaskItem[],
   running: boolean,
+  opts?: { userPrompt?: string | null; sessionTitle?: string | null },
 ): string[] {
   const lines: string[] = [];
   const seen = new Set<string>();
@@ -275,12 +303,18 @@ export function collectMiniCardBriefings(
     lines.push(t);
   };
 
+  const activeThought = [...timeline].reverse().find(
+    (i) => i.type === "THOUGHT" && i.active,
+  );
+  if (activeThought?.type === "THOUGHT") push("Raciocinando…");
+
+  const pendingTool = [...progress.tools].reverse().find((t) => t.ok === undefined);
+  if (pendingTool) {
+    push(toolBriefing(pendingTool.name, pathFromArgs(pendingTool.args)));
+  }
+
   const activeTask = tasks.find((t) => t.status === "active");
   if (activeTask) push(activeTask.label);
-
-  const narrative = buildAgentNarrative(progress, { running });
-  if (narrative.headline) push(narrative.headline);
-  if (narrative.subhint) push(narrative.subhint);
 
   for (const item of [...timeline].reverse()) {
     if (item.type === "TOOL") push(toolBriefing(item.name, item.path));
@@ -288,9 +322,19 @@ export function collectMiniCardBriefings(
     if (item.type === "RESULT" && item.ok && item.text) push(item.text);
   }
 
+  const narrative = buildAgentNarrative(progress, { running });
+  if (narrative.headline) push(narrative.headline);
+  if (narrative.subhint) push(narrative.subhint);
+
   if (progress.message) push(progress.message);
   if (progress.statusHint && !/conectando|iniciando/i.test(progress.statusHint)) {
     push(progress.statusHint);
+  }
+
+  if (running) {
+    push("Pensando…");
+    if (opts?.sessionTitle) push(opts.sessionTitle);
+    else if (opts?.userPrompt) push(deriveBrainstormTitle(opts.userPrompt));
   }
 
   return lines.length > 0 ? lines : ["Trabalhando no projeto…"];
@@ -406,7 +450,13 @@ export function shouldShowJobCard(opts: {
 export function buildAgentRunView(
   runId: string,
   progress: AgentProgress,
-  opts?: { running?: boolean; jobPlan?: PendingPlan | null; userPrompt?: string | null },
+  opts?: {
+    running?: boolean;
+    jobPlan?: PendingPlan | null;
+    userPrompt?: string | null;
+    /** Timestamp client-side — início do thinking de latência (~500ms após envio). */
+    runStartedAtMs?: number | null;
+  },
 ): AgentRunView {
   const running = isRunEffectivelyActive(progress, opts?.running);
   const jobPlan = opts?.jobPlan ?? progress.pendingPlan;
@@ -423,31 +473,45 @@ export function buildAgentRunView(
 
   const status = deriveMiniCardStatus(progress, running);
   const editedFile = lastEditedFile(progress);
+  const sessionTitle = deriveSessionTitle(progress, jobPlan, opts?.userPrompt);
   const liveBriefings = collectMiniCardBriefings(
     progress,
     forgeTimeline,
     tasks,
     running,
+    { userPrompt: opts?.userPrompt, sessionTitle },
   );
-  const sessionTitle = deriveSessionTitle(progress, jobPlan, opts?.userPrompt);
 
-  let thinking: AgentRunView["thinking"] = null;
-  const activeThought = [...forgeTimeline].reverse().find((i) => i.type === "THOUGHT");
-  if (activeThought?.type === "THOUGHT" && activeThought.active) {
-    thinking = {
-      active: true,
-      durationMs: activeThought.durationMs,
-      text: activeThought.text,
-    };
-  } else if (status === "thinking") {
-    thinking = { active: true, durationMs: 1000 };
-  } else if (activeThought?.type === "THOUGHT") {
-    thinking = {
-      active: false,
-      durationMs: activeThought.durationMs,
-      text: activeThought.text,
+  const thoughtItems = forgeTimeline.filter((i) => i.type === "THOUGHT");
+  const lastThought = thoughtItems[thoughtItems.length - 1];
+
+  let reasoningThought: ReasoningThought | null = null;
+  if (lastThought?.type === "THOUGHT") {
+    reasoningThought = {
+      active: !!lastThought.active,
+      durationMs: lastThought.durationMs,
     };
   }
+
+  let latencyThinking: LatencyThinking | null = null;
+  const runStartedAtMs = opts?.runStartedAtMs;
+  if (running && runStartedAtMs && !reasoningThought?.active) {
+    const hideLatency =
+      hasFirstResponseToken(progress) || !!reasoningThought;
+    if (!hideLatency) {
+      latencyThinking = { active: true, startedAtMs: runStartedAtMs };
+    }
+  }
+
+  const thinking: AgentRunView["thinking"] = reasoningThought
+    ? {
+        active: reasoningThought.active,
+        durationMs: reasoningThought.durationMs,
+        text: lastThought?.type === "THOUGHT" ? lastThought.text : undefined,
+      }
+    : latencyThinking
+      ? { active: true, durationMs: Math.max(500, Date.now() - latencyThinking.startedAtMs) }
+      : null;
 
   const streamBody = progress.streamText?.trim() || null;
   const narrationBody = progress.narrationText?.trim() || null;
@@ -473,6 +537,8 @@ export function buildAgentRunView(
       hasPlan: !!jobPlan?.steps?.length,
     },
     thinking,
+    latencyThinking,
+    reasoningThought,
     narration: liveNarration,
     closingText,
     timeline: forgeTimeline,

@@ -3,7 +3,7 @@ import { cn } from "@/lib/utils";
 import type { ForgeMiniCardData } from "@/lib/forge-run";
 import { ForgeTaskList } from "@/components/editor/ForgeTaskList";
 
-const BRIEFING_ROTATE_MS = 3500;
+const BRIEFING_ROTATE_MS = 2800;
 
 type ForgeMiniCardProps = {
   data: ForgeMiniCardData;

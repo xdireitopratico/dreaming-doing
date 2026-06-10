@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, RefreshCw } from "lucide-react";
 import { Button } from "@forge/ui";
 import type { AgentProgress, PendingPlan } from "@/lib/agent-progress";
@@ -58,6 +58,27 @@ export function ForgeChat({
   onQualifySelect,
 }: ForgeChatProps) {
   const [copiedIds, setCopiedIds] = useState<Set<string>>(new Set());
+  const runAnchorsRef = useRef<Map<string, number>>(new Map());
+  const [runAnchorTick, setRunAnchorTick] = useState(0);
+
+  const LATENCY_THINKING_DELAY_MS = 500;
+
+  useEffect(() => {
+    if (!running || !activeRunId) return;
+    if (runAnchorsRef.current.has(activeRunId)) return;
+
+    const timer = window.setTimeout(() => {
+      runAnchorsRef.current.set(activeRunId, Date.now());
+      setRunAnchorTick((n) => n + 1);
+    }, LATENCY_THINKING_DELAY_MS);
+
+    return () => window.clearTimeout(timer);
+  }, [running, activeRunId]);
+
+  useEffect(() => {
+    if (!activeRunId || running) return;
+    runAnchorsRef.current.delete(activeRunId);
+  }, [activeRunId, running, progress.finished]);
 
   const handleCopy = useCallback((text: string, msgId: string) => {
     navigator.clipboard.writeText(text).then(() => {
@@ -165,11 +186,20 @@ export function ForgeChat({
             })
           : null;
 
+        const runStartedAtMs =
+          item.runId && runAnchorsRef.current.get(item.runId) != null
+            ? runAnchorsRef.current.get(item.runId)!
+            : activeRunId && item.runId === activeRunId
+              ? runAnchorsRef.current.get(activeRunId) ?? null
+              : null;
+        void runAnchorTick;
+
         const runView = resolved
           ? buildAgentRunView(runId, resolved, {
               running: slotActive,
               jobPlan,
               userPrompt,
+              runStartedAtMs,
             })
           : null;
 

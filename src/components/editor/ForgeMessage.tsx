@@ -81,9 +81,9 @@ export function ForgeMessage({
   const showQualifyPrompt =
     !!qualifyPrompt && qualifyInteractive && !!onQualifySelect;
 
-  const showThinking =
-    !!runView?.thinking &&
-    (isActive || runView.thinking.active || !!runView.thinking.text);
+  const showLatencyThinking =
+    isActive && !!runView?.latencyThinking?.active;
+  const showReasoningThought = !!runView?.reasoningThought;
   const showNarration = !!runView?.narration && isActive;
 
   const showResponse =
@@ -99,10 +99,19 @@ export function ForgeMessage({
       className="forge-chat-item forge-chat-item-assistant group"
       data-testid="forge-message-assistant"
     >
-      {showThinking && runView?.thinking && (
+      {showLatencyThinking && runView?.latencyThinking && (
         <ForgeThinking
-          durationMs={runView.thinking.durationMs}
-          active={runView.thinking.active}
+          variant="latency"
+          startedAtMs={runView.latencyThinking.startedAtMs}
+          active
+        />
+      )}
+
+      {showReasoningThought && runView?.reasoningThought && (
+        <ForgeThinking
+          variant="reasoning"
+          durationMs={runView.reasoningThought.durationMs}
+          active={runView.reasoningThought.active}
         />
       )}
 

@@ -238,6 +238,64 @@ describe("forge-run mini card briefing e título", () => {
     );
   });
 
+  it("latencyThinking ativo antes do 1º token com runStartedAtMs", () => {
+    const startedAt = Date.now() - 2000;
+    const view = buildAgentRunView(
+      "run-1",
+      { ...initialAgentProgress, phase: "classify", finished: false },
+      { running: true, runStartedAtMs: startedAt, userPrompt: "landing page" },
+    );
+    expect(view.latencyThinking?.active).toBe(true);
+    expect(view.latencyThinking?.startedAtMs).toBe(startedAt);
+    expect(view.reasoningThought).toBeNull();
+  });
+
+  it("latencyThinking some após 1º token; reasoningThought só com thinking:true", () => {
+    const withStream = buildAgentRunView(
+      "run-1",
+      {
+        ...initialAgentProgress,
+        phase: "execute",
+        streamText: "Vou criar a landing.",
+        finished: false,
+      },
+      { running: true, runStartedAtMs: Date.now() - 3000 },
+    );
+    expect(withStream.latencyThinking).toBeNull();
+
+    const withReasoning = buildAgentRunView(
+      "run-1",
+      {
+        ...initialAgentProgress,
+        finished: false,
+        timeline: [
+          {
+            type: "assistant_text",
+            data: { text: "Analisando stack…", thinking: true, delta: true },
+            timestamp: Date.now() - 4000,
+          },
+        ],
+      },
+      { running: true, runStartedAtMs: Date.now() - 5000 },
+    );
+    expect(withReasoning.reasoningThought?.active).toBe(true);
+    expect(withReasoning.latencyThinking).toBeNull();
+  });
+
+  it("briefings incluem tool pendente e Pensando…", () => {
+    const progress = {
+      ...initialAgentProgress,
+      phase: "execute",
+      tools: [{ name: "fs_read", args: { path: "src/App.tsx" } }],
+      timeline: [],
+    };
+    const briefings = collectMiniCardBriefings(progress, [], [], true, {
+      userPrompt: "landing page",
+    });
+    expect(briefings.some((b) => b.includes("Lendo App.tsx"))).toBe(true);
+    expect(briefings.some((b) => b.includes("Pensando"))).toBe(true);
+  });
+
   it("run ativo expõe liveBriefings no mini card", () => {
     const progress = {
       ...initialAgentProgress,

@@ -118,6 +118,10 @@
   color: var(--status-thinking);
 }
 
+.forge-chat-latency-line {
+  color: var(--text-muted);
+}
+
 .forge-chat-narration-line {
   margin: 0 0 var(--space-sm);
   font: var(--font-narration);
