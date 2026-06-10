@@ -1,6 +1,5 @@
 import { inngest } from "../client";
 import {
-  cancelDuplicateRuns,
   drainPendingQueue,
   getRunStatus,
   markRunFinal,
@@ -16,7 +15,7 @@ export const agentBuildFunction = inngest.createFunction(
   {
     id: "agent-build",
     name: "Agent: Build Mode",
-    retries: 2,
+    retries: 0,
     concurrency: { limit: 5 },
     timeouts: { finish: "14m" },
     triggers: [{ event: "agent/build.requested" }],
@@ -65,26 +64,13 @@ export const agentBuildFunction = inngest.createFunction(
     }
 
     if (!final.ok && final.resumable) {
-      await step.run("re-enqueue-resumable-chunk", async () => {
-        await cancelDuplicateRuns(payload.projectId, runId);
-        const status = await getRunStatus(runId);
-        if (status === "failed") {
-          await markRunFinal(runId, "running", {
-            error: final.error ?? "loop budget exhausted",
-            meta: { checkpoint: true, resume: true, betweenChunks: true },
-          });
-        }
-        try {
-          // Internal re-enqueue (Inngest client path); core first-message/plan-approve/queue dispatches
-          // are centralized through hardened Edge agent-run action (see index.ts + continue-queue.ts).
-          await inngest.send({ name: "agent/build.requested", data: payload });
-        } catch (sendErr) {
-          const msg = sendErr instanceof Error ? sendErr.message : "Inngest re-enqueue failed";
-          await markRunFinal(runId, "failed", { error: msg });
-          throw sendErr;
-        }
+      await step.run("mark-failed-resumable-exhausted", async () => {
+        await markRunFinal(runId, "failed", {
+          error: final.error ?? "loop budget exhausted",
+          meta: { resumableExhausted: true, resumeAttempts: 3 },
+        });
       });
-      return { runId, ok: false, resumable: true, error: final.error ?? "loop budget exhausted" };
+      return { runId, ok: false, error: final.error ?? "loop budget exhausted" };
     }
 
     await step.run("mark-completed", async () => {

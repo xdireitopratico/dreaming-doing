@@ -99,11 +99,21 @@ export async function getRunStatus(runId: string): Promise<AgentRunStatus | null
   return (data as { status: AgentRunStatus }).status;
 }
 
+const TERMINAL_STATUSES = new Set<AgentRunStatus>(["failed", "canceled"]);
+
 export async function markRunFinal(
   runId: string,
   status: AgentRunStatus,
   extras: Record<string, unknown> = {},
 ): Promise<void> {
+  // Não sobrescrever status terminal — se já falhou/cancelou, não reverter pra running
+  if (TERMINAL_STATUSES.has(status)) {
+    // Só permite marcar terminal se não está num terminal diferente
+    const current = await getRunStatus(runId);
+    if (current === "failed" || current === "canceled") {
+      return;
+    }
+  }
   const patch: Record<string, unknown> = { status, ...extras };
   if (status === "completed" || status === "failed" || status === "canceled") {
     patch.finished_at = new Date().toISOString();
