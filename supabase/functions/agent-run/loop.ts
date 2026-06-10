@@ -1237,9 +1237,9 @@ export class AgentLoop {
         content:
           `BUILD GATE FINAL FALHOU (${buildAttempts}/${maxRetries}). Corrija antes de finalizar:\n\n` +
           `\`\`\`\n${
-            finalObservation.feedback?.slice(0, 3000) ?? ""
+            finalObservation.feedback?.slice(0, 6000) ?? ""
           }\n\`\`\`\n\n` +
-          `Use fs_edit para corrigir imports (@forge/ui apenas) e erros de compilação.`,
+          `Os erros reais de compilação estão acima — corrija cada um com fs_edit. Verifique imports, tipos e sintaxe.`,
       });
       this.streamNarration("Corrigindo erros de build antes de entregar…");
     }

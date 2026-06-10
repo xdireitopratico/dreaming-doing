@@ -155,7 +155,7 @@ export class RuntimeObserver {
 
     if (failures.length > 0) {
       feedback = failures
-        .map(f => `[${f.name}] ${f.output.slice(0, 1500)}`)
+        .map(f => `[${f.name}] ${f.output.slice(0, 4000)}`)
         .join("\n\n");
     }
 
