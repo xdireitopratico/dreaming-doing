@@ -5,11 +5,7 @@ import type { AgentComposerMode, ChatMessage } from "@/lib/chat-types";
 import type { FrozenRunSnapshot } from "@/lib/lovable-thread";
 import { resolvePendingPlan } from "@/lib/plan-message-meta";
 import { resolveEffectiveAgentProgress } from "@/lib/resolve-agent-progress";
-import {
-  buildOutgoingParts,
-  filesToMessageParts,
-  type StoredMessagePart,
-} from "@/lib/chat-attachments";
+import { buildOutgoingParts, type StoredMessagePart } from "@/lib/chat-attachments";
 import { loadAgentPreferences } from "@/lib/agent-preferences";
 import { getAgentSetupBlockMessage, isAgentPreferencesConfigured } from "@/lib/agent-setup";
 import { toast } from "@/lib/toast";
@@ -117,7 +113,7 @@ export function ForgeChatPanel({
       return () => cancelAnimationFrame(raf);
     }
     setShowNewMessagesPill(true);
-  }, [messages.length, running, scrollToBottom]);
+  }, [messages.length, running, effectiveProgress.timeline.length, scrollToBottom]);
 
   const handleSend = useCallback(
     async (text: string, mode?: AgentComposerMode, parts?: StoredMessagePart[]) => {
@@ -144,14 +140,10 @@ export function ForgeChatPanel({
   const agentBusy = !!(agentProgress && !agentProgress.finished);
 
   return (
-    <div className="forge-chat-panel flex min-h-0 flex-1 flex-col bg-[var(--bg-chat)]">
-      <div
-        ref={scrollRef}
-        className="forge-chat-panel-messages min-h-0 flex-1 overflow-y-auto"
-        onScroll={handleMessagesScroll}
-      >
+    <div className="forge-chat-inner">
+      <div ref={scrollRef} className="forge-messages" onScroll={handleMessagesScroll}>
         {messages.length === 0 ? (
-          <div className="p-[var(--chat-padding)] space-y-3 text-[var(--text-secondary)] text-sm">
+          <div className="forge-msg-text space-y-3">
             {welcomeMarkdown ? (
               <MarkdownRenderer>{welcomeMarkdown}</MarkdownRenderer>
             ) : (
@@ -165,7 +157,7 @@ export function ForgeChatPanel({
                 <button
                   type="button"
                   onClick={onStartProject}
-                  className="rounded-lg border border-[var(--text-accent)]/50 bg-[var(--text-accent)]/10 px-3 py-2 font-mono text-[10px] text-[var(--text-accent)] hover:bg-[var(--text-accent)]/20"
+                  className="rounded-lg border border-[var(--forge-primary)]/50 bg-[var(--forge-primary)]/10 px-3 py-2 font-mono text-[10px] text-[var(--forge-primary)] hover:bg-[var(--forge-primary)]/20 transition-colors"
                 >
                   Start Project · demo completa (~15 min)
                 </button>
@@ -196,7 +188,7 @@ export function ForgeChatPanel({
         {showNewMessagesPill && (
           <button
             type="button"
-            className="sticky bottom-2 left-1/2 -translate-x-1/2 rounded-full border border-[var(--border-forge)] bg-[var(--bg-card)] px-3 py-1 text-[10px] text-[var(--text-secondary)] shadow"
+            className="forge-new-messages-pill"
             onClick={() => scrollToBottom("smooth")}
           >
             Novas mensagens

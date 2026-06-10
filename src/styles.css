@@ -4,6 +4,7 @@
 @import "./styles/forge-tokens.css";
 @import "./styles/forge-animations.css";
 @import "./styles/editor-workspace.css";
+@import "./styles/forge-ui.css";
 @import "./styles/dashboard-workspace.css";
 @import "./styles/auth-workspace.css";
 @plugin "@tailwindcss/typography";

@@ -12,25 +12,23 @@ export function TimelineThought({ item }: TimelineThoughtProps) {
   const sec = Math.max(1, Math.round(item.durationMs / 1000));
 
   return (
-    <div className="forge-timeline-thought border-b border-[var(--border-forge)]/50 py-2" data-testid="timeline-thought">
+    <div className="lovable-thought-block forge-inspector-timeline-entry" data-testid="timeline-thought">
       <button
         type="button"
-        className="flex w-full items-center gap-2 text-left"
+        className="lovable-thought-block-header"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
       >
-        <span className="text-[length:var(--font-task-label)] uppercase tracking-wider text-[var(--status-thinking)] font-mono">
-          Thought
-        </span>
-        <span className="text-xs text-[var(--text-muted)] font-mono">for {sec}s</span>
-        {item.active && <Loader2 className="size-3 animate-spin text-[var(--status-thinking)]" />}
-        <ChevronDown className={cn("ml-auto size-3.5 transition-transform", open && "rotate-180")} />
+        <span className="lovable-thought-block-label">Thought for {sec}s</span>
+        {item.active && <Loader2 className="size-3 animate-spin text-[var(--forge-primary)]" />}
+        <ChevronDown
+          className={cn(
+            "lovable-thought-block-chevron size-3.5",
+            open && "lovable-thought-block-chevron--open",
+          )}
+        />
       </button>
-      {open && item.text && (
-        <p className="mt-1 text-sm text-[var(--text-secondary)] whitespace-pre-wrap pl-1">
-          {item.text}
-        </p>
-      )}
+      {open && item.text && <p className="lovable-thought-block-prose">{item.text}</p>}
     </div>
   );
 }

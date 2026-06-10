@@ -45,25 +45,23 @@ export function InspectorPlan({ plan, onApprove, onReject }: InspectorPlanProps)
   }, [onReject]);
 
   return (
-    <div className="forge-inspector-plan flex flex-col min-h-0" data-testid="inspector-plan">
+    <div className="forge-plan-panel flex flex-col min-h-0" data-testid="inspector-plan">
       <header className="mb-3">
-        <p className="text-[length:var(--font-task-label)] uppercase tracking-wider text-[var(--text-muted)] font-mono">
-          Plano FORGE
-        </p>
-        <h3 className="text-sm font-semibold text-[var(--text-primary)] mt-1">
+        <p className="lovable-job-section-label">Plano FORGE</p>
+        <h3 className="text-sm font-semibold text-[var(--forge-foreground)] mt-1">
           {plan.mission ?? plan.summary}
         </h3>
       </header>
 
-      <div className="flex-1 min-h-0 overflow-y-auto rounded-lg border border-[var(--border-forge)] bg-[var(--bg-card)] p-4">
+      <div className="flex-1 min-h-0 overflow-y-auto rounded-xl border border-[var(--forge-border)] bg-[var(--forge-surface-2)]/40 p-4">
         {editing ? (
           <textarea
-            className="w-full min-h-[240px] bg-transparent text-sm text-[var(--text-primary)] font-mono resize-y outline-none"
+            className="w-full min-h-[240px] bg-transparent text-sm text-[var(--forge-foreground)] font-mono resize-y outline-none"
             value={markdown}
             onChange={(e) => setMarkdown(e.target.value)}
           />
         ) : (
-          <div className="text-sm text-[var(--text-secondary)]">
+          <div className="forge-chat-markdown text-sm">
             <MarkdownRenderer>{markdown}</MarkdownRenderer>
           </div>
         )}
@@ -72,7 +70,7 @@ export function InspectorPlan({ plan, onApprove, onReject }: InspectorPlanProps)
       <footer className="mt-3 flex flex-wrap items-center gap-2">
         <button
           type="button"
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[var(--border-forge)] text-xs text-[var(--text-primary)] hover:bg-[var(--bg-hover)]"
+          className="lovable-doc-btn inline-flex items-center gap-1.5"
           onClick={() => setEditing((v) => !v)}
         >
           <Pencil className="size-3.5" />
@@ -81,7 +79,7 @@ export function InspectorPlan({ plan, onApprove, onReject }: InspectorPlanProps)
         <button
           type="button"
           disabled={busy !== null}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[var(--status-failed)]/40 text-xs text-[var(--status-failed)] hover:bg-[var(--status-failed)]/10 disabled:opacity-40"
+          className="lovable-doc-btn inline-flex items-center gap-1.5 text-red-300 disabled:opacity-40"
           onClick={handleReject}
         >
           {busy === "reject" ? <Loader2 className="size-3.5 animate-spin" /> : <X className="size-3.5" />}
@@ -90,7 +88,7 @@ export function InspectorPlan({ plan, onApprove, onReject }: InspectorPlanProps)
         <button
           type="button"
           disabled={busy !== null}
-          className="ml-auto inline-flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-[var(--status-working)] text-white text-xs font-medium hover:opacity-90 disabled:opacity-40"
+          className="ml-auto inline-flex items-center gap-1.5 rounded-lg bg-[var(--forge-primary)] px-4 py-2 text-xs font-medium text-[var(--primary-foreground)] hover:opacity-90 disabled:opacity-40"
           onClick={handleApprove}
         >
           {busy === "approve" ? <Loader2 className="size-3.5 animate-spin" /> : <Check className="size-3.5" />}

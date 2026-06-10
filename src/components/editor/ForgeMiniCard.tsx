@@ -9,13 +9,6 @@ type ForgeMiniCardProps = {
   onOpenInspector: (runId: string, tab?: "timeline" | "changes" | "plan") => void;
 };
 
-const STATUS_LABEL: Record<ForgeMiniCardData["status"], string> = {
-  thinking: "Thinking…",
-  working: "Working…",
-  done: "Done",
-  failed: "Failed",
-};
-
 export function ForgeMiniCard({
   data,
   runId,
@@ -27,50 +20,58 @@ export function ForgeMiniCard({
       ? `${data.fileCount} arquivos alterados →`
       : data.hasPlan
         ? "Ver plano no inspector →"
-        : "Timeline completa →";
+        : "Timeline completa no inspector →";
+
+  const statusClass =
+    data.status === "working"
+      ? "lovable-job-mini-card--working"
+      : data.status === "done"
+        ? "lovable-job-mini-card--done"
+        : data.status === "failed"
+          ? ""
+          : "";
 
   return (
     <div
       className={cn(
-        "forge-mini-card w-full rounded-lg border border-[var(--border-forge)] bg-[var(--bg-card)] forge-animate-card-appear",
-        data.status === "working" && "border-[var(--border-active)]/40",
-        isFocused && "ring-1 ring-[var(--border-active)]",
+        "lovable-job-mini-card w-full forge-animate-card-appear",
+        statusClass,
+        isFocused && "lovable-job-mini-card--focused",
       )}
       data-testid="forge-mini-card"
       data-run-id={runId}
     >
       <button
         type="button"
-        className="w-full text-left p-[var(--card-padding)] hover:bg-[var(--bg-hover)] transition-colors rounded-lg"
+        className="lovable-job-mini-card-body"
         onClick={() => onOpenInspector(runId, data.hasPlan ? "plan" : "timeline")}
         aria-label={`Job: ${data.title}`}
       >
-        <div className="flex items-center gap-2 mb-1">
-          <span
-            className={cn(
-              "text-[10px] font-medium uppercase tracking-wide",
-              data.status === "working" && "text-[var(--status-working)]",
-              data.status === "done" && "text-[var(--status-done)]",
-              data.status === "failed" && "text-[var(--status-failed)]",
-              data.status === "thinking" && "text-[var(--status-thinking)]",
-            )}
-          >
-            {STATUS_LABEL[data.status]}
-          </span>
+        <div className="lovable-job-mini-card-header">
+          {data.status === "working" && (
+            <span className="lovable-job-mini-card-badge-working">Working…</span>
+          )}
+          {data.status === "thinking" && (
+            <span className="lovable-job-mini-card-badge-working">Thinking…</span>
+          )}
+          {data.status === "done" && (
+            <span className="lovable-job-mini-card-badge-done">Done</span>
+          )}
+          {data.status === "failed" && (
+            <span className="lovable-job-mini-card-badge-partial">Failed</span>
+          )}
           {data.editedFile && (
-            <span className="text-[10px] text-[var(--text-muted)] font-mono">
-              Edited {data.editedFile}
+            <span className="lovable-job-mini-card-badge-edited">
+              Edited <span className="font-mono">{data.editedFile}</span>
             </span>
           )}
         </div>
 
-        <p className="text-[length:var(--font-card-title)] font-semibold text-[var(--text-primary)]">
-          {data.title}
-        </p>
+        <p className="lovable-job-mini-card-title">{data.title}</p>
 
         <ForgeTaskList tasks={data.tasks} />
 
-        <p className="mt-2 text-[10px] text-[var(--text-muted)]">{hint}</p>
+        <p className="lovable-job-mini-card-hint">{hint}</p>
       </button>
     </div>
   );

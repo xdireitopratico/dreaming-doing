@@ -23,19 +23,11 @@ export function InspectorTimeline({ progress, running, onOpenFile }: InspectorTi
   }, [items.length, running]);
 
   if (!items.length) {
-    return (
-      <p className="text-sm text-[var(--text-muted)] py-4" data-testid="inspector-timeline-empty">
-        Aguardando atividade do agente…
-      </p>
-    );
+    return <p className="lovable-job-empty" data-testid="inspector-timeline-empty">Aguardando atividade do agente…</p>;
   }
 
   return (
-    <div
-      ref={scrollRef}
-      className="forge-inspector-timeline space-y-0"
-      data-testid="inspector-timeline"
-    >
+    <div ref={scrollRef} className="lovable-job-timeline" data-testid="inspector-timeline">
       {items.map((item) => (
         <TimelineItem key={item.id} item={item} onOpenFile={onOpenFile} />
       ))}

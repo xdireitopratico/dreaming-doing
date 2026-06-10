@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from "react";
-import { ArrowUp, ChevronDown, FileText, ImageIcon, MousePointer2, Paperclip, Square, X } from "lucide-react";
+import { ArrowUp, FileText, ImageIcon, MousePointer2, Paperclip, Square, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { MicButton } from "@/components/voice/MicButton";
+import { ComposerModeSelect } from "@/components/editor/ComposerModeSelect";
 import type { AgentComposerMode } from "@/lib/chat-types";
 import {
   CHAT_ATTACHMENT_ACCEPT,
@@ -39,14 +40,13 @@ export function ChatInputV2({
 }: ChatInputV2Props) {
   const [input, setInput] = useState("");
   const [attachments, setAttachments] = useState<File[]>([]);
-  const [modeOpen, setModeOpen] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const isRunning = running || agentBusy;
   const placeholder = isRunning
     ? "Queue follow-up…"
-    : "Descreva o que quer construir…";
+    : "Descreva o que quer construir ou alterar…";
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -93,7 +93,7 @@ export function ChatInputV2({
     const el = textareaRef.current;
     if (!el) return;
     el.style.height = "auto";
-    el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
+    el.style.height = `${Math.min(el.scrollHeight, 140)}px`;
   }, [input]);
 
   const handleSend = useCallback(async () => {
@@ -107,23 +107,24 @@ export function ChatInputV2({
     setInput("");
     setAttachments([]);
     sessionStorage.removeItem(CHAT_DRAFT_KEY);
+    if (textareaRef.current) textareaRef.current.style.height = "auto";
   }, [input, attachments, onSend, composerMode]);
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      if (!isRunning) handleSend();
+      if (!isRunning) void handleSend();
     }
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { accepted } = filterAcceptedFiles(Array.from(e.target.files ?? []));
-    if (accepted.length) setAttachments((prev) => [...prev, ...accepted]);
+    if (accepted.length) setAttachments((prev) => [...prev, ...accepted].slice(0, 8));
     e.target.value = "";
   };
 
   return (
-    <div className="forge-chat-input-v2 border-t border-[var(--border-forge)] bg-[var(--bg-chat)] p-3" data-testid="chat-input-v2">
+    <div className="forge-composer lovable-composer" data-testid="chat-input-v2">
       <input
         ref={fileInputRef}
         type="file"
@@ -134,15 +135,23 @@ export function ChatInputV2({
       />
 
       {attachments.length > 0 && (
-        <div className="mb-2 flex flex-wrap gap-1.5">
+        <div className="mx-1 mb-1 flex flex-wrap gap-1.5">
           {attachments.map((f, i) => (
             <span
               key={`${f.name}-${i}`}
-              className="inline-flex items-center gap-1 rounded-md border border-[var(--border-forge)] bg-[var(--bg-card)] px-2 py-0.5 text-[10px] text-[var(--text-muted)]"
+              className="inline-flex items-center gap-1 rounded-md border border-[var(--forge-border)] bg-[var(--forge-surface-3)] pl-2 pr-1 py-0.5 text-[10px] text-[var(--forge-muted)]"
             >
-              {f.type.startsWith("image/") ? <ImageIcon className="size-3" /> : <FileText className="size-3" />}
-              <span className="max-w-[100px] truncate">{f.name}</span>
-              <button type="button" onClick={() => setAttachments((a) => a.filter((_, j) => j !== i))}>
+              {f.type.startsWith("image/") ? (
+                <ImageIcon className="size-3 shrink-0" />
+              ) : (
+                <FileText className="size-3 shrink-0" />
+              )}
+              <span className="max-w-[120px] truncate">{f.name}</span>
+              <button
+                type="button"
+                className="grid size-5 place-items-center rounded hover:bg-[var(--forge-surface-2)]"
+                onClick={() => setAttachments((a) => a.filter((_, j) => j !== i))}
+              >
                 <X className="size-3" />
               </button>
             </span>
@@ -157,13 +166,13 @@ export function ChatInputV2({
         onKeyDown={handleKeyDown}
         placeholder={placeholder}
         rows={1}
-        className="forge-composer-input w-full resize-none bg-[var(--bg-input)] border border-[var(--border-forge)] rounded-lg px-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] outline-none focus:border-[var(--border-active)]"
+        className="forge-composer-input"
       />
 
-      <div className="mt-2 flex items-center gap-1">
+      <div className="forge-composer-row">
         <button
           type="button"
-          className="p-2 rounded-lg hover:bg-[var(--bg-hover)] text-[var(--text-muted)]"
+          className="forge-composer-icon"
           title="Anexar"
           onClick={() => fileInputRef.current?.click()}
         >
@@ -174,8 +183,8 @@ export function ChatInputV2({
           <button
             type="button"
             className={cn(
-              "p-2 rounded-lg hover:bg-[var(--bg-hover)] text-[var(--text-muted)]",
-              visualEditsActive && "bg-[var(--status-working)]/15 text-[var(--status-working)]",
+              "forge-composer-icon",
+              visualEditsActive && "!bg-[var(--forge-primary)]/15 !text-[var(--forge-primary)]",
             )}
             title="Visual edits"
             onClick={onVisualEdits}
@@ -184,49 +193,20 @@ export function ChatInputV2({
           </button>
         )}
 
-        <div className="relative">
-          <button
-            type="button"
-            className="inline-flex items-center gap-1 px-2 py-1.5 rounded-lg border border-[var(--border-forge)] text-[11px] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]"
-            onClick={() => setModeOpen((v) => !v)}
-          >
-            Build
-            <ChevronDown className="size-3" />
-          </button>
-          {modeOpen && (
-            <div className="absolute bottom-full left-0 mb-1 min-w-[120px] rounded-lg border border-[var(--border-forge)] bg-[var(--bg-card)] shadow-lg z-10">
-              {(["build", "plan"] as const).map((mode) => (
-                <button
-                  key={mode}
-                  type="button"
-                  className={cn(
-                    "block w-full px-3 py-2 text-left text-[11px] capitalize hover:bg-[var(--bg-hover)]",
-                    composerMode === mode && "text-[var(--status-working)]",
-                  )}
-                  onClick={() => {
-                    onComposerModeChange(mode);
-                    setModeOpen(false);
-                  }}
-                >
-                  {mode}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
+        <span className="forge-composer-spacer" />
 
-        <span className="flex-1" />
+        <ComposerModeSelect value={composerMode} onChange={onComposerModeChange} />
 
         <MicButton
           size="sm"
-          className="text-[var(--text-muted)]"
+          className="forge-composer-mic"
           onTranscript={(t) => setInput((cur) => (cur ? `${cur} ${t}` : t))}
         />
 
         {isRunning ? (
           <button
             type="button"
-            className="p-2 rounded-lg bg-[var(--status-failed)]/20 text-[var(--status-failed)]"
+            className="forge-composer-send ml-1"
             onClick={onStop}
             title="Parar"
           >
@@ -235,8 +215,8 @@ export function ChatInputV2({
         ) : (
           <button
             type="button"
-            className="p-2 rounded-lg bg-[var(--status-working)] text-white disabled:opacity-40"
-            onClick={handleSend}
+            className="forge-composer-send ml-1"
+            onClick={() => void handleSend()}
             disabled={!input.trim() && attachments.length === 0}
             title="Enviar"
           >

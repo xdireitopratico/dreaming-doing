@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { AlertTriangle, MessageCircle, RefreshCw } from "lucide-react";
 import { Button } from "@forge/ui";
-import type { AgentProgress, PendingPlan, PlanStep } from "@/lib/agent-progress";
+import type { AgentProgress, PendingPlan } from "@/lib/agent-progress";
 import type { ChatMessage } from "@/lib/chat-types";
 import type { PendingQueueItem } from "@/components/editor/PendingQueuePanel";
 import { ForgeMessage } from "@/components/editor/ForgeMessage";
@@ -87,19 +87,14 @@ export function ForgeChat({
     !running && progress.finished && progress.error && !progress.resumable && !progress.autoResuming;
 
   return (
-    <div
-      className="forge-chat flex flex-col gap-[var(--message-gap)] p-[var(--chat-padding)]"
-      role="log"
-      aria-live="polite"
-      data-testid="forge-chat"
-    >
+    <div className="forge-chat-stream" role="log" aria-live="polite" data-testid="forge-chat">
       {awaitingQualify && (
         <section
-          className="rounded-lg border border-[var(--border-forge)] bg-[var(--bg-card)]/60 px-3 py-2.5 flex items-start gap-2"
+          className="my-2 rounded-lg border border-[var(--forge-border)] bg-[var(--forge-surface-2)]/40 px-3 py-2.5 flex items-start gap-2"
           data-testid="awaiting-user-banner"
         >
-          <MessageCircle className="size-4 shrink-0 text-[var(--text-accent)] mt-0.5" />
-          <p className="text-sm text-[var(--text-primary)] leading-relaxed">
+          <MessageCircle className="size-4 shrink-0 text-[var(--forge-primary)] mt-0.5" />
+          <p className="text-sm text-[var(--forge-foreground)] leading-relaxed">
             Uma pergunta rápida antes de continuar — responda no campo abaixo.
           </p>
         </section>
@@ -160,10 +155,10 @@ export function ForgeChat({
       {pendingQueueItems.length > 0 && (
         <div className="space-y-2" data-testid="pending-queue-messages">
           {pendingQueueItems.map((item) => (
-            <article key={`pending-${item.id}`} className="opacity-60">
-              <div className="rounded-xl border border-dashed border-[var(--border-forge)] bg-[var(--bg-card)] px-3 py-2">
-                <p className="whitespace-pre-wrap text-[var(--text-muted)] text-sm">{item.preview}</p>
-                <span className="text-[10px] text-[var(--text-muted)] mt-1 block">Na fila…</span>
+            <article key={`pending-${item.id}`} className="forge-chat-item forge-chat-item-user opacity-60">
+              <div className="forge-msg-user-outline border-dashed bg-[var(--forge-surface-2)]">
+                <p className="whitespace-pre-wrap text-[var(--forge-muted)]">{item.preview}</p>
+                <span className="text-[10px] text-[var(--forge-ghost)] mt-1 block">Na fila…</span>
               </div>
             </article>
           ))}
@@ -181,9 +176,9 @@ export function ForgeChat({
           {progress.error && (
             <ErrorHintCard hint={resolveErrorHint(progress.error)} onAction={onResume} />
           )}
-          <section className="flex items-center gap-2 rounded-lg border border-amber-400/30 bg-amber-400/5 px-3 py-2">
+          <section className="forge-chat-resume">
             <AlertTriangle className="size-4 text-amber-400 shrink-0" />
-            <p className="flex-1 font-mono text-[10px] text-[var(--text-secondary)]">
+            <p className="flex-1 min-w-0 font-mono text-[10px] text-[var(--forge-silver)] leading-relaxed">
               Execução pausada — use Continuar para retomar.
             </p>
             {onResume && (

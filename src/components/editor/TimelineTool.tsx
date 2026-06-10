@@ -13,36 +13,30 @@ export function TimelineTool({ item, onOpenFile }: TimelineToolProps) {
   const label = item.path ? `${item.name}  ${item.path}` : item.name;
 
   return (
-    <div className="forge-timeline-tool border-b border-[var(--border-forge)]/50 py-2" data-testid="timeline-tool">
+    <div className="lovable-job-edited-block forge-inspector-timeline-entry" data-testid="timeline-tool">
       <button
         type="button"
         className="flex w-full items-center gap-2 text-left"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
       >
-        <span className="text-[length:var(--font-task-label)] uppercase tracking-wider text-[var(--status-working)] font-mono">
-          Tool
-        </span>
-        <span className="text-[length:var(--font-tool)] text-[var(--text-secondary)] font-mono truncate">
-          {label}
-        </span>
-        <ChevronDown className={cn("ml-auto size-3.5 shrink-0 transition-transform", open && "rotate-180")} />
+        <span className="lovable-job-edited-badge">Tool</span>
+        <span className="font-mono text-[11px] text-[var(--forge-silver)] truncate">{label}</span>
+        <ChevronDown className={cn("ml-auto size-3.5 shrink-0 opacity-60", open && "rotate-180")} />
       </button>
       {open && (
-        <div className="mt-1 pl-1">
+        <div className="mt-2 w-full">
           {item.path && onOpenFile && (
             <button
               type="button"
-              className="text-[10px] font-mono text-[var(--status-working)] hover:underline"
+              className="lovable-job-log-link"
               onClick={() => onOpenFile(item.path!)}
             >
               Abrir {item.path}
             </button>
           )}
           {item.detail && (
-            <pre className="mt-1 text-[10px] font-mono text-[var(--text-muted)] whitespace-pre-wrap">
-              {item.detail}
-            </pre>
+            <pre className="lovable-job-log-detail mt-1 whitespace-pre-wrap">{item.detail}</pre>
           )}
         </div>
       )}

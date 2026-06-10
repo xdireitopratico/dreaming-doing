@@ -19,17 +19,17 @@ function DiffBlock({
   const [open, setOpen] = useState(false);
 
   return (
-    <div className="border border-[var(--border-forge)] rounded-lg overflow-hidden mb-2">
+    <div className="lovable-job-edited-block mb-2">
       <button
         type="button"
-        className="flex w-full items-center gap-2 px-3 py-2 bg-[var(--bg-card)] hover:bg-[var(--bg-hover)] text-left"
+        className="flex w-full items-center gap-2 text-left"
         onClick={() => setOpen((v) => !v)}
       >
-        <ChevronDown className={cn("size-3.5 transition-transform", open && "rotate-180")} />
-        <span className="font-mono text-[11px] text-[var(--text-primary)] truncate">{path}</span>
+        <ChevronDown className={cn("size-3.5 shrink-0 transition-transform", open && "rotate-180")} />
+        <span className="font-mono text-[11px] text-[var(--forge-foreground)] truncate">{path}</span>
       </button>
       {open && (
-        <pre className="px-3 py-2 text-[10px] font-mono text-[var(--text-secondary)] whitespace-pre-wrap max-h-64 overflow-auto bg-[var(--bg-chat)]">
+        <pre className="lovable-job-log-detail mt-2 max-h-64 overflow-auto whitespace-pre-wrap">
           {after || before || "(vazio)"}
         </pre>
       )}
@@ -43,24 +43,24 @@ export function InspectorChanges({ progress }: InspectorChangesProps) {
 
   if (!diffs.length && !delivered.length) {
     return (
-      <p className="text-sm text-[var(--text-muted)] py-4" data-testid="inspector-changes-empty">
+      <p className="lovable-job-empty" data-testid="inspector-changes-empty">
         Nenhuma alteração registrada ainda.
       </p>
     );
   }
 
   return (
-    <div className="forge-inspector-changes" data-testid="inspector-changes">
-      <p className="text-[length:var(--font-task-label)] uppercase tracking-wider text-[var(--text-muted)] font-mono mb-3">
+    <div className="lovable-job-changes" data-testid="inspector-changes">
+      <p className="lovable-job-section-label">
         {diffs.length} arquivo{diffs.length !== 1 ? "s" : ""} alterado{diffs.length !== 1 ? "s" : ""}
       </p>
 
       {delivered.length > 0 && (
         <section className="mb-4">
-          <p className="text-xs text-[var(--text-muted)] mb-1">Entregues</p>
-          <ul className="space-y-0.5">
+          <p className="lovable-job-section-label">Arquivos entregues</p>
+          <ul className="lovable-job-delivered-list">
             {delivered.map((p) => (
-              <li key={p} className="font-mono text-[11px] text-[var(--text-secondary)]">
+              <li key={p} className="font-mono text-[11px] text-[var(--forge-silver)]">
                 {p}
               </li>
             ))}

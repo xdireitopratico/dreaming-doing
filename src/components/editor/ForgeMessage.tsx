@@ -36,9 +36,9 @@ export function ForgeMessage({
 }: ForgeMessageProps) {
   if (role === "user" && message) {
     return (
-      <article className="forge-message forge-message-user" data-testid="forge-message-user">
-        <div className="rounded-xl border border-[var(--border-forge)] bg-[var(--bg-input)] px-3 py-2">
-          <p className="whitespace-pre-wrap text-[var(--text-primary)] text-sm">{message.content}</p>
+      <article className="forge-chat-item forge-chat-item-user" data-testid="forge-message-user">
+        <div className="forge-msg-user-outline">
+          <p className="whitespace-pre-wrap">{message.content}</p>
         </div>
       </article>
     );
@@ -54,59 +54,52 @@ export function ForgeMessage({
     showJobCard;
 
   return (
-    <article className="forge-message forge-message-assistant group relative" data-testid="forge-message-assistant">
-      <span className="text-[10px] font-semibold uppercase tracking-wider text-[var(--text-accent)] mb-1 block">
-        FORGE
-      </span>
+    <article
+      className="forge-chat-item forge-chat-item-assistant relative group"
+      data-testid="forge-message-assistant"
+    >
+      <span className="forge-chat-sender forge-chat-sender-assistant shrink-0">FORGE</span>
 
       {runView?.thinking && (isActive || runView.thinking.active) && (
         <ForgeThinking
           durationMs={runView.thinking.durationMs}
           active={runView.thinking.active}
-          text={runView.thinking.text}
         />
       )}
 
       {showJobCard && runView && onOpenInspector && (
-        <div className="my-2">
-          <ForgeMiniCard
-            data={runView.miniCard}
-            runId={runView.runId}
-            isFocused={isFocused}
-            onOpenInspector={onOpenInspector}
-          />
-        </div>
+        <ForgeMiniCard
+          data={runView.miniCard}
+          runId={runView.runId}
+          isFocused={isFocused}
+          onOpenInspector={onOpenInspector}
+        />
       )}
 
       {runView?.narration && <ForgeNarration text={runView.narration} />}
 
       {closingText && (
-        <p className="text-[var(--text-secondary)] text-sm leading-relaxed whitespace-pre-wrap mt-1">
+        <p className="forge-chat-closing-line" data-testid="assistant-closing-text">
           {closingText}
         </p>
       )}
 
-      {showDone && <div className="mt-2"><ForgeDoneBubble /></div>}
+      {showDone && <ForgeDoneBubble />}
 
       {runView?.finished && runView.error && (
-        <div className="mt-2">
-          <ForgeErrorCard
-            message={runView.error}
-            onResume={runView.resumable ? onResume : undefined}
-            onOpenInspector={
-              onOpenInspector && runView.runId
-                ? () => onOpenInspector(runView.runId, "timeline")
-                : undefined
-            }
-          />
-        </div>
+        <ForgeErrorCard
+          message={runView.error}
+          onResume={runView.resumable ? onResume : undefined}
+          onOpenInspector={
+            onOpenInspector && runView.runId
+              ? () => onOpenInspector(runView.runId, "timeline")
+              : undefined
+          }
+        />
       )}
 
       {message?.timestamp && runView?.finished && !isActive && (
-        <time
-          className="block mt-1 text-[9px] text-[var(--text-muted)]"
-          dateTime={new Date(message.timestamp).toISOString()}
-        >
+        <time className="lovable-turn-timestamp" dateTime={new Date(message.timestamp).toISOString()}>
           {new Date(message.timestamp).toLocaleString("pt-BR", {
             day: "numeric",
             month: "short",
@@ -117,12 +110,12 @@ export function ForgeMessage({
       )}
 
       {runView?.finished && !isActive && closingText && (onCopy || onUndo) && message?.id && (
-        <footer className="mt-2 flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+        <footer className="forge-chat-item-assistant-footer mt-2 flex items-center justify-end gap-1 opacity-60 hover:opacity-100 transition-opacity">
           {onUndo && (
             <button
               type="button"
               onClick={() => onUndo(message.id)}
-              className="p-1.5 rounded hover:bg-[var(--bg-hover)] text-[var(--text-muted)]"
+              className="p-1.5 rounded hover:bg-[var(--forge-surface-2)] transition-colors text-[var(--forge-muted)] hover:text-[var(--forge-destructive)]"
               aria-label="Desfazer"
             >
               <RotateCcw className="size-4" />
@@ -132,10 +125,10 @@ export function ForgeMessage({
             <button
               type="button"
               onClick={() => onCopy(closingText, msgId)}
-              className="p-1.5 rounded hover:bg-[var(--bg-hover)] text-[var(--text-muted)]"
+              className="p-1.5 rounded hover:bg-[var(--forge-surface-2)] transition-colors text-[var(--forge-muted)] hover:text-[var(--forge-foreground)]"
               aria-label={isCopied ? "Copiado!" : "Copiar"}
             >
-              <Copy className={isCopied ? "size-4 text-[var(--text-accent)]" : "size-4"} />
+              <Copy className={isCopied ? "size-4 text-[var(--forge-primary)]" : "size-4"} />
             </button>
           )}
         </footer>

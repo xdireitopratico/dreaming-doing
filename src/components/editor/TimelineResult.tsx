@@ -7,26 +7,16 @@ type TimelineResultProps = {
 export function TimelineResult({ item }: TimelineResultProps) {
   return (
     <div
-      className="forge-timeline-result py-2"
+      className={`lovable-result-bubble forge-inspector-timeline-entry${item.ok ? "" : " lovable-result-bubble--failed"}`}
       data-testid="timeline-result"
       data-ok={item.ok}
     >
-      <span
-        className={`text-[length:var(--font-task-label)] uppercase tracking-wider font-mono ${
-          item.ok ? "text-[var(--status-done)]" : "text-[var(--status-failed)]"
-        }`}
-      >
-        Result
-      </span>
-      <p className="text-[length:var(--font-task-body)] text-[var(--text-primary)] mt-0.5">
-        {item.text}
-      </p>
+      <span className="lovable-result-bubble-label">Result</span>
+      <p className="lovable-result-bubble-summary">{item.text}</p>
       {item.evidence && item.evidence.length > 0 && (
-        <ul className="mt-1 space-y-0.5">
+        <ul className="lovable-job-delivered-list mt-2">
           {item.evidence.map((e) => (
-            <li key={e} className="font-mono text-[10px] text-[var(--text-muted)]">
-              {e}
-            </li>
+            <li key={e}>{e}</li>
           ))}
         </ul>
       )}

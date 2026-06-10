@@ -11,7 +11,7 @@ export function ForgeTaskList({ tasks, maxVisible = 6 }: ForgeTaskListProps) {
   if (!visible.length) return null;
 
   return (
-    <ul className="forge-task-list mt-2 space-y-1" data-testid="forge-task-list">
+    <ul className="lovable-job-mini-card-steps mt-2" data-testid="forge-task-list">
       {visible.map((task) => (
         <ForgeTaskItem key={task.id} task={task} />
       ))}

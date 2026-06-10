@@ -39,42 +39,32 @@ export function JobInspector({
   const showPlanTab = !!pendingPlan;
 
   return (
-    <div
-      className="forge-job-inspector flex min-h-0 h-full w-full flex-col bg-[var(--bg-chat)]"
-      data-testid="job-inspector"
-    >
-      <header className="flex items-center gap-3 border-b border-[var(--border-forge)] px-4 py-2 shrink-0">
-        <button
-          type="button"
-          className="inline-flex items-center gap-1 text-[11px] text-[var(--text-muted)] hover:text-[var(--text-primary)]"
-          onClick={onBackToLatest}
-        >
+    <div className="lovable-job-workspace flex min-h-0 h-full w-full flex-col" data-testid="job-inspector">
+      <div className="lovable-job-workspace-header">
+        <button type="button" className="lovable-job-back-btn" onClick={onBackToLatest}>
           <ArrowLeft className="size-3.5" />
           Back to latest
         </button>
 
-        <div className="flex gap-1 ml-auto" role="tablist" aria-label="Job inspector">
+        <div className="lovable-job-tabs" role="tablist" aria-label="Job inspector">
           {TABS.filter((t) => t.id !== "plan" || showPlanTab).map((tab) => (
             <button
               key={tab.id}
               type="button"
               role="tab"
               aria-selected={activeTab === tab.id}
-              className={`px-3 py-1 rounded-md text-[11px] font-medium transition-colors ${
-                activeTab === tab.id
-                  ? "bg-[var(--bg-hover)] text-[var(--text-primary)]"
-                  : "text-[var(--text-muted)] hover:text-[var(--text-secondary)]"
-              }`}
+              className="lovable-job-tab"
+              data-active={activeTab === tab.id}
               onClick={() => onTabChange(tab.id)}
             >
               {tab.label}
             </button>
           ))}
         </div>
-      </header>
+      </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto p-[var(--inspector-padding)]">
-        <p className="font-mono text-[9px] text-[var(--text-muted)] mb-3">
+      <div className="lovable-job-workspace-body min-h-0 flex-1 overflow-y-auto px-4 py-3 forge-scrollbar-dark">
+        <p className="lovable-job-run-id font-mono text-[9px] text-[var(--forge-ghost)] mb-3">
           Run {runId.slice(0, 8)}…
         </p>
 
