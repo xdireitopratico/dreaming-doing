@@ -21,6 +21,8 @@ export type FrozenRunSnapshot = Pick<
   | "deliveryFiles"
   | "buildLogLines"
   | "stackForkSuggested"
+  | "awaiting"
+  | "awaitingKind"
 >;
 
 export type LovableThreadItem =
@@ -59,6 +61,8 @@ function freezeSnapshot(progress: AgentProgress): FrozenRunSnapshot {
     deliveryFiles: progress.deliveryFiles,
     buildLogLines: progress.buildLogLines,
     stackForkSuggested: progress.stackForkSuggested,
+    awaiting: progress.awaiting,
+    awaitingKind: progress.awaitingKind,
   };
 }
 
@@ -431,5 +435,7 @@ export function resolveAssistantProgress(
     deliveryFiles: f.deliveryFiles,
     buildLogLines: f.buildLogLines,
     stackForkSuggested: f.stackForkSuggested,
+    awaiting: f.awaiting,
+    awaitingKind: f.awaitingKind,
   };
 }

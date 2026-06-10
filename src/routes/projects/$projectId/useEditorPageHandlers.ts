@@ -207,13 +207,9 @@ export function useEditorPageHandlers({
       const liveRun =
         agent.activeRunId != null &&
         !agent.progress.finished &&
-        !agent.progress.canceled;
-      return (
-        running ||
-        agent.connected ||
-        liveRun ||
-        isAgentConnectInFlight()
-      );
+        !agent.progress.canceled &&
+        !agent.progress.awaiting;
+      return running || liveRun || isAgentConnectInFlight();
     },
     [
       running,
@@ -221,11 +217,15 @@ export function useEditorPageHandlers({
       agent.activeRunId,
       agent.progress.finished,
       agent.progress.canceled,
+      agent.progress.awaiting,
     ],
   );
 
   const runAgent = useCallback(
-    (explicitKind?: ForgeSessionKind, explicitAction?: TasteAction): boolean => {
+    async (
+      explicitKind?: ForgeSessionKind,
+      explicitAction?: TasteAction,
+    ): Promise<boolean> => {
       if (!conversation || isAgentBusy()) return false;
 
       const kind = explicitKind ?? resolveSessionKind(tasteQuota);
@@ -264,18 +264,24 @@ export function useEditorPageHandlers({
         "info",
         kind === "byok" ? "byok" : `${kind}.${tasteAction ?? "chat"}`,
       );
-      void (async () => {
-        try {
-          await agent.connect(projectId, conversation.id, kind, {
-            tasteAction,
-            mode: composerMode,
-          });
-        } catch (e: unknown) {
-          const msg = e instanceof Error ? e.message : "Erro ao iniciar agente";
-          logEditorTelemetryEvent("agent", "run_fail", "error", msg.slice(0, 200));
+
+      try {
+        const result = await agent.connect(projectId, conversation.id, kind, {
+          tasteAction,
+          mode: composerMode,
+        });
+        if (!result.ok) {
+          toast.error(result.error);
+          logEditorTelemetryEvent("agent", "run_fail", "error", result.error.slice(0, 200));
+          return false;
         }
-      })();
-      return true;
+        return true;
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : "Erro ao iniciar agente";
+        toast.error(msg);
+        logEditorTelemetryEvent("agent", "run_fail", "error", msg.slice(0, 200));
+        return false;
+      }
     },
     [
       conversation,
@@ -420,7 +426,7 @@ export function useEditorPageHandlers({
         }
         return;
       }
-      runAgent(kind);
+      await runAgent(kind);
     },
     [
       conversation,
@@ -478,10 +484,7 @@ export function useEditorPageHandlers({
 
     void qc.invalidateQueries({ queryKey: ["messages", conversation.id] });
 
-    const started = runAgent("taste", "start");
-    if (!started) {
-      toast.error("Não foi possível iniciar o agente. Tente novamente.");
-    }
+    await runAgent("taste", "start");
   }, [conversation, tasteQuota, isAgentBusy, qc, runAgent]);
 
   const handleStop = useCallback(() => {

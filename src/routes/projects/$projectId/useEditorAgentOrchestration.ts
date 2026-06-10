@@ -45,7 +45,7 @@ type UseEditorAgentOrchestrationParams = {
   runAgent: (
     explicitKind?: import("@/lib/taste").ForgeSessionKind,
     explicitAction?: import("@/lib/taste").TasteAction,
-  ) => boolean;
+  ) => Promise<boolean>;
   fileMap: Map<string, string>;
   editorRef: RefObject<editor.IStandaloneCodeEditor | null>;
   monacoRef: RefObject<typeof import("monaco-editor") | null>;
@@ -126,9 +126,18 @@ export function useEditorAgentOrchestration({
   // ─── Sync running state — slot live enquanto há run ativa (mesmo antes do realtime conectar) ──
   useEffect(() => {
     const active =
-      agent.activeRunId != null && !agent.progress.finished && !agent.progress.canceled;
+      agent.activeRunId != null &&
+      !agent.progress.finished &&
+      !agent.progress.canceled &&
+      !agent.progress.awaiting;
     setRunning(active);
-  }, [agent.activeRunId, agent.progress.finished, agent.progress.canceled, setRunning]);
+  }, [
+    agent.activeRunId,
+    agent.progress.finished,
+    agent.progress.canceled,
+    agent.progress.awaiting,
+    setRunning,
+  ]);
 
   // ─── Realtime events → logs ─────────────────────────────────────────
   useEffect(() => {

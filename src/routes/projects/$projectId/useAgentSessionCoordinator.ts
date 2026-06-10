@@ -29,7 +29,10 @@ type UseAgentSessionCoordinatorParams = {
   agent: AgentRun;
   running: boolean;
   tasteQuota: TasteQuota;
-  runAgent: (explicitKind?: ForgeSessionKind, explicitAction?: TasteAction) => boolean;
+  runAgent: (
+    explicitKind?: ForgeSessionKind,
+    explicitAction?: TasteAction,
+  ) => Promise<boolean>;
 };
 
 /** Runs que podem receber watch/reconnect com stream. */
@@ -172,7 +175,7 @@ export function useAgentSessionCoordinator({
 
         logEditorTelemetryEvent("agent", "auto_run_flagged", "info", conversation.id.slice(0, 8));
 
-        const started = runAgent(resolveSessionKind(tasteQuota));
+        const started = await runAgent(resolveSessionKind(tasteQuota));
         if (started) {
           markAutoRunAttempted(projectId, conversation.id);
           clearPendingAgentRun(projectId);

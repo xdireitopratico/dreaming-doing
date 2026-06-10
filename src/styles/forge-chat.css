@@ -164,6 +164,73 @@
   transition: opacity 0.25s ease;
 }
 
+.forge-qualify-prompt {
+  width: 100%;
+  max-width: min(100%, 520px);
+  margin: 0 0 var(--space-sm);
+  padding: var(--space-md) var(--space-lg);
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--text-accent) 35%, var(--border-forge));
+  background: color-mix(in srgb, var(--bg-card) 92%, var(--text-accent) 8%);
+}
+
+.forge-qualify-prompt-intro,
+.forge-qualify-prompt-question {
+  margin: 0 0 var(--space-sm);
+  font: var(--font-chat);
+  color: var(--text-primary);
+}
+
+.forge-qualify-prompt-question {
+  font-weight: 600;
+}
+
+.forge-qualify-prompt-options {
+  list-style: none;
+  margin: var(--space-sm) 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.forge-qualify-option {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  width: 100%;
+  padding: 10px var(--space-md);
+  border-radius: 10px;
+  border: 1px solid var(--border-forge);
+  background: var(--bg-input);
+  color: var(--text-primary);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.forge-qualify-option:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--text-accent) 55%, var(--border-forge));
+  background: var(--bg-hover);
+}
+
+.forge-qualify-option--disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.forge-qualify-option-label {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.forge-qualify-option-desc {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-secondary);
+}
+
 .forge-chat-item-assistant-footer {
   display: flex;
   align-items: center;

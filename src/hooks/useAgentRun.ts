@@ -24,6 +24,8 @@ import {
 import { freezeSnapshot, type FrozenRunSnapshot } from "@/lib/lovable-thread";
 import type { PendingQueueItem } from "@/components/editor/PendingQueuePanel";
 
+export type AgentConnectResult = { ok: true } | { ok: false; error: string };
+
 function formatQueueBlockReason(reason?: string): string | null {
   if (!reason) return null;
   if (reason.startsWith("blocking_run:")) {
@@ -134,12 +136,26 @@ export function useAgentRun() {
 
   // Limpa runId residual quando o job terminou (evita isAgentBusy preso após Done).
   useEffect(() => {
-    if (!progress.finished || progress.awaiting) return;
+    if (!progress.finished) return;
     if (!runIdRef.current && !activeRunId) return;
+    // Qualify: libera composer e ancora thread na mensagem do DB (não no slot live).
+    if (progress.awaiting && progress.awaitingKind === "qualify") {
+      runIdRef.current = null;
+      setActiveRunId(null);
+      setConnected(false);
+      return;
+    }
+    if (progress.awaiting) return;
     runIdRef.current = null;
     setActiveRunId(null);
     setConnected(false);
-  }, [progress.finished, progress.awaiting, progress.canceled, activeRunId]);
+  }, [
+    progress.finished,
+    progress.awaiting,
+    progress.awaitingKind,
+    progress.canceled,
+    activeRunId,
+  ]);
 
   // ─── Persistência de estado em sessionStorage ─────────────────────────
   const saveSnapshot = useCallback(() => {
@@ -297,12 +313,11 @@ export function useAgentRun() {
           streamText: streamText ?? next.streamText ?? next.summary ?? p.streamText,
         };
       });
-      // Clear active/connected consistently on terminal (except awaiting which may retain run for qualify UI).
-      // Makes isAgentBusy() and post-finish reconcile resilient (no stale connected/running derived state).
+      // Clear active/connected on terminal — qualify ancora no DB/frozen, não no slot live.
+      runIdRef.current = null;
+      setActiveRunId(null);
+      setConnected(false);
       if (status !== "awaiting_user") {
-        runIdRef.current = null;
-        setActiveRunId(null);
-        setConnected(false);
         clearAgentSnapshot();
       }
       teardownChannels();
@@ -596,10 +611,17 @@ export function useAgentRun() {
       conversationId: string,
       sessionKind?: ForgeSessionKind,
       options?: AgentConnectOptions & { tasteAction?: TasteAction },
-    ) => {
+    ): Promise<AgentConnectResult> => {
       if (!tryAcquireAgentConnect()) {
         logEditorTelemetryEvent("agent_run", "connect_skipped_inflight", "warn");
-        return;
+        setProgress((p) => ({
+          ...p,
+          statusHint: "Aguarde — conexão do agente em andamento…",
+        }));
+        return {
+          ok: false,
+          error: "Aguarde — conexão do agente em andamento…",
+        };
       }
       const manualResume = options?.resume === true;
       teardownChannels();
@@ -632,7 +654,7 @@ export function useAgentRun() {
           const msg = await parseErrorResponse(res);
           setProgress((p) => ({ ...p, error: msg, finished: true }));
           releaseAgentConnect();
-          return;
+          return { ok: false, error: msg };
         }
 
         const body = (await res.json()) as {
@@ -646,15 +668,16 @@ export function useAgentRun() {
         };
 
         if (body.busy) {
+          const msg = body.message ?? "Agente ocupado.";
           setProgress((p) => ({
             ...p,
             finished: true,
             pendingQueueCount: body.pendingCount ?? p.pendingQueueCount,
-            statusHint: body.message ?? "Agente ocupado.",
+            statusHint: msg,
             error: null,
           }));
           releaseAgentConnect();
-          return;
+          return { ok: false, error: msg };
         }
 
         if (body.queued) {
@@ -666,7 +689,7 @@ export function useAgentRun() {
             error: null,
           }));
           releaseAgentConnect();
-          return;
+          return { ok: true };
         }
 
         // Taste Chat concierge — JSON inline, sem runId (mensagem já salva no DB).
@@ -679,28 +702,32 @@ export function useAgentRun() {
             statusHint: "Resposta Taste enviada.",
           }));
           releaseAgentConnect();
-          return;
+          return { ok: true };
         }
 
         if (!body.runId) {
+          const msg = "Resposta inválida do servidor";
           setProgress((p) => ({
             ...p,
-            error: "Resposta inválida do servidor",
+            error: msg,
             finished: true,
           }));
           releaseAgentConnect();
-          return;
+          return { ok: false, error: msg };
         }
 
         await subscribeToRun(body.runId);
         logEditorTelemetryEvent("agent_run", "connect_ok", "info", body.runId.slice(0, 8));
+        return { ok: true };
       } catch (e) {
+        const msg = formatAgentFetchError(e);
         teardownChannels();
         setProgress((p) => ({
           ...p,
-          error: formatAgentFetchError(e),
+          error: msg,
           finished: true,
         }));
+        return { ok: false, error: msg };
       } finally {
         releaseAgentConnect();
       }

@@ -5,6 +5,8 @@ import type { AgentRunView } from "@/lib/forge-run";
 import { ForgeMiniCard } from "@/components/editor/ForgeMiniCard";
 import { ForgeDoneBubble } from "@/components/editor/ForgeDoneBubble";
 import { ForgeErrorCard } from "@/components/editor/ForgeErrorCard";
+import { ForgeQualifyPrompt } from "@/components/editor/ForgeQualifyPrompt";
+import { formatQualifyChoiceReply, parseQualifyChoices } from "@/lib/qualify-choices";
 
 type ForgeMessageProps = {
   role: "user" | "assistant";
@@ -13,6 +15,8 @@ type ForgeMessageProps = {
   isActive?: boolean;
   isFocused?: boolean;
   showJobCard?: boolean;
+  qualifyInteractive?: boolean;
+  onQualifySelect?: (text: string) => void;
   onCopy?: (text: string, msgId: string) => void;
   onUndo?: (msgId: string) => void;
   copiedIds?: Set<string>;
@@ -27,6 +31,8 @@ export function ForgeMessage({
   isActive = false,
   isFocused = false,
   showJobCard = false,
+  qualifyInteractive = false,
+  onQualifySelect,
   onCopy,
   onUndo,
   copiedIds,
@@ -46,9 +52,13 @@ export function ForgeMessage({
   const msgId = message?.id ?? `live-${runView?.runId ?? "forge"}`;
   const isCopied = copiedIds?.has(msgId) ?? false;
   const responseText = runView?.closingText ?? message?.content?.trim() ?? null;
+  const qualifyPrompt = responseText ? parseQualifyChoices(responseText) : null;
+  const showQualifyPrompt =
+    !!qualifyPrompt && qualifyInteractive && !!onQualifySelect;
 
   const showResponse =
     !!responseText &&
+    !showQualifyPrompt &&
     (!showJobCard || (!isActive && !!runView?.finished));
 
   const showDone =
@@ -65,6 +75,17 @@ export function ForgeMessage({
           runId={runView.runId}
           isFocused={isFocused}
           onOpenInspector={onOpenInspector}
+        />
+      )}
+
+      {showQualifyPrompt && qualifyPrompt && (
+        <ForgeQualifyPrompt
+          data={qualifyPrompt}
+          disabled={isActive}
+          onSelect={(label) => {
+            const choice = qualifyPrompt.choices.find((c) => c.label === label);
+            onQualifySelect(choice ? formatQualifyChoiceReply(choice) : label);
+          }}
         />
       )}
 
@@ -88,7 +109,12 @@ export function ForgeMessage({
         />
       )}
 
-      {runView?.finished && !isActive && responseText && (onCopy || onUndo) && message?.id && (
+      {runView?.finished &&
+        !isActive &&
+        responseText &&
+        !showQualifyPrompt &&
+        (onCopy || onUndo) &&
+        message?.id && (
         <footer className="forge-chat-item-assistant-footer">
           {onUndo && (
             <button

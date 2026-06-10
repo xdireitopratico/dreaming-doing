@@ -560,11 +560,17 @@ export function applyAgentProgressEvent(
     case "finish": {
       const failed = data.ok === false;
       const canceled = !!data.canceled || prev.canceled;
+      const awaiting = !!(data.awaiting || data.qualified || prev.awaiting);
       return {
         ...prev,
         finished: true,
         canceled,
-        awaiting: !!(data.awaiting || prev.awaiting),
+        awaiting,
+        awaitingKind: awaiting
+          ? data.qualified || data.awaiting || prev.awaitingKind === "qualify"
+            ? "qualify"
+            : prev.awaitingKind
+          : prev.awaitingKind,
         streamText: prev.streamText,
         autoResuming: false,
         lastFinishOk: !failed && !canceled,

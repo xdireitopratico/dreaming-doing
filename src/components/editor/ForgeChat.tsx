@@ -21,6 +21,7 @@ import {
 import { buildAgentRunView, isRunEffectivelyActive } from "@/lib/forge-run";
 import { isAgentJobMessage } from "@/lib/assistant-run-progress";
 import { resolveJobPlanForRun } from "@/lib/plan-message-meta";
+import { parseQualifyChoices } from "@/lib/qualify-choices";
 
 export type ForgeChatProps = {
   messages: ChatMessage[];
@@ -34,6 +35,7 @@ export type ForgeChatProps = {
   onUndoMessage?: (assistantMsgId: string) => void;
   onOpenInspector?: (runId: string, tab?: "timeline" | "changes" | "plan") => void;
   focusedRunId?: string | null;
+  onQualifySelect?: (text: string) => void;
 };
 
 export function ForgeChat({
@@ -48,6 +50,7 @@ export function ForgeChat({
   onUndoMessage,
   onOpenInspector,
   focusedRunId,
+  onQualifySelect,
 }: ForgeChatProps) {
   const [copiedIds, setCopiedIds] = useState<Set<string>>(new Set());
 
@@ -159,6 +162,22 @@ export function ForgeChat({
             ? `live-${item.runId}`
             : `slot-${idx}`;
 
+        const isLastTurn =
+          idx === thread.length - 1 ||
+          !thread.slice(idx + 1).some((t) => t.kind === "assistant");
+        const closingText =
+          runView?.closingText ?? item.message?.content?.trim() ?? null;
+        const parsedQualify = closingText ? parseQualifyChoices(closingText) : null;
+        const qualifyInteractive =
+          !!onQualifySelect &&
+          isLastTurn &&
+          !running &&
+          !slotActive &&
+          !!parsedQualify &&
+          (progress.awaitingKind === "qualify" ||
+            progress.awaiting ||
+            resolved?.awaitingKind === "qualify");
+
         return (
           <ForgeMessage
             key={stableKey}
@@ -168,6 +187,8 @@ export function ForgeChat({
             isActive={slotActive}
             isFocused={!!item.runId && focusedRunId === item.runId}
             showJobCard={showJobCard}
+            qualifyInteractive={qualifyInteractive}
+            onQualifySelect={onQualifySelect}
             onCopy={handleCopy}
             onUndo={onUndoMessage}
             copiedIds={copiedIds}

@@ -174,6 +174,7 @@ export function ForgeChatPanel({
             onUndoMessage={onUndoMessage}
             onOpenInspector={onOpenInspector}
             focusedRunId={focusedRunId}
+            onQualifySelect={(text) => void onSend(text, composerMode)}
           />
         )}
 
