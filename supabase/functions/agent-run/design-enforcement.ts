@@ -15,22 +15,11 @@ export const REQUIRED_COMPOSITES = [
   "FooterColumns",
 ] as const;
 
-export const LANDING_MIN_COMPOSITES = 3;
+export const LANDING_MIN_COMPOSITES = 1;
 
 export const FORBIDDEN_PATTERNS: Array<{ pattern: RegExp; message: string }> = [
-  { pattern: /\bbg-white\b/, message: "Fundo branco proibido — use bg-background ou bg-surface-*" },
-  { pattern: /\bbg-blue-[456]00\b/, message: "CTA azul genérico — use Button @forge/ui (variant primary)" },
-  { pattern: /\btext-blue-[456]00\b/, message: "Texto azul Tailwind raw — use text-brand-500" },
-  { pattern: /\bhover:bg-blue-\d+/, message: "Hover azul genérico — use tokens brand" },
-  { pattern: /\bfrom-blue-\d+/, message: "Gradiente azul genérico — use brand/accent tokens" },
   { pattern: /#[0-9a-fA-F]{3,8}/, message: "Hex hardcoded — use tokens @theme" },
   { pattern: /\brounded-\[/, message: "Radius arbitrário — use rounded-lg/xl/2xl" },
-];
-
-export const FORBIDDEN_RAW_TAILWIND = [
-  /bg-(gray|slate|zinc|neutral|stone|sky|blue|indigo)-\d+/g,
-  /text-(gray|slate|zinc|neutral|stone|sky|blue|indigo)-\d+/g,
-  /border-(gray|slate|zinc|neutral|stone|sky|blue|indigo)-\d+/g,
 ];
 
 export const FORBIDDEN_REIMPLEMENT = [
@@ -58,16 +47,6 @@ export function scanFileForViolations(file: string, code: string): DesignViolati
   for (const { pattern, message } of FORBIDDEN_PATTERNS) {
     if (pattern.test(code)) {
       violations.push({ file, message });
-    }
-  }
-
-  for (const pattern of FORBIDDEN_RAW_TAILWIND) {
-    const matches = code.match(pattern);
-    if (matches) {
-      violations.push({
-        file,
-        message: `Tailwind raw sem token: ${matches.slice(0, 3).join(", ")}`,
-      });
     }
   }
 

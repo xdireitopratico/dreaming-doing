@@ -8,7 +8,7 @@ import {
 } from "./token-usage.ts";
 
 const COMPRESSION_INTERVAL = 5;
-const MAX_CONTEXT_MESSAGES = 32;
+const MAX_CONTEXT_MESSAGES = 64;
 
 export type CompressionNotify = (type: string, data: Record<string, unknown>) => void;
 

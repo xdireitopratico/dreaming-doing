@@ -1,6 +1,7 @@
 // loop.ts — AgentLoop definitivo.
 // Model Router (cheap/main), Compression, Parallel Exec, Runtime Observer, Skills,
 // persistência incremental de tool_calls (cada step vira uma message viva no chat).
+// FSM integrada para validação de transições de estado (FORGE 2.0).
 import type {
   AgentState,
   ChatMessage,
@@ -64,6 +65,12 @@ import {
   describeStepExpectation,
   extractStepFilePaths,
 } from "../_shared/step-intent.ts";
+import {
+  type AgentStateData,
+  applyTransition,
+  isTerminal,
+} from "./agent-fsm.ts";
+import { smartTruncate } from "./truncate.ts";
 
 type StreamCallback = (event: { type: string; data: unknown }) => void;
 
@@ -143,6 +150,8 @@ export class AgentLoop {
   private lastActivityAt: number;
   private lastRunMessageId: string | null;
   private buildFixResume: boolean;
+  /** FSM state tracking (FORGE 2.0) — validado a cada transição de fase */
+  private fsmState: AgentStateData;
   private streamTailBuffer: Array<{
     type: string;
     data: Record<string, unknown>;
@@ -223,6 +232,7 @@ export class AgentLoop {
     this.lastActivityAt = Date.now();
     this.lastRunMessageId = null;
     this.buildFixResume = options?.buildFixResume ?? false;
+    this.fsmState = { name: "idle", since: Date.now() };
     this.streamTailBuffer = [];
     this.fileContentCache = new Map();
     this.runStartTime = Date.now();
@@ -230,7 +240,7 @@ export class AgentLoop {
       ? (state.currentStepIndex ?? 0)
       : 0;
     this.router = new ModelRouter(injectedKeys, routerOverrides);
-    this.observer = new RuntimeObserver(reg);
+    this.observer = new RuntimeObserver(reg, this.fileContentCache);
     this.skills = new SkillRegistry();
     this.compression = new CompressionManager(
       this.router.getCheapProvider(),
@@ -429,24 +439,19 @@ export class AgentLoop {
     }
   }
 
-  private async rollbackLastCommit(): Promise<void> {
-    try {
-      await this.reg.execute({
-        id: crypto.randomUUID(),
-        name: "shell_exec",
-        arguments: {
-          command: "cd /home/user && git reset --hard HEAD~1 2>&1 || true",
-        },
-      });
-      this.emit("rollback", {
-        message:
-          "Rollback automático: último commit revertido após falha de build",
-      });
-    } catch {
-      this.emit("rollback", {
-        message: "Rollback falhou — sandbox pode não ter git",
-      });
+  private async emitTransition(eventType: string, data?: unknown): Promise<void> {
+    const result = applyTransition(this.fsmState, { type: eventType as any, data, timestamp: Date.now() });
+    if (result.ok) {
+      this.fsmState = result.state;
     }
+    this.emit("fsm_transition", {
+      from: result.from,
+      to: result.to,
+      event: eventType,
+      ok: result.ok,
+      error: result.error,
+      stateName: this.fsmState.name,
+    });
   }
 
   async run(): Promise<{
@@ -470,6 +475,7 @@ export class AgentLoop {
     let executionModel = this.router.selectModel(this.complexityScore);
 
     if (this.resumeRun && this.hasCheckpoint) {
+      await this.emitTransition("send");
       this.emit("phase", {
         phase: "resume",
         message:
@@ -580,6 +586,8 @@ export class AgentLoop {
         summary: classification.summary,
         maxSteps: this.maxStepsLimit,
       });
+
+      await this.emitTransition("classified", classification);
 
       this.emit("phase", {
         phase: this.planMode ? "plan" : "build",
@@ -724,6 +732,7 @@ export class AgentLoop {
           planId: proposedPlan.planId,
           stepCount: proposedPlan.steps.length,
         });
+        await this.emitTransition("plan_proposed", proposedPlan);
         await this.persistPlanFinal(planChatText, proposedPlan);
         await this.saveCheckpoint(LoopPhase.CREATE_PLAN, true);
         await this.markRunStatus("completed", { plan: proposedPlan });
@@ -1073,7 +1082,7 @@ export class AgentLoop {
           this.state.messages.push({
             role: "tool",
             tool_call_id: call.id,
-            content: structured.slice(0, 4000),
+            content: structured.slice(0, 8000),
           });
         }
 
@@ -1105,10 +1114,12 @@ export class AgentLoop {
         }
 
         const stepHash = hashToolBatch(
-          response.tool_calls.map((tc) => ({
-            name: tc.name,
-            arguments: tc.arguments,
-          })),
+          response.tool_calls
+            .filter((tc) => tc.name !== "fs_write" && tc.name !== "fs_edit")
+            .map((tc) => ({
+              name: tc.name,
+              arguments: tc.arguments,
+            })),
         );
         this.state.executionLog = appendExecutionLogEntry(
           this.state.executionLog,
@@ -1173,10 +1184,6 @@ export class AgentLoop {
               ),
               feedback: observation.feedback?.slice(0, 500),
             });
-            // Rollback automático antes de pedir correção
-            if (buildAttempts > 1) {
-              await this.rollbackLastCommit();
-            }
             this.state.messages.push({
               role: "user",
               content:
@@ -1281,6 +1288,7 @@ export class AgentLoop {
     }
 
     this.state.phase = LoopPhase.SUMMARIZE;
+    await this.emitTransition("delivered");
     this.emit("phase", { phase: "summarize", message: "Finalizando..." });
     await this.saveCheckpoint(LoopPhase.SUMMARIZE, true);
     const wrapUp = buildFinalWrapUp({

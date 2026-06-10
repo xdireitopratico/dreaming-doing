@@ -17,10 +17,10 @@ describe("agent-stuck", () => {
     expect(h).toContain("fs_write#");
   });
 
-  it("isExecutionStuck detecta 3 passos iguais", () => {
+  it("isExecutionStuck detecta 4 passos iguais", () => {
     const step = hashToolStep("shell_exec", { command: "npm test" });
-    expect(isExecutionStuck([step, step, step])).toBe(true);
-    expect(isExecutionStuck([step, step, "other"])).toBe(false);
-    expect(isExecutionStuck([step])).toBe(false);
+    expect(isExecutionStuck([step, step, step, step])).toBe(true);
+    expect(isExecutionStuck([step, step, step, "other"])).toBe(false);
+    expect(isExecutionStuck([step, step, step])).toBe(false);
   });
 });

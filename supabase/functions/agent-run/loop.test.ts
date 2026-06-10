@@ -352,8 +352,8 @@ Deno.test("7 stuck proativa", async () => {
 Deno.test("8 stuck unit tests", () => {
   const h = hashToolBatch([{ name: "fs_write", arguments: { path: "a.tsx", content: "x" } }]);
   assertEquals(h, hashToolBatch([{ name: "fs_write", arguments: { path: "a.tsx", content: "x" } }]));
-  assertEquals(isExecutionStuck([h, h, h]), true);
-  assertEquals(isExecutionStuck([h, h, "d"]), false);
+  assertEquals(isExecutionStuck([h, h, h, h]), true);
+  assertEquals(isExecutionStuck([h, h, h, "d"]), false);
 });
 
 Deno.test("9 forceTools — LLM retorna texto sem tools", async () => {
@@ -597,7 +597,7 @@ Deno.test("22 smoke test — eventos principais", async () => {
 Deno.test("stableToolArgs deterministico", () => { assertEquals(stableToolArgs({ path: "a", content: "x" }), stableToolArgs({ content: "x", path: "a" })); });
 Deno.test("hashToolStep único", () => { assertNotEquals(hashToolStep("fs_write", { path: "a", content: "x" }), hashToolStep("fs_write", { path: "a", content: "y" })); });
 Deno.test("hashToolBatch concatena", () => { assert(hashToolBatch([{ name: "f", arguments: { a: "1" } }, { name: "g", arguments: {} }]).includes(";")); });
-Deno.test("isExecutionStuck 3 iguais", () => { assertEquals(isExecutionStuck(["a", "a", "a"]), true); assertEquals(isExecutionStuck(["a", "b", "a"]), false); });
+Deno.test("isExecutionStuck 4 iguais", () => { assertEquals(isExecutionStuck(["a", "a", "a", "a"]), true); assertEquals(isExecutionStuck(["a", "b", "a", "a"]), false); assertEquals(isExecutionStuck(["a", "a", "a"]), false); });
 Deno.test("appendExecutionLogEntry max 40", () => {
   const r = appendExecutionLogEntry(Array.from({ length: 40 }, (_, i) => `e${i}`), "e40");
   assertEquals(r.length, 40); assertEquals(r[0], "e1"); assertEquals(r[39], "e40");

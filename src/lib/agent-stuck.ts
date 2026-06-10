@@ -16,7 +16,7 @@ export function hashToolBatch(
 }
 
 export function isExecutionStuck(log: string[]): boolean {
-  if (log.length < 3) return false;
-  const last3 = log.slice(-3);
-  return last3[0] === last3[1] && last3[1] === last3[2];
+  if (log.length < 4) return false;
+  const last4 = log.slice(-4);
+  return last4[0] === last4[1] && last4[1] === last4[2] && last4[2] === last4[3];
 }
