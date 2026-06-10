@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { resolvePendingPlan, storedPlanFromMessage } from "@/lib/plan-message-meta";
-import type { ChatMessage } from "@/components/editor/ChatInput";
+import type { ChatMessage } from "@/lib/chat-types";
 
 describe("storedPlanFromMessage", () => {
   const base: ChatMessage = {

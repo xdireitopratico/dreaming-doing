@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { ChatMessage } from "@/components/editor/ChatInput";
+import type { ChatMessage } from "@/lib/chat-types";
 import { isAssistantRunMaterialized } from "@/lib/assistant-materialized";
 
 function msg(overrides: Partial<ChatMessage> = {}): ChatMessage {

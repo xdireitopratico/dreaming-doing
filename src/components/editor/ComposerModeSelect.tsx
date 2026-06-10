@@ -4,7 +4,7 @@ import {
   ForgeEditorDropdownItem,
 } from "@/components/editor/ForgeEditorDropdown";
 import { DropdownMenu, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import type { AgentComposerMode } from "@/components/editor/ChatInput";
+import type { AgentComposerMode } from "@/lib/chat-types";
 
 /**
  * Modos estilo Lovable (docs.lovable.dev/features/plan-mode + agent-mode).

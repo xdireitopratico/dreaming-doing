@@ -1,0 +1,46 @@
+/* FORGE 2.0 — Animations */
+
+@keyframes forge-thinking-pulse {
+  0%,
+  100% {
+    opacity: 0.6;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes forge-task-check {
+  0% {
+    transform: scale(0);
+  }
+  50% {
+    transform: scale(1.2);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes forge-card-appear {
+  0% {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.forge-animate-thinking {
+  animation: forge-thinking-pulse 1.8s ease-in-out infinite;
+}
+
+.forge-animate-card-appear {
+  animation: forge-card-appear 0.25s ease-out both;
+}
+
+.forge-animate-task-check {
+  animation: forge-task-check 0.3s ease-out both;
+}

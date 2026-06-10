@@ -1,0 +1,49 @@
+/* FORGE 2.0 — Design tokens (chat + inspector) */
+
+:root {
+  /* Status */
+  --status-thinking: #f59e0b;
+  --status-working: #3b82f6;
+  --status-done: #10b981;
+  --status-failed: #ef4444;
+  --status-pending: #6b7280;
+
+  /* Background */
+  --bg-chat: #0a0a0f;
+  --bg-card: #13131f;
+  --bg-hover: #1a1a2e;
+  --bg-input: #1e1e2e;
+
+  /* Text */
+  --text-primary: #e2e8f0;
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
+  --text-accent: #fbbf24;
+
+  /* Border */
+  --border-forge: #27273a;
+  --border-active: #3b82f6;
+
+  /* Typography */
+  --font-chat: 14px/1.6 "Inter", system-ui, sans-serif;
+  --font-narration: 14px/1.6 "Inter", system-ui, sans-serif;
+  --font-thought: 12px/1.4 "JetBrains Mono", ui-monospace, monospace;
+  --font-card-title: 13px/1.4 "Inter", system-ui, sans-serif;
+  --font-task: 12px/1.4 "Inter", system-ui, sans-serif;
+  --font-task-label: 11px/1.2 "JetBrains Mono", ui-monospace, monospace;
+  --font-task-body: 13px/1.5 "Inter", system-ui, sans-serif;
+  --font-tool: 12px/1.4 "JetBrains Mono", ui-monospace, monospace;
+
+  /* Spacing */
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 12px;
+  --space-lg: 16px;
+  --space-xl: 24px;
+  --chat-padding: 16px;
+  --message-gap: 12px;
+  --card-padding: 12px;
+  --inspector-padding: 16px;
+  --item-gap: 8px;
+  --item-padding: 10px 12px;
+}

@@ -1,6 +1,8 @@
 @import "tailwindcss" source(none);
 @source "../src";
 @import "tw-animate-css";
+@import "./styles/forge-tokens.css";
+@import "./styles/forge-animations.css";
 @import "./styles/editor-workspace.css";
 @import "./styles/dashboard-workspace.css";
 @import "./styles/auth-workspace.css";

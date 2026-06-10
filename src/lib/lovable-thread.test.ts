@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { ChatMessage } from "@/components/editor/ChatInput";
+import type { ChatMessage } from "@/lib/chat-types";
 import { initialAgentProgress } from "@/lib/agent-progress";
 import { buildLovableThread, freezeSnapshot, resolveAssistantProgress } from "@/lib/lovable-thread";
 

@@ -1,4 +1,4 @@
-import type { ChatMessage } from "@/components/editor/ChatInput";
+import type { ChatMessage } from "@/lib/chat-types";
 
 function hasVisibleText(message: ChatMessage): boolean {
   if (message.content?.trim()) return true;

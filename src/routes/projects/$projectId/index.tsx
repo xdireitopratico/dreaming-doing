@@ -8,7 +8,7 @@ import { loadAgentPreferences } from "@/lib/agent-preferences";
 import { useConnectors } from "@/hooks/useConnectors";
 import { useTasteUiActions } from "@/hooks/useTasteUiActions";
 import type { EditorMainView } from "@/components/editor/editor-views";
-import type { AgentComposerMode } from "@/components/editor/ChatInput";
+import type { AgentComposerMode } from "@/lib/chat-types";
 import type { Tab } from "@/components/editor/CodeEditor";
 import type { LogEntry } from "@/components/editor/LogPanel";
 import { useAgentRun } from "@/hooks/useAgentRun";

@@ -1,15 +1,14 @@
 import { type RefObject, useEffect, useMemo, useRef, useState } from "react";
-import { AnimatePresence } from "framer-motion";
-
 import { EditorShell } from "@/components/EditorShell";
 import { EditorResizableLayout } from "@/components/editor/EditorResizableLayout";
 import { EditorChatHeader } from "@/components/editor/EditorChatHeader";
 import { EditorWorkspaceHeader } from "@/components/editor/EditorWorkspaceHeader";
 import type { EditorMainView } from "@/components/editor/editor-views";
-import type { AgentComposerMode } from "@/components/editor/ChatInput";
+import type { AgentComposerMode } from "@/lib/chat-types";
 import { CodeEditor, type Tab } from "@/components/editor/CodeEditor";
 import { FileTree } from "@/components/editor/FileTree";
-import { ChatInput, type ChatMessage } from "@/components/editor/ChatInput";
+import { ForgeChatPanel } from "@/components/editor/ForgeChatPanel";
+import type { ChatMessage } from "@/lib/chat-types";
 import { SetupRail } from "@/components/editor/SetupRail";
 import { TasteSetupChecklist } from "@/components/editor/TasteSetupChecklist";
 import { TastePostStartBanner } from "@/components/editor/TastePostStartBanner";
@@ -19,13 +18,12 @@ import { CommandPalette, type PaletteAction } from "@/components/editor/CommandP
 import { ShortcutCheatsheet } from "@/components/editor/ShortcutCheatsheet";
 import { type LogEntry, LogPanel } from "@/components/editor/LogPanel";
 import { AiDiffViewer, type DiffEntry } from "@/components/editor/AiDiffViewer";
-import { PlanModal } from "@/components/editor/PlanModal";
 import { resolvePendingPlan } from "@/lib/plan-message-meta";
 import { resolveAssistantProgress } from "@/lib/lovable-thread";
 import { progressFromAssistantMessage } from "@/lib/assistant-run-progress";
 import type { AgentProgress } from "@/lib/agent-progress";
 import { useJobWorkspaceFocus } from "@/hooks/useJobWorkspaceFocus";
-import { JobWorkspacePanel } from "@/components/editor/JobWorkspacePanel";
+import { JobInspector } from "@/components/editor/JobInspector";
 import type { useAgentRun } from "@/hooks/useAgentRun";
 import type { usePreviewBoot } from "@/hooks/usePreviewBoot";
 import type { useConnectors } from "@/hooks/useConnectors";
@@ -220,37 +218,30 @@ export function EditorPageLayout({
     () => resolvePendingPlan(agent.progress.pendingPlan, chatMessages),
     [agent.progress.pendingPlan, chatMessages],
   );
-  const [dismissedPlanId, setDismissedPlanId] = useState<string | null>(null);
-  const [forcePlanOpen, setForcePlanOpen] = useState(false);
-
-  useEffect(() => {
-    if (!pendingPlan) {
-      setDismissedPlanId(null);
-      setForcePlanOpen(false);
-    }
-  }, [pendingPlan?.planId]);
-
   useEffect(() => {
     if (pendingPlan && !agent.progress.pendingPlan) {
       agent.hydratePendingPlan(pendingPlan);
     }
   }, [pendingPlan, agent.progress.pendingPlan, agent.hydratePendingPlan]);
 
-  useEffect(() => {
-    if (pendingPlan && pendingPlan.planId !== dismissedPlanId) {
-      setForcePlanOpen(true);
-    }
-  }, [pendingPlan?.planId, dismissedPlanId]);
-
-  const showPlanModal = pendingPlan != null && forcePlanOpen;
-
   const { jobWorkspaceFocus, openJobWorkspace, closeJobWorkspace, setJobTab, isJobFocused } =
     useJobWorkspaceFocus();
 
-  const handleOpenJobWorkspace = (runId: string) => {
-    openJobWorkspace(runId, "timeline");
+  const handleOpenInspector = (
+    runId: string,
+    tab: "timeline" | "changes" | "plan" = "timeline",
+  ) => {
+    openJobWorkspace(runId, tab);
     onMainViewChange("preview");
   };
+
+  useEffect(() => {
+    if (!pendingPlan) return;
+    const runId = pendingPlan.runId || agent.activeRunId;
+    if (!runId) return;
+    openJobWorkspace(runId, "plan");
+    onMainViewChange("preview");
+  }, [pendingPlan?.planId, pendingPlan?.runId, agent.activeRunId, openJobWorkspace, onMainViewChange]);
 
   const autoOpenedRunRef = useRef<string | null>(null);
   useEffect(() => {
@@ -303,16 +294,6 @@ export function EditorPageLayout({
     if (running) return "Agent working — clique o job no chat";
     return null;
   }, [isJobFocused, running, previewLiveUpdating, devUrl]);
-
-  const closePlanModal = () => {
-    if (pendingPlan) setDismissedPlanId(pendingPlan.planId);
-    setForcePlanOpen(false);
-  };
-
-  const handleReopenPlan = () => {
-    setDismissedPlanId(null);
-    setForcePlanOpen(true);
-  };
 
   return (
     <>
@@ -384,7 +365,7 @@ export function EditorPageLayout({
               <div className="forge-chat-column">
                 <div className="forge-chat-body">
                   <TastePostStartBanner />
-                  <ChatInput
+                  <ForgeChatPanel
                     messages={chatMessages}
                     running={running}
                     agentProgress={agent.progress}
@@ -395,7 +376,6 @@ export function EditorPageLayout({
                     onStop={handleStop}
                     onVisualEdits={handleVisualEdits}
                     visualEditsActive={pickMode}
-                    files={filePaths}
                     composerMode={composerMode}
                     onComposerModeChange={setComposerMode}
                     externalPrompt={promptDraft}
@@ -406,9 +386,6 @@ export function EditorPageLayout({
                     onStartProject={handleStartProject}
                     onDeploy={handleOpenLiveSite}
                     onUndoMessage={handleUndoMessage}
-                    onPlanApprove={handlePlanApprove}
-                    onPlanReject={handlePlanReject}
-                    onReopenPlan={handleReopenPlan}
                     pendingQueueItems={agent.pendingQueueItems}
                     queueBlockingReason={agent.queueBlockingReason}
                     onClearPendingItem={(id) =>
@@ -423,11 +400,10 @@ export function EditorPageLayout({
                     }
                     onDrainQueue={async () => {
                       if (!conversationId) return;
-                      // Forward current composerMode as drain intent (fallback); continue-queue will prefer stored mode from the pendingBody (send-time capture) if present.
                       await agent.drainQueue(projectId, conversationId, composerMode);
                     }}
-                    onOpenJobWorkspace={handleOpenJobWorkspace}
-                    jobWorkspaceRunId={jobWorkspaceFocus?.runId ?? null}
+                    onOpenInspector={handleOpenInspector}
+                    focusedRunId={jobWorkspaceFocus?.runId ?? null}
                   />
                 </div>
                 <SetupRail
@@ -486,17 +462,22 @@ export function EditorPageLayout({
                         isJobFocused &&
                         jobWorkspaceFocus &&
                         focusedJobProgress && (
-                          <JobWorkspacePanel
-                            progress={focusedJobProgress}
+                          <JobInspector
+                            run={focusedJobProgress}
                             runId={jobWorkspaceFocus.runId}
                             running={running && agent.activeRunId === jobWorkspaceFocus.runId}
                             activeTab={jobWorkspaceFocus.tab}
+                            pendingPlan={
+                              pendingPlan?.runId === jobWorkspaceFocus.runId ? pendingPlan : null
+                            }
                             onTabChange={setJobTab}
                             onBackToLatest={closeJobWorkspace}
                             onOpenFile={(path) => {
                               handleSelectFile(path);
                               onMainViewChange("code");
                             }}
+                            onPlanApprove={handlePlanApprove}
+                            onPlanReject={handlePlanReject}
                           />
                         )}
 
@@ -589,22 +570,6 @@ export function EditorPageLayout({
         </div>
       )}
 
-      <AnimatePresence>
-        {showPlanModal && pendingPlan && (
-          <PlanModal
-            plan={pendingPlan}
-            onClose={closePlanModal}
-            onApprove={async (steps, markdown) => {
-              await handlePlanApprove(steps, markdown);
-              closePlanModal();
-            }}
-            onReject={async (reason) => {
-              await handlePlanReject(reason);
-              closePlanModal();
-            }}
-          />
-        )}
-      </AnimatePresence>
     </>
   );
 }

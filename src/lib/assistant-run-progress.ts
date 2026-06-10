@@ -1,4 +1,4 @@
-import type { ChatMessage } from "@/components/editor/ChatInput";
+import type { ChatMessage } from "@/lib/chat-types";
 import { initialAgentProgress, type AgentProgress, type SSEEvent } from "@/lib/agent-progress";
 import { timelineFromExecutionLog } from "@/lib/agent-job-stream";
 
