@@ -23,10 +23,12 @@ interface ChatDiffViewerProps {
   onDismiss?: (id: string) => void;
   /** inspector = paleta FORGE completa; chat = compacto no thread */
   variant?: "chat" | "inspector";
+  /** Se true, começa expandido (auto-expande em tempo real) */
+  defaultExpanded?: boolean;
 }
 
-export function ChatDiffViewer({ diffs, onDismiss, variant = "chat" }: ChatDiffViewerProps) {
-  const [expanded, setExpanded] = useState(false);
+export function ChatDiffViewer({ diffs, onDismiss, variant = "chat", defaultExpanded = false }: ChatDiffViewerProps) {
+  const [expanded, setExpanded] = useState(defaultExpanded);
   const [openIds, setOpenIds] = useState<Set<string>>(new Set());
   const [activeId, setActiveId] = useState<string | null>(null);
 

@@ -46,6 +46,16 @@ export type JobStreamNode =
       summary: string;
       evidence: string[];
       status: "done" | "failed";
+    }
+  | {
+      kind: "diff";
+      id: string;
+      ts: number;
+      path: string;
+      op: "write" | "edit";
+      beforeLength: number;
+      afterLength: number;
+      status: "done";
     };
 
 export type CardStatus = "working" | "done" | "failed" | "idle";
@@ -249,6 +259,24 @@ export function buildJobStreamTree(
         files: toFileRefs(rawPaths),
         status: "active",
         technicalLabel: technicalLabel(name, args),
+      });
+      continue;
+    }
+
+    if (ev.type === "file_diff") {
+      const path = String(data.path ?? "unknown");
+      const before = String(data.before ?? "");
+      const after = String(data.after ?? "");
+      const op = (data.op as "write" | "edit") ?? "write";
+      nodes.push({
+        kind: "diff",
+        id: `diff-${ts}-${nodes.length}`,
+        ts,
+        path,
+        op,
+        beforeLength: before.length,
+        afterLength: after.length,
+        status: "done",
       });
       continue;
     }

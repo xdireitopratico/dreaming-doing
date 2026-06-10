@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ChevronDown, Loader2 } from "lucide-react";
+import { ChevronDown, FileEdit, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { JobStreamNode } from "@/lib/agent-job-stream";
 import { chatPersistedNodes, miniVisibleNodes } from "@/lib/agent-job-stream";
@@ -151,6 +151,48 @@ function JobResultBubble({
   );
 }
 
+function JobDiffBubble({
+  node,
+  variant,
+  onOpenFile,
+}: {
+  node: Extract<JobStreamNode, { kind: "diff" }>;
+  variant: TimelineVariant;
+  onOpenFile?: (path: string) => void;
+}) {
+  const fileName = node.path.split("/").pop() ?? node.path;
+  const changeType = node.op === "write" ? "criou" : "editou";
+  const sizeChange = node.afterLength - node.beforeLength;
+  const sign = sizeChange >= 0 ? "+" : "";
+  const label = `${changeType} ${fileName} (${sign}${sizeChange} linhas)`;
+
+  return (
+    <div
+      className={cn(
+        "lovable-step-bubble lovable-diff-bubble",
+        variant === "mini" && "lovable-step-bubble--mini",
+        variant === "chat" && "lovable-step-bubble--chat",
+      )}
+    >
+      <div className="lovable-step-bubble-row">
+        <FileEdit className="size-3.5 shrink-0 text-[var(--forge-primary)]" />
+        <p className="lovable-step-bubble-expectation">{label}</p>
+      </div>
+      <div className="lovable-step-bubble-files">
+        <FileRefChip
+          file={{
+            path: node.path,
+            langLabel: node.path.split(".").pop()?.toUpperCase() ?? "",
+            fileName,
+          }}
+          onOpenFile={onOpenFile}
+          variant={variant === "chat" ? "mini" : "chat"}
+        />
+      </div>
+    </div>
+  );
+}
+
 function TimelineNode({
   node,
   variant,
@@ -176,6 +218,7 @@ function TimelineNode({
         <JobStepBubble node={node} variant={variant} onOpenFile={onOpenFile} />
       )}
       {node.kind === "result" && <JobResultBubble node={node} variant={variant} />}
+      {node.kind === "diff" && <JobDiffBubble node={node} variant={variant} onOpenFile={onOpenFile} />}
     </div>
   );
 }
