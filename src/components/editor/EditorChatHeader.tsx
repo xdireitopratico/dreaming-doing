@@ -37,8 +37,8 @@ export function EditorChatHeader({
       : awaitingUser
         ? "Aguardando sua resposta"
         : pendingQueueCount > 0
-        ? `${pendingQueueCount} na fila`
-        : "Visualizando última versão salva";
+          ? `${pendingQueueCount} na fila`
+          : null;
   const toggleCollapse = () => {
     window.dispatchEvent(new CustomEvent("forge:toggle-chat-collapsed"));
   };
@@ -52,13 +52,15 @@ export function EditorChatHeader({
           {projectDisplayName(projectName)}
           <ChevronDown className="size-3 shrink-0 opacity-50" />
         </span>
-        <span
-          className="forge-project-sub"
-          data-testid="forge-header-state"
-          data-state={headerState}
-        >
-          {subLabel}
-        </span>
+        {subLabel ? (
+          <span
+            className="forge-project-sub"
+            data-testid="forge-header-state"
+            data-state={headerState}
+          >
+            {subLabel}
+          </span>
+        ) : null}
       </Link>
       <button
         type="button"

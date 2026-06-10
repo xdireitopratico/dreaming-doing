@@ -282,10 +282,9 @@ export function EditorPageLayout({
   const previewStatusLabel = useMemo(() => {
     if (isJobFocused) return "Job inspector";
     if (running && previewLiveUpdating) return "Live updating…";
-    if (devUrl) return "Previewing last saved version";
     if (running) return "Agent working — clique o job no chat";
     return null;
-  }, [isJobFocused, running, previewLiveUpdating, devUrl]);
+  }, [isJobFocused, running, previewLiveUpdating]);
 
   return (
     <>

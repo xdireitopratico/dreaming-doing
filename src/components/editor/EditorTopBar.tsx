@@ -58,9 +58,9 @@ export function EditorTopBar({
               {projectName ?? "Projeto"}
               <ChevronDown className="size-3 shrink-0 opacity-50" />
             </span>
-            <span className="forge-project-sub">
-              {running ? "Construindo alterações…" : "Visualizando última versão salva"}
-            </span>
+            {running ? (
+              <span className="forge-project-sub">Construindo alterações…</span>
+            ) : null}
           </Link>
         ) : (
           <Link to="/projects" className="forge-project-trigger">
@@ -68,9 +68,9 @@ export function EditorTopBar({
               {projectName ?? "Projeto"}
               <ChevronDown className="size-3 shrink-0 opacity-50" />
             </span>
-            <span className="forge-project-sub">
-              {running ? "Construindo alterações…" : "Visualizando última versão salva"}
-            </span>
+            {running ? (
+              <span className="forge-project-sub">Construindo alterações…</span>
+            ) : null}
           </Link>
         )}
       </div>

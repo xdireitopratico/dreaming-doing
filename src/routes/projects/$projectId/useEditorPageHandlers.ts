@@ -203,8 +203,25 @@ export function useEditorPageHandlers({
   );
 
   const isAgentBusy = useCallback(
-    () => running || agent.connected || agent.activeRunId != null || isAgentConnectInFlight(),
-    [running, agent.connected, agent.activeRunId],
+    () => {
+      const liveRun =
+        agent.activeRunId != null &&
+        !agent.progress.finished &&
+        !agent.progress.canceled;
+      return (
+        running ||
+        agent.connected ||
+        liveRun ||
+        isAgentConnectInFlight()
+      );
+    },
+    [
+      running,
+      agent.connected,
+      agent.activeRunId,
+      agent.progress.finished,
+      agent.progress.canceled,
+    ],
   );
 
   const runAgent = useCallback(
@@ -430,22 +447,42 @@ export function useEditorPageHandlers({
     });
   }, [activeView, setActiveView, setPickMode]);
 
-  const handleStartProject = useCallback(() => {
-    if (!conversation) return;
+  const handleStartProject = useCallback(async () => {
+    if (!conversation) {
+      toast.error("Conversa ainda carregando — tente de novo em instantes.");
+      return;
+    }
+    if (!canStartTasteProject(tasteQuota)) {
+      toast.error("Start Project já utilizado. Configure API para continuar.");
+      return;
+    }
+    if (isAgentBusy()) {
+      toast.error("Aguarde o agente terminar antes de iniciar o Start Project.");
+      return;
+    }
+
     const seed =
       "Start Project: apresente um plano curto (markdown) do que vai construir nesta sessão (~10–15 min), depois implemente uma primeira versão visual convincente no projeto. Ao final, diga que daqui pra frente é comigo configurando API.";
-    supabase
-      .from("messages")
-      .insert({
-        conversation_id: conversation.id,
-        role: "user",
-        parts: [{ type: "text", text: seed }],
-      })
-      .then(({ error }) => {
-        if (error) toast.error("Erro ao iniciar Start Project");
-        else runAgent("taste", "start");
-      });
-  }, [conversation, runAgent]);
+
+    const { error } = await supabase.from("messages").insert({
+      conversation_id: conversation.id,
+      role: "user",
+      parts: [{ type: "text", text: seed }],
+      meta: { mode: "build", kind: "start_project" },
+    });
+
+    if (error) {
+      toast.error("Erro ao iniciar Start Project");
+      return;
+    }
+
+    void qc.invalidateQueries({ queryKey: ["messages", conversation.id] });
+
+    const started = runAgent("taste", "start");
+    if (!started) {
+      toast.error("Não foi possível iniciar o agente. Tente novamente.");
+    }
+  }, [conversation, tasteQuota, isAgentBusy, qc, runAgent]);
 
   const handleStop = useCallback(() => {
     void (async () => {

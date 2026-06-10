@@ -132,6 +132,15 @@ export function useAgentRun() {
   const statusChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const stalePollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // Limpa runId residual quando o job terminou (evita isAgentBusy preso após Done).
+  useEffect(() => {
+    if (!progress.finished || progress.awaiting) return;
+    if (!runIdRef.current && !activeRunId) return;
+    runIdRef.current = null;
+    setActiveRunId(null);
+    setConnected(false);
+  }, [progress.finished, progress.awaiting, progress.canceled, activeRunId]);
+
   // ─── Persistência de estado em sessionStorage ─────────────────────────
   const saveSnapshot = useCallback(() => {
     saveAgentSnapshot({

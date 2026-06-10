@@ -6,9 +6,6 @@ import type { FrozenRunSnapshot } from "@/lib/lovable-thread";
 import { resolvePendingPlan } from "@/lib/plan-message-meta";
 import { resolveEffectiveAgentProgress } from "@/lib/resolve-agent-progress";
 import { buildOutgoingParts, type StoredMessagePart } from "@/lib/chat-attachments";
-import { loadAgentPreferences } from "@/lib/agent-preferences";
-import { getAgentSetupBlockMessage, isAgentPreferencesConfigured } from "@/lib/agent-setup";
-import { toast } from "@/lib/toast";
 import { ForgeChat } from "@/components/editor/ForgeChat";
 import { ChatInputV2 } from "@/components/editor/ChatInputV2";
 import { PendingQueuePanel, type PendingQueueItem } from "@/components/editor/PendingQueuePanel";
@@ -117,16 +114,8 @@ export function ForgeChatPanel({
 
   const handleSend = useCallback(
     async (text: string, mode?: AgentComposerMode, parts?: StoredMessagePart[]) => {
-      if (running) return;
-
       if (text.startsWith("/deploy")) {
         await onDeploy?.();
-        return;
-      }
-
-      const prefs = loadAgentPreferences();
-      if (!isAgentPreferencesConfigured(prefs)) {
-        toast.error(getAgentSetupBlockMessage(prefs));
         return;
       }
 
@@ -134,7 +123,7 @@ export function ForgeChatPanel({
       if (outgoing.length === 0) return;
       onSend(text, mode ?? composerMode, outgoing);
     },
-    [running, onDeploy, onSend, composerMode],
+    [onDeploy, onSend, composerMode],
   );
 
   const agentBusy = !!(
