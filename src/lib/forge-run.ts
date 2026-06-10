@@ -198,42 +198,31 @@ export function buildForgeTimeline(
   return items;
 }
 
-function deriveTasksFromPlan(
+export function deriveTasksFromPlan(
   plan: PendingPlan,
   progress: AgentProgress,
 ): ForgeTaskItem[] {
   const current = progress.currentStep ?? 0;
   const executing = progress.phase === "execute" && !progress.finished;
+  const succeeded = progress.finished && progress.lastFinishOk !== false && !progress.canceled;
+  const failed = progress.finished && (progress.lastFinishOk === false || !!progress.canceled);
 
-  return plan.steps.slice(0, 6).map((step, idx) => {
+  return enabledPlanSteps(plan.steps).slice(0, 6).map((step, idx) => {
     let status: TaskStatus = "pending";
-    if (progress.finished && progress.lastFinishOk) status = "done";
+    if (succeeded) status = "done";
+    else if (failed && idx === current) status = "failed";
     else if (executing && idx < current) status = "done";
     else if (executing && idx === current) status = "active";
-    else if (progress.finished && !progress.lastFinishOk && idx === current) status = "failed";
     return { id: step.id, label: step.description, status };
   });
-}
-
-function deriveTasksFromTimeline(timeline: ForgeTimelineItem[]): ForgeTaskItem[] {
-  const tasks: ForgeTaskItem[] = [];
-  for (const item of timeline) {
-    if (item.type !== "TASK") continue;
-    if (tasks.some((t) => t.label === item.label)) continue;
-    tasks.push({ id: item.id, label: item.label, status: "done" });
-  }
-  if (tasks.length > 0) {
-    const last = tasks[tasks.length - 1]!;
-    if (last.status === "done") last.status = "active";
-  }
-  return tasks.slice(-6);
 }
 
 function deriveMiniCardStatus(progress: AgentProgress, running: boolean): MiniCardStatus {
   if (progress.canceled || (progress.finished && progress.lastFinishOk === false)) {
     return "failed";
   }
-  if (progress.finished && progress.lastFinishOk) return "done";
+  if (progress.finished && progress.error && progress.resumable) return "failed";
+  if (progress.finished) return "done";
   if (running || progress.autoResuming) return "working";
   const lastThought = [...progress.timeline].reverse().find(
     (e) => e.type === "assistant_text" && isThinkingDelta(e.data),
@@ -245,15 +234,15 @@ function deriveMiniCardStatus(progress: AgentProgress, running: boolean): MiniCa
 function deriveMiniCardTitle(
   progress: AgentProgress,
   tasks: ForgeTaskItem[],
-  pendingPlan?: PendingPlan | null,
+  jobPlan?: PendingPlan | null,
 ): string {
-  if (pendingPlan?.mission) return pendingPlan.mission;
-  if (pendingPlan?.summary) return pendingPlan.summary;
+  if (jobPlan?.mission) return jobPlan.mission;
+  if (jobPlan?.summary) return jobPlan.summary;
   const active = tasks.find((t) => t.status === "active");
   if (active) return active.label;
   if (progress.summary) return truncate(progress.summary, 80);
   if (progress.message) return truncate(progress.message, 80);
-  if (progress.finished && progress.lastFinishOk) return "Concluído";
+  if (progress.finished) return "Concluído";
   return "Trabalhando no projeto…";
 }
 
@@ -265,18 +254,25 @@ function lastEditedFile(progress: AgentProgress): string | null {
   return null;
 }
 
+export function isRunEffectivelyActive(
+  progress: AgentProgress,
+  slotActive = false,
+): boolean {
+  return !!slotActive && !progress.finished && !progress.canceled;
+}
+
 export function buildAgentRunView(
   runId: string,
   progress: AgentProgress,
-  opts?: { running?: boolean; pendingPlan?: PendingPlan | null },
+  opts?: { running?: boolean; jobPlan?: PendingPlan | null },
 ): AgentRunView {
-  const running = opts?.running ?? !progress.finished;
-  const pendingPlan = opts?.pendingPlan ?? progress.pendingPlan;
+  const running = isRunEffectivelyActive(progress, opts?.running);
+  const jobPlan = opts?.jobPlan ?? progress.pendingPlan;
   const forgeTimeline = buildForgeTimeline(progress.timeline, running);
 
-  const tasks = pendingPlan?.steps?.length
-    ? deriveTasksFromPlan(pendingPlan, progress)
-    : deriveTasksFromTimeline(forgeTimeline);
+  const tasks = jobPlan?.steps?.length
+    ? deriveTasksFromPlan(jobPlan, progress)
+    : [];
 
   const currentTaskIndex = Math.max(
     0,
@@ -313,13 +309,13 @@ export function buildAgentRunView(
   return {
     runId,
     miniCard: {
-      title: deriveMiniCardTitle(progress, tasks, pendingPlan),
+      title: deriveMiniCardTitle(progress, tasks, jobPlan),
       status,
       tasks,
       currentTaskIndex: currentTaskIndex >= 0 ? currentTaskIndex : 0,
       editedFile,
       fileCount: progress.diffs.length || progress.deliveryFiles?.length,
-      hasPlan: !!pendingPlan,
+      hasPlan: !!jobPlan?.steps?.length,
     },
     thinking,
     narration:

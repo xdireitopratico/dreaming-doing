@@ -18,8 +18,9 @@ import {
   type FrozenRunSnapshot,
   resolveAssistantProgress,
 } from "@/lib/lovable-thread";
-import { buildAgentRunView } from "@/lib/forge-run";
+import { buildAgentRunView, isRunEffectivelyActive } from "@/lib/forge-run";
 import { isAgentJobMessage } from "@/lib/assistant-run-progress";
+import { resolveJobPlanForRun } from "@/lib/plan-message-meta";
 
 export type ForgeChatProps = {
   messages: ChatMessage[];
@@ -112,14 +113,24 @@ export function ForgeChat({
             (resolved.timeline?.length ?? 0) > 0 ||
             (resolved.tools?.length ?? 0) > 0);
 
-        const planForRun =
-          pendingPlan && (!item.runId || pendingPlan.runId === item.runId) ? pendingPlan : null;
+        const jobPlan = item.runId
+          ? resolveJobPlanForRun(item.runId, messages, {
+              livePlan:
+                pendingPlan && pendingPlan.runId === item.runId ? pendingPlan : null,
+              progressPlan: resolved?.pendingPlan ?? null,
+              assistantMessage: item.message,
+            })
+          : null;
+
+        const slotActive = resolved
+          ? isRunEffectivelyActive(resolved, item.isActive)
+          : item.isActive;
 
         const runView =
           resolved && showJobCard
             ? buildAgentRunView(runId, resolved, {
-                running: item.isActive,
-                pendingPlan: planForRun,
+                running: slotActive,
+                jobPlan,
               })
             : null;
 
@@ -135,7 +146,7 @@ export function ForgeChat({
             role="assistant"
             message={item.message}
             runView={runView}
-            isActive={item.isActive}
+            isActive={slotActive}
             isFocused={!!item.runId && focusedRunId === item.runId}
             showJobCard={showJobCard}
             onCopy={handleCopy}

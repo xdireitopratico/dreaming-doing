@@ -20,6 +20,59 @@ export function resolvePendingPlan(
   return live ?? findPendingPlanFromMessages(messages);
 }
 
+export type ResolveJobPlanOptions = {
+  livePlan?: PendingPlan | null;
+  progressPlan?: PendingPlan | null;
+  assistantMessage?: ChatMessage;
+};
+
+/** Plano/requisitos do job para um runId — usado no mini-card (não confundir com timeline SSE). */
+export function resolveJobPlanForRun(
+  runId: string,
+  messages: ChatMessage[],
+  opts: ResolveJobPlanOptions = {},
+): PendingPlan | null {
+  const { livePlan, progressPlan, assistantMessage } = opts;
+
+  if (livePlan?.runId === runId && livePlan.steps.length > 0) return livePlan;
+  if (progressPlan?.runId === runId && progressPlan.steps.length > 0) return progressPlan;
+
+  if (assistantMessage) {
+    const stored = storedPlanFromMessage(assistantMessage);
+    if (stored?.plan.runId === runId && stored.plan.steps.length > 0) return stored.plan;
+  }
+
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const msg = messages[i];
+    if (msg?.role !== "user") continue;
+    const meta = msg.meta as Record<string, unknown> | undefined;
+    if (meta?.buildRunId !== runId) continue;
+    const planSourceRunId =
+      typeof meta.planSourceRunId === "string" ? meta.planSourceRunId : null;
+    const planId = typeof meta.planId === "string" ? meta.planId : null;
+    if (!planSourceRunId) continue;
+
+    for (let j = messages.length - 1; j >= 0; j--) {
+      const am = messages[j];
+      if (am?.role !== "assistant") continue;
+      const ameta = am.meta as Record<string, unknown> | undefined;
+      if (ameta?.runId !== planSourceRunId) continue;
+      if (planId && ameta.planId !== planId) continue;
+      const stored = storedPlanFromMessage(am);
+      if (stored?.plan.steps.length) return stored.plan;
+    }
+  }
+
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const msg = messages[i];
+    if (msg?.role !== "assistant") continue;
+    const stored = storedPlanFromMessage(msg);
+    if (stored?.plan.runId === runId && stored.plan.steps.length > 0) return stored.plan;
+  }
+
+  return null;
+}
+
 export type StoredPlanStatus = "pending" | "rejected" | "approved";
 
 export type StoredPlanMeta = {

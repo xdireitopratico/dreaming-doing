@@ -54,7 +54,7 @@ export function progressFromAssistantMessage(msg: ChatMessage): AgentProgress | 
       : meta.buildFailed === true
         ? false
         : finishedAt
-          ? null
+          ? true
           : null;
 
   const tools = (msg.toolCalls ?? []).map((tc) => ({

@@ -260,6 +260,23 @@ describe("buildLovableThread", () => {
     expect(resolveAssistantProgress(slot)?.streamText).toContain("estilo visual");
   });
 
+  it("run finished não mantém isActive mesmo com running=true stale", () => {
+    const messages = [msg("u1", "user", "build")];
+    const progress = {
+      ...initialAgentProgress,
+      finished: true,
+      lastFinishOk: true,
+      streamText: "Pronto!",
+    };
+    const thread = buildLovableThread(messages, progress, {
+      running: true,
+      activeRunId: "run-done",
+    });
+    const slot = thread[1] as Extract<(typeof thread)[number], { kind: "assistant" }>;
+    expect(slot.isActive).toBe(false);
+    expect(slot.live?.finished).toBe(true);
+  });
+
   it("erro de connect sem runId aparece no turno pendente", () => {
     const messages = [msg("u1", "user", "build")];
     const progress = {

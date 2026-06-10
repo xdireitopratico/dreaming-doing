@@ -137,7 +137,11 @@ export function ForgeChatPanel({
     [running, onDeploy, onSend, composerMode],
   );
 
-  const agentBusy = !!(agentProgress && !agentProgress.finished);
+  const agentBusy = !!(
+    agentProgress &&
+    !agentProgress.finished &&
+    !agentProgress.canceled
+  );
 
   return (
     <div className="forge-chat-inner">

@@ -192,13 +192,21 @@ function dedupeThreadByRunId(items: LovableThreadItem[]): LovableThreadItem[] {
 
     const existing = out[existingIdx] as Extract<LovableThreadItem, { kind: "assistant" }>;
 
+    const mergedLive = item.live ?? existing.live;
+    const mergedFrozen = item.frozen ?? existing.frozen;
+    const terminal =
+      mergedLive?.finished ||
+      mergedFrozen?.finished ||
+      existing.live?.finished ||
+      existing.frozen?.finished;
+
     out[existingIdx] = {
       ...existing,
       ...item,
       message: mergeAssistantMessages(existing.message, item.message),
-      live: item.live ?? existing.live,
-      frozen: item.frozen ?? existing.frozen,
-      isActive: existing.isActive || item.isActive,
+      live: mergedLive,
+      frozen: mergedFrozen,
+      isActive: terminal ? false : existing.isActive || item.isActive,
       runId,
     };
   }
@@ -356,12 +364,19 @@ export function buildLovableThread(
   const anchored = insertIndexForActiveRun(items, activeRunId);
   const insertAt = anchored ?? pendingAssistantInsertIndex(items);
 
-  if (running) {
+  if (running && !progress.finished && !progress.canceled) {
     items = insertAssistantSlot(items, insertAt, {
       kind: "assistant",
       live: progress,
       runId: activeRunId,
       isActive: true,
+    });
+  } else if (running && progress.finished) {
+    items = insertAssistantSlot(items, insertAt, {
+      kind: "assistant",
+      live: progress,
+      runId: activeRunId,
+      isActive: false,
     });
   } else if (effectiveFrozen?.has(activeRunId)) {
     items = insertAssistantSlot(items, insertAt, {
