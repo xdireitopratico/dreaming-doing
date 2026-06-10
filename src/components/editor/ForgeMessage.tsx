@@ -7,8 +7,10 @@ import { ForgeThinking } from "@/components/editor/ForgeThinking";
 import { ForgeDoneBubble } from "@/components/editor/ForgeDoneBubble";
 import { ForgeErrorCard } from "@/components/editor/ForgeErrorCard";
 import { ForgeQualifyPrompt } from "@/components/editor/ForgeQualifyPrompt";
+import { ForgePlanPrompt } from "@/components/editor/ForgePlanPrompt";
 import { ForgeMessageToolbar } from "@/components/editor/ForgeMessageToolbar";
 import { formatQualifyChoiceReply, parseQualifyChoices } from "@/lib/qualify-choices";
+import type { PendingPlan } from "@/lib/agent-progress";
 import type { RollbackRequest } from "@/components/editor/ForgeRollbackFlow";
 
 type ForgeMessageProps = {
@@ -19,6 +21,8 @@ type ForgeMessageProps = {
   isFocused?: boolean;
   showJobCard?: boolean;
   qualifyInteractive?: boolean;
+  planInteractive?: boolean;
+  jobPlan?: PendingPlan | null;
   running?: boolean;
   onQualifySelect?: (text: string) => void;
   onCopy?: (text: string, msgId: string) => void;
@@ -36,6 +40,8 @@ export function ForgeMessage({
   isFocused = false,
   showJobCard = false,
   qualifyInteractive = false,
+  planInteractive = false,
+  jobPlan = null,
   running = false,
   onQualifySelect,
   onCopy,
@@ -80,16 +86,23 @@ export function ForgeMessage({
   const qualifyPrompt = responseText ? parseQualifyChoices(responseText) : null;
   const showQualifyPrompt =
     !!qualifyPrompt && qualifyInteractive && !!onQualifySelect;
+  const showPlanPrompt =
+    planInteractive && !!jobPlan?.steps?.length && !!onOpenInspector && !!runView?.runId;
 
   const showLatencyThinking =
     isActive && !!runView?.latencyThinking?.active;
   const showResponse =
     !!responseText &&
     !showQualifyPrompt &&
+    !showPlanPrompt &&
     responseText !== sessionTitle;
 
   const showDone =
-    !!runView?.finished && !isActive && runView.lastFinishOk === true && showJobCard;
+    !!runView?.finished &&
+    !isActive &&
+    runView.lastFinishOk === true &&
+    showJobCard &&
+    !showPlanPrompt;
 
   return (
     <article
@@ -121,6 +134,15 @@ export function ForgeMessage({
             const choice = qualifyPrompt.choices.find((c) => c.label === label);
             onQualifySelect(choice ? formatQualifyChoiceReply(choice) : label);
           }}
+        />
+      )}
+
+      {showPlanPrompt && jobPlan && (
+        <ForgePlanPrompt
+          plan={jobPlan}
+          runId={runView!.runId}
+          disabled={isActive}
+          onOpenPreview={(rid) => onOpenInspector!(rid, "plan")}
         />
       )}
 

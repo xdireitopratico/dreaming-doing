@@ -28,7 +28,7 @@ import { buildChatHistory } from "./memory.ts";
 import { RobinKeyPool } from "./robin-pool.ts";
 import { loadUserE2bApiKey } from "../_shared/user-e2b.ts";
 import { restoreExecutionLogFromRows } from "./executionLogMeta.ts";
-import { loadCheckpoint } from "./checkpoint.ts";
+import { clearConversationCheckpoint, loadCheckpoint } from "./checkpoint.ts";
 import { buildSandboxEnv } from "./sandbox-env.ts";
 import { looksLikeInteractionOnly } from "./qualify.ts";
 import { logger } from "../_shared/logger.ts";
@@ -191,12 +191,13 @@ export async function executeAgentRun(
     .limit(120);
   const historyRows = history ?? [];
 
-  const loadedCheckpoint = await loadCheckpoint(
-    supabase,
-    projectId,
-    conversationId,
-  );
-  const resumeRun = resumeParam === true || !!loadedCheckpoint;
+  const loadedCheckpoint = resumeParam === true
+    ? await loadCheckpoint(supabase, projectId, conversationId)
+    : null;
+  if (!resumeParam) {
+    await clearConversationCheckpoint(supabase, projectId, conversationId);
+  }
+  const resumeRun = resumeParam === true && !!loadedCheckpoint;
   const restoredExecutionLog = resumeRun
     ? restoreExecutionLogFromRows(historyRows)
     : [];
@@ -294,6 +295,9 @@ export async function executeAgentRun(
       projectFileCount = 0;
     }
     allocateSandboxLocal = !looksLikeInteraction || projectHasSandbox;
+  }
+  if (planMode) {
+    allocateSandboxLocal = false;
   }
 
   // Build runMetaBase + update run

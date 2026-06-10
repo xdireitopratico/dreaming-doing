@@ -3,12 +3,7 @@ import { useEffect, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { removeRealtimeChannel } from "@/lib/supabase-realtime";
 import type { RealtimeChannel } from "@supabase/supabase-js";
-import {
-  clearPendingAgentRun,
-  hasAutoRunAttempted,
-  markAutoRunAttempted,
-  peekPendingAgentRun,
-} from "@/lib/agent-auto-run";
+
 import { isAgentConnectInFlight } from "@/lib/agent-session-guards";
 import { logEditorTelemetryEvent } from "@/lib/editor-telemetry";
 import { resolveSessionKind } from "@/lib/taste";
@@ -46,7 +41,7 @@ function pendingBuildRunKey(projectId: string): string {
 }
 
 /**
- * Coordinator: sync pending → watch run ativo (mesma conversa) → drain → auto-run só com flag de projeto novo.
+ * Coordinator: sync pending → watch run ativo (mesma conversa) → drain. Sem autorun.
  */
 export function useAgentSessionCoordinator({
   projectId,
@@ -169,17 +164,7 @@ export function useAgentSessionCoordinator({
           if (drain.runId) return;
         }
 
-        const flagged = peekPendingAgentRun(projectId, conversation.id);
-        if (!flagged) return;
-        if (hasAutoRunAttempted(projectId, conversation.id)) return;
-
-        logEditorTelemetryEvent("agent", "auto_run_flagged", "info", conversation.id.slice(0, 8));
-
-        const started = await runAgent(resolveSessionKind(tasteQuota));
-        if (started) {
-          markAutoRunAttempted(projectId, conversation.id);
-          clearPendingAgentRun(projectId);
-        }
+        // Autorun removido — agente só inicia quando o usuário envia mensagem no composer.
       } finally {
         reconcileInFlightRef.current = false;
       }

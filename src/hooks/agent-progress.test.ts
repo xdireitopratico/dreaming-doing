@@ -81,7 +81,49 @@ describe("applyAgentProgressEvent", () => {
     expect(next.pendingPlan?.steps).toHaveLength(1);
     expect(next.pendingPlan?.runId).toBe("run-1");
     expect(next.pendingPlan?.projectId).toBe("proj-1");
+    expect(next.planSummary).toBe("Plano de teste");
     expect(next.statusHint).toContain("aprovação");
+  });
+
+  it("done com planProposed hidrata pendingPlan do payload plan", () => {
+    const done = applyAgentProgressEvent(
+      base,
+      ev("done", {
+        planProposed: true,
+        summary: "Landing page",
+        plan: {
+          planId: "p-99",
+          summary: "Landing page",
+          steps: [{ id: "s1", type: "create_file", description: "Hero", enabled: true }],
+          runId: "run-9",
+          projectId: "proj-9",
+        },
+      }),
+    );
+    expect(done.pendingPlan?.planId).toBe("p-99");
+    expect(done.awaitingKind).toBe("plan_approval");
+    expect(done.finished).toBe(true);
+  });
+
+  it("done com planProposed mantém pendingPlan e awaitingKind", () => {
+    const withPlan = applyAgentProgressEvent(
+      base,
+      ev("plan_proposed", {
+        planId: "p-123",
+        summary: "Plano de teste",
+        steps: [{ id: "s1", type: "create_file", description: "criar", enabled: true }],
+        runId: "run-1",
+        projectId: "proj-1",
+      }),
+    );
+    const done = applyAgentProgressEvent(
+      withPlan,
+      ev("done", { planProposed: true, summary: "Plano de teste" }),
+    );
+    expect(done.pendingPlan).not.toBeNull();
+    expect(done.awaiting).toBe(true);
+    expect(done.awaitingKind).toBe("plan_approval");
+    expect(done.finished).toBe(true);
   });
 
   it("plan_proposed sem runId/projectId não popula pendingPlan", () => {

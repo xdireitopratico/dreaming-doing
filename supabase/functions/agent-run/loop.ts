@@ -734,12 +734,16 @@ export class AgentLoop {
         });
         await this.emitTransition("plan_proposed", proposedPlan);
         await this.persistPlanFinal(planChatText, proposedPlan);
-        await this.saveCheckpoint(LoopPhase.CREATE_PLAN, true);
-        await this.markRunStatus("completed", { plan: proposedPlan });
+        await this.clearCheckpoint();
+        await this.markRunStatus("awaiting_user", {
+          plan: proposedPlan,
+          awaitingUser: { type: "plan_approval", planId: proposedPlan.planId },
+        });
         this.emit("done", {
           summary: proposedPlan.summary,
           plan: proposedPlan,
           planProposed: true,
+          awaiting: true,
         });
         return {
           ok: true,
@@ -748,6 +752,16 @@ export class AgentLoop {
           toolsUsed: [],
         };
       }
+    }
+
+    if (this.planMode) {
+      await this.clearCheckpoint();
+      return {
+        ok: false,
+        error: "Plan mode não executa ferramentas — apenas propõe plano.",
+        steps: 0,
+        toolsUsed: [...toolsUsed],
+      };
     }
 
     const step = this.resumeRun && this.hasCheckpoint
@@ -1466,7 +1480,9 @@ export class AgentLoop {
         nextMeta.awaitingUser = extra.awaitingUser;
       }
       const updateFields: Record<string, unknown> = { status, meta: nextMeta };
-      if (status === "completed" || status === "running") {
+      if (status === "awaiting_user") {
+        updateFields.finished_at = null;
+      } else if (status === "completed" || status === "running") {
         updateFields.finished_at = new Date().toISOString();
       }
       await this.sb

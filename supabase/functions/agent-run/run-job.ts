@@ -236,6 +236,9 @@ export async function executeAgentJob(
   );
 
   let allocateSandbox = params.allocateSandbox !== false; // default true (backward compat)
+  if (planMode) {
+    allocateSandbox = false;
+  }
   const isPlanApprovedBuild = !planMode && !!preMeta.planSourceRunId;
   if (isPlanApprovedBuild) {
     allocateSandbox = true; // force for approved builds + follow-ups (meta-aware contract)

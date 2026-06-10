@@ -1,6 +1,7 @@
 import type { ChatMessage } from "@/lib/chat-types";
 import { initialAgentProgress, type AgentProgress, type SSEEvent } from "@/lib/agent-progress";
 import { timelineFromExecutionLog } from "@/lib/agent-job-stream";
+import { storedPlanFromMessage } from "@/lib/plan-message-meta";
 
 export function runIdFromAssistantMessage(msg: ChatMessage): string | undefined {
   return (
@@ -68,6 +69,8 @@ export function progressFromAssistantMessage(msg: ChatMessage): AgentProgress | 
 
   const finished = finishedAt || lastFinishOk === true || lastFinishOk === false;
   const timeline = timelineFromMeta(meta);
+  const storedPlan = storedPlanFromMessage(msg);
+  const planPending = storedPlan?.status === "pending" ? storedPlan.plan : null;
 
   return {
     ...initialAgentProgress,
@@ -81,5 +84,9 @@ export function progressFromAssistantMessage(msg: ChatMessage): AgentProgress | 
     streamText: body,
     summary: null,
     deliveryFiles,
+    pendingPlan: planPending,
+    awaiting: !!planPending,
+    awaitingKind: planPending ? "plan_approval" : null,
+    planSummary: planPending?.summary ?? null,
   };
 }

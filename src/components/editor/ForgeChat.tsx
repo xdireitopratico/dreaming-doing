@@ -24,7 +24,7 @@ import {
   shouldShowJobCard,
 } from "@/lib/forge-run";
 import { isAgentJobMessage } from "@/lib/assistant-run-progress";
-import { resolveJobPlanForRun } from "@/lib/plan-message-meta";
+import { resolveJobPlanForRun, storedPlanFromMessage } from "@/lib/plan-message-meta";
 import { parseQualifyChoices } from "@/lib/qualify-choices";
 import type { RollbackRequest } from "@/components/editor/ForgeRollbackFlow";
 
@@ -237,6 +237,17 @@ export function ForgeChat({
             progress.awaiting ||
             resolved?.awaitingKind === "qualify");
 
+        const msgPlanMeta = item.message ? storedPlanFromMessage(item.message) : null;
+        const planForPrompt = jobPlan ?? msgPlanMeta?.plan ?? null;
+        const planAwaitingApproval =
+          progress.awaitingKind === "plan_approval" ||
+          resolved?.awaitingKind === "plan_approval";
+        const planInteractive =
+          !!onOpenInspector &&
+          !!planForPrompt?.steps?.length &&
+          (msgPlanMeta?.status === "pending" ||
+            (isLastTurn && planAwaitingApproval && !running && !slotActive));
+
         return (
           <ForgeMessage
             key={stableKey}
@@ -247,6 +258,8 @@ export function ForgeChat({
             isFocused={!!item.runId && focusedRunId === item.runId}
             showJobCard={showJobCard}
             qualifyInteractive={qualifyInteractive}
+            planInteractive={planInteractive}
+            jobPlan={planForPrompt}
             onQualifySelect={onQualifySelect}
             running={running}
             onCopy={handleCopy}

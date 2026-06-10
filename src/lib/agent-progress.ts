@@ -172,6 +172,54 @@ export function streamRowToSSEEvent(row: {
   };
 }
 
+function parsePendingPlanFromPayload(
+  source: Record<string, unknown>,
+  fallback?: { runId?: string | null; projectId?: string | null },
+): PendingPlan | null {
+  const nested =
+    source.plan && typeof source.plan === "object"
+      ? (source.plan as Record<string, unknown>)
+      : source;
+  const planId = typeof nested.planId === "string" ? nested.planId : null;
+  const steps = Array.isArray(nested.steps) ? (nested.steps as PlanStep[]) : [];
+  const runId =
+    typeof nested.runId === "string"
+      ? nested.runId
+      : typeof fallback?.runId === "string"
+        ? fallback.runId
+        : null;
+  const projectId =
+    typeof nested.projectId === "string"
+      ? nested.projectId
+      : typeof fallback?.projectId === "string"
+        ? fallback.projectId
+        : null;
+  if (!planId || steps.length === 0 || !runId || !projectId) return null;
+
+  return {
+    planId,
+    summary:
+      typeof nested.summary === "string" ? nested.summary : "Plano proposto",
+    rationale:
+      typeof nested.rationale === "string" && nested.rationale.trim()
+        ? nested.rationale.trim()
+        : undefined,
+    markdown:
+      typeof nested.markdown === "string" && nested.markdown.trim()
+        ? nested.markdown.trim()
+        : undefined,
+    mission: typeof nested.mission === "string" ? nested.mission : undefined,
+    objective:
+      typeof nested.objective === "string" ? nested.objective : undefined,
+    steps,
+    ttlMs:
+      typeof nested.ttlMs === "number" ? nested.ttlMs : Number.MAX_SAFE_INTEGER,
+    proposedAt: Date.now(),
+    runId,
+    projectId,
+  };
+}
+
 /** Reducer puro dos eventos do agente (exportado para testes). */
 export function applyAgentProgressEvent(
   prev: AgentProgress,
@@ -487,62 +535,50 @@ export function applyAgentProgressEvent(
         : summaryTrim && !summaryIsRobotic
           ? summaryTrim
           : prev.streamText;
+      const planFromDone =
+        data.planProposed === true && !data.planRejected
+          ? parsePendingPlanFromPayload(data)
+          : null;
+      const pendingPlan =
+        data.planRejected === true
+          ? null
+          : prev.pendingPlan ?? planFromDone;
+      const planAwaiting = data.planProposed === true && !!pendingPlan;
       return {
         ...prev,
         summary,
         finished: true,
         lastFinishOk: true,
-        awaiting: !!(data.awaiting || data.qualified) ||
-          (data.planProposed === true && !!prev.pendingPlan),
+        awaiting:
+          !!(data.awaiting || data.qualified) || planAwaiting,
         awaitingKind: data.qualified || data.awaiting
           ? "qualify"
-          : data.planProposed === true && prev.pendingPlan
-          ? "plan_approval"
-          : null,
+          : planAwaiting
+            ? "plan_approval"
+            : null,
         resumable: false,
         error: null,
         streamText,
-        pendingPlan: data.planRejected === true ? null : prev.pendingPlan,
+        pendingPlan,
+        planSummary: pendingPlan?.summary ?? prev.planSummary,
+        statusHint: planAwaiting
+          ? "Plano aguardando aprovação…"
+          : prev.statusHint,
         timeline: [...prev.timeline, event],
       };
     }
 
     case "plan_proposed": {
-      const planId = typeof data.planId === "string" ? data.planId : null;
-      const steps = Array.isArray(data.steps) ? (data.steps as PlanStep[]) : [];
-      const runId = typeof data.runId === "string" ? data.runId : null;
-      const projectId = typeof data.projectId === "string"
-        ? data.projectId
-        : null;
-      if (!planId || steps.length === 0 || !runId || !projectId) {
+      const pendingPlan = parsePendingPlanFromPayload(data);
+      if (!pendingPlan) {
         return { ...prev, timeline: [...prev.timeline, event] };
       }
-      const pendingPlan: PendingPlan = {
-        planId,
-        summary: typeof data.summary === "string"
-          ? data.summary
-          : "Plano proposto",
-        rationale: typeof data.rationale === "string" && data.rationale.trim()
-          ? data.rationale.trim()
-          : undefined,
-        markdown: typeof data.markdown === "string" && data.markdown.trim()
-          ? data.markdown.trim()
-          : undefined,
-        mission: typeof data.mission === "string" ? data.mission : undefined,
-        objective: typeof data.objective === "string"
-          ? data.objective
-          : undefined,
-        steps,
-        ttlMs: typeof data.ttlMs === "number" ? data.ttlMs : Number.MAX_SAFE_INTEGER,
-        proposedAt: Date.now(),
-        runId,
-        projectId,
-      };
       return {
         ...prev,
         awaiting: true,
         awaitingKind: "plan_approval",
         pendingPlan,
+        planSummary: pendingPlan.summary,
         statusHint: "Plano aguardando aprovação…",
         timeline: [...prev.timeline, event],
       };
@@ -598,13 +634,6 @@ export function applyAgentProgressEvent(
       return {
         ...prev,
         fsmState: (data.stateName as string) ?? prev.fsmState,
-        timeline: [...prev.timeline, event],
-      };
-
-    case "plan_proposed":
-      return {
-        ...prev,
-        planSummary: (data.summary as string) ?? prev.planSummary,
         timeline: [...prev.timeline, event],
       };
 

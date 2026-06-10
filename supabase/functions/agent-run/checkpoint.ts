@@ -134,3 +134,23 @@ export async function loadCheckpoint(
 
   return loaded;
 }
+
+/** Remove checkpoint órfão (ex.: após plan terminal) — evita resume fantasma em BUILD. */
+export async function clearConversationCheckpoint(
+  sb: { from: (table: string) => unknown },
+  projectId: string,
+  conversationId: string,
+): Promise<void> {
+  const q = sb.from("agent_checkpoints") as {
+    delete: () => {
+      eq: (col: string, val: string) => {
+        eq: (col: string, val: string) => Promise<unknown>;
+      };
+    };
+  };
+  try {
+    await q.delete().eq("project_id", projectId).eq("conversation_id", conversationId);
+  } catch {
+    /* best-effort */
+  }
+}

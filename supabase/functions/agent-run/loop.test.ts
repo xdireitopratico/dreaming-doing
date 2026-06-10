@@ -250,6 +250,24 @@ Deno.test("2 resume checkpoint — restaura estado, pula classificação", async
   assertEquals(cv?.restored, true);
 });
 
+Deno.test("3a plan mode propõe plano sem tool_start", async () => {
+  const { loop, cheap, main, events } = f({
+    msgs: [{ role: "user", content: "app de voz com hermes e expo" }],
+    files: [{ path: "src/App.tsx", content: "export default () => <p>Canvas vazio</p>" }],
+    planMode: true,
+  });
+  cheap.queue(cr(3, "new_project", "App de voz Hermes"));
+  const r = await loop.run();
+  assertEquals(r.ok, true);
+  assertEquals(r.steps, 0);
+  assertEquals(main.calls.length, 0);
+  assertEquals(ef(events, "plan_proposed").length, 1);
+  assertEquals(ef(events, "tool_start").length, 0);
+  const de = ef(events, "done")[0]?.data as { planProposed?: boolean; awaiting?: boolean };
+  assertEquals(de?.planProposed, true);
+  assertEquals(de?.awaiting, true);
+});
+
 Deno.test("3 qualify phase — só em Plan mode", async () => {
   const { loop, cheap, events } = f({
     msgs: [{ role: "user", content: "site" }],

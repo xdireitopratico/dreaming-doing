@@ -354,21 +354,10 @@ export function useEditorPageHandlers({
 
       const pp = resolvePendingPlan(agent.progress.pendingPlan, chatMessages);
       if (pp) {
-        try {
-          await planRejectFn({
-            data: {
-              runId: pp.runId,
-              planId: pp.planId,
-              reason: "Nova mensagem — plano ignorado",
-            },
-          });
-          agent.clearPendingPlan();
-          qc.invalidateQueries({ queryKey: ["conversation", projectId] });
-          qc.invalidateQueries({ queryKey: ["agent-runs", projectId] });
-        } catch (e) {
-          toast.error((e as Error)?.message ?? "Falha ao ignorar plano pendente");
-          return;
-        }
+        toast.error(
+          "Há um plano aguardando revisão — abra o preview, Aprovar ou Rejeitar antes de enviar outra mensagem.",
+        );
+        return;
       }
 
       const messageParts =

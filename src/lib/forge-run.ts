@@ -22,6 +22,7 @@ export type ForgeMiniCardData = {
   editedFile?: string | null;
   fileCount?: number;
   hasPlan?: boolean;
+  planReady?: boolean;
 };
 
 export type TimelineItemType = "TASK" | "THOUGHT" | "TOOL" | "RESULT";
@@ -225,6 +226,9 @@ export function deriveTasksFromPlan(
   plan: PendingPlan,
   progress: AgentProgress,
 ): ForgeTaskItem[] {
+  if (progress.awaitingKind === "plan_approval") {
+    return [];
+  }
   const current = progress.currentStep ?? 0;
   const executing = progress.phase === "execute" && !progress.finished;
   const succeeded = progress.finished && progress.lastFinishOk !== false && !progress.canceled;
@@ -441,6 +445,13 @@ export function shouldShowJobCard(opts: {
 
   if (!runId || !progress || isQualifyOnly) return false;
 
+  if (
+    progress.awaitingKind === "plan_approval" &&
+    (progress.pendingPlan?.steps?.length ?? 0) > 0
+  ) {
+    return true;
+  }
+
   const isAnchoredLiveRun =
     !!activeRunId &&
     runId === activeRunId &&
@@ -532,6 +543,8 @@ export function buildAgentRunView(
       editedFile,
       fileCount: progress.diffs.length || progress.deliveryFiles?.length,
       hasPlan: !!jobPlan?.steps?.length,
+      planReady:
+        !!jobPlan?.steps?.length && progress.awaitingKind === "plan_approval",
     },
     thinking,
     latencyThinking,

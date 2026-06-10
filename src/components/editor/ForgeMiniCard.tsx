@@ -39,8 +39,9 @@ export function ForgeMiniCard({
     ? briefings[briefingIndex % briefings.length] ?? data.title
     : data.title;
 
-  const hint =
-    data.status === "done" && data.fileCount
+  const hint = data.planReady
+    ? "Revisar plano no preview →"
+    : data.status === "done" && data.fileCount
       ? `${data.fileCount} arquivos alterados →`
       : data.hasPlan
         ? "Ver plano no inspector →"
@@ -76,7 +77,13 @@ export function ForgeMiniCard({
               <span className="forge-mini-card-badge forge-mini-card-badge--working">Working…</span>
             </>
           )}
-          {data.status === "done" && (
+          {data.planReady && (
+            <>
+              <span className="forge-mini-card-dot forge-mini-card-dot--working" aria-hidden />
+              <span className="forge-mini-card-badge forge-mini-card-badge--working">Plano</span>
+            </>
+          )}
+          {data.status === "done" && !data.planReady && (
             <>
               <span className="forge-mini-card-dot forge-mini-card-dot--done" aria-hidden />
               <span className="forge-mini-card-badge forge-mini-card-badge--done">Done</span>
