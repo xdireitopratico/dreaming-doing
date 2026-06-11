@@ -624,7 +624,8 @@ export function EditorPageLayout({
                             runId={jobWorkspaceFocus.runId}
                             running={running && agent.activeRunId === jobWorkspaceFocus.runId}
                             activeTab={jobWorkspaceFocus.tab}
-                            pendingPlan={
+                            messages={chatMessages}
+                            livePendingPlan={
                               pendingPlan?.runId === jobWorkspaceFocus.runId ? pendingPlan : null
                             }
                             onTabChange={setJobTab}

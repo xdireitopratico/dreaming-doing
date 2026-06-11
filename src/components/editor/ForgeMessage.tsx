@@ -7,10 +7,8 @@ import { ForgeNarration } from "@/components/editor/ForgeNarration";
 import { ForgeDoneBubble } from "@/components/editor/ForgeDoneBubble";
 import { ForgeErrorCard } from "@/components/editor/ForgeErrorCard";
 import { ForgeQualifyPrompt } from "@/components/editor/ForgeQualifyPrompt";
-import { ForgePlanPrompt } from "@/components/editor/ForgePlanPrompt";
 import { ForgeMessageToolbar } from "@/components/editor/ForgeMessageToolbar";
 import { formatQualifyChoiceReply, parseQualifyChoices } from "@/lib/qualify-choices";
-import type { PendingPlan } from "@/lib/agent-progress";
 import type { RollbackRequest } from "@/components/editor/ForgeRollbackFlow";
 
 type ForgeMessageProps = {
@@ -21,9 +19,6 @@ type ForgeMessageProps = {
   isFocused?: boolean;
   showJobCard?: boolean;
   qualifyInteractive?: boolean;
-  planInteractive?: boolean;
-  jobPlan?: PendingPlan | null;
-  planStatus?: "pending" | "approved" | "rejected" | null;
   running?: boolean;
   onQualifySelect?: (text: string) => void;
   onCopy?: (text: string, msgId: string) => void;
@@ -41,9 +36,6 @@ export function ForgeMessage({
   isFocused = false,
   showJobCard = false,
   qualifyInteractive = false,
-  planInteractive = false,
-  jobPlan = null,
-  planStatus = null,
   running = false,
   onQualifySelect,
   onCopy,
@@ -89,14 +81,6 @@ export function ForgeMessage({
   const responseText = runView?.closingText ?? message?.content?.trim() ?? null;
   const qualifyPrompt = responseText ? parseQualifyChoices(responseText) : null;
   const showQualifyPrompt = !!qualifyPrompt && qualifyInteractive && !!onQualifySelect;
-  const showPlanPrompt =
-    planInteractive && !!jobPlan?.steps?.length && !!onOpenInspector && !!runView?.runId;
-
-  const showSettledPlan =
-    !!planStatus &&
-    (planStatus === "approved" || planStatus === "rejected") &&
-    !!jobPlan?.steps?.length &&
-    !planInteractive;
 
   const latency = runView?.latencyThinking;
   const showLatencyThinking =
@@ -115,7 +99,6 @@ export function ForgeMessage({
   const showResponse =
     !!responseText &&
     !showQualifyPrompt &&
-    !showPlanPrompt &&
     (isConversational || proseDiffersFromTitle || !showJobCard);
 
   const hasDelivery =
@@ -126,7 +109,6 @@ export function ForgeMessage({
     !isActive &&
     runView.lastFinishOk === true &&
     showJobCard &&
-    !showPlanPrompt &&
     hasDelivery;
 
   return (
@@ -173,47 +155,6 @@ export function ForgeMessage({
               onQualifySelect(choice ? formatQualifyChoiceReply(choice) : label);
             }}
           />
-        )}
-
-        {showPlanPrompt && jobPlan && (
-          <ForgePlanPrompt
-            plan={jobPlan}
-            runId={runView!.runId}
-            disabled={isActive}
-            onOpenPreview={(rid) => onOpenInspector!(rid, "plan")}
-          />
-        )}
-
-        {showSettledPlan && jobPlan && (
-          <div
-            className={`forge-mini-card w-full forge-animate-card-appear forge-plan-${planStatus}`}
-            data-testid="forge-plan-settled"
-            onClick={() =>
-              onOpenInspector && runView?.runId && onOpenInspector(runView.runId, "plan")
-            }
-            role="button"
-            tabIndex={0}
-          >
-            <div className="forge-mini-card-header">
-              {planStatus === "approved" ? (
-                <>
-                  <span className="forge-mini-card-dot forge-mini-card-dot--done" aria-hidden />
-                  <span className="forge-mini-card-badge forge-mini-card-badge--done">
-                    Plano aprovado
-                  </span>
-                </>
-              ) : (
-                <>
-                  <span className="forge-mini-card-dot forge-mini-card-dot--failed" aria-hidden />
-                  <span className="forge-mini-card-badge forge-mini-card-badge--failed">
-                    Plano rejeitado
-                  </span>
-                </>
-              )}
-            </div>
-            <p className="forge-mini-card-title">{jobPlan.summary}</p>
-            <p className="forge-mini-card-hint">Ver no inspector →</p>
-          </div>
         )}
 
         {showDone && <ForgeDoneBubble />}

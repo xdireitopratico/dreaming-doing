@@ -1,5 +1,8 @@
+import { useMemo } from "react";
 import type { AgentProgress, PendingPlan, PlanStep } from "@/lib/agent-progress";
+import type { ChatMessage } from "@/lib/chat-types";
 import type { JobInspectorTab } from "@/hooks/useJobWorkspaceFocus";
+import { resolveInspectorPlanForRun } from "@/lib/plan-message-meta";
 import { InspectorTimeline } from "@/components/editor/InspectorTimeline";
 import { InspectorChanges } from "@/components/editor/InspectorChanges";
 import { InspectorPlan } from "@/components/editor/InspectorPlan";
@@ -9,7 +12,8 @@ export type JobInspectorProps = {
   runId: string;
   running: boolean;
   activeTab: JobInspectorTab;
-  pendingPlan?: PendingPlan | null;
+  messages: ChatMessage[];
+  livePendingPlan?: PendingPlan | null;
   onTabChange: (tab: JobInspectorTab) => void;
   onBackToLatest: () => void;
   onOpenFile?: (path: string) => void;
@@ -26,10 +30,11 @@ const TABS: { id: JobInspectorTab; label: string }[] = [
 
 export function JobInspector({
   run,
-  runId: _runId,
+  runId,
   running,
   activeTab,
-  pendingPlan,
+  messages,
+  livePendingPlan,
   onTabChange,
   onBackToLatest,
   onOpenFile,
@@ -37,7 +42,16 @@ export function JobInspector({
   onPlanReject,
   runStartedAtMs,
 }: JobInspectorProps) {
-  const showPlanTab = !!pendingPlan;
+  const inspectorPlan = useMemo(
+    () =>
+      resolveInspectorPlanForRun(runId, messages, {
+        livePlan: livePendingPlan,
+        progressPlan: run.pendingPlan,
+      }),
+    [runId, messages, livePendingPlan, run.pendingPlan],
+  );
+
+  const showPlanTab = !!inspectorPlan;
 
   return (
     <div className="forge-inspector" data-testid="job-inspector">
@@ -72,8 +86,14 @@ export function JobInspector({
           />
         )}
         {activeTab === "changes" && <InspectorChanges progress={run} />}
-        {activeTab === "plan" && pendingPlan && onPlanApprove && onPlanReject ? (
-          <InspectorPlan plan={pendingPlan} onApprove={onPlanApprove} onReject={onPlanReject} />
+        {activeTab === "plan" && inspectorPlan && onPlanApprove && onPlanReject ? (
+          <InspectorPlan
+            plan={inspectorPlan.plan}
+            status={inspectorPlan.status}
+            awaitingApproval={inspectorPlan.awaitingApproval}
+            onApprove={onPlanApprove}
+            onReject={onPlanReject}
+          />
         ) : activeTab === "plan" ? (
           <InspectorTimeline
             progress={run}

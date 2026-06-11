@@ -102,6 +102,50 @@ export function resolveJobPlanForRun(
 
 export type StoredPlanStatus = "pending" | "rejected" | "approved";
 
+export type InspectorPlanState = {
+  plan: PendingPlan;
+  status: StoredPlanStatus;
+  awaitingApproval: boolean;
+};
+
+/** Último plano persistido no meta para um runId (histórico DB-first). */
+export function findStoredPlanForRunId(
+  runId: string,
+  messages: ChatMessage[],
+): StoredPlanMeta | null {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const msg = messages[i];
+    if (msg?.role !== "assistant") continue;
+    const stored = storedPlanFromMessage(msg);
+    if (stored?.plan.runId === runId) return stored;
+  }
+  return null;
+}
+
+/** Plano do inspector — DB-first; live só enquanto aguarda aprovação. */
+export function resolveInspectorPlanForRun(
+  runId: string,
+  messages: ChatMessage[],
+  opts: ResolveJobPlanOptions = {},
+): InspectorPlanState | null {
+  const plan = resolveJobPlanForRun(runId, messages, opts);
+  if (!plan) return null;
+
+  const stored = findStoredPlanForRunId(runId, messages);
+  const status: StoredPlanStatus = stored?.status ?? "pending";
+  const liveMatches = opts.livePlan?.runId === runId;
+
+  const awaitingApproval =
+    status === "pending" &&
+    (liveMatches || needsPlanApprovalNow(liveMatches ? opts.livePlan : null, messages));
+
+  return { plan, status, awaitingApproval };
+}
+
+export function planHeadlineFromPlan(plan: PendingPlan): string {
+  return plan.mission?.trim() || plan.summary?.trim() || "Plano proposto";
+}
+
 export type StoredPlanMeta = {
   status: StoredPlanStatus;
   plan: PendingPlan;

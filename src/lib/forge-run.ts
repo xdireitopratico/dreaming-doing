@@ -607,6 +607,8 @@ export function buildAgentRunView(
     userPrompt?: string | null;
     /** Timestamp client-side — início do thinking de latência (~500ms após envio). */
     runStartedAtMs?: number | null;
+    /** Chat plan-teaser: força mini-card "Plan ready" mesmo sem live awaitingKind. */
+    forcePlanReady?: boolean;
   },
 ): AgentRunView {
   const running = isRunEffectivelyActive(progress, opts?.running);
@@ -679,9 +681,10 @@ export function buildAgentRunView(
       : null;
 
   const planReady =
-    !!jobPlan?.steps?.length &&
-    (progress.awaitingKind === "plan_approval" ||
-      (progress.pendingPlan?.steps?.length ?? 0) > 0);
+    !!opts?.forcePlanReady ||
+    (!!jobPlan?.steps?.length &&
+      (progress.awaitingKind === "plan_approval" ||
+        (progress.pendingPlan?.steps?.length ?? 0) > 0));
   const { header, subtitle } = buildMiniCardHeader(progress, running, {
     editedFile,
     liveBriefings,

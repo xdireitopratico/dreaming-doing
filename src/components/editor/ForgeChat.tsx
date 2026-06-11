@@ -174,12 +174,29 @@ export function ForgeChat({
         const runStartedAtMs =
           item.runId === activeRunId ? (activeRunStartedAtMs ?? null) : null;
 
+        const msgPlanMeta = item.message ? storedPlanFromMessage(item.message) : null;
+        const planStatus = msgPlanMeta?.status ?? null;
+        const planForPrompt = jobPlan ?? msgPlanMeta?.plan ?? null;
+        const planAwaitingApproval =
+          progress.awaitingKind === "plan_approval" || resolved?.awaitingKind === "plan_approval";
+        const planRunMatches =
+          (!!pendingPlan?.runId && pendingPlan.runId === item.runId) ||
+          msgPlanMeta?.plan.runId === item.runId;
+        const planAlreadyDecided = planStatus === "approved" || planStatus === "rejected";
+        const planTeaser =
+          !!onOpenInspector &&
+          !!planForPrompt?.steps?.length &&
+          planRunMatches &&
+          !planAlreadyDecided &&
+          (msgPlanMeta?.status === "pending" || planAwaitingApproval);
+
         const runView = resolved
           ? buildAgentRunView(runId, resolved, {
               running: slotActive,
               jobPlan,
               userPrompt,
               runStartedAtMs,
+              forcePlanReady: planTeaser,
             })
           : null;
 
@@ -202,22 +219,6 @@ export function ForgeChat({
           (progress.awaitingKind === "qualify" ||
             progress.awaiting ||
             resolved?.awaitingKind === "qualify");
-
-        const msgPlanMeta = item.message ? storedPlanFromMessage(item.message) : null;
-        const planStatus = msgPlanMeta?.status ?? null;
-        const planForPrompt = jobPlan ?? msgPlanMeta?.plan ?? null;
-        const planAwaitingApproval =
-          progress.awaitingKind === "plan_approval" || resolved?.awaitingKind === "plan_approval";
-        const planRunMatches =
-          (!!pendingPlan?.runId && pendingPlan.runId === item.runId) ||
-          msgPlanMeta?.plan.runId === item.runId;
-        const planAlreadyDecided = planStatus === "approved" || planStatus === "rejected";
-        const planTeaser =
-          !!onOpenInspector &&
-          !!planForPrompt?.steps?.length &&
-          planRunMatches &&
-          !planAlreadyDecided &&
-          (msgPlanMeta?.status === "pending" || planAwaitingApproval);
 
         return (
           <AssistantTurn

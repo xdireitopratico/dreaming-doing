@@ -540,6 +540,23 @@ export function useEditorPageHandlers({
       }
       const { enabledSkillIds, enabledMcpIds } = loadAgentSessionExtensions();
 
+      const conversationId = conversation?.id;
+      if (conversationId) {
+        qc.setQueryData(
+          ["messages", conversationId],
+          (old: typeof chatMessages | undefined) => {
+            if (!old) return old;
+            return old.map((m) => {
+              if (m.role !== "assistant") return m;
+              const meta = m.meta as Record<string, unknown> | undefined;
+              if (meta?.planId !== pp.planId || meta?.runId !== pp.runId) return m;
+              return { ...m, meta: { ...meta, planStatus: "approved" } };
+            });
+          },
+        );
+      }
+      agent.clearPendingPlan();
+
       try {
         const planDocument = markdown?.trim() || pp.markdown?.trim() || pp.summary;
         const planHeadline = pp.mission?.trim() || pp.summary;
@@ -558,7 +575,6 @@ export function useEditorPageHandlers({
           },
         });
         setComposerMode("build");
-        agent.clearPendingPlan();
         toast.success("Build iniciado — acompanhe o progresso no inspector.");
         await qc.invalidateQueries({ queryKey: ["conversation", projectId] });
         await qc.invalidateQueries({ queryKey: ["messages", conversation?.id] });
@@ -579,6 +595,21 @@ export function useEditorPageHandlers({
           }
         }
       } catch (e) {
+        if (conversationId) {
+          qc.setQueryData(
+            ["messages", conversationId],
+            (old: typeof chatMessages | undefined) => {
+              if (!old) return old;
+              return old.map((m) => {
+                if (m.role !== "assistant") return m;
+                const meta = m.meta as Record<string, unknown> | undefined;
+                if (meta?.planId !== pp.planId || meta?.runId !== pp.runId) return m;
+                return { ...m, meta: { ...meta, planStatus: "pending" } };
+              });
+            },
+          );
+        }
+        agent.hydratePendingPlan(pp);
         toast.error((e as Error)?.message ?? "Falha ao aprovar plano");
       }
     },
@@ -591,6 +622,7 @@ export function useEditorPageHandlers({
       setComposerMode,
       agent,
       tasteQuota,
+      chatMessages,
     ],
   );
 
@@ -601,6 +633,23 @@ export function useEditorPageHandlers({
         toast.error("Plano não encontrado.");
         return;
       }
+      const conversationId = conversation?.id;
+      if (conversationId) {
+        qc.setQueryData(
+          ["messages", conversationId],
+          (old: typeof chatMessages | undefined) => {
+            if (!old) return old;
+            return old.map((m) => {
+              if (m.role !== "assistant") return m;
+              const meta = m.meta as Record<string, unknown> | undefined;
+              if (meta?.planId !== pp.planId || meta?.runId !== pp.runId) return m;
+              return { ...m, meta: { ...meta, planStatus: "rejected" } };
+            });
+          },
+        );
+      }
+      agent.clearPendingPlan();
+
       try {
         await planRejectFn({
           data: { runId: pp.runId, planId: pp.planId, reason },
@@ -608,12 +657,26 @@ export function useEditorPageHandlers({
         await qc.invalidateQueries({ queryKey: ["messages", conversation?.id] });
         qc.invalidateQueries({ queryKey: ["conversation", projectId] });
         qc.invalidateQueries({ queryKey: ["agent-runs", projectId] });
-        agent.clearPendingPlan();
       } catch (e) {
+        if (conversationId) {
+          qc.setQueryData(
+            ["messages", conversationId],
+            (old: typeof chatMessages | undefined) => {
+              if (!old) return old;
+              return old.map((m) => {
+                if (m.role !== "assistant") return m;
+                const meta = m.meta as Record<string, unknown> | undefined;
+                if (meta?.planId !== pp.planId || meta?.runId !== pp.runId) return m;
+                return { ...m, meta: { ...meta, planStatus: "pending" } };
+              });
+            },
+          );
+        }
+        agent.hydratePendingPlan(pp);
         toast.error((e as Error)?.message ?? "Falha ao rejeitar plano");
       }
     },
-    [agent, getPendingPlan, conversation?.id, projectId, qc, planRejectFn],
+    [agent, getPendingPlan, conversation?.id, projectId, qc, planRejectFn, chatMessages],
   );
 
   const liveSiteUrl = useMemo(() => {

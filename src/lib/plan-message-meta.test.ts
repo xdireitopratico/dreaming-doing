@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { resolvePendingPlan, storedPlanFromMessage } from "@/lib/plan-message-meta";
+import {
+  resolveInspectorPlanForRun,
+  resolvePendingPlan,
+  storedPlanFromMessage,
+} from "@/lib/plan-message-meta";
 import type { ChatMessage } from "@/lib/chat-types";
 
 describe("storedPlanFromMessage", () => {
@@ -42,6 +46,46 @@ describe("storedPlanFromMessage", () => {
     expect(stored?.status).toBe("pending");
     expect(stored?.plan.steps).toHaveLength(1);
     expect(resolvePendingPlan(null, [pending])?.summary).toBe("Landing café");
+  });
+
+  it("resolveInspectorPlanForRun usa DB quando live foi limpo", () => {
+    const pending: ChatMessage = {
+      id: "m-pending",
+      role: "assistant",
+      content: "## Plano",
+      timestamp: 0,
+      meta: {
+        runId: "run-plan",
+        planId: "plan-db",
+        planSummary: "Landing café",
+        planMission: "Desbloquear exclusão",
+        planSteps: [{ id: "s1", type: "custom", description: "Hero", enabled: true }],
+        planStatus: "pending",
+      },
+    };
+    const state = resolveInspectorPlanForRun("run-plan", [pending], { livePlan: null });
+    expect(state?.plan.summary).toBe("Landing café");
+    expect(state?.status).toBe("pending");
+    expect(state?.awaitingApproval).toBe(true);
+  });
+
+  it("resolveInspectorPlanForRun marca approved após decisão", () => {
+    const approved: ChatMessage = {
+      id: "m-approved",
+      role: "assistant",
+      content: "## Plano",
+      timestamp: 0,
+      meta: {
+        runId: "run-plan",
+        planId: "plan-db",
+        planSummary: "Landing café",
+        planSteps: [{ id: "s1", type: "custom", description: "Hero", enabled: true }],
+        planStatus: "approved",
+      },
+    };
+    const state = resolveInspectorPlanForRun("run-plan", [approved]);
+    expect(state?.status).toBe("approved");
+    expect(state?.awaitingApproval).toBe(false);
   });
 
   it("resolvePendingPlan prioriza live e cai no histórico", () => {

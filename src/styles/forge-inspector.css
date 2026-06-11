@@ -284,6 +284,46 @@
   white-space: nowrap;
 }
 
+.forge-plan-waiting-banner {
+  border-radius: 12px;
+  border: 1px solid var(--border-active);
+  background: color-mix(in srgb, var(--border-active) 12%, var(--bg-card));
+  padding: var(--space-md) var(--space-lg);
+}
+
+.forge-plan-waiting-banner--approved {
+  border-color: color-mix(in srgb, var(--status-done) 55%, var(--border-forge));
+  background: color-mix(in srgb, var(--status-done) 10%, var(--bg-card));
+}
+
+.forge-plan-waiting-banner--rejected {
+  border-color: var(--border-forge);
+  background: var(--bg-input);
+}
+
+.forge-plan-waiting-banner-kicker {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--text-accent);
+}
+
+.forge-plan-waiting-banner--approved .forge-plan-waiting-banner-kicker {
+  color: var(--status-done);
+}
+
+.forge-plan-waiting-banner--rejected .forge-plan-waiting-banner-kicker {
+  color: var(--text-secondary);
+}
+
+.forge-plan-waiting-banner-headline {
+  margin: var(--space-xs) 0 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--text-primary);
+}
+
 .forge-inspector-plan {
   display: flex;
   flex-direction: column;
