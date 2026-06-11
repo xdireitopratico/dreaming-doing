@@ -1,5 +1,8 @@
 import type { ChatMessage } from "@/lib/chat-types";
 import type { AgentProgress } from "@/lib/agent-progress";
+
+/** RunId sintético — slot assistant otimista antes do runId real (Think imediato). */
+export const PENDING_RUN_ID = "__pending__";
 import {
   hasMaterializedCardSnapshot,
   progressFromAssistantMessage,
@@ -12,6 +15,8 @@ export type FrozenRunSnapshot = Pick<
   | "diffs"
   | "pendingPlan"
   | "streamText"
+  | "narrationText"
+  | "latencyThoughtMs"
   | "phase"
   | "message"
   | "summary"
@@ -26,6 +31,7 @@ export type FrozenRunSnapshot = Pick<
   | "stackForkSuggested"
   | "awaiting"
   | "awaitingKind"
+  | "conversational"
 >;
 
 export type LovableThreadItem =
@@ -43,6 +49,8 @@ export type BuildLovableThreadOptions = {
   activeRunId?: string | null;
   running?: boolean;
   frozenRuns?: ReadonlyMap<string, FrozenRunSnapshot>;
+  /** Início client-side do turno (Think latency desde o envio). */
+  pendingTurnStartedAtMs?: number | null;
 };
 
 function freezeSnapshot(progress: AgentProgress): FrozenRunSnapshot {
@@ -52,6 +60,8 @@ function freezeSnapshot(progress: AgentProgress): FrozenRunSnapshot {
     diffs: progress.diffs,
     pendingPlan: progress.pendingPlan,
     streamText: progress.streamText,
+    narrationText: progress.narrationText,
+    latencyThoughtMs: progress.latencyThoughtMs,
     phase: progress.phase,
     message: progress.message,
     summary: progress.summary,
@@ -66,6 +76,7 @@ function freezeSnapshot(progress: AgentProgress): FrozenRunSnapshot {
     stackForkSuggested: progress.stackForkSuggested,
     awaiting: progress.awaiting,
     awaitingKind: progress.awaitingKind,
+    conversational: progress.conversational,
   };
 }
 
@@ -278,6 +289,22 @@ function insertAssistantSlot(
   if (slot.runId) {
     for (let i = 0; i < next.length; i++) {
       const ex = next[i];
+      if (
+        ex?.kind === "assistant" &&
+        ex.runId === PENDING_RUN_ID &&
+        slot.runId !== PENDING_RUN_ID
+      ) {
+        next[i] = {
+          ...ex,
+          ...slot,
+          message: mergeAssistantMessages(ex.message, slot.message),
+          runId: slot.runId,
+          live: slot.live ?? ex.live,
+          frozen: slot.frozen ?? ex.frozen,
+          isActive: slot.isActive ?? ex.isActive,
+        };
+        return next;
+      }
       if (ex?.kind === "assistant" && ex.runId === slot.runId) {
         next[i] = {
           ...ex,
@@ -320,7 +347,8 @@ export function buildLovableThread(
   progress: AgentProgress,
   opts: BuildLovableThreadOptions = {},
 ): LovableThreadItem[] {
-  const { activeRunId, running = false, frozenRuns } = opts;
+  const { activeRunId, running = false, frozenRuns, pendingTurnStartedAtMs } = opts;
+  const isPendingRun = activeRunId === PENDING_RUN_ID;
   // Prune active's frozen defensively here (on new active) so ensure/attach never surfaces stale
   // frozen for the live slot; other historical frozen preserved (exactly one per runId).
   const effectiveFrozen =
@@ -337,7 +365,6 @@ export function buildLovableThread(
     if (msg.role === "tool") continue;
 
     if (msg.role === "user") {
-      if (msg.meta?.queued === true) continue;
       items.push({ kind: "user", message: msg });
       continue;
     }
@@ -351,7 +378,10 @@ export function buildLovableThread(
     const pendingText = progress.streamText?.trim();
     const needsLiveSlot =
       (progress.error && progress.finished && !progress.canceled) ||
-      (!!pendingText && progress.finished && progress.lastFinishOk === true);
+      (!!pendingText && progress.finished && progress.lastFinishOk === true) ||
+      (progress.finished &&
+        !!pendingText &&
+        (progress.conversational === true || progress.awaitingKind === "qualify"));
 
     if (needsLiveSlot) {
       const insertAt = pendingAssistantInsertIndex(items);
@@ -377,14 +407,15 @@ export function buildLovableThread(
     !!activeRunId &&
     !progress.finished &&
     !progress.canceled &&
-    (running || !frozenSnap);
+    (running || isPendingRun || !frozenSnap);
 
   if (isLiveRun) {
+    const liveProgress = progress;
     items = insertAssistantSlot(items, insertAt, {
       kind: "assistant",
-      live: progress,
+      live: liveProgress,
       runId: activeRunId,
-      isActive: running,
+      isActive: running || isPendingRun,
     });
   } else if (activeRunId && frozenSnap) {
     items = insertAssistantSlot(items, insertAt, {
@@ -442,6 +473,8 @@ export function resolveAssistantProgress(
     resumable: f.resumable ?? false,
     statusHint: null,
     streamText: f.streamText,
+    narrationText: f.narrationText ?? null,
+    latencyThoughtMs: f.latencyThoughtMs ?? null,
     lastFinishOk: f.lastFinishOk ?? null,
     autoResuming: false,
     pendingQueueCount: 0,
@@ -452,5 +485,6 @@ export function resolveAssistantProgress(
     stackForkSuggested: f.stackForkSuggested,
     awaiting: f.awaiting,
     awaitingKind: f.awaitingKind,
+    conversational: f.conversational,
   };
 }

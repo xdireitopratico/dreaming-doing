@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ChevronDown, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ForgeTimelineItem } from "@/lib/forge-run";
@@ -8,8 +8,12 @@ type TimelineThoughtProps = {
 };
 
 export function TimelineThought({ item }: TimelineThoughtProps) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(item.active);
   const sec = Math.max(1, Math.round(item.durationMs / 1000));
+
+  useEffect(() => {
+    if (item.active) setOpen(true);
+  }, [item.active, item.text]);
 
   return (
     <div className="forge-timeline-thought forge-inspector-timeline-entry" data-testid="timeline-thought">
@@ -28,7 +32,9 @@ export function TimelineThought({ item }: TimelineThoughtProps) {
           )}
         />
       </button>
-      {open && item.text && <p className="forge-timeline-thought-prose">{item.text}</p>}
+      {(open || item.active) && item.text && (
+        <p className="forge-timeline-thought-prose">{item.text}</p>
+      )}
     </div>
   );
 }

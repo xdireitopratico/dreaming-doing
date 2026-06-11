@@ -394,6 +394,10 @@ export function useEditorPageHandlers({
       logEditorTelemetryEvent("agent", "chat_send", "info", sendMode);
       void qc.invalidateQueries({ queryKey: ["messages", conversation.id] });
 
+      if (!busy) {
+        agent.beginPendingTurn();
+      }
+
       if (busy) {
         const queued = await agent.queueMessage(
           projectId,
@@ -411,7 +415,10 @@ export function useEditorPageHandlers({
         }
         return;
       }
-      await runAgent(kind);
+      const ok = await runAgent(kind);
+      if (!ok) {
+        agent.clearPendingTurn();
+      }
     },
     [
       conversation,

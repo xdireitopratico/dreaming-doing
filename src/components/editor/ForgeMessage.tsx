@@ -3,7 +3,7 @@ import type { ChatMessage } from "@/lib/chat-types";
 import type { AgentRunView } from "@/lib/forge-run";
 import { ForgeMiniCard } from "@/components/editor/ForgeMiniCard";
 import { ForgeThinking } from "@/components/editor/ForgeThinking";
-
+import { ForgeNarration } from "@/components/editor/ForgeNarration";
 import { ForgeDoneBubble } from "@/components/editor/ForgeDoneBubble";
 import { ForgeErrorCard } from "@/components/editor/ForgeErrorCard";
 import { ForgeQualifyPrompt } from "@/components/editor/ForgeQualifyPrompt";
@@ -57,10 +57,12 @@ export function ForgeMessage({
 
   if (role === "user" && message) {
     const copyText = message.content?.trim() ?? "";
+    const isQueued = message.meta?.queued === true;
     return (
       <article className="forge-chat-item forge-chat-item-user" data-testid="forge-message-user">
-        <div className="forge-msg-user">
+        <div className={`forge-msg-user${isQueued ? " forge-msg-user--queued" : ""}`}>
           <p className="whitespace-pre-wrap">{message.content}</p>
+          {isQueued && <span className="forge-msg-queued-label">Na fila…</span>}
         </div>
         {onCopy && (
           <ForgeMessageToolbar
@@ -89,13 +91,24 @@ export function ForgeMessage({
   const showPlanPrompt =
     planInteractive && !!jobPlan?.steps?.length && !!onOpenInspector && !!runView?.runId;
 
+  const latency = runView?.latencyThinking;
   const showLatencyThinking =
-    isActive && !!runView?.latencyThinking?.active;
+    !!latency && (latency.active || (latency.durationMs != null && latency.durationMs > 0));
+
+  const showNarration = !!runView?.narration?.trim();
+
+  const isConversational =
+    runView?.conversational === true ||
+    (runView?.finished === true && !showJobCard && !!responseText?.trim());
+
+  const proseDiffersFromTitle =
+    !sessionTitle || !responseText || responseText !== sessionTitle;
+
   const showResponse =
     !!responseText &&
     !showQualifyPrompt &&
     !showPlanPrompt &&
-    responseText !== sessionTitle;
+    (isConversational || proseDiffersFromTitle || !showJobCard);
 
   const showDone =
     !!runView?.finished &&
@@ -109,12 +122,17 @@ export function ForgeMessage({
       className="forge-chat-item forge-chat-item-assistant group"
       data-testid="forge-message-assistant"
     >
-      {showLatencyThinking && runView?.latencyThinking && (
+      {showLatencyThinking && latency && (
         <ForgeThinking
           variant="latency"
-          startedAtMs={runView.latencyThinking.startedAtMs}
-          active
+          startedAtMs={latency.startedAtMs}
+          durationMs={latency.durationMs}
+          active={latency.active}
         />
+      )}
+
+      {showNarration && runView?.narration && (
+        <ForgeNarration text={runView.narration} />
       )}
 
       {showJobCard && runView && onOpenInspector && (

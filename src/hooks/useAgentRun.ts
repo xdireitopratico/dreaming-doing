@@ -21,8 +21,39 @@ import {
   initialAgentProgress,
   streamRowToSSEEvent,
 } from "@/lib/agent-progress";
-import { freezeSnapshot, type FrozenRunSnapshot } from "@/lib/lovable-thread";
+import {
+  freezeSnapshot,
+  PENDING_RUN_ID,
+  type FrozenRunSnapshot,
+} from "@/lib/lovable-thread";
+import {
+  hasMaterializedCardSnapshot,
+  runIdFromAssistantMessage,
+} from "@/lib/assistant-run-progress";
+import type { ChatMessage } from "@/lib/chat-types";
 import type { PendingQueueItem } from "@/components/editor/PendingQueuePanel";
+
+function progressHasFirstChatToken(progress: AgentProgress): boolean {
+  if (progress.streamText?.trim() || progress.narrationText?.trim()) return true;
+  return progress.timeline.some(
+    (ev) =>
+      ev.type === "assistant_text" &&
+      typeof ev.data?.text === "string" &&
+      String(ev.data.text).trim().length > 0,
+  );
+}
+
+function withFrozenLatencyThought(
+  next: AgentProgress,
+  startedAtMs: number | null,
+): AgentProgress {
+  if (next.latencyThoughtMs != null || !startedAtMs) return next;
+  if (!progressHasFirstChatToken(next)) return next;
+  return {
+    ...next,
+    latencyThoughtMs: Math.max(500, Date.now() - startedAtMs),
+  };
+}
 
 export type AgentConnectResult = { ok: true } | { ok: false; error: string };
 
@@ -138,8 +169,17 @@ export function useAgentRun() {
   const [frozenRuns, setFrozenRuns] = useState<Map<string, FrozenRunSnapshot>>(new Map());
   const [pendingQueueItems, setPendingQueueItems] = useState<PendingQueueItem[]>([]);
   const [queueBlockingReason, setQueueBlockingReason] = useState<string | null>(null);
+  /** Início do turno (envio) — persiste até o run terminar; alimenta Think latency no chat e inspector. */
+  const [activeRunStartedAtMs, setActiveRunStartedAtMs] = useState<number | null>(
+    null,
+  );
 
   const runIdRef = useRef<string | null>(null);
+  const activeRunStartedAtMsRef = useRef<number | null>(null);
+  useEffect(() => {
+    activeRunStartedAtMsRef.current = activeRunStartedAtMs;
+  }, [activeRunStartedAtMs]);
+
   const pendingQueueCountRef = useRef(0);
   const lastSeqRef = useRef(0);
   const eventChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
@@ -154,12 +194,14 @@ export function useAgentRun() {
     if (progress.awaiting && progress.awaitingKind === "qualify") {
       runIdRef.current = null;
       setActiveRunId(null);
+      setActiveRunStartedAtMs(null);
       setConnected(false);
       return;
     }
     if (progress.awaiting) return;
     runIdRef.current = null;
     setActiveRunId(null);
+    setActiveRunStartedAtMs(null);
     setConnected(false);
   }, [
     progress.finished,
@@ -233,12 +275,15 @@ export function useAgentRun() {
       const terminal = t === "finish" || t === "canceled" || t === "error";
       const freezeTerminal = t === "finish" || t === "done" || t === "canceled" || t === "error";
       setProgress((prev) => {
-        const next = applyAgentProgressEvent(prev, event);
+        let next = applyAgentProgressEvent(prev, event);
+        next = withFrozenLatencyThought(next, activeRunStartedAtMsRef.current);
         const rid = runIdRef.current;
         if (freezeTerminal && rid) {
           const snap = freezeSnapshot({
             ...next,
             streamText: next.streamText ?? prev.streamText,
+            narrationText: next.narrationText ?? prev.narrationText,
+            latencyThoughtMs: next.latencyThoughtMs ?? prev.latencyThoughtMs,
           });
           setFrozenRuns((m) => {
             const copy = new Map(m);
@@ -642,11 +687,17 @@ export function useAgentRun() {
       const manualResume = options?.resume === true;
       teardownChannels();
       setQueueBlockingReason(null);
+      const keepPending = activeRunStartedAtMs != null;
       setProgress({
         ...initialAgentProgress,
-        statusHint: manualResume ? "Conectando para retomar o agente…" : "Iniciando agente…",
+        statusHint: manualResume
+          ? "Conectando para retomar o agente…"
+          : keepPending
+            ? "Conectando ao agente…"
+            : "Iniciando agente…",
         resumable: false,
         autoResuming: false,
+        phase: keepPending ? "classify" : null,
       });
 
       logEditorTelemetryEvent("agent_run", "connect_start", "info", sessionKind ?? "auto");
@@ -668,6 +719,8 @@ export function useAgentRun() {
 
         if (!res.ok) {
           const msg = await parseErrorResponse(res);
+          setActiveRunStartedAtMs(null);
+          setActiveRunId((cur) => (cur === PENDING_RUN_ID ? null : cur));
           setProgress((p) => ({ ...p, error: msg, finished: true }));
           releaseAgentConnect();
           return { ok: false, error: msg };
@@ -748,8 +801,26 @@ export function useAgentRun() {
         releaseAgentConnect();
       }
     },
-    [postAgentRun, subscribeToRun, teardownChannels],
+    [postAgentRun, subscribeToRun, teardownChannels, activeRunStartedAtMs],
   );
+
+  const beginPendingTurn = useCallback(() => {
+    const startedAtMs = Date.now();
+    setActiveRunStartedAtMs(startedAtMs);
+    setActiveRunId(PENDING_RUN_ID);
+    setProgress({
+      ...initialAgentProgress,
+      statusHint: "Iniciando…",
+      phase: "classify",
+      finished: false,
+    });
+    return startedAtMs;
+  }, []);
+
+  const clearPendingTurn = useCallback(() => {
+    setActiveRunStartedAtMs(null);
+    setActiveRunId((cur) => (cur === PENDING_RUN_ID ? null : cur));
+  }, []);
 
   const drainQueue = useCallback(
     async (
@@ -1007,13 +1078,33 @@ export function useAgentRun() {
   }, []);
 
   const acknowledgeMaterializedRun = useCallback((runId: string) => {
-    // Mantém frozen no mapa — mini-cards Lovable persistem no thread após materializar no DB.
     setActiveRunId((cur) => {
       if (cur === runId) {
         runIdRef.current = null;
         return null;
       }
       return cur;
+    });
+  }, []);
+
+  /** Remove frozen só quando o DB tem cardSnapshot — evita gap live→DB. */
+  const reconcileFrozenWithMessages = useCallback((messages: ChatMessage[]) => {
+    setFrozenRuns((m) => {
+      let changed = false;
+      const copy = new Map(m);
+      for (const runId of copy.keys()) {
+        const materialized = messages.some(
+          (msg) =>
+            msg.role === "assistant" &&
+            runIdFromAssistantMessage(msg) === runId &&
+            hasMaterializedCardSnapshot(msg),
+        );
+        if (materialized) {
+          copy.delete(runId);
+          changed = true;
+        }
+      }
+      return changed ? pruneFrozenRuns(copy) : m;
     });
   }, []);
 
@@ -1038,5 +1129,12 @@ export function useAgentRun() {
     clearPendingPlan,
     hydratePendingPlan,
     acknowledgeMaterializedRun,
+    reconcileFrozenWithMessages,
+    beginPendingTurn,
+    clearPendingTurn,
+    activeRunStartedAtMs,
+    /** @deprecated use activeRunStartedAtMs */
+    pendingTurnStartedAtMs: activeRunStartedAtMs,
+    isPendingRun: activeRunId === PENDING_RUN_ID,
   };
 }

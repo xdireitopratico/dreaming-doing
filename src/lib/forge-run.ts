@@ -33,13 +33,15 @@ export type ForgeTimelineItem =
   | { type: "TOOL"; id: string; name: string; path?: string; detail?: string; active?: boolean }
   | { type: "RESULT"; id: string; ok: boolean; text: string; evidence?: string[] };
 
-/** Timer imediato ao enviar mensagem — mitiga latência antes do 1º token. */
+/** Timer imediato ao enviar mensagem — congela e permanece no chat. */
 export type LatencyThinking = {
   active: boolean;
   startedAtMs: number;
+  /** Duração fixa após congelar — «Thought for Xs» permanente. */
+  durationMs?: number;
 };
 
-/** Raciocínio interno (thinking:true SSE) — «Thought for Xs» no chat. */
+/** Raciocínio interno (thinking:true SSE) — «Thought for Xs» no inspector. */
 export type ReasoningThought = {
   active: boolean;
   durationMs: number;
@@ -59,6 +61,7 @@ export type AgentRunView = {
   finished: boolean;
   lastFinishOk: boolean | null;
   resumable: boolean;
+  conversational?: boolean;
 };
 
 function fileBase(path: string): string {
@@ -278,6 +281,50 @@ function hasFirstResponseToken(progress: AgentProgress): boolean {
   return !!(progress.streamText?.trim() || progress.narrationText?.trim());
 }
 
+/** Think latency — congela ao 1º token e permanece no chat (append-only). */
+export function resolveLatencyThinking(
+  progress: AgentProgress,
+  running: boolean,
+  runStartedAtMs: number | null | undefined,
+  forgeTimeline?: ForgeTimelineItem[],
+): LatencyThinking | null {
+  const storedMs = progress.latencyThoughtMs;
+  if (storedMs != null && storedMs > 0) {
+    return {
+      active: false,
+      startedAtMs: runStartedAtMs ?? Date.now() - storedMs,
+      durationMs: storedMs,
+    };
+  }
+
+  if (!runStartedAtMs) return null;
+
+  const timeline =
+    forgeTimeline ?? buildForgeTimeline(progress.timeline, running);
+  const thoughtItems = timeline.filter((i) => i.type === "THOUGHT");
+  const shouldFreeze =
+    hasFirstResponseToken(progress) || thoughtItems.length > 0;
+
+  if (shouldFreeze) {
+    const durationMs = Math.max(500, Date.now() - runStartedAtMs);
+    return { active: false, startedAtMs: runStartedAtMs, durationMs };
+  }
+
+  if (!running) return null;
+
+  return { active: true, startedAtMs: runStartedAtMs };
+}
+
+export function hasInspectorThoughtStream(progress: AgentProgress): boolean {
+  return progress.timeline.some(
+    (ev) =>
+      ev.type === "assistant_text" &&
+      ev.data?.thinking === true &&
+      typeof ev.data?.text === "string" &&
+      String(ev.data.text).trim().length > 0,
+  );
+}
+
 /** Briefing do mini card — sem contagem de arquivos nem duplicata de fase. */
 export function normalizeMiniCardBriefing(line: string): string | null {
   const t = line.trim();
@@ -444,6 +491,8 @@ export function shouldShowJobCard(opts: {
   } = opts;
 
   if (!runId || !progress || isQualifyOnly) return false;
+  if (progress.conversational === true) return false;
+  if (runId === "__pending__") return false;
 
   if (
     progress.awaitingKind === "plan_approval" &&
@@ -507,14 +556,13 @@ export function buildAgentRunView(
     };
   }
 
-  let latencyThinking: LatencyThinking | null = null;
   const runStartedAtMs = opts?.runStartedAtMs;
-  if (running && runStartedAtMs && !reasoningThought?.active) {
-    const hideLatency = !!progress.streamText?.trim() || !!reasoningThought;
-    if (!hideLatency) {
-      latencyThinking = { active: true, startedAtMs: runStartedAtMs };
-    }
-  }
+  const latencyThinking = resolveLatencyThinking(
+    progress,
+    running,
+    runStartedAtMs,
+    forgeTimeline,
+  );
 
   const thinking: AgentRunView["thinking"] = reasoningThought
     ? {
@@ -527,10 +575,21 @@ export function buildAgentRunView(
       : null;
 
   const streamBody = progress.streamText?.trim() || null;
+  const narrationBody = progress.narrationText?.trim() || null;
   const summaryBody = progress.summary?.trim();
   const safeSummary =
     summaryBody && !isWrapUpPhrase(summaryBody) ? summaryBody : null;
-  const closingText = streamBody || (!running ? safeSummary : null) || null;
+  const closingText =
+    streamBody ||
+    (!running ? narrationBody || safeSummary : null) ||
+    null;
+  const narrationForLine =
+    running &&
+    narrationBody &&
+    narrationBody !== sessionTitle &&
+    narrationBody !== streamBody
+      ? narrationBody
+      : null;
 
   return {
     runId,
@@ -549,13 +608,14 @@ export function buildAgentRunView(
     thinking,
     latencyThinking,
     reasoningThought,
-    narration: null,
+    narration: narrationForLine,
     closingText,
     timeline: forgeTimeline,
     error: progress.error,
     finished: progress.finished,
     lastFinishOk: progress.lastFinishOk,
     resumable: progress.resumable,
+    conversational: progress.conversational === true,
   };
 }
 

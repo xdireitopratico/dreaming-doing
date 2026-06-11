@@ -43,6 +43,7 @@ export type ForgeChatPanelProps = {
   onDrainQueue?: () => Promise<void>;
   onOpenInspector?: (runId: string, tab?: "timeline" | "changes" | "plan") => void;
   focusedRunId?: string | null;
+  activeRunStartedAtMs?: number | null;
 };
 
 export function ForgeChatPanel({
@@ -73,6 +74,7 @@ export function ForgeChatPanel({
   onDrainQueue,
   onOpenInspector,
   focusedRunId,
+  activeRunStartedAtMs,
 }: ForgeChatPanelProps) {
   const [composerModeLocal, setComposerModeLocal] = useState<AgentComposerMode>("build");
   const composerMode = composerModeProp ?? composerModeLocal;
@@ -182,13 +184,13 @@ export function ForgeChatPanel({
             progress={effectiveProgress}
             activeRunId={activeRunId}
             frozenRuns={frozenRuns}
-            pendingQueueItems={pendingQueueItems}
             pendingPlan={pendingPlan}
             onResume={onResumeAgent}
             onRollbackRequest={onRollbackMessage ? requestRollback : undefined}
             onOpenInspector={onOpenInspector}
             focusedRunId={focusedRunId}
             onQualifySelect={(text) => void onSend(text, composerMode)}
+            activeRunStartedAtMs={activeRunStartedAtMs}
           />
         )}
 

@@ -26,6 +26,11 @@ import {
   getSystemPrompt,
 } from "./prompts.ts";
 import {
+  isConversationalTurn,
+  isConversationalTurnEarly,
+  runConversationalPhase,
+} from "./conversational.ts";
+import {
   ANTI_LEAK_RULE,
   buildExecuteInstruction,
   buildMobileStackQualifyMessage,
@@ -507,6 +512,15 @@ export class AgentLoop {
       // The plan is emitted to the client via Realtime; approval/rejection
       // creates a new build run via the plan-decide server action.
     } else {
+      if (
+        !this.resumeRun &&
+        !this.approvedPlanBuild &&
+        this.originalUserRequest &&
+        isConversationalTurnEarly(this.originalUserRequest)
+      ) {
+        return await this.runConversationalReply();
+      }
+
       if (this.resumeRun) {
         this.appendResumeInstruction();
         this.emit("phase", {
@@ -588,6 +602,14 @@ export class AgentLoop {
       });
 
       await this.emitTransition("classified", classification);
+
+      if (
+        !isApprovedOrSkip &&
+        this.originalUserRequest &&
+        isConversationalTurn(this.originalUserRequest, classification)
+      ) {
+        return await this.runConversationalReply();
+      }
 
       this.emit("phase", {
         phase: this.planMode ? "plan" : "build",
@@ -1504,6 +1526,27 @@ export class AgentLoop {
     }
   }
 
+  private async runConversationalReply(): Promise<{
+    ok: boolean;
+    summary: string;
+    steps: number;
+    toolsUsed: string[];
+  }> {
+    const model = this.router.selectModel(1);
+    const reply = await runConversationalPhase(model, this.state.messages, {
+      planMode: this.planMode,
+    });
+    this.emit("assistant_text", { text: reply, final: true });
+    await this.persistFinal(reply, {
+      lastFinishOk: true,
+      conversational: true,
+    });
+    await this.clearCheckpoint();
+    await this.markRunStatus("completed");
+    this.emit("done", { summary: reply, conversational: true });
+    return { ok: true, summary: reply, steps: 0, toolsUsed: [] };
+  }
+
   private async runInventoryPhase(model: LLMProvider): Promise<string> {
     this.emit("phase", {
       phase: "qualify",
@@ -1843,6 +1886,20 @@ export class AgentLoop {
     return diffs;
   }
 
+  private latencyThoughtMsFromTimeline(timeline: Array<{ type: string; data?: Record<string, unknown>; timestamp: number }>): number | null {
+    const startEv = timeline.find((e) => e.type === "start");
+    if (!startEv) return null;
+    const startTs = startEv.timestamp;
+    const first = timeline.find(
+      (e) =>
+        e.type === "assistant_text" &&
+        typeof e.data?.text === "string" &&
+        String(e.data.text).trim().length > 0,
+    );
+    if (!first) return null;
+    return Math.max(500, first.timestamp - startTs);
+  }
+
   private buildCardSnapshot(opts: {
     streamText: string;
     deliveryFiles: string[];
@@ -1851,6 +1908,7 @@ export class AgentLoop {
     awaiting?: boolean;
     awaitingKind?: "qualify" | "plan_approval" | null;
     pendingPlan?: ProposedPlan | null;
+    conversational?: boolean;
     phase?: string | null;
     currentStep?: number | null;
     totalSteps?: number | null;
@@ -1862,12 +1920,16 @@ export class AgentLoop {
     const diffs = this.diffsFromTimeline(timeline);
     const finished = opts.finished ?? true;
     const lastFinishOk = opts.lastFinishOk ?? (finished ? true : null);
+    const narration = this.narrationBuffer.trim();
+    const latencyThoughtMs = this.latencyThoughtMsFromTimeline(timeline);
 
     const snapshot: Record<string, unknown> = {
       timeline,
       tools,
       diffs,
       streamText: opts.streamText,
+      narrationText: narration || undefined,
+      latencyThoughtMs: latencyThoughtMs ?? undefined,
       phase: opts.phase ?? (finished ? "done" : null),
       message: null,
       summary: null,
@@ -1882,6 +1944,7 @@ export class AgentLoop {
       stackForkSuggested: null,
       awaiting: opts.awaiting ?? false,
       awaitingKind: opts.awaitingKind ?? null,
+      conversational: opts.conversational === true,
     };
 
     if (opts.pendingPlan) {
@@ -1912,8 +1975,10 @@ export class AgentLoop {
       buildFailed?: boolean;
       awaiting?: boolean;
       awaitingKind?: "qualify" | "plan_approval" | null;
+      conversational?: boolean;
     },
   ): Promise<void> {
+    const conversational = opts?.conversational === true;
     const narration = this.narrationBuffer.trim();
     const deliveryFiles = [...this.touchedPaths];
     const body = narration || summary.trim() || "Concluído.";
@@ -1922,7 +1987,7 @@ export class AgentLoop {
         deliveryFiles.map((p) => `\`${p}\``).join(", ")
       }`
       : "";
-    const text = `${body}${fileFooter}`;
+    const text = conversational ? summary.trim() : `${body}${fileFooter}`;
     const lastFinishOk = opts?.lastFinishOk ?? true;
     const cardSnapshot = this.buildCardSnapshot({
       streamText: text,
@@ -1931,11 +1996,13 @@ export class AgentLoop {
       lastFinishOk,
       awaiting: opts?.awaiting,
       awaitingKind: opts?.awaitingKind,
+      conversational,
       phase: opts?.awaiting ? null : "done",
     });
     const meta: Record<string, unknown> = {
       runId: this.runId ?? undefined,
       partial: false,
+      conversational: conversational || undefined,
       deliveryFiles,
       executionLog: this.state.executionLog,
       finishedAt: new Date().toISOString(),

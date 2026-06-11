@@ -1,13 +1,35 @@
 import { describe, expect, it } from "vitest";
 import type { ChatMessage } from "@/lib/chat-types";
 import { initialAgentProgress } from "@/lib/agent-progress";
-import { buildLovableThread, freezeSnapshot, resolveAssistantProgress } from "@/lib/lovable-thread";
+import {
+  buildLovableThread,
+  freezeSnapshot,
+  PENDING_RUN_ID,
+  resolveAssistantProgress,
+} from "@/lib/lovable-thread";
 
 function msg(id: string, role: ChatMessage["role"], content: string): ChatMessage {
   return { id, role, content, timestamp: 0 };
 }
 
 describe("buildLovableThread", () => {
+  it("mensagem queued permanece no thread cronológico", () => {
+    const messages: ChatMessage[] = [
+      msg("u1", "user", "primeira"),
+      { ...msg("a1", "assistant", "ok"), runId: "r1" },
+      {
+        id: "u2",
+        role: "user",
+        content: "na fila",
+        timestamp: 0,
+        meta: { queued: true },
+      },
+    ];
+    const thread = buildLovableThread(messages, initialAgentProgress, {});
+    expect(thread.map((t) => t.kind)).toEqual(["user", "assistant", "user"]);
+    expect(thread[2]?.kind === "user" && thread[2].message.meta?.queued).toBe(true);
+  });
+
   it("pares user/assistant em ordem", () => {
     const messages = [
       msg("u1", "user", "oi"),
@@ -17,6 +39,42 @@ describe("buildLovableThread", () => {
     ];
     const thread = buildLovableThread(messages, initialAgentProgress, {});
     expect(thread.map((t) => t.kind)).toEqual(["user", "assistant", "user", "assistant"]);
+  });
+
+  it("slot pendente (__pending__) com Think imediato antes do runId real", () => {
+    const messages = [msg("u1", "user", "bom dia")];
+    const startedAt = Date.now() - 100;
+    const progress = { ...initialAgentProgress, phase: "classify", statusHint: "Iniciando…" };
+    const thread = buildLovableThread(messages, progress, {
+      running: true,
+      activeRunId: PENDING_RUN_ID,
+      pendingTurnStartedAtMs: startedAt,
+    });
+    expect(thread).toHaveLength(2);
+    const slot = thread[1] as Extract<(typeof thread)[number], { kind: "assistant" }>;
+    expect(slot.runId).toBe(PENDING_RUN_ID);
+    expect(slot.isActive).toBe(true);
+    expect(slot.live?.statusHint).toBe("Iniciando…");
+  });
+
+  it("pending vira runId real sem duplicar assistant (append-only)", () => {
+    const messages = [msg("u1", "user", "bom dia")];
+    const progress = { ...initialAgentProgress, phase: "execute", message: "Trabalhando…" };
+    const pendingThread = buildLovableThread(messages, progress, {
+      running: true,
+      activeRunId: PENDING_RUN_ID,
+      pendingTurnStartedAtMs: Date.now(),
+    });
+    const mergedThread = buildLovableThread(messages, progress, {
+      running: true,
+      activeRunId: "run-real",
+      pendingTurnStartedAtMs: Date.now(),
+    });
+    expect(pendingThread.filter((t) => t.kind === "assistant")).toHaveLength(1);
+    expect(mergedThread.filter((t) => t.kind === "assistant")).toHaveLength(1);
+    expect(
+      (mergedThread[1] as Extract<(typeof mergedThread)[number], { kind: "assistant" }>).runId,
+    ).toBe("run-real");
   });
 
   it("live após último user sem resposta", () => {

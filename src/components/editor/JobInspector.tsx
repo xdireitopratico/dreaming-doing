@@ -15,6 +15,7 @@ export type JobInspectorProps = {
   onOpenFile?: (path: string) => void;
   onPlanApprove?: (steps: PlanStep[], markdown?: string) => void | Promise<void>;
   onPlanReject?: (reason?: string) => void | Promise<void>;
+  runStartedAtMs?: number | null;
 };
 
 const TABS: { id: JobInspectorTab; label: string }[] = [
@@ -34,6 +35,7 @@ export function JobInspector({
   onOpenFile,
   onPlanApprove,
   onPlanReject,
+  runStartedAtMs,
 }: JobInspectorProps) {
   const showPlanTab = !!pendingPlan;
 
@@ -62,13 +64,23 @@ export function JobInspector({
 
       <div className="forge-inspector-body forge-scrollbar-dark">
         {activeTab === "timeline" && (
-          <InspectorTimeline progress={run} running={running} onOpenFile={onOpenFile} />
+          <InspectorTimeline
+            progress={run}
+            running={running}
+            onOpenFile={onOpenFile}
+            runStartedAtMs={runStartedAtMs}
+          />
         )}
         {activeTab === "changes" && <InspectorChanges progress={run} />}
         {activeTab === "plan" && pendingPlan && onPlanApprove && onPlanReject ? (
           <InspectorPlan plan={pendingPlan} onApprove={onPlanApprove} onReject={onPlanReject} />
         ) : activeTab === "plan" ? (
-          <InspectorTimeline progress={run} running={running} onOpenFile={onOpenFile} />
+          <InspectorTimeline
+            progress={run}
+            running={running}
+            onOpenFile={onOpenFile}
+            runStartedAtMs={runStartedAtMs}
+          />
         ) : null}
       </div>
     </div>

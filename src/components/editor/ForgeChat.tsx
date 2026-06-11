@@ -3,7 +3,7 @@ import { AlertTriangle, RefreshCw } from "lucide-react";
 import { Button } from "@forge/ui";
 import type { AgentProgress, PendingPlan } from "@/lib/agent-progress";
 import type { ChatMessage } from "@/lib/chat-types";
-import type { PendingQueueItem } from "@/components/editor/PendingQueuePanel";
+
 import { ForgeMessage } from "@/components/editor/ForgeMessage";
 import { ErrorHintCard } from "@/components/editor/ErrorHintCard";
 import {
@@ -34,13 +34,13 @@ export type ForgeChatProps = {
   progress: AgentProgress;
   activeRunId?: string | null;
   frozenRuns?: ReadonlyMap<string, FrozenRunSnapshot>;
-  pendingQueueItems?: PendingQueueItem[];
   pendingPlan?: PendingPlan | null;
   onResume?: () => void;
   onRollbackRequest?: (req: RollbackRequest) => void;
   onOpenInspector?: (runId: string, tab?: "timeline" | "changes" | "plan") => void;
   focusedRunId?: string | null;
   onQualifySelect?: (text: string) => void;
+  activeRunStartedAtMs?: number | null;
 };
 
 export function ForgeChat({
@@ -49,36 +49,15 @@ export function ForgeChat({
   progress,
   activeRunId,
   frozenRuns,
-  pendingQueueItems = [],
   pendingPlan,
   onResume,
   onRollbackRequest,
   onOpenInspector,
   focusedRunId,
   onQualifySelect,
+  activeRunStartedAtMs,
 }: ForgeChatProps) {
   const [copiedIds, setCopiedIds] = useState<Set<string>>(new Set());
-  const runAnchorsRef = useRef<Map<string, number>>(new Map());
-  const [runAnchorTick, setRunAnchorTick] = useState(0);
-
-  const LATENCY_THINKING_DELAY_MS = 500;
-
-  useEffect(() => {
-    if (!running || !activeRunId) return;
-    if (runAnchorsRef.current.has(activeRunId)) return;
-
-    const timer = window.setTimeout(() => {
-      runAnchorsRef.current.set(activeRunId, Date.now());
-      setRunAnchorTick((n) => n + 1);
-    }, LATENCY_THINKING_DELAY_MS);
-
-    return () => window.clearTimeout(timer);
-  }, [running, activeRunId]);
-
-  useEffect(() => {
-    if (!activeRunId || running) return;
-    runAnchorsRef.current.delete(activeRunId);
-  }, [activeRunId, running, progress.finished]);
 
   const handleCopy = useCallback((text: string, msgId: string) => {
     navigator.clipboard.writeText(text).then(() => {
@@ -99,8 +78,9 @@ export function ForgeChat({
         activeRunId,
         running,
         frozenRuns,
+        pendingTurnStartedAtMs: activeRunStartedAtMs,
       }),
-    [messages, progress, activeRunId, running, frozenRuns],
+    [messages, progress, activeRunId, running, frozenRuns, activeRunStartedAtMs],
   );
 
   const resolveErrorHint = useCallback((error: string) => {
@@ -199,12 +179,7 @@ export function ForgeChat({
           : null;
 
         const runStartedAtMs =
-          item.runId && runAnchorsRef.current.get(item.runId) != null
-            ? runAnchorsRef.current.get(item.runId)!
-            : activeRunId && item.runId === activeRunId
-              ? runAnchorsRef.current.get(activeRunId) ?? null
-              : null;
-        void runAnchorTick;
+          item.runId === activeRunId ? (activeRunStartedAtMs ?? null) : null;
 
         const runView = resolved
           ? buildAgentRunView(runId, resolved, {
@@ -270,19 +245,6 @@ export function ForgeChat({
           />
         );
       })}
-
-      {pendingQueueItems.length > 0 && (
-        <div className="space-y-2" data-testid="pending-queue-messages">
-          {pendingQueueItems.map((item) => (
-            <article key={`pending-${item.id}`} className="forge-chat-item forge-chat-item-user">
-              <div className="forge-msg-user forge-msg-user--queued">
-                <p className="whitespace-pre-wrap">{item.preview}</p>
-                <span className="forge-msg-queued-label">Na fila…</span>
-              </div>
-            </article>
-          ))}
-        </div>
-      )}
 
       {showGlobalError && (
         <section data-testid="agent-global-error">

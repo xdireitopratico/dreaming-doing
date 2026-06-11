@@ -32,15 +32,16 @@ export function ForgeThinking({
     return () => window.clearInterval(id);
   }, [active]);
 
+  const frozenMs = !active && durationMs > 0 ? durationMs : null;
   const liveMs =
-    variant === "latency" && startedAtMs
+    variant === "latency" && startedAtMs && active
       ? Math.max(500, now - startedAtMs)
-      : durationMs;
+      : frozenMs ?? durationMs;
 
   const label =
-    variant === "latency"
+    variant === "latency" && active
       ? `Thinking… ${Math.max(1, Math.round(liveMs / 1000))}s`
-      : formatThoughtSeconds(active ? liveMs : durationMs);
+      : formatThoughtSeconds(liveMs);
 
   return (
     <p

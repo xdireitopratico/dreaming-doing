@@ -9,6 +9,7 @@ import {
   deriveSessionTitle,
   deriveTasksFromPlan,
   isRunEffectivelyActive,
+  resolveLatencyThinking,
   shouldShowJobCard,
 } from "@/lib/forge-run";
 
@@ -81,6 +82,24 @@ describe("forge-run job requirements", () => {
 });
 
 describe("shouldShowJobCard", () => {
+  it("turno conversacional não mostra mini-card", () => {
+    expect(
+      shouldShowJobCard({
+        runId: "run-1",
+        progress: {
+          ...initialAgentProgress,
+          finished: true,
+          conversational: true,
+          streamText: "Bom dia! Como posso ajudar?",
+        },
+        isQualifyOnly: false,
+        isAgentJobMessage: true,
+        hasExecutionEvidence: false,
+        slotActive: false,
+        activeRunId: "run-1",
+      }),
+    ).toBe(false);
+  });
   it("mantém mini card na fase classify enquanto a run está ativa", () => {
     const progress = {
       ...initialAgentProgress,
@@ -261,6 +280,69 @@ describe("forge-run mini card briefing e título", () => {
     );
   });
 
+  it("resolveLatencyThinking — ativo antes do 1º token", () => {
+    const startedAt = Date.now() - 1500;
+    expect(
+      resolveLatencyThinking(
+        { ...initialAgentProgress, phase: "classify", finished: false },
+        true,
+        startedAt,
+      )?.active,
+    ).toBe(true);
+  });
+
+  it("resolveLatencyThinking — congela e permanece após 1º thinking:true", () => {
+    const startedAt = Date.now() - 1500;
+    const frozen = resolveLatencyThinking(
+      {
+        ...initialAgentProgress,
+        finished: false,
+        timeline: [
+          {
+            type: "assistant_text",
+            data: { text: "Analisando…", thinking: true, delta: true },
+            timestamp: Date.now(),
+          },
+        ],
+      },
+      true,
+      startedAt,
+      buildForgeTimeline(
+        [
+          {
+            type: "assistant_text",
+            data: { text: "Analisando…", thinking: true, delta: true },
+            timestamp: Date.now(),
+          },
+        ],
+        true,
+      ),
+    );
+    expect(frozen?.active).toBe(false);
+    expect(frozen?.durationMs).toBeGreaterThanOrEqual(500);
+  });
+
+  it("resolveLatencyThinking — reidrata latencyThoughtMs do progress", () => {
+    const lat = resolveLatencyThinking(
+      { ...initialAgentProgress, latencyThoughtMs: 3200 },
+      false,
+      null,
+    );
+    expect(lat?.active).toBe(false);
+    expect(lat?.durationMs).toBe(3200);
+  });
+
+  it("closingText inclui narrationText quando terminal sem streamText", () => {
+    const view = buildAgentRunView("run-1", {
+      ...initialAgentProgress,
+      finished: true,
+      lastFinishOk: true,
+      narrationText: "Vou criar a landing com Hero e CTA.",
+    });
+    expect(view.closingText).toContain("Vou criar a landing");
+    expect(view.narration).toBeNull();
+  });
+
   it("latencyThinking ativo antes do 1º token com runStartedAtMs", () => {
     const startedAt = Date.now() - 2000;
     const view = buildAgentRunView(
@@ -273,7 +355,7 @@ describe("forge-run mini card briefing e título", () => {
     expect(view.reasoningThought).toBeNull();
   });
 
-  it("latencyThinking some após 1º token; reasoningThought só com thinking:true", () => {
+  it("latencyThinking congela após 1º token; reasoningThought só com thinking:true", () => {
     const withStream = buildAgentRunView(
       "run-1",
       {
@@ -284,7 +366,8 @@ describe("forge-run mini card briefing e título", () => {
       },
       { running: true, runStartedAtMs: Date.now() - 3000 },
     );
-    expect(withStream.latencyThinking).toBeNull();
+    expect(withStream.latencyThinking?.active).toBe(false);
+    expect(withStream.latencyThinking?.durationMs).toBeGreaterThanOrEqual(500);
 
     const withReasoning = buildAgentRunView(
       "run-1",
@@ -302,7 +385,8 @@ describe("forge-run mini card briefing e título", () => {
       { running: true, runStartedAtMs: Date.now() - 5000 },
     );
     expect(withReasoning.reasoningThought?.active).toBe(true);
-    expect(withReasoning.latencyThinking).toBeNull();
+    expect(withReasoning.latencyThinking?.active).toBe(false);
+    expect(withReasoning.latencyThinking?.durationMs).toBeGreaterThanOrEqual(500);
   });
 
   it("normaliza explorando sem contagem de arquivos", () => {

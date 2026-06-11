@@ -268,6 +268,25 @@ Deno.test("3a plan mode propõe plano sem tool_start", async () => {
   assertEquals(de?.awaiting, true);
 });
 
+Deno.test("3d plan mode bom dia — conversacional, sem plan_proposed nem gather", async () => {
+  const { loop, cheap, main, events } = f({
+    msgs: [{ role: "user", content: "bom dia" }],
+    files: [],
+    planMode: true,
+  });
+  cheap.queue(tr("Bom dia! Como posso ajudar você hoje?"));
+  const r = await loop.run();
+  assertEquals(r.ok, true);
+  assertEquals(r.steps, 0);
+  assertEquals(main.calls.length, 0);
+  assertEquals(ef(events, "plan_proposed").length, 0);
+  assertEquals(ef(events, "tool_start").length, 0);
+  const phases = ef(events, "phase").map((e) => (e.data as { phase?: string }).phase);
+  assertEquals(phases.includes("gather"), false);
+  const de = ef(events, "done")[0]?.data as { conversational?: boolean };
+  assertEquals(de?.conversational, true);
+});
+
 Deno.test("3 qualify phase — só em Plan mode", async () => {
   const { loop, cheap, events } = f({
     msgs: [{ role: "user", content: "site" }],

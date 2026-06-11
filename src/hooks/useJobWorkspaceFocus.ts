@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 
 export type JobInspectorTab = "timeline" | "changes" | "plan";
 
@@ -12,17 +12,32 @@ export type JobWorkspaceFocus = {
 
 export function useJobWorkspaceFocus() {
   const [focus, setFocus] = useState<JobWorkspaceFocus | null>(null);
+  const dismissedRunIdRef = useRef<string | null>(null);
 
   const openJobWorkspace = useCallback((runId: string, tab: JobInspectorTab = "timeline") => {
     setFocus({ runId, tab });
+    if (dismissedRunIdRef.current !== runId) {
+      dismissedRunIdRef.current = null;
+    }
   }, []);
 
   const closeJobWorkspace = useCallback(() => {
-    setFocus(null);
+    setFocus((prev) => {
+      if (prev?.runId) dismissedRunIdRef.current = prev.runId;
+      return null;
+    });
   }, []);
 
   const setJobTab = useCallback((tab: JobInspectorTab) => {
     setFocus((prev) => (prev ? { ...prev, tab } : prev));
+  }, []);
+
+  const isInspectorDismissedForRun = useCallback((runId: string) => {
+    return dismissedRunIdRef.current === runId;
+  }, []);
+
+  const clearInspectorDismissed = useCallback(() => {
+    dismissedRunIdRef.current = null;
   }, []);
 
   return {
@@ -31,5 +46,7 @@ export function useJobWorkspaceFocus() {
     closeJobWorkspace,
     setJobTab,
     isJobFocused: focus !== null,
+    isInspectorDismissedForRun,
+    clearInspectorDismissed,
   };
 }

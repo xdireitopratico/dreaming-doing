@@ -139,6 +139,16 @@ function progressFromCardSnapshot(
       ? snap.streamText
       : msg.content?.trim() || null;
 
+  const narrationText =
+    typeof snap.narrationText === "string" && snap.narrationText.trim()
+      ? snap.narrationText
+      : null;
+
+  const latencyThoughtMs =
+    typeof snap.latencyThoughtMs === "number" && snap.latencyThoughtMs > 0
+      ? snap.latencyThoughtMs
+      : null;
+
   return {
     ...initialAgentProgress,
     phase: typeof snap.phase === "string" ? snap.phase : null,
@@ -152,6 +162,8 @@ function progressFromCardSnapshot(
     finished: snap.finished === true,
     resumable: snap.resumable === true,
     streamText,
+    narrationText,
+    latencyThoughtMs,
     lastFinishOk:
       typeof snap.lastFinishOk === "boolean" ? snap.lastFinishOk : null,
     diffs,
@@ -164,6 +176,7 @@ function progressFromCardSnapshot(
         : null,
     awaiting: snap.awaiting === true || !!pendingPlan,
     awaitingKind,
+    conversational: snap.conversational === true,
     planSummary:
       typeof snap.planSummary === "string"
         ? snap.planSummary

@@ -93,10 +93,14 @@ export interface AgentProgress {
   } | null;
   /** Texto de narração do agente (briefing inicial, wrap-up final) — separado de streamText para não poluir tool calls. */
   narrationText?: string | null;
+  /** Duração congelada do «Thought for Xs» de latência — permanece no chat após o 1º token. */
+  latencyThoughtMs?: number | null;
   /** Estado atual da FSM do agente (FORGE 2.0). */
   fsmState?: string | null;
   /** Sumário do último plano proposto (FORGE 2.0). */
   planSummary?: string | null;
+  /** Turno social/conversacional — só bubble no chat, sem mini-card de job. */
+  conversational?: boolean;
 }
 
 export type AgentConnectOptions = {
@@ -122,6 +126,7 @@ export const initialAgentProgress: AgentProgress = {
   statusHint: null,
   streamText: null,
   narrationText: null,
+  latencyThoughtMs: null,
   lastFinishOk: null,
   autoResuming: false,
   pendingQueueCount: 0,
@@ -544,23 +549,29 @@ export function applyAgentProgressEvent(
           ? null
           : prev.pendingPlan ?? planFromDone;
       const planAwaiting = data.planProposed === true && !!pendingPlan;
+      const conversational = data.conversational === true;
       return {
         ...prev,
         summary,
         finished: true,
         lastFinishOk: true,
         awaiting:
-          !!(data.awaiting || data.qualified) || planAwaiting,
-        awaitingKind: data.qualified || data.awaiting
-          ? "qualify"
-          : planAwaiting
-            ? "plan_approval"
-            : null,
+          conversational
+            ? false
+            : !!(data.awaiting || data.qualified) || planAwaiting,
+        awaitingKind: conversational
+          ? null
+          : data.qualified || data.awaiting
+            ? "qualify"
+            : planAwaiting
+              ? "plan_approval"
+              : null,
         resumable: false,
         error: null,
         streamText,
-        pendingPlan,
-        planSummary: pendingPlan?.summary ?? prev.planSummary,
+        pendingPlan: conversational ? null : pendingPlan,
+        planSummary: conversational ? null : pendingPlan?.summary ?? prev.planSummary,
+        conversational,
         statusHint: planAwaiting
           ? "Plano aguardando aprovação…"
           : prev.statusHint,

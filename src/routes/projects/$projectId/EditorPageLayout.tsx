@@ -19,7 +19,7 @@ import { ShortcutCheatsheet } from "@/components/editor/ShortcutCheatsheet";
 import { type LogEntry, LogPanel } from "@/components/editor/LogPanel";
 import { AiDiffViewer, type DiffEntry } from "@/components/editor/AiDiffViewer";
 import { resolvePendingPlan } from "@/lib/plan-message-meta";
-import { resolveAssistantProgress } from "@/lib/lovable-thread";
+import { PENDING_RUN_ID, resolveAssistantProgress } from "@/lib/lovable-thread";
 import {
   hasMaterializedCardSnapshot,
   progressFromAssistantMessage,
@@ -230,8 +230,19 @@ export function EditorPageLayout({
     }
   }, [pendingPlan, agent.progress.pendingPlan, agent.hydratePendingPlan]);
 
-  const { jobWorkspaceFocus, openJobWorkspace, closeJobWorkspace, setJobTab, isJobFocused } =
-    useJobWorkspaceFocus();
+  useEffect(() => {
+    agent.reconcileFrozenWithMessages(chatMessages);
+  }, [chatMessages, agent.reconcileFrozenWithMessages]);
+
+  const {
+    jobWorkspaceFocus,
+    openJobWorkspace,
+    closeJobWorkspace,
+    setJobTab,
+    isJobFocused,
+    isInspectorDismissedForRun,
+    clearInspectorDismissed,
+  } = useJobWorkspaceFocus();
 
   const handleOpenInspector = (
     runId: string,
@@ -274,6 +285,35 @@ export function EditorPageLayout({
       setJobTab("timeline");
     }
   }, [pendingPlan, jobWorkspaceFocus?.tab, setJobTab]);
+
+  useEffect(() => {
+    if (!running) return;
+    const runId = agent.activeRunId;
+    if (!runId || runId === PENDING_RUN_ID) return;
+    if (agent.progress.conversational) return;
+    if (pendingPlan) return;
+    if (isInspectorDismissedForRun(runId)) return;
+    openJobWorkspace(runId, "timeline");
+    onMainViewChange("preview");
+  }, [
+    running,
+    agent.activeRunId,
+    agent.progress.conversational,
+    pendingPlan,
+    openJobWorkspace,
+    onMainViewChange,
+    isInspectorDismissedForRun,
+  ]);
+
+  const prevInspectorRunRef = useRef<string | null>(null);
+  useEffect(() => {
+    const rid = agent.activeRunId;
+    if (!rid || rid === PENDING_RUN_ID) return;
+    if (prevInspectorRunRef.current !== rid) {
+      clearInspectorDismissed();
+      prevInspectorRunRef.current = rid;
+    }
+  }, [agent.activeRunId, clearInspectorDismissed]);
 
   const focusedJobProgress = useMemo((): AgentProgress | null => {
     if (!jobWorkspaceFocus) return null;
@@ -422,6 +462,7 @@ export function EditorPageLayout({
                   }}
                   onOpenInspector={handleOpenInspector}
                   focusedRunId={jobWorkspaceFocus?.runId ?? null}
+                  activeRunStartedAtMs={agent.activeRunStartedAtMs}
                 />
               </div>
             }
@@ -482,6 +523,11 @@ export function EditorPageLayout({
                             }}
                             onPlanApprove={handlePlanApprove}
                             onPlanReject={handlePlanReject}
+                            runStartedAtMs={
+                              agent.activeRunId === jobWorkspaceFocus.runId
+                                ? agent.activeRunStartedAtMs
+                                : null
+                            }
                           />
                         )}
 
