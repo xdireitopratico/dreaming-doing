@@ -27,7 +27,6 @@ import { useEditorPageData } from "./useEditorPageData";
 import { useEditorPageHandlers } from "./useEditorPageHandlers";
 import { useEditorAgentOrchestration } from "./useEditorAgentOrchestration";
 import { EditorPageLayout } from "./EditorPageLayout";
-import { isAssistantRunMaterialized } from "@/lib/assistant-materialized";
 
 export const Route = createFileRoute("/projects/$projectId/")({
   component: EditorPage,
@@ -41,6 +40,7 @@ function EditorPage() {
   const { projectId } = useParams({ from: "/projects/$projectId/" });
   const navigate = useNavigate();
   const search = useSearch({ from: "/projects/$projectId/" });
+  const useV2Chat = new URLSearchParams(window.location.search).get("chat") === "v2";
 
   const {
     tasteChatRemaining,
@@ -205,39 +205,6 @@ function EditorPage() {
     reviewedDiffs,
   });
 
-  const prevConversationIdRef = useRef<string | null>(null);
-  const sessionBoundRef = useRef<string | null>(null);
-  useEffect(() => {
-    if (!conversation?.id) return;
-
-    if (prevConversationIdRef.current && prevConversationIdRef.current !== conversation.id) {
-      agent.resetSession();
-      sessionBoundRef.current = null;
-    }
-    prevConversationIdRef.current = conversation.id;
-
-    agent.bindSession(projectId, conversation.id);
-
-    if (sessionBoundRef.current !== conversation.id) {
-      agent.tryRestoreSnapshot(projectId, conversation.id);
-      sessionBoundRef.current = conversation.id;
-    }
-  }, [conversation?.id, projectId, agent]);
-
-  useEffect(() => {
-    for (const m of chatMessages) {
-      if (m.role !== "assistant" || !m.runId) continue;
-      const finishedAt =
-        m.meta && typeof m.meta === "object"
-          ? (m.meta as Record<string, unknown>).finishedAt
-          : undefined;
-      if (typeof finishedAt !== "string" || !finishedAt.trim()) continue;
-      if (isAssistantRunMaterialized(m)) {
-        agent.acknowledgeMaterializedRun(m.runId);
-      }
-    }
-  }, [chatMessages, agent]);
-
   // Defensive invalidate (single source post-terminal path) for messages on activeRunId clear or
   // finished transitions — complements orchestration/coordinator; ensures buildChatThread sees
   // latest DB assistants for anchoring (multi-turn, no mismatch after second msg).
@@ -340,6 +307,7 @@ function EditorPage() {
     <EditorPageLayout
       projectId={projectId}
       conversationId={conversation?.id ?? null}
+      useV2Chat={useV2Chat}
       projectName={project?.name}
       running={running}
       agent={agent}

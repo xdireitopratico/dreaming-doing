@@ -13,6 +13,7 @@ import type { AgentComposerMode } from "@/lib/chat-types";
 import { CodeEditor, type Tab } from "@/components/editor/CodeEditor";
 import { FileTree } from "@/components/editor/FileTree";
 import { ForgeChatPanel } from "@/components/editor/ForgeChatPanel";
+import { ChatPanel } from "@/components/chat/ChatPanel";
 import type { ChatMessage } from "@/lib/chat-types";
 import { TastePostStartBanner } from "@/components/editor/TastePostStartBanner";
 import { OPEN_CONNECTOR_EVENT } from "@/hooks/useTasteUiActions";
@@ -70,6 +71,7 @@ export type EditorPageLayoutProps = {
   previewDevice: "desktop" | "tablet" | "mobile";
   setPreviewDevice: (device: "desktop" | "tablet" | "mobile") => void;
   e2bConnected: boolean;
+  useV2Chat?: boolean;
   chatMessages: ChatMessage[];
   chatMessagesLoading?: boolean;
   handleResumeAgent: () => void;
@@ -171,6 +173,7 @@ export function EditorPageLayout({
   previewDevice,
   setPreviewDevice,
   e2bConnected,
+  useV2Chat = false,
   chatMessages,
   chatMessagesLoading = false,
   handleResumeAgent,
@@ -423,47 +426,56 @@ export function EditorPageLayout({
             chat={
               <div className="forge-chat-column">
                 <TastePostStartBanner />
-                <ForgeChatPanel
-                  messages={chatMessages}
-                  running={running}
-                  agentProgress={agent.progress}
-                  activeRunId={agent.activeRunId}
-                  onResumeAgent={handleResumeAgent}
-                  onSend={handleSend}
-                  onStop={handleStop}
-                  onVisualEdits={handleVisualEdits}
-                  visualEditsActive={pickMode}
-                  composerMode={composerMode}
-                  onComposerModeChange={setComposerMode}
-                  externalPrompt={promptDraft}
-                  onExternalPromptConsumed={() => setPromptDraft(null)}
-                  messagesLoading={chatMessagesLoading}
-                  welcomeMarkdown={showWelcomeMarkdown ? welcomeMarkdown : undefined}
-                  tasteChatRemaining={tasteChatRemaining}
-                  tasteStartRemaining={tasteStartRemaining}
-                  onStartProject={handleStartProject}
-                  onDeploy={handleOpenLiveSite}
-                  onRollbackMessage={handleRollbackMessage}
-                  pendingQueueItems={agent.pendingQueueItems}
-                  queueBlockingReason={agent.queueBlockingReason}
-                  onClearPendingItem={(id) =>
-                    conversationId
-                      ? agent.clearPendingItem(projectId, conversationId, id)
-                      : Promise.resolve()
-                  }
-                  onClearAllPending={() =>
-                    conversationId
-                      ? agent.clearAllPending(projectId, conversationId)
-                      : Promise.resolve()
-                  }
-                  onDrainQueue={async () => {
-                    if (!conversationId) return;
-                    await agent.drainQueue(projectId, conversationId, composerMode);
-                  }}
-                  onOpenInspector={handleOpenInspector}
-                  focusedRunId={jobWorkspaceFocus?.runId ?? null}
-                  activeRunStartedAtMs={agent.activeRunStartedAtMs}
-                />
+                {useV2Chat ? (
+                  <ChatPanel
+                    projectId={projectId}
+                    conversationId={conversationId}
+                    welcomeMarkdown={showWelcomeMarkdown ? welcomeMarkdown : undefined}
+                  />
+                ) : (
+                  <ForgeChatPanel
+                    projectId={projectId}
+                    conversationId={conversationId}
+                    messages={chatMessages}
+                    messagesLoading={chatMessagesLoading}
+                    agentHasRun={agentHasRun}
+                    agent={agent}
+                    running={running}
+                    onResumeAgent={handleResumeAgent}
+                    onSend={handleSend}
+                    onStop={handleStop}
+                    onVisualEdits={handleVisualEdits}
+                    visualEditsActive={pickMode}
+                    composerMode={composerMode}
+                    onComposerModeChange={setComposerMode}
+                    externalPrompt={promptDraft}
+                    onExternalPromptConsumed={() => setPromptDraft(null)}
+                    welcomeMarkdown={welcomeMarkdown}
+                    tasteChatRemaining={tasteChatRemaining}
+                    tasteStartRemaining={tasteStartRemaining}
+                    onStartProject={handleStartProject}
+                    onDeploy={handleOpenLiveSite}
+                    onRollbackMessage={handleRollbackMessage}
+                    pendingQueueItems={agent.pendingQueueItems}
+                    queueBlockingReason={agent.queueBlockingReason}
+                    onClearPendingItem={(id) =>
+                      conversationId
+                        ? agent.clearPendingItem(projectId, conversationId, id)
+                        : Promise.resolve()
+                    }
+                    onClearAllPending={() =>
+                      conversationId
+                        ? agent.clearAllPending(projectId, conversationId)
+                        : Promise.resolve()
+                    }
+                    onDrainQueue={async () => {
+                      if (!conversationId) return;
+                      await agent.drainQueue(projectId, conversationId, composerMode);
+                    }}
+                    onOpenInspector={handleOpenInspector}
+                    focusedRunId={jobWorkspaceFocus?.runId ?? null}
+                  />
+                )}
               </div>
             }
             workspace={

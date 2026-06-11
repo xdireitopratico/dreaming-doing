@@ -1,20 +1,27 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { MarkdownRenderer } from "@/components/ui/markdown-renderer";
 import type { AgentProgress, PlanStep } from "@/lib/agent-progress";
 import type { AgentComposerMode, ChatMessage } from "@/lib/chat-types";
 
-import { usePendingPlan } from "@/hooks/usePendingPlan";
-import { resolveEffectiveAgentProgress } from "@/lib/resolve-agent-progress";
+import { useForgeChat } from "@/hooks/useForgeChat";
 import { buildOutgoingParts, type StoredMessagePart } from "@/lib/chat-attachments";
 import { ForgeChat } from "@/components/editor/ForgeChat";
 import { ForgeRollbackFlow } from "@/components/editor/ForgeRollbackFlow";
 import { ChatInputV2 } from "@/components/editor/ChatInputV2";
 import { PendingQueuePanel, type PendingQueueItem } from "@/components/editor/PendingQueuePanel";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import type { useAgentRun } from "@/hooks/useAgentRun";
+
+type AgentRun = ReturnType<typeof useAgentRun>;
 
 export type ForgeChatPanelProps = {
+  projectId: string;
+  conversationId: string | null | undefined;
   messages: ChatMessage[];
+  messagesLoading?: boolean;
+  agentHasRun?: boolean;
+  agent: AgentRun;
   running: boolean;
   onSend: (text: string, mode?: AgentComposerMode, parts?: StoredMessagePart[]) => void;
   onStop: () => void;
@@ -25,13 +32,9 @@ export type ForgeChatPanelProps = {
   externalPrompt?: string | null;
   onExternalPromptConsumed?: () => void;
   welcomeMarkdown?: string;
-  /** Histórico do DB ainda carregando (ex.: após F5) — não mostrar welcome/checklist. */
-  messagesLoading?: boolean;
   tasteChatRemaining?: number;
   tasteStartRemaining?: number;
   onStartProject?: () => void;
-  agentProgress?: AgentProgress;
-  activeRunId?: string | null;
   onResumeAgent?: () => void;
   onDeploy?: () => void | Promise<void>;
   onRollbackMessage?: (
@@ -45,11 +48,15 @@ export type ForgeChatPanelProps = {
   onDrainQueue?: () => Promise<void>;
   onOpenInspector?: (runId: string, tab?: "details" | "timeline" | "changes" | "plan") => void;
   focusedRunId?: string | null;
-  activeRunStartedAtMs?: number | null;
 };
 
 export function ForgeChatPanel({
+  projectId,
+  conversationId,
   messages,
+  messagesLoading = false,
+  agentHasRun = false,
+  agent,
   running,
   onSend,
   onStop,
@@ -60,12 +67,9 @@ export function ForgeChatPanel({
   externalPrompt,
   onExternalPromptConsumed,
   welcomeMarkdown,
-  messagesLoading = false,
   tasteChatRemaining,
   tasteStartRemaining,
   onStartProject,
-  agentProgress,
-  activeRunId,
   onResumeAgent,
   onDeploy,
   onRollbackMessage,
@@ -76,27 +80,33 @@ export function ForgeChatPanel({
   onDrainQueue,
   onOpenInspector,
   focusedRunId,
-  activeRunStartedAtMs,
 }: ForgeChatPanelProps) {
   const [composerModeLocal, setComposerModeLocal] = useState<AgentComposerMode>("plan");
   const composerMode = composerModeProp ?? composerModeLocal;
   const setComposerMode = onComposerModeChange ?? setComposerModeLocal;
 
+  const {
+    thread,
+    progress,
+    pendingPlan,
+    showWelcome,
+    agentBusy,
+    activeRunId,
+    activeRunStartedAtMs,
+  } = useForgeChat({
+    projectId,
+    conversationId,
+    messages,
+    messagesLoading,
+    agentHasRun,
+    agent,
+    running,
+  });
+
   const scrollRef = useRef<HTMLDivElement>(null);
   const pinnedToBottomRef = useRef(true);
   const [showNewMessagesPill, setShowNewMessagesPill] = useState(false);
   const PIN_THRESHOLD_PX = 100;
-
-  const effectiveProgress = useMemo(
-    () => resolveEffectiveAgentProgress(agentProgress, messages, activeRunId),
-    [agentProgress, messages, activeRunId],
-  );
-
-  const pendingPlan = usePendingPlan({
-    livePlan: agentProgress?.pendingPlan ?? null,
-    messages,
-    activeRunId,
-  });
 
   const scrollToBottom = useCallback((behavior: ScrollBehavior = "auto") => {
     const el = scrollRef.current;
@@ -121,9 +131,9 @@ export function ForgeChatPanel({
     }
     setShowNewMessagesPill(true);
   }, [
-    messages.length,
+    thread.length,
     running,
-    effectiveProgress.timeline.length,
+    progress.timeline.length,
     pendingQueueItems.length,
     scrollToBottom,
   ]);
@@ -142,14 +152,6 @@ export function ForgeChatPanel({
     [onDeploy, onSend, composerMode],
   );
 
-  const agentBusy = !!(
-    activeRunId &&
-    agentProgress &&
-    !agentProgress.finished &&
-    !agentProgress.canceled &&
-    !agentProgress.awaiting
-  );
-
   return (
     <TooltipProvider delayDuration={300}>
       <ForgeRollbackFlow
@@ -161,7 +163,7 @@ export function ForgeChatPanel({
         {(requestRollback) => (
           <div className="forge-chat-inner">
             <div ref={scrollRef} className="forge-messages" onScroll={handleMessagesScroll}>
-              {messages.length === 0 ? (
+              {showWelcome ? (
                 <div className="forge-msg-text space-y-3">
                   {messagesLoading ? (
                     <div
@@ -194,9 +196,10 @@ export function ForgeChatPanel({
                 </div>
               ) : (
                 <ForgeChat
+                  thread={thread}
                   messages={messages}
                   running={running}
-                  progress={effectiveProgress}
+                  progress={progress}
                   activeRunId={activeRunId}
                   pendingPlan={pendingPlan}
                   onResume={onResumeAgent}
@@ -219,11 +222,11 @@ export function ForgeChatPanel({
               )}
             </div>
 
-            {((agentProgress?.pendingQueueCount ?? 0) > 0 && pendingQueueItems.length > 0) ||
+            {((agent.progress.pendingQueueCount ?? 0) > 0 && pendingQueueItems.length > 0) ||
             (queueBlockingReason && running) ? (
               <PendingQueuePanel
                 items={pendingQueueItems}
-                pendingCount={agentProgress?.pendingQueueCount ?? 0}
+                pendingCount={agent.progress.pendingQueueCount ?? 0}
                 running={running}
                 blockingReason={queueBlockingReason}
                 onCopy={(text) => void navigator.clipboard.writeText(text)}
@@ -259,4 +262,4 @@ export function ForgeChatPanel({
   );
 }
 
-export type { ChatMessage, AgentComposerMode, PlanStep };
+export type { ChatMessage, AgentComposerMode, PlanStep, AgentProgress };

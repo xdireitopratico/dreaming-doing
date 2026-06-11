@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { AlertTriangle, RefreshCw } from "lucide-react";
 import { Button } from "@forge/ui";
 import type { AgentProgress, PendingPlan } from "@/lib/agent-progress";
@@ -14,14 +14,12 @@ import {
   timeoutHint,
   zombieRunHint,
 } from "@/lib/llm-error-hints";
-import { buildChatThread, resolveAssistantProgress } from "@/lib/chat-thread";
-import { buildAgentRunView, isRunEffectivelyActive, shouldShowJobCard } from "@/lib/forge-run";
-import { isAgentJobMessage } from "@/lib/assistant-run-progress";
-import { resolveJobPlanForRun, storedPlanFromMessage } from "@/lib/plan-message-meta";
-import { parseQualifyChoices } from "@/lib/qualify-choices";
+import { buildAssistantTurnModel } from "@/lib/forge-chat/turn-model";
+import type { ForgeChatThreadItem } from "@/lib/forge-chat/types";
 import type { RollbackRequest } from "@/components/editor/ForgeRollbackFlow";
 
 export type ForgeChatProps = {
+  thread: ForgeChatThreadItem[];
   messages: ChatMessage[];
   running: boolean;
   progress: AgentProgress;
@@ -36,6 +34,7 @@ export type ForgeChatProps = {
 };
 
 export function ForgeChat({
+  thread,
   messages,
   running,
   progress,
@@ -63,14 +62,29 @@ export function ForgeChat({
     });
   }, []);
 
-  const thread = useMemo(
-    () =>
-      buildChatThread(messages, progress, {
-        activeRunId,
-        running,
-        pendingTurnStartedAtMs: activeRunStartedAtMs,
-      }),
-    [messages, progress, activeRunId, running, activeRunStartedAtMs],
+  const turnCtxBase = useMemo(
+    () => ({
+      messages,
+      thread,
+      running,
+      activeRunId,
+      activeRunStartedAtMs,
+      pendingPlan,
+      sessionProgress: progress,
+      onOpenInspector: !!onOpenInspector,
+      onQualifySelect: !!onQualifySelect,
+    }),
+    [
+      messages,
+      thread,
+      running,
+      activeRunId,
+      activeRunStartedAtMs,
+      pendingPlan,
+      progress,
+      onOpenInspector,
+      onQualifySelect,
+    ],
   );
 
   const resolveErrorHint = useCallback((error: string) => {
@@ -106,131 +120,24 @@ export function ForgeChat({
           );
         }
 
-        let userPrompt: string | null = null;
-        for (let j = idx - 1; j >= 0; j--) {
-          const prev = thread[j];
-          if (prev?.kind === "user") {
-            userPrompt = prev.message.content?.trim() ?? null;
-            break;
-          }
-        }
-
-        const resolved = resolveAssistantProgress(item);
-        const runId = item.runId ?? activeRunId ?? `slot-${idx}`;
-
-        const anchoredLive =
-          !!running &&
-          !!activeRunId &&
-          !!item.runId &&
-          item.runId === activeRunId &&
-          !!resolved &&
-          !resolved.finished &&
-          !resolved.canceled;
-
-        const isQualifyOnly =
-          !!resolved &&
-          resolved.awaitingKind === "qualify" &&
-          !!resolved.awaiting &&
-          !anchoredLive &&
-          (resolved.tools?.length ?? 0) === 0 &&
-          (resolved.diffs?.length ?? 0) === 0 &&
-          (resolved.deliveryFiles?.length ?? 0) === 0;
-
-        const hasExecutionEvidence =
-          !!resolved &&
-          ((resolved.timeline?.length ?? 0) > 0 ||
-            (resolved.tools?.length ?? 0) > 0 ||
-            (resolved.diffs?.length ?? 0) > 0 ||
-            (resolved.deliveryFiles?.length ?? 0) > 0 ||
-            resolved.phase === "gather" ||
-            resolved.phase === "classify" ||
-            resolved.phase === "plan" ||
-            resolved.phase === "execute" ||
-            resolved.phase === "observe" ||
-            resolved.phase === "summarize");
-
-        const slotActive = resolved
-          ? isRunEffectivelyActive(resolved, item.isActive || anchoredLive)
-          : item.isActive || anchoredLive;
-
-        const showJobCard = shouldShowJobCard({
-          runId: item.runId,
-          progress: resolved,
-          isQualifyOnly,
-          isAgentJobMessage: isAgentJobMessage(item.message),
-          hasExecutionEvidence,
-          slotActive,
-          activeRunId,
-        });
-
-        const jobPlan = item.runId
-          ? resolveJobPlanForRun(item.runId, messages, {
-              livePlan: pendingPlan && pendingPlan.runId === item.runId ? pendingPlan : null,
-              progressPlan: resolved?.pendingPlan ?? null,
-              assistantMessage: item.message,
-            })
-          : null;
-
-        const runStartedAtMs = item.runId === activeRunId ? (activeRunStartedAtMs ?? null) : null;
-
-        const msgPlanMeta = item.message ? storedPlanFromMessage(item.message) : null;
-        const planStatus = msgPlanMeta?.status ?? null;
-        const planForPrompt = jobPlan ?? msgPlanMeta?.plan ?? null;
-        const planAwaitingApproval =
-          progress.awaitingKind === "plan_approval" || resolved?.awaitingKind === "plan_approval";
-        const planRunMatches =
-          (!!pendingPlan?.runId && pendingPlan.runId === item.runId) ||
-          msgPlanMeta?.plan.runId === item.runId;
-        const planAlreadyDecided = planStatus === "approved" || planStatus === "rejected";
-        const planTeaser =
-          !!onOpenInspector &&
-          !!planForPrompt?.steps?.length &&
-          planRunMatches &&
-          !planAlreadyDecided &&
-          (msgPlanMeta?.status === "pending" || planAwaitingApproval);
-
-        const runView = resolved
-          ? buildAgentRunView(runId, resolved, {
-              running: slotActive,
-              jobPlan,
-              userPrompt,
-              runStartedAtMs,
-              forcePlanReady: planTeaser,
-            })
-          : null;
-
-        const stableKey = item.runId
-          ? `assistant-${item.runId}`
-          : item.message?.id
-            ? `msg-${item.message.id}`
-            : `slot-${idx}`;
-
-        const isLastTurn =
-          idx === thread.length - 1 || !thread.slice(idx + 1).some((t) => t.kind === "assistant");
-        const closingText = runView?.closingText ?? item.message?.content?.trim() ?? null;
-        const parsedQualify = closingText ? parseQualifyChoices(closingText) : null;
-        const qualifyInteractive =
-          !!onQualifySelect &&
-          isLastTurn &&
-          !running &&
-          !slotActive &&
-          !!parsedQualify &&
-          (progress.awaitingKind === "qualify" ||
-            progress.awaiting ||
-            resolved?.awaitingKind === "qualify");
+        const model = buildAssistantTurnModel(
+          item,
+          { ...turnCtxBase, itemIndex: idx },
+          focusedRunId,
+        );
 
         return (
           <AssistantTurn
-            key={stableKey}
-            message={item.message}
-            runView={runView}
-            progress={resolved}
-            isActive={slotActive}
-            isFocused={!!item.runId && focusedRunId === item.runId}
-            showJobCard={showJobCard || planTeaser}
-            qualifyInteractive={qualifyInteractive}
-            planTeaser={planTeaser}
-            jobPlan={planForPrompt}
+            key={model.stableKey}
+            message={model.message}
+            runView={model.runView}
+            progress={model.progress}
+            isActive={model.isActive}
+            isFocused={model.isFocused}
+            showJobCard={model.showJobCard}
+            qualifyInteractive={model.qualifyInteractive}
+            planTeaser={model.planTeaser}
+            jobPlan={model.jobPlan}
             onQualifySelect={onQualifySelect}
             running={running}
             onCopy={handleCopy}
