@@ -48,22 +48,25 @@ export function useElementPicker({ iframeRef, onPick, active, onToggle }: UseEle
     return parts.join(" > ");
   }, []);
 
-  const getComputedInfo = useCallback((el: Element): PickedElement => {
-    const rect = el.getBoundingClientRect();
-    return {
-      selector: buildSelector(el),
-      tagName: el.tagName.toLowerCase(),
-      id: el.id || null,
-      classes: el.className ? String(el.className).trim().split(/\s+/) : [],
-      boundingBox: {
-        x: Math.round(rect.x),
-        y: Math.round(rect.y),
-        w: Math.round(rect.width),
-        h: Math.round(rect.height),
-      },
-      text: el.textContent?.trim().slice(0, 100) ?? null,
-    };
-  }, [buildSelector]);
+  const getComputedInfo = useCallback(
+    (el: Element): PickedElement => {
+      const rect = el.getBoundingClientRect();
+      return {
+        selector: buildSelector(el),
+        tagName: el.tagName.toLowerCase(),
+        id: el.id || null,
+        classes: el.className ? String(el.className).trim().split(/\s+/) : [],
+        boundingBox: {
+          x: Math.round(rect.x),
+          y: Math.round(rect.y),
+          w: Math.round(rect.width),
+          h: Math.round(rect.height),
+        },
+        text: el.textContent?.trim().slice(0, 100) ?? null,
+      };
+    },
+    [buildSelector],
+  );
 
   // Inject pick script into iframe
   useEffect(() => {

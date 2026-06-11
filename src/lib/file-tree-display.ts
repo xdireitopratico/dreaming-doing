@@ -24,9 +24,7 @@ export function isForgeUiBundlePath(path: string): boolean {
 /** Reduz a árvore: esconde \`packages/forge-ui/**\` e mostra um único marcador. */
 export function collapseForgeUiBundle(paths: string[]): string[] {
   const hasBundle = paths.some((p) => p.startsWith(FORGE_UI_PREFIX) || p === "packages/forge-ui");
-  const visible = paths.filter(
-    (p) => !p.startsWith(FORGE_UI_PREFIX) && p !== "packages/forge-ui",
-  );
+  const visible = paths.filter((p) => !p.startsWith(FORGE_UI_PREFIX) && p !== "packages/forge-ui");
   if (hasBundle) {
     visible.push(FORGE_UI_BUNDLED_MARKER);
   }

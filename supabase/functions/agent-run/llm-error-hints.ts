@@ -1,7 +1,12 @@
 // llm-error-hints.ts — Erros estruturados com ação + link para o usuário.
 // Substitui/estende friendlyLlmError: cada erro retorna um ErrorHint com
 // mensagem amigável + ação concreta + URL pra resolver.
-import { isRateLimitError, isOverloadError, isConnectionError, isModelNotFoundError } from "./llm-errors.ts";
+import {
+  isRateLimitError,
+  isOverloadError,
+  isConnectionError,
+  isModelNotFoundError,
+} from "./llm-errors.ts";
 
 export type ErrorSeverity = "info" | "warning" | "error";
 
@@ -219,9 +224,7 @@ export function timeoutHint(): ErrorHint {
 /** Hint de erro de build/validate (TypeScript falhou, testes falharam, etc). */
 export function validationHint(toolName: string | undefined, errorPreview: string): ErrorHint {
   return {
-    message: toolName
-      ? `Ferramenta ${toolName} reportou erro.`
-      : "Validação do código falhou.",
+    message: toolName ? `Ferramenta ${toolName} reportou erro.` : "Validação do código falhou.",
     action: "Ver diffs no console",
     link: null,
     severity: "warning",

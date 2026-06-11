@@ -12,11 +12,7 @@ import {
   encodeConnectEnvelope,
   parseConnectProcessStream,
 } from "./e2b-rest.ts";
-import {
-  detectDevCommand,
-  detectDevPort,
-  isCachedPreviewValid,
-} from "./preview-dev.ts";
+import { detectDevCommand, detectDevPort, isCachedPreviewValid } from "./preview-dev.ts";
 
 Deno.test("patchViteConfigForE2b adds allowedHosts", () => {
   const input = `export default defineConfig({
@@ -44,36 +40,44 @@ Deno.test("normalizeProjectPath prefixes /home/user", () => {
 });
 
 Deno.test("detectDevPort reads vite port from package.json", () => {
-  const files = [{
-    path: "package.json",
-    content: JSON.stringify({ scripts: { dev: "vite --port 3000" } }),
-  }];
+  const files = [
+    {
+      path: "package.json",
+      content: JSON.stringify({ scripts: { dev: "vite --port 3000" } }),
+    },
+  ];
   assertEquals(detectDevPort(files), "3000");
 });
 
 Deno.test("detectDevCommand adds host for vite projects", () => {
-  const files = [{
-    path: "package.json",
-    content: JSON.stringify({ scripts: { dev: "vite" } }),
-  }];
+  const files = [
+    {
+      path: "package.json",
+      content: JSON.stringify({ scripts: { dev: "vite" } }),
+    },
+  ];
   const cmd = detectDevCommand(files, 5173);
   assertEquals(cmd.includes("--host 0.0.0.0"), true);
   assertEquals(cmd.includes("5173"), true);
 });
 
 Deno.test("detectDevPort uses 8081 for expo projects", () => {
-  const files = [{
-    path: "package.json",
-    content: JSON.stringify({ dependencies: { expo: "~52.0.0" } }),
-  }];
+  const files = [
+    {
+      path: "package.json",
+      content: JSON.stringify({ dependencies: { expo: "~52.0.0" } }),
+    },
+  ];
   assertEquals(detectDevPort(files), "8081");
 });
 
 Deno.test("detectDevCommand starts expo web for expo projects", () => {
-  const files = [{
-    path: "package.json",
-    content: JSON.stringify({ dependencies: { expo: "~52.0.0" } }),
-  }];
+  const files = [
+    {
+      path: "package.json",
+      content: JSON.stringify({ dependencies: { expo: "~52.0.0" } }),
+    },
+  ];
   const cmd = detectDevCommand(files, 8081);
   assertEquals(cmd.includes("expo start --web"), true);
   assertEquals(cmd.includes("8081"), true);
@@ -131,7 +135,10 @@ Deno.test("parseConnectProcessStream reads connect+json envelope stream", () => 
     `{"event":{"end":{"exited":true,"status":"exit status 0"}}}`,
   ];
 
-  const chunks = [...frames.map((frame) => encodeConnectEnvelope(frame)), encodeConnectEnvelope("{}", true)];
+  const chunks = [
+    ...frames.map((frame) => encodeConnectEnvelope(frame)),
+    encodeConnectEnvelope("{}", true),
+  ];
   const packed = new Uint8Array(chunks.reduce((sum, chunk) => sum + chunk.length, 0));
   let offset = 0;
   for (const chunk of chunks) {

@@ -56,7 +56,9 @@ export function registerFsTools(reg: ToolRegistry, ctx: FsContext): void {
       const { data, error } = await supabase
         .from("project_files")
         .select("content")
-        .eq("project_id", projectId).eq("path", args.path).maybeSingle();
+        .eq("project_id", projectId)
+        .eq("path", args.path)
+        .maybeSingle();
       if (error) {
         return {
           toolCallId: "",
@@ -80,8 +82,7 @@ export function registerFsTools(reg: ToolRegistry, ctx: FsContext): void {
   reg.register(
     {
       name: "fs_write",
-      description:
-        "Cria ou sobrescreve um arquivo. Escreva o conteúdo COMPLETO do arquivo.",
+      description: "Cria ou sobrescreve um arquivo. Escreva o conteúdo COMPLETO do arquivo.",
       parameters: {
         type: "object",
         properties: {
@@ -92,12 +93,15 @@ export function registerFsTools(reg: ToolRegistry, ctx: FsContext): void {
       },
     },
     async (args) => {
-      const { error } = await supabase.from("project_files").upsert({
-        project_id: projectId,
-        path: args.path as string,
-        content: args.content as string,
-        updated_at: new Date().toISOString(),
-      }, { onConflict: "project_id,path" });
+      const { error } = await supabase.from("project_files").upsert(
+        {
+          project_id: projectId,
+          path: args.path as string,
+          content: args.content as string,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "project_id,path" },
+      );
       if (error) {
         return {
           toolCallId: "",
@@ -106,12 +110,7 @@ export function registerFsTools(reg: ToolRegistry, ctx: FsContext): void {
           error: error.message,
         };
       }
-      corpusCapture(
-        ctx,
-        args.path as string,
-        args.content as string,
-        "agent_write",
-      );
+      corpusCapture(ctx, args.path as string, args.content as string, "agent_write");
       // success path for fs_write: loop emits file_diff(pre-capture) + preview_sync + tick (unconditional, live during first-gen seed + follow-ups)
       return {
         toolCallId: "",
@@ -133,10 +132,11 @@ export function registerFsTools(reg: ToolRegistry, ctx: FsContext): void {
       },
     },
     async (args) => {
-      const { error } = await supabase.from("project_files").delete().eq(
-        "project_id",
-        projectId,
-      ).eq("path", args.path);
+      const { error } = await supabase
+        .from("project_files")
+        .delete()
+        .eq("project_id", projectId)
+        .eq("path", args.path);
       if (error) {
         return {
           toolCallId: "",
@@ -170,7 +170,8 @@ export function registerFsTools(reg: ToolRegistry, ctx: FsContext): void {
       const { data, error } = await supabase
         .from("project_files")
         .select("path, updated_at")
-        .eq("project_id", projectId).order("path");
+        .eq("project_id", projectId)
+        .order("path");
       if (error) {
         return {
           toolCallId: "",
@@ -224,10 +225,12 @@ export function registerFsTools(reg: ToolRegistry, ctx: FsContext): void {
       let regex: RegExp | null = null;
       try {
         regex = new RegExp(search, "i");
-      } catch { /* texto literal */ }
+      } catch {
+        /* texto literal */
+      }
 
       const results: Array<{ path: string; line: number; text: string }> = [];
-      for (const f of (data ?? [])) {
+      for (const f of data ?? []) {
         if (!f.content || !globMatch(filePat, f.path)) continue;
         const lines = f.content.split("\n");
         for (let i = 0; i < lines.length; i++) {
@@ -253,8 +256,7 @@ export function registerFsTools(reg: ToolRegistry, ctx: FsContext): void {
   reg.register(
     {
       name: "fs_edit",
-      description:
-        `Substitui um trecho específico de texto em um arquivo. Edição cirúrgica — modifica só o necessário, não reescreve o arquivo inteiro.
+      description: `Substitui um trecho específico de texto em um arquivo. Edição cirúrgica — modifica só o necessário, não reescreve o arquivo inteiro.
 
 Parâmetros:
 - path: caminho do arquivo
@@ -288,12 +290,14 @@ Use fs_read antes para garantir que oldText bate exatamente.`,
       const path = args.path as string;
       const oldText = args.oldText as string;
       const newText = args.newText as string;
-      const replaceAll = args.replaceAll as boolean || false;
+      const replaceAll = (args.replaceAll as boolean) || false;
 
       const { data, error } = await supabase
         .from("project_files")
         .select("content")
-        .eq("project_id", projectId).eq("path", path).maybeSingle();
+        .eq("project_id", projectId)
+        .eq("path", path)
+        .maybeSingle();
       if (error) {
         return {
           toolCallId: "",
@@ -317,8 +321,7 @@ Use fs_read antes para garantir que oldText bate exatamente.`,
           toolCallId: "",
           ok: false,
           output: null,
-          error:
-            `Texto não encontrado em "${path}". Use fs_read para ver o conteúdo atual.`,
+          error: `Texto não encontrado em "${path}". Use fs_read para ver o conteúdo atual.`,
         };
       }
 
@@ -332,12 +335,15 @@ Use fs_read antes para garantir que oldText bate exatamente.`,
         count = 1;
       }
 
-      const { error: writeErr } = await supabase.from("project_files").upsert({
-        project_id: projectId,
-        path,
-        content: edited,
-        updated_at: new Date().toISOString(),
-      }, { onConflict: "project_id,path" });
+      const { error: writeErr } = await supabase.from("project_files").upsert(
+        {
+          project_id: projectId,
+          path,
+          content: edited,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "project_id,path" },
+      );
 
       if (writeErr) {
         return {
@@ -362,8 +368,7 @@ Use fs_read antes para garantir que oldText bate exatamente.`,
   reg.register(
     {
       name: "fs_read_many",
-      description:
-        `Lê VÁRIOS arquivos de uma vez usando glob pattern. Muito mais eficiente que chamar fs_read várias vezes.
+      description: `Lê VÁRIOS arquivos de uma vez usando glob pattern. Muito mais eficiente que chamar fs_read várias vezes.
 
 Exemplos:
 - pattern: "src/**/*.tsx" → lê todos os TSX do src
@@ -405,16 +410,17 @@ Arquivos muito grandes (>10KB) têm conteúdo truncado. Use fs_read individual p
         };
       }
 
-      const matched = (data ?? [] as FileEntry[])
+      const matched = (data ?? ([] as FileEntry[]))
         .filter((f: FileEntry) => globMatch(pattern, f.path))
         .slice(0, maxFiles);
 
       const files = matched.map((f: FileEntry) => ({
         path: f.path,
-        content: (f.content ?? "").length > 10240
-          ? (f.content ?? "").slice(0, 10240) +
-            `\n... [truncado, ${f.content.length} bytes totais]`
-          : f.content,
+        content:
+          (f.content ?? "").length > 10240
+            ? (f.content ?? "").slice(0, 10240) +
+              `\n... [truncado, ${f.content.length} bytes totais]`
+            : f.content,
       }));
 
       return {

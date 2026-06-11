@@ -29,9 +29,7 @@ export function parseQualifyChoices(text: string): ParsedQualifyPrompt | null {
     const line = raw.trim();
     if (!line) continue;
 
-    const bulletBold = line.match(
-      /^[-*•]\s+\*\*(.+?)\*\*(?:\s*[—–-]\s*(.+))?$/,
-    );
+    const bulletBold = line.match(/^[-*•]\s+\*\*(.+?)\*\*(?:\s*[—–-]\s*(.+))?$/);
     const bulletPlain = line.match(/^[-*•]\s+(.+)$/);
     const letter = line.match(/^([A-Da-d])[.)]\s+(.+)$/);
     const numbered = line.match(/^(\d+)[.)]\s+(.+)$/);

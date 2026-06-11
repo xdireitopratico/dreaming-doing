@@ -83,7 +83,9 @@ export function hasUserLlmKeyFromKeys(
   return (
     groqPool.length > 0 ||
     nvidiaPool.length > 0 ||
-    Object.keys(userOnlyKeys).some((k) => USER_LLM_KEY_NAMES.includes(k as (typeof USER_LLM_KEY_NAMES)[number]))
+    Object.keys(userOnlyKeys).some((k) =>
+      USER_LLM_KEY_NAMES.includes(k as (typeof USER_LLM_KEY_NAMES)[number]),
+    )
   );
 }
 
@@ -209,7 +211,9 @@ export async function resolveAgentProvider(
   if (sessionKind === "taste_start") {
     const poolKeys = await loadForgeTrialRobinPool(supabase);
     if (poolKeys.length === 0) {
-      throw new Error("Start Project: administrador deve configurar pool NVIDIA em API Keys (/api).");
+      throw new Error(
+        "Start Project: administrador deve configurar pool NVIDIA em API Keys (/api).",
+      );
     }
     const robinPool = new RobinKeyPool(poolKeys);
     const mainCfg = robinProviderConfig("nvidia", poolKeys, PLATFORM_ROBIN_TASTE_PRESET_ID);
@@ -231,9 +235,10 @@ export async function resolveAgentProvider(
     const mainCfg = robinProviderConfig(poolProvider, poolKeys, preferences?.robinPoolModelId);
     return {
       mainCfg,
-      connectorKeys: poolProvider === "nvidia"
-        ? { NVIDIA_API_KEY: poolKeys[0]! }
-        : { GROQ_API_KEY: poolKeys[0]! },
+      connectorKeys:
+        poolProvider === "nvidia"
+          ? { NVIDIA_API_KEY: poolKeys[0]! }
+          : { GROQ_API_KEY: poolKeys[0]! },
       robinPool,
       effectiveRobin: true,
       tasteStart: false,
@@ -255,7 +260,9 @@ export async function resolveAgentProvider(
   } else {
     const resolved = resolveModelFromPreferences(preferences, userOnlyKeys);
     if (!resolved) {
-      throw new Error("Chave ausente para o modelo escolhido. Adicione a API Key do provedor em /api.");
+      throw new Error(
+        "Chave ausente para o modelo escolhido. Adicione a API Key do provedor em /api.",
+      );
     }
     mainCfg = {
       provider: resolved.provider,

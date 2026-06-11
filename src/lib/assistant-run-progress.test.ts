@@ -57,18 +57,28 @@ describe("assistant-run-progress", () => {
         finishedAt: "2026-01-01T00:00:00Z",
         cardSnapshot: {
           timeline: [
-            { type: "tool_start", data: { name: "fs_write", args: { path: "src/App.tsx" } }, timestamp: 1 },
-            { type: "file_diff", data: { path: "src/App.tsx", before: "", after: "x", op: "write" }, timestamp: 2 },
+            {
+              type: "tool_start",
+              data: { name: "fs_write", args: { path: "src/App.tsx" } },
+              timestamp: 1,
+            },
+            {
+              type: "file_diff",
+              data: { path: "src/App.tsx", before: "", after: "x", op: "write" },
+              timestamp: 2,
+            },
           ],
           tools: [{ name: "fs_write", args: { path: "src/App.tsx" }, ok: true }],
-          diffs: [{
-            id: "src/App.tsx::0::2",
-            path: "src/App.tsx",
-            before: "",
-            after: "x",
-            op: "write",
-            timestamp: 2,
-          }],
+          diffs: [
+            {
+              id: "src/App.tsx::0::2",
+              path: "src/App.tsx",
+              before: "",
+              after: "x",
+              op: "write",
+              timestamp: 2,
+            },
+          ],
           streamText: "Landing criada com hero.",
           finished: true,
           lastFinishOk: true,

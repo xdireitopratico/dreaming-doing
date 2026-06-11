@@ -167,7 +167,8 @@ function HealthPage() {
                   : "✗ Um ou mais serviços críticos com problema"}
               </p>
               <p className="font-mono text-[9px] text-[var(--text-dim)] mt-1">
-                Última checagem: {new Date(report.timestamp).toLocaleString("pt-BR")} · auto-refresh 30s
+                Última checagem: {new Date(report.timestamp).toLocaleString("pt-BR")} · auto-refresh
+                30s
               </p>
             </div>
 

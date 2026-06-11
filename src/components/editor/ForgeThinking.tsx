@@ -36,7 +36,7 @@ export function ForgeThinking({
   const liveMs =
     variant === "latency" && startedAtMs && active
       ? Math.max(500, now - startedAtMs)
-      : frozenMs ?? durationMs;
+      : (frozenMs ?? durationMs);
 
   const label =
     variant === "latency" && active

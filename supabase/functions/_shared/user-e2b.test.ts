@@ -11,7 +11,9 @@ function parseE2bTokenField(raw: string | null | undefined): string | null {
         const first = parsed.find((x) => typeof x === "string" && x.trim().length > 8);
         if (typeof first === "string") return first.trim();
       }
-    } catch { /* */ }
+    } catch {
+      /* */
+    }
   }
   return trimmed.length > 8 ? trimmed : null;
 }
@@ -21,10 +23,7 @@ Deno.test("parseE2bTokenField accepts plain e2b key", () => {
 });
 
 Deno.test("parseE2bTokenField accepts JSON pool array", () => {
-  assertEquals(
-    parseE2bTokenField('["e2b_pool_key_12345"]'),
-    "e2b_pool_key_12345",
-  );
+  assertEquals(parseE2bTokenField('["e2b_pool_key_12345"]'), "e2b_pool_key_12345");
 });
 
 Deno.test("parseE2bTokenField rejects short values", () => {

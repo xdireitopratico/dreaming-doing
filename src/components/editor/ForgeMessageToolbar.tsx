@@ -1,9 +1,5 @@
 import { Copy, RotateCcw } from "lucide-react";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 const ROLLBACK_TOOLTIP =
   "Volta o chat e os arquivos do projeto ao estado anterior a esta mensagem. Remove este turno e tudo que veio depois.";

@@ -3,15 +3,23 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  Terminal, Monitor, AlertTriangle, Activity, X, Trash2, ChevronDown,
-  Circle, AlertCircle, CheckCircle2, Copy, Maximize2, Minimize2,
+  Terminal,
+  Monitor,
+  AlertTriangle,
+  Activity,
+  X,
+  Trash2,
+  ChevronDown,
+  Circle,
+  AlertCircle,
+  CheckCircle2,
+  Copy,
+  Maximize2,
+  Minimize2,
 } from "lucide-react";
 import { getDiagnostics, subscribeDiagnostics, type Diagnostic } from "@/hooks/useDiagnostics";
 import { TroubleshootingShotPanel } from "@/components/editor/TroubleshootingShotPanel";
-import {
-  getTroubleshootingShot,
-  subscribeEditorTelemetry,
-} from "@/lib/editor-telemetry";
+import { getTroubleshootingShot, subscribeEditorTelemetry } from "@/lib/editor-telemetry";
 
 export interface LogEntry {
   id: string;
@@ -97,12 +105,7 @@ export function LogPanel({
       id: "shot",
       label: "SHOT",
       icon: <Activity className="size-3" />,
-      badge:
-        shotHealth === "critical"
-          ? 1
-          : shotHealth === "degraded"
-            ? 1
-            : undefined,
+      badge: shotHealth === "critical" ? 1 : shotHealth === "degraded" ? 1 : undefined,
     },
   ];
 
@@ -152,14 +155,18 @@ export function LogPanel({
           {activeTab === "terminal" && (
             <>
               <button
-                onClick={() => {/* Copy all */}}
+                onClick={() => {
+                  /* Copy all */
+                }}
                 className="p-1 rounded hover:bg-[var(--surface-2)] text-[var(--text-ghost)] transition-colors"
                 title="Copiar tudo"
               >
                 <Copy className="size-3" />
               </button>
               <button
-                onClick={() => {/* Clear logs */}}
+                onClick={() => {
+                  /* Clear logs */
+                }}
                 className="p-1 rounded hover:bg-[var(--surface-2)] text-[var(--text-ghost)] transition-colors"
                 title="Limpar"
               >
@@ -201,7 +208,10 @@ export function LogPanel({
               {/* Welcome banner */}
               <div className="text-[var(--text-ghost)] mb-3 select-none">
                 <div>╔══════════════════════════════════════════╗</div>
-                <div>║   <span className="text-[var(--primary)]">FORGE Terminal</span> — Build & Agent Logs  ║</div>
+                <div>
+                  ║ <span className="text-[var(--primary)]">FORGE Terminal</span> — Build & Agent
+                  Logs ║
+                </div>
                 <div>╚══════════════════════════════════════════╝</div>
                 <div className="mt-1 opacity-60">$ forge dev --watch</div>
               </div>
@@ -391,11 +401,7 @@ export function LogPanel({
 // ---------------------------------------------------------------------------
 
 let _logIdCounter = 0;
-export function createLogEntry(
-  type: LogEntry["type"],
-  message: string,
-  source?: string,
-): LogEntry {
+export function createLogEntry(type: LogEntry["type"], message: string, source?: string): LogEntry {
   return {
     id: `log-${++_logIdCounter}`,
     type,

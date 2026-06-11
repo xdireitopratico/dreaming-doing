@@ -39,8 +39,7 @@ export function useTasteUiActions() {
             break;
           }
           const hash =
-            detail.hash ??
-            (detail.connector ? `forge-key-${detail.connector}` : undefined);
+            detail.hash ?? (detail.connector ? `forge-key-${detail.connector}` : undefined);
           void navigate({ to: "/api", hash });
           break;
         }

@@ -1,9 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import {
-  bootstrapComposerMode,
-  loadComposerMode,
-  saveComposerMode,
-} from "@/lib/composer-mode";
+import { bootstrapComposerMode, loadComposerMode, saveComposerMode } from "@/lib/composer-mode";
 
 const PROJECT = "proj-test-uuid";
 

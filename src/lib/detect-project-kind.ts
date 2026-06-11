@@ -23,15 +23,9 @@ const ANDROID_NATIVE_HINTS = [
   "gradlew",
 ];
 
-const WEB_PATH_HINTS = [
-  "vite.config",
-  "index.html",
-  "src/app.tsx",
-  "src/main.tsx",
-];
+const WEB_PATH_HINTS = ["vite.config", "index.html", "src/app.tsx", "src/main.tsx"];
 
-const MOBILE_PKG_RE =
-  /"(expo|react-native|@expo\/|expo-router|react-native-web|@capacitor\/)/i;
+const MOBILE_PKG_RE = /"(expo|react-native|@expo\/|expo-router|react-native-web|@capacitor\/)/i;
 
 const WEB_PKG_RE = /"(vite|@vitejs\/|react-dom|@forge\/)/i;
 
@@ -54,10 +48,11 @@ export function detectProjectStack(
 
   const hasAndroidNative = pathHints(paths, ANDROID_NATIVE_HINTS);
   const hasExpo =
-    pathHints(paths, MOBILE_PATH_HINTS.filter((h) => h !== "android/" && h !== "ios/")) ||
-    MOBILE_PKG_RE.test(pkgContent);
-  const hasWeb =
-    pathHints(paths, WEB_PATH_HINTS) || WEB_PKG_RE.test(pkgContent);
+    pathHints(
+      paths,
+      MOBILE_PATH_HINTS.filter((h) => h !== "android/" && h !== "ios/"),
+    ) || MOBILE_PKG_RE.test(pkgContent);
+  const hasWeb = pathHints(paths, WEB_PATH_HINTS) || WEB_PKG_RE.test(pkgContent);
 
   if (hasAndroidNative && hasWeb) return "mixed";
   if (hasAndroidNative) return "android-native";

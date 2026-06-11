@@ -20,10 +20,7 @@ describe("native-build-console", () => {
       { path: "app/build.gradle.kts" },
       { path: "app/src/main/AndroidManifest.xml" },
     ]);
-    expect(paths).toEqual([
-      "app/build.gradle.kts",
-      "app/src/main/AndroidManifest.xml",
-    ]);
+    expect(paths).toEqual(["app/build.gradle.kts", "app/src/main/AndroidManifest.xml"]);
   });
 
   it("collectBuildLogLines lê build_log do progress", () => {

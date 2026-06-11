@@ -22,10 +22,9 @@ export async function edgeFunctionErrorMessage(
     return format ? format(body.error, body.code) : body.error;
   }
 
-  const sources = [
-    response,
-    (error as FunctionsError & { context?: Response })?.context,
-  ].filter((r): r is Response => r instanceof Response);
+  const sources = [response, (error as FunctionsError & { context?: Response })?.context].filter(
+    (r): r is Response => r instanceof Response,
+  );
 
   for (const res of sources) {
     const json = await readErrorBody(res);

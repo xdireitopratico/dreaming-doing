@@ -82,8 +82,8 @@ export function useAutoPublish({
     if (booting || warming || publishing) return;
     if (publishedUrl === devUrl) return;
     void publishNow();
-  // publishing é guard de concorrência, não trigger — removido intencionalmente das deps
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // publishing é guard de concorrência, não trigger — removido intencionalmente das deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     enabled,
     devUrl,

@@ -27,9 +27,7 @@ import {
   EMPTY_AGENT_PREFERENCES,
   type AgentPreferences,
 } from "@/lib/agent-preferences";
-import {
-  isAgentPreferencesConfigured,
-} from "@/lib/agent-setup";
+import { isAgentPreferencesConfigured } from "@/lib/agent-setup";
 import {
   ONBOARDING_STEPS,
   loadOnboardingState,
@@ -137,9 +135,7 @@ function OnboardingPage() {
       const highestReachedIdx = stepIndex(state.highestReached);
       const nextReachedIdx = stepIndex(ns);
       const newHighest: OnboardingStepId =
-        nextReachedIdx > highestReachedIdx
-          ? ns
-          : state.highestReached;
+        nextReachedIdx > highestReachedIdx ? ns : state.highestReached;
       updateState({
         completed,
         currentStep: ns,
@@ -222,12 +218,7 @@ function OnboardingPage() {
             exit={{ opacity: 0, y: -8 }}
             transition={{ duration: 0.2 }}
           >
-            {isWelcome && (
-              <WelcomeStep
-                onNext={() => gotoStep("api_keys")}
-                state={state}
-              />
-            )}
+            {isWelcome && <WelcomeStep onNext={() => gotoStep("api_keys")} state={state} />}
 
             {currentStep === "api_keys" && (
               <ApiKeysStep
@@ -309,7 +300,13 @@ function OnboardingPage() {
 
 // ─── Stepper ────────────────────────────────────────────────────────────────
 
-function Stepper({ state, onGoto }: { state: OnboardingLocalState; onGoto: (id: OnboardingStepId) => void }) {
+function Stepper({
+  state,
+  onGoto,
+}: {
+  state: OnboardingLocalState;
+  onGoto: (id: OnboardingStepId) => void;
+}) {
   const setupSteps = ONBOARDING_STEPS.filter((s) => s.id !== "welcome" && s.id !== "done");
   const highestIdx = stepIndex(state.highestReached);
   const currentIdx = stepIndex(state.currentStep);
@@ -338,22 +335,24 @@ function Stepper({ state, onGoto }: { state: OnboardingLocalState; onGoto: (id: 
               disabled={!isReachable}
               onClick={() => onGoto(step.id)}
               className={`group flex items-center gap-2 rounded-md border px-3 py-2 transition-all shrink-0
-                ${isCurrent
-                  ? "border-[var(--forge-primary)] bg-[var(--forge-primary)]/10"
-                  : isCompleted
-                    ? "border-emerald-500/30 bg-emerald-500/5 hover:border-emerald-500/60"
-                    : isReachable
-                      ? "border-[var(--forge-border)] bg-[var(--forge-surface-2)]/50 hover:border-[var(--forge-primary)]/40"
-                      : "border-[var(--forge-border)]/50 bg-transparent opacity-40 cursor-not-allowed"
+                ${
+                  isCurrent
+                    ? "border-[var(--forge-primary)] bg-[var(--forge-primary)]/10"
+                    : isCompleted
+                      ? "border-emerald-500/30 bg-emerald-500/5 hover:border-emerald-500/60"
+                      : isReachable
+                        ? "border-[var(--forge-border)] bg-[var(--forge-surface-2)]/50 hover:border-[var(--forge-primary)]/40"
+                        : "border-[var(--forge-border)]/50 bg-transparent opacity-40 cursor-not-allowed"
                 }`}
             >
               <span
                 className={`grid size-6 place-items-center rounded-full
-                  ${isCurrent
-                    ? "bg-[var(--forge-primary)] text-[var(--forge-bg)]"
-                    : isCompleted
-                      ? "bg-emerald-500 text-white"
-                      : "bg-[var(--forge-surface-3)] text-[var(--forge-muted)]"
+                  ${
+                    isCurrent
+                      ? "bg-[var(--forge-primary)] text-[var(--forge-bg)]"
+                      : isCompleted
+                        ? "bg-emerald-500 text-white"
+                        : "bg-[var(--forge-surface-3)] text-[var(--forge-muted)]"
                   }`}
               >
                 {isCompleted ? <Check className="size-3" /> : <Icon className="size-3" />}
@@ -383,15 +382,18 @@ function WelcomeStep({ onNext, state }: { onNext: () => void; state: OnboardingL
             Bem-vindo ao FORGE
           </h1>
           <p className="mt-3 text-[var(--forge-silver)] text-sm leading-relaxed max-w-prose">
-            Você está no <strong className="text-[var(--forge-text)]">modo TASTE</strong> — estado reservado
-            a usuários novos, com até 50 mensagens concierge + 1 start de projeto. Em 4 passos
-            rápidos você sai do TASTE e libera o agente de verdade: suas chaves, seu modelo, seu deploy.
+            Você está no <strong className="text-[var(--forge-text)]">modo TASTE</strong> — estado
+            reservado a usuários novos, com até 50 mensagens concierge + 1 start de projeto. Em 4
+            passos rápidos você sai do TASTE e libera o agente de verdade: suas chaves, seu modelo,
+            seu deploy.
           </p>
           <ul className="mt-6 space-y-2 text-sm">
             {ONBOARDING_STEPS.filter((s) => s.required).map((s) => (
               <li key={s.id} className="flex items-center gap-2 text-[var(--forge-silver)]">
                 <CheckCircle2 className="size-3.5 text-[var(--forge-primary)] shrink-0" />
-                <span><strong className="text-[var(--forge-text)]">{s.title}</strong> — {s.description}</span>
+                <span>
+                  <strong className="text-[var(--forge-text)]">{s.title}</strong> — {s.description}
+                </span>
               </li>
             ))}
           </ul>
@@ -409,7 +411,8 @@ function WelcomeStep({ onNext, state }: { onNext: () => void; state: OnboardingL
           </div>
           {state.completed.length > 0 && (
             <p className="mt-4 font-mono text-[9px] text-[var(--forge-muted)]">
-              Você já completou {state.completed.filter((c) => c !== "done").length} passos antes — pode retomar de onde parou.
+              Você já completou {state.completed.filter((c) => c !== "done").length} passos antes —
+              pode retomar de onde parou.
             </p>
           )}
         </div>
@@ -418,7 +421,15 @@ function WelcomeStep({ onNext, state }: { onNext: () => void; state: OnboardingL
   );
 }
 
-function ApiKeysStep({ done, onComplete, onSkip }: { done: boolean; onComplete: () => void; onSkip: (() => void) | null }) {
+function ApiKeysStep({
+  done,
+  onComplete,
+  onSkip,
+}: {
+  done: boolean;
+  onComplete: () => void;
+  onSkip: (() => void) | null;
+}) {
   return (
     <StepCard
       icon={Key}
@@ -440,8 +451,8 @@ function ApiKeysStep({ done, onComplete, onSkip }: { done: boolean; onComplete: 
           /api — Gerenciador de chaves
         </Link>
         <p className="mt-3 text-xs text-[var(--forge-silver)] leading-relaxed">
-          Suportamos NVIDIA, OpenAI, Anthropic, Google, Groq, xAI, OpenRouter, DeepSeek, DashScope, Moonshot e Ollama.
-          Chaves ficam criptografadas no Supabase (pgsodium).
+          Suportamos NVIDIA, OpenAI, Anthropic, Google, Groq, xAI, OpenRouter, DeepSeek, DashScope,
+          Moonshot e Ollama. Chaves ficam criptografadas no Supabase (pgsodium).
         </p>
       </div>
     </StepCard>
@@ -484,7 +495,12 @@ function ModelStep({
           description="5 chaves NVIDIA em rotação — escala sem rate limit, melhor uptime"
           selected={prefs.mode === "robin"}
           onSelect={() =>
-            onChangePrefs({ ...prefs, mode: "robin", poolProvider: "nvidia", robinPoolModelId: "nvidia/nemotron-3-ultra-550b-a55b" })
+            onChangePrefs({
+              ...prefs,
+              mode: "robin",
+              poolProvider: "nvidia",
+              robinPoolModelId: "nvidia/nemotron-3-ultra-550b-a55b",
+            })
           }
         />
         <ModelModeOption
@@ -533,9 +549,10 @@ function ModelModeOption({
       type="button"
       onClick={onSelect}
       className={`group w-full text-left rounded-lg border p-3 transition-all
-        ${selected
-          ? "border-[var(--forge-primary)] bg-[var(--forge-primary)]/10"
-          : "border-[var(--forge-border)] bg-[var(--forge-surface-2)]/30 hover:border-[var(--forge-primary)]/40"
+        ${
+          selected
+            ? "border-[var(--forge-primary)] bg-[var(--forge-primary)]/10"
+            : "border-[var(--forge-border)] bg-[var(--forge-surface-2)]/30 hover:border-[var(--forge-primary)]/40"
         }`}
     >
       <div className="flex items-center justify-between">
@@ -556,7 +573,15 @@ function ModelModeOption({
   );
 }
 
-function SandboxStep({ done, onComplete, onSkip }: { done: boolean; onComplete: () => void; onSkip: (() => void) | null }) {
+function SandboxStep({
+  done,
+  onComplete,
+  onSkip,
+}: {
+  done: boolean;
+  onComplete: () => void;
+  onSkip: (() => void) | null;
+}) {
   return (
     <StepCard
       icon={Server}
@@ -569,7 +594,9 @@ function SandboxStep({ done, onComplete, onSkip }: { done: boolean; onComplete: 
       onSkip={onSkip}
     >
       <div className="rounded-lg border border-[var(--forge-border)] bg-[var(--forge-surface-2)]/40 p-4">
-        <p className="font-mono text-[10px] text-[var(--forge-muted)] mb-2">Adicionar chave E2B em</p>
+        <p className="font-mono text-[10px] text-[var(--forge-muted)] mb-2">
+          Adicionar chave E2B em
+        </p>
         <Link
           to="/api"
           hash="forge-key-e2b"
@@ -587,7 +614,15 @@ function SandboxStep({ done, onComplete, onSkip }: { done: boolean; onComplete: 
   );
 }
 
-function DeployStep({ done, onComplete, onSkip }: { done: boolean; onComplete: () => void; onSkip: (() => void) | null }) {
+function DeployStep({
+  done,
+  onComplete,
+  onSkip,
+}: {
+  done: boolean;
+  onComplete: () => void;
+  onSkip: (() => void) | null;
+}) {
   return (
     <StepCard
       icon={Rocket}
@@ -657,10 +692,18 @@ function DoneStep({
             Você saiu do TASTE
           </h1>
           <p className="mt-3 text-[var(--forge-silver)] text-sm leading-relaxed max-w-prose">
-            A partir de agora <strong className="text-[var(--forge-text)]">TASTE não existe mais</strong> na
-            sua conta. Tudo o que você configurou aqui vale. Pode refazer qualquer passo a qualquer
-            momento em <Link to="/api" className="text-[var(--forge-primary)] hover:underline">/api</Link> e{" "}
-            <Link to="/models" className="text-[var(--forge-primary)] hover:underline">/models</Link>.
+            A partir de agora{" "}
+            <strong className="text-[var(--forge-text)]">TASTE não existe mais</strong> na sua
+            conta. Tudo o que você configurou aqui vale. Pode refazer qualquer passo a qualquer
+            momento em{" "}
+            <Link to="/api" className="text-[var(--forge-primary)] hover:underline">
+              /api
+            </Link>{" "}
+            e{" "}
+            <Link to="/models" className="text-[var(--forge-primary)] hover:underline">
+              /models
+            </Link>
+            .
           </p>
 
           <div className="mt-6 grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -674,8 +717,8 @@ function DoneStep({
             <div className="mt-6 flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3">
               <AlertCircle className="size-4 text-amber-400 shrink-0 mt-0.5" />
               <p className="text-xs text-amber-200/90">
-                Os passos marcados como pendentes limitam funcionalidades: sem API keys você volta pro
-                TASTE; sem modelo o agente não inicia; sem E2B o preview não sobe.
+                Os passos marcados como pendentes limitam funcionalidades: sem API keys você volta
+                pro TASTE; sem modelo o agente não inicia; sem E2B o preview não sobe.
               </p>
             </div>
           )}
@@ -708,14 +751,23 @@ function DoneStep({
   );
 }
 
-function ChecklistItem({ ok, label, optional }: { ok: boolean; label: string; optional?: boolean }) {
+function ChecklistItem({
+  ok,
+  label,
+  optional,
+}: {
+  ok: boolean;
+  label: string;
+  optional?: boolean;
+}) {
   return (
     <div
-      className={`rounded-lg border p-2.5 ${ok
-        ? "border-emerald-500/30 bg-emerald-500/5"
-        : optional
-          ? "border-[var(--forge-border)] bg-[var(--forge-surface-2)]/30"
-          : "border-amber-500/30 bg-amber-500/5"
+      className={`rounded-lg border p-2.5 ${
+        ok
+          ? "border-emerald-500/30 bg-emerald-500/5"
+          : optional
+            ? "border-[var(--forge-border)] bg-[var(--forge-surface-2)]/30"
+            : "border-amber-500/30 bg-amber-500/5"
       }`}
     >
       <div className="flex items-center gap-2">
@@ -762,9 +814,10 @@ function StepCard({
     >
       <div className="flex items-start gap-4 mb-6">
         <div
-          className={`grid size-12 place-items-center rounded-xl shrink-0 ${done
-            ? "bg-emerald-500/10 border border-emerald-500/30"
-            : "bg-[var(--forge-primary)]/10 border border-[var(--forge-primary)]/30"
+          className={`grid size-12 place-items-center rounded-xl shrink-0 ${
+            done
+              ? "bg-emerald-500/10 border border-emerald-500/30"
+              : "bg-[var(--forge-primary)]/10 border border-[var(--forge-primary)]/30"
           }`}
         >
           <Icon className={`size-5 ${done ? "text-emerald-400" : "text-[var(--forge-primary)]"}`} />

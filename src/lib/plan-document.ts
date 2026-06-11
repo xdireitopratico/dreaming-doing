@@ -27,16 +27,23 @@ export function buildForgePlanMarkdown(input: {
   phases?: ForgePlanPhase[];
   steps?: PlanStep[];
 }): ForgePlanDocument {
-  const mission = input.mission?.trim() || input.summary.trim() || "Definir e entregar o pedido do usuário";
+  const mission =
+    input.mission?.trim() || input.summary.trim() || "Definir e entregar o pedido do usuário";
   const objective =
     input.objective?.trim() ||
     input.rationale?.trim() ||
     "Entregar uma primeira versão funcional alinhada ao que foi pedido.";
-  const approach = input.rationale?.trim() || "Abordagem incremental: estrutura, implementação e validação.";
-  const assumptions = input.assumptions?.length ? input.assumptions : ["Projeto React/Vite com preview E2B disponível."];
+  const approach =
+    input.rationale?.trim() || "Abordagem incremental: estrutura, implementação e validação.";
+  const assumptions = input.assumptions?.length
+    ? input.assumptions
+    : ["Projeto React/Vite com preview E2B disponível."];
   const outOfScope = input.outOfScope?.length
     ? input.outOfScope
-    : ["Não refatorar código fora do escopo do pedido.", "Não alterar autenticação ou billing sem pedido explícito."];
+    : [
+        "Não refatorar código fora do escopo do pedido.",
+        "Não alterar autenticação ou billing sem pedido explícito.",
+      ];
 
   let phases = input.phases?.length ? input.phases : [];
   if (phases.length === 0 && input.steps?.length) {
@@ -104,7 +111,9 @@ export function buildForgePlanMarkdown(input: {
   };
 }
 
-export function planDocumentFromMeta(meta: Record<string, unknown> | null | undefined): ForgePlanDocument | null {
+export function planDocumentFromMeta(
+  meta: Record<string, unknown> | null | undefined,
+): ForgePlanDocument | null {
   if (!meta) return null;
   if (typeof meta.planMarkdown === "string" && meta.planMarkdown.trim()) {
     const markdown = meta.planMarkdown.trim();

@@ -1,9 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  estimateMessageTokens,
-  INPUT_TOKEN_FORCE,
-  normalizeChatUsage,
-} from "@/lib/token-usage";
+import { estimateMessageTokens, INPUT_TOKEN_FORCE, normalizeChatUsage } from "@/lib/token-usage";
 
 describe("token-usage", () => {
   it("normalizeChatUsage unifica input_tokens e prompt_tokens", () => {
@@ -17,7 +13,11 @@ describe("token-usage", () => {
   });
 
   it("normalizeChatUsage lida com Gemini usageMetadata", () => {
-    const g = normalizeChatUsage({ promptTokenCount: 900, candidatesTokenCount: 120, totalTokenCount: 1020 });
+    const g = normalizeChatUsage({
+      promptTokenCount: 900,
+      candidatesTokenCount: 120,
+      totalTokenCount: 1020,
+    });
     expect(g?.input_tokens).toBe(900);
     expect(g?.output_tokens).toBe(120);
   });

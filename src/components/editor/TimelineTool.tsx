@@ -30,12 +30,21 @@ export function TimelineTool({ item, onOpenFile }: TimelineToolProps) {
         aria-expanded={open}
       >
         <span className="forge-timeline-tool-headline">{headline}</span>
-        <ChevronDown className={cn("forge-timeline-tool-chevron size-3.5", open && "forge-timeline-tool-chevron--open")} />
+        <ChevronDown
+          className={cn(
+            "forge-timeline-tool-chevron size-3.5",
+            open && "forge-timeline-tool-chevron--open",
+          )}
+        />
       </button>
       {open && (
         <div className="forge-timeline-tool-body">
           {item.path && onOpenFile && (
-            <button type="button" className="forge-timeline-tool-link" onClick={() => onOpenFile(item.path!)}>
+            <button
+              type="button"
+              className="forge-timeline-tool-link"
+              onClick={() => onOpenFile(item.path!)}
+            >
               Abrir {item.path}
             </button>
           )}

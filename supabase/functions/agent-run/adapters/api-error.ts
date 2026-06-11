@@ -17,10 +17,6 @@ export function llmApiErrorLabel(baseUrl: string): string {
   return "LLM";
 }
 
-export function formatLlmApiError(
-  baseUrl: string,
-  status: number,
-  body: string,
-): string {
+export function formatLlmApiError(baseUrl: string, status: number, body: string): string {
   return `${llmApiErrorLabel(baseUrl)} API error ${status}: ${body.slice(0, 300)}`;
 }

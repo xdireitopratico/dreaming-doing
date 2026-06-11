@@ -193,10 +193,10 @@ export function ForgeChat({
             })
           : null;
 
-        const stableKey = item.message?.id
-          ? `assistant-${item.message.id}`
-          : item.runId
-            ? `live-${item.runId}`
+        const stableKey = item.runId
+          ? `assistant-${item.runId}`
+          : item.message?.id
+            ? `msg-${item.message.id}`
             : `slot-${idx}`;
 
         const isLastTurn =
@@ -221,12 +221,13 @@ export function ForgeChat({
         const planRunMatches =
           (!!pendingPlan?.runId && pendingPlan.runId === item.runId) ||
           msgPlanMeta?.plan.runId === item.runId;
+        const planAlreadyDecided = planStatus === "approved" || planStatus === "rejected";
         const planInteractive =
           !!onOpenInspector &&
           !!planForPrompt?.steps?.length &&
           planRunMatches &&
-          (msgPlanMeta?.status === "pending" ||
-            (planAwaitingApproval && !running && !slotActive));
+          !planAlreadyDecided &&
+          (msgPlanMeta?.status === "pending" || (planAwaitingApproval && !running && !slotActive));
 
         return (
           <ForgeMessage

@@ -51,9 +51,7 @@ export async function buildChatHistory(
           type: "function" as const,
           function: {
             name: tc.name ?? "",
-            arguments: typeof tc.args === "string"
-              ? tc.args
-              : JSON.stringify(tc.args ?? {}),
+            arguments: typeof tc.args === "string" ? tc.args : JSON.stringify(tc.args ?? {}),
           },
         })),
       });
@@ -90,9 +88,9 @@ export async function buildChatHistory(
       const visionCapable = modelIdSupportsVision(modelHint);
       const content = hasRichParts
         ? await expandPartsToOpenAIContent(m.parts, {
-          visionCapable,
-          modelHint,
-        })
+            visionCapable,
+            modelHint,
+          })
         : plainText || "";
       const userMsg: ChatMessage = { role: "user", content: content || "" };
       if (m.meta) userMsg.meta = m.meta;

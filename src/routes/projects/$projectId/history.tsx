@@ -11,24 +11,30 @@ import { CodeEditor, type Tab } from "@/components/editor/CodeEditor";
 import { MessageDiffCard } from "@/components/editor/MessageDiffCard";
 import { TimelineScrubber } from "@/components/editor/TimelineScrubber";
 import {
-  History, ChevronLeft, ArrowLeftRight, GitCommit, Clock,
-  MessageSquare, CheckCircle2, AlertCircle, Loader2,
+  History,
+  ChevronLeft,
+  ArrowLeftRight,
+  GitCommit,
+  Clock,
+  MessageSquare,
+  CheckCircle2,
+  AlertCircle,
+  Loader2,
 } from "lucide-react";
 import { ForgeIcon } from "@/components/icons/ForgeIcon";
 import { AuditLog, type AuditEntry } from "@/components/editor/AuditLog";
-import {
-  agentRunToAuditEntry,
-  filterMessagesForRun,
-  type AgentRunRow,
-} from "@/lib/agent-runs";
+import { agentRunToAuditEntry, filterMessagesForRun, type AgentRunRow } from "@/lib/agent-runs";
 
 export const Route = createFileRoute("/projects/$projectId/history")({
   component: HistoryPage,
 });
 
 interface ToolCall {
-  id: string; name: string; args: Record<string, unknown>;
-  status: "running" | "ok" | "error"; error?: string;
+  id: string;
+  name: string;
+  args: Record<string, unknown>;
+  status: "running" | "ok" | "error";
+  error?: string;
   created_at: string;
 }
 
@@ -42,7 +48,10 @@ interface AgentMessage {
 }
 
 interface FileRow {
-  id: string; path: string; content: string; updated_at: string;
+  id: string;
+  path: string;
+  content: string;
+  updated_at: string;
 }
 
 function HistoryPage() {
@@ -56,7 +65,11 @@ function HistoryPage() {
   const { data: project } = useQuery({
     queryKey: ["project", projectId],
     queryFn: async () => {
-      const { data } = await supabase.from("projects").select("id, name").eq("id", projectId).single();
+      const { data } = await supabase
+        .from("projects")
+        .select("id, name")
+        .eq("id", projectId)
+        .single();
       return data;
     },
   });
@@ -66,8 +79,12 @@ function HistoryPage() {
     queryKey: ["conversation", projectId],
     queryFn: async () => {
       const { data } = await supabase
-        .from("conversations").select("*").eq("project_id", projectId)
-        .order("created_at", { ascending: false }).limit(1).maybeSingle();
+        .from("conversations")
+        .select("*")
+        .eq("project_id", projectId)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
       return data;
     },
   });
@@ -140,7 +157,8 @@ function HistoryPage() {
     queryKey: ["files", projectId],
     queryFn: async () => {
       const { data } = await supabase
-        .from("project_files").select("id, path, content, updated_at")
+        .from("project_files")
+        .select("id, path, content, updated_at")
         .eq("project_id", projectId);
       return (data ?? []) as FileRow[];
     },
@@ -166,9 +184,10 @@ function HistoryPage() {
     return scopedMessages.map((msg) => ({
       id: msg.id,
       timestamp: new Date(msg.created_at).getTime(),
-      label: msg.tool_calls.length > 0
-        ? `${msg.tool_calls.length} ferramenta${msg.tool_calls.length !== 1 ? "s" : ""}`
-        : "Resposta do agente",
+      label:
+        msg.tool_calls.length > 0
+          ? `${msg.tool_calls.length} ferramenta${msg.tool_calls.length !== 1 ? "s" : ""}`
+          : "Resposta do agente",
       toolCount: msg.tool_calls.length,
       okCount: msg.tool_calls.filter((t) => t.status === "ok").length,
       errorCount: msg.tool_calls.filter((t) => t.status === "error").length,
@@ -229,8 +248,9 @@ function HistoryPage() {
                 Histórico de Mudanças
               </h2>
               <p className="font-mono text-[9px] text-[var(--text-ghost)]">
-                {auditEntries.length} execuç{(auditEntries.length) !== 1 ? "ões" : "ão"} ·{" "}
-                {totalChanges} alteraç{(totalChanges) !== 1 ? "ões" : "ão"} em {scopedMessages.length} resposta
+                {auditEntries.length} execuç{auditEntries.length !== 1 ? "ões" : "ão"} ·{" "}
+                {totalChanges} alteraç{totalChanges !== 1 ? "ões" : "ão"} em {scopedMessages.length}{" "}
+                resposta
                 {scopedMessages.length !== 1 ? "s" : ""}
                 {selectedRun ? " (filtrado)" : ""}
               </p>
@@ -241,7 +261,9 @@ function HistoryPage() {
             <div className="flex items-center gap-1.5 text-[10px] font-mono text-[var(--text-ghost)]">
               <Clock className="size-3" />
               {scopedMessages.length
-                ? new Date(scopedMessages[scopedMessages.length - 1].created_at).toLocaleString("pt-BR")
+                ? new Date(scopedMessages[scopedMessages.length - 1].created_at).toLocaleString(
+                    "pt-BR",
+                  )
                 : auditEntries[0]
                   ? new Date(auditEntries[0].startedAt).toLocaleString("pt-BR")
                   : "—"}
@@ -299,11 +321,7 @@ function HistoryPage() {
               <p className="font-mono text-[10px] text-[var(--text-dim)]">
                 Selecione outra execução na aba Execuções ou volte ao editor.
               </p>
-              <button
-                type="button"
-                className="lovable-doc-btn"
-                onClick={() => setViewMode("runs")}
-              >
+              <button type="button" className="lovable-doc-btn" onClick={() => setViewMode("runs")}>
                 Ver execuções
               </button>
             </div>
@@ -414,11 +432,7 @@ function TimelineModeView({
       {/* Tool calls grid */}
       <div className="space-y-3">
         {message.tool_calls.map((tool) => (
-          <MessageDiffCard
-            key={tool.id}
-            tool={tool}
-            fileMap={fileMap}
-          />
+          <MessageDiffCard key={tool.id} tool={tool} fileMap={fileMap} />
         ))}
       </div>
     </div>
@@ -450,7 +464,9 @@ function DiffModeView({
               <GitCommit className="size-3 text-[var(--text-ghost)]" />
               {path.split("/").pop()}
               {tool.status === "ok" && <CheckCircle2 className="size-3 text-emerald-400" />}
-              {tool.status === "error" && <AlertCircle className="size-3 text-[var(--destructive)]" />}
+              {tool.status === "error" && (
+                <AlertCircle className="size-3 text-[var(--destructive)]" />
+              )}
             </span>
           );
         })}
@@ -463,9 +479,7 @@ function DiffModeView({
           const currentFile = fileMap.get(path);
           const agentContent = (tool.args.content as string) ?? "";
 
-          return (
-            <MessageDiffCard key={tool.id} tool={tool} fileMap={fileMap} />
-          );
+          return <MessageDiffCard key={tool.id} tool={tool} fileMap={fileMap} />;
         })}
       </div>
     </div>

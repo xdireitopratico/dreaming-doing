@@ -5,7 +5,8 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, mcp-session-id",
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type, mcp-session-id",
 };
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
@@ -26,7 +27,9 @@ function unauthorized(message: string, status = 401) {
   });
 }
 
-async function authenticate(req: Request): Promise<
+async function authenticate(
+  req: Request,
+): Promise<
   { ok: true; userId: string; email: string; isAdmin: boolean } | { ok: false; res: Response }
 > {
   const auth = req.headers.get("Authorization");
@@ -35,7 +38,10 @@ async function authenticate(req: Request): Promise<
   const userClient = createClient(SUPABASE_URL, ANON_KEY, {
     global: { headers: { Authorization: auth } },
   });
-  const { data: { user }, error } = await userClient.auth.getUser();
+  const {
+    data: { user },
+    error,
+  } = await userClient.auth.getUser();
   if (error || !user) return { ok: false, res: unauthorized("Sessão inválida") };
 
   // Check admin via user_roles (service-role read; the table's RLS now denies direct writes).
@@ -59,97 +65,101 @@ Deno.serve(async (req) => {
   if (req.method === "GET" && url.pathname === "/") {
     const auth = await authenticate(req);
     if (!auth.ok) return auth.res;
-    return new Response(JSON.stringify({
-      protocol: "mcp",
-      version: "1.0",
-      server: "supabase-mcp",
-      description: "Supabase MCP Server — Database, Auth, Storage, Edge Functions tools",
-      tools: [
-        {
-          name: "mcp__supabase__query",
-          description: "Executa query SQL no banco de dados do projeto (read-only para usuários normais)",
-          inputSchema: {
-            type: "object",
-            properties: {
-              sql: { type: "string", description: "Query SQL a executar" },
-              projectId: { type: "string", description: "ID do projeto Supabase" },
+    return new Response(
+      JSON.stringify({
+        protocol: "mcp",
+        version: "1.0",
+        server: "supabase-mcp",
+        description: "Supabase MCP Server — Database, Auth, Storage, Edge Functions tools",
+        tools: [
+          {
+            name: "mcp__supabase__query",
+            description:
+              "Executa query SQL no banco de dados do projeto (read-only para usuários normais)",
+            inputSchema: {
+              type: "object",
+              properties: {
+                sql: { type: "string", description: "Query SQL a executar" },
+                projectId: { type: "string", description: "ID do projeto Supabase" },
+              },
+              required: ["sql"],
             },
-            required: ["sql"],
           },
-        },
-        {
-          name: "mcp__supabase__migrate",
-          description: "Aplica migration SQL no banco de dados",
-          inputSchema: {
-            type: "object",
-            properties: {
-              sql: { type: "string", description: "SQL da migration a aplicar" },
-              name: { type: "string", description: "Nome descritivo da migration" },
-              projectId: { type: "string", description: "ID do projeto Supabase" },
+          {
+            name: "mcp__supabase__migrate",
+            description: "Aplica migration SQL no banco de dados",
+            inputSchema: {
+              type: "object",
+              properties: {
+                sql: { type: "string", description: "SQL da migration a aplicar" },
+                name: { type: "string", description: "Nome descritivo da migration" },
+                projectId: { type: "string", description: "ID do projeto Supabase" },
+              },
+              required: ["sql", "name"],
             },
-            required: ["sql", "name"],
           },
-        },
-        {
-          name: "mcp__supabase__list_tables",
-          description: "Lista todas as tabelas do banco de dados do projeto",
-          inputSchema: {
-            type: "object",
-            properties: {
-              projectId: { type: "string", description: "ID do projeto Supabase" },
+          {
+            name: "mcp__supabase__list_tables",
+            description: "Lista todas as tabelas do banco de dados do projeto",
+            inputSchema: {
+              type: "object",
+              properties: {
+                projectId: { type: "string", description: "ID do projeto Supabase" },
+              },
+              required: [],
             },
-            required: [],
           },
-        },
-        {
-          name: "mcp__supabase__describe_table",
-          description: "Descreve a estrutura de uma tabela (colunas, tipos, constraints)",
-          inputSchema: {
-            type: "object",
-            properties: {
-              table: { type: "string", description: "Nome da tabela" },
-              projectId: { type: "string", description: "ID do projeto Supabase" },
+          {
+            name: "mcp__supabase__describe_table",
+            description: "Descreve a estrutura de uma tabela (colunas, tipos, constraints)",
+            inputSchema: {
+              type: "object",
+              properties: {
+                table: { type: "string", description: "Nome da tabela" },
+                projectId: { type: "string", description: "ID do projeto Supabase" },
+              },
+              required: ["table"],
             },
-            required: ["table"],
           },
-        },
-        {
-          name: "mcp__supabase__auth_users",
-          description: "Lista usuários autenticados no projeto",
-          inputSchema: {
-            type: "object",
-            properties: {
-              projectId: { type: "string", description: "ID do projeto Supabase" },
+          {
+            name: "mcp__supabase__auth_users",
+            description: "Lista usuários autenticados no projeto",
+            inputSchema: {
+              type: "object",
+              properties: {
+                projectId: { type: "string", description: "ID do projeto Supabase" },
+              },
+              required: [],
             },
-            required: [],
           },
-        },
-        {
-          name: "mcp__supabase__list_files",
-          description: "Lista arquivos no storage do projeto",
-          inputSchema: {
-            type: "object",
-            properties: {
-              bucket: { type: "string", description: "Nome do bucket" },
-              prefix: { type: "string", description: "Prefixo para filtrar" },
-              projectId: { type: "string", description: "ID do projeto Supabase" },
+          {
+            name: "mcp__supabase__list_files",
+            description: "Lista arquivos no storage do projeto",
+            inputSchema: {
+              type: "object",
+              properties: {
+                bucket: { type: "string", description: "Nome do bucket" },
+                prefix: { type: "string", description: "Prefixo para filtrar" },
+                projectId: { type: "string", description: "ID do projeto Supabase" },
+              },
+              required: ["bucket"],
             },
-            required: ["bucket"],
           },
-        },
-        {
-          name: "mcp__supabase__rls_status",
-          description: "Verifica status de Row Level Security das tabelas",
-          inputSchema: {
-            type: "object",
-            properties: {
-              projectId: { type: "string", description: "ID do projeto Supabase" },
+          {
+            name: "mcp__supabase__rls_status",
+            description: "Verifica status de Row Level Security das tabelas",
+            inputSchema: {
+              type: "object",
+              properties: {
+                projectId: { type: "string", description: "ID do projeto Supabase" },
+              },
+              required: [],
             },
-            required: [],
           },
-        },
-      ],
-    }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        ],
+      }),
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+    );
   }
 
   // MCP Protocol: POST / → tool call (auth required; admin tools gated)
@@ -170,7 +180,11 @@ Deno.serve(async (req) => {
       switch (name) {
         case "mcp__supabase__query": {
           const { data, error } = await supabase.from("_sql").select("*").maybeSingle();
-          return mcpResult({ queried: true, sql: args.sql, note: "Query executada via service_role" });
+          return mcpResult({
+            queried: true,
+            sql: args.sql,
+            note: "Query executada via service_role",
+          });
         }
         case "mcp__supabase__migrate": {
           return mcpResult({ migrated: true, sql: args.sql, name: args.name });
@@ -211,14 +225,20 @@ Deno.serve(async (req) => {
 });
 
 function mcpResult(data: unknown): Response {
-  return new Response(JSON.stringify({
-    content: [{ type: "text", text: JSON.stringify(data, null, 2) }],
-  }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+  return new Response(
+    JSON.stringify({
+      content: [{ type: "text", text: JSON.stringify(data, null, 2) }],
+    }),
+    { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+  );
 }
 
 function mcpError(message: string): Response {
-  return new Response(JSON.stringify({
-    content: [{ type: "text", text: `Error: ${message}` }],
-    isError: true,
-  }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+  return new Response(
+    JSON.stringify({
+      content: [{ type: "text", text: `Error: ${message}` }],
+      isError: true,
+    }),
+    { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+  );
 }

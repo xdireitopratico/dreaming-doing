@@ -47,7 +47,10 @@ describe("applyAgentProgressEvent", () => {
   });
 
   it("finish com falha mantém resumable", () => {
-    const next = applyAgentProgressEvent(base, ev("finish", { ok: false, error: "timeout", resumable: true }));
+    const next = applyAgentProgressEvent(
+      base,
+      ev("finish", { ok: false, error: "timeout", resumable: true }),
+    );
     expect(next.finished).toBe(true);
     expect(next.resumable).toBe(true);
     expect(next.error).toBe("timeout");
@@ -68,9 +71,7 @@ describe("applyAgentProgressEvent", () => {
       ev("plan_proposed", {
         planId: "p-123",
         summary: "Plano de teste",
-        steps: [
-          { id: "s1", type: "create_file", description: "criar", enabled: true },
-        ],
+        steps: [{ id: "s1", type: "create_file", description: "criar", enabled: true }],
         ttlMs: 60_000,
         runId: "run-1",
         projectId: "proj-1",
@@ -296,10 +297,7 @@ describe("applyAgentProgressEvent", () => {
     const withSync = applyAgentProgressEvent(withDiff, ev("preview_sync", { reason: "fs_change" }));
     expect(withSync.previewSyncTick).toBe(2);
 
-    const cleared = applyAgentProgressEvent(
-      withPlan,
-      ev("done", { planRejected: true }),
-    );
+    const cleared = applyAgentProgressEvent(withPlan, ev("done", { planRejected: true }));
     expect(cleared.pendingPlan).toBeNull();
   });
 });

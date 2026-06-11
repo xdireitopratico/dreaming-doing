@@ -59,7 +59,7 @@ export interface CodeBlockProps {
 function extractFilenameFromCode(code: string): string | null {
   const firstLine = code.split("\n")[0]?.trim();
   if (firstLine?.startsWith("// ") || firstLine?.startsWith("# ") || firstLine?.startsWith("/* ")) {
-    const match = firstLine.match(/[\/\#\*]?\s*([\w\-\.\/]+\.\w+)/);
+    const match = firstLine.match(/[/#*]?\s*([\w\-./]+\.\w+)/);
     if (match) return match[1];
   }
   return null;
@@ -78,7 +78,14 @@ function detectLanguage(code: string, filename?: string): string {
   return "typescript";
 }
 
-export function CodeBlock({ code, language, filename, showLineNumbers = true, maxHeight = "400px", theme = "dark" }: CodeBlockProps) {
+export function CodeBlock({
+  code,
+  language,
+  filename,
+  showLineNumbers = true,
+  maxHeight = "400px",
+  theme = "dark",
+}: CodeBlockProps) {
   const [copied, setCopied] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
   const [detectedLang, setDetectedLang] = useState<string>("");
@@ -129,7 +136,9 @@ export function CodeBlock({ code, language, filename, showLineNumbers = true, ma
         <div className="flex items-center gap-2 min-w-0">
           <FileCode className="size-3.5 text-[var(--forge-muted)] shrink-0" aria-hidden="true" />
           {displayFilename ? (
-            <span className="truncate text-xs font-mono text-[var(--forge-silver)]">{displayFilename}</span>
+            <span className="truncate text-xs font-mono text-[var(--forge-silver)]">
+              {displayFilename}
+            </span>
           ) : (
             <span className="text-xs text-[var(--forge-ghost)]">arquivo</span>
           )}
@@ -218,7 +227,10 @@ export function CodeBlock({ code, language, filename, showLineNumbers = true, ma
   );
 }
 
-export function CodeBlockWithHighlight({ children, ...props }: Omit<CodeBlockProps, "code"> & { children: React.ReactNode }) {
+export function CodeBlockWithHighlight({
+  children,
+  ...props
+}: Omit<CodeBlockProps, "code"> & { children: React.ReactNode }) {
   const code = typeof children === "string" ? children : String(children);
   return <CodeBlock code={code} {...props} />;
 }

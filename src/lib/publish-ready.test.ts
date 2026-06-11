@@ -7,7 +7,7 @@ import {
 
 describe("publish-ready", () => {
   it("detecta canvas vazio no entry", () => {
-    expect(isSeedPlaceholderEntryContent('export default () => <p>Canvas vazio</p>')).toBe(true);
+    expect(isSeedPlaceholderEntryContent("export default () => <p>Canvas vazio</p>")).toBe(true);
     expect(isSeedPlaceholderEntryContent("export default function App() { return <Hero/> }")).toBe(
       false,
     );
@@ -21,7 +21,7 @@ describe("publish-ready", () => {
 
   it("web: bloqueia publish com App.tsx placeholder", () => {
     const files = [
-      { path: "src/App.tsx", content: 'export default () => <p>Canvas vazio</p>' },
+      { path: "src/App.tsx", content: "export default () => <p>Canvas vazio</p>" },
       { path: "package.json", content: "{}" },
     ];
     expect(isProjectPublishReady(files, "web")).toBe(false);

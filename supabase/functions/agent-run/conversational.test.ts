@@ -1,8 +1,5 @@
 import { assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
-import {
-  isConversationalTurn,
-  isConversationalTurnEarly,
-} from "./conversational.ts";
+import { isConversationalTurn, isConversationalTurnEarly } from "./conversational.ts";
 import type { ClassificationResult } from "./types.ts";
 
 const otherNoBuild: ClassificationResult = {

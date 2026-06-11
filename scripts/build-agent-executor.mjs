@@ -2,11 +2,7 @@ import esbuild from "esbuild";
 import { cpSync, mkdirSync } from "node:fs";
 
 mkdirSync("dist/server/forge-skills", { recursive: true });
-cpSync(
-  "supabase/functions/_shared/forge-skills",
-  "dist/server/forge-skills",
-  { recursive: true },
-);
+cpSync("supabase/functions/_shared/forge-skills", "dist/server/forge-skills", { recursive: true });
 
 const denoShimBanner = `
 import { readFile } from "node:fs/promises";

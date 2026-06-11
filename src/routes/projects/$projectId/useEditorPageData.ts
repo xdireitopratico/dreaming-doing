@@ -10,6 +10,7 @@ import { logEditorTelemetryEvent } from "@/lib/editor-telemetry";
 import { collapseForgeUiBundle } from "@/lib/file-tree-display";
 import { detectProjectStack, type ProjectStackKind } from "@/lib/detect-project-kind";
 import type { useAgentRun } from "@/hooks/useAgentRun";
+import { useAgentRealtime } from "@/hooks/useAgentRealtime";
 
 import type { FileRow, Msg } from "./editor-page-types";
 
@@ -22,12 +23,7 @@ type UseEditorPageDataParams = {
   navigate: (options: NavigateOptions) => void;
 };
 
-export function useEditorPageData({
-  projectId,
-  search,
-  agent,
-  navigate,
-}: UseEditorPageDataParams) {
+export function useEditorPageData({ projectId, search, agent, navigate }: UseEditorPageDataParams) {
   const qc = useQueryClient();
 
   const { data: project } = useQuery({
@@ -107,10 +103,7 @@ export function useEditorPageData({
   }, [files]);
 
   /** Só substitui o iframe quando não há app web — projetos mistos mantêm preview Vite. */
-  const nativeBuildPreview = useMemo(
-    () => projectStack === "android-native",
-    [projectStack],
-  );
+  const nativeBuildPreview = useMemo(() => projectStack === "android-native", [projectStack]);
 
   const agentHasRun = useMemo(
     () => messages?.some((m) => m.role === "assistant") ?? false,
@@ -123,21 +116,13 @@ export function useEditorPageData({
     typeof projectMeta?.publishedUrl === "string" ? projectMeta.publishedUrl : null;
   const previewReady = projectMeta?.previewReady === true;
 
-  // ─── Realtime (canal editor-{projectId} + setAuth no AuthProvider) ───
+  // ─── Realtime unificado (agent_runs + agent_stream_events + messages) ───
+  useAgentRealtime(projectId, conversation?.id);
+
+  // ─── Realtime project_files (canal editor-{projectId}) ───
   useEffect(() => {
-    if (!conversation) return;
     const channel: RealtimeChannel = supabase
       .channel(`editor-${projectId}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "messages",
-          filter: `conversation_id=eq.${conversation.id}`,
-        },
-        () => qc.invalidateQueries({ queryKey: ["messages", conversation.id] }),
-      )
       .on(
         "postgres_changes",
         {
@@ -163,7 +148,7 @@ export function useEditorPageData({
         }
       });
     return () => removeRealtimeChannel(channel);
-  }, [projectId, conversation?.id, qc]);
+  }, [projectId, qc]);
 
   // ─── Derivados ───────────────────────────────────────────────────────
   const filePaths = useMemo(() => files?.map((f) => f.path) ?? [], [files]);
@@ -179,13 +164,13 @@ export function useEditorPageData({
       const role: ChatMessage["role"] =
         roleRaw === "user" ? "user" : roleRaw === "assistant" ? "assistant" : "tool";
       const meta = m.meta ?? null;
-      const runId =
-        meta && typeof meta.runId === "string" ? meta.runId : undefined;
+      const runId = meta && typeof meta.runId === "string" ? meta.runId : undefined;
       return {
         id: m.id,
         role,
         content: m.parts?.map((p: any) => p.text).join("\n") ?? "",
-        toolCalls: m.tool_calls?.map((t: any) => ({ name: t.name, args: t.args?.path ?? "" })) ?? [],
+        toolCalls:
+          m.tool_calls?.map((t: any) => ({ name: t.name, args: t.args?.path ?? "" })) ?? [],
         meta,
         runId,
         timestamp: new Date(m.created_at).getTime(),

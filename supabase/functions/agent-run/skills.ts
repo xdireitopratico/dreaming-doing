@@ -30,7 +30,8 @@ Componentes funcionais com hooks. Export default para páginas, named exports pa
 Prefira composição a herança. React.memo apenas quando necessário (profiling first).
 Acessibilidade: labels em inputs, aria-labels em icon-only buttons, focus-visible visível, contraste 4.5:1.`,
         tools: [],
-        validate: (files) => files.some(f => f.path.includes("package.json") && f.content?.includes("react")),
+        validate: (files) =>
+          files.some((f) => f.path.includes("package.json") && f.content?.includes("react")),
       },
       {
         name: "nextjs-app-router",
@@ -47,7 +48,13 @@ Middleware (middleware.ts) para auth, i18n, bot protection, rewrites.
 generateStaticParams para SSG/ISR em rotas dinâmicas. Cache control: 'force-cache' | 'no-store' | revalidate.
 Prefetch automático com <Link> — não desative sem motivo. revalidateTag/revalidatePath para invalidação granular.`,
         tools: [],
-        validate: (files) => files.some(f => f.path === "next.config.js" || f.path === "next.config.ts" || f.path === "next.config.mjs"),
+        validate: (files) =>
+          files.some(
+            (f) =>
+              f.path === "next.config.js" ||
+              f.path === "next.config.ts" ||
+              f.path === "next.config.mjs",
+          ),
       },
       {
         name: "tanstack-start",
@@ -64,7 +71,12 @@ Vite 7 como bundler — HMR nativo, import.meta.env para env vars.
 Error boundaries via ErrorComponent na route. Pending UI via useNavigation()/usePendingServerFn().
 Route masks para layout persistence (auth, dashboard, etc.).`,
         tools: [],
-        validate: (files) => files.some(f => f.path.includes("@tanstack/react-start") || f.path.includes("@tanstack/router-plugin")),
+        validate: (files) =>
+          files.some(
+            (f) =>
+              f.path.includes("@tanstack/react-start") ||
+              f.path.includes("@tanstack/router-plugin"),
+          ),
       },
       {
         name: "expo",
@@ -81,7 +93,13 @@ Platform-specific code: .ios.tsx, .android.tsx, .web.tsx quando necessário.
 SafeAreaView, KeyboardAvoidingView para layout mobile. useColorScheme para dark mode nativo.
 Expo Image (expo-image) para performance. Gesture Handler + Reanimated 3 para animações.`,
         tools: [],
-        validate: (files) => files.some(f => f.path === "app.json" || f.path === "expo-env.d.ts" || f.content?.includes("expo-router")),
+        validate: (files) =>
+          files.some(
+            (f) =>
+              f.path === "app.json" ||
+              f.path === "expo-env.d.ts" ||
+              f.content?.includes("expo-router"),
+          ),
       },
       {
         name: "astro",
@@ -97,7 +115,8 @@ View Transitions API nativa: <ViewTransitions /> no layout + transition:name nos
 Image optimization com @astrojs/image + Sharp. Middleware (Astro 5) para auth, i18n, redirects.
 getStaticPaths para SSG de rotas dinâmicas. Astro.glob() ou import.meta.glob() para assets.`,
         tools: [],
-        validate: (files) => files.some(f => f.path === "astro.config.mjs" || f.path === "astro.config.ts"),
+        validate: (files) =>
+          files.some((f) => f.path === "astro.config.mjs" || f.path === "astro.config.ts"),
       },
       {
         name: "supabase-backend",
@@ -113,7 +132,13 @@ Realtime: supabase.channel().on('postgres_changes', ...).subscribe().
 Edge Functions: Deno runtime, import maps, supabase/functions/*/index.ts.
 Storage: buckets com policies, signed URLs para upload/download privado.`,
         tools: [],
-        validate: (files) => files.some(f => f.path.includes("supabase") || f.content?.includes("@supabase/supabase-js") || f.content?.includes("createClient")),
+        validate: (files) =>
+          files.some(
+            (f) =>
+              f.path.includes("supabase") ||
+              f.content?.includes("@supabase/supabase-js") ||
+              f.content?.includes("createClient"),
+          ),
       },
       {
         name: "vite-react",
@@ -127,7 +152,8 @@ React 19: useActionState, useOptimistic, useFormStatus, <Suspense> para streamin
 Tailwind CSS v4 via @tailwindcss/vite — tokens em src/index.css com @theme.
 Vitest para testes. @vitejs/plugin-react para Fast Refresh.`,
         tools: [],
-        validate: (files) => files.some(f => f.path === "vite.config.ts" || f.path === "vite.config.js"),
+        validate: (files) =>
+          files.some((f) => f.path === "vite.config.ts" || f.path === "vite.config.js"),
       },
       {
         name: "design-system",
@@ -185,9 +211,16 @@ import { HeroSignature, BentoGrid, CTASignature, NavShell, FeatureMatrix, Button
 ### 6. PROIBIDO (Observer rejeita):
 - bg-white, bg-blue-600/500, landing <3 composites, sem motion
 - Tailwind raw (bg-zinc-*, text-blue-*), hex hardcoded, <button> manual
-- Reimplementar Button/Card/Dialog — importe @forge/ui`, 
+- Reimplementar Button/Card/Dialog — importe @forge/ui`,
         tools: [],
-        validate: (files) => files.some(f => f.path.includes("tailwind.config") || f.path.includes("index.css") || f.path.includes("global.css") || f.path.includes("@forge/ui")),
+        validate: (files) =>
+          files.some(
+            (f) =>
+              f.path.includes("tailwind.config") ||
+              f.path.includes("index.css") ||
+              f.path.includes("global.css") ||
+              f.path.includes("@forge/ui"),
+          ),
       },
       {
         name: "testing",
@@ -214,13 +247,20 @@ PATTERNS:
 - Snapshot testing APENAS para design tokens, não UI completa
 - Test utils em test/utils.tsx (renderWithProviders, mockData)`,
         tools: [],
-        validate: (files) => files.some(f => f.path.includes("vitest.config") || f.path.includes("playwright.config") || f.path.endsWith(".test.tsx") || f.path.endsWith(".spec.ts")),
+        validate: (files) =>
+          files.some(
+            (f) =>
+              f.path.includes("vitest.config") ||
+              f.path.includes("playwright.config") ||
+              f.path.endsWith(".test.tsx") ||
+              f.path.endsWith(".spec.ts"),
+          ),
       },
     ];
   }
 
   addSkill(skill: Skill): void {
-    const existing = this.skills.findIndex(s => s.name === skill.name);
+    const existing = this.skills.findIndex((s) => s.name === skill.name);
     if (existing >= 0) {
       this.skills[existing] = skill;
     } else {
@@ -229,14 +269,14 @@ PATTERNS:
   }
 
   detectActive(files: FileEntry[]): Skill[] {
-    const active = this.skills.filter(s => s.validate(files));
+    const active = this.skills.filter((s) => s.validate(files));
     // Grupos mutuamente exclusivos: skills mais específicas têm precedência
     const exclusivityGroups = [
       ["nextjs-app-router", "tanstack-start", "expo", "android-native", "astro", "vite-react"],
       ["react-tailwind", "vite-react"],
     ];
     for (const group of exclusivityGroups) {
-      const groupActive = active.filter(s => group.includes(s.name));
+      const groupActive = active.filter((s) => group.includes(s.name));
       if (groupActive.length > 1) {
         // Mantém apenas a primeira (mais específica) do grupo
         const keep = groupActive[0];
@@ -254,7 +294,7 @@ PATTERNS:
     const active = this.detectActive(files);
     if (active.length === 0) return "";
 
-    return active.map(s => s.systemPrompt).join("\n\n");
+    return active.map((s) => s.systemPrompt).join("\n\n");
   }
 
   registerTools(registry: ToolRegistry, files: FileEntry[]): void {

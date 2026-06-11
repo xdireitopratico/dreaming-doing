@@ -14,8 +14,13 @@ const BAD_E2B_TEMPLATES = new Set(["base", "minimal", "empty", "nodejs", "node"]
 /** Ordem de tentativa na criação — só persiste sandbox após smoke npm. Nunca usa templates ruins. */
 export function e2bTemplateCandidates(requested?: string): string[] {
   const req = requested?.trim();
-  const cands = [req, E2B_TEMPLATE_DEFAULT, E2B_TEMPLATE_PREFERRED, "code-interpreter", "code-interpreter-v1"]
-    .filter((t): t is string => !!t && !BAD_E2B_TEMPLATES.has(t.toLowerCase()));
+  const cands = [
+    req,
+    E2B_TEMPLATE_DEFAULT,
+    E2B_TEMPLATE_PREFERRED,
+    "code-interpreter",
+    "code-interpreter-v1",
+  ].filter((t): t is string => !!t && !BAD_E2B_TEMPLATES.has(t.toLowerCase()));
   return [...new Set(cands)];
 }
 
@@ -64,11 +69,11 @@ export function patchViteConfigForE2b(content: string): string {
   let out = content;
   if (!/allowedHosts/i.test(out)) {
     if (/server:\s*\{/.test(out)) {
-      out = out.replace(/server:\s*\{/, 'server: { allowedHosts: true, ');
+      out = out.replace(/server:\s*\{/, "server: { allowedHosts: true, ");
     } else {
       out = out.replace(
         /defineConfig\(\s*\{/,
-        "defineConfig({\n  server: { host: \"0.0.0.0\", port: 5173, allowedHosts: true, hmr: { clientPort: 443 } },",
+        'defineConfig({\n  server: { host: "0.0.0.0", port: 5173, allowedHosts: true, hmr: { clientPort: 443 } },',
       );
     }
   }
@@ -120,9 +125,10 @@ export async function e2bCreateSandbox(
   timeoutSeconds = 1800,
   metadata?: Record<string, string>,
 ): Promise<{ sandboxID: string; raw: Record<string, unknown> }> {
-  const opts: E2bCreateOpts = typeof templateIDOrOpts === "string"
-    ? { templateID: templateIDOrOpts, timeoutSeconds, metadata }
-    : templateIDOrOpts;
+  const opts: E2bCreateOpts =
+    typeof templateIDOrOpts === "string"
+      ? { templateID: templateIDOrOpts, timeoutSeconds, metadata }
+      : templateIDOrOpts;
   const templateID = opts.templateID ?? E2B_TEMPLATE_DEFAULT;
   const timeout = opts.timeoutSeconds ?? 1800;
   const meta = opts.metadata;
@@ -172,12 +178,14 @@ export async function e2bListSandboxes(
     throw new Error(`E2B list ${resp.status}: ${text.slice(0, 300)}`);
   }
   const data = JSON.parse(text) as Array<Record<string, unknown>>;
-  return data.map((row) => ({
-    sandboxID: String(row.sandboxID ?? row.sandboxId ?? ""),
-    templateID: typeof row.templateID === "string" ? row.templateID : undefined,
-    state: typeof row.state === "string" ? row.state : undefined,
-    metadata: row.metadata as Record<string, string> | undefined,
-  })).filter((s) => s.sandboxID.length > 0);
+  return data
+    .map((row) => ({
+      sandboxID: String(row.sandboxID ?? row.sandboxId ?? ""),
+      templateID: typeof row.templateID === "string" ? row.templateID : undefined,
+      state: typeof row.state === "string" ? row.state : undefined,
+      metadata: row.metadata as Record<string, string> | undefined,
+    }))
+    .filter((s) => s.sandboxID.length > 0);
 }
 
 export async function e2bDeleteSandbox(apiKey: string, sandboxId: string): Promise<boolean> {

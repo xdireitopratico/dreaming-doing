@@ -113,7 +113,9 @@ async function main() {
     });
     const [run] = await runRow.json();
     const types = events.map((e) => e.event_type).reverse();
-    process.stdout.write(`\r  status=${run?.status} events=${events.length} [${types.slice(-5).join(",")}]   `);
+    process.stdout.write(
+      `\r  status=${run?.status} events=${events.length} [${types.slice(-5).join(",")}]   `,
+    );
     if (["completed", "failed", "canceled", "awaiting_user"].includes(run?.status)) {
       console.log(`\nDone: ${run.status}`, run.error ?? "");
       const toolDone = events.filter((e) => e.event_type === "tool_done").length;

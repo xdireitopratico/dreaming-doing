@@ -105,12 +105,9 @@ export function useEditorTelemetry(input: EditorTelemetryInput | null): void {
         activeView: input.activeView,
       },
       sandbox: {
-        previewSandboxId:
-          typeof meta.previewSandboxId === "string" ? meta.previewSandboxId : null,
-        previewReady:
-          typeof meta.previewReady === "boolean" ? meta.previewReady : null,
-        previewExpiresAt:
-          typeof meta.previewExpiresAt === "string" ? meta.previewExpiresAt : null,
+        previewSandboxId: typeof meta.previewSandboxId === "string" ? meta.previewSandboxId : null,
+        previewReady: typeof meta.previewReady === "boolean" ? meta.previewReady : null,
+        previewExpiresAt: typeof meta.previewExpiresAt === "string" ? meta.previewExpiresAt : null,
       },
       project: {
         fileCount: input.fileCount,

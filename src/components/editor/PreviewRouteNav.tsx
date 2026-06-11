@@ -94,7 +94,10 @@ export function PreviewRouteNav({
       role="navigation"
       aria-label="Navegação do preview"
     >
-      <span className="forge-address-bar-scheme" title={canNavigate ? previewHost : "Preview local"}>
+      <span
+        className="forge-address-bar-scheme"
+        title={canNavigate ? previewHost : "Preview local"}
+      >
         {canNavigate ? (
           <Lock className="size-3 text-[var(--forge-primary)]/80" aria-hidden />
         ) : (

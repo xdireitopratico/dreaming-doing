@@ -37,9 +37,7 @@ export class AgentNarrator {
   append(text: string): void {
     const chunk = text.trim();
     if (!chunk) return;
-    this.buffer = this.buffer
-      ? `${this.buffer}\n\n${chunk}`
-      : chunk;
+    this.buffer = this.buffer ? `${this.buffer}\n\n${chunk}` : chunk;
   }
 
   /** Emite texto de narração para o stream (markdown no chat). */

@@ -38,7 +38,15 @@ export function registerMcpForgeTools(reg: ToolRegistry, ctx: McpForgeContext): 
             toolCallId: "",
             ok: true,
             output: {
-              tables: ["projects", "project_files", "conversations", "messages", "connectors", "profiles", "deployments"],
+              tables: [
+                "projects",
+                "project_files",
+                "conversations",
+                "messages",
+                "connectors",
+                "profiles",
+                "deployments",
+              ],
               note: error.message,
             },
           };
@@ -101,24 +109,40 @@ export function registerMcpForgeTools(reg: ToolRegistry, ctx: McpForgeContext): 
       },
       async (args) => {
         if (!token) {
-          return { toolCallId: "", ok: false, error: "GitHub não conectado em Conectores", output: null };
+          return {
+            toolCallId: "",
+            ok: false,
+            error: "GitHub não conectado em Conectores",
+            output: null,
+          };
         }
         const perPage = Math.min(Number(args.per_page) || 15, 30);
-        const res = await fetch(`https://api.github.com/user/repos?per_page=${perPage}&sort=updated`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            Accept: "application/vnd.github+json",
-            "User-Agent": "FORGE-Agent",
+        const res = await fetch(
+          `https://api.github.com/user/repos?per_page=${perPage}&sort=updated`,
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+              Accept: "application/vnd.github+json",
+              "User-Agent": "FORGE-Agent",
+            },
           },
-        });
+        );
         if (!res.ok) {
           return { toolCallId: "", ok: false, error: `GitHub ${res.status}`, output: null };
         }
-        const repos = await res.json() as { full_name: string; private: boolean; html_url: string }[];
+        const repos = (await res.json()) as {
+          full_name: string;
+          private: boolean;
+          html_url: string;
+        }[];
         return {
           toolCallId: "",
           ok: true,
-          output: repos.map((r) => ({ full_name: r.full_name, private: r.private, url: r.html_url })),
+          output: repos.map((r) => ({
+            full_name: r.full_name,
+            private: r.private,
+            url: r.html_url,
+          })),
         };
       },
     );
@@ -159,10 +183,14 @@ export function registerMcpForgeTools(reg: ToolRegistry, ctx: McpForgeContext): 
         if (!res.ok) {
           return { toolCallId: "", ok: false, error: `GitHub ${res.status}`, output: null };
         }
-        const file = await res.json() as { content?: string; encoding?: string; size?: number };
+        const file = (await res.json()) as { content?: string; encoding?: string; size?: number };
         if (file.encoding === "base64" && file.content) {
           const text = atob(file.content.replace(/\n/g, ""));
-          return { toolCallId: "", ok: true, output: { path, size: file.size, content: text.slice(0, 80_000) } };
+          return {
+            toolCallId: "",
+            ok: true,
+            output: { path, size: file.size, content: text.slice(0, 80_000) },
+          };
         }
         return { toolCallId: "", ok: true, output: file };
       },
@@ -179,13 +207,19 @@ export function registerMcpForgeTools(reg: ToolRegistry, ctx: McpForgeContext): 
       },
       async () => {
         if (!token) {
-          return { toolCallId: "", ok: false, error: "Vercel não conectado em Conectores", output: null };
+          return {
+            toolCallId: "",
+            ok: false,
+            error: "Vercel não conectado em Conectores",
+            output: null,
+          };
         }
         const res = await fetch("https://api.vercel.com/v9/projects?limit=20", {
           headers: { Authorization: `Bearer ${token}` },
         });
-        if (!res.ok) return { toolCallId: "", ok: false, error: `Vercel ${res.status}`, output: null };
-        const body = await res.json() as { projects?: { name: string; id: string }[] };
+        if (!res.ok)
+          return { toolCallId: "", ok: false, error: `Vercel ${res.status}`, output: null };
+        const body = (await res.json()) as { projects?: { name: string; id: string }[] };
         return { toolCallId: "", ok: true, output: body.projects ?? [] };
       },
     );
@@ -210,8 +244,9 @@ export function registerMcpForgeTools(reg: ToolRegistry, ctx: McpForgeContext): 
           `https://api.vercel.com/v6/deployments?projectId=${encodeURIComponent(projectId)}&limit=${limit}`,
           { headers: { Authorization: `Bearer ${token}` } },
         );
-        if (!res.ok) return { toolCallId: "", ok: false, error: `Vercel ${res.status}`, output: null };
-        const body = await res.json() as { deployments?: unknown[] };
+        if (!res.ok)
+          return { toolCallId: "", ok: false, error: `Vercel ${res.status}`, output: null };
+        const body = (await res.json()) as { deployments?: unknown[] };
         return { toolCallId: "", ok: true, output: body.deployments ?? [] };
       },
     );
@@ -244,7 +279,12 @@ export function registerMcpForgeTools(reg: ToolRegistry, ctx: McpForgeContext): 
         const res = await fetch(url, { headers });
         if (!res.ok) {
           const err = await res.text();
-          return { toolCallId: "", ok: false, error: `Context7 ${res.status}: ${err.slice(0, 200)}`, output: null };
+          return {
+            toolCallId: "",
+            ok: false,
+            error: `Context7 ${res.status}: ${err.slice(0, 200)}`,
+            output: null,
+          };
         }
         const data = await res.json();
         return { toolCallId: "", ok: true, output: data };
@@ -274,7 +314,12 @@ export function registerMcpForgeTools(reg: ToolRegistry, ctx: McpForgeContext): 
         const res = await fetch(url, { headers });
         if (!res.ok) {
           const err = await res.text();
-          return { toolCallId: "", ok: false, error: `Context7 ${res.status}: ${err.slice(0, 200)}`, output: null };
+          return {
+            toolCallId: "",
+            ok: false,
+            error: `Context7 ${res.status}: ${err.slice(0, 200)}`,
+            output: null,
+          };
         }
         const data = await res.json();
         return { toolCallId: "", ok: true, output: data };

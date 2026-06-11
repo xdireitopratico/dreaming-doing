@@ -13,6 +13,7 @@ export function sanitizeDocumentMarkdown(raw: string): string {
   let s = raw.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
 
   // Caracteres de controle (exceto \n \t)
+  // eslint-disable-next-line no-control-regex
   s = s.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "");
 
   // Ligaturas comuns
@@ -23,10 +24,7 @@ export function sanitizeDocumentMarkdown(raw: string): string {
     .replace(/\u00A0/g, " ");
 
   // Cabeçalhos/rodapés de página
-  s = s.replace(
-    /^(?:Página|Page)\s+\d+\s+(?:de|of)\s+\d+\s*$/gim,
-    "",
-  );
+  s = s.replace(/^(?:Página|Page)\s+\d+\s+(?:de|of)\s+\d+\s*$/gim, "");
   s = s.replace(/^\s*-\s*\d+\s*-\s*$/gm, "");
 
   // Quebra de linha com hífen (palavra-\ncontinuação)
@@ -59,7 +57,7 @@ export function structurePlainTextAsMarkdown(text: string): string {
       prevBlank &&
       nextBlank &&
       ((line === line.toUpperCase() && /[A-ZÀ-Ú]/.test(line)) ||
-        /^(\d+(\.\d+)*[\.\)]\s+|[IVXLC]+\.\s+)/.test(line));
+        /^(\d+(\.\d+)*[.)]\s+|[IVXLC]+\.\s+)/.test(line));
 
     if (looksLikeTitle && !line.startsWith("#")) {
       out.push(`## ${line}`);
@@ -68,7 +66,10 @@ export function structurePlainTextAsMarkdown(text: string): string {
     }
   }
 
-  return out.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+  return out
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 }
 
 /** Converte TSV (saída do sheetjs) em tabela Markdown. */
@@ -79,9 +80,9 @@ export function tsvToMarkdownTable(tsv: string, maxRows = 200): string {
     .filter((l) => l.length > 0);
   if (!lines.length) return "_Tabela vazia_";
 
-  const rows = lines.slice(0, maxRows).map((line) =>
-    line.split("\t").map((c) => c.replace(/\|/g, "\\|").trim()),
-  );
+  const rows = lines
+    .slice(0, maxRows)
+    .map((line) => line.split("\t").map((c) => c.replace(/\|/g, "\\|").trim()));
   const colCount = Math.max(...rows.map((r) => r.length));
   const pad = (cells: string[]) => {
     while (cells.length < colCount) cells.push("");

@@ -68,7 +68,10 @@ export function llmErrorHint(err: unknown, robinActive: boolean): ErrorHint {
   const statusHint = hintFromStatus(status, msg);
   if (statusHint) return statusHint;
 
-  if (/\b404\b/.test(msg) && (lower.includes("model") || lower.includes("does not exist") || lower.includes("not found"))) {
+  if (
+    /\b404\b/.test(msg) &&
+    (lower.includes("model") || lower.includes("does not exist") || lower.includes("not found"))
+  ) {
     if (lower.includes("nvidia")) {
       return {
         message: "Modelo NVIDIA não encontrado. Pode estar deprecado ou sua chave não tem acesso.",
@@ -99,7 +102,10 @@ export function llmErrorHint(err: unknown, robinActive: boolean): ErrorHint {
     };
   }
 
-  if (/\b429\b/.test(msg) || /rate limit|too many requests|quota|capacity|overloaded|rpm|tpm/i.test(lower)) {
+  if (
+    /\b429\b/.test(msg) ||
+    /rate limit|too many requests|quota|capacity|overloaded|rpm|tpm/i.test(lower)
+  ) {
     if (robinActive) {
       return {
         message: "Limite por minuto nesta chave. ROBIN está alternando para a próxima…",
@@ -119,7 +125,11 @@ export function llmErrorHint(err: unknown, robinActive: boolean): ErrorHint {
     };
   }
 
-  if (/network|connection|timeout|timed out|econnreset|fetch failed|broken pipe|stream closed/i.test(lower)) {
+  if (
+    /network|connection|timeout|timed out|econnreset|fetch failed|broken pipe|stream closed/i.test(
+      lower,
+    )
+  ) {
     return {
       message: "Conexão com o modelo instável. O estado foi salvo.",
       action: "Continuar run",

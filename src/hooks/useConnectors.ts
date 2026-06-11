@@ -106,8 +106,8 @@ export function useConnectors() {
       forgeAvailable: CONNECTOR_REGISTRY.supabase.forgeAvailable,
       connected: !!supabaseRow,
       label: supabaseRow
-        ? ((supabaseRow.meta as { projectRef?: string })?.projectRef as string | undefined) ??
-          "Projeto conectado"
+        ? (((supabaseRow.meta as { projectRef?: string })?.projectRef as string | undefined) ??
+          "Projeto conectado")
         : undefined,
       meta: (supabaseRow?.meta as Record<string, unknown>) ?? {},
     },

@@ -1,12 +1,20 @@
 import { motion } from "framer-motion";
 
 const FEATURES = [
-  { t: "AI nativo", d: "Geração de código com modelos de fronteira, otimizada para produção.", k: "AI" },
+  {
+    t: "AI nativo",
+    d: "Geração de código com modelos de fronteira, otimizada para produção.",
+    k: "AI",
+  },
   { t: "Backend integrado", d: "Auth, DB Postgres e storage prontos com um clique.", k: "DB" },
   { t: "Edge deploy", d: "Global, instantâneo, sem servidores pra gerenciar.", k: "EDGE" },
   { t: "Editor visual", d: "Edite componentes ao vivo, com preview lado a lado.", k: "UI" },
   { t: "Versionamento", d: "Cada prompt vira um commit. Reverta a qualquer momento.", k: "GIT" },
-  { t: "Open by default", d: "Exporte para GitHub, conecte domínio, custodie seu código.", k: "OSS" },
+  {
+    t: "Open by default",
+    d: "Exporte para GitHub, conecte domínio, custodie seu código.",
+    k: "OSS",
+  },
 ];
 
 export function Features() {
@@ -18,8 +26,7 @@ export function Features() {
             // PAYLOAD MANIFEST
           </p>
           <h2 className="font-display font-bold text-4xl md:text-5xl tracking-tight">
-            Uma plataforma completa,{" "}
-            <span className="text-gradient-cool">ativa em um prompt</span>.
+            Uma plataforma completa, <span className="text-gradient-cool">ativa em um prompt</span>.
           </h2>
         </div>
 
@@ -40,8 +47,12 @@ export function Features() {
               data-cursor="hover"
               className="group relative glass p-7 rounded-sm border border-[var(--border)] hover:border-[var(--primary)]/40 transition-colors"
             >
-              <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none rounded-sm"
-                   style={{ boxShadow: "inset 0 0 60px rgba(255,107,53,0.06), 0 0 40px rgba(255,107,53,0.12)" }} />
+              <div
+                className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none rounded-sm"
+                style={{
+                  boxShadow: "inset 0 0 60px rgba(255,107,53,0.06), 0 0 40px rgba(255,107,53,0.12)",
+                }}
+              />
               <div className="flex items-center justify-between mb-5">
                 <span className="font-mono text-[10px] tracking-[0.3em] uppercase text-[var(--text-dim)] border border-[var(--border)] px-2 py-1">
                   {f.k}
@@ -51,9 +62,7 @@ export function Features() {
               <h3 className="font-display font-semibold text-xl mb-2 group-hover:text-[var(--primary)] transition-colors">
                 {f.t}
               </h3>
-              <p className="font-body text-sm text-[var(--text-dim)] leading-relaxed">
-                {f.d}
-              </p>
+              <p className="font-body text-sm text-[var(--text-dim)] leading-relaxed">{f.d}</p>
             </motion.div>
           ))}
         </div>

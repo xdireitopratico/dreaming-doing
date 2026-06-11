@@ -35,8 +35,12 @@ export function CTASignature({
             <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgba(255,182,39,0.15),transparent_60%)] pointer-events-none" />
             <FadeIn className="relative z-10 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-8">
               <div className="max-w-xl space-y-3">
-                <h2 className="font-display text-2xl md:text-3xl lg:text-4xl font-semibold tracking-tight">{title}</h2>
-                {description && <p className="text-muted-foreground text-base md:text-lg">{description}</p>}
+                <h2 className="font-display text-2xl md:text-3xl lg:text-4xl font-semibold tracking-tight">
+                  {title}
+                </h2>
+                {description && (
+                  <p className="text-muted-foreground text-base md:text-lg">{description}</p>
+                )}
               </div>
               <div className="flex flex-wrap gap-4 shrink-0">
                 <Button size="xl" onClick={onPrimary}>

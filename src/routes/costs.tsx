@@ -53,7 +53,9 @@ function CostsPage() {
 
   const stats = useMemo(() => {
     if (!data) return null;
-    const runs = data.filter((r) => r.status === "completed" || r.status === "failed" || r.status === "canceled");
+    const runs = data.filter(
+      (r) => r.status === "completed" || r.status === "failed" || r.status === "canceled",
+    );
     const totalCost = runs.reduce((acc, r) => acc + (r.meta.costUsd ?? 0), 0);
     const totalInput = runs.reduce((acc, r) => acc + (r.meta.totalInputTokens ?? 0), 0);
     const totalOutput = runs.reduce((acc, r) => acc + (r.meta.totalOutputTokens ?? 0), 0);
@@ -123,9 +125,7 @@ function CostsPage() {
         </div>
       </motion.div>
 
-      {isLoading && (
-        <p className="font-mono text-[10px] text-[var(--text-ghost)]">carregando…</p>
-      )}
+      {isLoading && <p className="font-mono text-[10px] text-[var(--text-ghost)]">carregando…</p>}
 
       {stats && (
         <>
@@ -146,11 +146,7 @@ function CostsPage() {
               label="Custo médio / run"
               value={`$${stats.avgCostPerRun.toFixed(4)}`}
             />
-            <KpiCard
-              icon={Cpu}
-              label="Runs"
-              value={String(stats.runs)}
-            />
+            <KpiCard icon={Cpu} label="Runs" value={String(stats.runs)} />
           </div>
 
           <section className="mb-6">
@@ -198,7 +194,10 @@ function CostsPage() {
             {stats.last7Days.length === 0 ? (
               <p className="font-mono text-[10px] text-[var(--text-ghost)]">Sem dados ainda.</p>
             ) : (
-              <DayBarChart days={stats.last7Days} maxCost={Math.max(...stats.last7Days.map((d) => d[1].cost), 0.001)} />
+              <DayBarChart
+                days={stats.last7Days}
+                maxCost={Math.max(...stats.last7Days.map((d) => d[1].cost), 0.001)}
+              />
             )}
           </section>
 
@@ -230,9 +229,7 @@ function CostsPage() {
                           minute: "2-digit",
                         })}
                       </td>
-                      <td className="px-3 py-2 truncate max-w-[200px]">
-                        {r.meta.model ?? "—"}
-                      </td>
+                      <td className="px-3 py-2 truncate max-w-[200px]">{r.meta.model ?? "—"}</td>
                       <td className="px-3 py-2 text-right">{r.steps}</td>
                       <td className="px-3 py-2 text-right">
                         {(r.meta.totalTokens ?? 0).toLocaleString("pt-BR")}
@@ -275,7 +272,9 @@ function KpiCard({
       }`}
     >
       <div className="flex items-center gap-2 mb-1.5">
-        <Icon className={`size-3.5 ${accent ? "text-[var(--primary)]" : "text-[var(--text-dim)]"}`} />
+        <Icon
+          className={`size-3.5 ${accent ? "text-[var(--primary)]" : "text-[var(--text-dim)]"}`}
+        />
         <span className="font-mono text-[9px] uppercase tracking-[0.2em] text-[var(--text-dim)]">
           {label}
         </span>

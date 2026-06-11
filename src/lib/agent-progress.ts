@@ -9,13 +9,7 @@ export interface SSEEvent {
 
 export interface PlanStep {
   id: string;
-  type:
-    | "create_file"
-    | "edit_file"
-    | "shell_exec"
-    | "install_dep"
-    | "observe"
-    | "custom";
+  type: "create_file" | "edit_file" | "shell_exec" | "install_dep" | "observe" | "custom";
   description: string;
   filePath?: string;
   estimatedCost?: number;
@@ -43,14 +37,12 @@ export interface AgentProgress {
   message: string | null;
   currentStep: number | null;
   totalSteps: number | null;
-  tools: Array<
-    {
-      name: string;
-      args: Record<string, unknown>;
-      ok?: boolean;
-      error?: string;
-    }
-  >;
+  tools: Array<{
+    name: string;
+    args: Record<string, unknown>;
+    ok?: boolean;
+    error?: string;
+  }>;
   cost: number;
   model: string | null;
   skills: string[];
@@ -82,9 +74,7 @@ export interface AgentProgress {
   /** Paths entregues no último delivery_checkpoint (contrato parcial). */
   deliveryFiles?: string[];
   /** Linhas de saída Gradle/shell (preview nativo). */
-  buildLogLines?: Array<
-    { command: string; line: string; ok: boolean; ts: number }
-  >;
+  buildLogLines?: Array<{ command: string; line: string; ok: boolean; ts: number }>;
   /** Sugestão de fork quando mobile nativo aparece em projeto web. */
   stackForkSuggested?: {
     path: string;
@@ -167,9 +157,10 @@ export function streamRowToSSEEvent(row: {
 }): SSEEvent {
   const payload = row.payload ?? {};
   const eventType = (payload.type as string) ?? row.event_type;
-  const eventData = payload.data && typeof payload.data === "object"
-    ? (payload.data as Record<string, unknown>)
-    : { ...payload, type: undefined };
+  const eventData =
+    payload.data && typeof payload.data === "object"
+      ? (payload.data as Record<string, unknown>)
+      : { ...payload, type: undefined };
   return {
     type: eventType,
     data: eventData,
@@ -203,8 +194,7 @@ function parsePendingPlanFromPayload(
 
   return {
     planId,
-    summary:
-      typeof nested.summary === "string" ? nested.summary : "Plano proposto",
+    summary: typeof nested.summary === "string" ? nested.summary : "Plano proposto",
     rationale:
       typeof nested.rationale === "string" && nested.rationale.trim()
         ? nested.rationale.trim()
@@ -214,11 +204,9 @@ function parsePendingPlanFromPayload(
         ? nested.markdown.trim()
         : undefined,
     mission: typeof nested.mission === "string" ? nested.mission : undefined,
-    objective:
-      typeof nested.objective === "string" ? nested.objective : undefined,
+    objective: typeof nested.objective === "string" ? nested.objective : undefined,
     steps,
-    ttlMs:
-      typeof nested.ttlMs === "number" ? nested.ttlMs : Number.MAX_SAFE_INTEGER,
+    ttlMs: typeof nested.ttlMs === "number" ? nested.ttlMs : Number.MAX_SAFE_INTEGER,
     proposedAt: Date.now(),
     runId,
     projectId,
@@ -226,10 +214,7 @@ function parsePendingPlanFromPayload(
 }
 
 /** Reducer puro dos eventos do agente (exportado para testes). */
-export function applyAgentProgressEvent(
-  prev: AgentProgress,
-  event: SSEEvent,
-): AgentProgress {
+export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): AgentProgress {
   const { type, data } = event;
 
   switch (type) {
@@ -243,8 +228,8 @@ export function applyAgentProgressEvent(
         statusHint: data.autoResume
           ? "Retomando automaticamente…"
           : data.resume
-          ? "Retomando com a memória salva no chat…"
-          : "Trabalhando no projeto…",
+            ? "Retomando com a memória salva no chat…"
+            : "Trabalhando no projeto…",
         timeline: [...prev.timeline, event],
       };
 
@@ -269,8 +254,8 @@ export function applyAgentProgressEvent(
         streamText: skipStream
           ? prev.streamText
           : append
-          ? `${prev.streamText ?? ""}${chunk}`
-          : chunk,
+            ? `${prev.streamText ?? ""}${chunk}`
+            : chunk,
         narrationText: narration
           ? append
             ? `${prev.narrationText ?? ""}${chunk}`
@@ -286,8 +271,7 @@ export function applyAgentProgressEvent(
         autoResuming: true,
         finished: false,
         error: null,
-        statusHint: (data.message as string) ??
-          "Retomando automaticamente no servidor…",
+        statusHint: (data.message as string) ?? "Retomando automaticamente no servidor…",
         timeline: [...prev.timeline, event],
       };
 
@@ -322,12 +306,8 @@ export function applyAgentProgressEvent(
     case "step":
       return {
         ...prev,
-        currentStep: typeof data.current === "number"
-          ? data.current
-          : prev.currentStep,
-        totalSteps: typeof data.total === "number"
-          ? data.total
-          : prev.totalSteps,
+        currentStep: typeof data.current === "number" ? data.current : prev.currentStep,
+        totalSteps: typeof data.total === "number" ? data.total : prev.totalSteps,
         timeline: [...prev.timeline, event],
       };
 
@@ -343,8 +323,7 @@ export function applyAgentProgressEvent(
     case "rate_limit":
       return {
         ...prev,
-        statusHint: (data.message as string) ??
-          "Rate limit — ROBIN alternando chave…",
+        statusHint: (data.message as string) ?? "Rate limit — ROBIN alternando chave…",
         timeline: [...prev.timeline, event],
       };
 
@@ -358,17 +337,13 @@ export function applyAgentProgressEvent(
       };
 
     case "build_log": {
-      const command = typeof data.command === "string"
-        ? data.command
-        : "gradle";
+      const command = typeof data.command === "string" ? data.command : "gradle";
       const ok = data.ok !== false;
       const rawLines = Array.isArray(data.lines)
-        ? (data.lines as string[]).filter((l) =>
-          typeof l === "string" && l.trim()
-        )
+        ? (data.lines as string[]).filter((l) => typeof l === "string" && l.trim())
         : typeof data.output === "string"
-        ? data.output.split("\n").filter((l) => l.trim())
-        : [];
+          ? data.output.split("\n").filter((l) => l.trim())
+          : [];
       const ts = Date.now();
       const appended = rawLines.map((line) => ({
         command,
@@ -389,16 +364,14 @@ export function applyAgentProgressEvent(
         stackForkSuggested: {
           path: String(data.path ?? "app/build.gradle.kts"),
           suggestedStack: String(data.suggestedStack ?? "android-native"),
-          message: (data.message as string) ??
-            "Isso é mobile nativo. Criar projeto Android dedicado?",
+          message:
+            (data.message as string) ?? "Isso é mobile nativo. Criar projeto Android dedicado?",
         },
         timeline: [...prev.timeline, event],
       };
 
     case "delivery_checkpoint": {
-      const narration = typeof data.narration === "string"
-        ? data.narration.trim()
-        : "";
+      const narration = typeof data.narration === "string" ? data.narration.trim() : "";
       const deliveryFiles = Array.isArray(data.deliveryFiles)
         ? (data.deliveryFiles as string[]).filter((p) => typeof p === "string")
         : prev.deliveryFiles;
@@ -407,19 +380,14 @@ export function applyAgentProgressEvent(
         ...prev,
         finished: false,
         error: null,
-        currentStep: typeof data.step === "number"
-          ? data.step
-          : prev.currentStep,
-        totalSteps: typeof data.totalSteps === "number"
-          ? data.totalSteps
-          : prev.totalSteps,
+        currentStep: typeof data.step === "number" ? data.step : prev.currentStep,
+        totalSteps: typeof data.totalSteps === "number" ? data.totalSteps : prev.totalSteps,
         streamText: prev.streamText,
         narrationText: narration || prev.narrationText,
         deliveryFiles,
         resumable: silent ? false : data.resumable === true || prev.resumable,
         autoResuming: silent || data.resumable === true,
-        statusHint: (data.message as string) ?? prev.statusHint ??
-          "Continuando…",
+        statusHint: (data.message as string) ?? prev.statusHint ?? "Continuando…",
         timeline: [...prev.timeline, event],
       };
     }
@@ -482,14 +450,17 @@ export function applyAgentProgressEvent(
       const id = `${path}::${prev.diffs.length}::${Date.now()}`;
       return {
         ...prev,
-        diffs: [...prev.diffs, {
-          id,
-          path,
-          before,
-          after,
-          op,
-          timestamp: Date.now(),
-        }],
+        diffs: [
+          ...prev.diffs,
+          {
+            id,
+            path,
+            before,
+            after,
+            op,
+            timestamp: Date.now(),
+          },
+        ],
         previewSyncTick: (prev.previewSyncTick ?? 0) + 1,
         timeline: [...prev.timeline, event],
       };
@@ -541,13 +512,8 @@ export function applyAgentProgressEvent(
           ? summaryTrim
           : prev.streamText;
       const planFromDone =
-        data.planProposed === true && !data.planRejected
-          ? parsePendingPlanFromPayload(data)
-          : null;
-      const pendingPlan =
-        data.planRejected === true
-          ? null
-          : prev.pendingPlan ?? planFromDone;
+        data.planProposed === true && !data.planRejected ? parsePendingPlanFromPayload(data) : null;
+      const pendingPlan = data.planRejected === true ? null : (prev.pendingPlan ?? planFromDone);
       const planAwaiting = data.planProposed === true && !!pendingPlan;
       const conversational = data.conversational === true;
       return {
@@ -555,10 +521,7 @@ export function applyAgentProgressEvent(
         summary,
         finished: true,
         lastFinishOk: true,
-        awaiting:
-          conversational
-            ? false
-            : !!(data.awaiting || data.qualified) || planAwaiting,
+        awaiting: conversational ? false : !!(data.awaiting || data.qualified) || planAwaiting,
         awaitingKind: conversational
           ? null
           : data.qualified || data.awaiting
@@ -570,11 +533,9 @@ export function applyAgentProgressEvent(
         error: null,
         streamText,
         pendingPlan: conversational ? null : pendingPlan,
-        planSummary: conversational ? null : pendingPlan?.summary ?? prev.planSummary,
+        planSummary: conversational ? null : (pendingPlan?.summary ?? prev.planSummary),
         conversational,
-        statusHint: planAwaiting
-          ? "Plano aguardando aprovação…"
-          : prev.statusHint,
+        statusHint: planAwaiting ? "Plano aguardando aprovação…" : prev.statusHint,
         timeline: [...prev.timeline, event],
       };
     }
@@ -598,8 +559,7 @@ export function applyAgentProgressEvent(
     case "error":
       return {
         ...prev,
-        error: (data.message as string) ?? (data.error as string) ??
-          "Erro desconhecido",
+        error: (data.message as string) ?? (data.error as string) ?? "Erro desconhecido",
         finished: true,
         resumable: data.recoverable === true || prev.resumable,
         timeline: [...prev.timeline, event],
@@ -609,23 +569,25 @@ export function applyAgentProgressEvent(
       const failed = data.ok === false;
       const canceled = !!data.canceled || prev.canceled;
       const awaiting = !!(data.awaiting || data.qualified || prev.awaiting);
+      const planPending =
+        prev.awaitingKind === "plan_approval" && (prev.pendingPlan?.steps?.length ?? 0) > 0;
       return {
         ...prev,
         finished: true,
         canceled,
         awaiting,
         awaitingKind: awaiting
-          ? data.qualified || data.awaiting || prev.awaitingKind === "qualify"
-            ? "qualify"
-            : prev.awaitingKind
+          ? planPending
+            ? "plan_approval"
+            : data.qualified || data.awaiting || prev.awaitingKind === "qualify"
+              ? "qualify"
+              : prev.awaitingKind
           : prev.awaitingKind,
         streamText: prev.streamText,
         autoResuming: false,
         lastFinishOk: !failed && !canceled,
         resumable: failed && data.resumable === true && !canceled,
-        error: failed || canceled
-          ? ((data.error as string) ?? prev.error)
-          : null,
+        error: failed || canceled ? ((data.error as string) ?? prev.error) : null,
         timeline: [...prev.timeline, event],
       };
     }

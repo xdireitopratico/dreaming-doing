@@ -44,8 +44,7 @@ export function MarketingShell({
     if (requireAuth && !loading && !user) {
       if (window.location.pathname === "/auth") return;
       const rawNext =
-        new URLSearchParams(window.location.search).get("next") ??
-        window.location.pathname;
+        new URLSearchParams(window.location.search).get("next") ?? window.location.pathname;
       const next = sanitizeNext(rawNext);
       navigate({
         to: "/auth",

@@ -20,11 +20,7 @@ export function StackHonestBanner({ files, onFocusChat }: StackHonestBannerProps
   const label = stackKindLabel(stack);
 
   return (
-    <section
-      className="forge-stack-honest-banner"
-      data-testid="stack-honest-banner"
-      role="status"
-    >
+    <section className="forge-stack-honest-banner" data-testid="stack-honest-banner" role="status">
       <AlertTriangle className="size-4 shrink-0 text-amber-400" />
       <div className="min-w-0 flex-1">
         <p className="text-[12px] font-medium text-[var(--forge-foreground)]">
@@ -37,11 +33,7 @@ export function StackHonestBanner({ files, onFocusChat }: StackHonestBannerProps
         </p>
         <div className="mt-2 flex flex-wrap gap-2">
           {onFocusChat && (
-            <button
-              type="button"
-              className="forge-stack-honest-action"
-              onClick={onFocusChat}
-            >
+            <button type="button" className="forge-stack-honest-action" onClick={onFocusChat}>
               Continuar build nativo
             </button>
           )}

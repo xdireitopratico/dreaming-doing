@@ -1,30 +1,14 @@
 // index.ts — Edge Function agent-run (build: agentloop-only 2026-06-06).
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 
-import {
-  type AgentPreferencesPayload,
-  loadDeployConnectorKeys,
-} from "./connector-keys.ts";
+import { type AgentPreferencesPayload, loadDeployConnectorKeys } from "./connector-keys.ts";
 import type { ProviderConfig } from "./providers.ts";
-import {
-  loadUserLlmContext,
-  resolveAgentProvider,
-  validateAgentPreferences,
-} from "./run-setup.ts";
-import {
-  buildStackContext,
-  stackPromptAddon,
-} from "../_shared/stack-context.ts";
+import { loadUserLlmContext, resolveAgentProvider, validateAgentPreferences } from "./run-setup.ts";
+import { buildStackContext, stackPromptAddon } from "../_shared/stack-context.ts";
 import { buildChatHistory } from "./memory.ts";
 import { RobinKeyPool } from "./robin-pool.ts";
-import {
-  E2B_SETUP_USER_MESSAGE,
-  loadUserE2bApiKey,
-} from "../_shared/user-e2b.ts";
-import {
-  buildSessionExtensionsPrompt,
-  normalizeIdList,
-} from "../_shared/session-extensions.ts";
+import { E2B_SETUP_USER_MESSAGE, loadUserE2bApiKey } from "../_shared/user-e2b.ts";
+import { buildSessionExtensionsPrompt, normalizeIdList } from "../_shared/session-extensions.ts";
 import { loadTasteNvidiaConfig, runTasteChat } from "./taste-session.ts";
 import { corsPreflightResponse, FORGE_CORS_HEADERS } from "../_shared/cors.ts";
 import {
@@ -37,10 +21,7 @@ import { restoreExecutionLogFromRows } from "./executionLogMeta.ts";
 import { loadCheckpoint } from "./checkpoint.ts";
 import { appendStreamEvent } from "../_shared/agent-stream.ts";
 import { isServiceRoleRequest } from "../_shared/service-auth.ts";
-import {
-  extractOriginalUserRequest,
-  looksLikeInteractionOnly,
-} from "./qualify.ts";
+import { extractOriginalUserRequest, looksLikeInteractionOnly } from "./qualify.ts";
 
 const runningLocks = new Map<string, Promise<unknown>>();
 
@@ -61,10 +42,7 @@ Deno.serve(async (req) => {
       const body = await req.json();
 
       const supabase = createClient(SUPABASE_URL, SERVICE_KEY);
-      const token = (req.headers.get("Authorization") ?? "").replace(
-        "Bearer ",
-        "",
-      );
+      const token = (req.headers.get("Authorization") ?? "").replace("Bearer ", "");
       const isServiceCall = isServiceRoleRequest(token, SERVICE_KEY);
 
       // Loop executa no handler Inngest (Vercel) — Edge não roda execute.
@@ -94,29 +72,21 @@ Deno.serve(async (req) => {
           );
         }
         const { handleContinueQueue } = await import("./continue-queue.ts");
-        const drainResult = await handleContinueQueue(
-          supabase,
-          INNGEST_EVENT_KEY,
-          {
-            projectId: cProjectId,
-            conversationId: cConversationId,
-            userId: cUserId,
-            planMode: body.planMode === true,
-          },
-        ); // Inngest continue passes prior run's planMode (if any); stored pending intent wins inside handle (no inherit)
+        const drainResult = await handleContinueQueue(supabase, INNGEST_EVENT_KEY, {
+          projectId: cProjectId,
+          conversationId: cConversationId,
+          userId: cUserId,
+          planMode: body.planMode === true,
+        }); // Inngest continue passes prior run's planMode (if any); stored pending intent wins inside handle (no inherit)
         return json(drainResult);
       }
 
-      const { data: userData, error: uErr } = await supabase.auth.getUser(
-        token,
-      );
+      const { data: userData, error: uErr } = await supabase.auth.getUser(token);
       if (uErr || !userData?.user) {
         return json({ error: "Não autenticado" }, 401);
       }
 
-      projectId = typeof body.projectId === "string"
-        ? body.projectId
-        : undefined;
+      projectId = typeof body.projectId === "string" ? body.projectId : undefined;
       logger.info("agent_run.request", {
         projectId,
         userId: userData.user.id,
@@ -192,25 +162,18 @@ Deno.serve(async (req) => {
 
         const runMeta = (run.meta ?? {}) as Record<string, unknown>;
         const preferences = (
-          runMeta.preferences && typeof runMeta.preferences === "object"
-            ? runMeta.preferences
-            : {}
+          runMeta.preferences && typeof runMeta.preferences === "object" ? runMeta.preferences : {}
         ) as Record<string, unknown>;
-        const sessionKind = typeof runMeta.sessionKind === "string"
-          ? runMeta.sessionKind
-          : "byok";
+        const sessionKind = typeof runMeta.sessionKind === "string" ? runMeta.sessionKind : "byok";
         const enabledSkillIds = Array.isArray(runMeta.enabledSkillIds)
           ? (runMeta.enabledSkillIds as string[])
           : [];
         const enabledMcpIds = Array.isArray(runMeta.enabledMcpIds)
           ? (runMeta.enabledMcpIds as string[])
           : [];
-        const planSummary = typeof runMeta.planSummary === "string"
-          ? runMeta.planSummary
-          : "";
-        const planSourceRunId = typeof runMeta.planSourceRunId === "string"
-          ? runMeta.planSourceRunId
-          : undefined;
+        const planSummary = typeof runMeta.planSummary === "string" ? runMeta.planSummary : "";
+        const planSourceRunId =
+          typeof runMeta.planSourceRunId === "string" ? runMeta.planSourceRunId : undefined;
 
         const eventPayload = {
           runId,
@@ -226,10 +189,7 @@ Deno.serve(async (req) => {
           planSourceRunId,
         };
 
-        const eventResult = await sendInngestEvent(
-          "agent/build.requested",
-          eventPayload,
-        );
+        const eventResult = await sendInngestEvent("agent/build.requested", eventPayload);
         if (!eventResult.ok) {
           logger.error("dispatch_build.inngest_failed", {
             runId,
@@ -246,9 +206,7 @@ Deno.serve(async (req) => {
           await supabase.from("agent_runs").delete().eq("id", runId);
           return json(
             {
-              error: `Falha ao iniciar build: ${
-                eventResult.error ?? "unknown"
-              }`,
+              error: `Falha ao iniciar build: ${eventResult.error ?? "unknown"}`,
             },
             500,
           );
@@ -287,13 +245,9 @@ Deno.serve(async (req) => {
         return json({ ok: true, eventId: dispatchEventId });
       }
 
-      projectId = typeof body.projectId === "string"
-        ? body.projectId
-        : undefined;
+      projectId = typeof body.projectId === "string" ? body.projectId : undefined;
       const conversationId = body.conversationId;
-      const preferences = body.preferences as
-        | AgentPreferencesPayload
-        | undefined;
+      const preferences = body.preferences as AgentPreferencesPayload | undefined;
       const sessionKindRaw = body.sessionKind as string | undefined;
       const tasteActionRaw = body.tasteAction as string | undefined;
       const resumeRun = body.resume === true;
@@ -301,33 +255,22 @@ Deno.serve(async (req) => {
       // Modo vem do dropdown (estilo Lovable): Plan = pensar/plano; Build = executar.
       // - "plan": propõe plano, não mexe em código até aprovação
       // - "build": loop de ferramentas (implementação direta quando pedido claro)
-      const modeRaw = typeof body.mode === "string"
-        ? body.mode.toLowerCase()
-        : "chat";
+      const modeRaw = typeof body.mode === "string" ? body.mode.toLowerCase() : "chat";
       const mode: "chat" | "plan" | "build" =
         modeRaw === "plan" || modeRaw === "build" ? modeRaw : "chat";
       const planMode = mode === "plan";
       const enabledSkillIds = normalizeIdList(body.enabledSkillIds);
       const enabledMcpIds = normalizeIdList(body.enabledMcpIds);
-      const sessionExt = await buildSessionExtensionsPrompt(
-        enabledSkillIds,
-        enabledMcpIds,
-      );
+      const sessionExt = await buildSessionExtensionsPrompt(enabledSkillIds, enabledMcpIds);
 
       if (!projectId || !conversationId) {
         return json({ error: "projectId e conversationId obrigatórios" }, 400);
       }
 
-      const { expireStaleRuns, sanitizePendingQueue } = await import(
-        "../_shared/agent-pending-queue.ts"
-      );
+      const { expireStaleRuns, sanitizePendingQueue } =
+        await import("../_shared/agent-pending-queue.ts");
       await expireStaleRuns(supabase, projectId);
-      await sanitizePendingQueue(
-        supabase,
-        projectId,
-        userData.user.id,
-        conversationId,
-      );
+      await sanitizePendingQueue(supabase, projectId, userData.user.id, conversationId);
 
       const { data: project } = await supabase
         .from("projects")
@@ -355,90 +298,46 @@ Deno.serve(async (req) => {
       }
 
       if (body.action === "pending_count") {
-        const { sanitizePendingQueue, countPendingMessages } = await import(
-          "../_shared/agent-pending-queue.ts"
-        );
-        await sanitizePendingQueue(
-          supabase,
-          projectId,
-          userData.user.id,
-          conversationId,
-        );
-        const pendingCount = await countPendingMessages(
-          supabase,
-          projectId,
-          userData.user.id,
-        );
+        const { sanitizePendingQueue, countPendingMessages } =
+          await import("../_shared/agent-pending-queue.ts");
+        await sanitizePendingQueue(supabase, projectId, userData.user.id, conversationId);
+        const pendingCount = await countPendingMessages(supabase, projectId, userData.user.id);
         return json({ pendingCount });
       }
 
       if (body.action === "list_pending") {
-        const {
-          sanitizePendingQueue,
-          listPendingMessages,
-          countPendingMessages,
-        } = await import("../_shared/agent-pending-queue.ts");
-        await sanitizePendingQueue(
-          supabase,
-          projectId,
-          userData.user.id,
-          conversationId,
-        );
-        const items = await listPendingMessages(
-          supabase,
-          projectId,
-          userData.user.id,
-        );
-        const pendingCount = await countPendingMessages(
-          supabase,
-          projectId,
-          userData.user.id,
-        );
+        const { sanitizePendingQueue, listPendingMessages, countPendingMessages } =
+          await import("../_shared/agent-pending-queue.ts");
+        await sanitizePendingQueue(supabase, projectId, userData.user.id, conversationId);
+        const items = await listPendingMessages(supabase, projectId, userData.user.id);
+        const pendingCount = await countPendingMessages(supabase, projectId, userData.user.id);
         return json({ pendingCount, items });
       }
 
       if (body.action === "clear_pending") {
-        const { clearPendingMessages, countPendingMessages } = await import(
-          "../_shared/agent-pending-queue.ts"
-        );
-        const messageId = typeof body.messageId === "string"
-          ? body.messageId
-          : undefined;
+        const { clearPendingMessages, countPendingMessages } =
+          await import("../_shared/agent-pending-queue.ts");
+        const messageId = typeof body.messageId === "string" ? body.messageId : undefined;
         const removed = await clearPendingMessages(
           supabase,
           projectId,
           userData.user.id,
           messageId,
         );
-        const pendingCount = await countPendingMessages(
-          supabase,
-          projectId,
-          userData.user.id,
-        );
+        const pendingCount = await countPendingMessages(supabase, projectId, userData.user.id);
         return json({ ok: true, removed, pendingCount });
       }
 
       if (body.action === "drain_queue") {
         const { handleContinueQueue } = await import("./continue-queue.ts");
-        const { sanitizePendingQueue } = await import(
-          "../_shared/agent-pending-queue.ts"
-        );
-        await sanitizePendingQueue(
-          supabase,
+        const { sanitizePendingQueue } = await import("../_shared/agent-pending-queue.ts");
+        await sanitizePendingQueue(supabase, projectId, userData.user.id, conversationId);
+        const drainResult = await handleContinueQueue(supabase, INNGEST_EVENT_KEY, {
           projectId,
-          userData.user.id,
           conversationId,
-        );
-        const drainResult = await handleContinueQueue(
-          supabase,
-          INNGEST_EVENT_KEY,
-          {
-            projectId,
-            conversationId,
-            userId: userData.user.id,
-            planMode: planMode,
-          },
-        ); // planMode here is call-time fallback; continue-queue prefers pendingBody.mode (send-time) if present (PR3)
+          userId: userData.user.id,
+          planMode: planMode,
+        }); // planMode here is call-time fallback; continue-queue prefers pendingBody.mode (send-time) if present (PR3)
         if (drainResult.continued && drainResult.runId) {
           return json({
             ok: true,
@@ -467,12 +366,10 @@ Deno.serve(async (req) => {
         typeof profile?.taste_chat_remaining === "number"
           ? profile.taste_chat_remaining
           : typeof profile?.trial_messages_remaining === "number"
-          ? profile.trial_messages_remaining
-          : 50;
+            ? profile.trial_messages_remaining
+            : 50;
       const tasteStartRemaining =
-        typeof profile?.taste_start_remaining === "number"
-          ? profile.taste_start_remaining
-          : 1;
+        typeof profile?.taste_start_remaining === "number" ? profile.taste_start_remaining : 1;
 
       const { data: activeRun } = await supabase
         .from("agent_runs")
@@ -507,12 +404,12 @@ Deno.serve(async (req) => {
       }
 
       const latestMeta = (awaitingRun?.meta ?? {}) as Record<string, unknown>;
-      const isAwaiting = awaitingRun?.status === "awaiting_user" ||
-        !!latestMeta.awaitingUser;
+      const isAwaiting = awaitingRun?.status === "awaiting_user" || !!latestMeta.awaitingUser;
 
       // Se o run está ativamente rodando (não apenas esperando), enfileira.
       // Se está awaiting_user, NÃO enfileira — cria run de continuação.
-      const isRunning = awaitingRun?.status === "running" ||
+      const isRunning =
+        awaitingRun?.status === "running" ||
         awaitingRun?.status === "pending" ||
         runningLocks.has(projectId);
 
@@ -520,14 +417,8 @@ Deno.serve(async (req) => {
 
       if (isRunning && !resumeRun && !isAwaiting) {
         if (!enqueueIntent) {
-          const { countPendingMessages } = await import(
-            "../_shared/agent-pending-queue.ts"
-          );
-          const pendingCount = await countPendingMessages(
-            supabase,
-            projectId,
-            userData.user.id,
-          );
+          const { countPendingMessages } = await import("../_shared/agent-pending-queue.ts");
+          const pendingCount = await countPendingMessages(supabase, projectId, userData.user.id);
           logger.info("agent_run.busy_no_enqueue", {
             projectId,
             pendingCount,
@@ -538,14 +429,12 @@ Deno.serve(async (req) => {
             busy: true,
             pendingCount,
             activeRunId: awaitingRun?.id ?? null,
-            message:
-              "Agente ocupado — aguarde ou envie mensagem com o agente ativo.",
+            message: "Agente ocupado — aguarde ou envie mensagem com o agente ativo.",
           });
         }
 
-        const { buildQueueInsertBody, countPendingMessages } = await import(
-          "../_shared/agent-pending-queue.ts"
-        );
+        const { buildQueueInsertBody, countPendingMessages } =
+          await import("../_shared/agent-pending-queue.ts");
         const queueBody = await buildQueueInsertBody(supabase, conversationId, {
           preferences,
           sessionKind: sessionKindRaw,
@@ -560,17 +449,12 @@ Deno.serve(async (req) => {
           user_id: userData.user.id,
           body: queueBody,
         });
-        const pendingCount = await countPendingMessages(
-          supabase,
-          projectId,
-          userData.user.id,
-        );
-        const preview = typeof queueBody.text === "string"
-          ? queueBody.text.slice(0, 120)
-          : null;
-        const queueMsg = pendingCount === 1
-          ? "Mensagem na fila — o agente processará quando terminar a tarefa atual."
-          : `${pendingCount} mensagens na fila — processando em ordem.`;
+        const pendingCount = await countPendingMessages(supabase, projectId, userData.user.id);
+        const preview = typeof queueBody.text === "string" ? queueBody.text.slice(0, 120) : null;
+        const queueMsg =
+          pendingCount === 1
+            ? "Mensagem na fila — o agente processará quando terminar a tarefa atual."
+            : `${pendingCount} mensagens na fila — processando em ordem.`;
         return json({
           ok: true,
           queued: true,
@@ -592,9 +476,7 @@ Deno.serve(async (req) => {
         .limit(120);
 
       const historyRows = history ?? [];
-      const restoredExecutionLog = resumeRun
-        ? restoreExecutionLogFromRows(historyRows)
-        : [];
+      const restoredExecutionLog = resumeRun ? restoreExecutionLogFromRows(historyRows) : [];
       const loadedCheckpoint = resumeRun
         ? await loadCheckpoint(supabase, projectId, conversationId)
         : null;
@@ -626,8 +508,7 @@ Deno.serve(async (req) => {
         runningLocks.delete(projectId);
         return json(
           {
-            error:
-              "Limite Taste Chat (50) atingido. Configure suas API em /api para continuar.",
+            error: "Limite Taste Chat (50) atingido. Configure suas API em /api para continuar.",
           },
           402,
         );
@@ -636,8 +517,7 @@ Deno.serve(async (req) => {
         runningLocks.delete(projectId);
         return json(
           {
-            error:
-              "Start Project já utilizado. Configure API para construir sem limites.",
+            error: "Start Project já utilizado. Configure API para construir sem limites.",
           },
           402,
         );
@@ -646,8 +526,7 @@ Deno.serve(async (req) => {
         runningLocks.delete(projectId);
         return json(
           {
-            error:
-              "Configure suas API em /api ou use o Taste Chat / Start Project.",
+            error: "Configure suas API em /api ou use o Taste Chat / Start Project.",
           },
           402,
         );
@@ -744,9 +623,7 @@ Deno.serve(async (req) => {
       // Use meta-aware extract (prefers skipping plan_approved meta) for the triggering user request; force allocate
       // if history contains prior plan_approved (makes follow-up "add X" after approve allocate sandbox reliably).
       const fromBody = (body as any).prompt || (body as any).message || "";
-      const lastUserContent = fromBody
-        ? String(fromBody)
-        : extractOriginalUserRequest(messages);
+      const lastUserContent = fromBody ? String(fromBody) : extractOriginalUserRequest(messages);
       const looksLikeInteraction = looksLikeInteractionOnly(lastUserContent);
       const projectHasSandbox = !!(
         ((project as any).meta || {})?.previewSandboxId ||
@@ -756,17 +633,15 @@ Deno.serve(async (req) => {
         const meta = (m?.meta ?? {}) as Record<string, unknown>;
         return (
           m?.role === "user" &&
-          (meta.kind === "plan_approved" ||
-            typeof meta.planSourceRunId === "string")
+          (meta.kind === "plan_approved" || typeof meta.planSourceRunId === "string")
         );
       });
       // Fase 4.7: 3 guardas — (1) interação explícita não aloca, (2) projeto SEM
       // arquivos não aloca (E2B só nasce depois do agente criar algo), (3) projeto
       // com sandbox pré-existente pode reusar.
       // + hasApproved for plan+follow-up proof.
-      const allocateSandboxLocal = hasApprovedPlanInHistory ||
-        !looksLikeInteraction ||
-        projectHasSandbox;
+      const allocateSandboxLocal =
+        hasApprovedPlanInHistory || !looksLikeInteraction || projectHasSandbox;
 
       // Fase 4.7: o código abaixo (reg + sandbox local) era DEAD CODE — o
       // executeAgentJob em run-job.ts cria seu próprio ToolRegistry e sandbox.
@@ -775,25 +650,16 @@ Deno.serve(async (req) => {
 
       const cleanup = () => runningLocks.delete(projectId!);
 
-      const projectTemplate = (project as { template?: string }).template ??
-        "vite-react";
-      const projectMeta =
-        ((project as { meta?: Record<string, unknown> }).meta ?? {}) as Record<
-          string,
-          unknown
-        >;
-      const deployKeys = await loadDeployConnectorKeys(
-        supabase,
-        userData.user.id,
-      );
-      const stackCtx = buildStackContext(
-        profile?.integration_prefs,
-        projectMeta,
-        {
-          ...connectorKeys,
-          ...deployKeys,
-        },
-      );
+      const projectTemplate = (project as { template?: string }).template ?? "vite-react";
+      const projectMeta = ((project as { meta?: Record<string, unknown> }).meta ?? {}) as Record<
+        string,
+        unknown
+      >;
+      const deployKeys = await loadDeployConnectorKeys(supabase, userData.user.id);
+      const stackCtx = buildStackContext(profile?.integration_prefs, projectMeta, {
+        ...connectorKeys,
+        ...deployKeys,
+      });
       const stackAddon = stackPromptAddon(stackCtx);
 
       // Early e2bKey check: se vamos alocar E2B mas o usuário não tem chave,
@@ -860,21 +726,15 @@ Deno.serve(async (req) => {
       }
 
       if (!agentRunId) {
-        const { data: lockedId, error: lockErr } = await supabase.rpc(
-          "acquire_agent_run_lock",
-          {
-            p_project_id: projectId,
-            p_conversation_id: conversationId,
-            p_user_id: userData.user.id,
-          },
-        );
+        const { data: lockedId, error: lockErr } = await supabase.rpc("acquire_agent_run_lock", {
+          p_project_id: projectId,
+          p_conversation_id: conversationId,
+          p_user_id: userData.user.id,
+        });
 
         if (lockErr || !lockedId) {
           runningLocks.delete(projectId);
-          return json(
-            { error: "Erro ao iniciar agente — tente novamente." },
-            500,
-          );
+          return json({ error: "Erro ao iniciar agente — tente novamente." }, 500);
         }
 
         agentRunId = lockedId;
@@ -890,14 +750,8 @@ Deno.serve(async (req) => {
         if (createdRun && createdRun.conversation_id !== conversationId) {
           runningLocks.delete(projectId);
           if (!enqueueIntent) {
-            const { countPendingMessages } = await import(
-              "../_shared/agent-pending-queue.ts"
-            );
-            const pendingCount = await countPendingMessages(
-              supabase,
-              projectId,
-              userData.user.id,
-            );
+            const { countPendingMessages } = await import("../_shared/agent-pending-queue.ts");
+            const pendingCount = await countPendingMessages(supabase, projectId, userData.user.id);
             return json({
               ok: true,
               busy: true,
@@ -906,39 +760,28 @@ Deno.serve(async (req) => {
               message: "Agente ocupado em outra conversa.",
             });
           }
-          const { buildQueueInsertBody, countPendingMessages } = await import(
-            "../_shared/agent-pending-queue.ts"
-          );
-          const queueBody = await buildQueueInsertBody(
-            supabase,
-            conversationId,
-            {
-              preferences,
-              sessionKind: sessionKindRaw,
-              enabledSkillIds,
-              enabledMcpIds,
-              allocateSandbox: true,
-              mode: body.mode ?? "build",
-            },
-          );
+          const { buildQueueInsertBody, countPendingMessages } =
+            await import("../_shared/agent-pending-queue.ts");
+          const queueBody = await buildQueueInsertBody(supabase, conversationId, {
+            preferences,
+            sessionKind: sessionKindRaw,
+            enabledSkillIds,
+            enabledMcpIds,
+            allocateSandbox: true,
+            mode: body.mode ?? "build",
+          });
           await supabase.from("agent_pending_messages").insert({
             project_id: projectId,
             conversation_id: conversationId,
             user_id: userData.user.id,
             body: queueBody,
           });
-          const pendingCount = await countPendingMessages(
-            supabase,
-            projectId,
-            userData.user.id,
-          );
+          const pendingCount = await countPendingMessages(supabase, projectId, userData.user.id);
           return json({
             ok: true,
             queued: true,
             pendingCount,
-            preview: typeof queueBody.text === "string"
-              ? queueBody.text.slice(0, 120)
-              : null,
+            preview: typeof queueBody.text === "string" ? queueBody.text.slice(0, 120) : null,
             activeRunId: agentRunId,
             message: "Agente ocupado — sua mensagem foi enfileirada.",
           });
@@ -977,8 +820,8 @@ Deno.serve(async (req) => {
         const currentStatus = current?.status as string | undefined;
         const currentMeta = (current?.meta ?? {}) as Record<string, unknown>;
         const awaitingStates = ["awaiting_user"];
-        const isAwaiting = awaitingStates.includes(currentStatus ?? "") ||
-          !!currentMeta.awaitingUser;
+        const isAwaiting =
+          awaitingStates.includes(currentStatus ?? "") || !!currentMeta.awaitingUser;
 
         let status: string;
         if (result.canceled) {
@@ -991,10 +834,7 @@ Deno.serve(async (req) => {
           status = "failed";
         }
 
-        const prevMeta = (current?.meta ?? runMetaBase) as Record<
-          string,
-          unknown
-        >;
+        const prevMeta = (current?.meta ?? runMetaBase) as Record<string, unknown>;
 
         await supabase
           .from("agent_runs")
@@ -1006,9 +846,7 @@ Deno.serve(async (req) => {
             meta: {
               ...prevMeta,
               ...(result.summary ? { summary: result.summary } : {}),
-              ...(result.toolsUsed?.length
-                ? { toolsUsed: result.toolsUsed }
-                : {}),
+              ...(result.toolsUsed?.length ? { toolsUsed: result.toolsUsed } : {}),
               ...(typeof result.totalTokens === "number"
                 ? { totalTokens: result.totalTokens }
                 : {}),
@@ -1018,13 +856,9 @@ Deno.serve(async (req) => {
               ...(typeof result.totalOutputTokens === "number"
                 ? { totalOutputTokens: result.totalOutputTokens }
                 : {}),
-              ...(typeof result.costUsd === "number"
-                ? { costUsd: result.costUsd }
-                : {}),
+              ...(typeof result.costUsd === "number" ? { costUsd: result.costUsd } : {}),
             },
-            ...(result.canceled
-              ? { canceled_at: new Date().toISOString() }
-              : {}),
+            ...(result.canceled ? { canceled_at: new Date().toISOString() } : {}),
           })
           .eq("id", agentRunId);
       };
@@ -1039,11 +873,7 @@ Deno.serve(async (req) => {
         projectId,
         conversationId,
         userId: userData.user.id,
-        sessionKind: tasteStart
-          ? "taste_start"
-          : hasUserLlmKey
-          ? "byok"
-          : "taste_chat",
+        sessionKind: tasteStart ? "taste_start" : hasUserLlmKey ? "byok" : "taste_chat",
         preferences: preferences ?? {},
         enabledSkillIds,
         enabledMcpIds,
@@ -1086,13 +916,8 @@ Deno.serve(async (req) => {
         taste: tasteStart,
         resume: resumeRun,
         checkpoint: !!loadedCheckpoint,
-        sessionKind: tasteStart
-          ? "taste_start"
-          : hasUserLlmKey
-          ? "byok"
-          : "taste_chat",
-        memoryMessages: loadedCheckpoint?.state.messages.length ??
-          messages.length,
+        sessionKind: tasteStart ? "taste_start" : hasUserLlmKey ? "byok" : "taste_chat",
+        memoryMessages: loadedCheckpoint?.state.messages.length ?? messages.length,
         mode: planMode ? "plan" : "build",
         eventId: eventResult.ids?.[0] ?? null,
       });

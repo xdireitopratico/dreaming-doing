@@ -3,12 +3,7 @@ import { hasLlmConnectorRows } from "./connector-llm";
 
 describe("hasLlmConnectorRows", () => {
   it("ignores deploy and e2b connectors", () => {
-    expect(
-      hasLlmConnectorRows([
-        { kind: "github" },
-        { kind: "e2b", provider: "" },
-      ]),
-    ).toBe(false);
+    expect(hasLlmConnectorRows([{ kind: "github" }, { kind: "e2b", provider: "" }])).toBe(false);
   });
 
   it("detects openai-compatible providers", () => {

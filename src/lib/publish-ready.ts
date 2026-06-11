@@ -15,10 +15,7 @@ function findFile(
   entryPath: string,
 ): { path: string; content?: string } | undefined {
   return files.find(
-    (f) =>
-      f.path === entryPath ||
-      f.path === `/${entryPath}` ||
-      f.path.endsWith(`/${entryPath}`),
+    (f) => f.path === entryPath || f.path === `/${entryPath}` || f.path.endsWith(`/${entryPath}`),
   );
 }
 

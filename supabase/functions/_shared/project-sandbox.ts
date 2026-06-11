@@ -46,13 +46,19 @@ export function readSandboxMeta(
     e2bCreationCircuit: {
       attempts: typeof circuitRaw.attempts === "number" ? circuitRaw.attempts : undefined,
       lastError: typeof circuitRaw.lastError === "string" ? circuitRaw.lastError : undefined,
-      cooldownUntil: typeof circuitRaw.cooldownUntil === "string" ? circuitRaw.cooldownUntil : undefined,
+      cooldownUntil:
+        typeof circuitRaw.cooldownUntil === "string" ? circuitRaw.cooldownUntil : undefined,
     },
   };
 }
 
 /** Returns true + details if creation is in cooldown (prevents infinite creation loops on bad keys/transients). */
-export function isE2bCreationCoolingDown(sm: ProjectSandboxMeta): { cooled: boolean; attempts?: number; until?: string; lastError?: string } {
+export function isE2bCreationCoolingDown(sm: ProjectSandboxMeta): {
+  cooled: boolean;
+  attempts?: number;
+  until?: string;
+  lastError?: string;
+} {
   const c = sm.e2bCreationCircuit;
   if (!c?.cooldownUntil) return { cooled: false };
   const until = Date.parse(c.cooldownUntil);
@@ -219,18 +225,26 @@ export async function ensureAgentProjectSandbox(
       // pick first (most recent from E2B side tends to be last created)
       const candidate = listed[0];
       if (isBadTemplate(candidate.templateID)) {
-        console.warn(`[project-sandbox] listed sandbox has bad template ${candidate.templateID}, killing and recreating`);
+        console.warn(
+          `[project-sandbox] listed sandbox has bad template ${candidate.templateID}, killing and recreating`,
+        );
         await killProjectSandbox(apiKey, candidate.sandboxID);
       } else {
         try {
           const sb = await e2bRestConnect(apiKey, candidate.sandboxID, SANDBOX_TIMEOUT_SEC);
-          await touchSandboxLease(supabase, projectId, existing, sb.sandboxId, { e2bTemplate: candidate.templateID });
+          await touchSandboxLease(supabase, projectId, existing, sb.sandboxId, {
+            e2bTemplate: candidate.templateID,
+          });
           // success reuse also clears any prior circuit
           await recordE2bCreationOutcome(supabase, projectId, existing, true);
           console.log(`[project-sandbox] reused listed ${candidate.sandboxID}`);
           return { sandbox: sb, sandboxId: sb.sandboxId, reused: true };
         } catch (connErr) {
-          console.warn("[project-sandbox] listed sandbox connect failed, will create fresh:", candidate.sandboxID, connErr);
+          console.warn(
+            "[project-sandbox] listed sandbox connect failed, will create fresh:",
+            candidate.sandboxID,
+            connErr,
+          );
           await killProjectSandbox(apiKey, candidate.sandboxID);
         }
       }
@@ -241,7 +255,13 @@ export async function ensureAgentProjectSandbox(
 
   // If meta itself records a bad template, clear it so we don't keep trying to reconnect to ghosts.
   if (isBadTemplate(sm.e2bTemplate) && sm.previewSandboxId) {
-    const cleared = { ...existing, previewSandboxId: undefined, e2bTemplate: undefined, previewUrl: undefined, previewExpiresAt: undefined };
+    const cleared = {
+      ...existing,
+      previewSandboxId: undefined,
+      e2bTemplate: undefined,
+      previewUrl: undefined,
+      previewExpiresAt: undefined,
+    };
     await supabase.from("projects").update({ meta: cleared }).eq("id", projectId);
   }
 

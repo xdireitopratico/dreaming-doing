@@ -29,7 +29,8 @@ export const CONNECTOR_REGISTRY: Record<ConnectorId, ConnectorRegistryEntry> = {
     tagline: "Conecte o GitHub para sincronizar e fazer deploy do seu app.",
     forgeAvailable: true,
     signupUrl: "https://github.com/signup",
-    docsUrl: "https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/creating-a-personal-access-token",
+    docsUrl:
+      "https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/creating-a-personal-access-token",
     tokenLabel: "Personal Access Token",
     tokenPlaceholder: "ghp_...",
     upsertKind: "github",

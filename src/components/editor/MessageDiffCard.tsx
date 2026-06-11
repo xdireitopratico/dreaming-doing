@@ -3,13 +3,25 @@
 import { useState, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  FileCode, ChevronDown, ChevronUp, CheckCircle2, AlertCircle,
-  Loader2, Clock, ArrowRight, FilePlus, FilePen, Copy,
+  FileCode,
+  ChevronDown,
+  ChevronUp,
+  CheckCircle2,
+  AlertCircle,
+  Loader2,
+  Clock,
+  ArrowRight,
+  FilePlus,
+  FilePen,
+  Copy,
 } from "lucide-react";
 
 interface ToolCall {
-  id: string; name: string; args: Record<string, unknown>;
-  status: "running" | "ok" | "error"; error?: string;
+  id: string;
+  name: string;
+  args: Record<string, unknown>;
+  status: "running" | "ok" | "error";
+  error?: string;
   created_at: string;
 }
 
@@ -47,7 +59,11 @@ export function MessageDiffCard({ tool, fileMap }: MessageDiffCardProps) {
         const isInEditRange = i >= editLine - 1 && i < editLine - 1 + editCount;
         const existing = existingLines[i] ?? "";
         const replacement = newLines[i - (editLine - 1)] ?? "";
-        result.push({ lineNum: i + 1, before: existing, after: isInEditRange ? replacement : existing });
+        result.push({
+          lineNum: i + 1,
+          before: existing,
+          after: isInEditRange ? replacement : existing,
+        });
       }
       return result;
     }
@@ -91,7 +107,9 @@ export function MessageDiffCard({ tool, fileMap }: MessageDiffCardProps) {
           <div className="flex items-center gap-2">
             {icon}
             <span className="font-mono text-[11px] text-[var(--foreground)]">{tool.name}</span>
-            <span className="font-mono text-[9px] text-[var(--primary)]/70 truncate">{fileName}</span>
+            <span className="font-mono text-[9px] text-[var(--primary)]/70 truncate">
+              {fileName}
+            </span>
           </div>
           <div className="flex items-center gap-3 mt-1">
             <span className="flex items-center gap-1 font-mono text-[9px] text-[var(--text-ghost)]">
@@ -153,9 +171,7 @@ export function MessageDiffCard({ tool, fileMap }: MessageDiffCardProps) {
                   {!currentFile && (
                     <div className="flex items-center gap-2 mb-3 px-2 py-1.5 rounded bg-emerald-400/10 border border-emerald-400/20">
                       <FilePlus className="size-3 text-emerald-400" />
-                      <span className="font-mono text-[9px] text-emerald-400">
-                        ARQUIVO NOVO
-                      </span>
+                      <span className="font-mono text-[9px] text-emerald-400">ARQUIVO NOVO</span>
                     </div>
                   )}
                   <pre className="font-mono text-[11px] leading-relaxed text-[var(--text-dim)] whitespace-pre-wrap bg-[var(--background)] p-3 rounded border border-[var(--border)] max-h-[400px] overflow-auto">
@@ -168,10 +184,7 @@ export function MessageDiffCard({ tool, fileMap }: MessageDiffCardProps) {
                     {diffLines.map((line, i) => {
                       const changed = line.before !== line.after;
                       return (
-                        <div
-                          key={i}
-                          className={`flex ${changed ? "bg-[var(--primary)]/5" : ""}`}
-                        >
+                        <div key={i} className={`flex ${changed ? "bg-[var(--primary)]/5" : ""}`}>
                           <span className="w-8 shrink-0 text-right pr-3 select-none text-[9px] text-[var(--text-ghost)]">
                             {line.lineNum}
                           </span>

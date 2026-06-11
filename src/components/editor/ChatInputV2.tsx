@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useRef, useState, type DragEvent, type KeyboardEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type DragEvent,
+  type KeyboardEvent,
+} from "react";
 import { ArrowUp, FileText, ImageIcon, MousePointer2, Paperclip, Square, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { MicButton } from "@/components/voice/MicButton";
@@ -59,10 +66,7 @@ export function ChatInputV2({
     const timer = setTimeout(() => {
       if (input.trim()) {
         try {
-          sessionStorage.setItem(
-            CHAT_DRAFT_KEY,
-            JSON.stringify({ input, timestamp: Date.now() }),
-          );
+          sessionStorage.setItem(CHAT_DRAFT_KEY, JSON.stringify({ input, timestamp: Date.now() }));
         } catch {
           /* quota */
         }
@@ -213,7 +217,10 @@ export function ChatInputV2({
         {onVisualEdits && (
           <button
             type="button"
-            className={cn("forge-composer-icon", visualEditsActive && "forge-composer-icon--active")}
+            className={cn(
+              "forge-composer-icon",
+              visualEditsActive && "forge-composer-icon--active",
+            )}
             title="Visual edits"
             onClick={onVisualEdits}
           >
@@ -232,12 +239,7 @@ export function ChatInputV2({
         />
 
         {isRunning && (
-          <button
-            type="button"
-            className="forge-composer-send ml-1"
-            onClick={onStop}
-            title="Parar"
-          >
+          <button type="button" className="forge-composer-send ml-1" onClick={onStop} title="Parar">
             <Square className="size-3.5 fill-current" />
           </button>
         )}

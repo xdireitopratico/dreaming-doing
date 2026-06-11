@@ -4,10 +4,7 @@ import { useState, useCallback } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { motion, AnimatePresence } from "framer-motion";
-import {
-  X, FolderOpen, Loader2, ArrowRight,
-  Globe, Layout, Package, Zap,
-} from "lucide-react";
+import { X, FolderOpen, Loader2, ArrowRight, Globe, Layout, Package, Zap } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { createProjectFromPrompt } from "@/lib/projects.functions";
 import { bootstrapComposerMode } from "@/lib/composer-mode";
@@ -141,11 +138,13 @@ export function CreateProjectDialog({ open, onClose }: CreateProjectDialogProps)
                   <FolderOpen className="size-4 text-[var(--primary)]" />
                 </div>
                 <div>
-                  <h2 className="text-base font-display text-[var(--foreground)]">
-                    Novo Projeto
-                  </h2>
+                  <h2 className="text-base font-display text-[var(--foreground)]">Novo Projeto</h2>
                   <p className="text-[10px] font-mono text-[var(--text-ghost)] uppercase tracking-wider">
-                    {step === "template" ? "Escolha um template" : step === "details" ? "Configure seu projeto" : "Criando..."}
+                    {step === "template"
+                      ? "Escolha um template"
+                      : step === "details"
+                        ? "Configure seu projeto"
+                        : "Criando..."}
                   </p>
                 </div>
               </div>
@@ -235,7 +234,8 @@ export function CreateProjectDialog({ open, onClose }: CreateProjectDialogProps)
                     {/* Primeiro prompt */}
                     <div>
                       <label className="block text-[10px] font-mono text-[var(--text-dim)] uppercase tracking-wider mb-1.5">
-                        Primeira instrução <span className="text-[var(--text-ghost)]">(opcional)</span>
+                        Primeira instrução{" "}
+                        <span className="text-[var(--text-ghost)]">(opcional)</span>
                       </label>
                       <textarea
                         value={firstPrompt}
@@ -256,7 +256,10 @@ export function CreateProjectDialog({ open, onClose }: CreateProjectDialogProps)
                           {selectedTemplate.name}
                         </span>
                         <button
-                          onClick={() => { setStep("template"); setSelectedTemplate(null); }}
+                          onClick={() => {
+                            setStep("template");
+                            setSelectedTemplate(null);
+                          }}
                           className="ml-auto text-[9px] font-mono text-[var(--text-dim)] hover:text-[var(--foreground)] transition-colors"
                         >
                           Mudar

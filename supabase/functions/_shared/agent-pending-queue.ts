@@ -165,9 +165,7 @@ export async function hasBlockingActiveRun(
   if (!lastEvTime) return data.id;
 
   const gapMs = Date.now() - new Date(lastEvTime).getTime();
-  const handoff =
-    !!lastEv &&
-    CHUNK_HANDOFF_EVENT_TYPES.has(lastEv.event_type as string);
+  const handoff = !!lastEv && CHUNK_HANDOFF_EVENT_TYPES.has(lastEv.event_type as string);
 
   if (handoff && gapMs > CHUNK_HANDOFF_GAP_MS) {
     return null;
@@ -366,9 +364,7 @@ export async function evaluateQueueDrain(
   const needsResponse = await conversationNeedsAgentResponse(supabase, conversationId);
   const blockingRunId = await hasBlockingActiveRun(supabase, projectId);
 
-  const shouldContinue =
-    (pendingCount > 0 || needsResponse) &&
-    !blockingRunId;
+  const shouldContinue = (pendingCount > 0 || needsResponse) && !blockingRunId;
 
   return { shouldContinue, pendingCount, needsResponse, blockingRunId };
 }

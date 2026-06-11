@@ -1,8 +1,5 @@
 import type { ComponentPropsWithoutRef } from "react";
-import {
-  DropdownMenuContent,
-  DropdownMenuItem,
-} from "@/components/ui/dropdown-menu";
+import { DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 
 export function ForgeEditorDropdownContent({

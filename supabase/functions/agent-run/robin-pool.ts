@@ -98,9 +98,10 @@ export class ResilientLLM implements LLMProvider {
       if (!apiKey) throw new Error("Nenhuma chave API no pool ROBIN. Adicione chaves em /api.");
 
       this.requestCount++;
-      const keyHint = this.pool && this.pool.size > 1
-        ? `chave ${((this.requestCount - 1) % this.pool.size) + 1}/${this.pool.size}`
-        : "chave única";
+      const keyHint =
+        this.pool && this.pool.size > 1
+          ? `chave ${((this.requestCount - 1) % this.pool.size) + 1}/${this.pool.size}`
+          : "chave única";
 
       if (this.pool && this.pool.size > 1) {
         this.emit("robin_rotate", {

@@ -15,10 +15,7 @@ export function registerShellTool(reg: ToolRegistry, ctx: ShellContext): void {
   const { sandbox, projectId, supabase, sandboxEnv } = ctx;
 
   async function ensureSync(): Promise<void> {
-    const { data } = await supabase
-      .from("project_files")
-      .select("*")
-      .eq("project_id", projectId);
+    const { data } = await supabase.from("project_files").select("*").eq("project_id", projectId);
     await sandbox.sync(projectId, (data ?? []) as any);
   }
 

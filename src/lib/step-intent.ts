@@ -6,10 +6,7 @@ function fileBase(path: unknown): string {
   return i >= 0 ? p.slice(i + 1) : p || "arquivo";
 }
 
-export function describeStepExpectation(
-  name: string,
-  args: Record<string, unknown> = {},
-): string {
+export function describeStepExpectation(name: string, args: Record<string, unknown> = {}): string {
   const path = String(args.path ?? args.filePath ?? args.file ?? "");
   const base = fileBase(path);
 
@@ -76,10 +73,7 @@ export function buildPhaseTaskTitle(phase: string, message?: string): string {
   }
 }
 
-export function extractStepFilePaths(
-  name: string,
-  args: Record<string, unknown> = {},
-): string[] {
+export function extractStepFilePaths(name: string, args: Record<string, unknown> = {}): string[] {
   const path = String(args.path ?? args.filePath ?? args.file ?? "").trim();
   if (path && name.startsWith("fs_")) return [path];
   return [];

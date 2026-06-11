@@ -14,7 +14,8 @@ const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const MAX_FILE_SIZE = 1024 * 1024; // 1 MB
 const MAX_FILES = 2000;
 const SKIP_PATHS = /(?:^|\/)(?:node_modules|\.git|dist|build|\.next|\.cache|coverage|\.turbo)\//;
-const BINARY_EXT = /\.(png|jpe?g|gif|webp|ico|bmp|tiff?|mp3|mp4|mov|wav|ogg|webm|avi|mkv|pdf|zip|tar|gz|7z|rar|woff2?|ttf|eot|otf|exe|dll|so|dylib|wasm|class|jar)$/i;
+const BINARY_EXT =
+  /\.(png|jpe?g|gif|webp|ico|bmp|tiff?|mp3|mp4|mov|wav|ogg|webm|avi|mkv|pdf|zip|tar|gz|7z|rar|woff2?|ttf|eot|otf|exe|dll|so|dylib|wasm|class|jar)$/i;
 
 function parseRepo(url: string): { owner: string; repo: string } | null {
   try {
@@ -29,11 +30,15 @@ function parseRepo(url: string): { owner: string; repo: string } | null {
 }
 
 function slugify(input: string): string {
-  return input
-    .toLowerCase()
-    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "")
-    .slice(0, 50) || "import";
+  return (
+    input
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 50) || "import"
+  );
 }
 
 Deno.serve(async (req) => {
@@ -95,14 +100,18 @@ Deno.serve(async (req) => {
     // Cria projeto
     const name = parsed.repo;
     const slug = `${slugify(name)}-${Math.random().toString(36).slice(2, 7)}`;
-    const { data: project, error: pErr } = await supabase.from("projects").insert({
-      owner_id: userId,
-      name,
-      slug,
-      description: `Importado de github.com/${parsed.owner}/${parsed.repo}`,
-      template: "imported",
-      meta: { source: { kind: "github", owner: parsed.owner, repo: parsed.repo, url } },
-    }).select("id").single();
+    const { data: project, error: pErr } = await supabase
+      .from("projects")
+      .insert({
+        owner_id: userId,
+        name,
+        slug,
+        description: `Importado de github.com/${parsed.owner}/${parsed.repo}`,
+        template: "imported",
+        meta: { source: { kind: "github", owner: parsed.owner, repo: parsed.repo, url } },
+      })
+      .select("id")
+      .single();
     if (pErr || !project) return json({ error: pErr?.message ?? "Falha ao criar projeto" }, 500);
 
     // Insere em chunks de 50
@@ -116,16 +125,25 @@ Deno.serve(async (req) => {
     }
 
     // Conversa inicial
-    const { data: conv, error: cErr } = await supabase.from("conversations").insert({
-      project_id: project.id,
-      title: name,
-    }).select("id").single();
+    const { data: conv, error: cErr } = await supabase
+      .from("conversations")
+      .insert({
+        project_id: project.id,
+        title: name,
+      })
+      .select("id")
+      .single();
     if (cErr || !conv) return json({ error: cErr?.message ?? "Falha ao criar conversa" }, 500);
 
     await supabase.from("messages").insert({
       conversation_id: conv.id,
       role: "assistant",
-      parts: [{ type: "text", text: `Importei **${entries.length}** arquivos do repositório \`${parsed.owner}/${parsed.repo}\`. Manda o que você quer mudar.` }],
+      parts: [
+        {
+          type: "text",
+          text: `Importei **${entries.length}** arquivos do repositório \`${parsed.owner}/${parsed.repo}\`. Manda o que você quer mudar.`,
+        },
+      ],
       tool_calls: [],
     });
 
@@ -140,5 +158,8 @@ Deno.serve(async (req) => {
 });
 
 function json(body: unknown, status = 200) {
-  return new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
 }

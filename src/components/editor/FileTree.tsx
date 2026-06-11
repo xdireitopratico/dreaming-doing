@@ -3,8 +3,16 @@
 import { useState, useCallback, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  ChevronRight, Folder, FolderOpen, FilePlus, FolderPlus,
-  MoreVertical, Pencil, Trash2, Copy, GripVertical,
+  ChevronRight,
+  Folder,
+  FolderOpen,
+  FilePlus,
+  FolderPlus,
+  MoreVertical,
+  Pencil,
+  Trash2,
+  Copy,
+  GripVertical,
 } from "lucide-react";
 import { getFileIcon } from "./fileIcons";
 import { cn } from "@/lib/utils";
@@ -184,11 +192,7 @@ export function FileTree({
           {/* Folder icon or nothing (file icon already shown) */}
           {node.type === "folder" && (
             <span className="mr-1.5 text-[var(--text-dim)]">
-              {isCollapsed ? (
-                <Folder className="size-3.5" />
-              ) : (
-                <FolderOpen className="size-3.5" />
-              )}
+              {isCollapsed ? <Folder className="size-3.5" /> : <FolderOpen className="size-3.5" />}
             </span>
           )}
 
@@ -224,14 +228,20 @@ export function FileTree({
             {node.type === "folder" && (
               <>
                 <button
-                  onClick={(e) => { e.stopPropagation(); onCreateFile(node.path); }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onCreateFile(node.path);
+                  }}
                   className="p-0.5 rounded hover:bg-[var(--border)] transition-colors"
                   title="Novo arquivo"
                 >
                   <FilePlus className="size-3 text-[var(--text-dim)] hover:text-[var(--foreground)]" />
                 </button>
                 <button
-                  onClick={(e) => { e.stopPropagation(); onCreateFolder(node.path); }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onCreateFolder(node.path);
+                  }}
                   className="p-0.5 rounded hover:bg-[var(--border)] transition-colors"
                   title="Nova pasta"
                 >

@@ -45,7 +45,6 @@ export function ImportRepoDialog({ trigger }: Props) {
       if (res.error) throw new Error(res.error);
       if (!res.projectId) throw new Error("Resposta inválida do servidor");
 
-
       setOpen(false);
       navigate({ to: "/projects/$projectId", params: { projectId: res.projectId } });
     } catch (err: any) {
@@ -78,7 +77,9 @@ export function ImportRepoDialog({ trigger }: Props) {
             placeholder="https://github.com/owner/repo"
             value={url}
             onChange={(e) => setUrl(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Enter") importRepo(); }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") importRepo();
+            }}
             disabled={busy}
           />
           <p className="text-xs text-muted-foreground mt-2">

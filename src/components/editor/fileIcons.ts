@@ -52,29 +52,60 @@ export function getFileIcon(path: string): FileIcon {
   if (filename === "docker-compose.yml" || filename === "docker-compose.yaml") {
     return { label: "DKR", color: "var(--cold)", colorHex: "#9FB4C7" };
   }
-  if (filename === ".gitignore" || filename === ".prettierrc" || filename === ".eslintrc" || filename === ".eslintrc.json") {
+  if (
+    filename === ".gitignore" ||
+    filename === ".prettierrc" ||
+    filename === ".eslintrc" ||
+    filename === ".eslintrc.json"
+  ) {
     return { label: "CFG", color: "var(--silver)", colorHex: "#C9CED6" };
   }
   if (filename === "README.md" || filename === "readme.md") {
     return { label: "📖", color: "var(--silver)", colorHex: "#C9CED6" };
   }
 
-  const ext = filename.includes(".") ? filename.split(".").pop()?.toLowerCase() ?? "" : "";
-  return iconMap[ext] ?? { label: "·", color: "var(--text-ghost)", colorHex: "rgba(237,239,242,0.22)" };
+  const ext = filename.includes(".") ? (filename.split(".").pop()?.toLowerCase() ?? "") : "";
+  return (
+    iconMap[ext] ?? { label: "·", color: "var(--text-ghost)", colorHex: "rgba(237,239,242,0.22)" }
+  );
 }
 
 export function getLanguageFromPath(path: string): string {
   const ext = path.split(".").pop()?.toLowerCase() ?? "";
   const langMap: Record<string, string> = {
-    ts: "typescript", tsx: "typescript", js: "javascript", jsx: "javascript",
-    css: "css", scss: "scss", less: "less", html: "html", htm: "html",
-    json: "json", jsonc: "jsonc", yaml: "yaml", yml: "yaml",
-    md: "markdown", mdx: "markdown", svg: "xml",
-    toml: "ini", env: "plaintext", sql: "sql",
-    graphql: "graphql", prisma: "prisma",
-    sh: "shell", bash: "shell", zsh: "shell",
-    py: "python", rs: "rust", go: "go", java: "java",
-    rb: "ruby", php: "php", c: "c", cpp: "cpp", h: "c",
+    ts: "typescript",
+    tsx: "typescript",
+    js: "javascript",
+    jsx: "javascript",
+    css: "css",
+    scss: "scss",
+    less: "less",
+    html: "html",
+    htm: "html",
+    json: "json",
+    jsonc: "jsonc",
+    yaml: "yaml",
+    yml: "yaml",
+    md: "markdown",
+    mdx: "markdown",
+    svg: "xml",
+    toml: "ini",
+    env: "plaintext",
+    sql: "sql",
+    graphql: "graphql",
+    prisma: "prisma",
+    sh: "shell",
+    bash: "shell",
+    zsh: "shell",
+    py: "python",
+    rs: "rust",
+    go: "go",
+    java: "java",
+    rb: "ruby",
+    php: "php",
+    c: "c",
+    cpp: "cpp",
+    h: "c",
     wasm: "plaintext",
   };
   return langMap[ext] ?? "plaintext";

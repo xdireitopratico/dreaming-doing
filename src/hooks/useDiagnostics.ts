@@ -27,7 +27,7 @@ let _globalState: DiagnosticsState = {
   totalWarningCount: 0,
 };
 
-let _listeners = new Set<(state: DiagnosticsState) => void>();
+const _listeners = new Set<(state: DiagnosticsState) => void>();
 
 export function getDiagnostics(): DiagnosticsState {
   return { ..._globalState };
@@ -35,7 +35,9 @@ export function getDiagnostics(): DiagnosticsState {
 
 export function subscribeDiagnostics(fn: (state: DiagnosticsState) => void) {
   _listeners.add(fn);
-  return () => { _listeners.delete(fn); };
+  return () => {
+    _listeners.delete(fn);
+  };
 }
 
 /** Push diagnostics from agent validation events */
@@ -53,9 +55,7 @@ export function clearDiagnostics() {
 }
 
 /** Parse a raw AgentEvent error payload into Diagnostics */
-export function parseAgentDiagnostics(
-  data: Record<string, unknown>,
-): Diagnostic[] {
+export function parseAgentDiagnostics(data: Record<string, unknown>): Diagnostic[] {
   const diags: Diagnostic[] = [];
   const message = (data.message as string) ?? (data.error as string) ?? "";
   if (!message) return diags;
@@ -121,11 +121,12 @@ export function useDiagnostics(
     );
 
     const markers: editor.IMarkerData[] = fileDiags.map((d) => ({
-      severity: d.severity === "error"
-        ? monaco.MarkerSeverity.Error
-        : d.severity === "warning"
-          ? monaco.MarkerSeverity.Warning
-          : monaco.MarkerSeverity.Info,
+      severity:
+        d.severity === "error"
+          ? monaco.MarkerSeverity.Error
+          : d.severity === "warning"
+            ? monaco.MarkerSeverity.Warning
+            : monaco.MarkerSeverity.Info,
       message: d.message,
       startLineNumber: d.line,
       startColumn: d.column ?? 1,
@@ -139,10 +140,13 @@ export function useDiagnostics(
   }, [editorRef, filePath]);
 
   // Store monaco reference on mount
-  const setMonaco = useCallback((m: typeof import("monaco-editor")) => {
-    monacoRef.current = m;
-    applyDiagnostics();
-  }, [applyDiagnostics]);
+  const setMonaco = useCallback(
+    (m: typeof import("monaco-editor")) => {
+      monacoRef.current = m;
+      applyDiagnostics();
+    },
+    [applyDiagnostics],
+  );
 
   // Listen to global diagnostics changes
   useEffect(() => {

@@ -28,11 +28,7 @@ export function ComposerModeSelect({
   return (
     <DropdownMenu modal={false}>
       <DropdownMenuTrigger asChild>
-        <button
-          type="button"
-          className="forge-composer-mode-trigger"
-          aria-label="Modo do agente"
-        >
+        <button type="button" className="forge-composer-mode-trigger" aria-label="Modo do agente">
           <CurrentIcon className="size-3.5 shrink-0" />
           <span>{current.label}</span>
         </button>

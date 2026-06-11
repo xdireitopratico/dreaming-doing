@@ -12,16 +12,10 @@ type ForgeMiniCardProps = {
   onOpenInspector: (runId: string, tab?: "timeline" | "changes" | "plan") => void;
 };
 
-export function ForgeMiniCard({
-  data,
-  runId,
-  isFocused,
-  onOpenInspector,
-}: ForgeMiniCardProps) {
+export function ForgeMiniCard({ data, runId, isFocused, onOpenInspector }: ForgeMiniCardProps) {
   const isLive = data.status === "working" || data.status === "thinking";
   const showWorkingBadge = isLive;
-  const briefings =
-    data.liveBriefings.length > 0 ? data.liveBriefings : [data.title];
+  const briefings = data.liveBriefings.length > 0 ? data.liveBriefings : [data.title];
   const [briefingIndex, setBriefingIndex] = useState(0);
 
   useEffect(() => {
@@ -36,7 +30,7 @@ export function ForgeMiniCard({
   }, [isLive, briefings.length, briefings.join("\u0000")]);
 
   const displayTitle = isLive
-    ? briefings[briefingIndex % briefings.length] ?? data.title
+    ? (briefings[briefingIndex % briefings.length] ?? data.title)
     : data.title;
 
   const hint = data.planReady
@@ -47,12 +41,11 @@ export function ForgeMiniCard({
         ? "Ver plano no inspector →"
         : "Timeline completa →";
 
-  const statusClass =
-    showWorkingBadge
-      ? "forge-mini-card--working"
-      : data.status === "done"
-        ? "forge-mini-card--done"
-        : "";
+  const statusClass = showWorkingBadge
+    ? "forge-mini-card--working"
+    : data.status === "done"
+      ? "forge-mini-card--done"
+      : "";
 
   return (
     <div

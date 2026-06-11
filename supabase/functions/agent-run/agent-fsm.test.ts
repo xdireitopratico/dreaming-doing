@@ -1,11 +1,6 @@
 // agent-fsm.test.ts — Testes da máquina de estados do agente.
 import { assertEquals, assert } from "https://deno.land/std@0.224.0/assert/mod.ts";
-import {
-  applyTransition,
-  isTerminal,
-  isAwaitingUser,
-  type AgentStateData,
-} from "./agent-fsm.ts";
+import { applyTransition, isTerminal, isAwaitingUser, type AgentStateData } from "./agent-fsm.ts";
 
 const idle: AgentStateData = { name: "idle", since: 0 };
 

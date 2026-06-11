@@ -40,7 +40,11 @@ export const agentPlanFunction = inngest.createFunction(
       await markRunFinal(runId, "running");
     });
 
-    const final = await runAgentLoopWithResume(step as Parameters<typeof runAgentLoopWithResume>[0], payload, true);
+    const final = await runAgentLoopWithResume(
+      step as Parameters<typeof runAgentLoopWithResume>[0],
+      payload,
+      true,
+    );
 
     if (final.canceled) {
       await step.run("mark-canceled", async () => {

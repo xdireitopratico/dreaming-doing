@@ -16,9 +16,9 @@ export function buildStackContext(
   projectMeta: Record<string, unknown>,
   connectorKeys: Record<string, string>,
 ): StackContext {
-  const prefs = (integrationPrefsRaw && typeof integrationPrefsRaw === "object"
-    ? integrationPrefsRaw
-    : {}) as Record<string, string>;
+  const prefs = (
+    integrationPrefsRaw && typeof integrationPrefsRaw === "object" ? integrationPrefsRaw : {}
+  ) as Record<string, string>;
 
   const metaTarget = projectMeta.deployTarget as DeployTarget | undefined;
   let deployTarget: DeployTarget = metaTarget ?? "vercel";
@@ -43,8 +43,10 @@ export function buildStackContext(
 export function stackPromptAddon(ctx: StackContext): string {
   const deployLines: Record<DeployTarget, string> = {
     e2b: "Deploy produção: aguardar instrução; preview ao vivo já usa E2B.",
-    vercel: "Deploy produção preferido: **Vercel** (use `vercel deploy` / API com token do usuário se disponível). O app gerado NÃO precisa usar Supabase se o usuário pedir só Vercel.",
-    netlify: "Deploy produção preferido: **Netlify** (`netlify deploy` ou API). Static/Vite: `npm run build` → publish dist.",
+    vercel:
+      "Deploy produção preferido: **Vercel** (use `vercel deploy` / API com token do usuário se disponível). O app gerado NÃO precisa usar Supabase se o usuário pedir só Vercel.",
+    netlify:
+      "Deploy produção preferido: **Netlify** (`netlify deploy` ou API). Static/Vite: `npm run build` → publish dist.",
     cloudflare: "Deploy produção preferido: **Cloudflare Pages** (wrangler/pages).",
   };
 

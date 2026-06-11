@@ -1,9 +1,6 @@
 /** Extrai anexos (PDF / Word / Excel / texto) → Markdown sanitizado na Edge. */
 
-import {
-  finalizeDocumentMarkdown,
-  tsvToMarkdownTable,
-} from "./document-sanitize.ts";
+import { finalizeDocumentMarkdown, tsvToMarkdownTable } from "./document-sanitize.ts";
 
 type BlobPart = {
   type: "file_blob";
@@ -20,10 +17,7 @@ function b64ToBytes(b64: string): Uint8Array {
 }
 
 function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
-  return bytes.buffer.slice(
-    bytes.byteOffset,
-    bytes.byteOffset + bytes.byteLength,
-  ) as ArrayBuffer;
+  return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
 }
 
 function wrapDocument(name: string, markdown: string, note?: string): string {
@@ -61,7 +55,11 @@ async function parseDocx(bytes: Uint8Array, name: string): Promise<string> {
     const mammoth = await import("https://esm.sh/mammoth@1.8.0");
     const m = (mammoth as unknown as { default?: typeof mammoth }).default ?? mammoth;
     const ab = toArrayBuffer(bytes);
-    const res = await (m as unknown as { convertToMarkdown: (opts: { arrayBuffer: ArrayBuffer }) => Promise<{ value: string }> }).convertToMarkdown({ arrayBuffer: ab });
+    const res = await (
+      m as unknown as {
+        convertToMarkdown: (opts: { arrayBuffer: ArrayBuffer }) => Promise<{ value: string }>;
+      }
+    ).convertToMarkdown({ arrayBuffer: ab });
     const raw = (res.value ?? "").trim();
     if (!raw) {
       return wrapDocument(name, "_Documento Word vazio._");
@@ -93,9 +91,7 @@ async function parseXlsx(bytes: Uint8Array, name: string): Promise<string> {
     }
     const { markdown } = finalizeDocumentMarkdown(joined, { structure: false });
     const extra =
-      wb.SheetNames.length > 6
-        ? `\n\n_… ${wb.SheetNames.length - 6} aba(s) omitidas_`
-        : "";
+      wb.SheetNames.length > 6 ? `\n\n_… ${wb.SheetNames.length - 6} aba(s) omitidas_` : "";
     return wrapDocument(
       name,
       markdown + extra,
@@ -123,11 +119,7 @@ export async function parseFileBlobPart(part: BlobPart): Promise<string> {
   if (mime === "application/pdf" || lower.endsWith(".pdf")) {
     return parsePdf(bytes, name);
   }
-  if (
-    mime.includes("word") ||
-    lower.endsWith(".docx") ||
-    lower.endsWith(".doc")
-  ) {
+  if (mime.includes("word") || lower.endsWith(".docx") || lower.endsWith(".doc")) {
     return parseDocx(bytes, name);
   }
   if (

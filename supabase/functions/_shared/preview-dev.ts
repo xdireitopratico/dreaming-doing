@@ -104,7 +104,10 @@ export async function probePreviewUrlStatus(
         method: "GET",
         signal: AbortSignal.timeout(PROBE_FETCH_MS),
       });
-      const snippet = await probe.text().then((t) => t.slice(0, 12_000)).catch(() => "");
+      const snippet = await probe
+        .text()
+        .then((t) => t.slice(0, 12_000))
+        .catch(() => "");
       if (isStaleE2bPreviewBody(snippet)) return "stale";
       if (probe.ok || (probe.status >= 200 && probe.status < 500)) {
         return "live";

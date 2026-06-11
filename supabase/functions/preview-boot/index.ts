@@ -126,25 +126,26 @@ Deno.serve(async (req) => {
     const existing = (project.meta ?? {}) as Record<string, unknown>;
     let cached = isCachedPreviewValid(existing, force);
 
-    const devPortFromMeta =
-      typeof existing.previewPort === "number" ? existing.previewPort : null;
+    const devPortFromMeta = typeof existing.previewPort === "number" ? existing.previewPort : null;
 
     let syncOnlyMissedSandbox = false;
 
     if (syncOnly) {
       const projectFiles = await loadProjectFiles(supabase, projectId);
       if (projectFiles.length === 0) {
-        return json({
-          url: null,
-          ready: false,
-          reused: false,
-          error: "Projeto sem arquivos — o agente ainda não gerou código.",
-          code: "no_files",
-        }, 200);
+        return json(
+          {
+            url: null,
+            ready: false,
+            reused: false,
+            error: "Projeto sem arquivos — o agente ainda não gerou código.",
+            code: "no_files",
+          },
+          200,
+        );
       }
 
-      const devPort = devPortFromMeta ??
-        (Number.parseInt(detectDevPort(projectFiles), 10) || 5173);
+      const devPort = devPortFromMeta ?? (Number.parseInt(detectDevPort(projectFiles), 10) || 5173);
 
       try {
         const { sandbox, sandboxId } = await connectSandboxForPreview(
@@ -189,12 +190,7 @@ Deno.serve(async (req) => {
         let published = false;
         let publishedUrl: string | null = null;
         if (ready) {
-          const pub = await autoPublishIfNeeded(
-            supabase,
-            projectId,
-            userData.user.id,
-            nextMeta,
-          );
+          const pub = await autoPublishIfNeeded(supabase, projectId, userData.user.id, nextMeta);
           published = pub.published;
           publishedUrl = pub.url ?? null;
         }
@@ -230,27 +226,33 @@ Deno.serve(async (req) => {
           .from("projects")
           .update({ meta: clearedPreviewMeta(existing) })
           .eq("id", projectId);
-        return json({
-          url: null,
-          ready: false,
-          reused: false,
-          probeOnly: true,
-          error: "Projeto sem arquivos — o agente ainda não gerou código.",
-          code: "no_files",
-        }, 200);
+        return json(
+          {
+            url: null,
+            ready: false,
+            reused: false,
+            probeOnly: true,
+            error: "Projeto sem arquivos — o agente ainda não gerou código.",
+            code: "no_files",
+          },
+          200,
+        );
       }
 
       const probeStatus = await probePreviewUrlStatus(cached.url, 3);
       if (probeStatus === "stale") {
         // Não limpa meta aqui — evita flash de devUrl no cliente; force boot atualiza atomically.
-        return json({
-          url: cached.url,
-          ready: false,
-          reused: true,
-          stale: true,
-          probeOnly: true,
-          code: "e2b_sandbox_stale",
-        }, 200);
+        return json(
+          {
+            url: cached.url,
+            ready: false,
+            reused: true,
+            stale: true,
+            probeOnly: true,
+            code: "e2b_sandbox_stale",
+          },
+          200,
+        );
       }
 
       let activeUrl = cached.url;
@@ -260,8 +262,8 @@ Deno.serve(async (req) => {
         typeof existing.previewSandboxId === "string" ? existing.previewSandboxId : undefined;
 
       if (!ready) {
-        const devPort = devPortFromMeta ??
-          (Number.parseInt(detectDevPort(projectFiles), 10) || 5173);
+        const devPort =
+          devPortFromMeta ?? (Number.parseInt(detectDevPort(projectFiles), 10) || 5173);
         const reboot = await rebootPreviewDevServer(
           supabase,
           projectId,
@@ -287,12 +289,7 @@ Deno.serve(async (req) => {
       await supabase.from("projects").update({ meta: nextMeta }).eq("id", projectId);
 
       if (ready) {
-        const pub = await autoPublishIfNeeded(
-          supabase,
-          projectId,
-          userData.user.id,
-          nextMeta,
-        );
+        const pub = await autoPublishIfNeeded(supabase, projectId, userData.user.id, nextMeta);
         published = pub.published;
         publishedUrl = pub.url ?? null;
       }
@@ -315,13 +312,16 @@ Deno.serve(async (req) => {
           .from("projects")
           .update({ meta: clearedPreviewMeta(existing) })
           .eq("id", projectId);
-        return json({
-          url: null,
-          ready: false,
-          reused: false,
-          error: "Projeto sem arquivos — o agente ainda não gerou código.",
-          code: "no_files",
-        }, 200);
+        return json(
+          {
+            url: null,
+            ready: false,
+            reused: false,
+            error: "Projeto sem arquivos — o agente ainda não gerou código.",
+            code: "no_files",
+          },
+          200,
+        );
       }
 
       const probeStatus = await probePreviewUrlStatus(cached.url, 2);
@@ -334,8 +334,8 @@ Deno.serve(async (req) => {
         let activeUrl = cached.url;
         let ready = probeStatus === "live";
         if (!ready && existing.previewReady === true) {
-          const devPort = devPortFromMeta ??
-            (Number.parseInt(detectDevPort(projectFiles), 10) || 5173);
+          const devPort =
+            devPortFromMeta ?? (Number.parseInt(detectDevPort(projectFiles), 10) || 5173);
           const reboot = await rebootPreviewDevServer(
             supabase,
             projectId,
@@ -362,12 +362,11 @@ Deno.serve(async (req) => {
         let publishedUrl: string | null =
           typeof existing.publishedUrl === "string" ? existing.publishedUrl : null;
         if (ready) {
-          const pub = await autoPublishIfNeeded(
-            supabase,
-            projectId,
-            userData.user.id,
-            { ...existing, previewUrl: activeUrl, previewReady: true },
-          );
+          const pub = await autoPublishIfNeeded(supabase, projectId, userData.user.id, {
+            ...existing,
+            previewUrl: activeUrl,
+            previewReady: true,
+          });
           published = pub.published;
           if (pub.url) publishedUrl = pub.url;
         }
@@ -391,13 +390,16 @@ Deno.serve(async (req) => {
           .update({ meta: clearedPreviewMeta(existing) })
           .eq("id", projectId);
       }
-      return json({
-        url: null,
-        ready: false,
-        reused: false,
-        error: "Projeto sem arquivos — o agente ainda não gerou código.",
-        code: "no_files",
-      }, 200);
+      return json(
+        {
+          url: null,
+          ready: false,
+          reused: false,
+          error: "Projeto sem arquivos — o agente ainda não gerou código.",
+          code: "no_files",
+        },
+        200,
+      );
     }
 
     const devPort = Number.parseInt(detectDevPort(files ?? []), 10) || 5173;
@@ -440,7 +442,11 @@ Deno.serve(async (req) => {
     });
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : "erro inesperado";
-    const code = (e as any)?.code || (msg.includes("circuit") || msg.includes("cooling") || msg.includes("E2B creation") ? "e2b_creation_circuit" : undefined);
+    const code =
+      (e as any)?.code ||
+      (msg.includes("circuit") || msg.includes("cooling") || msg.includes("E2B creation")
+        ? "e2b_creation_circuit"
+        : undefined);
     console.error("[preview-boot]", msg);
     return json({ error: msg, code }, 500);
   }

@@ -180,7 +180,11 @@ function mergeAssistantMessages(a?: ChatMessage, b?: ChatMessage): ChatMessage |
   const bText = b.content?.trim() ?? "";
   if (!aText) return b;
   if (!bText || aText === bText || bText.includes(aText) || aText.includes(bText)) {
-    return { ...b, content: bText || aText, toolCalls: b.toolCalls?.length ? b.toolCalls : a.toolCalls };
+    return {
+      ...b,
+      content: bText || aText,
+      toolCalls: b.toolCalls?.length ? b.toolCalls : a.toolCalls,
+    };
   }
   const merged = [aText, bText].join("\n\n");
   return {

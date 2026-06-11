@@ -41,9 +41,7 @@ export function FooterColumns({ brand, columns, copyright, className }: FooterCo
           ))}
         </div>
         <Separator className="my-8" />
-        {copyright && (
-          <p className="text-xs text-muted-foreground font-mono">{copyright}</p>
-        )}
+        {copyright && <p className="text-xs text-muted-foreground font-mono">{copyright}</p>}
       </div>
     </footer>
   );

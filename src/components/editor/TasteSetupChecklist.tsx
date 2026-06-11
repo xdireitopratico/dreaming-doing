@@ -82,7 +82,9 @@ export function TasteSetupChecklist({ userMessageCount, onOpenConnector, onStart
                 className="w-full flex items-center gap-2 rounded px-1 py-1 text-left hover:bg-[var(--forge-surface-3)] transition-colors"
               >
                 <Circle className="size-3 text-[var(--forge-muted)] shrink-0" />
-                <span className="font-mono text-[10px] text-[var(--forge-silver)]">{step.label}</span>
+                <span className="font-mono text-[10px] text-[var(--forge-silver)]">
+                  {step.label}
+                </span>
               </button>
             ) : (
               <div className="flex items-center gap-2 px-1 py-1">
@@ -91,7 +93,9 @@ export function TasteSetupChecklist({ userMessageCount, onOpenConnector, onStart
                 ) : (
                   <Circle className="size-3 text-[var(--forge-muted)] shrink-0" />
                 )}
-                <span className="font-mono text-[10px] text-[var(--forge-silver)]">{step.label}</span>
+                <span className="font-mono text-[10px] text-[var(--forge-silver)]">
+                  {step.label}
+                </span>
               </div>
             )}
           </li>

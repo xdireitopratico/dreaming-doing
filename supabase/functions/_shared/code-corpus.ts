@@ -40,7 +40,11 @@ export function inferStackKind(
 }
 
 export async function captureToCodeCorpus(
-  supabase: { from: (table: string) => { insert: (row: Record<string, unknown>) => Promise<{ error: { message: string } | null }> } },
+  supabase: {
+    from: (table: string) => {
+      insert: (row: Record<string, unknown>) => Promise<{ error: { message: string } | null }>;
+    };
+  },
   input: CodeCorpusCaptureInput,
 ): Promise<void> {
   const content = input.content ?? "";
@@ -84,7 +88,10 @@ export async function snapshotProjectFilesToCorpus(
   supabase: {
     from: (table: string) => {
       select: (cols: string) => {
-        eq: (col: string, val: string) => Promise<{ data: ProjectFileRow[] | null; error: { message: string } | null }>;
+        eq: (
+          col: string,
+          val: string,
+        ) => Promise<{ data: ProjectFileRow[] | null; error: { message: string } | null }>;
       };
       insert: (rows: Record<string, unknown>[]) => Promise<{ error: { message: string } | null }>;
     };

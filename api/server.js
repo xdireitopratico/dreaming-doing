@@ -8,10 +8,12 @@ async function loadHandler() {
 }
 
 function defaultErrorResponse() {
-  return "<!DOCTYPE html><html><head><meta charset='utf-8'><title>Server Error</title>" +
+  return (
+    "<!DOCTYPE html><html><head><meta charset='utf-8'><title>Server Error</title>" +
     "<style>body{font-family:system-ui;display:flex;align-items:center;justify-content:center;" +
     "height:100vh;margin:0;background:#0a0a0a;color:#fafafa}h1{font-size:2rem}</style></head>" +
-    "<body><h1>500 — Internal Server Error</h1></body></html>";
+    "<body><h1>500 — Internal Server Error</h1></body></html>"
+  );
 }
 
 export default async function serverless(req, res) {
@@ -22,10 +24,7 @@ export default async function serverless(req, res) {
     const host = req.headers["host"] || "localhost";
     const url = `${protocol}://${host}${req.url}`;
 
-    const body =
-      req.method === "GET" || req.method === "HEAD"
-        ? undefined
-        : await readBody(req);
+    const body = req.method === "GET" || req.method === "HEAD" ? undefined : await readBody(req);
 
     const request = new Request(url, {
       method: req.method,

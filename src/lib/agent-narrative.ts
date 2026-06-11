@@ -59,9 +59,7 @@ export function buildAgentNarrative(
   opts?: { running?: boolean; persistedText?: string | null },
 ): AgentNarrative {
   const running = opts?.running ?? !progress.finished;
-  const body =
-    (progress.streamText?.trim() || null) ??
-    (opts?.persistedText?.trim() || null);
+  const body = (progress.streamText?.trim() || null) ?? (opts?.persistedText?.trim() || null);
 
   if (!running) {
     return {
@@ -84,9 +82,7 @@ export function buildAgentNarrative(
 
   const toolLine = activeToolLabel(progress);
   const phaseLine = progress.phase
-    ? progress.message?.trim() ||
-      PHASE_LABELS[progress.phase] ||
-      progress.phase
+    ? progress.message?.trim() || PHASE_LABELS[progress.phase] || progress.phase
     : null;
 
   const headline =

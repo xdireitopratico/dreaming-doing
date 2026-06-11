@@ -64,20 +64,14 @@ function pendingPlanFromSnapshot(
   const nested = raw as Record<string, unknown>;
   const planId = typeof nested.planId === "string" ? nested.planId : null;
   const steps = asPlanSteps(nested.steps);
-  const runId =
-    typeof nested.runId === "string"
-      ? nested.runId
-      : fallback?.runId ?? null;
+  const runId = typeof nested.runId === "string" ? nested.runId : (fallback?.runId ?? null);
   const projectId =
-    typeof nested.projectId === "string"
-      ? nested.projectId
-      : fallback?.projectId ?? null;
+    typeof nested.projectId === "string" ? nested.projectId : (fallback?.projectId ?? null);
   if (!planId || steps.length === 0 || !runId) return null;
 
   return {
     planId,
-    summary:
-      typeof nested.summary === "string" ? nested.summary : "Plano proposto",
+    summary: typeof nested.summary === "string" ? nested.summary : "Plano proposto",
     rationale:
       typeof nested.rationale === "string" && nested.rationale.trim()
         ? nested.rationale.trim()
@@ -90,33 +84,20 @@ function pendingPlanFromSnapshot(
     objective: typeof nested.objective === "string" ? nested.objective : undefined,
     steps,
     ttlMs: Number.MAX_SAFE_INTEGER,
-    proposedAt:
-      typeof nested.proposedAt === "number" ? nested.proposedAt : Date.now(),
+    proposedAt: typeof nested.proposedAt === "number" ? nested.proposedAt : Date.now(),
     runId,
     projectId: projectId ?? "",
   };
 }
 
-function progressFromCardSnapshot(
-  snap: Record<string, unknown>,
-  msg: ChatMessage,
-): AgentProgress {
+function progressFromCardSnapshot(snap: Record<string, unknown>, msg: ChatMessage): AgentProgress {
   const runId = runIdFromAssistantMessage(msg);
-  const projectId =
-    typeof msg.meta?.projectId === "string" ? msg.meta.projectId : undefined;
+  const projectId = typeof msg.meta?.projectId === "string" ? msg.meta.projectId : undefined;
 
-  const timeline = Array.isArray(snap.timeline)
-    ? (snap.timeline as SSEEvent[])
-    : [];
-  const tools = Array.isArray(snap.tools)
-    ? (snap.tools as AgentProgress["tools"])
-    : [];
-  const diffs = Array.isArray(snap.diffs)
-    ? (snap.diffs as AgentProgress["diffs"])
-    : [];
-  const deliveryFiles = Array.isArray(snap.deliveryFiles)
-    ? (snap.deliveryFiles as string[])
-    : [];
+  const timeline = Array.isArray(snap.timeline) ? (snap.timeline as SSEEvent[]) : [];
+  const tools = Array.isArray(snap.tools) ? (snap.tools as AgentProgress["tools"]) : [];
+  const diffs = Array.isArray(snap.diffs) ? (snap.diffs as AgentProgress["diffs"]) : [];
+  const deliveryFiles = Array.isArray(snap.deliveryFiles) ? (snap.deliveryFiles as string[]) : [];
   const buildLogLines = Array.isArray(snap.buildLogLines)
     ? (snap.buildLogLines as AgentProgress["buildLogLines"])
     : [];
@@ -140,9 +121,7 @@ function progressFromCardSnapshot(
       : msg.content?.trim() || null;
 
   const narrationText =
-    typeof snap.narrationText === "string" && snap.narrationText.trim()
-      ? snap.narrationText
-      : null;
+    typeof snap.narrationText === "string" && snap.narrationText.trim() ? snap.narrationText : null;
 
   const latencyThoughtMs =
     typeof snap.latencyThoughtMs === "number" && snap.latencyThoughtMs > 0
@@ -164,8 +143,7 @@ function progressFromCardSnapshot(
     streamText,
     narrationText,
     latencyThoughtMs,
-    lastFinishOk:
-      typeof snap.lastFinishOk === "boolean" ? snap.lastFinishOk : null,
+    lastFinishOk: typeof snap.lastFinishOk === "boolean" ? snap.lastFinishOk : null,
     diffs,
     pendingPlan,
     deliveryFiles,
@@ -178,9 +156,7 @@ function progressFromCardSnapshot(
     awaitingKind,
     conversational: snap.conversational === true,
     planSummary:
-      typeof snap.planSummary === "string"
-        ? snap.planSummary
-        : pendingPlan?.summary ?? null,
+      typeof snap.planSummary === "string" ? snap.planSummary : (pendingPlan?.summary ?? null),
   };
 }
 
@@ -195,9 +171,7 @@ export function progressFromAssistantMessage(msg: ChatMessage): AgentProgress | 
   }
 
   const finishedAt = typeof meta.finishedAt === "string";
-  const deliveryFiles = Array.isArray(meta.deliveryFiles)
-    ? (meta.deliveryFiles as string[])
-    : [];
+  const deliveryFiles = Array.isArray(meta.deliveryFiles) ? (meta.deliveryFiles as string[]) : [];
   const currentStep = typeof meta.currentStep === "number" ? meta.currentStep : null;
   const totalSteps = typeof meta.totalSteps === "number" ? meta.totalSteps : null;
   const body = msg.content?.trim() || null;

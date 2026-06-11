@@ -1,8 +1,4 @@
-import {
-  buildShotHeadline,
-  partitionSignals,
-  qualifySnapshot,
-} from "./qualify";
+import { buildShotHeadline, partitionSignals, qualifySnapshot } from "./qualify";
 import type {
   EditorTelemetrySnapshot,
   TelemetryEvent,
@@ -15,9 +11,7 @@ const DEDUPE_MS = 1200;
 const SCHEMA_VERSION = 1 as const;
 
 const sessionId =
-  typeof crypto !== "undefined" && crypto.randomUUID
-    ? crypto.randomUUID()
-    : `sess-${Date.now()}`;
+  typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `sess-${Date.now()}`;
 
 let snapshot: EditorTelemetrySnapshot = emptySnapshot();
 let events: TelemetryEvent[] = [];
@@ -97,9 +91,7 @@ export function getEditorTelemetrySessionId(): string {
   return sessionId;
 }
 
-export function patchEditorTelemetrySnapshot(
-  patch: Partial<EditorTelemetrySnapshot>,
-): void {
+export function patchEditorTelemetrySnapshot(patch: Partial<EditorTelemetrySnapshot>): void {
   mergeSnapshot(patch);
   notify();
 }
@@ -116,10 +108,7 @@ export function logEditorTelemetryEvent(
   lastEventKey = key;
   lastEventAt = now;
 
-  events = [
-    ...events.slice(-(MAX_EVENTS - 1)),
-    { ts: now, category, action, level, detail },
-  ];
+  events = [...events.slice(-(MAX_EVENTS - 1)), { ts: now, category, action, level, detail }];
   notify();
 }
 
@@ -204,12 +193,7 @@ export function installEditorTelemetryGlobalHandlers(): void {
   exposeDevTelemetryApi();
 
   window.addEventListener("error", (ev) => {
-    logEditorTelemetryEvent(
-      "ui",
-      "uncaught_error",
-      "error",
-      ev.message?.slice(0, 200),
-    );
+    logEditorTelemetryEvent("ui", "uncaught_error", "error", ev.message?.slice(0, 200));
   });
 
   window.addEventListener("unhandledrejection", (ev) => {

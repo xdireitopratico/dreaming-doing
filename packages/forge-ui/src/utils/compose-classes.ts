@@ -8,8 +8,5 @@ export function composeClasses(layers: Layer[]): string {
 }
 
 export function sectionShell(bg: string, padding: string, extra?: string): string {
-  return composeClasses([
-    { base: "relative w-full overflow-hidden" },
-    { bg, padding, extra },
-  ]);
+  return composeClasses([{ base: "relative w-full overflow-hidden" }, { bg, padding, extra }]);
 }

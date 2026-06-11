@@ -97,7 +97,6 @@ export async function exportProjectZip(projectId: string, projectName: string) {
 
     const blob = await zip.generateAsync({ type: "blob" });
     saveAs(blob, `${projectName || "projeto"}.zip`);
-
   } catch (e: any) {
     toast.error(`Erro ao exportar: ${e.message}`);
   }

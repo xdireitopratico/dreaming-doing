@@ -13,7 +13,7 @@ export class ToolRegistry {
   }
 
   getDefinitions(): ToolDefinition[] {
-    return Array.from(this.tools.values()).map(t => t.def);
+    return Array.from(this.tools.values()).map((t) => t.def);
   }
 
   async execute(call: ToolCall): Promise<ToolResult> {

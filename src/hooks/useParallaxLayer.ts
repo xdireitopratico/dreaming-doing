@@ -16,8 +16,10 @@ export function useParallaxLayer<T extends HTMLElement = HTMLElement>() {
     if (!el) return;
 
     let raf = 0;
-    let tx = 0, ty = 0;
-    let cx = 0, cy = 0;
+    let tx = 0,
+      ty = 0;
+    let cx = 0,
+      cy = 0;
 
     const onMove = (e: MouseEvent) => {
       const r = el.getBoundingClientRect();

@@ -43,13 +43,7 @@ export interface SlideInProps extends HTMLMotionProps<"div"> {
   from?: "left" | "right" | "top" | "bottom";
 }
 
-export function SlideIn({
-  children,
-  className,
-  delay = 0,
-  from = "left",
-  ...props
-}: SlideInProps) {
+export function SlideIn({ children, className, delay = 0, from = "left", ...props }: SlideInProps) {
   const initial = {
     opacity: 0,
     x: from === "left" ? -100 : from === "right" ? 100 : 0,
@@ -118,7 +112,7 @@ export function StaggerContainer({
   );
 }
 
-export interface StaggerItemProps extends HTMLMotionProps<"div"> {}
+export type StaggerItemProps = HTMLMotionProps<"div">;
 
 export function StaggerItem({ children, className, ...props }: StaggerItemProps) {
   return (
@@ -187,7 +181,7 @@ export function Pulse({ children, className, scale = 1.05, duration = 1.5, ...pr
   );
 }
 
-export interface ShimmerProps extends HTMLMotionProps<"div"> {}
+export type ShimmerProps = HTMLMotionProps<"div">;
 
 export function Shimmer({ className, ...props }: ShimmerProps) {
   return (
@@ -219,8 +213,14 @@ export const modalTransition = {
 };
 
 export const drawerTransition = (side: "left" | "right" | "top" | "bottom" = "right") => ({
-  initial: { x: side === "left" ? -300 : side === "right" ? 300 : 0, y: side === "top" ? -300 : side === "bottom" ? 300 : 0 },
+  initial: {
+    x: side === "left" ? -300 : side === "right" ? 300 : 0,
+    y: side === "top" ? -300 : side === "bottom" ? 300 : 0,
+  },
   animate: { x: 0, y: 0 },
-  exit: { x: side === "left" ? -300 : side === "right" ? 300 : 0, y: side === "top" ? -300 : side === "bottom" ? 300 : 0 },
+  exit: {
+    x: side === "left" ? -300 : side === "right" ? 300 : 0,
+    y: side === "top" ? -300 : side === "bottom" ? 300 : 0,
+  },
   transition: { type: "spring", stiffness: 500, damping: 40 },
 });

@@ -78,8 +78,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { property: "og:title", content: "FORGE — Make Your Dream" },
       {
         property: "og:description",
-        content:
-          "Construtor de apps web movido a IA. Da ideia ao deploy em segundos.",
+        content: "Construtor de apps web movido a IA. Da ideia ao deploy em segundos.",
       },
       { name: "twitter:card", content: "summary_large_image" },
       { name: "twitter:title", content: "FORGE — Make Your Dream" },
@@ -106,8 +105,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
           name: "FORGE",
           applicationCategory: "DeveloperApplication",
           operatingSystem: "Web",
-          description:
-            "Construtor de apps web movido a IA. Da ideia ao deploy em segundos.",
+          description: "Construtor de apps web movido a IA. Da ideia ao deploy em segundos.",
         }),
       },
     ],

@@ -7,7 +7,13 @@ const STEPS = [
     body: "Escreva em linguagem natural. Sem briefings de 40 páginas, sem wireframes. Apenas a visão.",
     glyph: (
       <svg viewBox="0 0 64 64" className="w-12 h-12">
-        <path d="M8 16 L56 16 M8 32 L48 32 M8 48 L40 48" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" />
+        <path
+          d="M8 16 L56 16 M8 32 L48 32 M8 48 L40 48"
+          stroke="currentColor"
+          strokeWidth="2"
+          fill="none"
+          strokeLinecap="round"
+        />
       </svg>
     ),
   },
@@ -17,7 +23,12 @@ const STEPS = [
     body: "Modelos de fronteira escrevem componentes, lógica, banco de dados e auth — em segundos.",
     glyph: (
       <svg viewBox="0 0 64 64" className="w-12 h-12">
-        <polygon points="32,6 56,20 56,44 32,58 8,44 8,20" stroke="currentColor" strokeWidth="2" fill="none" />
+        <polygon
+          points="32,6 56,20 56,44 32,58 8,44 8,20"
+          stroke="currentColor"
+          strokeWidth="2"
+          fill="none"
+        />
         <circle cx="32" cy="32" r="6" fill="currentColor" />
       </svg>
     ),
@@ -28,7 +39,13 @@ const STEPS = [
     body: "Deploy global em uma URL. Edição visual ao vivo. Iteração instantânea. Pronto pra escala.",
     glyph: (
       <svg viewBox="0 0 64 64" className="w-12 h-12">
-        <path d="M32 4 L40 24 L60 28 L44 42 L48 60 L32 50 L16 60 L20 42 L4 28 L24 24 Z" stroke="currentColor" strokeWidth="2" fill="none" strokeLinejoin="round" />
+        <path
+          d="M32 4 L40 24 L60 28 L44 42 L48 60 L32 50 L16 60 L20 42 L4 28 L24 24 Z"
+          stroke="currentColor"
+          strokeWidth="2"
+          fill="none"
+          strokeLinejoin="round"
+        />
       </svg>
     ),
   },
@@ -43,8 +60,7 @@ export function HowItWorks() {
             // SEQUÊNCIA DE LANÇAMENTO
           </p>
           <h2 className="font-display font-bold text-4xl md:text-6xl tracking-tight">
-            Do conceito ao código{" "}
-            <span className="text-gradient">em segundos</span>
+            Do conceito ao código <span className="text-gradient">em segundos</span>
           </h2>
         </div>
 
@@ -73,9 +89,7 @@ export function HowItWorks() {
                 <div className="text-[var(--primary)]">{s.glyph}</div>
               </div>
               <h3 className="font-display font-semibold text-2xl mb-3">{s.title}</h3>
-              <p className="font-body text-[var(--text-dim)] leading-relaxed">
-                {s.body}
-              </p>
+              <p className="font-body text-[var(--text-dim)] leading-relaxed">{s.body}</p>
             </motion.div>
           ))}
         </div>

@@ -7,10 +7,7 @@ function keyHint(value: string): string {
 }
 
 /** Valor efetivo: banco (admin UI) → fallback Supabase Edge secret (env). */
-export async function getPlatformSecret(
-  admin: SupabaseClient,
-  name: string,
-): Promise<string> {
+export async function getPlatformSecret(admin: SupabaseClient, name: string): Promise<string> {
   const { data } = await admin
     .from("platform_secrets")
     .select("value_encrypted")

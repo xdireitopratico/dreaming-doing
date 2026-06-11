@@ -32,8 +32,7 @@ const ANDROID_NATIVE_STACK: StackDecision = {
   reason: "Build nativo — progresso no file tree e console; sem iframe Vite.",
 };
 
-const EXPO_RE =
-  /\b(expo|expo-router|react native|react-native|expo go)\b/i;
+const EXPO_RE = /\b(expo|expo-router|react native|react-native|expo go)\b/i;
 
 const ANDROID_NATIVE_RE =
   /\b(android nativo|kotlin|gradle|\.kt\b|swift\b|ios nativo|app nativo)\b/i;

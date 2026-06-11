@@ -44,10 +44,31 @@ export function pickMain(injected?: Record<string, string>): ProviderConfig {
   const MINIMAX = envKey("MINIMAX_API_KEY", injected);
   const MOONSHOT = envKey("MOONSHOT_API_KEY", injected);
   const MIMO = envKey("MIMO_API_KEY", injected);
-  if (ANTHROPIC) return { provider: "anthropic", apiKey: ANTHROPIC, model: "claude-sonnet-4-20250514", label: "Anthropic Claude Sonnet 4" };
-  if (GEMINI) return { provider: "gemini", apiKey: GEMINI, model: "gemini-2.5-pro", label: "Gemini 2.5 Pro" };
-  if (XAI) return { provider: "openai", apiKey: XAI, model: "grok-3", baseUrl: "https://api.x.ai/v1", label: "xAI Grok 3" };
-  if (GROQ) return { provider: "openai", apiKey: GROQ, model: "llama-3.3-70b-versatile", baseUrl: "https://api.groq.com/openai/v1", label: "Groq · Llama 3.3 70B" };
+  if (ANTHROPIC)
+    return {
+      provider: "anthropic",
+      apiKey: ANTHROPIC,
+      model: "claude-sonnet-4-20250514",
+      label: "Anthropic Claude Sonnet 4",
+    };
+  if (GEMINI)
+    return { provider: "gemini", apiKey: GEMINI, model: "gemini-2.5-pro", label: "Gemini 2.5 Pro" };
+  if (XAI)
+    return {
+      provider: "openai",
+      apiKey: XAI,
+      model: "grok-3",
+      baseUrl: "https://api.x.ai/v1",
+      label: "xAI Grok 3",
+    };
+  if (GROQ)
+    return {
+      provider: "openai",
+      apiKey: GROQ,
+      model: "llama-3.3-70b-versatile",
+      baseUrl: "https://api.groq.com/openai/v1",
+      label: "Groq · Llama 3.3 70B",
+    };
   if (NVIDIA) {
     return {
       provider: "openai",
@@ -111,11 +132,17 @@ export function pickMain(injected?: Record<string, string>): ProviderConfig {
       label: "OpenRouter",
     };
   }
-  if (LOVABLE) return { provider: "openai", apiKey: LOVABLE, model: "gemini-2.5-flash-preview-04-17", baseUrl: LOVABLE_GATEWAY, label: "Lovable AI · Gemini 2.5 Flash" };
-  if (OPENAI) return { provider: "openai", apiKey: OPENAI, model: "gpt-4o", label: "OpenAI GPT-4o" };
-  throw new Error(
-    "Nenhum modelo de IA configurado. Adicione chaves em /api e preset em /models.",
-  );
+  if (LOVABLE)
+    return {
+      provider: "openai",
+      apiKey: LOVABLE,
+      model: "gemini-2.5-flash-preview-04-17",
+      baseUrl: LOVABLE_GATEWAY,
+      label: "Lovable AI · Gemini 2.5 Flash",
+    };
+  if (OPENAI)
+    return { provider: "openai", apiKey: OPENAI, model: "gpt-4o", label: "OpenAI GPT-4o" };
+  throw new Error("Nenhum modelo de IA configurado. Adicione chaves em /api e preset em /models.");
 }
 
 export function pickCheap(main: ProviderConfig, injected?: Record<string, string>): ProviderConfig {
@@ -132,8 +159,22 @@ export function pickCheap(main: ProviderConfig, injected?: Record<string, string
       label: `${exP} (cheap override)`,
     };
   }
-  if (GROQ) return { provider: "openai", apiKey: GROQ, model: "llama-3.3-70b-versatile", baseUrl: "https://api.groq.com/openai/v1", label: "Groq · Llama 3.3 70B" };
-  if (LOVABLE) return { provider: "openai", apiKey: LOVABLE, model: "gemini-2.5-flash-preview-04-17", baseUrl: LOVABLE_GATEWAY, label: "Lovable AI · Gemini Flash Lite" };
+  if (GROQ)
+    return {
+      provider: "openai",
+      apiKey: GROQ,
+      model: "llama-3.3-70b-versatile",
+      baseUrl: "https://api.groq.com/openai/v1",
+      label: "Groq · Llama 3.3 70B",
+    };
+  if (LOVABLE)
+    return {
+      provider: "openai",
+      apiKey: LOVABLE,
+      model: "gemini-2.5-flash-preview-04-17",
+      baseUrl: LOVABLE_GATEWAY,
+      label: "Lovable AI · Gemini Flash Lite",
+    };
   return main;
 }
 

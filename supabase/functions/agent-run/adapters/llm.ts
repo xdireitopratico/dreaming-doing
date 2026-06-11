@@ -33,9 +33,10 @@ function toToolCall(raw: any): ToolCall {
   return {
     id: raw.id ?? crypto.randomUUID(),
     name: raw.function?.name ?? raw.name ?? "",
-    arguments: typeof raw.function?.arguments === "string"
-      ? JSON.parse(raw.function.arguments)
-      : (raw.function?.arguments ?? raw.arguments ?? {}),
+    arguments:
+      typeof raw.function?.arguments === "string"
+        ? JSON.parse(raw.function.arguments)
+        : (raw.function?.arguments ?? raw.arguments ?? {}),
   };
 }
 
@@ -48,11 +49,16 @@ class ClaudeAdapter implements LLMProvider {
   ) {}
 
   async chat(params: ChatParams): Promise<ChatResponse> {
-    const systemMsg = params.messages.filter(m => m.role === "system").map(m => m.content).join("\n\n");
-    const messages = params.messages.filter(m => m.role !== "system").map(m => ({
-      role: m.role,
-      content: m.content ?? "",
-    }));
+    const systemMsg = params.messages
+      .filter((m) => m.role === "system")
+      .map((m) => m.content)
+      .join("\n\n");
+    const messages = params.messages
+      .filter((m) => m.role !== "system")
+      .map((m) => ({
+        role: m.role,
+        content: m.content ?? "",
+      }));
 
     const body: any = {
       model: this.model,
@@ -62,7 +68,7 @@ class ClaudeAdapter implements LLMProvider {
     };
     if (systemMsg) body.system = systemMsg;
     if (params.tools?.length) {
-      body.tools = params.tools.map(t => ({
+      body.tools = params.tools.map((t) => ({
         name: t.name,
         description: t.description,
         input_schema: t.parameters,
@@ -137,11 +143,14 @@ class OpenAIAdapter implements LLMProvider {
       return this.chatCompletionsStream(params);
     }
 
-    const messages = params.messages.map(m => {
+    const messages = params.messages.map((m) => {
       const msg: any = { role: m.role, content: m.content ?? "" };
       if (Array.isArray(m.content)) msg.content = m.content;
       if (m.tool_calls) msg.tool_calls = m.tool_calls;
-      if (m.tool_call_id) { msg.tool_call_id = m.tool_call_id; msg.role = "tool"; }
+      if (m.tool_call_id) {
+        msg.tool_call_id = m.tool_call_id;
+        msg.role = "tool";
+      }
       if (m.name) msg.name = m.name;
       return msg;
     });
@@ -154,7 +163,7 @@ class OpenAIAdapter implements LLMProvider {
     };
 
     if (params.tools?.length) {
-      body.tools = params.tools.map(t => ({
+      body.tools = params.tools.map((t) => ({
         type: "function",
         function: {
           name: t.name,
@@ -178,7 +187,7 @@ class OpenAIAdapter implements LLMProvider {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "Authorization": `Bearer ${this.apiKey}`,
+        Authorization: `Bearer ${this.apiKey}`,
       },
       body: JSON.stringify(body),
     });
@@ -201,11 +210,14 @@ class OpenAIAdapter implements LLMProvider {
   }
 
   private async chatCompletionsStream(params: ChatParams): Promise<ChatResponse> {
-    const messages = params.messages.map(m => {
+    const messages = params.messages.map((m) => {
       const msg: any = { role: m.role, content: m.content ?? "" };
       if (Array.isArray(m.content)) msg.content = m.content;
       if (m.tool_calls) msg.tool_calls = m.tool_calls;
-      if (m.tool_call_id) { msg.tool_call_id = m.tool_call_id; msg.role = "tool"; }
+      if (m.tool_call_id) {
+        msg.tool_call_id = m.tool_call_id;
+        msg.role = "tool";
+      }
       if (m.name) msg.name = m.name;
       return msg;
     });
@@ -219,7 +231,7 @@ class OpenAIAdapter implements LLMProvider {
     };
 
     if (params.tools?.length) {
-      body.tools = params.tools.map(t => ({
+      body.tools = params.tools.map((t) => ({
         type: "function",
         function: {
           name: t.name,
@@ -243,7 +255,7 @@ class OpenAIAdapter implements LLMProvider {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "Authorization": `Bearer ${this.apiKey}`,
+        Authorization: `Bearer ${this.apiKey}`,
       },
       body: JSON.stringify(body),
     });
@@ -316,10 +328,12 @@ class OpenAIAdapter implements LLMProvider {
 
     const parsedToolCalls = [...toolCalls.values()]
       .filter((tc) => tc.name)
-      .map((tc) => toToolCall({
-        id: tc.id,
-        function: { name: tc.name, arguments: tc.arguments },
-      }));
+      .map((tc) =>
+        toToolCall({
+          id: tc.id,
+          function: { name: tc.name, arguments: tc.arguments },
+        }),
+      );
 
     return {
       role: "assistant",
@@ -340,16 +354,20 @@ class GeminiAdapter implements LLMProvider {
 
   async chat(params: ChatParams): Promise<ChatResponse> {
     const tools = params.tools?.length
-      ? [{ functionDeclarations: params.tools.map(t => ({
-          name: t.name,
-          description: t.description,
-          parameters: t.parameters,
-        })) }]
+      ? [
+          {
+            functionDeclarations: params.tools.map((t) => ({
+              name: t.name,
+              description: t.description,
+              parameters: t.parameters,
+            })),
+          },
+        ]
       : [];
 
     const contents = params.messages
-      .filter(m => m.role !== "system")
-      .map(m => {
+      .filter((m) => m.role !== "system")
+      .map((m) => {
         const role = m.role === "assistant" ? "model" : m.role;
         const parts: any[] = [];
         if (m.content) parts.push({ text: m.content });
@@ -358,9 +376,10 @@ class GeminiAdapter implements LLMProvider {
             parts.push({
               functionCall: {
                 name: tc.function.name,
-                args: typeof tc.function.arguments === "string"
-                  ? JSON.parse(tc.function.arguments)
-                  : tc.function.arguments,
+                args:
+                  typeof tc.function.arguments === "string"
+                    ? JSON.parse(tc.function.arguments)
+                    : tc.function.arguments,
               },
             });
           }
@@ -368,7 +387,10 @@ class GeminiAdapter implements LLMProvider {
         return { role, parts };
       });
 
-    const systemMsg = params.messages.filter(m => m.role === "system").map(m => m.content).join("\n\n");
+    const systemMsg = params.messages
+      .filter((m) => m.role === "system")
+      .map((m) => m.content)
+      .join("\n\n");
 
     const body: any = {
       contents,
@@ -377,7 +399,9 @@ class GeminiAdapter implements LLMProvider {
         temperature: params.temperature ?? 0.7,
       },
     };
-    if (tools.length) { body.tools = tools; }
+    if (tools.length) {
+      body.tools = tools;
+    }
     if (systemMsg) {
       body.systemInstruction = { parts: [{ text: systemMsg }] };
     }
@@ -440,17 +464,20 @@ class OpenRouterAdapter implements LLMProvider {
       model: this.model,
       max_tokens: params.max_tokens ?? 4096,
       temperature: params.temperature ?? 0.7,
-      messages: params.messages.map(m => {
+      messages: params.messages.map((m) => {
         const msg: any = { role: m.role, content: m.content ?? "" };
         if (Array.isArray(m.content)) msg.content = m.content;
         if (m.tool_calls) msg.tool_calls = m.tool_calls;
-        if (m.tool_call_id) { msg.tool_call_id = m.tool_call_id; msg.role = "tool"; }
+        if (m.tool_call_id) {
+          msg.tool_call_id = m.tool_call_id;
+          msg.role = "tool";
+        }
         return msg;
       }),
     };
 
     if (params.tools?.length) {
-      body.tools = params.tools.map(t => ({
+      body.tools = params.tools.map((t) => ({
         type: "function",
         function: { name: t.name, description: t.description, parameters: t.parameters },
       }));
@@ -463,7 +490,7 @@ class OpenRouterAdapter implements LLMProvider {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "Authorization": `Bearer ${this.apiKey}`,
+        Authorization: `Bearer ${this.apiKey}`,
         "HTTP-Referer": "https://dreaming-doing.app",
         "X-Title": "Dream Weaver",
       },
@@ -509,7 +536,7 @@ class OllamaAdapter implements LLMProvider {
     const body: any = {
       model: this.model,
       stream: false,
-      messages: params.messages.map(m => {
+      messages: params.messages.map((m) => {
         const msg: any = { role: m.role, content: m.content ?? "" };
         if (m.tool_calls) msg.tool_calls = m.tool_calls;
         return msg;
@@ -561,6 +588,10 @@ export function createLLMProvider(config: {
     case "ollama":
       return new OllamaAdapter(config.baseUrl, config.model);
     default:
-      return new OpenAIAdapter(config.apiKey, config.baseUrl ?? `https://api.${p}.com/v1`, config.model);
+      return new OpenAIAdapter(
+        config.apiKey,
+        config.baseUrl ?? `https://api.${p}.com/v1`,
+        config.model,
+      );
   }
 }

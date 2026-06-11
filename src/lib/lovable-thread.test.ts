@@ -93,11 +93,7 @@ describe("buildLovableThread", () => {
   });
 
   it("live no turno pendente com histórico anterior", () => {
-    const messages = [
-      msg("u1", "user", "a"),
-      msg("a1", "assistant", "ok"),
-      msg("u2", "user", "b"),
-    ];
+    const messages = [msg("u1", "user", "a"), msg("a1", "assistant", "ok"), msg("u2", "user", "b")];
     const thread = buildLovableThread(messages, initialAgentProgress, {
       running: true,
       activeRunId: "run-2",
@@ -171,12 +167,7 @@ describe("buildLovableThread", () => {
       running: true,
       activeRunId: "build-run",
     });
-    expect(thread.map((t) => t.kind)).toEqual([
-      "user",
-      "assistant",
-      "user",
-      "assistant",
-    ]);
+    expect(thread.map((t) => t.kind)).toEqual(["user", "assistant", "user", "assistant"]);
     expect(thread[3]).toMatchObject({
       kind: "assistant",
       isActive: true,
@@ -339,9 +330,7 @@ describe("buildLovableThread", () => {
           ...initialAgentProgress,
           finished: true,
           lastFinishOk: true,
-          timeline: [
-            { type: "tool_start", data: { name: "fs_read" }, timestamp: 1 },
-          ],
+          timeline: [{ type: "tool_start", data: { name: "fs_read" }, timestamp: 1 }],
         }),
       ],
     ]);
@@ -387,6 +376,63 @@ describe("buildLovableThread", () => {
     const slot = thread[1] as Extract<(typeof thread)[number], { kind: "assistant" }>;
     expect(slot.isActive).toBe(false);
     expect(slot.live?.finished).toBe(true);
+  });
+
+  it("frozen no turno anterior não rouba slot do novo user", () => {
+    const messages: ChatMessage[] = [
+      msg("u1", "user", "primeira"),
+      { ...msg("a1", "assistant", "ok"), runId: "run-1" },
+      msg("u2", "user", "segunda"),
+      msg("u3", "user", "terceira agora"),
+    ];
+    const frozen = new Map([
+      [
+        "run-2",
+        freezeSnapshot({
+          ...initialAgentProgress,
+          finished: true,
+          lastFinishOk: true,
+          streamText: "entrega parcial",
+          pendingPlan: {
+            planId: "p1",
+            summary: "Plano",
+            steps: [{ id: "s1", type: "custom" as const, description: "Passo 1", enabled: true }],
+            ttlMs: 60_000,
+            proposedAt: Date.now(),
+            runId: "run-2",
+            projectId: "test-project",
+          },
+          awaitingKind: "plan_approval",
+        }),
+      ],
+    ]);
+    const progress = { ...initialAgentProgress, phase: "classify", statusHint: "Iniciando…" };
+    const thread = buildLovableThread(messages, progress, {
+      running: true,
+      activeRunId: "run-3",
+      frozenRuns: frozen,
+    });
+
+    expect(thread.map((t) => t.kind)).toEqual([
+      "user",
+      "assistant",
+      "user",
+      "assistant",
+      "user",
+      "assistant",
+    ]);
+
+    const u3Idx = thread.findIndex((t) => t.kind === "user" && t.message.id === "u3");
+    const liveSlot = thread[u3Idx + 1] as Extract<(typeof thread)[number], { kind: "assistant" }>;
+    expect(liveSlot.runId).toBe("run-3");
+    expect(liveSlot.isActive).toBe(true);
+
+    const frozenSlot = thread.find((t) => t.kind === "assistant" && t.runId === "run-2") as Extract<
+      (typeof thread)[number],
+      { kind: "assistant" }
+    >;
+    expect(frozenSlot).toBeDefined();
+    expect(thread.indexOf(frozenSlot)).toBeLessThan(u3Idx);
   });
 
   it("erro de connect sem runId aparece no turno pendente", () => {

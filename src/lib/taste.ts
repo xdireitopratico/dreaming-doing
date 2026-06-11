@@ -30,7 +30,9 @@ export type TasteQuota = {
 };
 
 /** User está em TASTE? = não tem chave LLM própria E ainda tem alguma cortesia. */
-export function isInTaste(quota: Pick<TasteQuota, "hasUserLlmKey" | "tasteChatRemaining" | "tasteStartRemaining">): boolean {
+export function isInTaste(
+  quota: Pick<TasteQuota, "hasUserLlmKey" | "tasteChatRemaining" | "tasteStartRemaining">,
+): boolean {
   return !quota.hasUserLlmKey && (quota.tasteChatRemaining > 0 || quota.tasteStartRemaining > 0);
 }
 
@@ -44,12 +46,16 @@ export function resolveSessionKind(
 }
 
 /** User pode enviar uma mensagem no chat TASTE? (= tem cortesia de chat) */
-export function canSendTasteChat(quota: Pick<TasteQuota, "hasUserLlmKey" | "tasteChatRemaining">): boolean {
+export function canSendTasteChat(
+  quota: Pick<TasteQuota, "hasUserLlmKey" | "tasteChatRemaining">,
+): boolean {
   return !quota.hasUserLlmKey && quota.tasteChatRemaining > 0;
 }
 
 /** User pode fazer Start Project no TASTE? (= tem cortesia de start) */
-export function canStartTasteProject(quota: Pick<TasteQuota, "hasUserLlmKey" | "tasteStartRemaining">): boolean {
+export function canStartTasteProject(
+  quota: Pick<TasteQuota, "hasUserLlmKey" | "tasteStartRemaining">,
+): boolean {
   return !quota.hasUserLlmKey && quota.tasteStartRemaining > 0;
 }
 
@@ -59,11 +65,16 @@ export function buildSessionPayload(kind: ForgeSessionKind, action?: TasteAction
   return { sessionKind: "taste" as const, tasteAction: action ?? "chat" };
 }
 
-export function tasteQuotaFromProfile(row: {
-  taste_chat_remaining?: number | null;
-  taste_start_remaining?: number | null;
-  trial_messages_remaining?: number | null;
-} | null | undefined): Pick<TasteQuota, "tasteChatRemaining" | "tasteStartRemaining"> {
+export function tasteQuotaFromProfile(
+  row:
+    | {
+        taste_chat_remaining?: number | null;
+        taste_start_remaining?: number | null;
+        trial_messages_remaining?: number | null;
+      }
+    | null
+    | undefined,
+): Pick<TasteQuota, "tasteChatRemaining" | "tasteStartRemaining"> {
   const chat =
     typeof row?.taste_chat_remaining === "number"
       ? row.taste_chat_remaining

@@ -80,8 +80,7 @@ function detectStack(files) {
   const hasAndroid = paths.some((p) => ANDROID_PATH_RE.test(p));
   const hasExpo = /"(expo|react-native|@expo\/)/i.test(pkgContent);
   const hasWeb =
-    paths.some((p) => WEB_PATH_RE.test(p)) ||
-    /"(vite|@vitejs\/|react-dom)/i.test(pkgContent);
+    paths.some((p) => WEB_PATH_RE.test(p)) || /"(vite|@vitejs\/|react-dom)/i.test(pkgContent);
   if (hasAndroid && hasWeb) return "mixed";
   if (hasAndroid) return "android-native";
   if (hasExpo) return "expo";
@@ -144,17 +143,25 @@ async function main() {
 
   // Layer: publish guards
   const publishReady = stack !== "android-native" && stack !== "mixed";
-  record("publish", "publish-ready guard", !publishReady, publishReady ? "would allow publish" : "blocked (expected)");
+  record(
+    "publish",
+    "publish-ready guard",
+    !publishReady,
+    publishReady ? "would allow publish" : "blocked (expected)",
+  );
 
   // Layer: agent history
   const runsRes = await rest(
     `agent_runs?select=id,status,error,started_at&project_id=eq.${projectId}&order=started_at.desc&limit=20`,
   );
   const runs = await runsRes.json();
-  const androidRun = Array.isArray(runs)
-    ? runs.find((r) => r.error?.includes("passo 5/10"))
-    : null;
-  record("agent", "has run history", Array.isArray(runs) && runs.length > 0, `${runs?.length ?? 0} runs`);
+  const androidRun = Array.isArray(runs) ? runs.find((r) => r.error?.includes("passo 5/10")) : null;
+  record(
+    "agent",
+    "has run history",
+    Array.isArray(runs) && runs.length > 0,
+    `${runs?.length ?? 0} runs`,
+  );
 
   if (androidRun?.id) {
     const evRes = await rest(
@@ -164,8 +171,7 @@ async function main() {
     const androidDiffs = Array.isArray(events)
       ? events.filter(
           (e) =>
-            e.event_type === "file_diff" &&
-            ANDROID_PATH_RE.test(String(e.payload?.path ?? "")),
+            e.event_type === "file_diff" && ANDROID_PATH_RE.test(String(e.payload?.path ?? "")),
         )
       : [];
     record(
@@ -205,7 +211,12 @@ async function main() {
     ],
     { cwd: process.cwd(), encoding: "utf8", shell: true },
   );
-  record("tests", "vitest android slice", vitest.status === 0, vitest.status === 0 ? "all pass" : "see output");
+  record(
+    "tests",
+    "vitest android slice",
+    vitest.status === 0,
+    vitest.status === 0 ? "all pass" : "see output",
+  );
 
   const deno = spawnSync("deno", ["test", "supabase/functions/_shared/code-corpus.test.ts"], {
     cwd: process.cwd(),
@@ -249,7 +260,11 @@ async function main() {
       "agent",
       "smoke-agent-e2e",
       agent.status === 0,
-      agent.status === 0 ? "stream grew" : keyMissing ? "BYOK key missing (root cause)" : "timeout/other",
+      agent.status === 0
+        ? "stream grew"
+        : keyMissing
+          ? "BYOK key missing (root cause)"
+          : "timeout/other",
     );
   } else {
     record("agent", "smoke-agent-e2e", false, "INNGEST_EVENT_KEY not set — skipped");

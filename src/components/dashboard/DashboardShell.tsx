@@ -22,15 +22,7 @@ import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { useAuth } from "@/lib/auth";
 import { sanitizeNext } from "@/lib/sanitize-next";
 
-type NavId =
-  | "home"
-  | "projects"
-  | "connectors"
-  | "api"
-  | "models"
-  | "mcp"
-  | "skills"
-  | "settings";
+type NavId = "home" | "projects" | "connectors" | "api" | "models" | "mcp" | "skills" | "settings";
 
 type DashboardSidebarPanelProps = {
   activeNav: NavId;
@@ -81,7 +73,11 @@ function DashboardSidebarPanel({
           <Home className="size-4 shrink-0" />
           Home
         </Link>
-        <button type="button" className="dashboard-nav-item w-full text-left" onClick={handleSearch}>
+        <button
+          type="button"
+          className="dashboard-nav-item w-full text-left"
+          onClick={handleSearch}
+        >
           <Search className="size-4 shrink-0" />
           Buscar
           <span className="dashboard-nav-kbd">Ctrl K</span>

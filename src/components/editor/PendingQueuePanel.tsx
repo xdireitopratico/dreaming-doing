@@ -100,42 +100,42 @@ export function PendingQueuePanel({
       )}
 
       {expanded && (
-      <ul className="max-h-32 overflow-y-auto px-2 pb-2 space-y-1">
-        {displayItems.map((item) => (
-          <li
-            key={item.id}
-            className="flex items-start gap-2 rounded-md border border-[var(--forge-border)]/80 bg-[var(--forge-surface-3)]/60 px-2 py-1.5"
-          >
-            <p className="flex-1 min-w-0 text-[11px] text-[var(--forge-foreground)] leading-snug line-clamp-3">
-              {item.preview}
-            </p>
-            <div className="flex shrink-0 gap-0.5">
-              <button
-                type="button"
-                className="forge-pending-queue-icon"
-                title="Copiar texto"
-                onClick={() => {
-                  onCopy(item.preview);
-                  toast.success("Copiado");
-                }}
-              >
-                <ClipboardCopy className="size-3" />
-              </button>
-              {item.id !== "phantom" && (
+        <ul className="max-h-32 overflow-y-auto px-2 pb-2 space-y-1">
+          {displayItems.map((item) => (
+            <li
+              key={item.id}
+              className="flex items-start gap-2 rounded-md border border-[var(--forge-border)]/80 bg-[var(--forge-surface-3)]/60 px-2 py-1.5"
+            >
+              <p className="flex-1 min-w-0 text-[11px] text-[var(--forge-foreground)] leading-snug line-clamp-3">
+                {item.preview}
+              </p>
+              <div className="flex shrink-0 gap-0.5">
                 <button
                   type="button"
                   className="forge-pending-queue-icon"
-                  title="Remover da fila"
-                  disabled={busy}
-                  onClick={() => void wrap(() => onRemove(item.id))}
+                  title="Copiar texto"
+                  onClick={() => {
+                    onCopy(item.preview);
+                    toast.success("Copiado");
+                  }}
                 >
-                  <X className="size-3" />
+                  <ClipboardCopy className="size-3" />
                 </button>
-              )}
-            </div>
-          </li>
-        ))}
-      </ul>
+                {item.id !== "phantom" && (
+                  <button
+                    type="button"
+                    className="forge-pending-queue-icon"
+                    title="Remover da fila"
+                    disabled={busy}
+                    onClick={() => void wrap(() => onRemove(item.id))}
+                  >
+                    <X className="size-3" />
+                  </button>
+                )}
+              </div>
+            </li>
+          ))}
+        </ul>
       )}
     </div>
   );

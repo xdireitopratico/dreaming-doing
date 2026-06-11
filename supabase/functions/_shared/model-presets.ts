@@ -20,7 +20,13 @@ function gemini(model: string, label: string): PresetWire {
   return { provider: "gemini", model, label, secretKey: "GEMINI_API_KEY" };
 }
 function xai(model: string, label: string): PresetWire {
-  return { provider: "openai", model, baseUrl: "https://api.x.ai/v1", label, secretKey: "XAI_API_KEY" };
+  return {
+    provider: "openai",
+    model,
+    baseUrl: "https://api.x.ai/v1",
+    label,
+    secretKey: "XAI_API_KEY",
+  };
 }
 function nvidia(model: string, label: string): PresetWire {
   return {
@@ -32,7 +38,13 @@ function nvidia(model: string, label: string): PresetWire {
   };
 }
 function openrouter(slug: string, label: string): PresetWire {
-  return { provider: "openrouter", model: slug, baseUrl: OR, label, secretKey: "OPENROUTER_API_KEY" };
+  return {
+    provider: "openrouter",
+    model: slug,
+    baseUrl: OR,
+    label,
+    secretKey: "OPENROUTER_API_KEY",
+  };
 }
 function deepseek(model: string, label: string): PresetWire {
   return {
@@ -186,7 +198,8 @@ function wireFromUserEntry(entry: UserModelEntryPayload): PresetWire | null {
   if (entry.env === "openrouter") {
     return openrouter(slug, entry.label ?? slug);
   }
-  if (entry.env === "anthropic") return anthropic(slug.split("/").pop() ?? slug, entry.label ?? slug);
+  if (entry.env === "anthropic")
+    return anthropic(slug.split("/").pop() ?? slug, entry.label ?? slug);
   if (entry.env === "deepseek") return deepseek("deepseek-chat", entry.label ?? slug);
   if (entry.env === "alibaba") return dashscope("qwen-max", entry.label ?? slug);
   if (entry.env === "minimax") return minimax("MiniMax-M3", entry.label ?? slug);
@@ -194,14 +207,14 @@ function wireFromUserEntry(entry: UserModelEntryPayload): PresetWire | null {
   if (entry.env === "xiaomi") return mimo("mimo-v2.5-pro", entry.label ?? slug);
   if (entry.env === "nvidia") {
     let nimSlug = slug.includes("/") ? slug : `nvidia/${slug}`;
-    const bare = nimSlug.includes("/") ? nimSlug.split("/").pop() ?? nimSlug : nimSlug;
+    const bare = nimSlug.includes("/") ? (nimSlug.split("/").pop() ?? nimSlug) : nimSlug;
     if (bare.includes("nemotron-3-ultra-550b") && !bare.includes("-a55b")) {
       nimSlug = "nvidia/nemotron-3-ultra-550b-a55b";
     }
     return nvidia(nimSlug, entry.label ?? nimSlug);
   }
   if (entry.env === "ollama") {
-    const model = slug.includes("/") ? slug.split("/").pop() ?? slug : slug;
+    const model = slug.includes("/") ? (slug.split("/").pop() ?? slug) : slug;
     return ollama(model, entry.label ?? model);
   }
   return openai(slug.split("/").pop() ?? slug, entry.label ?? slug, "https://api.openai.com/v1");
@@ -270,7 +283,10 @@ type PrefsLike = {
   userModelEntries?: UserModelEntryPayload[];
 };
 
-function wireWithKey(wire: PresetWire, keys: Record<string, string>): (PresetWire & { apiKey: string }) | null {
+function wireWithKey(
+  wire: PresetWire,
+  keys: Record<string, string>,
+): (PresetWire & { apiKey: string }) | null {
   if (wire.provider === "ollama" || wire.secretKey === "OLLAMA_BASE_URL") {
     const baseUrl = keys.OLLAMA_BASE_URL;
     if (!baseUrl) return null;
@@ -320,7 +336,10 @@ export function resolveModelFromPreferences(
   return resolveFixedFromKeys(preferences?.fixedPresetId, keys);
 }
 
-export function defaultRobinModel(poolProvider: "nvidia" | "groq", modelPresetId?: string): PresetWire {
+export function defaultRobinModel(
+  poolProvider: "nvidia" | "groq",
+  modelPresetId?: string,
+): PresetWire {
   if (modelPresetId) {
     const p = getPresetWire(modelPresetId);
     if (p) {

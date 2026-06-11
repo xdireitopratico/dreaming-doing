@@ -76,11 +76,13 @@ export function selectDeployBundle(files: DeployFile[]): {
 }
 
 function slugify(name: string): string {
-  return name
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 48) || "forge-app";
+  return (
+    name
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 48) || "forge-app"
+  );
 }
 
 async function buildZip(files: DeployFile[]): Promise<Uint8Array> {
@@ -101,7 +103,10 @@ export async function deployToVercel(
   existingProjectId?: string,
 ): Promise<ProviderDeployResult> {
   if (files.length === 0) {
-    return { ok: false, error: "Nenhum arquivo para publicar — gere o build ou adicione index.html." };
+    return {
+      ok: false,
+      error: "Nenhum arquivo para publicar — gere o build ou adicione index.html.",
+    };
   }
 
   const vercelFiles = files.map((f) => ({ file: f.path, data: f.content }));
@@ -137,7 +142,7 @@ export async function deployToVercel(
   });
   clearTimeout(timeoutId);
 
-  const payload = await res.json().catch(() => ({})) as {
+  const payload = (await res.json().catch(() => ({}))) as {
     url?: string;
     id?: string;
     alias?: string[];
@@ -152,7 +157,9 @@ export async function deployToVercel(
   }
 
   const url = payload.url
-    ? (payload.url.startsWith("http") ? payload.url : `https://${payload.url}`)
+    ? payload.url.startsWith("http")
+      ? payload.url
+      : `https://${payload.url}`
     : payload.alias?.[0]
       ? `https://${payload.alias[0]}`
       : null;
@@ -178,8 +185,8 @@ export async function deployToNetlify(
   let siteId = existingSiteId?.trim();
   if (!siteId) {
     const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 60_000);
-  const createRes = await fetch("https://api.netlify.com/api/v1/sites", {
+    const timeoutId = setTimeout(() => controller.abort(), 60_000);
+    const createRes = await fetch("https://api.netlify.com/api/v1/sites", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${token}`,
@@ -188,8 +195,8 @@ export async function deployToNetlify(
       body: JSON.stringify({ name: `forge-${slugify(projectSlug)}` }),
       signal: controller.signal,
     });
-  clearTimeout(timeoutId);
-    const created = await createRes.json().catch(() => ({})) as { id?: string; message?: string };
+    clearTimeout(timeoutId);
+    const created = (await createRes.json().catch(() => ({}))) as { id?: string; message?: string };
     if (!createRes.ok || !created.id) {
       return {
         ok: false,
@@ -213,7 +220,7 @@ export async function deployToNetlify(
   });
   clearTimeout(timeoutId);
 
-  const deployed = await deployRes.json().catch(() => ({})) as {
+  const deployed = (await deployRes.json().catch(() => ({}))) as {
     id?: string;
     ssl_url?: string;
     url?: string;
@@ -249,7 +256,7 @@ async function resolveCloudflareAccountId(
     signal: controller.signal,
   });
   clearTimeout(timeoutId);
-  const body = await res.json().catch(() => ({})) as {
+  const body = (await res.json().catch(() => ({}))) as {
     result?: { id: string }[];
     errors?: { message?: string }[];
   };
@@ -294,7 +301,7 @@ export async function deployToCloudflare(
   );
   clearTimeout(deployTimeoutId);
   if (!createRes.ok && createRes.status !== 409) {
-    const errBody = await createRes.json().catch(() => ({})) as {
+    const errBody = (await createRes.json().catch(() => ({}))) as {
       errors?: { message?: string }[];
     };
     return {
@@ -305,11 +312,7 @@ export async function deployToCloudflare(
 
   const zipBytes = await buildZip(files);
   const form = new FormData();
-  form.append(
-    "file",
-    new Blob([zipBytes], { type: "application/zip" }),
-    "deploy.zip",
-  );
+  form.append("file", new Blob([zipBytes], { type: "application/zip" }), "deploy.zip");
 
   const deployController = new AbortController();
   const deployTimeoutId = setTimeout(() => deployController.abort(), 60_000);
@@ -324,7 +327,7 @@ export async function deployToCloudflare(
   );
   clearTimeout(timeoutId);
 
-  const deployed = await deployRes.json().catch(() => ({})) as {
+  const deployed = (await deployRes.json().catch(() => ({}))) as {
     result?: { url?: string; id?: string };
     errors?: { message?: string }[];
   };
@@ -359,9 +362,8 @@ export async function deployWithProvider(
   const { token, projectSlug, files, prebuilt, hasPackageJson, meta, connectorMeta } = input;
 
   if (provider === "vercel") {
-    const vercelProjectId = typeof meta.vercelProjectId === "string"
-      ? meta.vercelProjectId
-      : undefined;
+    const vercelProjectId =
+      typeof meta.vercelProjectId === "string" ? meta.vercelProjectId : undefined;
     return deployToVercel(token, projectSlug, files, prebuilt, hasPackageJson, vercelProjectId);
   }
 
@@ -371,12 +373,10 @@ export async function deployWithProvider(
   }
 
   if (provider === "cloudflare") {
-    const accountId = typeof connectorMeta?.accountId === "string"
-      ? connectorMeta.accountId
-      : undefined;
-    const cfProjectName = typeof meta.cloudflarePagesProject === "string"
-      ? meta.cloudflarePagesProject
-      : undefined;
+    const accountId =
+      typeof connectorMeta?.accountId === "string" ? connectorMeta.accountId : undefined;
+    const cfProjectName =
+      typeof meta.cloudflarePagesProject === "string" ? meta.cloudflarePagesProject : undefined;
     return deployToCloudflare(token, projectSlug, files, accountId, cfProjectName);
   }
 

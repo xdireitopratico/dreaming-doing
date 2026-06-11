@@ -157,7 +157,9 @@ export function ConnectorGuideModal({
         className={`${panelClass} sm:max-w-md${isEditor ? " z-[260] border-[var(--forge-border-strong)] bg-[var(--forge-surface-2)] text-[var(--forge-text)]" : ""}`}
       >
         <DialogHeader>
-          <DialogTitle className={`flex items-center gap-2 ${isEditor ? "text-[var(--forge-text)]" : ""}`}>
+          <DialogTitle
+            className={`flex items-center gap-2 ${isEditor ? "text-[var(--forge-text)]" : ""}`}
+          >
             <span
               className={`grid size-9 place-items-center rounded-lg ${
                 isEditor
@@ -202,7 +204,9 @@ export function ConnectorGuideModal({
             {status.label && (
               <p>
                 Conta:{" "}
-                <strong className={isEditor ? "text-[var(--forge-text)]" : "text-[var(--foreground)]"}>
+                <strong
+                  className={isEditor ? "text-[var(--forge-text)]" : "text-[var(--foreground)]"}
+                >
                   {status.label}
                 </strong>
               </p>
@@ -218,7 +222,11 @@ export function ConnectorGuideModal({
                   value={githubUser}
                   onChange={(e) => setGithubUser(e.target.value)}
                   placeholder="seu-usuario"
-                  className={isEditor ? "border-[var(--forge-border-strong)] bg-[var(--forge-surface-3)]" : ""}
+                  className={
+                    isEditor
+                      ? "border-[var(--forge-border-strong)] bg-[var(--forge-surface-3)]"
+                      : ""
+                  }
                 />
               </div>
             )}
@@ -229,7 +237,11 @@ export function ConnectorGuideModal({
                   value={vercelProject}
                   onChange={(e) => setVercelProject(e.target.value)}
                   placeholder="meu-app"
-                  className={isEditor ? "border-[var(--forge-border-strong)] bg-[var(--forge-surface-3)]" : ""}
+                  className={
+                    isEditor
+                      ? "border-[var(--forge-border-strong)] bg-[var(--forge-surface-3)]"
+                      : ""
+                  }
                 />
               </div>
             )}
@@ -240,7 +252,11 @@ export function ConnectorGuideModal({
                   value={cfAccount}
                   onChange={(e) => setCfAccount(e.target.value)}
                   placeholder="account id"
-                  className={isEditor ? "border-[var(--forge-border-strong)] bg-[var(--forge-surface-3)]" : ""}
+                  className={
+                    isEditor
+                      ? "border-[var(--forge-border-strong)] bg-[var(--forge-surface-3)]"
+                      : ""
+                  }
                 />
               </div>
             )}
@@ -251,7 +267,11 @@ export function ConnectorGuideModal({
                   value={supabaseUrl}
                   onChange={(e) => setSupabaseUrl(e.target.value)}
                   placeholder="https://xxxx.supabase.co"
-                  className={isEditor ? "border-[var(--forge-border-strong)] bg-[var(--forge-surface-3)]" : ""}
+                  className={
+                    isEditor
+                      ? "border-[var(--forge-border-strong)] bg-[var(--forge-surface-3)]"
+                      : ""
+                  }
                 />
               </div>
             )}
@@ -276,7 +296,11 @@ export function ConnectorGuideModal({
             ) : needsToken ? (
               <Button
                 type="button"
-                className={isEditor ? "bg-[var(--forge-primary)] text-[#0a0a0a]" : "bg-[var(--primary)] text-[#0a0a0a]"}
+                className={
+                  isEditor
+                    ? "bg-[var(--forge-primary)] text-[#0a0a0a]"
+                    : "bg-[var(--primary)] text-[#0a0a0a]"
+                }
                 onClick={handleConnect}
                 disabled={
                   busy ||

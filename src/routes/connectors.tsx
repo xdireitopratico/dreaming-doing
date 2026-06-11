@@ -51,10 +51,15 @@ function ConnectorsPage() {
       <div className="flex flex-wrap items-center gap-4 mb-6 px-4 py-3 rounded-lg bg-[var(--surface-1)] border border-[var(--border)]">
         <div className="flex items-center gap-2">
           <CheckCircle2 className="size-4 text-emerald-400" />
-          <span className="font-mono text-[10px]">{activeCount} integração(ões) operacional(is)</span>
+          <span className="font-mono text-[10px]">
+            {activeCount} integração(ões) operacional(is)
+          </span>
         </div>
         <span className="text-[var(--border)]">|</span>
-        <Link to="/api" className="flex items-center gap-1.5 font-mono text-[10px] text-[var(--primary)] hover:underline">
+        <Link
+          to="/api"
+          className="flex items-center gap-1.5 font-mono text-[10px] text-[var(--primary)] hover:underline"
+        >
           <Key className="size-3" />
           API (chaves de IA) →
         </Link>

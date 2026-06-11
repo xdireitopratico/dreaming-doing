@@ -39,7 +39,10 @@ function toConnectorPayload(id: AiProviderId) {
     case "minimax":
       return { kind: "openai" as const, meta: { provider: "minimax", label: "MiniMax" } };
     case "moonshotai":
-      return { kind: "openai" as const, meta: { provider: "moonshotai", label: "Moonshot (Kimi)" } };
+      return {
+        kind: "openai" as const,
+        meta: { provider: "moonshotai", label: "Moonshot (Kimi)" },
+      };
     case "xiaomi":
       return { kind: "openai" as const, meta: { provider: "xiaomi", label: "Xiaomi MiMo" } };
     case "ollama":

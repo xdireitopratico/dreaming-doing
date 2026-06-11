@@ -124,7 +124,8 @@ export function scanProjectForLandingQuality(files: Map<string, string>): Design
 }
 
 export function formatDesignFeedback(violations: DesignViolation[]): string {
-  if (violations.length === 0) return "Design System OK: @forge/ui + composites + tokens válidos + adaptação estrutural ao domínio";
+  if (violations.length === 0)
+    return "Design System OK: @forge/ui + composites + tokens válidos + adaptação estrutural ao domínio";
   const unique = violations.slice(0, 20);
   const base = unique.map((v) => `${v.file}: ${v.message}`).join("\n");
   return `${base}\n\nLembrete de adaptação: a composição dos composites (HeroSignature, BentoGrid etc.) deve refletir o domínio do usuário (ex: padaria = produtos/quente; app = features; sales = conversão). Revise se a estrutura faz sentido para o pedido.`;

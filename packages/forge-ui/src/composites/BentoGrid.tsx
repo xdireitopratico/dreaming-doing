@@ -24,7 +24,13 @@ export interface BentoGridProps {
   title?: string;
 }
 
-export function BentoGrid({ cells, preset = "showcase", className, eyebrow, title }: BentoGridProps) {
+export function BentoGrid({
+  cells,
+  preset = "showcase",
+  className,
+  eyebrow,
+  title,
+}: BentoGridProps) {
   const layout = BENTO_LAYOUT_PRESETS[preset];
 
   return (
@@ -34,7 +40,11 @@ export function BentoGrid({ cells, preset = "showcase", className, eyebrow, titl
           {eyebrow && (
             <p className="text-xs font-mono uppercase tracking-[0.2em] text-brand-500">{eyebrow}</p>
           )}
-          {title && <h2 className="font-display text-3xl md:text-4xl font-semibold tracking-tight">{title}</h2>}
+          {title && (
+            <h2 className="font-display text-3xl md:text-4xl font-semibold tracking-tight">
+              {title}
+            </h2>
+          )}
         </FadeIn>
       )}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-5 auto-rows-[minmax(140px,auto)]">

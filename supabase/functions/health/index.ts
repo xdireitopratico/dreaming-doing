@@ -39,11 +39,17 @@ type HealthReport = {
 async function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
   return await Promise.race([
     p,
-    new Promise<T>((_, reject) => setTimeout(() => reject(new Error(`${label} timeout ${ms}ms`)), ms)),
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error(`${label} timeout ${ms}ms`)), ms),
+    ),
   ]);
 }
 
-async function withTimeoutOn<T>(thunk: () => PromiseLike<T>, ms: number, label: string): Promise<T> {
+async function withTimeoutOn<T>(
+  thunk: () => PromiseLike<T>,
+  ms: number,
+  label: string,
+): Promise<T> {
   return withTimeout(Promise.resolve(thunk()), ms, label);
 }
 

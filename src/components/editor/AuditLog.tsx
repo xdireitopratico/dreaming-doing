@@ -3,9 +3,22 @@
 import { useState, useMemo, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  History, Search, Filter, ChevronDown, ChevronUp, ExternalLink,
-  CheckCircle2, AlertCircle, Clock, Zap, DollarSign, Activity,
-  Layers, Code2, BarChart3, RotateCcw,
+  History,
+  Search,
+  Filter,
+  ChevronDown,
+  ChevronUp,
+  ExternalLink,
+  CheckCircle2,
+  AlertCircle,
+  Clock,
+  Zap,
+  DollarSign,
+  Activity,
+  Layers,
+  Code2,
+  BarChart3,
+  RotateCcw,
 } from "lucide-react";
 
 export interface AuditEntry {
@@ -66,17 +79,44 @@ export function AuditLog({ entries, selectedId, onSelect, onReplay }: AuditLogPr
   const totalSteps = filtered.reduce((sum, e) => sum + e.steps, 0);
 
   const statusConfig = {
-    running: { icon: Activity, color: "text-[var(--primary)]", bg: "bg-[var(--primary)]/10", label: "EXECUTANDO" },
-    completed: { icon: CheckCircle2, color: "text-emerald-400", bg: "bg-emerald-400/10", label: "CONCLUÍDO" },
-    failed: { icon: AlertCircle, color: "text-[var(--destructive)]", bg: "bg-[var(--destructive)]/10", label: "FALHOU" },
+    running: {
+      icon: Activity,
+      color: "text-[var(--primary)]",
+      bg: "bg-[var(--primary)]/10",
+      label: "EXECUTANDO",
+    },
+    completed: {
+      icon: CheckCircle2,
+      color: "text-emerald-400",
+      bg: "bg-emerald-400/10",
+      label: "CONCLUÍDO",
+    },
+    failed: {
+      icon: AlertCircle,
+      color: "text-[var(--destructive)]",
+      bg: "bg-[var(--destructive)]/10",
+      label: "FALHOU",
+    },
     stopped: { icon: Clock, color: "text-amber-400", bg: "bg-amber-400/10", label: "INTERROMPIDO" },
   };
 
   const filters: { id: AuditFilter; label: string; count: number }[] = [
     { id: "all", label: "Todos", count: entries.length },
-    { id: "running", label: "Executando", count: entries.filter((e) => e.status === "running").length },
-    { id: "completed", label: "Concluídos", count: entries.filter((e) => e.status === "completed").length },
-    { id: "stopped", label: "Interrompidos", count: entries.filter((e) => e.status === "stopped").length },
+    {
+      id: "running",
+      label: "Executando",
+      count: entries.filter((e) => e.status === "running").length,
+    },
+    {
+      id: "completed",
+      label: "Concluídos",
+      count: entries.filter((e) => e.status === "completed").length,
+    },
+    {
+      id: "stopped",
+      label: "Interrompidos",
+      count: entries.filter((e) => e.status === "stopped").length,
+    },
     { id: "failed", label: "Falhas", count: entries.filter((e) => e.status === "failed").length },
   ];
 
@@ -102,9 +142,7 @@ export function AuditLog({ entries, selectedId, onSelect, onReplay }: AuditLogPr
               }`}
             >
               {f.label}
-              {f.count > 0 && (
-                <span className="ml-1 opacity-50">({f.count})</span>
-              )}
+              {f.count > 0 && <span className="ml-1 opacity-50">({f.count})</span>}
             </button>
           ))}
         </div>
@@ -127,8 +165,7 @@ export function AuditLog({ entries, selectedId, onSelect, onReplay }: AuditLogPr
             {totalSteps} steps
           </span>
           <span className="flex items-center gap-1">
-            <DollarSign className="size-3" />
-            ${totalCost.toFixed(4)}
+            <DollarSign className="size-3" />${totalCost.toFixed(4)}
           </span>
         </div>
       </div>
@@ -172,143 +209,144 @@ export function AuditLog({ entries, selectedId, onSelect, onReplay }: AuditLogPr
                 const status = statusConfig[entry.status];
                 const StatusIcon = status.icon;
                 const isExpanded = expandedId === entry.id;
-                const duration =
-                  entry.finishedAt
-                    ? (new Date(entry.finishedAt).getTime() - new Date(entry.startedAt).getTime()) / 1000
-                    : null;
+                const duration = entry.finishedAt
+                  ? (new Date(entry.finishedAt).getTime() - new Date(entry.startedAt).getTime()) /
+                    1000
+                  : null;
 
                 return (
                   <>
-                  <motion.tr
-                    key={entry.id}
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    onClick={() => onSelect?.(entry)}
-                    className={`border-b border-[var(--border)]/50 hover:bg-[var(--surface-2)]/30 transition-colors ${
-                      selectedId === entry.id ? "bg-[var(--primary)]/8" : ""
-                    } ${onSelect ? "cursor-pointer" : ""}`}
-                  >
-                    <td className="px-4 py-2.5">
-                      <div className="font-mono text-[11px] text-[var(--foreground)]">
-                        {entry.projectName}
-                      </div>
-                      <div className="font-mono text-[8px] text-[var(--text-ghost)] mt-0.5">
-                        {new Date(entry.startedAt).toLocaleString("pt-BR")}
-                      </div>
-                    </td>
-                    <td className="px-4 py-2.5">
-                      <div className="flex items-center gap-1.5">
-                        <div className="size-1.5 rounded-full bg-[var(--primary)]" />
-                        <span className="font-mono text-[10px] text-[var(--text-dim)]">
-                          {entry.provider}
-                        </span>
-                      </div>
-                      <div className="font-mono text-[9px] text-[var(--text-ghost)]">
-                        {entry.model}
-                      </div>
-                    </td>
-                    <td className="px-4 py-2.5">
-                      <span
-                        className={`inline-flex items-center gap-1 font-mono text-[9px] px-2 py-0.5 rounded ${status.color} ${status.bg}`}
-                      >
-                        <StatusIcon className="size-3" />
-                        {status.label}
-                      </span>
-                      {entry.error && (
-                        <div className="font-mono text-[8px] text-[var(--destructive)] mt-1 max-w-[180px] truncate">
-                          {entry.error}
+                    <motion.tr
+                      key={entry.id}
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      onClick={() => onSelect?.(entry)}
+                      className={`border-b border-[var(--border)]/50 hover:bg-[var(--surface-2)]/30 transition-colors ${
+                        selectedId === entry.id ? "bg-[var(--primary)]/8" : ""
+                      } ${onSelect ? "cursor-pointer" : ""}`}
+                    >
+                      <td className="px-4 py-2.5">
+                        <div className="font-mono text-[11px] text-[var(--foreground)]">
+                          {entry.projectName}
                         </div>
-                      )}
-                    </td>
-                    <td className="px-4 py-2.5 text-right font-mono text-[10px] text-[var(--text-dim)]">
-                      {entry.steps}
-                    </td>
-                    <td className="px-4 py-2.5 text-right font-mono text-[10px] text-[var(--text-dim)]">
-                      ${entry.cost.toFixed(4)}
-                    </td>
-                    <td className="px-4 py-2.5 text-right font-mono text-[10px] text-[var(--text-ghost)]">
-                      {duration !== null ? `${duration.toFixed(1)}s` : "—"}
-                    </td>
-                    <td className="px-2 py-2.5">
-                      <div className="flex items-center gap-1">
-                        {onReplay && entry.status !== "running" && (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onReplay(entry);
-                            }}
-                            title="Replay (re-ver I/O do run sem rerun)"
-                            data-testid="replay-run"
-                            className="p-1 rounded hover:bg-[var(--primary)]/10 text-[var(--text-ghost)] hover:text-[var(--primary)] transition-colors"
-                          >
-                            <RotateCcw className="size-3.5" />
-                          </button>
-                        )}
-                        <button
-                          onClick={() =>
-                            setExpandedId(isExpanded ? null : entry.id)
-                          }
-                          className="p-1 rounded hover:bg-[var(--surface-2)] text-[var(--text-ghost)] transition-colors"
+                        <div className="font-mono text-[8px] text-[var(--text-ghost)] mt-0.5">
+                          {new Date(entry.startedAt).toLocaleString("pt-BR")}
+                        </div>
+                      </td>
+                      <td className="px-4 py-2.5">
+                        <div className="flex items-center gap-1.5">
+                          <div className="size-1.5 rounded-full bg-[var(--primary)]" />
+                          <span className="font-mono text-[10px] text-[var(--text-dim)]">
+                            {entry.provider}
+                          </span>
+                        </div>
+                        <div className="font-mono text-[9px] text-[var(--text-ghost)]">
+                          {entry.model}
+                        </div>
+                      </td>
+                      <td className="px-4 py-2.5">
+                        <span
+                          className={`inline-flex items-center gap-1 font-mono text-[9px] px-2 py-0.5 rounded ${status.color} ${status.bg}`}
                         >
-                          {isExpanded ? (
-                            <ChevronUp className="size-3.5" />
-                          ) : (
-                            <ChevronDown className="size-3.5" />
-                          )}
-                        </button>
-                      </div>
-                    </td>
-
-                  </motion.tr>
-                  {isExpanded && (
-                    <tr key={`${entry.id}-detail`}>
-                      <td colSpan={7} className="px-4 py-3 bg-[var(--surface-1)]/20">
-                        <motion.div
-                          initial={{ opacity: 0, height: 0 }}
-                          animate={{ opacity: 1, height: "auto" }}
-                          className="space-y-3"
-                        >
-                          <div>
-                            <span className="font-mono text-[8px] tracking-[0.15em] uppercase text-[var(--text-ghost)]">
-                              Ferramentas
-                            </span>
-                            <div className="flex flex-wrap gap-1 mt-1.5">
-                              {entry.toolsUsed.length > 0 ? entry.toolsUsed.map((tool) => (
-                                <span
-                                  key={tool}
-                                  className="flex items-center gap-1 font-mono text-[9px] px-2 py-0.5 rounded bg-[var(--surface-2)] text-[var(--text-dim)]"
-                                >
-                                  <Code2 className="size-3" />
-                                  {tool}
-                                </span>
-                              )) : (
-                                <span className="font-mono text-[9px] text-[var(--text-ghost)]">—</span>
-                              )}
-                            </div>
+                          <StatusIcon className="size-3" />
+                          {status.label}
+                        </span>
+                        {entry.error && (
+                          <div className="font-mono text-[8px] text-[var(--destructive)] mt-1 max-w-[180px] truncate">
+                            {entry.error}
                           </div>
-
-                          {entry.summary && (
+                        )}
+                      </td>
+                      <td className="px-4 py-2.5 text-right font-mono text-[10px] text-[var(--text-dim)]">
+                        {entry.steps}
+                      </td>
+                      <td className="px-4 py-2.5 text-right font-mono text-[10px] text-[var(--text-dim)]">
+                        ${entry.cost.toFixed(4)}
+                      </td>
+                      <td className="px-4 py-2.5 text-right font-mono text-[10px] text-[var(--text-ghost)]">
+                        {duration !== null ? `${duration.toFixed(1)}s` : "—"}
+                      </td>
+                      <td className="px-2 py-2.5">
+                        <div className="flex items-center gap-1">
+                          {onReplay && entry.status !== "running" && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onReplay(entry);
+                              }}
+                              title="Replay (re-ver I/O do run sem rerun)"
+                              data-testid="replay-run"
+                              className="p-1 rounded hover:bg-[var(--primary)]/10 text-[var(--text-ghost)] hover:text-[var(--primary)] transition-colors"
+                            >
+                              <RotateCcw className="size-3.5" />
+                            </button>
+                          )}
+                          <button
+                            onClick={() => setExpandedId(isExpanded ? null : entry.id)}
+                            className="p-1 rounded hover:bg-[var(--surface-2)] text-[var(--text-ghost)] transition-colors"
+                          >
+                            {isExpanded ? (
+                              <ChevronUp className="size-3.5" />
+                            ) : (
+                              <ChevronDown className="size-3.5" />
+                            )}
+                          </button>
+                        </div>
+                      </td>
+                    </motion.tr>
+                    {isExpanded && (
+                      <tr key={`${entry.id}-detail`}>
+                        <td colSpan={7} className="px-4 py-3 bg-[var(--surface-1)]/20">
+                          <motion.div
+                            initial={{ opacity: 0, height: 0 }}
+                            animate={{ opacity: 1, height: "auto" }}
+                            className="space-y-3"
+                          >
                             <div>
                               <span className="font-mono text-[8px] tracking-[0.15em] uppercase text-[var(--text-ghost)]">
-                                Resumo
+                                Ferramentas
                               </span>
-                              <p className="font-mono text-[10px] text-[var(--text-dim)] mt-1 leading-relaxed max-w-2xl">
-                                {entry.summary}
-                              </p>
+                              <div className="flex flex-wrap gap-1 mt-1.5">
+                                {entry.toolsUsed.length > 0 ? (
+                                  entry.toolsUsed.map((tool) => (
+                                    <span
+                                      key={tool}
+                                      className="flex items-center gap-1 font-mono text-[9px] px-2 py-0.5 rounded bg-[var(--surface-2)] text-[var(--text-dim)]"
+                                    >
+                                      <Code2 className="size-3" />
+                                      {tool}
+                                    </span>
+                                  ))
+                                ) : (
+                                  <span className="font-mono text-[9px] text-[var(--text-ghost)]">
+                                    —
+                                  </span>
+                                )}
+                              </div>
                             </div>
-                          )}
 
-                          <a
-                            href={`/projects/${entry.projectId}`}
-                            className="inline-flex items-center gap-1 font-mono text-[9px] text-[var(--primary)] hover:underline"
-                          >
-                            <ExternalLink className="size-3" />
-                            Abrir projeto
-                          </a>
-                        </motion.div>
-                      </td>
-                    </tr>
-                  )}
+                            {entry.summary && (
+                              <div>
+                                <span className="font-mono text-[8px] tracking-[0.15em] uppercase text-[var(--text-ghost)]">
+                                  Resumo
+                                </span>
+                                <p className="font-mono text-[10px] text-[var(--text-dim)] mt-1 leading-relaxed max-w-2xl">
+                                  {entry.summary}
+                                </p>
+                              </div>
+                            )}
+
+                            <a
+                              href={`/projects/${entry.projectId}`}
+                              className="inline-flex items-center gap-1 font-mono text-[9px] text-[var(--primary)] hover:underline"
+                            >
+                              <ExternalLink className="size-3" />
+                              Abrir projeto
+                            </a>
+                          </motion.div>
+                        </td>
+                      </tr>
+                    )}
                   </>
                 );
               })}

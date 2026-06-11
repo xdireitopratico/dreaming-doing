@@ -24,7 +24,9 @@ export function parseTokenField(tokenField: string | null): string[] {
     try {
       const arr = JSON.parse(t) as unknown;
       if (Array.isArray(arr)) return arr.filter((x) => typeof x === "string" && x.length > 0);
-    } catch { /* single token */ }
+    } catch {
+      /* single token */
+    }
   }
   return [t];
 }
@@ -56,15 +58,12 @@ export async function loadConnectorPools(
 
   // Chave salva com «Salvar chave» (token único) — reutiliza como pool de 1
   const keys = await loadConnectorKeys(supabase, ownerId);
-  const fallback =
-    poolProvider === "nvidia" ? keys.NVIDIA_API_KEY : keys.GROQ_API_KEY;
+  const fallback = poolProvider === "nvidia" ? keys.NVIDIA_API_KEY : keys.GROQ_API_KEY;
   return fallback ? [fallback] : [];
 }
 
 /** ID do usuário administrador FORGE (pool ROBIN do tira-gosto). */
-export async function resolveForgeAdminUserId(
-  supabase: SupabaseClient,
-): Promise<string | null> {
+export async function resolveForgeAdminUserId(supabase: SupabaseClient): Promise<string | null> {
   const { data, error } = await supabase.auth.admin.listUsers({ perPage: 500, page: 1 });
   if (error) {
     console.error("resolveForgeAdminUserId:", error.message);

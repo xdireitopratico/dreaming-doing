@@ -19,9 +19,7 @@ describe("e2b-status", () => {
   });
 
   it("connected requires health ok in meta", () => {
-    expect(
-      isE2bConnected([{ kind: "e2b", meta: { e2bHealthOk: true } }]),
-    ).toBe(true);
+    expect(isE2bConnected([{ kind: "e2b", meta: { e2bHealthOk: true } }])).toBe(true);
     expect(isE2bConnected([{ kind: "e2b", meta: {} }])).toBe(false);
     expect(isE2bHealthOk({ e2bHealthOk: true })).toBe(true);
   });

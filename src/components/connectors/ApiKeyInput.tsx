@@ -45,13 +45,16 @@ export function ApiKeyInput({
     setTimeout(() => setCopied(false), 2000);
   }, [value]);
 
-  const maskValue = useCallback((val: string) => {
-    if (!val) return "";
-    if (visible) return val;
-    const prefix = val.slice(0, 3);
-    const suffix = val.slice(-4);
-    return `${prefix}${"•".repeat(Math.min(20, val.length - 7))}${suffix}`;
-  }, [visible]);
+  const maskValue = useCallback(
+    (val: string) => {
+      if (!val) return "";
+      if (visible) return val;
+      const prefix = val.slice(0, 3);
+      const suffix = val.slice(-4);
+      return `${prefix}${"•".repeat(Math.min(20, val.length - 7))}${suffix}`;
+    },
+    [visible],
+  );
 
   const hasValue = value.length > 0;
 

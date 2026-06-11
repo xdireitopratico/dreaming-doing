@@ -32,13 +32,10 @@ export function nvidiaConnectorMeta(rows: ConnectorRow[] | undefined): {
   connected: boolean;
   poolCount: number;
 } {
-  const row = rows?.find(
-    (r) => r.kind === "openai" && (r.provider ?? "").trim() === "nvidia",
-  );
+  const row = rows?.find((r) => r.kind === "openai" && (r.provider ?? "").trim() === "nvidia");
   if (!row) return { connected: false, poolCount: 0 };
   const meta = (row.meta ?? {}) as { poolCount?: number };
-  const poolCount =
-    typeof meta.poolCount === "number" && meta.poolCount > 0 ? meta.poolCount : 1;
+  const poolCount = typeof meta.poolCount === "number" && meta.poolCount > 0 ? meta.poolCount : 1;
   return { connected: true, poolCount };
 }
 
@@ -72,7 +69,8 @@ export function buildEditorReadiness(input: {
     items.push({
       level: "warn",
       label: "Modo Taste",
-      detail: "Sem chave LLM sua: chat = concierge (sem MVP completo). Use Start Project (1×) ou chaves em API.",
+      detail:
+        "Sem chave LLM sua: chat = concierge (sem MVP completo). Use Start Project (1×) ou chaves em API.",
       href: "/api",
     });
     return items;
@@ -82,7 +80,8 @@ export function buildEditorReadiness(input: {
     items.push({
       level: "error",
       label: "Modelo no editor",
-      detail: "Abra Modelos, escolha Fixo ou ROBIN (Nemotron 550B), salve — sem isso o agente não inicia.",
+      detail:
+        "Abra Modelos, escolha Fixo ou ROBIN (Nemotron 550B), salve — sem isso o agente não inicia.",
       href: "/models",
     });
     return items;

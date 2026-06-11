@@ -3,10 +3,32 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  Search, FilePlus, FolderPlus, Eye, Code2, Terminal, GitBranch,
-  Download, Upload, Save, Play, Square, Settings, Zap, ChevronRight,
-  Monitor, Smartphone, Tablet, History, Undo2, Redo2, Sun, Moon,
-  Keyboard, FileCode, FolderOpen,
+  Search,
+  FilePlus,
+  FolderPlus,
+  Eye,
+  Code2,
+  Terminal,
+  GitBranch,
+  Download,
+  Upload,
+  Save,
+  Play,
+  Square,
+  Settings,
+  Zap,
+  ChevronRight,
+  Monitor,
+  Smartphone,
+  Tablet,
+  History,
+  Undo2,
+  Redo2,
+  Sun,
+  Moon,
+  Keyboard,
+  FileCode,
+  FolderOpen,
 } from "lucide-react";
 
 export interface PaletteAction {
@@ -37,7 +59,13 @@ const spring = {
   mass: 0.8,
 };
 
-export function CommandPalette({ isOpen, onClose, actions, files = [], onOpenFile }: CommandPaletteProps) {
+export function CommandPalette({
+  isOpen,
+  onClose,
+  actions,
+  files = [],
+  onOpenFile,
+}: CommandPaletteProps) {
   const [query, setQuery] = useState("");
   const [selectedIdx, setSelectedIdx] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -85,9 +113,8 @@ export function CommandPalette({ isOpen, onClose, actions, files = [], onOpenFil
 
   const hasExplicitActionSearch = query.trim().toLowerCase().startsWith(">");
 
-
   // Clamp selected index
-  const idx = Math.min(selectedIdx, Math.max(0, (filtered.length + fileResults.length) - 1));
+  const idx = Math.min(selectedIdx, Math.max(0, filtered.length + fileResults.length - 1));
 
   const execute = useCallback(
     (action: PaletteAction | (typeof fileResults)[number]) => {
@@ -177,7 +204,9 @@ export function CommandPalette({ isOpen, onClose, actions, files = [], onOpenFil
     }
     // Fixed order
     const order = ["file", "view", "agent", "layout", "project"];
-    return order.filter((cat) => map.has(cat)).map((cat) => ({ category: cat, items: map.get(cat)! }));
+    return order
+      .filter((cat) => map.has(cat))
+      .map((cat) => ({ category: cat, items: map.get(cat)! }));
   }, [filtered]);
 
   // Calculate global index for keyboard nav
@@ -219,7 +248,7 @@ export function CommandPalette({ isOpen, onClose, actions, files = [], onOpenFil
                   setQuery(e.target.value);
                   setSelectedIdx(0);
                 }}
-              placeholder="> comandos  •  buscar arquivos..."
+                placeholder="> comandos  •  buscar arquivos..."
                 className="flex-1 bg-transparent text-sm text-[var(--foreground)] placeholder:text-[var(--text-ghost)] outline-none font-mono"
               />
               <kbd className="font-mono text-[9px] text-[var(--text-ghost)] px-1.5 py-0.5 rounded border border-[var(--border)] bg-[var(--surface-2)]">
@@ -240,7 +269,9 @@ export function CommandPalette({ isOpen, onClose, actions, files = [], onOpenFil
                 groupedWithIndex.map((group) => (
                   <div key={group.category} className="mb-1 last:mb-0">
                     <div className="flex items-center gap-1.5 px-4 py-1.5">
-                      <span className="text-[var(--text-ghost)]">{categoryIcons[group.category]}</span>
+                      <span className="text-[var(--text-ghost)]">
+                        {categoryIcons[group.category]}
+                      </span>
                       <span className="font-mono text-[8px] tracking-[0.25em] uppercase text-[var(--text-ghost)]">
                         {categoryLabels[group.category]}
                       </span>
@@ -291,16 +322,22 @@ export function CommandPalette({ isOpen, onClose, actions, files = [], onOpenFil
             {/* Footer hint */}
             <div className="flex items-center gap-4 px-4 h-8 border-t border-[var(--border)] shrink-0">
               <span className="flex items-center gap-1 font-mono text-[9px] text-[var(--text-ghost)]">
-                <kbd className="px-1 py-0.5 rounded border border-[var(--border)] bg-[var(--surface-2)] text-[8px]">↑↓</kbd>
-                {' '}navegar
+                <kbd className="px-1 py-0.5 rounded border border-[var(--border)] bg-[var(--surface-2)] text-[8px]">
+                  ↑↓
+                </kbd>{" "}
+                navegar
               </span>
               <span className="flex items-center gap-1 font-mono text-[9px] text-[var(--text-ghost)]">
-                <kbd className="px-1 py-0.5 rounded border border-[var(--border)] bg-[var(--surface-2)] text-[8px]">↵</kbd>
-                {' '}executar
+                <kbd className="px-1 py-0.5 rounded border border-[var(--border)] bg-[var(--surface-2)] text-[8px]">
+                  ↵
+                </kbd>{" "}
+                executar
               </span>
               <span className="flex items-center gap-1 font-mono text-[9px] text-[var(--text-ghost)]">
-                <kbd className="px-1 py-0.5 rounded border border-[var(--border)] bg-[var(--surface-2)] text-[8px]">ESC</kbd>
-                {' '}fechar
+                <kbd className="px-1 py-0.5 rounded border border-[var(--border)] bg-[var(--surface-2)] text-[8px]">
+                  ESC
+                </kbd>{" "}
+                fechar
               </span>
             </div>
           </motion.div>

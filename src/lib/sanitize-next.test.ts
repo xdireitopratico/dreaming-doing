@@ -9,9 +9,7 @@ describe("sanitizeNext", () => {
 
   it("strips nested auth redirect chains", () => {
     expect(sanitizeNext("/auth?next=/projects")).toBe("/projects");
-    expect(sanitizeNext("/auth?next=/auth?next=/projects/abc")).toBe(
-      "/projects/abc",
-    );
+    expect(sanitizeNext("/auth?next=/auth?next=/projects/abc")).toBe("/projects/abc");
   });
 
   it("allows static and project paths", () => {

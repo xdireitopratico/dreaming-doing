@@ -193,9 +193,10 @@ export function ConsoleLogStream({
   return (
     <div
       className={`mx-3 mb-2 rounded-lg border overflow-hidden transition-all
-        ${hasError
-          ? "border-amber-500/30 bg-amber-500/5"
-          : "border-[var(--forge-border)] bg-[var(--forge-surface-2)]/40"
+        ${
+          hasError
+            ? "border-amber-500/30 bg-amber-500/5"
+            : "border-[var(--forge-border)] bg-[var(--forge-surface-2)]/40"
         }`}
     >
       <button
@@ -211,7 +212,9 @@ export function ConsoleLogStream({
           </span>
           {lastPhase && !expanded && (
             <span className="font-mono text-[10px] text-[var(--forge-silver)] truncate min-w-0 flex items-center gap-1.5">
-              <lastPhase.icon className={`size-3 ${PHASE_META[lastPhase.text.toLowerCase().replace(/\s+/g, "_")]?.color ?? "text-[var(--forge-muted)]"} shrink-0`} />
+              <lastPhase.icon
+                className={`size-3 ${PHASE_META[lastPhase.text.toLowerCase().replace(/\s+/g, "_")]?.color ?? "text-[var(--forge-muted)]"} shrink-0`}
+              />
               <span className="truncate">{lastPhase.text}</span>
             </span>
           )}
@@ -281,9 +284,7 @@ export function ConsoleLogStream({
                       })}
                     </span>
                     <line.icon className={`size-3 shrink-0 mt-0.5 ${colorClass}`} />
-                    <span className="shrink-0 font-medium">
-                      {line.text}
-                    </span>
+                    <span className="shrink-0 font-medium">{line.text}</span>
                     {line.detail && (
                       <span className="text-[var(--forge-muted)] truncate min-w-0">
                         · {line.detail}

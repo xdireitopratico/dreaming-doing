@@ -23,8 +23,8 @@ function Counter({ value, suffix }: { value: number; suffix: string }) {
     value >= 1_000_000
       ? (n / 1_000_000).toFixed(1) + "M"
       : value >= 1000
-      ? Math.floor(n / 1000) + "K"
-      : n;
+        ? Math.floor(n / 1000) + "K"
+        : n;
   return (
     <span ref={ref} className="text-gradient">
       {display}

@@ -17,9 +17,11 @@ export function FinalCTA() {
   const inView = useInView(ref, { amount: 0.4 });
 
   useEffect(() => {
-    const s = (window as unknown as {
-      __forgeScene?: { intensity: number };
-    }).__forgeScene;
+    const s = (
+      window as unknown as {
+        __forgeScene?: { intensity: number };
+      }
+    ).__forgeScene;
     if (s) s.intensity = inView ? 2.2 : 1.0;
   }, [inView]);
 

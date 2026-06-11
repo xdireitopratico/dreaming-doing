@@ -113,7 +113,11 @@ export function normalizeThoughtProse(prose: string): string {
   if (lines.length <= 1) return prose.trim();
   const allShort = lines.every((l) => l.trim().length <= 24);
   if (allShort && lines.length >= 3) {
-    return lines.map((l) => l.trim()).join(" ").replace(/\s{2,}/g, " ").trim();
+    return lines
+      .map((l) => l.trim())
+      .join(" ")
+      .replace(/\s{2,}/g, " ")
+      .trim();
   }
   return prose.trim();
 }
@@ -146,12 +150,7 @@ function flushThought(nodes: JobStreamNode[], endTs: number): void {
   }
 }
 
-function pushTask(
-  nodes: JobStreamNode[],
-  title: string,
-  ts: number,
-  phase?: string,
-): void {
+function pushTask(nodes: JobStreamNode[], title: string, ts: number, phase?: string): void {
   const trimmed = title.trim();
   if (!trimmed) return;
   const last = nodes[nodes.length - 1];
@@ -223,10 +222,7 @@ export function buildJobStreamTree(
       const phase = typeof data.phase === "string" ? data.phase : ev.type;
       const title =
         (data.task_title as string) ??
-        buildPhaseTaskTitle(
-          phase,
-          (data.message as string) ?? undefined,
-        );
+        buildPhaseTaskTitle(phase, (data.message as string) ?? undefined);
       pushTask(nodes, title, ts, phase);
       continue;
     }
@@ -244,8 +240,7 @@ export function buildJobStreamTree(
       const rawPaths = Array.isArray(data.file_paths)
         ? (data.file_paths as string[])
         : extractStepFilePaths(name, args);
-      const expectation =
-        (data.step_intent as string) ?? describeStepExpectation(name, args);
+      const expectation = (data.step_intent as string) ?? describeStepExpectation(name, args);
 
       nodes.push({
         kind: "step",
@@ -286,9 +281,7 @@ export function buildJobStreamTree(
 
     if (ev.type === "step_result") {
       const summary = String(data.summary ?? "Resultado");
-      const evidence = Array.isArray(data.evidence)
-        ? (data.evidence as string[])
-        : [];
+      const evidence = Array.isArray(data.evidence) ? (data.evidence as string[]) : [];
       const ok = data.ok !== false;
       nodes.push({
         kind: "result",
@@ -337,16 +330,12 @@ export function buildJobStreamTree(
     }
 
     if (ev.type === "delivery_checkpoint") {
-      const files = Array.isArray(data.deliveryFiles)
-        ? (data.deliveryFiles as string[])
-        : [];
+      const files = Array.isArray(data.deliveryFiles) ? (data.deliveryFiles as string[]) : [];
       nodes.push({
         kind: "result",
         id: `result-${ts}`,
         ts,
-        summary: files.length
-          ? `Checkpoint · ${files.length} arquivo(s)`
-          : "Checkpoint salvo",
+        summary: files.length ? `Checkpoint · ${files.length} arquivo(s)` : "Checkpoint salvo",
         evidence: files.map(fileBase),
         status: "done",
       });
@@ -363,10 +352,7 @@ export function buildJobStreamTree(
         kind: "result",
         id: `error-${ts}`,
         ts,
-        summary:
-          typeof data.message === "string"
-            ? data.message.slice(0, 120)
-            : "Erro na execução",
+        summary: typeof data.message === "string" ? data.message.slice(0, 120) : "Erro na execução",
         evidence: [],
         status: "failed",
       });

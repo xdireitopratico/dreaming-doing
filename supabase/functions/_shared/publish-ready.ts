@@ -1,13 +1,8 @@
-import {
-  findProjectEntryFile,
-  isSeedPlaceholderAppContent,
-} from "../agent-run/qualify.ts";
+import { findProjectEntryFile, isSeedPlaceholderAppContent } from "../agent-run/qualify.ts";
 
 type StackKind = "web" | "expo" | "android-native" | "mixed" | null;
 
-function detectStackFromFiles(
-  files: Array<{ path: string; content: string }>,
-): StackKind {
+function detectStackFromFiles(files: Array<{ path: string; content: string }>): StackKind {
   const normalized = files.map((f) => f.path.replace(/^\//, "").toLowerCase());
   const hasAndroid = normalized.some(
     (p) => p.includes("build.gradle") || p.includes("app/src/main"),

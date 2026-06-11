@@ -74,7 +74,9 @@ export function mergeExtensionsFromProfile(rawPrefs: unknown): {
   skillIds: string[];
   mcpIds: string[];
 } {
-  const fromProfile = readSlice(parseIntegrationPrefs(rawPrefs) as IntegrationPrefs & AgentExtensionsSlice);
+  const fromProfile = readSlice(
+    parseIntegrationPrefs(rawPrefs) as IntegrationPrefs & AgentExtensionsSlice,
+  );
   const localSkills = loadEnabledSkillIdsLocal();
   const localMcps = loadEnabledMcpIdsLocal();
   const skillIds = fromProfile.skillIds.length ? fromProfile.skillIds : localSkills;

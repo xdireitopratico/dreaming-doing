@@ -11,8 +11,7 @@ export function useLenis() {
     function onScroll() {
       const max = document.documentElement.scrollHeight - window.innerHeight;
       const p = Math.min(1, Math.max(0, window.scrollY / Math.max(1, max)));
-      const scene = (window as unknown as { __forgeScene?: { scroll: number } })
-        .__forgeScene;
+      const scene = (window as unknown as { __forgeScene?: { scroll: number } }).__forgeScene;
       if (scene) scene.scroll = p * 1.4;
     }
     window.addEventListener("scroll", onScroll, { passive: true });

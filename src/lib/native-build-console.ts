@@ -15,9 +15,7 @@ export function isNativeProjectPath(path: string): boolean {
   return NATIVE_PATH_RE.test(normalized);
 }
 
-export function collectNativeProjectFiles(
-  files: Array<{ path: string }>,
-): string[] {
+export function collectNativeProjectFiles(files: Array<{ path: string }>): string[] {
   return files
     .map((f) => f.path.replace(/^\//, ""))
     .filter(isNativeProjectPath)

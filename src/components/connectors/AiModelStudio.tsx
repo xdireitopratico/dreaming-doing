@@ -81,10 +81,7 @@ const MODES: { id: ModelPowerMode; title: string; hint: string }[] = [
   },
 ];
 
-const MODE_GUIDE: Record<
-  ModelPowerMode,
-  { title: string; body: string; action: string }
-> = {
+const MODE_GUIDE: Record<ModelPowerMode, { title: string; body: string; action: string }> = {
   auto: {
     title: "Modo automático",
     body: "Marque um ou mais cards (○ vira ●). Pode marcar modelos de OpenAI, Anthropic, Groq, etc. no mesmo modo. Se não marcar nenhum, o agente usa todas as chaves que você cadastrou em API.",
@@ -150,12 +147,7 @@ function ModelCard({
           <X className="size-3.5" />
         </button>
       )}
-      <button
-        type="button"
-        disabled={disabled}
-        onClick={onClick}
-        className="w-full text-left pr-6"
-      >
+      <button type="button" disabled={disabled} onClick={onClick} className="w-full text-left pr-6">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
             <div
@@ -229,8 +221,7 @@ export function AiModelStudio({ connectorRows, keysSectionHref = "/api" }: AiMod
 
   const hidden = new Set(prefs.hiddenPresetIds ?? []);
   const envModels = useMemo(
-    () =>
-      modelsForStudioStep(selectedEnv, prefs.mode, userModels).filter((m) => !hidden.has(m.id)),
+    () => modelsForStudioStep(selectedEnv, prefs.mode, userModels).filter((m) => !hidden.has(m.id)),
     [selectedEnv, hidden, prefs.mode, userModels],
   );
   const connectedCount = AI_ENVS_SORTED.filter((e) => connected[e]).length;
@@ -246,8 +237,7 @@ export function AiModelStudio({ connectorRows, keysSectionHref = "/api" }: AiMod
   const sttReady = connected[sttNeeds];
 
   const hidePreset = (presetId: string) => {
-    const activeId =
-      prefs.mode === "robin" ? prefs.robinPoolModelId : prefs.fixedPresetId;
+    const activeId = prefs.mode === "robin" ? prefs.robinPoolModelId : prefs.fixedPresetId;
     if (normalizePresetId(activeId) === normalizePresetId(presetId)) {
       toast.error("Este modelo está ativo — troque antes de ocultar.");
       return;
@@ -310,7 +300,9 @@ export function AiModelStudio({ connectorRows, keysSectionHref = "/api" }: AiMod
     }
     if (prefs.mode === "robin") {
       if (!robinCanSelect(preset)) {
-        toast.error("ROBIN só seleciona modelos Groq ou NVIDIA. Use Automático ou Fixo para este provedor.");
+        toast.error(
+          "ROBIN só seleciona modelos Groq ou NVIDIA. Use Automático ou Fixo para este provedor.",
+        );
         return;
       }
       patch({
@@ -403,9 +395,10 @@ export function AiModelStudio({ connectorRows, keysSectionHref = "/api" }: AiMod
           </h2>
           <p className="mt-1 font-mono text-[10px] text-[var(--text-dim)] max-w-2xl leading-relaxed">
             Escolha o <strong className="text-[var(--foreground)]/90">modo</strong>, depois o{" "}
-            <strong className="text-[var(--foreground)]/90">provedor</strong> (OpenAI, NVIDIA, OpenRouter…),
-            depois <strong className="text-[var(--foreground)]/90">qual modelo</strong> — inclusive IDs que você
-            colar. Nada some ao trocar de modo: só muda o que você pode clicar.
+            <strong className="text-[var(--foreground)]/90">provedor</strong> (OpenAI, NVIDIA,
+            OpenRouter…), depois{" "}
+            <strong className="text-[var(--foreground)]/90">qual modelo</strong> — inclusive IDs que
+            você colar. Nada some ao trocar de modo: só muda o que você pode clicar.
           </p>
         </div>
         <div className="flex items-center gap-2 rounded-lg border border-[var(--border)] px-3 py-2">
@@ -444,7 +437,9 @@ export function AiModelStudio({ connectorRows, keysSectionHref = "/api" }: AiMod
         </div>
 
         <div className="mt-4 rounded-lg border border-[var(--primary)]/20 bg-[var(--primary)]/8 px-3 py-3">
-          <p className="font-mono text-[10px] font-medium text-[var(--primary)]">{modeGuide.title}</p>
+          <p className="font-mono text-[10px] font-medium text-[var(--primary)]">
+            {modeGuide.title}
+          </p>
           <p className="mt-1 font-mono text-[10px] text-[var(--text-dim)] leading-relaxed">
             {modeGuide.body}
           </p>
@@ -502,7 +497,9 @@ export function AiModelStudio({ connectorRows, keysSectionHref = "/api" }: AiMod
               >
                 <span
                   className={`grid size-9 place-items-center rounded-lg border ${
-                    active ? "border-[var(--primary)]/40 text-[var(--primary)]" : "border-[var(--border)]"
+                    active
+                      ? "border-[var(--primary)]/40 text-[var(--primary)]"
+                      : "border-[var(--border)]"
                   }`}
                 >
                   {ENV_ICONS[env]}
@@ -589,8 +586,9 @@ export function AiModelStudio({ connectorRows, keysSectionHref = "/api" }: AiMod
 
         <div className="mb-4 rounded-lg border border-[var(--border)] bg-[var(--surface-2)]/50 p-3">
           <p className="font-mono text-[10px] text-[var(--text-dim)] mb-2 leading-relaxed">
-            Adicione um modelo deste provedor — ele vira <strong className="text-[var(--foreground)]/90">card na grade</strong>,
-            igual aos do catálogo. No OpenRouter, cole o slug completo (ex.{" "}
+            Adicione um modelo deste provedor — ele vira{" "}
+            <strong className="text-[var(--foreground)]/90">card na grade</strong>, igual aos do
+            catálogo. No OpenRouter, cole o slug completo (ex.{" "}
             <code className="text-[var(--primary)]">zhipu/glm-5</code>).
           </p>
           <div className="flex flex-wrap gap-2">
@@ -624,14 +622,16 @@ export function AiModelStudio({ connectorRows, keysSectionHref = "/api" }: AiMod
           </div>
           {customCount > 0 && (
             <p className="mt-2 font-mono text-[9px] text-[var(--text-ghost)]">
-              {customCount} modelo(s) seu(s) neste provedor — cards com etiqueta &quot;seu modelo&quot;
+              {customCount} modelo(s) seu(s) neste provedor — cards com etiqueta &quot;seu
+              modelo&quot;
             </p>
           )}
         </div>
 
         {envModels.length === 0 ? (
           <p className="font-mono text-[10px] text-[var(--text-dim)] rounded-lg border border-dashed border-[var(--border)] p-4 leading-relaxed">
-            Nenhum atalho pré-carregado neste provedor. Use o campo acima para adicionar o primeiro card.
+            Nenhum atalho pré-carregado neste provedor. Use o campo acima para adicionar o primeiro
+            card.
             {selectedEnv === "openrouter" &&
               " No OpenRouter quase tudo é por slug — cada um vira um card selecionável."}
           </p>
@@ -658,11 +658,7 @@ export function AiModelStudio({ connectorRows, keysSectionHref = "/api" }: AiMod
                   multi={prefs.mode === "auto"}
                   onClick={() => selectModel(m.id)}
                   onRemove={isCustom ? () => removeUserModel(m.openRouterSlug) : undefined}
-                  onHide={
-                    isCustom
-                      ? undefined
-                      : () => hidePreset(m.id)
-                  }
+                  onHide={isCustom ? undefined : () => hidePreset(m.id)}
                 />
               );
             })}
@@ -670,16 +666,16 @@ export function AiModelStudio({ connectorRows, keysSectionHref = "/api" }: AiMod
         )}
 
         <p className="mt-2 font-mono text-[9px] text-[var(--text-ghost)] leading-relaxed">
-          Ordem: mais capaz → mais econômico. Cards sem chave em API ficam acinzentados. No ROBIN, só Groq e
-          NVIDIA são clicáveis; os outros provedores continuam visíveis para você comparar.
+          Ordem: mais capaz → mais econômico. Cards sem chave em API ficam acinzentados. No ROBIN,
+          só Groq e NVIDIA são clicáveis; os outros provedores continuam visíveis para você
+          comparar.
         </p>
       </div>
 
       {/* STT */}
       <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)]/30 p-4">
         <label className="flex items-center gap-2 font-mono text-[9px] uppercase tracking-wider text-[var(--text-dim)] mb-1">
-          <Mic className="size-3" />
-          4 · Voz (microfone)
+          <Mic className="size-3" />4 · Voz (microfone)
         </label>
         <p className="font-mono text-[9px] text-[var(--text-ghost)] mb-3">
           Independente do modelo de texto — só quem transcreve áudio.

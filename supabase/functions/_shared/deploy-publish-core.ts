@@ -61,7 +61,8 @@ export async function executeDeployPublish(
     if (!previewUrl) {
       return {
         ok: false,
-        error: "Sem preview ativo — inicie o preview E2B ou conecte Vercel/Netlify/Cloudflare em Conectores.",
+        error:
+          "Sem preview ativo — inicie o preview E2B ou conecte Vercel/Netlify/Cloudflare em Conectores.",
         provider,
         needsPreview: true,
       };
@@ -97,7 +98,8 @@ export async function executeDeployPublish(
   if (bundle.files.length === 0) {
     return {
       ok: false,
-      error: "Projeto sem arquivos publicáveis — execute o build (dist/) ou adicione arquivos estáticos.",
+      error:
+        "Projeto sem arquivos publicáveis — execute o build (dist/) ou adicione arquivos estáticos.",
       provider,
     };
   }

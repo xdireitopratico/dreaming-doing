@@ -7,15 +7,7 @@ type InspectorChangesProps = {
   progress: AgentProgress;
 };
 
-function DiffBlock({
-  path,
-  before,
-  after,
-}: {
-  path: string;
-  before: string;
-  after: string;
-}) {
+function DiffBlock({ path, before, after }: { path: string; before: string; after: string }) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -25,7 +17,9 @@ function DiffBlock({
         className="forge-inspector-diff-toggle"
         onClick={() => setOpen((v) => !v)}
       >
-        <ChevronDown className={cn("size-3.5 shrink-0 transition-transform", open && "rotate-180")} />
+        <ChevronDown
+          className={cn("size-3.5 shrink-0 transition-transform", open && "rotate-180")}
+        />
         <span className="forge-inspector-diff-path">{path}</span>
       </button>
       {open && (
@@ -50,7 +44,8 @@ export function InspectorChanges({ progress }: InspectorChangesProps) {
   return (
     <div className="forge-inspector-changes" data-testid="inspector-changes">
       <p className="forge-inspector-section-label">
-        {diffs.length} arquivo{diffs.length !== 1 ? "s" : ""} alterado{diffs.length !== 1 ? "s" : ""}
+        {diffs.length} arquivo{diffs.length !== 1 ? "s" : ""} alterado
+        {diffs.length !== 1 ? "s" : ""}
       </p>
 
       {delivered.length > 0 && (

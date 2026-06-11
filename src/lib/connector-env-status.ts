@@ -31,9 +31,7 @@ function openAiProvider(row: ConnectorRow): string {
 }
 
 /** Quais ambientes LLM têm chave salva (connectors_public). */
-export function connectedEnvsFromRows(
-  rows: ConnectorRow[] | undefined,
-): Record<AiEnvId, boolean> {
+export function connectedEnvsFromRows(rows: ConnectorRow[] | undefined): Record<AiEnvId, boolean> {
   const out: Record<AiEnvId, boolean> = {
     alibaba: false,
     anthropic: false,
@@ -63,10 +61,7 @@ export function connectedEnvsFromRows(
   return out;
 }
 
-export function isEnvConnected(
-  env: AiEnvId,
-  connected: Record<AiEnvId, boolean>,
-): boolean {
+export function isEnvConnected(env: AiEnvId, connected: Record<AiEnvId, boolean>): boolean {
   return connected[env] === true;
 }
 

@@ -39,9 +39,7 @@ function messagesToResponsesPayload(messages: ChatMessage[]): {
 
   for (const m of messages) {
     if (m.role === "system") {
-      const text = typeof m.content === "string"
-        ? m.content
-        : JSON.stringify(m.content ?? "");
+      const text = typeof m.content === "string" ? m.content : JSON.stringify(m.content ?? "");
       if (text) systemParts.push(text);
       continue;
     }
@@ -70,9 +68,7 @@ function messagesToResponsesPayload(messages: ChatMessage[]): {
     }
 
     if (m.role === "tool" && m.tool_call_id) {
-      const out = typeof m.content === "string"
-        ? m.content
-        : JSON.stringify(m.content ?? "");
+      const out = typeof m.content === "string" ? m.content : JSON.stringify(m.content ?? "");
       input.push({
         type: "function_call_output",
         call_id: m.tool_call_id,
@@ -177,7 +173,7 @@ export async function chatOpenAiResponses(
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "Authorization": `Bearer ${apiKey}`,
+      Authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify(body),
   });
@@ -187,7 +183,7 @@ export async function chatOpenAiResponses(
     throw new Error(formatLlmApiError(baseUrl, resp.status, err));
   }
 
-  const data = await resp.json() as Record<string, unknown>;
+  const data = (await resp.json()) as Record<string, unknown>;
   return parseResponsesOutput(data);
 }
 

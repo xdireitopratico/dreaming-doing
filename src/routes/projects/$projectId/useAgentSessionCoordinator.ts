@@ -24,10 +24,7 @@ type UseAgentSessionCoordinatorParams = {
   agent: AgentRun;
   running: boolean;
   tasteQuota: TasteQuota;
-  runAgent: (
-    explicitKind?: ForgeSessionKind,
-    explicitAction?: TasteAction,
-  ) => Promise<boolean>;
+  runAgent: (explicitKind?: ForgeSessionKind, explicitAction?: TasteAction) => Promise<boolean>;
 };
 
 /** Runs que podem receber watch/reconnect com stream. */

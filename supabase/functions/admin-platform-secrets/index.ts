@@ -27,10 +27,9 @@ function json(body: unknown, status = 200) {
 }
 
 async function ensureAdminRole(admin: ReturnType<typeof createClient>, userId: string) {
-  await admin.from("user_roles").upsert(
-    { user_id: userId, role: "admin" },
-    { onConflict: "user_id,role" },
-  );
+  await admin
+    .from("user_roles")
+    .upsert({ user_id: userId, role: "admin" }, { onConflict: "user_id,role" });
 }
 
 Deno.serve(async (req) => {

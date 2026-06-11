@@ -102,9 +102,7 @@ describe("agent-job-stream tree", () => {
   });
 
   it("deriveCardView momentum reflete último passo ativo", () => {
-    const timeline: SSEEvent[] = [
-      ev("tool_start", { name: "fs_read", args: { path: "a.ts" } }, 1),
-    ];
+    const timeline: SSEEvent[] = [ev("tool_start", { name: "fs_read", args: { path: "a.ts" } }, 1)];
     const nodes = buildJobStreamTree(timeline, { running: true });
     const view = deriveCardView(
       nodes,

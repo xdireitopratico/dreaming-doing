@@ -49,19 +49,35 @@ export function TestimonialCarousel({ testimonials, className, title }: Testimon
               <div className="flex items-center justify-between gap-4">
                 <div className="flex items-center gap-4">
                   <Avatar>
-                    {current.avatarUrl && <AvatarImage src={current.avatarUrl} alt={current.author} />}
-                    <AvatarFallback>{current.avatarFallback ?? current.author.slice(0, 2).toUpperCase()}</AvatarFallback>
+                    {current.avatarUrl && (
+                      <AvatarImage src={current.avatarUrl} alt={current.author} />
+                    )}
+                    <AvatarFallback>
+                      {current.avatarFallback ?? current.author.slice(0, 2).toUpperCase()}
+                    </AvatarFallback>
                   </Avatar>
                   <div>
                     <p className="font-medium text-foreground">{current.author}</p>
-                    {current.role && <p className="text-sm text-muted-foreground">{current.role}</p>}
+                    {current.role && (
+                      <p className="text-sm text-muted-foreground">{current.role}</p>
+                    )}
                   </div>
                 </div>
                 <div className="flex gap-2">
-                  <Button variant="outline" size="icon" onClick={prev} aria-label="Depoimento anterior">
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={prev}
+                    aria-label="Depoimento anterior"
+                  >
                     <ChevronLeft className="h-4 w-4" />
                   </Button>
-                  <Button variant="outline" size="icon" onClick={next} aria-label="Próximo depoimento">
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={next}
+                    aria-label="Próximo depoimento"
+                  >
                     <ChevronRight className="h-4 w-4" />
                   </Button>
                 </div>

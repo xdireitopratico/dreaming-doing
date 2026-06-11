@@ -5,13 +5,15 @@ import { seedForStack } from "@/lib/seeds";
 import { inferStackFromPrompt, type ProjectStackId } from "@/lib/stack-router";
 
 function slugify(input: string) {
-  return input
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 40) || "projeto";
+  return (
+    input
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 40) || "projeto"
+  );
 }
 
 function nameFromPrompt(p: string) {
@@ -81,10 +83,7 @@ export const createProjectFromPrompt = createServerFn({ method: "POST" })
     const { supabase, userId } = context;
 
     const promptText =
-      data.prompt?.trim() ||
-      data.firstPrompt?.trim() ||
-      data.description?.trim() ||
-      "";
+      data.prompt?.trim() || data.firstPrompt?.trim() || data.description?.trim() || "";
     const projectName = data.name?.trim() || nameFromPrompt(promptText);
     const slug = `${slugify(projectName)}-${Math.random().toString(36).slice(2, 7)}`;
     const stack =
@@ -145,9 +144,7 @@ export const createProjectFromPrompt = createServerFn({ method: "POST" })
 
 export const deleteProject = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: unknown) =>
-    z.object({ projectId: z.string().uuid() }).parse(input),
-  )
+  .inputValidator((input: unknown) => z.object({ projectId: z.string().uuid() }).parse(input))
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
 

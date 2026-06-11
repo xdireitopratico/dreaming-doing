@@ -61,10 +61,7 @@ export interface TransitionResult {
 const MAX_FIX_RETRIES = 3;
 const AWAITING_PLAN_TIMEOUT_MS = 24 * 60 * 60 * 1000; // 24h
 
-function mkState(
-  name: AgentStateName,
-  overrides: Partial<AgentStateData> = {},
-): AgentStateData {
+function mkState(name: AgentStateName, overrides: Partial<AgentStateData> = {}): AgentStateData {
   return {
     name,
     since: Date.now(),
@@ -181,9 +178,7 @@ export const transitions: Record<
     }
     if (e.type === "build_failed") {
       return mkState("fixing", {
-        errors: Array.isArray(e.data)
-          ? e.data as string[]
-          : [String(e.data ?? "build failed")],
+        errors: Array.isArray(e.data) ? (e.data as string[]) : [String(e.data ?? "build failed")],
         attempt: 0,
         plan: s.plan,
         stepIndex: s.stepIndex,
@@ -226,9 +221,7 @@ export const transitions: Record<
       return {
         ...s,
         attempt,
-        errors: Array.isArray(e.data)
-          ? e.data as string[]
-          : [String(e.data ?? "build error")],
+        errors: Array.isArray(e.data) ? (e.data as string[]) : [String(e.data ?? "build error")],
       };
     }
     return s;
@@ -252,10 +245,7 @@ export const transitions: Record<
 };
 
 /** Valida e aplica uma transição. Retorna o novo estado ou erro. */
-export function applyTransition(
-  state: AgentStateData,
-  event: AgentEvent,
-): TransitionResult {
+export function applyTransition(state: AgentStateData, event: AgentEvent): TransitionResult {
   const handler = transitions[state.name];
   if (!handler) {
     return {

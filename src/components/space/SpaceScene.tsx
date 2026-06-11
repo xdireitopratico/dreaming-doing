@@ -21,7 +21,7 @@ export function SpaceScene() {
       55,
       window.innerWidth / window.innerHeight,
       0.1,
-      2000
+      2000,
     );
     camera.position.z = 12;
 
@@ -97,7 +97,7 @@ export function SpaceScene() {
             gl_FragColor = vec4(col * alpha * 2.0, alpha);
           }
         `,
-      })
+      }),
     );
     nebula.frustumCulled = false;
     nebula.renderOrder = -10;
@@ -274,7 +274,7 @@ export function SpaceScene() {
             gl_FragColor = vec4(col, 1.0);
           }
         `,
-      })
+      }),
     );
     planetGroup.add(planet);
 
@@ -299,7 +299,7 @@ export function SpaceScene() {
             gl_FragColor = vec4(c, i * 0.35);
           }
         `,
-      })
+      }),
     );
     planetGroup.add(halo);
 
@@ -328,7 +328,7 @@ export function SpaceScene() {
             gl_FragColor = vec4(col, a * 0.6);
           }
         `,
-      })
+      }),
     );
     sunGlow.position.set(-14, 8, -18);
     sunGlow.renderOrder = -5;
@@ -356,13 +356,9 @@ export function SpaceScene() {
       const head = new THREE.Vector3(
         (Math.random() - 0.5) * 40 - 25,
         Math.random() * 20 - 5,
-        -Math.random() * 10
+        -Math.random() * 10,
       );
-      const vel = new THREE.Vector3(
-        0.25 + Math.random() * 0.2,
-        -0.05 - Math.random() * 0.1,
-        0
-      );
+      const vel = new THREE.Vector3(0.25 + Math.random() * 0.2, -0.05 - Math.random() * 0.1, 0);
       const trailLen = grand ? 240 : 80;
       const positions = new Float32Array(trailLen * 3);
       const geo = new THREE.BufferGeometry();
@@ -434,7 +430,7 @@ export function SpaceScene() {
       planetUniforms.uTime.value = t;
       const planetTargetScale = Math.max(0.35, 1.0 - warp * 0.7);
       planetGroup.scale.setScalar(
-        THREE.MathUtils.lerp(planetGroup.scale.x, planetTargetScale, 0.05)
+        THREE.MathUtils.lerp(planetGroup.scale.x, planetTargetScale, 0.05),
       );
       planetGroup.position.x = 7 + warp * 2;
       planetGroup.position.y = -4 - warp * 1.5;
@@ -495,11 +491,5 @@ export function SpaceScene() {
     };
   }, []);
 
-  return (
-    <div
-      ref={mountRef}
-      className="fixed inset-0 z-0 pointer-events-none"
-      aria-hidden
-    />
-  );
+  return <div ref={mountRef} className="fixed inset-0 z-0 pointer-events-none" aria-hidden />;
 }

@@ -20,6 +20,34 @@ export function resolvePendingPlan(
   return live ?? findPendingPlanFromMessages(messages);
 }
 
+/**
+ * true só se tem plano PENDENTE que o usuário PRECISA aprovar/rejeitar AGORA
+ * para o chat continuar fluido.
+ * Planos antigos ou já processados não bloqueiam o input.
+ */
+export function needsPlanApprovalNow(
+  live: PendingPlan | null | undefined,
+  messages: ChatMessage[],
+): boolean {
+  const plan = resolvePendingPlan(live, messages);
+  if (!plan) return false;
+  // Se veio do live do agente atual, é "aguardando agora"
+  if (live) return true;
+  // Do histórico: só se o último status for pending (não aprovado ainda)
+  const stored = findStoredPlanForPlan(plan, messages);
+  return stored?.status === "pending";
+}
+
+function findStoredPlanForPlan(plan: PendingPlan, messages: ChatMessage[]) {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const m = messages[i];
+    if (m.role !== "assistant") continue;
+    const s = storedPlanFromMessage(m);
+    if (s && s.plan.planId === plan.planId) return s;
+  }
+  return null;
+}
+
 export type ResolveJobPlanOptions = {
   livePlan?: PendingPlan | null;
   progressPlan?: PendingPlan | null;
@@ -47,8 +75,7 @@ export function resolveJobPlanForRun(
     if (msg?.role !== "user") continue;
     const meta = msg.meta as Record<string, unknown> | undefined;
     if (meta?.buildRunId !== runId) continue;
-    const planSourceRunId =
-      typeof meta.planSourceRunId === "string" ? meta.planSourceRunId : null;
+    const planSourceRunId = typeof meta.planSourceRunId === "string" ? meta.planSourceRunId : null;
     const planId = typeof meta.planId === "string" ? meta.planId : null;
     if (!planSourceRunId) continue;
 

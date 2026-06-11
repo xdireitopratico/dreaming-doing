@@ -103,7 +103,11 @@ export function PromptEngine({
 
     const { data: sess } = await supabase.auth.getSession();
     if (!sess.session) {
-      try { sessionStorage.setItem("forge.initialPrompt", v); } catch { /* ignore */ }
+      try {
+        sessionStorage.setItem("forge.initialPrompt", v);
+      } catch {
+        /* ignore */
+      }
       navigate({ to: "/auth", search: { next: sanitizeNext("/") } });
       return;
     }
@@ -135,7 +139,10 @@ export function PromptEngine({
       className={`w-full ${hero ? "max-w-2xl mx-auto" : ""}`}
     >
       <form
-        onSubmit={(e) => { e.preventDefault(); submit(); }}
+        onSubmit={(e) => {
+          e.preventDefault();
+          submit();
+        }}
         className="prompt-card p-4 md:p-5"
       >
         <textarea
@@ -168,7 +175,14 @@ export function PromptEngine({
               {model}
             </button>
             <span className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-[11px] font-mono tracking-[0.15em] uppercase text-[var(--text-ghost)]">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <svg
+                width="12"
+                height="12"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+              >
                 <circle cx="12" cy="12" r="10" />
                 <path d="M2 12h20M12 2a15 15 0 0 1 0 20M12 2a15 15 0 0 0 0 20" />
               </svg>
@@ -189,7 +203,16 @@ export function PromptEngine({
               aria-label={needsAuth ? "Entrar para construir" : "Enviar"}
               title={needsAuth ? "Entrar para construir" : undefined}
             >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.4"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
                 <path d="M12 19V5M5 12l7-7 7 7" />
               </svg>
             </button>

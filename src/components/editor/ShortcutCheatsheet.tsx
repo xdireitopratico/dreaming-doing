@@ -122,10 +122,7 @@ export function ShortcutCheatsheet({ isOpen, onClose }: ShortcutCheatsheetProps)
                     </h3>
                     <div className="space-y-1">
                       {items.map((item) => (
-                        <div
-                          key={item.label}
-                          className="flex items-center justify-between py-1"
-                        >
+                        <div key={item.label} className="flex items-center justify-between py-1">
                           <span className="font-mono text-[11px] text-[var(--text-dim)]">
                             {item.label}
                           </span>

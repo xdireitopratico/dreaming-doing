@@ -96,7 +96,10 @@ function AuthPage() {
 
   if (loading) {
     return (
-      <div className="auth-workspace grid place-items-center" style={{ gridTemplateColumns: "1fr" }}>
+      <div
+        className="auth-workspace grid place-items-center"
+        style={{ gridTemplateColumns: "1fr" }}
+      >
         <Loader2 className="size-6 animate-spin text-[var(--forge-primary)]" />
       </div>
     );
@@ -120,8 +123,8 @@ function AuthPage() {
           <div className="auth-visual-eyebrow">FORGE · beta</div>
           <h2 className="auth-visual-title">Make Your Dream.</h2>
           <p className="auth-visual-sub">
-            Construa apps web com IA: descreva a ideia, veja o preview ao vivo e publique quando estiver
-            pronto — com a infraestrutura FORGE ou com as suas próprias contas.
+            Construa apps web com IA: descreva a ideia, veja o preview ao vivo e publique quando
+            estiver pronto — com a infraestrutura FORGE ou com as suas próprias contas.
           </p>
         </div>
 

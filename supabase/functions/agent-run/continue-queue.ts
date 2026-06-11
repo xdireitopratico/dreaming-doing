@@ -3,10 +3,7 @@
  */
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { appendStreamEvent } from "../_shared/agent-stream.ts";
-import {
-  evaluateQueueDrain,
-  popOldestPendingMessage,
-} from "../_shared/agent-pending-queue.ts";
+import { evaluateQueueDrain, popOldestPendingMessage } from "../_shared/agent-pending-queue.ts";
 import { loadUserLlmContext, resolveAgentProvider } from "./run-setup.ts";
 import type { AgentPreferencesPayload } from "./connector-keys.ts";
 
@@ -31,12 +28,7 @@ export async function handleContinueQueue(
 ): Promise<ContinueQueueResult> {
   const { projectId, conversationId, userId } = input;
 
-  const decision = await evaluateQueueDrain(
-    supabase,
-    projectId,
-    conversationId,
-    userId,
-  );
+  const decision = await evaluateQueueDrain(supabase, projectId, conversationId, userId);
 
   if (!decision.shouldContinue) {
     return {
@@ -45,45 +37,34 @@ export async function handleContinueQueue(
       reason: decision.blockingRunId
         ? `blocking_run:${decision.blockingRunId}`
         : decision.pendingCount === 0 && !decision.needsResponse
-        ? "nothing_pending"
-        : "blocked",
+          ? "nothing_pending"
+          : "blocked",
     };
   }
 
-  const pendingBody = await popOldestPendingMessage(
-    supabase,
-    projectId,
-    userId,
-  );
-  const preferences = (pendingBody?.preferences ?? null) as
-    | AgentPreferencesPayload
-    | null;
-  const pendingSessionKind = typeof pendingBody?.sessionKind === "string"
-    ? pendingBody.sessionKind
-    : null;
+  const pendingBody = await popOldestPendingMessage(supabase, projectId, userId);
+  const preferences = (pendingBody?.preferences ?? null) as AgentPreferencesPayload | null;
+  const pendingSessionKind =
+    typeof pendingBody?.sessionKind === "string" ? pendingBody.sessionKind : null;
 
   // PR3: prefer send-time mode captured at onSend (stored in pendingBody at enqueue time, or user msg meta)
   // over the drain/continue call input (which may come from prior run's planMode or current composer).
   // Fall back to input only if absent (keeps legacy queues as "build").
-  const storedMode = typeof (pendingBody as any)?.mode === "string"
-    ? String((pendingBody as any).mode).toLowerCase()
-    : null;
-  const planMode = storedMode === "plan"
-    ? true
-    : storedMode === "build" || storedMode === "chat"
-    ? false
-    : input.planMode === true;
+  const storedMode =
+    typeof (pendingBody as any)?.mode === "string"
+      ? String((pendingBody as any).mode).toLowerCase()
+      : null;
+  const planMode =
+    storedMode === "plan"
+      ? true
+      : storedMode === "build" || storedMode === "chat"
+        ? false
+        : input.planMode === true;
 
-  const { hasUserLlmKey, userOnlyKeys } = await loadUserLlmContext(
-    supabase,
-    userId,
-    preferences,
-  );
+  const { hasUserLlmKey, userOnlyKeys } = await loadUserLlmContext(supabase, userId, preferences);
   const sessionKind = hasUserLlmKey ? "byok" : "taste_chat";
   const providerSessionKind =
-    pendingSessionKind === "taste_start" || sessionKind === "taste_start"
-      ? "taste_start"
-      : "byok";
+    pendingSessionKind === "taste_start" || sessionKind === "taste_start" ? "taste_start" : "byok";
 
   if (sessionKind === "taste_chat") {
     const { data: profile } = await supabase
@@ -91,11 +72,12 @@ export async function handleContinueQueue(
       .select("taste_chat_remaining, trial_messages_remaining")
       .eq("id", userId)
       .maybeSingle();
-    const remaining = typeof profile?.taste_chat_remaining === "number"
-      ? profile.taste_chat_remaining
-      : typeof profile?.trial_messages_remaining === "number"
-      ? profile.trial_messages_remaining
-      : 50;
+    const remaining =
+      typeof profile?.taste_chat_remaining === "number"
+        ? profile.taste_chat_remaining
+        : typeof profile?.trial_messages_remaining === "number"
+          ? profile.trial_messages_remaining
+          : 50;
     if (remaining <= 0) {
       return {
         continued: false,
@@ -105,14 +87,11 @@ export async function handleContinueQueue(
     }
   }
 
-  const { data: lockedId, error: lockErr } = await supabase.rpc(
-    "acquire_agent_run_lock",
-    {
-      p_project_id: projectId,
-      p_conversation_id: conversationId,
-      p_user_id: userId,
-    },
-  );
+  const { data: lockedId, error: lockErr } = await supabase.rpc("acquire_agent_run_lock", {
+    p_project_id: projectId,
+    p_conversation_id: conversationId,
+    p_user_id: userId,
+  });
 
   if (lockErr || !lockedId) {
     return {
@@ -158,9 +137,7 @@ export async function handleContinueQueue(
     return { continued: false, reason: "provider_setup_failed" };
   }
 
-  const eventName: InngestEventName = planMode
-    ? "agent/plan.requested"
-    : "agent/build.requested";
+  const eventName: InngestEventName = planMode ? "agent/plan.requested" : "agent/build.requested";
   const eventPayload = {
     runId: agentRunId,
     projectId,
@@ -174,11 +151,7 @@ export async function handleContinueQueue(
 
   // Reuse single hardened send helper from index.ts (owns INNGEST_EVENT_KEY check + loud fail)
   const { sendInngestEvent } = await import("./index.ts");
-  const eventResult = await sendInngestEvent(
-    eventName,
-    eventPayload,
-    inngestEventKey,
-  );
+  const eventResult = await sendInngestEvent(eventName, eventPayload, inngestEventKey);
   if (!eventResult.ok) {
     await supabase
       .from("agent_runs")
@@ -210,12 +183,7 @@ export async function handleContinueQueue(
     eventId: eventResult.ids?.[0] ?? null,
   });
 
-  const remaining = await evaluateQueueDrain(
-    supabase,
-    projectId,
-    conversationId,
-    userId,
-  );
+  const remaining = await evaluateQueueDrain(supabase, projectId, conversationId, userId);
 
   return {
     continued: true,

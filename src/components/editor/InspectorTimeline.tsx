@@ -47,11 +47,7 @@ export function InspectorTimeline({
     <div ref={scrollRef} className="forge-inspector-timeline" data-testid="inspector-timeline">
       {latencyThinking && (
         <div className="forge-inspector-latency-thinking" data-testid="inspector-latency-thinking">
-          <ForgeThinking
-            variant="latency"
-            startedAtMs={latencyThinking.startedAtMs}
-            active
-          />
+          <ForgeThinking variant="latency" startedAtMs={latencyThinking.startedAtMs} active />
         </div>
       )}
       {items.map((item) => (

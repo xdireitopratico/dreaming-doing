@@ -13,17 +13,20 @@ export function useLocalStorage<T>(key: string, initialValue: T) {
     }
   });
 
-  const setValue = useCallback((value: T | ((val: T) => T)) => {
-    try {
-      const valueToStore = value instanceof Function ? value(storedValue) : value;
-      setStoredValue(valueToStore);
-      if (typeof window !== "undefined") {
-        window.localStorage.setItem(key, JSON.stringify(valueToStore));
+  const setValue = useCallback(
+    (value: T | ((val: T) => T)) => {
+      try {
+        const valueToStore = value instanceof Function ? value(storedValue) : value;
+        setStoredValue(valueToStore);
+        if (typeof window !== "undefined") {
+          window.localStorage.setItem(key, JSON.stringify(valueToStore));
+        }
+      } catch (error) {
+        console.error(`Error setting localStorage key "${key}":`, error);
       }
-    } catch (error) {
-      console.error(`Error setting localStorage key "${key}":`, error);
-    }
-  }, [key, storedValue]);
+    },
+    [key, storedValue],
+  );
 
   return [storedValue, setValue] as const;
 }
@@ -66,12 +69,15 @@ export function useThrottle<T>(value: T, limit: number) {
   const lastRan = useRef(Date.now());
 
   useEffect(() => {
-    const handler = setTimeout(() => {
-      if (Date.now() - lastRan.current >= limit) {
-        setThrottledValue(value);
-        lastRan.current = Date.now();
-      }
-    }, limit - (Date.now() - lastRan.current));
+    const handler = setTimeout(
+      () => {
+        if (Date.now() - lastRan.current >= limit) {
+          setThrottledValue(value);
+          lastRan.current = Date.now();
+        }
+      },
+      limit - (Date.now() - lastRan.current),
+    );
 
     return () => clearTimeout(handler);
   }, [value, limit]);
@@ -143,7 +149,9 @@ export function useKeyPress(targetKey: string, handler: (event: KeyboardEvent) =
 
 export function useInterval(callback: () => void, delay: number | null) {
   const savedCallback = useRef(callback);
-  useEffect(() => { savedCallback.current = callback; }, [callback]);
+  useEffect(() => {
+    savedCallback.current = callback;
+  }, [callback]);
   useEffect(() => {
     if (delay === null) return;
     const id = setInterval(() => savedCallback.current(), delay);
@@ -153,7 +161,9 @@ export function useInterval(callback: () => void, delay: number | null) {
 
 export function useTimeout(callback: () => void, delay: number | null) {
   const savedCallback = useRef(callback);
-  useEffect(() => { savedCallback.current = callback; }, [callback]);
+  useEffect(() => {
+    savedCallback.current = callback;
+  }, [callback]);
   useEffect(() => {
     if (delay === null) return;
     const id = setTimeout(() => savedCallback.current(), delay);

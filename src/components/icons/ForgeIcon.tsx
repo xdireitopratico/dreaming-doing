@@ -8,12 +8,7 @@ type Props = SVGProps<SVGSVGElement> & {
 };
 
 /** Ícone da marca FORGE — hexágono/forja, sem sparkle genérico de IA. */
-export function ForgeIcon({
-  variant = "mark",
-  size = 16,
-  className = "",
-  ...rest
-}: Props) {
+export function ForgeIcon({ variant = "mark", size = 16, className = "", ...rest }: Props) {
   const common = {
     width: size,
     height: size,

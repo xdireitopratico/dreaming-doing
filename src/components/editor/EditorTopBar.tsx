@@ -58,9 +58,7 @@ export function EditorTopBar({
               {projectName ?? "Projeto"}
               <ChevronDown className="size-3 shrink-0 opacity-50" />
             </span>
-            {running ? (
-              <span className="forge-project-sub">Construindo alterações…</span>
-            ) : null}
+            {running ? <span className="forge-project-sub">Construindo alterações…</span> : null}
           </Link>
         ) : (
           <Link to="/projects" className="forge-project-trigger">
@@ -68,9 +66,7 @@ export function EditorTopBar({
               {projectName ?? "Projeto"}
               <ChevronDown className="size-3 shrink-0 opacity-50" />
             </span>
-            {running ? (
-              <span className="forge-project-sub">Construindo alterações…</span>
-            ) : null}
+            {running ? <span className="forge-project-sub">Construindo alterações…</span> : null}
           </Link>
         )}
       </div>
@@ -126,7 +122,11 @@ export function EditorTopBar({
         <button type="button" className="forge-connector-btn" title="Tema">
           <Moon className="size-4" />
         </button>
-        <button type="button" className="forge-btn-share flex items-center gap-1.5" onClick={onShare}>
+        <button
+          type="button"
+          className="forge-btn-share flex items-center gap-1.5"
+          onClick={onShare}
+        >
           <Share2 className="size-3.5" />
           Share
         </button>

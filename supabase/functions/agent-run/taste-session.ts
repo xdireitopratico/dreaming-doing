@@ -12,9 +12,7 @@ import { registerTasteTools, type TasteUiEmit } from "./tools/taste.ts";
 export async function loadTasteNvidiaConfig(supabase: SupabaseClient): Promise<ProviderConfig> {
   const poolKeys = await loadForgeTrialRobinPool(supabase);
   if (poolKeys.length === 0) {
-    throw new Error(
-      "Taste: o administrador precisa cadastrar o pool NVIDIA em API Keys (/api).",
-    );
+    throw new Error("Taste: o administrador precisa cadastrar o pool NVIDIA em API Keys (/api).");
   }
   const wire = defaultRobinModel("nvidia", PLATFORM_ROBIN_TASTE_PRESET_ID);
   return {
@@ -122,10 +120,7 @@ export async function runTasteChat(params: {
     ? `${TASTE_CONCIERGE_SYSTEM}\n\n${sessionAddon}`
     : TASTE_CONCIERGE_SYSTEM;
 
-  const chatMessages: ChatMessage[] = [
-    { role: "system", content: systemContent },
-    ...messages,
-  ];
+  const chatMessages: ChatMessage[] = [{ role: "system", content: systemContent }, ...messages];
 
   const content = await runTasteToolLoop(llm, reg, chatMessages);
 

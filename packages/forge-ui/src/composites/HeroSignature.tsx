@@ -28,8 +28,7 @@ export interface HeroSignatureProps {
 const variantBg: Record<HeroVariant, string> = {
   aurora:
     "before:absolute before:inset-0 before:bg-[radial-gradient(ellipse_80%_60%_at_50%_-20%,rgba(255,182,39,0.18),transparent)] before:pointer-events-none",
-  mesh:
-    "before:absolute before:inset-0 before:bg-[radial-gradient(circle_at_20%_30%,rgba(255,122,26,0.12),transparent_50%),radial-gradient(circle_at_80%_70%,rgba(34,197,94,0.08),transparent_50%)] before:pointer-events-none",
+  mesh: "before:absolute before:inset-0 before:bg-[radial-gradient(circle_at_20%_30%,rgba(255,122,26,0.12),transparent_50%),radial-gradient(circle_at_80%_70%,rgba(34,197,94,0.08),transparent_50%)] before:pointer-events-none",
   minimal: "",
   split: "lg:grid lg:grid-cols-2 lg:gap-16 lg:items-center",
 };
@@ -68,7 +67,12 @@ export function HeroSignature({
         className,
       )}
     >
-      <div className={cn("relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8", variant === "split" && variantBg.split)}>
+      <div
+        className={cn(
+          "relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8",
+          variant === "split" && variantBg.split,
+        )}
+      >
         <StaggerContainer className="max-w-4xl space-y-8">
           {eyebrow && (
             <StaggerItem>
@@ -86,17 +90,25 @@ export function HeroSignature({
           </StaggerItem>
           {subtitle && (
             <StaggerItem>
-              <p className="text-lg md:text-xl text-muted-foreground max-w-2xl leading-relaxed">{subtitle}</p>
+              <p className="text-lg md:text-xl text-muted-foreground max-w-2xl leading-relaxed">
+                {subtitle}
+              </p>
             </StaggerItem>
           )}
           <StaggerItem>
             <div className="flex flex-wrap items-center gap-4">
               <CtaButton cta={primaryCta} />
-              {secondaryCta && <CtaButton cta={{ ...secondaryCta, variant: secondaryCta.variant ?? "outline" }} />}
+              {secondaryCta && (
+                <CtaButton cta={{ ...secondaryCta, variant: secondaryCta.variant ?? "outline" }} />
+              )}
             </div>
           </StaggerItem>
         </StaggerContainer>
-        {children && <FadeIn delay={0.3} className="mt-12 md:mt-16">{children}</FadeIn>}
+        {children && (
+          <FadeIn delay={0.3} className="mt-12 md:mt-16">
+            {children}
+          </FadeIn>
+        )}
       </div>
     </section>
   );

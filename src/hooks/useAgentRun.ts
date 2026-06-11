@@ -21,11 +21,7 @@ import {
   initialAgentProgress,
   streamRowToSSEEvent,
 } from "@/lib/agent-progress";
-import {
-  freezeSnapshot,
-  PENDING_RUN_ID,
-  type FrozenRunSnapshot,
-} from "@/lib/lovable-thread";
+import { freezeSnapshot, PENDING_RUN_ID, type FrozenRunSnapshot } from "@/lib/lovable-thread";
 import {
   hasMaterializedCardSnapshot,
   runIdFromAssistantMessage,
@@ -43,10 +39,7 @@ function progressHasFirstChatToken(progress: AgentProgress): boolean {
   );
 }
 
-function withFrozenLatencyThought(
-  next: AgentProgress,
-  startedAtMs: number | null,
-): AgentProgress {
+function withFrozenLatencyThought(next: AgentProgress, startedAtMs: number | null): AgentProgress {
   if (next.latencyThoughtMs != null || !startedAtMs) return next;
   if (!progressHasFirstChatToken(next)) return next;
   return {
@@ -170,9 +163,7 @@ export function useAgentRun() {
   const [pendingQueueItems, setPendingQueueItems] = useState<PendingQueueItem[]>([]);
   const [queueBlockingReason, setQueueBlockingReason] = useState<string | null>(null);
   /** Início do turno (envio) — persiste até o run terminar; alimenta Think latency no chat e inspector. */
-  const [activeRunStartedAtMs, setActiveRunStartedAtMs] = useState<number | null>(
-    null,
-  );
+  const [activeRunStartedAtMs, setActiveRunStartedAtMs] = useState<number | null>(null);
 
   const runIdRef = useRef<string | null>(null);
   const activeRunStartedAtMsRef = useRef<number | null>(null);
@@ -203,13 +194,7 @@ export function useAgentRun() {
     setActiveRunId(null);
     setActiveRunStartedAtMs(null);
     setConnected(false);
-  }, [
-    progress.finished,
-    progress.awaiting,
-    progress.awaitingKind,
-    progress.canceled,
-    activeRunId,
-  ]);
+  }, [progress.finished, progress.awaiting, progress.awaitingKind, progress.canceled, activeRunId]);
 
   // ─── Persistência de estado em sessionStorage ─────────────────────────
   const saveSnapshot = useCallback(() => {
@@ -329,11 +314,13 @@ export function useAgentRun() {
       setProgress((p) => {
         let next: AgentProgress;
         if (status === "awaiting_user") {
+          const planPending =
+            p.awaitingKind === "plan_approval" || (p.pendingPlan?.steps?.length ?? 0) > 0;
           next = {
             ...p,
             finished: true,
             awaiting: true,
-            awaitingKind: "qualify",
+            awaitingKind: planPending ? "plan_approval" : "qualify",
             autoResuming: false,
           };
         } else if (status === "canceled") {
@@ -496,12 +483,15 @@ export function useAgentRun() {
         return copy;
       });
       setQueueBlockingReason(null);
-      if (!isSame && opts?.resetProgress !== false) {
+      const turnInProgress = activeRunStartedAtMsRef.current != null;
+      if (!isSame && opts?.resetProgress !== false && !turnInProgress) {
         lastSeqRef.current = 0;
         setProgress({
           ...initialAgentProgress,
           statusHint: "Conectando ao agente…",
         });
+      } else if (!isSame && turnInProgress) {
+        lastSeqRef.current = 0;
       }
 
       setConnected(true);
@@ -688,17 +678,24 @@ export function useAgentRun() {
       teardownChannels();
       setQueueBlockingReason(null);
       const keepPending = activeRunStartedAtMs != null;
-      setProgress({
-        ...initialAgentProgress,
-        statusHint: manualResume
-          ? "Conectando para retomar o agente…"
-          : keepPending
-            ? "Conectando ao agente…"
-            : "Iniciando agente…",
-        resumable: false,
-        autoResuming: false,
-        phase: keepPending ? "classify" : null,
-      });
+      if (keepPending) {
+        setProgress((p) => ({
+          ...p,
+          statusHint: "Conectando ao agente…",
+          finished: false,
+          resumable: false,
+          autoResuming: false,
+          phase: p.phase ?? "classify",
+        }));
+      } else {
+        setProgress({
+          ...initialAgentProgress,
+          statusHint: manualResume ? "Conectando para retomar o agente…" : "Iniciando agente…",
+          resumable: false,
+          autoResuming: false,
+          phase: null,
+        });
+      }
 
       logEditorTelemetryEvent("agent_run", "connect_start", "info", sessionKind ?? "auto");
 

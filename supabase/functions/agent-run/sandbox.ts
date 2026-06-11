@@ -31,7 +31,7 @@ class E2BSandbox implements SandboxProvider {
       .eq("project_id", this.projectId);
     if (!count || count === 0) {
       throw new Error(
-        "Nenhum arquivo no projeto. Crie arquivos com fs_write antes de usar shell_exec."
+        "Nenhum arquivo no projeto. Crie arquivos com fs_write antes de usar shell_exec.",
       );
     }
 

@@ -1,11 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import {
-  Activity,
-  AlertCircle,
-  CheckCircle2,
-  Copy,
-  RefreshCw,
-} from "lucide-react";
+import { Activity, AlertCircle, CheckCircle2, Copy, RefreshCw } from "lucide-react";
 import { toast } from "@/lib/toast";
 import {
   formatShotForClipboard,
@@ -54,9 +48,7 @@ function SignalRow({ s }: { s: TelemetrySignal }) {
             {s.category}
           </p>
           <p className="text-xs text-neutral-800 leading-snug">{s.message}</p>
-          {s.hint && (
-            <p className="mt-1 text-[11px] text-neutral-500 leading-relaxed">{s.hint}</p>
-          )}
+          {s.hint && <p className="mt-1 text-[11px] text-neutral-500 leading-relaxed">{s.hint}</p>}
         </div>
       </div>
     </li>
@@ -84,7 +76,6 @@ export function TroubleshootingShotPanel() {
     const text = formatShotForClipboard(getTroubleshootingShot());
     try {
       await navigator.clipboard.writeText(text);
-
     } catch {
       toast.error("Não foi possível copiar");
     }
@@ -92,10 +83,7 @@ export function TroubleshootingShotPanel() {
 
   const copyJson = useCallback(async () => {
     try {
-      await navigator.clipboard.writeText(
-        JSON.stringify(getTroubleshootingShot(), null, 2),
-      );
-
+      await navigator.clipboard.writeText(JSON.stringify(getTroubleshootingShot(), null, 2));
     } catch {
       toast.error("Não foi possível copiar JSON");
     }

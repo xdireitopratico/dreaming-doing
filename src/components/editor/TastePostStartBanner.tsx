@@ -16,8 +16,9 @@ export function TastePostStartBanner() {
       <Rocket className="size-4 text-amber-400 shrink-0 mt-0.5" />
       <div className="min-w-0">
         <p className="font-mono text-[10px] text-[var(--forge-silver)] leading-relaxed">
-          Você já viu o <strong className="text-amber-300/90">Start Project</strong> com preview ao vivo.
-          Para continuar construindo sem limite, configure <strong>suas</strong> API e modelos.
+          Você já viu o <strong className="text-amber-300/90">Start Project</strong> com preview ao
+          vivo. Para continuar construindo sem limite, configure <strong>suas</strong> API e
+          modelos.
         </p>
         <span className="mt-2 flex flex-wrap gap-3">
           <Link

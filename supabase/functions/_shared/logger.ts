@@ -46,7 +46,8 @@ export const logger = {
   warn: (msg: string, data?: LogContext) => emit("warn", msg, data),
   error: (msg: string, data?: LogContext) => emit("error", msg, data),
   /** Emite um evento tipado (ex: agent.phase_change, llm.retry) — útil pra filtros. */
-  event: (event: string, data?: LogContext) => emit("info", `event:${event}`, { event, ...(data ?? {}) }),
+  event: (event: string, data?: LogContext) =>
+    emit("info", `event:${event}`, { event, ...(data ?? {}) }),
 };
 
 /** Roda `fn` com correlationId no escopo. Toda chamada de logger dentro carrega o ID. */

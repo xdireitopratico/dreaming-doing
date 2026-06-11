@@ -10,7 +10,16 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
 
-const ALLOWED = new Set(["github", "vercel", "netlify", "cloudflare", "anthropic", "openai", "e2b", "supabase"]);
+const ALLOWED = new Set([
+  "github",
+  "vercel",
+  "netlify",
+  "cloudflare",
+  "anthropic",
+  "openai",
+  "e2b",
+  "supabase",
+]);
 
 type PoolSlot = { id: string; hint: string; addedAt: string };
 
@@ -34,7 +43,9 @@ function parsePool(tokenField: string | null): string[] {
     try {
       const arr = JSON.parse(t) as unknown;
       if (Array.isArray(arr)) return arr.filter((x) => typeof x === "string" && x.length > 0);
-    } catch { /* single token */ }
+    } catch {
+      /* single token */
+    }
   }
   return [t];
 }
@@ -85,22 +96,27 @@ Deno.serve(async (req) => {
     if (!kind || !ALLOWED.has(kind)) return json({ error: "Connector inválido" }, 400);
 
     const admin = createClient(SUPABASE_URL, SERVICE_KEY);
-    const metaIn =
-      typeof body?.meta === "object" && body.meta !== null ? body.meta : {};
+    const metaIn = typeof body?.meta === "object" && body.meta !== null ? body.meta : {};
     const providerKey = resolveProvider(kind, metaIn);
 
     if (kind === "openai" && !metaIn.provider) {
-      return json({
-        error:
-          "meta.provider obrigatório (groq, nvidia, xai, openai, gemini, openrouter, deepseek, alibaba, minimax, moonshotai, xiaomi, ollama)",
-      }, 400);
+      return json(
+        {
+          error:
+            "meta.provider obrigatório (groq, nvidia, xai, openai, gemini, openrouter, deepseek, alibaba, minimax, moonshotai, xiaomi, ollama)",
+        },
+        400,
+      );
     }
 
     if (kind === "supabase" && body?.disconnect !== true) {
       const projectUrl = typeof metaIn.projectUrl === "string" ? metaIn.projectUrl.trim() : "";
       const token = typeof body?.token === "string" ? body.token.trim() : "";
       if (!projectUrl || !token) {
-        return json({ error: "URL do projeto Supabase e chave (anon ou service role) são obrigatórios" }, 400);
+        return json(
+          { error: "URL do projeto Supabase e chave (anon ou service role) são obrigatórios" },
+          400,
+        );
       }
       try {
         const host = new URL(projectUrl).hostname;
@@ -171,11 +187,14 @@ Deno.serve(async (req) => {
         poolSlots: newSlots,
         updatedAt: new Date().toISOString(),
       };
-      await admin.from("connectors").update({
-        token_encrypted: JSON.stringify(pool),
-        meta: newMeta,
-        updated_at: new Date().toISOString(),
-      }).eq("id", row.id);
+      await admin
+        .from("connectors")
+        .update({
+          token_encrypted: JSON.stringify(pool),
+          meta: newMeta,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", row.id);
 
       return json(poolResponse(newMeta, true));
     }
@@ -196,7 +215,13 @@ Deno.serve(async (req) => {
     if (!token && kind === "openai" && metaIn.provider === "ollama") {
       const baseUrl = typeof metaIn.baseUrl === "string" ? metaIn.baseUrl.trim() : "";
       if (!baseUrl) {
-        return json({ error: "URL do Ollama obrigatória (meta.baseUrl) — use túnel HTTPS se o agente roda na nuvem" }, 400);
+        return json(
+          {
+            error:
+              "URL do Ollama obrigatória (meta.baseUrl) — use túnel HTTPS se o agente roda na nuvem",
+          },
+          400,
+        );
       }
     }
 
@@ -206,7 +231,9 @@ Deno.serve(async (req) => {
 
     if (body?.appendToPool === true && token) {
       const existing = kind === "openai" ? await loadOpenAiRow() : null;
-      const prevSlots = (existing?.meta as Record<string, unknown>)?.poolSlots as PoolSlot[] | undefined;
+      const prevSlots = (existing?.meta as Record<string, unknown>)?.poolSlots as
+        | PoolSlot[]
+        | undefined;
 
       pool = parsePool(existing?.token_encrypted ?? null);
       pool.push(token);
@@ -227,7 +254,8 @@ Deno.serve(async (req) => {
         return json({
           ok: false,
           connected: false,
-          error: smoke.error ??
+          error:
+            smoke.error ??
             "Chave E2B inválida ou template sem Node/npm. Gere nova chave em e2b.dev.",
           code: smoke.keyOk ? "e2b_template_failed" : "e2b_key_invalid",
           smoke,

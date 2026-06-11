@@ -13,9 +13,7 @@ const TANSTACK_ROUTE_FLAT = /^(?:src\/)?routes\/([^./][^/]*)\.(tsx|jsx)$/i;
 
 function labelFromSegment(seg: string): string {
   if (seg === "index" || seg === "") return "Início";
-  return seg
-    .replace(/[-_]/g, " ")
-    .replace(/\b\w/g, (c) => c.toUpperCase());
+  return seg.replace(/[-_]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
 function pathFromPageName(name: string): string {

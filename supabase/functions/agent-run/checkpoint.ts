@@ -39,9 +39,7 @@ export function serializeCheckpointPayload(
   };
 }
 
-export function deserializeCheckpointState(
-  raw: Record<string, unknown>,
-): LoadedCheckpoint | null {
+export function deserializeCheckpointState(raw: Record<string, unknown>): LoadedCheckpoint | null {
   const projectId = raw.projectId;
   const conversationId = raw.conversationId;
   const userId = raw.userId;
@@ -70,15 +68,13 @@ export function deserializeCheckpointState(
     messages: Array.isArray(raw.messages) ? raw.messages : [],
     phase,
     currentStepIndex: typeof raw.currentStepIndex === "number" ? raw.currentStepIndex : 0,
-    context: raw.context && typeof raw.context === "object"
-      ? (raw.context as AgentState["context"])
-      : null,
-    intent: raw.intent && typeof raw.intent === "object"
-      ? (raw.intent as AgentState["intent"])
-      : null,
-    plan: raw.plan && typeof raw.plan === "object"
-      ? (raw.plan as AgentState["plan"])
-      : null,
+    context:
+      raw.context && typeof raw.context === "object"
+        ? (raw.context as AgentState["context"])
+        : null,
+    intent:
+      raw.intent && typeof raw.intent === "object" ? (raw.intent as AgentState["intent"]) : null,
+    plan: raw.plan && typeof raw.plan === "object" ? (raw.plan as AgentState["plan"]) : null,
     validationResults: Array.isArray(raw.validationResults)
       ? (raw.validationResults as AgentState["validationResults"])
       : [],
@@ -109,8 +105,14 @@ export async function loadCheckpoint(
 ): Promise<LoadedCheckpoint | null> {
   const q = sb.from("agent_checkpoints") as {
     select: (cols: string) => {
-      eq: (col: string, val: string) => {
-        eq: (col: string, val: string) => {
+      eq: (
+        col: string,
+        val: string,
+      ) => {
+        eq: (
+          col: string,
+          val: string,
+        ) => {
           maybeSingle: () => Promise<{ data: { phase?: string; state?: unknown } | null }>;
         };
       };
@@ -143,7 +145,10 @@ export async function clearConversationCheckpoint(
 ): Promise<void> {
   const q = sb.from("agent_checkpoints") as {
     delete: () => {
-      eq: (col: string, val: string) => {
+      eq: (
+        col: string,
+        val: string,
+      ) => {
         eq: (col: string, val: string) => Promise<unknown>;
       };
     };

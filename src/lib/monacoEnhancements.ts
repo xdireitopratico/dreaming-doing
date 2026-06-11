@@ -30,7 +30,9 @@ export function registerAiFolding(monaco: typeof import("monaco-editor")) {
             const tagName = openMatch[2];
             let closeLine = -1;
             for (let j = i + 1; j < lines.length; j++) {
-              const closeMatch = lines[j].match(new RegExp(`^\\s{0,${indent}}</${tagName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`));
+              const closeMatch = lines[j].match(
+                new RegExp(`^\\s{0,${indent}}</${tagName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`),
+              );
               if (closeMatch) {
                 closeLine = j;
                 break;
@@ -48,13 +50,13 @@ export function registerAiFolding(monaco: typeof import("monaco-editor")) {
 
           // Function/block regions (mark by indent reduction)
           if (i > 0) {
-            const prevIndent = (lines[i - 1].match(/^(\s*)/)?.[1].length ?? 0);
-            const curIndent = (line.match(/^(\s*)/)?.[1].length ?? 0);
+            const prevIndent = lines[i - 1].match(/^(\s*)/)?.[1].length ?? 0;
+            const curIndent = line.match(/^(\s*)/)?.[1].length ?? 0;
             // Block opened on previous line
             if (line.trim() === "{" || line.trim().endsWith("{")) {
               let closeLine = -1;
               for (let j = i + 1; j < lines.length; j++) {
-                const jIndent = (lines[j].match(/^(\s*)/)?.[1].length ?? 0);
+                const jIndent = lines[j].match(/^(\s*)/)?.[1].length ?? 0;
                 if (jIndent === curIndent && lines[j].trim() === "}") {
                   closeLine = j;
                   break;

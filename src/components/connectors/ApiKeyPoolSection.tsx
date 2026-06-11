@@ -81,7 +81,8 @@ export function ApiKeyPoolSection({
       </ul>
       <p className="mt-2 font-mono text-[8px] text-[var(--text-ghost)] flex items-center gap-1">
         <Plus className="size-2.5" />
-        Cole a próxima chave abaixo e clique em &quot;Adicionar ao pool&quot; — o contador atualiza na hora.
+        Cole a próxima chave abaixo e clique em &quot;Adicionar ao pool&quot; — o contador atualiza
+        na hora.
       </p>
     </div>
   );

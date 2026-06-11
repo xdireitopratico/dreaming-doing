@@ -9,14 +9,13 @@ interface E2bStatusBadgeProps {
 export function E2bStatusBadge({ e2bConnected }: E2bStatusBadgeProps) {
   const { ok, label, checking } = useE2bLiveStatus(e2bConnected);
 
-  const dotClass =
-    !e2bConnected
-      ? "bg-[var(--forge-muted)]"
-      : checking
-        ? "bg-amber-400 animate-pulse"
-        : ok
-          ? "bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.5)]"
-          : "bg-red-400";
+  const dotClass = !e2bConnected
+    ? "bg-[var(--forge-muted)]"
+    : checking
+      ? "bg-amber-400 animate-pulse"
+      : ok
+        ? "bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.5)]"
+        : "bg-red-400";
 
   return (
     <Link

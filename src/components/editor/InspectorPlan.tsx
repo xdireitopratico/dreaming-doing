@@ -80,7 +80,11 @@ export function InspectorPlan({ plan, onApprove, onReject }: InspectorPlanProps)
           className="forge-inspector-plan-btn forge-inspector-plan-btn--danger"
           onClick={handleReject}
         >
-          {busy === "reject" ? <Loader2 className="size-3.5 animate-spin" /> : <X className="size-3.5" />}
+          {busy === "reject" ? (
+            <Loader2 className="size-3.5 animate-spin" />
+          ) : (
+            <X className="size-3.5" />
+          )}
           Rejeitar
         </button>
         <button
@@ -89,7 +93,11 @@ export function InspectorPlan({ plan, onApprove, onReject }: InspectorPlanProps)
           className="forge-inspector-plan-approve"
           onClick={handleApprove}
         >
-          {busy === "approve" ? <Loader2 className="size-3.5 animate-spin" /> : <Check className="size-3.5" />}
+          {busy === "approve" ? (
+            <Loader2 className="size-3.5 animate-spin" />
+          ) : (
+            <Check className="size-3.5" />
+          )}
           Aprovar e construir
         </button>
       </footer>

@@ -76,7 +76,8 @@ export class CompressionManager {
 
   /** Custo estimado em USD baseado no modelo principal. */
   getEstimatedCostUsd(model: string | null): number {
-    const costs = CompressionManager.MODEL_COSTS[model ?? "default"] ?? CompressionManager.MODEL_COSTS.default;
+    const costs =
+      CompressionManager.MODEL_COSTS[model ?? "default"] ?? CompressionManager.MODEL_COSTS.default;
     const inCost = (this.totalInputTokens / 1_000_000) * costs.input;
     const outCost = (this.totalOutputTokens / 1_000_000) * costs.output;
     return Number((inCost + outCost).toFixed(6));
@@ -131,9 +132,9 @@ export class CompressionManager {
 
   private async summarizeHistory(messages: ChatMessage[]): Promise<string> {
     const relevant = messages
-      .filter(m => m.content && (m.role === "user" || m.role === "assistant"))
+      .filter((m) => m.content && (m.role === "user" || m.role === "assistant"))
       .slice(-20)
-      .map(m => `[${m.role}]: ${String(m.content).slice(0, 300)}`)
+      .map((m) => `[${m.role}]: ${String(m.content).slice(0, 300)}`)
       .join("\n");
 
     const prevSummary = this.compressedSummary;
@@ -166,9 +167,10 @@ export class CompressionManager {
 
     const recent = messages.slice(-MAX_CONTEXT_MESSAGES);
     for (const m of recent) {
-      const trimmed = typeof m.content === "string" && m.content.length > 6000
-        ? { ...m, content: m.content.slice(0, 6000) + "\n... [truncado]" }
-        : m;
+      const trimmed =
+        typeof m.content === "string" && m.content.length > 6000
+          ? { ...m, content: m.content.slice(0, 6000) + "\n... [truncado]" }
+          : m;
       result.push(trimmed);
     }
 
@@ -185,14 +187,17 @@ export function buildCachedMessages(
 ): { system: ChatMessage[]; messages: ChatMessage[] } {
   const system: ChatMessage[] = [
     { role: "system", content: systemPrompt },
-    { role: "system", content: `## Ferramentas Disponíveis\n${JSON.stringify(toolDefs.map((t: any) => ({ name: t.name, description: t.description })))}` },
+    {
+      role: "system",
+      content: `## Ferramentas Disponíveis\n${JSON.stringify(toolDefs.map((t: any) => ({ name: t.name, description: t.description })))}`,
+    },
     { role: "system", content: contextBlock },
   ];
 
   return {
     system,
     messages: [
-      ...history.filter(m => m.role === "user" || m.role === "assistant" || m.role === "tool"),
+      ...history.filter((m) => m.role === "user" || m.role === "assistant" || m.role === "tool"),
       { role: "user", content: instruction },
     ],
   };
@@ -200,15 +205,28 @@ export function buildCachedMessages(
 
 export async function parallelExecute(
   calls: ToolCall[],
-  executor: (call: ToolCall) => Promise<{ toolCallId: string; ok: boolean; output: unknown; error?: string }>,
+  executor: (
+    call: ToolCall,
+  ) => Promise<{ toolCallId: string; ok: boolean; output: unknown; error?: string }>,
 ): Promise<Array<{ call: ToolCall; result: { ok: boolean; output: unknown; error?: string } }>> {
-  const reads = calls.filter(c => c.name === "fs_read" || c.name === "fs_read_many" || c.name === "fs_list" || c.name === "fs_search");
-  const writes = calls.filter(c => !reads.includes(c));
+  const reads = calls.filter(
+    (c) =>
+      c.name === "fs_read" ||
+      c.name === "fs_read_many" ||
+      c.name === "fs_list" ||
+      c.name === "fs_search",
+  );
+  const writes = calls.filter((c) => !reads.includes(c));
 
-  const results: Array<{ call: ToolCall; result: { ok: boolean; output: unknown; error?: string } }> = [];
+  const results: Array<{
+    call: ToolCall;
+    result: { ok: boolean; output: unknown; error?: string };
+  }> = [];
 
   if (reads.length > 0) {
-    const readResults = await Promise.all(reads.map(c => executor(c).then(r => ({ call: c, result: r }))));
+    const readResults = await Promise.all(
+      reads.map((c) => executor(c).then((r) => ({ call: c, result: r }))),
+    );
     results.push(...readResults);
   }
 

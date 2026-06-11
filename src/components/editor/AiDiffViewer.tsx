@@ -146,9 +146,7 @@ export function AiDiffViewer({
                     }`}
                   >
                     <GitCompare className="size-3 shrink-0 opacity-60" />
-                    <span className="truncate max-w-[120px]">
-                      {diff.path.split("/").pop()}
-                    </span>
+                    <span className="truncate max-w-[120px]">{diff.path.split("/").pop()}</span>
                     {!diff.reviewed && (
                       <span className="w-1.5 h-1.5 rounded-full bg-[var(--primary)] animate-pulse shrink-0" />
                     )}
@@ -245,32 +243,33 @@ export function AiDiffViewer({
                         original={diff.before}
                         modified={diff.after}
                         onMount={handleDiffMount}
-                        options={{
-                          fontSize: 13,
-                          fontFamily:
-                            "'Share Tech Mono', 'Fira Code', 'Consolas', monospace",
-                          fontLigatures: true,
-                          lineNumbers: "on",
-                          minimap: { enabled: false },
-                          scrollBeyondLastLine: false,
-                          wordWrap: "off",
-                          padding: { top: 8, bottom: 8 },
-                          smoothScrolling: true,
-                          bracketPairColorization: { enabled: true },
-                          automaticLayout: true,
-                          readOnly: true,
-                          renderSideBySide: true,
-                          originalEditable: false,
-                          renderOverviewRuler: true,
-                          diffWordWrap: "off",
-                          enableSplitViewResizing: false,
-                          ignoreTrimWhitespace: false,
-                          renderIndicators: true,
-                          renderMarginRevertIcon: true,
-                          overviewRulerBorder: false,
-                          hideCursorInOverviewRuler: true,
-                          guides: { indentation: true, bracketPairs: true },
-                        } as editor.IDiffEditorConstructionOptions}
+                        options={
+                          {
+                            fontSize: 13,
+                            fontFamily: "'Share Tech Mono', 'Fira Code', 'Consolas', monospace",
+                            fontLigatures: true,
+                            lineNumbers: "on",
+                            minimap: { enabled: false },
+                            scrollBeyondLastLine: false,
+                            wordWrap: "off",
+                            padding: { top: 8, bottom: 8 },
+                            smoothScrolling: true,
+                            bracketPairColorization: { enabled: true },
+                            automaticLayout: true,
+                            readOnly: true,
+                            renderSideBySide: true,
+                            originalEditable: false,
+                            renderOverviewRuler: true,
+                            diffWordWrap: "off",
+                            enableSplitViewResizing: false,
+                            ignoreTrimWhitespace: false,
+                            renderIndicators: true,
+                            renderMarginRevertIcon: true,
+                            overviewRulerBorder: false,
+                            hideCursorInOverviewRuler: true,
+                            guides: { indentation: true, bracketPairs: true },
+                          } as editor.IDiffEditorConstructionOptions
+                        }
                         loading={
                           <div className="h-full grid place-items-center bg-[var(--background)]">
                             <div className="flex flex-col items-center gap-2">

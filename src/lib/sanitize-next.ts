@@ -1,8 +1,7 @@
 /** Paths allowed as post-auth redirect targets (prevents /auth loops and 404). */
 const STATIC_PATHS = new Set(["/", "/projects", "/settings", "/connectors"]);
 
-const PROJECT_PATH =
-  /^\/projects\/([^/]+)(?:\/history)?$/;
+const PROJECT_PATH = /^\/projects\/([^/]+)(?:\/history)?$/;
 
 const DEFAULT_NEXT = "/projects";
 

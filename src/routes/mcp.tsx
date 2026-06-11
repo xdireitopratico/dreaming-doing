@@ -8,10 +8,7 @@ import { DashboardShell } from "@/components/dashboard/DashboardShell";
 import { MCP_CATALOG } from "@/lib/mcp-catalog";
 import { useAuth } from "@/lib/auth";
 import { supabase } from "@/integrations/supabase/client";
-import {
-  mergeExtensionsFromProfile,
-  toggleMcpIdPersisted,
-} from "@/lib/agent-extensions-prefs";
+import { mergeExtensionsFromProfile, toggleMcpIdPersisted } from "@/lib/agent-extensions-prefs";
 
 export const Route = createFileRoute("/mcp")({
   component: () => (
@@ -71,8 +68,9 @@ function McpPage() {
           <div>
             <h1 className="font-display text-3xl tracking-tight">MCP</h1>
             <p className="font-mono text-[10px] text-[var(--text-dim)] mt-0.5 max-w-xl">
-              Integrações com <strong className="text-[var(--foreground)]">tools executáveis</strong> no
-              agent-run (não só texto no prompt). Tokens em Conectores / API Keys.
+              Integrações com{" "}
+              <strong className="text-[var(--foreground)]">tools executáveis</strong> no agent-run
+              (não só texto no prompt). Tokens em Conectores / API Keys.
             </p>
           </div>
         </div>
@@ -136,8 +134,8 @@ function McpPage() {
 
       <p className="mt-8 font-mono text-[9px] text-[var(--text-ghost)] leading-relaxed max-w-lg">
         Context7 aceita <code className="text-[var(--text-dim)]">CONTEXT7_API_KEY</code> opcional em
-        secrets do Supabase para limites maiores. GitHub e Vercel exigem Conectores. Supabase MCP usa o
-        banco FORGE (SELECT only).
+        secrets do Supabase para limites maiores. GitHub e Vercel exigem Conectores. Supabase MCP
+        usa o banco FORGE (SELECT only).
       </p>
     </div>
   );

@@ -1,9 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "@tanstack/react-router";
-import {
-  type AgentPreferences,
-  loadAgentPreferences,
-} from "@/lib/agent-preferences";
+import { type AgentPreferences, loadAgentPreferences } from "@/lib/agent-preferences";
 import { getPresetById, normalizePresetId } from "@/lib/model-catalog";
 import { isAgentPreferencesConfigured } from "@/lib/agent-setup";
 

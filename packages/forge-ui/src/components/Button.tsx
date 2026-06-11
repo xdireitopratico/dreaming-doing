@@ -10,11 +10,15 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
-        primary: "bg-brand-500 text-brand-500-foreground shadow-[0_0_32px_rgba(255,182,39,0.32)] hover:bg-brand-600 hover:shadow-[0_0_32px_rgba(255,182,39,0.48),0_0_80px_rgba(255,122,26,0.28)] active:scale-[0.98]",
-        secondary: "bg-surface-3 text-foreground border border-border hover:bg-surface-4 hover:border-border/50 active:scale-[0.98]",
-        outline: "border border-border bg-transparent hover:bg-surface-2 hover:border-border/50 active:scale-[0.98]",
+        primary:
+          "bg-brand-500 text-brand-500-foreground shadow-[0_0_32px_rgba(255,182,39,0.32)] hover:bg-brand-600 hover:shadow-[0_0_32px_rgba(255,182,39,0.48),0_0_80px_rgba(255,122,26,0.28)] active:scale-[0.98]",
+        secondary:
+          "bg-surface-3 text-foreground border border-border hover:bg-surface-4 hover:border-border/50 active:scale-[0.98]",
+        outline:
+          "border border-border bg-transparent hover:bg-surface-2 hover:border-border/50 active:scale-[0.98]",
         ghost: "bg-transparent hover:bg-surface-2 active:scale-[0.98]",
-        destructive: "bg-destructive text-destructive-foreground shadow-[0_0_32px_rgba(229,72,77,0.32)] hover:bg-destructive/90 active:scale-[0.98]",
+        destructive:
+          "bg-destructive text-destructive-foreground shadow-[0_0_32px_rgba(229,72,77,0.32)] hover:bg-destructive/90 active:scale-[0.98]",
         link: "text-brand-500 underline-offset-4 hover:underline",
       },
       size: {
@@ -37,14 +41,26 @@ const buttonVariants = cva(
 );
 
 export interface ButtonProps
-  extends React.ButtonHTMLAttributes<HTMLButtonElement>,
-    VariantProps<typeof buttonVariants> {
+  extends React.ButtonHTMLAttributes<HTMLButtonElement>, VariantProps<typeof buttonVariants> {
   asChild?: boolean;
   loading?: boolean;
 }
 
 const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ className, variant, size, fullWidth, asChild = false, loading = false, children, disabled, ...props }, ref) => {
+  (
+    {
+      className,
+      variant,
+      size,
+      fullWidth,
+      asChild = false,
+      loading = false,
+      children,
+      disabled,
+      ...props
+    },
+    ref,
+  ) => {
     const Comp = asChild ? Slot : "button";
     return (
       <Comp

@@ -47,8 +47,7 @@ export function loadAgentPreferences(): AgentPreferences {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return EMPTY_AGENT_PREFERENCES;
     const parsed = JSON.parse(raw) as Partial<AgentPreferences> & { mode?: string };
-    const modeRaw =
-      (parsed.mode as string) === "rob" ? "robin" : parsed.mode;
+    const modeRaw = (parsed.mode as string) === "rob" ? "robin" : parsed.mode;
     const mode =
       modeRaw === "robin" || modeRaw === "fixed" || modeRaw === "auto" ? modeRaw : undefined;
 
@@ -58,9 +57,7 @@ export function loadAgentPreferences(): AgentPreferences {
       sttProvider: parsed.sttProvider,
       customModelId: parsed.customModelId,
       useCustomModel: parsed.useCustomModel,
-      fixedPresetId: parsed.fixedPresetId
-        ? normalizePresetId(parsed.fixedPresetId)
-        : undefined,
+      fixedPresetId: parsed.fixedPresetId ? normalizePresetId(parsed.fixedPresetId) : undefined,
       robinPoolModelId: parsed.robinPoolModelId
         ? normalizePresetId(parsed.robinPoolModelId)
         : undefined,
@@ -68,7 +65,9 @@ export function loadAgentPreferences(): AgentPreferences {
         ? parsed.hiddenPresetIds.filter((x): x is string => typeof x === "string")
         : undefined,
       autoAllowedPresetIds: Array.isArray(parsed.autoAllowedPresetIds)
-        ? parsed.autoAllowedPresetIds.filter((x): x is string => typeof x === "string").map(normalizePresetId)
+        ? parsed.autoAllowedPresetIds
+            .filter((x): x is string => typeof x === "string")
+            .map(normalizePresetId)
         : undefined,
       userModelEntries: normalizeUserModelEntries(parsed),
     };
@@ -82,7 +81,10 @@ function normalizeUserModelEntries(
 ): UserModelEntry[] | undefined {
   const fromField = Array.isArray(parsed.userModelEntries)
     ? parsed.userModelEntries
-        .filter((e): e is UserModelEntry => !!e && typeof e.slug === "string" && typeof e.env === "string")
+        .filter(
+          (e): e is UserModelEntry =>
+            !!e && typeof e.slug === "string" && typeof e.env === "string",
+        )
         .map((e) => ({
           slug: e.slug.trim(),
           env: e.env,
@@ -103,9 +105,7 @@ export function saveAgentPreferences(prefs: AgentPreferences) {
   if (typeof window === "undefined") return;
   const normalized: AgentPreferences = {
     ...prefs,
-    fixedPresetId: prefs.fixedPresetId
-      ? normalizePresetId(prefs.fixedPresetId)
-      : undefined,
+    fixedPresetId: prefs.fixedPresetId ? normalizePresetId(prefs.fixedPresetId) : undefined,
     robinPoolModelId: prefs.robinPoolModelId
       ? normalizePresetId(prefs.robinPoolModelId)
       : undefined,

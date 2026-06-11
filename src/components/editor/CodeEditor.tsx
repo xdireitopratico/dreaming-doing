@@ -34,12 +34,15 @@ export function CodeEditor({
   const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null);
   const { setMonaco } = useDiagnostics(editorRef, activePath);
 
-  const handleMount: OnMount = useCallback((editor, monaco) => {
-    editorRef.current = editor;
-    registerForgeTheme(monaco);
-    monaco.editor.setTheme("forge");
-    setMonaco(monaco);
-  }, [setMonaco]);
+  const handleMount: OnMount = useCallback(
+    (editor, monaco) => {
+      editorRef.current = editor;
+      registerForgeTheme(monaco);
+      monaco.editor.setTheme("forge");
+      setMonaco(monaco);
+    },
+    [setMonaco],
+  );
 
   const activeTab = tabs.find((t) => t.path === activePath);
 
@@ -69,12 +72,8 @@ export function CodeEditor({
               <span className="font-mono text-[9px] tracking-wider" style={{ color: icon.color }}>
                 {icon.label}
               </span>
-              <span className="font-mono text-[11px] truncate">
-                {tab.path.split("/").pop()}
-              </span>
-              {tab.isModified && (
-                <span className="w-1.5 h-1.5 rounded-full bg-[var(--primary)]" />
-              )}
+              <span className="font-mono text-[11px] truncate">{tab.path.split("/").pop()}</span>
+              {tab.isModified && <span className="w-1.5 h-1.5 rounded-full bg-[var(--primary)]" />}
               <button
                 onClick={(e) => {
                   e.stopPropagation();

@@ -8,9 +8,7 @@ describe("detectProjectKind", () => {
 
   it("detects mobile from package.json", () => {
     expect(
-      detectProjectKind([
-        { path: "package.json", content: '{"dependencies":{"expo":"^52"}}' },
-      ]),
+      detectProjectKind([{ path: "package.json", content: '{"dependencies":{"expo":"^52"}}' }]),
     ).toBe("mobile");
   });
 

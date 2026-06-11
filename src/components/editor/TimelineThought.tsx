@@ -16,7 +16,10 @@ export function TimelineThought({ item }: TimelineThoughtProps) {
   }, [item.active, item.text]);
 
   return (
-    <div className="forge-timeline-thought forge-inspector-timeline-entry" data-testid="timeline-thought">
+    <div
+      className="forge-timeline-thought forge-inspector-timeline-entry"
+      data-testid="timeline-thought"
+    >
       <button
         type="button"
         className="forge-timeline-thought-header"
@@ -24,7 +27,9 @@ export function TimelineThought({ item }: TimelineThoughtProps) {
         aria-expanded={open}
       >
         <span className="forge-timeline-thought-label">Thought for {sec}s</span>
-        {item.active && <Loader2 className="size-3 animate-spin" style={{ color: "var(--text-accent)" }} />}
+        {item.active && (
+          <Loader2 className="size-3 animate-spin" style={{ color: "var(--text-accent)" }} />
+        )}
         <ChevronDown
           className={cn(
             "forge-timeline-thought-chevron size-3.5",

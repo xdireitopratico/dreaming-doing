@@ -6,10 +6,7 @@ import {
   type EditorIntegrationsMenuProps,
 } from "@/components/editor/EditorIntegrationsMenu";
 import { PreviewRouteNav } from "@/components/editor/PreviewRouteNav";
-import {
-  previewDeviceWidth,
-  type PreviewDevice,
-} from "@/components/editor/PreviewViewportChrome";
+import { previewDeviceWidth, type PreviewDevice } from "@/components/editor/PreviewViewportChrome";
 import { Monitor, Smartphone, Tablet } from "lucide-react";
 import { E2bStatusBadge } from "@/components/editor/E2bStatusBadge";
 
@@ -152,7 +149,11 @@ export function EditorWorkspaceHeader({
         <button type="button" className="forge-connector-btn" title="Tema">
           <Moon className="size-4" />
         </button>
-        <button type="button" className="forge-btn-share flex items-center gap-1.5" onClick={onShare}>
+        <button
+          type="button"
+          className="forge-btn-share flex items-center gap-1.5"
+          onClick={onShare}
+        >
           <Share2 className="size-3.5" />
         </button>
         <button

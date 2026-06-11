@@ -3,7 +3,14 @@
 import { Check } from "lucide-react";
 import { cn } from "../utils";
 import { Button } from "../components/Button";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "../components/Card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "../components/Card";
 import { Badge } from "../components/Badge";
 import { FadeIn, StaggerContainer, StaggerItem, HoverLift } from "../components/Motion";
 
@@ -53,13 +60,18 @@ export function PricingTiers({ tiers, title, subtitle, className }: PricingTiers
                     {tier.description && <CardDescription>{tier.description}</CardDescription>}
                     <div className="pt-4">
                       <span className="font-display text-4xl font-semibold">{tier.price}</span>
-                      {tier.period && <span className="text-muted-foreground text-sm ml-1">/{tier.period}</span>}
+                      {tier.period && (
+                        <span className="text-muted-foreground text-sm ml-1">/{tier.period}</span>
+                      )}
                     </div>
                   </CardHeader>
                   <CardContent className="flex-1">
                     <ul className="space-y-3">
                       {tier.features.map((f) => (
-                        <li key={f} className="flex items-start gap-2 text-sm text-muted-foreground">
+                        <li
+                          key={f}
+                          className="flex items-start gap-2 text-sm text-muted-foreground"
+                        >
                           <Check className="h-4 w-4 text-accent-500 shrink-0 mt-0.5" />
                           {f}
                         </li>

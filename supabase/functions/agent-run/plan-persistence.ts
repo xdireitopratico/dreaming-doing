@@ -36,10 +36,7 @@ export interface PlanRepository {
   create(plan: Omit<PlanRecord, "id" | "createdAt" | "decidedAt">): Promise<PlanRecord>;
   findById(id: string): Promise<PlanRecord | null>;
   findByRunId(runId: string): Promise<PlanRecord | null>;
-  updateStatus(
-    id: string,
-    status: PlanRecord["status"],
-  ): Promise<void>;
+  updateStatus(id: string, status: PlanRecord["status"]): Promise<void>;
   expireStale(): Promise<number>;
 }
 

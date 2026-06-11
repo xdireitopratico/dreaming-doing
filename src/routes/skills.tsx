@@ -204,7 +204,8 @@ function SkillsPage() {
       </div>
 
       <p className="mb-6 font-mono text-[10px] text-emerald-400/90">
-        {enabled.length} ativa(s){hasFilter ? ` · ${filteredCount} visível(is)` : ""} — sincronizado no perfil · próximo agent-run injeta conteúdo real
+        {enabled.length} ativa(s){hasFilter ? ` · ${filteredCount} visível(is)` : ""} — sincronizado
+        no perfil · próximo agent-run injeta conteúdo real
       </p>
 
       {byCategory.length === 0 ? (
@@ -251,7 +252,9 @@ function SkillsPage() {
                           </span>
                         )}
                       </div>
-                      <p className="font-mono text-[9px] text-[var(--text-ghost)] mt-0.5">{s.description}</p>
+                      <p className="font-mono text-[9px] text-[var(--text-ghost)] mt-0.5">
+                        {s.description}
+                      </p>
                     </div>
                     <button
                       type="button"

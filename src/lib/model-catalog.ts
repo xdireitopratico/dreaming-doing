@@ -171,11 +171,7 @@ const ENV_DISPLAY_ORDER: Partial<Record<AiEnvId, string[]>> = {
   ],
   gemini: ["google--gemini-3-1-pro", "google--gemini-3-5-flash", "google--gemma-4-31b-it"],
   xai: ["xai--grok-4-3", "xai--grok-build-0-1"],
-  deepseek: [
-    "deepseek--deepseek-v4-pro",
-    "deepseek--deepseek-v4-flash",
-    "deepseek--deepseek-v3",
-  ],
+  deepseek: ["deepseek--deepseek-v4-pro", "deepseek--deepseek-v4-flash", "deepseek--deepseek-v3"],
   alibaba: [
     "qwen--qwen3-7-max",
     "qwen--qwen3-7-plus",
@@ -188,7 +184,12 @@ const ENV_DISPLAY_ORDER: Partial<Record<AiEnvId, string[]>> = {
   openrouter: ["zhipu--glm-5-1", "zhipu--glm-5"],
   xiaomi: ["xiaomi--mimo-v2-5-pro"],
   groq: ["pool-groq-flash"],
-  ollama: ["ollama--llama3-2", "ollama--qwen2-5-coder", "ollama--deepseek-r1-8b", "ollama--mistral"],
+  ollama: [
+    "ollama--llama3-2",
+    "ollama--qwen2-5-coder",
+    "ollama--deepseek-r1-8b",
+    "ollama--mistral",
+  ],
 };
 
 export type UserModelEntry = {
@@ -244,13 +245,10 @@ function sortPresetsForDisplay(env: AiEnvId, presets: ForgeModelPreset[]): Forge
   if (order) {
     const idx = new Map(order.map((id, i) => [id, i]));
     return [...presets].sort(
-      (a, b) =>
-        (a.envStrength ?? idx.get(a.id) ?? 999) - (b.envStrength ?? idx.get(b.id) ?? 999),
+      (a, b) => (a.envStrength ?? idx.get(a.id) ?? 999) - (b.envStrength ?? idx.get(b.id) ?? 999),
     );
   }
-  return [...presets].sort(
-    (a, b) => (a.envStrength ?? a.rank) - (b.envStrength ?? b.rank),
-  );
+  return [...presets].sort((a, b) => (a.envStrength ?? a.rank) - (b.envStrength ?? b.rank));
 }
 
 /** Roteamento: provedor nativo vs OpenRouter só quando não há conector dedicado */
@@ -399,25 +397,148 @@ function buildPreset(row: RankedInput): ForgeModelPreset {
 }
 
 const RANKED: RankedInput[] = [
-  { rank: 1, label: "Claude Opus 4.8", brand: "Anthropic", openRouterSlug: "anthropic/claude-opus-4-8", tier: "frontier", editorPick: true },
-  { rank: 2, label: "Claude Opus 4.7", brand: "Anthropic", openRouterSlug: "anthropic/claude-opus-4-7", tier: "frontier" },
-  { rank: 3, label: "Claude Sonnet 4.6", brand: "Anthropic", openRouterSlug: "anthropic/claude-sonnet-4-6", tier: "frontier", editorPick: true },
-  { rank: 4, label: "GPT-5.5", brand: "OpenAI", openRouterSlug: "openai/gpt-5.5", tier: "frontier", editorPick: true },
-  { rank: 5, label: "GPT-5.5 Instant", brand: "OpenAI", openRouterSlug: "openai/gpt-5.5-instant", tier: "frontier" },
-  { rank: 6, label: "GPT-5.3 Codex", brand: "OpenAI", openRouterSlug: "openai/gpt-5.3-codex", tier: "frontier", recommended: true, editorPick: true },
-  { rank: 7, label: "Gemini 3.5 Flash", brand: "Google", openRouterSlug: "google/gemini-3.5-flash", tier: "frontier", editorPick: true },
-  { rank: 8, label: "Gemini 3.1 Pro", brand: "Google", openRouterSlug: "google/gemini-3.1-pro", tier: "frontier", recommended: true },
-  { rank: 9, label: "Grok 4.3", brand: "xAI", openRouterSlug: "xai/grok-4.3", tier: "frontier", editorPick: true },
-  { rank: 10, label: "Grok Build 0.1", brand: "xAI", openRouterSlug: "xai/grok-build-0.1", tier: "frontier", recommended: true },
-  { rank: 11, label: "DeepSeek V4 Pro", brand: "DeepSeek", openRouterSlug: "deepseek/deepseek-v4-pro", tier: "balanced" },
-  { rank: 12, label: "DeepSeek V4 Flash", brand: "DeepSeek", openRouterSlug: "deepseek/deepseek-v4-flash", tier: "balanced" },
-  { rank: 13, label: "Qwen 3.7 Max", brand: "Qwen", openRouterSlug: "qwen/qwen3.7-max", tier: "balanced" },
-  { rank: 14, label: "Qwen 3.7 Plus", brand: "Qwen", openRouterSlug: "qwen/qwen3.7-plus", tier: "balanced" },
-  { rank: 15, label: "Qwen 3.6 Plus", brand: "Qwen", openRouterSlug: "qwen/qwen3.6-plus", tier: "balanced" },
-  { rank: 16, label: "Kimi K2.6", brand: "Moonshot", openRouterSlug: "moonshotai/kimi-k2.6", tier: "balanced" },
-  { rank: 17, label: "Kimi K2.5", brand: "Moonshot", openRouterSlug: "moonshotai/kimi-k2.5", tier: "balanced" },
-  { rank: 18, label: "MiniMax M3", brand: "MiniMax", openRouterSlug: "minimax/minimax-m3", tier: "balanced" },
-  { rank: 19, label: "MiniMax M2.7", brand: "MiniMax", openRouterSlug: "minimax/minimax-m2.7", tier: "balanced" },
+  {
+    rank: 1,
+    label: "Claude Opus 4.8",
+    brand: "Anthropic",
+    openRouterSlug: "anthropic/claude-opus-4-8",
+    tier: "frontier",
+    editorPick: true,
+  },
+  {
+    rank: 2,
+    label: "Claude Opus 4.7",
+    brand: "Anthropic",
+    openRouterSlug: "anthropic/claude-opus-4-7",
+    tier: "frontier",
+  },
+  {
+    rank: 3,
+    label: "Claude Sonnet 4.6",
+    brand: "Anthropic",
+    openRouterSlug: "anthropic/claude-sonnet-4-6",
+    tier: "frontier",
+    editorPick: true,
+  },
+  {
+    rank: 4,
+    label: "GPT-5.5",
+    brand: "OpenAI",
+    openRouterSlug: "openai/gpt-5.5",
+    tier: "frontier",
+    editorPick: true,
+  },
+  {
+    rank: 5,
+    label: "GPT-5.5 Instant",
+    brand: "OpenAI",
+    openRouterSlug: "openai/gpt-5.5-instant",
+    tier: "frontier",
+  },
+  {
+    rank: 6,
+    label: "GPT-5.3 Codex",
+    brand: "OpenAI",
+    openRouterSlug: "openai/gpt-5.3-codex",
+    tier: "frontier",
+    recommended: true,
+    editorPick: true,
+  },
+  {
+    rank: 7,
+    label: "Gemini 3.5 Flash",
+    brand: "Google",
+    openRouterSlug: "google/gemini-3.5-flash",
+    tier: "frontier",
+    editorPick: true,
+  },
+  {
+    rank: 8,
+    label: "Gemini 3.1 Pro",
+    brand: "Google",
+    openRouterSlug: "google/gemini-3.1-pro",
+    tier: "frontier",
+    recommended: true,
+  },
+  {
+    rank: 9,
+    label: "Grok 4.3",
+    brand: "xAI",
+    openRouterSlug: "xai/grok-4.3",
+    tier: "frontier",
+    editorPick: true,
+  },
+  {
+    rank: 10,
+    label: "Grok Build 0.1",
+    brand: "xAI",
+    openRouterSlug: "xai/grok-build-0.1",
+    tier: "frontier",
+    recommended: true,
+  },
+  {
+    rank: 11,
+    label: "DeepSeek V4 Pro",
+    brand: "DeepSeek",
+    openRouterSlug: "deepseek/deepseek-v4-pro",
+    tier: "balanced",
+  },
+  {
+    rank: 12,
+    label: "DeepSeek V4 Flash",
+    brand: "DeepSeek",
+    openRouterSlug: "deepseek/deepseek-v4-flash",
+    tier: "balanced",
+  },
+  {
+    rank: 13,
+    label: "Qwen 3.7 Max",
+    brand: "Qwen",
+    openRouterSlug: "qwen/qwen3.7-max",
+    tier: "balanced",
+  },
+  {
+    rank: 14,
+    label: "Qwen 3.7 Plus",
+    brand: "Qwen",
+    openRouterSlug: "qwen/qwen3.7-plus",
+    tier: "balanced",
+  },
+  {
+    rank: 15,
+    label: "Qwen 3.6 Plus",
+    brand: "Qwen",
+    openRouterSlug: "qwen/qwen3.6-plus",
+    tier: "balanced",
+  },
+  {
+    rank: 16,
+    label: "Kimi K2.6",
+    brand: "Moonshot",
+    openRouterSlug: "moonshotai/kimi-k2.6",
+    tier: "balanced",
+  },
+  {
+    rank: 17,
+    label: "Kimi K2.5",
+    brand: "Moonshot",
+    openRouterSlug: "moonshotai/kimi-k2.5",
+    tier: "balanced",
+  },
+  {
+    rank: 18,
+    label: "MiniMax M3",
+    brand: "MiniMax",
+    openRouterSlug: "minimax/minimax-m3",
+    tier: "balanced",
+  },
+  {
+    rank: 19,
+    label: "MiniMax M2.7",
+    brand: "MiniMax",
+    openRouterSlug: "minimax/minimax-m2.7",
+    tier: "balanced",
+  },
   { rank: 20, label: "GLM-5.1", brand: "Zhipu", openRouterSlug: "zhipu/glm-5.1", tier: "balanced" },
   {
     rank: 21,
@@ -435,13 +556,50 @@ const RANKED: RankedInput[] = [
     tier: "pool",
     envStrength: 3,
   },
-  { rank: 23, label: "Qwen3 Coder", brand: "Qwen", openRouterSlug: "qwen/qwen3-coder", tier: "pool", recommended: true },
-  { rank: 24, label: "Gemma 4 31B", brand: "Google", openRouterSlug: "google/gemma-4-31b-it", tier: "fast" },
-  { rank: 25, label: "Claude Opus 4.8 Fast", brand: "Anthropic", openRouterSlug: "anthropic/claude-opus-4-8-fast", tier: "fast" },
+  {
+    rank: 23,
+    label: "Qwen3 Coder",
+    brand: "Qwen",
+    openRouterSlug: "qwen/qwen3-coder",
+    tier: "pool",
+    recommended: true,
+  },
+  {
+    rank: 24,
+    label: "Gemma 4 31B",
+    brand: "Google",
+    openRouterSlug: "google/gemma-4-31b-it",
+    tier: "fast",
+  },
+  {
+    rank: 25,
+    label: "Claude Opus 4.8 Fast",
+    brand: "Anthropic",
+    openRouterSlug: "anthropic/claude-opus-4-8-fast",
+    tier: "fast",
+  },
   { rank: 26, label: "GPT-5.4", brand: "OpenAI", openRouterSlug: "openai/gpt-5.4", tier: "fast" },
-  { rank: 27, label: "DeepSeek V3", brand: "DeepSeek", openRouterSlug: "deepseek/deepseek-v3", tier: "fast" },
-  { rank: 28, label: "Qwen 3.6 Flash", brand: "Qwen", openRouterSlug: "qwen/qwen3.6-flash", tier: "fast" },
-  { rank: 29, label: "MiniMax M2.5", brand: "MiniMax", openRouterSlug: "minimax/minimax-m2.5", tier: "fast" },
+  {
+    rank: 27,
+    label: "DeepSeek V3",
+    brand: "DeepSeek",
+    openRouterSlug: "deepseek/deepseek-v3",
+    tier: "fast",
+  },
+  {
+    rank: 28,
+    label: "Qwen 3.6 Flash",
+    brand: "Qwen",
+    openRouterSlug: "qwen/qwen3.6-flash",
+    tier: "fast",
+  },
+  {
+    rank: 29,
+    label: "MiniMax M2.5",
+    brand: "MiniMax",
+    openRouterSlug: "minimax/minimax-m2.5",
+    tier: "fast",
+  },
   { rank: 30, label: "GLM-5", brand: "Zhipu", openRouterSlug: "zhipu/glm-5", tier: "fast" },
   {
     rank: 31,
@@ -452,7 +610,14 @@ const RANKED: RankedInput[] = [
     env: "nvidia",
     envStrength: 2,
   },
-  { rank: 32, label: "MiMo V2.5 Pro", brand: "Xiaomi", openRouterSlug: "xiaomi/mimo-v2.5-pro", tier: "balanced", recommended: true },
+  {
+    rank: 32,
+    label: "MiMo V2.5 Pro",
+    brand: "Xiaomi",
+    openRouterSlug: "xiaomi/mimo-v2.5-pro",
+    tier: "balanced",
+    recommended: true,
+  },
 ];
 
 /** Ranking completo — Estúdio IA em /models */
@@ -563,7 +728,9 @@ export const CODING_MODEL_PRESETS: ForgeModelPreset[] = [
 export const POOL_MODEL_PRESETS = CODING_MODEL_PRESETS.filter((p) => p.tier === "pool");
 
 /** Dropdown do editor — só atalhos, não os 31 de uma vez */
-export const EDITOR_MODEL_PRESETS = RANKED_MODEL_PRESETS.filter((p) => p.editorPick || p.recommended);
+export const EDITOR_MODEL_PRESETS = RANKED_MODEL_PRESETS.filter(
+  (p) => p.editorPick || p.recommended,
+);
 
 const LEGACY_PRESET_IDS: Record<string, string> = {
   "or-anthropic--claude-sonnet-4-6": slugToId("anthropic/claude-sonnet-4-6"),
@@ -629,9 +796,7 @@ export function presetsForEnv(
       if (!ids.has(p.id)) list.push(p);
     }
   }
-  const customs = (opts?.userModels ?? [])
-    .filter((e) => e.env === env)
-    .map(buildUserModelPreset);
+  const customs = (opts?.userModels ?? []).filter((e) => e.env === env).map(buildUserModelPreset);
   const seen = new Set<string>();
   const merged = [...list, ...customs].filter((p) => {
     const key = `${p.env}:${p.model}`;
@@ -656,13 +821,11 @@ export function presetsByEnvGrouped(): {
   meta: (typeof AI_ENV_META)[AiEnvId];
   models: ForgeModelPreset[];
 }[] {
-  return AI_ENVS_SORTED
-    .map((env) => ({
-      env,
-      meta: AI_ENV_META[env],
-      models: presetsForEnv(env),
-    }))
-    .filter((g) => g.models.length > 0 || g.env === "groq");
+  return AI_ENVS_SORTED.map((env) => ({
+    env,
+    meta: AI_ENV_META[env],
+    models: presetsForEnv(env),
+  })).filter((g) => g.models.length > 0 || g.env === "groq");
 }
 
 export function poolPresetsForProvider(poolProvider: "groq" | "nvidia"): ForgeModelPreset[] {

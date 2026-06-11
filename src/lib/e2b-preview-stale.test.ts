@@ -1,8 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  isStaleE2bPreviewBody,
-  isStaleE2bPreviewError,
-} from "@/lib/e2b-preview-stale";
+import { isStaleE2bPreviewBody, isStaleE2bPreviewError } from "@/lib/e2b-preview-stale";
 
 describe("e2b-preview-stale", () => {
   it("detecta HTML da E2B", () => {

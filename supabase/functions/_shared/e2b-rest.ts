@@ -54,10 +54,7 @@ function envdRelayPath(path: string): string {
 }
 
 /** Headers exigidos pelo relay E2B (igual ao SDK oficial). */
-function envdRelayHeaders(
-  sandboxId: string,
-  accessToken: string | null,
-): Record<string, string> {
+function envdRelayHeaders(sandboxId: string, accessToken: string | null): Record<string, string> {
   const h: Record<string, string> = {
     "E2b-Sandbox-Id": sandboxId,
     "E2b-Sandbox-Port": String(ENVD_PORT),
@@ -238,14 +235,13 @@ function parseProcessEventMessages(
       sawEnd = true;
       const status = typeof end.status === "string" ? end.status : "";
       const m = status.match(/(\d+)/);
-      const exitFromField = typeof end.exitCode === "number"
-        ? end.exitCode
-        : typeof (end as { exit_code?: number }).exit_code === "number"
-        ? (end as { exit_code: number }).exit_code
-        : null;
-      exitCode = m
-        ? Number.parseInt(m[1], 10)
-        : exitFromField ?? (end.exited === false ? 1 : 0);
+      const exitFromField =
+        typeof end.exitCode === "number"
+          ? end.exitCode
+          : typeof (end as { exit_code?: number }).exit_code === "number"
+            ? (end as { exit_code: number }).exit_code
+            : null;
+      exitCode = m ? Number.parseInt(m[1], 10) : (exitFromField ?? (end.exited === false ? 1 : 0));
       if (typeof end.error === "string" && end.error) stderr += end.error;
       break;
     }
@@ -278,7 +274,10 @@ export function parseConnectProcessStream(
   const trimmed = raw.trim();
   if (trimmed.startsWith("{") && trimmed.includes("\n")) {
     return parseProcessEventMessages(
-      trimmed.split("\n").map((line) => line.trim()).filter(Boolean),
+      trimmed
+        .split("\n")
+        .map((line) => line.trim())
+        .filter(Boolean),
       opts,
     );
   }
@@ -356,7 +355,9 @@ function buildSandbox(session: SandboxSession): E2bRestSandbox {
       },
     },
     getHost: (port) => e2bPreviewUrl(session.sandboxId, port).replace(/^https:\/\//, ""),
-    kill: async () => { await e2bDeleteSandbox(session.apiKey, session.sandboxId); },
+    kill: async () => {
+      await e2bDeleteSandbox(session.apiKey, session.sandboxId);
+    },
   };
 }
 

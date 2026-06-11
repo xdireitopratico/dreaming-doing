@@ -2,9 +2,7 @@
 // Visual timeline with dots, tool count badges, hover previews
 import { useRef, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
-import {
-  GitCommit, CheckCircle2, AlertCircle, Loader2, ChevronRight,
-} from "lucide-react";
+import { GitCommit, CheckCircle2, AlertCircle, Loader2, ChevronRight } from "lucide-react";
 
 export interface TimelineItem {
   id: string;
@@ -85,9 +83,7 @@ export function TimelineScrubber({ items, selectedId, onSelect }: TimelineScrubb
                 transition={{ ...spring, delay: i * 0.03 }}
                 onClick={() => onSelect(item.id)}
                 className={`relative w-full text-left pl-6 pr-3 py-2.5 group transition-colors ${
-                  isSelected
-                    ? "bg-[var(--primary)]/10"
-                    : "hover:bg-[var(--surface-2)]"
+                  isSelected ? "bg-[var(--primary)]/10" : "hover:bg-[var(--surface-2)]"
                 }`}
               >
                 {/* Dot on the timeline */}
@@ -137,9 +133,7 @@ export function TimelineScrubber({ items, selectedId, onSelect }: TimelineScrubb
                         {item.runningCount}
                       </span>
                     )}
-                    {isSelected && (
-                      <ChevronRight className="size-3 text-[var(--primary)]" />
-                    )}
+                    {isSelected && <ChevronRight className="size-3 text-[var(--primary)]" />}
                   </div>
                 </div>
               </motion.button>

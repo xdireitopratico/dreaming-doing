@@ -23,7 +23,11 @@ Deno.serve(async (req) => {
     if (uErr || !userData?.user) return json({ error: "Não autenticado" }, 401);
 
     const result = await executeDeployPublish(supabase, projectId, userData.user.id);
-    if (!result.ok) return json({ error: result.error ?? "Falha ao publicar" }, result.error === "Projeto não encontrado" ? 404 : 500);
+    if (!result.ok)
+      return json(
+        { error: result.error ?? "Falha ao publicar" },
+        result.error === "Projeto não encontrado" ? 404 : 500,
+      );
 
     return json({
       deploymentId: result.deploymentId,

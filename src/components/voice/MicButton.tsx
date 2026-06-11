@@ -17,9 +17,12 @@ export function MicButton({ onTranscript, className, size = "md" }: Props) {
   const chunksRef = useRef<Blob[]>([]);
   const streamRef = useRef<MediaStream | null>(null);
 
-  useEffect(() => () => {
-    streamRef.current?.getTracks().forEach((t) => t.stop());
-  }, []);
+  useEffect(
+    () => () => {
+      streamRef.current?.getTracks().forEach((t) => t.stop());
+    },
+    [],
+  );
 
   const start = useCallback(async () => {
     const requested = loadAgentPreferences().sttProvider ?? STT_DEFAULT_PROVIDER;

@@ -48,8 +48,15 @@ export function registerTasteTools(
         type: "object",
         properties: {
           step: { type: "string", enum: ["api", "api-keys", "models", "connectors", "auth"] },
-          hash: { type: "string", description: "Âncora opcional, ex: forge-key-nvidia ou forge-ai-studio" },
-          connector: { type: "string", enum: [...CONNECTORS], description: "Com step=connectors, qual integração abrir" },
+          hash: {
+            type: "string",
+            description: "Âncora opcional, ex: forge-key-nvidia ou forge-ai-studio",
+          },
+          connector: {
+            type: "string",
+            enum: [...CONNECTORS],
+            description: "Com step=connectors, qual integração abrir",
+          },
         },
         required: ["step"],
       },
@@ -87,7 +94,9 @@ export function registerTasteTools(
       },
     },
     async (args): Promise<ToolResult> => {
-      const email = String(args.email ?? "").trim().toLowerCase();
+      const email = String(args.email ?? "")
+        .trim()
+        .toLowerCase();
       const consent = args.consent === true;
       if (!consent) {
         return { toolCallId: "", ok: false, error: "Sem consentimento", output: null };

@@ -6,4 +6,8 @@ export { CTASignature, type CTASignatureProps } from "./CTASignature";
 export { NavShell, type NavLink, type NavShellProps } from "./NavShell";
 export { FooterColumns, type FooterColumn, type FooterColumnsProps } from "./FooterColumns";
 export { PricingTiers, type PricingTier, type PricingTiersProps } from "./PricingTiers";
-export { TestimonialCarousel, type Testimonial, type TestimonialCarouselProps } from "./TestimonialCarousel";
+export {
+  TestimonialCarousel,
+  type Testimonial,
+  type TestimonialCarouselProps,
+} from "./TestimonialCarousel";

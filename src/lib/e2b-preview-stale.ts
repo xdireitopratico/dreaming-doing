@@ -15,5 +15,4 @@ export function isStaleE2bPreviewError(message: string, code?: string): boolean 
   return lower.includes("sandbox not found") || lower.includes("wasn't found");
 }
 
-export const STALE_SANDBOX_USER_MESSAGE =
-  "O ambiente E2B expirou. Reconectando o preview…";
+export const STALE_SANDBOX_USER_MESSAGE = "O ambiente E2B expirou. Reconectando o preview…";

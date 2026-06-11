@@ -36,8 +36,9 @@ function outputIndicatesBuildFailure(output: string): boolean {
 
 function shellOutput(result: { output?: unknown }): string {
   return typeof result.output === "object"
-    ? (result.output as { stderr?: string; stdout?: string }).stderr ??
-      (result.output as { stderr?: string; stdout?: string }).stdout ?? ""
+    ? ((result.output as { stderr?: string; stdout?: string }).stderr ??
+        (result.output as { stderr?: string; stdout?: string }).stdout ??
+        "")
     : String(result.output ?? "");
 }
 
@@ -113,10 +114,11 @@ export class RuntimeObserver {
     }
 
     // 3. Lint check (se existir eslint config)
-    const hasLint = await this.sandboxPathExists(".eslintrc") ||
-      await this.sandboxPathExists(".eslintrc.json") ||
-      await this.sandboxPathExists("eslint.config.js") ||
-      await this.sandboxPathExists(".eslintrc.js");
+    const hasLint =
+      (await this.sandboxPathExists(".eslintrc")) ||
+      (await this.sandboxPathExists(".eslintrc.json")) ||
+      (await this.sandboxPathExists("eslint.config.js")) ||
+      (await this.sandboxPathExists(".eslintrc.js"));
     if (hasLint) {
       try {
         const lint = await this.reg.execute({
@@ -124,9 +126,10 @@ export class RuntimeObserver {
           name: "shell_exec",
           arguments: { command: "npm run lint 2>&1 || true" },
         });
-        const lintOutput = typeof lint.output === "object"
-          ? (lint.output as any).stderr ?? (lint.output as any).stdout ?? ""
-          : String(lint.output ?? "");
+        const lintOutput =
+          typeof lint.output === "object"
+            ? ((lint.output as any).stderr ?? (lint.output as any).stdout ?? "")
+            : String(lint.output ?? "");
         const lintOk = lint.ok && !outputIndicatesBuildFailure(lintOutput);
         checks.push({ name: "lint", ok: lintOk, output: lintOutput.slice(0, 2000) });
       } catch {
@@ -141,21 +144,24 @@ export class RuntimeObserver {
         name: "shell_exec",
         arguments: { command: "git status --short 2>&1 || true" },
       });
-      const gitOutput = typeof git.output === "object"
-        ? (git.output as any).stdout ?? ""
-        : String(git.output ?? "");
-      checks.push({ name: "git", ok: true, output: gitOutput.slice(0, 1000) || "(repositório limpo)" });
+      const gitOutput =
+        typeof git.output === "object"
+          ? ((git.output as any).stdout ?? "")
+          : String(git.output ?? "");
+      checks.push({
+        name: "git",
+        ok: true,
+        output: gitOutput.slice(0, 1000) || "(repositório limpo)",
+      });
     } catch {
       checks.push({ name: "git", ok: true, output: "(git não disponível)" });
     }
 
-    const failures = checks.filter(c => !c.ok);
+    const failures = checks.filter((c) => !c.ok);
     let feedback: string | undefined;
 
     if (failures.length > 0) {
-      feedback = failures
-        .map(f => `[${f.name}] ${f.output.slice(0, 4000)}`)
-        .join("\n\n");
+      feedback = failures.map((f) => `[${f.name}] ${f.output.slice(0, 4000)}`).join("\n\n");
     }
 
     return {
@@ -173,14 +179,14 @@ export class RuntimeObserver {
     }
 
     // Filtra apenas arquivos TypeScript/TSX
-    const tsFiles = modifiedFiles.filter(f => f.endsWith(".ts") || f.endsWith(".tsx"));
+    const tsFiles = modifiedFiles.filter((f) => f.endsWith(".ts") || f.endsWith(".tsx"));
     if (tsFiles.length === 0) {
       return { ok: true, errors: [], output: "" };
     }
 
     try {
       // tsc com --noEmit e lista de arquivos (mais rápido que projeto inteiro)
-      const fileArgs = tsFiles.map(f => `"${f}"`).join(" ");
+      const fileArgs = tsFiles.map((f) => `"${f}"`).join(" ");
       const tsc = await this.reg.execute({
         id: crypto.randomUUID(),
         name: "shell_exec",
@@ -229,8 +235,11 @@ export class RuntimeObserver {
       if (pkgCached) {
         try {
           const pkgJson = JSON.parse(pkgCached);
-          hasForgeUI = !!pkgJson.dependencies?.["@forge/ui"] || !!pkgJson.devDependencies?.["@forge/ui"];
-        } catch { /* ignora parse error */ }
+          hasForgeUI =
+            !!pkgJson.dependencies?.["@forge/ui"] || !!pkgJson.devDependencies?.["@forge/ui"];
+        } catch {
+          /* ignora parse error */
+        }
       } else {
         const pkg = await this.reg.execute({
           id: crypto.randomUUID(),
@@ -240,8 +249,11 @@ export class RuntimeObserver {
         if (pkg.ok && pkg.output) {
           try {
             const pkgJson = JSON.parse(String(pkg.output));
-            hasForgeUI = !!pkgJson.dependencies?.["@forge/ui"] || !!pkgJson.devDependencies?.["@forge/ui"];
-          } catch { /* ignora parse error */ }
+            hasForgeUI =
+              !!pkgJson.dependencies?.["@forge/ui"] || !!pkgJson.devDependencies?.["@forge/ui"];
+          } catch {
+            /* ignora parse error */
+          }
         }
       }
 
@@ -273,20 +285,25 @@ export class RuntimeObserver {
             name: "shell_exec",
             arguments: { command: `grep -r "@theme" --include="*.css" . 2>/dev/null | head -5` },
           });
-          hasThemeTokens = cssCheck.ok && !!cssCheck.output && String(cssCheck.output).trim().length > 0;
-        } catch { /* best-effort */ }
+          hasThemeTokens =
+            cssCheck.ok && !!cssCheck.output && String(cssCheck.output).trim().length > 0;
+        } catch {
+          /* best-effort */
+        }
       }
 
       if (!hasForgeUI && fileContents.size > 0) {
         designViolations.unshift({
           file: "package.json",
-          message: "@forge/ui não instalado — adicione \"@forge/ui\": \"file:./packages/forge-ui\" e dependências peer",
+          message:
+            '@forge/ui não instalado — adicione "@forge/ui": "file:./packages/forge-ui" e dependências peer',
         });
       }
       if (!hasThemeTokens && fileContents.size > 0) {
         designViolations.unshift({
           file: "src/index.css",
-          message: "Nenhum @theme encontrado — use forgeThemeBlock tokens (brand, surface, shadow-glow)",
+          message:
+            "Nenhum @theme encontrado — use forgeThemeBlock tokens (brand, surface, shadow-glow)",
         });
       }
     } catch {
@@ -307,9 +324,10 @@ export class RuntimeObserver {
       name: "shell_exec",
       arguments: { command: `test -e "${path.replace(/"/g, '\\"')}" && echo yes || echo no` },
     });
-    const output = typeof result.output === "object"
-      ? (result.output as { stdout?: string }).stdout ?? ""
-      : String(result.output ?? "");
+    const output =
+      typeof result.output === "object"
+        ? ((result.output as { stdout?: string }).stdout ?? "")
+        : String(result.output ?? "");
     return output.trim().endsWith("yes");
   }
 }

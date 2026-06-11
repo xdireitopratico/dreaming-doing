@@ -117,7 +117,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
 );
 `;
 
-/** 
+/**
  * Ponto de partida para o primeiro plano aprovado.
  * O seed é mínimo para não poluir contexto.
  * No primeiro build após aprovação do plano, o agente deve substituir isso por

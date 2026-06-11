@@ -39,11 +39,7 @@ Deno.serve(async (req) => {
 
     let sandboxCleanup: { killed: string[]; failed: string[]; listed: string[] } | null = null;
     if (e2bKey) {
-      sandboxCleanup = await killAllProjectSandboxes(
-        e2bKey,
-        projectId,
-        sm.previewSandboxId,
-      );
+      sandboxCleanup = await killAllProjectSandboxes(e2bKey, projectId, sm.previewSandboxId);
       if (sandboxCleanup.failed.length > 0) {
         console.error(
           `[project-delete] sandbox kill incomplete project=${projectId}`,

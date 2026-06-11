@@ -3,10 +3,7 @@ import { useConnectors, type ConnectorId, type ConnectorStatus } from "@/hooks/u
 import { CONNECTOR_REGISTRY, isConnectorActive } from "@/lib/connectors/registry";
 import type { IntegrationPrefs } from "@/lib/connectors/integration-prefs";
 import { ConnectorGuideModal } from "@/components/connectors/ConnectorGuideModal";
-import {
-  DropdownMenu,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { DropdownMenu, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import {
   ForgeEditorDropdownContent,
   ForgeEditorDropdownItem,
@@ -62,7 +59,12 @@ export function EditorIntegrationsMenu(props?: Partial<EditorIntegrationsMenuPro
             )}
           </button>
         </DropdownMenuTrigger>
-        <ForgeEditorDropdownContent align="start" side="bottom" sideOffset={6} className="min-w-[200px]">
+        <ForgeEditorDropdownContent
+          align="start"
+          side="bottom"
+          sideOffset={6}
+          className="min-w-[200px]"
+        >
           {MENU_IDS.map((id) => {
             const entry = CONNECTOR_REGISTRY[id];
             const active = isConnectorActive(id, modes[id], status[id]);

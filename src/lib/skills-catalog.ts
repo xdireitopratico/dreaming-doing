@@ -9,24 +9,34 @@ export type SkillCatalogEntry = {
   bundled: boolean;
 };
 
-function skill(
-  id: string,
-  name: string,
-  description: string,
-  category: string,
-): SkillCatalogEntry {
+function skill(id: string, name: string, description: string, category: string): SkillCatalogEntry {
   return { id, name, description, category, bundled: isSkillBundled(id) };
 }
 
 /** Skills com SKILL.md no bundle do servidor — ativar com + injeta conteúdo real no LLM. */
 export const SKILLS_CATALOG: SkillCatalogEntry[] = [
-  skill("brainstorming", "Brainstorming", "Explorar requisitos antes de implementar.", "Planejamento"),
+  skill(
+    "brainstorming",
+    "Brainstorming",
+    "Explorar requisitos antes de implementar.",
+    "Planejamento",
+  ),
   skill("writing-plans", "Writing plans", "Planos de implementação em etapas.", "Planejamento"),
   skill("systematic-debugging", "Debug sistemático", "Investigar bugs com evidência.", "Qualidade"),
   skill("test-driven-development", "TDD", "Testes antes do código.", "Qualidade"),
-  skill("verification-before-completion", "Verificação", "Provar que funciona antes de concluir.", "Qualidade"),
+  skill(
+    "verification-before-completion",
+    "Verificação",
+    "Provar que funciona antes de concluir.",
+    "Qualidade",
+  ),
   skill("nextjs", "Next.js", "Convenções e cache Next.js.", "Framework"),
-  skill("react-best-practices", "React performance", "Otimização React/Next da Vercel.", "Framework"),
+  skill(
+    "react-best-practices",
+    "React performance",
+    "Otimização React/Next da Vercel.",
+    "Framework",
+  ),
   skill("shadcn", "shadcn/ui", "Componentes e theming.", "UI"),
   skill("web-design-guidelines", "Web UI", "Acessibilidade e UX.", "UI"),
   skill("deploy-to-vercel", "Deploy Vercel", "Publicar na Vercel.", "Deploy"),

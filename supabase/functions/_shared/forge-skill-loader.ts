@@ -65,12 +65,14 @@ export function compressSkillBody(body: string, maxChars: number): string {
   const chunks: string[] = [];
 
   if (intro) {
-    const slice = intro.length > budget * 0.45 ? intro.slice(0, Math.floor(budget * 0.45)) + "\n…" : intro;
+    const slice =
+      intro.length > budget * 0.45 ? intro.slice(0, Math.floor(budget * 0.45)) + "\n…" : intro;
     chunks.push(slice);
     budget -= slice.length;
   }
 
-  const priority = /when to use|como usar|workflow|checklist|obrigat|must|debug|test|deploy|next\.?js|react/i;
+  const priority =
+    /when to use|como usar|workflow|checklist|obrigat|must|debug|test|deploy|next\.?js|react/i;
   const sorted = [...parts.slice(1)].sort((a, b) => {
     const pa = priority.test(a) ? 0 : 1;
     const pb = priority.test(b) ? 0 : 1;

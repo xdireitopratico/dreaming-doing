@@ -12,7 +12,12 @@ import { supabase } from "@/integrations/supabase/client";
 
 export type OnboardingStepId = "welcome" | "api_keys" | "model" | "sandbox" | "deploy" | "done";
 
-export const ONBOARDING_STEPS: { id: OnboardingStepId; title: string; description: string; required: boolean }[] = [
+export const ONBOARDING_STEPS: {
+  id: OnboardingStepId;
+  title: string;
+  description: string;
+  required: boolean;
+}[] = [
   {
     id: "welcome",
     title: "Bem-vindo ao FORGE",
@@ -22,13 +27,15 @@ export const ONBOARDING_STEPS: { id: OnboardingStepId; title: string; descriptio
   {
     id: "api_keys",
     title: "Chaves de API",
-    description: "Conecte seu provedor de LLM (NVIDIA, OpenAI, Anthropic…). Recomendado: pool NVIDIA pra ROBIN.",
+    description:
+      "Conecte seu provedor de LLM (NVIDIA, OpenAI, Anthropic…). Recomendado: pool NVIDIA pra ROBIN.",
     required: true,
   },
   {
     id: "model",
     title: "Modelo",
-    description: "Escolha Auto, Fixo ou ROBIN + o modelo. Nemotron 550B é a melhor relação custo × qualidade.",
+    description:
+      "Escolha Auto, Fixo ou ROBIN + o modelo. Nemotron 550B é a melhor relação custo × qualidade.",
     required: true,
   },
   {
@@ -40,7 +47,8 @@ export const ONBOARDING_STEPS: { id: OnboardingStepId; title: string; descriptio
   {
     id: "deploy",
     title: "Deploy (opcional)",
-    description: "Conecte Vercel, Netlify ou Cloudflare pra publicar com 1 clique no fim do projeto.",
+    description:
+      "Conecte Vercel, Netlify ou Cloudflare pra publicar com 1 clique no fim do projeto.",
     required: false,
   },
 ];

@@ -22,8 +22,7 @@ export const Route = createFileRoute("/")({
       { property: "og:title", content: "FORGE — Make Your Dream" },
       {
         property: "og:description",
-        content:
-          "Da ideia ao deploy em segundos. Web app builder com IA de fronteira.",
+        content: "Da ideia ao deploy em segundos. Web app builder com IA de fronteira.",
       },
     ],
   }),

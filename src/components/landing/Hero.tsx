@@ -5,8 +5,7 @@ import { ImportRepoDialog } from "@/components/ImportRepoDialog";
 
 export function Hero() {
   useEffect(() => {
-    const s = (window as unknown as { __forgeScene?: { scroll: number } })
-      .__forgeScene;
+    const s = (window as unknown as { __forgeScene?: { scroll: number } }).__forgeScene;
     if (s) s.scroll = 0;
   }, []);
 

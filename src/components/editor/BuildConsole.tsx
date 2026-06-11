@@ -104,7 +104,10 @@ export function BuildConsole({
         {shellHistory.length > 0 && (
           <div className="forge-build-console-commands">
             {shellHistory.map((cmd, i) => (
-              <div key={`${cmd.slice(0, 24)}-${i}`} className="font-mono text-[10px] text-[var(--forge-ghost)]">
+              <div
+                key={`${cmd.slice(0, 24)}-${i}`}
+                className="font-mono text-[10px] text-[var(--forge-ghost)]"
+              >
                 $ {cmd}
               </div>
             ))}

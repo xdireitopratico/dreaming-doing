@@ -17,6 +17,7 @@ type OnEvent = (event: AgentRealtimeEvent) => void;
  *  e invalida queries do TanStack Query automaticamente. */
 export function useAgentRealtime(
   projectId: string,
+  conversationId: string | null | undefined,
   onEvent?: OnEvent,
 ): void {
   const queryClient = useQueryClient();
@@ -32,7 +33,7 @@ export function useAgentRealtime(
       "postgres_changes",
       { event: "*", schema: "public", table: "agent_runs", filter: `project_id=eq.${projectId}` },
       () => {
-        queryClient.invalidateQueries({ queryKey: ["agent-run", projectId] });
+        queryClient.invalidateQueries({ queryKey: ["agent-runs", projectId] });
       },
     );
 
@@ -42,8 +43,6 @@ export function useAgentRealtime(
       { event: "INSERT", schema: "public", table: "agent_stream_events" },
       (payload) => {
         const row = payload.new as Record<string, unknown>;
-        // Only process events for this project's active run
-        queryClient.invalidateQueries({ queryKey: ["agent-events", projectId] });
 
         if (onEvent) {
           onEvent({
@@ -61,20 +60,20 @@ export function useAgentRealtime(
 
         // Terminal events → invalidate messages
         if (eventType === "done" || eventType === "finish" || eventType === "canceled") {
-          queryClient.invalidateQueries({ queryKey: ["messages", projectId] });
-          queryClient.invalidateQueries({ queryKey: ["agent-run", projectId] });
+          if (conversationId) {
+            queryClient.invalidateQueries({ queryKey: ["messages", conversationId] });
+          }
+          queryClient.invalidateQueries({ queryKey: ["agent-runs", projectId] });
         }
       },
     );
 
     // messages changes (assistant replies, plan proposals)
-    channel.on(
-      "postgres_changes",
-      { event: "*", schema: "public", table: "messages" },
-      () => {
-        queryClient.invalidateQueries({ queryKey: ["messages", projectId] });
-      },
-    );
+    channel.on("postgres_changes", { event: "*", schema: "public", table: "messages" }, () => {
+      if (conversationId) {
+        queryClient.invalidateQueries({ queryKey: ["messages", conversationId] });
+      }
+    });
 
     channel.subscribe((status, err) => {
       if (status === "CLOSED" || status === "CHANNEL_ERROR") {
@@ -88,5 +87,5 @@ export function useAgentRealtime(
       channel.unsubscribe();
       supabase.removeChannel(channel);
     };
-  }, [projectId, queryClient, onEvent]);
+  }, [projectId, conversationId, queryClient, onEvent]);
 }

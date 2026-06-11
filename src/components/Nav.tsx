@@ -16,11 +16,17 @@ function HudTelemetry() {
   return (
     <div className="hidden md:flex items-center gap-3 font-mono text-[10px] tracking-widest text-[var(--text-dim)] uppercase">
       <span className="inline-block w-1.5 h-1.5 rounded-full bg-[var(--success)] live-dot" />
-      <span>ALT <span className="text-[var(--tertiary)]">{alt.toFixed(1)}</span>KM</span>
+      <span>
+        ALT <span className="text-[var(--tertiary)]">{alt.toFixed(1)}</span>KM
+      </span>
       <span className="opacity-30">·</span>
-      <span>VEL <span className="text-[var(--tertiary)]">{vel.toFixed(2)}</span>KM/S</span>
+      <span>
+        VEL <span className="text-[var(--tertiary)]">{vel.toFixed(2)}</span>KM/S
+      </span>
       <span className="opacity-30">·</span>
-      <span>TEMP <span className="text-[var(--primary)]">{temp}</span>°C</span>
+      <span>
+        TEMP <span className="text-[var(--primary)]">{temp}</span>°C
+      </span>
     </div>
   );
 }
@@ -35,10 +41,8 @@ function ScrambleLink({ to, label }: { to: string; label: string }) {
       setText(
         label
           .split("")
-          .map((c, idx) =>
-            idx < i ? c : chars[Math.floor(Math.random() * chars.length)]
-          )
-          .join("")
+          .map((c, idx) => (idx < i ? c : chars[Math.floor(Math.random() * chars.length)]))
+          .join(""),
       );
       if (i >= label.length) {
         clearInterval(id);
@@ -69,9 +73,7 @@ export function Nav() {
   return (
     <nav
       className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
-        scrolled
-          ? "glass border-b border-[var(--border)]"
-          : "border-b border-transparent"
+        scrolled ? "glass border-b border-[var(--border)]" : "border-b border-transparent"
       }`}
     >
       <div className="max-w-[1400px] mx-auto px-6 lg:px-10 h-16 flex items-center justify-between">
@@ -89,9 +91,7 @@ export function Nav() {
               opacity="0.18"
             />
           </svg>
-          <span className="font-display font-bold tracking-[0.18em] text-sm">
-            FORGE
-          </span>
+          <span className="font-display font-bold tracking-[0.18em] text-sm">FORGE</span>
           <span className="hidden md:inline-block h-4 w-px bg-[var(--border)] mx-2" />
           <HudTelemetry />
         </Link>

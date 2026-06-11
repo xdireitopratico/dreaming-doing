@@ -5,7 +5,19 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import { toast } from "@/lib/toast";
 import {
-  ArrowLeft, Shield, CheckCircle2, AlertCircle, Star, ExternalLink, Plug, Zap, Brain, Globe, Cpu, Gem, Box,
+  ArrowLeft,
+  Shield,
+  CheckCircle2,
+  AlertCircle,
+  Star,
+  ExternalLink,
+  Plug,
+  Zap,
+  Brain,
+  Globe,
+  Cpu,
+  Gem,
+  Box,
 } from "lucide-react";
 import { DashboardShell } from "@/components/dashboard/DashboardShell";
 import { ApiKeyInput } from "@/components/connectors/ApiKeyInput";
@@ -384,7 +396,9 @@ function ApiPage() {
         await disconnectAiProvider(id);
         setProviders((prev) =>
           prev.map((p) =>
-            p.id === id ? { ...p, keyValue: "", status: "available", poolCount: 0, poolSlots: [] } : p,
+            p.id === id
+              ? { ...p, keyValue: "", status: "available", poolCount: 0, poolSlots: [] }
+              : p,
           ),
         );
         await qc.invalidateQueries({ queryKey: ["connectors-public"] });
@@ -530,7 +544,10 @@ function ApiPage() {
           Modelos →
         </Link>
         <span className="text-[var(--border)]">|</span>
-        <Link to="/connectors" className="font-mono text-[10px] text-[var(--primary)] hover:underline">
+        <Link
+          to="/connectors"
+          className="font-mono text-[10px] text-[var(--primary)] hover:underline"
+        >
           <Plug className="size-3 inline mr-1" />
           Conectores →
         </Link>
@@ -538,8 +555,8 @@ function ApiPage() {
 
       {robinMode && (
         <p className="mb-6 font-mono text-[9px] text-amber-400/90 px-3 py-2 rounded border border-amber-400/20 bg-amber-400/5">
-          Modo ROBIN ativo: use &quot;Adicionar ao pool&quot; em Groq ou NVIDIA — o contador e a lista abaixo
-          atualizam na hora. O agente troca de chave a cada requisição.
+          Modo ROBIN ativo: use &quot;Adicionar ao pool&quot; em Groq ou NVIDIA — o contador e a
+          lista abaixo atualizam na hora. O agente troca de chave a cada requisição.
         </p>
       )}
 
@@ -547,16 +564,28 @@ function ApiPage() {
         aria-label="Atalhos nesta página"
         className="mb-6 flex flex-wrap gap-2 font-mono text-[9px]"
       >
-        <a href="#forge-key-ollama" className="px-2 py-1 rounded border border-[var(--border)] hover:border-[var(--primary)]/50">
+        <a
+          href="#forge-key-ollama"
+          className="px-2 py-1 rounded border border-[var(--border)] hover:border-[var(--primary)]/50"
+        >
           Ollama
         </a>
-        <a href="#forge-key-e2b" className="px-2 py-1 rounded border border-[var(--border)] hover:border-[var(--primary)]/50">
+        <a
+          href="#forge-key-e2b"
+          className="px-2 py-1 rounded border border-[var(--border)] hover:border-[var(--primary)]/50"
+        >
           E2B
         </a>
-        <a href="#forge-key-groq" className="px-2 py-1 rounded border border-[var(--border)] hover:border-[var(--primary)]/50">
+        <a
+          href="#forge-key-groq"
+          className="px-2 py-1 rounded border border-[var(--border)] hover:border-[var(--primary)]/50"
+        >
           Provedores IA
         </a>
-        <Link to="/models" className="px-2 py-1 rounded border border-[var(--primary)]/30 text-[var(--primary)]">
+        <Link
+          to="/models"
+          className="px-2 py-1 rounded border border-[var(--primary)]/30 text-[var(--primary)]"
+        >
           Modelos + STT →
         </Link>
       </nav>
@@ -574,8 +603,8 @@ function ApiPage() {
       >
         <p className="font-mono text-[9px] text-[var(--text-ghost)] mb-4 leading-relaxed">
           O agente roda na nuvem (Supabase).{" "}
-          <code className="text-[var(--text-dim)]">localhost</code> só funciona se você expuser o Ollama com
-          túnel HTTPS (ngrok, Cloudflare Tunnel, etc.). Modelos em{" "}
+          <code className="text-[var(--text-dim)]">localhost</code> só funciona se você expuser o
+          Ollama com túnel HTTPS (ngrok, Cloudflare Tunnel, etc.). Modelos em{" "}
           <Link to="/models" className="text-[var(--primary)] underline">
             Modelos
           </Link>{" "}
@@ -583,7 +612,9 @@ function ApiPage() {
         </p>
         <div className="grid gap-3 sm:grid-cols-2 mb-3">
           <div>
-            <Label className="font-mono text-[9px] text-[var(--text-dim)]">URL base do Ollama</Label>
+            <Label className="font-mono text-[9px] text-[var(--text-dim)]">
+              URL base do Ollama
+            </Label>
             <Input
               value={ollamaBaseUrl}
               onChange={(e) => setOllamaBaseUrl(e.target.value)}
@@ -593,7 +624,9 @@ function ApiPage() {
             />
           </div>
           <div>
-            <Label className="font-mono text-[9px] text-[var(--text-dim)]">Modelo padrão (tag Ollama)</Label>
+            <Label className="font-mono text-[9px] text-[var(--text-dim)]">
+              Modelo padrão (tag Ollama)
+            </Label>
             <Input
               value={ollamaModel}
               onChange={(e) => setOllamaModel(e.target.value)}
@@ -621,7 +654,11 @@ function ApiPage() {
             disabled={savingId === "ollama" || !ollamaBaseUrl.trim()}
             onClick={() => void handleSaveOllama()}
           >
-            {savingId === "ollama" ? "Salvando…" : ollamaConnected ? "Atualizar Ollama" : "Salvar Ollama"}
+            {savingId === "ollama"
+              ? "Salvando…"
+              : ollamaConnected
+                ? "Atualizar Ollama"
+                : "Salvar Ollama"}
           </Button>
           <a
             href="https://github.com/ollama/ollama/blob/main/docs/faq.md"
@@ -737,14 +774,18 @@ function ApiPage() {
                     <h3 className="font-mono text-[13px]">{p.label}</h3>
                     {p.status === "connected" && (
                       <span className="font-mono text-[8px] text-emerald-400 px-1.5 py-0.5 rounded bg-emerald-400/10">
-                        {p.poolCount && p.poolCount > 1 ? `POOL · ${p.poolCount} chaves` : "CONECTADO"}
+                        {p.poolCount && p.poolCount > 1
+                          ? `POOL · ${p.poolCount} chaves`
+                          : "CONECTADO"}
                       </span>
                     )}
                     {p.costPerM === 0 && (
                       <span className="font-mono text-[8px] text-emerald-400/70">GRATUITO</span>
                     )}
                   </div>
-                  <p className="font-mono text-[9px] text-[var(--text-ghost)] mt-1">{p.description}</p>
+                  <p className="font-mono text-[9px] text-[var(--text-ghost)] mt-1">
+                    {p.description}
+                  </p>
                 </div>
                 <a
                   href={p.docUrl}
@@ -780,7 +821,9 @@ function ApiPage() {
                   label={`Chave ${p.label}`}
                   value={p.keyValue}
                   onChange={(v) =>
-                    setProviders((prev) => prev.map((x) => (x.id === p.id ? { ...x, keyValue: v } : x)))
+                    setProviders((prev) =>
+                      prev.map((x) => (x.id === p.id ? { ...x, keyValue: v } : x)),
+                    )
                   }
                   onDelete={() => void handleDelete(p.id)}
                   provider={p.provider}

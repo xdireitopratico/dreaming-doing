@@ -73,7 +73,13 @@ export function NavShell({ logo, links, ctaLabel, onCta, className }: NavShellPr
               </a>
             ))}
             {ctaLabel && (
-              <Button fullWidth onClick={() => { onCta?.(); setOpen(false); }}>
+              <Button
+                fullWidth
+                onClick={() => {
+                  onCta?.();
+                  setOpen(false);
+                }}
+              >
                 {ctaLabel}
               </Button>
             )}

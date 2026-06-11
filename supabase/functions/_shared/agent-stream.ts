@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { logger } from "./logger.ts";
 
-let seqCounters = new Map<string, number>();
+const seqCounters = new Map<string, number>();
 /** Serializa inserts por runId — evita seq duplicado quando emits não são awaited. */
 const insertChains = new Map<string, Promise<number>>();
 
@@ -11,7 +11,7 @@ async function appendStreamEventInner(
   eventType: string,
   payload: Record<string, unknown>,
 ): Promise<number> {
-  const prev = seqCounters.get(runId) ?? await loadMaxSeq(supabase, runId);
+  const prev = seqCounters.get(runId) ?? (await loadMaxSeq(supabase, runId));
   const seq = prev + 1;
   seqCounters.set(runId, seq);
 

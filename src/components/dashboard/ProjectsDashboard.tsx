@@ -10,10 +10,7 @@ import { CreateProjectDialog } from "@/components/editor/CreateProjectDialog";
 import { ImportRepoDialog } from "@/components/ImportRepoDialog";
 import { ForgeIcon } from "@/components/icons/ForgeIcon";
 import { useAuth } from "@/lib/auth";
-import {
-  removeRealtimeChannel,
-  subscribePostgresChanges,
-} from "@/lib/supabase-realtime";
+import { removeRealtimeChannel, subscribePostgresChanges } from "@/lib/supabase-realtime";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 
 type ProjectRow = {
@@ -90,9 +87,7 @@ export function ProjectsDashboard() {
     const q = search.trim().toLowerCase();
     if (!q) return list;
     return list.filter(
-      (p) =>
-        p.name.toLowerCase().includes(q) ||
-        (p.description ?? "").toLowerCase().includes(q),
+      (p) => p.name.toLowerCase().includes(q) || (p.description ?? "").toLowerCase().includes(q),
     );
   }, [projects, search]);
 
@@ -113,15 +108,12 @@ export function ProjectsDashboard() {
         <h1 className="dashboard-hero-title">Let&apos;s Build</h1>
 
         <div className="dashboard-prompt-wrap">
-          <PromptEngine
-            size="hero"
-            placeholder="Descreva o app que você quer criar…"
-            autoFocus
-          />
+          <PromptEngine size="hero" placeholder="Descreva o app que você quer criar…" autoFocus />
         </div>
 
         <p className="dashboard-hero-hint">
-          <strong>Setup obrigatório</strong> em API (modo + modelo). Tira-gosto opcional: ROBIN NVIDIA · Nemotron 550B.
+          <strong>Setup obrigatório</strong> em API (modo + modelo). Tira-gosto opcional: ROBIN
+          NVIDIA · Nemotron 550B.
         </p>
 
         <a href="#dashboard-projects" className="dashboard-scroll-cue">
@@ -151,11 +143,7 @@ export function ProjectsDashboard() {
         </div>
 
         <div className="dashboard-projects-row">
-          <button
-            type="button"
-            className="dashboard-new-card"
-            onClick={() => setDialogOpen(true)}
-          >
+          <button type="button" className="dashboard-new-card" onClick={() => setDialogOpen(true)}>
             <Plus className="size-5" />
             Novo projeto
           </button>

@@ -61,7 +61,9 @@ export function scoreAntiGeneric(code: string): { score: number; issues: string[
 
   const compositeCount = REQUIRED_COMPOSITE_IMPORTS.filter((c) => code.includes(c)).length;
   if (compositeCount === 0 && /<main|<section/.test(code)) {
-    issues.push("Página sem composites @forge/ui — use HeroSignature, BentoGrid, CTASignature, etc.");
+    issues.push(
+      "Página sem composites @forge/ui — use HeroSignature, BentoGrid, CTASignature, etc.",
+    );
     score -= 25;
   }
 

@@ -1,8 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  buildPhaseTaskTitle,
-  describeStepExpectation,
-} from "@/lib/step-intent";
+import { buildPhaseTaskTitle, describeStepExpectation } from "@/lib/step-intent";
 
 describe("step-intent", () => {
   it("fs_read package.json — expectativa humana", () => {
@@ -24,8 +21,6 @@ describe("step-intent", () => {
   });
 
   it("phase gather — task title", () => {
-    expect(buildPhaseTaskTitle("gather")).toBe(
-      "Entender o que já existe no projeto",
-    );
+    expect(buildPhaseTaskTitle("gather")).toBe("Entender o que já existe no projeto");
   });
 });

@@ -7,11 +7,7 @@ type ForgeQualifyPromptProps = {
   disabled?: boolean;
 };
 
-export function ForgeQualifyPrompt({
-  data,
-  onSelect,
-  disabled = false,
-}: ForgeQualifyPromptProps) {
+export function ForgeQualifyPrompt({ data, onSelect, disabled = false }: ForgeQualifyPromptProps) {
   return (
     <section className="forge-qualify-prompt" data-testid="forge-qualify-prompt">
       {data.intro && <p className="forge-qualify-prompt-intro">{data.intro}</p>}

@@ -3,8 +3,7 @@ import type { ChatMessage, ClassificationResult, LLMProvider } from "./types.ts"
 const GREETING_RE =
   /^(bom\s+dia|boa\s+tarde|boa\s+noite|oi|olá|ola|hey|e\s*aí|eai|hello|hi|salve|fala)[\s!.,?]*$/i;
 
-const THANKS_RE =
-  /^(obrigad[oa]|valeu|thanks|thank\s+you|brigad[ão]|tmj)[\s!.,?]*$/i;
+const THANKS_RE = /^(obrigad[oa]|valeu|thanks|thank\s+you|brigad[ão]|tmj)[\s!.,?]*$/i;
 
 /** Cumprimento/agradecimento óbvio — gate antes de gather (evita "Explorando…"). */
 export function isConversationalTurnEarly(text: string): boolean {
@@ -16,10 +15,7 @@ export function isConversationalTurnEarly(text: string): boolean {
 }
 
 /** Após classify — só cumprimento/agradecimento explícito (vago tipo "site" vai para qualify/plan). */
-export function isConversationalTurn(
-  text: string,
-  _classification: ClassificationResult,
-): boolean {
+export function isConversationalTurn(text: string, _classification: ClassificationResult): boolean {
   return isConversationalTurnEarly(text);
 }
 

@@ -49,38 +49,43 @@ export function useRollback({ projectId, enabled }: UseRollbackOptions) {
   }, [enabled, loadRollbackPoints]);
 
   // Create snapshot from current files
-  const createSnapshot = useCallback(async (label: string) => {
-    // Load current files
-    const { data: files } = await supabase
-      .from("project_files")
-      .select("path, content")
-      .eq("project_id", projectId);
+  const createSnapshot = useCallback(
+    async (label: string) => {
+      // Load current files
+      const { data: files } = await supabase
+        .from("project_files")
+        .select("path, content")
+        .eq("project_id", projectId);
 
-    if (!files || files.length === 0) return null;
+      if (!files || files.length === 0) return null;
 
-    const tree: Record<string, string> = {};
-    files.forEach((f) => { tree[f.path] = f.content ?? ""; });
+      const tree: Record<string, string> = {};
+      files.forEach((f) => {
+        tree[f.path] = f.content ?? "";
+      });
 
-    const { data: snapshot, error } = await supabase
-      .from("project_snapshots")
-      .insert({
-        project_id: projectId,
-        label,
-        tree: tree as any,
-      })
-      .select("id, label, created_at, tree")
-      .single();
+      const { data: snapshot, error } = await supabase
+        .from("project_snapshots")
+        .insert({
+          project_id: projectId,
+          label,
+          tree: tree as any,
+        })
+        .select("id, label, created_at, tree")
+        .single();
 
-    if (error) {
-      console.error("Failed to create snapshot:", error);
-      return null;
-    }
+      if (error) {
+        console.error("Failed to create snapshot:", error);
+        return null;
+      }
 
-    const point = snapshot as RollbackPoint;
-    setRollbackPoints((prev) => [...prev, point]);
-    autoSnapshotTaken.current.add(point.id);
-    return point;
-  }, [projectId]);
+      const point = snapshot as RollbackPoint;
+      setRollbackPoints((prev) => [...prev, point]);
+      autoSnapshotTaken.current.add(point.id);
+      return point;
+    },
+    [projectId],
+  );
 
   // Auto-create snapshot after agent finishes (called from editor)
   const autoSnapshotAfterAgent = useCallback(
@@ -106,10 +111,7 @@ export function useRollback({ projectId, enabled }: UseRollbackOptions) {
           .eq("project_id", projectId);
 
         if (existing && existing.length > 0) {
-          await supabase
-            .from("project_files")
-            .delete()
-            .eq("project_id", projectId);
+          await supabase.from("project_files").delete().eq("project_id", projectId);
         }
 
         // Insert restored files
@@ -119,12 +121,9 @@ export function useRollback({ projectId, enabled }: UseRollbackOptions) {
           content,
         }));
 
-        const { error } = await supabase
-          .from("project_files")
-          .upsert(inserts);
+        const { error } = await supabase.from("project_files").upsert(inserts);
 
         if (error) throw error;
-
 
         return true;
       } catch (e: any) {

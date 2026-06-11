@@ -18,10 +18,7 @@ export function FileRefChip({ file, onOpenFile, variant = "full" }: FileRefChipP
       <span className="lovable-file-ref-chip-sep" aria-hidden>
         ·
       </span>
-      <span
-        className="lovable-file-ref-chip-lang"
-        style={{ color: icon.color }}
-      >
+      <span className="lovable-file-ref-chip-lang" style={{ color: icon.color }}>
         {file.langLabel}
       </span>
       <span className="lovable-file-ref-chip-sep" aria-hidden>
@@ -35,10 +32,7 @@ export function FileRefChip({ file, onOpenFile, variant = "full" }: FileRefChipP
     return (
       <button
         type="button"
-        className={cn(
-          "lovable-file-ref-chip",
-          variant === "mini" && "lovable-file-ref-chip--mini",
-        )}
+        className={cn("lovable-file-ref-chip", variant === "mini" && "lovable-file-ref-chip--mini")}
         onClick={() => onOpenFile(file.path)}
         title={file.path}
       >
@@ -49,10 +43,7 @@ export function FileRefChip({ file, onOpenFile, variant = "full" }: FileRefChipP
 
   return (
     <span
-      className={cn(
-        "lovable-file-ref-chip",
-        variant === "mini" && "lovable-file-ref-chip--mini",
-      )}
+      className={cn("lovable-file-ref-chip", variant === "mini" && "lovable-file-ref-chip--mini")}
       title={file.path}
     >
       {inner}

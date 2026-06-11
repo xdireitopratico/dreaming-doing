@@ -1,11 +1,7 @@
 /**
  * Smoke test E2B — valida chave, template e toolchain Node/npm antes de gravar sandbox no projeto.
  */
-import {
-  E2B_PROJECT_DIR,
-  E2B_TEMPLATE_CANDIDATES,
-  e2bDeleteSandbox,
-} from "./e2b.ts";
+import { E2B_PROJECT_DIR, E2B_TEMPLATE_CANDIDATES, e2bDeleteSandbox } from "./e2b.ts";
 import { e2bRestCreate, type E2bRestSandbox } from "./e2b-rest.ts";
 
 export type E2bToolchainProbe = {
@@ -28,8 +24,14 @@ export type E2bSmokeResult = {
   error?: string;
 };
 
-function parseToolchainOutput(stdout: string): Pick<E2bToolchainProbe, "nodeOk" | "npmOk" | "nodeVersion" | "npmVersion"> {
-  const lines = stdout.trim().split("\n").map((l) => l.trim()).filter(Boolean);
+function parseToolchainOutput(
+  stdout: string,
+): Pick<E2bToolchainProbe, "nodeOk" | "npmOk" | "nodeVersion" | "npmVersion"> {
+  const lines = stdout
+    .trim()
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean);
   const nodeLine = lines.find((l) => /^v\d/.test(l)) ?? lines.find((l) => l.includes("node"));
   const npmLine = lines.find((l) => /^\d+\.\d+/.test(l)) ?? lines.find((l) => l.includes("npm"));
   return {
@@ -49,7 +51,7 @@ export async function probeSandboxToolchain(
   for (let i = 0; i < attempts; i++) {
     try {
       const result = await sandbox.commands.run(
-        "export PATH=\"/usr/local/bin:/usr/bin:/bin:$PATH\"; node -v && npm -v",
+        'export PATH="/usr/local/bin:/usr/bin:/bin:$PATH"; node -v && npm -v',
         { cwd: E2B_PROJECT_DIR, timeoutMs: 45_000 },
       );
 
@@ -81,7 +83,7 @@ export async function createValidatedE2bSandbox(
 ): Promise<{ sandbox: E2bRestSandbox; templateUsed: string }> {
   let lastErr: unknown;
   let lastProbeErr = "";
-  let templatesTried: string[] = [];
+  const templatesTried: string[] = [];
 
   for (const tpl of E2B_TEMPLATE_CANDIDATES) {
     let sandbox: E2bRestSandbox | null = null;
@@ -153,7 +155,8 @@ export async function runE2bSmokeTest(apiKey: string): Promise<E2bSmokeResult> {
     };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    const keyOk = !msg.includes("401") && !msg.includes("403") && !msg.toLowerCase().includes("api key");
+    const keyOk =
+      !msg.includes("401") && !msg.includes("403") && !msg.toLowerCase().includes("api key");
     return {
       ok: false,
       keyOk,

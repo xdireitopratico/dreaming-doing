@@ -19,7 +19,11 @@ export async function autoPublishIfNeeded(
     .from("project_files")
     .select("path, content")
     .eq("project_id", projectId);
-  if (!isProjectPublishReadyFromFiles((projectFiles ?? []) as Array<{ path: string; content: string }>)) {
+  if (
+    !isProjectPublishReadyFromFiles(
+      (projectFiles ?? []) as Array<{ path: string; content: string }>,
+    )
+  ) {
     return { published: false, error: "Entry ainda no placeholder do seed" };
   }
 

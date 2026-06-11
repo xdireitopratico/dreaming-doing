@@ -16,7 +16,8 @@ Deno.test("sanitizeDocumentMarkdown removes page footers and fixes hyphen breaks
 });
 
 Deno.test("structurePlainTextAsMarkdown promotes short isolated lines", () => {
-  const raw = "INTRODUÇÃO\n\nParágrafo longo com texto normal que não é título.\n\n1. Primeiro item";
+  const raw =
+    "INTRODUÇÃO\n\nParágrafo longo com texto normal que não é título.\n\n1. Primeiro item";
   const out = structurePlainTextAsMarkdown(raw);
   assertEquals(out.startsWith("## INTRODUÇÃO"), true);
 });

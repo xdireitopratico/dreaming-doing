@@ -16,9 +16,11 @@ function signal(
 }
 
 /** Deriva sinais acionáveis + score 0–100 a partir do snapshot. */
-export function qualifySnapshot(
-  snap: EditorTelemetrySnapshot,
-): { signals: TelemetrySignal[]; health: EditorHealth; score: number } {
+export function qualifySnapshot(snap: EditorTelemetrySnapshot): {
+  signals: TelemetrySignal[];
+  health: EditorHealth;
+  score: number;
+} {
   const signals: TelemetrySignal[] = [];
   let score = 100;
 
@@ -114,10 +116,11 @@ export function qualifySnapshot(
 
   if (snap.agent.lastError) {
     const errLower = snap.agent.lastError.toLowerCase();
-    const isNvidia404 = /\b404\b/i.test(snap.agent.lastError) &&
+    const isNvidia404 =
+      /\b404\b/i.test(snap.agent.lastError) &&
       (errLower.includes("nvidia") || errLower.includes("nemotron"));
-    const isOpenAi404 = /\b404\b/i.test(snap.agent.lastError) &&
-      errLower.includes("openai") && !isNvidia404;
+    const isOpenAi404 =
+      /\b404\b/i.test(snap.agent.lastError) && errLower.includes("openai") && !isNvidia404;
     signals.push(
       signal(
         "agent-error",
@@ -129,8 +132,8 @@ export function qualifySnapshot(
           : isOpenAi404
             ? "GPT-5.x na OpenAI usa API Responses — recarregue e reenvie; ou OpenRouter em /api."
             : snap.agent.resumable
-            ? "Tente Retomar no painel do agente."
-            : "Veja TERMINAL e eventos abaixo.",
+              ? "Tente Retomar no painel do agente."
+              : "Veja TERMINAL e eventos abaixo.",
       ),
     );
     penalize(25);
@@ -165,7 +168,11 @@ export function qualifySnapshot(
     penalize(8);
   }
 
-  if (snap.preview.isReactProject && !snap.sandbox.previewSandboxId && snap.connectors.e2bConnected) {
+  if (
+    snap.preview.isReactProject &&
+    !snap.sandbox.previewSandboxId &&
+    snap.connectors.e2bConnected
+  ) {
     signals.push(
       signal(
         "sandbox-not-provisioned",
@@ -192,9 +199,7 @@ export function qualifySnapshot(
   }
 
   if (signals.length === 0) {
-    signals.push(
-      signal("all-clear", "ok", "ui", "Nenhum bloqueio detectado no snapshot atual"),
-    );
+    signals.push(signal("all-clear", "ok", "ui", "Nenhum bloqueio detectado no snapshot atual"));
   }
 
   const hasError = signals.some((s) => s.level === "error");

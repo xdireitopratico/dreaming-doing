@@ -4,14 +4,8 @@
  */
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { type AgentJobParams, executeAgentJob } from "./run-job.ts";
-import {
-  buildSessionExtensionsPrompt,
-  normalizeIdList,
-} from "../_shared/session-extensions.ts";
-import {
-  type AgentPreferencesPayload,
-  loadDeployConnectorKeys,
-} from "./connector-keys.ts";
+import { buildSessionExtensionsPrompt, normalizeIdList } from "../_shared/session-extensions.ts";
+import { type AgentPreferencesPayload, loadDeployConnectorKeys } from "./connector-keys.ts";
 import type { ProviderConfig } from "./providers.ts";
 import {
   loadUserLlmContext,
@@ -20,10 +14,7 @@ import {
   resolveExecutePreferences,
   resolveExecuteSessionKindRaw,
 } from "./run-setup.ts";
-import {
-  buildStackContext,
-  stackPromptAddon,
-} from "../_shared/stack-context.ts";
+import { buildStackContext, stackPromptAddon } from "../_shared/stack-context.ts";
 import { buildChatHistory } from "./memory.ts";
 import { RobinKeyPool } from "./robin-pool.ts";
 import { loadUserE2bApiKey } from "../_shared/user-e2b.ts";
@@ -33,10 +24,7 @@ import { buildSandboxEnv } from "./sandbox-env.ts";
 import { looksLikeInteractionOnly } from "./qualify.ts";
 import { logger } from "../_shared/logger.ts";
 import { appendStreamEvent } from "../_shared/agent-stream.ts";
-import {
-  chunkCapErrorMessage,
-  evaluateChunkLimits,
-} from "../_shared/agent-chunk-limits.ts";
+import { chunkCapErrorMessage, evaluateChunkLimits } from "../_shared/agent-chunk-limits.ts";
 
 export type ExecuteParams = {
   runId: string;
@@ -71,14 +59,7 @@ export async function executeAgentRun(
   params: ExecuteParams,
 ): Promise<ExecuteResult> {
   const startMs = Date.now();
-  const {
-    runId,
-    projectId,
-    conversationId,
-    userId,
-    resume: resumeParam,
-    planMode,
-  } = params;
+  const { runId, projectId, conversationId, userId, resume: resumeParam, planMode } = params;
 
   // Race-safe cancel check: if the user canceled between Inngest's check
   // and this call, exit early without touching state.
@@ -88,24 +69,14 @@ export async function executeAgentRun(
     .eq("id", runId)
     .maybeSingle();
   const runMeta = (preCheck?.meta ?? {}) as Record<string, unknown>;
-  const effectivePreferences = resolveExecutePreferences(
-    params.preferences,
-    runMeta,
-  );
+  const effectivePreferences = resolveExecutePreferences(params.preferences, runMeta);
   const effectiveSkillIds = resolveExecuteIdList(
     params.enabledSkillIds,
     runMeta,
     "enabledSkillIds",
   );
-  const effectiveMcpIds = resolveExecuteIdList(
-    params.enabledMcpIds,
-    runMeta,
-    "enabledMcpIds",
-  );
-  const effectiveSessionKindRaw = resolveExecuteSessionKindRaw(
-    params.sessionKindRaw,
-    runMeta,
-  );
+  const effectiveMcpIds = resolveExecuteIdList(params.enabledMcpIds, runMeta, "enabledMcpIds");
+  const effectiveSessionKindRaw = resolveExecuteSessionKindRaw(params.sessionKindRaw, runMeta);
 
   if (preCheck?.status === "canceled" || preCheck?.canceled_at) {
     return {
@@ -191,16 +162,13 @@ export async function executeAgentRun(
     .limit(120);
   const historyRows = history ?? [];
 
-  const loadedCheckpoint = resumeParam === true
-    ? await loadCheckpoint(supabase, projectId, conversationId)
-    : null;
+  const loadedCheckpoint =
+    resumeParam === true ? await loadCheckpoint(supabase, projectId, conversationId) : null;
   if (!resumeParam) {
     await clearConversationCheckpoint(supabase, projectId, conversationId);
   }
   const resumeRun = resumeParam === true && !!loadedCheckpoint;
-  const restoredExecutionLog = resumeRun
-    ? restoreExecutionLogFromRows(historyRows)
-    : [];
+  const restoredExecutionLog = resumeRun ? restoreExecutionLogFromRows(historyRows) : [];
 
   const { userOnlyKeys, hasUserLlmKey } = await loadUserLlmContext(
     supabase,
@@ -236,11 +204,14 @@ export async function executeAgentRun(
     tasteStart = setup.tasteStart;
   } catch (err: unknown) {
     const msg = (err as Error)?.message ?? "Provider LLM não configurado";
-    await supabase.from("agent_runs").update({
-      status: "failed",
-      finished_at: new Date().toISOString(),
-      error: msg,
-    }).eq("id", runId);
+    await supabase
+      .from("agent_runs")
+      .update({
+        status: "failed",
+        finished_at: new Date().toISOString(),
+        error: msg,
+      })
+      .eq("id", runId);
     return {
       ok: false,
       runId,
@@ -257,13 +228,13 @@ export async function executeAgentRun(
 
   // Allocate sandbox decision — short-circuit approved (and prior plan_approved in history for follow-ups)
   // BEFORE any lastUserContent extraction / looksLike (meta-aware + approve-proof).
-  const isApprovedPlanBuild =
-    !!(runMeta.planSourceRunId ?? params.planSourceRunId);
+  const isApprovedPlanBuild = !!(runMeta.planSourceRunId ?? params.planSourceRunId);
   const hasApprovedPlanInHistory = historyRows.some((r: any) => {
     const meta = (r?.meta ?? {}) as Record<string, unknown>;
-    return r?.role === "user" &&
-      (meta.kind === "plan_approved" ||
-        typeof meta.planSourceRunId === "string");
+    return (
+      r?.role === "user" &&
+      (meta.kind === "plan_approved" || typeof meta.planSourceRunId === "string")
+    );
   });
   let allocateSandboxLocal: boolean;
   let looksLikeInteraction = false;
@@ -271,19 +242,15 @@ export async function executeAgentRun(
     allocateSandboxLocal = true;
   } else {
     const lastUserContent = (() => {
-      const lastUser = [...historyRows].reverse().find((m: any) =>
-        m.role === "user"
-      );
+      const lastUser = [...historyRows].reverse().find((m: any) => m.role === "user");
       const parts = lastUser?.parts || [];
-      const textPart = parts.find((p: any) =>
-        p?.type === "text" || typeof p?.text === "string"
-      );
+      const textPart = parts.find((p: any) => p?.type === "text" || typeof p?.text === "string");
       return textPart?.text || textPart?.content || "";
     })();
     looksLikeInteraction = looksLikeInteractionOnly(lastUserContent);
-    const projectHasSandbox =
-      !!(((project as any).meta || {})?.previewSandboxId ||
-        ((project as any).meta || {})?.previewReady);
+    const projectHasSandbox = !!(
+      ((project as any).meta || {})?.previewSandboxId || ((project as any).meta || {})?.previewReady
+    );
     let projectFileCount = 0;
     try {
       const { count } = await supabase
@@ -328,8 +295,7 @@ export async function executeAgentRun(
         ...runMetaBase,
         betweenChunks: false,
         plan: params.plan ?? currentMeta.plan ?? null,
-        planSourceRunId: params.planSourceRunId ??
-          currentMeta.planSourceRunId ?? null,
+        planSourceRunId: params.planSourceRunId ?? currentMeta.planSourceRunId ?? null,
       },
     })
     .eq("id", runId);
@@ -346,8 +312,7 @@ export async function executeAgentRun(
     enabledMcpIds: effectiveMcpIds,
     planMode,
     allocateSandbox: allocateSandboxLocal,
-    skipQualify: isApprovedPlanBuild || hasApprovedPlanInHistory ||
-      params.skipQualify === true,
+    skipQualify: isApprovedPlanBuild || hasApprovedPlanInHistory || params.skipQualify === true,
   };
 
   const onEvent = (type: string, data: Record<string, unknown>) => {
@@ -357,18 +322,17 @@ export async function executeAgentRun(
   // Inngest executa o loop in-process; resume só se o budget do step expirar.
   let result: Awaited<ReturnType<typeof executeAgentJob>>;
   try {
-    result = await executeAgentJob(
-      supabase,
-      { ...jobParams, resumeRun },
-      onEvent,
-    );
+    result = await executeAgentJob(supabase, { ...jobParams, resumeRun }, onEvent);
   } catch (err: unknown) {
     const msg = (err as Error)?.message ?? "Agent execution failed";
-    await supabase.from("agent_runs").update({
-      status: "failed",
-      finished_at: new Date().toISOString(),
-      error: msg,
-    }).eq("id", runId);
+    await supabase
+      .from("agent_runs")
+      .update({
+        status: "failed",
+        finished_at: new Date().toISOString(),
+        error: msg,
+      })
+      .eq("id", runId);
     return {
       ok: false,
       runId,
@@ -389,8 +353,7 @@ export async function executeAgentRun(
   const finalStatus = finalRun?.status as string | undefined;
   const finalMeta = (finalRun?.meta ?? {}) as Record<string, unknown>;
   const awaitingStates = ["awaiting_user"];
-  const isAwaiting = awaitingStates.includes(finalStatus ?? "") ||
-    !!finalMeta.awaitingUser;
+  const isAwaiting = awaitingStates.includes(finalStatus ?? "") || !!finalMeta.awaitingUser;
   const prevMeta = (finalRun?.meta ?? runMetaBase) as Record<string, unknown>;
 
   // Chunk resumable: Inngest chama execute de novo — não finalizar a run.

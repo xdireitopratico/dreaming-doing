@@ -3,15 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import { toast } from "@/lib/toast";
-import {
-  ArrowLeft,
-  Key,
-  Plug,
-  User,
-  Mail,
-  Lock,
-  LogOut,
-} from "lucide-react";
+import { ArrowLeft, Key, Plug, User, Mail, Lock, LogOut } from "lucide-react";
 import { DashboardShell } from "@/components/dashboard/DashboardShell";
 import { useAuth } from "@/lib/auth";
 import { supabase } from "@/integrations/supabase/client";
@@ -64,16 +56,13 @@ function SettingsPage() {
     if (!user?.id) return;
     setSavingProfile(true);
     try {
-      const { error } = await supabase
-        .from("profiles")
-        .upsert({
-          id: user.id,
-          display_name: displayName.trim() || null,
-          updated_at: new Date().toISOString(),
-        });
+      const { error } = await supabase.from("profiles").upsert({
+        id: user.id,
+        display_name: displayName.trim() || null,
+        updated_at: new Date().toISOString(),
+      });
       if (error) throw error;
       await qc.invalidateQueries({ queryKey: ["profile", user.id] });
-
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : "Falha ao salvar perfil");
     } finally {
@@ -96,7 +85,6 @@ function SettingsPage() {
       if (error) throw error;
       setNewPassword("");
       setConfirmPassword("");
-
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : "Falha ao alterar senha");
     } finally {
@@ -172,7 +160,9 @@ function SettingsPage() {
           </div>
           <div>
             <Label className="font-mono text-[10px] text-[var(--text-dim)]">ID</Label>
-            <p className="font-mono text-[9px] text-[var(--text-ghost)] mt-1 break-all">{user?.id}</p>
+            <p className="font-mono text-[9px] text-[var(--text-ghost)] mt-1 break-all">
+              {user?.id}
+            </p>
           </div>
         </div>
       </section>

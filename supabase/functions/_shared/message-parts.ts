@@ -86,7 +86,5 @@ export async function expandPartsToOpenAIContent(
     blocks.push({ type: "image_url", image_url: { url } });
   }
 
-  return blocks.length === 1 && blocks[0].type === "text"
-    ? (blocks[0].text ?? "")
-    : blocks;
+  return blocks.length === 1 && blocks[0].type === "text" ? (blocks[0].text ?? "") : blocks;
 }
