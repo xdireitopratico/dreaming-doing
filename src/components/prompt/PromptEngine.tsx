@@ -59,6 +59,13 @@ export function PromptEngine({
 }: Props) {
   const [value, setValue] = useState("");
   const [model, setModel] = useState<"forge-1" | "forge-pro">("forge-1");
+  const [useV2, setUseV2] = useState(() => {
+    try {
+      return new URLSearchParams(window.location.search).get("chat") === "v2";
+    } catch {
+      return false;
+    }
+  });
   const [busy, setBusy] = useState(false);
   const taRef = useRef<HTMLTextAreaElement>(null);
   const navigate = useNavigate();
@@ -119,6 +126,9 @@ export function PromptEngine({
       bootstrapComposerMode(res.projectId, "plan");
       warp.cancel();
       clearForgeTransitionOverlays();
+      if (useV2) {
+        try { sessionStorage.setItem("forge.chatV2", "1"); } catch { /* ignore */ }
+      }
       navigate({ to: "/projects/$projectId", params: { projectId: res.projectId } });
     } catch (e) {
       warp.finish();
@@ -173,6 +183,21 @@ export function PromptEngine({
             >
               <span className="w-1.5 h-1.5 rounded-full bg-[var(--primary)]" />
               {model}
+            </button>
+            <button
+              type="button"
+              data-cursor="hover"
+              onClick={() => setUseV2((v) => !v)}
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-[11px] font-mono tracking-[0.15em] uppercase transition-colors ${
+                useV2
+                  ? "bg-[var(--primary)]/15 text-[var(--primary)]"
+                  : "hover:bg-white/5 hover:text-[var(--foreground)] text-[var(--text-ghost)]"
+              }`}
+            >
+              <span
+                className={`w-1.5 h-1.5 rounded-full ${useV2 ? "bg-[var(--primary)]" : "bg-[var(--text-ghost)]"}`}
+              />
+              chat v2
             </button>
             <span className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-[11px] font-mono tracking-[0.15em] uppercase text-[var(--text-ghost)]">
               <svg

@@ -40,7 +40,18 @@ function EditorPage() {
   const { projectId } = useParams({ from: "/projects/$projectId/" });
   const navigate = useNavigate();
   const search = useSearch({ from: "/projects/$projectId/" });
-  const useV2Chat = new URLSearchParams(window.location.search).get("chat") === "v2";
+  const useV2Chat = (() => {
+    const urlParam = new URLSearchParams(window.location.search).get("chat") === "v2";
+    if (urlParam) return true;
+    try {
+      if (sessionStorage.getItem("forge.chatV2") === "1") {
+        sessionStorage.removeItem("forge.chatV2");
+        window.history.replaceState(null, "", window.location.pathname);
+        return true;
+      }
+    } catch { /* ignore */ }
+    return false;
+  })();
 
   const {
     tasteChatRemaining,
