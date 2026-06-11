@@ -132,6 +132,7 @@ function EditorPage() {
     filePaths,
     fileMap,
     chatMessages,
+    chatMessagesLoading,
     fileTreeFiles,
     previewNavFiles,
     isReactProject,
@@ -335,6 +336,7 @@ function EditorPage() {
       setPreviewDevice={setPreviewDevice}
       e2bConnected={e2bConnected}
       chatMessages={chatMessages}
+      chatMessagesLoading={chatMessagesLoading}
       handleResumeAgent={handlers.handleResumeAgent}
       handleSend={handlers.handleSend}
       handleStop={handlers.handleStop}

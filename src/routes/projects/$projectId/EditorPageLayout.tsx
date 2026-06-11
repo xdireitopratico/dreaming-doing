@@ -68,6 +68,7 @@ export type EditorPageLayoutProps = {
   setPreviewDevice: (device: "desktop" | "tablet" | "mobile") => void;
   e2bConnected: boolean;
   chatMessages: ChatMessage[];
+  chatMessagesLoading?: boolean;
   handleResumeAgent: () => void;
   handleSend: (
     text: string,
@@ -165,6 +166,7 @@ export function EditorPageLayout({
   setPreviewDevice,
   e2bConnected,
   chatMessages,
+  chatMessagesLoading = false,
   handleResumeAgent,
   handleSend,
   handleStop,
@@ -224,6 +226,19 @@ export function EditorPageLayout({
     () => resolvePendingPlan(agent.progress.pendingPlan, chatMessages),
     [agent.progress.pendingPlan, chatMessages],
   );
+
+  const showWelcomeMarkdown = useMemo(() => {
+    if (chatMessagesLoading || chatMessages.length > 0) return false;
+    if (agentHasRun) return false;
+    if (agent.frozenRuns.size > 0 || agent.activeRunId) return false;
+    return true;
+  }, [
+    chatMessagesLoading,
+    chatMessages.length,
+    agentHasRun,
+    agent.frozenRuns.size,
+    agent.activeRunId,
+  ]);
   useEffect(() => {
     if (pendingPlan && !agent.progress.pendingPlan) {
       agent.hydratePendingPlan(pendingPlan);
@@ -438,7 +453,8 @@ export function EditorPageLayout({
                   onComposerModeChange={setComposerMode}
                   externalPrompt={promptDraft}
                   onExternalPromptConsumed={() => setPromptDraft(null)}
-                  welcomeMarkdown={chatMessages.length === 0 ? welcomeMarkdown : undefined}
+                  messagesLoading={chatMessagesLoading}
+                  welcomeMarkdown={showWelcomeMarkdown ? welcomeMarkdown : undefined}
                   tasteChatRemaining={tasteChatRemaining}
                   tasteStartRemaining={tasteStartRemaining}
                   onStartProject={handleStartProject}

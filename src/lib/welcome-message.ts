@@ -13,18 +13,7 @@ Use **Start Project** (1×): plano + código + preview no painel à direita.
 2. [Modelos](/models) → **ROBIN** + NVIDIA + **Nemotron 550B** (slug \`nvidia/nemotron-3-ultra-550b-a55b\`) → **Salvar**.
 3. O chat já abre em modo **Build** — descreva o app e o agente edita \`src/App.tsx\` no preview.`;
 
-/** BYOK — chaves do usuário; agente completo. */
-export const FORGE_WELCOME_BYOK_MARKDOWN = `Projeto pronto para construir.
+/** BYOK — chaves do usuário; agente completo (só projeto novo, sem histórico). */
+export const FORGE_WELCOME_BYOK_MARKDOWN = `Descreva o que quer construir — o agente edita o código e o **preview** aparece à direita.
 
-**Checklist (acima do chat)**
-Confira E2B + modelo Nemotron — o agente só roda com os dois OK.
-
-**Preview à direita**
-Quando a IA gravar arquivos, seu site aparece aqui (rotas na barra do preview).
-
-**Para testar o 550B**
-- [Modelos](/models): **ROBIN** + pool **NVIDIA** + card Nemotron Ultra, ou **Fixo** com o mesmo slug.
-- Slug na API NIM: nvidia/nemotron-3-ultra-550b-a55b (igual Hermes / build.nvidia.com).
-- [API](/api): chave NVIDIA salva + **E2B**.
-
-O chat já abre em **Build** — descreva o MVP (ex.: landing + dashboard) e a interface aparece no preview.`;
+Antes do primeiro build, confira [API](/api) (E2B + NVIDIA) e [Modelos](/models) (Nemotron ou o modelo que preferir).`;

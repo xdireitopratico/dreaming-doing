@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Loader2 } from "lucide-react";
 import { MarkdownRenderer } from "@/components/ui/markdown-renderer";
 import type { AgentProgress, PlanStep } from "@/lib/agent-progress";
 import type { AgentComposerMode, ChatMessage } from "@/lib/chat-types";
@@ -24,6 +25,8 @@ export type ForgeChatPanelProps = {
   externalPrompt?: string | null;
   onExternalPromptConsumed?: () => void;
   welcomeMarkdown?: string;
+  /** Histórico do DB ainda carregando (ex.: após F5) — não mostrar welcome/checklist. */
+  messagesLoading?: boolean;
   tasteChatRemaining?: number;
   tasteStartRemaining?: number;
   onStartProject?: () => void;
@@ -58,6 +61,7 @@ export function ForgeChatPanel({
   externalPrompt,
   onExternalPromptConsumed,
   welcomeMarkdown,
+  messagesLoading = false,
   tasteChatRemaining,
   tasteStartRemaining,
   onStartProject,
@@ -155,13 +159,21 @@ export function ForgeChatPanel({
       <div ref={scrollRef} className="forge-messages" onScroll={handleMessagesScroll}>
         {messages.length === 0 ? (
           <div className="forge-msg-text space-y-3">
-            {welcomeMarkdown ? (
+            {messagesLoading ? (
+              <div
+                className="flex items-center gap-2 py-6 text-[var(--text-muted)]"
+                data-testid="forge-chat-loading"
+              >
+                <Loader2 className="size-4 shrink-0 animate-spin" />
+                <span className="text-sm">Carregando conversa…</span>
+              </div>
+            ) : welcomeMarkdown ? (
               <MarkdownRenderer>{welcomeMarkdown}</MarkdownRenderer>
             ) : (
               <p>Descreva o que quer construir. O agente gera o código e você vê o resultado à direita.</p>
             )}
             <div className="flex flex-wrap gap-2 pt-1">
-              {onStartProject && (tasteStartRemaining ?? 0) > 0 && (
+              {!messagesLoading && onStartProject && (tasteStartRemaining ?? 0) > 0 && (
                 <button
                   type="button"
                   onClick={onStartProject}

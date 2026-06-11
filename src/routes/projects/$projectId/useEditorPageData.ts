@@ -52,7 +52,11 @@ export function useEditorPageData({
     },
   });
 
-  const { data: messages } = useQuery({
+  const {
+    data: messages,
+    isPending: messagesPending,
+    isFetching: messagesFetching,
+  } = useQuery({
     queryKey: ["messages", conversation?.id],
     queryFn: async () => {
       if (!conversation) return [];
@@ -65,6 +69,10 @@ export function useEditorPageData({
     },
     enabled: !!conversation,
   });
+
+  /** Pós-F5: evita flash do welcome BYOK enquanto o histórico ainda não chegou do DB. */
+  const chatMessagesLoading =
+    !!conversation?.id && (messagesPending || (messagesFetching && messages === undefined));
 
   const { data: files } = useQuery({
     queryKey: ["files", projectId],
@@ -206,6 +214,7 @@ export function useEditorPageData({
     filePaths,
     fileMap,
     chatMessages,
+    chatMessagesLoading,
     fileTreeFiles,
     previewNavFiles,
     isReactProject,
