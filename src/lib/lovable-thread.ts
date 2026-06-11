@@ -87,13 +87,13 @@ function buildRunIdFromUser(msg: ChatMessage): string | null {
   return null;
 }
 
-/** Índice onde inserir assistant live/frozen: após último user sem resposta no DB. */
+/** Índice onde inserir assistant live/frozen: após último user sem slot assistant (live/frozen/DB). */
 function pendingAssistantInsertIndex(items: LovableThreadItem[]): number {
   for (let i = items.length - 1; i >= 0; i--) {
     const item = items[i];
     if (item?.kind !== "user") continue;
     const next = items[i + 1];
-    const hasReply = next?.kind === "assistant" && !!next.message?.content?.trim();
+    const hasReply = next?.kind === "assistant";
     if (!hasReply) return i + 1;
   }
   return items.length;
@@ -135,29 +135,32 @@ function mergeAssistantIntoItems(
   msg: ChatMessage,
   runId?: string,
 ): LovableThreadItem[] {
-  const last = items[items.length - 1];
-  if (
-    last?.kind === "assistant" &&
-    runId &&
-    last.runId === runId &&
-    !last.isActive &&
-    !last.live &&
-    !last.frozen
-  ) {
-    const prev = last.message;
-    const mergedContent =
-      [prev?.content, msg.content].filter((c) => c?.trim()).join("\n\n") || msg.content;
-    const next = [...items];
-    next[items.length - 1] = {
-      ...last,
-      message: {
-        ...msg,
-        content: mergedContent,
-        toolCalls: msg.toolCalls?.length ? msg.toolCalls : prev?.toolCalls,
-      },
-      runId,
-    };
-    return next;
+  if (runId) {
+    for (let i = items.length - 1; i >= 0; i--) {
+      const item = items[i];
+      if (
+        item?.kind === "assistant" &&
+        item.runId === runId &&
+        !item.isActive &&
+        !item.live &&
+        !item.frozen
+      ) {
+        const prev = item.message;
+        const mergedContent =
+          [prev?.content, msg.content].filter((c) => c?.trim()).join("\n\n") || msg.content;
+        const next = [...items];
+        next[i] = {
+          ...item,
+          message: {
+            ...msg,
+            content: mergedContent,
+            toolCalls: msg.toolCalls?.length ? msg.toolCalls : prev?.toolCalls,
+          },
+          runId,
+        };
+        return next;
+      }
+    }
   }
   return [
     ...items,
@@ -173,7 +176,13 @@ function mergeAssistantIntoItems(
 function mergeAssistantMessages(a?: ChatMessage, b?: ChatMessage): ChatMessage | undefined {
   if (!a) return b;
   if (!b) return a;
-  const merged = [a.content, b.content].filter((c) => c?.trim()).join("\n\n") || b.content;
+  const aText = a.content?.trim() ?? "";
+  const bText = b.content?.trim() ?? "";
+  if (!aText) return b;
+  if (!bText || aText === bText || bText.includes(aText) || aText.includes(bText)) {
+    return { ...b, content: bText || aText, toolCalls: b.toolCalls?.length ? b.toolCalls : a.toolCalls };
+  }
+  const merged = [aText, bText].join("\n\n");
   return {
     ...b,
     content: merged,
@@ -322,7 +331,7 @@ function insertAssistantSlot(
   const existing = next[insertAt];
   if (existing?.kind === "assistant") {
     const sameRun = !!slot.runId && !!existing.runId && slot.runId === existing.runId;
-    if (sameRun || existing.isActive || existing.frozen || !existing.message?.content?.trim()) {
+    if (sameRun) {
       next[insertAt] = {
         ...existing,
         ...slot,

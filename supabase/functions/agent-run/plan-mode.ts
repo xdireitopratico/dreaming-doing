@@ -1,6 +1,6 @@
 // plan-mode.ts — Plan mode (Fase 4.6): tipos + extração de plano a partir da classificação.
 // Espelha src/components/editor/PlanViewer.tsx (PlanStep) — não altera o componente client.
-import type { ProposedPlan } from "./types.ts";
+import type { ChatMessage, ProposedPlan } from "./types.ts";
 
 export type PlanStepType =
   | "create_file"
@@ -45,6 +45,133 @@ export interface PlanRationale {
 export type { ProposedPlan } from "./types.ts";
 
 export const PLAN_APPROVAL_TTL_MS = 5 * 60 * 1000; // 5min
+
+const META_HEADLINE_RE =
+  /^(conversa:|preciso ver|primeira intera|não há plano|nao ha plano|usuário pede|usuario pede|o usuário|a usuária)/i;
+
+/** Bloqueia meta-comentários do classify de vazarem para o chat. */
+export function sanitizePlanHeadline(
+  headline: string | undefined | null,
+  fallback: string,
+): string {
+  const h = headline?.trim() ?? "";
+  if (!h || META_HEADLINE_RE.test(h)) return fallback;
+  if (/^conversa:/i.test(h)) return fallback;
+  return h;
+}
+
+/** Usuário pede para ver/reabrir plano existente (estilo Lovable). */
+export function isShowExistingPlanRequest(text: string): boolean {
+  const t = text.trim().toLowerCase();
+  if (!t) return false;
+  return (
+    /mostr(a|e|ar)\s+(o\s+)?plano/.test(t) ||
+    /ver\s+(o\s+)?plano/.test(t) ||
+    /abre?\s+(o\s+)?plano/.test(t) ||
+    /reabr(e|ir)\s+(o\s+)?plano/.test(t) ||
+    /plano\s+(pronto|existente|anterior|a[ií])/.test(t) ||
+    /tem\s+um\s+plano/.test(t) ||
+    /c[eê]\s+tem\s+um\s+plano/.test(t) ||
+    /qual\s+(é|e)\s+o\s+plano/.test(t)
+  );
+}
+
+function asPlanStepsFromMeta(raw: unknown): PlanStep[] {
+  if (!Array.isArray(raw)) return [];
+  const out: PlanStep[] = [];
+  for (let i = 0; i < raw.length; i++) {
+    const s = coerceStep(raw[i], i);
+    if (s) out.push(s);
+  }
+  return out;
+}
+
+/** Plano persistido no meta de mensagem assistant (espelha plan-message-meta.ts no client). */
+export function extractStoredPlanFromMessageMeta(
+  meta: Record<string, unknown> | undefined,
+): ProposedPlan | null {
+  if (!meta) return null;
+  const planId = typeof meta.planId === "string" ? meta.planId : null;
+  const steps = asPlanStepsFromMeta(meta.planSteps);
+  if (!planId || steps.length === 0) return null;
+  const rawSummary = typeof meta.planSummary === "string" ? meta.planSummary : "Plano proposto";
+  const mission = typeof meta.planMission === "string" ? meta.planMission : undefined;
+  return {
+    planId,
+    summary: sanitizePlanHeadline(mission ?? rawSummary, "Plano proposto"),
+    rationale:
+      typeof meta.planRationale === "string" && meta.planRationale.trim()
+        ? meta.planRationale.trim()
+        : undefined,
+    mission,
+    objective: typeof meta.planObjective === "string" ? meta.planObjective : undefined,
+    markdown:
+      typeof meta.planMarkdown === "string" && meta.planMarkdown.trim()
+        ? meta.planMarkdown.trim()
+        : undefined,
+    assumptions: Array.isArray(meta.planAssumptions)
+      ? (meta.planAssumptions as unknown[]).filter((x): x is string => typeof x === "string")
+      : undefined,
+    outOfScope: Array.isArray(meta.planOutOfScope)
+      ? (meta.planOutOfScope as unknown[]).filter((x): x is string => typeof x === "string")
+      : undefined,
+    phases: Array.isArray(meta.planPhases) ? (meta.planPhases as ForgePlanPhase[]) : undefined,
+    steps,
+    ttlMs: PLAN_APPROVAL_TTL_MS,
+    proposedAt: new Date().toISOString(),
+  };
+}
+
+export type StoredPlanEntry = { plan: ProposedPlan; status: "pending" | "approved" | "rejected" };
+
+/** Último plano no histórico — prioriza pendente, depois qualquer com steps. */
+export function findLatestStoredPlan(messages: ChatMessage[]): StoredPlanEntry | null {
+  let fallback: StoredPlanEntry | null = null;
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const msg = messages[i];
+    if (msg?.role !== "assistant") continue;
+    const plan = extractStoredPlanFromMessageMeta(msg.meta);
+    if (!plan) continue;
+    const statusRaw = msg.meta?.planStatus;
+    const status: StoredPlanEntry["status"] =
+      statusRaw === "approved" || statusRaw === "rejected" || statusRaw === "pending"
+        ? statusRaw
+        : "pending";
+    const entry = { plan, status };
+    if (status === "pending") return entry;
+    if (!fallback) fallback = entry;
+  }
+  return fallback;
+}
+
+/** Texto único do chat em Plan mode — uma voz, sem vazar classify. */
+export function buildPlanChatMessageText(plan: ProposedPlan): string {
+  const mission = sanitizePlanHeadline(
+    plan.mission ?? plan.summary,
+    "Plano para seu pedido",
+  );
+  return [
+    `**${mission}**`,
+    "",
+    "O plano está no painel ao lado (Missão, Objetivo, Fases e Fora do escopo).",
+    "Revise, edite se quiser e clique em **Aprovar e construir** quando estiver pronto.",
+  ].join("\n");
+}
+
+/** Resumo markdown do último plano para contexto do classify. */
+export function lastPlanContextFromMessages(messages: ChatMessage[]): string {
+  const stored = findLatestStoredPlan(messages);
+  if (!stored) return "nenhum";
+  const p = stored.plan;
+  if (p.markdown?.trim()) return p.markdown.trim().slice(0, 2000);
+  const parts = [
+    p.mission && `Missão: ${p.mission}`,
+    p.objective && `Objetivo: ${p.objective}`,
+    p.summary && `Resumo: ${p.summary}`,
+    `Status: ${stored.status}`,
+  ].filter(Boolean);
+  return parts.join("\n").slice(0, 2000) || "nenhum";
+}
 
 const VALID_STEP_TYPES = new Set<PlanStepType>([
   "create_file",
@@ -300,17 +427,21 @@ export function buildProposedPlan(
 
   // Caminho 1: plan estruturado veio do router
   if (classification.plan && classification.plan.steps.length > 0) {
+    const headline = sanitizePlanHeadline(
+      classification.plan.mission ?? summary,
+      "Plano proposto",
+    );
     return attachDocument(
       {
         planId: options.planId,
-        summary,
+        summary: headline,
         rationale: classification.plan.rationale || undefined,
         steps: classification.plan.steps,
         ttlMs: options.ttlMs,
         proposedAt: options.proposedAt,
       },
       classification.plan,
-      summary,
+      headline,
     );
   }
 
@@ -336,7 +467,7 @@ export function buildProposedPlan(
     {
       planId: options.planId,
       summary,
-      rationale: "Plano gerado automaticamente — revise as fases antes de aprovar.",
+      rationale: "Plano gerado automaticamente (heurística) — revise as fases antes de aprovar.",
       steps: deriveDefaultPlan(classification.type, summary),
       ttlMs: options.ttlMs,
       proposedAt: options.proposedAt,
@@ -359,7 +490,8 @@ export function deriveDefaultPlan(classificationType: string, summary: string): 
       {
         id: "s1",
         type: "observe",
-        description: "Ler arquivos e contexto atual do projeto (incluindo connectors/integrações vinculadas)",
+        description:
+          "Ler arquivos e contexto atual do projeto (incluindo connectors/integrações vinculadas)",
         enabled: true,
         estimatedCost: baseCost,
       },

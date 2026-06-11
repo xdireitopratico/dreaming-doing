@@ -20,7 +20,7 @@ import { isAgentConnectInFlight } from "@/lib/agent-session-guards";
 import { loadAgentSessionExtensions } from "@/lib/agent-session-extensions";
 import { publishProject } from "@/lib/publish.functions";
 import { planApprove, planReject } from "@/lib/plan-decide.functions";
-import { resolvePendingPlan } from "@/lib/plan-message-meta";
+import { needsPlanApprovalNow, resolvePendingPlan } from "@/lib/plan-message-meta";
 import { rollbackChatTurn } from "@/lib/rollback-chat-turn";
 import type { PendingPlan } from "@/lib/agent-progress";
 import { exportProjectZip } from "@/hooks/useWorkspacePresets";
@@ -203,30 +203,24 @@ export function useEditorPageHandlers({
     [setOpenTabs],
   );
 
-  const isAgentBusy = useCallback(
-    () => {
-      const liveRun =
-        agent.activeRunId != null &&
-        !agent.progress.finished &&
-        !agent.progress.canceled &&
-        !agent.progress.awaiting;
-      return running || liveRun || isAgentConnectInFlight();
-    },
-    [
-      running,
-      agent.connected,
-      agent.activeRunId,
-      agent.progress.finished,
-      agent.progress.canceled,
-      agent.progress.awaiting,
-    ],
-  );
+  const isAgentBusy = useCallback(() => {
+    const liveRun =
+      agent.activeRunId != null &&
+      !agent.progress.finished &&
+      !agent.progress.canceled &&
+      !agent.progress.awaiting;
+    return running || liveRun || isAgentConnectInFlight();
+  }, [
+    running,
+    agent.connected,
+    agent.activeRunId,
+    agent.progress.finished,
+    agent.progress.canceled,
+    agent.progress.awaiting,
+  ]);
 
   const runAgent = useCallback(
-    async (
-      explicitKind?: ForgeSessionKind,
-      explicitAction?: TasteAction,
-    ): Promise<boolean> => {
+    async (explicitKind?: ForgeSessionKind, explicitAction?: TasteAction): Promise<boolean> => {
       if (!conversation || isAgentBusy()) return false;
 
       const kind = explicitKind ?? resolveSessionKind(tasteQuota);
@@ -352,7 +346,9 @@ export function useEditorPageHandlers({
         return;
       }
 
-      const pp = resolvePendingPlan(agent.progress.pendingPlan, chatMessages);
+      const pp = needsPlanApprovalNow(agent.progress.pendingPlan, chatMessages)
+        ? resolvePendingPlan(agent.progress.pendingPlan, chatMessages)
+        : null;
       if (pp) {
         toast.error(
           "Há um plano aguardando revisão — use Aprovar ou Rejeitar no inspector antes de enviar outra mensagem.",

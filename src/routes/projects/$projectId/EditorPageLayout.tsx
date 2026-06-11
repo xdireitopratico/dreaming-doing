@@ -23,7 +23,7 @@ import { CommandPalette, type PaletteAction } from "@/components/editor/CommandP
 import { ShortcutCheatsheet } from "@/components/editor/ShortcutCheatsheet";
 import { type LogEntry, LogPanel } from "@/components/editor/LogPanel";
 import { AiDiffViewer, type DiffEntry } from "@/components/editor/AiDiffViewer";
-import { resolvePendingPlan } from "@/lib/plan-message-meta";
+import { needsPlanApprovalNow, resolvePendingPlan } from "@/lib/plan-message-meta";
 import { PENDING_RUN_ID, resolveAssistantProgress } from "@/lib/lovable-thread";
 import {
   hasMaterializedCardSnapshot,
@@ -233,10 +233,10 @@ export function EditorPageLayout({
   mobilePanel = "chat",
   onMobilePanelChange,
 }: EditorPageLayoutProps) {
-  const pendingPlan = useMemo(
-    () => resolvePendingPlan(agent.progress.pendingPlan, chatMessages),
-    [agent.progress.pendingPlan, chatMessages],
-  );
+  const pendingPlan = useMemo(() => {
+    const plan = resolvePendingPlan(agent.progress.pendingPlan, chatMessages);
+    return needsPlanApprovalNow(agent.progress.pendingPlan, chatMessages) ? plan : null;
+  }, [agent.progress.pendingPlan, chatMessages]);
 
   const showWelcomeMarkdown = useMemo(() => {
     if (chatMessagesLoading || chatMessages.length > 0) return false;
@@ -569,7 +569,10 @@ export function EditorPageLayout({
                   <div className="flex min-h-0 min-w-0 flex-1 flex-col">
                     {isMobile && mobilePanel === "code" && fileTreeFiles.length > 0 && (
                       <div className="forge-mobile-code-bar">
-                        <label htmlFor="forge-mobile-code-select" className="forge-mobile-code-label">
+                        <label
+                          htmlFor="forge-mobile-code-select"
+                          className="forge-mobile-code-label"
+                        >
                           Arquivo
                         </label>
                         <select

@@ -102,7 +102,9 @@ export function ForgeMessage({
   const showLatencyThinking =
     !!latency && (latency.active || (latency.durationMs != null && latency.durationMs > 0));
 
-  const showNarration = !!runView?.narration?.trim();
+  const showNarration =
+    !!runView?.narration?.trim() &&
+    !(runView?.closingText?.trim() && runView.closingText.includes(runView.narration.trim()));
 
   const isConversational =
     runView?.conversational === true ||
@@ -182,7 +184,9 @@ export function ForgeMessage({
           <div
             className={`forge-mini-card w-full forge-animate-card-appear forge-plan-${planStatus}`}
             data-testid="forge-plan-settled"
-            onClick={() => onOpenInspector && runView?.runId && onOpenInspector(runView.runId, "plan")}
+            onClick={() =>
+              onOpenInspector && runView?.runId && onOpenInspector(runView.runId, "plan")
+            }
             role="button"
             tabIndex={0}
           >
@@ -190,12 +194,16 @@ export function ForgeMessage({
               {planStatus === "approved" ? (
                 <>
                   <span className="forge-mini-card-dot forge-mini-card-dot--done" aria-hidden />
-                  <span className="forge-mini-card-badge forge-mini-card-badge--done">Plano aprovado</span>
+                  <span className="forge-mini-card-badge forge-mini-card-badge--done">
+                    Plano aprovado
+                  </span>
                 </>
               ) : (
                 <>
                   <span className="forge-mini-card-dot forge-mini-card-dot--failed" aria-hidden />
-                  <span className="forge-mini-card-badge forge-mini-card-badge--failed">Plano rejeitado</span>
+                  <span className="forge-mini-card-badge forge-mini-card-badge--failed">
+                    Plano rejeitado
+                  </span>
                 </>
               )}
             </div>

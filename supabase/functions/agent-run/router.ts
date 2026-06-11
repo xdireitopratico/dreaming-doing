@@ -17,18 +17,23 @@ export interface ClassificationResult {
 }
 
 const VALID_STEP_TYPES = new Set<PlanStepType>([
-  "create_file", "edit_file", "shell_exec", "install_dep", "observe", "custom",
+  "create_file",
+  "edit_file",
+  "shell_exec",
+  "install_dep",
+  "observe",
+  "custom",
 ]);
 
 function coercePlanStep(raw: unknown, idx: number): PlanStep | null {
   if (!raw || typeof raw !== "object") return null;
   const r = raw as Record<string, unknown>;
-  const type: PlanStepType = typeof r.type === "string" && VALID_STEP_TYPES.has(r.type as PlanStepType)
-    ? r.type as PlanStepType
-    : "custom";
-  const description = typeof r.description === "string" && r.description.trim()
-    ? r.description.trim()
-    : null;
+  const type: PlanStepType =
+    typeof r.type === "string" && VALID_STEP_TYPES.has(r.type as PlanStepType)
+      ? (r.type as PlanStepType)
+      : "custom";
+  const description =
+    typeof r.description === "string" && r.description.trim() ? r.description.trim() : null;
   if (!description) return null;
   return {
     id: typeof r.id === "string" && r.id ? r.id : `s${idx + 1}`,
@@ -42,7 +47,9 @@ function coercePlanStep(raw: unknown, idx: number): PlanStep | null {
 
 function coerceStringList(raw: unknown): string[] | undefined {
   if (!Array.isArray(raw)) return undefined;
-  const list = raw.filter((x): x is string => typeof x === "string" && x.trim().length > 0).map((x) => x.trim());
+  const list = raw
+    .filter((x): x is string => typeof x === "string" && x.trim().length > 0)
+    .map((x) => x.trim());
   return list.length ? list : undefined;
 }
 
@@ -70,9 +77,7 @@ function coercePhases(raw: unknown): PlanRationale["phases"] {
 function coercePlan(raw: unknown): PlanRationale | null {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
   const r = raw as Record<string, unknown>;
-  const rationale = typeof r.rationale === "string" && r.rationale.trim()
-    ? r.rationale.trim()
-    : "";
+  const rationale = typeof r.rationale === "string" && r.rationale.trim() ? r.rationale.trim() : "";
   if (!Array.isArray(r.steps) || r.steps.length === 0) return null;
   const steps: PlanStep[] = [];
   for (let i = 0; i < r.steps.length; i++) {
@@ -107,7 +112,11 @@ export class ModelRouter {
     this.cheap = overrides?.cheap ?? buildProvider(this.cheapCfg);
   }
 
-  async classify(userPrompt: string, projectContext: string): Promise<ClassificationResult> {
+  async classify(
+    userPrompt: string,
+    projectContext: string,
+    opts?: { lastPlan?: string },
+  ): Promise<ClassificationResult> {
     try {
       const resp = await this.cheap.chat({
         messages: [
@@ -165,7 +174,16 @@ DIRETRIZES DE PLANEJAMENTO:
 
 Retorne APENAS o JSON. Sem markdown, sem comentários, sem texto antes/depois.`,
           },
-          { role: "user", content: `Contexto do projeto (resumo):\n${projectContext.slice(0, 2000)}\n\nPedido do usuário:\n${userPrompt}` },
+          {
+            role: "user",
+            content: [
+              `Contexto do projeto (resumo):\n${projectContext.slice(0, 2000)}`,
+              opts?.lastPlan && opts.lastPlan !== "nenhum"
+                ? `\nPlano anterior na conversa:\n${opts.lastPlan.slice(0, 1500)}`
+                : "",
+              `\nPedido do usuário:\n${userPrompt}`,
+            ].join(""),
+          },
         ],
         response_format: { type: "json_object" },
         max_tokens: 1500,
@@ -176,7 +194,7 @@ Retorne APENAS o JSON. Sem markdown, sem comentários, sem texto antes/depois.`,
       const stripped = rawContent.replace(/```json\s*|\s*```/g, "").trim();
       const j = JSON.parse(stripped || "{}");
       const result: ClassificationResult = {
-        complexity: Math.min(5, Math.max(1, j.complexity ?? 3)) as 1|2|3|4|5,
+        complexity: Math.min(5, Math.max(1, j.complexity ?? 3)) as 1 | 2 | 3 | 4 | 5,
         type: j.type ?? "modify",
         summary: j.summary ?? userPrompt.slice(0, 100),
         needsBuild: j.needsBuild ?? false,
@@ -186,7 +204,13 @@ Retorne APENAS o JSON. Sem markdown, sem comentários, sem texto antes/depois.`,
       if (plan) result.plan = plan;
       return result;
     } catch {
-      return { complexity: 3, type: "modify", summary: userPrompt.slice(0, 100), needsBuild: true, needsDeps: false };
+      return {
+        complexity: 3,
+        type: "modify",
+        summary: userPrompt.slice(0, 100),
+        needsBuild: true,
+        needsDeps: false,
+      };
     }
   }
 
@@ -194,6 +218,10 @@ Retorne APENAS o JSON. Sem markdown, sem comentários, sem texto antes/depois.`,
     return complexity <= 2 ? this.cheap : this.main;
   }
 
-  getMainProvider(): LLMProvider { return this.main; }
-  getCheapProvider(): LLMProvider { return this.cheap; }
+  getMainProvider(): LLMProvider {
+    return this.main;
+  }
+  getCheapProvider(): LLMProvider {
+    return this.cheap;
+  }
 }

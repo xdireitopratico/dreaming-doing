@@ -95,15 +95,16 @@ function normalizeProse(prose: string): string {
   if (lines.length <= 1) return prose.trim();
   const allShort = lines.every((l) => l.trim().length <= 24);
   if (allShort && lines.length >= 3) {
-    return lines.map((l) => l.trim()).join(" ").replace(/\s{2,}/g, " ").trim();
+    return lines
+      .map((l) => l.trim())
+      .join(" ")
+      .replace(/\s{2,}/g, " ")
+      .trim();
   }
   return prose.trim();
 }
 
-export function buildForgeTimeline(
-  timeline: SSEEvent[],
-  running = false,
-): ForgeTimelineItem[] {
+export function buildForgeTimeline(timeline: SSEEvent[], running = false): ForgeTimelineItem[] {
   const items: ForgeTimelineItem[] = [];
   let thoughtId: string | null = null;
   let thoughtStart = 0;
@@ -202,16 +203,13 @@ export function buildForgeTimeline(
         type: "RESULT",
         id: `error-${ts}`,
         ok: false,
-        text:
-          typeof data.message === "string"
-            ? data.message.slice(0, 200)
-            : "Erro na execução",
+        text: typeof data.message === "string" ? data.message.slice(0, 200) : "Erro na execução",
       });
     }
   }
 
   if (thoughtId) {
-    const endTs = running ? Date.now() : timeline.at(-1)?.timestamp ?? Date.now();
+    const endTs = running ? Date.now() : (timeline.at(-1)?.timestamp ?? Date.now());
     const durationMs = Math.max(1000, endTs - thoughtStart);
     items.push({
       type: "THOUGHT",
@@ -225,10 +223,7 @@ export function buildForgeTimeline(
   return items;
 }
 
-export function deriveTasksFromPlan(
-  plan: PendingPlan,
-  progress: AgentProgress,
-): ForgeTaskItem[] {
+export function deriveTasksFromPlan(plan: PendingPlan, progress: AgentProgress): ForgeTaskItem[] {
   if (progress.awaitingKind === "plan_approval") {
     return [];
   }
@@ -237,14 +232,16 @@ export function deriveTasksFromPlan(
   const succeeded = progress.finished && progress.lastFinishOk !== false && !progress.canceled;
   const failed = progress.finished && (progress.lastFinishOk === false || !!progress.canceled);
 
-  return enabledPlanSteps(plan.steps).slice(0, 6).map((step, idx) => {
-    let status: TaskStatus = "pending";
-    if (succeeded) status = "done";
-    else if (failed && idx === current) status = "failed";
-    else if (executing && idx < current) status = "done";
-    else if (executing && idx === current) status = "active";
-    return { id: step.id, label: step.description, status };
-  });
+  return enabledPlanSteps(plan.steps)
+    .slice(0, 6)
+    .map((step, idx) => {
+      let status: TaskStatus = "pending";
+      if (succeeded) status = "done";
+      else if (failed && idx === current) status = "failed";
+      else if (executing && idx < current) status = "done";
+      else if (executing && idx === current) status = "active";
+      return { id: step.id, label: step.description, status };
+    });
 }
 
 function deriveMiniCardStatus(progress: AgentProgress, running: boolean): MiniCardStatus {
@@ -299,11 +296,9 @@ export function resolveLatencyThinking(
 
   if (!runStartedAtMs) return null;
 
-  const timeline =
-    forgeTimeline ?? buildForgeTimeline(progress.timeline, running);
+  const timeline = forgeTimeline ?? buildForgeTimeline(progress.timeline, running);
   const thoughtItems = timeline.filter((i) => i.type === "THOUGHT");
-  const shouldFreeze =
-    hasFirstResponseToken(progress) || thoughtItems.length > 0;
+  const shouldFreeze = hasFirstResponseToken(progress) || thoughtItems.length > 0;
 
   if (shouldFreeze) {
     const durationMs = Math.max(500, Date.now() - runStartedAtMs);
@@ -355,9 +350,7 @@ export function collectMiniCardBriefings(
     lines.push(t);
   };
 
-  const activeThought = [...timeline].reverse().find(
-    (i) => i.type === "THOUGHT" && i.active,
-  );
+  const activeThought = [...timeline].reverse().find((i) => i.type === "THOUGHT" && i.active);
   if (activeThought?.type === "THOUGHT") push("Raciocinando…");
 
   const pendingTool = [...progress.tools].reverse().find((t) => t.ok === undefined);
@@ -378,15 +371,17 @@ export function collectMiniCardBriefings(
   if (narrative.headline) push(narrative.headline);
   if (narrative.subhint) push(narrative.subhint);
 
-  if (progress.narrationText?.trim()) push(progress.narrationText);
-  if (progress.message) push(progress.message);
+  const planAwaiting =
+    progress.awaitingKind === "plan_approval" && (progress.pendingPlan?.steps?.length ?? 0) > 0;
+  if (!planAwaiting && progress.narrationText?.trim()) push(progress.narrationText);
+  if (!planAwaiting && progress.message) push(progress.message);
   if (progress.statusHint && !/conectando|iniciando/i.test(progress.statusHint)) {
     push(progress.statusHint);
   }
 
   if (progress.phase === "gather") push("Explorando o projeto…");
   if (progress.phase === "classify") push("Avaliando o escopo…");
-  if (progress.phase === "plan") push("Montando o plano…");
+  if (progress.phase === "plan" || planAwaiting) push("Plano aguardando revisão…");
 
   if (running && opts?.sessionTitle) push(opts.sessionTitle);
   else if (running && opts?.userPrompt) push(deriveBrainstormTitle(opts.userPrompt));
@@ -463,10 +458,7 @@ function lastEditedFile(progress: AgentProgress): string | null {
   return null;
 }
 
-export function isRunEffectivelyActive(
-  progress: AgentProgress,
-  slotActive = false,
-): boolean {
+export function isRunEffectivelyActive(progress: AgentProgress, slotActive = false): boolean {
   return !!slotActive && !progress.finished && !progress.canceled;
 }
 
@@ -492,20 +484,16 @@ export function shouldShowJobCard(opts: {
 
   if (!runId || !progress || isQualifyOnly) return false;
   if (progress.conversational === true) return false;
-  if (runId === "__pending__") return false;
+  if (runId === "__pending__") {
+    return !!progress.statusHint || progress.phase != null;
+  }
 
-  if (
-    progress.awaitingKind === "plan_approval" &&
-    (progress.pendingPlan?.steps?.length ?? 0) > 0
-  ) {
+  if (progress.awaitingKind === "plan_approval" && (progress.pendingPlan?.steps?.length ?? 0) > 0) {
     return true;
   }
 
   const isAnchoredLiveRun =
-    !!activeRunId &&
-    runId === activeRunId &&
-    !progress.finished &&
-    !progress.canceled;
+    !!activeRunId && runId === activeRunId && !progress.finished && !progress.canceled;
 
   return isJobMsg || hasExecutionEvidence || slotActive || isAnchoredLiveRun;
 }
@@ -525,9 +513,7 @@ export function buildAgentRunView(
   const jobPlan = opts?.jobPlan ?? progress.pendingPlan;
   const forgeTimeline = buildForgeTimeline(progress.timeline, running);
 
-  const tasks = jobPlan?.steps?.length
-    ? deriveTasksFromPlan(jobPlan, progress)
-    : [];
+  const tasks = jobPlan?.steps?.length ? deriveTasksFromPlan(jobPlan, progress) : [];
 
   const currentTaskIndex = Math.max(
     0,
@@ -537,13 +523,10 @@ export function buildAgentRunView(
   const status = deriveMiniCardStatus(progress, running);
   const editedFile = lastEditedFile(progress);
   const sessionTitle = deriveSessionTitle(progress, jobPlan, opts?.userPrompt);
-  const liveBriefings = collectMiniCardBriefings(
-    progress,
-    forgeTimeline,
-    tasks,
-    running,
-    { userPrompt: opts?.userPrompt, sessionTitle },
-  );
+  const liveBriefings = collectMiniCardBriefings(progress, forgeTimeline, tasks, running, {
+    userPrompt: opts?.userPrompt,
+    sessionTitle,
+  });
 
   const thoughtItems = forgeTimeline.filter((i) => i.type === "THOUGHT");
   const lastThought = thoughtItems[thoughtItems.length - 1];
@@ -557,12 +540,7 @@ export function buildAgentRunView(
   }
 
   const runStartedAtMs = opts?.runStartedAtMs;
-  const latencyThinking = resolveLatencyThinking(
-    progress,
-    running,
-    runStartedAtMs,
-    forgeTimeline,
-  );
+  const latencyThinking = resolveLatencyThinking(progress, running, runStartedAtMs, forgeTimeline);
 
   const thinking: AgentRunView["thinking"] = reasoningThought
     ? {
@@ -577,15 +555,21 @@ export function buildAgentRunView(
   const streamBody = progress.streamText?.trim() || null;
   const narrationBody = progress.narrationText?.trim() || null;
   const summaryBody = progress.summary?.trim();
-  const safeSummary =
-    summaryBody && !isWrapUpPhrase(summaryBody) ? summaryBody : null;
+  const safeSummary = summaryBody && !isWrapUpPhrase(summaryBody) ? summaryBody : null;
+  const narrationDuplicatesStream =
+    !!streamBody &&
+    !!narrationBody &&
+    (narrationBody === streamBody ||
+      streamBody.includes(narrationBody) ||
+      narrationBody.includes(streamBody));
   const closingText =
     streamBody ||
-    (!running ? narrationBody || safeSummary : null) ||
+    (!running && !narrationDuplicatesStream ? narrationBody || safeSummary : null) ||
     null;
   const narrationForLine =
     running &&
     narrationBody &&
+    !streamBody &&
     narrationBody !== sessionTitle &&
     narrationBody !== streamBody
       ? narrationBody
@@ -603,7 +587,9 @@ export function buildAgentRunView(
       fileCount: progress.diffs.length || progress.deliveryFiles?.length,
       hasPlan: !!jobPlan?.steps?.length,
       planReady:
-        !!jobPlan?.steps?.length && progress.awaitingKind === "plan_approval",
+        !!jobPlan?.steps?.length &&
+        (progress.awaitingKind === "plan_approval" ||
+          (progress.pendingPlan?.steps?.length ?? 0) > 0),
     },
     thinking,
     latencyThinking,

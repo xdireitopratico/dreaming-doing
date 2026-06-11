@@ -45,7 +45,15 @@ import { hashToolBatch, isExecutionStuck } from "../_shared/agent-stuck.ts";
 import { logger } from "../_shared/logger.ts";
 import { appendExecutionLogEntry, buildExecutionLogMeta } from "./executionLogMeta.ts";
 import { type CheckpointExtra, resumeStepStart, serializeCheckpointPayload } from "./checkpoint.ts";
-import { buildProposedPlan, PLAN_APPROVAL_TTL_MS } from "./plan-mode.ts";
+import {
+  buildPlanChatMessageText,
+  buildProposedPlan,
+  findLatestStoredPlan,
+  isShowExistingPlanRequest,
+  lastPlanContextFromMessages,
+  PLAN_APPROVAL_TTL_MS,
+  sanitizePlanHeadline,
+} from "./plan-mode.ts";
 import type { ClassificationResult } from "./router.ts";
 import {
   buildApprovedPlanBriefing,
@@ -489,6 +497,37 @@ export class AgentLoop {
         return await this.runConversationalReply();
       }
 
+      if (
+        !this.resumeRun &&
+        !this.approvedPlanBuild &&
+        this.planMode &&
+        this.originalUserRequest &&
+        isShowExistingPlanRequest(this.originalUserRequest)
+      ) {
+        const stored = findLatestStoredPlan(this.state.messages);
+        if (stored) {
+          const reopened: ProposedPlan = {
+            ...stored.plan,
+            planId: crypto.randomUUID(),
+            summary: sanitizePlanHeadline(
+              stored.plan.mission ?? stored.plan.summary,
+              "Plano proposto",
+            ),
+            proposedAt: new Date().toISOString(),
+            ttlMs: PLAN_APPROVAL_TTL_MS,
+          };
+          return await this.finishPlanProposal(reopened);
+        }
+        const reply =
+          "Ainda não há plano nesta conversa. Descreva o que quer construir e eu monto um para você revisar.";
+        this.emit("assistant_text", { text: reply, final: true });
+        await this.persistFinal(reply, { lastFinishOk: true, conversational: true });
+        await this.clearCheckpoint();
+        await this.markRunStatus("completed");
+        this.emit("done", { summary: reply, conversational: true });
+        return { ok: true, summary: reply, steps: 0, toolsUsed: [] };
+      }
+
       if (this.resumeRun) {
         this.appendResumeInstruction();
         this.emit("phase", {
@@ -536,6 +575,7 @@ export class AgentLoop {
         classification = await this.router.classify(
           userPrompt,
           this.state.context?.projectConfig ?? "(vazio)",
+          { lastPlan: this.state.context?.lastPlan },
         );
       }
       if (this.loopBudgetExceeded()) {
@@ -576,18 +616,14 @@ export class AgentLoop {
 
       this.emit("phase", {
         phase: this.planMode ? "plan" : "build",
-        message: classification.summary,
+        message: this.planMode ? "Montando plano…" : classification.summary,
         intent: this.state.intent,
       });
 
       const skipIntentNarration = this.buildFixResume;
       if (!skipIntentNarration) {
         if (this.planMode) {
-          const planBriefing = buildClassifyBriefing(classification, {
-            maxSteps: this.maxStepsLimit,
-            planMode: true,
-          });
-          this.streamNarration(planBriefing);
+          // Plan mode: uma mensagem final via finishPlanProposal — sem narração duplicada.
         } else if (this.approvedPlanBuild) {
           this.streamNarration(
             buildApprovedPlanBriefing(this.originalUserRequest, this.approvedPlanSteps),
@@ -698,43 +734,7 @@ export class AgentLoop {
       // Propor plano (e pedir aprovação) quando em planMode explícito (usuário escolheu o modo).
       if (this.planMode) {
         const proposedPlan = this.proposePlan(classification);
-        const planChatText = this.buildPlanChatMessage(proposedPlan);
-        this.emit("assistant_text", { text: planChatText, final: true });
-        this.emit("plan_proposed", {
-          planId: proposedPlan.planId,
-          summary: proposedPlan.summary,
-          rationale: proposedPlan.rationale,
-          markdown: proposedPlan.markdown,
-          mission: proposedPlan.mission,
-          objective: proposedPlan.objective,
-          steps: proposedPlan.steps,
-          runId: this.runId,
-          projectId: this.state.projectId,
-        });
-        logger.event("agent_run.plan_proposed", {
-          runId: this.runId ?? undefined,
-          planId: proposedPlan.planId,
-          stepCount: proposedPlan.steps.length,
-        });
-        await this.emitTransition("plan_proposed", proposedPlan);
-        await this.persistPlanFinal(planChatText, proposedPlan);
-        await this.clearCheckpoint();
-        await this.markRunStatus("awaiting_user", {
-          plan: proposedPlan,
-          awaitingUser: { type: "plan_approval", planId: proposedPlan.planId },
-        });
-        this.emit("done", {
-          summary: proposedPlan.summary,
-          plan: proposedPlan,
-          planProposed: true,
-          awaiting: true,
-        });
-        return {
-          ok: true,
-          summary: proposedPlan.summary,
-          steps: 0,
-          toolsUsed: [],
-        };
+        return await this.finishPlanProposal(proposedPlan);
       }
     }
 
@@ -1381,7 +1381,52 @@ export class AgentLoop {
       projectConfig: agentCtx.projectConfig,
       gitLog: "(não disponível ainda)",
       dbSchema: "(não disponível)",
-      lastPlan: "nenhum",
+      lastPlan: lastPlanContextFromMessages(this.state.messages),
+    };
+  }
+
+  private async finishPlanProposal(proposedPlan: ProposedPlan): Promise<{
+    ok: boolean;
+    summary: string;
+    steps: number;
+    toolsUsed: string[];
+  }> {
+    const planChatText = buildPlanChatMessageText(proposedPlan);
+    this.emit("assistant_text", { text: planChatText, final: true });
+    this.emit("plan_proposed", {
+      planId: proposedPlan.planId,
+      summary: proposedPlan.summary,
+      rationale: proposedPlan.rationale,
+      markdown: proposedPlan.markdown,
+      mission: proposedPlan.mission,
+      objective: proposedPlan.objective,
+      steps: proposedPlan.steps,
+      runId: this.runId,
+      projectId: this.state.projectId,
+    });
+    logger.event("agent_run.plan_proposed", {
+      runId: this.runId ?? undefined,
+      planId: proposedPlan.planId,
+      stepCount: proposedPlan.steps.length,
+    });
+    await this.emitTransition("plan_proposed", proposedPlan);
+    await this.persistPlanFinal(planChatText, proposedPlan);
+    await this.clearCheckpoint();
+    await this.markRunStatus("awaiting_user", {
+      plan: proposedPlan,
+      awaitingUser: { type: "plan_approval", planId: proposedPlan.planId },
+    });
+    this.emit("done", {
+      summary: proposedPlan.summary,
+      plan: proposedPlan,
+      planProposed: true,
+      awaiting: true,
+    });
+    return {
+      ok: true,
+      summary: proposedPlan.summary,
+      steps: 0,
+      toolsUsed: [],
     };
   }
 
@@ -1393,11 +1438,17 @@ export class AgentLoop {
    *  3) deriveDefaultPlan (heurística) — último recurso
    */
   private proposePlan(classification: ClassificationResult): ProposedPlan {
-    return buildProposedPlan(classification, null, {
+    const raw = buildProposedPlan(classification, null, {
       planId: crypto.randomUUID(),
       ttlMs: PLAN_APPROVAL_TTL_MS,
       proposedAt: new Date().toISOString(),
     });
+    const headline = sanitizePlanHeadline(raw.mission ?? raw.summary, "Plano proposto");
+    return {
+      ...raw,
+      summary: headline,
+      mission: sanitizePlanHeadline(raw.mission, headline),
+    };
   }
 
   /**
@@ -1731,15 +1782,6 @@ export class AgentLoop {
     });
     const meta = buildExecutionLogMeta(null, this.state.executionLog, step);
     await this.sb.from("messages").update({ tool_calls, meta }).eq("id", msgId);
-  }
-
-  private buildPlanChatMessage(plan: ProposedPlan): string {
-    return [
-      `**${plan.summary}**`,
-      "",
-      "Abri o **plano completo** para você revisar (Missão, Objetivo, Fases e Fora do escopo).",
-      "Edite se quiser e clique em **Aprovar e construir** quando estiver pronto.",
-    ].join("\n");
   }
 
   private toolsFromTimeline(
