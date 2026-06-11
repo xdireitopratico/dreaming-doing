@@ -14,7 +14,7 @@
   position: relative;
   flex: 1;
   overflow-y: auto;
-  padding: var(--chat-padding) var(--chat-padding) var(--space-xs);
+  padding: var(--chat-padding) var(--chat-padding) 0;
   scrollbar-width: thin;
   scrollbar-color: rgba(226, 232, 240, 0.15) transparent;
   font: var(--font-chat);
@@ -741,22 +741,21 @@
   border-color: var(--text-accent);
 }
 
-/* Composer — card flutuante (Lovable), sem linha divisória */
+/* Composer — rodapé da mesma bolha (sem card flutuante) */
 .forge-composer {
   flex-shrink: 0;
-  margin: 0 var(--chat-padding) var(--chat-padding);
-  padding: 12px 14px 10px;
-  border-radius: 16px;
-  background: color-mix(in srgb, var(--bg-input) 92%, var(--bg-card) 8%);
-  border: 1px solid color-mix(in srgb, var(--border-forge) 75%, #52525b 25%);
-  box-shadow:
-    0 0 0 1px rgba(255, 255, 255, 0.02) inset,
-    0 6px 24px rgba(0, 0, 0, 0.28);
+  margin: 0;
+  padding: 10px var(--chat-padding) var(--chat-padding);
+  border-radius: 0;
+  background: var(--bg-chat);
+  border: none;
+  border-top: 1px solid color-mix(in srgb, var(--border-forge) 45%, transparent);
+  box-shadow: none;
 }
 
 .forge-composer--drag-over {
-  border-color: var(--border-active);
-  background: color-mix(in srgb, var(--bg-input) 75%, var(--text-accent) 5%);
+  border-top-color: var(--border-active);
+  background: color-mix(in srgb, var(--bg-chat) 92%, var(--text-accent) 8%);
 }
 
 .forge-composer-input {
