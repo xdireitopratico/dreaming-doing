@@ -40,20 +40,6 @@ function EditorPage() {
   const { projectId } = useParams({ from: "/projects/$projectId/" });
   const navigate = useNavigate();
   const search = useSearch({ from: "/projects/$projectId/" });
-  const [useV2Chat, setUseV2Chat] = useState(() => {
-    const urlParam = new URLSearchParams(window.location.search).get("chat") === "v2";
-    if (urlParam) return true;
-    try {
-      if (sessionStorage.getItem("forge.chatV2") === "1") {
-        sessionStorage.removeItem("forge.chatV2");
-        window.history.replaceState(null, "", window.location.pathname);
-        return true;
-      }
-    } catch { /* ignore */ }
-    return false;
-  });
-  const toggleV2Chat = useCallback(() => setUseV2Chat((v) => !v), []);
-
   const {
     tasteChatRemaining,
     tasteStartRemaining,
@@ -319,8 +305,6 @@ function EditorPage() {
     <EditorPageLayout
       projectId={projectId}
       conversationId={conversation?.id ?? null}
-      useV2Chat={useV2Chat}
-      onToggleV2Chat={toggleV2Chat}
       projectName={project?.name}
       running={running}
       agent={agent}

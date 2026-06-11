@@ -10,8 +10,6 @@ interface EditorChatHeaderProps {
   awaitingUser?: boolean;
   planPending?: boolean;
   pendingQueueCount?: number;
-  useV2Chat?: boolean;
-  onToggleV2Chat?: () => void;
 }
 
 export function EditorChatHeader({
@@ -21,8 +19,6 @@ export function EditorChatHeader({
   awaitingUser,
   planPending,
   pendingQueueCount = 0,
-  useV2Chat = false,
-  onToggleV2Chat,
 }: EditorChatHeaderProps) {
   const headerState = running
     ? "running"
@@ -66,34 +62,15 @@ export function EditorChatHeader({
           </span>
         ) : null}
       </Link>
-      <div className="ml-auto flex items-center gap-1">
-        {onToggleV2Chat && (
-          <button
-            type="button"
-            onClick={onToggleV2Chat}
-            className={`flex items-center gap-1.5 px-2 py-1 rounded-full text-[10px] font-mono tracking-[0.12em] uppercase transition-colors ${
-              useV2Chat
-                ? "bg-[var(--primary)]/15 text-[var(--primary)]"
-                : "text-[var(--text-ghost)] hover:bg-white/5 hover:text-[var(--foreground)]"
-            }`}
-            title={useV2Chat ? "Mudar para chat v1" : "Mudar para chat v2"}
-          >
-            <span
-              className={`w-1.5 h-1.5 rounded-full ${useV2Chat ? "bg-[var(--primary)]" : "bg-[var(--text-ghost)]"}`}
-            />
-            v{useV2Chat ? "2" : "1"}
-          </button>
-        )}
-        <button
-          type="button"
-          className="forge-chat-collapse-btn"
+      <button
+        type="button"
+        className="forge-chat-collapse-btn ml-auto"
         title="Colapsar chat"
         aria-label="Colapsar chat"
         onClick={toggleCollapse}
       >
-          <PanelLeftClose className="size-4" />
-        </button>
-      </div>
+        <PanelLeftClose className="size-4" />
+      </button>
     </div>
   );
 }

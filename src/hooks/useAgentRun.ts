@@ -21,7 +21,7 @@ import {
   initialAgentProgress,
   streamRowToSSEEvent,
 } from "@/lib/agent-progress";
-import { PENDING_RUN_ID } from "@/lib/chat-thread";
+import { PENDING_RUN_ID } from "@/lib/pending-run-id";
 import { shouldRetainLiveRunSlot } from "@/lib/live-run-overlay";
 
 import type { PendingQueueItem } from "@/components/editor/PendingQueuePanel";
