@@ -23,7 +23,7 @@ const CHAT_DRAFT_KEY = "forge:chat-draft-v2";
 export type ChatInputV2Props = {
   running: boolean;
   agentBusy?: boolean;
-  /** Plano aguardando aprovação — bloqueia envio. */
+  /** Plano aguardando aprovação — só afeta placeholder (chat sempre liberado). */
   planPending?: boolean;
   composerMode: AgentComposerMode;
   onComposerModeChange: (mode: AgentComposerMode) => void;
@@ -55,9 +55,8 @@ export function ChatInputV2({
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const isRunning = running || agentBusy;
-  const canSend = !planPending;
   const placeholder = planPending
-    ? "Aprove ou rejeite o plano no inspector antes de enviar…"
+    ? "Refinar o plano ou enfileirar mensagem…"
     : isRunning
       ? "Enfileirar mensagem de acompanhamento…"
       : "Descreva o que quer construir...";
@@ -129,7 +128,7 @@ export function ChatInputV2({
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      if (canSend) void handleSend();
+      void handleSend();
     }
   };
 
@@ -200,7 +199,6 @@ export function ChatInputV2({
         onKeyDown={handleKeyDown}
         placeholder={placeholder}
         rows={1}
-        disabled={planPending}
         className="forge-composer-input"
       />
 
@@ -247,7 +245,7 @@ export function ChatInputV2({
           type="button"
           className="forge-composer-send ml-1"
           onClick={() => void handleSend()}
-          disabled={!canSend || (!input.trim() && attachments.length === 0)}
+          disabled={!input.trim() && attachments.length === 0}
           title={isRunning ? "Enfileirar" : "Enviar"}
         >
           <ArrowUp className="size-4" />

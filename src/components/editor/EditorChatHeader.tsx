@@ -33,7 +33,7 @@ export function EditorChatHeader({
   const subLabel = running
     ? "Construindo alterações…"
     : planPending
-      ? "Plano aguardando aprovação"
+      ? "Plano aguardando — chat liberado"
       : awaitingUser
         ? "Aguardando sua resposta"
         : pendingQueueCount > 0

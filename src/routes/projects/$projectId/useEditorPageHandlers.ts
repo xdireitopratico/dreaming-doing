@@ -346,15 +346,9 @@ export function useEditorPageHandlers({
         return;
       }
 
-      const pp = needsPlanApprovalNow(agent.progress.pendingPlan, chatMessages)
-        ? resolvePendingPlan(agent.progress.pendingPlan, chatMessages)
-        : null;
-      if (pp) {
-        toast.error(
-          "Há um plano aguardando revisão — use Aprovar ou Rejeitar no inspector antes de enviar outra mensagem.",
-        );
-        return;
-      }
+      const planAwaiting =
+        needsPlanApprovalNow(agent.progress.pendingPlan, chatMessages) &&
+        !!resolvePendingPlan(agent.progress.pendingPlan, chatMessages);
 
       const messageParts =
         parts && parts.length > 0
@@ -372,7 +366,7 @@ export function useEditorPageHandlers({
       await agent.refreshPendingQueue(projectId, conversation.id).catch(() => {});
 
       const kind = resolveSessionKind(tasteQuota);
-      const busy = isAgentBusy();
+      const busy = isAgentBusy() || planAwaiting;
 
       const { error } = await supabase.from("messages").insert({
         conversation_id: conversation.id,
@@ -406,7 +400,10 @@ export function useEditorPageHandlers({
           toast.error(queued.message ?? "Erro ao enfileirar mensagem");
         } else {
           toast.success(
-            queued.message ?? "Mensagem na fila — o agente processará quando terminar.",
+            queued.message ??
+              (planAwaiting
+                ? "Mensagem na fila — aprove ou rejeite o plano no inspector para continuar."
+                : "Mensagem na fila — o agente processará quando terminar."),
           );
         }
         return;
