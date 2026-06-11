@@ -160,6 +160,21 @@ function progressFromCardSnapshot(snap: Record<string, unknown>, msg: ChatMessag
   };
 }
 
+/** Progresso histórico de um runId a partir das mensagens do DB (sem frozen). */
+export function resolveHistoricalRunProgress(
+  runId: string,
+  messages: ChatMessage[],
+): AgentProgress | null {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const msg = messages[i];
+    if (msg?.role !== "assistant") continue;
+    const rid = runIdFromAssistantMessage(msg);
+    if (rid !== runId) continue;
+    return progressFromAssistantMessage(msg);
+  }
+  return null;
+}
+
 /** Reidrata progresso mínimo a partir do DB — mini-card persiste após reload/acknowledge. */
 export function progressFromAssistantMessage(msg: ChatMessage): AgentProgress | null {
   if (!isAgentJobMessage(msg)) return null;

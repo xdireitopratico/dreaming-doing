@@ -3,7 +3,7 @@ import { Loader2 } from "lucide-react";
 import { MarkdownRenderer } from "@/components/ui/markdown-renderer";
 import type { AgentProgress, PlanStep } from "@/lib/agent-progress";
 import type { AgentComposerMode, ChatMessage } from "@/lib/chat-types";
-import type { FrozenRunSnapshot } from "@/lib/lovable-thread";
+
 import { needsPlanApprovalNow, resolvePendingPlan } from "@/lib/plan-message-meta";
 import { resolveEffectiveAgentProgress } from "@/lib/resolve-agent-progress";
 import { buildOutgoingParts, type StoredMessagePart } from "@/lib/chat-attachments";
@@ -32,7 +32,6 @@ export type ForgeChatPanelProps = {
   onStartProject?: () => void;
   agentProgress?: AgentProgress;
   activeRunId?: string | null;
-  frozenRuns?: ReadonlyMap<string, FrozenRunSnapshot>;
   onResumeAgent?: () => void;
   onDeploy?: () => void | Promise<void>;
   onRollbackMessage?: (
@@ -67,7 +66,6 @@ export function ForgeChatPanel({
   onStartProject,
   agentProgress,
   activeRunId,
-  frozenRuns,
   onResumeAgent,
   onDeploy,
   onRollbackMessage,

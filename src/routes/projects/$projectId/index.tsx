@@ -220,7 +220,7 @@ function EditorPage() {
   }, [chatMessages, agent]);
 
   // Defensive invalidate (single source post-terminal path) for messages on activeRunId clear or
-  // finished transitions — complements orchestration/coordinator; ensures buildLovableThread sees
+  // finished transitions — complements orchestration/coordinator; ensures buildChatThread sees
   // latest DB assistants for anchoring (multi-turn, no mismatch after second msg).
   useEffect(() => {
     if (!pageData.qc || !conversation?.id) return;

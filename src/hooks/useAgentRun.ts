@@ -21,12 +21,8 @@ import {
   initialAgentProgress,
   streamRowToSSEEvent,
 } from "@/lib/agent-progress";
-import { freezeSnapshot, PENDING_RUN_ID, type FrozenRunSnapshot } from "@/lib/lovable-thread";
-import {
-  hasMaterializedCardSnapshot,
-  runIdFromAssistantMessage,
-} from "@/lib/assistant-run-progress";
-import type { ChatMessage } from "@/lib/chat-types";
+import { PENDING_RUN_ID } from "@/lib/chat-thread";
+
 import type { PendingQueueItem } from "@/components/editor/PendingQueuePanel";
 
 function progressHasFirstChatToken(progress: AgentProgress): boolean {
@@ -75,24 +71,11 @@ const STALE_STREAM_WITH_QUEUE_MS = 10 * 60 * 1000;
 
 const SESSION_STORAGE_KEY = "forge:agent-snapshot";
 const SNAPSHOT_MAX_AGE_MS = 30 * 60 * 1000;
-const MAX_FROZEN_RUNS = 5;
-
-function pruneFrozenRuns(m: Map<string, FrozenRunSnapshot>): Map<string, FrozenRunSnapshot> {
-  if (m.size <= MAX_FROZEN_RUNS) return m;
-  const copy = new Map(m);
-  const keys = [...copy.keys()];
-  while (copy.size > MAX_FROZEN_RUNS) {
-    const oldest = keys.shift();
-    if (oldest) copy.delete(oldest);
-  }
-  return copy;
-}
 
 function saveAgentSnapshot(snapshot: {
   activeRunId: string | null;
   lastSeq: number;
   progress: AgentProgress;
-  frozenRuns: [string, FrozenRunSnapshot][];
 }) {
   try {
     const payload = JSON.stringify({ ...snapshot, timestamp: Date.now() });
@@ -106,7 +89,6 @@ function loadAgentSnapshot(): {
   activeRunId: string | null;
   lastSeq: number;
   progress: AgentProgress;
-  frozenRuns: [string, FrozenRunSnapshot][];
   timestamp: number;
 } | null {
   try {
@@ -159,7 +141,6 @@ export function useAgentRun() {
 
   const [connected, setConnected] = useState(false);
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
-  const [frozenRuns, setFrozenRuns] = useState<Map<string, FrozenRunSnapshot>>(new Map());
   const [pendingQueueItems, setPendingQueueItems] = useState<PendingQueueItem[]>([]);
   const [queueBlockingReason, setQueueBlockingReason] = useState<string | null>(null);
   /** Início do turno (envio) — persiste até o run terminar; alimenta Think latency no chat e inspector. */
@@ -202,15 +183,14 @@ export function useAgentRun() {
       activeRunId: runIdRef.current,
       lastSeq: lastSeqRef.current,
       progress,
-      frozenRuns: Array.from(frozenRuns.entries()),
     });
-  }, [progress, frozenRuns]);
+  }, [progress]);
 
   // Salva snapshot debounced a cada 500ms quando progress muda
   useEffect(() => {
     const timer = setTimeout(saveSnapshot, 500);
     return () => clearTimeout(timer);
-  }, [progress, frozenRuns, saveSnapshot]);
+  }, [progress, saveSnapshot]);
 
   // Recupera snapshot ao montar (sobrevive a F5 / hot-reload)
   useEffect(() => {
@@ -232,9 +212,6 @@ export function useAgentRun() {
       runIdRef.current = snap.activeRunId;
       setActiveRunId(snap.activeRunId);
       lastSeqRef.current = snap.lastSeq;
-      if (snap.frozenRuns.length > 0) {
-        setFrozenRuns(pruneFrozenRuns(new Map(snap.frozenRuns)));
-      }
       restoreProgress();
       void subscribeToRun(snap.activeRunId, { resetProgress: false });
     } else if (snap.progress.awaiting && snap.progress.awaitingKind === "qualify") {
@@ -258,24 +235,9 @@ export function useAgentRun() {
       if (row.seq <= lastSeqRef.current && !isFreshForStart) return false;
       lastSeqRef.current = row.seq;
       const terminal = t === "finish" || t === "canceled" || t === "error";
-      const freezeTerminal = t === "finish" || t === "done" || t === "canceled" || t === "error";
       setProgress((prev) => {
         let next = applyAgentProgressEvent(prev, event);
         next = withFrozenLatencyThought(next, activeRunStartedAtMsRef.current);
-        const rid = runIdRef.current;
-        if (freezeTerminal && rid) {
-          const snap = freezeSnapshot({
-            ...next,
-            streamText: next.streamText ?? prev.streamText,
-            narrationText: next.narrationText ?? prev.narrationText,
-            latencyThoughtMs: next.latencyThoughtMs ?? prev.latencyThoughtMs,
-          });
-          setFrozenRuns((m) => {
-            const copy = new Map(m);
-            copy.set(rid, snap);
-            return pruneFrozenRuns(copy);
-          });
-        }
         return next;
       });
       return terminal;
@@ -297,16 +259,6 @@ export function useAgentRun() {
       statusChannelRef.current = null;
     }
     setConnected(false);
-  }, []);
-
-  const persistFrozen = useCallback((snap: AgentProgress) => {
-    const rid = runIdRef.current;
-    if (!rid) return;
-    setFrozenRuns((m) => {
-      const copy = new Map(m);
-      copy.set(rid, freezeSnapshot(snap));
-      return pruneFrozenRuns(copy);
-    });
   }, []);
 
   const syncRunStatus = useCallback(
@@ -352,16 +304,12 @@ export function useAgentRun() {
         } else {
           return p;
         }
-        persistFrozen({
-          ...next,
-          streamText: streamText ?? next.streamText ?? next.summary ?? p.streamText,
-        });
         return {
           ...next,
           streamText: streamText ?? next.streamText ?? next.summary ?? p.streamText,
         };
       });
-      // Clear active/connected on terminal — qualify ancora no DB/frozen, não no slot live.
+      // Clear active/connected on terminal — qualify ancora no DB, não no slot live.
       runIdRef.current = null;
       setActiveRunId(null);
       setConnected(false);
@@ -370,7 +318,7 @@ export function useAgentRun() {
       }
       teardownChannels();
     },
-    [persistFrozen, teardownChannels],
+    [teardownChannels],
   );
 
   const catchUpRun = useCallback(
@@ -438,11 +386,7 @@ export function useAgentRun() {
             data: { ok: false, resumable, error, stale: true },
             timestamp: Date.now(),
           };
-          setProgress((p) => {
-            const next = applyAgentProgressEvent(p, finishEvent);
-            persistFrozen(next);
-            return next;
-          });
+          setProgress((p) => applyAgentProgressEvent(p, finishEvent));
           // Clear only the right runId state on terminal (stale synth path) before teardown.
           if (runIdRef.current === runId) {
             runIdRef.current = null;
@@ -456,7 +400,7 @@ export function useAgentRun() {
 
       return terminal;
     },
-    [applyStreamRow, syncRunStatus, persistFrozen, teardownChannels],
+    [applyStreamRow, syncRunStatus, teardownChannels],
   );
 
   const subscribeToRun = useCallback(
@@ -474,14 +418,6 @@ export function useAgentRun() {
       }
       runIdRef.current = runId;
       setActiveRunId(runId);
-      // Prune old/stale frozen for this (new) active runId so live always wins cleanly on (re)subscribe;
-      // historical frozen for prior runs preserved for Lovable multi-turn anchoring.
-      setFrozenRuns((m) => {
-        if (!m.has(runId)) return m;
-        const copy = new Map(m);
-        copy.delete(runId);
-        return copy;
-      });
       setQueueBlockingReason(null);
       const turnInProgress = activeRunStartedAtMsRef.current != null;
       if (!isSame && opts?.resetProgress !== false && !turnInProgress) {
@@ -963,49 +899,36 @@ export function useAgentRun() {
   const stop = useCallback(async () => {
     const runId = runIdRef.current;
 
-    let frozenSnap: AgentProgress | null = null;
-    setProgress((p) => {
-      frozenSnap = {
-        ...p,
-        finished: true,
-        canceled: true,
-        resumable: false,
-        autoResuming: false,
-        statusHint: "Cancelando…",
-      };
-      return frozenSnap;
-    });
-    if (frozenSnap) persistFrozen(frozenSnap);
+    setProgress((p) => ({
+      ...p,
+      finished: true,
+      canceled: true,
+      resumable: false,
+      autoResuming: false,
+      statusHint: "Cancelando…",
+    }));
     setConnected(false);
 
     if (runId) {
       try {
         await cancelAgentRun(runId);
         logEditorTelemetryEvent("agent", "cancel_request", "info", runId.slice(0, 8));
-        setProgress((p) => {
-          const next = {
-            ...p,
-            error: null,
-            statusHint: "Cancelado pelo usuário",
-            finished: true,
-            canceled: true,
-          };
-          persistFrozen(next);
-          return next;
-        });
+        setProgress((p) => ({
+          ...p,
+          error: null,
+          statusHint: "Cancelado pelo usuário",
+          finished: true,
+          canceled: true,
+        }));
       } catch (e) {
-        setProgress((p) => {
-          const next = {
-            ...p,
-            error: formatAgentFetchError(e),
-            statusHint: "Falha ao cancelar — tente novamente",
-            finished: true,
-            canceled: false,
-            resumable: true,
-          };
-          persistFrozen(next);
-          return next;
-        });
+        setProgress((p) => ({
+          ...p,
+          error: formatAgentFetchError(e),
+          statusHint: "Falha ao cancelar — tente novamente",
+          finished: true,
+          canceled: false,
+          resumable: true,
+        }));
       }
     }
 
@@ -1013,7 +936,7 @@ export function useAgentRun() {
     setActiveRunId(null);
     teardownChannels();
     clearAgentSnapshot();
-  }, [persistFrozen, teardownChannels]);
+  }, [teardownChannels]);
 
   const disconnect = useCallback(() => {
     runIdRef.current = null;
@@ -1095,32 +1018,10 @@ export function useAgentRun() {
     });
   }, []);
 
-  /** Remove frozen só quando o DB tem cardSnapshot — evita gap live→DB. */
-  const reconcileFrozenWithMessages = useCallback((messages: ChatMessage[]) => {
-    setFrozenRuns((m) => {
-      let changed = false;
-      const copy = new Map(m);
-      for (const runId of copy.keys()) {
-        const materialized = messages.some(
-          (msg) =>
-            msg.role === "assistant" &&
-            runIdFromAssistantMessage(msg) === runId &&
-            hasMaterializedCardSnapshot(msg),
-        );
-        if (materialized) {
-          copy.delete(runId);
-          changed = true;
-        }
-      }
-      return changed ? pruneFrozenRuns(copy) : m;
-    });
-  }, []);
-
   return {
     progress,
     connected,
     activeRunId,
-    frozenRuns,
     connect,
     watch,
     replay,
@@ -1137,7 +1038,6 @@ export function useAgentRun() {
     clearPendingPlan,
     hydratePendingPlan,
     acknowledgeMaterializedRun,
-    reconcileFrozenWithMessages,
     beginPendingTurn,
     clearPendingTurn,
     activeRunStartedAtMs,

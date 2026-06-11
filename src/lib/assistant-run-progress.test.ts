@@ -4,6 +4,7 @@ import {
   hasMaterializedCardSnapshot,
   isAgentJobMessage,
   progressFromAssistantMessage,
+  resolveHistoricalRunProgress,
   runIdFromAssistantMessage,
 } from "@/lib/assistant-run-progress";
 
@@ -123,6 +124,19 @@ describe("assistant-run-progress", () => {
     const p = progressFromAssistantMessage(msg);
     expect(p?.awaiting).toBe(true);
     expect(p?.awaitingKind).toBe("qualify");
+  });
+
+  it("resolveHistoricalRunProgress busca run no histórico DB", () => {
+    const msg: ChatMessage = {
+      id: "a1",
+      role: "assistant",
+      content: "Feito.",
+      timestamp: 0,
+      meta: { runId: "run-hist", finishedAt: "2026-01-01T00:00:00Z", lastFinishOk: true },
+    };
+    const p = resolveHistoricalRunProgress("run-hist", [msg]);
+    expect(p?.finished).toBe(true);
+    expect(p?.streamText).toBe("Feito.");
   });
 
   it("mensagem concierge sem runId não é job", () => {

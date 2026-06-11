@@ -24,15 +24,13 @@ import { ShortcutCheatsheet } from "@/components/editor/ShortcutCheatsheet";
 import { type LogEntry, LogPanel } from "@/components/editor/LogPanel";
 import { AiDiffViewer, type DiffEntry } from "@/components/editor/AiDiffViewer";
 import { needsPlanApprovalNow, resolvePendingPlan } from "@/lib/plan-message-meta";
-import { PENDING_RUN_ID } from "@/lib/lovable-thread";
-import {
-  hasMaterializedCardSnapshot,
-  progressFromAssistantMessage,
-} from "@/lib/assistant-run-progress";
+import { PENDING_RUN_ID } from "@/lib/chat-thread";
+import { resolveHistoricalRunProgress } from "@/lib/assistant-run-progress";
 import type { AgentProgress } from "@/lib/agent-progress";
 import { useJobWorkspaceFocus } from "@/hooks/useJobWorkspaceFocus";
 import { JobInspector } from "@/components/editor/JobInspector";
 import type { useAgentRun } from "@/hooks/useAgentRun";
+import { useActiveRun } from "@/hooks/useActiveRun";
 import type { usePreviewBoot } from "@/hooks/usePreviewBoot";
 import type { useConnectors } from "@/hooks/useConnectors";
 import type { AgentPreferences } from "@/lib/agent-preferences";
@@ -233,6 +231,8 @@ export function EditorPageLayout({
   mobilePanel = "chat",
   onMobilePanelChange,
 }: EditorPageLayoutProps) {
+  const activeRun = useActiveRun(agent);
+
   const pendingPlan = useMemo(() => {
     const plan = resolvePendingPlan(agent.progress.pendingPlan, chatMessages);
     return needsPlanApprovalNow(agent.progress.pendingPlan, chatMessages) ? plan : null;
@@ -241,24 +241,19 @@ export function EditorPageLayout({
   const showWelcomeMarkdown = useMemo(() => {
     if (chatMessagesLoading || chatMessages.length > 0) return false;
     if (agentHasRun) return false;
-    if (agent.frozenRuns.size > 0 || agent.activeRunId) return false;
+    if (activeRun.activeRunId) return false;
     return true;
   }, [
     chatMessagesLoading,
     chatMessages.length,
     agentHasRun,
-    agent.frozenRuns.size,
-    agent.activeRunId,
+    activeRun.activeRunId,
   ]);
   useEffect(() => {
     if (pendingPlan && !agent.progress.pendingPlan) {
       agent.hydratePendingPlan(pendingPlan);
     }
   }, [pendingPlan, agent.progress.pendingPlan, agent.hydratePendingPlan]);
-
-  useEffect(() => {
-    agent.reconcileFrozenWithMessages(chatMessages);
-  }, [chatMessages, agent.reconcileFrozenWithMessages]);
 
   const {
     jobWorkspaceFocus,
@@ -357,26 +352,8 @@ export function EditorPageLayout({
     if (!jobWorkspaceFocus) return null;
     const { runId } = jobWorkspaceFocus;
     if (agent.activeRunId === runId) return agent.progress;
-
-    const historical = chatMessages.find(
-      (m) =>
-        m.role === "assistant" &&
-        (m.runId === runId ||
-          (typeof m.meta?.runId === "string" && m.meta.runId === runId) ||
-          (typeof m.meta?.buildRunId === "string" && m.meta.buildRunId === runId)),
-    );
-    if (historical && hasMaterializedCardSnapshot(historical)) {
-      return progressFromAssistantMessage(historical);
-    }
-
-    const frozen = agent.frozenRuns.get(runId);
-    if (frozen) {
-      return { ...agent.progress, ...frozen };
-    }
-    if (historical) return progressFromAssistantMessage(historical);
-    return null;
-  }, [jobWorkspaceFocus, agent.activeRunId, agent.progress, agent.frozenRuns, chatMessages]);
-  // (defensive resolve via lovable-thread strengthening for correct frozen per runId on multi-turn)
+    return resolveHistoricalRunProgress(runId, chatMessages);
+  }, [jobWorkspaceFocus, agent.activeRunId, agent.progress, chatMessages]);
 
   const previewStatusLabel = useMemo(() => {
     if (isJobFocused) return "Job inspector";
@@ -508,7 +485,6 @@ export function EditorPageLayout({
                   running={running}
                   agentProgress={agent.progress}
                   activeRunId={agent.activeRunId}
-                  frozenRuns={agent.frozenRuns}
                   onResumeAgent={handleResumeAgent}
                   onSend={handleSend}
                   onStop={handleStop}
