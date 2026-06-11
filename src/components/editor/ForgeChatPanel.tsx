@@ -88,14 +88,16 @@ export function ForgeChatPanel({
   const PIN_THRESHOLD_PX = 100;
 
   const effectiveProgress = useMemo(
-    () => resolveEffectiveAgentProgress(agentProgress, messages),
-    [agentProgress, messages],
+    () => resolveEffectiveAgentProgress(agentProgress, messages, activeRunId),
+    [agentProgress, messages, activeRunId],
   );
 
   const pendingPlan = useMemo(() => {
-    const plan = resolvePendingPlan(agentProgress?.pendingPlan ?? null, messages);
-    return needsPlanApprovalNow(agentProgress?.pendingPlan ?? null, messages) ? plan : null;
-  }, [agentProgress?.pendingPlan, messages]);
+    const plan = resolvePendingPlan(agentProgress?.pendingPlan ?? null, messages, activeRunId);
+    return needsPlanApprovalNow(agentProgress?.pendingPlan ?? null, messages, activeRunId)
+      ? plan
+      : null;
+  }, [agentProgress?.pendingPlan, messages, activeRunId]);
 
   const scrollToBottom = useCallback((behavior: ScrollBehavior = "auto") => {
     const el = scrollRef.current;

@@ -73,6 +73,8 @@ const SESSION_STORAGE_KEY = "forge:agent-snapshot";
 const SNAPSHOT_MAX_AGE_MS = 30 * 60 * 1000;
 
 function saveAgentSnapshot(snapshot: {
+  projectId: string;
+  conversationId: string;
   activeRunId: string | null;
   lastSeq: number;
   progress: AgentProgress;
@@ -86,6 +88,8 @@ function saveAgentSnapshot(snapshot: {
 }
 
 function loadAgentSnapshot(): {
+  projectId?: string;
+  conversationId?: string;
   activeRunId: string | null;
   lastSeq: number;
   progress: AgentProgress;
@@ -154,6 +158,7 @@ export function useAgentRun() {
 
   const pendingQueueCountRef = useRef(0);
   const lastSeqRef = useRef(0);
+  const sessionContextRef = useRef<{ projectId: string; conversationId: string } | null>(null);
   const eventChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const statusChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const stalePollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -177,9 +182,13 @@ export function useAgentRun() {
     setConnected(false);
   }, [progress.finished, progress.awaiting, progress.awaitingKind, progress.canceled, activeRunId]);
 
-  // ─── Persistência de estado em sessionStorage ─────────────────────────
+  // ─── Persistência de estado em sessionStorage (escopado por projeto+conversa) ─
   const saveSnapshot = useCallback(() => {
+    const ctx = sessionContextRef.current;
+    if (!ctx) return;
     saveAgentSnapshot({
+      projectId: ctx.projectId,
+      conversationId: ctx.conversationId,
       activeRunId: runIdRef.current,
       lastSeq: lastSeqRef.current,
       progress,
@@ -191,34 +200,6 @@ export function useAgentRun() {
     const timer = setTimeout(saveSnapshot, 500);
     return () => clearTimeout(timer);
   }, [progress, saveSnapshot]);
-
-  // Recupera snapshot ao montar (sobrevive a F5 / hot-reload)
-  useEffect(() => {
-    const snap = loadAgentSnapshot();
-    if (!snap) return;
-    const age = Date.now() - snap.timestamp;
-    if (age > SNAPSHOT_MAX_AGE_MS) {
-      clearAgentSnapshot();
-      return;
-    }
-    const restoreProgress = () => {
-      setProgress((prev) => {
-        if (prev !== initialAgentProgress && prev.streamText != null) return prev;
-        return snap!.progress;
-      });
-    };
-
-    if (snap.activeRunId) {
-      runIdRef.current = snap.activeRunId;
-      setActiveRunId(snap.activeRunId);
-      lastSeqRef.current = snap.lastSeq;
-      restoreProgress();
-      void subscribeToRun(snap.activeRunId, { resetProgress: false });
-    } else if (snap.progress.awaiting && snap.progress.awaitingKind === "qualify") {
-      restoreProgress();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   const applyStreamRow = useCallback(
     (row: {
@@ -1018,6 +999,59 @@ export function useAgentRun() {
     });
   }, []);
 
+  const bindSession = useCallback((projectId: string, conversationId: string) => {
+    sessionContextRef.current = { projectId, conversationId };
+  }, []);
+
+  const resetSession = useCallback(() => {
+    runIdRef.current = null;
+    setActiveRunId(null);
+    setActiveRunStartedAtMs(null);
+    setConnected(false);
+    setProgress(initialAgentProgress);
+    setPendingQueueItems([]);
+    setQueueBlockingReason(null);
+    lastSeqRef.current = 0;
+    teardownChannels();
+    clearAgentSnapshot();
+  }, [teardownChannels]);
+
+  const tryRestoreSnapshot = useCallback(
+    (projectId: string, conversationId: string) => {
+      const snap = loadAgentSnapshot();
+      if (!snap) return;
+      const age = Date.now() - snap.timestamp;
+      if (age > SNAPSHOT_MAX_AGE_MS) {
+        clearAgentSnapshot();
+        return;
+      }
+      if (snap.projectId !== projectId || snap.conversationId !== conversationId) {
+        clearAgentSnapshot();
+        return;
+      }
+
+      const restoreProgress = () => {
+        setProgress((prev) => {
+          if (prev !== initialAgentProgress && prev.streamText != null) return prev;
+          return snap.progress;
+        });
+      };
+
+      if (snap.activeRunId) {
+        runIdRef.current = snap.activeRunId;
+        setActiveRunId(snap.activeRunId);
+        lastSeqRef.current = snap.lastSeq;
+        restoreProgress();
+        void subscribeToRun(snap.activeRunId, { resetProgress: false });
+      } else if (snap.progress.awaiting && snap.progress.awaitingKind === "qualify") {
+        restoreProgress();
+      } else if (snap.progress.pendingPlan || snap.progress.awaitingKind === "plan_approval") {
+        restoreProgress();
+      }
+    },
+    [subscribeToRun],
+  );
+
   return {
     progress,
     connected,
@@ -1038,6 +1072,9 @@ export function useAgentRun() {
     clearPendingPlan,
     hydratePendingPlan,
     acknowledgeMaterializedRun,
+    bindSession,
+    resetSession,
+    tryRestoreSnapshot,
     beginPendingTurn,
     clearPendingTurn,
     activeRunStartedAtMs,

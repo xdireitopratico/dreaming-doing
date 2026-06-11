@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  needsPlanApprovalNow,
   resolveInspectorPlanForRun,
   resolvePendingPlan,
+  runBelongsToChatMessages,
   storedPlanFromMessage,
 } from "@/lib/plan-message-meta";
 import type { ChatMessage } from "@/lib/chat-types";
@@ -88,7 +90,7 @@ describe("storedPlanFromMessage", () => {
     expect(state?.awaitingApproval).toBe(false);
   });
 
-  it("resolvePendingPlan prioriza live e cai no histórico", () => {
+  it("resolvePendingPlan prioriza live da mesma conversa e cai no histórico", () => {
     const pending: ChatMessage = {
       ...base,
       meta: {
@@ -102,10 +104,25 @@ describe("storedPlanFromMessage", () => {
       steps: [{ id: "s1", type: "custom" as const, description: "x", enabled: true }],
       ttlMs: 60_000,
       proposedAt: Date.now(),
-      runId: "r-live",
+      runId: "run-1",
       projectId: "p1",
     };
     expect(resolvePendingPlan(live, [pending])?.planId).toBe("live");
     expect(resolvePendingPlan(null, [pending])?.planId).toBe("plan-1");
+  });
+
+  it("ignora live plan de outra conversa (chat vazio)", () => {
+    const staleLive = {
+      planId: "stale",
+      summary: "Plano antigo",
+      steps: [{ id: "s1", type: "custom" as const, description: "x", enabled: true }],
+      ttlMs: 60_000,
+      proposedAt: Date.now(),
+      runId: "old-run",
+      projectId: "p1",
+    };
+    expect(resolvePendingPlan(staleLive, [])).toBeNull();
+    expect(needsPlanApprovalNow(staleLive, [])).toBe(false);
+    expect(runBelongsToChatMessages("old-run", [])).toBe(false);
   });
 });

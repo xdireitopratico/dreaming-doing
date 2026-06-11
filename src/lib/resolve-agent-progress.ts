@@ -7,11 +7,12 @@ import { needsPlanApprovalNow, resolvePendingPlan } from "@/lib/plan-message-met
 export function resolveEffectiveAgentProgress(
   progress: AgentProgress | null | undefined,
   messages: ChatMessage[],
+  activeRunId?: string | null,
 ): AgentProgress {
   const base = progress ?? initialAgentProgress;
-  const pendingPlan = resolvePendingPlan(base.pendingPlan, messages);
+  const pendingPlan = resolvePendingPlan(base.pendingPlan, messages, activeRunId);
 
-  if (pendingPlan && needsPlanApprovalNow(base.pendingPlan, messages)) {
+  if (pendingPlan && needsPlanApprovalNow(base.pendingPlan, messages, activeRunId)) {
     return {
       ...base,
       pendingPlan,

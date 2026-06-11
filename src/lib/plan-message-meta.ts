@@ -1,6 +1,21 @@
 import type { ChatMessage } from "@/lib/chat-types";
 import type { PendingPlan, PlanStep } from "@/lib/agent-progress";
 
+/** Run pertence ao histórico desta conversa (assistant ou buildRunId em user). */
+export function runBelongsToChatMessages(
+  runId: string | null | undefined,
+  messages: ChatMessage[],
+): boolean {
+  if (!runId) return false;
+  for (const msg of messages) {
+    if (msg.runId === runId) return true;
+    const meta = msg.meta as Record<string, unknown> | undefined;
+    if (typeof meta?.runId === "string" && meta.runId === runId) return true;
+    if (typeof meta?.buildRunId === "string" && meta.buildRunId === runId) return true;
+  }
+  return false;
+}
+
 /** Último plano pendente persistido no histórico (sobrevive a F5). */
 export function findPendingPlanFromMessages(messages: ChatMessage[]): PendingPlan | null {
   for (let i = messages.length - 1; i >= 0; i--) {
@@ -13,11 +28,22 @@ export function findPendingPlanFromMessages(messages: ChatMessage[]): PendingPla
 }
 
 /** Plano ativo: memória do agente ou último pendente no chat. */
+function livePlanBelongsToSession(
+  live: PendingPlan,
+  messages: ChatMessage[],
+  activeRunId?: string | null,
+): boolean {
+  if (runBelongsToChatMessages(live.runId, messages)) return true;
+  return !!activeRunId && activeRunId === live.runId;
+}
+
 export function resolvePendingPlan(
   live: PendingPlan | null | undefined,
   messages: ChatMessage[],
+  activeRunId?: string | null,
 ): PendingPlan | null {
-  return live ?? findPendingPlanFromMessages(messages);
+  if (live && livePlanBelongsToSession(live, messages, activeRunId)) return live;
+  return findPendingPlanFromMessages(messages);
 }
 
 /**
@@ -28,11 +54,11 @@ export function resolvePendingPlan(
 export function needsPlanApprovalNow(
   live: PendingPlan | null | undefined,
   messages: ChatMessage[],
+  activeRunId?: string | null,
 ): boolean {
-  const plan = resolvePendingPlan(live, messages);
+  const plan = resolvePendingPlan(live, messages, activeRunId);
   if (!plan) return false;
-  // Se veio do live do agente atual, é "aguardando agora"
-  if (live) return true;
+  if (live && livePlanBelongsToSession(live, messages, activeRunId)) return true;
   // Do histórico: só se o último status for pending (não aprovado ainda)
   const stored = findStoredPlanForPlan(plan, messages);
   return stored?.status === "pending";

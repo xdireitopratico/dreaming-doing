@@ -1,10 +1,12 @@
 import type { ChatMessage } from "@/lib/chat-types";
 import type { AgentProgress } from "@/lib/agent-progress";
+import { initialAgentProgress } from "@/lib/agent-progress";
 import {
   hasMaterializedCardSnapshot,
   progressFromAssistantMessage,
   runIdFromAssistantMessage,
 } from "@/lib/assistant-run-progress";
+import { runBelongsToChatMessages } from "@/lib/plan-message-meta";
 
 /** RunId sintético — slot assistant otimista antes do runId real (Think imediato). */
 export const PENDING_RUN_ID = "__pending__";
@@ -77,7 +79,11 @@ function pendingAssistantInsertIndex(items: ChatThreadItem[]): number {
     if (item?.kind !== "user") continue;
     const next = items[i + 1];
     if (next?.kind !== "assistant") return i + 1;
-    if (!next.message?.content?.trim() && !next.live && !hasMaterializedCardSnapshot(next.message)) {
+    if (
+      !next.message?.content?.trim() &&
+      !next.live &&
+      !hasMaterializedCardSnapshot(next.message)
+    ) {
       return i + 1;
     }
   }
@@ -112,12 +118,7 @@ function mergeAssistantIntoItems(
   if (runId) {
     for (let i = items.length - 1; i >= 0; i--) {
       const item = items[i];
-      if (
-        item?.kind === "assistant" &&
-        item.runId === runId &&
-        !item.isActive &&
-        !item.live
-      ) {
+      if (item?.kind === "assistant" && item.runId === runId && !item.isActive && !item.live) {
         const prev = item.message;
         const mergedContent =
           [prev?.content, msg.content].filter((c) => c?.trim()).join("\n\n") || msg.content;
@@ -245,10 +246,7 @@ function insertAssistantSlot(
   return next;
 }
 
-function shouldAttachEphemeralOverlay(
-  items: ChatThreadItem[],
-  progress: AgentProgress,
-): boolean {
+function shouldAttachEphemeralOverlay(items: ChatThreadItem[], progress: AgentProgress): boolean {
   const userIdx = lastUserIndex(items);
   if (userIdx < 0) return false;
   if (userHasAssistantReply(items, userIdx)) return false;
@@ -314,12 +312,34 @@ function shouldAttachLiveOverlay(
  * Thread DB-first estilo Lovable: mensagens do banco + no máximo 1 overlay live.
  * Sem frozenRuns — histórico vem de cardSnapshot no meta da mensagem assistant.
  */
+function scopeThreadAgentState(
+  messages: ChatMessage[],
+  progress: AgentProgress,
+  activeRunId: string | null | undefined,
+  running: boolean,
+): { progress: AgentProgress; activeRunId: string | null | undefined } {
+  const pendingTurn = activeRunId === PENDING_RUN_ID;
+  const runInThread = activeRunId ? runBelongsToChatMessages(activeRunId, messages) : false;
+  const liveTurn = pendingTurn || (running && !!activeRunId) || runInThread;
+
+  if (activeRunId && !liveTurn) {
+    return { progress: initialAgentProgress, activeRunId: null };
+  }
+  if (!activeRunId && messages.length === 0) {
+    return { progress: initialAgentProgress, activeRunId: null };
+  }
+  return { progress, activeRunId };
+}
+
 export function buildChatThread(
   messages: ChatMessage[],
   progress: AgentProgress,
   opts: BuildChatThreadOptions = {},
 ): ChatThreadItem[] {
-  const { activeRunId, running = false } = opts;
+  const { running = false } = opts;
+  const scoped = scopeThreadAgentState(messages, progress, opts.activeRunId, running);
+  const activeRunId = scoped.activeRunId;
+  progress = scoped.progress;
   let items: ChatThreadItem[] = [];
 
   for (const msg of messages) {

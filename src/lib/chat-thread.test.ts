@@ -1,11 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { ChatMessage } from "@/lib/chat-types";
 import { initialAgentProgress } from "@/lib/agent-progress";
-import {
-  buildChatThread,
-  PENDING_RUN_ID,
-  resolveAssistantProgress,
-} from "@/lib/chat-thread";
+import { buildChatThread, PENDING_RUN_ID, resolveAssistantProgress } from "@/lib/chat-thread";
 
 function msg(id: string, role: ChatMessage["role"], content: string): ChatMessage {
   return { id, role, content, timestamp: 0 };
@@ -205,6 +201,30 @@ describe("buildChatThread", () => {
     expect(thread).toHaveLength(2);
     const slot = thread[1] as Extract<(typeof thread)[number], { kind: "assistant" }>;
     expect(slot.live?.error).toBe("Chave API inválida");
+  });
+
+  it("não injeta overlay de run/plano de outra conversa em chat vazio", () => {
+    const staleProgress = {
+      ...initialAgentProgress,
+      finished: true,
+      awaiting: true,
+      awaitingKind: "plan_approval" as const,
+      streamText: "## Plano errado",
+      pendingPlan: {
+        planId: "stale",
+        summary: "Plano antigo",
+        steps: [{ id: "s1", type: "custom" as const, description: "x", enabled: true }],
+        ttlMs: 60_000,
+        proposedAt: Date.now(),
+        runId: "old-run",
+        projectId: "p1",
+      },
+    };
+    const thread = buildChatThread([], staleProgress, {
+      running: false,
+      activeRunId: "old-run",
+    });
+    expect(thread).toHaveLength(0);
   });
 
   it("DB materializado vence live stale no resolve", () => {

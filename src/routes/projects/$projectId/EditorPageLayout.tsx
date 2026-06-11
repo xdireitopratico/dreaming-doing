@@ -234,21 +234,18 @@ export function EditorPageLayout({
   const activeRun = useActiveRun(agent);
 
   const pendingPlan = useMemo(() => {
-    const plan = resolvePendingPlan(agent.progress.pendingPlan, chatMessages);
-    return needsPlanApprovalNow(agent.progress.pendingPlan, chatMessages) ? plan : null;
-  }, [agent.progress.pendingPlan, chatMessages]);
+    const plan = resolvePendingPlan(agent.progress.pendingPlan, chatMessages, agent.activeRunId);
+    return needsPlanApprovalNow(agent.progress.pendingPlan, chatMessages, agent.activeRunId)
+      ? plan
+      : null;
+  }, [agent.progress.pendingPlan, agent.activeRunId, chatMessages]);
 
   const showWelcomeMarkdown = useMemo(() => {
     if (chatMessagesLoading || chatMessages.length > 0) return false;
     if (agentHasRun) return false;
     if (activeRun.activeRunId) return false;
     return true;
-  }, [
-    chatMessagesLoading,
-    chatMessages.length,
-    agentHasRun,
-    activeRun.activeRunId,
-  ]);
+  }, [chatMessagesLoading, chatMessages.length, agentHasRun, activeRun.activeRunId]);
   useEffect(() => {
     if (pendingPlan && !agent.progress.pendingPlan) {
       agent.hydratePendingPlan(pendingPlan);

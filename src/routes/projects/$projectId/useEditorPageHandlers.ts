@@ -348,8 +348,8 @@ export function useEditorPageHandlers({
       }
 
       const planAwaiting =
-        needsPlanApprovalNow(agent.progress.pendingPlan, chatMessages) &&
-        !!resolvePendingPlan(agent.progress.pendingPlan, chatMessages);
+        needsPlanApprovalNow(agent.progress.pendingPlan, chatMessages, agent.activeRunId) &&
+        !!resolvePendingPlan(agent.progress.pendingPlan, chatMessages, agent.activeRunId);
 
       const sendMode = (mode ?? composerMode) as AgentComposerMode;
 
@@ -509,8 +509,8 @@ export function useEditorPageHandlers({
   }, [projectId, project]);
 
   const getPendingPlan = useCallback((): PendingPlan | null => {
-    return resolvePendingPlan(agent.progress.pendingPlan, chatMessages);
-  }, [agent.progress.pendingPlan, chatMessages]);
+    return resolvePendingPlan(agent.progress.pendingPlan, chatMessages, agent.activeRunId);
+  }, [agent.progress.pendingPlan, agent.activeRunId, chatMessages]);
 
   const handlePlanApprove = useCallback(
     async (steps: { id: string; enabled: boolean }[], markdown?: string) => {
@@ -542,18 +542,15 @@ export function useEditorPageHandlers({
 
       const conversationId = conversation?.id;
       if (conversationId) {
-        qc.setQueryData(
-          ["messages", conversationId],
-          (old: typeof chatMessages | undefined) => {
-            if (!old) return old;
-            return old.map((m) => {
-              if (m.role !== "assistant") return m;
-              const meta = m.meta as Record<string, unknown> | undefined;
-              if (meta?.planId !== pp.planId || meta?.runId !== pp.runId) return m;
-              return { ...m, meta: { ...meta, planStatus: "approved" } };
-            });
-          },
-        );
+        qc.setQueryData(["messages", conversationId], (old: typeof chatMessages | undefined) => {
+          if (!old) return old;
+          return old.map((m) => {
+            if (m.role !== "assistant") return m;
+            const meta = m.meta as Record<string, unknown> | undefined;
+            if (meta?.planId !== pp.planId || meta?.runId !== pp.runId) return m;
+            return { ...m, meta: { ...meta, planStatus: "approved" } };
+          });
+        });
       }
       agent.clearPendingPlan();
 
@@ -596,18 +593,15 @@ export function useEditorPageHandlers({
         }
       } catch (e) {
         if (conversationId) {
-          qc.setQueryData(
-            ["messages", conversationId],
-            (old: typeof chatMessages | undefined) => {
-              if (!old) return old;
-              return old.map((m) => {
-                if (m.role !== "assistant") return m;
-                const meta = m.meta as Record<string, unknown> | undefined;
-                if (meta?.planId !== pp.planId || meta?.runId !== pp.runId) return m;
-                return { ...m, meta: { ...meta, planStatus: "pending" } };
-              });
-            },
-          );
+          qc.setQueryData(["messages", conversationId], (old: typeof chatMessages | undefined) => {
+            if (!old) return old;
+            return old.map((m) => {
+              if (m.role !== "assistant") return m;
+              const meta = m.meta as Record<string, unknown> | undefined;
+              if (meta?.planId !== pp.planId || meta?.runId !== pp.runId) return m;
+              return { ...m, meta: { ...meta, planStatus: "pending" } };
+            });
+          });
         }
         agent.hydratePendingPlan(pp);
         toast.error((e as Error)?.message ?? "Falha ao aprovar plano");
@@ -635,18 +629,15 @@ export function useEditorPageHandlers({
       }
       const conversationId = conversation?.id;
       if (conversationId) {
-        qc.setQueryData(
-          ["messages", conversationId],
-          (old: typeof chatMessages | undefined) => {
-            if (!old) return old;
-            return old.map((m) => {
-              if (m.role !== "assistant") return m;
-              const meta = m.meta as Record<string, unknown> | undefined;
-              if (meta?.planId !== pp.planId || meta?.runId !== pp.runId) return m;
-              return { ...m, meta: { ...meta, planStatus: "rejected" } };
-            });
-          },
-        );
+        qc.setQueryData(["messages", conversationId], (old: typeof chatMessages | undefined) => {
+          if (!old) return old;
+          return old.map((m) => {
+            if (m.role !== "assistant") return m;
+            const meta = m.meta as Record<string, unknown> | undefined;
+            if (meta?.planId !== pp.planId || meta?.runId !== pp.runId) return m;
+            return { ...m, meta: { ...meta, planStatus: "rejected" } };
+          });
+        });
       }
       agent.clearPendingPlan();
 
@@ -659,18 +650,15 @@ export function useEditorPageHandlers({
         qc.invalidateQueries({ queryKey: ["agent-runs", projectId] });
       } catch (e) {
         if (conversationId) {
-          qc.setQueryData(
-            ["messages", conversationId],
-            (old: typeof chatMessages | undefined) => {
-              if (!old) return old;
-              return old.map((m) => {
-                if (m.role !== "assistant") return m;
-                const meta = m.meta as Record<string, unknown> | undefined;
-                if (meta?.planId !== pp.planId || meta?.runId !== pp.runId) return m;
-                return { ...m, meta: { ...meta, planStatus: "pending" } };
-              });
-            },
-          );
+          qc.setQueryData(["messages", conversationId], (old: typeof chatMessages | undefined) => {
+            if (!old) return old;
+            return old.map((m) => {
+              if (m.role !== "assistant") return m;
+              const meta = m.meta as Record<string, unknown> | undefined;
+              if (meta?.planId !== pp.planId || meta?.runId !== pp.runId) return m;
+              return { ...m, meta: { ...meta, planStatus: "pending" } };
+            });
+          });
         }
         agent.hydratePendingPlan(pp);
         toast.error((e as Error)?.message ?? "Falha ao rejeitar plano");
