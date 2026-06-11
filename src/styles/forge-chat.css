@@ -120,7 +120,7 @@
 .forge-chat-item-user {
   display: flex;
   flex-direction: column;
-  align-items: flex-end;
+  align-items: flex-start;
   width: 100%;
 }
 
@@ -131,16 +131,16 @@
   width: 100%;
 }
 
-/* User message — bolha neutra (Lovable), sem outline âmbar */
+/* User message — texto solto à esquerda (referência Lovable) */
 .forge-msg-user {
-  max-width: min(88%, 520px);
-  padding: var(--space-md) var(--space-lg);
-  border-radius: 12px 12px 4px 12px;
-  border: 1px solid var(--border-forge);
-  background: var(--bg-card);
+  max-width: 100%;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
   color: var(--text-primary);
   font-size: 14px;
-  line-height: 1.6;
+  line-height: 1.65;
 }
 
 .forge-msg-user p {

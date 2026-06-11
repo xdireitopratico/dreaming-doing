@@ -1,55 +1,134 @@
+import { useEffect, useState } from "react";
+import { cn } from "@/lib/utils";
 import type { MiniCardData } from "@/lib/chat/types";
 import { ChatTaskList } from "./ChatTaskList";
+
+const BRIEFING_ROTATE_MS = 2800;
 
 type ChatJobCardProps = {
   data: MiniCardData;
   runId: string;
   isFocused?: boolean;
+  planTeaser?: boolean;
   onClick?: () => void;
 };
 
-export function ChatJobCard({ data, isFocused, onClick }: ChatJobCardProps) {
-  const statusBadge = () => {
-    if (data.planReady) return <span className="forge-mini-card-badge">Plan ready</span>;
-    if (data.status === "done")
-      return <span className="forge-mini-card-badge forge-mini-card-badge--done">Done</span>;
-    if (data.status === "failed")
-      return <span className="forge-mini-card-badge forge-mini-card-badge--failed">Failed</span>;
-    return <span className="forge-mini-card-badge">Working...</span>;
-  };
+function parseEditedHeader(header: string): { edited: boolean; file: string | null } {
+  const match = /^Edited\s+(.+)$/i.exec(header.trim());
+  if (!match) return { edited: false, file: null };
+  return { edited: true, file: match[1].trim() };
+}
 
-  const statusDot = () => {
-    if (data.status === "done") return "forge-mini-card-dot--done";
-    if (data.status === "failed") return "forge-mini-card-dot--failed";
-    return "forge-mini-card-dot--active";
-  };
+export function ChatJobCard({
+  data,
+  runId,
+  isFocused,
+  planTeaser = false,
+  onClick,
+}: ChatJobCardProps) {
+  const isLive = data.status === "working" || data.status === "thinking";
+  const showWorkingBadge = isLive && !data.planReady && !planTeaser;
+  const briefings =
+    data.liveBriefings.length > 0 ? data.liveBriefings : [data.subtitle || data.title];
+  const [briefingIndex, setBriefingIndex] = useState(0);
+
+  useEffect(() => {
+    if (!isLive) {
+      setBriefingIndex(0);
+      return;
+    }
+    const id = window.setInterval(() => {
+      setBriefingIndex((i) => (i + 1) % briefings.length);
+    }, BRIEFING_ROTATE_MS);
+    return () => window.clearInterval(id);
+  }, [isLive, briefings.length, briefings.join("\u0000")]);
+
+  const displaySubtitle = isLive
+    ? (briefings[briefingIndex % briefings.length] ?? data.subtitle)
+    : data.subtitle || data.title;
+
+  const { edited, file } = parseEditedHeader(data.header);
+  const isRunningCommand = /^Running command$/i.test(data.header.trim());
+  const isPlanReady = data.planReady || planTeaser;
 
   const hint = () => {
-    if (data.planReady) return "Revisar plano no inspector →";
+    if (isPlanReady) return "Revisar plano no inspector →";
     if (data.status === "done" && data.fileCount) return `${data.fileCount} arquivos alterados →`;
     if (data.hasPlan) return "Ver plano no inspector →";
     return "Detalhes completos →";
   };
 
-  const subtitle =
-    data.liveBriefings.length > 0
-      ? data.liveBriefings[data.currentTaskIndex % data.liveBriefings.length]
-      : data.title;
+  const statusClass = showWorkingBadge
+    ? "forge-mini-card--working"
+    : data.status === "done"
+      ? "forge-mini-card--done"
+      : "";
 
   return (
-    <button
-      type="button"
-      className={`forge-mini-card ${isFocused ? "forge-mini-card--focused" : ""}`}
-      onClick={onClick}
+    <div
+      className={cn(
+        "forge-mini-card w-full",
+        statusClass,
+        isFocused && "forge-mini-card--focused",
+      )}
+      data-testid="chat-job-card"
+      data-run-id={runId}
     >
-      <div className="forge-mini-card-header">
-        <span className={`forge-mini-card-dot ${statusDot()}`} aria-hidden />
-        {statusBadge()}
-      </div>
-      {data.editedFile && <p className="forge-mini-card-header-line">{data.editedFile}</p>}
-      <p className="forge-mini-card-title">{subtitle}</p>
-      {data.tasks.length > 0 && <ChatTaskList tasks={data.tasks} />}
-      <p className="forge-mini-card-hint">{hint()}</p>
-    </button>
+      <button type="button" className="forge-mini-card-body" onClick={onClick}>
+        <div className="forge-mini-card-header">
+          {showWorkingBadge && (
+            <>
+              <span className="forge-mini-card-dot forge-mini-card-dot--working" aria-hidden />
+              <span className="forge-mini-card-badge forge-mini-card-badge--working">Working…</span>
+            </>
+          )}
+          {isPlanReady && (
+            <>
+              <span className="forge-mini-card-dot forge-mini-card-dot--working" aria-hidden />
+              <span className="forge-mini-card-badge forge-mini-card-badge--working">
+                Plan ready
+              </span>
+            </>
+          )}
+          {isRunningCommand && !showWorkingBadge && !isPlanReady && (
+            <span className="forge-mini-card-badge forge-mini-card-badge--working">
+              Running command
+            </span>
+          )}
+          {edited && file && (
+            <>
+              <span className="forge-mini-card-badge forge-mini-card-badge--edited-tag">Edited</span>
+              <span className="forge-mini-card-badge forge-mini-card-badge--edited-file">{file}</span>
+            </>
+          )}
+          {data.status === "done" && !isPlanReady && !edited && (
+            <>
+              <span className="forge-mini-card-dot forge-mini-card-dot--done" aria-hidden />
+              <span className="forge-mini-card-badge forge-mini-card-badge--done">Done</span>
+            </>
+          )}
+          {data.status === "failed" && (
+            <>
+              <span className="forge-mini-card-dot forge-mini-card-dot--failed" aria-hidden />
+              <span className="forge-mini-card-badge forge-mini-card-badge--failed">Failed</span>
+            </>
+          )}
+        </div>
+
+        {!edited && !isRunningCommand && data.header && !isPlanReady && (
+          <p className="forge-mini-card-header-line">{data.header}</p>
+        )}
+
+        <p
+          key={isLive ? `${briefingIndex}-${displaySubtitle}` : displaySubtitle}
+          className={cn("forge-mini-card-title", isLive && "forge-mini-card-title--live")}
+        >
+          {displaySubtitle}
+        </p>
+
+        {data.tasks.length > 0 && <ChatTaskList tasks={data.tasks} />}
+        <p className="forge-mini-card-hint">{hint()}</p>
+      </button>
+    </div>
   );
 }

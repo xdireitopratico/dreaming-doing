@@ -176,8 +176,8 @@ export function EditorPageLayout({
   handleResumeAgent,
   handleSend,
   handleStop,
-  handleVisualEdits: _handleVisualEdits,
-  pickMode: _pickMode,
+  handleVisualEdits,
+  pickMode,
   filePaths,
   composerMode,
   setComposerMode,
@@ -455,6 +455,8 @@ export function EditorPageLayout({
                     if (!conversationId) return;
                     await agent.drainQueue(projectId, conversationId, composerMode);
                   }}
+                  onVisualEdits={handleVisualEdits}
+                  visualEditsActive={pickMode}
                 />
               </div>
             }

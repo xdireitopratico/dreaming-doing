@@ -15,6 +15,10 @@ export type MiniCardStatus = "thinking" | "working" | "done" | "failed";
 
 export type MiniCardData = {
   title: string;
+  /** Header Lovable: «Edited App.tsx», «Running command», «Plan ready». */
+  header: string;
+  /** Subtitle rotativo — briefing da tarefa ativa. */
+  subtitle: string;
   liveBriefings: string[];
   status: MiniCardStatus;
   tasks: TaskItem[];
@@ -65,6 +69,8 @@ export type ThreadItem =
       thinking?: { active: boolean; startedAtMs?: number; durationMs?: number } | null;
       narration?: string | null;
       miniCard?: MiniCardData | null;
+      statusChips?: string[];
+      planTeaser?: boolean;
       qualify?: QualifyPrompt | null;
       plan?: PlanPrompt | null;
       planStatus?: "pending" | "approved" | "rejected" | null;

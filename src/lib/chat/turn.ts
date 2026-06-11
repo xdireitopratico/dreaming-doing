@@ -1,6 +1,11 @@
 import type { AgentProgress, PendingPlan } from "@/lib/agent-progress";
 import type { ChatMessage } from "@/lib/chat-types";
-import { buildAgentRunView, isRunEffectivelyActive, shouldShowJobCard } from "@/lib/forge-run";
+import {
+  buildAgentRunView,
+  collectStatusChips,
+  isRunEffectivelyActive,
+  shouldShowJobCard,
+} from "@/lib/forge-run";
 import { isAgentJobMessage } from "@/lib/assistant-run-progress";
 import { resolveJobPlanForRun, storedPlanFromMessage } from "@/lib/plan-message-meta";
 import { parseQualifyChoices } from "@/lib/qualify-choices";
@@ -32,6 +37,8 @@ function toMiniCard(
   const m = runView.miniCard;
   return {
     title: m.title || m.header,
+    header: m.header,
+    subtitle: m.subtitle,
     liveBriefings: m.liveBriefings.length > 0 ? m.liveBriefings : [m.subtitle || m.header],
     status: m.status,
     tasks: m.tasks,
@@ -199,6 +206,10 @@ export function mapAssistantTurn(
 
   const streamText = closingText ?? resolved?.streamText ?? null;
   const showCard = showJobCard || planTeaser;
+  const statusChips =
+    resolved && (slotActive || anchoredLive)
+      ? collectStatusChips(resolved, slotActive || anchoredLive)
+      : [];
 
   return {
     kind: "assistant",
@@ -211,6 +222,8 @@ export function mapAssistantTurn(
     thinking,
     narration: runView?.narration ?? resolved?.narrationText ?? null,
     miniCard: showCard && runView ? toMiniCard(runView) : null,
+    statusChips,
+    planTeaser,
     qualify,
     plan: planTeaser && planForPrompt ? toPlanPrompt(planForPrompt) : null,
     planStatus: planStatus ?? (planTeaser ? "pending" : null),

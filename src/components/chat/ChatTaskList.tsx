@@ -24,7 +24,7 @@ export function ChatTaskList({ tasks }: ChatTaskListProps) {
   return (
     <ul className="forge-task-list">
       {tasks.slice(0, 6).map((task) => (
-        <li key={task.id} className="forge-task-item">
+        <li key={task.id} className="forge-task-item" data-status={task.status}>
           {icon(task.status)}
           <span className="forge-task-label">{task.label}</span>
         </li>

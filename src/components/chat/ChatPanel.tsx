@@ -41,6 +41,8 @@ export type ChatPanelProps = {
   onClearPendingItem?: (id: string) => Promise<void>;
   onClearAllPending?: () => Promise<void>;
   onDrainQueue?: () => Promise<void>;
+  onVisualEdits?: () => void;
+  visualEditsActive?: boolean;
 };
 
 export function ChatPanel({
@@ -70,6 +72,8 @@ export function ChatPanel({
   onClearPendingItem,
   onClearAllPending,
   onDrainQueue,
+  onVisualEdits,
+  visualEditsActive,
 }: ChatPanelProps) {
   const {
     thread,
@@ -118,8 +122,8 @@ export function ChatPanel({
   }, [thread.length, running, agent.progress.timeline.length, pendingQueueItems.length, scrollToBottom]);
 
   const handleSend = useCallback(
-    (text: string, mode?: AgentComposerMode) => {
-      onSend(text, mode ?? composerMode);
+    (text: string, mode?: AgentComposerMode, parts?: StoredMessagePart[]) => {
+      onSend(text, mode ?? composerMode, parts);
     },
     [onSend, composerMode],
   );
@@ -224,6 +228,8 @@ export function ChatPanel({
         onComposerModeChange={onComposerModeChange}
         onSend={handleSend}
         onStop={onStop}
+        onVisualEdits={onVisualEdits}
+        visualEditsActive={visualEditsActive}
         externalPrompt={externalPrompt}
         onExternalPromptConsumed={onExternalPromptConsumed}
       />
