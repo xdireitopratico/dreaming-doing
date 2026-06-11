@@ -1,8 +1,12 @@
-import { type RefObject, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type RefObject, useEffect, useMemo, useRef, useState } from "react";
 import { EditorShell } from "@/components/EditorShell";
 import { EditorResizableLayout } from "@/components/editor/EditorResizableLayout";
 import { EditorChatHeader } from "@/components/editor/EditorChatHeader";
-import { EditorMobileHeader, type EditorMobilePanel } from "@/components/editor/EditorMobileHeader";
+import {
+  EditorMobileHeader,
+  EditorMobileTabBar,
+  type EditorMobilePanel,
+} from "@/components/editor/EditorMobileHeader";
 import { EditorWorkspaceHeader } from "@/components/editor/EditorWorkspaceHeader";
 import type { EditorMainView } from "@/components/editor/editor-views";
 import type { AgentComposerMode } from "@/lib/chat-types";
@@ -266,23 +270,14 @@ export function EditorPageLayout({
     clearInspectorDismissed,
   } = useJobWorkspaceFocus();
 
-  const focusWorkspace = useCallback(() => {
-    onMainViewChange("preview");
-    onMobilePanelChange?.("workspace");
-  }, [onMainViewChange, onMobilePanelChange]);
-
   const handleOpenInspector = (
     runId: string,
     tab: "timeline" | "changes" | "plan" = "timeline",
   ) => {
     openJobWorkspace(runId, tab);
-    focusWorkspace();
+    onMainViewChange("preview");
+    if (isMobile) onMobilePanelChange?.("preview");
   };
-
-  useEffect(() => {
-    if (!isMobile || mobilePanel !== "workspace") return;
-    if (activeView === "code") onMainViewChange("preview");
-  }, [isMobile, mobilePanel, activeView, onMainViewChange]);
 
   useEffect(() => {
     const onOpenConnector = (ev: Event) => {
@@ -300,17 +295,23 @@ export function EditorPageLayout({
     const runId = pendingPlan.runId || agent.activeRunId;
     if (!runId) return;
     openJobWorkspace(runId, "plan");
-    focusWorkspace();
-  }, [pendingPlan?.planId, pendingPlan?.runId, agent.activeRunId, openJobWorkspace, focusWorkspace]);
+    onMainViewChange("preview");
+  }, [
+    pendingPlan?.planId,
+    pendingPlan?.runId,
+    agent.activeRunId,
+    openJobWorkspace,
+    onMainViewChange,
+  ]);
 
   useEffect(() => {
     const hadPlan = !!prevPendingPlanRef.current;
     prevPendingPlanRef.current = pendingPlan;
     if (hadPlan && !pendingPlan && agent.activeRunId) {
       openJobWorkspace(agent.activeRunId, "timeline");
-      focusWorkspace();
+      onMainViewChange("preview");
     }
-  }, [pendingPlan, agent.activeRunId, openJobWorkspace, focusWorkspace]);
+  }, [pendingPlan, agent.activeRunId, openJobWorkspace, onMainViewChange]);
 
   useEffect(() => {
     if (!pendingPlan && jobWorkspaceFocus?.tab === "plan") {
@@ -326,14 +327,14 @@ export function EditorPageLayout({
     if (pendingPlan) return;
     if (isInspectorDismissedForRun(runId)) return;
     openJobWorkspace(runId, "timeline");
-    focusWorkspace();
+    onMainViewChange("preview");
   }, [
     running,
     agent.activeRunId,
     agent.progress.conversational,
     pendingPlan,
     openJobWorkspace,
-    focusWorkspace,
+    onMainViewChange,
     isInspectorDismissedForRun,
   ]);
 
@@ -384,7 +385,8 @@ export function EditorPageLayout({
     if (running && previewLiveUpdating) return "Live updating…";
     if (running) return isMobile ? "Agente trabalhando" : "Agent working — clique o job no chat";
     if (isMobile && pendingPlan) return "Plano aguardando";
-    if (isMobile && agent.progress.awaitingKind === "qualify" && !pendingPlan) return "Aguardando você";
+    if (isMobile && agent.progress.awaitingKind === "qualify" && !pendingPlan)
+      return "Aguardando você";
     return null;
   }, [
     isJobFocused,
@@ -414,7 +416,6 @@ export function EditorPageLayout({
               isMobile ? (
                 <EditorMobileHeader
                   mobilePanel={mobilePanel}
-                  onMobilePanelChange={onMobilePanelChange ?? (() => {})}
                   projectId={projectId}
                   projectName={projectName}
                   statusLabel={previewStatusLabel}
@@ -437,6 +438,14 @@ export function EditorPageLayout({
                     setPreviewReloadNonce((n) => n + 1);
                   }}
                   previewRefreshDisabled={previewBoot.booting}
+                />
+              ) : undefined
+            }
+            mobileTabBar={
+              isMobile ? (
+                <EditorMobileTabBar
+                  value={mobilePanel}
+                  onChange={onMobilePanelChange ?? (() => {})}
                 />
               ) : undefined
             }
@@ -558,15 +567,42 @@ export function EditorPageLayout({
                   )}
 
                   <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-                    <StackHonestBanner
-                      files={previewNavFiles}
-                      onFocusChat={() => {
-                        if (isMobile) onMobilePanelChange?.("chat");
-                        const el =
-                          document.querySelector<HTMLTextAreaElement>(".forge-composer-input");
-                        el?.focus();
-                      }}
-                    />
+                    {isMobile && mobilePanel === "code" && fileTreeFiles.length > 0 && (
+                      <div className="forge-mobile-code-bar">
+                        <label htmlFor="forge-mobile-code-select" className="forge-mobile-code-label">
+                          Arquivo
+                        </label>
+                        <select
+                          id="forge-mobile-code-select"
+                          className="forge-mobile-code-select"
+                          value={activeFilePath ?? ""}
+                          onChange={(e) => handleSelectFile(e.target.value)}
+                        >
+                          {!activeFilePath && (
+                            <option value="" disabled>
+                              Escolher arquivo…
+                            </option>
+                          )}
+                          {fileTreeFiles.map((path) => (
+                            <option key={path} value={path}>
+                              {path}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+
+                    {(!isMobile || mobilePanel === "preview") && (
+                      <StackHonestBanner
+                        files={previewNavFiles}
+                        onFocusChat={() => {
+                          if (isMobile) onMobilePanelChange?.("chat");
+                          const el =
+                            document.querySelector<HTMLTextAreaElement>(".forge-composer-input");
+                          el?.focus();
+                        }}
+                      />
+                    )}
                     <div className="min-h-0 min-w-0 flex-1">
                       {activeView === "code" && (
                         <CodeEditor
@@ -595,6 +631,7 @@ export function EditorPageLayout({
                             onOpenFile={(path) => {
                               handleSelectFile(path);
                               onMainViewChange("code");
+                              if (isMobile) onMobilePanelChange?.("code");
                             }}
                             onPlanApprove={handlePlanApprove}
                             onPlanReject={handlePlanReject}
@@ -689,7 +726,6 @@ export function EditorPageLayout({
           <p className="text-sm text-[var(--primary)]">Solte os arquivos para importar</p>
         </div>
       )}
-
     </>
   );
 }

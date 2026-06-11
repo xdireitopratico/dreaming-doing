@@ -65,14 +65,23 @@ function EditorPage() {
   const welcomeMarkdown = hasUserLlmKey ? FORGE_WELCOME_BYOK_MARKDOWN : FORGE_WELCOME_MARKDOWN;
   const e2bConnected = connectorStatus.e2b.connected;
   useTasteUiActions();
-  const tasteQuota = useMemo(() => ({
-    tasteChatRemaining,
-    tasteStartRemaining,
-    hasUserLlmKey,
-  }), [tasteChatRemaining, tasteStartRemaining, hasUserLlmKey]);
+  const tasteQuota = useMemo(
+    () => ({
+      tasteChatRemaining,
+      tasteStartRemaining,
+      hasUserLlmKey,
+    }),
+    [tasteChatRemaining, tasteStartRemaining, hasUserLlmKey],
+  );
 
   const isMobile = useIsMobile();
   const [mobilePanel, setMobilePanel] = useState<EditorMobilePanel>("chat");
+
+  const handleMobilePanelChange = useCallback((panel: EditorMobilePanel) => {
+    setMobilePanel(panel);
+    if (panel === "code") setActiveView("code");
+    else if (panel === "preview") setActiveView("preview");
+  }, []);
   const [showFileTree, setShowFileTree] = useState(false);
   const [activeView, setActiveView] = useState<"code" | "preview" | "diff">("preview");
   const [activeFilePath, setActiveFilePath] = useState<string | null>(null);
@@ -397,7 +406,7 @@ function EditorPage() {
       handleDrop={handleDrop}
       isMobile={isMobile}
       mobilePanel={mobilePanel}
-      onMobilePanelChange={setMobilePanel}
+      onMobilePanelChange={handleMobilePanelChange}
     />
   );
 }

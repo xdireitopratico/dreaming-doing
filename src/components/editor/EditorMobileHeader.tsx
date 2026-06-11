@@ -1,43 +1,48 @@
 import { Link } from "@tanstack/react-router";
-import { RefreshCw, Share2 } from "lucide-react";
+import { Code2, Eye, MessageSquare, RefreshCw, Share2 } from "lucide-react";
 import { ForgeLogoMark } from "@/components/editor/ForgeLogoMark";
 import { projectDisplayName } from "@/lib/project-display-name";
 
-export type EditorMobilePanel = "chat" | "workspace";
+export type EditorMobilePanel = "chat" | "preview" | "code";
 
-type EditorMobilePanelToggleProps = {
+type EditorMobileTabBarProps = {
   value: EditorMobilePanel;
   onChange: (value: EditorMobilePanel) => void;
 };
 
-export function EditorMobilePanelToggle({ value, onChange }: EditorMobilePanelToggleProps) {
+const MOBILE_TABS: Array<{
+  id: EditorMobilePanel;
+  label: string;
+  icon: typeof MessageSquare;
+}> = [
+  { id: "chat", label: "Chat", icon: MessageSquare },
+  { id: "preview", label: "Preview", icon: Eye },
+  { id: "code", label: "Código", icon: Code2 },
+];
+
+export function EditorMobileTabBar({ value, onChange }: EditorMobileTabBarProps) {
   return (
-    <div className="seg-toggle forge-mobile-panel-toggle" role="tablist" aria-label="Painel do editor">
-      <button
-        type="button"
-        role="tab"
-        aria-selected={value === "chat"}
-        data-active={value === "chat" ? "true" : undefined}
-        onClick={() => onChange("chat")}
-      >
-        Chat
-      </button>
-      <button
-        type="button"
-        role="tab"
-        aria-selected={value === "workspace"}
-        data-active={value === "workspace" ? "true" : undefined}
-        onClick={() => onChange("workspace")}
-      >
-        Preview
-      </button>
-    </div>
+    <nav className="forge-mobile-tab-bar" role="tablist" aria-label="Painéis do editor">
+      {MOBILE_TABS.map(({ id, label, icon: Icon }) => (
+        <button
+          key={id}
+          type="button"
+          role="tab"
+          aria-selected={value === id}
+          className="forge-mobile-tab-bar-item"
+          data-active={value === id ? "true" : undefined}
+          onClick={() => onChange(id)}
+        >
+          <Icon className="size-5 shrink-0" aria-hidden />
+          <span>{label}</span>
+        </button>
+      ))}
+    </nav>
   );
 }
 
 type EditorMobileHeaderProps = {
   mobilePanel: EditorMobilePanel;
-  onMobilePanelChange: (panel: EditorMobilePanel) => void;
   projectId: string;
   projectName?: string | null;
   statusLabel?: string | null;
@@ -51,7 +56,6 @@ type EditorMobileHeaderProps = {
 
 export function EditorMobileHeader({
   mobilePanel,
-  onMobilePanelChange,
   projectId,
   projectName,
   statusLabel,
@@ -66,11 +70,16 @@ export function EditorMobileHeader({
     <div className="forge-mobile-editor-header-inner">
       <div className="forge-mobile-editor-header-row">
         <ForgeLogoMark size={16} linkTo="/projects" title="Todos os projetos" />
-        <Link to="/projects/$projectId" params={{ projectId }} className="forge-mobile-project-link">
+        <Link
+          to="/projects/$projectId"
+          params={{ projectId }}
+          className="forge-mobile-project-link"
+        >
           <span className="truncate">{projectDisplayName(projectName)}</span>
         </Link>
+        {statusLabel ? <span className="forge-mobile-status-pill">{statusLabel}</span> : null}
         <div className="forge-mobile-editor-actions">
-          {mobilePanel === "workspace" && onPreviewRefresh && (
+          {mobilePanel === "preview" && onPreviewRefresh && (
             <button
               type="button"
               className="forge-mobile-icon-btn"
@@ -105,11 +114,6 @@ export function EditorMobileHeader({
             </button>
           )}
         </div>
-      </div>
-
-      <div className="forge-mobile-editor-toggle-row">
-        <EditorMobilePanelToggle value={mobilePanel} onChange={onMobilePanelChange} />
-        {statusLabel ? <span className="forge-mobile-status-pill">{statusLabel}</span> : null}
       </div>
     </div>
   );

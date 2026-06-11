@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import type { EditorMobilePanel } from "@/components/editor/EditorMobileHeader";
 
 const STORAGE_KEY = "forge-editor-chat-ratio";
 const COLLAPSED_KEY = "forge-editor-chat-collapsed";
@@ -34,14 +35,13 @@ function nearestSnap(ratio: number): number {
   return best;
 }
 
-export type EditorMobilePanel = "chat" | "workspace";
-
 interface EditorResizableLayoutProps {
   chat: ReactNode;
   workspace: ReactNode;
   chatHeader?: ReactNode;
   workspaceHeader?: ReactNode;
   mobileHeader?: ReactNode;
+  mobileTabBar?: ReactNode;
   workspaceCode?: boolean;
   isMobile?: boolean;
   mobilePanel?: EditorMobilePanel;
@@ -53,6 +53,7 @@ export function EditorResizableLayout({
   chatHeader,
   workspaceHeader,
   mobileHeader,
+  mobileTabBar,
   workspaceCode,
   isMobile = false,
   mobilePanel = "chat",
@@ -70,13 +71,16 @@ export function EditorResizableLayout({
     localStorage.setItem(COLLAPSED_KEY, collapsed ? "1" : "0");
   }, [collapsed]);
 
-  const onPointerMove = useCallback((e: PointerEvent) => {
-    if (isMobile || !draggingRef.current || !containerRef.current) return;
-    const rect = containerRef.current.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const next = Math.min(MAX_CHAT_RATIO, Math.max(MIN_CHAT_PX / rect.width, x / rect.width));
-    setRatio(next);
-  }, [isMobile]);
+  const onPointerMove = useCallback(
+    (e: PointerEvent) => {
+      if (isMobile || !draggingRef.current || !containerRef.current) return;
+      const rect = containerRef.current.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const next = Math.min(MAX_CHAT_RATIO, Math.max(MIN_CHAT_PX / rect.width, x / rect.width));
+      setRatio(next);
+    },
+    [isMobile],
+  );
 
   const endDrag = useCallback(() => {
     if (!draggingRef.current) return;
@@ -103,7 +107,7 @@ export function EditorResizableLayout({
   );
 
   const showChatPanel = isMobile ? mobilePanel === "chat" : !collapsed;
-  const showWorkspacePanel = isMobile ? mobilePanel === "workspace" : true;
+  const showWorkspacePanel = isMobile ? mobilePanel === "preview" || mobilePanel === "code" : true;
 
   const handleDoubleClick = () => {
     if (collapsed) return;
@@ -138,7 +142,9 @@ export function EditorResizableLayout({
         <header className="forge-mobile-editor-header">{mobileHeader}</header>
       ) : null}
 
-      {!isMobile && !collapsed && chatHeader && <header className="forge-chat-header">{chatHeader}</header>}
+      {!isMobile && !collapsed && chatHeader && (
+        <header className="forge-chat-header">{chatHeader}</header>
+      )}
       {!isMobile && workspaceHeader && (
         <header className="forge-workspace-header">
           {collapsed && (
@@ -177,6 +183,8 @@ export function EditorResizableLayout({
           {workspace}
         </section>
       )}
+
+      {isMobile && mobileTabBar}
     </div>
   );
 }
