@@ -22,7 +22,8 @@ export function ForgeMiniCard({
 }: ForgeMiniCardProps) {
   const isLive = data.status === "working" || data.status === "thinking";
   const showWorkingBadge = isLive && !data.planReady;
-  const briefings = data.liveBriefings.length > 0 ? data.liveBriefings : [data.subtitle || data.title];
+  const briefings =
+    data.liveBriefings.length > 0 ? data.liveBriefings : [data.subtitle || data.title];
   const [briefingIndex, setBriefingIndex] = useState(0);
 
   useEffect(() => {
@@ -41,13 +42,14 @@ export function ForgeMiniCard({
     ? (briefings[briefingIndex % briefings.length] ?? data.subtitle)
     : data.subtitle || data.title;
 
-  const hint = data.planReady || planTeaser
-    ? "Revisar plano no inspector →"
-    : data.status === "done" && data.fileCount
-      ? `${data.fileCount} arquivos alterados →`
-      : data.hasPlan
-        ? "Ver plano no inspector →"
-        : "Detalhes completos →";
+  const hint =
+    data.planReady || planTeaser
+      ? "Revisar plano no inspector →"
+      : data.status === "done" && data.fileCount
+        ? `${data.fileCount} arquivos alterados →`
+        : data.hasPlan
+          ? "Ver plano no inspector →"
+          : "Detalhes completos →";
 
   const statusClass = showWorkingBadge
     ? "forge-mini-card--working"
@@ -81,7 +83,9 @@ export function ForgeMiniCard({
           {(data.planReady || planTeaser) && (
             <>
               <span className="forge-mini-card-dot forge-mini-card-dot--working" aria-hidden />
-              <span className="forge-mini-card-badge forge-mini-card-badge--working">Plan ready</span>
+              <span className="forge-mini-card-badge forge-mini-card-badge--working">
+                Plan ready
+              </span>
             </>
           )}
           {data.status === "done" && !data.planReady && !planTeaser && (

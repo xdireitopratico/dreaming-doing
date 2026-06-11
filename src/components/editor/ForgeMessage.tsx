@@ -105,11 +105,7 @@ export function ForgeMessage({
     (runView?.miniCard.fileCount ?? 0) > 0 ||
     (runView?.miniCard.editedFile != null && runView.miniCard.editedFile !== "");
   const showDone =
-    !!runView?.finished &&
-    !isActive &&
-    runView.lastFinishOk === true &&
-    showJobCard &&
-    hasDelivery;
+    !!runView?.finished && !isActive && runView.lastFinishOk === true && showJobCard && hasDelivery;
 
   return (
     <article

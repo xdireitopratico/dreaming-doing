@@ -69,9 +69,7 @@ export function useAgentRealtime(
     );
 
     // messages changes (assistant replies, plan proposals)
-    const messagesFilter = conversationId
-      ? `conversation_id=eq.${conversationId}`
-      : undefined;
+    const messagesFilter = conversationId ? `conversation_id=eq.${conversationId}` : undefined;
     channel.on(
       "postgres_changes",
       {

@@ -171,8 +171,7 @@ export function ForgeChat({
             })
           : null;
 
-        const runStartedAtMs =
-          item.runId === activeRunId ? (activeRunStartedAtMs ?? null) : null;
+        const runStartedAtMs = item.runId === activeRunId ? (activeRunStartedAtMs ?? null) : null;
 
         const msgPlanMeta = item.message ? storedPlanFromMessage(item.message) : null;
         const planStatus = msgPlanMeta?.status ?? null;

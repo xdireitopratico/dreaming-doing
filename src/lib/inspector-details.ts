@@ -37,9 +37,7 @@ function humanizeToolName(name: string): string {
     .replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-export function actionLabelFromTool(
-  item: Extract<ForgeTimelineItem, { type: "TOOL" }>,
-): string {
+export function actionLabelFromTool(item: Extract<ForgeTimelineItem, { type: "TOOL" }>): string {
   const name = item.name;
   if (item.path) {
     const file = fileBase(item.path);

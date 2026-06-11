@@ -44,10 +44,7 @@ function ThoughtBlock({
           <Loader2 className="size-3 animate-spin" style={{ color: "var(--text-accent)" }} />
         )}
         <ChevronDown
-          className={cn(
-            "forge-details-chevron size-3.5",
-            open && "forge-details-chevron--open",
-          )}
+          className={cn("forge-details-chevron size-3.5", open && "forge-details-chevron--open")}
         />
       </button>
       {(open || block.active) && block.text && (
@@ -68,7 +65,11 @@ function ActionRow({
   return (
     <div className="forge-details-action" data-testid="details-action">
       {clickable ? (
-        <button type="button" className="forge-details-action-btn" onClick={() => onOpenFile!(block.path!)}>
+        <button
+          type="button"
+          className="forge-details-action-btn"
+          onClick={() => onOpenFile!(block.path!)}
+        >
           {block.label}
         </button>
       ) : (
@@ -132,7 +133,10 @@ export function InspectorDetails({
     <div className="forge-inspector-details" data-testid="inspector-details">
       <div ref={scrollRef} className="forge-inspector-details-scroll">
         {latencyThinking && (
-          <div className="forge-inspector-latency-thinking" data-testid="inspector-latency-thinking">
+          <div
+            className="forge-inspector-latency-thinking"
+            data-testid="inspector-latency-thinking"
+          >
             <ForgeThinking variant="latency" startedAtMs={latencyThinking.startedAtMs} active />
           </div>
         )}
