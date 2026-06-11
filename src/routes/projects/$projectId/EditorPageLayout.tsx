@@ -1,7 +1,8 @@
-import { type RefObject, useEffect, useMemo, useRef, useState } from "react";
+import { type RefObject, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { EditorShell } from "@/components/EditorShell";
 import { EditorResizableLayout } from "@/components/editor/EditorResizableLayout";
 import { EditorChatHeader } from "@/components/editor/EditorChatHeader";
+import { EditorMobileHeader, type EditorMobilePanel } from "@/components/editor/EditorMobileHeader";
 import { EditorWorkspaceHeader } from "@/components/editor/EditorWorkspaceHeader";
 import type { EditorMainView } from "@/components/editor/editor-views";
 import type { AgentComposerMode } from "@/lib/chat-types";
@@ -133,6 +134,9 @@ export type EditorPageLayoutProps = {
   handleDragOver: (e: React.DragEvent) => void;
   handleDragLeave: (e: React.DragEvent) => void;
   handleDrop: (e: React.DragEvent) => void;
+  isMobile?: boolean;
+  mobilePanel?: EditorMobilePanel;
+  onMobilePanelChange?: (panel: EditorMobilePanel) => void;
 };
 
 export function EditorPageLayout({
@@ -221,6 +225,9 @@ export function EditorPageLayout({
   handleDragOver,
   handleDragLeave,
   handleDrop,
+  isMobile = false,
+  mobilePanel = "chat",
+  onMobilePanelChange,
 }: EditorPageLayoutProps) {
   const pendingPlan = useMemo(
     () => resolvePendingPlan(agent.progress.pendingPlan, chatMessages),
@@ -259,13 +266,23 @@ export function EditorPageLayout({
     clearInspectorDismissed,
   } = useJobWorkspaceFocus();
 
+  const focusWorkspace = useCallback(() => {
+    onMainViewChange("preview");
+    onMobilePanelChange?.("workspace");
+  }, [onMainViewChange, onMobilePanelChange]);
+
   const handleOpenInspector = (
     runId: string,
     tab: "timeline" | "changes" | "plan" = "timeline",
   ) => {
     openJobWorkspace(runId, tab);
-    onMainViewChange("preview");
+    focusWorkspace();
   };
+
+  useEffect(() => {
+    if (!isMobile || mobilePanel !== "workspace") return;
+    if (activeView === "code") onMainViewChange("preview");
+  }, [isMobile, mobilePanel, activeView, onMainViewChange]);
 
   useEffect(() => {
     const onOpenConnector = (ev: Event) => {
@@ -283,17 +300,17 @@ export function EditorPageLayout({
     const runId = pendingPlan.runId || agent.activeRunId;
     if (!runId) return;
     openJobWorkspace(runId, "plan");
-    onMainViewChange("preview");
-  }, [pendingPlan?.planId, pendingPlan?.runId, agent.activeRunId, openJobWorkspace, onMainViewChange]);
+    focusWorkspace();
+  }, [pendingPlan?.planId, pendingPlan?.runId, agent.activeRunId, openJobWorkspace, focusWorkspace]);
 
   useEffect(() => {
     const hadPlan = !!prevPendingPlanRef.current;
     prevPendingPlanRef.current = pendingPlan;
     if (hadPlan && !pendingPlan && agent.activeRunId) {
       openJobWorkspace(agent.activeRunId, "timeline");
-      onMainViewChange("preview");
+      focusWorkspace();
     }
-  }, [pendingPlan, agent.activeRunId, openJobWorkspace, onMainViewChange]);
+  }, [pendingPlan, agent.activeRunId, openJobWorkspace, focusWorkspace]);
 
   useEffect(() => {
     if (!pendingPlan && jobWorkspaceFocus?.tab === "plan") {
@@ -309,14 +326,14 @@ export function EditorPageLayout({
     if (pendingPlan) return;
     if (isInspectorDismissedForRun(runId)) return;
     openJobWorkspace(runId, "timeline");
-    onMainViewChange("preview");
+    focusWorkspace();
   }, [
     running,
     agent.activeRunId,
     agent.progress.conversational,
     pendingPlan,
     openJobWorkspace,
-    onMainViewChange,
+    focusWorkspace,
     isInspectorDismissedForRun,
   ]);
 
@@ -365,9 +382,18 @@ export function EditorPageLayout({
   const previewStatusLabel = useMemo(() => {
     if (isJobFocused) return "Job inspector";
     if (running && previewLiveUpdating) return "Live updating…";
-    if (running) return "Agent working — clique o job no chat";
+    if (running) return isMobile ? "Agente trabalhando" : "Agent working — clique o job no chat";
+    if (isMobile && pendingPlan) return "Plano aguardando";
+    if (isMobile && agent.progress.awaitingKind === "qualify" && !pendingPlan) return "Aguardando você";
     return null;
-  }, [isJobFocused, running, previewLiveUpdating]);
+  }, [
+    isJobFocused,
+    running,
+    previewLiveUpdating,
+    isMobile,
+    pendingPlan,
+    agent.progress.awaitingKind,
+  ]);
 
   return (
     <>
@@ -381,7 +407,39 @@ export function EditorPageLayout({
           onDrop={handleDrop}
         >
           <EditorResizableLayout
+            isMobile={isMobile}
+            mobilePanel={mobilePanel}
             workspaceCode={activeView === "code"}
+            mobileHeader={
+              isMobile ? (
+                <EditorMobileHeader
+                  mobilePanel={mobilePanel}
+                  onMobilePanelChange={onMobilePanelChange ?? (() => {})}
+                  projectId={projectId}
+                  projectName={projectName}
+                  statusLabel={previewStatusLabel}
+                  onShare={handleShare}
+                  onPublish={handleOpenLiveSite}
+                  publishLabel={publishButtonLabel}
+                  publishDisabled={
+                    !liveSiteUrl &&
+                    (!contentPublishReady ||
+                      previewBoot.booting ||
+                      previewBoot.warming ||
+                      autoPublishPublishing)
+                  }
+                  onPreviewRefresh={() => {
+                    if (previewIframeRef.current?.contentWindow) {
+                      previewIframeRef.current.contentWindow.location.reload();
+                    } else {
+                      void previewBoot.boot({ force: true });
+                    }
+                    setPreviewReloadNonce((n) => n + 1);
+                  }}
+                  previewRefreshDisabled={previewBoot.booting}
+                />
+              ) : undefined
+            }
             chatHeader={
               <EditorChatHeader
                 projectId={projectId}
@@ -485,7 +543,7 @@ export function EditorPageLayout({
             workspace={
               <div className="flex min-h-0 h-full w-full flex-1 flex-col">
                 <div className="flex min-h-0 flex-1">
-                  {showFileTree && activeView === "code" && (
+                  {showFileTree && activeView === "code" && !isMobile && (
                     <div className="w-[200px] shrink-0 border-r border-[var(--forge-border)] bg-[#1a1c22]">
                       <FileTree
                         files={fileTreeFiles}
@@ -503,6 +561,7 @@ export function EditorPageLayout({
                     <StackHonestBanner
                       files={previewNavFiles}
                       onFocusChat={() => {
+                        if (isMobile) onMobilePanelChange?.("chat");
                         const el =
                           document.querySelector<HTMLTextAreaElement>(".forge-composer-input");
                         el?.focus();

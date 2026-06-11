@@ -34,12 +34,17 @@ function nearestSnap(ratio: number): number {
   return best;
 }
 
+export type EditorMobilePanel = "chat" | "workspace";
+
 interface EditorResizableLayoutProps {
   chat: ReactNode;
   workspace: ReactNode;
   chatHeader?: ReactNode;
   workspaceHeader?: ReactNode;
+  mobileHeader?: ReactNode;
   workspaceCode?: boolean;
+  isMobile?: boolean;
+  mobilePanel?: EditorMobilePanel;
 }
 
 export function EditorResizableLayout({
@@ -47,7 +52,10 @@ export function EditorResizableLayout({
   workspace,
   chatHeader,
   workspaceHeader,
+  mobileHeader,
   workspaceCode,
+  isMobile = false,
+  mobilePanel = "chat",
 }: EditorResizableLayoutProps) {
   const [ratio, setRatio] = useState(loadRatio);
   const [collapsed, setCollapsed] = useState(loadCollapsed);
@@ -63,12 +71,12 @@ export function EditorResizableLayout({
   }, [collapsed]);
 
   const onPointerMove = useCallback((e: PointerEvent) => {
-    if (!draggingRef.current || !containerRef.current) return;
+    if (isMobile || !draggingRef.current || !containerRef.current) return;
     const rect = containerRef.current.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const next = Math.min(MAX_CHAT_RATIO, Math.max(MIN_CHAT_PX / rect.width, x / rect.width));
     setRatio(next);
-  }, []);
+  }, [isMobile]);
 
   const endDrag = useCallback(() => {
     if (!draggingRef.current) return;
@@ -82,7 +90,7 @@ export function EditorResizableLayout({
 
   const startDrag = useCallback(
     (e: React.PointerEvent) => {
-      if (collapsed) return;
+      if (isMobile || collapsed) return;
       e.preventDefault();
       draggingRef.current = true;
       document.body.style.cursor = "col-resize";
@@ -91,8 +99,11 @@ export function EditorResizableLayout({
       window.addEventListener("pointermove", onPointerMove);
       window.addEventListener("pointerup", endDrag);
     },
-    [onPointerMove, endDrag, collapsed],
+    [onPointerMove, endDrag, collapsed, isMobile],
   );
+
+  const showChatPanel = isMobile ? mobilePanel === "chat" : !collapsed;
+  const showWorkspacePanel = isMobile ? mobilePanel === "workspace" : true;
 
   const handleDoubleClick = () => {
     if (collapsed) return;
@@ -113,15 +124,22 @@ export function EditorResizableLayout({
   return (
     <div
       ref={containerRef}
-      className={`forge-editor-canvas${chatHeader || workspaceHeader ? " forge-editor-canvas--split-header" : ""}${collapsed ? " forge-editor-canvas--collapsed" : ""}`}
+      className={`forge-editor-canvas${!isMobile && (chatHeader || workspaceHeader) ? " forge-editor-canvas--split-header" : ""}${!isMobile && collapsed ? " forge-editor-canvas--collapsed" : ""}${isMobile ? " forge-editor-canvas--mobile" : ""}`}
       style={
-        {
-          "--forge-chat-width": chatPct,
-        } as React.CSSProperties
+        isMobile
+          ? undefined
+          : ({
+              "--forge-chat-width": chatPct,
+            } as React.CSSProperties)
       }
+      data-mobile-panel={isMobile ? mobilePanel : undefined}
     >
-      {!collapsed && chatHeader && <header className="forge-chat-header">{chatHeader}</header>}
-      {workspaceHeader && (
+      {isMobile && mobileHeader ? (
+        <header className="forge-mobile-editor-header">{mobileHeader}</header>
+      ) : null}
+
+      {!isMobile && !collapsed && chatHeader && <header className="forge-chat-header">{chatHeader}</header>}
+      {!isMobile && workspaceHeader && (
         <header className="forge-workspace-header">
           {collapsed && (
             <button
@@ -137,9 +155,10 @@ export function EditorResizableLayout({
           {workspaceHeader}
         </header>
       )}
-      {!collapsed && <section className="forge-chat-panel">{chat}</section>}
 
-      {!collapsed && (
+      {showChatPanel && <section className="forge-chat-panel">{chat}</section>}
+
+      {!isMobile && !collapsed && (
         <div
           className="forge-resize-handle"
           role="separator"
@@ -151,11 +170,13 @@ export function EditorResizableLayout({
         />
       )}
 
-      <section
-        className={`forge-workspace-panel${workspaceCode ? " forge-workspace-panel--code" : ""}`}
-      >
-        {workspace}
-      </section>
+      {showWorkspacePanel && (
+        <section
+          className={`forge-workspace-panel${workspaceCode ? " forge-workspace-panel--code" : ""}`}
+        >
+          {workspace}
+        </section>
+      )}
     </div>
   );
 }

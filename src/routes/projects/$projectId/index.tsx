@@ -21,6 +21,8 @@ import { useFileDrop, useWorkspacePresets } from "@/hooks/useWorkspacePresets";
 
 import type { editor } from "monaco-editor";
 
+import { useIsMobile } from "@/hooks/use-mobile";
+import type { EditorMobilePanel } from "@/components/editor/EditorMobileHeader";
 import { useEditorPageData } from "./useEditorPageData";
 import { useEditorPageHandlers } from "./useEditorPageHandlers";
 import { useEditorAgentOrchestration } from "./useEditorAgentOrchestration";
@@ -69,6 +71,8 @@ function EditorPage() {
     hasUserLlmKey,
   }), [tasteChatRemaining, tasteStartRemaining, hasUserLlmKey]);
 
+  const isMobile = useIsMobile();
+  const [mobilePanel, setMobilePanel] = useState<EditorMobilePanel>("chat");
   const [showFileTree, setShowFileTree] = useState(false);
   const [activeView, setActiveView] = useState<"code" | "preview" | "diff">("preview");
   const [activeFilePath, setActiveFilePath] = useState<string | null>(null);
@@ -391,6 +395,9 @@ function EditorPage() {
       handleDragOver={handleDragOver}
       handleDragLeave={handleDragLeave}
       handleDrop={handleDrop}
+      isMobile={isMobile}
+      mobilePanel={mobilePanel}
+      onMobilePanelChange={setMobilePanel}
     />
   );
 }
