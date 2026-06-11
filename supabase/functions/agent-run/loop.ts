@@ -607,11 +607,6 @@ export class AgentLoop {
       const projectFiles = this.state.context?.files ?? [];
       const isSeedPlaceholder = isProjectSeedPlaceholder(projectFiles);
 
-      // Primeiro turno de projeto novo (seed ainda placeholder e sem plano aprovado):
-      // SEMPRE forçar caminho de qualify + plano + aprovação explícita do usuário.
-      // Nunca construir nada sem o usuário ter aprovado uma "receita" (plano).
-      const isFirstFreshTurn = isSeedPlaceholder && !this.approvedPlanBuild;
-
       // Inventário do projeto — responde com contexto real, sem fs_write nem qualify vago.
       if (
         this.originalUserRequest &&
@@ -669,14 +664,12 @@ export class AgentLoop {
         return { ok: true, summary: mobileQ, steps: 0, toolsUsed: [] };
       }
 
-      // No primeiro turno fresh (isFirstFreshTurn) ou quando em planMode: aplicar qualify se necessário.
-      // O objetivo é ter contexto suficiente para um bom plano antes de qualquer construção.
+      // Quando em planMode explícito: aplicar qualify se necessário.
       if (
-        (this.planMode || isFirstFreshTurn) &&
+        this.planMode &&
         this.originalUserRequest &&
         needsQualify(this.originalUserRequest, classification, {
           isSeedPlaceholder,
-          isFirstUserTurnOnProject: isFirstFreshTurn,
           planMode: this.planMode,
         })
       ) {
@@ -702,9 +695,8 @@ export class AgentLoop {
         }
       }
 
-      // Propor plano (e pedir aprovação) no primeiro turno de projeto novo OU quando em planMode.
-      // Nunca pular direto para build no primeiro prompt do usuário.
-      if (this.planMode || isFirstFreshTurn) {
+      // Propor plano (e pedir aprovação) quando em planMode explícito (usuário escolheu o modo).
+      if (this.planMode) {
         const proposedPlan = this.proposePlan(classification);
         const planChatText = this.buildPlanChatMessage(proposedPlan);
         this.emit("assistant_text", { text: planChatText, final: true });
