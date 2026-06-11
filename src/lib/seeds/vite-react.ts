@@ -117,14 +117,32 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
 );
 `;
 
-/** Canvas vazio — o agente gera a UI; sem mockup de marketing no seed. */
-const APP_TSX = `export default function App() {
+/** 
+ * Ponto de partida para o primeiro plano aprovado.
+ * O seed é mínimo para não poluir contexto.
+ * No primeiro build após aprovação do plano, o agente deve substituir isso por
+ * UMA página completa (landing ou tela principal) adaptada ao domínio do usuário
+ * (ex: padaria, SaaS, página de vendas), usando a estrutura do design system de forma
+ * contextual + preparação de auth/integrações se connectors já estiverem vinculados ao projeto.
+ */
+const APP_TSX = `import { Button } from "@forge/ui";
+
+export default function App() {
   return (
-    <main className="min-h-dvh bg-background text-foreground font-body flex items-center justify-center p-8">
-      <p className="text-muted-foreground text-center max-w-md text-sm leading-relaxed">
-        Canvas vazio — descreva o app no chat do FORGE para gerar a interface aqui.
-      </p>
-    </main>
+    <div className="min-h-dvh bg-background text-foreground font-body">
+      {/* O agente vai transformar isso na primeira página completa no primeiro passo aprovado do plano.
+          Use os composites do @forge/ui (HeroSignature, BentoGrid, etc.) de forma estruturalmente
+          adequada ao que o usuário pediu (padaria, app, sales page...). 
+          Inclua preparação de autenticação (botões + client) se o projeto tiver connectors vinculados. */}
+      <main className="flex min-h-[60vh] items-center justify-center p-8">
+        <div className="max-w-md text-center">
+          <p className="text-muted-foreground mb-6 text-sm">
+            Aguardando o primeiro plano aprovado para gerar a página inicial completa.
+          </p>
+          <Button onClick={() => {}}>Começar</Button>
+        </div>
+      </main>
+    </div>
   );
 }
 `;

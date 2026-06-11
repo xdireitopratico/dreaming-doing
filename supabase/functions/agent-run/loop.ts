@@ -20,11 +20,7 @@ import { ModelRouter } from "./router.ts";
 import { CompressionManager, parallelExecute } from "./compression.ts";
 import { RuntimeObserver } from "./observer.ts";
 import { SkillRegistry } from "./skills.ts";
-import {
-  buildStackEnforcement,
-  EXECUTE_RULES,
-  getSystemPrompt,
-} from "./prompts.ts";
+import { buildStackEnforcement, EXECUTE_RULES, getSystemPrompt } from "./prompts.ts";
 import {
   isConversationalTurn,
   isConversationalTurnEarly,
@@ -46,15 +42,8 @@ import { getTasteStartSystemPrompt } from "./prompts-taste.ts";
 import { friendlyLlmError } from "./llm-errors.ts";
 import { hashToolBatch, isExecutionStuck } from "../_shared/agent-stuck.ts";
 import { logger } from "../_shared/logger.ts";
-import {
-  appendExecutionLogEntry,
-  buildExecutionLogMeta,
-} from "./executionLogMeta.ts";
-import {
-  type CheckpointExtra,
-  resumeStepStart,
-  serializeCheckpointPayload,
-} from "./checkpoint.ts";
+import { appendExecutionLogEntry, buildExecutionLogMeta } from "./executionLogMeta.ts";
+import { type CheckpointExtra, resumeStepStart, serializeCheckpointPayload } from "./checkpoint.ts";
 import { buildProposedPlan, PLAN_APPROVAL_TTL_MS } from "./plan-mode.ts";
 import type { ClassificationResult } from "./router.ts";
 import {
@@ -70,11 +59,7 @@ import {
   describeStepExpectation,
   extractStepFilePaths,
 } from "../_shared/step-intent.ts";
-import {
-  type AgentStateData,
-  applyTransition,
-  isTerminal,
-} from "./agent-fsm.ts";
+import { type AgentStateData, applyTransition, isTerminal } from "./agent-fsm.ts";
 import { smartTruncate } from "./truncate.ts";
 
 type StreamCallback = (event: { type: string; data: unknown }) => void;
@@ -95,20 +80,15 @@ function isGradleCommand(command: string): boolean {
 
 function resolveLoopBudgetMs(): number {
   const raw =
-    (typeof globalThis.Deno !== "undefined"
-      ? Deno.env.get("AGENT_LOOP_BUDGET_MS")
-      : undefined) ??
-      (typeof process !== "undefined"
-        ? process.env.AGENT_LOOP_BUDGET_MS
-        : undefined);
+    (typeof globalThis.Deno !== "undefined" ? Deno.env.get("AGENT_LOOP_BUDGET_MS") : undefined) ??
+    (typeof process !== "undefined" ? process.env.AGENT_LOOP_BUDGET_MS : undefined);
   if (raw) {
     const parsed = Number(raw);
     if (Number.isFinite(parsed) && parsed > 0) return parsed;
   }
   const inngest =
     (typeof process !== "undefined" && process.env.INNGEST_EXECUTOR === "1") ||
-    (typeof globalThis.Deno !== "undefined" &&
-      Deno.env.get("INNGEST_EXECUTOR") === "1");
+    (typeof globalThis.Deno !== "undefined" && Deno.env.get("INNGEST_EXECUTOR") === "1");
   // Edge: ~90s; Inngest/Vercel step: ~4.5m (fits vercel maxDuration 300s).
   return inngest ? 270_000 : 90_000;
 }
@@ -221,14 +201,11 @@ export class AgentLoop {
     this.runId = options?.runId ?? null;
     this.planMode = options?.planMode ?? false;
     this.approvedPlanBuild = options?.approvedPlanBuild ?? false;
-    this.skipQualify = options?.skipQualify ??
-      (options?.approvedPlanBuild ?? false);
+    this.skipQualify = options?.skipQualify ?? options?.approvedPlanBuild ?? false;
     this.approvedPlanSteps = options?.planSteps ?? [];
     const extracted = extractOriginalUserRequest(state.messages);
     const planSummary = options?.planSummary?.trim() ?? "";
-    this.originalUserRequest = this.approvedPlanBuild && planSummary
-      ? planSummary
-      : extracted;
+    this.originalUserRequest = this.approvedPlanBuild && planSummary ? planSummary : extracted;
     this.toolsInvoked = false;
     this.narrationStarted = false;
     this.narrationBuffer = "";
@@ -241,15 +218,12 @@ export class AgentLoop {
     this.streamTailBuffer = [];
     this.fileContentCache = new Map();
     this.runStartTime = Date.now();
-    this.lastCheckpointStep = options?.hasCheckpoint
-      ? (state.currentStepIndex ?? 0)
-      : 0;
+    this.lastCheckpointStep = options?.hasCheckpoint ? (state.currentStepIndex ?? 0) : 0;
     this.router = new ModelRouter(injectedKeys, routerOverrides);
     this.observer = new RuntimeObserver(reg, this.fileContentCache);
     this.skills = new SkillRegistry();
-    this.compression = new CompressionManager(
-      this.router.getCheapProvider(),
-      (type, data) => this.emit(type, data),
+    this.compression = new CompressionManager(this.router.getCheapProvider(), (type, data) =>
+      this.emit(type, data),
     );
   }
 
@@ -260,12 +234,7 @@ export class AgentLoop {
   private requiresFinalBuildGate(): boolean {
     if (this.planMode || this.tasteStart) return false;
     if (this.touchedPaths.size > 0) return true;
-    const webTemplates = [
-      "vite-react",
-      "nextjs-app-router",
-      "tanstack-start",
-      "astro",
-    ];
+    const webTemplates = ["vite-react", "nextjs-app-router", "tanstack-start", "astro"];
     return webTemplates.includes(this.projectTemplate) && this.toolsInvoked;
   }
 
@@ -293,9 +262,7 @@ export class AgentLoop {
     });
     return {
       ok: false,
-      error: options?.buildFix
-        ? "Corrigindo erros de build…"
-        : "Retomando automaticamente…",
+      error: options?.buildFix ? "Corrigindo erros de build…" : "Retomando automaticamente…",
       steps,
       resumable: true,
       buildFix: options?.buildFix === true,
@@ -306,9 +273,7 @@ export class AgentLoop {
   private appendToNarration(text: string): void {
     const chunk = text.trim();
     if (!chunk) return;
-    this.narrationBuffer = this.narrationBuffer
-      ? `${this.narrationBuffer}\n\n${chunk}`
-      : chunk;
+    this.narrationBuffer = this.narrationBuffer ? `${this.narrationBuffer}\n\n${chunk}` : chunk;
     this.lastActivityAt = Date.now();
   }
 
@@ -338,8 +303,7 @@ export class AgentLoop {
         .eq("id", this.runId)
         .maybeSingle();
       const meta = (row?.meta ?? {}) as Record<string, unknown>;
-      const next = (typeof meta.llmRetries === "number" ? meta.llmRetries : 0) +
-        1;
+      const next = (typeof meta.llmRetries === "number" ? meta.llmRetries : 0) + 1;
       await this.sb
         .from("agent_runs")
         .update({ meta: { ...meta, llmRetries: next } })
@@ -375,9 +339,7 @@ export class AgentLoop {
       message: "Ainda processando o modelo…",
       silentMs: Date.now() - this.lastActivityAt,
     });
-    this.streamNarration(
-      "Ainda processando o modelo — já volto com a próxima entrega.",
-    );
+    this.streamNarration("Ainda processando o modelo — já volto com a próxima entrega.");
   }
 
   private async emitDeliveryCheckpoint(step: number): Promise<void> {
@@ -390,9 +352,10 @@ export class AgentLoop {
       narration: narration.slice(0, 4000),
       resumable: true,
       silent: true,
-      message: deliveryFiles.length > 0
-        ? `${deliveryFiles.length} arquivo(s) prontos — continuo em seguida`
-        : "Continuo em seguida",
+      message:
+        deliveryFiles.length > 0
+          ? `${deliveryFiles.length} arquivo(s) prontos — continuo em seguida`
+          : "Continuo em seguida",
     });
   }
 
@@ -416,8 +379,7 @@ export class AgentLoop {
     }
     if (Date.now() - this.runStartTime > LOOP_BUDGET_MS) {
       this.emit("timeout_warning", {
-        message:
-          "Próximo do limite de tempo da Edge Function — salvando checkpoint",
+        message: "Próximo do limite de tempo da Edge Function — salvando checkpoint",
         elapsedMs: Date.now() - this.runStartTime,
       });
     }
@@ -426,13 +388,16 @@ export class AgentLoop {
         complexityScore: this.complexityScore,
         maxStepsLimit: this.maxStepsLimit,
       };
-      await this.sb.from("agent_checkpoints").upsert({
-        project_id: this.state.projectId,
-        conversation_id: this.state.conversationId,
-        phase,
-        state: serializeCheckpointPayload(this.state, extra),
-        updated_at: new Date().toISOString(),
-      }, { onConflict: "project_id,conversation_id" });
+      await this.sb.from("agent_checkpoints").upsert(
+        {
+          project_id: this.state.projectId,
+          conversation_id: this.state.conversationId,
+          phase,
+          state: serializeCheckpointPayload(this.state, extra),
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "project_id,conversation_id" },
+      );
       this.lastCheckpointStep = step;
     } catch (err) {
       logger.error("agent.checkpoint_save_failed", {
@@ -445,7 +410,11 @@ export class AgentLoop {
   }
 
   private async emitTransition(eventType: string, data?: unknown): Promise<void> {
-    const result = applyTransition(this.fsmState, { type: eventType as any, data, timestamp: Date.now() });
+    const result = applyTransition(this.fsmState, {
+      type: eventType as any,
+      data,
+      timestamp: Date.now(),
+    });
     if (result.ok) {
       this.fsmState = result.state;
     }
@@ -495,9 +464,7 @@ export class AgentLoop {
       });
       this.emit("classify", {
         complexity: this.complexityScore,
-        model: this.complexityScore <= 2
-          ? this.router.cheapCfg.label
-          : this.router.mainCfg.label,
+        model: this.complexityScore <= 2 ? this.router.cheapCfg.label : this.router.mainCfg.label,
         summary: this.state.intent?.summary ?? "Retomada",
         maxSteps: this.maxStepsLimit,
         restored: true,
@@ -534,8 +501,7 @@ export class AgentLoop {
         message: "Lendo arquivos do projeto...",
       });
       this.emit("memory", {
-        message:
-          `Memória: ${this.state.messages.length} mensagens carregadas do projeto`,
+        message: `Memória: ${this.state.messages.length} mensagens carregadas do projeto`,
         messageCount: this.state.messages.length,
       });
       await this.gatherContext();
@@ -558,18 +524,14 @@ export class AgentLoop {
         classification = {
           complexity: (this.complexityScore || 3) as 1 | 2 | 3 | 4 | 5,
           type: "modify",
-          summary: (this.originalUserRequest || "Executar plano aprovado")
-            .slice(0, 200),
+          summary: (this.originalUserRequest || "Executar plano aprovado").slice(0, 200),
           needsBuild: true,
           needsDeps: false,
         };
       } else {
-        const lastUserContent = this.state.messages.filter((m) =>
-          m.role === "user"
-        ).pop()?.content ?? "";
-        const userPrompt = typeof lastUserContent === "string"
-          ? lastUserContent
-          : "";
+        const lastUserContent =
+          this.state.messages.filter((m) => m.role === "user").pop()?.content ?? "";
+        const userPrompt = typeof lastUserContent === "string" ? lastUserContent : "";
         classification = await this.router.classify(
           userPrompt,
           this.state.context?.projectConfig ?? "(vazio)",
@@ -583,20 +545,20 @@ export class AgentLoop {
         type: classification.type as IntentAnalysis["type"],
         summary: classification.summary,
         scope: [],
-        complexity: classification.complexity <= 2
-          ? "simple"
-          : classification.complexity <= 4
-          ? "medium"
-          : "complex",
+        complexity:
+          classification.complexity <= 2
+            ? "simple"
+            : classification.complexity <= 4
+              ? "medium"
+              : "complex",
       };
 
       this.maxStepsLimit = calculateMaxSteps(classification.complexity);
       executionModel = this.router.selectModel(classification.complexity);
       this.emit("classify", {
         complexity: classification.complexity,
-        model: classification.complexity <= 2
-          ? this.router.cheapCfg.label
-          : this.router.mainCfg.label,
+        model:
+          classification.complexity <= 2 ? this.router.cheapCfg.label : this.router.mainCfg.label,
         summary: classification.summary,
         maxSteps: this.maxStepsLimit,
       });
@@ -627,10 +589,7 @@ export class AgentLoop {
           this.streamNarration(planBriefing);
         } else if (this.approvedPlanBuild) {
           this.streamNarration(
-            buildApprovedPlanBriefing(
-              this.originalUserRequest,
-              this.approvedPlanSteps,
-            ),
+            buildApprovedPlanBriefing(this.originalUserRequest, this.approvedPlanSteps),
           );
         } else {
           this.streamNarration(
@@ -646,6 +605,11 @@ export class AgentLoop {
 
       const projectFiles = this.state.context?.files ?? [];
       const isSeedPlaceholder = isProjectSeedPlaceholder(projectFiles);
+
+      // Primeiro turno de projeto novo (seed ainda placeholder e sem plano aprovado):
+      // SEMPRE forçar caminho de qualify + plano + aprovação explícita do usuário.
+      // Nunca construir nada sem o usuário ter aprovado uma "receita" (plano).
+      const isFirstFreshTurn = isSeedPlaceholder && !this.approvedPlanBuild;
 
       // Inventário do projeto — responde com contexto real, sem fs_write nem qualify vago.
       if (
@@ -672,8 +636,8 @@ export class AgentLoop {
 
       // Mobile ambíguo em Build — perguntar Expo vs Kotlin antes de codar.
       // Skip se o projeto já tem stack mobile configurado.
-      const hasMobileTemplate = this.projectTemplate === "expo" ||
-        this.projectTemplate === "android-native";
+      const hasMobileTemplate =
+        this.projectTemplate === "expo" || this.projectTemplate === "android-native";
       if (
         !this.planMode &&
         !this.approvedPlanBuild &&
@@ -704,26 +668,23 @@ export class AgentLoop {
         return { ok: true, summary: mobileQ, steps: 0, toolsUsed: [] };
       }
 
-      // Qualify só em Plan — Build vai direto ao loop de ferramentas (estilo Lovable Agent).
+      // No primeiro turno fresh (isFirstFreshTurn) ou quando em planMode: aplicar qualify se necessário.
+      // O objetivo é ter contexto suficiente para um bom plano antes de qualquer construção.
       if (
-        this.planMode &&
+        (this.planMode || isFirstFreshTurn) &&
         this.originalUserRequest &&
         needsQualify(this.originalUserRequest, classification, {
           isSeedPlaceholder,
+          isFirstUserTurnOnProject: isFirstFreshTurn,
         })
       ) {
-        const qualifyResult = await this.runQualifyPhase(
-          executionModel,
-          this.originalUserRequest,
-        );
+        const qualifyResult = await this.runQualifyPhase(executionModel, this.originalUserRequest);
         if (qualifyResult.stopForUser) {
-          const q = qualifyResult.message ||
-            "Me conte mais sobre o que você quer construir.";
+          const q = qualifyResult.message || "Me conte mais sobre o que você quer construir.";
           this.emit("assistant_text", { text: q, final: true });
           this.emit("gate_decision", {
             phase: "qualify",
-            reason:
-              "needsQualify triggered (explicit interaction request or vague/short prompt)",
+            reason: "needsQualify triggered (explicit interaction request or vague/short prompt)",
             awaiting: true,
           });
           await this.persistFinal(q, {
@@ -739,8 +700,9 @@ export class AgentLoop {
         }
       }
 
-      // Plan mode: plano na Plan view + mensagem no chat; código só após aprovação.
-      if (this.planMode) {
+      // Propor plano (e pedir aprovação) no primeiro turno de projeto novo OU quando em planMode.
+      // Nunca pular direto para build no primeiro prompt do usuário.
+      if (this.planMode || isFirstFreshTurn) {
         const proposedPlan = this.proposePlan(classification);
         const planChatText = this.buildPlanChatMessage(proposedPlan);
         this.emit("assistant_text", { text: planChatText, final: true });
@@ -792,12 +754,10 @@ export class AgentLoop {
       };
     }
 
-    const step = this.resumeRun && this.hasCheckpoint
-      ? resumeStepStart(
-        this.resumePhase ?? this.state.phase,
-        this.state.currentStepIndex,
-      )
-      : 0;
+    const step =
+      this.resumeRun && this.hasCheckpoint
+        ? resumeStepStart(this.resumePhase ?? this.state.phase, this.state.currentStepIndex)
+        : 0;
 
     let buildAttempts = 0;
     const maxRetries = 3;
@@ -834,33 +794,24 @@ export class AgentLoop {
         });
 
         const compressed = await this.compression.compress(this.state.messages);
-        const executeInstruction = buildExecuteInstruction(
-          this.originalUserRequest,
-        );
-        const actionableIntent = this.state.intent?.type === "modify" ||
+        const executeInstruction = buildExecuteInstruction(this.originalUserRequest);
+        const actionableIntent =
+          this.state.intent?.type === "modify" ||
           this.state.intent?.type === "new_project" ||
           this.state.intent?.type === "fix" ||
           this.state.intent?.type === "add_dep";
-        const forceTools = !this.toolsInvoked && loopStep >= 2 &&
-          loopStep <= 4 && actionableIntent;
-        const narrationOnlyStep = !this.toolsInvoked && loopStep === 1 &&
-          actionableIntent;
+        const forceTools = !this.toolsInvoked && loopStep >= 2 && loopStep <= 4 && actionableIntent;
+        const narrationOnlyStep = !this.toolsInvoked && loopStep === 1 && actionableIntent;
         let response: ChatResponse | null = null;
         try {
           this.maybeEmitSilenceHeartbeat();
           await this.touchHeartbeat();
-          response = await this.llmChat(
-            executionModel,
-            executeInstruction,
-            compressed,
-            forceTools,
-          );
+          response = await this.llmChat(executionModel, executeInstruction, compressed, forceTools);
         } catch (err: unknown) {
           const message = err instanceof Error ? err.message : "Erro no modelo";
           const retries = await this.bumpLlmRetries();
           if (retries >= MAX_LLM_RETRIES) {
-            const failMsg =
-              `Erro no modelo após ${retries} tentativas: ${message}`;
+            const failMsg = `Erro no modelo após ${retries} tentativas: ${message}`;
             await this.persistFinal(failMsg, {
               lastFinishOk: false,
               buildFailed: true,
@@ -894,7 +845,8 @@ export class AgentLoop {
           });
           this.narrationStarted = true;
         } else if (
-          assistantText && this.llmResponseWasStreamed &&
+          assistantText &&
+          this.llmResponseWasStreamed &&
           !this.narrationBuffer.includes(assistantText)
         ) {
           this.appendToNarration(assistantText);
@@ -934,133 +886,122 @@ export class AgentLoop {
         // enquanto eles ainda estão executando (com status pending).
         const liveMsgId = await this.persistAssistantStep(response);
 
-        const execResults = await parallelExecute(
-          response.tool_calls,
-          async (call) => {
-            toolsUsed.add(call.name);
+        const execResults = await parallelExecute(response.tool_calls, async (call) => {
+          toolsUsed.add(call.name);
 
-            // ─── Captura o conteúdo ANTES (para diff) antes de mutações em arquivos ───
-            let preDiff: {
-              path: string;
-              before: string;
-              after: string;
-              op: "write" | "edit";
-            } | null = null;
-            if (call.name === "fs_write" || call.name === "fs_edit") {
-              const filePath = (call.arguments.path as string) ?? "";
-              if (filePath) {
-                try {
-                  // Usa cache para evitar N+1 queries ao Supabase
-                  const before = this.fileContentCache.get(filePath) ?? "";
-                  let after = before;
-                  if (call.name === "fs_write") {
-                    after = (call.arguments.content as string) ?? "";
+          // ─── Captura o conteúdo ANTES (para diff) antes de mutações em arquivos ───
+          let preDiff: {
+            path: string;
+            before: string;
+            after: string;
+            op: "write" | "edit";
+          } | null = null;
+          if (call.name === "fs_write" || call.name === "fs_edit") {
+            const filePath = (call.arguments.path as string) ?? "";
+            if (filePath) {
+              try {
+                // Usa cache para evitar N+1 queries ao Supabase
+                const before = this.fileContentCache.get(filePath) ?? "";
+                let after = before;
+                if (call.name === "fs_write") {
+                  after = (call.arguments.content as string) ?? "";
+                } else {
+                  const oldText = (call.arguments.oldText as string) ?? "";
+                  const newText = (call.arguments.newText as string) ?? "";
+                  const replaceAll = call.arguments.replaceAll === true;
+                  // Validação: oldText vazio causaria estouro de memória
+                  if (!oldText) {
+                    after = before + newText; // Append como fallback seguro
                   } else {
-                    const oldText = (call.arguments.oldText as string) ?? "";
-                    const newText = (call.arguments.newText as string) ?? "";
-                    const replaceAll = call.arguments.replaceAll === true;
-                    // Validação: oldText vazio causaria estouro de memória
-                    if (!oldText) {
-                      after = before + newText; // Append como fallback seguro
-                    } else {
-                      after = replaceAll
-                        ? before.split(oldText).join(newText)
-                        : before.replace(oldText, newText);
-                    }
+                    after = replaceAll
+                      ? before.split(oldText).join(newText)
+                      : before.replace(oldText, newText);
                   }
-                  preDiff = {
-                    path: filePath,
-                    before,
-                    after,
-                    op: call.name === "fs_write" ? "write" : "edit",
-                  };
-                  // Atualiza cache com o novo conteúdo
-                  this.fileContentCache.set(filePath, after);
-                } catch {
-                  /* não bloqueia a execução — diff é best-effort */
                 }
+                preDiff = {
+                  path: filePath,
+                  before,
+                  after,
+                  op: call.name === "fs_write" ? "write" : "edit",
+                };
+                // Atualiza cache com o novo conteúdo
+                this.fileContentCache.set(filePath, after);
+              } catch {
+                /* não bloqueia a execução — diff é best-effort */
               }
             }
+          }
 
-            this.emit("tool_start", { name: call.name, args: call.arguments });
-            const result = await this.reg.execute(call);
-            this.emit("tool_done", {
-              name: call.name,
-              ok: result.ok,
-              error: result.error,
-            });
+          this.emit("tool_start", { name: call.name, args: call.arguments });
+          const result = await this.reg.execute(call);
+          this.emit("tool_done", {
+            name: call.name,
+            ok: result.ok,
+            error: result.error,
+          });
 
-            if (
-              call.name === "shell_exec" &&
-              isGradleCommand(String(call.arguments.command ?? ""))
-            ) {
-              const output = typeof result.output === "string"
+          if (call.name === "shell_exec" && isGradleCommand(String(call.arguments.command ?? ""))) {
+            const output =
+              typeof result.output === "string"
                 ? result.output
                 : result.output != null
-                ? JSON.stringify(result.output)
-                : result.error ?? "";
-              this.emit("build_log", {
-                command: String(call.arguments.command ?? "").slice(0, 240),
-                lines: output.split("\n").map((l) => l.trim()).filter(Boolean)
-                  .slice(-40),
-                ok: result.ok,
-                output: output.slice(0, 4000),
+                  ? JSON.stringify(result.output)
+                  : (result.error ?? "");
+            this.emit("build_log", {
+              command: String(call.arguments.command ?? "").slice(0, 240),
+              lines: output
+                .split("\n")
+                .map((l) => l.trim())
+                .filter(Boolean)
+                .slice(-40),
+              ok: result.ok,
+              output: output.slice(0, 4000),
+            });
+          }
+
+          // ─── Emite o diff para o cliente APÓS tool_done (com o estado final já aplicado) ───
+          if (preDiff && result.ok) {
+            this.recordTouchedPath(preDiff.path);
+            this.emit("file_diff", preDiff);
+            const hasGradleScaffold = (this.state.context?.files ?? []).some((f) =>
+              /build\.gradle|settings\.gradle/i.test(f.path.replace(/^\//, "")),
+            );
+            if (
+              isAndroidNativePath(preDiff.path) &&
+              !hasGradleScaffold &&
+              (this.projectTemplate === "vite-react" || this.projectTemplate === "landing-page")
+            ) {
+              this.emit("stack_fork_suggested", {
+                path: preDiff.path,
+                suggestedStack: "android-native",
+                message:
+                  "Detectamos código **mobile nativo** neste projeto web. Quer criar um projeto Android dedicado? (O arquivo foi mantido — nada foi apagado.)",
               });
             }
+          }
 
-            // ─── Emite o diff para o cliente APÓS tool_done (com o estado final já aplicado) ───
-            if (preDiff && result.ok) {
-              this.recordTouchedPath(preDiff.path);
-              this.emit("file_diff", preDiff);
-              const hasGradleScaffold = (this.state.context?.files ?? []).some((
-                f,
-              ) =>
-                /build\.gradle|settings\.gradle/i.test(
-                  f.path.replace(/^\//, ""),
-                )
-              );
-              if (
-                isAndroidNativePath(preDiff.path) &&
-                !hasGradleScaffold &&
-                (this.projectTemplate === "vite-react" ||
-                  this.projectTemplate === "landing-page")
-              ) {
-                this.emit("stack_fork_suggested", {
-                  path: preDiff.path,
-                  suggestedStack: "android-native",
-                  message:
-                    "Detectamos código **mobile nativo** neste projeto web. Quer criar um projeto Android dedicado? (O arquivo foi mantido — nada foi apagado.)",
-                });
-              }
-            }
-
-            if (
-              (call.name === "fs_write" || call.name === "fs_edit") && result.ok
-            ) {
-              const pathArg = (call.arguments.path as string) ?? call.name;
-              this.emit("preview_sync", { path: pathArg, reason: "fs_change" });
-            }
-            return result;
-          },
-        );
+          if ((call.name === "fs_write" || call.name === "fs_edit") && result.ok) {
+            const pathArg = (call.arguments.path as string) ?? call.name;
+            this.emit("preview_sync", { path: pathArg, reason: "fs_change" });
+          }
+          return result;
+        });
 
         // Git commit único por step (não por arquivo) — após todas as tools executarem
         const modifiedPaths = execResults
-          .filter(({ call }) =>
-            call.name === "fs_write" || call.name === "fs_edit"
-          )
+          .filter(({ call }) => call.name === "fs_write" || call.name === "fs_edit")
           .map(({ call }) => (call.arguments.path as string) ?? call.name)
           .filter(Boolean);
         if (modifiedPaths.length > 0) {
-          const commitMsg = modifiedPaths.length === 1
-            ? `${modifiedPaths[0]}: update`
-            : `update ${modifiedPaths.length} files`;
+          const commitMsg =
+            modifiedPaths.length === 1
+              ? `${modifiedPaths[0]}: update`
+              : `update ${modifiedPaths.length} files`;
           await this.reg.execute({
             id: crypto.randomUUID(),
             name: "shell_exec",
             arguments: {
-              command:
-                `cd /home/user && git add -A && git commit -m "${commitMsg}" 2>&1 || true`,
+              command: `cd /home/user && git add -A && git commit -m "${commitMsg}" 2>&1 || true`,
             },
           });
           // unconditional preview_sync + tick drive on every successful fs_* (live during first-gen seed + follow-up edits)
@@ -1092,24 +1033,35 @@ export class AgentLoop {
             const args = call.arguments;
             const path = String(args.path ?? args.filePath ?? args.file ?? "");
             const errorMsg = String(result.error ?? "unknown error");
-            const outputSample = typeof result.output === "string"
-              ? result.output.slice(0, 200)
-              : typeof result.output === "object"
-                ? JSON.stringify(result.output).slice(0, 200)
-                : "";
+            const outputSample =
+              typeof result.output === "string"
+                ? result.output.slice(0, 200)
+                : typeof result.output === "object"
+                  ? JSON.stringify(result.output).slice(0, 200)
+                  : "";
 
             const hints: string[] = [];
             if (toolName === "fs_write" || toolName === "fs_edit") {
-              hints.push(`Verifique se o diretório de ${path ? path.split("/").slice(0, -1).join("/") : "destino"} existe antes de escrever.`);
+              hints.push(
+                `Verifique se o diretório de ${path ? path.split("/").slice(0, -1).join("/") : "destino"} existe antes de escrever.`,
+              );
               hints.push("Use shell_exec com `mkdir -p` ou `test -d` para garantir o caminho.");
             } else if (toolName === "shell_exec") {
               const cmd = String(args.command ?? "").slice(0, 120);
-              if (/npm (install|add)\b/.test(cmd)) hints.push("Tente `npm install --legacy-peer-deps` ou limpe node_modules primeiro.");
-              if (/npx tsc/.test(cmd)) hints.push("Verifique se tsconfig.json está correto e os tipos estão instalados.");
-              if (/npm run build/.test(cmd) && outputSample) hints.push(`Build falhou: ${outputSample.slice(0, 120)}`);
-              if (!outputSample) hints.push("Comando não produziu saída — verifique se o binário existe.");
+              if (/npm (install|add)\b/.test(cmd))
+                hints.push(
+                  "Tente `npm install --legacy-peer-deps` ou limpe node_modules primeiro.",
+                );
+              if (/npx tsc/.test(cmd))
+                hints.push("Verifique se tsconfig.json está correto e os tipos estão instalados.");
+              if (/npm run build/.test(cmd) && outputSample)
+                hints.push(`Build falhou: ${outputSample.slice(0, 120)}`);
+              if (!outputSample)
+                hints.push("Comando não produziu saída — verifique se o binário existe.");
             } else if (toolName === "fs_search" || toolName === "fs_read") {
-              hints.push(`O caminho ${path || "<vazio>"} pode não existir. Verifique com shell_exec + test -e.`);
+              hints.push(
+                `O caminho ${path || "<vazio>"} pode não existir. Verifique com shell_exec + test -e.`,
+              );
             }
 
             structured = JSON.stringify({
@@ -1163,10 +1115,7 @@ export class AgentLoop {
               arguments: tc.arguments,
             })),
         );
-        this.state.executionLog = appendExecutionLogEntry(
-          this.state.executionLog,
-          stepHash,
-        );
+        this.state.executionLog = appendExecutionLogEntry(this.state.executionLog, stepHash);
 
         // Coleta arquivos modificados para type-check incremental
         const modifiedFilePaths = response.tool_calls
@@ -1176,19 +1125,12 @@ export class AgentLoop {
 
         // Atualiza a mensagem persistida com o resultado (status, error, output curto)
         if (liveMsgId) {
-          await this.updateAssistantStep(
-            liveMsgId,
-            response,
-            execResults,
-            loopStep,
-          );
+          await this.updateAssistantStep(liveMsgId, response, execResults, loopStep);
         }
 
         // Quick TypeScript check incremental (rápido, apenas arquivos modificados)
         if (modifiedFilePaths.length > 0) {
-          const typeCheck = await this.observer.quickTypeCheck(
-            modifiedFilePaths,
-          );
+          const typeCheck = await this.observer.quickTypeCheck(modifiedFilePaths);
           if (!typeCheck.ok) {
             this.streamNarration(buildObserveNarration("typecheck"));
             this.emit("typecheck_fail", {
@@ -1197,11 +1139,9 @@ export class AgentLoop {
             });
             this.state.messages.push({
               role: "user",
-              content: `TYPECHECK FALHOU nos arquivos modificados:\n\n${
-                typeCheck.errors.map((e) =>
-                  `${e.file}:${e.line}:${e.column} - ${e.code}: ${e.message}`
-                ).join("\n")
-              }\n\nCorrija os erros acima com fs_edit antes de continuar.`,
+              content: `TYPECHECK FALHOU nos arquivos modificados:\n\n${typeCheck.errors
+                .map((e) => `${e.file}:${e.line}:${e.column} - ${e.code}: ${e.message}`)
+                .join("\n")}\n\nCorrija os erros acima com fs_edit antes de continuar.`,
             });
             continue;
           }
@@ -1221,17 +1161,15 @@ export class AgentLoop {
             buildAttempts++;
             this.emit("validate_fail", {
               attempt: buildAttempts,
-              checks: observation.checks.filter((c) => !c.ok).map((c) =>
-                c.name
-              ),
+              checks: observation.checks.filter((c) => !c.ok).map((c) => c.name),
               feedback: observation.feedback?.slice(0, 500),
             });
             this.state.messages.push({
               role: "user",
-              content:
-                `VERIFICAÇÃO FALHOU (${buildAttempts}/${maxRetries}). Analise e corrija:\n\n\`\`\`\n${
-                  observation.feedback?.slice(0, 3000)
-                }\n\`\`\`\n\nNÃO peça ajuda. Use fs_search/fs_edit para corrigir.`,
+              content: `VERIFICAÇÃO FALHOU (${buildAttempts}/${maxRetries}). Analise e corrija:\n\n\`\`\`\n${observation.feedback?.slice(
+                0,
+                3000,
+              )}\n\`\`\`\n\nNÃO peça ajuda. Use fs_search/fs_edit para corrigir.`,
             });
             continue;
           } else {
@@ -1244,8 +1182,7 @@ export class AgentLoop {
         if (isExecutionStuck(this.state.executionLog)) {
           this.streamNarration(buildObserveNarration("stuck"));
           this.emit("stuck", {
-            message:
-              "Padrão repetitivo detectado — injetando instrução para nova abordagem",
+            message: "Padrão repetitivo detectado — injetando instrução para nova abordagem",
           });
           this.state.messages.push({
             role: "user",
@@ -1293,11 +1230,9 @@ export class AgentLoop {
       });
 
       if (buildAttempts > maxRetries) {
-        const failMsg = `Build não passou após ${maxRetries} tentativas.\n\n` +
-          `${
-            finalObservation.feedback?.slice(0, 2000) ??
-              "Erros de compilação no sandbox."
-          }`;
+        const failMsg =
+          `Build não passou após ${maxRetries} tentativas.\n\n` +
+          `${finalObservation.feedback?.slice(0, 2000) ?? "Erros de compilação no sandbox."}`;
         await this.persistFinal(failMsg, {
           lastFinishOk: false,
           buildFailed: true,
@@ -1321,9 +1256,7 @@ export class AgentLoop {
         role: "user",
         content:
           `BUILD GATE FINAL FALHOU (${buildAttempts}/${maxRetries}). Corrija antes de finalizar:\n\n` +
-          `\`\`\`\n${
-            finalObservation.feedback?.slice(0, 6000) ?? ""
-          }\n\`\`\`\n\n` +
+          `\`\`\`\n${finalObservation.feedback?.slice(0, 6000) ?? ""}\n\`\`\`\n\n` +
           `Os erros reais de compilação estão acima — corrija cada um com fs_edit. Verifique imports, tipos e sintaxe.`,
       });
       this.streamNarration("Corrigindo erros de build antes de entregar…");
@@ -1360,9 +1293,7 @@ export class AgentLoop {
     await this.persistFinal(finalText, { lastFinishOk: true });
     await this.clearCheckpoint();
     const tokens = this.compression.getTotalTokens();
-    const costUsd = this.compression.getEstimatedCostUsd(
-      this.router.mainCfg.model,
-    );
+    const costUsd = this.compression.getEstimatedCostUsd(this.router.mainCfg.model);
     this.emit("done", {
       summary: finalText.slice(0, 2000),
       totalInputTokens: tokens.input,
@@ -1409,12 +1340,10 @@ export class AgentLoop {
         "src/App.tsx",
         "src/main.tsx",
         "src/index.css",
-      ].includes(f.path)
+      ].includes(f.path),
     );
     for (const f of keyFiles) {
-      projectConfig += `\n### ${f.path}\n\`\`\`\n${
-        (f.content ?? "").slice(0, 2000)
-      }\n\`\`\`\n`;
+      projectConfig += `\n### ${f.path}\n\`\`\`\n${(f.content ?? "").slice(0, 2000)}\n\`\`\`\n`;
     }
 
     if (fileList.length > 0) {
@@ -1422,11 +1351,10 @@ export class AgentLoop {
       this.emit("explore", {
         totalFiles: fileList.length,
         paths,
-        message: paths.length > 0
-          ? `Lendo ${paths.join(", ")}…`
-          : `Indexando ${fileList.length} arquivo${
-            fileList.length === 1 ? "" : "s"
-          }…`,
+        message:
+          paths.length > 0
+            ? `Lendo ${paths.join(", ")}…`
+            : `Indexando ${fileList.length} arquivo${fileList.length === 1 ? "" : "s"}…`,
       });
       this.emit("phase", {
         phase: "gather",
@@ -1450,8 +1378,7 @@ export class AgentLoop {
     this.state.context = {
       files: fileList,
       manifest: manifest || "(projeto vazio)",
-      projectConfig: projectConfig ||
-        "(projeto vazio — sem arquivos de configuração)",
+      projectConfig: projectConfig || "(projeto vazio — sem arquivos de configuração)",
       gitLog: "(não disponível ainda)",
       dbSchema: "(não disponível)",
       lastPlan: "nenhum",
@@ -1513,10 +1440,7 @@ export class AgentLoop {
       } else if (status === "completed" || status === "running") {
         updateFields.finished_at = new Date().toISOString();
       }
-      await this.sb
-        .from("agent_runs")
-        .update(updateFields)
-        .eq("id", this.runId);
+      await this.sb.from("agent_runs").update(updateFields).eq("id", this.runId);
     } catch (err) {
       logger.error("agent_run.mark_status_failed", {
         runId: this.runId,
@@ -1552,8 +1476,7 @@ export class AgentLoop {
       phase: "qualify",
       message: "Resumindo estado do projeto…",
     });
-    const ctx = this.state.context?.projectConfig?.slice(0, 4000) ??
-      "(sem arquivos)";
+    const ctx = this.state.context?.projectConfig?.slice(0, 4000) ?? "(sem arquivos)";
     const manifest = this.state.context?.manifest?.slice(0, 2000) ?? "";
     try {
       const resp = await model.chat({
@@ -1570,8 +1493,10 @@ export class AgentLoop {
         max_tokens: 900,
         temperature: 0.2,
       });
-      return (resp.content ?? "").trim() ||
-        "Scaffold Vite+React pronto; `src/App.tsx` ainda é placeholder. Descreva o app em modo Build.";
+      return (
+        (resp.content ?? "").trim() ||
+        "Scaffold Vite+React pronto; `src/App.tsx` ainda é placeholder. Descreva o app em modo Build."
+      );
     } catch {
       return "Scaffold Vite+React pronto; `src/App.tsx` ainda é placeholder. Descreva o app em modo Build.";
     }
@@ -1606,7 +1531,8 @@ export class AgentLoop {
         max_tokens: 800,
         temperature: 0.4,
       });
-      const message = (resp.content ?? "").trim() ||
+      const message =
+        (resp.content ?? "").trim() ||
         "Ok — me conte em uma frase o que você quer construir e para quem.";
       return { stopForUser: true, message };
     } catch {
@@ -1629,9 +1555,7 @@ export class AgentLoop {
     const base = getSystemPrompt(this.projectTemplate);
     const stackEnforcement = buildStackEnforcement(this.projectTemplate);
     const withStack = this.stackAddon ? `${base}\n\n${this.stackAddon}` : base;
-    const withEnforcement = stackEnforcement
-      ? `${withStack}\n\n${stackEnforcement}`
-      : withStack;
+    const withEnforcement = stackEnforcement ? `${withStack}\n\n${stackEnforcement}` : withStack;
     const tasteWrapped = this.tasteStart
       ? getTasteStartSystemPrompt(withEnforcement)
       : withEnforcement;
@@ -1641,7 +1565,9 @@ export class AgentLoop {
       this.sessionAddon,
       EXECUTE_RULES,
       ANTI_LEAK_RULE,
-    ].filter(Boolean).join("\n\n");
+    ]
+      .filter(Boolean)
+      .join("\n\n");
 
     const messages: ChatMessage[] = [
       { role: "system", content: fullSystemPrompt },
@@ -1657,19 +1583,21 @@ export class AgentLoop {
         tools: this.reg.getDefinitions(),
         tool_choice: forceTools ? "required" : "auto",
         max_tokens: 4096,
-        onTokenDelta: forceTools ? undefined : (delta) => {
-          if (!delta) return;
-          this.llmResponseWasStreamed = true;
-          // Resposta user-facing → streamText no chat (não THOUGHT no inspector).
-          this.emit("assistant_text", {
-            text: delta,
-            append: this.narrationStarted,
-            delta: true,
-            final: false,
-          });
-          this.narrationStarted = true;
-          this.appendToNarration(delta);
-        },
+        onTokenDelta: forceTools
+          ? undefined
+          : (delta) => {
+              if (!delta) return;
+              this.llmResponseWasStreamed = true;
+              // Resposta user-facing → streamText no chat (não THOUGHT no inspector).
+              this.emit("assistant_text", {
+                text: delta,
+                append: this.narrationStarted,
+                delta: true,
+                final: false,
+              });
+              this.narrationStarted = true;
+              this.appendToNarration(delta);
+            },
       });
     } catch (err: unknown) {
       const message = friendlyLlmError(err, this.robinActive);
@@ -1699,9 +1627,7 @@ export class AgentLoop {
     return !!data?.canceled_at;
   }
 
-  private async persistAssistantStep(
-    response: ChatResponse,
-  ): Promise<string | null> {
+  private async persistAssistantStep(response: ChatResponse): Promise<string | null> {
     const tool_calls = (response.tool_calls ?? []).map((tc) => ({
       id: tc.id,
       name: tc.name,
@@ -1724,9 +1650,8 @@ export class AgentLoop {
           .select("parts")
           .eq("id", existingId)
           .maybeSingle();
-        const prevParts = (existing as
-          | { parts?: Array<{ type?: string; text?: string }> }
-          | null)?.parts ?? [];
+        const prevParts =
+          (existing as { parts?: Array<{ type?: string; text?: string }> } | null)?.parts ?? [];
         const prevText = prevParts
           .filter((p) => p?.type === "text" && typeof p.text === "string")
           .map((p) => p.text!.trim())
@@ -1746,13 +1671,17 @@ export class AgentLoop {
       return existingId;
     }
 
-    const { data } = await this.sb.from("messages").insert({
-      conversation_id: this.state.conversationId,
-      role: "assistant",
-      parts: stepText ? [{ type: "text", text: stepText }] : [],
-      tool_calls,
-      meta,
-    }).select("id").single();
+    const { data } = await this.sb
+      .from("messages")
+      .insert({
+        conversation_id: this.state.conversationId,
+        role: "assistant",
+        parts: stepText ? [{ type: "text", text: stepText }] : [],
+        tool_calls,
+        meta,
+      })
+      .select("id")
+      .single();
     const id = data?.id ?? null;
     if (id) this.lastRunMessageId = id;
     return id;
@@ -1767,15 +1696,13 @@ export class AgentLoop {
         .select("id")
         .eq("conversation_id", this.state.conversationId)
         .eq("role", "assistant");
-      const filtered = typeof query.filter === "function"
-        ? query.filter("meta->>runId", "eq", this.runId)
-        : query;
-      const ordered = typeof filtered.order === "function"
-        ? filtered.order("created_at", { ascending: false })
-        : filtered;
-      const limited = typeof ordered.limit === "function"
-        ? ordered.limit(1)
-        : ordered;
+      const filtered =
+        typeof query.filter === "function" ? query.filter("meta->>runId", "eq", this.runId) : query;
+      const ordered =
+        typeof filtered.order === "function"
+          ? filtered.order("created_at", { ascending: false })
+          : filtered;
+      const limited = typeof ordered.limit === "function" ? ordered.limit(1) : ordered;
       const { data: existing } = await limited.maybeSingle();
       const id = (existing as { id?: string } | null)?.id ?? null;
       if (id) this.lastRunMessageId = id;
@@ -1886,7 +1813,9 @@ export class AgentLoop {
     return diffs;
   }
 
-  private latencyThoughtMsFromTimeline(timeline: Array<{ type: string; data?: Record<string, unknown>; timestamp: number }>): number | null {
+  private latencyThoughtMsFromTimeline(
+    timeline: Array<{ type: string; data?: Record<string, unknown>; timestamp: number }>,
+  ): number | null {
     const startEv = timeline.find((e) => e.type === "start");
     if (!startEv) return null;
     const startTs = startEv.timestamp;
@@ -1982,11 +1911,10 @@ export class AgentLoop {
     const narration = this.narrationBuffer.trim();
     const deliveryFiles = [...this.touchedPaths];
     const body = narration || summary.trim() || "Concluído.";
-    const fileFooter = deliveryFiles.length > 0
-      ? `\n\n**Arquivos alterados:** ${
-        deliveryFiles.map((p) => `\`${p}\``).join(", ")
-      }`
-      : "";
+    const fileFooter =
+      deliveryFiles.length > 0
+        ? `\n\n**Arquivos alterados:** ${deliveryFiles.map((p) => `\`${p}\``).join(", ")}`
+        : "";
     const text = conversational ? summary.trim() : `${body}${fileFooter}`;
     const lastFinishOk = opts?.lastFinishOk ?? true;
     const cardSnapshot = this.buildCardSnapshot({
@@ -2016,14 +1944,20 @@ export class AgentLoop {
 
     const existingId = await this.resolveExistingRunMessageId();
     if (existingId) {
-      await this.sb.from("messages").update({
-        parts: [{ type: "text", text }],
-        tool_calls: [],
-        meta,
-      }).eq("id", existingId);
-      await this.sb.from("projects").update({
-        updated_at: new Date().toISOString(),
-      }).eq("id", this.state.projectId);
+      await this.sb
+        .from("messages")
+        .update({
+          parts: [{ type: "text", text }],
+          tool_calls: [],
+          meta,
+        })
+        .eq("id", existingId);
+      await this.sb
+        .from("projects")
+        .update({
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", this.state.projectId);
       return;
     }
 
@@ -2034,15 +1968,15 @@ export class AgentLoop {
       tool_calls: [],
       meta,
     });
-    await this.sb.from("projects").update({
-      updated_at: new Date().toISOString(),
-    }).eq("id", this.state.projectId);
+    await this.sb
+      .from("projects")
+      .update({
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", this.state.projectId);
   }
 
-  private async persistPlanFinal(
-    summary: string,
-    plan: ProposedPlan,
-  ): Promise<void> {
+  private async persistPlanFinal(summary: string, plan: ProposedPlan): Promise<void> {
     const cardSnapshot = this.buildCardSnapshot({
       streamText: summary,
       deliveryFiles: [],
@@ -2075,29 +2009,42 @@ export class AgentLoop {
 
     const existingId = await this.resolveExistingRunMessageId();
     if (existingId) {
-      await this.sb.from("messages").update({
-        parts: [{ type: "text", text: summary }],
-        tool_calls: [],
-        meta,
-      }).eq("id", existingId);
-      await this.sb.from("projects").update({
-        updated_at: new Date().toISOString(),
-      }).eq("id", this.state.projectId);
+      await this.sb
+        .from("messages")
+        .update({
+          parts: [{ type: "text", text: summary }],
+          tool_calls: [],
+          meta,
+        })
+        .eq("id", existingId);
+      await this.sb
+        .from("projects")
+        .update({
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", this.state.projectId);
       return;
     }
 
-    const { data } = await this.sb.from("messages").insert({
-      conversation_id: this.state.conversationId,
-      role: "assistant",
-      parts: [{ type: "text", text: summary }],
-      tool_calls: [],
-      meta,
-    }).select("id").single();
+    const { data } = await this.sb
+      .from("messages")
+      .insert({
+        conversation_id: this.state.conversationId,
+        role: "assistant",
+        parts: [{ type: "text", text: summary }],
+        tool_calls: [],
+        meta,
+      })
+      .select("id")
+      .single();
     const id = data?.id ?? null;
     if (id) this.lastRunMessageId = id;
-    await this.sb.from("projects").update({
-      updated_at: new Date().toISOString(),
-    }).eq("id", this.state.projectId);
+    await this.sb
+      .from("projects")
+      .update({
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", this.state.projectId);
   }
 
   /** Checkpoint de comunicação — alimenta streamText no chat (markdown acima do activity card). */
@@ -2120,19 +2067,19 @@ export class AgentLoop {
     if (payload && typeof payload === "object") {
       const d = { ...(payload as Record<string, unknown>) };
       if (type === "phase" && typeof d.phase === "string") {
-        d.task_title = d.task_title ?? buildPhaseTaskTitle(
-          String(d.phase),
-          typeof d.message === "string" ? d.message : undefined,
-        );
+        d.task_title =
+          d.task_title ??
+          buildPhaseTaskTitle(
+            String(d.phase),
+            typeof d.message === "string" ? d.message : undefined,
+          );
         payload = d;
       }
       if (type === "tool_start" && typeof d.name === "string") {
         const args = (d.args as Record<string, unknown> | undefined) ?? {};
-        d.step_intent = d.step_intent ??
-          describeStepExpectation(String(d.name), args);
+        d.step_intent = d.step_intent ?? describeStepExpectation(String(d.name), args);
         d.task_phase = d.task_phase ?? this.state.phase;
-        d.file_paths = d.file_paths ??
-          extractStepFilePaths(String(d.name), args);
+        d.file_paths = d.file_paths ?? extractStepFilePaths(String(d.name), args);
         payload = d;
       }
       if (type === "validate_ok") {
@@ -2154,8 +2101,8 @@ export class AgentLoop {
               typeof d.feedback === "string"
                 ? d.feedback.slice(0, 120)
                 : typeof d.message === "string"
-                ? d.message.slice(0, 120)
-                : "Erro de compilação",
+                  ? d.message.slice(0, 120)
+                  : "Erro de compilação",
             ],
             ok: false,
           },

@@ -63,9 +63,8 @@ function coerceStep(raw: unknown, idx: number): PlanStep | null {
   if (!raw || typeof raw !== "object") return null;
   const r = raw as Record<string, unknown>;
   const type = isPlanStepType(r.type) ? r.type : "custom";
-  const description = typeof r.description === "string" && r.description.trim()
-    ? r.description.trim()
-    : null;
+  const description =
+    typeof r.description === "string" && r.description.trim() ? r.description.trim() : null;
   if (!description) return null;
   return {
     id: typeof r.id === "string" && r.id ? r.id : `s${idx + 1}`,
@@ -85,9 +84,7 @@ function coerceStep(raw: unknown, idx: number): PlanStep | null {
  *   - { plan: { steps: [...] } } — objeto aninhado
  * Retorna null se nada parseável.
  */
-export function extractPlanFromLlmContent(
-  content: string | null | undefined,
-): PlanStep[] | null {
+export function extractPlanFromLlmContent(content: string | null | undefined): PlanStep[] | null {
   if (!content) return null;
   const trimmed = content.trim();
   if (!trimmed.startsWith("{")) return null;
@@ -101,7 +98,11 @@ export function extractPlanFromLlmContent(
   const obj = parsed as Record<string, unknown>;
   const candidates: unknown[] = [];
   if (Array.isArray(obj.plan)) candidates.push(obj.plan);
-  else if (obj.plan && typeof obj.plan === "object" && Array.isArray((obj.plan as Record<string, unknown>).steps)) {
+  else if (
+    obj.plan &&
+    typeof obj.plan === "object" &&
+    Array.isArray((obj.plan as Record<string, unknown>).steps)
+  ) {
     candidates.push((obj.plan as Record<string, unknown>).steps);
   }
   if (Array.isArray(obj.steps)) candidates.push(obj.steps);
@@ -134,13 +135,15 @@ export function extractRationaleFromLlmContent(
   }
   if (!parsed || typeof parsed !== "object") return null;
   const obj = parsed as Record<string, unknown>;
-  const planObj = obj.plan && typeof obj.plan === "object" && !Array.isArray(obj.plan)
-    ? obj.plan as Record<string, unknown>
-    : null;
+  const planObj =
+    obj.plan && typeof obj.plan === "object" && !Array.isArray(obj.plan)
+      ? (obj.plan as Record<string, unknown>)
+      : null;
   if (!planObj) return null;
-  const rationale = typeof planObj.rationale === "string" && planObj.rationale.trim()
-    ? planObj.rationale.trim()
-    : "";
+  const rationale =
+    typeof planObj.rationale === "string" && planObj.rationale.trim()
+      ? planObj.rationale.trim()
+      : "";
   if (Array.isArray(planObj.steps)) {
     const steps: PlanStep[] = [];
     for (let i = 0; i < planObj.steps.length; i++) {
@@ -164,7 +167,9 @@ function coercePhases(raw: unknown): ForgePlanPhase[] {
     const title = typeof r.title === "string" && r.title.trim() ? r.title.trim() : `Fase ${i + 1}`;
     const goal = typeof r.goal === "string" ? r.goal.trim() : "";
     const tasks = Array.isArray(r.tasks)
-      ? r.tasks.filter((t): t is string => typeof t === "string" && t.trim().length > 0).map((t) => t.trim())
+      ? r.tasks
+          .filter((t): t is string => typeof t === "string" && t.trim().length > 0)
+          .map((t) => t.trim())
       : [];
     if (tasks.length === 0 && !goal) continue;
     out.push({
@@ -186,11 +191,20 @@ export function buildPlanDocumentMarkdown(input: {
   outOfScope?: string[];
   phases?: ForgePlanPhase[];
   steps?: PlanStep[];
-}): { markdown: string; mission: string; objective: string; phases: ForgePlanPhase[]; outOfScope: string[] } {
+}): {
+  markdown: string;
+  mission: string;
+  objective: string;
+  phases: ForgePlanPhase[];
+  outOfScope: string[];
+} {
   const mission = input.mission?.trim() || input.summary.trim() || "Entregar o pedido do usuário";
-  const objective = input.objective?.trim() || input.rationale?.trim() || "Versão funcional alinhada ao pedido.";
+  const objective =
+    input.objective?.trim() || input.rationale?.trim() || "Versão funcional alinhada ao pedido.";
   const approach = input.rationale?.trim() || "Implementação incremental com validação.";
-  const assumptions = input.assumptions?.length ? input.assumptions : ["Stack React/Vite do projeto."];
+  const assumptions = input.assumptions?.length
+    ? input.assumptions
+    : ["Stack React/Vite do projeto."];
   const outOfScope = input.outOfScope?.length
     ? input.outOfScope
     : ["Não alterar arquivos fora do escopo.", "Não mudar auth/billing sem pedido explícito."];
@@ -200,16 +214,41 @@ export function buildPlanDocumentMarkdown(input: {
     const mid = Math.ceil(input.steps.length / 2);
     const a = input.steps.slice(0, mid).map((s) => s.description);
     const b = input.steps.slice(mid).map((s) => s.description);
-    if (a.length) phases.push({ id: "p1", title: "Fase 1 — Preparação", goal: "Base e contexto.", tasks: a });
-    if (b.length) phases.push({ id: "p2", title: "Fase 2 — Implementação", goal: "Mudanças principais.", tasks: b });
+    if (a.length)
+      phases.push({ id: "p1", title: "Fase 1 — Preparação", goal: "Base e contexto.", tasks: a });
+    if (b.length)
+      phases.push({
+        id: "p2",
+        title: "Fase 2 — Implementação",
+        goal: "Mudanças principais.",
+        tasks: b,
+      });
   }
   if (phases.length === 0) {
-    phases = [{ id: "p1", title: "Fase 1 — Execução", goal: "Implementar e validar.", tasks: ["Analisar", "Implementar", "Validar"] }];
+    phases = [
+      {
+        id: "p1",
+        title: "Fase 1 — Execução",
+        goal: "Implementar e validar.",
+        tasks: ["Analisar", "Implementar", "Validar"],
+      },
+    ];
   }
 
   const lines = [
-    "## Missão", mission, "", "## Objetivo", objective, "", "## Abordagem", approach, "",
-    "## Premissas", ...assumptions.map((x) => `- ${x}`), "", "## Fases",
+    "## Missão",
+    mission,
+    "",
+    "## Objetivo",
+    objective,
+    "",
+    "## Abordagem",
+    approach,
+    "",
+    "## Premissas",
+    ...assumptions.map((x) => `- ${x}`),
+    "",
+    "## Fases",
   ];
   for (const ph of phases) {
     lines.push(`### ${ph.title}`, ph.goal, "");
@@ -220,7 +259,11 @@ export function buildPlanDocumentMarkdown(input: {
   return { markdown: lines.join("\n").trim(), mission, objective, phases, outOfScope };
 }
 
-function attachDocument(plan: ProposedPlan, src: PlanRationale | null, summary: string): ProposedPlan {
+function attachDocument(
+  plan: ProposedPlan,
+  src: PlanRationale | null,
+  summary: string,
+): ProposedPlan {
   const doc = buildPlanDocumentMarkdown({
     summary,
     rationale: src?.rationale ?? plan.rationale,
@@ -257,38 +300,50 @@ export function buildProposedPlan(
 
   // Caminho 1: plan estruturado veio do router
   if (classification.plan && classification.plan.steps.length > 0) {
-    return attachDocument({
-      planId: options.planId,
+    return attachDocument(
+      {
+        planId: options.planId,
+        summary,
+        rationale: classification.plan.rationale || undefined,
+        steps: classification.plan.steps,
+        ttlMs: options.ttlMs,
+        proposedAt: options.proposedAt,
+      },
+      classification.plan,
       summary,
-      rationale: classification.plan.rationale || undefined,
-      steps: classification.plan.steps,
-      ttlMs: options.ttlMs,
-      proposedAt: options.proposedAt,
-    }, classification.plan, summary);
+    );
   }
 
   // Caminho 2: extrai do rawContent
   const fromRaw = extractRationaleFromLlmContent(rawContent);
   if (fromRaw && fromRaw.steps.length > 0) {
-    return attachDocument({
-      planId: options.planId,
+    return attachDocument(
+      {
+        planId: options.planId,
+        summary,
+        rationale: fromRaw.rationale || undefined,
+        steps: fromRaw.steps,
+        ttlMs: options.ttlMs,
+        proposedAt: options.proposedAt,
+      },
+      fromRaw,
       summary,
-      rationale: fromRaw.rationale || undefined,
-      steps: fromRaw.steps,
-      ttlMs: options.ttlMs,
-      proposedAt: options.proposedAt,
-    }, fromRaw, summary);
+    );
   }
 
   // Caminho 3: heurística default
-  return attachDocument({
-    planId: options.planId,
+  return attachDocument(
+    {
+      planId: options.planId,
+      summary,
+      rationale: "Plano gerado automaticamente — revise as fases antes de aprovar.",
+      steps: deriveDefaultPlan(classification.type, summary),
+      ttlMs: options.ttlMs,
+      proposedAt: options.proposedAt,
+    },
+    null,
     summary,
-    rationale: "Plano gerado automaticamente — revise as fases antes de aprovar.",
-    steps: deriveDefaultPlan(classification.type, summary),
-    ttlMs: options.ttlMs,
-    proposedAt: options.proposedAt,
-  }, null, summary);
+  );
 }
 
 /**
@@ -296,38 +351,115 @@ export function buildProposedPlan(
  * (quando o LLM não produz um plano estruturado). Sempre retorna >=1 passo
  * para que o usuário tenha algo concreto para revisar.
  */
-export function deriveDefaultPlan(
-  classificationType: string,
-  summary: string,
-): PlanStep[] {
+export function deriveDefaultPlan(classificationType: string, summary: string): PlanStep[] {
   const sum = summary?.trim() || "Executar tarefa";
   const baseCost = 0.002;
   if (classificationType === "new_project") {
     return [
-      { id: "s1", type: "observe", description: "Ler arquivos existentes do projeto", enabled: true, estimatedCost: baseCost },
-      { id: "s2", type: "create_file", description: "Criar arquivos de configuração (package.json, tsconfig)", filePath: "package.json", enabled: true, estimatedCost: baseCost },
-      { id: "s3", type: "install_dep", description: "Instalar dependências do projeto", enabled: true, estimatedCost: baseCost },
-      { id: "s4", type: "create_file", description: `Implementar: ${sum.slice(0, 80)}`, filePath: "src/App.tsx", enabled: true, estimatedCost: 0.005 },
-      { id: "s5", type: "shell_exec", description: "Verificar build e typecheck", enabled: true, estimatedCost: baseCost },
+      {
+        id: "s1",
+        type: "observe",
+        description: "Ler arquivos e contexto atual do projeto (incluindo connectors/integrações vinculadas)",
+        enabled: true,
+        estimatedCost: baseCost,
+      },
+      {
+        id: "s2",
+        type: "create_file",
+        description: "Preparar estrutura inicial fullstack-ready (se necessário)",
+        filePath: "package.json",
+        enabled: true,
+        estimatedCost: baseCost,
+      },
+      {
+        id: "s3",
+        type: "install_dep",
+        description: "Instalar dependências base (incluindo @forge/ui se ausente)",
+        enabled: true,
+        estimatedCost: baseCost,
+      },
+      {
+        id: "s4",
+        type: "create_file",
+        description: `Fase 1 (obrigatória): Entregar UMA página completa (landing ou tela principal) adaptada ao domínio do pedido ("${sum.slice(0, 60)}"). Usar estrutura do design system (@forge/ui composites + tokens) de forma contextual (ex: padaria → hero apetitoso + bento de produtos; app → features + dashboard feel). Incluir botões e hooks de autenticação prontos (usar connector Supabase/Auth se já vinculado ao projeto; caso contrário deixar preparado para integração futura). Validar no preview.`,
+        filePath: "src/App.tsx",
+        enabled: true,
+        estimatedCost: 0.008,
+      },
+      {
+        id: "s5",
+        type: "shell_exec",
+        description: "Verificar build e typecheck",
+        enabled: true,
+        estimatedCost: baseCost,
+      },
     ];
   }
   if (classificationType === "modify" || classificationType === "fix") {
     return [
-      { id: "s1", type: "observe", description: "Ler arquivos relevantes do projeto", enabled: true, estimatedCost: baseCost },
-      { id: "s2", type: "edit_file", description: sum.slice(0, 120), enabled: true, estimatedCost: 0.003 },
-      { id: "s3", type: "shell_exec", description: "Verificar typecheck e build", enabled: true, estimatedCost: baseCost },
+      {
+        id: "s1",
+        type: "observe",
+        description: "Ler arquivos relevantes do projeto",
+        enabled: true,
+        estimatedCost: baseCost,
+      },
+      {
+        id: "s2",
+        type: "edit_file",
+        description: sum.slice(0, 120),
+        enabled: true,
+        estimatedCost: 0.003,
+      },
+      {
+        id: "s3",
+        type: "shell_exec",
+        description: "Verificar typecheck e build",
+        enabled: true,
+        estimatedCost: baseCost,
+      },
     ];
   }
   if (classificationType === "add_dep") {
     return [
-      { id: "s1", type: "install_dep", description: `Instalar: ${sum.slice(0, 80)}`, enabled: true, estimatedCost: 0.002 },
-      { id: "s2", type: "edit_file", description: "Integrar dependência no código", enabled: true, estimatedCost: 0.003 },
-      { id: "s3", type: "shell_exec", description: "Verificar build", enabled: true, estimatedCost: baseCost },
+      {
+        id: "s1",
+        type: "install_dep",
+        description: `Instalar: ${sum.slice(0, 80)}`,
+        enabled: true,
+        estimatedCost: 0.002,
+      },
+      {
+        id: "s2",
+        type: "edit_file",
+        description: "Integrar dependência no código",
+        enabled: true,
+        estimatedCost: 0.003,
+      },
+      {
+        id: "s3",
+        type: "shell_exec",
+        description: "Verificar build",
+        enabled: true,
+        estimatedCost: baseCost,
+      },
     ];
   }
   return [
-    { id: "s1", type: "observe", description: "Analisar o pedido e o contexto do projeto", enabled: true, estimatedCost: baseCost },
-    { id: "s2", type: "custom", description: sum.slice(0, 120), enabled: true, estimatedCost: 0.002 },
+    {
+      id: "s1",
+      type: "observe",
+      description: "Analisar o pedido e o contexto do projeto",
+      enabled: true,
+      estimatedCost: baseCost,
+    },
+    {
+      id: "s2",
+      type: "custom",
+      description: sum.slice(0, 120),
+      enabled: true,
+      estimatedCost: 0.002,
+    },
   ];
 }
 
@@ -374,9 +506,10 @@ export function validateApprovedSteps(
     out.push({
       id: original_step.id,
       type: original_step.type,
-      description: typeof r.description === "string" && r.description.trim()
-        ? r.description.trim()
-        : original_step.description,
+      description:
+        typeof r.description === "string" && r.description.trim()
+          ? r.description.trim()
+          : original_step.description,
       filePath: typeof r.filePath === "string" ? r.filePath : original_step.filePath,
       estimatedCost: original_step.estimatedCost,
       enabled: true,
