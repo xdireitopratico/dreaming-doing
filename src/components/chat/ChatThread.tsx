@@ -1,4 +1,4 @@
-import type { ThreadItem } from "@/lib-v2/chat-types";
+import type { ThreadItem } from "@/lib/chat/types";
 import { ChatMessage } from "./ChatMessage";
 
 type ChatThreadProps = {

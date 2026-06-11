@@ -1,5 +1,5 @@
 import { ClipboardList, ArrowUpRight } from "lucide-react";
-import type { PlanPrompt } from "@/lib-v2/chat-types";
+import type { PlanPrompt } from "@/lib/chat/types";
 
 type ChatPlanProps = {
   plan: PlanPrompt;

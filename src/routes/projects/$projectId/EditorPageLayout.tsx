@@ -174,20 +174,20 @@ export function EditorPageLayout({
   chatMessages,
   chatMessagesLoading = false,
   handleResumeAgent,
-  handleSend: _handleSend,
-  handleStop: _handleStop,
+  handleSend,
+  handleStop,
   handleVisualEdits: _handleVisualEdits,
   pickMode: _pickMode,
   filePaths,
-  composerMode: _composerMode,
-  setComposerMode: _setComposerMode,
-  promptDraft: _promptDraft,
-  setPromptDraft: _setPromptDraft,
+  composerMode,
+  setComposerMode,
+  promptDraft,
+  setPromptDraft,
   welcomeMarkdown,
-  tasteChatRemaining: _tasteChatRemaining,
-  tasteStartRemaining: _tasteStartRemaining,
-  handleStartProject: _handleStartProject,
-  handleRollbackMessage: _handleRollbackMessage,
+  tasteChatRemaining,
+  tasteStartRemaining,
+  handleStartProject,
+  handleRollbackMessage,
   handlePlanApprove,
   handlePlanReject,
   hasUserLlmKey: _hasUserLlmKey,
@@ -426,9 +426,41 @@ export function EditorPageLayout({
                 <ChatPanel
                   projectId={projectId}
                   conversationId={conversationId}
-                  welcomeMarkdown={showWelcomeMarkdown ? welcomeMarkdown : undefined}
-                  onOpenInspector={handleOpenInspector}
+                  messages={chatMessages}
+                  messagesLoading={chatMessagesLoading}
+                  agentHasRun={agentHasRun}
+                  agent={agent}
+                  running={running}
+                  welcomeMarkdown={welcomeMarkdown}
+                  composerMode={composerMode}
+                  onComposerModeChange={setComposerMode}
+                  onSend={handleSend}
+                  onStop={handleStop}
                   onResume={handleResumeAgent}
+                  onOpenInspector={handleOpenInspector}
+                  onRollbackMessage={handleRollbackMessage}
+                  focusedRunId={jobWorkspaceFocus?.runId ?? null}
+                  externalPrompt={promptDraft}
+                  onExternalPromptConsumed={() => setPromptDraft(null)}
+                  tasteChatRemaining={tasteChatRemaining}
+                  tasteStartRemaining={tasteStartRemaining}
+                  onStartProject={handleStartProject}
+                  pendingQueueItems={agent.pendingQueueItems}
+                  queueBlockingReason={agent.queueBlockingReason}
+                  onClearPendingItem={(id) =>
+                    conversationId
+                      ? agent.clearPendingItem(projectId, conversationId, id)
+                      : Promise.resolve()
+                  }
+                  onClearAllPending={() =>
+                    conversationId
+                      ? agent.clearAllPending(projectId, conversationId)
+                      : Promise.resolve()
+                  }
+                  onDrainQueue={async () => {
+                    if (!conversationId) return;
+                    await agent.drainQueue(projectId, conversationId, composerMode);
+                  }}
                 />
               </div>
             }

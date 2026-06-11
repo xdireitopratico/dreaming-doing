@@ -1,9 +1,7 @@
 import { useCallback, useState } from "react";
 import { Send, Square } from "lucide-react";
-import type { ChatStatus } from "@/lib-v2/chat-types";
-
 type ChatInputProps = {
-  status: ChatStatus;
+  status: "idle" | "running" | "error";
   onSend: (text: string) => void;
   onStop: () => void;
 };

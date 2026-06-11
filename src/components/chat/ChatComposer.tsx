@@ -1,17 +1,33 @@
 import { useCallback, useEffect, useState } from "react";
 import { ArrowUp, Square } from "lucide-react";
-import type { ChatStatus } from "@/lib-v2/chat-types";
+import type { AgentComposerMode } from "@/lib/chat-types";
 
 type ChatComposerProps = {
-  status: ChatStatus;
-  onSend: (text: string) => void;
+  running: boolean;
+  agentBusy?: boolean;
+  planPending?: boolean;
+  composerMode?: AgentComposerMode;
+  onComposerModeChange?: (mode: AgentComposerMode) => void;
+  onSend: (text: string, mode?: AgentComposerMode) => void;
   onStop: () => void;
+  externalPrompt?: string | null;
+  onExternalPromptConsumed?: () => void;
 };
 
-const DRAFT_KEY = "forge:chat-draft-v2";
+const DRAFT_KEY = "forge:chat-draft";
 const DRAFT_MAX_AGE = 24 * 60 * 60 * 1000;
 
-export function ChatComposer({ status, onSend, onStop }: ChatComposerProps) {
+export function ChatComposer({
+  running,
+  agentBusy = false,
+  planPending = false,
+  composerMode = "plan",
+  onComposerModeChange,
+  onSend,
+  onStop,
+  externalPrompt,
+  onExternalPromptConsumed,
+}: ChatComposerProps) {
   const [text, setText] = useState(() => {
     try {
       const raw = sessionStorage.getItem(DRAFT_KEY);
@@ -19,27 +35,42 @@ export function ChatComposer({ status, onSend, onStop }: ChatComposerProps) {
       const { value, ts } = JSON.parse(raw);
       if (Date.now() - ts < DRAFT_MAX_AGE) return value;
     } catch {
-      // sessionStorage unavailable or corrupted
+      // ignore
     }
     return "";
   });
 
-  const busy = status === "running";
+  const busy = running || agentBusy;
+  const canSend = !busy || planPending;
 
   useEffect(() => {
     const timer = setTimeout(() => {
-      sessionStorage.setItem(DRAFT_KEY, JSON.stringify({ value: text, ts: Date.now() }));
+      try {
+        sessionStorage.setItem(DRAFT_KEY, JSON.stringify({ value: text, ts: Date.now() }));
+      } catch {
+        // ignore
+      }
     }, 500);
     return () => clearTimeout(timer);
   }, [text]);
 
+  useEffect(() => {
+    if (!externalPrompt?.trim()) return;
+    setText(externalPrompt);
+    onExternalPromptConsumed?.();
+  }, [externalPrompt, onExternalPromptConsumed]);
+
   const handleSend = useCallback(() => {
     const trimmed = text.trim();
-    if (!trimmed || busy) return;
-    onSend(trimmed);
+    if (!trimmed || !canSend) return;
+    onSend(trimmed, composerMode);
     setText("");
-    sessionStorage.removeItem(DRAFT_KEY);
-  }, [text, busy, onSend]);
+    try {
+      sessionStorage.removeItem(DRAFT_KEY);
+    } catch {
+      // ignore
+    }
+  }, [text, canSend, onSend, composerMode]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -51,20 +82,47 @@ export function ChatComposer({ status, onSend, onStop }: ChatComposerProps) {
     [handleSend],
   );
 
+  const placeholder = planPending
+    ? "Mensagem enfileira — aprove ou rejeite o plano no inspector"
+    : busy
+      ? "Agente ocupado — mensagem vai para a fila"
+      : composerMode === "build"
+        ? "Descreva o que construir…"
+        : "Descreva o que planejar…";
+
   return (
     <div className="forge-composer">
+      {onComposerModeChange && (
+        <div className="forge-composer-mode-row">
+          <button
+            type="button"
+            className={`forge-composer-mode-btn ${composerMode === "plan" ? "is-active" : ""}`}
+            onClick={() => onComposerModeChange("plan")}
+            disabled={busy && !planPending}
+          >
+            Plan
+          </button>
+          <button
+            type="button"
+            className={`forge-composer-mode-btn ${composerMode === "build" ? "is-active" : ""}`}
+            onClick={() => onComposerModeChange("build")}
+            disabled={busy && !planPending}
+          >
+            Build
+          </button>
+        </div>
+      )}
       <div className="forge-composer-row">
         <textarea
           className="forge-composer-input"
-          placeholder={busy ? "Queue follow-up..." : "Descreva o que quer construir…"}
+          placeholder={placeholder}
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={handleKeyDown}
           rows={1}
-          disabled={busy}
         />
         <div className="forge-composer-actions">
-          {busy ? (
+          {running && !planPending ? (
             <button
               type="button"
               className="forge-composer-send"
@@ -78,7 +136,7 @@ export function ChatComposer({ status, onSend, onStop }: ChatComposerProps) {
               type="button"
               className="forge-composer-send"
               onClick={handleSend}
-              disabled={!text.trim()}
+              disabled={!text.trim() || !canSend}
               aria-label="Enviar"
             >
               <ArrowUp className="size-4" />

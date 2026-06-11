@@ -1,4 +1,22 @@
-import type { ChatMessage, ChatState, MiniCardData, ThreadItem } from "./chat-types";
+import type { ChatMessage, ChatState, ThreadItem } from "@/lib-v2/chat-types";
+
+function getRunId(msg: ChatMessage): string | undefined {
+  const meta = msg.meta;
+  if (meta && typeof meta === "object" && typeof meta.runId === "string") return meta.runId;
+  return msg.runId;
+}
+
+function mergeContent(a?: ChatMessage, b?: ChatMessage): ChatMessage | undefined {
+  if (!a) return b;
+  if (!b) return a;
+  const aText = a.content?.trim() ?? "";
+  const bText = b.content?.trim() ?? "";
+  const content =
+    !aText || !bText || aText === bText || bText.includes(aText)
+      ? bText || aText
+      : [aText, bText].join("\n\n");
+  return { ...b, content };
+}
 
 export function buildChatThread(messages: ChatMessage[], state: ChatState): ThreadItem[] {
   const items: ThreadItem[] = [];
@@ -11,93 +29,90 @@ export function buildChatThread(messages: ChatMessage[], state: ChatState): Thre
       continue;
     }
 
-    if (msg.role === "assistant") {
-      const existing = findLastAssistantByRunId(items, msg.runId);
-      if (existing && existing.runId === msg.runId) {
-        existing.message = mergeMessages(existing.message, msg);
-      } else {
-        items.push({
-          kind: "assistant",
-          message: msg,
-          runId: msg.runId ?? `msg-${msg.id}`,
-          isActive: false,
-          streamText: null,
-        });
-      }
-    }
-  }
-
-  if (state.status === "running" && state.runId) {
-    const existing = items.find((i) => i.kind === "assistant" && i.runId === state.runId);
-    if (existing && existing.kind === "assistant") {
-      existing.isActive = true;
-      existing.streamText = state.streamText;
-      existing.phase = state.phase;
-      existing.phaseMessage = state.phaseMessage;
-      existing.thinking = state.thinking;
-      existing.narration = state.narration;
-      existing.miniCard = buildMiniCard(state);
-      existing.plan = state.plan;
-      existing.planStatus = state.planStatus;
-      existing.qualify = state.qualify;
+    const runId = getRunId(msg);
+    const last = items[items.length - 1];
+    if (
+      runId &&
+      last?.kind === "assistant" &&
+      last.runId === runId &&
+      !last.isActive
+    ) {
+      items[items.length - 1] = {
+        ...last,
+        message: mergeContent(last.message, msg),
+      };
     } else {
       items.push({
         kind: "assistant",
-        runId: state.runId,
-        isActive: true,
-        streamText: state.streamText,
-        phase: state.phase,
-        phaseMessage: state.phaseMessage,
-        thinking: state.thinking,
-        narration: state.narration,
-        miniCard: buildMiniCard(state),
-        plan: state.plan,
-        planStatus: state.planStatus,
-        qualify: state.qualify,
+        message: msg,
+        runId: runId ?? msg.id,
+        isActive: false,
+        streamText: null,
       });
     }
   }
 
-  if (state.status === "error" && state.error) {
-    const lastAssistant = findLastAssistantByRunId(items, state.runId ?? undefined);
-    if (lastAssistant) {
-      lastAssistant.error = state.error;
-      lastAssistant.finished = true;
+  if (state.runId) {
+    const existingIdx = items.findIndex(
+      (it) => it.kind === "assistant" && it.runId === state.runId,
+    );
+
+    const liveItem: Extract<ThreadItem, { kind: "assistant" }> = {
+      kind: "assistant",
+      runId: state.runId,
+      isActive: state.status === "running",
+      streamText: state.streamText,
+      phase: state.phase,
+      phaseMessage: state.phaseMessage,
+      thinking: state.thinking,
+      narration: state.narration,
+      miniCard: state.editedFile
+        ? {
+            title: state.phase ?? "working",
+            liveBriefings: state.narration ? [state.narration] : [],
+            status: state.status === "running" ? "working" : state.status === "error" ? "failed" : "done",
+            tasks: state.tasks ?? [],
+            currentTaskIndex: state.currentTaskIndex ?? 0,
+            editedFile: state.editedFile,
+            fileCount: state.fileCount,
+            hasPlan: state.hasPlan,
+            planReady: state.planReady,
+          }
+        : null,
+      qualify: state.qualify,
+      plan: state.plan,
+      planStatus: state.planStatus,
+      error: state.error,
+      finished: state.finished,
+      lastFinishOk: state.lastFinishOk,
+      resumable: state.resumable,
+    };
+
+    if (existingIdx >= 0) {
+      const existing = items[existingIdx];
+      if (existing.kind === "assistant") {
+        items[existingIdx] = {
+          ...existing,
+          isActive: liveItem.isActive,
+          streamText: liveItem.streamText ?? existing.streamText,
+          phase: liveItem.phase ?? existing.phase,
+          phaseMessage: liveItem.phaseMessage ?? existing.phaseMessage,
+          thinking: liveItem.thinking ?? existing.thinking,
+          narration: liveItem.narration ?? existing.narration,
+          miniCard: liveItem.miniCard ?? existing.miniCard,
+          qualify: liveItem.qualify ?? existing.qualify,
+          plan: liveItem.plan ?? existing.plan,
+          planStatus: liveItem.planStatus ?? existing.planStatus,
+          error: liveItem.error ?? existing.error,
+          finished: liveItem.finished ?? existing.finished,
+          lastFinishOk: liveItem.lastFinishOk ?? existing.lastFinishOk,
+          resumable: liveItem.resumable ?? existing.resumable,
+        };
+      }
+    } else {
+      items.push(liveItem);
     }
   }
 
   return items;
-}
-
-function buildMiniCard(state: ChatState): MiniCardData | null {
-  if (!state.runId) return null;
-  return {
-    title: state.phaseMessage ?? state.phase ?? "Working...",
-    liveBriefings: state.phaseMessage ? [state.phaseMessage] : [],
-    status: state.error ? "failed" : state.finished ? "done" : "working",
-    tasks: state.tasks ?? [],
-    currentTaskIndex: state.currentTaskIndex ?? 0,
-    editedFile: state.editedFile,
-    fileCount: state.fileCount,
-    hasPlan: state.hasPlan,
-    planReady: state.planReady,
-  };
-}
-
-function findLastAssistantByRunId(
-  items: ThreadItem[],
-  runId?: string,
-): Extract<ThreadItem, { kind: "assistant" }> | null {
-  if (!runId) return null;
-  for (let i = items.length - 1; i >= 0; i--) {
-    const item = items[i];
-    if (item.kind === "assistant" && item.runId === runId) return item;
-  }
-  return null;
-}
-
-function mergeMessages(a: ChatMessage | undefined, b: ChatMessage): ChatMessage {
-  if (!a) return b;
-  const content = [a.content, b.content].filter((c) => c?.trim()).join("\n\n") || b.content;
-  return { ...b, content };
 }

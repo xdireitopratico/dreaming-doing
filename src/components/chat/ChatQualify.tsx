@@ -1,4 +1,4 @@
-import type { QualifyPrompt } from "@/lib-v2/chat-types";
+import type { QualifyPrompt } from "@/lib/chat/types";
 
 type ChatQualifyProps = {
   data: QualifyPrompt;

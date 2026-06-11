@@ -1,5 +1,5 @@
 import { MarkdownRenderer } from "@/components/ui/markdown-renderer";
-import type { ThreadItem } from "@/lib-v2/chat-types";
+import type { ThreadItem } from "@/lib/chat/types";
 import { ChatThinking } from "./ChatThinking";
 import { ChatNarration } from "./ChatNarration";
 import { ChatJobCard } from "./ChatJobCard";

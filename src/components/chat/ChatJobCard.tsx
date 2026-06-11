@@ -1,4 +1,4 @@
-import type { MiniCardData } from "@/lib-v2/chat-types";
+import type { MiniCardData } from "@/lib/chat/types";
 import { ChatTaskList } from "./ChatTaskList";
 
 type ChatJobCardProps = {

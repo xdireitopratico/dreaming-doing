@@ -1,15 +1,5 @@
-export type ChatRole = "user" | "assistant" | "tool";
-
-export type ChatMessage = {
-  id: string;
-  role: ChatRole;
-  content: string;
-  runId?: string;
-  meta?: Record<string, unknown>;
-  timestamp: number;
-};
-
-export type ChatStatus = "idle" | "running" | "error";
+import type { ChatMessage } from "@/lib/chat-types";
+import type { AgentProgress } from "@/lib/agent-progress";
 
 export type RunPhase = "classify" | "gather" | "plan" | "execute" | "observe" | "summarize" | null;
 
@@ -84,32 +74,28 @@ export type ThreadItem =
       resumable?: boolean;
     };
 
-export type ChatState = {
-  status: ChatStatus;
-  runId: string | null;
-  streamText: string | null;
-  error: string | null;
-  phase?: RunPhase;
-  phaseMessage?: string | null;
-  thinking?: { active: boolean; startedAtMs: number; durationMs?: number } | null;
-  narration?: string | null;
-  tasks?: TaskItem[];
-  currentTaskIndex?: number;
-  editedFile?: string | null;
-  fileCount?: number;
-  hasPlan?: boolean;
-  planReady?: boolean;
-  plan?: PlanPrompt | null;
-  planStatus?: "pending" | "approved" | "rejected" | null;
-  qualify?: QualifyPrompt | null;
-  finished?: boolean;
-  lastFinishOk?: boolean;
-  resumable?: boolean;
+/** Item interno antes do mapeamento para UI. */
+export type RawThreadItem =
+  | { kind: "user"; message: ChatMessage }
+  | {
+      kind: "assistant";
+      message?: ChatMessage;
+      runId?: string;
+      isActive: boolean;
+      live?: AgentProgress;
+    };
+
+export type BuildChatThreadOptions = {
+  activeRunId?: string | null;
+  running?: boolean;
+  activeRunStartedAtMs?: number | null;
+  pendingPlan?: import("@/lib/agent-progress").PendingPlan | null;
+  sessionProgress: AgentProgress;
+  focusedRunId?: string | null;
 };
 
-export const INITIAL_CHAT_STATE: ChatState = {
-  status: "idle",
-  runId: null,
-  streamText: null,
-  error: null,
+export type ChatLiveState = {
+  activeRunId: string | null;
+  progress: AgentProgress;
+  running: boolean;
 };

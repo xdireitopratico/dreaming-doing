@@ -1,5 +1,5 @@
 import { CheckCircle2, Loader2, XCircle, Circle } from "lucide-react";
-import type { TaskItem } from "@/lib-v2/chat-types";
+import type { TaskItem } from "@/lib/chat/types";
 
 type ChatTaskListProps = {
   tasks: TaskItem[];
