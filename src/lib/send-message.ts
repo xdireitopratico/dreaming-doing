@@ -48,6 +48,10 @@ export async function sendMessage(input: SendMessageInput, deps: SendMessageDeps
   const shouldQueue = input.agentBusy || input.planAwaiting;
   const parts = messageParts(input.text, input.parts);
 
+  if (!shouldQueue) {
+    deps.beginPendingTurn();
+  }
+
   const { error } = await deps.insertUserMessage(
     input.conversationId,
     parts,
@@ -55,6 +59,7 @@ export async function sendMessage(input: SendMessageInput, deps: SendMessageDeps
   );
 
   if (error) {
+    if (!shouldQueue) deps.clearPendingTurn();
     deps.onError?.("Erro ao enviar mensagem");
     return;
   }
@@ -62,7 +67,6 @@ export async function sendMessage(input: SendMessageInput, deps: SendMessageDeps
   deps.onInserted?.();
 
   if (!shouldQueue) {
-    deps.beginPendingTurn();
     const ok = await deps.runAgent(input.kind);
     if (!ok) {
       deps.clearPendingTurn();

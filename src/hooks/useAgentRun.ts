@@ -678,6 +678,9 @@ export function useAgentRun() {
 
         // Taste Chat concierge — JSON inline, sem runId (mensagem já salva no DB).
         if (body.ok && body.content && !body.runId) {
+          runIdRef.current = null;
+          setActiveRunId(null);
+          setActiveRunStartedAtMs(null);
           setProgress((p) => ({
             ...p,
             finished: true,

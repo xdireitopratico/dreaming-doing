@@ -89,12 +89,23 @@ export function useForgeChat({
     [messages, progress, agent.activeRunId, running],
   );
 
-  const showWelcome = useMemo(() => {
-    if (messagesLoading || messages.length > 0) return false;
+  /** Chat vazio sem turno live — welcome ou spinner (nunca tela branca). */
+  const showEmptyState = useMemo(() => {
+    if (messages.length > 0) return false;
     if (agentHasRun) return false;
     if (agent.activeRunId) return false;
     return true;
-  }, [messagesLoading, messages.length, agentHasRun, agent.activeRunId]);
+  }, [messages.length, agentHasRun, agent.activeRunId]);
+
+  // Libera slot live preso se o DB não materializar (ex.: Taste inline, edge timeout).
+  useEffect(() => {
+    if (!agent.activeRunId || !agent.progress.finished) return;
+    const runId = agent.activeRunId;
+    const timer = window.setTimeout(() => {
+      agent.acknowledgeMaterializedRun(runId);
+    }, 45_000);
+    return () => window.clearTimeout(timer);
+  }, [agent.activeRunId, agent.progress.finished, agent]);
 
   const agentBusy = !!(
     agent.activeRunId &&
@@ -107,7 +118,8 @@ export function useForgeChat({
     thread,
     progress,
     pendingPlan,
-    showWelcome,
+    showEmptyState,
+    messagesLoading,
     agentBusy,
     activeRunId: agent.activeRunId,
     activeRunStartedAtMs: agent.activeRunStartedAtMs,

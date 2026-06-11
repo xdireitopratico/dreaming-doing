@@ -36,6 +36,7 @@ import {
   bundledMarkerContent,
   isForgeUiBundlePath,
 } from "@/lib/file-tree-display";
+import type { Msg } from "./editor-page-types";
 
 type AgentRun = ReturnType<typeof useAgentRun>;
 type PreviewBoot = ReturnType<typeof usePreviewBoot>;
@@ -266,6 +267,7 @@ export function useEditorPageHandlers({
           tasteAction,
           mode: composerMode,
         });
+        void qc.invalidateQueries({ queryKey: ["messages", conversation.id] });
         if (!result.ok) {
           toast.error(result.error);
           logEditorTelemetryEvent("agent", "run_fail", "error", result.error.slice(0, 200));
@@ -373,13 +375,52 @@ export function useEditorPageHandlers({
         },
         {
           insertUserMessage: async (conversationId, messageParts, meta) => {
-            const { error } = await supabase.from("messages").insert({
-              conversation_id: conversationId,
+            const tempId = `optimistic-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+            const optimistic: Msg = {
+              id: tempId,
               role: "user",
               parts: messageParts,
-              meta: meta as import("@/integrations/supabase/types").Json,
-            });
-            return { error: error?.message ?? null };
+              tool_calls: [],
+              meta,
+              created_at: new Date().toISOString(),
+            };
+
+            qc.setQueryData<Msg[]>(["messages", conversation.id], (old) => [
+              ...(old ?? []),
+              optimistic,
+            ]);
+
+            const { data, error } = await supabase
+              .from("messages")
+              .insert({
+                conversation_id: conversationId,
+                role: "user",
+                parts: messageParts,
+                meta: meta as import("@/integrations/supabase/types").Json,
+              })
+              .select()
+              .single();
+
+            if (error) {
+              qc.setQueryData<Msg[]>(["messages", conversation.id], (old) =>
+                (old ?? []).filter((m) => m.id !== tempId),
+              );
+              return { error: error.message };
+            }
+
+            const row = data as Msg;
+            qc.setQueryData<Msg[]>(["messages", conversation.id], (old) =>
+              (old ?? []).map((m) =>
+                m.id === tempId
+                  ? {
+                      ...row,
+                      parts: row.parts ?? messageParts,
+                      tool_calls: row.tool_calls ?? [],
+                    }
+                  : m,
+              ),
+            );
+            return { error: null };
           },
           queueMessage: async (pid, cid, sessionKind, queueMode) =>
             agent.queueMessage(pid, cid, sessionKind, undefined, queueMode),

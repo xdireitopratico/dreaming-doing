@@ -40,7 +40,7 @@ function EditorPage() {
   const { projectId } = useParams({ from: "/projects/$projectId/" });
   const navigate = useNavigate();
   const search = useSearch({ from: "/projects/$projectId/" });
-  const useV2Chat = (() => {
+  const [useV2Chat, setUseV2Chat] = useState(() => {
     const urlParam = new URLSearchParams(window.location.search).get("chat") === "v2";
     if (urlParam) return true;
     try {
@@ -51,7 +51,8 @@ function EditorPage() {
       }
     } catch { /* ignore */ }
     return false;
-  })();
+  });
+  const toggleV2Chat = useCallback(() => setUseV2Chat((v) => !v), []);
 
   const {
     tasteChatRemaining,
@@ -319,6 +320,7 @@ function EditorPage() {
       projectId={projectId}
       conversationId={conversation?.id ?? null}
       useV2Chat={useV2Chat}
+      onToggleV2Chat={toggleV2Chat}
       projectName={project?.name}
       running={running}
       agent={agent}

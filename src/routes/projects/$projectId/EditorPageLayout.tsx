@@ -72,6 +72,7 @@ export type EditorPageLayoutProps = {
   setPreviewDevice: (device: "desktop" | "tablet" | "mobile") => void;
   e2bConnected: boolean;
   useV2Chat?: boolean;
+  onToggleV2Chat?: () => void;
   chatMessages: ChatMessage[];
   chatMessagesLoading?: boolean;
   handleResumeAgent: () => void;
@@ -174,6 +175,7 @@ export function EditorPageLayout({
   setPreviewDevice,
   e2bConnected,
   useV2Chat = false,
+  onToggleV2Chat,
   chatMessages,
   chatMessagesLoading = false,
   handleResumeAgent,
@@ -378,6 +380,8 @@ export function EditorPageLayout({
                 awaitingUser={agent.progress.awaitingKind === "qualify" && !pendingPlan}
                 planPending={!!pendingPlan}
                 pendingQueueCount={agent.progress.pendingQueueCount}
+                useV2Chat={useV2Chat}
+                onToggleV2Chat={onToggleV2Chat}
               />
             }
             workspaceHeader={

@@ -89,7 +89,8 @@ export function ForgeChatPanel({
     thread,
     progress,
     pendingPlan,
-    showWelcome,
+    showEmptyState,
+    messagesLoading: chatLoading,
     agentBusy,
     activeRunId,
     activeRunStartedAtMs,
@@ -163,9 +164,9 @@ export function ForgeChatPanel({
         {(requestRollback) => (
           <div className="forge-chat-inner">
             <div ref={scrollRef} className="forge-messages" onScroll={handleMessagesScroll}>
-              {showWelcome ? (
+              {showEmptyState ? (
                 <div className="forge-msg-text space-y-3">
-                  {messagesLoading ? (
+                  {chatLoading ? (
                     <div
                       className="flex items-center gap-2 py-6 text-[var(--text-muted)]"
                       data-testid="forge-chat-loading"
@@ -182,7 +183,7 @@ export function ForgeChatPanel({
                     </p>
                   )}
                   <div className="flex flex-wrap gap-2 pt-1">
-                    {!messagesLoading && onStartProject && (tasteStartRemaining ?? 0) > 0 && (
+                    {!chatLoading && onStartProject && (tasteStartRemaining ?? 0) > 0 && (
                       <button type="button" onClick={onStartProject} className="forge-welcome-btn">
                         Start Project · demo completa (~15 min)
                       </button>

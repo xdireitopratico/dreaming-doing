@@ -16,7 +16,6 @@ export function scopeLiveState(
   const belongs = pendingTurn || (running && !!activeRunId) || runInThread;
 
   if (!activeRunId || !belongs) {
-    if (messages.length === 0) return null;
     if (!activeRunId && canUseEphemeralProgress(messages, progress)) {
       return { activeRunId: null, progress, running: false };
     }
