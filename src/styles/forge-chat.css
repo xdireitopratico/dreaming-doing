@@ -10,13 +10,14 @@
   overflow: hidden;
   border-radius: 0 0 14px 14px;
   background: var(--bg-chat);
+  gap: var(--space-sm);
 }
 
 .forge-messages {
   position: relative;
   flex: 1;
   overflow-y: auto;
-  padding: var(--chat-padding) var(--chat-padding) var(--space-sm);
+  padding: var(--chat-padding) var(--chat-padding) var(--space-xs);
   scrollbar-width: thin;
   scrollbar-color: rgba(226, 232, 240, 0.15) transparent;
   font: var(--font-chat);
@@ -62,7 +63,16 @@
 .forge-chat-stream {
   display: flex;
   flex-direction: column;
-  gap: var(--message-gap);
+  gap: 18px;
+}
+
+/* Turno assistant — blocos separados (Lovable): thought/texto solto + card com borda */
+.forge-assistant-turn {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+  max-width: 100%;
 }
 
 .forge-chat-item-user {
@@ -113,9 +123,9 @@
   display: flex;
   align-items: center;
   gap: var(--space-sm);
-  margin: 0 0 var(--space-sm);
+  margin: 0;
   font: var(--font-thought);
-  color: var(--status-thinking);
+  color: var(--text-muted);
 }
 
 .forge-chat-latency-line {
@@ -123,14 +133,15 @@
 }
 
 .forge-chat-narration-line {
-  margin: 0 0 var(--space-sm);
+  margin: 0;
   font: var(--font-narration);
-  font-style: italic;
-  color: var(--text-secondary);
+  font-style: normal;
+  color: var(--text-primary);
+  line-height: 1.65;
 }
 
 .forge-chat-closing-line {
-  margin: 0 0 var(--space-sm);
+  margin: 0;
   font: var(--font-chat);
   color: var(--text-primary);
   width: 100%;
@@ -458,23 +469,27 @@
   color: var(--text-muted);
 }
 
-/* Mini card */
+/* Mini card — card destacado (referência Lovable) */
 .forge-mini-card {
   display: block;
   width: 100%;
   align-self: stretch;
-  margin: var(--space-sm) 0 var(--space-md);
-  border-radius: 12px;
-  border: 1px solid var(--border-forge);
-  background: var(--bg-card);
+  margin: 0;
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--border-forge) 70%, #3f3f46 30%);
+  background: color-mix(in srgb, var(--bg-card) 88%, #18181b 12%);
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.03) inset,
+    0 4px 20px rgba(0, 0, 0, 0.22);
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
   text-align: left;
+  overflow: hidden;
 }
 
 .forge-mini-card-body {
   display: block;
   width: 100%;
-  padding: var(--card-padding) 14px;
+  padding: 14px 16px;
   border: none;
   border-radius: inherit;
   background: none;
@@ -485,7 +500,7 @@
 }
 
 .forge-mini-card-body:hover {
-  background: var(--bg-hover);
+  background: color-mix(in srgb, var(--bg-hover) 55%, transparent);
 }
 
 .forge-mini-card:hover,
@@ -563,21 +578,36 @@
   color: color-mix(in srgb, var(--status-failed) 95%, white);
 }
 
-.forge-mini-card-badge--edited {
+.forge-mini-card-badge--edited-tag {
   font-size: 10px;
-  padding: 2px 8px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.08);
+  padding: 3px 8px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-muted);
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 500;
+}
+
+.forge-mini-card-badge--edited-file {
+  font-size: 10px;
+  padding: 3px 10px;
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--border-forge) 80%, transparent);
+  background: color-mix(in srgb, var(--bg-input) 70%, transparent);
   color: var(--text-secondary);
   text-transform: none;
   letter-spacing: 0;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-weight: 500;
 }
 
 .forge-mini-card-title {
   margin: 0;
   font: var(--font-card-title);
-  font-weight: 600;
-  color: var(--text-primary);
+  font-weight: 500;
+  color: var(--text-secondary);
+  line-height: 1.5;
 }
 
 .forge-task-list {
@@ -592,8 +622,15 @@
 .forge-task-item {
   display: flex;
   align-items: center;
-  gap: var(--space-sm);
+  gap: 10px;
   font: var(--font-task);
+  color: var(--text-secondary);
+  line-height: 1.45;
+}
+
+.forge-task-item[data-status="pending"] svg {
+  color: var(--text-muted);
+  opacity: 0.85;
 }
 
 .forge-task-item[data-status="done"] {
@@ -707,20 +744,22 @@
   border-color: var(--text-accent);
 }
 
-/* Composer */
+/* Composer — card flutuante (Lovable), sem linha divisória */
 .forge-composer {
   flex-shrink: 0;
-  margin: 0;
-  padding: 10px 14px 14px;
-  border-radius: 0 0 14px 14px;
-  background: var(--bg-chat);
-  border: none;
-  border-top: 1px solid var(--border-forge);
+  margin: 0 var(--chat-padding) var(--chat-padding);
+  padding: 12px 14px 10px;
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--bg-input) 92%, var(--bg-card) 8%);
+  border: 1px solid color-mix(in srgb, var(--border-forge) 75%, #52525b 25%);
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.02) inset,
+    0 6px 24px rgba(0, 0, 0, 0.28);
 }
 
 .forge-composer--drag-over {
-  border-top-color: var(--border-active);
-  background: color-mix(in srgb, var(--bg-input) 40%, var(--bg-chat));
+  border-color: var(--border-active);
+  background: color-mix(in srgb, var(--bg-input) 75%, var(--text-accent) 5%);
 }
 
 .forge-composer-input {

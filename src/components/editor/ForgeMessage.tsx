@@ -122,55 +122,57 @@ export function ForgeMessage({
       className="forge-chat-item forge-chat-item-assistant group"
       data-testid="forge-message-assistant"
     >
-      {showLatencyThinking && latency && (
-        <ForgeThinking
-          variant="latency"
-          startedAtMs={latency.startedAtMs}
-          durationMs={latency.durationMs}
-          active={latency.active}
-        />
-      )}
+      <div className="forge-assistant-turn">
+        {showLatencyThinking && latency && (
+          <ForgeThinking
+            variant="latency"
+            startedAtMs={latency.startedAtMs}
+            durationMs={latency.durationMs}
+            active={latency.active}
+          />
+        )}
 
-      {showNarration && runView?.narration && (
-        <ForgeNarration text={runView.narration} />
-      )}
+        {showNarration && runView?.narration && (
+          <ForgeNarration text={runView.narration} />
+        )}
 
-      {showJobCard && runView && onOpenInspector && (
-        <ForgeMiniCard
-          data={runView.miniCard}
-          runId={runView.runId}
-          isFocused={isFocused}
-          onOpenInspector={onOpenInspector}
-        />
-      )}
+        {showResponse && (
+          <div className="forge-chat-closing-line forge-chat-prose" data-testid="assistant-closing-text">
+            <MarkdownRenderer>{responseText}</MarkdownRenderer>
+          </div>
+        )}
 
-      {showQualifyPrompt && qualifyPrompt && (
-        <ForgeQualifyPrompt
-          data={qualifyPrompt}
-          disabled={isActive}
-          onSelect={(label) => {
-            const choice = qualifyPrompt.choices.find((c) => c.label === label);
-            onQualifySelect(choice ? formatQualifyChoiceReply(choice) : label);
-          }}
-        />
-      )}
+        {showJobCard && runView && onOpenInspector && (
+          <ForgeMiniCard
+            data={runView.miniCard}
+            runId={runView.runId}
+            isFocused={isFocused}
+            onOpenInspector={onOpenInspector}
+          />
+        )}
 
-      {showPlanPrompt && jobPlan && (
-        <ForgePlanPrompt
-          plan={jobPlan}
-          runId={runView!.runId}
-          disabled={isActive}
-          onOpenPreview={(rid) => onOpenInspector!(rid, "plan")}
-        />
-      )}
+        {showQualifyPrompt && qualifyPrompt && (
+          <ForgeQualifyPrompt
+            data={qualifyPrompt}
+            disabled={isActive}
+            onSelect={(label) => {
+              const choice = qualifyPrompt.choices.find((c) => c.label === label);
+              onQualifySelect(choice ? formatQualifyChoiceReply(choice) : label);
+            }}
+          />
+        )}
 
-      {showResponse && (
-        <div className="forge-chat-closing-line forge-chat-prose" data-testid="assistant-closing-text">
-          <MarkdownRenderer>{responseText}</MarkdownRenderer>
-        </div>
-      )}
+        {showPlanPrompt && jobPlan && (
+          <ForgePlanPrompt
+            plan={jobPlan}
+            runId={runView!.runId}
+            disabled={isActive}
+            onOpenPreview={(rid) => onOpenInspector!(rid, "plan")}
+          />
+        )}
 
-      {showDone && <ForgeDoneBubble />}
+        {showDone && <ForgeDoneBubble />}
+      </div>
 
       {runView?.finished && runView.error && (
         <ForgeErrorCard

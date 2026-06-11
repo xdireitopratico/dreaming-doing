@@ -548,9 +548,11 @@ body:has(.editor-workspace) {
   max-height: 100%;
   border-radius: 14px;
   background: var(--bg-chat);
-  border: 1px solid var(--border-forge);
+  border: 1px solid color-mix(in srgb, var(--border-forge) 80%, #3f3f46 20%);
   overflow: hidden;
-  box-shadow: none;
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.02) inset,
+    0 8px 32px rgba(0, 0, 0, 0.18);
 }
 
 .forge-chat-column {

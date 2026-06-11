@@ -96,9 +96,14 @@ export function ForgeMiniCard({
             </>
           )}
           {data.editedFile && (
-            <span className="forge-mini-card-badge forge-mini-card-badge--edited">
-              Edited <span className="font-mono">{data.editedFile}</span>
-            </span>
+            <>
+              <span className="forge-mini-card-badge forge-mini-card-badge--edited-tag">
+                Edited
+              </span>
+              <span className="forge-mini-card-badge forge-mini-card-badge--edited-file">
+                {data.editedFile}
+              </span>
+            </>
           )}
         </div>
 
