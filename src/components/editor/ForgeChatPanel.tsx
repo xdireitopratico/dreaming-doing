@@ -76,7 +76,7 @@ export function ForgeChatPanel({
   focusedRunId,
   activeRunStartedAtMs,
 }: ForgeChatPanelProps) {
-  const [composerModeLocal, setComposerModeLocal] = useState<AgentComposerMode>("build");
+  const [composerModeLocal, setComposerModeLocal] = useState<AgentComposerMode>("plan");
   const composerMode = composerModeProp ?? composerModeLocal;
   const setComposerMode = onComposerModeChange ?? setComposerModeLocal;
 

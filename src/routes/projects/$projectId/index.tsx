@@ -9,6 +9,7 @@ import { useConnectors } from "@/hooks/useConnectors";
 import { useTasteUiActions } from "@/hooks/useTasteUiActions";
 import type { EditorMainView } from "@/components/editor/editor-views";
 import type { AgentComposerMode } from "@/lib/chat-types";
+import { loadComposerMode, saveComposerMode } from "@/lib/composer-mode";
 import type { Tab } from "@/components/editor/CodeEditor";
 import type { LogEntry } from "@/components/editor/LogPanel";
 import { useAgentRun } from "@/hooks/useAgentRun";
@@ -81,7 +82,24 @@ function EditorPage() {
   );
   const [pickMode, setPickMode] = useState(false);
   const [logs, setLogs] = useState<LogEntry[]>([]);
-  const [composerMode, setComposerMode] = useState<AgentComposerMode>("build");
+  const [composerMode, setComposerModeState] = useState<AgentComposerMode>(() =>
+    loadComposerMode(projectId),
+  );
+
+  const setComposerMode = useCallback(
+    (value: AgentComposerMode | ((prev: AgentComposerMode) => AgentComposerMode)) => {
+      setComposerModeState((prev) => {
+        const next = typeof value === "function" ? value(prev) : value;
+        saveComposerMode(projectId, next);
+        return next;
+      });
+    },
+    [projectId],
+  );
+
+  useEffect(() => {
+    setComposerModeState(loadComposerMode(projectId));
+  }, [projectId]);
   const [promptDraft, setPromptDraft] = useState<string | null>(null);
   const [previewRoute, setPreviewRoute] = useState("/");
   const [previewReloadNonce, setPreviewReloadNonce] = useState(0);

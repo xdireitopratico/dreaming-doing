@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { createProjectFromPrompt } from "@/lib/projects.functions";
+import { bootstrapComposerMode } from "@/lib/composer-mode";
 
 import { toast } from "@/lib/toast";
 import { ForgeIcon } from "@/components/icons/ForgeIcon";
@@ -93,6 +94,7 @@ export function CreateProjectDialog({ open, onClose }: CreateProjectDialogProps)
         },
       });
 
+      bootstrapComposerMode(res.projectId, "plan");
       navigate({ to: "/projects/$projectId", params: { projectId: res.projectId } });
       onClose();
     } catch (e: unknown) {

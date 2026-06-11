@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { toast } from "@/lib/toast";
 import { supabase } from "@/integrations/supabase/client";
 import { createProjectFromPrompt } from "@/lib/projects.functions";
+import { bootstrapComposerMode } from "@/lib/composer-mode";
 
 import { sanitizeNext } from "@/lib/sanitize-next";
 import { MicButton } from "@/components/voice/MicButton";
@@ -111,6 +112,7 @@ export function PromptEngine({
     const warp = playWarp();
     try {
       const res = await createProject({ data: { prompt: v } });
+      bootstrapComposerMode(res.projectId, "plan");
       warp.cancel();
       clearForgeTransitionOverlays();
       navigate({ to: "/projects/$projectId", params: { projectId: res.projectId } });
