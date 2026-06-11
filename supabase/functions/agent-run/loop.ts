@@ -28,6 +28,7 @@ import {
 } from "./conversational.ts";
 import {
   ANTI_LEAK_RULE,
+  buildAgentContextForLlm,
   buildExecuteInstruction,
   buildMobileStackQualifyMessage,
   extractOriginalUserRequest,
@@ -676,6 +677,7 @@ export class AgentLoop {
         needsQualify(this.originalUserRequest, classification, {
           isSeedPlaceholder,
           isFirstUserTurnOnProject: isFirstFreshTurn,
+          planMode: this.planMode,
         })
       ) {
         const qualifyResult = await this.runQualifyPhase(executionModel, this.originalUserRequest);
@@ -1375,10 +1377,16 @@ export class AgentLoop {
       });
     }
 
+    const agentCtx = buildAgentContextForLlm(
+      fileList,
+      projectConfig || "(projeto vazio — sem arquivos de configuração)",
+      manifest || "(projeto vazio)",
+    );
+
     this.state.context = {
       files: fileList,
-      manifest: manifest || "(projeto vazio)",
-      projectConfig: projectConfig || "(projeto vazio — sem arquivos de configuração)",
+      manifest: agentCtx.manifest,
+      projectConfig: agentCtx.projectConfig,
       gitLog: "(não disponível ainda)",
       dbSchema: "(não disponível)",
       lastPlan: "nenhum",
