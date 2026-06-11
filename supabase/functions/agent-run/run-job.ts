@@ -358,8 +358,7 @@ export async function executeAgentJob(
               : typeof preMeta.planSummary === "string"
                 ? preMeta.planSummary
                 : undefined,
-          planHeadline:
-            typeof preMeta.planHeadline === "string" ? preMeta.planHeadline : undefined,
+          planHeadline: typeof preMeta.planHeadline === "string" ? preMeta.planHeadline : undefined,
           planSteps: coercePlanStepsFromMeta(preMeta.steps),
           buildFixResume: preMeta.buildFix === true,
         },

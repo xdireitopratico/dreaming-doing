@@ -221,7 +221,9 @@ export class AgentLoop {
     const planDocument = options?.planSummary?.trim() ?? "";
     const planHeadlineOpt = options?.planHeadline?.trim() ?? "";
     this.planHeadline =
-      planHeadlineOpt || (planDocument ? planDocument.slice(0, 120) : "") || extracted.slice(0, 120);
+      planHeadlineOpt ||
+      (planDocument ? planDocument.slice(0, 120) : "") ||
+      extracted.slice(0, 120);
     this.originalUserRequest = this.approvedPlanBuild && planDocument ? planDocument : extracted;
     this.toolsInvoked = false;
     this.narrationStarted = false;
@@ -2154,10 +2156,7 @@ export class AgentLoop {
   }
 
   /** Checkpoint de comunicação — chat só quando chatVisible; build aprovado usa Inspector por padrão. */
-  private streamNarration(
-    text: string,
-    opts?: { append?: boolean; chatVisible?: boolean },
-  ): void {
+  private streamNarration(text: string, opts?: { append?: boolean; chatVisible?: boolean }): void {
     const chunk = text.trim();
     if (!chunk) return;
     const chatVisible = this.approvedPlanBuild

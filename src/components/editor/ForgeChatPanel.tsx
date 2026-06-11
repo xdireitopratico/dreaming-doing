@@ -199,7 +199,6 @@ export function ForgeChatPanel({
                   running={running}
                   progress={effectiveProgress}
                   activeRunId={activeRunId}
-                  frozenRuns={frozenRuns}
                   pendingPlan={pendingPlan}
                   onResume={onResumeAgent}
                   onRollbackRequest={onRollbackMessage ? requestRollback : undefined}

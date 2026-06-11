@@ -24,7 +24,7 @@ import { ShortcutCheatsheet } from "@/components/editor/ShortcutCheatsheet";
 import { type LogEntry, LogPanel } from "@/components/editor/LogPanel";
 import { AiDiffViewer, type DiffEntry } from "@/components/editor/AiDiffViewer";
 import { needsPlanApprovalNow, resolvePendingPlan } from "@/lib/plan-message-meta";
-import { PENDING_RUN_ID, resolveAssistantProgress } from "@/lib/lovable-thread";
+import { PENDING_RUN_ID } from "@/lib/lovable-thread";
 import {
   hasMaterializedCardSnapshot,
   progressFromAssistantMessage,
@@ -371,14 +371,7 @@ export function EditorPageLayout({
 
     const frozen = agent.frozenRuns.get(runId);
     if (frozen) {
-      return (
-        resolveAssistantProgress({
-          kind: "assistant",
-          frozen,
-          runId,
-          isActive: false,
-        }) ?? null
-      );
+      return { ...agent.progress, ...frozen };
     }
     if (historical) return progressFromAssistantMessage(historical);
     return null;

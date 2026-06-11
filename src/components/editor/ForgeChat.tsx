@@ -5,6 +5,7 @@ import type { AgentProgress, PendingPlan } from "@/lib/agent-progress";
 import type { ChatMessage } from "@/lib/chat-types";
 
 import { ForgeMessage } from "@/components/editor/ForgeMessage";
+import { AssistantTurn } from "@/components/editor/AssistantTurn";
 import { ErrorHintCard } from "@/components/editor/ErrorHintCard";
 import {
   e2bErrorHint,
@@ -13,11 +14,7 @@ import {
   timeoutHint,
   zombieRunHint,
 } from "@/lib/llm-error-hints";
-import {
-  buildLovableThread,
-  type FrozenRunSnapshot,
-  resolveAssistantProgress,
-} from "@/lib/lovable-thread";
+import { buildChatThread, resolveAssistantProgress } from "@/lib/chat-thread";
 import { buildAgentRunView, isRunEffectivelyActive, shouldShowJobCard } from "@/lib/forge-run";
 import { isAgentJobMessage } from "@/lib/assistant-run-progress";
 import { resolveJobPlanForRun, storedPlanFromMessage } from "@/lib/plan-message-meta";
@@ -29,7 +26,6 @@ export type ForgeChatProps = {
   running: boolean;
   progress: AgentProgress;
   activeRunId?: string | null;
-  frozenRuns?: ReadonlyMap<string, FrozenRunSnapshot>;
   pendingPlan?: PendingPlan | null;
   onResume?: () => void;
   onRollbackRequest?: (req: RollbackRequest) => void;
@@ -44,7 +40,6 @@ export function ForgeChat({
   running,
   progress,
   activeRunId,
-  frozenRuns,
   pendingPlan,
   onResume,
   onRollbackRequest,
@@ -70,13 +65,12 @@ export function ForgeChat({
 
   const thread = useMemo(
     () =>
-      buildLovableThread(messages, progress, {
+      buildChatThread(messages, progress, {
         activeRunId,
         running,
-        frozenRuns,
         pendingTurnStartedAtMs: activeRunStartedAtMs,
       }),
-    [messages, progress, activeRunId, running, frozenRuns, activeRunStartedAtMs],
+    [messages, progress, activeRunId, running, activeRunStartedAtMs],
   );
 
   const resolveErrorHint = useCallback((error: string) => {
@@ -178,11 +172,7 @@ export function ForgeChat({
           : null;
 
         const runStartedAtMs =
-          item.runId === activeRunId
-            ? (activeRunStartedAtMs ?? null)
-            : item.frozen?.latencyThoughtMs != null
-              ? Date.now() - item.frozen.latencyThoughtMs
-              : null;
+          item.runId === activeRunId ? (activeRunStartedAtMs ?? null) : null;
 
         const runView = resolved
           ? buildAgentRunView(runId, resolved, {
@@ -222,26 +212,25 @@ export function ForgeChat({
           (!!pendingPlan?.runId && pendingPlan.runId === item.runId) ||
           msgPlanMeta?.plan.runId === item.runId;
         const planAlreadyDecided = planStatus === "approved" || planStatus === "rejected";
-        const planInteractive =
+        const planTeaser =
           !!onOpenInspector &&
           !!planForPrompt?.steps?.length &&
           planRunMatches &&
           !planAlreadyDecided &&
-          (msgPlanMeta?.status === "pending" || (planAwaitingApproval && !running && !slotActive));
+          (msgPlanMeta?.status === "pending" || planAwaitingApproval);
 
         return (
-          <ForgeMessage
+          <AssistantTurn
             key={stableKey}
-            role="assistant"
             message={item.message}
             runView={runView}
+            progress={resolved}
             isActive={slotActive}
             isFocused={!!item.runId && focusedRunId === item.runId}
-            showJobCard={showJobCard}
+            showJobCard={showJobCard || planTeaser}
             qualifyInteractive={qualifyInteractive}
-            planInteractive={planInteractive}
+            planTeaser={planTeaser}
             jobPlan={planForPrompt}
-            planStatus={planStatus}
             onQualifySelect={onQualifySelect}
             running={running}
             onCopy={handleCopy}

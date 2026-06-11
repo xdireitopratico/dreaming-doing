@@ -14,6 +14,10 @@ export type MiniCardStatus = "thinking" | "working" | "done" | "failed";
 export type ForgeMiniCardData = {
   /** Título da sessão quando terminal (ex.: «Brainstorm de app mobile»). */
   title: string;
+  /** Header Lovable: «Edited App.tsx», «Running command», «Plan ready». */
+  header: string;
+  /** Subtitle rotativo — briefing da tarefa ativa. */
+  subtitle: string;
   /** Briefings rotativos enquanto o job está ativo — resumo miniatura da timeline. */
   liveBriefings: string[];
   status: MiniCardStatus;
@@ -458,7 +462,100 @@ function lastEditedFile(progress: AgentProgress): string | null {
     const d = progress.diffs[i];
     if (d?.path) return fileBase(d.path);
   }
+  for (let i = progress.tools.length - 1; i >= 0; i--) {
+    const t = progress.tools[i];
+    const name = t?.name;
+    if (name === "fs_write" || name === "fs_edit") {
+      const path = pathFromArgs(t.args);
+      if (path) return fileBase(path);
+    }
+  }
   return null;
+}
+
+function hasActiveShellTool(progress: AgentProgress): boolean {
+  return progress.tools.some((t) => t.name === "shell_exec" && t.ok === undefined);
+}
+
+/** Header + subtitle do mini-card no estilo Lovable. */
+export function buildMiniCardHeader(
+  progress: AgentProgress,
+  running: boolean,
+  opts: {
+    editedFile?: string | null;
+    liveBriefings: string[];
+    sessionTitle: string;
+    planReady?: boolean;
+    briefingIndex?: number;
+  },
+): { header: string; subtitle: string } {
+  const edited = opts.editedFile?.trim();
+  const briefings = opts.liveBriefings.length > 0 ? opts.liveBriefings : [opts.sessionTitle];
+  const idx = opts.briefingIndex ?? 0;
+  const subtitle = briefings[idx % briefings.length] ?? opts.sessionTitle;
+
+  if (opts.planReady) {
+    return { header: "Plan ready", subtitle };
+  }
+  if (edited && (running || !progress.finished)) {
+    return { header: `Edited ${edited}`, subtitle };
+  }
+  if (hasActiveShellTool(progress) && running) {
+    return { header: "Running command", subtitle };
+  }
+  if (progress.finished && edited) {
+    return { header: `Edited ${edited}`, subtitle: opts.sessionTitle };
+  }
+  if (running) {
+    return { header: "Working", subtitle };
+  }
+  return { header: opts.sessionTitle, subtitle };
+}
+
+const STATUS_CHIP_VERBS: Record<string, string> = {
+  fs_read: "Reading",
+  fs_read_many: "Reading files",
+  fs_list: "Listing",
+  fs_search: "Searching",
+  fs_glob: "Searching",
+  fs_write: "Writing",
+  fs_edit: "Editing",
+  shell_exec: "Running command",
+  web_search: "Searching web",
+  web_fetch: "Fetching",
+};
+
+function statusChipLabel(name: string, args?: Record<string, unknown>): string {
+  const verb = STATUS_CHIP_VERBS[name] ?? "Working on";
+  const path = pathFromArgs(args);
+  const file = path ? fileBase(path) : "";
+  if (file) return `${verb} ${file}…`;
+  if (name === "shell_exec") return "Running command…";
+  return `${verb}…`;
+}
+
+/** Até 2 chips de status curtos antes do mini-card (estilo Lovable image 4). */
+export function collectStatusChips(progress: AgentProgress, running: boolean): string[] {
+  if (!running || progress.finished) return [];
+
+  const chips: string[] = [];
+  const seen = new Set<string>();
+
+  for (const tool of [...progress.tools].reverse()) {
+    if (tool.ok !== undefined) continue;
+    const label = statusChipLabel(tool.name, tool.args);
+    if (seen.has(label)) continue;
+    seen.add(label);
+    chips.push(label);
+    if (chips.length >= 2) break;
+  }
+
+  if (chips.length === 0 && progress.message?.trim()) {
+    const m = progress.message.trim();
+    if (m.length <= 72) chips.push(m);
+  }
+
+  return chips;
 }
 
 export function isRunEffectivelyActive(progress: AgentProgress, slotActive = false): boolean {
@@ -581,10 +678,23 @@ export function buildAgentRunView(
       ? narrationBody
       : null;
 
+  const planReady =
+    !!jobPlan?.steps?.length &&
+    (progress.awaitingKind === "plan_approval" ||
+      (progress.pendingPlan?.steps?.length ?? 0) > 0);
+  const { header, subtitle } = buildMiniCardHeader(progress, running, {
+    editedFile,
+    liveBriefings,
+    sessionTitle,
+    planReady,
+  });
+
   return {
     runId,
     miniCard: {
       title: sessionTitle,
+      header,
+      subtitle,
       liveBriefings,
       status,
       tasks,
@@ -592,10 +702,7 @@ export function buildAgentRunView(
       editedFile,
       fileCount: progress.diffs.length || progress.deliveryFiles?.length,
       hasPlan: !!jobPlan?.steps?.length,
-      planReady:
-        !!jobPlan?.steps?.length &&
-        (progress.awaitingKind === "plan_approval" ||
-          (progress.pendingPlan?.steps?.length ?? 0) > 0),
+      planReady,
     },
     thinking,
     latencyThinking,

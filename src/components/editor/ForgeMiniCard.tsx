@@ -9,13 +9,20 @@ type ForgeMiniCardProps = {
   data: ForgeMiniCardData;
   runId: string;
   isFocused?: boolean;
+  planTeaser?: boolean;
   onOpenInspector: (runId: string, tab?: "timeline" | "changes" | "plan") => void;
 };
 
-export function ForgeMiniCard({ data, runId, isFocused, onOpenInspector }: ForgeMiniCardProps) {
+export function ForgeMiniCard({
+  data,
+  runId,
+  isFocused,
+  planTeaser = false,
+  onOpenInspector,
+}: ForgeMiniCardProps) {
   const isLive = data.status === "working" || data.status === "thinking";
-  const showWorkingBadge = isLive;
-  const briefings = data.liveBriefings.length > 0 ? data.liveBriefings : [data.title];
+  const showWorkingBadge = isLive && !data.planReady;
+  const briefings = data.liveBriefings.length > 0 ? data.liveBriefings : [data.subtitle || data.title];
   const [briefingIndex, setBriefingIndex] = useState(0);
 
   useEffect(() => {
@@ -29,17 +36,18 @@ export function ForgeMiniCard({ data, runId, isFocused, onOpenInspector }: Forge
     return () => window.clearInterval(id);
   }, [isLive, briefings.length, briefings.join("\u0000")]);
 
-  const displayTitle = isLive
-    ? (briefings[briefingIndex % briefings.length] ?? data.title)
-    : data.title;
+  const displayHeader = data.header || data.title;
+  const displaySubtitle = isLive
+    ? (briefings[briefingIndex % briefings.length] ?? data.subtitle)
+    : data.subtitle || data.title;
 
-  const hint = data.planReady
-    ? "Revisar plano no preview →"
+  const hint = data.planReady || planTeaser
+    ? "Revisar plano no inspector →"
     : data.status === "done" && data.fileCount
       ? `${data.fileCount} arquivos alterados →`
       : data.hasPlan
         ? "Ver plano no inspector →"
-        : "Timeline completa →";
+        : "Detalhes completos →";
 
   const statusClass = showWorkingBadge
     ? "forge-mini-card--working"
@@ -60,8 +68,8 @@ export function ForgeMiniCard({ data, runId, isFocused, onOpenInspector }: Forge
       <button
         type="button"
         className="forge-mini-card-body"
-        onClick={() => onOpenInspector(runId, data.hasPlan ? "plan" : "timeline")}
-        aria-label={`Job: ${displayTitle}`}
+        onClick={() => onOpenInspector(runId, data.planReady || planTeaser ? "plan" : "timeline")}
+        aria-label={`Job: ${displayHeader}`}
       >
         <div className="forge-mini-card-header">
           {showWorkingBadge && (
@@ -70,13 +78,13 @@ export function ForgeMiniCard({ data, runId, isFocused, onOpenInspector }: Forge
               <span className="forge-mini-card-badge forge-mini-card-badge--working">Working…</span>
             </>
           )}
-          {data.planReady && (
+          {(data.planReady || planTeaser) && (
             <>
               <span className="forge-mini-card-dot forge-mini-card-dot--working" aria-hidden />
-              <span className="forge-mini-card-badge forge-mini-card-badge--working">Plano</span>
+              <span className="forge-mini-card-badge forge-mini-card-badge--working">Plan ready</span>
             </>
           )}
-          {data.status === "done" && !data.planReady && (
+          {data.status === "done" && !data.planReady && !planTeaser && (
             <>
               <span className="forge-mini-card-dot forge-mini-card-dot--done" aria-hidden />
               <span className="forge-mini-card-badge forge-mini-card-badge--done">Done</span>
@@ -88,23 +96,14 @@ export function ForgeMiniCard({ data, runId, isFocused, onOpenInspector }: Forge
               <span className="forge-mini-card-badge forge-mini-card-badge--failed">Failed</span>
             </>
           )}
-          {data.editedFile && (
-            <>
-              <span className="forge-mini-card-badge forge-mini-card-badge--edited-tag">
-                Edited
-              </span>
-              <span className="forge-mini-card-badge forge-mini-card-badge--edited-file">
-                {data.editedFile}
-              </span>
-            </>
-          )}
         </div>
 
+        <p className="forge-mini-card-header-line">{displayHeader}</p>
         <p
-          key={isLive ? `${briefingIndex}-${displayTitle}` : data.title}
+          key={isLive ? `${briefingIndex}-${displaySubtitle}` : displaySubtitle}
           className={cn("forge-mini-card-title", isLive && "forge-mini-card-title--live")}
         >
-          {displayTitle}
+          {displaySubtitle}
         </p>
 
         <ForgeTaskList tasks={data.tasks} />

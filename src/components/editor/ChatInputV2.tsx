@@ -56,10 +56,10 @@ export function ChatInputV2({
 
   const isRunning = running || agentBusy;
   const placeholder = planPending
-    ? "Refinar o plano ou enfileirar mensagem…"
+    ? "Diga o que fazer em vez disso…"
     : isRunning
-      ? "Enfileirar mensagem de acompanhamento…"
-      : "Descreva o que quer construir...";
+      ? "Queue follow-up…"
+      : "Descreva o que quer construir…";
 
   useEffect(() => {
     const timer = setTimeout(() => {

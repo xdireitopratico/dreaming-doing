@@ -69,11 +69,23 @@ export function useAgentRealtime(
     );
 
     // messages changes (assistant replies, plan proposals)
-    channel.on("postgres_changes", { event: "*", schema: "public", table: "messages" }, () => {
-      if (conversationId) {
-        queryClient.invalidateQueries({ queryKey: ["messages", conversationId] });
-      }
-    });
+    const messagesFilter = conversationId
+      ? `conversation_id=eq.${conversationId}`
+      : undefined;
+    channel.on(
+      "postgres_changes",
+      {
+        event: "*",
+        schema: "public",
+        table: "messages",
+        ...(messagesFilter ? { filter: messagesFilter } : {}),
+      },
+      () => {
+        if (conversationId) {
+          queryClient.invalidateQueries({ queryKey: ["messages", conversationId] });
+        }
+      },
+    );
 
     channel.subscribe((status, err) => {
       if (status === "CLOSED" || status === "CHANNEL_ERROR") {

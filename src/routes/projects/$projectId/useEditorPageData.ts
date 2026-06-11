@@ -60,7 +60,8 @@ export function useEditorPageData({ projectId, search, agent, navigate }: UseEdi
         .from("messages")
         .select("*")
         .eq("conversation_id", conversation.id)
-        .order("created_at", { ascending: true });
+        .order("created_at", { ascending: true })
+        .order("id", { ascending: true });
       return (data ?? []) as Msg[];
     },
     enabled: !!conversation,

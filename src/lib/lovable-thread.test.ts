@@ -102,27 +102,21 @@ describe("buildLovableThread", () => {
     expect(thread[3]).toMatchObject({ isActive: true, runId: "run-2" });
   });
 
-  it("frozen após run sem assistant no DB", () => {
+  it("erro terminal sem activeRunId aparece via overlay efêmero", () => {
     const messages = [msg("u1", "user", "x")];
-    const frozen = new Map([
-      [
-        "r1",
-        freezeSnapshot({
-          ...initialAgentProgress,
-          finished: true,
-          error: "falhou",
-          streamText: "parcial",
-        }),
-      ],
-    ]);
-    const thread = buildLovableThread(messages, initialAgentProgress, {
+    const progress = {
+      ...initialAgentProgress,
+      finished: true,
+      error: "falhou",
+      streamText: "parcial",
+    };
+    const thread = buildLovableThread(messages, progress, {
       running: false,
-      activeRunId: "r1",
-      frozenRuns: frozen,
+      activeRunId: null,
     });
     expect(thread).toHaveLength(2);
     const slot = thread[1] as Extract<(typeof thread)[number], { kind: "assistant" }>;
-    expect(slot.frozen?.error).toBe("falhou");
+    expect(slot.live?.error).toBe("falhou");
     expect(slot.isActive).toBe(false);
   });
 
@@ -175,7 +169,7 @@ describe("buildLovableThread", () => {
     });
   });
 
-  it("frozen preserva currentStep e deliveryFiles no resolve", () => {
+  it("freezeSnapshot preserva currentStep e deliveryFiles", () => {
     const frozen = freezeSnapshot({
       ...initialAgentProgress,
       finished: true,
@@ -184,14 +178,9 @@ describe("buildLovableThread", () => {
       deliveryFiles: ["app/build.gradle.kts"],
       streamText: "Chunk entregue",
     });
-    const resolved = resolveAssistantProgress({
-      kind: "assistant",
-      frozen,
-      isActive: false,
-    });
-    expect(resolved?.currentStep).toBe(5);
-    expect(resolved?.totalSteps).toBe(10);
-    expect(resolved?.deliveryFiles).toEqual(["app/build.gradle.kts"]);
+    expect(frozen.currentStep).toBe(5);
+    expect(frozen.totalSteps).toBe(10);
+    expect(frozen.deliveryFiles).toEqual(["app/build.gradle.kts"]);
   });
 
   it("merge assistants consecutivos com mesmo runId", () => {
@@ -226,50 +215,45 @@ describe("buildLovableThread", () => {
     expect(assistants[0]).toMatchObject({ isActive: true, runId: "run-x" });
   });
 
-  it("mini-card persiste: frozen histórico em turnos anteriores enquanto novo run ativo", () => {
+  it("mini-card persiste: DB histórico em turnos anteriores enquanto novo run ativo", () => {
     const messages: ChatMessage[] = [
       msg("u1", "user", "padaria"),
       {
         ...msg("a1", "assistant", "Entrega 1"),
         runId: "run-1",
-        meta: { runId: "run-1", finishedAt: "2026-01-01T00:00:00Z" },
+        meta: {
+          runId: "run-1",
+          finishedAt: "2026-01-01T00:00:00Z",
+          cardSnapshot: {
+            streamText: "Entrega 1",
+            finished: true,
+            lastFinishOk: true,
+            deliveryFiles: ["src/App.tsx"],
+            timeline: [],
+            tools: [],
+            diffs: [],
+            phase: "done",
+          },
+        },
       },
       msg("u2", "user", "adicione footer"),
     ];
-    const frozen = new Map([
-      [
-        "run-1",
-        freezeSnapshot({
-          ...initialAgentProgress,
-          finished: true,
-          lastFinishOk: true,
-          deliveryFiles: ["src/App.tsx"],
-        }),
-      ],
-    ]);
     const progress = { ...initialAgentProgress, phase: "execute", message: "Trabalhando…" };
     const thread = buildLovableThread(messages, progress, {
       running: true,
       activeRunId: "run-2",
-      frozenRuns: frozen,
     });
     expect(thread.map((t) => t.kind)).toEqual(["user", "assistant", "user", "assistant"]);
     const first = thread[1] as Extract<(typeof thread)[number], { kind: "assistant" }>;
     const second = thread[3] as Extract<(typeof thread)[number], { kind: "assistant" }>;
     expect(first.runId).toBe("run-1");
-    expect(first.frozen?.deliveryFiles).toEqual(["src/App.tsx"]);
+    expect(resolveAssistantProgress(first)?.deliveryFiles).toEqual(["src/App.tsx"]);
     expect(resolveAssistantProgress(first)?.finished).toBe(true);
     expect(second.isActive).toBe(true);
     expect(second.runId).toBe("run-2");
   });
 
-  it("DB materializado (cardSnapshot) vence frozen stale no resolve", () => {
-    const staleFrozen = freezeSnapshot({
-      ...initialAgentProgress,
-      finished: true,
-      streamText: "stale",
-      deliveryFiles: [],
-    });
+  it("DB materializado (cardSnapshot) resolve progresso do histórico", () => {
     const message: ChatMessage = {
       id: "a1",
       role: "assistant",
@@ -296,7 +280,6 @@ describe("buildLovableThread", () => {
       isActive: false,
       runId: "run-z",
       message,
-      frozen: staleFrozen,
     });
     expect(resolved?.streamText).toBe("Do banco.");
     expect(resolved?.deliveryFiles).toEqual(["src/App.tsx"]);
@@ -321,30 +304,7 @@ describe("buildLovableThread", () => {
     expect(resolved?.summary).toBeNull();
   });
 
-  it("frozen persiste sem activeRunId e sem msg DB (append-only)", () => {
-    const messages = [msg("u1", "user", "padaria")];
-    const frozen = new Map([
-      [
-        "run-gone",
-        freezeSnapshot({
-          ...initialAgentProgress,
-          finished: true,
-          lastFinishOk: true,
-          timeline: [{ type: "tool_start", data: { name: "fs_read" }, timestamp: 1 }],
-        }),
-      ],
-    ]);
-    const thread = buildLovableThread(messages, initialAgentProgress, {
-      running: false,
-      activeRunId: null,
-      frozenRuns: frozen,
-    });
-    expect(thread).toHaveLength(2);
-    const slot = thread[1] as Extract<(typeof thread)[number], { kind: "assistant" }>;
-    expect(slot.runId).toBe("run-gone");
-    expect(slot.frozen?.finished).toBe(true);
-    expect(resolveAssistantProgress(slot)?.timeline.length).toBeGreaterThan(0);
-  });
+
 
   it("concierge sem runId: resposta live aparece no turno pendente", () => {
     const messages = [msg("u1", "user", "quero uma landing de cafeteria")];
@@ -378,46 +338,23 @@ describe("buildLovableThread", () => {
     expect(slot.live?.finished).toBe(true);
   });
 
-  it("frozen no turno anterior não rouba slot do novo user", () => {
+  it("novo run ativo ancora no último user sem roubar turnos anteriores", () => {
     const messages: ChatMessage[] = [
       msg("u1", "user", "primeira"),
       { ...msg("a1", "assistant", "ok"), runId: "run-1" },
       msg("u2", "user", "segunda"),
       msg("u3", "user", "terceira agora"),
     ];
-    const frozen = new Map([
-      [
-        "run-2",
-        freezeSnapshot({
-          ...initialAgentProgress,
-          finished: true,
-          lastFinishOk: true,
-          streamText: "entrega parcial",
-          pendingPlan: {
-            planId: "p1",
-            summary: "Plano",
-            steps: [{ id: "s1", type: "custom" as const, description: "Passo 1", enabled: true }],
-            ttlMs: 60_000,
-            proposedAt: Date.now(),
-            runId: "run-2",
-            projectId: "test-project",
-          },
-          awaitingKind: "plan_approval",
-        }),
-      ],
-    ]);
     const progress = { ...initialAgentProgress, phase: "classify", statusHint: "Iniciando…" };
     const thread = buildLovableThread(messages, progress, {
       running: true,
       activeRunId: "run-3",
-      frozenRuns: frozen,
     });
 
     expect(thread.map((t) => t.kind)).toEqual([
       "user",
       "assistant",
       "user",
-      "assistant",
       "user",
       "assistant",
     ]);
@@ -426,13 +363,6 @@ describe("buildLovableThread", () => {
     const liveSlot = thread[u3Idx + 1] as Extract<(typeof thread)[number], { kind: "assistant" }>;
     expect(liveSlot.runId).toBe("run-3");
     expect(liveSlot.isActive).toBe(true);
-
-    const frozenSlot = thread.find((t) => t.kind === "assistant" && t.runId === "run-2") as Extract<
-      (typeof thread)[number],
-      { kind: "assistant" }
-    >;
-    expect(frozenSlot).toBeDefined();
-    expect(thread.indexOf(frozenSlot)).toBeLessThan(u3Idx);
   });
 
   it("erro de connect sem runId aparece no turno pendente", () => {

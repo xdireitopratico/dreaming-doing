@@ -95,6 +95,28 @@
   max-width: 100%;
 }
 
+.forge-status-chip {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  max-width: 100%;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--bg-card) 88%, #fff 4%);
+  border: 1px solid var(--border);
+  font: var(--font-task);
+  color: var(--text-secondary);
+  line-height: 1.35;
+}
+
+.forge-mini-card-header-line {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--text-primary);
+}
+
 .forge-chat-item-user {
   display: flex;
   flex-direction: column;

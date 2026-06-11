@@ -30,6 +30,7 @@ import type { ProjectStackKind } from "@/lib/detect-project-kind";
 import type { useAgentRun } from "@/hooks/useAgentRun";
 import type { usePreviewBoot } from "@/hooks/usePreviewBoot";
 import { toast } from "@/lib/toast";
+import { sendMessage } from "@/lib/send-message";
 import {
   FORGE_UI_BUNDLED_MARKER,
   bundledMarkerContent,
@@ -350,16 +351,6 @@ export function useEditorPageHandlers({
         needsPlanApprovalNow(agent.progress.pendingPlan, chatMessages) &&
         !!resolvePendingPlan(agent.progress.pendingPlan, chatMessages);
 
-      const messageParts =
-        parts && parts.length > 0
-          ? parts
-          : [
-              {
-                type: "text" as const,
-                text,
-              },
-            ];
-
       const sendMode = (mode ?? composerMode) as AgentComposerMode;
 
       void qc.invalidateQueries({ queryKey: ["agent-runs", projectId] });
@@ -367,65 +358,48 @@ export function useEditorPageHandlers({
 
       const kind = resolveSessionKind(tasteQuota);
       const agentBusy = isAgentBusy();
-      const shouldQueue = agentBusy || planAwaiting;
 
-      const { error } = await supabase.from("messages").insert({
-        conversation_id: conversation.id,
-        role: "user",
-        parts: messageParts,
-        meta: shouldQueue ? { mode: sendMode, queued: true } : { mode: sendMode },
-      });
-
-      if (error) {
-        toast.error("Erro ao enviar mensagem");
-        logEditorTelemetryEvent("agent", "chat_send_fail", "error", error.message.slice(0, 200));
-        return;
-      }
-
-      logEditorTelemetryEvent("agent", "chat_send", "info", sendMode);
-      void qc.invalidateQueries({ queryKey: ["messages", conversation.id] });
-
-      if (!shouldQueue) {
-        agent.beginPendingTurn();
-      }
-
-      if (shouldQueue) {
-        const queued = await agent.queueMessage(
+      await sendMessage(
+        {
+          text,
+          mode,
+          parts,
+          composerMode,
+          conversationId: conversation.id,
           projectId,
-          conversation.id,
           kind,
-          undefined,
-          sendMode,
-        );
-        if (!queued.ok) {
-          if (planAwaiting) {
-            toast.error(
-              queued.message ??
-                "Não foi possível enfileirar com o plano pendente — aprove ou rejeite o plano e envie de novo.",
-            );
-            return;
-          }
-          if (!agentBusy) {
-            agent.beginPendingTurn();
-            const ok = await runAgent(kind);
-            if (!ok) agent.clearPendingTurn();
-            return;
-          }
-          toast.error(queued.message ?? "Erro ao enfileirar mensagem");
-          return;
-        }
-        toast.success(
-          queued.message ??
-            (planAwaiting
-              ? "Mensagem na fila — aprove ou rejeite o plano no inspector para continuar."
-              : "Mensagem na fila — o agente processará quando terminar."),
-        );
-        return;
-      }
-      const ok = await runAgent(kind);
-      if (!ok) {
-        agent.clearPendingTurn();
-      }
+          agentBusy,
+          planAwaiting,
+        },
+        {
+          insertUserMessage: async (conversationId, messageParts, meta) => {
+            const { error } = await supabase.from("messages").insert({
+              conversation_id: conversationId,
+              role: "user",
+              parts: messageParts,
+              meta: meta as import("@/integrations/supabase/types").Json,
+            });
+            return { error: error?.message ?? null };
+          },
+          queueMessage: async (pid, cid, sessionKind, queueMode) =>
+            agent.queueMessage(pid, cid, sessionKind, undefined, queueMode),
+          runAgent: (sessionKind) => runAgent(sessionKind),
+          beginPendingTurn: () => agent.beginPendingTurn(),
+          clearPendingTurn: () => agent.clearPendingTurn(),
+          onInserted: () => {
+            logEditorTelemetryEvent("agent", "chat_send", "info", sendMode);
+            void qc.invalidateQueries({ queryKey: ["messages", conversation.id] });
+          },
+          onQueued: (message) => toast.success(message),
+          onError: (message) => {
+            toast.error(message);
+            logEditorTelemetryEvent("agent", "chat_send_fail", "error", message.slice(0, 200));
+          },
+          onRunFailed: () => {
+            toast.error("Não foi possível iniciar o agente — verifique API e tente de novo.");
+          },
+        },
+      );
     },
     [
       conversation,
