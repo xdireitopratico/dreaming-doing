@@ -40,6 +40,13 @@ import {
 - **NavShell** + **FooterColumns**: layout completo
 - **StatsRibbon**, **PricingTiers**, **TestimonialCarousel**: prova social e conversão
 
+**ADAPTAÇÃO ESTRUTURAL POR DOMÍNIO (OBRIGATÓRIO — adapte a composição ao que o usuário pediu):**
+O design system é uma estrutura, não um template fixo. Mapeie o domínio do pedido do usuário para a forma como os composites são usados:
+- Padaria / food / físico: HeroSignature com tom quente/apetitoso (pão, forno, ingredientes), BentoGrid como cards de produtos/preços/comida, FeatureMatrix como "por que nos escolher" com ícones de qualidade/frescura, TestimonialCarousel com clientes reais comendo.
+- SaaS / app / ferramenta: HeroSignature mais funcional, BentoGrid ou FeatureMatrix para features técnicas, StatsRibbon para métricas/impacto, PricingTiers se for produto pago.
+- Página de vendas / curso / conversão: HeroSignature forte com oferta clara, CTASignature dominante, PricingTiers + TestimonialCarousel + StatsRibbon como prova social pesada.
+NUNCA use a mesma composição genérica para domínios diferentes. O plano e a implementação devem refletir o "sabor" estrutural correto do pedido.
+
 ### 2. TOKENS VIA @THEME (Tailwind v4) — em src/index.css:
 @theme {
   --color-brand-500: #FFB627; --color-brand-600: #FF7A1A; --color-accent-500: #22C55E;
@@ -292,9 +299,9 @@ const PROMPTS: Record<ProjectTemplateId, string> = {
   "vite-react": VITE_REACT_PROMPT,
   "nextjs-app-router": NEXTJS_APP_ROUTER_PROMPT,
   "tanstack-start": TANSTACK_START_PROMPT,
-  "expo": EXPO_PROMPT,
+  expo: EXPO_PROMPT,
   "android-native": ANDROID_NATIVE_PROMPT,
-  "astro": ASTRO_PROMPT,
+  astro: ASTRO_PROMPT,
   "node-api": NODE_API_PROMPT,
   "static-html": STATIC_HTML_PROMPT,
   custom: CUSTOM_PROMPT,
@@ -305,32 +312,43 @@ export function getSystemPrompt(template: string | null | undefined): string {
   return PROMPTS[id] ?? PROMPTS["vite-react"];
 }
 
-export { buildStackContext, stackPromptAddon, type DeployTarget, type StackContext } from "../_shared/stack-context.ts";
+export {
+  buildStackContext,
+  stackPromptAddon,
+  type DeployTarget,
+  type StackContext,
+} from "../_shared/stack-context.ts";
 
 const STACK_ENFORCEMENT_LABELS: Record<string, { name: string; constraint: string }> = {
   "vite-react": {
     name: "Vite + React + TypeScript + Tailwind v4",
-    constraint: "Todo código DEVE ser React/TypeScript. Use src/App.tsx como entry. NÃO gere Android/Kotlin, Swift, Flutter ou qualquer stack não-web a menos que o usuário peça EXPLICITAMENTE a troca.",
+    constraint:
+      "Todo código DEVE ser React/TypeScript. Use src/App.tsx como entry. NÃO gere Android/Kotlin, Swift, Flutter ou qualquer stack não-web a menos que o usuário peça EXPLICITAMENTE a troca.",
   },
-  "expo": {
+  expo: {
     name: "Expo (React Native + Web)",
-    constraint: "Todo código DEVE ser Expo/React Native. Use app/ directory (Expo Router). NÃO gere Vite-only, Android/Kotlin nativo, ou Flutter a menos que o usuário peça EXPLICITAMENTE a troca.",
+    constraint:
+      "Todo código DEVE ser Expo/React Native. Use app/ directory (Expo Router). NÃO gere Vite-only, Android/Kotlin nativo, ou Flutter a menos que o usuário peça EXPLICITAMENTE a troca.",
   },
   "android-native": {
     name: "Android Nativo (Kotlin/Gradle)",
-    constraint: "Todo código DEVE ser Kotlin/Gradle (app/src/main). NÃO gere React, Vite, Expo, ou qualquer framework web como stack principal a menos que o usuário peça EXPLICITAMENTE a troca.",
+    constraint:
+      "Todo código DEVE ser Kotlin/Gradle (app/src/main). NÃO gere React, Vite, Expo, ou qualquer framework web como stack principal a menos que o usuário peça EXPLICITAMENTE a troca.",
   },
   "nextjs-app-router": {
     name: "Next.js 15 App Router",
-    constraint: "Todo código DEVE usar Next.js App Router (app/ directory). NÃO gere Vite-only, Expo, ou Android nativo a menos que o usuário peça EXPLICITAMENTE a troca.",
+    constraint:
+      "Todo código DEVE usar Next.js App Router (app/ directory). NÃO gere Vite-only, Expo, ou Android nativo a menos que o usuário peça EXPLICITAMENTE a troca.",
   },
   "tanstack-start": {
     name: "TanStack Start (React + SSR)",
-    constraint: "Todo código DEVE usar TanStack Start/Router. NÃO gere Next.js, Expo, ou Android nativo a menos que o usuário peça EXPLICITAMENTE a troca.",
+    constraint:
+      "Todo código DEVE usar TanStack Start/Router. NÃO gere Next.js, Expo, ou Android nativo a menos que o usuário peça EXPLICITAMENTE a troca.",
   },
-  "astro": {
+  astro: {
     name: "Astro (Content-first)",
-    constraint: "Todo código DEVE usar Astro (.astro files, islands). NÃO gere Next.js, Vite puro, ou Android nativo a menos que o usuário peça EXPLICITAMENTE a troca.",
+    constraint:
+      "Todo código DEVE usar Astro (.astro files, islands). NÃO gere Next.js, Vite puro, ou Android nativo a menos que o usuário peça EXPLICITAMENTE a troca.",
   },
 };
 

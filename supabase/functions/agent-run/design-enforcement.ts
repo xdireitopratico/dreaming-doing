@@ -1,7 +1,7 @@
 // design-enforcement.ts — Regras anti-genérico espelhadas do @forge/ui (Edge/Deno standalone).
 
 export const DESIGN_MISSION =
-  "O usuário recebe, sem esforço, design absurdamente único — multi-componente, alta complexidade, NUNCA página branca + CTA azul.";
+  "O usuário recebe, sem esforço, design absurdamente único — multi-componente, alta complexidade, NUNCA página branca + CTA azul. O design system é uma ESTRUTURA que deve ser ADAPTADA ao domínio específico do pedido (padaria usa composições quentes e de produto; app usa técnicas; sales usa conversão).";
 
 export const REQUIRED_COMPOSITES = [
   "HeroSignature",
@@ -62,13 +62,22 @@ export function scanFileForViolations(file: string, code: string): DesignViolati
     INVALID_FORGE_UI_DEEP_IMPORT.lastIndex = 0;
   }
 
-  const hasUIComponents = /<(Button|Input|Card|Dialog|HeroSignature|BentoGrid|CTASignature)/.test(code);
+  const hasUIComponents = /<(Button|Input|Card|Dialog|HeroSignature|BentoGrid|CTASignature)/.test(
+    code,
+  );
   if (hasUIComponents && !code.includes("@forge/ui")) {
     violations.push({ file, message: "Usa componentes UI sem importar @forge/ui" });
   }
 
-  if (/<button[^>]*className=/.test(code) && !code.includes("<Button") && !code.includes("@forge/ui")) {
-    violations.push({ file, message: "Use <Button> de @forge/ui em vez de <button> estilizado manualmente" });
+  if (
+    /<button[^>]*className=/.test(code) &&
+    !code.includes("<Button") &&
+    !code.includes("@forge/ui")
+  ) {
+    violations.push({
+      file,
+      message: "Use <Button> de @forge/ui em vez de <button> estilizado manualmente",
+    });
   }
 
   return violations;
@@ -76,8 +85,8 @@ export function scanFileForViolations(file: string, code: string): DesignViolati
 
 export function scanProjectForLandingQuality(files: Map<string, string>): DesignViolation[] {
   const violations: DesignViolation[] = [];
-  const appFiles = [...files.entries()].filter(([p]) =>
-    /App\.tsx|page\.tsx|index\.tsx/.test(p) && !p.includes("node_modules"),
+  const appFiles = [...files.entries()].filter(
+    ([p]) => /App\.tsx|page\.tsx|index\.tsx/.test(p) && !p.includes("node_modules"),
   );
 
   for (const [file, code] of appFiles) {
@@ -99,7 +108,11 @@ export function scanProjectForLandingQuality(files: Map<string, string>): Design
       });
     }
 
-    if (/\bbg-zinc-950\b|\bbg-gray-50\b/.test(code) && !code.includes("bg-background") && !code.includes("bg-surface")) {
+    if (
+      /\bbg-zinc-950\b|\bbg-gray-50\b/.test(code) &&
+      !code.includes("bg-background") &&
+      !code.includes("bg-surface")
+    ) {
       violations.push({
         file,
         message: "Paleta raw (zinc/gray) — migre para bg-background e tokens @theme",
@@ -111,7 +124,8 @@ export function scanProjectForLandingQuality(files: Map<string, string>): Design
 }
 
 export function formatDesignFeedback(violations: DesignViolation[]): string {
-  if (violations.length === 0) return "Design System OK: @forge/ui + composites + tokens válidos";
+  if (violations.length === 0) return "Design System OK: @forge/ui + composites + tokens válidos + adaptação estrutural ao domínio";
   const unique = violations.slice(0, 20);
-  return unique.map((v) => `${v.file}: ${v.message}`).join("\n");
+  const base = unique.map((v) => `${v.file}: ${v.message}`).join("\n");
+  return `${base}\n\nLembrete de adaptação: a composição dos composites (HeroSignature, BentoGrid etc.) deve refletir o domínio do usuário (ex: padaria = produtos/quente; app = features; sales = conversão). Revise se a estrutura faz sentido para o pedido.`;
 }

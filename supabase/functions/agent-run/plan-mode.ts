@@ -381,7 +381,7 @@ export function deriveDefaultPlan(classificationType: string, summary: string): 
       {
         id: "s4",
         type: "create_file",
-        description: `Fase 1 (obrigatória): Entregar UMA página completa (landing ou tela principal) adaptada ao domínio do pedido ("${sum.slice(0, 60)}"). Usar estrutura do design system (@forge/ui composites + tokens) de forma contextual (ex: padaria → hero apetitoso + bento de produtos; app → features + dashboard feel). Incluir botões e hooks de autenticação prontos (usar connector Supabase/Auth se já vinculado ao projeto; caso contrário deixar preparado para integração futura). Validar no preview.`,
+        description: `Fase 1 (obrigatória): Entregar UMA página completa (landing ou tela principal) adaptada ao domínio do pedido ("${sum.slice(0, 60)}"). ADAPTAR DE VERDADE a estrutura do design system: mapear o domínio para a composição dos composites (veja ADAPTAÇÃO ESTRUTURAL POR DOMÍNIO no system prompt — padaria usa BentoGrid como produtos com preço, SaaS usa FeatureMatrix técnica, sales page usa CTASignature + PricingTiers pesados). Usar tokens + motion corretamente. Incluir botões e hooks de autenticação prontos (se connector vinculado) ou preparado. Validar no preview.`,
         filePath: "src/App.tsx",
         enabled: true,
         estimatedCost: 0.008,
