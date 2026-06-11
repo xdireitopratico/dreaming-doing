@@ -53,7 +53,7 @@ const agentPreferencesSchema = z
   })
   .passthrough();
 
-const INNGEST_GRACIOSA_MESSAGE = "Ok. Vejo que rejeitou o plano atual. Como posso melhora-lo?";
+const INNGEST_GRACIOSA_MESSAGE = "Vi que rejeitou o plano , como posso melhora-lo?";
 
 // PLAN_APPROVED_PREFIX source of truth is qualify.ts (exported); here use literal for cross-runtime (minor alignment, no dupe const).
 

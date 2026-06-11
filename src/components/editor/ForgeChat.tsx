@@ -18,11 +18,7 @@ import {
   type FrozenRunSnapshot,
   resolveAssistantProgress,
 } from "@/lib/lovable-thread";
-import {
-  buildAgentRunView,
-  isRunEffectivelyActive,
-  shouldShowJobCard,
-} from "@/lib/forge-run";
+import { buildAgentRunView, isRunEffectivelyActive, shouldShowJobCard } from "@/lib/forge-run";
 import { isAgentJobMessage } from "@/lib/assistant-run-progress";
 import { resolveJobPlanForRun, storedPlanFromMessage } from "@/lib/plan-message-meta";
 import { parseQualifyChoices } from "@/lib/qualify-choices";
@@ -93,7 +89,11 @@ export function ForgeChat({
   }, []);
 
   const showGlobalError =
-    !running && progress.finished && progress.error && !progress.resumable && !progress.autoResuming;
+    !running &&
+    progress.finished &&
+    progress.error &&
+    !progress.resumable &&
+    !progress.autoResuming;
 
   return (
     <div className="forge-chat-stream" role="log" aria-live="polite" data-testid="forge-chat">
@@ -171,15 +171,18 @@ export function ForgeChat({
 
         const jobPlan = item.runId
           ? resolveJobPlanForRun(item.runId, messages, {
-              livePlan:
-                pendingPlan && pendingPlan.runId === item.runId ? pendingPlan : null,
+              livePlan: pendingPlan && pendingPlan.runId === item.runId ? pendingPlan : null,
               progressPlan: resolved?.pendingPlan ?? null,
               assistantMessage: item.message,
             })
           : null;
 
         const runStartedAtMs =
-          item.runId === activeRunId ? (activeRunStartedAtMs ?? null) : null;
+          item.runId === activeRunId
+            ? (activeRunStartedAtMs ?? null)
+            : item.frozen?.latencyThoughtMs != null
+              ? Date.now() - item.frozen.latencyThoughtMs
+              : null;
 
         const runView = resolved
           ? buildAgentRunView(runId, resolved, {
@@ -197,10 +200,8 @@ export function ForgeChat({
             : `slot-${idx}`;
 
         const isLastTurn =
-          idx === thread.length - 1 ||
-          !thread.slice(idx + 1).some((t) => t.kind === "assistant");
-        const closingText =
-          runView?.closingText ?? item.message?.content?.trim() ?? null;
+          idx === thread.length - 1 || !thread.slice(idx + 1).some((t) => t.kind === "assistant");
+        const closingText = runView?.closingText ?? item.message?.content?.trim() ?? null;
         const parsedQualify = closingText ? parseQualifyChoices(closingText) : null;
         const qualifyInteractive =
           !!onQualifySelect &&
@@ -213,15 +214,19 @@ export function ForgeChat({
             resolved?.awaitingKind === "qualify");
 
         const msgPlanMeta = item.message ? storedPlanFromMessage(item.message) : null;
+        const planStatus = msgPlanMeta?.status ?? null;
         const planForPrompt = jobPlan ?? msgPlanMeta?.plan ?? null;
         const planAwaitingApproval =
-          progress.awaitingKind === "plan_approval" ||
-          resolved?.awaitingKind === "plan_approval";
+          progress.awaitingKind === "plan_approval" || resolved?.awaitingKind === "plan_approval";
+        const planRunMatches =
+          (!!pendingPlan?.runId && pendingPlan.runId === item.runId) ||
+          msgPlanMeta?.plan.runId === item.runId;
         const planInteractive =
           !!onOpenInspector &&
           !!planForPrompt?.steps?.length &&
+          planRunMatches &&
           (msgPlanMeta?.status === "pending" ||
-            (isLastTurn && planAwaitingApproval && !running && !slotActive));
+            (planAwaitingApproval && !running && !slotActive));
 
         return (
           <ForgeMessage
@@ -235,6 +240,7 @@ export function ForgeChat({
             qualifyInteractive={qualifyInteractive}
             planInteractive={planInteractive}
             jobPlan={planForPrompt}
+            planStatus={planStatus}
             onQualifySelect={onQualifySelect}
             running={running}
             onCopy={handleCopy}
@@ -258,7 +264,10 @@ export function ForgeChat({
             <ErrorHintCard hint={resolveErrorHint(progress.error)} onAction={onResume} />
           )}
           <section className="forge-chat-resume">
-            <AlertTriangle className="size-4 shrink-0" style={{ color: "var(--status-thinking)" }} />
+            <AlertTriangle
+              className="size-4 shrink-0"
+              style={{ color: "var(--status-thinking)" }}
+            />
             <p className="flex-1 min-w-0" style={{ font: "var(--font-thought)", fontSize: "10px" }}>
               Execução pausada — use Continuar para retomar.
             </p>

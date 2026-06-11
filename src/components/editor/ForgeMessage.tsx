@@ -23,6 +23,7 @@ type ForgeMessageProps = {
   qualifyInteractive?: boolean;
   planInteractive?: boolean;
   jobPlan?: PendingPlan | null;
+  planStatus?: "pending" | "approved" | "rejected" | null;
   running?: boolean;
   onQualifySelect?: (text: string) => void;
   onCopy?: (text: string, msgId: string) => void;
@@ -42,6 +43,7 @@ export function ForgeMessage({
   qualifyInteractive = false,
   planInteractive = false,
   jobPlan = null,
+  planStatus = null,
   running = false,
   onQualifySelect,
   onCopy,
@@ -86,10 +88,15 @@ export function ForgeMessage({
   const sessionTitle = runView?.miniCard.title?.trim() ?? null;
   const responseText = runView?.closingText ?? message?.content?.trim() ?? null;
   const qualifyPrompt = responseText ? parseQualifyChoices(responseText) : null;
-  const showQualifyPrompt =
-    !!qualifyPrompt && qualifyInteractive && !!onQualifySelect;
+  const showQualifyPrompt = !!qualifyPrompt && qualifyInteractive && !!onQualifySelect;
   const showPlanPrompt =
     planInteractive && !!jobPlan?.steps?.length && !!onOpenInspector && !!runView?.runId;
+
+  const showSettledPlan =
+    !!planStatus &&
+    (planStatus === "approved" || planStatus === "rejected") &&
+    !!jobPlan?.steps?.length &&
+    !planInteractive;
 
   const latency = runView?.latencyThinking;
   const showLatencyThinking =
@@ -101,8 +108,7 @@ export function ForgeMessage({
     runView?.conversational === true ||
     (runView?.finished === true && !showJobCard && !!responseText?.trim());
 
-  const proseDiffersFromTitle =
-    !sessionTitle || !responseText || responseText !== sessionTitle;
+  const proseDiffersFromTitle = !sessionTitle || !responseText || responseText !== sessionTitle;
 
   const showResponse =
     !!responseText &&
@@ -132,12 +138,13 @@ export function ForgeMessage({
           />
         )}
 
-        {showNarration && runView?.narration && (
-          <ForgeNarration text={runView.narration} />
-        )}
+        {showNarration && runView?.narration && <ForgeNarration text={runView.narration} />}
 
         {showResponse && (
-          <div className="forge-chat-closing-line forge-chat-prose" data-testid="assistant-closing-text">
+          <div
+            className="forge-chat-closing-line forge-chat-prose"
+            data-testid="assistant-closing-text"
+          >
             <MarkdownRenderer>{responseText}</MarkdownRenderer>
           </div>
         )}
@@ -169,6 +176,32 @@ export function ForgeMessage({
             disabled={isActive}
             onOpenPreview={(rid) => onOpenInspector!(rid, "plan")}
           />
+        )}
+
+        {showSettledPlan && jobPlan && (
+          <div
+            className={`forge-mini-card w-full forge-animate-card-appear forge-plan-${planStatus}`}
+            data-testid="forge-plan-settled"
+            onClick={() => onOpenInspector && runView?.runId && onOpenInspector(runView.runId, "plan")}
+            role="button"
+            tabIndex={0}
+          >
+            <div className="forge-mini-card-header">
+              {planStatus === "approved" ? (
+                <>
+                  <span className="forge-mini-card-dot forge-mini-card-dot--done" aria-hidden />
+                  <span className="forge-mini-card-badge forge-mini-card-badge--done">Plano aprovado</span>
+                </>
+              ) : (
+                <>
+                  <span className="forge-mini-card-dot forge-mini-card-dot--failed" aria-hidden />
+                  <span className="forge-mini-card-badge forge-mini-card-badge--failed">Plano rejeitado</span>
+                </>
+              )}
+            </div>
+            <p className="forge-mini-card-title">{jobPlan.summary}</p>
+            <p className="forge-mini-card-hint">Ver no inspector →</p>
+          </div>
         )}
 
         {showDone && <ForgeDoneBubble />}
