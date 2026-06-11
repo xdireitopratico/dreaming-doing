@@ -16,9 +16,32 @@
   overflow-y: auto;
   padding: var(--chat-padding) var(--chat-padding) var(--space-xs);
   scrollbar-width: thin;
-  scrollbar-color: rgba(226, 232, 240, 0.15) transparent;
+  scrollbar-color: color-mix(in srgb, var(--border-forge) 65%, #52525b 35%) transparent;
   font: var(--font-chat);
   color: var(--text-primary);
+}
+
+/* Scrollbar escuro — mesma paleta do composer (Chrome/Edge/Safari) */
+.forge-messages::-webkit-scrollbar,
+.forge-composer-input::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.forge-messages::-webkit-scrollbar-track,
+.forge-composer-input::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.forge-messages::-webkit-scrollbar-thumb,
+.forge-composer-input::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--border-forge) 70%, #52525b 30%);
+  border-radius: 999px;
+}
+
+.forge-messages::-webkit-scrollbar-thumb:hover,
+.forge-composer-input::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--text-muted) 45%, var(--border-forge) 55%);
 }
 
 .forge-msg-text {
@@ -772,6 +795,8 @@
   font-size: 14px;
   line-height: 1.6;
   outline: none;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--border-forge) 65%, #52525b 35%) transparent;
 }
 
 .forge-composer-input::placeholder {
