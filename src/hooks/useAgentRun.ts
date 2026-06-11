@@ -927,6 +927,8 @@ export function useAgentRun() {
           queued?: boolean;
           pendingCount?: number;
           message?: string;
+          runId?: string;
+          busy?: boolean;
         };
         if (body.queued) {
           setProgress((p) => ({
@@ -941,7 +943,16 @@ export function useAgentRun() {
             message: body.message,
           };
         }
-        return { ok: false, message: "Agente livre — use run normal." };
+        if (body.busy) {
+          return {
+            ok: false,
+            message: body.message ?? "Agente ocupado — envie com enqueue ativo.",
+          };
+        }
+        return {
+          ok: false,
+          message: body.message ?? "Não foi possível enfileirar a mensagem.",
+        };
       } catch (e) {
         return { ok: false, message: formatAgentFetchError(e) };
       }

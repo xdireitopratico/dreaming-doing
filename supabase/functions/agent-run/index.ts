@@ -406,8 +406,8 @@ Deno.serve(async (req) => {
       const latestMeta = (awaitingRun?.meta ?? {}) as Record<string, unknown>;
       const isAwaiting = awaitingRun?.status === "awaiting_user" || !!latestMeta.awaitingUser;
 
-      // Se o run está ativamente rodando (não apenas esperando), enfileira.
-      // Se está awaiting_user, NÃO enfileira — cria run de continuação.
+      // Run ativo (running/pending): enfileira com enqueue=true.
+      // awaiting_user (plano pendente): também enfileira — mensagens do chat ficam na fila até aprovar/rejeitar.
       const isRunning =
         awaitingRun?.status === "running" ||
         awaitingRun?.status === "pending" ||
@@ -455,6 +455,39 @@ Deno.serve(async (req) => {
           pendingCount === 1
             ? "Mensagem na fila — o agente processará quando terminar a tarefa atual."
             : `${pendingCount} mensagens na fila — processando em ordem.`;
+        return json({
+          ok: true,
+          queued: true,
+          pendingCount,
+          preview,
+          activeRunId: awaitingRun?.id ?? null,
+          message: queueMsg,
+        });
+      }
+
+      if (isAwaiting && !resumeRun && enqueueIntent) {
+        const { buildQueueInsertBody, countPendingMessages } =
+          await import("../_shared/agent-pending-queue.ts");
+        const queueBody = await buildQueueInsertBody(supabase, conversationId, {
+          preferences,
+          sessionKind: sessionKindRaw,
+          enabledSkillIds,
+          enabledMcpIds,
+          allocateSandbox: true,
+          mode: body.mode ?? "build",
+        });
+        await supabase.from("agent_pending_messages").insert({
+          project_id: projectId,
+          conversation_id: conversationId,
+          user_id: userData.user.id,
+          body: queueBody,
+        });
+        const pendingCount = await countPendingMessages(supabase, projectId, userData.user.id);
+        const preview = typeof queueBody.text === "string" ? queueBody.text.slice(0, 120) : null;
+        const queueMsg =
+          pendingCount === 1
+            ? "Mensagem na fila — aprove ou rejeite o plano no inspector para continuar."
+            : `${pendingCount} mensagens na fila — processando após o plano.`;
         return json({
           ok: true,
           queued: true,

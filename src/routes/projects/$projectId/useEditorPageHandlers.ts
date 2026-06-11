@@ -366,13 +366,14 @@ export function useEditorPageHandlers({
       await agent.refreshPendingQueue(projectId, conversation.id).catch(() => {});
 
       const kind = resolveSessionKind(tasteQuota);
-      const busy = isAgentBusy() || planAwaiting;
+      const agentBusy = isAgentBusy();
+      const shouldQueue = agentBusy || planAwaiting;
 
       const { error } = await supabase.from("messages").insert({
         conversation_id: conversation.id,
         role: "user",
         parts: messageParts,
-        meta: busy ? { mode: sendMode, queued: true } : { mode: sendMode },
+        meta: shouldQueue ? { mode: sendMode, queued: true } : { mode: sendMode },
       });
 
       if (error) {
@@ -384,11 +385,11 @@ export function useEditorPageHandlers({
       logEditorTelemetryEvent("agent", "chat_send", "info", sendMode);
       void qc.invalidateQueries({ queryKey: ["messages", conversation.id] });
 
-      if (!busy) {
+      if (!shouldQueue) {
         agent.beginPendingTurn();
       }
 
-      if (busy) {
+      if (shouldQueue) {
         const queued = await agent.queueMessage(
           projectId,
           conversation.id,
@@ -397,15 +398,28 @@ export function useEditorPageHandlers({
           sendMode,
         );
         if (!queued.ok) {
+          if (planAwaiting) {
+            toast.error(
+              queued.message ??
+                "Não foi possível enfileirar com o plano pendente — aprove ou rejeite o plano e envie de novo.",
+            );
+            return;
+          }
+          if (!agentBusy) {
+            agent.beginPendingTurn();
+            const ok = await runAgent(kind);
+            if (!ok) agent.clearPendingTurn();
+            return;
+          }
           toast.error(queued.message ?? "Erro ao enfileirar mensagem");
-        } else {
-          toast.success(
-            queued.message ??
-              (planAwaiting
-                ? "Mensagem na fila — aprove ou rejeite o plano no inspector para continuar."
-                : "Mensagem na fila — o agente processará quando terminar."),
-          );
+          return;
         }
+        toast.success(
+          queued.message ??
+            (planAwaiting
+              ? "Mensagem na fila — aprove ou rejeite o plano no inspector para continuar."
+              : "Mensagem na fila — o agente processará quando terminar."),
+        );
         return;
       }
       const ok = await runAgent(kind);

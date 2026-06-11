@@ -275,8 +275,11 @@ export function EditorPageLayout({
     tab: "timeline" | "changes" | "plan" = "timeline",
   ) => {
     openJobWorkspace(runId, tab);
-    onMainViewChange("preview");
-    if (isMobile) onMobilePanelChange?.("preview");
+    if (isMobile) {
+      onMobilePanelChange?.("preview");
+    } else {
+      onMainViewChange("preview");
+    }
   };
 
   useEffect(() => {
@@ -295,13 +298,14 @@ export function EditorPageLayout({
     const runId = pendingPlan.runId || agent.activeRunId;
     if (!runId) return;
     openJobWorkspace(runId, "plan");
-    onMainViewChange("preview");
+    if (isMobile) onMobilePanelChange?.("preview");
   }, [
     pendingPlan?.planId,
     pendingPlan?.runId,
     agent.activeRunId,
     openJobWorkspace,
-    onMainViewChange,
+    isMobile,
+    onMobilePanelChange,
   ]);
 
   useEffect(() => {
@@ -309,9 +313,9 @@ export function EditorPageLayout({
     prevPendingPlanRef.current = pendingPlan;
     if (hadPlan && !pendingPlan && agent.activeRunId) {
       openJobWorkspace(agent.activeRunId, "timeline");
-      onMainViewChange("preview");
+      if (isMobile) onMobilePanelChange?.("preview");
     }
-  }, [pendingPlan, agent.activeRunId, openJobWorkspace, onMainViewChange]);
+  }, [pendingPlan, agent.activeRunId, openJobWorkspace, isMobile, onMobilePanelChange]);
 
   useEffect(() => {
     if (!pendingPlan && jobWorkspaceFocus?.tab === "plan") {
@@ -327,14 +331,15 @@ export function EditorPageLayout({
     if (pendingPlan) return;
     if (isInspectorDismissedForRun(runId)) return;
     openJobWorkspace(runId, "timeline");
-    onMainViewChange("preview");
+    if (isMobile) onMobilePanelChange?.("preview");
   }, [
     running,
     agent.activeRunId,
     agent.progress.conversational,
     pendingPlan,
     openJobWorkspace,
-    onMainViewChange,
+    isMobile,
+    onMobilePanelChange,
     isInspectorDismissedForRun,
   ]);
 
