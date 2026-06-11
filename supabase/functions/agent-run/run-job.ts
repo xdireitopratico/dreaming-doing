@@ -8,23 +8,14 @@ import { createSandboxProvider } from "./sandbox.ts";
 import { registerFsTools } from "./tools/fs.ts";
 import { registerShellTool } from "./tools/shell.ts";
 import { type AgentState, LoopPhase } from "./types.ts";
-import {
-  type AgentPreferencesPayload,
-  loadDeployConnectorKeys,
-} from "./connector-keys.ts";
+import { type AgentPreferencesPayload, loadDeployConnectorKeys } from "./connector-keys.ts";
 import type { ProviderConfig } from "./providers.ts";
 import { loadUserLlmContext, resolveAgentProvider } from "./run-setup.ts";
-import {
-  buildStackContext,
-  stackPromptAddon,
-} from "../_shared/stack-context.ts";
+import { buildStackContext, stackPromptAddon } from "../_shared/stack-context.ts";
 import { buildChatHistory } from "./memory.ts";
 import { ResilientLLM, RobinKeyPool } from "./robin-pool.ts";
 import { loadUserE2bApiKey } from "../_shared/user-e2b.ts";
-import {
-  buildSessionExtensionsPrompt,
-  normalizeIdList,
-} from "../_shared/session-extensions.ts";
+import { buildSessionExtensionsPrompt, normalizeIdList } from "../_shared/session-extensions.ts";
 import { registerMcpForgeTools } from "./tools/mcp-forge.ts";
 import { registerDeployTool } from "./tools/deploy.ts";
 import { restoreExecutionLogFromRows } from "./executionLogMeta.ts";
@@ -82,9 +73,7 @@ function injectPlanApprovalMessage(
   planMode: boolean,
 ): ChatMessage[] {
   if (planMode) return baseMessages;
-  const planSummary = typeof meta.planSummary === "string"
-    ? meta.planSummary.trim()
-    : "";
+  const planSummary = typeof meta.planSummary === "string" ? meta.planSummary.trim() : "";
   const steps = Array.isArray(meta.steps) ? (meta.steps as unknown[]) : [];
   if (!planSummary && steps.length === 0) return baseMessages;
 
@@ -105,16 +94,16 @@ function injectPlanApprovalMessage(
     `${PLAN_APPROVED_PREFIX} Segue o plano abaixo.`,
     "",
     `${planBlock}${stepsBlock}Execute os passos acima na ordem indicada.`,
-  ].join("\n").trim();
+  ]
+    .join("\n")
+    .trim();
 
   const injected: ChatMessage = {
     role: "user",
     content,
     meta: {
       kind: "plan_approved",
-      planSourceRunId: typeof meta.planSourceRunId === "string"
-        ? meta.planSourceRunId
-        : undefined,
+      planSourceRunId: typeof meta.planSourceRunId === "string" ? meta.planSourceRunId : undefined,
     },
   };
   return [...baseMessages, injected];
@@ -127,18 +116,14 @@ function coercePlanStepsFromMeta(raw: unknown): PlanStep[] {
     const s = raw[i];
     if (!s || typeof s !== "object") continue;
     const r = s as Record<string, unknown>;
-    const description = typeof r.description === "string"
-      ? r.description.trim()
-      : "";
+    const description = typeof r.description === "string" ? r.description.trim() : "";
     if (!description) continue;
     steps.push({
       id: typeof r.id === "string" && r.id ? r.id : `s${i + 1}`,
-      type: typeof r.type === "string" ? r.type as PlanStep["type"] : "custom",
+      type: typeof r.type === "string" ? (r.type as PlanStep["type"]) : "custom",
       description,
       filePath: typeof r.filePath === "string" ? r.filePath : undefined,
-      estimatedCost: typeof r.estimatedCost === "number"
-        ? r.estimatedCost
-        : 0.002,
+      estimatedCost: typeof r.estimatedCost === "number" ? r.estimatedCost : 0.002,
       enabled: r.enabled !== false,
     });
   }
@@ -173,9 +158,11 @@ export async function executeAgentJob(
   } = params;
 
   // Fast cancel check (covers both inline fallback in agent-run and worker chunks)
-  const { data: pre } = await supabase.from("agent_runs").select(
-    "canceled_at, status, meta",
-  ).eq("id", agentRunId).maybeSingle();
+  const { data: pre } = await supabase
+    .from("agent_runs")
+    .select("canceled_at, status, meta")
+    .eq("id", agentRunId)
+    .maybeSingle();
   if (pre?.canceled_at || pre?.status === "canceled") {
     return { ok: false, error: "Cancelado", steps: 0, canceled: true };
   }
@@ -185,7 +172,8 @@ export async function executeAgentJob(
   const [projectResult, profileResult, historyResult, userLlmResult] = await Promise.all([
     supabase.from("projects").select("id, owner_id, template, meta").eq("id", projectId).single(),
     supabase.from("profiles").select("integration_prefs").eq("id", userId).maybeSingle(),
-    supabase.from("messages")
+    supabase
+      .from("messages")
       .select("role, parts, tool_calls, meta, created_at")
       .eq("conversation_id", conversationId)
       .order("created_at", { ascending: true })
@@ -203,9 +191,7 @@ export async function executeAgentJob(
   const { userOnlyKeys } = userLlmResult;
 
   const historyRows = history ?? [];
-  const restoredExecutionLog = resumeRun
-    ? restoreExecutionLogFromRows(historyRows)
-    : [];
+  const restoredExecutionLog = resumeRun ? restoreExecutionLogFromRows(historyRows) : [];
   const loadedCheckpoint = resumeRun
     ? await loadCheckpoint(supabase, projectId, conversationId)
     : null;
@@ -215,25 +201,17 @@ export async function executeAgentJob(
   if (sessionKindRaw === "taste_start") sessionKind = "taste_start";
   if (sessionKindRaw === "taste") sessionKind = "taste_start";
 
-  const {
-    mainCfg,
-    connectorKeys,
-    robinPool,
-    effectiveRobin,
-    tasteStart,
-  } = await resolveAgentProvider({
-    supabase,
-    userId,
-    preferences,
-    sessionKind,
-    userOnlyKeys,
-  });
+  const { mainCfg, connectorKeys, robinPool, effectiveRobin, tasteStart } =
+    await resolveAgentProvider({
+      supabase,
+      userId,
+      preferences,
+      sessionKind,
+      userOnlyKeys,
+    });
 
   const messages = await buildChatHistory(historyRows, 120, mainCfg.model);
-  const sessionExt = await buildSessionExtensionsPrompt(
-    enabledSkillIds,
-    enabledMcpIds,
-  );
+  const sessionExt = await buildSessionExtensionsPrompt(enabledSkillIds, enabledMcpIds);
 
   let allocateSandbox = params.allocateSandbox !== false; // default true (backward compat)
   if (planMode) {
@@ -245,13 +223,11 @@ export async function executeAgentJob(
   }
 
   const reg = new ToolRegistry();
-  const projectTemplate = (project as { template?: string }).template ??
-    "vite-react";
-  const projectMeta =
-    ((project as { meta?: Record<string, unknown> }).meta ?? {}) as Record<
-      string,
-      unknown
-    >;
+  const projectTemplate = (project as { template?: string }).template ?? "vite-react";
+  const projectMeta = ((project as { meta?: Record<string, unknown> }).meta ?? {}) as Record<
+    string,
+    unknown
+  >;
   const deployKeys = await loadDeployConnectorKeys(supabase, userId);
   const stackCtx = buildStackContext(profile?.integration_prefs, projectMeta, {
     ...connectorKeys,
@@ -274,12 +250,7 @@ export async function executeAgentJob(
   if (allocateSandbox) {
     const e2bKey = await loadUserE2bApiKey(supabase, userId);
     if (!e2bKey?.trim()) throw new Error("Sandbox E2B não configurado");
-    const realSandbox = createSandboxProvider(
-      e2bKey,
-      undefined,
-      supabase,
-      projectId,
-    );
+    const realSandbox = createSandboxProvider(e2bKey, undefined, supabase, projectId);
     sandbox = realSandbox;
     registerShellTool(reg, {
       sandbox: realSandbox,
@@ -301,13 +272,14 @@ export async function executeAgentJob(
     deployKeys,
     context7ApiKey: Deno.env.get("CONTEXT7_API_KEY") ?? undefined,
   });
-  const deployTokenKey = stackCtx.deployTarget === "vercel"
-    ? "VERCEL_TOKEN"
-    : stackCtx.deployTarget === "netlify"
-    ? "NETLIFY_TOKEN"
-    : stackCtx.deployTarget === "cloudflare"
-    ? "CLOUDFLARE_API_TOKEN"
-    : null;
+  const deployTokenKey =
+    stackCtx.deployTarget === "vercel"
+      ? "VERCEL_TOKEN"
+      : stackCtx.deployTarget === "netlify"
+        ? "NETLIFY_TOKEN"
+        : stackCtx.deployTarget === "cloudflare"
+          ? "CLOUDFLARE_API_TOKEN"
+          : null;
   registerDeployTool(reg, {
     supabase,
     projectId,
@@ -324,12 +296,8 @@ export async function executeAgentJob(
         projectId,
         conversationId,
         userId,
-        messages: cp.messages.length >= messages.length
-          ? cp.messages
-          : [...messages],
-        executionLog: cp.executionLog.length > 0
-          ? cp.executionLog
-          : [...restoredExecutionLog],
+        messages: cp.messages.length >= messages.length ? cp.messages : [...messages],
+        executionLog: cp.executionLog.length > 0 ? cp.executionLog : [...restoredExecutionLog],
       };
     }
     return {
@@ -349,8 +317,7 @@ export async function executeAgentJob(
     };
   };
 
-  const streamEmit = (type: string, data: Record<string, unknown>) =>
-    onEvent(type, data);
+  const streamEmit = (type: string, data: Record<string, unknown>) => onEvent(type, data);
   const resilientMain = new ResilientLLM(mainCfg, robinPool, streamEmit);
 
   const loop = new AgentLoop(
@@ -366,31 +333,36 @@ export async function executeAgentJob(
     stackAddon,
     tasteStart
       ? {
-        maxSteps: 14,
-        tasteStart: true,
-        sessionAddon: sessionExt.addon,
-        userSkillNames: sessionExt.skillNames,
-        runId: agentRunId,
-        planMode,
-      }
+          maxSteps: 14,
+          tasteStart: true,
+          sessionAddon: sessionExt.addon,
+          userSkillNames: sessionExt.skillNames,
+          runId: agentRunId,
+          planMode,
+        }
       : {
-        sessionAddon: sessionExt.addon,
-        userSkillNames: sessionExt.skillNames,
-        resumeRun,
-        hasCheckpoint: !!loadedCheckpoint,
-        resumePhase: loadedCheckpoint?.phase ?? null,
-        complexityScore: loadedCheckpoint?.extra.complexityScore,
-        maxStepsFromCheckpoint: loadedCheckpoint?.extra.maxStepsLimit,
-        runId: agentRunId,
-        planMode,
-        approvedPlanBuild: isPlanApprovedBuild,
-        skipQualify: skipQualify || isPlanApprovedBuild,
-        planSummary: typeof preMeta.planSummary === "string"
-          ? preMeta.planSummary
-          : undefined,
-        planSteps: coercePlanStepsFromMeta(preMeta.steps),
-        buildFixResume: preMeta.buildFix === true,
-      },
+          sessionAddon: sessionExt.addon,
+          userSkillNames: sessionExt.skillNames,
+          resumeRun,
+          hasCheckpoint: !!loadedCheckpoint,
+          resumePhase: loadedCheckpoint?.phase ?? null,
+          complexityScore: loadedCheckpoint?.extra.complexityScore,
+          maxStepsFromCheckpoint: loadedCheckpoint?.extra.maxStepsLimit,
+          runId: agentRunId,
+          planMode,
+          approvedPlanBuild: isPlanApprovedBuild,
+          skipQualify: skipQualify || isPlanApprovedBuild,
+          planSummary:
+            typeof preMeta.planDocument === "string"
+              ? preMeta.planDocument
+              : typeof preMeta.planSummary === "string"
+                ? preMeta.planSummary
+                : undefined,
+          planHeadline:
+            typeof preMeta.planHeadline === "string" ? preMeta.planHeadline : undefined,
+          planSteps: coercePlanStepsFromMeta(preMeta.steps),
+          buildFixResume: preMeta.buildFix === true,
+        },
   );
 
   let result: {
@@ -412,7 +384,7 @@ export async function executeAgentJob(
   // Só mata sandbox se falhou ou não produziu nada.
   // Se criou/alterou arquivos, mantém vivo para preview.
   const hasOutput = (result.toolsUsed ?? []).some((t) =>
-    ["fs_write", "fs_edit", "shell_exec"].includes(t)
+    ["fs_write", "fs_edit", "shell_exec"].includes(t),
   );
   if (!result.ok || !hasOutput) {
     await sandbox.kill().catch(() => {});

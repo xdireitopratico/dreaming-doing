@@ -37,12 +37,14 @@ Deno.test("buildGatherNarration — sem contagem de arquivos", () => {
   assertEquals(text.includes("48"), false);
 });
 
-Deno.test("buildApprovedPlanBriefing — passos", () => {
-  const text = buildApprovedPlanBriefing("Landing café", [
-    { id: "s1", type: "custom", description: "Hero com CTA", enabled: true },
-  ]);
+Deno.test("buildApprovedPlanBriefing — uma linha, sem markdown do plano", () => {
+  const longPlan = "## Missão\n\nCriar app\n\n## Fases\n\n- Passo 1\n- Passo 2";
+  const text = buildApprovedPlanBriefing(longPlan);
   assertStringIncludes(text, "plano aprovado");
-  assertStringIncludes(text, "Hero com CTA");
+  assertStringIncludes(text, "Missão");
+  assertEquals(text.includes("## Fases"), false);
+  assertEquals(text.includes("Passo 1"), false);
+  assertEquals(text.split("\n").length, 1);
 });
 
 Deno.test("buildToolBatchNarration — lote de tools", () => {

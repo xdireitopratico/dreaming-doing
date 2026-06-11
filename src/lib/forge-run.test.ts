@@ -67,6 +67,19 @@ describe("forge-run job requirements", () => {
     expect(view.miniCard.tasks).toEqual([]);
   });
 
+  it("tarefa atômica avança com currentStep do plano (0-based)", () => {
+    const progress = {
+      ...initialAgentProgress,
+      phase: "execute",
+      currentStep: 1,
+      totalSteps: 3,
+    };
+    const tasks = deriveTasksFromPlan(samplePlan, progress);
+    expect(tasks[0]?.status).toBe("done");
+    expect(tasks[1]?.status).toBe("active");
+    expect(tasks[2]?.status).toBe("pending");
+  });
+
   it("marca todos os passos como done quando o job terminou com sucesso", () => {
     const progress = {
       ...initialAgentProgress,
@@ -251,8 +264,16 @@ describe("forge-run mini card briefing e título", () => {
       streamText: "Entendi que você quer um app mobile. Antes de codar, qual caminho prefere?",
       message: "Gerando código",
       timeline: [
-        { type: "phase", data: { phase: "execute", message: "Implementando layout" }, timestamp: 1 },
-        { type: "tool_start", data: { name: "fs_read", args: { path: "src/App.tsx" } }, timestamp: 2 },
+        {
+          type: "phase",
+          data: { phase: "execute", message: "Implementando layout" },
+          timestamp: 1,
+        },
+        {
+          type: "tool_start",
+          data: { name: "fs_read", args: { path: "src/App.tsx" } },
+          timestamp: 2,
+        },
       ],
     };
     const timeline = buildForgeTimeline(progress.timeline, true);
@@ -390,12 +411,8 @@ describe("forge-run mini card briefing e título", () => {
   });
 
   it("normaliza explorando sem contagem de arquivos", () => {
-    expect(normalizeMiniCardBriefing("Explorando 48 arquivos…")).toBe(
-      "Explorando o projeto…",
-    );
-    expect(normalizeMiniCardBriefing("Analisando o projeto")).toBe(
-      "Explorando o projeto…",
-    );
+    expect(normalizeMiniCardBriefing("Explorando 48 arquivos…")).toBe("Explorando o projeto…");
+    expect(normalizeMiniCardBriefing("Analisando o projeto")).toBe("Explorando o projeto…");
   });
 
   it("briefings incluem tool pendente na fase gather", () => {
@@ -417,14 +434,10 @@ describe("forge-run mini card briefing e título", () => {
       ...initialAgentProgress,
       phase: "gather",
       message: "Analisando estrutura",
-      timeline: [
-        { type: "memory", data: { message: "Lendo package.json" }, timestamp: 1 },
-      ],
+      timeline: [{ type: "memory", data: { message: "Lendo package.json" }, timestamp: 1 }],
     };
     const view = buildAgentRunView("run-1", progress, { running: true });
     expect(view.miniCard.liveBriefings.length).toBeGreaterThan(0);
-    expect(view.miniCard.liveBriefings.some((b) => /package\.json|Analisando/i.test(b))).toBe(
-      true,
-    );
+    expect(view.miniCard.liveBriefings.some((b) => /package\.json|Analisando/i.test(b))).toBe(true);
   });
 });

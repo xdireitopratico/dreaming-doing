@@ -67,16 +67,32 @@ type DecideResponse = {
   approveUserMessageId?: string;
 };
 
-const planApproveSchema = z.object({
-  runId: z.string().uuid(),
-  planId: z.string().min(1),
-  plan: z.string().min(1),
-  steps: z.array(z.unknown()).optional(),
-  preferences: agentPreferencesSchema.optional(),
-  sessionKind: z.enum(["byok", "taste"]).optional(),
-  enabledSkillIds: z.array(z.string()).optional(),
-  enabledMcpIds: z.array(z.string()).optional(),
-});
+const planApproveSchema = z
+  .object({
+    runId: z.string().uuid(),
+    planId: z.string().min(1),
+    /** @deprecated use planDocument */
+    plan: z.string().optional(),
+    planHeadline: z.string().optional(),
+    planDocument: z.string().optional(),
+    steps: z.array(z.unknown()).optional(),
+    preferences: agentPreferencesSchema.optional(),
+    sessionKind: z.enum(["byok", "taste"]).optional(),
+    enabledSkillIds: z.array(z.string()).optional(),
+    enabledMcpIds: z.array(z.string()).optional(),
+  })
+  .refine((d) => !!(d.planDocument?.trim() || d.plan?.trim()), {
+    message: "planDocument ou plan é obrigatório",
+  });
+
+const META_STEP_RE =
+  /pedir (ao|à) usu[aá]rio|perguntar (ao|à) usu[aá]rio|colar o plano|compartilhe o plano|me diga onde est[aá]|pe[cç]a ao usu[aá]rio/i;
+
+function isActionableStepDescription(description: string): boolean {
+  const d = description.trim();
+  if (!d) return false;
+  return !META_STEP_RE.test(d);
+}
 
 const planRejectSchema = z.object({
   runId: z.string().uuid(),
@@ -89,7 +105,31 @@ export const planApprove = createServerFn({ method: "POST" })
   .inputValidator((input: unknown) => planApproveSchema.parse(input))
   .handler(async ({ data, context }): Promise<DecideResponse> => {
     const { supabase, userId } = context;
-    const { runId, plan, planId, steps } = data;
+    const { runId, planId, steps } = data;
+    const planDocument = (data.planDocument ?? data.plan ?? "").trim();
+    const planHeadline = (data.planHeadline?.trim() || planDocument.slice(0, 120)).trim();
+    if (!planDocument) {
+      throw new Error("Documento do plano vazio — gere ou edite o plano antes de aprovar.");
+    }
+
+    const enabledSteps = (steps ?? []).filter(
+      (s) => s && typeof s === "object" && (s as { enabled?: boolean }).enabled !== false,
+    );
+    const stepDescriptions = enabledSteps
+      .map((s) =>
+        typeof s === "object" && s && "description" in s
+          ? String((s as { description?: string }).description ?? "")
+          : "",
+      )
+      .filter(Boolean);
+    if (
+      stepDescriptions.length > 0 &&
+      stepDescriptions.every((d) => !isActionableStepDescription(d))
+    ) {
+      throw new Error(
+        "Todos os passos são apenas conversacionais (ex.: pedir plano ao usuário). Edite o plano com ações concretas antes de aprovar.",
+      );
+    }
 
     const { data: run, error: rErr } = await supabase
       .from("agent_runs")
@@ -137,7 +177,9 @@ export const planApprove = createServerFn({ method: "POST" })
           planMode: false,
           planSourceRunId: runId,
           planId,
-          planSummary: plan,
+          planHeadline,
+          planDocument,
+          planSummary: planDocument,
           steps: (steps ?? []) as unknown as never,
           preferences: (preferences ?? {}) as Record<string, unknown>,
           sessionKind,

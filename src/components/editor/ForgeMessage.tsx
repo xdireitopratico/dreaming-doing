@@ -118,12 +118,16 @@ export function ForgeMessage({
     !showPlanPrompt &&
     (isConversational || proseDiffersFromTitle || !showJobCard);
 
+  const hasDelivery =
+    (runView?.miniCard.fileCount ?? 0) > 0 ||
+    (runView?.miniCard.editedFile != null && runView.miniCard.editedFile !== "");
   const showDone =
     !!runView?.finished &&
     !isActive &&
     runView.lastFinishOk === true &&
     showJobCard &&
-    !showPlanPrompt;
+    !showPlanPrompt &&
+    hasDelivery;
 
   return (
     <article

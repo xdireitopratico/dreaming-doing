@@ -373,7 +373,10 @@ export function collectMiniCardBriefings(
 
   const planAwaiting =
     progress.awaitingKind === "plan_approval" && (progress.pendingPlan?.steps?.length ?? 0) > 0;
-  if (!planAwaiting && progress.narrationText?.trim()) push(progress.narrationText);
+  const hasAtomicTasks = tasks.length > 0 && progress.phase === "execute";
+  if (!planAwaiting && !hasAtomicTasks && progress.narrationText?.trim()) {
+    push(progress.narrationText);
+  }
   if (!planAwaiting && progress.message) push(progress.message);
   if (progress.statusHint && !/conectando|iniciando/i.test(progress.statusHint)) {
     push(progress.statusHint);
@@ -566,7 +569,10 @@ export function buildAgentRunView(
     streamBody ||
     (!running && !narrationDuplicatesStream ? narrationBody || safeSummary : null) ||
     null;
+  const suppressNarrationLine =
+    running && tasks.length > 0 && progress.phase === "execute" && !progress.awaitingKind;
   const narrationForLine =
+    !suppressNarrationLine &&
     running &&
     narrationBody &&
     !streamBody &&

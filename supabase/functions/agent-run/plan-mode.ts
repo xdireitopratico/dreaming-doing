@@ -60,6 +60,21 @@ export function sanitizePlanHeadline(
   return h;
 }
 
+const META_STEP_RE =
+  /pedir (ao|à) usu[aá]rio|perguntar (ao|à) usu[aá]rio|colar o plano|compartilhe o plano|me diga onde est[aá]|pe[cç]a ao usu[aá]rio/i;
+
+/** Passo executável no build — não meta-conversação. */
+export function isActionablePlanStep(description: string): boolean {
+  const d = description.trim();
+  if (!d) return false;
+  return !META_STEP_RE.test(d);
+}
+
+export function filterActionablePlanSteps(steps: PlanStep[]): PlanStep[] {
+  const actionable = steps.filter((s) => isActionablePlanStep(s.description));
+  return actionable.length > 0 ? actionable : steps;
+}
+
 /** Usuário pede para ver/reabrir plano existente (estilo Lovable). */
 export function isShowExistingPlanRequest(text: string): boolean {
   const t = text.trim().toLowerCase();
@@ -146,10 +161,7 @@ export function findLatestStoredPlan(messages: ChatMessage[]): StoredPlanEntry |
 
 /** Texto único do chat em Plan mode — uma voz, sem vazar classify. */
 export function buildPlanChatMessageText(plan: ProposedPlan): string {
-  const mission = sanitizePlanHeadline(
-    plan.mission ?? plan.summary,
-    "Plano para seu pedido",
-  );
+  const mission = sanitizePlanHeadline(plan.mission ?? plan.summary, "Plano para seu pedido");
   return [
     `**${mission}**`,
     "",
@@ -427,10 +439,7 @@ export function buildProposedPlan(
 
   // Caminho 1: plan estruturado veio do router
   if (classification.plan && classification.plan.steps.length > 0) {
-    const headline = sanitizePlanHeadline(
-      classification.plan.mission ?? summary,
-      "Plano proposto",
-    );
+    const headline = sanitizePlanHeadline(classification.plan.mission ?? summary, "Plano proposto");
     return attachDocument(
       {
         planId: options.planId,

@@ -48,6 +48,7 @@ import { type CheckpointExtra, resumeStepStart, serializeCheckpointPayload } fro
 import {
   buildPlanChatMessageText,
   buildProposedPlan,
+  filterActionablePlanSteps,
   findLatestStoredPlan,
   isShowExistingPlanRequest,
   lastPlanContextFromMessages,
@@ -137,6 +138,8 @@ export class AgentLoop {
   private approvedPlanBuild: boolean;
   private skipQualify: boolean;
   private approvedPlanSteps: PlanStep[];
+  private planHeadline: string;
+  private approvedPlanStepIndex: number;
   private narrationStarted: boolean;
   private narrationBuffer: string;
   private llmResponseWasStreamed: boolean;
@@ -183,6 +186,7 @@ export class AgentLoop {
       /** Explicit flag to bypass qualify/classify pollution paths for plan+follow-up (PR2). */
       skipQualify?: boolean;
       planSummary?: string;
+      planHeadline?: string;
       planSteps?: PlanStep[];
       /** Retomada após falha de build — pula re-narração de intenção. */
       buildFixResume?: boolean;
@@ -212,9 +216,13 @@ export class AgentLoop {
     this.approvedPlanBuild = options?.approvedPlanBuild ?? false;
     this.skipQualify = options?.skipQualify ?? options?.approvedPlanBuild ?? false;
     this.approvedPlanSteps = options?.planSteps ?? [];
+    this.approvedPlanStepIndex = 0;
     const extracted = extractOriginalUserRequest(state.messages);
-    const planSummary = options?.planSummary?.trim() ?? "";
-    this.originalUserRequest = this.approvedPlanBuild && planSummary ? planSummary : extracted;
+    const planDocument = options?.planSummary?.trim() ?? "";
+    const planHeadlineOpt = options?.planHeadline?.trim() ?? "";
+    this.planHeadline =
+      planHeadlineOpt || (planDocument ? planDocument.slice(0, 120) : "") || extracted.slice(0, 120);
+    this.originalUserRequest = this.approvedPlanBuild && planDocument ? planDocument : extracted;
     this.toolsInvoked = false;
     this.narrationStarted = false;
     this.narrationBuffer = "";
@@ -625,9 +633,7 @@ export class AgentLoop {
         if (this.planMode) {
           // Plan mode: uma mensagem final via finishPlanProposal — sem narração duplicada.
         } else if (this.approvedPlanBuild) {
-          this.streamNarration(
-            buildApprovedPlanBriefing(this.originalUserRequest, this.approvedPlanSteps),
-          );
+          this.streamNarration(buildApprovedPlanBriefing(this.planHeadline), { chatVisible: true });
         } else {
           this.streamNarration(
             buildClassifyBriefing(classification, {
@@ -778,14 +784,30 @@ export class AgentLoop {
 
         loopStep++;
         this.state.currentStepIndex = loopStep;
-        this.state.totalSteps = this.maxStepsLimit;
         this.state.phase = LoopPhase.EXECUTE_STEP;
         await this.touchHeartbeat();
-        this.emit("step", { current: loopStep, total: this.maxStepsLimit });
-        this.emit("phase", {
-          phase: "execute",
-          message: `Executando passo ${loopStep}/${this.maxStepsLimit}…`,
-        });
+        if (this.approvedPlanBuild) {
+          const enabled = this.enabledApprovedPlanSteps();
+          this.state.totalSteps = enabled.length;
+          this.emit("step", {
+            current: this.approvedPlanStepIndex,
+            total: enabled.length,
+          });
+          const activeStep = enabled[this.approvedPlanStepIndex];
+          this.emit("phase", {
+            phase: "execute",
+            message: activeStep
+              ? activeStep.description.slice(0, 120)
+              : `Executando passo ${this.approvedPlanStepIndex + 1}/${enabled.length}…`,
+          });
+        } else {
+          this.state.totalSteps = this.maxStepsLimit;
+          this.emit("step", { current: loopStep, total: this.maxStepsLimit });
+          this.emit("phase", {
+            phase: "execute",
+            message: `Executando passo ${loopStep}/${this.maxStepsLimit}…`,
+          });
+        }
 
         const compressed = await this.compression.compress(this.state.messages);
         const executeInstruction = buildExecuteInstruction(this.originalUserRequest);
@@ -830,6 +852,7 @@ export class AgentLoop {
         this.compression.recordUsage(response.usage);
 
         const assistantText = (response.content ?? "").trim();
+        const streamedToInspector = this.approvedPlanBuild && this.llmResponseWasStreamed;
         if (assistantText && !this.llmResponseWasStreamed) {
           this.appendToNarration(assistantText);
           this.emit("assistant_text", {
@@ -841,6 +864,7 @@ export class AgentLoop {
         } else if (
           assistantText &&
           this.llmResponseWasStreamed &&
+          !streamedToInspector &&
           !this.narrationBuffer.includes(assistantText)
         ) {
           this.appendToNarration(assistantText);
@@ -1085,7 +1109,20 @@ export class AgentLoop {
             allOk: execResults.every(({ result }) => result.ok),
           },
         );
-        if (batchNarration) this.streamNarration(batchNarration);
+        if (batchNarration) this.notifyExecution(batchNarration);
+
+        if (
+          this.approvedPlanBuild &&
+          execResults.every(({ result }) => result.ok) &&
+          this.approvedPlanStepIndex < this.enabledApprovedPlanSteps().length - 1
+        ) {
+          this.approvedPlanStepIndex++;
+          const enabled = this.enabledApprovedPlanSteps();
+          this.emit("step", {
+            current: this.approvedPlanStepIndex,
+            total: enabled.length,
+          });
+        }
 
         // Extra cancel check after potentially long tool execution (shell, writes, observer).
         // Combined with per-step check this makes stop responsive without full AbortSignal everywhere.
@@ -1444,8 +1481,10 @@ export class AgentLoop {
       proposedAt: new Date().toISOString(),
     });
     const headline = sanitizePlanHeadline(raw.mission ?? raw.summary, "Plano proposto");
+    const steps = filterActionablePlanSteps(raw.steps);
     return {
       ...raw,
+      steps,
       summary: headline,
       mission: sanitizePlanHeadline(raw.mission, headline),
     };
@@ -1639,15 +1678,16 @@ export class AgentLoop {
           : (delta) => {
               if (!delta) return;
               this.llmResponseWasStreamed = true;
-              // Resposta user-facing → streamText no chat (não THOUGHT no inspector).
+              const toInspector = this.approvedPlanBuild || forceTools;
               this.emit("assistant_text", {
                 text: delta,
-                append: this.narrationStarted,
+                append: true,
                 delta: true,
                 final: false,
+                ...(toInspector ? { thinking: true } : {}),
               });
-              this.narrationStarted = true;
-              this.appendToNarration(delta);
+              if (!toInspector) this.narrationStarted = true;
+              if (!toInspector) this.appendToNarration(delta);
             },
       });
     } catch (err: unknown) {
@@ -2089,12 +2129,46 @@ export class AgentLoop {
       .eq("id", this.state.projectId);
   }
 
-  /** Checkpoint de comunicação — alimenta streamText no chat (markdown acima do activity card). */
-  private streamNarration(text: string, append?: boolean): void {
+  private enabledApprovedPlanSteps(): PlanStep[] {
+    const enabled = this.approvedPlanSteps.filter((s) => s.enabled !== false);
+    return enabled.length > 0 ? enabled : this.approvedPlanSteps;
+  }
+
+  /** Progresso de execução — Inspector durante build pós-approve; chat nos demais modos. */
+  private notifyExecution(text: string): void {
+    if (this.approvedPlanBuild) {
+      this.emitInspectorNote(text);
+      return;
+    }
+    this.streamNarration(text);
+  }
+
+  private emitInspectorNote(message: string): void {
+    const chunk = message.trim();
+    if (!chunk) return;
+    this.emit("phase", {
+      phase: "checkpoint",
+      message: chunk,
+      task_title: chunk.slice(0, 120),
+    });
+  }
+
+  /** Checkpoint de comunicação — chat só quando chatVisible; build aprovado usa Inspector por padrão. */
+  private streamNarration(
+    text: string,
+    opts?: { append?: boolean; chatVisible?: boolean },
+  ): void {
     const chunk = text.trim();
     if (!chunk) return;
+    const chatVisible = this.approvedPlanBuild
+      ? opts?.chatVisible === true
+      : opts?.chatVisible !== false;
+    if (!chatVisible) {
+      this.emitInspectorNote(chunk);
+      return;
+    }
     this.appendToNarration(chunk);
-    const shouldAppend = append ?? this.narrationStarted;
+    const shouldAppend = opts?.append ?? this.narrationStarted;
     this.emit("assistant_text", {
       text: shouldAppend ? `\n\n${chunk}` : chunk,
       append: shouldAppend,

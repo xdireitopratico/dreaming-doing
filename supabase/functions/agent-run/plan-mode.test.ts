@@ -5,6 +5,8 @@ import {
   buildPlanChatMessageText,
   buildProposedPlan,
   extractRationaleFromLlmContent,
+  filterActionablePlanSteps,
+  isActionablePlanStep,
   isShowExistingPlanRequest,
   sanitizePlanHeadline,
 } from "./plan-mode.ts";
@@ -125,6 +127,17 @@ Deno.test("sanitizePlanHeadline bloqueia meta-comentário do classify", () => {
 Deno.test("isShowExistingPlanRequest detecta pedido de reabrir plano", () => {
   assertEquals(isShowExistingPlanRequest("mostra o plano"), true);
   assertEquals(isShowExistingPlanRequest("criar landing"), false);
+});
+
+Deno.test("isActionablePlanStep rejeita passos meta-conversacionais", () => {
+  assertEquals(isActionablePlanStep("Pedir ao usuário o conteúdo do plano"), false);
+  assertEquals(isActionablePlanStep("Criar apps/hermes-voice-app com Expo"), true);
+  const filtered = filterActionablePlanSteps([
+    { id: "s1", type: "custom", description: "Pedir ao usuário colar plano", enabled: true },
+    { id: "s2", type: "create_file", description: "Criar App.tsx", enabled: true },
+  ]);
+  assertEquals(filtered.length, 1);
+  assertEquals(filtered[0]?.description, "Criar App.tsx");
 });
 
 Deno.test("buildPlanChatMessageText não repete template antigo", () => {

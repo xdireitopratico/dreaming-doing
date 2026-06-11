@@ -556,11 +556,15 @@ export function useEditorPageHandlers({
       const { enabledSkillIds, enabledMcpIds } = loadAgentSessionExtensions();
 
       try {
+        const planDocument = markdown?.trim() || pp.markdown?.trim() || pp.summary;
+        const planHeadline = pp.mission?.trim() || pp.summary;
         const result = await planApproveFn({
           data: {
             runId: pp.runId,
             planId: pp.planId,
-            plan: markdown?.trim() || pp.summary,
+            planHeadline,
+            planDocument,
+            plan: planDocument,
             steps: full,
             preferences: prefs,
             sessionKind,

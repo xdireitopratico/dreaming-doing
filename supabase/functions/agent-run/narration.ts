@@ -1,6 +1,5 @@
 // narration.ts — Textos de checkpoint de comunicação (briefing + narração durante execução).
 import type { ClassificationResult } from "./router.ts";
-import type { PlanStep } from "./types.ts";
 
 const INTENT_LABELS: Record<string, string> = {
   new_project: "criar algo novo no projeto",
@@ -39,7 +38,9 @@ function describeTool(call: ToolCallLike): string {
     case "fs_edit":
       return `editar \`${String(args.path ?? "arquivo")}\``;
     case "shell_exec": {
-      const cmd = String(args.command ?? "").trim().slice(0, 56);
+      const cmd = String(args.command ?? "")
+        .trim()
+        .slice(0, 56);
       return cmd ? `executar \`${cmd}\`` : "rodar comando no sandbox";
     }
     case "web_search":
@@ -85,10 +86,7 @@ export function buildClassifyBriefing(
   }
 
   if (!opts.planMode) {
-    lines.push(
-      "",
-      "Vou ler o projeto, implementar as mudanças e validar o resultado.",
-    );
+    lines.push("", "Vou ler o projeto, implementar as mudanças e validar o resultado.");
   }
 
   return lines.join("\n").trim();
@@ -99,25 +97,15 @@ export function buildGatherNarration(_totalFiles?: number, _paths?: string[]): s
   return "Explorando o projeto…";
 }
 
-/** Briefing quando o build vem de plano aprovado. */
-export function buildApprovedPlanBriefing(planSummary: string, steps?: PlanStep[]): string {
-  const lines = ["**Executando plano aprovado.**", ""];
-  const summary = planSummary.trim();
-  if (summary) lines.push(summary);
-
-  const enabled = (steps ?? []).filter((s) => s.enabled !== false);
-  if (enabled.length > 0) {
-    lines.push("", "**Passos aprovados:**");
-    for (const step of enabled.slice(0, 8)) {
-      lines.push(`- ${step.description}`);
-    }
-    if (enabled.length > 8) {
-      lines.push(`- _…e mais ${enabled.length - 8} passo(s)_`);
-    }
-  }
-
-  lines.push("", "Começando a implementar agora.");
-  return lines.join("\n").trim();
+/** Briefing quando o build vem de plano aprovado — uma linha no chat; plano completo fica no Inspector. */
+export function buildApprovedPlanBriefing(headline: string): string {
+  const firstLine = headline
+    .trim()
+    .split("\n")[0]
+    ?.replace(/^#+\s*/, "")
+    .trim();
+  const h = (firstLine || headline.trim()).slice(0, 120) || "seu plano";
+  return `Executando plano aprovado — **${h}**.`;
 }
 
 /** Atualização curta após um lote de ferramentas. */
@@ -134,10 +122,7 @@ export function buildToolBatchNarration(
       ? unique.join(", ")
       : `${unique.slice(0, 2).join(", ")} e mais ${unique.length - 2} ação(ões)`;
 
-  const prefix =
-    opts?.step && opts?.total
-      ? `**Passo ${opts.step}/${opts.total}** — `
-      : "";
+  const prefix = opts?.step && opts?.total ? `**Passo ${opts.step}/${opts.total}** — ` : "";
 
   const status =
     opts?.allOk === false
@@ -176,7 +161,10 @@ function mentionsDelivery(text: string): boolean {
 }
 
 function buildDeliveryClosing(fileCount: number, paths: string[]): string {
-  const shown = paths.slice(-3).map((p) => `\`${p}\``).join(", ");
+  const shown = paths
+    .slice(-3)
+    .map((p) => `\`${p}\``)
+    .join(", ");
   const extra = fileCount > 3 ? ` e mais ${fileCount - 3}` : "";
   if (fileCount === 1) {
     return `Mexi em ${shown} — confere o preview. Quer refinar algo?`;
@@ -188,7 +176,10 @@ function buildPartialClosing(fileCount: number, paths: string[]): string {
   if (fileCount === 0) {
     return "Até aqui — continuo na próxima rodada. Quer priorizar algo específico?";
   }
-  const shown = paths.slice(-2).map((p) => `\`${p}\``).join(", ");
+  const shown = paths
+    .slice(-2)
+    .map((p) => `\`${p}\``)
+    .join(", ");
   return `Até aqui mexi em ${shown}${fileCount > 2 ? ` (+${fileCount - 2})` : ""}. Posso seguir quando quiser.`;
 }
 
@@ -208,9 +199,10 @@ export function resolveFinalChatMessage(opts: ResolveFinalChatOpts): ResolvedFin
   }
 
   if (opts.silentResume) {
-    const note = fileCount > 0
-      ? "Ainda estou trabalhando — já deixei parte do pedido pronta."
-      : "Ainda estou trabalhando no seu pedido.";
+    const note =
+      fileCount > 0
+        ? "Ainda estou trabalhando — já deixei parte do pedido pronta."
+        : "Ainda estou trabalhando no seu pedido.";
     if (narration) return { text: narration, emitExtra: false };
     return { text: note, emitExtra: true };
   }
@@ -251,7 +243,9 @@ export function buildFinalWrapUp(opts: FinalWrapUpOpts): string {
 }
 
 /** Narração curta para validação/observe. */
-export function buildObserveNarration(kind: "typecheck" | "build" | "stuck" | "validate_ok"): string {
+export function buildObserveNarration(
+  kind: "typecheck" | "build" | "stuck" | "validate_ok",
+): string {
   switch (kind) {
     case "typecheck":
       return "Encontrei erros de TypeScript — vou corrigir antes de seguir.";
