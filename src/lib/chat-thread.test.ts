@@ -259,6 +259,6 @@ describe("buildChatThread", () => {
         finished: true,
       },
     });
-    expect(resolved?.streamText).toBe("stale live");
+    expect(resolved?.streamText).toBe("Do banco.");
   });
 });

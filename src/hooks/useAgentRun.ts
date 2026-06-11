@@ -22,6 +22,7 @@ import {
   streamRowToSSEEvent,
 } from "@/lib/agent-progress";
 import { PENDING_RUN_ID } from "@/lib/chat-thread";
+import { shouldRetainLiveRunSlot } from "@/lib/live-run-overlay";
 
 import type { PendingQueueItem } from "@/components/editor/PendingQueuePanel";
 
@@ -163,24 +164,16 @@ export function useAgentRun() {
   const statusChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const stalePollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Limpa runId residual quando o job terminou (evita isAgentBusy preso após Done).
+  // Libera slot live só quando não há conteúdo a mostrar até o DB materializar.
   useEffect(() => {
     if (!progress.finished) return;
     if (!runIdRef.current && !activeRunId) return;
-    // Qualify: libera composer e ancora thread na mensagem do DB (não no slot live).
-    if (progress.awaiting && progress.awaitingKind === "qualify") {
-      runIdRef.current = null;
-      setActiveRunId(null);
-      setActiveRunStartedAtMs(null);
-      setConnected(false);
-      return;
-    }
-    if (progress.awaiting) return;
+    if (shouldRetainLiveRunSlot(progress)) return;
     runIdRef.current = null;
     setActiveRunId(null);
     setActiveRunStartedAtMs(null);
     setConnected(false);
-  }, [progress.finished, progress.awaiting, progress.awaitingKind, progress.canceled, activeRunId]);
+  }, [progress.finished, progress.awaiting, progress.awaitingKind, progress.canceled, activeRunId, progress]);
 
   // ─── Persistência de estado em sessionStorage (escopado por projeto+conversa) ─
   const saveSnapshot = useCallback(() => {
@@ -290,14 +283,18 @@ export function useAgentRun() {
           streamText: streamText ?? next.streamText ?? next.summary ?? p.streamText,
         };
       });
-      // Clear active/connected on terminal — qualify ancora no DB, não no slot live.
-      runIdRef.current = null;
-      setActiveRunId(null);
-      setConnected(false);
-      if (status !== "awaiting_user") {
-        clearAgentSnapshot();
-      }
       teardownChannels();
+      setConnected(false);
+      setProgress((p) => {
+        if (!shouldRetainLiveRunSlot(p)) {
+          runIdRef.current = null;
+          setActiveRunId(null);
+          if (status !== "awaiting_user") {
+            clearAgentSnapshot();
+          }
+        }
+        return p;
+      });
     },
     [teardownChannels],
   );
@@ -368,13 +365,15 @@ export function useAgentRun() {
             timestamp: Date.now(),
           };
           setProgress((p) => applyAgentProgressEvent(p, finishEvent));
-          // Clear only the right runId state on terminal (stale synth path) before teardown.
-          if (runIdRef.current === runId) {
-            runIdRef.current = null;
-            setActiveRunId(null);
-            setConnected(false);
-          }
           teardownChannels();
+          setConnected(false);
+          setProgress((p) => {
+            if (!shouldRetainLiveRunSlot(p) && runIdRef.current === runId) {
+              runIdRef.current = null;
+              setActiveRunId(null);
+            }
+            return p;
+          });
           return true;
         }
       }
@@ -435,13 +434,15 @@ export function useAgentRun() {
               created_at?: string;
             };
             if (applyStreamRow(row)) {
-              // Clear only the right runId state on terminal (before teardown); consistent with PR3 clears.
-              if (runIdRef.current === runId) {
-                runIdRef.current = null;
-                setActiveRunId(null);
-                setConnected(false);
-              }
               teardownChannels();
+              setConnected(false);
+              setProgress((p) => {
+                if (!shouldRetainLiveRunSlot(p) && runIdRef.current === runId) {
+                  runIdRef.current = null;
+                  setActiveRunId(null);
+                }
+                return p;
+              });
             }
           },
         )

@@ -4,7 +4,7 @@ import { MarkdownRenderer } from "@/components/ui/markdown-renderer";
 import type { AgentProgress, PlanStep } from "@/lib/agent-progress";
 import type { AgentComposerMode, ChatMessage } from "@/lib/chat-types";
 
-import { needsPlanApprovalNow, resolvePendingPlan } from "@/lib/plan-message-meta";
+import { usePendingPlan } from "@/hooks/usePendingPlan";
 import { resolveEffectiveAgentProgress } from "@/lib/resolve-agent-progress";
 import { buildOutgoingParts, type StoredMessagePart } from "@/lib/chat-attachments";
 import { ForgeChat } from "@/components/editor/ForgeChat";
@@ -92,12 +92,11 @@ export function ForgeChatPanel({
     [agentProgress, messages, activeRunId],
   );
 
-  const pendingPlan = useMemo(() => {
-    const plan = resolvePendingPlan(agentProgress?.pendingPlan ?? null, messages, activeRunId);
-    return needsPlanApprovalNow(agentProgress?.pendingPlan ?? null, messages, activeRunId)
-      ? plan
-      : null;
-  }, [agentProgress?.pendingPlan, messages, activeRunId]);
+  const pendingPlan = usePendingPlan({
+    livePlan: agentProgress?.pendingPlan ?? null,
+    messages,
+    activeRunId,
+  });
 
   const scrollToBottom = useCallback((behavior: ScrollBehavior = "auto") => {
     const el = scrollRef.current;

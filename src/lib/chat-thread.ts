@@ -386,13 +386,13 @@ export function buildChatThread(
   return dedupeThreadByRunId(items);
 }
 
-/** Progress efetivo: live > DB materializado (cardSnapshot) > DB fraco. */
+/** Progress efetivo: DB materializado > live > DB fraco. */
 export function resolveAssistantProgress(
   item: Extract<ChatThreadItem, { kind: "assistant" }>,
 ): AgentProgress | null {
-  if (item.live) return item.live;
   if (item.message && hasMaterializedCardSnapshot(item.message)) {
     return progressFromAssistantMessage(item.message);
   }
+  if (item.live) return item.live;
   return item.message ? progressFromAssistantMessage(item.message) : null;
 }

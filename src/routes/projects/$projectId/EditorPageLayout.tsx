@@ -23,7 +23,7 @@ import { CommandPalette, type PaletteAction } from "@/components/editor/CommandP
 import { ShortcutCheatsheet } from "@/components/editor/ShortcutCheatsheet";
 import { type LogEntry, LogPanel } from "@/components/editor/LogPanel";
 import { AiDiffViewer, type DiffEntry } from "@/components/editor/AiDiffViewer";
-import { needsPlanApprovalNow, resolvePendingPlan } from "@/lib/plan-message-meta";
+import { usePendingPlan } from "@/hooks/usePendingPlan";
 import { PENDING_RUN_ID } from "@/lib/chat-thread";
 import { resolveHistoricalRunProgress } from "@/lib/assistant-run-progress";
 import type { AgentProgress } from "@/lib/agent-progress";
@@ -233,12 +233,11 @@ export function EditorPageLayout({
 }: EditorPageLayoutProps) {
   const activeRun = useActiveRun(agent);
 
-  const pendingPlan = useMemo(() => {
-    const plan = resolvePendingPlan(agent.progress.pendingPlan, chatMessages, agent.activeRunId);
-    return needsPlanApprovalNow(agent.progress.pendingPlan, chatMessages, agent.activeRunId)
-      ? plan
-      : null;
-  }, [agent.progress.pendingPlan, agent.activeRunId, chatMessages]);
+  const pendingPlan = usePendingPlan({
+    livePlan: agent.progress.pendingPlan,
+    messages: chatMessages,
+    activeRunId: agent.activeRunId,
+  });
 
   const showWelcomeMarkdown = useMemo(() => {
     if (chatMessagesLoading || chatMessages.length > 0) return false;
@@ -246,19 +245,12 @@ export function EditorPageLayout({
     if (activeRun.activeRunId) return false;
     return true;
   }, [chatMessagesLoading, chatMessages.length, agentHasRun, activeRun.activeRunId]);
-  useEffect(() => {
-    if (pendingPlan && !agent.progress.pendingPlan) {
-      agent.hydratePendingPlan(pendingPlan);
-    }
-  }, [pendingPlan, agent.progress.pendingPlan, agent.hydratePendingPlan]);
-
   const {
     jobWorkspaceFocus,
     openJobWorkspace,
     closeJobWorkspace,
     setJobTab,
     isJobFocused,
-    isInspectorDismissedForRun,
     clearInspectorDismissed,
   } = useJobWorkspaceFocus();
 
@@ -283,57 +275,11 @@ export function EditorPageLayout({
     return () => window.removeEventListener(OPEN_CONNECTOR_EVENT, onOpenConnector);
   }, [openConnector]);
 
-  const prevPendingPlanRef = useRef(pendingPlan);
-
-  useEffect(() => {
-    if (!pendingPlan) return;
-    const runId = pendingPlan.runId || agent.activeRunId;
-    if (!runId) return;
-    openJobWorkspace(runId, "plan");
-    if (isMobile) onMobilePanelChange?.("preview");
-  }, [
-    pendingPlan?.planId,
-    pendingPlan?.runId,
-    agent.activeRunId,
-    openJobWorkspace,
-    isMobile,
-    onMobilePanelChange,
-  ]);
-
-  useEffect(() => {
-    const hadPlan = !!prevPendingPlanRef.current;
-    prevPendingPlanRef.current = pendingPlan;
-    if (hadPlan && !pendingPlan && agent.activeRunId) {
-      openJobWorkspace(agent.activeRunId, "details");
-      if (isMobile) onMobilePanelChange?.("preview");
-    }
-  }, [pendingPlan, agent.activeRunId, openJobWorkspace, isMobile, onMobilePanelChange]);
-
   useEffect(() => {
     if (!pendingPlan && jobWorkspaceFocus?.tab === "plan") {
       setJobTab("details");
     }
   }, [pendingPlan, jobWorkspaceFocus?.tab, setJobTab]);
-
-  useEffect(() => {
-    if (!running) return;
-    const runId = agent.activeRunId;
-    if (!runId || runId === PENDING_RUN_ID) return;
-    if (agent.progress.conversational) return;
-    if (pendingPlan) return;
-    if (isInspectorDismissedForRun(runId)) return;
-    openJobWorkspace(runId, "details");
-    if (isMobile) onMobilePanelChange?.("preview");
-  }, [
-    running,
-    agent.activeRunId,
-    agent.progress.conversational,
-    pendingPlan,
-    openJobWorkspace,
-    isMobile,
-    onMobilePanelChange,
-    isInspectorDismissedForRun,
-  ]);
 
   const prevInspectorRunRef = useRef<string | null>(null);
   useEffect(() => {
