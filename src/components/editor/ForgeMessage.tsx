@@ -25,7 +25,7 @@ type ForgeMessageProps = {
   onRollbackRequest?: (req: RollbackRequest) => void;
   copiedIds?: Set<string>;
   onResume?: () => void;
-  onOpenInspector?: (runId: string, tab?: "timeline" | "changes" | "plan") => void;
+  onOpenInspector?: (runId: string, tab?: "details" | "timeline" | "changes" | "plan") => void;
 };
 
 export function ForgeMessage({
@@ -166,7 +166,7 @@ export function ForgeMessage({
           onResume={runView.resumable ? onResume : undefined}
           onOpenInspector={
             onOpenInspector && runView.runId
-              ? () => onOpenInspector(runView.runId, "timeline")
+              ? () => onOpenInspector(runView.runId, "details")
               : undefined
           }
         />

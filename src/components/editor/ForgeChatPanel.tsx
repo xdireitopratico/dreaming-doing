@@ -44,7 +44,7 @@ export type ForgeChatPanelProps = {
   onClearPendingItem?: (id: string) => Promise<void>;
   onClearAllPending?: () => Promise<void>;
   onDrainQueue?: () => Promise<void>;
-  onOpenInspector?: (runId: string, tab?: "timeline" | "changes" | "plan") => void;
+  onOpenInspector?: (runId: string, tab?: "details" | "timeline" | "changes" | "plan") => void;
   focusedRunId?: string | null;
   activeRunStartedAtMs?: number | null;
 };

@@ -272,7 +272,7 @@ export function EditorPageLayout({
 
   const handleOpenInspector = (
     runId: string,
-    tab: "timeline" | "changes" | "plan" = "timeline",
+    tab: "details" | "timeline" | "changes" | "plan" = "details",
   ) => {
     openJobWorkspace(runId, tab);
     if (isMobile) {
@@ -312,14 +312,14 @@ export function EditorPageLayout({
     const hadPlan = !!prevPendingPlanRef.current;
     prevPendingPlanRef.current = pendingPlan;
     if (hadPlan && !pendingPlan && agent.activeRunId) {
-      openJobWorkspace(agent.activeRunId, "timeline");
+      openJobWorkspace(agent.activeRunId, "details");
       if (isMobile) onMobilePanelChange?.("preview");
     }
   }, [pendingPlan, agent.activeRunId, openJobWorkspace, isMobile, onMobilePanelChange]);
 
   useEffect(() => {
     if (!pendingPlan && jobWorkspaceFocus?.tab === "plan") {
-      setJobTab("timeline");
+      setJobTab("details");
     }
   }, [pendingPlan, jobWorkspaceFocus?.tab, setJobTab]);
 
@@ -330,7 +330,7 @@ export function EditorPageLayout({
     if (agent.progress.conversational) return;
     if (pendingPlan) return;
     if (isInspectorDismissedForRun(runId)) return;
-    openJobWorkspace(runId, "timeline");
+    openJobWorkspace(runId, "details");
     if (isMobile) onMobilePanelChange?.("preview");
   }, [
     running,

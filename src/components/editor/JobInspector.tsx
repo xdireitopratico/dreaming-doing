@@ -3,6 +3,7 @@ import type { AgentProgress, PendingPlan, PlanStep } from "@/lib/agent-progress"
 import type { ChatMessage } from "@/lib/chat-types";
 import type { JobInspectorTab } from "@/hooks/useJobWorkspaceFocus";
 import { resolveInspectorPlanForRun } from "@/lib/plan-message-meta";
+import { InspectorDetails } from "@/components/editor/InspectorDetails";
 import { InspectorTimeline } from "@/components/editor/InspectorTimeline";
 import { InspectorChanges } from "@/components/editor/InspectorChanges";
 import { InspectorPlan } from "@/components/editor/InspectorPlan";
@@ -23,6 +24,7 @@ export type JobInspectorProps = {
 };
 
 const TABS: { id: JobInspectorTab; label: string }[] = [
+  { id: "details", label: "Details" },
   { id: "timeline", label: "Timeline" },
   { id: "changes", label: "Changes" },
   { id: "plan", label: "Plan" },
@@ -56,6 +58,9 @@ export function JobInspector({
   return (
     <div className="forge-inspector" data-testid="job-inspector">
       <div className="forge-inspector-header">
+        <button type="button" className="forge-inspector-back-btn" onClick={onBackToLatest}>
+          Back to latest
+        </button>
         <div className="forge-inspector-tabs" role="tablist" aria-label="Job inspector">
           {TABS.filter((t) => t.id !== "plan" || showPlanTab).map((tab) => (
             <button
@@ -71,12 +76,17 @@ export function JobInspector({
             </button>
           ))}
         </div>
-        <button type="button" className="forge-inspector-close-btn" onClick={onBackToLatest}>
-          Fechar inspector
-        </button>
       </div>
 
       <div className="forge-inspector-body forge-scrollbar-dark">
+        {activeTab === "details" && (
+          <InspectorDetails
+            progress={run}
+            running={running}
+            onOpenFile={onOpenFile}
+            runStartedAtMs={runStartedAtMs}
+          />
+        )}
         {activeTab === "timeline" && (
           <InspectorTimeline
             progress={run}
@@ -95,7 +105,7 @@ export function JobInspector({
             onReject={onPlanReject}
           />
         ) : activeTab === "plan" ? (
-          <InspectorTimeline
+          <InspectorDetails
             progress={run}
             running={running}
             onOpenFile={onOpenFile}

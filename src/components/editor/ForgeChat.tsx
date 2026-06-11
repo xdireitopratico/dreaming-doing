@@ -29,7 +29,7 @@ export type ForgeChatProps = {
   pendingPlan?: PendingPlan | null;
   onResume?: () => void;
   onRollbackRequest?: (req: RollbackRequest) => void;
-  onOpenInspector?: (runId: string, tab?: "timeline" | "changes" | "plan") => void;
+  onOpenInspector?: (runId: string, tab?: "details" | "timeline" | "changes" | "plan") => void;
   focusedRunId?: string | null;
   onQualifySelect?: (text: string) => void;
   activeRunStartedAtMs?: number | null;

@@ -10,7 +10,7 @@ type ForgeMiniCardProps = {
   runId: string;
   isFocused?: boolean;
   planTeaser?: boolean;
-  onOpenInspector: (runId: string, tab?: "timeline" | "changes" | "plan") => void;
+  onOpenInspector: (runId: string, tab?: "details" | "timeline" | "changes" | "plan") => void;
 };
 
 export function ForgeMiniCard({
@@ -68,7 +68,7 @@ export function ForgeMiniCard({
       <button
         type="button"
         className="forge-mini-card-body"
-        onClick={() => onOpenInspector(runId, data.planReady || planTeaser ? "plan" : "timeline")}
+        onClick={() => onOpenInspector(runId, data.planReady || planTeaser ? "plan" : "details")}
         aria-label={`Job: ${displayHeader}`}
       >
         <div className="forge-mini-card-header">
