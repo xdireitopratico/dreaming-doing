@@ -269,7 +269,7 @@ export function useAgentSessionCoordinator({
         // pendingQueueItems (React batching). countRef is kept in sync via the progress effect.
         // Critically, even if fwd===undefined here (using input fallback to handleContinueQueue),
         // the backend in continue-queue.ts ALWAYS prefers the *actual DB* pendingBody.mode
-        // (popped item, written at enqueue from sendMode captured in handlers/ChatInput at
+        // (popped item, written at enqueue from sendMode captured in handlers/ChatComposer at
         // onSend time, or meta on user message) over the call input. See original PR3 prompt:
         // "Make drain/continue paths prefer stored intent from pendingBody (or user msg meta)
         // when present; fall back to drain call input only if absent." + "Forward mode

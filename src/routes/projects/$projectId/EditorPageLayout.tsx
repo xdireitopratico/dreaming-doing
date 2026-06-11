@@ -239,12 +239,6 @@ export function EditorPageLayout({
     activeRunId: agent.activeRunId,
   });
 
-  const showWelcomeMarkdown = useMemo(() => {
-    if (chatMessagesLoading || chatMessages.length > 0) return false;
-    if (agentHasRun) return false;
-    if (activeRun.activeRunId) return false;
-    return true;
-  }, [chatMessagesLoading, chatMessages.length, agentHasRun, activeRun.activeRunId]);
   const {
     jobWorkspaceFocus,
     openJobWorkspace,
