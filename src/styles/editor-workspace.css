@@ -1205,7 +1205,7 @@ body:has(.editor-workspace) {
   }
 
   .forge-editor-canvas--mobile .forge-composer {
-    padding-bottom: var(--chat-padding);
+    margin-bottom: max(var(--chat-padding), env(safe-area-inset-bottom));
   }
 }
 
