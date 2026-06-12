@@ -3,7 +3,9 @@
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { CodeBlock } from "@/components/ui/code-block";
-import type { ReactElement } from "react";
+import { MermaidDiagram } from "@/components/chat/MermaidDiagram";
+import { WireframeBlock } from "@/components/chat/WireframeBlock";
+import { isChatDiagramFence } from "@/lib/chat/diagram-fences";
 
 interface MarkdownRendererProps {
   children: string;
@@ -51,8 +53,17 @@ const defaultComponents: Components = {
   },
 };
 
+function chatDiagramLanguage(className: string | undefined): string | null {
+  if (!className) return null;
+  const match = className.match(/language-([\w-]+)/);
+  const lang = match?.[1] ?? "";
+  return isChatDiagramFence(lang) ? lang.toLowerCase() : null;
+}
+
 const chatComponents: Components = {
   code({ children, className, ...props }) {
+    const lang = chatDiagramLanguage(typeof className === "string" ? className : undefined);
+    if (lang) return null;
     const isBlock = typeof className === "string" && className.includes("language-");
     if (isBlock) return null;
     return (
@@ -64,7 +75,14 @@ const chatComponents: Components = {
       </code>
     );
   },
-  pre() {
+  pre({ node, ...props }) {
+    const codeChild = (node as { children?: Array<{ tagName?: string; properties?: { className?: string[] }; children?: Array<{ value?: string }> }> })?.children?.[0];
+    if (codeChild?.tagName !== "code") return null;
+    const className = codeChild.properties?.className?.[0] ?? "";
+    const lang = chatDiagramLanguage(className);
+    const code = codeChild.children?.[0]?.value ?? "";
+    if (lang === "mermaid") return <MermaidDiagram chart={code} {...props} />;
+    if (lang === "wireframe") return <WireframeBlock text={code} {...props} />;
     return null;
   },
 };

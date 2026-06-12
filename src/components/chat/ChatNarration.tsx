@@ -1,3 +1,5 @@
+import { MarkdownRenderer } from "@/components/ui/markdown-renderer";
+
 type ChatNarrationProps = {
   text: string;
   streaming?: boolean;
@@ -6,11 +8,11 @@ type ChatNarrationProps = {
 export function ChatNarration({ text, streaming = false }: ChatNarrationProps) {
   if (!text?.trim()) return null;
   return (
-    <p
+    <div
       className={streaming ? "forge-chat-streaming-text" : "forge-chat-narration-line"}
       data-testid="chat-narration"
     >
-      {text}
-    </p>
+      <MarkdownRenderer variant="chat">{text}</MarkdownRenderer>
+    </div>
   );
 }

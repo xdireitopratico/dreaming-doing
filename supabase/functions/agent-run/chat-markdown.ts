@@ -11,6 +11,7 @@ export const FORGE_CHAT_MARKDOWN = `## Markdown no chat (padrão FORGE)
 - \`inline code\` para caminhos (\`src/App.tsx\`) e comandos curtos.
 - Listas com \`-\` apenas com 2+ itens distintos; evite listas numeradas no chat ao vivo.
 - Títulos \`##\` só em planos/documentos — não em mensagens curtas de progresso.
+- **Wireframe / diagrama:** use bloco \`\`\`mermaid\`\`\` (flowchart, block-beta) ou \`\`\`wireframe\`\`\` (ASCII) — o chat renderiza visualmente. Máx. 1 diagrama por mensagem.
 
 **Emojis:**
 - Opcionais e discretos (0–1 por mensagem, nunca obrigatórios).
@@ -21,7 +22,7 @@ export const FORGE_CHAT_MARKDOWN = `## Markdown no chat (padrão FORGE)
 - Repetir a mesma frase, abertura ou emoji.
 - "explorando o projeto", "indexando arquivos", jargão de pipeline ("classify", "fase", "orquestrador").
 - Fechamentos robóticos ("Pronto! Resumo do que fiz"), listas de ferramentas, blocos de sistema vazados.
-- **Nunca** blocos de código (\`\`\`), listas de tokens CSS (\`--color-*\`, \`@theme\`), nem vomitar paths do seed (\`src/index.css\`, \`tailwind.config\`).
+- **Nunca** blocos de código (\`\`\`) exceto \`mermaid\` e \`wireframe\`; nem tokens CSS (\`--color-*\`, \`@theme\`) nem paths do seed (\`src/index.css\`, \`tailwind.config\`).
 - Cores e decisões em **prosa humana** (ex.: "âmbar quente #FFB627") — máx. 1 hex por mensagem, sem dump de config.`;
 
 /** Voz curta para narração LLM (abertura / loop / fechamento). */

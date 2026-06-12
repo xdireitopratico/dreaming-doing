@@ -22,15 +22,16 @@ export function normalizeChatProse(text: string | null | undefined): string | nu
   return normalizeRepeatedEmojis(t);
 }
 
+import { stripNonDiagramFences } from "@/lib/chat/diagram-fences";
+
 const PATH_INLINE_RE = /`(?:src|app|lib|components|pages|supabase|public)[^\s`]+`/gi;
-const FENCE_RE = /```[\s\S]*?```/g;
 const CSS_TOKEN_LINE_RE = /^.*(?:--color-|@theme|--surface-|--background|--foreground).*$/gm;
 
-/** Remove fences, paths e tokens de seed antes de renderizar no chat. */
+/** Remove fences de código (exceto mermaid/wireframe), paths e tokens de seed. */
 export function sanitizeChatProseForDisplay(text: string | null | undefined): string | null {
   const t = text?.trim();
   if (!t) return null;
-  let out = t.replace(FENCE_RE, "");
+  let out = stripNonDiagramFences(t);
   out = out.replace(PATH_INLINE_RE, "");
   out = out.replace(CSS_TOKEN_LINE_RE, "");
   out = out.replace(/\n{3,}/g, "\n\n").replace(/[ \t]{2,}/g, " ").trim();

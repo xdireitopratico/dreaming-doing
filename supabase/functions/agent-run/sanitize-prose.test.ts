@@ -15,3 +15,24 @@ Deno.test("sanitizeUserFacingProse — remove fences e paths", () => {
   assertEquals(out.includes("--color-brand"), false);
   assertEquals(out.includes("dark industrial"), true);
 });
+
+Deno.test("sanitizeUserFacingProse — preserva mermaid e wireframe", () => {
+  const raw = [
+    "Layout:",
+    "```mermaid",
+    "flowchart LR",
+    "  A --> B",
+    "```",
+    "```wireframe",
+    "+---+",
+    "| A |",
+    "+---+",
+    "```",
+  ].join("\n");
+
+  const out = sanitizeUserFacingProse(raw);
+  assertEquals(out.includes("```mermaid"), true);
+  assertEquals(out.includes("flowchart LR"), true);
+  assertEquals(out.includes("```wireframe"), true);
+  assertEquals(out.includes("| A |"), true);
+});

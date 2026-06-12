@@ -25,6 +25,26 @@ describe("sanitizeChatProseForDisplay", () => {
       "Tokens em `src/index.css`:\n```css\n--color-brand-500: #FFB627;\n```\nDark industrial.";
     expect(sanitizeChatProseForDisplay(raw)).toBe("Tokens em :\n\nDark industrial.");
   });
+
+  it("preserva mermaid e wireframe", () => {
+    const raw = [
+      "Proposta de layout:",
+      "```mermaid",
+      "flowchart TB",
+      "  Hero --> Menu",
+      "```",
+      "```wireframe",
+      "+------+",
+      "| Hero |",
+      "+------+",
+      "```",
+    ].join("\n");
+    const out = sanitizeChatProseForDisplay(raw)!;
+    expect(out).toContain("```mermaid");
+    expect(out).toContain("Hero --> Menu");
+    expect(out).toContain("```wireframe");
+    expect(out).toContain("| Hero |");
+  });
 });
 
 describe("resolveClosingProse", () => {
