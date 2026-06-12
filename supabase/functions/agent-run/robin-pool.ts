@@ -75,6 +75,15 @@ export class ResilientLLM implements LLMProvider {
     private robinLabel = "ROBIN",
   ) {}
 
+  /** Atualiza modelo BYOK in-place (Auto pós-classify; Fixo/ROBIN não chama). */
+  updateCfg(cfg: ProviderConfig): void {
+    this.cfg = cfg;
+  }
+
+  getCfg(): ProviderConfig {
+    return this.cfg;
+  }
+
   async chat(params: ChatParams): Promise<ChatResponse> {
     const poolSize = this.pool?.size ?? 1;
     const attempts = Math.max(poolSize, MAX_LLM_RETRIES);

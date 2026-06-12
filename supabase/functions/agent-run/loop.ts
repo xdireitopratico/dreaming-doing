@@ -56,6 +56,10 @@ import {
   sanitizePlanHeadline,
 } from "./plan-mode.ts";
 import type { ClassificationResult } from "./router.ts";
+import type { ProviderConfig } from "./providers.ts";
+import type { AgentPreferencesPayload } from "./connector-keys.ts";
+import { resolveAutoForComplexity } from "../_shared/model-presets.ts";
+import { ResilientLLM } from "./robin-pool.ts";
 import {
   generateClosureMessage,
   generateLoopUpdate,
@@ -154,6 +158,8 @@ export class AgentLoop {
   }>;
   /** Cache de conteúdo de arquivos para evitar N+1 queries ao Supabase durante execução */
   private fileContentCache: Map<string, string>;
+  private preferences: AgentPreferencesPayload | null;
+  private connectorKeys: Record<string, string>;
 
   constructor(
     reg: ToolRegistry,
@@ -188,10 +194,16 @@ export class AgentLoop {
       planSteps?: PlanStep[];
       /** Retomada após falha de build — pula re-narração de intenção. */
       buildFixResume?: boolean;
+      /** mainCfg de resolveAgentProvider — label/modelo exatos do BYOK do usuário */
+      resolvedMainCfg?: ProviderConfig;
+      /** Preferências /models — Auto troca modelo após classify; Fixo/ROBIN não */
+      preferences?: AgentPreferencesPayload;
     },
   ) {
     this.reg = reg;
     this.llm = llm;
+    this.connectorKeys = injectedKeys ?? {};
+    this.preferences = options?.preferences ?? null;
     this.sb = supabase;
     this.state = state;
     this.onStream = onStream;
@@ -236,7 +248,7 @@ export class AgentLoop {
     this.fileContentCache = new Map();
     this.runStartTime = Date.now();
     this.lastCheckpointStep = options?.hasCheckpoint ? (state.currentStepIndex ?? 0) : 0;
-    this.router = new ModelRouter(injectedKeys, routerOverrides);
+    this.router = new ModelRouter(injectedKeys, routerOverrides, options?.resolvedMainCfg);
     this.observer = new RuntimeObserver(reg, this.fileContentCache);
     this.skills = new SkillRegistry();
     this.compression = new CompressionManager(this.configuredModel(), (type, data) =>
@@ -247,6 +259,41 @@ export class AgentLoop {
   /** Modelo BYOK configurado pelo usuário — única voz do chat e da execução. */
   private configuredModel(): LLMProvider {
     return this.llm;
+  }
+
+  /**
+   * AUTO: após classify, escolhe preset por potência da demanda (complexidade).
+   * FIXO / ROBIN: no-op — o nome do modo já define o comportamento.
+   */
+  private applyAutoModelForComplexity(complexity: number): void {
+    if (this.preferences?.mode !== "auto") return;
+
+    const wire = resolveAutoForComplexity(
+      this.connectorKeys,
+      complexity,
+      this.preferences.autoAllowedPresetIds,
+      this.preferences.userModelEntries,
+    );
+    if (!wire) return;
+
+    const newCfg: ProviderConfig = {
+      provider: wire.provider,
+      apiKey: wire.apiKey,
+      model: wire.model,
+      baseUrl: wire.baseUrl,
+      label: `${wire.label} (Auto · exec c${complexity})`,
+    };
+
+    const cur = this.router.mainCfg;
+    if (cur.provider === newCfg.provider && cur.model === newCfg.model) {
+      this.router.setResolvedCfg(newCfg);
+      return;
+    }
+
+    if (this.llm instanceof ResilientLLM) {
+      this.llm.updateCfg(newCfg);
+    }
+    this.router.setResolvedCfg(newCfg);
   }
 
   private loopBudgetExceeded(): boolean {
@@ -483,6 +530,7 @@ export class AgentLoop {
         }`,
         messageCount: this.state.messages.length,
       });
+      this.applyAutoModelForComplexity(this.complexityScore);
       this.emit("classify", {
         complexity: this.complexityScore,
         model: this.router.mainCfg.label,
@@ -600,6 +648,7 @@ export class AgentLoop {
       };
 
       this.maxStepsLimit = calculateMaxSteps(classification.complexity);
+      this.applyAutoModelForComplexity(classification.complexity);
       executionModel = this.configuredModel();
       this.emit("classify", {
         complexity: classification.complexity,

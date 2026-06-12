@@ -1,5 +1,7 @@
 /** Presets — sync com src/lib/model-catalog.ts (IDs = slug com / → --) */
 
+export type ModelTier = "frontier" | "balanced" | "fast" | "pool";
+
 export type PresetWire = {
   provider: string;
   model: string;
@@ -7,6 +9,127 @@ export type PresetWire = {
   label: string;
   secretKey: string;
 };
+
+type PresetMeta = { tier: ModelTier; rank: number };
+
+/** Tier + rank — sync com src/lib/model-catalog.ts (menor rank = mais forte). */
+const PRESET_META: Record<string, PresetMeta> = {
+  "anthropic--claude-opus-4-8": { tier: "frontier", rank: 1 },
+  "anthropic--claude-opus-4-7": { tier: "frontier", rank: 2 },
+  "anthropic--claude-sonnet-4-6": { tier: "frontier", rank: 3 },
+  "openai--gpt-5-5": { tier: "frontier", rank: 4 },
+  "openai--gpt-5-5-instant": { tier: "frontier", rank: 5 },
+  "openai--gpt-5-3-codex": { tier: "frontier", rank: 6 },
+  "google--gemini-3-5-flash": { tier: "frontier", rank: 7 },
+  "google--gemini-3-1-pro": { tier: "frontier", rank: 8 },
+  "xai--grok-4-3": { tier: "frontier", rank: 9 },
+  "xai--grok-build-0-1": { tier: "frontier", rank: 10 },
+  "deepseek--deepseek-v4-pro": { tier: "balanced", rank: 11 },
+  "deepseek--deepseek-v4-flash": { tier: "balanced", rank: 12 },
+  "qwen--qwen3-7-max": { tier: "balanced", rank: 13 },
+  "qwen--qwen3-7-plus": { tier: "balanced", rank: 14 },
+  "qwen--qwen3-6-plus": { tier: "balanced", rank: 15 },
+  "moonshotai--kimi-k2-6": { tier: "balanced", rank: 16 },
+  "moonshotai--kimi-k2-5": { tier: "balanced", rank: 17 },
+  "minimax--minimax-m3": { tier: "balanced", rank: 18 },
+  "minimax--minimax-m2-7": { tier: "balanced", rank: 19 },
+  "zhipu--glm-5-1": { tier: "balanced", rank: 20 },
+  "xiaomi--mimo-v2-5-pro": { tier: "balanced", rank: 32 },
+  "google--gemma-4-31b-it": { tier: "fast", rank: 24 },
+  "anthropic--claude-opus-4-8-fast": { tier: "fast", rank: 25 },
+  "openai--gpt-5-4": { tier: "fast", rank: 26 },
+  "deepseek--deepseek-v3": { tier: "fast", rank: 27 },
+  "qwen--qwen3-6-flash": { tier: "fast", rank: 28 },
+  "minimax--minimax-m2-5": { tier: "fast", rank: 29 },
+  "zhipu--glm-5": { tier: "fast", rank: 30 },
+  "qwen--qwen3-coder": { tier: "pool", rank: 23 },
+  "nvidia--nemotron-3-ultra-550b": { tier: "pool", rank: 21 },
+  "nvidia--nemotron-3-super-120b": { tier: "pool", rank: 22 },
+  "qwen--qwen3-5-397b-a17b": { tier: "pool", rank: 31 },
+  "pool-groq-flash": { tier: "pool", rank: 90 },
+  "pool-nemotron-ultra-550b": { tier: "pool", rank: 91 },
+  "pool-nemotron-super": { tier: "pool", rank: 91 },
+  "ollama--llama3-2": { tier: "fast", rank: 200 },
+  "ollama--qwen2-5-coder": { tier: "balanced", rank: 201 },
+  "ollama--deepseek-r1-8b": { tier: "fast", rank: 202 },
+  "ollama--mistral": { tier: "fast", rank: 203 },
+};
+
+function metaForPresetId(id: string): PresetMeta {
+  return PRESET_META[normalizePresetId(id)] ?? { tier: "balanced", rank: 9999 };
+}
+
+/** Ordem de tiers a tentar conforme complexidade (1=leve, 5=pesado). */
+export function autoTierSearchOrder(complexity: number): ModelTier[] {
+  const c = Math.min(5, Math.max(1, complexity));
+  if (c <= 2) return ["fast", "balanced", "frontier"];
+  if (c === 3) return ["balanced", "frontier", "fast"];
+  return ["frontier", "balanced", "fast"];
+}
+
+type AutoCandidate = {
+  id: string;
+  wire: PresetWire & { apiKey: string };
+  tier: ModelTier;
+  rank: number;
+};
+
+function listAutoCandidates(
+  keys: Record<string, string>,
+  allowedPresetIds?: string[],
+  userModels?: UserModelEntryPayload[],
+): AutoCandidate[] {
+  const allowlist = allowedPresetIds?.map(normalizePresetId).filter(Boolean) ?? [];
+  const ids =
+    allowlist.length > 0
+      ? allowlist
+      : Object.keys(PRESETS).filter((id) => metaForPresetId(id).tier !== "pool");
+
+  const out: AutoCandidate[] = [];
+  for (const id of ids) {
+    const wire = resolveWireFromPresetId(id, userModels) ?? getPresetWire(id);
+    if (!wire) continue;
+    const resolved = wireWithKey(wire, keys);
+    if (!resolved) continue;
+    const meta = metaForPresetId(id);
+    if (meta.tier === "pool") continue;
+    out.push({ id, wire: resolved, tier: meta.tier, rank: meta.rank });
+  }
+  out.sort((a, b) => a.rank - b.rank);
+  return out;
+}
+
+function pickAutoByTierOrder(
+  candidates: AutoCandidate[],
+  tierOrder: ModelTier[],
+): (PresetWire & { apiKey: string }) | null {
+  for (const tier of tierOrder) {
+    const inTier = candidates.filter((c) => c.tier === tier);
+    if (inTier.length > 0) return inTier[0]!.wire;
+  }
+  return candidates[0]?.wire ?? null;
+}
+
+/** Classify no Auto — sempre tier fast (demanda leve). */
+export function resolveAutoClassifyProvider(
+  keys: Record<string, string>,
+  allowedPresetIds?: string[],
+  userModels?: UserModelEntryPayload[],
+): (PresetWire & { apiKey: string }) | null {
+  const candidates = listAutoCandidates(keys, allowedPresetIds, userModels);
+  return pickAutoByTierOrder(candidates, ["fast", "balanced", "frontier"]);
+}
+
+/** Execução no Auto — modelo conforme complexidade / potência da demanda. */
+export function resolveAutoForComplexity(
+  keys: Record<string, string>,
+  complexity: number,
+  allowedPresetIds?: string[],
+  userModels?: UserModelEntryPayload[],
+): (PresetWire & { apiKey: string }) | null {
+  const candidates = listAutoCandidates(keys, allowedPresetIds, userModels);
+  return pickAutoByTierOrder(candidates, autoTierSearchOrder(complexity));
+}
 
 const OR = "https://openrouter.ai/api/v1";
 
@@ -283,7 +406,7 @@ type PrefsLike = {
   userModelEntries?: UserModelEntryPayload[];
 };
 
-function wireWithKey(
+export function wireWithKey(
   wire: PresetWire,
   keys: Record<string, string>,
 ): (PresetWire & { apiKey: string }) | null {

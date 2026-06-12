@@ -13,8 +13,8 @@ import { pickMain, type ProviderConfig } from "./providers.ts";
 import {
   defaultRobinModel,
   PLATFORM_ROBIN_TASTE_PRESET_ID,
+  resolveAutoClassifyProvider,
   resolveModelFromPreferences,
-  filterKeysForAutoAllowlist,
 } from "../_shared/model-presets.ts";
 import { RobinKeyPool } from "./robin-pool.ts";
 
@@ -249,19 +249,31 @@ export async function resolveAgentProvider(
   let mainCfg: ProviderConfig;
 
   if (preferences?.mode === "auto") {
-    const autoKeys = filterKeysForAutoAllowlist(
+    const allowlist = preferences?.autoAllowedPresetIds ?? [];
+    const classifyWire = resolveAutoClassifyProvider(
       userOnlyKeys,
-      preferences?.autoAllowedPresetIds,
+      allowlist,
       preferences?.userModelEntries,
     );
-    mainCfg = pickMain(autoKeys);
-    const n = preferences?.autoAllowedPresetIds?.length ?? 0;
-    mainCfg.label = `${mainCfg.label} (Auto · ${n > 0 ? `${n} modelo(s)` : "todas as chaves"})`;
-  } else {
+    if (!classifyWire) {
+      throw new Error(
+        allowlist.length > 0
+          ? "Nenhum modelo marcado no Auto tem chave em /api. Adicione a chave ou marque outro modelo."
+          : "Modo Auto: cadastre pelo menos uma chave LLM em /api.",
+      );
+    }
+    mainCfg = {
+      provider: classifyWire.provider,
+      apiKey: classifyWire.apiKey,
+      model: classifyWire.model,
+      baseUrl: classifyWire.baseUrl,
+      label: `${classifyWire.label} (Auto · classify)`,
+    };
+  } else if (preferences?.mode === "fixed") {
     const resolved = resolveModelFromPreferences(preferences, userOnlyKeys);
     if (!resolved) {
       throw new Error(
-        "Chave ausente para o modelo escolhido. Adicione a API Key do provedor em /api.",
+        "Chave ausente para o modelo fixo. Adicione a API Key do provedor em /api.",
       );
     }
     mainCfg = {
@@ -271,6 +283,8 @@ export async function resolveAgentProvider(
       baseUrl: resolved.baseUrl,
       label: `${resolved.label} (fixo)`,
     };
+  } else {
+    throw new Error("Modo de modelo inválido. Configure Auto ou Fixo em /models.");
   }
 
   return {

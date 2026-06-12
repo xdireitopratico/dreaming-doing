@@ -4,7 +4,7 @@
 // concretos que o usuário pode revisar antes da execução.
 import type { LLMProvider } from "./types.ts";
 import type { PlanRationale, PlanStep, PlanStepType } from "./plan-mode.ts";
-import { buildProvider, pickCheap, pickMain, type ProviderConfig } from "./providers.ts";
+import { buildProvider, pickMain, type ProviderConfig } from "./providers.ts";
 
 export interface ClassificationResult {
   complexity: 1 | 2 | 3 | 4 | 5;
@@ -105,11 +105,18 @@ export class ModelRouter {
   constructor(
     injected?: Record<string, string>,
     overrides?: { main?: LLMProvider; cheap?: LLMProvider },
+    /** mainCfg já resolvido por resolveAgentProvider (BYOK / ROBIN / taste) — fonte única de verdade */
+    resolvedCfg?: ProviderConfig,
   ) {
-    this.mainCfg = pickMain(injected);
-    this.cheapCfg = pickCheap(this.mainCfg, injected);
+    if (resolvedCfg) {
+      this.mainCfg = resolvedCfg;
+      this.cheapCfg = resolvedCfg;
+    } else {
+      this.mainCfg = pickMain(injected);
+      this.cheapCfg = this.mainCfg;
+    }
     this.main = overrides?.main ?? buildProvider(this.mainCfg);
-    this.cheap = overrides?.cheap ?? buildProvider(this.cheapCfg);
+    this.cheap = overrides?.cheap ?? overrides?.main ?? this.main;
   }
 
   async classify(
@@ -118,7 +125,7 @@ export class ModelRouter {
     opts?: { lastPlan?: string },
   ): Promise<ClassificationResult> {
     try {
-      const resp = await this.cheap.chat({
+      const resp = await this.main.chat({
         messages: [
           {
             role: "system",
@@ -214,14 +221,22 @@ Retorne APENAS o JSON. Sem markdown, sem comentários, sem texto antes/depois.`,
     }
   }
 
-  selectModel(complexity: number): LLMProvider {
-    return complexity <= 2 ? this.cheap : this.main;
+  setResolvedCfg(cfg: ProviderConfig): void {
+    this.mainCfg = cfg;
+    this.cheapCfg = cfg;
+  }
+
+  /** Fixo/ROBIN: mesmo modelo. Auto: caller troca após classify por demanda. */
+  selectModel(_complexity?: number): LLMProvider {
+    return this.main;
   }
 
   getMainProvider(): LLMProvider {
     return this.main;
   }
+
+  /** @deprecated Alias de getMainProvider — não existe modelo separado no BYOK. */
   getCheapProvider(): LLMProvider {
-    return this.cheap;
+    return this.main;
   }
 }

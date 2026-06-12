@@ -333,6 +333,8 @@ export async function executeAgentJob(
     stackAddon,
     tasteStart
       ? {
+          resolvedMainCfg: mainCfg,
+          preferences,
           maxSteps: 14,
           tasteStart: true,
           sessionAddon: sessionExt.addon,
@@ -341,6 +343,8 @@ export async function executeAgentJob(
           planMode,
         }
       : {
+          resolvedMainCfg: mainCfg,
+          preferences,
           sessionAddon: sessionExt.addon,
           userSkillNames: sessionExt.skillNames,
           resumeRun,
