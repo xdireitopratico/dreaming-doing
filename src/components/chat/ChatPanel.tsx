@@ -361,9 +361,8 @@ export function ChatPanel({
   const lastAssistantMessageId = useMemo(() => {
     for (let i = thread.length - 1; i >= 0; i--) {
       const item = thread[i];
-      if (item?.kind === "assistant" && item.message?.id && !item.isActive) {
-        return item.message.id;
-      }
+      if (item?.kind !== "assistant" || !item.message?.id) continue;
+      if (!item.isActive) return item.message.id;
     }
     return null;
   }, [thread]);

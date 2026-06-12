@@ -67,7 +67,7 @@ export type ThreadItem =
 
 /** Item interno antes do mapeamento para UI. */
 export type RawThreadItem =
-  | { kind: "user"; message: ChatMessage }
+  | { kind: "user"; message: ChatMessage; internal?: boolean }
   | {
       kind: "assistant";
       message?: ChatMessage;

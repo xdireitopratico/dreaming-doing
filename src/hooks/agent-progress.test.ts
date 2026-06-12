@@ -59,6 +59,22 @@ describe("applyAgentProgressEvent", () => {
     expect(next.statusHint).toContain("Retomando");
   });
 
+  it("start zera streamText e narration do run anterior", () => {
+    const stale = {
+      ...base,
+      streamText: "Plano: landing viva e convertendo",
+      narrationText: "Vou montar o plano.",
+      latencyThoughtMs: 83_000,
+      timeline: [ev("phase", { phase: "creating_plan" })],
+    };
+    const next = applyAgentProgressEvent(stale, ev("start", {}));
+    expect(next.streamText).toBeNull();
+    expect(next.narrationText).toBeNull();
+    expect(next.latencyThoughtMs).toBeNull();
+    expect(next.timeline).toHaveLength(1);
+    expect(next.timeline[0]?.type).toBe("start");
+  });
+
   it("finish ok encerra sem resumable", () => {
     const next = applyAgentProgressEvent(base, ev("finish", { ok: true, resumable: true }));
     expect(next.finished).toBe(true);

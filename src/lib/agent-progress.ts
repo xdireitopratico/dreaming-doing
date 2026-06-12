@@ -232,7 +232,8 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
   switch (type) {
     case "start":
       return {
-        ...prev,
+        ...initialAgentProgress,
+        pendingQueueCount: prev.pendingQueueCount,
         error: null,
         finished: false,
         resumable: false,
@@ -242,7 +243,7 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
           : data.resume
             ? "Retomando com a memória salva no chat…"
             : "Trabalhando no projeto…",
-        timeline: [...prev.timeline, event],
+        timeline: [event],
       };
 
     case "canceled":

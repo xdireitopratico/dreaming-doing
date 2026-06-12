@@ -71,6 +71,43 @@ describe("buildChatThread", () => {
     }
   });
 
+  it("oculta mensagem plan_approved do chat mas ancora build run", () => {
+    const messages: ChatMessage[] = [
+      msg("u1", "user", "landing viva"),
+      {
+        id: "a-plan",
+        role: "assistant",
+        content: "Revise o plano.",
+        timestamp: 0,
+        runId: "run-plan",
+        meta: { runId: "run-plan", planId: "p1", planStatus: "approved" },
+      },
+      {
+        id: "u-approve",
+        role: "user",
+        content: "[Plano aprovado] Plano aprovado — executar em modo Build.",
+        timestamp: 0,
+        meta: { kind: "plan_approved", buildRunId: "run-build", planSourceRunId: "run-plan" },
+      },
+    ];
+    const progress = { ...initialAgentProgress, statusHint: "Trabalhando…" };
+    const thread = buildChatThread(messages, progress, {
+      running: true,
+      activeRunId: "run-build",
+      sessionProgress: progress,
+    });
+    expect(thread.map((t) => t.kind)).toEqual(["user", "assistant", "assistant"]);
+    const users = thread.filter((t) => t.kind === "user");
+    expect(users).toHaveLength(1);
+    expect(users[0].kind === "user" && users[0].message.content).toBe("landing viva");
+    const buildSlot = thread[2];
+    expect(buildSlot.kind).toBe("assistant");
+    if (buildSlot.kind === "assistant") {
+      expect(buildSlot.runId).toBe("run-build");
+      expect(buildSlot.isActive).toBe(true);
+    }
+  });
+
   it("não vaza run de outra conversa em chat vazio", () => {
     const stale = {
       ...initialAgentProgress,

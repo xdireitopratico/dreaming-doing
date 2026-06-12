@@ -203,12 +203,15 @@ export function useAgentRun() {
       const isFreshForStart = t === "start" && lastSeqRef.current === 0;
       if (row.seq <= lastSeqRef.current && !isFreshForStart) return false;
       lastSeqRef.current = row.seq;
-      const terminal = t === "finish" || t === "canceled" || t === "error";
+      const terminal = t === "finish" || t === "canceled" || t === "error" || t === "done";
       setProgress((prev) => {
         let next = applyAgentProgressEvent(prev, event);
         next = withFrozenLatencyThought(next, activeRunStartedAtMsRef.current);
         return next;
       });
+      if (terminal) {
+        setActiveRunStartedAtMs(null);
+      }
       return terminal;
     },
     [],
@@ -287,6 +290,7 @@ export function useAgentRun() {
         };
         return withFrozenLatencyThought(merged, activeRunStartedAtMsRef.current);
       });
+      setActiveRunStartedAtMs(null);
       teardownChannels();
       setConnected(false);
       setProgress((p) => {
@@ -405,14 +409,13 @@ export function useAgentRun() {
       runIdRef.current = runId;
       setActiveRunId(runId);
       setQueueBlockingReason(null);
-      const turnInProgress = activeRunStartedAtMsRef.current != null;
-      if (!isSame && opts?.resetProgress !== false && !turnInProgress) {
+      if (!isSame && opts?.resetProgress !== false) {
         lastSeqRef.current = 0;
         setProgress({
           ...initialAgentProgress,
           statusHint: "Conectando ao agente…",
         });
-      } else if (!isSame && turnInProgress) {
+      } else if (!isSame) {
         lastSeqRef.current = 0;
       }
 
@@ -807,34 +810,20 @@ export function useAgentRun() {
       void projectId;
       void conversationId;
       const isNew = runIdRef.current !== runId;
-      const turnInProgress = activeRunStartedAtMsRef.current != null;
       if (isNew) {
         // Do not pre-mutate runIdRef before subscribe (watch is the coordinator/reconcile/drain/pendingBuild
         // path for new runIds on realtime INSERT/UPDATE and rapid successive turns). Pre-set made isSame=true
         // inside subscribe, skipping !isSame teardown + lastSeqRef=0 + setProgress(initial) even when
         // resetProgress:isNew. Result: high lastSeq from prior run → catchUp .gt() gets 0 rows for new
         // low-seq events (incl start), realtime apply skips via seq guard (fresh bypass requires ===0).
-        // This re-introduced the "no visible execution" root cause (99% subagent: watch:668/subscribe:305/327
-        // + shared lastSeq + catchup-before-channels) for the primary multi-turn subscribe path.
-        // Fix: snapshot isNew from pre-call ref value; subscribe's isSame (still seeing prior) drives
-        // correct !isSame path (teardown old, set ref, lastSeq=0 since !isSame && opts.reset, fresh start).
-        // Matches direct connect/drain (no pre-set) + idempotent guard + existing ref/reset ownership in subscribe.
-        // Ensures "start" out-of-seq + catchUp for new run from watch (core to "realtime subscribe" title + double msg).
+        // Plan→Build: sempre reset completo — nunca herdar streamText/narration/timeline do run anterior.
         setActiveRunId(runId);
-        if (turnInProgress) {
-          setProgress((p) => ({
-            ...p,
-            statusHint: "Conectando ao agente…",
-            finished: false,
-          }));
-        } else {
-          setProgress({
-            ...initialAgentProgress,
-            statusHint: "Conectando ao agente…",
-          });
-        }
+        setProgress({
+          ...initialAgentProgress,
+          statusHint: "Conectando ao agente…",
+        });
       }
-      await subscribeToRun(runId, { resetProgress: isNew && !turnInProgress });
+      await subscribeToRun(runId, { resetProgress: isNew });
     },
     [subscribeToRun],
   );

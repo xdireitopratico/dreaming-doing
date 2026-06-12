@@ -201,6 +201,39 @@ describe("mapAssistantTurn — contrato Lovable imutável", () => {
     assertAssistantTurnInvariant(turn);
   });
 
+  it("turn histórico não herda sessionProgress do run ativo", () => {
+    const staleSession = {
+      ...initialAgentProgress,
+      streamText: "Plano: landing viva e convertendo",
+      narrationText: "Missão: entregar landing viva",
+      latencyThoughtMs: 83_000,
+      finished: false,
+    };
+    const messages = [
+      msg("u1", "user", "landing"),
+      msg("a1", "assistant", "Texto persistido do plano.", {
+        runId: "run-plan",
+        meta: { runId: "run-plan", finishedAt: new Date().toISOString() },
+      }),
+    ];
+    const thread: RawThreadItem[] = [
+      { kind: "user", message: messages[0] },
+      { kind: "assistant", message: messages[1], runId: "run-plan", isActive: false },
+    ];
+
+    const turn = mapAssistantTurn(thread[1] as Extract<RawThreadItem, { kind: "assistant" }>, {
+      messages,
+      thread,
+      itemIndex: 1,
+      running: true,
+      activeRunId: "run-build",
+      sessionProgress: staleSession,
+    });
+
+    expect(turn.streamText).not.toBe("Plano: landing viva e convertendo");
+    expect(turn.narration).not.toBe("Missão: entregar landing viva");
+  });
+
   it("Terminal img15: chips de plano, sem mini-card", () => {
     const plan = {
       planId: "p1",

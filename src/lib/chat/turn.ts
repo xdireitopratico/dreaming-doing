@@ -72,7 +72,12 @@ export function mapAssistantTurn(
   let resolved = resolveAssistantProgress(item);
   const runId = item.runId ?? activeRunId ?? `slot-${itemIndex}`;
 
-  if (!resolved && runId && item.runId === activeRunId) {
+  if (
+    !resolved &&
+    runId &&
+    item.runId === activeRunId &&
+    (item.isActive || !!item.live)
+  ) {
     resolved = sessionProgress;
   }
   if (!resolved && item.runId) {

@@ -22,6 +22,17 @@ function buildRunIdFromUser(msg: ChatMessage): string | null {
   return null;
 }
 
+/** Mensagem user só para LLM/âncora de build — não exibir no chat (espelha run-context.ts). */
+export function isPlanApprovedUserMessage(msg: ChatMessage): boolean {
+  const meta = msg.meta;
+  if (!meta || typeof meta !== "object") return false;
+  if (meta.kind === "plan_approved") return true;
+  if (typeof meta.planSourceRunId === "string") return true;
+  const text = msg.content?.trim() ?? "";
+  if (text.startsWith("[Plano aprovado]")) return true;
+  return /^Plano aprovado — executar em modo Build/i.test(text);
+}
+
 function mergeMessageContent(a?: ChatMessage, b?: ChatMessage): ChatMessage | undefined {
   if (!a) return b;
   if (!b) return a;
@@ -45,7 +56,11 @@ function buildDbThread(messages: ChatMessage[]): RawThreadItem[] {
     if (msg.role === "tool") continue;
 
     if (msg.role === "user") {
-      items.push({ kind: "user", message: msg });
+      items.push({
+        kind: "user",
+        message: msg,
+        internal: isPlanApprovedUserMessage(msg) ? true : undefined,
+      });
       continue;
     }
 
@@ -252,11 +267,12 @@ export function buildChatThread(
   const raw = buildRawThread(messages, progress, opts);
   const running = opts.running ?? false;
 
-  return raw.map((item, itemIndex) => {
+  return raw.flatMap((item, itemIndex) => {
     if (item.kind === "user") {
-      return { kind: "user", message: item.message };
+      if (item.internal) return [];
+      return [{ kind: "user", message: item.message }];
     }
-    return mapAssistantTurn(item, {
+    return [mapAssistantTurn(item, {
       messages,
       thread: raw,
       itemIndex,
@@ -266,6 +282,6 @@ export function buildChatThread(
       pendingPlan: opts.pendingPlan,
       sessionProgress: opts.sessionProgress,
       focusedRunId: opts.focusedRunId,
-    });
+    })];
   });
 }
