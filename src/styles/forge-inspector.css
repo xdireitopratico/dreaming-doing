@@ -3,9 +3,13 @@
 .forge-inspector {
   display: flex;
   min-height: 0;
-  height: 100%;
   flex-direction: column;
   background: var(--bg-chat);
+}
+
+.forge-inspector.forge-inspector-rail {
+  align-self: stretch;
+  height: auto;
 }
 
 .forge-inspector:not(.forge-inspector-rail) {
@@ -22,10 +26,10 @@
 }
 
 .forge-inspector-rail {
-  width: min(420px, 42vw);
+  width: 320px;
   min-width: 280px;
-  max-width: 42vw;
-  flex: 0 0 auto;
+  max-width: 320px;
+  flex: 0 0 320px;
   border-left: 1px solid var(--border-forge);
 }
 

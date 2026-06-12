@@ -16,6 +16,7 @@ import { canSendTasteChat, canStartTasteProject, resolveSessionKind } from "@/li
 import type { StoredMessagePart } from "@/lib/chat-attachments";
 import { buildPreviewUrl } from "@/lib/project-routes";
 import { logEditorTelemetryEvent } from "@/lib/editor-telemetry";
+import { isEditorAgentBusy } from "@/lib/agent-busy";
 import { isAgentConnectInFlight } from "@/lib/agent-session-guards";
 import { loadAgentSessionExtensions } from "@/lib/agent-session-extensions";
 import { publishProject } from "@/lib/publish.functions";
@@ -205,21 +206,24 @@ export function useEditorPageHandlers({
     [setOpenTabs],
   );
 
-  const isAgentBusy = useCallback(() => {
-    const liveRun =
-      agent.activeRunId != null &&
-      !agent.progress.finished &&
-      !agent.progress.canceled &&
-      !agent.progress.awaiting;
-    return running || liveRun || isAgentConnectInFlight();
-  }, [
-    running,
-    agent.connected,
-    agent.activeRunId,
-    agent.progress.finished,
-    agent.progress.canceled,
-    agent.progress.awaiting,
-  ]);
+  const isAgentBusy = useCallback(
+    () =>
+      isEditorAgentBusy({
+        running,
+        activeRunId: agent.activeRunId,
+        finished: agent.progress.finished,
+        canceled: agent.progress.canceled,
+        awaiting: agent.progress.awaiting,
+        connectInFlight: isAgentConnectInFlight(),
+      }),
+    [
+      running,
+      agent.activeRunId,
+      agent.progress.finished,
+      agent.progress.canceled,
+      agent.progress.awaiting,
+    ],
+  );
 
   const runAgent = useCallback(
     async (explicitKind?: ForgeSessionKind, explicitAction?: TasteAction): Promise<boolean> => {
@@ -437,7 +441,7 @@ export function useEditorPageHandlers({
             logEditorTelemetryEvent("agent", "chat_send_fail", "error", message.slice(0, 200));
           },
           onRunFailed: () => {
-            toast.error("Não foi possível iniciar o agente — verifique API e tente de novo.");
+            // runAgent já exibe toast com o erro real (API, quota, etc.)
           },
         },
       );

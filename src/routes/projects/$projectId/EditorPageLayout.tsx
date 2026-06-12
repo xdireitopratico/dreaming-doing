@@ -460,7 +460,7 @@ export function EditorPageLayout({
             }
             workspace={
               <div className="flex min-h-0 h-full w-full flex-1 flex-col">
-                <div className="flex min-h-0 flex-1">
+                <div className="flex min-h-0 flex-1 overflow-hidden">
                   {showFileTree && activeView === "code" && !isMobile && (
                     <div className="w-[200px] shrink-0 border-r border-[var(--forge-border)] bg-[#1a1c22]">
                       <FileTree
@@ -475,7 +475,7 @@ export function EditorPageLayout({
                     </div>
                   )}
 
-                  <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+                  <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
                     {isMobile && mobilePanel === "code" && fileTreeFiles.length > 0 && (
                       <div className="forge-mobile-code-bar">
                         <label
@@ -529,75 +529,44 @@ export function EditorPageLayout({
                       )}
 
                       {activeView === "preview" && (
-                        <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden">
-                          <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-                            <PreviewFrame
-                              files={previewNavFiles}
-                              booting={previewBoot.booting}
-                              agentRunning={running}
-                              previewLiveUpdating={previewLiveUpdating}
-                              devUrl={devUrl}
-                              previewPath={previewRoute}
-                              iframeRef={previewIframeRef}
-                              bootError={
-                                previewBoot.bootLogs
-                                  ? `${previewBoot.lastError ?? "Vite subindo"} — ${previewBoot.bootLogs.slice(
-                                      0,
-                                      280,
-                                    )}`
-                                  : previewBoot.lastError
-                              }
-                              warming={previewBoot.warming}
-                              onWarmComplete={previewBoot.clearWarming}
-                              onRefresh={() => previewBoot.boot({ force: true })}
-                              reloadNonce={previewReloadNonce}
-                              previewSyncing={previewSyncing}
-                              agentHasRun={agentHasRun}
-                              previewIdle={previewIdle}
-                              isNoFiles={previewBoot.isNoFiles}
-                              sandboxStale={previewBoot.sandboxStale}
-                              reconnecting={previewBoot.reconnecting}
-                              isReactProject={isReactProject}
-                              nativeBuildPreview={nativeBuildPreview}
-                              projectStack={projectStack}
-                              agentProgress={agent.progress}
-                              device={previewDevice}
-                              onFocusChat={() => {
-                                const el =
-                                  document.querySelector<HTMLTextAreaElement>(
-                                    ".forge-composer-input",
-                                  );
-                                el?.focus();
-                              }}
-                            />
-                          </div>
-
-                          {isJobFocused && jobWorkspaceFocus && focusedJobProgress && (
-                            <JobInspector
-                              run={focusedJobProgress}
-                              runId={jobWorkspaceFocus.runId}
-                              running={running && agent.activeRunId === jobWorkspaceFocus.runId}
-                              activeTab={jobWorkspaceFocus.tab}
-                              messages={chatMessages}
-                              livePendingPlan={
-                                pendingPlan?.runId === jobWorkspaceFocus.runId ? pendingPlan : null
-                              }
-                              onTabChange={setJobTab}
-                              onBackToLatest={closeJobWorkspace}
-                              onOpenFile={(path) => {
-                                handleSelectFile(path);
-                                onMainViewChange("code");
-                                if (isMobile) onMobilePanelChange?.("code");
-                              }}
-                              onPlanApprove={handlePlanApprove}
-                              onPlanReject={handlePlanReject}
-                              runStartedAtMs={
-                                agent.activeRunId === jobWorkspaceFocus.runId
-                                  ? agent.activeRunStartedAtMs
-                                  : null
-                              }
-                            />
-                          )}
+                        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                          <PreviewFrame
+                            files={previewNavFiles}
+                            booting={previewBoot.booting}
+                            agentRunning={running}
+                            previewLiveUpdating={previewLiveUpdating}
+                            devUrl={devUrl}
+                            previewPath={previewRoute}
+                            iframeRef={previewIframeRef}
+                            bootError={
+                              previewBoot.bootLogs
+                                ? `${previewBoot.lastError ?? "Vite subindo"} — ${previewBoot.bootLogs.slice(
+                                    0,
+                                    280,
+                                  )}`
+                                : previewBoot.lastError
+                            }
+                            warming={previewBoot.warming}
+                            onWarmComplete={previewBoot.clearWarming}
+                            onRefresh={() => previewBoot.boot({ force: true })}
+                            reloadNonce={previewReloadNonce}
+                            previewSyncing={previewSyncing}
+                            agentHasRun={agentHasRun}
+                            previewIdle={previewIdle}
+                            isNoFiles={previewBoot.isNoFiles}
+                            sandboxStale={previewBoot.sandboxStale}
+                            reconnecting={previewBoot.reconnecting}
+                            isReactProject={isReactProject}
+                            nativeBuildPreview={nativeBuildPreview}
+                            projectStack={projectStack}
+                            agentProgress={agent.progress}
+                            device={previewDevice}
+                            onFocusChat={() => {
+                              const el =
+                                document.querySelector<HTMLTextAreaElement>(".forge-composer-input");
+                              el?.focus();
+                            }}
+                          />
                         </div>
                       )}
 
@@ -616,6 +585,36 @@ export function EditorPageLayout({
                       )}
                     </div>
                   </div>
+
+                  {activeView === "preview" &&
+                    isJobFocused &&
+                    jobWorkspaceFocus &&
+                    focusedJobProgress && (
+                      <JobInspector
+                        run={focusedJobProgress}
+                        runId={jobWorkspaceFocus.runId}
+                        running={running && agent.activeRunId === jobWorkspaceFocus.runId}
+                        activeTab={jobWorkspaceFocus.tab}
+                        messages={chatMessages}
+                        livePendingPlan={
+                          pendingPlan?.runId === jobWorkspaceFocus.runId ? pendingPlan : null
+                        }
+                        onTabChange={setJobTab}
+                        onBackToLatest={closeJobWorkspace}
+                        onOpenFile={(path) => {
+                          handleSelectFile(path);
+                          onMainViewChange("code");
+                          if (isMobile) onMobilePanelChange?.("code");
+                        }}
+                        onPlanApprove={handlePlanApprove}
+                        onPlanReject={handlePlanReject}
+                        runStartedAtMs={
+                          agent.activeRunId === jobWorkspaceFocus.runId
+                            ? agent.activeRunStartedAtMs
+                            : null
+                        }
+                      />
+                    )}
                 </div>
               </div>
             }
