@@ -20,6 +20,8 @@ export type JobInspectorProps = {
   onPlanApprove?: (steps: PlanStep[], markdown?: string) => void | Promise<void>;
   onPlanReject?: (reason?: string) => void | Promise<void>;
   runStartedAtMs?: number | null;
+  /** Sobrepõe o canto direito do preview — não divide a largura (estilo Lovable). */
+  overlay?: boolean;
 };
 
 const TABS: { id: JobInspectorTab; label: string }[] = [
@@ -40,6 +42,7 @@ export function JobInspector({
   onPlanApprove,
   onPlanReject,
   runStartedAtMs,
+  overlay = false,
 }: JobInspectorProps) {
   const inspectorPlan = useMemo(
     () =>
@@ -60,7 +63,10 @@ export function JobInspector({
         : "timeline";
 
   return (
-    <div className="forge-inspector forge-inspector-rail" data-testid="job-inspector">
+    <div
+      className={`forge-inspector forge-inspector-rail${overlay ? " forge-inspector-rail--overlay" : ""}`}
+      data-testid="job-inspector"
+    >
       <div className="forge-inspector-header">
         <button type="button" className="forge-inspector-back-btn" onClick={onBackToLatest}>
           Back to latest

@@ -517,7 +517,7 @@ export function EditorPageLayout({
                       )}
 
                       {activeView === "preview" && (
-                        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+                        <div className="forge-preview-shell flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
                           <PreviewFrame
                             files={previewNavFiles}
                             booting={previewBoot.booting}
@@ -555,6 +555,40 @@ export function EditorPageLayout({
                               el?.focus();
                             }}
                           />
+
+                          {isJobFocused &&
+                            jobWorkspaceFocus &&
+                            focusedJobProgress && (
+                              <JobInspector
+                                run={focusedJobProgress}
+                                runId={jobWorkspaceFocus.runId}
+                                running={
+                                  running && agent.activeRunId === jobWorkspaceFocus.runId
+                                }
+                                activeTab={jobWorkspaceFocus.tab}
+                                messages={chatMessages}
+                                livePendingPlan={
+                                  pendingPlan?.runId === jobWorkspaceFocus.runId
+                                    ? pendingPlan
+                                    : null
+                                }
+                                onTabChange={setJobTab}
+                                onBackToLatest={closeJobWorkspace}
+                                onOpenFile={(path) => {
+                                  handleSelectFile(path);
+                                  onMainViewChange("code");
+                                  if (isMobile) onMobilePanelChange?.("code");
+                                }}
+                                onPlanApprove={handlePlanApprove}
+                                onPlanReject={handlePlanReject}
+                                runStartedAtMs={
+                                  agent.activeRunId === jobWorkspaceFocus.runId
+                                    ? agent.activeRunStartedAtMs
+                                    : null
+                                }
+                                overlay
+                              />
+                            )}
                         </div>
                       )}
 
@@ -574,35 +608,6 @@ export function EditorPageLayout({
                     </div>
                   </div>
 
-                  {activeView === "preview" &&
-                    isJobFocused &&
-                    jobWorkspaceFocus &&
-                    focusedJobProgress && (
-                      <JobInspector
-                        run={focusedJobProgress}
-                        runId={jobWorkspaceFocus.runId}
-                        running={running && agent.activeRunId === jobWorkspaceFocus.runId}
-                        activeTab={jobWorkspaceFocus.tab}
-                        messages={chatMessages}
-                        livePendingPlan={
-                          pendingPlan?.runId === jobWorkspaceFocus.runId ? pendingPlan : null
-                        }
-                        onTabChange={setJobTab}
-                        onBackToLatest={closeJobWorkspace}
-                        onOpenFile={(path) => {
-                          handleSelectFile(path);
-                          onMainViewChange("code");
-                          if (isMobile) onMobilePanelChange?.("code");
-                        }}
-                        onPlanApprove={handlePlanApprove}
-                        onPlanReject={handlePlanReject}
-                        runStartedAtMs={
-                          agent.activeRunId === jobWorkspaceFocus.runId
-                            ? agent.activeRunStartedAtMs
-                            : null
-                        }
-                      />
-                    )}
                 </div>
               </div>
             }

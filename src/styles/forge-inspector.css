@@ -33,6 +33,24 @@
   border-left: 1px solid var(--border-forge);
 }
 
+/* Preview 100% largura; inspector flutua no extremo direito (não split 50/50). */
+.forge-preview-shell {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+}
+
+.forge-inspector-rail--overlay {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 40;
+  flex: none;
+  max-width: min(320px, 36vw);
+  box-shadow: -10px 0 28px rgba(0, 0, 0, 0.45);
+}
+
 .forge-inspector-header .forge-inspector-tabs {
   margin-left: auto;
 }
