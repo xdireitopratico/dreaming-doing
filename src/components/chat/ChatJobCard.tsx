@@ -64,9 +64,9 @@ export function ChatJobCard({
 
   const cardVariant = isPlanWaiting
     ? "forge-mini-card--plan-waiting"
-    : isRunningCommand && isLive
+    : (isRunningCommand || edited) && isLive
       ? "forge-mini-card--running-command"
-      : isLive && !edited
+      : isLive && !edited && !isRunningCommand
         ? "forge-mini-card--working"
         : isDone
           ? "forge-mini-card--done"

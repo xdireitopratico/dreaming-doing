@@ -636,7 +636,11 @@ export function isRunEffectivelyActive(progress: AgentProgress, slotActive = fal
   return !!slotActive && !progress.finished && !progress.canceled;
 }
 
-/** Mini card visível durante toda a run ativa — inclusive classify/gather antes de tools. */
+/**
+ * Mini-card só nos gatilhos Lovable (plan.md Estado C/D — imgs 5/8/9/14):
+ * Edited | Running command | Plan ready | terminal com entrega.
+ * Estado B (img 4): só Thought + narração + chips — sem card.
+ */
 export function shouldShowJobCard(opts: {
   runId?: string;
   progress: AgentProgress | null;
@@ -646,30 +650,30 @@ export function shouldShowJobCard(opts: {
   slotActive: boolean;
   activeRunId?: string | null;
 }): boolean {
-  const {
-    runId,
-    progress,
-    isQualifyOnly,
-    isAgentJobMessage: isJobMsg,
-    hasExecutionEvidence,
-    slotActive,
-    activeRunId,
-  } = opts;
+  const { runId, progress, isQualifyOnly, slotActive } = opts;
 
   if (!runId || !progress || isQualifyOnly) return false;
   if (progress.conversational === true) return false;
-  if (runId === "__pending__") {
-    return !!progress.statusHint || progress.phase != null;
-  }
+  if (runId === "__pending__") return false;
 
   if (progress.awaitingKind === "plan_approval" && (progress.pendingPlan?.steps?.length ?? 0) > 0) {
     return true;
   }
 
-  const isAnchoredLiveRun =
-    !!activeRunId && runId === activeRunId && !progress.finished && !progress.canceled;
+  const running = slotActive && !progress.finished && !progress.canceled;
+  const edited = lastEditedFile(progress);
 
-  return isJobMsg || hasExecutionEvidence || slotActive || isAnchoredLiveRun;
+  if (edited && (running || !progress.finished)) return true;
+  if (hasActiveShellTool(progress) && running) return true;
+
+  if (progress.finished && progress.lastFinishOk !== false) {
+    if ((progress.diffs?.length ?? 0) > 0 || (progress.deliveryFiles?.length ?? 0) > 0) {
+      return true;
+    }
+    if (edited) return true;
+  }
+
+  return false;
 }
 
 export function buildAgentRunView(

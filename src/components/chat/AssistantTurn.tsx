@@ -1,13 +1,13 @@
 import { MarkdownRenderer } from "@/components/ui/markdown-renderer";
 import type { ThreadItem } from "@/lib/chat/types";
-import { ForgeStatusChip } from "@/components/editor/ForgeStatusChip";
+import { ChatStatusChip } from "./ChatStatusChip";
 import { ChatThinking } from "./ChatThinking";
 import { ChatNarration } from "./ChatNarration";
 import { ChatJobCard } from "./ChatJobCard";
 import { ChatQualify } from "./ChatQualify";
 import { ChatDone } from "./ChatDone";
 import { ChatError } from "./ChatError";
-import { ChatToolbar } from "./ChatToolbar";
+
 
 type AssistantTurnProps = {
   item: Extract<ThreadItem, { kind: "assistant" }>;
@@ -55,8 +55,6 @@ export function AssistantTurn({
   const showDone =
     item.finished && item.lastFinishOk && !item.isActive && showJobCard && !planTeaser && hasDelivery;
   const showError = item.finished && item.error;
-  const copyText = text ?? "";
-
   return (
     <article className="forge-chat-item forge-chat-item-assistant" data-testid="chat-message-assistant">
       <div className="forge-assistant-turn" data-testid="assistant-turn">
@@ -73,7 +71,7 @@ export function AssistantTurn({
         {item.statusChips && item.statusChips.length > 0 && (
           <div className="forge-status-chips" data-testid="forge-status-chips">
             {item.statusChips.map((chip) => (
-              <ForgeStatusChip key={chip} label={chip} />
+              <ChatStatusChip key={chip} label={chip} />
             ))}
           </div>
         )}
@@ -110,15 +108,6 @@ export function AssistantTurn({
         />
       )}
 
-      {copyText && (
-        <ChatToolbar
-          text={copyText}
-          msgId={item.message?.id ?? item.runId}
-          align="start"
-          canRollback={!!onRollback && !!item.message?.id}
-          onRollback={() => item.message?.id && onRollback?.(item.message.id)}
-        />
-      )}
     </article>
   );
 }

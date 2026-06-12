@@ -22,6 +22,7 @@ import { Route as ApiKeysRouteImport } from './routes/api-keys'
 import { Route as ApiRouteImport } from './routes/api'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ProjectsIndexRouteImport } from './routes/projects/index'
+import { Route as DevLovableChatRouteImport } from './routes/dev/lovable-chat'
 import { Route as ProjectsProjectIdIndexRouteImport } from './routes/projects/$projectId/index'
 import { Route as ProjectsProjectIdHistoryRouteImport } from './routes/projects/$projectId/history'
 
@@ -90,6 +91,11 @@ const ProjectsIndexRoute = ProjectsIndexRouteImport.update({
   path: '/projects/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const DevLovableChatRoute = DevLovableChatRouteImport.update({
+  id: '/dev/lovable-chat',
+  path: '/dev/lovable-chat',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ProjectsProjectIdIndexRoute = ProjectsProjectIdIndexRouteImport.update({
   id: '/projects/$projectId/',
   path: '/projects/$projectId/',
@@ -115,6 +121,7 @@ export interface FileRoutesByFullPath {
   '/onboarding': typeof OnboardingRoute
   '/settings': typeof SettingsRoute
   '/skills': typeof SkillsRoute
+  '/dev/lovable-chat': typeof DevLovableChatRoute
   '/projects/': typeof ProjectsIndexRoute
   '/projects/$projectId/history': typeof ProjectsProjectIdHistoryRoute
   '/projects/$projectId/': typeof ProjectsProjectIdIndexRoute
@@ -132,6 +139,7 @@ export interface FileRoutesByTo {
   '/onboarding': typeof OnboardingRoute
   '/settings': typeof SettingsRoute
   '/skills': typeof SkillsRoute
+  '/dev/lovable-chat': typeof DevLovableChatRoute
   '/projects': typeof ProjectsIndexRoute
   '/projects/$projectId/history': typeof ProjectsProjectIdHistoryRoute
   '/projects/$projectId': typeof ProjectsProjectIdIndexRoute
@@ -150,6 +158,7 @@ export interface FileRoutesById {
   '/onboarding': typeof OnboardingRoute
   '/settings': typeof SettingsRoute
   '/skills': typeof SkillsRoute
+  '/dev/lovable-chat': typeof DevLovableChatRoute
   '/projects/': typeof ProjectsIndexRoute
   '/projects/$projectId/history': typeof ProjectsProjectIdHistoryRoute
   '/projects/$projectId/': typeof ProjectsProjectIdIndexRoute
@@ -169,6 +178,7 @@ export interface FileRouteTypes {
     | '/onboarding'
     | '/settings'
     | '/skills'
+    | '/dev/lovable-chat'
     | '/projects/'
     | '/projects/$projectId/history'
     | '/projects/$projectId/'
@@ -186,6 +196,7 @@ export interface FileRouteTypes {
     | '/onboarding'
     | '/settings'
     | '/skills'
+    | '/dev/lovable-chat'
     | '/projects'
     | '/projects/$projectId/history'
     | '/projects/$projectId'
@@ -203,6 +214,7 @@ export interface FileRouteTypes {
     | '/onboarding'
     | '/settings'
     | '/skills'
+    | '/dev/lovable-chat'
     | '/projects/'
     | '/projects/$projectId/history'
     | '/projects/$projectId/'
@@ -221,6 +233,7 @@ export interface RootRouteChildren {
   OnboardingRoute: typeof OnboardingRoute
   SettingsRoute: typeof SettingsRoute
   SkillsRoute: typeof SkillsRoute
+  DevLovableChatRoute: typeof DevLovableChatRoute
   ProjectsIndexRoute: typeof ProjectsIndexRoute
   ProjectsProjectIdHistoryRoute: typeof ProjectsProjectIdHistoryRoute
   ProjectsProjectIdIndexRoute: typeof ProjectsProjectIdIndexRoute
@@ -319,6 +332,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProjectsIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/dev/lovable-chat': {
+      id: '/dev/lovable-chat'
+      path: '/dev/lovable-chat'
+      fullPath: '/dev/lovable-chat'
+      preLoaderRoute: typeof DevLovableChatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/projects/$projectId/': {
       id: '/projects/$projectId/'
       path: '/projects/$projectId'
@@ -349,6 +369,7 @@ const rootRouteChildren: RootRouteChildren = {
   OnboardingRoute: OnboardingRoute,
   SettingsRoute: SettingsRoute,
   SkillsRoute: SkillsRoute,
+  DevLovableChatRoute: DevLovableChatRoute,
   ProjectsIndexRoute: ProjectsIndexRoute,
   ProjectsProjectIdHistoryRoute: ProjectsProjectIdHistoryRoute,
   ProjectsProjectIdIndexRoute: ProjectsProjectIdIndexRoute,

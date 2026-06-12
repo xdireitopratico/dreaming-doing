@@ -4,5 +4,9 @@ type ChatNarrationProps = {
 
 export function ChatNarration({ text }: ChatNarrationProps) {
   if (!text?.trim()) return null;
-  return <p className="forge-chat-narration-line">{text}</p>;
+  return (
+    <p className="forge-chat-narration-line" data-testid="chat-narration">
+      {text}
+    </p>
+  );
 }

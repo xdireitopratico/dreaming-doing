@@ -1,6 +1,5 @@
 import type { ThreadItem } from "@/lib/chat/types";
 import { AssistantTurn } from "./AssistantTurn";
-import { ChatToolbar } from "./ChatToolbar";
 import { ChatUserBubble } from "./ChatUserBubble";
 
 type ChatMessageProps = {
@@ -24,13 +23,6 @@ export function ChatMessage({
     return (
       <article className="forge-chat-item forge-chat-item-user" data-testid="chat-message-user">
         <ChatUserBubble content={item.message.content} queued={isQueued} />
-        <ChatToolbar
-          text={item.message.content}
-          msgId={item.message.id}
-          align="start"
-          canRollback={!!onRollback}
-          onRollback={() => onRollback?.(item.message.id)}
-        />
       </article>
     );
   }

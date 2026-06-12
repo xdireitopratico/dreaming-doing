@@ -250,7 +250,7 @@
   margin: 0;
   font: var(--font-narration);
   font-style: normal;
-  color: var(--text-primary);
+  color: var(--text-secondary);
   line-height: 1.65;
 }
 

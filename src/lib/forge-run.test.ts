@@ -132,11 +132,13 @@ describe("shouldShowJobCard", () => {
       }),
     ).toBe(false);
   });
-  it("mantém mini card na fase classify enquanto a run está ativa", () => {
+  it("Estado B img 4: gather com chips — sem mini-card", () => {
     const progress = {
       ...initialAgentProgress,
-      phase: "classify",
+      phase: "gather",
       finished: false,
+      message: "Checking browser route wiring in lara-workspace",
+      statusHint: "Diagnosing Lara container gaps and needs",
     };
 
     expect(
@@ -145,11 +147,11 @@ describe("shouldShowJobCard", () => {
         progress,
         isQualifyOnly: false,
         isAgentJobMessage: false,
-        hasExecutionEvidence: false,
-        slotActive: false,
+        hasExecutionEvidence: true,
+        slotActive: true,
         activeRunId: "run-1",
       }),
-    ).toBe(true);
+    ).toBe(false);
   });
 
   it("oculta mini card em turno qualify-only", () => {
@@ -174,12 +176,13 @@ describe("shouldShowJobCard", () => {
     ).toBe(false);
   });
 
-  it("mantém mini card na fase classify de run ativa (plan/build)", () => {
+  it("img 5: Edited file mostra mini-card", () => {
     const progress = {
       ...initialAgentProgress,
-      phase: "classify",
+      phase: "execute",
       finished: false,
-      timeline: [{ type: "phase", data: { phase: "classify" }, timestamp: 1 }],
+      tools: [{ name: "fs_edit", args: { path: "Dockerfile.lara" }, ok: true }],
+      diffs: [{ path: "Dockerfile.lara", patch: "..." }],
     };
 
     expect(
@@ -189,7 +192,28 @@ describe("shouldShowJobCard", () => {
         isQualifyOnly: false,
         isAgentJobMessage: false,
         hasExecutionEvidence: true,
-        slotActive: false,
+        slotActive: true,
+        activeRunId: "run-1",
+      }),
+    ).toBe(true);
+  });
+
+  it("img 9: Running command (shell_exec ativo) mostra mini-card", () => {
+    const progress = {
+      ...initialAgentProgress,
+      phase: "execute",
+      finished: false,
+      tools: [{ name: "shell_exec", args: { command: "deploy" } }],
+    };
+
+    expect(
+      shouldShowJobCard({
+        runId: "run-1",
+        progress,
+        isQualifyOnly: false,
+        isAgentJobMessage: false,
+        hasExecutionEvidence: true,
+        slotActive: true,
         activeRunId: "run-1",
       }),
     ).toBe(true);

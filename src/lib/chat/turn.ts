@@ -227,12 +227,7 @@ export function mapAssistantTurn(
     !!runView &&
     (planTeaser ||
       showJobCard ||
-      slotActive ||
-      hasExecutionEvidence ||
-      (!!item.message && hasMaterializedCardSnapshot(item.message)) ||
-      (runView.miniCard.tasks.length > 0 ||
-        !!runView.miniCard.editedFile ||
-        runView.miniCard.planReady));
+      (!!item.message && hasMaterializedCardSnapshot(item.message)));
   const showCard = persistMiniCard;
   const storedChips =
     resolved?.statusChips ??
