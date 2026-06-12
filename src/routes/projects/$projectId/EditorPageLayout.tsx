@@ -311,7 +311,7 @@ export function EditorPageLayout({
   }, [jobWorkspaceFocus, agent.activeRunId, agent.progress, chatMessages]);
 
   const previewStatusLabel = useMemo(() => {
-    if (running) return isMobile ? "Agente trabalhando" : "Agent working — clique o job no chat";
+    if (running && isMobile) return "Agente trabalhando";
     if (isMobile && pendingPlan) return "Plano aguardando";
     if (
       isMobile &&
