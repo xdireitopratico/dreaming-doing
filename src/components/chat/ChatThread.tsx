@@ -16,8 +16,10 @@ export function ChatThread({
 }: ChatThreadProps) {
   return (
     <div className="forge-chat-stream" role="log" aria-live="polite">
-      {items.map((item) => {
-        const key = item.kind === "user" ? `user-${item.message.id}` : `assistant-${item.runId}`;
+      {items.map((item, index) => {
+        // Índice estável — runId muda (__pending__ → UUID) sem remontar o turno inteiro.
+        const key =
+          item.kind === "user" ? `user-${item.message.id}` : `assistant-slot-${index}`;
         return (
           <ChatMessage
             key={key}

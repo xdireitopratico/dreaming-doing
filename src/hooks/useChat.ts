@@ -91,7 +91,8 @@ export function useChat({
   }, [agent.progress, pendingPlan]);
 
   const thread = useMemo(() => {
-    if (messagesLoading) return [];
+    // Mantém thread visível em refetch — só esconde no 1º load sem mensagens.
+    if (messagesLoading && messages.length === 0) return [];
     return buildChatThread(messages, progress, {
       activeRunId: agent.activeRunId,
       activeRunStartedAtMs: agent.activeRunStartedAtMs,

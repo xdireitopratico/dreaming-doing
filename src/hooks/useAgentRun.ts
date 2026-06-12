@@ -798,6 +798,7 @@ export function useAgentRun() {
       void projectId;
       void conversationId;
       const isNew = runIdRef.current !== runId;
+      const turnInProgress = activeRunStartedAtMsRef.current != null;
       if (isNew) {
         // Do not pre-mutate runIdRef before subscribe (watch is the coordinator/reconcile/drain/pendingBuild
         // path for new runIds on realtime INSERT/UPDATE and rapid successive turns). Pre-set made isSame=true
@@ -811,12 +812,20 @@ export function useAgentRun() {
         // Matches direct connect/drain (no pre-set) + idempotent guard + existing ref/reset ownership in subscribe.
         // Ensures "start" out-of-seq + catchUp for new run from watch (core to "realtime subscribe" title + double msg).
         setActiveRunId(runId);
-        setProgress({
-          ...initialAgentProgress,
-          statusHint: "Conectando ao agente…",
-        });
+        if (turnInProgress) {
+          setProgress((p) => ({
+            ...p,
+            statusHint: "Conectando ao agente…",
+            finished: false,
+          }));
+        } else {
+          setProgress({
+            ...initialAgentProgress,
+            statusHint: "Conectando ao agente…",
+          });
+        }
       }
-      await subscribeToRun(runId, { resetProgress: isNew });
+      await subscribeToRun(runId, { resetProgress: isNew && !turnInProgress });
     },
     [subscribeToRun],
   );

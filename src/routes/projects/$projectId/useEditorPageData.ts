@@ -48,11 +48,7 @@ export function useEditorPageData({ projectId, search, agent, navigate }: UseEdi
     },
   });
 
-  const {
-    data: messages,
-    isPending: messagesPending,
-    isFetching: messagesFetching,
-  } = useQuery({
+  const { data: messages, isPending: messagesPending } = useQuery({
     queryKey: ["messages", conversation?.id],
     queryFn: async () => {
       if (!conversation) return [];
@@ -67,9 +63,8 @@ export function useEditorPageData({ projectId, search, agent, navigate }: UseEdi
     enabled: !!conversation,
   });
 
-  /** Pós-F5: chat só renderiza após histórico estável do DB (sem welcome/overlay fantasma). */
-  const chatMessagesLoading =
-    !!conversation?.id && (messagesPending || messagesFetching);
+  /** Só bloqueia no 1º load (sem cache). Refetch pós-envio mantém o thread visível — evita flash. */
+  const chatMessagesLoading = !!conversation?.id && messagesPending;
 
   const { data: files } = useQuery({
     queryKey: ["files", projectId],

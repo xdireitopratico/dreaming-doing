@@ -433,7 +433,7 @@ export function useEditorPageHandlers({
           clearPendingTurn: () => agent.clearPendingTurn(),
           onInserted: () => {
             logEditorTelemetryEvent("agent", "chat_send", "info", sendMode);
-            void qc.invalidateQueries({ queryKey: ["messages", conversation.id] });
+            // Optimistic setQueryData já tem a mensagem — invalidate aqui causava flash no chat.
           },
           onQueued: (message) => toast.success(message),
           onError: (message) => {
