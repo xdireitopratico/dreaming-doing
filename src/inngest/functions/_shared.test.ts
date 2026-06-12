@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { drainPendingQueue, partitionAgentRunExtras, type AgentRunRequest } from "./_shared";
+import {
+  drainPendingQueue,
+  MAX_LOOP_RESUME_STEPS,
+  partitionAgentRunExtras,
+  type AgentRunRequest,
+} from "./_shared";
 
 const drainPayload: AgentRunRequest = {
   runId: "1dd5bff2-6722-42a0-8a36-098813d144ab",
@@ -10,6 +15,12 @@ const drainPayload: AgentRunRequest = {
   preferences: {},
   planMode: true,
 };
+
+describe("MAX_LOOP_RESUME_STEPS", () => {
+  it("permite até 3 chunks antes de resumableExhausted", () => {
+    expect(MAX_LOOP_RESUME_STEPS).toBe(3);
+  });
+});
 
 describe("partitionAgentRunExtras", () => {
   it("routes plan into metaDelta, not columns", () => {

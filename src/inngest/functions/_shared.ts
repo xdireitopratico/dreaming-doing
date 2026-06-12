@@ -60,8 +60,8 @@ export function getSupabaseAdmin(): SupabaseClient {
 
 import { runAgentLoop } from "../executor/run-agent-loop.ts";
 
-/** Sem autorun: um step Inngest por invocação; retomada só com resume explícito no payload. */
-const MAX_LOOP_RESUME_STEPS = 1;
+/** Chunks Inngest por invocação — cada um com budget ~270s; alinhado a resumeAttempts: 3. */
+export const MAX_LOOP_RESUME_STEPS = 3;
 
 type InngestStep = {
   run: <T>(id: string, fn: () => Promise<T> | T) => Promise<T>;
