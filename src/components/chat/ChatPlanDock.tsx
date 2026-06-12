@@ -56,40 +56,43 @@ export function ChatPlanDock({
   if (creating && !pendingPlan) {
     return (
       <div className="forge-plan-dock" data-testid="chat-plan-dock-creating">
-        <div className="forge-plan-dock-shimmer" aria-hidden />
-        <p className="forge-plan-dock-creating-label">Creating plan…</p>
+        <div className="forge-plan-dock-shell">
+          <div className="forge-plan-dock-inner">
+            <div className="forge-plan-dock-shimmer" aria-hidden />
+          </div>
+          <p className="forge-plan-dock-creating-label">Creating plan…</p>
+        </div>
       </div>
     );
   }
 
   if (!pendingPlan) return null;
 
-  const kickerSummary = pendingPlan.summary?.trim() || "Plano proposto";
   const planBody = planParagraphFromPlan(pendingPlan);
 
   return (
-    <div className="forge-plan-dock" data-testid="chat-plan-dock-ready">
-      <div className="forge-plan-approval">
-        <div className="forge-plan-waiting-kicker">
-          <p className="forge-plan-waiting-kicker-title">Waiting for user to approve plan</p>
-          <p className="forge-plan-waiting-kicker-sub">{kickerSummary}</p>
+    <div className="forge-plan-dock">
+      <div className="forge-plan-dock-shell" data-testid="chat-plan-dock-ready">
+        <div className="forge-plan-dock-inner">
+          <p className="forge-plan-dock-label">Plan</p>
+          <p className="forge-plan-dock-body">{planBody}</p>
         </div>
 
-        <div className="forge-plan-approval-card">
-          <p className="forge-plan-approval-label">Plan</p>
-          <p className="forge-plan-approval-body">{planBody}</p>
-
-          <div className="forge-plan-approval-actions">
+        <div className="forge-composer-row">
+          <div className="forge-composer-row-start">
             <button
               type="button"
-              className="forge-plan-approval-btn"
+              className="forge-plan-dock-btn"
               onClick={() => onReview?.(pendingPlan.runId)}
             >
               Review
             </button>
+          </div>
+          <div className="forge-composer-spacer" aria-hidden />
+          <div className="forge-composer-row-end">
             <button
               type="button"
-              className="forge-plan-approval-btn"
+              className="forge-plan-dock-btn"
               disabled={busy !== null}
               onClick={handleReject}
             >
@@ -102,7 +105,7 @@ export function ChatPlanDock({
             </button>
             <button
               type="button"
-              className="forge-plan-approval-btn forge-plan-approval-btn--primary"
+              className="forge-plan-dock-btn forge-plan-dock-btn--approve"
               disabled={busy !== null}
               onClick={handleApprove}
             >

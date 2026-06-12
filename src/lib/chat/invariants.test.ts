@@ -234,6 +234,41 @@ describe("mapAssistantTurn — contrato Lovable imutável", () => {
     expect(turn.narration).not.toBe("Missão: entregar landing viva");
   });
 
+  it("plano pendente no dock: sem corpo duplicado no streamText do thread", () => {
+    const plan = {
+      planId: "p1",
+      summary: "Landing viva e convertendo",
+      mission:
+        "Malandro, impede, que transmite confiança, técnica, encantamento humano, fundo creme, quente, com blobs animados, petróleo âmbar.",
+      steps: [{ id: "s1", type: "custom" as const, description: "Step", enabled: true }],
+      ttlMs: 60_000,
+      proposedAt: Date.now(),
+      runId: "run-plan",
+      projectId: "proj",
+    };
+    const progress = {
+      ...initialAgentProgress,
+      finished: true,
+      awaitingKind: "plan_approval" as const,
+      pendingPlan: plan,
+      streamText: plan.mission,
+    };
+    const thread: RawThreadItem[] = [
+      { kind: "assistant", live: progress, runId: "run-plan", isActive: false },
+    ];
+
+    const turn = mapAssistantTurn(thread[0] as Extract<RawThreadItem, { kind: "assistant" }>, {
+      ...assistantCtx(thread, 0),
+      running: false,
+      activeRunId: null,
+      pendingPlan: plan,
+      sessionProgress: progress,
+    });
+
+    expect(turn.streamText).toBeNull();
+    expect(turn.miniCard).toBeNull();
+  });
+
   it("Terminal img15: chips de plano, sem mini-card", () => {
     const plan = {
       planId: "p1",

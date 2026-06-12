@@ -206,6 +206,13 @@ export function mapAssistantTurn(
   }
   if (slotActive && showJobCard && streamText) streamText = null;
 
+  const planDockActive =
+    !!ctx.pendingPlan &&
+    (resolved?.awaitingKind === "plan_approval" ||
+      jobPlan?.status === "pending" ||
+      item.runId === ctx.pendingPlan.runId);
+  if (planDockActive) streamText = null;
+
   const persistMiniCard =
     !!runView &&
     (showJobCard || (!!item.message && hasMaterializedCardSnapshot(item.message)));

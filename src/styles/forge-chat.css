@@ -345,17 +345,94 @@
 
 .forge-plan-dock {
   flex-shrink: 0;
-  padding: 0 var(--space-md) var(--space-sm);
+  margin: 0 var(--chat-padding) var(--space-sm);
+}
+
+.forge-plan-dock-shell {
+  width: 100%;
+  max-width: min(100%, 520px);
+  padding: 12px 14px 10px;
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--bg-input) 92%, var(--bg-card) 8%);
+  border: 1px solid color-mix(in srgb, var(--border-forge) 75%, #52525b 25%);
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.02) inset,
+    0 6px 24px rgba(0, 0, 0, 0.28);
+}
+
+.forge-plan-dock-inner {
+  margin-bottom: 8px;
+  padding: var(--space-md) var(--space-lg);
+  border-radius: 12px;
+  background: var(--forge-preview, #0a0a0f);
+  border: 1px solid color-mix(in srgb, var(--border-forge) 55%, transparent);
+}
+
+.forge-plan-dock-label {
+  margin: 0 0 var(--space-xs);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.forge-plan-dock-body {
+  margin: 0;
+  font: var(--font-chat);
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text-primary);
+}
+
+.forge-plan-dock-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 12px;
+  border-radius: var(--chat-cta-radius);
+  border: 1px solid color-mix(in srgb, var(--border-forge) 80%, transparent);
+  background: color-mix(in srgb, var(--bg-input) 85%, transparent);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.forge-plan-dock-btn:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+  border-color: var(--border-active);
+}
+
+.forge-plan-dock-btn--approve {
+  background: var(--text-accent);
+  color: #0a0a0a;
+  border-color: transparent;
+}
+
+.forge-plan-dock-btn--approve:hover:not(:disabled) {
+  filter: brightness(1.08);
+  background: var(--text-accent);
+  color: #0a0a0a;
+}
+
+.forge-plan-dock-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 .forge-plan-dock-shimmer {
-  height: 88px;
-  border-radius: 12px;
+  height: 72px;
+  border-radius: 8px;
   background: linear-gradient(
     90deg,
-    color-mix(in srgb, var(--bg-card) 92%, var(--status-thinking) 8%) 0%,
-    color-mix(in srgb, var(--bg-card) 70%, var(--status-thinking) 30%) 50%,
-    color-mix(in srgb, var(--bg-card) 92%, var(--status-thinking) 8%) 100%
+    color-mix(in srgb, var(--bg-input) 92%, var(--bg-card) 8%) 0%,
+    color-mix(in srgb, var(--bg-input) 70%, #52525b 30%) 50%,
+    color-mix(in srgb, var(--bg-input) 92%, var(--bg-card) 8%) 100%
   );
   background-size: 200% 100%;
   animation: forge-plan-shimmer 1.4s ease-in-out infinite;
@@ -366,101 +443,6 @@
   font-size: 13px;
   font-weight: 500;
   color: var(--text-secondary);
-}
-
-.forge-plan-approval {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-sm);
-  width: 100%;
-  max-width: min(100%, 520px);
-}
-
-.forge-plan-waiting-kicker {
-  padding: 0 2px;
-}
-
-.forge-plan-waiting-kicker-title {
-  margin: 0;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  color: var(--text-accent);
-}
-
-.forge-plan-waiting-kicker-sub {
-  margin: 2px 0 0;
-  font-size: 12px;
-  line-height: 1.4;
-  color: var(--text-secondary);
-}
-
-.forge-plan-approval-card {
-  padding: var(--space-md) var(--space-lg);
-  border-radius: 12px;
-  border: 1px solid color-mix(in srgb, var(--status-thinking) 40%, var(--border-forge));
-  background: color-mix(in srgb, var(--bg-card) 90%, var(--status-thinking) 10%);
-}
-
-.forge-plan-approval-label {
-  margin: 0 0 var(--space-xs);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--text-secondary);
-}
-
-.forge-plan-approval-body {
-  margin: 0 0 var(--space-md);
-  font: var(--font-chat);
-  font-size: 13px;
-  line-height: 1.5;
-  color: var(--text-primary);
-}
-
-.forge-plan-approval-actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-sm);
-}
-
-.forge-plan-approval-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  padding: 8px 14px;
-  border-radius: var(--chat-cta-radius);
-  border: 1px solid var(--border-forge);
-  background: var(--bg-input);
-  color: var(--text-secondary);
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: border-color 0.15s, color 0.15s, background 0.15s;
-}
-
-.forge-plan-approval-btn:hover:not(:disabled) {
-  color: var(--text-primary);
-  border-color: var(--border-active);
-}
-
-.forge-plan-approval-btn--primary {
-  border-color: color-mix(in srgb, var(--text-accent) 55%, var(--border-forge));
-  background: color-mix(in srgb, var(--text-accent) 12%, var(--bg-input));
-  color: var(--text-primary);
-}
-
-.forge-plan-approval-btn--primary:hover:not(:disabled) {
-  border-color: var(--text-accent);
-  background: color-mix(in srgb, var(--text-accent) 18%, var(--bg-input));
-}
-
-.forge-plan-approval-btn:disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
 }
 
 @keyframes forge-plan-shimmer {

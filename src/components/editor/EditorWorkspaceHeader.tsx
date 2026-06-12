@@ -30,6 +30,7 @@ interface EditorWorkspaceHeaderProps {
   };
   e2bConnected?: boolean;
   previewStatusLabel?: string | null;
+  devGuardLabel?: string | null;
   jobInspectorActive?: boolean;
 }
 
@@ -50,6 +51,7 @@ export function EditorWorkspaceHeader({
   preview,
   e2bConnected = false,
   previewStatusLabel,
+  devGuardLabel,
   jobInspectorActive = false,
 }: EditorWorkspaceHeaderProps) {
   const { user } = useAuth();
@@ -92,7 +94,10 @@ export function EditorWorkspaceHeader({
         <span className="forge-topbar-divider mx-1 shrink-0" aria-hidden />
         <EditorIntegrationsMenu {...integrations} />
         <E2bStatusBadge e2bConnected={e2bConnected} />
-        {previewStatusLabel && activeView === "preview" && (
+        {devGuardLabel && activeView === "preview" && (
+          <span className="forge-dev-guard-pill">{devGuardLabel}</span>
+        )}
+        {previewStatusLabel && activeView === "preview" && !devGuardLabel && (
           <span className="forge-preview-status-pill">{previewStatusLabel}</span>
         )}
       </div>
