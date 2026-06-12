@@ -36,6 +36,17 @@ describe("shouldRetainLiveRunSlot", () => {
     ).toBe(false);
   });
 
+  it("mantém slot com erro após falha do agente", () => {
+    expect(
+      shouldRetainLiveRunSlot({
+        ...initialAgentProgress,
+        finished: true,
+        lastFinishOk: false,
+        error: "Erro no modelo",
+      }),
+    ).toBe(true);
+  });
+
   it("mantém plano pendente", () => {
     expect(
       shouldRetainLiveRunSlot({

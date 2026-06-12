@@ -21,7 +21,7 @@ export function resolveEffectiveAgentProgress(
     };
   }
 
-  if (base.awaitingKind === "plan_approval") {
+  if (base.awaitingKind === "plan_approval" && !base.pendingPlan) {
     return { ...base, awaiting: false, awaitingKind: null };
   }
 

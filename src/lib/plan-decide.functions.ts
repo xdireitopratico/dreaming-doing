@@ -270,6 +270,24 @@ export const planApprove = createServerFn({ method: "POST" })
       );
     }
 
+    const { awaitingUser: _awaitingUser, ...sourceMetaWithoutAwaiting } = sourceMeta;
+    const { error: closePlanRunErr } = await supabase
+      .from("agent_runs")
+      .update({
+        status: "completed",
+        finished_at: now,
+        meta: {
+          ...sourceMetaWithoutAwaiting,
+          planApproved: true,
+          planApprovedAt: now,
+          buildRunId: newRun.id,
+        },
+      })
+      .eq("id", runId);
+    if (closePlanRunErr) {
+      throw new Error(`Falha ao encerrar run do plano: ${closePlanRunErr.message}`);
+    }
+
     return {
       ok: true,
       approvedRunId: runId,

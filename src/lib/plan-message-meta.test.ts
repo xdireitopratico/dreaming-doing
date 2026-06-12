@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  awaitingKindFromMessageMeta,
   needsPlanApprovalNow,
   planParagraphFromPlan,
   resolveInspectorPlanForRun,
@@ -111,6 +112,65 @@ describe("storedPlanFromMessage", () => {
     };
     expect(resolvePendingPlan(live, [pending])?.planId).toBe("live");
     expect(resolvePendingPlan(null, [pending])?.planId).toBe("plan-1");
+  });
+
+  it("storedPlanFromMessage lê pendingPlan só no cardSnapshot (88764445)", () => {
+    const msg: ChatMessage = {
+      id: "m-snap",
+      role: "assistant",
+      content: "**Plano: Landing**",
+      timestamp: 0,
+      meta: {
+        runId: "88764445-0979-4442-91b5-432a239869f6",
+        finishedAt: "2026-06-12T18:39:46.863Z",
+        cardSnapshot: {
+          awaiting: true,
+          awaitingKind: "plan_approval",
+          pendingPlan: {
+            planId: "5d1e52ec-70c4-4879-9009-cdda3a32785d",
+            runId: "88764445-0979-4442-91b5-432a239869f6",
+            summary: "Landing de confiança",
+            steps: [
+              { id: "1", type: "custom", description: "Reescrever App.tsx", enabled: true },
+              { id: "2", type: "custom", description: "Validar preview", enabled: true },
+            ],
+          },
+        },
+      },
+    };
+    const stored = storedPlanFromMessage(msg);
+    expect(stored?.status).toBe("pending");
+    expect(stored?.plan.steps).toHaveLength(2);
+    expect(awaitingKindFromMessageMeta(msg.meta as Record<string, unknown>)).toBe("plan_approval");
+    expect(needsPlanApprovalNow(null, [msg])).toBe(true);
+    expect(resolvePendingPlan(null, [msg])?.planId).toBe("5d1e52ec-70c4-4879-9009-cdda3a32785d");
+  });
+
+  it("planStatus approved no topo vence cardSnapshot.awaitingKind stale", () => {
+    const msg: ChatMessage = {
+      id: "m-approved-snap",
+      role: "assistant",
+      content: "Plano aprovado.",
+      timestamp: 0,
+      meta: {
+        runId: "88764445-0979-4442-91b5-432a239869f6",
+        planId: "5d1e52ec-70c4-4879-9009-cdda3a32785d",
+        planStatus: "approved",
+        planSteps: [{ id: "1", type: "custom", description: "Hero", enabled: true }],
+        finishedAt: "2026-06-12T18:50:00.000Z",
+        cardSnapshot: {
+          awaitingKind: "plan_approval",
+          pendingPlan: {
+            planId: "5d1e52ec-70c4-4879-9009-cdda3a32785d",
+            runId: "88764445-0979-4442-91b5-432a239869f6",
+            summary: "Landing",
+            steps: [{ id: "1", type: "custom", description: "Hero", enabled: true }],
+          },
+        },
+      },
+    };
+    expect(storedPlanFromMessage(msg)?.status).toBe("approved");
+    expect(needsPlanApprovalNow(null, [msg])).toBe(false);
   });
 
   it("ignora live plan de outra conversa (chat vazio)", () => {

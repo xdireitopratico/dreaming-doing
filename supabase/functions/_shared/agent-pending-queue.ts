@@ -9,6 +9,60 @@ import { logger } from "./logger.ts";
 const STALE_RUN_MS = 15 * 60 * 1000;
 /** Com itens na fila, runs sem heartbeat expiram mais cedo para destravar drain. */
 const QUEUE_STALE_RUN_MS = 5 * 60 * 1000;
+/** Gap sem eventos de stream — UX "zumbi" no toast busy (88764445 ~52 min). */
+export const BUSY_ZOMBIE_GAP_MS = 3 * 60 * 1000;
+
+export type AgentBusyReason = "zombie" | "running" | "other_conversation";
+
+export function classifyAgentBusyReason(input: {
+  status?: string | null;
+  staleExpired?: boolean;
+  lastActivityAgeMs?: number | null;
+  otherConversation?: boolean;
+}): AgentBusyReason {
+  if (input.otherConversation) return "other_conversation";
+  if (input.staleExpired) return "zombie";
+  const age = input.lastActivityAgeMs;
+  if (
+    age != null &&
+    age > BUSY_ZOMBIE_GAP_MS &&
+    (input.status === "running" || input.status === "pending")
+  ) {
+    return "zombie";
+  }
+  return "running";
+}
+
+export async function resolveAgentBusyReason(
+  supabase: SupabaseClient,
+  run: { id: string; status: string; meta?: unknown; started_at?: string | null } | null,
+  opts?: { otherConversation?: boolean },
+): Promise<AgentBusyReason> {
+  if (opts?.otherConversation) return "other_conversation";
+  if (!run) return "running";
+
+  const meta = (run.meta ?? {}) as Record<string, unknown>;
+  if (meta.staleExpired === true) {
+    return "zombie";
+  }
+
+  const { data: lastEv } = await supabase
+    .from("agent_stream_events")
+    .select("created_at")
+    .eq("run_id", run.id)
+    .order("seq", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const lastAt = (lastEv?.created_at ?? run.started_at) as string | null | undefined;
+  const lastActivityAgeMs = lastAt ? Date.now() - new Date(lastAt).getTime() : null;
+
+  return classifyAgentBusyReason({
+    status: run.status,
+    staleExpired: false,
+    lastActivityAgeMs,
+  });
+}
 
 export type PendingQueueItem = {
   id: string;
@@ -240,7 +294,7 @@ export async function latestUserMessageSnapshot(
 ): Promise<Record<string, unknown> | null> {
   const { data: row } = await supabase
     .from("messages")
-    .select("id, parts, created_at")
+    .select("id, parts, created_at, meta")
     .eq("conversation_id", conversationId)
     .eq("role", "user")
     .order("created_at", { ascending: false })
@@ -256,12 +310,35 @@ export async function latestUserMessageSnapshot(
     .filter(Boolean)
     .join("\n");
 
+  const meta = (row.meta ?? {}) as Record<string, unknown>;
+  const msgMode = typeof meta.mode === "string" ? meta.mode.toLowerCase() : null;
+
   return {
     messageId: row.id,
     text: text || undefined,
     parts,
     createdAt: row.created_at,
+    ...(msgMode === "plan" || msgMode === "build" || msgMode === "chat" ? { mode: msgMode } : {}),
   };
+}
+
+/** Modo do próximo run ao drenar fila — pendingBody.mode > user msg meta > input fallback. */
+export function resolveQueuedPlanMode(input: {
+  pendingBody: Record<string, unknown> | null;
+  messageMetaMode?: string | null;
+  inputPlanMode?: boolean;
+}): boolean {
+  const bodyMode =
+    typeof input.pendingBody?.mode === "string"
+      ? String(input.pendingBody.mode).toLowerCase()
+      : null;
+  const metaMode =
+    typeof input.messageMetaMode === "string" ? input.messageMetaMode.toLowerCase() : null;
+  const storedMode = bodyMode ?? metaMode;
+
+  if (storedMode === "plan") return true;
+  if (storedMode === "build" || storedMode === "chat") return false;
+  return input.inputPlanMode === true;
 }
 
 export async function popOldestPendingMessage(

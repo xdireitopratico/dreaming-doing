@@ -49,7 +49,13 @@ import {
 } from "./tools/meta.ts";
 
 import { friendlyLlmError } from "./llm-errors.ts";
+import { MAX_CHUNK_GENERATIONS } from "../_shared/agent-chunk-limits.ts";
 import { hashToolBatch, isExecutionStuck } from "../_shared/agent-stuck.ts";
+import {
+  assistantContentForHistory,
+  decideToolProgress,
+  TOOL_FAIL_USER_MESSAGE,
+} from "./tool-progress.ts";
 import { logger } from "../_shared/logger.ts";
 import { appendExecutionLogEntry, buildExecutionLogMeta } from "./executionLogMeta.ts";
 import { type CheckpointExtra, resumeStepStart, serializeCheckpointPayload } from "./checkpoint.ts";
@@ -62,6 +68,7 @@ import {
   sanitizePlanHeadline,
 } from "./plan-mode.ts";
 import { isPlanShapedMarkdown, planToolArgsFromMarkdown } from "./plan-markdown-parse.ts";
+import { buildPlanModeTurnInstruction } from "./plan-mode.ts";
 import { deriveClassificationFromPrompt, type ClassificationResult } from "./router.ts";
 import type { ProviderConfig } from "./providers.ts";
 import type { AgentPreferencesPayload } from "./connector-keys.ts";
@@ -111,6 +118,7 @@ function resolveLoopBudgetMs(): number {
 }
 
 const LOOP_BUDGET_MS = resolveLoopBudgetMs();
+const THINKING_STREAM_CAP_MS = 45_000;
 function calculateMaxSteps(complexity: 1 | 2 | 3 | 4 | 5): number {
   const limits: Record<1 | 2 | 3 | 4 | 5, number> = {
     1: 50,
@@ -157,6 +165,11 @@ export class AgentLoop {
   private narrationBuffer: string;
   private lastStepHadAgentProse: boolean;
   private llmResponseWasStreamed: boolean;
+  private toolMissCount: number;
+  private forceToolsNext: boolean;
+  private thinkingStreamStartedAt: number | null;
+  private lastExecutePhaseMessage: string | null;
+  private chunkGeneration: number;
   private touchedPaths: Set<string>;
   private lastActivityAt: number;
   private lastRunMessageId: string | null;
@@ -210,6 +223,8 @@ export class AgentLoop {
       resolvedMainCfg?: ProviderConfig;
       /** Preferências /models — Auto troca modelo por complexidade; Fixo/ROBIN não */
       preferences?: AgentPreferencesPayload;
+      /** Retomada Inngest entre chunks — alimenta mensagem explore na timeline. */
+      chunkGeneration?: number;
     },
   ) {
     this.reg = reg;
@@ -248,6 +263,11 @@ export class AgentLoop {
     this.narrationBuffer = "";
     this.lastStepHadAgentProse = false;
     this.llmResponseWasStreamed = false;
+    this.toolMissCount = 0;
+    this.forceToolsNext = false;
+    this.thinkingStreamStartedAt = null;
+    this.lastExecutePhaseMessage = null;
+    this.chunkGeneration = options?.chunkGeneration ?? 0;
     this.touchedPaths = new Set();
     this.lastActivityAt = Date.now();
     this.lastRunMessageId = null;
@@ -521,6 +541,11 @@ export class AgentLoop {
     if (!this.resumeRun) {
       this.state.executionLog = [];
     }
+    if (this.chunkGeneration > 0) {
+      this.emit("explore", {
+        message: `Retomando execução no servidor (parte ${this.chunkGeneration}/${MAX_CHUNK_GENERATIONS})…`,
+      });
+    }
     this.compression.reset();
     const toolsUsed = new Set<string>();
     let executionModel = this.configuredModel();
@@ -768,12 +793,16 @@ export class AgentLoop {
             total: enabled.length,
           });
           const activeStep = enabled[this.approvedPlanStepIndex];
-          this.emit("phase", {
-            phase: "execute",
-            message: activeStep
-              ? activeStep.description.slice(0, 120)
-              : "Trabalhando no plano aprovado…",
-          });
+          const stepMessage = activeStep
+            ? activeStep.description.slice(0, 120)
+            : "Trabalhando no plano aprovado…";
+          if (stepMessage !== this.lastExecutePhaseMessage) {
+            this.emit("phase", {
+              phase: "execute",
+              message: stepMessage,
+            });
+            this.lastExecutePhaseMessage = stepMessage;
+          }
         } else {
           this.state.totalSteps = this.maxStepsLimit;
           this.emit("step", { current: loopStep, total: this.maxStepsLimit });
@@ -790,8 +819,19 @@ export class AgentLoop {
           this.state.intent?.type === "new_project" ||
           this.state.intent?.type === "fix" ||
           this.state.intent?.type === "add_dep";
-        const forceTools = !this.toolsInvoked && loopStep >= 2 && loopStep <= 4 && actionableIntent;
-        const narrationOnlyStep = !this.toolsInvoked && loopStep === 1 && actionableIntent;
+        const forceTools =
+          this.forceToolsNext ||
+          (!this.toolsInvoked &&
+            actionableIntent &&
+            (this.approvedPlanBuild
+              ? loopStep >= 1
+              : loopStep >= 2 && loopStep <= 4));
+        const narrationOnlyStep =
+          !this.forceToolsNext &&
+          !this.toolsInvoked &&
+          loopStep === 1 &&
+          actionableIntent &&
+          !this.approvedPlanBuild;
         let response: ChatResponse | null = null;
         try {
           this.maybeEmitSilenceHeartbeat();
@@ -865,20 +905,32 @@ export class AgentLoop {
           return await this.finishClarify(combined, 0, [...toolsUsed]);
         }
 
-        // Sem tool_calls
+        // Sem tool_calls — enforcement mesmo quando thinking foi streamed (content vazio).
         if (!response.tool_calls || response.tool_calls.length === 0) {
-          if ((forceTools || narrationOnlyStep) && assistantText) {
-            this.emitAgentProse(assistantText);
-            this.state.messages.push({
-              role: "assistant",
-              content: response.content ?? assistantText,
-            });
-            this.state.messages.push({
-              role: "user",
-              content:
-                "Ótimo — agora use ferramentas (fs_read, fs_write, fs_edit ou shell_exec) para implementar. " +
-                "Pode manter 1 frase curta de narração junto com as tool_calls.",
-            });
+          const shouldEnforce =
+            forceTools ||
+            narrationOnlyStep ||
+            this.llmResponseWasStreamed ||
+            this.approvedPlanBuild ||
+            actionableIntent;
+          if (shouldEnforce) {
+            const fail = this.applyNoToolCallsEnforcement(response, assistantText, loopStep);
+            if (fail) {
+              await this.persistFinal(TOOL_FAIL_USER_MESSAGE, { lastFinishOk: false });
+              await this.markRunStatus("failed");
+              this.emit("finish", {
+                ok: false,
+                resumable: false,
+                error: TOOL_FAIL_USER_MESSAGE,
+              });
+              return {
+                ok: false,
+                error: TOOL_FAIL_USER_MESSAGE,
+                steps: loopStep,
+                resumable: false,
+                toolsUsed: [...toolsUsed],
+              };
+            }
             continue;
           }
           this.state.messages.push({
@@ -888,6 +940,8 @@ export class AgentLoop {
           break;
         }
 
+        this.toolMissCount = 0;
+        this.forceToolsNext = false;
         this.toolsInvoked = true;
 
         if (assistantText) {
@@ -1395,6 +1449,32 @@ export class AgentLoop {
     };
   }
 
+  private async finishPlanModeFailure(
+    summary: string,
+    steps: number,
+    toolsUsed: readonly string[],
+    error?: string,
+  ): Promise<{
+    ok: false;
+    summary: string;
+    steps: number;
+    toolsUsed: string[];
+    error: string;
+  }> {
+    const message = summary.trim() || "Erro no modo Plan.";
+    const err = (error ?? message).trim() || message;
+    this.emit("assistant_text", { text: message, final: true });
+    await this.persistFinal(message, { lastFinishOk: false });
+    await this.clearCheckpoint();
+    return {
+      ok: false,
+      summary: message,
+      steps,
+      toolsUsed: [...toolsUsed],
+      error: err,
+    };
+  }
+
   private async finishPlanProposal(
     proposedPlan: ProposedPlan,
     toolsUsed: string[] = [],
@@ -1484,7 +1564,7 @@ export class AgentLoop {
   }
 
   private buildPlanModeInstruction(): string {
-    return this.originalUserRequest?.trim() || "Continue com o pedido do usuário.";
+    return buildPlanModeTurnInstruction(this.originalUserRequest ?? "");
   }
 
   private buildAgentSystemPrompt(planMode: boolean, skillPrompt: string): string {
@@ -1537,17 +1617,16 @@ export class AgentLoop {
           compressed,
         );
       } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : "Erro no modelo";
-        return { ok: false, summary: message, steps: step, toolsUsed: [...toolsUsed], error: message };
+        const message = friendlyLlmError(err, this.robinActive);
+        return await this.finishPlanModeFailure(message, step, [...toolsUsed], message);
       }
       if (!response) {
-        return {
-          ok: false,
-          summary: "Sem resposta do modelo.",
-          steps: step,
-          toolsUsed: [...toolsUsed],
-          error: "Sem resposta do modelo.",
-        };
+        return await this.finishPlanModeFailure(
+          "Sem resposta do modelo.",
+          step,
+          [...toolsUsed],
+          "Sem resposta do modelo.",
+        );
       }
 
       const assistantText = (response.content ?? "").trim();
@@ -1580,13 +1659,12 @@ export class AgentLoop {
         this.emit("phase", { phase: "creating_plan", message: "Criando plano…" });
         const proposed = proposedPlanFromToolArgs(planCall.arguments);
         if (!proposed) {
-          return {
-            ok: false,
-            summary: "create_plan inválido — faltam summary ou steps.",
-            steps: step,
-            toolsUsed: [...toolsUsed],
-            error: "create_plan inválido",
-          };
+          return await this.finishPlanModeFailure(
+            "create_plan inválido — faltam summary ou steps.",
+            step,
+            [...toolsUsed],
+            "create_plan inválido",
+          );
         }
         return await this.finishPlanProposal(proposed, [...toolsUsed]);
       }
@@ -1607,13 +1685,12 @@ export class AgentLoop {
             if (proposed) {
               return await this.finishPlanProposal(proposed, [...toolsUsed]);
             }
-            return {
-              ok: false,
-              summary: "Plano no chat inválido — use create_plan com 2–7 passos.",
-              steps: step,
-              toolsUsed: [...toolsUsed],
-              error: "plan_markdown_invalid",
-            };
+            return await this.finishPlanModeFailure(
+              "Plano no chat inválido — use create_plan com 2–7 passos.",
+              step,
+              [...toolsUsed],
+              "plan_markdown_invalid",
+            );
           }
 
           const clean = sanitizeUserFacingProse(assistantText);
@@ -1624,13 +1701,12 @@ export class AgentLoop {
           this.emit("done", { summary: clean, conversational: true });
           return { ok: true, summary: clean, steps: step, toolsUsed: [...toolsUsed] };
         }
-        return {
-          ok: false,
-          summary: "Use clarify, create_plan ou ferramentas de exploração.",
-          steps: step,
-          toolsUsed: [...toolsUsed],
-          error: "Resposta sem tool nem texto",
-        };
+        return await this.finishPlanModeFailure(
+          "Use clarify, create_plan ou ferramentas de exploração.",
+          step,
+          [...toolsUsed],
+          "Resposta sem tool nem texto",
+        );
       }
 
       const patchCalls = execCalls.filter((c) => isPlanModePatchTool(c.name));
@@ -1688,13 +1764,12 @@ export class AgentLoop {
       }
     }
 
-    return {
-      ok: false,
-      summary: "Limite de exploração no modo Plan — tente create_plan ou clarify.",
-      steps: MAX_PLAN_EXPLORE,
-      toolsUsed: [...toolsUsed],
-      error: "plan_explore_limit",
-    };
+    return await this.finishPlanModeFailure(
+      "Limite de exploração no modo Plan — tente create_plan ou clarify.",
+      MAX_PLAN_EXPLORE,
+      [...toolsUsed],
+      "plan_explore_limit",
+    );
   }
 
   private async llmChatPlanMode(
@@ -1863,6 +1938,48 @@ export class AgentLoop {
     }
   }
 
+  /** @returns true quando esgotou tentativas — caller deve finalizar a run. */
+  private applyNoToolCallsEnforcement(
+    response: ChatResponse,
+    assistantText: string,
+    _loopStep: number,
+  ): boolean {
+    const decision = decideToolProgress({
+      hasToolCalls: false,
+      missCount: this.toolMissCount,
+      wasStreamed: this.llmResponseWasStreamed,
+    });
+    if (decision.kind === "fail") {
+      this.emit("explore", { message: decision.exploreMessage });
+      this.emit("error", { message: decision.userMessage, recoverable: false });
+      return true;
+    }
+
+    this.toolMissCount = decision.attempt;
+    this.forceToolsNext = decision.forceToolsNext;
+    this.emit("explore", { message: decision.exploreMessage });
+
+    const historyContent = assistantContentForHistory(
+      response.content,
+      assistantText,
+      this.narrationBuffer,
+      this.llmResponseWasStreamed,
+    );
+    if (assistantText.trim()) {
+      this.emitAgentProse(assistantText);
+    }
+
+    this.state.messages.push({
+      role: "assistant",
+      content: historyContent,
+    });
+    this.state.messages.push({
+      role: "user",
+      content: decision.userNudge,
+    });
+    return false;
+  }
+
   private async llmChat(
     model: LLMProvider,
     instruction: string,
@@ -1886,6 +2003,7 @@ export class AgentLoop {
     ];
 
     this.llmResponseWasStreamed = false;
+    this.thinkingStreamStartedAt = null;
     try {
       return await model.chat({
         messages,
@@ -1896,7 +2014,16 @@ export class AgentLoop {
           ? undefined
           : (delta) => {
               if (!delta) return;
+              if (this.thinkingStreamStartedAt == null) {
+                this.thinkingStreamStartedAt = Date.now();
+              }
+              const elapsed = Date.now() - this.thinkingStreamStartedAt;
+              if (elapsed > THINKING_STREAM_CAP_MS) {
+                this.forceToolsNext = true;
+                return;
+              }
               this.llmResponseWasStreamed = true;
+              this.lastActivityAt = Date.now();
               this.emit("assistant_text", {
                 text: delta,
                 append: true,
@@ -2486,6 +2613,10 @@ export class AgentLoop {
       "file_diff",
       "done",
       "finish",
+      "timeout_warning",
+      "heartbeat",
+      "error",
+      "stuck",
     ]);
     if (timelineTypes.has(type) && payload && typeof payload === "object") {
       this.streamTailBuffer.push({

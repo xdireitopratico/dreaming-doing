@@ -53,6 +53,35 @@ export function filterActionablePlanSteps(steps: PlanStep[]): PlanStep[] {
   return actionable.length > 0 ? actionable : steps;
 }
 
+/** Pedido explícito de **novo** plano formal — dispara nudge create_plan no turno 0. */
+export function isExplicitPlanProposalRequest(text: string): boolean {
+  const t = text.trim().toLowerCase();
+  if (!t) return false;
+  if (isShowExistingPlanRequest(text)) return false;
+  return (
+    /create[_\s-]?plan/.test(t) ||
+    /us(a|e|ar)\s+(a\s+)?tool\s+create/.test(t) ||
+    /(monte|montar|crie|criar|fa[cç]a|fazer|elabore|elaborar|proponha|propor)\s+(um\s+)?plano/.test(
+      t,
+    ) ||
+    /plano\s+(em\s+)?fases/.test(t) ||
+    /preciso\s+de\s+um\s+plano/.test(t) ||
+    /quero\s+um\s+plano/.test(t)
+  );
+}
+
+export const PLAN_MODE_CREATE_PLAN_NUDGE =
+  "IMPORTANTE: o usuário pediu um plano formal. Explore o repo se precisar, mas feche este turno com a tool `create_plan` (2–7 passos). Não responda só com markdown (## Estado Atual, ## Fases, etc.) — isso não gera o card de aprovação.";
+
+/** Instrução do turno 0 em plan mode — repete o pedido + nudge quando aplicável. */
+export function buildPlanModeTurnInstruction(userRequest: string): string {
+  const task = userRequest.trim() || "Continue com o pedido do usuário.";
+  if (isExplicitPlanProposalRequest(task)) {
+    return `${task}\n\n${PLAN_MODE_CREATE_PLAN_NUDGE}`;
+  }
+  return task;
+}
+
 /** Usuário pede para ver/reabrir plano existente (estilo Lovable). */
 export function isShowExistingPlanRequest(text: string): boolean {
   const t = text.trim().toLowerCase();

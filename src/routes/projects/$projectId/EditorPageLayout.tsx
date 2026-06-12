@@ -26,7 +26,7 @@ import { AiDiffViewer, type DiffEntry } from "@/components/editor/AiDiffViewer";
 import { usePendingPlan } from "@/hooks/usePendingPlan";
 import { PENDING_RUN_ID } from "@/lib/pending-run-id";
 import { hasFirstInspectorToken } from "@/lib/forge-run";
-import { resolveHistoricalRunProgress } from "@/lib/assistant-run-progress";
+import { resolveInspectorRunProgress } from "@/lib/assistant-run-progress";
 import type { AgentProgress } from "@/lib/agent-progress";
 import { useJobWorkspaceFocus } from "@/hooks/useJobWorkspaceFocus";
 import { JobInspector } from "@/components/editor/JobInspector";
@@ -306,9 +306,19 @@ export function EditorPageLayout({
   const focusedJobProgress = useMemo((): AgentProgress | null => {
     if (!jobWorkspaceFocus) return null;
     const { runId } = jobWorkspaceFocus;
-    if (agent.activeRunId === runId) return agent.progress;
-    return resolveHistoricalRunProgress(runId, chatMessages);
-  }, [jobWorkspaceFocus, agent.activeRunId, agent.progress, chatMessages]);
+    return resolveInspectorRunProgress(runId, chatMessages, {
+      activeRunId: agent.activeRunId,
+      liveProgress: agent.progress,
+      frozenProgress: agent.getFrozenRunProgress(runId),
+    });
+  }, [
+    jobWorkspaceFocus,
+    agent.activeRunId,
+    agent.progress,
+    chatMessages,
+    agent.getFrozenRunProgress,
+    agent.frozenProgressTick,
+  ]);
 
   const previewStatusLabel = useMemo(() => {
     if (running && isMobile) return "Agente trabalhando";

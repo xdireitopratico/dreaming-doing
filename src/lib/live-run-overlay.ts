@@ -18,5 +18,7 @@ export function shouldRetainLiveRunSlot(progress: AgentProgress): boolean {
   if ((progress.deliveryFiles?.length ?? 0) > 0) return true;
   if ((progress.timeline?.length ?? 0) > 0) return true;
   if ((progress.tools?.length ?? 0) > 0) return true;
+  if (progress.error?.trim()) return true;
+  if (progress.lastFinishOk === false) return true;
   return progress.lastFinishOk === true;
 }

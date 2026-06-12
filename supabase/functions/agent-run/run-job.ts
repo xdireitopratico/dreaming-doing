@@ -365,6 +365,8 @@ export async function executeAgentJob(
           planHeadline: typeof preMeta.planHeadline === "string" ? preMeta.planHeadline : undefined,
           planSteps: coercePlanStepsFromMeta(preMeta.steps),
           buildFixResume: preMeta.buildFix === true,
+          chunkGeneration:
+            typeof preMeta.chunkGeneration === "number" ? preMeta.chunkGeneration : 0,
         },
   );
 

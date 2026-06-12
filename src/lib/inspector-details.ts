@@ -1,7 +1,14 @@
 import type { ForgeTimelineItem } from "@/lib/forge-run";
 
 export type InspectorDetailBlock =
-  | { kind: "thought"; id: string; durationMs: number; text: string; active?: boolean }
+  | {
+      kind: "thought";
+      id: string;
+      durationMs: number;
+      text: string;
+      active?: boolean;
+      startedAtMs?: number;
+    }
   | { kind: "action"; id: string; label: string; emoji?: string; path?: string }
   | { kind: "code"; id: string; code: string }
   | { kind: "section"; id: string; title: string; body?: string };
@@ -77,11 +84,14 @@ export function buildInspectorDetailBlocks(items: ForgeTimelineItem[]): Inspecto
         durationMs: item.durationMs,
         text: item.text,
         active: item.active,
+        startedAtMs: item.startedAtMs,
       });
       continue;
     }
 
     if (item.type === "TASK") {
+      const prev = blocks.at(-1);
+      if (prev?.kind === "section" && prev.title === item.label) continue;
       blocks.push({ kind: "section", id: item.id, title: item.label });
       continue;
     }

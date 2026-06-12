@@ -1,10 +1,16 @@
 import { describe, expect, it } from "vitest";
 import type { ChatMessage } from "@/lib/chat-types";
+import { initialAgentProgress } from "@/lib/agent-progress";
 import {
+  hasInspectorReadySnapshot,
   hasMaterializedCardSnapshot,
   isAgentJobMessage,
   progressFromAssistantMessage,
+  hasInspectorProgressContent,
+  inspectorProgressWeight,
+  progressTimelineWeight,
   resolveHistoricalRunProgress,
+  resolveInspectorRunProgress,
   runIdFromAssistantMessage,
 } from "@/lib/assistant-run-progress";
 
@@ -137,6 +143,118 @@ describe("assistant-run-progress", () => {
     const p = resolveHistoricalRunProgress("run-hist", [msg]);
     expect(p?.finished).toBe(true);
     expect(p?.streamText).toBe("Feito.");
+  });
+
+  it("hasInspectorReadySnapshot exige timeline, streamTail ou tools no snapshot", () => {
+    const emptySnap: ChatMessage = {
+      id: "a1",
+      role: "assistant",
+      content: "Feito.",
+      timestamp: 0,
+      meta: {
+        runId: "run-1",
+        partial: false,
+        finishedAt: "2026-01-01T00:00:00Z",
+        cardSnapshot: { timeline: [], tools: [], finished: true },
+      },
+    };
+    expect(hasInspectorReadySnapshot(emptySnap)).toBe(false);
+
+    const withTimeline: ChatMessage = {
+      ...emptySnap,
+      meta: {
+        ...emptySnap.meta,
+        cardSnapshot: {
+          timeline: [{ type: "tool_start", data: { name: "fs_write" }, timestamp: 1 }],
+          tools: [],
+          finished: true,
+        },
+      },
+    };
+    expect(hasInspectorReadySnapshot(withTimeline)).toBe(true);
+  });
+
+  it("resolveInspectorRunProgress prefere live, frozen e DB rico", () => {
+    const live: typeof initialAgentProgress = {
+      ...initialAgentProgress,
+      finished: true,
+      timeline: [
+        { type: "explore", data: { message: "Lendo arquivos" }, timestamp: 1 },
+        { type: "tool_start", data: { name: "fs_write", args: { path: "a.tsx" } }, timestamp: 2 },
+      ],
+    };
+    const frozen = {
+      ...live,
+      timeline: [{ type: "explore", data: { message: "Só explore" }, timestamp: 1 }],
+    };
+    const weakDbMsg: ChatMessage = {
+      id: "a1",
+      role: "assistant",
+      content: "Feito.",
+      timestamp: 0,
+      meta: {
+        runId: "run-x",
+        partial: false,
+        finishedAt: "2026-01-01T00:00:00Z",
+        cardSnapshot: { timeline: [], tools: [], finished: true },
+      },
+    };
+
+    expect(
+      resolveInspectorRunProgress("run-x", [weakDbMsg], {
+        activeRunId: "run-x",
+        liveProgress: live,
+      })?.timeline,
+    ).toHaveLength(2);
+
+    expect(
+      resolveInspectorRunProgress("run-x", [weakDbMsg], {
+        activeRunId: null,
+        liveProgress: initialAgentProgress,
+        frozenProgress: frozen,
+      })?.timeline,
+    ).toHaveLength(1);
+
+    expect(progressTimelineWeight(live)).toBe(2);
+    expect(progressTimelineWeight(null)).toBe(0);
+  });
+
+  it("inspectorProgressWeight considera tools quando timeline vazia", () => {
+    const toolsOnly = {
+      ...initialAgentProgress,
+      finished: true,
+      tools: [{ name: "fs_write", args: { path: "src/App.tsx" }, ok: true as const }],
+    };
+    expect(inspectorProgressWeight(toolsOnly)).toBe(1);
+    expect(hasInspectorProgressContent(toolsOnly)).toBe(true);
+  });
+
+  it("resolveInspectorRunProgress prefere frozen com tools sobre DB fraco", () => {
+    const frozen = {
+      ...initialAgentProgress,
+      finished: true,
+      tools: [{ name: "fs_read", args: { path: "src/App.tsx" }, ok: true as const }],
+    };
+    const weakDbMsg: ChatMessage = {
+      id: "a1",
+      role: "assistant",
+      content: "Feito.",
+      timestamp: 0,
+      meta: {
+        runId: "run-tools",
+        partial: false,
+        finishedAt: "2026-01-01T00:00:00Z",
+        cardSnapshot: { timeline: [], tools: [], finished: true },
+      },
+    };
+
+    expect(
+      resolveInspectorRunProgress("run-tools", [weakDbMsg], {
+        activeRunId: null,
+        liveProgress: initialAgentProgress,
+        frozenProgress: frozen,
+      })?.tools,
+    ).toHaveLength(1);
   });
 
   it("mensagem concierge sem runId não é job", () => {

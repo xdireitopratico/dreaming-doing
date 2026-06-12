@@ -39,6 +39,85 @@ export function hasMaterializedCardSnapshot(msg?: ChatMessage): boolean {
   return snap !== null && typeof snap === "object";
 }
 
+/** Peso da timeline para escolher a fonte mais rica (inspector pós-job). */
+export function progressTimelineWeight(progress: AgentProgress | null | undefined): number {
+  if (!progress) return 0;
+  return progress.timeline?.length ?? 0;
+}
+
+/** Timeline ou tools — inspector útil mesmo com cardSnapshot.timeline vazio. */
+export function inspectorProgressWeight(progress: AgentProgress | null | undefined): number {
+  if (!progress) return 0;
+  const timeline = progress.timeline?.length ?? 0;
+  if (timeline > 0) return timeline;
+  return progress.tools?.length ?? 0;
+}
+
+export function hasInspectorProgressContent(progress: AgentProgress | null | undefined): boolean {
+  return inspectorProgressWeight(progress) > 0;
+}
+
+/** Banco tem snapshot terminal com timeline útil para o inspector. */
+export function hasInspectorReadySnapshot(msg?: ChatMessage): boolean {
+  if (!hasMaterializedCardSnapshot(msg)) return false;
+  const meta = (msg!.meta ?? {}) as Record<string, unknown>;
+  const snap = meta.cardSnapshot as Record<string, unknown>;
+  const timeline = snap.timeline;
+  if (Array.isArray(timeline) && timeline.length > 0) return true;
+  const streamTail = meta.streamTail;
+  if (Array.isArray(streamTail) && streamTail.length > 0) return true;
+  const tools = snap.tools;
+  if (Array.isArray(tools) && tools.length > 0) return true;
+  return false;
+}
+
+function findAssistantMessageForRun(runId: string, messages: ChatMessage[]): ChatMessage | null {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const msg = messages[i];
+    if (msg?.role !== "assistant") continue;
+    if (runIdFromAssistantMessage(msg) === runId) return msg;
+  }
+  return null;
+}
+
+function pickRicherProgress(
+  a: AgentProgress | null,
+  b: AgentProgress | null,
+): AgentProgress | null {
+  const wa = inspectorProgressWeight(a);
+  const wb = inspectorProgressWeight(b);
+  if (!a) return b;
+  if (!b) return a;
+  return wa >= wb ? a : b;
+}
+
+/** Inspector: ao vivo > DB rico > cópia congelada > DB fraco. */
+export function resolveInspectorRunProgress(
+  runId: string,
+  messages: ChatMessage[],
+  opts: {
+    activeRunId: string | null;
+    liveProgress: AgentProgress;
+    frozenProgress?: AgentProgress | null;
+  },
+): AgentProgress | null {
+  if (opts.activeRunId === runId) return opts.liveProgress;
+
+  const historical = resolveHistoricalRunProgress(runId, messages);
+  const frozen = opts.frozenProgress ?? null;
+  const msg = findAssistantMessageForRun(runId, messages);
+
+  if (msg && hasInspectorReadySnapshot(msg)) {
+    const fromDb = historical ?? progressFromAssistantMessage(msg);
+    if (fromDb && inspectorProgressWeight(fromDb) > 0) return fromDb;
+  }
+
+  const merged = pickRicherProgress(frozen, historical);
+  if (merged) return merged;
+
+  return frozen ?? historical;
+}
+
 function timelineFromMeta(meta: Record<string, unknown>): SSEEvent[] {
   const streamTail = meta.streamTail;
   if (Array.isArray(streamTail) && streamTail.length > 0) {

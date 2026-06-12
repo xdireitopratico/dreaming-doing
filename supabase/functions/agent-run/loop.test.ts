@@ -47,25 +47,34 @@ class MockLLM implements LLMProvider {
     this.q.push(...r);
   }
   async chat(p: ChatParams): Promise<ChatResponse> {
-    const { onTokenDelta: _stream, ...serializable } = p;
+    const { onTokenDelta, ...serializable } = p;
     this.calls.push(structuredClone(serializable));
     const r = this.q.shift();
-    if (!r) {
-      return {
-        role: "assistant",
-        content: "Continuando com o pedido.",
-        tool_calls: [],
-        usage: {
-          prompt_tokens: 10,
-          completion_tokens: 5,
-          total_tokens: 15,
-          input_tokens: 10,
-          output_tokens: 5,
-        },
-      };
+    const fallback = {
+      role: "assistant" as const,
+      content: "Continuando com o pedido.",
+      tool_calls: [] as ChatResponse["tool_calls"],
+      usage: {
+        prompt_tokens: 10,
+        completion_tokens: 5,
+        total_tokens: 15,
+        input_tokens: 10,
+        output_tokens: 5,
+      },
+    };
+    const resolved = !r
+      ? fallback
+      : r instanceof Error
+        ? null
+        : structuredClone(r);
+    if (!resolved) {
+      if (r instanceof Error) throw r;
+      return fallback;
     }
-    if (r instanceof Error) throw r;
-    return structuredClone(r);
+    if (onTokenDelta && resolved.tool_calls?.length === 0 && !String(resolved.content ?? "").trim()) {
+      onTokenDelta("Vou analisar o projeto…");
+    }
+    return resolved;
   }
 }
 
@@ -519,6 +528,23 @@ Deno.test("3a plan mode propõe plano sem tool_start", async () => {
   assertEquals(de?.awaiting, true);
 });
 
+Deno.test("3j Plan mode — erro LLM persiste assistant com lastFinishOk false", async () => {
+  const { loop, main, sb, events } = f({
+    msgs: [{ role: "user", content: "plano em fases do projeto" }],
+    planMode: true,
+  });
+  main.queue(new Error("NVIDIA NIM API error 500: template invalid"));
+  const r = await loop.run();
+  assertEquals(r.ok, false);
+  assertEquals(sb.messageInserts, 1);
+  const meta = sb.messageWriteMetas[sb.messageWriteMetas.length - 1];
+  assertEquals(meta?.lastFinishOk, false);
+  const card = meta?.cardSnapshot as { lastFinishOk?: boolean; streamText?: string } | undefined;
+  assertEquals(card?.lastFinishOk, false);
+  assertExists(card?.streamText?.includes("template invalid"));
+  assertEquals(ef(events, "assistant_text").length, 1);
+});
+
 Deno.test("3d plan mode bom dia — conversacional, sem plan_proposed nem gather", async () => {
   const { loop, cheap, main, events } = f({
     msgs: [{ role: "user", content: "bom dia" }],
@@ -685,6 +711,30 @@ Hero de confiança + serviços + depoimentos de clientes da região.
   const de = ef(events, "done")[0]?.data as { conversational?: boolean; planProposed?: boolean };
   assertEquals(de?.conversational, undefined);
   assertEquals(de?.planProposed, true);
+});
+
+Deno.test("3k Plan mode — Estado Atual markdown vira plan_proposed (c0416192)", async () => {
+  const planMd = `## Estado Atual & Próximos Passos
+
+### ⏳ **Falta fazer (em ordem)**
+1. **Reescrever App.tsx** — landing viva com NavShell, Hero, StatsRibbon
+2. **Rodar npm run dev** — validar no preview ao vivo
+3. **Build final** — npm run build sem erros
+
+### 🎯 **Resultado esperado**
+Página única, fundo creme com blobs animados, cards glass e WhatsApp fixo.
+`;
+  const { loop, main, events } = f({
+    msgs: [{ role: "user", content: "usa a tool create plan" }],
+    files: [],
+    planMode: true,
+  });
+  main.queue(tr(planMd));
+  const r = await loop.run();
+  assertEquals(r.ok, true);
+  assertEquals(ef(events, "plan_proposed").length, 1);
+  const phases = ef(events, "phase").map((e) => (e.data as { phase?: string }).phase);
+  assertEquals(phases.includes("creating_plan"), true);
 });
 
 Deno.test("3c Build mode — mobile ambíguo para em clarify", async () => {

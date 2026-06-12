@@ -33,7 +33,8 @@ export function buildToolsReference(planMode = false): string {
     ? [
         "**Modo Plan:** explore com fs_read, fs_search, fs_list, shell_exec e MCP.",
         "Patch bloqueado (fs_write, fs_edit, fs_delete).",
-        "Feche com \`create_plan\` (2–7 passos) ou \`clarify\` se bloqueante.",
+        "Ao **entregar** um plano: \`create_plan\` é **obrigatório** (2–7 passos) — markdown no chat sozinho não gera card.",
+        "Conversa social (oi, obrigado): texto ok. Pedido de plano/projeto: feche com \`create_plan\` ou \`clarify\` se bloqueante.",
       ]
     : [
         "**Modo Build:** leia o escopo, patch (fs_edit preferível), shell_exec no sandbox FORGE (/home/user).",
@@ -59,9 +60,16 @@ export const VIBE_PLAN_TAIL = `## Execução Plan
 - Explore o repo antes de \`create_plan\`.
 - Patch fica para Build após aprovação do usuário.
 - \`clarify\` só se bloqueante; prefira assumir e planejar.
+- **Entregar plano:** feche com tool \`create_plan\` — **proibido** fechar só com markdown no chat (## Estado Atual, ## Fases, listas de passos).
+- Pedido explícito de plano / "create plan" / "usa create_plan": explore se necessário, depois **só** \`create_plan\` — nunca substitua por texto.
+- Conversa social leve (bom dia, obrigado): pode responder só em texto, sem \`create_plan\`.
 - \`mission\` = um parágrafo humano para o card (estilo Lovable).
 - \`rationale\` = Princípio; \`assumptions\` = Estado atual (bullets).
-- \`steps\` = entregas visíveis — proibido src/, npm, tokens, @forge/ui.`;
+- \`steps\` = entregas visíveis — proibido src/, npm, tokens, @forge/ui.
+
+### Exemplos (siga o CERTO)
+- ERRADO: "## Estado Atual …" + "## Fases …" no chat, sem tool.
+- CERTO: 1–2 frases + tool \`create_plan\` com mission, rationale, assumptions e steps.`;
 
 /** @deprecated Use VIBE_CODING_CORE + VIBE_EXECUTE_TAIL no assembly. */
 export const VIBE_EXECUTE_RULES = `${VIBE_CODING_CORE}\n\n${VIBE_EXECUTE_TAIL}`;

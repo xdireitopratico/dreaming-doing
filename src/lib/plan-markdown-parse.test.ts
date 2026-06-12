@@ -51,4 +51,21 @@ describe("plan-markdown-parse", () => {
   it("rejeita conversa casual", () => {
     expect(isPlanShapedMarkdown("Bom dia! Como posso ajudar?")).toBe(false);
   });
+
+  it("detecta markdown informal Estado Atual (c0416192)", () => {
+    const ESTADO_ATUAL = `## Estado Atual & Próximos Passos
+
+### ⏳ **Falta fazer (em ordem)**
+1. **Reescrever App.tsx** — landing viva com NavShell e Hero
+2. **Rodar npm run dev** — validar no preview ao vivo
+3. **Build final** — npm run build sem erros
+
+### 🎯 **Resultado esperado**
+Página única com motion escalonada e WhatsApp fixo no canto da tela.
+`;
+    expect(isPlanShapedMarkdown(ESTADO_ATUAL)).toBe(true);
+    const parsed = parsePlanFromMarkdown(ESTADO_ATUAL);
+    expect(parsed?.steps.length).toBe(3);
+    expect(parsed?.summary).toContain("Estado Atual");
+  });
 });

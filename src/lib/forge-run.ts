@@ -31,7 +31,14 @@ export type TimelineItemType = "TASK" | "THOUGHT" | "TOOL" | "RESULT";
 
 export type ForgeTimelineItem =
   | { type: "TASK"; id: string; label: string }
-  | { type: "THOUGHT"; id: string; durationMs: number; text: string; active?: boolean }
+  | {
+      type: "THOUGHT";
+      id: string;
+      durationMs: number;
+      text: string;
+      active?: boolean;
+      startedAtMs?: number;
+    }
   | { type: "TOOL"; id: string; name: string; path?: string; detail?: string; active?: boolean }
   | { type: "RESULT"; id: string; ok: boolean; text: string; evidence?: string[] };
 
@@ -120,6 +127,7 @@ export function buildForgeTimeline(timeline: SSEEvent[], running = false): Forge
       id: thoughtId,
       durationMs,
       text: normalizeProse(thoughtText),
+      startedAtMs: thoughtStart,
     });
     thoughtId = null;
     thoughtText = "";
@@ -146,13 +154,34 @@ export function buildForgeTimeline(timeline: SSEEvent[], running = false): Forge
 
     if (thoughtId) flushThought(ts);
 
-    if (ev.type === "phase" || ev.type === "memory" || ev.type === "explore") {
-      const phase =
-        typeof data.phase === "string"
-          ? data.phase
-          : ev.type === "explore"
-            ? "explore"
-            : undefined;
+    if (ev.type === "explore") {
+      const label = typeof data.message === "string" ? data.message.trim() : "";
+      if (label) {
+        items.push({ type: "TASK", id: `explore-${ts}`, label: truncate(label, 120) });
+      }
+      continue;
+    }
+
+    if (
+      ev.type === "timeout_warning" ||
+      ev.type === "heartbeat" ||
+      ev.type === "stuck" ||
+      ev.type === "error"
+    ) {
+      const label =
+        typeof data.message === "string"
+          ? data.message.trim()
+          : typeof data.error === "string"
+            ? data.error.trim()
+            : "";
+      if (label) {
+        items.push({ type: "TASK", id: `status-${ts}`, label: truncate(label, 120) });
+      }
+      continue;
+    }
+
+    if (ev.type === "phase" || ev.type === "memory") {
+      const phase = typeof data.phase === "string" ? data.phase : undefined;
       const label =
         typeof data.message === "string"
           ? data.message
@@ -218,14 +247,18 @@ export function buildForgeTimeline(timeline: SSEEvent[], running = false): Forge
   }
 
   if (thoughtId) {
-    const endTs = running ? Date.now() : (timeline.at(-1)?.timestamp ?? Date.now());
+    const lastEventTs = timeline.at(-1)?.timestamp ?? thoughtStart;
+    const staleMs = running ? Date.now() - lastEventTs : 0;
+    const active = running && staleMs < 12_000;
+    const endTs = active ? Date.now() : Math.max(thoughtStart + 1000, lastEventTs);
     const durationMs = Math.max(1000, endTs - thoughtStart);
     items.push({
       type: "THOUGHT",
       id: thoughtId,
       durationMs,
       text: normalizeProse(thoughtText),
-      active: running,
+      active,
+      startedAtMs: thoughtStart,
     });
   }
 
@@ -356,7 +389,6 @@ export function normalizeMiniCardBriefing(line: string): string | null {
 function isInternalPhaseNoise(label: string, phase?: string): boolean {
   if (
     phase === "gather" ||
-    phase === "explore" ||
     phase === "classify" ||
     phase === "clarify" ||
     phase === "qualify" ||

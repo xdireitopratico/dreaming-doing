@@ -610,7 +610,12 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
                 ? "plan_approval"
                 : null
           : prev.awaitingKind,
-        streamText: prev.streamText,
+        streamText:
+          failed || canceled
+            ? prev.streamText?.trim() ||
+              (typeof data.error === "string" ? data.error : null) ||
+              prev.error
+            : prev.streamText,
         autoResuming: false,
         lastFinishOk: !failed && !canceled,
         resumable: failed && data.resumable === true && !canceled,

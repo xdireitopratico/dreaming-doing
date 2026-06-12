@@ -16,7 +16,8 @@ import { canSendTasteChat, canStartTasteProject, resolveSessionKind } from "@/li
 import type { StoredMessagePart } from "@/lib/chat-attachments";
 import { buildPreviewUrl } from "@/lib/project-routes";
 import { logEditorTelemetryEvent } from "@/lib/editor-telemetry";
-import { isEditorAgentBusy } from "@/lib/agent-busy";
+import { isEditorAgentBusy, showAgentBusyToast } from "@/lib/agent-busy";
+import { cancelAgentRun } from "@/lib/agent-cancel";
 import { isAgentConnectInFlight } from "@/lib/agent-session-guards";
 import { loadAgentSessionExtensions } from "@/lib/agent-session-extensions";
 import { publishProject } from "@/lib/publish.functions";
@@ -273,7 +274,21 @@ export function useEditorPageHandlers({
         });
         void qc.invalidateQueries({ queryKey: ["messages", conversation.id] });
         if (!result.ok) {
-          toast.error(result.error);
+          if (result.busy) {
+            showAgentBusyToast(result.busy, async (runId) => {
+              try {
+                await cancelAgentRun(runId);
+                toast.error("Run cancelado — pode enviar de novo.");
+                logEditorTelemetryEvent("agent", "busy_cancel_ok", "info", runId.slice(0, 8));
+              } catch (e: unknown) {
+                const msg = e instanceof Error ? e.message : "Falha ao cancelar run";
+                toast.error(msg);
+                logEditorTelemetryEvent("agent", "busy_cancel_fail", "error", msg.slice(0, 200));
+              }
+            });
+          } else {
+            toast.error(result.error);
+          }
           logEditorTelemetryEvent("agent", "run_fail", "error", result.error.slice(0, 200));
           return false;
         }

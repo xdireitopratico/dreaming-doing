@@ -18,12 +18,34 @@ export type ParsedPlanMarkdown = {
   steps: Array<{ id?: string; description: string; type?: PlanStepType }>;
 };
 
-const PLAN_SECTION_RE = /^##\s+(Missão|Objetivo|Abordagem|Premissas|Fases|Fora do escopo)\s*$/im;
+const PLAN_ANCHOR_RE =
+  /^##\s+(Missão|Objetivo|Abordagem|Premissas|Fases|Fora do escopo|Entregas|Princípio|Estado\s+[Aa]tual|Próximos\s+[Pp]assos)/im;
 
 function sectionBody(text: string, heading: string): string {
   const re = new RegExp(`##\\s+${heading}\\s*\\n([\\s\\S]*?)(?=\\n##\\s+|$)`, "i");
   const m = text.match(re);
   return m?.[1]?.trim() ?? "";
+}
+
+function sectionBodyFlexible(text: string, headingPattern: RegExp): string {
+  const re = new RegExp(
+    `##\\s*(?:${headingPattern.source})[^\\n]*\\n([\\s\\S]*?)(?=\\n##\\s+|$)`,
+    "i",
+  );
+  return text.match(re)?.[1]?.trim() ?? "";
+}
+
+function subsectionBodyFlexible(text: string, headingPattern: RegExp): string {
+  const re = new RegExp(
+    `###\\s*(?:${headingPattern.source})[^\\n]*\\n([\\s\\S]*?)(?=\\n###\\s+|\\n##\\s+|$)`,
+    "i",
+  );
+  return text.match(re)?.[1]?.trim() ?? "";
+}
+
+function planTitleFromHeading(text: string): string | null {
+  const m = text.match(/^##\s+(.+)$/im);
+  return m?.[1]?.trim() ?? null;
 }
 
 function bulletsFromSection(section: string): string[] {
@@ -68,40 +90,85 @@ function numberedSteps(text: string): string[] {
   return steps;
 }
 
+function collectPlanStepDescriptions(text: string): string[] {
+  const fromPhases = stepsFromPhases(text);
+  if (fromPhases.length >= 2) return fromPhases;
+
+  const fromEntregas = bulletsFromSection(sectionBodyFlexible(text, /Entregas/));
+  if (fromEntregas.length >= 2) return fromEntregas;
+
+  const fromFalta = numberedSteps(subsectionBodyFlexible(text, /Falta fazer/i));
+  if (fromFalta.length >= 2) return fromFalta;
+
+  const fromNumbered = numberedSteps(text);
+  if (fromNumbered.length >= 2) return fromNumbered;
+
+  const flat = bulletsFromSection(text);
+  if (flat.length >= 2) return flat;
+
+  return fromPhases.length ? fromPhases : fromNumbered;
+}
+
 export function isPlanShapedMarkdown(text: string): boolean {
   const t = text.trim();
   if (!t || t.length < 80) return false;
-  if (!PLAN_SECTION_RE.test(t)) return false;
+  if (!PLAN_ANCHOR_RE.test(t)) return false;
 
-  const hasMission = /^##\s+Missão/im.test(t);
+  const hasCanonicalMission = /^##\s+Missão/im.test(t);
   const hasPhases = /^##\s+Fases/im.test(t);
-  const stepCandidates = [...stepsFromPhases(t), ...numberedSteps(t)];
   const checklistCount = (t.match(/^[-*]\s+\[[ xX]\]/gm) ?? []).length;
+  const stepCount = collectPlanStepDescriptions(t).length;
 
-  return hasMission && (hasPhases || checklistCount >= 2 || stepCandidates.length >= 2);
+  if (hasCanonicalMission) {
+    return hasPhases || checklistCount >= 2 || stepCount >= 2;
+  }
+
+  return stepCount >= 2 || checklistCount >= 2;
 }
 
 export function parsePlanFromMarkdown(text: string): ParsedPlanMarkdown | null {
   const raw = text.trim();
   if (!isPlanShapedMarkdown(raw)) return null;
 
-  const mission = sectionBody(raw, "Missão");
+  const missionBlock = sectionBody(raw, "Missão");
+  const estadoBlock = sectionBodyFlexible(raw, /Estado\s+[Aa]tual/);
+  const titleFromHeading = planTitleFromHeading(raw);
+  const mission =
+    missionBlock ||
+    titleFromHeading ||
+    estadoBlock
+      .split("\n")
+      .find((line) => {
+        const t = line.trim();
+        return t && !t.startsWith("|") && !t.startsWith("###");
+      })
+      ?.trim() ||
+    "";
+
   const objective = sectionBody(raw, "Objetivo");
-  const rationale = sectionBody(raw, "Abordagem");
-  const assumptions = bulletsFromSection(sectionBody(raw, "Premissas"));
+  const rationale =
+    sectionBody(raw, "Abordagem") ||
+    sectionBodyFlexible(raw, /Princípio/) ||
+    subsectionBodyFlexible(raw, /Resultado esperado/i);
+
+  let assumptions = bulletsFromSection(sectionBody(raw, "Premissas"));
+  if (!assumptions.length) {
+    assumptions = bulletsFromSection(subsectionBodyFlexible(raw, /J[aá]\s+feito/i));
+  }
+  if (!assumptions.length && estadoBlock) {
+    assumptions = bulletsFromSection(estadoBlock);
+  }
+
   const outOfScope = bulletsFromSection(sectionBody(raw, "Fora do escopo"));
 
-  let descriptions = stepsFromPhases(raw);
-  if (descriptions.length < 2) descriptions = numberedSteps(raw);
-  if (descriptions.length < 2) {
-    const flat = bulletsFromSection(raw);
-    if (flat.length >= 2) descriptions = flat;
-  }
+  const descriptions = collectPlanStepDescriptions(raw);
   if (descriptions.length < 2) return null;
 
   const summary =
-    mission.split("\n")[0]?.trim() ||
+    missionBlock.split("\n")[0]?.trim() ||
+    titleFromHeading ||
     objective.split("\n")[0]?.trim() ||
+    descriptions[0]?.slice(0, 120) ||
     "Plano proposto";
 
   const steps = descriptions.slice(0, 7).map((description, i) => ({

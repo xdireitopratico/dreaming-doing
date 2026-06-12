@@ -8,7 +8,10 @@ import {
   generatePlanChatMessage,
   filterActionablePlanSteps,
   isActionablePlanStep,
+  buildPlanModeTurnInstruction,
+  isExplicitPlanProposalRequest,
   isShowExistingPlanRequest,
+  PLAN_MODE_CREATE_PLAN_NUDGE,
   sanitizePlanHeadline,
   validateApprovedSteps,
 } from "./plan-mode.ts";
@@ -41,6 +44,21 @@ Deno.test("sanitizePlanHeadline bloqueia meta-comentário do classify", () => {
 Deno.test("isShowExistingPlanRequest detecta pedido de reabrir plano", () => {
   assertEquals(isShowExistingPlanRequest("mostra o plano"), true);
   assertEquals(isShowExistingPlanRequest("criar landing"), false);
+});
+
+Deno.test("isExplicitPlanProposalRequest detecta pedido formal de plano", () => {
+  assertEquals(isExplicitPlanProposalRequest("usa a tool create plan"), true);
+  assertEquals(isExplicitPlanProposalRequest("plano em fases do projeto"), true);
+  assertEquals(isExplicitPlanProposalRequest("monte um plano para a landing"), true);
+  assertEquals(isExplicitPlanProposalRequest("mostra o plano"), false);
+  assertEquals(isExplicitPlanProposalRequest("bom dia"), false);
+});
+
+Deno.test("buildPlanModeTurnInstruction anexa nudge create_plan quando explícito", () => {
+  const out = buildPlanModeTurnInstruction("usa a tool create plan");
+  assert(out.includes("usa a tool create plan"));
+  assert(out.includes(PLAN_MODE_CREATE_PLAN_NUDGE));
+  assertEquals(buildPlanModeTurnInstruction("bom dia"), "bom dia");
 });
 
 Deno.test("isActionablePlanStep rejeita passos meta-conversacionais", () => {

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef } from "react";
 import type { AgentProgress } from "@/lib/agent-progress";
 import type { ChatMessage } from "@/lib/chat-types";
 import { isAssistantRunMaterialized } from "@/lib/assistant-materialized";
+import { hasInspectorReadySnapshot } from "@/lib/assistant-run-progress";
 import { buildChatThread } from "@/lib/chat";
 import { usePendingPlan } from "@/hooks/usePendingPlan";
 import type { useAgentRun } from "@/hooks/useAgentRun";
@@ -64,7 +65,12 @@ export function useChat({
     for (const m of messages) {
       if (m.role !== "assistant" || !m.runId) continue;
       if (!isAssistantRunMaterialized(m)) continue;
-      agent.acknowledgeMaterializedRun(m.runId);
+      const rid = m.runId;
+      if (agent.activeRunId === rid && !hasInspectorReadySnapshot(m)) continue;
+      if (hasInspectorReadySnapshot(m)) {
+        agent.clearFrozenRunProgress(rid);
+      }
+      agent.acknowledgeMaterializedRun(rid);
     }
   }, [messages, messagesLoading, agent]);
 
@@ -77,7 +83,7 @@ export function useChat({
   const progress: AgentProgress = useMemo(() => {
     const base = agent.progress;
     if (!pendingPlan) {
-      if (base.awaitingKind === "plan_approval") {
+      if (base.awaitingKind === "plan_approval" && !base.pendingPlan) {
         return { ...base, awaiting: false, awaitingKind: null };
       }
       return base;
@@ -124,10 +130,14 @@ export function useChat({
     if (!agent.activeRunId || !agent.progress.finished) return;
     const runId = agent.activeRunId;
     const timer = window.setTimeout(() => {
+      const materialized = messages.find(
+        (m) => m.role === "assistant" && m.runId === runId && isAssistantRunMaterialized(m),
+      );
+      if (materialized && !hasInspectorReadySnapshot(materialized)) return;
       agent.acknowledgeMaterializedRun(runId);
     }, 45_000);
     return () => window.clearTimeout(timer);
-  }, [agent.activeRunId, agent.progress.finished, agent]);
+  }, [agent.activeRunId, agent.progress.finished, agent, messages]);
 
   const agentBusy = !!(
     agent.activeRunId &&

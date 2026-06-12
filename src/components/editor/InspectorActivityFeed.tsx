@@ -22,7 +22,19 @@ function ThoughtBlock({
   defaultOpen: boolean;
 }) {
   const [open, setOpen] = useState(defaultOpen || !!block.active);
-  const sec = Math.max(1, Math.round(block.durationMs / 1000));
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    if (!block.active) return;
+    const id = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(id);
+  }, [block.active]);
+
+  const liveMs =
+    block.active && block.startedAtMs
+      ? Math.max(1000, now - block.startedAtMs)
+      : block.durationMs;
+  const sec = Math.max(1, Math.round(liveMs / 1000));
 
   useEffect(() => {
     if (block.active) setOpen(true);

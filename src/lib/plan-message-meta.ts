@@ -58,10 +58,27 @@ export function needsPlanApprovalNow(
 ): boolean {
   const plan = resolvePendingPlan(live, messages, activeRunId);
   if (!plan) return false;
-  if (live && livePlanBelongsToSession(live, messages, activeRunId)) return true;
-  // Do histórico: só se o último status for pending (não aprovado ainda)
+
   const stored = findStoredPlanForPlan(plan, messages);
-  return stored?.status === "pending";
+  if (stored?.status === "approved" || stored?.status === "rejected") return false;
+  if (stored?.status === "pending") return true;
+
+  if (live && livePlanBelongsToSession(live, messages, activeRunId)) return true;
+
+  // cardSnapshot.awaitingKind sem planStatus no topo (88764445)
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const m = messages[i];
+    if (m?.role !== "assistant") continue;
+    const meta = m.meta as Record<string, unknown> | undefined;
+    if (!meta) continue;
+    const snapPlan = meta.cardSnapshot
+      ? pendingPlanFromCardSnapshot(cardSnapshotRecord(meta) ?? {}, meta)
+      : null;
+    if (snapPlan?.planId !== plan.planId) continue;
+    if (awaitingKindFromMessageMeta(meta) === "plan_approval") return true;
+  }
+
+  return false;
 }
 
 function findStoredPlanForPlan(plan: PendingPlan, messages: ChatMessage[]) {
@@ -72,6 +89,79 @@ function findStoredPlanForPlan(plan: PendingPlan, messages: ChatMessage[]) {
     if (s && s.plan.planId === plan.planId) return s;
   }
   return null;
+}
+
+function cardSnapshotRecord(meta: Record<string, unknown>): Record<string, unknown> | null {
+  const snap = meta.cardSnapshot;
+  return snap && typeof snap === "object" ? (snap as Record<string, unknown>) : null;
+}
+
+/** awaitingKind no topo ou dentro de cardSnapshot (run 88764445). */
+export function awaitingKindFromMessageMeta(
+  meta: Record<string, unknown> | undefined,
+): "clarify" | "plan_approval" | null {
+  if (!meta) return null;
+  const top = meta.awaitingKind;
+  if (top === "clarify" || top === "plan_approval" || top === "qualify") {
+    return top === "qualify" ? "clarify" : top;
+  }
+  const snap = cardSnapshotRecord(meta);
+  if (snap?.awaitingKind === "clarify" || snap?.awaitingKind === "qualify") return "clarify";
+  if (snap?.awaitingKind === "plan_approval") return "plan_approval";
+  return null;
+}
+
+function planStatusFromMessageMeta(meta: Record<string, unknown>): StoredPlanStatus {
+  const statusRaw = meta.planStatus;
+  if (statusRaw === "approved" || statusRaw === "rejected" || statusRaw === "pending") {
+    return statusRaw;
+  }
+  if (awaitingKindFromMessageMeta(meta) === "plan_approval") return "pending";
+  return "pending";
+}
+
+function pendingPlanFromCardSnapshot(
+  snap: Record<string, unknown>,
+  meta: Record<string, unknown>,
+): PendingPlan | null {
+  const raw = snap.pendingPlan;
+  if (!raw || typeof raw !== "object") return null;
+  const nested = raw as Record<string, unknown>;
+  const planId = typeof nested.planId === "string" ? nested.planId : null;
+  const steps = asPlanSteps(nested.steps);
+  const runId =
+    typeof nested.runId === "string"
+      ? nested.runId
+      : typeof meta.runId === "string"
+        ? meta.runId
+        : null;
+  const projectId =
+    typeof nested.projectId === "string"
+      ? nested.projectId
+      : typeof meta.projectId === "string"
+        ? meta.projectId
+        : "";
+  if (!planId || !runId || steps.length === 0) return null;
+
+  return {
+    planId,
+    summary: typeof nested.summary === "string" ? nested.summary : "Plano proposto",
+    rationale:
+      typeof nested.rationale === "string" && nested.rationale.trim()
+        ? nested.rationale.trim()
+        : undefined,
+    markdown:
+      typeof nested.markdown === "string" && nested.markdown.trim()
+        ? nested.markdown.trim()
+        : undefined,
+    mission: typeof nested.mission === "string" ? nested.mission : undefined,
+    objective: typeof nested.objective === "string" ? nested.objective : undefined,
+    steps,
+    ttlMs: Number.MAX_SAFE_INTEGER,
+    proposedAt: typeof nested.proposedAt === "number" ? nested.proposedAt : Date.now(),
+    runId,
+    projectId,
+  };
 }
 
 export type ResolveJobPlanOptions = {
@@ -198,20 +288,14 @@ function asPlanSteps(raw: unknown): PlanStep[] {
 export function storedPlanFromMessage(message?: ChatMessage): StoredPlanMeta | null {
   if (!message?.meta) return null;
   const meta = message.meta as Record<string, unknown>;
+
   const planId = typeof meta.planId === "string" ? meta.planId : null;
   const runId = typeof meta.runId === "string" ? meta.runId : null;
   const steps = asPlanSteps(meta.planSteps);
-  if (!planId || !runId || steps.length === 0) return null;
 
-  const statusRaw = meta.planStatus;
-  const status: StoredPlanStatus =
-    statusRaw === "rejected" || statusRaw === "approved" || statusRaw === "pending"
-      ? statusRaw
-      : "pending";
-
-  return {
-    status,
-    plan: {
+  let plan: PendingPlan | null = null;
+  if (planId && runId && steps.length > 0) {
+    plan = {
       planId,
       summary: typeof meta.planSummary === "string" ? meta.planSummary : "Plano proposto",
       rationale:
@@ -229,6 +313,16 @@ export function storedPlanFromMessage(message?: ChatMessage): StoredPlanMeta | n
       proposedAt: Date.now(),
       runId,
       projectId: typeof meta.projectId === "string" ? meta.projectId : "",
-    },
+    };
+  } else {
+    const snap = cardSnapshotRecord(meta);
+    if (snap) plan = pendingPlanFromCardSnapshot(snap, meta);
+  }
+
+  if (!plan) return null;
+
+  return {
+    status: planStatusFromMessageMeta(meta),
+    plan,
   };
 }

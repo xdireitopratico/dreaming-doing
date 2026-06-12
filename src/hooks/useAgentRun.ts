@@ -26,7 +26,10 @@ import { PENDING_RUN_ID } from "@/lib/pending-run-id";
 import { hasFirstInspectorToken } from "@/lib/forge-run";
 import { shouldRetainLiveRunSlot } from "@/lib/live-run-overlay";
 import { isAssistantRunMaterialized } from "@/lib/assistant-materialized";
+import { inspectorProgressWeight } from "@/lib/assistant-run-progress";
 import type { ChatMessage } from "@/lib/chat-types";
+import type { AgentBusyInfo } from "@/lib/agent-busy";
+import { parseAgentBusyResponse } from "@/lib/agent-busy";
 
 import type { PendingQueueItem } from "@/components/editor/PendingQueuePanel";
 
@@ -39,7 +42,9 @@ function withFrozenLatencyThought(next: AgentProgress, startedAtMs: number | nul
   };
 }
 
-export type AgentConnectResult = { ok: true } | { ok: false; error: string };
+export type AgentConnectResult =
+  | { ok: true }
+  | { ok: false; error: string; busy?: AgentBusyInfo };
 
 function formatQueueBlockReason(reason?: string): string | null {
   if (!reason) return null;
@@ -133,26 +138,78 @@ export type {
 
 export function useAgentRun() {
   const [progress, setProgress] = useState<AgentProgress>(initialAgentProgress);
-
-  useEffect(() => {
-    pendingQueueCountRef.current = progress.pendingQueueCount ?? 0;
-  }, [progress.pendingQueueCount]);
-
   const [connected, setConnected] = useState(false);
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const [pendingQueueItems, setPendingQueueItems] = useState<PendingQueueItem[]>([]);
   const [queueBlockingReason, setQueueBlockingReason] = useState<string | null>(null);
   /** Início do turno (envio) — persiste até o run terminar; alimenta Think latency no chat e inspector. */
   const [activeRunStartedAtMs, setActiveRunStartedAtMs] = useState<number | null>(null);
+  /** Bump quando frozen map muda — refs não re-renderizam o inspector. */
+  const [frozenProgressTick, setFrozenProgressTick] = useState(0);
 
   const runIdRef = useRef<string | null>(null);
   const activeRunStartedAtMsRef = useRef<number | null>(null);
+  const pendingQueueCountRef = useRef(0);
+  const progressRef = useRef<AgentProgress>(initialAgentProgress);
+  const frozenRunProgressRef = useRef<Map<string, AgentProgress>>(new Map());
+  const lastSeqRef = useRef(0);
+
+  useEffect(() => {
+    pendingQueueCountRef.current = progress.pendingQueueCount ?? 0;
+  }, [progress.pendingQueueCount]);
+
+  useEffect(() => {
+    progressRef.current = progress;
+  }, [progress]);
+
   useEffect(() => {
     activeRunStartedAtMsRef.current = activeRunStartedAtMs;
   }, [activeRunStartedAtMs]);
 
-  const pendingQueueCountRef = useRef(0);
-  const lastSeqRef = useRef(0);
+  const bumpFrozenProgressTick = useCallback(() => {
+    setFrozenProgressTick((n) => n + 1);
+  }, []);
+
+  const freezeRunProgress = useCallback(
+    (runId: string) => {
+      if (!runId) return;
+      if (runIdRef.current !== runId) return;
+      const p = progressRef.current;
+      if (inspectorProgressWeight(p) === 0) return;
+      frozenRunProgressRef.current.set(runId, {
+        ...p,
+        timeline: [...(p.timeline ?? [])],
+        tools: [...(p.tools ?? [])],
+        diffs: [...(p.diffs ?? [])],
+        deliveryFiles: [...(p.deliveryFiles ?? [])],
+        buildLogLines: [...(p.buildLogLines ?? [])],
+      });
+      bumpFrozenProgressTick();
+    },
+    [bumpFrozenProgressTick],
+  );
+
+  const getFrozenRunProgress = useCallback((runId: string): AgentProgress | null => {
+    return frozenRunProgressRef.current.get(runId) ?? null;
+  }, []);
+
+  const clearFrozenRunProgress = useCallback(
+    (runId: string) => {
+      if (!frozenRunProgressRef.current.delete(runId)) return;
+      bumpFrozenProgressTick();
+    },
+    [bumpFrozenProgressTick],
+  );
+
+  const releaseLiveRunSlot = useCallback(
+    (runId: string) => {
+      freezeRunProgress(runId);
+      runIdRef.current = null;
+      setActiveRunId(null);
+      setActiveRunStartedAtMs(null);
+    },
+    [freezeRunProgress],
+  );
   const sessionContextRef = useRef<{ projectId: string; conversationId: string } | null>(null);
   const eventChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const statusChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
@@ -164,11 +221,18 @@ export function useAgentRun() {
     if (!runIdRef.current && !activeRunId) return;
     if (activeRunStartedAtMsRef.current != null) return;
     if (shouldRetainLiveRunSlot(progress)) return;
-    runIdRef.current = null;
-    setActiveRunId(null);
-    setActiveRunStartedAtMs(null);
+    const rid = runIdRef.current ?? activeRunId;
+    if (rid) releaseLiveRunSlot(rid);
     setConnected(false);
-  }, [progress.finished, progress.awaiting, progress.awaitingKind, progress.canceled, activeRunId, progress]);
+  }, [
+    progress.finished,
+    progress.awaiting,
+    progress.awaitingKind,
+    progress.canceled,
+    activeRunId,
+    progress,
+    releaseLiveRunSlot,
+  ]);
 
   // ─── Persistência de estado em sessionStorage (escopado por projeto+conversa) ─
   const saveSnapshot = useCallback(() => {
@@ -183,9 +247,9 @@ export function useAgentRun() {
     });
   }, [progress]);
 
-  // Salva snapshot debounced a cada 500ms quando progress muda
+  // Salva snapshot debounced — lastSeqRef é síncrono em applyStreamRow
   useEffect(() => {
-    const timer = setTimeout(saveSnapshot, 500);
+    const timer = setTimeout(saveSnapshot, 200);
     return () => clearTimeout(timer);
   }, [progress, saveSnapshot]);
 
@@ -294,9 +358,8 @@ export function useAgentRun() {
       teardownChannels();
       setConnected(false);
       setProgress((p) => {
-        if (!shouldRetainLiveRunSlot(p)) {
-          runIdRef.current = null;
-          setActiveRunId(null);
+        if (!shouldRetainLiveRunSlot(p) && runIdRef.current) {
+          releaseLiveRunSlot(runIdRef.current);
           if (status !== "awaiting_user") {
             clearAgentSnapshot();
           }
@@ -304,7 +367,7 @@ export function useAgentRun() {
         return p;
       });
     },
-    [teardownChannels],
+    [teardownChannels, releaseLiveRunSlot],
   );
 
   const catchUpRun = useCallback(
@@ -379,8 +442,7 @@ export function useAgentRun() {
           setConnected(false);
           setProgress((p) => {
             if (!shouldRetainLiveRunSlot(p) && runIdRef.current === runId) {
-              runIdRef.current = null;
-              setActiveRunId(null);
+              releaseLiveRunSlot(runId);
             }
             return p;
           });
@@ -390,7 +452,7 @@ export function useAgentRun() {
 
       return terminal;
     },
-    [applyStreamRow, syncRunStatus, teardownChannels],
+    [applyStreamRow, syncRunStatus, teardownChannels, releaseLiveRunSlot],
   );
 
   const subscribeToRun = useCallback(
@@ -447,8 +509,7 @@ export function useAgentRun() {
               setConnected(false);
               setProgress((p) => {
                 if (!shouldRetainLiveRunSlot(p) && runIdRef.current === runId) {
-                  runIdRef.current = null;
-                  setActiveRunId(null);
+                  releaseLiveRunSlot(runId);
                 }
                 return p;
               });
@@ -495,7 +556,7 @@ export function useAgentRun() {
         void catchUpRun(runIdRef.current);
       }, 12_000);
     },
-    [applyStreamRow, catchUpRun, syncRunStatus, teardownChannels],
+    [applyStreamRow, catchUpRun, syncRunStatus, teardownChannels, releaseLiveRunSlot],
   );
 
   useEffect(() => {
@@ -652,27 +713,21 @@ export function useAgentRun() {
           return { ok: false, error: msg };
         }
 
-        const body = (await res.json()) as {
-          ok?: boolean;
-          runId?: string;
-          queued?: boolean;
-          busy?: boolean;
-          pendingCount?: number;
-          message?: string;
-          content?: string;
-        };
+        const body = (await res.json()) as Record<string, unknown>;
 
-        if (body.busy) {
-          const msg = body.message ?? "Agente ocupado.";
+        const busyInfo = parseAgentBusyResponse(body);
+        if (busyInfo) {
+          const msg = busyInfo.message ?? "Agente ocupado.";
           setProgress((p) => ({
             ...p,
             finished: true,
-            pendingQueueCount: body.pendingCount ?? p.pendingQueueCount,
+            pendingQueueCount:
+              typeof body.pendingCount === "number" ? body.pendingCount : p.pendingQueueCount,
             statusHint: msg,
             error: null,
           }));
           releaseAgentConnect();
-          return { ok: false, error: msg };
+          return { ok: false, error: msg, busy: busyInfo };
         }
 
         if (body.queued) {
@@ -1002,15 +1057,19 @@ export function useAgentRun() {
     }));
   }, []);
 
-  const acknowledgeMaterializedRun = useCallback((runId: string) => {
-    setActiveRunId((cur) => {
-      if (cur === runId) {
-        runIdRef.current = null;
-        return null;
-      }
-      return cur;
-    });
-  }, []);
+  const acknowledgeMaterializedRun = useCallback(
+    (runId: string) => {
+      freezeRunProgress(runId);
+      setActiveRunId((cur) => {
+        if (cur === runId) {
+          runIdRef.current = null;
+          return null;
+        }
+        return cur;
+      });
+    },
+    [freezeRunProgress],
+  );
 
   const bindSession = useCallback((projectId: string, conversationId: string) => {
     sessionContextRef.current = { projectId, conversationId };
@@ -1025,9 +1084,13 @@ export function useAgentRun() {
     setPendingQueueItems([]);
     setQueueBlockingReason(null);
     lastSeqRef.current = 0;
+    if (frozenRunProgressRef.current.size > 0) {
+      frozenRunProgressRef.current.clear();
+      bumpFrozenProgressTick();
+    }
     teardownChannels();
     clearAgentSnapshot();
-  }, [teardownChannels]);
+  }, [teardownChannels, bumpFrozenProgressTick]);
 
   const tryRestoreSnapshot = useCallback(
     (projectId: string, conversationId: string, messages: ChatMessage[] = []) => {
@@ -1102,6 +1165,9 @@ export function useAgentRun() {
     clearPendingPlan,
     hydratePendingPlan,
     acknowledgeMaterializedRun,
+    getFrozenRunProgress,
+    clearFrozenRunProgress,
+    frozenProgressTick,
     bindSession,
     resetSession,
     tryRestoreSnapshot,

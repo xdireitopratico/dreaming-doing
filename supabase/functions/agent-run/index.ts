@@ -372,7 +372,7 @@ Deno.serve(async (req) => {
 
       const { data: activeRun } = await supabase
         .from("agent_runs")
-        .select("id, status, meta")
+        .select("id, status, meta, started_at")
         .eq("project_id", projectId)
         .in("status", ["running", "awaiting_user", "pending"])
         .order("started_at", { ascending: false })
@@ -416,19 +416,33 @@ Deno.serve(async (req) => {
 
       if (isRunning && !resumeRun && !isAwaiting) {
         if (!enqueueIntent) {
-          const { countPendingMessages } = await import("../_shared/agent-pending-queue.ts");
+          const { countPendingMessages, resolveAgentBusyReason } =
+            await import("../_shared/agent-pending-queue.ts");
           const pendingCount = await countPendingMessages(supabase, projectId, userData.user.id);
+          const reason = awaitingRun
+            ? await resolveAgentBusyReason(supabase, {
+                id: awaitingRun.id as string,
+                status: awaitingRun.status as string,
+                meta: awaitingRun.meta,
+                started_at: (awaitingRun as { started_at?: string | null }).started_at ?? null,
+              })
+            : "running";
           logger.info("agent_run.busy_no_enqueue", {
             projectId,
             pendingCount,
             activeRunId: awaitingRun?.id ?? null,
+            reason,
           });
           return json({
             ok: true,
             busy: true,
             pendingCount,
             activeRunId: awaitingRun?.id ?? null,
-            message: "Agente ocupado — aguarde ou envie mensagem com o agente ativo.",
+            reason,
+            message:
+              reason === "zombie"
+                ? "Agente travado — cancele o run ou aguarde a expiração automática."
+                : "Agente ocupado — aguarde ou envie mensagem com o agente ativo.",
           });
         }
 
@@ -777,13 +791,26 @@ Deno.serve(async (req) => {
         if (createdRun && createdRun.conversation_id !== conversationId) {
           runningLocks.delete(projectId);
           if (!enqueueIntent) {
-            const { countPendingMessages } = await import("../_shared/agent-pending-queue.ts");
+            const { countPendingMessages, resolveAgentBusyReason } =
+              await import("../_shared/agent-pending-queue.ts");
             const pendingCount = await countPendingMessages(supabase, projectId, userData.user.id);
+            const reason = await resolveAgentBusyReason(
+              supabase,
+              createdRun
+                ? {
+                    id: createdRun.id as string,
+                    status: createdRun.status as string,
+                    meta: createdRun.meta,
+                  }
+                : null,
+              { otherConversation: true },
+            );
             return json({
               ok: true,
               busy: true,
               pendingCount,
               activeRunId: agentRunId,
+              reason,
               message: "Agente ocupado em outra conversa.",
             });
           }

@@ -102,23 +102,68 @@ export async function getRunStatus(runId: string): Promise<AgentRunStatus | null
 
 const TERMINAL_STATUSES = new Set<AgentRunStatus>(["failed", "canceled"]);
 
+/** Colunas reais de agent_runs — demais chaves em extras viram merge em meta (ex.: plan). */
+const AGENT_RUN_PATCH_COLUMNS = new Set(["error", "steps", "canceled_at"]);
+
+export function partitionAgentRunExtras(extras: Record<string, unknown>): {
+  columns: Record<string, unknown>;
+  metaDelta: Record<string, unknown>;
+} {
+  const columns: Record<string, unknown> = {};
+  const metaDelta: Record<string, unknown> = {};
+
+  for (const [key, value] of Object.entries(extras)) {
+    if (key === "meta" && value && typeof value === "object" && !Array.isArray(value)) {
+      Object.assign(metaDelta, value as Record<string, unknown>);
+      continue;
+    }
+    if (AGENT_RUN_PATCH_COLUMNS.has(key)) {
+      columns[key] = value;
+      continue;
+    }
+    if (key === "status" || key === "finished_at") continue;
+    metaDelta[key] = value;
+  }
+
+  return { columns, metaDelta };
+}
+
 export async function markRunFinal(
   runId: string,
   status: AgentRunStatus,
   extras: Record<string, unknown> = {},
 ): Promise<void> {
+  const current = await getRunStatus(runId);
+
+  // Não reverter awaiting_user/completed para running (evita reattach zumbi no mesmo runId).
+  if (status === "running" && (current === "awaiting_user" || current === "completed")) {
+    return;
+  }
+
   // Não sobrescrever status terminal — se já falhou/cancelou, não reverter pra running
   if (TERMINAL_STATUSES.has(status)) {
     // Só permite marcar terminal se não está num terminal diferente
-    const current = await getRunStatus(runId);
     if (current === "failed" || current === "canceled") {
       return;
     }
   }
-  const patch: Record<string, unknown> = { status, ...extras };
+
+  const { columns, metaDelta } = partitionAgentRunExtras(extras);
+  const patch: Record<string, unknown> = { status, ...columns };
   if (status === "completed" || status === "failed" || status === "canceled") {
     patch.finished_at = new Date().toISOString();
   }
+
+  if (Object.keys(metaDelta).length > 0) {
+    const { data: existing } = await getSupabaseAdmin()
+      .from("agent_runs")
+      .select("meta")
+      .eq("id", runId)
+      .maybeSingle();
+    const prevMeta = (existing?.meta ?? {}) as Record<string, unknown>;
+    patch.meta = { ...prevMeta, ...metaDelta };
+  }
+
   const { error } = await getSupabaseAdmin().from("agent_runs").update(patch).eq("id", runId);
   if (error) throw new Error(`Failed to mark run ${runId} as ${status}: ${error.message}`);
 }
@@ -170,7 +215,7 @@ export async function drainPendingQueue(payload: AgentRunRequest): Promise<Conti
       projectId: payload.projectId,
       conversationId: payload.conversationId,
       userId: payload.userId,
-      planMode: false,
+      // Omit planMode — continue-queue prefers pendingBody.mode (send-time) over drain caller.
     }),
   });
 

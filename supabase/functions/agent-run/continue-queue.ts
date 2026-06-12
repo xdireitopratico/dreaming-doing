@@ -3,7 +3,11 @@
  */
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { appendStreamEvent } from "../_shared/agent-stream.ts";
-import { evaluateQueueDrain, popOldestPendingMessage } from "../_shared/agent-pending-queue.ts";
+import {
+  evaluateQueueDrain,
+  popOldestPendingMessage,
+  resolveQueuedPlanMode,
+} from "../_shared/agent-pending-queue.ts";
 import { loadUserLlmContext, resolveAgentProvider } from "./run-setup.ts";
 import type { AgentPreferencesPayload } from "./connector-keys.ts";
 
@@ -47,19 +51,25 @@ export async function handleContinueQueue(
   const pendingSessionKind =
     typeof pendingBody?.sessionKind === "string" ? pendingBody.sessionKind : null;
 
-  // PR3: prefer send-time mode captured at onSend (stored in pendingBody at enqueue time, or user msg meta)
-  // over the drain/continue call input (which may come from prior run's planMode or current composer).
-  // Fall back to input only if absent (keeps legacy queues as "build").
-  const storedMode =
-    typeof (pendingBody as any)?.mode === "string"
-      ? String((pendingBody as any).mode).toLowerCase()
-      : null;
-  const planMode =
-    storedMode === "plan"
-      ? true
-      : storedMode === "build" || storedMode === "chat"
-        ? false
-        : input.planMode === true;
+  // PR3 / S7: pendingBody.mode (enqueue) > user message meta > drain input (omit planMode from Inngest).
+  let messageMetaMode: string | null = null;
+  const pendingMessageId =
+    typeof pendingBody?.messageId === "string" ? pendingBody.messageId : null;
+  if (!pendingBody?.mode && pendingMessageId) {
+    const { data: msgRow } = await supabase
+      .from("messages")
+      .select("meta")
+      .eq("id", pendingMessageId)
+      .maybeSingle();
+    const raw = (msgRow?.meta as Record<string, unknown> | undefined)?.mode;
+    messageMetaMode = typeof raw === "string" ? raw : null;
+  }
+
+  const planMode = resolveQueuedPlanMode({
+    pendingBody,
+    messageMetaMode,
+    inputPlanMode: input.planMode,
+  });
 
   const { hasUserLlmKey, userOnlyKeys } = await loadUserLlmContext(supabase, userId, preferences);
   const sessionKind = hasUserLlmKey ? "byok" : "taste_chat";

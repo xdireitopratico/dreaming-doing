@@ -32,7 +32,11 @@ export const agentPlanFunction = inngest.createFunction(
       return status;
     });
 
-    if (initialStatus === "completed" || initialStatus === "failed") {
+    if (
+      initialStatus === "completed" ||
+      initialStatus === "failed" ||
+      initialStatus === "awaiting_user"
+    ) {
       return { runId, ok: true, alreadyDone: true };
     }
 
@@ -76,7 +80,7 @@ export const agentPlanFunction = inngest.createFunction(
     await step.run("mark-completed", async () => {
       const status = await getRunStatus(runId);
       if (status === "canceled" || status === "awaiting_user") return;
-      await markRunFinal(runId, "completed", { plan: final.plan ?? null });
+      await markRunFinal(runId, "completed", { meta: { plan: final.plan ?? null } });
     });
 
     await step.run("drain-pending-queue", async () => {
