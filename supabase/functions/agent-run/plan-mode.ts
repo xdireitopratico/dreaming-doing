@@ -16,7 +16,8 @@ export interface PlanRationale {
   phases?: ForgePlanPhase[];
 }
 
-export const PLAN_APPROVAL_TTL_MS = 5 * 60 * 1000; // 5min
+/** Plano enviado não expira — usuário aprova quando quiser. */
+export const PLAN_APPROVAL_TTL_MS = Number.MAX_SAFE_INTEGER;
 
 const META_HEADLINE_RE =
   /^(conversa:|preciso ver|primeira intera|não há plano|nao ha plano|usuário pede|usuario pede|o usuário|a usuária)/i;

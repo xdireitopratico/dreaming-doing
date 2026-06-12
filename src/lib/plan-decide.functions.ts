@@ -55,7 +55,7 @@ const agentPreferencesSchema = z
 
 const INNGEST_GRACIOSA_MESSAGE = "Vi que rejeitou o plano , como posso melhora-lo?";
 
-// PLAN_APPROVED_PREFIX source of truth is qualify.ts (exported); here use literal for cross-runtime (minor alignment, no dupe const).
+// PLAN_APPROVED_PREFIX source of truth is run-context.ts (exported); literal aqui por cross-runtime.
 
 type DecideResponse = {
   ok: true;

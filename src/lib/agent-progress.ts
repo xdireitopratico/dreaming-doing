@@ -16,7 +16,7 @@ export interface PlanStep {
   enabled: boolean;
 }
 
-export type AwaitingKind = "qualify" | "plan_approval" | null;
+export type AwaitingKind = "clarify" | "plan_approval" | null;
 
 /** Rehydrate awaiting gate from agent_runs.meta.awaitingUser (post-F5 / catch-up). */
 export function awaitingKindFromRunMeta(
@@ -24,7 +24,7 @@ export function awaitingKindFromRunMeta(
 ): AwaitingKind {
   const awaitingUser = meta?.awaitingUser as { type?: string } | undefined;
   if (awaitingUser?.type === "plan_approval") return "plan_approval";
-  if (awaitingUser?.type === "qualify") return "qualify";
+  if (awaitingUser?.type === "clarify" || awaitingUser?.type === "qualify") return "clarify";
   return null;
 }
 
@@ -517,7 +517,7 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
       return {
         ...prev,
         awaiting: awaiting || prev.awaiting,
-        awaitingKind: awaiting ? "qualify" : prev.awaitingKind,
+        awaitingKind: awaiting ? "clarify" : prev.awaitingKind,
         timeline: [...prev.timeline, event],
       };
     }
@@ -547,7 +547,7 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
         awaitingKind: conversational
           ? null
           : data.qualified || data.awaiting
-            ? "qualify"
+            ? "clarify"
             : planAwaiting
               ? "plan_approval"
               : null,
@@ -601,9 +601,14 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
         awaitingKind: awaiting
           ? planPending
             ? "plan_approval"
-            : data.qualified || data.awaiting || prev.awaitingKind === "qualify"
-              ? "qualify"
-              : prev.awaitingKind
+            : data.qualified ||
+                data.awaiting ||
+                prev.awaitingKind === "clarify" ||
+                (prev.awaitingKind as string | null) === "qualify"
+              ? "clarify"
+              : prev.awaitingKind === "plan_approval"
+                ? "plan_approval"
+                : null
           : prev.awaitingKind,
         streamText: prev.streamText,
         autoResuming: false,

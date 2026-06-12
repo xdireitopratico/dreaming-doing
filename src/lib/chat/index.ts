@@ -11,5 +11,5 @@ export type {
   ThreadItem,
   MiniCardData,
   PlanPrompt,
-  QualifyPrompt,
+  ClarifyPrompt,
 } from "@/lib/chat/types";

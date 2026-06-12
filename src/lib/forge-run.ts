@@ -370,6 +370,7 @@ function isInternalPhaseNoise(label: string, phase?: string): boolean {
     phase === "gather" ||
     phase === "explore" ||
     phase === "classify" ||
+    phase === "clarify" ||
     phase === "qualify" ||
     phase === "build"
   ) {
@@ -540,7 +541,7 @@ export function isRunEffectivelyActive(progress: AgentProgress, slotActive = fal
 export function shouldShowJobCard(opts: {
   runId?: string;
   progress: AgentProgress | null;
-  /** Turno só com clarify (awaitingKind qualify) — sem mini-card. */
+  /** Turno só com clarify — sem mini-card. */
   isClarifyOnly: boolean;
   isAgentJobMessage: boolean;
   hasExecutionEvidence: boolean;

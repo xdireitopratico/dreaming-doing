@@ -21,7 +21,7 @@ import { restoreExecutionLogFromRows } from "./executionLogMeta.ts";
 import { loadCheckpoint } from "./checkpoint.ts";
 import { appendStreamEvent } from "../_shared/agent-stream.ts";
 import { isServiceRoleRequest } from "../_shared/service-auth.ts";
-import { extractOriginalUserRequest, resolveAllocateSandbox } from "./qualify.ts";
+import { extractOriginalUserRequest, resolveAllocateSandbox } from "./run-context.ts";
 
 const runningLocks = new Map<string, Promise<unknown>>();
 
@@ -651,7 +651,7 @@ Deno.serve(async (req) => {
       // === Decisão "caminho barato primeiro" (o que o usuário pediu) ===
       // Se o prompt parece pedido explícito de interação/perguntas ("quero uma mensagem claramente de interação, não de execução")
       // ou é curto/vago, e ainda não existe sandbox alocado para o projeto, NÃO alocamos E2B para este run.
-      // clarify tool no loop responde e marca awaiting sem container (plan mode não aloca E2B).
+      // Plan mode só reconecta sandbox existente; Build pode criar. Conversa vaga sem sandbox → sem E2B.
       // Use meta-aware extract (prefers skipping plan_approved meta) for the triggering user request; force allocate
       // if history contains prior plan_approved (makes follow-up "add X" after approve allocate sandbox reliably).
       const fromBody = (body as any).prompt || (body as any).message || "";

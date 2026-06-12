@@ -184,7 +184,7 @@ describe("shouldShowJobCard", () => {
   it("oculta mini card em turno clarify-only", () => {
     const progress = {
       ...initialAgentProgress,
-      awaitingKind: "qualify" as const,
+      awaitingKind: "clarify" as const,
       awaiting: true,
       finished: true,
     };

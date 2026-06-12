@@ -22,7 +22,7 @@ import { registerDeployTool } from "./tools/deploy.ts";
 import { restoreExecutionLogFromRows } from "./executionLogMeta.ts";
 import { loadCheckpoint } from "./checkpoint.ts";
 import { buildSandboxEnv } from "./sandbox-env.ts";
-import { PLAN_APPROVED_PREFIX } from "./qualify.ts";
+import { PLAN_APPROVED_PREFIX } from "./run-context.ts";
 import type { ChatMessage, PlanStep } from "./types.ts";
 
 export type AgentJobParams = {
@@ -63,7 +63,7 @@ export type AgentJobParams = {
  *   Execute os passos acima na ordem indicada.
  *
  * A mensagem é marcada com o prefixo [Plano aprovado] — `extractOriginalUserRequest`
- * (qualify.ts) a ignora ao buscar o pedido original do usuário, evitando que
+ * (run-context.ts) a ignora ao buscar o pedido original do usuário, evitando que
  * essa mensagem sintética seja confundida com a requisição real.
  */
 function injectPlanApprovalMessage(
@@ -212,7 +212,7 @@ export async function executeAgentJob(
   const messages = await buildChatHistory(historyRows, 120, mainCfg.model);
   const sessionExt = await buildSessionExtensionsPrompt(enabledSkillIds, enabledMcpIds);
 
-  // Plan mode precisa de sandbox para shell_exec exploratório (grep, cat, ls…).
+  // Plan: shell só se sandbox já existe (reuso). Build: pode criar sandbox novo.
   let allocateSandbox = params.allocateSandbox !== false;
   const isPlanApprovedBuild = !planMode && !!preMeta.planSourceRunId;
   if (isPlanApprovedBuild) {
@@ -248,7 +248,9 @@ export async function executeAgentJob(
   if (allocateSandbox) {
     const e2bKey = await loadUserE2bApiKey(supabase, userId);
     if (!e2bKey?.trim()) throw new Error("Sandbox E2B não configurado");
-    const realSandbox = createSandboxProvider(e2bKey, undefined, supabase, projectId);
+    const realSandbox = createSandboxProvider(e2bKey, undefined, supabase, projectId, {
+      allowCreate: !planMode,
+    });
     sandbox = realSandbox;
     registerShellTool(reg, {
       sandbox: realSandbox,

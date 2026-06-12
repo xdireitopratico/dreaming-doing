@@ -99,7 +99,7 @@ describe("assistant-run-progress", () => {
     expect(p?.deliveryFiles).toEqual(["src/App.tsx"]);
   });
 
-  it("cardSnapshot com awaitingKind qualify (clarify) restaura gate pós-F5", () => {
+  it("cardSnapshot com awaitingKind clarify restaura gate pós-F5", () => {
     const msg: ChatMessage = {
       id: "a1",
       role: "assistant",
@@ -113,7 +113,7 @@ describe("assistant-run-progress", () => {
           streamText: "Qual estilo visual?",
           finished: true,
           awaiting: true,
-          awaitingKind: "qualify",
+          awaitingKind: "clarify",
           timeline: [],
           tools: [],
           diffs: [],
@@ -123,7 +123,7 @@ describe("assistant-run-progress", () => {
     };
     const p = progressFromAssistantMessage(msg);
     expect(p?.awaiting).toBe(true);
-    expect(p?.awaitingKind).toBe("qualify");
+    expect(p?.awaitingKind).toBe("clarify");
   });
 
   it("resolveHistoricalRunProgress busca run no histórico DB", () => {

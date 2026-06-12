@@ -15,12 +15,12 @@ describe("AssistantTurn — ordem de renderização", () => {
       "{showThinking &&",
       "{showNarration &&",
       "{showJobCard &&",
-      "{showQualify &&",
+      "{showClarify &&",
       "forge-chat-closing-line",
       "forge-assistant-turn-toolbar",
     ];
     expect(source).not.toContain("ChatDone");
-    expect(source).toContain("ChatQualify");
+    expect(source).toContain("ChatClarify");
     expect(source).not.toContain("ChatError");
     const indices = markers.map((m) => source.indexOf(m));
     for (const idx of indices) {

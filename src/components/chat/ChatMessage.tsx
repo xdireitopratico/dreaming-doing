@@ -3,12 +3,12 @@ import { AssistantTurn } from "./AssistantTurn";
 import { ChatUserBubble } from "./ChatUserBubble";
 import { ChatToolbar } from "./ChatToolbar";
 
-import type { QualifyChoice } from "@/lib/chat/types";
+import type { ClarifyChoice } from "@/lib/chat/types";
 
 type ChatMessageProps = {
   item: ThreadItem;
   onOpenInspector?: (runId: string, tab?: "timeline" | "changes" | "plan") => void;
-  onQualifySelect?: (choice: QualifyChoice) => void;
+  onClarifySelect?: (choice: ClarifyChoice) => void;
   onRollback?: (messageId: string, role: "user" | "assistant") => void;
   canRollbackUser?: boolean;
   canRollbackAssistant?: boolean;
@@ -18,7 +18,7 @@ type ChatMessageProps = {
 export function ChatMessage({
   item,
   onOpenInspector,
-  onQualifySelect,
+  onClarifySelect,
   onRollback,
   canRollbackUser,
   canRollbackAssistant,
@@ -51,7 +51,7 @@ export function ChatMessage({
     <AssistantTurn
       item={item}
       onOpenInspector={onOpenInspector}
-      onQualifySelect={onQualifySelect}
+      onClarifySelect={onClarifySelect}
       canRollback={canRollbackAssistant && !!messageId}
       onRollback={
         onRollback && canRollbackAssistant && messageId

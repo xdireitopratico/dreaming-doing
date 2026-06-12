@@ -11,7 +11,7 @@ import {
   projectEntryPathFromFiles,
   resolveAllocateSandbox,
   SEED_CONTEXT_FOR_LLM,
-} from "./qualify.ts";
+} from "./run-context.ts";
 
 Deno.test("extractOriginalUserRequest ignora mensagem de plano aprovado", () => {
   const req = extractOriginalUserRequest([
@@ -160,14 +160,25 @@ Deno.test(
   },
 );
 
-Deno.test("resolveAllocateSandbox: plan mode nunca aloca", () => {
+Deno.test("resolveAllocateSandbox: plan mode sem sandbox existente não aloca", () => {
   assertEquals(
     resolveAllocateSandbox({
       planMode: true,
       userContent: "Crie uma landing completa com hero e formulário",
-      projectHasSandbox: true,
+      projectHasSandbox: false,
     }),
     false,
+  );
+});
+
+Deno.test("resolveAllocateSandbox: plan mode reutiliza sandbox existente", () => {
+  assertEquals(
+    resolveAllocateSandbox({
+      planMode: true,
+      userContent: "Monte um plano",
+      projectHasSandbox: true,
+    }),
+    true,
   );
 });
 

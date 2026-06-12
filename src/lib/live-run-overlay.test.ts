@@ -24,13 +24,13 @@ describe("shouldRetainLiveRunSlot", () => {
     ).toBe(false);
   });
 
-  it("libera clarify (awaitingKind qualify) para ancorar no DB", () => {
+  it("libera clarify para ancorar no DB", () => {
     expect(
       shouldRetainLiveRunSlot({
         ...initialAgentProgress,
         finished: true,
         awaiting: true,
-        awaitingKind: "qualify",
+        awaitingKind: "clarify",
         streamText: "Qual estilo?",
       }),
     ).toBe(false);

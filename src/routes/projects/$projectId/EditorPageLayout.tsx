@@ -288,7 +288,12 @@ export function EditorPageLayout({
     if (running && previewLiveUpdating) return "Live updating…";
     if (running) return isMobile ? "Agente trabalhando" : "Agent working — clique o job no chat";
     if (isMobile && pendingPlan) return "Plano aguardando";
-    if (isMobile && agent.progress.awaitingKind === "qualify" && !pendingPlan)
+    if (
+      isMobile &&
+      (agent.progress.awaitingKind === "clarify" ||
+        (agent.progress.awaitingKind as string | null) === "qualify") &&
+      !pendingPlan
+    )
       return "Aguardando você";
     return null;
   }, [
@@ -356,7 +361,11 @@ export function EditorPageLayout({
                 projectId={projectId}
                 projectName={projectName ?? undefined}
                 running={running}
-                awaitingUser={agent.progress.awaitingKind === "qualify" && !pendingPlan}
+                awaitingUser={
+                  (agent.progress.awaitingKind === "clarify" ||
+                    (agent.progress.awaitingKind as string | null) === "qualify") &&
+                  !pendingPlan
+                }
                 planPending={!!pendingPlan}
                 pendingQueueCount={agent.progress.pendingQueueCount}
               />

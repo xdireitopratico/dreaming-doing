@@ -108,12 +108,14 @@ function progressFromCardSnapshot(snap: Record<string, unknown>, msg: ChatMessag
       projectId,
     }) ?? null;
 
-  const awaitingKind =
-    snap.awaitingKind === "qualify" || snap.awaitingKind === "plan_approval"
-      ? (snap.awaitingKind as AwaitingKind)
-      : pendingPlan
+  const awaitingKind: AwaitingKind =
+    snap.awaitingKind === "clarify" || (snap.awaitingKind as string | null) === "qualify"
+      ? "clarify"
+      : snap.awaitingKind === "plan_approval"
         ? "plan_approval"
-        : null;
+        : pendingPlan
+          ? "plan_approval"
+          : null;
 
   const streamText =
     typeof snap.streamText === "string" && snap.streamText.trim()

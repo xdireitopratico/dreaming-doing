@@ -1,3 +1,4 @@
+// run-context.ts — contexto da run (ex-qualify.ts: utilitários, não é fase qualify antiga).
 import type { ChatMessage } from "./types.ts";
 
 export const RESUME_PREFIX = "[Retomar]";
@@ -30,9 +31,14 @@ export type ResolveAllocateSandboxInput = {
   isApprovedPlanBuild?: boolean;
 };
 
-/** Whether this run should allocate/reuse E2B sandbox (false for plan mode and pure conversation). */
+/**
+ * Whether shell_exec / E2B should be wired for this run.
+ * - Build: pode criar sandbox novo.
+ * - Plan: só reconecta sandbox já criado (nunca cria).
+ * - Conversa vaga sem sandbox: false.
+ */
 export function resolveAllocateSandbox(input: ResolveAllocateSandboxInput): boolean {
-  if (input.planMode) return false;
+  if (input.planMode) return input.projectHasSandbox;
   if (input.isApprovedPlanBuild || input.hasApprovedPlanInHistory) return true;
   if (looksLikeInteractionOnly(input.userContent)) return input.projectHasSandbox;
   return true;

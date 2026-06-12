@@ -132,3 +132,10 @@ export const VIBE_PLAN_RULES = `${VIBE_CODING_CORE}
 
 export const VIBE_CLARIFY_HINT =
   "Dúvida bloqueante → tool `clarify`. Caso contrário → assuma default, diga qual, e codifique/explore.";
+
+/** Banner interno (system) — única diferença de sessão além do catálogo de tools. */
+export function forgeSessionModeBanner(planMode: boolean): string {
+  return planMode
+    ? "[FORGE sessão: modo Plan — sem fs_write/fs_edit/fs_delete; demais tools iguais ao Build.]"
+    : "[FORGE sessão: modo Build — patch e sandbox disponíveis.]";
+}

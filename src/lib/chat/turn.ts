@@ -10,7 +10,7 @@ import {
   isAgentJobMessage,
 } from "@/lib/assistant-run-progress";
 import { resolveJobPlanForRun, storedPlanFromMessage } from "@/lib/plan-message-meta";
-import { parseQualifyChoices } from "@/lib/qualify-choices";
+import { parseClarifyChoices } from "@/lib/clarify-choices";
 import { resolveAssistantProgress } from "@/lib/chat/resolve-progress";
 import { enforceAssistantTurnInvariant } from "@/lib/chat/invariants";
 import { resolveTurnNarration, resolveTurnThinking } from "@/lib/chat/turn-display";
@@ -19,7 +19,7 @@ import { initialAgentProgress } from "@/lib/agent-progress";
 import type {
   MiniCardData,
   PlanPrompt,
-  QualifyPrompt,
+  ClarifyPrompt,
   RawThreadItem,
   RunPhase,
   ThreadItem,
@@ -116,7 +116,8 @@ export function mapAssistantTurn(
 
   const isClarifyOnly =
     !!resolved &&
-    resolved.awaitingKind === "qualify" &&
+    (resolved.awaitingKind === "clarify" ||
+      (resolved.awaitingKind as string | null) === "qualify") &&
     !!resolved.awaiting &&
     !anchoredLive &&
     (resolved.tools?.length ?? 0) === 0 &&
@@ -197,23 +198,25 @@ export function mapAssistantTurn(
     itemIndex === thread.length - 1 ||
     !thread.slice(itemIndex + 1).some((t) => t.kind === "assistant");
   const closingText = runView?.closingText ?? item.message?.content?.trim() ?? null;
-  const parsedQualify = closingText ? parseQualifyChoices(closingText) : null;
+  const parsedClarify = closingText ? parseClarifyChoices(closingText) : null;
 
-  const qualifyInteractive =
+  const clarifyInteractive =
     isLastTurn &&
     !running &&
     !slotActive &&
-    !!parsedQualify &&
-    (sessionProgress.awaitingKind === "qualify" ||
+    !!parsedClarify &&
+    (sessionProgress.awaitingKind === "clarify" ||
+      (sessionProgress.awaitingKind as string | null) === "qualify" ||
       sessionProgress.awaiting ||
-      resolved?.awaitingKind === "qualify");
+      resolved?.awaitingKind === "clarify" ||
+      (resolved?.awaitingKind as string | null) === "qualify");
 
-  let qualify: QualifyPrompt | null = null;
-  if (qualifyInteractive && parsedQualify) {
-    qualify = {
-      intro: parsedQualify.intro || undefined,
-      question: parsedQualify.question || undefined,
-      choices: parsedQualify.choices.map((c) => ({
+  let clarify: ClarifyPrompt | null = null;
+  if (clarifyInteractive && parsedClarify) {
+    clarify = {
+      intro: parsedClarify.intro || undefined,
+      question: parsedClarify.question || undefined,
+      choices: parsedClarify.choices.map((c) => ({
         label: c.label,
         description: c.description,
       })),
@@ -256,7 +259,7 @@ export function mapAssistantTurn(
     miniCard,
     statusChips: [],
     planTeaser,
-    qualify,
+    clarify,
     plan: planTeaser && planForPrompt ? toPlanPrompt(planForPrompt) : null,
     planStatus: planStatus ?? (planTeaser ? "pending" : null),
     error: runView?.error ?? resolved?.error ?? null,

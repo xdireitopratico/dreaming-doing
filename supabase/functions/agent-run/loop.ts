@@ -34,7 +34,7 @@ import {
   extractOriginalUserRequest,
   INVENTORY_SYSTEM,
   isProjectInventoryQuestion,
-} from "./qualify.ts";
+} from "./run-context.ts";
 import {
   formatClarifyMessage,
   hasMixedMetaAndExecution,
@@ -44,7 +44,7 @@ import {
   proposedPlanFromToolArgs,
   splitMetaToolCalls,
 } from "./tools/meta.ts";
-import { VIBE_CLARIFY_HINT, VIBE_PLAN_RULES } from "./vibe-coding-prompt.ts";
+import { forgeSessionModeBanner, VIBE_CLARIFY_HINT } from "./vibe-coding-prompt.ts";
 import { getTasteStartSystemPrompt } from "./prompts-taste.ts";
 import { friendlyLlmError } from "./llm-errors.ts";
 import { hashToolBatch, isExecutionStuck } from "../_shared/agent-stuck.ts";
@@ -1461,31 +1461,45 @@ export class AgentLoop {
     }
     this.emit("assistant_text", { text, final: true });
     this.emit("gate_decision", {
-      phase: "qualify",
+      phase: "clarify",
       reason: "clarify tool",
       awaiting: true,
     });
     await this.persistFinal(text, {
       awaiting: true,
-      awaitingKind: "qualify",
+      awaitingKind: "clarify",
     });
     await this.clearCheckpoint();
     await this.markRunStatus("awaiting_user", {
-      awaitingUser: { type: "qualify", message: text.slice(0, 200) },
+      awaitingUser: { type: "clarify", message: text.slice(0, 200) },
     });
     this.emit("done", { summary: text, qualified: true, awaiting: true });
     return { ok: true, summary: text, steps, toolsUsed };
   }
 
   private buildPlanModeInstruction(): string {
-    const task = this.originalUserRequest?.trim() || "Monte um plano para o pedido do usuário.";
+    return this.originalUserRequest?.trim() || "Continue com o pedido do usuário.";
+  }
+
+  private buildAgentSystemPrompt(planMode: boolean, skillPrompt: string): string {
+    const base = getSystemPrompt(this.projectTemplate, planMode);
+    const stackEnforcement = buildStackEnforcement(this.projectTemplate);
+    const withStack = this.stackAddon ? `${base}\n\n${this.stackAddon}` : base;
+    const withEnforcement = stackEnforcement ? `${withStack}\n\n${stackEnforcement}` : withStack;
+    const tasteWrapped = this.tasteStart
+      ? getTasteStartSystemPrompt(withEnforcement)
+      : withEnforcement;
     return [
-      "Modo Plan — explore o projeto (fs_read, fs_search, shell_exec para grep/cat/ls) e depois use create_plan ou clarify.",
-      "Não use fs_write, fs_edit nem fs_delete neste modo.",
-      "",
-      "**Pedido do usuário:**",
-      task,
-    ].join("\n");
+      tasteWrapped,
+      skillPrompt,
+      this.sessionAddon,
+      forgeSessionModeBanner(planMode),
+      EXECUTE_RULES,
+      VIBE_CLARIFY_HINT,
+      ANTI_LEAK_RULE,
+    ]
+      .filter(Boolean)
+      .join("\n\n");
   }
 
   private async runPlanModeAgentTurn(model: LLMProvider): Promise<{
@@ -1679,16 +1693,7 @@ export class AgentLoop {
     const skillPrompt = this.state.context
       ? this.skills.buildSkillPrompt(this.state.context.files)
       : "";
-    const base = getSystemPrompt(this.projectTemplate, true);
-    const fullSystemPrompt = [
-      base,
-      skillPrompt,
-      this.sessionAddon,
-      VIBE_PLAN_RULES,
-      ANTI_LEAK_RULE,
-    ]
-      .filter(Boolean)
-      .join("\n\n");
+    const fullSystemPrompt = this.buildAgentSystemPrompt(true, skillPrompt);
 
     return model.chat({
       messages: [
@@ -1828,23 +1833,7 @@ export class AgentLoop {
     const skillPrompt = this.state.context
       ? this.skills.buildSkillPrompt(this.state.context.files)
       : "";
-    const base = getSystemPrompt(this.projectTemplate);
-    const stackEnforcement = buildStackEnforcement(this.projectTemplate);
-    const withStack = this.stackAddon ? `${base}\n\n${this.stackAddon}` : base;
-    const withEnforcement = stackEnforcement ? `${withStack}\n\n${stackEnforcement}` : withStack;
-    const tasteWrapped = this.tasteStart
-      ? getTasteStartSystemPrompt(withEnforcement)
-      : withEnforcement;
-    const fullSystemPrompt = [
-      tasteWrapped,
-      skillPrompt,
-      this.sessionAddon,
-      EXECUTE_RULES,
-      VIBE_CLARIFY_HINT,
-      ANTI_LEAK_RULE,
-    ]
-      .filter(Boolean)
-      .join("\n\n");
+    const fullSystemPrompt = this.buildAgentSystemPrompt(false, skillPrompt);
 
     const messages: ChatMessage[] = [
       { role: "system", content: fullSystemPrompt },
@@ -2103,7 +2092,7 @@ export class AgentLoop {
     finished?: boolean;
     lastFinishOk?: boolean | null;
     awaiting?: boolean;
-    awaitingKind?: "qualify" | "plan_approval" | null;
+    awaitingKind?: "clarify" | "plan_approval" | null;
     pendingPlan?: ProposedPlan | null;
     conversational?: boolean;
     phase?: string | null;
@@ -2174,7 +2163,7 @@ export class AgentLoop {
       lastFinishOk?: boolean;
       buildFailed?: boolean;
       awaiting?: boolean;
-      awaitingKind?: "qualify" | "plan_approval" | null;
+      awaitingKind?: "clarify" | "plan_approval" | null;
       conversational?: boolean;
     },
   ): Promise<void> {

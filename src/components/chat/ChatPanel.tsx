@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Loader2 } from "lucide-react";
 import type { AgentComposerMode, ChatMessage } from "@/lib/chat-types";
-import { formatQualifyChoiceReply } from "@/lib/qualify-choices";
-import type { QualifyChoice } from "@/lib/chat/types";
+import { formatClarifyChoiceReply } from "@/lib/clarify-choices";
+import type { ClarifyChoice } from "@/lib/chat/types";
 import type { StoredMessagePart } from "@/lib/chat-attachments";
 import { useChat } from "@/hooks/useChat";
 import { ChatThread } from "./ChatThread";
@@ -163,9 +163,9 @@ export function ChatPanel({
     [onSend, composerMode],
   );
 
-  const handleQualifySelect = useCallback(
-    (choice: QualifyChoice) => {
-      onSend(formatQualifyChoiceReply(choice), composerMode);
+  const handleClarifySelect = useCallback(
+    (choice: ClarifyChoice) => {
+      onSend(formatClarifyChoiceReply(choice), composerMode);
     },
     [onSend, composerMode],
   );
@@ -203,7 +203,7 @@ export function ChatPanel({
           <ChatThread
             items={thread}
             onOpenInspector={onOpenInspector}
-            onQualifySelect={handleQualifySelect}
+            onClarifySelect={handleClarifySelect}
             onRollback={onRollbackMessage ? handleRollback : undefined}
             lastUserMessageId={lastUserMessageId}
             lastAssistantMessageId={lastAssistantMessageId}

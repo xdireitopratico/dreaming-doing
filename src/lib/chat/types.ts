@@ -29,16 +29,21 @@ export type MiniCardData = {
   planReady?: boolean;
 };
 
-export type QualifyChoice = {
+export type ClarifyChoice = {
   label: string;
   description?: string;
 };
 
-export type QualifyPrompt = {
+export type ClarifyPrompt = {
   intro?: string;
   question?: string;
-  choices: QualifyChoice[];
+  choices: ClarifyChoice[];
 };
+
+/** @deprecated Use ClarifyChoice */
+export type QualifyChoice = ClarifyChoice;
+/** @deprecated Use ClarifyPrompt */
+export type QualifyPrompt = ClarifyPrompt;
 
 export type PlanStep = {
   id: string;
@@ -71,7 +76,7 @@ export type ThreadItem =
       miniCard?: MiniCardData | null;
       statusChips?: string[];
       planTeaser?: boolean;
-      qualify?: QualifyPrompt | null;
+      clarify?: ClarifyPrompt | null;
       plan?: PlanPrompt | null;
       planStatus?: "pending" | "approved" | "rejected" | null;
       error?: string | null;

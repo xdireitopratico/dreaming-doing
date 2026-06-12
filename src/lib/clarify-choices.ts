@@ -1,13 +1,13 @@
-export type QualifyChoice = {
+export type ClarifyChoice = {
   id: string;
   label: string;
   description?: string;
 };
 
-export type ParsedQualifyPrompt = {
+export type ParsedClarifyPrompt = {
   intro: string;
   question: string | null;
-  choices: QualifyChoice[];
+  choices: ClarifyChoice[];
 };
 
 function cleanInline(text: string): string {
@@ -18,9 +18,9 @@ function cleanInline(text: string): string {
  * Extrai opções de múltipla escolha de perguntas clarify (bullets, A/B/C, numeradas).
  * Retorna null se não houver pelo menos 2 opções clicáveis.
  */
-export function parseQualifyChoices(text: string): ParsedQualifyPrompt | null {
+export function parseClarifyChoices(text: string): ParsedClarifyPrompt | null {
   const lines = text.split("\n");
-  const choices: QualifyChoice[] = [];
+  const choices: ClarifyChoice[] = [];
   const introLines: string[] = [];
   const questionLines: string[] = [];
   let phase: "intro" | "question" | "choices" = "intro";
@@ -30,7 +30,6 @@ export function parseQualifyChoices(text: string): ParsedQualifyPrompt | null {
     if (!line) continue;
 
     const bulletBold = line.match(/^[-*•]\s+\*\*(.+?)\*\*(?:\s*[—–-]\s*(.+))?$/);
-    const bulletPlain = line.match(/^[-*•]\s+(.+)$/);
     const letter = line.match(/^([A-Da-d])[.)]\s+(.+)$/);
     const numbered = line.match(/^(\d+)[.)]\s+(.+)$/);
 
@@ -87,6 +86,11 @@ export function parseQualifyChoices(text: string): ParsedQualifyPrompt | null {
   };
 }
 
-export function formatQualifyChoiceReply(choice: QualifyChoice): string {
+export function formatClarifyChoiceReply(choice: ClarifyChoice): string {
   return choice.description ? `${choice.label} — ${choice.description}` : choice.label;
 }
+
+/** @deprecated Use parseClarifyChoices */
+export const parseQualifyChoices = parseClarifyChoices;
+/** @deprecated Use formatClarifyChoiceReply */
+export const formatQualifyChoiceReply = formatClarifyChoiceReply;

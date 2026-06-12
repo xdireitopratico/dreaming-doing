@@ -5,7 +5,7 @@ export { ChatThread } from "./ChatThread";
 export { ChatMessage } from "./ChatMessage";
 export { ChatComposer } from "./ChatComposer";
 export { AssistantTurn } from "./AssistantTurn";
-export { ChatQualify } from "./ChatQualify";
+export { ChatClarify } from "./ChatClarify";
 export { ChatUserBubble } from "./ChatUserBubble";
 export { ChatThinking } from "./ChatThinking";
 export { ChatNarration } from "./ChatNarration";

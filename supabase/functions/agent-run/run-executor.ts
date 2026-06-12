@@ -21,7 +21,7 @@ import { loadUserE2bApiKey } from "../_shared/user-e2b.ts";
 import { restoreExecutionLogFromRows } from "./executionLogMeta.ts";
 import { clearConversationCheckpoint, loadCheckpoint } from "./checkpoint.ts";
 import { buildSandboxEnv } from "./sandbox-env.ts";
-import { resolveAllocateSandbox } from "./qualify.ts";
+import { resolveAllocateSandbox } from "./run-context.ts";
 import { logger } from "../_shared/logger.ts";
 import { appendStreamEvent } from "../_shared/agent-stream.ts";
 import { chunkCapErrorMessage, evaluateChunkLimits } from "../_shared/agent-chunk-limits.ts";

@@ -1,4 +1,4 @@
-import { findProjectEntryFile, isSeedPlaceholderAppContent } from "../agent-run/qualify.ts";
+import { findProjectEntryFile, isSeedPlaceholderAppContent } from "../agent-run/run-context.ts";
 
 type StackKind = "web" | "expo" | "android-native" | "mixed" | null;
 

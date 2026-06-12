@@ -4,7 +4,13 @@ import type { AgentProgress } from "@/lib/agent-progress";
 export function shouldRetainLiveRunSlot(progress: AgentProgress): boolean {
   if (!progress.finished) return true;
   if (progress.canceled) return false;
-  if (progress.awaiting && progress.awaitingKind === "qualify") return false;
+  if (
+    progress.awaiting &&
+    (progress.awaitingKind === "clarify" ||
+      (progress.awaitingKind as string | null) === "qualify")
+  ) {
+    return false;
+  }
   if (progress.pendingPlan?.steps?.length) return true;
   if (progress.awaiting) return true;
   if (progress.latencyThoughtMs != null && progress.latencyThoughtMs > 0) return true;

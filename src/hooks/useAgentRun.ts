@@ -248,7 +248,7 @@ export function useAgentRun() {
             ...p,
             finished: true,
             awaiting: true,
-            awaitingKind: fromMeta ?? (planPending ? "plan_approval" : "qualify"),
+            awaitingKind: fromMeta ?? (planPending ? "plan_approval" : "clarify"),
             autoResuming: false,
           };
         } else if (status === "canceled") {
@@ -1076,7 +1076,11 @@ export function useAgentRun() {
         lastSeqRef.current = snap.lastSeq;
         restoreProgress();
         void subscribeToRun(snap.activeRunId, { resetProgress: false });
-      } else if (snap.progress.awaiting && snap.progress.awaitingKind === "qualify") {
+      } else if (
+        snap.progress.awaiting &&
+        (snap.progress.awaitingKind === "clarify" ||
+          (snap.progress.awaitingKind as string | null) === "qualify")
+      ) {
         restoreProgress();
       } else if (snap.progress.pendingPlan || snap.progress.awaitingKind === "plan_approval") {
         restoreProgress();

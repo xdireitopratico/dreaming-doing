@@ -1,14 +1,14 @@
-import type { QualifyChoice, QualifyPrompt } from "@/lib/chat/types";
+import type { ClarifyChoice, ClarifyPrompt } from "@/lib/chat/types";
 
-type ChatQualifyProps = {
-  data: QualifyPrompt;
+type ChatClarifyProps = {
+  data: ClarifyPrompt;
   disabled?: boolean;
-  onSelect?: (choice: QualifyChoice) => void;
+  onSelect?: (choice: ClarifyChoice) => void;
 };
 
-export function ChatQualify({ data, disabled, onSelect }: ChatQualifyProps) {
+export function ChatClarify({ data, disabled, onSelect }: ChatClarifyProps) {
   return (
-    <section className="forge-qualify-prompt" data-testid="chat-qualify">
+    <section className="forge-qualify-prompt" data-testid="chat-clarify">
       {data.intro && <p className="forge-qualify-prompt-intro">{data.intro}</p>}
       {data.question && <p className="forge-qualify-prompt-question">{data.question}</p>}
       <ul className="forge-qualify-prompt-options">
@@ -31,3 +31,6 @@ export function ChatQualify({ data, disabled, onSelect }: ChatQualifyProps) {
     </section>
   );
 }
+
+/** @deprecated Use ChatClarify */
+export const ChatQualify = ChatClarify;

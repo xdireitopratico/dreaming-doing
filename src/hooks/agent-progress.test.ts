@@ -31,8 +31,12 @@ function ev(type: string, data: Record<string, unknown>): SSEEvent {
 }
 
 describe("awaitingKindFromRunMeta", () => {
-  it("lê qualify do meta.awaitingUser", () => {
-    expect(awaitingKindFromRunMeta({ awaitingUser: { type: "qualify" } })).toBe("qualify");
+  it("lê clarify do meta.awaitingUser", () => {
+    expect(awaitingKindFromRunMeta({ awaitingUser: { type: "clarify" } })).toBe("clarify");
+  });
+
+  it("legado qualify no meta → clarify", () => {
+    expect(awaitingKindFromRunMeta({ awaitingUser: { type: "qualify" } })).toBe("clarify");
   });
 
   it("lê plan_approval do meta.awaitingUser", () => {

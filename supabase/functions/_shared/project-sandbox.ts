@@ -173,6 +173,23 @@ export type ConnectSandboxResult = {
 const NO_SANDBOX_MSG =
   "Ainda não há ambiente ao vivo. Envie um pedido ao agente para ele começar a programar.";
 
+/** Plan / reuso: reconecta sandbox existente — nunca cria um novo. */
+export async function connectExistingProjectSandbox(
+  supabase: SupabaseClient,
+  projectId: string,
+  apiKey: string,
+): Promise<ConnectSandboxResult> {
+  const { existing, sm } = await loadProjectMeta(supabase, projectId);
+  if (!sm.previewSandboxId) {
+    throw new Error(
+      "Sandbox E2B ainda não existe neste projeto — use modo Build para criar o ambiente.",
+    );
+  }
+  const sandbox = await e2bRestConnect(apiKey, sm.previewSandboxId, SANDBOX_TIMEOUT_SEC);
+  await touchSandboxLease(supabase, projectId, existing, sandbox.sandboxId);
+  return { sandbox, sandboxId: sandbox.sandboxId, reused: true };
+}
+
 /** Agente: cria sandbox uma única vez por projeto; depois só reconecta. */
 export async function ensureAgentProjectSandbox(
   supabase: SupabaseClient,

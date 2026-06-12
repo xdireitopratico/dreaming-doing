@@ -1,10 +1,10 @@
-import type { QualifyChoice, ThreadItem } from "@/lib/chat/types";
+import type { ClarifyChoice, ThreadItem } from "@/lib/chat/types";
 import { ChatMessage } from "./ChatMessage";
 
 type ChatThreadProps = {
   items: ThreadItem[];
   onOpenInspector?: (runId: string, tab?: "timeline" | "changes" | "plan") => void;
-  onQualifySelect?: (choice: QualifyChoice) => void;
+  onClarifySelect?: (choice: ClarifyChoice) => void;
   onRollback?: (messageId: string, role: "user" | "assistant") => void;
   lastUserMessageId?: string | null;
   lastAssistantMessageId?: string | null;
@@ -13,7 +13,7 @@ type ChatThreadProps = {
 export function ChatThread({
   items,
   onOpenInspector,
-  onQualifySelect,
+  onClarifySelect,
   onRollback,
   lastUserMessageId,
   lastAssistantMessageId,
@@ -29,7 +29,7 @@ export function ChatThread({
             key={key}
             item={item}
             onOpenInspector={onOpenInspector}
-            onQualifySelect={onQualifySelect}
+            onClarifySelect={onClarifySelect}
             onRollback={onRollback}
             canRollbackUser={
               item.kind === "user" &&
