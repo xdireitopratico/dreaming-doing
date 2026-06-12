@@ -172,6 +172,18 @@ export function planHeadlineFromPlan(plan: PendingPlan): string {
   return plan.mission?.trim() || plan.summary?.trim() || "Plano proposto";
 }
 
+/** Corpo do plano no inspector — parágrafo único legível (referência Lovable img 14). */
+export function planParagraphFromPlan(plan: PendingPlan): string {
+  const markdown = plan.markdown?.trim();
+  if (markdown && !/^##\s/m.test(markdown)) return markdown;
+
+  const mission = plan.mission?.trim();
+  const objective = plan.objective?.trim();
+  if (mission) return mission;
+  if (objective) return objective;
+  return plan.summary?.trim() || "Plano proposto";
+}
+
 export type StoredPlanMeta = {
   status: StoredPlanStatus;
   plan: PendingPlan;

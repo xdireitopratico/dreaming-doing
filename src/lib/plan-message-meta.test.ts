@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
   needsPlanApprovalNow,
+  planParagraphFromPlan,
   resolveInspectorPlanForRun,
   resolvePendingPlan,
   runBelongsToChatMessages,
   storedPlanFromMessage,
 } from "@/lib/plan-message-meta";
+import type { PendingPlan } from "@/lib/agent-progress";
 import type { ChatMessage } from "@/lib/chat-types";
 
 describe("storedPlanFromMessage", () => {
@@ -124,5 +126,36 @@ describe("storedPlanFromMessage", () => {
     expect(resolvePendingPlan(staleLive, [])).toBeNull();
     expect(needsPlanApprovalNow(staleLive, [])).toBe(false);
     expect(runBelongsToChatMessages("old-run", [])).toBe(false);
+  });
+});
+
+describe("planParagraphFromPlan", () => {
+  it("usa missão como parágrafo único (img 14)", () => {
+    const plan: PendingPlan = {
+      planId: "p1",
+      summary: "Defining cross-view deletion strategy planning",
+      mission:
+        "Desbloquear exclusão do documento travado (vínculo com proposta no banco) e adicionar botão Excluir para documentos pendentes na aba Documentos",
+      steps: [],
+      ttlMs: 60_000,
+      proposedAt: Date.now(),
+      runId: "run-1",
+      projectId: "proj",
+    };
+    expect(planParagraphFromPlan(plan)).toBe(plan.mission);
+  });
+
+  it("prefere markdown plano sem headings", () => {
+    const plan: PendingPlan = {
+      planId: "p2",
+      summary: "Resumo",
+      markdown: "Texto corrido sem seções markdown.",
+      steps: [],
+      ttlMs: 60_000,
+      proposedAt: Date.now(),
+      runId: "run-2",
+      projectId: "proj",
+    };
+    expect(planParagraphFromPlan(plan)).toBe("Texto corrido sem seções markdown.");
   });
 });

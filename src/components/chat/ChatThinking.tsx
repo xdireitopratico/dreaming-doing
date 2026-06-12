@@ -35,7 +35,6 @@ export function ChatThinking({ startedAtMs, active, durationMs }: ChatThinkingPr
       className={cn("forge-chat-thought-line", active && "forge-animate-thinking")}
       data-testid="chat-thinking"
     >
-      <span aria-hidden>💡</span>
       <span>{label}</span>
       {active && <Loader2 className="size-3 animate-spin" />}
     </p>

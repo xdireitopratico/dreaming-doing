@@ -1,5 +1,6 @@
 import type { AgentProgress, PendingPlan, PlanStep, SSEEvent } from "@/lib/agent-progress";
 import { buildAgentNarrative } from "@/lib/agent-narrative";
+import { planHeadlineFromPlan } from "@/lib/plan-message-meta";
 
 export type TaskStatus = "pending" | "active" | "done" | "failed";
 
@@ -227,9 +228,19 @@ export function buildForgeTimeline(timeline: SSEEvent[], running = false): Forge
   return items;
 }
 
-export function deriveTasksFromPlan(plan: PendingPlan, progress: AgentProgress): ForgeTaskItem[] {
-  if (progress.awaitingKind === "plan_approval") {
-    return [];
+export function deriveTasksFromPlan(
+  plan: PendingPlan,
+  progress: AgentProgress,
+  opts?: { planTeaser?: boolean },
+): ForgeTaskItem[] {
+  if (opts?.planTeaser || progress.awaitingKind === "plan_approval") {
+    return enabledPlanSteps(plan.steps)
+      .slice(0, 4)
+      .map((step) => ({
+        id: step.id,
+        label: step.description,
+        status: "pending" as const,
+      }));
   }
   const current = progress.currentStep ?? 0;
   const executing = progress.phase === "execute" && !progress.finished;
@@ -486,6 +497,7 @@ export function buildMiniCardHeader(
     liveBriefings: string[];
     sessionTitle: string;
     planReady?: boolean;
+    planHeadline?: string;
     briefingIndex?: number;
   },
 ): { header: string; subtitle: string } {
@@ -495,7 +507,10 @@ export function buildMiniCardHeader(
   const subtitle = briefings[idx % briefings.length] ?? opts.sessionTitle;
 
   if (opts.planReady) {
-    return { header: "Waiting for user to approve plan", subtitle };
+    return {
+      header: "Plan ready",
+      subtitle: opts.planHeadline?.trim() || subtitle,
+    };
   }
   if (edited && (running || !progress.finished)) {
     return { header: `Edited ${edited}`, subtitle };
@@ -674,7 +689,11 @@ export function buildAgentRunView(
   const jobPlan = opts?.jobPlan ?? progress.pendingPlan;
   const forgeTimeline = buildForgeTimeline(progress.timeline, running);
 
-  const tasks = jobPlan?.steps?.length ? deriveTasksFromPlan(jobPlan, progress) : [];
+  const planTeaser =
+    !!opts?.forcePlanReady || progress.awaitingKind === "plan_approval";
+  const tasks = jobPlan?.steps?.length
+    ? deriveTasksFromPlan(jobPlan, progress, { planTeaser })
+    : [];
 
   const currentTaskIndex = Math.max(
     0,
@@ -747,6 +766,7 @@ export function buildAgentRunView(
     liveBriefings,
     sessionTitle,
     planReady,
+    planHeadline: jobPlan ? planHeadlineFromPlan(jobPlan) : undefined,
   });
 
   return {

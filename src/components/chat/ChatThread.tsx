@@ -3,7 +3,7 @@ import { ChatMessage } from "./ChatMessage";
 
 type ChatThreadProps = {
   items: ThreadItem[];
-  onOpenInspector?: (runId: string) => void;
+  onOpenInspector?: (runId: string, tab?: "details" | "timeline" | "changes" | "plan") => void;
   onQualifySelect?: (text: string) => void;
   onResume?: () => void;
   onRollback?: (messageId: string) => void;

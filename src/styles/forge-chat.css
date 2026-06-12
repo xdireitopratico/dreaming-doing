@@ -179,20 +179,43 @@
   width: 100%;
 }
 
-/* User message — texto solto à esquerda (referência Lovable) */
+/* User message — bolha cinza arredondada (referência Lovable img 4/15) */
 .forge-msg-user {
-  max-width: 100%;
-  padding: 0;
-  border: none;
-  border-radius: 0;
-  background: transparent;
+  max-width: min(88%, 520px);
+  padding: var(--space-md) var(--space-lg);
+  border-radius: 12px 12px 4px 12px;
+  border: 1px solid var(--border-forge);
+  background: var(--bg-card);
   color: var(--text-primary);
   font-size: 14px;
-  line-height: 1.65;
+  line-height: 1.6;
 }
 
-.forge-msg-user p {
+.forge-msg-user-text {
   margin: 0;
+}
+
+.forge-msg-user-text--clamped {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.forge-msg-user-show-more {
+  display: block;
+  margin-top: var(--space-xs);
+  padding: 0;
+  border: none;
+  background: none;
+  font: var(--font-thought);
+  font-size: 12px;
+  color: var(--text-muted);
+  cursor: pointer;
+  text-align: left;
+}
+
+.forge-msg-user-show-more:hover {
+  color: var(--text-secondary);
 }
 
 .forge-msg-user--queued {

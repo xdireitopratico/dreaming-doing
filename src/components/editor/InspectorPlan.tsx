@@ -1,10 +1,13 @@
 import { useCallback, useState } from "react";
 import { Check, Loader2, Pencil, SkipForward } from "lucide-react";
-import { MarkdownRenderer } from "@/components/ui/markdown-renderer";
 import type { PendingPlan, PlanStep } from "@/lib/agent-progress";
 import { buildForgePlanMarkdown } from "@/lib/plan-document";
 import { enabledPlanSteps } from "@/lib/forge-run";
-import { planHeadlineFromPlan, type StoredPlanStatus } from "@/lib/plan-message-meta";
+import {
+  planHeadlineFromPlan,
+  planParagraphFromPlan,
+  type StoredPlanStatus,
+} from "@/lib/plan-message-meta";
 import { PlanWaitingBanner } from "@/components/editor/PlanWaitingBanner";
 
 type InspectorPlanProps = {
@@ -73,9 +76,9 @@ export function InspectorPlan({
             onChange={(e) => setMarkdown(e.target.value)}
           />
         ) : (
-          <div className="forge-chat-markdown text-sm">
-            <MarkdownRenderer>{markdown}</MarkdownRenderer>
-          </div>
+          <p className="forge-inspector-plan-paragraph text-sm leading-relaxed">
+            {planParagraphFromPlan(plan)}
+          </p>
         )}
       </div>
 

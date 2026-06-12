@@ -8,10 +8,11 @@ import { ChatQualify } from "./ChatQualify";
 import { ChatDone } from "./ChatDone";
 import { ChatError } from "./ChatError";
 import { ChatToolbar } from "./ChatToolbar";
+import { ChatUserBubble } from "./ChatUserBubble";
 
 type ChatMessageProps = {
   item: ThreadItem;
-  onOpenInspector?: (runId: string) => void;
+  onOpenInspector?: (runId: string, tab?: "details" | "timeline" | "changes" | "plan") => void;
   onQualifySelect?: (text: string) => void;
   onResume?: () => void;
   onRollback?: (messageId: string) => void;
@@ -28,10 +29,7 @@ export function ChatMessage({
     const isQueued = item.message.meta?.queued === true;
     return (
       <article className="forge-chat-item forge-chat-item-user" data-testid="chat-message-user">
-        <div className={`forge-msg-user${isQueued ? " forge-msg-user--queued" : ""}`}>
-          <p className="whitespace-pre-wrap">{item.message.content}</p>
-          {isQueued && <span className="forge-msg-queued-label">Na fila…</span>}
-        </div>
+        <ChatUserBubble content={item.message.content} queued={isQueued} />
         <ChatToolbar
           text={item.message.content}
           msgId={item.message.id}
@@ -106,7 +104,9 @@ export function ChatMessage({
             data={item.miniCard}
             runId={item.runId}
             planTeaser={planTeaser}
-            onClick={() => onOpenInspector?.(item.runId)}
+            onClick={() =>
+              onOpenInspector?.(item.runId, planTeaser || item.miniCard?.planReady ? "plan" : "details")
+            }
           />
         )}
 

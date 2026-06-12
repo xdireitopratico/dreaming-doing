@@ -97,9 +97,7 @@ export function ChatJobCard({
         )}
 
         {isPlanWaiting && !isRunningCommand && !edited && (
-          <p className="forge-mini-card-header-line forge-mini-card-header-line--plan">
-            Waiting for user to approve plan
-          </p>
+          <p className="forge-mini-card-header-line forge-mini-card-header-line--plan">Plan ready</p>
         )}
 
         {isDone && !edited && !isRunningCommand && !isPlanWaiting && (
