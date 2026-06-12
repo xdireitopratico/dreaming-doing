@@ -63,18 +63,6 @@ describe("Lovable acceptance — Chat (imgs 4/5/9/15)", () => {
     );
     expect(running.header).toBe("Running command");
 
-    const plan = buildMiniCardHeader(
-      { ...initialAgentProgress, awaitingKind: "plan_approval" },
-      true,
-      {
-        liveBriefings: [],
-        sessionTitle: "Deletion fix",
-        planReady: true,
-        planHeadline: samplePlan.summary,
-      },
-    );
-    expect(plan.header).toBe("Plan ready");
-    expect(plan.subtitle).toBe(samplePlan.summary);
   });
 
   it("subtitle briefing separado do header (img 5)", () => {
@@ -124,7 +112,6 @@ describe("Lovable acceptance — Chat (imgs 4/5/9/15)", () => {
       sessionProgress: progress,
     });
 
-    expect(turn.planTeaser).toBe(false);
     expect(turn.miniCard).toBeNull();
   });
 

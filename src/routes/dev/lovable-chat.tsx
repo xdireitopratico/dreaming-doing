@@ -6,7 +6,9 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import type { ChatMessage } from "@/lib/chat-types";
 import type { ThreadItem } from "@/lib/chat/types";
+import type { PendingPlan } from "@/lib/agent-progress";
 import { ChatThread } from "@/components/chat/ChatThread";
+import { ChatPlanDock } from "@/components/chat/ChatPlanDock";
 import { ChatComposer } from "@/components/chat/ChatComposer";
 
 export const Route = createFileRoute("/dev/lovable-chat")({
@@ -14,7 +16,30 @@ export const Route = createFileRoute("/dev/lovable-chat")({
   ssr: false,
 });
 
-const FIXTURES: { id: string; label: string; ref: string; items: ThreadItem[]; running: boolean; planPending: boolean }[] = [
+const SAMPLE_DOCK_PLAN: PendingPlan = {
+  planId: "fixture-plan",
+  summary: "Defining cross-view deletion strategy planning",
+  mission: "Desbloquear exclusão do documento travado (vínculo com proposta no banco)",
+  steps: [
+    { id: "s1", type: "custom", description: "Desbloquear exclusão documento", enabled: true },
+    { id: "s2", type: "custom", description: "Botão Excluir na aba Documentos", enabled: true },
+    { id: "s3", type: "custom", description: "Validar vínculo proposta/banco", enabled: true },
+  ],
+  ttlMs: Number.MAX_SAFE_INTEGER,
+  proposedAt: Date.now(),
+  runId: "run-img14",
+  projectId: "fixture",
+};
+
+const FIXTURES: {
+  id: string;
+  label: string;
+  ref: string;
+  items: ThreadItem[];
+  running: boolean;
+  planPending: boolean;
+  pendingPlan?: PendingPlan | null;
+}[] = [
   {
     id: "img4",
     label: "Working — narração + mini-card",
@@ -159,10 +184,11 @@ const FIXTURES: { id: string; label: string; ref: string; items: ThreadItem[]; r
   },
   {
     id: "img14",
-    label: "Estado D — Plan ready teaser",
+    label: "Estado D — plano no dock acima do composer",
     ref: "image (14) chat",
     running: false,
     planPending: true,
+    pendingPlan: SAMPLE_DOCK_PLAN,
     items: [
       {
         kind: "assistant",
@@ -171,32 +197,17 @@ const FIXTURES: { id: string; label: string; ref: string; items: ThreadItem[]; r
         streamText: null,
         thinking: { active: false, durationMs: 5000 },
         narration: "Vou propor um plano para desbloquear a exclusão do documento travado.",
-        planTeaser: true,
-        miniCard: {
-          title: "Defining cross-view deletion strategy planning",
-          header: "Plan ready",
-          subtitle: "Defining cross-view deletion strategy planning",
-          liveBriefings: ["Defining cross-view deletion strategy planning"],
-          status: "working",
-          planReady: true,
-          hasPlan: true,
-          tasks: [
-            { id: "s1", label: "Desbloquear exclusão documento", status: "pending" },
-            { id: "s2", label: "Botão Excluir na aba Documentos", status: "pending" },
-            { id: "s3", label: "Validar vínculo proposta/banco", status: "pending" },
-          ],
-          currentTaskIndex: 0,
-        },
         finished: false,
       },
     ],
   },
   {
     id: "img15",
-    label: "Terminal — plano no mini-card",
+    label: "Terminal — plano no dock, thread só narração",
     ref: "image (15)",
     running: false,
     planPending: true,
+    pendingPlan: { ...SAMPLE_DOCK_PLAN, runId: "run-img15", steps: SAMPLE_DOCK_PLAN.steps.slice(0, 1) },
     items: [
       {
         kind: "user",
@@ -214,21 +225,6 @@ const FIXTURES: { id: string; label: string; ref: string; items: ThreadItem[]; r
         isActive: false,
         streamText: null,
         narration: "Vou propor um plano para desbloquear a exclusão do documento travado.",
-        statusChips: [],
-        planTeaser: true,
-        miniCard: {
-          title: "Defining cross-view deletion strategy planning",
-          header: "Plan ready",
-          subtitle: "Defining cross-view deletion strategy planning",
-          liveBriefings: ["Defining cross-view deletion strategy planning"],
-          status: "working",
-          planReady: true,
-          hasPlan: true,
-          tasks: [
-            { id: "s1", label: "Desbloquear exclusão do documento", status: "pending" },
-          ],
-          currentTaskIndex: 0,
-        },
         finished: true,
         lastFinishOk: true,
       },
@@ -269,6 +265,11 @@ function LovableChatFixturePage() {
           <div className="forge-messages flex-1 overflow-y-auto px-3 py-4" data-testid="lovable-fixture-stream">
             <ChatThread items={fixture.items} />
           </div>
+          <ChatPlanDock
+            pendingPlan={fixture.pendingPlan ?? null}
+            creating={false}
+            onReview={() => {}}
+          />
           <ChatComposer
             running={fixture.running}
             planPending={fixture.planPending}

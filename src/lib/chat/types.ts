@@ -26,7 +26,6 @@ export type MiniCardData = {
   editedFile?: string | null;
   fileCount?: number;
   hasPlan?: boolean;
-  planReady?: boolean;
 };
 
 export type ClarifyChoice = {
@@ -45,22 +44,6 @@ export type QualifyChoice = ClarifyChoice;
 /** @deprecated Use ClarifyPrompt */
 export type QualifyPrompt = ClarifyPrompt;
 
-export type PlanStep = {
-  id: string;
-  type: string;
-  description: string;
-  enabled: boolean;
-};
-
-export type PlanPrompt = {
-  planId: string;
-  summary: string;
-  mission?: string;
-  objective?: string;
-  steps: PlanStep[];
-  runId: string;
-};
-
 export type ThreadItem =
   | { kind: "user"; message: ChatMessage }
   | {
@@ -75,10 +58,7 @@ export type ThreadItem =
       narration?: string | null;
       miniCard?: MiniCardData | null;
       statusChips?: string[];
-      planTeaser?: boolean;
       clarify?: ClarifyPrompt | null;
-      plan?: PlanPrompt | null;
-      planStatus?: "pending" | "approved" | "rejected" | null;
       error?: string | null;
       finished?: boolean;
       lastFinishOk?: boolean;

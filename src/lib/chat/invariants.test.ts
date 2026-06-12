@@ -196,7 +196,6 @@ describe("mapAssistantTurn — contrato Lovable imutável", () => {
       sessionProgress: progress,
     });
 
-    expect(turn.planTeaser).toBe(false);
     expect(turn.miniCard).toBeNull();
     expect(turn.statusChips).toHaveLength(0);
     assertAssistantTurnInvariant(turn);

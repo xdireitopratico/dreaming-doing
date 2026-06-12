@@ -9,7 +9,6 @@ type ChatJobCardProps = {
   data: MiniCardData;
   runId: string;
   isFocused?: boolean;
-  planTeaser?: boolean;
   onClick?: () => void;
 };
 
@@ -23,7 +22,6 @@ export function ChatJobCard({
   data,
   runId,
   isFocused,
-  planTeaser = false,
   onClick,
 }: ChatJobCardProps) {
   const isLive = data.status === "working" || data.status === "thinking";
@@ -48,23 +46,17 @@ export function ChatJobCard({
 
   const { edited, file } = parseEditedHeader(data.header);
   const isRunningCommand = /^Running command$/i.test(data.header.trim());
-  const isPlanWaiting =
-    planTeaser ||
-    data.planReady ||
-    /^Waiting for user to approve plan$/i.test(data.header.trim());
-  const isDone = data.status === "done" && !isPlanWaiting;
+  const isDone = data.status === "done";
   const isFailed = data.status === "failed";
 
   const hint = () => {
-    if (isPlanWaiting) return "Revisar plano no inspector →";
     if (isDone && data.fileCount) return `${data.fileCount} arquivos alterados →`;
     if (data.hasPlan) return "Ver plano no inspector →";
     return "Timeline completa →";
   };
 
-  const cardVariant = isPlanWaiting
-    ? "forge-mini-card--plan-waiting"
-    : (isRunningCommand || edited) && isLive
+  const cardVariant =
+    (isRunningCommand || edited) && isLive
       ? "forge-mini-card--running-command"
       : isLive && !edited && !isRunningCommand
         ? "forge-mini-card--working"
@@ -96,11 +88,7 @@ export function ChatJobCard({
           </p>
         )}
 
-        {isPlanWaiting && !isRunningCommand && !edited && (
-          <p className="forge-mini-card-header-line forge-mini-card-header-line--plan">Plan ready</p>
-        )}
-
-        {isDone && !edited && !isRunningCommand && !isPlanWaiting && (
+        {isDone && !edited && !isRunningCommand && (
           <div className="forge-mini-card-header">
             <span className="forge-mini-card-dot forge-mini-card-dot--done" aria-hidden />
             <span className="forge-mini-card-badge forge-mini-card-badge--done">Done</span>
@@ -116,7 +104,6 @@ export function ChatJobCard({
 
         {!edited &&
           !isRunningCommand &&
-          !isPlanWaiting &&
           data.header &&
           !isDone &&
           !isFailed && (

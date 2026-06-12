@@ -18,8 +18,8 @@ const EXPECT = {
   img5: { chips: 0, jobCard: 1, thought: 1, edited: 1 },
   img8: { chips: 0, jobCard: 1, thought: 1, edited: 1 },
   img9: { chips: 0, jobCard: 1, runningCommand: 1, activeTask: 1 },
-  img14: { chips: 0, jobCard: 1, planReady: 1, planTasks: 3 },
-  img15: { chips: 3, jobCard: 0, userBubble: 1, showMore: 1 },
+  img14: { chips: 0, jobCard: 0, planDock: 1, planDockCta: 1 },
+  img15: { chips: 0, jobCard: 0, planDock: 1, userBubble: 1, showMore: 1 },
 };
 
 async function main() {
@@ -41,8 +41,8 @@ async function main() {
       narration: await page.locator("[data-testid=chat-narration]").count(),
       edited: await page.locator(".forge-mini-card-badge--edited-tag").count(),
       runningCommand: await page.locator(".forge-mini-card-header-line--command").count(),
-      planReady: await page.locator(".forge-mini-card-header-line--plan").count(),
-      planTasks: await page.locator("[data-testid=chat-task-list] li").count(),
+      planDock: await page.locator("[data-testid=chat-plan-dock-ready]").count(),
+      planDockCta: await page.locator(".forge-plan-prompt-cta").count(),
       userBubble: await page.locator("[data-testid=chat-message-user]").count(),
       showMore: await page.locator(".forge-msg-user-show-more").count(),
       activeTask: await page.locator('.forge-task-item[data-status="active"]').count(),

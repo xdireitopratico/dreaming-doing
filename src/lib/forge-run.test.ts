@@ -94,25 +94,6 @@ describe("forge-run job requirements", () => {
     expect(view.miniCard.tasks).toEqual([]);
   });
 
-  it("plan teaser mostra até 4 passos pendentes com header Plan ready", () => {
-    const progress = {
-      ...initialAgentProgress,
-      awaitingKind: "plan_approval" as const,
-      awaiting: true,
-      pendingPlan: samplePlan,
-    };
-
-    const view = buildAgentRunView("run-1", progress, {
-      running: true,
-      jobPlan: samplePlan,
-      forcePlanReady: true,
-    });
-
-    expect(view.miniCard.header).toBe("Plan ready");
-    expect(view.miniCard.tasks).toHaveLength(3);
-    expect(view.miniCard.tasks.every((t) => t.status === "pending")).toBe(true);
-  });
-
   it("tarefa atômica avança com currentStep do plano (0-based)", () => {
     const progress = {
       ...initialAgentProgress,

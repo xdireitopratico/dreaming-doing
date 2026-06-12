@@ -10,6 +10,5 @@ export type {
   BuildChatThreadOptions,
   ThreadItem,
   MiniCardData,
-  PlanPrompt,
   ClarifyPrompt,
 } from "@/lib/chat/types";

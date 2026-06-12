@@ -9,7 +9,7 @@ import {
   hasMaterializedCardSnapshot,
   isAgentJobMessage,
 } from "@/lib/assistant-run-progress";
-import { resolveJobPlanForRun, storedPlanFromMessage } from "@/lib/plan-message-meta";
+import { resolveJobPlanForRun } from "@/lib/plan-message-meta";
 import { parseClarifyChoices } from "@/lib/clarify-choices";
 import { resolveAssistantProgress } from "@/lib/chat/resolve-progress";
 import { enforceAssistantTurnInvariant } from "@/lib/chat/invariants";
@@ -51,7 +51,6 @@ function toMiniCard(
     editedFile: m.editedFile,
     fileCount: m.fileCount,
     hasPlan: m.hasPlan,
-    planReady: m.planReady,
   };
 }
 
@@ -150,10 +149,6 @@ export function mapAssistantTurn(
       ? Date.now() - resolved.latencyThoughtMs
       : null;
 
-  const msgPlanMeta = item.message ? storedPlanFromMessage(item.message) : null;
-  const planStatus = msgPlanMeta?.status ?? null;
-  const planTeaser = false;
-
   const runView = resolved
     ? buildAgentRunView(runId, resolved, {
         running: slotActive,
@@ -195,7 +190,7 @@ export function mapAssistantTurn(
   const rawStreamText = closingText ?? resolved?.streamText ?? null;
   const thinking = resolveTurnThinking(resolved, runView, runStartedAtMs, slotActive);
   const narration = resolveTurnNarration(resolved, runView, rawStreamText);
-  let streamText = planTeaser ? null : rawStreamText;
+  let streamText = rawStreamText;
   if (
     !streamText &&
     resolved?.error?.trim() &&
@@ -208,12 +203,8 @@ export function mapAssistantTurn(
 
   const persistMiniCard =
     !!runView &&
-    (planTeaser ||
-      showJobCard ||
-      (!!item.message && hasMaterializedCardSnapshot(item.message)));
-  const showCard = persistMiniCard;
-
-  const miniCard = showCard && runView ? toMiniCard(runView) : null;
+    (showJobCard || (!!item.message && hasMaterializedCardSnapshot(item.message)));
+  const miniCard = persistMiniCard && runView ? toMiniCard(runView) : null;
 
   const turn: Extract<ThreadItem, { kind: "assistant" }> = {
     kind: "assistant",
@@ -227,10 +218,7 @@ export function mapAssistantTurn(
     narration,
     miniCard,
     statusChips: [],
-    planTeaser,
     clarify,
-    plan: null,
-    planStatus: planStatus ?? (planTeaser ? "pending" : null),
     error: runView?.error ?? resolved?.error ?? null,
     finished: runView?.finished ?? resolved?.finished ?? false,
     lastFinishOk: runView?.lastFinishOk ?? resolved?.lastFinishOk ?? undefined,

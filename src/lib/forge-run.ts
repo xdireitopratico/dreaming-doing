@@ -1,5 +1,4 @@
 import type { AgentProgress, PendingPlan, PlanStep, SSEEvent } from "@/lib/agent-progress";
-import { planHeadlineFromPlan } from "@/lib/plan-message-meta";
 
 export type TaskStatus = "pending" | "active" | "done" | "failed";
 
@@ -14,7 +13,7 @@ export type MiniCardStatus = "thinking" | "working" | "done" | "failed";
 export type ForgeMiniCardData = {
   /** Título da sessão quando terminal (ex.: «Brainstorm de app mobile»). */
   title: string;
-  /** Header Lovable: «Edited App.tsx», «Running command», «Plan ready». */
+  /** Header Lovable: «Edited App.tsx», «Running command», «Working». */
   header: string;
   /** Subtitle rotativo — briefing da tarefa ativa. */
   subtitle: string;
@@ -26,7 +25,6 @@ export type ForgeMiniCardData = {
   editedFile?: string | null;
   fileCount?: number;
   hasPlan?: boolean;
-  planReady?: boolean;
 };
 
 export type TimelineItemType = "TASK" | "THOUGHT" | "TOOL" | "RESULT";
@@ -237,17 +235,7 @@ export function buildForgeTimeline(timeline: SSEEvent[], running = false): Forge
 export function deriveTasksFromPlan(
   plan: PendingPlan,
   progress: AgentProgress,
-  opts?: { planTeaser?: boolean },
 ): ForgeTaskItem[] {
-  if (opts?.planTeaser) {
-    return enabledPlanSteps(plan.steps)
-      .slice(0, 4)
-      .map((step) => ({
-        id: step.id,
-        label: step.description,
-        status: "pending" as const,
-      }));
-  }
   const current = progress.currentStep ?? 0;
   const executing = progress.phase === "execute" && !progress.finished;
   const succeeded = progress.finished && progress.lastFinishOk !== false && !progress.canceled;
@@ -500,8 +488,6 @@ export function buildMiniCardHeader(
     editedFile?: string | null;
     liveBriefings: string[];
     sessionTitle: string;
-    planReady?: boolean;
-    planHeadline?: string;
     briefingIndex?: number;
   },
 ): { header: string; subtitle: string } {
@@ -510,12 +496,6 @@ export function buildMiniCardHeader(
   const idx = opts.briefingIndex ?? 0;
   const subtitle = briefings[idx % briefings.length] ?? opts.sessionTitle;
 
-  if (opts.planReady) {
-    return {
-      header: "Plan ready",
-      subtitle: opts.planHeadline?.trim() || subtitle,
-    };
-  }
   if (edited && (running || !progress.finished)) {
     return { header: `Edited ${edited}`, subtitle };
   }
@@ -594,18 +574,13 @@ export function buildAgentRunView(
     userPrompt?: string | null;
     /** Timestamp client-side — início do thinking de latência (~500ms após envio). */
     runStartedAtMs?: number | null;
-    /** Chat plan-teaser: força mini-card "Plan ready" mesmo sem live awaitingKind. */
-    forcePlanReady?: boolean;
   },
 ): AgentRunView {
   const running = isRunEffectivelyActive(progress, opts?.running);
   const jobPlan = opts?.jobPlan ?? progress.pendingPlan;
   const forgeTimeline = buildForgeTimeline(progress.timeline, running);
 
-  const planTeaser = !!opts?.forcePlanReady;
-  const tasks = jobPlan?.steps?.length
-    ? deriveTasksFromPlan(jobPlan, progress, { planTeaser })
-    : [];
+  const tasks = jobPlan?.steps?.length ? deriveTasksFromPlan(jobPlan, progress) : [];
 
   const currentTaskIndex = Math.max(
     0,
@@ -665,13 +640,10 @@ export function buildAgentRunView(
       ? narrationBody
       : null;
 
-  const planReady = !!opts?.forcePlanReady;
   const { header, subtitle } = buildMiniCardHeader(progress, running, {
     editedFile,
     liveBriefings,
     sessionTitle,
-    planReady,
-    planHeadline: jobPlan ? planHeadlineFromPlan(jobPlan) : undefined,
   });
 
   return {
@@ -687,7 +659,6 @@ export function buildAgentRunView(
       editedFile,
       fileCount: progress.diffs.length || progress.deliveryFiles?.length,
       hasPlan: !!jobPlan?.steps?.length,
-      planReady,
     },
     thinking,
     latencyThinking,

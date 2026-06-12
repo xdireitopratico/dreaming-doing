@@ -50,7 +50,7 @@ describe("mapAssistantTurn — mini-card permanece", () => {
     expect(turn.narration).toBe("Vou investigar o estado atual.");
   });
 
-  it("header plan-waiting estilo Lovable img 14", () => {
+  it("plan approval não mostra mini-card no thread (dock separado)", () => {
     const progress = {
       ...initialAgentProgress,
       finished: false,
@@ -87,7 +87,6 @@ describe("mapAssistantTurn — mini-card permanece", () => {
       sessionProgress: progress,
     });
 
-    expect(turn.planTeaser).toBe(false);
     expect(turn.miniCard).toBeNull();
   });
 });

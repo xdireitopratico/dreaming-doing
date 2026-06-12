@@ -47,7 +47,6 @@ export function AssistantTurn({
   const showClarify = !!item.clarify?.choices?.length;
   const showClosing = !showClarify && !!closingText;
 
-  const planTab = item.planTeaser || item.miniCard?.planReady;
   const copyText = assistantTurnCopyText(item);
 
   return (
@@ -69,10 +68,7 @@ export function AssistantTurn({
           <ChatJobCard
             data={item.miniCard}
             runId={item.runId}
-            planTeaser={!!item.planTeaser}
-            onClick={() =>
-              onOpenInspector?.(item.runId, planTab ? "plan" : "timeline")
-            }
+            onClick={() => onOpenInspector?.(item.runId, "timeline")}
           />
         )}
 

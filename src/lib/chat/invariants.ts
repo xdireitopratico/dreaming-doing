@@ -31,10 +31,6 @@ export function enforceAssistantTurnInvariant(
     streamText = null;
   }
 
-  if (item.planTeaser && streamText) {
-    streamText = null;
-  }
-
   if (streamText === item.streamText) {
     return item;
   }
@@ -55,12 +51,6 @@ export function assertAssistantTurnInvariant(
   if (item.isActive && item.miniCard && item.streamText) {
     throw new Error(
       `Lovable invariant violated: closing prose only after job (runId=${item.runId})`,
-    );
-  }
-
-  if (item.planTeaser && item.streamText) {
-    throw new Error(
-      `Lovable invariant violated: plan teaser hides stream prose (runId=${item.runId})`,
     );
   }
 }
