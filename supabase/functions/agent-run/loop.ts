@@ -1,5 +1,5 @@
 // loop.ts — AgentLoop definitivo.
-// Model Router (cheap/main), Compression, Parallel Exec, Runtime Observer, Skills,
+// Model Router (classify), Compression, Parallel Exec, Runtime Observer, Skills,
 // persistência incremental de tool_calls (cada step vira uma message viva no chat).
 // FSM integrada para validação de transições de estado (FORGE 2.0).
 import type {
@@ -239,9 +239,14 @@ export class AgentLoop {
     this.router = new ModelRouter(injectedKeys, routerOverrides);
     this.observer = new RuntimeObserver(reg, this.fileContentCache);
     this.skills = new SkillRegistry();
-    this.compression = new CompressionManager(this.router.getCheapProvider(), (type, data) =>
+    this.compression = new CompressionManager(this.configuredModel(), (type, data) =>
       this.emit(type, data),
     );
+  }
+
+  /** Modelo BYOK configurado pelo usuário — única voz do chat e da execução. */
+  private configuredModel(): LLMProvider {
+    return this.llm;
   }
 
   private loopBudgetExceeded(): boolean {
@@ -462,7 +467,7 @@ export class AgentLoop {
     }
     this.compression.reset();
     const toolsUsed = new Set<string>();
-    let executionModel = this.router.selectModel(this.complexityScore);
+    let executionModel = this.configuredModel();
 
     if (this.resumeRun && this.hasCheckpoint) {
       await this.emitTransition("send");
@@ -480,7 +485,7 @@ export class AgentLoop {
       });
       this.emit("classify", {
         complexity: this.complexityScore,
-        model: this.complexityScore <= 2 ? this.router.cheapCfg.label : this.router.mainCfg.label,
+        model: this.router.mainCfg.label,
         summary: this.state.intent?.summary ?? "Retomada",
         maxSteps: this.maxStepsLimit,
         restored: true,
@@ -595,11 +600,10 @@ export class AgentLoop {
       };
 
       this.maxStepsLimit = calculateMaxSteps(classification.complexity);
-      executionModel = this.router.selectModel(classification.complexity);
+      executionModel = this.configuredModel();
       this.emit("classify", {
         complexity: classification.complexity,
-        model:
-          classification.complexity <= 2 ? this.router.cheapCfg.label : this.router.mainCfg.label,
+        model: this.router.mainCfg.label,
         summary: classification.summary,
         maxSteps: this.maxStepsLimit,
       });
@@ -622,7 +626,7 @@ export class AgentLoop {
 
       const skipIntentNarration = this.buildFixResume;
       if (!skipIntentNarration) {
-        const opening = await generateOpeningMessage(this.router.getCheapProvider(), {
+        const opening = await generateOpeningMessage(this.configuredModel(), {
           userSummary: classification.summary,
           intentType: classification.type as import("./router.ts").ClassificationResult["type"],
           planMode: this.planMode,
@@ -682,7 +686,7 @@ export class AgentLoop {
       ) {
         const mobileQ =
           (await generateMobileStackQualifyMessage(
-            this.router.getCheapProvider(),
+            this.configuredModel(),
             this.originalUserRequest ?? "",
           )) ?? "";
         if (!mobileQ) {
@@ -1312,7 +1316,7 @@ export class AgentLoop {
     this.emit("phase", { phase: "summarize", message: "Finalizando..." });
     await this.saveCheckpoint(LoopPhase.SUMMARIZE, true);
     const narration = this.narrationBuffer.trim();
-    const finalChat = await generateClosureMessage(this.router.getCheapProvider(), {
+    const finalChat = await generateClosureMessage(this.configuredModel(), {
       touchedPaths: [...this.touchedPaths],
       priorConversation: narration,
       userRequest: this.originalUserRequest ?? undefined,
@@ -1415,10 +1419,7 @@ export class AgentLoop {
     steps: number;
     toolsUsed: string[];
   }> {
-    const planChatText = await generatePlanChatMessage(
-      this.router.getCheapProvider(),
-      proposedPlan,
-    );
+    const planChatText = await generatePlanChatMessage(this.configuredModel(), proposedPlan);
     if (!planChatText) {
       return {
         ok: false,
@@ -1544,8 +1545,7 @@ export class AgentLoop {
     steps: number;
     toolsUsed: string[];
   }> {
-    const model = this.router.selectModel(1);
-    const reply = await runConversationalPhase(model, this.state.messages, {
+    const reply = await runConversationalPhase(this.configuredModel(), this.state.messages, {
       planMode: this.planMode,
     });
     this.emit("assistant_text", { text: reply, final: true });
@@ -2137,7 +2137,7 @@ export class AgentLoop {
   }
 
   private async narrateLoop(ctx: LoopUpdateContext): Promise<void> {
-    const text = await generateLoopUpdate(this.router.getCheapProvider(), {
+    const text = await generateLoopUpdate(this.configuredModel(), {
       ...ctx,
       userRequest: this.originalUserRequest ?? undefined,
       touchedPaths: [...this.touchedPaths],
