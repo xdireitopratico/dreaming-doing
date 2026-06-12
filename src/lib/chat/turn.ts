@@ -233,9 +233,31 @@ export function mapAssistantTurn(
         !!runView.miniCard.editedFile ||
         runView.miniCard.planReady));
   const showCard = persistMiniCard;
+  const storedChips =
+    resolved?.statusChips ??
+    (() => {
+      const snap = (item.message?.meta as Record<string, unknown> | undefined)?.cardSnapshot;
+      if (!snap || typeof snap !== "object") return null;
+      const raw = (snap as Record<string, unknown>).statusChips;
+      return Array.isArray(raw) ? raw.filter((c) => typeof c === "string") : null;
+    })();
+
+  const hasChipEvidence =
+    !!resolved &&
+    (slotActive ||
+      anchoredLive ||
+      resolved.finished ||
+      (resolved.tools?.length ?? 0) > 0 ||
+      !!resolved.pendingPlan ||
+      !!resolved.planSummary ||
+      resolved.awaitingKind === "plan_approval");
+
   const statusChips =
-    resolved && (slotActive || anchoredLive)
-      ? collectStatusChips(resolved, slotActive || anchoredLive)
+    resolved && hasChipEvidence
+      ? collectStatusChips(resolved, slotActive || anchoredLive, {
+          jobPlan,
+          storedChips,
+        })
       : [];
 
   return {

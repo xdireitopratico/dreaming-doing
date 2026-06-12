@@ -534,28 +534,87 @@ function statusChipLabel(name: string, args?: Record<string, unknown>): string {
   return `${verb}…`;
 }
 
-/** Até 2 chips de status curtos antes do mini-card (estilo Lovable image 4). */
-export function collectStatusChips(progress: AgentProgress, running: boolean): string[] {
-  if (!running || progress.finished) return [];
+const STATUS_CHIP_SKIP = /^(conectando|iniciando|na fila)/i;
+
+function pushStatusChip(chips: string[], seen: Set<string>, raw: string | null | undefined): void {
+  const t = truncate(String(raw ?? "").trim(), 72);
+  if (!t || seen.has(t) || STATUS_CHIP_SKIP.test(t)) return;
+  seen.add(t);
+  chips.push(t);
+}
+
+export type StatusChipOptions = {
+  jobPlan?: PendingPlan | null;
+  /** Chips materializados no cardSnapshot — fonte de verdade pós-F5. */
+  storedChips?: string[] | null;
+};
+
+/** Chips cinza antes do mini-card — ativo: máx 2 (img 4); terminal: permanecem (img 15). */
+export function collectStatusChips(
+  progress: AgentProgress,
+  running: boolean,
+  opts?: StatusChipOptions,
+): string[] {
+  if (opts?.storedChips?.length) return opts.storedChips;
 
   const chips: string[] = [];
   const seen = new Set<string>();
+  const isLive = running && !progress.finished && !progress.canceled;
 
-  for (const tool of [...progress.tools].reverse()) {
-    if (tool.ok !== undefined) continue;
-    const label = statusChipLabel(tool.name, tool.args);
-    if (seen.has(label)) continue;
-    seen.add(label);
-    chips.push(label);
-    if (chips.length >= 2) break;
+  if (isLive) {
+    for (const tool of [...progress.tools].reverse()) {
+      if (tool.ok !== undefined) continue;
+      pushStatusChip(chips, seen, statusChipLabel(tool.name, tool.args));
+      if (chips.length >= 2) return chips;
+    }
+
+    if (progress.message?.trim()) {
+      pushStatusChip(chips, seen, progress.message.trim());
+    }
+    if (chips.length < 2 && progress.statusHint?.trim()) {
+      pushStatusChip(chips, seen, progress.statusHint.trim());
+    }
+
+    const narrative = buildAgentNarrative(progress, { running: true });
+    if (chips.length < 2 && narrative.subhint) {
+      pushStatusChip(chips, seen, narrative.subhint);
+    }
+    if (chips.length < 2 && narrative.headline && narrative.headline !== progress.message?.trim()) {
+      pushStatusChip(chips, seen, narrative.headline);
+    }
+
+    return chips.slice(0, 2);
   }
 
-  if (chips.length === 0 && progress.message?.trim()) {
-    const m = progress.message.trim();
-    if (m.length <= 72) chips.push(m);
+  const plan = progress.pendingPlan ?? opts?.jobPlan ?? null;
+  const hasPlanEvidence =
+    !!plan?.steps?.length ||
+    progress.awaitingKind === "plan_approval" ||
+    !!progress.planSummary?.trim();
+
+  if (hasPlanEvidence) {
+    pushStatusChip(chips, seen, "Reading approved plan");
+    if (plan?.summary?.trim()) {
+      pushStatusChip(chips, seen, plan.summary.trim());
+    } else if (progress.planSummary?.trim()) {
+      pushStatusChip(chips, seen, progress.planSummary.trim());
+    }
+    const mission = plan?.mission?.trim() || plan?.objective?.trim();
+    if (mission) {
+      pushStatusChip(chips, seen, `Plan: ${truncate(mission, 56)}`);
+    }
   }
 
-  return chips;
+  for (const tool of progress.tools) {
+    pushStatusChip(chips, seen, statusChipLabel(tool.name, tool.args));
+    if (chips.length >= 4) break;
+  }
+
+  if (progress.message?.trim()) {
+    pushStatusChip(chips, seen, progress.message.trim());
+  }
+
+  return chips.slice(0, 4);
 }
 
 export function isRunEffectivelyActive(progress: AgentProgress, slotActive = false): boolean {

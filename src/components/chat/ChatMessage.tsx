@@ -81,6 +81,14 @@ export function ChatMessage({
 
         {showNarration && <ChatNarration text={item.narration!} />}
 
+        {item.statusChips && item.statusChips.length > 0 && (
+          <div className="forge-status-chips" data-testid="forge-status-chips">
+            {item.statusChips.map((chip) => (
+              <ForgeStatusChip key={chip} label={chip} />
+            ))}
+          </div>
+        )}
+
         {showResponse && (
           <div className="forge-chat-closing-line forge-chat-prose">
             <MarkdownRenderer>{text!}</MarkdownRenderer>
@@ -92,8 +100,6 @@ export function ChatMessage({
             Pensando…
           </p>
         )}
-
-        {item.statusChips?.map((chip) => <ForgeStatusChip key={chip} label={chip} />)}
 
         {showJobCard && item.miniCard && (
           <ChatJobCard

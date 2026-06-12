@@ -103,18 +103,39 @@
   box-sizing: border-box;
 }
 
-.forge-status-chip {
-  display: inline-flex;
-  align-items: center;
-  width: fit-content;
+.forge-status-chips {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
   max-width: 100%;
-  padding: 8px 12px;
-  border-radius: 10px;
-  background: color-mix(in srgb, var(--bg-card) 88%, #fff 4%);
-  border: 1px solid var(--border);
-  font: var(--font-task);
-  color: var(--text-secondary);
-  line-height: 1.35;
+  min-width: 0;
+}
+
+.forge-status-chip {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  padding: 9px 12px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--bg-card) 72%, #3f3f46 28%);
+  border: 1px solid color-mix(in srgb, var(--border) 85%, #52525b 15%);
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 11px;
+  font-weight: 500;
+  color: color-mix(in srgb, var(--text-secondary) 92%, #a1a1aa 8%);
+  line-height: 1.4;
+  box-sizing: border-box;
+}
+
+.forge-status-chip-label {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .forge-mini-card-header-line {
