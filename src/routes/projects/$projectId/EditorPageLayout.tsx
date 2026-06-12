@@ -310,11 +310,6 @@ export function EditorPageLayout({
     return resolveHistoricalRunProgress(runId, chatMessages);
   }, [jobWorkspaceFocus, agent.activeRunId, agent.progress, chatMessages]);
 
-  const devGuardLabel =
-    activeView === "preview"
-      ? "NÃO criar componentes novos — reusar ChatPlanDock + forge-composer-row"
-      : null;
-
   const previewStatusLabel = useMemo(() => {
     if (running) return isMobile ? "Agente trabalhando" : "Agent working — clique o job no chat";
     if (isMobile && pendingPlan) return "Plano aguardando";
@@ -434,7 +429,6 @@ export function EditorPageLayout({
                   onDeviceChange: setPreviewDevice,
                 }}
                 previewStatusLabel={previewStatusLabel}
-                devGuardLabel={devGuardLabel}
                 jobInspectorActive={isJobFocused}
               />
             }

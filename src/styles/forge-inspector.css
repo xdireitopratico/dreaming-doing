@@ -706,16 +706,3 @@
   white-space: nowrap;
 }
 
-.forge-dev-guard-pill {
-  font-size: 10px;
-  font-weight: 600;
-  padding: 4px 10px;
-  border-radius: 999px;
-  border: 1px solid color-mix(in srgb, #ef4444 55%, var(--border-forge));
-  background: color-mix(in srgb, #ef4444 8%, var(--bg-card));
-  color: #ef4444;
-  white-space: nowrap;
-  max-width: 280px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
