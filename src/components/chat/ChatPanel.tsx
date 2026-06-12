@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Loader2 } from "lucide-react";
 import type { AgentComposerMode, ChatMessage } from "@/lib/chat-types";
 import type { StoredMessagePart } from "@/lib/chat-attachments";
@@ -25,7 +25,7 @@ export type ChatPanelProps = {
   onSend: (text: string, mode?: AgentComposerMode, parts?: StoredMessagePart[]) => void;
   onStop: () => void;
   onResume?: () => void;
-  onOpenInspector?: (runId: string, tab?: "details" | "timeline" | "changes" | "plan") => void;
+  onOpenInspector?: (runId: string, tab?: "timeline" | "changes" | "plan") => void;
   onRollbackMessage?: (
     messageId: string,
     role: "user" | "assistant",
@@ -135,6 +135,22 @@ export function ChatPanel({
     [onSend, composerMode],
   );
 
+  const lastUserMessageId = useMemo(() => {
+    for (let i = thread.length - 1; i >= 0; i--) {
+      const item = thread[i];
+      if (item?.kind === "user") return item.message.id;
+    }
+    return null;
+  }, [thread]);
+
+  const handleRollback = useCallback(
+    async (messageId: string) => {
+      if (!onRollbackMessage) return;
+      await onRollbackMessage(messageId, "user");
+    },
+    [onRollbackMessage],
+  );
+
   return (
     <div className="forge-chat-inner">
       <div ref={scrollRef} className="forge-messages" onScroll={handleScroll}>
@@ -175,6 +191,8 @@ export function ChatPanel({
             onOpenInspector={onOpenInspector}
             onQualifySelect={handleQualifySelect}
             onResume={onResume}
+            onRollback={onRollbackMessage ? handleRollback : undefined}
+            lastUserMessageId={lastUserMessageId}
           />
         )}
 

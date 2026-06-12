@@ -12,10 +12,21 @@
 .forge-inspector-header {
   display: flex;
   align-items: center;
-  gap: var(--space-lg);
+  gap: var(--space-md);
   padding: 10px var(--inspector-padding);
   border-bottom: 1px solid var(--border-forge);
   flex-shrink: 0;
+}
+
+.forge-inspector-rail {
+  width: min(420px, 42vw);
+  min-width: 300px;
+  border-left: 1px solid var(--border-forge);
+  flex-shrink: 0;
+}
+
+.forge-inspector-header .forge-inspector-tabs {
+  margin-left: auto;
 }
 
 .forge-inspector-back-btn {
@@ -120,6 +131,9 @@
 
 .forge-details-action-label,
 .forge-details-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   font-size: 12px;
   color: var(--text-primary);
   background: none;
@@ -127,6 +141,12 @@
   padding: 0;
   cursor: default;
   text-align: left;
+}
+
+.forge-details-action-emoji {
+  flex-shrink: 0;
+  font-size: 13px;
+  line-height: 1;
 }
 
 .forge-details-action-btn {

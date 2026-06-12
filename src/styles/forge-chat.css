@@ -168,7 +168,7 @@
 .forge-chat-item-user {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
+  align-items: flex-end;
   width: 100%;
 }
 
@@ -183,7 +183,7 @@
 .forge-msg-user {
   max-width: min(88%, 520px);
   padding: var(--space-md) var(--space-lg);
-  border-radius: 12px 12px 4px 12px;
+  border-radius: 12px 12px 12px 4px;
   border: 1px solid var(--border-forge);
   background: var(--bg-card);
   color: var(--text-primary);
@@ -211,7 +211,7 @@
   font-size: 12px;
   color: var(--text-muted);
   cursor: pointer;
-  text-align: left;
+  text-align: right;
 }
 
 .forge-msg-user-show-more:hover {
@@ -1033,11 +1033,11 @@
 .forge-composer-mic {
   display: grid;
   place-items: center;
-  width: 32px;
-  height: 32px;
-  border-radius: var(--space-sm);
-  border: none;
-  background: transparent;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--border-forge) 80%, transparent);
+  background: color-mix(in srgb, var(--bg-input) 85%, transparent);
   color: var(--text-muted);
   cursor: pointer;
   transition: background 0.15s, color 0.15s;
@@ -1061,9 +1061,9 @@
 .forge-composer-stop {
   display: grid;
   place-items: center;
-  width: 32px;
-  height: 32px;
-  border-radius: 10px;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
   background: var(--bg-input);
   color: var(--text-secondary);
   border: 1px solid var(--border-forge);
@@ -1144,9 +1144,9 @@
 .forge-composer-send {
   display: grid;
   place-items: center;
-  width: 32px;
-  height: 32px;
-  border-radius: 10px;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
   background: var(--bg-input);
   color: var(--text-primary);
   border: 1px solid var(--border-forge);

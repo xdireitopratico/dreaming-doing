@@ -11,7 +11,7 @@ import { ChatError } from "./ChatError";
 
 type AssistantTurnProps = {
   item: Extract<ThreadItem, { kind: "assistant" }>;
-  onOpenInspector?: (runId: string, tab?: "details" | "timeline" | "changes" | "plan") => void;
+  onOpenInspector?: (runId: string, tab?: "timeline" | "changes" | "plan") => void;
   onQualifySelect?: (text: string) => void;
   onResume?: () => void;
 };
@@ -80,7 +80,7 @@ export function AssistantTurn({
             runId={item.runId}
             planTeaser={planTeaser}
             onClick={() =>
-              onOpenInspector?.(item.runId, planTeaser || item.miniCard?.planReady ? "plan" : "details")
+              onOpenInspector?.(item.runId, planTeaser || item.miniCard?.planReady ? "plan" : "timeline")
             }
           />
         )}

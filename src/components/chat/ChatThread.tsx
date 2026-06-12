@@ -3,9 +3,11 @@ import { ChatMessage } from "./ChatMessage";
 
 type ChatThreadProps = {
   items: ThreadItem[];
-  onOpenInspector?: (runId: string, tab?: "details" | "timeline" | "changes" | "plan") => void;
+  onOpenInspector?: (runId: string, tab?: "timeline" | "changes" | "plan") => void;
   onQualifySelect?: (text: string) => void;
   onResume?: () => void;
+  onRollback?: (messageId: string) => void;
+  lastUserMessageId?: string | null;
 };
 
 export function ChatThread({
@@ -13,6 +15,8 @@ export function ChatThread({
   onOpenInspector,
   onQualifySelect,
   onResume,
+  onRollback,
+  lastUserMessageId,
 }: ChatThreadProps) {
   return (
     <div className="forge-chat-stream" role="log" aria-live="polite">
@@ -25,6 +29,12 @@ export function ChatThread({
             onOpenInspector={onOpenInspector}
             onQualifySelect={onQualifySelect}
             onResume={onResume}
+            onRollback={onRollback}
+            canRollbackUser={
+              item.kind === "user" &&
+              !!lastUserMessageId &&
+              item.message.id === lastUserMessageId
+            }
           />
         );
       })}

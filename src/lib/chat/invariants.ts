@@ -24,6 +24,42 @@ export function resolveTurnStatusChips(
   return rawChips;
 }
 
+/**
+ * Corrige violações silenciosamente em runtime — nunca quebra o chat do usuário.
+ * Testes usam assertAssistantTurnInvariant para falhar cedo em regressões.
+ */
+export function enforceAssistantTurnInvariant(
+  item: Extract<ThreadItem, { kind: "assistant" }>,
+): Extract<ThreadItem, { kind: "assistant" }> {
+  let statusChips = item.statusChips ?? [];
+  let streamText = item.streamText;
+
+  if (item.miniCard && statusChips.length > 0) {
+    statusChips = [];
+  }
+
+  if (item.isActive && statusChips.length > 2) {
+    statusChips = statusChips.slice(0, 2);
+  }
+
+  if (statusChips.length > 4) {
+    statusChips = statusChips.slice(0, 4);
+  }
+
+  if (item.planTeaser && streamText) {
+    streamText = null;
+  }
+
+  if (
+    statusChips === item.statusChips &&
+    streamText === item.streamText
+  ) {
+    return item;
+  }
+
+  return { ...item, statusChips, streamText };
+}
+
 /** Guarda de integridade — falha em testes se o turno violar contrato Lovable. */
 export function assertAssistantTurnInvariant(
   item: Extract<ThreadItem, { kind: "assistant" }>,

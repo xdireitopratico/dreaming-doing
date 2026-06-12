@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState } from "react";
 
-export type JobInspectorTab = "details" | "timeline" | "changes" | "plan";
+export type JobInspectorTab = "timeline" | "changes" | "plan";
 
 /** @deprecated Use JobInspectorTab */
 export type JobWorkspaceTab = JobInspectorTab;
@@ -14,7 +14,7 @@ export function useJobWorkspaceFocus() {
   const [focus, setFocus] = useState<JobWorkspaceFocus | null>(null);
   const dismissedRunIdRef = useRef<string | null>(null);
 
-  const openJobWorkspace = useCallback((runId: string, tab: JobInspectorTab = "details") => {
+  const openJobWorkspace = useCallback((runId: string, tab: JobInspectorTab = "timeline") => {
     setFocus({ runId, tab });
     if (dismissedRunIdRef.current !== runId) {
       dismissedRunIdRef.current = null;

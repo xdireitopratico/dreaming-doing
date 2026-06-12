@@ -13,7 +13,7 @@ import {
 import { resolveJobPlanForRun, storedPlanFromMessage } from "@/lib/plan-message-meta";
 import { parseQualifyChoices } from "@/lib/qualify-choices";
 import { resolveAssistantProgress } from "@/lib/chat/resolve-progress";
-import { assertAssistantTurnInvariant, resolveTurnStatusChips } from "@/lib/chat/invariants";
+import { enforceAssistantTurnInvariant, resolveTurnStatusChips } from "@/lib/chat/invariants";
 import { resolveTurnNarration, resolveTurnThinking } from "@/lib/chat/turn-display";
 import { resolveHistoricalRunProgress } from "@/lib/assistant-run-progress";
 import { initialAgentProgress } from "@/lib/agent-progress";
@@ -287,6 +287,5 @@ export function mapAssistantTurn(
     resumable: runView?.resumable ?? resolved?.resumable ?? false,
   };
 
-  assertAssistantTurnInvariant(turn);
-  return turn;
+  return enforceAssistantTurnInvariant(turn);
 }

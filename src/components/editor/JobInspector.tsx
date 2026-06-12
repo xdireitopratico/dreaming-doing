@@ -3,7 +3,6 @@ import type { AgentProgress, PendingPlan, PlanStep } from "@/lib/agent-progress"
 import type { ChatMessage } from "@/lib/chat-types";
 import type { JobInspectorTab } from "@/hooks/useJobWorkspaceFocus";
 import { resolveInspectorPlanForRun } from "@/lib/plan-message-meta";
-import { InspectorDetails } from "@/components/editor/InspectorDetails";
 import { InspectorTimeline } from "@/components/editor/InspectorTimeline";
 import { InspectorChanges } from "@/components/editor/InspectorChanges";
 import { InspectorPlan } from "@/components/editor/InspectorPlan";
@@ -24,10 +23,8 @@ export type JobInspectorProps = {
 };
 
 const TABS: { id: JobInspectorTab; label: string }[] = [
-  { id: "details", label: "Details" },
   { id: "timeline", label: "Timeline" },
   { id: "changes", label: "Changes" },
-  { id: "plan", label: "Plan" },
 ];
 
 export function JobInspector({
@@ -54,40 +51,51 @@ export function JobInspector({
   );
 
   const showPlanTab = !!inspectorPlan;
+  const normalizedTab = (activeTab as string) === "details" ? "timeline" : activeTab;
+  const resolvedTab =
+    normalizedTab === "plan" && showPlanTab
+      ? "plan"
+      : normalizedTab === "changes"
+        ? "changes"
+        : "timeline";
 
   return (
-    <div className="forge-inspector" data-testid="job-inspector">
+    <div className="forge-inspector forge-inspector-rail" data-testid="job-inspector">
       <div className="forge-inspector-header">
         <button type="button" className="forge-inspector-back-btn" onClick={onBackToLatest}>
           Back to latest
         </button>
-        <div className="forge-inspector-tabs" role="tablist" aria-label="Job inspector">
-          {TABS.filter((t) => t.id !== "plan" || showPlanTab).map((tab) => (
+        <div className="forge-inspector-tabs" role="tablist" aria-label="Inspector">
+          {TABS.map((tab) => (
             <button
               key={tab.id}
               type="button"
               role="tab"
-              aria-selected={activeTab === tab.id}
+              aria-selected={resolvedTab === tab.id}
               className="forge-inspector-tab"
-              data-active={activeTab === tab.id}
+              data-active={resolvedTab === tab.id}
               onClick={() => onTabChange(tab.id)}
             >
               {tab.label}
             </button>
           ))}
+          {showPlanTab && (
+            <button
+              type="button"
+              role="tab"
+              aria-selected={resolvedTab === "plan"}
+              className="forge-inspector-tab"
+              data-active={resolvedTab === "plan"}
+              onClick={() => onTabChange("plan")}
+            >
+              Plan
+            </button>
+          )}
         </div>
       </div>
 
       <div className="forge-inspector-body forge-scrollbar-dark">
-        {activeTab === "details" && (
-          <InspectorDetails
-            progress={run}
-            running={running}
-            onOpenFile={onOpenFile}
-            runStartedAtMs={runStartedAtMs}
-          />
-        )}
-        {activeTab === "timeline" && (
+        {resolvedTab === "timeline" && (
           <InspectorTimeline
             progress={run}
             running={running}
@@ -95,8 +103,8 @@ export function JobInspector({
             runStartedAtMs={runStartedAtMs}
           />
         )}
-        {activeTab === "changes" && <InspectorChanges progress={run} />}
-        {activeTab === "plan" && inspectorPlan && onPlanApprove && onPlanReject ? (
+        {resolvedTab === "changes" && <InspectorChanges progress={run} />}
+        {resolvedTab === "plan" && inspectorPlan && onPlanApprove && onPlanReject && (
           <InspectorPlan
             plan={inspectorPlan.plan}
             status={inspectorPlan.status}
@@ -104,14 +112,7 @@ export function JobInspector({
             onApprove={onPlanApprove}
             onReject={onPlanReject}
           />
-        ) : activeTab === "plan" ? (
-          <InspectorDetails
-            progress={run}
-            running={running}
-            onOpenFile={onOpenFile}
-            runStartedAtMs={runStartedAtMs}
-          />
-        ) : null}
+        )}
       </div>
     </div>
   );

@@ -2,7 +2,7 @@ import type { ForgeTimelineItem } from "@/lib/forge-run";
 
 export type InspectorDetailBlock =
   | { kind: "thought"; id: string; durationMs: number; text: string; active?: boolean }
-  | { kind: "action"; id: string; label: string; path?: string }
+  | { kind: "action"; id: string; label: string; emoji?: string; path?: string }
   | { kind: "code"; id: string; code: string }
   | { kind: "section"; id: string; title: string; body?: string };
 
@@ -35,6 +35,18 @@ function humanizeToolName(name: string): string {
     .replace(/_/g, " ")
     .replace(/([a-z])([A-Z])/g, "$1 $2")
     .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+export function actionEmojiFromTool(item: Extract<ForgeTimelineItem, { type: "TOOL" }>): string {
+  const name = item.name;
+  if (item.path) {
+    if (READ_TOOLS.test(name)) return "📄";
+    if (WRITE_TOOLS.test(name)) return "✏️";
+    return "🔧";
+  }
+  if (SEARCH_TOOLS.test(name)) return "🔍";
+  if (SHELL_TOOLS.test(name)) return "⚡";
+  return "🔧";
 }
 
 export function actionLabelFromTool(item: Extract<ForgeTimelineItem, { type: "TOOL" }>): string {
@@ -83,6 +95,7 @@ export function buildInspectorDetailBlocks(items: ForgeTimelineItem[]): Inspecto
         kind: "action",
         id: item.id,
         label: actionLabelFromTool(item),
+        emoji: actionEmojiFromTool(item),
         path: item.path,
       });
       if (item.detail && isCodeLike(item.detail) && !SHELL_TOOLS.test(item.name)) {

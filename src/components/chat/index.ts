@@ -14,3 +14,4 @@ export { ChatTaskList } from "./ChatTaskList";
 export { ChatDone } from "./ChatDone";
 export { ChatError } from "./ChatError";
 export { ChatQualify } from "./ChatQualify";
+export { ChatToolbar } from "./ChatToolbar";
