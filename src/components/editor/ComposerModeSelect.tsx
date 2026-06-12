@@ -1,4 +1,4 @@
-import { Check, Hammer, ListTodo } from "lucide-react";
+import { Check, ChevronDown, Hammer, ListTodo } from "lucide-react";
 import {
   ForgeEditorDropdownContent,
   ForgeEditorDropdownItem,
@@ -29,8 +29,9 @@ export function ComposerModeSelect({
     <DropdownMenu modal={false}>
       <DropdownMenuTrigger asChild>
         <button type="button" className="forge-composer-mode-trigger" aria-label="Modo do agente">
-          <CurrentIcon className="size-3.5 shrink-0" />
+          <CurrentIcon className="size-3.5 shrink-0 opacity-80" />
           <span>{current.label}</span>
+          <ChevronDown className="size-3 shrink-0 opacity-60" aria-hidden />
         </button>
       </DropdownMenuTrigger>
       <ForgeEditorDropdownContent align="end" side="top" sideOffset={6} className="min-w-[120px]">

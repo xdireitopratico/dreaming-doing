@@ -827,45 +827,86 @@
 
 .forge-composer-row {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
-  gap: var(--space-xs);
-  margin-top: 6px;
+  gap: 6px;
+  margin-top: 8px;
   min-width: 0;
 }
 
+.forge-composer-row-start,
+.forge-composer-row-end {
+  display: inline-flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.forge-composer-row-end {
+  margin-left: auto;
+}
+
 .forge-composer-row .forge-composer-send,
+.forge-composer-row .forge-composer-stop,
 .forge-composer-row .forge-composer-mic,
-.forge-composer-row .forge-composer-icon {
+.forge-composer-row .forge-composer-add,
+.forge-composer-row .forge-composer-visual-edits,
+.forge-composer-row .forge-composer-mode-trigger {
   flex-shrink: 0;
 }
 
 .forge-composer-row .forge-composer-spacer {
   flex: 1 1 8px;
-  min-width: 0;
+  min-width: 4px;
 }
 
-.forge-composer-icon {
+.forge-composer-add {
   display: grid;
   place-items: center;
-  width: 32px;
-  height: 32px;
-  border-radius: var(--space-sm);
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--border-forge) 80%, transparent);
+  background: color-mix(in srgb, var(--bg-input) 85%, transparent);
   color: var(--text-muted);
-  transition: background 0.15s, color 0.15s;
-  border: none;
-  background: transparent;
   cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
 }
 
-.forge-composer-icon:hover {
+.forge-composer-add:hover {
   background: var(--bg-hover);
   color: var(--text-primary);
+  border-color: var(--border-active);
 }
 
-.forge-composer-icon--active {
-  background: color-mix(in srgb, var(--text-accent) 15%, transparent);
-  color: var(--text-accent);
+.forge-composer-visual-edits {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--border-forge) 80%, transparent);
+  background: color-mix(in srgb, var(--bg-input) 85%, transparent);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.forge-composer-visual-edits:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+  border-color: var(--border-active);
+}
+
+.forge-composer-visual-edits--active {
+  background: color-mix(in srgb, var(--text-accent) 12%, transparent);
+  border-color: color-mix(in srgb, var(--text-accent) 35%, var(--border-forge));
+  color: var(--text-primary);
 }
 
 .forge-composer-spacer {
@@ -873,33 +914,66 @@
 }
 
 .forge-composer-mic {
-  display: grid !important;
+  display: grid;
   place-items: center;
-  width: 32px !important;
-  height: 32px !important;
-  border-radius: var(--space-sm) !important;
-  border: none !important;
-  background: transparent !important;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--space-sm);
+  border: none;
+  background: transparent;
   color: var(--text-muted);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
 }
 
 .forge-composer-mic:hover {
-  background: var(--bg-hover) !important;
-  color: var(--text-primary) !important;
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.forge-composer-mic--recording {
+  background: color-mix(in srgb, #ef4444 18%, transparent);
+  color: #f87171;
+}
+
+.forge-composer-mic--recording:hover {
+  background: color-mix(in srgb, #ef4444 28%, transparent);
+  color: #fca5a5;
+}
+
+.forge-composer-stop {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  background: var(--bg-input);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-forge);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.forge-composer-stop:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+  border-color: var(--border-active);
 }
 
 .forge-composer-mode-trigger {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 4px 10px;
-  border-radius: var(--space-sm);
-  border: 1px solid var(--border-forge);
-  background: var(--bg-input);
+  gap: 5px;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--border-forge) 80%, transparent);
+  background: color-mix(in srgb, var(--bg-input) 85%, transparent);
   font-size: 11px;
   font-weight: 600;
   color: var(--text-secondary);
   cursor: pointer;
+  white-space: nowrap;
   transition: border-color 0.15s, background 0.15s, color 0.15s;
 }
 

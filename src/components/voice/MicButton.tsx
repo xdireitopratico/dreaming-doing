@@ -1,17 +1,25 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Mic, Loader2, Square } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { toast } from "@/lib/toast";
 import { supabase } from "@/integrations/supabase/client";
 import { loadAgentPreferences } from "@/lib/agent-preferences";
-import { STT_DEFAULT_PROVIDER, sttProviderName, type SttProviderId } from "@/lib/stt-config";
+import { STT_DEFAULT_PROVIDER, sttProviderName } from "@/lib/stt-config";
 
 type Props = {
   onTranscript: (text: string) => void;
   className?: string;
   size?: "sm" | "md";
+  /** Estilo plano do composer Lovable — sem rounded-full/border próprios. */
+  variant?: "default" | "composer";
 };
 
-export function MicButton({ onTranscript, className, size = "md" }: Props) {
+export function MicButton({
+  onTranscript,
+  className,
+  size = "md",
+  variant = "default",
+}: Props) {
   const [state, setState] = useState<"idle" | "recording" | "uploading">("idle");
   const recRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
@@ -59,13 +67,8 @@ export function MicButton({ onTranscript, className, size = "md" }: Props) {
           if (errMsg) throw new Error(errMsg);
           if (error) throw new Error(error.message);
 
-          const body = data as {
-            text?: string;
-            provider?: string;
-            requested?: string;
-          };
+          const body = data as { text?: string; provider?: string; requested?: string };
           const text = body?.text?.trim();
-          const used = body?.provider ?? requested;
 
           if (text) {
             onTranscript(text);
@@ -96,6 +99,24 @@ export function MicButton({ onTranscript, className, size = "md" }: Props) {
   const sizeCls = size === "sm" ? "size-8" : "size-9";
   const iconCls = size === "sm" ? "size-3.5" : "size-4";
   const stt = loadAgentPreferences().sttProvider ?? STT_DEFAULT_PROVIDER;
+  const isComposer = variant === "composer";
+
+  const composerCls = cn("forge-composer-mic", className);
+  const defaultIdleCls = cn(
+    sizeCls,
+    "grid place-items-center rounded-full bg-[var(--surface-2)] hover:bg-[var(--surface-3)] border border-[var(--border)] text-[var(--text-dim)] hover:text-foreground transition-colors",
+    className,
+  );
+  const defaultUploadCls = cn(
+    sizeCls,
+    "grid place-items-center rounded-full bg-[var(--surface-2)] border border-[var(--border)] text-[var(--text-dim)]",
+    className,
+  );
+  const defaultRecordCls = cn(
+    sizeCls,
+    "grid place-items-center rounded-full bg-red-500/90 hover:bg-red-500 text-white animate-pulse",
+    className,
+  );
 
   if (state === "uploading") {
     return (
@@ -104,9 +125,9 @@ export function MicButton({ onTranscript, className, size = "md" }: Props) {
         disabled
         aria-label="Transcrevendo"
         title={`Transcrevendo · ${sttProviderName(stt)}`}
-        className={`${sizeCls} grid place-items-center rounded-full bg-[var(--surface-2)] border border-[var(--border)] text-[var(--text-dim)] ${className ?? ""}`}
+        className={isComposer ? composerCls : defaultUploadCls}
       >
-        <Loader2 className={`${iconCls} animate-spin`} />
+        <Loader2 className={cn(iconCls, "animate-spin")} />
       </button>
     );
   }
@@ -117,9 +138,13 @@ export function MicButton({ onTranscript, className, size = "md" }: Props) {
         type="button"
         onClick={stop}
         aria-label="Parar gravação"
-        className={`${sizeCls} grid place-items-center rounded-full bg-red-500/90 hover:bg-red-500 text-white animate-pulse ${className ?? ""}`}
+        className={
+          isComposer
+            ? cn(composerCls, "forge-composer-mic--recording")
+            : defaultRecordCls
+        }
       >
-        <Square className={`${iconCls} fill-current`} />
+        <Square className={cn(iconCls, "fill-current")} />
       </button>
     );
   }
@@ -129,8 +154,8 @@ export function MicButton({ onTranscript, className, size = "md" }: Props) {
       type="button"
       onClick={start}
       aria-label={`Gravar áudio (${sttProviderName(stt)})`}
-      title={`Microfone · ${sttProviderName(stt)} — voz em Modelos`}
-      className={`${sizeCls} grid place-items-center rounded-full bg-[var(--surface-2)] hover:bg-[var(--surface-3)] border border-[var(--border)] text-[var(--text-dim)] hover:text-foreground transition-colors ${className ?? ""}`}
+      title={`Microfone · ${sttProviderName(stt)}`}
+      className={isComposer ? composerCls : defaultIdleCls}
     >
       <Mic className={iconCls} />
     </button>

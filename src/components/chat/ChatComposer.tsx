@@ -6,7 +6,7 @@ import {
   type DragEvent,
   type KeyboardEvent,
 } from "react";
-import { ArrowUp, FileText, ImageIcon, MousePointer2, Paperclip, Square, X } from "lucide-react";
+import { ArrowUp, FileText, ImageIcon, MousePointer2, Plus, Square, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { MicButton } from "@/components/voice/MicButton";
 import { ComposerModeSelect } from "@/components/editor/ComposerModeSelect";
@@ -96,12 +96,10 @@ export function ChatComposer({
   }, [text]);
 
   const placeholder = planPending
-    ? "Diga o que fazer em vez disso…"
+    ? "Tell Lovable what to do instead..."
     : isRunning
-      ? "Queue follow-up…"
-      : composerMode === "build"
-        ? "Descreva o que construir…"
-        : "Descreva o que planejar…";
+      ? "Queue follow-up..."
+      : "Ask Lovable...";
 
   const addFiles = useCallback((files: File[]) => {
     const { accepted } = filterAcceptedFiles(files);
@@ -160,6 +158,7 @@ export function ChatComposer({
   };
 
   const canSubmit = text.trim().length > 0 || attachments.length > 0;
+  const showVisualEdits = !!onVisualEdits && !planPending;
 
   return (
     <div
@@ -211,62 +210,69 @@ export function ChatComposer({
       />
 
       <div className="forge-composer-row">
-        <button
-          type="button"
-          className="forge-composer-icon"
-          title="Anexar"
-          onClick={() => fileInputRef.current?.click()}
-        >
-          <Paperclip className="size-4" />
-        </button>
-
-        {onVisualEdits && (
+        <div className="forge-composer-row-start">
           <button
             type="button"
-            className={cn(
-              "forge-composer-icon",
-              visualEditsActive && "forge-composer-icon--active",
-            )}
-            title="Visual edits"
-            onClick={onVisualEdits}
+            className="forge-composer-add"
+            title="Anexar"
+            aria-label="Anexar"
+            onClick={() => fileInputRef.current?.click()}
           >
-            <MousePointer2 className="size-4" />
+            <Plus className="size-4" />
           </button>
-        )}
 
-        <span className="forge-composer-spacer" />
+          {showVisualEdits && (
+            <button
+              type="button"
+              className={cn(
+                "forge-composer-visual-edits",
+                visualEditsActive && "forge-composer-visual-edits--active",
+              )}
+              title="Visual edits"
+              onClick={onVisualEdits}
+            >
+              <MousePointer2 className="size-3.5 shrink-0" />
+              <span>Visual edits</span>
+            </button>
+          )}
+        </div>
 
-        {onComposerModeChange && (
-          <ComposerModeSelect value={composerMode} onChange={onComposerModeChange} />
-        )}
+        <span className="forge-composer-spacer" aria-hidden />
 
-        <MicButton
-          size="sm"
-          className="forge-composer-mic"
-          onTranscript={(t) => setText((cur: string) => (cur ? `${cur} ${t}` : t))}
-        />
+        <div className="forge-composer-row-end">
+          {onComposerModeChange && (
+            <ComposerModeSelect value={composerMode} onChange={onComposerModeChange} />
+          )}
 
-        {running && (
+          <MicButton
+            variant="composer"
+            size="sm"
+            onTranscript={(t) => setText((cur: string) => (cur ? `${cur} ${t}` : t))}
+          />
+
+          {running && (
+            <button
+              type="button"
+              className="forge-composer-stop"
+              onClick={onStop}
+              title="Parar"
+              aria-label="Parar"
+            >
+              <Square className="size-3.5 fill-current" />
+            </button>
+          )}
+
           <button
             type="button"
-            className="forge-composer-send ml-1"
-            onClick={onStop}
-            title="Parar"
-            aria-label="Parar"
+            className="forge-composer-send"
+            onClick={() => void handleSend()}
+            disabled={!canSubmit}
+            title={isRunning ? "Enfileirar" : "Enviar"}
+            aria-label={isRunning ? "Enfileirar" : "Enviar"}
           >
-            <Square className="size-3.5 fill-current" />
+            <ArrowUp className="size-4" />
           </button>
-        )}
-        <button
-          type="button"
-          className="forge-composer-send ml-1"
-          onClick={() => void handleSend()}
-          disabled={!canSubmit}
-          title={isRunning ? "Enfileirar" : "Enviar"}
-          aria-label={isRunning ? "Enfileirar" : "Enviar"}
-        >
-          <ArrowUp className="size-4" />
-        </button>
+        </div>
       </div>
     </div>
   );
