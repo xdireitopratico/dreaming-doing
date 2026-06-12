@@ -2,7 +2,7 @@ import { assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import {
   buildAgentContextForLlm,
   buildExecuteInstruction,
-  buildMobileStackQualifyMessage,
+  generateMobileStackQualifyMessage,
   extractOriginalUserRequest,
   isAmbiguousMobileRequest,
   isPreviewActionRequest,
@@ -187,8 +187,18 @@ Deno.test("isAmbiguousMobileRequest para app de voz sem stack", () => {
   assertEquals(isAmbiguousMobileRequest("app android kotlin"), false);
 });
 
-Deno.test("buildMobileStackQualifyMessage oferece Expo e Kotlin", () => {
-  const msg = buildMobileStackQualifyMessage();
+Deno.test("generateMobileStackQualifyMessage oferece Expo e Kotlin", async () => {
+  const mock = {
+    async chat() {
+      return {
+        role: "assistant" as const,
+        content:
+          "Quer seguir com **Expo** (preview rápido) ou **Kotlin nativo** (Gradle mais longo)? Me diz qual prefere.",
+        tool_calls: [],
+      };
+    },
+  };
+  const msg = await generateMobileStackQualifyMessage(mock, "quero um app mobile de voz");
   assertEquals(msg.includes("Expo"), true);
   assertEquals(msg.includes("Kotlin"), true);
 });

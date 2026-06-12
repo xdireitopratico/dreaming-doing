@@ -1,5 +1,6 @@
-import type { ChatMessage } from "./types.ts";
+import type { ChatMessage, LLMProvider } from "./types.ts";
 import type { ClassificationResult } from "./router.ts";
+import { llmChatLine } from "./narration.ts";
 
 const RESUME_PREFIX = "[Retomar]";
 export const PLAN_APPROVED_PREFIX = "[Plano aprovado]";
@@ -137,17 +138,20 @@ export function isAmbiguousMobileRequest(prompt: string): boolean {
   );
 }
 
-export function buildMobileStackQualifyMessage(): string {
-  return [
-    "Entendi que você quer um **app mobile**.",
-    "",
-    "Antes de codar, qual caminho prefere?",
-    "",
-    "- **Expo (recomendado)** — preview web imediato no FORGE + QR para testar no celular",
-    "- **Nativo Kotlin** — build Gradle mais longo; progresso no chat e arquivos, sem iframe bonito",
-    "",
-    "Responda com *Expo* ou *Kotlin nativo* (ou descreva em uma frase o app e a plataforma).",
-  ].join("\n");
+const MOBILE_QUALIFY_SYSTEM = `Você qualifica um pedido mobile no FORGE — português, tom humano.
+O usuário quer um app mobile mas não escolheu stack. Pergunte de forma natural se prefere Expo (preview rápido + QR) ou Kotlin nativo (Gradle, mais demorado).
+Ofereça as duas opções; pode usar markdown leve.`;
+
+export async function generateMobileStackQualifyMessage(
+  model: LLMProvider,
+  userRequest: string,
+): Promise<string | null> {
+  return llmChatLine(
+    model,
+    MOBILE_QUALIFY_SYSTEM,
+    `Pedido do usuário:\n${userRequest.trim() || "(app mobile sem detalhes)"}`,
+    { max_tokens: 420, minLength: 40, temperature: 0.45 },
+  );
 }
 
 export const SEED_CONTEXT_FOR_LLM = `SCAFFOLD TÉCNICO DA PLATAFORMA (NÃO é trabalho do usuário):

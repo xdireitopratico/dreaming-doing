@@ -2,7 +2,7 @@
 import { assertEquals, assertExists, assert } from "https://deno.land/std@0.224.0/assert/mod.ts";
 
 import {
-  buildPlanChatMessageText,
+  generatePlanChatMessage,
   buildProposedPlan,
   extractRationaleFromLlmContent,
   filterActionablePlanSteps,
@@ -140,14 +140,23 @@ Deno.test("isActionablePlanStep rejeita passos meta-conversacionais", () => {
   assertEquals(filtered[0]?.description, "Criar App.tsx");
 });
 
-Deno.test("buildPlanChatMessageText não repete template antigo", () => {
-  const text = buildPlanChatMessageText({
+Deno.test("generatePlanChatMessage — texto vem do LLM", async () => {
+  const mock = {
+    async chat() {
+      return {
+        role: "assistant" as const,
+        content: "**App de voz** — revise o plano no painel ao lado e aprove quando estiver pronto.",
+        tool_calls: [],
+      };
+    },
+  };
+  const text = await generatePlanChatMessage(mock, {
     planId: "p1",
     summary: "App de voz",
     mission: "App de voz",
     steps: [{ id: "s1", type: "custom", description: "x", enabled: true }],
     ttlMs: 300000,
   });
-  assert(text.includes("painel ao lado"));
-  assert(!text.includes("Abri o **plano completo**"));
+  assert(text?.includes("painel ao lado"));
+  assert(!text?.includes("Abri o **plano completo**"));
 });

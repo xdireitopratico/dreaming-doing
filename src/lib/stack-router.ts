@@ -96,15 +96,4 @@ export function isAmbiguousMobileRequest(prompt: string): boolean {
   return MOBILE_GENERIC_RE.test(p) || /\b(app de voz|voice app|hermes)\b/i.test(p);
 }
 
-export function buildMobileStackQualifyMessage(): string {
-  return [
-    "Entendi que você quer um **app mobile**.",
-    "",
-    "Antes de codar, qual caminho prefere?",
-    "",
-    "- **Expo (recomendado)** — preview web imediato no FORGE + QR para testar no celular",
-    "- **Nativo Kotlin** — build Gradle mais longo; progresso no chat e arquivos, sem iframe bonito",
-    "",
-    "Responda com *Expo* ou *Kotlin nativo* (ou descreva em uma frase o app e a plataforma).",
-  ].join("\n");
-}
+

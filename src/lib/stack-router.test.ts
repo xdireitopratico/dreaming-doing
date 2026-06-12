@@ -1,9 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  buildMobileStackQualifyMessage,
-  inferStackFromPrompt,
-  isAmbiguousMobileRequest,
-} from "./stack-router";
+import { inferStackFromPrompt, isAmbiguousMobileRequest } from "./stack-router";
 
 describe("inferStackFromPrompt", () => {
   it("default web para landing", () => {
@@ -37,10 +33,4 @@ describe("isAmbiguousMobileRequest", () => {
   });
 });
 
-describe("buildMobileStackQualifyMessage", () => {
-  it("menciona Expo e Kotlin", () => {
-    const msg = buildMobileStackQualifyMessage();
-    expect(msg).toContain("Expo");
-    expect(msg).toContain("Kotlin");
-  });
-});
+

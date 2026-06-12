@@ -30,7 +30,7 @@ import {
   ANTI_LEAK_RULE,
   buildAgentContextForLlm,
   buildExecuteInstruction,
-  buildMobileStackQualifyMessage,
+  generateMobileStackQualifyMessage,
   extractOriginalUserRequest,
   INVENTORY_SYSTEM,
   isAmbiguousMobileRequest,
@@ -46,7 +46,7 @@ import { logger } from "../_shared/logger.ts";
 import { appendExecutionLogEntry, buildExecutionLogMeta } from "./executionLogMeta.ts";
 import { type CheckpointExtra, resumeStepStart, serializeCheckpointPayload } from "./checkpoint.ts";
 import {
-  buildPlanChatMessageText,
+  generatePlanChatMessage,
   buildProposedPlan,
   filterActionablePlanSteps,
   findLatestStoredPlan,
@@ -57,9 +57,10 @@ import {
 } from "./plan-mode.ts";
 import type { ClassificationResult } from "./router.ts";
 import {
-  buildLoopUpdate,
   generateClosureMessage,
+  generateLoopUpdate,
   generateOpeningMessage,
+  type LoopUpdateContext,
 } from "./narration.ts";
 import {
   buildPhaseTaskTitle,
@@ -355,8 +356,6 @@ export class AgentLoop {
       message: "Ainda processando o modelo…",
       silentMs: Date.now() - this.lastActivityAt,
     });
-    const heartbeat = buildLoopUpdate({ kind: "processing" });
-    if (heartbeat) this.streamNarration(heartbeat);
   }
 
   private async emitDeliveryCheckpoint(step: number): Promise<void> {
@@ -486,13 +485,12 @@ export class AgentLoop {
         maxSteps: this.maxStepsLimit,
         restored: true,
       });
-      const resumeNarration = buildLoopUpdate({
+      await this.narrateLoop({
         kind: "resume",
         fixResume: this.buildFixResume,
         resumeStep: this.state.currentStepIndex,
         total: this.maxStepsLimit,
       });
-      if (resumeNarration) this.streamNarration(resumeNarration);
 
       // Plan runs terminate after proposing (no in-memory decision wait).
       // The plan is emitted to the client via Realtime; approval/rejection
@@ -632,7 +630,7 @@ export class AgentLoop {
           planHeadline: this.planHeadline,
           userRequest: this.originalUserRequest ?? classification.summary,
         });
-        this.streamNarration(opening, { chatVisible: true });
+        if (opening) this.streamNarration(opening, { chatVisible: true });
       }
 
       await this.saveCheckpoint(LoopPhase.CREATE_PLAN);
@@ -646,7 +644,15 @@ export class AgentLoop {
         isProjectInventoryQuestion(this.originalUserRequest) &&
         !this.planMode
       ) {
-        const inv = await this.runInventoryPhase(executionModel);
+        const inv = (await this.runInventoryPhase(executionModel)).trim();
+        if (!inv) {
+          return {
+            ok: false,
+            error: "Não foi possível resumir o estado do projeto.",
+            steps: 0,
+            toolsUsed: [],
+          };
+        }
         this.emit("assistant_text", { text: inv, final: true });
         await this.persistFinal(inv);
         await this.clearCheckpoint();
@@ -674,7 +680,19 @@ export class AgentLoop {
         this.originalUserRequest &&
         isAmbiguousMobileRequest(this.originalUserRequest)
       ) {
-        const mobileQ = buildMobileStackQualifyMessage();
+        const mobileQ =
+          (await generateMobileStackQualifyMessage(
+            this.router.getCheapProvider(),
+            this.originalUserRequest ?? "",
+          )) ?? "";
+        if (!mobileQ) {
+          return {
+            ok: false,
+            error: "Não foi possível gerar a pergunta de qualificação mobile.",
+            steps: 0,
+            toolsUsed: [],
+          };
+        }
         this.emit("assistant_text", { text: mobileQ, final: true });
         this.emit("gate_decision", {
           phase: "qualify",
@@ -708,7 +726,15 @@ export class AgentLoop {
       ) {
         const qualifyResult = await this.runQualifyPhase(executionModel, this.originalUserRequest);
         if (qualifyResult.stopForUser) {
-          const q = qualifyResult.message || "Me conte mais sobre o que você quer construir.";
+          const q = qualifyResult.message;
+          if (!q?.trim()) {
+            return {
+              ok: false,
+              error: "Não foi possível gerar a pergunta de qualificação.",
+              steps: 0,
+              toolsUsed: [],
+            };
+          }
           this.emit("assistant_text", { text: q, final: true });
           this.emit("gate_decision", {
             phase: "qualify",
@@ -832,9 +858,10 @@ export class AgentLoop {
             };
           }
           await this.saveCheckpoint(LoopPhase.ERROR, true);
-          this.streamNarration(
-            `Encontrei um problema no modelo (${message}) — vou tentar de novo em instantes.`,
-          );
+          await this.narrateLoop({
+            kind: "model_error",
+            errorDetail: message,
+          });
           return this.returnResumableChunk(loopStep, toolsUsed);
         }
         if (!response) break;
@@ -1087,7 +1114,7 @@ export class AgentLoop {
           });
         }
 
-        const batchNarration = buildLoopUpdate({
+        await this.narrateLoop({
           kind: "tool_batch",
           tools: response.tool_calls.map((tc) => ({
             name: tc.name,
@@ -1097,7 +1124,6 @@ export class AgentLoop {
           total: this.maxStepsLimit,
           allOk: execResults.every(({ result }) => result.ok),
         });
-        if (batchNarration) this.notifyExecution(batchNarration);
 
         if (
           this.approvedPlanBuild &&
@@ -1151,8 +1177,7 @@ export class AgentLoop {
         if (modifiedFilePaths.length > 0) {
           const typeCheck = await this.observer.quickTypeCheck(modifiedFilePaths);
           if (!typeCheck.ok) {
-            const typecheckNarration = buildLoopUpdate({ kind: "typecheck_fail" });
-            if (typecheckNarration) this.streamNarration(typecheckNarration);
+            await this.narrateLoop({ kind: "typecheck_fail" });
             this.emit("typecheck_fail", {
               errors: typeCheck.errors,
               files: modifiedFilePaths,
@@ -1170,8 +1195,7 @@ export class AgentLoop {
         const modifiedFiles = modifiedFilePaths.length > 0;
         if (modifiedFiles && buildAttempts < maxRetries) {
           this.state.phase = LoopPhase.VALIDATE_STEP;
-          const buildNarration = buildLoopUpdate({ kind: "build_check" });
-          if (buildNarration) this.streamNarration(buildNarration);
+          await this.narrateLoop({ kind: "build_check" });
           this.emit("phase", {
             phase: "observe",
             message: "Verificando build...",
@@ -1195,15 +1219,13 @@ export class AgentLoop {
             continue;
           } else {
             buildAttempts = 0;
-            const buildOkNarration = buildLoopUpdate({ kind: "build_ok" });
-            if (buildOkNarration) this.streamNarration(buildOkNarration);
+            await this.narrateLoop({ kind: "build_ok" });
             this.emit("validate_ok", { message: "Build OK" });
           }
         }
 
         if (isExecutionStuck(this.state.executionLog)) {
-          const stuckNarration = buildLoopUpdate({ kind: "stuck" });
-          if (stuckNarration) this.streamNarration(stuckNarration);
+          await this.narrateLoop({ kind: "stuck" });
           this.emit("stuck", {
             message: "Padrão repetitivo detectado — injetando instrução para nova abordagem",
           });
@@ -1238,8 +1260,7 @@ export class AgentLoop {
       await this.saveCheckpoint(LoopPhase.VALIDATE_STEP);
       const finalObservation = await this.observer.observe();
       if (finalObservation.passed) {
-        const finalOkNarration = buildLoopUpdate({ kind: "build_ok" });
-        if (finalOkNarration) this.streamNarration(finalOkNarration);
+        await this.narrateLoop({ kind: "build_ok" });
         this.emit("validate_ok", { message: "Build OK (gate final)" });
         finalGateOk = true;
         continue;
@@ -1283,8 +1304,7 @@ export class AgentLoop {
           `\`\`\`\n${finalObservation.feedback?.slice(0, 6000) ?? ""}\n\`\`\`\n\n` +
           `Os erros reais de compilação estão acima — corrija cada um com fs_edit. Verifique imports, tipos e sintaxe.`,
       });
-      const buildFixNarration = buildLoopUpdate({ kind: "build_fix" });
-      if (buildFixNarration) this.streamNarration(buildFixNarration);
+      await this.narrateLoop({ kind: "build_fix" });
     }
 
     this.state.phase = LoopPhase.SUMMARIZE;
@@ -1395,7 +1415,18 @@ export class AgentLoop {
     steps: number;
     toolsUsed: string[];
   }> {
-    const planChatText = buildPlanChatMessageText(proposedPlan);
+    const planChatText = await generatePlanChatMessage(
+      this.router.getCheapProvider(),
+      proposedPlan,
+    );
+    if (!planChatText) {
+      return {
+        ok: false,
+        summary: "Não foi possível gerar a mensagem do plano.",
+        steps: 0,
+        toolsUsed: [],
+      };
+    }
     this.emit("assistant_text", { text: planChatText, final: true });
     this.emit("plan_proposed", {
       planId: proposedPlan.planId,
@@ -1550,12 +1581,22 @@ export class AgentLoop {
         max_tokens: 900,
         temperature: 0.2,
       });
-      return (
-        (resp.content ?? "").trim() ||
-        "Scaffold Vite+React pronto; `src/App.tsx` ainda é placeholder. Descreva o app em modo Build."
-      );
+      const text = (resp.content ?? "").trim();
+      if (text.length >= 12) return text;
+      const retry = await model.chat({
+        messages: [
+          { role: "system", content: `${INVENTORY_SYSTEM}\n\n${ANTI_LEAK_RULE}` },
+          {
+            role: "user",
+            content: `Contexto de arquivos:\n${ctx}\n\nLista:\n${manifest}\n\nResuma o estado do projeto em linguagem natural.`,
+          },
+        ],
+        max_tokens: 900,
+        temperature: 0.35,
+      });
+      return (retry.content ?? "").trim();
     } catch {
-      return "Scaffold Vite+React pronto; `src/App.tsx` ainda é placeholder. Descreva o app em modo Build.";
+      return "";
     }
   }
 
@@ -1572,7 +1613,8 @@ export class AgentLoop {
       this.projectTemplate !== "android-native" &&
       isAmbiguousMobileRequest(userRequest)
     ) {
-      return { stopForUser: true, message: buildMobileStackQualifyMessage() };
+      const mobileQ = await generateMobileStackQualifyMessage(model, userRequest);
+      return { stopForUser: true, message: mobileQ ?? "" };
     }
     try {
       const resp = await model.chat({
@@ -1588,9 +1630,7 @@ export class AgentLoop {
         max_tokens: 800,
         temperature: 0.4,
       });
-      const message =
-        (resp.content ?? "").trim() ||
-        "Ok — me conte em uma frase o que você quer construir e para quem.";
+      const message = (resp.content ?? "").trim();
       return { stopForUser: true, message };
     } catch {
       return { stopForUser: false, message: "" };
@@ -1958,7 +1998,7 @@ export class AgentLoop {
   ): Promise<void> {
     const conversational = opts?.conversational === true;
     const deliveryFiles = [...this.touchedPaths];
-    const closing = summary.trim() || "Concluído.";
+    const closing = summary.trim();
     const text = conversational ? closing : closing;
     const lastFinishOk = opts?.lastFinishOk ?? true;
     const cardSnapshot = this.buildCardSnapshot({
@@ -2094,6 +2134,20 @@ export class AgentLoop {
   private enabledApprovedPlanSteps(): PlanStep[] {
     const enabled = this.approvedPlanSteps.filter((s) => s.enabled !== false);
     return enabled.length > 0 ? enabled : this.approvedPlanSteps;
+  }
+
+  private async narrateLoop(ctx: LoopUpdateContext): Promise<void> {
+    const text = await generateLoopUpdate(this.router.getCheapProvider(), {
+      ...ctx,
+      userRequest: this.originalUserRequest ?? undefined,
+      touchedPaths: [...this.touchedPaths],
+    });
+    if (!text) return;
+    if (ctx.kind === "model_error") {
+      this.streamNarration(text);
+      return;
+    }
+    this.notifyExecution(text);
   }
 
   /** Progresso de execução — Inspector durante build pós-approve; chat nos demais modos. */

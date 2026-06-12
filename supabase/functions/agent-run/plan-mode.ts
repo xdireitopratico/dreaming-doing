@@ -1,6 +1,7 @@
 // plan-mode.ts — Plan mode (Fase 4.6): tipos + extração de plano a partir da classificação.
 // Espelha src/components/editor/PlanViewer.tsx (PlanStep) — não altera o componente client.
-import type { ChatMessage, ProposedPlan } from "./types.ts";
+import type { ChatMessage, LLMProvider, ProposedPlan } from "./types.ts";
+import { llmChatLine } from "./narration.ts";
 
 export type PlanStepType =
   | "create_file"
@@ -159,15 +160,31 @@ export function findLatestStoredPlan(messages: ChatMessage[]): StoredPlanEntry |
   return fallback;
 }
 
-/** Texto único do chat em Plan mode — uma voz, sem vazar classify. */
-export function buildPlanChatMessageText(plan: ProposedPlan): string {
+const PLAN_CHAT_SYSTEM = `Você apresenta um plano no FORGE — tom humano, português, 2–4 frases.
+Mencione a missão do plano e oriente o usuário a revisar no painel ao lado e aprovar quando estiver pronto.
+Pode usar markdown leve (negrito no título). Sem listas longas — o detalhe está no inspector.`;
+
+/** Mensagem do chat em Plan mode — só LLM, sem template fixo. */
+export async function generatePlanChatMessage(
+  model: LLMProvider,
+  plan: ProposedPlan,
+): Promise<string | null> {
   const mission = sanitizePlanHeadline(plan.mission ?? plan.summary, "Plano para seu pedido");
-  return [
-    `**${mission}**`,
-    "",
-    "O plano está no painel ao lado (Missão, Objetivo, Fases e Fora do escopo).",
-    "Revise, edite se quiser e clique em **Aprovar e construir** quando estiver pronto.",
-  ].join("\n");
+  const objective = plan.objective?.trim() || "";
+  const stepCount = plan.steps?.length ?? 0;
+  return llmChatLine(
+    model,
+    PLAN_CHAT_SYSTEM,
+    [
+      `Missão: ${mission}`,
+      objective ? `Objetivo: ${objective}` : "",
+      `Passos no plano: ${stepCount}`,
+      plan.summary?.trim() ? `Resumo: ${plan.summary.trim()}` : "",
+    ]
+      .filter(Boolean)
+      .join("\n"),
+    { max_tokens: 400, minLength: 24, temperature: 0.45 },
+  );
 }
 
 /** Resumo markdown do último plano para contexto do classify. */
