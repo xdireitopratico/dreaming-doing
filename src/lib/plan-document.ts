@@ -27,17 +27,20 @@ export function buildForgePlanMarkdown(input: {
   phases?: ForgePlanPhase[];
   steps?: PlanStep[];
 }): ForgePlanDocument {
+  const title = input.summary?.trim() || input.mission?.trim() || "Plano proposto";
   const mission =
     input.mission?.trim() || input.summary.trim() || "Definir e entregar o pedido do usuário";
   const objective =
     input.objective?.trim() ||
     input.rationale?.trim() ||
     "Entregar uma primeira versão funcional alinhada ao que foi pedido.";
-  const approach =
-    input.rationale?.trim() || "Abordagem incremental: estrutura, implementação e validação.";
+  const principle =
+    input.rationale?.trim() ||
+    input.objective?.trim() ||
+    "Abordagem incremental alinhada ao pedido do usuário.";
   const assumptions = input.assumptions?.length
     ? input.assumptions
-    : ["Projeto React/Vite com preview E2B disponível."];
+    : ["Contexto atual será refinado durante a execução."];
   const outOfScope = input.outOfScope?.length
     ? input.outOfScope
     : [
@@ -45,65 +48,45 @@ export function buildForgePlanMarkdown(input: {
         "Não alterar autenticação ou billing sem pedido explícito.",
       ];
 
+  const enabledSteps = (input.steps ?? []).filter((s) => s.enabled !== false);
+  const deliverables =
+    enabledSteps.length > 0
+      ? enabledSteps.map((s) => s.description)
+      : ["Implementar o pedido com validação no preview."];
+
   let phases = input.phases?.length ? input.phases : [];
-  if (phases.length === 0 && input.steps?.length) {
-    const chunk = Math.max(2, Math.ceil(input.steps.length / 2));
+  if (phases.length === 0 && enabledSteps.length > 0) {
     phases = [
       {
         id: "phase-1",
-        title: "Fase 1 — Preparação",
-        goal: "Entender o contexto e preparar a base.",
-        tasks: input.steps.slice(0, chunk).map((s) => s.description),
-      },
-      {
-        id: "phase-2",
-        title: "Fase 2 — Implementação",
-        goal: "Executar as mudanças principais.",
-        tasks: input.steps.slice(chunk).map((s) => s.description),
-      },
-    ].filter((p) => p.tasks.length > 0);
-  }
-  if (phases.length === 0) {
-    phases = [
-      {
-        id: "phase-1",
-        title: "Fase 1 — Execução",
-        goal: "Implementar o pedido com validação.",
-        tasks: ["Analisar o projeto", "Implementar mudanças", "Validar preview e typecheck"],
+        title: "Entregas",
+        goal: "Passos aprovados para execução.",
+        tasks: deliverables,
       },
     ];
   }
 
   const lines: string[] = [
-    "## Missão",
-    mission,
+    `# ${title}`,
     "",
-    "## Objetivo",
-    objective,
+    "## Princípio (sua regra)",
+    principle,
     "",
-    "## Abordagem",
-    approach,
-    "",
-    "## Premissas",
+    "## Estado atual (o que está errado)",
     ...assumptions.map((a) => `- ${a}`),
     "",
-    "## Fases",
+    "## Entregas",
+    ...deliverables.map((d) => `- ${d}`),
   ];
 
-  for (const phase of phases) {
-    lines.push(`### ${phase.title}`, phase.goal, "");
-    for (const task of phase.tasks) {
-      lines.push(`- [ ] ${task}`);
-    }
-    lines.push("");
+  if (outOfScope.length > 0) {
+    lines.push("", "## Fora do escopo", ...outOfScope.map((o) => `- ${o}`));
   }
-
-  lines.push("## Fora do escopo", ...outOfScope.map((o) => `- ${o}`));
 
   return {
     mission,
     objective,
-    approach,
+    approach: principle,
     assumptions,
     outOfScope,
     phases,

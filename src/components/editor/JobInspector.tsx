@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import type { AgentProgress, PendingPlan, PlanStep } from "@/lib/agent-progress";
+import type { AgentProgress, PendingPlan } from "@/lib/agent-progress";
 import type { ChatMessage } from "@/lib/chat-types";
 import type { JobInspectorTab } from "@/hooks/useJobWorkspaceFocus";
 import { resolveInspectorPlanForRun } from "@/lib/plan-message-meta";
@@ -17,8 +17,6 @@ export type JobInspectorProps = {
   onTabChange: (tab: JobInspectorTab) => void;
   onBackToLatest: () => void;
   onOpenFile?: (path: string) => void;
-  onPlanApprove?: (steps: PlanStep[], markdown?: string) => void | Promise<void>;
-  onPlanReject?: (reason?: string) => void | Promise<void>;
   runStartedAtMs?: number | null;
   /** Inspector ocupa o workspace inteiro (Lovable: job aberto = sem preview). */
   fullWidth?: boolean;
@@ -39,8 +37,6 @@ export function JobInspector({
   onTabChange,
   onBackToLatest,
   onOpenFile,
-  onPlanApprove,
-  onPlanReject,
   runStartedAtMs,
   fullWidth = false,
 }: JobInspectorProps) {
@@ -53,7 +49,7 @@ export function JobInspector({
     [runId, messages, livePendingPlan, run.pendingPlan],
   );
 
-  const showPlanTab = !!inspectorPlan;
+  const showPlanTab = activeTab === "plan" && !!inspectorPlan;
   const normalizedTab = (activeTab as string) === "details" ? "timeline" : activeTab;
   const resolvedTab =
     normalizedTab === "plan" && showPlanTab
@@ -110,14 +106,8 @@ export function JobInspector({
           />
         )}
         {resolvedTab === "changes" && <InspectorChanges progress={run} />}
-        {resolvedTab === "plan" && inspectorPlan && onPlanApprove && onPlanReject && (
-          <InspectorPlan
-            plan={inspectorPlan.plan}
-            status={inspectorPlan.status}
-            awaitingApproval={inspectorPlan.awaitingApproval}
-            onApprove={onPlanApprove}
-            onReject={onPlanReject}
-          />
+        {resolvedTab === "plan" && inspectorPlan && (
+          <InspectorPlan plan={inspectorPlan.plan} />
         )}
       </div>
     </div>

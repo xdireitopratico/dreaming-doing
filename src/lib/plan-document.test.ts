@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { buildForgePlanMarkdown } from "@/lib/plan-document";
 
 describe("buildForgePlanMarkdown", () => {
-  it("gera seções Missão, Objetivo e Fases", () => {
+  it("gera markdown Lovable: título, Princípio, Estado atual e Entregas", () => {
     const doc = buildForgePlanMarkdown({
       summary: "Landing para café",
       rationale: "Começar pelo hero e depois formulário.",
@@ -11,9 +11,11 @@ describe("buildForgePlanMarkdown", () => {
         { id: "s2", type: "custom", description: "Adicionar formulário", enabled: true },
       ],
     });
-    expect(doc.markdown).toContain("## Missão");
-    expect(doc.markdown).toContain("## Objetivo");
-    expect(doc.markdown).toContain("## Fases");
+    expect(doc.markdown).toContain("# Landing para café");
+    expect(doc.markdown).toContain("## Princípio (sua regra)");
+    expect(doc.markdown).toContain("## Estado atual (o que está errado)");
+    expect(doc.markdown).toContain("## Entregas");
+    expect(doc.markdown).toContain("- Criar hero");
     expect(doc.markdown).toContain("## Fora do escopo");
   });
 });

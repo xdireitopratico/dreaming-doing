@@ -36,11 +36,16 @@ export function sanitizePlanHeadline(
 const META_STEP_RE =
   /pedir (ao|à) usu[aá]rio|perguntar (ao|à) usu[aá]rio|colar o plano|compartilhe o plano|me diga onde est[aá]|pe[cç]a ao usu[aá]rio/i;
 
-/** Passo executável no build — não meta-conversação. */
+const TECH_STEP_RE =
+  /\b(src\/|app\/|lib\/|components\/|npm run|npx |eslint|tsc\b|--color-|@theme|NavShell|HeroSignature|BentoGrid|StatsRibbon|FeatureMatrix)/i;
+
+/** Passo executável no build — não meta-conversação nem jargão de pipeline. */
 export function isActionablePlanStep(description: string): boolean {
   const d = description.trim();
   if (!d) return false;
-  return !META_STEP_RE.test(d);
+  if (META_STEP_RE.test(d)) return false;
+  if (TECH_STEP_RE.test(d)) return false;
+  return true;
 }
 
 export function filterActionablePlanSteps(steps: PlanStep[]): PlanStep[] {
@@ -220,64 +225,53 @@ export function buildPlanDocumentMarkdown(input: {
   phases: ForgePlanPhase[];
   outOfScope: string[];
 } {
-  const mission = input.mission?.trim() || input.summary.trim() || "Entregar o pedido do usuário";
+  const title = input.summary?.trim() || input.mission?.trim() || "Plano proposto";
+  const mission =
+    input.mission?.trim() || input.summary.trim() || "Entregar o pedido do usuário";
   const objective =
     input.objective?.trim() || input.rationale?.trim() || "Versão funcional alinhada ao pedido.";
-  const approach = input.rationale?.trim() || "Implementação incremental com validação.";
+  const principle =
+    input.rationale?.trim() ||
+    input.objective?.trim() ||
+    "Abordagem incremental alinhada ao pedido do usuário.";
   const assumptions = input.assumptions?.length
     ? input.assumptions
-    : ["Stack React/Vite do projeto."];
+    : ["Contexto atual será refinado durante a execução."];
   const outOfScope = input.outOfScope?.length
     ? input.outOfScope
     : ["Não alterar arquivos fora do escopo.", "Não mudar auth/billing sem pedido explícito."];
 
+  const deliverables = (input.steps ?? [])
+    .filter((s) => s.enabled !== false)
+    .map((s) => s.description);
+
   let phases = input.phases?.length ? input.phases : [];
-  if (phases.length === 0 && input.steps?.length) {
-    const mid = Math.ceil(input.steps.length / 2);
-    const a = input.steps.slice(0, mid).map((s) => s.description);
-    const b = input.steps.slice(mid).map((s) => s.description);
-    if (a.length)
-      phases.push({ id: "p1", title: "Fase 1 — Preparação", goal: "Base e contexto.", tasks: a });
-    if (b.length)
-      phases.push({
-        id: "p2",
-        title: "Fase 2 — Implementação",
-        goal: "Mudanças principais.",
-        tasks: b,
-      });
-  }
-  if (phases.length === 0) {
+  if (phases.length === 0 && deliverables.length > 0) {
     phases = [
       {
         id: "p1",
-        title: "Fase 1 — Execução",
-        goal: "Implementar e validar.",
-        tasks: ["Analisar", "Implementar", "Validar"],
+        title: "Entregas",
+        goal: "Passos aprovados para execução.",
+        tasks: deliverables,
       },
     ];
   }
 
   const lines = [
-    "## Missão",
-    mission,
+    `# ${title}`,
     "",
-    "## Objetivo",
-    objective,
+    "## Princípio (sua regra)",
+    principle,
     "",
-    "## Abordagem",
-    approach,
-    "",
-    "## Premissas",
+    "## Estado atual (o que está errado)",
     ...assumptions.map((x) => `- ${x}`),
     "",
-    "## Fases",
+    "## Entregas",
+    ...deliverables.map((d) => `- ${d}`),
+    "",
+    "## Fora do escopo",
+    ...outOfScope.map((x) => `- ${x}`),
   ];
-  for (const ph of phases) {
-    lines.push(`### ${ph.title}`, ph.goal, "");
-    for (const t of ph.tasks) lines.push(`- [ ] ${t}`);
-    lines.push("");
-  }
-  lines.push("## Fora do escopo", ...outOfScope.map((x) => `- ${x}`));
   return { markdown: lines.join("\n").trim(), mission, objective, phases, outOfScope };
 }
 

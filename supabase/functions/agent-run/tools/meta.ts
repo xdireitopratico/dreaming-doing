@@ -60,16 +60,27 @@ export const CLARIFY_TOOL: ToolDefinition = {
 export const CREATE_PLAN_TOOL: ToolDefinition = {
   name: "create_plan",
   description:
-    "Proponha um plano estruturado para revisão do usuário (modo Plan). " +
-    "Use quando tiver contexto suficiente — 2 a 7 passos = entregas de produto (seções, fluxos, validações), não lista de componentes @forge/ui.",
+    "Proponha um plano para revisão do usuário (modo Plan). " +
+    "2 a 7 steps = entregas de produto em linguagem humana (seções, fluxos, UX). " +
+    "Proibido: paths (src/), npm, tokens CSS, nomes de componentes internos.",
   parameters: {
     type: "object",
     properties: {
       summary: { type: "string", description: "Título curto do plano." },
-      rationale: { type: "string", description: "Abordagem em 1–2 frases." },
-      mission: { type: "string", description: "Missão do plano." },
-      objective: { type: "string", description: "Objetivo mensurável." },
-      assumptions: { type: "array", items: { type: "string" } },
+      rationale: {
+        type: "string",
+        description: "Princípio/regra do plano (1–3 frases, linguagem de negócio).",
+      },
+      mission: {
+        type: "string",
+        description: "Parágrafo único para o card de aprovação (como no chat Lovable).",
+      },
+      objective: { type: "string", description: "Resultado mensurável em linguagem humana." },
+      assumptions: {
+        type: "array",
+        items: { type: "string" },
+        description: "Estado atual / o que está errado (bullets).",
+      },
       outOfScope: { type: "array", items: { type: "string" } },
       steps: {
         type: "array",

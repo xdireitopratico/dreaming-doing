@@ -26,7 +26,7 @@ Deno.test("proposedPlanFromToolArgs (meta) monta documento via helpers de plan-m
   });
   assertEquals(plan?.summary, "Landing de padaria");
   assertEquals(plan?.steps.length, 2);
-  assert(plan?.markdown?.includes("## Missão"));
+  assert(plan?.markdown?.includes("## Princípio (sua regra)"));
   assert(plan?.phases?.length);
 });
 
@@ -63,7 +63,8 @@ Deno.test("buildPlanDocumentMarkdown gera fases a partir dos steps", () => {
       { id: "s2", type: "create_file", description: "Scaffold Expo", enabled: true },
     ],
   });
-  assert(doc.markdown.includes("## Missão"));
+  assert(doc.markdown.includes("## Princípio (sua regra)"));
+  assert(doc.markdown.includes("## Entregas"));
   assertEquals(doc.phases.length >= 1, true);
 });
 

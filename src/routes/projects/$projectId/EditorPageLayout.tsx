@@ -456,6 +456,8 @@ export function EditorPageLayout({
                   onStop={handleStop}
                   onResume={handleResumeAgent}
                   onOpenInspector={handleOpenInspector}
+                  onPlanApprove={handlePlanApprove}
+                  onPlanReject={handlePlanReject}
                   onRollbackMessage={handleRollbackMessage}
                   focusedRunId={jobWorkspaceFocus?.runId ?? null}
                   externalPrompt={promptDraft}
@@ -573,8 +575,6 @@ export function EditorPageLayout({
                                 onMainViewChange("code");
                                 if (isMobile) onMobilePanelChange?.("code");
                               }}
-                              onPlanApprove={handlePlanApprove}
-                              onPlanReject={handlePlanReject}
                               runStartedAtMs={
                                 agent.activeRunId === jobWorkspaceFocus.runId
                                   ? agent.activeRunStartedAtMs

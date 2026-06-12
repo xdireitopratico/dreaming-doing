@@ -16,6 +16,7 @@ import { ChatThread } from "./ChatThread";
 import { ChatPlanDock } from "./ChatPlanDock";
 import { ChatComposer } from "./ChatComposer";
 import { PendingQueuePanel, type PendingQueueItem } from "@/components/editor/PendingQueuePanel";
+import type { PlanStep } from "@/lib/agent-progress";
 import type { useAgentRun } from "@/hooks/useAgentRun";
 
 type AgentRun = ReturnType<typeof useAgentRun>;
@@ -34,6 +35,8 @@ export type ChatPanelProps = {
   onStop: () => void;
   onResume?: () => void;
   onOpenInspector?: (runId: string, tab?: "timeline" | "changes" | "plan") => void;
+  onPlanApprove?: (steps: PlanStep[], markdown?: string) => void | Promise<void>;
+  onPlanReject?: (reason?: string) => void | Promise<void>;
   onRollbackMessage?: (
     messageId: string,
     role: "user" | "assistant",
@@ -63,6 +66,8 @@ export function ChatPanel({
   onSend,
   onStop,
   onOpenInspector,
+  onPlanApprove,
+  onPlanReject,
   onRollbackMessage,
   focusedRunId,
   externalPrompt,
@@ -417,6 +422,8 @@ export function ChatPanel({
         pendingPlan={pendingPlan}
         creating={running && agent.progress.phase === "creating_plan" && !pendingPlan}
         onReview={(runId) => onOpenInspector?.(runId, "plan")}
+        onApprove={onPlanApprove}
+        onReject={onPlanReject}
       />
 
       {((agent.progress.pendingQueueCount ?? 0) > 0 && pendingQueueItems.length > 0) ||

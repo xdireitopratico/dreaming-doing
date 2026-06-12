@@ -59,7 +59,9 @@ export const VIBE_PLAN_TAIL = `## Execução Plan
 - Explore o repo antes de \`create_plan\`.
 - Patch fica para Build após aprovação do usuário.
 - \`clarify\` só se bloqueante; prefira assumir e planejar.
-- Plano descreve **seções de negócio** (ex.: hero confiança + prova social oficina) — não catálogo @forge/ui nem tokens CSS.`;
+- \`mission\` = um parágrafo humano para o card (estilo Lovable).
+- \`rationale\` = Princípio; \`assumptions\` = Estado atual (bullets).
+- \`steps\` = entregas visíveis — proibido src/, npm, tokens, @forge/ui.`;
 
 /** @deprecated Use VIBE_CODING_CORE + VIBE_EXECUTE_TAIL no assembly. */
 export const VIBE_EXECUTE_RULES = `${VIBE_CODING_CORE}\n\n${VIBE_EXECUTE_TAIL}`;
