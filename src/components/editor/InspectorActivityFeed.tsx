@@ -3,8 +3,6 @@ import { ChevronDown, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ForgeTimelineItem } from "@/lib/forge-run";
 import {
-  actionEmojiFromTool,
-  actionLabelFromTool,
   buildInspectorDetailBlocks,
   lastThoughtBlockId,
   type InspectorDetailBlock,
@@ -132,4 +130,3 @@ export function InspectorActivityFeed({
   );
 }
 
-export { actionEmojiFromTool, actionLabelFromTool };

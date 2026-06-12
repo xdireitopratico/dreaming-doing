@@ -4,9 +4,12 @@
   display: flex;
   min-height: 0;
   height: 100%;
-  width: 100%;
   flex-direction: column;
   background: var(--bg-chat);
+}
+
+.forge-inspector:not(.forge-inspector-rail) {
+  width: 100%;
 }
 
 .forge-inspector-header {
@@ -20,9 +23,10 @@
 
 .forge-inspector-rail {
   width: min(420px, 42vw);
-  min-width: 300px;
+  min-width: 280px;
+  max-width: 42vw;
+  flex: 0 0 auto;
   border-left: 1px solid var(--border-forge);
-  flex-shrink: 0;
 }
 
 .forge-inspector-header .forge-inspector-tabs {

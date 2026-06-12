@@ -515,20 +515,22 @@ export function EditorPageLayout({
                         }}
                       />
                     )}
-                    <div className="min-h-0 min-w-0 flex-1">
+                    <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
                       {activeView === "code" && (
-                        <CodeEditor
-                          tabs={openTabs}
-                          activePath={activeFilePath}
-                          onSelectTab={handleSelectFile}
-                          onCloseTab={handleCloseTab}
-                          onContentChange={handleContentChange}
-                        />
+                        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                          <CodeEditor
+                            tabs={openTabs}
+                            activePath={activeFilePath}
+                            onSelectTab={handleSelectFile}
+                            onCloseTab={handleCloseTab}
+                            onContentChange={handleContentChange}
+                          />
+                        </div>
                       )}
 
                       {activeView === "preview" && (
-                        <div className="flex min-h-0 min-w-0 flex-1">
-                          <div className="min-h-0 min-w-0 flex-1">
+                        <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden">
+                          <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
                             <PreviewFrame
                               files={previewNavFiles}
                               booting={previewBoot.booting}
@@ -600,6 +602,7 @@ export function EditorPageLayout({
                       )}
 
                       {activeView === "diff" && (
+                        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
                         <AiDiffViewer
                           diffs={diffEntries}
                           activeDiffId={diffEntries[0]?.id ?? null}
@@ -609,6 +612,7 @@ export function EditorPageLayout({
                           onAcceptAll={handleDiffAcceptAll}
                           onRejectAll={handleDiffRejectAll}
                         />
+                        </div>
                       )}
                     </div>
                   </div>
