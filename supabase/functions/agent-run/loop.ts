@@ -59,6 +59,7 @@ import {
 import { logger } from "../_shared/logger.ts";
 import { appendExecutionLogEntry, buildExecutionLogMeta } from "./executionLogMeta.ts";
 import { isDuplicateNarrationChunk } from "./narration-dedupe.ts";
+import { checkpointChatText } from "./checkpoint-chat.ts";
 import { type CheckpointExtra, resumeStepStart, serializeCheckpointPayload } from "./checkpoint.ts";
 import {
   generatePlanChatMessage,
@@ -359,6 +360,7 @@ export class AgentLoop {
       elapsedMs: Date.now() - this.runStartTime,
       buildFix: options?.buildFix === true,
     });
+    await this.persistCheckpointChat(steps, options?.buildFix);
     return {
       ok: false,
       error: options?.buildFix ? "Corrigindo erros de build…" : "Retomando automaticamente…",
@@ -2321,6 +2323,81 @@ export class AgentLoop {
     }
 
     return snapshot;
+  }
+
+  private async persistCheckpointChat(steps: number, buildFix?: boolean): Promise<void> {
+    const buildFixFlag = buildFix === true;
+    const text = checkpointChatText(this.narrationBuffer, buildFixFlag);
+    const deliveryFiles = [...this.touchedPaths];
+    const cardSnapshot = this.buildCardSnapshot({
+      streamText: text,
+      deliveryFiles,
+      finished: false,
+      lastFinishOk: null,
+      resumable: true,
+      phase: this.state.phase,
+      currentStep: steps,
+    });
+    const meta: Record<string, unknown> = {
+      runId: this.runId ?? undefined,
+      partial: false,
+      checkpoint: true,
+      betweenChunks: true,
+      resumable: true,
+      buildFix: buildFixFlag || undefined,
+      deliveryFiles,
+      executionLog: this.state.executionLog,
+      finishedAt: new Date().toISOString(),
+      currentStep: steps,
+      totalSteps: this.maxStepsLimit,
+      streamTail: this.streamTailBuffer.slice(-120),
+      cardSnapshot,
+      latencyThoughtMs:
+        typeof cardSnapshot.latencyThoughtMs === "number"
+          ? cardSnapshot.latencyThoughtMs
+          : undefined,
+      narrationText:
+        typeof cardSnapshot.narrationText === "string" ? cardSnapshot.narrationText : undefined,
+    };
+
+    const existingId = await this.resolveExistingRunMessageId();
+    if (existingId) {
+      await this.sb
+        .from("messages")
+        .update({
+          parts: [{ type: "text", text }],
+          tool_calls: [],
+          meta,
+        })
+        .eq("id", existingId);
+      await this.sb
+        .from("projects")
+        .update({
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", this.state.projectId);
+      return;
+    }
+
+    const { data } = await this.sb
+      .from("messages")
+      .insert({
+        conversation_id: this.state.conversationId,
+        role: "assistant",
+        parts: [{ type: "text", text }],
+        tool_calls: [],
+        meta,
+      })
+      .select("id")
+      .single();
+    const id = data?.id ?? null;
+    if (id) this.lastRunMessageId = id;
+    await this.sb
+      .from("projects")
+      .update({
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", this.state.projectId);
   }
 
   private async persistFinal(
