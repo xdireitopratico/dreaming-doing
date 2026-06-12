@@ -83,6 +83,16 @@ function DashboardSidebarPanel({
           <Home className="size-4 shrink-0" />
           Home
         </Link>
+        <Link
+          to="/agents"
+          className="dashboard-nav-item"
+          data-active={activeNav === "agents" ? "true" : undefined}
+          title="Agentes de IA com fluxos visuais AetherForge"
+          onClick={onNavClick}
+        >
+          <Bot className="size-4 shrink-0" />
+          AI Agents
+        </Link>
         <button
           type="button"
           className="dashboard-nav-item w-full text-left"
@@ -158,16 +168,6 @@ function DashboardSidebarPanel({
         >
           <Grid3X3 className="size-4 shrink-0" />
           Todos os projetos
-        </Link>
-        <Link
-          to="/agents"
-          className="dashboard-nav-item"
-          data-active={activeNav === "agents" ? "true" : undefined}
-          title="Agentes de IA com fluxos visuais AetherForge"
-          onClick={onNavClick}
-        >
-          <Bot className="size-4 shrink-0" />
-          AI Agents
         </Link>
         <span className="dashboard-nav-item opacity-60 cursor-default">
           <Star className="size-4 shrink-0" />
