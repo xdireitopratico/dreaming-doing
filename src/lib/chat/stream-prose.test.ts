@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { normalizeRepeatedEmojis, resolveClosingProse } from "@/lib/chat/stream-prose";
+import {
+  normalizeRepeatedEmojis,
+  resolveClosingProse,
+  sanitizeChatProseForDisplay,
+} from "@/lib/chat/stream-prose";
 
 describe("normalizeRepeatedEmojis", () => {
   it("colapsa o mesmo emoji repetido", () => {
@@ -12,6 +16,14 @@ describe("normalizeRepeatedEmojis", () => {
     expect(normalizeRepeatedEmojis("Feito ✅ — confira o preview 🎉")).toBe(
       "Feito ✅ — confira o preview 🎉",
     );
+  });
+});
+
+describe("sanitizeChatProseForDisplay", () => {
+  it("remove fences e paths do seed", () => {
+    const raw =
+      "Tokens em `src/index.css`:\n```css\n--color-brand-500: #FFB627;\n```\nDark industrial.";
+    expect(sanitizeChatProseForDisplay(raw)).toBe("Tokens em :\n\nDark industrial.");
   });
 });
 

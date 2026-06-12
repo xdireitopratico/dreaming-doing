@@ -1,5 +1,6 @@
 import { assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import {
+  isAdvisoryQuestion,
   isConversationRecallQuestion,
   isConversationalTurn,
   isConversationalTurnEarly,
@@ -31,4 +32,11 @@ Deno.test("isConversationalTurn — alias de early exit social", () => {
   assertEquals(isConversationalTurn("crie uma landing"), false);
   assertEquals(isConversationalTurn("bom dia"), true);
   assertEquals(isConversationalTurn("você lembra do que conversamos?"), true);
+});
+
+Deno.test("isAdvisoryQuestion — paleta e sugestões sem implementação", () => {
+  assertEquals(isAdvisoryQuestion("qual paleta de cor você sugere?"), true);
+  assertEquals(isAdvisoryQuestion("o que você acha desse layout?"), true);
+  assertEquals(isAdvisoryQuestion("crie uma landing com paleta azul"), false);
+  assertEquals(isAdvisoryQuestion("implemente o tema dark"), false);
 });

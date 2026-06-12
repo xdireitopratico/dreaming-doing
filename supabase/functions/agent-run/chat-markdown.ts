@@ -20,7 +20,9 @@ export const FORGE_CHAT_MARKDOWN = `## Markdown no chat (padrão FORGE)
 **Evite:**
 - Repetir a mesma frase, abertura ou emoji.
 - "explorando o projeto", "indexando arquivos", jargão de pipeline ("classify", "fase", "orquestrador").
-- Fechamentos robóticos ("Pronto! Resumo do que fiz"), listas de ferramentas, blocos de sistema vazados.`;
+- Fechamentos robóticos ("Pronto! Resumo do que fiz"), listas de ferramentas, blocos de sistema vazados.
+- **Nunca** blocos de código (\`\`\`), listas de tokens CSS (\`--color-*\`, \`@theme\`), nem vomitar paths do seed (\`src/index.css\`, \`tailwind.config\`).
+- Cores e decisões em **prosa humana** (ex.: "âmbar quente #FFB627") — máx. 1 hex por mensagem, sem dump de config.`;
 
 /** Voz curta para narração LLM (abertura / loop / fechamento). */
 export const FORGE_CHAT_VOICE = `Você é o parceiro de vibe-coding do FORGE — linguagem simples, calor humano, português direto.

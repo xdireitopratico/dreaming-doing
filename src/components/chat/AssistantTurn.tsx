@@ -1,7 +1,7 @@
 import { MarkdownRenderer } from "@/components/ui/markdown-renderer";
 import type { ThreadItem } from "@/lib/chat/types";
 import { assistantTurnCopyText } from "@/lib/chat/assistant-turn-copy";
-import { normalizeChatProse, resolveClosingProse } from "@/lib/chat/stream-prose";
+import { resolveClosingProse, sanitizeChatProseForDisplay } from "@/lib/chat/stream-prose";
 import { ChatThinking } from "./ChatThinking";
 import { ChatNarration } from "./ChatNarration";
 import { ChatJobCard } from "./ChatJobCard";
@@ -33,8 +33,11 @@ export function AssistantTurn({
     item.error?.trim() ||
     (!item.isActive ? item.message?.content?.trim() : null) ||
     null;
-  const narrationText = normalizeChatProse(item.narration);
-  const closingText = resolveClosingProse(narrationText, rawClosing);
+  const narrationText = sanitizeChatProseForDisplay(item.narration);
+  const closingText = resolveClosingProse(
+    narrationText,
+    sanitizeChatProseForDisplay(rawClosing),
+  );
   const narrationStreaming = !!item.isActive && !!narrationText;
   const closingStreaming = !!item.isActive && !!item.streamText?.trim();
 
@@ -88,7 +91,7 @@ export function AssistantTurn({
             {closingStreaming ? (
               <p className="forge-chat-streaming-text whitespace-pre-wrap">{closingText}</p>
             ) : (
-              <MarkdownRenderer>{closingText!}</MarkdownRenderer>
+              <MarkdownRenderer variant="chat">{closingText!}</MarkdownRenderer>
             )}
           </div>
         )}

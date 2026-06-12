@@ -8,6 +8,8 @@ import type { ReactElement } from "react";
 interface MarkdownRendererProps {
   children: string;
   className?: string;
+  /** Chat assistant: sem CodeBlock de arquivo — só prosa. */
+  variant?: "default" | "chat";
 }
 
 const PROSE_CLASSES = `
@@ -27,7 +29,7 @@ const PROSE_CLASSES = `
   [&_pre]:text-[var(--forge-text)]
 `;
 
-const components: Components = {
+const defaultComponents: Components = {
   code({ node, ...props }) {
     const code = (node as any)?.children?.[0]?.value ?? "";
     const className = (node as any)?.properties?.className?.[0] ?? "";
@@ -49,7 +51,30 @@ const components: Components = {
   },
 };
 
-export function MarkdownRenderer({ children, className = "" }: MarkdownRendererProps) {
+const chatComponents: Components = {
+  code({ children, className, ...props }) {
+    const isBlock = typeof className === "string" && className.includes("language-");
+    if (isBlock) return null;
+    return (
+      <code
+        className="font-mono text-[11px] bg-[var(--forge-surface-2)] px-1 py-0.5 rounded"
+        {...props}
+      >
+        {children}
+      </code>
+    );
+  },
+  pre() {
+    return null;
+  },
+};
+
+export function MarkdownRenderer({
+  children,
+  className = "",
+  variant = "default",
+}: MarkdownRendererProps) {
+  const components = variant === "chat" ? chatComponents : defaultComponents;
   return (
     <div className={`${PROSE_CLASSES} ${className}`}>
       <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>

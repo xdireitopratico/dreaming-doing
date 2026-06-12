@@ -23,10 +23,13 @@ import { RuntimeObserver } from "./observer.ts";
 import { SkillRegistry } from "./skills.ts";
 import { buildForgeAgentSystemInput } from "./agent-system-input.ts";
 import {
+  isAdvisoryQuestion,
   isConversationalTurn,
   isConversationalTurnEarly,
+  runAdvisoryPhase,
   runConversationalPhase,
 } from "./conversational.ts";
+import { sanitizeUserFacingProse } from "./sanitize-prose.ts";
 import {
   ANTI_LEAK_RULE,
   buildAgentContextForLlm,
@@ -661,6 +664,14 @@ export class AgentLoop {
       // Inventário do projeto — responde com contexto real, sem fs_write.
       if (
         this.originalUserRequest &&
+        isAdvisoryQuestion(this.originalUserRequest) &&
+        !this.approvedPlanBuild
+      ) {
+        return await this.runAdvisoryReply();
+      }
+
+      if (
+        this.originalUserRequest &&
         isProjectInventoryQuestion(this.originalUserRequest) &&
         !this.planMode
       ) {
@@ -812,21 +823,6 @@ export class AgentLoop {
         this.compression.recordUsage(response.usage);
 
         const assistantText = (response.content ?? "").trim();
-        const streamedToInspector = this.approvedPlanBuild && this.llmResponseWasStreamed;
-        if (assistantText && !this.llmResponseWasStreamed) {
-          if (response.tool_calls?.length) {
-            this.streamNarration(assistantText, { chatVisible: true });
-          } else {
-            this.streamNarration(assistantText, { chatVisible: true });
-          }
-        } else if (
-          assistantText &&
-          this.llmResponseWasStreamed &&
-          !streamedToInspector &&
-          !this.narrationBuffer.includes(assistantText)
-        ) {
-          this.appendToNarration(assistantText);
-        }
 
         if (hasMixedMetaAndExecution(response.tool_calls)) {
           this.state.messages.push({
@@ -1296,7 +1292,7 @@ export class AgentLoop {
       priorConversation: narration,
       userRequest: this.originalUserRequest ?? undefined,
     });
-    const closingText = (finalChat.extraText ?? finalChat.text).trim();
+    const closingText = sanitizeUserFacingProse((finalChat.extraText ?? finalChat.text).trim());
 
     if (closingText) {
       this.emit("assistant_text", {
@@ -1306,7 +1302,9 @@ export class AgentLoop {
       });
     }
 
-    await this.persistFinal(closingText || finalChat.text, { lastFinishOk: true });
+    await this.persistFinal(closingText || sanitizeUserFacingProse(finalChat.text), {
+      lastFinishOk: true,
+    });
     await this.clearCheckpoint();
     const tokens = this.compression.getTotalTokens();
     const costUsd = this.compression.getEstimatedCostUsd(this.router.mainCfg.model);
@@ -1592,12 +1590,13 @@ export class AgentLoop {
 
       if (!response.tool_calls?.length) {
         if (assistantText) {
-          this.emit("assistant_text", { text: assistantText, final: true });
-          await this.persistFinal(assistantText, { lastFinishOk: true, conversational: true });
+          const clean = sanitizeUserFacingProse(assistantText);
+          this.emit("assistant_text", { text: clean, final: true });
+          await this.persistFinal(clean, { lastFinishOk: true, conversational: true });
           await this.clearCheckpoint();
           await this.markRunStatus("completed");
-          this.emit("done", { summary: assistantText, conversational: true });
-          return { ok: true, summary: assistantText, steps: step, toolsUsed: [...toolsUsed] };
+          this.emit("done", { summary: clean, conversational: true });
+          return { ok: true, summary: clean, steps: step, toolsUsed: [...toolsUsed] };
         }
         return {
           ok: false,
@@ -1748,16 +1747,44 @@ export class AgentLoop {
     }
   }
 
+  private async runAdvisoryReply(): Promise<{
+    ok: boolean;
+    summary: string;
+    steps: number;
+    toolsUsed: string[];
+  }> {
+    const ctx = this.state.context
+      ? `${this.state.context.projectConfig}\n\n${this.state.context.manifest}`.slice(0, 4000)
+      : "";
+    const reply = sanitizeUserFacingProse(
+      await runAdvisoryPhase(this.configuredModel(), this.state.messages, {
+        userRequest: this.originalUserRequest ?? undefined,
+        projectContext: ctx,
+      }),
+    );
+    this.emit("assistant_text", { text: reply, final: true });
+    await this.persistFinal(reply, {
+      lastFinishOk: true,
+      conversational: true,
+    });
+    await this.clearCheckpoint();
+    await this.markRunStatus("completed");
+    this.emit("done", { summary: reply, conversational: true });
+    return { ok: true, summary: reply, steps: 0, toolsUsed: [] };
+  }
+
   private async runConversationalReply(): Promise<{
     ok: boolean;
     summary: string;
     steps: number;
     toolsUsed: string[];
   }> {
-    const reply = await runConversationalPhase(this.configuredModel(), this.state.messages, {
-      planMode: this.planMode,
-      userRequest: this.originalUserRequest ?? undefined,
-    });
+    const reply = sanitizeUserFacingProse(
+      await runConversationalPhase(this.configuredModel(), this.state.messages, {
+        planMode: this.planMode,
+        userRequest: this.originalUserRequest ?? undefined,
+      }),
+    );
     this.emit("assistant_text", { text: reply, final: true });
     await this.persistFinal(reply, {
       lastFinishOk: true,
@@ -1844,16 +1871,13 @@ export class AgentLoop {
           : (delta) => {
               if (!delta) return;
               this.llmResponseWasStreamed = true;
-              const toInspector = this.approvedPlanBuild || forceTools;
               this.emit("assistant_text", {
                 text: delta,
                 append: true,
                 delta: true,
                 final: false,
-                ...(toInspector ? { thinking: true } : { narration: true }),
+                thinking: true,
               });
-              if (!toInspector) this.narrationStarted = true;
-              if (!toInspector) this.appendToNarration(delta);
             },
       });
     } catch (err: unknown) {
