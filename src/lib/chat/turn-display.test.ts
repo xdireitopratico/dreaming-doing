@@ -4,6 +4,19 @@ import { buildAgentRunView } from "@/lib/forge-run";
 import { resolveTurnNarration, resolveTurnThinking } from "@/lib/chat/turn-display";
 
 describe("turn-display — entrou, permanece", () => {
+  it("resolveTurnThinking — aparece no envio antes do 1º token", () => {
+    const startedAt = Date.now() - 1200;
+    const thinking = resolveTurnThinking(
+      { ...initialAgentProgress, finished: false, phase: "classify" },
+      null,
+      startedAt,
+      true,
+    );
+    expect(thinking).not.toBeNull();
+    expect(thinking?.active).toBe(true);
+    expect(thinking?.startedAtMs).toBe(startedAt);
+  });
+
   it("resolveTurnThinking — congela latencyThoughtMs após terminal", () => {
     const progress = {
       ...initialAgentProgress,

@@ -123,10 +123,7 @@ export function ChatJobCard({
             <p className="forge-mini-card-header-line">{data.header}</p>
           )}
 
-        <p
-          key={isLive ? `${briefingIndex}-${displaySubtitle}` : displaySubtitle}
-          className={cn("forge-mini-card-title", isLive && "forge-mini-card-title--live")}
-        >
+        <p className={cn("forge-mini-card-title", isLive && "forge-mini-card-title--live")}>
           {displaySubtitle}
         </p>
 

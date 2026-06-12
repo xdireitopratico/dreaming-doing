@@ -148,13 +148,16 @@ export function buildForgeTimeline(timeline: SSEEvent[], running = false): Forge
 
     if (thoughtId) flushThought(ts);
 
-    if (ev.type === "phase" || ev.type === "memory") {
+    if (ev.type === "phase" || ev.type === "memory" || ev.type === "explore") {
+      const phase =
+        typeof data.phase === "string" ? data.phase : ev.type === "explore" ? "gather" : undefined;
       const label =
         typeof data.message === "string"
           ? data.message
           : typeof data.phase === "string"
             ? data.phase
             : "Task";
+      if (isGatherPhaseNoise(label, phase)) continue;
       items.push({ type: "TASK", id: `task-${ts}`, label: truncate(label, 120) });
       continue;
     }
@@ -334,16 +337,28 @@ export function hasInspectorThoughtStream(progress: AgentProgress): boolean {
   );
 }
 
-/** Briefing do mini card — sem contagem de arquivos nem duplicata de fase. */
+/** Briefing do mini card — sem gather/explore genérico (só trabalho real). */
 export function normalizeMiniCardBriefing(line: string): string | null {
   const t = line.trim();
   if (!t) return null;
   if (/^explorando/i.test(t)) return null;
+  if (/explorando(\s+o)?\s+projeto/i.test(t)) return null;
   if (/^indexando/i.test(t)) return null;
-  if (/analisando o projeto/i.test(t)) return null;
+  if (/^lendo arquivos/i.test(t)) return null;
+  if (/^lendo package\.json/i.test(t)) return null;
+  if (/analisando(\s+o)?\s+projeto/i.test(t)) return null;
+  if (/entender o que já existe/i.test(t)) return null;
   if (/entendendo o que já existe/i.test(t)) return null;
+  if (/^avaliando o escopo/i.test(t)) return null;
   if (/^pensando[.…]*$/i.test(t)) return null;
   return truncate(t, 80);
+}
+
+function isGatherPhaseNoise(label: string, phase?: string): boolean {
+  if (phase === "gather" || phase === "explore" || phase === "classify") return true;
+  const t = label.trim();
+  if (!t) return true;
+  return normalizeMiniCardBriefing(t) === null;
 }
 
 /** Briefings humanos derivados da timeline — rotacionam no mini card durante a run. */
@@ -384,7 +399,6 @@ export function collectMiniCardBriefings(
   const planAwaiting =
     progress.awaitingKind === "plan_approval" && (progress.pendingPlan?.steps?.length ?? 0) > 0;
 
-  if (progress.phase === "classify") push("Avaliando o escopo…");
   if (progress.phase === "plan" || planAwaiting) push("Plano aguardando revisão…");
 
   return lines;

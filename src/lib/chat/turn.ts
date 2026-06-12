@@ -159,12 +159,13 @@ export function mapAssistantTurn(
       })
     : null;
 
-  const runStartedAtMs =
-    item.runId === activeRunId
-      ? (ctx.activeRunStartedAtMs ?? null)
-      : resolved?.latencyThoughtMs
-        ? Date.now() - resolved.latencyThoughtMs
-        : null;
+  const isLiveTurn =
+    item.isActive || anchoredLive || (!!activeRunId && item.runId === activeRunId);
+  const runStartedAtMs = isLiveTurn
+    ? (ctx.activeRunStartedAtMs ?? null)
+    : resolved?.latencyThoughtMs && resolved.latencyThoughtMs > 0
+      ? Date.now() - resolved.latencyThoughtMs
+      : null;
 
   const msgPlanMeta = item.message ? storedPlanFromMessage(item.message) : null;
   const planStatus = msgPlanMeta?.status ?? null;

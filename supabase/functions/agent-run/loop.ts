@@ -546,14 +546,6 @@ export class AgentLoop {
         });
       }
 
-      this.emit("phase", {
-        phase: "gather",
-        message: "Lendo arquivos do projeto...",
-      });
-      this.emit("memory", {
-        message: `Memória: ${this.state.messages.length} mensagens carregadas do projeto`,
-        messageCount: this.state.messages.length,
-      });
       await this.gatherContext();
       if (this.loopBudgetExceeded()) {
         return this.returnResumableChunk(0, toolsUsed);
@@ -1374,23 +1366,6 @@ export class AgentLoop {
     );
     for (const f of keyFiles) {
       projectConfig += `\n### ${f.path}\n\`\`\`\n${(f.content ?? "").slice(0, 2000)}\n\`\`\`\n`;
-    }
-
-    if (fileList.length > 0) {
-      const paths = keyFiles.map((f) => f.path);
-      const gatherMessage =
-        paths.length > 0
-          ? `Lendo ${paths.join(", ")}…`
-          : `Indexando ${fileList.length} arquivo${fileList.length === 1 ? "" : "s"}…`;
-      this.emit("explore", {
-        totalFiles: fileList.length,
-        paths,
-        message: gatherMessage,
-      });
-      this.emit("phase", {
-        phase: "gather",
-        message: gatherMessage,
-      });
     }
 
     const stackSkills = this.skills.detectActive(fileList).map((s) => s.name);

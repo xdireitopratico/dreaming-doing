@@ -8,14 +8,32 @@ export type TurnThinking = {
   durationMs?: number;
 };
 
-/** Thought for Xs — congela e permanece (referência Lovable img 5/9). */
+/** Thought for Xs — aparece no envio, congela no 1º token, nunca some. */
 export function resolveTurnThinking(
   resolved: AgentProgress | null,
   runView: AgentRunView | null,
   runStartedAtMs: number | null,
   slotActive: boolean,
 ): TurnThinking | null {
-  const latency = runView?.latencyThinking;
+  const storedMs = resolved?.latencyThoughtMs;
+  if (storedMs != null && storedMs > 0) {
+    return {
+      active: false,
+      startedAtMs: runStartedAtMs ?? Date.now() - storedMs,
+      durationMs: storedMs,
+    };
+  }
+
+  const latency =
+    runView?.latencyThinking ??
+    (resolved && runStartedAtMs
+      ? resolveLatencyThinking(
+          resolved,
+          slotActive,
+          runStartedAtMs,
+          buildForgeTimeline(resolved.timeline, slotActive),
+        )
+      : null);
   const reasoning = runView?.reasoningThought;
 
   if (latency || reasoning) {
@@ -33,28 +51,14 @@ export function resolveTurnThinking(
     };
   }
 
-  if (!resolved) return null;
-
-  const forgeTimeline = buildForgeTimeline(resolved.timeline, slotActive);
-  const frozenLatency = resolveLatencyThinking(
-    resolved,
-    slotActive,
-    runStartedAtMs,
-    forgeTimeline,
-  );
-
-  if (frozenLatency) {
-    return {
-      active: frozenLatency.active,
-      startedAtMs: frozenLatency.startedAtMs,
-      durationMs:
-        frozenLatency.durationMs ??
-        (frozenLatency.startedAtMs
-          ? Math.max(500, Date.now() - frozenLatency.startedAtMs)
-          : undefined),
-    };
+  if (!resolved) {
+    if (slotActive && runStartedAtMs) {
+      return { active: true, startedAtMs: runStartedAtMs };
+    }
+    return null;
   }
 
+  const forgeTimeline = buildForgeTimeline(resolved.timeline, slotActive);
   const thoughtItems = forgeTimeline.filter((i) => i.type === "THOUGHT");
   const lastThought = thoughtItems[thoughtItems.length - 1];
   if (lastThought?.type === "THOUGHT" && lastThought.durationMs > 0) {
@@ -62,6 +66,10 @@ export function resolveTurnThinking(
       active: !!lastThought.active,
       durationMs: lastThought.durationMs,
     };
+  }
+
+  if (slotActive && runStartedAtMs) {
+    return { active: true, startedAtMs: runStartedAtMs };
   }
 
   return null;

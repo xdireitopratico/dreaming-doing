@@ -482,7 +482,9 @@ describe("forge-run mini card briefing e título", () => {
 
   it("filtra mensagens genéricas de gather/explorando", () => {
     expect(normalizeMiniCardBriefing("Explorando 48 arquivos…")).toBeNull();
+    expect(normalizeMiniCardBriefing("Explorando o projeto")).toBeNull();
     expect(normalizeMiniCardBriefing("Analisando o projeto")).toBeNull();
+    expect(normalizeMiniCardBriefing("Lendo arquivos do projeto...")).toBeNull();
     expect(normalizeMiniCardBriefing("Indexando 12 arquivos…")).toBeNull();
   });
 
@@ -500,15 +502,21 @@ describe("forge-run mini card briefing e título", () => {
     expect(briefings.some((b) => b.includes("Lendo App.tsx"))).toBe(true);
   });
 
-  it("run ativo expõe liveBriefings no mini card", () => {
+  it("run ativo não expõe briefings genéricos de gather no mini card", () => {
     const progress = {
       ...initialAgentProgress,
       phase: "gather",
       message: "Analisando estrutura",
-      timeline: [{ type: "memory", data: { message: "Lendo package.json" }, timestamp: 1 }],
+      timeline: [
+        { type: "explore", data: { message: "Explorando o projeto", phase: "gather" }, timestamp: 1 },
+        { type: "memory", data: { message: "Lendo package.json" }, timestamp: 2 },
+      ],
     };
     const view = buildAgentRunView("run-1", progress, { running: true });
-    expect(view.miniCard.liveBriefings.length).toBeGreaterThan(0);
-    expect(view.miniCard.liveBriefings.some((b) => /package\.json|Analisando/i.test(b))).toBe(true);
+    expect(
+      view.miniCard.liveBriefings.some((b) =>
+        /package\.json|Analisando|Explorando|Lendo arquivos/i.test(b),
+      ),
+    ).toBe(false);
   });
 });

@@ -95,6 +95,29 @@ describe("mapAssistantTurn — contrato Lovable imutável", () => {
     assertAssistantTurnInvariant(turn);
   });
 
+  it("run ativa com activeRunStartedAtMs: Thought aparece imediatamente", () => {
+    const progress = {
+      ...initialAgentProgress,
+      phase: "classify" as const,
+      finished: false,
+    };
+    const thread: RawThreadItem[] = [
+      { kind: "user", message: msg("u1", "user", "oi") },
+      { kind: "assistant", live: progress, runId: "run-1", isActive: true },
+    ];
+    const startedAt = Date.now() - 800;
+    const turn = mapAssistantTurn(thread[1] as Extract<RawThreadItem, { kind: "assistant" }>, {
+      ...assistantCtx(thread, 1),
+      running: true,
+      activeRunId: "run-1",
+      activeRunStartedAtMs: startedAt,
+      sessionProgress: progress,
+    });
+    expect(turn.thinking).not.toBeNull();
+    expect(turn.thinking?.active).toBe(true);
+    assertAssistantTurnInvariant(turn);
+  });
+
   it("Estado C img5: mini-card Edited, sem chips", () => {
     const progress = {
       ...initialAgentProgress,
