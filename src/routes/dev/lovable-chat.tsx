@@ -1,5 +1,5 @@
 /**
- * Fixture visual Lovable — dados copiados dos prints image (4)(5)(9)(14)(15).
+ * Fixture visual Lovable — dados copiados dos prints image (4)(5)(8)(9)(14)(15).
  * Rota dev-only para provar paridade no browser: /dev/lovable-chat
  */
 import { createFileRoute } from "@tanstack/react-router";
@@ -77,6 +77,40 @@ const FIXTURES: { id: string; label: string; ref: string; items: ThreadItem[]; r
           ],
           currentTaskIndex: 0,
           editedFile: "Dockerfile.lara",
+        },
+        finished: false,
+      },
+    ],
+  },
+  {
+    id: "img8",
+    label: "Estado C — Edited index.ts",
+    ref: "image (8)",
+    running: true,
+    planPending: false,
+    items: [
+      {
+        kind: "assistant",
+        runId: "run-img8",
+        isActive: true,
+        streamText: null,
+        thinking: { active: false, durationMs: 4000 },
+        narration: "Vou investigar o estado atual do container DP Lara antes de organizar a higienização.",
+        miniCard: {
+          title: "Configuring Lara workspace safeguards now",
+          header: "Edited index.ts",
+          subtitle: "Configuring Lara workspace safeguards now",
+          liveBriefings: ["Configuring Lara workspace safeguards now"],
+          status: "working",
+          tasks: [
+            { id: "t1", label: "Higienizar Dockerfile.lara", status: "pending" },
+            { id: "t2", label: "Conectar rota browser execute", status: "pending" },
+            { id: "t3", label: "Proteção anti-destrutivo", status: "pending" },
+            { id: "t4", label: "Auto-save de scripts persistente", status: "pending" },
+            { id: "t5", label: "Regenerar bundles e redeploy", status: "pending" },
+          ],
+          currentTaskIndex: 0,
+          editedFile: "index.ts",
         },
         finished: false,
       },

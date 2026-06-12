@@ -6,7 +6,6 @@ type ChatThreadProps = {
   onOpenInspector?: (runId: string, tab?: "details" | "timeline" | "changes" | "plan") => void;
   onQualifySelect?: (text: string) => void;
   onResume?: () => void;
-  onRollback?: (messageId: string) => void;
 };
 
 export function ChatThread({
@@ -14,7 +13,6 @@ export function ChatThread({
   onOpenInspector,
   onQualifySelect,
   onResume,
-  onRollback,
 }: ChatThreadProps) {
   return (
     <div className="forge-chat-stream" role="log" aria-live="polite">
@@ -27,7 +25,6 @@ export function ChatThread({
             onOpenInspector={onOpenInspector}
             onQualifySelect={onQualifySelect}
             onResume={onResume}
-            onRollback={onRollback}
           />
         );
       })}

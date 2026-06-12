@@ -14,7 +14,6 @@ type AssistantTurnProps = {
   onOpenInspector?: (runId: string, tab?: "details" | "timeline" | "changes" | "plan") => void;
   onQualifySelect?: (text: string) => void;
   onResume?: () => void;
-  onRollback?: (messageId: string) => void;
 };
 
 /**
@@ -30,7 +29,6 @@ export function AssistantTurn({
   onOpenInspector,
   onQualifySelect,
   onResume,
-  onRollback,
 }: AssistantTurnProps) {
   const text = item.streamText ?? item.message?.content?.trim() ?? null;
   const hasContent = !!text?.trim();
@@ -47,7 +45,7 @@ export function AssistantTurn({
     !showQualify &&
     !planTeaser &&
     !showJobCard &&
-    (proseDiffersFromTitle || !showJobCard) &&
+    proseDiffersFromTitle &&
     !(showNarration && text?.trim() === item.narration?.trim());
   const hasDelivery =
     (item.miniCard?.fileCount ?? 0) > 0 ||

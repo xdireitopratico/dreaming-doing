@@ -135,16 +135,6 @@ export function ChatPanel({
     [onSend, composerMode],
   );
 
-  const handleRollback = useCallback(
-    async (messageId: string) => {
-      if (!onRollbackMessage) return;
-      const item = thread.find((t) => t.kind === "user" && t.message.id === messageId);
-      if (!item || item.kind !== "user") return;
-      await onRollbackMessage(messageId, "user");
-    },
-    [onRollbackMessage, thread],
-  );
-
   return (
     <div className="forge-chat-inner">
       <div ref={scrollRef} className="forge-messages" onScroll={handleScroll}>
@@ -185,7 +175,6 @@ export function ChatPanel({
             onOpenInspector={onOpenInspector}
             onQualifySelect={handleQualifySelect}
             onResume={onResume}
-            onRollback={onRollbackMessage ? handleRollback : undefined}
           />
         )}
 

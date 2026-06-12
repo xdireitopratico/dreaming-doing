@@ -656,7 +656,11 @@ export function shouldShowJobCard(opts: {
   if (progress.conversational === true) return false;
   if (runId === "__pending__") return false;
 
-  if (progress.awaitingKind === "plan_approval" && (progress.pendingPlan?.steps?.length ?? 0) > 0) {
+  if (
+    progress.awaitingKind === "plan_approval" &&
+    (progress.pendingPlan?.steps?.length ?? 0) > 0 &&
+    !progress.finished
+  ) {
     return true;
   }
 

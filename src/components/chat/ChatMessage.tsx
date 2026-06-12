@@ -7,7 +7,6 @@ type ChatMessageProps = {
   onOpenInspector?: (runId: string, tab?: "details" | "timeline" | "changes" | "plan") => void;
   onQualifySelect?: (text: string) => void;
   onResume?: () => void;
-  onRollback?: (messageId: string) => void;
 };
 
 /** Roteador: user → bolha | assistant → AssistantTurn (ordem Lovable). */
@@ -16,7 +15,6 @@ export function ChatMessage({
   onOpenInspector,
   onQualifySelect,
   onResume,
-  onRollback,
 }: ChatMessageProps) {
   if (item.kind === "user") {
     const isQueued = item.message.meta?.queued === true;
@@ -33,7 +31,6 @@ export function ChatMessage({
       onOpenInspector={onOpenInspector}
       onQualifySelect={onQualifySelect}
       onResume={onResume}
-      onRollback={onRollback}
     />
   );
 }

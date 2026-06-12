@@ -13,6 +13,7 @@ import {
 import { resolveJobPlanForRun, storedPlanFromMessage } from "@/lib/plan-message-meta";
 import { parseQualifyChoices } from "@/lib/qualify-choices";
 import { resolveAssistantProgress } from "@/lib/chat/resolve-progress";
+import { assertAssistantTurnInvariant, resolveTurnStatusChips } from "@/lib/chat/invariants";
 import { resolveTurnNarration, resolveTurnThinking } from "@/lib/chat/turn-display";
 import { resolveHistoricalRunProgress } from "@/lib/assistant-run-progress";
 import { initialAgentProgress } from "@/lib/agent-progress";
@@ -180,6 +181,7 @@ export function mapAssistantTurn(
     !!planForPrompt?.steps?.length &&
     planRunMatches &&
     !planAlreadyDecided &&
+    !resolved?.finished &&
     (msgPlanMeta?.status === "pending" || planAwaitingApproval);
 
   const runView = resolved
@@ -223,12 +225,6 @@ export function mapAssistantTurn(
   const thinking = resolveTurnThinking(resolved, runView, runStartedAtMs, slotActive);
   const narration = resolveTurnNarration(resolved, runView, rawStreamText);
   const streamText = planTeaser ? null : rawStreamText;
-  const persistMiniCard =
-    !!runView &&
-    (planTeaser ||
-      showJobCard ||
-      (!!item.message && hasMaterializedCardSnapshot(item.message)));
-  const showCard = persistMiniCard;
   const storedChips =
     resolved?.statusChips ??
     (() => {
@@ -237,6 +233,16 @@ export function mapAssistantTurn(
       const raw = (snap as Record<string, unknown>).statusChips;
       return Array.isArray(raw) ? raw.filter((c) => typeof c === "string") : null;
     })();
+
+  const snapshotChipsOnly =
+    !!storedChips?.length && !showJobCard && !planTeaser && !!resolved?.finished;
+
+  const persistMiniCard =
+    !!runView &&
+    (planTeaser ||
+      showJobCard ||
+      (!!item.message && hasMaterializedCardSnapshot(item.message) && !snapshotChipsOnly));
+  const showCard = persistMiniCard;
 
   const hasChipEvidence =
     !!resolved &&
@@ -248,7 +254,7 @@ export function mapAssistantTurn(
       !!resolved.planSummary ||
       resolved.awaitingKind === "plan_approval");
 
-  const statusChips =
+  const rawStatusChips =
     resolved && hasChipEvidence
       ? collectStatusChips(resolved, slotActive || anchoredLive, {
           jobPlan,
@@ -256,7 +262,10 @@ export function mapAssistantTurn(
         })
       : [];
 
-  return {
+  const miniCard = showCard && runView ? toMiniCard(runView) : null;
+  const statusChips = resolveTurnStatusChips(rawStatusChips, !!miniCard);
+
+  const turn: Extract<ThreadItem, { kind: "assistant" }> = {
     kind: "assistant",
     message: item.message,
     runId,
@@ -266,7 +275,7 @@ export function mapAssistantTurn(
     phaseMessage: resolved?.message ?? resolved?.statusHint ?? null,
     thinking,
     narration,
-    miniCard: showCard && runView ? toMiniCard(runView) : null,
+    miniCard,
     statusChips,
     planTeaser,
     qualify,
@@ -277,4 +286,7 @@ export function mapAssistantTurn(
     lastFinishOk: runView?.lastFinishOk ?? resolved?.lastFinishOk ?? undefined,
     resumable: runView?.resumable ?? resolved?.resumable ?? false,
   };
+
+  assertAssistantTurnInvariant(turn);
+  return turn;
 }

@@ -1,0 +1,244 @@
+import { describe, expect, it } from "vitest";
+import type { ChatMessage } from "@/lib/chat-types";
+import { initialAgentProgress } from "@/lib/agent-progress";
+import { mapAssistantTurn } from "@/lib/chat/turn";
+import {
+  assertAssistantTurnInvariant,
+  resolveTurnStatusChips,
+} from "@/lib/chat/invariants";
+import type { RawThreadItem, ThreadItem } from "@/lib/chat/types";
+
+function msg(id: string, role: ChatMessage["role"], content: string, extra?: Partial<ChatMessage>): ChatMessage {
+  return { id, role, content, timestamp: 0, ...extra };
+}
+
+function assistantCtx(
+  thread: RawThreadItem[],
+  itemIndex: number,
+  overrides: Partial<Parameters<typeof mapAssistantTurn>[1]> = {},
+) {
+  const messages = thread
+    .filter((t) => t.kind === "user")
+    .map((t) => (t.kind === "user" ? t.message : msg("u", "user", "")));
+  return {
+    messages,
+    thread,
+    itemIndex,
+    running: false,
+    activeRunId: null,
+    sessionProgress: initialAgentProgress,
+    ...overrides,
+  };
+}
+
+describe("resolveTurnStatusChips", () => {
+  it("esvazia chips quando mini-card está visível", () => {
+    expect(resolveTurnStatusChips(["a", "b"], true)).toEqual([]);
+    expect(resolveTurnStatusChips(["a", "b"], false)).toEqual(["a", "b"]);
+  });
+});
+
+describe("assertAssistantTurnInvariant", () => {
+  const base: Extract<ThreadItem, { kind: "assistant" }> = {
+    kind: "assistant",
+    runId: "r1",
+    isActive: false,
+    streamText: null,
+  };
+
+  it("rejeita card + chips simultâneos", () => {
+    expect(() =>
+      assertAssistantTurnInvariant({
+        ...base,
+        miniCard: {
+          title: "t",
+          header: "Edited x.ts",
+          subtitle: "s",
+          liveBriefings: ["s"],
+          status: "working",
+          tasks: [],
+          currentTaskIndex: 0,
+        },
+        statusChips: ["chip"],
+      }),
+    ).toThrow(/cannot coexist/);
+  });
+
+  it("aceita Estado B — chips sem card", () => {
+    expect(() =>
+      assertAssistantTurnInvariant({
+        ...base,
+        isActive: true,
+        statusChips: ["a", "b"],
+        miniCard: null,
+      }),
+    ).not.toThrow();
+  });
+});
+
+describe("mapAssistantTurn — contrato Lovable imutável", () => {
+  it("Estado B img4: chips ativos, sem mini-card", () => {
+    const progress = {
+      ...initialAgentProgress,
+      phase: "gather" as const,
+      finished: false,
+      message: "Checking browser route wiring in lara-workspace",
+      statusHint: "Diagnosing Lara container gaps and needs",
+    };
+    const thread: RawThreadItem[] = [
+      { kind: "user", message: msg("u1", "user", "higienizar") },
+      { kind: "assistant", live: progress, runId: "run-1", isActive: true },
+    ];
+
+    const turn = mapAssistantTurn(thread[1] as Extract<RawThreadItem, { kind: "assistant" }>, {
+      ...assistantCtx(thread, 1),
+      running: true,
+      activeRunId: "run-1",
+      sessionProgress: progress,
+    });
+
+    expect(turn.miniCard).toBeNull();
+    expect(turn.statusChips).toHaveLength(2);
+    assertAssistantTurnInvariant(turn);
+  });
+
+  it("Estado C img5: mini-card Edited, sem chips", () => {
+    const progress = {
+      ...initialAgentProgress,
+      phase: "execute" as const,
+      finished: false,
+      tools: [{ name: "fs_edit", args: { path: "Dockerfile.lara" }, ok: true }],
+      diffs: [{ path: "Dockerfile.lara", patch: "..." }],
+      message: "Checking browser route wiring",
+      statusHint: "Diagnosing Lara container gaps",
+    };
+    const thread: RawThreadItem[] = [
+      { kind: "assistant", live: progress, runId: "run-1", isActive: true },
+    ];
+
+    const turn = mapAssistantTurn(thread[0] as Extract<RawThreadItem, { kind: "assistant" }>, {
+      ...assistantCtx(thread, 0),
+      running: true,
+      activeRunId: "run-1",
+      sessionProgress: progress,
+    });
+
+    expect(turn.miniCard).not.toBeNull();
+    expect(turn.miniCard?.header).toMatch(/^Edited /);
+    expect(turn.statusChips).toHaveLength(0);
+    assertAssistantTurnInvariant(turn);
+  });
+
+  it("Estado C img9: Running command, sem chips", () => {
+    const progress = {
+      ...initialAgentProgress,
+      phase: "execute" as const,
+      finished: false,
+      tools: [{ name: "shell_exec", args: { command: "deploy" } }],
+    };
+    const thread: RawThreadItem[] = [
+      { kind: "assistant", live: progress, runId: "run-1", isActive: true },
+    ];
+
+    const turn = mapAssistantTurn(thread[0] as Extract<RawThreadItem, { kind: "assistant" }>, {
+      ...assistantCtx(thread, 0),
+      running: true,
+      activeRunId: "run-1",
+      sessionProgress: progress,
+    });
+
+    expect(turn.miniCard?.header).toBe("Running command");
+    expect(turn.statusChips).toHaveLength(0);
+    assertAssistantTurnInvariant(turn);
+  });
+
+  it("Estado D img14: plan teaser, sem chips", () => {
+    const plan = {
+      planId: "p1",
+      summary: "Defining cross-view deletion strategy planning",
+      steps: [{ id: "s1", type: "custom" as const, description: "Step", enabled: true }],
+      ttlMs: 60_000,
+      proposedAt: Date.now(),
+      runId: "run-plan",
+      projectId: "proj",
+    };
+    const progress = {
+      ...initialAgentProgress,
+      finished: false,
+      awaitingKind: "plan_approval" as const,
+      pendingPlan: plan,
+    };
+    const thread: RawThreadItem[] = [
+      { kind: "assistant", live: progress, runId: "run-plan", isActive: true },
+    ];
+
+    const turn = mapAssistantTurn(thread[0] as Extract<RawThreadItem, { kind: "assistant" }>, {
+      ...assistantCtx(thread, 0),
+      running: true,
+      activeRunId: "run-plan",
+      pendingPlan: plan,
+      sessionProgress: progress,
+    });
+
+    expect(turn.planTeaser).toBe(true);
+    expect(turn.miniCard?.header).toBe("Plan ready");
+    expect(turn.statusChips).toHaveLength(0);
+    expect(turn.streamText).toBeNull();
+    assertAssistantTurnInvariant(turn);
+  });
+
+  it("Terminal img15: chips de plano, sem mini-card", () => {
+    const plan = {
+      planId: "p1",
+      summary: "Defining cross-view deletion strategy planning",
+      mission: "Desbloquear exclusão do documento travado (vínculo com proposta no banco)",
+      steps: [{ id: "s1", type: "custom" as const, description: "Step", enabled: true }],
+      ttlMs: 60_000,
+      proposedAt: Date.now(),
+      runId: "run-plan",
+      projectId: "proj",
+    };
+    const progress = {
+      ...initialAgentProgress,
+      finished: true,
+      awaitingKind: "plan_approval" as const,
+      pendingPlan: plan,
+    };
+    const messages = [
+      msg("u1", "user", "fix delete"),
+      msg("a1", "assistant", "", {
+        runId: "run-plan",
+        meta: {
+          finishedAt: new Date().toISOString(),
+          runId: "run-plan",
+          cardSnapshot: {
+            ...progress,
+            statusChips: [
+              "Reading approved plan",
+              "Defining cross-view deletion strategy planning",
+              "Plan: Desbloquear exclusão do documento travado (vínculo com proposta no banco)",
+            ],
+          },
+        },
+      }),
+    ];
+    const thread: RawThreadItem[] = [
+      { kind: "user", message: messages[0] },
+      { kind: "assistant", message: messages[1], runId: "run-plan", isActive: false },
+    ];
+
+    const turn = mapAssistantTurn(thread[1] as Extract<RawThreadItem, { kind: "assistant" }>, {
+      messages,
+      thread,
+      itemIndex: 1,
+      running: false,
+      activeRunId: null,
+      sessionProgress: initialAgentProgress,
+      pendingPlan: plan,
+    });
+
+    expect(turn.miniCard).toBeNull();
+    expect(turn.statusChips).toHaveLength(3);
+    assertAssistantTurnInvariant(turn);
+  });
+});
