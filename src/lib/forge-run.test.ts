@@ -28,6 +28,33 @@ const samplePlan: PendingPlan = {
   projectId: "proj-1",
 };
 
+describe("buildForgeTimeline", () => {
+  it("não inclui mensagem do usuário nem passo interno X/Y", () => {
+    const items = buildForgeTimeline(
+      [
+        {
+          type: "phase",
+          data: { phase: "build", message: "Crie uma landing de padaria com hero quente" },
+          timestamp: 1,
+        },
+        {
+          type: "phase",
+          data: { phase: "execute", message: "Executando passo 1 de 15…" },
+          timestamp: 2,
+        },
+        {
+          type: "tool_start",
+          data: { name: "fs_read", args: { path: "src/App.tsx" } },
+          timestamp: 3,
+        },
+      ],
+      true,
+    );
+    expect(items.some((i) => i.type === "TASK")).toBe(false);
+    expect(items.some((i) => i.type === "TOOL" && i.name === "fs_read")).toBe(true);
+  });
+});
+
 describe("forge-run job requirements", () => {
   it("lista atômica usa passos do plano, não fases da timeline", () => {
     const progress = {

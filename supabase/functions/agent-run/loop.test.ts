@@ -33,7 +33,8 @@ import { validateApprovedSteps } from "./plan-mode.ts";
 // ===== UUID MOCK =====
 let _uuid = 0;
 const _origUUID = crypto.randomUUID;
-(crypto as Record<string, unknown>).randomUUID = () => `mu-${String(++_uuid).padStart(4, "0")}`;
+(crypto as { randomUUID: typeof crypto.randomUUID }).randomUUID = () =>
+  `mu-${String(++_uuid).padStart(4, "0")}` as `${string}-${string}-${string}-${string}-${string}`;
 
 // ===== MOCK LLM =====
 class MockLLM implements LLMProvider {
@@ -172,20 +173,21 @@ class MockSB {
     this.queries.push(q);
     return q;
   }
-  resolve(b: QB) {
+  resolve(b: QB): { data: unknown; error: null } {
     if (b.getTable() === "messages") {
       const writeOp = b.getWriteOperation();
       if (writeOp === "insert") {
-        return { data: { id: this.messageRow?.id ?? "msg-live" } };
+        return { data: { id: this.messageRow?.id ?? "msg-live" }, error: null };
       }
       if (writeOp === "update") {
-        return { data: null };
+        return { data: null, error: null };
       }
       if (b.getOperation() === "select") {
-        return { data: this.messageRow };
+        return { data: this.messageRow, error: null };
       }
     }
-    return this.r.get(b.getTable()) ?? { data: null };
+    const row = this.r.get(b.getTable()) ?? { data: null };
+    return { ...row, error: null };
   }
 }
 
@@ -1211,4 +1213,4 @@ Deno.test("plan-mode — validateApprovedSteps pula steps com enabled=false", ()
   }
 });
 
-(crypto as Record<string, unknown>).randomUUID = _origUUID;
+(crypto as { randomUUID: typeof crypto.randomUUID }).randomUUID = _origUUID;

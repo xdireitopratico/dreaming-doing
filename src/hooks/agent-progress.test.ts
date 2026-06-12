@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyAgentProgressEvent } from "@/lib/agent-progress";
+import { applyAgentProgressEvent, awaitingKindFromRunMeta } from "@/lib/agent-progress";
 import type { AgentProgress, SSEEvent } from "@/lib/agent-progress";
 
 const base: AgentProgress = {
@@ -29,6 +29,22 @@ const base: AgentProgress = {
 function ev(type: string, data: Record<string, unknown>): SSEEvent {
   return { type, data, timestamp: 0 };
 }
+
+describe("awaitingKindFromRunMeta", () => {
+  it("lê qualify do meta.awaitingUser", () => {
+    expect(awaitingKindFromRunMeta({ awaitingUser: { type: "qualify" } })).toBe("qualify");
+  });
+
+  it("lê plan_approval do meta.awaitingUser", () => {
+    expect(awaitingKindFromRunMeta({ awaitingUser: { type: "plan_approval", planId: "p1" } })).toBe(
+      "plan_approval",
+    );
+  });
+
+  it("retorna null sem awaitingUser", () => {
+    expect(awaitingKindFromRunMeta({})).toBeNull();
+  });
+});
 
 describe("applyAgentProgressEvent", () => {
   it("start com resume limpa erro e resumable", () => {
@@ -211,6 +227,15 @@ describe("applyAgentProgressEvent", () => {
       ev("assistant_text", { text: "Vou", delta: true, thinking: true }),
     );
     expect(next.streamText).toBe("Resposta real");
+  });
+
+  it("assistant_text thinking espelha narração para o chat", () => {
+    const next = applyAgentProgressEvent(
+      { ...base, finished: false },
+      ev("assistant_text", { text: "Entendi", delta: true, thinking: true }),
+    );
+    expect(next.narrationText).toBe("Entendi");
+    expect(next.streamText).toBeNull();
   });
 
   it("done preserva streamText completo", () => {

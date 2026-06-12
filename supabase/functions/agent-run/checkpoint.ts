@@ -59,7 +59,9 @@ export function deserializeCheckpointState(raw: Record<string, unknown>): Loaded
   const maxStepsLimit =
     typeof raw.maxStepsLimit === "number" && raw.maxStepsLimit > 0
       ? raw.maxStepsLimit
-      : complexityScore * 5 + 5;
+      : ({ 1: 50, 2: 60, 3: 70, 4: 85, 5: 100 } as const)[
+          complexityScore as 1 | 2 | 3 | 4 | 5
+        ] ?? 60;
 
   const state: AgentState = {
     projectId,

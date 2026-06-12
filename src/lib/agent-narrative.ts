@@ -42,6 +42,15 @@ export type AgentNarrative = {
   subhint: string | null;
 };
 
+function sanitizeHeadline(message: string | null | undefined): string | null {
+  const t = message?.trim();
+  if (!t) return null;
+  if (/^executando passo \d+/i.test(t)) return null;
+  if (/^passo \d+\s*\/\s*\d+/i.test(t)) return null;
+  if (/retomando do passo \d+/i.test(t)) return null;
+  return t;
+}
+
 function activeToolLabel(progress: AgentProgress): string | null {
   const active = progress.tools.filter((t) => t.ok === undefined);
   const last = active[active.length - 1];
@@ -82,14 +91,16 @@ export function buildAgentNarrative(
 
   const toolLine = activeToolLabel(progress);
   const phaseLine = progress.phase
-    ? progress.message?.trim() || PHASE_LABELS[progress.phase] || progress.phase
+    ? sanitizeHeadline(progress.message?.trim()) ||
+      PHASE_LABELS[progress.phase] ||
+      progress.phase
     : null;
 
   const headline =
     (connecting ? progress.statusHint?.trim() : null) ??
-    phaseLine ??
     toolLine ??
-    progress.message?.trim() ??
+    phaseLine ??
+    sanitizeHeadline(progress.message) ??
     progress.statusHint ??
     "Trabalhando no seu pedido…";
 

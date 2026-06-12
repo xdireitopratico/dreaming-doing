@@ -21,7 +21,7 @@ import { loadUserE2bApiKey } from "../_shared/user-e2b.ts";
 import { restoreExecutionLogFromRows } from "./executionLogMeta.ts";
 import { clearConversationCheckpoint, loadCheckpoint } from "./checkpoint.ts";
 import { buildSandboxEnv } from "./sandbox-env.ts";
-import { looksLikeInteractionOnly } from "./qualify.ts";
+import { resolveAllocateSandbox } from "./qualify.ts";
 import { logger } from "../_shared/logger.ts";
 import { appendStreamEvent } from "../_shared/agent-stream.ts";
 import { chunkCapErrorMessage, evaluateChunkLimits } from "../_shared/agent-chunk-limits.ts";
@@ -236,36 +236,22 @@ export async function executeAgentRun(
       (meta.kind === "plan_approved" || typeof meta.planSourceRunId === "string")
     );
   });
-  let allocateSandboxLocal: boolean;
-  let looksLikeInteraction = false;
-  if (isApprovedPlanBuild || hasApprovedPlanInHistory) {
-    allocateSandboxLocal = true;
-  } else {
-    const lastUserContent = (() => {
-      const lastUser = [...historyRows].reverse().find((m: any) => m.role === "user");
-      const parts = lastUser?.parts || [];
-      const textPart = parts.find((p: any) => p?.type === "text" || typeof p?.text === "string");
-      return textPart?.text || textPart?.content || "";
-    })();
-    looksLikeInteraction = looksLikeInteractionOnly(lastUserContent);
-    const projectHasSandbox = !!(
-      ((project as any).meta || {})?.previewSandboxId || ((project as any).meta || {})?.previewReady
-    );
-    let projectFileCount = 0;
-    try {
-      const { count } = await supabase
-        .from("project_files")
-        .select("id", { count: "exact", head: true })
-        .eq("project_id", projectId);
-      projectFileCount = count ?? 0;
-    } catch {
-      projectFileCount = 0;
-    }
-    allocateSandboxLocal = !looksLikeInteraction || projectHasSandbox;
-  }
-  if (planMode) {
-    allocateSandboxLocal = false;
-  }
+  const lastUserContent = (() => {
+    const lastUser = [...historyRows].reverse().find((m: any) => m.role === "user");
+    const parts = lastUser?.parts || [];
+    const textPart = parts.find((p: any) => p?.type === "text" || typeof p?.text === "string");
+    return textPart?.text || textPart?.content || "";
+  })();
+  const projectHasSandbox = !!(
+    ((project as any).meta || {})?.previewSandboxId || ((project as any).meta || {})?.previewReady
+  );
+  const allocateSandboxLocal = resolveAllocateSandbox({
+    planMode,
+    userContent: lastUserContent,
+    projectHasSandbox,
+    hasApprovedPlanInHistory,
+    isApprovedPlanBuild,
+  });
 
   // Build runMetaBase + update run
   const runMetaBase = {

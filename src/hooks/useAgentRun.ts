@@ -18,6 +18,7 @@ import {
   type AgentConnectOptions,
   type AgentProgress,
   applyAgentProgressEvent,
+  awaitingKindFromRunMeta,
   initialAgentProgress,
   streamRowToSSEEvent,
 } from "@/lib/agent-progress";
@@ -229,17 +230,25 @@ export function useAgentRun() {
   }, []);
 
   const syncRunStatus = useCallback(
-    (status: string, error: string | null, streamText?: string | null) => {
+    (
+      status: string,
+      error: string | null,
+      streamText?: string | null,
+      runMeta?: Record<string, unknown> | null,
+    ) => {
       setProgress((p) => {
         let next: AgentProgress;
         if (status === "awaiting_user") {
+          const fromMeta = awaitingKindFromRunMeta(runMeta);
           const planPending =
-            p.awaitingKind === "plan_approval" || (p.pendingPlan?.steps?.length ?? 0) > 0;
+            fromMeta === "plan_approval" ||
+            p.awaitingKind === "plan_approval" ||
+            (p.pendingPlan?.steps?.length ?? 0) > 0;
           next = {
             ...p,
             finished: true,
             awaiting: true,
-            awaitingKind: planPending ? "plan_approval" : "qualify",
+            awaitingKind: fromMeta ?? (planPending ? "plan_approval" : "qualify"),
             autoResuming: false,
           };
         } else if (status === "canceled") {
@@ -326,12 +335,14 @@ export function useAgentRun() {
         .eq("id", runId)
         .maybeSingle();
 
+      const runMeta = (run?.meta ?? null) as Record<string, unknown> | null;
+
       if (run?.canceled_at || run?.status === "canceled") {
-        syncRunStatus("canceled", run.error);
+        syncRunStatus("canceled", run.error, undefined, runMeta);
         return true;
       }
       if (run?.status && TERMINAL_STATUSES.has(run.status)) {
-        syncRunStatus(run.status, run.error);
+        syncRunStatus(run.status, run.error, undefined, runMeta);
         return true;
       }
 
@@ -459,13 +470,15 @@ export function useAgentRun() {
               status: string;
               error: string | null;
               canceled_at: string | null;
+              meta?: Record<string, unknown> | null;
             };
             if (!runIdRef.current) return;
             await catchUpRun(runIdRef.current);
+            const runMeta = (row.meta ?? null) as Record<string, unknown> | null;
             if (row.canceled_at || row.status === "canceled") {
-              syncRunStatus("canceled", row.error);
+              syncRunStatus("canceled", row.error, undefined, runMeta);
             } else if (TERMINAL_STATUSES.has(row.status)) {
-              syncRunStatus(row.status, row.error);
+              syncRunStatus(row.status, row.error, undefined, runMeta);
             }
           },
         )

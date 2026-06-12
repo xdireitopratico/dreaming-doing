@@ -109,7 +109,14 @@ function resolveLoopBudgetMs(): number {
 
 const LOOP_BUDGET_MS = resolveLoopBudgetMs();
 function calculateMaxSteps(complexity: 1 | 2 | 3 | 4 | 5): number {
-  return complexity * 5 + 5;
+  const limits: Record<1 | 2 | 3 | 4 | 5, number> = {
+    1: 50,
+    2: 60,
+    3: 70,
+    4: 85,
+    5: 100,
+  };
+  return limits[complexity] ?? 60;
 }
 
 export class AgentLoop {
@@ -517,9 +524,7 @@ export class AgentLoop {
       await this.emitTransition("send");
       this.emit("phase", {
         phase: "resume",
-        message:
-          `Retomando do passo ${this.state.currentStepIndex}/${this.maxStepsLimit} ` +
-          "(checkpoint restaurado — sem reclassificar)",
+        message: "Retomando execução…",
       });
       this.emit("memory", {
         message: `Checkpoint: ${this.state.messages.length} mensagens, fase ${
@@ -683,7 +688,7 @@ export class AgentLoop {
 
       this.emit("phase", {
         phase: "build",
-        message: userPrompt.slice(0, 120) || "Executando…",
+        message: "Implementando mudanças…",
         intent: this.state.intent,
       });
 
@@ -753,14 +758,14 @@ export class AgentLoop {
             phase: "execute",
             message: activeStep
               ? activeStep.description.slice(0, 120)
-              : `Executando passo ${this.approvedPlanStepIndex + 1}/${enabled.length}…`,
+              : "Trabalhando no plano aprovado…",
           });
         } else {
           this.state.totalSteps = this.maxStepsLimit;
           this.emit("step", { current: loopStep, total: this.maxStepsLimit });
           this.emit("phase", {
             phase: "execute",
-            message: `Executando passo ${loopStep}/${this.maxStepsLimit}…`,
+            message: "Trabalhando no pedido…",
           });
         }
 
@@ -1866,7 +1871,9 @@ export class AgentLoop {
                 append: true,
                 delta: true,
                 final: false,
-                ...(toInspector ? { thinking: true } : { narration: true }),
+                ...(toInspector
+                  ? { thinking: true }
+                  : { thinking: true, narration: true }),
               });
               if (!toInspector) this.narrationStarted = true;
               if (!toInspector) this.appendToNarration(delta);
@@ -2374,6 +2381,7 @@ export class AgentLoop {
       append: shouldAppend,
       final: false,
       narration: true,
+      thinking: true,
     });
     this.narrationStarted = true;
   }

@@ -370,12 +370,16 @@ function isInternalPhaseNoise(label: string, phase?: string): boolean {
     phase === "gather" ||
     phase === "explore" ||
     phase === "classify" ||
-    phase === "qualify"
+    phase === "qualify" ||
+    phase === "build"
   ) {
     return true;
   }
   const t = label.trim();
   if (!t) return true;
+  if (/^executando passo \d+/i.test(t)) return true;
+  if (/^passo \d+\s*\/\s*\d+/i.test(t)) return true;
+  if (/retomando do passo \d+/i.test(t)) return true;
   return normalizeMiniCardBriefing(t) === null;
 }
 

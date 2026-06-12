@@ -1,6 +1,7 @@
 import { MarkdownRenderer } from "@/components/ui/markdown-renderer";
 import type { ThreadItem } from "@/lib/chat/types";
 import { assistantTurnCopyText } from "@/lib/chat/assistant-turn-copy";
+import { resolveClosingProse } from "@/lib/chat/stream-prose";
 import { ChatThinking } from "./ChatThinking";
 import { ChatNarration } from "./ChatNarration";
 import { ChatJobCard } from "./ChatJobCard";
@@ -27,21 +28,20 @@ export function AssistantTurn({
   canRollback,
   onRollback,
 }: AssistantTurnProps) {
-  const closingText =
+  const rawClosing =
     item.streamText?.trim() ||
     item.error?.trim() ||
     (!item.isActive ? item.message?.content?.trim() : null) ||
     null;
   const narrationText = item.narration?.trim() || null;
+  const closingText = resolveClosingProse(narrationText, rawClosing);
+  const closingStreaming = !!item.isActive && !!item.streamText?.trim();
 
   const showThinking = !!item.thinking;
   const showNarration = !!narrationText;
   const showJobCard = !!item.miniCard;
   const showQualify = !!item.qualify?.choices?.length;
-  const showClosing =
-    !showQualify &&
-    !!closingText &&
-    (!narrationText || closingText !== narrationText);
+  const showClosing = !showQualify && !!closingText;
 
   const planTab = item.planTeaser || item.miniCard?.planReady;
   const copyText = assistantTurnCopyText(item);
@@ -79,8 +79,14 @@ export function AssistantTurn({
         )}
 
         {showClosing && (
-          <div className="forge-chat-closing-line forge-chat-prose">
-            <MarkdownRenderer>{closingText!}</MarkdownRenderer>
+          <div
+            className={`forge-chat-closing-line${closingStreaming ? "" : " forge-chat-prose"}`}
+          >
+            {closingStreaming ? (
+              <p className="forge-chat-streaming-text whitespace-pre-wrap">{closingText}</p>
+            ) : (
+              <MarkdownRenderer>{closingText!}</MarkdownRenderer>
+            )}
           </div>
         )}
 

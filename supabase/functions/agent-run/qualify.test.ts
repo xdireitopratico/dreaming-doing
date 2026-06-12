@@ -9,6 +9,7 @@ import {
   isSeedPlaceholderAppContent,
   looksLikeInteractionOnly,
   projectEntryPathFromFiles,
+  resolveAllocateSandbox,
   SEED_CONTEXT_FOR_LLM,
 } from "./qualify.ts";
 
@@ -158,6 +159,38 @@ Deno.test(
     assertEquals(req, "landing de cafeteria");
   },
 );
+
+Deno.test("resolveAllocateSandbox: plan mode nunca aloca", () => {
+  assertEquals(
+    resolveAllocateSandbox({
+      planMode: true,
+      userContent: "Crie uma landing completa com hero e formulário",
+      projectHasSandbox: true,
+    }),
+    false,
+  );
+});
+
+Deno.test("resolveAllocateSandbox: conversa vaga sem sandbox não aloca", () => {
+  assertEquals(
+    resolveAllocateSandbox({
+      userContent: "quero conversar sobre a ideia",
+      projectHasSandbox: false,
+    }),
+    false,
+  );
+});
+
+Deno.test("resolveAllocateSandbox: plano aprovado força alocação", () => {
+  assertEquals(
+    resolveAllocateSandbox({
+      userContent: "oi",
+      projectHasSandbox: false,
+      hasApprovedPlanInHistory: true,
+    }),
+    true,
+  );
+});
 
 Deno.test("buildAgentContextForLlm mascara seed como scaffold da plataforma", () => {
   const ctx = buildAgentContextForLlm(

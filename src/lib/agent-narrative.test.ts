@@ -3,16 +3,17 @@ import { initialAgentProgress } from "@/lib/agent-progress";
 import { buildAgentNarrative } from "@/lib/agent-narrative";
 
 describe("buildAgentNarrative", () => {
-  it("headline prioriza fase; tool ativa fica no subhint do activity card", () => {
+  it("headline prioriza tool ativa — não expõe passo interno X/Y", () => {
     const progress = {
       ...initialAgentProgress,
       finished: false,
       tools: [{ name: "fs_edit", args: { path: "src/App.tsx" } }],
       phase: "execute",
-      message: "Executando passo 1…",
+      message: "Executando passo 1 de 15…",
     };
     const n = buildAgentNarrative(progress, { running: true });
-    expect(n.headline).toContain("Executando passo 1");
+    expect(n.headline).toContain("Editando");
+    expect(n.headline).not.toContain("passo");
     expect(n.showTyping).toBe(true);
   });
 

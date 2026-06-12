@@ -5,7 +5,7 @@ import type { ChatParams, ChatResponse } from "./types.ts";
 
 class MockLLM implements LLMProvider {
   async chat(_p: ChatParams): Promise<ChatResponse> {
-    return { content: "ok", toolCalls: null };
+    return { role: "assistant", content: "ok", tool_calls: [] };
   }
 }
 

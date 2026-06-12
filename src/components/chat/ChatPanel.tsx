@@ -86,6 +86,7 @@ export function ChatPanel({
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const pinnedToBottom = useRef(true);
+  const userAnchorIdRef = useRef<string | null>(null);
   const [showPill, setShowPill] = useState(false);
   const PIN_THRESHOLD_PX = 100;
 
@@ -94,24 +95,66 @@ export function ChatPanel({
     if (!el) return;
     el.scrollTo({ top: el.scrollHeight, behavior });
     pinnedToBottom.current = true;
+    userAnchorIdRef.current = null;
     setShowPill(false);
   }, []);
+
+  const scrollUserBubbleToTop = useCallback(
+    (messageId: string, behavior: ScrollBehavior = "smooth") => {
+      const container = scrollRef.current;
+      if (!container) return;
+      const bubble = container.querySelector<HTMLElement>(`[data-user-msg-id="${messageId}"]`);
+      if (!bubble) return;
+      const top =
+        bubble.offsetTop - container.offsetTop - parseFloat(getComputedStyle(container).paddingTop);
+      container.scrollTo({ top: Math.max(0, top), behavior });
+      pinnedToBottom.current = false;
+      setShowPill(false);
+    },
+    [],
+  );
 
   const handleScroll = useCallback(() => {
     const el = scrollRef.current;
     if (!el) return;
     const dist = el.scrollHeight - el.scrollTop - el.clientHeight;
     pinnedToBottom.current = dist <= PIN_THRESHOLD_PX;
-    if (pinnedToBottom.current) setShowPill(false);
+    if (pinnedToBottom.current) {
+      userAnchorIdRef.current = null;
+      setShowPill(false);
+    }
   }, []);
 
+  const lastUserMessageId = useMemo(() => {
+    for (let i = thread.length - 1; i >= 0; i--) {
+      const item = thread[i];
+      if (item?.kind === "user") return item.message.id;
+    }
+    return null;
+  }, [thread]);
+
   useEffect(() => {
+    if (lastUserMessageId && lastUserMessageId !== userAnchorIdRef.current) {
+      userAnchorIdRef.current = lastUserMessageId;
+      const raf = requestAnimationFrame(() => scrollUserBubbleToTop(lastUserMessageId));
+      return () => cancelAnimationFrame(raf);
+    }
+
+    if (userAnchorIdRef.current && running) return;
+
     if (pinnedToBottom.current) {
       const raf = requestAnimationFrame(() => scrollToBottom());
       return () => cancelAnimationFrame(raf);
     }
     setShowPill(true);
-  }, [thread.length, running, agent.progress.timeline.length, pendingQueueItems.length, scrollToBottom]);
+  }, [
+    thread.length,
+    running,
+    pendingQueueItems.length,
+    lastUserMessageId,
+    scrollToBottom,
+    scrollUserBubbleToTop,
+  ]);
 
   const handleSend = useCallback(
     (text: string, mode?: AgentComposerMode, parts?: StoredMessagePart[]) => {
@@ -126,14 +169,6 @@ export function ChatPanel({
     },
     [onSend, composerMode],
   );
-
-  const lastUserMessageId = useMemo(() => {
-    for (let i = thread.length - 1; i >= 0; i--) {
-      const item = thread[i];
-      if (item?.kind === "user") return item.message.id;
-    }
-    return null;
-  }, [thread]);
 
   const lastAssistantMessageId = useMemo(() => {
     for (let i = thread.length - 1; i >= 0; i--) {

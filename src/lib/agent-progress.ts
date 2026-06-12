@@ -18,6 +18,16 @@ export interface PlanStep {
 
 export type AwaitingKind = "qualify" | "plan_approval" | null;
 
+/** Rehydrate awaiting gate from agent_runs.meta.awaitingUser (post-F5 / catch-up). */
+export function awaitingKindFromRunMeta(
+  meta: Record<string, unknown> | null | undefined,
+): AwaitingKind {
+  const awaitingUser = meta?.awaitingUser as { type?: string } | undefined;
+  if (awaitingUser?.type === "plan_approval") return "plan_approval";
+  if (awaitingUser?.type === "qualify") return "qualify";
+  return null;
+}
+
 export interface PendingPlan {
   planId: string;
   summary: string;
@@ -250,7 +260,8 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
       const append = data.append === true || data.delta === true;
       const narration = data.narration === true;
       const thinking = data.thinking === true;
-      const skipStream = narration || thinking;
+      const toNarration = narration || thinking;
+      const skipStream = toNarration;
       return {
         ...prev,
         streamText: skipStream
@@ -258,7 +269,7 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
           : append
             ? `${prev.streamText ?? ""}${chunk}`
             : chunk,
-        narrationText: narration
+        narrationText: toNarration
           ? append
             ? `${prev.narrationText ?? ""}${chunk}`
             : chunk

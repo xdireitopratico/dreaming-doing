@@ -21,7 +21,7 @@ import { restoreExecutionLogFromRows } from "./executionLogMeta.ts";
 import { loadCheckpoint } from "./checkpoint.ts";
 import { appendStreamEvent } from "../_shared/agent-stream.ts";
 import { isServiceRoleRequest } from "../_shared/service-auth.ts";
-import { extractOriginalUserRequest, looksLikeInteractionOnly } from "./qualify.ts";
+import { extractOriginalUserRequest, resolveAllocateSandbox } from "./qualify.ts";
 
 const runningLocks = new Map<string, Promise<unknown>>();
 
@@ -281,21 +281,20 @@ Deno.serve(async (req) => {
         return json({ error: "Projeto não encontrado" }, 404);
       }
 
-      // Fase 4.7: checa se o projeto tem arquivos ANTES de alocar E2B.
-      // Sandbox E2B só nasce DEPOIS do agente criar o primeiro arquivo (ou seja,
-      // DEPOIS de pelo menos um fs_write/fs_edit ter acontecido). Projeto vazio
-      // => conversa pura => sem sandbox => sem preview iframe.
-      let projectFileCount = 0;
-      try {
-        const { count } = await supabase
-          .from("project_files")
-          .select("id", { count: "exact", head: true })
-          .eq("project_id", projectId);
-        projectFileCount = count ?? 0;
-      } catch {
-        // Se a tabela não tem RLS adequado, fallback = 0 (não aloca).
-        projectFileCount = 0;
-      }
+      const projectHasSandbox = !!(
+        ((project as { meta?: Record<string, unknown> }).meta || {})?.previewSandboxId ||
+        ((project as { meta?: Record<string, unknown> }).meta || {})?.previewReady
+      );
+      const enqueueUserContent = String(
+        (body as { prompt?: string; message?: string }).prompt ||
+          (body as { prompt?: string; message?: string }).message ||
+          "",
+      ).trim();
+      const allocateSandboxForQueue = resolveAllocateSandbox({
+        planMode,
+        userContent: enqueueUserContent,
+        projectHasSandbox,
+      });
 
       if (body.action === "pending_count") {
         const { sanitizePendingQueue, countPendingMessages } =
@@ -440,7 +439,7 @@ Deno.serve(async (req) => {
           sessionKind: sessionKindRaw,
           enabledSkillIds,
           enabledMcpIds,
-          allocateSandbox: true,
+          allocateSandbox: allocateSandboxForQueue,
           mode: body.mode ?? "build",
         });
         await supabase.from("agent_pending_messages").insert({
@@ -473,7 +472,7 @@ Deno.serve(async (req) => {
           sessionKind: sessionKindRaw,
           enabledSkillIds,
           enabledMcpIds,
-          allocateSandbox: true,
+          allocateSandbox: allocateSandboxForQueue,
           mode: body.mode ?? "build",
         });
         await supabase.from("agent_pending_messages").insert({
@@ -657,11 +656,6 @@ Deno.serve(async (req) => {
       // if history contains prior plan_approved (makes follow-up "add X" after approve allocate sandbox reliably).
       const fromBody = (body as any).prompt || (body as any).message || "";
       const lastUserContent = fromBody ? String(fromBody) : extractOriginalUserRequest(messages);
-      const looksLikeInteraction = looksLikeInteractionOnly(lastUserContent);
-      const projectHasSandbox = !!(
-        ((project as any).meta || {})?.previewSandboxId ||
-        ((project as any).meta || {})?.previewReady
-      );
       const hasApprovedPlanInHistory = messages.some((m) => {
         const meta = (m?.meta ?? {}) as Record<string, unknown>;
         return (
@@ -669,13 +663,12 @@ Deno.serve(async (req) => {
           (meta.kind === "plan_approved" || typeof meta.planSourceRunId === "string")
         );
       });
-      // Fase 4.7: 3 guardas — (1) interação explícita não aloca, (2) projeto SEM
-      // arquivos não aloca (E2B só nasce depois do agente criar algo), (3) projeto
-      // com sandbox pré-existente pode reusar.
-      // + hasApproved for plan+follow-up proof.
-      let allocateSandboxLocal =
-        hasApprovedPlanInHistory || !looksLikeInteraction || projectHasSandbox;
-      // Plan mode: sandbox para grep/cat/ls — sem fs_write/fs_edit (filtrado no loop).
+      const allocateSandboxLocal = resolveAllocateSandbox({
+        planMode,
+        userContent: lastUserContent,
+        projectHasSandbox,
+        hasApprovedPlanInHistory,
+      });
 
       // Fase 4.7: o código abaixo (reg + sandbox local) era DEAD CODE — o
       // executeAgentJob em run-job.ts cria seu próprio ToolRegistry e sandbox.
@@ -801,7 +794,7 @@ Deno.serve(async (req) => {
             sessionKind: sessionKindRaw,
             enabledSkillIds,
             enabledMcpIds,
-            allocateSandbox: true,
+            allocateSandbox: allocateSandboxForQueue,
             mode: body.mode ?? "build",
           });
           await supabase.from("agent_pending_messages").insert({

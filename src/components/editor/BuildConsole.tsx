@@ -32,10 +32,7 @@ export function BuildConsole({
   const logLines = collectBuildLogLines(progress ?? null);
   const shellHistory = collectShellCommands(progress ?? null);
   const fork = progress?.stackForkSuggested ?? null;
-  const step =
-    progress?.currentStep != null && progress?.totalSteps != null
-      ? `Passo ${progress.currentStep}/${progress.totalSteps}`
-      : null;
+  const step = null;
 
   return (
     <div className="forge-build-console" data-testid="build-console">

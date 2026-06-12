@@ -26,7 +26,11 @@ export function ChatMessage({
   if (item.kind === "user") {
     const isQueued = item.message.meta?.queued === true;
     return (
-      <article className="forge-chat-item forge-chat-item-user" data-testid="chat-message-user">
+      <article
+        className="forge-chat-item forge-chat-item-user"
+        data-testid="chat-message-user"
+        data-user-msg-id={item.message.id}
+      >
         <ChatUserBubble content={item.message.content} queued={isQueued} />
         <ChatToolbar
           text={item.message.content}
