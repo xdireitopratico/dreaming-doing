@@ -1,5 +1,19 @@
 import { describe, expect, it } from "vitest";
-import { shouldHoldUserMessageAnchor } from "@/lib/chat/user-message-anchor";
+import {
+  shouldAnchorNewUserMessage,
+  shouldHoldUserMessageAnchor,
+} from "@/lib/chat/user-message-anchor";
+
+describe("shouldAnchorNewUserMessage", () => {
+  it("não ancora antes do scroll inicial", () => {
+    expect(shouldAnchorNewUserMessage(null, "u-2", false)).toBe(false);
+  });
+
+  it("ancora só quando o id do usuário mudou após o load", () => {
+    expect(shouldAnchorNewUserMessage("u-1", "u-2", true)).toBe(true);
+    expect(shouldAnchorNewUserMessage("u-2", "u-2", true)).toBe(false);
+  });
+});
 
 describe("shouldHoldUserMessageAnchor", () => {
   it("segura anchor no turno otimista __pending__", () => {

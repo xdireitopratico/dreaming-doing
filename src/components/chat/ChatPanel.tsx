@@ -7,6 +7,7 @@ import type { StoredMessagePart } from "@/lib/chat-attachments";
 import { useChat } from "@/hooks/useChat";
 import {
   scrollOffsetToAlignUserMessage,
+  shouldAnchorNewUserMessage,
   shouldHoldUserMessageAnchor,
   type ChatScrollMode,
 } from "@/lib/chat/user-message-anchor";
@@ -93,6 +94,8 @@ export function ChatPanel({
   const pinnedToBottom = useRef(true);
   const scrollModeRef = useRef<ChatScrollMode>("bottom");
   const anchoredUserIdRef = useRef<string | null>(null);
+  const prevLastUserMessageIdRef = useRef<string | null>(null);
+  const initialScrollDoneRef = useRef(false);
   const isProgrammaticScrollRef = useRef(false);
   const firstAnchorRef = useRef(true);
   const userScrolledAwayRef = useRef(false);
@@ -194,10 +197,36 @@ export function ChatPanel({
   }, [thread]);
 
   useEffect(() => {
-    if (!lastUserMessageId) return;
-    if (lastUserMessageId === anchoredUserIdRef.current && scrollModeRef.current === "user-anchor") {
+    initialScrollDoneRef.current = false;
+    prevLastUserMessageIdRef.current = null;
+    scrollModeRef.current = "bottom";
+    anchoredUserIdRef.current = null;
+    firstAnchorRef.current = true;
+    userScrolledAwayRef.current = false;
+    pinnedToBottom.current = true;
+  }, [conversationId]);
+
+  useEffect(() => {
+    if (chatLoading) return;
+    if (initialScrollDoneRef.current) return;
+    initialScrollDoneRef.current = true;
+    prevLastUserMessageIdRef.current = lastUserMessageId;
+    scrollModeRef.current = "bottom";
+    anchoredUserIdRef.current = null;
+    pinnedToBottom.current = true;
+    const raf = requestAnimationFrame(() => scrollToBottom("auto"));
+    return () => cancelAnimationFrame(raf);
+  }, [chatLoading, lastUserMessageId, scrollToBottom]);
+
+  useEffect(() => {
+    if (!shouldAnchorNewUserMessage(
+      prevLastUserMessageIdRef.current,
+      lastUserMessageId,
+      initialScrollDoneRef.current,
+    )) {
       return;
     }
+    prevLastUserMessageIdRef.current = lastUserMessageId;
     scrollModeRef.current = "user-anchor";
     anchoredUserIdRef.current = lastUserMessageId;
     firstAnchorRef.current = true;

@@ -12,6 +12,7 @@ import { detectProjectStack, type ProjectStackKind } from "@/lib/detect-project-
 import type { useAgentRun } from "@/hooks/useAgentRun";
 import { useAgentRealtime } from "@/hooks/useAgentRealtime";
 
+import { CHAT_MESSAGE_WINDOW } from "@/lib/chat/constants";
 import type { FileRow, Msg } from "./editor-page-types";
 
 type AgentRun = ReturnType<typeof useAgentRun>;
@@ -56,9 +57,10 @@ export function useEditorPageData({ projectId, search, agent, navigate }: UseEdi
         .from("messages")
         .select("*")
         .eq("conversation_id", conversation.id)
-        .order("created_at", { ascending: true })
-        .order("id", { ascending: true });
-      return (data ?? []) as Msg[];
+        .order("created_at", { ascending: false })
+        .order("id", { ascending: false })
+        .limit(CHAT_MESSAGE_WINDOW);
+      return [...((data ?? []) as Msg[])].reverse();
     },
     enabled: !!conversation,
   });

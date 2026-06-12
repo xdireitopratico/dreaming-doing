@@ -1,5 +1,16 @@
 export type ChatScrollMode = "bottom" | "user-anchor";
 
+/** Só ancora quando o usuário acabou de enviar — nunca no F5 / hydrate do histórico. */
+export function shouldAnchorNewUserMessage(
+  prevId: string | null,
+  nextId: string | null,
+  initialScrollDone: boolean,
+): nextId is string {
+  if (!initialScrollDone) return false;
+  if (!nextId) return false;
+  return prevId !== nextId;
+}
+
 export function scrollOffsetToAlignUserMessage(
   container: HTMLElement,
   bubble: HTMLElement,
