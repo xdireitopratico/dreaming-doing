@@ -95,7 +95,7 @@ export function buildExecuteInstruction(userRequest: string): string {
     "Antes de agir: 1 frase confirmando o que entendeu.",
     "Ferramentas: fs_read/fs_search → fs_edit (preferível) ou fs_write → shell_exec para build/test.",
     "Comunicação (obrigatório):",
-    "- Antes de cada bloco de tools: 1–3 frases em markdown (o quê, por quê, ordem).",
+    "- Antes de cada bloco de tools: 1–2 frases no campo content (o quê, por quê, ordem) — nunca envie tool_calls com content vazio.",
     "- Texto + tool_calls no mesmo turno quando fizer sentido.",
     "- Dúvida bloqueante: tool clarify. Caso contrário: assuma um default razoável, diga qual, e siga.",
     "- Só termine só com texto quando a tarefa estiver concluída ou para UMA pergunta objetiva.",

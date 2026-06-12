@@ -68,10 +68,10 @@ import type { AgentPreferencesPayload } from "./connector-keys.ts";
 import { resolveAutoForComplexity } from "../_shared/model-presets.ts";
 import { ResilientLLM } from "./robin-pool.ts";
 import {
-  generateClosureMessage,
-  generateLoopUpdate,
+  formatLoopStatus,
+  resolveClosureText,
   type LoopUpdateContext,
-} from "./narration.ts";
+} from "./loop-status.ts";
 import {
   buildPhaseTaskTitle,
   describeStepExpectation,
@@ -155,6 +155,7 @@ export class AgentLoop {
   private approvedPlanStepIndex: number;
   private narrationStarted: boolean;
   private narrationBuffer: string;
+  private lastStepHadAgentProse: boolean;
   private llmResponseWasStreamed: boolean;
   private touchedPaths: Set<string>;
   private lastActivityAt: number;
@@ -245,6 +246,7 @@ export class AgentLoop {
     this.toolsInvoked = false;
     this.narrationStarted = false;
     this.narrationBuffer = "";
+    this.lastStepHadAgentProse = false;
     this.llmResponseWasStreamed = false;
     this.touchedPaths = new Set();
     this.lastActivityAt = Date.now();
@@ -543,7 +545,7 @@ export class AgentLoop {
         maxSteps: this.maxStepsLimit,
         restored: true,
       });
-      await this.narrateLoop({
+      this.notifyLoopStatus({
         kind: "resume",
         fixResume: this.buildFixResume,
         resumeStep: this.state.currentStepIndex,
@@ -755,6 +757,7 @@ export class AgentLoop {
 
         loopStep++;
         this.state.currentStepIndex = loopStep;
+        this.lastStepHadAgentProse = false;
         this.state.phase = LoopPhase.EXECUTE_STEP;
         await this.touchHeartbeat();
         if (this.approvedPlanBuild) {
@@ -812,7 +815,7 @@ export class AgentLoop {
             };
           }
           await this.saveCheckpoint(LoopPhase.ERROR, true);
-          await this.narrateLoop({
+          this.notifyLoopStatus({
             kind: "model_error",
             errorDetail: message,
           });
@@ -865,6 +868,7 @@ export class AgentLoop {
         // Sem tool_calls
         if (!response.tool_calls || response.tool_calls.length === 0) {
           if ((forceTools || narrationOnlyStep) && assistantText) {
+            this.emitAgentProse(assistantText);
             this.state.messages.push({
               role: "assistant",
               content: response.content ?? assistantText,
@@ -885,6 +889,10 @@ export class AgentLoop {
         }
 
         this.toolsInvoked = true;
+
+        if (assistantText) {
+          this.emitAgentProse(assistantText);
+        }
 
         this.emit("phase", {
           phase: "execute",
@@ -1090,7 +1098,7 @@ export class AgentLoop {
           });
         }
 
-        await this.narrateLoop({
+        this.notifyLoopStatus({
           kind: "tool_batch",
           tools: response.tool_calls.map((tc) => ({
             name: tc.name,
@@ -1153,7 +1161,7 @@ export class AgentLoop {
         if (modifiedFilePaths.length > 0) {
           const typeCheck = await this.observer.quickTypeCheck(modifiedFilePaths);
           if (!typeCheck.ok) {
-            await this.narrateLoop({ kind: "typecheck_fail" });
+            this.notifyLoopStatus({ kind: "typecheck_fail" });
             this.emit("typecheck_fail", {
               errors: typeCheck.errors,
               files: modifiedFilePaths,
@@ -1171,7 +1179,7 @@ export class AgentLoop {
         const modifiedFiles = modifiedFilePaths.length > 0;
         if (modifiedFiles && buildAttempts < maxRetries) {
           this.state.phase = LoopPhase.VALIDATE_STEP;
-          await this.narrateLoop({ kind: "build_check" });
+          this.notifyLoopStatus({ kind: "build_check" });
           this.emit("phase", {
             phase: "observe",
             message: "Verificando build...",
@@ -1195,13 +1203,13 @@ export class AgentLoop {
             continue;
           } else {
             buildAttempts = 0;
-            await this.narrateLoop({ kind: "build_ok" });
+            this.notifyLoopStatus({ kind: "build_ok" });
             this.emit("validate_ok", { message: "Build OK" });
           }
         }
 
         if (isExecutionStuck(this.state.executionLog)) {
-          await this.narrateLoop({ kind: "stuck" });
+          this.notifyLoopStatus({ kind: "stuck" });
           this.emit("stuck", {
             message: "Padrão repetitivo detectado — injetando instrução para nova abordagem",
           });
@@ -1236,7 +1244,7 @@ export class AgentLoop {
       await this.saveCheckpoint(LoopPhase.VALIDATE_STEP);
       const finalObservation = await this.observer.observe();
       if (finalObservation.passed) {
-        await this.narrateLoop({ kind: "build_ok" });
+        this.notifyLoopStatus({ kind: "build_ok" });
         this.emit("validate_ok", { message: "Build OK (gate final)" });
         finalGateOk = true;
         continue;
@@ -1280,20 +1288,20 @@ export class AgentLoop {
           `\`\`\`\n${finalObservation.feedback?.slice(0, 6000) ?? ""}\n\`\`\`\n\n` +
           `Os erros reais de compilação estão acima — corrija cada um com fs_edit. Verifique imports, tipos e sintaxe.`,
       });
-      await this.narrateLoop({ kind: "build_fix" });
+      this.notifyLoopStatus({ kind: "build_fix" });
     }
 
     this.state.phase = LoopPhase.SUMMARIZE;
     await this.emitTransition("delivered");
     this.emit("phase", { phase: "summarize", message: "Finalizando..." });
     await this.saveCheckpoint(LoopPhase.SUMMARIZE, true);
-    const narration = this.narrationBuffer.trim();
-    const finalChat = await generateClosureMessage(this.configuredModel(), {
-      touchedPaths: [...this.touchedPaths],
-      priorConversation: narration,
-      userRequest: this.originalUserRequest ?? undefined,
-    });
-    const closingText = sanitizeUserFacingProse((finalChat.extraText ?? finalChat.text).trim());
+    const closingText = sanitizeUserFacingProse(
+      resolveClosureText({
+        messages: this.state.messages,
+        touchedPaths: [...this.touchedPaths],
+        userRequest: this.originalUserRequest ?? undefined,
+      }),
+    );
 
     if (closingText) {
       this.emit("assistant_text", {
@@ -1303,14 +1311,14 @@ export class AgentLoop {
       });
     }
 
-    await this.persistFinal(closingText || sanitizeUserFacingProse(finalChat.text), {
+    await this.persistFinal(closingText || "Pronto.", {
       lastFinishOk: true,
     });
     await this.clearCheckpoint();
     const tokens = this.compression.getTotalTokens();
     const costUsd = this.compression.getEstimatedCostUsd(this.router.mainCfg.model);
     this.emit("done", {
-      summary: (closingText || finalChat.text).slice(0, 2000),
+      summary: (closingText || "Pronto.").slice(0, 2000),
       totalInputTokens: tokens.input,
       totalOutputTokens: tokens.output,
       totalTokens: tokens.total,
@@ -1318,7 +1326,7 @@ export class AgentLoop {
     });
     return {
       ok: true,
-      summary: (closingText || finalChat.text).slice(0, 2000),
+      summary: (closingText || "Pronto.").slice(0, 2000),
       steps: loopStep,
       toolsUsed: [...toolsUsed],
       totalInputTokens: tokens.input,
@@ -2349,8 +2357,19 @@ export class AgentLoop {
     return enabled.length > 0 ? enabled : this.approvedPlanSteps;
   }
 
-  private async narrateLoop(ctx: LoopUpdateContext): Promise<void> {
-    const text = await generateLoopUpdate(this.configuredModel(), {
+  private emitAgentProse(raw: string): void {
+    const clean = sanitizeUserFacingProse(raw);
+    if (!clean) return;
+    this.streamNarration(clean);
+    this.lastStepHadAgentProse = true;
+  }
+
+  private notifyLoopStatus(ctx: LoopUpdateContext): void {
+    if (ctx.kind === "tool_batch" && this.lastStepHadAgentProse) {
+      this.lastStepHadAgentProse = false;
+      return;
+    }
+    const text = formatLoopStatus({
       ...ctx,
       userRequest: this.originalUserRequest ?? undefined,
       touchedPaths: [...this.touchedPaths],
