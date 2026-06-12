@@ -54,7 +54,11 @@ export function ChatMessage({
   const sessionTitle = item.miniCard?.title?.trim() ?? null;
   const proseDiffersFromTitle = !sessionTitle || !text || text !== sessionTitle;
   const showResponse =
-    hasContent && !showQualify && !planTeaser && (proseDiffersFromTitle || !showJobCard);
+    hasContent &&
+    !showQualify &&
+    !planTeaser &&
+    (proseDiffersFromTitle || !showJobCard) &&
+    !(showNarration && text?.trim() === item.narration?.trim());
   const hasDelivery =
     (item.miniCard?.fileCount ?? 0) > 0 ||
     (item.miniCard?.editedFile != null && item.miniCard.editedFile !== "");
@@ -83,7 +87,7 @@ export function ChatMessage({
           </div>
         )}
 
-        {item.isActive && !hasContent && !showThinking && (
+        {item.isActive && !hasContent && !showThinking && !showNarration && (
           <p className="forge-msg-text" style={{ color: "var(--text-muted)", fontSize: "12px" }}>
             Pensando…
           </p>

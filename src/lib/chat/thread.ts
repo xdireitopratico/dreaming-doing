@@ -177,11 +177,28 @@ function shouldShowLiveOverlay(items: RawThreadItem[], live: ChatLiveState): boo
   return shouldRetainLiveRunSlot(progress);
 }
 
+/** Congela progresso live no slot DB quando cardSnapshot ainda não chegou. */
+function attachFrozenProgressToRun(
+  items: RawThreadItem[],
+  runId: string,
+  progress: AgentProgress,
+): RawThreadItem[] {
+  return items.map((item) => {
+    if (item.kind !== "assistant" || item.runId !== runId) return item;
+    if (item.message && hasMaterializedCardSnapshot(item.message)) return item;
+    return {
+      ...item,
+      live: item.live ?? progress,
+      isActive: false,
+    };
+  });
+}
+
 function applyLiveOverlay(items: RawThreadItem[], live: ChatLiveState): RawThreadItem[] {
   const { activeRunId, progress, running } = live;
 
   if (activeRunId && !shouldShowLiveOverlay(items, live)) {
-    return items;
+    return attachFrozenProgressToRun(items, activeRunId, progress);
   }
 
   const isPending = activeRunId === PENDING_RUN_ID;

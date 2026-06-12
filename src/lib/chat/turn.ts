@@ -10,6 +10,9 @@ import { isAgentJobMessage } from "@/lib/assistant-run-progress";
 import { resolveJobPlanForRun, storedPlanFromMessage } from "@/lib/plan-message-meta";
 import { parseQualifyChoices } from "@/lib/qualify-choices";
 import { resolveAssistantProgress } from "@/lib/chat/resolve-progress";
+import { resolveTurnNarration, resolveTurnThinking } from "@/lib/chat/turn-display";
+import { resolveHistoricalRunProgress } from "@/lib/assistant-run-progress";
+import { initialAgentProgress } from "@/lib/agent-progress";
 import type {
   MiniCardData,
   PlanPrompt,
@@ -81,8 +84,23 @@ export function mapAssistantTurn(
     }
   }
 
-  const resolved = resolveAssistantProgress(item);
+  let resolved = resolveAssistantProgress(item);
   const runId = item.runId ?? activeRunId ?? `slot-${itemIndex}`;
+
+  if (!resolved && runId && item.runId === activeRunId) {
+    resolved = sessionProgress;
+  }
+  if (!resolved && item.runId) {
+    resolved = resolveHistoricalRunProgress(item.runId, messages);
+  }
+  if (!resolved && item.message?.content?.trim()) {
+    resolved = {
+      ...initialAgentProgress,
+      finished: true,
+      streamText: item.message.content.trim(),
+      conversational: true,
+    };
+  }
 
   const anchoredLive =
     !!running &&
@@ -138,7 +156,12 @@ export function mapAssistantTurn(
       })
     : null;
 
-  const runStartedAtMs = item.runId === activeRunId ? (ctx.activeRunStartedAtMs ?? null) : null;
+  const runStartedAtMs =
+    item.runId === activeRunId
+      ? (ctx.activeRunStartedAtMs ?? null)
+      : resolved?.latencyThoughtMs
+        ? Date.now() - resolved.latencyThoughtMs
+        : null;
 
   const msgPlanMeta = item.message ? storedPlanFromMessage(item.message) : null;
   const planStatus = msgPlanMeta?.status ?? null;
@@ -193,18 +216,9 @@ export function mapAssistantTurn(
     };
   }
 
-  const latency = runView?.latencyThinking;
-  const reasoning = runView?.reasoningThought;
-  const thinking =
-    latency || reasoning
-      ? {
-          active: !!(latency?.active || reasoning?.active),
-          startedAtMs: latency?.startedAtMs,
-          durationMs: latency?.durationMs ?? reasoning?.durationMs,
-        }
-      : null;
-
   const streamText = closingText ?? resolved?.streamText ?? null;
+  const thinking = resolveTurnThinking(resolved, runView, runStartedAtMs, slotActive);
+  const narration = resolveTurnNarration(resolved, runView, streamText);
   const showCard = showJobCard || planTeaser;
   const statusChips =
     resolved && (slotActive || anchoredLive)
@@ -220,7 +234,7 @@ export function mapAssistantTurn(
     phase: (resolved?.phase as RunPhase) ?? null,
     phaseMessage: resolved?.message ?? resolved?.statusHint ?? null,
     thinking,
-    narration: runView?.narration ?? resolved?.narrationText ?? null,
+    narration,
     miniCard: showCard && runView ? toMiniCard(runView) : null,
     statusChips,
     planTeaser,

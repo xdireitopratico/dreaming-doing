@@ -39,6 +39,38 @@ describe("buildChatThread", () => {
     }
   });
 
+  it("congela progresso live no slot quando cardSnapshot ainda não existe", () => {
+    const messages = [
+      msg("u1", "user", "oi"),
+      {
+        id: "a1",
+        role: "assistant" as const,
+        content: "Olá!",
+        timestamp: 0,
+        runId: "run-1",
+        meta: { finishedAt: new Date().toISOString(), runId: "run-1" },
+      },
+    ];
+    const progress = {
+      ...initialAgentProgress,
+      finished: true,
+      latencyThoughtMs: 3800,
+      narrationText: "Vou investigar o estado atual.",
+      streamText: "Olá!",
+    };
+    const thread = buildChatThread(messages, progress, {
+      running: false,
+      activeRunId: "run-1",
+      sessionProgress: progress,
+    });
+    const turn = thread[1];
+    expect(turn.kind).toBe("assistant");
+    if (turn.kind === "assistant") {
+      expect(turn.thinking?.durationMs).toBe(3800);
+      expect(turn.narration).toBe("Vou investigar o estado atual.");
+    }
+  });
+
   it("não vaza run de outra conversa em chat vazio", () => {
     const stale = {
       ...initialAgentProgress,

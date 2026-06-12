@@ -353,6 +353,18 @@ describe("forge-run mini card briefing e título", () => {
     expect(lat?.durationMs).toBe(3200);
   });
 
+  it("narration line persiste no chat quando terminal com stream distinto", () => {
+    const view = buildAgentRunView("run-1", {
+      ...initialAgentProgress,
+      finished: true,
+      lastFinishOk: true,
+      streamText: "Pronto!",
+      narrationText: "Vou criar a landing com Hero e CTA.",
+    });
+    expect(view.closingText).toBe("Pronto!");
+    expect(view.narration).toBe("Vou criar a landing com Hero e CTA.");
+  });
+
   it("closingText inclui narrationText quando terminal sem streamText", () => {
     const view = buildAgentRunView("run-1", {
       ...initialAgentProgress,
@@ -361,7 +373,7 @@ describe("forge-run mini card briefing e título", () => {
       narrationText: "Vou criar a landing com Hero e CTA.",
     });
     expect(view.closingText).toContain("Vou criar a landing");
-    expect(view.narration).toBeNull();
+    expect(view.narration).toBe("Vou criar a landing com Hero e CTA.");
   });
 
   it("latencyThinking ativo antes do 1º token com runStartedAtMs", () => {

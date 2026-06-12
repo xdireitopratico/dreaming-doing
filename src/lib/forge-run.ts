@@ -672,11 +672,9 @@ export function buildAgentRunView(
     running && tasks.length > 0 && progress.phase === "execute" && !progress.awaitingKind;
   const narrationForLine =
     !suppressNarrationLine &&
-    running &&
     narrationBody &&
-    !streamBody &&
     narrationBody !== sessionTitle &&
-    narrationBody !== streamBody
+    !narrationDuplicatesStream
       ? narrationBody
       : null;
 
