@@ -13,10 +13,7 @@ import {
   isOpenAiModelNotFound,
   shouldUseOpenAiResponsesApi,
 } from "./openai-responses.ts";
-
-function isNvidiaNimBaseUrl(baseUrl: string): boolean {
-  return baseUrl.includes("integrate.api.nvidia.com");
-}
+import { isNvidiaNimBaseUrl, normalizeMessagesForNim } from "./nim-messages.ts";
 
 /** Parâmetros oficiais Nemotron (thinking + reasoning budget) — ver build.nvidia.com */
 function nvidiaNimChatExtras(model: string): Record<string, unknown> | undefined {
@@ -138,12 +135,17 @@ class OpenAIAdapter implements LLMProvider {
     }
   }
 
+  private nimNormalizedMessages(params: ChatParams): ChatParams["messages"] {
+    if (!isNvidiaNimBaseUrl(this.baseUrl)) return params.messages;
+    return normalizeMessagesForNim(params.messages);
+  }
+
   private async chatCompletions(params: ChatParams): Promise<ChatResponse> {
     if (params.onTokenDelta) {
       return this.chatCompletionsStream(params);
     }
 
-    const messages = params.messages.map((m) => {
+    const messages = this.nimNormalizedMessages(params).map((m) => {
       const msg: any = { role: m.role, content: m.content ?? "" };
       if (Array.isArray(m.content)) msg.content = m.content;
       if (m.tool_calls) msg.tool_calls = m.tool_calls;
@@ -210,7 +212,7 @@ class OpenAIAdapter implements LLMProvider {
   }
 
   private async chatCompletionsStream(params: ChatParams): Promise<ChatResponse> {
-    const messages = params.messages.map((m) => {
+    const messages = this.nimNormalizedMessages(params).map((m) => {
       const msg: any = { role: m.role, content: m.content ?? "" };
       if (Array.isArray(m.content)) msg.content = m.content;
       if (m.tool_calls) msg.tool_calls = m.tool_calls;
