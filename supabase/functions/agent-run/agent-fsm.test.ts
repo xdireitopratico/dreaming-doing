@@ -4,14 +4,14 @@ import { applyTransition, isTerminal, isAwaitingUser, type AgentStateData } from
 
 const idle: AgentStateData = { name: "idle", since: 0 };
 
-Deno.test("idle → send → classifying", () => {
+Deno.test("idle → send → running", () => {
   const r = applyTransition(idle, { type: "send" });
   assertEquals(r.ok, true);
-  assertEquals(r.to, "classifying");
+  assertEquals(r.to, "running");
 });
 
-Deno.test("classifying → classified → planning", () => {
-  const s: AgentStateData = { name: "classifying", since: 0, attempt: 0 };
+Deno.test("running → classified → planning", () => {
+  const s: AgentStateData = { name: "running", since: 0, attempt: 0 };
   const r = applyTransition(s, { type: "classified", data: { complexity: 3 } });
   assertEquals(r.ok, true);
   assertEquals(r.to, "planning");
@@ -23,6 +23,14 @@ Deno.test("planning → plan_proposed → awaiting_plan", () => {
   const r = applyTransition(s, { type: "plan_proposed", data: { summary: "Criar landing" } });
   assertEquals(r.ok, true);
   assertEquals(r.to, "awaiting_plan");
+});
+
+Deno.test("running → no_plan_needed → building (atalho sem planning)", () => {
+  const s: AgentStateData = { name: "running", since: 0, classification: { complexity: 2 } };
+  const r = applyTransition(s, { type: "no_plan_needed" });
+  assertEquals(r.ok, true);
+  assertEquals(r.to, "building");
+  assertEquals(r.state.stepIndex, 0);
 });
 
 Deno.test("awaiting_plan → plan_approved → building", () => {

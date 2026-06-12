@@ -99,7 +99,7 @@ describe("assistant-run-progress", () => {
     expect(p?.deliveryFiles).toEqual(["src/App.tsx"]);
   });
 
-  it("cardSnapshot com awaitingKind qualify restaura gate pós-F5", () => {
+  it("cardSnapshot com awaitingKind qualify (clarify) restaura gate pós-F5", () => {
     const msg: ChatMessage = {
       id: "a1",
       role: "assistant",

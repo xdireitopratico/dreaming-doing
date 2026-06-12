@@ -283,6 +283,23 @@ class MockReg extends ToolRegistry {
       { n: "fs_search", req: ["regex"] },
       { n: "fs_read_many", req: ["paths"] },
       { n: "shell_exec", props: { command: { type: "string" } }, req: ["command"] },
+      {
+        n: "clarify",
+        props: {
+          question: { type: "string" },
+          intro: { type: "string" },
+          choices: { type: "array" },
+        },
+        req: ["question"],
+      },
+      {
+        n: "create_plan",
+        props: {
+          summary: { type: "string" },
+          steps: { type: "array" },
+        },
+        req: ["summary", "steps"],
+      },
     ];
     for (const t of tools) {
       this.register(
@@ -307,26 +324,7 @@ class MockReg extends ToolRegistry {
 }
 
 // ===== HELPERS =====
-/** Classify + abertura LLM (router.main e configuredModel compartilham a mesma fila). */
-function queueClassify(main: MockLLM, response: ChatResponse) {
-  main.queue(response);
-  main.queue(tr("Vou começar por aí."));
-}
 
-function cr(complexity = 3, type = "modify", summary = "Tarefa"): ChatResponse {
-  return {
-    role: "assistant",
-    content: JSON.stringify({ complexity, type, summary, needsBuild: true, needsDeps: false }),
-    tool_calls: [],
-    usage: {
-      prompt_tokens: 100,
-      completion_tokens: 20,
-      total_tokens: 120,
-      input_tokens: 100,
-      output_tokens: 20,
-    },
-  };
-}
 function er(
   content: string,
   ...tools: Array<{ id: string; name: string; arguments: Record<string, unknown> }>
@@ -449,9 +447,8 @@ function ef(ev: Array<{ type: string; data: unknown }>, type: string) {
 
 // ===== TESTS =====
 
-Deno.test("1 happy path — classifica→executa→valida→done", async () => {
+Deno.test("1 happy path — executa→valida→done", async () => {
   const { loop, cheap, main, events } = f({ files: [] });
-  queueClassify(main, cr(3, "new_project", "Landing de cafeteria"));
   main.queue(er("Criando...", tc("t1", "fs_write", { path: "src/App.tsx", content: "// app" })));
   main.queue(tr("Concluído!"));
   const r = await loop.run();
@@ -461,7 +458,7 @@ Deno.test("1 happy path — classifica→executa→valida→done", async () => {
   assertEquals(ef(events, "done").length, 1);
 });
 
-Deno.test("2 resume checkpoint — restaura estado, pula classificação", async () => {
+Deno.test("2 resume checkpoint — restaura estado", async () => {
   const { loop, cheap, main, events } = f({
     msgs: [
       { role: "user", content: "Crie landing" },
@@ -492,7 +489,23 @@ Deno.test("3a plan mode propõe plano sem tool_start", async () => {
     files: [{ path: "src/App.tsx", content: "export default () => <p>Canvas vazio</p>" }],
     planMode: true,
   });
-  queueClassify(main, cr(3, "new_project", "App de voz Hermes"));
+  main.queue(
+    er(
+      "",
+      tc("p1", "create_plan", {
+        summary: "App de voz com Hermes e Expo",
+        steps: [
+          { id: "s1", type: "observe", description: "Ler contexto do projeto" },
+          {
+            id: "s2",
+            type: "create_file",
+            description: "Implementar app de voz com Hermes e Expo",
+            filePath: "src/App.tsx",
+          },
+        ],
+      }),
+    ),
+  );
   main.queue(tr("Plano: app de voz com Hermes e Expo — revisar antes de codar."));
   const r = await loop.run();
   assertEquals(r.ok, true);
@@ -522,46 +535,129 @@ Deno.test("3d plan mode bom dia — conversacional, sem plan_proposed nem gather
   assertEquals(de?.conversational, true);
 });
 
-Deno.test("3 qualify phase — só em Plan mode", async () => {
+Deno.test("3 plan mode — pedido vago propõe plano", async () => {
   const { loop, cheap, main, events } = f({
     msgs: [{ role: "user", content: "site" }],
     files: [],
     planMode: true,
   });
-  queueClassify(main, {
-    role: "assistant",
-    content: JSON.stringify({
-      complexity: 1,
-      type: "other",
-      summary: "x",
-      needsBuild: false,
-      needsDeps: false,
-    }),
-    tool_calls: [],
-    usage: {
-      prompt_tokens: 100,
-      completion_tokens: 20,
-      total_tokens: 120,
-      input_tokens: 100,
-      output_tokens: 20,
-    },
-  });
-  main.queue(tr("Me conte mais sobre o que você quer construir..."));
+  main.queue(
+    er(
+      "",
+      tc("p1", "create_plan", {
+        summary: "Site",
+        steps: [
+          { id: "s1", type: "observe", description: "Analisar pedido e contexto" },
+          { id: "s2", type: "create_file", description: "Criar landing do site", filePath: "src/App.tsx" },
+        ],
+      }),
+    ),
+  );
+  main.queue(tr("Plano para o site — revise antes de codar."));
   const r = await loop.run();
   assertEquals(r.ok, true);
   assertEquals(r.steps, 0);
-  const de = ef(events, "done")[0]?.data as { qualified?: boolean };
-  assertEquals(de?.qualified, true);
+  assertEquals(ef(events, "plan_proposed").length, 1);
 });
 
-Deno.test("3c Build mode — mobile ambíguo para em qualify", async () => {
+Deno.test("3e Build mode — clarify+fs_write no mesmo turno não executa tools", async () => {
+  const { loop, main, reg, events } = f({
+    msgs: [{ role: "user", content: "Crie landing de padaria completa" }],
+    files: [{ path: "src/App.tsx", content: "export default () => <p>Hi</p>" }],
+    maxSteps: 3,
+  });
+  main.queue(
+    er(
+      "Vou perguntar antes",
+      tc("c1", "clarify", { question: "Qual tom visual?" }),
+      tc("t1", "fs_write", { path: "src/App.tsx", content: "// x" }),
+    ),
+  );
+  main.queue(er("Ok", tc("t2", "fs_write", { path: "src/App.tsx", content: "// y" })));
+  main.queue(tr("Pronto"));
+  const r = await loop.run();
+  assertEquals(r.ok, true);
+  assertEquals(ef(events, "gate_decision").length, 0);
+  assertEquals(reg.execs.some((e) => e.name === "fs_write"), true);
+});
+
+Deno.test("3f Plan mode — clarify sem create_plan", async () => {
+  const { loop, main, events } = f({
+    msgs: [{ role: "user", content: "quero um app" }],
+    files: [],
+    planMode: true,
+  });
+  main.queue(
+    er(
+      "",
+      tc("c1", "clarify", {
+        question: "Qual o objetivo principal?",
+        choices: [{ label: "Vendas" }, { label: "Suporte" }],
+      }),
+    ),
+  );
+  const r = await loop.run();
+  assertEquals(r.ok, true);
+  assertEquals(ef(events, "plan_proposed").length, 0);
+  const de = ef(events, "done")[0]?.data as { qualified?: boolean; awaiting?: boolean };
+  assertEquals(de?.qualified, true);
+  assertEquals(ef(events, "gate_decision").length, 1);
+});
+
+Deno.test("3g Plan mode — create_plan inválido (1 passo)", async () => {
+  const { loop, main, events } = f({
+    msgs: [{ role: "user", content: "site" }],
+    files: [],
+    planMode: true,
+  });
+  main.queue(
+    er("", tc("p1", "create_plan", { summary: "Site", steps: [{ description: "único" }] })),
+  );
+  const r = await loop.run();
+  assertEquals(r.ok, false);
+  assertEquals(ef(events, "plan_proposed").length, 0);
+});
+
+Deno.test("3h Plan mode — create_plan vence clarify no mesmo turno", async () => {
+  const { loop, main, events } = f({
+    msgs: [{ role: "user", content: "landing de padaria" }],
+    files: [],
+    planMode: true,
+  });
+  main.queue(
+    er(
+      "",
+      tc("c1", "clarify", { question: "Mais detalhes?" }),
+      tc("p1", "create_plan", {
+        summary: "Landing padaria",
+        steps: [
+          { description: "Ler contexto", type: "observe" },
+          { description: "Criar hero", type: "create_file", filePath: "src/App.tsx" },
+        ],
+      }),
+    ),
+  );
+  main.queue(tr("Plano pronto para revisão."));
+  const r = await loop.run();
+  assertEquals(r.ok, true);
+  assertEquals(ef(events, "plan_proposed").length, 1);
+});
+
+Deno.test("3c Build mode — mobile ambíguo para em clarify", async () => {
   const { loop, cheap, main, events } = f({
     msgs: [{ role: "user", content: "app de voz para celular" }],
     files: [{ path: "src/App.tsx", content: "export default () => <p>Canvas vazio</p>" }],
     maxSteps: 2,
   });
-  queueClassify(main, cr(3, "new_project", "App de voz"));
-  main.queue(tr("Você prefere Expo (React Native) ou Android nativo em Kotlin?"));
+  main.queue(
+    er(
+      "",
+      tc("c1", "clarify", {
+        question: "Você prefere Expo (React Native) ou Android nativo em Kotlin?",
+        choices: [{ label: "Expo (React Native)" }, { label: "Android nativo (Kotlin)" }],
+      }),
+    ),
+  );
   const r = await loop.run();
   assertEquals(r.ok, true);
   assertEquals(r.steps, 0);
@@ -570,13 +666,12 @@ Deno.test("3c Build mode — mobile ambíguo para em qualify", async () => {
   assertEquals(de?.awaiting, true);
 });
 
-Deno.test("3b Build mode — prompt vago não para em qualify", async () => {
+Deno.test("3b Build mode — prompt vago segue para execução", async () => {
   const { loop, cheap, main, events } = f({
     msgs: [{ role: "user", content: "site" }],
     files: [{ path: "src/App.tsx", content: "export default () => <p>Hi</p>" }],
     maxSteps: 2,
   });
-  queueClassify(main, cr(1, "other", "x"));
   main.queue(tr("ok"));
   const r = await loop.run();
   assertEquals(ef(events, "gate_decision").length, 0);
@@ -592,7 +687,6 @@ Deno.test("4 cancelamento via evento emitido no loop", async () => {
     maxSteps: 5,
     runId: "cancel-test",
   });
-  queueClassify(main, cr(3, "new_project", "Landing"));
   sb.set("agent_runs", { canceled_at: "2024-06-06T00:00:00Z" });
   const r = await loop.run();
   assertEquals(r.ok, false);
@@ -623,7 +717,6 @@ Deno.test("6 erro LLM — resumable", async () => {
     msgs: [{ role: "user", content: "Crie componente" }],
     files: [],
   });
-  queueClassify(main, cr(3, "new_project", "Componente"));
   main.queue(new Error("rate limit 429"));
   const r = await loop.run();
   assertEquals(r.ok, false);
@@ -686,7 +779,6 @@ Deno.test("9 forceTools — LLM retorna texto sem tools", async () => {
     files: [],
     intent: { type: "new_project", scope: [], complexity: "medium", summary: "Header" },
   });
-  queueClassify(main, cr(3, "new_project", "Header"));
   main.queue(tr("Vou analisar primeiro...")); // no tools, triggers forceTools
   main.queue(er("Criando", tc("t1", "fs_write", { path: "src/H.tsx", content: "// h" })));
   main.queue(tr("Pronto!"));
@@ -707,7 +799,6 @@ Deno.test("10 git commit automático após fs_write", async () => {
     msgs: [{ role: "user", content: "Crie hero.tsx" }],
     files: [],
   });
-  queueClassify(main, cr(3, "modify", "Criar"));
   main.queue(er("Criando...", tc("t1", "fs_write", { path: "src/hero.tsx", content: "// hero" })));
   main.queue(tr("Pronto!"));
   const r = await loop.run();
@@ -723,7 +814,6 @@ Deno.test("11 projeto vazio sem crash", async () => {
     msgs: [{ role: "user", content: "Crie projeto do zero" }],
     files: [],
   });
-  queueClassify(main, cr(4, "new_project", "Novo projeto"));
   main.queue(er("Criando...", tc("t1", "fs_write", { path: "package.json", content: "{}" })));
   main.queue(tr("Pronto!"));
   const r = await loop.run();
@@ -735,7 +825,6 @@ Deno.test("12 persistAssistantStep reutiliza uma mensagem por run", async () => 
     msgs: [{ role: "user", content: "Crie landing de padaria" }],
     files: [],
   });
-  queueClassify(main, cr(3, "new_project", "Landing padaria"));
   main.queue(er("Lendo componentes...", tc("t1", "fs_read", { path: "src/App.tsx" })));
   main.queue(
     er("Criando hero...", tc("t2", "fs_write", { path: "src/Hero.tsx", content: "// hero" })),
@@ -768,7 +857,6 @@ Deno.test("12b persistAssistantStep meta.partial=true em cada step", async () =>
     msgs: [{ role: "user", content: "Crie landing" }],
     files: [],
   });
-  queueClassify(main, cr(3, "new_project", "Landing"));
   main.queue(er("Lendo...", tc("t1", "fs_read", { path: "src/App.tsx" })));
   main.queue(tr("Pronto!"));
   const r = await loop.run();
@@ -793,7 +881,6 @@ Deno.test("13 skills detectadas", async () => {
       { path: "src/app/page.tsx", content: "export default function(){}" },
     ],
   });
-  queueClassify(main, cr(3, "modify", "Adicionar página"));
   main.queue(
     er(
       "Adicionando...",
@@ -821,7 +908,6 @@ Deno.test("13 múltiplos tool_calls", async () => {
     msgs: [{ role: "user", content: "Crie 3 componentes" }],
     files: [],
   });
-  queueClassify(main, cr(3, "new_project", "Criar componentes"));
   main.queue(
     er(
       "Criando...",
@@ -850,7 +936,6 @@ Deno.test("14 LLM sem tool_calls — (type other, not forced)", async () => {
     files: [],
     intent: { type: "other", scope: [], complexity: "simple", summary: "Explicar RSC" },
   });
-  queueClassify(main, cr(1, "other", "Pergunta"));
   // complexity=1 → cheap model for execution
   main.queue(tr("React Server Components são componentes que renderizam no servidor..."));
   const r = await loop.run();
@@ -866,7 +951,6 @@ Deno.test("15 build fail → rollback", async () => {
     ],
   });
   reg.failBuild(); // observer reports build failure
-  queueClassify(main, cr(3, "modify", "Adicionar"));
   main.queue(
     er("Adicionando...", tc("t1", "fs_write", { path: "src/Bug.tsx", content: "const x='bug'" })),
   );
@@ -897,7 +981,6 @@ Deno.test("16 typecheck failure", async () => {
     ],
   });
   reg.failTypecheck(); // shell_exec for "npx tsc --noEmit src/New.tsx" returns error-like stderr
-  queueClassify(main, cr(3, "modify", "Adicionar"));
   main.queue(
     er(
       "Adicionando...",
@@ -925,7 +1008,6 @@ Deno.test("17 checkpoint salvo e limpo", async () => {
     msgs: [{ role: "user", content: "Faça várias alterações" }],
     files: [],
   });
-  queueClassify(main, cr(3, "modify", "Alterações"));
   main.queue(er("P1", tc("t1", "fs_write", { path: "src/a.tsx", content: "// a" })));
   main.queue(er("P2", tc("t2", "fs_write", { path: "src/b.tsx", content: "// b" })));
   main.queue(er("P3", tc("t3", "fs_write", { path: "src/c.tsx", content: "// c" })));
@@ -947,7 +1029,6 @@ Deno.test("18 executionLog populado", async () => {
     msgs: [{ role: "user", content: "Crie arquivos" }],
     files: [],
   });
-  queueClassify(main, cr(3, "modify", "Criar"));
   main.queue(
     er(
       "Criando...",
@@ -973,7 +1054,6 @@ Deno.test("19 observer validate_ok", async () => {
       { path: "tsconfig.json", content: "{}" },
     ],
   });
-  queueClassify(main, cr(3, "modify", "Criar componente"));
   main.queue(
     er(
       "Criando...",
@@ -1001,7 +1081,6 @@ Deno.test("20 compressão a cada 5 turnos", async () => {
     files: [],
     maxSteps: 2,
   });
-  queueClassify(main, cr(3, "modify", "Alterações"));
   main.queue(er("P1", tc("t1", "fs_write", { path: "src/f1.tsx", content: "// 1" })));
   main.queue(tr("Resumo: alterações feitas."));
   await loop.run();
@@ -1020,7 +1099,6 @@ Deno.test("21 resume sem checkpoint", async () => {
     checkpoint: false,
     intent: { type: "new_project", scope: [], complexity: "medium", summary: "Landing" },
   });
-  queueClassify(main, cr(3, "new_project", "Landing"));
   main.queue(
     er("Continuando...", tc("t1", "fs_write", { path: "src/style.css", content: "/* css */" })),
   );
@@ -1038,7 +1116,6 @@ Deno.test("22 smoke test — eventos principais", async () => {
       { path: "src/App.tsx", content: "export default () => null" },
     ],
   });
-  queueClassify(main, cr(3, "new_project", "Teste"));
   main.queue(
     er(
       "Testing...",
@@ -1048,7 +1125,7 @@ Deno.test("22 smoke test — eventos principais", async () => {
   );
   main.queue(tr("Done!"));
   await loop.run();
-  for (const t of ["phase", "classify", "step", "tool_start", "tool_done", "done"]) {
+  for (const t of ["phase", "step", "tool_start", "tool_done", "done"]) {
     assert(ef(events, t).length > 0, `Faltou "${t}"`);
   }
 });

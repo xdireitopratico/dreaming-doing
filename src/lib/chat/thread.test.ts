@@ -24,7 +24,7 @@ describe("buildChatThread", () => {
 
   it("slot __pending__ imediato após envio", () => {
     const messages = [msg("u1", "user", "bom dia")];
-    const progress = { ...initialAgentProgress, phase: "classify", statusHint: "Iniciando…" };
+    const progress = { ...initialAgentProgress, statusHint: "Iniciando…" };
     const thread = buildChatThread(messages, progress, {
       running: true,
       activeRunId: PENDING_RUN_ID,

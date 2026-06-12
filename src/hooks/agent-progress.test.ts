@@ -154,7 +154,7 @@ describe("applyAgentProgressEvent", () => {
     expect(state.tools[1]?.ok).toBe(true);
   });
 
-  it("classify não polui streamText (planejamento interno)", () => {
+  it("classify legado não polui streamText (checkpoint resume)", () => {
     const next = applyAgentProgressEvent(
       { ...base, finished: false, streamText: null },
       ev("classify", { summary: "Landing de cafeteria", model: "gpt-4" }),
@@ -266,12 +266,12 @@ describe("applyAgentProgressEvent", () => {
     expect(next.statusHint).toContain("processando");
   });
 
-  it("explore atualiza fase gather", () => {
+  it("explore atualiza mensagem sem poluir phase", () => {
     const next = applyAgentProgressEvent(
       { ...base, finished: false },
       ev("explore", { message: "Lendo package.json, src/App.tsx…", paths: ["package.json"] }),
     );
-    expect(next.phase).toBe("gather");
+    expect(next.phase).toBeNull();
     expect(next.message).toContain("package.json");
   });
 

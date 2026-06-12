@@ -1,12 +1,12 @@
 import type { AgentProgress } from "@/lib/agent-progress";
 
 const PHASE_LABELS: Record<string, string> = {
-  gather: "Analisando o projeto",
-  classify: "Entendendo o que você pediu",
   plan: "Montando um plano",
+  build: "Implementando as mudanças",
   execute: "Implementando as mudanças",
   observe: "Verificando se tudo compila",
   summarize: "Finalizando a resposta",
+  resume: "Retomando execução",
   taste: "Concierge",
   taste_chat: "Concierge",
   done: "Concluído",

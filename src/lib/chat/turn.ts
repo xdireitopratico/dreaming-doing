@@ -114,7 +114,7 @@ export function mapAssistantTurn(
     !resolved.finished &&
     !resolved.canceled;
 
-  const isQualifyOnly =
+  const isClarifyOnly =
     !!resolved &&
     resolved.awaitingKind === "qualify" &&
     !!resolved.awaiting &&
@@ -129,9 +129,8 @@ export function mapAssistantTurn(
       (resolved.tools?.length ?? 0) > 0 ||
       (resolved.diffs?.length ?? 0) > 0 ||
       (resolved.deliveryFiles?.length ?? 0) > 0 ||
-      resolved.phase === "gather" ||
-      resolved.phase === "classify" ||
       resolved.phase === "plan" ||
+      resolved.phase === "build" ||
       resolved.phase === "execute" ||
       resolved.phase === "observe" ||
       resolved.phase === "summarize");
@@ -143,7 +142,7 @@ export function mapAssistantTurn(
   const showJobCard = shouldShowJobCard({
     runId: item.runId,
     progress: resolved,
-    isQualifyOnly,
+    isClarifyOnly,
     isAgentJobMessage: isAgentJobMessage(item.message),
     hasExecutionEvidence,
     slotActive,

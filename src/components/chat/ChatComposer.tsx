@@ -99,7 +99,7 @@ export function ChatComposer({
     ? "Tell Lovable what to do instead..."
     : isRunning
       ? "Queue follow-up..."
-      : "Ask Lovable...";
+      : "Let's Build...";
 
   const addFiles = useCallback((files: File[]) => {
     const { accepted } = filterAcceptedFiles(files);

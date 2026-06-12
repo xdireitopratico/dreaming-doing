@@ -55,8 +55,8 @@ export function buildPhaseTaskTitle(phase: string, message?: string): string {
   switch (phase) {
     case "gather":
       return "Entender o que já existe no projeto";
-    case "classify":
-      return "Avaliar o escopo da tarefa";
+    case "running":
+      return "Trabalhar no seu pedido";
     case "plan":
       return "Montar plano de implementação";
     case "build":

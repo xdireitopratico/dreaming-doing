@@ -48,12 +48,17 @@ export function InspectorTimeline({
       <div ref={scrollRef} className="forge-inspector-details-scroll">
         {latencyThinking && (
           <div className="forge-inspector-latency-thinking" data-testid="inspector-latency-thinking">
-            <ForgeThinking variant="latency" startedAtMs={latencyThinking.startedAtMs} active />
+            <ForgeThinking
+              variant="latency"
+              startedAtMs={latencyThinking.startedAtMs}
+              durationMs={latencyThinking.durationMs}
+              active={latencyThinking.active}
+            />
           </div>
         )}
         <InspectorActivityFeed items={timelineItems} onOpenFile={onOpenFile} running={running} />
       </div>
-      {running && (
+      {running && latencyThinking?.active && (
         <footer className="forge-inspector-details-footer" data-testid="inspector-thinking-footer">
           <span className="forge-inspector-details-footer-dot" aria-hidden />
           Thinking…

@@ -3,6 +3,7 @@
  */
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { ToolRegistry } from "./registry.ts";
+import { registerMetaTools } from "./tools/meta.ts";
 import { AgentLoop } from "./loop.ts";
 import { createSandboxProvider } from "./sandbox.ts";
 import { registerFsTools } from "./tools/fs.ts";
@@ -37,14 +38,12 @@ export type AgentJobParams = {
   /** Fase 4.6 plan mode: emite plan_proposed + pausa pra aprovação. */
   planMode?: boolean;
   /**
-   * Se false: caminho leve de conversa/qualify.
-   * NÃO carrega chave E2B, NÃO cria SandboxProvider, NÃO registra shell tool.
-   * Usado para o "caminho barato primeiro" (só LLM de qualify sem container).
-   * Default true para não quebrar chamadas existentes.
+   * Se false: caminho leve (clarify/conversa) — sem E2B nem shell tool.
+   * Default true para compatibilidade.
    */
   allocateSandbox?: boolean;
-  /** Explicit skip for qualify on approved plan builds (contract for PR2 meta-aware bypass). */
-  skipQualify?: boolean;
+  /** Pula gate conversacional no loop (build pós-plano aprovado). */
+  skipConversationalGate?: boolean;
 };
 
 /**
@@ -154,7 +153,7 @@ export async function executeAgentJob(
     enabledSkillIds,
     enabledMcpIds,
     planMode = false,
-    skipQualify = false,
+    skipConversationalGate = false,
   } = params;
 
   // Fast cancel check (covers both inline fallback in agent-run and worker chunks)
@@ -213,16 +212,15 @@ export async function executeAgentJob(
   const messages = await buildChatHistory(historyRows, 120, mainCfg.model);
   const sessionExt = await buildSessionExtensionsPrompt(enabledSkillIds, enabledMcpIds);
 
-  let allocateSandbox = params.allocateSandbox !== false; // default true (backward compat)
-  if (planMode) {
-    allocateSandbox = false;
-  }
+  // Plan mode precisa de sandbox para shell_exec exploratório (grep, cat, ls…).
+  let allocateSandbox = params.allocateSandbox !== false;
   const isPlanApprovedBuild = !planMode && !!preMeta.planSourceRunId;
   if (isPlanApprovedBuild) {
     allocateSandbox = true; // force for approved builds + follow-ups (meta-aware contract)
   }
 
   const reg = new ToolRegistry();
+  registerMetaTools(reg, { planMode });
   const projectTemplate = (project as { template?: string }).template ?? "vite-react";
   const projectMeta = ((project as { meta?: Record<string, unknown> }).meta ?? {}) as Record<
     string,
@@ -355,7 +353,7 @@ export async function executeAgentJob(
           runId: agentRunId,
           planMode,
           approvedPlanBuild: isPlanApprovedBuild,
-          skipQualify: skipQualify || isPlanApprovedBuild,
+          skipConversationalGate: skipConversationalGate || isPlanApprovedBuild,
           planSummary:
             typeof preMeta.planDocument === "string"
               ? preMeta.planDocument

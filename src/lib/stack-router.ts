@@ -88,7 +88,7 @@ export function inferStackFromPrompt(prompt: string): StackDecision {
   return DEFAULT;
 }
 
-/** Pedido mobile sem stack explícita — qualify deve perguntar Expo vs nativo. */
+/** Pedido mobile sem stack explícita — clarify deve perguntar Expo vs nativo. */
 export function isAmbiguousMobileRequest(prompt: string): boolean {
   const p = prompt.trim();
   if (!p) return false;

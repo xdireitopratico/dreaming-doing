@@ -7,7 +7,7 @@ describe("turn-display — entrou, permanece", () => {
   it("resolveTurnThinking — aparece no envio antes do 1º token", () => {
     const startedAt = Date.now() - 1200;
     const thinking = resolveTurnThinking(
-      { ...initialAgentProgress, finished: false, phase: "classify" },
+      { ...initialAgentProgress, finished: false },
       null,
       startedAt,
       true,

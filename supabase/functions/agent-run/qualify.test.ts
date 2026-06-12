@@ -2,15 +2,12 @@ import { assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import {
   buildAgentContextForLlm,
   buildExecuteInstruction,
-  generateMobileStackQualifyMessage,
   extractOriginalUserRequest,
-  isAmbiguousMobileRequest,
   isPreviewActionRequest,
   isProjectInventoryQuestion,
   isProjectSeedPlaceholder,
   isSeedPlaceholderAppContent,
   looksLikeInteractionOnly,
-  needsQualify,
   projectEntryPathFromFiles,
   SEED_CONTEXT_FOR_LLM,
 } from "./qualify.ts";
@@ -44,19 +41,9 @@ Deno.test("buildExecuteInstruction inclui pedido literal", () => {
   assertEquals(text.includes("fs_write"), true);
 });
 
-Deno.test("preview action não é conversa vaga nem qualify", () => {
+Deno.test("preview action não é conversa vaga", () => {
   assertEquals(isPreviewActionRequest("envia para o preview"), true);
   assertEquals(looksLikeInteractionOnly("envia para o preview"), false);
-  assertEquals(
-    needsQualify("envia para o preview", {
-      complexity: 2,
-      type: "other",
-      summary: "x",
-      needsBuild: false,
-      needsDeps: false,
-    }),
-    false,
-  );
   const instr = buildExecuteInstruction("envia para o preview");
   assertEquals(instr.includes("shell_exec"), true);
 });
@@ -71,61 +58,11 @@ Deno.test("variantes de preview action", () => {
   for (const s of samples) {
     assertEquals(isPreviewActionRequest(s), true);
     assertEquals(looksLikeInteractionOnly(s), false);
-    assertEquals(
-      needsQualify(s, {
-        complexity: 1,
-        type: "other",
-        summary: "x",
-        needsBuild: false,
-        needsDeps: false,
-      }),
-      false,
-    );
   }
 });
 
-Deno.test("pergunta de inventário não entra em needsQualify", () => {
+Deno.test("pergunta de inventário detectada", () => {
   assertEquals(isProjectInventoryQuestion("o que temos pronto no projeto?"), true);
-  assertEquals(
-    needsQualify("o que temos pronto no projeto?", {
-      complexity: 1,
-      type: "other",
-      summary: "x",
-      needsBuild: false,
-      needsDeps: false,
-    }),
-    false,
-  );
-});
-
-Deno.test("needsBuild pula qualify", () => {
-  assertEquals(
-    needsQualify("site", {
-      complexity: 2,
-      type: "other",
-      summary: "x",
-      needsBuild: true,
-      needsDeps: false,
-    }),
-    false,
-  );
-});
-
-Deno.test("seed placeholder + new_project pula qualify", () => {
-  assertEquals(
-    needsQualify(
-      "landing de café",
-      {
-        complexity: 3,
-        type: "new_project",
-        summary: "x",
-        needsBuild: false,
-        needsDeps: false,
-      },
-      { isSeedPlaceholder: true },
-    ),
-    false,
-  );
 });
 
 Deno.test("projectEntryPathFromFiles expo vs web", () => {
@@ -158,52 +95,6 @@ Deno.test("isSeedPlaceholderAppContent detecta canvas vazio", () => {
   );
 });
 
-Deno.test("needsQualify para pedido curto", () => {
-  assertEquals(
-    needsQualify("site", {
-      complexity: 2,
-      type: "other",
-      summary: "x",
-      needsBuild: false,
-      needsDeps: false,
-    }),
-    true,
-  );
-  assertEquals(
-    needsQualify("Crie landing completa para cafeteria artesanal em SP com menu e reservas", {
-      complexity: 4,
-      type: "new_project",
-      summary: "x",
-      needsBuild: true,
-      needsDeps: false,
-    }),
-    false,
-  );
-});
-
-Deno.test("isAmbiguousMobileRequest para app de voz sem stack", () => {
-  assertEquals(isAmbiguousMobileRequest("app de voz para celular"), true);
-  assertEquals(isAmbiguousMobileRequest("app expo de voz"), false);
-  assertEquals(isAmbiguousMobileRequest("app android kotlin"), false);
-});
-
-Deno.test("generateMobileStackQualifyMessage oferece Expo e Kotlin", async () => {
-  const mock = {
-    async chat() {
-      return {
-        role: "assistant" as const,
-        content:
-          "Quer seguir com **Expo** (preview rápido) ou **Kotlin nativo** (Gradle mais longo)? Me diz qual prefere.",
-        tool_calls: [],
-      };
-    },
-  };
-  const msg = await generateMobileStackQualifyMessage(mock, "quero um app mobile de voz");
-  assertEquals(msg.includes("Expo"), true);
-  assertEquals(msg.includes("Kotlin"), true);
-});
-
-// === PR2 exhaustive cases for meta-aware extract + approve-proof (landing + approve + short follow-up) ===
 Deno.test(
   "extractOriginalUserRequest landing + approve(with meta) + short follow-up 'add X' returns follow-up",
   () => {
@@ -225,35 +116,37 @@ Deno.test(
   "extractOriginalUserRequest prefers meta.kind=plan_approved even without prefix in content",
   () => {
     const req = extractOriginalUserRequest([
-      { role: "user", content: "landing prompt" },
+      { role: "user", content: "landing" },
       {
         role: "user",
-        content: "Plano sem prefixo mas meta",
-        meta: { kind: "plan_approved" },
+        content: "Segue o plano abaixo.",
+        meta: { kind: "plan_approved", planSourceRunId: "r1" },
       },
-      { role: "user", content: "add footer now" },
+      { role: "user", content: "add dark mode" },
     ]);
-    assertEquals(req, "add footer now");
+    assertEquals(req, "add dark mode");
   },
 );
 
-Deno.test("extractOriginalUserRequest prefers meta.planSourceRunId over string heuristics", () => {
-  const req = extractOriginalUserRequest([
-    { role: "user", content: "initial request for app" },
-    {
-      role: "user",
-      content: "random text",
-      meta: { planSourceRunId: "src-xyz" },
-    },
-    { role: "user", content: "add dark mode" },
-  ]);
-  assertEquals(req, "add dark mode");
-});
+Deno.test(
+  "extractOriginalUserRequest prefers meta.planSourceRunId over string heuristics",
+  () => {
+    const req = extractOriginalUserRequest([
+      { role: "user", content: "landing" },
+      {
+        role: "user",
+        content: "ok",
+        meta: { planSourceRunId: "r1" },
+      },
+      { role: "user", content: "add dark mode" },
+    ]);
+    assertEquals(req, "add dark mode");
+  },
+);
 
 Deno.test(
   "extractOriginalUserRequest with mixed history returns planSummary equiv for pure approve (no followup)",
   () => {
-    // In approve run, extract (used for fallback) returns prior; ctor overrides with planSummary.
     const req = extractOriginalUserRequest([
       { role: "user", content: "landing de cafeteria" },
       {
@@ -266,22 +159,6 @@ Deno.test(
   },
 );
 
-Deno.test(
-  "needsQualify on plan-like summary with needsBuild=false does not gate (approved path)",
-  () => {
-    assertEquals(
-      needsQualify("landing com hero, menu e preview", {
-        complexity: 3,
-        type: "modify",
-        summary: "x",
-        needsBuild: true,
-        needsDeps: false,
-      }),
-      false,
-    );
-  },
-);
-
 Deno.test("buildAgentContextForLlm mascara seed como scaffold da plataforma", () => {
   const ctx = buildAgentContextForLlm(
     [{ path: "src/App.tsx", content: "export default () => <p>Canvas vazio</p>" }],
@@ -290,21 +167,4 @@ Deno.test("buildAgentContextForLlm mascara seed como scaffold da plataforma", ()
   );
   assertEquals(ctx.projectConfig, SEED_CONTEXT_FOR_LLM);
   assertEquals(ctx.manifest.includes("seed"), true);
-});
-
-Deno.test("plan mode primeiro turno substantivo pula qualify", () => {
-  assertEquals(
-    needsQualify(
-      "app de voz com hermes e expo para direito prático",
-      {
-        complexity: 3,
-        type: "new_project",
-        summary: "App de voz",
-        needsBuild: false,
-        needsDeps: false,
-      },
-      { isSeedPlaceholder: true, isFirstUserTurnOnProject: true, planMode: true },
-    ),
-    false,
-  );
 });

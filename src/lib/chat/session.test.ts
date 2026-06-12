@@ -37,8 +37,25 @@ describe("scopeLiveState", () => {
     expect(scopeLiveState([], progress, "old-run", false)).toBeNull();
   });
 
+  it("mantém overlay após finish até materializar no DB", () => {
+    const progress = {
+      ...initialAgentProgress,
+      finished: true,
+      lastFinishOk: true,
+      streamText: "Pronto!",
+      latencyThoughtMs: 3200,
+    };
+    const messages = [msg("u1", "user", "oi")];
+
+    expect(scopeLiveState(messages, progress, "run-1", false)).toEqual({
+      activeRunId: "run-1",
+      progress,
+      running: false,
+    });
+  });
+
   it("permite slot pendente imediato após envio", () => {
-    const progress = { ...initialAgentProgress, phase: "classify", statusHint: "Iniciando…" };
+    const progress = { ...initialAgentProgress, statusHint: "Iniciando…" };
 
     expect(scopeLiveState([], progress, "__pending__", true)).toEqual({
       activeRunId: "__pending__",

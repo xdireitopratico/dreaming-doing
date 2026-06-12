@@ -31,15 +31,15 @@ describe("agent-job-stream tree", () => {
     expect(nodes.find((n) => n.kind === "result" && n.status === "failed")).toBeTruthy();
   });
 
-  it("phase/memory viram task nodes, não thought", () => {
+  it("phase/memory viram task nodes; classify legado é ignorado", () => {
     const timeline: SSEEvent[] = [
-      ev("phase", { phase: "gather", message: "Lendo arquivos do projeto..." }, 1),
+      ev("phase", { phase: "build", message: "Implementando mudanças..." }, 1),
       ev("memory", { message: "Carregando memória…" }, 2),
       ev("classify", { message: "Classificando…" }, 3),
     ];
     const nodes = buildJobStreamTree(timeline, { running: false });
     expect(nodes.filter((n) => n.kind === "thought")).toHaveLength(0);
-    expect(nodes.filter((n) => n.kind === "task").length).toBeGreaterThanOrEqual(3);
+    expect(nodes.filter((n) => n.kind === "task").length).toBeGreaterThanOrEqual(2);
     const insp = deriveInspectorView(nodes);
     expect(insp.nodes.length).toBe(nodes.length);
   });

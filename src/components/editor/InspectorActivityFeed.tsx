@@ -104,29 +104,41 @@ export function InspectorActivityFeed({
   const blocks = useMemo(() => buildInspectorDetailBlocks(items), [items]);
   const lastThoughtId = useMemo(() => lastThoughtBlockId(blocks), [blocks]);
 
+  if (!blocks.length) return null;
+
   return (
-    <>
+    <div className="forge-inspector-timeline-track" data-testid="inspector-timeline-track">
       {blocks.map((block) => {
         switch (block.kind) {
           case "thought":
             return (
-              <ThoughtBlock
-                key={block.id}
-                block={block}
-                defaultOpen={block.id === lastThoughtId}
-              />
+              <div key={block.id} className="forge-inspector-timeline-entry">
+                <ThoughtBlock block={block} defaultOpen={block.id === lastThoughtId} />
+              </div>
             );
           case "action":
-            return <ActionRow key={block.id} block={block} onOpenFile={onOpenFile} />;
+            return (
+              <div key={block.id} className="forge-inspector-timeline-entry">
+                <ActionRow block={block} onOpenFile={onOpenFile} />
+              </div>
+            );
           case "code":
-            return <CodeBlock key={block.id} block={block} />;
+            return (
+              <div key={block.id} className="forge-inspector-timeline-entry">
+                <CodeBlock block={block} />
+              </div>
+            );
           case "section":
-            return <SectionBlock key={block.id} block={block} />;
+            return (
+              <div key={block.id} className="forge-inspector-timeline-entry">
+                <SectionBlock block={block} />
+              </div>
+            );
           default:
             return null;
         }
       })}
-    </>
+    </div>
   );
 }
 

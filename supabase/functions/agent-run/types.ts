@@ -196,8 +196,8 @@ export interface AgentState {
 
 export enum LoopPhase {
   GATHER_CONTEXT = "gather_context",
-  ANALYZE_INTENT = "analyze_intent",
-  CREATE_PLAN = "create_plan",
+  /** Turno do agente em plan mode (create_plan tool — não é fase orchestrator). */
+  PLAN_MODE = "create_plan",
   EXECUTE_STEP = "execute_step",
   VALIDATE_STEP = "validate_step",
   DECIDE_NEXT = "decide_next",

@@ -292,7 +292,6 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
       const msg = (data.message as string) ?? prev.message;
       return {
         ...prev,
-        phase: "gather",
         message: msg ?? prev.message,
         statusHint: msg ?? prev.statusHint,
         timeline: [...prev.timeline, event],
@@ -498,6 +497,16 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
             { name: "build", ok: false },
           ]),
         ],
+        timeline: [...prev.timeline, event],
+      };
+    }
+
+    case "gate_decision": {
+      const awaiting = data.awaiting === true;
+      return {
+        ...prev,
+        awaiting: awaiting || prev.awaiting,
+        awaitingKind: awaiting ? "qualify" : prev.awaitingKind,
         timeline: [...prev.timeline, event],
       };
     }

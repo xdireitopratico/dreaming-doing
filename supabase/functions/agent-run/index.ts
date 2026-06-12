@@ -652,7 +652,7 @@ Deno.serve(async (req) => {
       // === Decisão "caminho barato primeiro" (o que o usuário pediu) ===
       // Se o prompt parece pedido explícito de interação/perguntas ("quero uma mensagem claramente de interação, não de execução")
       // ou é curto/vago, e ainda não existe sandbox alocado para o projeto, NÃO alocamos E2B para este run.
-      // O qualify dentro do loop (ou um futuro lightweight) vai responder e marcar awaiting sem container.
+      // clarify tool no loop responde e marca awaiting sem container (plan mode não aloca E2B).
       // Use meta-aware extract (prefers skipping plan_approved meta) for the triggering user request; force allocate
       // if history contains prior plan_approved (makes follow-up "add X" after approve allocate sandbox reliably).
       const fromBody = (body as any).prompt || (body as any).message || "";
@@ -673,8 +673,9 @@ Deno.serve(async (req) => {
       // arquivos não aloca (E2B só nasce depois do agente criar algo), (3) projeto
       // com sandbox pré-existente pode reusar.
       // + hasApproved for plan+follow-up proof.
-      const allocateSandboxLocal =
+      let allocateSandboxLocal =
         hasApprovedPlanInHistory || !looksLikeInteraction || projectHasSandbox;
+      // Plan mode: sandbox para grep/cat/ls — sem fs_write/fs_edit (filtrado no loop).
 
       // Fase 4.7: o código abaixo (reg + sandbox local) era DEAD CODE — o
       // executeAgentJob em run-job.ts cria seu próprio ToolRegistry e sandbox.
@@ -696,7 +697,7 @@ Deno.serve(async (req) => {
       const stackAddon = stackPromptAddon(stackCtx);
 
       // Early e2bKey check: se vamos alocar E2B mas o usuário não tem chave,
-      // retornamos 403 AGORA (sem gastar tempo com classify/loop). É duplicado
+      // retornamos 403 AGORA (sem gastar tempo no agent loop). É duplicado
       // com o check em run-job.ts:204 mas falha mais rápido e com mensagem clara.
       if (allocateSandboxLocal) {
         const e2bKey = await loadUserE2bApiKey(supabase, userData.user.id);

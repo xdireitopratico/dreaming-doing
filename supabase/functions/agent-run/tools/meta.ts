@@ -1,0 +1,274 @@
+// meta.ts — Tools de decisão do agente (clarify + create_plan).
+// Substituem fases orchestrator (needsQualify, proposePlan heurístico).
+import type { PlanStep, PlanStepType, ProposedPlan, ToolCall, ToolDefinition, ToolResult } from "../types.ts";
+import type { ToolRegistry } from "../registry.ts";
+import {
+  buildPlanDocumentMarkdown,
+  filterActionablePlanSteps,
+  PLAN_APPROVAL_TTL_MS,
+  sanitizePlanHeadline,
+} from "../plan-mode.ts";
+
+export const META_CLARIFY_KIND = "meta_clarify";
+export const META_PLAN_KIND = "meta_plan";
+
+const VALID_STEP_TYPES = new Set<PlanStepType>([
+  "create_file",
+  "edit_file",
+  "shell_exec",
+  "install_dep",
+  "observe",
+  "custom",
+]);
+
+const CHOICE_SCHEMA = {
+  type: "object",
+  properties: {
+    label: { type: "string", description: "Texto curto da opção (clicável)." },
+    description: { type: "string", description: "Detalhe opcional da opção." },
+  },
+  required: ["label"],
+};
+
+export const CLARIFY_TOOL: ToolDefinition = {
+  name: "clarify",
+  description:
+    "Pergunte ao usuário APENAS quando uma ambiguidade for bloqueante para continuar. " +
+    "Não use para curiosidade — prefira assumir defaults razoáveis. " +
+    "Ofereça 2–4 opções claras quando fizer sentido.",
+  parameters: {
+    type: "object",
+    properties: {
+      intro: {
+        type: "string",
+        description: "1 frase confirmando o que entendeu do pedido (opcional).",
+      },
+      question: {
+        type: "string",
+        description: "Pergunta objetiva para o usuário.",
+      },
+      choices: {
+        type: "array",
+        items: CHOICE_SCHEMA,
+        description: "Opções clicáveis (mínimo 2 quando houver escolha discreta).",
+      },
+    },
+    required: ["question"],
+  },
+};
+
+export const CREATE_PLAN_TOOL: ToolDefinition = {
+  name: "create_plan",
+  description:
+    "Proponha um plano estruturado para revisão do usuário (modo Plan). " +
+    "Use quando tiver contexto suficiente — 2 a 7 passos executáveis, sem meta-conversação.",
+  parameters: {
+    type: "object",
+    properties: {
+      summary: { type: "string", description: "Título curto do plano." },
+      rationale: { type: "string", description: "Abordagem em 1–2 frases." },
+      mission: { type: "string", description: "Missão do plano." },
+      objective: { type: "string", description: "Objetivo mensurável." },
+      assumptions: { type: "array", items: { type: "string" } },
+      outOfScope: { type: "array", items: { type: "string" } },
+      steps: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            id: { type: "string" },
+            type: {
+              type: "string",
+              enum: ["create_file", "edit_file", "shell_exec", "install_dep", "observe", "custom"],
+            },
+            description: { type: "string" },
+            filePath: { type: "string" },
+          },
+          required: ["description"],
+        },
+      },
+    },
+    required: ["summary", "steps"],
+  },
+};
+
+export const MIN_PLAN_STEPS = 2;
+export const MAX_PLAN_STEPS = 7;
+
+export function getMetaToolDefinitions(planMode: boolean): ToolDefinition[] {
+  return planMode ? [CLARIFY_TOOL, CREATE_PLAN_TOOL] : [CLARIFY_TOOL];
+}
+
+/** Patch/mutação — ocultas em Plan mode (leitura + shell exploratório permanecem). */
+export const PLAN_MODE_PATCH_TOOLS = new Set(["fs_write", "fs_edit", "fs_delete"]);
+
+export function isPlanModePatchTool(name: string): boolean {
+  return PLAN_MODE_PATCH_TOOLS.has(name);
+}
+
+/** Build: registry completo + clarify. Plan: registry − patch + clarify + create_plan. */
+export function mergeExecutionToolDefinitions(
+  registryDefs: ToolDefinition[],
+  planMode = false,
+): ToolDefinition[] {
+  if (planMode) return mergePlanModeToolDefinitions(registryDefs);
+  const filtered = registryDefs.filter((d) => d.name !== "clarify" && d.name !== "create_plan");
+  return [...filtered, ...getMetaToolDefinitions(false)];
+}
+
+/** Plan mode — tudo exceto fs_write/fs_edit/fs_delete; shell_exec para grep/cat/ls. */
+export function mergePlanModeToolDefinitions(registryDefs: ToolDefinition[]): ToolDefinition[] {
+  const filtered = registryDefs.filter(
+    (d) =>
+      !PLAN_MODE_PATCH_TOOLS.has(d.name) && d.name !== "clarify" && d.name !== "create_plan",
+  );
+  return [...filtered, ...getMetaToolDefinitions(true)];
+}
+
+export function splitMetaToolCalls(toolCalls: ToolCall[]): {
+  clarify: ToolCall | null;
+  createPlan: ToolCall | null;
+  execution: ToolCall[];
+} {
+  let clarify: ToolCall | null = null;
+  let createPlan: ToolCall | null = null;
+  const execution: ToolCall[] = [];
+  for (const call of toolCalls) {
+    if (call.name === "clarify") clarify = call;
+    else if (call.name === "create_plan") createPlan = call;
+    else execution.push(call);
+  }
+  return { clarify, createPlan, execution };
+}
+
+export function hasMixedMetaAndExecution(toolCalls: ToolCall[] | undefined): boolean {
+  if (!toolCalls?.length) return false;
+  const { clarify, createPlan, execution } = splitMetaToolCalls(toolCalls);
+  return execution.length > 0 && (clarify !== null || createPlan !== null);
+}
+
+export function registerMetaTools(reg: ToolRegistry, opts: { planMode: boolean }): void {
+  reg.register(CLARIFY_TOOL, async (args) => metaClarifyHandler(args));
+  if (opts.planMode) {
+    reg.register(CREATE_PLAN_TOOL, async (args) => metaPlanHandler(args));
+  }
+}
+
+async function metaClarifyHandler(args: Record<string, unknown>): Promise<ToolResult> {
+  return {
+    toolCallId: "",
+    ok: true,
+    output: { kind: META_CLARIFY_KIND, ...args },
+  };
+}
+
+async function metaPlanHandler(args: Record<string, unknown>): Promise<ToolResult> {
+  return {
+    toolCallId: "",
+    ok: true,
+    output: { kind: META_PLAN_KIND, ...args },
+  };
+}
+
+/** Formata args da tool clarify em markdown para o chat. */
+export function formatClarifyMessage(args: Record<string, unknown>): string {
+  const parts: string[] = [];
+  const intro = typeof args.intro === "string" ? args.intro.trim() : "";
+  const question = typeof args.question === "string" ? args.question.trim() : "";
+  if (intro) parts.push(intro);
+  if (question) parts.push(question);
+  const choices = Array.isArray(args.choices) ? args.choices : [];
+  for (const raw of choices) {
+    if (!raw || typeof raw !== "object") continue;
+    const c = raw as Record<string, unknown>;
+    const label = typeof c.label === "string" ? c.label.trim() : "";
+    if (!label) continue;
+    const desc = typeof c.description === "string" ? c.description.trim() : "";
+    parts.push(desc ? `- **${label}** — ${desc}` : `- **${label}**`);
+  }
+  return parts.join("\n\n").trim() || question || intro || "Preciso de mais um detalhe para continuar.";
+}
+
+function coercePlanSteps(raw: unknown): PlanStep[] {
+  if (!Array.isArray(raw)) return [];
+  const out: PlanStep[] = [];
+  for (let i = 0; i < raw.length; i++) {
+    const r = raw[i];
+    if (!r || typeof r !== "object") continue;
+    const o = r as Record<string, unknown>;
+    const description =
+      typeof o.description === "string" && o.description.trim() ? o.description.trim() : null;
+    if (!description) continue;
+    const typeRaw = typeof o.type === "string" ? o.type : "custom";
+    const type = VALID_STEP_TYPES.has(typeRaw as PlanStepType)
+      ? (typeRaw as PlanStepType)
+      : "custom";
+    out.push({
+      id: typeof o.id === "string" && o.id ? o.id : `s${i + 1}`,
+      type,
+      description,
+      filePath: typeof o.filePath === "string" ? o.filePath : undefined,
+      estimatedCost: 0.002,
+      enabled: true,
+    });
+  }
+  return out;
+}
+
+/** Converte args de create_plan em ProposedPlan persistível. */
+export function proposedPlanFromToolArgs(
+  args: Record<string, unknown>,
+  planId = crypto.randomUUID(),
+): ProposedPlan | null {
+  const summaryRaw = typeof args.summary === "string" ? args.summary.trim() : "";
+  const steps = filterActionablePlanSteps(coercePlanSteps(args.steps));
+  if (!summaryRaw || steps.length < MIN_PLAN_STEPS || steps.length > MAX_PLAN_STEPS) {
+    return null;
+  }
+
+  const rationale = typeof args.rationale === "string" ? args.rationale.trim() : undefined;
+  const missionRaw = typeof args.mission === "string" ? args.mission.trim() : undefined;
+  const objectiveRaw = typeof args.objective === "string" ? args.objective.trim() : undefined;
+  const assumptions = Array.isArray(args.assumptions)
+    ? (args.assumptions as unknown[]).filter((x): x is string => typeof x === "string")
+    : undefined;
+  const outOfScope = Array.isArray(args.outOfScope)
+    ? (args.outOfScope as unknown[]).filter((x): x is string => typeof x === "string")
+    : undefined;
+
+  const headline = sanitizePlanHeadline(missionRaw ?? summaryRaw, "Plano proposto");
+  const doc = buildPlanDocumentMarkdown({
+    summary: headline,
+    rationale,
+    mission: missionRaw,
+    objective: objectiveRaw,
+    assumptions,
+    outOfScope,
+    steps,
+  });
+
+  return {
+    planId,
+    summary: headline,
+    rationale,
+    mission: doc.mission,
+    objective: doc.objective,
+    assumptions,
+    outOfScope: doc.outOfScope,
+    phases: doc.phases,
+    markdown: doc.markdown,
+    steps,
+    ttlMs: PLAN_APPROVAL_TTL_MS,
+    proposedAt: new Date().toISOString(),
+  };
+}
+
+export const PLAN_MODE_AGENT_RULES = `## Modo Plan (explorar → decidir)
+- **Explore** com fs_read, fs_search, fs_list, shell_exec (grep, cat, head, ls, find) e integrações MCP antes de planejar.
+- **Proibido** em Plan: fs_write, fs_edit, fs_delete — patch fica para Build após aprovação.
+- Use **create_plan** quando tiver contexto para 2–7 passos executáveis.
+- Use **clarify** só se uma decisão do usuário for bloqueante.
+- Scaffolds da plataforma (canvas vazio) não são trabalho do usuário.`;
+
+export const BUILD_CLARIFY_RULE =
+  "Use **clarify** apenas quando uma ambiguidade bloquear a implementação; caso contrário assuma defaults e codifique.";

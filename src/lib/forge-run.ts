@@ -132,9 +132,9 @@ export function buildForgeTimeline(timeline: SSEEvent[], running = false): Forge
     const ts = ev.timestamp;
 
     if (ev.type === "assistant_text") {
-      if (isNarration(data)) continue;
-      if (isInspectorThought(data)) {
+      if (isNarration(data) || isInspectorThought(data)) {
         const chunk = String(data.text ?? "");
+        if (!chunk) continue;
         if (!thoughtId) {
           thoughtId = `thought-${ts}`;
           thoughtStart = ts;
@@ -150,14 +150,18 @@ export function buildForgeTimeline(timeline: SSEEvent[], running = false): Forge
 
     if (ev.type === "phase" || ev.type === "memory" || ev.type === "explore") {
       const phase =
-        typeof data.phase === "string" ? data.phase : ev.type === "explore" ? "gather" : undefined;
+        typeof data.phase === "string"
+          ? data.phase
+          : ev.type === "explore"
+            ? "explore"
+            : undefined;
       const label =
         typeof data.message === "string"
           ? data.message
           : typeof data.phase === "string"
             ? data.phase
             : "Task";
-      if (isGatherPhaseNoise(label, phase)) continue;
+      if (isInternalPhaseNoise(label, phase)) continue;
       items.push({ type: "TASK", id: `task-${ts}`, label: truncate(label, 120) });
       continue;
     }
@@ -291,8 +295,15 @@ export function toolBriefing(name: string, path?: string): string {
   return file ? `${verb} ${file}…` : `${verb}…`;
 }
 
-function hasFirstResponseToken(progress: AgentProgress): boolean {
-  return !!(progress.streamText?.trim() || progress.narrationText?.trim());
+/** 1º token no inspector ou no chat — congela Thinking → Thought for Xs. */
+export function hasFirstInspectorToken(progress: AgentProgress): boolean {
+  if (progress.streamText?.trim() || progress.narrationText?.trim()) return true;
+  return progress.timeline.some(
+    (ev) =>
+      ev.type === "assistant_text" &&
+      typeof ev.data?.text === "string" &&
+      String(ev.data.text).trim().length > 0,
+  );
 }
 
 /** Think latency — congela ao 1º token e permanece no chat (append-only). */
@@ -315,7 +326,7 @@ export function resolveLatencyThinking(
 
   const timeline = forgeTimeline ?? buildForgeTimeline(progress.timeline, running);
   const thoughtItems = timeline.filter((i) => i.type === "THOUGHT");
-  const shouldFreeze = hasFirstResponseToken(progress) || thoughtItems.length > 0;
+  const shouldFreeze = hasFirstInspectorToken(progress) || thoughtItems.length > 0;
 
   if (shouldFreeze) {
     const durationMs = Math.max(500, Date.now() - runStartedAtMs);
@@ -354,8 +365,15 @@ export function normalizeMiniCardBriefing(line: string): string | null {
   return truncate(t, 80);
 }
 
-function isGatherPhaseNoise(label: string, phase?: string): boolean {
-  if (phase === "gather" || phase === "explore" || phase === "classify") return true;
+function isInternalPhaseNoise(label: string, phase?: string): boolean {
+  if (
+    phase === "gather" ||
+    phase === "explore" ||
+    phase === "classify" ||
+    phase === "qualify"
+  ) {
+    return true;
+  }
   const t = label.trim();
   if (!t) return true;
   return normalizeMiniCardBriefing(t) === null;
@@ -402,15 +420,6 @@ export function collectMiniCardBriefings(
   if (progress.phase === "plan" || planAwaiting) push("Plano aguardando revisão…");
 
   return lines;
-}
-
-function isQualifyLikePhase(progress: AgentProgress): boolean {
-  return (
-    progress.awaitingKind === "qualify" ||
-    progress.phase === "classify" ||
-    progress.phase === "taste" ||
-    progress.phase === "taste_chat"
-  );
 }
 
 function isWrapUpPhrase(text: string): boolean {
@@ -527,15 +536,16 @@ export function isRunEffectivelyActive(progress: AgentProgress, slotActive = fal
 export function shouldShowJobCard(opts: {
   runId?: string;
   progress: AgentProgress | null;
-  isQualifyOnly: boolean;
+  /** Turno só com clarify (awaitingKind qualify) — sem mini-card. */
+  isClarifyOnly: boolean;
   isAgentJobMessage: boolean;
   hasExecutionEvidence: boolean;
   slotActive: boolean;
   activeRunId?: string | null;
 }): boolean {
-  const { runId, progress, isQualifyOnly, slotActive } = opts;
+  const { runId, progress, isClarifyOnly, slotActive } = opts;
 
-  if (!runId || !progress || isQualifyOnly) return false;
+  if (!runId || !progress || isClarifyOnly) return false;
   if (progress.conversational === true) return false;
   if (runId === "__pending__") return false;
 

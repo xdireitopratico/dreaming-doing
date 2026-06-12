@@ -39,8 +39,8 @@ export type ExecuteParams = {
   planMode: boolean;
   plan?: string;
   planSourceRunId?: string;
-  /** Skip qualify gate for approved builds (passed through contract). */
-  skipQualify?: boolean;
+  /** Pula gate conversacional no loop (build pós-plano aprovado). */
+  skipConversationalGate?: boolean;
 };
 
 export type ExecuteResult = {
@@ -312,7 +312,8 @@ export async function executeAgentRun(
     enabledMcpIds: effectiveMcpIds,
     planMode,
     allocateSandbox: allocateSandboxLocal,
-    skipQualify: isApprovedPlanBuild || hasApprovedPlanInHistory || params.skipQualify === true,
+    skipConversationalGate:
+      isApprovedPlanBuild || hasApprovedPlanInHistory || params.skipConversationalGate === true,
   };
 
   const onEvent = (type: string, data: Record<string, unknown>) => {

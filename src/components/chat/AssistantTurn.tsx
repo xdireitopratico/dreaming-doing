@@ -5,10 +5,13 @@ import { ChatThinking } from "./ChatThinking";
 import { ChatNarration } from "./ChatNarration";
 import { ChatJobCard } from "./ChatJobCard";
 import { ChatToolbar } from "./ChatToolbar";
+import { ChatQualify } from "./ChatQualify";
+import type { QualifyChoice } from "@/lib/chat/types";
 
 type AssistantTurnProps = {
   item: Extract<ThreadItem, { kind: "assistant" }>;
   onOpenInspector?: (runId: string, tab?: "timeline" | "changes" | "plan") => void;
+  onQualifySelect?: (choice: QualifyChoice) => void;
   canRollback?: boolean;
   onRollback?: () => void;
 };
@@ -20,6 +23,7 @@ type AssistantTurnProps = {
 export function AssistantTurn({
   item,
   onOpenInspector,
+  onQualifySelect,
   canRollback,
   onRollback,
 }: AssistantTurnProps) {
@@ -33,8 +37,11 @@ export function AssistantTurn({
   const showThinking = !!item.thinking;
   const showNarration = !!narrationText;
   const showJobCard = !!item.miniCard;
+  const showQualify = !!item.qualify?.choices?.length;
   const showClosing =
-    !!closingText && (!narrationText || closingText !== narrationText);
+    !showQualify &&
+    !!closingText &&
+    (!narrationText || closingText !== narrationText);
 
   const planTab = item.planTeaser || item.miniCard?.planReady;
   const copyText = assistantTurnCopyText(item);
@@ -60,6 +67,14 @@ export function AssistantTurn({
             onClick={() =>
               onOpenInspector?.(item.runId, planTab ? "plan" : "timeline")
             }
+          />
+        )}
+
+        {showQualify && item.qualify && (
+          <ChatQualify
+            data={item.qualify}
+            disabled={item.isActive || !onQualifySelect}
+            onSelect={onQualifySelect}
           />
         )}
 

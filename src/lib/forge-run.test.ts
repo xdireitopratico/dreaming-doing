@@ -124,7 +124,7 @@ describe("shouldShowJobCard", () => {
           conversational: true,
           streamText: "Bom dia! Como posso ajudar?",
         },
-        isQualifyOnly: false,
+        isClarifyOnly: false,
         isAgentJobMessage: true,
         hasExecutionEvidence: false,
         slotActive: false,
@@ -132,10 +132,10 @@ describe("shouldShowJobCard", () => {
       }),
     ).toBe(false);
   });
-  it("run ativa: mini-card no primeiro token (gather)", () => {
+  it("run ativa: mini-card no primeiro token", () => {
     const progress = {
       ...initialAgentProgress,
-      phase: "gather",
+      phase: "build",
       finished: false,
       message: "Checking browser route wiring in lara-workspace",
       statusHint: "Diagnosing Lara container gaps and needs",
@@ -145,7 +145,7 @@ describe("shouldShowJobCard", () => {
       shouldShowJobCard({
         runId: "run-1",
         progress,
-        isQualifyOnly: false,
+        isClarifyOnly: false,
         isAgentJobMessage: false,
         hasExecutionEvidence: true,
         slotActive: true,
@@ -154,10 +154,9 @@ describe("shouldShowJobCard", () => {
     ).toBe(true);
   });
 
-  it("oculta mini card em turno qualify-only", () => {
+  it("oculta mini card em turno clarify-only", () => {
     const progress = {
       ...initialAgentProgress,
-      phase: "classify",
       awaitingKind: "qualify" as const,
       awaiting: true,
       finished: true,
@@ -167,7 +166,7 @@ describe("shouldShowJobCard", () => {
       shouldShowJobCard({
         runId: "run-1",
         progress,
-        isQualifyOnly: true,
+        isClarifyOnly: true,
         isAgentJobMessage: false,
         hasExecutionEvidence: false,
         slotActive: false,
@@ -189,7 +188,7 @@ describe("shouldShowJobCard", () => {
       shouldShowJobCard({
         runId: "run-1",
         progress,
-        isQualifyOnly: false,
+        isClarifyOnly: false,
         isAgentJobMessage: false,
         hasExecutionEvidence: true,
         slotActive: true,
@@ -209,7 +208,7 @@ describe("shouldShowJobCard", () => {
           narrationText: "Vou criar a landing.",
           streamText: "Pronto!",
         },
-        isQualifyOnly: false,
+        isClarifyOnly: false,
         isAgentJobMessage: true,
         hasExecutionEvidence: true,
         slotActive: false,
@@ -230,7 +229,7 @@ describe("shouldShowJobCard", () => {
       shouldShowJobCard({
         runId: "run-1",
         progress,
-        isQualifyOnly: false,
+        isClarifyOnly: false,
         isAgentJobMessage: false,
         hasExecutionEvidence: true,
         slotActive: true,
@@ -350,7 +349,7 @@ describe("forge-run mini card briefing e título", () => {
     const progress = {
       ...initialAgentProgress,
       finished: false,
-      phase: "gather",
+      phase: "build",
     };
 
     expect(deriveBrainstormTitle("quero um app mobile para padaria")).toBe(
@@ -363,7 +362,7 @@ describe("forge-run mini card briefing e título", () => {
     const startedAt = Date.now() - 1500;
     expect(
       resolveLatencyThinking(
-        { ...initialAgentProgress, phase: "classify", finished: false },
+        { ...initialAgentProgress, finished: false },
         true,
         startedAt,
       )?.active,
@@ -438,7 +437,7 @@ describe("forge-run mini card briefing e título", () => {
     const startedAt = Date.now() - 2000;
     const view = buildAgentRunView(
       "run-1",
-      { ...initialAgentProgress, phase: "classify", finished: false },
+      { ...initialAgentProgress, finished: false },
       { running: true, runStartedAtMs: startedAt, userPrompt: "landing page" },
     );
     expect(view.latencyThinking?.active).toBe(true);
@@ -502,10 +501,10 @@ describe("forge-run mini card briefing e título", () => {
     expect(briefings.some((b) => b.includes("Lendo App.tsx"))).toBe(true);
   });
 
-  it("run ativo não expõe briefings genéricos de gather no mini card", () => {
+  it("run ativo não expõe briefings genéricos de explore/gather no mini card", () => {
     const progress = {
       ...initialAgentProgress,
-      phase: "gather",
+      phase: "build",
       message: "Analisando estrutura",
       timeline: [
         { type: "explore", data: { message: "Explorando o projeto", phase: "gather" }, timestamp: 1 },

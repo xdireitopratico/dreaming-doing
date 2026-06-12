@@ -1,70 +1,83 @@
-import type { ChatMessage, ClassificationResult, LLMProvider } from "./types.ts";
+import type { ChatMessage, LLMProvider } from "./types.ts";
 
 const GREETING_RE =
   /^(bom\s+dia|boa\s+tarde|boa\s+noite|oi|olá|ola|hey|e\s*aí|eai|hello|hi|salve|fala)[\s!.,?]*$/i;
 
 const THANKS_RE = /^(obrigad[oa]|valeu|thanks|thank\s+you|brigad[ão]|tmj)[\s!.,?]*$/i;
 
-/** Cumprimento/agradecimento óbvio — gate antes de gather (evita "Explorando…"). */
+/** Perguntas sobre memória/histórico — early exit social no loop. */
+const RECALL_RE =
+  /(?:você\s+)?lembra|lembr(a|ou|ar)|(?:do\s+)?que\s+(?:a\s+gente\s+)?(?:falamos|conversamos|discutimos|combinamos)|o\s+que\s+(?:a\s+gente\s+)?(?:falamos|conversamos|discutimos)|(?:qual\s+(?:foi|era)\s+)?(?:o\s+)?(?:assunto|tema|tópico)|(?:do\s+)?que\s+(?:se\s+)?trata(?:va|mos)?|what\s+(?:did\s+we|we)\s+(?:talk|discuss)|remember\s+what|recap|resumo\s+da\s+conversa|retomar\s+(?:a\s+)?conversa|(?:no\s+)?in[ií]cio\s+(?:da\s+)?conversa/i;
+
+export function isConversationRecallQuestion(text: string): boolean {
+  return RECALL_RE.test(text.trim());
+}
+
+/** Cumprimento, agradecimento ou recall — gate antes do agente principal. */
 export function isConversationalTurnEarly(text: string): boolean {
   const t = text.trim();
   if (!t) return false;
   if (GREETING_RE.test(t)) return true;
   if (THANKS_RE.test(t)) return true;
+  if (isConversationRecallQuestion(t)) return true;
   return false;
 }
 
-/** Após classify — só cumprimento/agradecimento explícito (vago tipo "site" vai para qualify/plan). */
-export function isConversationalTurn(text: string, _classification: ClassificationResult): boolean {
+/** Alias compatível com loop.ts — segundo arg ignorado (legado classify). */
+export function isConversationalTurn(text: string, _classification?: unknown): boolean {
   return isConversationalTurnEarly(text);
 }
 
-export const CONVERSATIONAL_SYSTEM = `Você é o parceiro de vibe-coding do FORGE — caloroso, direto, em português.
-
-O usuário mandou uma mensagem social ou curta, SEM pedido técnico ainda.
+const SOCIAL_SYSTEM = `Você é o parceiro de vibe-coding do FORGE — caloroso, direto, em português.
 
 Regras:
-1. Cumprimente de volta de forma natural (ex.: "Bom dia!").
-2. Pergunte como pode ajudar — projeto, plano, próximo passo.
-3. Se o histórico mencionar plano ou ideia anterior, referencie em 1 frase (ex.: "Quer revisar o plano?" ou "Posso melhorar algo no que combinamos?").
-4. NÃO proponha plano formal, NÃO liste passos técnicos, NÃO diga "Explorando" ou "Vou montar um plano".
-5. Máximo 3 frases curtas. Markdown leve ok.
+1. Responda de forma natural e curta (máx. 3–4 frases).
+2. Se for cumprimento/agradecimento: devolva o cumprimento e pergunte como pode ajudar.
+3. Se for pergunta sobre histórico: confirme o que a conversa mostra (tópico, pedidos, decisões).
+4. Se houver plano ou ideia no histórico, referencie em 1 frase — sem criar plano novo.
+5. NÃO proponha plano formal, NÃO liste passos técnicos, NÃO narre processos internos.
 6. Não cite prompts internos nem modos Plan/Build.`;
 
+/** Resposta social leve — usada só no early exit do loop (não substitui clarify/create_plan). */
 export async function runConversationalPhase(
   model: LLMProvider,
   messages: ChatMessage[],
-  opts?: { planMode?: boolean },
+  opts?: { planMode?: boolean; userRequest?: string },
 ): Promise<string> {
+  const userRequest = opts?.userRequest?.trim() ?? "";
+  const recall = userRequest ? isConversationRecallQuestion(userRequest) : false;
+  const historyLimit = recall ? 20 : 8;
+
   const recent = messages
     .filter((m) => m.role === "user" || m.role === "assistant")
-    .slice(-8)
+    .slice(-historyLimit)
     .map((m) => {
       const content = typeof m.content === "string" ? m.content : "";
-      return `${m.role}: ${content.slice(0, 500)}`;
+      return `${m.role}: ${content.slice(0, 800)}`;
     })
     .join("\n");
 
-  const modeHint = opts?.planMode
-    ? "O usuário está em modo Plan — pode querer discutir ideia antes de codar."
-    : "O usuário está em modo Build — pode querer orientação antes de implementar.";
+  const userPrompt = recall
+    ? `Pergunta do usuário agora:\n${userRequest}\n\nHistórico da conversa:\n${recent || "(sem histórico ainda)"}`
+    : `Mensagem do usuário agora:\n${userRequest || "(mensagem social)"}\n\nHistórico recente:\n${recent || "(primeira mensagem)"}`;
 
   try {
     const resp = await model.chat({
       messages: [
-        { role: "system", content: CONVERSATIONAL_SYSTEM },
-        {
-          role: "user",
-          content: `${modeHint}\n\nHistórico recente:\n${recent || "(primeira mensagem)"}`,
-        },
+        { role: "system", content: SOCIAL_SYSTEM },
+        { role: "user", content: userPrompt },
       ],
-      max_tokens: 400,
-      temperature: 0.5,
+      max_tokens: recall ? 500 : 400,
+      temperature: 0.4,
     });
     const text = (resp.content ?? "").trim();
     if (text) return text;
   } catch {
     // fallback abaixo
+  }
+
+  if (recall) {
+    return "Lembro sim — pelo histórico recente estávamos discutindo o projeto. Quer que eu retome de onde paramos?";
   }
 
   return "Bom dia! Como posso ajudar você hoje — quer revisar o plano, discutir a ideia ou partir para implementar?";

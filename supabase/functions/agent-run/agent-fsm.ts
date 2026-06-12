@@ -4,7 +4,7 @@
 
 export type AgentStateName =
   | "idle"
-  | "classifying"
+  | "running"
   | "planning"
   | "awaiting_plan"
   | "building"
@@ -30,6 +30,7 @@ export interface AgentStateData {
 
 export type AgentEventType =
   | "send"
+  /** @deprecated Legado do orchestrator classify — loop ainda emite; mapeia para planning. */
   | "classified"
   | "plan_proposed"
   | "no_plan_needed"
@@ -76,20 +77,34 @@ export const transitions: Record<
   (state: AgentStateData, event: AgentEvent) => AgentStateData
 > = {
   idle: (s, e) => {
-    if (e.type === "send") return mkState("classifying");
+    if (e.type === "send") return mkState("running");
     return s;
   },
 
-  classifying: (s, e) => {
+  running: (s, e) => {
     if (e.type === "classified") {
       return mkState("planning", {
         classification: e.data,
         attempt: 0,
       });
     }
+    if (e.type === "no_plan_needed") {
+      return mkState("building", {
+        plan: null,
+        stepIndex: 0,
+        maxSteps: 20,
+        classification: s.classification,
+      });
+    }
+    if (e.type === "plan_proposed") {
+      return mkState("awaiting_plan", {
+        plan: e.data,
+        classification: s.classification,
+      });
+    }
     if (e.type === "error") {
       return mkState("failed", {
-        reason: String(e.data ?? "classify error"),
+        reason: String(e.data ?? "run error"),
         recoverable: true,
       });
     }
@@ -111,6 +126,12 @@ export const transitions: Record<
         maxSteps: 20,
         classification: s.classification,
       });
+    }
+    if (e.type === "classified") {
+      return {
+        ...s,
+        classification: e.data,
+      };
     }
     if (e.type === "error") {
       return mkState("failed", {

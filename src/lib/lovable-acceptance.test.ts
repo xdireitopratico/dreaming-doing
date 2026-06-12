@@ -180,12 +180,12 @@ describe("Lovable acceptance — Inspector plan (img 14)", () => {
 });
 
 describe("Lovable acceptance — Composer placeholders (imgs 4/14)", () => {
-  const IDLE = "Ask Lovable...";
+  const IDLE = "Let's Build...";
   const RUNNING = "Queue follow-up...";
   const PLAN = "Tell Lovable what to do instead...";
 
   it("3 estados Lovable documentados", () => {
-    expect(IDLE).toBe("Ask Lovable...");
+    expect(IDLE).toBe("Let's Build...");
     expect(RUNNING).toBe("Queue follow-up...");
     expect(PLAN).toBe("Tell Lovable what to do instead...");
   });

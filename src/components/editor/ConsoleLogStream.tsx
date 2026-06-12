@@ -34,9 +34,9 @@ const PHASE_META: Record<
   string,
   { label: string; icon: React.ComponentType<{ className?: string }>; color: string }
 > = {
-  gather: { label: "Lendo projeto", icon: ListChecks, color: "text-[var(--forge-primary)]" },
-  classify: { label: "Classificando", icon: Brain, color: "text-[var(--forge-primary)]" },
   plan: { label: "Planejando", icon: Brain, color: "text-[var(--forge-primary)]" },
+  build: { label: "Implementando", icon: Wrench, color: "text-[var(--forge-primary)]" },
+  resume: { label: "Retomando", icon: ListChecks, color: "text-[var(--forge-primary)]" },
   execute: { label: "Executando", icon: Wrench, color: "text-[var(--forge-primary)]" },
   observe: { label: "Verificando build", icon: Eye, color: "text-amber-400" },
   summarize: { label: "Finalizando", icon: CheckCircle2, color: "text-emerald-400" },

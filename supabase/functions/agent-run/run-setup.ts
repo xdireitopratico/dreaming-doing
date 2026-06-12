@@ -13,7 +13,7 @@ import { pickMain, type ProviderConfig } from "./providers.ts";
 import {
   defaultRobinModel,
   PLATFORM_ROBIN_TASTE_PRESET_ID,
-  resolveAutoClassifyProvider,
+  resolveAutoForComplexity,
   resolveModelFromPreferences,
 } from "../_shared/model-presets.ts";
 import { RobinKeyPool } from "./robin-pool.ts";
@@ -250,12 +250,13 @@ export async function resolveAgentProvider(
 
   if (preferences?.mode === "auto") {
     const allowlist = preferences?.autoAllowedPresetIds ?? [];
-    const classifyWire = resolveAutoClassifyProvider(
+    const autoWire = resolveAutoForComplexity(
       userOnlyKeys,
+      3,
       allowlist,
       preferences?.userModelEntries,
     );
-    if (!classifyWire) {
+    if (!autoWire) {
       throw new Error(
         allowlist.length > 0
           ? "Nenhum modelo marcado no Auto tem chave em /api. Adicione a chave ou marque outro modelo."
@@ -263,11 +264,11 @@ export async function resolveAgentProvider(
       );
     }
     mainCfg = {
-      provider: classifyWire.provider,
-      apiKey: classifyWire.apiKey,
-      model: classifyWire.model,
-      baseUrl: classifyWire.baseUrl,
-      label: `${classifyWire.label} (Auto · classify)`,
+      provider: autoWire.provider,
+      apiKey: autoWire.apiKey,
+      model: autoWire.model,
+      baseUrl: autoWire.baseUrl,
+      label: `${autoWire.label} (Auto)`,
     };
   } else if (preferences?.mode === "fixed") {
     const resolved = resolveModelFromPreferences(preferences, userOnlyKeys);

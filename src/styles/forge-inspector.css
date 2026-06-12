@@ -269,6 +269,30 @@
   color: var(--text-muted);
 }
 
+.forge-inspector-timeline-track {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  margin-top: var(--space-xs);
+  padding-left: 22px;
+}
+
+.forge-inspector-timeline-track::before {
+  content: "";
+  position: absolute;
+  left: 7px;
+  top: 6px;
+  bottom: 6px;
+  width: 2px;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--text-accent) 35%, transparent),
+    color-mix(in srgb, var(--border-forge) 90%, transparent)
+  );
+  border-radius: 1px;
+}
+
 .forge-inspector-timeline {
   display: flex;
   flex-direction: column;
@@ -276,9 +300,23 @@
 }
 
 .forge-inspector-timeline-entry {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: var(--space-xs);
+}
+
+.forge-inspector-timeline-entry::before {
+  content: "";
+  position: absolute;
+  left: -18px;
+  top: 8px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--bg-chat);
+  border: 2px solid color-mix(in srgb, var(--text-accent) 55%, var(--border-forge));
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--bg-chat) 80%, transparent);
 }
 
 /* TASK — label mono + título (sem card âmbar) */

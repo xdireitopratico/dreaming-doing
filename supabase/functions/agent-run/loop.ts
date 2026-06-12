@@ -1,5 +1,5 @@
 // loop.ts — AgentLoop definitivo.
-// Model Router (classify), Compression, Parallel Exec, Runtime Observer, Skills,
+// Compression, Parallel Exec, Runtime Observer, Skills,
 // persistência incremental de tool_calls (cada step vira uma message viva no chat).
 // FSM integrada para validação de transições de estado (FORGE 2.0).
 import type {
@@ -11,6 +11,7 @@ import type {
   LLMProvider,
   PlanStep,
   ProposedPlan,
+  ToolDefinition,
 } from "./types.ts";
 import { LoopPhase } from "./types.ts";
 
@@ -30,15 +31,21 @@ import {
   ANTI_LEAK_RULE,
   buildAgentContextForLlm,
   buildExecuteInstruction,
-  generateMobileStackQualifyMessage,
   extractOriginalUserRequest,
   INVENTORY_SYSTEM,
-  isAmbiguousMobileRequest,
   isProjectInventoryQuestion,
-  isProjectSeedPlaceholder,
-  needsQualify,
-  QUALIFY_SYSTEM,
 } from "./qualify.ts";
+import {
+  BUILD_CLARIFY_RULE,
+  formatClarifyMessage,
+  hasMixedMetaAndExecution,
+  isPlanModePatchTool,
+  mergeExecutionToolDefinitions,
+  mergePlanModeToolDefinitions,
+  PLAN_MODE_AGENT_RULES,
+  proposedPlanFromToolArgs,
+  splitMetaToolCalls,
+} from "./tools/meta.ts";
 import { getTasteStartSystemPrompt } from "./prompts-taste.ts";
 import { friendlyLlmError } from "./llm-errors.ts";
 import { hashToolBatch, isExecutionStuck } from "../_shared/agent-stuck.ts";
@@ -47,15 +54,13 @@ import { appendExecutionLogEntry, buildExecutionLogMeta } from "./executionLogMe
 import { type CheckpointExtra, resumeStepStart, serializeCheckpointPayload } from "./checkpoint.ts";
 import {
   generatePlanChatMessage,
-  buildProposedPlan,
-  filterActionablePlanSteps,
   findLatestStoredPlan,
   isShowExistingPlanRequest,
   lastPlanContextFromMessages,
   PLAN_APPROVAL_TTL_MS,
   sanitizePlanHeadline,
 } from "./plan-mode.ts";
-import type { ClassificationResult } from "./router.ts";
+import { deriveClassificationFromPrompt, type ClassificationResult } from "./router.ts";
 import type { ProviderConfig } from "./providers.ts";
 import type { AgentPreferencesPayload } from "./connector-keys.ts";
 import { resolveAutoForComplexity } from "../_shared/model-presets.ts";
@@ -63,7 +68,6 @@ import { ResilientLLM } from "./robin-pool.ts";
 import {
   generateClosureMessage,
   generateLoopUpdate,
-  generateOpeningMessage,
   type LoopUpdateContext,
 } from "./narration.ts";
 import {
@@ -72,7 +76,6 @@ import {
   extractStepFilePaths,
 } from "../_shared/step-intent.ts";
 import { type AgentStateData, applyTransition, isTerminal } from "./agent-fsm.ts";
-import { smartTruncate } from "./truncate.ts";
 
 type StreamCallback = (event: { type: string; data: unknown }) => void;
 
@@ -138,9 +141,8 @@ export class AgentLoop {
   private lastCheckpointStep: number;
   private planMode: boolean;
   private approvedPlanBuild: boolean;
-  private skipQualify: boolean;
+  private skipConversationalGate: boolean;
   private approvedPlanSteps: PlanStep[];
-  private planHeadline: string;
   private approvedPlanStepIndex: number;
   private narrationStarted: boolean;
   private narrationBuffer: string;
@@ -187,8 +189,8 @@ export class AgentLoop {
       planMode?: boolean;
       /** Run de build disparada por planApprove — pula qualify e usa planSummary. */
       approvedPlanBuild?: boolean;
-      /** Explicit flag to bypass qualify/classify pollution paths for plan+follow-up (PR2). */
-      skipQualify?: boolean;
+      /** Pula gate conversacional pós-stub (build pós-plano aprovado / follow-up). */
+      skipConversationalGate?: boolean;
       planSummary?: string;
       planHeadline?: string;
       planSteps?: PlanStep[];
@@ -196,7 +198,7 @@ export class AgentLoop {
       buildFixResume?: boolean;
       /** mainCfg de resolveAgentProvider — label/modelo exatos do BYOK do usuário */
       resolvedMainCfg?: ProviderConfig;
-      /** Preferências /models — Auto troca modelo após classify; Fixo/ROBIN não */
+      /** Preferências /models — Auto troca modelo por complexidade; Fixo/ROBIN não */
       preferences?: AgentPreferencesPayload;
     },
   ) {
@@ -224,16 +226,12 @@ export class AgentLoop {
     this.runId = options?.runId ?? null;
     this.planMode = options?.planMode ?? false;
     this.approvedPlanBuild = options?.approvedPlanBuild ?? false;
-    this.skipQualify = options?.skipQualify ?? options?.approvedPlanBuild ?? false;
+    this.skipConversationalGate =
+      options?.skipConversationalGate ?? options?.approvedPlanBuild ?? false;
     this.approvedPlanSteps = options?.planSteps ?? [];
     this.approvedPlanStepIndex = 0;
     const extracted = extractOriginalUserRequest(state.messages);
     const planDocument = options?.planSummary?.trim() ?? "";
-    const planHeadlineOpt = options?.planHeadline?.trim() ?? "";
-    this.planHeadline =
-      planHeadlineOpt ||
-      (planDocument ? planDocument.slice(0, 120) : "") ||
-      extracted.slice(0, 120);
     this.originalUserRequest = this.approvedPlanBuild && planDocument ? planDocument : extracted;
     this.toolsInvoked = false;
     this.narrationStarted = false;
@@ -262,7 +260,7 @@ export class AgentLoop {
   }
 
   /**
-   * AUTO: após classify, escolhe preset por potência da demanda (complexidade).
+   * AUTO: escolhe preset por potência da demanda (complexidade fixa ou do checkpoint).
    * FIXO / ROBIN: no-op — o nome do modo já define o comportamento.
    */
   private applyAutoModelForComplexity(complexity: number): void {
@@ -544,6 +542,14 @@ export class AgentLoop {
         resumeStep: this.state.currentStepIndex,
         total: this.maxStepsLimit,
       });
+      await this.emitTransition("classified", {
+        complexity: this.complexityScore,
+        summary: this.state.intent?.summary ?? "Retomada",
+        restored: true,
+      });
+      if (!this.planMode) {
+        await this.emitTransition("no_plan_needed");
+      }
 
       // Plan runs terminate after proposing (no in-memory decision wait).
       // The plan is emitted to the client via Realtime; approval/rejection
@@ -603,60 +609,42 @@ export class AgentLoop {
       }
       await this.saveCheckpoint(LoopPhase.GATHER_CONTEXT);
 
-      // Strong approvedPlanBuild / skipQualify short-circuit BEFORE classify + lastUserContent pop.
-      // Uses planSummary (via originalUserRequest) + meta carried in history; avoids pollution on plan+follow-up.
-      const isApprovedOrSkip = this.approvedPlanBuild || this.skipQualify;
-      this.emit("phase", {
-        phase: "classify",
-        message: isApprovedOrSkip
-          ? "Preparando execução do plano aprovado..."
-          : "Classificando complexidade...",
-      });
-      let classification: ClassificationResult;
-      if (isApprovedOrSkip) {
-        classification = {
-          complexity: (this.complexityScore || 3) as 1 | 2 | 3 | 4 | 5,
-          type: "modify",
-          summary: (this.originalUserRequest || "Executar plano aprovado").slice(0, 200),
-          needsBuild: true,
-          needsDeps: false,
-        };
-      } else {
-        const lastUserContent =
-          this.state.messages.filter((m) => m.role === "user").pop()?.content ?? "";
-        const userPrompt = typeof lastUserContent === "string" ? lastUserContent : "";
-        classification = await this.router.classify(
-          userPrompt,
-          this.state.context?.projectConfig ?? "(vazio)",
-          { lastPlan: this.state.context?.lastPlan },
-        );
-      }
+      const isApprovedOrSkip = this.approvedPlanBuild || this.skipConversationalGate;
+      const userPrompt =
+        this.originalUserRequest?.trim() ||
+        (() => {
+          const last = this.state.messages.filter((m) => m.role === "user").pop()?.content;
+          return typeof last === "string" ? last.trim() : "";
+        })();
+
+      const classification: ClassificationResult = isApprovedOrSkip
+        ? {
+            complexity: (this.complexityScore || 3) as 1 | 2 | 3 | 4 | 5,
+            type: "modify",
+            summary: (userPrompt || "Executar plano aprovado").slice(0, 200),
+            needsBuild: true,
+            needsDeps: false,
+          }
+        : deriveClassificationFromPrompt(userPrompt, this.planMode);
+
       if (this.loopBudgetExceeded()) {
         return this.returnResumableChunk(0, toolsUsed);
       }
+
       this.complexityScore = classification.complexity;
       this.state.intent = {
         type: classification.type as IntentAnalysis["type"],
         summary: classification.summary,
         scope: [],
-        complexity:
-          classification.complexity <= 2
-            ? "simple"
-            : classification.complexity <= 4
-              ? "medium"
-              : "complex",
+        complexity: "medium",
       };
-
       this.maxStepsLimit = calculateMaxSteps(classification.complexity);
       this.applyAutoModelForComplexity(classification.complexity);
       executionModel = this.configuredModel();
-      this.emit("classify", {
-        complexity: classification.complexity,
-        model: this.router.mainCfg.label,
-        summary: classification.summary,
-        maxSteps: this.maxStepsLimit,
-      });
 
+      if (this.fsmState.name === "idle") {
+        await this.emitTransition("send");
+      }
       await this.emitTransition("classified", classification);
 
       if (
@@ -667,31 +655,7 @@ export class AgentLoop {
         return await this.runConversationalReply();
       }
 
-      this.emit("phase", {
-        phase: this.planMode ? "plan" : "build",
-        message: this.planMode ? "Montando plano…" : classification.summary,
-        intent: this.state.intent,
-      });
-
-      const skipIntentNarration = this.buildFixResume;
-      if (!skipIntentNarration) {
-        const opening = await generateOpeningMessage(this.configuredModel(), {
-          userSummary: classification.summary,
-          intentType: classification.type as import("./router.ts").ClassificationResult["type"],
-          planMode: this.planMode,
-          approvedPlan: this.approvedPlanBuild,
-          planHeadline: this.planHeadline,
-          userRequest: this.originalUserRequest ?? classification.summary,
-        });
-        if (opening) this.streamNarration(opening, { chatVisible: true });
-      }
-
-      await this.saveCheckpoint(LoopPhase.CREATE_PLAN);
-
-      const projectFiles = this.state.context?.files ?? [];
-      const isSeedPlaceholder = isProjectSeedPlaceholder(projectFiles);
-
-      // Inventário do projeto — responde com contexto real, sem fs_write nem qualify vago.
+      // Inventário do projeto — responde com contexto real, sem fs_write.
       if (
         this.originalUserRequest &&
         isProjectInventoryQuestion(this.originalUserRequest) &&
@@ -714,7 +678,16 @@ export class AgentLoop {
         return { ok: true, summary: inv, steps: 0, toolsUsed: [] };
       }
 
-      // Build pós-approve: nunca qualify — executar plano aprovado.
+      if (this.planMode) {
+        return await this.runPlanModeAgentTurn(executionModel);
+      }
+
+      this.emit("phase", {
+        phase: "build",
+        message: userPrompt.slice(0, 120) || "Executando…",
+        intent: this.state.intent,
+      });
+
       if (this.approvedPlanBuild) {
         this.emit("phase", {
           phase: "build",
@@ -722,95 +695,8 @@ export class AgentLoop {
         });
       }
 
-      // Mobile ambíguo em Build — perguntar Expo vs Kotlin antes de codar.
-      // Skip se o projeto já tem stack mobile configurado.
-      const hasMobileTemplate =
-        this.projectTemplate === "expo" || this.projectTemplate === "android-native";
-      if (
-        !this.planMode &&
-        !this.approvedPlanBuild &&
-        !hasMobileTemplate &&
-        this.originalUserRequest &&
-        isAmbiguousMobileRequest(this.originalUserRequest)
-      ) {
-        const mobileQ =
-          (await generateMobileStackQualifyMessage(
-            this.configuredModel(),
-            this.originalUserRequest ?? "",
-          )) ?? "";
-        if (!mobileQ) {
-          return {
-            ok: false,
-            error: "Não foi possível gerar a pergunta de qualificação mobile.",
-            steps: 0,
-            toolsUsed: [],
-          };
-        }
-        this.emit("assistant_text", { text: mobileQ, final: true });
-        this.emit("gate_decision", {
-          phase: "qualify",
-          reason: "ambiguous mobile request",
-          awaiting: true,
-        });
-        await this.persistFinal(mobileQ, {
-          awaiting: true,
-          awaitingKind: "qualify",
-        });
-        await this.clearCheckpoint();
-        await this.markRunStatus("awaiting_user", {
-          awaitingUser: { type: "qualify", message: mobileQ.slice(0, 200) },
-        });
-        this.emit("done", {
-          summary: mobileQ,
-          qualified: true,
-          awaiting: true,
-        });
-        return { ok: true, summary: mobileQ, steps: 0, toolsUsed: [] };
-      }
-
-      // Quando em planMode explícito: aplicar qualify se necessário.
-      if (
-        this.planMode &&
-        this.originalUserRequest &&
-        needsQualify(this.originalUserRequest, classification, {
-          isSeedPlaceholder,
-          planMode: this.planMode,
-        })
-      ) {
-        const qualifyResult = await this.runQualifyPhase(executionModel, this.originalUserRequest);
-        if (qualifyResult.stopForUser) {
-          const q = qualifyResult.message;
-          if (!q?.trim()) {
-            return {
-              ok: false,
-              error: "Não foi possível gerar a pergunta de qualificação.",
-              steps: 0,
-              toolsUsed: [],
-            };
-          }
-          this.emit("assistant_text", { text: q, final: true });
-          this.emit("gate_decision", {
-            phase: "qualify",
-            reason: "needsQualify triggered (explicit interaction request or vague/short prompt)",
-            awaiting: true,
-          });
-          await this.persistFinal(q, {
-            awaiting: true,
-            awaitingKind: "qualify",
-          });
-          await this.clearCheckpoint();
-          await this.markRunStatus("awaiting_user", {
-            awaitingUser: { type: "qualify", message: q.slice(0, 200) },
-          });
-          this.emit("done", { summary: q, qualified: true, awaiting: true });
-          return { ok: true, summary: q, steps: 0, toolsUsed: [] };
-        }
-      }
-
-      // Propor plano (e pedir aprovação) quando em planMode explícito (usuário escolheu o modo).
-      if (this.planMode) {
-        const proposedPlan = this.proposePlan(classification);
-        return await this.finishPlanProposal(proposedPlan);
+      if (this.fsmState.name === "planning") {
+        await this.emitTransition("no_plan_needed");
       }
     }
 
@@ -937,6 +823,43 @@ export class AgentLoop {
           !this.narrationBuffer.includes(assistantText)
         ) {
           this.appendToNarration(assistantText);
+        }
+
+        if (hasMixedMetaAndExecution(response.tool_calls)) {
+          this.state.messages.push({
+            role: "assistant",
+            content: response.content ?? assistantText,
+            tool_calls: response.tool_calls?.map((tc) => ({
+              id: tc.id,
+              type: "function" as const,
+              function: { name: tc.name, arguments: JSON.stringify(tc.arguments) },
+            })),
+          });
+          this.state.messages.push({
+            role: "user",
+            content:
+              "Não misture clarify/create_plan com ferramentas de execução no mesmo turno. " +
+              "Use só clarify (para perguntar) OU só fs_read/fs_write/fs_edit/shell_exec (para implementar).",
+          });
+          continue;
+        }
+
+        const { clarify: clarifyCall, createPlan: createPlanCall, execution: execCalls } =
+          splitMetaToolCalls(response.tool_calls ?? []);
+        if (createPlanCall) {
+          return {
+            ok: false,
+            error: "create_plan só é válido em modo Plan.",
+            summary: "create_plan só é válido em modo Plan.",
+            steps: loopStep,
+            toolsUsed: [...toolsUsed, "create_plan"],
+          };
+        }
+        if (clarifyCall && execCalls.length === 0) {
+          toolsUsed.add("clarify");
+          const clarifyMsg = formatClarifyMessage(clarifyCall.arguments);
+          const combined = [assistantText, clarifyMsg].filter(Boolean).join("\n\n").trim();
+          return await this.finishClarify(combined, 0, [...toolsUsed]);
         }
 
         // Sem tool_calls
@@ -1462,7 +1385,10 @@ export class AgentLoop {
     };
   }
 
-  private async finishPlanProposal(proposedPlan: ProposedPlan): Promise<{
+  private async finishPlanProposal(
+    proposedPlan: ProposedPlan,
+    toolsUsed: string[] = [],
+  ): Promise<{
     ok: boolean;
     summary: string;
     steps: number;
@@ -1511,31 +1437,259 @@ export class AgentLoop {
       ok: true,
       summary: proposedPlan.summary,
       steps: 0,
-      toolsUsed: [],
+      toolsUsed,
     };
   }
 
-  /**
-   * Constrói um ProposedPlan rico a partir da resposta do classificador.
-   * Usa a nova cadeia de prioridade:
-   *  1) classification.plan (LLM estruturado: rationale + steps) — caminho preferencial
-   *  2) rawContent (LLM seguiu parcialmente) — fallback robusto
-   *  3) deriveDefaultPlan (heurística) — último recurso
-   */
-  private proposePlan(classification: ClassificationResult): ProposedPlan {
-    const raw = buildProposedPlan(classification, null, {
-      planId: crypto.randomUUID(),
-      ttlMs: PLAN_APPROVAL_TTL_MS,
-      proposedAt: new Date().toISOString(),
+  private async finishClarify(
+    message: string,
+    steps: number,
+    toolsUsed: string[],
+  ): Promise<{ ok: boolean; summary: string; steps: number; toolsUsed: string[] }> {
+    const text = message.trim();
+    if (!text) {
+      return {
+        ok: false,
+        summary: "Não foi possível gerar a pergunta de esclarecimento.",
+        steps,
+        toolsUsed,
+      };
+    }
+    this.emit("assistant_text", { text, final: true });
+    this.emit("gate_decision", {
+      phase: "qualify",
+      reason: "clarify tool",
+      awaiting: true,
     });
-    const headline = sanitizePlanHeadline(raw.mission ?? raw.summary, "Plano proposto");
-    const steps = filterActionablePlanSteps(raw.steps);
+    await this.persistFinal(text, {
+      awaiting: true,
+      awaitingKind: "qualify",
+    });
+    await this.clearCheckpoint();
+    await this.markRunStatus("awaiting_user", {
+      awaitingUser: { type: "qualify", message: text.slice(0, 200) },
+    });
+    this.emit("done", { summary: text, qualified: true, awaiting: true });
+    return { ok: true, summary: text, steps, toolsUsed };
+  }
+
+  private buildPlanModeInstruction(): string {
+    const task = this.originalUserRequest?.trim() || "Monte um plano para o pedido do usuário.";
+    return [
+      "Modo Plan — explore o projeto (fs_read, fs_search, shell_exec para grep/cat/ls) e depois use create_plan ou clarify.",
+      "Não use fs_write, fs_edit nem fs_delete neste modo.",
+      "",
+      "**Pedido do usuário:**",
+      task,
+    ].join("\n");
+  }
+
+  private async runPlanModeAgentTurn(model: LLMProvider): Promise<{
+    ok: boolean;
+    summary: string;
+    steps: number;
+    toolsUsed: string[];
+    error?: string;
+  }> {
+    const MAX_PLAN_EXPLORE = 10;
+    const toolsUsed = new Set<string>();
+
+    this.emit("phase", {
+      phase: "plan",
+      message: "Explorando projeto antes do plano…",
+      intent: this.state.intent ?? undefined,
+    });
+    await this.saveCheckpoint(LoopPhase.CREATE_PLAN);
+
+    for (let step = 0; step < MAX_PLAN_EXPLORE; step++) {
+      if (this.loopBudgetExceeded()) {
+        return await this.returnResumableChunk(step, toolsUsed);
+      }
+
+      const compressed = await this.compression.compress(this.state.messages);
+      let response: ChatResponse | null = null;
+      try {
+        response = await this.llmChatPlanMode(
+          model,
+          step === 0 ? this.buildPlanModeInstruction() : "Continue explorando ou proponha o plano.",
+          compressed,
+        );
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : "Erro no modelo";
+        return { ok: false, summary: message, steps: step, toolsUsed: [...toolsUsed], error: message };
+      }
+      if (!response) {
+        return {
+          ok: false,
+          summary: "Sem resposta do modelo.",
+          steps: step,
+          toolsUsed: [...toolsUsed],
+          error: "Sem resposta do modelo.",
+        };
+      }
+
+      const assistantText = (response.content ?? "").trim();
+
+      if (hasMixedMetaAndExecution(response.tool_calls)) {
+        this.state.messages.push({
+          role: "assistant",
+          content: response.content ?? assistantText,
+          tool_calls: response.tool_calls?.map((tc) => ({
+            id: tc.id,
+            type: "function" as const,
+            function: { name: tc.name, arguments: JSON.stringify(tc.arguments) },
+          })),
+        });
+        this.state.messages.push({
+          role: "user",
+          content:
+            "Não misture clarify/create_plan com ferramentas de exploração no mesmo turno. " +
+            "Use só clarify OU só fs_read/fs_search/shell_exec.",
+        });
+        continue;
+      }
+
+      const { clarify: clarifyCall, createPlan: planCall, execution: execCalls } = splitMetaToolCalls(
+        response.tool_calls ?? [],
+      );
+
+      if (planCall) {
+        toolsUsed.add("create_plan");
+        const proposed = proposedPlanFromToolArgs(planCall.arguments);
+        if (!proposed) {
+          return {
+            ok: false,
+            summary: "create_plan inválido — faltam summary ou steps.",
+            steps: step,
+            toolsUsed: [...toolsUsed],
+            error: "create_plan inválido",
+          };
+        }
+        return await this.finishPlanProposal(proposed, [...toolsUsed]);
+      }
+
+      if (clarifyCall && execCalls.length === 0) {
+        toolsUsed.add("clarify");
+        const clarifyMsg = formatClarifyMessage(clarifyCall.arguments);
+        const combined = [assistantText, clarifyMsg].filter(Boolean).join("\n\n").trim();
+        return await this.finishClarify(combined, step, [...toolsUsed]);
+      }
+
+      if (!response.tool_calls?.length) {
+        if (assistantText) {
+          this.emit("assistant_text", { text: assistantText, final: true });
+          await this.persistFinal(assistantText, { lastFinishOk: true, conversational: true });
+          await this.clearCheckpoint();
+          await this.markRunStatus("completed");
+          this.emit("done", { summary: assistantText, conversational: true });
+          return { ok: true, summary: assistantText, steps: step, toolsUsed: [...toolsUsed] };
+        }
+        return {
+          ok: false,
+          summary: "Use clarify, create_plan ou ferramentas de exploração.",
+          steps: step,
+          toolsUsed: [...toolsUsed],
+          error: "Resposta sem tool nem texto",
+        };
+      }
+
+      const patchCalls = execCalls.filter((c) => isPlanModePatchTool(c.name));
+      if (patchCalls.length > 0) {
+        this.state.messages.push({
+          role: "assistant",
+          content: response.content ?? assistantText,
+          tool_calls: response.tool_calls.map((tc) => ({
+            id: tc.id,
+            type: "function" as const,
+            function: { name: tc.name, arguments: JSON.stringify(tc.arguments) },
+          })),
+        });
+        this.state.messages.push({
+          role: "user",
+          content:
+            "Modo Plan: fs_write, fs_edit e fs_delete estão bloqueados. " +
+            "Use fs_read, fs_search, fs_list ou shell_exec (grep, cat, ls) para explorar.",
+        });
+        continue;
+      }
+
+      this.toolsInvoked = true;
+      this.emit("phase", { phase: "plan", message: "Explorando…", toolCount: execCalls.length });
+
+      const execResults = await parallelExecute(execCalls, async (call) => {
+        toolsUsed.add(call.name);
+        this.emit("tool_start", { name: call.name, args: call.arguments });
+        const result = await this.reg.execute(call);
+        this.emit("tool_done", {
+          name: call.name,
+          ok: result.ok,
+          error: result.error,
+          summary: result.ok ? "ok" : (result.error ?? "erro"),
+        });
+        return result;
+      });
+
+      this.state.messages.push({
+        role: "assistant",
+        content: response.content ?? assistantText,
+        tool_calls: execCalls.map((tc) => ({
+          id: tc.id,
+          type: "function" as const,
+          function: { name: tc.name, arguments: JSON.stringify(tc.arguments) },
+        })),
+      });
+
+      for (const { call, result } of execResults) {
+        this.state.messages.push({
+          role: "tool",
+          tool_call_id: call.id,
+          content: JSON.stringify(result).slice(0, 8000),
+        });
+      }
+    }
+
     return {
-      ...raw,
-      steps,
-      summary: headline,
-      mission: sanitizePlanHeadline(raw.mission, headline),
+      ok: false,
+      summary: "Limite de exploração no modo Plan — tente create_plan ou clarify.",
+      steps: MAX_PLAN_EXPLORE,
+      toolsUsed: [...toolsUsed],
+      error: "plan_explore_limit",
     };
+  }
+
+  private async llmChatPlanMode(
+    model: LLMProvider,
+    instruction: string,
+    history: ChatMessage[],
+  ): Promise<ChatResponse | null> {
+    const contextBlock = this.state.context
+      ? `## Contexto do Projeto\n${this.state.context.projectConfig}\n\n## Arquivos\n${this.state.context.manifest}`
+      : "(projeto novo)";
+    const skillPrompt = this.state.context
+      ? this.skills.buildSkillPrompt(this.state.context.files)
+      : "";
+    const base = getSystemPrompt(this.projectTemplate);
+    const fullSystemPrompt = [
+      base,
+      skillPrompt,
+      this.sessionAddon,
+      PLAN_MODE_AGENT_RULES,
+      ANTI_LEAK_RULE,
+    ]
+      .filter(Boolean)
+      .join("\n\n");
+
+    return model.chat({
+      messages: [
+        { role: "system", content: fullSystemPrompt },
+        { role: "system", content: contextBlock },
+        ...history,
+        { role: "user", content: instruction },
+      ],
+      tools: mergePlanModeToolDefinitions(this.reg.getDefinitions()),
+      tool_choice: "auto",
+      max_tokens: 4096,
+    });
   }
 
   /**
@@ -1596,6 +1750,7 @@ export class AgentLoop {
   }> {
     const reply = await runConversationalPhase(this.configuredModel(), this.state.messages, {
       planMode: this.planMode,
+      userRequest: this.originalUserRequest ?? undefined,
     });
     this.emit("assistant_text", { text: reply, final: true });
     await this.persistFinal(reply, {
@@ -1610,7 +1765,7 @@ export class AgentLoop {
 
   private async runInventoryPhase(model: LLMProvider): Promise<string> {
     this.emit("phase", {
-      phase: "qualify",
+      phase: "inventory",
       message: "Resumindo estado do projeto…",
     });
     const ctx = this.state.context?.projectConfig?.slice(0, 4000) ?? "(sem arquivos)";
@@ -1649,48 +1804,12 @@ export class AgentLoop {
     }
   }
 
-  private async runQualifyPhase(
-    model: LLMProvider,
-    userRequest: string,
-  ): Promise<{ stopForUser: boolean; message: string }> {
-    this.emit("phase", {
-      phase: "qualify",
-      message: "Qualificando ideia antes de codar…",
-    });
-    if (
-      this.projectTemplate !== "expo" &&
-      this.projectTemplate !== "android-native" &&
-      isAmbiguousMobileRequest(userRequest)
-    ) {
-      const mobileQ = await generateMobileStackQualifyMessage(model, userRequest);
-      return { stopForUser: true, message: mobileQ ?? "" };
-    }
-    try {
-      const resp = await model.chat({
-        messages: [
-          { role: "system", content: `${QUALIFY_SYSTEM}\n\n${ANTI_LEAK_RULE}` },
-          {
-            role: "user",
-            content: `Pedido do usuário:\n${userRequest}\n\nContexto:\n${
-              this.state.context?.projectConfig?.slice(0, 1500) ?? "(novo)"
-            }`,
-          },
-        ],
-        max_tokens: 800,
-        temperature: 0.4,
-      });
-      const message = (resp.content ?? "").trim();
-      return { stopForUser: true, message };
-    } catch {
-      return { stopForUser: false, message: "" };
-    }
-  }
-
   private async llmChat(
     model: LLMProvider,
     instruction: string,
     history: ChatMessage[],
     forceTools = false,
+    tools?: ToolDefinition[],
   ): Promise<ChatResponse | null> {
     const contextBlock = this.state.context
       ? `## Contexto do Projeto\n${this.state.context.projectConfig}\n\n## Arquivos\n${this.state.context.manifest}`
@@ -1710,6 +1829,7 @@ export class AgentLoop {
       skillPrompt,
       this.sessionAddon,
       EXECUTE_RULES,
+      BUILD_CLARIFY_RULE,
       ANTI_LEAK_RULE,
     ]
       .filter(Boolean)
@@ -1726,7 +1846,7 @@ export class AgentLoop {
     try {
       return await model.chat({
         messages,
-        tools: this.reg.getDefinitions(),
+        tools: tools ?? mergeExecutionToolDefinitions(this.reg.getDefinitions(), false),
         tool_choice: forceTools ? "required" : "auto",
         max_tokens: 4096,
         onTokenDelta: forceTools
@@ -1985,7 +2105,10 @@ export class AgentLoop {
     const finished = opts.finished ?? true;
     const lastFinishOk = opts.lastFinishOk ?? (finished ? true : null);
     const narration = this.narrationBuffer.trim();
-    const latencyThoughtMs = this.latencyThoughtMsFromTimeline(timeline);
+    let latencyThoughtMs = this.latencyThoughtMsFromTimeline(timeline);
+    if (latencyThoughtMs == null && (opts.finished ?? true)) {
+      latencyThoughtMs = Math.max(500, Date.now() - this.runStartTime);
+    }
 
     const snapshot: Record<string, unknown> = {
       timeline,

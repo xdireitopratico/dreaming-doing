@@ -211,10 +211,13 @@ export function buildJobStreamTree(
       continue;
     }
 
+    if (ev.type === "classify") {
+      continue;
+    }
+
     if (
       ev.type === "phase" ||
       ev.type === "memory" ||
-      ev.type === "classify" ||
       ev.type === "skills" ||
       ev.type === "explore"
     ) {

@@ -15,7 +15,7 @@ function cleanInline(text: string): string {
 }
 
 /**
- * Extrai opções de múltipla escolha de perguntas qualify (bullets, A/B/C, numeradas).
+ * Extrai opções de múltipla escolha de perguntas clarify (bullets, A/B/C, numeradas).
  * Retorna null se não houver pelo menos 2 opções clicáveis.
  */
 export function parseQualifyChoices(text: string): ParsedQualifyPrompt | null {

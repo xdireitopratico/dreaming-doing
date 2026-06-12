@@ -1,119 +1,33 @@
-// plan-mode.test.ts — Testes do buildProposedPlan (Fase 4.6+: plano rico)
-import { assertEquals, assertExists, assert } from "https://deno.land/std@0.224.0/assert/mod.ts";
-
+// plan-mode.test.ts — Helpers de plan mode + plano persistido (create_plan vive em meta.ts)
+import { assertEquals, assert } from "https://deno.land/std@0.224.0/assert/mod.ts";
+import { proposedPlanFromToolArgs } from "./tools/meta.ts";
 import {
+  buildPlanDocumentMarkdown,
+  extractStoredPlanFromMessageMeta,
+  findLatestStoredPlan,
   generatePlanChatMessage,
-  buildProposedPlan,
-  extractRationaleFromLlmContent,
   filterActionablePlanSteps,
   isActionablePlanStep,
   isShowExistingPlanRequest,
   sanitizePlanHeadline,
+  validateApprovedSteps,
 } from "./plan-mode.ts";
+import type { ChatMessage } from "./types.ts";
 
-const opts = { planId: "p1", ttlMs: 5 * 60 * 1000, proposedAt: "2026-06-06T00:00:00Z" };
-
-Deno.test("buildProposedPlan: caminho 1 — classification.plan do LLM estruturado", () => {
-  const plan = buildProposedPlan(
-    {
-      type: "new_project",
-      summary: "Vou criar X",
-      plan: {
-        rationale: "Abordagem pensada",
-        steps: [
-          {
-            id: "s1",
-            type: "create_file",
-            description: "Criar arquivo A",
-            filePath: "a.ts",
-            enabled: true,
-          },
-          {
-            id: "s2",
-            type: "edit_file",
-            description: "Editar arquivo B",
-            filePath: "b.ts",
-            enabled: true,
-          },
-        ],
-      },
-    },
-    null,
-    opts,
-  );
-  assertEquals(plan.steps.length, 2);
-  assertEquals(plan.rationale, "Abordagem pensada");
-  assertEquals(plan.summary, "Vou criar X");
-});
-
-Deno.test(
-  "buildProposedPlan: caminho 2 — extrai do rawContent quando classification.plan ausente",
-  () => {
-    const raw = JSON.stringify({
-      complexity: 3,
-      type: "modify",
-      summary: "Ajuste X",
-      plan: {
-        rationale: "Do raw",
-        steps: [{ id: "s1", type: "edit_file", description: "Editar Y", filePath: "y.ts" }],
-      },
-    });
-    const plan = buildProposedPlan({ type: "modify", summary: "Ajuste X" }, raw, opts);
-    assertEquals(plan.steps.length, 1);
-    assertEquals(plan.rationale, "Do raw");
-  },
-);
-
-Deno.test(
-  "buildProposedPlan: caminho 3 — sem LLM estruturado, usa deriveDefaultPlan + rationale genérico",
-  () => {
-    const plan = buildProposedPlan(
-      { type: "new_project", summary: "Criar landing page" },
-      null,
-      opts,
-    );
-    assertEquals(plan.steps.length, 5, "new_project tem 5 passos default");
-    assertExists(plan.rationale);
-    assert(plan.rationale!.includes("heurística"), "rationale default deve mencionar heurística");
-  },
-);
-
-Deno.test("buildProposedPlan: rationale vazio vira undefined", () => {
-  const plan = buildProposedPlan(
-    {
-      type: "modify",
-      summary: "x",
-      plan: {
-        rationale: "",
-        steps: [{ id: "s1", type: "custom", description: "d", enabled: true }],
-      },
-    },
-    null,
-    opts,
-  );
-  assertEquals(plan.rationale, undefined);
-});
-
-Deno.test("extractRationaleFromLlmContent: parseia {plan:{rationale,steps[]}}", () => {
-  const raw = JSON.stringify({
-    plan: { rationale: "r", steps: [{ type: "custom", description: "d" }] },
+Deno.test("proposedPlanFromToolArgs (meta) monta documento via helpers de plan-mode", () => {
+  const plan = proposedPlanFromToolArgs({
+    summary: "Landing de padaria",
+    rationale: "Começar pela home.",
+    mission: "Landing de padaria",
+    steps: [
+      { id: "s1", type: "observe", description: "Ler contexto" },
+      { id: "s2", type: "create_file", description: "Criar hero", filePath: "src/App.tsx" },
+    ],
   });
-  const r = extractRationaleFromLlmContent(raw);
-  assertExists(r);
-  assertEquals(r!.rationale, "r");
-  assertEquals(r!.steps.length, 1);
-});
-
-Deno.test("extractRationaleFromLlmContent: retorna null se plan não tem steps", () => {
-  const raw = JSON.stringify({ plan: { rationale: "r", steps: [] } });
-  const r = extractRationaleFromLlmContent(raw);
-  assertEquals(r, null);
-});
-
-Deno.test("extractRationaleFromLlmContent: retorna null se JSON inválido", () => {
-  assertEquals(extractRationaleFromLlmContent("não é json"), null);
-  assertEquals(extractRationaleFromLlmContent(""), null);
-  assertEquals(extractRationaleFromLlmContent(null), null);
+  assertEquals(plan?.summary, "Landing de padaria");
+  assertEquals(plan?.steps.length, 2);
+  assert(plan?.markdown?.includes("## Missão"));
+  assert(plan?.phases?.length);
 });
 
 Deno.test("sanitizePlanHeadline bloqueia meta-comentário do classify", () => {
@@ -138,6 +52,68 @@ Deno.test("isActionablePlanStep rejeita passos meta-conversacionais", () => {
   ]);
   assertEquals(filtered.length, 1);
   assertEquals(filtered[0]?.description, "Criar App.tsx");
+});
+
+Deno.test("buildPlanDocumentMarkdown gera fases a partir dos steps", () => {
+  const doc = buildPlanDocumentMarkdown({
+    summary: "App mobile",
+    rationale: "Expo primeiro.",
+    steps: [
+      { id: "s1", type: "observe", description: "Ler projeto", enabled: true },
+      { id: "s2", type: "create_file", description: "Scaffold Expo", enabled: true },
+    ],
+  });
+  assert(doc.markdown.includes("## Missão"));
+  assertEquals(doc.phases.length >= 1, true);
+});
+
+Deno.test("extractStoredPlanFromMessageMeta e findLatestStoredPlan", () => {
+  const messages: ChatMessage[] = [
+    {
+      role: "assistant",
+      meta: {
+        planId: "p-old",
+        planSummary: "Plano antigo",
+        planSteps: [{ id: "s1", type: "custom", description: "Antigo", enabled: true }],
+        planStatus: "approved",
+      },
+    },
+    {
+      role: "assistant",
+      meta: {
+        planId: "p-new",
+        planSummary: "Plano novo",
+        planSteps: [
+          { id: "s1", type: "custom", description: "Novo passo 1", enabled: true },
+          { id: "s2", type: "custom", description: "Novo passo 2", enabled: true },
+        ],
+        planStatus: "pending",
+      },
+    },
+  ];
+  const latest = findLatestStoredPlan(messages);
+  assertEquals(latest?.plan.planId, "p-new");
+  assertEquals(latest?.status, "pending");
+  const one = extractStoredPlanFromMessageMeta(messages[0]?.meta);
+  assertEquals(one?.planId, "p-old");
+});
+
+Deno.test("validateApprovedSteps preserva subset por id", () => {
+  const original = [
+    { id: "s1", type: "custom" as const, description: "A", enabled: true },
+    { id: "s2", type: "custom" as const, description: "B", enabled: true },
+  ];
+  const ok = validateApprovedSteps(original, [
+    { id: "s1", description: "A editado" },
+    { id: "s2", enabled: false },
+  ]);
+  assertEquals(ok.ok, true);
+  if (ok.ok) {
+    assertEquals(ok.steps.length, 1);
+    assertEquals(ok.steps[0]?.description, "A editado");
+  }
+  const bad = validateApprovedSteps(original, [{ id: "s9" }]);
+  assertEquals(bad.ok, false);
 });
 
 Deno.test("generatePlanChatMessage — texto vem do LLM", async () => {

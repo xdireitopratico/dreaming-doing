@@ -20,7 +20,7 @@ describe("step-intent", () => {
     );
   });
 
-  it("phase gather — task title", () => {
-    expect(buildPhaseTaskTitle("gather")).toBe("Entender o que já existe no projeto");
+  it("phase build — task title", () => {
+    expect(buildPhaseTaskTitle("build")).toBe("Implementar as mudanças pedidas");
   });
 });

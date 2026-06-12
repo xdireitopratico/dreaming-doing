@@ -1,6 +1,6 @@
 import type { AgentProgress } from "@/lib/agent-progress";
 import type { AgentRunView } from "@/lib/forge-run";
-import { buildForgeTimeline, resolveLatencyThinking } from "@/lib/forge-run";
+import { resolveLatencyThinking } from "@/lib/forge-run";
 
 export type TurnThinking = {
   active: boolean;
@@ -8,7 +8,7 @@ export type TurnThinking = {
   durationMs?: number;
 };
 
-/** Thought for Xs — aparece no envio, congela no 1º token, nunca some. */
+/** Thinking… no envio → Thought for Xs no 1º token → nunca some. */
 export function resolveTurnThinking(
   resolved: AgentProgress | null,
   runView: AgentRunView | null,
@@ -24,51 +24,23 @@ export function resolveTurnThinking(
     };
   }
 
+  if (!runStartedAtMs) return null;
+
   const latency =
     runView?.latencyThinking ??
-    (resolved && runStartedAtMs
-      ? resolveLatencyThinking(
-          resolved,
-          slotActive,
-          runStartedAtMs,
-          buildForgeTimeline(resolved.timeline, slotActive),
-        )
+    (resolved
+      ? resolveLatencyThinking(resolved, slotActive, runStartedAtMs)
       : null);
-  const reasoning = runView?.reasoningThought;
 
-  if (latency || reasoning) {
-    const durationMs =
-      latency?.durationMs ??
-      reasoning?.durationMs ??
-      (latency?.startedAtMs && latency.active
-        ? Math.max(500, Date.now() - latency.startedAtMs)
-        : undefined);
-
+  if (latency) {
     return {
-      active: !!(latency?.active || reasoning?.active),
-      startedAtMs: latency?.startedAtMs,
-      durationMs,
+      active: latency.active,
+      startedAtMs: latency.startedAtMs ?? runStartedAtMs,
+      durationMs: latency.durationMs,
     };
   }
 
-  if (!resolved) {
-    if (slotActive && runStartedAtMs) {
-      return { active: true, startedAtMs: runStartedAtMs };
-    }
-    return null;
-  }
-
-  const forgeTimeline = buildForgeTimeline(resolved.timeline, slotActive);
-  const thoughtItems = forgeTimeline.filter((i) => i.type === "THOUGHT");
-  const lastThought = thoughtItems[thoughtItems.length - 1];
-  if (lastThought?.type === "THOUGHT" && lastThought.durationMs > 0) {
-    return {
-      active: !!lastThought.active,
-      durationMs: lastThought.durationMs,
-    };
-  }
-
-  if (slotActive && runStartedAtMs) {
+  if (slotActive) {
     return { active: true, startedAtMs: runStartedAtMs };
   }
 

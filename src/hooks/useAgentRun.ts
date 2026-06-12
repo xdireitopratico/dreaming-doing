@@ -22,25 +22,16 @@ import {
   streamRowToSSEEvent,
 } from "@/lib/agent-progress";
 import { PENDING_RUN_ID } from "@/lib/pending-run-id";
+import { hasFirstInspectorToken } from "@/lib/forge-run";
 import { shouldRetainLiveRunSlot } from "@/lib/live-run-overlay";
 import { isAssistantRunMaterialized } from "@/lib/assistant-materialized";
 import type { ChatMessage } from "@/lib/chat-types";
 
 import type { PendingQueueItem } from "@/components/editor/PendingQueuePanel";
 
-function progressHasFirstChatToken(progress: AgentProgress): boolean {
-  if (progress.streamText?.trim() || progress.narrationText?.trim()) return true;
-  return progress.timeline.some(
-    (ev) =>
-      ev.type === "assistant_text" &&
-      typeof ev.data?.text === "string" &&
-      String(ev.data.text).trim().length > 0,
-  );
-}
-
 function withFrozenLatencyThought(next: AgentProgress, startedAtMs: number | null): AgentProgress {
   if (next.latencyThoughtMs != null || !startedAtMs) return next;
-  if (!progressHasFirstChatToken(next)) return next;
+  if (!hasFirstInspectorToken(next)) return next;
   return {
     ...next,
     latencyThoughtMs: Math.max(500, Date.now() - startedAtMs),
@@ -280,10 +271,11 @@ export function useAgentRun() {
         } else {
           return p;
         }
-        return {
+        const merged = {
           ...next,
           streamText: streamText ?? next.streamText ?? next.summary ?? p.streamText,
         };
+        return withFrozenLatencyThought(merged, activeRunStartedAtMsRef.current);
       });
       teardownChannels();
       setConnected(false);
@@ -605,7 +597,7 @@ export function useAgentRun() {
           finished: false,
           resumable: false,
           autoResuming: false,
-          phase: p.phase ?? "classify",
+          phase: p.phase ?? null,
         }));
       } else {
         setProgress({
@@ -731,7 +723,7 @@ export function useAgentRun() {
     setProgress({
       ...initialAgentProgress,
       statusHint: "Iniciando…",
-      phase: "classify",
+      phase: null,
       finished: false,
     });
     return startedAtMs;

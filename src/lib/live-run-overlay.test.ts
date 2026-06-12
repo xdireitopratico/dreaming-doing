@@ -24,7 +24,7 @@ describe("shouldRetainLiveRunSlot", () => {
     ).toBe(false);
   });
 
-  it("libera qualify para ancorar no DB", () => {
+  it("libera clarify (awaitingKind qualify) para ancorar no DB", () => {
     expect(
       shouldRetainLiveRunSlot({
         ...initialAgentProgress,

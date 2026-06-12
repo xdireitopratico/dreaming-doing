@@ -66,10 +66,10 @@ describe("assertAssistantTurnInvariant", () => {
 });
 
 describe("mapAssistantTurn — contrato Lovable imutável", () => {
-  it("run ativa gather: Thought → narração LLM → mini-card", () => {
+  it("run ativa: Thought → narração LLM → mini-card", () => {
     const progress = {
       ...initialAgentProgress,
-      phase: "gather" as const,
+      phase: "build" as const,
       finished: false,
       narrationText: "Vou investigar o estado atual.",
       message: "Checking browser route wiring in lara-workspace",
@@ -98,7 +98,7 @@ describe("mapAssistantTurn — contrato Lovable imutável", () => {
   it("run ativa com activeRunStartedAtMs: Thought aparece imediatamente", () => {
     const progress = {
       ...initialAgentProgress,
-      phase: "classify" as const,
+      phase: "build" as const,
       finished: false,
     };
     const thread: RawThreadItem[] = [

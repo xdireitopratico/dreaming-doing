@@ -1,7 +1,7 @@
 import type { ChatMessage } from "@/lib/chat-types";
 import type { AgentProgress } from "@/lib/agent-progress";
 
-export type RunPhase = "classify" | "gather" | "plan" | "execute" | "observe" | "summarize" | null;
+export type RunPhase = "plan" | "build" | "execute" | "observe" | "summarize" | "resume" | null;
 
 export type TaskStatus = "pending" | "active" | "done" | "failed";
 

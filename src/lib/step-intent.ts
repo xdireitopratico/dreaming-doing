@@ -50,13 +50,9 @@ export function describeStepExpectation(name: string, args: Record<string, unkno
 
 export function buildPhaseTaskTitle(phase: string, message?: string): string {
   const m = (message ?? "").trim();
-  if (m && !/^lendo arquivos|classificando|verificando/i.test(m)) return m;
+  if (m && !/^lendo arquivos|classificando|verificando|resumindo estado/i.test(m)) return m;
 
   switch (phase) {
-    case "gather":
-      return "Entender o que já existe no projeto";
-    case "classify":
-      return "Avaliar o escopo da tarefa";
     case "plan":
       return "Montar plano de implementação";
     case "build":
