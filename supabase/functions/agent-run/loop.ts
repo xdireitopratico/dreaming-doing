@@ -36,16 +36,15 @@ import {
   isProjectInventoryQuestion,
 } from "./qualify.ts";
 import {
-  BUILD_CLARIFY_RULE,
   formatClarifyMessage,
   hasMixedMetaAndExecution,
   isPlanModePatchTool,
   mergeExecutionToolDefinitions,
   mergePlanModeToolDefinitions,
-  PLAN_MODE_AGENT_RULES,
   proposedPlanFromToolArgs,
   splitMetaToolCalls,
 } from "./tools/meta.ts";
+import { VIBE_CLARIFY_HINT, VIBE_PLAN_RULES } from "./vibe-coding-prompt.ts";
 import { getTasteStartSystemPrompt } from "./prompts-taste.ts";
 import { friendlyLlmError } from "./llm-errors.ts";
 import { hashToolBatch, isExecutionStuck } from "../_shared/agent-stuck.ts";
@@ -1499,11 +1498,18 @@ export class AgentLoop {
       message: "Explorando projeto antes do plano…",
       intent: this.state.intent ?? undefined,
     });
-    await this.saveCheckpoint(LoopPhase.CREATE_PLAN);
+    await this.saveCheckpoint(LoopPhase.PLAN_MODE);
 
     for (let step = 0; step < MAX_PLAN_EXPLORE; step++) {
       if (this.loopBudgetExceeded()) {
-        return await this.returnResumableChunk(step, toolsUsed);
+        const chunk = await this.returnResumableChunk(step, toolsUsed);
+        return {
+          ok: false,
+          summary: chunk.error,
+          steps: chunk.steps,
+          toolsUsed: chunk.toolsUsed,
+          error: chunk.error,
+        };
       }
 
       const compressed = await this.compression.compress(this.state.messages);
@@ -1668,12 +1674,12 @@ export class AgentLoop {
     const skillPrompt = this.state.context
       ? this.skills.buildSkillPrompt(this.state.context.files)
       : "";
-    const base = getSystemPrompt(this.projectTemplate);
+    const base = getSystemPrompt(this.projectTemplate, true);
     const fullSystemPrompt = [
       base,
       skillPrompt,
       this.sessionAddon,
-      PLAN_MODE_AGENT_RULES,
+      VIBE_PLAN_RULES,
       ANTI_LEAK_RULE,
     ]
       .filter(Boolean)
@@ -1829,7 +1835,7 @@ export class AgentLoop {
       skillPrompt,
       this.sessionAddon,
       EXECUTE_RULES,
-      BUILD_CLARIFY_RULE,
+      VIBE_CLARIFY_HINT,
       ANTI_LEAK_RULE,
     ]
       .filter(Boolean)

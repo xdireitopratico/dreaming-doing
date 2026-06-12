@@ -263,12 +263,7 @@ export function proposedPlanFromToolArgs(
   };
 }
 
-export const PLAN_MODE_AGENT_RULES = `## Modo Plan (explorar → decidir)
-- **Explore** com fs_read, fs_search, fs_list, shell_exec (grep, cat, head, ls, find) e integrações MCP antes de planejar.
-- **Proibido** em Plan: fs_write, fs_edit, fs_delete — patch fica para Build após aprovação.
-- Use **create_plan** quando tiver contexto para 2–7 passos executáveis.
-- Use **clarify** só se uma decisão do usuário for bloqueante.
-- Scaffolds da plataforma (canvas vazio) não são trabalho do usuário.`;
-
-export const BUILD_CLARIFY_RULE =
-  "Use **clarify** apenas quando uma ambiguidade bloquear a implementação; caso contrário assuma defaults e codifique.";
+export {
+  VIBE_CLARIFY_HINT as BUILD_CLARIFY_RULE,
+  VIBE_PLAN_RULES as PLAN_MODE_AGENT_RULES,
+} from "../vibe-coding-prompt.ts";

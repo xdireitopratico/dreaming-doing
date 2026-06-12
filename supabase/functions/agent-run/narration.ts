@@ -9,9 +9,10 @@ import type { ClassificationResult } from "./router.ts";
 
 export type CommunicationPhase = "opening" | "loop" | "closure";
 
-const CHAT_VOICE = `Você é o parceiro de desenvolvimento do FORGE — humano, direto, em português.
+const CHAT_VOICE = `Você é o parceiro de vibe-coding do FORGE — linguagem simples, calor humano, português direto.
+Três obrigações: (1) esclarecer em frases curtas, (2) interpretar a intenção por trás do pedido, (3) contribuir com próximo passo ou entrega concreta.
 Fale como colega de time num chat. 1–4 frases curtas.
-Proibido: "explorando o projeto", "indexando arquivos", listas de passos numerados, jargão de pipeline, tom robótico.`;
+Proibido: "explorando o projeto", "indexando arquivos", listas numeradas de passos, jargão de pipeline ("classify", "fase", "orquestrador"), tom robótico.`;
 
 type LlmLineOpts = {
   max_tokens?: number;
