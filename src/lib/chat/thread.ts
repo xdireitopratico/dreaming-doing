@@ -218,7 +218,7 @@ function applyLiveOverlay(items: RawThreadItem[], live: ChatLiveState): RawThrea
 
   const isPending = activeRunId === PENDING_RUN_ID;
   const slotActive = activeRunId
-    ? (running || isPending) && !progress.finished
+    ? (running || isPending || progress.autoResuming) && !progress.finished
     : false;
 
   const slot: Extract<RawThreadItem, { kind: "assistant" }> = {

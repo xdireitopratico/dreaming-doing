@@ -544,7 +544,8 @@ export function buildMiniCardHeader(
 }
 
 export function isRunEffectivelyActive(progress: AgentProgress, slotActive = false): boolean {
-  return !!slotActive && !progress.finished && !progress.canceled;
+  if (progress.finished || progress.canceled) return false;
+  return !!slotActive || progress.autoResuming === true;
 }
 
 /**
@@ -574,7 +575,8 @@ export function shouldShowJobCard(opts: {
     !hasActiveShellTool(progress);
   if (planApprovalOnly) return false;
 
-  const running = slotActive && !progress.finished && !progress.canceled;
+  const running =
+    !progress.finished && !progress.canceled && (slotActive || progress.autoResuming === true);
   if (running) return true;
 
   const edited = lastEditedFile(progress);

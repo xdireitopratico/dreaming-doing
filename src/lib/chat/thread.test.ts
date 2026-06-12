@@ -22,6 +22,27 @@ describe("buildChatThread", () => {
     expect(thread.map((t) => t.kind)).toEqual(["user", "assistant", "user", "assistant"]);
   });
 
+  it("mantém slot ativo durante autoResuming entre chunks", () => {
+    const messages = [msg("u1", "user", "fix build")];
+    const progress = {
+      ...initialAgentProgress,
+      autoResuming: true,
+      finished: false,
+      statusHint: "Retomando automaticamente no servidor…",
+    };
+    const thread = buildChatThread(messages, progress, {
+      running: false,
+      activeRunId: "run-chunk",
+      sessionProgress: progress,
+    });
+    const slot = thread[1];
+    expect(slot?.kind).toBe("assistant");
+    if (slot?.kind === "assistant") {
+      expect(slot.isActive).toBe(true);
+      expect(slot.runId).toBe("run-chunk");
+    }
+  });
+
   it("slot __pending__ imediato após envio", () => {
     const messages = [msg("u1", "user", "bom dia")];
     const progress = { ...initialAgentProgress, statusHint: "Iniciando…" };

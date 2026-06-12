@@ -247,6 +247,28 @@ describe("shouldShowJobCard", () => {
   });
 });
 
+describe("autoResuming — mini-card ancorado", () => {
+  it("mantém run ativa com autoResuming mesmo sem slotActive", () => {
+    const progress = {
+      ...initialAgentProgress,
+      autoResuming: true,
+      finished: false,
+      phase: "build",
+    };
+    expect(isRunEffectivelyActive(progress, false)).toBe(true);
+    expect(
+      shouldShowJobCard({
+        runId: "run-1",
+        progress,
+        isClarifyOnly: false,
+        isAgentJobMessage: false,
+        hasExecutionEvidence: true,
+        slotActive: false,
+      }),
+    ).toBe(true);
+  });
+});
+
 describe("forge-run terminal state", () => {
   it("não trata run como ativa quando progress.finished", () => {
     const progress = {
