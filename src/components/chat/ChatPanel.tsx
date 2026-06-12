@@ -6,6 +6,7 @@ import type { ClarifyChoice } from "@/lib/chat/types";
 import type { StoredMessagePart } from "@/lib/chat-attachments";
 import { useChat } from "@/hooks/useChat";
 import {
+  computeUserAnchorSpacerHeight,
   scrollOffsetToAlignUserMessage,
   shouldAnchorNewUserMessage,
   shouldHoldUserMessageAnchor,
@@ -100,6 +101,7 @@ export function ChatPanel({
   const firstAnchorRef = useRef(true);
   const userScrolledAwayRef = useRef(false);
   const [showPill, setShowPill] = useState(false);
+  const [anchorSpacerPx, setAnchorSpacerPx] = useState(0);
   const PIN_THRESHOLD_PX = 100;
 
   const holdUserAnchor = shouldHoldUserMessageAnchor({
@@ -136,8 +138,25 @@ export function ChatPanel({
     [runProgrammaticScroll],
   );
 
+  const measureAnchorSpacer = useCallback((messageId?: string | null): number => {
+    const container = scrollRef.current;
+    const id = messageId ?? anchoredUserIdRef.current;
+    if (!container || !id) return 0;
+    const bubble = container.querySelector<HTMLElement>(`[data-user-msg-id="${id}"]`);
+    const style = getComputedStyle(container);
+    const padTop = parseFloat(style.paddingTop) || 0;
+    const padBottom = parseFloat(style.paddingBottom) || 0;
+    const bubbleH = bubble?.getBoundingClientRect().height ?? 96;
+    return computeUserAnchorSpacerHeight(
+      container.clientHeight,
+      bubbleH,
+      padTop,
+      padBottom,
+    );
+  }, []);
+
   const scrollUserBubbleToTop = useCallback(
-    (messageId: string, behavior: ScrollBehavior = "smooth"): boolean => {
+    (messageId: string, behavior: ScrollBehavior = "auto"): boolean => {
       const container = scrollRef.current;
       if (!container) return false;
       const bubble = container.querySelector<HTMLElement>(`[data-user-msg-id="${messageId}"]`);
@@ -232,7 +251,26 @@ export function ChatPanel({
     firstAnchorRef.current = true;
     userScrolledAwayRef.current = false;
     pinnedToBottom.current = false;
-  }, [lastUserMessageId]);
+    setAnchorSpacerPx(measureAnchorSpacer(lastUserMessageId));
+  }, [lastUserMessageId, measureAnchorSpacer]);
+
+  useEffect(() => {
+    if (!holdUserAnchor) {
+      setAnchorSpacerPx(0);
+      return;
+    }
+    setAnchorSpacerPx(measureAnchorSpacer());
+  }, [holdUserAnchor, lastUserMessageId, thread.length, measureAnchorSpacer]);
+
+  useEffect(() => {
+    if (anchorSpacerPx <= 0 || scrollModeRef.current !== "user-anchor") return;
+    const messageId = anchoredUserIdRef.current;
+    if (!messageId) return;
+    const raf = requestAnimationFrame(() => {
+      scrollUserBubbleToTop(messageId, "auto");
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [anchorSpacerPx, scrollUserBubbleToTop]);
 
   useEffect(() => {
     if (!holdUserAnchor) {
@@ -251,8 +289,7 @@ export function ChatPanel({
       if (!holdUserAnchor || scrollModeRef.current !== "user-anchor") return;
       if (userScrolledAwayRef.current) return;
       if (anchoredUserIdRef.current !== messageId) return;
-      const behavior: ScrollBehavior = firstAnchorRef.current ? "smooth" : "auto";
-      if (scrollUserBubbleToTop(messageId, behavior)) {
+      if (scrollUserBubbleToTop(messageId, "auto")) {
         firstAnchorRef.current = false;
       }
     };
@@ -281,6 +318,7 @@ export function ChatPanel({
     agent.progress.streamText,
     agent.progress.narrationText,
     agent.progress.phase,
+    anchorSpacerPx,
   ]);
 
   useEffect(() => {
@@ -344,14 +382,23 @@ export function ChatPanel({
             <span className="text-sm">Carregando conversa…</span>
           </div>
         ) : showEmptyState ? null : (
-          <ChatThread
-            items={thread}
-            onOpenInspector={onOpenInspector}
-            onClarifySelect={handleClarifySelect}
-            onRollback={onRollbackMessage ? handleRollback : undefined}
-            lastUserMessageId={lastUserMessageId}
-            lastAssistantMessageId={lastAssistantMessageId}
-          />
+          <>
+            <ChatThread
+              items={thread}
+              onOpenInspector={onOpenInspector}
+              onClarifySelect={handleClarifySelect}
+              onRollback={onRollbackMessage ? handleRollback : undefined}
+              lastUserMessageId={lastUserMessageId}
+              lastAssistantMessageId={lastAssistantMessageId}
+            />
+            {anchorSpacerPx > 0 ? (
+              <div
+                className="forge-chat-scroll-spacer"
+                style={{ minHeight: anchorSpacerPx }}
+                aria-hidden
+              />
+            ) : null}
+          </>
         )}
 
         {showPill && (

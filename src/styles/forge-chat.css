@@ -61,6 +61,13 @@
   gap: 20px;
 }
 
+/* Espaço de scroll abaixo do turno ativo — ancora bolha do usuário no topo do painel */
+.forge-chat-scroll-spacer {
+  flex-shrink: 0;
+  width: 100%;
+  pointer-events: none;
+}
+
 /* Turno assistant — blocos separados (Lovable): thought/texto solto + card com borda */
 .forge-assistant-turn {
   display: flex;
