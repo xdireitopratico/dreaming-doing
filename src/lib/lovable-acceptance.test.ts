@@ -217,3 +217,17 @@ describe("Lovable acceptance — Composer placeholders (imgs 4/14)", () => {
     expect(PLAN).toBe("Tell Lovable what to do instead...");
   });
 });
+
+describe("Lovable acceptance — higiene de escopo", () => {
+  it("mini-card hint padrão é Timeline completa → (img 5/9)", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { resolve } = await import("node:path");
+    const src = readFileSync(
+      resolve(import.meta.dirname, "../components/chat/ChatJobCard.tsx"),
+      "utf8",
+    );
+    expect(src).toContain("Timeline completa →");
+    expect(src).not.toContain("Detalhes completos →");
+    expect(src).not.toContain("Working…");
+  });
+});

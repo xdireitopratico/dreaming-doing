@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type ChatThinkingProps = {
@@ -26,9 +25,7 @@ export function ChatThinking({ startedAtMs, active, durationMs }: ChatThinkingPr
   const liveMs =
     startedAtMs && active ? Math.max(500, now - startedAtMs) : (frozenMs ?? durationMs ?? 1000);
 
-  const label = active
-    ? `Thinking… ${Math.max(1, Math.round(liveMs / 1000))}s`
-    : formatThoughtSeconds(liveMs);
+  const label = formatThoughtSeconds(liveMs);
 
   return (
     <p
@@ -36,7 +33,6 @@ export function ChatThinking({ startedAtMs, active, durationMs }: ChatThinkingPr
       data-testid="chat-thinking"
     >
       <span>{label}</span>
-      {active && <Loader2 className="size-3 animate-spin" />}
     </p>
   );
 }

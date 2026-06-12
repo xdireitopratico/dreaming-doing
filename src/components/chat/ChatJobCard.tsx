@@ -59,7 +59,7 @@ export function ChatJobCard({
     if (isPlanWaiting) return "Revisar plano no inspector →";
     if (isDone && data.fileCount) return `${data.fileCount} arquivos alterados →`;
     if (data.hasPlan) return "Ver plano no inspector →";
-    return "Detalhes completos →";
+    return "Timeline completa →";
   };
 
   const cardVariant = isPlanWaiting
@@ -114,16 +114,14 @@ export function ChatJobCard({
           </div>
         )}
 
-        {isLive && !edited && !isRunningCommand && !isPlanWaiting && (
-          <div className="forge-mini-card-header">
-            <span className="forge-mini-card-dot forge-mini-card-dot--working" aria-hidden />
-            <span className="forge-mini-card-badge forge-mini-card-badge--working">Working…</span>
-          </div>
-        )}
-
-        {!edited && !isRunningCommand && !isPlanWaiting && data.header && !isDone && !isFailed && (
-          <p className="forge-mini-card-header-line">{data.header}</p>
-        )}
+        {!edited &&
+          !isRunningCommand &&
+          !isPlanWaiting &&
+          data.header &&
+          !isDone &&
+          !isFailed && (
+            <p className="forge-mini-card-header-line">{data.header}</p>
+          )}
 
         <p
           key={isLive ? `${briefingIndex}-${displaySubtitle}` : displaySubtitle}
