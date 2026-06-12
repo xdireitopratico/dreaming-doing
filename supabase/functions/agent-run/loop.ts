@@ -61,6 +61,7 @@ import {
   PLAN_APPROVAL_TTL_MS,
   sanitizePlanHeadline,
 } from "./plan-mode.ts";
+import { isPlanShapedMarkdown, planToolArgsFromMarkdown } from "./plan-markdown-parse.ts";
 import { deriveClassificationFromPrompt, type ClassificationResult } from "./router.ts";
 import type { ProviderConfig } from "./providers.ts";
 import type { AgentPreferencesPayload } from "./connector-keys.ts";
@@ -1568,6 +1569,7 @@ export class AgentLoop {
 
       if (planCall) {
         toolsUsed.add("create_plan");
+        this.emit("phase", { phase: "creating_plan", message: "Criando plano…" });
         const proposed = proposedPlanFromToolArgs(planCall.arguments);
         if (!proposed) {
           return {
@@ -1590,6 +1592,22 @@ export class AgentLoop {
 
       if (!response.tool_calls?.length) {
         if (assistantText) {
+          if (isPlanShapedMarkdown(assistantText)) {
+            this.emit("phase", { phase: "creating_plan", message: "Criando plano…" });
+            const toolArgs = planToolArgsFromMarkdown(assistantText);
+            const proposed = toolArgs ? proposedPlanFromToolArgs(toolArgs) : null;
+            if (proposed) {
+              return await this.finishPlanProposal(proposed, [...toolsUsed]);
+            }
+            return {
+              ok: false,
+              summary: "Plano no chat inválido — use create_plan com 2–7 passos.",
+              steps: step,
+              toolsUsed: [...toolsUsed],
+              error: "plan_markdown_invalid",
+            };
+          }
+
           const clean = sanitizeUserFacingProse(assistantText);
           this.emit("assistant_text", { text: clean, final: true });
           await this.persistFinal(clean, { lastFinishOk: true, conversational: true });

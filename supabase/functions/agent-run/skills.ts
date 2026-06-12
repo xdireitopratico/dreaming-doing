@@ -165,18 +165,15 @@ Vitest para testes. @vitejs/plugin-react para Fast Refresh.`,
 
 ### 1. USE @FORGE/UI — PRIMITIVOS + COMPOSITES
 \`\`\`tsx
-import { HeroSignature, BentoGrid, CTASignature, NavShell, FeatureMatrix, Button, FadeIn } from "@forge/ui";
+import { Button, FadeIn, HeroSignature, BentoGrid } from "@forge/ui";
 \`\`\`
 
-**Composites obrigatórios em landings (≥3):** HeroSignature, BentoGrid, FeatureMatrix, CTASignature, NavShell, FooterColumns, StatsRibbon, PricingTiers, TestimonialCarousel
+**Composição por domínio (≥3 seções, variadas):** escolha 3–5 composites adequados ao **pedido do usuário** (oficina ≠ SaaS ≠ padaria). Varie a stack entre projetos — **proibido** repetir a mesma receita de seções em pedidos diferentes.
 
 **Primitives:** Button, Input, Card, Badge, Avatar, Dialog, Toast, Motion
 
-### 2. TOKENS VIA @THEME (Tailwind v4) — em src/index.css ou global.css:
-@theme {
-  --color-brand-500: #FFB627; --color-brand-600: #FF7A1A; --color-accent-500: #22C55E;
-  --spacing-*: ...; --radius-*: ...; --shadow-*: ...; --font-*: ...;
-}
+### 2. TOKENS VIA @THEME (Tailwind v4)
+Leia tokens internamente no CSS do projeto — **nunca cite** \`src/index.css\`, \`@theme\` nem \`--color-*\` ao usuário no chat ou no plano.
 **NÃO use valores hardcoded** (px, rem arbitrários, hex colors) — use tokens semânticos:
 - Cores: bg-brand-500, text-brand-600, border-brand-500, ring-brand-500
 - Espaçamento: p-4, m-6, gap-4 (usa scale do @theme)
@@ -209,7 +206,7 @@ import { HeroSignature, BentoGrid, CTASignature, NavShell, FeatureMatrix, Button
 - Grid/Flex com gap, não margin
 
 ### 6. PROIBIDO (Observer rejeita):
-- bg-white, bg-blue-600/500, landing <3 composites, sem motion
+- bg-white, bg-blue-600/500, landing com <3 composites @forge/ui, sem motion
 - Tailwind raw (bg-zinc-*, text-blue-*), hex hardcoded, <button> manual
 - Reimplementar Button/Card/Dialog — importe @forge/ui`,
         tools: [],

@@ -13,6 +13,7 @@ import {
   type ChatScrollMode,
 } from "@/lib/chat/user-message-anchor";
 import { ChatThread } from "./ChatThread";
+import { ChatPlanDock } from "./ChatPlanDock";
 import { ChatComposer } from "./ChatComposer";
 import { PendingQueuePanel, type PendingQueueItem } from "@/components/editor/PendingQueuePanel";
 import type { useAgentRun } from "@/hooks/useAgentRun";
@@ -411,6 +412,12 @@ export function ChatPanel({
           </button>
         )}
       </div>
+
+      <ChatPlanDock
+        pendingPlan={pendingPlan}
+        creating={running && agent.progress.phase === "creating_plan" && !pendingPlan}
+        onReview={(runId) => onOpenInspector?.(runId, "plan")}
+      />
 
       {((agent.progress.pendingQueueCount ?? 0) > 0 && pendingQueueItems.length > 0) ||
       (queueBlockingReason && running) ? (

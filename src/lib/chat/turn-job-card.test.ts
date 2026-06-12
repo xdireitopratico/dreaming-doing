@@ -87,9 +87,7 @@ describe("mapAssistantTurn — mini-card permanece", () => {
       sessionProgress: progress,
     });
 
-    expect(turn.planTeaser).toBe(true);
-    expect(turn.miniCard?.header).toBe("Plan ready");
-    expect(turn.miniCard?.tasks.length).toBeGreaterThan(0);
-    expect(turn.miniCard?.tasks.every((t) => t.status === "pending")).toBe(true);
+    expect(turn.planTeaser).toBe(false);
+    expect(turn.miniCard).toBeNull();
   });
 });

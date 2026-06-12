@@ -1,5 +1,6 @@
 import { useState, useCallback } from "react";
 import { Copy, RotateCcw } from "lucide-react";
+import { copyToClipboard } from "@/lib/copy-to-clipboard";
 
 type ChatToolbarProps = {
   text: string;
@@ -17,33 +18,10 @@ export function ChatToolbar({
   const [copied, setCopied] = useState(false);
 
   const handleCopy = useCallback(async () => {
-    const markCopied = () => {
+    const ok = await copyToClipboard(text);
+    if (ok) {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
-    };
-
-    try {
-      if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(text);
-        markCopied();
-        return;
-      }
-    } catch {
-      /* fallback */
-    }
-
-    const ta = document.createElement("textarea");
-    ta.value = text;
-    ta.setAttribute("readonly", "");
-    ta.style.position = "fixed";
-    ta.style.left = "-9999px";
-    document.body.appendChild(ta);
-    ta.select();
-    try {
-      document.execCommand("copy");
-      markCopied();
-    } finally {
-      document.body.removeChild(ta);
     }
   }, [text]);
 

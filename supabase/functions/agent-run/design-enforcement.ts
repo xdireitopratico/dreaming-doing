@@ -3,7 +3,8 @@
 export const DESIGN_MISSION =
   "O usuário recebe, sem esforço, design absurdamente único — multi-componente, alta complexidade, NUNCA página branca + CTA azul. O design system é uma ESTRUTURA que deve ser ADAPTADA ao domínio específico do pedido (padaria usa composições quentes e de produto; app usa técnicas; sales usa conversão).";
 
-export const REQUIRED_COMPOSITES = [
+/** Catálogo de composites conhecidos — qualquer subconjunto válido, não lista fixa obrigatória. */
+export const KNOWN_FORGE_COMPOSITES = [
   "HeroSignature",
   "BentoGrid",
   "FeatureMatrix",
@@ -13,9 +14,41 @@ export const REQUIRED_COMPOSITES = [
   "PricingTiers",
   "TestimonialCarousel",
   "FooterColumns",
+  "LogoWall",
+  "FAQAccordion",
+  "TeamGrid",
+  "MarqueeStrip",
+  "SplitFeature",
+  "MediaGallery",
+  "ContactForm",
+  "NewsletterSignup",
+  "AppScreenshot",
+  "ComparisonTable",
+  "TimelineVertical",
+  "ProcessSteps",
+  "TrustBar",
+  "CaseStudyCard",
+  "AnnouncementBar",
+  "StickyCTA",
+  "SplitHero",
+  "VideoHero",
+  "ProductShowcase",
+  "ServiceGrid",
+  "LocationMap",
+  "BookingWidget",
+  "ReviewGrid",
+  "GalleryMasonry",
+  "PressMentions",
+  "IntegrationGrid",
+  "DashboardPreview",
+  "MetricCards",
+  "OnboardingSteps",
 ] as const;
 
-export const LANDING_MIN_COMPOSITES = 1;
+/** @deprecated Use KNOWN_FORGE_COMPOSITES — mantido para compat de imports. */
+export const REQUIRED_COMPOSITES = KNOWN_FORGE_COMPOSITES;
+
+export const LANDING_MIN_COMPOSITES = 3;
 
 export const FORBIDDEN_PATTERNS: Array<{ pattern: RegExp; message: string }> = [
   { pattern: /#[0-9a-fA-F]{3,8}/, message: "Hex hardcoded — use tokens @theme" },
@@ -39,6 +72,10 @@ export const INVALID_FORGE_UI_IMPORT_MESSAGE =
 export interface DesignViolation {
   file: string;
   message: string;
+}
+
+export function countForgeComposites(code: string): number {
+  return KNOWN_FORGE_COMPOSITES.filter((c) => code.includes(c)).length;
 }
 
 export function scanFileForViolations(file: string, code: string): DesignViolation[] {
@@ -90,13 +127,13 @@ export function scanProjectForLandingQuality(files: Map<string, string>): Design
   );
 
   for (const [file, code] of appFiles) {
-    const compositeCount = REQUIRED_COMPOSITES.filter((c) => code.includes(c)).length;
+    const compositeCount = countForgeComposites(code);
     const isLanding = /<main|<HeroSignature|<section/.test(code);
 
     if (isLanding && compositeCount < LANDING_MIN_COMPOSITES) {
       violations.push({
         file,
-        message: `Landing precisa de ≥${LANDING_MIN_COMPOSITES} composites @forge/ui (HeroSignature, BentoGrid, CTASignature, NavShell, etc.) — encontrados: ${compositeCount}`,
+        message: `Landing precisa de ≥${LANDING_MIN_COMPOSITES} composites @forge/ui (qualquer combinação adequada ao domínio) — encontrados: ${compositeCount}`,
       });
     }
 
@@ -125,8 +162,8 @@ export function scanProjectForLandingQuality(files: Map<string, string>): Design
 
 export function formatDesignFeedback(violations: DesignViolation[]): string {
   if (violations.length === 0)
-    return "Design System OK: @forge/ui + composites + tokens válidos + adaptação estrutural ao domínio";
+    return "Design System OK: @forge/ui + composites diversos + tokens válidos + adaptação ao domínio";
   const unique = violations.slice(0, 20);
   const base = unique.map((v) => `${v.file}: ${v.message}`).join("\n");
-  return `${base}\n\nLembrete de adaptação: a composição dos composites (HeroSignature, BentoGrid etc.) deve refletir o domínio do usuário (ex: padaria = produtos/quente; app = features; sales = conversão). Revise se a estrutura faz sentido para o pedido.`;
+  return `${base}\n\nLembrete: adapte composição ao domínio do pedido — evite repetir a mesma stack de seções entre projetos.`;
 }

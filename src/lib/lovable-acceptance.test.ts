@@ -100,21 +100,13 @@ describe("Lovable acceptance — Chat (imgs 4/5/9/15)", () => {
     expect(view.miniCard.tasks.length).toBeGreaterThan(0);
   });
 
-  it("plan teaser: até 4 steps ○ pending, sem markdown ## Missão no chat", () => {
-    const tasks = deriveTasksFromPlan(
-      samplePlan,
-      { ...initialAgentProgress, awaitingKind: "plan_approval" },
-      { planTeaser: true },
-    );
-    expect(tasks).toHaveLength(3);
-    expect(tasks.every((t) => t.status === "pending")).toBe(true);
-
+  it("plan approval: sem mini-card no thread (dock acima do composer)", () => {
     const progress = {
       ...initialAgentProgress,
       finished: false,
       awaitingKind: "plan_approval" as const,
       pendingPlan: samplePlan,
-      streamText: "## Missão\nNão deve aparecer no teaser",
+      streamText: "## Missão\nNão deve aparecer no thread",
     };
 
     const thread: RawThreadItem[] = [
@@ -132,9 +124,8 @@ describe("Lovable acceptance — Chat (imgs 4/5/9/15)", () => {
       sessionProgress: progress,
     });
 
-    expect(turn.planTeaser).toBe(true);
-    expect(turn.miniCard?.header).toBe("Plan ready");
-    expect(turn.streamText).toBeNull();
+    expect(turn.planTeaser).toBe(false);
+    expect(turn.miniCard).toBeNull();
   });
 
   it("thread DB ordem cronológica + thought/narração congelam no F5", () => {

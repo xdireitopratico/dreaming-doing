@@ -18,7 +18,6 @@ import { resolveHistoricalRunProgress } from "@/lib/assistant-run-progress";
 import { initialAgentProgress } from "@/lib/agent-progress";
 import type {
   MiniCardData,
-  PlanPrompt,
   ClarifyPrompt,
   RawThreadItem,
   RunPhase,
@@ -53,22 +52,6 @@ function toMiniCard(
     fileCount: m.fileCount,
     hasPlan: m.hasPlan,
     planReady: m.planReady,
-  };
-}
-
-function toPlanPrompt(plan: PendingPlan): PlanPrompt {
-  return {
-    planId: plan.planId,
-    summary: plan.summary,
-    mission: plan.mission,
-    objective: plan.objective,
-    steps: plan.steps.map((s) => ({
-      id: s.id,
-      type: s.type,
-      description: s.description,
-      enabled: s.enabled,
-    })),
-    runId: plan.runId,
   };
 }
 
@@ -169,20 +152,7 @@ export function mapAssistantTurn(
 
   const msgPlanMeta = item.message ? storedPlanFromMessage(item.message) : null;
   const planStatus = msgPlanMeta?.status ?? null;
-  const planForPrompt = jobPlan ?? msgPlanMeta?.plan ?? null;
-  const planAwaitingApproval =
-    sessionProgress.awaitingKind === "plan_approval" ||
-    resolved?.awaitingKind === "plan_approval";
-  const planRunMatches =
-    (!!ctx.pendingPlan?.runId && ctx.pendingPlan.runId === item.runId) ||
-    msgPlanMeta?.plan.runId === item.runId;
-  const planAlreadyDecided = planStatus === "approved" || planStatus === "rejected";
-  const planTeaser =
-    !!planForPrompt?.steps?.length &&
-    planRunMatches &&
-    !planAlreadyDecided &&
-    !resolved?.finished &&
-    (msgPlanMeta?.status === "pending" || planAwaitingApproval);
+  const planTeaser = false;
 
   const runView = resolved
     ? buildAgentRunView(runId, resolved, {
@@ -190,7 +160,6 @@ export function mapAssistantTurn(
         jobPlan,
         userPrompt,
         runStartedAtMs,
-        forcePlanReady: planTeaser,
       })
     : null;
 
@@ -260,7 +229,7 @@ export function mapAssistantTurn(
     statusChips: [],
     planTeaser,
     clarify,
-    plan: planTeaser && planForPrompt ? toPlanPrompt(planForPrompt) : null,
+    plan: null,
     planStatus: planStatus ?? (planTeaser ? "pending" : null),
     error: runView?.error ?? resolved?.error ?? null,
     finished: runView?.finished ?? resolved?.finished ?? false,

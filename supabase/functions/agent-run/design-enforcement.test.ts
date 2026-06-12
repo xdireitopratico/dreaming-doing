@@ -18,3 +18,24 @@ Deno.test("scanFileForViolations — aceita import canônico @forge/ui", () => {
     false,
   );
 });
+
+Deno.test("scanProjectForLandingQuality — exige ≥3 composites quaisquer, não lista fixa", async () => {
+  const { scanProjectForLandingQuality } = await import("./design-enforcement.ts");
+  const files = new Map([
+    [
+      "src/App.tsx",
+      `import { HeroSignature, ServiceGrid, TestimonialCarousel, FadeIn } from "@forge/ui";
+export default function App() {
+  return (
+    <main>
+      <HeroSignature title="Oficina" primaryCta={{ label: "Agendar" }} />
+      <ServiceGrid items={[]} />
+      <TestimonialCarousel items={[]} />
+      <FadeIn><p>ok</p></FadeIn>
+    </main>
+  );
+}`,
+    ],
+  ]);
+  assertEquals(scanProjectForLandingQuality(files).length, 0);
+});

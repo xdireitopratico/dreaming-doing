@@ -1,20 +1,16 @@
 import type { ThreadItem } from "@/lib/chat/types";
-import {
-  resolveClosingProse,
-  sanitizeChatProseForDisplay,
-} from "@/lib/chat/stream-prose";
+import { resolveClosingProse } from "@/lib/chat/stream-prose";
 
-/** Texto copiável do turno assistant — abertura + fechamento (sem thought/mini-card). */
+/** Texto copiável do turno assistant — raw visível (display continua sanitizado). */
 export function assistantTurnCopyText(
   item: Extract<ThreadItem, { kind: "assistant" }>,
 ): string {
-  const narration = sanitizeChatProseForDisplay(item.narration);
-  const rawClosing = sanitizeChatProseForDisplay(
+  const narration = item.narration?.trim() || "";
+  const rawClosing =
     item.streamText?.trim() ||
-      item.error?.trim() ||
-      item.message?.content?.trim() ||
-      "",
-  );
+    item.error?.trim() ||
+    item.message?.content?.trim() ||
+    "";
   const closing = resolveClosingProse(narration, rawClosing);
   const parts: string[] = [];
   if (narration) parts.push(narration);

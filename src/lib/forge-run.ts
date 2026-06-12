@@ -239,7 +239,7 @@ export function deriveTasksFromPlan(
   progress: AgentProgress,
   opts?: { planTeaser?: boolean },
 ): ForgeTaskItem[] {
-  if (opts?.planTeaser || progress.awaitingKind === "plan_approval") {
+  if (opts?.planTeaser) {
     return enabledPlanSteps(plan.steps)
       .slice(0, 4)
       .map((step) => ({
@@ -554,15 +554,16 @@ export function shouldShowJobCard(opts: {
   if (progress.conversational === true) return false;
   if (runId === "__pending__") return false;
 
+  const planApprovalOnly =
+    progress.awaitingKind === "plan_approval" &&
+    (progress.pendingPlan?.steps?.length ?? 0) > 0 &&
+    (progress.diffs?.length ?? 0) === 0 &&
+    !lastEditedFile(progress) &&
+    !hasActiveShellTool(progress);
+  if (planApprovalOnly) return false;
+
   const running = slotActive && !progress.finished && !progress.canceled;
   if (running) return true;
-
-  if (
-    progress.awaitingKind === "plan_approval" &&
-    (progress.pendingPlan?.steps?.length ?? 0) > 0
-  ) {
-    return true;
-  }
 
   const edited = lastEditedFile(progress);
 
@@ -601,8 +602,7 @@ export function buildAgentRunView(
   const jobPlan = opts?.jobPlan ?? progress.pendingPlan;
   const forgeTimeline = buildForgeTimeline(progress.timeline, running);
 
-  const planTeaser =
-    !!opts?.forcePlanReady || progress.awaitingKind === "plan_approval";
+  const planTeaser = !!opts?.forcePlanReady;
   const tasks = jobPlan?.steps?.length
     ? deriveTasksFromPlan(jobPlan, progress, { planTeaser })
     : [];
@@ -665,11 +665,7 @@ export function buildAgentRunView(
       ? narrationBody
       : null;
 
-  const planReady =
-    !!opts?.forcePlanReady ||
-    (!!jobPlan?.steps?.length &&
-      (progress.awaitingKind === "plan_approval" ||
-        (progress.pendingPlan?.steps?.length ?? 0) > 0));
+  const planReady = !!opts?.forcePlanReady;
   const { header, subtitle } = buildMiniCardHeader(progress, running, {
     editedFile,
     liveBriefings,

@@ -61,7 +61,7 @@ export const CREATE_PLAN_TOOL: ToolDefinition = {
   name: "create_plan",
   description:
     "Proponha um plano estruturado para revisão do usuário (modo Plan). " +
-    "Use quando tiver contexto suficiente — 2 a 7 passos executáveis, sem meta-conversação.",
+    "Use quando tiver contexto suficiente — 2 a 7 passos = entregas de produto (seções, fluxos, validações), não lista de componentes @forge/ui.",
   parameters: {
     type: "object",
     properties: {

@@ -196,10 +196,9 @@ describe("mapAssistantTurn — contrato Lovable imutável", () => {
       sessionProgress: progress,
     });
 
-    expect(turn.planTeaser).toBe(true);
-    expect(turn.miniCard?.header).toBe("Plan ready");
+    expect(turn.planTeaser).toBe(false);
+    expect(turn.miniCard).toBeNull();
     expect(turn.statusChips).toHaveLength(0);
-    expect(turn.streamText).toBeNull();
     assertAssistantTurnInvariant(turn);
   });
 
@@ -253,7 +252,7 @@ describe("mapAssistantTurn — contrato Lovable imutável", () => {
       pendingPlan: plan,
     });
 
-    expect(turn.miniCard).not.toBeNull();
+    expect(turn.miniCard).toBeNull();
     expect(turn.statusChips).toHaveLength(0);
     assertAssistantTurnInvariant(turn);
   });

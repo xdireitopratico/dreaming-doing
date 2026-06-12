@@ -1,0 +1,84 @@
+import { FileText } from "lucide-react";
+import type { PendingPlan } from "@/lib/agent-progress";
+import { buildPlanPromptPreview } from "@/lib/plan-prompt";
+
+export type ChatPlanDockProps = {
+  pendingPlan: PendingPlan | null;
+  creating: boolean;
+  onReview?: (runId: string) => void;
+};
+
+export function ChatPlanDock({ pendingPlan, creating, onReview }: ChatPlanDockProps) {
+  if (!creating && !pendingPlan) return null;
+
+  if (creating && !pendingPlan) {
+    return (
+      <div className="forge-plan-dock" data-testid="chat-plan-dock-creating">
+        <div className="forge-plan-dock-shimmer" aria-hidden />
+        <p className="forge-plan-dock-creating-label">Creating plan…</p>
+      </div>
+    );
+  }
+
+  if (!pendingPlan) return null;
+
+  const preview = buildPlanPromptPreview(pendingPlan);
+
+  return (
+    <div className="forge-plan-dock" data-testid="chat-plan-dock-ready">
+      <div className="forge-plan-prompt">
+        <div className="forge-plan-prompt-header">
+          <FileText className="size-4 shrink-0" aria-hidden />
+          <div>
+            <p className="forge-plan-prompt-kicker">Plan ready</p>
+            <h3 className="forge-plan-prompt-title">{preview.title}</h3>
+          </div>
+        </div>
+
+        {preview.mission ? (
+          <div>
+            <span className="forge-plan-prompt-label">Missão</span>
+            <p className="forge-plan-prompt-mission">{preview.mission}</p>
+          </div>
+        ) : null}
+
+        {preview.objective ? (
+          <div>
+            <span className="forge-plan-prompt-label">Objetivo</span>
+            <p className="forge-plan-prompt-objective">{preview.objective}</p>
+          </div>
+        ) : null}
+
+        {preview.phases.length > 0 ? (
+          <div className="forge-plan-prompt-phases">
+            {preview.phases.map((phase) => (
+              <div key={phase.title}>
+                <p className="forge-plan-prompt-phase-title">{phase.title}</p>
+                <ul className="forge-plan-prompt-phase-list">
+                  {phase.items.map((item) => (
+                    <li key={item}>{item}</li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
+        ) : null}
+
+        {preview.hasMoreSteps ? (
+          <p className="forge-plan-prompt-more">
+            +{preview.stepCount - preview.phases.reduce((n, p) => n + p.items.length, 0)} passos no
+            inspector
+          </p>
+        ) : null}
+
+        <button
+          type="button"
+          className="forge-plan-prompt-cta"
+          onClick={() => onReview?.(pendingPlan.runId)}
+        >
+          Review plan →
+        </button>
+      </div>
+    </div>
+  );
+}

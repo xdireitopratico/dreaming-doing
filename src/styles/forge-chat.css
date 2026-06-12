@@ -343,6 +343,40 @@
   color: var(--text-secondary);
 }
 
+.forge-plan-dock {
+  flex-shrink: 0;
+  padding: 0 var(--space-md) var(--space-sm);
+}
+
+.forge-plan-dock-shimmer {
+  height: 88px;
+  border-radius: 12px;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--bg-card) 92%, var(--status-thinking) 8%) 0%,
+    color-mix(in srgb, var(--bg-card) 70%, var(--status-thinking) 30%) 50%,
+    color-mix(in srgb, var(--bg-card) 92%, var(--status-thinking) 8%) 100%
+  );
+  background-size: 200% 100%;
+  animation: forge-plan-shimmer 1.4s ease-in-out infinite;
+}
+
+.forge-plan-dock-creating-label {
+  margin: var(--space-xs) 0 0;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+@keyframes forge-plan-shimmer {
+  0% {
+    background-position: 100% 0;
+  }
+  100% {
+    background-position: -100% 0;
+  }
+}
+
 .forge-plan-prompt {
   width: 100%;
   max-width: min(100%, 520px);

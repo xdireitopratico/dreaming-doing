@@ -15,9 +15,9 @@ export type ProjectTemplateId =
 
 /** Guia curto — o pedido do usuário manda na forma e na paleta. */
 export const DESIGN_GUIDE = `## Design
-- O **pedido do usuário** define forma, tom e paleta — adapte composição ao domínio; evite template genérico repetido.
-- **@forge/ui** acelera (primitives, motion, composites) — importe só de \`@forge/ui\` (paths profundos quebram o bundle).
-- **Tokens:** leia \`src/index.css\` (@theme) ou equivalente; ajuste cores e tipografia ao vibe — não copie defaults do seed sem motivo.
+- O **pedido do usuário** define forma, tom e paleta — adapte composição ao domínio; **proibido** receita fixa de landing SaaS (NavShell + Hero + Bento + Stats em todo projeto).
+- **@forge/ui** acelera (primitives, motion, composites) — importe só de \`@forge/ui\` (paths profundos quebram o bundle). Escolha 3–5 seções adequadas ao negócio; varie entre pedidos.
+- **Tokens:** leia internamente no CSS do projeto; ajuste cores e tipografia ao vibe — **nunca cite** paths, \`@theme\` ou \`--color-*\` ao usuário.
 - UI profissional: motion leve, contraste ok, sem página branca + CTA azul genérico.`;
 
 export const STACK_FLEX = `## Stack flexível

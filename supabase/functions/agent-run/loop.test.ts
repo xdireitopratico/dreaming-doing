@@ -645,6 +645,48 @@ Deno.test("3h Plan mode — create_plan vence clarify no mesmo turno", async () 
   assertEquals(ef(events, "plan_proposed").length, 1);
 });
 
+Deno.test("3i Plan mode — markdown sem create_plan vira plan_proposed", async () => {
+  const planMd = `## Missão
+Landing da Oficina Confiança — mecânica de confiança com prova social local.
+
+## Objetivo
+Primeira versão que converte visitantes em agendamentos de revisão.
+
+## Abordagem
+Hero de confiança + serviços + depoimentos de clientes da região.
+
+## Premissas
+- Stack Vite/React do projeto.
+
+## Fases
+### Fase 1 — Confiança
+- [ ] Hero com CTA de agendamento
+- [ ] Grid de serviços (revisão, freios, suspensão)
+
+### Fase 2 — Conversão
+- [ ] Carrossel de depoimentos
+- [ ] CTA final de WhatsApp
+
+## Fora do escopo
+- Agendamento online integrado
+`;
+  const { loop, main, events } = f({
+    msgs: [{ role: "user", content: "landing oficina mecânica" }],
+    files: [],
+    planMode: true,
+  });
+  main.queue(tr(planMd));
+  main.queue(tr("Plano da Oficina Confiança — revise no painel ao lado."));
+  const r = await loop.run();
+  assertEquals(r.ok, true);
+  assertEquals(ef(events, "plan_proposed").length, 1);
+  const phases = ef(events, "phase").map((e) => (e.data as { phase?: string }).phase);
+  assertEquals(phases.includes("creating_plan"), true);
+  const de = ef(events, "done")[0]?.data as { conversational?: boolean; planProposed?: boolean };
+  assertEquals(de?.conversational, undefined);
+  assertEquals(de?.planProposed, true);
+});
+
 Deno.test("3c Build mode — mobile ambíguo para em clarify", async () => {
   const { loop, cheap, main, events } = f({
     msgs: [{ role: "user", content: "app de voz para celular" }],
