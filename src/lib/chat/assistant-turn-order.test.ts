@@ -16,6 +16,7 @@ describe("AssistantTurn — ordem de renderização", () => {
       "{showNarration &&",
       "{showJobCard &&",
       "forge-chat-closing-line",
+      "forge-assistant-turn-toolbar",
     ];
     expect(source).not.toContain("ChatDone");
     expect(source).not.toContain("ChatQualify");

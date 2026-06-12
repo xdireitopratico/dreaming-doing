@@ -126,10 +126,20 @@ export function ChatPanel({
     return null;
   }, [thread]);
 
+  const lastAssistantMessageId = useMemo(() => {
+    for (let i = thread.length - 1; i >= 0; i--) {
+      const item = thread[i];
+      if (item?.kind === "assistant" && item.message?.id && !item.isActive) {
+        return item.message.id;
+      }
+    }
+    return null;
+  }, [thread]);
+
   const handleRollback = useCallback(
-    async (messageId: string) => {
+    async (messageId: string, role: "user" | "assistant") => {
       if (!onRollbackMessage) return;
-      await onRollbackMessage(messageId, "user");
+      await onRollbackMessage(messageId, role);
     },
     [onRollbackMessage],
   );
@@ -151,6 +161,7 @@ export function ChatPanel({
             onOpenInspector={onOpenInspector}
             onRollback={onRollbackMessage ? handleRollback : undefined}
             lastUserMessageId={lastUserMessageId}
+            lastAssistantMessageId={lastAssistantMessageId}
           />
         )}
 

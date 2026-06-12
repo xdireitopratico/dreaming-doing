@@ -1,19 +1,28 @@
 import { MarkdownRenderer } from "@/components/ui/markdown-renderer";
 import type { ThreadItem } from "@/lib/chat/types";
+import { assistantTurnCopyText } from "@/lib/chat/assistant-turn-copy";
 import { ChatThinking } from "./ChatThinking";
 import { ChatNarration } from "./ChatNarration";
 import { ChatJobCard } from "./ChatJobCard";
+import { ChatToolbar } from "./ChatToolbar";
 
 type AssistantTurnProps = {
   item: Extract<ThreadItem, { kind: "assistant" }>;
   onOpenInspector?: (runId: string, tab?: "timeline" | "changes" | "plan") => void;
+  canRollback?: boolean;
+  onRollback?: () => void;
 };
 
 /**
  * Fluxo fixo do chat — só 4 blocos, ordem imutável, estado permanente:
  * Thought → Mensagem LLM (abertura) → Mini Card → Mensagem LLM (fechamento)
  */
-export function AssistantTurn({ item, onOpenInspector }: AssistantTurnProps) {
+export function AssistantTurn({
+  item,
+  onOpenInspector,
+  canRollback,
+  onRollback,
+}: AssistantTurnProps) {
   const closingText =
     item.streamText?.trim() ||
     item.error?.trim() ||
@@ -28,6 +37,7 @@ export function AssistantTurn({ item, onOpenInspector }: AssistantTurnProps) {
     !!closingText && (!narrationText || closingText !== narrationText);
 
   const planTab = item.planTeaser || item.miniCard?.planReady;
+  const copyText = assistantTurnCopyText(item);
 
   return (
     <article className="forge-chat-item forge-chat-item-assistant" data-testid="chat-message-assistant">
@@ -58,6 +68,15 @@ export function AssistantTurn({ item, onOpenInspector }: AssistantTurnProps) {
             <MarkdownRenderer>{closingText!}</MarkdownRenderer>
           </div>
         )}
+
+        <div className="forge-assistant-turn-toolbar" data-testid="assistant-turn-toolbar">
+          <ChatToolbar
+            text={copyText}
+            align="start"
+            canRollback={canRollback}
+            onRollback={onRollback}
+          />
+        </div>
       </div>
     </article>
   );

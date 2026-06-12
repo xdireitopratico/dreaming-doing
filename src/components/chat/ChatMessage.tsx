@@ -6,8 +6,9 @@ import { ChatToolbar } from "./ChatToolbar";
 type ChatMessageProps = {
   item: ThreadItem;
   onOpenInspector?: (runId: string, tab?: "timeline" | "changes" | "plan") => void;
-  onRollback?: (messageId: string) => void;
+  onRollback?: (messageId: string, role: "user" | "assistant") => void;
   canRollbackUser?: boolean;
+  canRollbackAssistant?: boolean;
 };
 
 /** Roteador: user → bolha | assistant → AssistantTurn (ordem Lovable). */
@@ -16,6 +17,7 @@ export function ChatMessage({
   onOpenInspector,
   onRollback,
   canRollbackUser,
+  canRollbackAssistant,
 }: ChatMessageProps) {
   if (item.kind === "user") {
     const isQueued = item.message.meta?.queued === true;
@@ -28,7 +30,7 @@ export function ChatMessage({
           canRollback={canRollbackUser}
           onRollback={
             onRollback && canRollbackUser
-              ? () => onRollback(item.message.id)
+              ? () => onRollback(item.message.id, "user")
               : undefined
           }
         />
@@ -36,5 +38,17 @@ export function ChatMessage({
     );
   }
 
-  return <AssistantTurn item={item} onOpenInspector={onOpenInspector} />;
+  const messageId = item.message?.id;
+  return (
+    <AssistantTurn
+      item={item}
+      onOpenInspector={onOpenInspector}
+      canRollback={canRollbackAssistant && !!messageId}
+      onRollback={
+        onRollback && canRollbackAssistant && messageId
+          ? () => onRollback(messageId, "assistant")
+          : undefined
+      }
+    />
+  );
 }

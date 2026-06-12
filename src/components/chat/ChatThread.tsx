@@ -4,8 +4,9 @@ import { ChatMessage } from "./ChatMessage";
 type ChatThreadProps = {
   items: ThreadItem[];
   onOpenInspector?: (runId: string, tab?: "timeline" | "changes" | "plan") => void;
-  onRollback?: (messageId: string) => void;
+  onRollback?: (messageId: string, role: "user" | "assistant") => void;
   lastUserMessageId?: string | null;
+  lastAssistantMessageId?: string | null;
 };
 
 export function ChatThread({
@@ -13,6 +14,7 @@ export function ChatThread({
   onOpenInspector,
   onRollback,
   lastUserMessageId,
+  lastAssistantMessageId,
 }: ChatThreadProps) {
   return (
     <div className="forge-chat-stream" role="log" aria-live="polite">
@@ -30,6 +32,13 @@ export function ChatThread({
               item.kind === "user" &&
               !!lastUserMessageId &&
               item.message.id === lastUserMessageId
+            }
+            canRollbackAssistant={
+              item.kind === "assistant" &&
+              !!lastAssistantMessageId &&
+              !!item.message?.id &&
+              item.message.id === lastAssistantMessageId &&
+              !item.isActive
             }
           />
         );

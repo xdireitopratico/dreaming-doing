@@ -190,6 +190,11 @@ export function progressFromAssistantMessage(msg: ChatMessage): AgentProgress | 
     return progressFromCardSnapshot(cardSnapshot as Record<string, unknown>, msg);
   }
 
+  const metaLatency =
+    typeof meta.latencyThoughtMs === "number" && meta.latencyThoughtMs > 0
+      ? meta.latencyThoughtMs
+      : null;
+
   const finishedAt = typeof meta.finishedAt === "string";
   const deliveryFiles = Array.isArray(meta.deliveryFiles) ? (meta.deliveryFiles as string[]) : [];
   const currentStep = typeof meta.currentStep === "number" ? meta.currentStep : null;
@@ -219,6 +224,11 @@ export function progressFromAssistantMessage(msg: ChatMessage): AgentProgress | 
   const storedPlan = storedPlanFromMessage(msg);
   const planPending = storedPlan?.status === "pending" ? storedPlan.plan : null;
 
+  const narrationText =
+    typeof meta.narrationText === "string" && meta.narrationText.trim()
+      ? meta.narrationText
+      : null;
+
   return {
     ...initialAgentProgress,
     phase: finished ? "done" : null,
@@ -229,6 +239,8 @@ export function progressFromAssistantMessage(msg: ChatMessage): AgentProgress | 
     finished,
     lastFinishOk,
     streamText: body,
+    narrationText,
+    latencyThoughtMs: metaLatency,
     summary: null,
     deliveryFiles,
     pendingPlan: planPending,

@@ -1954,9 +1954,6 @@ export class AgentLoop {
   private latencyThoughtMsFromTimeline(
     timeline: Array<{ type: string; data?: Record<string, unknown>; timestamp: number }>,
   ): number | null {
-    const startEv = timeline.find((e) => e.type === "start");
-    if (!startEv) return null;
-    const startTs = startEv.timestamp;
     const first = timeline.find(
       (e) =>
         e.type === "assistant_text" &&
@@ -1964,7 +1961,7 @@ export class AgentLoop {
         String(e.data.text).trim().length > 0,
     );
     if (!first) return null;
-    return Math.max(500, first.timestamp - startTs);
+    return Math.max(500, first.timestamp - this.runStartTime);
   }
 
   private buildCardSnapshot(opts: {
@@ -2073,6 +2070,12 @@ export class AgentLoop {
       buildFailed: opts?.buildFailed === true || lastFinishOk === false,
       streamTail: this.streamTailBuffer.slice(-120),
       cardSnapshot,
+      latencyThoughtMs:
+        typeof cardSnapshot.latencyThoughtMs === "number"
+          ? cardSnapshot.latencyThoughtMs
+          : undefined,
+      narrationText:
+        typeof cardSnapshot.narrationText === "string" ? cardSnapshot.narrationText : undefined,
     };
 
     const existingId = await this.resolveExistingRunMessageId();
@@ -2138,6 +2141,12 @@ export class AgentLoop {
       planSteps: plan.steps,
       finishedAt: new Date().toISOString(),
       cardSnapshot,
+      latencyThoughtMs:
+        typeof cardSnapshot.latencyThoughtMs === "number"
+          ? cardSnapshot.latencyThoughtMs
+          : undefined,
+      narrationText:
+        typeof cardSnapshot.narrationText === "string" ? cardSnapshot.narrationText : undefined,
     };
 
     const existingId = await this.resolveExistingRunMessageId();
