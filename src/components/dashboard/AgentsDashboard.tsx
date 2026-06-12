@@ -1,17 +1,16 @@
 import { Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
-import { ChevronDown, FolderOpen, Plus, Trash2 } from "lucide-react";
+import { ChevronDown, Plus, Trash2 } from "lucide-react";
 import { toast } from "@/lib/toast";
 import { deleteProject } from "@/lib/projects.functions";
 import { supabase } from "@/integrations/supabase/client";
 import { PromptEngine } from "@/components/prompt/PromptEngine";
-import { CreateProjectDialog } from "@/components/editor/CreateProjectDialog";
-import { ImportRepoDialog } from "@/components/ImportRepoDialog";
+import { CreateAgentDialog } from "@/components/dashboard/CreateAgentDialog";
 import { ForgeIcon } from "@/components/icons/ForgeIcon";
 import { useAuth } from "@/lib/auth";
 import { removeRealtimeChannel, subscribePostgresChanges } from "@/lib/supabase-realtime";
-import { isAppProject, type ProjectListRow } from "@/lib/project-kind";
+import { isAgentProject, type ProjectListRow } from "@/lib/project-kind";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 
 function formatRelative(dateStr: string | null) {
@@ -25,7 +24,7 @@ function formatRelative(dateStr: string | null) {
   return d.toLocaleDateString("pt-BR", { day: "2-digit", month: "short" });
 }
 
-export function ProjectsDashboard() {
+export function AgentsDashboard() {
   const { user } = useAuth();
   const qc = useQueryClient();
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -61,13 +60,12 @@ export function ProjectsDashboard() {
     return () => removeRealtimeChannel(channel);
   }, [user?.id, qc]);
 
-  const handleDelete = async (e: React.MouseEvent, projectId: string, name: string) => {
+  const handleDelete = async (e: React.MouseEvent, agentId: string, name: string) => {
     e.preventDefault();
     e.stopPropagation();
-    if (!confirm(`Excluir “${name}”? O ambiente ao vivo deste projeto será encerrado.`)) return;
+    if (!confirm(`Excluir “${name}”? O fluxo deste agente será removido.`)) return;
     try {
-      await deleteProject({ data: { projectId } });
-
+      await deleteProject({ data: { projectId: agentId } });
       void qc.invalidateQueries({ queryKey: ["projects-all"] });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Não foi possível excluir");
@@ -75,7 +73,7 @@ export function ProjectsDashboard() {
   };
 
   const filtered = useMemo(() => {
-    const list = (projects ?? []).filter(isAppProject);
+    const list = (projects ?? []).filter(isAgentProject);
     const q = search.trim().toLowerCase();
     if (!q) return list;
     return list.filter(
@@ -90,43 +88,46 @@ export function ProjectsDashboard() {
         type="search"
         value={search}
         onChange={(e) => setSearch(e.target.value)}
-        placeholder="Buscar projetos…"
+        placeholder="Buscar agentes…"
         className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:right-4 focus:z-50 focus:w-64 focus:rounded-lg focus:border focus:border-[var(--forge-border-strong)] focus:bg-[var(--forge-surface-2)] focus:px-3 focus:py-2 focus:text-sm"
-        aria-label="Buscar projetos"
+        aria-label="Buscar agentes"
       />
 
-      {/* Primeira dobra: só o motor de prompt (estilo Grok) */}
-      <section className="dashboard-hero" aria-label="Criar com IA">
-        <h1 className="dashboard-hero-title">Let&apos;s Build</h1>
+      <section className="dashboard-hero" aria-label="Criar agente com IA">
+        <h1 className="dashboard-hero-title">AI Agents</h1>
 
         <div className="dashboard-prompt-wrap">
-          <PromptEngine size="hero" placeholder="Descreva o app que você quer criar…" autoFocus />
+          <PromptEngine
+            size="hero"
+            projectKind="agent"
+            placeholder="Descreva o agente de IA que você quer criar…"
+            autoFocus
+          />
         </div>
 
         <p className="dashboard-hero-hint">
-          <strong>Setup obrigatório</strong> em API (modo + modelo). Tira-gosto opcional: ROBIN
-          NVIDIA · Nemotron 550B.
+          <strong>Fluxos visuais</strong> com React Flow e runtime AetherForge. Configure modelos em
+          API Keys e Conectores.
         </p>
 
-        <a href="#dashboard-projects" className="dashboard-scroll-cue">
-          <span>Seus projetos</span>
+        <a href="#dashboard-agents" className="dashboard-scroll-cue">
+          <span>Seus agentes</span>
           <ChevronDown className="size-4" />
         </a>
       </section>
 
-      {/* Segunda dobra: projetos (abaixo da primeira tela) */}
       <section
-        id="dashboard-projects"
+        id="dashboard-agents"
         className="dashboard-dock dashboard-dock-secondary"
-        aria-label="Meus projetos"
+        aria-label="Meus agentes"
       >
         <div className="dashboard-dock-header">
           <div>
-            <p className="dashboard-dock-title">Projetos recentes</p>
+            <p className="dashboard-dock-title">Agentes recentes</p>
             <p className="dashboard-dock-sub">
               {filtered.length === 0 && !isLoading
                 ? "Nada aqui ainda — use o prompt acima para começar"
-                : `${filtered.length} projeto${filtered.length !== 1 ? "s" : ""}`}
+                : `${filtered.length} agente${filtered.length !== 1 ? "s" : ""}`}
             </p>
           </div>
           <Link to="/connectors" className="dashboard-dock-browse">
@@ -137,17 +138,8 @@ export function ProjectsDashboard() {
         <div className="dashboard-projects-row">
           <button type="button" className="dashboard-new-card" onClick={() => setDialogOpen(true)}>
             <Plus className="size-5" />
-            Novo projeto
+            Novo agente
           </button>
-
-          <ImportRepoDialog
-            trigger={
-              <button type="button" className="dashboard-new-card">
-                <FolderOpen className="size-5" />
-                GitHub
-              </button>
-            }
-          />
 
           {isLoading &&
             Array.from({ length: 3 }).map((_, i) => (
@@ -160,34 +152,34 @@ export function ProjectsDashboard() {
 
           {!isLoading && filtered.length === 0 && !search && (
             <p className="self-center px-4 text-sm text-[var(--forge-muted)] max-w-md text-center">
-              Projetos aparecem aqui depois que você criar algo no campo acima.
+              Agentes aparecem aqui depois que você criar algo no campo acima.
             </p>
           )}
 
           {!isLoading && filtered.length === 0 && search && (
             <p className="self-center px-4 text-sm text-[var(--forge-muted)]">
-              Nenhum projeto encontrado para &quot;{search}&quot;.
+              Nenhum agente encontrado para &quot;{search}&quot;.
             </p>
           )}
 
           {filtered.map((p) => (
             <Link
               key={p.id}
-              to="/projects/$projectId"
-              params={{ projectId: p.id }}
+              to="/agents/$agentId"
+              params={{ agentId: p.id }}
               className="dashboard-project-card group relative"
             >
               <button
                 type="button"
                 className="absolute right-2 top-2 z-10 grid size-8 place-items-center rounded-lg text-neutral-400 opacity-0 transition-opacity hover:bg-red-50 hover:text-red-600 group-hover:opacity-100"
-                title="Excluir projeto"
+                title="Excluir agente"
                 aria-label={`Excluir ${p.name}`}
                 onClick={(e) => void handleDelete(e, p.id, p.name)}
               >
                 <Trash2 className="size-4" />
               </button>
               <div className="dashboard-project-thumb">
-                <ForgeIcon variant="project" size={22} className="text-[var(--forge-ghost)]" />
+                <ForgeIcon variant="agent" size={22} className="text-[var(--forge-ghost)]" />
               </div>
               <div className="dashboard-project-meta">
                 <p className="dashboard-project-name">{p.name}</p>
@@ -200,7 +192,7 @@ export function ProjectsDashboard() {
         </div>
       </section>
 
-      <CreateProjectDialog open={dialogOpen} onClose={() => setDialogOpen(false)} />
+      <CreateAgentDialog open={dialogOpen} onClose={() => setDialogOpen(false)} />
     </div>
   );
 }

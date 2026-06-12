@@ -1,4 +1,5 @@
 import { inngest } from "../client";
+import { ensureTerminalRunMessage } from "./ensure-terminal-message";
 import {
   drainPendingQueue,
   getRunStatus,
@@ -64,13 +65,23 @@ export const agentBuildFunction = inngest.createFunction(
     }
 
     if (!final.ok && final.resumable) {
+      const exhaustedError = final.error ?? "loop budget exhausted";
       await step.run("mark-failed-resumable-exhausted", async () => {
         await markRunFinal(runId, "failed", {
-          error: final.error ?? "loop budget exhausted",
+          error: exhaustedError,
           meta: { resumableExhausted: true, resumeAttempts: 3 },
         });
       });
-      return { runId, ok: false, error: final.error ?? "loop budget exhausted" };
+      await step.run("ensure-terminal-message-resumable", async () => {
+        return await ensureTerminalRunMessage({
+          runId,
+          conversationId: payload.conversationId,
+          projectId: payload.projectId,
+          error: exhaustedError,
+          buildFailed: true,
+        });
+      });
+      return { runId, ok: false, error: exhaustedError };
     }
 
     await step.run("mark-completed", async () => {

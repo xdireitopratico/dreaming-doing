@@ -71,6 +71,7 @@ const createProjectInputSchema = z
     description: z.string().max(500).optional(),
     template: z.string().max(64).optional(),
     firstPrompt: z.string().max(8000).optional(),
+    kind: z.enum(["app", "agent"]).optional(),
   })
   .refine((d) => Boolean(d.prompt?.trim() || d.name?.trim()), {
     message: "Informe o prompt ou o nome do projeto",
@@ -98,6 +99,30 @@ export const createProjectFromPrompt = createServerFn({ method: "POST" })
       promptText ||
       `Iniciar projeto: ${projectName}`;
 
+    const kind = data.kind ?? "app";
+
+    if (kind === "agent") {
+      const { data: project, error: pErr } = await supabase
+        .from("projects")
+        .insert({
+          owner_id: userId,
+          name: projectName,
+          slug,
+          description: description || null,
+          template: "aetherforge-agent",
+          kind: "agent",
+          meta: {
+            createdFrom: data.prompt?.trim() ? "prompt" : "dialog",
+            initialPrompt: promptText || null,
+          },
+        })
+        .select("id")
+        .single();
+      if (pErr) throw new Error(pErr.message);
+
+      return { projectId: project.id as string, conversationId: null };
+    }
+
     const { data: project, error: pErr } = await supabase
       .from("projects")
       .insert({
@@ -106,6 +131,7 @@ export const createProjectFromPrompt = createServerFn({ method: "POST" })
         slug,
         description: description || null,
         template: data.template?.trim() || stack.id,
+        kind: "app",
         meta: {
           stackLabel: stack.label,
           stackReason: stack.reason,

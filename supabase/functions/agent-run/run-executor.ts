@@ -25,6 +25,7 @@ import { resolveAllocateSandbox } from "./run-context.ts";
 import { logger } from "../_shared/logger.ts";
 import { appendStreamEvent } from "../_shared/agent-stream.ts";
 import { chunkCapErrorMessage, evaluateChunkLimits } from "../_shared/agent-chunk-limits.ts";
+import { ensureTerminalRunMessage } from "../_shared/ensure-terminal-message.ts";
 
 export type ExecuteParams = {
   runId: string;
@@ -380,6 +381,14 @@ export async function executeAgentRun(
         steps: result.steps,
       });
 
+      await ensureTerminalRunMessage(supabase, {
+        runId,
+        conversationId,
+        projectId,
+        error: capError,
+        buildFailed: !planMode,
+      });
+
       logger.warn("agent_run.chunk_cap_exceeded", {
         runId,
         reason: chunkLimits.reason,
@@ -478,6 +487,17 @@ export async function executeAgentRun(
     steps: result.steps,
     summary: result.summary ?? null,
   });
+
+  if (!result.ok && !result.canceled && !isAwaiting) {
+    await ensureTerminalRunMessage(supabase, {
+      runId,
+      conversationId,
+      projectId,
+      error: result.error ?? null,
+      summary: result.summary ?? null,
+      buildFailed: !planMode,
+    });
+  }
 
   logger.info("agent_run.executed", {
     runId,

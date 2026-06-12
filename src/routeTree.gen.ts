@@ -22,8 +22,10 @@ import { Route as ApiKeysRouteImport } from './routes/api-keys'
 import { Route as ApiRouteImport } from './routes/api'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ProjectsIndexRouteImport } from './routes/projects/index'
+import { Route as AgentsIndexRouteImport } from './routes/agents/index'
 import { Route as DevLovableChatRouteImport } from './routes/dev/lovable-chat'
 import { Route as ProjectsProjectIdIndexRouteImport } from './routes/projects/$projectId/index'
+import { Route as AgentsAgentIdIndexRouteImport } from './routes/agents/$agentId/index'
 import { Route as ProjectsProjectIdHistoryRouteImport } from './routes/projects/$projectId/history'
 
 const SkillsRoute = SkillsRouteImport.update({
@@ -91,6 +93,11 @@ const ProjectsIndexRoute = ProjectsIndexRouteImport.update({
   path: '/projects/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AgentsIndexRoute = AgentsIndexRouteImport.update({
+  id: '/agents/',
+  path: '/agents/',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const DevLovableChatRoute = DevLovableChatRouteImport.update({
   id: '/dev/lovable-chat',
   path: '/dev/lovable-chat',
@@ -99,6 +106,11 @@ const DevLovableChatRoute = DevLovableChatRouteImport.update({
 const ProjectsProjectIdIndexRoute = ProjectsProjectIdIndexRouteImport.update({
   id: '/projects/$projectId/',
   path: '/projects/$projectId/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AgentsAgentIdIndexRoute = AgentsAgentIdIndexRouteImport.update({
+  id: '/agents/$agentId/',
+  path: '/agents/$agentId/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ProjectsProjectIdHistoryRoute =
@@ -122,8 +134,10 @@ export interface FileRoutesByFullPath {
   '/settings': typeof SettingsRoute
   '/skills': typeof SkillsRoute
   '/dev/lovable-chat': typeof DevLovableChatRoute
+  '/agents/': typeof AgentsIndexRoute
   '/projects/': typeof ProjectsIndexRoute
   '/projects/$projectId/history': typeof ProjectsProjectIdHistoryRoute
+  '/agents/$agentId/': typeof AgentsAgentIdIndexRoute
   '/projects/$projectId/': typeof ProjectsProjectIdIndexRoute
 }
 export interface FileRoutesByTo {
@@ -140,8 +154,10 @@ export interface FileRoutesByTo {
   '/settings': typeof SettingsRoute
   '/skills': typeof SkillsRoute
   '/dev/lovable-chat': typeof DevLovableChatRoute
+  '/agents': typeof AgentsIndexRoute
   '/projects': typeof ProjectsIndexRoute
   '/projects/$projectId/history': typeof ProjectsProjectIdHistoryRoute
+  '/agents/$agentId': typeof AgentsAgentIdIndexRoute
   '/projects/$projectId': typeof ProjectsProjectIdIndexRoute
 }
 export interface FileRoutesById {
@@ -159,8 +175,10 @@ export interface FileRoutesById {
   '/settings': typeof SettingsRoute
   '/skills': typeof SkillsRoute
   '/dev/lovable-chat': typeof DevLovableChatRoute
+  '/agents/': typeof AgentsIndexRoute
   '/projects/': typeof ProjectsIndexRoute
   '/projects/$projectId/history': typeof ProjectsProjectIdHistoryRoute
+  '/agents/$agentId/': typeof AgentsAgentIdIndexRoute
   '/projects/$projectId/': typeof ProjectsProjectIdIndexRoute
 }
 export interface FileRouteTypes {
@@ -179,8 +197,10 @@ export interface FileRouteTypes {
     | '/settings'
     | '/skills'
     | '/dev/lovable-chat'
+    | '/agents/'
     | '/projects/'
     | '/projects/$projectId/history'
+    | '/agents/$agentId/'
     | '/projects/$projectId/'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -197,8 +217,10 @@ export interface FileRouteTypes {
     | '/settings'
     | '/skills'
     | '/dev/lovable-chat'
+    | '/agents'
     | '/projects'
     | '/projects/$projectId/history'
+    | '/agents/$agentId'
     | '/projects/$projectId'
   id:
     | '__root__'
@@ -215,8 +237,10 @@ export interface FileRouteTypes {
     | '/settings'
     | '/skills'
     | '/dev/lovable-chat'
+    | '/agents/'
     | '/projects/'
     | '/projects/$projectId/history'
+    | '/agents/$agentId/'
     | '/projects/$projectId/'
   fileRoutesById: FileRoutesById
 }
@@ -234,8 +258,10 @@ export interface RootRouteChildren {
   SettingsRoute: typeof SettingsRoute
   SkillsRoute: typeof SkillsRoute
   DevLovableChatRoute: typeof DevLovableChatRoute
+  AgentsIndexRoute: typeof AgentsIndexRoute
   ProjectsIndexRoute: typeof ProjectsIndexRoute
   ProjectsProjectIdHistoryRoute: typeof ProjectsProjectIdHistoryRoute
+  AgentsAgentIdIndexRoute: typeof AgentsAgentIdIndexRoute
   ProjectsProjectIdIndexRoute: typeof ProjectsProjectIdIndexRoute
 }
 
@@ -332,6 +358,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProjectsIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/agents/': {
+      id: '/agents/'
+      path: '/agents'
+      fullPath: '/agents/'
+      preLoaderRoute: typeof AgentsIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/dev/lovable-chat': {
       id: '/dev/lovable-chat'
       path: '/dev/lovable-chat'
@@ -344,6 +377,13 @@ declare module '@tanstack/react-router' {
       path: '/projects/$projectId'
       fullPath: '/projects/$projectId/'
       preLoaderRoute: typeof ProjectsProjectIdIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/agents/$agentId/': {
+      id: '/agents/$agentId/'
+      path: '/agents/$agentId'
+      fullPath: '/agents/$agentId/'
+      preLoaderRoute: typeof AgentsAgentIdIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/projects/$projectId/history': {
@@ -370,8 +410,10 @@ const rootRouteChildren: RootRouteChildren = {
   SettingsRoute: SettingsRoute,
   SkillsRoute: SkillsRoute,
   DevLovableChatRoute: DevLovableChatRoute,
+  AgentsIndexRoute: AgentsIndexRoute,
   ProjectsIndexRoute: ProjectsIndexRoute,
   ProjectsProjectIdHistoryRoute: ProjectsProjectIdHistoryRoute,
+  AgentsAgentIdIndexRoute: AgentsAgentIdIndexRoute,
   ProjectsProjectIdIndexRoute: ProjectsProjectIdIndexRoute,
 }
 export const routeTree = rootRouteImport

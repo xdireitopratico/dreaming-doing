@@ -1,6 +1,7 @@
 import { Link, Navigate, useLocation, useNavigate } from "@tanstack/react-router";
 import {
   BookOpen,
+  Bot,
   Brain,
   ChevronDown,
   Grid3X3,
@@ -22,7 +23,16 @@ import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { useAuth } from "@/lib/auth";
 import { sanitizeNext } from "@/lib/sanitize-next";
 
-type NavId = "home" | "projects" | "connectors" | "api" | "models" | "mcp" | "skills" | "settings";
+type NavId =
+  | "home"
+  | "projects"
+  | "agents"
+  | "connectors"
+  | "api"
+  | "models"
+  | "mcp"
+  | "skills"
+  | "settings";
 
 type DashboardSidebarPanelProps = {
   activeNav: NavId;
@@ -148,6 +158,16 @@ function DashboardSidebarPanel({
         >
           <Grid3X3 className="size-4 shrink-0" />
           Todos os projetos
+        </Link>
+        <Link
+          to="/agents"
+          className="dashboard-nav-item"
+          data-active={activeNav === "agents" ? "true" : undefined}
+          title="Agentes de IA com fluxos visuais AetherForge"
+          onClick={onNavClick}
+        >
+          <Bot className="size-4 shrink-0" />
+          AI Agents
         </Link>
         <span className="dashboard-nav-item opacity-60 cursor-default">
           <Star className="size-4 shrink-0" />

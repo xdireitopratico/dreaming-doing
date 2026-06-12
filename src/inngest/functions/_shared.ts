@@ -48,7 +48,7 @@ function requireEnv(): { url: string; serviceKey: string } {
 
 let adminClient: SupabaseClient | null = null;
 
-function getSupabaseAdmin(): SupabaseClient {
+export function getSupabaseAdmin(): SupabaseClient {
   if (!adminClient) {
     const { url, serviceKey } = requireEnv();
     adminClient = createClient(url, serviceKey, {

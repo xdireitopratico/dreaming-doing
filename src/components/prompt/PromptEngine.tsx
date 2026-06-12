@@ -11,11 +11,14 @@ import { sanitizeNext } from "@/lib/sanitize-next";
 import { MicButton } from "@/components/voice/MicButton";
 import { useAuth } from "@/lib/auth";
 import { clearForgeTransitionOverlays } from "@/lib/clear-forge-overlays";
+import type { ProjectKind } from "@/lib/project-kind";
+
 type Props = {
   size?: "hero" | "compact";
   onSubmit?: (text: string) => void;
   placeholder?: string;
   autoFocus?: boolean;
+  projectKind?: ProjectKind;
 };
 
 function playWarp() {
@@ -56,6 +59,7 @@ export function PromptEngine({
   onSubmit,
   placeholder = "Ask FORGE to build your dream…",
   autoFocus = false,
+  projectKind = "app",
 }: Props) {
   const [value, setValue] = useState("");
   const [model, setModel] = useState<"forge-1" | "forge-pro">("forge-1");
@@ -113,13 +117,18 @@ export function PromptEngine({
     }
 
     setBusy(true);
-    const warp = playWarp();
+    const warp = projectKind === "app" ? playWarp() : { cancel: () => {}, finish: () => {} };
     try {
-      const res = await createProject({ data: { prompt: v } });
-      bootstrapComposerMode(res.projectId, "plan");
-      warp.cancel();
-      clearForgeTransitionOverlays();
-      navigate({ to: "/projects/$projectId", params: { projectId: res.projectId } });
+      const res = await createProject({ data: { prompt: v, kind: projectKind } });
+      if (projectKind === "app") {
+        bootstrapComposerMode(res.projectId, "plan");
+        warp.cancel();
+        clearForgeTransitionOverlays();
+        navigate({ to: "/projects/$projectId", params: { projectId: res.projectId } });
+      } else {
+        warp.cancel();
+        navigate({ to: "/agents/$agentId", params: { agentId: res.projectId } });
+      }
     } catch (e) {
       warp.finish();
       const msg = e instanceof Error ? e.message : "Falha ao criar projeto";
