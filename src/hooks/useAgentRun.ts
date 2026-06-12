@@ -23,6 +23,8 @@ import {
 } from "@/lib/agent-progress";
 import { PENDING_RUN_ID } from "@/lib/pending-run-id";
 import { shouldRetainLiveRunSlot } from "@/lib/live-run-overlay";
+import { isAssistantRunMaterialized } from "@/lib/assistant-materialized";
+import type { ChatMessage } from "@/lib/chat-types";
 
 import type { PendingQueueItem } from "@/components/editor/PendingQueuePanel";
 
@@ -1021,7 +1023,7 @@ export function useAgentRun() {
   }, [teardownChannels]);
 
   const tryRestoreSnapshot = useCallback(
-    (projectId: string, conversationId: string) => {
+    (projectId: string, conversationId: string, messages: ChatMessage[] = []) => {
       const snap = loadAgentSnapshot();
       if (!snap) return;
       const age = Date.now() - snap.timestamp;
@@ -1030,6 +1032,19 @@ export function useAgentRun() {
         return;
       }
       if (snap.projectId !== projectId || snap.conversationId !== conversationId) {
+        clearAgentSnapshot();
+        return;
+      }
+
+      if (snap.activeRunId) {
+        const alreadyInDb = messages.some(
+          (m) => m.runId === snap.activeRunId && isAssistantRunMaterialized(m),
+        );
+        if (alreadyInDb && snap.progress.finished) {
+          clearAgentSnapshot();
+          return;
+        }
+      } else if (snap.progress.finished) {
         clearAgentSnapshot();
         return;
       }

@@ -5,7 +5,6 @@ import type { StoredMessagePart } from "@/lib/chat-attachments";
 import { useChat } from "@/hooks/useChat";
 import { ChatThread } from "./ChatThread";
 import { ChatComposer } from "./ChatComposer";
-import { MarkdownRenderer } from "@/components/ui/markdown-renderer";
 import { PendingQueuePanel, type PendingQueueItem } from "@/components/editor/PendingQueuePanel";
 import type { useAgentRun } from "@/hooks/useAgentRun";
 
@@ -19,7 +18,6 @@ export type ChatPanelProps = {
   agentHasRun?: boolean;
   agent: AgentRun;
   running: boolean;
-  welcomeMarkdown?: string;
   composerMode?: AgentComposerMode;
   onComposerModeChange?: (mode: AgentComposerMode) => void;
   onSend: (text: string, mode?: AgentComposerMode, parts?: StoredMessagePart[]) => void;
@@ -33,9 +31,6 @@ export type ChatPanelProps = {
   focusedRunId?: string | null;
   externalPrompt?: string | null;
   onExternalPromptConsumed?: () => void;
-  tasteChatRemaining?: number;
-  tasteStartRemaining?: number;
-  onStartProject?: () => void;
   pendingQueueItems?: PendingQueueItem[];
   queueBlockingReason?: string | null;
   onClearPendingItem?: (id: string) => Promise<void>;
@@ -53,7 +48,6 @@ export function ChatPanel({
   agentHasRun = false,
   agent,
   running,
-  welcomeMarkdown,
   composerMode = "plan",
   onComposerModeChange,
   onSend,
@@ -64,9 +58,6 @@ export function ChatPanel({
   focusedRunId,
   externalPrompt,
   onExternalPromptConsumed,
-  tasteChatRemaining,
-  tasteStartRemaining,
-  onStartProject,
   pendingQueueItems = [],
   queueBlockingReason,
   onClearPendingItem,
@@ -154,38 +145,15 @@ export function ChatPanel({
   return (
     <div className="forge-chat-inner">
       <div ref={scrollRef} className="forge-messages" onScroll={handleScroll}>
-        {showEmptyState ? (
-          <div className="forge-msg-text space-y-3">
-            {chatLoading ? (
-              <div
-                className="flex items-center gap-2 py-6 text-[var(--text-muted)]"
-                data-testid="forge-chat-loading"
-              >
-                <Loader2 className="size-4 shrink-0 animate-spin" />
-                <span className="text-sm">Carregando conversa…</span>
-              </div>
-            ) : welcomeMarkdown ? (
-              <MarkdownRenderer>{welcomeMarkdown}</MarkdownRenderer>
-            ) : (
-              <p>
-                Descreva o que quer construir. O agente gera o código e você vê o resultado à
-                direita.
-              </p>
-            )}
-            <div className="flex flex-wrap gap-2 pt-1">
-              {!chatLoading && onStartProject && (tasteStartRemaining ?? 0) > 0 && (
-                <button type="button" onClick={onStartProject} className="forge-welcome-btn">
-                  Start Project · demo completa (~15 min)
-                </button>
-              )}
-            </div>
-            {tasteChatRemaining != null && tasteChatRemaining <= 0 && (
-              <p className="forge-welcome-limit">
-                Limite Taste Chat atingido. Configure chaves em API para continuar.
-              </p>
-            )}
+        {chatLoading ? (
+          <div
+            className="flex items-center gap-2 py-6 text-[var(--text-muted)]"
+            data-testid="forge-chat-loading"
+          >
+            <Loader2 className="size-4 shrink-0 animate-spin" />
+            <span className="text-sm">Carregando conversa…</span>
           </div>
-        ) : (
+        ) : showEmptyState ? null : (
           <ChatThread
             items={thread}
             onOpenInspector={onOpenInspector}

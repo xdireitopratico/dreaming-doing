@@ -67,9 +67,9 @@ export function useEditorPageData({ projectId, search, agent, navigate }: UseEdi
     enabled: !!conversation,
   });
 
-  /** Pós-F5: evita flash do welcome BYOK enquanto o histórico ainda não chegou do DB. */
+  /** Pós-F5: chat só renderiza após histórico estável do DB (sem welcome/overlay fantasma). */
   const chatMessagesLoading =
-    !!conversation?.id && (messagesPending || (messagesFetching && messages === undefined));
+    !!conversation?.id && (messagesPending || messagesFetching);
 
   const { data: files } = useQuery({
     queryKey: ["files", projectId],

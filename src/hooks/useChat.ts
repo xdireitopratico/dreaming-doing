@@ -34,6 +34,7 @@ export function useChat({
 }: UseChatParams) {
   const prevConversationIdRef = useRef<string | null>(null);
   const sessionBoundRef = useRef<string | null>(null);
+  const snapshotRestoredRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!conversationId) return;
@@ -41,24 +42,31 @@ export function useChat({
     if (prevConversationIdRef.current && prevConversationIdRef.current !== conversationId) {
       agent.resetSession();
       sessionBoundRef.current = null;
+      snapshotRestoredRef.current = null;
     }
     prevConversationIdRef.current = conversationId;
 
     agent.bindSession(projectId, conversationId);
-
-    if (sessionBoundRef.current !== conversationId) {
-      agent.tryRestoreSnapshot(projectId, conversationId);
-      sessionBoundRef.current = conversationId;
-    }
   }, [conversationId, projectId, agent]);
 
+  /** Snapshot só após histórico do DB — evita flash de texto/cards fantasma no F5. */
   useEffect(() => {
+    if (!conversationId || messagesLoading) return;
+    if (snapshotRestoredRef.current === conversationId) return;
+
+    agent.tryRestoreSnapshot(projectId, conversationId, messages);
+    snapshotRestoredRef.current = conversationId;
+    sessionBoundRef.current = conversationId;
+  }, [conversationId, projectId, agent, messagesLoading, messages]);
+
+  useEffect(() => {
+    if (messagesLoading) return;
     for (const m of messages) {
       if (m.role !== "assistant" || !m.runId) continue;
       if (!isAssistantRunMaterialized(m)) continue;
       agent.acknowledgeMaterializedRun(m.runId);
     }
-  }, [messages, agent]);
+  }, [messages, messagesLoading, agent]);
 
   const pendingPlan = usePendingPlan({
     livePlan: agent.progress.pendingPlan,
@@ -82,25 +90,34 @@ export function useChat({
     };
   }, [agent.progress, pendingPlan]);
 
-  const thread = useMemo(
-    () =>
-      buildChatThread(messages, progress, {
-        activeRunId: agent.activeRunId,
-        activeRunStartedAtMs: agent.activeRunStartedAtMs,
-        running,
-        pendingPlan,
-        sessionProgress: progress,
-        focusedRunId,
-      }),
-    [messages, progress, agent.activeRunId, agent.activeRunStartedAtMs, running, pendingPlan, focusedRunId],
-  );
+  const thread = useMemo(() => {
+    if (messagesLoading) return [];
+    return buildChatThread(messages, progress, {
+      activeRunId: agent.activeRunId,
+      activeRunStartedAtMs: agent.activeRunStartedAtMs,
+      running,
+      pendingPlan,
+      sessionProgress: progress,
+      focusedRunId,
+    });
+  }, [
+    messagesLoading,
+    messages,
+    progress,
+    agent.activeRunId,
+    agent.activeRunStartedAtMs,
+    running,
+    pendingPlan,
+    focusedRunId,
+  ]);
 
   const showEmptyState = useMemo(() => {
+    if (messagesLoading) return false;
     if (messages.length > 0) return false;
     if (agentHasRun) return false;
     if (agent.activeRunId) return false;
     return true;
-  }, [messages.length, agentHasRun, agent.activeRunId]);
+  }, [messagesLoading, messages.length, agentHasRun, agent.activeRunId]);
 
   useEffect(() => {
     if (!agent.activeRunId || !agent.progress.finished) return;

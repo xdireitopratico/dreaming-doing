@@ -5,10 +5,10 @@ import { runBelongsToChatMessages } from "@/lib/plan-message-meta";
 import { PENDING_RUN_ID } from "@/lib/pending-run-id";
 import type { ChatLiveState } from "@/lib/chat/types";
 
-/** Estado live válido só para esta conversa. */
+/** Estado live válido só para esta conversa — sem overlay efêmero fora de run ativo. */
 export function scopeLiveState(
   messages: ChatMessage[],
-  progress: AgentProgress,
+  _progress: AgentProgress,
   activeRunId: string | null | undefined,
   running: boolean,
 ): ChatLiveState | null {
@@ -17,33 +17,10 @@ export function scopeLiveState(
   const belongs = pendingTurn || (running && !!activeRunId) || runInThread;
 
   if (!activeRunId || !belongs) {
-    if (!activeRunId && canUseEphemeralProgress(messages, progress)) {
-      return { activeRunId: null, progress, running: false };
-    }
     return null;
   }
 
-  return { activeRunId, progress, running };
-}
-
-function canUseEphemeralProgress(messages: ChatMessage[], progress: AgentProgress): boolean {
-  if (!progress.finished) return false;
-  const lastUser = [...messages].reverse().find((m) => m.role === "user");
-  if (!lastUser) return false;
-  const lastUserIdx = messages.lastIndexOf(lastUser);
-  const hasReply = messages.slice(lastUserIdx + 1).some((m) => {
-    if (m.role !== "assistant") return false;
-    return !!m.content?.trim();
-  });
-  if (hasReply) return false;
-
-  const text = progress.streamText?.trim();
-  if (progress.error && !progress.canceled) return true;
-  if (text && progress.lastFinishOk === true) return true;
-  if (text && (progress.conversational === true || progress.awaitingKind === "qualify")) {
-    return true;
-  }
-  return false;
+  return { activeRunId, progress: _progress, running };
 }
 
 export function emptyProgress(): AgentProgress {

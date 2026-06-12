@@ -2,7 +2,6 @@
 import { createFileRoute, useNavigate, useParams, useSearch } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { FORGE_WELCOME_BYOK_MARKDOWN, FORGE_WELCOME_MARKDOWN } from "@/lib/welcome-message";
 import { loadAgentPreferences } from "@/lib/agent-preferences";
 
 import { useConnectors } from "@/hooks/useConnectors";
@@ -60,7 +59,6 @@ function EditorPage() {
     return () => window.removeEventListener("forge:prefs-updated", refresh);
   }, []);
 
-  const welcomeMarkdown = hasUserLlmKey ? FORGE_WELCOME_BYOK_MARKDOWN : FORGE_WELCOME_MARKDOWN;
   const e2bConnected = connectorStatus.e2b.connected;
   useTasteUiActions();
   const tasteQuota = useMemo(
@@ -344,10 +342,6 @@ function EditorPage() {
       setComposerMode={setComposerMode}
       promptDraft={promptDraft}
       setPromptDraft={setPromptDraft}
-      welcomeMarkdown={welcomeMarkdown}
-      tasteChatRemaining={tasteChatRemaining}
-      tasteStartRemaining={tasteStartRemaining}
-      handleStartProject={handlers.handleStartProject}
       handleRollbackMessage={handlers.handleRollbackMessage}
       handlePlanApprove={handlers.handlePlanApprove}
       handlePlanReject={handlers.handlePlanReject}

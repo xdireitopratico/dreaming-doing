@@ -86,10 +86,6 @@ export type EditorPageLayoutProps = {
   setComposerMode: (mode: AgentComposerMode) => void;
   promptDraft: string | null;
   setPromptDraft: (value: string | null) => void;
-  welcomeMarkdown: string;
-  tasteChatRemaining: number;
-  tasteStartRemaining: number;
-  handleStartProject: () => void;
   handleRollbackMessage: (
     messageId: string,
     role: "user" | "assistant",
@@ -183,10 +179,6 @@ export function EditorPageLayout({
   setComposerMode,
   promptDraft,
   setPromptDraft,
-  welcomeMarkdown,
-  tasteChatRemaining,
-  tasteStartRemaining,
-  handleStartProject,
   handleRollbackMessage,
   handlePlanApprove,
   handlePlanReject,
@@ -423,7 +415,6 @@ export function EditorPageLayout({
                   agentHasRun={agentHasRun}
                   agent={agent}
                   running={running}
-                  welcomeMarkdown={welcomeMarkdown}
                   composerMode={composerMode}
                   onComposerModeChange={setComposerMode}
                   onSend={handleSend}
@@ -434,9 +425,6 @@ export function EditorPageLayout({
                   focusedRunId={jobWorkspaceFocus?.runId ?? null}
                   externalPrompt={promptDraft}
                   onExternalPromptConsumed={() => setPromptDraft(null)}
-                  tasteChatRemaining={tasteChatRemaining}
-                  tasteStartRemaining={tasteStartRemaining}
-                  onStartProject={handleStartProject}
                   pendingQueueItems={agent.pendingQueueItems}
                   queueBlockingReason={agent.queueBlockingReason}
                   onClearPendingItem={(id) =>
