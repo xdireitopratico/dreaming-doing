@@ -17,8 +17,8 @@ export const Route = createFileRoute("/dev/lovable-chat")({
 const FIXTURES: { id: string; label: string; ref: string; items: ThreadItem[]; running: boolean; planPending: boolean }[] = [
   {
     id: "img4",
-    label: "Estado B — chips sem mini-card",
-    ref: "image (4)",
+    label: "Working — narração + mini-card",
+    ref: "image (4)/(5)",
     running: true,
     planPending: false,
     items: [
@@ -39,11 +39,19 @@ const FIXTURES: { id: string; label: string; ref: string; items: ThreadItem[]; r
         streamText: null,
         thinking: { active: false, durationMs: 4000 },
         narration: "Vou investigar o estado atual do container DP Lara antes de organizar a higienização.",
-        statusChips: [
-          "Checking browser route wiring in lara-worksp...",
-          "Diagnosing Lara container gaps and needs",
-        ],
-        miniCard: null,
+        statusChips: [],
+        miniCard: {
+          title: "Orchestrating Lara container cleanup",
+          header: "Working",
+          subtitle: "Orchestrating Lara container cleanup",
+          liveBriefings: ["Orchestrating Lara container cleanup"],
+          status: "working",
+          tasks: [
+            { id: "t1", label: "Higienizar Dockerfile.lara", status: "active" },
+            { id: "t2", label: "Conectar rota browser execute", status: "pending" },
+          ],
+          currentTaskIndex: 0,
+        },
         finished: false,
       },
     ],
@@ -185,10 +193,10 @@ const FIXTURES: { id: string; label: string; ref: string; items: ThreadItem[]; r
   },
   {
     id: "img15",
-    label: "Terminal — chips de plano",
+    label: "Terminal — plano no mini-card",
     ref: "image (15)",
-    running: true,
-    planPending: false,
+    running: false,
+    planPending: true,
     items: [
       {
         kind: "user",
@@ -205,12 +213,22 @@ const FIXTURES: { id: string; label: string; ref: string; items: ThreadItem[]; r
         runId: "run-img15",
         isActive: false,
         streamText: null,
-        statusChips: [
-          "Reading approved plan",
-          "Defining cross-view deletion strategy planning",
-          "Plan: Desbloquear exclusão do documento travado (vínculo com proposta no banco)",
-        ],
-        miniCard: null,
+        narration: "Vou propor um plano para desbloquear a exclusão do documento travado.",
+        statusChips: [],
+        planTeaser: true,
+        miniCard: {
+          title: "Defining cross-view deletion strategy planning",
+          header: "Plan ready",
+          subtitle: "Defining cross-view deletion strategy planning",
+          liveBriefings: ["Defining cross-view deletion strategy planning"],
+          status: "working",
+          planReady: true,
+          hasPlan: true,
+          tasks: [
+            { id: "s1", label: "Desbloquear exclusão do documento", status: "pending" },
+          ],
+          currentTaskIndex: 0,
+        },
         finished: true,
         lastFinishOk: true,
       },

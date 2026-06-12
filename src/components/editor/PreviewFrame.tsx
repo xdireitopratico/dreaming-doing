@@ -5,6 +5,7 @@ import { buildPreviewUrl } from "@/lib/project-routes";
 import { BuildConsole } from "@/components/editor/BuildConsole";
 import type { AgentProgress } from "@/lib/agent-progress";
 import type { ProjectStackKind } from "@/lib/detect-project-kind";
+import { isSeedPlaceholderEntryContent, projectEntryPath } from "@/lib/publish-ready";
 
 interface PreviewFrameProps {
   files: Array<{ path: string; content: string }>;
@@ -50,7 +51,6 @@ interface PreviewFrameProps {
 
 type PreviewView =
   | "native-console"
-  | "boot-error"
   | "boot-spinner"
   | "preview-idle"
   | "iframe-live"
@@ -125,6 +125,15 @@ export function PreviewFrame({
 
   const hasBuiltApp = (agentHasRun || agentRunning) && !isNoFiles;
 
+  const seedPlaceholder = useMemo(() => {
+    const entryPath = projectEntryPath(projectStack);
+    const entry = files.find(
+      (f) =>
+        f.path === entryPath || f.path === `/${entryPath}` || f.path.endsWith(`/${entryPath}`),
+    );
+    return isSeedPlaceholderEntryContent(entry?.content);
+  }, [files, projectStack]);
+
   const showConnecting =
     isReactProject && hasBuiltApp && !devUrl && (booting || warming || previewSyncing);
 
@@ -144,21 +153,25 @@ export function PreviewFrame({
     !showStaleGuide;
 
   const showLetsBuild =
-    !hasBuiltApp &&
-    !agentRunning &&
-    (showStaleGuide ||
-      isNoFiles ||
-      (!iframeSrc && !previewContent && !booting && !warming && !showReconnecting));
+    seedPlaceholder ||
+    (!hasBuiltApp &&
+      !agentRunning &&
+      (showStaleGuide ||
+        isNoFiles ||
+        (!iframeSrc && !previewContent && !booting && !warming && !showReconnecting)));
 
   const canShowIframe =
-    !nativeBuildPreview && Boolean(iframeSrc) && !sandboxStale && (!isNoFiles || agentRunning);
+    !nativeBuildPreview &&
+    Boolean(iframeSrc) &&
+    !sandboxStale &&
+    !seedPlaceholder &&
+    (!isNoFiles || agentRunning);
 
   const showNativeConsole = nativeBuildPreview && projectStack === "android-native";
 
   const view: PreviewView = useMemo(() => {
     if (showNativeConsole) return "native-console";
-    if (bootError && !showBootSpinner) return "boot-error";
-    if (showBootSpinner || showReconnecting) return "boot-spinner";
+    if (showBootSpinner || showReconnecting || (bootError && !devUrl)) return "boot-spinner";
     if (previewIdle && devUrl) return "preview-idle";
     if (canShowIframe && iframeSrc) return "iframe-live";
     if (previewContent) return "iframe-srcdoc";
@@ -178,6 +191,7 @@ export function PreviewFrame({
     showBuiltAppPending,
     showLetsBuild,
     showStaleGuide,
+    seedPlaceholder,
     onRefresh,
   ]);
 
@@ -207,31 +221,6 @@ export function PreviewFrame({
               agentRunning={agentRunning}
               onFocusChat={onFocusChat}
             />
-          </div>
-        )}
-
-        {view === "boot-error" && (
-          <div
-            className={surfaceClass(
-              "flex flex-col items-center justify-center gap-3 bg-white p-8 text-center",
-            )}
-          >
-            <p className="text-sm text-neutral-700 max-w-md leading-relaxed">{bootError}</p>
-            {onRefresh && bootError?.includes("agente") && (
-              <p className="text-xs text-neutral-400">
-                Peça uma alteração no chat para a IA começar.
-              </p>
-            )}
-            {onRefresh && bootError && !bootError.includes("agente") && (
-              <button
-                type="button"
-                onClick={onRefresh}
-                className="rounded-full bg-neutral-900 px-5 py-2 text-sm font-medium text-white hover:bg-neutral-800"
-                data-testid="preview-retry"
-              >
-                Tentar de novo
-              </button>
-            )}
           </div>
         )}
 

@@ -28,6 +28,19 @@ describe("turn-display — entrou, permanece", () => {
     expect(narration).toBe("Vou investigar o estado atual do container DP Lara.");
   });
 
+  it("resolveTurnNarration — permanece mesmo se stream contém o texto", () => {
+    const narrationLine = "Vou investigar o estado atual do container DP Lara.";
+    const progress = {
+      ...initialAgentProgress,
+      finished: true,
+      narrationText: narrationLine,
+      streamText: `${narrationLine} Pronto no preview.`,
+    };
+    const runView = buildAgentRunView("run-1", progress, { running: false });
+    const narration = resolveTurnNarration(progress, runView, progress.streamText);
+    expect(narration).toBe(narrationLine);
+  });
+
   it("buildAgentRunView — narration line persiste quando terminal", () => {
     const view = buildAgentRunView("run-1", {
       ...initialAgentProgress,

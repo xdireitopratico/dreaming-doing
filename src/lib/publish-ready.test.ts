@@ -13,6 +13,26 @@ describe("publish-ready", () => {
     );
   });
 
+  it("detecta seed vite antigo com CTA Começar", () => {
+    const legacy = `export default function App() {
+      return (
+        <main>
+          <p>Aguardando o primeiro plano aprovado para gerar a página inicial completa.</p>
+          <Button>Começar</Button>
+        </main>
+      );
+    }`;
+    expect(isSeedPlaceholderEntryContent(legacy)).toBe(true);
+  });
+
+  it("detecta seed vite mínimo (canvas vazio)", () => {
+    expect(
+      isSeedPlaceholderEntryContent(
+        'export default function App() { return <div className="min-h-dvh" aria-hidden />; }',
+      ),
+    ).toBe(true);
+  });
+
   it("entry path por stack", () => {
     expect(projectEntryPath("expo")).toBe("app/index.tsx");
     expect(projectEntryPath("web")).toBe("src/App.tsx");

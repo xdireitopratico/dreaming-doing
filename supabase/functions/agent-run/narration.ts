@@ -1,259 +1,235 @@
-// narration.ts — Textos de checkpoint de comunicação (briefing + narração durante execução).
+// narration.ts — Comunicação do agente em exatamente 3 momentos (sem camadas extras).
+//
+// 1. Abertura — usuário manda mensagem → LLM responde com interação humana
+// 2. Loop     — durante build/planejamento → compartilha o processo ao vivo
+// 3. Fechamento — o que entregou, o que tocou, expectativa do usuário
+
 import type { ClassificationResult } from "./router.ts";
 
-const INTENT_LABELS: Record<string, string> = {
-  new_project: "criar algo novo no projeto",
-  modify: "modificar o que já existe",
-  fix: "corrigir um problema",
-  add_dep: "adicionar dependências",
+export type CommunicationPhase = "opening" | "loop" | "closure";
+
+// ─── 1. ABERTURA ───────────────────────────────────────────────────────────
+
+export type OpeningContext = {
+  userSummary: string;
+  intentType?: ClassificationResult["type"];
+  planMode?: boolean;
+  approvedPlan?: boolean;
+  planHeadline?: string;
+};
+
+const INTENT_OPENING: Record<string, string> = {
+  new_project: "montar isso do zero",
+  modify: "ajustar o que já existe",
+  fix: "corrigir o problema",
+  add_dep: "adicionar o que falta nas dependências",
   other: "atender seu pedido",
 };
+
+/** Primeira resposta humana após o usuário enviar mensagem. */
+export function buildOpeningMessage(ctx: OpeningContext): string {
+  const summary = ctx.userSummary?.trim() || "seu pedido";
+  const intent = INTENT_OPENING[ctx.intentType ?? "other"] ?? INTENT_OPENING.other;
+
+  if (ctx.approvedPlan) {
+    const headline = (ctx.planHeadline ?? "o plano que você aprovou").trim().slice(0, 160);
+    return `Perfeito — vou executar ${headline}. Te aviso conforme for avançando e no final resumo o que ficou pronto.`;
+  }
+
+  if (ctx.planMode) {
+    return `Entendi: ${summary}. Antes de codar, vou te propor um plano passo a passo para você revisar no inspector.`;
+  }
+
+  return `Entendi — você quer ${summary}. Vou ${intent} e te conto o que encontro pelo caminho.`;
+}
+
+// ─── 2. LOOP ───────────────────────────────────────────────────────────────
 
 type ToolCallLike = {
   name: string;
   arguments: Record<string, unknown>;
 };
 
-function fileBase(path: unknown): string {
-  const p = String(path ?? "").replace(/^\/+/, "");
-  const i = p.lastIndexOf("/");
-  return i >= 0 ? p.slice(i + 1) : p || "arquivo";
-}
+export type LoopUpdateKind =
+  | "tool_batch"
+  | "typecheck_fail"
+  | "build_check"
+  | "build_ok"
+  | "stuck"
+  | "build_fix"
+  | "resume"
+  | "processing";
 
-function describeTool(call: ToolCallLike): string {
+export type LoopUpdateContext = {
+  kind: LoopUpdateKind;
+  tools?: ToolCallLike[];
+  step?: number;
+  total?: number;
+  allOk?: boolean;
+  resumeStep?: number;
+  fixResume?: boolean;
+};
+
+function humanToolPhrase(call: ToolCallLike): string | null {
   const args = call.arguments ?? {};
   switch (call.name) {
     case "fs_read":
-      return `ler \`${String(args.path ?? "arquivo")}\``;
+      return `estou lendo \`${String(args.path ?? "um arquivo")}\``;
     case "fs_read_many":
-      return `ler vários arquivos (${String(args.pattern ?? args.glob ?? "projeto")})`;
+      return "estou lendo um conjunto de arquivos do projeto";
     case "fs_list":
-      return "listar arquivos do projeto";
+      return "estou vendo a estrutura de pastas";
     case "fs_search":
-      return `buscar «${String(args.regex ?? args.query ?? "…").slice(0, 48)}» no código`;
     case "fs_glob":
-      return `encontrar arquivos (${String(args.pattern ?? "…")})`;
+      return "estou buscando no código o que preciso";
     case "fs_write":
-      return `criar \`${String(args.path ?? "arquivo")}\``;
+      return `vou criar \`${String(args.path ?? "um arquivo")}\``;
     case "fs_edit":
-      return `editar \`${String(args.path ?? "arquivo")}\``;
+      return `vou editar \`${String(args.path ?? "um arquivo")}\``;
     case "shell_exec": {
-      const cmd = String(args.command ?? "")
-        .trim()
-        .slice(0, 56);
-      return cmd ? `executar \`${cmd}\`` : "rodar comando no sandbox";
+      const cmd = String(args.command ?? "").trim().slice(0, 40);
+      return cmd ? `vou rodar \`${cmd}\`` : "vou rodar um comando no sandbox";
     }
     case "web_search":
-      return "pesquisar na web";
+      return "vou pesquisar uma referência na web";
     case "web_fetch":
-      return "buscar documentação";
+      return "vou buscar documentação";
     default:
-      return `usar ${call.name}`;
+      return null;
   }
 }
 
-/** Briefing pós-classify — o que o agente vai fazer antes de entrar no loop. */
-export function buildClassifyBriefing(
-  classification: ClassificationResult,
-  opts: { maxSteps: number; planMode: boolean; approvedPlan?: boolean },
-): string {
-  const intent = INTENT_LABELS[classification.type] ?? INTENT_LABELS.other;
-  const summary = classification.summary?.trim() || "Implementar seu pedido";
-  const lines: string[] = [];
+/** Atualizações durante o looping — o que está fazendo, problema, próximo passo. */
+export function buildLoopUpdate(ctx: LoopUpdateContext): string | null {
+  switch (ctx.kind) {
+    case "processing":
+      return "Ainda estou processando — já volto com a próxima parte.";
 
-  if (opts.approvedPlan) {
-    lines.push("**Plano aprovado** — vou executar passo a passo o que combinamos.");
-  } else if (opts.planMode) {
-    lines.push("Vou montar um **plano** para você revisar antes de qualquer código.");
-  } else {
-    lines.push(`Entendi: vou **${intent}**.`);
-  }
-
-  lines.push("", summary);
-
-  const plan = classification.plan;
-  if (!opts.planMode && plan?.steps?.length) {
-    const enabled = plan.steps.filter((s) => s.enabled !== false).slice(0, 6);
-    if (enabled.length > 0) {
-      lines.push("", "**Caminho previsto:**");
-      for (const step of enabled) {
-        lines.push(`- ${step.description}`);
+    case "resume":
+      if (ctx.fixResume) {
+        return "Retomei para corrigir os erros de build que apareceram.";
       }
-      if (plan.steps.length > enabled.length) {
-        lines.push(`- _…e mais ${plan.steps.length - enabled.length} passo(s)_`);
+      if (ctx.resumeStep && ctx.total) {
+        return `Retomei de onde parei — continuo a partir do passo ${ctx.resumeStep} de ${ctx.total}.`;
       }
+      return "Retomei de onde parei e sigo com o que faltava.";
+
+    case "tool_batch": {
+      const tools = ctx.tools ?? [];
+      if (!tools.length) return null;
+      const phrases = tools
+        .map(humanToolPhrase)
+        .filter((p): p is string => !!p);
+      const unique = [...new Set(phrases)];
+      const action =
+        unique.length <= 2
+          ? unique.join(" e ")
+          : `${unique.slice(0, 2).join(", ")} e mais ${unique.length - 2} coisa(s)`;
+      if (ctx.allOk === false) {
+        return `Encontrei um obstáculo em ${action}. Vou ajustar e seguir.`;
+      }
+      return `Agora ${action}.`;
     }
+
+    case "typecheck_fail":
+      return "O TypeScript apontou erro no que acabei de mexer — vou corrigir antes de continuar.";
+
+    case "build_check":
+      return "Vou conferir se o projeto compila com as mudanças que fiz.";
+
+    case "build_ok":
+      return "Build passou — sigo para o próximo passo.";
+
+    case "stuck":
+      return "Percebi que estava repetindo a mesma abordagem — vou mudar o caminho.";
+
+    case "build_fix":
+      return "O build ainda não passou — vou corrigir os erros antes de te entregar.";
+
+    default:
+      return null;
   }
-
-  if (!opts.planMode) {
-    lines.push("", "Vou ler o projeto, implementar as mudanças e validar o resultado.");
-  }
-
-  return lines.join("\n").trim();
 }
 
-/** Narração ao explorar o projeto (gather) — só mini card, sem contagem. */
-export function buildGatherNarration(_totalFiles?: number, _paths?: string[]): string {
-  return "Explorando o projeto…";
-}
+// ─── 3. FECHAMENTO ─────────────────────────────────────────────────────────
 
-/** Briefing quando o build vem de plano aprovado — uma linha no chat; plano completo fica no Inspector. */
-export function buildApprovedPlanBriefing(headline: string): string {
-  const firstLine = headline
-    .trim()
-    .split("\n")[0]
-    ?.replace(/^#+\s*/, "")
-    .trim();
-  const h = (firstLine || headline.trim()).slice(0, 120) || "seu plano";
-  return `Executando plano aprovado — **${h}**.`;
-}
-
-/** Atualização curta após um lote de ferramentas. */
-export function buildToolBatchNarration(
-  calls: ToolCallLike[],
-  opts?: { step?: number; total?: number; allOk?: boolean },
-): string | null {
-  if (!calls.length) return null;
-
-  const parts = calls.map(describeTool);
-  const unique = [...new Set(parts)];
-  const joined =
-    unique.length <= 3
-      ? unique.join(", ")
-      : `${unique.slice(0, 2).join(", ")} e mais ${unique.length - 2} ação(ões)`;
-
-  const prefix = opts?.step && opts?.total ? `**Passo ${opts.step}/${opts.total}** — ` : "";
-
-  const status =
-    opts?.allOk === false
-      ? "Algumas ações falharam; vou ajustar e seguir."
-      : "Próximo: continuar implementando com base no que encontrei.";
-
-  return `${prefix}Concluí: ${joined}. ${status}`;
-}
-
-export type FinalWrapUpOpts = {
-  stepsCompleted: number;
-  totalSteps: number;
+export type ClosureContext = {
   touchedPaths: string[];
-  toolsUsed: string[];
-  resumable?: boolean;
-  partial?: boolean;
+  priorConversation?: string;
   errorMessage?: string;
-  /** Pausa interna (auto-resume) — sem pedir ação ao usuário. */
+  partial?: boolean;
   silentResume?: boolean;
 };
 
-export type ResolveFinalChatOpts = FinalWrapUpOpts & {
-  /** Texto já produzido pelo LLM durante a run (stream/narração). */
-  narration?: string;
-};
-
-export type ResolvedFinalChat = {
+export type ResolvedClosure = {
   text: string;
-  /** Texto extra a emitir além do que já foi streamado. */
   emitExtra: boolean;
   extraText?: string;
 };
 
-function mentionsDelivery(text: string): boolean {
-  return /preview|arquivo|alterei|entreguei|confere|mexi em|pronto —/i.test(text);
+function formatTouched(paths: string[]): string {
+  if (!paths.length) return "";
+  const shown = paths.slice(-3).map((p) => `\`${p}\``).join(", ");
+  const extra = paths.length > 3 ? ` e mais ${paths.length - 3}` : "";
+  return `${shown}${extra}`;
 }
 
-function buildDeliveryClosing(fileCount: number, paths: string[]): string {
-  const shown = paths
-    .slice(-3)
-    .map((p) => `\`${p}\``)
-    .join(", ");
-  const extra = fileCount > 3 ? ` e mais ${fileCount - 3}` : "";
-  if (fileCount === 1) {
-    return `Mexi em ${shown} — confere o preview. Quer refinar algo?`;
-  }
-  return `Entreguei em **${fileCount} arquivos** (${shown}${extra}). Dá uma olhada no preview; se quiser ajustar, é só falar.`;
+function closureAlreadyComplete(text: string): boolean {
+  return /preview|confere|mexi|entreguei|pronto|arquivo/i.test(text);
 }
 
-function buildPartialClosing(fileCount: number, paths: string[]): string {
-  if (fileCount === 0) {
-    return "Até aqui — continuo na próxima rodada. Quer priorizar algo específico?";
-  }
-  const shown = paths
-    .slice(-2)
-    .map((p) => `\`${p}\``)
-    .join(", ");
-  return `Até aqui mexi em ${shown}${fileCount > 2 ? ` (+${fileCount - 2})` : ""}. Posso seguir quando quiser.`;
-}
+/** Mensagem final — entrega, arquivos tocados, expectativa do usuário. */
+export function buildClosureMessage(ctx: ClosureContext): ResolvedClosure {
+  const prior = ctx.priorConversation?.trim() ?? "";
+  const files = ctx.touchedPaths ?? [];
+  const fileCount = files.length;
 
-/**
- * Mensagem final do chat — conversa do LLM em primeiro lugar; zero template robótico.
- * «Pronto! Resumo do que fiz» e «Nenhum arquivo alterado» foram removidos de propósito.
- */
-export function resolveFinalChatMessage(opts: ResolveFinalChatOpts): ResolvedFinalChat {
-  const narration = opts.narration?.trim() ?? "";
-  const fileCount = opts.touchedPaths.length;
-
-  if (opts.errorMessage?.trim()) {
-    const err = opts.errorMessage.trim();
-    return narration && !narration.includes(err.slice(0, 24))
-      ? { text: `${narration}\n\n${err}`, emitExtra: true, extraText: err }
-      : { text: err, emitExtra: !narration };
+  if (ctx.errorMessage?.trim()) {
+    const err = ctx.errorMessage.trim();
+    if (prior && !prior.includes(err.slice(0, 24))) {
+      return { text: `${prior}\n\n${err}`, emitExtra: true, extraText: err };
+    }
+    return { text: err, emitExtra: !prior };
   }
 
-  if (opts.silentResume) {
+  if (ctx.silentResume) {
     const note =
       fileCount > 0
         ? "Ainda estou trabalhando — já deixei parte do pedido pronta."
         : "Ainda estou trabalhando no seu pedido.";
-    if (narration) return { text: narration, emitExtra: false };
+    if (prior) return { text: prior, emitExtra: false };
     return { text: note, emitExtra: true };
   }
 
-  if (opts.partial) {
-    const note = buildPartialClosing(fileCount, opts.touchedPaths);
-    if (narration) {
-      return { text: `${narration}\n\n${note}`, emitExtra: true, extraText: note };
-    }
+  if (ctx.partial) {
+    const note =
+      fileCount === 0
+        ? "Cheguei até aqui — posso continuar quando você quiser."
+        : `Até aqui mexi em ${formatTouched(files)}. Posso seguir no próximo passo.`;
+    if (prior) return { text: `${prior}\n\n${note}`, emitExtra: true, extraText: note };
     return { text: note, emitExtra: true };
   }
 
   if (fileCount === 0) {
-    if (narration) return { text: narration, emitExtra: false };
+    if (prior) return { text: prior, emitExtra: false };
     return {
       text: "Me conta o que você quer construir ou ajustar — estou aqui pra ajudar.",
       emitExtra: true,
     };
   }
 
-  const deliveryNote = buildDeliveryClosing(fileCount, opts.touchedPaths);
-  if (narration) {
-    if (mentionsDelivery(narration)) {
-      return { text: narration, emitExtra: false };
+  const touched = formatTouched(files);
+  const delivery =
+    fileCount === 1
+      ? `Pronto — mexi em ${touched}. Abre o preview pra ver; se quiser refinar algo, é só falar.`
+      : `Pronto — entreguei em **${fileCount} arquivos** (${touched}). Confere o preview e me diz se quer algum ajuste.`;
+
+  if (prior) {
+    if (closureAlreadyComplete(prior)) {
+      return { text: prior, emitExtra: false };
     }
-    return {
-      text: `${narration}\n\n${deliveryNote}`,
-      emitExtra: true,
-      extraText: deliveryNote,
-    };
+    return { text: `${prior}\n\n${delivery}`, emitExtra: true, extraText: delivery };
   }
-  return { text: deliveryNote, emitExtra: true };
-}
 
-/** @deprecated Use resolveFinalChatMessage — mantido para testes legados. */
-export function buildFinalWrapUp(opts: FinalWrapUpOpts): string {
-  return resolveFinalChatMessage({ ...opts }).text;
-}
-
-/** Narração curta para validação/observe. */
-export function buildObserveNarration(
-  kind: "typecheck" | "build" | "stuck" | "validate_ok",
-): string {
-  switch (kind) {
-    case "typecheck":
-      return "Encontrei erros de TypeScript — vou corrigir antes de seguir.";
-    case "build":
-      return "Verificando se o projeto compila e o build passa…";
-    case "stuck":
-      return "Percebi repetição nas mesmas ações — vou mudar de abordagem.";
-    case "validate_ok":
-      return "Build OK — seguindo para o próximo passo.";
-  }
+  return { text: delivery, emitExtra: true };
 }

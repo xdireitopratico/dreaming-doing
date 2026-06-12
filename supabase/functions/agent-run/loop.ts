@@ -57,12 +57,9 @@ import {
 } from "./plan-mode.ts";
 import type { ClassificationResult } from "./router.ts";
 import {
-  buildApprovedPlanBriefing,
-  buildClassifyBriefing,
-  resolveFinalChatMessage,
-  buildGatherNarration,
-  buildObserveNarration,
-  buildToolBatchNarration,
+  buildClosureMessage,
+  buildLoopUpdate,
+  buildOpeningMessage,
 } from "./narration.ts";
 import {
   buildPhaseTaskTitle,
@@ -358,7 +355,8 @@ export class AgentLoop {
       message: "Ainda processando o modelo…",
       silentMs: Date.now() - this.lastActivityAt,
     });
-    this.streamNarration("Ainda processando o modelo — já volto com a próxima entrega.");
+    const heartbeat = buildLoopUpdate({ kind: "processing" });
+    if (heartbeat) this.streamNarration(heartbeat);
   }
 
   private async emitDeliveryCheckpoint(step: number): Promise<void> {
@@ -488,11 +486,13 @@ export class AgentLoop {
         maxSteps: this.maxStepsLimit,
         restored: true,
       });
-      this.streamNarration(
-        this.buildFixResume
-          ? "Corrigindo erros de build…"
-          : `Retomando de onde parei (**passo ${this.state.currentStepIndex}/${this.maxStepsLimit}**).`,
-      );
+      const resumeNarration = buildLoopUpdate({
+        kind: "resume",
+        fixResume: this.buildFixResume,
+        resumeStep: this.state.currentStepIndex,
+        total: this.maxStepsLimit,
+      });
+      if (resumeNarration) this.streamNarration(resumeNarration);
 
       // Plan runs terminate after proposing (no in-memory decision wait).
       // The plan is emitted to the client via Realtime; approval/rejection
@@ -632,18 +632,14 @@ export class AgentLoop {
 
       const skipIntentNarration = this.buildFixResume;
       if (!skipIntentNarration) {
-        if (this.planMode) {
-          // Plan mode: uma mensagem final via finishPlanProposal — sem narração duplicada.
-        } else if (this.approvedPlanBuild) {
-          this.streamNarration(buildApprovedPlanBriefing(this.planHeadline), { chatVisible: true });
-        } else {
-          this.streamNarration(
-            buildClassifyBriefing(classification, {
-              maxSteps: this.maxStepsLimit,
-              planMode: false,
-            }),
-          );
-        }
+        const opening = buildOpeningMessage({
+          userSummary: classification.summary,
+          intentType: classification.type,
+          planMode: this.planMode,
+          approvedPlan: this.approvedPlanBuild,
+          planHeadline: this.planHeadline,
+        });
+        this.streamNarration(opening, { chatVisible: true });
       }
 
       await this.saveCheckpoint(LoopPhase.CREATE_PLAN);
@@ -1100,17 +1096,16 @@ export class AgentLoop {
           });
         }
 
-        const batchNarration = buildToolBatchNarration(
-          response.tool_calls.map((tc) => ({
+        const batchNarration = buildLoopUpdate({
+          kind: "tool_batch",
+          tools: response.tool_calls.map((tc) => ({
             name: tc.name,
             arguments: tc.arguments,
           })),
-          {
-            step: loopStep,
-            total: this.maxStepsLimit,
-            allOk: execResults.every(({ result }) => result.ok),
-          },
-        );
+          step: loopStep,
+          total: this.maxStepsLimit,
+          allOk: execResults.every(({ result }) => result.ok),
+        });
         if (batchNarration) this.notifyExecution(batchNarration);
 
         if (
@@ -1165,7 +1160,8 @@ export class AgentLoop {
         if (modifiedFilePaths.length > 0) {
           const typeCheck = await this.observer.quickTypeCheck(modifiedFilePaths);
           if (!typeCheck.ok) {
-            this.streamNarration(buildObserveNarration("typecheck"));
+            const typecheckNarration = buildLoopUpdate({ kind: "typecheck_fail" });
+            if (typecheckNarration) this.streamNarration(typecheckNarration);
             this.emit("typecheck_fail", {
               errors: typeCheck.errors,
               files: modifiedFilePaths,
@@ -1183,7 +1179,8 @@ export class AgentLoop {
         const modifiedFiles = modifiedFilePaths.length > 0;
         if (modifiedFiles && buildAttempts < maxRetries) {
           this.state.phase = LoopPhase.VALIDATE_STEP;
-          this.streamNarration(buildObserveNarration("build"));
+          const buildNarration = buildLoopUpdate({ kind: "build_check" });
+          if (buildNarration) this.streamNarration(buildNarration);
           this.emit("phase", {
             phase: "observe",
             message: "Verificando build...",
@@ -1207,13 +1204,15 @@ export class AgentLoop {
             continue;
           } else {
             buildAttempts = 0;
-            this.streamNarration(buildObserveNarration("validate_ok"));
+            const buildOkNarration = buildLoopUpdate({ kind: "build_ok" });
+            if (buildOkNarration) this.streamNarration(buildOkNarration);
             this.emit("validate_ok", { message: "Build OK" });
           }
         }
 
         if (isExecutionStuck(this.state.executionLog)) {
-          this.streamNarration(buildObserveNarration("stuck"));
+          const stuckNarration = buildLoopUpdate({ kind: "stuck" });
+          if (stuckNarration) this.streamNarration(stuckNarration);
           this.emit("stuck", {
             message: "Padrão repetitivo detectado — injetando instrução para nova abordagem",
           });
@@ -1248,7 +1247,8 @@ export class AgentLoop {
       await this.saveCheckpoint(LoopPhase.VALIDATE_STEP);
       const finalObservation = await this.observer.observe();
       if (finalObservation.passed) {
-        this.streamNarration(buildObserveNarration("validate_ok"));
+        const finalOkNarration = buildLoopUpdate({ kind: "build_ok" });
+        if (finalOkNarration) this.streamNarration(finalOkNarration);
         this.emit("validate_ok", { message: "Build OK (gate final)" });
         finalGateOk = true;
         continue;
@@ -1292,7 +1292,8 @@ export class AgentLoop {
           `\`\`\`\n${finalObservation.feedback?.slice(0, 6000) ?? ""}\n\`\`\`\n\n` +
           `Os erros reais de compilação estão acima — corrija cada um com fs_edit. Verifique imports, tipos e sintaxe.`,
       });
-      this.streamNarration("Corrigindo erros de build antes de entregar…");
+      const buildFixNarration = buildLoopUpdate({ kind: "build_fix" });
+      if (buildFixNarration) this.streamNarration(buildFixNarration);
     }
 
     this.state.phase = LoopPhase.SUMMARIZE;
@@ -1300,13 +1301,9 @@ export class AgentLoop {
     this.emit("phase", { phase: "summarize", message: "Finalizando..." });
     await this.saveCheckpoint(LoopPhase.SUMMARIZE, true);
     const narration = this.narrationBuffer.trim();
-    const finalChat = resolveFinalChatMessage({
-      stepsCompleted: loopStep,
-      totalSteps: this.maxStepsLimit,
+    const finalChat = buildClosureMessage({
       touchedPaths: [...this.touchedPaths],
-      toolsUsed: [...toolsUsed],
-      resumable: false,
-      narration,
+      priorConversation: narration,
     });
     const finalText = finalChat.text;
 
@@ -1381,21 +1378,19 @@ export class AgentLoop {
 
     if (fileList.length > 0) {
       const paths = keyFiles.map((f) => f.path);
+      const gatherMessage =
+        paths.length > 0
+          ? `Lendo ${paths.join(", ")}…`
+          : `Indexando ${fileList.length} arquivo${fileList.length === 1 ? "" : "s"}…`;
       this.emit("explore", {
         totalFiles: fileList.length,
         paths,
-        message:
-          paths.length > 0
-            ? `Lendo ${paths.join(", ")}…`
-            : `Indexando ${fileList.length} arquivo${fileList.length === 1 ? "" : "s"}…`,
+        message: gatherMessage,
       });
       this.emit("phase", {
         phase: "gather",
-        message: "Explorando o projeto…",
+        message: gatherMessage,
       });
-      this.streamNarration(buildGatherNarration(fileList.length, paths));
-    } else {
-      this.streamNarration(buildGatherNarration(0, []));
     }
 
     const stackSkills = this.skills.detectActive(fileList).map((s) => s.name);

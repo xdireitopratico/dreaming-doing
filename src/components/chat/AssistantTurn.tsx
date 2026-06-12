@@ -1,58 +1,34 @@
 import { MarkdownRenderer } from "@/components/ui/markdown-renderer";
 import type { ThreadItem } from "@/lib/chat/types";
-import { ChatStatusChip } from "./ChatStatusChip";
 import { ChatThinking } from "./ChatThinking";
 import { ChatNarration } from "./ChatNarration";
 import { ChatJobCard } from "./ChatJobCard";
-import { ChatQualify } from "./ChatQualify";
-import { ChatDone } from "./ChatDone";
-import { ChatError } from "./ChatError";
-
 
 type AssistantTurnProps = {
   item: Extract<ThreadItem, { kind: "assistant" }>;
   onOpenInspector?: (runId: string, tab?: "timeline" | "changes" | "plan") => void;
-  onQualifySelect?: (text: string) => void;
-  onResume?: () => void;
 };
 
 /**
- * Orquestra o turno assistant — ordem Lovable fixa (plan.md §2):
- * 1. Thought for Xs
- * 2. Narração
- * 3. Status chips (0–2 ativo / até 4 terminal)
- * 4. Mini-card ou plan-teaser
- * 5. Done bubble (se entregou arquivos)
+ * Fluxo fixo do chat — só 4 blocos, ordem imutável, estado permanente:
+ * Thought → Mensagem LLM (abertura) → Mini Card → Mensagem LLM (fechamento)
  */
-export function AssistantTurn({
-  item,
-  onOpenInspector,
-  onQualifySelect,
-  onResume,
-}: AssistantTurnProps) {
-  const text = item.streamText ?? item.message?.content?.trim() ?? null;
-  const hasContent = !!text?.trim();
-  const showThinking =
-    !!item.thinking && (item.thinking.active || (item.thinking.durationMs ?? 0) > 0);
-  const showNarration = !!item.narration?.trim();
-  const showJobCard = !!item.miniCard && !item.qualify;
-  const showQualify = !!item.qualify && onQualifySelect;
-  const planTeaser = !!item.planTeaser;
-  const sessionTitle = item.miniCard?.title?.trim() ?? null;
-  const proseDiffersFromTitle = !sessionTitle || !text || text !== sessionTitle;
-  const showResponse =
-    hasContent &&
-    !showQualify &&
-    !planTeaser &&
-    !showJobCard &&
-    proseDiffersFromTitle &&
-    !(showNarration && text?.trim() === item.narration?.trim());
-  const hasDelivery =
-    (item.miniCard?.fileCount ?? 0) > 0 ||
-    (item.miniCard?.editedFile != null && item.miniCard.editedFile !== "");
-  const showDone =
-    item.finished && item.lastFinishOk && !item.isActive && showJobCard && !planTeaser && hasDelivery;
-  const showError = item.finished && item.error;
+export function AssistantTurn({ item, onOpenInspector }: AssistantTurnProps) {
+  const closingText =
+    item.streamText?.trim() ||
+    item.error?.trim() ||
+    (!item.isActive ? item.message?.content?.trim() : null) ||
+    null;
+  const narrationText = item.narration?.trim() || null;
+
+  const showThinking = !!item.thinking;
+  const showNarration = !!narrationText;
+  const showJobCard = !!item.miniCard;
+  const showClosing =
+    !!closingText && (!narrationText || closingText !== narrationText);
+
+  const planTab = item.planTeaser || item.miniCard?.planReady;
+
   return (
     <article className="forge-chat-item forge-chat-item-assistant" data-testid="chat-message-assistant">
       <div className="forge-assistant-turn" data-testid="assistant-turn">
@@ -64,48 +40,25 @@ export function AssistantTurn({
           />
         )}
 
-        {showNarration && <ChatNarration text={item.narration!} />}
-
-        {item.statusChips && item.statusChips.length > 0 && (
-          <div className="forge-status-chips" data-testid="forge-status-chips">
-            {item.statusChips.map((chip) => (
-              <ChatStatusChip key={chip} label={chip} />
-            ))}
-          </div>
-        )}
+        {showNarration && <ChatNarration text={narrationText!} />}
 
         {showJobCard && item.miniCard && (
           <ChatJobCard
             data={item.miniCard}
             runId={item.runId}
-            planTeaser={planTeaser}
+            planTeaser={!!item.planTeaser}
             onClick={() =>
-              onOpenInspector?.(item.runId, planTeaser || item.miniCard?.planReady ? "plan" : "timeline")
+              onOpenInspector?.(item.runId, planTab ? "plan" : "timeline")
             }
           />
         )}
 
-        {showDone && <ChatDone />}
-
-        {showResponse && (
+        {showClosing && (
           <div className="forge-chat-closing-line forge-chat-prose">
-            <MarkdownRenderer>{text!}</MarkdownRenderer>
+            <MarkdownRenderer>{closingText!}</MarkdownRenderer>
           </div>
         )}
-
-        {showQualify && item.qualify && (
-          <ChatQualify data={item.qualify} disabled={item.isActive} onSelect={onQualifySelect} />
-        )}
       </div>
-
-      {showError && item.error && (
-        <ChatError
-          message={item.error}
-          onResume={item.resumable ? onResume : undefined}
-          onOpenInspector={() => onOpenInspector?.(item.runId)}
-        />
-      )}
-
     </article>
   );
 }

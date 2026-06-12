@@ -8,7 +8,6 @@ import { initialAgentProgress } from "@/lib/agent-progress";
 import {
   buildAgentRunView,
   buildMiniCardHeader,
-  collectStatusChips,
   deriveTasksFromPlan,
 } from "@/lib/forge-run";
 import { buildChatThread } from "@/lib/chat/thread";
@@ -136,32 +135,6 @@ describe("Lovable acceptance — Chat (imgs 4/5/9/15)", () => {
     expect(turn.planTeaser).toBe(true);
     expect(turn.miniCard?.header).toBe("Plan ready");
     expect(turn.streamText).toBeNull();
-  });
-
-  it("status chips ativo máx 2 (img 4) e terminal plano persiste (img 15)", () => {
-    const live = collectStatusChips(
-      {
-        ...initialAgentProgress,
-        finished: false,
-        message: "Checking browser route wiring in lara-workspace",
-        statusHint: "Diagnosing Lara container gaps and needs",
-      },
-      true,
-    );
-    expect(live).toHaveLength(2);
-
-    const terminal = collectStatusChips(
-      {
-        ...initialAgentProgress,
-        finished: true,
-        awaitingKind: "plan_approval",
-        pendingPlan: samplePlan,
-      },
-      false,
-    );
-    expect(terminal[0]).toBe("Reading approved plan");
-    expect(terminal[1]).toBe(samplePlan.summary);
-    expect(terminal[2]).toMatch(/^Plan: Desbloquear exclusão/);
   });
 
   it("thread DB ordem cronológica + thought/narração congelam no F5", () => {

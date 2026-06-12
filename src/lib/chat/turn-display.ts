@@ -67,20 +67,11 @@ export function resolveTurnThinking(
   return null;
 }
 
-/** Narração PT solta acima do card — permanece após resposta (img 5). */
+/** Narração de abertura — entrou, nunca mais sai (mesmo com fechamento no stream). */
 export function resolveTurnNarration(
   resolved: AgentProgress | null,
   runView: AgentRunView | null,
-  streamText: string | null,
+  _streamText: string | null,
 ): string | null {
-  const narration =
-    runView?.narration?.trim() || resolved?.narrationText?.trim() || null;
-  if (!narration) return null;
-
-  const stream = streamText?.trim() || null;
-  if (!stream) return narration;
-  if (stream === narration) return null;
-  if (stream.includes(narration)) return null;
-
-  return narration;
+  return resolved?.narrationText?.trim() || runView?.narration?.trim() || null;
 }

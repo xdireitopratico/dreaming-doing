@@ -7,18 +7,19 @@ const ASSISTANT_TURN_PATH = resolve(
   "../../components/chat/AssistantTurn.tsx",
 );
 
-/** Garante ordem DOM Lovable fixa no orquestrador (plan.md §2). */
+/** Garante ordem DOM fixa: Thought → LLM → Mini Card → LLM. */
 describe("AssistantTurn — ordem de renderização", () => {
-  it("sequência: Thought → Narração → chips → mini-card → Done → prose", () => {
+  it("sequência: Thought → Narração → mini-card → fechamento LLM", () => {
     const source = readFileSync(ASSISTANT_TURN_PATH, "utf8");
     const markers = [
       "{showThinking &&",
       "{showNarration &&",
-      "forge-status-chips",
       "{showJobCard &&",
-      "{showDone &&",
       "forge-chat-closing-line",
     ];
+    expect(source).not.toContain("ChatDone");
+    expect(source).not.toContain("ChatQualify");
+    expect(source).not.toContain("ChatError");
     const indices = markers.map((m) => source.indexOf(m));
     for (const idx of indices) {
       expect(idx).toBeGreaterThan(-1);

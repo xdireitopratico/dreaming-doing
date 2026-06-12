@@ -2,10 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { ChatMessage } from "@/lib/chat-types";
 import { initialAgentProgress } from "@/lib/agent-progress";
 import { mapAssistantTurn } from "@/lib/chat/turn";
-import {
-  assertAssistantTurnInvariant,
-  resolveTurnStatusChips,
-} from "@/lib/chat/invariants";
+import { assertAssistantTurnInvariant } from "@/lib/chat/invariants";
 import type { RawThreadItem, ThreadItem } from "@/lib/chat/types";
 
 function msg(id: string, role: ChatMessage["role"], content: string, extra?: Partial<ChatMessage>): ChatMessage {
@@ -31,13 +28,6 @@ function assistantCtx(
   };
 }
 
-describe("resolveTurnStatusChips", () => {
-  it("esvazia chips quando mini-card está visível", () => {
-    expect(resolveTurnStatusChips(["a", "b"], true)).toEqual([]);
-    expect(resolveTurnStatusChips(["a", "b"], false)).toEqual(["a", "b"]);
-  });
-});
-
 describe("assertAssistantTurnInvariant", () => {
   const base: Extract<ThreadItem, { kind: "assistant" }> = {
     kind: "assistant",
@@ -46,42 +36,42 @@ describe("assertAssistantTurnInvariant", () => {
     streamText: null,
   };
 
-  it("rejeita card + chips simultâneos", () => {
+  it("rejeita status chips no chat", () => {
     expect(() =>
       assertAssistantTurnInvariant({
         ...base,
+        statusChips: ["chip"],
+      }),
+    ).toThrow(/status chips removed/);
+  });
+
+  it("rejeita fechamento durante run ativa com mini-card", () => {
+    expect(() =>
+      assertAssistantTurnInvariant({
+        ...base,
+        isActive: true,
+        streamText: "Pronto!",
         miniCard: {
           title: "t",
-          header: "Edited x.ts",
+          header: "Working",
           subtitle: "s",
           liveBriefings: ["s"],
           status: "working",
           tasks: [],
           currentTaskIndex: 0,
         },
-        statusChips: ["chip"],
       }),
-    ).toThrow(/cannot coexist/);
-  });
-
-  it("aceita Estado B — chips sem card", () => {
-    expect(() =>
-      assertAssistantTurnInvariant({
-        ...base,
-        isActive: true,
-        statusChips: ["a", "b"],
-        miniCard: null,
-      }),
-    ).not.toThrow();
+    ).toThrow(/closing prose only after job/);
   });
 });
 
 describe("mapAssistantTurn — contrato Lovable imutável", () => {
-  it("Estado B img4: chips ativos, sem mini-card", () => {
+  it("run ativa gather: Thought → narração LLM → mini-card", () => {
     const progress = {
       ...initialAgentProgress,
       phase: "gather" as const,
       finished: false,
+      narrationText: "Vou investigar o estado atual.",
       message: "Checking browser route wiring in lara-workspace",
       statusHint: "Diagnosing Lara container gaps and needs",
     };
@@ -97,8 +87,11 @@ describe("mapAssistantTurn — contrato Lovable imutável", () => {
       sessionProgress: progress,
     });
 
-    expect(turn.miniCard).toBeNull();
-    expect(turn.statusChips).toHaveLength(2);
+    expect(turn.miniCard).not.toBeNull();
+    expect(turn.miniCard?.header).toBe("Working");
+    expect(turn.statusChips).toHaveLength(0);
+    expect(turn.narration).toBe("Vou investigar o estado atual.");
+    expect(turn.streamText).toBeNull();
     assertAssistantTurnInvariant(turn);
   });
 
@@ -237,8 +230,8 @@ describe("mapAssistantTurn — contrato Lovable imutável", () => {
       pendingPlan: plan,
     });
 
-    expect(turn.miniCard).toBeNull();
-    expect(turn.statusChips).toHaveLength(3);
+    expect(turn.miniCard).not.toBeNull();
+    expect(turn.statusChips).toHaveLength(0);
     assertAssistantTurnInvariant(turn);
   });
 });

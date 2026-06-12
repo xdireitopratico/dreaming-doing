@@ -52,7 +52,6 @@ export function ChatPanel({
   onComposerModeChange,
   onSend,
   onStop,
-  onResume,
   onOpenInspector,
   onRollbackMessage,
   focusedRunId,
@@ -119,13 +118,6 @@ export function ChatPanel({
     [onSend, composerMode],
   );
 
-  const handleQualifySelect = useCallback(
-    (text: string) => {
-      onSend(text, composerMode);
-    },
-    [onSend, composerMode],
-  );
-
   const lastUserMessageId = useMemo(() => {
     for (let i = thread.length - 1; i >= 0; i--) {
       const item = thread[i];
@@ -157,8 +149,6 @@ export function ChatPanel({
           <ChatThread
             items={thread}
             onOpenInspector={onOpenInspector}
-            onQualifySelect={handleQualifySelect}
-            onResume={onResume}
             onRollback={onRollbackMessage ? handleRollback : undefined}
             lastUserMessageId={lastUserMessageId}
           />

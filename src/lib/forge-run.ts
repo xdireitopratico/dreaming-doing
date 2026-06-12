@@ -1,5 +1,4 @@
 import type { AgentProgress, PendingPlan, PlanStep, SSEEvent } from "@/lib/agent-progress";
-import { buildAgentNarrative } from "@/lib/agent-narrative";
 import { planHeadlineFromPlan } from "@/lib/plan-message-meta";
 
 export type TaskStatus = "pending" | "active" | "done" | "failed";
@@ -339,11 +338,11 @@ export function hasInspectorThoughtStream(progress: AgentProgress): boolean {
 export function normalizeMiniCardBriefing(line: string): string | null {
   const t = line.trim();
   if (!t) return null;
-  if (/^explorando/i.test(t)) return "Explorando o projeto…";
-  if (/^indexando/i.test(t)) return "Explorando o projeto…";
-  if (/analisando o projeto/i.test(t)) return "Explorando o projeto…";
-  if (/entendendo o que já existe/i.test(t)) return "Explorando o projeto…";
-  if (/^pensando[.…]*$/i.test(t)) return "Pensando…";
+  if (/^explorando/i.test(t)) return null;
+  if (/^indexando/i.test(t)) return null;
+  if (/analisando o projeto/i.test(t)) return null;
+  if (/entendendo o que já existe/i.test(t)) return null;
+  if (/^pensando[.…]*$/i.test(t)) return null;
   return truncate(t, 80);
 }
 
@@ -382,29 +381,13 @@ export function collectMiniCardBriefings(
     if (item.type === "RESULT" && item.ok && item.text) push(item.text);
   }
 
-  const narrative = buildAgentNarrative(progress, { running });
-  if (narrative.headline) push(narrative.headline);
-  if (narrative.subhint) push(narrative.subhint);
-
   const planAwaiting =
     progress.awaitingKind === "plan_approval" && (progress.pendingPlan?.steps?.length ?? 0) > 0;
-  const hasAtomicTasks = tasks.length > 0 && progress.phase === "execute";
-  if (!planAwaiting && !hasAtomicTasks && progress.narrationText?.trim()) {
-    push(progress.narrationText);
-  }
-  if (!planAwaiting && progress.message) push(progress.message);
-  if (progress.statusHint && !/conectando|iniciando/i.test(progress.statusHint)) {
-    push(progress.statusHint);
-  }
 
-  if (progress.phase === "gather") push("Explorando o projeto…");
   if (progress.phase === "classify") push("Avaliando o escopo…");
   if (progress.phase === "plan" || planAwaiting) push("Plano aguardando revisão…");
 
-  if (running && opts?.sessionTitle) push(opts.sessionTitle);
-  else if (running && opts?.userPrompt) push(deriveBrainstormTitle(opts.userPrompt));
-
-  return lines.length > 0 ? lines : ["Trabalhando no projeto…"];
+  return lines;
 }
 
 function isQualifyLikePhase(progress: AgentProgress): boolean {
@@ -436,10 +419,6 @@ export function deriveSessionTitle(
     return planSummaryProgress;
   }
 
-  if (isQualifyLikePhase(progress) || progress.awaiting) {
-    return deriveBrainstormTitle(userPrompt);
-  }
-
   if (progress.diffs.length > 0) {
     return `Entrega · ${progress.diffs.length} arquivo(s)`;
   }
@@ -448,12 +427,9 @@ export function deriveSessionTitle(
     return `Entrega · ${progress.deliveryFiles.length} arquivo(s)`;
   }
 
-  if (progress.finished && userPrompt?.trim()) {
-    const titled = deriveBrainstormTitle(userPrompt);
-    if (titled !== "Brainstorm") return titled;
-  }
+  if (!progress.finished) return "Working";
 
-  return progress.finished ? "Sessão concluída" : "Trabalhando no projeto…";
+  return "Sessão concluída";
 }
 
 export function deriveBrainstormTitle(userPrompt?: string | null): string {
@@ -527,119 +503,12 @@ export function buildMiniCardHeader(
   return { header: opts.sessionTitle, subtitle };
 }
 
-const STATUS_CHIP_VERBS: Record<string, string> = {
-  fs_read: "Reading",
-  fs_read_many: "Reading files",
-  fs_list: "Listing",
-  fs_search: "Searching",
-  fs_glob: "Searching",
-  fs_write: "Writing",
-  fs_edit: "Editing",
-  shell_exec: "Running command",
-  web_search: "Searching web",
-  web_fetch: "Fetching",
-};
-
-function statusChipLabel(name: string, args?: Record<string, unknown>): string {
-  const verb = STATUS_CHIP_VERBS[name] ?? "Working on";
-  const path = pathFromArgs(args);
-  const file = path ? fileBase(path) : "";
-  if (file) return `${verb} ${file}…`;
-  if (name === "shell_exec") return "Running command…";
-  return `${verb}…`;
-}
-
-const STATUS_CHIP_SKIP = /^(conectando|iniciando|na fila)/i;
-
-function pushStatusChip(chips: string[], seen: Set<string>, raw: string | null | undefined): void {
-  const t = truncate(String(raw ?? "").trim(), 72);
-  if (!t || seen.has(t) || STATUS_CHIP_SKIP.test(t)) return;
-  seen.add(t);
-  chips.push(t);
-}
-
-export type StatusChipOptions = {
-  jobPlan?: PendingPlan | null;
-  /** Chips materializados no cardSnapshot — fonte de verdade pós-F5. */
-  storedChips?: string[] | null;
-};
-
-/** Chips cinza antes do mini-card — ativo: máx 2 (img 4); terminal: permanecem (img 15). */
-export function collectStatusChips(
-  progress: AgentProgress,
-  running: boolean,
-  opts?: StatusChipOptions,
-): string[] {
-  if (opts?.storedChips?.length) return opts.storedChips;
-
-  const chips: string[] = [];
-  const seen = new Set<string>();
-  const isLive = running && !progress.finished && !progress.canceled;
-
-  if (isLive) {
-    for (const tool of [...progress.tools].reverse()) {
-      if (tool.ok !== undefined) continue;
-      pushStatusChip(chips, seen, statusChipLabel(tool.name, tool.args));
-      if (chips.length >= 2) return chips;
-    }
-
-    if (progress.message?.trim()) {
-      pushStatusChip(chips, seen, progress.message.trim());
-    }
-    if (chips.length < 2 && progress.statusHint?.trim()) {
-      pushStatusChip(chips, seen, progress.statusHint.trim());
-    }
-
-    const narrative = buildAgentNarrative(progress, { running: true });
-    if (chips.length < 2 && narrative.subhint) {
-      pushStatusChip(chips, seen, narrative.subhint);
-    }
-    if (chips.length < 2 && narrative.headline && narrative.headline !== progress.message?.trim()) {
-      pushStatusChip(chips, seen, narrative.headline);
-    }
-
-    return chips.slice(0, 2);
-  }
-
-  const plan = progress.pendingPlan ?? opts?.jobPlan ?? null;
-  const hasPlanEvidence =
-    !!plan?.steps?.length ||
-    progress.awaitingKind === "plan_approval" ||
-    !!progress.planSummary?.trim();
-
-  if (hasPlanEvidence) {
-    pushStatusChip(chips, seen, "Reading approved plan");
-    if (plan?.summary?.trim()) {
-      pushStatusChip(chips, seen, plan.summary.trim());
-    } else if (progress.planSummary?.trim()) {
-      pushStatusChip(chips, seen, progress.planSummary.trim());
-    }
-    const mission = plan?.mission?.trim() || plan?.objective?.trim();
-    if (mission) {
-      pushStatusChip(chips, seen, `Plan: ${truncate(mission, 56)}`);
-    }
-  }
-
-  for (const tool of progress.tools) {
-    pushStatusChip(chips, seen, statusChipLabel(tool.name, tool.args));
-    if (chips.length >= 4) break;
-  }
-
-  if (progress.message?.trim()) {
-    pushStatusChip(chips, seen, progress.message.trim());
-  }
-
-  return chips.slice(0, 4);
-}
-
 export function isRunEffectivelyActive(progress: AgentProgress, slotActive = false): boolean {
   return !!slotActive && !progress.finished && !progress.canceled;
 }
 
 /**
- * Mini-card só nos gatilhos Lovable (plan.md Estado C/D — imgs 5/8/9/14):
- * Edited | Running command | Plan ready | terminal com entrega.
- * Estado B (img 4): só Thought + narração + chips — sem card.
+ * Mini-card após narração (FRONTEND_REFACTOR_PLAN): Thought → narração LLM → card → fechamento.
  */
 export function shouldShowJobCard(opts: {
   runId?: string;
@@ -656,15 +525,16 @@ export function shouldShowJobCard(opts: {
   if (progress.conversational === true) return false;
   if (runId === "__pending__") return false;
 
+  const running = slotActive && !progress.finished && !progress.canceled;
+  if (running) return true;
+
   if (
     progress.awaitingKind === "plan_approval" &&
-    (progress.pendingPlan?.steps?.length ?? 0) > 0 &&
-    !progress.finished
+    (progress.pendingPlan?.steps?.length ?? 0) > 0
   ) {
     return true;
   }
 
-  const running = slotActive && !progress.finished && !progress.canceled;
   const edited = lastEditedFile(progress);
 
   if (edited && (running || !progress.finished)) return true;
@@ -675,6 +545,11 @@ export function shouldShowJobCard(opts: {
       return true;
     }
     if (edited) return true;
+  }
+
+  // Mini-card permanente: job materializado no DB mantém o card após terminar.
+  if (progress.finished && opts.isAgentJobMessage && progress.conversational !== true) {
+    return true;
   }
 
   return false;
@@ -754,10 +629,7 @@ export function buildAgentRunView(
     streamBody ||
     (!running && !narrationDuplicatesStream ? narrationBody || safeSummary : null) ||
     null;
-  const suppressNarrationLine =
-    running && tasks.length > 0 && progress.phase === "execute" && !progress.awaitingKind;
   const narrationForLine =
-    !suppressNarrationLine &&
     narrationBody &&
     narrationBody !== sessionTitle &&
     !narrationDuplicatesStream

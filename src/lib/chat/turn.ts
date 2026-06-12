@@ -2,7 +2,6 @@ import type { AgentProgress, PendingPlan } from "@/lib/agent-progress";
 import type { ChatMessage } from "@/lib/chat-types";
 import {
   buildAgentRunView,
-  collectStatusChips,
   isRunEffectivelyActive,
   shouldShowJobCard,
 } from "@/lib/forge-run";
@@ -13,7 +12,7 @@ import {
 import { resolveJobPlanForRun, storedPlanFromMessage } from "@/lib/plan-message-meta";
 import { parseQualifyChoices } from "@/lib/qualify-choices";
 import { resolveAssistantProgress } from "@/lib/chat/resolve-progress";
-import { enforceAssistantTurnInvariant, resolveTurnStatusChips } from "@/lib/chat/invariants";
+import { enforceAssistantTurnInvariant } from "@/lib/chat/invariants";
 import { resolveTurnNarration, resolveTurnThinking } from "@/lib/chat/turn-display";
 import { resolveHistoricalRunProgress } from "@/lib/assistant-run-progress";
 import { initialAgentProgress } from "@/lib/agent-progress";
@@ -224,46 +223,25 @@ export function mapAssistantTurn(
   const rawStreamText = closingText ?? resolved?.streamText ?? null;
   const thinking = resolveTurnThinking(resolved, runView, runStartedAtMs, slotActive);
   const narration = resolveTurnNarration(resolved, runView, rawStreamText);
-  const streamText = planTeaser ? null : rawStreamText;
-  const storedChips =
-    resolved?.statusChips ??
-    (() => {
-      const snap = (item.message?.meta as Record<string, unknown> | undefined)?.cardSnapshot;
-      if (!snap || typeof snap !== "object") return null;
-      const raw = (snap as Record<string, unknown>).statusChips;
-      return Array.isArray(raw) ? raw.filter((c) => typeof c === "string") : null;
-    })();
-
-  const snapshotChipsOnly =
-    !!storedChips?.length && !showJobCard && !planTeaser && !!resolved?.finished;
+  let streamText = planTeaser ? null : rawStreamText;
+  if (
+    !streamText &&
+    resolved?.error?.trim() &&
+    resolved.finished &&
+    !slotActive
+  ) {
+    streamText = resolved.error.trim();
+  }
+  if (slotActive && showJobCard && streamText) streamText = null;
 
   const persistMiniCard =
     !!runView &&
     (planTeaser ||
       showJobCard ||
-      (!!item.message && hasMaterializedCardSnapshot(item.message) && !snapshotChipsOnly));
+      (!!item.message && hasMaterializedCardSnapshot(item.message)));
   const showCard = persistMiniCard;
 
-  const hasChipEvidence =
-    !!resolved &&
-    (slotActive ||
-      anchoredLive ||
-      resolved.finished ||
-      (resolved.tools?.length ?? 0) > 0 ||
-      !!resolved.pendingPlan ||
-      !!resolved.planSummary ||
-      resolved.awaitingKind === "plan_approval");
-
-  const rawStatusChips =
-    resolved && hasChipEvidence
-      ? collectStatusChips(resolved, slotActive || anchoredLive, {
-          jobPlan,
-          storedChips,
-        })
-      : [];
-
   const miniCard = showCard && runView ? toMiniCard(runView) : null;
-  const statusChips = resolveTurnStatusChips(rawStatusChips, !!miniCard);
 
   const turn: Extract<ThreadItem, { kind: "assistant" }> = {
     kind: "assistant",
@@ -276,7 +254,7 @@ export function mapAssistantTurn(
     thinking,
     narration,
     miniCard,
-    statusChips,
+    statusChips: [],
     planTeaser,
     qualify,
     plan: planTeaser && planForPrompt ? toPlanPrompt(planForPrompt) : null,

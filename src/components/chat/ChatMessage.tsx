@@ -6,8 +6,6 @@ import { ChatToolbar } from "./ChatToolbar";
 type ChatMessageProps = {
   item: ThreadItem;
   onOpenInspector?: (runId: string, tab?: "timeline" | "changes" | "plan") => void;
-  onQualifySelect?: (text: string) => void;
-  onResume?: () => void;
   onRollback?: (messageId: string) => void;
   canRollbackUser?: boolean;
 };
@@ -16,8 +14,6 @@ type ChatMessageProps = {
 export function ChatMessage({
   item,
   onOpenInspector,
-  onQualifySelect,
-  onResume,
   onRollback,
   canRollbackUser,
 }: ChatMessageProps) {
@@ -40,12 +36,5 @@ export function ChatMessage({
     );
   }
 
-  return (
-    <AssistantTurn
-      item={item}
-      onOpenInspector={onOpenInspector}
-      onQualifySelect={onQualifySelect}
-      onResume={onResume}
-    />
-  );
+  return <AssistantTurn item={item} onOpenInspector={onOpenInspector} />;
 }

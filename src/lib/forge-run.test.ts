@@ -132,7 +132,7 @@ describe("shouldShowJobCard", () => {
       }),
     ).toBe(false);
   });
-  it("Estado B img 4: gather com chips — sem mini-card", () => {
+  it("run ativa: mini-card no primeiro token (gather)", () => {
     const progress = {
       ...initialAgentProgress,
       phase: "gather",
@@ -151,7 +151,7 @@ describe("shouldShowJobCard", () => {
         slotActive: true,
         activeRunId: "run-1",
       }),
-    ).toBe(false);
+    ).toBe(true);
   });
 
   it("oculta mini card em turno qualify-only", () => {
@@ -194,6 +194,26 @@ describe("shouldShowJobCard", () => {
         hasExecutionEvidence: true,
         slotActive: true,
         activeRunId: "run-1",
+      }),
+    ).toBe(true);
+  });
+
+  it("job materializado permanece com mini-card após terminar", () => {
+    expect(
+      shouldShowJobCard({
+        runId: "run-1",
+        progress: {
+          ...initialAgentProgress,
+          finished: true,
+          lastFinishOk: true,
+          narrationText: "Vou criar a landing.",
+          streamText: "Pronto!",
+        },
+        isQualifyOnly: false,
+        isAgentJobMessage: true,
+        hasExecutionEvidence: true,
+        slotActive: false,
+        activeRunId: null,
       }),
     ).toBe(true);
   });
@@ -326,22 +346,17 @@ describe("forge-run mini card briefing e título", () => {
     expect(briefings.some((b) => b.includes("Entendi que você quer"))).toBe(false);
   });
 
-  it("título de sessão qualify vira brainstorm, não repete pergunta", () => {
+  it("deriveBrainstormTitle permanece utilitário; sessão ativa usa Working", () => {
     const progress = {
       ...initialAgentProgress,
-      finished: true,
-      lastFinishOk: true,
-      awaitingKind: "qualify" as const,
-      phase: "classify",
-      streamText: "Entendi que você quer um app mobile. Antes de codar, qual caminho prefere?",
+      finished: false,
+      phase: "gather",
     };
 
     expect(deriveBrainstormTitle("quero um app mobile para padaria")).toBe(
       "Brainstorm de app mobile para padaria",
     );
-    expect(deriveSessionTitle(progress, null, "quero um app mobile")).toBe(
-      "Brainstorm de app mobile",
-    );
+    expect(deriveSessionTitle(progress, null, "quero um app mobile")).toBe("Working");
   });
 
   it("resolveLatencyThinking — ativo antes do 1º token", () => {
@@ -465,9 +480,10 @@ describe("forge-run mini card briefing e título", () => {
     expect(withReasoning.latencyThinking?.durationMs).toBeGreaterThanOrEqual(500);
   });
 
-  it("normaliza explorando sem contagem de arquivos", () => {
-    expect(normalizeMiniCardBriefing("Explorando 48 arquivos…")).toBe("Explorando o projeto…");
-    expect(normalizeMiniCardBriefing("Analisando o projeto")).toBe("Explorando o projeto…");
+  it("filtra mensagens genéricas de gather/explorando", () => {
+    expect(normalizeMiniCardBriefing("Explorando 48 arquivos…")).toBeNull();
+    expect(normalizeMiniCardBriefing("Analisando o projeto")).toBeNull();
+    expect(normalizeMiniCardBriefing("Indexando 12 arquivos…")).toBeNull();
   });
 
   it("briefings incluem tool pendente na fase gather", () => {

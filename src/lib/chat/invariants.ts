@@ -1,21 +1,14 @@
 import type { ThreadItem } from "@/lib/chat/types";
 
-/** Ordem DOM fixa no turno assistant — espelha plan.md §2. */
+/** Ordem DOM fixa — Thought → LLM → Mini Card → LLM. */
 export const ASSISTANT_TURN_DOM_ORDER = [
   "thought",
   "narration",
-  "statusChips",
   "miniCard",
-  "done",
   "prose",
-  "qualify",
 ] as const;
 
-/**
- * Chips e mini-card são mutuamente exclusivos em todos os prints Lovable.
- * Estado B (img 4): chips sem card. Estado C/D (imgs 5/8/9/14): card sem chips.
- * Terminal (img 15): chips sem card.
- */
+/** Chips e mini-card são mutuamente exclusivos (Lovable). */
 export function resolveTurnStatusChips(
   rawChips: string[],
   showMiniCard: boolean,
@@ -31,57 +24,37 @@ export function resolveTurnStatusChips(
 export function enforceAssistantTurnInvariant(
   item: Extract<ThreadItem, { kind: "assistant" }>,
 ): Extract<ThreadItem, { kind: "assistant" }> {
-  let statusChips = item.statusChips ?? [];
   let streamText = item.streamText;
 
-  if (item.miniCard && statusChips.length > 0) {
-    statusChips = [];
-  }
-
-  if (item.isActive && statusChips.length > 2) {
-    statusChips = statusChips.slice(0, 2);
-  }
-
-  if (statusChips.length > 4) {
-    statusChips = statusChips.slice(0, 4);
+  // Fechamento só após o job — durante run: narração + mini-card.
+  if (item.isActive && item.miniCard && streamText) {
+    streamText = null;
   }
 
   if (item.planTeaser && streamText) {
     streamText = null;
   }
 
-  if (
-    statusChips === item.statusChips &&
-    streamText === item.streamText
-  ) {
+  if (streamText === item.streamText) {
     return item;
   }
 
-  return { ...item, statusChips, streamText };
+  return { ...item, streamText, statusChips: [] };
 }
 
 /** Guarda de integridade — falha em testes se o turno violar contrato Lovable. */
 export function assertAssistantTurnInvariant(
   item: Extract<ThreadItem, { kind: "assistant" }>,
 ): void {
-  const hasCard = !!item.miniCard;
-  const chips = item.statusChips ?? [];
-
-  if (hasCard && chips.length > 0) {
+  if ((item.statusChips?.length ?? 0) > 0) {
     throw new Error(
-      `Lovable invariant violated: mini-card and status chips cannot coexist (runId=${item.runId})`,
+      `Lovable invariant violated: status chips removed from chat (runId=${item.runId})`,
     );
   }
 
-  if (chips.length > 2 && item.isActive) {
+  if (item.isActive && item.miniCard && item.streamText) {
     throw new Error(
-      `Lovable invariant violated: live turn allows max 2 chips (runId=${item.runId}, got ${chips.length})`,
-    );
-  }
-
-  if (chips.length > 4) {
-    throw new Error(
-      `Lovable invariant violated: max 4 terminal chips (runId=${item.runId}, got ${chips.length})`,
+      `Lovable invariant violated: closing prose only after job (runId=${item.runId})`,
     );
   }
 
