@@ -47,9 +47,9 @@ export function CodeEditor({
   const activeTab = tabs.find((t) => t.path === activePath);
 
   return (
-    <div className="flex flex-col h-full bg-[var(--background)]">
+    <div className="flex flex-col h-full bg-[var(--bg-hover)]">
       {/* Tab Bar */}
-      <div className="flex items-center h-9 bg-[var(--surface-1)] border-b border-[var(--border)] overflow-x-auto shrink-0">
+      <div className="flex items-center h-9 bg-[var(--surface-1)] border-b border-[var(--border)] overflow-x-auto shrink-0 min-w-0">
         {tabs.map((tab) => {
           const icon = getFileIcon(tab.path);
           const isActive = tab.path === activePath;
@@ -88,6 +88,11 @@ export function CodeEditor({
             </button>
           );
         })}
+        {tabs.some((t) => t.isModified) && (
+          <span className="ml-auto shrink-0 px-3 font-mono text-[9px] tracking-wide text-[var(--primary)]/85">
+            Não salvo · ⌘S
+          </span>
+        )}
       </div>
 
       {/* Editor */}
@@ -137,7 +142,7 @@ export function CodeEditor({
               parameterHints: { enabled: true },
             }}
             loading={
-              <div className="h-full grid place-items-center bg-[var(--background)]">
+              <div className="h-full grid place-items-center bg-[var(--bg-hover)]">
                 <div className="flex flex-col items-center gap-3">
                   <div className="size-8 border-2 border-[var(--primary)]/30 border-t-[var(--primary)] rounded-full animate-spin" />
                   <span className="font-mono text-[10px] tracking-[0.3em] uppercase text-[var(--text-ghost)]">

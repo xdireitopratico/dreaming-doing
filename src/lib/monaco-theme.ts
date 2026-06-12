@@ -2,14 +2,17 @@
 // Cada cor é minuciosamente escolhida pra máxima legibilidade e beleza
 import type { editor } from "monaco-editor";
 
+/** Mesmo cinza do painel Explorer (pastas) — evita diff/code em preto puro. */
+export const FORGE_EDITOR_SURFACE = "#1a1c22";
+
 export const FORGE_THEME: editor.IStandaloneThemeData = {
   base: "vs-dark",
   inherit: false,
   colors: {
     // Background layers
-    "editor.background": "#05060A",
+    "editor.background": FORGE_EDITOR_SURFACE,
     "editor.foreground": "#EDEFF2",
-    "editor.lineHighlightBackground": "#0B0D12",
+    "editor.lineHighlightBackground": "#22252d",
     "editor.selectionBackground": "rgba(255, 182, 39, 0.18)",
     "editor.inactiveSelectionBackground": "rgba(255, 182, 39, 0.08)",
     "editorCursor.foreground": "#FFB627",
@@ -20,7 +23,7 @@ export const FORGE_THEME: editor.IStandaloneThemeData = {
     "editorLineNumber.activeForeground": "rgba(237, 239, 242, 0.55)",
 
     // Minimap
-    "minimap.background": "#05060A",
+    "minimap.background": FORGE_EDITOR_SURFACE,
     "minimap.selectionHighlight": "rgba(255, 182, 39, 0.25)",
 
     // Bracket matching
@@ -32,7 +35,7 @@ export const FORGE_THEME: editor.IStandaloneThemeData = {
     "editor.findMatchHighlightBackground": "rgba(255, 122, 26, 0.18)",
 
     // Gutter
-    "editorGutter.background": "#05060A",
+    "editorGutter.background": FORGE_EDITOR_SURFACE,
     "editorGutter.addedBackground": "rgba(91, 214, 166, 0.18)",
     "editorGutter.modifiedBackground": "rgba(255, 182, 39, 0.18)",
     "editorGutter.deletedBackground": "rgba(229, 72, 77, 0.18)",
@@ -43,18 +46,18 @@ export const FORGE_THEME: editor.IStandaloneThemeData = {
     "editorIndentGuide.activeBackground": "rgba(237, 239, 242, 0.14)",
 
     // Scrollbar
-    "scrollbar.shadow": "#05060A",
+    "scrollbar.shadow": FORGE_EDITOR_SURFACE,
     "scrollbarSlider.background": "rgba(237, 239, 242, 0.08)",
     "scrollbarSlider.hoverBackground": "rgba(237, 239, 242, 0.14)",
     "scrollbarSlider.activeBackground": "rgba(237, 239, 242, 0.20)",
 
     // Widgets (suggest, parameter hints)
-    "editorWidget.background": "#0B0D12",
+    "editorWidget.background": "#22252d",
     "editorWidget.border": "rgba(237, 239, 242, 0.08)",
-    "editorSuggestWidget.background": "#0B0D12",
+    "editorSuggestWidget.background": "#22252d",
     "editorSuggestWidget.border": "rgba(237, 239, 242, 0.08)",
     "editorSuggestWidget.selectedBackground": "rgba(255, 182, 39, 0.12)",
-    "editorHoverWidget.background": "#0B0D12",
+    "editorHoverWidget.background": "#22252d",
     "editorHoverWidget.border": "rgba(237, 239, 242, 0.08)",
 
     // Error and warning
@@ -62,11 +65,18 @@ export const FORGE_THEME: editor.IStandaloneThemeData = {
     "editorWarning.foreground": "#FFB627",
     "editorInfo.foreground": "#9FB4C7",
 
-    // Diff editor — paleta FORGE (âmbar / verde suave / vermelho contido)
-    "diffEditor.insertedTextBackground": "rgba(91, 214, 166, 0.14)",
-    "diffEditor.removedTextBackground": "rgba(229, 72, 77, 0.14)",
-    "diffEditor.insertedLineBackground": "rgba(91, 214, 166, 0.06)",
-    "diffEditor.removedLineBackground": "rgba(229, 72, 77, 0.06)",
+    // Diff editor — fundo cinza do explorer; vermelho/verde só nas mudanças
+    "diffEditor.insertedTextBackground": "rgba(91, 214, 166, 0.18)",
+    "diffEditor.removedTextBackground": "rgba(229, 72, 77, 0.18)",
+    "diffEditor.insertedTextBorder": "rgba(91, 214, 166, 0.35)",
+    "diffEditor.removedTextBorder": "rgba(229, 72, 77, 0.35)",
+    "diffEditor.insertedLineBackground": "rgba(91, 214, 166, 0.08)",
+    "diffEditor.removedLineBackground": "rgba(229, 72, 77, 0.08)",
+    "diffEditor.insertedTextForeground": "#5BD6A6",
+    "diffEditor.removedTextForeground": "#E5484D",
+    "diffEditor.unchangedRegionBackground": FORGE_EDITOR_SURFACE,
+    "diffEditor.unchangedRegionForeground": "#C9CED6",
+    "diffEditor.unchangedCodeBackground": FORGE_EDITOR_SURFACE,
     "diffEditor.border": "rgba(237, 239, 242, 0.08)",
     "diffEditor.diagonalFill": "rgba(237, 239, 242, 0.04)",
   },

@@ -84,7 +84,7 @@ export function AiDiffViewer({
   if (diffs.length === 0) return null;
 
   return (
-    <div className="flex flex-col h-full bg-[var(--background)]">
+    <div className="flex flex-col h-full bg-[var(--bg-hover)]">
       {/* Header bar */}
       {hasPendingChanges && (
         <motion.div
@@ -271,7 +271,7 @@ export function AiDiffViewer({
                           } as editor.IDiffEditorConstructionOptions
                         }
                         loading={
-                          <div className="h-full grid place-items-center bg-[var(--background)]">
+                          <div className="h-full grid place-items-center bg-[var(--bg-hover)]">
                             <div className="flex flex-col items-center gap-2">
                               <div className="size-6 border-2 border-[var(--primary)]/30 border-t-[var(--primary)] rounded-full animate-spin" />
                               <span className="font-mono text-[9px] tracking-[0.2em] uppercase text-[var(--text-ghost)]">
@@ -286,7 +286,7 @@ export function AiDiffViewer({
                 ))}
             </AnimatePresence>
           ) : (
-            <div className="h-full grid place-items-center bg-[var(--background)]">
+            <div className="h-full grid place-items-center bg-[var(--bg-hover)]">
               <div className="text-center space-y-3">
                 <motion.div
                   initial={{ scale: 0.8, opacity: 0 }}

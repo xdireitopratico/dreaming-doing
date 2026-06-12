@@ -1,6 +1,5 @@
 // FileTree.tsx — Árvore de arquivos com nesting, ícones por tipo, criar/renomear/deletar
-// Animações stagger cascade, nesting visual com linhas guia, context menu
-import { useState, useCallback, useMemo } from "react";
+import { useState, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ChevronRight,
@@ -8,11 +7,8 @@ import {
   FolderOpen,
   FilePlus,
   FolderPlus,
-  MoreVertical,
   Pencil,
   Trash2,
-  Copy,
-  GripVertical,
 } from "lucide-react";
 import { getFileIcon } from "./fileIcons";
 import { cn } from "@/lib/utils";
@@ -31,9 +27,10 @@ interface FileTreeProps {
   onCreateFolder: (parentPath: string) => void;
   onRename: (oldPath: string, newPath: string) => void;
   onDelete: (path: string) => void;
+  /** Tabs com alterações ainda não salvas (não há autosave). */
+  hasUnsavedChanges?: boolean;
 }
 
-// Converte array plano de paths em árvore aninhada
 function buildTree(paths: string[]): TreeNode[] {
   const root: TreeNode[] = [];
   const map = new Map<string, TreeNode>();
@@ -68,7 +65,6 @@ function buildTree(paths: string[]): TreeNode[] {
         }
       }
 
-      // Se encontramos uma pasta mas depois vemos que é arquivo
       const existing = map.get(currentPath)!;
       if (isFile) {
         existing.type = "file";
@@ -80,6 +76,9 @@ function buildTree(paths: string[]): TreeNode[] {
   return root;
 }
 
+const TREE_ACTION_BTN =
+  "flex h-7 w-7 shrink-0 items-center justify-center rounded hover:bg-[var(--border)] transition-colors";
+
 export function FileTree({
   files,
   activePath,
@@ -88,6 +87,7 @@ export function FileTree({
   onCreateFolder,
   onRename,
   onDelete,
+  hasUnsavedChanges = false,
 }: FileTreeProps) {
   const tree = useMemo(() => buildTree(files), [files]);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
@@ -130,7 +130,7 @@ export function FileTree({
     setEditing(null);
   };
 
-  const renderNode = (node: TreeNode, depth: number, index: number) => {
+  const renderNode = (node: TreeNode, index: number) => {
     const isCollapsed = collapsed.has(node.path);
     const isActive = node.path === activePath;
     const isEditing = node.path === editing;
@@ -140,17 +140,17 @@ export function FileTree({
     return (
       <motion.div
         key={node.path}
-        initial={{ opacity: 0, x: -8 }}
-        animate={{ opacity: 1, x: 0 }}
-        transition={{ delay: index * 0.015, duration: 0.25, ease: "easeOut" }}
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: index * 0.01, duration: 0.2, ease: "easeOut" }}
+        className="min-w-0 w-full"
       >
         <div
           className={cn(
-            "group flex items-center h-7 px-1.5 mx-1 rounded cursor-pointer transition-colors select-none",
+            "group flex min-w-0 w-full items-center h-7 gap-0.5 px-1.5 rounded cursor-pointer transition-colors select-none",
             "hover:bg-[var(--surface-2)]",
             isActive && "bg-[var(--primary)]/10 border border-[var(--primary)]/20",
           )}
-          style={{ paddingLeft: `${depth * 16 + 4}px` }}
           onClick={() => {
             if (node.type === "folder") {
               toggleCollapse(node.path);
@@ -160,43 +160,29 @@ export function FileTree({
           }}
           onContextMenu={(e) => handleContext(e, node.path)}
         >
-          {/* Nesting guide lines */}
-          {depth > 0 && (
-            <div
-              className="absolute left-0 w-px h-7"
-              style={{
-                left: `${depth * 16 - 6}px`,
-                background: "var(--border)",
-              }}
-            />
-          )}
-
-          {/* Collapse chevron or file icon */}
           {node.type === "folder" ? (
             <motion.span
               animate={{ rotate: isCollapsed ? 0 : 90 }}
               transition={{ duration: 0.15 }}
-              className="mr-1 text-[var(--text-ghost)]"
+              className="shrink-0 text-[var(--text-ghost)]"
             >
               <ChevronRight className="size-3.5" />
             </motion.span>
           ) : (
             <span
-              className="mr-1.5 font-mono text-[9px] tracking-wider w-4 text-center shrink-0"
+              className="shrink-0 font-mono text-[9px] tracking-wider w-4 text-center"
               style={{ color: icon?.color ?? "var(--text-ghost)" }}
             >
               {icon?.label ?? "·"}
             </span>
           )}
 
-          {/* Folder icon or nothing (file icon already shown) */}
           {node.type === "folder" && (
-            <span className="mr-1.5 text-[var(--text-dim)]">
+            <span className="shrink-0 text-[var(--text-dim)]">
               {isCollapsed ? <Folder className="size-3.5" /> : <FolderOpen className="size-3.5" />}
             </span>
           )}
 
-          {/* Name (edit mode or display) */}
           {isEditing ? (
             <input
               autoFocus
@@ -208,41 +194,43 @@ export function FileTree({
                 if (e.key === "Escape") setEditing(null);
               }}
               onClick={(e) => e.stopPropagation()}
-              className="flex-1 bg-[var(--surface-2)] border border-[var(--primary)]/50 rounded px-1 py-0 text-[11px] font-mono text-[var(--foreground)] outline-none min-w-0"
+              className="min-w-0 flex-1 bg-[var(--surface-2)] border border-[var(--primary)]/50 rounded px-1 py-0 text-[11px] font-mono text-[var(--foreground)] outline-none"
             />
           ) : (
             <span
               className={cn(
-                "text-[12px] font-mono truncate",
+                "min-w-0 flex-1 truncate text-[12px] font-mono",
                 isActive
                   ? "text-[var(--foreground)]"
                   : "text-[var(--text-dim)] group-hover:text-[var(--foreground)]",
               )}
+              title={name}
             >
               {name}
             </span>
           )}
 
-          {/* Hover actions (file + folder) */}
-          <div className="ml-auto hidden group-hover:flex items-center gap-0.5">
+          <div className="ml-auto hidden shrink-0 group-hover:flex items-center gap-0.5">
             {node.type === "folder" && (
               <>
                 <button
+                  type="button"
                   onClick={(e) => {
                     e.stopPropagation();
                     onCreateFile(node.path);
                   }}
-                  className="p-0.5 rounded hover:bg-[var(--border)] transition-colors"
+                  className="flex h-6 w-6 items-center justify-center rounded hover:bg-[var(--border)] transition-colors"
                   title="Novo arquivo"
                 >
                   <FilePlus className="size-3 text-[var(--text-dim)] hover:text-[var(--foreground)]" />
                 </button>
                 <button
+                  type="button"
                   onClick={(e) => {
                     e.stopPropagation();
                     onCreateFolder(node.path);
                   }}
-                  className="p-0.5 rounded hover:bg-[var(--border)] transition-colors"
+                  className="flex h-6 w-6 items-center justify-center rounded hover:bg-[var(--border)] transition-colors"
                   title="Nova pasta"
                 >
                   <FolderPlus className="size-3 text-[var(--text-dim)] hover:text-[var(--foreground)]" />
@@ -252,17 +240,16 @@ export function FileTree({
           </div>
         </div>
 
-        {/* Children */}
         <AnimatePresence>
-          {node.type === "folder" && !isCollapsed && node.children && (
+          {node.type === "folder" && !isCollapsed && node.children && node.children.length > 0 && (
             <motion.div
               initial={{ height: 0, opacity: 0 }}
               animate={{ height: "auto", opacity: 1 }}
               exit={{ height: 0, opacity: 0 }}
-              transition={{ duration: 0.2, ease: "easeInOut" }}
-              className="overflow-hidden"
+              transition={{ duration: 0.18, ease: "easeInOut" }}
+              className="overflow-hidden min-w-0 border-l border-[var(--border)]/50 ml-[11px] pl-1"
             >
-              {node.children.map((child, i) => renderNode(child, depth + 1, i))}
+              {node.children.map((child, i) => renderNode(child, i))}
             </motion.div>
           )}
         </AnimatePresence>
@@ -271,23 +258,24 @@ export function FileTree({
   };
 
   return (
-    <div className="h-full flex flex-col bg-[var(--surface-1)]/60 select-none">
-      {/* Header */}
-      <div className="flex items-center justify-between px-3 h-8 border-b border-[var(--border)] shrink-0">
-        <span className="font-mono text-[9px] tracking-[0.3em] uppercase text-[var(--text-ghost)]">
+    <div className="forge-file-tree h-full flex flex-col bg-[var(--bg-hover)] select-none">
+      <div className="flex items-center justify-between gap-1 px-1.5 h-7 border-b border-[var(--border)] shrink-0">
+        <span className="font-mono text-[9px] tracking-[0.3em] uppercase text-[var(--text-ghost)] pl-1.5 truncate">
           EXPLORER
         </span>
-        <div className="flex items-center gap-0.5">
+        <div className="flex items-center gap-0.5 shrink-0">
           <button
+            type="button"
             onClick={() => onCreateFile("")}
-            className="p-1 rounded hover:bg-[var(--border)] transition-colors"
+            className={TREE_ACTION_BTN}
             title="Novo arquivo"
           >
             <FilePlus className="size-3.5 text-[var(--text-dim)] hover:text-[var(--foreground)]" />
           </button>
           <button
+            type="button"
             onClick={() => onCreateFolder("")}
-            className="p-1 rounded hover:bg-[var(--border)] transition-colors"
+            className={TREE_ACTION_BTN}
             title="Nova pasta"
           >
             <FolderPlus className="size-3.5 text-[var(--text-dim)] hover:text-[var(--foreground)]" />
@@ -295,19 +283,28 @@ export function FileTree({
         </div>
       </div>
 
-      {/* Tree */}
-      <div className="flex-1 overflow-y-auto py-1">
+      <div className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden py-1">
         {tree.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full gap-2 text-[var(--text-ghost)]">
             <Folder className="size-8 opacity-30" />
             <span className="font-mono text-[9px] tracking-[0.2em] uppercase">VAZIO</span>
           </div>
         ) : (
-          tree.map((node, i) => renderNode(node, 0, i))
+          tree.map((node, i) => renderNode(node, i))
         )}
       </div>
 
-      {/* Context Menu (positioned absolutely on viewport) */}
+      <div className="shrink-0 border-t border-[var(--border)] px-2 py-1.5">
+        <p
+          className={cn(
+            "font-mono text-[8px] tracking-wide leading-snug",
+            hasUnsavedChanges ? "text-[var(--primary)]/90" : "text-[var(--text-ghost)]",
+          )}
+        >
+          {hasUnsavedChanges ? "Alterações não salvas · ⌘S" : "Salvar manual · ⌘S"}
+        </p>
+      </div>
+
       <AnimatePresence>
         {contextTarget && (
           <>
@@ -321,16 +318,16 @@ export function FileTree({
               style={{ left: contextPos.x, top: contextPos.y }}
             >
               <button
+                type="button"
                 onClick={startRename}
                 className="w-full flex items-center gap-2 px-3 py-1.5 text-[11px] font-mono text-[var(--text-dim)] hover:text-[var(--foreground)] hover:bg-[var(--surface-2)] transition-colors text-left"
               >
                 <Pencil className="size-3" /> Renomear
               </button>
               <button
+                type="button"
                 onClick={() => {
-                  if (contextTarget) {
-                    onDelete(contextTarget);
-                  }
+                  if (contextTarget) onDelete(contextTarget);
                   closeContext();
                 }}
                 className="w-full flex items-center gap-2 px-3 py-1.5 text-[11px] font-mono text-[var(--destructive)] hover:bg-[var(--destructive)]/10 transition-colors text-left"

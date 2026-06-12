@@ -485,7 +485,7 @@ export function EditorPageLayout({
               <div className="flex min-h-0 h-full w-full flex-1 flex-col">
                 <div className="flex min-h-0 flex-1 overflow-hidden">
                   {showFileTree && activeView === "code" && !isMobile && (
-                    <div className="w-[200px] shrink-0 border-r border-[var(--forge-border)] bg-[#1a1c22]">
+                    <div className="w-[200px] shrink-0 border-r border-[var(--forge-border)] bg-[var(--bg-hover)]">
                       <FileTree
                         files={fileTreeFiles}
                         activePath={activeFilePath}
@@ -494,6 +494,7 @@ export function EditorPageLayout({
                         onCreateFolder={() => {}}
                         onRename={() => {}}
                         onDelete={() => {}}
+                        hasUnsavedChanges={openTabs.some((t) => t.isModified)}
                       />
                     </div>
                   )}
