@@ -11,7 +11,7 @@ body:has(.editor-workspace) {
   --forge-surface-2: var(--bg-hover);
   --forge-surface-3: var(--bg-input);
   --forge-chat: var(--bg-chat);
-  --forge-preview: #eceae4;
+  --forge-preview: #0a0a0f;
   --forge-primary: var(--text-accent);
   --forge-primary-hot: #f59e0b;
   --forge-silver: var(--text-secondary);
@@ -870,12 +870,36 @@ body:has(.editor-workspace) {
 .lovable-preview-viewport {
   flex: 1;
   min-height: 0;
-  overflow: auto;
+  min-width: 0;
+  width: 100%;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  position: relative;
+  background: var(--forge-preview);
+}
+
+/* Uma superfície por vez — ocupa 100% do viewport (sem metade branca / metade escura). */
+.forge-preview-surface {
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.forge-preview-viewport[data-device="tablet"] .forge-preview-iframe-wrap,
+.forge-preview-viewport[data-device="mobile"] .forge-preview-iframe-wrap {
+  flex: 1;
+  min-height: 0;
   display: flex;
   justify-content: center;
   align-items: stretch;
-  position: relative;
-  background: #eceae4;
+  overflow: auto;
 }
 
 .forge-preview-frame,
@@ -883,7 +907,7 @@ body:has(.editor-workspace) {
   width: 100%;
   height: 100%;
   border: none;
-  background: #fff;
+  background: var(--forge-preview);
 }
 
 .forge-preview-frame--sized {

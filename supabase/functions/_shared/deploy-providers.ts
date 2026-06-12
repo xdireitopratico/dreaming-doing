@@ -296,10 +296,10 @@ export async function deployToCloudflare(
         name: projectName,
         production_branch: "main",
       }),
-      signal: deployController.signal,
+      signal: controller.signal,
     },
   );
-  clearTimeout(deployTimeoutId);
+  clearTimeout(timeoutId);
   if (!createRes.ok && createRes.status !== 409) {
     const errBody = (await createRes.json().catch(() => ({}))) as {
       errors?: { message?: string }[];
@@ -322,10 +322,10 @@ export async function deployToCloudflare(
       method: "POST",
       headers: { Authorization: `Bearer ${token}` },
       body: form,
-      signal: controller.signal,
+      signal: deployController.signal,
     },
   );
-  clearTimeout(timeoutId);
+  clearTimeout(deployTimeoutId);
 
   const deployed = (await deployRes.json().catch(() => ({}))) as {
     result?: { url?: string; id?: string };

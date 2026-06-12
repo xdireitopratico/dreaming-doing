@@ -48,6 +48,22 @@ interface PreviewFrameProps {
   agentProgress?: AgentProgress | null;
 }
 
+type PreviewView =
+  | "native-console"
+  | "boot-error"
+  | "boot-spinner"
+  | "preview-idle"
+  | "iframe-live"
+  | "iframe-srcdoc"
+  | "built-app-pending"
+  | "stale-reconnect"
+  | "lets-build"
+  | "empty";
+
+function surfaceClass(...extra: string[]) {
+  return ["forge-preview-surface", ...extra].filter(Boolean).join(" ");
+}
+
 export function PreviewFrame({
   files,
   booting = false,
@@ -118,7 +134,6 @@ export function PreviewFrame({
 
   const showStaleGuide = sandboxStale && !showReconnecting;
 
-  /** Agente já gerou código mas o sandbox Vite ainda não subiu — nunca mostrar onboarding Let's Build. */
   const showBuiltAppPending =
     hasBuiltApp &&
     !devUrl &&
@@ -140,6 +155,32 @@ export function PreviewFrame({
 
   const showNativeConsole = nativeBuildPreview && projectStack === "android-native";
 
+  const view: PreviewView = useMemo(() => {
+    if (showNativeConsole) return "native-console";
+    if (bootError && !showBootSpinner) return "boot-error";
+    if (showBootSpinner || showReconnecting) return "boot-spinner";
+    if (previewIdle && devUrl) return "preview-idle";
+    if (canShowIframe && iframeSrc) return "iframe-live";
+    if (previewContent) return "iframe-srcdoc";
+    if (showBuiltAppPending) return "built-app-pending";
+    if (showLetsBuild) return showStaleGuide && onRefresh ? "stale-reconnect" : "lets-build";
+    return "empty";
+  }, [
+    showNativeConsole,
+    bootError,
+    showBootSpinner,
+    showReconnecting,
+    previewIdle,
+    devUrl,
+    canShowIframe,
+    iframeSrc,
+    previewContent,
+    showBuiltAppPending,
+    showLetsBuild,
+    showStaleGuide,
+    onRefresh,
+  ]);
+
   useEffect(() => {
     if (!showBuiltAppPending || !onRefresh || autoBootAttemptedRef.current) return;
     autoBootAttemptedRef.current = true;
@@ -147,9 +188,9 @@ export function PreviewFrame({
   }, [showBuiltAppPending, onRefresh]);
 
   return (
-    <div className="forge-preview-root flex min-h-0 flex-1 flex-col">
+    <div className="forge-preview-root flex min-h-0 min-w-0 flex-1 flex-col">
       <div
-        className="forge-preview-viewport min-h-0 flex-1"
+        className="forge-preview-viewport min-h-0 min-w-0 flex-1"
         data-device={device}
         style={
           deviceWidth
@@ -157,25 +198,31 @@ export function PreviewFrame({
             : undefined
         }
       >
-        {showNativeConsole ? (
-          <BuildConsole
-            files={files}
-            progress={agentProgress}
-            stackKind={projectStack ?? "android-native"}
-            agentRunning={agentRunning}
-            onFocusChat={onFocusChat}
-          />
-        ) : null}
+        {view === "native-console" && (
+          <div className={surfaceClass()}>
+            <BuildConsole
+              files={files}
+              progress={agentProgress}
+              stackKind={projectStack ?? "android-native"}
+              agentRunning={agentRunning}
+              onFocusChat={onFocusChat}
+            />
+          </div>
+        )}
 
-        {!showNativeConsole && bootError && !showBootSpinner && (
-          <div className="flex h-full flex-col items-center justify-center gap-3 bg-white p-8 text-center">
-            <p className="text-sm text-neutral-700 max-w-sm leading-relaxed">{bootError}</p>
-            {onRefresh && bootError.includes("agente") && (
+        {view === "boot-error" && (
+          <div
+            className={surfaceClass(
+              "flex flex-col items-center justify-center gap-3 bg-white p-8 text-center",
+            )}
+          >
+            <p className="text-sm text-neutral-700 max-w-md leading-relaxed">{bootError}</p>
+            {onRefresh && bootError?.includes("agente") && (
               <p className="text-xs text-neutral-400">
                 Peça uma alteração no chat para a IA começar.
               </p>
             )}
-            {onRefresh && !bootError.includes("agente") && (
+            {onRefresh && bootError && !bootError.includes("agente") && (
               <button
                 type="button"
                 onClick={onRefresh}
@@ -188,8 +235,12 @@ export function PreviewFrame({
           </div>
         )}
 
-        {!showNativeConsole && !bootError && (showBootSpinner || showReconnecting) ? (
-          <div className="flex h-full w-full flex-col items-center justify-center gap-3 bg-white">
+        {view === "boot-spinner" && (
+          <div
+            className={surfaceClass(
+              "flex w-full flex-col items-center justify-center gap-3 bg-white",
+            )}
+          >
             <Loader2 className="size-8 animate-spin text-neutral-400" />
             <p className="text-sm text-neutral-500">
               {showReconnecting
@@ -198,7 +249,7 @@ export function PreviewFrame({
                   ? "Subindo preview ao vivo…"
                   : "Conectando preview…"}
             </p>
-            <p className="text-xs text-neutral-400 max-w-xs">
+            <p className="text-xs text-neutral-400 max-w-xs text-center px-4">
               {showReconnecting
                 ? "O ambiente E2B expirou — estamos a subir um novo."
                 : agentRunning
@@ -206,16 +257,24 @@ export function PreviewFrame({
                   : "A atividade do agente aparece só no chat à esquerda."}
             </p>
           </div>
-        ) : !showNativeConsole && !bootError && previewIdle && devUrl ? (
-          <div className="flex h-full flex-col items-center justify-center gap-3 bg-neutral-50 p-8 text-center">
+        )}
+
+        {view === "preview-idle" && (
+          <div
+            className={surfaceClass(
+              "flex flex-col items-center justify-center gap-3 bg-neutral-50 p-8 text-center",
+            )}
+          >
             <p className="text-sm font-medium text-neutral-800">Preview em repouso</p>
             <p className="text-sm text-neutral-500 max-w-sm leading-relaxed">
               Sem interação por 10 minutos — o preview foi pausado para economizar recursos. Mova o
               mouse ou clique para reativar.
             </p>
           </div>
-        ) : !showNativeConsole && !bootError && canShowIframe && iframeSrc ? (
-          <>
+        )}
+
+        {view === "iframe-live" && iframeSrc && (
+          <div className={surfaceClass("forge-preview-iframe-wrap relative")}>
             {previewLiveUpdating && !previewSyncing && !warming && !iframeLoading ? (
               <div className="pointer-events-none absolute right-3 top-3 z-20 rounded-full bg-neutral-900/85 px-3 py-1 text-xs font-medium text-white shadow-sm">
                 Preview ao vivo
@@ -237,7 +296,7 @@ export function PreviewFrame({
               ref={iframeRef}
               key={`${iframeSrc}-${reloadNonce}`}
               src={iframeSrc}
-              className="forge-preview-frame forge-preview-frame--sized"
+              className="forge-preview-frame forge-preview-frame--sized min-h-0 flex-1"
               sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
               title="Preview"
               onLoad={() => {
@@ -245,16 +304,26 @@ export function PreviewFrame({
                 onWarmComplete?.();
               }}
             />
-          </>
-        ) : !showNativeConsole && !bootError && previewContent ? (
-          <iframe
-            srcDoc={previewContent}
-            className="forge-preview-frame forge-preview-frame--sized"
-            sandbox="allow-scripts"
-            title="Preview"
-          />
-        ) : !showNativeConsole && !bootError && showBuiltAppPending ? (
-          <div className="flex h-full w-full flex-col items-center justify-center gap-4 bg-neutral-50 p-8 text-center">
+          </div>
+        )}
+
+        {view === "iframe-srcdoc" && previewContent && (
+          <div className={surfaceClass("forge-preview-iframe-wrap")}>
+            <iframe
+              srcDoc={previewContent}
+              className="forge-preview-frame forge-preview-frame--sized min-h-0 flex-1"
+              sandbox="allow-scripts"
+              title="Preview"
+            />
+          </div>
+        )}
+
+        {view === "built-app-pending" && (
+          <div
+            className={surfaceClass(
+              "flex w-full flex-col items-center justify-center gap-4 bg-neutral-50 p-8 text-center",
+            )}
+          >
             <Loader2 className="size-8 text-neutral-400" />
             <div className="max-w-sm space-y-2">
               <p className="text-sm font-medium text-neutral-900">Preview do app construído</p>
@@ -273,25 +342,30 @@ export function PreviewFrame({
                 Subir preview agora
               </button>
             )}
-            {bootError && <p className="text-xs text-amber-800/90 max-w-md">{bootError}</p>}
           </div>
-        ) : !showNativeConsole && !bootError && showLetsBuild ? (
-          showStaleGuide && onRefresh ? (
-            <div className="flex h-full flex-col items-center justify-center gap-3 bg-neutral-50 p-8 text-center">
-              <p className="text-sm text-neutral-500">Preview desconectado</p>
-              <button
-                type="button"
-                onClick={onRefresh}
-                className="rounded-full bg-neutral-900 px-5 py-2.5 text-sm font-medium text-white hover:bg-neutral-800"
-                data-testid="preview-stale-reconnect"
-              >
-                Reconectar preview
-              </button>
-            </div>
-          ) : (
-            <div className="h-full bg-neutral-50" aria-hidden />
-          )
-        ) : null}
+        )}
+
+        {view === "stale-reconnect" && (
+          <div
+            className={surfaceClass(
+              "flex flex-col items-center justify-center gap-3 bg-neutral-50 p-8 text-center",
+            )}
+          >
+            <p className="text-sm text-neutral-500">Preview desconectado</p>
+            <button
+              type="button"
+              onClick={onRefresh}
+              className="rounded-full bg-neutral-900 px-5 py-2.5 text-sm font-medium text-white hover:bg-neutral-800"
+              data-testid="preview-stale-reconnect"
+            >
+              Reconectar preview
+            </button>
+          </div>
+        )}
+
+        {view === "lets-build" && (
+          <div className={surfaceClass("bg-[var(--bg-chat)]")} aria-hidden />
+        )}
       </div>
     </div>
   );
