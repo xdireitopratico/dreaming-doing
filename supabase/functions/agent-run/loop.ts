@@ -58,6 +58,7 @@ import {
 } from "./tool-progress.ts";
 import { logger } from "../_shared/logger.ts";
 import { appendExecutionLogEntry, buildExecutionLogMeta } from "./executionLogMeta.ts";
+import { isDuplicateNarrationChunk } from "./narration-dedupe.ts";
 import { type CheckpointExtra, resumeStepStart, serializeCheckpointPayload } from "./checkpoint.ts";
 import {
   generatePlanChatMessage,
@@ -2532,6 +2533,7 @@ export class AgentLoop {
   private streamNarration(text: string, opts?: { append?: boolean; chatVisible?: boolean }): void {
     const chunk = text.trim();
     if (!chunk) return;
+    if (isDuplicateNarrationChunk(this.narrationBuffer, chunk)) return;
     const chatVisible = this.approvedPlanBuild
       ? opts?.chatVisible === true
       : opts?.chatVisible !== false;
