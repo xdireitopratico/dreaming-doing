@@ -1,7 +1,7 @@
 import { MarkdownRenderer } from "@/components/ui/markdown-renderer";
 import type { ThreadItem } from "@/lib/chat/types";
 import { assistantTurnCopyText } from "@/lib/chat/assistant-turn-copy";
-import { resolveClosingProse } from "@/lib/chat/stream-prose";
+import { normalizeChatProse, resolveClosingProse } from "@/lib/chat/stream-prose";
 import { ChatThinking } from "./ChatThinking";
 import { ChatNarration } from "./ChatNarration";
 import { ChatJobCard } from "./ChatJobCard";
@@ -33,7 +33,7 @@ export function AssistantTurn({
     item.error?.trim() ||
     (!item.isActive ? item.message?.content?.trim() : null) ||
     null;
-  const narrationText = item.narration?.trim() || null;
+  const narrationText = normalizeChatProse(item.narration);
   const closingText = resolveClosingProse(narrationText, rawClosing);
   const closingStreaming = !!item.isActive && !!item.streamText?.trim();
 

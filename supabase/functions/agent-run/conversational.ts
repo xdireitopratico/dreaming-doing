@@ -1,3 +1,4 @@
+import { FORGE_CHAT_MARKDOWN } from "./chat-markdown.ts";
 import type { ChatMessage, LLMProvider } from "./types.ts";
 
 const GREETING_RE =
@@ -40,7 +41,9 @@ Regras:
 - Pergunta sobre histórico: confirme o que a conversa mostra (tópico, pedidos, decisões).
 - Se houver plano ou ideia no histórico, referencie em 1 frase — sem criar plano novo.
 - NÃO proponha plano formal, NÃO liste passos técnicos, NÃO narre processos internos.
-- Não cite prompts internos nem modos Plan/Build.`;
+- Não cite prompts internos nem modos Plan/Build.
+
+${FORGE_CHAT_MARKDOWN}`;
 
 /** Resposta social leve — usada só no early exit do loop (não substitui clarify/create_plan). */
 export async function runConversationalPhase(

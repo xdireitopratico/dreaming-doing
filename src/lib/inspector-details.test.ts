@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { actionLabelFromTool, buildInspectorDetailBlocks } from "@/lib/inspector-details";
+import {
+  actionEmojiFromTool,
+  actionLabelFromTool,
+  buildInspectorDetailBlocks,
+} from "@/lib/inspector-details";
 import type { ForgeTimelineItem } from "@/lib/forge-run";
 
 describe("buildInspectorDetailBlocks", () => {
@@ -18,11 +22,25 @@ describe("buildInspectorDetailBlocks", () => {
 
     const blocks = buildInspectorDetailBlocks(items);
     expect(blocks.map((b) => b.kind)).toEqual(["thought", "action", "code", "section"]);
-    expect(blocks[1]).toMatchObject({ kind: "action", label: "Read App.tsx" });
+    expect(blocks[1]).toMatchObject({ kind: "action", label: "Read App.tsx", emoji: "📄" });
     expect(blocks[2]).toMatchObject({
       kind: "code",
       code: "cd supabase/functions && grep -n deploy",
     });
+  });
+
+  it("actionEmojiFromTool mapeia leitura e shell", () => {
+    expect(
+      actionEmojiFromTool({ type: "TOOL", id: "a", name: "fs_read", path: "src/App.tsx" }),
+    ).toBe("📄");
+    expect(
+      actionEmojiFromTool({
+        type: "TOOL",
+        id: "b",
+        name: "shell_exec",
+        detail: "npm run build",
+      }),
+    ).toBe("⚡");
   });
 
   it("actionLabelFromTool formata busca", () => {
