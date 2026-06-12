@@ -55,6 +55,7 @@ export function ChatMessage({
     hasContent &&
     !showQualify &&
     !planTeaser &&
+    !(item.isActive && showJobCard) &&
     (proseDiffersFromTitle || !showJobCard) &&
     !(showNarration && text?.trim() === item.narration?.trim());
   const hasDelivery =
@@ -87,12 +88,6 @@ export function ChatMessage({
           </div>
         )}
 
-        {showResponse && (
-          <div className="forge-chat-closing-line forge-chat-prose">
-            <MarkdownRenderer>{text!}</MarkdownRenderer>
-          </div>
-        )}
-
         {item.isActive && !hasContent && !showThinking && !showNarration && (
           <p className="forge-msg-text" style={{ color: "var(--text-muted)", fontSize: "12px" }}>
             Pensando…
@@ -108,6 +103,12 @@ export function ChatMessage({
               onOpenInspector?.(item.runId, planTeaser || item.miniCard?.planReady ? "plan" : "details")
             }
           />
+        )}
+
+        {showResponse && (
+          <div className="forge-chat-closing-line forge-chat-prose">
+            <MarkdownRenderer>{text!}</MarkdownRenderer>
+          </div>
         )}
 
         {showQualify && item.qualify && (

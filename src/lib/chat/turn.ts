@@ -219,9 +219,10 @@ export function mapAssistantTurn(
     };
   }
 
-  const streamText = closingText ?? resolved?.streamText ?? null;
+  const rawStreamText = closingText ?? resolved?.streamText ?? null;
   const thinking = resolveTurnThinking(resolved, runView, runStartedAtMs, slotActive);
-  const narration = resolveTurnNarration(resolved, runView, streamText);
+  const narration = resolveTurnNarration(resolved, runView, rawStreamText);
+  const streamText = planTeaser ? null : rawStreamText;
   const persistMiniCard =
     !!runView &&
     (planTeaser ||

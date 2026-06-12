@@ -1,4 +1,4 @@
-import { CheckCircle2, Circle, Loader2, XCircle } from "lucide-react";
+import { CheckCircle2, Circle, XCircle } from "lucide-react";
 import type { TaskItem } from "@/lib/chat/types";
 
 type ChatTaskListProps = {
@@ -16,7 +16,7 @@ export function ChatTaskList({ tasks }: ChatTaskListProps) {
             {task.status === "done" ? (
               <CheckCircle2 className="size-3.5 forge-animate-task-check" />
             ) : task.status === "active" ? (
-              <Loader2 className="size-3.5 animate-spin" />
+              <Circle className="size-3.5 forge-task-icon--active" fill="currentColor" strokeWidth={0} />
             ) : task.status === "failed" ? (
               <XCircle className="size-3.5" />
             ) : (

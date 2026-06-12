@@ -1,4 +1,4 @@
-import { CheckCircle2, Circle, Loader2, XCircle } from "lucide-react";
+import { CheckCircle2, Circle, XCircle } from "lucide-react";
 import type { ForgeTaskItem as TaskItem } from "@/lib/forge-run";
 
 type ForgeTaskItemProps = {
@@ -12,7 +12,7 @@ export function ForgeTaskItem({ task }: ForgeTaskItemProps) {
         {task.status === "done" ? (
           <CheckCircle2 className="size-3.5 forge-animate-task-check" />
         ) : task.status === "active" ? (
-          <Loader2 className="size-3.5 animate-spin" />
+          <Circle className="size-3.5 forge-task-icon--active" fill="currentColor" strokeWidth={0} />
         ) : task.status === "failed" ? (
           <XCircle className="size-3.5" />
         ) : (

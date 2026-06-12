@@ -786,6 +786,21 @@
   color: color-mix(in srgb, var(--status-working) 95%, white);
 }
 
+.forge-task-icon--active {
+  color: var(--status-working);
+  animation: forge-task-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes forge-task-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
 .forge-task-item[data-status="failed"] {
   color: color-mix(in srgb, var(--status-failed) 90%, white);
 }
