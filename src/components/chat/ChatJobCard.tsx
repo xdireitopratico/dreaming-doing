@@ -27,7 +27,6 @@ export function ChatJobCard({
   onClick,
 }: ChatJobCardProps) {
   const isLive = data.status === "working" || data.status === "thinking";
-  const showWorkingBadge = isLive && !data.planReady && !planTeaser;
   const briefings =
     data.liveBriefings.length > 0 ? data.liveBriefings : [data.subtitle || data.title];
   const [briefingIndex, setBriefingIndex] = useState(0);
@@ -49,73 +48,82 @@ export function ChatJobCard({
 
   const { edited, file } = parseEditedHeader(data.header);
   const isRunningCommand = /^Running command$/i.test(data.header.trim());
-  const isPlanReady = data.planReady || planTeaser;
+  const isPlanWaiting =
+    planTeaser ||
+    data.planReady ||
+    /^Waiting for user to approve plan$/i.test(data.header.trim());
+  const isDone = data.status === "done" && !isPlanWaiting;
+  const isFailed = data.status === "failed";
 
   const hint = () => {
-    if (isPlanReady) return "Revisar plano no inspector →";
-    if (data.status === "done" && data.fileCount) return `${data.fileCount} arquivos alterados →`;
+    if (isPlanWaiting) return "Revisar plano no inspector →";
+    if (isDone && data.fileCount) return `${data.fileCount} arquivos alterados →`;
     if (data.hasPlan) return "Ver plano no inspector →";
     return "Detalhes completos →";
   };
 
-  const statusClass = showWorkingBadge
-    ? "forge-mini-card--working"
-    : data.status === "done"
-      ? "forge-mini-card--done"
-      : "";
+  const cardVariant = isPlanWaiting
+    ? "forge-mini-card--plan-waiting"
+    : isRunningCommand && isLive
+      ? "forge-mini-card--running-command"
+      : isLive && !edited
+        ? "forge-mini-card--working"
+        : isDone
+          ? "forge-mini-card--done"
+          : "";
 
   return (
     <div
       className={cn(
-        "forge-mini-card w-full",
-        statusClass,
+        "forge-mini-card forge-mini-card-in-chat w-full",
+        cardVariant,
         isFocused && "forge-mini-card--focused",
       )}
       data-testid="chat-job-card"
       data-run-id={runId}
     >
       <button type="button" className="forge-mini-card-body" onClick={onClick}>
-        <div className="forge-mini-card-header">
-          {showWorkingBadge && (
-            <>
-              <span className="forge-mini-card-dot forge-mini-card-dot--working" aria-hidden />
-              <span className="forge-mini-card-badge forge-mini-card-badge--working">Working…</span>
-            </>
-          )}
-          {isPlanReady && (
-            <>
-              <span className="forge-mini-card-dot forge-mini-card-dot--working" aria-hidden />
-              <span className="forge-mini-card-badge forge-mini-card-badge--working">
-                Plan ready
-              </span>
-            </>
-          )}
-          {isRunningCommand && !showWorkingBadge && !isPlanReady && (
-            <span className="forge-mini-card-badge forge-mini-card-badge--working">
-              Running command
-            </span>
-          )}
-          {edited && file && (
-            <>
-              <span className="forge-mini-card-badge forge-mini-card-badge--edited-tag">Edited</span>
-              <span className="forge-mini-card-badge forge-mini-card-badge--edited-file">{file}</span>
-            </>
-          )}
-          {data.status === "done" && !isPlanReady && !edited && (
-            <>
-              <span className="forge-mini-card-dot forge-mini-card-dot--done" aria-hidden />
-              <span className="forge-mini-card-badge forge-mini-card-badge--done">Done</span>
-            </>
-          )}
-          {data.status === "failed" && (
-            <>
-              <span className="forge-mini-card-dot forge-mini-card-dot--failed" aria-hidden />
-              <span className="forge-mini-card-badge forge-mini-card-badge--failed">Failed</span>
-            </>
-          )}
-        </div>
+        {edited && file && (
+          <div className="forge-mini-card-edited-row">
+            <span className="forge-mini-card-badge forge-mini-card-badge--edited-tag">Edited</span>
+            <span className="forge-mini-card-badge forge-mini-card-badge--edited-file">{file}</span>
+          </div>
+        )}
 
-        {!edited && !isRunningCommand && data.header && !isPlanReady && (
+        {isRunningCommand && (
+          <p className="forge-mini-card-header-line forge-mini-card-header-line--command">
+            Running command
+          </p>
+        )}
+
+        {isPlanWaiting && !isRunningCommand && !edited && (
+          <p className="forge-mini-card-header-line forge-mini-card-header-line--plan">
+            Waiting for user to approve plan
+          </p>
+        )}
+
+        {isDone && !edited && !isRunningCommand && !isPlanWaiting && (
+          <div className="forge-mini-card-header">
+            <span className="forge-mini-card-dot forge-mini-card-dot--done" aria-hidden />
+            <span className="forge-mini-card-badge forge-mini-card-badge--done">Done</span>
+          </div>
+        )}
+
+        {isFailed && (
+          <div className="forge-mini-card-header">
+            <span className="forge-mini-card-dot forge-mini-card-dot--failed" aria-hidden />
+            <span className="forge-mini-card-badge forge-mini-card-badge--failed">Failed</span>
+          </div>
+        )}
+
+        {isLive && !edited && !isRunningCommand && !isPlanWaiting && (
+          <div className="forge-mini-card-header">
+            <span className="forge-mini-card-dot forge-mini-card-dot--working" aria-hidden />
+            <span className="forge-mini-card-badge forge-mini-card-badge--working">Working…</span>
+          </div>
+        )}
+
+        {!edited && !isRunningCommand && !isPlanWaiting && data.header && !isDone && !isFailed && (
           <p className="forge-mini-card-header-line">{data.header}</p>
         )}
 

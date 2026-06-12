@@ -495,7 +495,7 @@ export function buildMiniCardHeader(
   const subtitle = briefings[idx % briefings.length] ?? opts.sessionTitle;
 
   if (opts.planReady) {
-    return { header: "Plan ready", subtitle };
+    return { header: "Waiting for user to approve plan", subtitle };
   }
   if (edited && (running || !progress.finished)) {
     return { header: `Edited ${edited}`, subtitle };

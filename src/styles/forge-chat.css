@@ -93,6 +93,14 @@
   gap: 12px;
   width: 100%;
   max-width: 100%;
+  min-width: 0;
+}
+
+.forge-assistant-turn .forge-mini-card-in-chat {
+  align-self: stretch;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 .forge-status-chip {
@@ -110,11 +118,30 @@
 }
 
 .forge-mini-card-header-line {
-  margin: 0;
+  margin: 0 0 var(--space-sm);
   font-size: 13px;
   font-weight: 600;
   line-height: 1.35;
   color: var(--text-primary);
+}
+
+.forge-mini-card-header-line--command {
+  color: color-mix(in srgb, var(--status-working) 95%, white);
+  font-size: 14px;
+}
+
+.forge-mini-card-header-line--plan {
+  color: color-mix(in srgb, var(--status-working) 92%, white);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.forge-mini-card-edited-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: var(--space-sm);
 }
 
 .forge-chat-item-user {
@@ -532,7 +559,7 @@
 .forge-mini-card-body {
   display: block;
   width: 100%;
-  padding: 14px 16px;
+  padding: 16px 18px;
   border: none;
   border-radius: inherit;
   background: none;
@@ -554,6 +581,18 @@
 .forge-mini-card--working {
   border-color: color-mix(in srgb, var(--status-working) 55%, transparent);
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--status-working) 12%, transparent);
+}
+
+.forge-mini-card--running-command {
+  border-color: color-mix(in srgb, var(--status-working) 62%, transparent);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--status-working) 16%, transparent),
+    0 4px 24px color-mix(in srgb, var(--status-working) 8%, transparent);
+}
+
+.forge-mini-card--plan-waiting {
+  border-color: color-mix(in srgb, var(--status-working) 50%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--status-working) 14%, transparent);
 }
 
 .forge-mini-card--focused {
@@ -648,9 +687,16 @@
 .forge-mini-card-title {
   margin: 0;
   font: var(--font-card-title);
+  font-size: 13px;
   font-weight: 500;
   color: var(--text-secondary);
-  line-height: 1.5;
+  line-height: 1.55;
+  word-break: break-word;
+}
+
+.forge-mini-card-in-chat .forge-mini-card-title {
+  font-size: 14px;
+  color: color-mix(in srgb, var(--text-secondary) 92%, var(--text-primary));
 }
 
 .forge-task-list {
@@ -664,11 +710,23 @@
 
 .forge-task-item {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 10px;
   font: var(--font-task);
+  font-size: 13px;
   color: var(--text-secondary);
-  line-height: 1.45;
+  line-height: 1.5;
+}
+
+.forge-task-label {
+  flex: 1;
+  min-width: 0;
+  word-break: break-word;
+}
+
+.forge-task-icon {
+  margin-top: 2px;
+  color: var(--text-muted);
 }
 
 .forge-task-item[data-status="pending"] svg {

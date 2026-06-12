@@ -1,4 +1,4 @@
-import { CheckCircle2, Loader2, XCircle, Circle } from "lucide-react";
+import { CheckCircle2, Circle, Loader2, XCircle } from "lucide-react";
 import type { TaskItem } from "@/lib/chat/types";
 
 type ChatTaskListProps = {
@@ -8,25 +8,22 @@ type ChatTaskListProps = {
 export function ChatTaskList({ tasks }: ChatTaskListProps) {
   if (!tasks.length) return null;
 
-  const icon = (status: TaskItem["status"]) => {
-    switch (status) {
-      case "done":
-        return <CheckCircle2 className="size-3.5 text-emerald-500 forge-animate-task-check" />;
-      case "active":
-        return <Loader2 className="size-3.5 animate-spin" />;
-      case "failed":
-        return <XCircle className="size-3.5 text-red-500" />;
-      default:
-        return <Circle className="size-3.5 opacity-40" />;
-    }
-  };
-
   return (
-    <ul className="forge-task-list">
+    <ul className="forge-task-list" data-testid="chat-task-list">
       {tasks.slice(0, 6).map((task) => (
         <li key={task.id} className="forge-task-item" data-status={task.status}>
-          {icon(task.status)}
-          <span className="forge-task-label">{task.label}</span>
+          <span className="forge-task-icon shrink-0" aria-hidden>
+            {task.status === "done" ? (
+              <CheckCircle2 className="size-3.5 forge-animate-task-check" />
+            ) : task.status === "active" ? (
+              <Loader2 className="size-3.5 animate-spin" />
+            ) : task.status === "failed" ? (
+              <XCircle className="size-3.5" />
+            ) : (
+              <Circle className="size-3.5" strokeWidth={1.75} />
+            )}
+          </span>
+          <span className="forge-task-label min-w-0">{task.label}</span>
         </li>
       ))}
     </ul>

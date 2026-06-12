@@ -6,7 +6,10 @@ import {
   isRunEffectivelyActive,
   shouldShowJobCard,
 } from "@/lib/forge-run";
-import { isAgentJobMessage } from "@/lib/assistant-run-progress";
+import {
+  hasMaterializedCardSnapshot,
+  isAgentJobMessage,
+} from "@/lib/assistant-run-progress";
 import { resolveJobPlanForRun, storedPlanFromMessage } from "@/lib/plan-message-meta";
 import { parseQualifyChoices } from "@/lib/qualify-choices";
 import { resolveAssistantProgress } from "@/lib/chat/resolve-progress";
@@ -219,7 +222,17 @@ export function mapAssistantTurn(
   const streamText = closingText ?? resolved?.streamText ?? null;
   const thinking = resolveTurnThinking(resolved, runView, runStartedAtMs, slotActive);
   const narration = resolveTurnNarration(resolved, runView, streamText);
-  const showCard = showJobCard || planTeaser;
+  const persistMiniCard =
+    !!runView &&
+    (planTeaser ||
+      showJobCard ||
+      slotActive ||
+      hasExecutionEvidence ||
+      (!!item.message && hasMaterializedCardSnapshot(item.message)) ||
+      (runView.miniCard.tasks.length > 0 ||
+        !!runView.miniCard.editedFile ||
+        runView.miniCard.planReady));
+  const showCard = persistMiniCard;
   const statusChips =
     resolved && (slotActive || anchoredLive)
       ? collectStatusChips(resolved, slotActive || anchoredLive)
