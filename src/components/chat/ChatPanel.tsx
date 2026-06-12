@@ -5,6 +5,11 @@ import { formatClarifyChoiceReply } from "@/lib/clarify-choices";
 import type { ClarifyChoice } from "@/lib/chat/types";
 import type { StoredMessagePart } from "@/lib/chat-attachments";
 import { useChat } from "@/hooks/useChat";
+import {
+  scrollOffsetToAlignUserMessage,
+  shouldHoldUserMessageAnchor,
+  type ChatScrollMode,
+} from "@/lib/chat/user-message-anchor";
 import { ChatThread } from "./ChatThread";
 import { ChatComposer } from "./ChatComposer";
 import { PendingQueuePanel, type PendingQueueItem } from "@/components/editor/PendingQueuePanel";
@@ -86,25 +91,47 @@ export function ChatPanel({
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const pinnedToBottom = useRef(true);
-  const userAnchorIdRef = useRef<string | null>(null);
-  /** True until `[data-user-msg-id]` is found and scrolled — retries across thread updates. */
-  const userAnchorPendingRef = useRef(false);
+  const scrollModeRef = useRef<ChatScrollMode>("bottom");
+  const anchoredUserIdRef = useRef<string | null>(null);
+  const isProgrammaticScrollRef = useRef(false);
+  const firstAnchorRef = useRef(true);
+  const userScrolledAwayRef = useRef(false);
   const [showPill, setShowPill] = useState(false);
   const PIN_THRESHOLD_PX = 100;
 
-  const clearUserAnchor = useCallback(() => {
-    userAnchorIdRef.current = null;
-    userAnchorPendingRef.current = false;
+  const holdUserAnchor = shouldHoldUserMessageAnchor({
+    isPendingRun: agent.isPendingRun,
+    running,
+    activeRunId: agent.activeRunId,
+    finished: agent.progress.finished,
+  });
+
+  const runProgrammaticScroll = useCallback((fn: () => void) => {
+    isProgrammaticScrollRef.current = true;
+    fn();
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        isProgrammaticScrollRef.current = false;
+      });
+    });
   }, []);
 
-  const scrollToBottom = useCallback((behavior: ScrollBehavior = "auto") => {
-    const el = scrollRef.current;
-    if (!el) return;
-    el.scrollTo({ top: el.scrollHeight, behavior });
-    pinnedToBottom.current = true;
-    clearUserAnchor();
-    setShowPill(false);
-  }, [clearUserAnchor]);
+  const scrollToBottom = useCallback(
+    (behavior: ScrollBehavior = "auto") => {
+      const el = scrollRef.current;
+      if (!el) return;
+      runProgrammaticScroll(() => {
+        el.scrollTo({ top: el.scrollHeight, behavior });
+        pinnedToBottom.current = true;
+        scrollModeRef.current = "bottom";
+        anchoredUserIdRef.current = null;
+        firstAnchorRef.current = true;
+        userScrolledAwayRef.current = false;
+        setShowPill(false);
+      });
+    },
+    [runProgrammaticScroll],
+  );
 
   const scrollUserBubbleToTop = useCallback(
     (messageId: string, behavior: ScrollBehavior = "smooth"): boolean => {
@@ -112,30 +139,51 @@ export function ChatPanel({
       if (!container) return false;
       const bubble = container.querySelector<HTMLElement>(`[data-user-msg-id="${messageId}"]`);
       if (!bubble) return false;
-      const paddingTop = parseFloat(getComputedStyle(container).paddingTop) || 0;
-      const top =
-        bubble.getBoundingClientRect().top -
-        container.getBoundingClientRect().top +
-        container.scrollTop -
-        paddingTop;
-      container.scrollTo({ top: Math.max(0, top), behavior });
-      pinnedToBottom.current = false;
-      setShowPill(false);
+      const top = scrollOffsetToAlignUserMessage(container, bubble);
+      runProgrammaticScroll(() => {
+        container.scrollTo({ top: Math.max(0, top), behavior });
+        pinnedToBottom.current = false;
+        scrollModeRef.current = "user-anchor";
+        anchoredUserIdRef.current = messageId;
+        setShowPill(false);
+      });
       return true;
     },
-    [],
+    [runProgrammaticScroll],
   );
 
   const handleScroll = useCallback(() => {
+    if (isProgrammaticScrollRef.current) return;
     const el = scrollRef.current;
     if (!el) return;
     const dist = el.scrollHeight - el.scrollTop - el.clientHeight;
     pinnedToBottom.current = dist <= PIN_THRESHOLD_PX;
-    if (pinnedToBottom.current) {
-      clearUserAnchor();
+
+    const messageId = anchoredUserIdRef.current;
+    if (
+      holdUserAnchor &&
+      scrollModeRef.current === "user-anchor" &&
+      messageId &&
+      !userScrolledAwayRef.current
+    ) {
+      const bubble = el.querySelector<HTMLElement>(`[data-user-msg-id="${messageId}"]`);
+      if (bubble) {
+        const anchorTop = scrollOffsetToAlignUserMessage(el, bubble);
+        if (Math.abs(el.scrollTop - anchorTop) > 48) {
+          userScrolledAwayRef.current = true;
+          scrollModeRef.current = "bottom";
+        }
+      }
+    }
+
+    if (pinnedToBottom.current && !holdUserAnchor) {
+      scrollModeRef.current = "bottom";
+      anchoredUserIdRef.current = null;
+      firstAnchorRef.current = true;
+      userScrolledAwayRef.current = false;
       setShowPill(false);
     }
-  }, [clearUserAnchor]);
+  }, [holdUserAnchor]);
 
   const lastUserMessageId = useMemo(() => {
     for (let i = thread.length - 1; i >= 0; i--) {
@@ -146,24 +194,37 @@ export function ChatPanel({
   }, [thread]);
 
   useEffect(() => {
-    if (lastUserMessageId && lastUserMessageId !== userAnchorIdRef.current) {
-      userAnchorIdRef.current = lastUserMessageId;
-      userAnchorPendingRef.current = true;
+    if (!lastUserMessageId) return;
+    if (lastUserMessageId === anchoredUserIdRef.current && scrollModeRef.current === "user-anchor") {
+      return;
     }
+    scrollModeRef.current = "user-anchor";
+    anchoredUserIdRef.current = lastUserMessageId;
+    firstAnchorRef.current = true;
+    userScrolledAwayRef.current = false;
+    pinnedToBottom.current = false;
   }, [lastUserMessageId]);
 
   useEffect(() => {
-    if (!userAnchorPendingRef.current || !userAnchorIdRef.current) return;
+    if (!holdUserAnchor) {
+      if (scrollModeRef.current === "user-anchor") {
+        scrollModeRef.current = "bottom";
+        anchoredUserIdRef.current = null;
+        firstAnchorRef.current = true;
+      }
+      return;
+    }
 
-    const messageId = userAnchorIdRef.current;
-    let useSmooth = true;
+    const messageId = anchoredUserIdRef.current;
+    if (!messageId || scrollModeRef.current !== "user-anchor") return;
 
     const attempt = () => {
-      if (!userAnchorPendingRef.current || userAnchorIdRef.current !== messageId) return;
-      const behavior: ScrollBehavior = useSmooth ? "smooth" : "auto";
-      useSmooth = false;
+      if (!holdUserAnchor || scrollModeRef.current !== "user-anchor") return;
+      if (userScrolledAwayRef.current) return;
+      if (anchoredUserIdRef.current !== messageId) return;
+      const behavior: ScrollBehavior = firstAnchorRef.current ? "smooth" : "auto";
       if (scrollUserBubbleToTop(messageId, behavior)) {
-        userAnchorPendingRef.current = false;
+        firstAnchorRef.current = false;
       }
     };
 
@@ -183,18 +244,32 @@ export function ChatPanel({
       cancelAnimationFrame(raf);
       resizeObserver?.disconnect();
     };
-  }, [lastUserMessageId, thread.length, scrollUserBubbleToTop]);
+  }, [
+    holdUserAnchor,
+    lastUserMessageId,
+    thread.length,
+    scrollUserBubbleToTop,
+    agent.progress.streamText,
+    agent.progress.narrationText,
+    agent.progress.phase,
+  ]);
 
   useEffect(() => {
-    if (userAnchorPendingRef.current) return;
-    if (userAnchorIdRef.current && running) return;
+    if (scrollModeRef.current === "user-anchor" && holdUserAnchor) return;
 
     if (pinnedToBottom.current) {
       const raf = requestAnimationFrame(() => scrollToBottom());
       return () => cancelAnimationFrame(raf);
     }
     setShowPill(true);
-  }, [thread.length, running, pendingQueueItems.length, scrollToBottom]);
+  }, [
+    thread.length,
+    holdUserAnchor,
+    pendingQueueItems.length,
+    scrollToBottom,
+    agent.progress.streamText,
+    agent.progress.narrationText,
+  ]);
 
   const handleSend = useCallback(
     (text: string, mode?: AgentComposerMode, parts?: StoredMessagePart[]) => {
