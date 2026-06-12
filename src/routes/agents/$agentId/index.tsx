@@ -4,7 +4,7 @@ import { ArrowLeft, Loader2 } from "lucide-react";
 import { DashboardShell } from "@/components/dashboard/DashboardShell";
 import { ForgeIcon } from "@/components/icons/ForgeIcon";
 import { supabase } from "@/integrations/supabase/client";
-import { isAgentProject } from "@/lib/project-kind";
+import { isAgentProject, type ProjectKind } from "@/lib/project-kind";
 
 export const Route = createFileRoute("/agents/$agentId/")({
   component: AgentEditorPlaceholder,
@@ -25,7 +25,7 @@ function AgentEditorPlaceholder() {
       if (
         !data ||
         !isAgentProject({
-          kind: data.kind,
+          kind: data.kind as ProjectKind,
           meta: data.meta as Record<string, unknown> | null,
         })
       ) {
