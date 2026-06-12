@@ -4,6 +4,7 @@
 // 2. Loop     — durante build/planejamento → compartilha o processo ao vivo
 // 3. Fechamento — o que entregou, o que tocou, expectativa do usuário
 
+import type { LLMProvider } from "./types.ts";
 import type { ClassificationResult } from "./router.ts";
 
 export type CommunicationPhase = "opening" | "loop" | "closure";
@@ -41,6 +42,54 @@ export function buildOpeningMessage(ctx: OpeningContext): string {
   }
 
   return `Entendi — você quer ${summary}. Vou ${intent} e te conto o que encontro pelo caminho.`;
+}
+
+export type OpeningLLMContext = OpeningContext & {
+  userRequest: string;
+};
+
+const OPENING_SYSTEM = `Você é o parceiro de desenvolvimento do FORGE — humano, direto, em português.
+
+O usuário acabou de enviar um pedido. Responda como num chat (2–4 frases):
+- Confirme o que entendeu
+- Diga o que vai fazer agora, em linguagem natural
+- Tom de colega de time, não robô
+
+Proibido: "explorando o projeto", "indexando arquivos", listas de passos, markdown pesado, jargão de pipeline.`;
+
+/** Abertura gerada pelo LLM — fallback para template se o modelo falhar. */
+export async function generateOpeningMessage(
+  model: LLMProvider,
+  ctx: OpeningLLMContext,
+): Promise<string> {
+  const request = ctx.userRequest?.trim() || ctx.userSummary?.trim() || "pedido do usuário";
+  const mode = ctx.approvedPlan
+    ? "executar plano já aprovado"
+    : ctx.planMode
+      ? "propor plano antes de codar"
+      : "implementar em build";
+
+  try {
+    const resp = await model.chat({
+      messages: [
+        { role: "system", content: OPENING_SYSTEM },
+        {
+          role: "user",
+          content:
+            `Pedido do usuário:\n${request}\n\n` +
+            `Resumo interno: ${ctx.userSummary?.trim() || request}\n` +
+            `Modo: ${mode}`,
+        },
+      ],
+      max_tokens: 320,
+      temperature: 0.45,
+    });
+    const text = (resp.content ?? "").trim();
+    if (text.length >= 12) return text;
+  } catch {
+    /* fallback */
+  }
+  return buildOpeningMessage(ctx);
 }
 
 // ─── 2. LOOP ───────────────────────────────────────────────────────────────
@@ -159,7 +208,13 @@ export type ClosureContext = {
   errorMessage?: string;
   partial?: boolean;
   silentResume?: boolean;
+  userRequest?: string;
 };
+
+const CLOSURE_SYSTEM = `Você fecha a entrega no FORGE — mensagem final curta em português (2–4 frases).
+
+Inclua: o que entregou, em quais arquivos (se houver), e peça para o usuário conferir o preview.
+Tom humano. Não repita a conversa anterior. Não diga "explorando o projeto".`;
 
 export type ResolvedClosure = {
   text: string;
@@ -231,5 +286,48 @@ export function buildClosureMessage(ctx: ClosureContext): ResolvedClosure {
     return { text: `${prior}\n\n${delivery}`, emitExtra: true, extraText: delivery };
   }
 
-  return { text: delivery, emitExtra: true };
+  return { text: delivery, emitExtra: true, extraText: delivery };
+}
+
+/** Fechamento gerado pelo LLM — texto só da entrega (4º bloco do chat). */
+export async function generateClosureMessage(
+  model: LLMProvider,
+  ctx: ClosureContext,
+): Promise<ResolvedClosure> {
+  const fallback = buildClosureMessage(ctx);
+  const files = ctx.touchedPaths ?? [];
+  if (ctx.errorMessage?.trim() || ctx.partial || ctx.silentResume || files.length === 0) {
+    return fallback;
+  }
+
+  const fileList = files.slice(-8).map((p) => `- ${p}`).join("\n");
+  try {
+    const resp = await model.chat({
+      messages: [
+        { role: "system", content: CLOSURE_SYSTEM },
+        {
+          role: "user",
+          content:
+            `Pedido original: ${ctx.userRequest?.trim() || "(não informado)"}\n\n` +
+            `Arquivos alterados:\n${fileList}\n\n` +
+            `Contexto anterior (não repetir):\n${(ctx.priorConversation ?? "").slice(0, 800)}`,
+        },
+      ],
+      max_tokens: 360,
+      temperature: 0.4,
+    });
+    const closing = (resp.content ?? "").trim();
+    if (closing.length >= 16) {
+      return {
+        text: ctx.priorConversation?.trim()
+          ? `${ctx.priorConversation.trim()}\n\n${closing}`
+          : closing,
+        emitExtra: true,
+        extraText: closing,
+      };
+    }
+  } catch {
+    /* fallback */
+  }
+  return fallback;
 }

@@ -57,9 +57,9 @@ import {
 } from "./plan-mode.ts";
 import type { ClassificationResult } from "./router.ts";
 import {
-  buildClosureMessage,
   buildLoopUpdate,
-  buildOpeningMessage,
+  generateClosureMessage,
+  generateOpeningMessage,
 } from "./narration.ts";
 import {
   buildPhaseTaskTitle,
@@ -624,12 +624,13 @@ export class AgentLoop {
 
       const skipIntentNarration = this.buildFixResume;
       if (!skipIntentNarration) {
-        const opening = buildOpeningMessage({
+        const opening = await generateOpeningMessage(this.router.getCheapProvider(), {
           userSummary: classification.summary,
-          intentType: classification.type,
+          intentType: classification.type as import("./router.ts").ClassificationResult["type"],
           planMode: this.planMode,
           approvedPlan: this.approvedPlanBuild,
           planHeadline: this.planHeadline,
+          userRequest: this.originalUserRequest ?? classification.summary,
         });
         this.streamNarration(opening, { chatVisible: true });
       }
@@ -844,13 +845,11 @@ export class AgentLoop {
         const assistantText = (response.content ?? "").trim();
         const streamedToInspector = this.approvedPlanBuild && this.llmResponseWasStreamed;
         if (assistantText && !this.llmResponseWasStreamed) {
-          this.appendToNarration(assistantText);
-          this.emit("assistant_text", {
-            text: assistantText,
-            append: this.narrationStarted,
-            final: !response.tool_calls?.length,
-          });
-          this.narrationStarted = true;
+          if (response.tool_calls?.length) {
+            this.streamNarration(assistantText, { chatVisible: true });
+          } else {
+            this.streamNarration(assistantText, { chatVisible: true });
+          }
         } else if (
           assistantText &&
           this.llmResponseWasStreamed &&
@@ -1293,31 +1292,27 @@ export class AgentLoop {
     this.emit("phase", { phase: "summarize", message: "Finalizando..." });
     await this.saveCheckpoint(LoopPhase.SUMMARIZE, true);
     const narration = this.narrationBuffer.trim();
-    const finalChat = buildClosureMessage({
+    const finalChat = await generateClosureMessage(this.router.getCheapProvider(), {
       touchedPaths: [...this.touchedPaths],
       priorConversation: narration,
+      userRequest: this.originalUserRequest ?? undefined,
     });
-    const finalText = finalChat.text;
+    const closingText = (finalChat.extraText ?? finalChat.text).trim();
 
-    if (finalChat.emitExtra) {
-      const extra = finalChat.extraText ?? finalText;
-      if (extra.trim()) {
-        this.emit("assistant_text", {
-          text: this.narrationStarted ? `\n\n${extra}` : extra,
-          append: this.narrationStarted,
-          final: true,
-        });
-        this.appendToNarration(extra);
-        this.narrationStarted = true;
-      }
+    if (closingText) {
+      this.emit("assistant_text", {
+        text: closingText,
+        append: false,
+        final: true,
+      });
     }
 
-    await this.persistFinal(finalText, { lastFinishOk: true });
+    await this.persistFinal(closingText || finalChat.text, { lastFinishOk: true });
     await this.clearCheckpoint();
     const tokens = this.compression.getTotalTokens();
     const costUsd = this.compression.getEstimatedCostUsd(this.router.mainCfg.model);
     this.emit("done", {
-      summary: finalText.slice(0, 2000),
+      summary: (closingText || finalChat.text).slice(0, 2000),
       totalInputTokens: tokens.input,
       totalOutputTokens: tokens.output,
       totalTokens: tokens.total,
@@ -1325,7 +1320,7 @@ export class AgentLoop {
     });
     return {
       ok: true,
-      summary: finalText.slice(0, 2000),
+      summary: (closingText || finalChat.text).slice(0, 2000),
       steps: loopStep,
       toolsUsed: [...toolsUsed],
       totalInputTokens: tokens.input,
@@ -1656,7 +1651,7 @@ export class AgentLoop {
                 append: true,
                 delta: true,
                 final: false,
-                ...(toInspector ? { thinking: true } : {}),
+                ...(toInspector ? { thinking: true } : { narration: true }),
               });
               if (!toInspector) this.narrationStarted = true;
               if (!toInspector) this.appendToNarration(delta);
@@ -1962,14 +1957,9 @@ export class AgentLoop {
     },
   ): Promise<void> {
     const conversational = opts?.conversational === true;
-    const narration = this.narrationBuffer.trim();
     const deliveryFiles = [...this.touchedPaths];
-    const body = narration || summary.trim() || "Concluído.";
-    const fileFooter =
-      deliveryFiles.length > 0
-        ? `\n\n**Arquivos alterados:** ${deliveryFiles.map((p) => `\`${p}\``).join(", ")}`
-        : "";
-    const text = conversational ? summary.trim() : `${body}${fileFooter}`;
+    const closing = summary.trim() || "Concluído.";
+    const text = conversational ? closing : closing;
     const lastFinishOk = opts?.lastFinishOk ?? true;
     const cardSnapshot = this.buildCardSnapshot({
       streamText: text,
