@@ -20,8 +20,8 @@ export type JobInspectorProps = {
   onPlanApprove?: (steps: PlanStep[], markdown?: string) => void | Promise<void>;
   onPlanReject?: (reason?: string) => void | Promise<void>;
   runStartedAtMs?: number | null;
-  /** Sobrepõe o canto direito do preview — não divide a largura (estilo Lovable). */
-  overlay?: boolean;
+  /** Inspector ocupa o workspace inteiro (Lovable: job aberto = sem preview). */
+  fullWidth?: boolean;
 };
 
 const TABS: { id: JobInspectorTab; label: string }[] = [
@@ -42,7 +42,7 @@ export function JobInspector({
   onPlanApprove,
   onPlanReject,
   runStartedAtMs,
-  overlay = false,
+  fullWidth = false,
 }: JobInspectorProps) {
   const inspectorPlan = useMemo(
     () =>
@@ -64,7 +64,7 @@ export function JobInspector({
 
   return (
     <div
-      className={`forge-inspector forge-inspector-rail${overlay ? " forge-inspector-rail--overlay" : ""}`}
+      className={`forge-inspector${fullWidth ? " forge-inspector-full" : " forge-inspector-rail"}`}
       data-testid="job-inspector"
     >
       <div className="forge-inspector-header">

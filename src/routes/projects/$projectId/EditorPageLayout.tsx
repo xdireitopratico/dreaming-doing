@@ -516,81 +516,83 @@ export function EditorPageLayout({
                         </div>
                       )}
 
-                      {activeView === "preview" && (
-                        <div className="forge-preview-shell flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-                          <PreviewFrame
-                            files={previewNavFiles}
-                            booting={previewBoot.booting}
-                            agentRunning={running}
-                            previewLiveUpdating={previewLiveUpdating}
-                            devUrl={devUrl}
-                            previewPath={previewRoute}
-                            iframeRef={previewIframeRef}
-                            bootError={
-                              previewBoot.bootLogs
-                                ? `${previewBoot.lastError ?? "Vite subindo"} — ${previewBoot.bootLogs.slice(
-                                    0,
-                                    280,
-                                  )}`
-                                : previewBoot.lastError
-                            }
-                            warming={previewBoot.warming}
-                            onWarmComplete={previewBoot.clearWarming}
-                            onRefresh={() => previewBoot.boot({ force: true })}
-                            reloadNonce={previewReloadNonce}
-                            previewSyncing={previewSyncing}
-                            agentHasRun={agentHasRun}
-                            previewIdle={previewIdle}
-                            isNoFiles={previewBoot.isNoFiles}
-                            sandboxStale={previewBoot.sandboxStale}
-                            reconnecting={previewBoot.reconnecting}
-                            isReactProject={isReactProject}
-                            nativeBuildPreview={nativeBuildPreview}
-                            projectStack={projectStack}
-                            agentProgress={agent.progress}
-                            device={previewDevice}
-                            onFocusChat={() => {
-                              const el =
-                                document.querySelector<HTMLTextAreaElement>(".forge-composer-input");
-                              el?.focus();
-                            }}
-                          />
+                      {activeView === "preview" &&
+                        isJobFocused &&
+                        jobWorkspaceFocus &&
+                        focusedJobProgress && (
+                          <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+                            <JobInspector
+                              run={focusedJobProgress}
+                              runId={jobWorkspaceFocus.runId}
+                              running={running && agent.activeRunId === jobWorkspaceFocus.runId}
+                              activeTab={jobWorkspaceFocus.tab}
+                              messages={chatMessages}
+                              livePendingPlan={
+                                pendingPlan?.runId === jobWorkspaceFocus.runId ? pendingPlan : null
+                              }
+                              onTabChange={setJobTab}
+                              onBackToLatest={closeJobWorkspace}
+                              onOpenFile={(path) => {
+                                handleSelectFile(path);
+                                onMainViewChange("code");
+                                if (isMobile) onMobilePanelChange?.("code");
+                              }}
+                              onPlanApprove={handlePlanApprove}
+                              onPlanReject={handlePlanReject}
+                              runStartedAtMs={
+                                agent.activeRunId === jobWorkspaceFocus.runId
+                                  ? agent.activeRunStartedAtMs
+                                  : null
+                              }
+                              fullWidth
+                            />
+                          </div>
+                        )}
 
-                          {isJobFocused &&
-                            jobWorkspaceFocus &&
-                            focusedJobProgress && (
-                              <JobInspector
-                                run={focusedJobProgress}
-                                runId={jobWorkspaceFocus.runId}
-                                running={
-                                  running && agent.activeRunId === jobWorkspaceFocus.runId
-                                }
-                                activeTab={jobWorkspaceFocus.tab}
-                                messages={chatMessages}
-                                livePendingPlan={
-                                  pendingPlan?.runId === jobWorkspaceFocus.runId
-                                    ? pendingPlan
-                                    : null
-                                }
-                                onTabChange={setJobTab}
-                                onBackToLatest={closeJobWorkspace}
-                                onOpenFile={(path) => {
-                                  handleSelectFile(path);
-                                  onMainViewChange("code");
-                                  if (isMobile) onMobilePanelChange?.("code");
-                                }}
-                                onPlanApprove={handlePlanApprove}
-                                onPlanReject={handlePlanReject}
-                                runStartedAtMs={
-                                  agent.activeRunId === jobWorkspaceFocus.runId
-                                    ? agent.activeRunStartedAtMs
-                                    : null
-                                }
-                                overlay
-                              />
-                            )}
-                        </div>
-                      )}
+                      {activeView === "preview" &&
+                        !(isJobFocused && jobWorkspaceFocus && focusedJobProgress) && (
+                          <div className="forge-preview-shell flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+                            <PreviewFrame
+                              files={previewNavFiles}
+                              booting={previewBoot.booting}
+                              agentRunning={running}
+                              previewLiveUpdating={previewLiveUpdating}
+                              devUrl={devUrl}
+                              previewPath={previewRoute}
+                              iframeRef={previewIframeRef}
+                              bootError={
+                                previewBoot.bootLogs
+                                  ? `${previewBoot.lastError ?? "Vite subindo"} — ${previewBoot.bootLogs.slice(
+                                      0,
+                                      280,
+                                    )}`
+                                  : previewBoot.lastError
+                              }
+                              warming={previewBoot.warming}
+                              onWarmComplete={previewBoot.clearWarming}
+                              onRefresh={() => previewBoot.boot({ force: true })}
+                              reloadNonce={previewReloadNonce}
+                              previewSyncing={previewSyncing}
+                              agentHasRun={agentHasRun}
+                              previewIdle={previewIdle}
+                              isNoFiles={previewBoot.isNoFiles}
+                              sandboxStale={previewBoot.sandboxStale}
+                              reconnecting={previewBoot.reconnecting}
+                              isReactProject={isReactProject}
+                              nativeBuildPreview={nativeBuildPreview}
+                              projectStack={projectStack}
+                              agentProgress={agent.progress}
+                              device={previewDevice}
+                              onFocusChat={() => {
+                                const el =
+                                  document.querySelector<HTMLTextAreaElement>(
+                                    ".forge-composer-input",
+                                  );
+                                el?.focus();
+                              }}
+                            />
+                          </div>
+                        )}
 
                       {activeView === "diff" && (
                         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
