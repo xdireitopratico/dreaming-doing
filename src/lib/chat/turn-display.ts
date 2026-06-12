@@ -1,6 +1,6 @@
 import type { AgentProgress } from "@/lib/agent-progress";
 import type { AgentRunView } from "@/lib/forge-run";
-import { resolveLatencyThinking } from "@/lib/forge-run";
+import { hasFirstInspectorToken, resolveLatencyThinking } from "@/lib/forge-run";
 
 export type TurnThinking = {
   active: boolean;
@@ -24,7 +24,24 @@ export function resolveTurnThinking(
     };
   }
 
-  if (!runStartedAtMs) return null;
+  if (!runStartedAtMs) {
+    if (resolved && hasFirstInspectorToken(resolved)) {
+      const first = resolved.timeline.find(
+        (e) =>
+          e.type === "assistant_text" &&
+          typeof e.data?.text === "string" &&
+          String(e.data.text).trim().length > 0,
+      );
+      const startedAt = first?.timestamp ?? Date.now();
+      return {
+        active: false,
+        startedAtMs: startedAt,
+        durationMs: Math.max(500, Date.now() - startedAt),
+      };
+    }
+    if (slotActive) return { active: true };
+    return null;
+  }
 
   const latency =
     runView?.latencyThinking ??

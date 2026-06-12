@@ -22,6 +22,17 @@ describe("isEditorAgentBusy", () => {
     ).toBe(false);
   });
 
+  it("não bloqueia quando running=true mas activeRunId é __pending__", () => {
+    expect(
+      isEditorAgentBusy({
+        ...idle,
+        running: true,
+        activeRunId: PENDING_RUN_ID,
+        finished: false,
+      }),
+    ).toBe(false);
+  });
+
   it("bloqueia run real em andamento", () => {
     expect(
       isEditorAgentBusy({

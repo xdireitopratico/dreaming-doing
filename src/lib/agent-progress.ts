@@ -260,8 +260,7 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
       const append = data.append === true || data.delta === true;
       const narration = data.narration === true;
       const thinking = data.thinking === true;
-      const toNarration = narration || thinking;
-      const skipStream = toNarration;
+      const skipStream = narration || thinking;
       return {
         ...prev,
         streamText: skipStream
@@ -269,7 +268,7 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
           : append
             ? `${prev.streamText ?? ""}${chunk}`
             : chunk,
-        narrationText: toNarration
+        narrationText: narration
           ? append
             ? `${prev.narrationText ?? ""}${chunk}`
             : chunk

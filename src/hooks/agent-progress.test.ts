@@ -233,13 +233,14 @@ describe("applyAgentProgressEvent", () => {
     expect(next.streamText).toBe("Resposta real");
   });
 
-  it("assistant_text thinking espelha narração para o chat", () => {
+  it("assistant_text thinking vai à timeline, não à narração do chat", () => {
     const next = applyAgentProgressEvent(
       { ...base, finished: false },
       ev("assistant_text", { text: "Entendi", delta: true, thinking: true }),
     );
-    expect(next.narrationText).toBe("Entendi");
+    expect(next.narrationText).toBeFalsy();
     expect(next.streamText).toBeNull();
+    expect(next.timeline).toHaveLength(1);
   });
 
   it("done preserva streamText completo", () => {

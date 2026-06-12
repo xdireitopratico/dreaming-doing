@@ -10,6 +10,7 @@ import type { usePreviewBoot } from "@/hooks/usePreviewBoot";
 import { clearEnhancements } from "@/lib/monacoEnhancements";
 import { useAgentSessionCoordinator } from "./useAgentSessionCoordinator";
 import type { useAgentRun } from "@/hooks/useAgentRun";
+import { PENDING_RUN_ID } from "@/lib/pending-run-id";
 
 import type { FileRow } from "./editor-page-types";
 
@@ -128,6 +129,7 @@ export function useEditorAgentOrchestration({
   useEffect(() => {
     const active =
       agent.activeRunId != null &&
+      agent.activeRunId !== PENDING_RUN_ID &&
       !agent.progress.finished &&
       !agent.progress.canceled &&
       !agent.progress.awaiting;

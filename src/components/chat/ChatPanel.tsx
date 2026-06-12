@@ -87,29 +87,41 @@ export function ChatPanel({
   const scrollRef = useRef<HTMLDivElement>(null);
   const pinnedToBottom = useRef(true);
   const userAnchorIdRef = useRef<string | null>(null);
+  /** True until `[data-user-msg-id]` is found and scrolled — retries across thread updates. */
+  const userAnchorPendingRef = useRef(false);
   const [showPill, setShowPill] = useState(false);
   const PIN_THRESHOLD_PX = 100;
+
+  const clearUserAnchor = useCallback(() => {
+    userAnchorIdRef.current = null;
+    userAnchorPendingRef.current = false;
+  }, []);
 
   const scrollToBottom = useCallback((behavior: ScrollBehavior = "auto") => {
     const el = scrollRef.current;
     if (!el) return;
     el.scrollTo({ top: el.scrollHeight, behavior });
     pinnedToBottom.current = true;
-    userAnchorIdRef.current = null;
+    clearUserAnchor();
     setShowPill(false);
-  }, []);
+  }, [clearUserAnchor]);
 
   const scrollUserBubbleToTop = useCallback(
-    (messageId: string, behavior: ScrollBehavior = "smooth") => {
+    (messageId: string, behavior: ScrollBehavior = "smooth"): boolean => {
       const container = scrollRef.current;
-      if (!container) return;
+      if (!container) return false;
       const bubble = container.querySelector<HTMLElement>(`[data-user-msg-id="${messageId}"]`);
-      if (!bubble) return;
+      if (!bubble) return false;
+      const paddingTop = parseFloat(getComputedStyle(container).paddingTop) || 0;
       const top =
-        bubble.offsetTop - container.offsetTop - parseFloat(getComputedStyle(container).paddingTop);
+        bubble.getBoundingClientRect().top -
+        container.getBoundingClientRect().top +
+        container.scrollTop -
+        paddingTop;
       container.scrollTo({ top: Math.max(0, top), behavior });
       pinnedToBottom.current = false;
       setShowPill(false);
+      return true;
     },
     [],
   );
@@ -120,10 +132,10 @@ export function ChatPanel({
     const dist = el.scrollHeight - el.scrollTop - el.clientHeight;
     pinnedToBottom.current = dist <= PIN_THRESHOLD_PX;
     if (pinnedToBottom.current) {
-      userAnchorIdRef.current = null;
+      clearUserAnchor();
       setShowPill(false);
     }
-  }, []);
+  }, [clearUserAnchor]);
 
   const lastUserMessageId = useMemo(() => {
     for (let i = thread.length - 1; i >= 0; i--) {
@@ -136,10 +148,45 @@ export function ChatPanel({
   useEffect(() => {
     if (lastUserMessageId && lastUserMessageId !== userAnchorIdRef.current) {
       userAnchorIdRef.current = lastUserMessageId;
-      const raf = requestAnimationFrame(() => scrollUserBubbleToTop(lastUserMessageId));
-      return () => cancelAnimationFrame(raf);
+      userAnchorPendingRef.current = true;
+    }
+  }, [lastUserMessageId]);
+
+  useEffect(() => {
+    if (!userAnchorPendingRef.current || !userAnchorIdRef.current) return;
+
+    const messageId = userAnchorIdRef.current;
+    let useSmooth = true;
+
+    const attempt = () => {
+      if (!userAnchorPendingRef.current || userAnchorIdRef.current !== messageId) return;
+      const behavior: ScrollBehavior = useSmooth ? "smooth" : "auto";
+      useSmooth = false;
+      if (scrollUserBubbleToTop(messageId, behavior)) {
+        userAnchorPendingRef.current = false;
+      }
+    };
+
+    const raf = requestAnimationFrame(() => requestAnimationFrame(attempt));
+
+    const container = scrollRef.current;
+    const resizeObserver =
+      container &&
+      new ResizeObserver(() => {
+        attempt();
+      });
+    if (resizeObserver && container) {
+      resizeObserver.observe(container);
     }
 
+    return () => {
+      cancelAnimationFrame(raf);
+      resizeObserver?.disconnect();
+    };
+  }, [lastUserMessageId, thread.length, scrollUserBubbleToTop]);
+
+  useEffect(() => {
+    if (userAnchorPendingRef.current) return;
     if (userAnchorIdRef.current && running) return;
 
     if (pinnedToBottom.current) {
@@ -147,14 +194,7 @@ export function ChatPanel({
       return () => cancelAnimationFrame(raf);
     }
     setShowPill(true);
-  }, [
-    thread.length,
-    running,
-    pendingQueueItems.length,
-    lastUserMessageId,
-    scrollToBottom,
-    scrollUserBubbleToTop,
-  ]);
+  }, [thread.length, running, pendingQueueItems.length, scrollToBottom]);
 
   const handleSend = useCallback(
     (text: string, mode?: AgentComposerMode, parts?: StoredMessagePart[]) => {

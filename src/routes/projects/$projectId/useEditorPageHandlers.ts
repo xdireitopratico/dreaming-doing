@@ -227,7 +227,7 @@ export function useEditorPageHandlers({
 
   const runAgent = useCallback(
     async (explicitKind?: ForgeSessionKind, explicitAction?: TasteAction): Promise<boolean> => {
-      if (!conversation || isAgentBusy()) return false;
+      if (!conversation || (isAgentBusy() && !agent.isPendingRun)) return false;
 
       const kind = explicitKind ?? resolveSessionKind(tasteQuota);
       const tasteAction: TasteAction | undefined =

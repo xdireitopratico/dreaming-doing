@@ -35,6 +35,7 @@ export function AssistantTurn({
     null;
   const narrationText = normalizeChatProse(item.narration);
   const closingText = resolveClosingProse(narrationText, rawClosing);
+  const narrationStreaming = !!item.isActive && !!narrationText;
   const closingStreaming = !!item.isActive && !!item.streamText?.trim();
 
   const showThinking = !!item.thinking;
@@ -57,7 +58,9 @@ export function AssistantTurn({
           />
         )}
 
-        {showNarration && <ChatNarration text={narrationText!} />}
+        {showNarration && (
+          <ChatNarration text={narrationText!} streaming={narrationStreaming} />
+        )}
 
         {showJobCard && item.miniCard && (
           <ChatJobCard

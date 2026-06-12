@@ -25,6 +25,7 @@ import { type LogEntry, LogPanel } from "@/components/editor/LogPanel";
 import { AiDiffViewer, type DiffEntry } from "@/components/editor/AiDiffViewer";
 import { usePendingPlan } from "@/hooks/usePendingPlan";
 import { PENDING_RUN_ID } from "@/lib/pending-run-id";
+import { hasFirstInspectorToken } from "@/lib/forge-run";
 import { resolveHistoricalRunProgress } from "@/lib/assistant-run-progress";
 import type { AgentProgress } from "@/lib/agent-progress";
 import { useJobWorkspaceFocus } from "@/hooks/useJobWorkspaceFocus";
@@ -238,6 +239,7 @@ export function EditorPageLayout({
     setJobTab,
     isJobFocused,
     clearInspectorDismissed,
+    isInspectorDismissedForRun,
   } = useJobWorkspaceFocus();
 
   const handleOpenInspector = (
@@ -268,14 +270,38 @@ export function EditorPageLayout({
   }, [pendingPlan, jobWorkspaceFocus?.tab, setJobTab]);
 
   const prevInspectorRunRef = useRef<string | null>(null);
+  const autoOpenedInspectorRunRef = useRef<string | null>(null);
+
   useEffect(() => {
     const rid = agent.activeRunId;
     if (!rid || rid === PENDING_RUN_ID) return;
     if (prevInspectorRunRef.current !== rid) {
       clearInspectorDismissed();
+      autoOpenedInspectorRunRef.current = null;
       prevInspectorRunRef.current = rid;
     }
   }, [agent.activeRunId, clearInspectorDismissed]);
+
+  useEffect(() => {
+    const runId = agent.activeRunId;
+    if (!runId || runId === PENDING_RUN_ID) return;
+    if (!running) return;
+    if (agent.progress.conversational) return;
+    if (pendingPlan) return;
+    if (isInspectorDismissedForRun(runId)) return;
+    if (autoOpenedInspectorRunRef.current === runId) return;
+    if (!hasFirstInspectorToken(agent.progress)) return;
+
+    autoOpenedInspectorRunRef.current = runId;
+    handleOpenInspector(runId, "timeline");
+  }, [
+    running,
+    agent.activeRunId,
+    agent.progress,
+    pendingPlan,
+    isInspectorDismissedForRun,
+    handleOpenInspector,
+  ]);
 
   const focusedJobProgress = useMemo((): AgentProgress | null => {
     if (!jobWorkspaceFocus) return null;

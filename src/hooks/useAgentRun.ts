@@ -162,6 +162,7 @@ export function useAgentRun() {
   useEffect(() => {
     if (!progress.finished) return;
     if (!runIdRef.current && !activeRunId) return;
+    if (activeRunStartedAtMsRef.current != null) return;
     if (shouldRetainLiveRunSlot(progress)) return;
     runIdRef.current = null;
     setActiveRunId(null);
@@ -745,6 +746,9 @@ export function useAgentRun() {
   const clearPendingTurn = useCallback(() => {
     setActiveRunStartedAtMs(null);
     setActiveRunId((cur) => (cur === PENDING_RUN_ID ? null : cur));
+    setProgress((p) =>
+      p.finished ? p : { ...p, finished: true, statusHint: null, phase: null },
+    );
   }, []);
 
   const drainQueue = useCallback(

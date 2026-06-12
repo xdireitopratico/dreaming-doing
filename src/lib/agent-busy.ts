@@ -18,5 +18,6 @@ export function isEditorAgentBusy(input: AgentBusyInput): boolean {
     !input.canceled &&
     !input.awaiting;
 
-  return input.running || liveRun || input.connectInFlight;
+  const pendingTurn = input.activeRunId === PENDING_RUN_ID;
+  return (input.running && !pendingTurn) || liveRun || input.connectInFlight;
 }

@@ -21,7 +21,7 @@ import { ModelRouter } from "./router.ts";
 import { CompressionManager, parallelExecute } from "./compression.ts";
 import { RuntimeObserver } from "./observer.ts";
 import { SkillRegistry } from "./skills.ts";
-import { buildStackEnforcement, EXECUTE_RULES, getSystemPrompt } from "./prompts.ts";
+import { buildForgeAgentSystemInput } from "./agent-system-input.ts";
 import {
   isConversationalTurn,
   isConversationalTurnEarly,
@@ -44,8 +44,7 @@ import {
   proposedPlanFromToolArgs,
   splitMetaToolCalls,
 } from "./tools/meta.ts";
-import { forgeSessionModeBanner, VIBE_CLARIFY_HINT } from "./vibe-coding-prompt.ts";
-import { getTasteStartSystemPrompt } from "./prompts-taste.ts";
+
 import { friendlyLlmError } from "./llm-errors.ts";
 import { hashToolBatch, isExecutionStuck } from "../_shared/agent-stuck.ts";
 import { logger } from "../_shared/logger.ts";
@@ -1482,24 +1481,15 @@ export class AgentLoop {
   }
 
   private buildAgentSystemPrompt(planMode: boolean, skillPrompt: string): string {
-    const base = getSystemPrompt(this.projectTemplate, planMode);
-    const stackEnforcement = buildStackEnforcement(this.projectTemplate);
-    const withStack = this.stackAddon ? `${base}\n\n${this.stackAddon}` : base;
-    const withEnforcement = stackEnforcement ? `${withStack}\n\n${stackEnforcement}` : withStack;
-    const tasteWrapped = this.tasteStart
-      ? getTasteStartSystemPrompt(withEnforcement)
-      : withEnforcement;
-    return [
-      tasteWrapped,
+    return buildForgeAgentSystemInput({
+      planMode,
+      projectTemplate: this.projectTemplate,
+      stackAddon: this.stackAddon,
       skillPrompt,
-      this.sessionAddon,
-      forgeSessionModeBanner(planMode),
-      EXECUTE_RULES,
-      VIBE_CLARIFY_HINT,
-      ANTI_LEAK_RULE,
-    ]
-      .filter(Boolean)
-      .join("\n\n");
+      sessionAddon: this.sessionAddon,
+      antiLeakRule: ANTI_LEAK_RULE,
+      tasteStart: this.tasteStart,
+    });
   }
 
   private async runPlanModeAgentTurn(model: LLMProvider): Promise<{
@@ -1860,9 +1850,7 @@ export class AgentLoop {
                 append: true,
                 delta: true,
                 final: false,
-                ...(toInspector
-                  ? { thinking: true }
-                  : { thinking: true, narration: true }),
+                ...(toInspector ? { thinking: true } : { narration: true }),
               });
               if (!toInspector) this.narrationStarted = true;
               if (!toInspector) this.appendToNarration(delta);
@@ -2370,7 +2358,6 @@ export class AgentLoop {
       append: shouldAppend,
       final: false,
       narration: true,
-      thinking: true,
     });
     this.narrationStarted = true;
   }
