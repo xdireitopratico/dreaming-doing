@@ -229,6 +229,52 @@ describe("assistant-run-progress", () => {
     expect(hasInspectorProgressContent(toolsOnly)).toBe(true);
   });
 
+  it("enrichProgressFromMessageMeta reidrata streamTail quando cardSnapshot.timeline vazio", () => {
+    const msg: ChatMessage = {
+      id: "a1",
+      role: "assistant",
+      content: "Landing criada.",
+      timestamp: 0,
+      meta: {
+        runId: "run-reload",
+        partial: false,
+        finishedAt: "2026-01-01T00:00:00Z",
+        streamTail: [
+          { type: "tool_start", data: { name: "fs_write", args: { path: "src/App.tsx" } }, timestamp: 1 },
+          { type: "tool_end", data: { name: "fs_write", ok: true }, timestamp: 2 },
+        ],
+        cardSnapshot: { timeline: [], tools: [], finished: true, streamText: "Landing criada." },
+      },
+    };
+    const p = progressFromAssistantMessage(msg);
+    expect(p?.timeline).toHaveLength(2);
+    expect(hasInspectorProgressContent(p)).toBe(true);
+  });
+
+  it("resolveInspectorRunProgress pós-reload usa streamTail sem frozen", () => {
+    const msg: ChatMessage = {
+      id: "a1",
+      role: "assistant",
+      content: "Feito.",
+      timestamp: 0,
+      meta: {
+        runId: "run-reload",
+        partial: false,
+        finishedAt: "2026-01-01T00:00:00Z",
+        streamTail: [
+          { type: "explore", data: { message: "Lendo projeto" }, timestamp: 1 },
+        ],
+        cardSnapshot: { timeline: [], tools: [], finished: true },
+      },
+    };
+    expect(
+      resolveInspectorRunProgress("run-reload", [msg], {
+        activeRunId: null,
+        liveProgress: initialAgentProgress,
+      })?.timeline,
+    ).toHaveLength(1);
+  });
+
   it("resolveInspectorRunProgress prefere frozen com tools sobre DB fraco", () => {
     const frozen = {
       ...initialAgentProgress,

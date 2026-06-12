@@ -108,6 +108,43 @@ describe("buildChatThread", () => {
     }
   });
 
+  it("pós-reload: cardSnapshot fraco + streamTail mantém evidência no turno", () => {
+    const messages: ChatMessage[] = [
+      msg("u1", "user", "cria landing"),
+      {
+        id: "a1",
+        role: "assistant",
+        content: "Landing criada.",
+        timestamp: 0,
+        runId: "run-reload",
+        meta: {
+          runId: "run-reload",
+          partial: false,
+          finishedAt: "2026-01-01T00:00:00Z",
+          streamTail: [
+            {
+              type: "tool_start",
+              data: { name: "fs_write", args: { path: "src/App.tsx" } },
+              timestamp: 1,
+            },
+          ],
+          cardSnapshot: { timeline: [], tools: [], finished: true, streamText: "Landing criada." },
+        },
+      },
+    ];
+    const thread = buildChatThread(messages, initialAgentProgress, {
+      running: false,
+      activeRunId: null,
+      sessionProgress: initialAgentProgress,
+    });
+    const turn = thread[1];
+    expect(turn.kind).toBe("assistant");
+    if (turn.kind === "assistant") {
+      expect(turn.miniCard).toBeTruthy();
+      expect(turn.runId).toBe("run-reload");
+    }
+  });
+
   it("não vaza run de outra conversa em chat vazio", () => {
     const stale = {
       ...initialAgentProgress,

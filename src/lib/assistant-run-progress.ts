@@ -80,7 +80,7 @@ function findAssistantMessageForRun(runId: string, messages: ChatMessage[]): Cha
   return null;
 }
 
-function pickRicherProgress(
+export function pickRicherProgress(
   a: AgentProgress | null,
   b: AgentProgress | null,
 ): AgentProgress | null {
@@ -89,6 +89,60 @@ function pickRicherProgress(
   if (!a) return b;
   if (!b) return a;
   return wa >= wb ? a : b;
+}
+
+function toolsFromMessageToolCalls(msg: ChatMessage): AgentProgress["tools"] {
+  return (msg.toolCalls ?? []).map((tc) => ({
+    name: tc.name,
+    args:
+      typeof tc.args === "string"
+        ? ({ path: tc.args } as Record<string, unknown>)
+        : ((tc.args as Record<string, unknown> | undefined) ?? {}),
+    ok: true as const,
+  }));
+}
+
+/** Preenche lacunas do cardSnapshot com streamTail, executionLog e toolCalls do meta. */
+export function enrichProgressFromMessageMeta(
+  progress: AgentProgress,
+  meta: Record<string, unknown>,
+  msg: ChatMessage,
+): AgentProgress {
+  let next = progress;
+
+  if (inspectorProgressWeight(next) === 0) {
+    const timeline = timelineFromMeta(meta);
+    if (timeline.length > 0) {
+      next = { ...next, timeline };
+    }
+  }
+
+  if ((next.tools?.length ?? 0) === 0 && (msg.toolCalls?.length ?? 0) > 0) {
+    next = { ...next, tools: toolsFromMessageToolCalls(msg) };
+  }
+
+  if (!next.streamText?.trim()) {
+    const body = msg.content?.trim();
+    if (body) next = { ...next, streamText: body };
+  }
+
+  if (next.latencyThoughtMs == null) {
+    const metaLatency =
+      typeof meta.latencyThoughtMs === "number" && meta.latencyThoughtMs > 0
+        ? meta.latencyThoughtMs
+        : null;
+    if (metaLatency != null) next = { ...next, latencyThoughtMs: metaLatency };
+  }
+
+  if (!next.narrationText?.trim()) {
+    const narration =
+      typeof meta.narrationText === "string" && meta.narrationText.trim()
+        ? meta.narrationText.trim()
+        : null;
+    if (narration) next = { ...next, narrationText: narration };
+  }
+
+  return next;
 }
 
 /** Inspector: ao vivo > DB rico > cópia congelada > DB fraco. */
@@ -268,7 +322,11 @@ export function progressFromAssistantMessage(msg: ChatMessage): AgentProgress | 
   const meta = (msg.meta ?? {}) as Record<string, unknown>;
   const cardSnapshot = meta.cardSnapshot;
   if (cardSnapshot && typeof cardSnapshot === "object") {
-    return progressFromCardSnapshot(cardSnapshot as Record<string, unknown>, msg);
+    return enrichProgressFromMessageMeta(
+      progressFromCardSnapshot(cardSnapshot as Record<string, unknown>, msg),
+      meta,
+      msg,
+    );
   }
 
   const metaLatency =
