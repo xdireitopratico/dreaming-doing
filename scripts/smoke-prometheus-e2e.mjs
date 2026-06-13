@@ -203,7 +203,7 @@ async function smokeFetchPage() {
 async function smokeCortexStart(userJwt, userId, flowId) {
   console.log("→ prometheus-builder start (user JWT)");
   const prompt =
-    "Agente de vendas para loja de roupas no WhatsApp, tom amigável e respostas curtas";
+    "agente prospect para vender plataforma SaaS para advogados";
 
   const res = await fetch(`${SUPABASE_URL}/functions/v1/prometheus-builder`, {
     method: "POST",
@@ -240,7 +240,7 @@ async function smokeCortexStart(userJwt, userId, flowId) {
     await sleep(pollIntervalMs);
 
     const turns = await rest(
-      `prometheus_build_turns?session_id=eq.${sessionId}&select=agent_key,phase,created_at&order=created_at.asc`,
+      `prometheus_build_turns?session_id=eq.${sessionId}&select=agent_key,phase,content,created_at&order=created_at.asc`,
     ).then((r) => r.json());
 
     if (!Array.isArray(turns)) {
@@ -254,9 +254,17 @@ async function smokeCortexStart(userJwt, userId, flowId) {
     ).then((r) => r.json());
     phase = sessions?.[0]?.phase ?? phase;
 
-    if (cortexTurns >= 1) {
-      console.log(`  ✓ cortex turn OK (turns=${cortexTurns}, phase=${phase})`);
-      return { sessionId, cortexTurns, phase };
+    const agentKeys = new Set(turns.map((t) => t.agent_key));
+    const stupidFork = turns.some((t) =>
+      typeof t.content === "string" &&
+      (/Em quais canais o agente/i.test(t.content) ||
+        /Qual tom de comunicação/i.test(t.content) ||
+        /ferramentas externas/i.test(t.content)),
+    );
+
+    if (cortexTurns >= 1 && agentKeys.size >= 3 && !stupidFork) {
+      console.log(`  ✓ boardroom OK (agents=${agentKeys.size}, cortex=${cortexTurns}, phase=${phase})`);
+      return { sessionId, cortexTurns, phase, agentKeys: [...agentKeys] };
     }
   }
 

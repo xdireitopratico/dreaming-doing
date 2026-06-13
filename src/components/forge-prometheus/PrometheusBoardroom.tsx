@@ -321,6 +321,19 @@ export function PrometheusBoardroom({
             <div ref={messagesEndRef} />
           </div>
 
+          {isStreaming && onSkip && (
+            <div className="flex-shrink-0 px-6 pb-1 flex justify-end">
+              <button
+                type="button"
+                onClick={onSkip}
+                className="rounded-lg px-3 py-1.5 text-[10px] font-semibold transition-opacity hover:opacity-80"
+                style={{ background: "rgba(239,68,68,0.12)", color: "hsl(0 70% 65%)", border: "1px solid rgba(239,68,68,0.25)" }}
+              >
+                Parar
+              </button>
+            </div>
+          )}
+
           {onSendFeedback && (
             <PrometheusBoardroomFeedbackBar isStreaming={isStreaming} onSendFeedback={onSendFeedback} />
           )}
