@@ -3,7 +3,7 @@
 set -euo pipefail
 
 REF="dpduljngdurfpmaclffa"
-FUNCTIONS=(
+FORGE_APP_FUNCTIONS=(
   agent-run
   health
   admin-platform-secrets
@@ -17,6 +17,25 @@ FUNCTIONS=(
   project-delete
   voice-transcribe
 )
+
+AETHERFORGE_FUNCTIONS=(
+  aetherforge-gateway
+  aetherforge-rag-embed
+  aetherforge-api-proxy
+  aetherforge-cron
+  aetherforge-webhook-worker
+  aetherforge-healthz
+  aetherforge-gdpr
+  aetherforge-marketplace-checkout
+  aetherforge-widget
+  prometheus-builder
+  prometheus-tool-executor
+  prometheus-healer
+  prometheus-learn-pipeline
+  firecrawl-search
+)
+
+FUNCTIONS=("${FORGE_APP_FUNCTIONS[@]}" "${AETHERFORGE_FUNCTIONS[@]}")
 
 echo "→ Deployando ${#FUNCTIONS[@]} edge functions em $REF"
 for fn in "${FUNCTIONS[@]}"; do

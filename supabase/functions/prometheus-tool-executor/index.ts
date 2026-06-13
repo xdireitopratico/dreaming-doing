@@ -1,0 +1,97 @@
+/**
+ * prometheus-tool-executor — Edge function for Python VPS to call any Prometheus tool
+ * 
+ * D4: TS reference engine + Python proxy. Python VPS calls this function
+ * to execute tools instead of reimplementing them.
+ * 
+ * Auth: Bearer VPS_TOKEN or service_role key
+ * POST { tool_name, params, session_id, tenant_id? }
+ */
+
+import { supabaseAdmin } from "../_shared/prometheus-db.ts";
+import { dispatchTool, type ToolContext } from "../_shared/prometheus-tools.ts";
+
+const VPS_TOKEN = Deno.env.get("VPS_BRIDGE_TOKEN") || Deno.env.get("VPS_TOKEN") || "";
+
+Deno.serve(async (req: Request) => {
+  // CORS preflight
+  if (req.method === "OPTIONS") {
+    return new Response(null, {
+      headers: {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "POST, OPTIONS",
+        "Access-Control-Allow-Headers": "Authorization, Content-Type",
+      },
+    });
+  }
+
+  if (req.method !== "POST") {
+    return new Response(JSON.stringify({ error: "Method not allowed" }), { status: 405 });
+  }
+
+  // Auth check — NEVER allow empty tokens
+  const authHeader = req.headers.get("authorization") || "";
+  const token = authHeader.replace(/^Bearer\s+/i, "");
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+
+  if (!token || (!VPS_TOKEN && !serviceKey)) {
+    return new Response(JSON.stringify({ error: "Server misconfigured: auth tokens not set" }), { status: 500 });
+  }
+
+  if (token !== VPS_TOKEN && token !== serviceKey) {
+    return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401 });
+  }
+
+  try {
+    const body = await req.json();
+    const { tool_name, params, session_id, tenant_id } = body;
+
+    if (!tool_name) {
+      return new Response(JSON.stringify({ error: "tool_name is required" }), { status: 400 });
+    }
+    if (!session_id) {
+      return new Response(JSON.stringify({ error: "session_id is required" }), { status: 400 });
+    }
+
+    // Load research cache from session
+    const sb = supabaseAdmin();
+    const { data: session } = await sb
+      .from("prometheus_build_sessions")
+      .select("research_cache")
+      .eq("id", session_id)
+      .single();
+
+    const researchCache = (session?.research_cache || {}) as Record<string, unknown>;
+
+    const ctx: ToolContext = {
+      sessionId: session_id,
+      supabase: sb,
+      researchCache,
+      tenantId: tenant_id,
+    };
+
+    const startMs = Date.now();
+    const result = await dispatchTool(tool_name, params || {}, ctx);
+    const durationMs = Date.now() - startMs;
+
+    // Persist updated research cache back to session
+    if (JSON.stringify(researchCache) !== JSON.stringify(session?.research_cache || {})) {
+      await sb
+        .from("prometheus_build_sessions")
+        .update({ research_cache: researchCache })
+        .eq("id", session_id);
+    }
+
+    return new Response(JSON.stringify({ result, duration_ms: durationMs }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : "Internal error";
+    console.error("[prometheus-tool-executor] Error:", msg);
+    return new Response(JSON.stringify({ error: msg }), {
+      status: 500,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+});
