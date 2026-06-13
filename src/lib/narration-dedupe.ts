@@ -1,5 +1,7 @@
 /** Espelho testável de supabase/functions/agent-run/narration-dedupe.ts */
 
+export const ENTENDI_OPENER_RE = /^entendi\b/i;
+
 export function normalizeNarrationKey(text: string): string {
   return text.trim().toLowerCase().replace(/\s+/g, " ");
 }
@@ -11,6 +13,10 @@ export function narrationParagraphs(buffer: string): string[] {
     .filter(Boolean);
 }
 
+export function isEntendiOpener(text: string): boolean {
+  return ENTENDI_OPENER_RE.test(text.trim());
+}
+
 /**
  * Evita acumular o mesmo parágrafo de narração a cada step do loop
  * (ex.: «Entendi: vou ler o arquivo…» repetido 10× no chat).
@@ -18,6 +24,12 @@ export function narrationParagraphs(buffer: string): string[] {
 export function isDuplicateNarrationChunk(existingBuffer: string, newChunk: string): boolean {
   const chunk = newChunk.trim();
   if (!chunk) return true;
+
+  if (isEntendiOpener(chunk)) {
+    for (const paragraph of narrationParagraphs(existingBuffer)) {
+      if (isEntendiOpener(paragraph)) return true;
+    }
+  }
 
   const key = normalizeNarrationKey(chunk);
   if (key.length < 16) return false;
@@ -27,4 +39,26 @@ export function isDuplicateNarrationChunk(existingBuffer: string, newChunk: stri
   }
 
   return false;
+}
+
+/** Colapsa parede de "Entendi…" no buffer persistido ou exibido. */
+export function collapseNarrationBuffer(buffer: string): string {
+  const paragraphs = narrationParagraphs(buffer);
+  if (paragraphs.length === 0) return "";
+
+  const out: string[] = [];
+  let keptEntendi = false;
+
+  for (const p of paragraphs) {
+    if (isEntendiOpener(p)) {
+      if (!keptEntendi) {
+        keptEntendi = true;
+        out.push(p);
+      }
+      continue;
+    }
+    out.push(p);
+  }
+
+  return out.join("\n\n");
 }

@@ -166,6 +166,52 @@ describe("buildChatThread", () => {
     }
   });
 
+  it("reordena narração órfã Entendi para depois do último user", () => {
+    const messages: ChatMessage[] = [
+      {
+        id: "a-orphan",
+        role: "assistant",
+        content: "",
+        timestamp: 0,
+        parts: [{ type: "text", text: "Entendi: vou ler o projeto." }],
+      },
+      msg("u1", "user", "refaz o header"),
+    ];
+    const thread = buildChatThread(messages, initialAgentProgress, {
+      sessionProgress: initialAgentProgress,
+    });
+    expect(thread.map((t) => t.kind)).toEqual(["user", "assistant"]);
+  });
+
+  it("slot live nunca ancora antes do último user visível", () => {
+    const messages = [
+      msg("u0", "user", "pedido antigo"),
+      {
+        id: "a0",
+        role: "assistant" as const,
+        content: "ok",
+        timestamp: 0,
+        runId: "run-old",
+        meta: { runId: "run-old", finishedAt: "2026-01-01T00:00:00Z" },
+      },
+      msg("u1", "user", "novo pedido"),
+    ];
+    const progress = {
+      ...initialAgentProgress,
+      finished: false,
+      narrationText: "Vou implementar.",
+    };
+    const thread = buildChatThread(messages, progress, {
+      running: true,
+      activeRunId: "run-new",
+      sessionProgress: progress,
+    });
+    const userIdx = thread.findIndex((t) => t.kind === "user" && t.message.content === "novo pedido");
+    const asstIdx = thread.findIndex((t) => t.kind === "assistant" && t.runId === "run-new");
+    expect(userIdx).toBeGreaterThanOrEqual(0);
+    expect(asstIdx).toBeGreaterThan(userIdx);
+  });
+
   it("não vaza run de outra conversa em chat vazio", () => {
     const stale = {
       ...initialAgentProgress,

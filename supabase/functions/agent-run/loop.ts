@@ -58,7 +58,7 @@ import {
 } from "./tool-progress.ts";
 import { logger } from "../_shared/logger.ts";
 import { appendExecutionLogEntry, buildExecutionLogMeta } from "./executionLogMeta.ts";
-import { isDuplicateNarrationChunk } from "./narration-dedupe.ts";
+import { collapseNarrationBuffer, isDuplicateNarrationChunk } from "./narration-dedupe.ts";
 import { checkpointChatText } from "./checkpoint-chat.ts";
 import {
   auditDesignInventory,
@@ -442,7 +442,8 @@ export class AgentLoop {
   private appendToNarration(text: string): void {
     const chunk = text.trim();
     if (!chunk) return;
-    this.narrationBuffer = this.narrationBuffer ? `${this.narrationBuffer}\n\n${chunk}` : chunk;
+    const merged = this.narrationBuffer ? `${this.narrationBuffer}\n\n${chunk}` : chunk;
+    this.narrationBuffer = collapseNarrationBuffer(merged);
     this.lastActivityAt = Date.now();
   }
 

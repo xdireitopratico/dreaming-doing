@@ -8,6 +8,12 @@ describe("checkpointChatText", () => {
     );
   });
 
+  it("colapsa parede Entendi no checkpoint", () => {
+    expect(
+      checkpointChatText("Entendi: A\n\nEntendi: B\n\nRetomando passo 2.", false),
+    ).toBe("Entendi: A\n\nRetomando passo 2.");
+  });
+
   it("fallback para retomada automática", () => {
     expect(checkpointChatText("", false)).toBe("Retomando automaticamente no servidor…");
   });

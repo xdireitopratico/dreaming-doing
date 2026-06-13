@@ -5,6 +5,7 @@ import {
   runIdFromAssistantMessage,
 } from "@/lib/assistant-run-progress";
 import { shouldRetainLiveRunSlot } from "@/lib/live-run-overlay";
+import { isEntendiOpener } from "@/lib/narration-dedupe";
 import { PENDING_RUN_ID } from "@/lib/pending-run-id";
 import { scopeLiveState } from "@/lib/chat/session";
 import { mapAssistantTurn } from "@/lib/chat/turn";
@@ -49,6 +50,61 @@ function mergeMessageContent(a?: ChatMessage, b?: ChatMessage): ChatMessage | un
   };
 }
 
+function lastVisibleUserIndex(items: RawThreadItem[]): number {
+  for (let i = items.length - 1; i >= 0; i--) {
+    const item = items[i];
+    if (item?.kind === "user" && !item.internal) return i;
+  }
+  return -1;
+}
+
+function assistantVisibleText(item: Extract<RawThreadItem, { kind: "assistant" }>): string {
+  const msg = item.message;
+  if (!msg) return "";
+  const parts = msg.parts;
+  if (Array.isArray(parts)) {
+    return parts
+      .filter((p) => p && typeof p === "object" && (p as { type?: string }).type === "text")
+      .map((p) => (p as { text?: string }).text ?? "")
+      .join("\n")
+      .trim();
+  }
+  return msg.content?.trim() ?? "";
+}
+
+/** Assistant órfão (narração parcial sem runId) antes do user — reordenar após o último user. */
+function isReorderableOrphanAssistant(item: Extract<RawThreadItem, { kind: "assistant" }>): boolean {
+  if (item.live || item.isActive) return false;
+  if (item.runId) return false;
+  if (item.message && hasMaterializedCardSnapshot(item.message)) return false;
+  const text = assistantVisibleText(item);
+  if (!text) return true;
+  return isEntendiOpener(text);
+}
+
+/** Garante user visível antes de narração órfã do DB. */
+function normalizeThreadOrder(items: RawThreadItem[]): RawThreadItem[] {
+  const lastUserIdx = lastVisibleUserIndex(items);
+  if (lastUserIdx < 0) return items;
+
+  const head: RawThreadItem[] = [];
+  const tail: RawThreadItem[] = [];
+  const deferred: RawThreadItem[] = [];
+
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i]!;
+    if (i < lastUserIdx && item.kind === "assistant" && isReorderableOrphanAssistant(item)) {
+      deferred.push(item);
+      continue;
+    }
+    if (i <= lastUserIdx) head.push(item);
+    else tail.push(item);
+  }
+
+  if (deferred.length === 0) return items;
+  return [...head, ...deferred, ...tail];
+}
+
 function buildDbThread(messages: ChatMessage[]): RawThreadItem[] {
   const items: RawThreadItem[] = [];
 
@@ -88,7 +144,7 @@ function buildDbThread(messages: ChatMessage[]): RawThreadItem[] {
     }
   }
 
-  return items;
+  return normalizeThreadOrder(items);
 }
 
 function isRunMaterializedInThread(items: RawThreadItem[], runId: string): boolean {
@@ -135,8 +191,10 @@ function upsertLiveSlot(
   items: RawThreadItem[],
   insertAt: number,
   slot: Extract<RawThreadItem, { kind: "assistant" }>,
+  minInsertAt = 0,
 ): RawThreadItem[] {
   const next = [...items];
+  const at = Math.max(insertAt, minInsertAt);
 
   if (slot.runId) {
     for (let i = 0; i < next.length; i++) {
@@ -152,30 +210,36 @@ function upsertLiveSlot(
         return next;
       }
       if (ex.runId === slot.runId) {
-        next[i] = {
+        const merged: Extract<RawThreadItem, { kind: "assistant" }> = {
           ...ex,
           ...slot,
           message: mergeMessageContent(ex.message, slot.message),
           live: slot.live ?? ex.live,
           isActive: slot.isActive || ex.isActive,
         };
+        if (i < minInsertAt) {
+          next.splice(i, 1);
+          next.splice(Math.min(at, next.length), 0, merged);
+        } else {
+          next[i] = merged;
+        }
         return next;
       }
     }
   }
 
-  const at = next[insertAt];
-  if (at?.kind === "assistant" && slot.runId && at.runId === slot.runId) {
-    next[insertAt] = {
-      ...at,
+  const existing = next[at];
+  if (existing?.kind === "assistant" && slot.runId && existing.runId === slot.runId) {
+    next[at] = {
+      ...existing,
       ...slot,
-      message: mergeMessageContent(at.message, slot.message),
-      live: slot.live ?? at.live,
+      message: mergeMessageContent(existing.message, slot.message),
+      live: slot.live ?? existing.live,
     };
     return next;
   }
 
-  next.splice(insertAt, 0, slot);
+  next.splice(at, 0, slot);
   return next;
 }
 
@@ -228,20 +292,24 @@ function applyLiveOverlay(items: RawThreadItem[], live: ChatLiveState): RawThrea
     isActive: slotActive,
   };
 
+  const lastUserIdx = lastVisibleUserIndex(items);
+  const minInsertAt = lastUserIdx >= 0 ? lastUserIdx + 1 : 0;
+
   if (activeRunId) {
-    const anchored = anchorIndexForRun(items, activeRunId);
+    let anchored = anchorIndexForRun(items, activeRunId);
+    if (anchored != null && anchored < minInsertAt) anchored = null;
     const insertAt =
       anchored ??
       (() => {
         const u = lastUnansweredUserIndex(items);
         return u >= 0 ? u + 1 : items.length;
       })();
-    return upsertLiveSlot(items, insertAt, slot);
+    return upsertLiveSlot(items, insertAt, slot, minInsertAt);
   }
 
   const insertAt = lastUnansweredUserIndex(items);
   if (insertAt < 0) return items;
-  return upsertLiveSlot(items, insertAt + 1, { ...slot, isActive: false });
+  return upsertLiveSlot(items, insertAt + 1, { ...slot, isActive: false }, minInsertAt);
 }
 
 function buildRawThread(
