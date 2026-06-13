@@ -86,21 +86,21 @@ export function useWhisperSTT({ language = "pt", whisperModel = "large-v3", onTr
   const transcribeWithWhisper = useCallback(async (blob: Blob): Promise<string | null> => {
     const attempt = async (retryCount: number): Promise<string | null> => {
       const formData = new FormData();
-      formData.append("audio", blob, "recording.webm");
+      formData.append("file", blob, "recording.webm");
       formData.append("language", language);
-      formData.append("model", whisperModel);
+      formData.append("provider", "groq");
 
-      const { data, error: fnError } = await supabase.functions.invoke("vps-whisper-transcribe", {
+      const { data, error: fnError } = await supabase.functions.invoke("voice-transcribe", {
         body: formData,
       });
 
-      if (fnError || !data?.success) {
+      if (fnError || !data?.text) {
         if (retryCount < 1) {
           console.warn("[useWhisperSTT] Retry after", (retryCount + 1) * 2000, "ms");
           await new Promise(r => setTimeout(r, (retryCount + 1) * 2000));
           return attempt(retryCount + 1);
         }
-        throw new Error(fnError?.message || data?.error || "Whisper falhou");
+        throw new Error(fnError?.message || data?.error || "Transcrição falhou");
       }
 
       return data.text?.trim() || null;

@@ -91,6 +91,10 @@ const PHASE_LABELS: Record<string, string> = {
 
 // ═══ MAIN COMPONENT ═══
 
+function psStorageKey(projectId: string | undefined, field: string): string {
+  return projectId ? `ps_${field}_${projectId}` : `ps_${field}`;
+}
+
 export interface AdminAgentBuilderViewProps {
   projectId?: string;
 }
@@ -105,10 +109,10 @@ export default function AdminAgentBuilderView({ projectId }: AdminAgentBuilderVi
 
   const [pipeline, dispatch] = useReducer(prometheusReducer, initialPrometheusPipelineState, (init) => {
     try {
-      const savedPhase = localStorage.getItem("ps_phase");
-      const savedFlowId = localStorage.getItem("ps_flow_id");
-      const savedPrompt = localStorage.getItem("ps_prompt") || "";
-      const savedModel = localStorage.getItem("ps_quality_model") || "";
+      const savedPhase = localStorage.getItem(psStorageKey(projectId, "phase"));
+      const savedFlowId = localStorage.getItem(psStorageKey(projectId, "flow_id"));
+      const savedPrompt = localStorage.getItem(psStorageKey(projectId, "prompt")) || "";
+      const savedModel = localStorage.getItem(psStorageKey(projectId, "quality_model")) || "";
       if (
         savedPhase &&
         ["boardroom", "architecture_brief", "review"].includes(savedPhase) &&
@@ -129,9 +133,9 @@ export default function AdminAgentBuilderView({ projectId }: AdminAgentBuilderVi
   const setPhase = useCallback((p: PrometheusUIPhase) => {
     dispatch({ type: "SET_PHASE", phase: p });
     try {
-      localStorage.setItem("ps_phase", p);
+      localStorage.setItem(psStorageKey(projectId, "phase"), p);
     } catch {}
-  }, []);
+  }, [projectId]);
 
   // ═══ PHASE HANDLERS ═══
 
@@ -140,8 +144,8 @@ export default function AdminAgentBuilderView({ projectId }: AdminAgentBuilderVi
     setResolvedQualityModel(config.qualityModel);
     dispatch({ type: "SET_LAUNCH", prompt: config.prompt, qualityModel: config.qualityModel });
     try {
-      localStorage.setItem("ps_prompt", config.prompt);
-      localStorage.setItem("ps_quality_model", config.qualityModel);
+      localStorage.setItem(psStorageKey(projectId, "prompt"), config.prompt);
+      localStorage.setItem(psStorageKey(projectId, "quality_model"), config.qualityModel);
     } catch {}
 
     // Create agent_flows draft row directly (was done in onboarding before)
@@ -182,7 +186,7 @@ export default function AdminAgentBuilderView({ projectId }: AdminAgentBuilderVi
 
     const flowId = (data as { id: string }).id;
     dispatch({ type: "SET_FLOW_ID", flowId });
-    try { localStorage.setItem("ps_flow_id", flowId); } catch {}
+    try { localStorage.setItem(psStorageKey(projectId, "flow_id"), flowId); } catch {}
     // Skip onboarding → go directly to boardroom (enrichment happens server-side in cortex)
     setPhase("boardroom");
   }, [setPhase, projectId]);
@@ -219,7 +223,7 @@ export default function AdminAgentBuilderView({ projectId }: AdminAgentBuilderVi
 
     const flowId = (data as { id: string }).id;
     dispatch({ type: "SET_FLOW_ID", flowId });
-    try { localStorage.setItem("ps_flow_id", flowId); } catch {}
+    try { localStorage.setItem(psStorageKey(projectId, "flow_id"), flowId); } catch {}
     setPhase("boardroom");
   }, [pipeline.launchPrompt, pipeline.launchQualityModel, setPhase, projectId]);
 
@@ -289,9 +293,12 @@ export default function AdminAgentBuilderView({ projectId }: AdminAgentBuilderVi
     if (targetFlowId) {
       openBuilder(targetFlowId);
       setPhase("home");
-      try { localStorage.removeItem("ps_phase"); localStorage.removeItem("ps_flow_id"); } catch {}
+      try {
+        localStorage.removeItem(psStorageKey(projectId, "phase"));
+        localStorage.removeItem(psStorageKey(projectId, "flow_id"));
+      } catch {}
     }
-  }, [pipeline.flowId, openBuilder, setPhase]);
+  }, [pipeline.flowId, openBuilder, setPhase, projectId]);
 
   // Review → Architecture Brief (adjust)
   const handleAdjust = useCallback(() => {
@@ -367,12 +374,12 @@ export default function AdminAgentBuilderView({ projectId }: AdminAgentBuilderVi
     setPhase("home");
     dispatch({ type: "SET_FLOW_ID", flowId: null });
     try {
-      localStorage.removeItem("ps_phase");
-      localStorage.removeItem("ps_flow_id");
-      localStorage.removeItem("ps_prompt");
-      localStorage.removeItem("ps_quality_model");
+      localStorage.removeItem(psStorageKey(projectId, "phase"));
+      localStorage.removeItem(psStorageKey(projectId, "flow_id"));
+      localStorage.removeItem(psStorageKey(projectId, "prompt"));
+      localStorage.removeItem(psStorageKey(projectId, "quality_model"));
     } catch {}
-  }, [setPhase]);
+  }, [setPhase, projectId]);
 
   const handleBuilderClose = useCallback(() => {
     closeBuilder();
@@ -551,7 +558,7 @@ export default function AdminAgentBuilderView({ projectId }: AdminAgentBuilderVi
       phase: activeSession.phase,
       onResume: () => {
         dispatch({ type: "SET_FLOW_ID", flowId: activeSession.flowId });
-        try { localStorage.setItem("ps_flow_id", activeSession.flowId); } catch {}
+        try { localStorage.setItem(psStorageKey(projectId, "flow_id"), activeSession.flowId); } catch {}
         // Resume to correct UI phase based on backend phase
         const buildPhases = ["building", "testing", "review", "deploying"];
         if (buildPhases.includes(activeSession.phase)) {
@@ -563,7 +570,7 @@ export default function AdminAgentBuilderView({ projectId }: AdminAgentBuilderVi
         }
       },
     };
-  }, [activeSession, setPhase]);
+  }, [activeSession, setPhase, projectId]);
 
   // ═══ RESUME / OPEN AGENT BY FLOW ID ═══
   const handleResumeOrOpenFlow = useCallback(async (flowId: string) => {
@@ -580,7 +587,7 @@ export default function AdminAgentBuilderView({ projectId }: AdminAgentBuilderVi
       const session = sessions?.[0] as unknown as { id: string; phase: string } | undefined;
       if (session) {
         dispatch({ type: "SET_FLOW_ID", flowId });
-        try { localStorage.setItem("ps_flow_id", flowId); } catch {}
+        try { localStorage.setItem(psStorageKey(projectId, "flow_id"), flowId); } catch {}
         const buildPhases = ["building", "testing", "review", "deploying"];
         if (buildPhases.includes(session.phase)) {
           setPhase("building");
@@ -605,10 +612,10 @@ export default function AdminAgentBuilderView({ projectId }: AdminAgentBuilderVi
     } else {
       // Draft with no session — start fresh boardroom
       dispatch({ type: "SET_FLOW_ID", flowId });
-      try { localStorage.setItem("ps_flow_id", flowId); } catch {}
+      try { localStorage.setItem(psStorageKey(projectId, "flow_id"), flowId); } catch {}
       setPhase("boardroom");
     }
-  }, [setPhase, openBuilder]);
+  }, [setPhase, openBuilder, projectId]);
 
   // ═══ HOME DATA ═══
   const recentAgents = flows.slice(0, 20).map(f => {

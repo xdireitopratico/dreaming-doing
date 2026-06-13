@@ -120,6 +120,16 @@ export const createProjectFromPrompt = createServerFn({ method: "POST" })
         .single();
       if (pErr) throw new Error(pErr.message);
 
+      const { error: flowErr } = await supabase.from("agent_flows").insert({
+        name: projectName,
+        description: description || null,
+        user_id: userId,
+        project_id: project.id,
+        flow_definition: { nodes: [], edges: [] },
+        status: "draft",
+      });
+      if (flowErr) throw new Error(`Falha ao criar fluxo do agente: ${flowErr.message}`);
+
       return { projectId: project.id as string, conversationId: null };
     }
 

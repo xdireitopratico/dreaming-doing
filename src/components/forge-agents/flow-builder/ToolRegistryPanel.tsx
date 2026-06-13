@@ -496,7 +496,7 @@ export function ToolRegistryPanel({ onClose, onSelectTool }: ToolRegistryPanelPr
                   <SelectContent>
                     <SelectItem value="http" className="text-xs">HTTP Request</SelectItem>
                     <SelectItem value="edge_function" className="text-xs">Edge Function</SelectItem>
-                    <SelectItem value="python" className="text-xs">Python (KVM8)</SelectItem>
+                    <SelectItem value="python" className="text-xs">Python (sandbox)</SelectItem>
                     <SelectItem value="builtin" className="text-xs">Built-in</SelectItem>
                   </SelectContent>
                 </Select>
