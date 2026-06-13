@@ -539,7 +539,7 @@ export function useEditorPageHandlers({
       if (!conversation) {
         return { ok: false, error: "Conversa ainda carregando — tente de novo em instantes." };
       }
-      if (running) {
+      if (isAgentBusy()) {
         return { ok: false, error: "Aguarde o agente terminar antes do rollback." };
       }
 
@@ -552,6 +552,7 @@ export function useEditorPageHandlers({
       });
 
       if (result.ok) {
+        agent.resetSession();
         logEditorTelemetryEvent("agent", "rollback", "info", messageId.slice(0, 8));
         await qc.invalidateQueries({ queryKey: ["messages", conversation.id] });
         await qc.invalidateQueries({ queryKey: ["files", projectId] });
@@ -560,7 +561,7 @@ export function useEditorPageHandlers({
 
       return result.ok ? { ok: true } : { ok: false, error: result.error };
     },
-    [chatMessages, conversation, projectId, qc, running],
+    [chatMessages, conversation, projectId, qc, isAgentBusy, agent],
   );
 
   const handleExportZip = useCallback(() => {

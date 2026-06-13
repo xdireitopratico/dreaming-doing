@@ -339,6 +339,14 @@ export function useEditorAgentOrchestration({
 
   const previewSyncing = previewSyncInFlight || (previewBoot.booting && !!devUrl);
 
+  const refreshPreview = useCallback(() => {
+    if (devUrl) {
+      void syncPreviewToSandbox(true);
+      return;
+    }
+    void previewBoot.boot({ force: true });
+  }, [devUrl, syncPreviewToSandbox, previewBoot.boot]);
+
   return {
     previewE2bCircuit,
     diffEntries,
@@ -346,5 +354,6 @@ export function useEditorAgentOrchestration({
     filesSyncKey,
     previewSyncing,
     previewLiveUpdating: running && supportsLivePreview && (previewSyncing || !!devUrl),
+    refreshPreview,
   };
 }

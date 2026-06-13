@@ -115,6 +115,7 @@ export type EditorPageLayoutProps = {
   previewReloadNonce: number;
   previewSyncing?: boolean;
   previewLiveUpdating?: boolean;
+  onPreviewRefresh?: () => void;
   diffEntries: DiffEntry[];
   handleDiffAccept: (diffId: string) => void;
   handleDiffReject: (diffId: string) => void;
@@ -202,6 +203,7 @@ export function EditorPageLayout({
   previewReloadNonce,
   previewSyncing = false,
   previewLiveUpdating = false,
+  onPreviewRefresh,
   diffEntries,
   handleDiffAccept,
   handleDiffReject,
@@ -366,12 +368,11 @@ export function EditorPageLayout({
                       autoPublishPublishing)
                   }
                   onPreviewRefresh={() => {
-                    if (previewIframeRef.current?.contentWindow) {
-                      previewIframeRef.current.contentWindow.location.reload();
+                    if (onPreviewRefresh) {
+                      onPreviewRefresh();
                     } else {
                       void previewBoot.boot({ force: true });
                     }
-                    setPreviewReloadNonce((n) => n + 1);
                   }}
                   previewRefreshDisabled={previewBoot.booting}
                 />
@@ -428,12 +429,11 @@ export function EditorPageLayout({
                   onNavigate: setPreviewRoute,
                   devUrl,
                   onRefresh: () => {
-                    if (previewIframeRef.current?.contentWindow) {
-                      previewIframeRef.current.contentWindow.location.reload();
+                    if (onPreviewRefresh) {
+                      onPreviewRefresh();
                     } else {
                       void previewBoot.boot({ force: true });
                     }
-                    setPreviewReloadNonce((n) => n + 1);
                   },
                   device: previewDevice,
                   onDeviceChange: setPreviewDevice,
@@ -604,7 +604,11 @@ export function EditorPageLayout({
                               bootError={previewBoot.lastError}
                               warming={previewBoot.warming}
                               onWarmComplete={previewBoot.clearWarming}
-                              onRefresh={() => previewBoot.boot({ force: true })}
+                              onRefresh={() =>
+                                onPreviewRefresh
+                                  ? onPreviewRefresh()
+                                  : void previewBoot.boot({ force: true })
+                              }
                               reloadNonce={previewReloadNonce}
                               previewSyncing={previewSyncing}
                               agentHasRun={agentHasRun}

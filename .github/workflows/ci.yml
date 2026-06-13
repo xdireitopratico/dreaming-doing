@@ -19,4 +19,27 @@ jobs:
       - run: npm run lint
       - run: npm run typecheck
       - run: npm run test
+      - uses: denoland/setup-deno@v2
+      - run: deno test supabase/functions/_shared/agent-pending-queue.test.ts
+      - run: npm run smoke:stability
       - run: VERCEL=1 npm run build && npm run build:inngest
+      - name: Smoke agent E2E (optional)
+        if: ${{ secrets.SMOKE_PROJECT_ID != '' }}
+        env:
+          SMOKE_PROJECT_ID: ${{ secrets.SMOKE_PROJECT_ID }}
+          SMOKE_CONVERSATION_ID: ${{ secrets.SMOKE_CONVERSATION_ID }}
+          SMOKE_USER_ID: ${{ secrets.SMOKE_USER_ID }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          INNGEST_EVENT_KEY: ${{ secrets.INNGEST_EVENT_KEY }}
+        run: npm run smoke:agent
+      - name: Smoke queue E2E (optional)
+        if: ${{ secrets.SMOKE_PROJECT_ID != '' }}
+        env:
+          SMOKE_PROJECT_ID: ${{ secrets.SMOKE_PROJECT_ID }}
+          SMOKE_CONVERSATION_ID: ${{ secrets.SMOKE_CONVERSATION_ID }}
+          SMOKE_USER_ID: ${{ secrets.SMOKE_USER_ID }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          INNGEST_EVENT_KEY: ${{ secrets.INNGEST_EVENT_KEY }}
+        run: npm run smoke:queue

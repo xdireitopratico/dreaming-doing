@@ -1,7 +1,11 @@
+import { useMemo } from "react";
 import { MarkdownRenderer } from "@/components/ui/markdown-renderer";
+import { ErrorHintCard } from "@/components/editor/ErrorHintCard";
 import type { ThreadItem } from "@/lib/chat/types";
 import { assistantTurnCopyText } from "@/lib/chat/assistant-turn-copy";
 import { resolveClosingProse, sanitizeChatProseForDisplay } from "@/lib/chat/stream-prose";
+import { loadAgentPreferences } from "@/lib/agent-preferences";
+import { llmErrorHint, timeoutHint, zombieRunHint } from "@/lib/llm-error-hints";
 import { ChatThinking } from "./ChatThinking";
 import { ChatNarration } from "./ChatNarration";
 import { ChatJobCard } from "./ChatJobCard";
@@ -15,6 +19,7 @@ type AssistantTurnProps = {
   onClarifySelect?: (choice: ClarifyChoice) => void;
   canRollback?: boolean;
   onRollback?: () => void;
+  onResume?: () => void;
 };
 
 /**
@@ -27,6 +32,7 @@ export function AssistantTurn({
   onClarifySelect,
   canRollback,
   onRollback,
+  onResume,
 }: AssistantTurnProps) {
   const rawClosing =
     item.streamText?.trim() ||
@@ -47,6 +53,24 @@ export function AssistantTurn({
   const showClarify = !!item.clarify?.choices?.length;
   const showClosing = !showClarify && !!closingText;
 
+  const errorHint = useMemo(() => {
+    const err = item.error?.trim();
+    if (!err || item.isActive) return null;
+    if (item.lastFinishOk !== false && !item.resumable) return null;
+    const lower = err.toLowerCase();
+    if (item.resumable || lower.includes("continuar") || lower.includes("checkpoint")) {
+      return {
+        ...llmErrorHint(err, loadAgentPreferences().mode === "robin"),
+        action: "Continuar execução",
+        link: null as string | null,
+      };
+    }
+    if (lower.includes("zumbi") || lower.includes("expirado")) return zombieRunHint();
+    if (lower.includes("timeout") || lower.includes("interrompida")) return timeoutHint();
+    return llmErrorHint(err, loadAgentPreferences().mode === "robin");
+  }, [item.error, item.isActive, item.lastFinishOk, item.resumable]);
+
+  const showErrorHint = !!errorHint;
   const copyText = assistantTurnCopyText(item);
 
   return (
@@ -80,7 +104,18 @@ export function AssistantTurn({
           />
         )}
 
-        {showClosing && (
+        {showErrorHint && errorHint && (
+          <div className="forge-chat-error-hint" data-testid="assistant-error-hint">
+            <ErrorHintCard
+              hint={errorHint}
+              onAction={
+                errorHint.link == null && onResume && item.resumable ? onResume : undefined
+              }
+            />
+          </div>
+        )}
+
+        {showClosing && !showErrorHint && (
           <div
             className={`forge-chat-closing-line${closingStreaming ? "" : " forge-chat-prose"}`}
           >

@@ -364,6 +364,7 @@ function EditorPage() {
       previewReloadNonce={previewReloadNonce}
       previewSyncing={orchestration.previewSyncing}
       previewLiveUpdating={orchestration.previewLiveUpdating}
+      onPreviewRefresh={orchestration.refreshPreview}
       diffEntries={orchestration.diffEntries}
       handleDiffAccept={handlers.handleDiffAccept}
       handleDiffReject={handlers.handleDiffReject}

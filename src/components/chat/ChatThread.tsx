@@ -8,6 +8,7 @@ type ChatThreadProps = {
   onRollback?: (messageId: string, role: "user" | "assistant") => void;
   lastUserMessageId?: string | null;
   lastAssistantMessageId?: string | null;
+  onResume?: () => void;
 };
 
 export function ChatThread({
@@ -17,6 +18,7 @@ export function ChatThread({
   onRollback,
   lastUserMessageId,
   lastAssistantMessageId,
+  onResume,
 }: ChatThreadProps) {
   return (
     <div className="forge-chat-stream" role="log" aria-live="polite">
@@ -43,6 +45,7 @@ export function ChatThread({
               item.message.id === lastAssistantMessageId &&
               !item.isActive
             }
+            onResume={onResume}
           />
         );
       })}

@@ -65,6 +65,7 @@ export function ChatPanel({
   onComposerModeChange,
   onSend,
   onStop,
+  onResume,
   onOpenInspector,
   onPlanApprove,
   onPlanReject,
@@ -378,7 +379,7 @@ export function ChatPanel({
   return (
     <div className="forge-chat-inner">
       <div ref={scrollRef} className="forge-messages" onScroll={handleScroll}>
-        {chatLoading ? (
+        {chatLoading && messages.length === 0 ? (
           <div
             className="flex items-center gap-2 py-6 text-[var(--text-muted)]"
             data-testid="forge-chat-loading"
@@ -386,13 +387,14 @@ export function ChatPanel({
             <Loader2 className="size-4 shrink-0 animate-spin" />
             <span className="text-sm">Carregando conversa…</span>
           </div>
-        ) : showEmptyState ? null : (
+        ) : showEmptyState && messages.length === 0 ? null : (
           <>
             <ChatThread
               items={thread}
               onOpenInspector={onOpenInspector}
               onClarifySelect={handleClarifySelect}
               onRollback={onRollbackMessage ? handleRollback : undefined}
+              onResume={onResume}
               lastUserMessageId={lastUserMessageId}
               lastAssistantMessageId={lastAssistantMessageId}
             />

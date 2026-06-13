@@ -12,6 +12,7 @@ type ChatMessageProps = {
   onRollback?: (messageId: string, role: "user" | "assistant") => void;
   canRollbackUser?: boolean;
   canRollbackAssistant?: boolean;
+  onResume?: () => void;
 };
 
 /** Roteador: user → bolha | assistant → AssistantTurn (ordem Lovable). */
@@ -22,6 +23,7 @@ export function ChatMessage({
   onRollback,
   canRollbackUser,
   canRollbackAssistant,
+  onResume,
 }: ChatMessageProps) {
   if (item.kind === "user") {
     const isQueued = item.message.meta?.queued === true;
@@ -58,6 +60,7 @@ export function ChatMessage({
           ? () => onRollback(messageId, "assistant")
           : undefined
       }
+      onResume={onResume}
     />
   );
 }
