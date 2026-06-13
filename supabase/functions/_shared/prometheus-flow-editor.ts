@@ -192,8 +192,22 @@ export async function processFlowEditMessage(
   const def = (flowData?.flow_definition as Record<string, unknown>) || {};
   const nodes = (def.nodes as Array<Record<string, unknown>>) || [];
   const edges = (def.edges as Array<Record<string, unknown>>) || [];
+  const briefing = (def.briefing as Record<string, unknown>) || {};
+  const boardroom = (def.boardroom_output as Record<string, unknown>) || {};
 
-  const userPrompt = `Grafo atual:\n${summarizeGraph(nodes, edges)}\n\nJSON completo (referência):\n${JSON.stringify({ nodes, edges })}\n\nPedido do usuário:\n${message}`;
+  const prometheusContext = [
+    briefing.prompt ? `Prompt original (Prometheus): ${briefing.prompt}` : null,
+    briefing.objective ? `Objetivo: ${briefing.objective}` : null,
+    boardroom.genome ? `Genoma: ${boardroom.genome}` : null,
+    boardroom.objective ? `Objetivo boardroom: ${boardroom.objective}` : null,
+  ].filter(Boolean).join("\n");
+
+  const userPrompt = [
+    prometheusContext ? `Contexto do agente (criado via Prometheus):\n${prometheusContext}` : null,
+    `Grafo atual:\n${summarizeGraph(nodes, edges)}`,
+    `JSON completo (referência):\n${JSON.stringify({ nodes, edges })}`,
+    `Pedido do usuário:\n${message}`,
+  ].filter(Boolean).join("\n\n");
 
   const llmResult = await routeLLM({
     model_id: modelId,
