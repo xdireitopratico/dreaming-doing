@@ -341,11 +341,17 @@ export function resolveQueuedPlanMode(input: {
   return input.inputPlanMode === true;
 }
 
-export async function popOldestPendingMessage(
+export type PendingMessagePeek = {
+  id: string;
+  body: Record<string, unknown>;
+};
+
+/** Lê o mais antigo sem remover — commit só após dispatch bem-sucedido. */
+export async function peekOldestPendingMessage(
   supabase: SupabaseClient,
   projectId: string,
   userId: string,
-): Promise<Record<string, unknown> | null> {
+): Promise<PendingMessagePeek | null> {
   const { data: row } = await supabase
     .from("agent_pending_messages")
     .select("id, body")
@@ -356,9 +362,29 @@ export async function popOldestPendingMessage(
     .maybeSingle();
 
   if (!row?.id) return null;
+  return {
+    id: row.id as string,
+    body: (row.body ?? {}) as Record<string, unknown>,
+  };
+}
 
-  await supabase.from("agent_pending_messages").delete().eq("id", row.id);
-  return (row.body ?? {}) as Record<string, unknown>;
+export async function removePendingMessageById(
+  supabase: SupabaseClient,
+  pendingId: string,
+): Promise<void> {
+  await supabase.from("agent_pending_messages").delete().eq("id", pendingId);
+}
+
+/** @deprecated Prefer peek + removePendingMessageById after successful dispatch. */
+export async function popOldestPendingMessage(
+  supabase: SupabaseClient,
+  projectId: string,
+  userId: string,
+): Promise<Record<string, unknown> | null> {
+  const peeked = await peekOldestPendingMessage(supabase, projectId, userId);
+  if (!peeked) return null;
+  await removePendingMessageById(supabase, peeked.id);
+  return peeked.body;
 }
 
 export type QueueDrainDecision = {

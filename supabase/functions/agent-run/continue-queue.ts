@@ -4,8 +4,11 @@
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { appendStreamEvent } from "../_shared/agent-stream.ts";
 import {
+  countPendingMessages,
   evaluateQueueDrain,
-  popOldestPendingMessage,
+  latestUserMessageSnapshot,
+  peekOldestPendingMessage,
+  removePendingMessageById,
   resolveQueuedPlanMode,
 } from "../_shared/agent-pending-queue.ts";
 import { loadUserLlmContext, resolveAgentProvider } from "./run-setup.ts";
@@ -46,8 +49,24 @@ export async function handleContinueQueue(
     };
   }
 
-  const pendingBody = await popOldestPendingMessage(supabase, projectId, userId);
-  const preferences = (pendingBody?.preferences ?? null) as AgentPreferencesPayload | null;
+  const pendingPeek = await peekOldestPendingMessage(supabase, projectId, userId);
+  let pendingRowId: string | null = pendingPeek?.id ?? null;
+  let pendingBody: Record<string, unknown> | null = pendingPeek?.body ?? null;
+
+  if (!pendingBody && decision.needsResponse) {
+    pendingBody = await latestUserMessageSnapshot(supabase, conversationId);
+    pendingRowId = null;
+  }
+
+  if (!pendingBody) {
+    return {
+      continued: false,
+      pendingCount: decision.pendingCount,
+      reason: "nothing_pending",
+    };
+  }
+
+  const preferences = (pendingBody.preferences ?? null) as AgentPreferencesPayload | null;
   const pendingSessionKind =
     typeof pendingBody?.sessionKind === "string" ? pendingBody.sessionKind : null;
 
@@ -89,9 +108,10 @@ export async function handleContinueQueue(
           ? profile.trial_messages_remaining
           : 50;
     if (remaining <= 0) {
+      const pendingCount = await countPendingMessages(supabase, projectId, userId);
       return {
         continued: false,
-        pendingCount: decision.pendingCount,
+        pendingCount,
         reason: "taste_limit",
       };
     }
@@ -104,9 +124,10 @@ export async function handleContinueQueue(
   });
 
   if (lockErr || !lockedId) {
+    const pendingCount = await countPendingMessages(supabase, projectId, userId);
     return {
       continued: false,
-      pendingCount: decision.pendingCount,
+      pendingCount,
       reason: "lock_failed",
     };
   }
@@ -192,6 +213,10 @@ export async function handleContinueQueue(
     mode: planMode ? "plan" : "build",
     eventId: eventResult.ids?.[0] ?? null,
   });
+
+  if (pendingRowId) {
+    await removePendingMessageById(supabase, pendingRowId);
+  }
 
   const remaining = await evaluateQueueDrain(supabase, projectId, conversationId, userId);
 

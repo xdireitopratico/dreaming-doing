@@ -18,6 +18,11 @@ function hasVisibleText(message: ChatMessage): boolean {
   return false;
 }
 
+/** Libera live slot / acknowledge quando a mensagem assistant é terminal no DB. */
+export function canReleaseLiveSlot(message: ChatMessage): boolean {
+  return isAssistantRunMaterialized(message);
+}
+
 /** Só libera acknowledge/frozen quando a mensagem assistant é terminal no DB (finishedAt, não partial). */
 export function isAssistantRunMaterialized(message: ChatMessage): boolean {
   const meta = message.meta;

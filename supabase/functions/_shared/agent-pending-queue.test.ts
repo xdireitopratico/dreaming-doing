@@ -61,6 +61,52 @@ Deno.test("resolveQueuedPlanMode — legacy sem mode cai em build", () => {
   );
 });
 
+Deno.test("peekOldestPendingMessage — não remove até commit explícito", async () => {
+  const deleted: string[] = [];
+  const mockSupabase = {
+    from(table: string) {
+      if (table !== "agent_pending_messages") throw new Error("unexpected table");
+      return {
+        select() {
+          return this;
+        },
+        eq() {
+          return this;
+        },
+        order() {
+          return this;
+        },
+        limit() {
+          return this;
+        },
+        async maybeSingle() {
+          return {
+            data: { id: "pending-1", body: { text: "hello", messageId: "m1" } },
+          };
+        },
+        delete() {
+          return {
+            eq(_col: string, id: string) {
+              deleted.push(id);
+              return Promise.resolve({ data: null });
+            },
+          };
+        },
+      };
+    },
+  };
+
+  const { peekOldestPendingMessage } = await import("./agent-pending-queue.ts");
+  const peeked = await peekOldestPendingMessage(
+    mockSupabase as never,
+    "proj",
+    "user",
+  );
+  assertEquals(peeked?.id, "pending-1");
+  assertEquals(peeked?.body.text, "hello");
+  assertEquals(deleted.length, 0);
+});
+
 Deno.test("classifyAgentBusyReason — gap longo em running vira zombie (88764445)", () => {
   assertEquals(
     classifyAgentBusyReason({

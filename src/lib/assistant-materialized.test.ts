@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { ChatMessage } from "@/lib/chat-types";
-import { isAssistantRunMaterialized } from "@/lib/assistant-materialized";
+import {
+  canReleaseLiveSlot,
+  isAssistantRunMaterialized,
+} from "@/lib/assistant-materialized";
 
 function msg(overrides: Partial<ChatMessage> = {}): ChatMessage {
   return {
@@ -43,6 +46,16 @@ describe("isAssistantRunMaterialized", () => {
         }),
       ),
     ).toBe(false);
+  });
+
+  it("canReleaseLiveSlot segue isAssistantRunMaterialized", () => {
+    const materialized = msg({
+      runId: "r1",
+      content: "Done.",
+      meta: { runId: "r1", finishedAt: "2026-06-08T00:00:00Z" },
+    });
+    expect(canReleaseLiveSlot(materialized)).toBe(true);
+    expect(canReleaseLiveSlot(msg({ runId: "r1", content: "wip" }))).toBe(false);
   });
 
   it("rejeita partial com finishedAt se partial ainda true", () => {

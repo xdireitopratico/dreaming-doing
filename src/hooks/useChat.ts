@@ -1,7 +1,10 @@
 import { useEffect, useMemo, useRef } from "react";
 import type { AgentProgress } from "@/lib/agent-progress";
 import type { ChatMessage } from "@/lib/chat-types";
-import { isAssistantRunMaterialized } from "@/lib/assistant-materialized";
+import {
+  canReleaseLiveSlot,
+  isAssistantRunMaterialized,
+} from "@/lib/assistant-materialized";
 import { hasInspectorReadySnapshot } from "@/lib/assistant-run-progress";
 import { buildChatThread } from "@/lib/chat";
 import { usePendingPlan } from "@/hooks/usePendingPlan";
@@ -55,18 +58,24 @@ export function useChat({
     if (!conversationId || messagesLoading) return;
     if (snapshotRestoredRef.current === conversationId) return;
 
-    void agent.tryRestoreSnapshot(projectId, conversationId, messages);
-    snapshotRestoredRef.current = conversationId;
-    sessionBoundRef.current = conversationId;
+    let cancelled = false;
+    void agent.tryRestoreSnapshot(projectId, conversationId, messages).then(() => {
+      if (!cancelled) {
+        snapshotRestoredRef.current = conversationId;
+        sessionBoundRef.current = conversationId;
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [conversationId, projectId, agent, messagesLoading, messages]);
 
   useEffect(() => {
     if (messagesLoading) return;
     for (const m of messages) {
       if (m.role !== "assistant" || !m.runId) continue;
-      if (!isAssistantRunMaterialized(m)) continue;
+      if (!canReleaseLiveSlot(m)) continue;
       const rid = m.runId;
-      if (agent.activeRunId === rid && !hasInspectorReadySnapshot(m)) continue;
       if (hasInspectorReadySnapshot(m)) {
         agent.clearFrozenRunProgress(rid);
       }
@@ -131,9 +140,9 @@ export function useChat({
     const runId = agent.activeRunId;
     const timer = window.setTimeout(() => {
       const materialized = messages.find(
-        (m) => m.role === "assistant" && m.runId === runId && isAssistantRunMaterialized(m),
+        (m) => m.role === "assistant" && m.runId === runId && canReleaseLiveSlot(m),
       );
-      if (materialized && !hasInspectorReadySnapshot(materialized)) return;
+      if (!materialized) return;
       agent.acknowledgeMaterializedRun(runId);
     }, 45_000);
     return () => window.clearTimeout(timer);

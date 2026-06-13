@@ -1,5 +1,6 @@
 import type { ChatMessage } from "@/lib/chat-types";
 import type { AgentProgress } from "@/lib/agent-progress";
+import { isAssistantRunMaterialized } from "@/lib/assistant-materialized";
 import {
   hasMaterializedCardSnapshot,
   runIdFromAssistantMessage,
@@ -150,7 +151,7 @@ function buildDbThread(messages: ChatMessage[]): RawThreadItem[] {
 function isRunMaterializedInThread(items: RawThreadItem[], runId: string): boolean {
   for (const item of items) {
     if (item.kind !== "assistant" || item.runId !== runId) continue;
-    if (item.message && hasMaterializedCardSnapshot(item.message)) return true;
+    if (item.message && isAssistantRunMaterialized(item.message)) return true;
   }
   return false;
 }

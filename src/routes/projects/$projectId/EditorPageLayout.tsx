@@ -566,9 +566,7 @@ export function EditorPageLayout({
                               run={focusedJobProgress}
                               runId={jobWorkspaceFocus.runId}
                               running={
-                                running &&
-                                agent.activeRunId === jobWorkspaceFocus.runId &&
-                                agent.connected
+                                running && agent.activeRunId === jobWorkspaceFocus.runId
                               }
                               activeTab={jobWorkspaceFocus.tab}
                               messages={chatMessages}
@@ -603,7 +601,7 @@ export function EditorPageLayout({
                               devUrl={devUrl}
                               previewPath={previewRoute}
                               iframeRef={previewIframeRef}
-                              bootError={null}
+                              bootError={previewBoot.lastError}
                               warming={previewBoot.warming}
                               onWarmComplete={previewBoot.clearWarming}
                               onRefresh={() => previewBoot.boot({ force: true })}

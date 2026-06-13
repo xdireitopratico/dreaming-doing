@@ -216,6 +216,9 @@ export function useAgentRun() {
   const eventChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const statusChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const stalePollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const reconnectAttemptsRef = useRef(0);
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const MAX_REALTIME_RECONNECT = 3;
 
   // Libera slot live só quando não há conteúdo a mostrar até o DB materializar.
   useEffect(() => {
@@ -284,6 +287,10 @@ export function useAgentRun() {
   );
 
   const teardownChannels = useCallback(() => {
+    if (reconnectTimerRef.current) {
+      clearTimeout(reconnectTimerRef.current);
+      reconnectTimerRef.current = null;
+    }
     if (stalePollRef.current) {
       clearInterval(stalePollRef.current);
       stalePollRef.current = null;
@@ -518,7 +525,41 @@ export function useAgentRun() {
             }
           },
         )
-        .subscribe();
+        .subscribe((status) => {
+          if (status === "SUBSCRIBED") {
+            reconnectAttemptsRef.current = 0;
+          }
+          if (
+            (status === "CHANNEL_ERROR" || status === "TIMED_OUT") &&
+            runIdRef.current === runId
+          ) {
+            if (reconnectAttemptsRef.current >= MAX_REALTIME_RECONNECT) return;
+            reconnectAttemptsRef.current += 1;
+            const delay = Math.min(1000 * 2 ** reconnectAttemptsRef.current, 8000);
+            logEditorTelemetryEvent(
+              "agent_run",
+              "realtime_reconnect",
+              "warn",
+              `${runId.slice(0, 8)}:${reconnectAttemptsRef.current}`,
+            );
+            if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
+            reconnectTimerRef.current = setTimeout(() => {
+              if (runIdRef.current !== runId) return;
+              void catchUpRun(runId).then(() => {
+                if (runIdRef.current !== runId) return;
+                if (eventChannelRef.current) {
+                  void supabase.removeChannel(eventChannelRef.current);
+                  eventChannelRef.current = null;
+                }
+                if (statusChannelRef.current) {
+                  void supabase.removeChannel(statusChannelRef.current);
+                  statusChannelRef.current = null;
+                }
+                void subscribeToRun(runId, { resetProgress: false });
+              });
+            }, delay);
+          }
+        });
       eventChannelRef.current = eventChannel;
 
       const statusChannel = supabase
@@ -1150,12 +1191,21 @@ export function useAgentRun() {
           clearAgentSnapshot();
           setActiveRunId(null);
           runIdRef.current = null;
-          restoreProgressOnly({
-            ...snap.progress,
-            finished: snap.progress.finished || !isLiveStatus,
-            autoResuming: false,
-            resumable: snap.progress.resumable || staleMs >= SNAPSHOT_RUN_FRESH_MS,
-          });
+          const awaitingClarify =
+            snap.progress.awaiting &&
+            (snap.progress.awaitingKind === "clarify" ||
+              (snap.progress.awaitingKind as string | null) === "qualify");
+          const awaitingPlan =
+            snap.progress.awaitingKind === "plan_approval" && !!snap.progress.pendingPlan;
+          if (awaitingClarify || awaitingPlan) {
+            restoreProgressOnly({
+              ...snap.progress,
+              finished: true,
+              autoResuming: false,
+            });
+          } else {
+            restoreProgressOnly(idleProgress);
+          }
           return;
         }
 
