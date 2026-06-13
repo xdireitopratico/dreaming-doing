@@ -92,6 +92,7 @@ export function AssistantTurn({
           <ChatJobCard
             data={item.miniCard}
             runId={item.runId}
+            isFocused={item.isFocused}
             onClick={() => onOpenInspector?.(item.runId, "timeline")}
           />
         )}

@@ -212,6 +212,39 @@ describe("buildChatThread", () => {
     expect(asstIdx).toBeGreaterThan(userIdx);
   });
 
+  it("focusedRunId histórico suprime overlay live do activeRunId", () => {
+    const messages = [
+      msg("u1", "user", "old"),
+      {
+        id: "a-old",
+        role: "assistant" as const,
+        content: "done",
+        timestamp: 1,
+        runId: "run-old",
+      },
+      msg("u2", "user", "new"),
+    ];
+    const progress = {
+      ...initialAgentProgress,
+      finished: false,
+      streamText: "Trabalhando no novo…",
+    };
+    const thread = buildChatThread(messages, progress, {
+      running: true,
+      activeRunId: "run-new",
+      focusedRunId: "run-old",
+      sessionProgress: progress,
+    });
+    const liveSlots = thread.filter(
+      (t) => t.kind === "assistant" && t.isActive && t.runId === "run-new",
+    );
+    expect(liveSlots).toHaveLength(0);
+    const focused = thread.find(
+      (t) => t.kind === "assistant" && t.runId === "run-old" && t.isFocused,
+    );
+    expect(focused).toBeDefined();
+  });
+
   it("não vaza run de outra conversa em chat vazio", () => {
     const stale = {
       ...initialAgentProgress,

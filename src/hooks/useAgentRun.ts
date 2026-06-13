@@ -32,6 +32,8 @@ import type { AgentBusyInfo } from "@/lib/agent-busy";
 import { parseAgentBusyResponse } from "@/lib/agent-busy";
 
 import type { PendingQueueItem } from "@/components/editor/PendingQueuePanel";
+import { shouldRestoreLiveRun } from "@/lib/agent-snapshot-restore";
+import { clientStaleStreamMs } from "@/lib/agent-stale-thresholds";
 
 function withFrozenLatencyThought(next: AgentProgress, startedAtMs: number | null): AgentProgress {
   if (next.latencyThoughtMs != null || !startedAtMs) return next;
@@ -64,12 +66,6 @@ function formatQueueBlockReason(reason?: string): string | null {
 }
 
 const TERMINAL_STATUSES = new Set(["completed", "failed", "canceled", "awaiting_user"]);
-// Longer/conditional stale thresholds when Inngest is authoritative (PR1 dispatch foundation; avoids
-// synthesizing stale finish on still-running Inngest step with ~4.5m budget + gaps between events/heartbeats).
-const STALE_STREAM_MS = 30 * 60 * 1000;
-/** Snapshot só re-subscribe se heartbeat do DB for recente. */
-const SNAPSHOT_RUN_FRESH_MS = 2 * 60 * 1000;
-const STALE_STREAM_WITH_QUEUE_MS = 10 * 60 * 1000;
 
 const SESSION_STORAGE_KEY = "forge:agent-snapshot";
 const SNAPSHOT_MAX_AGE_MS = 30 * 60 * 1000;
@@ -423,14 +419,13 @@ export function useAgentRun() {
         return true;
       }
 
-      if (run?.status === "running") {
+      if (run?.status === "running" || run?.status === "pending") {
         const lastRow = rows?.[rows.length - 1];
         const lastActivity =
           (lastRow?.created_at as string | undefined) ??
           (run.heartbeat_at as string | null) ??
           (run.started_at as string | null);
-        const staleMs =
-          pendingQueueCountRef.current > 0 ? STALE_STREAM_WITH_QUEUE_MS : STALE_STREAM_MS;
+        const staleMs = clientStaleStreamMs(pendingQueueCountRef.current);
         const stale = lastActivity && Date.now() - new Date(lastActivity).getTime() > staleMs;
         if (stale) {
           const meta = (run.meta ?? {}) as Record<string, unknown>;
@@ -1181,11 +1176,21 @@ export function useAgentRun() {
           .eq("id", snap.activeRunId)
           .maybeSingle();
 
-        const isLiveStatus =
-          run?.status === "running" || run?.status === "pending";
-        const heartbeat = (run?.heartbeat_at ?? run?.started_at) as string | null;
-        const staleMs = heartbeat ? Date.now() - new Date(heartbeat).getTime() : Infinity;
-        const fresh = isLiveStatus && !run?.canceled_at && staleMs < SNAPSHOT_RUN_FRESH_MS;
+        const { data: lastStream } = await supabase
+          .from("agent_stream_events")
+          .select("created_at")
+          .eq("run_id", snap.activeRunId)
+          .order("seq", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        const fresh = shouldRestoreLiveRun({
+          status: run?.status ?? null,
+          canceledAt: (run?.canceled_at as string | null) ?? null,
+          heartbeatAt: (run?.heartbeat_at as string | null) ?? null,
+          startedAt: (run?.started_at as string | null) ?? null,
+          lastStreamAt: (lastStream?.created_at as string | null) ?? null,
+        });
 
         if (!fresh) {
           clearAgentSnapshot();

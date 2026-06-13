@@ -314,12 +314,23 @@ function applyLiveOverlay(items: RawThreadItem[], live: ChatLiveState): RawThrea
 function buildRawThread(
   messages: ChatMessage[],
   progress: AgentProgress,
-  opts: Pick<BuildChatThreadOptions, "activeRunId" | "running">,
+  opts: Pick<BuildChatThreadOptions, "activeRunId" | "running" | "focusedRunId">,
 ): RawThreadItem[] {
   const running = opts.running ?? false;
   const live = scopeLiveState(messages, progress, opts.activeRunId, running);
   let items = buildDbThread(messages);
   if (!live) return items;
+
+  const focusedRunId = opts.focusedRunId;
+  if (
+    focusedRunId &&
+    live.activeRunId &&
+    focusedRunId !== live.activeRunId &&
+    live.activeRunId !== PENDING_RUN_ID
+  ) {
+    return attachFrozenProgressToRun(items, live.activeRunId, live.progress);
+  }
+
   return applyLiveOverlay(items, live);
 }
 

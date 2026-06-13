@@ -63,6 +63,7 @@ export type ThreadItem =
       finished?: boolean;
       lastFinishOk?: boolean;
       resumable?: boolean;
+      isFocused?: boolean;
     };
 
 /** Item interno antes do mapeamento para UI. */
@@ -79,6 +80,7 @@ export type RawThreadItem =
 export type BuildChatThreadOptions = {
   activeRunId?: string | null;
   running?: boolean;
+  /** Inspector focado em run histórico — suprime overlay live divergente. */
   activeRunStartedAtMs?: number | null;
   pendingPlan?: import("@/lib/agent-progress").PendingPlan | null;
   sessionProgress: AgentProgress;

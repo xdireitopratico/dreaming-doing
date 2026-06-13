@@ -85,6 +85,8 @@ export function useEditorAgentOrchestration({
   /** Evita boot duplicado do preview entre fim do agente e refetch do previewUrl. */
   const previewBootAfterAgentRef = useRef(false);
   const previewBootDuringRunRef = useRef(false);
+  const previewBootInRunAttemptsRef = useRef(0);
+  const MAX_IN_RUN_BOOT_ATTEMPTS = 3;
   const lastSyncedFilesKeyRef = useRef("");
   const lastPreviewSyncTickRef = useRef(0);
   const previewSyncInFlightRef = useRef(false);
@@ -201,13 +203,22 @@ export function useEditorAgentOrchestration({
   useEffect(() => {
     if (!running) {
       previewBootDuringRunRef.current = false;
+      previewBootInRunAttemptsRef.current = 0;
       return;
     }
     if (!supportsLivePreview || !e2bConnected || previewBoot.booting || previewE2bCircuit) return;
     if (devUrl) return;
+    if (previewBootInRunAttemptsRef.current >= MAX_IN_RUN_BOOT_ATTEMPTS) return;
     if (previewBootDuringRunRef.current) return;
     previewBootDuringRunRef.current = true;
-    void previewBoot.bootWithRetry({ force: true, silent: true });
+    void previewBoot.bootWithRetry({ force: true, silent: true }).then((url) => {
+      previewBootDuringRunRef.current = false;
+      if (!url) {
+        previewBootInRunAttemptsRef.current += 1;
+        return;
+      }
+      previewBootInRunAttemptsRef.current = 0;
+    });
   }, [
     running,
     supportsLivePreview,
@@ -217,6 +228,7 @@ export function useEditorAgentOrchestration({
     previewBoot.bootWithRetry,
     previewE2bCircuit,
     fileCount,
+    agent.progress.previewSyncTick,
   ]);
 
   useEffect(() => {

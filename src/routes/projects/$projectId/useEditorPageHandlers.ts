@@ -23,6 +23,7 @@ import { loadAgentSessionExtensions } from "@/lib/agent-session-extensions";
 import { publishProject } from "@/lib/publish.functions";
 import { planApprove, planReject } from "@/lib/plan-decide.functions";
 import { needsPlanApprovalNow, resolvePendingPlan } from "@/lib/plan-message-meta";
+import { cancelAgentRun } from "@/lib/agent-cancel";
 import { rollbackChatTurn } from "@/lib/rollback-chat-turn";
 import type { PendingPlan } from "@/lib/agent-progress";
 import { exportProjectZip } from "@/hooks/useWorkspacePresets";
@@ -541,6 +542,36 @@ export function useEditorPageHandlers({
       }
       if (isAgentBusy()) {
         return { ok: false, error: "Aguarde o agente terminar antes do rollback." };
+      }
+
+      const anchorIndex = (() => {
+        const idx = chatMessages.findIndex((m) => m.id === messageId && m.role === role);
+        if (idx < 0) return -1;
+        if (role === "assistant") {
+          const userIdx = idx - 1;
+          return userIdx >= 0 && chatMessages[userIdx]?.role === "user" ? userIdx : -1;
+        }
+        return idx;
+      })();
+
+      if (anchorIndex >= 0) {
+        const runIds = new Set<string>();
+        for (const m of chatMessages.slice(anchorIndex)) {
+          if (m.runId) runIds.add(m.runId);
+          const metaRunId = (m.meta as Record<string, unknown> | undefined)?.runId;
+          if (typeof metaRunId === "string") runIds.add(metaRunId);
+        }
+        for (const runId of runIds) {
+          if (agent.activeRunId === runId && !agent.progress.finished) {
+            await agent.stop();
+          } else {
+            try {
+              await cancelAgentRun(runId);
+            } catch {
+              // best-effort — rollback segue mesmo se cancel falhar
+            }
+          }
+        }
       }
 
       const result = await rollbackChatTurn({

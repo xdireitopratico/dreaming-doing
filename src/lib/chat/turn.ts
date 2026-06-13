@@ -58,7 +58,8 @@ export function mapAssistantTurn(
   item: Extract<RawThreadItem, { kind: "assistant" }>,
   ctx: TurnContext,
 ): Extract<ThreadItem, { kind: "assistant" }> {
-  const { thread, itemIndex, messages, running, activeRunId, sessionProgress } = ctx;
+  const { thread, itemIndex, messages, running, activeRunId, sessionProgress, focusedRunId } =
+    ctx;
 
   let userPrompt: string | null = null;
   for (let j = itemIndex - 1; j >= 0; j--) {
@@ -234,6 +235,7 @@ export function mapAssistantTurn(
     finished: runView?.finished ?? resolved?.finished ?? false,
     lastFinishOk: runView?.lastFinishOk ?? resolved?.lastFinishOk ?? undefined,
     resumable: runView?.resumable ?? resolved?.resumable ?? false,
+    isFocused: !!focusedRunId && focusedRunId === runId,
   };
 
   return enforceAssistantTurnInvariant(turn);

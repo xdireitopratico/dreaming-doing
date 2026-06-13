@@ -89,4 +89,41 @@ describe("mapAssistantTurn — mini-card permanece", () => {
 
     expect(turn.miniCard).toBeNull();
   });
+
+  it("marca isFocused quando focusedRunId coincide com runId", () => {
+    const messages = [
+      msg("u1", "user", "build"),
+      msg("a1", "assistant", "Pronto.", {
+        runId: "run-1",
+        meta: {
+          finishedAt: new Date().toISOString(),
+          runId: "run-1",
+          cardSnapshot: {
+            finished: true,
+            lastFinishOk: true,
+            timeline: [{ type: "tool_start", data: { name: "fs_read" }, timestamp: 1 }],
+            tools: [{ name: "fs_read", args: { path: "a.ts" }, ok: true }],
+            diffs: [],
+          },
+        },
+      }),
+    ];
+
+    const thread: RawThreadItem[] = [
+      { kind: "user", message: messages[0] },
+      { kind: "assistant", message: messages[1], runId: "run-1", isActive: false },
+    ];
+
+    const turn = mapAssistantTurn(thread[1] as Extract<RawThreadItem, { kind: "assistant" }>, {
+      messages,
+      thread,
+      itemIndex: 1,
+      running: false,
+      activeRunId: "run-2",
+      focusedRunId: "run-1",
+      sessionProgress: initialAgentProgress,
+    });
+
+    expect(turn.isFocused).toBe(true);
+  });
 });
