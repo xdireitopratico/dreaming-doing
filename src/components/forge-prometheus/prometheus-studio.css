@@ -310,7 +310,7 @@
    FORM OVERRIDES — Dark theme for all inputs inside studio
    ═══════════════════════════════════════════════════════════ */
 .prometheus-studio input,
-.prometheus-studio textarea:not(.ps-prompt-textarea) {
+.prometheus-studio textarea:not(.ps-prompt-textarea):not(.forge-composer-input) {
   background: var(--ps-bg-surface) !important;
   color: var(--ps-cream) !important;
   border-color: var(--ps-border) !important;
@@ -321,9 +321,18 @@
   color: var(--ps-cream-25) !important;
 }
 .prometheus-studio input:focus,
-.prometheus-studio textarea:not(.ps-prompt-textarea):focus {
+.prometheus-studio textarea:not(.ps-prompt-textarea):not(.forge-composer-input):focus {
   border-color: var(--ps-border-accent) !important;
   box-shadow: 0 0 0 1px var(--ps-accent-glow) !important;
+}
+
+/* Vibe Agent chat — textarea dentro do composer, sem retângulo escuro */
+.prometheus-studio .forge-vibe-agent-chat .forge-composer-input,
+.prometheus-studio .forge-vibe-agent-chat .forge-composer-input:focus {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  outline: none !important;
 }
 .prometheus-studio label {
   color: var(--ps-cream-60);

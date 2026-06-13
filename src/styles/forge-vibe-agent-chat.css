@@ -1,12 +1,15 @@
 /**
  * Vibe Agent chat — paridade visual com Vibe Coder (sites).
- * Escopo isolado: não altera tokens do React Flow / Prometheus studio.
+ * Escopo isolado: não altera publish/draft/sidebar do React Flow.
  */
 @import "./forge-tokens.css";
 
 .forge-vibe-agent-chat {
-  /* Amarelo do Vibe Coder — não o dourado #ffb627 do publish/React */
-  --text-accent: #fbbf24;
+  /* Amarelo SOMENTE no botão enviar — igual Vibe Coder */
+  --vibe-coder-send: #fbbf24;
+  /* Acentos do chat em azul — não competir com publish/draft (#ffb627) nem com o enviar */
+  --text-accent: #60a5fa;
+  --border-active: #3b82f6;
   --bg-chat: #0a0a0f;
   --bg-card: #13131f;
   --bg-hover: #1a1a2e;
@@ -15,15 +18,23 @@
   --text-secondary: #94a3b8;
   --text-muted: #64748b;
   --border-forge: #27273a;
-  --border-active: #3b82f6;
   --chat-padding: 12px;
   --chat-cta-radius: 10px;
   --font-chat: 14px/1.6 "Inter", system-ui, sans-serif;
+  /* +30% vs largura original (400px); altura até o topo do canvas (nível do header) */
+  --vibe-agent-panel-w: min(520px, calc(100% - 3rem));
+  --vibe-agent-panel-top: 0.75rem;
+  --vibe-agent-panel-bottom: 5.5rem;
 
   color: var(--text-primary);
 }
 
 .forge-vibe-agent-chat__panel {
+  top: var(--vibe-agent-panel-top);
+  bottom: var(--vibe-agent-panel-bottom);
+  width: var(--vibe-agent-panel-w);
+  height: auto;
+  max-height: none;
   border-radius: 20px;
   background: var(--bg-chat);
   border: 1px solid color-mix(in srgb, var(--border-forge) 85%, transparent);
@@ -51,11 +62,12 @@
   border-color: color-mix(in srgb, var(--border-forge) 100%, transparent);
 }
 
-/* Composer: só a bolha — sem caixa preta extra no wrapper */
+/* Composer: uma bolha só — sem retângulo preto interno */
 .forge-vibe-agent-chat .forge-vibe-agent-composer-wrap {
   padding: 0 var(--chat-padding) var(--chat-padding);
-  background: transparent;
-  border: none;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
 }
 
 .forge-vibe-agent-chat .forge-composer {
@@ -63,10 +75,21 @@
   border-radius: 16px;
   background: color-mix(in srgb, var(--bg-input) 92%, var(--bg-card) 8%);
   border: 1px solid color-mix(in srgb, var(--border-forge) 75%, #52525b 25%);
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.02) inset,
+    0 6px 24px rgba(0, 0, 0, 0.28);
 }
 
 .forge-vibe-agent-chat .forge-composer-input {
-  background: transparent;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  outline: none !important;
+}
+
+.forge-vibe-agent-chat .forge-composer-input:focus {
+  border: none !important;
+  box-shadow: none !important;
 }
 
 .forge-vibe-agent-chat .forge-composer-add,
@@ -76,10 +99,11 @@
   border-radius: 10px;
 }
 
+/* Único amarelo Vibe Coder: botão enviar */
 .forge-vibe-agent-chat .forge-composer-send:not(:disabled) {
-  background: var(--text-accent);
-  color: #0a0a0a;
-  border-color: transparent;
+  background: var(--vibe-coder-send) !important;
+  color: #0a0a0a !important;
+  border-color: transparent !important;
 }
 
 .forge-vibe-agent-chat .forge-composer-send:hover:not(:disabled) {
@@ -90,16 +114,25 @@
   padding: var(--chat-padding);
 }
 
+/* FAB: azul (como estava) — não amarelo */
 .forge-vibe-agent-chat__fab {
-  background: var(--text-accent);
-  color: #0a0a0a;
-  border: 1px solid color-mix(in srgb, var(--text-accent) 70%, #000 30%);
+  background: rgba(30, 58, 138, 0.92);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.forge-vibe-agent-chat__fab:hover {
+  background: rgba(37, 99, 235, 0.95);
 }
 
 .forge-vibe-agent-chat__fab--open {
-  background: color-mix(in srgb, var(--bg-input) 90%, var(--text-accent) 10%);
-  color: var(--text-accent);
-  border-color: color-mix(in srgb, var(--text-accent) 40%, var(--border-forge) 60%);
+  background: #3b82f6;
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.forge-vibe-agent-chat__history-item--active {
+  color: var(--text-primary) !important;
 }
 
 .forge-vibe-agent-chat .forge-chat-message,

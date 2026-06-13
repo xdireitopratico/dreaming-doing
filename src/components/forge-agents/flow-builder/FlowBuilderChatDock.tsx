@@ -13,7 +13,6 @@ import "@/styles/forge-chat.css";
 import "@/styles/forge-vibe-agent-chat.css";
 
 const STORAGE_KEY = "forge-flow-chat-open";
-const PANEL_MAX_H = "min(616px, 77vh)";
 
 function loadOpenState(): boolean {
   if (typeof window === "undefined") return false;
@@ -112,8 +111,7 @@ export function FlowBuilderChatDock({
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 16, scale: 0.96 }}
             transition={{ duration: 0.2 }}
-            className="forge-vibe-agent-chat__panel pointer-events-auto absolute bottom-20 right-6 flex w-[min(400px,calc(100%-3rem))] flex-col overflow-hidden"
-            style={{ maxHeight: PANEL_MAX_H }}
+            className="forge-vibe-agent-chat__panel pointer-events-auto absolute right-6 flex flex-col overflow-hidden"
           >
             <header
               className="flex shrink-0 items-center justify-between gap-2 border-b px-4 py-2.5"
@@ -163,10 +161,8 @@ export function FlowBuilderChatDock({
                         <button
                           key={c.id}
                           type="button"
-                          className="w-full px-3 py-2 text-left text-[10px] transition-colors hover:bg-white/5"
-                          style={{
-                            color: c.id === conversationId ? "var(--text-accent)" : "var(--text-secondary)",
-                          }}
+                          className={`w-full px-3 py-2 text-left text-[10px] transition-colors hover:bg-white/5${c.id === conversationId ? " forge-vibe-agent-chat__history-item--active" : ""}`}
+                          style={{ color: "var(--text-secondary)" }}
                           onClick={() => {
                             void selectConversation(c.id);
                             setHistoryOpen(false);
@@ -205,7 +201,6 @@ export function FlowBuilderChatDock({
             <div
               ref={scrollRef}
               className="forge-chat-inner min-h-0 flex-1 overflow-y-auto"
-              style={{ maxHeight: `calc(${PANEL_MAX_H} - 132px)` }}
             >
               {!initialized ? (
                 <div className="flex items-center justify-center py-12">
