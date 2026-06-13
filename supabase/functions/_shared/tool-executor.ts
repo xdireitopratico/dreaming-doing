@@ -177,7 +177,7 @@ async function checkIdempotency(supabase: any, executionId: string, idempotencyK
     .from("agent_execution_steps")
     .select("output_data, status")
     .eq("execution_id", executionId)
-    .eq("idempotency_key", idempotencyKey)
+    .eq("tool_idempotency_key", idempotencyKey)
     .eq("status", "completed")
     .limit(1)
     .maybeSingle();
@@ -254,16 +254,35 @@ async function executeBuiltinTool(
 
       const query = input.query || input.text || "";
       const topK = input.top_k || 5;
-      const flowId = input.flow_id || tenantId;
+      const ragTenantId = input.tenant_id || tenantId;
 
-      // Use existing pgvector search
-      const { data: chunks } = await supabase
-        .from("rag_chunks")
-        .select("content, metadata, similarity")
-        .eq("document_id", flowId)
-        .limit(topK);
+      if (!query) throw new Error("rag_search requires 'query'");
 
-      return { chunks: chunks || [], query, top_k: topK, source: "pgvector" };
+      const embedUrl = Deno.env.get("OLLAMA_EMBED_URL") || "http://localhost:11434/api/embed";
+      const embedModel = Deno.env.get("OLLAMA_EMBED_MODEL") || "nomic-embed-text-v2-moe";
+      const embedRes = await fetch(embedUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ model: embedModel, input: query.substring(0, 2000) }),
+        signal: AbortSignal.timeout(30000),
+      });
+      if (!embedRes.ok) {
+        const err = await embedRes.text().catch(() => "?");
+        throw new Error(`RAG embed failed (${embedRes.status}): ${err.substring(0, 200)}`);
+      }
+      const embedData = await embedRes.json();
+      const embedding = embedData.embeddings?.[0];
+      if (!embedding?.length) throw new Error("Empty embedding for rag_search query");
+
+      const { data: chunks, error } = await supabase.rpc("search_rag_chunks", {
+        p_tenant_id: ragTenantId,
+        p_embedding: embedding,
+        p_match_threshold: input.match_threshold ?? 0.5,
+        p_match_count: topK,
+      });
+      if (error) throw new Error(`search_rag_chunks: ${error.message}`);
+
+      return { chunks: chunks || [], query, top_k: topK, source: "search_rag_chunks" };
     }
 
     case "http_request": {

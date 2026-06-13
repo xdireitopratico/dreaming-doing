@@ -1,6 +1,6 @@
 /**
  * aetherforge-rag-embed — Edge Function para gerar embeddings dos chunks RAG
- * Usa Ollama (nomic-embed-text) na KVM8 como primário, custo zero.
+ * Usa Ollama (nomic-embed-text) via OLLAMA_EMBED_URL.
  * 
  * BUG FIXES: 32 (env var for URL), 33 (auth required), 59 (batch mismatch), 60 (partial status), 61 (empty embedding), 62 (no recursive self-call)
  */
@@ -20,7 +20,7 @@ const BATCH_SIZE = 10;
 async function generateEmbedding(text: string): Promise<number[]> {
   const res = await meteredFetch(OLLAMA_EMBED_URL, {
     method: "POST",
-    headers: { "Content-Type": "application/json", "X-Lara-Origin": "edge.aetherforge_rag.embed" },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       model: OLLAMA_EMBED_MODEL,
       input: text.substring(0, 2000),
@@ -45,7 +45,7 @@ async function generateEmbedding(text: string): Promise<number[]> {
 async function generateEmbeddingsBatch(texts: string[]): Promise<(number[] | null)[]> {
   const res = await meteredFetch(OLLAMA_EMBED_URL, {
     method: "POST",
-    headers: { "Content-Type": "application/json", "X-Lara-Origin": "edge.aetherforge_rag.batch_embed" },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       model: OLLAMA_EMBED_MODEL,
       input: texts.map((t) => t.substring(0, 2000)),

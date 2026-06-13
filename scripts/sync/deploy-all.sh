@@ -33,6 +33,8 @@ AETHERFORGE_FUNCTIONS=(
   prometheus-healer
   prometheus-learn-pipeline
   firecrawl-search
+  web-research-tools
+  admin-secrets-map
 )
 
 FUNCTIONS=("${FORGE_APP_FUNCTIONS[@]}" "${AETHERFORGE_FUNCTIONS[@]}")

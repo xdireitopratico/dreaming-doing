@@ -285,10 +285,6 @@ async function executeFlowInternal(supabase: any, params: FlowExecParams): Promi
     executionId = newExec.id;
   }
 
-  // Try KVM8 executor first
-  const KVM8_IP = Deno.env.get("KVM8_IP");
-  const KVM8_PROTOCOL = Deno.env.get("KVM8_PROTOCOL") || "https";
-  const KVM8_PORT = Deno.env.get("KVM8_PORT") || "8890";
   const triggerNode = nodes.find((n: any) => n.type === "trigger");
 
   if (!triggerNode) {
@@ -298,32 +294,8 @@ async function executeFlowInternal(supabase: any, params: FlowExecParams): Promi
     });
   }
 
-  if (KVM8_IP) {
-    try {
-      const executorUrl = `${KVM8_PROTOCOL}://${KVM8_IP}:${KVM8_PORT}/execute`;
-      const executorRes = await fetch(executorUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ execution_id: executionId, flow_id: flow.id, flow_definition: flowDef, message, channel, metadata, state_snapshot: stateSnapshot }),
-        signal: AbortSignal.timeout(55000),
-      });
-      if (executorRes.ok) {
-        const executorResult = await executorRes.json();
-        console.log("[Gateway] KVM8 executor responded successfully");
-        return new Response(JSON.stringify(executorResult), {
-          status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      console.log(`[Gateway] KVM8 executor returned ${executorRes.status}`);
-    } catch (err) {
-      console.log(`[Gateway] KVM8 unreachable, inline fallback: ${(err as Error).message}`);
-    }
-  } else {
-    console.log("[Gateway] KVM8_IP not configured, using inline executor");
-  }
-
-  // Inline BFS execution with saga compensation
-  console.log("[Gateway] Using inline executor fallback");
+  // Inline BFS execution with saga compensation (FORGE v1 — no KVM8 executor)
+  console.log("[Gateway] Using inline executor");
   const executionSteps: any[] = [];
   const completedSteps: { nodeId: string; node: any; output: any; input: any }[] = [];
   const visited = new Set<string>();
@@ -432,6 +404,9 @@ async function executeFlowInternal(supabase: any, params: FlowExecParams): Promi
       input_data: input, output_data: output, status: stepStatus,
       started_at: new Date(stepStart).toISOString(), completed_at: new Date().toISOString(),
       latency_ms: stepDuration, cost_cents: stepCostCents,
+      ...(node.type === "tool" && output?.idempotency_key
+        ? { tool_idempotency_key: output.idempotency_key }
+        : {}),
     });
 
     executionSteps.push({ node_id: nodeId, node_type: node.type, status: stepStatus, output, duration_ms: stepDuration });
@@ -484,7 +459,11 @@ async function executeFlowInternal(supabase: any, params: FlowExecParams): Promi
     const evalOutput = guardedOutput?.response || guardedOutput?.text || "";
     if (evalOutput && evalOutput.length > 10) {
       try {
-        evalScores = await evaluateOutput(message, evalOutput, flow.id);
+        const evalModelId =
+          flowSettings.eval_model_id
+          || flowDef?.briefing?.quality_model
+          || "google/gemini-2.5-flash";
+        evalScores = await evaluateOutput(message, evalOutput, flow.id, evalModelId);
       } catch (err) {
         console.log(`[Gateway] Eval failed: ${(err as Error).message}`);
       }

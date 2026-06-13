@@ -357,114 +357,44 @@ async function callAnthropic(
   }
 }
 
-/** 
- * Ollama via VPS Celery — Routes through the VPS worker to avoid Edge Function 60s timeout.
- * Uses VPS_CELERY_URL (KVM2 Celery API) which dispatches to KVM8 Ollama.
+/**
+ * Ollama direct — FORGE v1 (no VPS Celery). Uses OLLAMA_URL / OLLAMA_BASE_URL.
  */
-async function callOllamaViaCelery(
+async function callOllamaDirect(
   modelName: string,
   messages: Array<{ role: string; content: string }>,
   temperature: number,
   maxTokens: number,
   maxPollMs: number = 55_000,
 ): Promise<{ content: string; tokens_in: number; tokens_out: number; finish_reason: string; raw: any }> {
-  const VPS_CELERY_URL = Deno.env.get("VPS_CELERY_URL");
-  const VPS_TOKEN = Deno.env.get("VPS_POST_PRODUCTION_TOKEN");
-
-  if (!VPS_CELERY_URL || !VPS_TOKEN) {
-    throw new Error("VPS_CELERY_URL or VPS_POST_PRODUCTION_TOKEN not configured — Ollama requires VPS Celery routing");
-  }
-
-  // ═══ AUTHORITY GATE — FAIL-CLOSED ═══
-  const INFRA_ALLOWED = new Set(["nomic-embed-text-v2-moe", "minicpm-v"]);
   const bareModel = modelName.replace(":latest", "").trim().replace(/^ollama\//, "");
-  if (!INFRA_ALLOWED.has(bareModel)) {
-    const sbUrl = Deno.env.get("SUPABASE_URL") || "";
-    const sbKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || Deno.env.get("SUPABASE_ANON_KEY") || "";
-    if (sbUrl && sbKey) {
-      const cfgRes = await fetch(`${sbUrl}/rest/v1/vps_ai_config?select=active_model`, {
-        headers: { "apikey": sbKey, "Authorization": `Bearer ${sbKey}` },
-      });
-      if (cfgRes.ok) {
-        const rows = await cfgRes.json();
-        const authorized = new Set<string>();
-        for (const r of rows) {
-          if (r.active_model) authorized.add(r.active_model.replace(":latest", "").trim().replace(/^ollama\//, ""));
-        }
-        if (!authorized.has(bareModel)) {
-          throw new Error(`AUTHORITY_GATE_DENIED: modelo '${modelName}' não autorizado no Motor de Potência`);
-        }
-      }
-    }
-  }
+  const base = (Deno.env.get("OLLAMA_URL") || Deno.env.get("OLLAMA_BASE_URL") || "http://localhost:11434").replace(/\/$/, "");
 
-  const jobId = crypto.randomUUID();
-
-  // 1. Submit inference job to VPS Celery
-  const submitRes = await meteredFetch(`${VPS_CELERY_URL}/api/v1/jobs/submit`, {
+  const res = await meteredFetch(`${base}/api/chat`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": `Bearer ${VPS_TOKEN}`,
-    },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      job_type: "ollama_inference",
-      session_id: `ollama-${jobId}`,
-      user_id: "system",
-      model_name: modelName,
+      model: bareModel,
       messages,
-      temperature,
-      max_tokens_llm: maxTokens,
+      stream: false,
+      options: { temperature, num_predict: maxTokens },
     }),
-  }, { source: "llm-router:ollama-submit", category: "vps", metadata: { model: modelName } });
+    signal: AbortSignal.timeout(maxPollMs),
+  }, { source: "llm-router:ollama-direct", category: "ollama", metadata: { model: bareModel } });
 
-  if (!submitRes.ok) {
-    const errText = await submitRes.text().catch(() => "unknown");
-    throw new Error(`VPS Celery submit failed (${submitRes.status}): ${errText.substring(0, 200)}`);
+  if (!res.ok) {
+    const errText = await res.text().catch(() => "unknown");
+    throw new Error(`Ollama direct failed (${res.status}): ${errText.substring(0, 200)}`);
   }
 
-  const submitData = await submitRes.json();
-  const celeryJobId = submitData.job_id;
-
-  // 2. Poll for result (default 55s, safe for Edge Functions)
-  const maxWaitMs = maxPollMs;
-  const startPoll = Date.now();
-  let pollInterval = 500; // start at 500ms for faster response capture
-
-  while (Date.now() - startPoll < maxWaitMs) {
-    await new Promise(r => setTimeout(r, pollInterval));
-
-    const statusRes = await meteredFetch(`${VPS_CELERY_URL}/api/v1/jobs/${celeryJobId}/status`, {
-      headers: { "Authorization": `Bearer ${VPS_TOKEN}` },
-    }, { source: "llm-router:ollama-poll", category: "vps", metadata: { model: modelName } });
-
-    if (!statusRes.ok) {
-      // Transient error, retry
-      pollInterval = Math.min(pollInterval * 1.5, 5000);
-      continue;
-    }
-
-    const statusData = await statusRes.json();
-
-    if (statusData.status === "completed" && statusData.result) {
-      return {
-        content: statusData.result.content || "",
-        tokens_in: statusData.result.tokens_in || 0,
-        tokens_out: statusData.result.tokens_out || 0,
-        finish_reason: statusData.result.finish_reason || "stop",
-        raw: statusData.result,
-      };
-    }
-
-    if (statusData.status === "failed") {
-      throw new Error(`Ollama inference failed: ${statusData.error || "unknown error"}`);
-    }
-
-    // Increase poll interval (backoff)
-    pollInterval = Math.min(pollInterval * 1.3, 5000);
-  }
-
-  throw new Error(`Ollama inference timed out after ${maxWaitMs / 1000}s`);
+  const data = await res.json();
+  return {
+    content: data.message?.content || "",
+    tokens_in: data.prompt_eval_count || 0,
+    tokens_out: data.eval_count || 0,
+    finish_reason: data.done_reason || "stop",
+    raw: data,
+  };
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -606,7 +536,7 @@ export async function routeLLM(request: LLMRequest): Promise<LLMResponse> {
         `Autorizados: [${[...authorized].join(", ")}].`
       );
     }
-    result = await callOllamaViaCelery(modelName, request.messages, temperature, maxTokens, request.maxPollMs ?? 55_000);
+    result = await callOllamaDirect(modelName, request.messages, temperature, maxTokens, request.maxPollMs ?? 55_000);
   } else if (provider === "anthropic") {
     const apiKey = await resolveApiKey(provider, modelName, request.tenant_id);
     result = await callAnthropic(apiKey, modelName, request.messages, temperature, maxTokens);
@@ -681,7 +611,7 @@ export async function routeLLM(request: LLMRequest): Promise<LLMResponse> {
 // ═══════════════════════════════════════════════════════════
 
 /**
- * Check if a model_id routes to Ollama (VPS Celery).
+ * Check if a model_id routes to Ollama (direct API).
  * Used by services that need SSE heartbeats during Ollama polling.
  */
 export function isOllamaModel(modelId: string): boolean {
