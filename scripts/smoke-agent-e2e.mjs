@@ -39,10 +39,9 @@ const SUPABASE_URL = process.env.SUPABASE_URL ?? process.env.VITE_SUPABASE_URL ?
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
 const INNGEST_EVENT_KEY = process.env.INNGEST_EVENT_KEY ?? "";
 
-const DEFAULT_PROJECT = process.env.SMOKE_PROJECT_ID ?? "27d4fd0c-9783-44ac-9446-70bd931620ac";
-const DEFAULT_CONVERSATION =
-  process.env.SMOKE_CONVERSATION_ID ?? "2bfca54a-3170-4a4d-9289-e8acab4d413f";
-const DEFAULT_USER = process.env.SMOKE_USER_ID ?? "2e8aca9f-1161-4246-9b33-3f2ca6c247d2";
+const DEFAULT_PROJECT = process.env.SMOKE_PROJECT_ID ?? "";
+const DEFAULT_CONVERSATION = process.env.SMOKE_CONVERSATION_ID ?? "";
+const DEFAULT_USER = process.env.SMOKE_USER_ID ?? "";
 
 function arg(name, fallback) {
   const hit = process.argv.find((a) => a.startsWith(`--${name}=`));
@@ -73,6 +72,30 @@ function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
+async function resolveSmokeIds() {
+  let pid = projectId;
+  let cid = conversationId;
+  let uid = userId;
+
+  if (!pid) {
+    const res = await rest("projects?select=id,owner_id&order=updated_at.desc&limit=1");
+    const [row] = await res.json();
+    pid = row?.id;
+    if (!uid) uid = row?.owner_id;
+  }
+  if (!cid && pid) {
+    const res = await rest(`conversations?project_id=eq.${pid}&select=id&limit=1`);
+    const [row] = await res.json();
+    cid = row?.id;
+  }
+  if (!uid) {
+    const res = await rest("projects?select=owner_id&limit=1");
+    const [row] = await res.json();
+    uid = row?.owner_id;
+  }
+  return { pid, cid, uid };
+}
+
 async function main() {
   if (!SUPABASE_URL || !SERVICE_KEY || !INNGEST_EVENT_KEY) {
     console.error(
@@ -81,11 +104,23 @@ async function main() {
     process.exit(1);
   }
 
+  const resolved = await resolveSmokeIds();
+  const projectIdResolved = resolved.pid;
+  const conversationIdResolved = resolved.cid;
+  const userIdResolved = resolved.uid;
+
+  if (!projectIdResolved || !conversationIdResolved || !userIdResolved) {
+    console.error(
+      "FAIL: project/conversation/user não encontrados — defina SMOKE_PROJECT_ID, SMOKE_CONVERSATION_ID, SMOKE_USER_ID",
+    );
+    process.exit(1);
+  }
+
   const runId = crypto.randomUUID();
-  console.log(`Smoke run ${runId.slice(0, 8)} project=${projectId.slice(0, 8)}`);
+  console.log(`Smoke run ${runId.slice(0, 8)} project=${projectIdResolved.slice(0, 8)}`);
 
   const prefsRes = await rest(
-    `agent_runs?user_id=eq.${userId}&status=eq.completed&order=started_at.desc&limit=1&select=meta`,
+    `agent_runs?user_id=eq.${userIdResolved}&status=eq.completed&order=started_at.desc&limit=1&select=meta`,
   );
   const [lastRun] = await prefsRes.json();
   const smokePreferences = lastRun?.meta?.preferences?.mode
@@ -96,9 +131,9 @@ async function main() {
     method: "POST",
     body: JSON.stringify({
       id: runId,
-      project_id: projectId,
-      conversation_id: conversationId,
-      user_id: userId,
+      project_id: projectIdResolved,
+      conversation_id: conversationIdResolved,
+      user_id: userIdResolved,
       status: "pending",
       meta: { sessionKind: "byok", smoke: true, preferences: smokePreferences },
     }),
@@ -111,9 +146,9 @@ async function main() {
 
   const eventPayload = {
     runId,
-    projectId,
-    conversationId,
-    userId,
+    projectId: projectIdResolved,
+    conversationId: conversationIdResolved,
+    userId: userIdResolved,
     sessionKind: "byok",
     preferences: smokePreferences,
     planMode: false,

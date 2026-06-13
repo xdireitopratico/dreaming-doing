@@ -6,9 +6,21 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { corsHeaders, executeLLMNode } from "./gateway-core.ts";
 
-const KVM8_VOICE_IP = () => Deno.env.get("KVM8_IP") || "154.26.128.124";
-const WHISPER_PORT = 8787;
-const KOKORO_PORT = 8880;
+function voiceServiceHost(): string | null {
+  const explicit = Deno.env.get("VPS_VOICE_URL") || Deno.env.get("WHISPER_SERVICE_URL");
+  if (explicit) {
+    try {
+      return new URL(explicit).hostname;
+    } catch {
+      return explicit.replace(/^https?:\/\//, "").split(":")[0] || null;
+    }
+  }
+  const ip = Deno.env.get("KVM8_IP");
+  return ip || null;
+}
+
+const WHISPER_PORT = Number(Deno.env.get("WHISPER_PORT") || "8787");
+const KOKORO_PORT = Number(Deno.env.get("KOKORO_PORT") || "8880");
 
 /**
  * Execute STT node — transcribe audio via VPS Whisper (Faster-Whisper large-v3)
@@ -23,7 +35,16 @@ export async function executeSTTNode(node: any, input: any): Promise<any> {
   }
 
   try {
-    const ip = KVM8_VOICE_IP();
+    const ip = voiceServiceHost();
+    if (!ip) {
+      return {
+        text: input.message || input.text || "",
+        confidence: 0,
+        language,
+        engine: "whisper_unconfigured",
+        error: "VPS_VOICE_URL or KVM8_IP not configured",
+      };
+    }
     const audioBytes = Uint8Array.from(atob(audioBase64), (c) => c.charCodeAt(0));
     const audioBlob = new Blob([audioBytes], { type: "audio/wav" });
 
@@ -81,7 +102,10 @@ export async function executeTTSNode(node: any, input: any): Promise<any> {
   }
 
   try {
-    const ip = KVM8_VOICE_IP();
+    const ip = voiceServiceHost();
+    if (!ip) {
+      return { audio_base64: null, text, voice, engine: "kokoro_unconfigured", error: "VPS_VOICE_URL or KVM8_IP not configured" };
+    }
     console.log(`[Gateway/TTS] Synthesizing ${text.length} chars via Kokoro at ${ip}:${KOKORO_PORT}, voice=${voice}`);
 
     const resp = await fetch(`http://${ip}:${KOKORO_PORT}/v1/audio/speech`, {

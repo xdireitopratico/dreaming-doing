@@ -68,11 +68,10 @@ export function DeployPanel({ flowId, flowName, onClose }: DeployPanelProps) {
   const [webActive, setWebActive] = useState(false);
   const [whatsappActive, setWhatsappActive] = useState(false);
   const [evolutionInstances, setEvolutionInstances] = useState<EvolutionInstance[]>([]);
-  const [selectedInstance, setSelectedInstance] = useState("direito-pratico");
+  const [selectedInstance, setSelectedInstance] = useState("");
   const [canaryPercent, setCanaryPercent] = useState(0);
   const [canaryUpdating, setCanaryUpdating] = useState(false);
   const [flowStatus, setFlowStatus] = useState<string>("draft");
-  ;
 
   // Generate slug from flow name
   useEffect(() => {
@@ -135,7 +134,13 @@ export function DeployPanel({ flowId, flowName, onClose }: DeployPanelProps) {
       .from("evolution_instances")
       .select("id, instance_name, status, api_url")
       .eq("is_active", true);
-    if (data) setEvolutionInstances(data as EvolutionInstance[]);
+    if (data) {
+      const instances = data as EvolutionInstance[];
+      setEvolutionInstances(instances);
+      if (!selectedInstance && instances.length > 0) {
+        setSelectedInstance(instances[0].instance_name);
+      }
+    }
   };
 
   const loadDeployments = async () => {

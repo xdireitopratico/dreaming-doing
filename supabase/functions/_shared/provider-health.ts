@@ -59,10 +59,18 @@ export async function checkAllProviders(): Promise<HealthCheckResult> {
 }
 
 async function checkOllama(): Promise<ProviderHealthStatus> {
-  const KVM8_IP = Deno.env.get("KVM8_IP") || "154.26.128.124";
+  const base = (Deno.env.get("OLLAMA_URL") || Deno.env.get("OLLAMA_BASE_URL") || "").replace(/\/$/, "");
+  if (!base) {
+    return {
+      provider: "ollama",
+      status: "offline",
+      error: "OLLAMA_URL not configured",
+      checked_at: new Date().toISOString(),
+    };
+  }
   const start = Date.now();
   try {
-    const res = await fetch(`http://${KVM8_IP}:11434/api/tags`, {
+    const res = await fetch(`${base}/api/tags`, {
       signal: AbortSignal.timeout(5000),
     });
     const latency = Date.now() - start;

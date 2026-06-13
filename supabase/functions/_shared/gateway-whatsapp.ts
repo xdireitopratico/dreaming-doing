@@ -13,7 +13,11 @@ export async function sendWhatsAppViaEvolutionV1(
   supabase: any, phone: string, message: string, instanceName?: string
 ): Promise<boolean> {
   try {
-    const targetInstance = instanceName || "direito-pratico";
+    const targetInstance = instanceName || Deno.env.get("EVOLUTION_DEFAULT_INSTANCE") || "";
+    if (!targetInstance) {
+      console.error("[Gateway/WhatsApp] No instance_name and EVOLUTION_DEFAULT_INSTANCE not set");
+      return false;
+    }
     const { data: config } = await supabase
       .from("evolution_instances")
       .select("api_url, api_key, instance_name, status")
@@ -91,7 +95,7 @@ export async function handleWhatsAppIncoming(body: any): Promise<Response> {
 
     const deployment = deploymentsList?.find((d: any) => {
       const config = d.channel_config as Record<string, any> | null;
-      return config?.instance_name === instance_name || config?.instance_name === "direito-pratico";
+      return config?.instance_name === instance_name;
     });
 
     if (!deployment) {
@@ -279,7 +283,7 @@ export async function handleWhatsAppSend(body: any): Promise<Response> {
     });
   }
 
-  const sent = await sendWhatsAppViaEvolutionV1(supabase, phone, message, instance_name || "direito-pratico");
+  const sent = await sendWhatsAppViaEvolutionV1(supabase, phone, message, instance_name);
   return new Response(JSON.stringify({ sent, phone }), {
     status: sent ? 200 : 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
