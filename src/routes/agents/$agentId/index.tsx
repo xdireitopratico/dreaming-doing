@@ -13,6 +13,7 @@ const AdminAgentBuilderView = lazy(
 
 export const Route = createFileRoute("/agents/$agentId/")({
   component: AgentEditorPage,
+  ssr: false,
 });
 
 function AgentEditorPage() {

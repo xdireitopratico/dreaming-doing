@@ -3,6 +3,7 @@ import { DashboardShell } from "@/components/dashboard/DashboardShell";
 import { AgentsDashboard } from "@/components/dashboard/AgentsDashboard";
 
 export const Route = createFileRoute("/agents/")({
+  ssr: false,
   component: () => (
     <DashboardShell requireAuth activeNav="agents">
       <AgentsDashboard />

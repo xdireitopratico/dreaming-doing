@@ -8,7 +8,8 @@
   ],
   "scripts": {
     "dev": "vite dev",
-    "build": "vite build",
+    "build": "VERCEL=1 vite build",
+    "build:cloudflare": "vite build",
     "build:vercel": "VERCEL=1 vite build",
     "build:inngest": "node scripts/build-agent-executor.mjs && node scripts/build-inngest.mjs",
     "build:dev": "vite build --mode development",
