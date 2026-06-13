@@ -1,0 +1,46 @@
+/**
+ * FORGE Agents — bridge Prometheus studio tokens → dashboard palette.
+ * Importar globalmente; componentes usam .prometheus-studio como scope.
+ */
+@import "../components/forge-prometheus/prometheus-studio.css";
+
+.prometheus-studio {
+  --ps-bg: var(--forge-bg, #05060a);
+  --ps-bg-deep: var(--forge-bg, #05060a);
+  --ps-bg-surface: var(--forge-surface, #0b0d12);
+  --ps-bg-surface-hover: var(--forge-surface-2, #12151c);
+  --ps-bg-surface-active: color-mix(in srgb, var(--forge-primary, #ffb627) 12%, transparent);
+  --ps-bg-glass: color-mix(in srgb, var(--forge-bg, #05060a) 75%, transparent);
+
+  --ps-accent: var(--forge-primary, #ffb627);
+  --ps-accent-glow: color-mix(in srgb, var(--forge-primary, #ffb627) 35%, transparent);
+  --ps-accent-dim: color-mix(in srgb, var(--forge-primary, #ffb627) 65%, transparent);
+  --ps-accent-subtle: color-mix(in srgb, var(--forge-primary, #ffb627) 10%, transparent);
+
+  --ps-cream: var(--forge-text, #edeff2);
+  --ps-cream-80: color-mix(in srgb, var(--forge-text, #edeff2) 80%, transparent);
+  --ps-cream-60: color-mix(in srgb, var(--forge-text, #edeff2) 60%, transparent);
+  --ps-cream-40: color-mix(in srgb, var(--forge-text, #edeff2) 40%, transparent);
+  --ps-cream-25: color-mix(in srgb, var(--forge-text, #edeff2) 25%, transparent);
+  --ps-cream-15: color-mix(in srgb, var(--forge-text, #edeff2) 15%, transparent);
+  --ps-cream-08: color-mix(in srgb, var(--forge-text, #edeff2) 8%, transparent);
+
+  --ps-border: var(--forge-border, rgba(237, 239, 242, 0.08));
+  --ps-border-hover: var(--forge-border-strong, rgba(237, 239, 242, 0.14));
+  --ps-border-accent: color-mix(in srgb, var(--forge-primary, #ffb627) 45%, transparent);
+  --ps-border-accent-dim: color-mix(in srgb, var(--forge-primary, #ffb627) 22%, transparent);
+
+  --ps-green: #10b981;
+  --ps-blue: var(--forge-primary-hot, #ff7a1a);
+  --ps-purple: #a855f7;
+  --ps-orange: var(--forge-primary, #ffb627);
+  --ps-red: #ef4444;
+
+  --ps-node-green: #10b981;
+  --ps-node-blue: var(--forge-primary-hot, #ff7a1a);
+  --ps-node-purple: #a855f7;
+  --ps-node-orange: var(--forge-primary, #ffb627);
+
+  color: var(--ps-cream);
+  background: var(--ps-bg);
+}

@@ -1,3 +1,4 @@
+import { lazy, Suspense } from "react";
 import { Link, createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, Loader2 } from "lucide-react";
@@ -6,11 +7,15 @@ import { ForgeIcon } from "@/components/icons/ForgeIcon";
 import { supabase } from "@/integrations/supabase/client";
 import { isAgentProject, type ProjectKind } from "@/lib/project-kind";
 
+const AdminAgentBuilderView = lazy(
+  () => import("@/components/forge-agents/AdminAgentBuilderView")
+);
+
 export const Route = createFileRoute("/agents/$agentId/")({
-  component: AgentEditorPlaceholder,
+  component: AgentEditorPage,
 });
 
-function AgentEditorPlaceholder() {
+function AgentEditorPage() {
   const { agentId } = Route.useParams();
 
   const { data: agent, isLoading, error } = useQuery({
@@ -37,8 +42,8 @@ function AgentEditorPlaceholder() {
 
   return (
     <DashboardShell requireAuth activeNav="agents">
-      <div className="flex min-h-[calc(100vh-4rem)] flex-col">
-        <header className="flex items-center gap-3 border-b border-[var(--forge-border)] px-4 py-3 md:px-6">
+      <div className="dashboard-workspace flex min-h-0 flex-1 flex-col overflow-hidden">
+        <header className="flex shrink-0 items-center gap-3 border-b border-[var(--forge-border)] px-4 py-3 md:px-6">
           <Link
             to="/agents"
             className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-sm text-[var(--forge-muted)] hover:bg-[var(--forge-surface-2)] hover:text-[var(--forge-text)]"
@@ -57,35 +62,34 @@ function AgentEditorPlaceholder() {
           </div>
         </header>
 
-        <main className="grid flex-1 place-items-center p-6">
-          {isLoading && <Loader2 className="size-6 animate-spin text-[var(--forge-primary)]" />}
+        <main className="min-h-0 flex-1 overflow-hidden px-3 pb-3 pt-3 lg:px-6 lg:pb-6 lg:pt-3">
+          {isLoading && (
+            <div className="grid h-full place-items-center">
+              <Loader2 className="size-6 animate-spin text-[var(--forge-primary)]" />
+            </div>
+          )}
           {!isLoading && (error || !agent) && (
-            <div className="max-w-md text-center">
-              <p className="text-sm text-[var(--forge-muted)]">
-                {error instanceof Error ? error.message : "Agente não encontrado."}
-              </p>
-              <Link to="/agents" className="mt-4 inline-block text-sm text-[var(--forge-primary)]">
-                Voltar para AI Agents
-              </Link>
+            <div className="grid h-full place-items-center p-6">
+              <div className="max-w-md text-center">
+                <p className="text-sm text-[var(--forge-muted)]">
+                  {error instanceof Error ? error.message : "Agente não encontrado."}
+                </p>
+                <Link to="/agents" className="mt-4 inline-block text-sm text-[var(--forge-primary)]">
+                  Voltar para AI Agents
+                </Link>
+              </div>
             </div>
           )}
           {!isLoading && agent && (
-            <div className="max-w-lg rounded-2xl border border-dashed border-[var(--forge-border-strong)] bg-[var(--forge-surface)] p-8 text-center">
-              <ForgeIcon
-                variant="agent"
-                size={32}
-                className="mx-auto text-[var(--forge-primary)]"
-              />
-              <h1 className="mt-4 text-lg font-medium text-[var(--forge-text)]">
-                Flow builder em breve
-              </h1>
-              <p className="mt-2 text-sm leading-relaxed text-[var(--forge-muted)]">
-                O editor React Flow (AetherForge) será montado aqui. O runtime usa{" "}
-                <code className="text-xs">agent_flows</code> e{" "}
-                <code className="text-xs">aetherforge-gateway</code> — separado do app builder de
-                sites.
-              </p>
-            </div>
+            <Suspense
+              fallback={
+                <div className="grid h-full place-items-center">
+                  <Loader2 className="size-6 animate-spin text-[var(--forge-primary)]" />
+                </div>
+              }
+            >
+              <AdminAgentBuilderView projectId={agentId} />
+            </Suspense>
           )}
         </main>
       </div>
