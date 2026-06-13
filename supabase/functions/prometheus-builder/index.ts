@@ -65,6 +65,7 @@ Deno.serve(async (req) => {
           body.briefing || {},
           body.flow_id,
           qualityModel,
+          body.intent === "modify" ? "modify" : "create",
         );
         EdgeRuntime.waitUntil(backgroundTask);
         result = { session_id, ok };

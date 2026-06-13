@@ -28,6 +28,7 @@ import { TransformerNode } from "./nodes/TransformerNode";
 import { ErrorHandlerNode } from "./nodes/ErrorHandlerNode";
 import { VisionNode } from "./nodes/VisionNode";
 import { ConditionalEdge } from "./edges/ConditionalEdge";
+import { FlowBuilderChatDock } from "./FlowBuilderChatDock";
 
 const nodeTypes = {
   trigger: TriggerNode, llm: LLMNode, tool: ToolNode,
@@ -75,6 +76,13 @@ interface FlowCanvasProps {
   onEdgeClick: (event: React.MouseEvent, edge: Edge) => void;
   onPaneClick: () => void;
   onRegisterFitView?: (fn: () => void) => void;
+  flowId?: string;
+  chatEnabled?: boolean;
+  onApplyPatch?: (nodes: Node[], edges: Edge[]) => void;
+  onHighlightNodes?: (ids: string[]) => void;
+  registerChatToggle?: (fn: () => void) => void;
+  registerChatCollapse?: (fn: () => void) => void;
+  onChatOpenChange?: (open: boolean) => void;
 }
 
 export const FlowCanvas = memo(function FlowCanvas({
@@ -82,6 +90,8 @@ export const FlowCanvas = memo(function FlowCanvas({
   onNodesChange, onEdgesChange, onSetEdges, onSetNodes,
   onNodeClick, onEdgeClick, onPaneClick,
   onRegisterFitView,
+  flowId, chatEnabled = false, onApplyPatch, onHighlightNodes,
+  registerChatToggle, registerChatCollapse, onChatOpenChange,
 }: FlowCanvasProps) {
   const displayNodes = useMemo(() =>
     nodes.map((n) => ({
@@ -157,6 +167,20 @@ export const FlowCanvas = memo(function FlowCanvas({
           <FlowCanvasInternals onRegisterFitView={onRegisterFitView} />
         </ReactFlow>
       </ReactFlowProvider>
+
+      {flowId && onApplyPatch && (
+        <FlowBuilderChatDock
+          flowId={flowId}
+          enabled={chatEnabled}
+          nodes={nodes}
+          edges={edges}
+          onApplyPatch={onApplyPatch}
+          onHighlightNodes={onHighlightNodes}
+          registerToggle={registerChatToggle}
+          registerCollapse={registerChatCollapse}
+          onOpenChange={onChatOpenChange}
+        />
+      )}
 
       {/* Empty canvas guidance */}
       {nodes.length === 0 && (

@@ -17,6 +17,7 @@ interface ShortcutActions {
   onToggleDebug: () => void;
   onSelectAll: () => void;
   onFitView: () => void;
+  onToggleChat?: () => void;
 }
 
 interface UseFlowShortcutsOptions {
@@ -96,6 +97,13 @@ export function useFlowShortcuts({ enabled, actions }: UseFlowShortcutsOptions) 
         return;
       }
 
+      // Toggle vibe chat — Ctrl/Cmd+Shift+L
+      if (mod && e.shiftKey && (e.key === "L" || e.key === "l")) {
+        e.preventDefault();
+        actions.onToggleChat?.();
+        return;
+      }
+
       // Toggle panels with number keys (not in inputs)
       if (!isInput && !mod) {
         if (e.key === "1") { actions.onToggleTest(); return; }
@@ -124,5 +132,6 @@ export const SHORTCUT_MAP = [
   { action: "Deploy (toggle)", keys: "2", category: "painéis" },
   { action: "Debug (toggle)", keys: "3", category: "painéis" },
   { action: "Ajustar zoom", keys: "Ctrl+Shift+F", category: "canvas" },
+  { action: "Chat vibe (toggle)", keys: "Ctrl+Shift+L", category: "canvas" },
   { action: "Selecionar todos", keys: "Ctrl+A", category: "canvas" },
 ] as const;

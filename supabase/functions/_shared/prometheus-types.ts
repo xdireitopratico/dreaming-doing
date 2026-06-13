@@ -115,6 +115,8 @@ export interface PrometheusRequest {
   feedback?: string;
   briefing?: Record<string, unknown>;
   flow_id?: string;
+  /** Session intent — "modify" for flow-builder vibe chat */
+  intent?: PrometheusIntent;
   /** The user-selected model ID from the power selector */
   model_id?: string;
 }

@@ -38,6 +38,7 @@ import { generateArchitecture } from "./prometheus-architect.ts";
 import { runSentinel, saveFlowToAgentFlows } from "./prometheus-sentinel.ts";
 import { runBoardroomRoundtable, writeArchitectureToFlow } from "./prometheus-deliberation.ts";
 import { runEnrichment } from "./prometheus-enrichment.ts";
+import { startModifySession, processFlowEditMessage } from "./prometheus-flow-editor.ts";
 
 // ═══ SESSION MANAGEMENT ═══
 
@@ -46,13 +47,20 @@ export async function startSession(
   briefing: Record<string, unknown>,
   flowId?: string,
   modelId?: string,
+  intent: "create" | "modify" = "create",
 ): Promise<{ session_id: string; ok: true; backgroundTask: Promise<void> }> {
-  const sb = supabaseAdmin();
-
   const qualityModel = modelId || (briefing?.quality_model as string) || "";
   if (!qualityModel) {
     throw new Error("[cortex] quality_model is required — the user must select a model in the power selector");
   }
+
+  if (intent === "modify") {
+    if (!flowId) throw new Error("[cortex] flow_id is required for modify sessions");
+    const { session_id } = await startModifySession(userId, flowId, qualityModel);
+    return { session_id, ok: true, backgroundTask: Promise.resolve() };
+  }
+
+  const sb = supabaseAdmin();
 
   console.log(`[cortex] Starting session with quality_model: ${qualityModel}`);
 
@@ -368,6 +376,11 @@ async function processMessageAsync(
   round: number,
 ) {
   try {
+  if (session.intent === "modify") {
+    await processFlowEditMessage(sb, sessionId, session, message, round);
+    return;
+  }
+
   const phase = session.phase as PrometheusPhase;
   const modelId = getModelId(session);
   const motorTenantId = session.user_id as string;

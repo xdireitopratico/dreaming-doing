@@ -202,6 +202,20 @@ export function useFlowBuilderState(flowId: string, open: boolean) {
     setHasUnsaved(true);
   }, [setNodes, setEdges]);
 
+  const handleApplyPatch = useCallback((patchNodes: Node[], patchEdges: Edge[]) => {
+    setNodes(patchNodes);
+    setEdges(patchEdges);
+    setHasUnsaved(true);
+    historyRef.current = historyRef.current.slice(0, historyIndexRef.current + 1);
+    historyRef.current.push({ nodes: patchNodes, edges: patchEdges });
+    historyIndexRef.current = historyRef.current.length - 1;
+  }, [setNodes, setEdges]);
+
+  const handleHighlightNodes = useCallback((ids: string[]) => {
+    if (ids.length > 0) setHighlightedNodeId(ids[0]);
+    setTimeout(() => setHighlightedNodeId(null), 3000);
+  }, []);
+
   // Node/Edge interactions — M4 Fix: close panel when clicking node for focus
   const onNodeClick = useCallback((_: React.MouseEvent, node: Node) => {
     setSelectedNode(node);
@@ -273,7 +287,8 @@ export function useFlowBuilderState(flowId: string, open: boolean) {
     agentAutoDetect, setAgentAutoDetect, handlePrimaryLangChange,
     // Actions
     handleSave, handlePublish, handleUndo, handleRedo,
-    handleRollback, handleApplyTemplate, handleDelete, handleSelectAll,
+    handleRollback, handleApplyTemplate, handleApplyPatch, handleHighlightNodes,
+    handleDelete, handleSelectAll,
     onNodeClick, onEdgeClick, onPaneClick,
     handleNodeUpdate, handleEdgeUpdate,
   };

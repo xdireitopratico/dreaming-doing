@@ -29,6 +29,29 @@ export function FlowBuilderDialog({ flowId, open, onClose }: FlowBuilderDialogPr
   // M4 Fix: node/edge selection now works independently of panel state
 
   const fitViewCallbackRef = useRef<(() => void) | null>(null);
+  const chatToggleRef = useRef<(() => void) | null>(null);
+  const chatCollapseRef = useRef<(() => void) | null>(null);
+  const chatOpenRef = useRef(false);
+
+  const registerChatToggle = useCallback((fn: () => void) => {
+    chatToggleRef.current = fn;
+  }, []);
+
+  const registerChatCollapse = useCallback((fn: () => void) => {
+    chatCollapseRef.current = fn;
+  }, []);
+
+  const handleChatOpenChange = useCallback((open: boolean) => {
+    chatOpenRef.current = open;
+  }, []);
+
+  const handleChatEscape = useCallback(() => {
+    if (chatOpenRef.current && chatCollapseRef.current) {
+      chatCollapseRef.current();
+      return true;
+    }
+    return false;
+  }, []);
 
   // P3.5: Graduation Gate — intercept publish to verify credentials
   const { checkCredentials, GateDialog, checking: graduationChecking } = useGraduationGate({
@@ -44,13 +67,20 @@ export function FlowBuilderDialog({ flowId, open, onClose }: FlowBuilderDialogPr
     onRedo: s.handleRedo,
     onDelete: s.handleDelete,
     onCommandPalette: () => s.setShowCommandPalette(true),
-    onEscape: () => { s.closePanel(); s.setSelectedNode(null); s.setSelectedEdge(null); s.setShowCommandPalette(false); },
+    onEscape: () => {
+      if (handleChatEscape()) return;
+      s.closePanel();
+      s.setSelectedNode(null);
+      s.setSelectedEdge(null);
+      s.setShowCommandPalette(false);
+    },
+    onToggleChat: () => chatToggleRef.current?.(),
     onToggleTest: () => s.togglePanel("test"),
     onToggleDeploy: () => s.togglePanel("deploy"),
     onToggleDebug: () => s.togglePanel("debug"),
     onSelectAll: s.handleSelectAll,
     onFitView: () => fitViewCallbackRef.current?.(),
-  }), [s.handleSave, checkCredentials, s.handleUndo, s.handleRedo, s.handleDelete, s.closePanel, s.togglePanel, s.handleSelectAll]);
+  }), [s.handleSave, checkCredentials, s.handleUndo, s.handleRedo, s.handleDelete, s.closePanel, s.togglePanel, s.handleSelectAll, handleChatEscape]);
 
   useFlowShortcuts({ enabled: open, actions: shortcutActions });
 
@@ -109,6 +139,13 @@ export function FlowBuilderDialog({ flowId, open, onClose }: FlowBuilderDialogPr
             onEdgeClick={s.onEdgeClick}
             onPaneClick={s.onPaneClick}
             onRegisterFitView={(fn) => { fitViewCallbackRef.current = fn; }}
+            flowId={flowId}
+            chatEnabled={open}
+            onApplyPatch={s.handleApplyPatch}
+            onHighlightNodes={s.handleHighlightNodes}
+            registerChatToggle={registerChatToggle}
+            registerChatCollapse={registerChatCollapse}
+            onChatOpenChange={handleChatOpenChange}
           />
 
           {selectedNode()}
