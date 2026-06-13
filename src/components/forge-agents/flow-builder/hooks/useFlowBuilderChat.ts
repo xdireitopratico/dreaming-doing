@@ -1,6 +1,5 @@
 /**
- * useFlowBuilderChat — Vibe editing chat for Flow Builder (intent: modify)
- * Reuses ChatMessage format; backend: prometheus-builder + prometheus_build_turns.
+ * useFlowBuilderChat — Vibe Agent chat (conversas próprias, isolado do boardroom)
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Node, Edge } from "@xyflow/react";
@@ -9,36 +8,36 @@ import type { ChatMessage } from "@/lib/chat-types";
 import type { ThreadItem } from "@/lib/chat/types";
 import type { StoredMessagePart } from "@/lib/chat-attachments";
 
-const DEFAULT_MODEL = "google/gemini-2.5-flash";
 const POLL_MIN_MS = 2_000;
-const POLL_MAX_MS = 12_000;
+const POLL_MAX_MS = 10_000;
 
-type TurnRow = {
+export type VibeConversation = {
   id: string;
-  agent_key: string;
+  title: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type MessageRow = {
+  id: string;
+  role: "user" | "assistant";
   content: string;
-  message_type: string;
-  output_data: Record<string, unknown> | null;
+  meta: Record<string, unknown> | null;
   created_at: string;
 };
 
-function turnToMessages(row: TurnRow): ChatMessage[] {
-  const ts = new Date(row.created_at).getTime();
-  if (row.message_type === "user_input" || row.agent_key === "user") {
-    return [{
-      id: row.id,
-      role: "user",
-      content: row.content,
-      timestamp: ts,
-    }];
-  }
-  return [{
+function convStorageKey(flowId: string) {
+  return `forge-vibe-agent-conv-${flowId}`;
+}
+
+function rowToChatMessage(row: MessageRow): ChatMessage {
+  return {
     id: row.id,
-    role: "assistant",
+    role: row.role,
     content: row.content,
-    timestamp: ts,
-    meta: row.output_data ? { outputData: row.output_data } : undefined,
-  }];
+    timestamp: new Date(row.created_at).getTime(),
+    meta: row.meta ?? undefined,
+  };
 }
 
 function messagesToThreadItems(messages: ChatMessage[], running: boolean): ThreadItem[] {
@@ -66,12 +65,6 @@ function messagesToThreadItems(messages: ChatMessage[], running: boolean): Threa
         streamText: null,
         finished: false,
       });
-    } else if (last?.role === "assistant") {
-      const lastItem = items[items.length - 1];
-      if (lastItem?.kind === "assistant") {
-        lastItem.isActive = true;
-        lastItem.finished = false;
-      }
     }
   }
 
@@ -81,8 +74,6 @@ function messagesToThreadItems(messages: ChatMessage[], running: boolean): Threa
 export function useFlowBuilderChat({
   flowId,
   enabled,
-  nodes,
-  edges,
   onApplyPatch,
   onHighlightNodes,
 }: {
@@ -94,86 +85,114 @@ export function useFlowBuilderChat({
   onHighlightNodes?: (ids: string[]) => void;
 }) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [conversations, setConversations] = useState<VibeConversation[]>([]);
+  const [conversationId, setConversationId] = useState<string | null>(null);
   const [running, setRunning] = useState(false);
-  const [sessionId, setSessionId] = useState<string | null>(null);
-  const [unreadCount, setUnreadCount] = useState(0);
   const [initialized, setInitialized] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
 
-  const processedTurnIdsRef = useRef<Set<string>>(new Set());
+  const processedIdsRef = useRef<Set<string>>(new Set());
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const pollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pollIntervalRef = useRef(POLL_MIN_MS);
   const chatVisibleRef = useRef(false);
+  const conversationIdRef = useRef<string | null>(null);
 
-  const applyFlowPatch = useCallback((outputData: Record<string, unknown> | null) => {
-    const patch = outputData?.flow_patch as {
+  useEffect(() => {
+    conversationIdRef.current = conversationId;
+  }, [conversationId]);
+
+  const applyFlowPatch = useCallback((meta: Record<string, unknown> | null | undefined, isNew: boolean) => {
+    if (!isNew) return;
+    const patch = meta?.flow_patch as {
       nodes?: Node[];
       edges?: Edge[];
       changed_node_ids?: string[];
     } | undefined;
     if (!patch?.nodes || !patch?.edges) return;
-
     onApplyPatch(patch.nodes, patch.edges);
     if (patch.changed_node_ids?.length && onHighlightNodes) {
       onHighlightNodes(patch.changed_node_ids);
     }
   }, [onApplyPatch, onHighlightNodes]);
 
-  const processTurn = useCallback((row: TurnRow, isNew: boolean) => {
-    if (processedTurnIdsRef.current.has(row.id)) return false;
-    processedTurnIdsRef.current.add(row.id);
-
-    const newMsgs = turnToMessages(row);
-    setMessages((prev) => [...prev, ...newMsgs]);
-
-    if (row.output_data?.flow_patch) {
-      applyFlowPatch(row.output_data);
+  const ingestRows = useCallback((rows: MessageRow[], isNewStream: boolean) => {
+    const added: ChatMessage[] = [];
+    for (const row of rows) {
+      if (processedIdsRef.current.has(row.id)) continue;
+      processedIdsRef.current.add(row.id);
+      added.push(rowToChatMessage(row));
+      if (row.role === "assistant") {
+        applyFlowPatch(row.meta, isNewStream);
+        if (isNewStream && !chatVisibleRef.current) {
+          setUnreadCount((c) => c + 1);
+        }
+        setRunning(false);
+      }
     }
-
-    if (isNew && row.agent_key !== "user" && !chatVisibleRef.current) {
-      setUnreadCount((c) => c + 1);
+    if (added.length) {
+      setMessages((prev) => [...prev, ...added]);
     }
-
-    if (row.agent_key !== "user") {
-      setRunning(false);
-    }
-
-    return true;
   }, [applyFlowPatch]);
 
-  const hydrateTurns = useCallback(async (sid: string) => {
-    const { data } = await supabase
-      .from("prometheus_build_turns" as never)
-      .select("id, agent_key, content, message_type, output_data, created_at")
-      .eq("session_id", sid)
-      .order("created_at", { ascending: true });
+  const loadMessages = useCallback(async (convId: string) => {
+    const { data, error } = await supabase.functions.invoke("vibe-agent-chat", {
+      body: { action: "load_messages", conversation_id: convId },
+    });
+    if (error) throw error;
+    const rows = (data as { messages?: MessageRow[] })?.messages ?? [];
+    processedIdsRef.current.clear();
+    setMessages([]);
+    ingestRows(rows, false);
+    return rows;
+  }, [ingestRows]);
 
-    let count = 0;
-    for (const row of (data as TurnRow[] | null) || []) {
-      if (processTurn(row, false)) count += 1;
-    }
-    return count;
-  }, [processTurn]);
+  const refreshConversations = useCallback(async () => {
+    const { data, error } = await supabase.functions.invoke("vibe-agent-chat", {
+      body: { action: "list_conversations", flow_id: flowId },
+    });
+    if (error) throw error;
+    const list = (data as { conversations?: VibeConversation[] })?.conversations ?? [];
+    setConversations(list);
+    return list;
+  }, [flowId]);
 
-  const schedulePoll = useCallback((sid: string) => {
+  const subscribe = useCallback((convId: string) => {
+    if (channelRef.current) supabase.removeChannel(channelRef.current);
+
+    const channel = supabase
+      .channel(`vibe-agent-chat-${convId}`)
+      .on(
+        "postgres_changes" as never,
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "vibe_agent_messages",
+          filter: `conversation_id=eq.${convId}`,
+        },
+        (payload: { new: MessageRow }) => {
+          if (payload.new.conversation_id !== conversationIdRef.current) return;
+          pollIntervalRef.current = POLL_MIN_MS;
+          ingestRows([payload.new], true);
+        },
+      )
+      .subscribe();
+
+    channelRef.current = channel;
+
     if (pollRef.current) clearTimeout(pollRef.current);
-
     const tick = async () => {
       try {
         const { data } = await supabase
-          .from("prometheus_build_turns" as never)
-          .select("id, agent_key, content, message_type, output_data, created_at")
-          .eq("session_id", sid)
+          .from("vibe_agent_messages" as never)
+          .select("id, role, content, meta, created_at, conversation_id")
+          .eq("conversation_id", convId)
           .order("created_at", { ascending: true });
 
-        let hasNew = false;
-        for (const row of (data as TurnRow[] | null) || []) {
-          if (!processedTurnIdsRef.current.has(row.id)) {
-            if (processTurn(row, true)) hasNew = true;
-          }
-        }
-
-        pollIntervalRef.current = hasNew
+        const rows = (data as (MessageRow & { conversation_id: string })[] | null) ?? [];
+        const pending = rows.filter((r) => !processedIdsRef.current.has(r.id));
+        if (pending.length) ingestRows(pending, true);
+        pollIntervalRef.current = pending.length
           ? POLL_MIN_MS
           : Math.min(Math.round(pollIntervalRef.current * 1.4), POLL_MAX_MS);
       } catch {
@@ -181,80 +200,29 @@ export function useFlowBuilderChat({
       }
       pollRef.current = setTimeout(tick, pollIntervalRef.current);
     };
-
     pollRef.current = setTimeout(tick, pollIntervalRef.current);
-  }, [processTurn]);
+  }, [ingestRows]);
 
-  const subscribe = useCallback((sid: string) => {
-    if (channelRef.current) {
-      supabase.removeChannel(channelRef.current);
-    }
+  const selectConversation = useCallback(async (convId: string) => {
+    setConversationId(convId);
+    localStorage.setItem(convStorageKey(flowId), convId);
+    setRunning(false);
+    await loadMessages(convId);
+    subscribe(convId);
+  }, [flowId, loadMessages, subscribe]);
 
-    const channel = supabase
-      .channel(`flow-builder-chat-${sid}`)
-      .on(
-        "postgres_changes" as never,
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "prometheus_build_turns",
-          filter: `session_id=eq.${sid}`,
-        },
-        (payload: { new: TurnRow }) => {
-          pollIntervalRef.current = POLL_MIN_MS;
-          processTurn(payload.new, true);
-        },
-      )
-      .subscribe();
-
-    channelRef.current = channel;
-    schedulePoll(sid);
-  }, [processTurn, schedulePoll]);
-
-  const resolveModelId = useCallback(async (): Promise<string> => {
-    const { data } = await supabase
-      .from("agent_flows")
-      .select("flow_definition")
-      .eq("id", flowId)
-      .single();
-
-    const briefing = (data?.flow_definition as { briefing?: { quality_model?: string } } | null)?.briefing;
-    return briefing?.quality_model?.trim() || DEFAULT_MODEL;
-  }, [flowId]);
-
-  const ensureSession = useCallback(async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return null;
-
-    const { data: existing } = await supabase
-      .from("prometheus_build_sessions" as never)
-      .select("id")
-      .eq("target_flow_id", flowId)
-      .eq("intent", "modify")
-      .eq("user_id", user.id)
-      .is("success", null)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    if (existing?.id) {
-      return existing.id as string;
-    }
-
-    const modelId = await resolveModelId();
-    const { data, error } = await supabase.functions.invoke("prometheus-builder", {
-      body: {
-        action: "start",
-        intent: "modify",
-        flow_id: flowId,
-        model_id: modelId,
-        briefing: { quality_model: modelId },
-      },
+  const startNewConversation = useCallback(async () => {
+    const { data, error } = await supabase.functions.invoke("vibe-agent-chat", {
+      body: { action: "create_conversation", flow_id: flowId },
     });
-
     if (error) throw error;
-    return (data as { session_id?: string })?.session_id ?? null;
-  }, [flowId, resolveModelId]);
+
+    const convId = (data as { conversation_id?: string })?.conversation_id;
+    if (!convId) throw new Error("conversation_id missing");
+
+    await refreshConversations();
+    await selectConversation(convId);
+  }, [flowId, refreshConversations, selectConversation]);
 
   useEffect(() => {
     if (!enabled || !flowId) return;
@@ -263,18 +231,25 @@ export function useFlowBuilderChat({
 
     void (async () => {
       try {
-        const sid = await ensureSession();
-        if (cancelled || !sid) return;
+        const list = await refreshConversations();
+        if (cancelled) return;
 
-        setSessionId(sid);
-        processedTurnIdsRef.current.clear();
-        setMessages([]);
-        await hydrateTurns(sid);
-        subscribe(sid);
-        setInitialized(true);
+        const savedId = localStorage.getItem(convStorageKey(flowId));
+        const pick =
+          (savedId && list.some((c) => c.id === savedId) ? savedId : null)
+          ?? list[0]?.id
+          ?? null;
+
+        if (pick) {
+          await selectConversation(pick);
+        } else {
+          await startNewConversation();
+        }
+
+        if (!cancelled) setInitialized(true);
       } catch (err) {
         console.error("[useFlowBuilderChat] init failed:", err);
-        setInitialized(true);
+        if (!cancelled) setInitialized(true);
       }
     })();
 
@@ -286,24 +261,27 @@ export function useFlowBuilderChat({
         channelRef.current = null;
       }
     };
-  }, [enabled, flowId, ensureSession, hydrateTurns, subscribe]);
+  }, [enabled, flowId, refreshConversations, selectConversation, startNewConversation]);
 
   const onSend = useCallback(async (text: string, _mode?: string, _parts?: StoredMessagePart[]) => {
     const trimmed = text.trim();
     if (!trimmed || running) return;
 
-    let sid = sessionId;
-    if (!sid) {
-      sid = await ensureSession();
-      if (!sid) return;
-      setSessionId(sid);
-      subscribe(sid);
+    let convId = conversationId;
+    if (!convId) {
+      await startNewConversation();
+      convId = conversationIdRef.current;
+      if (!convId) return;
     }
 
     setRunning(true);
 
-    const { error } = await supabase.functions.invoke("prometheus-builder", {
-      body: { action: "message", session_id: sid, message: trimmed },
+    const { error } = await supabase.functions.invoke("vibe-agent-chat", {
+      body: {
+        action: "send_message",
+        conversation_id: convId,
+        message: trimmed,
+      },
     });
 
     if (error) {
@@ -317,35 +295,32 @@ export function useFlowBuilderChat({
           timestamp: Date.now(),
         },
       ]);
+    } else {
+      await refreshConversations();
     }
-  }, [running, sessionId, ensureSession, subscribe]);
+  }, [running, conversationId, startNewConversation, refreshConversations]);
 
-  const onStop = useCallback(async () => {
-    if (!sessionId) {
-      setRunning(false);
-      return;
-    }
-    await supabase.functions.invoke("prometheus-builder", {
-      body: { action: "halt", session_id: sessionId },
-    });
+  const onStop = useCallback(() => {
     setRunning(false);
-  }, [sessionId]);
+  }, []);
 
   const setChatVisible = useCallback((visible: boolean) => {
     chatVisibleRef.current = visible;
     if (visible) setUnreadCount(0);
   }, []);
 
-  const threadItems = messagesToThreadItems(messages, running);
-
   return {
     messages,
-    threadItems,
+    threadItems: messagesToThreadItems(messages, running),
+    conversations,
+    conversationId,
     running,
     initialized,
     unreadCount,
     onSend,
     onStop,
     setChatVisible,
+    startNewConversation,
+    selectConversation,
   };
 }

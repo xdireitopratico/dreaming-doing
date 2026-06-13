@@ -3,7 +3,7 @@
  * Reuses ChatThread + ChatComposer (no Visual Edits). Does not resize the canvas.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
-import { MessageCircle, Minimize2, X } from "lucide-react";
+import { History, MessageCircle, Minimize2, Plus, X } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import type { Node, Edge } from "@xyflow/react";
 import { ChatThread } from "@/components/chat/ChatThread";
@@ -44,6 +44,7 @@ export function FlowBuilderChatDock({
   onOpenChange,
 }: FlowBuilderChatDockProps) {
   const [open, setOpenState] = useState(loadOpenState);
+  const [historyOpen, setHistoryOpen] = useState(false);
 
   const setOpen = useCallback((value: boolean | ((prev: boolean) => boolean)) => {
     setOpenState((prev) => {
@@ -60,14 +61,16 @@ export function FlowBuilderChatDock({
     running,
     initialized,
     unreadCount,
+    conversations,
+    conversationId,
     onSend,
     onStop,
     setChatVisible,
+    startNewConversation,
+    selectConversation,
   } = useFlowBuilderChat({
     flowId,
     enabled,
-    nodes,
-    edges,
     onApplyPatch,
     onHighlightNodes,
   });
@@ -124,7 +127,60 @@ export function FlowBuilderChatDock({
                   Construa e tire dúvidas do agente no canvas
                 </p>
               </div>
-              <div className="flex items-center gap-1">
+              <div className="relative flex items-center gap-1">
+                <button
+                  type="button"
+                  className="forge-vibe-agent-chat__header-btn"
+                  title="Nova conversa"
+                  aria-label="Nova conversa"
+                  onClick={() => void startNewConversation()}
+                >
+                  <Plus className="size-3.5" />
+                </button>
+                <button
+                  type="button"
+                  className="forge-vibe-agent-chat__header-btn"
+                  title="Histórico"
+                  aria-label="Histórico de conversas"
+                  onClick={() => setHistoryOpen((v) => !v)}
+                >
+                  <History className="size-3.5" />
+                </button>
+                {historyOpen && (
+                  <div
+                    className="absolute right-0 top-full z-10 mt-1 max-h-48 w-56 overflow-y-auto rounded-xl py-1 shadow-xl"
+                    style={{
+                      background: "var(--bg-card)",
+                      border: "1px solid var(--border-forge)",
+                    }}
+                  >
+                    {conversations.length === 0 ? (
+                      <p className="px-3 py-2 text-[10px]" style={{ color: "var(--text-muted)" }}>
+                        Nenhuma conversa ainda
+                      </p>
+                    ) : (
+                      conversations.map((c) => (
+                        <button
+                          key={c.id}
+                          type="button"
+                          className="w-full px-3 py-2 text-left text-[10px] transition-colors hover:bg-white/5"
+                          style={{
+                            color: c.id === conversationId ? "var(--text-accent)" : "var(--text-secondary)",
+                          }}
+                          onClick={() => {
+                            void selectConversation(c.id);
+                            setHistoryOpen(false);
+                          }}
+                        >
+                          <span className="block truncate font-medium">{c.title || "Conversa"}</span>
+                          <span className="block text-[9px] opacity-70">
+                            {new Date(c.updated_at || c.created_at).toLocaleString("pt-BR")}
+                          </span>
+                        </button>
+                      ))
+                    )}
+                  </div>
+                )}
                 <button
                   type="button"
                   className="forge-vibe-agent-chat__header-btn"

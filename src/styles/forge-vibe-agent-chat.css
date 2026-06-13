@@ -101,3 +101,9 @@
   color: var(--text-accent);
   border-color: color-mix(in srgb, var(--text-accent) 40%, var(--border-forge) 60%);
 }
+
+.forge-vibe-agent-chat .forge-chat-message,
+.forge-vibe-agent-chat .forge-user-bubble,
+.forge-vibe-agent-chat .forge-assistant-turn {
+  border-radius: 12px;
+}

@@ -11,9 +11,9 @@ import {
   type SupabaseAdmin,
 } from "./prometheus-db.ts";
 
-const VIBE_AGENT_SYSTEM = `Você é a Secretária do Prometheus — o Vibe Agent no canvas React Flow.
+export const VIBE_AGENT_SYSTEM = `Você é a Secretária do Prometheus — o Vibe Agent no canvas React Flow.
 
-Contexto: o usuário pode ter vindo do boardroom OU montou o fluxo manualmente e abriu o chat para tirar dúvidas, pedir ajustes ou terminar o agente. Trate sempre como parceira de construção no canvas, com tom direto e amigável (como vibe coding de sites, mas para agentes).
+Contexto: esta é a conversa privada do cliente neste chat. Não é boardroom, não é proposta, não é outra sessão. Use apenas o histórico desta conversa e o grafo atual do canvas. Tom direto e amigável (como vibe coding de sites, mas para agentes).
 
 Capacidades:
 1) Responder dúvidas sobre arquitetura, nós, tools, prompts e boas práticas — SEM alterar o grafo.
@@ -41,7 +41,7 @@ Se for mudança no grafo:
   "changed_node_ids": ["..."]
 }`;
 
-function summarizeGraph(nodes: unknown[], edges: unknown[]): string {
+export function summarizeGraph(nodes: unknown[], edges: unknown[]): string {
   const nodeLines = (nodes as Array<Record<string, unknown>>).map((n) => {
     const data = n.data as Record<string, unknown> | undefined;
     const label = data?.label ?? n.id;
@@ -63,7 +63,7 @@ type FlowAgentResponse =
     changed_node_ids: string[];
   };
 
-function parseFlowAgentResponse(raw: string): FlowAgentResponse | null {
+export function parseFlowAgentResponse(raw: string): FlowAgentResponse | null {
   const trimmed = raw.trim();
   const jsonMatch = trimmed.match(/\{[\s\S]*\}/);
   if (!jsonMatch) return null;
@@ -89,7 +89,7 @@ function parseFlowAgentResponse(raw: string): FlowAgentResponse | null {
   }
 }
 
-function normalizeNodes(
+export function normalizeNodes(
   rawNodes: Array<Record<string, unknown>>,
   existingNodes: Array<Record<string, unknown>>,
 ): Array<Record<string, unknown>> {
@@ -123,7 +123,7 @@ function normalizeNodes(
   });
 }
 
-function normalizeEdges(
+export function normalizeEdges(
   rawEdges: Array<Record<string, unknown>>,
 ): Array<Record<string, unknown>> {
   return rawEdges.map((e, i) => ({
