@@ -10,8 +10,10 @@ import { ChatThread } from "@/components/chat/ChatThread";
 import { ChatComposer } from "@/components/chat/ChatComposer";
 import { useFlowBuilderChat } from "./hooks/useFlowBuilderChat";
 import "@/styles/forge-chat.css";
+import "@/styles/forge-vibe-agent-chat.css";
 
 const STORAGE_KEY = "forge-flow-chat-open";
+const PANEL_MAX_H = "min(616px, 77vh)";
 
 function loadOpenState(): boolean {
   if (typeof window === "undefined") return false;
@@ -98,7 +100,7 @@ export function FlowBuilderChatDock({
   if (!enabled) return null;
 
   return (
-    <div className="pointer-events-none absolute inset-0 z-50 overflow-hidden">
+    <div className="forge-vibe-agent-chat pointer-events-none absolute inset-0 z-50 overflow-hidden">
       <AnimatePresence>
         {open && (
           <motion.div
@@ -107,44 +109,39 @@ export function FlowBuilderChatDock({
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 16, scale: 0.96 }}
             transition={{ duration: 0.2 }}
-            className="pointer-events-auto absolute bottom-20 right-6 flex w-[min(400px,calc(100%-3rem))] flex-col overflow-hidden rounded-2xl shadow-2xl"
-            style={{
-              maxHeight: "min(560px, 70vh)",
-              background: "rgba(12, 14, 24, 0.92)",
-              border: "1px solid var(--ps-border, rgba(255,255,255,0.1))",
-              backdropFilter: "blur(12px)",
-            }}
+            className="forge-vibe-agent-chat__panel pointer-events-auto absolute bottom-20 right-6 flex w-[min(400px,calc(100%-3rem))] flex-col overflow-hidden"
+            style={{ maxHeight: PANEL_MAX_H }}
           >
             <header
-              className="flex shrink-0 items-center justify-between gap-2 px-4 py-2.5"
-              style={{ borderBottom: "1px solid var(--ps-border, rgba(255,255,255,0.08))" }}
+              className="flex shrink-0 items-center justify-between gap-2 border-b px-4 py-2.5"
+              style={{ borderColor: "color-mix(in srgb, var(--border-forge) 80%, transparent)" }}
             >
               <div className="min-w-0">
-                <p className="text-[11px] font-semibold tracking-wide" style={{ color: "var(--ps-cream, #f5f0e8)" }}>
-                  Vibe Builder
+                <p className="text-[11px] font-semibold tracking-wide" style={{ color: "var(--text-primary)" }}>
+                  Vibe Agent
                 </p>
-                <p className="text-[9px] truncate" style={{ color: "var(--ps-cream-40, rgba(245,240,232,0.4))" }}>
-                  Edite o fluxo por linguagem natural
+                <p className="text-[9px] truncate" style={{ color: "var(--text-muted)" }}>
+                  Construa e tire dúvidas do agente no canvas
                 </p>
               </div>
               <div className="flex items-center gap-1">
                 <button
                   type="button"
-                  className="rounded-lg p-1.5 transition-colors hover:bg-white/5"
+                  className="forge-vibe-agent-chat__header-btn"
                   title="Minimizar"
                   aria-label="Minimizar chat"
                   onClick={collapse}
                 >
-                  <Minimize2 className="size-4" style={{ color: "var(--ps-cream-60)" }} />
+                  <Minimize2 className="size-3.5" />
                 </button>
                 <button
                   type="button"
-                  className="rounded-lg p-1.5 transition-colors hover:bg-white/5"
+                  className="forge-vibe-agent-chat__header-btn"
                   title="Fechar"
                   aria-label="Fechar chat"
                   onClick={collapse}
                 >
-                  <X className="size-4" style={{ color: "var(--ps-cream-60)" }} />
+                  <X className="size-3.5" />
                 </button>
               </div>
             </header>
@@ -152,21 +149,21 @@ export function FlowBuilderChatDock({
             <div
               ref={scrollRef}
               className="forge-chat-inner min-h-0 flex-1 overflow-y-auto"
-              style={{ maxHeight: "calc(min(560px, 70vh) - 120px)" }}
+              style={{ maxHeight: `calc(${PANEL_MAX_H} - 132px)` }}
             >
               {!initialized ? (
                 <div className="flex items-center justify-center py-12">
-                  <span className="text-[11px]" style={{ color: "var(--ps-cream-40)" }}>
+                  <span className="text-[11px]" style={{ color: "var(--text-muted)" }}>
                     Conectando...
                   </span>
                 </div>
               ) : threadItems.length === 0 ? (
                 <div className="px-4 py-8 text-center">
-                  <p className="text-[12px] font-medium mb-1" style={{ color: "var(--ps-cream-60)" }}>
-                    Descreva a mudança
+                  <p className="text-[12px] font-medium mb-1" style={{ color: "var(--text-secondary)" }}>
+                    Vibe Agent
                   </p>
-                  <p className="text-[10px] leading-relaxed" style={{ color: "var(--ps-cream-25)" }}>
-                    Ex: &quot;Adicione um nó RAG entre o LLM e o output guard&quot;
+                  <p className="text-[10px] leading-relaxed" style={{ color: "var(--text-muted)" }}>
+                    Peça mudanças no fluxo, tire dúvidas ou peça para terminar o agente.
                   </p>
                 </div>
               ) : (
@@ -176,7 +173,7 @@ export function FlowBuilderChatDock({
               )}
             </div>
 
-            <div className="shrink-0 px-2 pb-2 pt-1">
+            <div className="forge-vibe-agent-composer-wrap shrink-0">
               <ChatComposer
                 running={running}
                 onSend={onSend}
@@ -189,14 +186,9 @@ export function FlowBuilderChatDock({
 
       <button
         type="button"
-        className="pointer-events-auto absolute bottom-6 right-6 flex size-12 items-center justify-center rounded-full shadow-lg transition-transform hover:scale-105 active:scale-95"
-        style={{
-          background: open ? "var(--ps-accent, #3b82f6)" : "rgba(30, 58, 138, 0.9)",
-          border: "1px solid rgba(255,255,255,0.15)",
-          color: "#fff",
-        }}
-        title={open ? "Minimizar chat (Ctrl+Shift+L)" : "Abrir chat (Ctrl+Shift+L)"}
-        aria-label={open ? "Minimizar chat" : "Abrir chat vibe builder"}
+        className={`forge-vibe-agent-chat__fab pointer-events-auto absolute bottom-6 right-6 flex size-12 items-center justify-center rounded-full shadow-lg transition-transform hover:scale-105 active:scale-95${open ? " forge-vibe-agent-chat__fab--open" : ""}`}
+        title={open ? "Minimizar chat (Ctrl+Shift+L)" : "Abrir Vibe Agent (Ctrl+Shift+L)"}
+        aria-label={open ? "Minimizar chat" : "Abrir Vibe Agent"}
         onClick={toggle}
       >
         <MessageCircle className="size-5" />

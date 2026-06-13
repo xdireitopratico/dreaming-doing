@@ -1,0 +1,103 @@
+/**
+ * Vibe Agent chat — paridade visual com Vibe Coder (sites).
+ * Escopo isolado: não altera tokens do React Flow / Prometheus studio.
+ */
+@import "./forge-tokens.css";
+
+.forge-vibe-agent-chat {
+  /* Amarelo do Vibe Coder — não o dourado #ffb627 do publish/React */
+  --text-accent: #fbbf24;
+  --bg-chat: #0a0a0f;
+  --bg-card: #13131f;
+  --bg-hover: #1a1a2e;
+  --bg-input: #1e1e2e;
+  --text-primary: #e2e8f0;
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
+  --border-forge: #27273a;
+  --border-active: #3b82f6;
+  --chat-padding: 12px;
+  --chat-cta-radius: 10px;
+  --font-chat: 14px/1.6 "Inter", system-ui, sans-serif;
+
+  color: var(--text-primary);
+}
+
+.forge-vibe-agent-chat__panel {
+  border-radius: 20px;
+  background: var(--bg-chat);
+  border: 1px solid color-mix(in srgb, var(--border-forge) 85%, transparent);
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.03) inset,
+    0 12px 40px rgba(0, 0, 0, 0.45);
+}
+
+.forge-vibe-agent-chat__header-btn {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--border-forge) 80%, transparent);
+  background: color-mix(in srgb, var(--bg-input) 85%, transparent);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.forge-vibe-agent-chat__header-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+  border-color: color-mix(in srgb, var(--border-forge) 100%, transparent);
+}
+
+/* Composer: só a bolha — sem caixa preta extra no wrapper */
+.forge-vibe-agent-chat .forge-vibe-agent-composer-wrap {
+  padding: 0 var(--chat-padding) var(--chat-padding);
+  background: transparent;
+  border: none;
+}
+
+.forge-vibe-agent-chat .forge-composer {
+  margin: 0;
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--bg-input) 92%, var(--bg-card) 8%);
+  border: 1px solid color-mix(in srgb, var(--border-forge) 75%, #52525b 25%);
+}
+
+.forge-vibe-agent-chat .forge-composer-input {
+  background: transparent;
+}
+
+.forge-vibe-agent-chat .forge-composer-add,
+.forge-vibe-agent-chat .forge-composer-stop,
+.forge-vibe-agent-chat .forge-composer-mic,
+.forge-vibe-agent-chat .forge-composer-send {
+  border-radius: 10px;
+}
+
+.forge-vibe-agent-chat .forge-composer-send:not(:disabled) {
+  background: var(--text-accent);
+  color: #0a0a0a;
+  border-color: transparent;
+}
+
+.forge-vibe-agent-chat .forge-composer-send:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+.forge-vibe-agent-chat .forge-messages {
+  padding: var(--chat-padding);
+}
+
+.forge-vibe-agent-chat__fab {
+  background: var(--text-accent);
+  color: #0a0a0a;
+  border: 1px solid color-mix(in srgb, var(--text-accent) 70%, #000 30%);
+}
+
+.forge-vibe-agent-chat__fab--open {
+  background: color-mix(in srgb, var(--bg-input) 90%, var(--text-accent) 10%);
+  color: var(--text-accent);
+  border-color: color-mix(in srgb, var(--text-accent) 40%, var(--border-forge) 60%);
+}

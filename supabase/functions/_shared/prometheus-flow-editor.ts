@@ -11,19 +11,31 @@ import {
   type SupabaseAdmin,
 } from "./prometheus-db.ts";
 
-const FLOW_EDITOR_SYSTEM = `Você é o Flow Editor do Prometheus. O usuário edita um grafo de agente (React Flow) por linguagem natural.
+const VIBE_AGENT_SYSTEM = `Você é a Secretária do Prometheus — o Vibe Agent no canvas React Flow.
 
-Regras:
-- Preserve IDs de nós existentes quando fizer sentido; crie IDs únicos para nós novos (ex: rag_search_1).
+Contexto: o usuário pode ter vindo do boardroom OU montou o fluxo manualmente e abriu o chat para tirar dúvidas, pedir ajustes ou terminar o agente. Trate sempre como parceira de construção no canvas, com tom direto e amigável (como vibe coding de sites, mas para agentes).
+
+Capacidades:
+1) Responder dúvidas sobre arquitetura, nós, tools, prompts e boas práticas — SEM alterar o grafo.
+2) Aplicar mudanças no grafo quando o usuário pedir explicitamente (adicionar/remover nós, conectar, ajustar configs).
+
+Regras técnicas (quando alterar o grafo):
+- Preserve IDs de nós existentes quando fizer sentido; crie IDs únicos para nós novos.
 - Tipos válidos: trigger, llm, tool, condition, switch, transformer, loop, rag_search, memory, stt, tts, vision, delay, error_handler, hitl, sub_flow, output_guard.
 - Todo fluxo precisa de pelo menos um trigger e caminho até output_guard ou nó terminal.
-- Responda SOMENTE com JSON válido no formato abaixo.
-- Inclua position {x,y} para nós novos; para existentes pode omitir position (será preservada).
-- Edges precisam de source e target válidos.
+- Inclua position {x,y} para nós novos; para existentes pode omitir position.
+- Responda SOMENTE com JSON válido.
 
-Formato:
+Se for APENAS dúvida/explicação (sem mudança no canvas):
 {
-  "summary": "string — o que mudou em 1-2 frases",
+  "answer_only": true,
+  "summary": "sua resposta em português, clara e objetiva"
+}
+
+Se for mudança no grafo:
+{
+  "answer_only": false,
+  "summary": "o que mudou em 1-2 frases",
   "nodes": [{ "id": "...", "type": "...", "position": {"x":0,"y":0}, "data": {"label":"...", "config":{}} }],
   "edges": [{ "id": "edge_0", "source": "...", "target": "..." }],
   "changed_node_ids": ["..."]
@@ -41,20 +53,33 @@ function summarizeGraph(nodes: unknown[], edges: unknown[]): string {
   return `Nós:\n${nodeLines.join("\n") || "(vazio)"}\n\nArestas:\n${edgeLines.join("\n") || "(vazio)"}`;
 }
 
-function parseFlowPatch(raw: string): {
-  summary: string;
-  nodes: Array<Record<string, unknown>>;
-  edges: Array<Record<string, unknown>>;
-  changed_node_ids: string[];
-} | null {
+type FlowAgentResponse =
+  | { answer_only: true; summary: string }
+  | {
+    answer_only: false;
+    summary: string;
+    nodes: Array<Record<string, unknown>>;
+    edges: Array<Record<string, unknown>>;
+    changed_node_ids: string[];
+  };
+
+function parseFlowAgentResponse(raw: string): FlowAgentResponse | null {
   const trimmed = raw.trim();
   const jsonMatch = trimmed.match(/\{[\s\S]*\}/);
   if (!jsonMatch) return null;
   try {
     const parsed = JSON.parse(jsonMatch[0]);
+    const summary = typeof parsed.summary === "string" ? parsed.summary : null;
+    if (!summary) return null;
+
+    if (parsed.answer_only === true) {
+      return { answer_only: true, summary };
+    }
+
     if (!Array.isArray(parsed.nodes) || !Array.isArray(parsed.edges)) return null;
     return {
-      summary: typeof parsed.summary === "string" ? parsed.summary : "Fluxo atualizado.",
+      answer_only: false,
+      summary,
       nodes: parsed.nodes,
       edges: parsed.edges,
       changed_node_ids: Array.isArray(parsed.changed_node_ids) ? parsed.changed_node_ids : [],
@@ -161,8 +186,8 @@ export async function startModifySession(
   await insertTurn(
     sb,
     sessionId,
-    "architect",
-    "Olá! Descreva as mudanças que quer no fluxo — adicionar nós, conectar ferramentas, ajustar prompts. Eu aplico no canvas em tempo real.",
+    "secretary",
+    "Olá! Sou a Secretária do Prometheus — seu Vibe Agent aqui no canvas. Pode pedir mudanças no fluxo, tirar dúvidas ou pedir para eu terminar o agente. O que precisa?",
     "architecture",
     "building",
     1,
@@ -212,26 +237,26 @@ export async function processFlowEditMessage(
   const llmResult = await routeLLM({
     model_id: modelId,
     messages: [
-      { role: "system", content: FLOW_EDITOR_SYSTEM },
+      { role: "system", content: VIBE_AGENT_SYSTEM },
       { role: "user", content: userPrompt },
     ],
     temperature: 0.2,
     max_tokens: 4096,
     tenant_id: session.user_id as string,
-    feature: "prometheus_flow_editor",
+    feature: "prometheus_vibe_agent",
   });
 
   if (llmResult.tokens_in + llmResult.tokens_out > 0) {
     await persistTokensUsed(sb, sessionId, llmResult.tokens_in + llmResult.tokens_out);
   }
 
-  const patch = parseFlowPatch(llmResult.content);
-  if (!patch) {
+  const response = parseFlowAgentResponse(llmResult.content);
+  if (!response) {
     await insertTurn(
       sb,
       sessionId,
-      "architect",
-      "Não consegui interpretar a resposta como patch de fluxo. Tente ser mais específico (ex: \"adicione um nó RAG entre o LLM e o output guard\").",
+      "secretary",
+      "Não consegui processar isso. Reformule: peça uma mudança no fluxo ou faça uma pergunta direta sobre o agente.",
       "architecture",
       "building",
       round,
@@ -239,13 +264,27 @@ export async function processFlowEditMessage(
     return;
   }
 
-  const normalizedNodes = normalizeNodes(patch.nodes, nodes);
-  const normalizedEdges = normalizeEdges(patch.edges);
+  if (response.answer_only) {
+    await insertTurn(
+      sb,
+      sessionId,
+      "secretary",
+      response.summary,
+      "architecture",
+      "building",
+      round,
+      { answer_only: true },
+    );
+    return;
+  }
+
+  const normalizedNodes = normalizeNodes(response.nodes, nodes);
+  const normalizedEdges = normalizeEdges(response.edges);
 
   const flowPatch = {
     nodes: normalizedNodes,
     edges: normalizedEdges,
-    changed_node_ids: patch.changed_node_ids,
+    changed_node_ids: response.changed_node_ids,
   };
 
   const updatedDef = {
@@ -266,8 +305,8 @@ export async function processFlowEditMessage(
   await insertTurn(
     sb,
     sessionId,
-    "architect",
-    patch.summary,
+    "secretary",
+    response.summary,
     "architecture",
     "building",
     round,

@@ -36,6 +36,7 @@ export const AGENT_DISPLAY_NAMES: Record<string, string> = {
   cortex: "Cortex — Orquestrador",
   analyst: "Analyst — Requisitos",
   architect: "Architect — Arquitetura",
+  secretary: "Secretária — Vibe Agent",
   scribe: "Scribe — Prompts",
   sentinel: "Sentinel — Testes",
   user: "Você",
