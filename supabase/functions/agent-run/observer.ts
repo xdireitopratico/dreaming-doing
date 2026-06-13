@@ -3,6 +3,7 @@
 import type { ToolRegistry } from "./registry.ts";
 import {
   formatDesignFeedback,
+  INVALID_FORGE_UI_IMPORT_MESSAGE,
   scanFileForViolations,
   scanProjectForLandingQuality,
   type DesignViolation,
@@ -76,9 +77,9 @@ export class RuntimeObserver {
       return { passed: false, checks, feedback: `[install] ${msg}` };
     }
 
-    // 0.5. Design System Check — sugestões NÃO bloqueantes (warnings)
+    // 0.5. Design System — deep imports @forge/ui bloqueiam; demais violações são warnings
     const designCheck = await this.checkDesignSystem();
-    checks.push({ name: "design-system", ok: true, output: designCheck.output });
+    checks.push({ name: "design-system", ok: designCheck.ok, output: designCheck.output });
 
     // 1. Build check
     try {
@@ -310,9 +311,10 @@ export class RuntimeObserver {
       /* design check é best-effort — silencia erros */
     }
 
+    const blocking = designViolations.filter((v) => v.message === INVALID_FORGE_UI_IMPORT_MESSAGE);
     return {
       name: "design-system",
-      ok: true,
+      ok: blocking.length === 0,
       output: formatDesignFeedback(designViolations),
     };
   }

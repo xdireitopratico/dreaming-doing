@@ -60,6 +60,11 @@ import { logger } from "../_shared/logger.ts";
 import { appendExecutionLogEntry, buildExecutionLogMeta } from "./executionLogMeta.ts";
 import { isDuplicateNarrationChunk } from "./narration-dedupe.ts";
 import { checkpointChatText } from "./checkpoint-chat.ts";
+import {
+  auditDesignInventory,
+  needsDesignPreflight,
+  runDesignPreflight,
+} from "./design-preflight.ts";
 import { type CheckpointExtra, resumeStepStart, serializeCheckpointPayload } from "./checkpoint.ts";
 import {
   generatePlanChatMessage,
@@ -336,6 +341,69 @@ export class AgentLoop {
     if (this.touchedPaths.size > 0) return true;
     const webTemplates = ["vite-react", "nextjs-app-router", "tanstack-start", "astro"];
     return webTemplates.includes(this.projectTemplate) && this.toolsInvoked;
+  }
+
+  /** Inventário + npm install/build no sandbox antes do 1º fs_* em templates web. */
+  private async runDesignPreflightIfNeeded(): Promise<void> {
+    if (this.planMode || !needsDesignPreflight(this.projectTemplate)) return;
+    if (this.resumeRun && this.touchedPaths.size > 0) return;
+    if (this.loopBudgetExceeded()) return;
+
+    if (!this.state.context?.files?.length) {
+      await this.gatherContext();
+    }
+
+    const files = this.state.context?.files ?? [];
+    const inventory = auditDesignInventory(files);
+    if (!inventory.ok) {
+      this.state.messages.push({
+        role: "user",
+        content:
+          `PREFLIGHT INVENTÁRIO FALHOU — faltam no projeto:\n${inventory.missing.join("\n")}\n\n` +
+          `Corrija com fs_write (package.json, packages/forge-ui) antes de editar UI.`,
+      });
+      return;
+    }
+
+    if (inventory.warnings.length > 0) {
+      this.state.messages.push({
+        role: "user",
+        content:
+          `AVISO PREFLIGHT — imports inválidos detectados no DB:\n${inventory.warnings.slice(0, 8).join("\n")}\n\n` +
+          `Use apenas import de "@forge/ui".`,
+      });
+    }
+
+    await this.touchHeartbeat();
+    this.emit("phase", {
+      phase: "preflight",
+      message: "Preparando design system (@forge/ui)…",
+    });
+
+    const preflight = await runDesignPreflight(this.reg);
+    const manifest = preflight.availableComponents;
+    if (this.state.context) {
+      this.state.context.projectConfig += `\n\n## Design System (@forge/ui)\n${manifest}`;
+    }
+
+    if (!preflight.passed) {
+      const failed = preflight.checks.filter((c) => !c.ok).map((c) => c.name).join(", ");
+      this.emit("validate_fail", {
+        attempt: 0,
+        checks: failed ? [failed] : ["preflight"],
+        feedback: preflight.feedback?.slice(0, 500),
+        preflight: true,
+      });
+      this.state.messages.push({
+        role: "user",
+        content:
+          `PREFLIGHT DESIGN SYSTEM FALHOU:\n\n${preflight.feedback?.slice(0, 6000) ?? "erro desconhecido"}\n\n` +
+          `${manifest}\n\nCorrija infra (npm install, paths, package.json) com shell_exec/fs_edit antes de editar UI.`,
+      });
+      return;
+    }
+
+    this.emit("validate_ok", { message: "Design system pronto (preflight)" });
   }
 
   private async returnResumableChunk(
@@ -754,6 +822,8 @@ export class AgentLoop {
         toolsUsed: [...toolsUsed],
       };
     }
+
+    await this.runDesignPreflightIfNeeded();
 
     const step =
       this.resumeRun && this.hasCheckpoint
