@@ -474,6 +474,70 @@ export async function runSentinel(
   };
 }
 
+// ═══ DEPLOY NORMALIZATION ═══
+
+const NODE_TYPE_MAP: Record<string, string> = {
+  tool_call: "tool",
+  rag_query: "rag_search",
+  conditional: "condition",
+};
+
+const BOARDROOM_TOOL_MAP: Record<string, string> = {
+  research_web: "web_research",
+  fetch_page: "web_scrape",
+};
+
+export type FlowToolConfigs = Record<string, { tools: string[]; config: Record<string, unknown> }>;
+
+function normalizeNodeType(type: string): string {
+  return NODE_TYPE_MAP[type] || type;
+}
+
+function resolveRegistryToolName(
+  nodeId: string,
+  node: ArchitecturePlan["nodes"][number],
+  toolConfigs?: FlowToolConfigs,
+  requirements?: Partial<RequirementSpec>,
+): string | undefined {
+  const fromCfg = toolConfigs?.[nodeId]?.tools?.[0];
+  const fromNode = node.config?.tool_name as string | undefined;
+  const fromReqs = requirements?.tools_needed?.[0];
+  const raw = fromCfg || fromNode || fromReqs;
+  if (!raw || typeof raw !== "string") return undefined;
+  return BOARDROOM_TOOL_MAP[raw] || raw;
+}
+
+export function validateFlowForDeploy(
+  architecture: ArchitecturePlan,
+  requirements: Partial<RequirementSpec>,
+): string[] {
+  const errors: string[] = [];
+  const nodes = architecture.nodes || [];
+  const triggers = nodes.filter((n) => normalizeNodeType(n.type) === "trigger");
+
+  if (triggers.length === 0) errors.push("sem nó trigger");
+  if (triggers.length > 1) errors.push("mais de um trigger");
+
+  const triggerId = triggers[0]?.id;
+  if (triggerId && !architecture.edges.some((e) => e.source === triggerId)) {
+    errors.push("trigger sem aresta de saída");
+  }
+
+  const channels = (requirements.channels || []) as string[];
+  if (channels.some((c) => c === "webhook" || c === "api")) {
+    if (triggers.length === 0) errors.push("canal webhook/api exige nó trigger");
+  }
+
+  for (const n of nodes) {
+    const t = normalizeNodeType(n.type);
+    if (t === "tool" && !resolveRegistryToolName(n.id, n, undefined, requirements)) {
+      errors.push(`nó tool "${n.id}" sem tool_name`);
+    }
+  }
+
+  return errors;
+}
+
 // ═══ SAVE FLOW TO agent_flows ═══
 
 export async function saveFlowToAgentFlows(
@@ -483,18 +547,28 @@ export async function saveFlowToAgentFlows(
   architecture: ArchitecturePlan,
   prompts: Record<string, any>,
   requirements: Partial<RequirementSpec>,
+  toolConfigs?: FlowToolConfigs,
 ): Promise<string> {
-  // Build flow_definition matching agent_flows schema
-  // PHASE 2 (ROADMAP-03): Second safety layer — ensure ALL LLM nodes have model_id
+  const deployErrors = validateFlowForDeploy(architecture, requirements);
+  if (deployErrors.length > 0) {
+    throw new Error(`Deploy inválido: ${deployErrors.join("; ")}`);
+  }
+
   const qualityModelFallback = architecture.models_used?.[0] || "";
   const flowDefinition = {
     nodes: architecture.nodes.map((n, idx) => {
-      const isLLM = n.type === "llm";
+      const nodeType = normalizeNodeType(n.type);
+      const isLLM = nodeType === "llm";
+      const isTool = nodeType === "tool";
       const resolvedModelId = isLLM ? (n.model_id || qualityModelFallback) : undefined;
-      const needsTrialFlag = isLLM && !n.model_id; // model was missing, had to fallback
+      const needsTrialFlag = isLLM && !n.model_id;
+      const toolName = isTool
+        ? resolveRegistryToolName(n.id, n, toolConfigs, requirements)
+        : undefined;
+
       return {
         id: n.id,
-        type: n.type,
+        type: nodeType,
         position: { x: 250 * (idx + 1), y: 150 + (idx % 2) * 100 },
         data: {
           label: n.label,
@@ -505,6 +579,7 @@ export async function saveFlowToAgentFlows(
             } : {}),
             ...(isLLM ? { model_id: resolvedModelId } : {}),
             ...(needsTrialFlag ? { trial_model: true } : {}),
+            ...(toolName ? { tool_name: toolName } : {}),
           },
         },
       };

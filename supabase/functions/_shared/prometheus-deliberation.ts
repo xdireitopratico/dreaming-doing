@@ -24,6 +24,7 @@ import {
   insertTurn,
   updateSessionPhase,
   persistTokensUsed,
+  researchCacheHasResults,
   sanitizeForPrompt,
 } from "./prometheus-db.ts";
 
@@ -284,7 +285,7 @@ export async function runBoardroomRoundtable(
 
     // ── user → decision fork (research-backed question only) ──
     if (modDecision.next_speaker === "user") {
-      const hasResearch = Object.keys(researchCache).length > 0;
+      const hasResearch = researchCacheHasResults(researchCache);
       if (!hasResearch && intent === "directive") {
         modDecision.next_speaker = "architect";
         modDecision.instruction = modDecision.instruction || "Proponha arquitetura com defaults do domínio.";

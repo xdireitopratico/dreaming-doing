@@ -15,6 +15,8 @@
 
 import type { SupabaseAdmin } from "./prometheus-db.ts";
 import type { ToolDef } from "./prometheus-react-loop.ts";
+import { loadMotorWebSearch } from "./motor-research.ts";
+import { researchWebQuery, scrapeWebPage } from "./web-research-providers.ts";
 
 // ═══════════════════════════════════════════════════════════
 // CONTEXT
@@ -112,52 +114,83 @@ async function callEdgeFunction(functionName: string, body: Record<string, unkno
 // GRUPO 1: PESQUISA (5 tools — Analyst)
 // ═══════════════════════════════════════════════════════════
 
-/** 1. research_web — Search via Firecrawl (firecrawl-search) + cache (D6).
- *  NEVER throws: returns { error } on failure so ReAct loops keep going. */
+function countResearchResults(payload: Record<string, unknown>): number {
+  const direct = payload.count;
+  if (typeof direct === "number") return direct;
+  const results = payload.results;
+  return Array.isArray(results) ? results.length : 0;
+}
+
+/** 1. research_web — Provedor único cadastrado em /api (motor). Sem cascade. */
 async function researchWeb(params: Record<string, unknown>, ctx: ToolContext): Promise<unknown> {
   const query = String(params.query || "");
-  if (!query) return { error: "query is required" };
+  if (!query) return { error: "query is required", results_count: 0 };
 
-  // D6: Check research cache
   const cacheKey = query.toLowerCase().trim().replace(/\s+/g, " ");
-  if (ctx.researchCache[cacheKey]) {
-    return { ...(ctx.researchCache[cacheKey] as Record<string, unknown>), from_cache: true };
+  const cached = ctx.researchCache[cacheKey] as Record<string, unknown> | undefined;
+  if (cached?.result) {
+    const count = countResearchResults(cached.result as Record<string, unknown>);
+    return { ...(cached.result as Record<string, unknown>), from_cache: true, results_count: count };
   }
 
   const maxResults = Number(params.max_results) || 5;
-  try {
-    const raw = await callEdgeFunction("firecrawl-search", {
-      query,
-      options: { limit: maxResults },
-    }) as { success?: boolean; data?: unknown; error?: string };
+  const ownerId = ctx.tenantId;
+  if (!ownerId) {
+    return {
+      results: [],
+      results_count: 0,
+      note: "Configure um provedor de pesquisa em API Keys (/api).",
+    };
+  }
 
-    if (raw?.success === false) {
-      return { error: raw.error || "research unavailable", results: [] };
+  const motor = await loadMotorWebSearch(ctx.supabase, ownerId);
+  if (!motor.provider) {
+    return {
+      results: [],
+      results_count: 0,
+      note: "Nenhum provedor de pesquisa em /api — o motor segue só com o contexto do boardroom.",
+    };
+  }
+
+  try {
+    const raw = await researchWebQuery(
+      { query, max_results: maxResults, provider: motor.provider },
+      motor.secrets,
+    );
+    const count = countResearchResults(raw);
+    const result = { ...raw, results_count: count, from_cache: false };
+    if (count > 0) {
+      ctx.researchCache[cacheKey] = { result, fetched_at: new Date().toISOString() };
     }
-    const result = { results: raw?.data ?? raw };
-    ctx.researchCache[cacheKey] = { result, fetched_at: new Date().toISOString() };
-    return { ...result, from_cache: false };
+    return result;
   } catch (e) {
-    // Research is best-effort: degrade gracefully, never break the loop.
-    return { error: e instanceof Error ? e.message : "research failed", results: [] };
+    return {
+      error: e instanceof Error ? e.message : "research failed",
+      results: [],
+      results_count: 0,
+      provider: motor.provider,
+    };
   }
 }
 
-/** 2. fetch_page — Scrape a URL via firecrawl-scrape (D9 validated). Never throws. */
-async function fetchPage(params: Record<string, unknown>, _ctx: ToolContext): Promise<unknown> {
+/** 2. fetch_page — HTTP direto (grátis). Sem cascade. */
+async function fetchPage(params: Record<string, unknown>, ctx: ToolContext): Promise<unknown> {
   const url = String(params.url || "");
   if (!url) return { error: "url is required" };
 
   const check = validateExternalUrl(url);
   if (!check.safe) return { error: `URL blocked: ${check.reason}` };
 
+  const cacheKey = `url:${url}`;
+  const cached = ctx.researchCache[cacheKey] as Record<string, unknown> | undefined;
+  if (cached?.result) {
+    return { ...(cached.result as Record<string, unknown>), from_cache: true };
+  }
+
   try {
-    const raw = await callEdgeFunction("firecrawl-scrape", {
-      url,
-      options: { formats: ["markdown"], onlyMainContent: true },
-    }) as { success?: boolean; error?: string };
-    if (raw?.success === false) return { error: raw.error || "scrape unavailable" };
-    return raw;
+    const raw = await scrapeWebPage({ url, provider: "http" }, {});
+    ctx.researchCache[cacheKey] = { result: raw, fetched_at: new Date().toISOString() };
+    return { ...raw, from_cache: false };
   } catch (e) {
     return { error: e instanceof Error ? e.message : "scrape failed" };
   }

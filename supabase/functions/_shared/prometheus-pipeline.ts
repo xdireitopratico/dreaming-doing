@@ -328,6 +328,10 @@ export async function deployFlow(
       return;
     }
 
+    const flowDef = (freshSession.flow_definition || {}) as {
+      tool_configs?: Record<string, { tools: string[]; config: Record<string, unknown> }>;
+    };
+
     const flowId = await saveFlowToAgentFlows(
       sb,
       freshSession.user_id,
@@ -335,6 +339,7 @@ export async function deployFlow(
       freshSession.architecture,
       freshSession.prompts,
       freshSession.requirements || {},
+      flowDef.tool_configs,
     );
 
     const createdAt = freshSession.created_at ? new Date(freshSession.created_at).getTime() : Date.now();

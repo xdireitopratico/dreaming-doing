@@ -99,6 +99,31 @@ export async function persistTokensUsed(
   }
 }
 
+export function researchCacheHasResults(cache: Record<string, unknown>): boolean {
+  for (const v of Object.values(cache)) {
+    const entry = v as { result?: { results_count?: number; count?: number; word_count?: number } };
+    const r = entry?.result;
+    if (!r) continue;
+    const hits = r.results_count ?? r.count ?? (r.word_count && r.word_count > 0 ? 1 : 0);
+    if (typeof hits === "number" && hits > 0) return true;
+  }
+  return false;
+}
+
+export async function persistResearchCache(
+  sb: SupabaseAdmin,
+  sessionId: string,
+  researchCache: Record<string, unknown>,
+) {
+  if (!sessionId || Object.keys(researchCache).length === 0) return;
+  const { error } = await sb.from("prometheus_build_sessions")
+    .update({ research_cache: researchCache })
+    .eq("id", sessionId);
+  if (error) {
+    console.error(`[prometheus-db] Failed to persist research_cache for ${sessionId}:`, error.message);
+  }
+}
+
 // ═══ SESSION PHASE UPDATE ═══
 
 export async function updateSessionPhase(

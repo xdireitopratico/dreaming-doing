@@ -11,6 +11,21 @@ import type { ArchitecturePlan } from "./prometheus-types.ts";
 import type { SentinelReport } from "./prometheus-sentinel.ts";
 import type { ToolCallLog } from "./prometheus-react-loop.ts";
 
+function countSuccessfulResearchEntries(
+  cache: Record<string, unknown> | undefined | null,
+): number {
+  if (!cache) return 0;
+  let n = 0;
+  for (const v of Object.values(cache)) {
+    const entry = v as { result?: { results_count?: number; count?: number; word_count?: number } };
+    const r = entry?.result;
+    if (!r) continue;
+    const hits = r.results_count ?? r.count ?? (r.word_count && r.word_count > 0 ? 1 : 0);
+    if (typeof hits === "number" && hits > 0) n++;
+  }
+  return n;
+}
+
 // ═══ INTERFACES ═══
 
 export interface ReportInput {
@@ -140,9 +155,10 @@ export async function generateReport(
     ? input.toolCallLogs.map(t => `${t.tool}: ${!t.output || !(t.output as any)?.error ? "ok" : "erro"} (${t.latency_ms}ms)`).join("\n")
     : "Nenhuma ferramenta externa usada";
 
-  const researchSummary = session.research_cache
-    ? Object.entries(session.research_cache).map(([k, v]) => `• ${k}: ${String(v).substring(0, 100)}`).join("\n")
-    : "Nenhuma pesquisa realizada";
+  const successfulResearch = countSuccessfulResearchEntries(session.research_cache);
+  const researchSummary = successfulResearch > 0
+    ? `${successfulResearch} consulta(s) com resultados reais`
+    : "Nenhuma pesquisa com resultados (motor seguiu com brainstorm)";
 
   const createdAt = session.created_at ? new Date(session.created_at).getTime() : Date.now();
   const completedAt = session.completed_at ? new Date(session.completed_at).getTime() : Date.now();
@@ -212,9 +228,9 @@ function fallbackReport(input: ReportInput, buildTimeSeconds: number): AgentRepo
 
   return {
     executive_summary: `Agente de ${(requirements as any).domain || "propósito geral"} construído com ${arch?.nodes?.length || 0} nós. ${(requirements as any).objective || ""}`,
-    research_summary: session.research_cache
-      ? `${Object.keys(session.research_cache).length} pesquisa(s) realizadas durante a construção.`
-      : "Nenhuma pesquisa externa realizada.",
+    research_summary: countSuccessfulResearchEntries(session.research_cache) > 0
+      ? `${countSuccessfulResearchEntries(session.research_cache)} consulta(s) com resultados durante a construção.`
+      : "Nenhuma pesquisa com resultados — construção baseada em brainstorm.",
     architecture_explanation: (arch?.nodes || []).map(n => ({
       node_id: n.id,
       label: n.label,

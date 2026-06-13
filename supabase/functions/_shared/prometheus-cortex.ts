@@ -30,6 +30,7 @@ import {
   updateSessionPhase,
   getModelId,
   persistTokensUsed,
+  researchCacheHasResults,
   sanitizeForPrompt,
 } from "./prometheus-db.ts";
 import { analyzeRequirements, sanitizeAnalystResult } from "./prometheus-analyst.ts";
@@ -145,7 +146,7 @@ async function processInitialBriefing(
         .single();
 
       const researchCache = (sessionRow?.research_cache || {}) as Record<string, unknown>;
-      const hasResearch = Object.keys(researchCache).length > 0;
+      const hasResearch = researchCacheHasResults(researchCache);
 
       const rawAnalyst = await analyzeRequirements(
         JSON.stringify(briefing),

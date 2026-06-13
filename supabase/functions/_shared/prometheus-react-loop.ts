@@ -10,7 +10,12 @@
  */
 
 import { routeLLM, type LLMResponse } from "./llm-router.ts";
-import { insertTurn, persistTokensUsed, type SupabaseAdmin } from "./prometheus-db.ts";
+import {
+  insertTurn,
+  persistResearchCache,
+  persistTokensUsed,
+  type SupabaseAdmin,
+} from "./prometheus-db.ts";
 
 // ═══════════════════════════════════════════════════════════
 // TYPES
@@ -185,14 +190,15 @@ export async function runReActLoop(config: ReActConfig): Promise<ReActResult> {
   } = config;
 
   const maxSteps = Math.min(config.maxSteps ?? DEFAULT_MAX_STEPS, MAX_STEPS_CAP);
-  const researchCache: Record<string, unknown> = { ...(config.researchCache || {}) };
+  if (!config.researchCache) config.researchCache = {};
+  const researchCache = config.researchCache;
   let tokensUsed = config.tokenBudget?.used ?? 0;
   const tokenLimit = config.tokenBudget?.limit ?? 50_000;
   const toolCalls: ToolCallLog[] = [];
 
-  // Helper: persist token count to DB before returning any result
   const makeResult = async (partial: ReActResult): Promise<ReActResult> => {
     await persistTokensUsed(sb, sessionId, partial.tokensUsed);
+    await persistResearchCache(sb, sessionId, partial.researchCache);
     return partial;
   };
 

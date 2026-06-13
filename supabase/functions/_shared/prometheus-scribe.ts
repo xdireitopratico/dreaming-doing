@@ -236,9 +236,13 @@ Responda APENAS com JSON válido neste formato:
   const tool_configs: ScribeResult["tool_configs"] = {};
   for (const node of architecture.nodes) {
     if (node.type === "tool_call" || node.type === "tool") {
+      const nodeCfg = (node.config as Record<string, unknown>) || {};
+      const named =
+        (typeof nodeCfg.tool_name === "string" && nodeCfg.tool_name) ||
+        requirements.tools_needed?.[0];
       tool_configs[node.id] = {
-        tools: requirements.tools_needed || [],
-        config: (node.config as Record<string, unknown>) || {},
+        tools: named ? [named] : [],
+        config: nodeCfg,
       };
     }
   }

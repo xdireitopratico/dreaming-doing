@@ -19,7 +19,10 @@ const ALLOWED = new Set([
   "openai",
   "e2b",
   "supabase",
+  "web_search",
 ]);
+
+const WEB_SEARCH_PROVIDERS = new Set(["brave", "tavily", "serper", "firecrawl"]);
 
 type PoolSlot = { id: string; hint: string; addedAt: string };
 
@@ -31,6 +34,9 @@ function json(body: unknown, status = 200) {
 }
 
 function resolveProvider(kind: string, meta: Record<string, unknown>): string {
+  if (kind === "web_search") {
+    return typeof meta.provider === "string" ? meta.provider.trim() : "";
+  }
   if (kind !== "openai") return "";
   const p = typeof meta.provider === "string" ? meta.provider.trim() : "";
   return p || "openai";
@@ -109,6 +115,13 @@ Deno.serve(async (req) => {
       );
     }
 
+    if (kind === "web_search") {
+      const wp = resolveProvider(kind, metaIn);
+      if (!WEB_SEARCH_PROVIDERS.has(wp)) {
+        return json({ error: "meta.provider obrigatório (brave, tavily, serper, firecrawl)" }, 400);
+      }
+    }
+
     if (kind === "supabase" && body?.disconnect !== true) {
       const projectUrl = typeof metaIn.projectUrl === "string" ? metaIn.projectUrl.trim() : "";
       const token = typeof body?.token === "string" ? body.token.trim() : "";
@@ -147,6 +160,8 @@ Deno.serve(async (req) => {
           .eq("owner_id", user.id)
           .eq("kind", "openai")
           .eq("provider", providerKey);
+      } else if (kind === "web_search") {
+        await admin.from("connectors").delete().eq("owner_id", user.id).eq("kind", "web_search");
       } else {
         await admin
           .from("connectors")
@@ -211,6 +226,9 @@ Deno.serve(async (req) => {
     }
     if (!token && kind === "supabase") {
       return json({ error: "Chave Supabase obrigatória" }, 400);
+    }
+    if (!token && kind === "web_search") {
+      return json({ error: "Chave de pesquisa web obrigatória" }, 400);
     }
     if (!token && kind === "openai" && metaIn.provider === "ollama") {
       const baseUrl = typeof metaIn.baseUrl === "string" ? metaIn.baseUrl.trim() : "";
@@ -277,6 +295,11 @@ Deno.serve(async (req) => {
       label: metaIn.label ?? kind,
     };
 
+    // Motor Prometheus: uma provedora de pesquisa por usuário
+    if (kind === "web_search" && token) {
+      await admin.from("connectors").delete().eq("owner_id", user.id).eq("kind", "web_search");
+    }
+
     const row: Record<string, unknown> = {
       owner_id: user.id,
       kind,
@@ -286,9 +309,11 @@ Deno.serve(async (req) => {
     };
     if (tokenEncrypted) row.token_encrypted = tokenEncrypted;
 
-    const { error } = await admin.from("connectors").upsert(row, {
-      onConflict: "owner_id,kind,provider",
-    });
+    const { error } = kind === "web_search"
+      ? await admin.from("connectors").insert(row)
+      : await admin.from("connectors").upsert(row, {
+        onConflict: "owner_id,kind,provider",
+      });
     if (error) return json({ error: error.message }, 500);
 
     if (kind === "github" && typeof metaIn.githubUsername === "string") {

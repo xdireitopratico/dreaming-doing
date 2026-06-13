@@ -292,6 +292,15 @@ export async function researchWebQuery(
   }
 
   if (attempts.length === 0) {
+    if (provider !== "auto" && provider !== "duckduckgo") {
+      return {
+        query,
+        results: [],
+        provider,
+        count: 0,
+        note: "Provedor sem chave configurada.",
+      };
+    }
     return searchViaDuckDuckGo(query, limit);
   }
 

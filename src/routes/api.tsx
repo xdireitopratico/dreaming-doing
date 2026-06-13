@@ -600,7 +600,6 @@ function ApiPage() {
       </nav>
 
       <MotorInfraSection
-        isAdmin={isAdmin}
         llmConnectedCount={providers.filter((p) => p.status === "connected").length}
       />
 
