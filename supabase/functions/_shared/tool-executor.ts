@@ -7,6 +7,7 @@
 
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { routeLLM } from "./llm-router.ts";
+import { researchWebQuery, scrapeWebPage } from "./web-research-providers.ts";
 
 // ═══════════════════════════════════════════════════════════
 // TYPES
@@ -376,33 +377,8 @@ async function executeBuiltinTool(
       return { expression, result: !!result, branch: result ? "true" : "false" };
     }
 
-    case "web_scrape":
-    case "web_research": {
-      // Delegates to web-research-tools edge function (P23)
-      // Uses Firecrawl (platform) as default, or user's own keys via tenant_secrets
-      const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-      const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-      
-      const response = await fetch(`${supabaseUrl}/functions/v1/web-research-tools`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${supabaseKey}`,
-        },
-        body: JSON.stringify({
-          tool: toolName,
-          params: { ...input, tenant_id: tenantId },
-        }),
-      });
-
-      if (!response.ok) {
-        const errText = await response.text().catch(() => "unknown");
-        throw new Error(`web-research-tools ${toolName} failed: ${errText.substring(0, 200)}`);
-      }
-
-      const data = await response.json();
-      return data.result;
-    }
+    case "web_research":
+      return researchWebQuery(input, secrets);
 
     // ── P24: Visualization Tools (QuickChart — free, no API key) ──
 
@@ -2636,75 +2612,8 @@ Contexto: ${input.context || "dados de negócio"}`,
 
     // ── P33: Automação Avançada (Web Scraping + Code Sandbox + Browser Automation) ──
 
-    case "web_scrape": {
-      // Scrape/extract web content via Jina Reader (free) or Firecrawl (tenant key)
-      const url = input.url;
-      if (!url) throw new Error("url is required");
-
-      const mode = input.mode || "read"; // read, extract, screenshot
-      const format = input.format || "markdown"; // markdown, html, text
-
-      // Strategy 1: Jina Reader (free, no key needed)
-      if (!secrets["FIRECRAWL_API_KEY"] || input.provider === "jina") {
-        const jinaUrl = mode === "screenshot"
-          ? `https://s.jina.ai/${encodeURIComponent(url)}`
-          : `https://r.jina.ai/${encodeURIComponent(url)}`;
-
-        const headers: Record<string, string> = { "Accept": "application/json" };
-        if (format === "html") headers["X-Return-Format"] = "html";
-
-        const response = await fetch(jinaUrl, { headers, signal: AbortSignal.timeout(30000) });
-        if (!response.ok) throw new Error(`Jina Reader failed: HTTP ${response.status}`);
-
-        if (mode === "screenshot") {
-          const blob = await response.blob();
-          const buffer = await blob.arrayBuffer();
-          const base64 = btoa(String.fromCharCode(...new Uint8Array(buffer)));
-          return { screenshot_base64: base64, url, provider: "jina" };
-        }
-
-        const data = await response.json();
-        return {
-          title: data.data?.title || "",
-          content: data.data?.content || data.data?.text || "",
-          url: data.data?.url || url,
-          word_count: (data.data?.content || "").split(/\s+/).length,
-          provider: "jina",
-        };
-      }
-
-      // Strategy 2: Firecrawl (tenant key)
-      const fcResponse = await fetch("https://api.firecrawl.dev/v1/scrape", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${secrets["FIRECRAWL_API_KEY"]}`,
-        },
-        body: JSON.stringify({
-          url,
-          formats: [format === "html" ? "html" : "markdown"],
-          onlyMainContent: input.only_main_content !== false,
-          waitFor: input.wait_for || 0,
-        }),
-        signal: AbortSignal.timeout(45000),
-      });
-
-      if (!fcResponse.ok) {
-        const errText = await fcResponse.text().catch(() => "unknown");
-        throw new Error(`Firecrawl failed: HTTP ${fcResponse.status} — ${errText.substring(0, 200)}`);
-      }
-
-      const fcData = await fcResponse.json();
-      const content = fcData.data?.markdown || fcData.data?.html || "";
-      return {
-        title: fcData.data?.metadata?.title || "",
-        content,
-        url: fcData.data?.metadata?.sourceURL || url,
-        word_count: content.split(/\s+/).length,
-        metadata: fcData.data?.metadata || {},
-        provider: "firecrawl",
-      };
-    }
+    case "web_scrape":
+      return scrapeWebPage(input, secrets);
 
     case "web_crawl": {
       // Crawl multiple pages from a domain via Firecrawl (tenant key required)
@@ -3376,6 +3285,15 @@ async function withRetry<T>(
   throw lastError!;
 }
 
+// Builtins used in flows but optional in tool_registry seeds
+const IMPLICIT_BUILTIN_TOOLS = new Set([
+  "llm_generate",
+  "rag_search",
+  "http_request",
+  "condition_eval",
+  "web_research",
+]);
+
 // ═══════════════════════════════════════════════════════════
 // MAIN EXECUTOR
 // ═══════════════════════════════════════════════════════════
@@ -3396,6 +3314,32 @@ export async function executeTool(req: ToolExecutionRequest): Promise<ToolExecut
     .maybeSingle();
 
   if (toolErr || !tool) {
+    if (IMPLICIT_BUILTIN_TOOLS.has(req.tool_name)) {
+      try {
+        const { result, retries } = await withRetry(async () => {
+          return executeBuiltinTool(req.tool_name, req.input_data, {}, req.tenant_id);
+        }, 3, 1000);
+        await recordSuccess(req.tool_name);
+        return {
+          tool_name: req.tool_name,
+          status: "success",
+          result,
+          duration_ms: Date.now() - startTime,
+          retries,
+          circuit_state: (await getCircuitFromDB(req.tool_name)).state,
+        };
+      } catch (err: any) {
+        return {
+          tool_name: req.tool_name,
+          status: "error",
+          result: null,
+          duration_ms: Date.now() - startTime,
+          retries: 3,
+          error: err.message,
+        };
+      }
+    }
+
     return {
       tool_name: req.tool_name,
       status: "error",
@@ -3455,11 +3399,13 @@ export async function executeTool(req: ToolExecutionRequest): Promise<ToolExecut
   // 5. Execute with retry
   try {
     const { result, retries } = await withRetry(async () => {
+      if (registryTool.executor_type === "edge_function") {
+        return executeEdgeFunction(registryTool, req.input_data, secrets, req.tenant_id, req.timeout_ms);
+      }
       if (registryTool.is_builtin) {
         return executeBuiltinTool(req.tool_name, req.input_data, secrets, req.tenant_id);
-      } else {
-        return executeExternalTool(registryTool, req.input_data, secrets, req.timeout_ms);
       }
+      return executeExternalTool(registryTool, req.input_data, secrets, req.timeout_ms);
     }, 3, 1000);
 
     await recordSuccess(req.tool_name);
@@ -3488,6 +3434,75 @@ export async function executeTool(req: ToolExecutionRequest): Promise<ToolExecut
       circuit_state: (await getCircuitFromDB(req.tool_name)).state,
       error: err.message,
     };
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+// EDGE FUNCTION TOOL EXECUTION (Supabase functions.invoke pattern)
+// ═══════════════════════════════════════════════════════════
+
+async function executeEdgeFunction(
+  tool: ToolRegistryEntry,
+  input: Record<string, any>,
+  secrets: Record<string, string>,
+  tenantId: string,
+  timeoutOverride?: number,
+): Promise<any> {
+  const config = tool.executor_config || {};
+  const functionName = config.function_name as string | undefined;
+  if (!functionName) {
+    throw new Error(`Tool '${tool.name}' edge_function missing function_name in executor_config`);
+  }
+
+  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+  const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+  const toolField = (config.tool_param || config.tool_field || tool.name) as string;
+
+  const body: Record<string, unknown> = {
+    tool: toolField,
+    input,
+    tenant_id: tenantId,
+  };
+  if (config.pass_secrets !== false && Object.keys(secrets).length) {
+    body.secrets = secrets;
+  }
+
+  const controller = new AbortController();
+  const timeout = timeoutOverride || config.timeout_ms || 30000;
+  const timer = setTimeout(() => controller.abort(), timeout);
+
+  try {
+    const res = await fetch(`${supabaseUrl}/functions/v1/${functionName}`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${supabaseKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+    clearTimeout(timer);
+
+    const bodyText = await res.text();
+    let parsed: any;
+    try {
+      parsed = JSON.parse(bodyText);
+    } catch {
+      parsed = { raw: bodyText };
+    }
+
+    if (!res.ok) {
+      throw new Error(`Edge function '${functionName}' HTTP ${res.status}: ${bodyText.substring(0, 200)}`);
+    }
+
+    if (parsed?.status === "error" && parsed?.error) {
+      throw new Error(String(parsed.error));
+    }
+
+    return parsed?.result ?? parsed;
+  } catch (err) {
+    clearTimeout(timer);
+    throw err;
   }
 }
 

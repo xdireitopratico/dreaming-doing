@@ -5,7 +5,7 @@
  * @version 1.0.0 — Round 35
  * 
  * Routing: model_id → resolveModelForAPI() → provider → endpoint + auth
- * Secret priority: 1° tenant_secret (BYOK) → 2° env var (platform)
+ * Secret priority: 1° tenant_secret (BYOK) → 2° /api connectors → 3° env var (platform)
  * Anthropic: Messages API adapter → OpenAI-compatible response
  * Cost: calculated per model from catalog pricing
  */
@@ -13,6 +13,7 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { resolveModelForAPI, findProvider, PROVIDERS, getAuthorizedOllamaModels, type ModelDefinition } from "./model-catalog.ts";
 import { meteredFetch } from "./egress-meter.ts";
+import { resolveConnectorApiKey } from "./connector-llm-bridge.ts";
 
 // ═══════════════════════════════════════════════════════════
 // TYPES
@@ -205,14 +206,23 @@ async function resolveApiKey(
     secretName = PROVIDER_SECRET_MAP[provider] || `${provider.toUpperCase()}_API_KEY`;
   }
 
-  // 2. Try BYOK tenant secret
+  // 2. Try BYOK tenant secret (agent runtime: tenant_id = flowId)
   const tenantKey = await resolveTenantSecret(tenantId, secretName);
   if (tenantKey) {
     console.log(`[llm-router] Using BYOK key for ${provider} (tenant: ${tenantId})`);
     return tenantKey;
   }
 
-  // 3. Try platform env var (for testing phase — admin-configured secrets)
+  // 3. Try /api connectors (Prometheus motor: tenant_id = userId)
+  if (tenantId) {
+    const connectorKey = await resolveConnectorApiKey(tenantId, secretName);
+    if (connectorKey) {
+      console.log(`[llm-router] Using connector key for ${provider} (${secretName}, owner: ${tenantId})`);
+      return connectorKey;
+    }
+  }
+
+  // 4. Try platform env var (admin-configured secrets)
   const envKey = Deno.env.get(secretName);
   if (envKey) {
     console.log(`[llm-router] Using platform secret for ${provider} (${secretName})`);

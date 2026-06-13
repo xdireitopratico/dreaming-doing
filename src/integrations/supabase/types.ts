@@ -132,6 +132,7 @@ export type Database = {
         Row: {
           canary_baseline_version_id: string | null
           canary_percent: number | null
+          canary_version_id: string | null
           channel: string
           channel_config: Json | null
           created_at: string | null
@@ -145,6 +146,7 @@ export type Database = {
         Insert: {
           canary_baseline_version_id?: string | null
           canary_percent?: number | null
+          canary_version_id?: string | null
           channel: string
           channel_config?: Json | null
           created_at?: string | null
@@ -158,6 +160,7 @@ export type Database = {
         Update: {
           canary_baseline_version_id?: string | null
           canary_percent?: number | null
+          canary_version_id?: string | null
           channel?: string
           channel_config?: Json | null
           created_at?: string | null
@@ -169,6 +172,13 @@ export type Database = {
           updated_at?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "agent_deployments_canary_version_id_fkey"
+            columns: ["canary_version_id"]
+            isOneToOne: false
+            referencedRelation: "agent_flow_versions"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "agent_deployments_flow_id_fkey"
             columns: ["flow_id"]
@@ -2155,6 +2165,7 @@ export type Database = {
           build_time_seconds: number | null
           completed_at: string | null
           created_at: string | null
+          fallback_model_id: string | null
           flow_definition: Json | null
           id: string
           intent: string
@@ -2163,6 +2174,7 @@ export type Database = {
           output_flow_id: string | null
           phase: string
           prompts: Json | null
+          quality_model: string
           report: Json | null
           requirements: Json | null
           research_cache: Json
@@ -2180,6 +2192,7 @@ export type Database = {
           build_time_seconds?: number | null
           completed_at?: string | null
           created_at?: string | null
+          fallback_model_id?: string | null
           flow_definition?: Json | null
           id?: string
           intent?: string
@@ -2188,6 +2201,7 @@ export type Database = {
           output_flow_id?: string | null
           phase?: string
           prompts?: Json | null
+          quality_model?: string
           report?: Json | null
           requirements?: Json | null
           research_cache?: Json
@@ -2205,6 +2219,7 @@ export type Database = {
           build_time_seconds?: number | null
           completed_at?: string | null
           created_at?: string | null
+          fallback_model_id?: string | null
           flow_definition?: Json | null
           id?: string
           intent?: string
@@ -2213,6 +2228,7 @@ export type Database = {
           output_flow_id?: string | null
           phase?: string
           prompts?: Json | null
+          quality_model?: string
           report?: Json | null
           requirements?: Json | null
           research_cache?: Json
@@ -2670,14 +2686,18 @@ export type Database = {
           access_count: number | null
           created_at: string | null
           created_by: string | null
+          description: string | null
           encrypted_value: string
           encryption_key_id: string
           expires_at: string | null
           id: string
+          is_platform_provided: boolean | null
           last_accessed_at: string | null
+          provider_id: string | null
           rotated_at: string | null
           rotation_reminder_sent: boolean | null
           secret_name: string
+          secret_type: string | null
           tenant_id: string
           updated_at: string | null
         }
@@ -2685,14 +2705,18 @@ export type Database = {
           access_count?: number | null
           created_at?: string | null
           created_by?: string | null
+          description?: string | null
           encrypted_value: string
           encryption_key_id?: string
           expires_at?: string | null
           id?: string
+          is_platform_provided?: boolean | null
           last_accessed_at?: string | null
+          provider_id?: string | null
           rotated_at?: string | null
           rotation_reminder_sent?: boolean | null
           secret_name: string
+          secret_type?: string | null
           tenant_id: string
           updated_at?: string | null
         }
@@ -2700,16 +2724,47 @@ export type Database = {
           access_count?: number | null
           created_at?: string | null
           created_by?: string | null
+          description?: string | null
           encrypted_value?: string
           encryption_key_id?: string
           expires_at?: string | null
           id?: string
+          is_platform_provided?: boolean | null
           last_accessed_at?: string | null
+          provider_id?: string | null
           rotated_at?: string | null
           rotation_reminder_sent?: boolean | null
           secret_name?: string
+          secret_type?: string | null
           tenant_id?: string
           updated_at?: string | null
+        }
+        Relationships: []
+      }
+      tool_circuit_breaker_state: {
+        Row: {
+          failures: number
+          last_failure_at: string | null
+          opened_at: string | null
+          state: string
+          tool_name: string
+          updated_at: string
+        }
+        Insert: {
+          failures?: number
+          last_failure_at?: string | null
+          opened_at?: string | null
+          state?: string
+          tool_name: string
+          updated_at?: string
+        }
+        Update: {
+          failures?: number
+          last_failure_at?: string | null
+          opened_at?: string | null
+          state?: string
+          tool_name?: string
+          updated_at?: string
         }
         Relationships: []
       }

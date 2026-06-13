@@ -125,7 +125,13 @@ export const createProjectFromPrompt = createServerFn({ method: "POST" })
         description: description || null,
         user_id: userId,
         project_id: project.id,
-        flow_definition: { nodes: [], edges: [] },
+        flow_definition: {
+          nodes: [],
+          edges: [],
+          briefing: {
+            prompt: promptText || null,
+          },
+        },
         status: "draft",
       });
       if (flowErr) throw new Error(`Falha ao criar fluxo do agente: ${flowErr.message}`);

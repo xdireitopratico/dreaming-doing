@@ -1,11 +1,10 @@
 /**
  * GraduationGate — Pre-publish credential verification
- * Checks that LLM nodes have corresponding API keys in tenant_secrets
- * P3.5: Prevents trial/construction models from leaking into production
+ * Verifica secrets de operação do agente (tools) em tenant_secrets.
+ * LLM providers ficam em /api — não bloquear publicação por GROQ/OPENAI/etc.
  */
 import { useState, useCallback } from "react";
-import { AlertTriangle, KeyRound, Check, ExternalLink } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { AlertTriangle, KeyRound, ExternalLink } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   AlertDialog, AlertDialogContent, AlertDialogHeader,
@@ -14,25 +13,31 @@ import {
 } from "@/components/ui/alert-dialog";
 import { supabase } from "@/integrations/supabase/client";
 import type { Node } from "@xyflow/react";
-
-/** Map provider prefix → required secret name */
-const PROVIDER_SECRET_MAP: Record<string, string> = {
-  openai: "OPENAI_API_KEY",
-  anthropic: "ANTHROPIC_API_KEY",
-  google: "GOOGLE_API_KEY",
-  groq: "GROQ_API_KEY",
-  xai: "XAI_API_KEY",
-  nvidia: "NVIDIA_API_KEY",
-  perplexity: "PERPLEXITY_API_KEY",
-  ollama: "", // local, no key needed
-};
+import { findModel, findProvider } from "./model-catalog-frontend";
+import { extractToolSecrets, NVIDIA_MODEL_SECRET_MAP } from "./flow-tool-secrets";
 
 interface MissingCredential {
   nodeId: string;
   nodeLabel: string;
-  modelId: string;
-  provider: string;
   secretName: string;
+  context: string;
+}
+
+/** BYOK LLM secrets still stored per-agent (non-platform providers only). */
+function resolveLlmSecretName(modelId: string): string | null {
+  const normalized = modelId.includes("/") ? modelId : `google/${modelId}`;
+  const model = findModel(normalized) ?? findModel(modelId);
+  if (!model) return null;
+
+  const provider = findProvider(model.provider);
+  if (!provider || provider.id === "ollama" || provider.platformProvided) return null;
+
+  if (provider.id === "nvidia") {
+    return NVIDIA_MODEL_SECRET_MAP[model.id] || provider.secretEnvKey || "NVIDIA_API_KEY";
+  }
+
+  // google → GOOGLE_AI_API_KEY (not GOOGLE_API_KEY)
+  return provider.secretEnvKey || null;
 }
 
 interface GraduationGateProps {
@@ -49,53 +54,52 @@ export function useGraduationGate({ flowId, nodes, onProceed }: GraduationGatePr
   const checkCredentials = useCallback(async () => {
     setChecking(true);
 
-    // 1. Find all LLM nodes with model_id
-    const llmNodes = nodes.filter(
-      (n) => n.type === "llm" || n.type === "sub_flow"
-    );
-
     const requiredSecrets = new Map<string, MissingCredential>();
 
-    for (const node of llmNodes) {
-      const config = (node.data as any)?.config || {};
-      const modelId: string = config.model_id || config.modelId || "";
-      if (!modelId) continue;
-
-      const provider = modelId.split("/")[0]?.toLowerCase() || "";
-      const secretName = PROVIDER_SECRET_MAP[provider];
-
-      // Skip providers that don't need keys (ollama, etc.)
-      if (secretName === "" || secretName === undefined) continue;
-
+    for (const secretName of extractToolSecrets(nodes)) {
       if (!requiredSecrets.has(secretName)) {
         requiredSecrets.set(secretName, {
-          nodeId: node.id,
-          nodeLabel: (node.data as any)?.label || node.id,
-          modelId,
-          provider,
+          nodeId: "tool",
+          nodeLabel: "Tool",
           secretName,
+          context: "Tool do registry",
         });
       }
     }
 
+    const llmNodes = nodes.filter((n) => n.type === "llm" || n.type === "sub_flow");
+    for (const node of llmNodes) {
+      const config = (node.data as Record<string, unknown>)?.config as Record<string, unknown> | undefined;
+      const modelId = String(config?.model_id || config?.modelId || config?.model || "");
+      if (!modelId) continue;
+
+      const secretName = resolveLlmSecretName(modelId);
+      if (!secretName || requiredSecrets.has(secretName)) continue;
+
+      requiredSecrets.set(secretName, {
+        nodeId: node.id,
+        nodeLabel: String(config?.label || node.id),
+        secretName,
+        context: `Modelo: ${modelId}`,
+      });
+    }
+
     if (requiredSecrets.size === 0) {
-      // No LLM nodes or all local models — proceed directly
       setChecking(false);
       onProceed();
       return;
     }
 
-    // 2. Check tenant_secrets for this flow
     const { data: secrets } = await supabase
       .from("tenant_secrets")
       .select("secret_name")
       .eq("tenant_id", flowId);
 
-    const existingNames = new Set((secrets || []).map((s: any) => s.secret_name));
+    const existingNames = new Set((secrets || []).map((s: { secret_name: string }) => s.secret_name));
 
     const missingCreds: MissingCredential[] = [];
-    for (const [secretName, cred] of requiredSecrets) {
-      if (!existingNames.has(secretName)) {
+    for (const [, cred] of requiredSecrets) {
+      if (!existingNames.has(cred.secretName)) {
         missingCreds.push(cred);
       }
     }
@@ -133,7 +137,7 @@ export function useGraduationGate({ flowId, nodes, onProceed }: GraduationGatePr
                 Credenciais necessárias
               </AlertDialogTitle>
               <AlertDialogDescription className="mt-1" style={{ color: "var(--ps-cream-60)" }}>
-                Configure as API keys antes de publicar
+                Configure os secrets de operação do agente antes de publicar
               </AlertDialogDescription>
             </div>
           </div>
@@ -141,7 +145,7 @@ export function useGraduationGate({ flowId, nodes, onProceed }: GraduationGatePr
 
         <div className="px-6 pb-2">
           <p className="text-[11px] mb-3" style={{ color: "var(--ps-cream-40)" }}>
-            Os seguintes nós utilizam modelos que requerem chaves de API não configuradas:
+            Chaves de LLM (Groq, OpenAI, Gemini…) ficam em /api. Aqui faltam secrets de tools ou BYOK:
           </p>
 
           <ScrollArea className="max-h-[240px]">
@@ -161,7 +165,7 @@ export function useGraduationGate({ flowId, nodes, onProceed }: GraduationGatePr
                       {cred.secretName}
                     </div>
                     <div className="text-[10px] mt-0.5" style={{ color: "var(--ps-cream-40)" }}>
-                      Nó: {cred.nodeLabel} · Modelo: {cred.modelId}
+                      {cred.context} · Nó: {cred.nodeLabel}
                     </div>
                   </div>
                 </div>

@@ -17,6 +17,7 @@ const ALLOWED_NAMES = new Set([
   "ANTHROPIC_API_KEY",
   "OPENAI_API_KEY",
   "NVIDIA_API_KEY",
+  "FIRECRAWL_API_KEY",
 ]);
 
 function json(body: unknown, status = 200) {

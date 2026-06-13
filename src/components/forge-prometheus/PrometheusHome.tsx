@@ -86,6 +86,8 @@ interface PrometheusHomeProps {
   onOpenAgent?: (flowId: string) => void;
   onDeleteAgent?: (flowId: string) => void;
   onOpenMonitoring?: () => void;
+  /** Pré-preenche o textarea (dashboard → Prometheus, draft do projeto). */
+  initialPrompt?: string | null;
 }
 
 export function PrometheusHome({
@@ -97,6 +99,7 @@ export function PrometheusHome({
   onOpenAgent,
   onDeleteAgent,
   onOpenMonitoring,
+  initialPrompt,
 }: PrometheusHomeProps) {
   const adminMode = useAdminMode();
   const [prompt, setPrompt] = useState("");
@@ -124,6 +127,12 @@ export function PrometheusHome({
       textareaRef.current?.focus();
     },
   });
+
+  useEffect(() => {
+    const text = initialPrompt?.trim();
+    if (!text) return;
+    setPrompt((prev) => (prev.trim() ? prev : text));
+  }, [initialPrompt]);
 
   // Click-outside handler to close all dropdowns
   useEffect(() => {

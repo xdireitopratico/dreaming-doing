@@ -418,3 +418,57 @@
   opacity: 0.3;
   cursor: not-allowed;
 }
+
+/* Boardroom narrative stepper (3-step planning rail) */
+.ps-boardroom-stepper {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+  max-width: 280px;
+}
+
+.ps-boardroom-stepper__segment {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+}
+
+.ps-boardroom-stepper__segment:last-child {
+  flex: 0;
+}
+
+.ps-boardroom-stepper__node {
+  flex-shrink: 0;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 2px solid var(--ps-border-hover);
+  background: transparent;
+  transition: border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
+}
+
+.ps-boardroom-stepper__node[data-done="true"] {
+  border-color: var(--ps-cream-40);
+  background: var(--ps-cream-40);
+}
+
+.ps-boardroom-stepper__node[data-active="true"] {
+  border-color: var(--ps-accent);
+  background: var(--ps-accent);
+  box-shadow: 0 0 0 3px var(--ps-accent-subtle), 0 0 12px var(--ps-accent-glow);
+}
+
+.ps-boardroom-stepper__line {
+  flex: 1;
+  height: 2px;
+  margin: 0 4px;
+  border-radius: 1px;
+  background: var(--ps-border);
+  transition: background 0.2s ease;
+}
+
+.ps-boardroom-stepper__line[data-done="true"] {
+  background: var(--ps-cream-25);
+}

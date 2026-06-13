@@ -24,6 +24,7 @@ export async function runScribePhase(
 ) {
   const architecture = session.architecture;
   const requirements = session.requirements || {};
+  const motorTenantId = session.user_id as string;
 
   if (!architecture) {
     await insertTurn(sb, sessionId, "cortex",
@@ -49,13 +50,14 @@ export async function runScribePhase(
       tokenBudget: sessionData?.token_budget
         ? { used: sessionData.tokens_used || 0, limit: sessionData.token_budget }
         : undefined,
+      tenantId: motorTenantId,
     };
 
     await insertTurn(sb, sessionId, "scribe",
       "Analisando a arquitetura para gerar prompts otimizados...",
       "generation", "building", round);
 
-    const scribeResult = await generatePrompts(architecture, requirements, modelId);
+    const scribeResult = await generatePrompts(architecture, requirements, modelId, motorTenantId);
 
     if (!scribeResult?.prompts || Object.keys(scribeResult.prompts).length === 0) {
       throw new Error("Scribe não gerou nenhum prompt válido para a arquitetura.");
@@ -146,7 +148,8 @@ export async function runSentinelPhase(
 
   const iteration = session.iterations || 1;
   const flowId = session.output_flow_id || undefined;
-  const sentinelConfig: SentinelConfig = { sessionId, sb, flowId };
+  const motorTenantId = session.user_id as string;
+  const sentinelConfig: SentinelConfig = { sessionId, sb, flowId, tenantId: motorTenantId };
 
   await insertTurn(sb, sessionId, "sentinel",
     `Gerando casos de teste e executando ${flowId ? "testes reais" : "dry-runs"} (iteração ${iteration}/${MAX_REPAIR_ITERATIONS})...`,
@@ -199,6 +202,7 @@ export async function runSentinelPhase(
       round,
       researchCache: (session.research_cache || {}) as Record<string, unknown>,
       tokenBudget: { used: tokensUsed, limit: tokenLimit },
+      tenantId: motorTenantId,
     };
 
     await insertTurn(sb, sessionId, "scribe",
@@ -364,7 +368,7 @@ export async function deployFlow(
       console.warn("[pipeline] Report skipped: session has no quality_model/fallback_model_id");
     } else {
       try {
-        report = await generateReport(reportInput, reportModelId);
+        report = await generateReport(reportInput, reportModelId, freshSession.user_id);
       } catch (err) {
         console.error("[pipeline] Report generation failed:", err);
       }

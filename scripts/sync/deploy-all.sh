@@ -33,6 +33,7 @@ AETHERFORGE_FUNCTIONS=(
   prometheus-healer
   prometheus-learn-pipeline
   firecrawl-search
+  firecrawl-scrape
   web-research-tools
   admin-secrets-map
 )

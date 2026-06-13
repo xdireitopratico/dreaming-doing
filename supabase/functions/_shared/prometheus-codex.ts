@@ -193,6 +193,7 @@ Responda em português, de forma concisa e acionável. Foque em:
       messages: [{ role: "user", content: prompt }],
       temperature: 0.3,
       max_tokens: 1024,
+      tenant_id: userId,
     });
     return { suggestions: result.content, model_used: modelId };
   } catch (err) {

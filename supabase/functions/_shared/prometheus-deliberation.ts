@@ -89,6 +89,15 @@ export function formatAnalystOutput(result: any): string {
 
 // ═══ BOARDROOM ROUNDTABLE ═══
 
+function isHaltMessage(msg: string): boolean {
+  const lower = msg.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  return /\b(parar|pare|stop|cancelar|cancela|halt|abortar|aborta|errado|ta errado|tá errado)\b/.test(lower);
+}
+
+function contentFingerprint(text: string): string {
+  return text.toLowerCase().replace(/\s+/g, " ").trim().slice(0, 120);
+}
+
 export async function runBoardroomRoundtable(
   sb: SupabaseAdmin,
   sessionId: string,
@@ -99,6 +108,7 @@ export async function runBoardroomRoundtable(
   forceDirective = false,
   resumeHistory?: DelibTurn[],
   resumeArchitecture?: any,
+  skipAnalystKickoff = false,
 ) {
   const intent = forceDirective ? "directive" : classifyUserIntent(userMessage);
   const isResume = !!resumeHistory?.length;
@@ -106,17 +116,19 @@ export async function runBoardroomRoundtable(
   // ReAct v2: Build shared config for analyst/architect
   const { data: sessionRow } = await sb
     .from("prometheus_build_sessions")
-    .select("research_cache, tokens_used, token_budget")
+    .select("user_id, research_cache, tokens_used, token_budget")
     .eq("id", sessionId)
     .single();
+
+  const motorTenantId = (sessionRow?.user_id as string) || "";
 
   const researchCache = (sessionRow?.research_cache || {}) as Record<string, unknown>;
   const tokenBudget = sessionRow?.token_budget
     ? { used: sessionRow.tokens_used || 0, limit: sessionRow.token_budget }
     : undefined;
 
-  const analystConfig: AnalystConfig = { sessionId, sb, round, researchCache, tokenBudget };
-  const architectConfig: ArchitectConfig = { sessionId, sb, round, researchCache, tokenBudget };
+  const analystConfig: AnalystConfig = { sessionId, sb, round, researchCache, tokenBudget, tenantId: motorTenantId };
+  const architectConfig: ArchitectConfig = { sessionId, sb, round, researchCache, tokenBudget, tenantId: motorTenantId };
 
   // Mark deliberation as active to prevent race conditions
   await sb.from("prometheus_build_sessions")
@@ -133,6 +145,7 @@ export async function runBoardroomRoundtable(
       ],
       temperature: 0.7,
       max_tokens: 1024,
+      tenant_id: motorTenantId,
     });
     await persistTokensUsed(sb, sessionId, (sessionRow?.tokens_used || 0) + (response.tokens_in + response.tokens_out));
     await insertTurn(sb, sessionId, "cortex",
@@ -154,6 +167,16 @@ export async function runBoardroomRoundtable(
     deliberation = resumeHistory!;
     await insertTurn(sb, sessionId, "cortex",
       "Entendido. Retomando a discussão com a equipe.",
+      "decision", "planning", round);
+  } else if (skipAnalystKickoff && Object.keys(existingRequirements).length > 0) {
+    const analystOutput = formatAnalystOutput({ requirements: existingRequirements });
+    deliberation = [
+      { speaker: "user", content: userMessage },
+      { speaker: "analyst", content: analystOutput },
+    ];
+    currentReqs = { ...existingRequirements };
+    await insertTurn(sb, sessionId, "cortex",
+      "Requisitos consolidados. A equipe vai deliberar a arquitetura.",
       "decision", "planning", round);
   } else {
     const analystInput = intent === "directive"
@@ -193,14 +216,30 @@ export async function runBoardroomRoundtable(
   // ─── STEP 2: Deliberation loop — Cortex moderates ───
   await updateSessionPhase(sb, sessionId, "planning");
 
+  let lastSpeaker = "";
+  let consecutiveSameSpeaker = 0;
+  const recentFingerprints: string[] = [];
+
   for (let turn = 0; turn < MAX_DELIBERATION_TURNS; turn++) {
     const userInterjection = await checkUserInterjection(sb, sessionId, round);
     if (userInterjection) {
+      if (isHaltMessage(userInterjection)) {
+        await insertTurn(sb, sessionId, "cortex",
+          "Entendido — interrompi a deliberação. Você pode pedir mudanças ou reiniciar quando quiser.",
+          "decision", "planning", round,
+          { halted: true });
+        await sb.from("prometheus_build_sessions").update({
+          deliberation_state: { halted: true, history: deliberation, architecture: currentArchitecture },
+        }).eq("id", sessionId);
+        return;
+      }
       deliberation.push({ speaker: "user", content: userInterjection });
       await insertTurn(sb, sessionId, "cortex",
         `O usuário acrescentou: "${userInterjection.substring(0, 100)}". Vou incorporar na discussão.`,
         "decision", "planning", round);
     }
+
+    if (intent === "directive" && turn >= 5 && currentArchitecture) break;
 
     // Cortex moderator: decide who speaks next
     const historyText = deliberation.map(d =>
@@ -223,6 +262,7 @@ export async function runBoardroomRoundtable(
       ],
       temperature: 0.4,
       max_tokens: 512,
+      tenant_id: motorTenantId,
     });
 
     let modDecision: { next_speaker: string; instruction: string; cortex_comment?: string | null };
@@ -242,24 +282,43 @@ export async function runBoardroomRoundtable(
 
     if (modDecision.next_speaker === "done") break;
 
-    // ── user → pause and wait ──
+    // ── user → decision fork (research-backed question only) ──
     if (modDecision.next_speaker === "user") {
-      await insertTurn(sb, sessionId, "cortex",
-        modDecision.instruction || "Preciso de uma decisão sua para avançar.",
-        "decision", "planning", round,
-        { awaiting_input: true, deliberation_paused: true });
-      await sb.from("prometheus_build_sessions").update({
-        deliberation_state: { history: deliberation, architecture: currentArchitecture },
-        research_cache: researchCache,
-      }).eq("id", sessionId);
-      return;
+      const hasResearch = Object.keys(researchCache).length > 0;
+      if (!hasResearch && intent === "directive") {
+        modDecision.next_speaker = "architect";
+        modDecision.instruction = modDecision.instruction || "Proponha arquitetura com defaults do domínio.";
+      } else {
+        await insertTurn(sb, sessionId, "cortex",
+          modDecision.instruction || "Encontrei duas rotas viáveis — preciso da sua preferência.",
+          "decision", "planning", round,
+          {
+            decision_fork: {
+              question: modDecision.instruction,
+              evidence: "Deliberação pós-pesquisa",
+            },
+            deliberation_paused: true,
+          });
+        await sb.from("prometheus_build_sessions").update({
+          deliberation_state: { history: deliberation, architecture: currentArchitecture, awaiting_fork: true },
+          research_cache: researchCache,
+        }).eq("id", sessionId);
+        return;
+      }
     }
 
     // ── agent speaks ──
     const speaker = modDecision.next_speaker;
+
+    if (speaker === lastSpeaker) consecutiveSameSpeaker++;
+    else {
+      consecutiveSameSpeaker = 0;
+      lastSpeaker = speaker;
+    }
+    if (consecutiveSameSpeaker >= 2) break;
     const agentContent = await generateAgentContribution(
       speaker, modDecision.instruction, deliberation,
-      currentReqs, currentArchitecture, modelId,
+      currentReqs, currentArchitecture, modelId, motorTenantId,
     );
 
     const messageTypeMap: Record<string, string> = {
@@ -275,6 +334,11 @@ export async function runBoardroomRoundtable(
       "planning", round);
 
     deliberation.push({ speaker, content: agentContent });
+
+    const fp = contentFingerprint(agentContent);
+    if (recentFingerprints.includes(fp)) break;
+    recentFingerprints.push(fp);
+    if (recentFingerprints.length > 4) recentFingerprints.shift();
 
     if (speaker === "architect") {
       const freshArch = await tryGenerateArchitecture(currentReqs, modelId, architectConfig);
@@ -292,7 +356,7 @@ export async function runBoardroomRoundtable(
     }
 
     if (speaker === "analyst") {
-      const updatedReqs = await tryExtractRequirements(agentContent, currentReqs, modelId);
+      const updatedReqs = await tryExtractRequirements(agentContent, currentReqs, modelId, motorTenantId);
       if (updatedReqs) {
         currentReqs = { ...currentReqs, ...updatedReqs };
         await sb.from("prometheus_build_sessions")
@@ -342,6 +406,7 @@ export async function runBoardroomRoundtable(
     ],
     temperature: 0.5,
     max_tokens: 1024,
+    tenant_id: motorTenantId,
   });
 
   await insertTurn(sb, sessionId, "cortex",
@@ -365,6 +430,7 @@ async function generateAgentContribution(
   requirements: Record<string, unknown>,
   architecture: any,
   modelId: string,
+  tenantId?: string,
 ): Promise<string> {
   const historyText = history.map(d =>
     `[${AGENT_DISPLAY_NAMES[d.speaker] || d.speaker}]: ${d.content}`
@@ -399,6 +465,7 @@ async function generateAgentContribution(
     ],
     temperature: 0.6,
     max_tokens: 1024,
+    tenant_id: tenantId,
   });
 
   return response?.content || `[${agentName}] Concordo com a equipe. Podemos avançar.`;
@@ -428,9 +495,10 @@ async function tryExtractRequirements(
   agentText: string,
   existingReqs: Record<string, unknown>,
   modelId: string,
+  tenantId?: string,
 ): Promise<Record<string, unknown> | null> {
   try {
-    const result = await analyzeRequirements(agentText, JSON.stringify(existingReqs), modelId);
+    const result = await analyzeRequirements(agentText, JSON.stringify(existingReqs), modelId, { tenantId });
     return result.requirements || null;
   } catch (err) {
     console.error("[deliberation] tryExtractRequirements failed:", err instanceof Error ? err.message : err);
@@ -451,7 +519,7 @@ async function tryGenerateArchitecture(
   }
 }
 
-async function writeArchitectureToFlow(
+export async function writeArchitectureToFlow(
   sb: SupabaseAdmin,
   sessionId: string,
   architecture: any,

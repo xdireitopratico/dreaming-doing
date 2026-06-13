@@ -114,6 +114,7 @@ Retorne JSON com esta estrutura EXATA:
 export async function generateReport(
   input: ReportInput,
   modelId: string,
+  tenantId?: string,
 ): Promise<AgentReport> {
   if (!modelId) {
     throw new Error("[prometheus-report] model_id is required");
@@ -168,6 +169,7 @@ export async function generateReport(
       ],
       temperature: 0.4,
       max_tokens: 3000,
+      tenant_id: tenantId ?? (session as { user_id?: string }).user_id,
     });
 
     const jsonMatch = response.content.match(/\{(?:[^{}]|\{(?:[^{}]|\{[^{}]*\})*\})*\}/);

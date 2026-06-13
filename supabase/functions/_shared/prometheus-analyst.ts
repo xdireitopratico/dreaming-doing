@@ -23,6 +23,30 @@ export interface AnalystResult {
   tokensUsed?: number;
 }
 
+/** Strip generic questions; keep only research-backed forks. */
+export function sanitizeAnalystResult(
+  result: AnalystResult,
+  hasResearchEvidence: boolean,
+): AnalystResult {
+  if (result.is_complete) {
+    return { ...result, clarification_questions: [] };
+  }
+
+  const STUPID_IDS = new Set(["channels", "tools", "tone"]);
+  const questions = (result.clarification_questions || []).filter((q) => {
+    if (STUPID_IDS.has(q.id)) return false;
+    if (!hasResearchEvidence) return false;
+    const evidence = (q as ClarificationQuestion & { evidence_from_research?: string }).evidence_from_research;
+    return typeof evidence === "string" && evidence.trim().length >= 20;
+  });
+
+  if (questions.length === 0) {
+    return { ...result, clarification_questions: [], is_complete: true };
+  }
+
+  return { ...result, clarification_questions: questions.slice(0, 1) };
+}
+
 export interface AnalystConfig {
   sessionId: string;
   sb?: SupabaseAdmin;
@@ -44,7 +68,7 @@ export async function analyzeRequirements(
 
   // If no config (backward compat), use legacy single-call path
   if (!config?.sessionId) {
-    return analyzeRequirementsLegacy(userInput, briefingContext, modelId);
+    return analyzeRequirementsLegacy(userInput, briefingContext, modelId, config?.tenantId);
   }
 
   // â•â•â• ReAct v2: Use tools for real research â•â•â•
@@ -102,6 +126,7 @@ Pesquise sobre o domÃ­nio se necessÃ¡rio, depois extraia requisitos completo
       tokenBudget: config.tokenBudget,
       sb,
       executeTool,
+      tenantId: config.tenantId,
     });
 
     // D8: If ReAct returned an error, fall back to deterministic
@@ -140,6 +165,7 @@ async function analyzeRequirementsLegacy(
   userInput: string,
   briefingContext: string,
   modelId: string,
+  tenantId?: string,
 ): Promise<AnalystResult> {
   const prompt = ANALYST_EXTRACTION_PROMPT
     .replace("{briefing}", briefingContext)
@@ -154,6 +180,7 @@ async function analyzeRequirementsLegacy(
       ],
       temperature: 0.3,
       max_tokens: 4096,
+      tenant_id: tenantId,
     });
 
     const jsonMatch = response.content.match(/\{(?:[^{}]|\{(?:[^{}]|\{[^{}]*\})*\})*\}/);
@@ -194,40 +221,33 @@ function fallbackAnalysis(input: string): AnalystResult {
   // BUG 113 FIX: Remove redundant /i flag since string is already lowercased
   const hasRag = /document|pdf|base.*conhec|rag|arquivo|manual/.test(lower);
 
+  const integrations: string[] = [];
+  if (lower.includes("crm")) integrations.push("CRM");
+  if (lower.includes("linkedin")) integrations.push("LinkedIn");
+  if (lower.includes("email")) integrations.push("email");
+  if (lower.includes("calend")) integrations.push("calendário");
+
+  const tools_needed: string[] = [];
+  if (domain === "vendas" || lower.includes("prospect")) tools_needed.push("prospecting", "email_outreach");
+  if (lower.includes("linkedin")) tools_needed.push("linkedin_search");
+
   return {
     requirements: {
-      objective: input.slice(0, 200),
-      target_audience: "UsuÃ¡rios finais",
+      objective: input.slice(0, 300),
+      target_audience: domain === "legal" ? "Advogados e escritórios jurídicos"
+        : domain === "vendas" ? "Prospects e leads comerciais"
+        : "Usuários finais",
       channels,
-      integrations: [],
+      integrations,
       tone: "profissional",
       domain,
       complexity: input.length > 200 ? "high" : input.length > 80 ? "medium" : "low",
-      constraints: [],
-      tools_needed: [],
+      constraints: domain === "legal" ? ["LGPD", "comunicação ética OAB"] : [],
+      tools_needed,
       has_rag: hasRag,
       auto_healing: true,
     },
-    clarification_questions: [
-      {
-        id: "channels",
-        question: "Em quais canais o agente vai atuar?",
-        options: ["Web Widget", "WhatsApp", "API REST", "Telegram"],
-        required: true,
-      },
-      {
-        id: "tools",
-        question: "Precisa acessar ferramentas externas? (APIs, banco de dados, calendÃ¡rio)",
-        options: ["Nenhuma", "API externa", "CalendÃ¡rio", "CRM"],
-        required: false,
-      },
-      {
-        id: "tone",
-        question: "Qual tom de comunicaÃ§Ã£o do agente?",
-        options: ["Formal", "Informal", "TÃ©cnico", "EmpÃ¡tico"],
-        required: false,
-      },
-    ],
-    is_complete: false,
+    clarification_questions: [],
+    is_complete: true,
   };
 }

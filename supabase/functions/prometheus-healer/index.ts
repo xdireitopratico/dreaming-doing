@@ -103,6 +103,7 @@ async function treatPromptRewrite(
   symptomData: Record<string, unknown>,
   modelId: string,
   shadowMode: boolean,
+  userId: string,
 ): Promise<{ success: boolean; data: Record<string, unknown> }> {
   // Get current flow definition
   const { data: flow } = await sb
@@ -139,6 +140,7 @@ async function treatPromptRewrite(
     ],
     temperature: 0.4,
     max_tokens: 1500,
+    tenant_id: userId,
   });
 
   const newPrompt = llmResponse.content || "";
@@ -198,6 +200,7 @@ async function treatModelSwitch(
   symptomData: Record<string, unknown>,
   modelId: string,
   shadowMode: boolean,
+  userId: string,
 ): Promise<{ success: boolean; data: Record<string, unknown> }> {
   const { data: flow } = await sb
     .from("agent_flows")
@@ -227,6 +230,7 @@ async function treatModelSwitch(
     ],
     temperature: 0.2,
     max_tokens: 200,
+    tenant_id: userId,
   });
 
   let recommendation: any = {};
@@ -459,7 +463,8 @@ Deno.serve(async (req) => {
         reasoning: "",
       };
 
-      const result = await applyTreatment(sb, logEntry.flow_id, treatment, diagResult, logEntry.symptom_data as any || {}, modelId, false);
+      const healUserId = (logEntry as { user_id?: string }).user_id || user.id;
+      const result = await applyTreatment(sb, logEntry.flow_id, treatment, diagResult, logEntry.symptom_data as any || {}, modelId, false, healUserId);
 
       await sb.from("prometheus_healing_log").update({
         treatment_applied: treatment,
@@ -598,6 +603,7 @@ Deno.serve(async (req) => {
             ],
             temperature: 0.3,
             max_tokens: 500,
+            tenant_id: config.user_id,
           });
 
           const diagLatency = Date.now() - diagStart;
@@ -628,7 +634,7 @@ Deno.serve(async (req) => {
           let treatmentResult: { success: boolean; data: Record<string, unknown> } | null = null;
 
           if (isAllowed && diagResult.confidence >= 0.5) {
-            treatmentResult = await applyTreatment(sb, config.flow_id, treatment, diagResult, symptom.data, modelId, config.shadow_mode);
+            treatmentResult = await applyTreatment(sb, config.flow_id, treatment, diagResult, symptom.data, modelId, config.shadow_mode, config.user_id);
             if (treatmentResult.success) totalTreated++;
           }
 
@@ -692,14 +698,15 @@ async function applyTreatment(
   symptomData: Record<string, unknown>,
   modelId: string,
   shadowMode: boolean,
+  userId: string,
 ): Promise<{ success: boolean; data: Record<string, unknown> }> {
   console.log(`[physician] Applying treatment '${treatment}' to flow ${flowId} (shadow=${shadowMode})`);
 
   switch (treatment) {
     case "prompt_rewrite":
-      return treatPromptRewrite(sb, flowId, diagnosis, symptomData, modelId, shadowMode);
+      return treatPromptRewrite(sb, flowId, diagnosis, symptomData, modelId, shadowMode, userId);
     case "model_switch":
-      return treatModelSwitch(sb, flowId, diagnosis, symptomData, modelId, shadowMode);
+      return treatModelSwitch(sb, flowId, diagnosis, symptomData, modelId, shadowMode, userId);
     case "timeout_adjust":
       return treatTimeoutAdjust(sb, flowId, shadowMode);
     case "cache_clear":

@@ -105,10 +105,14 @@ export interface BuildSession {
   success: boolean | null;
 }
 
+export type PrometheusSessionIntent = "approve" | "request_changes" | "reject_plan" | "halt";
+
 export interface PrometheusRequest {
-  action: "start" | "message" | "status" | "skip" | "summarize" | "physician" | "codex_report" | "codex_insights";
+  action: "start" | "message" | "status" | "skip" | "summarize" | "physician" | "codex_report" | "codex_insights"
+    | "approve" | "request_changes" | "reject_plan" | "halt";
   session_id?: string;
   message?: string;
+  feedback?: string;
   briefing?: Record<string, unknown>;
   flow_id?: string;
   /** The user-selected model ID from the power selector */

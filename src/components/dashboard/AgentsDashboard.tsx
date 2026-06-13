@@ -130,9 +130,20 @@ export function AgentsDashboard() {
                 : `${filtered.length} agente${filtered.length !== 1 ? "s" : ""}`}
             </p>
           </div>
-          <Link to="/connectors" className="dashboard-dock-browse">
-            Conectores
-          </Link>
+          {filtered[0] ? (
+            <Link
+              to="/agents/$agentId"
+              params={{ agentId: filtered[0].id }}
+              search={{ open: "flow" }}
+              className="dashboard-dock-browse"
+            >
+              Fluxo Visual
+            </Link>
+          ) : (
+            <a href="#dashboard-hero" className="dashboard-dock-browse">
+              Fluxo Visual
+            </a>
+          )}
         </div>
 
         <div className="dashboard-projects-row">

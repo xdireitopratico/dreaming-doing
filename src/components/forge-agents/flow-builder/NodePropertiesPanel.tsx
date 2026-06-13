@@ -58,13 +58,14 @@ const CONFIG_MAP: Record<string, React.ComponentType<{ config: Record<string, un
 };
 
 interface NodePropertiesPanelProps {
+  flowId: string;
   node: Node | null;
   onUpdate: (nodeId: string, data: Record<string, unknown>) => void;
   onDelete: (nodeId: string) => void;
   onClose: () => void;
 }
 
-export function NodePropertiesPanel({ node, onUpdate, onDelete, onClose }: NodePropertiesPanelProps) {
+export function NodePropertiesPanel({ flowId, node, onUpdate, onDelete, onClose }: NodePropertiesPanelProps) {
   if (!node) return null;
 
   const meta = NODE_META[node.type || ""] || { label: "Nó", color: "bg-muted", icon: null };
@@ -112,7 +113,11 @@ export function NodePropertiesPanel({ node, onUpdate, onDelete, onClose }: NodeP
           <Label className="text-xs" style={{ color: 'var(--ps-cream-60)' }}>ID do Nó</Label>
           <Input value={node.id} disabled className="h-8 text-xs mt-1 border-none" style={{ background: 'var(--ps-bg-surface)', color: 'var(--ps-cream-40)' }} />
         </div>
-        {ConfigComponent && <ConfigComponent config={config} updateConfig={updateConfig} />}
+        {node.type === "tool" ? (
+          <ToolConfig config={config} updateConfig={updateConfig} flowId={flowId} />
+        ) : (
+          ConfigComponent && <ConfigComponent config={config} updateConfig={updateConfig} />
+        )}
       </div>
     </div>
   );

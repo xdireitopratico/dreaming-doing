@@ -1,6 +1,6 @@
 /**
- * SecretsPanel — Gestão de secrets por agente com BYOK (Bring Your Own Key)
- * @version 2.0.0 — Round 34: Provider-aware BYOK detection
+ * SecretsPanel — Gestão de secrets de operação do agente (tools, integrações)
+ * LLM providers ficam em /api (connectors); não duplicar aqui.
  */
 import { useState, useEffect, useMemo } from "react";
 import { Button } from "@/components/ui/button";
@@ -10,9 +10,10 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/lib/toast";
 import {
   X, Plus, Key, Eye, EyeOff, Trash2, RefreshCw, Shield,
-  AlertCircle, Copy, Check, Cloud, Cpu, CheckCircle2,
+  AlertCircle, Copy, Check, Play, Loader2,
 } from "lucide-react";
-import { PROVIDERS, findModel, type ProviderDefinition } from "./model-catalog-frontend";
+import { extractFlowTools, extractToolSecrets } from "./flow-tool-secrets";
+import { testToolHealth, type ToolHealthStatus } from "@/lib/tool-health-test";
 
 interface Secret {
   id: string;
@@ -48,70 +49,21 @@ function formatDate(d: string | null): string {
   return new Date(d).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
 }
 
-/** Extract provider IDs that are in use by LLM nodes in the flow */
-function extractUsedProviders(nodes: any[]): Map<string, { providerId: string; modelLabel: string; nodeLabel: string }[]> {
-  const providerUsage = new Map<string, { providerId: string; modelLabel: string; nodeLabel: string }[]>();
-
-  for (const node of nodes) {
-    if (node.type !== "llm") continue;
-    const config = node.data?.config || {};
-    const modelId = config.model_id || config.model || "";
-    if (!modelId) continue;
-
-    const model = findModel(modelId);
-    if (!model) continue;
-
-    const provider = PROVIDERS.find(p => p.id === model.provider);
-    if (!provider) continue;
-
-    // Only care about providers that need keys
-    if (provider.id === "ollama") continue; // local, no key needed
-
-    const key = provider.secretEnvKey;
-    if (!key) continue;
-
-    if (!providerUsage.has(key)) providerUsage.set(key, []);
-    providerUsage.get(key)!.push({
-      providerId: provider.id,
-      modelLabel: model.label,
-      nodeLabel: config.label || node.id,
-    });
-  }
-  return providerUsage;
-}
-
-/** Extract required secrets from tool nodes */
-function extractToolSecrets(nodes: any[]): string[] {
-  const secrets = new Set<string>();
-  for (const node of nodes) {
-    const config = node.data?.config || {};
-    if (config.auth_type === "bearer" || config.auth_type === "api_key") {
-      if (config.auth_secret_name) secrets.add(config.auth_secret_name);
-    }
-    if (config.api_key_secret) secrets.add(config.api_key_secret);
-    if (config.required_secrets && Array.isArray(config.required_secrets)) {
-      config.required_secrets.forEach((s: string) => secrets.add(s));
-    }
-  }
-  return Array.from(secrets);
-}
-
 export function SecretsPanel({ flowId, nodes, onClose }: SecretsPanelProps) {
   const [secrets, setSecrets] = useState<Secret[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
   const [newName, setNewName] = useState("");
   const [newValue, setNewValue] = useState("");
-  const [newProvider, setNewProvider] = useState("");
   const [newDescription, setNewDescription] = useState("");
   const [creating, setCreating] = useState(false);
   const [revealedIds, setRevealedIds] = useState<Set<string>>(new Set());
   const [copiedId, setCopiedId] = useState<string | null>(null);
-  ;
+  const [toolHealth, setToolHealth] = useState<Record<string, ToolHealthStatus>>({});
+  const [testingTool, setTestingTool] = useState<string | null>(null);
 
-  // Analyze flow for provider requirements
-  const providerUsage = useMemo(() => extractUsedProviders(nodes), [nodes]);
   const toolSecrets = useMemo(() => extractToolSecrets(nodes), [nodes]);
+  const flowTools = useMemo(() => extractFlowTools(nodes), [nodes]);
 
   const fetchSecrets = async () => {
     setLoading(true);
@@ -140,7 +92,7 @@ export function SecretsPanel({ flowId, nodes, onClose }: SecretsPanelProps) {
       secret_name: secretName,
       encrypted_value: encodedValue,
       encryption_key_id: "frontend-base64",
-      provider_id: newProvider || null,
+      provider_id: null,
       is_platform_provided: false,
       secret_type: "api_key",
       description: newDescription || null,
@@ -154,18 +106,20 @@ export function SecretsPanel({ flowId, nodes, onClose }: SecretsPanelProps) {
       setShowCreate(false);
       setNewName("");
       setNewValue("");
-      setNewProvider("");
       setNewDescription("");
-      fetchSecrets();
+      await fetchSecrets();
+
+      const linkedTools = flowTools.filter((t) => t.requiredSecrets.includes(secretName));
+      if (linkedTools.length === 1) {
+        void handleTestTool(linkedTools[0].toolName);
+      }
     }
     setCreating(false);
   };
 
-  const handleQuickCreate = (secretEnvKey: string, providerId: string) => {
-    setNewName(secretEnvKey);
-    setNewProvider(providerId);
-    const provider = PROVIDERS.find(p => p.id === providerId);
-    setNewDescription(`API key for ${provider?.label || providerId}`);
+  const handleQuickCreate = (secretName: string) => {
+    setNewName(secretName);
+    setNewDescription(`Secret de operação: ${secretName}`);
     setShowCreate(true);
   };
 
@@ -189,38 +143,54 @@ export function SecretsPanel({ flowId, nodes, onClose }: SecretsPanelProps) {
     setTimeout(() => setCopiedId(null), 2000);
   };
 
-  // Build provider checklist
   const configuredNames = new Set(secrets.map((s) => s.secret_name));
-  const allToolSecretsMissing = toolSecrets.filter((r) => !configuredNames.has(r));
+  const toolSecretsMissing = toolSecrets.filter((r) => !configuredNames.has(r));
 
-  // Provider status: which keys are configured vs missing
-  const providerChecklist = useMemo(() => {
-    const items: { provider: ProviderDefinition; secretKey: string; configured: boolean; platformProvided: boolean; models: string[] }[] = [];
-    for (const [secretKey, usages] of providerUsage.entries()) {
-      const providerId = usages[0].providerId;
-      const provider = PROVIDERS.find(p => p.id === providerId);
-      if (!provider) continue;
+  const healthColor: Record<ToolHealthStatus, string> = {
+    healthy: "text-emerald-500",
+    degraded: "text-amber-500",
+    unhealthy: "text-red-500",
+    idle: "text-muted-foreground",
+    testing: "text-primary",
+  };
 
-      items.push({
-        provider,
-        secretKey,
-        configured: configuredNames.has(secretKey),
-        platformProvided: provider.platformProvided,
-        models: usages.map(u => u.modelLabel),
+  const healthLabel: Record<ToolHealthStatus, string> = {
+    healthy: "OK",
+    degraded: "Parcial",
+    unhealthy: "Falhou",
+    idle: "—",
+    testing: "Testando…",
+  };
+
+  const handleTestTool = async (toolName: string) => {
+    setTestingTool(toolName);
+    setToolHealth((prev) => ({ ...prev, [toolName]: "testing" }));
+    const result = await testToolHealth(flowId, toolName);
+    setToolHealth((prev) => ({ ...prev, [toolName]: result.health }));
+    setTestingTool(null);
+
+    if (result.health === "healthy") {
+      toast({ title: `${toolName}: OK` });
+    } else if (result.health === "degraded") {
+      toast({
+        title: `${toolName}: conexão parcial`,
+        description: result.error?.slice(0, 120) || "Provider respondeu com erro esperado",
+      });
+    } else {
+      toast({
+        title: `${toolName}: falhou`,
+        description: result.error || "Erro desconhecido",
+        variant: "destructive",
       });
     }
-    return items;
-  }, [providerUsage, configuredNames]);
-
-  const hasMissing = providerChecklist.some(p => !p.configured && !p.platformProvided) || allToolSecretsMissing.length > 0;
+  };
 
   return (
     <div className="w-[380px] border-l bg-background flex flex-col shrink-0 overflow-hidden">
-      {/* Header */}
       <div className="p-4 border-b flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Key className="h-4 w-4 text-primary" />
-          <h3 className="font-semibold text-sm">Secrets & BYOK</h3>
+          <h3 className="font-semibold text-sm">Secrets do Agente</h3>
           <Badge variant="secondary" className="text-xs">{secrets.length}</Badge>
         </div>
         <div className="flex items-center gap-1">
@@ -234,74 +204,63 @@ export function SecretsPanel({ flowId, nodes, onClose }: SecretsPanelProps) {
       </div>
 
       <div className="flex-1 overflow-y-auto p-3 space-y-3">
-        {/* ═══ Provider Checklist ═══ */}
-        {providerChecklist.length > 0 && (
-          <div className="border rounded-lg p-3 space-y-2">
-            <div className="text-xs font-semibold text-muted-foreground uppercase flex items-center gap-1.5">
-              <Cloud className="h-3 w-3" />
-              Provedores em uso
-            </div>
+        {flowTools.length > 0 && (
+          <div className="border rounded-lg p-3 space-y-2 bg-muted/20">
+            <div className="text-xs font-medium text-muted-foreground">Health das tools no flow</div>
             <div className="space-y-1.5">
-              {providerChecklist.map(({ provider, secretKey, configured, platformProvided, models }) => (
-                <div
-                  key={provider.id}
-                  className="flex items-center justify-between p-2 rounded-md bg-muted/30"
-                >
-                  <div className="flex items-center gap-2 min-w-0">
-                    <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium ${provider.badgeBg} ${provider.badgeText}`}>
-                      {provider.label}
-                    </span>
-                    <span className="text-[10px] text-muted-foreground truncate">
-                      {models.length === 1 ? models[0] : `${models.length} modelos`}
+              {flowTools.map((tool) => {
+                const status = toolHealth[tool.toolName] || "idle";
+                const missing = tool.requiredSecrets.filter((s) => !configuredNames.has(s));
+                return (
+                  <div key={`${tool.nodeId}-${tool.toolName}`} className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-7 flex-1 justify-start text-[10px] font-mono px-2"
+                      disabled={testingTool === tool.toolName || missing.length > 0}
+                      onClick={() => handleTestTool(tool.toolName)}
+                      title={missing.length ? `Configure: ${missing.join(", ")}` : "Testar tool"}
+                    >
+                      {testingTool === tool.toolName ? (
+                        <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                      ) : (
+                        <Play className="h-3 w-3 mr-1" />
+                      )}
+                      {tool.toolName}
+                    </Button>
+                    <span className={`text-[10px] font-medium w-14 text-right ${healthColor[status]}`}>
+                      {healthLabel[status]}
                     </span>
                   </div>
-                  <div className="shrink-0">
-                    {platformProvided ? (
-                      <Badge variant="outline" className="text-[9px] border-emerald-500/50 text-emerald-600 gap-1">
-                        <CheckCircle2 className="h-2.5 w-2.5" />
-                        Plataforma
-                      </Badge>
-                    ) : configured ? (
-                      <Badge variant="outline" className="text-[9px] border-emerald-500/50 text-emerald-600 gap-1">
-                        <CheckCircle2 className="h-2.5 w-2.5" />
-                        BYOK
-                      </Badge>
-                    ) : (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-6 text-[10px] px-2 border-amber-500/50 text-amber-600 hover:bg-amber-500/10"
-                        onClick={() => handleQuickCreate(secretKey, provider.id)}
-                      >
-                        <Plus className="h-2.5 w-2.5 mr-1" />
-                        Configurar
-                      </Button>
-                    )}
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         )}
 
-        {/* Tool secrets missing */}
-        {allToolSecretsMissing.length > 0 && (
+        {toolSecretsMissing.length > 0 && (
           <div className="border border-amber-500/30 rounded-lg p-3 bg-amber-500/5 space-y-2">
             <div className="flex items-center gap-2 text-xs font-medium text-amber-600">
               <AlertCircle className="h-3.5 w-3.5" />
-              Secrets de Tools faltando
+              Secrets de tools faltando
             </div>
             <div className="flex flex-wrap gap-1">
-              {allToolSecretsMissing.map((s) => (
-                <Badge key={s} variant="outline" className="text-[10px] border-amber-500/50 text-amber-600">
+              {toolSecretsMissing.map((s) => (
+                <Button
+                  key={s}
+                  variant="outline"
+                  size="sm"
+                  className="h-6 text-[10px] px-2 border-amber-500/50 text-amber-600 hover:bg-amber-500/10"
+                  onClick={() => handleQuickCreate(s)}
+                >
+                  <Plus className="h-2.5 w-2.5 mr-1" />
                   {s}
-                </Badge>
+                </Button>
               ))}
             </div>
           </div>
         )}
 
-        {/* Create button */}
         {!showCreate && (
           <Button variant="outline" size="sm" className="w-full gap-2" onClick={() => setShowCreate(true)}>
             <Plus className="h-3.5 w-3.5" />
@@ -309,7 +268,6 @@ export function SecretsPanel({ flowId, nodes, onClose }: SecretsPanelProps) {
           </Button>
         )}
 
-        {/* Create form */}
         {showCreate && (
           <div className="border rounded-lg p-3 space-y-3 bg-muted/30">
             <div className="text-xs font-semibold text-muted-foreground uppercase">Novo Secret</div>
@@ -319,7 +277,7 @@ export function SecretsPanel({ flowId, nodes, onClose }: SecretsPanelProps) {
               <Input
                 value={newName}
                 onChange={(e) => setNewName(e.target.value.toUpperCase().replace(/\s+/g, "_"))}
-                placeholder="OPENAI_API_KEY"
+                placeholder="RESEND_API_KEY"
                 className="h-8 text-sm font-mono"
               />
             </div>
@@ -330,7 +288,7 @@ export function SecretsPanel({ flowId, nodes, onClose }: SecretsPanelProps) {
                 type="password"
                 value={newValue}
                 onChange={(e) => setNewValue(e.target.value)}
-                placeholder="sk-..."
+                placeholder="re_..."
                 className="h-8 text-sm font-mono"
               />
             </div>
@@ -340,17 +298,10 @@ export function SecretsPanel({ flowId, nodes, onClose }: SecretsPanelProps) {
               <Input
                 value={newDescription}
                 onChange={(e) => setNewDescription(e.target.value)}
-                placeholder="Chave da minha conta OpenAI"
+                placeholder="Chave Resend para envio de e-mail"
                 className="h-8 text-sm"
               />
             </div>
-
-            {newProvider && (
-              <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
-                <Cloud className="h-3 w-3" />
-                Vinculado ao provedor: <span className="font-semibold">{PROVIDERS.find(p => p.id === newProvider)?.label || newProvider}</span>
-              </div>
-            )}
 
             <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
               <Shield className="h-3 w-3" />
@@ -361,21 +312,19 @@ export function SecretsPanel({ flowId, nodes, onClose }: SecretsPanelProps) {
               <Button size="sm" onClick={handleCreate} disabled={creating || !newName.trim() || !newValue.trim()}>
                 Criar
               </Button>
-              <Button size="sm" variant="ghost" onClick={() => { setShowCreate(false); setNewName(""); setNewValue(""); setNewProvider(""); setNewDescription(""); }}>
+              <Button size="sm" variant="ghost" onClick={() => { setShowCreate(false); setNewName(""); setNewValue(""); setNewDescription(""); }}>
                 Cancelar
               </Button>
             </div>
           </div>
         )}
 
-        {/* Info */}
         <div className="p-2 rounded bg-muted/30 text-[10px] text-muted-foreground space-y-1">
-          <p><strong>BYOK:</strong> Traga sua própria chave API de qualquer provedor.</p>
+          <p>Chaves de <strong>tools</strong> (e-mail, WhatsApp, Firecrawl do agente, etc.) ficam aqui.</p>
+          <p>Chaves de <strong>LLM</strong> (Groq, OpenAI, Gemini…) ficam em <strong>/api</strong>.</p>
           <p>Use <code className="font-mono bg-muted px-1 rounded">{"{{secrets.NOME}}"}</code> nos prompts e configs.</p>
-          <p>Provedores marcados como "Plataforma" usam chaves da infraestrutura automaticamente.</p>
         </div>
 
-        {/* Secrets list */}
         {loading ? (
           <div className="text-center text-xs text-muted-foreground py-8">Carregando...</div>
         ) : secrets.length === 0 && !showCreate ? (
@@ -387,7 +336,6 @@ export function SecretsPanel({ flowId, nodes, onClose }: SecretsPanelProps) {
           secrets.map((s) => {
             const isRevealed = revealedIds.has(s.id);
             const decodedValue = (() => { try { return atob(s.encrypted_value); } catch { return s.encrypted_value; } })();
-            const linkedProvider = s.provider_id ? PROVIDERS.find(p => p.id === s.provider_id) : null;
 
             return (
               <div key={s.id} className="border rounded-lg p-3 space-y-2">
@@ -409,20 +357,9 @@ export function SecretsPanel({ flowId, nodes, onClose }: SecretsPanelProps) {
                   </div>
                 </div>
 
-                {/* Provider badge + description */}
-                <div className="flex items-center gap-2">
-                  {linkedProvider && (
-                    <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-medium ${linkedProvider.badgeBg} ${linkedProvider.badgeText}`}>
-                      {linkedProvider.label}
-                    </span>
-                  )}
-                  {s.is_platform_provided && (
-                    <Badge variant="outline" className="text-[9px]">plataforma</Badge>
-                  )}
-                  {s.description && (
-                    <span className="text-[10px] text-muted-foreground truncate">{s.description}</span>
-                  )}
-                </div>
+                {s.description && (
+                  <span className="text-[10px] text-muted-foreground truncate block">{s.description}</span>
+                )}
 
                 <div className="text-xs font-mono text-muted-foreground bg-muted/50 rounded px-2 py-1">
                   {isRevealed ? decodedValue : maskValue(decodedValue)}

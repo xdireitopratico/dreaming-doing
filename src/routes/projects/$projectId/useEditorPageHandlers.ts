@@ -23,7 +23,6 @@ import { loadAgentSessionExtensions } from "@/lib/agent-session-extensions";
 import { publishProject } from "@/lib/publish.functions";
 import { planApprove, planReject } from "@/lib/plan-decide.functions";
 import { needsPlanApprovalNow, resolvePendingPlan } from "@/lib/plan-message-meta";
-import { cancelAgentRun } from "@/lib/agent-cancel";
 import { rollbackChatTurn } from "@/lib/rollback-chat-turn";
 import type { PendingPlan } from "@/lib/agent-progress";
 import { exportProjectZip } from "@/hooks/useWorkspacePresets";

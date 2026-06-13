@@ -193,6 +193,7 @@ export async function generateTestCases(
   architecture: ArchitecturePlan,
   modelId: string,
   budget?: RunBudget,
+  tenantId?: string,
 ): Promise<TestCase[]> {
   if (!modelId) {
     throw new Error("[prometheus-sentinel] model_id is required — no hardcoded fallback allowed");
@@ -218,6 +219,7 @@ export async function generateTestCases(
       messages: [{ role: "user", content: prompt }],
       temperature: 0.3,
       max_tokens: 4096,
+      tenant_id: tenantId,
     });
 
     // BUG 87 FIX: Use non-greedy array match
@@ -255,6 +257,7 @@ async function executeDryRun(
   systemPrompt: string,
   modelId: string,
   budget?: RunBudget,
+  tenantId?: string,
 ): Promise<{ output: string; latency_ms: number; error?: string }> {
   const start = Date.now();
   try {
@@ -267,6 +270,7 @@ async function executeDryRun(
       ],
       temperature: 0.7,
       max_tokens: 4096,
+      tenant_id: tenantId,
     });
     return { output: result.content, latency_ms: Date.now() - start };
   } catch (err: any) {
@@ -359,7 +363,8 @@ export async function runSentinel(
   const budget = newRunBudget();
 
   // 1. Generate test cases (3 for real tests, 6 for dry-run)
-  const allCases = await generateTestCases(requirements, architecture, modelId, budget);
+  const motorTenantId = config?.tenantId;
+  const allCases = await generateTestCases(requirements, architecture, modelId, budget, motorTenantId);
   // For real tests: only happy_path, pii, injection (gateway is heavy)
   const useRealTests = !!config?.flowId;
   const testCases = useRealTests
@@ -400,14 +405,14 @@ export async function runSentinel(
       // If real test failed entirely, fall back to dry-run for this case
       if (error && !output) {
         console.warn(`[sentinel] Real test failed for ${tc.name}, falling back to dry-run`);
-        const dryResult = await executeDryRun(tc, mainPrompt, modelId, budget);
+        const dryResult = await executeDryRun(tc, mainPrompt, modelId, budget, motorTenantId);
         output = dryResult.output;
         latencyMs = dryResult.latency_ms;
         error = `gateway_fallback: ${error}`;
       }
     } else {
       // Dry-run via LLM roleplay
-      const dryResult = await executeDryRun(tc, mainPrompt, modelId, budget);
+      const dryResult = await executeDryRun(tc, mainPrompt, modelId, budget, motorTenantId);
       output = dryResult.output;
       latencyMs = dryResult.latency_ms;
       error = dryResult.error;

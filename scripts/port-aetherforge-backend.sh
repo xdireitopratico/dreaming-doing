@@ -16,7 +16,9 @@ SHARED_FILES=(
   prometheus-react-loop.ts prometheus-analyst.ts prometheus-architect.ts prometheus-scribe.ts
   prometheus-sentinel.ts prometheus-tools.ts prometheus-prompts.ts prometheus-deliberation.ts
   prometheus-enrichment.ts prometheus-report.ts prometheus-physician.ts prometheus-codex.ts
-  security.ts rateLimiter.ts ollama-worker-client.ts
+  security.ts rateLimiter.ts
+  # FORGE-only (não copiar do vibrant):
+  # connector-llm-bridge.ts — ver supabase/functions/_shared/connector-llm-bridge.ts
 )
 
 EDGE_FUNCTIONS=(
@@ -34,6 +36,7 @@ EDGE_FUNCTIONS=(
   prometheus-healer
   prometheus-learn-pipeline
   firecrawl-search
+  firecrawl-scrape
 )
 
 mkdir -p "$DEST/_shared"

@@ -25,6 +25,7 @@ export interface AgentBriefingData {
 export interface PrometheusLaunchConfig {
   prompt: string;
   qualityModel: string;
+  projectId?: string;
 }
 
 // ═══ STYLE CONSTANTS (mirrors VideoStudioOnboarding) ═══
@@ -93,7 +94,9 @@ interface Props {
 export default function PrometheusOnboarding({ onComplete, isProcessing, launchConfig, onGoBack }: Props) {
   const TOTAL_STEPS = 4;
   const storageKey = useRef(
-    `ps_onboarding_${btoa(String.fromCharCode(...new TextEncoder().encode(launchConfig.prompt.slice(0, 60)))).replace(/[^a-zA-Z0-9]/g, "")}`
+    launchConfig.projectId
+      ? `ps_onboarding_${launchConfig.projectId}`
+      : `ps_onboarding_legacy_${launchConfig.prompt.slice(0, 32).replace(/\s+/g, "_")}`,
   ).current;
 
   const [step, setStep] = useState(() => {

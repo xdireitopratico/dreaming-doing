@@ -302,6 +302,7 @@ Ao dar sua resposta final, retorne JSON:
         tokenBudget: config.tokenBudget,
         sb,
         executeTool,
+        tenantId: config.tenantId,
       });
 
       if (!reactResult.error) {
@@ -340,6 +341,7 @@ Ao dar sua resposta final, retorne JSON:
       ],
       temperature: 0.4,
       max_tokens: 4096,
+      tenant_id: config?.tenantId,
     });
 
     // BUG 87 FIX: Use balanced brace matching instead of greedy regex

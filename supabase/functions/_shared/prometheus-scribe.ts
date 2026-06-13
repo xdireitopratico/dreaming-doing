@@ -152,6 +152,7 @@ export async function generatePrompts(
   architecture: ArchitecturePlan,
   requirements: Partial<RequirementSpec>,
   modelId: string,
+  tenantId?: string,
 ): Promise<ScribeResult> {
   if (!modelId) {
     throw new Error("[prometheus-scribe] model_id is required — no hardcoded fallback allowed");
@@ -203,6 +204,7 @@ Responda APENAS com JSON válido neste formato:
           ],
           temperature: 0.5,
           max_tokens: 1200,
+          tenant_id: tenantId,
         });
 
         const parsed = extractJson<{
@@ -374,6 +376,7 @@ export async function repairNode(
 
     try {
       const result = await runReActLoop({
+        tenantId: config.tenantId,
         systemPrompt: `${SCRIBE_SYSTEM_PROMPT}
 
 Você precisa CORRIGIR um nó que falhou nos testes.
@@ -425,6 +428,7 @@ Responda com JSON: {"system_prompt": "novo prompt completo", "description": "o q
       ],
       temperature: 0.5,
       max_tokens: 2048,
+      tenant_id: config?.tenantId,
     });
 
     const parsed = extractJson<{ system_prompt?: string; description?: string }>(response.content || "");
@@ -475,6 +479,7 @@ export async function configureToolNodes(
 
   try {
     const result = await runReActLoop({
+      tenantId: config.tenantId,
       systemPrompt: `${SCRIBE_SYSTEM_PROMPT}
 
 Você precisa configurar os nós de ferramenta do fluxo.

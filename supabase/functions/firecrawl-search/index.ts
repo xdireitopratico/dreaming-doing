@@ -1,4 +1,6 @@
+import { createClient } from "npm:@supabase/supabase-js@2";
 import { logIntegrationUsage } from "../_shared/integration-logger.ts";
+import { getPlatformSecret } from "../_shared/platform-secrets.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -20,9 +22,13 @@ Deno.serve(async (req) => {
       );
     }
 
-    const apiKey = Deno.env.get('FIRECRAWL_API_KEY');
+    const admin = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    );
+    const apiKey = await getPlatformSecret(admin, "FIRECRAWL_API_KEY");
     if (!apiKey) {
-      console.error('FIRECRAWL_API_KEY not configured');
+      console.error("FIRECRAWL_API_KEY not configured (platform_secrets or env)");
       return new Response(
         JSON.stringify({ success: false, error: 'Firecrawl connector not configured' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

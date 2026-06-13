@@ -5,6 +5,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/lib/toast";
+import { findProjectDraft, upsertProjectDraftFlow } from "@/lib/agent-project-draft";
 
 export interface AgentFlow {
   id: string;
@@ -21,7 +22,7 @@ export interface AgentFlow {
   flow_definition?: Record<string, unknown> | null;
 }
 
-export function useAgentFlows(projectId?: string) {
+export function useAgentFlows(projectId: string) {
   const [flows, setFlows] = useState<AgentFlow[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -30,16 +31,11 @@ export function useAgentFlows(projectId?: string) {
 
   const fetchFlows = useCallback(async () => {
     setLoading(true);
-    let query = supabase
+    const { data, error } = await supabase
       .from("agent_flows")
       .select("id, name, description, status, channels, version, total_executions, avg_quality_score, avg_latency_ms, created_at, updated_at, flow_definition")
+      .eq("project_id", projectId)
       .order("updated_at", { ascending: false });
-
-    if (projectId) {
-      query = query.eq("project_id", projectId);
-    }
-
-    const { data, error } = await query;
 
     if (error) {
       console.error("[AgentBuilder] Erro ao carregar flows:", error);
@@ -52,28 +48,29 @@ export function useAgentFlows(projectId?: string) {
   useEffect(() => { fetchFlows(); }, [fetchFlows]);
 
   const handleCreate = async () => {
-    const { data: userData } = await supabase.auth.getUser();
-    if (!userData?.user) return;
-
-    const { data, error } = await supabase
-      .from("agent_flows")
-      .insert({
-        name: "Novo Agente",
-        description: "",
-        user_id: userData.user.id,
-        ...(projectId ? { project_id: projectId } : {}),
-        flow_definition: { nodes: [], edges: [] },
-        status: "draft",
-      })
-      .select("id")
-      .single();
-
-    if (error) {
-      toast({ title: "Erro ao criar agente", description: error.message, variant: "destructive" });
+    const existingDraft = findProjectDraft(flows);
+    if (existingDraft) {
+      setSelectedFlowId(existingDraft.id);
+      setBuilderOpen(true);
       return;
     }
 
-    setSelectedFlowId((data as { id: string }).id);
+    const { data: userData } = await supabase.auth.getUser();
+    if (!userData?.user) return;
+
+    const { flowId, error } = await upsertProjectDraftFlow(supabase, {
+      projectId,
+      userId: userData.user.id,
+      name: "Novo Agente",
+      description: "",
+    });
+
+    if (error || !flowId) {
+      toast({ title: "Erro ao criar agente", description: error ?? "Tente novamente", variant: "destructive" });
+      return;
+    }
+
+    setSelectedFlowId(flowId);
     setBuilderOpen(true);
     fetchFlows();
   };
@@ -89,6 +86,16 @@ export function useAgentFlows(projectId?: string) {
   };
 
   const handleDuplicate = async (flow: AgentFlow) => {
+    if (flow.status === "draft") {
+      toast({
+        title: "Rascunho único por projeto",
+        description: "Abra o builder para editar o rascunho existente.",
+      });
+      setSelectedFlowId(flow.id);
+      setBuilderOpen(true);
+      return;
+    }
+
     const { data: userData } = await supabase.auth.getUser();
     if (!userData?.user) return;
 
@@ -100,15 +107,22 @@ export function useAgentFlows(projectId?: string) {
 
     if (!original) return;
 
-    await supabase.from("agent_flows").insert([{
+    const copyStatus = flow.status === "published" ? "published" : "archived";
+
+    const { error } = await supabase.from("agent_flows").insert([{
       name: `${flow.name} (cópia)`,
       description: flow.description,
       user_id: userData.user.id,
-      ...(projectId ? { project_id: projectId } : {}),
+      project_id: projectId,
       flow_definition: JSON.parse(JSON.stringify(original.flow_definition)),
-      status: "draft" as const,
+      status: copyStatus,
       channels: flow.channels,
     }]);
+
+    if (error) {
+      toast({ title: "Erro ao duplicar", description: error.message, variant: "destructive" });
+      return;
+    }
 
     toast({ title: "Agente duplicado" });
     fetchFlows();

@@ -38,6 +38,8 @@ export interface ReActConfig {
   sb: SupabaseAdmin;
   /** Tool executor: resolves tool_name + params → result */
   executeTool: (toolName: string, params: Record<string, unknown>) => Promise<unknown>;
+  /** Motor Prometheus: userId for /api connector key lookup in llm-router */
+  tenantId?: string;
 }
 
 export interface ToolCallLog {
@@ -214,7 +216,7 @@ export async function runReActLoop(config: ReActConfig): Promise<ReActResult> {
         { role: "user", content: 'ATENÇÃO: Limite de tokens atingido. Responda AGORA com {"action":"respond","params":{"content":"..."}}. Apresente o melhor resultado possível com o que já coletou.' },
       ];
       try {
-        const forceResp = await routeLLM({ model_id: modelId, messages: forceMsg, temperature: 0.3, max_tokens: 1024 });
+        const forceResp = await routeLLM({ model_id: modelId, messages: forceMsg, temperature: 0.3, max_tokens: 1024, tenant_id: config.tenantId });
         tokensUsed += (forceResp.tokens_in + forceResp.tokens_out);
         const parsed = parseReActResponse(forceResp.content);
         if (parsed?.action === "respond" && parsed.params.content) {
@@ -235,6 +237,7 @@ export async function runReActLoop(config: ReActConfig): Promise<ReActResult> {
         messages,
         temperature: 0.3,
         max_tokens: 1024,
+        tenant_id: config.tenantId,
       });
 
       llmResponse = await Promise.race([
@@ -250,7 +253,7 @@ export async function runReActLoop(config: ReActConfig): Promise<ReActResult> {
         console.warn(`[react-loop] Primary model failed (${msg}), trying fallback: ${config.fallbackModelId}`);
         try {
           llmResponse = await Promise.race([
-            routeLLM({ model_id: config.fallbackModelId, messages, temperature: 0.3, max_tokens: 1024 }),
+            routeLLM({ model_id: config.fallbackModelId, messages, temperature: 0.3, max_tokens: 1024, tenant_id: config.tenantId }),
             new Promise<never>((_, reject) => setTimeout(() => reject(new Error("fallback_timeout")), STEP_TIMEOUT_MS)),
           ]);
         } catch (e2: unknown) {

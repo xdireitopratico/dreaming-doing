@@ -45,6 +45,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { MotorInfraSection } from "@/components/connectors/MotorInfraSection";
+import { useAdmin } from "@/lib/forge-admin";
 
 export const Route = createFileRoute("/api")({
   component: () => (
@@ -244,6 +246,7 @@ function rowForProvider(
 
 function ApiPage() {
   const { user } = useAuth();
+  const { isAdmin } = useAdmin();
   const qc = useQueryClient();
   const [providers, setProviders] = useState(INITIAL);
   const [e2bKeyValue, setE2bKeyValue] = useState("");
@@ -517,7 +520,7 @@ function ApiPage() {
           <div>
             <h1 className="font-display text-3xl tracking-tight">API Keys</h1>
             <p className="font-mono text-[10px] text-[var(--text-dim)] mt-0.5">
-              Única fonte de chaves: IA, sandbox E2B e pool ROBIN. Modelos e STT em Modelos.
+              LLM do motor Prometheus + sandbox E2B + pool ROBIN. Firecrawl infra abaixo. Modelos e STT em Modelos.
             </p>
           </div>
         </div>
@@ -565,6 +568,12 @@ function ApiPage() {
         className="mb-6 flex flex-wrap gap-2 font-mono text-[9px]"
       >
         <a
+          href="#forge-motor-infra"
+          className="px-2 py-1 rounded border border-orange-400/30 text-orange-400/90 hover:border-orange-400/50"
+        >
+          Motor Prometheus
+        </a>
+        <a
           href="#forge-key-ollama"
           className="px-2 py-1 rounded border border-[var(--border)] hover:border-[var(--primary)]/50"
         >
@@ -589,6 +598,11 @@ function ApiPage() {
           Modelos + STT →
         </Link>
       </nav>
+
+      <MotorInfraSection
+        isAdmin={isAdmin}
+        llmConnectedCount={providers.filter((p) => p.status === "connected").length}
+      />
 
       <h2 className="flex items-center gap-2 font-mono text-[10px] tracking-[0.2em] uppercase text-[var(--text-dim)] mb-4">
         <Cpu className="size-3 text-[var(--primary)]" />

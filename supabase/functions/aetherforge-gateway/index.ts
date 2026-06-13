@@ -11,19 +11,26 @@
  */
 
 import { createClient } from "npm:@supabase/supabase-js@2";
-import { cacheLookup, cacheSave } from "../_shared/semantic-cache.ts";
-import { applyOutputGuards, getDefaultGuardConfig, type GuardConfig } from "../_shared/output-guards.ts";
-import { evaluateOutput, type EvalScores } from "../_shared/eval-layer.ts";
-import { routeCanary, type CanaryConfig } from "../_shared/canary-router.ts";
-
+import { type CanaryConfig } from "../_shared/canary-router.ts";
+import { corsHeaders, handleHealthCheck } from "../_shared/gateway-core.ts";
 import {
-  corsHeaders, HITLPauseSignal,
-  executeLLMNode, executeNodeInline, executeToolNode, executeMemoryNode, executeSubFlowNode, executeVisionNode,
-  handleHealthCheck,
-} from "../_shared/gateway-core.ts";
+  buildCanaryDecision,
+  executeGatewayBfsStep,
+  finalizeGatewayExecution,
+  initGatewayBfsState,
+  runGatewayBfsInline,
+  type GatewayBfsState,
+  type GatewayFlowContext,
+} from "../_shared/gateway-bfs.ts";
+import { sendGatewayInngestEvent } from "../_shared/gateway-inngest.ts";
+import { executeTool } from "../_shared/tool-executor.ts";
+import {
+  classifyToolHealthResult,
+  getToolHealthPayload,
+} from "../_shared/tool-health-payloads.ts";
 import { handleWhatsAppIncoming, handleWhatsAppSend } from "../_shared/gateway-whatsapp.ts";
-import { handleVoicePipeline, handleDirectTTS, executeSTTNode, executeTTSNode } from "../_shared/gateway-voice.ts";
-import { handleDLQRetry, handleHITLDecide, executeSagaCompensation } from "../_shared/gateway-saga.ts";
+import { handleVoicePipeline, handleDirectTTS } from "../_shared/gateway-voice.ts";
+import { handleDLQRetry, handleHITLDecide } from "../_shared/gateway-saga.ts";
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
@@ -47,6 +54,8 @@ Deno.serve(async (req: Request) => {
     switch (body.action) {
       case "health":        return handleHealthCheck();
       case "test":          return await testFlow(body);
+      case "test_tool":     return await testTool(body);
+      case "execute_step":  return await executeFlowStep(body);
       case "hitl_decide":   return handleHITLDecide(body);
       case "whatsapp_incoming": return handleWhatsAppIncoming(body);
       case "whatsapp_send": return handleWhatsAppSend(body);
@@ -133,7 +142,7 @@ async function testFlow(body: any): Promise<Response> {
 
   console.log(`[Gateway/Test] Testing flow ${flow_id} (${flow.name}) status=${flow.status}`);
 
-  // Execute using shared internal function — deployment_id is null for test
+  // Test mode: inline BFS (fast smoke)
   return await executeFlowInternal(supabase, {
     flow,
     flowDef,
@@ -143,6 +152,47 @@ async function testFlow(body: any): Promise<Response> {
     channel,
     metadata: { ...metadata, test_mode: true },
     canaryConfig: null,
+    forceInline: true,
+  });
+}
+
+// ═══════════════════════════════════════════════════════════
+// testTool — Lightweight tool health check (editor SecretsPanel)
+// ═══════════════════════════════════════════════════════════
+
+async function testTool(body: any): Promise<Response> {
+  const flowId = body?.flow_id as string | undefined;
+  const toolName = body?.tool_name as string | undefined;
+  if (!flowId || !toolName) {
+    return new Response(JSON.stringify({ error: "flow_id and tool_name are required" }), {
+      status: 400,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
+  const toolInput = (body?.tool_input as Record<string, unknown> | undefined)
+    || getToolHealthPayload(toolName);
+
+  const result = await executeTool({
+    tool_name: toolName,
+    input_data: toolInput,
+    execution_id: crypto.randomUUID(),
+    tenant_id: flowId,
+    timeout_ms: Number(body?.timeout_ms) || 45000,
+  });
+
+  const health = classifyToolHealthResult(toolName, result);
+
+  return new Response(JSON.stringify({
+    tool_name: toolName,
+    health,
+    status: result.status,
+    error: result.error || null,
+    result: result.result,
+    duration_ms: result.duration_ms,
+  }), {
+    status: 200,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
 }
 
@@ -225,276 +275,286 @@ interface FlowExecParams {
   channel: string;
   metadata: Record<string, any>;
   canaryConfig: CanaryConfig | null;
+  forceInline?: boolean;
+}
+
+function buildFlowContext(params: FlowExecParams): GatewayFlowContext {
+  return {
+    flow: params.flow,
+    flowDef: params.flowDef,
+    deploymentId: params.deploymentId,
+    message: params.message,
+    sessionId: params.sessionId,
+    channel: params.channel,
+    metadata: params.metadata,
+    canaryConfig: params.canaryConfig,
+    testMode: !!params.metadata?.test_mode,
+  };
+}
+
+async function createOrResumeExecution(
+  supabase: any,
+  params: FlowExecParams,
+  triggerNode: any,
+  bfsState?: GatewayBfsState,
+): Promise<{ executionId: string; isNew: boolean } | Response> {
+  const { flow, deploymentId, sessionId, channel, metadata, message } = params;
+  const nodes = params.flowDef?.nodes || [];
+
+  const { data: existing } = await supabase
+    .from("agent_executions")
+    .select("id, status, fsm_snapshot")
+    .eq("session_id", sessionId)
+    .eq("flow_id", flow.id)
+    .in("status", ["running", "paused", "queued"])
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (existing?.id) {
+    return { executionId: existing.id, isNew: false };
+  }
+
+  const snapshot = {
+    channel,
+    metadata,
+    message,
+    variables: {},
+    ...(bfsState ? { bfs: bfsState } : {}),
+  };
+
+  const { data: newExec, error: execErr } = await supabase
+    .from("agent_executions")
+    .insert({
+      flow_id: flow.id,
+      deployment_id: deploymentId,
+      session_id: sessionId,
+      status: bfsState ? "queued" : "running",
+      current_state: triggerNode?.id || nodes.find((n: any) => n.type === "trigger")?.id || null,
+      fsm_snapshot: snapshot,
+    })
+    .select("id")
+    .single();
+
+  if (execErr || !newExec) {
+    return new Response(JSON.stringify({ error: "Failed to create execution" }), {
+      status: 500,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
+  return { executionId: newExec.id, isNew: true };
+}
+
+function buildGatewayResponse(
+  executionId: string,
+  state: GatewayBfsState,
+  ctx: GatewayFlowContext,
+  canaryDecision: ReturnType<typeof buildCanaryDecision>,
+  executor: string,
+  extra?: Record<string, unknown>,
+  statusCode = 200,
+) {
+  const finalStatus = state.paused ? "paused" : (state.sagaTriggered ? "failed" : (state.done ? "completed" : "running"));
+  return new Response(JSON.stringify({
+    execution_id: executionId,
+    status: finalStatus,
+    output: state.finalOutput,
+    steps: state.executionSteps,
+    steps_count: state.stepOrder,
+    saga_triggered: state.sagaTriggered,
+    canary: { is_canary: canaryDecision.is_canary, reason: canaryDecision.reason },
+    executor,
+    ...(state.pausePayload || {}),
+    ...extra,
+  }), { status: statusCode, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 }
 
 async function executeFlowInternal(supabase: any, params: FlowExecParams): Promise<Response> {
-  const { flow, flowDef, deploymentId, message, sessionId, channel, metadata, canaryConfig } = params;
-
-  const nodes = flowDef?.nodes || [];
-  const edges = flowDef?.edges || [];
-
-  // Canary routing (only for production paths with canary config)
-  let canaryDecision = { is_canary: false, version_id: null as string | null, reason: "no_canary", percent: 0 };
-  if (canaryConfig && canaryConfig.canary_percent > 0) {
-    canaryDecision = routeCanary(sessionId, canaryConfig);
-    if (canaryDecision.is_canary) {
-      console.log(`[Gateway/Canary] Session ${sessionId} routed to CANARY`);
-    }
+  const nodes = params.flowDef?.nodes || [];
+  const triggerNode = nodes.find((n: any) => n.type === "trigger");
+  if (!triggerNode) {
+    return new Response(JSON.stringify({ error: "Flow has no trigger node" }), {
+      status: 400,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   }
 
-  // Create or resume execution
-  let executionId: string;
-  let isNewExecution = true;
-  const stateSnapshot = { channel, metadata, message, variables: {} };
+  const canaryDecision = buildCanaryDecision(params.sessionId, params.canaryConfig);
+  const ctx = buildFlowContext(params);
+  const initialState = initGatewayBfsState(
+    nodes,
+    triggerNode,
+    params.message,
+    params.channel,
+    params.metadata,
+  );
 
-  // Try to resume existing session
-  const { data: existing } = await supabase
-    .from("agent_executions")
-    .select("id, status")
-    .eq("session_id", sessionId)
-    .eq("flow_id", flow.id)
-    .in("status", ["running", "paused"])
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .single();
+  const useInngest = !params.forceInline
+    && !params.metadata?.test_mode
+    && params.deploymentId != null;
 
-  if (existing) {
-    executionId = existing.id;
-    isNewExecution = false;
-  }
+  const created = await createOrResumeExecution(
+    supabase,
+    params,
+    triggerNode,
+    useInngest ? initialState : undefined,
+  );
+  if (created instanceof Response) return created;
 
-  if (isNewExecution) {
-    const { data: newExec, error: execErr } = await supabase
+  if (useInngest && !created.isNew) {
+    const { data: existingExec } = await supabase
       .from("agent_executions")
-      .insert({
-        flow_id: flow.id,
-        deployment_id: deploymentId,
-        session_id: sessionId,
-        status: "running",
-        current_state: nodes.find((n: any) => n.type === "trigger")?.type || null,
-        fsm_snapshot: stateSnapshot,
-      })
-      .select("id")
+      .select("status, fsm_snapshot")
+      .eq("id", created.executionId)
       .single();
 
-    if (execErr || !newExec) {
-      return new Response(JSON.stringify({ error: "Failed to create execution" }), {
-        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-    executionId = newExec.id;
+    const snapshot = (existingExec?.fsm_snapshot || {}) as Record<string, unknown>;
+    const existingBfs = (snapshot.bfs as GatewayBfsState | undefined) || { ...initialState, done: false };
+    return buildGatewayResponse(
+      created.executionId,
+      existingBfs,
+      ctx,
+      canaryDecision,
+      existingExec?.status === "queued" ? "inngest_queued" : "inngest_running",
+      { resumed: true },
+      existingExec?.status === "queued" ? 202 : 200,
+    );
   }
 
-  const triggerNode = nodes.find((n: any) => n.type === "trigger");
+  if (useInngest) {
+    const inngestResult = await sendGatewayInngestEvent({
+      execution_id: created.executionId,
+      flow_id: params.flow.id,
+      deployment_id: params.deploymentId,
+      message: params.message,
+      session_id: params.sessionId,
+      channel: params.channel,
+      metadata: params.metadata,
+    });
 
-  if (!triggerNode) {
-    await supabase.from("agent_executions").update({ status: "failed", error: "No trigger node found" }).eq("id", executionId!);
-    return new Response(JSON.stringify({ error: "Flow has no trigger node" }), {
-      status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+    if (inngestResult.ok) {
+      return buildGatewayResponse(
+        created.executionId,
+        { ...initialState, done: false },
+        ctx,
+        canaryDecision,
+        "inngest_queued",
+        { inngest_event_ids: inngestResult.ids },
+        202,
+      );
+    }
+
+    console.warn("[Gateway] Inngest enqueue failed, falling back to inline:", inngestResult.error);
+    await supabase.from("agent_executions").update({ status: "running" }).eq("id", created.executionId);
+  }
+
+  const executionStart = Date.now();
+  const state = await runGatewayBfsInline(
+    supabase,
+    created.executionId,
+    ctx,
+    initialState,
+    canaryDecision,
+    executionStart,
+  );
+
+  const executor = useInngest ? "inline_fallback" : "inline";
+  return buildGatewayResponse(created.executionId, state, ctx, canaryDecision, executor);
+}
+
+async function executeFlowStep(body: any): Promise<Response> {
+  const supabase = getSupabaseClient();
+  const executionId = body?.execution_id as string;
+  if (!executionId) {
+    return new Response(JSON.stringify({ error: "execution_id is required" }), {
+      status: 400,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 
-  // Inline BFS execution with saga compensation (FORGE v1 — no KVM8 executor)
-  console.log("[Gateway] Using inline executor");
-  const executionSteps: any[] = [];
-  const completedSteps: { nodeId: string; node: any; output: any; input: any }[] = [];
-  const visited = new Set<string>();
-  const queue: { nodeId: string; input: any }[] = [{ nodeId: triggerNode.id, input: { message, channel, metadata } }];
-  let finalOutput: any = null;
-  let stepOrder = 0;
-  let sagaTriggered = false;
-  let totalTokensIn = 0;
-  let totalTokensOut = 0;
-  let totalCostCents = 0;
+  const { data: execution, error: execErr } = await supabase
+    .from("agent_executions")
+    .select("id, flow_id, deployment_id, session_id, status, fsm_snapshot")
+    .eq("id", executionId)
+    .single();
+
+  if (execErr || !execution) {
+    return new Response(JSON.stringify({ error: "Execution not found" }), {
+      status: 404,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
+  const { data: flow, error: flowErr } = await supabase
+    .from("agent_flows")
+    .select("id, name, flow_definition, status")
+    .eq("id", execution.flow_id)
+    .single();
+
+  if (flowErr || !flow) {
+    return new Response(JSON.stringify({ error: "Flow not found" }), {
+      status: 404,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
+  const snapshot = (execution.fsm_snapshot || {}) as Record<string, any>;
+  const flowDef = flow.flow_definition as { nodes?: any[]; edges?: any[] };
+  const nodes = flowDef?.nodes || [];
+  const triggerNode = nodes.find((n: any) => n.type === "trigger");
+  if (!triggerNode) {
+    return new Response(JSON.stringify({ error: "Flow has no trigger node" }), {
+      status: 400,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
+  let state = snapshot.bfs as GatewayBfsState | undefined;
+  if (!state) {
+    state = initGatewayBfsState(
+      nodes,
+      triggerNode,
+      snapshot.message || body.message || "",
+      snapshot.channel || "web",
+      snapshot.metadata || {},
+    );
+  }
+
+  const ctx: GatewayFlowContext = {
+    flow,
+    flowDef,
+    deploymentId: execution.deployment_id,
+    message: snapshot.message || body.message || "",
+    sessionId: execution.session_id,
+    channel: snapshot.channel || "web",
+    metadata: snapshot.metadata || {},
+    canaryConfig: null,
+    testMode: false,
+  };
+
+  const canaryDecision = buildCanaryDecision(ctx.sessionId, null);
   const executionStart = Date.now();
 
-  while (queue.length > 0) {
-    const { nodeId, input } = queue.shift()!;
-    if (visited.has(nodeId)) continue;
-    visited.add(nodeId);
+  await supabase.from("agent_executions").update({ status: "running" }).eq("id", executionId);
+  state = await executeGatewayBfsStep(supabase, executionId, ctx, state);
 
-    const node = nodes.find((n: any) => n.id === nodeId);
-    if (!node) continue;
-
-    stepOrder++;
-    const stepStart = Date.now();
-    await supabase.from("agent_executions").update({ current_state: nodeId }).eq("id", executionId);
-
-    let output: any;
-    let stepStatus = "completed";
-    let stepCostCents = 0;
-
-    try {
-      if (node.type === "llm") {
-        const cacheEnabled = flow.flow_definition?.settings?.semantic_cache !== false;
-        if (cacheEnabled) {
-          const cacheResult = await cacheLookup(flow.id, input.message || input.response || message);
-          if (cacheResult.hit && cacheResult.cached_response) {
-            console.log(`[Gateway] Semantic cache HIT (sim=${cacheResult.similarity?.toFixed(3)})`);
-            output = { response: cacheResult.cached_response, model: "cache", provider: "semantic_cache", tokens: { prompt: 0, completion: 0, total: 0 }, cost_cents: 0, cache_hit: true, cache_similarity: cacheResult.similarity };
-          }
-        }
-        if (!output) {
-          output = await executeLLMNode(node, input, message, flow.id);
-          stepCostCents = output.cost_cents || 0;
-          if (cacheEnabled && output.response && !output.error) {
-            const inputText = input.message || input.response || message;
-            const hashBuffer = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(inputText));
-            const inputHash = Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, "0")).join("");
-            cacheSave({ flow_id: flow.id, input_text: inputText, input_hash: inputHash, response_text: output.response, model_id: output.model || "", tokens_saved: output.tokens?.total || 0, cost_saved_cents: output.cost_cents || 0 }).catch(() => {});
-          }
-        }
-      } else if (node.type === "memory") {
-        output = await executeMemoryNode(node, input, flow.id, sessionId || "default");
-      } else if (node.type === "stt") {
-        output = await executeSTTNode(node, input);
-      } else if (node.type === "tts") {
-        output = await executeTTSNode(node, input);
-      } else if (node.type === "tool" && node.data?.config?.tool_name) {
-        output = await executeToolNode(supabase, node, input, flow.id, executionId);
-      } else if (node.type === "sub_flow" && node.data?.config?.flow_id) {
-        const depth = (metadata?.depth as number) || 0;
-        const ancestors = (metadata?.ancestor_flow_ids as string[]) || [];
-        output = await executeSubFlowNode(node, input, flow.id, executionId, sessionId || "default", channel, depth, ancestors);
-      } else if (node.type === "vision") {
-        output = await executeVisionNode(node, input, message, flow.id);
-        stepCostCents = output.cost_cents || 0;
-      } else {
-        output = executeNodeInline(node, input, message);
-      }
-    } catch (err) {
-      if (err instanceof HITLPauseSignal) {
-        const timeoutAt = new Date(Date.now() + err.timeoutMinutes * 60000).toISOString();
-        await supabase.from("agent_executions").update({
-          status: "paused", is_paused: true, paused_at: new Date().toISOString(),
-          pause_reason: err.pauseMessage, pause_timeout_at: timeoutAt,
-          pause_fallback_action: err.fallbackAction, current_state: nodeId,
-          fsm_snapshot: { channel, metadata, message, last_output: finalOutput, proposed_response: finalOutput?.response || null, steps_count: stepOrder, hitl_node_id: nodeId },
-        }).eq("id", executionId);
-
-        await supabase.from("agent_execution_steps").insert({
-          execution_id: executionId, node_id: nodeId, node_type: "hitl", step_order: stepOrder,
-          input_data: input, output_data: { status: "paused", timeout_minutes: err.timeoutMinutes, fallback: err.fallbackAction },
-          status: "paused", started_at: new Date(stepStart).toISOString(), completed_at: new Date().toISOString(), latency_ms: Date.now() - stepStart,
-        });
-
-        return new Response(JSON.stringify({
-          execution_id: executionId, status: "paused",
-          hitl: { message: err.pauseMessage, timeout_at: timeoutAt, fallback: err.fallbackAction },
-          steps: executionSteps, executor: "inline_fallback",
-        }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-      }
-
-      // Saga Compensation
-      const errorMsg = (err as Error).message;
-      output = { error: errorMsg };
-      stepStatus = "error";
-
-      const sagaResult = await executeSagaCompensation(
-        supabase, executionId, flow.id, completedSteps,
-        nodeId, node.type, errorMsg, stepOrder,
-        { channel, metadata, message }
-      );
-      sagaTriggered = sagaResult.sagaTriggered;
-    }
-
-    const stepDuration = Date.now() - stepStart;
-    await supabase.from("agent_execution_steps").insert({
-      execution_id: executionId, node_id: nodeId, node_type: node.type, step_order: stepOrder,
-      input_data: input, output_data: output, status: stepStatus,
-      started_at: new Date(stepStart).toISOString(), completed_at: new Date().toISOString(),
-      latency_ms: stepDuration, cost_cents: stepCostCents,
-      ...(node.type === "tool" && output?.idempotency_key
-        ? { tool_idempotency_key: output.idempotency_key }
-        : {}),
-    });
-
-    executionSteps.push({ node_id: nodeId, node_type: node.type, status: stepStatus, output, duration_ms: stepDuration });
-    if (stepStatus === "completed") {
-      finalOutput = output;
-      totalTokensIn += output?.tokens?.prompt || 0;
-      totalTokensOut += output?.tokens?.completion || 0;
-      totalCostCents += stepCostCents;
-    }
-
-    if (sagaTriggered) {
-      queue.length = 0;
-      break;
-    }
-
-    if (stepStatus === "completed") {
-      completedSteps.push({ nodeId, node, output, input });
-      const outEdges = edges.filter((e: any) => e.source === nodeId);
-      for (const edge of outEdges) {
-        if (node.type === "condition" && edge.sourceHandle && output?.branch) {
-          if (edge.sourceHandle !== output.branch) continue;
-        }
-        if (!visited.has(edge.target)) queue.push({ nodeId: edge.target, input: output });
-      }
-    }
+  if (state.done && !state.paused) {
+    const finalized = await finalizeGatewayExecution(
+      supabase,
+      executionId,
+      ctx,
+      state,
+      executionStart,
+      canaryDecision,
+    );
+    state.finalOutput = finalized.guardedOutput;
+  } else if (!state.paused) {
+    await supabase.from("agent_executions").update({
+      status: "running",
+      fsm_snapshot: { ...snapshot, bfs: state, message: ctx.message, channel: ctx.channel, metadata: ctx.metadata },
+    }).eq("id", executionId);
   }
 
-  // Post-execution: Output Guards
-  const flowSettings = flow.flow_definition?.settings || {};
-  const flowGuardConfig: GuardConfig = flowSettings.output_guards || getDefaultGuardConfig();
-  let guardedOutput = finalOutput;
-  let guardInfo: any = null;
-
-  if (flowGuardConfig.enabled && finalOutput && !sagaTriggered) {
-    const textToGuard = finalOutput.response || finalOutput.text || "";
-    if (textToGuard) {
-      const guardResult = applyOutputGuards(textToGuard, flowGuardConfig);
-      if (guardResult.was_modified || guardResult.was_blocked) {
-        guardedOutput = { ...finalOutput, response: guardResult.filtered_text, text: guardResult.filtered_text };
-        guardInfo = { rules_applied: guardResult.rules_applied, rules_blocked: guardResult.rules_blocked, was_blocked: guardResult.was_blocked };
-        console.log(`[Gateway] Output Guards applied: ${guardResult.rules_applied.join(", ")}`);
-      }
-    }
-  }
-
-  // Post-execution: Eval Layer
-  let evalScores: EvalScores | null = null;
-  const evalEnabled = flowSettings.eval_enabled !== false;
-  if (evalEnabled && !sagaTriggered && finalOutput) {
-    const evalOutput = guardedOutput?.response || guardedOutput?.text || "";
-    if (evalOutput && evalOutput.length > 10) {
-      try {
-        const evalModelId =
-          flowSettings.eval_model_id
-          || flowDef?.briefing?.quality_model
-          || "google/gemini-2.5-flash";
-        evalScores = await evaluateOutput(message, evalOutput, flow.id, evalModelId);
-      } catch (err) {
-        console.log(`[Gateway] Eval failed: ${(err as Error).message}`);
-      }
-    }
-  }
-
-  const finalStatus = sagaTriggered ? "failed" : "completed";
-  await supabase.from("agent_executions").update({
-    status: finalStatus, current_state: null,
-    completed_at: new Date().toISOString(),
-    total_latency_ms: Date.now() - executionStart,
-    nodes_executed: stepOrder,
-    total_tokens_in: totalTokensIn,
-    total_tokens_out: totalTokensOut,
-    total_cost_cents: totalCostCents,
-    quality_score: evalScores?.aggregate || null,
-    eval_details: evalScores ? { relevance: evalScores.relevance, completeness: evalScores.completeness, safety: evalScores.safety, hallucination: evalScores.hallucination, aggregate: evalScores.aggregate, reasoning: evalScores.reasoning, model_used: evalScores.model_used } : null,
-    fsm_snapshot: {
-      channel, metadata, message, final_output: guardedOutput, steps_count: stepOrder,
-      saga_triggered: sagaTriggered, output_guards: guardInfo,
-      canary: canaryDecision.is_canary ? { version: canaryDecision.version_id, percent: canaryDecision.percent } : null,
-      eval_scores: evalScores ? { relevance: evalScores.relevance, completeness: evalScores.completeness, safety: evalScores.safety, hallucination: evalScores.hallucination, aggregate: evalScores.aggregate, reasoning: evalScores.reasoning, model_used: evalScores.model_used } : null,
-    },
-  }).eq("id", executionId);
-
-  return new Response(JSON.stringify({
-    execution_id: executionId, status: finalStatus, output: guardedOutput,
-    steps: executionSteps, steps_count: stepOrder, saga_triggered: sagaTriggered,
-    output_guards: guardInfo,
-    canary: { is_canary: canaryDecision.is_canary, reason: canaryDecision.reason },
-    eval_scores: evalScores ? { relevance: evalScores.relevance, completeness: evalScores.completeness, safety: evalScores.safety, hallucination: evalScores.hallucination, aggregate: evalScores.aggregate } : null,
-    executor: "inline_fallback",
-  }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+  return buildGatewayResponse(executionId, state, ctx, canaryDecision, "inngest_step");
 }

@@ -158,6 +158,7 @@ export function FlowBuilderDialog({ flowId, open, onClose }: FlowBuilderDialogPr
     if (!s.selectedNode) return null;
     return (
       <NodePropertiesPanel
+        flowId={flowId}
         node={s.selectedNode}
         onUpdate={s.handleNodeUpdate}
         onDelete={(nodeId) => {

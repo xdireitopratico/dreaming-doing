@@ -1,9 +1,9 @@
 /**
  * AdminAgentBuilderView — Orchestrator with useReducer state machine
  * Phases: home → boardroom → architecture_brief → building → review → builder → monitoring
- * NOTE: onboarding phase is disconnected (component preserved for future use)
+ * Onboarding removido — fluxo vai direto para boardroom (T30)
  */
-import { lazy, Suspense, useCallback, useEffect, useReducer, useState, useMemo } from "react";
+import { lazy, Suspense, useCallback, useEffect, useReducer, useState, useMemo, useRef } from "react";
 
 import { PrometheusLoadingSkeleton } from "@/components/forge-prometheus/PrometheusLoadingSkeleton";
 import { PrometheusHome } from "@/components/forge-prometheus/PrometheusHome";
@@ -20,11 +20,15 @@ import {
 } from "@/components/forge-prometheus/prometheusReducer";
 import type { ReviewData } from "@/components/forge-prometheus/PrometheusReview";
 import type { BoardroomPhase } from "@/components/forge-prometheus/PrometheusBoardroom";
-
-// DISCONNECTED (not deleted) — component preserved for future use
-// const PrometheusOnboarding = lazy(() =>
-//   import("@/components/forge-prometheus/PrometheusOnboarding")
-// );
+import {
+  clearPsPipelineStorage,
+  migrateLegacyPrometheusStorage,
+  purgeOrphanPrometheusStorageOnce,
+  readPsPipelineField,
+  removePsPipelineField,
+  writePsPipelineField,
+} from "@/lib/prometheus-pipeline-storage";
+import { findProjectDraft, upsertProjectDraftFlow } from "@/lib/agent-project-draft";
 
 const PrometheusBoardroomPage = lazy(() =>
   import("@/components/forge-prometheus/PrometheusBoardroomPage").then(m => ({ default: m.PrometheusBoardroomPage }))
@@ -91,15 +95,35 @@ const PHASE_LABELS: Record<string, string> = {
 
 // ═══ MAIN COMPONENT ═══
 
-function psStorageKey(projectId: string | undefined, field: string): string {
-  return projectId ? `ps_${field}_${projectId}` : `ps_${field}`;
+function readBriefingPrompt(flowDef: unknown): string {
+  const briefing = (flowDef as { briefing?: { prompt?: unknown } } | null)?.briefing;
+  return typeof briefing?.prompt === "string" ? briefing.prompt.trim() : "";
 }
+
+function readBriefingQualityModel(flowDef: unknown): string {
+  const briefing = (flowDef as { briefing?: { quality_model?: unknown } } | null)?.briefing;
+  return typeof briefing?.quality_model === "string" ? briefing.quality_model.trim() : "";
+}
+
+const DEFAULT_LAUNCH_QUALITY_MODEL = "google/gemini-2.5-flash";
 
 export interface AdminAgentBuilderViewProps {
-  projectId?: string;
+  projectId: string;
+  projectName?: string;
+  /** De projects.meta.initialPrompt (dashboard / CreateAgentDialog). */
+  initialPrompt?: string | null;
+  /** Dashboard link Fluxo Visual: abre React Flow ao entrar. */
+  initialOpenFlow?: boolean;
+  onBoardroomActive?: (active: boolean) => void;
 }
 
-export default function AdminAgentBuilderView({ projectId }: AdminAgentBuilderViewProps = {}) {
+export default function AdminAgentBuilderView({
+  projectId,
+  projectName,
+  initialPrompt,
+  initialOpenFlow = false,
+  onBoardroomActive,
+}: AdminAgentBuilderViewProps) {
   const {
     flows, loading,
     selectedFlowId, builderOpen,
@@ -107,12 +131,17 @@ export default function AdminAgentBuilderView({ projectId }: AdminAgentBuilderVi
     openBuilder, closeBuilder,
   } = useAgentFlows(projectId);
 
+  if (typeof window !== "undefined") {
+    migrateLegacyPrometheusStorage(projectId);
+  }
+  purgeOrphanPrometheusStorageOnce();
+
   const [pipeline, dispatch] = useReducer(prometheusReducer, initialPrometheusPipelineState, (init) => {
     try {
-      const savedPhase = localStorage.getItem(psStorageKey(projectId, "phase"));
-      const savedFlowId = localStorage.getItem(psStorageKey(projectId, "flow_id"));
-      const savedPrompt = localStorage.getItem(psStorageKey(projectId, "prompt")) || "";
-      const savedModel = localStorage.getItem(psStorageKey(projectId, "quality_model")) || "";
+      const savedPhase = readPsPipelineField(projectId, "phase");
+      const savedFlowId = readPsPipelineField(projectId, "flow_id");
+      const savedPrompt = readPsPipelineField(projectId, "prompt") || "";
+      const savedModel = readPsPipelineField(projectId, "quality_model") || "";
       if (
         savedPhase &&
         ["boardroom", "architecture_brief", "review"].includes(savedPhase) &&
@@ -129,12 +158,22 @@ export default function AdminAgentBuilderView({ projectId }: AdminAgentBuilderVi
 
   const { phase } = pipeline;
 
+  const hydratedPrompt = useMemo(() => {
+    const fromMeta = initialPrompt?.trim() || "";
+    if (fromMeta) return fromMeta;
+    const draft = findProjectDraft(flows);
+    return draft ? readBriefingPrompt(draft.flow_definition) : "";
+  }, [initialPrompt, flows]);
+
+  const skipHomePrompt = !!initialPrompt?.trim();
+  const autoLaunchRef = useRef(false);
+  const openFlowHandledRef = useRef(false);
+  const [autoLaunching, setAutoLaunching] = useState(skipHomePrompt);
+
   // Persist phase
   const setPhase = useCallback((p: PrometheusUIPhase) => {
     dispatch({ type: "SET_PHASE", phase: p });
-    try {
-      localStorage.setItem(psStorageKey(projectId, "phase"), p);
-    } catch {}
+    writePsPipelineField(projectId, "phase", p);
   }, [projectId]);
 
   // ═══ PHASE HANDLERS ═══
@@ -143,10 +182,8 @@ export default function AdminAgentBuilderView({ projectId }: AdminAgentBuilderVi
   const handleLaunch = useCallback(async (config: { prompt: string; qualityModel: string; fallbackModelId?: string }) => {
     setResolvedQualityModel(config.qualityModel);
     dispatch({ type: "SET_LAUNCH", prompt: config.prompt, qualityModel: config.qualityModel });
-    try {
-      localStorage.setItem(psStorageKey(projectId, "prompt"), config.prompt);
-      localStorage.setItem(psStorageKey(projectId, "quality_model"), config.qualityModel);
-    } catch {}
+    writePsPipelineField(projectId, "prompt", config.prompt);
+    writePsPipelineField(projectId, "quality_model", config.qualityModel);
 
     // Create agent_flows draft row directly (was done in onboarding before)
     const { data: userData } = await supabase.auth.getUser();
@@ -157,111 +194,158 @@ export default function AdminAgentBuilderView({ projectId }: AdminAgentBuilderVi
       return;
     }
 
-    const { data, error } = await supabase
-      .from("agent_flows")
-      .insert({
-        name: config.prompt.slice(0, 50) + (config.prompt.length > 50 ? "..." : ""),
-        description: config.prompt,
-        user_id: userData.user.id,
-        ...(projectId ? { project_id: projectId } : {}),
-        flow_definition: {
-          nodes: [], edges: [],
-          briefing: {
-            prompt: config.prompt,
-            quality_model: config.qualityModel,
-            fallback_model_id: config.fallbackModelId || null,
-          },
-        },
-        status: "draft",
-      })
-      .select("id")
-      .single();
+    const flowName =
+      config.prompt.slice(0, 50) + (config.prompt.length > 50 ? "..." : "");
+    const briefing = {
+      prompt: config.prompt,
+      quality_model: config.qualityModel,
+      fallback_model_id: config.fallbackModelId || null,
+    };
 
-    if (error || !data) {
-      console.error("[launch] Failed to create flow:", error?.message);
+    const existingDraft = findProjectDraft(flows);
+    const { flowId, error: upsertErr } = await upsertProjectDraftFlow(supabase, {
+      projectId,
+      userId: userData.user.id,
+      name: flowName,
+      description: config.prompt,
+      briefing,
+      existingDraft,
+    });
+
+    if (upsertErr || !flowId) {
+      console.error("[launch] Failed to upsert draft flow:", upsertErr);
       const { toast } = await import("sonner");
-      toast.error("Erro ao criar agente. Tente novamente.");
+      toast.error("Erro ao salvar rascunho do agente. Tente novamente.");
       return;
     }
 
-    const flowId = (data as { id: string }).id;
+    if (!flowId) return;
     dispatch({ type: "SET_FLOW_ID", flowId });
-    try { localStorage.setItem(psStorageKey(projectId, "flow_id"), flowId); } catch {}
+    writePsPipelineField(projectId, "flow_id", flowId);
     // Skip onboarding → go directly to boardroom (enrichment happens server-side in cortex)
     setPhase("boardroom");
-  }, [setPhase, projectId]);
+    setAutoLaunching(false);
+  }, [setPhase, projectId, flows]);
 
-  // Onboarding → Boardroom
-  const handleOnboardingComplete = useCallback(async (briefing: any) => {
-    const { data: userData } = await supabase.auth.getUser();
-    if (!userData?.user) {
-      console.error("[onboarding] No authenticated user");
-      const { toast } = await import("sonner");
-      toast.error("Você precisa estar autenticado para criar um agente.");
+  useEffect(() => {
+    onBoardroomActive?.(phase === "boardroom");
+  }, [phase, onBoardroomActive]);
+
+  // Dashboard Fluxo Visual → abre React Flow
+  useEffect(() => {
+    if (!initialOpenFlow || loading || openFlowHandledRef.current) return;
+    openFlowHandledRef.current = true;
+    setAutoLaunching(false);
+
+    const draft = findProjectDraft(flows);
+    if (draft) {
+      openBuilder(draft.id);
+      return;
+    }
+    void handleCreate();
+  }, [initialOpenFlow, loading, flows, openBuilder, handleCreate]);
+
+  // Dashboard prompt → boardroom direto (sem PrometheusHome duplicado)
+  useEffect(() => {
+    if (initialOpenFlow) return;
+    if (!skipHomePrompt || loading || autoLaunchRef.current || phase !== "home") return;
+
+    const prompt = hydratedPrompt.trim();
+    if (prompt.length < 10) {
+      setAutoLaunching(false);
       return;
     }
 
-    const { data, error } = await supabase
-      .from("agent_flows")
-      .insert({
-        name: pipeline.launchPrompt.slice(0, 50) + (pipeline.launchPrompt.length > 50 ? "..." : ""),
-        description: pipeline.launchPrompt,
-        user_id: userData.user.id,
-        ...(projectId ? { project_id: projectId } : {}),
-        flow_definition: { nodes: [], edges: [], briefing: { ...briefing, quality_model: pipeline.launchQualityModel } },
-        status: "draft",
-      })
-      .select("id")
-      .single();
+    autoLaunchRef.current = true;
+    setAutoLaunching(true);
 
-    if (error || !data) {
-      console.error("[onboarding] Failed to create flow:", error?.message);
-      const { toast } = await import("sonner");
-      toast.error("Erro ao criar agente. Tente novamente.");
-      return;
-    }
+    const draft = findProjectDraft(flows);
+    const qualityModel =
+      (draft ? readBriefingQualityModel(draft.flow_definition) : "") ||
+      readPsPipelineField(projectId, "quality_model") ||
+      DEFAULT_LAUNCH_QUALITY_MODEL;
 
-    const flowId = (data as { id: string }).id;
-    dispatch({ type: "SET_FLOW_ID", flowId });
-    try { localStorage.setItem(psStorageKey(projectId, "flow_id"), flowId); } catch {}
-    setPhase("boardroom");
-  }, [pipeline.launchPrompt, pipeline.launchQualityModel, setPhase, projectId]);
+    void handleLaunch({ prompt, qualityModel });
+  }, [
+    skipHomePrompt,
+    loading,
+    phase,
+    hydratedPrompt,
+    flows,
+    projectId,
+    handleLaunch,
+  ]);
 
   // Boardroom → Architecture Brief
   const handleBoardroomAdvance = useCallback(() => {
     setPhase("architecture_brief");
   }, [setPhase]);
 
-  // Architecture Brief → Building (streaming)
-  const handleBriefApprove = useCallback(async () => {
-    // FIX: Send approval message to backend so it transitions approval → building
-    if (pipeline.flowId) {
-      try {
-        const { data: sessions } = await supabase
-          .from("prometheus_build_sessions" as any)
-          .select("id, phase")
-          .eq("target_flow_id", pipeline.flowId)
-          .not("phase", "eq", "complete")
-          .order("created_at", { ascending: false })
-          .limit(1);
+  const invokeSessionIntent = useCallback(async (
+    action: "approve" | "request_changes" | "reject_plan" | "halt",
+    feedback?: string,
+  ) => {
+    if (!pipeline.flowId) return null;
+    const { data: sessions } = await supabase
+      .from("prometheus_build_sessions" as any)
+      .select("id, phase")
+      .eq("target_flow_id", pipeline.flowId)
+      .not("phase", "eq", "complete")
+      .order("created_at", { ascending: false })
+      .limit(1);
+    const session = sessions?.[0] as unknown as { id: string; phase: string } | undefined;
+    if (!session) return null;
+    await supabase.functions.invoke("prometheus-builder", {
+      body: { action, session_id: session.id, feedback },
+    });
+    return session;
+  }, [pipeline.flowId]);
 
-        const session = sessions?.[0] as unknown as { id: string; phase: string } | undefined;
-        if (session && session.phase === "approval") {
-          await supabase.functions.invoke("prometheus-builder", {
-            body: { action: "message", session_id: session.id, message: "Aprovado — construir o agente" },
-          });
-        }
+  const handleBriefApprove = useCallback(async (editedBrief?: { objective?: string }) => {
+    if (editedBrief?.objective && pipeline.flowId) {
+      try {
+        const { data: flowData } = await supabase
+          .from("agent_flows")
+          .select("flow_definition")
+          .eq("id", pipeline.flowId)
+          .single();
+        const flowDef = (flowData?.flow_definition as Record<string, unknown>) || {};
+        const boardroomOutput = (flowDef.boardroom_output as Record<string, unknown>) || {};
+        await supabase.from("agent_flows").update({
+          flow_definition: {
+            ...flowDef,
+            boardroom_output: { ...boardroomOutput, objective: editedBrief.objective },
+          },
+        }).eq("id", pipeline.flowId);
       } catch (err) {
-        console.warn("[brief-approve] Failed to send approval:", err);
+        console.warn("[brief-approve] Failed to persist objective edit:", err);
       }
     }
+    try {
+      await invokeSessionIntent("approve");
+    } catch (err) {
+      console.warn("[brief-approve] Failed to send approval:", err);
+    }
     setPhase("building");
-  }, [pipeline.flowId, setPhase]);
+  }, [invokeSessionIntent, pipeline.flowId, setPhase]);
 
-  // Architecture Brief → Boardroom (adjust)
-  const handleBriefRefine = useCallback(() => {
+  const handleBriefRefine = useCallback(async () => {
+    try {
+      await invokeSessionIntent("request_changes");
+    } catch (err) {
+      console.warn("[brief-refine] Failed to request changes:", err);
+    }
     setPhase("boardroom");
-  }, [setPhase]);
+  }, [invokeSessionIntent, setPhase]);
+
+  const handleBriefReject = useCallback(async () => {
+    try {
+      await invokeSessionIntent("reject_plan");
+    } catch (err) {
+      console.warn("[brief-reject] Failed to reject plan:", err);
+    }
+    setPhase("boardroom");
+  }, [invokeSessionIntent, setPhase]);
 
   // Building → Review
   const handleBuildingComplete = useCallback(() => {
@@ -293,10 +377,8 @@ export default function AdminAgentBuilderView({ projectId }: AdminAgentBuilderVi
     if (targetFlowId) {
       openBuilder(targetFlowId);
       setPhase("home");
-      try {
-        localStorage.removeItem(psStorageKey(projectId, "phase"));
-        localStorage.removeItem(psStorageKey(projectId, "flow_id"));
-      } catch {}
+      removePsPipelineField(projectId, "phase");
+      removePsPipelineField(projectId, "flow_id");
     }
   }, [pipeline.flowId, openBuilder, setPhase, projectId]);
 
@@ -373,12 +455,7 @@ export default function AdminAgentBuilderView({ projectId }: AdminAgentBuilderVi
     setIsHeaderCollapsed(false);
     setPhase("home");
     dispatch({ type: "SET_FLOW_ID", flowId: null });
-    try {
-      localStorage.removeItem(psStorageKey(projectId, "phase"));
-      localStorage.removeItem(psStorageKey(projectId, "flow_id"));
-      localStorage.removeItem(psStorageKey(projectId, "prompt"));
-      localStorage.removeItem(psStorageKey(projectId, "quality_model"));
-    } catch {}
+    clearPsPipelineStorage(projectId);
   }, [setPhase, projectId]);
 
   const handleBuilderClose = useCallback(() => {
@@ -558,7 +635,7 @@ export default function AdminAgentBuilderView({ projectId }: AdminAgentBuilderVi
       phase: activeSession.phase,
       onResume: () => {
         dispatch({ type: "SET_FLOW_ID", flowId: activeSession.flowId });
-        try { localStorage.setItem(psStorageKey(projectId, "flow_id"), activeSession.flowId); } catch {}
+        writePsPipelineField(projectId, "flow_id", activeSession.flowId);
         // Resume to correct UI phase based on backend phase
         const buildPhases = ["building", "testing", "review", "deploying"];
         if (buildPhases.includes(activeSession.phase)) {
@@ -587,7 +664,7 @@ export default function AdminAgentBuilderView({ projectId }: AdminAgentBuilderVi
       const session = sessions?.[0] as unknown as { id: string; phase: string } | undefined;
       if (session) {
         dispatch({ type: "SET_FLOW_ID", flowId });
-        try { localStorage.setItem(psStorageKey(projectId, "flow_id"), flowId); } catch {}
+        writePsPipelineField(projectId, "flow_id", flowId);
         const buildPhases = ["building", "testing", "review", "deploying"];
         if (buildPhases.includes(session.phase)) {
           setPhase("building");
@@ -612,7 +689,7 @@ export default function AdminAgentBuilderView({ projectId }: AdminAgentBuilderVi
     } else {
       // Draft with no session — start fresh boardroom
       dispatch({ type: "SET_FLOW_ID", flowId });
-      try { localStorage.setItem(psStorageKey(projectId, "flow_id"), flowId); } catch {}
+      writePsPipelineField(projectId, "flow_id", flowId);
       setPhase("boardroom");
     }
   }, [setPhase, openBuilder, projectId]);
@@ -641,7 +718,10 @@ export default function AdminAgentBuilderView({ projectId }: AdminAgentBuilderVi
     return undefined;
   }, [phase, workflowPhase]);
 
-  const fullScreenClass = "-mx-3 lg:-mx-6 -mb-3 lg:-mb-6 -mt-3 lg:-mt-6 h-[calc(100dvh_-_4rem)] min-h-0 min-w-0";
+  const fullScreenClass =
+    phase === "boardroom"
+      ? "flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
+      : "-mx-3 lg:-mx-6 -mb-3 lg:-mb-6 -mt-3 lg:-mt-6 h-[calc(100dvh_-_4rem)] min-h-0 min-w-0";
   const loader = <PrometheusLoadingSkeleton />;
 
   // ═══ PHASE RENDERING ═══
@@ -665,12 +745,15 @@ export default function AdminAgentBuilderView({ projectId }: AdminAgentBuilderVi
           <PrometheusPhaseHeader
             currentPhase={phase}
             workflowPhase={workflowPhaseForHeader}
+            agentName={projectName}
             onGoHome={handleGoHome}
             qualityModel={resolvedQualityModel}
-            convergenceScore={phase === "boardroom" ? convergenceScore : undefined}
-            currentRound={phase === "boardroom" ? currentRound : undefined}
+            convergenceScore={phase === "boardroom" ? undefined : convergenceScore}
+            currentRound={phase === "boardroom" ? undefined : currentRound}
             isCollapsed={isHeaderCollapsed}
-            onToggleCollapse={() => setIsHeaderCollapsed((prev) => !prev)}
+            onToggleCollapse={
+              phase === "boardroom" ? undefined : () => setIsHeaderCollapsed((prev) => !prev)
+            }
           />
         )}
 
@@ -698,6 +781,7 @@ export default function AdminAgentBuilderView({ projectId }: AdminAgentBuilderVi
                   qualityModel={pipeline.launchQualityModel}
                   onApprove={handleBriefApprove}
                   onRefine={handleBriefRefine}
+                  onReject={handleBriefReject}
                   onBack={() => setPhase("boardroom")}
                 />
               )}
@@ -724,6 +808,21 @@ export default function AdminAgentBuilderView({ projectId }: AdminAgentBuilderVi
             </Suspense>
           </PrometheusPhaseTransition>
         </div>
+        {builderOpen && selectedFlowId && (
+          <FlowBuilderDialog
+            flowId={selectedFlowId}
+            open={builderOpen}
+            onClose={handleBuilderClose}
+          />
+        )}
+      </div>
+    );
+  }
+
+  if (autoLaunching) {
+    return (
+      <div className={`${fullScreenClass} overflow-auto`}>
+        <PrometheusLoadingSkeleton />
       </div>
     );
   }
@@ -732,6 +831,7 @@ export default function AdminAgentBuilderView({ projectId }: AdminAgentBuilderVi
   return (
     <div className={`${fullScreenClass} overflow-auto`}>
       <PrometheusHome
+        initialPrompt={hydratedPrompt}
         onLaunch={handleLaunch}
         onOpenBuilder={handleCreate}
         onOpenBuilderWithFlow={handleResumeOrOpenFlow}

@@ -29,10 +29,11 @@ interface Props {
   qualityModel: string;
   onApprove: (editedBrief?: BriefData) => void;
   onRefine: () => void;
+  onReject?: () => void;
   onBack?: () => void;
 }
 
-export function PrometheusArchitectureBrief({ flowId, qualityModel, onApprove, onRefine, onBack }: Props) {
+export function PrometheusArchitectureBrief({ flowId, qualityModel, onApprove, onRefine, onReject, onBack }: Props) {
   const [brief, setBrief] = useState<BriefData>({});
   const [loading, setLoading] = useState(true);
   const [editingObjective, setEditingObjective] = useState(false);
@@ -50,7 +51,30 @@ export function PrometheusArchitectureBrief({ flowId, qualityModel, onApprove, o
 
         const flowDef = (flowData.flow_definition as any) || {};
         const briefing = flowDef.briefing || {};
-        const boardroomOutput = flowDef.boardroom_output || {};
+        let boardroomOutput = flowDef.boardroom_output || {};
+
+        const { data: sessions } = await supabase
+          .from("prometheus_build_sessions" as any)
+          .select("architecture, requirements")
+          .eq("target_flow_id", flowId)
+          .not("phase", "eq", "complete")
+          .order("created_at", { ascending: false })
+          .limit(1);
+
+        const sessionArch = (sessions?.[0] as any)?.architecture;
+        const sessionReqs = (sessions?.[0] as any)?.requirements;
+        if (sessionArch && !boardroomOutput.genome) {
+          boardroomOutput = {
+            genome: sessionArch.genome_name,
+            objective: sessionReqs?.objective || briefing.prompt,
+            audience: sessionReqs?.target_audience,
+            tone: sessionReqs?.tone,
+            nodes: sessionArch.nodes,
+            edges: sessionArch.edges,
+            costEstimate: sessionArch.estimated_cost_per_interaction,
+            tools: sessionReqs?.tools_needed || [],
+          };
+        }
 
         const parsed: BriefData = {
           objective: boardroomOutput.objective || briefing.prompt || flowData.description || "",
@@ -143,6 +167,13 @@ export function PrometheusArchitectureBrief({ flowId, qualityModel, onApprove, o
             </span>
           </div>
           <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+            {onReject && (
+              <button onClick={onReject}
+                className="px-3.5 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all"
+                style={{ background: "rgba(255,255,255,0.04)", color: "var(--ps-cream-60)", border: "1px solid var(--ps-border)" }}>
+                Rejeitar
+              </button>
+            )}
             <button onClick={onRefine}
               className="px-3.5 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all"
               style={{ background: "rgba(255,255,255,0.06)", color: "var(--ps-cream-80)", border: "1px solid var(--ps-border)" }}>

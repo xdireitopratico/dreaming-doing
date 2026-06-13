@@ -32,10 +32,10 @@ import {
   persistTokensUsed,
   sanitizeForPrompt,
 } from "./prometheus-db.ts";
-import { analyzeRequirements } from "./prometheus-analyst.ts";
+import { analyzeRequirements, sanitizeAnalystResult } from "./prometheus-analyst.ts";
 import { generateArchitecture } from "./prometheus-architect.ts";
 import { runSentinel, saveFlowToAgentFlows } from "./prometheus-sentinel.ts";
-import { runBoardroomRoundtable } from "./prometheus-deliberation.ts";
+import { runBoardroomRoundtable, writeArchitectureToFlow } from "./prometheus-deliberation.ts";
 import { runEnrichment } from "./prometheus-enrichment.ts";
 
 // ═══ SESSION MANAGEMENT ═══
@@ -77,7 +77,7 @@ export async function startSession(
   const sessionId = data.id;
 
   // Return background task for waitUntil
-  const backgroundTask = processInitialBriefing(sb, sessionId, briefing, qualityModel).catch(err =>
+  const backgroundTask = processInitialBriefing(sb, sessionId, briefing, qualityModel, userId).catch(err =>
     console.error("[cortex] Background briefing error:", err)
   );
 
@@ -91,6 +91,7 @@ async function processInitialBriefing(
   sessionId: string,
   briefing: Record<string, unknown>,
   modelId: string,
+  userId: string,
 ) {
   try {
     await insertTurn(sb, sessionId, "cortex",
@@ -105,6 +106,7 @@ async function processInitialBriefing(
         modelId,
         sessionId,
         sb,
+        tenantId: userId,
       });
 
       // Always merge enrichment output into the briefing. The enrichment step
@@ -136,41 +138,56 @@ async function processInitialBriefing(
     // briefing always carries domain/channels/etc., so a simple {prompt} request
     // now advances instead of stalling silently in "discovery".
     if (briefing && Object.keys(briefing).length > 0) {
-      const analystResult = await analyzeRequirements(
+      const { data: sessionRow } = await sb
+        .from("prometheus_build_sessions")
+        .select("research_cache")
+        .eq("id", sessionId)
+        .single();
+
+      const researchCache = (sessionRow?.research_cache || {}) as Record<string, unknown>;
+      const hasResearch = Object.keys(researchCache).length > 0;
+
+      const rawAnalyst = await analyzeRequirements(
         JSON.stringify(briefing),
         JSON.stringify(briefing),
         modelId,
-        { sessionId, sb, round: 1 },
+        { sessionId, sb, round: 1, researchCache, tenantId: userId },
       );
+      const analystResult = sanitizeAnalystResult(rawAnalyst, hasResearch);
 
       await insertTurn(sb, sessionId, "analyst",
         formatAnalystOutput(analystResult),
         "analysis", "discovery", 1,
         { requirements: analystResult.requirements });
 
-      // Update session with requirements
+      const mergedReqs = {
+        ...(typeof briefing === "object" ? briefing : {}),
+        ...analystResult.requirements,
+      };
+
       await sb.from("prometheus_build_sessions").update({
-        requirements: analystResult.requirements,
+        requirements: mergedReqs,
         specialist_calls: [{ agent: "analyst", action: "analyze", timestamp: Date.now() }],
       } as any).eq("id", sessionId);
 
-      if (analystResult.is_complete) {
+      if (analystResult.clarification_questions?.length > 0) {
+        const forkQ = analystResult.clarification_questions[0];
         await insertTurn(sb, sessionId, "cortex",
-          "Requisitos completos. Avançando para planejamento da arquitetura.",
-          "decision", "planning", 1);
-        await updateSessionPhase(sb, sessionId, "planning");
-        // AUTO-TRIGGER ARCHITECT — don't leave planning phase idle
-        await runPlanningPhase(sb, sessionId, analystResult.requirements || briefing, modelId, 1);
-      } else if (analystResult.clarification_questions?.length > 0) {
-        await insertTurn(sb, sessionId, "cortex",
-          "Preciso de mais alguns detalhes antes de continuar.",
-          "decision", "clarification", 1);
-        await insertTurn(sb, sessionId, "analyst",
-          formatClarifications(analystResult.clarification_questions),
-          "analysis", "clarification", 1,
-          { questions: analystResult.clarification_questions });
-        await updateSessionPhase(sb, sessionId, "clarification");
+          forkQ.question,
+          "decision", "planning", 1,
+          {
+            decision_fork: {
+              question: forkQ.question,
+              options: forkQ.options || [],
+              evidence: (forkQ as { evidence_from_research?: string }).evidence_from_research,
+            },
+          });
       }
+
+      await runBoardroomRoundtable(
+        sb, sessionId, rawPrompt, mergedReqs, 1, modelId,
+        true, undefined, undefined, true,
+      );
     }
   } catch (err) {
     // Mantém uma fase válida para evitar falha silenciosa ao persistir o erro
@@ -224,6 +241,122 @@ export async function processMessage(
   return { ok: true, backgroundTask };
 }
 
+export type SessionIntent = "approve" | "request_changes" | "reject_plan" | "halt";
+
+export async function processIntent(
+  sessionId: string,
+  userId: string,
+  intent: SessionIntent,
+  feedback?: string,
+): Promise<{ ok: true; backgroundTask: Promise<void> }> {
+  const sb = supabaseAdmin();
+
+  const { data: session, error } = await sb
+    .from("prometheus_build_sessions")
+    .select("*")
+    .eq("id", sessionId)
+    .eq("user_id", userId)
+    .single();
+
+  if (error || !session) throw new Error("Session not found");
+
+  const { data: newRound, error: incrErr } = await sb
+    .rpc("prometheus_increment_iteration", { p_session_id: sessionId } as any);
+
+  if (incrErr || !newRound) throw new Error("Failed to increment iteration");
+  const round = newRound as number;
+
+  if (feedback?.trim()) {
+    await insertTurn(sb, sessionId, "user", feedback.trim(), "user_input", session.phase, round);
+  }
+
+  const backgroundTask = processIntentAsync(sb, sessionId, session, intent, feedback?.trim() || "", round).catch(err =>
+    console.error("[cortex] Background intent error:", err)
+  );
+
+  return { ok: true, backgroundTask };
+}
+
+async function processIntentAsync(
+  sb: ReturnType<typeof supabaseAdmin>,
+  sessionId: string,
+  session: any,
+  intent: SessionIntent,
+  feedback: string,
+  round: number,
+) {
+  const modelId = getModelId(session);
+  const motorTenantId = session.user_id as string;
+  const rawPrompt = (session.requirements as Record<string, unknown>)?.objective as string
+    || feedback
+    || "Revisar plano do agente";
+
+  switch (intent) {
+    case "approve": {
+      if (session.phase !== "approval") {
+        await insertTurn(sb, sessionId, "cortex",
+          "Aprovação só está disponível quando o plano estiver pronto.",
+          "decision", session.phase, round);
+        return;
+      }
+      await insertTurn(sb, sessionId, "cortex",
+        "Aprovado! Scribe, inicie a construção dos prompts.",
+        "decision", "building", round);
+      await updateSessionPhase(sb, sessionId, "building");
+      const { data: freshSession } = await sb
+        .from("prometheus_build_sessions")
+        .select("*")
+        .eq("id", sessionId)
+        .single();
+      if (freshSession) {
+        await runScribePhase(sb, sessionId, freshSession, round, modelId);
+      }
+      break;
+    }
+    case "request_changes": {
+      await insertTurn(sb, sessionId, "cortex",
+        feedback
+          ? "Entendido. A equipe vai re-deliberar incorporando seu feedback."
+          : "Voltando à deliberação para ajustes.",
+        "decision", "planning", round);
+      await updateSessionPhase(sb, sessionId, "planning");
+      await runBoardroomRoundtable(
+        sb, sessionId,
+        feedback || "Ajustar o plano conforme feedback do usuário",
+        session.requirements || {},
+        round, modelId,
+        false,
+      );
+      break;
+    }
+    case "reject_plan": {
+      await insertTurn(sb, sessionId, "cortex",
+        "Plano rejeitado. Reiniciando deliberação do zero.",
+        "decision", "planning", round);
+      await updateSessionPhase(sb, sessionId, "planning");
+      await sb.from("prometheus_build_sessions").update({ architecture: null }).eq("id", sessionId);
+      await runBoardroomRoundtable(
+        sb, sessionId,
+        feedback || rawPrompt,
+        session.requirements || {},
+        round, modelId,
+        true,
+      );
+      break;
+    }
+    case "halt": {
+      await insertTurn(sb, sessionId, "cortex",
+        "Deliberação interrompida. Você pode retomar enviando feedback ou pedindo mudanças.",
+        "decision", session.phase, round,
+        { halted: true });
+      await sb.from("prometheus_build_sessions").update({
+        deliberation_state: { halted: true },
+      }).eq("id", sessionId);
+      break;
+    }
+  }
+}
+
 // ═══ FSM ROUTER ═══
 
 async function processMessageAsync(
@@ -236,6 +369,7 @@ async function processMessageAsync(
   try {
   const phase = session.phase as PrometheusPhase;
   const modelId = getModelId(session);
+  const motorTenantId = session.user_id as string;
 
   switch (phase) {
     case "discovery":
@@ -266,6 +400,7 @@ async function processMessageAsync(
           phase,
         }),
         modelId,
+        { tenantId: motorTenantId },
       );
 
       const nextQuestions = phase === "clarification"
@@ -294,7 +429,7 @@ async function processMessageAsync(
           "decision", "planning", round);
         await updateSessionPhase(sb, sessionId, "planning");
         // AUTO-TRIGGER ARCHITECT
-        await runPlanningPhase(sb, sessionId, mergedReqs, modelId, round);
+        await runPlanningPhase(sb, sessionId, mergedReqs, modelId, round, motorTenantId);
       } else if (nextQuestions.length > 0) {
         if (phase !== "clarification") {
           await insertTurn(sb, sessionId, "cortex",
@@ -313,57 +448,43 @@ async function processMessageAsync(
           "decision", "planning", round);
         await updateSessionPhase(sb, sessionId, "planning");
         // AUTO-TRIGGER ARCHITECT
-        await runPlanningPhase(sb, sessionId, mergedReqs, modelId, round);
+        await runPlanningPhase(sb, sessionId, mergedReqs, modelId, round, motorTenantId);
       }
       break;
     }
 
     case "planning": {
-      // User sent message while in planning — treat as adjustment request
-      // Re-run architect with updated context
+      const haltRx = /\b(parar|pare|stop|cancelar|halt|abortar)\b/i;
+      if (haltRx.test(message)) {
+        await insertTurn(sb, sessionId, "cortex",
+          "Deliberação interrompida.",
+          "decision", "planning", round,
+          { halted: true });
+        await sb.from("prometheus_build_sessions").update({
+          deliberation_state: { halted: true },
+        }).eq("id", sessionId);
+        break;
+      }
       await insertTurn(sb, sessionId, "cortex",
-        "Recebido. Reelaborando o plano com seus ajustes.",
+        "Recebido. Incorporando seu feedback na deliberação.",
         "decision", "planning", round);
-      await runPlanningPhase(sb, sessionId, session.requirements || {}, modelId, round);
+      await runBoardroomRoundtable(
+        sb, sessionId, message,
+        session.requirements || {},
+        round, modelId,
+        false,
+      );
       break;
     }
 
-    // ── Approval: user approves or requests changes ──
+    // ── Approval: free text does not auto-approve (use explicit intent actions) ──
     case "approval": {
-      // Stem match (prefix) — NÃO usar \b no fim, senão "aprovar"/"ajustar" nunca casam
-      const approveRx = /\b(aprov|sim|go|vamos|ok|perfeito|construir|constrói|constroi|build|pode)/i;
-      const redoRx = /\b(ajust|voltar|volta|muda|altera|alter|refaz|refazer|corrig|melhor)/i;
-
-      if (approveRx.test(message)) {
-        await insertTurn(sb, sessionId, "cortex",
-          "Aprovado! Scribe, inicie a construção dos prompts.",
-          "decision", "building", round);
-        await updateSessionPhase(sb, sessionId, "building");
-
-        // Auto-trigger Scribe
-        const { data: freshSession } = await sb
-          .from("prometheus_build_sessions")
-          .select("*")
-          .eq("id", sessionId)
-          .single();
-        if (freshSession) {
-          // Await so the EdgeRuntime.waitUntil keeps the function alive through the whole build chain
-          await runScribePhase(sb, sessionId, freshSession, round, modelId);
-        }
-      } else if (redoRx.test(message)) {
-        await insertTurn(sb, sessionId, "cortex",
-          "Voltando ao planejamento para ajustes.",
-          "decision", "planning", round);
-        await updateSessionPhase(sb, sessionId, "planning");
-        await runPlanningPhase(sb, sessionId, session.requirements || {}, modelId, round);
-      } else {
-        // Clarify what the user wants
-        await insertTurn(sb, sessionId, "cortex",
-          "O plano está na fase de aprovação.\n\n" +
-          "• Diga **\"aprovar\"** ou **\"construir\"** para iniciar a construção\n" +
-          "• Diga **\"ajustar\"** ou **\"voltar\"** para modificar o plano",
-          "decision", "approval", round);
-      }
+      await insertTurn(sb, sessionId, "cortex",
+        "O plano está pronto para revisão.\n\n" +
+        "• Use **Aprovar** para iniciar a construção\n" +
+        "• Use **Pedir mudanças** ou **Rejeitar** no painel do plano\n" +
+        "• Ou interaja no chat durante a deliberação",
+        "decision", "approval", round);
       break;
     }
 
@@ -410,6 +531,7 @@ async function processMessageAsync(
             ],
             temperature: 0.7,
             max_tokens: 4096,
+            tenant_id: motorTenantId,
           });
           await persistTokensUsed(sb, sessionId, (session.tokens_used || 0) + (llmResponse.tokens_in + llmResponse.tokens_out));
           const responseContent = llmResponse?.content || "Desculpe, não consegui processar sua mensagem. Você pode \"deploy/salvar\" ou \"ajustar/voltar\".";
@@ -447,6 +569,7 @@ async function processMessageAsync(
           ],
           temperature: 0.7,
           max_tokens: 4096,
+          tenant_id: motorTenantId,
         });
         await persistTokensUsed(sb, sessionId, (session.tokens_used || 0) + (llmResponse.tokens_in + llmResponse.tokens_out));
         await insertTurn(sb, sessionId, "cortex",
@@ -534,6 +657,7 @@ export async function summarizeSession(
 
     const llmResponse = await routeLLM({
       model_id: modelId,
+      tenant_id: userId,
       messages: [
         {
           role: "system",
@@ -665,13 +789,14 @@ async function runPlanningPhase(
   requirements: Record<string, unknown>,
   modelId: string,
   round: number,
+  tenantId: string,
 ) {
   try {
     await insertTurn(sb, sessionId, "architect",
       "Analisando requisitos e selecionando genome ideal...",
       "architecture", "planning", round);
 
-    const architecture = await generateArchitecture(requirements as any, modelId);
+    const architecture = await generateArchitecture(requirements as any, modelId, { tenantId });
 
     // Format architecture for display
     const nodesList = architecture.nodes.map(n => `• ${n.label} (${n.type})`).join("\n");
@@ -686,6 +811,8 @@ async function runPlanningPhase(
     await sb.from("prometheus_build_sessions").update({
       architecture,
     }).eq("id", sessionId);
+
+    await writeArchitectureToFlow(sb, sessionId, architecture, requirements);
 
     await insertTurn(sb, sessionId, "cortex",
       "Plano pronto. Aprove para iniciar a construção ou peça ajustes.",
@@ -711,6 +838,8 @@ async function runPlanningPhase(
       await sb.from("prometheus_build_sessions").update({
         architecture: fallback,
       }).eq("id", sessionId);
+
+      await writeArchitectureToFlow(sb, sessionId, fallback, requirements);
 
       await insertTurn(sb, sessionId, "cortex",
         "Plano gerado com template padrão. Aprove para iniciar a construção ou peça ajustes.",

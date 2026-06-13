@@ -33,7 +33,7 @@ export function PrometheusBoardroomFeedbackBar({ isStreaming, onSendFeedback }: 
         <input
           value={feedbackText}
           onChange={e => setFeedbackText(e.target.value)}
-          placeholder="Direcionar: ex. mais foco em segurança, adicionar ferramenta de email..."
+          placeholder="Interromper, corrigir rumo, ou responder à equipe..."
           className="flex-1 rounded-lg px-3 py-2 text-[12px] outline-none"
           style={{ background: "rgba(255,255,255,0.04)", border: "1px solid var(--ps-border)", color: "var(--ps-cream)" }}
           onKeyDown={e => { if (e.key === "Enter" && feedbackText.trim()) handleSend(); }}

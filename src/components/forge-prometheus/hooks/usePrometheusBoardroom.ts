@@ -228,7 +228,7 @@ export function usePrometheusBoardroom(flowId: string) {
       }
     }
 
-    const waitingForUser = Boolean(row.output_data?.questions) || row.phase === "approval";
+    const waitingForUser = Boolean(row.output_data?.decision_fork);
 
     if (row.phase === "complete" || row.output_data?.final === true) {
       setIsStreaming(false);
@@ -483,11 +483,20 @@ export function usePrometheusBoardroom(flowId: string) {
     }
   }, [currentPhase, sessionId, resetWatchdog]);
 
-  const skip = useCallback(() => {
+  const skip = useCallback(async () => {
+    if (sessionId) {
+      try {
+        await supabase.functions.invoke("prometheus-builder", {
+          body: { action: "halt", session_id: sessionId },
+        });
+      } catch (err) {
+        console.warn("[boardroom] halt failed:", err);
+      }
+    }
     setIsStreaming(false);
     clearPolling();
     if (watchdogRef.current) clearTimeout(watchdogRef.current);
-  }, [clearPolling]);
+  }, [clearPolling, sessionId]);
 
   const startBuild = useCallback(() => {
     setReady(true);

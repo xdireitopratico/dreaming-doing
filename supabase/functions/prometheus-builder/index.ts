@@ -6,7 +6,7 @@
  */
 
 import { createClient } from "npm:@supabase/supabase-js@2";
-import { startSession, processMessage, summarizeSession } from "../_shared/prometheus-cortex.ts";
+import { startSession, processMessage, processIntent, summarizeSession } from "../_shared/prometheus-cortex.ts";
 import { runPhysician } from "../_shared/prometheus-physician.ts";
 import { getCodexReport, generateOptimizationInsights } from "../_shared/prometheus-codex.ts";
 import type { PrometheusRequest } from "../_shared/prometheus-types.ts";
@@ -123,9 +123,37 @@ Deno.serve(async (req) => {
         break;
       }
 
-      case "skip":
-        result = { ok: true, skipped: true };
+      case "approve":
+      case "request_changes":
+      case "reject_plan":
+      case "halt": {
+        if (!body.session_id) {
+          return new Response(JSON.stringify({ error: "session_id required" }), {
+            status: 400,
+            headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+          });
+        }
+        const { ok, backgroundTask } = await processIntent(
+          body.session_id,
+          user.id,
+          body.action,
+          body.feedback || body.message,
+        );
+        EdgeRuntime.waitUntil(backgroundTask);
+        result = { ok };
         break;
+      }
+
+      case "skip": {
+        if (body.session_id) {
+          const { ok, backgroundTask } = await processIntent(body.session_id, user.id, "halt");
+          EdgeRuntime.waitUntil(backgroundTask);
+          result = { ok, halted: true };
+        } else {
+          result = { ok: true, skipped: true };
+        }
+        break;
+      }
 
       case "codex_report":
         result = await getCodexReport(user.id);
@@ -145,7 +173,7 @@ Deno.serve(async (req) => {
           });
         }
         const modelId = body.model_id || "google/gemini-2.5-flash";
-        result = await runPhysician(body.flow_id, user.id, modelId);
+        result = await runPhysician(body.flow_id, user.id, modelId, user.id);
         break;
       }
 
