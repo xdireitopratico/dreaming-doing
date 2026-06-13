@@ -259,9 +259,10 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
     case "assistant_text": {
       const chunk = (data.text as string) ?? "";
       const append = data.append === true || data.delta === true;
-      const narration = data.narration === true;
+      const opening = data.opening === true;
+      const narration = data.narration === true || opening;
       const thinking = data.thinking === true;
-      const skipStream = narration || thinking;
+      const skipStream = narration || thinking || opening;
       return {
         ...prev,
         streamText: skipStream
@@ -270,9 +271,11 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
             ? `${prev.streamText ?? ""}${chunk}`
             : chunk,
         narrationText: narration
-          ? append
+          ? append && !opening
             ? `${prev.narrationText ?? ""}${chunk}`
-            : chunk
+            : opening && prev.narrationText?.trim()
+              ? prev.narrationText
+              : chunk
           : prev.narrationText,
         timeline: [...prev.timeline, event],
       };

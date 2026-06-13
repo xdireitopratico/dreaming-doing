@@ -311,6 +311,44 @@ describe("forge-run terminal state", () => {
     expect(items.some((i) => i.type === "THOUGHT")).toBe(false);
   });
 
+  it("abertura/opening não vira THOUGHT no inspector", () => {
+    const items = buildForgeTimeline(
+      [
+        {
+          type: "assistant_text",
+          data: { text: "Vou montar o hero da oficina.", opening: true },
+          timestamp: 1,
+        },
+        {
+          type: "assistant_text",
+          data: { text: "Montando landing.", narration: true },
+          timestamp: 2,
+        },
+      ],
+      true,
+    );
+    expect(items.some((i) => i.type === "THOUGHT")).toBe(false);
+  });
+
+  it("step_result vira RESULT na timeline", () => {
+    const items = buildForgeTimeline(
+      [
+        {
+          type: "step_result",
+          data: { summary: "Build OK (gate final)", ok: true, evidence: ["Compilação OK"] },
+          timestamp: 1,
+        },
+      ],
+      false,
+    );
+    expect(items).toHaveLength(1);
+    expect(items[0]?.type).toBe("RESULT");
+    if (items[0]?.type === "RESULT") {
+      expect(items[0].text).toContain("Build OK");
+      expect(items[0].ok).toBe(true);
+    }
+  });
+
   it("deriveSessionTitle não repete wrap-up do chat", () => {
     const wrapUp = "**Pronto!** Resumo do que fiz:\n\nNenhum arquivo foi alterado.";
     const title = deriveSessionTitle(

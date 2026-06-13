@@ -31,8 +31,8 @@ describe("S15 agent turn flow", () => {
       ev("assistant_text", { text: "Entendi", delta: true, thinking: true }),
       ev("assistant_text", { text: ": vou montar a landing.", delta: true, thinking: true }),
       ev("assistant_text", {
-        text: "Entendi: vou corrigir os ícones.",
-        narration: true,
+        text: "Vou montar o hero da oficina.",
+        opening: true,
       }),
       ev("tool_start", { name: "fs_write", args: { path: "src/App.tsx" } }),
       ev("tool_done", { name: "fs_write", ok: true }),
@@ -55,8 +55,8 @@ describe("S15 agent turn flow", () => {
     if (turn?.kind !== "assistant") return;
 
     expect(turn.thinking?.durationMs).toBeGreaterThan(0);
-    expect(turn.narration).toContain("Entendi");
-    expect(turn.narration).not.toMatch(/Entendi[\s\S]*Entendi/);
+    expect(turn.narration).toContain("hero");
+    expect(turn.narration).not.toMatch(/hero[\s\S]*hero/i);
     expect(turn.miniCard).toBeTruthy();
     expect(turn.streamText).toContain("Pronto");
     assertAssistantTurnInvariant(turn);
@@ -145,15 +145,15 @@ describe("S15 agent turn flow", () => {
     }
   });
 
-  it("loop natural: progresso factual visível após tools", () => {
+  it("loop natural: abertura no chat, progresso factual só no inspector", () => {
     let progress = reduce([
       ev("start", {}),
-      ev("assistant_text", { text: "Montando o hero da landing.", narration: true }),
+      ev("assistant_text", { text: "Montando o hero da landing.", opening: true }),
       ev("tool_start", { name: "fs_write", args: { path: "src/App.tsx" } }),
       ev("tool_done", { name: "fs_write", ok: true }),
-      ev("assistant_text", {
-        text: "Concluído: criar `src/App.tsx` (passo 1/5).",
-        narration: true,
+      ev("phase", {
+        phase: "checkpoint",
+        message: "Concluído: criar `src/App.tsx` (passo 1/5).",
       }),
       ev("assistant_text", { text: "Pronto — confere o preview.", final: true }),
       ev("done", { summary: "Pronto — confere o preview." }),
@@ -169,8 +169,9 @@ describe("S15 agent turn flow", () => {
     expect(turn?.kind).toBe("assistant");
     if (turn?.kind !== "assistant") return;
 
-    expect(turn.narration).toContain("Concluído: criar");
-    expect(turn.narration).not.toMatch(/Entendi[\s\S]*Entendi/);
+    expect(turn.narration).toContain("Montando o hero");
+    expect(turn.narration).not.toContain("Concluído: criar");
+    expect(turn.streamText).toContain("Pronto");
     expect(turn.miniCard).toBeTruthy();
   });
 

@@ -59,6 +59,15 @@ describe("applyAgentProgressEvent", () => {
     expect(next.statusHint).toContain("Retomando");
   });
 
+  it("opening:true vai para narrationText, não streamText", () => {
+    const next = applyAgentProgressEvent(
+      { ...base, finished: false, error: null },
+      ev("assistant_text", { text: "Vou montar o hero.", opening: true }),
+    );
+    expect(next.narrationText).toBe("Vou montar o hero.");
+    expect(next.streamText).toBeNull();
+  });
+
   it("start zera streamText e narration do run anterior", () => {
     const stale = {
       ...base,

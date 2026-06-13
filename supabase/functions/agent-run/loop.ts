@@ -174,6 +174,8 @@ export class AgentLoop {
   private approvedPlanStepIndex: number;
   private narrationStarted: boolean;
   private narrationBuffer: string;
+  /** Abertura FASE 1 — uma vez por turno, só chat [2]. */
+  private openingEmitted: boolean;
 
   private llmResponseWasStreamed: boolean;
   private toolMissCount: number;
@@ -272,6 +274,7 @@ export class AgentLoop {
     this.toolsInvoked = false;
     this.narrationStarted = false;
     this.narrationBuffer = "";
+    this.openingEmitted = false;
 
     this.llmResponseWasStreamed = false;
     this.toolMissCount = 0;
@@ -2643,12 +2646,31 @@ export class AgentLoop {
   private emitAgentProse(raw: string): void {
     const clean = sanitizeUserFacingProse(raw);
     if (!clean) return;
+    const step = this.state.currentStepIndex;
+    if (step > 1 || this.buildFixResume) return;
     const filtered = filterLoopAgentProseForChat(clean, {
-      loopStep: this.state.currentStepIndex,
+      loopStep: step,
       skipAck: this.buildFixResume,
     });
     if (!filtered) return;
-    this.streamNarration(filtered);
+    this.emitOpeningToChat(filtered);
+  }
+
+  /** FASE 1 — abertura única no chat [2], nunca no inspector. */
+  private emitOpeningToChat(text: string): void {
+    if (this.openingEmitted) return;
+    const chunk = text.trim();
+    if (!chunk) return;
+    if (isDuplicateNarrationChunk(this.narrationBuffer, chunk)) return;
+    this.appendToNarration(chunk);
+    this.emit("assistant_text", {
+      text: chunk,
+      append: false,
+      final: false,
+      opening: true,
+    });
+    this.openingEmitted = true;
+    this.narrationStarted = true;
   }
 
   private notifyLoopStatus(ctx: LoopUpdateContext): void {
@@ -2658,20 +2680,12 @@ export class AgentLoop {
       touchedPaths: [...this.touchedPaths],
     });
     if (!text) return;
-    if (ctx.kind === "model_error") {
-      this.streamNarration(text);
-      return;
-    }
     this.notifyExecution(text);
   }
 
-  /** Progresso de execução — Inspector durante build pós-approve; chat nos demais modos. */
+  /** Progresso factual do loop — sempre inspector (FASE 2..N). */
   private notifyExecution(text: string): void {
-    if (this.approvedPlanBuild) {
-      this.emitInspectorNote(text);
-      return;
-    }
-    this.streamNarration(text);
+    this.emitInspectorNote(text);
   }
 
   private emitInspectorNote(message: string): void {

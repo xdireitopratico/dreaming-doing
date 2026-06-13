@@ -85,22 +85,20 @@ export type ExecuteInstructionOpts = {
 function executeCommunicationRules(isContinuation: boolean): string[] {
   if (isContinuation) {
     return [
-      "Continuação do loop — NÃO reconfirme o pedido nem use 'Entendi' de novo.",
-      "0–1 frase factual sobre o que faz AGORA (ex.: 'Ajustando o hero…'), depois tool_calls.",
+      "FASE 2..N — continuação do loop no inspector.",
+      "NÃO reconfirme o pedido, NÃO use 'Entendi' de novo, NÃO escreva abertura.",
+      "Content vazio ou omitido — vá direto às tool_calls; o progresso factual vai ao inspector.",
       "Ferramentas: fs_read/fs_search → fs_edit (preferível) ou fs_write → shell_exec para build/test.",
-      "Comunicação:",
-      "- Content vazio com tool_calls só se o histórico já deixou claro o próximo passo.",
-      "- Dúvida bloqueante: tool clarify. Caso contrário: assuma default e siga.",
+      "Dúvida bloqueante: tool clarify. Caso contrário: assuma default e siga.",
+      "FASE 4 (só ao concluir): prosa no chat — o que mudou + pergunta aberta (CTA conversacional, sem botão).",
     ];
   }
   return [
-    "Primeiro passo desta run — no máximo 1 frase humana de abertura (evite template 'Entendi:'), depois aja.",
+    "FASE 1 — primeiro passo: no máximo 1 frase humana de abertura (evite 'Entendi:'), depois tool_calls.",
     "Ferramentas: fs_read/fs_search → fs_edit (preferível) ou fs_write → shell_exec para build/test.",
-    "Comunicação:",
-    "- Antes do bloco de tools: 0–1 frase factual (o quê faz agora) — nunca tool_calls com content vazio quando há ação.",
-    "- Texto + tool_calls no mesmo turno quando fizer sentido.",
-    "- Dúvida bloqueante: tool clarify. Caso contrário: assuma um default razoável, diga qual, e siga.",
-    "- Só termine só com texto quando a tarefa estiver concluída ou para UMA pergunta objetiva.",
+    "Passos 2+: content vazio — progresso no inspector, não no chat.",
+    "Dúvida bloqueante: tool clarify. Caso contrário: assuma default, diga qual, siga.",
+    "FASE 4 (ao concluir): fechamento no chat — o que mudou + convite ao preview + pergunta aberta.",
   ];
 }
 

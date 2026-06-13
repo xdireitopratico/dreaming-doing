@@ -144,17 +144,17 @@ function formatClosureFallback(input: ClosureResolveInput): string {
     return `Não consegui concluir: ${input.errorMessage.trim()}.${files}`;
   }
   if (paths.length === 0) {
-    return "Pronto — confere o preview e me diz se quer ajustar algo.";
+    return "Pronto — confere o preview. Quer ajustar algo ou seguimos para o próximo passo?";
   }
   if (paths.length === 1) {
-    return `Pronto — mexi em \`${paths[0]}\`. Confere o preview.`;
+    return `Pronto — mexi em \`${paths[0]}\`. Confere o preview. Quer ajustar algo ou seguimos?`;
   }
   const listed = paths
     .slice(-4)
     .map((p) => `\`${p}\``)
     .join(", ");
   const extra = paths.length > 4 ? ` e mais ${paths.length - 4}` : "";
-  return `Pronto — alterei ${listed}${extra}. Confere o preview.`;
+  return `Pronto — alterei ${listed}${extra}. Confere o preview. O que quer fazer a seguir?`;
 }
 
 /** Fechamento do mesmo agente — sem LLM narrador paralelo. */

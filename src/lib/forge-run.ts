@@ -95,10 +95,6 @@ function isInspectorThought(data: Record<string, unknown>): boolean {
   return data.thinking === true;
 }
 
-function isNarration(data: Record<string, unknown>): boolean {
-  return data.narration === true;
-}
-
 function normalizeProse(prose: string): string {
   const lines = prose.split("\n");
   if (lines.length <= 1) return prose.trim();
@@ -138,7 +134,7 @@ export function buildForgeTimeline(timeline: SSEEvent[], running = false): Forge
     const ts = ev.timestamp;
 
     if (ev.type === "assistant_text") {
-      if (isNarration(data) || isInspectorThought(data)) {
+      if (isInspectorThought(data)) {
         const chunk = String(data.text ?? "");
         if (!chunk) continue;
         if (!thoughtId) {
@@ -149,6 +145,28 @@ export function buildForgeTimeline(timeline: SSEEvent[], running = false): Forge
           thoughtText += chunk;
         }
       }
+      continue;
+    }
+
+    if (ev.type === "step_result") {
+      if (thoughtId) flushThought(ts);
+      const ok = data.ok !== false;
+      const text =
+        typeof data.summary === "string"
+          ? data.summary
+          : ok
+            ? "Concluído"
+            : "Falhou";
+      const evidence = Array.isArray(data.evidence)
+        ? (data.evidence as string[]).filter((e) => typeof e === "string")
+        : undefined;
+      items.push({
+        type: "RESULT",
+        id: `result-${ts}`,
+        ok,
+        text,
+        evidence: evidence?.length ? evidence : undefined,
+      });
       continue;
     }
 

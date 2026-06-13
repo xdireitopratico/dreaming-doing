@@ -44,7 +44,7 @@ Deno.test("buildExecuteInstruction inclui pedido literal", () => {
 
 Deno.test("buildExecuteInstruction passo 1 — abertura única", () => {
   const text = buildExecuteInstruction("landing oficina", { loopStep: 1 });
-  assertEquals(text.includes("Primeiro passo"), true);
+  assertEquals(text.includes("FASE 1"), true);
   assertEquals(text.includes("NÃO reconfirme"), false);
 });
 
@@ -52,6 +52,14 @@ Deno.test("buildExecuteInstruction passo 2+ — proíbe reconfirmar", () => {
   const text = buildExecuteInstruction("landing oficina", { loopStep: 2 });
   assertEquals(text.includes("NÃO reconfirme"), true);
   assertEquals(text.includes("confirmando o que entendeu"), false);
+  assertEquals(text.includes("FASE 2..N"), true);
+  assertEquals(text.includes("Content vazio"), true);
+});
+
+Deno.test("buildExecuteInstruction passo 1 — contrato FASE 4 fechamento", () => {
+  const text = buildExecuteInstruction("landing oficina", { loopStep: 1 });
+  assertEquals(text.includes("FASE 4"), true);
+  assertEquals(text.includes("pergunta aberta"), true);
 });
 
 Deno.test("buildExecuteInstruction buildFixResume — continuação sem ack", () => {
