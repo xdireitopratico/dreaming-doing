@@ -145,6 +145,35 @@ describe("S15 agent turn flow", () => {
     }
   });
 
+  it("loop natural: progresso factual visível após tools", () => {
+    let progress = reduce([
+      ev("start", {}),
+      ev("assistant_text", { text: "Montando o hero da landing.", narration: true }),
+      ev("tool_start", { name: "fs_write", args: { path: "src/App.tsx" } }),
+      ev("tool_done", { name: "fs_write", ok: true }),
+      ev("assistant_text", {
+        text: "Concluído: criar `src/App.tsx` (passo 1/5).",
+        narration: true,
+      }),
+      ev("assistant_text", { text: "Pronto — confere o preview.", final: true }),
+      ev("done", { summary: "Pronto — confere o preview." }),
+    ]);
+    progress = { ...progress, finished: true, streamText: "Pronto — confere o preview." };
+
+    const thread = buildChatThread([msg("u1", "user", "landing oficina")], progress, {
+      running: false,
+      activeRunId: "run-factual",
+      sessionProgress: progress,
+    });
+    const turn = thread[1];
+    expect(turn?.kind).toBe("assistant");
+    if (turn?.kind !== "assistant") return;
+
+    expect(turn.narration).toContain("Concluído: criar");
+    expect(turn.narration).not.toMatch(/Entendi[\s\S]*Entendi/);
+    expect(turn.miniCard).toBeTruthy();
+  });
+
   it("collapseNarrationBuffer — parede Entendi não vaza ao display", () => {
     const wall =
       "Entendi: A\n\nEntendi: B\n\nEntendi: C\n\nBuild passou.";

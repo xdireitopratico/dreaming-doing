@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   collapseNarrationBuffer,
+  filterLoopAgentProseForChat,
   isDuplicateNarrationChunk,
   isEntendiOpener,
 } from "./narration-dedupe";
@@ -37,6 +38,14 @@ describe("isDuplicateNarrationChunk", () => {
   it("permite narração distinta no mesmo turno", () => {
     const buf = "Entendi: vou ler o arquivo atual.";
     expect(isDuplicateNarrationChunk(buf, "Conferindo se o projeto compila…")).toBe(false);
+  });
+});
+
+describe("filterLoopAgentProseForChat", () => {
+  it("passo 2+ remove Entendi e mantém factual", () => {
+    expect(
+      filterLoopAgentProseForChat("Entendi: vou ler.\n\nConferindo build…", { loopStep: 2 }),
+    ).toBe("Conferindo build…");
   });
 });
 

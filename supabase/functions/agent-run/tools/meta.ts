@@ -41,7 +41,7 @@ export const CLARIFY_TOOL: ToolDefinition = {
     properties: {
       intro: {
         type: "string",
-        description: "1 frase confirmando o que entendeu do pedido (opcional).",
+        description: "1 frase opcional de contexto (sem template 'Entendi:').",
       },
       question: {
         type: "string",

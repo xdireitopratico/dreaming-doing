@@ -62,3 +62,19 @@ export function collapseNarrationBuffer(buffer: string): string {
 
   return out.join("\n\n");
 }
+
+/** Espelho de supabase/functions/agent-run/narration-dedupe.ts */
+export function filterLoopAgentProseForChat(
+  prose: string,
+  opts: { loopStep: number; skipAck?: boolean },
+): string | null {
+  const trimmed = prose.trim();
+  if (!trimmed) return null;
+
+  const stripAck = opts.skipAck === true || opts.loopStep > 1;
+  if (!stripAck) return trimmed;
+
+  const kept = narrationParagraphs(trimmed).filter((p) => !isEntendiOpener(p));
+  if (kept.length === 0) return null;
+  return kept.join("\n\n");
+}

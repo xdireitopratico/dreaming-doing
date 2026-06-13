@@ -42,6 +42,23 @@ Deno.test("buildExecuteInstruction inclui pedido literal", () => {
   assertEquals(text.includes("fs_write"), true);
 });
 
+Deno.test("buildExecuteInstruction passo 1 — abertura única", () => {
+  const text = buildExecuteInstruction("landing oficina", { loopStep: 1 });
+  assertEquals(text.includes("Primeiro passo"), true);
+  assertEquals(text.includes("NÃO reconfirme"), false);
+});
+
+Deno.test("buildExecuteInstruction passo 2+ — proíbe reconfirmar", () => {
+  const text = buildExecuteInstruction("landing oficina", { loopStep: 2 });
+  assertEquals(text.includes("NÃO reconfirme"), true);
+  assertEquals(text.includes("confirmando o que entendeu"), false);
+});
+
+Deno.test("buildExecuteInstruction buildFixResume — continuação sem ack", () => {
+  const text = buildExecuteInstruction("corrigir build", { loopStep: 1, buildFixResume: true });
+  assertEquals(text.includes("NÃO reconfirme"), true);
+});
+
 Deno.test("preview action não é conversa vaga", () => {
   assertEquals(isPreviewActionRequest("envia para o preview"), true);
   assertEquals(looksLikeInteractionOnly("envia para o preview"), false);

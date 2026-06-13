@@ -58,7 +58,11 @@ import {
 } from "./tool-progress.ts";
 import { logger } from "../_shared/logger.ts";
 import { appendExecutionLogEntry, buildExecutionLogMeta } from "./executionLogMeta.ts";
-import { collapseNarrationBuffer, isDuplicateNarrationChunk } from "./narration-dedupe.ts";
+import {
+  collapseNarrationBuffer,
+  filterLoopAgentProseForChat,
+  isDuplicateNarrationChunk,
+} from "./narration-dedupe.ts";
 import { checkpointChatText } from "./checkpoint-chat.ts";
 import {
   auditDesignInventory,
@@ -170,7 +174,7 @@ export class AgentLoop {
   private approvedPlanStepIndex: number;
   private narrationStarted: boolean;
   private narrationBuffer: string;
-  private lastStepHadAgentProse: boolean;
+
   private llmResponseWasStreamed: boolean;
   private toolMissCount: number;
   private forceToolsNext: boolean;
@@ -268,7 +272,7 @@ export class AgentLoop {
     this.toolsInvoked = false;
     this.narrationStarted = false;
     this.narrationBuffer = "";
-    this.lastStepHadAgentProse = false;
+
     this.llmResponseWasStreamed = false;
     this.toolMissCount = 0;
     this.forceToolsNext = false;
@@ -856,7 +860,7 @@ export class AgentLoop {
 
         loopStep++;
         this.state.currentStepIndex = loopStep;
-        this.lastStepHadAgentProse = false;
+    
         this.state.phase = LoopPhase.EXECUTE_STEP;
         await this.touchHeartbeat();
         if (this.approvedPlanBuild) {
@@ -887,7 +891,10 @@ export class AgentLoop {
         }
 
         const compressed = await this.compression.compress(this.state.messages);
-        const executeInstruction = buildExecuteInstruction(this.originalUserRequest);
+        const executeInstruction = buildExecuteInstruction(this.originalUserRequest, {
+          loopStep,
+          buildFixResume: this.buildFixResume,
+        });
         const actionableIntent =
           this.state.intent?.type === "modify" ||
           this.state.intent?.type === "new_project" ||
@@ -2636,15 +2643,15 @@ export class AgentLoop {
   private emitAgentProse(raw: string): void {
     const clean = sanitizeUserFacingProse(raw);
     if (!clean) return;
-    this.streamNarration(clean);
-    this.lastStepHadAgentProse = true;
+    const filtered = filterLoopAgentProseForChat(clean, {
+      loopStep: this.state.currentStepIndex,
+      skipAck: this.buildFixResume,
+    });
+    if (!filtered) return;
+    this.streamNarration(filtered);
   }
 
   private notifyLoopStatus(ctx: LoopUpdateContext): void {
-    if (ctx.kind === "tool_batch" && this.lastStepHadAgentProse) {
-      this.lastStepHadAgentProse = false;
-      return;
-    }
     const text = formatLoopStatus({
       ...ctx,
       userRequest: this.originalUserRequest ?? undefined,
