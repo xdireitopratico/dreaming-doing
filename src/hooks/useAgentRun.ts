@@ -67,6 +67,8 @@ const TERMINAL_STATUSES = new Set(["completed", "failed", "canceled", "awaiting_
 // Longer/conditional stale thresholds when Inngest is authoritative (PR1 dispatch foundation; avoids
 // synthesizing stale finish on still-running Inngest step with ~4.5m budget + gaps between events/heartbeats).
 const STALE_STREAM_MS = 30 * 60 * 1000;
+/** Snapshot só re-subscribe se heartbeat do DB for recente. */
+const SNAPSHOT_RUN_FRESH_MS = 2 * 60 * 1000;
 const STALE_STREAM_WITH_QUEUE_MS = 10 * 60 * 1000;
 
 const SESSION_STORAGE_KEY = "forge:agent-snapshot";
@@ -734,8 +736,12 @@ export function useAgentRun() {
           setProgress((p) => ({
             ...p,
             finished: true,
-            pendingQueueCount: body.pendingCount ?? 0,
-            statusHint: body.message ?? "Mensagem na fila do agente.",
+            pendingQueueCount:
+              typeof body.pendingCount === "number" ? body.pendingCount : 0,
+            statusHint:
+              typeof body.message === "string"
+                ? body.message
+                : "Mensagem na fila do agente.",
             error: null,
           }));
           releaseAgentConnect();
@@ -751,14 +757,15 @@ export function useAgentRun() {
             ...p,
             finished: true,
             lastFinishOk: true,
-            streamText: body.content ?? null,
+            streamText: typeof body.content === "string" ? body.content : null,
             statusHint: "Resposta Taste enviada.",
           }));
           releaseAgentConnect();
           return { ok: true };
         }
 
-        if (!body.runId) {
+        const runId = typeof body.runId === "string" ? body.runId : null;
+        if (!runId) {
           const msg = "Resposta inválida do servidor";
           setProgress((p) => ({
             ...p,
@@ -769,8 +776,8 @@ export function useAgentRun() {
           return { ok: false, error: msg };
         }
 
-        await subscribeToRun(body.runId);
-        logEditorTelemetryEvent("agent_run", "connect_ok", "info", body.runId.slice(0, 8));
+        await subscribeToRun(runId);
+        logEditorTelemetryEvent("agent_run", "connect_ok", "info", runId.slice(0, 8));
         return { ok: true };
       } catch (e) {
         const msg = formatAgentFetchError(e);
@@ -1093,7 +1100,7 @@ export function useAgentRun() {
   }, [teardownChannels, bumpFrozenProgressTick]);
 
   const tryRestoreSnapshot = useCallback(
-    (projectId: string, conversationId: string, messages: ChatMessage[] = []) => {
+    async (projectId: string, conversationId: string, messages: ChatMessage[] = []) => {
       const snap = loadAgentSnapshot();
       if (!snap) return;
       const age = Date.now() - snap.timestamp;
@@ -1106,6 +1113,18 @@ export function useAgentRun() {
         return;
       }
 
+      const idleProgress = {
+        ...initialAgentProgress,
+        autoResuming: false,
+      };
+
+      const restoreProgressOnly = (progress: AgentProgress) => {
+        setProgress((prev) => {
+          if (prev !== initialAgentProgress && prev.streamText != null) return prev;
+          return { ...progress, autoResuming: false };
+        });
+      };
+
       if (snap.activeRunId) {
         const alreadyInDb = messages.some(
           (m) => m.runId === snap.activeRunId && isAssistantRunMaterialized(m),
@@ -1114,33 +1133,61 @@ export function useAgentRun() {
           clearAgentSnapshot();
           return;
         }
-      } else if (snap.progress.finished) {
+
+        const { data: run } = await supabase
+          .from("agent_runs")
+          .select("id, status, heartbeat_at, started_at, canceled_at")
+          .eq("id", snap.activeRunId)
+          .maybeSingle();
+
+        const isLiveStatus =
+          run?.status === "running" || run?.status === "pending";
+        const heartbeat = (run?.heartbeat_at ?? run?.started_at) as string | null;
+        const staleMs = heartbeat ? Date.now() - new Date(heartbeat).getTime() : Infinity;
+        const fresh = isLiveStatus && !run?.canceled_at && staleMs < SNAPSHOT_RUN_FRESH_MS;
+
+        if (!fresh) {
+          clearAgentSnapshot();
+          setActiveRunId(null);
+          runIdRef.current = null;
+          restoreProgressOnly({
+            ...snap.progress,
+            finished: snap.progress.finished || !isLiveStatus,
+            autoResuming: false,
+            resumable: snap.progress.resumable || staleMs >= SNAPSHOT_RUN_FRESH_MS,
+          });
+          return;
+        }
+
+        runIdRef.current = snap.activeRunId;
+        setActiveRunId(snap.activeRunId);
+        lastSeqRef.current = snap.lastSeq;
+        restoreProgressOnly(snap.progress);
+        void subscribeToRun(snap.activeRunId, { resetProgress: false });
+        return;
+      }
+
+      if (snap.progress.finished) {
         clearAgentSnapshot();
         return;
       }
 
-      const restoreProgress = () => {
-        setProgress((prev) => {
-          if (prev !== initialAgentProgress && prev.streamText != null) return prev;
-          return snap.progress;
-        });
-      };
-
-      if (snap.activeRunId) {
-        runIdRef.current = snap.activeRunId;
-        setActiveRunId(snap.activeRunId);
-        lastSeqRef.current = snap.lastSeq;
-        restoreProgress();
-        void subscribeToRun(snap.activeRunId, { resetProgress: false });
-      } else if (
+      if (
         snap.progress.awaiting &&
         (snap.progress.awaitingKind === "clarify" ||
           (snap.progress.awaitingKind as string | null) === "qualify")
       ) {
-        restoreProgress();
-      } else if (snap.progress.pendingPlan || snap.progress.awaitingKind === "plan_approval") {
-        restoreProgress();
+        restoreProgressOnly(snap.progress);
+        return;
       }
+
+      if (snap.progress.pendingPlan || snap.progress.awaitingKind === "plan_approval") {
+        restoreProgressOnly(snap.progress);
+        return;
+      }
+
+      clearAgentSnapshot();
+      setProgress(idleProgress);
     },
     [subscribeToRun],
   );

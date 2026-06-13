@@ -247,15 +247,15 @@ describe("shouldShowJobCard", () => {
   });
 });
 
-describe("autoResuming — mini-card ancorado", () => {
-  it("mantém run ativa com autoResuming mesmo sem slotActive", () => {
+describe("hasActiveJob — sem fantasma no mount", () => {
+  it("autoResuming sozinho não é job ativo", () => {
     const progress = {
       ...initialAgentProgress,
       autoResuming: true,
       finished: false,
       phase: "build",
     };
-    expect(isRunEffectivelyActive(progress, false)).toBe(true);
+    expect(isRunEffectivelyActive(progress, false)).toBe(false);
     expect(
       shouldShowJobCard({
         runId: "run-1",
@@ -265,7 +265,36 @@ describe("autoResuming — mini-card ancorado", () => {
         hasExecutionEvidence: true,
         slotActive: false,
       }),
-    ).toBe(true);
+    ).toBe(false);
+  });
+
+  it("job ativo exige running e slotActive", () => {
+    const progress = { ...initialAgentProgress, finished: false, phase: "execute" };
+    expect(isRunEffectivelyActive(progress, true)).toBe(true);
+    expect(isRunEffectivelyActive(progress, false)).toBe(false);
+  });
+
+  it("normalizeMiniCardBriefing filtra retomando automaticamente", () => {
+    expect(normalizeMiniCardBriefing("Retomando automaticamente no servidor…")).toBeNull();
+  });
+
+  it("collectMiniCardBriefings vazio sem job ativo", () => {
+    const progress = {
+      ...initialAgentProgress,
+      phase: "execute",
+      tools: [{ name: "fs_edit", args: { path: "src/App.tsx" } }],
+    };
+    const timeline = buildForgeTimeline(
+      [
+        {
+          type: "tool_start",
+          data: { name: "fs_edit", args: { path: "src/App.tsx" } },
+          timestamp: 1,
+        },
+      ],
+      false,
+    );
+    expect(collectMiniCardBriefings(progress, timeline, [], false)).toEqual([]);
   });
 });
 

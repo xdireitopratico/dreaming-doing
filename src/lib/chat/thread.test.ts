@@ -22,7 +22,7 @@ describe("buildChatThread", () => {
     expect(thread.map((t) => t.kind)).toEqual(["user", "assistant", "user", "assistant"]);
   });
 
-  it("mantém slot ativo durante autoResuming entre chunks", () => {
+  it("autoResuming sozinho não mantém slot ativo sem running", () => {
     const messages = [msg("u1", "user", "fix build")];
     const progress = {
       ...initialAgentProgress,
@@ -38,7 +38,7 @@ describe("buildChatThread", () => {
     const slot = thread[1];
     expect(slot?.kind).toBe("assistant");
     if (slot?.kind === "assistant") {
-      expect(slot.isActive).toBe(true);
+      expect(slot.isActive).toBe(false);
       expect(slot.runId).toBe("run-chunk");
     }
   });

@@ -55,7 +55,7 @@ export function useChat({
     if (!conversationId || messagesLoading) return;
     if (snapshotRestoredRef.current === conversationId) return;
 
-    agent.tryRestoreSnapshot(projectId, conversationId, messages);
+    void agent.tryRestoreSnapshot(projectId, conversationId, messages);
     snapshotRestoredRef.current = conversationId;
     sessionBoundRef.current = conversationId;
   }, [conversationId, projectId, agent, messagesLoading, messages]);

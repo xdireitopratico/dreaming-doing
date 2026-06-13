@@ -565,7 +565,11 @@ export function EditorPageLayout({
                             <JobInspector
                               run={focusedJobProgress}
                               runId={jobWorkspaceFocus.runId}
-                              running={running && agent.activeRunId === jobWorkspaceFocus.runId}
+                              running={
+                                running &&
+                                agent.activeRunId === jobWorkspaceFocus.runId &&
+                                agent.connected
+                              }
                               activeTab={jobWorkspaceFocus.tab}
                               messages={chatMessages}
                               livePendingPlan={

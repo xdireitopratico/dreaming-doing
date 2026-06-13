@@ -1,9 +1,6 @@
-import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 import type { MiniCardData } from "@/lib/chat/types";
 import { ChatTaskList } from "./ChatTaskList";
-
-const BRIEFING_ROTATE_MS = 2800;
 
 type ChatJobCardProps = {
   data: MiniCardData;
@@ -25,24 +22,8 @@ export function ChatJobCard({
   onClick,
 }: ChatJobCardProps) {
   const isLive = data.status === "working" || data.status === "thinking";
-  const briefings =
-    data.liveBriefings.length > 0 ? data.liveBriefings : [data.subtitle || data.title];
-  const [briefingIndex, setBriefingIndex] = useState(0);
-
-  useEffect(() => {
-    if (!isLive) {
-      setBriefingIndex(0);
-      return;
-    }
-    const id = window.setInterval(() => {
-      setBriefingIndex((i) => (i + 1) % briefings.length);
-    }, BRIEFING_ROTATE_MS);
-    return () => window.clearInterval(id);
-  }, [isLive, briefings.length, briefings.join("\u0000")]);
-
-  const displaySubtitle = isLive
-    ? (briefings[briefingIndex % briefings.length] ?? data.subtitle)
-    : data.subtitle || data.title;
+  const latestBriefing = data.liveBriefings[0] ?? (data.subtitle || data.title);
+  const displaySubtitle = isLive ? latestBriefing : data.subtitle || data.title;
 
   const { edited, file } = parseEditedHeader(data.header);
   const isRunningCommand = /^Running command$/i.test(data.header.trim());

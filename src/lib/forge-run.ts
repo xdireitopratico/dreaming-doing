@@ -304,14 +304,26 @@ export function deriveTasksFromPlan(
     });
 }
 
-function deriveMiniCardStatus(progress: AgentProgress, running: boolean): MiniCardStatus {
+/** Job ativo confirmado — sem autoResuming nem flags stale. */
+export function hasActiveJob(
+  progress: AgentProgress,
+  opts?: { running?: boolean; slotActive?: boolean },
+): boolean {
+  if (progress.finished || progress.canceled || progress.awaiting) return false;
+  if (progress.awaitingKind === "plan_approval" || progress.awaitingKind === "clarify") {
+    return false;
+  }
+  return !!(opts?.running && opts?.slotActive);
+}
+
+function deriveMiniCardStatus(progress: AgentProgress, jobActive: boolean): MiniCardStatus {
   if (progress.canceled || (progress.finished && progress.lastFinishOk === false)) {
     return "failed";
   }
   if (progress.finished && progress.error && progress.resumable) return "failed";
   if (progress.finished) return "done";
-  if (running || progress.autoResuming) return "working";
-  return "working";
+  if (jobActive) return "working";
+  return "done";
 }
 
 const TOOL_BRIEF_VERBS: Record<string, string> = {
@@ -401,6 +413,11 @@ export function normalizeMiniCardBriefing(line: string): string | null {
   if (/entendendo o que já existe/i.test(t)) return null;
   if (/^avaliando o escopo/i.test(t)) return null;
   if (/^pensando[.…]*$/i.test(t)) return null;
+  if (/retomando automaticamente/i.test(t)) return null;
+  if (/retomando execução/i.test(t)) return null;
+  if (/retomando do passo/i.test(t)) return null;
+  if (/conectando ao agente/i.test(t)) return null;
+  if (/^iniciando[.…]*$/i.test(t)) return null;
   return truncate(t, 80);
 }
 
@@ -422,47 +439,53 @@ function isInternalPhaseNoise(label: string, phase?: string): boolean {
   return normalizeMiniCardBriefing(t) === null;
 }
 
-/** Briefings humanos derivados da timeline — rotacionam no mini card durante a run. */
+/** Último briefing factual — só durante job ativo; sem carrossel de histórico. */
 export function collectMiniCardBriefings(
   progress: AgentProgress,
   timeline: ForgeTimelineItem[],
   tasks: ForgeTaskItem[],
-  running: boolean,
-  opts?: { userPrompt?: string | null; sessionTitle?: string | null },
+  jobActive: boolean,
+  _opts?: { userPrompt?: string | null; sessionTitle?: string | null },
 ): string[] {
-  const lines: string[] = [];
-  const seen = new Set<string>();
-
-  const push = (line: string) => {
-    const t = normalizeMiniCardBriefing(line);
-    if (!t || seen.has(t)) return;
-    seen.add(t);
-    lines.push(t);
-  };
-
-  const activeThought = [...timeline].reverse().find((i) => i.type === "THOUGHT" && i.active);
-  if (activeThought?.type === "THOUGHT") push("Raciocinando…");
+  if (!jobActive) return [];
 
   const pendingTool = [...progress.tools].reverse().find((t) => t.ok === undefined);
   if (pendingTool) {
-    push(toolBriefing(pendingTool.name, pathFromArgs(pendingTool.args)));
+    const line = normalizeMiniCardBriefing(
+      toolBriefing(pendingTool.name, pathFromArgs(pendingTool.args)),
+    );
+    if (line) return [line];
   }
 
-  const activeTask = tasks.find((t) => t.status === "active");
-  if (activeTask) push(activeTask.label);
-
   for (const item of [...timeline].reverse()) {
-    if (item.type === "TOOL") push(toolBriefing(item.name, item.path));
-    if (item.type === "TASK") push(item.label);
-    if (item.type === "RESULT" && item.ok && item.text) push(item.text);
+    if (item.type === "RESULT" && item.ok && item.text) {
+      const line = normalizeMiniCardBriefing(item.text);
+      if (line) return [line];
+    }
+    if (item.type === "TOOL") {
+      const line = normalizeMiniCardBriefing(toolBriefing(item.name, item.path));
+      if (line) return [line];
+    }
+    if (item.type === "TASK") {
+      const line = normalizeMiniCardBriefing(item.label);
+      if (line) return [line];
+    }
+  }
+
+  const activeThought = [...timeline].reverse().find((i) => i.type === "THOUGHT" && i.active);
+  if (activeThought?.type === "THOUGHT") return ["Raciocinando…"];
+
+  const activeTask = tasks.find((t) => t.status === "active");
+  if (activeTask) {
+    const line = normalizeMiniCardBriefing(activeTask.label);
+    if (line) return [line];
   }
 
   const planAwaiting =
     progress.awaitingKind === "plan_approval" && (progress.pendingPlan?.steps?.length ?? 0) > 0;
+  if (progress.phase === "plan" || planAwaiting) return ["Plano aguardando revisão…"];
 
-  if (progress.phase === "plan" || planAwaiting) push("Plano aguardando revisão…");
-
-  return lines;
+  return [];
 }
 
 function isWrapUpPhrase(text: string): boolean {
@@ -538,13 +561,10 @@ export function buildMiniCardHeader(
     editedFile?: string | null;
     liveBriefings: string[];
     sessionTitle: string;
-    briefingIndex?: number;
   },
 ): { header: string; subtitle: string } {
   const edited = opts.editedFile?.trim();
-  const briefings = opts.liveBriefings.length > 0 ? opts.liveBriefings : [opts.sessionTitle];
-  const idx = opts.briefingIndex ?? 0;
-  const subtitle = briefings[idx % briefings.length] ?? opts.sessionTitle;
+  const subtitle = opts.liveBriefings[0] ?? opts.sessionTitle;
 
   if (edited && (running || !progress.finished)) {
     return { header: `Edited ${edited}`, subtitle };
@@ -562,8 +582,7 @@ export function buildMiniCardHeader(
 }
 
 export function isRunEffectivelyActive(progress: AgentProgress, slotActive = false): boolean {
-  if (progress.finished || progress.canceled) return false;
-  return !!slotActive || progress.autoResuming === true;
+  return hasActiveJob(progress, { running: true, slotActive });
 }
 
 /**
@@ -593,14 +612,13 @@ export function shouldShowJobCard(opts: {
     !hasActiveShellTool(progress);
   if (planApprovalOnly) return false;
 
-  const running =
-    !progress.finished && !progress.canceled && (slotActive || progress.autoResuming === true);
-  if (running) return true;
+  const jobActive = hasActiveJob(progress, { running: true, slotActive });
+  if (jobActive) return true;
 
   const edited = lastEditedFile(progress);
 
-  if (edited && (running || !progress.finished)) return true;
-  if (hasActiveShellTool(progress) && running) return true;
+  if (edited && (jobActive || !progress.finished)) return true;
+  if (hasActiveShellTool(progress) && jobActive) return true;
 
   if (progress.finished && progress.lastFinishOk !== false) {
     if ((progress.diffs?.length ?? 0) > 0 || (progress.deliveryFiles?.length ?? 0) > 0) {
@@ -610,7 +628,7 @@ export function shouldShowJobCard(opts: {
   }
 
   // Mini-card permanente: job materializado no DB mantém o card após terminar.
-  if (progress.finished && opts.isAgentJobMessage && progress.conversational !== true) {
+  if (progress.finished && opts.isAgentJobMessage) {
     return true;
   }
 
@@ -628,9 +646,10 @@ export function buildAgentRunView(
     runStartedAtMs?: number | null;
   },
 ): AgentRunView {
-  const running = isRunEffectivelyActive(progress, opts?.running);
+  const slotActive = !!opts?.running;
+  const jobActive = hasActiveJob(progress, { running: true, slotActive });
   const jobPlan = opts?.jobPlan ?? progress.pendingPlan;
-  const forgeTimeline = buildForgeTimeline(progress.timeline, running);
+  const forgeTimeline = buildForgeTimeline(progress.timeline, jobActive);
 
   const tasks = jobPlan?.steps?.length ? deriveTasksFromPlan(jobPlan, progress) : [];
 
@@ -639,10 +658,10 @@ export function buildAgentRunView(
     tasks.findIndex((t) => t.status === "active"),
   );
 
-  const status = deriveMiniCardStatus(progress, running);
+  const status = deriveMiniCardStatus(progress, jobActive);
   const editedFile = lastEditedFile(progress);
   const sessionTitle = deriveSessionTitle(progress, jobPlan, opts?.userPrompt);
-  const liveBriefings = collectMiniCardBriefings(progress, forgeTimeline, tasks, running, {
+  const liveBriefings = collectMiniCardBriefings(progress, forgeTimeline, tasks, jobActive, {
     userPrompt: opts?.userPrompt,
     sessionTitle,
   });
@@ -659,7 +678,7 @@ export function buildAgentRunView(
   }
 
   const runStartedAtMs = opts?.runStartedAtMs;
-  const latencyThinking = resolveLatencyThinking(progress, running, runStartedAtMs, forgeTimeline);
+  const latencyThinking = resolveLatencyThinking(progress, jobActive, runStartedAtMs, forgeTimeline);
 
   const thinking: AgentRunView["thinking"] = reasoningThought
     ? {
@@ -683,7 +702,7 @@ export function buildAgentRunView(
       narrationBody.includes(streamBody));
   const closingText =
     streamBody ||
-    (!running && !narrationDuplicatesStream ? narrationBody || safeSummary : null) ||
+    (!jobActive && !narrationDuplicatesStream ? narrationBody || safeSummary : null) ||
     null;
   const narrationForLine =
     narrationBody &&
@@ -692,7 +711,7 @@ export function buildAgentRunView(
       ? narrationBody
       : null;
 
-  const { header, subtitle } = buildMiniCardHeader(progress, running, {
+  const { header, subtitle } = buildMiniCardHeader(progress, jobActive, {
     editedFile,
     liveBriefings,
     sessionTitle,

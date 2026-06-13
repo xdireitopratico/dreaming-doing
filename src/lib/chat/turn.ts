@@ -2,7 +2,7 @@ import type { AgentProgress, PendingPlan } from "@/lib/agent-progress";
 import type { ChatMessage } from "@/lib/chat-types";
 import {
   buildAgentRunView,
-  isRunEffectivelyActive,
+  hasActiveJob,
   shouldShowJobCard,
 } from "@/lib/forge-run";
 import {
@@ -124,7 +124,7 @@ export function mapAssistantTurn(
       resolved.phase === "summarize");
 
   const slotActive = resolved
-    ? isRunEffectivelyActive(resolved, item.isActive || anchoredLive)
+    ? hasActiveJob(resolved, { running: true, slotActive: item.isActive || anchoredLive })
     : item.isActive || anchoredLive;
 
   const showJobCard = shouldShowJobCard({
@@ -209,7 +209,6 @@ export function mapAssistantTurn(
   const planDockActive =
     !!ctx.pendingPlan &&
     (resolved?.awaitingKind === "plan_approval" ||
-      jobPlan?.status === "pending" ||
       item.runId === ctx.pendingPlan.runId);
   if (planDockActive) streamText = null;
 
