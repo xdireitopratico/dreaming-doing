@@ -127,50 +127,42 @@ export function PrometheusBoardroom({
       <PrometheusParticles />
 
       <div className="relative z-10 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-        <header
-          className="flex flex-shrink-0 items-center gap-2 border-b px-3 py-2 sm:px-4"
-          style={{ borderColor: "var(--ps-border)", background: "var(--ps-bg-deep)" }}
-        >
+        <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-start justify-between px-4 pt-3 sm:px-5 sm:pt-4">
           <button
             type="button"
             onClick={handleBack}
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border transition-colors"
-            style={{
-              borderColor: "var(--ps-border)",
-              background: "var(--ps-bg-surface)",
-              color: "var(--ps-cream-80)",
-            }}
+            className="pointer-events-auto flex h-8 w-8 shrink-0 items-center justify-center transition-opacity hover:opacity-80"
+            style={{ color: "var(--ps-cream-60)" }}
             aria-label="Voltar"
             title="Voltar"
           >
             <X className="h-4 w-4" />
           </button>
 
-          <div className="flex min-w-0 flex-1 justify-center gap-2 sm:gap-3">
+          <div className="pointer-events-none absolute left-1/2 top-3 flex -translate-x-1/2 gap-2 sm:top-4 sm:gap-3">
             {PROMETHEUS_AGENTS.map((agent) => (
-              <PrometheusBoardroomAgent
-                key={agent.id}
-                agent={agent}
-                isActive={activeAgent === agent.id}
-                hasSpoken={agentsSpokeSet.has(agent.id)}
-                isStreaming={isStreaming}
-              />
+              <div key={agent.id} className="pointer-events-auto">
+                <PrometheusBoardroomAgent
+                  agent={agent}
+                  isActive={activeAgent === agent.id}
+                  hasSpoken={agentsSpokeSet.has(agent.id)}
+                  isStreaming={isStreaming}
+                />
+              </div>
             ))}
           </div>
 
-          {planningDone && onAdvance ? (
+          {planningDone && onAdvance && (
             <button
               type="button"
               onClick={onAdvance}
-              className="shrink-0 rounded-lg px-2.5 py-1.5 text-[10px] font-semibold transition-all hover:scale-[1.02] sm:px-3 sm:text-xs"
+              className="pointer-events-auto shrink-0 rounded-lg px-2.5 py-1.5 text-[10px] font-semibold transition-all hover:scale-[1.02] sm:px-3 sm:text-xs"
               style={{ background: "var(--ps-accent)", color: "var(--ps-bg-deep)" }}
             >
               Ver Proposta →
             </button>
-          ) : (
-            <div className="w-8 shrink-0 sm:w-[7.5rem]" aria-hidden />
           )}
-        </header>
+        </div>
 
         {/* Error with recovery actions */}
         {error && (
@@ -195,7 +187,7 @@ export function PrometheusBoardroom({
           </div>
         )}
 
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden pt-[7.5rem] sm:pt-[8rem]">
           <div
             ref={messagesScrollRef}
             className="flex-1 overflow-y-auto overflow-x-hidden px-4 py-3 space-y-2"
