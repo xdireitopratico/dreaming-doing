@@ -234,10 +234,13 @@ export function DashboardShell({
   children,
   requireAuth = true,
   activeNav = "home",
+  immersive = false,
 }: {
   children: ReactNode;
   requireAuth?: boolean;
   activeNav?: NavId;
+  /** Sem sidebar nem header mobile — boardroom, Flow React, etc. */
+  immersive?: boolean;
 }) {
   const { user, loading, signOut } = useAuth();
   const loc = useLocation();
@@ -277,42 +280,48 @@ export function DashboardShell({
     "builder";
 
   return (
-    <div className="dashboard-workspace">
-      <aside className="dashboard-sidebar">
-        <DashboardSidebarPanel
-          activeNav={activeNav}
-          displayName={displayName}
-          user={user}
-          onSignOut={() => signOut()}
-        />
-      </aside>
-
-      <div className="dashboard-main">
-        <header className="dashboard-mobile-header">
-          <ForgeLogoMark linkTo="/projects" size={18} />
-          <button
-            type="button"
-            className="dashboard-mobile-menu-btn"
-            aria-label="Abrir menu de navegação"
-            onClick={() => setMobileNavOpen(true)}
-          >
-            <Menu className="size-5" />
-          </button>
-        </header>
-        {children}
-      </div>
-
-      <Sheet open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
-        <SheetContent side="left" className="dashboard-mobile-sheet w-[min(280px,88vw)] gap-0 p-0">
+    <div className={`dashboard-workspace${immersive ? " dashboard-immersive" : ""}`}>
+      {!immersive && (
+        <aside className="dashboard-sidebar">
           <DashboardSidebarPanel
             activeNav={activeNav}
             displayName={displayName}
             user={user}
-            onNavClick={() => setMobileNavOpen(false)}
             onSignOut={() => signOut()}
           />
-        </SheetContent>
-      </Sheet>
+        </aside>
+      )}
+
+      <div className="dashboard-main">
+        {!immersive && (
+          <header className="dashboard-mobile-header">
+            <ForgeLogoMark linkTo="/projects" size={18} />
+            <button
+              type="button"
+              className="dashboard-mobile-menu-btn"
+              aria-label="Abrir menu de navegação"
+              onClick={() => setMobileNavOpen(true)}
+            >
+              <Menu className="size-5" />
+            </button>
+          </header>
+        )}
+        {children}
+      </div>
+
+      {!immersive && (
+        <Sheet open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
+          <SheetContent side="left" className="dashboard-mobile-sheet w-[min(280px,88vw)] gap-0 p-0">
+            <DashboardSidebarPanel
+              activeNav={activeNav}
+              displayName={displayName}
+              user={user}
+              onNavClick={() => setMobileNavOpen(false)}
+              onSignOut={() => signOut()}
+            />
+          </SheetContent>
+        </Sheet>
+      )}
     </div>
   );
 }

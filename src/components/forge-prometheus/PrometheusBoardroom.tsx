@@ -5,6 +5,7 @@
  */
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { X } from "lucide-react";
 import { PrometheusParticles } from "./PrometheusParticles";
 import { PrometheusBoardroomAgent } from "./PrometheusBoardroomAgent";
 import { PrometheusBoardroomTurn } from "./PrometheusBoardroomTurn";
@@ -67,15 +68,15 @@ function humanizeError(error: string): string {
 const PLANNING_PHASES: BoardroomPhase[] = ["discovery", "clarification", "planning"];
 
 export function PrometheusBoardroom({
-  messages, isStreaming, currentPhase, phaseIndex,
+  messages, isStreaming, currentPhase,
   ready = true, onStartBuild,
   onSkip, onBack, onSendFeedback, onAdvance,
   error,
 }: Props) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesScrollRef = useRef<HTMLDivElement>(null);
   const [activeAgent, setActiveAgent] = useState<string | null>(null);
   const [showLeaveDialog, setShowLeaveDialog] = useState(false);
-  const [dismissedBanner, setDismissedBanner] = useState<string | null>(null);
 
   const handleBack = useCallback(() => {
     if (isStreaming) {
@@ -91,35 +92,19 @@ export function PrometheusBoardroom({
   }, [onBack]);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    const el = messagesScrollRef.current;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
   }, [messages.length]);
 
   useEffect(() => {
     if (messages.length > 0) setActiveAgent(messages[messages.length - 1].agent);
   }, [messages]);
 
-  useEffect(() => {
-    setDismissedBanner(null);
-  }, [currentPhase]);
-
   const getAgent = (id: string) => PROMETHEUS_AGENTS.find(a => a.id === id) || { id, name: id === "user" ? "Você" : id, icon: id === "user" ? "👤" : "🤖", color: "hsl(40 30% 85%)", role: id === "user" ? "Usuário" : id };
-
-  const planningPhaseIndex = useMemo(() => {
-    const idx = PLANNING_PHASES.indexOf(currentPhase);
-    return idx >= 0 ? idx : Math.min(phaseIndex, 2);
-  }, [currentPhase, phaseIndex]);
-
-  const convergenceScore = useMemo(() => {
-    return Math.round(((planningPhaseIndex + 1) / 3) * 100);
-  }, [planningPhaseIndex]);
-
-  const currentRound = useMemo(() => {
-    return messages.filter(m => m.type === "user_input").length + 1;
-  }, [messages]);
 
   const agentsSpokeSet = useMemo(() => new Set(messages.map(m => m.agent)), [messages]);
   const planningDone = !isStreaming && !PLANNING_PHASES.includes(currentPhase) && messages.length > 0;
-  const showActionsBar = Boolean(planningDone && onAdvance);
 
   // Pre-start screen
   void ready;
@@ -142,24 +127,26 @@ export function PrometheusBoardroom({
       <PrometheusParticles />
 
       <div className="relative z-10 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-        {showActionsBar && (
-          <div
-            className="flex flex-shrink-0 items-center justify-end gap-2 px-4 py-2"
+        <header
+          className="flex flex-shrink-0 items-center gap-2 border-b px-3 py-2 sm:px-4"
+          style={{ borderColor: "var(--ps-border)", background: "var(--ps-bg-deep)" }}
+        >
+          <button
+            type="button"
+            onClick={handleBack}
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border transition-colors"
+            style={{
+              borderColor: "var(--ps-border)",
+              background: "var(--ps-bg-surface)",
+              color: "var(--ps-cream-80)",
+            }}
+            aria-label="Voltar"
+            title="Voltar"
           >
-            {planningDone && onAdvance && (
-              <button
-                onClick={onAdvance}
-                className="rounded-lg px-3 py-1.5 text-xs font-semibold transition-all hover:scale-[1.02]"
-                style={{ background: "var(--ps-accent)", color: "var(--ps-bg-deep)" }}
-              >
-                ✅ Ver Proposta →
-              </button>
-            )}
-          </div>
-        )}
+            <X className="h-4 w-4" />
+          </button>
 
-        <div className="flex-shrink-0 px-4 py-2">
-          <div className="flex flex-wrap justify-center gap-3">
+          <div className="flex min-w-0 flex-1 justify-center gap-2 sm:gap-3">
             {PROMETHEUS_AGENTS.map((agent) => (
               <PrometheusBoardroomAgent
                 key={agent.id}
@@ -170,7 +157,20 @@ export function PrometheusBoardroom({
               />
             ))}
           </div>
-        </div>
+
+          {planningDone && onAdvance ? (
+            <button
+              type="button"
+              onClick={onAdvance}
+              className="shrink-0 rounded-lg px-2.5 py-1.5 text-[10px] font-semibold transition-all hover:scale-[1.02] sm:px-3 sm:text-xs"
+              style={{ background: "var(--ps-accent)", color: "var(--ps-bg-deep)" }}
+            >
+              Ver Proposta →
+            </button>
+          ) : (
+            <div className="w-8 shrink-0 sm:w-[7.5rem]" aria-hidden />
+          )}
+        </header>
 
         {/* Error with recovery actions */}
         {error && (
@@ -195,82 +195,9 @@ export function PrometheusBoardroom({
           </div>
         )}
 
-        {currentPhase === "clarification" && messages.length > 0 && dismissedBanner !== "clarification" && (
-          <div
-            className="mx-4 mt-1 flex flex-shrink-0 items-center justify-between gap-2 rounded-lg px-3 py-2"
-            style={{ background: "rgba(139,92,246,0.06)", border: "1px solid rgba(139,92,246,0.15)" }}
-          >
-            <span className="text-xs" style={{ color: "hsl(271 80% 65%)" }}>
-              🔍 Clarificação — Responda às perguntas para refinar o projeto.
-            </span>
-            <button
-              type="button"
-              onClick={() => setDismissedBanner("clarification")}
-              className="flex h-6 w-6 items-center justify-center rounded-md text-xs transition-colors"
-              style={{ color: "hsl(271 80% 65%)", background: "transparent" }}
-              aria-label="Fechar aviso de clarificação"
-              title="Fechar"
-            >
-              ×
-            </button>
-          </div>
-        )}
-
-        {currentPhase === "planning" && dismissedBanner !== "planning" && (
-          <div
-            className="mx-4 mt-1 flex flex-shrink-0 items-center justify-between gap-2 rounded-lg px-3 py-2"
-            style={{ background: "rgba(59,130,246,0.06)", border: "1px solid rgba(59,130,246,0.15)" }}
-          >
-            <span className="text-xs" style={{ color: "var(--ps-accent)" }}>
-              📐 Planejamento — Os agentes estão projetando a arquitetura do seu agente.
-            </span>
-            <button
-              type="button"
-              onClick={() => setDismissedBanner("planning")}
-              className="flex h-6 w-6 items-center justify-center rounded-md text-xs transition-colors"
-              style={{ color: "var(--ps-accent)", background: "transparent" }}
-              aria-label="Fechar aviso de planejamento"
-              title="Fechar"
-            >
-              ×
-            </button>
-          </div>
-        )}
-
-        {planningDone && dismissedBanner !== "planning_done" && (
-          <div
-            className="mx-4 mt-1 flex flex-shrink-0 items-center justify-between gap-2 rounded-lg px-3 py-2"
-            style={{ background: "rgba(52,211,153,0.06)", border: "1px solid rgba(52,211,153,0.15)" }}
-          >
-            <span className="text-xs" style={{ color: "hsl(142 70% 55%)" }}>
-              ✅ Planejamento concluído — Clique em "Ver Proposta" para avaliar a arquitetura.
-            </span>
-            <div className="flex items-center gap-2">
-              {onAdvance && (
-                <button
-                  onClick={onAdvance}
-                  className="flex-shrink-0 rounded px-3 py-1 text-[10px] font-semibold"
-                  style={{ background: "rgba(52,211,153,0.15)", color: "hsl(142 70% 55%)" }}
-                >
-                  Ver Proposta →
-                </button>
-              )}
-              <button
-                type="button"
-                onClick={() => setDismissedBanner("planning_done")}
-                className="flex h-6 w-6 items-center justify-center rounded-md text-xs transition-colors"
-                style={{ color: "hsl(142 70% 55%)", background: "transparent" }}
-                aria-label="Fechar aviso de conclusão"
-                title="Fechar"
-              >
-                ×
-              </button>
-            </div>
-          </div>
-        )}
-
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
           <div
+            ref={messagesScrollRef}
             className="flex-1 overflow-y-auto overflow-x-hidden px-4 py-3 space-y-2"
             style={{ WebkitOverflowScrolling: "touch" }}
           >

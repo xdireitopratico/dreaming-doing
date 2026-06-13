@@ -27,7 +27,7 @@ export const Route = createFileRoute("/agents/$agentId/")({
 function AgentEditorPage() {
   const { agentId } = Route.useParams();
   const { open } = Route.useSearch();
-  const [boardroomActive, setBoardroomActive] = useState(false);
+  const [immersiveActive, setImmersiveActive] = useState(false);
 
   const { data: agent, isLoading, error } = useQuery({
     queryKey: ["agent-project", agentId],
@@ -52,9 +52,9 @@ function AgentEditorPage() {
   });
 
   return (
-    <DashboardShell requireAuth activeNav="agents">
-      <div className="dashboard-workspace flex min-h-0 flex-1 flex-col overflow-hidden">
-        {!boardroomActive && (
+    <DashboardShell requireAuth activeNav="agents" immersive={immersiveActive}>
+      <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
+        {!immersiveActive && (
           <header className="flex shrink-0 items-center gap-3 border-b border-[var(--forge-border)] px-4 py-3 md:px-6">
             <Link
               to="/agents"
@@ -77,8 +77,8 @@ function AgentEditorPage() {
 
         <main
           className={
-            boardroomActive
-              ? "min-h-0 flex-1 overflow-hidden"
+            immersiveActive
+              ? "h-full min-h-0 flex-1 overflow-hidden"
               : "min-h-0 flex-1 overflow-hidden px-3 pb-3 pt-3 lg:px-6 lg:pb-6 lg:pt-3"
           }
         >
@@ -111,7 +111,7 @@ function AgentEditorPage() {
                 projectId={agentId}
                 projectName={agent.name}
                 initialOpenFlow={open === "flow"}
-                onBoardroomActive={setBoardroomActive}
+                onImmersiveChange={setImmersiveActive}
                 initialPrompt={
                   typeof (agent.meta as Record<string, unknown> | null)?.initialPrompt === "string"
                     ? ((agent.meta as Record<string, unknown>).initialPrompt as string)

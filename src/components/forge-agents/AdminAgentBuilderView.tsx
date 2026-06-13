@@ -114,15 +114,22 @@ export interface AdminAgentBuilderViewProps {
   initialPrompt?: string | null;
   /** Dashboard link Fluxo Visual: abre React Flow ao entrar. */
   initialOpenFlow?: boolean;
-  onBoardroomActive?: (active: boolean) => void;
+  onImmersiveChange?: (active: boolean) => void;
 }
+
+const IMMERSIVE_PHASES = new Set([
+  "boardroom",
+  "architecture_brief",
+  "building",
+  "review",
+]);
 
 export default function AdminAgentBuilderView({
   projectId,
   projectName,
   initialPrompt,
   initialOpenFlow = false,
-  onBoardroomActive,
+  onImmersiveChange,
 }: AdminAgentBuilderViewProps) {
   const {
     flows, loading,
@@ -228,8 +235,8 @@ export default function AdminAgentBuilderView({
   }, [setPhase, projectId, flows]);
 
   useEffect(() => {
-    onBoardroomActive?.(phase === "boardroom");
-  }, [phase, onBoardroomActive]);
+    onImmersiveChange?.(IMMERSIVE_PHASES.has(phase) || builderOpen);
+  }, [phase, builderOpen, onImmersiveChange]);
 
   // Dashboard Fluxo Visual → abre React Flow
   useEffect(() => {
@@ -718,15 +725,14 @@ export default function AdminAgentBuilderView({
     return undefined;
   }, [phase, workflowPhase]);
 
-  const fullScreenClass =
-    phase === "boardroom"
-      ? "flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
-      : "-mx-3 lg:-mx-6 -mb-3 lg:-mb-6 -mt-3 lg:-mt-6 h-[calc(100dvh_-_4rem)] min-h-0 min-w-0";
+  const fullScreenClass = IMMERSIVE_PHASES.has(phase) || builderOpen
+    ? "flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
+    : "-mx-3 lg:-mx-6 -mb-3 lg:-mb-6 -mt-3 lg:-mt-6 h-[calc(100dvh_-_4rem)] min-h-0 min-w-0";
   const loader = <PrometheusLoadingSkeleton />;
 
   // ═══ PHASE RENDERING ═══
 
-  const showPhaseHeader = !["home", "monitoring"].includes(phase);
+  const showPhaseHeader = !["home", "monitoring", "boardroom"].includes(phase);
 
   if (phase === "monitoring") {
     return (
