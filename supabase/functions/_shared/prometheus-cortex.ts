@@ -39,8 +39,54 @@ import { runSentinel, saveFlowToAgentFlows } from "./prometheus-sentinel.ts";
 import { runBoardroomRoundtable, writeArchitectureToFlow } from "./prometheus-deliberation.ts";
 import { runEnrichment } from "./prometheus-enrichment.ts";
 import { startModifySession, processFlowEditMessage } from "./prometheus-flow-editor.ts";
+import { loadConnectorKeys } from "../agent-run/connector-keys.ts";
+import { resolveModelForAPI } from "./model-catalog.ts";
 
 // ═══ SESSION MANAGEMENT ═══
+
+/**
+ * Validates that the user has a connector key for the selected model's provider.
+ * Prevents silent failures downstream when routeLLM cannot find the API key.
+ */
+async function validateModelKeyAvailability(
+  userId: string,
+  modelId: string,
+): Promise<void> {
+  const resolved = resolveModelForAPI(modelId);
+  if (!resolved) {
+    throw new Error(
+      `[cortex] Modelo "${modelId}" não encontrado no catálogo. Selecione outro modelo no power selector.`,
+    );
+  }
+
+  const sb = supabaseAdmin();
+  const keys = await loadConnectorKeys(sb, userId);
+
+  const SECRET_ALIASES: Record<string, string[]> = {
+    GOOGLE_AI_API_KEY: ["GEMINI_API_KEY"],
+  };
+
+  const PROVIDER_SECRET_MAP: Record<string, string> = {
+    groq: "GROQ_API_KEY",
+    xai: "XAI_API_KEY",
+    anthropic: "ANTHROPIC_API_KEY",
+    openai: "OPENAI_API_KEY",
+    google: "GOOGLE_AI_API_KEY",
+    openrouter: "OPENROUTER_API_KEY",
+    perplexity: "PERPLEXITY_API_KEY",
+  };
+
+  const secretName = PROVIDER_SECRET_MAP[resolved.provider] || `${resolved.provider.toUpperCase()}_API_KEY`;
+  const candidates = [secretName, ...(SECRET_ALIASES[secretName] ?? [])];
+  const hasKey = candidates.some((k) => keys[k]);
+
+  if (!hasKey) {
+    throw new Error(
+      `[cortex] Chave API para o provedor "${resolved.provider}" não encontrada nos conectores. ` +
+      `Configure a chave em Configurações > API ou selecione outro modelo no power selector.`,
+    );
+  }
+}
 
 export async function startSession(
   userId: string,
@@ -53,6 +99,8 @@ export async function startSession(
   if (!qualityModel) {
     throw new Error("[cortex] quality_model is required — the user must select a model in the power selector");
   }
+
+  await validateModelKeyAvailability(userId, qualityModel);
 
   if (intent === "modify") {
     if (!flowId) throw new Error("[cortex] flow_id is required for modify sessions");
