@@ -1,16 +1,14 @@
 /**
  * vibe-agent-chat.ts — Chat do Vibe Agent (isolado do boardroom Prometheus)
  *
- * Model resolution follows the same path as VibeCoder (agent-run):
- * loads user's connectors from the API tab, picks the best model
- * from the catalog the user has a key for.
- * No hardcoded fallbacks, no tenant_secrets for key resolution.
+ * Model resolution: same canonical path as VibeCoder (agent-run).
+ * Uses resolveAgentProvider() → ROBIN/auto/fixed based on user's connectors.
+ * No hardcoded fallbacks, no parallel resolution, no dead code.
  */
 
-import { routeLLM } from "./llm-router.ts";
-import { supabaseAdmin, type SupabaseAdmin } from "./prometheus-db.ts";
-import { loadConnectorKeys } from "../agent-run/connector-keys.ts";
-import { ALL_MODELS } from "./model-catalog.ts";
+import { supabaseAdmin } from "./prometheus-db.ts";
+import { resolveAgentProvider, loadUserLlmContext } from "../agent-run/run-setup.ts";
+import { createLLMProvider } from "../agent-run/adapters/llm.ts";
 import {
   normalizeEdges,
   normalizeNodes,
@@ -102,59 +100,6 @@ export async function loadVibeMessages(conversationId: string, userId: string) {
   return data ?? [];
 }
 
-/**
- * Maps connector key names (from loadConnectorKeys) to model-catalog provider IDs.
- * loadConnectorKeys stores Gemini as GEMINI_API_KEY; catalog uses provider "google".
- */
-const KEY_TO_CATALOG_PROVIDER: Record<string, string> = {
-  GROQ_API_KEY: "groq",
-  OPENAI_API_KEY: "openai",
-  ANTHROPIC_API_KEY: "anthropic",
-  XAI_API_KEY: "xai",
-  GEMINI_API_KEY: "google",
-  OPENROUTER_API_KEY: "openrouter",
-  NVIDIA_API_KEY: "nvidia",
-};
-
-/** Provider priority for auto-selection (lower index = preferred). */
-const PROVIDER_PRIORITY = ["groq", "openai", "anthropic", "xai", "google", "openrouter", "nvidia"];
-
-const QUALITY_RANK: Record<string, number> = { "very-high": 0, "high": 1, "medium": 2, "low": 3 };
-
-/**
- * Resolve the best LLM model from the user's configured connectors.
- * Same resolution path as VibeCoder — reads the API tab connectors,
- * picks the highest-quality model the user has a key for.
- */
-async function resolveVibeAgentModel(sb: SupabaseAdmin, userId: string): Promise<string> {
-  const keys = await loadConnectorKeys(sb, userId);
-
-  const availableProviders = new Set<string>();
-  for (const keyName of Object.keys(keys)) {
-    const provider = KEY_TO_CATALOG_PROVIDER[keyName];
-    if (provider) availableProviders.add(provider);
-  }
-
-  if (availableProviders.size === 0) {
-    throw new Error(
-      "Nenhuma chave LLM configurada. Adicione uma chave em Configurações > API para usar o Vibe Agent.",
-    );
-  }
-
-  for (const provider of PROVIDER_PRIORITY) {
-    if (!availableProviders.has(provider)) continue;
-
-    const candidate = ALL_MODELS
-      .filter((m) => m.provider === provider && m.chatAllowed && !m.deprecated)
-      .sort((a, b) => (QUALITY_RANK[a.quality ?? "medium"] ?? 2) - (QUALITY_RANK[b.quality ?? "medium"] ?? 2))
-      .shift();
-
-    if (candidate) return candidate.id;
-  }
-
-  throw new Error("Nenhum modelo disponível para as chaves configuradas.");
-}
-
 export async function sendVibeAgentMessage(
   userId: string,
   conversationId: string,
@@ -204,7 +149,6 @@ export async function sendVibeAgentMessage(
   const def = (flowData?.flow_definition as Record<string, unknown>) || {};
   const nodes = (def.nodes as Array<Record<string, unknown>>) || [];
   const edges = (def.edges as Array<Record<string, unknown>>) || [];
-  const modelId = await resolveVibeAgentModel(sb, userId);
 
   const chatHistory = (history ?? [])
     .filter((m) => m.role === "user" || m.role === "assistant")
@@ -219,19 +163,25 @@ export async function sendVibeAgentMessage(
     `\nNova mensagem do cliente:\n${trimmed}`,
   ].join("\n");
 
-  const llmResult = await routeLLM({
-    model_id: modelId,
+  const { userOnlyKeys } = await loadUserLlmContext(sb, userId);
+  const { mainCfg } = await resolveAgentProvider({
+    supabase: sb,
+    userId,
+    sessionKind: "byok",
+    userOnlyKeys,
+  });
+
+  const llm = createLLMProvider(mainCfg);
+  const llmResponse = await llm.chat({
     messages: [
       { role: "system", content: VIBE_AGENT_SYSTEM },
       { role: "user", content: userPrompt },
     ],
     temperature: 0.2,
     max_tokens: 4096,
-    tenant_id: userId,
-    feature: "vibe_agent_chat",
   });
 
-  const response = parseFlowAgentResponse(llmResult.content);
+  const response = parseFlowAgentResponse(llmResponse.content ?? "");
   const assistantContent = response?.summary
     ?? "Não consegui processar. Reformule sua pergunta ou peça uma mudança específica no fluxo.";
 
