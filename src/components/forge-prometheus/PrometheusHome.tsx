@@ -1,6 +1,8 @@
 /**
- * PrometheusHome — Landing page for AI Agent creation
- * Mirrors VideoStudioHome UX with blue/graph theme
+ * DEPRECATED (Home 1.0) — Motor de Potência original.
+ * Preservado para referência futura. Não está no fluxo atual.
+ * O fluxo atual vai direto: prompt → Boardroom → building → review.
+ * Último uso: AdminAgentBuilderView.handleGoHome redireciona para /agents.
  */
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";

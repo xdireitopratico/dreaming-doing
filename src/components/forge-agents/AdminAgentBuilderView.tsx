@@ -21,7 +21,6 @@ import {
 import type { ReviewData } from "@/components/forge-prometheus/PrometheusReview";
 import type { BoardroomPhase } from "@/components/forge-prometheus/PrometheusBoardroom";
 import {
-  clearPsPipelineStorage,
   migrateLegacyPrometheusStorage,
   purgeOrphanPrometheusStorageOnce,
   readPsPipelineField,
@@ -457,13 +456,8 @@ export default function AdminAgentBuilderView({
   }, [setPhase]);
 
   const handleGoHome = useCallback(() => {
-    setWorkflowPhase(undefined);
-    setResolvedQualityModel("");
-    setIsHeaderCollapsed(false);
-    setPhase("home");
-    dispatch({ type: "SET_FLOW_ID", flowId: null });
-    clearPsPipelineStorage(projectId);
-  }, [setPhase, projectId]);
+    window.location.href = "/agents";
+  }, []);
 
   const handleBuilderClose = useCallback(() => {
     closeBuilder();
