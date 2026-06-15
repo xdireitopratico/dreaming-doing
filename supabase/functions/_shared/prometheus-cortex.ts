@@ -40,18 +40,19 @@ import { runBoardroomRoundtable, writeArchitectureToFlow } from "./prometheus-de
 import { runEnrichment } from "./prometheus-enrichment.ts";
 import { startModifySession, processFlowEditMessage } from "./prometheus-flow-editor.ts";
 import { loadConnectorKeys } from "../agent-run/connector-keys.ts";
-import { resolveModelForAPI } from "./model-catalog.ts";
+import { resolveModelForAPI, ALL_MODELS } from "./model-catalog.ts";
 
 // ═══ SESSION MANAGEMENT ═══
 
 /**
  * Validates that the user has a connector key for the selected model's provider.
- * Prevents silent failures downstream when routeLLM cannot find the API key.
+ * If the key is missing, auto-selects the best available model from the user's connectors.
+ * Returns the resolved model_id (may differ from the input if auto-selected).
  */
-async function validateModelKeyAvailability(
+async function resolveBoardroomModel(
   userId: string,
   modelId: string,
-): Promise<void> {
+): Promise<string> {
   const resolved = resolveModelForAPI(modelId);
   if (!resolved) {
     throw new Error(
@@ -80,12 +81,49 @@ async function validateModelKeyAvailability(
   const candidates = [secretName, ...(SECRET_ALIASES[secretName] ?? [])];
   const hasKey = candidates.some((k) => keys[k]);
 
-  if (!hasKey) {
+  if (hasKey) return modelId;
+
+  // Key not found — auto-select best available model from user's connectors
+  console.log(`[cortex] Model ${modelId} has no key — auto-selecting from connectors`);
+
+  const KEY_TO_CATALOG_PROVIDER: Record<string, string> = {
+    GROQ_API_KEY: "groq",
+    OPENAI_API_KEY: "openai",
+    ANTHROPIC_API_KEY: "anthropic",
+    XAI_API_KEY: "xai",
+    GEMINI_API_KEY: "google",
+    OPENROUTER_API_KEY: "openrouter",
+    NVIDIA_API_KEY: "nvidia",
+  };
+
+  const availableProviders = new Set<string>();
+  for (const keyName of Object.keys(keys)) {
+    const provider = KEY_TO_CATALOG_PROVIDER[keyName];
+    if (provider) availableProviders.add(provider);
+  }
+
+  if (availableProviders.size === 0) {
     throw new Error(
-      `[cortex] Chave API para o provedor "${resolved.provider}" não encontrada nos conectores. ` +
-      `Configure a chave em Configurações > API ou selecione outro modelo no power selector.`,
+      "[cortex] Nenhuma chave LLM configurada. Configure uma chave em Configurações > API antes de iniciar o Boardroom.",
     );
   }
+
+  const PROVIDER_PRIORITY = ["groq", "openai", "anthropic", "xai", "google", "openrouter", "nvidia"];
+  const QUALITY_RANK: Record<string, number> = { "very-high": 0, "high": 1, "medium": 2, "low": 3 };
+
+  for (const provider of PROVIDER_PRIORITY) {
+    if (!availableProviders.has(provider)) continue;
+    const candidate = ALL_MODELS
+      .filter((m) => m.provider === provider && m.chatAllowed && !m.deprecated)
+      .sort((a, b) => (QUALITY_RANK[a.quality ?? "medium"] ?? 2) - (QUALITY_RANK[b.quality ?? "medium"] ?? 2))
+      .shift();
+    if (candidate) {
+      console.log(`[cortex] Auto-selected model: ${candidate.id}`);
+      return candidate.id;
+    }
+  }
+
+  throw new Error("[cortex] Nenhum modelo disponível para as chaves configuradas.");
 }
 
 export async function startSession(
@@ -100,17 +138,17 @@ export async function startSession(
     throw new Error("[cortex] quality_model is required — the user must select a model in the power selector");
   }
 
-  await validateModelKeyAvailability(userId, qualityModel);
+  const resolvedModel = await resolveBoardroomModel(userId, qualityModel);
 
   if (intent === "modify") {
     if (!flowId) throw new Error("[cortex] flow_id is required for modify sessions");
-    const { session_id } = await startModifySession(userId, flowId, qualityModel);
+    const { session_id } = await startModifySession(userId, flowId, resolvedModel);
     return { session_id, ok: true, backgroundTask: Promise.resolve() };
   }
 
   const sb = supabaseAdmin();
 
-  console.log(`[cortex] Starting session with quality_model: ${qualityModel}`);
+  console.log(`[cortex] Starting session with quality_model: ${resolvedModel}`);
 
   const fallbackModelId = (briefing?.fallback_model_id as string) || null;
 
@@ -123,7 +161,7 @@ export async function startSession(
       messages: [],
       requirements: briefing || null,
       target_flow_id: flowId || null,
-      quality_model: qualityModel,
+      quality_model: resolvedModel,
       fallback_model_id: fallbackModelId,
     } as any)
     .select("id")
@@ -134,7 +172,7 @@ export async function startSession(
   const sessionId = data.id;
 
   // Return background task for waitUntil
-  const backgroundTask = processInitialBriefing(sb, sessionId, briefing, qualityModel, userId).catch(err =>
+  const backgroundTask = processInitialBriefing(sb, sessionId, briefing, resolvedModel, userId).catch(err =>
     console.error("[cortex] Background briefing error:", err)
   );
 
