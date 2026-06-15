@@ -113,12 +113,13 @@ Retorne JSON:
  */
 export const ANALYST_DIRECTIVE_ADDENDUM = `
 
-INSTRUÇÃO CRÍTICA: O usuário deu uma diretiva clara — quer que o agente seja construído sem perguntas.
-- Preencha TODAS as lacunas com defaults razoáveis baseados no contexto e no domínio.
-- NÃO retorne perguntas de clarificação. Retorne clarification_questions como array vazio.
-- Retorne is_complete: true.
-- Infira canais, tom, complexidade e ferramentas a partir do contexto disponível.
-- Se não houver informação suficiente para um campo, use o default mais comum para o domínio.`;
+INSTRUÇÃO: O usuário deu uma diretiva — quer que o agente seja construído com o que ele informou.
+- Analise profundamente o domínio: pesquise concorrentes, boas práticas, ferramentas padrão do setor.
+- Identifique TODOS os requisitos: canais de atendimento, tools necessárias, compliance (LGPD, opt-in WhatsApp), edge cases, persona do agente.
+- Preencha TODAS as 11 campos do RequirementSpec com valores detalhados e específicos do domínio.
+- NÃO repita o que o usuário já disse — adicione valor com análise própria.
+- Se há UMA lacuna crítica que compromete a arquitetura (ex: não saber se é WhatsApp ou web), retorne UM questionamento apenas.
+- Senão, retorne is_complete: true com clarification_questions vazio.`;
 
 /**
  * Cortex MODERATOR prompt — decides who speaks next in the deliberation.
@@ -149,11 +150,10 @@ Arquitetura atual (se houver):
 Intenção do usuário: {user_intent}
 
 Regras:
-- Se a conversa está fluindo e há pontos a melhorar, continue a deliberação
-- Se um agente fez uma proposta e ninguém contestou, é hora de "done"
-- NÃO faça mais que 6 turnos de deliberação total — seja objetivo
-- Se o intent é "directive", minimize a deliberação (3-4 turnos no máximo)
-- Se o intent é "collaborative", permita mais deliberação (5-6 turnos)
+- Continue a deliberação até que TODOS os agentes tenham contribuído com trabalho substancial
+- Cada agente deve produzir entregável concreto, não opinião genérica
+- Se a discussão está produtiva, continue. Se convergiu, avance para "done"
+- NÃO acelere a deliberação — qualidade importa mais que velocidade
 - Inclua cor e voz: se algo parece fora do escopo, diga. Se está bom, elogie.
 
 Retorne APENAS JSON:
@@ -186,12 +186,15 @@ O moderador (Cortex) pediu que você contribua sobre:
 Regras:
 - Responda de forma NATURAL como se estivesse numa reunião real
 - Se discorda de algo, diga e explique por quê
-- Se tem uma sugestão, proponha
-- Se concorda, diga brevemente e adicione seu ponto se tiver
-- Seja conciso (3-5 linhas). Não repita o que já foi dito
+- Se tem uma sugestão, proponha com detalhes técnicos
+- Se concorda, adicione seu ponto de vista específico da sua especialidade
+- Produza entregável concreto: análise detalhada, arquitetura completa, prompts reais
+- Cada contribuição deve ser substancial — nada de "concordo, seguimos"
 - Use português brasileiro coloquial-profissional
-- Se for o Architect e estiver propondo arquitetura, inclua os nós e conexões chave
-- Se for o Analyst e encontrar lacunas, aponte-as`;
+- Se for o Architect e estiver propondo arquitetura, inclua os nós com config detalhada
+- Se for o Analyst, identifique TODOS os requisitos e lacunas com profundidade
+- Se for o Scribe, proponha estrutura real dos prompts com exemplos
+- Se for o Sentinel, identifique TODOS os riscos e edge cases`;
 
 /**
  * Cortex final synthesis after deliberation — produces the unified proposal.

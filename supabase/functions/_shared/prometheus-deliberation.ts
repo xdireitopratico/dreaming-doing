@@ -38,7 +38,7 @@ const AGENT_ROLES: Record<string, string> = {
   cortex: "Orquestrador e moderador. Sintetiza, desafia, redireciona. Toma decisões de escopo.",
 };
 
-const MAX_DELIBERATION_TURNS = 8;
+const MAX_DELIBERATION_TURNS = 15;
 
 export interface DelibTurn {
   speaker: string;
@@ -62,8 +62,8 @@ export function classifyUserIntent(message: string): "directive" | "collaborativ
     return "directive";
   }
 
-  if (message.trim().length < 40 && /\b(sim|ok|certo|beleza|blz|top|show|massa|dale|valeu|isso|exato|perfeito)\b/.test(lower)) {
-    return "directive";
+  if (message.trim().length < 40 && /\b(sim|certo|beleza|blz|top|show|massa|dale|valeu|isso|exato|perfeito)\b/.test(lower)) {
+    return "collaborative";
   }
 
   return "collaborative";
@@ -191,11 +191,6 @@ export async function runBoardroomRoundtable(
       analystConfig,
     );
 
-    if (intent === "directive") {
-      analystResult.is_complete = true;
-      analystResult.clarification_questions = [];
-    }
-
     currentReqs = { ...existingRequirements, ...analystResult.requirements };
     const analystOutput = formatAnalystOutput(analystResult);
 
@@ -240,7 +235,7 @@ export async function runBoardroomRoundtable(
         "decision", "planning", round);
     }
 
-    if (intent === "directive" && turn >= 5 && currentArchitecture) break;
+    if (intent === "directive" && turn >= 10 && currentArchitecture) break;
 
     // Cortex moderator: decide who speaks next
     const historyText = deliberation.map(d =>

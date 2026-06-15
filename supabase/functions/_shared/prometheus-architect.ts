@@ -452,13 +452,17 @@ export function fallbackPlan(reqs: Partial<RequirementSpec>, modelId: string): A
   const edges: ArchitecturePlan["edges"] = [];
 
   if (hasRag) {
-    nodes.push({ id: "rag", type: "rag_query", label: "RAG Retriever", config: {} });
+    nodes.push({ id: "rag", type: "rag_query", label: "RAG Retriever", config: { chunk_size: 500, top_k: 3 } });
     edges.push({ source: "trigger", target: "rag" });
-    nodes.push({ id: "llm", type: "llm", label: "LLM Principal", config: { trial_model: true }, model_id: modelId });
-    edges.push({ source: "rag", target: "llm" });
+    nodes.push({ id: "intake", type: "llm", label: "Intake Analyzer", config: { trial_model: true, temperature: 0.3 }, model_id: modelId });
+    edges.push({ source: "rag", target: "intake" });
+    nodes.push({ id: "llm", type: "llm", label: "LLM Principal", config: { trial_model: true, temperature: 0.7 }, model_id: modelId });
+    edges.push({ source: "intake", target: "llm" });
   } else {
-    nodes.push({ id: "llm", type: "llm", label: "LLM Principal", config: { trial_model: true }, model_id: modelId });
-    edges.push({ source: "trigger", target: "llm" });
+    nodes.push({ id: "intake", type: "llm", label: "Intake Analyzer", config: { trial_model: true, temperature: 0.3 }, model_id: modelId });
+    edges.push({ source: "trigger", target: "intake" });
+    nodes.push({ id: "llm", type: "llm", label: "LLM Principal", config: { trial_model: true, temperature: 0.7 }, model_id: modelId });
+    edges.push({ source: "intake", target: "llm" });
   }
 
   nodes.push({ id: "guard", type: "output_guard", label: "Output Guard", config: {} });
@@ -469,8 +473,8 @@ export function fallbackPlan(reqs: Partial<RequirementSpec>, modelId: string): A
     genome_name: "Agente Personalizado",
     nodes,
     edges,
-    estimated_cost_per_interaction: hasRag ? 0.006 : 0.002,
-    estimated_latency_ms: hasRag ? 3500 : 2000,
+    estimated_cost_per_interaction: hasRag ? 0.008 : 0.004,
+    estimated_latency_ms: hasRag ? 4000 : 2500,
     models_used: [modelId],
   };
 }

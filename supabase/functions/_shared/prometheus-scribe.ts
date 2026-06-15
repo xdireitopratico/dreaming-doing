@@ -184,16 +184,32 @@ Agente: "${birthCtx.agentName}"
 Objetivo geral do agente: ${birthCtx.objective}
 Domínio: ${birthCtx.domain} | Público-alvo: ${birthCtx.audience} | Tom: ${birthCtx.tone}
 
+Requisitos completos:
+- Canais: ${requirements.channels?.join(", ") || "web"}
+- Tools: ${requirements.tools_needed?.join(", ") || "nenhuma"}
+- Compliance: ${requirements.constraints?.join(", ") || "nenhum"}
+- Complexidade: ${requirements.complexity || "média"}
+- RAG: ${requirements.has_rag ? "sim" : "não"}
+
+Todos os nós do fluxo:
+${architecture.nodes.map((n: any) => `- ${n.id} (${n.type}): ${n.label}`).join("\n")}
+
 Nó a configurar:
 - id: ${node.id}
 - papel (label): ${node.label}
 - recebe a entrada de: ${incoming.length ? incoming.join(", ") : "início do fluxo (mensagem do usuário)"}
 - envia a saída para: ${outgoing.length ? outgoing.join(", ") : "fim do fluxo (resposta ao usuário)"}
 
-O prompt deve ser ESPECÍFICO para o papel "${node.label}" — nunca genérico. Deixe claro o que ESTE nó faz, o formato de saída esperado e como prepara o próximo passo do fluxo.
+O prompt deve ser ESPECÍFICO para o papel "${node.label}" — nunca genérico. Deixe claro:
+1. O que ESTE nó faz exatamente
+2. Formato de entrada esperado
+3. Formato de saída esperado
+4. Como prepara o próximo passo do fluxo
+5. Regras de comportamento e edge cases
+6. Exemplo de input/output
 
 Responda APENAS com JSON válido neste formato:
-{"system_prompt": "o prompt completo", "temperature": 0.7, "max_tokens": 600, "description": "o que este nó faz em uma frase"}`;
+{"system_prompt": "o prompt completo e detalhado", "temperature": 0.7, "max_tokens": 2000, "description": "o que este nó faz em uma frase"}`;
 
       try {
         const response = await routeLLM({
@@ -203,7 +219,7 @@ Responda APENAS com JSON válido neste formato:
             { role: "user", content: userPrompt },
           ],
           temperature: 0.5,
-          max_tokens: 1200,
+          max_tokens: 4096,
           tenant_id: tenantId,
         });
 
