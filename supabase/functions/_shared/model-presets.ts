@@ -324,10 +324,22 @@ function wireFromUserEntry(entry: UserModelEntryPayload): PresetWire | null {
   if (entry.env === "anthropic")
     return anthropic(slug.split("/").pop() ?? slug, entry.label ?? slug);
   if (entry.env === "deepseek") return deepseek("deepseek-chat", entry.label ?? slug);
-  if (entry.env === "alibaba") return dashscope("qwen-max", entry.label ?? slug);
-  if (entry.env === "minimax") return minimax("MiniMax-M3", entry.label ?? slug);
-  if (entry.env === "moonshotai") return moonshot("kimi-k2.6", entry.label ?? slug);
-  if (entry.env === "xiaomi") return mimo("mimo-v2.5-pro", entry.label ?? slug);
+  if (entry.env === "alibaba") {
+    const model = slug.split("/").pop() ?? slug;
+    return dashscope(model, entry.label ?? slug);
+  }
+  if (entry.env === "minimax") {
+    const model = slug.split("/").pop() ?? slug;
+    return minimax(model, entry.label ?? slug);
+  }
+  if (entry.env === "moonshotai") {
+    const model = slug.split("/").pop() ?? slug;
+    return moonshot(model, entry.label ?? slug);
+  }
+  if (entry.env === "xiaomi") {
+    const model = slug.split("/").pop() ?? slug;
+    return mimo(model, entry.label ?? slug);
+  }
   if (entry.env === "nvidia") {
     let nimSlug = slug.includes("/") ? slug : `nvidia/${slug}`;
     const bare = nimSlug.includes("/") ? (nimSlug.split("/").pop() ?? nimSlug) : nimSlug;
