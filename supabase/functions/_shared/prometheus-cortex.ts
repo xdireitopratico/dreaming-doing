@@ -45,38 +45,39 @@ import { resolveAgentProvider, loadUserLlmContext } from "../agent-run/run-setup
 // ═══ SESSION MANAGEMENT ═══
 
 /**
- * Fail-closed validation: checks if user has a connector key for the selected model.
- * No auto-selection, no fallback — if no key, throws clear error.
+ * Resolves the model to use for the Boardroom session.
+ * If user has key for selected model → uses it.
+ * If not → uses whatever resolveAgentProvider() returns (auto/robin from connectors).
+ * Returns the actual model_id to use (may differ from input).
  */
-async function validateBoardroomKey(
+async function resolveBoardroomModel(
   userId: string,
   modelId: string,
-): Promise<void> {
-  const resolved = resolveModelForAPI(modelId);
-  if (!resolved) {
-    throw new Error(
-      `[cortex] Modelo "${modelId}" não encontrado no catálogo. Selecione outro modelo no power selector.`,
-    );
-  }
-
+): Promise<string> {
   const sb = supabaseAdmin();
   const { userOnlyKeys } = await loadUserLlmContext(sb, userId);
 
-  // Use resolveAgentProvider to validate the key exists
-  try {
-    await resolveAgentProvider({
-      supabase: sb,
-      userId,
-      sessionKind: "byok",
-      userOnlyKeys,
-    });
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    throw new Error(
-      `[cortex] Chave API para o modelo "${modelId}" não encontrada. ` +
-      `Configure a chave em Configurações > API ou selecione outro modelo no power selector.`,
-    );
+  // Check if user has key for the selected model
+  const resolved = resolveModelForAPI(modelId);
+  if (resolved) {
+    const PROVIDER_SECRET_MAP: Record<string, string> = {
+      groq: "GROQ_API_KEY", xai: "XAI_API_KEY", anthropic: "ANTHROPIC_API_KEY",
+      openai: "OPENAI_API_KEY", google: "GOOGLE_AI_API_KEY",
+      openrouter: "OPENROUTER_API_KEY", perplexity: "PERPLEXITY_API_KEY",
+    };
+    const SECRET_ALIASES: Record<string, string[]> = { GOOGLE_AI_API_KEY: ["GEMINI_API_KEY"] };
+    const secretName = PROVIDER_SECRET_MAP[resolved.provider] || `${resolved.provider.toUpperCase()}_API_KEY`;
+    const candidates = [secretName, ...(SECRET_ALIASES[secretName] ?? [])];
+    if (candidates.some((k) => userOnlyKeys[k])) return modelId;
   }
+
+  // Key not found — use canonical resolution (same as VibeCoder)
+  console.log(`[cortex] Model ${modelId} has no key — resolving via resolveAgentProvider`);
+  const { mainCfg } = await resolveAgentProvider({
+    supabase: sb, userId, sessionKind: "byok", userOnlyKeys,
+  });
+  console.log(`[cortex] Resolved model: ${mainCfg.model} (${mainCfg.label})`);
+  return mainCfg.model;
 }
 
 export async function startSession(
@@ -91,17 +92,17 @@ export async function startSession(
     throw new Error("[cortex] quality_model is required — the user must select a model in the power selector");
   }
 
-  await validateBoardroomKey(userId, qualityModel);
+  const resolvedModel = await resolveBoardroomModel(userId, qualityModel);
 
   if (intent === "modify") {
     if (!flowId) throw new Error("[cortex] flow_id is required for modify sessions");
-    const { session_id } = await startModifySession(userId, flowId, qualityModel);
+    const { session_id } = await startModifySession(userId, flowId, resolvedModel);
     return { session_id, ok: true, backgroundTask: Promise.resolve() };
   }
 
   const sb = supabaseAdmin();
 
-  console.log(`[cortex] Starting session with quality_model: ${qualityModel}`);
+  console.log(`[cortex] Starting session with quality_model: ${resolvedModel}`);
 
   const fallbackModelId = (briefing?.fallback_model_id as string) || null;
 
@@ -114,7 +115,7 @@ export async function startSession(
       messages: [],
       requirements: briefing || null,
       target_flow_id: flowId || null,
-      quality_model: qualityModel,
+      quality_model: resolvedModel,
       fallback_model_id: fallbackModelId,
     } as any)
     .select("id")
@@ -125,7 +126,7 @@ export async function startSession(
   const sessionId = data.id;
 
   // Return background task for waitUntil
-  const backgroundTask = processInitialBriefing(sb, sessionId, briefing, qualityModel, userId).catch(err =>
+  const backgroundTask = processInitialBriefing(sb, sessionId, briefing, resolvedModel, userId).catch(err =>
     console.error("[cortex] Background briefing error:", err)
   );
 
