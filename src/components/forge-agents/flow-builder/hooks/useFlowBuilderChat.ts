@@ -8,9 +8,6 @@ import type { ChatMessage } from "@/lib/chat-types";
 import type { ThreadItem } from "@/lib/chat/types";
 import type { StoredMessagePart } from "@/lib/chat-attachments";
 
-const POLL_MIN_MS = 2_000;
-const POLL_MAX_MS = 10_000;
-
 export type VibeConversation = {
   id: string;
   title: string | null;
@@ -24,6 +21,7 @@ type MessageRow = {
   content: string;
   meta: Record<string, unknown> | null;
   created_at: string;
+  conversation_id?: string;
 };
 
 function convStorageKey(flowId: string) {
@@ -74,13 +72,15 @@ function messagesToThreadItems(messages: ChatMessage[], running: boolean): Threa
 export function useFlowBuilderChat({
   flowId,
   enabled,
+  nodes,
+  edges,
   onApplyPatch,
   onHighlightNodes,
 }: {
   flowId: string;
   enabled: boolean;
-  nodes: Node[];
-  edges: Edge[];
+  nodes?: Node[];
+  edges?: Edge[];
   onApplyPatch: (nodes: Node[], edges: Edge[]) => void;
   onHighlightNodes?: (ids: string[]) => void;
 }) {
@@ -93,10 +93,9 @@ export function useFlowBuilderChat({
 
   const processedIdsRef = useRef<Set<string>>(new Set());
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
-  const pollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const pollIntervalRef = useRef(POLL_MIN_MS);
   const chatVisibleRef = useRef(false);
   const conversationIdRef = useRef<string | null>(null);
+  const requestCancelledRef = useRef(false);
 
   useEffect(() => {
     conversationIdRef.current = conversationId;
@@ -109,7 +108,9 @@ export function useFlowBuilderChat({
       edges?: Edge[];
       changed_node_ids?: string[];
     } | undefined;
-    if (!patch?.nodes || !patch?.edges) return;
+    // B6 FIX: validate patch structure before applying
+    if (!patch || !Array.isArray(patch.nodes) || !Array.isArray(patch.edges)) return;
+    if (patch.nodes.length === 0 || patch.edges.length === 0) return;
     onApplyPatch(patch.nodes, patch.edges);
     if (patch.changed_node_ids?.length && onHighlightNodes) {
       onHighlightNodes(patch.changed_node_ids);
@@ -163,7 +164,7 @@ export function useFlowBuilderChat({
     const channel = supabase
       .channel(`vibe-agent-chat-${convId}`)
       .on(
-        "postgres_changes" as never,
+        "postgres_changes",
         {
           event: "INSERT",
           schema: "public",
@@ -172,42 +173,30 @@ export function useFlowBuilderChat({
         },
         (payload: { new: MessageRow }) => {
           if (payload.new.conversation_id !== conversationIdRef.current) return;
-          pollIntervalRef.current = POLL_MIN_MS;
           ingestRows([payload.new], true);
         },
       )
       .subscribe();
 
     channelRef.current = channel;
-
-    if (pollRef.current) clearTimeout(pollRef.current);
-    const tick = async () => {
-      try {
-        const { data } = await supabase
-          .from("vibe_agent_messages" as never)
-          .select("id, role, content, meta, created_at, conversation_id")
-          .eq("conversation_id", convId)
-          .order("created_at", { ascending: true });
-
-        const rows = (data as (MessageRow & { conversation_id: string })[] | null) ?? [];
-        const pending = rows.filter((r) => !processedIdsRef.current.has(r.id));
-        if (pending.length) ingestRows(pending, true);
-        pollIntervalRef.current = pending.length
-          ? POLL_MIN_MS
-          : Math.min(Math.round(pollIntervalRef.current * 1.4), POLL_MAX_MS);
-      } catch {
-        pollIntervalRef.current = POLL_MAX_MS;
-      }
-      pollRef.current = setTimeout(tick, pollIntervalRef.current);
-    };
-    pollRef.current = setTimeout(tick, pollIntervalRef.current);
   }, [ingestRows]);
 
   const selectConversation = useCallback(async (convId: string) => {
+    // B1 FIX: update ref BEFORE any async work so realtime/poll handlers see correct convId
+    conversationIdRef.current = convId;
     setConversationId(convId);
     localStorage.setItem(convStorageKey(flowId), convId);
     setRunning(false);
-    await loadMessages(convId);
+    // P2 FIX: reset unread count when user explicitly selects a conversation
+    setUnreadCount(0);
+    try {
+      await loadMessages(convId);
+    } catch (err) {
+      // B2 FIX: ensure processedIdsRef is cleared even on load failure
+      processedIdsRef.current.clear();
+      setMessages([]);
+      throw err;
+    }
     subscribe(convId);
   }, [flowId, loadMessages, subscribe]);
 
@@ -255,7 +244,6 @@ export function useFlowBuilderChat({
 
     return () => {
       cancelled = true;
-      if (pollRef.current) clearTimeout(pollRef.current);
       if (channelRef.current) {
         supabase.removeChannel(channelRef.current);
         channelRef.current = null;
@@ -274,33 +262,41 @@ export function useFlowBuilderChat({
       if (!convId) return;
     }
 
+    // B8 FIX: track cancellation via simple flag (supabase invoke doesn't support AbortSignal)
+    requestCancelledRef.current = false;
     setRunning(true);
-
-    const { error } = await supabase.functions.invoke("vibe-agent-chat", {
-      body: {
-        action: "send_message",
-        conversation_id: convId,
-        message: trimmed,
-      },
-    });
-
-    if (error) {
-      setRunning(false);
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: `err-${Date.now()}`,
-          role: "assistant",
-          content: `Erro ao enviar: ${error.message}`,
-          timestamp: Date.now(),
+    try {
+      const { error } = await supabase.functions.invoke("vibe-agent-chat", {
+        body: {
+          action: "send_message",
+          conversation_id: convId,
+          message: trimmed,
         },
-      ]);
-    } else {
-      await refreshConversations();
+      });
+
+      // B8 FIX: if request was cancelled via onStop, ignore response
+      if (requestCancelledRef.current) return;
+
+      if (error) {
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: `err-${Date.now()}`,
+            role: "assistant",
+            content: `Erro ao enviar: ${error.message}`,
+            timestamp: Date.now(),
+          },
+        ]);
+      }
+    } finally {
+      // B4 FIX: always reset running, even on network error / exception
+      setRunning(false);
     }
-  }, [running, conversationId, startNewConversation, refreshConversations]);
+  }, [running, conversationId, startNewConversation]);
 
   const onStop = useCallback(() => {
+    // B8 FIX: mark request as cancelled; running will be reset in finally
+    requestCancelledRef.current = true;
     setRunning(false);
   }, []);
 
