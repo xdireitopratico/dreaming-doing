@@ -39,40 +39,17 @@ import { runSentinel, saveFlowToAgentFlows } from "./prometheus-sentinel.ts";
 import { runBoardroomRoundtable, writeArchitectureToFlow } from "./prometheus-deliberation.ts";
 import { runEnrichment } from "./prometheus-enrichment.ts";
 import { startModifySession, processFlowEditMessage } from "./prometheus-flow-editor.ts";
-import { resolveModelForAPI } from "./model-catalog.ts";
 import { resolveAgentProvider, loadUserLlmContext } from "../agent-run/run-setup.ts";
 
 // ═══ SESSION MANAGEMENT ═══
 
 /**
  * Resolves the model to use for the Boardroom session.
- * If user has key for selected model → uses it.
- * If not → uses whatever resolveAgentProvider() returns (auto/robin from connectors).
- * Returns the actual model_id to use (may differ from input).
+ * Canonical path: resolveAgentProvider() — same as VibeCoder.
  */
-async function resolveBoardroomModel(
-  userId: string,
-  modelId: string,
-): Promise<string> {
+async function resolveBoardroomModel(userId: string): Promise<string> {
   const sb = supabaseAdmin();
   const { userOnlyKeys } = await loadUserLlmContext(sb, userId);
-
-  // Check if user has key for the selected model
-  const resolved = resolveModelForAPI(modelId);
-  if (resolved) {
-    const PROVIDER_SECRET_MAP: Record<string, string> = {
-      groq: "GROQ_API_KEY", xai: "XAI_API_KEY", anthropic: "ANTHROPIC_API_KEY",
-      openai: "OPENAI_API_KEY", google: "GOOGLE_AI_API_KEY",
-      openrouter: "OPENROUTER_API_KEY", perplexity: "PERPLEXITY_API_KEY",
-    };
-    const SECRET_ALIASES: Record<string, string[]> = { GOOGLE_AI_API_KEY: ["GEMINI_API_KEY"] };
-    const secretName = PROVIDER_SECRET_MAP[resolved.provider] || `${resolved.provider.toUpperCase()}_API_KEY`;
-    const candidates = [secretName, ...(SECRET_ALIASES[secretName] ?? [])];
-    if (candidates.some((k) => userOnlyKeys[k])) return modelId;
-  }
-
-  // Key not found — use canonical resolution (same as VibeCoder)
-  console.log(`[cortex] Model ${modelId} has no key — resolving via resolveAgentProvider`);
   const { mainCfg } = await resolveAgentProvider({
     supabase: sb, userId, sessionKind: "byok", userOnlyKeys,
   });
@@ -87,24 +64,17 @@ export async function startSession(
   modelId?: string,
   intent: "create" | "modify" = "create",
 ): Promise<{ session_id: string; ok: true; backgroundTask: Promise<void> }> {
-  const qualityModel = modelId || (briefing?.quality_model as string) || "";
-  if (!qualityModel) {
-    throw new Error("[cortex] quality_model is required — the user must select a model in the power selector");
-  }
-
-  const resolvedModel = await resolveBoardroomModel(userId, qualityModel);
+  const qualityModel = await resolveBoardroomModel(userId);
 
   if (intent === "modify") {
     if (!flowId) throw new Error("[cortex] flow_id is required for modify sessions");
-    const { session_id } = await startModifySession(userId, flowId, resolvedModel);
+    const { session_id } = await startModifySession(userId, flowId, qualityModel);
     return { session_id, ok: true, backgroundTask: Promise.resolve() };
   }
 
   const sb = supabaseAdmin();
 
-  console.log(`[cortex] Starting session with quality_model: ${resolvedModel}`);
-
-  const fallbackModelId = (briefing?.fallback_model_id as string) || null;
+  console.log(`[cortex] Starting session with quality_model: ${qualityModel}`);
 
   const { data, error } = await sb
     .from("prometheus_build_sessions")
@@ -115,8 +85,7 @@ export async function startSession(
       messages: [],
       requirements: briefing || null,
       target_flow_id: flowId || null,
-      quality_model: resolvedModel,
-      fallback_model_id: fallbackModelId,
+      quality_model: qualityModel,
     } as any)
     .select("id")
     .single();
@@ -126,7 +95,7 @@ export async function startSession(
   const sessionId = data.id;
 
   // Return background task for waitUntil
-  const backgroundTask = processInitialBriefing(sb, sessionId, briefing, resolvedModel, userId).catch(err =>
+  const backgroundTask = processInitialBriefing(sb, sessionId, briefing, qualityModel, userId).catch(err =>
     console.error("[cortex] Background briefing error:", err)
   );
 
