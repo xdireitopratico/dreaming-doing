@@ -8,7 +8,14 @@ ALTER TABLE public.vibe_agent_events
   ADD COLUMN IF NOT EXISTS channel TEXT NOT NULL DEFAULT 'inspector';
 
 ALTER TABLE public.vibe_agent_events
+  ADD COLUMN IF NOT EXISTS event_data JSONB;
+
+ALTER TABLE public.vibe_agent_events
   ADD COLUMN IF NOT EXISTS payload JSONB DEFAULT '{}'::jsonb;
+
+UPDATE public.vibe_agent_events
+SET event_data = payload
+WHERE event_data IS NULL AND payload IS NOT NULL;
 
 CREATE INDEX IF NOT EXISTS vibe_agent_events_execution_channel_idx
   ON public.vibe_agent_events(execution_id, channel, id ASC);
