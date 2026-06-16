@@ -195,15 +195,27 @@ Deno.serve(async (req) => {
             runId,
             error: eventResult.error,
           });
-          // Harden: append terminal finish + delete so we never leave a pending run without events.
-          // The action owns INNGEST check+send+loud failure.
+          // Harden: append terminal finish + mark run as failed so the client
+          // picks up the failure immediately via agent_runs UPDATE (Realtime
+          // publication ON) — NOT delete. Deletion left activeRunId orphaned
+          // and the client hit `stale_stream_detected` 15min later, looking
+          // like a mysterious hang. The run now stays in the DB as `failed`
+          // with `error` populated, so the UI can render a clear hint instead
+          // of a generic "Execução interrompida".
           await appendStreamEvent(supabase, runId, "finish", {
             type: "finish",
             ok: false,
             error: eventResult.error ?? "unknown",
             resumable: false,
           });
-          await supabase.from("agent_runs").delete().eq("id", runId);
+          await supabase
+            .from("agent_runs")
+            .update({
+              status: "failed",
+              finished_at: new Date().toISOString(),
+              error: `dispatch_failed: ${eventResult.error ?? "unknown"}`,
+            })
+            .eq("id", runId);
           return json(
             {
               error: `Falha ao iniciar build: ${eventResult.error ?? "unknown"}`,
@@ -222,7 +234,14 @@ Deno.serve(async (req) => {
             error: "INNGEST_EVENT_KEY not configured (no eventId)",
             resumable: false,
           });
-          await supabase.from("agent_runs").delete().eq("id", runId);
+          await supabase
+            .from("agent_runs")
+            .update({
+              status: "failed",
+              finished_at: new Date().toISOString(),
+              error: "dispatch_failed: INNGEST_EVENT_KEY not configured (no eventId)",
+            })
+            .eq("id", runId);
           return json(
             {
               error:

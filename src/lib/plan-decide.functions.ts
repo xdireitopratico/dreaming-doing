@@ -193,6 +193,27 @@ export const planApprove = createServerFn({ method: "POST" })
       throw new Error(`Falha ao criar run de build: ${insertErr?.message ?? "unknown"}`);
     }
 
+    // Fase 1.7 — fail-loud se planSourceRunId não foi persistido. Sem este
+    // check, o INSERT pode retornar sucesso mesmo se o JSONB meta for
+    // parcialmente aplicado, e o inspector tab Plan fica vazio (sem pista).
+    // Re-ler do banco e validar antes de despachar.
+    const { data: verifyRow, error: verifyErr } = await supabase
+      .from("agent_runs")
+      .select("meta")
+      .eq("id", newRun.id)
+      .single();
+    if (verifyErr) {
+      throw new Error(
+        `Falha ao verificar run criado (Inngest não disparado): ${verifyErr.message}`,
+      );
+    }
+    const verifyMeta = (verifyRow?.meta ?? {}) as Record<string, unknown>;
+    if (verifyMeta.planSourceRunId !== runId || verifyMeta.planId !== planId) {
+      throw new Error(
+        `Build run criado sem planSourceRunId/planId (esperado ${runId}/${planId}, obtido ${String(verifyMeta.planSourceRunId)}/${String(verifyMeta.planId)}). Inspector tab Plan ficará vazia — abortando para evitar diagnóstico silencioso.`,
+      );
+    }
+
     const { data: planMsgs } = await supabase
       .from("messages")
       .select("id, meta")

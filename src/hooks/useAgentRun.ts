@@ -34,6 +34,10 @@ import { parseAgentBusyResponse } from "@/lib/agent-busy";
 import type { PendingQueueItem } from "@/components/editor/PendingQueuePanel";
 import { shouldRestoreLiveRun } from "@/lib/agent-snapshot-restore";
 import { clientStaleStreamMs } from "@/lib/agent-stale-thresholds";
+import {
+  emitStreamingTelemetry,
+  setStreamingTelemetryContext,
+} from "@/lib/streaming-telemetry";
 
 function withFrozenLatencyThought(next: AgentProgress, startedAtMs: number | null): AgentProgress {
   if (next.latencyThoughtMs != null || !startedAtMs) return next;
@@ -151,6 +155,18 @@ export function useAgentRun() {
   const progressRef = useRef<AgentProgress>(initialAgentProgress);
   const frozenRunProgressRef = useRef<Map<string, AgentProgress>>(new Map());
   const lastSeqRef = useRef(0);
+  // Fase 1.2 — mutex + buffer: serializa applyStreamRow independentemente da
+  // origem (catchUpRun async vs Realtime delivery sync). Sem isso, catchup
+  // pode aplicar rows com seq > lastSeqRef enquanto Realtime entrega uma row
+  // nova, e o resultado depende da ordem de resolução dos dois `await`.
+  const streamProcessingRef = useRef(false);
+  const streamBufferRef = useRef<Array<{
+    seq: number;
+    event_type: string;
+    payload: Record<string, unknown>;
+    created_at?: string;
+    run_id?: string;
+  }>>([]);
 
   useEffect(() => {
     pendingQueueCountRef.current = progress.pendingQueueCount ?? 0;
@@ -163,6 +179,15 @@ export function useAgentRun() {
   useEffect(() => {
     activeRunStartedAtMsRef.current = activeRunStartedAtMs;
   }, [activeRunStartedAtMs]);
+
+  // Sincroniza o contexto de telemetria com o run ativo. Disparado em qualquer
+  // mudança de activeRunId (subscribe novo run, release, stop, reset).
+  useEffect(() => {
+    const ctx = sessionContextRef.current;
+    if (ctx) {
+      setStreamingTelemetryContext({ projectId: ctx.projectId, runId: activeRunId });
+    }
+  }, [activeRunId]);
 
   const bumpFrozenProgressTick = useCallback(() => {
     setFrozenProgressTick((n) => n + 1);
@@ -260,14 +285,42 @@ export function useAgentRun() {
       event_type: string;
       payload: Record<string, unknown>;
       created_at?: string;
+      run_id?: string;
     }): boolean => {
       const event = streamRowToSSEEvent(row);
       const t = event.type;
-      // Process "start" even out-of-seq on fresh subscribe (rapid successive runs; catchup may set seq
-      // but late realtime "start" for the new runId must still initialize progress flags).
-      const isFreshForStart = t === "start" && lastSeqRef.current === 0;
-      if (row.seq <= lastSeqRef.current && !isFreshForStart) return false;
+      // Fase 1.3 — bypass por runId, não por lastSeq.
+      // Antes: `t === "start" && lastSeqRef.current === 0` deixava start
+      // atrasado entrar, mas se catchup já tinha setado lastSeq=5, uma start
+      // event do novo runId era descartada como duplicada. Agora: se o runId
+      // da row é diferente do runId ativo, reseta lastSeq (mudança de run)
+      // e aceita o start.
+      const rowRunId = row.run_id;
+      const activeId = runIdRef.current;
+      if (rowRunId && activeId && rowRunId !== activeId && t === "start") {
+        lastSeqRef.current = 0;
+      }
+      if (row.seq <= lastSeqRef.current) {
+        emitStreamingTelemetry("agent.stream_seq_dropped", {
+          seq: row.seq,
+          lastSeq: lastSeqRef.current,
+          eventType: t,
+        });
+        return false;
+      }
+      // Detecta gap (espera-se contíguo: lastSeqRef+1 === row.seq)
+      if (row.seq > lastSeqRef.current + 1) {
+        emitStreamingTelemetry("agent.stream_seq_gap", {
+          lastSeq: lastSeqRef.current,
+          receivedSeq: row.seq,
+          gap: row.seq - lastSeqRef.current - 1,
+        });
+      }
       lastSeqRef.current = row.seq;
+      emitStreamingTelemetry("agent.stream_seq_processed", {
+        seq: row.seq,
+        eventType: t,
+      });
       const terminal = t === "finish" || t === "canceled" || t === "error" || t === "done";
       setProgress((prev) => {
         let next = applyAgentProgressEvent(prev, event);
@@ -280,6 +333,42 @@ export function useAgentRun() {
       return terminal;
     },
     [],
+  );
+
+  // Fase 1.2 — serializa aplicação de rows entre catchup (async) e Realtime
+  // (sync delivery). Cada row entra por enqueueStreamRow, que checa o mutex:
+  // se ninguém está processando, processa; senão, enfileira. Quando termina,
+  // drena o buffer até esvaziar.
+  const enqueueStreamRow = useCallback(
+    (row: {
+      seq: number;
+      event_type: string;
+      payload: Record<string, unknown>;
+      created_at?: string;
+      run_id?: string;
+    }): boolean => {
+      if (streamProcessingRef.current) {
+        streamBufferRef.current.push(row);
+        return false;
+      }
+      streamProcessingRef.current = true;
+      try {
+        const isTerminal = applyStreamRow(row);
+        // Drena o buffer em ordem, mas só aplica rows do mesmo runId ativo
+        // (rows de runs antigos são descartadas —它们的 runId não bate).
+        while (streamBufferRef.current.length > 0) {
+          const next = streamBufferRef.current.shift()!;
+          if (next.run_id && runIdRef.current && next.run_id !== runIdRef.current) {
+            continue;
+          }
+          applyStreamRow(next);
+        }
+        return isTerminal;
+      } finally {
+        streamProcessingRef.current = false;
+      }
+    },
+    [applyStreamRow],
   );
 
   const teardownChannels = useCallback(() => {
@@ -391,11 +480,12 @@ export function useAgentRun() {
       let terminal = false;
       for (const row of rows ?? []) {
         if (
-          applyStreamRow({
+          enqueueStreamRow({
             seq: row.seq as number,
             event_type: row.event_type as string,
             payload: (row.payload ?? {}) as Record<string, unknown>,
             created_at: row.created_at as string | undefined,
+            run_id: runId,
           })
         ) {
           terminal = true;
@@ -507,8 +597,9 @@ export function useAgentRun() {
               event_type: string;
               payload: Record<string, unknown>;
               created_at?: string;
+              run_id?: string;
             };
-            if (applyStreamRow(row)) {
+            if (enqueueStreamRow(row)) {
               teardownChannels();
               setConnected(false);
               setProgress((p) => {
@@ -523,14 +614,30 @@ export function useAgentRun() {
         .subscribe((status) => {
           if (status === "SUBSCRIBED") {
             reconnectAttemptsRef.current = 0;
+            emitStreamingTelemetry("agent.realtime_reconnected", { runId: runId.slice(0, 8) });
+            setProgress((p) => ({ ...p, connectionState: "connected" }));
           }
           if (
             (status === "CHANNEL_ERROR" || status === "TIMED_OUT") &&
             runIdRef.current === runId
           ) {
-            if (reconnectAttemptsRef.current >= MAX_REALTIME_RECONNECT) return;
+            emitStreamingTelemetry("agent.realtime_channel_error", {
+              runId: runId.slice(0, 8),
+              status,
+              attempt: reconnectAttemptsRef.current + 1,
+            });
+            setProgress((p) => ({ ...p, connectionState: "reconnecting" }));
+            if (reconnectAttemptsRef.current >= MAX_REALTIME_RECONNECT) {
+              setProgress((p) => ({ ...p, connectionState: "disconnected" }));
+              return;
+            }
             reconnectAttemptsRef.current += 1;
-            const delay = Math.min(1000 * 2 ** reconnectAttemptsRef.current, 8000);
+            const delay = Math.min(500 * 2 ** reconnectAttemptsRef.current, 8000);
+            emitStreamingTelemetry("agent.realtime_reconnect", {
+              runId: runId.slice(0, 8),
+              attempt: reconnectAttemptsRef.current,
+              delayMs: delay,
+            });
             logEditorTelemetryEvent(
               "agent_run",
               "realtime_reconnect",
@@ -1116,6 +1223,7 @@ export function useAgentRun() {
 
   const bindSession = useCallback((projectId: string, conversationId: string) => {
     sessionContextRef.current = { projectId, conversationId };
+    setStreamingTelemetryContext({ projectId, runId: runIdRef.current });
   }, []);
 
   const resetSession = useCallback(() => {

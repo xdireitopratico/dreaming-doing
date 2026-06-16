@@ -7,6 +7,7 @@ export type TurnThinking = {
   active: boolean;
   startedAtMs?: number;
   durationMs?: number;
+  connectionState?: "connected" | "reconnecting" | "disconnected";
 };
 
 /** Thinking… no envio → Thought for Xs no 1º token → nunca some. */
@@ -55,6 +56,7 @@ export function resolveTurnThinking(
       active: latency.active,
       startedAtMs: latency.startedAtMs ?? runStartedAtMs,
       durationMs: latency.durationMs,
+      connectionState: resolved?.connectionState,
     };
   }
 

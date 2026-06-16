@@ -20,6 +20,11 @@ type AssistantTurnProps = {
   canRollback?: boolean;
   onRollback?: () => void;
   onResume?: () => void;
+  /** Fase 2.2 — action chips: handlers opcionais. Chips só aparecem
+   *  se o respectivo handler for passado. */
+  onOpenFile?: (path: string) => void;
+  onShowOutput?: (runId: string) => void;
+  onShowPreview?: (runId: string) => void;
 };
 
 /**
@@ -33,6 +38,9 @@ export function AssistantTurn({
   canRollback,
   onRollback,
   onResume,
+  onOpenFile,
+  onShowOutput,
+  onShowPreview,
 }: AssistantTurnProps) {
   const rawClosing =
     item.streamText?.trim() ||
@@ -58,6 +66,16 @@ export function AssistantTurn({
     if (!err || item.isActive) return null;
     if (item.lastFinishOk !== false && !item.resumable) return null;
     const lower = err.toLowerCase();
+    if (lower.startsWith("dispatch_failed")) {
+      return {
+        message: "Não foi possível iniciar o agente",
+        action: "Tentar novamente",
+        link: null,
+        severity: "error" as const,
+        code: "dispatch_failed",
+        tip: "O servidor não conseguiu despachar o trabalho. Verifique INNGEST_EVENT_KEY nas secrets.",
+      };
+    }
     if (item.resumable || lower.includes("continuar") || lower.includes("checkpoint")) {
       return {
         ...llmErrorHint(err, loadAgentPreferences().mode === "robin"),
@@ -81,6 +99,7 @@ export function AssistantTurn({
             startedAtMs={item.thinking.startedAtMs}
             active={item.thinking.active}
             durationMs={item.thinking.durationMs}
+            connectionState={item.thinking.connectionState}
           />
         )}
 
@@ -94,8 +113,35 @@ export function AssistantTurn({
             runId={item.runId}
             isFocused={item.isFocused}
             onClick={() => onOpenInspector?.(item.runId, "timeline")}
+            onOpenFile={onOpenFile}
+            onShowDiff={(rid) => onOpenInspector?.(rid, "changes")}
+            onShowOutput={onShowOutput}
+            onShowPreview={onShowPreview}
           />
         )}
+
+        {showJobCard &&
+          item.miniCard?.status === "done" &&
+          (item.miniCard.fileCount ?? 0) > 0 && (
+            <div
+              className="forge-chat-review-callout"
+              data-testid="chat-review-callout"
+            >
+              <span className="forge-chat-review-callout-text">
+                {item.miniCard.fileCount} arquivo
+                {item.miniCard.fileCount !== 1 ? "s" : ""} alterado
+                {item.miniCard.fileCount !== 1 ? "s" : ""}
+              </span>
+              <button
+                type="button"
+                className="forge-chat-review-callout-action"
+                onClick={() => onOpenInspector?.(item.runId, "changes")}
+                data-testid="chat-review-callout-open"
+              >
+                Abrir inspector →
+              </button>
+            </div>
+          )}
 
         {showClarify && item.clarify && (
           <ChatClarify

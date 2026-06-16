@@ -10,6 +10,7 @@ import {
 import { timelineFromExecutionLog } from "@/lib/agent-job-stream";
 import { isAssistantRunMaterialized } from "@/lib/assistant-materialized";
 import { storedPlanFromMessage } from "@/lib/plan-message-meta";
+import { emitStreamingTelemetry } from "@/lib/streaming-telemetry";
 
 export function runIdFromAssistantMessage(msg: ChatMessage): string | undefined {
   return (
@@ -226,6 +227,30 @@ function pendingPlanFromSnapshot(
 function progressFromCardSnapshot(snap: Record<string, unknown>, msg: ChatMessage): AgentProgress {
   const runId = runIdFromAssistantMessage(msg);
   const projectId = typeof msg.meta?.projectId === "string" ? msg.meta.projectId : undefined;
+
+  // Fase 1.5 — validação de shape do cardSnapshot. Se o backend mudou o
+  // contrato (ex: `diffs` passou de `{path, patch}` para `{id, path, before,
+  // after, op, timestamp}`), o `useChat` segura o live slot por 45s enquanto
+  // o materialization gate espera um shape que nunca chega. Validação early
+  // + log de telemetria + tolerância (aceita shapes antigos E novos) evitam o
+  // ghost-lock. Sem isso: "mensagem sumiu após o run terminar".
+  const diffsArr = Array.isArray(snap.diffs) ? snap.diffs : [];
+  const diffsShapeOk = diffsArr.every(
+    (d) =>
+      d &&
+      typeof d === "object" &&
+      typeof (d as Record<string, unknown>).id === "string" &&
+      typeof (d as Record<string, unknown>).path === "string",
+  );
+  if (Array.isArray(snap.diffs) && !diffsShapeOk) {
+    emitStreamingTelemetry("agent.materialized_shape_mismatch", {
+      runId: runId ?? null,
+      field: "diffs",
+      received: diffsArr.length,
+    });
+    // Tolerância: descarta diffs malformados em vez de falhar tudo.
+    // O inspector ainda renderiza com timeline + tools + streamText.
+  }
 
   const timeline = Array.isArray(snap.timeline) ? (snap.timeline as SSEEvent[]) : [];
   const tools = Array.isArray(snap.tools) ? (snap.tools as AgentProgress["tools"]) : [];

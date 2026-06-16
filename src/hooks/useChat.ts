@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import type { AgentProgress } from "@/lib/agent-progress";
 import type { ChatMessage } from "@/lib/chat-types";
 import {
@@ -8,6 +8,7 @@ import {
 import { hasInspectorReadySnapshot } from "@/lib/assistant-run-progress";
 import { buildChatThread } from "@/lib/chat";
 import { usePendingPlan } from "@/hooks/usePendingPlan";
+import { emitStreamingTelemetry } from "@/lib/streaming-telemetry";
 import type { useAgentRun } from "@/hooks/useAgentRun";
 
 type AgentRun = ReturnType<typeof useAgentRun>;
@@ -138,11 +139,25 @@ export function useChat({
   useEffect(() => {
     if (!agent.activeRunId || !agent.progress.finished) return;
     const runId = agent.activeRunId;
+    const startedAt = Date.now();
     const timer = window.setTimeout(() => {
       const materialized = messages.find(
         (m) => m.role === "assistant" && m.runId === runId && canReleaseLiveSlot(m),
       );
-      if (!materialized) return;
+      if (!materialized) {
+        // Fase 1.5 — telemetria de slot preso. Se chegou até aqui, o DB nunca
+        // materializou uma assistant message terminada para esse runId (ou
+        // tem shape inválido). Em vez de segurar o slot indefinidamente
+        // (comportamento histórico era: soltar 45s e só então liberar), libera
+        // imediatamente e loga para diagnóstico. Isso restaura o chat em vez
+        // de mantê-lo "engolido".
+        emitStreamingTelemetry("agent.materialized_release_pending", {
+          runId,
+          elapsedMs: Date.now() - startedAt,
+        });
+        agent.acknowledgeMaterializedRun(runId);
+        return;
+      }
       agent.acknowledgeMaterializedRun(runId);
     }, 45_000);
     return () => window.clearTimeout(timer);
@@ -155,6 +170,24 @@ export function useChat({
     !agent.progress.awaiting
   );
 
+  // Fase 1.9 — expõe busyReason pro composer. "running" = mesma conversa,
+  // turno atual. "other_conversation" = outra aba/dispositivo tomando o
+  // lock. "zombie" = run travou (status pending/running mas finished sem
+  // lastFinishOk ou stale stream detectado). O composer decide se mostra
+  // chip "Tomar controle".
+  const busyReason: "running" | "zombie" | "other_conversation" | null = agentBusy
+    ? (progress?.finished === true && progress?.lastFinishOk === false
+        ? "zombie"
+        : "running")
+    : null;
+
+  const takeOver = useCallback(() => {
+    emitStreamingTelemetry("agent.dual_tab_detected", {
+      activeRunId: agent.activeRunId,
+    });
+    void agent.stop();
+  }, [agent]);
+
   return {
     thread,
     progress,
@@ -163,5 +196,7 @@ export function useChat({
     messagesLoading,
     agentBusy,
     activeRunId: agent.activeRunId,
+    busyReason,
+    takeOver,
   };
 }

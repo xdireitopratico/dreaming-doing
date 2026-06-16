@@ -15,6 +15,7 @@ import {
 import { ChatThread } from "./ChatThread";
 import { ChatPlanDock } from "./ChatPlanDock";
 import { ChatComposer } from "./ChatComposer";
+import { ChatEmptyState } from "./ChatEmptyState";
 import { PendingQueuePanel, type PendingQueueItem } from "@/components/editor/PendingQueuePanel";
 import type { PlanStep } from "@/lib/agent-progress";
 import type { useAgentRun } from "@/hooks/useAgentRun";
@@ -87,6 +88,8 @@ export function ChatPanel({
     showEmptyState,
     messagesLoading: chatLoading,
     agentBusy,
+    busyReason,
+    takeOver,
   } = useChat({
     projectId,
     conversationId,
@@ -97,6 +100,7 @@ export function ChatPanel({
     running,
     focusedRunId,
   });
+  // busyReason + takeOver vêm do useChat (Fase 1.9).
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const pinnedToBottom = useRef(true);
@@ -108,6 +112,9 @@ export function ChatPanel({
   const firstAnchorRef = useRef(true);
   const userScrolledAwayRef = useRef(false);
   const [showPill, setShowPill] = useState(false);
+  /** Fase 2.5 — quando o user clica num card de sugestão do empty state,
+   *  setamos este state que alimenta `externalPrompt` no ChatComposer. */
+  const [suggestionPrompt, setSuggestionPrompt] = useState<string | null>(null);
   const [anchorSpacerPx, setAnchorSpacerPx] = useState(0);
   const PIN_THRESHOLD_PX = 100;
 
@@ -387,7 +394,13 @@ export function ChatPanel({
             <Loader2 className="size-4 shrink-0 animate-spin" />
             <span className="text-sm">Carregando conversa…</span>
           </div>
-        ) : showEmptyState && messages.length === 0 ? null : (
+        ) : showEmptyState && messages.length === 0 ? (
+          <ChatEmptyState
+            onPickSuggestion={(prompt) => {
+              setSuggestionPrompt(prompt);
+            }}
+          />
+        ) : (
           <>
             <ChatThread
               items={thread}
@@ -450,6 +463,8 @@ export function ChatPanel({
       <ChatComposer
         running={running}
         agentBusy={agentBusy}
+        busyReason={busyReason}
+        onTakeOver={takeOver}
         planPending={!!pendingPlan}
         composerMode={composerMode}
         onComposerModeChange={onComposerModeChange}
@@ -457,8 +472,11 @@ export function ChatPanel({
         onStop={onStop}
         onVisualEdits={onVisualEdits}
         visualEditsActive={visualEditsActive}
-        externalPrompt={externalPrompt}
-        onExternalPromptConsumed={onExternalPromptConsumed}
+        externalPrompt={externalPrompt ?? suggestionPrompt}
+        onExternalPromptConsumed={() => {
+          setSuggestionPrompt(null);
+          onExternalPromptConsumed?.();
+        }}
       />
     </div>
   );

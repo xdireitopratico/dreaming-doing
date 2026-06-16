@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import type { AgentProgress, PendingPlan } from "@/lib/agent-progress";
 import type { ChatMessage } from "@/lib/chat-types";
 import type { JobInspectorTab } from "@/hooks/useJobWorkspaceFocus";
@@ -6,6 +6,8 @@ import { resolveInspectorPlanForRun } from "@/lib/plan-message-meta";
 import { InspectorTimeline } from "@/components/editor/InspectorTimeline";
 import { InspectorChanges } from "@/components/editor/InspectorChanges";
 import { InspectorPlan } from "@/components/editor/InspectorPlan";
+import { InspectorHistory } from "@/components/editor/InspectorHistory";
+import { emitStreamingTelemetry } from "@/lib/streaming-telemetry";
 
 export type JobInspectorProps = {
   run: AgentProgress;
@@ -20,11 +22,14 @@ export type JobInspectorProps = {
   runStartedAtMs?: number | null;
   /** Inspector ocupa o workspace inteiro (Lovable: job aberto = sem preview). */
   fullWidth?: boolean;
+  projectId?: string;
+  conversationId?: string;
 };
 
 const TABS: { id: JobInspectorTab; label: string }[] = [
   { id: "timeline", label: "Timeline" },
   { id: "changes", label: "Changes" },
+  { id: "history", label: "History" },
 ];
 
 export function JobInspector({
@@ -39,6 +44,8 @@ export function JobInspector({
   onOpenFile,
   runStartedAtMs,
   fullWidth = false,
+  projectId,
+  conversationId,
 }: JobInspectorProps) {
   const inspectorPlan = useMemo(
     () =>
@@ -56,7 +63,32 @@ export function JobInspector({
       ? "plan"
       : normalizedTab === "changes"
         ? "changes"
-        : "timeline";
+        : normalizedTab === "history"
+          ? "history"
+          : "timeline";
+
+  // Fase 1.7 — telemetria: se este run foi originado de um plano aprovado
+  // (build run com planSourceRunId), mas o inspector não consegue
+  // reconstruir o plano (inspectorPlan === null), emitimos
+  // `plan_source_runid_missing` para diagnóstico. Causa típica: meta JSONB
+  // do INSERT não persistiu `planSourceRunId` (fail silencioso do Supabase
+  // JSONB apply). Hoje a UI mostra tab Plan oculto sem explicação.
+  const planDiagEmittedRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (inspectorPlan) {
+      planDiagEmittedRef.current = null;
+      return;
+    }
+    const isBuildRun = messages.some(
+      (m) =>
+        m.role === "user" &&
+        (m.meta as Record<string, unknown> | undefined)?.buildRunId === runId,
+    );
+    if (!isBuildRun) return;
+    if (planDiagEmittedRef.current === runId) return;
+    planDiagEmittedRef.current = runId;
+    emitStreamingTelemetry("agent.plan_source_runid_missing", { runId });
+  }, [inspectorPlan, messages, runId]);
 
   return (
     <div
@@ -108,6 +140,13 @@ export function JobInspector({
         {resolvedTab === "changes" && <InspectorChanges progress={run} />}
         {resolvedTab === "plan" && inspectorPlan && (
           <InspectorPlan plan={inspectorPlan.plan} />
+        )}
+        {resolvedTab === "history" && projectId && conversationId && (
+          <InspectorHistory
+            projectId={projectId}
+            conversationId={conversationId}
+            messages={messages}
+          />
         )}
       </div>
     </div>

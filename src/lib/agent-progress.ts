@@ -103,6 +103,9 @@ export interface AgentProgress {
   statusChips?: string[];
   /** Turno social/conversacional — só bubble no chat, sem mini-card de job. */
   conversational?: boolean;
+  /** Estado da conexão Realtime — usado para feedback visual durante reconnect
+   *  (Fase 1.6: «Reconectando…» no ChatThinking enquanto o canal refaz handshake). */
+  connectionState?: "connected" | "reconnecting" | "disconnected";
 }
 
 export type AgentConnectOptions = {

@@ -26,6 +26,13 @@ export type MiniCardData = {
   editedFile?: string | null;
   fileCount?: number;
   hasPlan?: boolean;
+  /** Fase 2.2 — action chips: último tool executado vira chip clicável
+   *  (Show file / Show diff / Show output / Show preview). */
+  lastTool?: {
+    name: string;
+    path?: string;
+    ok?: boolean;
+  } | null;
 };
 
 export type ClarifyChoice = {
@@ -54,7 +61,12 @@ export type ThreadItem =
       streamText: string | null;
       phase?: RunPhase;
       phaseMessage?: string | null;
-      thinking?: { active: boolean; startedAtMs?: number; durationMs?: number } | null;
+      thinking?: {
+        active: boolean;
+        startedAtMs?: number;
+        durationMs?: number;
+        connectionState?: "connected" | "reconnecting" | "disconnected";
+      } | null;
       narration?: string | null;
       miniCard?: MiniCardData | null;
       statusChips?: string[];

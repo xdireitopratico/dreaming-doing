@@ -1,4 +1,5 @@
 import type { AgentProgress, PendingPlan, PlanStep, SSEEvent } from "@/lib/agent-progress";
+import { emitStreamingTelemetry } from "@/lib/streaming-telemetry";
 
 export type TaskStatus = "pending" | "active" | "done" | "failed";
 
@@ -25,6 +26,13 @@ export type ForgeMiniCardData = {
   editedFile?: string | null;
   fileCount?: number;
   hasPlan?: boolean;
+  /** Fase 2.2 — action chips: o último tool executado vira chip clicável
+   *  no mini card (Show file / Show diff / Show output / Show preview). */
+  lastTool?: {
+    name: string;
+    path?: string;
+    ok?: boolean;
+  } | null;
 };
 
 export type TimelineItemType = "TASK" | "THOUGHT" | "TOOL" | "RESULT";
@@ -694,12 +702,31 @@ export function buildAgentRunView(
   const narrationBody = progress.narrationText?.trim() || null;
   const summaryBody = progress.summary?.trim();
   const safeSummary = summaryBody && !isWrapUpPhrase(summaryBody) ? summaryBody : null;
+  // Fase 1.8 — dedupe mais rigoroso: igual OU prefix match OU includes.
+  // O caso "streamBody.startsWith(narrationBody)" é o bug típico — o agente
+  // emite "Vou criar a landing" como narration, depois repete a mesma frase
+  // caractere a caractere como streamText. Sem prefix-match, ambas viram
+  // visíveis (a linha de narração E o closing text).
   const narrationDuplicatesStream =
     !!streamBody &&
     !!narrationBody &&
     (narrationBody === streamBody ||
+      streamBody.startsWith(narrationBody) ||
       streamBody.includes(narrationBody) ||
       narrationBody.includes(streamBody));
+  if (narrationDuplicatesStream && streamBody && narrationBody) {
+    emitStreamingTelemetry("agent.narration_stream_overlap", {
+      streamLength: streamBody.length,
+      narrationLength: narrationBody.length,
+      overlapType: streamBody.startsWith(narrationBody)
+        ? "stream_starts_with_narration"
+        : streamBody.includes(narrationBody)
+          ? "stream_contains_narration"
+          : narrationBody.includes(streamBody)
+            ? "narration_contains_stream"
+            : "exact",
+    });
+  }
   const closingText =
     streamBody ||
     (!jobActive && !narrationDuplicatesStream ? narrationBody || safeSummary : null) ||
@@ -717,6 +744,16 @@ export function buildAgentRunView(
     sessionTitle,
   });
 
+  // Fase 2.2 — extrai o último TOOL executado (reverso do forgeTimeline) para
+  // action chips no mini card. Ignora TOOLs ativos (active=true) — só
+  // mostramos chips para tools que terminaram.
+  const lastToolItem = [...forgeTimeline].reverse().find(
+    (t) => t.type === "TOOL" && !t.active,
+  ) as Extract<ForgeTimelineItem, { type: "TOOL" }> | undefined;
+  const lastTool = lastToolItem
+    ? { name: lastToolItem.name, path: lastToolItem.path, ok: true }
+    : null;
+
   return {
     runId,
     miniCard: {
@@ -730,6 +767,7 @@ export function buildAgentRunView(
       editedFile,
       fileCount: progress.diffs.length || progress.deliveryFiles?.length,
       hasPlan: !!jobPlan?.steps?.length,
+      lastTool,
     },
     thinking,
     latencyThinking,

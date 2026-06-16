@@ -51,6 +51,7 @@ function toMiniCard(
     editedFile: m.editedFile,
     fileCount: m.fileCount,
     hasPlan: m.hasPlan,
+    lastTool: m.lastTool ?? null,
   };
 }
 

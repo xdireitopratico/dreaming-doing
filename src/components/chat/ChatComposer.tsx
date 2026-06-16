@@ -24,6 +24,11 @@ const DRAFT_MAX_AGE = 24 * 60 * 60 * 1000;
 type ChatComposerProps = {
   running: boolean;
   agentBusy?: boolean;
+  /** Fase 1.9 — quando agentBusy vem de uma run em outra aba/conversa, exibimos
+   *  um chip explícito em vez de só desabilitar o composer silenciosamente. */
+  busyReason?: "running" | "zombie" | "other_conversation" | null;
+  /** Callback pra "Tomar controle" — cancela a run ativa e libera o lock. */
+  onTakeOver?: () => void;
   planPending?: boolean;
   composerMode?: AgentComposerMode;
   onComposerModeChange?: (mode: AgentComposerMode) => void;
@@ -38,6 +43,8 @@ type ChatComposerProps = {
 export function ChatComposer({
   running,
   agentBusy = false,
+  busyReason = null,
+  onTakeOver,
   planPending = false,
   composerMode = "plan",
   onComposerModeChange,
@@ -176,6 +183,25 @@ export function ChatComposer({
         accept={CHAT_ATTACHMENT_ACCEPT}
         onChange={handleFileChange}
       />
+
+      {agentBusy && (busyReason === "other_conversation" || busyReason === "zombie") && (
+        <div className="forge-composer-busy-banner" data-testid="chat-composer-busy-banner">
+          <span className="forge-composer-busy-text">
+            {busyReason === "zombie"
+              ? "O agente travou nesta conversa. Tome o controle para tentar de novo."
+              : "Outra aba ou conversa está rodando o agente. Tome o controle para enviar aqui."}
+          </span>
+          {onTakeOver && (
+            <button
+              type="button"
+              className="forge-composer-busy-action"
+              onClick={onTakeOver}
+            >
+              Tomar controle
+            </button>
+          )}
+        </div>
+      )}
 
       {attachments.length > 0 && (
         <div className="forge-composer-attachments">
