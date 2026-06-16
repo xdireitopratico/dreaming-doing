@@ -6,9 +6,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { History, MessageCircle, Minimize2, Plus, X } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import type { Node, Edge } from "@xyflow/react";
-import { ChatThread } from "@/components/chat/ChatThread";
 import { ChatComposer } from "@/components/chat/ChatComposer";
-import { useFlowBuilderChat } from "./hooks/useFlowBuilderChat";
+import { VibeChatPanel } from "./chat/VibeChatPanel";
+import { VibeInspectorDrawer } from "./inspector/VibeInspectorDrawer";
+import { useVibeChat } from "@/hooks/useVibeChat";
+import { useVibeInspector } from "@/hooks/useVibeInspector";
 import "@/styles/forge-chat.css";
 import "@/styles/forge-vibe-agent-chat.css";
 
@@ -55,23 +57,16 @@ export function FlowBuilderChatDock({
   }, [onOpenChange]);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  const {
-    threadItems,
-    running,
-    initialized,
-    unreadCount,
-    conversations,
-    conversationId,
-    onSend,
-    onStop,
-    setChatVisible,
-    startNewConversation,
-    selectConversation,
-  } = useFlowBuilderChat({
+  const chat = useVibeChat({
     flowId,
     enabled,
-    onApplyPatch,
-    onHighlightNodes,
+    conversationId: null,
+    onNewConversation: () => {},
+  });
+
+  const inspector = useVibeInspector({
+    conversationId: chat.conversationId,
+    enabled,
   });
 
   const toggle = useCallback(() => {
@@ -89,15 +84,14 @@ export function FlowBuilderChatDock({
 
   useEffect(() => {
     onOpenChange?.(open);
-    setChatVisible(open);
-  }, [open, setChatVisible, onOpenChange]);
+  }, [open, onOpenChange]);
 
   useEffect(() => {
     if (!open) return;
     const el = scrollRef.current;
     if (!el) return;
     el.scrollTop = el.scrollHeight;
-  }, [open, threadItems.length, running]);
+  }, [open, chat.messages.length, chat.running]);
 
   if (!enabled) return null;
 
@@ -131,7 +125,7 @@ export function FlowBuilderChatDock({
                   className="forge-vibe-agent-chat__header-btn"
                   title="Nova conversa"
                   aria-label="Nova conversa"
-                  onClick={() => void startNewConversation()}
+                  onClick={() => void chat.startNewConversation()}
                 >
                   <Plus className="size-3.5" />
                 </button>
@@ -152,19 +146,19 @@ export function FlowBuilderChatDock({
                       border: "1px solid var(--border-forge)",
                     }}
                   >
-                    {conversations.length === 0 ? (
+                    {chat.conversations.length === 0 ? (
                       <p className="px-3 py-2 text-[10px]" style={{ color: "var(--text-muted)" }}>
                         Nenhuma conversa ainda
                       </p>
                     ) : (
-                      conversations.map((c) => (
+                      chat.conversations.map((c) => (
                         <button
                           key={c.id}
                           type="button"
-                          className={`w-full px-3 py-2 text-left text-[10px] transition-colors hover:bg-white/5${c.id === conversationId ? " forge-vibe-agent-chat__history-item--active" : ""}`}
+                          className={`w-full px-3 py-2 text-left text-[10px] transition-colors hover:bg-white/5${c.id === chat.conversationId ? " forge-vibe-agent-chat__history-item--active" : ""}`}
                           style={{ color: "var(--text-secondary)" }}
                           onClick={() => {
-                            void selectConversation(c.id);
+                            void chat.selectConversation(c.id);
                             setHistoryOpen(false);
                           }}
                         >
@@ -202,13 +196,13 @@ export function FlowBuilderChatDock({
               ref={scrollRef}
               className="forge-chat-inner min-h-0 flex-1 overflow-y-auto"
             >
-              {!initialized ? (
+              {!chat.initialized ? (
                 <div className="flex items-center justify-center py-12">
                   <span className="text-[11px]" style={{ color: "var(--text-muted)" }}>
                     Conectando...
                   </span>
                 </div>
-              ) : threadItems.length === 0 ? (
+              ) : chat.messages.length === 0 ? (
                 <div className="px-4 py-8 text-center">
                   <p className="text-[12px] font-medium mb-1" style={{ color: "var(--text-secondary)" }}>
                     Vibe Agent
@@ -219,16 +213,31 @@ export function FlowBuilderChatDock({
                 </div>
               ) : (
                 <div className="forge-messages">
-                  <ChatThread items={threadItems} />
+                  <VibeChatPanel
+                    messages={chat.messages}
+                    currentMinicard={chat.currentMinicard}
+                    currentPlan={chat.currentPlan}
+                  />
+                  <div className="mt-4 border-t border-border pt-4">
+                    <VibeInspectorDrawer
+                      thinking={inspector.thinking}
+                      toolCalls={inspector.toolCalls}
+                      sessionInfo={inspector.sessionInfo}
+                      isConnected={inspector.isConnected}
+                      error={inspector.error}
+                      exportSession={inspector.exportSession}
+                      clearBuffers={inspector.clearBuffers}
+                    />
+                  </div>
                 </div>
               )}
             </div>
 
             <div className="forge-vibe-agent-composer-wrap shrink-0">
               <ChatComposer
-                running={running}
-                onSend={onSend}
-                onStop={onStop}
+                running={chat.running}
+                onSend={chat.send}
+                onStop={chat.stop}
               />
             </div>
           </motion.div>
@@ -243,12 +252,12 @@ export function FlowBuilderChatDock({
         onClick={toggle}
       >
         <MessageCircle className="size-5" />
-        {!open && unreadCount > 0 && (
+        {!open && chat.error && (
           <span
             className="absolute -right-0.5 -top-0.5 flex size-5 items-center justify-center rounded-full text-[9px] font-bold"
             style={{ background: "#ef4444", color: "#fff" }}
           >
-            {unreadCount > 9 ? "9+" : unreadCount}
+            !
           </span>
         )}
       </button>
