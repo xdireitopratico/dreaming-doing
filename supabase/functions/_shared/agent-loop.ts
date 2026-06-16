@@ -42,7 +42,7 @@ interface TaskResult {
 }
 
 type ChatEmitter = (event: any) => void;
-type InspectorEmitter = (event: any) => void;
+type InspectorEmitter = (event: any) => Promise<void>;
 
 interface AtomicPlan {
   title: string;
@@ -62,13 +62,15 @@ export async function executeAgentLoop(ctx: LoopContext): Promise<void> {
     ctx.chatWriter.write({ ...event, timestamp: Date.now(), requestId: ctx.requestId } as ChatEvent);
   };
 
-  const emitInspector = (event: any) => {
-    ctx.inspectorWriter.write({ ...event, timestamp: Date.now(), requestId: ctx.requestId, sequence: ++sequence } as InspectorEvent);
+  const emitInspector = async (event: any) => {
+    const inspectorEvent = { ...event, timestamp: Date.now(), requestId: ctx.requestId, sequence: ++sequence } as InspectorEvent;
+    ctx.inspectorWriter.write(inspectorEvent);
+    await persistInspectorEvent(sb, ctx, inspectorEvent);
   };
 
   try {
     // ─── SESSION START ───
-    emitInspector({
+    await emitInspector({
       type: 'session_start',
       sessionId: ctx.sessionId,
       prompt: ctx.userMessage,
@@ -119,7 +121,7 @@ export async function executeAgentLoop(ctx: LoopContext): Promise<void> {
     });
 
     // ─── SESSION END ───
-    emitInspector({
+    await emitInspector({
       type: 'session_end',
       sessionId: ctx.sessionId,
       outcome: failedTasks.length === 0 ? 'success' : 'partial',
@@ -139,7 +141,7 @@ export async function executeAgentLoop(ctx: LoopContext): Promise<void> {
       recoverable: true,
       suggestion: 'Tente reformular ou peça para continuar de onde parou.',
     });
-    emitInspector({
+    await emitInspector({
       type: 'session_end',
       sessionId: ctx.sessionId,
       outcome: 'failed',
@@ -175,17 +177,17 @@ async function runExplorationLoop(
 
   for (const step of ordered) {
     emitChat({ type: 'chat_loop_step', stepId: step.id, label: step.label, status: 'running' });
-    emitInspector({ type: 'tool_call', callId: crypto.randomUUID(), tool: step.tool, input: { step: step.id }, status: 'start' });
+    await emitInspector({ type: 'tool_call', callId: crypto.randomUUID(), tool: step.tool, input: { step: step.id }, status: 'start' });
 
     const stepStart = Date.now();
     try {
       await executeStep(step, ctx, emitInspector);
       emitChat({ type: 'chat_loop_step', stepId: step.id, label: step.label, status: 'done' });
-      emitInspector({ type: 'tool_call', callId: crypto.randomUUID(), tool: step.tool, input: { step: step.id }, status: 'complete', durationMs: Date.now() - stepStart });
+      await emitInspector({ type: 'tool_call', callId: crypto.randomUUID(), tool: step.tool, input: { step: step.id }, status: 'complete', durationMs: Date.now() - stepStart });
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Erro ao executar etapa';
       emitChat({ type: 'chat_loop_step', stepId: step.id, label: step.label, status: 'error' });
-      emitInspector({ type: 'tool_call', callId: crypto.randomUUID(), tool: step.tool, input: { step: step.id }, status: 'error', error: errorMessage, durationMs: Date.now() - stepStart });
+      await emitInspector({ type: 'tool_call', callId: crypto.randomUUID(), tool: step.tool, input: { step: step.id }, status: 'error', error: errorMessage, durationMs: Date.now() - stepStart });
     }
   }
 
@@ -215,12 +217,12 @@ async function executeStep(step: ExplorationStep, ctx: LoopContext, emitInspecto
     const nodes = (def.nodes as Array<Record<string, unknown>>) || [];
     const edges = (def.edges as Array<Record<string, unknown>>) || [];
 
-    emitInspector({
+    await emitInspector({
       type: 'thinking',
       content: `Contexto carregado: ${nodes.length} nodes, ${edges.length} edges`,
     });
   } else if (step.id === 'analyze_issue') {
-    emitInspector({
+    await emitInspector({
       type: 'thinking',
       content: `Analisando: ${ctx.userMessage}`,
     });
@@ -232,12 +234,12 @@ async function executeStep(step: ExplorationStep, ctx: LoopContext, emitInspecto
       .order("created_at", { ascending: false })
       .limit(10);
 
-    emitInspector({
+    await emitInspector({
       type: 'thinking',
       content: `Histórico encontrado: ${history?.length || 0} mensagens`,
     });
   } else if (step.id === 'identify_root_cause') {
-    emitInspector({
+    await emitInspector({
       type: 'thinking',
       content: 'Causa raiz identificada: gap entre chat limpo e inspector completo',
     });
@@ -283,7 +285,7 @@ async function executePlan(
 
     await Promise.all(ready.map(async (task) => {
       emitChat({ type: 'chat_task_update', planId, taskId: task.id, status: 'running' });
-      emitInspector({ type: 'tool_call', callId: crypto.randomUUID(), tool: 'edit', input: { task: task.id }, status: 'start' });
+      await emitInspector({ type: 'tool_call', callId: crypto.randomUUID(), tool: 'edit', input: { task: task.id }, status: 'start' });
 
       const taskStart = Date.now();
       try {
@@ -291,12 +293,12 @@ async function executePlan(
         const output = `Tarefa ${task.id} concluída com sucesso`;
         results.push({ taskId: task.id, success: true, output });
         emitChat({ type: 'chat_task_update', planId, taskId: task.id, status: 'done', output });
-        emitInspector({ type: 'tool_call', callId: crypto.randomUUID(), tool: 'edit', input: { task: task.id }, status: 'complete', durationMs: Date.now() - taskStart });
+        await emitInspector({ type: 'tool_call', callId: crypto.randomUUID(), tool: 'edit', input: { task: task.id }, status: 'complete', durationMs: Date.now() - taskStart });
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : 'Erro ao executar tarefa';
         results.push({ taskId: task.id, success: false, error: errorMessage });
         emitChat({ type: 'chat_task_update', planId, taskId: task.id, status: 'error', output: errorMessage });
-        emitInspector({ type: 'tool_call', callId: crypto.randomUUID(), tool: 'edit', input: { task: task.id }, status: 'error', error: errorMessage, durationMs: Date.now() - taskStart });
+        await emitInspector({ type: 'tool_call', callId: crypto.randomUUID(), tool: 'edit', input: { task: task.id }, status: 'error', error: errorMessage, durationMs: Date.now() - taskStart });
       }
       completed.add(task.id);
     }));
@@ -314,36 +316,53 @@ async function executeTask(
   const sb = supabaseAdmin();
 
   if (task.id === 'fix_chat_architecture') {
-    emitInspector({
+    await emitInspector({
       type: 'thinking',
       content: 'Separando chat limpo do inspector completo: chat terá intro → minicard → plano → fechamento; inspector terá tudo.',
     });
   } else if (task.id === 'implement_sse_dual_stream') {
-    emitInspector({
+    await emitInspector({
       type: 'thinking',
       content: 'Implementando SSE dual stream: chat stream e inspector stream independentes.',
     });
   } else if (task.id === 'add_minicard_looping') {
-    emitInspector({
+    await emitInspector({
       type: 'thinking',
       content: 'Minicard de looping: etapas aparecem em ordem dinâmica com status running/done.',
     });
   } else if (task.id === 'add_atomic_plan') {
-    emitInspector({
+    await emitInspector({
       type: 'thinking',
       content: 'Lista atômica: tasks com dependsOn para ordenação topológica.',
     });
   } else if (task.id === 'add_closure') {
-    emitInspector({
+    await emitInspector({
       type: 'thinking',
       content: 'Fechamento: summary + remaining + nextSteps.',
     });
   } else if (task.id === 'add_inspector_full') {
-    emitInspector({
+    await emitInspector({
       type: 'thinking',
       content: 'Inspector completo: thinking bruto + tool calls + session info.',
     });
   }
+}
+
+// ─── PERSIST INSPECTOR EVENT ───
+async function persistInspectorEvent(
+  sb: ReturnType<typeof supabaseAdmin>,
+  ctx: LoopContext,
+  event: InspectorEvent,
+): Promise<void> {
+  await (sb.from("vibe_agent_events" as any) as any).insert({
+    conversation_id: ctx.conversationId,
+    request_id: ctx.requestId,
+    event_type: event.type,
+    event_data: event,
+    sequence: 'sequence' in event ? event.sequence : 0,
+  }).catch((err: unknown) => {
+    console.error("[agent-loop] Failed to persist inspector event:", err);
+  });
 }
 
 // ─── PERSIST MESSAGES ───

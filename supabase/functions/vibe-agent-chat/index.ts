@@ -21,6 +21,11 @@ interface StreamRecord {
 
 const streamRegistry = new Map<string, StreamRecord>();
 
+const RATE_LIMIT = {
+  windowMs: 60 * 1000, // 1 minute
+  maxRequests: 10,
+};
+
 serve(async (req) => {
   // CORS
   if (req.method === "OPTIONS") {
@@ -42,6 +47,15 @@ serve(async (req) => {
       const { conversation_id, message, model, provider } = await req.json();
       if (!conversation_id || !message) {
         return Response.json({ error: "conversation_id and message are required" }, { status: 400, headers: corsHeaders() });
+      }
+
+      // Rate limiting
+      const rateLimitResult = await checkRateLimit(conversation_id);
+      if (!rateLimitResult.allowed) {
+        return Response.json(
+          { error: "Rate limit exceeded" },
+          { status: 429, headers: { ...corsHeaders(), "Retry-After": String(rateLimitResult.retryAfterSeconds) } },
+        );
       }
 
       const chatStreamId = crypto.randomUUID();
@@ -199,24 +213,75 @@ serve(async (req) => {
 
 // ─── DB HELPERS ───
 async function applyFlowPatch(conversationId: string, patch: unknown): Promise<unknown> {
+  // Get conversation to find flow_id
+  const { data: conv, error: convError } = await supabase
+    .from("vibe_agent_conversations")
+    .select("flow_id")
+    .eq("id", conversationId)
+    .single();
+
+  if (convError || !conv) {
+    throw new Error("Conversation not found");
+  }
+
+  const flowId = (conv as any).flow_id;
+
+  // Get current flow definition
+  const { data: flowData, error: flowError } = await supabase
+    .from("agent_flows")
+    .select("flow_definition")
+    .eq("id", flowId)
+    .single();
+
+  if (flowError || !flowData) {
+    throw new Error("Flow not found");
+  }
+
+  const currentDef = (flowData as any).flow_definition || {};
+  const patchData = patch as { nodes?: unknown[]; edges?: unknown[]; changed_node_ids?: string[]; description?: string };
+
+  // Apply patch to flow definition
+  const updatedDef = {
+    ...currentDef,
+    nodes: patchData.nodes || currentDef.nodes || [],
+    edges: patchData.edges || currentDef.edges || [],
+  };
+
+  // Update agent_flows
+  const { error: updateError } = await supabase
+    .from("agent_flows")
+    .update({
+      flow_definition: updatedDef,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", flowId);
+
+  if (updateError) {
+    throw new Error(`Failed to update flow: ${updateError.message}`);
+  }
+
+  // Insert version record
   const { data, error } = await supabase
     .from("agent_flow_versions")
     .insert({
       conversation_id: conversationId,
+      flow_id: flowId,
       patch,
       applied_by: "agent",
+      metadata: { description: patchData.description || "Patch aplicado pelo Vibe Agent" },
     })
     .select()
     .single();
 
-  if (error) throw new Error(`Failed to apply patch: ${error.message}`);
+  if (error) throw new Error(`Failed to save version: ${error.message}`);
   return data;
 }
 
 async function undoFlowVersion(conversationId: string, versionId: string): Promise<unknown> {
+  // Get the version to undo
   const { data: version, error: fetchError } = await supabase
     .from("agent_flow_versions")
-    .select("patch")
+    .select("patch, flow_id, parent_version_id")
     .eq("id", versionId)
     .eq("conversation_id", conversationId)
     .single();
@@ -225,11 +290,63 @@ async function undoFlowVersion(conversationId: string, versionId: string): Promi
     throw new Error("Version not found");
   }
 
+  const versionData = version as any;
+  const flowId = versionData.flow_id;
+
+  // Get parent version if exists
+  const parentId = versionData.parent_version_id;
+  let restorePatch = versionData.patch;
+
+  if (parentId) {
+    const { data: parentVersion, error: parentError } = await supabase
+      .from("agent_flow_versions")
+      .select("patch")
+      .eq("id", parentId)
+      .single();
+
+    if (!parentError && parentVersion) {
+      restorePatch = (parentVersion as any).patch;
+    }
+  }
+
+  // Apply restore patch to flow
+  const { data: flowData, error: flowError } = await supabase
+    .from("agent_flows")
+    .select("flow_definition")
+    .eq("id", flowId)
+    .single();
+
+  if (flowError || !flowData) {
+    throw new Error("Flow not found");
+  }
+
+  const currentDef = (flowData as any).flow_definition || {};
+  const patchData = restorePatch as { nodes?: unknown[]; edges?: unknown[] };
+  const updatedDef = {
+    ...currentDef,
+    nodes: patchData.nodes || currentDef.nodes || [],
+    edges: patchData.edges || currentDef.edges || [],
+  };
+
+  const { error: updateError } = await supabase
+    .from("agent_flows")
+    .update({
+      flow_definition: updatedDef,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", flowId);
+
+  if (updateError) {
+    throw new Error(`Failed to restore flow: ${updateError.message}`);
+  }
+
+  // Insert undo version record
   const { data, error } = await supabase
     .from("agent_flow_versions")
     .insert({
       conversation_id: conversationId,
-      patch: version.patch,
+      flow_id: flowId,
+      patch: restorePatch,
       applied_by: "user",
       parent_version_id: versionId,
       metadata: { undo: true },
@@ -237,7 +354,7 @@ async function undoFlowVersion(conversationId: string, versionId: string): Promi
     .select()
     .single();
 
-  if (error) throw new Error(`Failed to undo: ${error.message}`);
+  if (error) throw new Error(`Failed to save undo version: ${error.message}`);
   return data;
 }
 
@@ -287,6 +404,58 @@ function createSSEStream<T>(): { readable: ReadableStream<T>; writable: Writable
     },
   });
   return { readable, writable: writer! };
+}
+
+async function checkRateLimit(key: string): Promise<{ allowed: boolean; retryAfterSeconds: number }> {
+  const now = new Date();
+  const windowStart = new Date(now.getTime() - RATE_LIMIT.windowMs);
+
+  // Get current count
+  const { data, error } = await supabase
+    .from("rate_limit_counters")
+    .select("count, window_start")
+    .eq("key", `conv:${key}`)
+    .single();
+
+  if (error || !data) {
+    // First request in window
+    await (supabase.from("rate_limit_counters" as any) as any).insert({
+      key: `conv:${key}`,
+      count: 1,
+      window_start: now.toISOString(),
+      updated_at: now.toISOString(),
+    });
+    return { allowed: true, retryAfterSeconds: 0 };
+  }
+
+  const countData = data as { count: number; window_start: string };
+  const windowStartDb = new Date(countData.window_start);
+
+  if (windowStartDb < windowStart) {
+    // Reset window
+    await (supabase.from("rate_limit_counters" as any) as any).upsert({
+      key: `conv:${key}`,
+      count: 1,
+      window_start: now.toISOString(),
+      updated_at: now.toISOString(),
+    });
+    return { allowed: true, retryAfterSeconds: 0 };
+  }
+
+  if (countData.count >= RATE_LIMIT.maxRequests) {
+    const retryAfterSeconds = Math.ceil((windowStartDb.getTime() + RATE_LIMIT.windowMs - now.getTime()) / 1000);
+    return { allowed: false, retryAfterSeconds };
+  }
+
+  // Increment count
+  await (supabase.from("rate_limit_counters" as any) as any)
+    .update({
+      count: countData.count + 1,
+      updated_at: now.toISOString(),
+    })
+    .eq("key", `conv:${key}`);
+
+  return { allowed: true, retryAfterSeconds: 0 };
 }
 
 function corsHeaders() {
