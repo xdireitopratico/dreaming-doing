@@ -1,12 +1,18 @@
 import { cn } from "@/lib/utils";
 import type { MiniCardData } from "@/lib/chat/types";
 import { ChatTaskList } from "./ChatTaskList";
+import { FileText, GitCompareArrows, Terminal, ExternalLink } from "lucide-react";
 
 type ChatJobCardProps = {
   data: MiniCardData;
   runId: string;
   isFocused?: boolean;
   onClick?: () => void;
+  /** Fase 2.2 — handlers de action chips. */
+  onOpenFile?: (path: string) => void;
+  onShowDiff?: (runId: string) => void;
+  onShowOutput?: (runId: string) => void;
+  onShowPreview?: (runId: string) => void;
 };
 
 function parseEditedHeader(header: string): { edited: boolean; file: string | null } {
@@ -20,6 +26,10 @@ export function ChatJobCard({
   runId,
   isFocused,
   onClick,
+  onOpenFile,
+  onShowDiff,
+  onShowOutput,
+  onShowPreview,
 }: ChatJobCardProps) {
   const isLive = data.status === "working" || data.status === "thinking";
   const latestBriefing = data.liveBriefings[0] ?? (data.subtitle || data.title);
@@ -35,6 +45,60 @@ export function ChatJobCard({
     if (data.hasPlan) return "Ver plano no inspector →";
     return "Timeline completa →";
   };
+
+  // Fase 2.2 — action chips Lovable-style. Cada chip dispara uma ação
+  // contextual: abrir o arquivo, ver o diff completo no inspector, abrir o
+  // output de shell, ou abrir o preview. Só renderiza chips que têm handler
+  // (evita botão quebrado).
+  const chips: Array<{
+    key: string;
+    label: string;
+    icon: React.ComponentType<{ className?: string }>;
+    onClick: (e: React.MouseEvent) => void;
+    visible: boolean;
+  }> = [
+    {
+      key: "show-file",
+      label: data.lastTool?.path ? `Show ${data.lastTool.path.split("/").pop()}` : "Show file",
+      icon: FileText,
+      onClick: (e) => {
+        e.stopPropagation();
+        if (data.lastTool?.path) onOpenFile?.(data.lastTool.path);
+      },
+      visible: !!data.lastTool?.path && (data.lastTool.name === "fs_read" || data.lastTool.name === "fs_write" || data.lastTool.name === "fs_edit") && !!onOpenFile,
+    },
+    {
+      key: "show-diff",
+      label: "Show diff",
+      icon: GitCompareArrows,
+      onClick: (e) => {
+        e.stopPropagation();
+        onShowDiff?.(runId);
+      },
+      visible: isDone && !!data.fileCount && data.fileCount > 0 && !!onShowDiff,
+    },
+    {
+      key: "show-output",
+      label: "Show output",
+      icon: Terminal,
+      onClick: (e) => {
+        e.stopPropagation();
+        onShowOutput?.(runId);
+      },
+      visible: !!data.lastTool && data.lastTool.name === "shell_exec" && !!onShowOutput,
+    },
+    {
+      key: "show-preview",
+      label: "Show preview",
+      icon: ExternalLink,
+      onClick: (e) => {
+        e.stopPropagation();
+        onShowPreview?.(runId);
+      },
+      visible: isDone && !!onShowPreview,
+    },
+  ];
+  const visibleChips = chips.filter((c) => c.visible);
 
   const cardVariant =
     (isRunningCommand || edited) && isLive
@@ -96,6 +160,24 @@ export function ChatJobCard({
         </p>
 
         {data.tasks.length > 0 && <ChatTaskList tasks={data.tasks} />}
+
+        {visibleChips.length > 0 && (
+          <div className="forge-mini-card-chips" data-testid="chat-mini-card-chips">
+            {visibleChips.map(({ key, label, icon: Icon, onClick: handler }) => (
+              <button
+                key={key}
+                type="button"
+                className="forge-mini-card-chip"
+                onClick={handler}
+                data-testid={`chat-mini-card-chip-${key}`}
+              >
+                <Icon className="size-3" />
+                <span>{label}</span>
+              </button>
+            ))}
+          </div>
+        )}
+
         <p className="forge-mini-card-hint">{hint()}</p>
       </button>
     </div>

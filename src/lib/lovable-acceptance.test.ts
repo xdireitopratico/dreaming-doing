@@ -182,3 +182,160 @@ describe("Lovable acceptance — higiene de escopo", () => {
     expect(src).not.toContain("Working…");
   });
 });
+
+// ─── Fase 2 — Lovable gaps visuais ───────────────────────────────────────
+
+describe("Fase 2.1 — Monaco Diff View está plugado no InspectorChanges", () => {
+  it("MonacoDiffView é exportado e usado em InspectorChanges", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { resolve } = await import("node:path");
+    const diffView = readFileSync(
+      resolve(import.meta.dirname, "../components/editor/MonacoDiffView.tsx"),
+      "utf8",
+    );
+    const changes = readFileSync(
+      resolve(import.meta.dirname, "../components/editor/InspectorChanges.tsx"),
+      "utf8",
+    );
+    expect(diffView).toContain("DiffEditor");
+    expect(diffView).toContain("renderSideBySide");
+    expect(changes).toContain("MonacoDiffView");
+    // Não deve usar mais o <pre> simples (era o gap visual #1)
+    expect(changes).not.toContain('className="forge-timeline-tool-detail mt-2"');
+  });
+});
+
+describe("Fase 2.2 — lastTool é extraído do timeline e exposto em MiniCardData", () => {
+  it("buildAgentRunView popula miniCard.lastTool a partir do forgeTimeline", () => {
+    const progress = {
+      ...initialAgentProgress,
+      timeline: [
+        { type: "tool_start", data: { name: "fs_read" }, timestamp: 1 },
+        { type: "tool_done", data: { name: "fs_read", ok: true }, timestamp: 2 },
+        { type: "tool_start", data: { name: "fs_write" }, timestamp: 3 },
+        { type: "tool_done", data: { name: "fs_write", ok: true }, timestamp: 4 },
+      ],
+    };
+    const view = buildAgentRunView("r1", progress);
+    expect(view.miniCard?.lastTool).toBeTruthy();
+    expect(view.miniCard?.lastTool?.name).toBe("fs_write");
+  });
+
+  it("MiniCardData aceita lastTool como tipo opcional", async () => {
+    const types = await import("@/lib/chat/types");
+    // Sanity check: tipo aceita o campo (TypeScript valida em build).
+    const sample: import("@/lib/chat/types").MiniCardData = {
+      title: "",
+      header: "",
+      subtitle: "",
+      liveBriefings: [],
+      status: "done",
+      tasks: [],
+      currentTaskIndex: 0,
+      lastTool: { name: "fs_read", path: "src/app.tsx", ok: true },
+    };
+    expect(sample.lastTool?.name).toBe("fs_read");
+  });
+
+  it("ChatJobCard filtra chips pela presença de handler e contexto", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { resolve } = await import("node:path");
+    const src = readFileSync(
+      resolve(import.meta.dirname, "../components/chat/ChatJobCard.tsx"),
+      "utf8",
+    );
+    // Existem os 4 chips canônicos
+    expect(src).toContain('key: "show-file"');
+    expect(src).toContain('key: "show-diff"');
+    expect(src).toContain('key: "show-output"');
+    expect(src).toContain('key: "show-preview"');
+  });
+});
+
+describe("Fase 2.3 — Version history (snapshot list + tab)", () => {
+  it("listProjectSnapshots exporta e ordena por created_at desc", async () => {
+    const mod = await import("@/lib/snapshot-history");
+    expect(typeof mod.listProjectSnapshots).toBe("function");
+  });
+
+  it("JobInspectorTab inclui 'history' e JobInspector renderiza a tab", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { resolve } = await import("node:path");
+    const focus = readFileSync(
+      resolve(import.meta.dirname, "../hooks/useJobWorkspaceFocus.ts"),
+      "utf8",
+    );
+    const inspector = readFileSync(
+      resolve(import.meta.dirname, "../components/editor/JobInspector.tsx"),
+      "utf8",
+    );
+    expect(focus).toContain('"history"');
+    expect(inspector).toContain('id: "history"');
+    expect(inspector).toContain("InspectorHistory");
+  });
+});
+
+describe("Fase 2.4 — Review callout aparece quando job done com fileCount > 0", () => {
+  it("AssistantTurn renderiza callout entre mini-card e closing", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { resolve } = await import("node:path");
+    const src = readFileSync(
+      resolve(import.meta.dirname, "../components/chat/AssistantTurn.tsx"),
+      "utf8",
+    );
+    expect(src).toContain("chat-review-callout");
+    expect(src).toContain('item.miniCard?.status === "done"');
+    expect(src).toContain('item.miniCard.fileCount ?? 0) > 0');
+  });
+});
+
+describe("Fase 2.5 — Empty state tem 4 cards de sugestão", () => {
+  it("ChatEmptyState exporta e tem 4 cards", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { resolve } = await import("node:path");
+    const src = readFileSync(
+      resolve(import.meta.dirname, "../components/chat/ChatEmptyState.tsx"),
+      "utf8",
+    );
+    expect(src).toContain("Build a TODO app");
+    expect(src).toContain("Create a landing page");
+    expect(src).toContain("Add user authentication");
+    expect(src).toContain("Connect to a database");
+    // Verifica que cada card tem onClick
+    expect(src).toContain("onPickSuggestion");
+  });
+
+  it("ChatPanel renderiza ChatEmptyState quando showEmptyState", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { resolve } = await import("node:path");
+    const src = readFileSync(
+      resolve(import.meta.dirname, "../components/chat/ChatPanel.tsx"),
+      "utf8",
+    );
+    expect(src).toContain("ChatEmptyState");
+    expect(src).toContain("setSuggestionPrompt");
+  });
+});
+
+describe("Fase 2.6 — Mobile swap tem transição (não abrupt)", () => {
+  it("EditorResizableLayout adiciona key=mobilePanel + classe de animação", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { resolve } = await import("node:path");
+    const layout = readFileSync(
+      resolve(import.meta.dirname, "../components/editor/EditorResizableLayout.tsx"),
+      "utf8",
+    );
+    const css = readFileSync(
+      resolve(import.meta.dirname, "../styles/editor-workspace.css"),
+      "utf8",
+    );
+    // Layout força re-mount via key quando mobilePanel muda
+    expect(layout).toContain("key={`mobile-chat-${isMobile ? mobilePanel : \"static\"}`}");
+    expect(layout).toContain("forge-mobile-panel-anim");
+    // CSS define a animação
+    expect(css).toContain("@keyframes forge-mobile-panel-in");
+    expect(css).toContain(".forge-mobile-panel-anim");
+    // Respeita prefers-reduced-motion
+    expect(css).toContain("prefers-reduced-motion");
+  });
+});

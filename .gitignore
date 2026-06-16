@@ -28,6 +28,9 @@ dist-ssr
 .DS_Store
 *.suo
 *.ntvs*
+
+# Agent runtime artifacts (not source)
+.claude-flow/
 *.njsproj
 *.sln
 *.sw?

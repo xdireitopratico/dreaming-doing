@@ -162,7 +162,14 @@ export function EditorResizableLayout({
         </header>
       )}
 
-      {showChatPanel && <section className="forge-chat-panel">{chat}</section>}
+      {showChatPanel && (
+        <section
+          className="forge-chat-panel forge-mobile-panel-anim"
+          key={`mobile-chat-${isMobile ? mobilePanel : "static"}`}
+        >
+          {chat}
+        </section>
+      )}
 
       {!isMobile && !collapsed && (
         <div
@@ -178,7 +185,8 @@ export function EditorResizableLayout({
 
       {showWorkspacePanel && (
         <section
-          className={`forge-workspace-panel${workspaceCode ? " forge-workspace-panel--code" : ""}`}
+          key={`mobile-workspace-${isMobile ? mobilePanel : "static"}`}
+          className={`forge-workspace-panel${workspaceCode ? " forge-workspace-panel--code" : ""} forge-mobile-panel-anim`}
         >
           {workspace}
         </section>

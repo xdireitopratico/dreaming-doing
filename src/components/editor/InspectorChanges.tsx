@@ -2,20 +2,25 @@ import { useState } from "react";
 import { ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { AgentProgress } from "@/lib/agent-progress";
+import { MonacoDiffView } from "./MonacoDiffView";
 
 type InspectorChangesProps = {
   progress: AgentProgress;
 };
 
 function DiffBlock({ path, before, after }: { path: string; before: string; after: string }) {
-  const [open, setOpen] = useState(false);
+  // Lovable: o diff abre default, mas o usuário pode fechar pra ver a lista.
+  // Antes usávamos `<pre>` simples sem syntax highlight (gap visual #1 do
+  // FORGE). Agora: Monaco DiffEditor com side-by-side + highlight.
+  const [open, setOpen] = useState(true);
 
   return (
-    <div className="forge-inspector-diff-block">
+    <div className="forge-inspector-diff-block" data-testid="inspector-diff-block">
       <button
         type="button"
         className="forge-inspector-diff-toggle"
         onClick={() => setOpen((v) => !v)}
+        data-testid="inspector-diff-toggle"
       >
         <ChevronDown
           className={cn("size-3.5 shrink-0 transition-transform", open && "rotate-180")}
@@ -23,7 +28,13 @@ function DiffBlock({ path, before, after }: { path: string; before: string; afte
         <span className="forge-inspector-diff-path">{path}</span>
       </button>
       {open && (
-        <pre className="forge-timeline-tool-detail mt-2">{after || before || "(vazio)"}</pre>
+        <div className="mt-2 h-[320px] border border-[var(--border)] rounded overflow-hidden">
+          <MonacoDiffView
+            path={path}
+            before={before}
+            after={after}
+          />
+        </div>
       )}
     </div>
   );

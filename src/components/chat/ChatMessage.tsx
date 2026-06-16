@@ -13,6 +13,10 @@ type ChatMessageProps = {
   canRollbackUser?: boolean;
   canRollbackAssistant?: boolean;
   onResume?: () => void;
+  /** Fase 2.2 — action chips no mini card. */
+  onOpenFile?: (path: string) => void;
+  onShowOutput?: (runId: string) => void;
+  onShowPreview?: (runId: string) => void;
 };
 
 /** Roteador: user → bolha | assistant → AssistantTurn (ordem Lovable). */
@@ -24,6 +28,9 @@ export function ChatMessage({
   canRollbackUser,
   canRollbackAssistant,
   onResume,
+  onOpenFile,
+  onShowOutput,
+  onShowPreview,
 }: ChatMessageProps) {
   if (item.kind === "user") {
     const isQueued = item.message.meta?.queued === true;
@@ -61,6 +68,9 @@ export function ChatMessage({
           : undefined
       }
       onResume={onResume}
+      onOpenFile={onOpenFile}
+      onShowOutput={onShowOutput}
+      onShowPreview={onShowPreview}
     />
   );
 }
