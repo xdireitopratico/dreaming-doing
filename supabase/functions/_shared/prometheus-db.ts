@@ -71,7 +71,7 @@ export async function insertTurn(
   round: number,
   outputData?: Record<string, unknown> | null,
 ) {
-  const { error } = await (sb.from("prometheus_build_turns" as any) as any).insert({
+  const { error } = await sb.from("prometheus_build_turns").insert({
     session_id: sessionId,
     agent_key: agentKey,
     agent_display: AGENT_DISPLAY_NAMES[agentKey] || agentKey,
@@ -92,7 +92,7 @@ export async function persistTokensUsed(
   tokensUsed: number,
 ) {
   if (tokensUsed <= 0) return;
-  const { error } = await (sb.from("prometheus_build_sessions" as any) as any)
+  const { error } = await sb.from("prometheus_build_sessions")
     .update({ tokens_used: tokensUsed })
     .eq("id", sessionId);
   if (error) {
@@ -117,7 +117,7 @@ export async function persistResearchCache(
   researchCache: Record<string, unknown>,
 ) {
   if (!sessionId || Object.keys(researchCache).length === 0) return;
-  const { error } = await (sb.from("prometheus_build_sessions" as any) as any)
+  const { error } = await sb.from("prometheus_build_sessions")
     .update({ research_cache: researchCache })
     .eq("id", sessionId);
   if (error) {
@@ -134,7 +134,7 @@ export async function updateSessionPhase(
   extra?: Record<string, unknown>,
 ) {
   const update: Record<string, unknown> = { phase, ...extra };
-  await (sb.from("prometheus_build_sessions" as any) as any).update(update).eq("id", sessionId);
+  await sb.from("prometheus_build_sessions").update(update).eq("id", sessionId);
 }
 
 // ═══ MODEL RESOLUTION ═══

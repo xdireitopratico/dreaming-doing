@@ -1,14 +1,9 @@
 /**
  * vibe-agent-chat.ts — Chat do Vibe Agent (isolado do boardroom Prometheus)
- *
- * Model resolution: same canonical path as VibeCoder (agent-run).
- * Uses resolveAgentProvider() → ROBIN/auto/fixed based on user's connectors.
- * No hardcoded fallbacks, no parallel resolution, no dead code.
  */
 
-import { supabaseAdmin } from "./prometheus-db.ts";
-import { resolveAgentProvider, loadUserLlmContext } from "../agent-run/run-setup.ts";
-import { createLLMProvider } from "../agent-run/adapters/llm.ts";
+import { routeLLM } from "./llm-router.ts";
+import { supabaseAdmin, type SupabaseAdmin } from "./prometheus-db.ts";
 import {
   normalizeEdges,
   normalizeNodes,
@@ -100,6 +95,17 @@ export async function loadVibeMessages(conversationId: string, userId: string) {
   return data ?? [];
 }
 
+async function resolveModelId(sb: SupabaseAdmin, flowId: string): Promise<string> {
+  const { data } = await sb
+    .from("agent_flows")
+    .select("flow_definition")
+    .eq("id", flowId)
+    .single();
+
+  const briefing = (data?.flow_definition as { briefing?: { quality_model?: string } } | null)?.briefing;
+  return briefing?.quality_model?.trim() || "google/gemini-2.5-flash";
+}
+
 export async function sendVibeAgentMessage(
   userId: string,
   conversationId: string,
@@ -149,6 +155,7 @@ export async function sendVibeAgentMessage(
   const def = (flowData?.flow_definition as Record<string, unknown>) || {};
   const nodes = (def.nodes as Array<Record<string, unknown>>) || [];
   const edges = (def.edges as Array<Record<string, unknown>>) || [];
+  const modelId = await resolveModelId(sb, flowId);
 
   const chatHistory = (history ?? [])
     .filter((m) => m.role === "user" || m.role === "assistant")
@@ -163,25 +170,19 @@ export async function sendVibeAgentMessage(
     `\nNova mensagem do cliente:\n${trimmed}`,
   ].join("\n");
 
-  const { userOnlyKeys } = await loadUserLlmContext(sb, userId);
-  const { mainCfg } = await resolveAgentProvider({
-    supabase: sb,
-    userId,
-    sessionKind: "byok",
-    userOnlyKeys,
-  });
-
-  const llm = createLLMProvider(mainCfg);
-  const llmResponse = await llm.chat({
+  const llmResult = await routeLLM({
+    model_id: modelId,
     messages: [
       { role: "system", content: VIBE_AGENT_SYSTEM },
       { role: "user", content: userPrompt },
     ],
     temperature: 0.2,
     max_tokens: 4096,
+    tenant_id: userId,
+    feature: "vibe_agent_chat",
   });
 
-  const response = parseFlowAgentResponse(llmResponse.content ?? "");
+  const response = parseFlowAgentResponse(llmResult.content);
   const assistantContent = response?.summary
     ?? "Não consegui processar. Reformule sua pergunta ou peça uma mudança específica no fluxo.";
 

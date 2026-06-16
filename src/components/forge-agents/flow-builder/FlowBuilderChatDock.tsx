@@ -6,15 +6,14 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { History, MessageCircle, Minimize2, Plus, X } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import type { Node, Edge } from "@xyflow/react";
+import { ChatThread } from "@/components/chat/ChatThread";
 import { ChatComposer } from "@/components/chat/ChatComposer";
-import { VibeChatPanel } from "./chat/VibeChatPanel";
-import { VibeInspectorDrawer } from "./inspector/VibeInspectorDrawer";
-import { useVibeChat } from "@/hooks/useVibeChat";
-import { useVibeInspector } from "@/hooks/useVibeInspector";
+import { useFlowBuilderChat } from "./hooks/useFlowBuilderChat";
 import "@/styles/forge-chat.css";
 import "@/styles/forge-vibe-agent-chat.css";
 
 const STORAGE_KEY = "forge-flow-chat-open";
+const PANEL_MAX_H = "min(616px, 77vh)";
 
 function loadOpenState(): boolean {
   if (typeof window === "undefined") return false;
@@ -57,16 +56,23 @@ export function FlowBuilderChatDock({
   }, [onOpenChange]);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  const chat = useVibeChat({
+  const {
+    threadItems,
+    running,
+    initialized,
+    unreadCount,
+    conversations,
+    conversationId,
+    onSend,
+    onStop,
+    setChatVisible,
+    startNewConversation,
+    selectConversation,
+  } = useFlowBuilderChat({
     flowId,
     enabled,
-    conversationId: null,
-    onNewConversation: () => {},
-  });
-
-  const inspector = useVibeInspector({
-    conversationId: chat.conversationId,
-    enabled,
+    onApplyPatch,
+    onHighlightNodes,
   });
 
   const toggle = useCallback(() => {
@@ -84,14 +90,15 @@ export function FlowBuilderChatDock({
 
   useEffect(() => {
     onOpenChange?.(open);
-  }, [open, onOpenChange]);
+    setChatVisible(open);
+  }, [open, setChatVisible, onOpenChange]);
 
   useEffect(() => {
     if (!open) return;
     const el = scrollRef.current;
     if (!el) return;
     el.scrollTop = el.scrollHeight;
-  }, [open, chat.messages.length, chat.running]);
+  }, [open, threadItems.length, running]);
 
   if (!enabled) return null;
 
@@ -105,7 +112,8 @@ export function FlowBuilderChatDock({
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 16, scale: 0.96 }}
             transition={{ duration: 0.2 }}
-            className="forge-vibe-agent-chat__panel pointer-events-auto absolute right-6 flex flex-col overflow-hidden"
+            className="forge-vibe-agent-chat__panel pointer-events-auto absolute bottom-20 right-6 flex w-[min(400px,calc(100%-3rem))] flex-col overflow-hidden"
+            style={{ maxHeight: PANEL_MAX_H }}
           >
             <header
               className="flex shrink-0 items-center justify-between gap-2 border-b px-4 py-2.5"
@@ -125,7 +133,7 @@ export function FlowBuilderChatDock({
                   className="forge-vibe-agent-chat__header-btn"
                   title="Nova conversa"
                   aria-label="Nova conversa"
-                  onClick={() => void chat.startNewConversation()}
+                  onClick={() => void startNewConversation()}
                 >
                   <Plus className="size-3.5" />
                 </button>
@@ -146,19 +154,21 @@ export function FlowBuilderChatDock({
                       border: "1px solid var(--border-forge)",
                     }}
                   >
-                    {chat.conversations.length === 0 ? (
+                    {conversations.length === 0 ? (
                       <p className="px-3 py-2 text-[10px]" style={{ color: "var(--text-muted)" }}>
                         Nenhuma conversa ainda
                       </p>
                     ) : (
-                      chat.conversations.map((c) => (
+                      conversations.map((c) => (
                         <button
                           key={c.id}
                           type="button"
-                          className={`w-full px-3 py-2 text-left text-[10px] transition-colors hover:bg-white/5${c.id === chat.conversationId ? " forge-vibe-agent-chat__history-item--active" : ""}`}
-                          style={{ color: "var(--text-secondary)" }}
+                          className="w-full px-3 py-2 text-left text-[10px] transition-colors hover:bg-white/5"
+                          style={{
+                            color: c.id === conversationId ? "var(--text-accent)" : "var(--text-secondary)",
+                          }}
                           onClick={() => {
-                            void chat.selectConversation(c.id);
+                            void selectConversation(c.id);
                             setHistoryOpen(false);
                           }}
                         >
@@ -195,14 +205,15 @@ export function FlowBuilderChatDock({
             <div
               ref={scrollRef}
               className="forge-chat-inner min-h-0 flex-1 overflow-y-auto"
+              style={{ maxHeight: `calc(${PANEL_MAX_H} - 132px)` }}
             >
-              {!chat.initialized ? (
+              {!initialized ? (
                 <div className="flex items-center justify-center py-12">
                   <span className="text-[11px]" style={{ color: "var(--text-muted)" }}>
                     Conectando...
                   </span>
                 </div>
-              ) : chat.messages.length === 0 ? (
+              ) : threadItems.length === 0 ? (
                 <div className="px-4 py-8 text-center">
                   <p className="text-[12px] font-medium mb-1" style={{ color: "var(--text-secondary)" }}>
                     Vibe Agent
@@ -213,31 +224,16 @@ export function FlowBuilderChatDock({
                 </div>
               ) : (
                 <div className="forge-messages">
-                  <VibeChatPanel
-                    messages={chat.messages}
-                    currentMinicard={chat.currentMinicard}
-                    currentPlan={chat.currentPlan}
-                  />
-                  <div className="mt-4 border-t border-border pt-4">
-                    <VibeInspectorDrawer
-                      thinking={inspector.thinking}
-                      toolCalls={inspector.toolCalls}
-                      sessionInfo={inspector.sessionInfo}
-                      isConnected={inspector.isConnected}
-                      error={inspector.error}
-                      exportSession={inspector.exportSession}
-                      clearBuffers={inspector.clearBuffers}
-                    />
-                  </div>
+                  <ChatThread items={threadItems} />
                 </div>
               )}
             </div>
 
             <div className="forge-vibe-agent-composer-wrap shrink-0">
               <ChatComposer
-                running={chat.running}
-                onSend={chat.send}
-                onStop={chat.stop}
+                running={running}
+                onSend={onSend}
+                onStop={onStop}
               />
             </div>
           </motion.div>
@@ -252,12 +248,12 @@ export function FlowBuilderChatDock({
         onClick={toggle}
       >
         <MessageCircle className="size-5" />
-        {!open && chat.error && (
+        {!open && unreadCount > 0 && (
           <span
             className="absolute -right-0.5 -top-0.5 flex size-5 items-center justify-center rounded-full text-[9px] font-bold"
             style={{ background: "#ef4444", color: "#fff" }}
           >
-            !
+            {unreadCount > 9 ? "9+" : unreadCount}
           </span>
         )}
       </button>

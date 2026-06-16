@@ -144,7 +144,8 @@ export async function startModifySession(
 ): Promise<{ session_id: string }> {
   const sb = supabaseAdmin();
 
-  const { data: flowData, error: flowError } = await (sb.from("agent_flows" as any) as any)
+  const { data: flowData, error: flowError } = await sb
+    .from("agent_flows")
     .select("name, flow_definition")
     .eq("id", flowId)
     .single();
@@ -157,7 +158,8 @@ export async function startModifySession(
   const nodes = (def.nodes as unknown[]) || [];
   const edges = (def.edges as unknown[]) || [];
 
-  const { data, error } = await (sb.from("prometheus_build_sessions" as any) as any)
+  const { data, error } = await sb
+    .from("prometheus_build_sessions")
     .insert({
       user_id: userId,
       intent: "modify",
@@ -171,7 +173,7 @@ export async function startModifySession(
       target_flow_id: flowId,
       quality_model: modelId,
       flow_definition: def,
-    })
+    } as Record<string, unknown>)
     .select("id")
     .single();
 
@@ -206,7 +208,8 @@ export async function processFlowEditMessage(
   if (!modelId) throw new Error("[flow-editor] quality_model is required");
   if (!flowId) throw new Error("[flow-editor] target_flow_id is required");
 
-  const { data: flowData } = await (sb.from("agent_flows" as any) as any)
+  const { data: flowData } = await sb
+    .from("agent_flows")
     .select("flow_definition")
     .eq("id", flowId)
     .single();
@@ -290,12 +293,12 @@ export async function processFlowEditMessage(
     edges: normalizedEdges,
   };
 
-  await (sb.from("agent_flows" as any) as any).update({
+  await sb.from("agent_flows").update({
     flow_definition: updatedDef,
     updated_at: new Date().toISOString(),
   }).eq("id", flowId);
 
-  await (sb.from("prometheus_build_sessions" as any) as any).update({
+  await sb.from("prometheus_build_sessions").update({
     flow_definition: updatedDef,
   }).eq("id", sessionId);
 
