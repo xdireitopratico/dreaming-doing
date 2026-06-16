@@ -136,7 +136,7 @@ export function useVibeInspector({
   // ---------------------------------------------------------------------------
   // EXPORT / DEBUG
   // ---------------------------------------------------------------------------
-  const exportSession = useCallback(() => {
+  const exportSession = useCallback(async () => {
     if (!conversationId) return '';
     return vibeAgent.exportSession(conversationId);
   }, [conversationId]);

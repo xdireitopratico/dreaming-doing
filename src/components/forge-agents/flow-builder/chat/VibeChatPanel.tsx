@@ -33,7 +33,7 @@ interface VibeChatPanelProps {
   currentPlan: {
     id: string;
     title: string;
-    tasks: Array<{ id: string; label: string; status: 'pending' | 'running' | 'done' | 'error'; dependsOn?: string[] }>;
+    tasks: Array<{ id: string; label: string; status: 'pending' | 'running' | 'done' | 'error'; dependsOn?: string[]; output?: string }>;
     createdAt: number;
   } | null;
 }

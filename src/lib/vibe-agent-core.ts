@@ -27,8 +27,9 @@ interface SendMessageOptions {
 interface SendMessageResult {
   chatStream: AsyncIterable<ChatEvent>;
   inspectorStream: AsyncIterable<InspectorEvent>;
-  chatStreamId: string;
-  inspectorStreamId: string;
+  executionId: string;
+  chatStreamId?: string;
+  inspectorStreamId?: string;
 }
 
 /**
@@ -57,8 +58,8 @@ class VibeAgentCore {
     
     while (!signal.aborted) {
       try {
-        const url = new URL(`${EDGE_BASE}/stream/chat`);
-        url.searchParams.set('conversation_id', conversationId);
+        const url = new URL(this.resolveEdgeUrl(`${EDGE_BASE}/stream/chat`));
+        url.searchParams.set('execution_id', conversationId);
         if (lastCursor) url.searchParams.set('cursor', lastCursor);
         
         const response = await fetch(url, { 
@@ -122,8 +123,8 @@ class VibeAgentCore {
     
     while (!signal.aborted) {
       try {
-        const url = new URL(`${EDGE_BASE}/stream/inspector`);
-        url.searchParams.set('conversation_id', conversationId);
+        const url = new URL(this.resolveEdgeUrl(`${EDGE_BASE}/stream/inspector`));
+        url.searchParams.set('execution_id', conversationId);
         if (lastCursor) url.searchParams.set('cursor', lastCursor);
         
         const response = await fetch(url, { 
@@ -181,7 +182,7 @@ class VibeAgentCore {
   ): Promise<SendMessageResult> {
     const idempotencyKey = options.idempotencyKey ?? crypto.randomUUID();
     
-    const response = await fetch(`${EDGE_BASE}/execute`, {
+    const response = await fetch(this.resolveEdgeUrl(`${EDGE_BASE}/execute`), {
       method: 'POST',
       headers: { 
         'Content-Type': 'application/json',
@@ -201,13 +202,16 @@ class VibeAgentCore {
       throw new Error(err.message || `HTTP ${response.status}`);
     }
     
-    const { chat_stream_id, inspector_stream_id } = await response.json();
+    const payload = await response.json();
+    const executionId = payload.execution_id || payload.chat_stream_id || payload.inspector_stream_id;
+    if (!executionId) throw new Error('Execution ID not returned');
     
     return {
-      chatStream: this.subscribeChat(chat_stream_id),
-      inspectorStream: this.subscribeInspector(inspector_stream_id),
-      chatStreamId: chat_stream_id,
-      inspectorStreamId: inspector_stream_id
+      chatStream: this.subscribeChat(executionId),
+      inspectorStream: this.subscribeInspector(executionId),
+      executionId,
+      chatStreamId: payload.chat_stream_id,
+      inspectorStreamId: payload.inspector_stream_id
     };
   }
 
@@ -215,7 +219,7 @@ class VibeAgentCore {
   // FLOW VERSIONING & UNDO
   // ---------------------------------------------------------------------------
   async applyPatch(conversationId: string, patch: FlowPatch): Promise<FlowVersion> {
-    const response = await fetch(`${EDGE_BASE}/apply-patch`, {
+    const response = await fetch(this.resolveEdgeUrl(`${EDGE_BASE}/apply-patch`), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ conversation_id: conversationId, patch })
@@ -228,13 +232,13 @@ class VibeAgentCore {
   }
   
   async getHistory(conversationId: string): Promise<FlowVersion[]> {
-    const response = await fetch(`${EDGE_BASE}/history?conversation_id=${encodeURIComponent(conversationId)}`);
+    const response = await fetch(this.resolveEdgeUrl(`${EDGE_BASE}/history?conversation_id=${encodeURIComponent(conversationId)}`));
     if (!response.ok) throw new Error('Failed to fetch history');
     return response.json();
   }
   
   async undo(conversationId: string, versionId: string): Promise<FlowVersion> {
-    const response = await fetch(`${EDGE_BASE}/undo`, {
+    const response = await fetch(this.resolveEdgeUrl(`${EDGE_BASE}/undo`), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ conversation_id: conversationId, version_id: versionId })
@@ -250,7 +254,7 @@ class VibeAgentCore {
   // CONVERSATION MANAGEMENT
   // ---------------------------------------------------------------------------
   async createConversation(flowId: string): Promise<string> {
-    const response = await fetch(`${EDGE_BASE}/conversations`, {
+    const response = await fetch(this.resolveEdgeUrl(`${EDGE_BASE}/conversations`), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ flow_id: flowId })
@@ -264,8 +268,14 @@ class VibeAgentCore {
   }
   
   async listConversations(flowId: string): Promise<Conversation[]> {
-    const response = await fetch(`${EDGE_BASE}/conversations?flow_id=${encodeURIComponent(flowId)}`);
+    const response = await fetch(this.resolveEdgeUrl(`${EDGE_BASE}/conversations?flow_id=${encodeURIComponent(flowId)}`));
     if (!response.ok) throw new Error('Failed to list conversations');
+    return response.json();
+  }
+
+  async listChatEvents(conversationId: string): Promise<ChatEvent[]> {
+    const response = await fetch(this.resolveEdgeUrl(`${EDGE_BASE}/events?conversation_id=${encodeURIComponent(conversationId)}&channel=chat&limit=1000`));
+    if (!response.ok) throw new Error('Failed to list chat events');
     return response.json();
   }
 
@@ -301,8 +311,15 @@ class VibeAgentCore {
     return [...(this.eventBuffers.get(conversationId) || [])];
   }
   
-  exportSession(conversationId: string): string {
-    return JSON.stringify(this.getBufferedEvents(conversationId), null, 2);
+  async exportSession(conversationId: string): Promise<string> {
+    const response = await fetch(`${EDGE_BASE}/events?conversation_id=${encodeURIComponent(conversationId)}&channel=inspector&limit=1000`);
+    if (!response.ok) {
+      const buffered = this.getBufferedEvents(conversationId);
+      if (buffered.length > 0) return JSON.stringify(buffered, null, 2);
+      throw new Error('Failed to export session');
+    }
+    const events = await response.json();
+    return JSON.stringify(events, null, 2);
   }
   
   clearBuffer(conversationId: string) {
@@ -342,6 +359,13 @@ class VibeAgentCore {
     } finally {
       reader.releaseLock();
     }
+  }
+  
+  private resolveEdgeUrl(path: string): string {
+    if (typeof window !== 'undefined' && path.startsWith('/')) {
+      return new URL(path, window.location.origin).toString();
+    }
+    return path;
   }
   
   private sleep(ms: number): Promise<void> {

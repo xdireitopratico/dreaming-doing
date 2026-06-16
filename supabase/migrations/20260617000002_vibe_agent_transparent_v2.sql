@@ -31,14 +31,23 @@ CREATE INDEX IF NOT EXISTS vibe_agent_events_request_idx
 -- 3. FLOW VERSIONS (undo/history)
 CREATE TABLE IF NOT EXISTS public.agent_flow_versions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  conversation_id UUID NOT NULL REFERENCES public.vibe_agent_conversations(id) ON DELETE CASCADE,
-  flow_id UUID NOT NULL REFERENCES public.agent_flows(id) ON DELETE CASCADE,
+  conversation_id UUID REFERENCES public.vibe_agent_conversations(id) ON DELETE CASCADE,
+  flow_id UUID REFERENCES public.agent_flows(id) ON DELETE CASCADE,
   patch JSONB NOT NULL,
   applied_by TEXT NOT NULL CHECK (applied_by IN ('user', 'agent')),
   parent_version_id UUID REFERENCES public.agent_flow_versions(id) ON DELETE SET NULL,
   metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
   applied_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Ensure required columns exist for existing tables
+ALTER TABLE public.agent_flow_versions ADD COLUMN IF NOT EXISTS conversation_id UUID REFERENCES public.vibe_agent_conversations(id) ON DELETE CASCADE;
+ALTER TABLE public.agent_flow_versions ADD COLUMN IF NOT EXISTS flow_id UUID REFERENCES public.agent_flows(id) ON DELETE CASCADE;
+ALTER TABLE public.agent_flow_versions ADD COLUMN IF NOT EXISTS patch JSONB;
+ALTER TABLE public.agent_flow_versions ADD COLUMN IF NOT EXISTS applied_by TEXT CHECK (applied_by IN ('user', 'agent'));
+ALTER TABLE public.agent_flow_versions ADD COLUMN IF NOT EXISTS parent_version_id UUID REFERENCES public.agent_flow_versions(id) ON DELETE SET NULL;
+ALTER TABLE public.agent_flow_versions ADD COLUMN IF NOT EXISTS metadata JSONB DEFAULT '{}'::jsonb;
+ALTER TABLE public.agent_flow_versions ADD COLUMN IF NOT EXISTS applied_at TIMESTAMPTZ DEFAULT now();
 
 CREATE INDEX IF NOT EXISTS agent_flow_versions_conv_idx
   ON public.agent_flow_versions(conversation_id, applied_at DESC);

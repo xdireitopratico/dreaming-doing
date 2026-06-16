@@ -15,6 +15,7 @@ import { resolveAgentProvider, loadUserLlmContext } from "../agent-run/run-setup
 import { supabaseAdmin } from "./prometheus-db.ts";
 
 interface LoopContext {
+  executionId: string;
   conversationId: string;
   userMessage: string;
   userId: string;
@@ -41,7 +42,7 @@ interface TaskResult {
   error?: string;
 }
 
-type ChatEmitter = (event: any) => void;
+type ChatEmitter = (event: any) => Promise<void>;
 type InspectorEmitter = (event: any) => Promise<void>;
 
 interface AtomicPlan {
@@ -50,6 +51,7 @@ interface AtomicPlan {
 }
 
 let sequence = 0;
+const sequenceByChannel: Record<'chat' | 'inspector', number> = { chat: 0, inspector: 0 };
 
 export async function executeAgentLoop(ctx: LoopContext): Promise<void> {
   const sb = supabaseAdmin();
@@ -58,14 +60,16 @@ export async function executeAgentLoop(ctx: LoopContext): Promise<void> {
   let totalOutputTokens = 0;
   let flowPatch: { nodes: unknown[]; edges: unknown[]; changed_node_ids?: string[] } | undefined;
 
-  const emitChat = (event: any) => {
-    ctx.chatWriter.write({ ...event, timestamp: Date.now(), requestId: ctx.requestId } as ChatEvent);
+  const emitChat = async (event: any) => {
+    const chatEvent = { ...event, timestamp: Date.now(), requestId: ctx.requestId } as ChatEvent;
+    await persistVibeEvent(sb, ctx, 'chat', chatEvent);
+    ctx.chatWriter.write(chatEvent);
   };
 
   const emitInspector = async (event: any) => {
     const inspectorEvent = { ...event, timestamp: Date.now(), requestId: ctx.requestId, sequence: ++sequence } as InspectorEvent;
+    await persistVibeEvent(sb, ctx, 'inspector', inspectorEvent);
     ctx.inspectorWriter.write(inspectorEvent);
-    await persistInspectorEvent(sb, ctx, inspectorEvent);
   };
 
   try {
@@ -80,7 +84,7 @@ export async function executeAgentLoop(ctx: LoopContext): Promise<void> {
 
     // ─── INTRO ───
     const introText = `Vou avaliar o problema com o chat e onde ele quebra. Vou analisar o fluxo atual, identificar a causa raiz e aplicar os ajustes necessários.`;
-    emitChat({ type: 'chat_intro', text: introText });
+    await emitChat({ type: 'chat_intro', text: introText });
 
     // ─── LOOPING PHASE (exploração) ───
     const loopSteps = await runExplorationLoop(ctx, emitChat, emitInspector);
@@ -92,7 +96,7 @@ export async function executeAgentLoop(ctx: LoopContext): Promise<void> {
     // ─── PLAN APPROVAL (based on actual LLM result) ───
     const plan = generatePlanFromLLM(llmResult);
     const planId = crypto.randomUUID();
-    emitChat({
+    await emitChat({
       type: 'chat_plan_approved',
       planId,
       title: plan.title,
@@ -111,7 +115,7 @@ export async function executeAgentLoop(ctx: LoopContext): Promise<void> {
       { type: 'flow_version' as const, id: crypto.randomUUID(), label: 'Patch aplicado ao flow' },
     ] : [];
 
-    emitChat({
+    await emitChat({
       type: 'chat_closure',
       summary: closureSummary,
       remaining,
@@ -119,21 +123,29 @@ export async function executeAgentLoop(ctx: LoopContext): Promise<void> {
       artifacts,
     });
 
+    const outcome = llmResult.flowPatch ? 'success' : 'partial';
+
     // ─── SESSION END ───
     await emitInspector({
       type: 'session_end',
       sessionId: ctx.sessionId,
-      outcome: llmResult.flowPatch ? 'success' : 'partial',
+      outcome,
       totalDurationMs: Date.now() - startTime,
       totalTokens: { input: totalInputTokens, output: totalOutputTokens },
     });
 
     // ─── Persist messages in DB ───
     await persistExecutionMessages(sb, ctx, closureSummary, flowPatch);
+    await updateAgentExecution(sb, ctx.executionId, {
+      status: outcome,
+      duration_ms: Date.now() - startTime,
+      input_tokens: totalInputTokens,
+      output_tokens: totalOutputTokens,
+    });
 
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : 'Erro desconhecido';
-    emitChat({
+    await emitChat({
       type: 'chat_error',
       code: 'EXECUTION_FAILED',
       message: errorMessage,
@@ -146,6 +158,13 @@ export async function executeAgentLoop(ctx: LoopContext): Promise<void> {
       outcome: 'failed',
       totalDurationMs: Date.now() - startTime,
       totalTokens: { input: totalInputTokens, output: totalOutputTokens },
+    });
+    await updateAgentExecution(sb, ctx.executionId, {
+      status: 'failed',
+      duration_ms: Date.now() - startTime,
+      input_tokens: totalInputTokens,
+      output_tokens: totalOutputTokens,
+      error_message: errorMessage,
     });
 
     // Persist error message
@@ -340,17 +359,17 @@ async function runExplorationLoop(
   const ordered = [steps[0], ...shuffle(steps.slice(1))];
 
   for (const step of ordered) {
-    emitChat({ type: 'chat_loop_step', stepId: step.id, label: step.label, status: 'running' });
+    await emitChat({ type: 'chat_loop_step', stepId: step.id, label: step.label, status: 'running' });
     await emitInspector({ type: 'tool_call', callId: crypto.randomUUID(), tool: step.tool, input: { step: step.id }, status: 'start' });
 
     const stepStart = Date.now();
     try {
       await executeStep(step, ctx, emitInspector);
-      emitChat({ type: 'chat_loop_step', stepId: step.id, label: step.label, status: 'done' });
+      await emitChat({ type: 'chat_loop_step', stepId: step.id, label: step.label, status: 'done' });
       await emitInspector({ type: 'tool_call', callId: crypto.randomUUID(), tool: step.tool, input: { step: step.id }, status: 'complete', durationMs: Date.now() - stepStart });
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Erro ao executar etapa';
-      emitChat({ type: 'chat_loop_step', stepId: step.id, label: step.label, status: 'error' });
+      await emitChat({ type: 'chat_loop_step', stepId: step.id, label: step.label, status: 'error' });
       await emitInspector({ type: 'tool_call', callId: crypto.randomUUID(), tool: step.tool, input: { step: step.id }, status: 'error', error: errorMessage, durationMs: Date.now() - stepStart });
     }
   }
@@ -448,7 +467,7 @@ async function executePlan(
     if (ready.length === 0) break;
 
     await Promise.all(ready.map(async (task) => {
-      emitChat({ type: 'chat_task_update', planId, taskId: task.id, status: 'running' });
+      await emitChat({ type: 'chat_task_update', planId, taskId: task.id, status: 'running' });
       await emitInspector({ type: 'tool_call', callId: crypto.randomUUID(), tool: 'edit', input: { task: task.id }, status: 'start' });
 
       const taskStart = Date.now();
@@ -456,12 +475,12 @@ async function executePlan(
         await executeTask(task, ctx, emitInspector);
         const output = `Tarefa ${task.id} concluída com sucesso`;
         results.push({ taskId: task.id, success: true, output });
-        emitChat({ type: 'chat_task_update', planId, taskId: task.id, status: 'done', output });
+        await emitChat({ type: 'chat_task_update', planId, taskId: task.id, status: 'done', output });
         await emitInspector({ type: 'tool_call', callId: crypto.randomUUID(), tool: 'edit', input: { task: task.id }, status: 'complete', durationMs: Date.now() - taskStart });
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : 'Erro ao executar tarefa';
         results.push({ taskId: task.id, success: false, error: errorMessage });
-        emitChat({ type: 'chat_task_update', planId, taskId: task.id, status: 'error', output: errorMessage });
+        await emitChat({ type: 'chat_task_update', planId, taskId: task.id, status: 'error', output: errorMessage });
         await emitInspector({ type: 'tool_call', callId: crypto.randomUUID(), tool: 'edit', input: { task: task.id }, status: 'error', error: errorMessage, durationMs: Date.now() - taskStart });
       }
       completed.add(task.id);
@@ -512,21 +531,42 @@ async function executeTask(
   }
 }
 
-// ─── PERSIST INSPECTOR EVENT ───
-async function persistInspectorEvent(
+// ─── PERSIST EVENT ───
+async function persistVibeEvent(
   sb: ReturnType<typeof supabaseAdmin>,
   ctx: LoopContext,
-  event: InspectorEvent,
+  channel: 'chat' | 'inspector',
+  event: ChatEvent | InspectorEvent,
 ): Promise<void> {
-  await (sb.from("vibe_agent_events" as any) as any).insert({
+  sequenceByChannel[channel] += 1;
+  const { error } = await (sb.from("vibe_agent_events" as any) as any).insert({
+    execution_id: ctx.executionId,
     conversation_id: ctx.conversationId,
     request_id: ctx.requestId,
+    channel,
     event_type: event.type,
     event_data: event,
-    sequence: 'sequence' in event ? event.sequence : 0,
-  }).catch((err: unknown) => {
-    console.error("[agent-loop] Failed to persist inspector event:", err);
+    payload: event,
+    sequence: sequenceByChannel[channel],
   });
+
+  if (error) {
+    console.error(`[agent-loop] Failed to persist ${channel} event:`, error);
+  }
+}
+
+export async function updateAgentExecution(
+  sb: ReturnType<typeof supabaseAdmin>,
+  executionId: string,
+  updates: Record<string, unknown>,
+): Promise<void> {
+  const { error } = await (sb.from("agent_executions" as any) as any)
+    .update({ ...updates, completed_at: new Date().toISOString() })
+    .eq("id", executionId);
+
+  if (error) {
+    console.error("[agent-loop] Failed to update execution:", error);
+  }
 }
 
 // ─── PERSIST MESSAGES ───

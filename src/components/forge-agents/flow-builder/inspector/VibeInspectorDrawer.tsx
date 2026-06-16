@@ -30,7 +30,7 @@ interface VibeInspectorDrawerProps {
   } | null;
   isConnected: boolean;
   error: string | null;
-  exportSession: () => string;
+  exportSession: () => Promise<string> | string;
   clearBuffers: () => void;
 }
 

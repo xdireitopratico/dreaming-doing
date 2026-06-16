@@ -4,8 +4,13 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
-import { executeAgentLoop } from "../_shared/agent-loop.ts";
+import { executeAgentLoop, updateAgentExecution } from "../_shared/agent-loop.ts";
 import { checkIdempotency, getIdempotencyKey, storeIdempotency } from "../_shared/idempotency.ts";
+import {
+  createPersistentSseReadable,
+  fetchConversationEvents,
+  type VibeChannel,
+} from "../_shared/vibe-agent-sse.ts";
 import type { ChatEvent, InspectorEvent } from "../_shared/vibe-agent-events.ts";
 
 const supabase = createClient(
@@ -13,13 +18,6 @@ const supabase = createClient(
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
 );
 
-interface StreamRecord {
-  chatWriter: WritableStreamDefaultWriter<ChatEvent>;
-  inspectorWriter: WritableStreamDefaultWriter<InspectorEvent>;
-  createdAt: number;
-}
-
-const streamRegistry = new Map<string, StreamRecord>();
 
 const RATE_LIMIT = {
   windowMs: 60 * 1000, // 1 minute
@@ -58,66 +56,66 @@ serve(async (req) => {
         );
       }
 
-      const chatStreamId = crypto.randomUUID();
-      const inspectorStreamId = crypto.randomUUID();
+      const executionId = crypto.randomUUID();
       const requestId = crypto.randomUUID();
       const sessionId = crypto.randomUUID();
 
-      const { readable: chatReadable, writable: chatWritable } = createSSEStream<ChatEvent>();
-      const { readable: inspectorReadable, writable: inspectorWritable } = createSSEStream<InspectorEvent>();
-
-      streamRegistry.set(chatStreamId, {
-        chatWriter: chatWritable,
-        inspectorWriter: inspectorWritable,
-        createdAt: Date.now(),
-      });
-
-      // Execute in background
-      executeAgentLoop({
+      await createAgentExecution({
+        executionId,
         conversationId: conversation_id,
-        userMessage: message,
-        userId: "system", // TODO: passar do auth
+        requestId,
         model,
         provider,
-        chatWriter: chatWritable,
-        inspectorWriter: inspectorWritable,
-        requestId,
-        sessionId,
-      }).catch((err) => {
-        console.error("[vibe-agent-chat] executeAgentLoop failed:", err);
-        chatWritable.write({
-          type: "chat_error",
-          code: "EXECUTION_FAILED",
-          message: err instanceof Error ? err.message : "Erro desconhecido",
-          recoverable: true,
-          timestamp: Date.now(),
-          requestId,
-        }).catch(() => {});
-      }).finally(() => {
-        chatWritable.close().catch(() => {});
-        inspectorWritable.close().catch(() => {});
-        streamRegistry.delete(chatStreamId);
       });
 
-      const result = { chat_stream_id: chatStreamId, inspector_stream_id: inspectorStreamId };
-      await storeIdempotency(idempotencyKey, result);
+      const result = {
+        execution_id: executionId,
+        chat_stream_id: executionId,
+        inspector_stream_id: executionId,
+      };
 
+      const { writable: chatWritable } = createPersistentMemoryStream<ChatEvent>();
+      const { writable: inspectorWritable } = createPersistentMemoryStream<InspectorEvent>();
+
+      try {
+        await executeAgentLoop({
+          executionId,
+          conversationId: conversation_id,
+          userMessage: message,
+          userId: "system", // TODO: passar do auth
+          model,
+          provider,
+          chatWriter: chatWritable,
+          inspectorWriter: inspectorWritable,
+          requestId,
+          sessionId,
+        });
+      } catch (err) {
+        console.error("[vibe-agent-chat] executeAgentLoop failed:", err);
+        await updateAgentExecution(supabase as any, executionId, {
+          status: "failed",
+          error_message: err instanceof Error ? err.message : "Erro desconhecido",
+        });
+        throw err;
+      } finally {
+        closeWriter(chatWritable);
+        closeWriter(inspectorWritable);
+      }
+
+      await storeIdempotency(idempotencyKey, result);
       return Response.json(result, { headers: corsHeaders() });
     }
 
     // ─── GET /stream/chat ───
     if (path.endsWith("/stream/chat") && req.method === "GET") {
-      const streamId = url.searchParams.get("stream_id");
-      if (!streamId) {
-        return new Response("stream_id is required", { status: 400, headers: corsHeaders() });
+      const executionId = getExecutionId(url);
+      if (!executionId) {
+        return new Response("execution_id is required", { status: 400, headers: corsHeaders() });
       }
 
-      const record = streamRegistry.get(streamId);
-      if (!record) {
-        return new Response("Stream not found", { status: 404, headers: corsHeaders() });
-      }
-
-      return new Response(record.chatWriter as unknown as ReadableStream, {
+      const cursor = url.searchParams.get("cursor") || undefined;
+      const body = await createPersistentSseReadable(supabase, "chat", executionId, cursor, { signal: req.signal });
+      return new Response(body, {
         headers: {
           ...corsHeaders(),
           "Content-Type": "text/event-stream",
@@ -129,17 +127,14 @@ serve(async (req) => {
 
     // ─── GET /stream/inspector ───
     if (path.endsWith("/stream/inspector") && req.method === "GET") {
-      const streamId = url.searchParams.get("stream_id");
-      if (!streamId) {
-        return new Response("stream_id is required", { status: 400, headers: corsHeaders() });
+      const executionId = getExecutionId(url);
+      if (!executionId) {
+        return new Response("execution_id is required", { status: 400, headers: corsHeaders() });
       }
 
-      const record = streamRegistry.get(streamId);
-      if (!record) {
-        return new Response("Stream not found", { status: 404, headers: corsHeaders() });
-      }
-
-      return new Response(record.inspectorWriter as unknown as ReadableStream, {
+      const cursor = url.searchParams.get("cursor") || undefined;
+      const body = await createPersistentSseReadable(supabase, "inspector", executionId, cursor, { signal: req.signal });
+      return new Response(body, {
         headers: {
           ...corsHeaders(),
           "Content-Type": "text/event-stream",
@@ -147,6 +142,19 @@ serve(async (req) => {
           "Connection": "keep-alive",
         },
       });
+    }
+
+    // ─── GET /events ───
+    if (path.endsWith("/events") && req.method === "GET") {
+      const conversationId = url.searchParams.get("conversation_id");
+      const channel = (url.searchParams.get("channel") || "inspector") as VibeChannel;
+      if (!conversationId || (channel !== "chat" && channel !== "inspector")) {
+        return new Response("conversation_id and valid channel are required", { status: 400, headers: corsHeaders() });
+      }
+
+      const limit = Number(url.searchParams.get("limit") || 500);
+      const events = await fetchConversationEvents(supabase, conversationId, channel, Math.min(limit, 1000));
+      return Response.json(events.map((row) => row.event_data || row.payload), { headers: corsHeaders() });
     }
 
     // ─── POST /apply-patch ───
@@ -210,6 +218,56 @@ serve(async (req) => {
     return Response.json({ error: err instanceof Error ? err.message : "Erro desconhecido" }, { status: 500, headers: corsHeaders() });
   }
 });
+
+async function createAgentExecution(input: {
+  executionId: string;
+  conversationId: string;
+  requestId: string;
+  model?: string;
+  provider?: string;
+}): Promise<void> {
+  await (supabase.from("agent_executions" as any) as any).insert({
+    id: input.executionId,
+    conversation_id: input.conversationId,
+    request_id: input.requestId,
+    user_id: null,
+    model: input.model || null,
+    provider: input.provider || null,
+    status: "running",
+    started_at: new Date().toISOString(),
+  });
+}
+
+function getExecutionId(url: URL): string | null {
+  return url.searchParams.get("execution_id")
+    || url.searchParams.get("chat_stream_id")
+    || url.searchParams.get("inspector_stream_id")
+    || url.searchParams.get("stream_id");
+}
+
+function closeWriter(writer: WritableStreamDefaultWriter<unknown>): void {
+  try {
+    const closeResult = writer.close();
+    if (closeResult && typeof closeResult.catch === "function") {
+      closeResult.catch(() => {});
+    }
+  } catch {
+    // Ignore close errors after the response has been prepared.
+  }
+}
+
+function createPersistentMemoryStream<T>(): { readable: ReadableStream<T>; writable: WritableStreamDefaultWriter<T> } {
+  let writer: WritableStreamDefaultWriter<T>;
+  const readable = new ReadableStream<T>({
+    start(controller) {
+      writer = controller as unknown as WritableStreamDefaultWriter<T>;
+    },
+    cancel() {
+      // Client disconnected; agent loop will persist errors independently.
+    },
+  });
+  return { readable, writable: writer! };
+}
 
 // ─── DB HELPERS ───
 async function applyFlowPatch(conversationId: string, patch: unknown): Promise<unknown> {
@@ -372,7 +430,7 @@ async function getFlowHistory(conversationId: string): Promise<unknown> {
 async function createConversation(flowId: string): Promise<unknown> {
   const { data, error } = await supabase
     .from("vibe_agent_conversations")
-    .insert({ flow_id: flowId, title: `Conversa ${new Date().toLocaleString("pt-BR")}` })
+    .insert({ flow_id: flowId, user_id: null, title: `Conversa ${new Date().toLocaleString("pt-BR")}` })
     .select()
     .single();
 
@@ -390,20 +448,6 @@ async function listConversations(flowId: string): Promise<unknown> {
 
   if (error) throw new Error(`Failed to list conversations: ${error.message}`);
   return data || [];
-}
-
-// ─── SSE HELPER ───
-function createSSEStream<T>(): { readable: ReadableStream<T>; writable: WritableStreamDefaultWriter<T> } {
-  let writer: WritableStreamDefaultWriter<T>;
-  const readable = new ReadableStream<T>({
-    start(controller) {
-      writer = controller as unknown as WritableStreamDefaultWriter<T>;
-    },
-    cancel() {
-      // Client disconnected
-    },
-  });
-  return { readable, writable: writer! };
 }
 
 async function checkRateLimit(key: string): Promise<{ allowed: boolean; retryAfterSeconds: number }> {

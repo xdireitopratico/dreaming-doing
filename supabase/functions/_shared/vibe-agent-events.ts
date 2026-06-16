@@ -14,7 +14,7 @@ export type ChatEvent =
   | { type: 'chat_plan_approved';
       planId: string;
       title: string;
-      tasks: Array<{ id: string; label: string; status: 'pending' | 'running' | 'done' | 'error'; dependsOn?: string[] }>;
+      tasks: Array<{ id: string; label: string; status: 'pending' | 'running' | 'done' | 'error'; dependsOn?: string[]; output?: string }>;
       timestamp: number; 
       requestId: string }
   | { type: 'chat_task_update';

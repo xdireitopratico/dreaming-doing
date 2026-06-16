@@ -133,11 +133,84 @@ export function useVibeChat({
   // ---------------------------------------------------------------------------
   const selectConversation = useCallback(async (id: string) => {
     setConvId(id);
-    setMessages([]);
     setCurrentMinicard(null);
     setCurrentPlan(null);
     setError(null);
-    // TODO: Carregar histórico via vibeAgent.listMessages(id) quando implementado
+
+    try {
+      const events = await vibeAgent.listChatEvents(id);
+      const messages: CuratedMessage[] = [];
+      let plan: AtomicPlan | null = null;
+
+      for (const event of events) {
+        switch (event.type) {
+          case 'chat_intro':
+            messages.push({
+              id: crypto.randomUUID(),
+              role: 'assistant',
+              content: event.text,
+              timestamp: event.timestamp,
+              meta: { kind: 'intro' },
+            });
+            break;
+
+          case 'chat_plan_approved':
+            plan = {
+              id: event.planId,
+              title: event.title,
+              tasks: topologicalSort(event.tasks),
+              createdAt: event.timestamp,
+            };
+            break;
+
+          case 'chat_task_update':
+            if (plan) {
+              const nextTasks: AtomicPlan['tasks'] = plan.tasks.map((task) =>
+                task.id === event.taskId ? { ...task, status: event.status, output: event.output } : task,
+              );
+              plan = { id: plan.id, title: plan.title, tasks: nextTasks, createdAt: plan.createdAt };
+            }
+            break;
+
+          case 'chat_closure':
+            messages.push({
+              id: crypto.randomUUID(),
+              role: 'assistant',
+              content: event.summary,
+              timestamp: event.timestamp,
+              meta: {
+                kind: 'closure',
+                closure: {
+                  summary: event.summary,
+                  remaining: event.remaining,
+                  nextSteps: event.nextSteps,
+                  artifacts: event.artifacts || [],
+                },
+              },
+            });
+            break;
+
+          case 'chat_error':
+            if (event.recoverable) {
+              messages.push({
+                id: crypto.randomUUID(),
+                role: 'assistant',
+                content: event.message + (event.suggestion ? ` — ${event.suggestion}` : ''),
+                timestamp: event.timestamp,
+                meta: { kind: 'error' },
+              });
+            }
+            break;
+        }
+      }
+
+      setMessages(messages);
+      setCurrentPlan(plan);
+    } catch (err) {
+      console.error('[useVibeChat] failed to load chat history:', err);
+      setMessages([]);
+      setCurrentPlan(null);
+    }
   }, []);
 
   const startNewConversation = useCallback(async () => {

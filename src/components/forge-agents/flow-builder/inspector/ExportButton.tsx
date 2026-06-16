@@ -1,11 +1,11 @@
 interface ExportButtonProps {
-  exportSession: () => string;
+  exportSession: () => Promise<string> | string;
   disabled?: boolean;
 }
 
 export function ExportButton({ exportSession, disabled = false }: ExportButtonProps) {
-  const handleExport = () => {
-    const json = exportSession();
+  const handleExport = async () => {
+    const json = await exportSession();
     if (!json) return;
 
     const blob = new Blob([json], { type: 'application/json' });
