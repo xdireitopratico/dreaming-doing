@@ -1547,6 +1547,7 @@ export class AgentLoop {
   }> {
     const message = summary.trim() || "Erro no modo Plan.";
     const err = (error ?? message).trim() || message;
+    console.error(`[loop] plan_mode_failure: ${err} | step=${steps} | tools=${toolsUsed.join(",")} | streamed=${this.llmResponseWasStreamed}`);
     this.emit("assistant_text", { text: message, final: true });
     await this.persistFinal(message, { lastFinishOk: false });
     await this.clearCheckpoint();
@@ -1785,6 +1786,17 @@ export class AgentLoop {
           this.emit("done", { summary: clean, conversational: true });
           return { ok: true, summary: clean, steps: step, toolsUsed: [...toolsUsed] };
         }
+        // Se thinking foi streamed mas content vazio, não falhar — modelo processou via thinking
+        if (this.llmResponseWasStreamed) {
+          const fallback = "Pensamento processado. Use create_plan ou clarify para continuar.";
+          const clean = sanitizeUserFacingProse(fallback);
+          this.emit("assistant_text", { text: clean, final: true });
+          await this.persistFinal(clean, { lastFinishOk: true, conversational: true });
+          await this.clearCheckpoint();
+          await this.markRunStatus("completed");
+          this.emit("done", { summary: clean, conversational: true });
+          return { ok: true, summary: clean, steps: step, toolsUsed: [...toolsUsed] };
+        }
         return await this.finishPlanModeFailure(
           "Use clarify, create_plan ou ferramentas de exploração.",
           step,
@@ -1869,6 +1881,9 @@ export class AgentLoop {
       : "";
     const fullSystemPrompt = this.buildAgentSystemPrompt(true, skillPrompt);
 
+    this.llmResponseWasStreamed = false;
+    this.thinkingStreamStartedAt = null;
+
     return model.chat({
       messages: [
         { role: "system", content: fullSystemPrompt },
@@ -1879,6 +1894,23 @@ export class AgentLoop {
       tools: mergePlanModeToolDefinitions(this.reg.getDefinitions()),
       tool_choice: "auto",
       max_tokens: 4096,
+      onTokenDelta: (delta) => {
+        if (!delta) return;
+        if (this.thinkingStreamStartedAt == null) {
+          this.thinkingStreamStartedAt = Date.now();
+        }
+        const elapsed = Date.now() - this.thinkingStreamStartedAt;
+        if (elapsed > THINKING_STREAM_CAP_MS) return;
+        this.llmResponseWasStreamed = true;
+        this.lastActivityAt = Date.now();
+        this.emit("assistant_text", {
+          text: delta,
+          append: true,
+          delta: true,
+          final: false,
+          thinking: true,
+        });
+      },
     });
   }
 
