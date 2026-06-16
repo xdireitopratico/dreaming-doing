@@ -1,5 +1,8 @@
 -- Make Vibe Agent execution rows compatible with the existing gateway execution schema.
 ALTER TABLE public.agent_executions
+  ADD COLUMN IF NOT EXISTS user_id UUID;
+
+ALTER TABLE public.agent_executions
   ADD COLUMN IF NOT EXISTS session_id UUID;
 
 UPDATE public.agent_executions

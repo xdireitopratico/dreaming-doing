@@ -243,7 +243,6 @@ async function createAgentExecution(input: {
     session_id: input.requestId,
     conversation_id: input.conversationId,
     request_id: input.requestId,
-    user_id: null,
     model: input.model || null,
     provider: input.provider || null,
     status: "running",
