@@ -85,24 +85,23 @@ export async function executeAgentLoop(ctx: LoopContext): Promise<void> {
     // ─── LOOPING PHASE (exploração) ───
     const loopSteps = await runExplorationLoop(ctx, emitChat, emitInspector);
 
-    // ─── PLAN APPROVAL ───
-    const plan = await generatePlan(loopSteps, ctx.userMessage);
+    // ─── LLM EXECUTION ───
+    const llmResult = await runLLMExecution(ctx, emitInspector);
+    flowPatch = llmResult.flowPatch;
+
+    // ─── PLAN APPROVAL (based on actual LLM result) ───
+    const plan = generatePlanFromLLM(llmResult);
     const planId = crypto.randomUUID();
     emitChat({
       type: 'chat_plan_approved',
       planId,
       title: plan.title,
-      tasks: plan.tasks.map(t => ({ ...t, status: 'pending' })),
+      tasks: plan.tasks.map(t => ({ ...t, status: 'done' })),
     });
 
-    // ─── EXECUTE PLAN (atomic tasks) ───
-    const results = await executePlan(plan, ctx, emitChat, emitInspector, planId);
-
     // ─── CLOSURE ───
-    const successfulTasks = results.filter(r => r.success).length;
-    const failedTasks = results.filter(r => !r.success);
-    const closureSummary = `Concluí a análise do chat. Foram executadas ${successfulTasks}/${results.length} tarefas com sucesso.`;
-    const remaining = failedTasks.map(t => t.error || t.taskId);
+    const closureSummary = llmResult.assistantContent;
+    const remaining: string[] = [];
     const nextSteps = [
       "Validar o comportamento em ambiente de preview",
       "Testar a experiência do usuário no fluxo completo",
@@ -124,7 +123,7 @@ export async function executeAgentLoop(ctx: LoopContext): Promise<void> {
     await emitInspector({
       type: 'session_end',
       sessionId: ctx.sessionId,
-      outcome: failedTasks.length === 0 ? 'success' : 'partial',
+      outcome: llmResult.flowPatch ? 'success' : 'partial',
       totalDurationMs: Date.now() - startTime,
       totalTokens: { input: totalInputTokens, output: totalOutputTokens },
     });
@@ -157,6 +156,171 @@ export async function executeAgentLoop(ctx: LoopContext): Promise<void> {
       meta: { kind: "error", error: errorMessage },
     });
   }
+}
+
+// ─── LLM EXECUTION ───
+interface LLMResult {
+  assistantContent: string;
+  flowPatch?: { nodes: unknown[]; edges: unknown[]; changed_node_ids?: string[]; description?: string };
+}
+
+async function runLLMExecution(
+  ctx: LoopContext,
+  emitInspector: InspectorEmitter,
+): Promise<LLMResult> {
+  const sb = supabaseAdmin();
+
+  // Load conversation history
+  await emitInspector({
+    type: 'tool_call',
+    callId: crypto.randomUUID(),
+    tool: 'db_query',
+    input: { action: 'load_history', conversation_id: ctx.conversationId },
+    status: 'start',
+  });
+
+  const { data: history } = await (sb.from("vibe_agent_messages" as any) as any)
+    .select("role, content, meta")
+    .eq("conversation_id", ctx.conversationId)
+    .order("created_at", { ascending: true })
+    .limit(40);
+
+  await emitInspector({
+    type: 'tool_call',
+    callId: crypto.randomUUID(),
+    tool: 'db_query',
+    input: { action: 'load_history', conversation_id: ctx.conversationId },
+    output: { count: history?.length || 0 },
+    status: 'complete',
+  });
+
+  // Load flow definition
+  await emitInspector({
+    type: 'tool_call',
+    callId: crypto.randomUUID(),
+    tool: 'db_query',
+    input: { action: 'load_flow', conversation_id: ctx.conversationId },
+    status: 'start',
+  });
+
+  const { data: conv } = await (sb.from("vibe_agent_conversations" as any) as any)
+    .select("flow_id")
+    .eq("id", ctx.conversationId)
+    .single();
+
+  if (!conv) throw new Error("Conversation not found");
+
+  const { data: flowData } = await (sb.from("agent_flows" as any) as any)
+    .select("flow_definition")
+    .eq("id", (conv as any).flow_id)
+    .single();
+
+  await emitInspector({
+    type: 'tool_call',
+    callId: crypto.randomUUID(),
+    tool: 'db_query',
+    input: { action: 'load_flow', conversation_id: ctx.conversationId },
+    output: { found: !!flowData },
+    status: 'complete',
+  });
+
+  const def = ((flowData as any)?.flow_definition as Record<string, unknown>) || {};
+  const nodes = (def.nodes as Array<Record<string, unknown>>) || [];
+  const edges = (def.edges as Array<Record<string, unknown>>) || [];
+
+  const chatHistory = (history ?? [])
+    .filter((m: any) => m.role === "user" || m.role === "assistant")
+    .map((m: any) => `${m.role === "user" ? "Cliente" : "Secretária"}: ${m.content}`)
+    .join("\n");
+
+  const userPrompt = [
+    `Histórico desta conversa:`,
+    chatHistory,
+    `\nGrafo atual no canvas:\n${summarizeGraph(nodes, edges)}`,
+    `JSON do grafo:\n${JSON.stringify({ nodes, edges })}`,
+    `\nNova mensagem do cliente:\n${ctx.userMessage}`,
+  ].join("\n");
+
+  await emitInspector({
+    type: 'thinking',
+    content: 'Chamando LLM com contexto do flow atual...',
+  });
+
+  await emitInspector({
+    type: 'tool_call',
+    callId: crypto.randomUUID(),
+    tool: 'llm_call',
+    input: { model: ctx.model || 'auto', provider: ctx.provider || 'auto' },
+    status: 'start',
+  });
+
+  const llmStart = Date.now();
+  const llm = createLLMProvider({
+    provider: ctx.provider || 'openai',
+    model: ctx.model || 'gpt-4o-mini',
+    apiKey: Deno.env.get('OPENAI_API_KEY') || '',
+  } as any);
+
+  const llmResponse = await llm.chat({
+    messages: [
+      { role: 'system', content: VIBE_AGENT_SYSTEM },
+      { role: 'user', content: userPrompt },
+    ],
+    temperature: 0.2,
+    max_tokens: 4096,
+  });
+
+  await emitInspector({
+    type: 'tool_call',
+    callId: crypto.randomUUID(),
+    tool: 'llm_call',
+    input: { model: ctx.model || 'auto', provider: ctx.provider || 'auto' },
+    output: { durationMs: Date.now() - llmStart },
+    status: 'complete',
+    durationMs: Date.now() - llmStart,
+  });
+
+  const response = parseFlowAgentResponse(llmResponse.content ?? "");
+  const assistantContent = response?.summary
+    ?? "Não consegui processar. Reformule sua pergunta ou peça uma mudança específica no fluxo.";
+
+  let flowPatch: LLMResult['flowPatch'];
+
+  if (response && !response.answer_only) {
+    const normalizedNodes = normalizeNodes(response.nodes, nodes);
+    const normalizedEdges = normalizeEdges(response.edges);
+    flowPatch = {
+      nodes: normalizedNodes,
+      edges: normalizedEdges,
+      changed_node_ids: response.changed_node_ids,
+      description: response.summary,
+    };
+
+    await emitInspector({
+      type: 'tool_call',
+      callId: crypto.randomUUID(),
+      tool: 'patch',
+      input: { patch: flowPatch },
+      status: 'complete',
+    });
+  }
+
+  return { assistantContent, flowPatch };
+}
+
+function generatePlanFromLLM(result: LLMResult): AtomicPlan {
+  const tasks: Array<{ id: string; label: string; dependsOn?: string[] }> = [
+    { id: 'llm_analysis', label: 'Análise LLM concluída', dependsOn: [] },
+  ];
+
+  if (result.flowPatch) {
+    tasks.push({ id: 'flow_patch', label: 'Patch de flow preparado', dependsOn: ['llm_analysis'] });
+  }
+
+  return {
+    title: 'Plano executado',
+    tasks,
+  };
 }
 
 // ─── EXPLORATION LOOP ───
