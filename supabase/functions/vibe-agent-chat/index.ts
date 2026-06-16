@@ -257,16 +257,29 @@ function closeWriter(writer: WritableStreamDefaultWriter<unknown>): void {
 }
 
 function createPersistentMemoryStream<T>(): { readable: ReadableStream<T>; writable: WritableStreamDefaultWriter<T> } {
-  let writer: WritableStreamDefaultWriter<T>;
+  let controller: ReadableStreamDefaultController<T>;
   const readable = new ReadableStream<T>({
-    start(controller) {
-      writer = controller as unknown as WritableStreamDefaultWriter<T>;
+    start(streamController) {
+      controller = streamController;
     },
-    cancel() {
-      // Client disconnected; agent loop will persist errors independently.
+    cancel(reason) {
+      controller.error(reason);
     },
   });
-  return { readable, writable: writer! };
+
+  const writable = new WritableStream<T>({
+    write(chunk) {
+      controller.enqueue(chunk);
+    },
+    close() {
+      controller.close();
+    },
+    abort(reason) {
+      controller.error(reason);
+    },
+  });
+
+  return { readable, writable: writable.getWriter() };
 }
 
 // ─── DB HELPERS ───
