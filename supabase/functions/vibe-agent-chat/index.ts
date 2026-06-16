@@ -226,8 +226,21 @@ async function createAgentExecution(input: {
   model?: string;
   provider?: string;
 }): Promise<void> {
-  await (supabase.from("agent_executions" as any) as any).insert({
+  const { data: conversation, error: conversationError } = await supabase
+    .from("vibe_agent_conversations" as any)
+    .select("flow_id")
+    .eq("id", input.conversationId)
+    .single();
+
+  if (conversationError || !conversation) {
+    throw new Error(`Conversation not found: ${conversationError?.message || "unknown error"}`);
+  }
+
+  const { error } = await (supabase.from("agent_executions" as any) as any).insert({
     id: input.executionId,
+    flow_id: conversation.flow_id,
+    flow_version: 1,
+    session_id: input.requestId,
     conversation_id: input.conversationId,
     request_id: input.requestId,
     user_id: null,
@@ -236,6 +249,10 @@ async function createAgentExecution(input: {
     status: "running",
     started_at: new Date().toISOString(),
   });
+
+  if (error) {
+    throw new Error(`Failed to create execution: ${error.message}`);
+  }
 }
 
 function getExecutionId(url: URL): string | null {
