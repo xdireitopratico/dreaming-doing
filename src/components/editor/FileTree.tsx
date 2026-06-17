@@ -259,7 +259,7 @@ export function FileTree({
 
   return (
     <div className="forge-file-tree h-full flex flex-col bg-[var(--bg-hover)] select-none">
-      <div className="flex items-center justify-between gap-1 px-1.5 h-7 border-b border-[var(--border)] shrink-0">
+      <div className="flex items-center justify-between gap-1 px-1.5 h-9 border-b border-[var(--border)] shrink-0">
         <span className="font-mono text-[9px] tracking-[0.3em] uppercase text-[var(--text-ghost)] pl-1.5 truncate">
           EXPLORER
         </span>
