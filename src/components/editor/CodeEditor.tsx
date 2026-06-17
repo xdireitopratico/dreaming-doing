@@ -49,7 +49,7 @@ export function CodeEditor({
   return (
     <div className="flex flex-col h-full bg-[var(--bg-hover)]">
       {/* Tab Bar */}
-      <div className="flex items-center h-9 bg-[var(--surface-1)] border-b border-[var(--border)] overflow-x-auto shrink-0 min-w-0">
+      <div className="flex items-center h-9 bg-[var(--bg-hover)] border-b border-[var(--border)] overflow-x-auto shrink-0 min-w-0">
         {tabs.map((tab) => {
           const icon = getFileIcon(tab.path);
           const isActive = tab.path === activePath;
@@ -65,7 +65,7 @@ export function CodeEditor({
               }}
               className={`group relative flex items-center gap-1.5 h-full px-3 text-[11px] min-w-[80px] max-w-[180px] border-r border-[var(--border)] transition-colors shrink-0 ${
                 isActive
-                  ? "bg-[var(--background)] text-[var(--foreground)] border-t-2 border-t-[var(--primary)]"
+                  ? "bg-[var(--bg-hover)] text-[var(--foreground)] border-t-2 border-t-[var(--primary)]"
                   : "bg-[var(--surface-2)]/50 text-[var(--text-dim)] hover:bg-[var(--surface-2)] hover:text-[var(--foreground)]"
               }`}
             >
