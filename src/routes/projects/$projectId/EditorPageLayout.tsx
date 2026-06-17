@@ -292,7 +292,11 @@ export function EditorPageLayout({
     if (pendingPlan) return;
     if (isInspectorDismissedForRun(runId)) return;
     if (autoOpenedInspectorRunRef.current === runId) return;
-    const hasStartedWork = (agent.progress.tools?.length ?? 0) > 0 || (agent.progress.diffs?.length ?? 0) > 0;
+    const hasStartedWork =
+      (agent.progress.tools?.length ?? 0) > 0 ||
+      (agent.progress.diffs?.length ?? 0) > 0 ||
+      (agent.progress.buildLogLines?.length ?? 0) > 0 ||
+      (agent.progress.deliveryFiles?.length ?? 0) > 0;
     if (!hasStartedWork) return;
 
     const timer = window.setTimeout(() => {
