@@ -27,10 +27,10 @@ export function resolveTurnThinking(
   }
 
   if (!runStartedAtMs) {
-    const hasThinkingEvidence = resolved?.timeline.some(
-      (e) => e.type === "assistant_text" && e.data?.thinking === true,
+    const hasTextEvidence = resolved?.timeline.some(
+      (e) => e.type === "assistant_text",
     );
-    if (resolved && hasThinkingEvidence) {
+    if (resolved && hasTextEvidence) {
       const first = resolved.timeline.find(
         (e) =>
           e.type === "assistant_text" &&
@@ -67,10 +67,10 @@ export function resolveTurnThinking(
     return { active: true, startedAtMs: runStartedAtMs };
   }
 
-  const hasThinkingEvidence2 = resolved?.timeline.some(
-    (e) => e.type === "assistant_text" && e.data?.thinking === true,
+  const hasTextEvidence2 = resolved?.timeline.some(
+    (e) => e.type === "assistant_text",
   );
-  if (resolved && hasThinkingEvidence2) {
+  if (resolved && hasTextEvidence2) {
     const first = resolved.timeline.find(
       (e) =>
         e.type === "assistant_text" &&

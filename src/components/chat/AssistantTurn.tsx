@@ -121,29 +121,6 @@ export function AssistantTurn({
           />
         )}
 
-        {showJobCard &&
-          item.miniCard?.status === "done" &&
-          (item.miniCard.fileCount ?? 0) > 0 && (
-            <div
-              className="forge-chat-review-callout"
-              data-testid="chat-review-callout"
-            >
-              <span className="forge-chat-review-callout-text">
-                {item.miniCard.fileCount} arquivo
-                {item.miniCard.fileCount !== 1 ? "s" : ""} alterado
-                {item.miniCard.fileCount !== 1 ? "s" : ""}
-              </span>
-              <button
-                type="button"
-                className="forge-chat-review-callout-action"
-                onClick={() => onOpenInspector?.(item.runId, "changes")}
-                data-testid="chat-review-callout-open"
-              >
-                Abrir inspector →
-              </button>
-            </div>
-          )}
-
         {showClarify && item.clarify && (
           <ChatClarify
             data={item.clarify}
