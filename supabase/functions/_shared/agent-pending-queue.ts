@@ -185,7 +185,7 @@ export async function conversationNeedsAgentResponse(
   return (count ?? 0) > 0;
 }
 
-const CHUNK_HANDOFF_EVENT_TYPES = new Set(["delivery_checkpoint", "timeout_warning"]);
+const CHUNK_HANDOFF_EVENT_TYPES = new Set(["delivery_checkpoint"]);
 
 export async function hasBlockingActiveRun(
   supabase: SupabaseClient,

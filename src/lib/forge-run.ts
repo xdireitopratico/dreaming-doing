@@ -222,7 +222,7 @@ export function buildForgeTimeline(timeline: SSEEvent[], running = false): Forge
     }
 
     if (ev.type === "checkpoint_resume" || ev.type === "delivery_checkpoint_silent") {
-      items.push({ type: "TASK", id: `task-${ts}`, label: "Retomando execução" });
+      items.push({ type: "TASK", id: `task-${ts}`, label: "Continuando" });
       continue;
     }
 
@@ -382,8 +382,8 @@ export function buildForgeTimeline(timeline: SSEEvent[], running = false): Forge
     }
 
     if (ev.type === "resume") {
-      items.push({ type: "TASK", id: `resume-${ts}`, label: "Retomando execução" });
-      continue;
+      items.push({ type: "TASK", id: `resume-${ts}`, label: "Continuando" });
+      return;
     }
 
     if (ev.type === "canceled") {

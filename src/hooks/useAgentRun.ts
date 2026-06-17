@@ -411,7 +411,6 @@ export function useAgentRun() {
             finished: true,
             awaiting: true,
             awaitingKind: fromMeta ?? (planPending ? "plan_approval" : "clarify"),
-            autoResuming: false,
           };
         } else if (status === "canceled") {
           next = {
@@ -419,7 +418,6 @@ export function useAgentRun() {
             finished: true,
             canceled: true,
             resumable: false,
-            autoResuming: false,
             error: error ?? p.error,
           };
         } else if (status === "completed") {
@@ -428,7 +426,6 @@ export function useAgentRun() {
             finished: true,
             lastFinishOk: p.lastFinishOk === false ? false : (p.lastFinishOk ?? true),
             resumable: false,
-            autoResuming: false,
           };
         } else if (status === "failed") {
           next = {
@@ -437,7 +434,6 @@ export function useAgentRun() {
             lastFinishOk: false,
             error: error ?? p.error ?? "Agente falhou",
             resumable: false,
-            autoResuming: false,
           };
         } else {
           return p;
@@ -819,15 +815,13 @@ export function useAgentRun() {
           statusHint: "Conectando ao agente…",
           finished: false,
           resumable: false,
-          autoResuming: false,
           phase: p.phase ?? null,
         }));
       } else {
         setProgress({
           ...initialAgentProgress,
-          statusHint: manualResume ? "Conectando para retomar o agente…" : "Iniciando agente…",
+          statusHint: "Iniciando agente…",
           resumable: false,
-          autoResuming: false,
           phase: null,
         });
       }
@@ -1103,7 +1097,6 @@ export function useAgentRun() {
       finished: true,
       canceled: true,
       resumable: false,
-      autoResuming: false,
       statusHint: "Cancelando…",
     }));
     setConnected(false);
@@ -1259,13 +1252,12 @@ export function useAgentRun() {
 
       const idleProgress = {
         ...initialAgentProgress,
-        autoResuming: false,
       };
 
-      const restoreProgressOnly = (progress: AgentProgress) => {
+      const         restoreProgressOnly = (progress: AgentProgress) => {
         setProgress((prev) => {
           if (prev !== initialAgentProgress && prev.streamText != null) return prev;
-          return { ...progress, autoResuming: false };
+          return { ...progress };
         });
       };
 
@@ -1314,7 +1306,6 @@ export function useAgentRun() {
             restoreProgressOnly({
               ...snap.progress,
               finished: true,
-              autoResuming: false,
             });
           } else {
             restoreProgressOnly(idleProgress);

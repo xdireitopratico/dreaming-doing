@@ -14,11 +14,11 @@ describe("checkpointChatText", () => {
     ).toBe("Entendi: A\n\nRetomando passo 2.");
   });
 
-  it("fallback para retomada automática", () => {
-    expect(checkpointChatText("", false)).toBe("Retomando automaticamente no servidor…");
+  it("fallback vazio quando sem narração", () => {
+    expect(checkpointChatText("", false)).toBe("");
   });
 
-  it("fallback para build fix", () => {
-    expect(checkpointChatText("  ", true)).toBe("Corrigindo erros de build no servidor…");
+  it("fallback vazio para whitespace", () => {
+    expect(checkpointChatText("  ", true)).toBe("");
   });
 });

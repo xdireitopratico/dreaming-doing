@@ -30,7 +30,7 @@ describe("needsTerminalMessagePersist", () => {
 describe("resolveTerminalDisplayText", () => {
   it("usa validate_fail quando erro genérico de build fix", () => {
     const text = resolveTerminalDisplayText({
-      error: "Corrigindo erros de build…",
+      error: "",
       streamRows: [
         {
           event_type: "validate_fail",

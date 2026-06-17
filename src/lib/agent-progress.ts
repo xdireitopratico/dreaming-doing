@@ -242,12 +242,7 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
         error: null,
         finished: false,
         resumable: false,
-        autoResuming: data.autoResume === true,
-        statusHint: data.autoResume
-          ? "Retomando automaticamente…"
-          : data.resume
-            ? "Retomando com a memória salva no chat…"
-            : "Trabalhando no projeto…",
+        statusHint: "Trabalhando no projeto…",
         timeline: [event],
       };
 
@@ -328,10 +323,8 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
     case "resume":
       return {
         ...prev,
-        autoResuming: true,
         finished: false,
         error: null,
-        statusHint: (data.message as string) ?? "Retomando automaticamente no servidor…",
         timeline: [...prev.timeline, event],
       };
 
@@ -445,8 +438,7 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
         narrationText: narration || prev.narrationText,
         deliveryFiles,
         resumable: silent ? false : data.resumable === true || prev.resumable,
-        autoResuming: silent || data.resumable === true,
-        statusHint: (data.message as string) ?? prev.statusHint ?? "Continuando…",
+        statusHint: (data.message as string) ?? prev.statusHint,
         timeline: [...prev.timeline, event],
       };
     }
@@ -663,7 +655,6 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
               (typeof data.error === "string" ? data.error : null) ||
               prev.error
             : prev.streamText,
-        autoResuming: false,
         lastFinishOk: !failed && !canceled,
         resumable: failed && data.resumable === true && !canceled,
         error: failed || canceled ? ((data.error as string) ?? prev.error) : null,

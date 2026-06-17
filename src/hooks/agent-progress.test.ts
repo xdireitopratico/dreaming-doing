@@ -51,12 +51,12 @@ describe("awaitingKindFromRunMeta", () => {
 });
 
 describe("applyAgentProgressEvent", () => {
-  it("start com resume limpa erro e resumable", () => {
+  it("start limpa erro e resumable", () => {
     const next = applyAgentProgressEvent(base, ev("start", { resume: true }));
     expect(next.error).toBeNull();
     expect(next.resumable).toBe(false);
     expect(next.finished).toBe(false);
-    expect(next.statusHint).toContain("Retomando");
+    expect(next.statusHint).toBe("Trabalhando no projeto…");
   });
 
   it("opening:true vai para narrationText, não streamText", () => {
@@ -291,7 +291,7 @@ describe("applyAgentProgressEvent", () => {
     expect(next.streamText).toBeNull();
   });
 
-  it("delivery_checkpoint silencioso marca autoResuming sem pausar", () => {
+  it("delivery_checkpoint silencioso mantém progresso sem pausar", () => {
     const next = applyAgentProgressEvent(
       { ...base, finished: false, streamText: null },
       ev("delivery_checkpoint", {
@@ -308,7 +308,6 @@ describe("applyAgentProgressEvent", () => {
     expect(next.streamText).toBeNull();
     expect(next.narrationText).toBe("Gradle configurado.");
     expect(next.deliveryFiles).toEqual(["app/build.gradle.kts", "src/App.tsx"]);
-    expect(next.autoResuming).toBe(true);
     expect(next.resumable).toBe(false);
     expect(next.finished).toBe(false);
   });

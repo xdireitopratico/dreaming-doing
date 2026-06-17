@@ -1,9 +1,6 @@
 import { collapseNarrationBuffer } from "./narration-dedupe.ts";
 
-export function checkpointChatText(narration: string, buildFix: boolean): string {
-  const hint = buildFix
-    ? "Corrigindo erros de build no servidor…"
-    : "Retomando automaticamente no servidor…";
+export function checkpointChatText(narration: string, _buildFix: boolean): string {
   const n = collapseNarrationBuffer(narration).trim();
-  return n || hint;
+  return n || "";
 }

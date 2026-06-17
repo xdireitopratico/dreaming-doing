@@ -39,7 +39,7 @@ describe("S15 agent turn flow", () => {
       ev("assistant_text", { text: "Pronto — confere o preview.", final: true }),
       ev("done", { summary: "Pronto — confere o preview." }),
     ]);
-    progress = { ...progress, finished: true, streamText: "Pronto — confere o preview." };
+    progress = { ...progress, finished: true, streamText: "Pronto — confere o preview.", latencyThoughtMs: 4800 };
 
     const messages: ChatMessage[] = [msg("u1", "user", "landing oficina")];
     const thread = buildChatThread(messages, progress, {

@@ -1,21 +1,11 @@
 import { useEffect, useState } from "react";
-import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
-
-const INTRODUCTION_PHRASES = [
-  "Analisando seu pedido…",
-  "Preparando execução…",
-  "Configurando ambiente…",
-  "Inicializando agente…",
-  "Conectando ao FORGE…",
-];
 
 type ChatThinkingProps = {
   startedAtMs?: number;
   active: boolean;
   durationMs?: number;
   connectionState?: "connected" | "reconnecting" | "disconnected";
-  phase?: "introduction" | "thinking" | null;
 };
 
 function formatThoughtSeconds(ms: number): string {
@@ -23,7 +13,7 @@ function formatThoughtSeconds(ms: number): string {
   return `Thought for ${sec}s`;
 }
 
-export function ChatThinking({ startedAtMs, active, durationMs, connectionState, phase }: ChatThinkingProps) {
+export function ChatThinking({ startedAtMs, active, durationMs, connectionState }: ChatThinkingProps) {
   const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
@@ -32,23 +22,16 @@ export function ChatThinking({ startedAtMs, active, durationMs, connectionState,
     return () => window.clearInterval(id);
   }, [active]);
 
-  const frozenMs = !active && durationMs ? durationMs : null;
-  const liveMs =
-    startedAtMs && active
-      ? Math.max(500, now - startedAtMs)
-      : (frozenMs ?? durationMs ?? 1000);
-
   const isReconnecting = connectionState === "reconnecting";
   const isDisconnected = connectionState === "disconnected";
+
   const label = isReconnecting
     ? "Reconectando…"
     : isDisconnected
       ? "Conexão perdida — tentando reconectar…"
-      : active && phase === "introduction"
-        ? INTRODUCTION_PHRASES[Math.floor(Math.random() * INTRODUCTION_PHRASES.length)]
-        : active
-          ? "Thinking…"
-          : formatThoughtSeconds(liveMs);
+      : active
+        ? "Trabalhando…"
+        : formatThoughtSeconds(durationMs ?? 1000);
 
   return (
     <p
@@ -60,11 +43,7 @@ export function ChatThinking({ startedAtMs, active, durationMs, connectionState,
       data-testid="chat-thinking"
       data-connection={connectionState ?? "connected"}
     >
-      <span aria-hidden>💡</span>
       <span>{label}</span>
-      {(active || isReconnecting || isDisconnected) && (
-        <Loader2 className="size-3 animate-spin" />
-      )}
     </p>
   );
 }

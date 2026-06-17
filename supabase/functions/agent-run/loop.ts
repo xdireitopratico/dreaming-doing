@@ -345,9 +345,7 @@ export class AgentLoop {
 
   private requiresFinalBuildGate(): boolean {
     if (this.planMode || this.tasteStart) return false;
-    if (this.touchedPaths.size > 0) return true;
-    const webTemplates = ["vite-react", "nextjs-app-router", "tanstack-start", "astro"];
-    return webTemplates.includes(this.projectTemplate) && this.toolsInvoked;
+    return this.touchedPaths.size > 0;
   }
 
   /** Inventário + npm install/build no sandbox antes do 1º fs_* em templates web. */
@@ -428,17 +426,13 @@ export class AgentLoop {
     await this.saveCheckpoint(this.state.phase, true);
     await this.emitDeliveryCheckpoint(steps);
     await this.touchHeartbeat();
-    this.emit("timeout_warning", {
-      message: options?.buildFix
-        ? "Corrigindo erros de build no servidor"
-        : "Retomando automaticamente no servidor",
-      elapsedMs: Date.now() - this.runStartTime,
-      buildFix: options?.buildFix === true,
+    this.emit("explore", {
+      message: this.narrationBuffer || "Continuando…",
     });
     await this.persistCheckpointChat(steps, options?.buildFix);
     return {
       ok: false,
-      error: options?.buildFix ? "Corrigindo erros de build…" : "Retomando automaticamente…",
+      error: "Limite de iterações — execução continua em segundo plano.",
       steps,
       resumable: true,
       buildFix: options?.buildFix === true,
@@ -622,7 +616,7 @@ export class AgentLoop {
     }
     if (this.chunkGeneration > 0) {
       this.emit("explore", {
-        message: `Retomando execução no servidor (parte ${this.chunkGeneration}/${MAX_CHUNK_GENERATIONS})…`,
+        message: `Continuando (parte ${this.chunkGeneration}/${MAX_CHUNK_GENERATIONS})…`,
       });
     }
     this.compression.reset();
@@ -633,7 +627,7 @@ export class AgentLoop {
       await this.emitTransition("send");
       this.emit("phase", {
         phase: "resume",
-        message: "Retomando execução…",
+        message: "Continuando execução…",
       });
       this.emit("memory", {
         message: `Checkpoint: ${this.state.messages.length} mensagens, fase ${
@@ -712,7 +706,7 @@ export class AgentLoop {
         this.appendResumeInstruction();
         this.emit("phase", {
           phase: "resume",
-          message: "Retomando a partir do histórico salvo no chat…",
+          message: "Continuando execução…",
         });
       }
 
@@ -2576,13 +2570,16 @@ export class AgentLoop {
 
     const existingId = await this.resolveExistingRunMessageId();
     if (existingId) {
+      const updateData: Record<string, unknown> = {
+        tool_calls: [],
+        meta,
+      };
+      if (text) {
+        updateData.parts = [{ type: "text", text }];
+      }
       await this.sb
         .from("messages")
-        .update({
-          parts: [{ type: "text", text }],
-          tool_calls: [],
-          meta,
-        })
+        .update(updateData)
         .eq("id", existingId);
       await this.sb
         .from("projects")
@@ -2592,6 +2589,8 @@ export class AgentLoop {
         .eq("id", this.state.projectId);
       return;
     }
+
+    if (!text) return;
 
     const { data } = await this.sb
       .from("messages")

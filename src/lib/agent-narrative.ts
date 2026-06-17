@@ -6,7 +6,7 @@ const PHASE_LABELS: Record<string, string> = {
   execute: "Implementando as mudanças",
   observe: "Verificando se tudo compila",
   summarize: "Finalizando a resposta",
-  resume: "Retomando execução",
+  resume: "Continuando",
   taste: "Concierge",
   taste_chat: "Concierge",
   done: "Concluído",

@@ -34,7 +34,7 @@ const TIMELINE_TYPES = new Set([
 ]);
 
 const GENERIC_FAILURE_RE =
-  /corrigindo erros de build|loop budget|retomando automaticamente|resumable/i;
+  /loop budget|resumable/i;
 
 export function isTerminalAssistantMeta(meta: Record<string, unknown> | null | undefined): boolean {
   if (!meta || typeof meta !== "object") return false;
