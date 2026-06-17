@@ -526,6 +526,15 @@ Deno.serve(async (req) => {
         });
       }
 
+      // Mensagem do usuário durante awaiting_user: finaliza run de espera,
+      // nova run começa do histórico (agente vê clarify + resposta no contexto).
+      if (isAwaiting && awaitingRun?.id && !resumeRun) {
+        await supabase
+          .from("agent_runs")
+          .update({ status: "completed", finished_at: new Date().toISOString() })
+          .eq("id", awaitingRun.id);
+      }
+
       if (resumeRun) runningLocks.delete(projectId);
       runningLocks.set(projectId, Promise.resolve());
 

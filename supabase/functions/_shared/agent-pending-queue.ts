@@ -81,7 +81,7 @@ export async function expireStaleRuns(
     .from("agent_runs")
     .select("id, meta, started_at, heartbeat_at")
     .eq("project_id", projectId)
-    .in("status", ["running", "pending"]);
+    .in("status", ["running", "pending", "awaiting_user"]);
 
   if (!candidates?.length) return 0;
 
