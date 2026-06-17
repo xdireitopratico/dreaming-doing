@@ -228,6 +228,29 @@
   color: var(--text-muted);
 }
 
+.forge-inspector-thinking-header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border-forge);
+  font: var(--font-thought);
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.forge-inspector-thinking-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-accent);
+  animation: forge-details-pulse 1.2s ease-in-out infinite;
+}
+
 .forge-inspector-details-footer-dot {
   width: 6px;
   height: 6px;

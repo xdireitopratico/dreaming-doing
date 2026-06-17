@@ -1,6 +1,6 @@
 import type { AgentProgress } from "@/lib/agent-progress";
 import type { AgentRunView } from "@/lib/forge-run";
-import { hasFirstInspectorToken, resolveLatencyThinking } from "@/lib/forge-run";
+import { resolveLatencyThinking } from "@/lib/forge-run";
 import { collapseNarrationBuffer } from "@/lib/narration-dedupe";
 
 export type TurnThinking = {
@@ -27,7 +27,10 @@ export function resolveTurnThinking(
   }
 
   if (!runStartedAtMs) {
-    if (resolved && hasFirstInspectorToken(resolved)) {
+    const hasThinkingEvidence = resolved?.timeline.some(
+      (e) => e.type === "assistant_text" && e.data?.thinking === true,
+    );
+    if (resolved && hasThinkingEvidence) {
       const first = resolved.timeline.find(
         (e) =>
           e.type === "assistant_text" &&
@@ -64,7 +67,10 @@ export function resolveTurnThinking(
     return { active: true, startedAtMs: runStartedAtMs };
   }
 
-  if (resolved && hasFirstInspectorToken(resolved)) {
+  const hasThinkingEvidence2 = resolved?.timeline.some(
+    (e) => e.type === "assistant_text" && e.data?.thinking === true,
+  );
+  if (resolved && hasThinkingEvidence2) {
     const first = resolved.timeline.find(
       (e) =>
         e.type === "assistant_text" &&

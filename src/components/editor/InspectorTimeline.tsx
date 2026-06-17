@@ -79,23 +79,23 @@ export function InspectorTimeline({
   return (
     <div className="forge-inspector-details" data-testid="inspector-timeline">
       <div ref={scrollRef} className="forge-inspector-details-scroll">
+        {showThinkingFooter && (
+          <div className="forge-inspector-thinking-header" data-testid="inspector-thinking-header">
+            <span className="forge-inspector-thinking-dot" aria-hidden />
+            {latencyThinking?.active && latencyThinking.startedAtMs ? (
+              <ForgeThinking
+                variant="latency"
+                startedAtMs={latencyThinking.startedAtMs}
+                durationMs={latencyThinking.durationMs}
+                active
+              />
+            ) : (
+              <span>Thinking…</span>
+            )}
+          </div>
+        )}
         <InspectorActivityFeed items={timelineItems} onOpenFile={onOpenFile} running={running} />
       </div>
-      {showThinkingFooter && (
-        <footer className="forge-inspector-details-footer" data-testid="inspector-thinking-footer">
-          <span className="forge-inspector-details-footer-dot" aria-hidden />
-          {latencyThinking?.active && latencyThinking.startedAtMs ? (
-            <ForgeThinking
-              variant="latency"
-              startedAtMs={latencyThinking.startedAtMs}
-              durationMs={latencyThinking.durationMs}
-              active
-            />
-          ) : (
-            <span>Thinking…</span>
-          )}
-        </footer>
-      )}
     </div>
   );
 }
