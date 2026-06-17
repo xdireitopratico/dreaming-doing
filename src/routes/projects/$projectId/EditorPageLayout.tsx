@@ -288,6 +288,7 @@ export function EditorPageLayout({
     const runId = agent.activeRunId;
     if (!runId || runId === PENDING_RUN_ID) return;
     if (!running) return;
+    if (jobWorkspaceFocus?.runId === runId) return;
     if (agent.progress.conversational) return;
     if (pendingPlan) return;
     if (isInspectorDismissedForRun(runId)) return;
@@ -310,6 +311,7 @@ export function EditorPageLayout({
   }, [
     running,
     agent.activeRunId,
+    jobWorkspaceFocus,
     agent.progress,
     pendingPlan,
     isInspectorDismissedForRun,

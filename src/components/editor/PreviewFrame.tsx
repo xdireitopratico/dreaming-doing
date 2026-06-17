@@ -264,7 +264,7 @@ export function PreviewFrame({
 
         {view === "iframe-live" && iframeSrc && (
           <div className={surfaceClass("forge-preview-iframe-wrap relative")}>
-            {previewLiveUpdating && !previewSyncing && !warming && !iframeLoading ? (
+              {previewLiveUpdating && !agentRunning && !previewSyncing && !warming && !iframeLoading ? (
               <div className="pointer-events-none absolute right-3 top-3 z-20 rounded-full bg-neutral-900/85 px-3 py-1 text-xs font-medium text-white shadow-sm">
                 Preview ao vivo
               </div>
