@@ -120,7 +120,7 @@ export function AiDiffViewer({
       {/* Diff list + selected diff viewer */}
       <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
         {/* File list sidebar */}
-        <div className="border-b border-[var(--border)] bg-[var(--surface-1)]/40 overflow-x-auto shrink-0">
+        <div className="border-b border-[var(--border)] bg-[var(--bg-hover)] overflow-x-auto shrink-0">
           <div className="flex items-center h-8 px-2 gap-0.5">
             <AnimatePresence mode="popLayout">
               {diffs
@@ -184,7 +184,7 @@ export function AiDiffViewer({
                     <motion.div
                       initial={{ opacity: 0, y: -4 }}
                       animate={{ opacity: 1, y: 0 }}
-                      className="flex items-center gap-2 px-3 h-8 bg-[var(--surface-1)]/60 border-b border-[var(--border)] shrink-0"
+                      className="flex items-center gap-2 px-3 h-8 bg-[var(--bg-hover)] border-b border-[var(--border)] shrink-0"
                     >
                       <span className="font-mono text-[9px] tracking-[0.15em] uppercase text-[var(--text-dim)]">
                         {diff.path}

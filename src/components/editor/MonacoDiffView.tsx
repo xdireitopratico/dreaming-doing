@@ -48,7 +48,7 @@ export function MonacoDiffView({ path, before, after, language, className }: Mon
 
   return (
     <div className={cn("flex flex-col h-full min-h-0 bg-[var(--bg-hover)]", className)}>
-      <div className="flex items-center justify-end h-7 px-2 bg-[var(--surface-1)] border-b border-[var(--border)] shrink-0">
+      <div className="flex items-center justify-end h-7 px-2 bg-[var(--bg-hover)] border-b border-[var(--border)] shrink-0">
         <button
           type="button"
           onClick={() => setRenderSideBySide((v) => !v)}
