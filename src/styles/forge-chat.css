@@ -1296,3 +1296,41 @@
   gap: 6px;
   margin: 0 var(--space-xs) var(--space-xs);
 }
+
+/* Review callout — aparece entre mini-card e closing quando job done com fileCount > 0 */
+.chat-review-callout {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm, 8px);
+  margin: var(--space-xs, 4px) 0;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--bg-subtle, rgba(255, 255, 255, 0.04));
+  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.08));
+  font-size: 13px;
+}
+
+.chat-review-callout-label {
+  color: var(--text-secondary, #6b7280);
+}
+
+.chat-review-callout-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.chat-review-callout-btn {
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.12));
+  background: transparent;
+  color: var(--text-primary, inherit);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.chat-review-callout-btn:hover {
+  background: var(--bg-hover, rgba(255, 255, 255, 0.06));
+}
+
