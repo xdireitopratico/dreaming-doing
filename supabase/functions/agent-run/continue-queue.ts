@@ -16,6 +16,39 @@ import type { AgentPreferencesPayload } from "./connector-keys.ts";
 
 type InngestEventName = "agent/plan.requested" | "agent/build.requested";
 
+const ACQUIRE_LOCK_RETRIES = 3;
+const ACQUIRE_LOCK_BASE_DELAY_MS = 350;
+
+async function acquireAgentRunLockWithRetry(
+  supabase: SupabaseClient,
+  projectId: string,
+  conversationId: string,
+  userId: string,
+): Promise<{ lockedId: string | null; lockErr: unknown }> {
+  let lastErr: unknown;
+  for (let attempt = 0; attempt < ACQUIRE_LOCK_RETRIES; attempt += 1) {
+    const { data: lockedId, error: lockErr } = await supabase.rpc("acquire_agent_run_lock", {
+      p_project_id: projectId,
+      p_conversation_id: conversationId,
+      p_user_id: userId,
+    });
+
+    if (!lockErr && lockedId) {
+      return { lockedId, lockErr: null };
+    }
+
+    lastErr = lockErr;
+    if (attempt < ACQUIRE_LOCK_RETRIES - 1) {
+      await new Promise((resolve) => {
+        const delay = ACQUIRE_LOCK_BASE_DELAY_MS * 2 ** attempt + Math.floor(Math.random() * 250);
+        setTimeout(resolve, delay);
+      });
+    }
+  }
+
+  return { lockedId: null, lockErr: lastErr };
+}
+
 export type ContinueQueueResult = {
   continued: boolean;
   runId?: string;
@@ -117,11 +150,12 @@ export async function handleContinueQueue(
     }
   }
 
-  const { data: lockedId, error: lockErr } = await supabase.rpc("acquire_agent_run_lock", {
-    p_project_id: projectId,
-    p_conversation_id: conversationId,
-    p_user_id: userId,
-  });
+  const { lockedId: lockedId, lockErr } = await acquireAgentRunLockWithRetry(
+    supabase,
+    projectId,
+    conversationId,
+    userId,
+  );
 
   if (lockErr || !lockedId) {
     const pendingCount = await countPendingMessages(supabase, projectId, userId);
