@@ -292,10 +292,17 @@ export function EditorPageLayout({
     if (pendingPlan) return;
     if (isInspectorDismissedForRun(runId)) return;
     if (autoOpenedInspectorRunRef.current === runId) return;
-    if (!hasFirstInspectorToken(agent.progress)) return;
+    const hasStartedWork = (agent.progress.tools?.length ?? 0) > 0 || (agent.progress.diffs?.length ?? 0) > 0;
+    if (!hasStartedWork) return;
 
-    autoOpenedInspectorRunRef.current = runId;
-    handleOpenInspector(runId, "timeline");
+    const timer = window.setTimeout(() => {
+      if (autoOpenedInspectorRunRef.current !== runId && !isInspectorDismissedForRun(runId)) {
+        autoOpenedInspectorRunRef.current = runId;
+        handleOpenInspector(runId, "timeline");
+      }
+    }, 4000);
+
+    return () => window.clearTimeout(timer);
   }, [
     running,
     agent.activeRunId,
