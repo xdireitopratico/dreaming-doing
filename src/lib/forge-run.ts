@@ -436,27 +436,21 @@ export function deriveTasksFromPlan(
     });
 }
 
-/** Derive tasks from step/step_result events when no plan exists (hardcore mode). */
+/** Derive tasks from actual tool executions when no plan exists (hardcore mode). */
 export function deriveTasksFromSteps(progress: AgentProgress): ForgeTaskItem[] {
-  const tasks: ForgeTaskItem[] = [];
-  const stepEvents = progress.timeline.filter((ev) => ev.type === "step");
-  const resultEvents = progress.timeline.filter((ev) => ev.type === "step_result");
-  const total = progress.totalSteps ?? stepEvents.length;
-  const current = progress.currentStep ?? 0;
+  const recentTools = progress.tools.slice(-6);
+  if (recentTools.length === 0) return [];
 
-  for (let i = 0; i < Math.min(total, 6); i++) {
-    const result = resultEvents[i];
+  return recentTools.map((tool, idx) => {
+    const path = pathFromArgs(tool.args);
+    const label = toolBriefing(tool.name, path);
     let status: TaskStatus = "pending";
-    if (result) status = result.data?.ok !== false ? "done" : "failed";
-    else if (i === current && !progress.finished) status = "active";
+    if (tool.ok === true) status = "done";
+    else if (tool.ok === false || !!tool.error) status = "failed";
+    else status = "active";
 
-    tasks.push({
-      id: `step-${i}`,
-      label: (stepEvents[i]?.data?.message as string) ?? `Passo ${i + 1}/${total}`,
-      status,
-    });
-  }
-  return tasks;
+    return { id: `tool-${idx}-${tool.name}`, label, status };
+  });
 }
 
 /** Job ativo confirmado — sem autoResuming nem flags stale. */
