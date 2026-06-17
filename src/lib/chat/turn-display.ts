@@ -64,6 +64,21 @@ export function resolveTurnThinking(
     return { active: true, startedAtMs: runStartedAtMs };
   }
 
+  if (resolved && hasFirstInspectorToken(resolved)) {
+    const first = resolved.timeline.find(
+      (e) =>
+        e.type === "assistant_text" &&
+        typeof e.data?.text === "string" &&
+        String(e.data.text).trim().length > 0,
+    );
+    const startedAt = first?.timestamp ?? Date.now();
+    return {
+      active: false,
+      startedAtMs: startedAt,
+      durationMs: Math.max(500, Date.now() - startedAt),
+    };
+  }
+
   return null;
 }
 

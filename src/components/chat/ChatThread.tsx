@@ -25,7 +25,9 @@ export function ChatThread({
       {items.map((item, index) => {
         // Índice estável — runId muda (__pending__ → UUID) sem remontar o turno inteiro.
         const key =
-          item.kind === "user" ? `user-${item.message.id}` : `assistant-slot-${index}`;
+          item.kind === "user"
+            ? `user-${item.message.id}`
+            : `assistant-${item.runId ?? item.message?.id ?? `fallback-${index}`}`;
         return (
           <ChatMessage
             key={key}

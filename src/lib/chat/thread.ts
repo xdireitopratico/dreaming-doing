@@ -265,7 +265,16 @@ function attachFrozenProgressToRun(
 ): RawThreadItem[] {
   return items.map((item) => {
     if (item.kind !== "assistant" || item.runId !== runId) return item;
-    if (item.message && hasMaterializedCardSnapshot(item.message)) return item;
+    if (item.message && hasMaterializedCardSnapshot(item.message)) {
+      if (progress.latencyThoughtMs != null && progress.latencyThoughtMs > 0) {
+        return {
+          ...item,
+          live: item.live ?? progress,
+          isActive: false,
+        };
+      }
+      return item;
+    }
     return {
       ...item,
       live: item.live ?? progress,

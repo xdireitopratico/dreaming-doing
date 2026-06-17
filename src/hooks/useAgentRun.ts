@@ -327,9 +327,9 @@ export function useAgentRun() {
         next = withFrozenLatencyThought(next, activeRunStartedAtMsRef.current);
         return next;
       });
-      if (terminal) {
-        setActiveRunStartedAtMs(null);
-      }
+      // Nota: activeRunStartedAtMs é limpo em syncRunStatus/releaseLiveRunSlot,
+      // não aqui, para evitar race onde withFrozenLatencyThought perde o ref
+      // antes de poder congelar latencyThoughtMs.
       return terminal;
     },
     [],
