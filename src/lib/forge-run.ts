@@ -436,23 +436,6 @@ export function deriveTasksFromPlan(
     });
 }
 
-/** Derive tasks from actual tool executions when no plan exists (hardcore mode). */
-export function deriveTasksFromSteps(progress: AgentProgress): ForgeTaskItem[] {
-  const recentTools = progress.tools.slice(-6);
-  if (recentTools.length === 0) return [];
-
-  return recentTools.map((tool, idx) => {
-    const path = pathFromArgs(tool.args);
-    const label = toolBriefing(tool.name, path);
-    let status: TaskStatus = "pending";
-    if (tool.ok === true) status = "done";
-    else if (tool.ok === false || !!tool.error) status = "failed";
-    else status = "active";
-
-    return { id: `tool-${idx}-${tool.name}`, label, status };
-  });
-}
-
 /** Job ativo confirmado — sem autoResuming nem flags stale. */
 export function hasActiveJob(
   progress: AgentProgress,
@@ -800,9 +783,7 @@ export function buildAgentRunView(
   const jobPlan = opts?.jobPlan ?? progress.pendingPlan;
   const forgeTimeline = buildForgeTimeline(progress.timeline, jobActive);
 
-  const tasks = jobPlan?.steps?.length
-    ? deriveTasksFromPlan(jobPlan, progress)
-    : deriveTasksFromSteps(progress);
+  const tasks = jobPlan?.steps?.length ? deriveTasksFromPlan(jobPlan, progress) : [];
 
   const currentTaskIndex = Math.max(
     0,
