@@ -62,6 +62,18 @@ export async function executeAgentRun(
   const startMs = Date.now();
   const { runId, projectId, conversationId, userId, resume: resumeParam, planMode } = params;
 
+  // Infra-debug: log estruturado do início do executor. Sem isso, o
+  // caminho entre Inngest e o AgentLoop é invisível.
+  const execStartedAt = Date.now();
+  logger.info("agent_run.execute_started", {
+    runId,
+    projectId,
+    conversationId,
+    planMode,
+    resumeParam,
+    hasApprovedPlanSource: !!params.planSourceRunId,
+  });
+
   // Race-safe cancel check: if the user canceled between Inngest's check
   // and this call, exit early without touching state.
   const { data: preCheck } = await supabase
@@ -203,7 +215,21 @@ export async function executeAgentRun(
     robinPool = setup.robinPool;
     effectiveRobin = setup.effectiveRobin;
     tasteStart = setup.tasteStart;
+    logger.info("agent_run.provider_resolved", {
+      runId,
+      provider: mainCfg.label,
+      model: mainCfg.model,
+      effectiveRobin,
+      tasteStart,
+      poolSize: robinPool?.size ?? 0,
+    });
   } catch (err: unknown) {
+    // Infra-debug: loga o erro raw antes de marcar o run como failed.
+    logger.error("agent_run.provider_resolve_failed", {
+      runId,
+      errorMessage: (err as Error)?.message,
+      errorName: (err as Error)?.name,
+    });
     const msg = (err as Error)?.message ?? "Provider LLM não configurado";
     await supabase
       .from("agent_runs")
@@ -251,6 +277,13 @@ export async function executeAgentRun(
     userContent: lastUserContent,
     projectHasSandbox,
     hasApprovedPlanInHistory,
+    isApprovedPlanBuild,
+  });
+  logger.info("agent_run.sandbox_decision", {
+    runId,
+    planMode,
+    allocateSandbox: allocateSandboxLocal,
+    projectHasSandbox,
     isApprovedPlanBuild,
   });
 

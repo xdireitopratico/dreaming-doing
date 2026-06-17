@@ -4,6 +4,7 @@
 // Cheap: Groq → Lovable AI (flash-lite) → main.
 import { createLLMProvider } from "./adapters/llm.ts";
 import type { LLMProvider } from "./types.ts";
+import { logger } from "../_shared/logger.ts";
 
 export interface ProviderConfig {
   provider: string;
@@ -179,12 +180,31 @@ export function pickCheap(main: ProviderConfig, injected?: Record<string, string
 }
 
 export function buildProvider(cfg: ProviderConfig): LLMProvider {
-  return createLLMProvider({
+  // Infra-debug: loga qual provider+model+baseUrl foi escolhido. Sem
+  // isso, erros de adapter NVIDIA NIM (ex: 500 com "invalid type: unit
+  // variant") são invisíveis — só o `robin.robin_llm_error` mostra o
+  // errMessage, mas não sabemos qual adapter gerou.
+  logger.debug("agent.build_provider", {
     provider: cfg.provider,
-    apiKey: cfg.apiKey,
     model: cfg.model,
     baseUrl: cfg.baseUrl,
+    label: cfg.label,
   });
+  try {
+    return createLLMProvider({
+      provider: cfg.provider,
+      apiKey: cfg.apiKey,
+      model: cfg.model,
+      baseUrl: cfg.baseUrl,
+    });
+  } catch (e) {
+    logger.error("agent.build_provider_failed", {
+      provider: cfg.provider,
+      model: cfg.model,
+      errorMessage: (e as Error)?.message,
+    });
+    throw e;
+  }
 }
 
 export { MAX_LLM_RETRIES, llmBackoffMs } from "./llm-retry.ts";

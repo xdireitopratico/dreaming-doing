@@ -30,6 +30,27 @@ export function isRetryableLlmError(err: unknown): boolean {
   return isRateLimitError(err) || isOverloadError(err) || isConnectionError(err);
 }
 
+/**
+ * Erro de provider externo (HTTP 5xx sem ser 503/529) — ex: NVIDIA NIM
+ * retornando 500 com "invalid type: unit variant, expected newtype variant"
+ * por causa de payload incompatível.
+ *
+ * Diferente de `isRetryableLlmError` (que cobre 429/529/503/connection):
+ *   - Retry com mesma config NÃO vai consertar (problema é de payload/serialização)
+ *   - Retry com outra chave do MESMO pool também não (mesmo provider)
+ *   - Útil retry seria com OUTRO provedor (groq/anthropic/etc)
+ *
+ * Por isso NÃO está incluído em `isRetryableLlmError`. Quem quiser
+ * classificar 500 como retryable em outros lugares (ex: Auto mode que
+ * troca provedor) pode importar esta função diretamente.
+ */
+export function isProviderError(err: unknown): boolean {
+  const msg = errorMessage(err);
+  // 500 ou 502 sem cair em 503 (overload)
+  if (/\b500\b/.test(msg) || /\b502\b/.test(msg) || /\b504\b/.test(msg)) return true;
+  return msg.toLowerCase().includes("internal server error");
+}
+
 export function parseRetryAfterSec(err: unknown): number | null {
   const msg = errorMessage(err);
   const headerMatch = msg.match(/retry[- ]after[:\s]+(\d+)/i);
@@ -93,6 +114,12 @@ export function friendlyLlmError(err: unknown, robinActive: boolean): string {
   }
   if (isConnectionError(err)) {
     return "Conexão com o modelo instável. Seu histórico está salvo — use Continuar para retomar.";
+  }
+  if (isProviderError(err)) {
+    return (
+      "Provedor de modelo retornou erro 5xx (provavelmente incompatibilidade de payload). " +
+      "Tente outro modelo em /models ou troque a chave do pool ROBIN em /api."
+    );
   }
   return errorMessage(err).slice(0, 400);
 }

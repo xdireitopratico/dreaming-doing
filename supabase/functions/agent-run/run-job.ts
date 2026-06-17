@@ -24,6 +24,7 @@ import { loadCheckpoint } from "./checkpoint.ts";
 import { buildSandboxEnv } from "./sandbox-env.ts";
 import { PLAN_APPROVED_PREFIX } from "./run-context.ts";
 import type { ChatMessage, PlanStep } from "./types.ts";
+import { logger } from "../_shared/logger.ts";
 
 export type AgentJobParams = {
   projectId: string;
@@ -155,6 +156,20 @@ export async function executeAgentJob(
     planMode = false,
     skipConversationalGate = false,
   } = params;
+
+  // Infra-debug: log estruturado do início do job — sem isso, qualquer
+  // falha em run-job.ts é invisível (não havia logger aqui).
+  const jobStartedAt = Date.now();
+  logger.info("agent.run_job_started", {
+    runId: agentRunId ?? undefined,
+    projectId,
+    conversationId,
+    planMode,
+    resumeRun,
+    enabledSkillCount: enabledSkillIds?.length ?? 0,
+    enabledMcpCount: enabledMcpIds?.length ?? 0,
+    skipConversationalGate,
+  });
 
   // Fast cancel check (covers both inline fallback in agent-run and worker chunks)
   const { data: pre } = await supabase
@@ -396,5 +411,19 @@ export async function executeAgentJob(
   } else {
     await sandbox.destroy().catch(() => {});
   }
+  // Infra-debug: log de fim do job. Cobre o caminho "feliz" e o "fim com
+  // erro do loop" (canceled, resumable, failed). Soma com agent.run_job_threw
+  // dá o quadro completo.
+  logger.info("agent.run_job_finished", {
+    runId: agentRunId ?? undefined,
+    durationMs: Date.now() - jobStartedAt,
+    ok: result.ok,
+    steps: result.steps,
+    resumable: !!result.resumable,
+    canceled: !!result.canceled,
+    buildFix: !!result.buildFix,
+    error: result.error?.slice(0, 200),
+    toolsUsedCount: result.toolsUsed?.length ?? 0,
+  });
   return result;
 }

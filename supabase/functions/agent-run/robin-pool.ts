@@ -10,6 +10,7 @@ import {
   parseRetryAfterSec,
 } from "./llm-errors.ts";
 import { llmBackoffMs, MAX_LLM_RETRIES, sleepMs } from "./llm-retry.ts";
+import { logger } from "../_shared/logger.ts";
 
 export type StreamEmit = (type: string, data: Record<string, unknown>) => void;
 
@@ -88,6 +89,12 @@ export class ResilientLLM implements LLMProvider {
     const poolSize = this.pool?.size ?? 1;
     const attempts = Math.max(poolSize, MAX_LLM_RETRIES);
     let lastErr: unknown = null;
+    // Infra-debug: log de início do chat ROBIN. Esse é o caminho do
+    // Erro #2 (NVIDIA NIM 500) — sem esse log, perdemos o que o provider
+    // externo respondeu e qual chave foi usada.
+    const chatStartedAt = Date.now();
+    const model = this.cfg.model;
+    const label = this.cfg.label;
 
     for (let attempt = 0; attempt < attempts; attempt++) {
       let apiKey = this.pool?.nextKey() ?? this.cfg.apiKey;
@@ -118,14 +125,46 @@ export class ResilientLLM implements LLMProvider {
           requestIndex: this.requestCount,
           poolSize: this.pool.size,
         });
+        logger.info("agent.robin_attempt", {
+          model,
+          label,
+          attempt: attempt + 1,
+          maxAttempts: attempts,
+          keyHint,
+          requestIndex: this.requestCount,
+        });
       }
 
       const llm = buildProvider({ ...this.cfg, apiKey });
 
       try {
-        return await llm.chat(params);
+        const llmStartedAt = Date.now();
+        const result = await llm.chat(params);
+        logger.info("agent.robin_llm_ok", {
+          model,
+          label,
+          attempt: attempt + 1,
+          keyHint,
+          durationMs: Date.now() - llmStartedAt,
+        });
+        return result;
       } catch (err) {
         lastErr = err;
+        const errMessage = (err as Error)?.message ?? String(err);
+        // Infra-debug: loga o erro raw (inclui status HTTP, payload
+        // de provider, etc). Sem isso, o Erro #2 fica invisível.
+        logger.warn("agent.robin_llm_error", {
+          model,
+          label,
+          attempt: attempt + 1,
+          keyHint,
+          errorMessage: errMessage.slice(0, 500),
+          errorName: (err as Error)?.name,
+          retryable: isRetryableLlmError(err),
+          isRateLimit: isRateLimitError(err),
+          isOverload: isOverloadError(err),
+          isConnection: isConnectionError(err),
+        });
 
         if (isRetryableLlmError(err) && attempt < attempts - 1) {
           const retryAfter = parseRetryAfterSec(err);
@@ -169,6 +208,15 @@ export class ResilientLLM implements LLMProvider {
           continue;
         }
 
+        // Infra-debug: erro final do robin — todas as tentativas falharam.
+        logger.error("agent.robin_exhausted", {
+          model,
+          label,
+          attempts,
+          durationMs: Date.now() - chatStartedAt,
+          lastErrorMessage: errMessage.slice(0, 500),
+          lastErrorName: (err as Error)?.name,
+        });
         const friendly = friendlyLlmError(err, !!this.pool);
         this.emit("error", {
           message: friendly,

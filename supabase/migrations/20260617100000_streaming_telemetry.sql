@@ -49,7 +49,7 @@ CREATE POLICY "agent_streaming_telemetry_select_own"
   FOR SELECT
   TO authenticated
   USING (project_id IN (
-    SELECT id FROM public.projects WHERE user_id = auth.uid()
+    SELECT id FROM public.projects WHERE owner_id = auth.uid()
   ));
 
 -- Service role can write (the client uses anon key with a fire-and-forget
@@ -61,5 +61,5 @@ CREATE POLICY "agent_streaming_telemetry_insert_own"
   FOR INSERT
   TO authenticated
   WITH CHECK (project_id IN (
-    SELECT id FROM public.projects WHERE user_id = auth.uid()
+    SELECT id FROM public.projects WHERE owner_id = auth.uid()
   ));

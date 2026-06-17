@@ -1547,7 +1547,16 @@ export class AgentLoop {
   }> {
     const message = summary.trim() || "Erro no modo Plan.";
     const err = (error ?? message).trim() || message;
-    console.error(`[loop] plan_mode_failure: ${err} | step=${steps} | tools=${toolsUsed.join(",")} | streamed=${this.llmResponseWasStreamed}`);
+    // Infra-debug: estruturado com runId/step/tools/streamed pra correlacionar
+    // com o que o usuário viu no chat e com os agent_stream_events do DB.
+    logger.error("agent.plan_mode_failure", {
+      runId: this.runId ?? undefined,
+      step: steps,
+      tools: toolsUsed.join(","),
+      streamed: this.llmResponseWasStreamed,
+      error: err,
+      message,
+    });
     this.emit("assistant_text", { text: message, final: true });
     await this.persistFinal(message, { lastFinishOk: false });
     await this.clearCheckpoint();
@@ -1695,6 +1704,9 @@ export class AgentLoop {
 
       const compressed = await this.compression.compress(this.state.messages);
       let response: ChatResponse | null = null;
+      // Infra-debug: log pré-LLM com step/instruction/tools pra correlacionar
+      // com o que o LLM respondeu e com os agent_stream_events do DB.
+      const planModeStartedAt = Date.now();
       try {
         response = await this.llmChatPlanMode(
           model,
@@ -1702,6 +1714,16 @@ export class AgentLoop {
           compressed,
         );
       } catch (err: unknown) {
+        // Loga o err raw além da friendlyLlmError — `err.message` pode
+        // conter o que o provider externo rejeitou (ex: NVIDIA NIM 500 com
+        // "invalid type: unit variant"). Sem isso, perdemos a causa raiz.
+        logger.error("agent.plan_llm_call_failed", {
+          runId: this.runId ?? undefined,
+          step,
+          durationMs: Date.now() - planModeStartedAt,
+          errorMessage: (err as Error)?.message,
+          errorName: (err as Error)?.name,
+        });
         const message = friendlyLlmError(err, this.robinActive);
         return await this.finishPlanModeFailure(message, step, [...toolsUsed], message);
       }
@@ -1713,6 +1735,21 @@ export class AgentLoop {
           "Sem resposta do modelo.",
         );
       }
+      // Infra-debug: log pós-LLM com o que o modelo retornou. Sem content/tool_calls
+      // aqui, não dá pra reproduzir o Erro #1 ("Resposta sem tool nem texto").
+      logger.info("agent.plan_llm_response", {
+        runId: this.runId ?? undefined,
+        step,
+        durationMs: Date.now() - planModeStartedAt,
+        hasContent: typeof response.content === "string" && response.content.trim().length > 0,
+        contentLength: typeof response.content === "string" ? response.content.length : 0,
+        contentPreview: typeof response.content === "string"
+          ? response.content.slice(0, 200)
+          : null,
+        toolCallCount: response.tool_calls?.length ?? 0,
+        toolCallNames: (response.tool_calls ?? []).map((tc) => tc.name).join(",") || null,
+        streamed: this.llmResponseWasStreamed,
+      });
 
       const assistantText = (response.content ?? "").trim();
 
@@ -1797,6 +1834,21 @@ export class AgentLoop {
           this.emit("done", { summary: clean, conversational: true });
           return { ok: true, summary: clean, steps: step, toolsUsed: [...toolsUsed] };
         }
+        // Infra-debug: log estruturado quando o modelo não retorna nada útil.
+        // Esse é o caminho do Erro #1 ("Resposta sem tool nem texto") — sem
+        // essa info, não dá pra saber se o LLM retornou null, "", ou algo
+        // que o parser descartou.
+        logger.warn("agent.plan_empty_response", {
+          runId: this.runId ?? undefined,
+          step,
+          streamed: this.llmResponseWasStreamed,
+          contentType: typeof response.content,
+          contentIsNull: response.content === null,
+          contentIsEmptyString: response.content === "",
+          contentLength: typeof response.content === "string" ? response.content.length : 0,
+          toolCallCount: response.tool_calls?.length ?? 0,
+          assistantText: assistantText.slice(0, 200),
+        });
         return await this.finishPlanModeFailure(
           "Use clarify, create_plan ou ferramentas de exploração.",
           step,
@@ -1957,7 +2009,7 @@ export class AgentLoop {
       await this.sb.from("agent_runs").update(updateFields).eq("id", this.runId);
     } catch (err) {
       logger.error("agent_run.mark_status_failed", {
-        runId: this.runId,
+        runId: this.runId ?? undefined,
         status,
         error: (err as Error)?.message,
       });
@@ -2120,8 +2172,12 @@ export class AgentLoop {
 
     this.llmResponseWasStreamed = false;
     this.thinkingStreamStartedAt = null;
+    // Infra-debug: log pré-LLM com instruction resumida + forceTools.
+    // Esse é o caminho do Erro #2 (NVIDIA NIM 500) — sem timing, não dá
+    // pra saber se foi timeout do provider ou serialização rejeitada.
+    const buildModeStartedAt = Date.now();
     try {
-      return await model.chat({
+      const response = await model.chat({
         messages,
         tools: tools ?? mergeExecutionToolDefinitions(this.reg.getDefinitions(), false),
         tool_choice: forceTools ? "required" : "auto",
@@ -2149,7 +2205,31 @@ export class AgentLoop {
               });
             },
       });
+      // Infra-debug: log pós-LLM com o que o build loop recebeu. Mesmo
+      // formato do plan loop pra debug cruzado.
+      logger.info("agent.build_llm_response", {
+        runId: this.runId ?? undefined,
+        durationMs: Date.now() - buildModeStartedAt,
+        hasContent: typeof response.content === "string" && response.content.trim().length > 0,
+        contentLength: typeof response.content === "string" ? response.content.length : 0,
+        contentPreview: typeof response.content === "string"
+          ? response.content.slice(0, 200)
+          : null,
+        toolCallCount: response.tool_calls?.length ?? 0,
+        toolCallNames: (response.tool_calls ?? []).map((tc) => tc.name).join(",") || null,
+        streamed: this.llmResponseWasStreamed,
+        forceTools,
+      });
+      return response;
     } catch (err: unknown) {
+      // Infra-debug: loga o err raw (mesma razão do plan loop).
+      logger.error("agent.build_llm_call_failed", {
+        runId: this.runId ?? undefined,
+        durationMs: Date.now() - buildModeStartedAt,
+        forceTools,
+        errorMessage: (err as Error)?.message,
+        errorName: (err as Error)?.name,
+      });
       const message = friendlyLlmError(err, this.robinActive);
       this.emit("error", { message, recoverable: true });
       throw new Error(message);
@@ -2429,7 +2509,7 @@ export class AgentLoop {
         steps: plan.steps,
         ttlMs: Number.MAX_SAFE_INTEGER,
         proposedAt: Date.now(),
-        runId: this.runId,
+        runId: this.runId ?? undefined,
         projectId: this.state.projectId,
       };
       snapshot.planSummary = plan.summary;
