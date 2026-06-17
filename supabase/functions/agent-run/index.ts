@@ -126,10 +126,6 @@ Deno.serve(async (req) => {
         await appendStreamEvent(supabase, runId, "canceled", {
           type: "canceled",
           message: "Cancelado pelo usuário",
-        });
-        await appendStreamEvent(supabase, runId, "finish", {
-          type: "finish",
-          ok: false,
           canceled: true,
           resumable: false,
         });
