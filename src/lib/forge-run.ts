@@ -269,6 +269,130 @@ export function buildForgeTimeline(timeline: SSEEvent[], running = false): Forge
         ok: false,
         text: typeof data.message === "string" ? data.message.slice(0, 200) : "Erro na execução",
       });
+      continue;
+    }
+
+    if (ev.type === "step") {
+      const current = typeof data.current === "number" ? data.current : 0;
+      const total = typeof data.total === "number" ? data.total : 0;
+      items.push({ type: "TASK", id: `step-${ts}`, label: `Passo ${current + 1}/${total}` });
+      continue;
+    }
+
+    if (ev.type === "classify") {
+      const model = typeof data.model === "string" ? data.model : "modelo";
+      items.push({ type: "TASK", id: `classify-${ts}`, label: `Classificando com ${model}` });
+      continue;
+    }
+
+    if (ev.type === "skills") {
+      const active = Array.isArray(data.active) ? data.active : [];
+      if (active.length > 0) {
+        items.push({ type: "TASK", id: `skills-${ts}`, label: `Skills: ${active.join(", ")}` });
+      }
+      continue;
+    }
+
+    if (ev.type === "build_log") {
+      const command = typeof data.command === "string" ? data.command : "build";
+      const ok = data.ok !== false;
+      items.push({
+        type: "RESULT",
+        id: `build-${ts}`,
+        ok,
+        text: `Build ${command}: ${ok ? "sucesso" : "falha"}`,
+      });
+      continue;
+    }
+
+    if (ev.type === "file_diff") {
+      const path = typeof data.path === "string" ? data.path : "";
+      const op = typeof data.op === "string" ? data.op : "edit";
+      if (path) {
+        const label = op === "write" ? `Criando ${fileBase(path)}` : `Editando ${fileBase(path)}`;
+        items.push({ type: "TASK", id: `diff-${ts}`, label: truncate(label, 120) });
+      }
+      continue;
+    }
+
+    if (ev.type === "typecheck_fail") {
+      const errors = Array.isArray(data.errors) ? data.errors : [];
+      items.push({
+        type: "RESULT",
+        id: `typecheck-${ts}`,
+        ok: false,
+        text: `Type check: ${errors.length} erro(s)`,
+      });
+      continue;
+    }
+
+    if (ev.type === "fsm_transition") {
+      const to = typeof data.to === "string" ? data.to : "unknown";
+      items.push({ type: "TASK", id: `fsm-${ts}`, label: `Estado: ${to}` });
+      continue;
+    }
+
+    if (ev.type === "plan_proposed") {
+      const summary = typeof data.summary === "string" ? data.summary : "Plano proposto";
+      items.push({ type: "TASK", id: `plan-${ts}`, label: truncate(summary, 120) });
+      continue;
+    }
+
+    if (ev.type === "gate_decision") {
+      const awaiting = data.awaiting === true;
+      items.push({
+        type: "TASK",
+        id: `gate-${ts}`,
+        label: awaiting ? "Aguardando aprovação" : "Gate decidido",
+      });
+      continue;
+    }
+
+    if (ev.type === "rate_limit") {
+      items.push({ type: "TASK", id: `rate-${ts}`, label: "Rate limit — aguardando" });
+      continue;
+    }
+
+    if (ev.type === "robin_rotate") {
+      items.push({ type: "TASK", id: `robin-${ts}`, label: "ROBIN rotacionando chave" });
+      continue;
+    }
+
+    if (ev.type === "connection_retry") {
+      items.push({ type: "TASK", id: `retry-${ts}`, label: "Reconectando..." });
+      continue;
+    }
+
+    if (ev.type === "context_pressure") {
+      const message = typeof data.message === "string" ? data.message : "Contexto sob pressão";
+      items.push({ type: "TASK", id: `pressure-${ts}`, label: truncate(message, 120) });
+      continue;
+    }
+
+    if (ev.type === "context_compress") {
+      items.push({ type: "TASK", id: `compress-${ts}`, label: "Comprimindo contexto" });
+      continue;
+    }
+
+    if (ev.type === "start") {
+      items.push({ type: "TASK", id: `start-${ts}`, label: "Iniciando execução" });
+      continue;
+    }
+
+    if (ev.type === "resume") {
+      items.push({ type: "TASK", id: `resume-${ts}`, label: "Retomando execução" });
+      continue;
+    }
+
+    if (ev.type === "canceled") {
+      const message = typeof data.message === "string" ? data.message : "Cancelado";
+      items.push({
+        type: "RESULT",
+        id: `canceled-${ts}`,
+        ok: false,
+        text: truncate(message, 120),
+      });
+      continue;
     }
   }
 
@@ -310,6 +434,29 @@ export function deriveTasksFromPlan(
       else if (executing && idx === current) status = "active";
       return { id: step.id, label: step.description, status };
     });
+}
+
+/** Derive tasks from step/step_result events when no plan exists (hardcore mode). */
+export function deriveTasksFromSteps(progress: AgentProgress): ForgeTaskItem[] {
+  const tasks: ForgeTaskItem[] = [];
+  const stepEvents = progress.timeline.filter((ev) => ev.type === "step");
+  const resultEvents = progress.timeline.filter((ev) => ev.type === "step_result");
+  const total = progress.totalSteps ?? stepEvents.length;
+  const current = progress.currentStep ?? 0;
+
+  for (let i = 0; i < Math.min(total, 6); i++) {
+    const result = resultEvents[i];
+    let status: TaskStatus = "pending";
+    if (result) status = result.data?.ok !== false ? "done" : "failed";
+    else if (i === current && !progress.finished) status = "active";
+
+    tasks.push({
+      id: `step-${i}`,
+      label: (stepEvents[i]?.data?.message as string) ?? `Passo ${i + 1}/${total}`,
+      status,
+    });
+  }
+  return tasks;
 }
 
 /** Job ativo confirmado — sem autoResuming nem flags stale. */
@@ -659,7 +806,9 @@ export function buildAgentRunView(
   const jobPlan = opts?.jobPlan ?? progress.pendingPlan;
   const forgeTimeline = buildForgeTimeline(progress.timeline, jobActive);
 
-  const tasks = jobPlan?.steps?.length ? deriveTasksFromPlan(jobPlan, progress) : [];
+  const tasks = jobPlan?.steps?.length
+    ? deriveTasksFromPlan(jobPlan, progress)
+    : deriveTasksFromSteps(progress);
 
   const currentTaskIndex = Math.max(
     0,

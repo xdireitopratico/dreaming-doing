@@ -2,11 +2,20 @@ import { useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
+const INTRODUCTION_PHRASES = [
+  "Analisando seu pedido…",
+  "Preparando execução…",
+  "Configurando ambiente…",
+  "Inicializando agente…",
+  "Conectando ao FORGE…",
+];
+
 type ChatThinkingProps = {
   startedAtMs?: number;
   active: boolean;
   durationMs?: number;
   connectionState?: "connected" | "reconnecting" | "disconnected";
+  phase?: "introduction" | "thinking" | null;
 };
 
 function formatThoughtSeconds(ms: number): string {
@@ -14,7 +23,7 @@ function formatThoughtSeconds(ms: number): string {
   return `Thought for ${sec}s`;
 }
 
-export function ChatThinking({ startedAtMs, active, durationMs, connectionState }: ChatThinkingProps) {
+export function ChatThinking({ startedAtMs, active, durationMs, connectionState, phase }: ChatThinkingProps) {
   const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
@@ -35,9 +44,11 @@ export function ChatThinking({ startedAtMs, active, durationMs, connectionState 
     ? "Reconectando…"
     : isDisconnected
       ? "Conexão perdida — tentando reconectar…"
-      : active
-        ? "Thinking…"
-        : formatThoughtSeconds(liveMs);
+      : active && phase === "introduction"
+        ? INTRODUCTION_PHRASES[Math.floor(Math.random() * INTRODUCTION_PHRASES.length)]
+        : active
+          ? "Thinking…"
+          : formatThoughtSeconds(liveMs);
 
   return (
     <p

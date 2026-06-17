@@ -100,6 +100,7 @@ export function AssistantTurn({
             active={item.thinking.active}
             durationMs={item.thinking.durationMs}
             connectionState={item.thinking.connectionState}
+            phase={item.phase === "gather" ? "introduction" : null}
           />
         )}
 
