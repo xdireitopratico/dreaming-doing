@@ -76,6 +76,10 @@ export function MonacoDiffView({ path, before, after, language, className }: Mon
           modified={after}
           language={lang}
           theme="forge"
+          beforeMount={(monaco) => {
+            registerForgeTheme(monaco);
+            monaco.editor.setTheme("forge");
+          }}
           onMount={handleMount}
           options={{
             fontSize: 12,

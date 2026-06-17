@@ -242,6 +242,10 @@ export function AiDiffViewer({
                         language={getLanguageFromPath(diff.path)}
                         original={diff.before}
                         modified={diff.after}
+                        beforeMount={(monaco) => {
+                          registerForgeTheme(monaco);
+                          monaco.editor.setTheme("forge");
+                        }}
                         onMount={handleDiffMount}
                         options={
                           {

@@ -1449,10 +1449,18 @@ export class AgentLoop {
       });
     }
 
-    await this.persistFinal(closingText || "Pronto.", {
-      lastFinishOk: true,
-    });
-    await this.clearCheckpoint();
+    try {
+      await this.persistFinal(closingText || "Pronto.", {
+        lastFinishOk: true,
+      });
+    } catch (e) {
+      console.error("[loop] persistFinal failed", e);
+    }
+    try {
+      await this.clearCheckpoint();
+    } catch (e) {
+      console.error("[loop] clearCheckpoint failed", e);
+    }
     const tokens = this.compression.getTotalTokens();
     const costUsd = this.compression.getEstimatedCostUsd(this.router.mainCfg.model);
     this.emit("done", {
@@ -1972,7 +1980,7 @@ export class AgentLoop {
    * Em plan mode, marca a run como completed com `plan` em meta.
    */
   private async markRunStatus(
-    status: "running" | "completed" | "awaiting_user",
+    status: "running" | "completed" | "failed" | "awaiting_user",
     extra?: {
       plan?: ProposedPlan | null;
       awaitingUser?: Record<string, unknown>;
@@ -2003,7 +2011,7 @@ export class AgentLoop {
       const updateFields: Record<string, unknown> = { status, meta: nextMeta };
       if (status === "awaiting_user") {
         updateFields.finished_at = null;
-      } else if (status === "completed" || status === "running") {
+      } else if (status === "completed") {
         updateFields.finished_at = new Date().toISOString();
       }
       await this.sb.from("agent_runs").update(updateFields).eq("id", this.runId);
@@ -2122,6 +2130,7 @@ export class AgentLoop {
       this.emit("error", { message: decision.userMessage, recoverable: false });
       return true;
     }
+    if (decision.kind !== "retry") return false;
 
     this.toolMissCount = decision.attempt;
     this.forceToolsNext = decision.forceToolsNext;

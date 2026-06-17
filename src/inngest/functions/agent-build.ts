@@ -3,6 +3,7 @@ import { ensureTerminalRunMessage } from "./ensure-terminal-message";
 import {
   drainPendingQueue,
   getRunStatus,
+  getSupabaseAdmin,
   markRunFinal,
   runAgentLoopWithResume,
   type AgentRunRequest,
@@ -79,6 +80,24 @@ export const agentBuildFunction = inngest.createFunction(
           projectId: payload.projectId,
           error: exhaustedError,
           buildFailed: true,
+        });
+      });
+      await step.run("emit-finish-resumable", async () => {
+        const sb = getSupabaseAdmin();
+        const { data: lastRow } = await sb
+          .from("agent_stream_events")
+          .select("seq")
+          .eq("run_id", runId)
+          .order("seq", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        const nextSeq = (typeof lastRow?.seq === "number" ? lastRow.seq : 0) + 1;
+        await sb.from("agent_stream_events").insert({
+          id: crypto.randomUUID(),
+          run_id: runId,
+          seq: nextSeq,
+          event_type: "finish",
+          payload: { type: "finish", ok: false, canceled: false, resumable: false, error: exhaustedError },
         });
       });
       return { runId, ok: false, error: exhaustedError };
