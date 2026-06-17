@@ -64,4 +64,42 @@ describe("turn-display — entrou, permanece", () => {
     expect(view.narration).toBe("Vou criar a landing com Hero e CTA.");
     expect(view.closingText).toBe("Pronto!");
   });
+
+  it("resolveTurnThinking — assistant_text thinking:true NÃO conta como 1º token (PR 1 — Gap 1)", () => {
+    const progress = {
+      ...initialAgentProgress,
+      finished: false,
+      timeline: [
+        {
+          type: "assistant_text",
+          data: { text: "I need to investigate the container state...", thinking: true },
+          timestamp: 1000,
+        },
+        {
+          type: "assistant_text",
+          data: { text: "I need to investigate the container state...", thinking: true },
+          timestamp: 1500,
+        },
+      ],
+    };
+    const thinking = resolveTurnThinking(progress, null, null, true);
+    expect(thinking).not.toBeNull();
+    expect(thinking?.active).toBe(true);
+  });
+
+  it("resolveTurnThinking — opening:true também NÃO conta como 1º token", () => {
+    const progress = {
+      ...initialAgentProgress,
+      finished: false,
+      timeline: [
+        {
+          type: "assistant_text",
+          data: { text: "Vou criar a landing.", opening: true },
+          timestamp: 1000,
+        },
+      ],
+    };
+    const thinking = resolveTurnThinking(progress, null, null, true);
+    expect(thinking?.active).toBe(true);
+  });
 });

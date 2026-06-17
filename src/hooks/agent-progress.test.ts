@@ -355,4 +355,40 @@ describe("applyAgentProgressEvent", () => {
     const cleared = applyAgentProgressEvent(withPlan, ev("done", { planRejected: true }));
     expect(cleared.pendingPlan).toBeNull();
   });
+
+  it("thinking_text acumula em privateThoughtText, não vira streamText/narrationText", () => {
+    const next = applyAgentProgressEvent(
+      { ...base, finished: false, error: null },
+      ev("thinking_text", { text: "I need to ", append: true, delta: true }),
+    );
+    expect(next.privateThoughtText).toBe("I need to ");
+    expect(next.streamText).toBeFalsy();
+    expect(next.narrationText).toBeFalsy();
+
+    const next2 = applyAgentProgressEvent(
+      next,
+      ev("thinking_text", { text: "investigate.", append: true, delta: true }),
+    );
+    expect(next2.privateThoughtText).toBe("I need to investigate.");
+    expect(next2.streamText).toBeFalsy();
+    expect(next2.narrationText).toBeFalsy();
+  });
+
+  it("thinking_text entra na timeline (reidratação)", () => {
+    const next = applyAgentProgressEvent(
+      { ...base, finished: false, error: null },
+      ev("thinking_text", { text: "check deps", append: true, delta: true }),
+    );
+    expect(next.timeline).toHaveLength(1);
+    expect(next.timeline[0]?.type).toBe("thinking_text");
+  });
+
+  it("thinking:true legado não vira streamText (regressão Gap 1)", () => {
+    const next = applyAgentProgressEvent(
+      { ...base, finished: false, error: null },
+      ev("assistant_text", { text: "I need to investigate...", thinking: true, append: true }),
+    );
+    expect(next.streamText).toBeFalsy();
+    expect(next.narrationText).toBeFalsy();
+  });
 });

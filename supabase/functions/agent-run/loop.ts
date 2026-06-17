@@ -996,7 +996,7 @@ export class AgentLoop {
             narrationOnlyStep ||
             this.llmResponseWasStreamed ||
             this.approvedPlanBuild ||
-            actionableIntent;
+            (actionableIntent && !this.toolsInvoked);
           if (shouldEnforce) {
             const fail = this.applyNoToolCallsEnforcement(response, assistantText, loopStep);
             if (fail) {
@@ -1970,6 +1970,12 @@ export class AgentLoop {
           final: false,
           thinking: true,
         });
+        this.emit("thinking_text", {
+          text: delta,
+          append: true,
+          delta: true,
+          final: false,
+        });
       },
     });
   }
@@ -2211,6 +2217,12 @@ export class AgentLoop {
                 delta: true,
                 final: false,
                 thinking: true,
+              });
+              this.emit("thinking_text", {
+                text: delta,
+                append: true,
+                delta: true,
+                final: false,
               });
             },
       });
@@ -2899,6 +2911,7 @@ export class AgentLoop {
       "tool_done",
       "step_result",
       "assistant_text",
+      "thinking_text",
       "validate_ok",
       "validate_fail",
       "delivery_checkpoint",

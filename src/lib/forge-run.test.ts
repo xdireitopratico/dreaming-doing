@@ -615,4 +615,29 @@ describe("forge-run mini card briefing e título", () => {
       ),
     ).toBe(false);
   });
+
+  it("thinking_text vira THOUGHT no inspector (PR 1 — Gap 1)", () => {
+    const items = buildForgeTimeline(
+      [
+        {
+          type: "thinking_text",
+          data: { text: "Vou verificar o estado do container.", append: true, delta: true },
+          timestamp: 1,
+        },
+        {
+          type: "thinking_text",
+          data: { text: " Talvez precise de docker compose build.", append: true, delta: true },
+          timestamp: 2,
+        },
+      ],
+      true,
+    );
+    const thought = items.find((i) => i.type === "THOUGHT");
+    expect(thought).toBeDefined();
+    if (thought?.type === "THOUGHT") {
+      expect(thought.text).toContain("container");
+      expect(thought.text).toContain("docker compose build");
+      expect(thought.durationMs).toBeGreaterThanOrEqual(1000);
+    }
+  });
 });

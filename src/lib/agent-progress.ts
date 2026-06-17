@@ -95,6 +95,8 @@ export interface AgentProgress {
   narrationText?: string | null;
   /** Duração congelada do «Thought for Xs» de latência — permanece no chat após o 1º token. */
   latencyThoughtMs?: number | null;
+  /** Texto privado do raciocínio do LLM — vai só pro Inspector, nunca pro thread do chat. */
+  privateThoughtText?: string | null;
   /** Estado atual da FSM do agente (FORGE 2.0). */
   fsmState?: string | null;
   /** Sumário do último plano proposto (FORGE 2.0). */
@@ -283,6 +285,45 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
         timeline: [...prev.timeline, event],
       };
     }
+
+    case "thinking_text": {
+      const chunk = (data.text as string) ?? "";
+      const append = data.append === true || data.delta === true;
+      return {
+        ...prev,
+        privateThoughtText: append
+          ? `${prev.privateThoughtText ?? ""}${chunk}`
+          : chunk,
+        timeline: [...prev.timeline, event],
+      };
+    }
+
+    /**
+     * GAP 1 — PR 1 (T1.5 — sem feature flag por enquanto).
+     *
+     * Esta é a segunda camada de defesa contra o vazamento de
+     * raciocínio do LLM pro chat:
+     *
+     *   1ª camada (servidor): `thinking_text` event é emitido em
+     *      ADIÇÃO ao `assistant_text { thinking: true }` legado, não
+     *      em substituição — zero risco de regressão.
+     *   2ª camada (este case): `privateThoughtText` acumula o
+     *      thinking em campo dedicado, separado de `streamText`/
+     *      `narrationText`. Vai pro Inspector.
+     *   3ª camada (turn-display.ts): `resolveTurnThinking` ignora
+     *      `assistant_text { thinking: true }` como evidência de
+     *      "1º token" — o chip "Thought for Xs" não dispara a partir
+     *      do pensamento, só do chat real.
+     *   4ª camada (forge-run.ts): `buildForgeTimeline` aceita
+     *      `thinking_text` como source pra `THOUGHT` items do
+     *      Inspector.
+     *
+     * Nenhuma das 4 camadas remove o caminho legado. A migração pra
+     * usar SÓ `thinking_text` no chat é um PR futuro (PR 4), com
+     * feature flag dedicada (`chat.thinkingStreamIsolated`). Por
+     * enquanto, ambas as fontes coexistem com comportamento
+     * idêntico.
+     */
 
     case "resume":
       return {

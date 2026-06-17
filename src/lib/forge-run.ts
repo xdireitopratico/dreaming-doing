@@ -141,8 +141,10 @@ export function buildForgeTimeline(timeline: SSEEvent[], running = false): Forge
     const data = ev.data ?? {};
     const ts = ev.timestamp;
 
-    if (ev.type === "assistant_text") {
-      if (isInspectorThought(data)) {
+    if (ev.type === "assistant_text" || ev.type === "thinking_text") {
+      const isThought =
+        ev.type === "thinking_text" || isInspectorThought(data);
+      if (isThought) {
         const chunk = String(data.text ?? "");
         if (!chunk) continue;
         if (!thoughtId) {

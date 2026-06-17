@@ -28,12 +28,17 @@ export function resolveTurnThinking(
 
   if (!runStartedAtMs) {
     const hasTextEvidence = resolved?.timeline.some(
-      (e) => e.type === "assistant_text",
+      (e) =>
+        e.type === "assistant_text" &&
+        e.data?.thinking !== true &&
+        e.data?.opening !== true,
     );
     if (resolved && hasTextEvidence) {
       const first = resolved.timeline.find(
         (e) =>
           e.type === "assistant_text" &&
+          e.data?.thinking !== true &&
+          e.data?.opening !== true &&
           typeof e.data?.text === "string" &&
           String(e.data.text).trim().length > 0,
       );
@@ -68,12 +73,17 @@ export function resolveTurnThinking(
   }
 
   const hasTextEvidence2 = resolved?.timeline.some(
-    (e) => e.type === "assistant_text",
+    (e) =>
+      e.type === "assistant_text" &&
+      e.data?.thinking !== true &&
+      e.data?.opening !== true,
   );
   if (resolved && hasTextEvidence2) {
     const first = resolved.timeline.find(
       (e) =>
         e.type === "assistant_text" &&
+        e.data?.thinking !== true &&
+        e.data?.opening !== true &&
         typeof e.data?.text === "string" &&
         String(e.data.text).trim().length > 0,
     );
