@@ -77,7 +77,7 @@ body:has(.editor-workspace) {
   align-items: center;
   gap: 10px;
   padding: 0 10px 0 12px;
-  background: var(--forge-bg);
+  background: var(--bg-hover);
   border-bottom: 1px solid var(--forge-border);
   position: relative;
   z-index: 40;
