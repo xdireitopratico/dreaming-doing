@@ -6,7 +6,9 @@ import {
   useScroll,
   useTransform,
   useMotionValue,
+  useMotionTemplate,
   useSpring,
+  useInView,
   HTMLMotionProps,
 } from "framer-motion";
 import { cn } from "../utils";
@@ -375,4 +377,177 @@ export function useScrollProgress(target?: React.RefObject<HTMLElement>) {
     target ? { target, offset: ["start end", "end start"] } : undefined,
   );
   return useSpring(scrollYProgress, springPresets.soft);
+}
+
+/* ─────────────── Motion 2.0 — primitivas de polish profissional ─────────────── */
+
+/** Barrinha de progresso de leitura no topo — assinatura de site premium. */
+export function ScrollProgress({ className }: { className?: string }) {
+  const { scrollYProgress } = useScroll();
+  const scaleX = useSpring(scrollYProgress, springPresets.soft);
+  return (
+    <motion.div
+      aria-hidden
+      className={cn(
+        "fixed inset-x-0 top-0 z-[700] h-[3px] origin-left bg-brand-500 shadow-glow",
+        className,
+      )}
+      style={{ scaleX }}
+    />
+  );
+}
+
+/** Perspectiva 3D no hover — cartões/produtos ganham profundidade tátil. */
+export interface Tilt3DProps extends HTMLMotionProps<"div"> {
+  max?: number;
+}
+
+export function Tilt3D({ children, className, max = 12, ...props }: Tilt3DProps) {
+  const ref = React.useRef<HTMLDivElement>(null);
+  const rx = useMotionValue(0);
+  const ry = useMotionValue(0);
+  const srx = useSpring(rx, springPresets.snappy);
+  const sry = useSpring(ry, springPresets.snappy);
+  const onMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    const el = ref.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    ry.set(((e.clientX - r.left) / r.width - 0.5) * max * 2);
+    rx.set(-((e.clientY - r.top) / r.height - 0.5) * max * 2);
+  };
+  return (
+    <motion.div
+      ref={ref}
+      onMouseMove={onMove}
+      onMouseLeave={() => {
+        rx.set(0);
+        ry.set(0);
+      }}
+      style={{ rotateX: srx, rotateY: sry, transformPerspective: 800 }}
+      className={cn(className)}
+      {...props}
+    >
+      {children}
+    </motion.div>
+  );
+}
+
+/** Spotlight radial que segue o cursor — highlight suave em grids/showcase. */
+export function Spotlight({
+  children,
+  className,
+  size = 400,
+  color = "var(--color-brand-500)",
+}: {
+  children: React.ReactNode;
+  className?: string;
+  size?: number;
+  color?: string;
+}) {
+  const ref = React.useRef<HTMLDivElement>(null);
+  const x = useMotionValue(-1000);
+  const y = useMotionValue(-1000);
+  const bg = useMotionTemplate`radial-gradient(${size}px circle at ${x}px ${y}px, ${color}22, transparent 70%)`;
+  const onMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    const el = ref.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    x.set(e.clientX - r.left);
+    y.set(e.clientY - r.top);
+  };
+  return (
+    <div ref={ref} onMouseMove={onMove} className={cn("relative overflow-hidden", className)}>
+      <motion.div aria-hidden className="pointer-events-none absolute -inset-px" style={{ background: bg }} />
+      {children}
+    </div>
+  );
+}
+
+/** Contagem animada que dispara ao entrar no viewport — métricas/stats. */
+export function CountUp({
+  to,
+  duration = 2,
+  className,
+  prefix,
+  suffix,
+}: {
+  to: number;
+  duration?: number;
+  className?: string;
+  prefix?: string;
+  suffix?: string;
+}) {
+  const ref = React.useRef<HTMLSpanElement>(null);
+  const inView = useInView(ref, { once: true, amount: 0.5 });
+  const [val, setVal] = React.useState(0);
+  React.useEffect(() => {
+    if (!inView) return;
+    let raf = 0;
+    const start = performance.now();
+    const tick = (now: number) => {
+      const t = Math.min(1, (now - start) / (duration * 1000));
+      const eased = 1 - Math.pow(1 - t, 3);
+      setVal(Math.round(eased * to));
+      if (t < 1) raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [inView, to, duration]);
+  return (
+    <span ref={ref} className={cn(className)}>
+      {prefix}
+      {val.toLocaleString("pt-BR")}
+      {suffix}
+    </span>
+  );
+}
+
+/** Marquee infinito seamless — logos, testimonials, faixas de prova social. */
+export function Marquee({
+  children,
+  className,
+  speed = 40,
+  reverse = false,
+}: {
+  children: React.ReactNode;
+  className?: string;
+  speed?: number;
+  reverse?: boolean;
+}) {
+  return (
+    <div className={cn("flex overflow-hidden", className)}>
+      <motion.div
+        className="flex shrink-0 items-center gap-8 pr-8"
+        animate={{ x: reverse ? ["-50%", "0%"] : ["0%", "-50%"] }}
+        transition={{ duration: speed, repeat: Infinity, ease: "linear" }}
+      >
+        {children}
+        {children}
+      </motion.div>
+    </div>
+  );
+}
+
+/** Reveal por máscara (wipe) — texto/imagens surgem varridos por uma cortina. */
+export function RevealMask({
+  children,
+  className,
+  delay = 0,
+}: {
+  children: React.ReactNode;
+  className?: string;
+  delay?: number;
+}) {
+  return (
+    <div className={cn("relative overflow-hidden", className)}>
+      <motion.div
+        initial={{ y: "100%" }}
+        whileInView={{ y: "0%" }}
+        viewport={{ once: true, amount: 0.3 }}
+        transition={{ ...easeOut, delay }}
+      >
+        {children}
+      </motion.div>
+    </div>
+  );
 }

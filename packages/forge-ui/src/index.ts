@@ -4,3 +4,4 @@ export * from "./components";
 export * from "./composites";
 export * from "./patterns";
 export * from "./hooks";
+export * from "./techniques";

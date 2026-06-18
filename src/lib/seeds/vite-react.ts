@@ -1,6 +1,12 @@
 // seeds/vite-react.ts — Vite + React 19 + @forge/ui embutido + Tailwind v4 @theme.
 import { FORGE_UI_SEED_FILES } from "./forge-ui-bundle.generated";
-import { buildThemeBlock, MOOD_IDS } from "@forge/ui/tokens";
+import {
+  buildThemeBlock,
+  MOOD_IDS,
+  MOODS,
+  suggestMoodForDomain,
+  type DesignMood,
+} from "@forge/ui/tokens";
 import type { SeedFile } from "./types";
 
 export type { SeedFile };
@@ -88,8 +94,10 @@ const TSCONFIG = `{
 }
 `;
 
-const INDEX_HTML = `<!doctype html>
-<html lang="pt-BR" class="dark">
+function buildIndexHtml(mood: DesignMood): string {
+  const darkClass = MOODS[mood].dark ? "dark" : "";
+  return `<!doctype html>
+<html lang="pt-BR" class="${darkClass}">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
@@ -105,6 +113,7 @@ const INDEX_HTML = `<!doctype html>
   </body>
 </html>
 `;
+}
 
 const MAIN_TSX = `import React from "react";
 import ReactDOM from "react-dom/client";
@@ -131,12 +140,13 @@ const APP_TSX = `export default function App() {
 }
 `;
 
-const INDEX_CSS = `@import "tailwindcss";
+function buildIndexCss(mood: DesignMood): string {
+  return `@import "tailwindcss";
 
-${buildThemeBlock("ember")}
+${buildThemeBlock(mood)}
 
-/* Design mood: ember. Para mudar a identidade visual, substitua o @theme acima
-   por outro mood (edite os tokens em src/index.css). Moods disponíveis:
+/* Design mood: ${mood}. Para mudar a identidade visual, substitua o @theme
+   acima por outro mood (edite os tokens em src/index.css). Moods disponíveis:
    ${MOOD_IDS.join(", ")}. Escolha um adequado ao domínio do projeto.
    Veja @forge/ui/tokens/moods para a paleta de cada um. */
 
@@ -148,6 +158,7 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 `;
+}
 
 const GITIGNORE = `node_modules
 dist
@@ -172,16 +183,19 @@ const ENV_EXAMPLE = `# VITE_SUPABASE_URL=
 # VITE_SUPABASE_ANON_KEY=
 `;
 
-export const VITE_REACT_SEED: SeedFile[] = [
-  { path: "package.json", content: PACKAGE_JSON },
-  { path: "vite.config.ts", content: VITE_CONFIG },
-  { path: "tsconfig.json", content: TSCONFIG },
-  { path: "index.html", content: INDEX_HTML },
-  { path: "src/main.tsx", content: MAIN_TSX },
-  { path: "src/App.tsx", content: APP_TSX },
-  { path: "src/index.css", content: INDEX_CSS },
-  { path: ".gitignore", content: GITIGNORE },
-  { path: ".env.example", content: ENV_EXAMPLE },
-  { path: "README.md", content: README },
-  ...FORGE_UI_SEED_FILES,
-];
+export function buildViteReactSeed(domainPrompt?: string): SeedFile[] {
+  const mood = suggestMoodForDomain(domainPrompt ?? "");
+  return [
+    { path: "package.json", content: PACKAGE_JSON },
+    { path: "vite.config.ts", content: VITE_CONFIG },
+    { path: "tsconfig.json", content: TSCONFIG },
+    { path: "index.html", content: buildIndexHtml(mood) },
+    { path: "src/main.tsx", content: MAIN_TSX },
+    { path: "src/App.tsx", content: APP_TSX },
+    { path: "src/index.css", content: buildIndexCss(mood) },
+    { path: ".gitignore", content: GITIGNORE },
+    { path: ".env.example", content: ENV_EXAMPLE },
+    { path: "README.md", content: README },
+    ...FORGE_UI_SEED_FILES,
+  ];
+}

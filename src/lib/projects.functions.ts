@@ -157,7 +157,7 @@ export const createProjectFromPrompt = createServerFn({ method: "POST" })
       .single();
     if (pErr) throw new Error(pErr.message);
 
-    const seedFiles = seedForStack(stack.id);
+    const seedFiles = seedForStack(stack.id, userMessageText);
     const seedRows = seedFiles.map((f) => ({
       project_id: project.id,
       path: f.path,

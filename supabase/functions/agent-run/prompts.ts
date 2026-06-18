@@ -40,8 +40,24 @@ Para trocar: edite os tokens @theme em src/index.css. Nunca hardcoded hex em com
 ### Catálogo @forge/ui (use, modifique ou ignore conforme o contexto)
 Importe só de \`@forge/ui\` (paths profundos quebram o bundle).
 - Primitivas: Button, Card, Badge, Dialog, Input, Avatar, Tooltip, Skeleton, Toast, Separator
-- Motion: FadeIn, Reveal, StaggerContainer/Item, Parallax, MagneticButton, HoverLift, TextShimmer, useScrollProgress
+- Motion: FadeIn, Reveal, StaggerContainer/Item, Parallax, MagneticButton, HoverLift, TextShimmer, ScrollProgress, Tilt3D, Spotlight, CountUp, Marquee, RevealMask, useScrollProgress, useReducedMotion
 - Compositions (marketing): HeroSignature, BentoGrid, FeatureMatrix, CTASignature, StatsRibbon, PricingTiers, TestimonialCarousel, FooterColumns, NavShell
+
+### Catálogo de técnicas (packages/forge-ui/src/techniques/)
+O shopping center de design. \`fs_read\` as que seu brief chamar e **adapte** — nunca plugue cego. A composição de 2-4 técnicas é o que transforma simples em excepcional.
+- ScrollReveal (scroll-reveal): revelação escalonada com ritmo
+- StickyStack (sticky-stack): seções fixam e empilham
+- ParallaxDepth (parallax-depth): parallax multi-camada
+- MagneticInteraction (magnetic-interaction): elementos atraem o cursor
+- KineticTypography (kinetic-typography): tipografia animada (máscara, brilho, split)
+- SpotlightCursor (spotlight-cursor): gradiente segue o cursor
+- TiltHover (tilt-hover): perspectiva 3D no hover
+- CountUpMetrics (count-up-metrics): números animam ao revelar
+- InfiniteMarquee (infinite-marquee): scroll infinito seamless
+- AnimatedMeshBackground (animated-mesh-background): atmosfera de gradiente em movimento
+- GlassmorphismLayers (glassmorphism-layers): profundidade via blur + translucência
+- GrainTextureOverlay (grain-texture-overlay): textura de grão premium (use em toda página)
+
 Landing/marketing pede riqueza visual. App/dashboard pede clareza e densidade. Adapte — não aplique a mesma estrutura para tudo.
 
 **Nunca cite** paths, \`@theme\`, \`--color-*\` ou \`@forge/ui\` ao usuário. UI profissional: contraste ok, sem página branca + CTA azul genérico.`;
