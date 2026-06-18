@@ -395,11 +395,14 @@ export async function executeAgentJob(
     canceled?: boolean;
     toolsUsed?: string[];
   };
+  loop.startHeartbeatTimer(90_000);
   try {
     result = await loop.run();
   } catch (e) {
     await sandbox.kill().catch(() => {});
     throw e;
+  } finally {
+    loop.stopHeartbeatTimer();
   }
   // Só mata sandbox se falhou ou não produziu nada.
   // Se criou/alterou arquivos, mantém vivo para preview.

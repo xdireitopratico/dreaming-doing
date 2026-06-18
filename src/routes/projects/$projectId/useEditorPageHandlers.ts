@@ -255,7 +255,7 @@ export function useEditorPageHandlers({
           : kind === "taste"
             ? "Concierge Taste"
             : agent.progress.resumable
-              ? "Retomando agente (memória do chat)"
+              ? "Continuando execução anterior"
               : "Agente FORGE iniciado";
       setLogs((prev) => [...prev, createLogEntry("info", label, "agent")]);
       if (!logPanelOpen) setLogPanelOpen(true);
@@ -335,7 +335,7 @@ export function useEditorPageHandlers({
 
     setLogs((prev) => [
       ...prev,
-      createLogEntry("info", "Retomando agente (memória do chat)", "agent"),
+      createLogEntry("info", "Continuando execução anterior", "agent"),
     ]);
     if (!logPanelOpen) setLogPanelOpen(true);
     void qc.invalidateQueries({ queryKey: ["messages", conversation.id] });

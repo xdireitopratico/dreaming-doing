@@ -68,18 +68,46 @@ export function useAgentRealtime(
       },
     );
 
-    // messages changes (assistant replies, plan proposals)
+    // messages changes (assistant replies, plan proposals).
+    // Filtra por role=assistant no server-side filter para não refetchar
+    // a janela inteira a cada INSERT do user (que é otimista). Também evita
+    // re-render do thread em tool_dones que não alteram messages.
+    // Cobre Bug #9 (chat dança) e Bug #16 (badge "Na fila" não some).
     const messagesFilter = conversationId ? `conversation_id=eq.${conversationId}` : undefined;
     channel.on(
       "postgres_changes",
       {
-        event: "*",
+        event: "INSERT",
         schema: "public",
         table: "messages",
         ...(messagesFilter ? { filter: messagesFilter } : {}),
       },
-      () => {
-        if (conversationId) {
+      (payload) => {
+        const row = payload.new as Record<string, unknown>;
+        // Só refetcha a janela quando um novo assistant chega — user messages
+        // são otimistas e o cache já está em sync via mutation.
+        if (row?.role === "assistant" && conversationId) {
+          queryClient.invalidateQueries({ queryKey: ["messages", conversationId] });
+        }
+      },
+    );
+
+    // UPDATE em messages: cobre patch de meta.queued=false (drain da fila).
+    channel.on(
+      "postgres_changes",
+      {
+        event: "UPDATE",
+        schema: "public",
+        table: "messages",
+        ...(messagesFilter ? { filter: messagesFilter } : {}),
+      },
+      (payload) => {
+        const row = payload.new as Record<string, unknown>;
+        const old = payload.old as Record<string, unknown> | null;
+        const newMeta = (row?.meta ?? {}) as Record<string, unknown>;
+        const oldMeta = ((old?.meta ?? {}) as Record<string, unknown>) ?? {};
+        // Dispara refetch quando o flag queued muda (Fila drena → bubble limpa).
+        if (newMeta.queued !== oldMeta.queued && conversationId) {
           queryClient.invalidateQueries({ queryKey: ["messages", conversationId] });
         }
       },

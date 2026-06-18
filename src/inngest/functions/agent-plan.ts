@@ -101,7 +101,13 @@ export const agentPlanFunction = inngest.createFunction(
           run_id: runId,
           seq: nextSeq,
           event_type: "finish",
-          payload: { type: "finish", ok: false, canceled: false, resumable: false, error: exhaustedError },
+          payload: {
+            type: "finish",
+            ok: false,
+            canceled: false,
+            resumable: false,
+            error: exhaustedError,
+          },
         });
       });
       return { runId, ok: false, error: exhaustedError };
@@ -111,6 +117,15 @@ export const agentPlanFunction = inngest.createFunction(
       const status = await getRunStatus(runId);
       if (status === "canceled" || status === "awaiting_user") return;
       await markRunFinal(runId, "completed", { meta: { plan: final.plan ?? null } });
+    });
+
+    await step.run("ensure-terminal-message-success", async () => {
+      return await ensureTerminalRunMessage({
+        runId,
+        conversationId: payload.conversationId,
+        projectId: payload.projectId,
+        buildFailed: false,
+      });
     });
 
     await step.run("drain-pending-queue", async () => {

@@ -52,6 +52,14 @@ export const agentBuildFunction = inngest.createFunction(
       await step.run("mark-canceled", async () => {
         await markRunFinal(runId, "canceled", { error: final.error ?? "canceled" });
       });
+      await step.run("ensure-terminal-message-canceled", async () => {
+        return await ensureTerminalRunMessage({
+          runId,
+          conversationId: payload.conversationId,
+          projectId: payload.projectId,
+          error: final.error ?? "canceled",
+        });
+      });
       return { runId, ok: false, canceled: true };
     }
 
@@ -97,7 +105,13 @@ export const agentBuildFunction = inngest.createFunction(
           run_id: runId,
           seq: nextSeq,
           event_type: "finish",
-          payload: { type: "finish", ok: false, canceled: false, resumable: false, error: exhaustedError },
+          payload: {
+            type: "finish",
+            ok: false,
+            canceled: false,
+            resumable: false,
+            error: exhaustedError,
+          },
         });
       });
       return { runId, ok: false, error: exhaustedError };
@@ -107,6 +121,16 @@ export const agentBuildFunction = inngest.createFunction(
       const status = await getRunStatus(runId);
       if (status === "canceled" || status === "awaiting_user") return;
       await markRunFinal(runId, "completed");
+    });
+
+    // Bug #4: garantir linha assistant materializada mesmo em sucesso.
+    await step.run("ensure-terminal-message-success", async () => {
+      return await ensureTerminalRunMessage({
+        runId,
+        conversationId: payload.conversationId,
+        projectId: payload.projectId,
+        buildFailed: false,
+      });
     });
 
     await step.run("drain-pending-queue", async () => {

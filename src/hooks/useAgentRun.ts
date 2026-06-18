@@ -34,10 +34,7 @@ import { parseAgentBusyResponse } from "@/lib/agent-busy";
 import type { PendingQueueItem } from "@/components/editor/PendingQueuePanel";
 import { shouldRestoreLiveRun } from "@/lib/agent-snapshot-restore";
 import { clientStaleStreamMs } from "@/lib/agent-stale-thresholds";
-import {
-  emitStreamingTelemetry,
-  setStreamingTelemetryContext,
-} from "@/lib/streaming-telemetry";
+import { emitStreamingTelemetry, setStreamingTelemetryContext } from "@/lib/streaming-telemetry";
 
 function withFrozenLatencyThought(next: AgentProgress, startedAtMs: number | null): AgentProgress {
   if (next.latencyThoughtMs != null || !startedAtMs) return next;
@@ -48,9 +45,7 @@ function withFrozenLatencyThought(next: AgentProgress, startedAtMs: number | nul
   };
 }
 
-export type AgentConnectResult =
-  | { ok: true }
-  | { ok: false; error: string; busy?: AgentBusyInfo };
+export type AgentConnectResult = { ok: true } | { ok: false; error: string; busy?: AgentBusyInfo };
 
 function formatQueueBlockReason(reason?: string): string | null {
   if (!reason) return null;
@@ -160,13 +155,15 @@ export function useAgentRun() {
   // pode aplicar rows com seq > lastSeqRef enquanto Realtime entrega uma row
   // nova, e o resultado depende da ordem de resolução dos dois `await`.
   const streamProcessingRef = useRef(false);
-  const streamBufferRef = useRef<Array<{
-    seq: number;
-    event_type: string;
-    payload: Record<string, unknown>;
-    created_at?: string;
-    run_id?: string;
-  }>>([]);
+  const streamBufferRef = useRef<
+    Array<{
+      seq: number;
+      event_type: string;
+      payload: Record<string, unknown>;
+      created_at?: string;
+      run_id?: string;
+    }>
+  >([]);
 
   useEffect(() => {
     pendingQueueCountRef.current = progress.pendingQueueCount ?? 0;
@@ -556,6 +553,10 @@ export function useAgentRun() {
         return;
       }
       if (!isSame) {
+        // Bug #11: descarta rows da run antiga que estavam no buffer.
+        // Sem isso, enqueueStreamRow aplica rows de run morta contra
+        // o novo lastSeq=0 e dispara stream_seq_gap fantasma.
+        streamBufferRef.current = [];
         teardownChannels();
       }
       runIdRef.current = runId;
@@ -873,12 +874,9 @@ export function useAgentRun() {
           setProgress((p) => ({
             ...p,
             finished: true,
-            pendingQueueCount:
-              typeof body.pendingCount === "number" ? body.pendingCount : 0,
+            pendingQueueCount: typeof body.pendingCount === "number" ? body.pendingCount : 0,
             statusHint:
-              typeof body.message === "string"
-                ? body.message
-                : "Mensagem na fila do agente.",
+              typeof body.message === "string" ? body.message : "Mensagem na fila do agente.",
             error: null,
           }));
           releaseAgentConnect();
@@ -948,9 +946,7 @@ export function useAgentRun() {
   const clearPendingTurn = useCallback(() => {
     setActiveRunStartedAtMs(null);
     setActiveRunId((cur) => (cur === PENDING_RUN_ID ? null : cur));
-    setProgress((p) =>
-      p.finished ? p : { ...p, finished: true, statusHint: null, phase: null },
-    );
+    setProgress((p) => (p.finished ? p : { ...p, finished: true, statusHint: null, phase: null }));
   }, []);
 
   const drainQueue = useCallback(
@@ -1254,7 +1250,7 @@ export function useAgentRun() {
         ...initialAgentProgress,
       };
 
-      const         restoreProgressOnly = (progress: AgentProgress) => {
+      const restoreProgressOnly = (progress: AgentProgress) => {
         setProgress((prev) => {
           if (prev !== initialAgentProgress && prev.streamText != null) return prev;
           return { ...progress };
@@ -1345,6 +1341,32 @@ export function useAgentRun() {
     },
     [subscribeToRun],
   );
+
+  // Realtime: agent_pending_messages INSERT/DELETE → refaz fetch da fila.
+  // Cobre Bug #5 (fila órfã): INSERT de nova pendente + DELETE após drain.
+  useEffect(() => {
+    const ctx = sessionContextRef.current;
+    if (!ctx) return;
+    const { projectId, conversationId } = ctx;
+    const channel = supabase
+      .channel(`agent-pending-queue-${projectId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "agent_pending_messages",
+          filter: `project_id=eq.${projectId}`,
+        },
+        () => {
+          void refreshPendingQueue(projectId, conversationId);
+        },
+      )
+      .subscribe();
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [activeRunId, refreshPendingQueue]);
 
   return {
     progress,

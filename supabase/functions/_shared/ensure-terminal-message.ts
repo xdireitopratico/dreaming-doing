@@ -274,13 +274,16 @@ export async function ensureTerminalRunMessage(
     });
 
     if (existing?.id) {
+      const updateData: Record<string, unknown> = {
+        tool_calls: [],
+        meta,
+      };
+      if (text) {
+        updateData.parts = [{ type: "text", text }];
+      }
       await supabase
         .from("messages")
-        .update({
-          parts: [{ type: "text", text }],
-          tool_calls: [],
-          meta,
-        })
+        .update(updateData)
         .eq("id", existing.id);
       await supabase
         .from("projects")
@@ -288,6 +291,8 @@ export async function ensureTerminalRunMessage(
         .eq("id", projectId);
       return { persisted: true, messageId: existing.id };
     }
+
+    if (!text) return { persisted: false };
 
     const { data: inserted } = await supabase
       .from("messages")

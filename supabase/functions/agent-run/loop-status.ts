@@ -99,12 +99,12 @@ export function formatLoopStatus(ctx: LoopUpdateContext): string | null {
 
     case "resume":
       if (ctx.fixResume) {
-        return "Retomei para corrigir erros de build.";
+        return "Corrigindo erros de build.";
       }
       if (ctx.resumeStep && ctx.total) {
-        return `Retomei do passo ${ctx.resumeStep} de ${ctx.total}.`;
+        return `Continuando do passo ${ctx.resumeStep} de ${ctx.total}.`;
       }
-      return "Retomei de onde parei.";
+      return "Continuando execução…";
 
     case "processing":
       return "Ainda processando — continuo em instantes.";

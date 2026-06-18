@@ -1001,6 +1001,19 @@ Deno.serve(async (req) => {
       });
 
       cleanup();
+
+      // Persiste meta.queued=false na última user message desta conversa
+      // para que o badge "Na fila…" suma no client via Realtime UPDATE
+      // (cobrado pelo listener em useAgentRealtime).
+      await supabase
+        .from("messages")
+        .update({ meta: { queued: false } })
+        .eq("conversation_id", conversationId)
+        .eq("role", "user")
+        .eq("meta->>queued", "true")
+        .order("created_at", { ascending: false })
+        .limit(1);
+
       return json({
         ok: true,
         runId: agentRunId,

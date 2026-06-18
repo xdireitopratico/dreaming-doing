@@ -168,11 +168,15 @@ export async function markRunFinal(
   if (error) throw new Error(`Failed to mark run ${runId} as ${status}: ${error.message}`);
 }
 
-/** Cancela outras runs ativas no mesmo projeto (evita 2× running na mesma conversa). */
+/** Cancela outras runs ativas no mesmo projeto (evita 2× running na mesma conversa).
+ *  SÓ cancela runs com heartbeat stale (> 2min) — preserva runs vivas em outras
+ *  abas do mesmo user (Bug #2: 2 abas → run de uma morria "duplicada"). */
 export async function cancelDuplicateRuns(projectId: string, activeRunId: string): Promise<number> {
+  const STALE_HEARTBEAT_MS = 2 * 60 * 1000;
+  const staleCutoff = new Date(Date.now() - STALE_HEARTBEAT_MS).toISOString();
   const { data: dupes } = await getSupabaseAdmin()
     .from("agent_runs")
-    .select("id")
+    .select("id, heartbeat_at, started_at")
     .eq("project_id", projectId)
     .in("status", ["running", "pending"])
     .neq("id", activeRunId);
@@ -180,6 +184,10 @@ export async function cancelDuplicateRuns(projectId: string, activeRunId: string
   let canceled = 0;
   for (const row of dupes ?? []) {
     const dupeId = row.id as string;
+    const lastBeat = (row.heartbeat_at as string | null) ?? (row.started_at as string | null);
+    // Só cancela se a run duplicada está com heartbeat stale. Se o heartbeat
+    // é fresco, outra aba pode estar cuidando dela — deixamos viva.
+    if (lastBeat && lastBeat > staleCutoff) continue;
     await markRunFinal(dupeId, "failed", {
       error: "Run duplicado cancelado — outra execução assumiu.",
       meta: { duplicateCanceled: true },

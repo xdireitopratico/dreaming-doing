@@ -176,6 +176,26 @@ export class AgentLoop {
   private narrationBuffer: string;
   /** Abertura FASE 1 — uma vez por turno, só chat [2]. */
   private openingEmitted: boolean;
+  /** Heartbeat timer (90s) que mantém `agent_runs.heartbeat_at` fresco durante silêncios longos.
+   *  Garante que F5 e snapshot-restore continuem funcionando em runs de design+build > 5min. */
+  private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+
+  /** Inicia um timer que chama `touchHeartbeat()` a cada 90s enquanto o loop roda.
+   *  Complementa o `touchHeartbeat` reativo (chamado em transições) cobrindo
+   *  os silêncios longos onde o agente pensa mas não emite eventos. */
+  startHeartbeatTimer(intervalMs = 90_000): void {
+    if (this.heartbeatTimer) return;
+    this.heartbeatTimer = setInterval(() => {
+      void this.touchHeartbeat();
+    }, intervalMs);
+  }
+
+  stopHeartbeatTimer(): void {
+    if (this.heartbeatTimer) {
+      clearInterval(this.heartbeatTimer);
+      this.heartbeatTimer = null;
+    }
+  }
 
   private llmResponseWasStreamed: boolean;
   private toolMissCount: number;
