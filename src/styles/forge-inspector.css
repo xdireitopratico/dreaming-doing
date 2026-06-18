@@ -379,7 +379,7 @@
   padding: var(--space-sm) var(--space-md);
   border: 1px solid var(--border-forge);
   border-radius: 8px;
-  background: color-mix(in srgb, var(--bg-card) 50%, transparent);
+  background: var(--bg-card);
 }
 
 .forge-timeline-tool-header {
@@ -478,7 +478,7 @@
   padding: var(--space-sm) var(--space-md);
   border: 1px solid var(--border-forge);
   border-radius: 8px;
-  background: color-mix(in srgb, var(--bg-card) 50%, transparent);
+  background: var(--bg-card);
 }
 
 .forge-timeline-checkpoint-header {
@@ -523,7 +523,6 @@
 
 .forge-timeline-checkpoint-file {
   display: block;
-}
 }
 
 .forge-timeline-result--failed .forge-timeline-result-label {
