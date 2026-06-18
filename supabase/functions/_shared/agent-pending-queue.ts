@@ -81,7 +81,13 @@ export async function expireStaleRuns(
     .from("agent_runs")
     .select("id, meta, started_at, heartbeat_at")
     .eq("project_id", projectId)
-    .in("status", ["running", "pending", "awaiting_user"]);
+    // awaiting_user NÃO entra: runs pausadas esperando humano (plan_approval /
+    // clarify) não heartbeatem por design — expirá-las pelo threshold de 8min
+    // mata aprovações de plano legítimas (bug: run virava zumbi enquanto o
+    // usuário lia o plano). A limpeza de awaiting_user abandonado acontece em
+    // agent-run/index.ts: ao chegar nova mensagem, a run awaiting antiga é
+    // completada antes de criar a nova.
+    .in("status", ["running", "pending"]);
 
   if (!candidates?.length) return 0;
 
