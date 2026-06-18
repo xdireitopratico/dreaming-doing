@@ -191,6 +191,7 @@ export function AssistantTurn({
             align="start"
             canRollback={canRollback}
             onRollback={onRollback}
+            isActive={item.isActive}
           />
         </div>
       </div>

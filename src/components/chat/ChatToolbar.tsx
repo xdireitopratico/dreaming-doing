@@ -7,6 +7,8 @@ type ChatToolbarProps = {
   align?: "start" | "end";
   canRollback?: boolean;
   onRollback?: () => void;
+  /** Turn em progresso: esconde a toolbar inteira (cópia só no done). */
+  isActive?: boolean;
 };
 
 export function ChatToolbar({
@@ -14,6 +16,7 @@ export function ChatToolbar({
   align = "end",
   canRollback,
   onRollback,
+  isActive,
 }: ChatToolbarProps) {
   const [copied, setCopied] = useState(false);
 
@@ -25,7 +28,7 @@ export function ChatToolbar({
     }
   }, [text]);
 
-  if (!text.trim()) return null;
+  if (isActive || !text.trim()) return null;
 
   return (
     <footer
