@@ -3,6 +3,7 @@ import {
   useEffect,
   useRef,
   useState,
+  type ClipboardEvent,
   type DragEvent,
   type KeyboardEvent,
 } from "react";
@@ -143,6 +144,25 @@ export function ChatComposer({
     [handleSend],
   );
 
+  const handlePaste = useCallback(
+    (e: ClipboardEvent<HTMLTextAreaElement>) => {
+      const items = e.clipboardData.items;
+      const imageFiles: File[] = [];
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        if (item.type.startsWith("image/")) {
+          const file = item.getAsFile();
+          if (file) imageFiles.push(file);
+        }
+      }
+      if (imageFiles.length > 0) {
+        e.preventDefault();
+        addFiles(imageFiles);
+      }
+    },
+    [addFiles],
+  );
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     addFiles(Array.from(e.target.files ?? []));
     e.target.value = "";
@@ -232,6 +252,7 @@ export function ChatComposer({
         value={text}
         onChange={(e) => setText(e.target.value)}
         onKeyDown={handleKeyDown}
+        onPaste={handlePaste}
         rows={1}
       />
 
