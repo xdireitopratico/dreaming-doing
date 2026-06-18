@@ -6,7 +6,6 @@ import type { ClarifyChoice } from "@/lib/chat/types";
 import type { StoredMessagePart } from "@/lib/chat-attachments";
 import { useChat } from "@/hooks/useChat";
 import {
-  computeUserAnchorSpacerHeight,
   scrollOffsetToAlignUserMessage,
   shouldAnchorNewUserMessage,
   shouldHoldUserMessageAnchor,
@@ -109,14 +108,12 @@ export function ChatPanel({
   const prevLastUserMessageIdRef = useRef<string | null>(null);
   const initialScrollDoneRef = useRef(false);
   const isProgrammaticScrollRef = useRef(false);
-  const firstAnchorRef = useRef(true);
   const userScrolledAwayRef = useRef(false);
   const userJustSentRef = useRef(false);
   const [showPill, setShowPill] = useState(false);
   /** Fase 2.5 — quando o user clica num card de sugestão do empty state,
    *  setamos este state que alimenta `externalPrompt` no ChatComposer. */
   const [suggestionPrompt, setSuggestionPrompt] = useState<string | null>(null);
-  const [anchorSpacerPx, setAnchorSpacerPx] = useState(0);
   const PIN_THRESHOLD_PX = 100;
 
   const holdUserAnchor = shouldHoldUserMessageAnchor({
@@ -145,7 +142,6 @@ export function ChatPanel({
         pinnedToBottom.current = true;
         scrollModeRef.current = "bottom";
         anchoredUserIdRef.current = null;
-        firstAnchorRef.current = true;
         userScrolledAwayRef.current = false;
         setShowPill(false);
       });
@@ -153,35 +149,25 @@ export function ChatPanel({
     [runProgrammaticScroll],
   );
 
-  const measureAnchorSpacer = useCallback((messageId?: string | null): number => {
-    const container = scrollRef.current;
-    const id = messageId ?? anchoredUserIdRef.current;
-    if (!container || !id) return 0;
-    const bubble = container.querySelector<HTMLElement>(`[data-user-msg-id="${id}"]`);
-    const style = getComputedStyle(container);
-    const padTop = parseFloat(style.paddingTop) || 0;
-    const padBottom = parseFloat(style.paddingBottom) || 0;
-    const bubbleH = bubble?.getBoundingClientRect().height ?? 96;
-    return computeUserAnchorSpacerHeight(
-      container.clientHeight,
-      bubbleH,
-      padTop,
-      padBottom,
-    );
-  }, []);
-
-  const scrollUserBubbleToTop = useCallback(
+  /**
+   * Ancora a bolha do usuário no topo do painel UMA vez, via scrollIntoView.
+   * O scroll anchoring nativo do navegador (overflow-anchor: auto) mantém a
+   * bolha no topo enquanto o conteúdo do agente cresce abaixo — sem re-ancoragem
+   * contínua, sem spacer, sem ResizeObserver. Isso elimina a race que jogava
+   * o scroll para o meio do chat durante o streaming.
+   */
+  const anchorUserBubble = useCallback(
     (messageId: string, behavior: ScrollBehavior = "auto"): boolean => {
       const container = scrollRef.current;
       if (!container) return false;
       const bubble = container.querySelector<HTMLElement>(`[data-user-msg-id="${messageId}"]`);
       if (!bubble) return false;
-      const top = scrollOffsetToAlignUserMessage(container, bubble);
       runProgrammaticScroll(() => {
-        container.scrollTo({ top: Math.max(0, top), behavior });
+        bubble.scrollIntoView({ block: "start", behavior });
         pinnedToBottom.current = false;
         scrollModeRef.current = "user-anchor";
         anchoredUserIdRef.current = messageId;
+        userScrolledAwayRef.current = false;
         setShowPill(false);
       });
       return true;
@@ -208,7 +194,6 @@ export function ChatPanel({
         const anchorTop = scrollOffsetToAlignUserMessage(el, bubble);
         if (Math.abs(el.scrollTop - anchorTop) > 48) {
           userScrolledAwayRef.current = true;
-          scrollModeRef.current = "bottom";
         }
       }
     }
@@ -216,7 +201,6 @@ export function ChatPanel({
     if (pinnedToBottom.current && !holdUserAnchor) {
       scrollModeRef.current = "bottom";
       anchoredUserIdRef.current = null;
-      firstAnchorRef.current = true;
       userScrolledAwayRef.current = false;
       setShowPill(false);
     }
@@ -235,7 +219,6 @@ export function ChatPanel({
     prevLastUserMessageIdRef.current = null;
     scrollModeRef.current = "bottom";
     anchoredUserIdRef.current = null;
-    firstAnchorRef.current = true;
     userScrolledAwayRef.current = false;
     userJustSentRef.current = false;
     pinnedToBottom.current = true;
@@ -253,105 +236,54 @@ export function ChatPanel({
     return () => cancelAnimationFrame(raf);
   }, [chatLoading, lastUserMessageId, scrollToBottom]);
 
+  // Âncora UMA vez quando o usuário envia nova mensagem. A partir daí o
+  // navegador mantém a bolha no topo via scroll anchoring nativo.
   useEffect(() => {
-    if (!shouldAnchorNewUserMessage(
-      prevLastUserMessageIdRef.current,
-      lastUserMessageId,
-      initialScrollDoneRef.current,
-    )) {
+    if (
+      !shouldAnchorNewUserMessage(
+        prevLastUserMessageIdRef.current,
+        lastUserMessageId,
+        initialScrollDoneRef.current,
+      )
+    ) {
       return;
     }
     prevLastUserMessageIdRef.current = lastUserMessageId;
-    scrollModeRef.current = "user-anchor";
-    anchoredUserIdRef.current = lastUserMessageId;
-    firstAnchorRef.current = true;
-    pinnedToBottom.current = false;
     if (userJustSentRef.current) {
       userScrolledAwayRef.current = false;
       userJustSentRef.current = false;
     }
-    setAnchorSpacerPx(measureAnchorSpacer(lastUserMessageId));
-  }, [lastUserMessageId, measureAnchorSpacer]);
-
-  useEffect(() => {
-    if (!holdUserAnchor) {
-      setAnchorSpacerPx(0);
-      return;
-    }
-    setAnchorSpacerPx(measureAnchorSpacer());
-  }, [holdUserAnchor, lastUserMessageId, thread.length, measureAnchorSpacer]);
-
-  useEffect(() => {
-    if (anchorSpacerPx <= 0 || scrollModeRef.current !== "user-anchor") return;
-    const messageId = anchoredUserIdRef.current;
-    if (!messageId) return;
+    const id = lastUserMessageId;
     const raf = requestAnimationFrame(() => {
-      scrollUserBubbleToTop(messageId, "auto");
+      if (id) anchorUserBubble(id, "smooth");
     });
     return () => cancelAnimationFrame(raf);
-  }, [anchorSpacerPx, scrollUserBubbleToTop]);
+  }, [lastUserMessageId, anchorUserBubble]);
 
-  useEffect(() => {
-    if (!holdUserAnchor) {
-      if (scrollModeRef.current === "user-anchor") {
-        scrollModeRef.current = "bottom";
-        anchoredUserIdRef.current = null;
-        firstAnchorRef.current = true;
-      }
-      return;
-    }
-
-    const messageId = anchoredUserIdRef.current;
-    if (!messageId || scrollModeRef.current !== "user-anchor") return;
-
-    const attempt = () => {
-      if (!holdUserAnchor || scrollModeRef.current !== "user-anchor") return;
-      if (userScrolledAwayRef.current) return;
-      if (anchoredUserIdRef.current !== messageId) return;
-      if (scrollUserBubbleToTop(messageId, "auto")) {
-        firstAnchorRef.current = false;
-      }
-    };
-
-    const raf = requestAnimationFrame(() => requestAnimationFrame(attempt));
-
-    const container = scrollRef.current;
-    const resizeObserver =
-      container &&
-      new ResizeObserver(() => {
-        attempt();
-      });
-    if (resizeObserver && container) {
-      resizeObserver.observe(container);
-    }
-
-    return () => {
-      cancelAnimationFrame(raf);
-      resizeObserver?.disconnect();
-    };
-  }, [
-    holdUserAnchor,
-    lastUserMessageId,
-    thread.length,
-    scrollUserBubbleToTop,
-    agent.progress.phase,
-    anchorSpacerPx,
-  ]);
-
+  // Fonte única de verdade para scroll durante/after o run:
+  //  - ancorado + run ativo → não mexe (navegador segura a âncora)
+  //  - fim do run estando ancorado → leva ao resultado, ou pill se o usuário rolou pra cima
+  //  - modo bottom → auto-segue o streaming
   useEffect(() => {
     if (scrollModeRef.current === "user-anchor" && holdUserAnchor) return;
+
+    if (scrollModeRef.current === "user-anchor" && !holdUserAnchor) {
+      scrollModeRef.current = "bottom";
+      anchoredUserIdRef.current = null;
+      if (userScrolledAwayRef.current) {
+        setShowPill(true);
+        return;
+      }
+      const raf = requestAnimationFrame(() => scrollToBottom("smooth"));
+      return () => cancelAnimationFrame(raf);
+    }
 
     if (pinnedToBottom.current) {
       const raf = requestAnimationFrame(() => scrollToBottom());
       return () => cancelAnimationFrame(raf);
     }
     setShowPill(true);
-  }, [
-    thread.length,
-    holdUserAnchor,
-    pendingQueueItems.length,
-    scrollToBottom,
-  ]);
+  }, [thread.length, holdUserAnchor, pendingQueueItems.length, scrollToBottom]);
 
   const handleSend = useCallback(
     (text: string, mode?: AgentComposerMode, parts?: StoredMessagePart[]) => {
@@ -413,13 +345,6 @@ export function ChatPanel({
               lastUserMessageId={lastUserMessageId}
               lastAssistantMessageId={lastAssistantMessageId}
             />
-            {anchorSpacerPx > 0 ? (
-              <div
-                className="forge-chat-scroll-spacer"
-                style={{ minHeight: anchorSpacerPx }}
-                aria-hidden
-              />
-            ) : null}
           </>
         )}
 

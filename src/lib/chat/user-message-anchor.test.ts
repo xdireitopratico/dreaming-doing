@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-  computeUserAnchorSpacerHeight,
   shouldAnchorNewUserMessage,
   shouldHoldUserMessageAnchor,
 } from "@/lib/chat/user-message-anchor";
@@ -13,16 +12,6 @@ describe("shouldAnchorNewUserMessage", () => {
   it("ancora só quando o id do usuário mudou após o load", () => {
     expect(shouldAnchorNewUserMessage("u-1", "u-2", true)).toBe(true);
     expect(shouldAnchorNewUserMessage("u-2", "u-2", true)).toBe(false);
-  });
-});
-
-describe("computeUserAnchorSpacerHeight", () => {
-  it("preenche o restante do viewport abaixo da bolha", () => {
-    expect(computeUserAnchorSpacerHeight(600, 80, 16, 8, 8)).toBe(488);
-  });
-
-  it("não retorna negativo", () => {
-    expect(computeUserAnchorSpacerHeight(200, 400, 16, 8, 8)).toBe(0);
   });
 });
 

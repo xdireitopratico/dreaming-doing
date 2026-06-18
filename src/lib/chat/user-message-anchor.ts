@@ -12,21 +12,11 @@ export function shouldAnchorNewUserMessage(
 }
 
 /**
- * Espaço extra abaixo do turno ativo — sem isso o scroll não consegue
- * subir a bolha do usuário até o topo do painel (limite físico do scrollHeight).
+ * Offset de scroll que alinha a bolha do usuário ao topo do painel.
+ * Usado apenas para detectar se o usuário rolou para longe da âncora —
+ * o ancoramento em si usa `scrollIntoView({ block: "start" })` + scroll
+ * anchoring nativo do navegador, sem spacer nem medições contínuas.
  */
-export function computeUserAnchorSpacerHeight(
-  containerClientHeight: number,
-  bubbleHeight: number,
-  paddingTop = 0,
-  paddingBottom = 0,
-  gap = 8,
-): number {
-  if (containerClientHeight <= 0) return 0;
-  const reserved = bubbleHeight + paddingTop + paddingBottom + gap;
-  return Math.max(0, Math.ceil(containerClientHeight - reserved));
-}
-
 export function scrollOffsetToAlignUserMessage(
   container: HTMLElement,
   bubble: HTMLElement,
