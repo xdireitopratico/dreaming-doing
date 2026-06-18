@@ -1,5 +1,12 @@
 import type { SSEEvent, AgentProgress } from "@/lib/agent-progress";
 
+function hasFirstInspectorToken(progress: AgentProgress): boolean {
+  if (progress.streamText?.trim() || progress.narrationText?.trim()) return true;
+  return progress.timeline.some(
+    (ev) => ev.type === "assistant_text" && typeof ev.data?.text === "string" && String(ev.data.text).trim().length > 0,
+  );
+}
+
 export type TimelineEntryKind = "thought" | "tool" | "result" | "phase" | "checkpoint";
 
 export type TimelineEntry = {
@@ -475,9 +482,16 @@ export function resolveLatencyThinking(
     };
   }
   if (!runStartedAtMs) return null;
-  if (!running) {
-    const elapsed = Date.now() - runStartedAtMs;
-    return { active: false, startedAtMs: runStartedAtMs, durationMs: Math.max(1000, elapsed) };
+
+  const hasToken = hasFirstInspectorToken(progress);
+  const timelineThoughts = progress.timeline.some(
+    (ev) => ev.type === "thinking_text" || ev.data?.thinking === true,
+  );
+
+  if (hasToken || timelineThoughts || !running) {
+    const durationMs = Math.max(500, Date.now() - runStartedAtMs);
+    return { active: false, startedAtMs: runStartedAtMs, durationMs };
   }
+
   return { active: true, startedAtMs: runStartedAtMs };
 }
