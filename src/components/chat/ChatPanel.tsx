@@ -329,8 +329,6 @@ export function ChatPanel({
     lastUserMessageId,
     thread.length,
     scrollUserBubbleToTop,
-    agent.progress.streamText,
-    agent.progress.narrationText,
     agent.progress.phase,
     anchorSpacerPx,
   ]);
@@ -348,8 +346,6 @@ export function ChatPanel({
     holdUserAnchor,
     pendingQueueItems.length,
     scrollToBottom,
-    agent.progress.streamText,
-    agent.progress.narrationText,
   ]);
 
   const handleSend = useCallback(

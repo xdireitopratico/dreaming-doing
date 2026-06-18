@@ -1,6 +1,6 @@
 import type { AgentComposerMode } from "@/lib/chat-types";
 import type { ForgeSessionKind } from "@/lib/taste";
-import type { StoredMessagePart } from "@/lib/chat-attachments";
+import { buildOutgoingParts, type StoredMessagePart } from "@/lib/chat-attachments";
 
 export type SendMessageInput = {
   text: string;
@@ -36,8 +36,7 @@ export type SendMessageDeps = {
 };
 
 function messageParts(text: string, parts?: StoredMessagePart[]): StoredMessagePart[] {
-  if (parts && parts.length > 0) return parts;
-  return [{ type: "text", text }];
+  return buildOutgoingParts(text, parts ?? []);
 }
 
 /**

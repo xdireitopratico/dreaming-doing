@@ -40,7 +40,7 @@ export function ChatMessage({
         data-testid="chat-message-user"
         data-user-msg-id={item.message.id}
       >
-        <ChatUserBubble content={item.message.content} queued={isQueued} />
+        <ChatUserBubble content={item.message.content} parts={item.message.parts} queued={isQueued} />
         <ChatToolbar
           text={item.message.content}
           align="end"
