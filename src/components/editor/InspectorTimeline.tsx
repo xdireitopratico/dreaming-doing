@@ -1,29 +1,10 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
+import { buildTimeline, resolveLatencyThinking } from "@/lib/timeline-builder";
 import type { AgentProgress } from "@/lib/agent-progress";
-import {
-  buildForgeTimeline,
-  resolveLatencyThinking,
-  type ForgeTimelineItem,
-} from "@/lib/forge-run";
+import type { TimelineEntry } from "@/lib/timeline-builder";
 import { hasInspectorProgressContent } from "@/lib/assistant-run-progress";
 import { ForgeThinking } from "@/components/editor/ForgeThinking";
 import { InspectorActivityFeed } from "@/components/editor/InspectorActivityFeed";
-
-function toolPathFromArgs(args: Record<string, unknown> | undefined): string | undefined {
-  if (!args) return undefined;
-  const path = args.path ?? args.filePath ?? args.file;
-  return typeof path === "string" && path.trim() ? path : undefined;
-}
-
-function timelineItemsFromTools(tools: AgentProgress["tools"]): ForgeTimelineItem[] {
-  return tools.map((tool, index) => ({
-    type: "TOOL",
-    id: `tool-snap-${index}`,
-    name: tool.name,
-    path: toolPathFromArgs(tool.args),
-    detail: toolPathFromArgs(tool.args) ? undefined : JSON.stringify(tool.args ?? {}).slice(0, 200),
-  }));
-}
 
 type InspectorTimelineProps = {
   progress: AgentProgress;
@@ -32,7 +13,6 @@ type InspectorTimelineProps = {
   runStartedAtMs?: number | null;
 };
 
-/** Timeline Lovable — labels humanos (Read/Edited/Searching) + thoughts colapsáveis. */
 export function InspectorTimeline({
   progress,
   running,
@@ -40,32 +20,42 @@ export function InspectorTimeline({
   runStartedAtMs,
 }: InspectorTimelineProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
-  const timelineItems = useMemo(() => {
-    const built = buildForgeTimeline(progress.timeline, running);
-    if (built.length > 0) return built;
-    if (!running && (progress.tools?.length ?? 0) > 0) {
-      return timelineItemsFromTools(progress.tools);
-    }
-    return built;
-  }, [progress.timeline, progress.tools, running]);
+  const userScrolledRef = useRef(false);
+
+  const timelineItems = useMemo(
+    () => buildTimeline(progress.timeline, running),
+    [progress.timeline, running],
+  );
 
   const latencyThinking = useMemo(
-    () => resolveLatencyThinking(progress, running, runStartedAtMs, timelineItems),
-    [progress, running, runStartedAtMs, timelineItems],
+    () => resolveLatencyThinking(progress, running, runStartedAtMs),
+    [progress, running, runStartedAtMs],
   );
 
   const hasActiveThought = timelineItems.some(
-    (item) => item.type === "THOUGHT" && item.active,
+    (item) => item.kind === "thought" && item.active,
   );
-  const showThinkingFooter =
+  const showThinkingHeader =
     running && (latencyThinking?.active || hasActiveThought || timelineItems.length === 0);
+
+  const handleUserScroll = useCallback(() => {
+    userScrolledRef.current = true;
+  }, []);
 
   useEffect(() => {
     const el =
       scrollRef.current?.closest<HTMLElement>(".forge-inspector-body") ?? scrollRef.current;
     if (!el || !running) return;
-    el.scrollTop = el.scrollHeight;
-  }, [timelineItems.length, latencyThinking, running, progress.timeline.length]);
+
+    const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    if (distFromBottom < 100 && !userScrolledRef.current) {
+      el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+    }
+  }, [timelineItems.length, running, latencyThinking]);
+
+  useEffect(() => {
+    userScrolledRef.current = false;
+  }, [timelineItems.length]);
 
   const hasInspectorContent = hasInspectorProgressContent(progress);
   if (!timelineItems.length && !running && !hasInspectorContent) {
@@ -78,8 +68,12 @@ export function InspectorTimeline({
 
   return (
     <div className="forge-inspector-details" data-testid="inspector-timeline">
-      <div ref={scrollRef} className="forge-inspector-details-scroll">
-        {showThinkingFooter && (
+      <div
+        ref={scrollRef}
+        className="forge-inspector-details-scroll"
+        onScroll={handleUserScroll}
+      >
+        {showThinkingHeader && (
           <div className="forge-inspector-thinking-header" data-testid="inspector-thinking-header">
             <span className="forge-inspector-thinking-dot" aria-hidden />
             {latencyThinking?.active && latencyThinking.startedAtMs ? (
@@ -90,7 +84,7 @@ export function InspectorTimeline({
                 active
               />
             ) : (
-              <span>Thinking…</span>
+              <span>Raciocinando…</span>
             )}
           </div>
         )}

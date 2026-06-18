@@ -15,7 +15,7 @@ type ForgeThinkingProps = {
 
 function formatThoughtSeconds(ms: number): string {
   const sec = Math.max(1, Math.round(ms / 1000));
-  return `Thought for ${sec}s`;
+  return `Raciocinou por ${sec}s`;
 }
 
 export function ForgeThinking({
@@ -39,7 +39,7 @@ export function ForgeThinking({
       : (frozenMs ?? durationMs);
 
   const label =
-    variant === "latency" && active ? "Thinking…" : formatThoughtSeconds(liveMs);
+    variant === "latency" && active ? "Raciocinando…" : formatThoughtSeconds(liveMs);
 
   return (
     <p

@@ -10,5 +10,4 @@ export { ChatUserBubble } from "./ChatUserBubble";
 export { ChatNarration } from "./ChatNarration";
 
 export { ChatJobCard } from "./ChatJobCard";
-export { ChatTaskList } from "./ChatTaskList";
 export { ChatToolbar } from "./ChatToolbar";
