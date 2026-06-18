@@ -6,7 +6,6 @@ import { resolveInspectorPlanForRun } from "@/lib/plan-message-meta";
 import { InspectorTimeline } from "@/components/editor/InspectorTimeline";
 import { InspectorChanges } from "@/components/editor/InspectorChanges";
 import { InspectorPlan } from "@/components/editor/InspectorPlan";
-import { InspectorHistory } from "@/components/editor/InspectorHistory";
 import { emitStreamingTelemetry } from "@/lib/streaming-telemetry";
 
 export type JobInspectorProps = {
@@ -22,14 +21,11 @@ export type JobInspectorProps = {
   runStartedAtMs?: number | null;
   /** Inspector ocupa o workspace inteiro (Lovable: job aberto = sem preview). */
   fullWidth?: boolean;
-  projectId?: string;
-  conversationId?: string;
 };
 
 const TABS: { id: JobInspectorTab; label: string }[] = [
   { id: "timeline", label: "Timeline" },
   { id: "changes", label: "Changes" },
-  { id: "history", label: "History" },
 ];
 
 export function JobInspector({
@@ -44,8 +40,6 @@ export function JobInspector({
   onOpenFile,
   runStartedAtMs,
   fullWidth = false,
-  projectId,
-  conversationId,
 }: JobInspectorProps) {
   const inspectorPlan = useMemo(
     () =>
@@ -63,9 +57,7 @@ export function JobInspector({
       ? "plan"
       : normalizedTab === "changes"
         ? "changes"
-        : normalizedTab === "history"
-          ? "history"
-          : "timeline";
+        : "timeline";
 
   // Fase 1.7 — telemetria: se este run foi originado de um plano aprovado
   // (build run com planSourceRunId), mas o inspector não consegue
@@ -140,13 +132,6 @@ export function JobInspector({
         {resolvedTab === "changes" && <InspectorChanges progress={run} />}
         {resolvedTab === "plan" && inspectorPlan && (
           <InspectorPlan plan={inspectorPlan.plan} />
-        )}
-        {resolvedTab === "history" && projectId && conversationId && (
-          <InspectorHistory
-            projectId={projectId}
-            conversationId={conversationId}
-            messages={messages}
-          />
         )}
       </div>
     </div>

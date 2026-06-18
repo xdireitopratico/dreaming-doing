@@ -111,6 +111,7 @@ export function ChatPanel({
   const isProgrammaticScrollRef = useRef(false);
   const firstAnchorRef = useRef(true);
   const userScrolledAwayRef = useRef(false);
+  const userJustSentRef = useRef(false);
   const [showPill, setShowPill] = useState(false);
   /** Fase 2.5 — quando o user clica num card de sugestão do empty state,
    *  setamos este state que alimenta `externalPrompt` no ChatComposer. */
@@ -236,6 +237,7 @@ export function ChatPanel({
     anchoredUserIdRef.current = null;
     firstAnchorRef.current = true;
     userScrolledAwayRef.current = false;
+    userJustSentRef.current = false;
     pinnedToBottom.current = true;
   }, [conversationId]);
 
@@ -263,8 +265,11 @@ export function ChatPanel({
     scrollModeRef.current = "user-anchor";
     anchoredUserIdRef.current = lastUserMessageId;
     firstAnchorRef.current = true;
-    userScrolledAwayRef.current = false;
     pinnedToBottom.current = false;
+    if (userJustSentRef.current) {
+      userScrolledAwayRef.current = false;
+      userJustSentRef.current = false;
+    }
     setAnchorSpacerPx(measureAnchorSpacer(lastUserMessageId));
   }, [lastUserMessageId, measureAnchorSpacer]);
 
@@ -350,6 +355,7 @@ export function ChatPanel({
 
   const handleSend = useCallback(
     (text: string, mode?: AgentComposerMode, parts?: StoredMessagePart[]) => {
+      userJustSentRef.current = true;
       onSend(text, mode ?? composerMode, parts);
     },
     [onSend, composerMode],

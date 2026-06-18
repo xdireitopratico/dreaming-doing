@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState } from "react";
 
-export type JobInspectorTab = "timeline" | "changes" | "plan" | "history";
+export type JobInspectorTab = "timeline" | "changes" | "plan";
 
 /** @deprecated Use JobInspectorTab */
 export type JobWorkspaceTab = JobInspectorTab;

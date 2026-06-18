@@ -255,7 +255,7 @@ describe("Fase 2.3 — Version history (snapshot list + tab)", () => {
     expect(typeof mod.listProjectSnapshots).toBe("function");
   });
 
-  it("JobInspectorTab inclui 'history' e JobInspector renderiza a tab", async () => {
+  it("JobInspectorTab não inclui mais 'history' (removido em limpeza)", async () => {
     const { readFileSync } = await import("node:fs");
     const { resolve } = await import("node:path");
     const focus = readFileSync(
@@ -266,9 +266,9 @@ describe("Fase 2.3 — Version history (snapshot list + tab)", () => {
       resolve(import.meta.dirname, "../components/editor/JobInspector.tsx"),
       "utf8",
     );
-    expect(focus).toContain('"history"');
-    expect(inspector).toContain('id: "history"');
-    expect(inspector).toContain("InspectorHistory");
+    expect(focus).not.toContain('"history"');
+    expect(inspector).not.toContain('id: "history"');
+    expect(inspector).not.toContain("InspectorHistory");
   });
 });
 

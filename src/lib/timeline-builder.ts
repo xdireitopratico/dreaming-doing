@@ -75,7 +75,7 @@ function toolLabel(name: string, path?: string, detail?: string): string {
   if (path) {
     const file = fileBase(path);
     if (READ_TOOLS.test(name)) return `Ler ${file}`;
-    if (WRITE_TOOLS.test(name)) return `Editou ${file}`;
+    if (WRITE_TOOLS.test(name)) return `Editando ${file}`;
     return `${name} ${path}`;
   }
   if (/search|grep|find|scan/i.test(name)) {
@@ -84,6 +84,21 @@ function toolLabel(name: string, path?: string, detail?: string): string {
   }
   if (SHELL_TOOLS.test(name)) return "Rodando comando";
   return name;
+}
+
+function toolDoneLabel(name: string, path?: string): string | null {
+  if (!path) return null;
+  const file = fileBase(path);
+  if (READ_TOOLS.test(name)) return `Ler ${file}`;
+  if (WRITE_TOOLS.test(name)) return `Editou ${file}`;
+  return null;
+}
+
+function findLastToolItem(items: TimelineEntry[]): TimelineEntry | null {
+  for (let i = items.length - 1; i >= 0; i--) {
+    if (items[i]?.kind === "tool") return items[i]!;
+  }
+  return null;
 }
 
 function isRedundant(prev: TimelineEntry | null, ev: SSEEvent, data: Record<string, unknown>): boolean {
@@ -297,22 +312,26 @@ export function buildTimeline(events: SSEEvent[], running = false): TimelineEntr
 
     if (ev.type === "tool_result" || ev.type === "tool_end") {
       const ok = data.ok !== false && data.error == null;
-      const text = typeof data.summary === "string"
-        ? data.summary
-        : ok ? "Concluído" : String(data.error ?? "Falhou");
-      items.push({
-        id: `result-${ts}`,
-        kind: "result",
-        ts,
-        label: ok ? `✓ ${text}` : `✗ ${text}`,
-        ok,
-      });
+      const lastTool = findLastToolItem(items);
+      if (lastTool) {
+        const toolName = String(data.name ?? "tool");
+        const pastLabel = toolDoneLabel(toolName, lastTool.path);
+        lastTool.label = ok
+          ? `✓ ${pastLabel ?? lastTool.label}`
+          : `✗ ${pastLabel ?? lastTool.label}`;
+        lastTool.ok = ok;
+        lastTool.active = false;
+      }
       continue;
     }
 
     if (ev.type === "file_diff") {
       const path = typeof data.path === "string" ? data.path : "";
       if (path) {
+        const lastTool = findLastToolItem(items);
+        if (lastTool && lastTool.path === path) {
+          continue;
+        }
         items.push({
           id: `diff-${ts}`,
           kind: "phase",
