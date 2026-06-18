@@ -7,7 +7,6 @@ import {
   normalizeMiniCardBriefing,
   deriveBrainstormTitle,
   deriveSessionTitle,
-  deriveTasksFromPlan,
   isRunEffectivelyActive,
   resolveLatencyThinking,
   shouldShowJobCard,
@@ -55,71 +54,7 @@ describe("buildForgeTimeline", () => {
   });
 });
 
-describe("forge-run job requirements", () => {
-  it("lista atômica usa passos do plano, não fases da timeline", () => {
-    const progress = {
-      ...initialAgentProgress,
-      phase: "execute",
-      currentStep: 1,
-      timeline: [
-        { type: "phase", data: { phase: "gather", message: "Coletando contexto" }, timestamp: 1 },
-        { type: "memory", data: { message: "Lendo arquivos" }, timestamp: 2 },
-      ],
-    };
 
-    const view = buildAgentRunView("run-1", progress, {
-      running: true,
-      jobPlan: samplePlan,
-    });
-
-    expect(view.miniCard.tasks.map((t) => t.label)).toEqual([
-      "Hero section",
-      "Features section",
-      "CTA section",
-    ]);
-    expect(view.miniCard.tasks.some((t) => t.label.includes("Coletando"))).toBe(false);
-  });
-
-  it("sem plano não deriva tarefas da timeline SSE", () => {
-    const progress = {
-      ...initialAgentProgress,
-      phase: "execute",
-      timeline: [
-        { type: "phase", data: { phase: "execute", message: "Gerando código" }, timestamp: 1 },
-        { type: "memory", data: { message: "Editando App.tsx" }, timestamp: 2 },
-      ],
-    };
-
-    const view = buildAgentRunView("run-1", progress, { running: true });
-    expect(view.miniCard.tasks).toEqual([]);
-  });
-
-  it("tarefa atômica avança com currentStep do plano (0-based)", () => {
-    const progress = {
-      ...initialAgentProgress,
-      phase: "execute",
-      currentStep: 1,
-      totalSteps: 3,
-    };
-    const tasks = deriveTasksFromPlan(samplePlan, progress);
-    expect(tasks[0]?.status).toBe("done");
-    expect(tasks[1]?.status).toBe("active");
-    expect(tasks[2]?.status).toBe("pending");
-  });
-
-  it("marca todos os passos como done quando o job terminou com sucesso", () => {
-    const progress = {
-      ...initialAgentProgress,
-      phase: "done",
-      finished: true,
-      lastFinishOk: true,
-      currentStep: 2,
-    };
-
-    const tasks = deriveTasksFromPlan(samplePlan, progress);
-    expect(tasks.every((t) => t.status === "done")).toBe(true);
-  });
-});
 
 describe("shouldShowJobCard", () => {
   it("turno conversacional não mostra mini-card", () => {
@@ -294,7 +229,7 @@ describe("hasActiveJob — sem fantasma no mount", () => {
       ],
       false,
     );
-    expect(collectMiniCardBriefings(progress, timeline, [], false)).toEqual([]);
+    expect(collectMiniCardBriefings(progress, timeline, false)).toEqual([]);
   });
 });
 
@@ -411,7 +346,6 @@ describe("forge-run terminal state", () => {
     });
 
     expect(view.miniCard.status).toBe("done");
-    expect(view.miniCard.tasks.every((t) => t.status === "done")).toBe(true);
   });
 });
 
@@ -436,7 +370,7 @@ describe("forge-run mini card briefing e título", () => {
       ],
     };
     const timeline = buildForgeTimeline(progress.timeline, true);
-    const briefings = collectMiniCardBriefings(progress, timeline, [], true);
+    const briefings = collectMiniCardBriefings(progress, timeline, true);
 
     expect(briefings.some((b) => b.includes("Lendo App.tsx"))).toBe(true);
     expect(briefings.some((b) => b.includes("Entendi que você quer"))).toBe(false);
@@ -591,7 +525,7 @@ describe("forge-run mini card briefing e título", () => {
       tools: [{ name: "fs_read", args: { path: "src/App.tsx" } }],
       timeline: [],
     };
-    const briefings = collectMiniCardBriefings(progress, [], [], true, {
+    const briefings = collectMiniCardBriefings(progress, [], true, {
       userPrompt: "landing page",
     });
     expect(briefings.some((b) => b.includes("Lendo App.tsx"))).toBe(true);

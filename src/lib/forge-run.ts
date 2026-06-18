@@ -1,14 +1,6 @@
 import type { AgentProgress, PendingPlan, PlanStep, SSEEvent } from "@/lib/agent-progress";
 import { emitStreamingTelemetry } from "@/lib/streaming-telemetry";
 
-export type TaskStatus = "pending" | "active" | "done" | "failed";
-
-export type ForgeTaskItem = {
-  id: string;
-  label: string;
-  status: TaskStatus;
-};
-
 export type MiniCardStatus = "thinking" | "working" | "done" | "failed";
 
 export type ForgeMiniCardData = {
@@ -21,8 +13,6 @@ export type ForgeMiniCardData = {
   /** Briefings rotativos enquanto o job está ativo — resumo miniatura da timeline. */
   liveBriefings: string[];
   status: MiniCardStatus;
-  tasks: ForgeTaskItem[];
-  currentTaskIndex: number;
   editedFile?: string | null;
   fileCount?: number;
   hasPlan?: boolean;
@@ -274,13 +264,6 @@ export function buildForgeTimeline(timeline: SSEEvent[], running = false): Forge
       continue;
     }
 
-    if (ev.type === "step") {
-      const current = typeof data.current === "number" ? data.current : 0;
-      const total = typeof data.total === "number" ? data.total : 0;
-      items.push({ type: "TASK", id: `step-${ts}`, label: `Passo ${current + 1}/${total}` });
-      continue;
-    }
-
     if (ev.type === "classify") {
       const model = typeof data.model === "string" ? data.model : "modelo";
       items.push({ type: "TASK", id: `classify-${ts}`, label: `Classificando com ${model}` });
@@ -415,27 +398,6 @@ export function buildForgeTimeline(timeline: SSEEvent[], running = false): Forge
   }
 
   return items;
-}
-
-export function deriveTasksFromPlan(
-  plan: PendingPlan,
-  progress: AgentProgress,
-): ForgeTaskItem[] {
-  const current = progress.currentStep ?? 0;
-  const executing = progress.phase === "execute" && !progress.finished;
-  const succeeded = progress.finished && progress.lastFinishOk !== false && !progress.canceled;
-  const failed = progress.finished && (progress.lastFinishOk === false || !!progress.canceled);
-
-  return enabledPlanSteps(plan.steps)
-    .slice(0, 6)
-    .map((step, idx) => {
-      let status: TaskStatus = "pending";
-      if (succeeded) status = "done";
-      else if (failed && idx === current) status = "failed";
-      else if (executing && idx < current) status = "done";
-      else if (executing && idx === current) status = "active";
-      return { id: step.id, label: step.description, status };
-    });
 }
 
 /** Job ativo confirmado — sem autoResuming nem flags stale. */
@@ -577,7 +539,6 @@ function isInternalPhaseNoise(label: string, phase?: string): boolean {
 export function collectMiniCardBriefings(
   progress: AgentProgress,
   timeline: ForgeTimelineItem[],
-  tasks: ForgeTaskItem[],
   jobActive: boolean,
   _opts?: { userPrompt?: string | null; sessionTitle?: string | null },
 ): string[] {
@@ -608,12 +569,6 @@ export function collectMiniCardBriefings(
 
   const activeThought = [...timeline].reverse().find((i) => i.type === "THOUGHT" && i.active);
   if (activeThought?.type === "THOUGHT") return ["Raciocinando…"];
-
-  const activeTask = tasks.find((t) => t.status === "active");
-  if (activeTask) {
-    const line = normalizeMiniCardBriefing(activeTask.label);
-    if (line) return [line];
-  }
 
   const planAwaiting =
     progress.awaitingKind === "plan_approval" && (progress.pendingPlan?.steps?.length ?? 0) > 0;
@@ -785,17 +740,10 @@ export function buildAgentRunView(
   const jobPlan = opts?.jobPlan ?? progress.pendingPlan;
   const forgeTimeline = buildForgeTimeline(progress.timeline, jobActive);
 
-  const tasks = jobPlan?.steps?.length ? deriveTasksFromPlan(jobPlan, progress) : [];
-
-  const currentTaskIndex = Math.max(
-    0,
-    tasks.findIndex((t) => t.status === "active"),
-  );
-
   const status = deriveMiniCardStatus(progress, jobActive);
   const editedFile = lastEditedFile(progress);
   const sessionTitle = deriveSessionTitle(progress, jobPlan, opts?.userPrompt);
-  const liveBriefings = collectMiniCardBriefings(progress, forgeTimeline, tasks, jobActive, {
+  const liveBriefings = collectMiniCardBriefings(progress, forgeTimeline, jobActive, {
     userPrompt: opts?.userPrompt,
     sessionTitle,
   });
@@ -888,8 +836,6 @@ export function buildAgentRunView(
       subtitle,
       liveBriefings,
       status,
-      tasks,
-      currentTaskIndex: currentTaskIndex >= 0 ? currentTaskIndex : 0,
       editedFile,
       fileCount: progress.diffs.length || progress.deliveryFiles?.length,
       hasPlan: !!jobPlan?.steps?.length,

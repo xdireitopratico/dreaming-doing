@@ -1,6 +1,5 @@
 import { cn } from "@/lib/utils";
 import type { MiniCardData } from "@/lib/chat/types";
-import { ChatTaskList } from "./ChatTaskList";
 import { FileText, GitCompareArrows, Terminal, ExternalLink } from "lucide-react";
 
 type ChatJobCardProps = {
@@ -158,8 +157,6 @@ export function ChatJobCard({
         <p className={cn("forge-mini-card-title", isLive && "forge-mini-card-title--live")}>
           {displaySubtitle}
         </p>
-
-        {data.tasks.length > 0 && <ChatTaskList tasks={data.tasks} />}
 
         {visibleChips.length > 0 && (
           <div className="forge-mini-card-chips" data-testid="chat-mini-card-chips">

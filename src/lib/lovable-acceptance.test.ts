@@ -8,7 +8,6 @@ import { initialAgentProgress } from "@/lib/agent-progress";
 import {
   buildAgentRunView,
   buildMiniCardHeader,
-  deriveTasksFromPlan,
 } from "@/lib/forge-run";
 import { buildChatThread } from "@/lib/chat/thread";
 import { mapAssistantTurn } from "@/lib/chat/turn";
@@ -85,7 +84,6 @@ describe("Lovable acceptance — Chat (imgs 4/5/9/15)", () => {
     );
     expect(view.miniCard.header).toMatch(/^Edited /);
     expect(view.miniCard.subtitle).not.toBe(view.miniCard.header);
-    expect(view.miniCard.tasks.length).toBeGreaterThan(0);
   });
 
   it("plan approval: sem mini-card no thread (dock acima do composer)", () => {

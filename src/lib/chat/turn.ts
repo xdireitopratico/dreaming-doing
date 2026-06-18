@@ -46,8 +46,6 @@ function toMiniCard(
     subtitle: m.subtitle,
     liveBriefings: m.liveBriefings.length > 0 ? m.liveBriefings : [m.subtitle || m.header],
     status: m.status,
-    tasks: m.tasks,
-    currentTaskIndex: m.currentTaskIndex,
     editedFile: m.editedFile,
     fileCount: m.fileCount,
     hasPlan: m.hasPlan,

@@ -3,14 +3,6 @@ import type { AgentProgress } from "@/lib/agent-progress";
 
 export type RunPhase = "plan" | "build" | "execute" | "observe" | "summarize" | "resume" | null;
 
-export type TaskStatus = "pending" | "active" | "done" | "failed";
-
-export type TaskItem = {
-  id: string;
-  label: string;
-  status: TaskStatus;
-};
-
 export type MiniCardStatus = "thinking" | "working" | "done" | "failed";
 
 export type MiniCardData = {
@@ -21,8 +13,6 @@ export type MiniCardData = {
   subtitle: string;
   liveBriefings: string[];
   status: MiniCardStatus;
-  tasks: TaskItem[];
-  currentTaskIndex: number;
   editedFile?: string | null;
   fileCount?: number;
   hasPlan?: boolean;
