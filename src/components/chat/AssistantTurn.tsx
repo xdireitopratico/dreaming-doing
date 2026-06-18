@@ -6,7 +6,6 @@ import { assistantTurnCopyText } from "@/lib/chat/assistant-turn-copy";
 import { resolveClosingProse, sanitizeChatProseForDisplay } from "@/lib/chat/stream-prose";
 import { loadAgentPreferences } from "@/lib/agent-preferences";
 import { llmErrorHint, timeoutHint, zombieRunHint } from "@/lib/llm-error-hints";
-import { ChatThinking } from "./ChatThinking";
 import { ChatNarration } from "./ChatNarration";
 import { ChatJobCard } from "./ChatJobCard";
 import { ChatToolbar } from "./ChatToolbar";
@@ -55,7 +54,6 @@ export function AssistantTurn({
   const narrationStreaming = !!item.isActive && !!narrationText;
   const closingStreaming = !!item.isActive && !!item.streamText?.trim();
 
-  const showThinking = !!item.thinking;
   const showNarration = !!narrationText;
   const showJobCard = !!item.miniCard;
   const showClarify = !!item.clarify?.choices?.length;
@@ -96,16 +94,6 @@ export function AssistantTurn({
   return (
     <article className="forge-chat-item forge-chat-item-assistant" data-testid="chat-message-assistant">
       <div className="forge-assistant-turn" data-testid="assistant-turn">
-        {showThinking && item.thinking && (
-          <ChatThinking
-            startedAtMs={item.thinking.startedAtMs}
-            active={item.thinking.active}
-            durationMs={item.thinking.durationMs}
-            connectionState={item.thinking.connectionState}
-            phase={item.phase === "gather" ? "introduction" : null}
-          />
-        )}
-
         {showNarration && (
           <ChatNarration text={narrationText!} streaming={narrationStreaming} />
         )}

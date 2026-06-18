@@ -87,7 +87,6 @@ describe("buildChatThread", () => {
     const turn = thread[1];
     expect(turn.kind).toBe("assistant");
     if (turn.kind === "assistant") {
-      expect(turn.thinking?.durationMs).toBe(3800);
       expect(turn.narration).toBe("Vou investigar o estado atual.");
     }
   });

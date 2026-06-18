@@ -7,12 +7,11 @@ const ASSISTANT_TURN_PATH = resolve(
   "../../components/chat/AssistantTurn.tsx",
 );
 
-/** Garante ordem DOM fixa: Thought → LLM → Mini Card → LLM. */
+/** Garante ordem DOM fixa: Narração → Mini Card → LLM. */
 describe("AssistantTurn — ordem de renderização", () => {
-  it("sequência: Thought → Narração → mini-card → fechamento LLM", () => {
+  it("sequência: Narração → mini-card → fechamento LLM", () => {
     const source = readFileSync(ASSISTANT_TURN_PATH, "utf8");
     const markers = [
-      "{showThinking &&",
       "{showNarration &&",
       "{showJobCard &&",
       "{showClarify &&",

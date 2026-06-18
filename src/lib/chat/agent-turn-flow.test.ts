@@ -54,7 +54,6 @@ describe("S15 agent turn flow", () => {
     expect(turn?.kind).toBe("assistant");
     if (turn?.kind !== "assistant") return;
 
-    expect(turn.thinking?.durationMs).toBeGreaterThan(0);
     expect(turn.narration).toContain("hero");
     expect(turn.narration).not.toMatch(/hero[\s\S]*hero/i);
     expect(turn.miniCard).toBeTruthy();
@@ -106,7 +105,6 @@ describe("S15 agent turn flow", () => {
     expect(turn?.kind).toBe("assistant");
     if (turn?.kind !== "assistant") return;
 
-    expect(turn.thinking?.durationMs).toBe(2400);
     expect(turn.narration).toBe("Entendi: vou criar.");
     expect(turn.miniCard).toBeTruthy();
     expect(turn.streamText).toContain("Pronto");

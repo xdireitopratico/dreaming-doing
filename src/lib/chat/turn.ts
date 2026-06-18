@@ -13,7 +13,7 @@ import { resolveJobPlanForRun } from "@/lib/plan-message-meta";
 import { parseClarifyChoices } from "@/lib/clarify-choices";
 import { resolveAssistantProgress } from "@/lib/chat/resolve-progress";
 import { enforceAssistantTurnInvariant } from "@/lib/chat/invariants";
-import { resolveTurnNarration, resolveTurnThinking } from "@/lib/chat/turn-display";
+import { resolveTurnNarration } from "@/lib/chat/turn-display";
 import { resolveHistoricalRunProgress } from "@/lib/assistant-run-progress";
 import { initialAgentProgress } from "@/lib/agent-progress";
 import type {
@@ -150,11 +150,7 @@ export function mapAssistantTurn(
 
   const isLiveTurn =
     item.isActive || anchoredLive || (!!activeRunId && item.runId === activeRunId);
-  const runStartedAtMs = isLiveTurn
-    ? (ctx.activeRunStartedAtMs ?? null)
-    : resolved?.latencyThoughtMs && resolved.latencyThoughtMs > 0
-      ? Date.now() - resolved.latencyThoughtMs
-      : null;
+  const runStartedAtMs = isLiveTurn ? (ctx.activeRunStartedAtMs ?? null) : null;
 
   const runView = resolved
     ? buildAgentRunView(runId, resolved, {
@@ -195,7 +191,6 @@ export function mapAssistantTurn(
   }
 
   const rawStreamText = closingText ?? resolved?.streamText ?? null;
-  const thinking = resolveTurnThinking(resolved, runView, runStartedAtMs, slotActive);
   const narration = resolveTurnNarration(resolved, runView, rawStreamText);
   let streamText = rawStreamText;
   if (
@@ -227,7 +222,6 @@ export function mapAssistantTurn(
     streamText,
     phase: (resolved?.phase as RunPhase) ?? null,
     phaseMessage: resolved?.message ?? resolved?.statusHint ?? null,
-    thinking,
     narration,
     miniCard,
     statusChips: [],

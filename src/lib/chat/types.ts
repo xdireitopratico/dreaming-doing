@@ -61,12 +61,6 @@ export type ThreadItem =
       streamText: string | null;
       phase?: RunPhase;
       phaseMessage?: string | null;
-      thinking?: {
-        active: boolean;
-        startedAtMs?: number;
-        durationMs?: number;
-        connectionState?: "connected" | "reconnecting" | "disconnected";
-      } | null;
       narration?: string | null;
       miniCard?: MiniCardData | null;
       statusChips?: string[];

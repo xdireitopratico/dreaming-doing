@@ -115,7 +115,7 @@ describe("Lovable acceptance — Chat (imgs 4/5/9/15)", () => {
     expect(turn.miniCard).toBeNull();
   });
 
-  it("thread DB ordem cronológica + thought/narração congelam no F5", () => {
+  it("thread DB ordem cronológica + narração/mini-card congelam no F5", () => {
     const messages = [
       msg("u1", "user", "oi"),
       msg("a1", "assistant", "Pronto.", {
@@ -142,7 +142,6 @@ describe("Lovable acceptance — Chat (imgs 4/5/9/15)", () => {
     const turn = thread[1];
     expect(turn.kind).toBe("assistant");
     if (turn.kind === "assistant") {
-      expect(turn.thinking?.durationMs).toBe(4000);
       expect(turn.narration).toContain("Vou investigar o estado atual");
       expect(turn.miniCard).not.toBeNull();
     }

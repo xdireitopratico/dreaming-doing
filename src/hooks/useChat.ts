@@ -1,10 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import type { AgentProgress } from "@/lib/agent-progress";
 import type { ChatMessage } from "@/lib/chat-types";
-import {
-  canReleaseLiveSlot,
-  isAssistantRunMaterialized,
-} from "@/lib/assistant-materialized";
+import { canReleaseLiveSlot } from "@/lib/assistant-materialized";
 import { hasInspectorReadySnapshot } from "@/lib/assistant-run-progress";
 import { buildChatThread } from "@/lib/chat";
 import { usePendingPlan } from "@/hooks/usePendingPlan";
@@ -84,6 +81,27 @@ export function useChat({
     }
   }, [messages, messagesLoading, agent]);
 
+  useEffect(() => {
+    if (!agent.activeRunId || !agent.progress.finished) return;
+    const runId = agent.activeRunId;
+    const startedAt = Date.now();
+    const timer = window.setTimeout(() => {
+      const materialized = messages.find(
+        (m) => m.role === "assistant" && m.runId === runId && canReleaseLiveSlot(m),
+      );
+      if (!materialized) {
+        emitStreamingTelemetry("agent.materialized_release_pending", {
+          runId,
+          elapsedMs: Date.now() - startedAt,
+        });
+        agent.acknowledgeMaterializedRun(runId);
+        return;
+      }
+      agent.acknowledgeMaterializedRun(runId);
+    }, 45_000);
+    return () => window.clearTimeout(timer);
+  }, [agent.activeRunId, agent.progress.finished, agent, messages]);
+
   const pendingPlan = usePendingPlan({
     livePlan: agent.progress.pendingPlan,
     messages,
@@ -136,32 +154,7 @@ export function useChat({
     return true;
   }, [messagesLoading, messages.length, agentHasRun, agent.activeRunId]);
 
-  useEffect(() => {
-    if (!agent.activeRunId || !agent.progress.finished) return;
-    const runId = agent.activeRunId;
-    const startedAt = Date.now();
-    const timer = window.setTimeout(() => {
-      const materialized = messages.find(
-        (m) => m.role === "assistant" && m.runId === runId && canReleaseLiveSlot(m),
-      );
-      if (!materialized) {
-        // Fase 1.5 — telemetria de slot preso. Se chegou até aqui, o DB nunca
-        // materializou uma assistant message terminada para esse runId (ou
-        // tem shape inválido). Em vez de segurar o slot indefinidamente
-        // (comportamento histórico era: soltar 45s e só então liberar), libera
-        // imediatamente e loga para diagnóstico. Isso restaura o chat em vez
-        // de mantê-lo "engolido".
-        emitStreamingTelemetry("agent.materialized_release_pending", {
-          runId,
-          elapsedMs: Date.now() - startedAt,
-        });
-        agent.acknowledgeMaterializedRun(runId);
-        return;
-      }
-      agent.acknowledgeMaterializedRun(runId);
-    }, 45_000);
-    return () => window.clearTimeout(timer);
-  }, [agent.activeRunId, agent.progress.finished, agent, messages]);
+
 
   const agentBusy = !!(
     agent.activeRunId &&

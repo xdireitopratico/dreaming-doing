@@ -46,7 +46,6 @@ describe("mapAssistantTurn — mini-card permanece", () => {
     });
 
     expect(turn.miniCard).not.toBeNull();
-    expect(turn.thinking?.durationMs).toBe(4000);
     expect(turn.narration).toBe("Vou investigar o estado atual.");
   });
 

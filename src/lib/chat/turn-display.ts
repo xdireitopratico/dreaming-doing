@@ -2,35 +2,6 @@ import type { AgentProgress } from "@/lib/agent-progress";
 import type { AgentRunView } from "@/lib/forge-run";
 import { collapseNarrationBuffer } from "@/lib/narration-dedupe";
 
-export type TurnThinking = {
-  active: boolean;
-  startedAtMs?: number;
-  durationMs?: number;
-  connectionState?: "connected" | "reconnecting" | "disconnected";
-};
-
-export function resolveTurnThinking(
-  resolved: AgentProgress | null,
-  _runView: AgentRunView | null,
-  runStartedAtMs: number | null,
-  slotActive: boolean,
-): TurnThinking | null {
-  if (slotActive) {
-    return { active: true, startedAtMs: runStartedAtMs ?? undefined };
-  }
-
-  const storedMs = resolved?.latencyThoughtMs;
-  if (storedMs != null && storedMs > 0) {
-    return {
-      active: false,
-      startedAtMs: runStartedAtMs ?? Date.now() - storedMs,
-      durationMs: storedMs,
-    };
-  }
-
-  return null;
-}
-
 export function resolveTurnNarration(
   resolved: AgentProgress | null,
   _runView: AgentRunView | null,
