@@ -27,8 +27,8 @@ export interface HeroSignatureProps {
 
 const variantBg: Record<HeroVariant, string> = {
   aurora:
-    "before:absolute before:inset-0 before:bg-[radial-gradient(ellipse_80%_60%_at_50%_-20%,rgba(255,182,39,0.18),transparent)] before:pointer-events-none",
-  mesh: "before:absolute before:inset-0 before:bg-[radial-gradient(circle_at_20%_30%,rgba(255,122,26,0.12),transparent_50%),radial-gradient(circle_at_80%_70%,rgba(34,197,94,0.08),transparent_50%)] before:pointer-events-none",
+    "before:absolute before:inset-0 before:bg-[radial-gradient(ellipse_80%_60%_at_50%_-20%,color-mix(in_srgb,var(--color-brand-500)_18%,transparent),transparent)] before:pointer-events-none",
+  mesh: "before:absolute before:inset-0 before:bg-[radial-gradient(circle_at_20%_30%,color-mix(in_srgb,var(--color-brand-600)_12%,transparent),transparent_50%),radial-gradient(circle_at_80%_70%,color-mix(in_srgb,var(--color-accent-500)_8%,transparent),transparent_50%)] before:pointer-events-none",
   minimal: "",
   split: "lg:grid lg:grid-cols-2 lg:gap-16 lg:items-center",
 };

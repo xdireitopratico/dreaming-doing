@@ -1,5 +1,6 @@
 // seeds/vite-react.ts — Vite + React 19 + @forge/ui embutido + Tailwind v4 @theme.
 import { FORGE_UI_SEED_FILES } from "./forge-ui-bundle.generated";
+import { buildThemeBlock, MOOD_IDS } from "@forge/ui/tokens";
 import type { SeedFile } from "./types";
 
 export type { SeedFile };
@@ -132,49 +133,12 @@ const APP_TSX = `export default function App() {
 
 const INDEX_CSS = `@import "tailwindcss";
 
-@theme {
-  --color-brand-50: #FFFAE5;
-  --color-brand-100: #FFF3C4;
-  --color-brand-200: #FFE899;
-  --color-brand-300: #FFD966;
-  --color-brand-400: #FFC933;
-  --color-brand-500: #FFB627;
-  --color-brand-600: #FF7A1A;
-  --color-brand-700: #E65C00;
-  --color-brand-800: #B33D00;
-  --color-brand-900: #802600;
-  --color-brand-500-foreground: #0B0D12;
-  --color-accent-500: #22C55E;
-  --color-accent-600: #16A34A;
-  --color-surface-1: #0B0D12;
-  --color-surface-2: #12151C;
-  --color-surface-3: #1A1E27;
-  --color-surface-4: #252A36;
-  --color-background: #05060A;
-  --color-foreground: #EDEFF2;
-  --color-muted-foreground: #94A3B8;
-  --color-border: color-mix(in srgb, #EDEFF2 8%, transparent);
-  --color-destructive: #E5484D;
-  --color-destructive-foreground: #FAFAFA;
-  --color-success: #22C55E;
-  --color-ring: #FFB627;
-  --radius-sm: 0.25rem;
-  --radius-md: 0.375rem;
-  --radius-lg: 0.5rem;
-  --radius-xl: 0.75rem;
-  --radius-2xl: 1rem;
-  --radius-full: 9999px;
-  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
-  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1);
-  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1);
-  --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1);
-  --shadow-2xl: 0 25px 50px -12px rgb(0 0 0 / 0.25);
-  --shadow-glow: 0 0 32px rgba(255, 182, 39, 0.32), 0 0 80px rgba(255, 122, 26, 0.18);
-  --shadow-glow-silver: 0 0 24px rgba(201, 206, 214, 0.18);
-  --font-display: "Space Grotesk", system-ui, sans-serif;
-  --font-body: "Inter", system-ui, sans-serif;
-  --font-mono: "Share Tech Mono", "Fira Code", monospace;
-}
+${buildThemeBlock("ember")}
+
+/* Design mood: ember. Para mudar a identidade visual, substitua o @theme acima
+   por outro mood (edite os tokens em src/index.css). Moods disponíveis:
+   ${MOOD_IDS.join(", ")}. Escolha um adequado ao domínio do projeto.
+   Veja @forge/ui/tokens/moods para a paleta de cada um. */
 
 html, body, #root { height: 100%; }
 body {

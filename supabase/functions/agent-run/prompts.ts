@@ -13,12 +13,38 @@ export type ProjectTemplateId =
   | "static-html"
   | "custom";
 
-/** Guia curto — o pedido do usuário manda na forma e na paleta. */
+/** Guia orientacional — ferramentas e princípios, não receita fixa. O pedido manda. */
 export const DESIGN_GUIDE = `## Design
-- O **pedido do usuário** define forma, tom e paleta — adapte composição ao domínio; **proibido** receita fixa de landing SaaS (NavShell + Hero + Bento + Stats em todo projeto).
-- **@forge/ui** acelera (primitives, motion, composites) — importe só de \`@forge/ui\` (paths profundos quebram o bundle). Escolha 3–5 seções adequadas ao negócio; varie entre pedidos.
-- **Tokens:** leia internamente no CSS do projeto; ajuste cores e tipografia ao vibe — **nunca cite** paths, \`@theme\` ou \`--color-*\` ao usuário.
-- UI profissional: motion leve, contraste ok, sem página branca + CTA azul genérico.`;
+O pedido do usuário define forma, tom e paleta. **Proibido** receita fixa (NavShell + Hero + Bento + Stats em todo projeto). Adapte a composição ao domínio.
+
+### Moods (identidade visual)
+O projeto nasce com um mood em src/index.css (tokens @theme). Escolha/customize um adequado ao domínio — o mood controla cor, glow e contraste:
+- **ember** (laranja/escuro): food, criativo, identidade FORGE
+- **ocean** (azul): SaaS, fintech, dev tools, data
+- **forest** (verde): eco, saúde, natureza, bem-estar
+- **mono** (cinza/preto): minimal premium, editorial, portfólio
+- **neon** (magenta/ciano, dark): cyberpunk, gaming, web3
+- **sand** (terracota, claro): padaria, gourmet, lifestyle
+- **royal** (roxo/dourado): luxo, criativo, imobiliário premium
+- **sunset** (rosa/laranja): moda, beleza, lifestyle jovem
+Para trocar: edite os tokens @theme em src/index.css. Nunca hardcoded hex em componentes.
+
+### Princípios (amador → profissional)
+1. Ritmo vertical: alterne densidade e respiro entre seções (py-20 hero, py-12 densa, py-24 respirada). Sem isso é página plana.
+2. Hierarquia tipográfica: h1 display → h2 → h3, contraste de tamanho e peso.
+3. Camadas de superfície: bg-background → bg-surface-1/2/3 pra profundidade, nunca cor chapada.
+4. Motion com intenção: revelar no scroll, parallax sutil, hover com física (spring). Excesso ou ausência = amador.
+5. Assinatura: cada página tem UM momento memorável (hero com glow, bento assimétrico, prova social). Seja específico do domínio.
+6. Acessibilidade: focus-visible, aria-label, contraste AA, alvo >= 40px.
+
+### Catálogo @forge/ui (use, modifique ou ignore conforme o contexto)
+Importe só de \`@forge/ui\` (paths profundos quebram o bundle).
+- Primitivas: Button, Card, Badge, Dialog, Input, Avatar, Tooltip, Skeleton, Toast, Separator
+- Motion: FadeIn, Reveal, StaggerContainer/Item, Parallax, MagneticButton, HoverLift, TextShimmer, useScrollProgress
+- Compositions (marketing): HeroSignature, BentoGrid, FeatureMatrix, CTASignature, StatsRibbon, PricingTiers, TestimonialCarousel, FooterColumns, NavShell
+Landing/marketing pede riqueza visual. App/dashboard pede clareza e densidade. Adapte — não aplique a mesma estrutura para tudo.
+
+**Nunca cite** paths, \`@theme\`, \`--color-*\` ou \`@forge/ui\` ao usuário. UI profissional: contraste ok, sem página branca + CTA azul genérico.`;
 
 export const STACK_FLEX = `## Stack flexível
 - Padrão deste projeto: seção acima.
