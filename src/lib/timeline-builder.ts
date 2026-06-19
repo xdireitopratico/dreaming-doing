@@ -168,6 +168,9 @@ export function buildTimeline(events: SSEEvent[], running = false): TimelineEntr
   let thoughtStart = 0;
   let thoughtText = "";
 
+  let lastThoughtTs = 0;
+  let lastThoughtText = "";
+
   const flushThought = (endTs: number) => {
     if (!thoughtId) return;
     const durationMs = Math.max(1000, endTs - thoughtStart);
@@ -193,6 +196,11 @@ export function buildTimeline(events: SSEEvent[], running = false): TimelineEntr
       if (isThought) {
         const chunk = String(data.text ?? "");
         if (!chunk) continue;
+
+        if (ts === lastThoughtTs && chunk === lastThoughtText) continue;
+        lastThoughtTs = ts;
+        lastThoughtText = chunk;
+
         if (!thoughtId) {
           thoughtId = `thought-${ts}`;
           thoughtStart = ts;

@@ -16,7 +16,7 @@ function ThoughtBlock({
   entry: TimelineEntry;
   defaultOpen: boolean;
 }) {
-  const [open, setOpen] = useState(defaultOpen || !!entry.active);
+  const [open, setOpen] = useState(defaultOpen);
   const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
