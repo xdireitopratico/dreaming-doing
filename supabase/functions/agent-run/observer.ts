@@ -90,7 +90,7 @@ export class RuntimeObserver {
       });
       const buildOutput = shellOutput(build);
       const buildOk = build.ok && !outputIndicatesBuildFailure(buildOutput);
-      checks.push({ name: "build", ok: buildOk, output: buildOutput.slice(0, 3000) });
+      checks.push({ name: "build", ok: buildOk, output: buildOutput.slice(0, 8000) });
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "build check falhou";
       checks.push({ name: "build", ok: false, output: msg });

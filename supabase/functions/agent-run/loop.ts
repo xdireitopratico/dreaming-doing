@@ -40,6 +40,7 @@ import {
 } from "./run-context.ts";
 import {
   formatClarifyMessage,
+  getMetaToolDefinitions,
   hasMixedMetaAndExecution,
   isPlanModePatchTool,
   mergeExecutionToolDefinitions,
@@ -1016,16 +1017,18 @@ export class AgentLoop {
           if (shouldEnforce) {
             const fail = this.applyNoToolCallsEnforcement(response, assistantText, loopStep);
             if (fail) {
-              await this.persistFinal(TOOL_FAIL_USER_MESSAGE, { lastFinishOk: false });
+              const closing = await this.attemptGracefulClosing("tool_miss");
+              const msg = closing ?? TOOL_FAIL_USER_MESSAGE;
+              await this.persistFinal(msg, { lastFinishOk: false });
               await this.markRunStatus("failed");
               this.emit("finish", {
                 ok: false,
                 resumable: false,
-                error: TOOL_FAIL_USER_MESSAGE,
+                error: msg,
               });
               return {
                 ok: false,
-                error: TOOL_FAIL_USER_MESSAGE,
+                error: msg,
                 steps: loopStep,
                 resumable: false,
                 toolsUsed: [...toolsUsed],
@@ -1351,7 +1354,7 @@ export class AgentLoop {
               role: "user",
               content: `VERIFICAÇÃO FALHOU (${buildAttempts}/${maxRetries}). Analise e corrija:\n\n\`\`\`\n${observation.feedback?.slice(
                 0,
-                3000,
+                8000,
               )}\n\`\`\`\n\nNÃO peça ajuda. Use fs_search/fs_edit para corrigir.`,
             });
             continue;
@@ -1413,16 +1416,18 @@ export class AgentLoop {
       });
 
       if (buildAttempts > maxRetries) {
+        const closing = await this.attemptGracefulClosing("build_fail");
         const failMsg =
           `Build não passou após ${maxRetries} tentativas.\n\n` +
           `${finalObservation.feedback?.slice(0, 2000) ?? "Erros de compilação no sandbox."}`;
-        await this.persistFinal(failMsg, {
+        const msg = closing ?? failMsg;
+        await this.persistFinal(msg, {
           lastFinishOk: false,
           buildFailed: true,
         });
         return {
           ok: false,
-          error: failMsg,
+          error: msg,
           steps: loopStep,
           resumable: false,
           toolsUsed: [...toolsUsed],
@@ -1439,7 +1444,7 @@ export class AgentLoop {
         role: "user",
         content:
           `BUILD GATE FINAL FALHOU (${buildAttempts}/${maxRetries}). Corrija antes de finalizar:\n\n` +
-          `\`\`\`\n${finalObservation.feedback?.slice(0, 6000) ?? ""}\n\`\`\`\n\n` +
+          `\`\`\`\n${finalObservation.feedback?.slice(0, 10000) ?? ""}\n\`\`\`\n\n` +
           `Os erros reais de compilação estão acima — corrija cada um com fs_edit. Verifique imports, tipos e sintaxe.`,
       });
       this.notifyLoopStatus({ kind: "build_fix" });
@@ -1878,6 +1883,10 @@ export class AgentLoop {
           toolCallCount: response.tool_calls?.length ?? 0,
           assistantText: assistantText.slice(0, 200),
         });
+        {
+          const closing = await this.attemptGracefulClosing("plan_stuck");
+          if (closing) return { ok: true, summary: closing, steps: step, toolsUsed: [...toolsUsed] };
+        }
         return await this.finishPlanModeFailure(
           "O modelo não completou a resposta. Tente reformular seu pedido ou escolha outro modelo.",
           step,
@@ -1941,6 +1950,12 @@ export class AgentLoop {
       }
     }
 
+    {
+      const closing = await this.attemptGracefulClosing("plan_stuck");
+      if (closing) {
+        return { ok: true, summary: closing, steps: MAX_PLAN_EXPLORE, toolsUsed: [...toolsUsed] };
+      }
+    }
     return await this.finishPlanModeFailure(
       "Limite de exploração no modo Plan — tente create_plan ou clarify.",
       MAX_PLAN_EXPLORE,
@@ -2182,6 +2197,72 @@ export class AgentLoop {
       content: decision.userNudge,
     });
     return false;
+  }
+
+  /**
+   * Antes de um fail duro, tenta uma chamada amigável ao mesmo LLM pedindo
+   * um fechamento com contexto. O LLM já tem todo o histórico — só empurramos
+   * um nudge e chamamos com tool_choice restrito.
+   *
+   * Retorna o texto de fechamento, ou null se o LLM não respondeu.
+   *
+   * - tool_miss / build_fail: tool_choice = "none" — só texto.
+   * - plan_stuck: tools = [create_plan] — o LLM pode tentar gerar o plano
+   *   com base no que já explorou. Se gerar, chama finishPlanProposal.
+   */
+  private async attemptGracefulClosing(
+    reason: "tool_miss" | "build_fail" | "plan_stuck",
+  ): Promise<string | null> {
+    const nudge: Record<string, string> = {
+      tool_miss:
+        "O sistema detectou que você não está progredindo. " +
+        "Sem usar ferramentas, escreva uma mensagem amigável para o usuário " +
+        "explicando o que estava tentando fazer, o que deu errado, e perguntando " +
+        "se pode continuar na próxima sessão.",
+      build_fail:
+        "O build falhou após várias tentativas. " +
+        "Sem usar ferramentas, escreva uma mensagem para o usuário " +
+        "explicando qual foi o erro, o que foi tentado, e perguntando " +
+        "se pode continuar corrigindo na próxima sessão.",
+      plan_stuck:
+        "Você explorou o suficiente mas não conseguiu finalizar o plano. " +
+        "Use create_plan para propor o plano baseado no que já explorou, " +
+        "ou se não for possível, explique ao usuário o que encontrou " +
+        "e pergunte se pode continuar na próxima sessão.",
+    };
+
+    const isPlan = reason === "plan_stuck";
+    const toolChoice = isPlan ? "auto" : "none";
+    const tools = isPlan ? getMetaToolDefinitions(true) : [];
+
+    this.state.messages.push({ role: "user", content: nudge[reason] });
+
+    try {
+      const response = await this.configuredModel().chat({
+        messages: this.state.messages,
+        tool_choice: toolChoice,
+        tools,
+        max_tokens: 1024,
+        temperature: 0.7,
+      });
+
+      if (isPlan && response.tool_calls?.length) {
+        const { createPlan } = splitMetaToolCalls(response.tool_calls);
+        if (createPlan) {
+          const proposed = proposedPlanFromToolArgs(createPlan.arguments);
+          if (proposed) {
+            await this.finishPlanProposal(proposed);
+            return proposed.summary;
+          }
+        }
+      }
+
+      const text = (response.content ?? "").trim();
+      if (!text) return null;
+      return sanitizeUserFacingProse(text);
+    } catch {
+      return null;
+    }
   }
 
   private async llmChat(
