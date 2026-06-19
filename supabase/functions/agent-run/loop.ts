@@ -1588,6 +1588,7 @@ export class AgentLoop {
     this.emit("assistant_text", { text: message, final: true });
     await this.persistFinal(message, { lastFinishOk: false });
     await this.clearCheckpoint();
+    await this.markRunStatus("failed");
     return {
       ok: false,
       summary: message,
@@ -1878,7 +1879,7 @@ export class AgentLoop {
           assistantText: assistantText.slice(0, 200),
         });
         return await this.finishPlanModeFailure(
-          "Use clarify, create_plan ou ferramentas de exploração.",
+          "O modelo não completou a resposta. Tente reformular seu pedido ou escolha outro modelo.",
           step,
           [...toolsUsed],
           "Resposta sem tool nem texto",
