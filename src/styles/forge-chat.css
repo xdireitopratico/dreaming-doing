@@ -20,7 +20,7 @@
      que mantém a bolha no topo enquanto o conteúdo do agente cresce abaixo. */
   scroll-padding-top: 8px;
   overflow-anchor: auto;
-  padding: var(--chat-padding) var(--chat-padding) var(--space-xs);
+  padding: var(--chat-padding) var(--chat-padding) 16px;
   scrollbar-width: thin;
   scrollbar-color: color-mix(in srgb, var(--border-forge) 65%, #52525b 35%) transparent;
   font: var(--font-chat);
