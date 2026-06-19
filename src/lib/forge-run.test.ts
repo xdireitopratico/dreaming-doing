@@ -574,4 +574,32 @@ describe("forge-run mini card briefing e título", () => {
       expect(thought.durationMs).toBeGreaterThanOrEqual(1000);
     }
   });
+
+  it("deduplicates assistant_text thinking duplicated by thinking_text", () => {
+    const items = buildForgeTimeline(
+      [
+        {
+          type: "assistant_text",
+          data: { text: "Vou", thinking: true, delta: true },
+          timestamp: 1,
+        },
+        {
+          type: "thinking_text",
+          data: { text: "Vou", delta: true },
+          timestamp: 1,
+        },
+        {
+          type: "thinking_text",
+          data: { text: " verificar o container.", delta: true },
+          timestamp: 2,
+        },
+      ],
+      true,
+    );
+    const thought = items.find((i) => i.type === "THOUGHT");
+    expect(thought).toBeDefined();
+    if (thought?.type === "THOUGHT") {
+      expect(thought.text).toBe("Vou verificar o container.");
+    }
+  });
 });

@@ -112,6 +112,9 @@ export function buildForgeTimeline(timeline: SSEEvent[], running = false): Forge
   let thoughtId: string | null = null;
   let thoughtStart = 0;
   let thoughtText = "";
+  let lastThoughtTs = 0;
+  let lastThoughtText = "";
+  const hasThinkingText = timeline.some((ev) => ev.type === "thinking_text");
 
   const flushThought = (endTs: number) => {
     if (!thoughtId) return;
@@ -125,6 +128,8 @@ export function buildForgeTimeline(timeline: SSEEvent[], running = false): Forge
     });
     thoughtId = null;
     thoughtText = "";
+    lastThoughtTs = 0;
+    lastThoughtText = "";
   };
 
   for (const ev of timeline) {
@@ -132,11 +137,15 @@ export function buildForgeTimeline(timeline: SSEEvent[], running = false): Forge
     const ts = ev.timestamp;
 
     if (ev.type === "assistant_text" || ev.type === "thinking_text") {
-      const isThought =
-        ev.type === "thinking_text" || isInspectorThought(data);
-      if (isThought) {
+      const isThinkingText = ev.type === "thinking_text";
+      const isLegacyThought = ev.type === "assistant_text" && isInspectorThought(data);
+      if (isThinkingText || (!hasThinkingText && isLegacyThought)) {
         const chunk = String(data.text ?? "");
         if (!chunk) continue;
+        if (ts === lastThoughtTs && chunk === lastThoughtText) continue;
+        lastThoughtTs = ts;
+        lastThoughtText = chunk;
+
         if (!thoughtId) {
           thoughtId = `thought-${ts}`;
           thoughtStart = ts;

@@ -170,6 +170,7 @@ export function buildTimeline(events: SSEEvent[], running = false): TimelineEntr
 
   let lastThoughtTs = 0;
   let lastThoughtText = "";
+  const hasThinkingText = events.some((ev) => ev.type === "thinking_text");
 
   const flushThought = (endTs: number) => {
     if (!thoughtId) return;
@@ -185,6 +186,8 @@ export function buildTimeline(events: SSEEvent[], running = false): TimelineEntr
     });
     thoughtId = null;
     thoughtText = "";
+    lastThoughtTs = 0;
+    lastThoughtText = "";
   };
 
   for (const ev of events) {
@@ -192,8 +195,9 @@ export function buildTimeline(events: SSEEvent[], running = false): TimelineEntr
     const ts = ev.timestamp;
 
     if (ev.type === "assistant_text" || ev.type === "thinking_text") {
-      const isThought = ev.type === "thinking_text" || isInspectorThought(data);
-      if (isThought) {
+      const isThinkingText = ev.type === "thinking_text";
+      const isLegacyThought = ev.type === "assistant_text" && isInspectorThought(data);
+      if (isThinkingText || (!hasThinkingText && isLegacyThought)) {
         const chunk = String(data.text ?? "");
         if (!chunk) continue;
 

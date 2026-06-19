@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { ChevronDown, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { TimelineEntry } from "@/lib/timeline-builder";
@@ -17,20 +17,6 @@ function ThoughtBlock({
   defaultOpen: boolean;
 }) {
   const [open, setOpen] = useState(defaultOpen);
-  const [now, setNow] = useState(() => Date.now());
-
-  useEffect(() => {
-    if (!entry.active) return;
-    const id = window.setInterval(() => setNow(Date.now()), 1000);
-    return () => window.clearInterval(id);
-  }, [entry.active]);
-
-  const durationMs = entry.durationMs ?? 1000;
-  const sec = Math.max(1, Math.round(durationMs / 1000));
-
-  useEffect(() => {
-    if (entry.active) setOpen(true);
-  }, [entry.active, entry.detail]);
 
   return (
     <div className="forge-details-thought" data-testid="timeline-thought">
@@ -48,7 +34,7 @@ function ThoughtBlock({
           className={cn("forge-details-chevron size-3.5", open && "forge-details-chevron--open")}
         />
       </button>
-      {(open || entry.active) && entry.detail && (
+      {open && entry.detail && (
         <p className="forge-details-thought-body">{entry.detail}</p>
       )}
     </div>
@@ -164,13 +150,6 @@ export function InspectorActivityFeed({
 }: InspectorActivityFeedProps) {
   if (!items.length) return null;
 
-  const lastThoughtId = useMemo(() => {
-    for (let i = items.length - 1; i >= 0; i--) {
-      if (items[i]?.kind === "thought") return items[i]!.id;
-    }
-    return null;
-  }, [items]);
-
   return (
     <div className="forge-inspector-timeline-track" data-testid="inspector-timeline-track">
       {items.map((entry) => {
@@ -179,7 +158,7 @@ export function InspectorActivityFeed({
         return (
           <div key={entry.id} className={cn("forge-inspector-timeline-entry", kindClass, failClass)}>
             {entry.kind === "thought" && (
-              <ThoughtBlock entry={entry} defaultOpen={entry.id === lastThoughtId} />
+              <ThoughtBlock entry={entry} defaultOpen={false} />
             )}
             {entry.kind === "tool" && <ToolBlock entry={entry} onOpenFile={onOpenFile} />}
             {entry.kind === "result" && <ResultBlock entry={entry} />}
