@@ -258,7 +258,6 @@ export function useEditorPageHandlers({
               ? "Continuando execução anterior"
               : "Agente FORGE iniciado";
       setLogs((prev) => [...prev, createLogEntry("info", label, "agent")]);
-      if (!logPanelOpen) setLogPanelOpen(true);
       void qc.invalidateQueries({ queryKey: ["messages", conversation.id] });
       logEditorTelemetryEvent(
         "agent",
@@ -333,11 +332,7 @@ export function useEditorPageHandlers({
       return;
     }
 
-    setLogs((prev) => [
-      ...prev,
-      createLogEntry("info", "Continuando execução anterior", "agent"),
-    ]);
-    if (!logPanelOpen) setLogPanelOpen(true);
+    setLogs((prev) => [...prev, createLogEntry("info", "Continuando execução anterior", "agent")]);
     void qc.invalidateQueries({ queryKey: ["messages", conversation.id] });
     logEditorTelemetryEvent("agent", "resume_start", "info", kind);
 
