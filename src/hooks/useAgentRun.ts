@@ -1013,6 +1013,7 @@ export function useAgentRun() {
         // low-seq events (incl start), realtime apply skips via seq guard (fresh bypass requires ===0).
         // Plan→Build: sempre reset completo — nunca herdar streamText/narration/timeline do run anterior.
         setActiveRunId(runId);
+        setActiveRunStartedAtMs(Date.now());
         setProgress({
           ...initialAgentProgress,
           statusHint: "Conectando ao agente…",

@@ -215,6 +215,17 @@ export function timeoutHint(): ErrorHint {
   };
 }
 
+export function staleStreamHint(): ErrorHint {
+  return {
+    message: "A conexão com o agente foi interrompida antes do início da execução.",
+    action: "Continuar run",
+    link: null,
+    severity: "warning",
+    code: "agent.stale_stream",
+    tip: "Isso pode ocorrer quando o servidor demora para iniciar. Tente novamente com Continuar.",
+  };
+}
+
 export function zombieRunHint(): ErrorHint {
   return {
     message: "A execução expirou (run zumbi) — o servidor marcou como falha após 15 minutos.",

@@ -5,7 +5,7 @@ import type { ThreadItem } from "@/lib/chat/types";
 import { assistantTurnCopyText } from "@/lib/chat/assistant-turn-copy";
 import { resolveClosingProse, sanitizeChatProseForDisplay } from "@/lib/chat/stream-prose";
 import { loadAgentPreferences } from "@/lib/agent-preferences";
-import { llmErrorHint, timeoutHint, zombieRunHint } from "@/lib/llm-error-hints";
+import { llmErrorHint, staleStreamHint, timeoutHint, zombieRunHint } from "@/lib/llm-error-hints";
 import { ChatNarration } from "./ChatNarration";
 import { ChatJobCard } from "./ChatJobCard";
 import { ChatToolbar } from "./ChatToolbar";
@@ -54,12 +54,20 @@ export function AssistantTurn({
   const narrationStreaming = !!item.isActive && !!narrationText;
   const closingStreaming = !!item.isActive && !!item.streamText?.trim();
 
+  const planStatus = useMemo(() => {
+    const meta = item.message?.meta as Record<string, unknown> | undefined;
+    if (!meta?.planId) return null;
+    const ps = meta.planStatus;
+    if (ps === "approved" || ps === "rejected") return ps;
+    return null;
+  }, [item.message?.meta]);
+
   const showNarration = !!narrationText;
   const showJobCard = !!item.miniCard;
   const showClarify = !!item.clarify?.choices?.length;
   const showReviewCallout =
     item.miniCard?.status === "done" && (item.miniCard.fileCount ?? 0) > 0;
-  const showClosing = !showClarify && !!closingText;
+  const showClosing = !showClarify && !planStatus && !!closingText;
 
   const errorHint = useMemo(() => {
     const err = item.error?.trim();
@@ -84,7 +92,8 @@ export function AssistantTurn({
       };
     }
     if (lower.includes("zumbi") || lower.includes("expirado")) return zombieRunHint();
-    if (lower.includes("timeout") || lower.includes("interrompida")) return timeoutHint();
+    if (lower.includes("timeout") && !lower.includes("interrompida")) return timeoutHint();
+    if (lower.includes("interrompida")) return staleStreamHint();
     return llmErrorHint(err, loadAgentPreferences().mode === "robin");
   }, [item.error, item.isActive, item.lastFinishOk, item.resumable]);
 
@@ -158,6 +167,20 @@ export function AssistantTurn({
                 errorHint.link == null && onResume && item.resumable ? onResume : undefined
               }
             />
+          </div>
+        )}
+
+        {planStatus && closingText && (
+          <div className="forge-plan-status-card" data-testid="plan-status-card">
+            <div className="forge-plan-status-header">
+              <span className={`forge-plan-status-badge forge-plan-status-badge--${planStatus}`}>
+                {planStatus === "approved" ? "Aprovado" : "Rejeitado"}
+              </span>
+              <span className="forge-plan-status-label">Plano</span>
+            </div>
+            <div className="forge-plan-status-body">
+              <MarkdownRenderer variant="chat">{closingText}</MarkdownRenderer>
+            </div>
           </div>
         )}
 

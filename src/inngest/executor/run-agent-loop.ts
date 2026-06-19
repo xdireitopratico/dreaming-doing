@@ -23,6 +23,14 @@ function requireEnv(): { url: string; serviceKey: string } {
   return { url, serviceKey };
 }
 
+const executorHref = new URL("./agent-executor.js", import.meta.url).href;
+const executorImport = import(executorHref) as Promise<{
+  executeAgentRun: (
+    supabase: ReturnType<typeof createClient>,
+    params: Record<string, unknown>,
+  ) => Promise<ExecuteResponse>;
+}>;
+
 /** Executa o agent loop in-process no handler Inngest (Node/Vercel). */
 export async function runAgentLoop(
   payload: AgentRunRequest & { planMode: boolean; resume?: boolean },
@@ -30,13 +38,7 @@ export async function runAgentLoop(
   process.env.INNGEST_EXECUTOR = "1";
   process.env.AGENT_LOOP_BUDGET_MS = INNGEST_LOOP_BUDGET_MS;
 
-  const executorHref = new URL("./agent-executor.js", import.meta.url).href;
-  const { executeAgentRun } = (await import(executorHref)) as {
-    executeAgentRun: (
-      supabase: ReturnType<typeof createClient>,
-      params: Record<string, unknown>,
-    ) => Promise<ExecuteResponse>;
-  };
+  const { executeAgentRun } = await executorImport;
 
   const { url, serviceKey } = requireEnv();
   const supabase = createClient(url, serviceKey, {

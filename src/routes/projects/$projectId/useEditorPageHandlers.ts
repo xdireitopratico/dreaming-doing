@@ -643,7 +643,6 @@ export function useEditorPageHandlers({
           });
         });
       }
-      agent.clearPendingPlan();
 
       try {
         const planDocument = markdown?.trim() || pp.markdown?.trim() || pp.summary;
@@ -662,6 +661,7 @@ export function useEditorPageHandlers({
             enabledMcpIds,
           },
         });
+        agent.clearPendingPlan();
         setComposerMode("build");
         toast.success("Build iniciado — acompanhe o progresso no inspector.");
         await qc.invalidateQueries({ queryKey: ["conversation", projectId] });
