@@ -24,7 +24,7 @@ describe("shouldRetainLiveRunSlot", () => {
     ).toBe(false);
   });
 
-  it("libera clarify para ancorar no DB", () => {
+  it("mantém slot durante clarify para evitar gap visual", () => {
     expect(
       shouldRetainLiveRunSlot({
         ...initialAgentProgress,
@@ -33,7 +33,7 @@ describe("shouldRetainLiveRunSlot", () => {
         awaitingKind: "clarify",
         streamText: "Qual estilo?",
       }),
-    ).toBe(false);
+    ).toBe(true);
   });
 
   it("mantém slot com erro após falha do agente", () => {

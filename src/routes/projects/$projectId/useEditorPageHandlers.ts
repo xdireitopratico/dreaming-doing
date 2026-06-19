@@ -370,7 +370,7 @@ export function useEditorPageHandlers({
       const sendMode = (mode ?? composerMode) as AgentComposerMode;
 
       void qc.invalidateQueries({ queryKey: ["agent-runs", projectId] });
-      await agent.refreshPendingQueue(projectId, conversation.id).catch(() => {});
+      agent.refreshPendingQueue(projectId, conversation.id).catch(() => {});
 
       const kind = resolveSessionKind(tasteQuota);
       const agentBusy = isAgentBusy();

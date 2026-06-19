@@ -218,6 +218,8 @@ export class AgentLoop {
   private fileContentCache: Map<string, string>;
   private preferences: AgentPreferencesPayload | null;
   private connectorKeys: Record<string, string>;
+  /** Últimas skills emitidas — evita repetir o mesmo evento skills em runs subsequentes. */
+  private lastEmittedSkills: string[] | null = null;
 
   constructor(
     reg: ToolRegistry,
@@ -1531,7 +1533,11 @@ export class AgentLoop {
 
     const stackSkills = this.skills.detectActive(fileList).map((s) => s.name);
     const activeSkills = [...new Set([...stackSkills, ...this.userSkillNames])];
-    if (activeSkills.length > 0) {
+    if (
+      activeSkills.length > 0 &&
+      JSON.stringify(activeSkills) !== JSON.stringify(this.lastEmittedSkills)
+    ) {
+      this.lastEmittedSkills = activeSkills;
       this.emit("skills", {
         active: activeSkills,
         stack: stackSkills,
