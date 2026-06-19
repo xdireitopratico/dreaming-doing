@@ -2,6 +2,7 @@ import type { ThreadItem } from "@/lib/chat/types";
 import { AssistantTurn } from "./AssistantTurn";
 import { ChatUserBubble } from "./ChatUserBubble";
 import { ChatToolbar } from "./ChatToolbar";
+import { ChatPlanDock } from "./ChatPlanDock";
 
 import type { ClarifyChoice } from "@/lib/chat/types";
 
@@ -40,16 +41,34 @@ export function ChatMessage({
         data-testid="chat-message-user"
         data-user-msg-id={item.message.id}
       >
-        <ChatUserBubble content={item.message.content} parts={item.message.parts} queued={isQueued} />
+        <ChatUserBubble
+          content={item.message.content}
+          parts={item.message.parts}
+          queued={isQueued}
+        />
         <ChatToolbar
           text={item.message.content}
           align="end"
           canRollback={canRollbackUser}
           onRollback={
-            onRollback && canRollbackUser
-              ? () => onRollback(item.message.id, "user")
-              : undefined
+            onRollback && canRollbackUser ? () => onRollback(item.message.id, "user") : undefined
           }
+        />
+      </article>
+    );
+  }
+
+  if (item.kind === "plan_status") {
+    return (
+      <article
+        className="forge-chat-item forge-chat-item-plan-status"
+        data-testid="chat-plan-status"
+      >
+        <ChatPlanDock
+          pendingPlan={item.plan}
+          creating={false}
+          status={item.status}
+          onReview={(runId) => onOpenInspector?.(runId, "plan")}
         />
       </article>
     );

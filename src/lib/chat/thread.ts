@@ -5,6 +5,7 @@ import {
   hasMaterializedCardSnapshot,
   runIdFromAssistantMessage,
 } from "@/lib/assistant-run-progress";
+import { storedPlanFromMessage } from "@/lib/plan-message-meta";
 import { shouldRetainLiveRunSlot } from "@/lib/live-run-overlay";
 import { isEntendiOpener } from "@/lib/narration-dedupe";
 import { PENDING_RUN_ID } from "@/lib/pending-run-id";
@@ -74,7 +75,9 @@ function assistantVisibleText(item: Extract<RawThreadItem, { kind: "assistant" }
 }
 
 /** Assistant órfão (narração parcial sem runId) antes do user — reordenar após o último user. */
-function isReorderableOrphanAssistant(item: Extract<RawThreadItem, { kind: "assistant" }>): boolean {
+function isReorderableOrphanAssistant(
+  item: Extract<RawThreadItem, { kind: "assistant" }>,
+): boolean {
   if (item.live || item.isActive) return false;
   if (item.runId) return false;
   if (item.message && hasMaterializedCardSnapshot(item.message)) return false;
@@ -141,6 +144,15 @@ function buildDbThread(messages: ChatMessage[]): RawThreadItem[] {
         message: msg,
         runId,
         isActive: false,
+      });
+    }
+
+    const meta = msg.meta as Record<string, unknown> | undefined;
+    if (meta?.planStatus === "approved" || meta?.planStatus === "rejected") {
+      items.push({
+        kind: "plan_status",
+        status: meta.planStatus,
+        message: msg,
       });
     }
   }
@@ -354,21 +366,34 @@ export function buildChatThread(
   const raw = buildRawThread(messages, progress, opts);
   const running = opts.running ?? false;
 
-  return raw.flatMap((item, itemIndex) => {
+  return raw.flatMap((item, itemIndex): ThreadItem[] => {
     if (item.kind === "user") {
       if (item.internal) return [];
       return [{ kind: "user", message: item.message }];
     }
-    return [mapAssistantTurn(item, {
-      messages,
-      thread: raw,
-      itemIndex,
-      running,
-      activeRunId: opts.activeRunId,
-      activeRunStartedAtMs: opts.activeRunStartedAtMs,
-      pendingPlan: opts.pendingPlan,
-      sessionProgress: opts.sessionProgress,
-      focusedRunId: opts.focusedRunId,
-    })];
+    if (item.kind === "plan_status") {
+      const stored = storedPlanFromMessage(item.message);
+      return [
+        {
+          kind: "plan_status",
+          status: item.status,
+          plan: stored?.plan ?? null,
+          message: item.message,
+        },
+      ];
+    }
+    return [
+      mapAssistantTurn(item, {
+        messages,
+        thread: raw,
+        itemIndex,
+        running,
+        activeRunId: opts.activeRunId,
+        activeRunStartedAtMs: opts.activeRunStartedAtMs,
+        pendingPlan: opts.pendingPlan,
+        sessionProgress: opts.sessionProgress,
+        focusedRunId: opts.focusedRunId,
+      }),
+    ];
   });
 }

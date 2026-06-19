@@ -27,7 +27,9 @@ export function ChatThread({
         const key =
           item.kind === "user"
             ? `user-${item.message.id}`
-            : `assistant-${item.runId ?? item.message?.id ?? `fallback-${index}`}`;
+            : item.kind === "plan_status"
+              ? `plan-status-${item.message.id}`
+              : `assistant-${item.runId ?? item.message?.id ?? `fallback-${index}`}`;
         return (
           <ChatMessage
             key={key}
@@ -36,9 +38,7 @@ export function ChatThread({
             onClarifySelect={onClarifySelect}
             onRollback={onRollback}
             canRollbackUser={
-              item.kind === "user" &&
-              !!lastUserMessageId &&
-              item.message.id === lastUserMessageId
+              item.kind === "user" && !!lastUserMessageId && item.message.id === lastUserMessageId
             }
             canRollbackAssistant={
               item.kind === "assistant" &&

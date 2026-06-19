@@ -116,11 +116,16 @@ describe("buildChatThread", () => {
       activeRunId: "run-build",
       sessionProgress: progress,
     });
-    expect(thread.map((t) => t.kind)).toEqual(["user", "assistant", "assistant"]);
+    expect(thread.map((t) => t.kind)).toEqual(["user", "assistant", "plan_status", "assistant"]);
     const users = thread.filter((t) => t.kind === "user");
     expect(users).toHaveLength(1);
     expect(users[0].kind === "user" && users[0].message.content).toBe("landing viva");
-    const buildSlot = thread[2];
+    const planStatusSlot = thread[2];
+    expect(planStatusSlot.kind).toBe("plan_status");
+    if (planStatusSlot.kind === "plan_status") {
+      expect(planStatusSlot.status).toBe("approved");
+    }
+    const buildSlot = thread[3];
     expect(buildSlot.kind).toBe("assistant");
     if (buildSlot.kind === "assistant") {
       expect(buildSlot.runId).toBe("run-build");

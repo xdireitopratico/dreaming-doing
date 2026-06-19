@@ -11,6 +11,8 @@ export type ChatPlanDockProps = {
   onReview?: (runId: string) => void;
   onApprove?: (steps: PlanStep[], markdown?: string) => void | Promise<void>;
   onReject?: (reason?: string) => void | Promise<void>;
+  /** When set, renders in read-only mode showing plan status (approved/rejected). */
+  status?: "approved" | "rejected";
 };
 
 export function ChatPlanDock({
@@ -19,6 +21,7 @@ export function ChatPlanDock({
   onReview,
   onApprove,
   onReject,
+  status,
 }: ChatPlanDockProps) {
   const [busy, setBusy] = useState<"approve" | "reject" | null>(null);
 
@@ -50,6 +53,38 @@ export function ChatPlanDock({
       setBusy(null);
     }
   }, [onReject]);
+
+  if (status && pendingPlan) {
+    const body = planParagraphFromPlan(pendingPlan);
+    return (
+      <div className="forge-plan-dock" data-testid="chat-plan-status-readonly">
+        <div className="forge-plan-status-card">
+          <div className="forge-plan-status-header">
+            <span className={`forge-plan-status-badge forge-plan-status-badge--${status}`}>
+              {status === "approved" ? "Aprovado" : "Rejeitado"}
+            </span>
+            <span className="forge-plan-status-label">Plano</span>
+          </div>
+          <div className="forge-plan-dock-inner">
+            <p className="forge-plan-dock-body">{body}</p>
+          </div>
+          {onReview && (
+            <div className="forge-composer-row">
+              <div className="forge-composer-row-start">
+                <button
+                  type="button"
+                  className="forge-plan-dock-btn"
+                  onClick={() => onReview(pendingPlan.runId)}
+                >
+                  Review
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   if (!creating && !pendingPlan) return null;
 

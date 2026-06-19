@@ -104,18 +104,6 @@ export function useEditorAgentOrchestration({
     runAgent,
   });
 
-  const firstMessageAutoRunRef = useRef(false);
-
-  useEffect(() => {
-    if (firstMessageAutoRunRef.current) return;
-    if (!conversation?.id) return;
-    if (agent.activeRunId != null) return;
-    if (agentHasRun) return;
-
-    firstMessageAutoRunRef.current = true;
-    void runAgent();
-  }, [conversation?.id, agent.activeRunId, agentHasRun, runAgent]);
-
   const fileCount = files?.length ?? 0;
 
   const previewE2bCircuit = previewBoot.isE2bCircuit;

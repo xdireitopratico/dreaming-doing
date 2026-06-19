@@ -122,6 +122,15 @@ export function PromptEngine({
       const res = await createProject({ data: { prompt: v, kind: projectKind } });
       if (projectKind === "app") {
         bootstrapComposerMode(res.projectId, "plan");
+        supabase.functions
+          .invoke("agent-run", {
+            body: {
+              projectId: res.projectId,
+              conversationId: res.conversationId,
+              mode: "plan",
+            },
+          })
+          .catch(() => {});
         warp.cancel();
         clearForgeTransitionOverlays();
         navigate({ to: "/projects/$projectId", params: { projectId: res.projectId } });

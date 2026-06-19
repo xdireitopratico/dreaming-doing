@@ -47,27 +47,15 @@ export function AssistantTurn({
     (!item.isActive ? item.message?.content?.trim() : null) ||
     null;
   const narrationText = sanitizeChatProseForDisplay(item.narration);
-  const closingText = resolveClosingProse(
-    narrationText,
-    sanitizeChatProseForDisplay(rawClosing),
-  );
+  const closingText = resolveClosingProse(narrationText, sanitizeChatProseForDisplay(rawClosing));
   const narrationStreaming = !!item.isActive && !!narrationText;
   const closingStreaming = !!item.isActive && !!item.streamText?.trim();
-
-  const planStatus = useMemo(() => {
-    const meta = item.message?.meta as Record<string, unknown> | undefined;
-    if (!meta?.planId) return null;
-    const ps = meta.planStatus;
-    if (ps === "approved" || ps === "rejected") return ps;
-    return null;
-  }, [item.message?.meta]);
 
   const showNarration = !!narrationText;
   const showJobCard = !!item.miniCard;
   const showClarify = !!item.clarify?.choices?.length;
-  const showReviewCallout =
-    item.miniCard?.status === "done" && (item.miniCard.fileCount ?? 0) > 0;
-  const showClosing = !showClarify && !planStatus && !!closingText;
+  const showReviewCallout = item.miniCard?.status === "done" && (item.miniCard.fileCount ?? 0) > 0;
+  const showClosing = !showClarify && !!closingText;
 
   const errorHint = useMemo(() => {
     const err = item.error?.trim();
@@ -101,11 +89,12 @@ export function AssistantTurn({
   const copyText = assistantTurnCopyText(item);
 
   return (
-    <article className="forge-chat-item forge-chat-item-assistant" data-testid="chat-message-assistant">
+    <article
+      className="forge-chat-item forge-chat-item-assistant"
+      data-testid="chat-message-assistant"
+    >
       <div className="forge-assistant-turn" data-testid="assistant-turn">
-        {showNarration && (
-          <ChatNarration text={narrationText!} streaming={narrationStreaming} />
-        )}
+        {showNarration && <ChatNarration text={narrationText!} streaming={narrationStreaming} />}
 
         {showJobCard && item.miniCard && (
           <ChatJobCard
@@ -121,10 +110,7 @@ export function AssistantTurn({
         )}
 
         {showReviewCallout && item.runId && (
-          <div
-            className="chat-review-callout"
-            data-testid="assistant-review-callout"
-          >
+          <div className="chat-review-callout" data-testid="assistant-review-callout">
             <span className="chat-review-callout-label">
               {item.miniCard?.fileCount === 1
                 ? "1 arquivo modificado"
@@ -163,31 +149,13 @@ export function AssistantTurn({
           <div className="forge-chat-error-hint" data-testid="assistant-error-hint">
             <ErrorHintCard
               hint={errorHint}
-              onAction={
-                errorHint.link == null && onResume && item.resumable ? onResume : undefined
-              }
+              onAction={errorHint.link == null && onResume && item.resumable ? onResume : undefined}
             />
           </div>
         )}
 
-        {planStatus && closingText && (
-          <div className="forge-plan-status-card" data-testid="plan-status-card">
-            <div className="forge-plan-status-header">
-              <span className={`forge-plan-status-badge forge-plan-status-badge--${planStatus}`}>
-                {planStatus === "approved" ? "Aprovado" : "Rejeitado"}
-              </span>
-              <span className="forge-plan-status-label">Plano</span>
-            </div>
-            <div className="forge-plan-status-body">
-              <MarkdownRenderer variant="chat">{closingText}</MarkdownRenderer>
-            </div>
-          </div>
-        )}
-
         {showClosing && !showErrorHint && (
-          <div
-            className={`forge-chat-closing-line${closingStreaming ? "" : " forge-chat-prose"}`}
-          >
+          <div className={`forge-chat-closing-line${closingStreaming ? "" : " forge-chat-prose"}`}>
             {closingStreaming ? (
               <p className="forge-chat-streaming-text whitespace-pre-wrap">{closingText}</p>
             ) : (

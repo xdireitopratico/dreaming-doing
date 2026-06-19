@@ -1,5 +1,6 @@
 import type { ChatMessage } from "@/lib/chat-types";
 import type { AgentProgress } from "@/lib/agent-progress";
+import type { PendingPlan } from "@/lib/agent-progress";
 
 export type RunPhase = "plan" | "build" | "execute" | "observe" | "summarize" | "resume" | null;
 
@@ -60,6 +61,12 @@ export type ThreadItem =
       lastFinishOk?: boolean;
       resumable?: boolean;
       isFocused?: boolean;
+    }
+  | {
+      kind: "plan_status";
+      status: "approved" | "rejected";
+      plan: PendingPlan | null;
+      message: ChatMessage;
     };
 
 /** Item interno antes do mapeamento para UI. */
@@ -71,6 +78,11 @@ export type RawThreadItem =
       runId?: string;
       isActive: boolean;
       live?: AgentProgress;
+    }
+  | {
+      kind: "plan_status";
+      status: "approved" | "rejected";
+      message: ChatMessage;
     };
 
 export type BuildChatThreadOptions = {
