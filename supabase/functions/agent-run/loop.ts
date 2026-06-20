@@ -204,6 +204,7 @@ export class AgentLoop {
   private thinkingStreamStartedAt: number | null;
   private lastExecutePhaseMessage: string | null;
   private chunkGeneration: number;
+  private consecutiveNoContentReadSteps: number;
   private touchedPaths: Set<string>;
   private lastActivityAt: number;
   private lastRunMessageId: string | null;
@@ -305,6 +306,7 @@ export class AgentLoop {
     this.thinkingStreamStartedAt = null;
     this.lastExecutePhaseMessage = null;
     this.chunkGeneration = options?.chunkGeneration ?? 0;
+    this.consecutiveNoContentReadSteps = 0;
     this.touchedPaths = new Set();
     this.lastActivityAt = Date.now();
     this.lastRunMessageId = null;
@@ -643,6 +645,7 @@ export class AgentLoop {
       });
     }
     this.compression.reset();
+    this.consecutiveNoContentReadSteps = 0;
     const toolsUsed = new Set<string>();
     let executionModel = this.configuredModel();
 
@@ -968,6 +971,60 @@ export class AgentLoop {
         this.compression.recordUsage(response.usage);
 
         const assistantText = (response.content ?? "").trim();
+
+        // ── Read-only loop detection: modelo lê arquivos mas nunca produz output ──
+        const READ_ONLY_TOOLS = ["fs_read", "fs_read_many", "fs_search", "fs_list", "fs_glob"];
+        const hasOnlyReadTools =
+          response.tool_calls.length > 0 &&
+          response.tool_calls.every((tc) => READ_ONLY_TOOLS.includes(tc.name));
+        const hasNoContent = !assistantText;
+
+        if (hasNoContent && hasOnlyReadTools) {
+          this.consecutiveNoContentReadSteps++;
+        } else if (assistantText || !hasOnlyReadTools) {
+          this.consecutiveNoContentReadSteps = 0;
+        }
+
+        const NO_CONTENT_HARD_STOP = 5;
+        const NO_CONTENT_NUDGE = 3;
+
+        if (this.consecutiveNoContentReadSteps >= NO_CONTENT_HARD_STOP) {
+          this.emit("stuck", {
+            message: `Modelo preso em leitura por ${this.consecutiveNoContentReadSteps} passos sem produzir output`,
+          });
+          await this.persistFinal(
+            "idle timeout — O modelo não foi capaz de produzir output após várias tentativas. " +
+            "Tente enviar um novo prompt ou considere trocar o modelo nas configurações.",
+            { lastFinishOk: false, buildFailed: true },
+          );
+          return {
+            ok: false,
+            error:
+              "idle timeout — O modelo não produziu output após leituras consecutivas. " +
+              "Tente novamente ou troque o modelo.",
+            steps: loopStep,
+            resumable: false,
+            toolsUsed: [...toolsUsed],
+          };
+        }
+
+        if (this.consecutiveNoContentReadSteps === NO_CONTENT_NUDGE) {
+          const filesRead = response.tool_calls
+            .filter((tc) => tc.arguments?.path)
+            .map((tc) => String(tc.arguments.path))
+            .filter(Boolean);
+          const fileList = filesRead.length > 0 ? ` (${filesRead.join(", ")})` : "";
+          this.emit("stuck", {
+            message: `Modelo lendo sem produzir output — forçando produção de código`,
+          });
+          this.state.messages.push({
+            role: "user",
+            content:
+              `ATENÇÃO: Você já leu${fileList} nos últimos passos, mas não produziu nenhum código ou texto. ` +
+              "Você tem informação suficiente. Agora IMPLEMENTE a solução usando fs_write ou fs_edit. " +
+              "Comece a escrever o código agora — não leia mais arquivos.",
+          });
+        }
 
         if (hasMixedMetaAndExecution(response.tool_calls)) {
           this.state.messages.push({
