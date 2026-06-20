@@ -15,6 +15,7 @@ import { Route as OnboardingRouteImport } from './routes/onboarding'
 import { Route as ModelsRouteImport } from './routes/models'
 import { Route as McpRouteImport } from './routes/mcp'
 import { Route as HealthzRouteImport } from './routes/healthz'
+import { Route as DesignLibraryRouteImport } from './routes/design-library'
 import { Route as CostsRouteImport } from './routes/costs'
 import { Route as ConnectorsRouteImport } from './routes/connectors'
 import { Route as AuthRouteImport } from './routes/auth'
@@ -56,6 +57,11 @@ const McpRoute = McpRouteImport.update({
 const HealthzRoute = HealthzRouteImport.update({
   id: '/healthz',
   path: '/healthz',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DesignLibraryRoute = DesignLibraryRouteImport.update({
+  id: '/design-library',
+  path: '/design-library',
   getParentRoute: () => rootRouteImport,
 } as any)
 const CostsRoute = CostsRouteImport.update({
@@ -127,6 +133,7 @@ export interface FileRoutesByFullPath {
   '/auth': typeof AuthRoute
   '/connectors': typeof ConnectorsRoute
   '/costs': typeof CostsRoute
+  '/design-library': typeof DesignLibraryRoute
   '/healthz': typeof HealthzRoute
   '/mcp': typeof McpRoute
   '/models': typeof ModelsRoute
@@ -147,6 +154,7 @@ export interface FileRoutesByTo {
   '/auth': typeof AuthRoute
   '/connectors': typeof ConnectorsRoute
   '/costs': typeof CostsRoute
+  '/design-library': typeof DesignLibraryRoute
   '/healthz': typeof HealthzRoute
   '/mcp': typeof McpRoute
   '/models': typeof ModelsRoute
@@ -168,6 +176,7 @@ export interface FileRoutesById {
   '/auth': typeof AuthRoute
   '/connectors': typeof ConnectorsRoute
   '/costs': typeof CostsRoute
+  '/design-library': typeof DesignLibraryRoute
   '/healthz': typeof HealthzRoute
   '/mcp': typeof McpRoute
   '/models': typeof ModelsRoute
@@ -190,6 +199,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/connectors'
     | '/costs'
+    | '/design-library'
     | '/healthz'
     | '/mcp'
     | '/models'
@@ -210,6 +220,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/connectors'
     | '/costs'
+    | '/design-library'
     | '/healthz'
     | '/mcp'
     | '/models'
@@ -230,6 +241,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/connectors'
     | '/costs'
+    | '/design-library'
     | '/healthz'
     | '/mcp'
     | '/models'
@@ -251,6 +263,7 @@ export interface RootRouteChildren {
   AuthRoute: typeof AuthRoute
   ConnectorsRoute: typeof ConnectorsRoute
   CostsRoute: typeof CostsRoute
+  DesignLibraryRoute: typeof DesignLibraryRoute
   HealthzRoute: typeof HealthzRoute
   McpRoute: typeof McpRoute
   ModelsRoute: typeof ModelsRoute
@@ -307,6 +320,13 @@ declare module '@tanstack/react-router' {
       path: '/healthz'
       fullPath: '/healthz'
       preLoaderRoute: typeof HealthzRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/design-library': {
+      id: '/design-library'
+      path: '/design-library'
+      fullPath: '/design-library'
+      preLoaderRoute: typeof DesignLibraryRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/costs': {
@@ -403,6 +423,7 @@ const rootRouteChildren: RootRouteChildren = {
   AuthRoute: AuthRoute,
   ConnectorsRoute: ConnectorsRoute,
   CostsRoute: CostsRoute,
+  DesignLibraryRoute: DesignLibraryRoute,
   HealthzRoute: HealthzRoute,
   McpRoute: McpRoute,
   ModelsRoute: ModelsRoute,

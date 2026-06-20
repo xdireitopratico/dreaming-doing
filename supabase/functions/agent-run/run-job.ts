@@ -365,6 +365,7 @@ export async function executeAgentJob(
     projectId,
     sandboxExecUrl,
     sandboxToken: Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? undefined,
+    connectorKeys,
   });
 
   const buildState = (): AgentState => {

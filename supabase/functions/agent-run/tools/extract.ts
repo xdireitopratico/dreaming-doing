@@ -1,6 +1,7 @@
 // tools/extract.ts — Tool extract_design_dna para o agent-run.
 // Expõe ao LLM a capacidade de extrair DesignDNA estruturado de URLs.
 // Modo shallow (grátis, Plan mode) e deep (Playwright no sandbox, Build mode).
+// APENAS usuários admin podem extrair DesignDNA (uso de LLM custa créditos da plataforma).
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import type { ToolRegistry } from "../registry.ts";
 import { logger } from "../../_shared/logger.ts";
@@ -9,13 +10,10 @@ export interface ExtractToolsContext {
   supabase: SupabaseClient;
   userId: string;
   projectId: string;
-  /** Sandbox exec URL (disponível apenas no Build mode) */
   sandboxExecUrl?: string;
   sandboxToken?: string;
-  /** LLM config para especialista */
-  llmApiKey?: string;
-  llmModel?: string;
-  llmBaseUrl?: string;
+  /** Chaves de conectores do usuário (para passar LLM config à extração) */
+  connectorKeys: Record<string, string>;
 }
 
 export function registerExtractTools(reg: ToolRegistry, ctx: ExtractToolsContext): void {
@@ -60,7 +58,7 @@ export function registerExtractTools(reg: ToolRegistry, ctx: ExtractToolsContext
     },
     async (args) => {
       try {
-        const urls = Array.isArray(args.urls) ? args.urls.filter((u) => typeof u === "string" && u.trim()) : [];
+        const urls = Array.isArray(args.urls) ? (args.urls as string[]).filter((u) => u.trim()) : [];
         if (urls.length === 0) {
           return {
             toolCallId: "",
@@ -78,6 +76,23 @@ export function registerExtractTools(reg: ToolRegistry, ctx: ExtractToolsContext
           };
         }
 
+        // ── Admin gate ──────────────────────────────────────────
+        const { data: role } = await ctx.supabase
+          .from("user_roles")
+          .select("role")
+          .eq("user_id", ctx.userId)
+          .eq("role", "admin")
+          .maybeSingle();
+
+        if (!role) {
+          return {
+            toolCallId: "",
+            ok: false,
+            error: "Apenas administradores podem extrair DesignDNA (uso de LLM custa créditos da plataforma)",
+            output: null,
+          };
+        }
+
         const depth = (args.depth as string) ?? "shallow";
         const categories = Array.isArray(args.categories) ? args.categories : undefined;
 
@@ -89,6 +104,31 @@ export function registerExtractTools(reg: ToolRegistry, ctx: ExtractToolsContext
             error: "Modo deep requer sandbox ativo (Build mode). Use shallow no Plan mode.",
             output: null,
           };
+        }
+
+        // Constrói LLM config a partir das chaves de conectores do usuário
+        const userLlmApiKey = ctx.connectorKeys.OPENAI_API_KEY
+          || ctx.connectorKeys.OPENROUTER_API_KEY
+          || ctx.connectorKeys.GROQ_API_KEY
+          || ctx.connectorKeys.DEEPSEEK_API_KEY
+          || ctx.connectorKeys.XAI_API_KEY
+          || ctx.connectorKeys.GEMINI_API_KEY
+          || undefined;
+
+        // Deriva baseUrl do provedor
+        let userLlmBaseUrl: string | undefined;
+        if (ctx.connectorKeys.OPENROUTER_API_KEY) {
+          userLlmBaseUrl = "https://openrouter.ai/api/v1";
+        } else if (ctx.connectorKeys.GROQ_API_KEY) {
+          userLlmBaseUrl = "https://api.groq.com/openai/v1";
+        } else if (ctx.connectorKeys.DEEPSEEK_API_KEY) {
+          userLlmBaseUrl = "https://api.deepseek.com/v1";
+        } else if (ctx.connectorKeys.XAI_API_KEY) {
+          userLlmBaseUrl = "https://api.x.ai/v1";
+        } else if (ctx.connectorKeys.GEMINI_API_KEY) {
+          userLlmBaseUrl = "https://generativelanguage.googleapis.com/v1beta/openai";
+        } else if (ctx.connectorKeys.OLLAMA_BASE_URL) {
+          userLlmBaseUrl = ctx.connectorKeys.OLLAMA_BASE_URL;
         }
 
         // Chama a edge function extract-design-dna
@@ -108,6 +148,9 @@ export function registerExtractTools(reg: ToolRegistry, ctx: ExtractToolsContext
             projectId: ctx.projectId,
             sandboxExecUrl: ctx.sandboxExecUrl,
             sandboxToken: ctx.sandboxToken,
+            llmApiKey: userLlmApiKey,
+            llmBaseUrl: userLlmBaseUrl,
+            llmModel: ctx.connectorKeys.OLLAMA_MODEL || undefined,
           }),
           signal: AbortSignal.timeout(depth === "deep" ? 120000 : 60000),
         });

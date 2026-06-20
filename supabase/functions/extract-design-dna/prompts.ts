@@ -121,11 +121,11 @@ Analise o HTML/markdown e identifique evidências de motion:
 
 ## Evidências no HTML/markdown
 Procure por:
-- CSS: `transition`, `animation`, `@keyframes`, `transform`, `will-change`
+- CSS: 'transition', 'animation', '@keyframes', 'transform', 'will-change'
 - JS libs: Framer Motion, GSAP, Motion One, anime.js, AOS
-- Classes: `fade-in`, `slide-up`, `reveal`, `parallax`, `stagger`
+- Classes: 'fade-in', 'slide-up', 'reveal', 'parallax', 'stagger'
 - IntersectionObserver patterns
-- `position: sticky`, `position: fixed` para scroll effects
+- 'position: sticky', 'position: fixed' para scroll effects
 
 ## O que IGNORAR
 - Hover states simples (color change) — isso é interaction, não motion
@@ -165,11 +165,11 @@ Famílias tipográficas que você conhece por categoria:
 ## O que extrair do site de referência
 
 1. **typography.font_stack**: Que fonte(s) são usadas?
-   - Procure em CSS: `font-family`, `@font-face`, Google Fonts link
+   - Procure em CSS: 'font-family', '@font-face', Google Fonts link
    - Identifique a família principal (headline) e secundária (body)
 
 2. **typography.scale**: Escala tipográfica do headline
-   - Procure: `font-size`, `clamp()`, media queries
+   - Procure: 'font-size', 'clamp()', media queries
    - Ex: "clamp(3rem, 8vw, 7rem)" = responsivo
 
 3. **typography.weight_hierarchy**: Hierarquia de pesos
@@ -186,7 +186,7 @@ Famílias tipográficas que você conhece por categoria:
    - "0.9 headline" (brutalist — letras se tocam)
 
 6. **typography.variable_font**: Usa variable font? (true/false)
-   - Procure: `font-variation-settings`, `@font-face` com `font-weight: 100 900`
+   - Procure: 'font-variation-settings', '@font-face' com 'font-weight: 100 900'
 
 7. **typography.notes**: Tratamento especial
    - "Weight drop 700→300 no subhead cria contraste sem trocar fonte"
@@ -194,10 +194,10 @@ Famílias tipográficas que você conhece por categoria:
    - "Tracking extremo (-0.04em) + line-height 0.9 = densidade brutalist"
 
 ## Evidências no HTML/markdown
-- `<h1>`, `<h2>`, `<p>` tags e seus styles
-- CSS: `font-family`, `font-size`, `font-weight`, `letter-spacing`, `line-height`
-- Google Fonts: `<link>` tags
-- Tailwind classes: `font-display`, `text-7xl`, `tracking-tight`, `leading-tight`
+- '<h1>', '<h2>', '<p>' tags e seus styles
+- CSS: 'font-family', 'font-size', 'font-weight', 'letter-spacing', 'line-height'
+- Google Fonts: '<link>' tags
+- Tailwind classes: 'font-display', 'text-7xl', 'tracking-tight', 'leading-tight'
 
 ## Formato de saída (JSON estrito)
 {
@@ -260,10 +260,10 @@ Estratégias que você sabe identificar:
    - "monochrome bg + product color pop (Apple)"
 
 ## Evidências no HTML/markdown
-- CSS: `background`, `color`, `border`, `box-shadow`, `gradient`, `linear-gradient`, `radial-gradient`, `conic-gradient`
-- Tailwind: `bg-dark`, `surface-1`, `text-brand`, `from-brand`, `via-accent`
+- CSS: 'background', 'color', 'border', 'box-shadow', 'gradient', 'linear-gradient', 'radial-gradient', 'conic-gradient'
+- Tailwind: 'bg-dark', 'surface-1', 'text-brand', 'from-brand', 'via-accent'
 - Cores hex/rgb/hsl
-- `backdrop-filter`, `mix-blend-mode`
+- 'backdrop-filter', 'mix-blend-mode'
 
 ## Formato de saída (JSON estrito)
 {
@@ -318,9 +318,9 @@ Para cada componente identificado no site:
    - "Code/visual na coluna direita complementa texto na esquerda"
 
 ## Evidências no HTML/markdown
-- Estrutura HTML: `<section>`, `<div class="hero">`, `<div class="bento">`, `<nav>`, `<footer>`
-- CSS classes que indicam padrões: `hero`, `bento`, `grid`, `sticky`, `carousel`, `pricing`
-- Tailwind: `grid-cols-*`, `sticky`, `rounded-*`, `shadow-*`, `border-*`
+- Estrutura HTML: '<section>', '<div class="hero">', '<div class="bento">', '<nav>', '<footer>'
+- CSS classes que indicam padrões: 'hero', 'bento', 'grid', 'sticky', 'carousel', 'pricing'
+- Tailwind: 'grid-cols-*', 'sticky', 'rounded-*', 'shadow-*', 'border-*'
 
 ## O que IGNORAR
 - Scripts de analytics
@@ -383,10 +383,10 @@ Tipos de interação que você sabe identificar:
    - "spotlight radial gradient segue cursor"
 
 ## Evidências no HTML/markdown
-- CSS: `:hover`, `cursor`, `transform`, `transition`, `perspective`
-- JS: `mousemove`, `mouseenter`, `mouseleave`, `onMouseMove`
-- Classes: `magnetic`, `spotlight`, `tilt`, `cursor-follow`, `hover-lift`
-- `cursor: pointer`, `cursor: none` (indica cursor customizado)
+- CSS: ':hover', 'cursor', 'transform', 'transition', 'perspective'
+- JS: 'mousemove', 'mouseenter', 'mouseleave', 'onMouseMove'
+- Classes: 'magnetic', 'spotlight', 'tilt', 'cursor-follow', 'hover-lift'
+- 'cursor: pointer', 'cursor: none' (indica cursor customizado)
 
 ## O que IGNORAR
 - Links simples com underline (browser default)

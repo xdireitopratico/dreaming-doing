@@ -1,31 +1,20 @@
-/**
- * design-dna-scheduler — Cron semanal para extração contínua de DesignDNA.
- *
- * Invocado por pg_cron toda segunda 06h UTC.
- * Processa até 5 sites semanais de fontes curadas (Awwwards, FWA, Godly, etc.)
- * Usa extração shallow (gratuita, edge) — sem sandbox.
- * Armazena resultados na tabela design_dna.
- *
- * @version 1.0.0
- */
-
 import { createClient } from "npm:@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-/** Fontes curadas de sites de design de alta qualidade */
+const INNGEST_EVENT_KEY = Deno.env.get("INNGEST_EVENT_KEY") ?? "";
+const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
+const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+
 const CURATED_SOURCES = [
-  // Awwwards winners (atualiza todo mês)
   { name: "Awwwards", url: "https://www.awwwards.com/websites/", type: "aggregator" as const },
   { name: "FWA", url: "https://thefwa.com/", type: "aggregator" as const },
   { name: "Godly", url: "https://godly.website/", type: "aggregator" as const },
   { name: "Mobbin", url: "https://mobbin.com/browse/ios/apps", type: "aggregator" as const },
   { name: "SiteInspire", url: "https://www.siteinspire.com/", type: "aggregator" as const },
-  // Sites seminalmente premiados (rotacionados)
   { name: "Bruno Simon", url: "https://bruno-simon.com/", type: "direct" as const },
   { name: "Locomotive", url: "https://locomotive.ca/", type: "direct" as const },
   { name: "Cuberto", url: "https://cuberto.com/", type: "direct" as const },
@@ -38,344 +27,237 @@ const CURATED_SOURCES = [
   { name: "Awwwards Nominees", url: "https://www.awwwards.com/websites/nominees/", type: "aggregator" as const },
 ];
 
-/** Sites processados nesta run — rotaciona para não repetir todo mês */
 const SITES_PER_RUN = 5;
+const CATEGORIES = ["hero", "motion", "typography", "color_application", "components", "interactions"];
 
-// ── Categorias de extração ──────────────────────────────────────
-
-type ExtractionCategory = "hero" | "motion" | "typography" | "color_application" | "components" | "interactions";
-
-const CATEGORIES: ExtractionCategory[] = [
-  "hero", "motion", "typography", "color_application", "components", "interactions",
-];
-
-// ── Main handler ────────────────────────────────────────────────
-
-Deno.serve(async (req: Request) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
-
-  const supabaseUrl = Deno.env.get("SUPABASE_URL");
-  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-  if (!supabaseUrl || !serviceKey) {
-    return new Response(JSON.stringify({ error: "Missing env vars" }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
-  const supabase = createClient(supabaseUrl, serviceKey);
-
-  const results = {
-    sources_processed: 0,
-    dnas_extracted: 0,
-    dnas_upserted: 0,
-    errors: [] as string[],
-    started_at: new Date().toISOString(),
-  };
+Deno.serve(async (req) => {
+  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    // 1. Determina quais sites processar nesta run (rotaciona baseado na semana)
-    const weekOffset = Math.floor(Date.now() / (7 * 24 * 3600 * 1000));
-    const batch = getBatchForWeek(weekOffset, SITES_PER_RUN);
+    const auth = req.headers.get("Authorization") || "";
+    const token = auth.replace(/^Bearer\s+/i, "");
 
-    results.sources_processed = batch.length;
+    const supabase = createClient(SUPABASE_URL, token || SERVICE_ROLE_KEY, {
+      global: { headers: { Authorization: auth } },
+    });
 
-    // 2. Extrai DNA de cada site (shallow — edge-friendly)
-    for (const source of batch) {
-      try {
-        const dna = await extractSingleSource(source, supabase);
-        if (dna && dna.quality_score >= 3) {
-          // Upsert via service_role
-          const { error } = await supabase
-            .from("design_dna")
-            .upsert(dna, { onConflict: "id" });
+    const { action, urls, depth, categories, jobId } = await req.json().catch(() => ({}));
 
-          if (error) {
-            results.errors.push(`${source.name}: upsert failed — ${error.message}`);
-          } else {
-            results.dnas_upserted++;
-          }
-        }
-        results.dnas_extracted++;
-      } catch (err) {
-        results.errors.push(`${source.name}: ${(err as Error).message}`);
-      }
+    switch (action) {
+      case "schedule":
+        return await handleSchedule(supabase, urls, depth ?? "deep", categories ?? CATEGORIES);
+      case "trigger_curated":
+        return await handleTriggerCurated(supabase);
+      case "continue_queue":
+        return await handleContinueQueue(supabase);
+      case "status":
+        return await handleStatus(supabase, jobId);
+      case "emit_event":
+        return await handleEmitEvent(supabase, jobId, req);
+      default:
+        return json({ error: `Unknown action: ${action}` }, 400);
     }
-
-    // 3. Log
-    console.log("[design-dna-scheduler] Done:", JSON.stringify(results));
-
-    return new Response(JSON.stringify({ ok: true, ...results }), {
-      status: 200,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
   } catch (err) {
-    console.error("[design-dna-scheduler] Fatal:", err);
-    return new Response(JSON.stringify({ error: "Internal error", ...results }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return json({ error: (err as Error).message }, 500);
   }
 });
 
-// ── Batch Rotation ──────────────────────────────────────────────
+async function handleSchedule(
+  supabase: ReturnType<typeof createClient>,
+  urls: string[],
+  depth: string,
+  categories: string[],
+): Promise<Response> {
+  if (!urls?.length || urls.length > 5) {
+    return json({ error: "1-5 URLs required" }, 400);
+  }
+
+  const { data: user } = await supabase.auth.getUser();
+  const userId = user?.user?.id;
+
+  // Verifica admin (exceto se chamado com service_role — Inngest drain)
+  const { data: role } = await supabase
+    .from("user_roles")
+    .select("role")
+    .eq("user_id", userId)
+    .eq("role", "admin")
+    .maybeSingle();
+  if (!role && userId) {
+    return json({ error: "Apenas administradores podem agendar extração de DesignDNA" }, 403);
+  }
+
+  // Cria job na tabela
+  const { data: job, error: insertError } = await supabase
+    .from("design_dna_jobs")
+    .insert({
+      user_id: userId,
+      status: "pending",
+      depth,
+      categories,
+      urls,
+      current_url_index: 0,
+      results: [],
+      errors: [],
+    })
+    .select("id")
+    .single();
+
+  if (insertError || !job) {
+    return json({ error: `Failed to create job: ${insertError?.message}` }, 500);
+  }
+
+  const jobId = (job as Record<string, unknown>).id as string;
+
+  // Dispara Inngest event
+  if (!INNGEST_EVENT_KEY) {
+    await supabase.from("design_dna_jobs").update({ status: "failed", error: "INNGEST_EVENT_KEY not configured" }).eq("id", jobId);
+    return json({ error: "INNGEST_EVENT_KEY not configured" }, 500);
+  }
+
+  const eventResult = await sendInngestEvent("design-dna/extract.requested", { jobId, userId, depth, categories, urls });
+
+  if (!eventResult.ok) {
+    await supabase.from("design_dna_jobs").update({ status: "failed", error: eventResult.error }).eq("id", jobId);
+    return json({ error: eventResult.error }, 500);
+  }
+
+  return json({ ok: true, jobId, eventIds: eventResult.ids });
+}
+
+async function handleTriggerCurated(supabase: ReturnType<typeof createClient>): Promise<Response> {
+  const weekOffset = Math.floor(Date.now() / (7 * 24 * 3600 * 1000));
+  const batch = getBatchForWeek(weekOffset, SITES_PER_RUN);
+
+  const urls: string[] = [];
+  for (const source of batch) {
+    if (source.type === "direct") {
+      urls.push(source.url);
+    }
+  }
+
+  if (urls.length === 0) return json({ ok: true, note: "no direct URLs this week" });
+
+  return await handleSchedule(supabase, urls, "deep", CATEGORIES);
+}
+
+async function handleContinueQueue(supabase: ReturnType<typeof createClient>): Promise<Response> {
+  const { data: nextJob } = await supabase
+    .from("design_dna_job_queue")
+    .select("*")
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+
+  if (!nextJob) return json({ continued: false, reason: "queue empty" });
+
+  const body = (nextJob as Record<string, unknown>).body as Record<string, unknown> ?? {};
+
+  if (!INNGEST_EVENT_KEY) {
+    return json({ continued: false, reason: "INNGEST_EVENT_KEY not configured" });
+  }
+
+  const eventResult = await sendInngestEvent("design-dna/extract.requested", {
+    jobId: body.jobId,
+    userId: body.userId,
+    depth: body.depth ?? "deep",
+    categories: body.categories ?? CATEGORIES,
+    urls: body.urls ?? [],
+  });
+
+  if (!eventResult.ok) {
+    return json({ continued: false, reason: eventResult.error });
+  }
+
+  // Remove da fila
+  await supabase.from("design_dna_job_queue").delete().eq("id", (nextJob as Record<string, unknown>).id as string);
+
+  return json({ continued: true, jobId: body.jobId });
+}
+
+async function handleStatus(supabase: ReturnType<typeof createClient>, jobId: string): Promise<Response> {
+  if (!jobId) return json({ error: "jobId required" }, 400);
+
+  const { data: job } = await supabase
+    .from("design_dna_jobs")
+    .select("*")
+    .eq("id", jobId)
+    .maybeSingle();
+
+  if (!job) return json({ error: "Job not found" }, 404);
+
+  return json({ ok: true, job });
+}
+
+async function handleEmitEvent(
+  supabase: ReturnType<typeof createClient>,
+  jobId: string,
+  req: Request,
+): Promise<Response> {
+  if (!jobId) return json({ error: "jobId required" }, 400);
+
+  const { event_type, payload } = await req.json().catch(() => ({}));
+  if (!event_type) return json({ error: "event_type required" }, 400);
+
+  const { data: lastRow } = await supabase
+    .from("design_dna_events")
+    .select("seq")
+    .eq("job_id", jobId)
+    .order("seq", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const nextSeq = (typeof lastRow?.seq === "number" ? lastRow.seq : 0) + 1;
+
+  const { error } = await supabase.from("design_dna_events").insert({
+    id: crypto.randomUUID(),
+    job_id: jobId,
+    seq: nextSeq,
+    event_type,
+    payload: payload ?? {},
+  });
+
+  if (error) return json({ error: error.message }, 500);
+  return json({ ok: true, seq: nextSeq });
+}
+
+// ── Helpers ──────────────────────────────────────────────────────
 
 function getBatchForWeek(weekOffset: number, count: number) {
   const shuffled = [...CURATED_SOURCES];
-  // Rotaciona deterministicamente baseado na semana
   const shift = weekOffset % shuffled.length;
   const rotated = [...shuffled.slice(shift), ...shuffled.slice(0, shift)];
-  // Pega os primeiros `count`, priorizando agregadores que listam sites novos
   const aggregators = rotated.filter((s) => s.type === "aggregator");
   const directs = rotated.filter((s) => s.type === "direct");
-  const batch = [
-    ...aggregators.slice(0, Math.min(2, count)),
-    ...directs.slice(0, count - 2),
-  ];
-  return batch.slice(0, count);
+  return [...aggregators.slice(0, Math.min(2, count)), ...directs.slice(0, count - 2)].slice(0, count);
 }
 
-// ── Single Source Extraction ────────────────────────────────────
-
-async function extractSingleSource(
-  source: { name: string; url: string; type: string },
-  supabase: ReturnType<typeof createClient>,
-) {
-  // 1. Se for agregador, extrai URLs dos sites em destaque
-  const urlsToExtract = source.type === "aggregator"
-    ? await extractFeaturedUrls(source.url, supabase)
-    : [source.url];
-
-  if (urlsToExtract.length === 0) return null;
-
-  // 2. Para cada URL, faz shallow extraction via pipeline
-  const dnas = [];
-  for (const siteUrl of urlsToExtract.slice(0, 3)) {
-    try {
-      const html = await fetchSiteContent(siteUrl);
-      if (!html) continue;
-
-      const markdown = htmlToMarkdown(html);
-      const screenshotUrl = `https://image.thum.io/get/width/1280/crop/720/fullpage/${encodeURIComponent(siteUrl)}`;
-
-      const dna = await callLlmExtraction(siteUrl, markdown, screenshotUrl);
-      if (dna) dnas.push(dna);
-    } catch {
-      // skip — não quebra o batch por um site
-    }
-  }
-
-  return dnas.length > 0 ? dnas[0] : null;
-}
-
-// ── Featured URL Extraction ─────────────────────────────────────
-
-async function extractFeaturedUrls(
-  aggregatorUrl: string,
-  _supabase: ReturnType<typeof createClient>,
-): Promise<string[]> {
+async function sendInngestEvent(
+  name: string,
+  data: Record<string, unknown>,
+): Promise<{ ok: boolean; ids?: string[]; error?: string }> {
+  if (!INNGEST_EVENT_KEY) return { ok: false, error: "INNGEST_EVENT_KEY not configured" };
   try {
-    const html = await fetchSiteContent(aggregatorUrl);
-    if (!html) return [];
-
-    // Regex simples para extrair links de sites (não do próprio agregador)
-    const urlRegex = /https?:\/\/[^\s"'>]+/g;
-    const matches = html.match(urlRegex) || [];
-
-    // Filtra URLs únicas que parecem sites de portfólio (não agregadores)
-    const uniqueUrls = [...new Set(matches)]
-      .filter((u) => {
-        try {
-          const host = new URL(u).hostname;
-          return !host.includes("awwwards") &&
-            !host.includes("fwa") &&
-            !host.includes("godly") &&
-            !host.includes("mobbin") &&
-            !host.includes("siteinspire") &&
-            !host.includes("dribbble") &&
-            !host.includes("behance") &&
-            !host.includes("cssdesignawards") &&
-            !host.includes("google") &&
-            !host.includes("facebook") &&
-            !host.includes("twitter") &&
-            !host.includes("instagram") &&
-            !host.includes("linkedin") &&
-            !host.includes("youtube");
-        } catch {
-          return false;
-        }
-      })
-      .slice(0, 5);
-
-    return uniqueUrls;
-  } catch {
-    return [];
-  }
-}
-
-// ── Content Fetch ───────────────────────────────────────────────
-
-async function fetchSiteContent(url: string): Promise<string | null> {
-  try {
-    // Tenta Jina Reader primeiro (grátis, markdown estruturado)
-    const jinaUrl = `https://r.jina.ai/${encodeURIComponent(url)}`;
-    const response = await fetch(jinaUrl, {
-      headers: { Accept: "application/json" },
-      signal: AbortSignal.timeout(20000),
+    const res = await fetch("https://inn.gs/e/" + INNGEST_EVENT_KEY, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, data, ts: Date.now() }),
     });
-
-    if (response.ok) {
-      const data = await response.json();
-      return data.data?.content || data.data?.text || null;
+    if (!res.ok) {
+      const text = await res.text();
+      return { ok: false, error: `Inngest returned ${res.status}: ${text.slice(0, 200)}` };
     }
-  } catch {
-    // fallback
-  }
-
-  // Fallback: HTTP direto
-  try {
-    const response = await fetch(url, {
-      headers: { "User-Agent": "AetherForge/1.0 (design-dna-scheduler)" },
-      signal: AbortSignal.timeout(15000),
-    });
-    if (!response.ok) return null;
-    return await response.text();
-  } catch {
-    return null;
+    const body = (await res.json()) as { ids?: string[] };
+    if (!body.ids || body.ids.length === 0) {
+      return { ok: false, error: "Inngest returned no event ids" };
+    }
+    return { ok: true, ids: body.ids };
+  } catch (e) {
+    return { ok: false, error: (e as Error)?.message ?? String(e) };
   }
 }
 
-// ── HTML to Markdown (simplificado) ─────────────────────────────
-
-function htmlToMarkdown(html: string): string {
-  return html
-    .replace(/<script[\s\S]*?<\/script>/gi, "")
-    .replace(/<style[\s\S]*?<\/style>/gi, "")
-    .replace(/<nav[\s\S]*?<\/nav>/gi, "")
-    .replace(/<footer[\s\S]*?<\/footer>/gi, "")
-    .replace(/<header[\s\S]*?<\/header>/gi, "")
-    .replace(/<[^>]+>/g, " ")
-    .replace(/&[a-z]+;/g, " ")
-    .replace(/\s+/g, " ")
-    .trim()
-    .slice(0, 30000);
-}
-
-// ── LLM Extraction ──────────────────────────────────────────────
-
-async function callLlmExtraction(
-  url: string,
-  markdown: string,
-  screenshotUrl: string,
-): Promise<Record<string, unknown> | null> {
-  const llmUrl = Deno.env.get("LLM_BASE_URL") || "https://api.openai.com/v1";
-  const llmKey = Deno.env.get("LLM_API_KEY") || Deno.env.get("OPENAI_API_KEY") || "";
-  const llmModel = Deno.env.get("LLM_MODEL") || "gpt-4o-mini";
-
-  if (!llmKey) {
-    return buildFallbackDna(url);
-  }
-
-  const systemPrompt = `You are a DesignDNA extraction specialist. Analyze the markdown content and screenshot to extract design DNA elements.
-
-## Categories to extract
-- hero: Layout, headline style, visual hierarchy
-- motion: Animations, transitions, scroll effects
-- typography: Font choices, sizes, weights, hierarchy, letter-spacing
-- color_application: Primary palette, accents, gradients, backgrounds
-- components: Card patterns, buttons, navigation, form elements
-- interactions: Hover states, click feedback, micro-interactions
-
-## Output format
-Return a JSON object with this structure:
-{
-  "quality_score": number 0-10,
-  "layout": { "type": string, "grid": string|null, "hero_style": string|null },
-  "color": { "primary": string|null, "secondary": string|null, "accent": string|null, "background": string|null, "gradient": string|null },
-  "typography": { "heading_font": string|null, "body_font": string|null, "scale": string|null, "heading_weight": string|null },
-  "motion": { "has_parallax": boolean, "has_reveal": boolean, "has_stagger": boolean, "transition_style": string|null },
-  "interaction": { "hover_effect": string|null, "click_feedback": string|null, "cursor_custom": boolean },
-  "component": { "card_style": string|null, "button_style": string|null, "nav_style": string|null },
-  "serves_domains": string[],
-  "compatible_moods": string[],
-  "compatible_languages": string[]
-}`;
-
-  const response = await fetch(`${llmUrl}/chat/completions`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${llmKey}`,
-    },
-    body: JSON.stringify({
-      model: llmModel,
-      messages: [
-        { role: "system", content: systemPrompt },
-        {
-          role: "user",
-          content: [
-            { type: "text", text: `Site: ${url}\n\nContent:\n${markdown.slice(0, 20000)}` },
-            { type: "image_url", image_url: { url: screenshotUrl } },
-          ],
-        },
-      ],
-      max_tokens: 2048,
-      temperature: 0.3,
-      response_format: { type: "json_object" },
-    }),
-    signal: AbortSignal.timeout(45000),
+function json(data: unknown, status = 200): Response {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
-
-  if (!response.ok) return buildFallbackDna(url);
-
-  const data = await response.json();
-  const content = data.choices?.[0]?.message?.content || "{}";
-
-  try {
-    const parsed = JSON.parse(content);
-    return {
-      id: `scheduled-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      name: url,
-      source_url: url,
-      category: "full_page",
-      serves_domains: parsed.serves_domains || [],
-      compatible_languages: parsed.compatible_languages || [],
-      compatible_moods: parsed.compatible_moods || [],
-      layout: parsed.layout || null,
-      color: parsed.color || null,
-      typography: parsed.typography || null,
-      motion: parsed.motion || null,
-      interaction: parsed.interaction || null,
-      component: parsed.component || null,
-      quality_score: Math.min(10, Math.max(0, parsed.quality_score || 5)),
-      quality_source: "shallow extraction (scheduler)",
-      extracted_at: new Date().toISOString(),
-      validated: false,
-    };
-  } catch {
-    return buildFallbackDna(url);
-  }
-}
-
-function buildFallbackDna(url: string): Record<string, unknown> {
-  return {
-    id: `scheduled-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-    name: url,
-    source_url: url,
-    category: "full_page",
-    serves_domains: [],
-    compatible_languages: [],
-    compatible_moods: [],
-    layout: { type: "unknown" },
-    color: null,
-    typography: null,
-    motion: null,
-    interaction: null,
-    component: null,
-    quality_score: 3,
-    quality_source: "heuristic (no LLM available)",
-    extracted_at: new Date().toISOString(),
-    validated: false,
-  };
 }

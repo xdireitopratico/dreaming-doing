@@ -1,0 +1,16 @@
+name = "design-dna-email"
+main = "src/index.ts"
+compatibility_date = "2025-01-01"
+
+# Create KV namespace: wrangler kv:namespace create DESIGN_DNA_EMAIL_KV
+# Then copy the ID below (use preview_id for wrangler dev)
+# [[kv_namespaces]]
+# binding = "DESIGN_DNA_EMAIL_KV"
+# id = "PASTE_ID_HERE"
+# preview_id = "PASTE_PREVIEW_ID_HERE"
+
+[env.production]
+vars = { FORGE_DOMAIN = "forge.app" }
+
+[env.preview]
+vars = { FORGE_DOMAIN = "forge.preview.app" }
