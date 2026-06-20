@@ -32,9 +32,7 @@ export function InspectorTimeline({
     [progress, running, runStartedAtMs],
   );
 
-  const hasActiveThought = timelineItems.some(
-    (item) => item.kind === "thought" && item.active,
-  );
+  const hasActiveThought = timelineItems.some((item) => item.kind === "thought" && item.active);
   const showThinkingHeader =
     running && (latencyThinking?.active || hasActiveThought || timelineItems.length === 0);
 
@@ -68,11 +66,7 @@ export function InspectorTimeline({
 
   return (
     <div className="forge-inspector-details" data-testid="inspector-timeline">
-      <div
-        ref={scrollRef}
-        className="forge-inspector-details-scroll"
-        onScroll={handleUserScroll}
-      >
+      <div ref={scrollRef} className="forge-inspector-details-scroll" onScroll={handleUserScroll}>
         {showThinkingHeader && (
           <div className="forge-inspector-thinking-header" data-testid="inspector-thinking-header">
             <span className="forge-inspector-thinking-dot" aria-hidden />
@@ -84,7 +78,7 @@ export function InspectorTimeline({
                 active
               />
             ) : (
-              <span>Raciocinando…</span>
+              <span>Thinking…</span>
             )}
           </div>
         )}

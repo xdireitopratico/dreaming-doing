@@ -2,6 +2,13 @@ import type { AgentProgress, PendingPlan, PlanStep, SSEEvent } from "@/lib/agent
 import { emitStreamingTelemetry } from "@/lib/streaming-telemetry";
 
 export type MiniCardStatus = "thinking" | "working" | "done" | "failed";
+export type MiniCardTaskStatus = "done" | "active" | "pending" | "failed";
+
+export type ForgeMiniCardTask = {
+  id: string;
+  label: string;
+  status: MiniCardTaskStatus;
+};
 
 export type ForgeMiniCardData = {
   /** Título da sessão quando terminal (ex.: «Brainstorm de app mobile»). */
@@ -13,6 +20,8 @@ export type ForgeMiniCardData = {
   /** Briefings rotativos enquanto o job está ativo — resumo miniatura da timeline. */
   liveBriefings: string[];
   status: MiniCardStatus;
+  tasks: ForgeMiniCardTask[];
+  currentTaskIndex: number;
   editedFile?: string | null;
   fileCount?: number;
   hasPlan?: boolean;
@@ -160,12 +169,7 @@ export function buildForgeTimeline(timeline: SSEEvent[], running = false): Forge
     if (ev.type === "step_result") {
       if (thoughtId) flushThought(ts);
       const ok = data.ok !== false;
-      const text =
-        typeof data.summary === "string"
-          ? data.summary
-          : ok
-            ? "Concluído"
-            : "Falhou";
+      const text = typeof data.summary === "string" ? data.summary : ok ? "Concluído" : "Falhou";
       const evidence = Array.isArray(data.evidence)
         ? (data.evidence as string[]).filter((e) => typeof e === "string")
         : undefined;
@@ -375,7 +379,7 @@ export function buildForgeTimeline(timeline: SSEEvent[], running = false): Forge
 
     if (ev.type === "resume") {
       items.push({ type: "TASK", id: `resume-${ts}`, label: "Continuando" });
-      return;
+      continue;
     }
 
     if (ev.type === "canceled") {
@@ -586,6 +590,56 @@ export function collectMiniCardBriefings(
   return [];
 }
 
+function normalizePlanTaskLabel(description: string): string {
+  const label = description
+    .replace(/^[-*\d.)\s]+/, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  return truncate(label || "Etapa do plano", 58);
+}
+
+function deriveMiniCardTasks(
+  progress: AgentProgress,
+  jobPlan: PendingPlan | null | undefined,
+  jobActive: boolean,
+): { tasks: ForgeMiniCardTask[]; currentTaskIndex: number } {
+  const steps = (jobPlan?.steps ?? []).filter((step) => step.enabled !== false);
+  if (steps.length === 0) return { tasks: [], currentTaskIndex: -1 };
+
+  const rawCurrent =
+    typeof progress.currentStep === "number" && Number.isFinite(progress.currentStep)
+      ? progress.currentStep
+      : null;
+  const currentTaskIndex =
+    rawCurrent == null
+      ? jobActive
+        ? 0
+        : progress.finished && progress.lastFinishOk !== false
+          ? steps.length - 1
+          : -1
+      : Math.max(0, Math.min(steps.length - 1, rawCurrent > 0 ? rawCurrent - 1 : rawCurrent));
+
+  const tasks = steps.map((step, index): ForgeMiniCardTask => {
+    let status: MiniCardTaskStatus = "pending";
+    if (progress.finished) {
+      status =
+        progress.lastFinishOk === false && index >= Math.max(0, currentTaskIndex)
+          ? "failed"
+          : "done";
+    } else if (jobActive) {
+      if (index < currentTaskIndex) status = "done";
+      else if (index === currentTaskIndex) status = "active";
+    }
+    return {
+      id: step.id || `plan-step-${index}`,
+      label: normalizePlanTaskLabel(step.description),
+      status,
+    };
+  });
+
+  return { tasks, currentTaskIndex };
+}
+
 function isWrapUpPhrase(text: string): boolean {
   const normalized = text.replace(/\*+/g, "").trim();
   return /pronto!?\s*resumo do que fiz/i.test(normalized);
@@ -659,6 +713,7 @@ export function buildMiniCardHeader(
     editedFile?: string | null;
     liveBriefings: string[];
     sessionTitle: string;
+    planDriven?: boolean;
   },
 ): { header: string; subtitle: string } {
   const edited = opts.editedFile?.trim();
@@ -669,6 +724,9 @@ export function buildMiniCardHeader(
   }
   if (hasActiveShellTool(progress) && running) {
     return { header: "Running command", subtitle };
+  }
+  if (opts.planDriven && running) {
+    return { header: "Reading approved plan", subtitle };
   }
   if (progress.finished && edited) {
     return { header: `Edited ${edited}`, subtitle: opts.sessionTitle };
@@ -756,6 +814,13 @@ export function buildAgentRunView(
     userPrompt: opts?.userPrompt,
     sessionTitle,
   });
+  const normalizedBriefings =
+    liveBriefings.length > 0
+      ? liveBriefings
+      : jobActive && jobPlan?.steps?.length
+        ? ["Defining approved plan execution"]
+        : liveBriefings;
+  const { tasks, currentTaskIndex } = deriveMiniCardTasks(progress, jobPlan, jobActive);
 
   const thoughtItems = forgeTimeline.filter((i) => i.type === "THOUGHT");
   const lastThought = thoughtItems[thoughtItems.length - 1];
@@ -769,7 +834,12 @@ export function buildAgentRunView(
   }
 
   const runStartedAtMs = opts?.runStartedAtMs;
-  const latencyThinking = resolveLatencyThinking(progress, jobActive, runStartedAtMs, forgeTimeline);
+  const latencyThinking = resolveLatencyThinking(
+    progress,
+    jobActive,
+    runStartedAtMs,
+    forgeTimeline,
+  );
 
   const thinking: AgentRunView["thinking"] = reasoningThought
     ? {
@@ -815,24 +885,23 @@ export function buildAgentRunView(
     (!jobActive && !narrationDuplicatesStream ? narrationBody || safeSummary : null) ||
     null;
   const narrationForLine =
-    narrationBody &&
-    narrationBody !== sessionTitle &&
-    !narrationDuplicatesStream
+    narrationBody && narrationBody !== sessionTitle && !narrationDuplicatesStream
       ? narrationBody
       : null;
 
   const { header, subtitle } = buildMiniCardHeader(progress, jobActive, {
     editedFile,
-    liveBriefings,
+    liveBriefings: normalizedBriefings,
     sessionTitle,
+    planDriven: !!jobPlan?.steps?.length,
   });
 
   // Fase 2.2 — extrai o último TOOL executado (reverso do forgeTimeline) para
   // action chips no mini card. Ignora TOOLs ativos (active=true) — só
   // mostramos chips para tools que terminaram.
-  const lastToolItem = [...forgeTimeline].reverse().find(
-    (t) => t.type === "TOOL" && !t.active,
-  ) as Extract<ForgeTimelineItem, { type: "TOOL" }> | undefined;
+  const lastToolItem = [...forgeTimeline].reverse().find((t) => t.type === "TOOL" && !t.active) as
+    | Extract<ForgeTimelineItem, { type: "TOOL" }>
+    | undefined;
   const lastTool = lastToolItem
     ? { name: lastToolItem.name, path: lastToolItem.path, ok: true }
     : null;
@@ -843,8 +912,10 @@ export function buildAgentRunView(
       title: sessionTitle,
       header,
       subtitle,
-      liveBriefings,
+      liveBriefings: normalizedBriefings,
       status,
+      tasks,
+      currentTaskIndex,
       editedFile,
       fileCount: progress.diffs.length || progress.deliveryFiles?.length,
       hasPlan: !!jobPlan?.steps?.length,

@@ -3,7 +3,10 @@ import type { SSEEvent, AgentProgress } from "@/lib/agent-progress";
 function hasFirstInspectorToken(progress: AgentProgress): boolean {
   if (progress.streamText?.trim() || progress.narrationText?.trim()) return true;
   return progress.timeline.some(
-    (ev) => ev.type === "assistant_text" && typeof ev.data?.text === "string" && String(ev.data.text).trim().length > 0,
+    (ev) =>
+      ev.type === "assistant_text" &&
+      typeof ev.data?.text === "string" &&
+      String(ev.data.text).trim().length > 0,
   );
 }
 
@@ -55,42 +58,35 @@ function normalizeProse(prose: string): string {
   if (lines.length <= 1) return prose.trim();
   const allShort = lines.every((l) => l.trim().length <= 24);
   if (allShort && lines.length >= 3) {
-    return lines.map((l) => l.trim()).join(" ").replace(/\s{2,}/g, " ").trim();
+    return lines
+      .map((l) => l.trim())
+      .join(" ")
+      .replace(/\s{2,}/g, " ")
+      .trim();
   }
   return prose.trim();
-}
-
-function toolEmoji(name: string, path?: string): string {
-  if (path) {
-    if (READ_TOOLS.test(name)) return "📄";
-    if (WRITE_TOOLS.test(name)) return "✏️";
-    return "🔧";
-  }
-  if (/search|grep|find|scan/i.test(name)) return "🔍";
-  if (SHELL_TOOLS.test(name)) return "⚡";
-  return "🔧";
 }
 
 function toolLabel(name: string, path?: string, detail?: string): string {
   if (path) {
     const file = fileBase(path);
-    if (READ_TOOLS.test(name)) return `Ler ${file}`;
-    if (WRITE_TOOLS.test(name)) return `Editando ${file}`;
+    if (READ_TOOLS.test(name)) return `Read ${file}`;
+    if (WRITE_TOOLS.test(name)) return `Edited ${file}`;
     return `${name} ${path}`;
   }
   if (/search|grep|find|scan/i.test(name)) {
-    const hint = detail ? truncate(detail, 48) : "resultados";
-    return `Buscando ${hint}`;
+    const hint = detail ? truncate(detail, 48) : "results";
+    return `Searching ${hint}`;
   }
-  if (SHELL_TOOLS.test(name)) return "Rodando comando";
+  if (SHELL_TOOLS.test(name)) return "Running command";
   return name;
 }
 
 function toolDoneLabel(name: string, path?: string): string | null {
   if (!path) return null;
   const file = fileBase(path);
-  if (READ_TOOLS.test(name)) return `Ler ${file}`;
-  if (WRITE_TOOLS.test(name)) return `Editou ${file}`;
+  if (READ_TOOLS.test(name)) return `Read ${file}`;
+  if (WRITE_TOOLS.test(name)) return `Edited ${file}`;
   return null;
 }
 
@@ -101,7 +97,11 @@ function findLastToolItem(items: TimelineEntry[]): TimelineEntry | null {
   return null;
 }
 
-function isRedundant(prev: TimelineEntry | null, ev: SSEEvent, data: Record<string, unknown>): boolean {
+function isRedundant(
+  prev: TimelineEntry | null,
+  ev: SSEEvent,
+  data: Record<string, unknown>,
+): boolean {
   if (!prev) return false;
 
   if (isPhaseNoise(prev, ev)) return true;
@@ -112,14 +112,22 @@ function isRedundant(prev: TimelineEntry | null, ev: SSEEvent, data: Record<stri
 }
 
 function isPhaseNoise(prev: TimelineEntry, ev: SSEEvent): boolean {
-  if (prev.label === "Processando…" && (ev.type === "phase" || ev.type === "step_result")) return true;
+  if (prev.label === "Processando…" && (ev.type === "phase" || ev.type === "step_result"))
+    return true;
   if (prev.kind === "phase" && ev.type === "phase") return true;
   return false;
 }
 
 function isBuildRedundant(prev: TimelineEntry, ev: SSEEvent): boolean {
-  if (prev.kind === "phase" && prev.label.startsWith("Build") && ev.type === "build_log") return true;
-  if (prev.kind === "phase" && prev.label.startsWith("Build") && ev.type === "tool_start" && prev.ts === ev.timestamp) return true;
+  if (prev.kind === "phase" && prev.label.startsWith("Build") && ev.type === "build_log")
+    return true;
+  if (
+    prev.kind === "phase" &&
+    prev.label.startsWith("Build") &&
+    ev.type === "tool_start" &&
+    prev.ts === ev.timestamp
+  )
+    return true;
   return false;
 }
 
@@ -154,7 +162,12 @@ function pathFromArgs(args: Record<string, unknown> | undefined): string | undef
 }
 
 const INTERNAL_PHASE_NOISE = new Set([
-  "execute", "execute_step", "build", "observe", "summarize", "resume",
+  "execute",
+  "execute_step",
+  "build",
+  "observe",
+  "summarize",
+  "resume",
   "Trabalhando no pedido…",
 ]);
 
@@ -180,7 +193,7 @@ export function buildTimeline(events: SSEEvent[], running = false): TimelineEntr
       kind: "thought",
       ts: thoughtStart,
       durationMs,
-      label: `Raciocinou por ${Math.round(durationMs / 1000)}s`,
+      label: `Thought for ${Math.round(durationMs / 1000)}s`,
       detail: normalizeProse(thoughtText),
       active: false,
     });
@@ -219,14 +232,12 @@ export function buildTimeline(events: SSEEvent[], running = false): TimelineEntr
     if (ev.type === "step_result") {
       if (thoughtId) flushThought(ts);
       const ok = data.ok !== false;
-      const text = typeof data.summary === "string"
-        ? data.summary
-        : ok ? "Concluído" : "Falhou";
+      const text = typeof data.summary === "string" ? data.summary : ok ? "Concluído" : "Falhou";
       items.push({
         id: `result-${ts}`,
         kind: "result",
         ts,
-        label: ok ? `✓ ${text}` : `✗ ${text}`,
+        label: text,
         ok,
         detail: text,
       });
@@ -246,25 +257,25 @@ export function buildTimeline(events: SSEEvent[], running = false): TimelineEntr
           kind: "phase",
           ts,
           label: truncate(label, 120),
-          emoji: "🔍",
         });
       }
       continue;
     }
 
     if (ev.type === "phase" || ev.type === "memory") {
-      const label = typeof data.message === "string"
-        ? data.message
-        : typeof data.phase === "string"
-          ? data.phase
-          : "";
+      const label =
+        typeof data.message === "string"
+          ? data.message
+          : typeof data.phase === "string"
+            ? data.phase
+            : "";
       if (!label || isInternalPhaseNoise(label)) continue;
       const isBuild = /build|compila|verifica/i.test(label);
       items.push({
         id: `phase-${ts}`,
         kind: "phase",
         ts,
-        label: isBuild ? `🔨 ${label}` : truncate(label, 120),
+        label: truncate(label, 120),
         active: !isBuild ? undefined : true,
       });
       continue;
@@ -276,7 +287,7 @@ export function buildTimeline(events: SSEEvent[], running = false): TimelineEntr
         id: `build-${ts}`,
         kind: "result",
         ts,
-        label: ok ? "✓ Build passou" : "✗ Build falhou",
+        label: ok ? "Build passed" : "Build failed",
         ok,
       });
       continue;
@@ -287,8 +298,7 @@ export function buildTimeline(events: SSEEvent[], running = false): TimelineEntr
         id: `cp-${ts}`,
         kind: "phase",
         ts,
-        label: "Continuando…",
-        emoji: "▶️",
+        label: "Continuing…",
       });
       continue;
     }
@@ -299,7 +309,7 @@ export function buildTimeline(events: SSEEvent[], running = false): TimelineEntr
         id: `checkpoint-${ts}`,
         kind: "checkpoint",
         ts,
-        label: `📦 Checkpoint · ${files.length} arquivo(s)`,
+        label: `Checkpoint · ${files.length} file(s)`,
         evidence: files.map(fileBase),
       });
       continue;
@@ -314,7 +324,6 @@ export function buildTimeline(events: SSEEvent[], running = false): TimelineEntr
         kind: "tool",
         ts,
         label: toolLabel(name, path),
-        emoji: toolEmoji(name, path),
         path: path || undefined,
         detail: path ? undefined : JSON.stringify(args ?? {}).slice(0, 200),
         active: running,
@@ -328,9 +337,7 @@ export function buildTimeline(events: SSEEvent[], running = false): TimelineEntr
       if (lastTool) {
         const toolName = String(data.name ?? "tool");
         const pastLabel = toolDoneLabel(toolName, lastTool.path);
-        lastTool.label = ok
-          ? `✓ ${pastLabel ?? lastTool.label}`
-          : `✗ ${pastLabel ?? lastTool.label}`;
+        lastTool.label = pastLabel ?? lastTool.label;
         lastTool.ok = ok;
         lastTool.active = false;
       }
@@ -348,8 +355,7 @@ export function buildTimeline(events: SSEEvent[], running = false): TimelineEntr
           id: `diff-${ts}`,
           kind: "phase",
           ts,
-          label: `Editando ${fileBase(path)}`,
-          emoji: "✏️",
+          label: `Edited ${fileBase(path)}`,
         });
       }
       continue;
@@ -361,7 +367,7 @@ export function buildTimeline(events: SSEEvent[], running = false): TimelineEntr
         id: `typecheck-${ts}`,
         kind: "result",
         ts,
-        label: `✗ TypeScript: ${errors.length} erro(s)`,
+        label: `TypeScript: ${errors.length} error(s)`,
         ok: false,
       });
       continue;
@@ -372,7 +378,7 @@ export function buildTimeline(events: SSEEvent[], running = false): TimelineEntr
         id: `error-${ts}`,
         kind: "result",
         ts,
-        label: "✗ Erro na execução",
+        label: "Execution failed",
         detail: typeof data.message === "string" ? data.message.slice(0, 200) : undefined,
         ok: false,
       });
@@ -387,7 +393,6 @@ export function buildTimeline(events: SSEEvent[], running = false): TimelineEntr
           kind: "phase",
           ts,
           label: truncate(label, 120),
-          emoji: "⚠️",
         });
       }
       continue;
@@ -399,8 +404,7 @@ export function buildTimeline(events: SSEEvent[], running = false): TimelineEntr
         id: `classify-${ts}`,
         kind: "phase",
         ts,
-        label: `Classificando com ${model}`,
-        emoji: "🏷️",
+        label: `Classifying with ${model}`,
       });
       continue;
     }
@@ -412,7 +416,6 @@ export function buildTimeline(events: SSEEvent[], running = false): TimelineEntr
         kind: "phase",
         ts,
         label: truncate(summary, 120),
-        emoji: "📋",
       });
       continue;
     }
@@ -423,7 +426,7 @@ export function buildTimeline(events: SSEEvent[], running = false): TimelineEntr
         id: `fsm-${ts}`,
         kind: "phase",
         ts,
-        label: `Estado: ${to}`,
+        label: `State: ${to}`,
       });
       continue;
     }
@@ -433,7 +436,7 @@ export function buildTimeline(events: SSEEvent[], running = false): TimelineEntr
         id: `gate-${ts}`,
         kind: "phase",
         ts,
-        label: data.awaiting === true ? "⏳ Aguardando aprovação" : "Gate decidido",
+        label: data.awaiting === true ? "Waiting for approval" : "Gate decided",
       });
       continue;
     }
@@ -443,7 +446,7 @@ export function buildTimeline(events: SSEEvent[], running = false): TimelineEntr
         id: `rate-${ts}`,
         kind: "phase",
         ts,
-        label: "⏳ Rate limit — aguardando",
+        label: "Rate limit — waiting",
       });
       continue;
     }
@@ -453,7 +456,7 @@ export function buildTimeline(events: SSEEvent[], running = false): TimelineEntr
         id: `robin-${ts}`,
         kind: "phase",
         ts,
-        label: "🔄 Rotacionando chave API",
+        label: "Rotating API key",
       });
       continue;
     }
@@ -463,7 +466,7 @@ export function buildTimeline(events: SSEEvent[], running = false): TimelineEntr
         id: `retry-${ts}`,
         kind: "phase",
         ts,
-        label: "🔄 Reconectando…",
+        label: "Reconnecting…",
       });
       continue;
     }
@@ -476,14 +479,14 @@ export function buildTimeline(events: SSEEvent[], running = false): TimelineEntr
           kind: "phase",
           ts,
           label: `Skills: ${active.join(", ")}`,
-          emoji: "🧠",
         });
       }
       continue;
     }
   }
 
-  if (thoughtId) flushThought(events.length > 0 ? events[events.length - 1]!.timestamp : thoughtStart);
+  if (thoughtId)
+    flushThought(events.length > 0 ? events[events.length - 1]!.timestamp : thoughtStart);
 
   markActiveThought(items);
   return items;

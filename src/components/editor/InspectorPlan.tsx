@@ -1,9 +1,15 @@
-import { useMemo } from "react";
-import type { PendingPlan, DesignPlanField } from "@/lib/agent-progress";
+import { useCallback, useMemo, useState } from "react";
+import { Check, Loader2, Pencil, SkipForward } from "lucide-react";
+import type { DesignPlanField, PendingPlan, PlanStep } from "@/lib/agent-progress";
 import { buildForgePlanMarkdown } from "@/lib/plan-document";
 import { MarkdownRenderer } from "@/components/ui/markdown-renderer";
+import { enabledPlanSteps } from "@/lib/forge-run";
+import type { InspectorPlanState } from "@/lib/plan-message-meta";
 type InspectorPlanProps = {
-  plan: PendingPlan;
+  state: InspectorPlanState;
+  onApprove?: (steps: PlanStep[], markdown?: string) => void | Promise<void>;
+  onReject?: (reason?: string) => void | Promise<void>;
+  onEditRequest?: (plan: PendingPlan) => void;
 };
 
 function DesignDirectionCard({ design }: { design: DesignPlanField }) {
@@ -96,7 +102,9 @@ function DesignDirectionCard({ design }: { design: DesignPlanField }) {
 
       {design.references && design.references.length > 0 && (
         <div style={{ marginBottom: "12px" }}>
-          <span style={{ fontSize: "0.75rem", opacity: 0.6, display: "block", marginBottom: "6px" }}>
+          <span
+            style={{ fontSize: "0.75rem", opacity: 0.6, display: "block", marginBottom: "6px" }}
+          >
             Referências:
           </span>
           {design.references.map((ref, i) => (
@@ -136,7 +144,9 @@ function DesignDirectionCard({ design }: { design: DesignPlanField }) {
   );
 }
 
-export function InspectorPlan({ plan }: InspectorPlanProps) {
+export function InspectorPlan({ state, onApprove, onReject, onEditRequest }: InspectorPlanProps) {
+  const { plan, status, awaitingApproval } = state;
+  const [busy, setBusy] = useState<"approve" | "reject" | null>(null);
   const markdown = useMemo(() => {
     if (plan.markdown?.trim()) return plan.markdown.trim();
     return buildForgePlanMarkdown({
@@ -148,11 +158,99 @@ export function InspectorPlan({ plan }: InspectorPlanProps) {
     }).markdown;
   }, [plan]);
 
+  const handleApprove = useCallback(async () => {
+    if (!onApprove) return;
+    setBusy("approve");
+    try {
+      await onApprove(enabledPlanSteps(plan.steps), markdown);
+    } finally {
+      setBusy(null);
+    }
+  }, [markdown, onApprove, plan.steps]);
+
+  const handleReject = useCallback(async () => {
+    if (!onReject) return;
+    setBusy("reject");
+    try {
+      await onReject();
+    } finally {
+      setBusy(null);
+    }
+  }, [onReject]);
+
+  const statusCopy =
+    status === "approved"
+      ? "Approved plan"
+      : status === "rejected"
+        ? "Rejected plan"
+        : awaitingApproval
+          ? "Waiting for approval"
+          : "Plan";
+
   return (
     <div className="forge-inspector-plan" data-testid="inspector-plan">
+      <div
+        className={`forge-inspector-plan-status forge-inspector-plan-status--${status}`}
+        data-testid="inspector-plan-status"
+      >
+        <span className="forge-inspector-plan-status-label">{statusCopy}</span>
+        <span className="forge-inspector-plan-status-summary">
+          {plan.mission?.trim() || plan.summary}
+        </span>
+      </div>
       {plan.design && <DesignDirectionCard design={plan.design} />}
       <div className="forge-inspector-plan-doc forge-inspector-plan-doc--preview">
         <MarkdownRenderer className="forge-inspector-plan-markdown">{markdown}</MarkdownRenderer>
+      </div>
+      <div className="forge-inspector-plan-footer">
+        {awaitingApproval ? (
+          <>
+            <button
+              type="button"
+              className="forge-inspector-plan-btn"
+              onClick={() => onEditRequest?.(plan)}
+              disabled={busy !== null}
+            >
+              <Pencil className="size-3.5" />
+              Edit in chat
+            </button>
+            <button
+              type="button"
+              className="forge-inspector-plan-btn forge-inspector-plan-btn--danger"
+              onClick={handleReject}
+              disabled={busy !== null || !onReject}
+            >
+              {busy === "reject" ? (
+                <Loader2 className="size-3.5 animate-spin" />
+              ) : (
+                <SkipForward className="size-3.5" />
+              )}
+              Reject
+            </button>
+            <button
+              type="button"
+              className="forge-inspector-plan-approve"
+              onClick={handleApprove}
+              disabled={busy !== null || !onApprove}
+            >
+              {busy === "approve" ? (
+                <Loader2 className="size-3.5 animate-spin" />
+              ) : (
+                <Check className="size-3.5" />
+              )}
+              Approve and build
+            </button>
+          </>
+        ) : (
+          <button
+            type="button"
+            className="forge-inspector-plan-btn"
+            onClick={() => onEditRequest?.(plan)}
+          >
+            <Pencil className="size-3.5" />
+            Use as edit request
+          </button>
+        )}
       </div>
     </div>
   );

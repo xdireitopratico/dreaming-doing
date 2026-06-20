@@ -6,6 +6,14 @@ export type RunPhase = "plan" | "build" | "execute" | "observe" | "summarize" | 
 
 export type MiniCardStatus = "thinking" | "working" | "done" | "failed";
 
+export type MiniCardTaskStatus = "done" | "active" | "pending" | "failed";
+
+export type MiniCardTask = {
+  id: string;
+  label: string;
+  status: MiniCardTaskStatus;
+};
+
 export type MiniCardData = {
   title: string;
   /** Header Lovable: «Edited App.tsx», «Running command», «Plan ready». */
@@ -14,6 +22,8 @@ export type MiniCardData = {
   subtitle: string;
   liveBriefings: string[];
   status: MiniCardStatus;
+  tasks: MiniCardTask[];
+  currentTaskIndex: number;
   editedFile?: string | null;
   fileCount?: number;
   hasPlan?: boolean;

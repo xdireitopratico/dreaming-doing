@@ -586,9 +586,7 @@ export function EditorPageLayout({
                             <JobInspector
                               run={focusedJobProgress}
                               runId={jobWorkspaceFocus.runId}
-                              running={
-                                running && agent.activeRunId === jobWorkspaceFocus.runId
-                              }
+                              running={running && agent.activeRunId === jobWorkspaceFocus.runId}
                               activeTab={jobWorkspaceFocus.tab}
                               messages={chatMessages}
                               livePendingPlan={
@@ -600,6 +598,21 @@ export function EditorPageLayout({
                                 handleSelectFile(path);
                                 onMainViewChange("code");
                                 if (isMobile) onMobilePanelChange?.("code");
+                              }}
+                              onPlanApprove={handlePlanApprove}
+                              onPlanReject={handlePlanReject}
+                              onPlanEditRequest={(plan) => {
+                                const headline =
+                                  plan.mission?.trim() || plan.summary?.trim() || "este plano";
+                                setPromptDraft(`Ajuste ${headline}: `);
+                                if (isMobile) onMobilePanelChange?.("chat");
+                                window.requestAnimationFrame(() => {
+                                  const el =
+                                    document.querySelector<HTMLTextAreaElement>(
+                                      ".forge-composer-input",
+                                    );
+                                  el?.focus();
+                                });
                               }}
                               runStartedAtMs={
                                 agent.activeRunId === jobWorkspaceFocus.runId
@@ -668,20 +681,19 @@ export function EditorPageLayout({
 
                       {activeView === "diff" && (
                         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-                        <AiDiffViewer
-                          diffs={diffEntries}
-                          activeDiffId={diffEntries[0]?.id ?? null}
-                          onSelectDiff={() => {}}
-                          onAccept={handleDiffAccept}
-                          onReject={handleDiffReject}
-                          onAcceptAll={handleDiffAcceptAll}
-                          onRejectAll={handleDiffRejectAll}
-                        />
+                          <AiDiffViewer
+                            diffs={diffEntries}
+                            activeDiffId={diffEntries[0]?.id ?? null}
+                            onSelectDiff={() => {}}
+                            onAccept={handleDiffAccept}
+                            onReject={handleDiffReject}
+                            onAcceptAll={handleDiffAcceptAll}
+                            onRejectAll={handleDiffRejectAll}
+                          />
                         </div>
                       )}
                     </div>
                   </div>
-
                 </div>
               </div>
             }

@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import { Check, Loader2, SkipForward } from "lucide-react";
+import { Check, FileText, Loader2, SkipForward } from "lucide-react";
 import type { PendingPlan, PlanStep } from "@/lib/agent-progress";
 import { buildForgePlanMarkdown } from "@/lib/plan-document";
 import { enabledPlanSteps } from "@/lib/forge-run";
@@ -56,16 +56,23 @@ export function ChatPlanDock({
 
   if (status && pendingPlan) {
     const body = planParagraphFromPlan(pendingPlan);
+    const approved = status === "approved";
     return (
       <div className="forge-plan-dock" data-testid="chat-plan-status-readonly">
-        <div className="forge-plan-status-card">
+        <div className={`forge-plan-status-card forge-plan-status-card--${status}`}>
           <div className="forge-plan-status-header">
             <span className={`forge-plan-status-badge forge-plan-status-badge--${status}`}>
-              {status === "approved" ? "Aprovado" : "Rejeitado"}
+              {approved ? "Approved" : "Rejected"}
             </span>
-            <span className="forge-plan-status-label">Plano</span>
+            <span className="forge-plan-status-label">
+              {approved ? "Plano aprovado" : "Plano rejeitado"}
+            </span>
           </div>
           <div className="forge-plan-dock-inner">
+            <p className="forge-plan-dock-label forge-plan-dock-label--icon">
+              <FileText className="size-3" aria-hidden />
+              Plan
+            </p>
             <p className="forge-plan-dock-body">{body}</p>
           </div>
           {onReview && (
@@ -76,7 +83,7 @@ export function ChatPlanDock({
                   className="forge-plan-dock-btn"
                   onClick={() => onReview(pendingPlan.runId)}
                 >
-                  Review
+                  {approved ? "Open approved plan" : "Open rejected plan"}
                 </button>
               </div>
             </div>

@@ -54,8 +54,6 @@ describe("buildForgeTimeline", () => {
   });
 });
 
-
-
 describe("shouldShowJobCard", () => {
   it("turno conversacional não mostra mini-card", () => {
     expect(
@@ -124,7 +122,16 @@ describe("shouldShowJobCard", () => {
       phase: "execute",
       finished: false,
       tools: [{ name: "fs_edit", args: { path: "Dockerfile.lara" }, ok: true }],
-      diffs: [{ path: "Dockerfile.lara", patch: "..." }],
+      diffs: [
+        {
+          id: "diff-1",
+          path: "Dockerfile.lara",
+          before: "",
+          after: "...",
+          op: "edit",
+          timestamp: 1,
+        },
+      ],
     };
 
     expect(
@@ -392,11 +399,7 @@ describe("forge-run mini card briefing e título", () => {
   it("resolveLatencyThinking — ativo antes do 1º token", () => {
     const startedAt = Date.now() - 1500;
     expect(
-      resolveLatencyThinking(
-        { ...initialAgentProgress, finished: false },
-        true,
-        startedAt,
-      )?.active,
+      resolveLatencyThinking({ ...initialAgentProgress, finished: false }, true, startedAt)?.active,
     ).toBe(true);
   });
 
@@ -538,7 +541,11 @@ describe("forge-run mini card briefing e título", () => {
       phase: "build",
       message: "Analisando estrutura",
       timeline: [
-        { type: "explore", data: { message: "Explorando o projeto", phase: "gather" }, timestamp: 1 },
+        {
+          type: "explore",
+          data: { message: "Explorando o projeto", phase: "gather" },
+          timestamp: 1,
+        },
         { type: "memory", data: { message: "Lendo package.json" }, timestamp: 2 },
       ],
     };

@@ -1,6 +1,15 @@
 import { cn } from "@/lib/utils";
 import type { MiniCardData } from "@/lib/chat/types";
-import { FileText, GitCompareArrows, Terminal, ExternalLink } from "lucide-react";
+import {
+  CheckCircle2,
+  Circle,
+  ExternalLink,
+  FileText,
+  GitCompareArrows,
+  Loader2,
+  Terminal,
+  XCircle,
+} from "lucide-react";
 
 type ChatJobCardProps = {
   data: MiniCardData;
@@ -64,7 +73,12 @@ export function ChatJobCard({
         e.stopPropagation();
         if (data.lastTool?.path) onOpenFile?.(data.lastTool.path);
       },
-      visible: !!data.lastTool?.path && (data.lastTool.name === "fs_read" || data.lastTool.name === "fs_write" || data.lastTool.name === "fs_edit") && !!onOpenFile,
+      visible:
+        !!data.lastTool?.path &&
+        (data.lastTool.name === "fs_read" ||
+          data.lastTool.name === "fs_write" ||
+          data.lastTool.name === "fs_edit") &&
+        !!onOpenFile,
     },
     {
       key: "show-diff",
@@ -98,6 +112,8 @@ export function ChatJobCard({
     },
   ];
   const visibleChips = chips.filter((c) => c.visible);
+  const visibleTasks = data.tasks.slice(0, 6);
+  const hiddenTaskCount = Math.max(0, data.tasks.length - visibleTasks.length);
 
   const cardVariant =
     (isRunningCommand || edited) && isLive
@@ -146,13 +162,9 @@ export function ChatJobCard({
           </div>
         )}
 
-        {!edited &&
-          !isRunningCommand &&
-          data.header &&
-          !isDone &&
-          !isFailed && (
-            <p className="forge-mini-card-header-line">{data.header}</p>
-          )}
+        {!edited && !isRunningCommand && data.header && !isDone && !isFailed && (
+          <p className="forge-mini-card-header-line">{data.header}</p>
+        )}
 
         <p className={cn("forge-mini-card-title", isLive && "forge-mini-card-title--live")}>
           {displaySubtitle}
@@ -173,6 +185,40 @@ export function ChatJobCard({
               </button>
             ))}
           </div>
+        )}
+
+        {visibleTasks.length > 0 && (
+          <ul className="forge-task-list" data-testid="chat-mini-card-task-list">
+            {visibleTasks.map((task) => {
+              const Icon =
+                task.status === "done"
+                  ? CheckCircle2
+                  : task.status === "failed"
+                    ? XCircle
+                    : task.status === "active"
+                      ? Loader2
+                      : Circle;
+              return (
+                <li key={task.id} className="forge-task-item" data-status={task.status}>
+                  <Icon
+                    className={cn(
+                      "forge-task-icon size-3.5 shrink-0",
+                      task.status === "active" && "forge-task-icon--active animate-spin",
+                    )}
+                  />
+                  <span className="forge-task-label">{task.label}</span>
+                </li>
+              );
+            })}
+            {hiddenTaskCount > 0 && (
+              <li className="forge-task-item forge-task-item--more">
+                <span className="forge-task-icon forge-task-icon--more" aria-hidden>
+                  +{hiddenTaskCount}
+                </span>
+                <span className="forge-task-label">more plan steps</span>
+              </li>
+            )}
+          </ul>
         )}
 
         <p className="forge-mini-card-hint">{hint()}</p>

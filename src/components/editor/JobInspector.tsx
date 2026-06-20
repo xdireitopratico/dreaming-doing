@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef } from "react";
-import type { AgentProgress, PendingPlan } from "@/lib/agent-progress";
+import type { AgentProgress, PendingPlan, PlanStep } from "@/lib/agent-progress";
 import type { ChatMessage } from "@/lib/chat-types";
 import type { JobInspectorTab } from "@/hooks/useJobWorkspaceFocus";
 import { resolveInspectorPlanForRun } from "@/lib/plan-message-meta";
@@ -18,6 +18,9 @@ export type JobInspectorProps = {
   onTabChange: (tab: JobInspectorTab) => void;
   onBackToLatest: () => void;
   onOpenFile?: (path: string) => void;
+  onPlanApprove?: (steps: PlanStep[], markdown?: string) => void | Promise<void>;
+  onPlanReject?: (reason?: string) => void | Promise<void>;
+  onPlanEditRequest?: (plan: PendingPlan) => void;
   runStartedAtMs?: number | null;
   /** Inspector ocupa o workspace inteiro (Lovable: job aberto = sem preview). */
   fullWidth?: boolean;
@@ -38,6 +41,9 @@ export function JobInspector({
   onTabChange,
   onBackToLatest,
   onOpenFile,
+  onPlanApprove,
+  onPlanReject,
+  onPlanEditRequest,
   runStartedAtMs,
   fullWidth = false,
 }: JobInspectorProps) {
@@ -50,7 +56,7 @@ export function JobInspector({
     [runId, messages, livePendingPlan, run.pendingPlan],
   );
 
-  const showPlanTab = activeTab === "plan" && !!inspectorPlan;
+  const showPlanTab = !!inspectorPlan;
   const normalizedTab = (activeTab as string) === "details" ? "timeline" : activeTab;
   const resolvedTab =
     normalizedTab === "plan" && showPlanTab
@@ -73,8 +79,7 @@ export function JobInspector({
     }
     const isBuildRun = messages.some(
       (m) =>
-        m.role === "user" &&
-        (m.meta as Record<string, unknown> | undefined)?.buildRunId === runId,
+        m.role === "user" && (m.meta as Record<string, unknown> | undefined)?.buildRunId === runId,
     );
     if (!isBuildRun) return;
     if (planDiagEmittedRef.current === runId) return;
@@ -91,6 +96,7 @@ export function JobInspector({
         <button type="button" className="forge-inspector-back-btn" onClick={onBackToLatest}>
           Back to latest
         </button>
+        <div className="forge-inspector-title">Details</div>
         <div className="forge-inspector-tabs" role="tablist" aria-label="Inspector">
           {TABS.map((tab) => (
             <button
@@ -131,7 +137,12 @@ export function JobInspector({
         )}
         {resolvedTab === "changes" && <InspectorChanges progress={run} />}
         {resolvedTab === "plan" && inspectorPlan && (
-          <InspectorPlan plan={inspectorPlan.plan} />
+          <InspectorPlan
+            state={inspectorPlan}
+            onApprove={onPlanApprove}
+            onReject={onPlanReject}
+            onEditRequest={onPlanEditRequest}
+          />
         )}
       </div>
     </div>

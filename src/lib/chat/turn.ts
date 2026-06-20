@@ -1,14 +1,7 @@
 import type { AgentProgress, PendingPlan } from "@/lib/agent-progress";
 import type { ChatMessage } from "@/lib/chat-types";
-import {
-  buildAgentRunView,
-  hasActiveJob,
-  shouldShowJobCard,
-} from "@/lib/forge-run";
-import {
-  hasMaterializedCardSnapshot,
-  isAgentJobMessage,
-} from "@/lib/assistant-run-progress";
+import { buildAgentRunView, hasActiveJob, shouldShowJobCard } from "@/lib/forge-run";
+import { hasMaterializedCardSnapshot, isAgentJobMessage } from "@/lib/assistant-run-progress";
 import { resolveJobPlanForRun } from "@/lib/plan-message-meta";
 import { parseClarifyChoices } from "@/lib/clarify-choices";
 import { resolveAssistantProgress } from "@/lib/chat/resolve-progress";
@@ -36,9 +29,7 @@ export type TurnContext = {
   focusedRunId?: string | null;
 };
 
-function toMiniCard(
-  runView: NonNullable<ReturnType<typeof buildAgentRunView>>,
-): MiniCardData {
+function toMiniCard(runView: NonNullable<ReturnType<typeof buildAgentRunView>>): MiniCardData {
   const m = runView.miniCard;
   return {
     title: m.title || m.header,
@@ -46,6 +37,8 @@ function toMiniCard(
     subtitle: m.subtitle,
     liveBriefings: m.liveBriefings.length > 0 ? m.liveBriefings : [m.subtitle || m.header],
     status: m.status,
+    tasks: m.tasks,
+    currentTaskIndex: m.currentTaskIndex,
     editedFile: m.editedFile,
     fileCount: m.fileCount,
     hasPlan: m.hasPlan,
@@ -57,8 +50,7 @@ export function mapAssistantTurn(
   item: Extract<RawThreadItem, { kind: "assistant" }>,
   ctx: TurnContext,
 ): Extract<ThreadItem, { kind: "assistant" }> {
-  const { thread, itemIndex, messages, running, activeRunId, sessionProgress, focusedRunId } =
-    ctx;
+  const { thread, itemIndex, messages, running, activeRunId, sessionProgress, focusedRunId } = ctx;
 
   let userPrompt: string | null = null;
   for (let j = itemIndex - 1; j >= 0; j--) {
@@ -72,12 +64,7 @@ export function mapAssistantTurn(
   let resolved = resolveAssistantProgress(item);
   const runId = item.runId ?? activeRunId ?? `slot-${itemIndex}`;
 
-  if (
-    !resolved &&
-    runId &&
-    item.runId === activeRunId &&
-    (item.isActive || !!item.live)
-  ) {
+  if (!resolved && runId && item.runId === activeRunId && (item.isActive || !!item.live)) {
     resolved = sessionProgress;
   }
   if (!resolved && item.runId) {
@@ -139,15 +126,13 @@ export function mapAssistantTurn(
 
   const jobPlan = item.runId
     ? resolveJobPlanForRun(item.runId, messages, {
-        livePlan:
-          ctx.pendingPlan && ctx.pendingPlan.runId === item.runId ? ctx.pendingPlan : null,
+        livePlan: ctx.pendingPlan && ctx.pendingPlan.runId === item.runId ? ctx.pendingPlan : null,
         progressPlan: resolved?.pendingPlan ?? null,
         assistantMessage: item.message,
       })
     : null;
 
-  const isLiveTurn =
-    item.isActive || anchoredLive || (!!activeRunId && item.runId === activeRunId);
+  const isLiveTurn = item.isActive || anchoredLive || (!!activeRunId && item.runId === activeRunId);
   const runStartedAtMs = isLiveTurn ? (ctx.activeRunStartedAtMs ?? null) : null;
 
   const runView = resolved
@@ -191,25 +176,18 @@ export function mapAssistantTurn(
   const rawStreamText = closingText ?? resolved?.streamText ?? null;
   const narration = resolveTurnNarration(resolved, runView, rawStreamText);
   let streamText = rawStreamText;
-  if (
-    !streamText &&
-    resolved?.error?.trim() &&
-    resolved.finished &&
-    !slotActive
-  ) {
+  if (!streamText && resolved?.error?.trim() && resolved.finished && !slotActive) {
     streamText = resolved.error.trim();
   }
   if (slotActive && showJobCard && streamText) streamText = null;
 
   const planDockActive =
     !!ctx.pendingPlan &&
-    (resolved?.awaitingKind === "plan_approval" ||
-      item.runId === ctx.pendingPlan.runId);
+    (resolved?.awaitingKind === "plan_approval" || item.runId === ctx.pendingPlan.runId);
   if (planDockActive) streamText = null;
 
   const persistMiniCard =
-    !!runView &&
-    (showJobCard || (!!item.message && hasMaterializedCardSnapshot(item.message)));
+    !!runView && (showJobCard || (!!item.message && hasMaterializedCardSnapshot(item.message)));
   const miniCard = persistMiniCard && runView ? toMiniCard(runView) : null;
 
   const turn: Extract<ThreadItem, { kind: "assistant" }> = {
