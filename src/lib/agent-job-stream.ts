@@ -198,9 +198,11 @@ export function buildJobStreamTree(
   const nodes: JobStreamNode[] = [];
   const running = opts?.running ?? false;
   let lastResultTs = 0;
+  let lastTs = typeof timeline[0]?.timestamp === "number" ? timeline[0].timestamp : 0;
 
   for (const ev of timeline) {
-    const ts = ev.timestamp ?? Date.now();
+    const ts = typeof ev.timestamp === "number" ? ev.timestamp : lastTs + 1;
+    lastTs = Math.max(lastTs, ts);
     const data = ev.data ?? {};
 
     if (ev.type === "assistant_text" && typeof data.text === "string") {
@@ -365,10 +367,10 @@ export function buildJobStreamTree(
   if (running) {
     const last = nodes[nodes.length - 1];
     if (last?.kind === "thought" && last.status === "active") {
-      last.thoughtSec = Math.max(1, Math.round((Date.now() - last.ts) / 1000));
+      last.thoughtSec = Math.max(1, Math.round((lastTs - last.ts) / 1000));
     }
   } else {
-    flushThought(nodes, Date.now());
+    flushThought(nodes, lastTs);
     for (let i = 0; i < nodes.length; i++) {
       const n = nodes[i]!;
       if (n.kind === "step" && n.status === "active") {
@@ -532,7 +534,7 @@ export function chatPersistedNodes(nodes: JobStreamNode[]): JobStreamNode[] {
 /** Reidrata timeline mínima a partir de executionLog persistido no DB. */
 export function timelineFromExecutionLog(lines: string[]): SSEEvent[] {
   const out: SSEEvent[] = [];
-  let t = Date.now() - lines.length * 1000;
+  let t = 0;
   for (const line of lines) {
     const trimmed = line.trim();
     if (!trimmed) continue;
