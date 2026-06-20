@@ -43,17 +43,25 @@ Deno.serve(async (req) => {
     const auth = req.headers.get("Authorization") || "";
     const token = auth.replace(/^Bearer\s+/i, "");
 
-    const supabase = createClient(SUPABASE_URL, token || SERVICE_ROLE_KEY, {
-      global: { headers: { Authorization: auth } },
-    });
+    // Service-role client (for DB operations + Inngest calls)
+    const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
+
+    // If there's a user token, also create a user-scoped client (for auth.getUser)
+    // Use anon key + user JWT for proper user identification
+    let userClient: ReturnType<typeof createClient> | null = null;
+    if (token && token !== SERVICE_ROLE_KEY) {
+      userClient = createClient(SUPABASE_URL, Deno.env.get("SUPABASE_ANON_KEY") ?? SERVICE_ROLE_KEY, {
+        global: { headers: { Authorization: auth } },
+      });
+    }
 
     const { action, urls, depth, categories, jobId } = await req.json().catch(() => ({}));
 
     switch (action) {
       case "schedule":
-        return await handleSchedule(supabase, urls, depth ?? "deep", categories ?? CATEGORIES);
+        return await handleSchedule(supabase, userClient, urls, depth ?? "deep", categories ?? CATEGORIES);
       case "trigger_curated":
-        return await handleTriggerCurated(supabase);
+        return await handleTriggerCurated(supabase, userClient);
       case "continue_queue":
         return await handleContinueQueue(supabase);
       case "status":
@@ -70,6 +78,7 @@ Deno.serve(async (req) => {
 
 async function handleSchedule(
   supabase: ReturnType<typeof createClient>,
+  userClient: ReturnType<typeof createClient> | null,
   urls: string[],
   depth: string,
   categories: string[],
@@ -78,9 +87,14 @@ async function handleSchedule(
     return json({ error: "1-5 URLs required" }, 400);
   }
 
-  const { data: user } = await supabase.auth.getUser();
-  const userId = user?.user?.id;
-  const userEmail = user?.user?.email;
+  // Identify user via userClient (if present)
+  let userId: string | null = null;
+  let userEmail: string | null = null;
+  if (userClient) {
+    const { data: user } = await userClient.auth.getUser();
+    userId = user?.user?.id ?? null;
+    userEmail = user?.user?.email ?? null;
+  }
 
   // service_role (Inngest/cron) bypassa auth check
   const isServiceRole = !userId;
@@ -89,7 +103,7 @@ async function handleSchedule(
     return json({ error: "Apenas administradores podem agendar extração de DesignDNA" }, 403);
   }
 
-  // Cria job na tabela
+  // Cria job na tabela (via service_role client)
   const { data: job, error: insertError } = await supabase
     .from("design_dna_jobs")
     .insert({
@@ -127,7 +141,10 @@ async function handleSchedule(
   return json({ ok: true, jobId, eventIds: eventResult.ids });
 }
 
-async function handleTriggerCurated(supabase: ReturnType<typeof createClient>): Promise<Response> {
+async function handleTriggerCurated(
+  supabase: ReturnType<typeof createClient>,
+  userClient: ReturnType<typeof createClient> | null,
+): Promise<Response> {
   const weekOffset = Math.floor(Date.now() / (7 * 24 * 3600 * 1000));
   const batch = getBatchForWeek(weekOffset, SITES_PER_RUN);
 
@@ -141,7 +158,7 @@ async function handleTriggerCurated(supabase: ReturnType<typeof createClient>): 
   if (urls.length === 0) return json({ ok: true, note: "no direct URLs this week" });
 
   // Quando chamado por cron/service_role, handleSchedule faz bypass do check admin
-  return await handleSchedule(supabase, urls, "deep", CATEGORIES);
+  return await handleSchedule(supabase, userClient, urls, "deep", CATEGORIES);
 }
 
 async function handleContinueQueue(supabase: ReturnType<typeof createClient>): Promise<Response> {

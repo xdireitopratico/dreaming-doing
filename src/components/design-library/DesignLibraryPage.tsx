@@ -99,20 +99,31 @@ export function DesignLibraryPage() {
 
   return (
     <div className="flex flex-col h-full">
-      {/* Actions bar (no header per dashboard pattern) */}
-      <div className="px-6 pt-2 flex items-center justify-end gap-2">
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => setViewMode(viewMode === "grid" ? "list" : "grid")}
-          className="h-7"
-        >
-          {viewMode === "grid" ? <List className="size-3" /> : <LayoutGrid className="size-3" />}
-        </Button>
-        <Button onClick={() => setCreateOpen(true)} size="sm" className="h-7">
-          <Plus className="size-3 mr-1" />
-          Extrair URLs
-        </Button>
+      {/* Page header (sem faixa preta) */}
+      <div className="px-6 pt-4 flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-display font-semibold flex items-center gap-2">
+            <Library className="size-5 text-primary" />
+            Design Library
+          </h1>
+          <p className="text-xs text-muted-foreground mt-1">
+            Biblioteca curada de referências de design extraídas automaticamente
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setViewMode(viewMode === "grid" ? "list" : "grid")}
+            className="h-7"
+          >
+            {viewMode === "grid" ? <List className="size-3" /> : <LayoutGrid className="size-3" />}
+          </Button>
+          <Button onClick={() => setCreateOpen(true)} size="sm" className="h-7">
+            <Plus className="size-3 mr-1" />
+            Extrair URLs
+          </Button>
+        </div>
       </div>
 
       {/* Active Jobs Banner */}
