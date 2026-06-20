@@ -11,7 +11,7 @@ import {
   DialogFooter,
   DialogClose,
 } from "@/components/ui/dialog";
-import { Plus, Loader2, LayoutGrid, List, Sparkles, ChevronRight, Play } from "lucide-react";
+import { Plus, Loader2, LayoutGrid, List, Library, ChevronRight, Play } from "lucide-react";
 import { useLibrary, useJobs } from "./hooks";
 import { DesignLibraryFilters } from "./DesignLibraryFilters";
 import { DesignLibraryCard } from "./DesignLibraryCard";
@@ -100,37 +100,20 @@ export function DesignLibraryPage() {
 
   return (
     <div className="flex flex-col h-full">
-      {/* Header */}
-      <div className="px-6 py-4 border-b border-border bg-surface-1">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-xl font-display font-semibold flex items-center gap-2">
-              <Sparkles className="size-5 text-primary" />
-              Design Library
-            </h1>
-            <p className="text-xs text-muted-foreground mt-1">
-              Biblioteca curada de referências de design extraídas automaticamente
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setViewMode(viewMode === "grid" ? "list" : "grid")}
-              className="h-8"
-            >
-              {viewMode === "grid" ? (
-                <List className="size-3.5" />
-              ) : (
-                <LayoutGrid className="size-3.5" />
-              )}
-            </Button>
-            <Button onClick={() => setCreateOpen(true)} size="sm" className="h-8">
-              <Plus className="size-3.5 mr-1" />
-              Extrair URLs
-            </Button>
-          </div>
-        </div>
+      {/* Actions bar (no header per dashboard pattern) */}
+      <div className="px-6 pt-2 flex items-center justify-end gap-2">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setViewMode(viewMode === "grid" ? "list" : "grid")}
+          className="h-7"
+        >
+          {viewMode === "grid" ? <List className="size-3" /> : <LayoutGrid className="size-3" />}
+        </Button>
+        <Button onClick={() => setCreateOpen(true)} size="sm" className="h-7">
+          <Plus className="size-3 mr-1" />
+          Extrair URLs
+        </Button>
       </div>
 
       {/* Active Jobs Banner */}
@@ -222,7 +205,7 @@ export function DesignLibraryPage() {
           </div>
         ) : entries.length === 0 ? (
           <div className="text-center py-16">
-            <Sparkles className="size-12 mx-auto text-muted-foreground/30 mb-3" />
+            <Library className="size-12 mx-auto text-muted-foreground/30 mb-3" />
             <h3 className="text-sm font-medium mb-1">Nenhuma entrada encontrada</h3>
             <p className="text-xs text-muted-foreground">
               Clique em "Extrair URLs" para começar a popular a biblioteca

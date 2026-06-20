@@ -148,27 +148,46 @@ Deno.serve(async (req: Request) => {
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const supabase = createClient(supabaseUrl, supabaseKey, {
-      global: { headers: { Authorization: auth } },
-    });
+    const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Identify user from JWT
-    const { data: userData } = await supabase.auth.getUser();
-    const userId = userData?.user?.id;
-    if (!userId) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+    // Extract token from Authorization header
+    const token = auth.replace(/^Bearer\s+/i, "");
+
+    // Decode JWT payload to check role (avoids needing the actual service_role key)
+    let isServiceRole = false;
+    try {
+      const payload = JSON.parse(atob(token.split(".")[1] ?? ""));
+      isServiceRole = payload.role === "service_role";
+    } catch {
+      /* not a JWT */
     }
 
-    // Admin gate: only xdireitopratico@gmail.com
-    const userEmail = userData.user.email?.toLowerCase();
-    if (userEmail !== "xdireitopratico@gmail.com") {
-      return new Response(JSON.stringify({ error: "Forbidden" }), {
-        status: 403,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+    let userId: string | null = null;
+    let userEmail: string | null = null;
+
+    if (!isServiceRole) {
+      // User call — decode JWT via anon client
+      const userClient = createClient(supabaseUrl, Deno.env.get("SUPABASE_ANON_KEY") ?? supabaseKey, {
+        global: { headers: { Authorization: auth } },
       });
+      const { data: userData } = await userClient.auth.getUser();
+      userId = userData?.user?.id ?? null;
+      userEmail = userData?.user?.email ?? null;
+
+      if (!userId) {
+        return new Response(JSON.stringify({ error: "Unauthorized" }), {
+          status: 401,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // Admin gate: only xdireitopratico@gmail.com
+      if (userEmail?.toLowerCase() !== "xdireitopratico@gmail.com") {
+        return new Response(JSON.stringify({ error: "Forbidden" }), {
+          status: 403,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
     }
 
     const input: ChatRequest = await req.json();
@@ -180,7 +199,24 @@ Deno.serve(async (req: Request) => {
     }
 
     // Load user's LLM credentials (same BYOK pattern as agent-run)
-    const connectorKeys = await loadConnectorKeys(supabase, userId);
+    let targetUserId = userId;
+    if (!targetUserId) {
+      // service_role: load admin's keys
+      const { data: users } = await supabase.auth.admin.listUsers({ perPage: 500 });
+      const adminUser = users?.users?.find(
+        (u) => u.email?.toLowerCase() === "xdireitopratico@gmail.com",
+      );
+      targetUserId = adminUser?.id ?? null;
+    }
+    if (!targetUserId) {
+      return new Response(
+        JSON.stringify({
+          reply: "⚠️ Admin user not found.",
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+    const connectorKeys = await loadConnectorKeys(supabase, targetUserId);
     const llmConfig = resolveLLMConfig(connectorKeys);
 
     if (!llmConfig) {

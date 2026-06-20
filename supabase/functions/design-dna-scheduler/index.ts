@@ -1,9 +1,15 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { FORGE_ADMIN_EMAIL } from "../_shared/forge-admin.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
+
+function isAdminEmail(email: string | null | undefined): boolean {
+  if (!email) return false;
+  return email.trim().toLowerCase() === FORGE_ADMIN_EMAIL.toLowerCase();
+}
 
 const INNGEST_EVENT_KEY = Deno.env.get("INNGEST_EVENT_KEY") ?? "";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
@@ -74,15 +80,12 @@ async function handleSchedule(
 
   const { data: user } = await supabase.auth.getUser();
   const userId = user?.user?.id;
+  const userEmail = user?.user?.email;
 
-  // Verifica admin (exceto se chamado com service_role — Inngest drain)
-  const { data: role } = await supabase
-    .from("user_roles")
-    .select("role")
-    .eq("user_id", userId)
-    .eq("role", "admin")
-    .maybeSingle();
-  if (!role && userId) {
+  // service_role (Inngest/cron) bypassa auth check
+  const isServiceRole = !userId;
+  // Admin: email check (mesma regra do frontend via isForgeAdminEmail)
+  if (!isServiceRole && !isAdminEmail(userEmail)) {
     return json({ error: "Apenas administradores podem agendar extração de DesignDNA" }, 403);
   }
 
@@ -137,6 +140,7 @@ async function handleTriggerCurated(supabase: ReturnType<typeof createClient>): 
 
   if (urls.length === 0) return json({ ok: true, note: "no direct URLs this week" });
 
+  // Quando chamado por cron/service_role, handleSchedule faz bypass do check admin
   return await handleSchedule(supabase, urls, "deep", CATEGORIES);
 }
 
