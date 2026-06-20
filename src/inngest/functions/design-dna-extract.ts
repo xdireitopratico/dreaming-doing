@@ -55,14 +55,42 @@ export const designDnaExtractFunction = inngest.createFunction(
     });
 
     let lastResult: DesignDnaExecuteResponse | null = null;
+    let lastError: string | null = null;
     for (let i = 0; i < 3; i++) {
-      const result = await step.run(`extract-loop-${i}`, async () => {
-        const { executeDesignDnaJob } = await import("../executor/run-design-dna.ts");
+      try {
+        const result = await step.run(`extract-loop-${i}`, async () => {
+          const { executeDesignDnaJob } = await import("../executor/run-design-dna.ts");
+          const sb = getSupabaseAdmin();
+          return await executeDesignDnaJob(sb, { ...payload, resume: i > 0 });
+        });
+        lastResult = result;
+        if (result.ok || result.canceled || !result.resumable) break;
+      } catch (err) {
+        lastError = err instanceof Error ? err.message : String(err);
+        console.error(`[design-dna-extract] extract-loop-${i} threw:`, lastError);
+        // Marcar como failed imediatamente em vez de propagar (que deixaria job em running)
+        lastResult = {
+          ok: false,
+          jobId: payload.jobId,
+          resumable: false,
+          canceled: false,
+          error: lastError,
+          urlsCompleted: 0,
+          durationMs: 0,
+        };
+        break;
+      }
+    }
+
+    // Se houve erro fatal, marcar failed e sair
+    if (lastError && !lastResult?.ok) {
+      await step.run("mark-failed-fatal", async () => {
         const sb = getSupabaseAdmin();
-        return await executeDesignDnaJob(sb, { ...payload, resume: i > 0 });
+        await markJobFinal(sb, payload.jobId, "failed", {
+          error: lastError ?? "extraction failed",
+        });
       });
-      lastResult = result;
-      if (result.ok || result.canceled || !result.resumable) break;
+      return { jobId: payload.jobId, ok: false, error: lastError };
     }
 
     if (!lastResult) {

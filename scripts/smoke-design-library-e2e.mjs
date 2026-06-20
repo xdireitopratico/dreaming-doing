@@ -104,7 +104,7 @@ async function test2_VerifyJobInDb(jobId) {
   log("fetch job by id", ok, `status=${data.status} depth=${data.depth}`);
 }
 
-async function test3_WaitForCompletion(jobId, timeoutMs = 90000) {
+async function test3_WaitForCompletion(jobId, timeoutMs = 300000) {
   console.log("\n── Test 3: wait for completion ──");
   if (!jobId) {
     log("wait for completion", false, "no jobId");

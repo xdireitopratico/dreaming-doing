@@ -68,7 +68,16 @@ export async function executeDesignDnaJob(
   }
 
   if (!e2bApiKey) {
-    throw new Error("Configure sua chave E2B em API Keys (/api)");
+    const msg = "Configure sua chave E2B em API Keys (/api)";
+    await appendJobEvent(supabase, jobId, "url_error", { error: msg });
+    await supabase
+      .from("design_dna_jobs")
+      .update({ status: "failed", error: msg, finished_at: new Date().toISOString() })
+      .eq("id", jobId);
+    return {
+      ok: false, jobId, resumable: false, canceled: false,
+      error: msg, urlsCompleted: 0, durationMs: Date.now() - startMs,
+    };
   }
 
   let sandboxId = "";
