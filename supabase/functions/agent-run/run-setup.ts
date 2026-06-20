@@ -9,7 +9,7 @@ import {
   loadForgeTrialRobinPool,
   type AgentPreferencesPayload,
 } from "./connector-keys.ts";
-import { pickMain, type ProviderConfig } from "./providers.ts";
+import { pickMain, type ProviderConfig, detectVisionSupport } from "./providers.ts";
 import {
   defaultRobinModel,
   PLATFORM_ROBIN_TASTE_PRESET_ID,
@@ -72,6 +72,7 @@ export function robinProviderConfig(
     model: wire.model,
     baseUrl: wire.baseUrl,
     label: `ROBIN · ${wire.label} (${keys.length} chaves)`,
+    supportsVision: detectVisionSupport(wire.provider, wire.model),
   };
 }
 
@@ -269,6 +270,7 @@ export async function resolveAgentProvider(
       model: autoWire.model,
       baseUrl: autoWire.baseUrl,
       label: `${autoWire.label} (Auto)`,
+      supportsVision: detectVisionSupport(autoWire.provider, autoWire.model),
     };
   } else if (preferences?.mode === "fixed") {
     const resolved = resolveModelFromPreferences(preferences, userOnlyKeys);
@@ -283,6 +285,7 @@ export async function resolveAgentProvider(
       model: resolved.model,
       baseUrl: resolved.baseUrl,
       label: `${resolved.label} (fixo)`,
+      supportsVision: detectVisionSupport(resolved.provider, resolved.model),
     };
   } else {
     throw new Error("Modo de modelo inválido. Configure Auto ou Fixo em /models.");

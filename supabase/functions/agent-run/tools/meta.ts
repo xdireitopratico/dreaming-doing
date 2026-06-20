@@ -1,6 +1,6 @@
 // meta.ts — Tools de decisão do agente (clarify + create_plan).
 // Substituem fases orchestrator (needsQualify, proposePlan heurístico).
-import type { PlanStep, PlanStepType, ProposedPlan, ToolCall, ToolDefinition, ToolResult } from "../types.ts";
+import type { PlanStep, PlanStepType, ProposedPlan, ToolCall, ToolDefinition, ToolResult, DesignPlanField, DesignReference } from "../types.ts";
 import type { ToolRegistry } from "../registry.ts";
 import {
   buildPlanDocumentMarkdown,
@@ -82,6 +82,60 @@ export const CREATE_PLAN_TOOL: ToolDefinition = {
         description: "Estado atual / o que está errado (bullets).",
       },
       outOfScope: { type: "array", items: { type: "string" } },
+      design: {
+        type: "object",
+        description:
+          "Direção de design (apenas para projetos com UI/web). " +
+          "Define a síntese visual antes de construir — voice, momento-memorável, técnicas, referências. " +
+          "O usuário aprova a direção junto com o plano.",
+        properties: {
+          voice: {
+            type: "array",
+            items: { type: "string" },
+            description: "Linguagens visuais escolhidas (ex: ['editorial', 'brutalist']). 2-3 do léxico.",
+          },
+          moment: {
+            type: "string",
+            description: "O gesto-memorável concreto e específico do domínio (ex: 'Hero tipográfico gigante com grain + sticky stack de produtos').",
+          },
+          techniques: {
+            type: "array",
+            items: { type: "string" },
+            description: "Técnicas do catálogo @forge/ui (ex: ['kinetic-typography', 'grain-texture-overlay']).",
+          },
+          mood: {
+            type: "string",
+            description: "Mood escolhido do catálogo (ember, ocean, forest, mono, neon, sand, royal, sunset).",
+          },
+          references: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                url: { type: "string" },
+                title: { type: "string" },
+                screenshot_url: { type: "string" },
+              },
+            },
+            description: "Referências visuais extraídas via web_research/web_scrape/screenshot_capture.",
+          },
+          anti_patterns: {
+            type: "array",
+            items: { type: "string" },
+            description: "Anti-padrões que você está evitando (ex: 'hero centralizado com 3 cards').",
+          },
+          synthesis_reasoning: {
+            type: "string",
+            description: "Por que esta combinação de linguagens serve ao domínio (1-2 frases).",
+          },
+          relevant_dnas: {
+            type: "array",
+            items: { type: "string" },
+            description: "IDs de DesignDNAs relevantes do catálogo.",
+          },
+        },
+        required: ["voice", "moment", "techniques"],
+      },
       steps: {
         type: "array",
         items: {
@@ -247,6 +301,45 @@ export function proposedPlanFromToolArgs(
     ? (args.outOfScope as unknown[]).filter((x): x is string => typeof x === "string")
     : undefined;
 
+  // Extrai campo design (opcional — só para projetos com UI)
+  let design: DesignPlanField | undefined;
+  if (args.design && typeof args.design === "object") {
+    const d = args.design as Record<string, unknown>;
+    const voice = Array.isArray(d.voice)
+      ? (d.voice as unknown[]).filter((x): x is string => typeof x === "string")
+      : [];
+    const moment = typeof d.moment === "string" ? d.moment.trim() : "";
+    const techniques = Array.isArray(d.techniques)
+      ? (d.techniques as unknown[]).filter((x): x is string => typeof x === "string")
+      : [];
+    if (voice.length > 0 && moment) {
+      const references: DesignReference[] = Array.isArray(d.references)
+        ? (d.references as unknown[])
+            .filter((r): r is Record<string, unknown> => r !== null && typeof r === "object")
+            .map((r) => ({
+              url: typeof r.url === "string" ? r.url : "",
+              title: typeof r.title === "string" ? r.title : undefined,
+              screenshot_url: typeof r.screenshot_url === "string" ? r.screenshot_url : undefined,
+            }))
+            .filter((r) => r.url)
+        : [];
+      design = {
+        voice,
+        moment,
+        techniques,
+        mood: typeof d.mood === "string" ? d.mood : undefined,
+        references: references.length > 0 ? references : undefined,
+        anti_patterns: Array.isArray(d.anti_patterns)
+          ? (d.anti_patterns as unknown[]).filter((x): x is string => typeof x === "string")
+          : undefined,
+        synthesis_reasoning: typeof d.synthesis_reasoning === "string" ? d.synthesis_reasoning : undefined,
+        relevant_dnas: Array.isArray(d.relevant_dnas)
+          ? (d.relevant_dnas as unknown[]).filter((x): x is string => typeof x === "string")
+          : undefined,
+      };
+    }
+  }
+
   const headline = sanitizePlanHeadline(missionRaw ?? summaryRaw, "Plano proposto");
   const doc = buildPlanDocumentMarkdown({
     summary: headline,
@@ -269,6 +362,7 @@ export function proposedPlanFromToolArgs(
     phases: doc.phases,
     markdown: doc.markdown,
     steps,
+    design,
     ttlMs: PLAN_APPROVAL_TTL_MS,
     proposedAt: new Date().toISOString(),
   };

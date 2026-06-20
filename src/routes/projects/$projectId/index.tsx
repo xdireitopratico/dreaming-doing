@@ -15,7 +15,8 @@ import { useAgentRun } from "@/hooks/useAgentRun";
 import { usePreviewBoot } from "@/hooks/usePreviewBoot";
 import { usePreviewIdle } from "@/hooks/usePreviewIdle";
 import { useEditorTelemetry } from "@/hooks/useEditorTelemetry";
-import { useElementPicker } from "@/hooks/useElementPicker";
+import { useVisualEditor } from "@/hooks/useVisualEditor";
+import type { VisualEditGroup } from "@/components/editor/visual-editor/types";
 import { useFileDrop, useWorkspacePresets } from "@/hooks/useWorkspacePresets";
 
 import type { editor } from "monaco-editor";
@@ -251,14 +252,35 @@ function EditorPage() {
     setActiveView(view);
   }, []);
 
-  useElementPicker({
-    iframeRef: previewIframeRef,
-    onPick: () => {
+  const handleVisualEditsApply = useCallback(
+    (groups: VisualEditGroup[]) => {
+      const lines: string[] = [];
+      lines.push("## Edições Visuais\n");
+      for (const group of groups) {
+        lines.push(`### ${group.selector}`);
+        for (const edit of group.edits) {
+          lines.push(`- \`${edit.property}\`: \`${edit.originalValue}\` → \`${edit.value}\``);
+        }
+        lines.push("");
+      }
+      setPromptDraft(lines.join("\n"));
       setPickMode(false);
     },
-    active: pickMode,
-    onToggle: () => setPickMode(!pickMode),
+    [setPickMode],
+  );
+
+  const visualEditor = useVisualEditor({
+    iframeRef: previewIframeRef,
+    onApply: handleVisualEditsApply,
   });
+
+  useEffect(() => {
+    if (pickMode && visualEditor.mode === "inactive") {
+      visualEditor.togglePicking();
+    } else if (!pickMode && visualEditor.mode !== "inactive") {
+      visualEditor.handleCancel();
+    }
+  }, [pickMode]);
 
   const { isDragOver, handleDragOver, handleDragLeave, handleDrop } = useFileDrop(() => {});
 
@@ -337,6 +359,14 @@ function EditorPage() {
       handleStop={handlers.handleStop}
       handleVisualEdits={handlers.handleVisualEdits}
       pickMode={pickMode}
+      visualEditor={visualEditor}
+      onVisualEditorCancel={() => {
+        visualEditor.handleCancel();
+        setPickMode(false);
+      }}
+      onTogglePickMode={() => {
+        setPickMode((v) => !v);
+      }}
       filePaths={filePaths}
       composerMode={composerMode}
       setComposerMode={setComposerMode}

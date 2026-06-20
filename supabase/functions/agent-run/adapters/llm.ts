@@ -321,52 +321,126 @@ class OpenAIAdapter implements LLMProvider {
     const toolCalls = new Map<number, { id: string; name: string; arguments: string }>();
     let usage: ChatResponse["usage"];
 
+    // Buffer de payload SSE entre eventos — usado para remontar JSON
+    // que pode vir quebrado em múltiplas linhas (ex.: provider não escapa \n
+    // dentro de string values, ou envia JSON pretty-printed).
+    let ssePayloadBuffer = "";
+
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
       buffer += decoder.decode(value, { stream: true });
 
-      const lines = buffer.split("\n");
-      buffer = lines.pop() ?? "";
+      // SSE delimitador: \n\n separa eventos completos.
+      // Dentro de um evento, linhas que começam com "data:" são concatenadas.
+      const parts = buffer.split("\n\n");
+      // A última parte pode estar incompleta — preservar no buffer.
+      buffer = parts.pop() ?? "";
 
-      for (const line of lines) {
-        const trimmed = line.trim();
-        if (!trimmed.startsWith("data:")) continue;
-        const payload = trimmed.slice(5).trim();
-        if (!payload || payload === "[DONE]") continue;
+      for (const eventBlock of parts) {
+        const lines = eventBlock.split("\n");
+        let eventJson = "";
+        let sawData = false;
 
-        let parsed: any;
-        try {
-          parsed = JSON.parse(payload);
-        } catch {
-          continue;
-        }
-
-        if (parsed.usage) {
-          usage = mapUsage(parsed.usage);
-        }
-
-        const delta = parsed.choices?.[0]?.delta;
-        if (!delta) continue;
-
-        if (delta.content) {
-          text += delta.content;
-          params.onTokenDelta?.(delta.content);
-        }
-
-        if (Array.isArray(delta.tool_calls)) {
-          for (const raw of delta.tool_calls) {
-            const idx = typeof raw.index === "number" ? raw.index : 0;
-            const existing = toolCalls.get(idx) ?? {
-              id: raw.id ?? crypto.randomUUID(),
-              name: "",
-              arguments: "",
-            };
-            if (raw.id) existing.id = raw.id;
-            if (raw.function?.name) existing.name = raw.function.name;
-            if (raw.function?.arguments) existing.arguments += raw.function.arguments;
-            toolCalls.set(idx, existing);
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (trimmed.startsWith("data:")) {
+            const payload = trimmed.slice(5).trim();
+            if (payload === "[DONE]") {
+              // Evento de fim: processa payload acumulado antes (se houver)
+              if (eventJson) {
+                try {
+                  const parsed = JSON.parse(eventJson);
+                  processChunk(parsed);
+                } catch {
+                  /* ignora — payload do [DONE] não deve ter dados pendentes */
+                }
+              }
+              eventJson = "";
+              sawData = false;
+              continue;
+            }
+            sawData = true;
+            eventJson += payload;
+          } else if (sawData && trimmed && !trimmed.startsWith(":")) {
+            // Linha sem "data:" mas dentro de um evento SSE — pode ser
+            // continuação de um JSON string que contém quebra de linha real.
+            eventJson += trimmed;
           }
+        }
+
+        // Tenta parsear o JSON completo do evento
+        if (eventJson) {
+          try {
+            const parsed = JSON.parse(eventJson);
+            ssePayloadBuffer = ""; // limpou — payload completo processado
+            processChunk(parsed);
+          } catch {
+            // JSON incompleto — acumula no buffer de payload SSE
+            // para remontar quando o próximo chunk chegar.
+            ssePayloadBuffer += eventJson;
+          }
+        }
+      }
+
+      // Tenta parsear o buffer acumulado (pode ter sido completado pelo chunk atual)
+      if (ssePayloadBuffer) {
+        try {
+          const parsed = JSON.parse(ssePayloadBuffer);
+          ssePayloadBuffer = "";
+          processChunk(parsed);
+        } catch {
+          // Ainda incompleto — continua acumulando
+        }
+      }
+    }
+
+    // Processa payload residual no buffer e no ssePayloadBuffer
+    const finalPayload = (ssePayloadBuffer ? ssePayloadBuffer + "\n" : "") + buffer.trim();
+    if (finalPayload) {
+      // Tenta extrair dados de linhas "data:" no residual
+      for (const line of finalPayload.split("\n")) {
+        const trimmed = line.trim();
+        if (trimmed.startsWith("data:")) {
+          const payload = trimmed.slice(5).trim();
+          if (payload && payload !== "[DONE]") {
+            try {
+              const parsed = JSON.parse(payload);
+              processChunk(parsed);
+            } catch {
+              /* residual incompleto — ignora */
+            }
+          }
+        }
+      }
+    }
+
+    /** Processa um chunk SSE parseado — extrai text, tool_calls e usage. */
+    function processChunk(parsed: any): void {
+      if (parsed.usage) {
+        usage = mapUsage(parsed.usage);
+      }
+
+      const delta = parsed.choices?.[0]?.delta;
+      if (!delta) return;
+
+      if (delta.content) {
+        text += delta.content;
+        params.onTokenDelta?.(delta.content);
+      }
+
+      if (Array.isArray(delta.tool_calls)) {
+        for (const raw of delta.tool_calls) {
+          const idx = typeof raw.index === "number" ? raw.index : 0;
+          const existing = toolCalls.get(idx) ?? {
+            id: raw.id ?? crypto.randomUUID(),
+            name: "",
+            arguments: "",
+          };
+          if (raw.id) existing.id = raw.id;
+          if (raw.function?.name) existing.name = raw.function.name;
+          if (raw.function?.arguments) existing.arguments += raw.function.arguments;
+          toolCalls.set(idx, existing);
         }
       }
     }

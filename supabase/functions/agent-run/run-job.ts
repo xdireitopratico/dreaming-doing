@@ -19,6 +19,8 @@ import { loadUserE2bApiKey } from "../_shared/user-e2b.ts";
 import { buildSessionExtensionsPrompt, normalizeIdList } from "../_shared/session-extensions.ts";
 import { registerMcpForgeTools } from "./tools/mcp-forge.ts";
 import { registerDeployTool } from "./tools/deploy.ts";
+import { registerWebTools } from "./tools/web.ts";
+import { registerExtractTools } from "./tools/extract.ts";
 import { restoreExecutionLogFromRows } from "./executionLogMeta.ts";
 import { loadCheckpoint } from "./checkpoint.ts";
 import { buildSandboxEnv } from "./sandbox-env.ts";
@@ -90,10 +92,14 @@ function injectPlanApprovalMessage(
 
   const planBlock = planSummary ? `${planSummary}\n\n` : "";
   const stepsBlock = stepsList ? `${stepsList}\n\n` : "";
+
+  // Extrai direção de design do plano aprovado (se houver)
+  const designBlock = buildDesignDirectiveBlock(meta.design);
+
   const content = [
     `${PLAN_APPROVED_PREFIX} Segue o plano abaixo.`,
     "",
-    `${planBlock}${stepsBlock}Execute os passos acima na ordem indicada.`,
+    `${planBlock}${stepsBlock}${designBlock}Execute os passos acima na ordem indicada.`,
   ]
     .join("\n")
     .trim();
@@ -107,6 +113,46 @@ function injectPlanApprovalMessage(
     },
   };
   return [...baseMessages, injected];
+}
+
+function buildDesignDirectiveBlock(designRaw: unknown): string {
+  if (!designRaw || typeof designRaw !== "object") return "";
+  const d = designRaw as Record<string, unknown>;
+  const voice = Array.isArray(d.voice) ? (d.voice as string[]).join(" + ") : "";
+  const moment = typeof d.moment === "string" ? d.moment : "";
+  const techniques = Array.isArray(d.techniques) ? (d.techniques as string[]).join(", ") : "";
+  const mood = typeof d.mood === "string" ? d.mood : "";
+  const reasoning = typeof d.synthesis_reasoning === "string" ? d.synthesis_reasoning : "";
+  const antiPatterns = Array.isArray(d.anti_patterns) ? (d.anti_patterns as string[]) : [];
+  const references = Array.isArray(d.references) ? (d.references as Record<string, unknown>[]) : [];
+
+  if (!voice && !moment) return "";
+
+  const lines: string[] = ["", "---", "## DIREÇÃO DE DESIGN APROVADA", ""];
+
+  if (voice) lines.push(`**Voice:** ${voice}`);
+  if (mood) lines.push(`**Mood:** ${mood}`);
+  if (moment) lines.push(`**Momento-memorável:** ${moment}`);
+  if (techniques) lines.push(`**Técnicas:** ${techniques}`);
+  if (reasoning) lines.push(`**Reasoning:** ${reasoning}`);
+
+  if (references.length > 0) {
+    lines.push("", "**Referências visuais:**");
+    for (const ref of references) {
+      const url = typeof ref.url === "string" ? ref.url : "";
+      const title = typeof ref.title === "string" ? ref.title : url;
+      if (url) lines.push(`- ${title} — ${url}`);
+    }
+  }
+
+  if (antiPatterns.length > 0) {
+    lines.push("", "**Anti-padrões a evitar:**");
+    for (const ap of antiPatterns) lines.push(`- ${ap}`);
+  }
+
+  lines.push("", "Siga esta direção ao construir. Não improvise — execute a síntese aprovada.", "---", "");
+
+  return lines.join("\n");
 }
 
 function coercePlanStepsFromMeta(raw: unknown): PlanStep[] {
@@ -303,6 +349,24 @@ export async function executeAgentJob(
     hasDeployToken: deployTokenKey ? !!deployKeys[deployTokenKey] : false,
   });
 
+  registerWebTools(reg, {
+    supabase,
+    userId,
+    connectorKeys,
+  });
+
+  // extract_design_dna — sandbox exec URL só no Build mode (sandbox ativo)
+  const sandboxExecUrl = allocateSandbox
+    ? `${Deno.env.get("SUPABASE_URL")}/functions/v1/prometheus-tool-executor`
+    : undefined;
+  registerExtractTools(reg, {
+    supabase,
+    userId,
+    projectId,
+    sandboxExecUrl,
+    sandboxToken: Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? undefined,
+  });
+
   const buildState = (): AgentState => {
     if (loadedCheckpoint) {
       const cp = loadedCheckpoint.state;
@@ -379,6 +443,14 @@ export async function executeAgentJob(
                 : undefined,
           planHeadline: typeof preMeta.planHeadline === "string" ? preMeta.planHeadline : undefined,
           planSteps: coercePlanStepsFromMeta(preMeta.steps),
+          planDesign: preMeta.design ? (() => {
+            const d = preMeta.design as Record<string, unknown>;
+            return {
+              references: Array.isArray(d.references)
+                ? d.references
+                : [],
+            };
+          })() : undefined,
           buildFixResume: preMeta.buildFix === true,
           chunkGeneration:
             typeof preMeta.chunkGeneration === "number" ? preMeta.chunkGeneration : 0,

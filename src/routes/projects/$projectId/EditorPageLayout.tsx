@@ -28,6 +28,8 @@ import { PENDING_RUN_ID } from "@/lib/pending-run-id";
 import { hasFirstInspectorToken } from "@/lib/forge-run";
 import { resolveInspectorRunProgress } from "@/lib/assistant-run-progress";
 import type { AgentProgress } from "@/lib/agent-progress";
+import { VisualEditorPanel } from "@/components/editor/visual-editor/VisualEditorPanel";
+import type { useVisualEditor } from "@/hooks/useVisualEditor";
 import { useJobWorkspaceFocus } from "@/hooks/useJobWorkspaceFocus";
 import { JobInspector } from "@/components/editor/JobInspector";
 import type { useAgentRun } from "@/hooks/useAgentRun";
@@ -82,6 +84,9 @@ export type EditorPageLayoutProps = {
   handleStop: () => void;
   handleVisualEdits: () => void;
   pickMode: boolean;
+  visualEditor: ReturnType<typeof useVisualEditor>;
+  onVisualEditorCancel: () => void;
+  onTogglePickMode: () => void;
   filePaths: string[];
   composerMode: AgentComposerMode;
   setComposerMode: (mode: AgentComposerMode) => void;
@@ -176,6 +181,9 @@ export function EditorPageLayout({
   handleStop,
   handleVisualEdits,
   pickMode,
+  visualEditor,
+  onVisualEditorCancel,
+  onTogglePickMode,
   filePaths,
   composerMode,
   setComposerMode,
@@ -641,6 +649,19 @@ export function EditorPageLayout({
                                   );
                                 el?.focus();
                               }}
+                            />
+                            <VisualEditorPanel
+                              mode={visualEditor.mode}
+                              selectedElement={visualEditor.selectedElement}
+                              computedStyles={visualEditor.computedStyles}
+                              activeEditGroup={visualEditor.activeEditGroup}
+                              editGroups={visualEditor.editGroups}
+                              onUpdateStyle={visualEditor.updateStyleEdit}
+                              onRemoveEdit={visualEditor.removeStyleEdit}
+                              onRevertAll={visualEditor.revertAllEdits}
+                              onApply={visualEditor.handleApply}
+                              onCancel={onVisualEditorCancel}
+                              onTogglePicking={onTogglePickMode}
                             />
                           </div>
                         )}

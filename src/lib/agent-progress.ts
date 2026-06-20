@@ -28,6 +28,23 @@ export function awaitingKindFromRunMeta(
   return null;
 }
 
+export interface DesignReference {
+  url: string;
+  title?: string;
+  screenshot_url?: string;
+}
+
+export interface DesignPlanField {
+  voice: string[];
+  moment: string;
+  techniques: string[];
+  mood?: string;
+  references?: DesignReference[];
+  anti_patterns?: string[];
+  synthesis_reasoning?: string;
+  relevant_dnas?: string[];
+}
+
 export interface PendingPlan {
   planId: string;
   summary: string;
@@ -36,6 +53,7 @@ export interface PendingPlan {
   mission?: string;
   objective?: string;
   steps: PlanStep[];
+  design?: DesignPlanField;
   ttlMs: number;
   proposedAt: number;
   runId: string;
@@ -227,6 +245,43 @@ function parsePendingPlanFromPayload(
     proposedAt: Date.now(),
     runId,
     projectId,
+    design: nested.design && typeof nested.design === "object"
+      ? parseDesignPlanField(nested.design as Record<string, unknown>)
+      : undefined,
+  };
+}
+
+function parseDesignPlanField(d: Record<string, unknown>): DesignPlanField {
+  const voice = Array.isArray(d.voice)
+    ? (d.voice as unknown[]).filter((x): x is string => typeof x === "string")
+    : [];
+  const moment = typeof d.moment === "string" ? d.moment : "";
+  const techniques = Array.isArray(d.techniques)
+    ? (d.techniques as unknown[]).filter((x): x is string => typeof x === "string")
+    : [];
+  const references: DesignReference[] = Array.isArray(d.references)
+    ? (d.references as unknown[])
+        .filter((r): r is Record<string, unknown> => r !== null && typeof r === "object")
+        .map((r) => ({
+          url: typeof r.url === "string" ? r.url : "",
+          title: typeof r.title === "string" ? r.title : undefined,
+          screenshot_url: typeof r.screenshot_url === "string" ? r.screenshot_url : undefined,
+        }))
+        .filter((r) => r.url)
+    : [];
+  return {
+    voice,
+    moment,
+    techniques,
+    mood: typeof d.mood === "string" ? d.mood : undefined,
+    references: references.length > 0 ? references : undefined,
+    anti_patterns: Array.isArray(d.anti_patterns)
+      ? (d.anti_patterns as unknown[]).filter((x): x is string => typeof x === "string")
+      : undefined,
+    synthesis_reasoning: typeof d.synthesis_reasoning === "string" ? d.synthesis_reasoning : undefined,
+    relevant_dnas: Array.isArray(d.relevant_dnas)
+      ? (d.relevant_dnas as unknown[]).filter((x): x is string => typeof x === "string")
+      : undefined,
   };
 }
 

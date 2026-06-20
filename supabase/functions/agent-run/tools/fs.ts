@@ -93,11 +93,39 @@ export function registerFsTools(reg: ToolRegistry, ctx: FsContext): void {
       },
     },
     async (args) => {
+      const path = args.path as string;
+      const content = args.content as string;
+
+      // Validação heurística de truncamento: se o conteúdo parece incompleto,
+      // registra warning mas ainda salva (não bloqueante — evita falsos positivos).
+      // Arquivos truncados geralmente não terminam com \n e têm chaves
+      // desbalanceadas (para .tsx/.ts).
+      let truncationWarnings: string[] = [];
+      if (content && content.length > 0) {
+        if (!content.endsWith("\n")) {
+          truncationWarnings.push("conteúdo não termina com newline");
+        }
+        if (/\.(tsx?|jsx?)$/.test(path)) {
+          const opens = (content.match(/[{([\s\S]/g) || []).length;
+          const closes = (content.match(/[})\]][\s\S]/g) || []).length;
+          if (opens > closes + 5) {
+            truncationWarnings.push(
+              `chaves/colls desbalanceadas (abre=${opens}, fecha=${closes}) — possível truncamento`,
+            );
+          }
+        }
+      }
+      if (truncationWarnings.length > 0) {
+        console.warn(
+          `[fs_write] possível truncamento em "${path}": ${truncationWarnings.join("; ")}`,
+        );
+      }
+
       const { error } = await supabase.from("project_files").upsert(
         {
           project_id: projectId,
-          path: args.path as string,
-          content: args.content as string,
+          path: path,
+          content: content,
           updated_at: new Date().toISOString(),
         },
         { onConflict: "project_id,path" },
@@ -110,13 +138,13 @@ export function registerFsTools(reg: ToolRegistry, ctx: FsContext): void {
           error: error.message,
         };
       }
-      corpusCapture(ctx, args.path as string, args.content as string, "agent_write");
+      corpusCapture(ctx, path, content, "agent_write");
       // success path for fs_write: loop emits file_diff(pre-capture) + preview_sync + tick (unconditional, live during first-gen seed + follow-ups)
       return {
         toolCallId: "",
         ok: true,
-        output: `"${args.path}" salvo`,
-        artifacts: [args.path as string],
+        output: `"${path}" salvo`,
+        artifacts: [path as string],
       };
     },
   );

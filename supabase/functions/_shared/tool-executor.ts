@@ -3292,6 +3292,7 @@ const IMPLICIT_BUILTIN_TOOLS = new Set([
   "http_request",
   "condition_eval",
   "web_research",
+  "extract_design_dna",
 ]);
 
 // ═══════════════════════════════════════════════════════════

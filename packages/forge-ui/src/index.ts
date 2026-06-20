@@ -5,3 +5,6 @@ export * from "./composites";
 export * from "./patterns";
 export * from "./hooks";
 export * from "./techniques";
+export * from "./design-dna";
+export * from "./synthesis";
+export * from "./design-critic";

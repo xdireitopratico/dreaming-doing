@@ -137,6 +137,34 @@ export interface ForgePlanPhase {
   tasks: string[];
 }
 
+export interface DesignReference {
+  url: string;
+  title?: string;
+  screenshot_url?: string;
+  extracted_dna?: string;
+}
+
+export interface DesignPlanField {
+  /** Linguagens visuais escolhidas (2-3 do léxico). */
+  voice: string[];
+  /** O gesto-memorável concreto — assinatura desta página. */
+  moment: string;
+  /** Técnicas do catálogo @forge/ui que servem à visão. */
+  techniques: string[];
+  /** Mood escolhido (do catálogo de 8 moods). */
+  mood?: string;
+  /** Referências visuais extraídas via web_research + web_scrape + screenshot_capture. */
+  references?: DesignReference[];
+  /** Anti-padrões verificados — o agente declara que está evitando. */
+  anti_patterns?: string[];
+  /** Reasoning da síntese — por que esta combinação serve ao domínio. */
+  synthesis_reasoning?: string;
+  /** Auto-cheque preenchido pelo agente (5 itens). */
+  auto_check?: { id: string; answer: string; pass: boolean }[];
+  /** DesignDNAs relevantes do catálogo (IDs). */
+  relevant_dnas?: string[];
+}
+
 export interface ProposedPlan {
   planId: string;
   summary: string;
@@ -150,6 +178,8 @@ export interface ProposedPlan {
   /** Documento markdown estilo Lovable (Missão, Objetivo, Fases, Fora do escopo). */
   markdown?: string;
   steps: PlanStep[];
+  /** Direção de design — só preenchida quando o template tem UI (web/app). */
+  design?: DesignPlanField;
   ttlMs: number;
   /** Decisão do cliente (preenchida quando aprovada/rejeitada). */
   decision?:

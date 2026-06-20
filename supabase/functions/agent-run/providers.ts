@@ -12,6 +12,8 @@ export interface ProviderConfig {
   model: string;
   baseUrl?: string;
   label: string;
+  /** Se true, o modelo suporta imagens (vision/multimodal). */
+  supportsVision?: boolean;
 }
 
 const LOVABLE_GATEWAY = "https://ai.gateway.lovable.dev/v1";
@@ -180,15 +182,12 @@ export function pickCheap(main: ProviderConfig, injected?: Record<string, string
 }
 
 export function buildProvider(cfg: ProviderConfig): LLMProvider {
-  // Infra-debug: loga qual provider+model+baseUrl foi escolhido. Sem
-  // isso, erros de adapter NVIDIA NIM (ex: 500 com "invalid type: unit
-  // variant") são invisíveis — só o `robin.robin_llm_error` mostra o
-  // errMessage, mas não sabemos qual adapter gerou.
   logger.debug("agent.build_provider", {
     provider: cfg.provider,
     model: cfg.model,
     baseUrl: cfg.baseUrl,
     label: cfg.label,
+    supportsVision: cfg.supportsVision ?? detectVisionSupport(cfg.provider, cfg.model),
   });
   try {
     return createLLMProvider({
@@ -205,6 +204,35 @@ export function buildProvider(cfg: ProviderConfig): LLMProvider {
     });
     throw e;
   }
+}
+
+/**
+ * Detecta se um modelo suporta vision/multimodal baseado no nome.
+ * Modelos conhecidos: Claude 3.5+, GPT-4o, Gemini, Qwen-VL, Kimi, LLaVA.
+ */
+export function detectVisionSupport(provider: string, model: string): boolean {
+  const m = model.toLowerCase();
+  const p = provider.toLowerCase();
+
+  // Claude 3.5+ (Sonnet, Opus) — todos multimodal
+  if (p === "anthropic" && /claude.*3|claude.*4|claude.*sonnet|claude.*opus/.test(m)) return true;
+
+  // GPT-4o, GPT-4 Vision, GPT-4o-mini
+  if (p === "openai" && /gpt-4o|gpt-4-vision|gpt-4-turbo/.test(m)) return true;
+
+  // Gemini (todos os modelos Gemini suportam vision)
+  if (p === "gemini" && /gemini/.test(m)) return true;
+
+  // Qwen-VL, Qwen2-VL
+  if (/qwen.*vl|qwen.*vision/.test(m)) return true;
+
+  // Kimi (Moonshot) — multimodal
+  if (p === "moonshotai" && /kimi/.test(m)) return true;
+
+  // LLaVA, BakLLaVA (Ollama)
+  if (/llava|bakllava|moondream/.test(m)) return true;
+
+  return false;
 }
 
 export { MAX_LLM_RETRIES, llmBackoffMs } from "./llm-retry.ts";
