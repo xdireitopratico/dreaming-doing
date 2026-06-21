@@ -21,17 +21,56 @@ export interface TypeCheckResult {
   output: string;
 }
 
+/** C6 fix: regex mais amplo para detectar falhas de build/TypeScript/Vite/eslint.
+ *  Antes: só pegava "error ts*", "failed to resolve", "module not found".
+ *  Erros TS comuns (Cannot find name, Property does not exist, etc) passavam
+ *  despercebidos e o build reportava 'ok: true' mesmo quebrado.
+ *  Agora: cobre TS errors, Vite errors, esbuild errors, eslint errors,
+ *  dependency conflicts (ERESOLVE), e exit codes não-zero. */
 function outputIndicatesBuildFailure(output: string): boolean {
   const o = output.toLowerCase();
+  // Exit code não-zero no output (caso tenha sido capturado)
+  if (/exit\s*code\s*[1-9]\d*/i.test(o)) return true;
   return (
+    // TypeScript errors
     o.includes("error ts") ||
+    o.includes("cannot find name") ||
+    o.includes("cannot find module") ||
+    (o.includes("property ") && o.includes("does not exist on type")) ||
+    (o.includes("argument of type") && o.includes("is not assignable")) ||
+    (o.includes("type ") && o.includes("is not assignable to type")) ||
+    o.includes("ts(") || // ts(2304), ts(2322), etc
+    o.includes("ts error") ||
+    // Import/Module errors
     o.includes("failed to resolve import") ||
+    o.includes("failed to resolve") ||
     o.includes("could not resolve") ||
     o.includes("module not found") ||
+    o.includes("cannot find package") ||
+    // Vite/Rollup/esbuild errors
     o.includes("build failed") ||
     o.includes("rollup failed") ||
+    o.includes("esbuild error") ||
+    o.includes("vite error") ||
     o.includes("✘ [") ||
-    o.includes("[plugin:vite")
+    o.includes("[plugin:vite") ||
+    o.includes("internal server error") ||
+    // ESLint
+    o.includes("eslint error") ||
+    o.includes("lint error") ||
+    // Dependency conflicts
+    o.includes("eresolve") ||
+    o.includes("peer dep") ||
+    o.includes("peer dependency") ||
+    // npm/yarn/pnpm errors
+    o.includes("npm err!") ||
+    o.includes("npm error") ||
+    o.includes("yarn error") ||
+    o.includes("pnpm error") ||
+    // tsc / build direct errors
+    o.includes("compilation failed") ||
+    o.includes("type error:") ||
+    o.includes("syntax error:")
   );
 }
 
