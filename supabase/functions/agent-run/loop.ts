@@ -716,6 +716,11 @@ export class AgentLoop {
         });
       }
 
+      // C8 fix: budget check ANTES de gatherContext (5-10s de I/O caro).
+      // Se o budget já estourou, gatherContext seria desperdício.
+      if (this.loopBudgetExceeded()) {
+        return this.returnResumableChunk(0, toolsUsed);
+      }
       await this.gatherContext();
       if (this.loopBudgetExceeded()) {
         return this.returnResumableChunk(0, toolsUsed);
