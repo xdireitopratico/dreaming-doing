@@ -125,6 +125,8 @@ export function BrowserPreviewPanel({ jobId, onClose }: BrowserPreviewPanelProps
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [jobContext, setJobContext] = useState<JobContext | null>(null);
   const [chatHistoryLoaded, setChatHistoryLoaded] = useState(false);
+  const [cdpStatus, setCdpStatus] = useState<"checking" | "ok" | "failed">("checking");
+  const [cdpMessage, setCdpMessage] = useState<string>("");
 
   const previewUrl = job?.meta?.previewUrl;
   const latestScreenshot = useMemo(() => {
@@ -143,6 +145,36 @@ export function BrowserPreviewPanel({ jobId, onClose }: BrowserPreviewPanelProps
       timelineRef.current.scrollTop = timelineRef.current.scrollHeight;
     }
   }, [events, autoScroll]);
+
+  // CDP health check: verifica se Chrome DevTools responde no previewUrl
+  useEffect(() => {
+    if (!previewUrl || isTerminal) {
+      setCdpStatus("checking");
+      return;
+    }
+    let cancelled = false;
+    setCdpStatus("checking");
+    fetch(`${previewUrl}/json/version`, { signal: AbortSignal.timeout(8000) })
+      .then(async (r) => {
+        if (cancelled) return;
+        if (r.ok) {
+          const data = await r.json().catch(() => ({}));
+          setCdpStatus("ok");
+          setCdpMessage(data.Browser ?? "");
+        } else {
+          setCdpStatus("failed");
+          setCdpMessage(`HTTP ${r.status}`);
+        }
+      })
+      .catch((e) => {
+        if (cancelled) return;
+        setCdpStatus("failed");
+        setCdpMessage(e instanceof Error ? e.message : "unreachable");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [previewUrl, isTerminal]);
 
   const callChat = useCallback(
     async (message: string) => {
@@ -294,6 +326,21 @@ export function BrowserPreviewPanel({ jobId, onClose }: BrowserPreviewPanelProps
               Offline
             </span>
           )}
+          {previewUrl && !isTerminal && cdpStatus === "ok" && (
+            <span className="inline-flex items-center gap-1 text-[10px] text-green-500">
+              <Globe className="size-3" />
+              CDP {cdpMessage ? `(${cdpMessage.split(" ")[0]})` : "ready"}
+            </span>
+          )}
+          {previewUrl && !isTerminal && cdpStatus === "failed" && (
+            <span
+              className="inline-flex items-center gap-1 text-[10px] text-amber-500"
+              title={`Chrome DevTools não responde: ${cdpMessage}`}
+            >
+              <Globe className="size-3" />
+              CDP offline
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-2">
           {previewUrl && !isTerminal && (
@@ -315,21 +362,42 @@ export function BrowserPreviewPanel({ jobId, onClose }: BrowserPreviewPanelProps
       <div className="flex-1 flex overflow-hidden">
         {/* Preview Panel — fallback gracioso quando iframe não disponível */}
         <div className="flex-1 flex flex-col border-r border-border min-w-0">
-          {previewUrl && !isTerminal ? (
-            <>
-              <iframe
-                src={previewUrl}
-                className="flex-1 w-full bg-white"
-                sandbox="allow-same-origin allow-scripts allow-forms allow-popups"
-                title="Browser Preview"
-                onError={() => {
-                  /* iframe load falhou — usuário verá screenshots abaixo */
-                }}
-              />
-              <div className="px-3 py-1 text-[9px] text-muted-foreground bg-surface-1 border-t border-border/50 text-center">
-                Sandbox: {previewUrl} (pode estar indisponível se E2B encerrou)
+          {previewUrl && !isTerminal && cdpStatus === "ok" ? (
+            <iframe
+              src={previewUrl}
+              className="flex-1 w-full bg-white"
+              sandbox="allow-same-origin allow-scripts allow-forms allow-popups"
+              title="Browser Preview"
+            />
+          ) : previewUrl && !isTerminal && cdpStatus === "failed" ? (
+            <div className="flex-1 flex items-center justify-center bg-surface-2 p-6">
+              <div className="text-center max-w-md">
+                <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-amber-500/10 flex items-center justify-center">
+                  <Globe className="w-6 h-6 text-amber-500" />
+                </div>
+                <h3 className="text-sm font-medium mb-1">Sandbox sem Chrome DevTools</h3>
+                <p className="text-[11px] text-muted-foreground mb-2">
+                  O template E2B precisa ter Chromium rodando em :9222. Provavelmente você está
+                  usando o template genérico (code-interpreter-v1) sem Chromium.
+                </p>
+                <p className="text-[10px] text-muted-foreground/70">
+                  Para corrigir:{" "}
+                  <code className="px-1 py-0.5 rounded bg-surface-3">
+                    cd e2b-template && npm run build:prod
+                  </code>{" "}
+                  e defina{" "}
+                  <code className="px-1 py-0.5 rounded bg-surface-3">
+                    E2B_TEMPLATE=dreaming-doing-chromium
+                  </code>
+                  .
+                </p>
+                {latestScreenshot && (
+                  <p className="text-[10px] text-amber-500 mt-3">
+                    Último screenshot capturado abaixo ↓
+                  </p>
+                )}
               </div>
-            </>
+            </div>
           ) : latestScreenshot ? (
             <div className="flex-1 flex items-center justify-center bg-surface-2 p-4 overflow-auto">
               <div className="max-w-2xl w-full space-y-3">

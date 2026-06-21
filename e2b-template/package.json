@@ -1,0 +1,16 @@
+{
+  "name": "dreaming-doing-chromium-template",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build:dev": "tsx build.dev.ts",
+    "build:prod": "tsx build.prod.ts"
+  },
+  "devDependencies": {
+    "e2b": "^2.3.0",
+    "dotenv": "^16.4.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0"
+  }
+}
