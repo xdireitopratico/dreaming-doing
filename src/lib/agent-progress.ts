@@ -130,7 +130,7 @@ export interface AgentProgress {
 
 export type AgentConnectOptions = {
   resume?: boolean;
-  mode?: "plan" | "build";
+  mode?: "chat" | "plan" | "build";
 };
 
 export const initialAgentProgress: AgentProgress = {

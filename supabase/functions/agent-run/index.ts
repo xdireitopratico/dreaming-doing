@@ -2,7 +2,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 
 import { type AgentPreferencesPayload, loadDeployConnectorKeys } from "./connector-keys.ts";
-import type { ProviderConfig } from "./providers.ts";
+import { buildProvider, type ProviderConfig } from "./providers.ts";
 import { loadUserLlmContext, resolveAgentProvider, validateAgentPreferences } from "./run-setup.ts";
 import { buildStackContext, stackPromptAddon } from "../_shared/stack-context.ts";
 import { buildChatHistory } from "./memory.ts";
@@ -10,6 +10,7 @@ import { RobinKeyPool } from "./robin-pool.ts";
 import { E2B_SETUP_USER_MESSAGE, loadUserE2bApiKey } from "../_shared/user-e2b.ts";
 import { buildSessionExtensionsPrompt, normalizeIdList } from "../_shared/session-extensions.ts";
 import { loadTasteNvidiaConfig, runTasteChat } from "./taste-session.ts";
+import { isAdvisoryQuestion, runAdvisoryPhase, runDirectChatPhase } from "./conversational.ts";
 import { corsPreflightResponse, FORGE_CORS_HEADERS } from "../_shared/cors.ts";
 import {
   correlationIdFromRequest,
@@ -685,6 +686,40 @@ Deno.serve(async (req) => {
       }
 
       const messages = await buildChatHistory(historyRows, 120, mainCfg.model);
+      const fromBody = (body as any).prompt || (body as any).message || "";
+      const lastUserContent = fromBody ? String(fromBody) : extractOriginalUserRequest(messages);
+
+      if (mode === "chat" && !resumeRun) {
+        try {
+          const model = buildProvider(mainCfg);
+          const content = isAdvisoryQuestion(lastUserContent)
+            ? await runAdvisoryPhase(model, messages, { userRequest: lastUserContent })
+            : await runDirectChatPhase(model, messages, { userRequest: lastUserContent });
+
+          await supabase.from("messages").insert({
+            conversation_id: conversationId,
+            role: "assistant",
+            parts: [{ type: "text", text: content }],
+            meta: {
+              mode: "chat",
+              turnIntent: "chat",
+              provider: mainCfg.label,
+              model: mainCfg.model,
+            },
+          });
+
+          runningLocks.delete(projectId);
+          return json({ ok: true, content, chat: true });
+        } catch (err: unknown) {
+          runningLocks.delete(projectId);
+          return json(
+            {
+              error: (err as Error)?.message ?? "Falha ao responder no chat",
+            },
+            500,
+          );
+        }
+      }
 
       // === Decisão "caminho barato primeiro" (o que o usuário pediu) ===
       // Se o prompt parece pedido explícito de interação/perguntas ("quero uma mensagem claramente de interação, não de execução")
@@ -692,8 +727,6 @@ Deno.serve(async (req) => {
       // Plan mode só reconecta sandbox existente; Build pode criar. Conversa vaga sem sandbox → sem E2B.
       // Use meta-aware extract (prefers skipping plan_approved meta) for the triggering user request; force allocate
       // if history contains prior plan_approved (makes follow-up "add X" after approve allocate sandbox reliably).
-      const fromBody = (body as any).prompt || (body as any).message || "";
-      const lastUserContent = fromBody ? String(fromBody) : extractOriginalUserRequest(messages);
       const hasApprovedPlanInHistory = messages.some((m) => {
         const meta = (m?.meta ?? {}) as Record<string, unknown>;
         return (

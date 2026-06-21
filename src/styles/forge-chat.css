@@ -67,14 +67,14 @@
 .forge-chat-stream {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 12px;
 }
 
 /* Turno assistant — blocos separados (Lovable): thought/texto solto + card com borda */
 .forge-assistant-turn {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 8px;
   width: 100%;
   max-width: 100%;
   min-width: 0;
@@ -166,13 +166,13 @@
 /* User message — bolha cinza arredondada (referência Lovable img 4/15) */
 .forge-msg-user {
   max-width: min(88%, 520px);
-  padding: var(--space-md) var(--space-lg);
+  padding: 10px 14px;
   border-radius: 12px 12px 12px 4px;
   border: 1px solid var(--border-forge);
   background: var(--bg-card);
   color: var(--text-primary);
   font-size: 14px;
-  line-height: 1.6;
+  line-height: 1.5;
 }
 
 .forge-msg-user-text {

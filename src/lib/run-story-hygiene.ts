@@ -68,10 +68,8 @@ export function isInternalRunEvent(type: string, data: Record<string, unknown> =
 }
 
 export function formatSkillInvocation(data: Record<string, unknown>): string | null {
-  const userSkills = asStringArray(data.user);
   const invokedSkills = asStringArray(data.invoked);
-  const explicitSkills = asStringArray(data.explicit);
-  const skills = [...new Set([...userSkills, ...invokedSkills, ...explicitSkills])];
+  const skills = [...new Set(invokedSkills)];
   if (skills.length === 0) return null;
   return `Skill: ${skills.join(", ")}`;
 }

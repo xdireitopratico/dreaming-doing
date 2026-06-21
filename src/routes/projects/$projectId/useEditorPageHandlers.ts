@@ -33,6 +33,7 @@ import type { useAgentRun } from "@/hooks/useAgentRun";
 import type { usePreviewBoot } from "@/hooks/usePreviewBoot";
 import { toast } from "@/lib/toast";
 import { sendMessage } from "@/lib/send-message";
+import type { AgentRunMode } from "@/lib/turn-intent";
 import {
   FORGE_UI_BUNDLED_MARKER,
   bundledMarkerContent,
@@ -213,8 +214,8 @@ export function useEditorPageHandlers({
         running,
         activeRunId: agent.activeRunId,
         finished: agent.progress.finished,
-        canceled: agent.progress.canceled,
-        awaiting: agent.progress.awaiting,
+        canceled: agent.progress.canceled === true,
+        awaiting: agent.progress.awaiting === true,
         connectInFlight: isAgentConnectInFlight(),
       }),
     [
@@ -227,7 +228,11 @@ export function useEditorPageHandlers({
   );
 
   const runAgent = useCallback(
-    async (explicitKind?: ForgeSessionKind, explicitAction?: TasteAction): Promise<boolean> => {
+    async (
+      explicitKind?: ForgeSessionKind,
+      explicitAction?: TasteAction,
+      explicitMode?: AgentRunMode,
+    ): Promise<boolean> => {
       if (!conversation || (isAgentBusy() && !agent.isPendingRun)) return false;
 
       const kind = explicitKind ?? resolveSessionKind(tasteQuota);
@@ -269,7 +274,7 @@ export function useEditorPageHandlers({
       try {
         const result = await agent.connect(projectId, conversation.id, kind, {
           tasteAction,
-          mode: composerMode,
+          mode: explicitMode ?? composerMode,
         });
         void qc.invalidateQueries({ queryKey: ["messages", conversation.id] });
         if (!result.ok) {
@@ -438,7 +443,7 @@ export function useEditorPageHandlers({
           },
           queueMessage: async (pid, cid, sessionKind, queueMode) =>
             agent.queueMessage(pid, cid, sessionKind, undefined, queueMode),
-          runAgent: (sessionKind) => runAgent(sessionKind),
+          runAgent: (sessionKind, runMode) => runAgent(sessionKind, undefined, runMode),
           beginPendingTurn: () => agent.beginPendingTurn(),
           clearPendingTurn: () => agent.clearPendingTurn(),
           onInserted: () => {

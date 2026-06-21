@@ -883,7 +883,7 @@ export function useAgentRun() {
           return { ok: true };
         }
 
-        // Taste Chat concierge — JSON inline, sem runId (mensagem já salva no DB).
+        // Chat direto — JSON inline, sem runId (mensagem já salva no DB).
         if (body.ok && body.content && !body.runId) {
           runIdRef.current = null;
           setActiveRunId(null);
@@ -893,7 +893,7 @@ export function useAgentRun() {
             finished: true,
             lastFinishOk: true,
             streamText: typeof body.content === "string" ? body.content : null,
-            statusHint: "Resposta Taste enviada.",
+            statusHint: body.chat ? "Resposta enviada." : "Resposta Taste enviada.",
           }));
           releaseAgentConnect();
           return { ok: true };

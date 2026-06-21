@@ -1,6 +1,7 @@
 import type { AgentComposerMode } from "@/lib/chat-types";
 import type { ForgeSessionKind } from "@/lib/taste";
 import { buildOutgoingParts, type StoredMessagePart } from "@/lib/chat-attachments";
+import { resolveTurnIntent, type AgentRunMode } from "@/lib/turn-intent";
 
 export type SendMessageInput = {
   text: string;
@@ -24,9 +25,9 @@ export type SendMessageDeps = {
     projectId: string,
     conversationId: string,
     kind: ForgeSessionKind,
-    mode: AgentComposerMode,
+    mode: AgentRunMode,
   ) => Promise<{ ok: boolean; message?: string }>;
-  runAgent: (kind: ForgeSessionKind) => Promise<boolean>;
+  runAgent: (kind: ForgeSessionKind, mode: AgentRunMode) => Promise<boolean>;
   beginPendingTurn: () => void;
   clearPendingTurn: () => void;
   onInserted?: () => void;
@@ -43,9 +44,17 @@ function messageParts(text: string, parts?: StoredMessagePart[]): StoredMessageP
  * Caminho único de envio — sempre resposta (run), fila ou toast de erro.
  */
 export async function sendMessage(input: SendMessageInput, deps: SendMessageDeps): Promise<void> {
-  const sendMode = (input.mode ?? input.composerMode) as AgentComposerMode;
   const shouldQueue = input.agentBusy || input.planAwaiting;
   const parts = messageParts(input.text, input.parts);
+  const intent = resolveTurnIntent({
+    text: input.text,
+    composerMode: input.composerMode,
+    explicitMode: input.mode,
+    hasAttachments: (input.parts?.length ?? 0) > 0,
+  });
+  const sendMode = shouldQueue
+    ? ((input.mode ?? input.composerMode) as AgentComposerMode)
+    : intent.runMode;
 
   if (!shouldQueue) {
     deps.beginPendingTurn();
@@ -54,7 +63,9 @@ export async function sendMessage(input: SendMessageInput, deps: SendMessageDeps
   const { error } = await deps.insertUserMessage(
     input.conversationId,
     parts,
-    shouldQueue ? { mode: sendMode, queued: true } : { mode: sendMode },
+    shouldQueue
+      ? { mode: sendMode, turnIntent: intent.kind, queued: true }
+      : { mode: sendMode, turnIntent: intent.kind },
   );
 
   if (error) {
@@ -66,7 +77,7 @@ export async function sendMessage(input: SendMessageInput, deps: SendMessageDeps
   deps.onInserted?.();
 
   if (!shouldQueue) {
-    const ok = await deps.runAgent(input.kind);
+    const ok = await deps.runAgent(input.kind, intent.runMode);
     if (!ok) {
       deps.clearPendingTurn();
       deps.onRunFailed?.();
@@ -91,7 +102,7 @@ export async function sendMessage(input: SendMessageInput, deps: SendMessageDeps
     }
     if (!input.agentBusy) {
       deps.beginPendingTurn();
-      const ok = await deps.runAgent(input.kind);
+      const ok = await deps.runAgent(input.kind, intent.runMode);
       if (!ok) {
         deps.clearPendingTurn();
         deps.onRunFailed?.();

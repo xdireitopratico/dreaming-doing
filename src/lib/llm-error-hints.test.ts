@@ -95,9 +95,9 @@ describe("e2bErrorHint", () => {
 });
 
 describe("timeoutHint", () => {
-  it("returns edge.timeout with no link (in-place continue)", () => {
+  it("returns execution-window hint with no link (in-place continue)", () => {
     const hint = timeoutHint();
-    expect(hint.code).toBe("edge.timeout");
+    expect(hint.code).toBe("agent.execution_window");
     expect(hint.link).toBeNull();
   });
 });

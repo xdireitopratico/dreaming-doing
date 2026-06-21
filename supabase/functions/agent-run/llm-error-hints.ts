@@ -209,15 +209,15 @@ export function e2bErrorHint(err: unknown): ErrorHint {
   };
 }
 
-/** Hint de erro de timeout do edge function (120s). */
+/** Hint de janela de execução/checkpoint do worker. */
 export function timeoutHint(): ErrorHint {
   return {
-    message: "O agente atingiu o tempo limite da Edge Function (~90s por chunk).",
+    message: "O agente atingiu uma janela de execução e salvou o progresso.",
     action: "Continuar run",
     link: null,
     severity: "warning",
-    code: "edge.timeout",
-    tip: "O estado foi salvo em checkpoint — Continue retoma sem perder trabalho.",
+    code: "agent.execution_window",
+    tip: "Continue retoma do último checkpoint sem perder trabalho.",
   };
 }
 

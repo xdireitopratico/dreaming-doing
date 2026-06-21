@@ -573,7 +573,7 @@ export class AgentLoop {
     }
     if (Date.now() - this.runStartTime > LOOP_BUDGET_MS) {
       this.emit("timeout_warning", {
-        message: "Próximo do limite de tempo da Edge Function — salvando checkpoint",
+        message: "Janela de execução concluída — progresso salvo para continuar",
         elapsedMs: Date.now() - this.runStartTime,
       });
     }
@@ -1082,6 +1082,10 @@ export class AgentLoop {
 
         if (assistantText) {
           this.emitAgentProse(assistantText);
+        } else if (!this.openingEmitted && !this.buildFixResume) {
+          this.emitOpeningToChat(
+            "Vou trabalhar nisso agora e te manter atualizado conforme eu validar as mudanças.",
+          );
         }
 
         this.emit("phase", {

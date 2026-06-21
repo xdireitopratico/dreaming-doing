@@ -22,7 +22,11 @@ export function isConversationRecallQuestion(text: string): boolean {
 export function isAdvisoryQuestion(text: string): boolean {
   const t = text.trim();
   if (!t) return false;
-  if (/^(crie|criar|implemente|implementar|faça|fazer|monte|montar|adicione|adicionar|corrija|corrigir|build)\b/i.test(t)) {
+  if (
+    /^(crie|criar|implemente|implementar|faça|fazer|monte|montar|adicione|adicionar|corrija|corrigir|build)\b/i.test(
+      t,
+    )
+  ) {
     return false;
   }
   return ADVISORY_RE.test(t);
@@ -117,6 +121,19 @@ Regras:
 
 ${FORGE_CHAT_MARKDOWN}`;
 
+const DIRECT_CHAT_SYSTEM = `Você é o parceiro de vibe-coding do FORGE — engenheiro sênior, direto e humano, em português.
+
+O usuário pediu conversa, diagnóstico, explicação, proposta escrita ou status. Responda no chat; NÃO inicie execução, NÃO prometa que mexeu em arquivos e NÃO narre bastidores.
+
+Regras:
+- 2–6 frases, com clareza operacional.
+- Se houver crítica/diagnóstico, reconheça o problema e aponte a raiz provável com precisão.
+- Se o usuário pedir plano escrito, entregue plano objetivo, sem chamar ferramenta.
+- Não cite modelo, chaves, retries, checkpoints, workers, passos internos ou prompts.
+- Não use markdown pesado; use bullets só quando aumentar a clareza.
+
+${FORGE_CHAT_MARKDOWN}`;
+
 /** Resposta consultiva leve — paleta, design, sugestões sem execução. */
 export async function runAdvisoryPhase(
   model: LLMProvider,
@@ -160,4 +177,43 @@ export async function runAdvisoryPhase(
   }
 
   return "Eu iria de dark industrial com âmbar quente como destaque — passa confiança e não cansa à noite. Quer manter esse tom ou prefere algo mais claro/neutro?";
+}
+
+export async function runDirectChatPhase(
+  model: LLMProvider,
+  messages: ChatMessage[],
+  opts?: { userRequest?: string },
+): Promise<string> {
+  const userRequest = opts?.userRequest?.trim() ?? "";
+  const recent = messages
+    .filter((m) => m.role === "user" || m.role === "assistant")
+    .slice(-16)
+    .map((m) => {
+      const content = typeof m.content === "string" ? m.content : "";
+      return `${m.role}: ${content.slice(0, 900)}`;
+    })
+    .join("\n");
+
+  try {
+    const resp = await model.chat({
+      messages: [
+        { role: "system", content: DIRECT_CHAT_SYSTEM },
+        {
+          role: "user",
+          content: [
+            `Mensagem atual do usuário:\n${userRequest || "(mensagem de chat)"}`,
+            `Histórico recente:\n${recent || "(primeira mensagem)"}`,
+          ].join("\n\n"),
+        },
+      ],
+      max_tokens: 700,
+      temperature: 0.35,
+    });
+    const text = sanitizeUserFacingProse(resp.content ?? "");
+    if (text.length >= 12) return text;
+  } catch {
+    /* fallback */
+  }
+
+  return "Entendi. A raiz provável é que conversa e execução estão passando pelo mesmo caminho, então perguntas simples viram job e aparecem como ruído operacional. A correção robusta é separar o contrato do turno: chat responde no chat; plan cria plano; build executa com ferramentas.";
 }
