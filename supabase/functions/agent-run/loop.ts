@@ -889,7 +889,13 @@ export class AgentLoop {
         ? resumeStepStart(this.resumePhase ?? this.state.phase, this.state.currentStepIndex)
         : 0;
 
+    // H3 fix: separar buildAttempts em dois counters independentes.
+    // Antes: per-step e final-gate compartilhavam o mesmo counter.
+    // Build passava no meio do loop, zerava, aí final-gate só tinha 3
+    // retries a partir de 0. A mensagem "Build não passou após 3
+    // tentativas" podia ser 1 (final-gate) ou 5+ (intercalado).
     let buildAttempts = 0;
+    let finalGateAttempts = 0;
     const maxRetries = 3;
     let loopStep = step;
     let finalGateOk = false;
@@ -1505,15 +1511,15 @@ export class AgentLoop {
         continue;
       }
 
-      buildAttempts++;
+      finalGateAttempts++; // H3: counter separado do per-step
       this.emit("validate_fail", {
-        attempt: buildAttempts,
+        attempt: finalGateAttempts,
         checks: finalObservation.checks.filter((c) => !c.ok).map((c) => c.name),
         feedback: finalObservation.feedback?.slice(0, 500),
         finalGate: true,
       });
 
-      if (buildAttempts > maxRetries) {
+      if (finalGateAttempts > maxRetries) {
         const closing = await this.attemptGracefulClosing("build_fail");
         const failMsg =
           `Build não passou após ${maxRetries} tentativas.\n\n` +
