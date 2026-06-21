@@ -1,5 +1,6 @@
 import { parseAgentDiagnostics, pushDiagnostics } from "@/hooks/useDiagnostics";
 import { dispatchTasteUiAction, isTasteUiAction } from "@/lib/taste-ui-actions";
+import type { AgentStreamEventData } from "@/lib/agent-event-contract";
 
 export interface SSEEvent {
   type: string;
@@ -70,6 +71,7 @@ export interface AgentProgress {
     args: Record<string, unknown>;
     ok?: boolean;
     error?: string;
+    toolCallId?: string;
   }>;
   cost: number;
   model: string | null;
@@ -124,8 +126,22 @@ export interface AgentProgress {
   /** Turno social/conversacional — só bubble no chat, sem mini-card de job. */
   conversational?: boolean;
   /** Estado da conexão Realtime — usado para feedback visual durante reconnect
-   *  (Fase 1.6: «Reconectando…» no ChatThinking enquanto o canal refaz handshake). */
+    *  (Fase 1.6: «Reconectando…» no ChatThinking enquanto o canal refaz handshake). */
   connectionState?: "connected" | "reconnecting" | "disconnected";
+  /** Session 2.0 — tokens consumidos pela run (lidos do finish/done enriquecido). */
+  tokens?: { input: number; output: number; total: number } | null;
+  /** Session 2.0 — nº da tentativa de retomada de chunk (lido de chunk_resume/finish). */
+  resumeAttempts?: number | null;
+  /** Session 2.0 — true quando o finish terminal indicou chunkCap (exaustão de chunks). */
+  chunkCap?: boolean;
+  /** Session 2.0 — true quando o finish terminal indicou resumableExhausted. */
+  resumableExhausted?: boolean;
+  /** Session 2.0 — complexidade classificada pelo agente (lida de classify). */
+  classifyComplexity?: string | null;
+  /** Session 2.0 — sumário da classificação (lido de classify). */
+  classifySummary?: string | null;
+  /** Session 2.0 — true quando classify indicou checkpoint restaurado. */
+  classifyRestored?: boolean;
 }
 
 export type AgentConnectOptions = {
@@ -162,6 +178,13 @@ export const initialAgentProgress: AgentProgress = {
   awaiting: false,
   fsmState: null,
   planSummary: null,
+  tokens: null,
+  resumeAttempts: null,
+  chunkCap: false,
+  resumableExhausted: false,
+  classifyComplexity: null,
+  classifySummary: null,
+  classifyRestored: false,
 };
 
 const MODEL_COSTS: Record<string, number> = {
@@ -241,8 +264,13 @@ function parsePendingPlanFromPayload(
     mission: typeof nested.mission === "string" ? nested.mission : undefined,
     objective: typeof nested.objective === "string" ? nested.objective : undefined,
     steps,
-    ttlMs: typeof nested.ttlMs === "number" ? nested.ttlMs : Number.MAX_SAFE_INTEGER,
-    proposedAt: Date.now(),
+    // Session 2.0: ttlMs default 60s (antes MAX_SAFE_INTEGER — nunca expirava).
+    ttlMs: typeof nested.ttlMs === "number" ? nested.ttlMs : 60_000,
+    // Session 2.0: proposedAt lido do payload (ISO string) se presente.
+    proposedAt:
+      typeof nested.proposedAt === "string" && nested.proposedAt
+        ? Date.parse(nested.proposedAt) || Date.now()
+        : Date.now(),
     runId,
     projectId,
     design:
@@ -375,14 +403,6 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
      * idêntico.
      */
 
-    case "resume":
-      return {
-        ...prev,
-        finished: false,
-        error: null,
-        timeline: [...prev.timeline, event],
-      };
-
     case "phase": {
       const msg = (data.message as string) ?? prev.message;
       return {
@@ -411,12 +431,6 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
       };
 
     case "step":
-      if (data.plan !== true) {
-        return {
-          ...prev,
-          timeline: [...prev.timeline, event],
-        };
-      }
       return {
         ...prev,
         currentStep: typeof data.current === "number" ? data.current : prev.currentStep,
@@ -424,7 +438,6 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
         timeline: [...prev.timeline, event],
       };
 
-    case "memory":
     case "context_pressure":
     case "context_compress":
       return {
@@ -510,6 +523,11 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
       return {
         ...prev,
         model: (data.model as string) ?? prev.model,
+        classifyComplexity:
+          typeof data.complexity === "string" ? data.complexity : prev.classifyComplexity,
+        classifySummary:
+          typeof data.summary === "string" ? data.summary : prev.classifySummary,
+        classifyRestored: data.restored === true ? true : prev.classifyRestored,
         timeline: [...prev.timeline, event],
       };
     }
@@ -529,6 +547,9 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
           {
             name: (data.name as string) ?? "?",
             args: (data.args as Record<string, unknown>) ?? {},
+            ...(typeof data.toolCallId === "string"
+              ? { toolCallId: data.toolCallId }
+              : {}),
           },
         ],
         timeline: [...prev.timeline, event],
@@ -536,10 +557,23 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
 
     case "tool_done": {
       const toolName = data.name as string;
+      const toolCallId = typeof data.toolCallId === "string" ? data.toolCallId : null;
       const tools = [...prev.tools];
       for (let i = tools.length - 1; i >= 0; i--) {
         const t = tools[i];
-        if (t.name === toolName && t.ok === undefined) {
+        if (t.ok !== undefined) continue;
+        if (toolCallId) {
+          // Session 2.0: correlação por toolCallId (suporta paralelo mesmo nome)
+          if ((t as { toolCallId?: string }).toolCallId === toolCallId) {
+            tools[i] = {
+              ...t,
+              ok: data.ok as boolean,
+              error: data.error as string,
+            };
+            break;
+          }
+        } else if (t.name === toolName) {
+          // Legado: por nome
           tools[i] = {
             ...t,
             ok: data.ok as boolean,
@@ -625,6 +659,8 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
     }
 
     case "done": {
+      // Session 2.0: done deixa de ser terminal (só sumário + tokens + cost).
+      // O terminal canônico é o `finish` emitido pelo run-executor.
       const summary = (data.summary as string) ?? prev.summary;
       const summaryTrim = summary?.trim() ?? "";
       const summaryIsRobotic = /pronto!?\s*resumo do que fiz|nenhum arquivo foi alterado/i.test(
@@ -640,11 +676,17 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
       const pendingPlan = data.planRejected === true ? null : (prev.pendingPlan ?? planFromDone);
       const planAwaiting = data.planProposed === true && !!pendingPlan;
       const conversational = data.conversational === true;
+      const totalInputTokens =
+        typeof data.totalInputTokens === "number" ? data.totalInputTokens : prev.tokens?.input;
+      const totalOutputTokens =
+        typeof data.totalOutputTokens === "number" ? data.totalOutputTokens : prev.tokens?.output;
+      const totalTokens =
+        typeof data.totalTokens === "number" ? data.totalTokens : prev.tokens?.total;
+      const costUsd = typeof data.costUsd === "number" ? data.costUsd : prev.cost;
       return {
         ...prev,
         summary,
-        finished: true,
-        lastFinishOk: true,
+        // NÃO setar finished/lastFinishOk aqui — responsabilidade do finish.
         awaiting: conversational ? false : !!(data.awaiting || data.qualified) || planAwaiting,
         awaitingKind: conversational
           ? null
@@ -653,13 +695,20 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
             : planAwaiting
               ? "plan_approval"
               : null,
-        resumable: false,
-        error: null,
         streamText,
         pendingPlan: conversational ? null : pendingPlan,
         planSummary: conversational ? null : (pendingPlan?.summary ?? prev.planSummary),
         conversational,
         statusHint: planAwaiting ? "Plano aguardando aprovação…" : prev.statusHint,
+        tokens:
+          totalInputTokens != null || totalOutputTokens != null || totalTokens != null
+            ? {
+                input: totalInputTokens ?? 0,
+                output: totalOutputTokens ?? 0,
+                total: totalTokens ?? 0,
+              }
+            : prev.tokens,
+        cost: costUsd,
         timeline: [...prev.timeline, event],
       };
     }
@@ -695,6 +744,21 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
       const awaiting = !!(data.awaiting || data.qualified || prev.awaiting);
       const planPending =
         prev.awaitingKind === "plan_approval" && (prev.pendingPlan?.steps?.length ?? 0) > 0;
+      const totalInputTokens =
+        typeof data.totalInputTokens === "number" ? data.totalInputTokens : prev.tokens?.input;
+      const totalOutputTokens =
+        typeof data.totalOutputTokens === "number" ? data.totalOutputTokens : prev.tokens?.output;
+      const totalTokens =
+        typeof data.totalTokens === "number" ? data.totalTokens : prev.tokens?.total;
+      const costUsd = typeof data.costUsd === "number" ? data.costUsd : prev.cost;
+      const chunkCap = data.chunkCap === true || prev.chunkCap;
+      const resumableExhausted = data.resumableExhausted === true || prev.resumableExhausted;
+      const resumeAttempts =
+        typeof data.resumeAttempts === "number" ? data.resumeAttempts : prev.resumeAttempts;
+      const summary =
+        typeof data.summary === "string" && data.summary.trim()
+          ? data.summary
+          : prev.summary;
       return {
         ...prev,
         finished: true,
@@ -721,6 +785,19 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
         lastFinishOk: !failed && !canceled,
         resumable: failed && data.resumable === true && !canceled,
         error: failed || canceled ? ((data.error as string) ?? prev.error) : null,
+        summary,
+        tokens:
+          totalInputTokens != null || totalOutputTokens != null || totalTokens != null
+            ? {
+                input: totalInputTokens ?? 0,
+                output: totalOutputTokens ?? 0,
+                total: totalTokens ?? 0,
+              }
+            : prev.tokens,
+        cost: costUsd,
+        chunkCap,
+        resumableExhausted,
+        resumeAttempts,
         timeline: [...prev.timeline, event],
       };
     }
@@ -742,6 +819,48 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
         fsmState: (data.stateName as string) ?? prev.fsmState,
         timeline: [...prev.timeline, event],
       };
+
+    // ─── Session 2.0 — novos handlers ──────────────────────────────────────
+
+    case "stuck":
+      return {
+        ...prev,
+        statusHint:
+          (data.message as string) ?? "Modelo preso — tentando destravar…",
+        timeline: [...prev.timeline, event],
+      };
+
+    case "typecheck_fail": {
+      const diags = parseAgentDiagnostics(data);
+      pushDiagnostics(diags);
+      return {
+        ...prev,
+        statusHint:
+          (data.message as string) ?? "Erros de TypeScript — veja o editor",
+        timeline: [...prev.timeline, event],
+      };
+    }
+
+    case "timeout_warning":
+      return {
+        ...prev,
+        statusHint:
+          (data.message as string) ?? "Loop budget quase esgotado…",
+        timeline: [...prev.timeline, event],
+      };
+
+    case "chunk_resume": {
+      const attempt = typeof data.attempt === "number" ? data.attempt : 0;
+      const maxAttempts = typeof data.maxAttempts === "number" ? data.maxAttempts : 0;
+      const reason = typeof data.reason === "string" ? data.reason : "step budget exceeded";
+      return {
+        ...prev,
+        autoResuming: true,
+        resumeAttempts: attempt,
+        statusHint: `Retomando chunk ${attempt}/${maxAttempts} — ${reason}`,
+        timeline: [...prev.timeline, event],
+      };
+    }
 
     default:
       return { ...prev, timeline: [...prev.timeline, event] };
