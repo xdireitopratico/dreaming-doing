@@ -91,7 +91,7 @@ describe("buildChatThread", () => {
     }
   });
 
-  it("oculta mensagem plan_approved do chat mas ancora build run", () => {
+  it("mostra plano aprovado como card no chat e ancora build run", () => {
     const messages: ChatMessage[] = [
       msg("u1", "user", "landing viva"),
       {
@@ -107,7 +107,13 @@ describe("buildChatThread", () => {
         role: "user",
         content: "[Plano aprovado] Plano aprovado — executar em modo Build.",
         timestamp: 0,
-        meta: { kind: "plan_approved", buildRunId: "run-build", planSourceRunId: "run-plan" },
+        meta: {
+          kind: "plan_approved",
+          buildRunId: "run-build",
+          planSourceRunId: "run-plan",
+          planHeadline: "Landing viva",
+          steps: [{ title: "Criar Hero" }, { title: "Adicionar CTA" }],
+        },
       },
     ];
     const progress = { ...initialAgentProgress, statusHint: "Trabalhando…" };
@@ -116,18 +122,18 @@ describe("buildChatThread", () => {
       activeRunId: "run-build",
       sessionProgress: progress,
     });
-    expect(thread.map((t) => t.kind)).toEqual(["user", "assistant", "plan_status", "assistant"]);
+    // H12 fix: plano aprovado aparece como user card (não é mais internal).
+    // Esperado: 4 itens: user original, assistant plan, user "Plano aprovado",
+    // assistant build (active).
     const users = thread.filter((t) => t.kind === "user");
-    expect(users).toHaveLength(1);
+    expect(users).toHaveLength(2);
     expect(users[0].kind === "user" && users[0].message.content).toBe("landing viva");
-    const planStatusSlot = thread[2];
-    expect(planStatusSlot.kind).toBe("plan_status");
-    if (planStatusSlot.kind === "plan_status") {
-      expect(planStatusSlot.status).toBe("approved");
-    }
-    const buildSlot = thread[3];
-    expect(buildSlot.kind).toBe("assistant");
-    if (buildSlot.kind === "assistant") {
+    const approveCard = users[1];
+    expect(approveCard.kind === "user" && approveCard.message.content).toContain("Plano aprovado");
+    expect(approveCard.kind === "user" && approveCard.message.content).toContain("Landing viva");
+    const buildSlot = thread.find((t) => t.kind === "assistant" && t.runId === "run-build");
+    expect(buildSlot?.kind).toBe("assistant");
+    if (buildSlot?.kind === "assistant") {
       expect(buildSlot.runId).toBe("run-build");
       expect(buildSlot.isActive).toBe(true);
     }
@@ -210,7 +216,9 @@ describe("buildChatThread", () => {
       activeRunId: "run-new",
       sessionProgress: progress,
     });
-    const userIdx = thread.findIndex((t) => t.kind === "user" && t.message.content === "novo pedido");
+    const userIdx = thread.findIndex(
+      (t) => t.kind === "user" && t.message.content === "novo pedido",
+    );
     const asstIdx = thread.findIndex((t) => t.kind === "assistant" && t.runId === "run-new");
     expect(userIdx).toBeGreaterThanOrEqual(0);
     expect(asstIdx).toBeGreaterThan(userIdx);
