@@ -25,6 +25,31 @@ import { extractOriginalUserRequest, resolveAllocateSandbox } from "./run-contex
 
 const runningLocks = new Map<string, Promise<unknown>>();
 
+/** H9 fix: cap meta em 50KB para não estourar Realtime UPDATE.
+ *  Trunca executionLog/streamTail/cardSnapshot mantendo os mais recentes. */
+const META_MAX_BYTES = 50_000;
+function capAgentRunMeta(meta: Record<string, unknown>): Record<string, unknown> {
+  const json = JSON.stringify(meta);
+  if (json.length <= META_MAX_BYTES) return meta;
+
+  // Trunca executionLog (mantém últimos 20)
+  if (Array.isArray(meta.executionLog) && meta.executionLog.length > 20) {
+    meta.executionLog = (meta.executionLog as unknown[]).slice(-20);
+  }
+  // Trunca streamTail
+  if (typeof meta.streamTail === "string" && meta.streamTail.length > 2000) {
+    meta.streamTail = (meta.streamTail as string).slice(-2000);
+  }
+  // Trunca cardSnapshot.timeline se existir
+  if (meta.cardSnapshot && typeof meta.cardSnapshot === "object") {
+    const cs = meta.cardSnapshot as Record<string, unknown>;
+    if (Array.isArray(cs.timeline) && cs.timeline.length > 30) {
+      cs.timeline = (cs.timeline as unknown[]).slice(-30);
+    }
+  }
+  return meta;
+}
+
 const corsHeaders = FORGE_CORS_HEADERS;
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
@@ -913,6 +938,21 @@ Deno.serve(async (req) => {
         }
 
         const prevMeta = (current?.meta ?? runMetaBase) as Record<string, unknown>;
+        // H9 fix: cap meta em 50KB para não estourar Realtime UPDATE.
+        // Trunca executionLog/streamTail/cardSnapshot se necessário.
+        const builtMeta = capAgentRunMeta({
+          ...prevMeta,
+          ...(result.summary ? { summary: result.summary } : {}),
+          ...(result.toolsUsed?.length ? { toolsUsed: result.toolsUsed } : {}),
+          ...(typeof result.totalTokens === "number" ? { totalTokens: result.totalTokens } : {}),
+          ...(typeof result.totalInputTokens === "number"
+            ? { totalInputTokens: result.totalInputTokens }
+            : {}),
+          ...(typeof result.totalOutputTokens === "number"
+            ? { totalOutputTokens: result.totalOutputTokens }
+            : {}),
+          ...(typeof result.costUsd === "number" ? { costUsd: result.costUsd } : {}),
+        });
 
         await supabase
           .from("agent_runs")
@@ -921,21 +961,7 @@ Deno.serve(async (req) => {
             finished_at: isAwaiting ? null : new Date().toISOString(),
             steps: result.steps,
             error: result.error ?? null,
-            meta: {
-              ...prevMeta,
-              ...(result.summary ? { summary: result.summary } : {}),
-              ...(result.toolsUsed?.length ? { toolsUsed: result.toolsUsed } : {}),
-              ...(typeof result.totalTokens === "number"
-                ? { totalTokens: result.totalTokens }
-                : {}),
-              ...(typeof result.totalInputTokens === "number"
-                ? { totalInputTokens: result.totalInputTokens }
-                : {}),
-              ...(typeof result.totalOutputTokens === "number"
-                ? { totalOutputTokens: result.totalOutputTokens }
-                : {}),
-              ...(typeof result.costUsd === "number" ? { costUsd: result.costUsd } : {}),
-            },
+            meta: builtMeta,
             ...(result.canceled ? { canceled_at: new Date().toISOString() } : {}),
           })
           .eq("id", agentRunId);

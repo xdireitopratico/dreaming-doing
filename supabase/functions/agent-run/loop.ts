@@ -138,6 +138,35 @@ function calculateMaxSteps(complexity: 1 | 2 | 3 | 4 | 5): number {
   return limits[complexity] ?? 60;
 }
 
+/** H9 fix: cap meta JSONB em 50KB para não estourar Realtime.
+ *  executionLog e streamTail podem crescer indefinidamente em runs longas.
+ *  Supabase Realtime tem limite de payload (~1MB por UPDATE) — quando meta
+ *  passa de algumas centenas de KB, o canal desconecta ("Reconnecting...")
+ *  e o usuário perde o stream. Cap em 50KB preserva o Realtime funcionando. */
+const META_MAX_BYTES = 50_000;
+
+function capMetaSize(meta: Record<string, unknown>): Record<string, unknown> {
+  const json = JSON.stringify(meta);
+  if (json.length <= META_MAX_BYTES) return meta;
+
+  // Trunca executionLog (mantém apenas os últimos 20 entries)
+  if (Array.isArray(meta.executionLog) && meta.executionLog.length > 20) {
+    meta.executionLog = (meta.executionLog as unknown[]).slice(-20);
+  }
+  // Trunca streamTail
+  if (typeof meta.streamTail === "string" && meta.streamTail.length > 2000) {
+    meta.streamTail = (meta.streamTail as string).slice(-2000);
+  }
+  // Trunca cardSnapshot se existir
+  if (meta.cardSnapshot && typeof meta.cardSnapshot === "object") {
+    const cs = meta.cardSnapshot as Record<string, unknown>;
+    if (Array.isArray(cs.timeline) && cs.timeline.length > 30) {
+      cs.timeline = (cs.timeline as unknown[]).slice(-30);
+    }
+  }
+  return meta;
+}
+
 /** H4 fix: max_tokens dinâmico por complexidade.
  *  Antes: hard-coded 4096 em todos os LLMs. TSX de página inteira (Hero+Section+Footer)
  *  precisa 6-8k tokens. Lovable/Claude Code usam 16-32k.
@@ -2834,6 +2863,7 @@ export class AgentLoop {
       narrationText:
         typeof cardSnapshot.narrationText === "string" ? cardSnapshot.narrationText : undefined,
     };
+    const cappedMeta = capMetaSize(meta); // H9
 
     const existingId = await this.resolveExistingRunMessageId();
     if (existingId) {
@@ -2842,7 +2872,7 @@ export class AgentLoop {
         .update({
           parts: [{ type: "text", text }],
           tool_calls: [],
-          meta,
+          meta: cappedMeta,
         })
         .eq("id", existingId);
       await this.sb
@@ -2859,7 +2889,7 @@ export class AgentLoop {
       role: "assistant",
       parts: [{ type: "text", text }],
       tool_calls: [],
-      meta,
+      meta: cappedMeta,
     });
     await this.sb
       .from("projects")
