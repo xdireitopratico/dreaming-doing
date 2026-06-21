@@ -482,12 +482,19 @@ export async function executeAgentJob(
   } finally {
     loop.stopHeartbeatTimer();
   }
-  // Só mata sandbox se falhou ou não produziu nada.
-  // Se criou/alterou arquivos, mantém vivo para preview.
+  // C2 fix: NÃO mata sandbox se a run é resumable. Antes, o caminho
+  // resumable (loop budget estourou) matava o sandbox, e o próximo
+  // chunk tinha que recriar do zero (perdendo node_modules, npm install
+  // de novo = 60-120s).
+  // Agora: só mata se a run terminou definitivamente (ok ou fail/canceled).
   const hasOutput = (result.toolsUsed ?? []).some((t) =>
     ["fs_write", "fs_edit", "shell_exec"].includes(t),
   );
-  if (!result.ok || !hasOutput) {
+  const isResumable = !!result.resumable;
+  if (isResumable) {
+    // Preserva sandbox para o próximo chunk.
+    await sandbox.destroy().catch(() => {}); // libera in-memory ref mas mantém o sandbox E2B
+  } else if (!result.ok || !hasOutput) {
     await sandbox.kill().catch(() => {});
   } else {
     await sandbox.destroy().catch(() => {});
