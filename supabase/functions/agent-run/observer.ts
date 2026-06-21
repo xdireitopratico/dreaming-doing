@@ -35,12 +35,13 @@ function outputIndicatesBuildFailure(output: string): boolean {
   );
 }
 
-function shellOutput(result: { output?: unknown }): string {
-  return typeof result.output === "object"
-    ? ((result.output as { stderr?: string; stdout?: string }).stderr ??
-        (result.output as { stderr?: string; stdout?: string }).stdout ??
-        "")
-    : String(result.output ?? "");
+function shellOutput(result: { output?: unknown; error?: string }): string {
+  if (typeof result.output === "object" && result.output) {
+    const o = result.output as { stderr?: string; stdout?: string };
+    return o.stderr ?? o.stdout ?? result.error ?? "";
+  }
+  if (typeof result.output === "string" && result.output) return result.output;
+  return result.error ?? "";
 }
 
 export class RuntimeObserver {

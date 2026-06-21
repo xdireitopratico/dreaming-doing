@@ -68,7 +68,13 @@ Retorna { exitCode, stdout, stderr }. Exit code 0 = sucesso.`,
           },
         };
       } catch (err: any) {
-        return { toolCallId: "", ok: false, output: null, error: `Sandbox: ${err?.message}` };
+        const msg = err?.message ?? String(err);
+        return {
+          toolCallId: "",
+          ok: false,
+          output: { exitCode: -1, stdout: "", stderr: `Sandbox: ${msg}` },
+          error: `Sandbox: ${msg}`,
+        };
       }
     },
   );

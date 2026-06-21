@@ -655,6 +655,11 @@ export class AgentLoop {
         summary: this.state.intent?.summary ?? "Retomada",
         restored: true,
       });
+      this.emit("classify", {
+        complexity: this.complexityScore,
+        summary: this.state.intent?.summary ?? "Retomada",
+        restored: true,
+      });
       if (!this.planMode) {
         await this.emitTransition("no_plan_needed");
       }
@@ -882,6 +887,10 @@ export class AgentLoop {
           }
         } else {
           this.state.totalSteps = this.maxStepsLimit;
+          this.emit("step", {
+            current: loopStep,
+            total: this.maxStepsLimit,
+          });
           this.emit("phase", {
             phase: "execute",
             message: "Trabalhando no pedido…",
@@ -1146,6 +1155,10 @@ export class AgentLoop {
             name: call.name,
             ok: result.ok,
             error: result.error,
+            output:
+              typeof result.output === "object"
+                ? JSON.stringify(result.output).slice(0, 2000)
+                : String(result.output ?? "").slice(0, 2000),
           });
 
           if (call.name === "shell_exec" && isGradleCommand(String(call.arguments.command ?? ""))) {
