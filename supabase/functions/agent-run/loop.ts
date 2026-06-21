@@ -1446,7 +1446,7 @@ export class AgentLoop {
             message: "Verificando build...",
           });
           await this.saveCheckpoint(LoopPhase.VALIDATE_STEP);
-          const observation = await this.observer.observe();
+          const observation = await this.observer.observe(() => this.loopBudgetExceeded());
           if (!observation.passed) {
             buildAttempts++;
             this.emit("validate_fail", {
@@ -1503,7 +1503,7 @@ export class AgentLoop {
         message: "Verificação final de build...",
       });
       await this.saveCheckpoint(LoopPhase.VALIDATE_STEP);
-      const finalObservation = await this.observer.observe();
+      const finalObservation = await this.observer.observe(() => this.loopBudgetExceeded());
       if (finalObservation.passed) {
         this.notifyLoopStatus({ kind: "build_ok" });
         this.emit("validate_ok", { message: "Build OK (gate final)" });

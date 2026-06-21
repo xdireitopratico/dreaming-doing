@@ -91,6 +91,24 @@ function stripAnsi(s: string): string {
   return s.replace(/\u001b\[[0-9;]*[a-zA-Z]/g, "").replace(/\u001b\][^\u0007]*\u0007/g, "");
 }
 
+/** H1 fix: check budget entre comandos de observe().
+ *  Se o budget estourou, retorna checks parciais + early-exit
+ *  para evitar gastar tempo em comandos subsequentes. */
+type BudgetChecker = () => boolean;
+function makeBudgetGate(budgetExceeded: BudgetChecker): {
+  check: () => boolean;
+  exceeded: () => boolean;
+} {
+  let _exceeded = false;
+  return {
+    check: () => {
+      if (budgetExceeded()) _exceeded = true;
+      return _exceeded;
+    },
+    exceeded: () => _exceeded,
+  };
+}
+
 export class RuntimeObserver {
   private reg: ToolRegistry;
   private fileCache: Map<string, string> | null;
@@ -100,8 +118,16 @@ export class RuntimeObserver {
     this.fileCache = fileCache ?? null;
   }
 
-  async observe(): Promise<ObservationResult> {
+  async observe(budgetExceeded?: () => boolean): Promise<ObservationResult> {
     const checks: Array<{ name: string; ok: boolean; output: string }> = [];
+    const isOverBudget = () => budgetExceeded?.() === true;
+    if (isOverBudget()) {
+      return {
+        passed: false,
+        checks,
+        feedback: "[budget] Loop budget exhausted before observe() started",
+      };
+    }
 
     // 0. Ensure dependencies are installed (sandbox FS — not Supabase project_files)
     try {
@@ -130,6 +156,9 @@ export class RuntimeObserver {
     checks.push({ name: "design-system", ok: designCheck.ok, output: designCheck.output });
 
     // 1. Build check
+    if (isOverBudget()) {
+      return { passed: false, checks, feedback: "[budget] Skipped build check" };
+    }
     try {
       const build = await this.reg.execute({
         id: crypto.randomUUID(),
@@ -145,6 +174,9 @@ export class RuntimeObserver {
     }
 
     // 2. TypeScript check (se existir tsconfig)
+    if (isOverBudget()) {
+      return { passed: false, checks, feedback: "[budget] Skipped typescript check" };
+    }
     const hasTs = await this.sandboxPathExists("tsconfig.json");
     if (hasTs) {
       try {
@@ -163,6 +195,9 @@ export class RuntimeObserver {
     }
 
     // 3. Lint check (se existir eslint config)
+    if (isOverBudget()) {
+      return { passed: false, checks, feedback: "[budget] Skipped lint check" };
+    }
     const hasLint =
       (await this.sandboxPathExists(".eslintrc")) ||
       (await this.sandboxPathExists(".eslintrc.json")) ||
