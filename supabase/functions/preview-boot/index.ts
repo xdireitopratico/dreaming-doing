@@ -99,8 +99,10 @@ Deno.serve(async (req) => {
       force?: boolean;
       probeOnly?: boolean;
       syncOnly?: boolean;
+      /** P3 fix: indica se boot veio de user action ou auto-run. */
+      userInitiated?: boolean;
     };
-    const { projectId, force, probeOnly, syncOnly } = body;
+    const { projectId, force, probeOnly, syncOnly, userInitiated } = body;
     if (!projectId) return json({ error: "projectId obrigatório" }, 400);
 
     const supabase = createClient(SUPABASE_URL, SERVICE_KEY);
@@ -390,6 +392,16 @@ Deno.serve(async (req) => {
           .update({ meta: clearedPreviewMeta(existing) })
           .eq("id", projectId);
       }
+      // P3 fix: boot de auto-run com force=true E sem files não pode
+      // criar sandbox. Se userInitiated=false E cached já foi invalidado
+      // (force=true), é um boot especulativo do useEditorAgentOrchestration.
+      // Retornar no_files silenciosamente (sem alocar).
+      const logLevel = userInitiated === false ? "info" : "warn";
+      console[logLevel]("[preview-boot] no_files + !userInitiated", {
+        projectId,
+        userInitiated,
+        force,
+      });
       return json(
         {
           url: null,

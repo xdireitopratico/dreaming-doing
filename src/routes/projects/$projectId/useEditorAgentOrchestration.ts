@@ -249,7 +249,9 @@ export function useEditorAgentOrchestration({
     if (previewBootAfterAgentRef.current) return;
     previewBootAfterAgentRef.current = true;
     void previewBoot.bootWithRetry(
-      devUrl ? { syncOnly: true, silent: true } : { force: true, silent: true },
+      devUrl
+        ? { syncOnly: true, silent: true, userInitiated: false }
+        : { force: true, silent: true, userInitiated: false },
     );
   }, [
     agentShouldBootPreview,
@@ -285,6 +287,7 @@ export function useEditorAgentOrchestration({
           const url = await previewBoot.boot({
             ...(devUrl ? { syncOnly: true } : { force: true }),
             silent: true,
+            userInitiated: false, // P3: auto-sync durante run
           });
           if (shouldReload && url) {
             setPreviewReloadNonce((n) => n + 1);

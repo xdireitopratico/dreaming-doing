@@ -28,6 +28,15 @@ type BootOpts = {
   /** Sincroniza ficheiros no sandbox sem reiniciar Vite (quando já há previewUrl). */
   syncOnly?: boolean;
   silent?: boolean;
+  /**
+   * P3 fix: indica se o boot foi disparado por ação explícita do user
+   * (clique em "Atualizar Preview" / "Abrir Site" / aba preview) ou por
+   * auto-run (useEditorAgentOrchestration durante run do agente).
+   * Default: true (assume user action). Auto-run passa false.
+   * O edge preview-boot usa isso pra decidir se pode criar novo sandbox
+   * sem files (caminho safe) ou se deve falhar.
+   */
+  userInitiated?: boolean;
 };
 
 const RETRY_DELAYS_MS = [0, 5_000, 15_000, 30_000];
@@ -91,6 +100,8 @@ export function usePreviewBoot(projectId: string, opts?: UsePreviewBootOpts) {
           force: opts?.force ?? false,
           probeOnly: opts?.probeOnly ?? false,
           syncOnly: opts?.syncOnly ?? false,
+          // P3: default true (user action). Auto-run passa false.
+          userInitiated: opts?.userInitiated ?? true,
         }),
       });
 
