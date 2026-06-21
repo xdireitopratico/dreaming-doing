@@ -138,6 +138,21 @@ function calculateMaxSteps(complexity: 1 | 2 | 3 | 4 | 5): number {
   return limits[complexity] ?? 60;
 }
 
+/** H4 fix: max_tokens dinâmico por complexidade.
+ *  Antes: hard-coded 4096 em todos os LLMs. TSX de página inteira (Hero+Section+Footer)
+ *  precisa 6-8k tokens. Lovable/Claude Code usam 16-32k.
+ *  Complexity 5 (mais alto) = output máximo de 32k tokens. */
+function calculateMaxTokens(complexity: 1 | 2 | 3 | 4 | 5): number {
+  const limits: Record<1 | 2 | 3 | 4 | 5, number> = {
+    1: 8192,
+    2: 12288,
+    3: 16384,
+    4: 24576,
+    5: 32768,
+  };
+  return limits[complexity] ?? 16384;
+}
+
 export class AgentLoop {
   private reg: ToolRegistry;
   private state: AgentState;
@@ -2046,7 +2061,7 @@ export class AgentLoop {
       ],
       tools: mergePlanModeToolDefinitions(this.reg.getDefinitions()),
       tool_choice: "auto",
-      max_tokens: 4096,
+      max_tokens: calculateMaxTokens(this.complexityScore as 1 | 2 | 3 | 4 | 5), // H4
       onTokenDelta: (delta) => {
         if (!delta) return;
         if (this.thinkingStreamStartedAt == null) {
@@ -2355,7 +2370,7 @@ export class AgentLoop {
         messages,
         tools: tools ?? mergeExecutionToolDefinitions(this.reg.getDefinitions(), false),
         tool_choice: forceTools ? "required" : "auto",
-        max_tokens: 4096,
+        max_tokens: calculateMaxTokens(this.complexityScore as 1 | 2 | 3 | 4 | 5), // H4
         onTokenDelta: forceTools
           ? undefined
           : (delta) => {
