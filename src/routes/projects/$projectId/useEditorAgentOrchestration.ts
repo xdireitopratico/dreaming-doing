@@ -208,17 +208,24 @@ export function useEditorAgentOrchestration({
     }
     if (!supportsLivePreview || !e2bConnected || previewBoot.booting || previewE2bCircuit) return;
     if (devUrl) return;
+    // P1 fix: gate fileCount === 0. Sem files, não há o que servir no
+    // preview — o edge retornaria no_files e a chamada HTTP é desperdiçada
+    // (mais telemetria poluída). O effect after-agent (linha 234) já
+    // checa fileCount, mas o during-run não. Adicionando aqui.
+    if (fileCount === 0) return;
     if (previewBootInRunAttemptsRef.current >= MAX_IN_RUN_BOOT_ATTEMPTS) return;
     if (previewBootDuringRunRef.current) return;
     previewBootDuringRunRef.current = true;
-    void previewBoot.bootWithRetry({ force: true, silent: true }).then((url) => {
-      previewBootDuringRunRef.current = false;
-      if (!url) {
-        previewBootInRunAttemptsRef.current += 1;
-        return;
-      }
-      previewBootInRunAttemptsRef.current = 0;
-    });
+    void previewBoot
+      .bootWithRetry({ force: true, silent: true, userInitiated: false })
+      .then((url) => {
+        previewBootDuringRunRef.current = false;
+        if (!url) {
+          previewBootInRunAttemptsRef.current += 1;
+          return;
+        }
+        previewBootInRunAttemptsRef.current = 0;
+      });
   }, [
     running,
     supportsLivePreview,
