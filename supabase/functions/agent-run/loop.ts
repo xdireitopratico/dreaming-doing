@@ -110,6 +110,15 @@ function isGradleCommand(command: string): boolean {
   return /gradle|gradlew|assembleDebug|assembleRelease/i.test(command);
 }
 
+// Session 2.0 — build_log para qualquer comando de build/test/lint web,
+// não só Gradle. Cobre npm/yarn/pnpm/vite/tsc/eslint/jest/vitest.
+function isBuildCommand(command: string): boolean {
+  if (isGradleCommand(command)) return true;
+  return /\b(npm|yarn|pnpm|bun|npx)\s+(run\s+)?(build|dev|preview|test|lint|typecheck|check)|\bvite\s+(build|preview|dev)\b|\btsc\b|--noEmit|eslint|vitest|jest\s+run/i.test(
+    command,
+  );
+}
+
 function resolveLoopBudgetMs(): number {
   const raw =
     (typeof globalThis.Deno !== "undefined" ? Deno.env.get("AGENT_LOOP_BUDGET_MS") : undefined) ??
@@ -1206,10 +1215,15 @@ export class AgentLoop {
             }
           }
 
-          this.emit("tool_start", { name: call.name, args: call.arguments });
+          this.emit("tool_start", {
+            name: call.name,
+            args: call.arguments,
+            toolCallId: call.id,
+          });
           const result = await this.reg.execute(call);
           this.emit("tool_done", {
             name: call.name,
+            toolCallId: call.id,
             ok: result.ok,
             error: result.error,
             output:
@@ -1218,7 +1232,11 @@ export class AgentLoop {
                 : String(result.output ?? "").slice(0, 2000),
           });
 
-          if (call.name === "shell_exec" && isGradleCommand(String(call.arguments.command ?? ""))) {
+          // Session 2.0 — build_log para qualquer comando de build (npm/vite/tsc/gradle)
+          if (
+            call.name === "shell_exec" &&
+            isBuildCommand(String(call.arguments.command ?? ""))
+          ) {
             const output =
               typeof result.output === "string"
                 ? result.output
@@ -1737,6 +1755,10 @@ export class AgentLoop {
       steps: proposedPlan.steps,
       runId: this.runId,
       projectId: this.state.projectId,
+      // Session 2.0 — design + ttlMs + proposedAt (antes descartados pelo reducer)
+      design: proposedPlan.design,
+      ttlMs: proposedPlan.ttlMs,
+      proposedAt: proposedPlan.proposedAt ?? new Date().toISOString(),
     });
     logger.event("agent_run.plan_proposed", {
       runId: this.runId ?? undefined,
@@ -2027,10 +2049,15 @@ export class AgentLoop {
 
       const execResults = await parallelExecute(execCalls, async (call) => {
         toolsUsed.add(call.name);
-        this.emit("tool_start", { name: call.name, args: call.arguments });
+        this.emit("tool_start", {
+          name: call.name,
+          args: call.arguments,
+          toolCallId: call.id,
+        });
         const result = await this.reg.execute(call);
         this.emit("tool_done", {
           name: call.name,
+          toolCallId: call.id,
           ok: result.ok,
           error: result.error,
           summary: result.ok ? "ok" : (result.error ?? "erro"),

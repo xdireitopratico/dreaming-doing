@@ -117,6 +117,10 @@ export const agentBuildFunction = inngest.createFunction(
             canceled: false,
             resumable: false,
             error: exhaustedError,
+            // Session 2.0 — sinaliza exaustão de chunks no evento (antes só em meta)
+            chunkCap: true,
+            resumableExhausted: true,
+            resumeAttempts: 3,
           },
         });
       });

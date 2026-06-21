@@ -191,8 +191,14 @@ export async function executeAgentJob(
   error?: string;
   steps: number;
   resumable?: boolean;
+  buildFix?: boolean;
   canceled?: boolean;
   toolsUsed?: string[];
+  // Session 2.0 — tokens/cost propagados do loop.run() para o finish terminal
+  totalInputTokens?: number;
+  totalOutputTokens?: number;
+  totalTokens?: number;
+  costUsd?: number;
 }> {
   const {
     projectId,
@@ -472,6 +478,10 @@ export async function executeAgentJob(
     buildFix?: boolean;
     canceled?: boolean;
     toolsUsed?: string[];
+    totalInputTokens?: number;
+    totalOutputTokens?: number;
+    totalTokens?: number;
+    costUsd?: number;
   };
   loop.startHeartbeatTimer(30_000); // H8: 90s → 30s (observe() pode demorar 2-5min)
   try {
