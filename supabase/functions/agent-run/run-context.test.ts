@@ -154,21 +154,18 @@ Deno.test(
   },
 );
 
-Deno.test(
-  "extractOriginalUserRequest prefers meta.planSourceRunId over string heuristics",
-  () => {
-    const req = extractOriginalUserRequest([
-      { role: "user", content: "landing" },
-      {
-        role: "user",
-        content: "ok",
-        meta: { planSourceRunId: "r1" },
-      },
-      { role: "user", content: "add dark mode" },
-    ]);
-    assertEquals(req, "add dark mode");
-  },
-);
+Deno.test("extractOriginalUserRequest prefers meta.planSourceRunId over string heuristics", () => {
+  const req = extractOriginalUserRequest([
+    { role: "user", content: "landing" },
+    {
+      role: "user",
+      content: "ok",
+      meta: { planSourceRunId: "r1" },
+    },
+    { role: "user", content: "add dark mode" },
+  ]);
+  assertEquals(req, "add dark mode");
+});
 
 Deno.test(
   "extractOriginalUserRequest with mixed history returns planSummary equiv for pure approve (no followup)",
@@ -217,10 +214,40 @@ Deno.test("resolveAllocateSandbox: conversa vaga sem sandbox não aloca", () => 
   );
 });
 
-Deno.test("resolveAllocateSandbox: plano aprovado força alocação", () => {
+Deno.test("resolveAllocateSandbox: plano aprovado + conversa não aloca novo", () => {
+  // P2 fix: hasApprovedPlanInHistory é sinalizador, não forçador.
+  // "oi" é conversa (interaction-only), então com projectHasSandbox=false
+  // retorna false (não aloca novo).
   assertEquals(
     resolveAllocateSandbox({
       userContent: "oi",
+      projectHasSandbox: false,
+      hasApprovedPlanInHistory: true,
+    }),
+    false,
+  );
+});
+
+Deno.test("resolveAllocateSandbox: plano aprovado + conversa + já tem sandbox reusa", () => {
+  // P2 fix: com plano aprovado E conversa E já tem sandbox,
+  // retorna true (reusa o existente, não cria novo).
+  assertEquals(
+    resolveAllocateSandbox({
+      userContent: "oi",
+      projectHasSandbox: true,
+      hasApprovedPlanInHistory: true,
+    }),
+    true,
+  );
+});
+
+Deno.test("resolveAllocateSandbox: plano aprovado + implementação aloca", () => {
+  // P2 fix: com plano aprovado E mensagem implementável longa,
+  // aloca normalmente.
+  assertEquals(
+    resolveAllocateSandbox({
+      userContent:
+        "adicione 3 botões de cores diferentes na home, com hover effects suaves, transições de 200ms, e cada botão deve ter um ícone SVG específico conforme o tema da landing page",
       projectHasSandbox: false,
       hasApprovedPlanInHistory: true,
     }),
