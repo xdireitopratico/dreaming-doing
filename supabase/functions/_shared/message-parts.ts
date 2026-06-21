@@ -39,8 +39,15 @@ export async function expandPartsToUserContent(
           `[Imagem anexada: ${p.name ?? "image"} — enviada ao modelo com visão (${p.mimeType ?? "image"})]`,
         );
       } else {
+        // C3 fix: vision fallback chain. Antes: placeholder estático
+        // "modelo não tem visão". Agora: o usuário recebe um texto
+        // mais útil com:
+        // 1) Aviso claro do nome do modelo sem visão
+        // 2) Sugestão de modelos com visão
+        // 3) Sugestão de descrever a imagem em texto
+        const modelHint = options.modelHint ?? "modelo ativo";
         imageNotes.push(
-          `[Imagem: ${p.name ?? "image"} — o modelo ativo não tem visão. Descreva o que precisa ou troque o modelo em /models.]`,
+          `[Imagem anexada: ${p.name ?? "image"} — ${modelHint} não tem visão. Para usar imagem: troque para um modelo com visão em /models (ex: gpt-4o, gemini-2.5-pro, claude-sonnet-4, qwen-vl) ou descreva em texto o que precisa na imagem.]`,
         );
       }
       continue;
