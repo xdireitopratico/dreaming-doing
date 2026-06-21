@@ -1,4 +1,5 @@
 import type { AgentProgress } from "@/lib/agent-progress";
+import { lifecycleLabel, resolveAgentLifecycle } from "@/lib/agent-lifecycle";
 
 const PHASE_LABELS: Record<string, string> = {
   plan: "Montando um plano",
@@ -69,10 +70,15 @@ export function buildAgentNarrative(
 ): AgentNarrative {
   const running = opts?.running ?? !progress.finished;
   const body = (progress.streamText?.trim() || null) ?? (opts?.persistedText?.trim() || null);
+  const lifecycle = resolveAgentLifecycle({
+    progress,
+    activeRunId: null,
+    running,
+  });
 
   if (!running) {
     return {
-      headline: null,
+      headline: lifecycle === "complete" ? lifecycleLabel(lifecycle) : null,
       body,
       showTyping: false,
       subhint: progress.statusHint,
@@ -91,15 +97,16 @@ export function buildAgentNarrative(
 
   const toolLine = activeToolLabel(progress);
   const phaseLine = progress.phase
-    ? sanitizeHeadline(progress.message?.trim()) ||
-      PHASE_LABELS[progress.phase] ||
-      progress.phase
+    ? sanitizeHeadline(progress.message?.trim()) || PHASE_LABELS[progress.phase] || progress.phase
     : null;
 
   const headline =
     (connecting ? progress.statusHint?.trim() : null) ??
     toolLine ??
     phaseLine ??
+    (lifecycle === "dispatch" || lifecycle === "waiting_user" || lifecycle === "finish"
+      ? lifecycleLabel(lifecycle)
+      : null) ??
     sanitizeHeadline(progress.message) ??
     progress.statusHint ??
     "Trabalhando no seu pedido…";
@@ -111,7 +118,7 @@ export function buildAgentNarrative(
   return {
     headline,
     body,
-    showTyping: running && !body && !progress.awaiting,
+    showTyping: running && !body && !progress.awaiting && lifecycle !== "finish",
     subhint: subhint && subhint !== headline ? subhint : null,
   };
 }

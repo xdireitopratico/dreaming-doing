@@ -11,7 +11,7 @@ export type AgentBusyInput = {
   connectInFlight: boolean;
 };
 
-export type AgentBusyReason = "zombie" | "running" | "other_conversation";
+export type AgentBusyReason = "zombie" | "stale" | "running" | "other_conversation";
 
 export type AgentBusyInfo = {
   activeRunId: string | null;
@@ -37,7 +37,9 @@ export function parseAgentBusyResponse(body: Record<string, unknown>): AgentBusy
   if (body.busy !== true) return null;
   const reasonRaw = body.reason;
   const reason: AgentBusyReason =
-    reasonRaw === "zombie" || reasonRaw === "other_conversation" ? reasonRaw : "running";
+    reasonRaw === "zombie" || reasonRaw === "stale" || reasonRaw === "other_conversation"
+      ? reasonRaw
+      : "running";
   return {
     activeRunId: typeof body.activeRunId === "string" ? body.activeRunId : null,
     reason,
@@ -50,6 +52,9 @@ export function formatAgentBusyMessage(info: AgentBusyInfo): string {
   const shortId = info.activeRunId?.slice(0, 8) ?? "???";
   if (info.reason === "zombie") {
     return `Agente travado (run ${shortId}…) — cancele e envie de novo.`;
+  }
+  if (info.reason === "stale") {
+    return `Execução interrompida (run ${shortId}…) — pode retomar ou enviar de novo.`;
   }
   if (info.reason === "other_conversation") {
     return `Agente ocupado em outra conversa (run ${shortId}…).`;

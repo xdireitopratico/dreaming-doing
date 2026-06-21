@@ -1,4 +1,5 @@
 import type { AgentProgress, PendingPlan, PlanStep, SSEEvent } from "@/lib/agent-progress";
+import { lifecycleLabel, resolveAgentLifecycle } from "@/lib/agent-lifecycle";
 import { emitStreamingTelemetry } from "@/lib/streaming-telemetry";
 import { checkpointSummary, formatSkillInvocation, sanitizeRunText } from "@/lib/run-story-hygiene";
 
@@ -411,11 +412,18 @@ export function hasActiveJob(
 }
 
 function deriveMiniCardStatus(progress: AgentProgress, jobActive: boolean): MiniCardStatus {
-  if (progress.canceled || (progress.finished && progress.lastFinishOk === false)) {
+  const lifecycle = resolveAgentLifecycle({
+    progress,
+    activeRunId: null,
+    running: jobActive,
+  });
+  if (lifecycle === "cancel" || lifecycle === "failed" || lifecycle === "stale") {
     return "failed";
   }
-  if (progress.finished && progress.error && progress.resumable) return "failed";
-  if (progress.finished) return "done";
+  if (lifecycle === "waiting_user" || lifecycle === "dispatch" || lifecycle === "running") {
+    return jobActive ? "working" : "done";
+  }
+  if (lifecycle === "finish" || lifecycle === "complete") return "done";
   if (jobActive) return "working";
   return "done";
 }
@@ -714,6 +722,20 @@ export function buildMiniCardHeader(
   }
   if (opts.planDriven && running) {
     return { header: "Reading approved plan", subtitle };
+  }
+  const lifecycle = resolveAgentLifecycle({
+    progress,
+    activeRunId: null,
+    running,
+  });
+  if (lifecycle === "dispatch" && !edited) {
+    return { header: lifecycleLabel(lifecycle), subtitle };
+  }
+  if (lifecycle === "waiting_user" && !edited) {
+    return { header: lifecycleLabel(lifecycle), subtitle };
+  }
+  if (lifecycle === "finish" && !edited) {
+    return { header: lifecycleLabel(lifecycle), subtitle };
   }
   if (progress.finished && edited) {
     return { header: `Edited ${edited}`, subtitle: opts.sessionTitle };

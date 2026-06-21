@@ -1,11 +1,19 @@
 import type { AgentProgress } from "@/lib/agent-progress";
+import { resolveAgentLifecycle } from "@/lib/agent-lifecycle";
 
 /** Mantém slot live no chat até a mensagem assistant materializar no DB. */
 export function shouldRetainLiveRunSlot(progress: AgentProgress): boolean {
+  const lifecycle = resolveAgentLifecycle({
+    progress,
+    activeRunId: null,
+    running: !progress.finished,
+  });
+  if (lifecycle === "complete" || lifecycle === "cancel") return false;
   if (!progress.finished) return true;
   if (progress.canceled) return false;
   if (progress.pendingPlan?.steps?.length) return true;
   if (progress.awaiting) return true;
+  if (lifecycle === "stale" || lifecycle === "failed") return true;
   if (progress.latencyThoughtMs != null && progress.latencyThoughtMs > 0) return true;
   if (progress.streamText?.trim() || progress.narrationText?.trim()) return true;
   if ((progress.deliveryFiles?.length ?? 0) > 0) return true;
