@@ -1,3 +1,7 @@
+/** H11 fix: padrões de "passo X de Y" e "step X / Y" só matcham no INÍCIO
+ *  do texto. Antes, /\bpasso\s+\d+\s+de\s+\d+\b/i filtrava frases do usuário
+ *  como "fiz o passo 3 de 4, agora falta o último" — sumindo a fala do user
+ *  do chat. Agora só filtra quando o texto COMEÇA com esse padrão. */
 const INTERNAL_TEXT_PATTERNS = [
   /^\s*classif(?:y|ying|icando)\b/i,
   /^\s*state\s*:/i,
@@ -10,13 +14,13 @@ const INTERNAL_TEXT_PATTERNS = [
   /^\s*checkpoint\s*:\s*\d+\s+mensagens/i,
   /^\s*checkpoint\s*[,·-]?\s*0\s+(?:file|arquivo)/i,
   /^\s*trabalhando\s+no\s+pedido/i,
-  /\bpasso\s+\d+\s*\/\s*\d+\b/i,
-  /\bpasso\s+\d+\s+(?:de|of)\s+\d+\b/i,
-  /\bstep\s+\d+\s*\/\s*\d+\b/i,
-  /\bpr[oó]ximo\s+do\s+limite\s+de\s+tempo/i,
-  /\bhead\s+function\b/i,
-  /\bmax(?:imum)?\s+interactions\b/i,
-  /\bmaxSteps\b/i,
+  /^\s*passo\s+\d+\s*\/\s+\d+/i,
+  /^\s*passo\s+\d+\s+(?:de|of)\s+\d+/i,
+  /^\s*step\s+\d+\s*\/\s+\d+/i,
+  /^\s*pr[oó]ximo\s+do\s+limite\s+de\s+tempo/i,
+  /^\s*head\s+function\b/i,
+  /^\s*max(?:imum)?\s+interactions\b/i,
+  /^\s*maxSteps\b/i,
 ];
 
 const INTERNAL_EVENT_TYPES = new Set([
