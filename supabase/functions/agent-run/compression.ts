@@ -165,7 +165,20 @@ export class CompressionManager {
       });
     }
 
-    const recent = messages.slice(-MAX_CONTEXT_MESSAGES);
+    // C5 fix: pegar o índice do último assistant com tool_calls (âncora)
+    // e garantir que pegamos pelo menos esse bloco completo. Sem isso, o
+    // slice(-64) pode cortar entre o tool_call do assistant e o tool
+    // result, deixando o LLM sem saber o que aconteceu.
+    const MAX = MAX_CONTEXT_MESSAGES;
+    const lastAssistantWithTools = [...messages]
+      .reverse()
+      .findIndex((m) => m.role === "assistant" && (m.tool_calls?.length ?? 0) > 0);
+    const anchorIdx =
+      lastAssistantWithTools === -1 ? -1 : messages.length - 1 - lastAssistantWithTools;
+    // Inclui até 3 messages depois do anchor (tool results + respostas)
+    const safeEnd = anchorIdx === -1 ? messages.length : Math.min(messages.length, anchorIdx + 4);
+    const startFrom = Math.max(0, safeEnd - MAX);
+    const recent = messages.slice(startFrom, safeEnd);
     for (const m of recent) {
       const trimmed =
         typeof m.content === "string" && m.content.length > 6000
