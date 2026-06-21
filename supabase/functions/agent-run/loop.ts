@@ -2577,15 +2577,22 @@ export class AgentLoop {
     execResults: Array<{ call: any; result: any }>,
     step: number,
   ): Promise<void> {
+    // H10 fix: sempre atualizar status de TODOS os tool calls (ok/error/running).
+    // Antes, se um tool falhava, ficava "running" pra sempre. Agora,
+    // - se result.ok: "ok"
+    // - se !result.ok: "error" + error message + output resumido
+    // - se não está em execResults (não executou): "running" (legítimo)
+    const execMap = new Map(execResults.map((r) => [r.call.id, r.result]));
     const tool_calls = (response.tool_calls ?? []).map((tc) => {
-      const found = execResults.find((r) => r.call.id === tc.id);
+      const result = execMap.get(tc.id);
+      const hasResult = result !== undefined;
       return {
         id: tc.id,
         name: tc.name,
         args: tc.arguments,
-        status: found?.result.ok ? "ok" : "error",
-        error: found?.result.error ?? null,
-        artifacts: found?.result.artifacts ?? [],
+        status: hasResult ? (result.ok ? "ok" : "error") : "running",
+        error: hasResult ? (result.error ?? null) : null,
+        artifacts: hasResult ? (result.artifacts ?? []) : [],
       };
     });
     const meta = buildExecutionLogMeta(null, this.state.executionLog, step);
