@@ -153,13 +153,17 @@ export function DesignLibraryPage() {
 
       {/* Main Content */}
       <div className="flex-1 overflow-auto p-6 space-y-4">
-        {/* Recent Jobs */}
-        {recentJobs.length > 0 && (
-          <div className="rounded-lg border border-border bg-surface-1 p-3">
-            <h2 className="text-xs font-medium mb-2 flex items-center gap-2">
-              Jobs recentes
-              {jobsLoading && <Loader2 className="size-3 animate-spin text-muted-foreground" />}
-            </h2>
+        {/* Recent Jobs — sempre visível */}
+        <div className="rounded-lg border border-border bg-surface-1 p-3">
+          <h2 className="text-xs font-medium mb-2 flex items-center gap-2">
+            Jobs recentes
+            {jobsLoading && <Loader2 className="size-3 animate-spin text-muted-foreground" />}
+          </h2>
+          {recentJobs.length === 0 ? (
+            <p className="text-[11px] text-muted-foreground">
+              Nenhum job ainda. Clique em &quot;Extrair URLs&quot; para começar.
+            </p>
+          ) : (
             <div className="flex flex-wrap gap-2">
               {recentJobs.map((job) => (
                 <button
@@ -183,8 +187,8 @@ export function DesignLibraryPage() {
                 </button>
               ))}
             </div>
-          </div>
-        )}
+          )}
+        </div>
 
         {/* Filters */}
         <DesignLibraryFilters
@@ -195,24 +199,7 @@ export function DesignLibraryPage() {
 
         {/* Entries Grid/List */}
         {entriesLoading ? (
-          <div
-            className={
-              viewMode === "grid"
-                ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3"
-                : "space-y-2"
-            }
-          >
-            {[1, 2, 3, 4, 5, 6].map((i) => (
-              <div
-                key={i}
-                className="rounded-lg border border-border bg-surface-1 p-3 animate-pulse"
-              >
-                <div className="aspect-video bg-surface-3 rounded mb-2" />
-                <div className="h-3 bg-surface-3 rounded w-3/4" />
-                <div className="h-2 bg-surface-3 rounded w-1/2 mt-1" />
-              </div>
-            ))}
-          </div>
+          <div className="text-center py-8 text-xs text-muted-foreground">Carregando entradas…</div>
         ) : entries.length === 0 ? (
           <div className="text-center py-16">
             <Library className="size-12 mx-auto text-muted-foreground/30 mb-3" />

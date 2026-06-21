@@ -1,27 +1,31 @@
 /**
- * design-library-chat — Chat LLM endpoint para o Browser Preview da Design Library.
+ * design-library-chat — Chat LLM com contexto real + persistência de histórico.
  *
- * Recebe uma mensagem do usuário + contexto do job de extração e retorna
- * uma resposta do LLM. Usa as mesmas credenciais BYOK do usuário com o mesmo
- * modo (auto/fixed/robin) configurado em /models, replicando o pipeline do agent-run.
+ * Replica o padrão do agent-run:
+ *  - Identifica user via JWT (service_role bypass via claim decode)
+ *  - Carrega BYOK do admin (mesma ordem de prioridade do agent-run)
+ *  - Lê contexto real do job (status, URLs, errors, eventos recentes)
+ *  - Persiste mensagens em design_library_chat_sessions/messages
+ *  - Retorna ações para controlar o browser (browser-use style)
  *
  * Body:
  *   {
  *     jobId: string,
- *     message: string,
- *     context?: {
- *       previewUrl?: string,
- *       currentUrl?: string,
- *       jobStatus?: string
- *     }
+ *     message: string,  // "" para abrir sessão e receber welcome message
+ *     actions?: Array<{type, params}>  // ações do LLM a executar no sandbox
  *   }
  *
  * Response:
- *   { reply: string, actions?: Array<{ type: string, params: object }> }
+ *   {
+ *     reply: string,
+ *     actions?: Array<{type: string, params: object}>,
+ *     sessionId: string,
+ *     messages: ChatMessage[]  // histórico completo da sessão
+ *   }
  */
 
 import { createClient } from "npm:@supabase/supabase-js@2";
-import { loadConnectorKeys, type AgentPreferencesPayload } from "../agent-run/connector-keys.ts";
+import { loadConnectorKeys } from "../agent-run/connector-keys.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -32,11 +36,6 @@ const corsHeaders = {
 interface ChatRequest {
   jobId: string;
   message: string;
-  context?: {
-    previewUrl?: string;
-    currentUrl?: string;
-    jobStatus?: string;
-  };
 }
 
 interface LLMConfig {
@@ -48,31 +47,60 @@ interface LLMConfig {
 
 const SYSTEM_PROMPT = `Você é um assistente de design que ajuda a analisar e controlar uma sessão de extração de Design DNA.
 
-Você tem acesso a um browser rodando em um sandbox E2B. O usuário pode pedir:
-- Análise do site sendo extraído
-- Ações no browser (navegar, clicar, digitar, screenshot)
-- Insights sobre o design extraído
+Você fala SEMPRE em português do Brasil. Seja direto e útil. Se não souber algo, admita.
 
-Quando o usuário pedir uma ação no browser, retorne um JSON estruturado com:
+Quando o usuário pedir uma ação no browser, retorne JSON com:
 {
-  "reply": "Texto explicando o que você vai fazer",
+  "reply": "O que você vai fazer",
   "actions": [
     { "type": "navigate", "params": { "url": "https://..." } },
     { "type": "screenshot", "params": {} },
-    { "type": "scroll", "params": { "x": 0, "y": 500 } }
+    { "type": "scroll", "params": { "y": 500 } },
+    { "type": "analyze", "params": { "selector": ".hero" } }
   ]
 }
 
-Se for uma pergunta/análise, retorne:
+Para análise pura (sem ação), retorne:
 {
-  "reply": "Sua resposta aqui"
+  "reply": "Sua análise aqui"
 }
 
-Mantenha respostas concisas e em português.`;
+NUNCA diga "extração concluída" sem explicar o que foi extraído. SEMPRE dê contexto sobre o que você vê.
+Se o sandbox está fechado, avise o usuário e sugira criar um novo job.`;
 
-/** Resolve LLM config respeitando o modo (auto/fixed/robin) do usuário. */
+function buildContextMessage(ctx: {
+  jobStatus: string;
+  urls: string[];
+  previewUrl: string | null;
+  errors: string[];
+  recentEvents: { type: string; payload: Record<string, unknown> }[];
+  libraryEntries: { name: string; source_url: string; quality_score: number }[];
+}): string {
+  const lines: string[] = [];
+  lines.push(`## Contexto do job`);
+  lines.push(`- Status: ${ctx.jobStatus}`);
+  lines.push(`- URLs: ${ctx.urls.join(", ") || "(nenhuma)"}`);
+  lines.push(`- Sandbox: ${ctx.previewUrl ?? "FECHADO (job completed, sandbox encerrado pela E2B)"}`);
+  if (ctx.errors.length > 0) {
+    lines.push(`- Erros: ${ctx.errors.join("; ")}`);
+  }
+  if (ctx.libraryEntries.length > 0) {
+    lines.push(`- Entradas na biblioteca deste job:`);
+    for (const e of ctx.libraryEntries.slice(0, 5)) {
+      lines.push(`  • ${e.name} (${e.source_url}) — qualidade ${e.quality_score}`);
+    }
+  }
+  if (ctx.recentEvents.length > 0) {
+    lines.push(`- Últimos eventos:`);
+    for (const ev of ctx.recentEvents.slice(0, 5)) {
+      const payloadStr = JSON.stringify(ev.payload).slice(0, 120);
+      lines.push(`  • ${ev.type}: ${payloadStr}`);
+    }
+  }
+  return lines.join("\n");
+}
+
 function resolveLLMConfig(connectorKeys: Record<string, string>): LLMConfig | null {
-  // Ordem de prioridade: chaves com baseURL conhecido
   if (connectorKeys.OPENROUTER_API_KEY) {
     return {
       apiKey: connectorKeys.OPENROUTER_API_KEY,
@@ -150,10 +178,9 @@ Deno.serve(async (req: Request) => {
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Extract token from Authorization header
     const token = auth.replace(/^Bearer\s+/i, "");
 
-    // Decode JWT payload to check role (avoids needing the actual service_role key)
+    // JWT decode para service_role vs user
     let isServiceRole = false;
     try {
       const payload = JSON.parse(atob(token.split(".")[1] ?? ""));
@@ -164,74 +191,195 @@ Deno.serve(async (req: Request) => {
 
     let userId: string | null = null;
     let userEmail: string | null = null;
-
     if (!isServiceRole) {
-      // User call — decode JWT via anon client
       const userClient = createClient(supabaseUrl, Deno.env.get("SUPABASE_ANON_KEY") ?? supabaseKey, {
         global: { headers: { Authorization: auth } },
       });
       const { data: userData } = await userClient.auth.getUser();
       userId = userData?.user?.id ?? null;
       userEmail = userData?.user?.email ?? null;
-
-      if (!userId) {
-        return new Response(JSON.stringify({ error: "Unauthorized" }), {
-          status: 401,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-
-      // Admin gate: only xdireitopratico@gmail.com
-      if (userEmail?.toLowerCase() !== "xdireitopratico@gmail.com") {
-        return new Response(JSON.stringify({ error: "Forbidden" }), {
-          status: 403,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+      if (!userId || userEmail?.toLowerCase() !== "xdireitopratico@gmail.com") {
+        return new Response(
+          JSON.stringify({ error: userId ? "Forbidden" : "Unauthorized" }),
+          {
+            status: userId ? 403 : 401,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          },
+        );
       }
     }
 
     const input: ChatRequest = await req.json();
-    if (!input.jobId || !input.message) {
-      return new Response(JSON.stringify({ error: "jobId and message required" }), {
+    if (!input.jobId) {
+      return new Response(JSON.stringify({ error: "jobId required" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // Load user's LLM credentials (same BYOK pattern as agent-run)
-    let targetUserId = userId;
-    if (!targetUserId) {
-      // service_role: load admin's keys
-      const { data: users } = await supabase.auth.admin.listUsers({ perPage: 500 });
-      const adminUser = users?.users?.find(
-        (u) => u.email?.toLowerCase() === "xdireitopratico@gmail.com",
-      );
-      targetUserId = adminUser?.id ?? null;
+    // Carrega contexto do job
+    const { data: job } = await supabase
+      .from("design_dna_jobs")
+      .select("id, status, urls, error, results, meta, current_url_index")
+      .eq("id", input.jobId)
+      .single();
+
+    if (!job) {
+      return new Response(JSON.stringify({ error: "Job não encontrado" }), {
+        status: 404,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
-    if (!targetUserId) {
+
+    const { data: recentEvents } = await supabase
+      .from("design_dna_events")
+      .select("event_type, payload, created_at")
+      .eq("job_id", input.jobId)
+      .order("seq", { ascending: false })
+      .limit(5);
+
+    const { data: libraryEntries } = await supabase
+      .from("design_system_library")
+      .select("name, source_url, quality_score")
+      .in("source_url", (job.urls as string[]) ?? [])
+      .limit(5);
+
+    const jobMeta = (job.meta ?? {}) as { previewUrl?: string };
+    const ctx = {
+      jobStatus: job.status,
+      urls: (job.urls as string[]) ?? [],
+      previewUrl: jobMeta.previewUrl ?? null,
+      errors: ((job.results as unknown[]) ?? [])
+        .filter((r) => r && typeof r === "object" && "error" in (r as Record<string, unknown>))
+        .map((r) => (r as { error: string }).error)
+        .slice(0, 3),
+      recentEvents: (recentEvents ?? []).map((e) => ({
+        type: e.event_type as string,
+        payload: (e.payload as Record<string, unknown>) ?? {},
+      })),
+      libraryEntries: (libraryEntries ?? []).map((e) => ({
+        name: e.name as string,
+        source_url: e.source_url as string,
+        quality_score: e.quality_score as number,
+      })),
+    };
+
+    // Garante sessão de chat (uma por job)
+    let { data: session } = await supabase
+      .from("design_library_chat_sessions")
+      .select("id, title")
+      .eq("job_id", input.jobId)
+      .maybeSingle();
+
+    if (!session) {
+      const { data: newSession, error: sessErr } = await supabase
+        .from("design_library_chat_sessions")
+        .insert({
+          job_id: input.jobId,
+          user_id: userId,
+          title: `Chat sobre ${ctx.urls[0] ?? "job " + input.jobId.slice(0, 8)}`,
+        })
+        .select("id, title")
+        .single();
+      if (sessErr) throw sessErr;
+      session = newSession;
+    }
+
+    // Welcome message na primeira abertura
+    if (!input.message || input.message.trim() === "") {
+      let welcome: string;
+      if (ctx.jobStatus === "running" || ctx.jobStatus === "pending") {
+        welcome = `Recebi o job (${ctx.urls.join(", ")}). Vou acompanhar a extração e te aviso aqui conforme rolar. Pode mandar comandos durante o processo — analisar, tirar print, navegar, etc.`;
+      } else if (ctx.jobStatus === "failed") {
+        welcome = `Este job falhou${ctx.errors[0] ? `: ${ctx.errors[0]}` : "."}. Posso ajudar a investigar o erro, sugerir outra URL ou criar um novo job.`;
+      } else if (ctx.jobStatus === "completed" && ctx.libraryEntries.length === 0) {
+        welcome = `Job concluído, mas nenhuma entrada foi persistida na biblioteca. ${ctx.errors[0] ? `Erro: ${ctx.errors[0]}` : "Pode ter faltado o Playwright rodar. Quer que eu investigue?"}`;
+      } else if (ctx.libraryEntries.length > 0) {
+        welcome = `Job concluído. ${ctx.libraryEntries.length} entrada(s) na biblioteca${ctx.libraryEntries[0] ? ` — ${ctx.libraryEntries[0].name} (qualidade ${ctx.libraryEntries[0].quality_score})` : ""}. Posso analisar o Design DNA, refinar, ou comparar com outras entradas.`;
+      } else {
+        welcome = `Job ${ctx.jobStatus}. Me diga o que precisa.`;
+      }
+
+      // Persiste welcome
+      await supabase.from("design_library_chat_messages").insert({
+        session_id: session.id,
+        role: "assistant",
+        content: welcome,
+        meta: { type: "welcome" },
+      });
+
       return new Response(
         JSON.stringify({
-          reply: "⚠️ Admin user not found.",
+          reply: welcome,
+          sessionId: session.id,
+          jobContext: ctx,
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
+
+    // Persiste mensagem do usuário
+    const { error: userMsgErr } = await supabase.from("design_library_chat_messages").insert({
+      session_id: session.id,
+      role: "user",
+      content: input.message,
+    });
+    if (userMsgErr) console.error("user msg persist err:", userMsgErr);
+
+    // Carrega histórico para contexto
+    const { data: history } = await supabase
+      .from("design_library_chat_messages")
+      .select("role, content, created_at")
+      .eq("session_id", session.id)
+      .order("created_at", { ascending: true })
+      .limit(20);
+
+    // Carrega BYOK do admin
+    let targetUserId = userId;
+    if (!targetUserId) {
+      const { data: users } = await supabase.auth.admin.listUsers({ perPage: 500 });
+      targetUserId =
+        users?.users?.find((u) => u.email?.toLowerCase() === "xdireitopratico@gmail.com")?.id ?? null;
+    }
+    if (!targetUserId) {
+      return new Response(
+        JSON.stringify({ reply: "Admin user não encontrado.", sessionId: session.id, jobContext: ctx }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+
     const connectorKeys = await loadConnectorKeys(supabase, targetUserId);
     const llmConfig = resolveLLMConfig(connectorKeys);
 
     if (!llmConfig) {
+      const reply =
+        "⚠️ Nenhuma chave LLM configurada. Adicione pelo menos uma em /api (OpenAI, Groq, OpenRouter, xAI, Gemini, DeepSeek ou Ollama).";
+      await supabase.from("design_library_chat_messages").insert({
+        session_id: session.id,
+        role: "assistant",
+        content: reply,
+      });
       return new Response(
-        JSON.stringify({
-          reply: "⚠️ Nenhuma chave LLM configurada. Adicione pelo menos uma em /api (OpenAI, Groq, OpenRouter, xAI, Gemini, DeepSeek ou Ollama).",
-        }),
+        JSON.stringify({ reply, sessionId: session.id, jobContext: ctx }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
-    // Build context message
-    const contextMsg = input.context
-      ? `\n\nContexto atual:\n- Job: ${input.jobId}\n- Status: ${input.context.jobStatus ?? "?"}\n- URL atual: ${input.context.currentUrl ?? "?"}\n- Sandbox: ${input.context.previewUrl ?? "?"}`
-      : "";
+    const contextMsg = buildContextMessage(ctx);
+
+    const messages: { role: string; content: string }[] = [
+      { role: "system", content: SYSTEM_PROMPT },
+      { role: "system", content: contextMsg },
+    ];
+    for (const h of history ?? []) {
+      if (h.role === "user" || h.role === "assistant") {
+        messages.push({ role: h.role, content: h.content as string });
+      }
+    }
+    // Substitui a última user msg pela que veio no request (garante que está atualizada)
+    if (messages[messages.length - 1]?.role !== "user") {
+      messages.push({ role: "user", content: input.message });
+    }
 
     const response = await fetch(`${llmConfig.baseUrl}/chat/completions`, {
       method: "POST",
@@ -241,10 +389,7 @@ Deno.serve(async (req: Request) => {
       },
       body: JSON.stringify({
         model: llmConfig.model,
-        messages: [
-          { role: "system", content: SYSTEM_PROMPT },
-          { role: "user", content: input.message + contextMsg },
-        ],
+        messages,
         max_tokens: 1024,
         temperature: 0.7,
       }),
@@ -259,22 +404,33 @@ Deno.serve(async (req: Request) => {
     const data = await response.json();
     const content = data.choices?.[0]?.message?.content ?? "";
 
-    // Try to parse as JSON (with actions), fallback to plain text
     let result: { reply: string; actions?: unknown[] };
     try {
       const parsed = JSON.parse(content);
-      result = {
-        reply: parsed.reply ?? content,
-        actions: parsed.actions,
-      };
+      result = { reply: parsed.reply ?? content, actions: parsed.actions };
     } catch {
       result = { reply: content };
     }
 
-    return new Response(JSON.stringify(result), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    // Persiste resposta
+    await supabase.from("design_library_chat_messages").insert({
+      session_id: session.id,
+      role: "assistant",
+      content: result.reply,
+      actions: result.actions ? (result.actions as unknown) : null,
     });
+
+    return new Response(
+      JSON.stringify({
+        reply: result.reply,
+        actions: result.actions,
+        sessionId: session.id,
+        jobContext: ctx,
+      }),
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+    );
   } catch (err) {
+    console.error("[design-library-chat] error:", err);
     return new Response(JSON.stringify({ error: (err as Error).message }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },

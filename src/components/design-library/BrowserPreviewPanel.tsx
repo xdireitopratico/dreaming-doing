@@ -1,8 +1,8 @@
-import { useState, useRef, useEffect, useMemo } from "react";
+import { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { X, Send, Globe, Loader2, ExternalLink } from "lucide-react";
+import { X, Send, Globe, Loader2, ExternalLink, Paperclip, Square } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useJobEvents, useJobPolling } from "./hooks";
 import { JOB_STATUS_COLORS, type RealtimeEvent } from "./types";
@@ -17,7 +17,19 @@ interface ChatMessage {
   role: "user" | "assistant";
   content: string;
   timestamp: string;
+  actions?: Array<{ type: string; params: Record<string, unknown> }>;
 }
+
+interface JobContext {
+  jobStatus: string;
+  urls: string[];
+  previewUrl: string | null;
+  errors: string[];
+  recentEvents: { type: string; payload: Record<string, unknown> }[];
+  libraryEntries: { name: string; source_url: string; quality_score: number }[];
+}
+
+const TERMINAL_STATUSES = new Set(["completed", "failed", "canceled"]);
 
 function formatRelativeTime(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
@@ -31,18 +43,18 @@ function formatRelativeTime(iso: string): string {
 }
 
 const EVENT_LABELS: Record<string, { icon: string; label: string; dotColor: string }> = {
-  url_extracting: { icon: "🌐", label: "Navegando para", dotColor: "bg-blue-500" },
+  url_extracting: { icon: "🌐", label: "Navegando", dotColor: "bg-blue-500" },
   page_loaded: { icon: "📄", label: "Página carregada", dotColor: "bg-green-500" },
   scrolling: { icon: "⬇️", label: "Scroll", dotColor: "bg-gray-500" },
-  screenshot_taken: { icon: "📸", label: "Screenshot capturado", dotColor: "bg-purple-500" },
-  css_computed: { icon: "🎨", label: "CSS computado extraído", dotColor: "bg-green-500" },
-  motion_traced: { icon: "✨", label: "Motion traces extraídos", dotColor: "bg-green-500" },
-  llm_extracting: { icon: "🧠", label: "LLM extraindo DesignDNA", dotColor: "bg-yellow-500" },
-  url_extracted: { icon: "✅", label: "Extração concluída", dotColor: "bg-green-500" },
+  screenshot_taken: { icon: "📸", label: "Screenshot", dotColor: "bg-purple-500" },
+  css_computed: { icon: "🎨", label: "CSS extraído", dotColor: "bg-green-500" },
+  motion_traced: { icon: "✨", label: "Motion traces", dotColor: "bg-green-500" },
+  llm_extracting: { icon: "🧠", label: "LLM extraindo DNA", dotColor: "bg-yellow-500" },
+  url_extracted: { icon: "✅", label: "URL extraída", dotColor: "bg-green-500" },
   url_error: { icon: "❌", label: "Erro", dotColor: "bg-red-500" },
-  job_completed: { icon: "🎉", label: "Job concluído!", dotColor: "bg-amber-500" },
+  job_completed: { icon: "🎉", label: "Job concluído", dotColor: "bg-amber-500" },
   job_failed: { icon: "💥", label: "Job falhou", dotColor: "bg-red-500" },
-  sandbox_setup: { icon: "🔧", label: "Configurando sandbox", dotColor: "bg-blue-500" },
+  sandbox_setup: { icon: "🔧", label: "Setup sandbox", dotColor: "bg-blue-500" },
   sandbox_ready: { icon: "✓", label: "Sandbox pronto", dotColor: "bg-green-500" },
 };
 
@@ -57,29 +69,29 @@ function EventRow({ event, isLatest }: { event: RealtimeEvent; isLatest: boolean
 
   const description = useMemo(() => {
     if (event.event_type === "url_extracting") {
-      return `${config.label} ${(event.payload?.url as string) ?? ""}`;
-    }
-    if (event.event_type === "scrolling") {
-      const x = event.payload?.scroll_x ?? "?";
-      const y = event.payload?.scroll_y ?? "?";
-      return `${config.label} ${x}/${y}`;
-    }
-    if (event.event_type === "url_error") {
-      return `${config.label} ${(event.payload?.message as string) ?? ""}`;
+      return `${config.label} → ${(event.payload?.url as string) ?? ""}`;
     }
     if (event.event_type === "url_extracted") {
-      return `${config.label}: ${(event.payload?.url as string) ?? ""}`;
+      const count = event.payload?.resultsCount;
+      return `${config.label} (${count ?? 0} resultados)`;
+    }
+    if (event.event_type === "url_error") {
+      return `${config.label}: ${(event.payload?.error as string) ?? ""}`;
     }
     return config.label;
   }, [event, config.label]);
 
   return (
     <div
-      className={`relative pl-7 pb-2.5 cursor-pointer transition-colors hover:bg-surface-2/50 rounded ${isLatest ? "opacity-100" : "opacity-70"}`}
+      className={`relative pl-7 pb-2.5 cursor-pointer transition-colors hover:bg-surface-2/50 rounded ${
+        isLatest ? "opacity-100" : "opacity-70"
+      }`}
       onClick={() => setExpanded(!expanded)}
     >
       <div
-        className={`absolute left-2 top-1.5 w-2.5 h-2.5 rounded-full border-2 border-surface-1 ${config.dotColor} ${isLLM ? "animate-pulse" : ""}`}
+        className={`absolute left-2 top-1.5 w-2.5 h-2.5 rounded-full border-2 border-surface-1 ${
+          config.dotColor
+        } ${isLLM ? "animate-pulse" : ""}`}
       />
       <div className="flex items-center gap-1.5 text-[11px]">
         <span className="text-muted-foreground shrink-0">
@@ -97,44 +109,142 @@ function EventRow({ event, isLatest }: { event: RealtimeEvent; isLatest: boolean
 }
 
 export function BrowserPreviewPanel({ jobId, onClose }: BrowserPreviewPanelProps) {
-  const { events, connected } = useJobEvents(jobId);
-  const { job } = useJobPolling(jobId);
+  // Polling e realtime param quando job chega a estado terminal
+  const { job, loading: jobLoading } = useJobPolling(jobId);
+  const jobStatus = job?.status;
+  const isTerminal = jobStatus ? TERMINAL_STATUSES.has(jobStatus) : false;
+
+  const { events, connected } = useJobEvents(isTerminal ? null : jobId);
   const timelineRef = useRef<HTMLDivElement>(null);
   const chatRef = useRef<HTMLDivElement>(null);
   const [autoScroll, setAutoScroll] = useState(true);
-  const [chatInput, setChatInput] = useState("");
+
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [chatInput, setChatInput] = useState("");
   const [chatLoading, setChatLoading] = useState(false);
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [jobContext, setJobContext] = useState<JobContext | null>(null);
+  const [chatHistoryLoaded, setChatHistoryLoaded] = useState(false);
 
   const previewUrl = job?.meta?.previewUrl;
-  const isRunning = job?.status === "running" || job?.status === "pending";
-
   const latestScreenshot = useMemo(() => {
-    const screenshots = events.filter((e) => e.event_type === "screenshot_taken");
-    if (screenshots.length === 0) return null;
-    return screenshots[screenshots.length - 1];
+    const shots = events.filter((e) => e.event_type === "screenshot_taken");
+    return shots.length > 0 ? shots[shots.length - 1] : null;
   }, [events]);
 
   const currentUrlEvent = useMemo(() => {
     const extracting = events.filter((e) => e.event_type === "url_extracting");
-    if (extracting.length === 0) return null;
-    return extracting[extracting.length - 1];
+    return extracting.length > 0 ? extracting[extracting.length - 1] : null;
   }, [events]);
 
+  // Auto-scroll timeline
   useEffect(() => {
     if (autoScroll && timelineRef.current) {
       timelineRef.current.scrollTop = timelineRef.current.scrollHeight;
     }
   }, [events, autoScroll]);
 
+  const callChat = useCallback(
+    async (message: string) => {
+      if (!jobId) return;
+      setChatLoading(true);
+      try {
+        const { data, error } = await supabase.functions.invoke("design-library-chat", {
+          body: { jobId, message },
+        });
+        if (error) throw new Error(error.message);
+
+        setSessionId((data.sessionId as string) ?? null);
+        if (data.jobContext) setJobContext(data.jobContext as JobContext);
+
+        const newMsg: ChatMessage = {
+          id: crypto.randomUUID(),
+          role: "assistant",
+          content: (data.reply as string) ?? "",
+          timestamp: new Date().toISOString(),
+          actions: data.actions as ChatMessage["actions"],
+        };
+        setChatMessages((prev) => {
+          // Evita duplicar welcome (caso o histórico já tenha sido carregado depois)
+          if (
+            !message &&
+            prev.length > 0 &&
+            prev[prev.length - 1].role === "assistant" &&
+            prev[prev.length - 1].content === newMsg.content
+          ) {
+            return prev;
+          }
+          return [...prev, newMsg];
+        });
+      } catch (err) {
+        const errorMsg: ChatMessage = {
+          id: crypto.randomUUID(),
+          role: "assistant",
+          content: `Erro: ${err instanceof Error ? err.message : "desconhecido"}`,
+          timestamp: new Date().toISOString(),
+        };
+        setChatMessages((prev) => [...prev, errorMsg]);
+      } finally {
+        setChatLoading(false);
+      }
+    },
+    [jobId],
+  );
+
+  // Carrega histórico de chat e abre sessão (welcome message) na primeira vez
+  const loadChatHistory = useCallback(async () => {
+    if (!jobId) return;
+    setChatHistoryLoaded(false);
+    try {
+      // 1) Carrega mensagens existentes do DB
+      const { data: sessions } = await supabase
+        .from("design_library_chat_sessions")
+        .select("id")
+        .eq("job_id", jobId)
+        .maybeSingle();
+
+      if (sessions) {
+        setSessionId(sessions.id);
+        const { data: msgs } = await supabase
+          .from("design_library_chat_messages")
+          .select("id, role, content, actions, created_at")
+          .eq("session_id", sessions.id)
+          .order("created_at", { ascending: true });
+        setChatMessages(
+          (msgs ?? []).map((m) => ({
+            id: m.id as string,
+            role: m.role as "user" | "assistant",
+            content: m.content as string,
+            timestamp: m.created_at as string,
+            actions: m.actions as ChatMessage["actions"],
+          })),
+        );
+      } else {
+        // Sem sessão ainda — chama chat com message vazia para criar e receber welcome
+        await callChat("");
+      }
+    } catch (err) {
+      console.error("loadChatHistory:", err);
+    } finally {
+      setChatHistoryLoaded(true);
+    }
+  }, [jobId, callChat]);
+
+  useEffect(() => {
+    if (jobId) {
+      void loadChatHistory();
+    }
+  }, [jobId, loadChatHistory]);
+
+  // Auto-scroll chat
   useEffect(() => {
     if (chatRef.current) {
       chatRef.current.scrollTop = chatRef.current.scrollHeight;
     }
   }, [chatMessages]);
 
-  const handleSendChat = async () => {
-    if (!chatInput.trim() || !jobId) return;
+  const handleSendChat = useCallback(async () => {
+    if (!chatInput.trim() || chatLoading || !jobId) return;
     const userMsg: ChatMessage = {
       id: crypto.randomUUID(),
       role: "user",
@@ -143,42 +253,13 @@ export function BrowserPreviewPanel({ jobId, onClose }: BrowserPreviewPanelProps
     };
     setChatMessages((prev) => [...prev, userMsg]);
     setChatInput("");
-    setChatLoading(true);
+    await callChat(userMsg.content);
+  }, [chatInput, chatLoading, jobId, callChat]);
 
-    try {
-      const { data, error } = await supabase.functions.invoke("design-library-chat", {
-        body: {
-          jobId,
-          message: userMsg.content,
-          context: {
-            previewUrl,
-            currentUrl: currentUrlEvent?.payload?.url,
-            jobStatus: job?.status,
-          },
-        },
-      });
-
-      if (error) throw new Error(error.message ?? "Erro desconhecido");
-
-      const assistantMsg: ChatMessage = {
-        id: crypto.randomUUID(),
-        role: "assistant",
-        content: data?.reply ?? "Sem resposta",
-        timestamp: new Date().toISOString(),
-      };
-      setChatMessages((prev) => [...prev, assistantMsg]);
-    } catch (err) {
-      const errorMsg: ChatMessage = {
-        id: crypto.randomUUID(),
-        role: "assistant",
-        content: `Erro: ${err instanceof Error ? err.message : "desconhecido"}`,
-        timestamp: new Date().toISOString(),
-      };
-      setChatMessages((prev) => [...prev, errorMsg]);
-    } finally {
-      setChatLoading(false);
-    }
-  };
+  // Se o LLM retornou ações, mostra como chips visuais (placeholder para execução futura)
+  const lastAssistantMsg = [...chatMessages]
+    .reverse()
+    .find((m) => m.role === "assistant" && m.actions && m.actions.length > 0);
 
   return (
     <div className="fixed inset-0 z-50 bg-background/95 flex flex-col">
@@ -193,13 +274,21 @@ export function BrowserPreviewPanel({ jobId, onClose }: BrowserPreviewPanelProps
               {job.status}
             </Badge>
           )}
-          {connected && (
+          {isTerminal && (
+            <Badge
+              variant="outline"
+              className="text-[10px] bg-gray-500/10 text-gray-400 border-gray-500/30"
+            >
+              Encerrado
+            </Badge>
+          )}
+          {!isTerminal && connected && (
             <span className="inline-flex items-center gap-1 text-[10px] text-green-500">
               <span className="h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse" />
               Live
             </span>
           )}
-          {!connected && jobId && (
+          {!isTerminal && !connected && jobId && (
             <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground">
               <span className="h-1.5 w-1.5 rounded-full bg-gray-500" />
               Offline
@@ -207,7 +296,7 @@ export function BrowserPreviewPanel({ jobId, onClose }: BrowserPreviewPanelProps
           )}
         </div>
         <div className="flex items-center gap-2">
-          {previewUrl && (
+          {previewUrl && !isTerminal && (
             <a
               href={previewUrl}
               target="_blank"
@@ -224,26 +313,53 @@ export function BrowserPreviewPanel({ jobId, onClose }: BrowserPreviewPanelProps
       </div>
 
       <div className="flex-1 flex overflow-hidden">
-        {/* Iframe Panel */}
-        <div className="flex-1 flex flex-col border-r border-border">
-          {previewUrl ? (
-            <iframe
-              src={previewUrl}
-              className="flex-1 w-full bg-white"
-              sandbox="allow-same-origin allow-scripts allow-forms allow-popups"
-              title="Browser Preview"
-            />
+        {/* Preview Panel — fallback gracioso quando iframe não disponível */}
+        <div className="flex-1 flex flex-col border-r border-border min-w-0">
+          {previewUrl && !isTerminal ? (
+            <>
+              <iframe
+                src={previewUrl}
+                className="flex-1 w-full bg-white"
+                sandbox="allow-same-origin allow-scripts allow-forms allow-popups"
+                title="Browser Preview"
+                onError={() => {
+                  /* iframe load falhou — usuário verá screenshots abaixo */
+                }}
+              />
+              <div className="px-3 py-1 text-[9px] text-muted-foreground bg-surface-1 border-t border-border/50 text-center">
+                Sandbox: {previewUrl} (pode estar indisponível se E2B encerrou)
+              </div>
+            </>
           ) : latestScreenshot ? (
-            <div className="flex-1 flex items-center justify-center bg-surface-2 p-4">
-              <div className="max-w-2xl w-full">
-                <img
-                  src={(latestScreenshot.payload?.screenshot_url as string) ?? ""}
-                  alt="Screenshot"
-                  className="w-full rounded-lg border border-border"
-                />
-                {currentUrlEvent && (
-                  <p className="text-[10px] text-muted-foreground mt-2 truncate text-center">
-                    {currentUrlEvent.payload?.url as string}
+            <div className="flex-1 flex items-center justify-center bg-surface-2 p-4 overflow-auto">
+              <div className="max-w-2xl w-full space-y-3">
+                {events
+                  .filter((e) => e.event_type === "screenshot_taken")
+                  .slice(-3)
+                  .reverse()
+                  .map((ev, idx) => {
+                    const url = (ev.payload?.url as string) ?? currentUrlEvent?.payload?.url ?? "";
+                    return (
+                      <div key={ev.id}>
+                        <img
+                          src={(ev.payload?.screenshot_url as string) ?? ""}
+                          alt={`Screenshot ${idx + 1}`}
+                          className="w-full rounded-lg border border-border"
+                        />
+                        {url && (
+                          <p className="text-[10px] text-muted-foreground mt-1 truncate text-center">
+                            {url}
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })}
+                {isTerminal && (
+                  <p className="text-[10px] text-amber-500 text-center pt-2 border-t border-border/50">
+                    Sandbox E2B encerrado (job {jobStatus}). O iframe da sandbox E2B não fica
+                    disponível externamente — o live preview depende de um serviço de browser
+                    hospedado (ex: Browser-Use Cloud). Por ora, mostrando os últimos screenshots
+                    capturados.
                   </p>
                 )}
               </div>
@@ -255,31 +371,47 @@ export function BrowserPreviewPanel({ jobId, onClose }: BrowserPreviewPanelProps
                   <Globe className="w-6 h-6 text-muted-foreground" />
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  {isRunning ? "Aguardando sandbox..." : "Nenhum preview disponível"}
+                  {!jobId
+                    ? "Selecione um job"
+                    : isTerminal
+                      ? `Job ${jobStatus}. ${jobContext?.errors?.[0] ?? "Sem screenshots capturados."}`
+                      : "Aguardando sandbox..."}
                 </p>
+                {!isTerminal && (
+                  <p className="text-[10px] text-muted-foreground/60 mt-2">
+                    (Playwright ainda está configurando o Chromium — pode levar ~1 min)
+                  </p>
+                )}
               </div>
             </div>
           )}
 
           {/* Timeline at bottom */}
-          <div className="border-t border-border bg-surface-1 max-h-[140px] flex flex-col">
+          <div className="border-t border-border bg-surface-1 max-h-[160px] flex flex-col">
             <div className="flex items-center justify-between px-3 py-1.5 border-b border-border/50">
-              <span className="text-[10px] font-medium">Timeline ({events.length})</span>
-              <button
-                onClick={() => setAutoScroll(!autoScroll)}
-                className={`text-[9px] px-1.5 py-0.5 rounded border transition-colors ${
-                  autoScroll
-                    ? "border-primary/30 text-primary bg-primary/10"
-                    : "border-border text-muted-foreground"
-                }`}
-              >
-                Auto-scroll {autoScroll ? "ON" : "OFF"}
-              </button>
+              <span className="text-[10px] font-medium">
+                Timeline ({events.length})
+                {isTerminal && <span className="text-muted-foreground ml-1">— encerrada</span>}
+              </span>
+              {!isTerminal && (
+                <button
+                  onClick={() => setAutoScroll(!autoScroll)}
+                  className={`text-[9px] px-1.5 py-0.5 rounded border transition-colors ${
+                    autoScroll
+                      ? "border-primary/30 text-primary bg-primary/10"
+                      : "border-border text-muted-foreground"
+                  }`}
+                >
+                  Auto-scroll {autoScroll ? "ON" : "OFF"}
+                </button>
+              )}
             </div>
             <div ref={timelineRef} className="flex-1 overflow-y-auto px-3 py-1">
               {events.length === 0 ? (
                 <div className="flex items-center justify-center h-full">
-                  <p className="text-[10px] text-muted-foreground">Aguardando eventos...</p>
+                  <p className="text-[10px] text-muted-foreground">
+                    {isTerminal ? "Sem eventos registrados" : "Aguardando eventos..."}
+                  </p>
                 </div>
               ) : (
                 events.map((event, i) => (
@@ -290,24 +422,17 @@ export function BrowserPreviewPanel({ jobId, onClose }: BrowserPreviewPanelProps
           </div>
         </div>
 
-        {/* Chat Panel */}
-        <div className="w-[360px] flex flex-col bg-surface-1">
-          <div className="px-3 py-2 border-b border-border">
-            <h3 className="text-xs font-medium">Chat com LLM</h3>
-            <p className="text-[10px] text-muted-foreground mt-0.5">
-              Converse sobre a extração ou peça ações no browser
-            </p>
-          </div>
-
+        {/* Chat Panel — estilo Vibe Code via classes forge-composer */}
+        <div className="w-[380px] flex flex-col bg-surface-1">
           <div ref={chatRef} className="flex-1 overflow-y-auto p-3 space-y-2">
-            {chatMessages.length === 0 && (
+            {!chatHistoryLoaded && (
+              <div className="flex items-center justify-center h-full">
+                <Loader2 className="size-4 animate-spin text-muted-foreground" />
+              </div>
+            )}
+            {chatHistoryLoaded && chatMessages.length === 0 && !chatLoading && (
               <div className="text-center py-8">
-                <p className="text-[11px] text-muted-foreground">
-                  Nenhuma mensagem. Comece a conversar!
-                </p>
-                <p className="text-[10px] text-muted-foreground mt-2">
-                  Ex: "Analise o hero" ou "Tire um screenshot da seção de features"
-                </p>
+                <p className="text-[11px] text-muted-foreground">Carregando conversa...</p>
               </div>
             )}
             {chatMessages.map((msg) => (
@@ -316,13 +441,25 @@ export function BrowserPreviewPanel({ jobId, onClose }: BrowserPreviewPanelProps
                 className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
               >
                 <div
-                  className={`max-w-[85%] rounded-lg px-2.5 py-1.5 text-[11px] ${
+                  className={`max-w-[90%] rounded-lg px-2.5 py-1.5 text-[11px] ${
                     msg.role === "user"
                       ? "bg-primary text-primary-foreground"
                       : "bg-surface-2 text-foreground border border-border"
                   }`}
                 >
                   <p className="whitespace-pre-wrap">{msg.content}</p>
+                  {msg.actions && msg.actions.length > 0 && (
+                    <div className="mt-1.5 flex flex-wrap gap-1">
+                      {msg.actions.map((a, i) => (
+                        <span
+                          key={i}
+                          className="text-[9px] px-1.5 py-0.5 rounded border border-primary/30 text-primary bg-primary/10"
+                        >
+                          {a.type}
+                        </span>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
             ))}
@@ -333,31 +470,75 @@ export function BrowserPreviewPanel({ jobId, onClose }: BrowserPreviewPanelProps
                 </div>
               </div>
             )}
+            {lastAssistantMsg && (
+              <div className="text-[9px] text-muted-foreground/60 italic px-1">
+                Ações do LLM serão executadas no sandbox quando o preview estiver ativo.
+              </div>
+            )}
           </div>
 
-          <div className="p-2 border-t border-border">
-            <div className="flex gap-1.5">
+          {/* Composer — visual idêntico ao Vibe Code via forge-composer CSS */}
+          <div className="border-t border-border p-2">
+            <div className="forge-composer" data-testid="chat-composer">
               <Textarea
                 value={chatInput}
                 onChange={(e) => setChatInput(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && !e.shiftKey) {
                     e.preventDefault();
-                    handleSendChat();
+                    void handleSendChat();
                   }
                 }}
-                placeholder="Pergunte ou peça uma ação..."
-                className="min-h-[60px] max-h-[120px] text-[11px] resize-none"
+                placeholder={
+                  isTerminal && chatMessages.length > 0
+                    ? "Continuar conversa sobre o resultado..."
+                    : "Pergunte sobre a extração ou peça uma ação no browser..."
+                }
+                className="forge-composer-input"
+                rows={2}
                 disabled={chatLoading || !jobId}
               />
-              <Button
-                onClick={handleSendChat}
-                disabled={!chatInput.trim() || chatLoading || !jobId}
-                size="sm"
-                className="h-auto px-2"
-              >
-                <Send className="size-3" />
-              </Button>
+              <div className="forge-composer-row">
+                <div className="forge-composer-row-start">
+                  <button
+                    type="button"
+                    className="forge-composer-add"
+                    title="Anexar"
+                    aria-label="Anexar"
+                    onClick={() => {
+                      /* placeholder para anexos futuros */
+                    }}
+                  >
+                    <Paperclip className="size-4" />
+                  </button>
+                </div>
+                <span className="forge-composer-spacer" aria-hidden />
+                <div className="forge-composer-row-end">
+                  {chatLoading && (
+                    <button
+                      type="button"
+                      className="forge-composer-stop"
+                      title="Parar"
+                      aria-label="Parar"
+                      onClick={() => {
+                        /* sem cancel stream no MVP */
+                      }}
+                    >
+                      <Square className="size-3.5 fill-current" />
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    className="forge-composer-send"
+                    onClick={() => void handleSendChat()}
+                    disabled={!chatInput.trim() || chatLoading || !jobId}
+                    title="Enviar"
+                    aria-label="Enviar"
+                  >
+                    <Send className="size-4" />
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </div>

@@ -179,20 +179,61 @@ async function test5_RlsBlocksAnon() {
 }
 
 async function test6_ChatEndpoint() {
-  console.log("\n── Test 6: design-library-chat ──");
-  const { data, error } = await adminClient.functions.invoke("design-library-chat", {
-    body: { jobId: "00000000-0000-0000-0000-000000000000", message: "test" },
+  console.log("\n── Test 6: design-library-chat (welcome + history) ──");
+
+  // Use a real completed job if available
+  const { data: job } = await adminClient
+    .from("design_dna_jobs")
+    .select("id, status")
+    .order("started_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const jobId = job?.id ?? "00000000-0000-0000-0000-000000000000";
+
+  // 1. Empty message → welcome
+  const welcome = await adminClient.functions.invoke("design-library-chat", {
+    body: { jobId, message: "" },
   });
 
-  if (error) {
-    const errMsg = error.message ?? "";
-    if (errMsg.includes("403") || errMsg.includes("Forbidden")) {
-      log("chat rejects service_role (expected)", true, "403");
-    } else {
-      log("chat endpoint reachable", false, errMsg.slice(0, 80));
-    }
+  if (welcome.error) {
+    log("chat welcome", false, welcome.error.message?.slice(0, 80) ?? "error");
+  } else if (welcome.data?.reply) {
+    log("chat welcome", true, welcome.data.reply.slice(0, 60) + "...");
   } else {
-    log("chat responds", true, JSON.stringify(data).slice(0, 80));
+    log("chat welcome", false, "no reply");
+  }
+
+  // 2. Real message → LLM response
+  const reply = await adminClient.functions.invoke("design-library-chat", {
+    body: { jobId, message: "Quantas URLs tem esse job?" },
+  });
+
+  if (reply.error) {
+    log("chat with LLM", false, reply.error.message?.slice(0, 80) ?? "error");
+  } else if (reply.data?.reply) {
+    log("chat with LLM", true, reply.data.reply.slice(0, 60) + "...");
+  } else {
+    log("chat with LLM", false, "no reply");
+  }
+
+  // 3. History persisted in DB
+  const { data: session } = await adminClient
+    .from("design_library_chat_sessions")
+    .select("id")
+    .eq("job_id", jobId)
+    .maybeSingle();
+
+  if (session) {
+    const { data: msgs } = await adminClient
+      .from("design_library_chat_messages")
+      .select("id")
+      .eq("session_id", session.id);
+
+    const ok = (msgs?.length ?? 0) >= 2; // welcome + reply
+    log("chat history persisted", ok, `${msgs?.length ?? 0} messages`);
+  } else {
+    log("chat history persisted", false, "no session");
   }
 }
 
