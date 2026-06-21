@@ -5,6 +5,7 @@ import {
   describeStepExpectation,
   extractStepFilePaths,
 } from "@/lib/step-intent";
+import { checkpointSummary, formatSkillInvocation, sanitizeRunText } from "@/lib/run-story-hygiene";
 
 export type NodeStatus = "active" | "done" | "failed";
 
@@ -225,9 +226,16 @@ export function buildJobStreamTree(
     ) {
       flushThought(nodes, ts);
       const phase = typeof data.phase === "string" ? data.phase : ev.type;
+      if (ev.type === "skills") {
+        const skillTitle = formatSkillInvocation(data);
+        if (skillTitle) pushTask(nodes, skillTitle, ts, phase);
+        continue;
+      }
+      const cleanMessage = sanitizeRunText(data.message);
+      if (!cleanMessage && (ev.type !== "phase" || typeof data.task_title !== "string")) continue;
       const title =
-        (data.task_title as string) ??
-        buildPhaseTaskTitle(phase, (data.message as string) ?? undefined);
+        (data.task_title as string) ?? buildPhaseTaskTitle(phase, cleanMessage ?? undefined);
+      if (!sanitizeRunText(title)) continue;
       pushTask(nodes, title, ts, phase);
       continue;
     }
@@ -335,20 +343,20 @@ export function buildJobStreamTree(
     }
 
     if (ev.type === "delivery_checkpoint") {
-      const files = Array.isArray(data.deliveryFiles) ? (data.deliveryFiles as string[]) : [];
+      const checkpoint = checkpointSummary(data);
+      if (!checkpoint) continue;
       nodes.push({
         kind: "result",
         id: `result-${ts}`,
         ts,
-        summary: files.length ? `Checkpoint · ${files.length} arquivo(s)` : "Checkpoint salvo",
-        evidence: files.map(fileBase),
+        summary: checkpoint.text,
+        evidence: checkpoint.files.map(fileBase),
         status: "done",
       });
       continue;
     }
 
     if (ev.type === "delivery_checkpoint_silent" || ev.type === "checkpoint_resume") {
-      pushTask(nodes, buildPhaseTaskTitle("resume"), ts, "resume");
       continue;
     }
 

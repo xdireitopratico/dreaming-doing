@@ -1,9 +1,9 @@
-import { assertEquals, assertStringIncludes } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import {
-  formatLoopStatus,
-  lastAssistantProse,
-  resolveClosureText,
-} from "./loop-status.ts";
+  assertEquals,
+  assertFalse,
+  assertStringIncludes,
+} from "https://deno.land/std@0.224.0/assert/mod.ts";
+import { formatLoopStatus, lastAssistantProse, resolveClosureText } from "./loop-status.ts";
 import type { ChatMessage } from "./types.ts";
 
 Deno.test("formatLoopStatus — lote de tools", () => {
@@ -18,7 +18,16 @@ Deno.test("formatLoopStatus — lote de tools", () => {
     total: 8,
   });
   assertStringIncludes(text!, "Hero");
-  assertStringIncludes(text!, "passo 2/8");
+  assertFalse(text!.includes("passo 2/8"));
+});
+
+Deno.test("formatLoopStatus — resume comum não vaza passo interno", () => {
+  const text = formatLoopStatus({
+    kind: "resume",
+    resumeStep: 12,
+    total: 70,
+  });
+  assertEquals(text, null);
 });
 
 Deno.test("formatLoopStatus — null sem tools no batch", () => {
@@ -33,7 +42,11 @@ Deno.test("formatLoopStatus — build_ok", () => {
 
 Deno.test("lastAssistantProse — ignora turnos com tool_calls", () => {
   const messages: ChatMessage[] = [
-    { role: "assistant", content: "Vou criar o hero.", tool_calls: [{ id: "1", type: "function", function: { name: "fs_write", arguments: "{}" } }] },
+    {
+      role: "assistant",
+      content: "Vou criar o hero.",
+      tool_calls: [{ id: "1", type: "function", function: { name: "fs_write", arguments: "{}" } }],
+    },
     { role: "assistant", content: "Pronto — confere o preview." },
   ];
   assertEquals(lastAssistantProse(messages), "Pronto — confere o preview.");

@@ -245,9 +245,10 @@ function parsePendingPlanFromPayload(
     proposedAt: Date.now(),
     runId,
     projectId,
-    design: nested.design && typeof nested.design === "object"
-      ? parseDesignPlanField(nested.design as Record<string, unknown>)
-      : undefined,
+    design:
+      nested.design && typeof nested.design === "object"
+        ? parseDesignPlanField(nested.design as Record<string, unknown>)
+        : undefined,
   };
 }
 
@@ -278,7 +279,8 @@ function parseDesignPlanField(d: Record<string, unknown>): DesignPlanField {
     anti_patterns: Array.isArray(d.anti_patterns)
       ? (d.anti_patterns as unknown[]).filter((x): x is string => typeof x === "string")
       : undefined,
-    synthesis_reasoning: typeof d.synthesis_reasoning === "string" ? d.synthesis_reasoning : undefined,
+    synthesis_reasoning:
+      typeof d.synthesis_reasoning === "string" ? d.synthesis_reasoning : undefined,
     relevant_dnas: Array.isArray(d.relevant_dnas)
       ? (d.relevant_dnas as unknown[]).filter((x): x is string => typeof x === "string")
       : undefined,
@@ -341,9 +343,7 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
       const append = data.append === true || data.delta === true;
       return {
         ...prev,
-        privateThoughtText: append
-          ? `${prev.privateThoughtText ?? ""}${chunk}`
-          : chunk,
+        privateThoughtText: append ? `${prev.privateThoughtText ?? ""}${chunk}` : chunk,
         timeline: [...prev.timeline, event],
       };
     }
@@ -411,6 +411,12 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
       };
 
     case "step":
+      if (data.plan !== true) {
+        return {
+          ...prev,
+          timeline: [...prev.timeline, event],
+        };
+      }
       return {
         ...prev,
         currentStep: typeof data.current === "number" ? data.current : prev.currentStep,
@@ -487,8 +493,12 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
         ...prev,
         finished: false,
         error: null,
-        currentStep: typeof data.step === "number" ? data.step : prev.currentStep,
-        totalSteps: typeof data.totalSteps === "number" ? data.totalSteps : prev.totalSteps,
+        currentStep:
+          data.plan === true && typeof data.step === "number" ? data.step : prev.currentStep,
+        totalSteps:
+          data.plan === true && typeof data.totalSteps === "number"
+            ? data.totalSteps
+            : prev.totalSteps,
         streamText: prev.streamText,
         narrationText: narration || prev.narrationText,
         deliveryFiles,

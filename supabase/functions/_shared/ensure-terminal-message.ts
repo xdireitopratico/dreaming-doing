@@ -12,7 +12,6 @@ const TIMELINE_TYPES = new Set([
   "phase",
   "explore",
   "memory",
-  "classify",
   "skills",
   "tool_start",
   "tool_done",
@@ -32,8 +31,7 @@ const TIMELINE_TYPES = new Set([
   "rate_limit",
 ]);
 
-const GENERIC_FAILURE_RE =
-  /loop budget|resumable/i;
+const GENERIC_FAILURE_RE = /loop budget|resumable/i;
 
 export function isTerminalAssistantMeta(meta: Record<string, unknown> | null | undefined): boolean {
   if (!meta || typeof meta !== "object") return false;
@@ -84,7 +82,10 @@ function streamRowToTimelineEvent(row: StreamEventRow): {
 function buildStreamTailFromRows(
   rows: StreamEventRow[],
 ): Array<{ type: string; data: Record<string, unknown>; timestamp: number }> {
-  return rows.map(streamRowToTimelineEvent).filter((e) => TIMELINE_TYPES.has(e.type)).slice(-120);
+  return rows
+    .map(streamRowToTimelineEvent)
+    .filter((e) => TIMELINE_TYPES.has(e.type))
+    .slice(-120);
 }
 
 function toolsFromTimeline(
@@ -207,10 +208,7 @@ function buildTerminalMessageMeta(opts: {
   };
 }
 
-async function fetchStreamRows(
-  supabase: SupabaseClient,
-  runId: string,
-): Promise<StreamEventRow[]> {
+async function fetchStreamRows(supabase: SupabaseClient, runId: string): Promise<StreamEventRow[]> {
   const { data } = await supabase
     .from("agent_stream_events")
     .select("event_type, payload, created_at, seq")
@@ -224,7 +222,11 @@ async function findAssistantMessageForRun(
   supabase: SupabaseClient,
   conversationId: string,
   runId: string,
-): Promise<{ id: string; parts?: Array<{ type?: string; text?: string }>; meta?: Record<string, unknown> } | null> {
+): Promise<{
+  id: string;
+  parts?: Array<{ type?: string; text?: string }>;
+  meta?: Record<string, unknown>;
+} | null> {
   const { data } = await supabase
     .from("messages")
     .select("id, parts, meta")
@@ -234,7 +236,13 @@ async function findAssistantMessageForRun(
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
-  return (data as { id: string; parts?: Array<{ type?: string; text?: string }>; meta?: Record<string, unknown> } | null) ?? null;
+  return (
+    (data as {
+      id: string;
+      parts?: Array<{ type?: string; text?: string }>;
+      meta?: Record<string, unknown>;
+    } | null) ?? null
+  );
 }
 
 export type EnsureTerminalMessageParams = {
@@ -281,10 +289,7 @@ export async function ensureTerminalRunMessage(
       if (text) {
         updateData.parts = [{ type: "text", text }];
       }
-      await supabase
-        .from("messages")
-        .update(updateData)
-        .eq("id", existing.id);
+      await supabase.from("messages").update(updateData).eq("id", existing.id);
       await supabase
         .from("projects")
         .update({ updated_at: new Date().toISOString() })

@@ -50,3 +50,37 @@ describe("buildTimeline thinking", () => {
     expect(thought.detail).toBe("Vou verificar o container.");
   });
 });
+
+describe("buildTimeline hygiene", () => {
+  it("remove lixo interno e preserva Robin/skill explícito", () => {
+    const items = buildTimeline([
+      { type: "classify", data: { model: "nemotron" }, timestamp: 1 },
+      { type: "fsm_transition", data: { to: "planning" }, timestamp: 2 },
+      {
+        type: "skills",
+        data: { active: ["react-tailwind"], stack: ["react-tailwind"] },
+        timestamp: 3,
+      },
+      {
+        type: "phase",
+        data: { phase: "checkpoint", message: "Continuando do passo 3 de 70." },
+        timestamp: 4,
+      },
+      { type: "explore", data: { message: "Continuando (parte 1/12)…" }, timestamp: 5 },
+      { type: "delivery_checkpoint", data: { files: [] }, timestamp: 6 },
+      { type: "robin_rotate", data: {}, timestamp: 7 },
+      {
+        type: "skills",
+        data: { active: ["design-system"], user: ["design-system"], invoked: ["design-system"] },
+        timestamp: 8,
+      },
+    ]);
+
+    const labels = items.map((item) => item.label);
+    expect(labels.join(" ")).not.toMatch(
+      /classif|State|Estado|Skills:|passo 3|parte 1\/12|0 file/i,
+    );
+    expect(labels).toContain("Robin rotating API key");
+    expect(labels).toContain("Skill: design-system");
+  });
+});

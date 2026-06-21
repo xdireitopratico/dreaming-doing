@@ -13,7 +13,6 @@ const TIMELINE_TYPES = new Set([
   "phase",
   "explore",
   "memory",
-  "classify",
   "skills",
   "tool_start",
   "tool_done",
@@ -33,8 +32,7 @@ const TIMELINE_TYPES = new Set([
   "rate_limit",
 ]);
 
-const GENERIC_FAILURE_RE =
-  /loop budget|resumable/i;
+const GENERIC_FAILURE_RE = /loop budget|resumable/i;
 
 export function isTerminalAssistantMeta(meta: Record<string, unknown> | null | undefined): boolean {
   if (!meta || typeof meta !== "object") return false;
@@ -85,7 +83,10 @@ export function streamRowToTimelineEvent(row: StreamEventRow): {
 export function buildStreamTailFromRows(
   rows: StreamEventRow[],
 ): Array<{ type: string; data: Record<string, unknown>; timestamp: number }> {
-  return rows.map(streamRowToTimelineEvent).filter((e) => TIMELINE_TYPES.has(e.type)).slice(-120);
+  return rows
+    .map(streamRowToTimelineEvent)
+    .filter((e) => TIMELINE_TYPES.has(e.type))
+    .slice(-120);
 }
 
 export function toolsFromTimeline(

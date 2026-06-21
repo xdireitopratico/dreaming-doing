@@ -1,4 +1,5 @@
 import type { SSEEvent, AgentProgress } from "@/lib/agent-progress";
+import { checkpointSummary, formatSkillInvocation, sanitizeRunText } from "@/lib/run-story-hygiene";
 
 function hasFirstInspectorToken(progress: AgentProgress): boolean {
   if (progress.streamText?.trim() || progress.narrationText?.trim()) return true;
@@ -168,11 +169,11 @@ const INTERNAL_PHASE_NOISE = new Set([
   "observe",
   "summarize",
   "resume",
-  "Trabalhando no pedido…",
+  "trabalhando no pedido…",
 ]);
 
 function isInternalPhaseNoise(label: string): boolean {
-  return INTERNAL_PHASE_NOISE.has(label.trim().toLowerCase());
+  return INTERNAL_PHASE_NOISE.has(label.trim().toLowerCase()) || sanitizeRunText(label) === null;
 }
 
 export function buildTimeline(events: SSEEvent[], running = false): TimelineEntry[] {
@@ -250,7 +251,7 @@ export function buildTimeline(events: SSEEvent[], running = false): TimelineEntr
     if (isRedundant(prev, ev, data)) continue;
 
     if (ev.type === "explore") {
-      const label = typeof data.message === "string" ? data.message.trim() : "";
+      const label = sanitizeRunText(data.message);
       if (label) {
         items.push({
           id: `explore-${ts}`,
@@ -263,12 +264,7 @@ export function buildTimeline(events: SSEEvent[], running = false): TimelineEntr
     }
 
     if (ev.type === "phase" || ev.type === "memory") {
-      const label =
-        typeof data.message === "string"
-          ? data.message
-          : typeof data.phase === "string"
-            ? data.phase
-            : "";
+      const label = sanitizeRunText(data.message ?? data.phase);
       if (!label || isInternalPhaseNoise(label)) continue;
       const isBuild = /build|compila|verifica/i.test(label);
       items.push({
@@ -294,23 +290,18 @@ export function buildTimeline(events: SSEEvent[], running = false): TimelineEntr
     }
 
     if (ev.type === "checkpoint_resume" || ev.type === "delivery_checkpoint_silent") {
-      items.push({
-        id: `cp-${ts}`,
-        kind: "phase",
-        ts,
-        label: "Continuing…",
-      });
       continue;
     }
 
     if (ev.type === "delivery_checkpoint") {
-      const files = Array.isArray(data.files) ? (data.files as string[]) : [];
+      const checkpoint = checkpointSummary(data);
+      if (!checkpoint) continue;
       items.push({
         id: `checkpoint-${ts}`,
         kind: "checkpoint",
         ts,
-        label: `Checkpoint · ${files.length} file(s)`,
-        evidence: files.map(fileBase),
+        label: checkpoint.text,
+        evidence: checkpoint.files.map(fileBase),
       });
       continue;
     }
@@ -399,13 +390,6 @@ export function buildTimeline(events: SSEEvent[], running = false): TimelineEntr
     }
 
     if (ev.type === "classify") {
-      const model = typeof data.model === "string" ? data.model : "modelo";
-      items.push({
-        id: `classify-${ts}`,
-        kind: "phase",
-        ts,
-        label: `Classifying with ${model}`,
-      });
       continue;
     }
 
@@ -421,13 +405,6 @@ export function buildTimeline(events: SSEEvent[], running = false): TimelineEntr
     }
 
     if (ev.type === "fsm_transition") {
-      const to = typeof data.to === "string" ? data.to : "unknown";
-      items.push({
-        id: `fsm-${ts}`,
-        kind: "phase",
-        ts,
-        label: `State: ${to}`,
-      });
       continue;
     }
 
@@ -456,7 +433,7 @@ export function buildTimeline(events: SSEEvent[], running = false): TimelineEntr
         id: `robin-${ts}`,
         kind: "phase",
         ts,
-        label: "Rotating API key",
+        label: "Robin rotating API key",
       });
       continue;
     }
@@ -472,13 +449,13 @@ export function buildTimeline(events: SSEEvent[], running = false): TimelineEntr
     }
 
     if (ev.type === "skills") {
-      const active = Array.isArray(data.active) ? data.active : [];
-      if (active.length > 0) {
+      const label = formatSkillInvocation(data);
+      if (label) {
         items.push({
           id: `skills-${ts}`,
           kind: "phase",
           ts,
-          label: `Skills: ${active.join(", ")}`,
+          label,
         });
       }
       continue;

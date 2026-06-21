@@ -45,7 +45,9 @@ function toolSummary(call: ToolCallLike): string {
     case "fs_list":
       return path ? `listar \`${path}\`` : "listar arquivos";
     case "shell_exec": {
-      const cmd = String(call.arguments.command ?? "").trim().slice(0, 72);
+      const cmd = String(call.arguments.command ?? "")
+        .trim()
+        .slice(0, 72);
       return cmd ? `rodar \`${cmd}\`` : "rodar comando";
     }
     default:
@@ -59,21 +61,17 @@ function formatToolBatch(ctx: LoopUpdateContext): string | null {
 
   const summaries = tools.map(toolSummary);
   const ok = ctx.allOk !== false;
-  const step =
-    ctx.step && ctx.total ? ` (passo ${ctx.step}/${ctx.total})` : "";
 
   if (tools.length === 1) {
     const action = summaries[0]!;
-    return ok
-      ? `Concluído: ${action}${step}.`
-      : `Falhou ao ${action}${step} — vou corrigir.`;
+    return ok ? `Concluído: ${action}.` : `Falhou ao ${action} — vou corrigir.`;
   }
 
   const joined = summaries.slice(0, 3).join(", ");
   const extra = summaries.length > 3 ? ` e mais ${summaries.length - 3}` : "";
   return ok
-    ? `Concluído: ${joined}${extra}${step}.`
-    : `Algumas ferramentas falharam (${joined}${extra})${step} — vou corrigir.`;
+    ? `Concluído: ${joined}${extra}.`
+    : `Algumas ferramentas falharam (${joined}${extra}) — vou corrigir.`;
 }
 
 /** Mensagem curta e factual para o chat — nunca inventa intenção do agente. */
@@ -101,10 +99,7 @@ export function formatLoopStatus(ctx: LoopUpdateContext): string | null {
       if (ctx.fixResume) {
         return "Corrigindo erros de build.";
       }
-      if (ctx.resumeStep && ctx.total) {
-        return `Continuando do passo ${ctx.resumeStep} de ${ctx.total}.`;
-      }
-      return "Continuando execução…";
+      return null;
 
     case "processing":
       return "Ainda processando — continuo em instantes.";

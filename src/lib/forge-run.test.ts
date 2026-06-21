@@ -52,6 +52,42 @@ describe("buildForgeTimeline", () => {
     expect(items.some((i) => i.type === "TASK")).toBe(false);
     expect(items.some((i) => i.type === "TOOL" && i.name === "fs_read")).toBe(true);
   });
+
+  it("higieniza eventos internos e mantém eventos qualificados", () => {
+    const items = buildForgeTimeline([
+      { type: "classify", data: { model: "Kimi 2.6" }, timestamp: 1 },
+      { type: "fsm_transition", data: { to: "build" }, timestamp: 2 },
+      { type: "checkpoint_resume", data: {}, timestamp: 3 },
+      { type: "delivery_checkpoint_silent", data: {}, timestamp: 4 },
+      { type: "delivery_checkpoint", data: { files: [] }, timestamp: 5 },
+      {
+        type: "skills",
+        data: { active: ["react-tailwind"], stack: ["react-tailwind"] },
+        timestamp: 6,
+      },
+      { type: "explore", data: { message: "Continuando (parte 1/12)…" }, timestamp: 7 },
+      {
+        type: "phase",
+        data: { phase: "checkpoint", message: "Concluído: rodar `npm run build` (passo 3/70)." },
+        timestamp: 8,
+      },
+      { type: "robin_rotate", data: {}, timestamp: 9 },
+      { type: "delivery_checkpoint", data: { deliveryFiles: ["src/App.tsx"] }, timestamp: 10 },
+      {
+        type: "skills",
+        data: { user: ["design-system"], invoked: ["design-system"] },
+        timestamp: 11,
+      },
+    ]);
+
+    const visible = items.map((item) => ("label" in item ? item.label : item.text)).join(" ");
+    expect(visible).not.toMatch(
+      /Classificando|Kimi|Estado|Continuando|parte 1\/12|passo 3\/70|Skills:|Checkpoint salvo/i,
+    );
+    expect(visible).toContain("Robin rotating API key");
+    expect(visible).toContain("Checkpoint · 1 arquivo(s)");
+    expect(visible).toContain("Skill: design-system");
+  });
 });
 
 describe("shouldShowJobCard", () => {
@@ -357,6 +393,13 @@ describe("forge-run terminal state", () => {
 });
 
 describe("forge-run mini card briefing e título", () => {
+  it("normalizeMiniCardBriefing bloqueia contrato interno do loop", () => {
+    expect(normalizeMiniCardBriefing("Continuando (parte 1/12)…")).toBeNull();
+    expect(normalizeMiniCardBriefing("State: building")).toBeNull();
+    expect(normalizeMiniCardBriefing("Skills: react-tailwind, design-system")).toBeNull();
+    expect(normalizeMiniCardBriefing("Próximo do limite de tempo da head function")).toBeNull();
+  });
+
   it("briefings vêm da timeline, não do streamText do chat", () => {
     const progress = {
       ...initialAgentProgress,

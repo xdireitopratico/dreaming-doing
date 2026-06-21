@@ -86,11 +86,7 @@ import type { ProviderConfig } from "./providers.ts";
 import type { AgentPreferencesPayload } from "./connector-keys.ts";
 import { resolveAutoForComplexity } from "../_shared/model-presets.ts";
 import { ResilientLLM } from "./robin-pool.ts";
-import {
-  formatLoopStatus,
-  resolveClosureText,
-  type LoopUpdateContext,
-} from "./loop-status.ts";
+import { formatLoopStatus, resolveClosureText, type LoopUpdateContext } from "./loop-status.ts";
 import {
   buildPhaseTaskTitle,
   describeStepExpectation,
@@ -417,7 +413,10 @@ export class AgentLoop {
     }
 
     if (!preflight.passed) {
-      const failed = preflight.checks.filter((c) => !c.ok).map((c) => c.name).join(", ");
+      const failed = preflight.checks
+        .filter((c) => !c.ok)
+        .map((c) => c.name)
+        .join(", ");
       this.emit("validate_fail", {
         attempt: 0,
         checks: failed ? [failed] : ["preflight"],
@@ -639,11 +638,6 @@ export class AgentLoop {
     if (!this.resumeRun) {
       this.state.executionLog = [];
     }
-    if (this.chunkGeneration > 0) {
-      this.emit("explore", {
-        message: `Continuando (parte ${this.chunkGeneration}/${MAX_CHUNK_GENERATIONS})…`,
-      });
-    }
     this.compression.reset();
     this.consecutiveNoContentReadSteps = 0;
     const toolsUsed = new Set<string>();
@@ -651,29 +645,10 @@ export class AgentLoop {
 
     if (this.resumeRun && this.hasCheckpoint) {
       await this.emitTransition("send");
-      this.emit("phase", {
-        phase: "resume",
-        message: "Continuando execução…",
-      });
-      this.emit("memory", {
-        message: `Checkpoint: ${this.state.messages.length} mensagens, fase ${
-          this.resumePhase ?? this.state.phase
-        }`,
-        messageCount: this.state.messages.length,
-      });
       this.applyAutoModelForComplexity(this.complexityScore);
-      this.emit("classify", {
-        complexity: this.complexityScore,
-        model: this.router.mainCfg.label,
-        summary: this.state.intent?.summary ?? "Retomada",
-        maxSteps: this.maxStepsLimit,
-        restored: true,
-      });
       this.notifyLoopStatus({
         kind: "resume",
         fixResume: this.buildFixResume,
-        resumeStep: this.state.currentStepIndex,
-        total: this.maxStepsLimit,
       });
       await this.emitTransition("classified", {
         complexity: this.complexityScore,
@@ -883,15 +858,16 @@ export class AgentLoop {
 
         loopStep++;
         this.state.currentStepIndex = loopStep;
-    
+
         this.state.phase = LoopPhase.EXECUTE_STEP;
         await this.touchHeartbeat();
         if (this.approvedPlanBuild) {
           const enabled = this.enabledApprovedPlanSteps();
           this.state.totalSteps = enabled.length;
           this.emit("step", {
-            current: this.approvedPlanStepIndex,
+            current: this.approvedPlanStepIndex + 1,
             total: enabled.length,
+            plan: true,
           });
           const activeStep = enabled[this.approvedPlanStepIndex];
           const stepMessage = activeStep
@@ -906,7 +882,6 @@ export class AgentLoop {
           }
         } else {
           this.state.totalSteps = this.maxStepsLimit;
-          this.emit("step", { current: loopStep, total: this.maxStepsLimit });
           this.emit("phase", {
             phase: "execute",
             message: "Trabalhando no pedido…",
@@ -927,9 +902,7 @@ export class AgentLoop {
           this.forceToolsNext ||
           (!this.toolsInvoked &&
             actionableIntent &&
-            (this.approvedPlanBuild
-              ? loopStep >= 1
-              : loopStep >= 2 && loopStep <= 4));
+            (this.approvedPlanBuild ? loopStep >= 1 : loopStep >= 2 && loopStep <= 4));
         const narrationOnlyStep =
           !this.forceToolsNext &&
           !this.toolsInvoked &&
@@ -994,7 +967,7 @@ export class AgentLoop {
           });
           await this.persistFinal(
             "idle timeout — O modelo não foi capaz de produzir output após várias tentativas. " +
-            "Tente enviar um novo prompt ou considere trocar o modelo nas configurações.",
+              "Tente enviar um novo prompt ou considere trocar o modelo nas configurações.",
             { lastFinishOk: false, buildFailed: true },
           );
           return {
@@ -1045,8 +1018,11 @@ export class AgentLoop {
           continue;
         }
 
-        const { clarify: clarifyCall, createPlan: createPlanCall, execution: execCalls } =
-          splitMetaToolCalls(response.tool_calls ?? []);
+        const {
+          clarify: clarifyCall,
+          createPlan: createPlanCall,
+          execution: execCalls,
+        } = splitMetaToolCalls(response.tool_calls ?? []);
         if (createPlanCall) {
           return {
             ok: false,
@@ -1331,8 +1307,9 @@ export class AgentLoop {
           this.approvedPlanStepIndex++;
           const enabled = this.enabledApprovedPlanSteps();
           this.emit("step", {
-            current: this.approvedPlanStepIndex,
+            current: this.approvedPlanStepIndex + 1,
             total: enabled.length,
+            plan: true,
           });
         }
 
@@ -1594,16 +1571,17 @@ export class AgentLoop {
     }
 
     const stackSkills = this.skills.detectActive(fileList).map((s) => s.name);
-    const activeSkills = [...new Set([...stackSkills, ...this.userSkillNames])];
+    const invokedSkills = [...new Set(this.userSkillNames)];
     if (
-      activeSkills.length > 0 &&
-      JSON.stringify(activeSkills) !== JSON.stringify(this.lastEmittedSkills)
+      invokedSkills.length > 0 &&
+      JSON.stringify(invokedSkills) !== JSON.stringify(this.lastEmittedSkills)
     ) {
-      this.lastEmittedSkills = activeSkills;
+      this.lastEmittedSkills = invokedSkills;
       this.emit("skills", {
-        active: activeSkills,
+        active: invokedSkills,
         stack: stackSkills,
-        user: this.userSkillNames,
+        user: invokedSkills,
+        invoked: invokedSkills,
       });
     }
 
@@ -1834,9 +1812,8 @@ export class AgentLoop {
         durationMs: Date.now() - planModeStartedAt,
         hasContent: typeof response.content === "string" && response.content.trim().length > 0,
         contentLength: typeof response.content === "string" ? response.content.length : 0,
-        contentPreview: typeof response.content === "string"
-          ? response.content.slice(0, 200)
-          : null,
+        contentPreview:
+          typeof response.content === "string" ? response.content.slice(0, 200) : null,
         toolCallCount: response.tool_calls?.length ?? 0,
         toolCallNames: (response.tool_calls ?? []).map((tc) => tc.name).join(",") || null,
         streamed: this.llmResponseWasStreamed,
@@ -1863,9 +1840,11 @@ export class AgentLoop {
         continue;
       }
 
-      const { clarify: clarifyCall, createPlan: planCall, execution: execCalls } = splitMetaToolCalls(
-        response.tool_calls ?? [],
-      );
+      const {
+        clarify: clarifyCall,
+        createPlan: planCall,
+        execution: execCalls,
+      } = splitMetaToolCalls(response.tool_calls ?? []);
 
       if (planCall) {
         toolsUsed.add("create_plan");
@@ -1942,7 +1921,8 @@ export class AgentLoop {
         });
         {
           const closing = await this.attemptGracefulClosing("plan_stuck");
-          if (closing) return { ok: true, summary: closing, steps: step, toolsUsed: [...toolsUsed] };
+          if (closing)
+            return { ok: true, summary: closing, steps: step, toolsUsed: [...toolsUsed] };
         }
         return await this.finishPlanModeFailure(
           "O modelo não completou a resposta. Tente reformular seu pedido ou escolha outro modelo.",
@@ -2392,9 +2372,8 @@ export class AgentLoop {
         durationMs: Date.now() - buildModeStartedAt,
         hasContent: typeof response.content === "string" && response.content.trim().length > 0,
         contentLength: typeof response.content === "string" ? response.content.length : 0,
-        contentPreview: typeof response.content === "string"
-          ? response.content.slice(0, 200)
-          : null,
+        contentPreview:
+          typeof response.content === "string" ? response.content.slice(0, 200) : null,
         toolCallCount: response.tool_calls?.length ?? 0,
         toolCallNames: (response.tool_calls ?? []).map((tc) => tc.name).join(",") || null,
         streamed: this.llmResponseWasStreamed,
@@ -2742,10 +2721,7 @@ export class AgentLoop {
       if (text) {
         updateData.parts = [{ type: "text", text }];
       }
-      await this.sb
-        .from("messages")
-        .update(updateData)
-        .eq("id", existingId);
+      await this.sb.from("messages").update(updateData).eq("id", existingId);
       await this.sb
         .from("projects")
         .update({
@@ -2944,13 +2920,19 @@ export class AgentLoop {
     const clean = sanitizeUserFacingProse(raw);
     if (!clean) return;
     const step = this.state.currentStepIndex;
-    if (step > 1 || this.buildFixResume) return;
     const filtered = filterLoopAgentProseForChat(clean, {
       loopStep: step,
       skipAck: this.buildFixResume,
     });
     if (!filtered) return;
-    this.emitOpeningToChat(filtered);
+    if (!this.openingEmitted && !this.buildFixResume) {
+      this.emitOpeningToChat(filtered);
+      return;
+    }
+    this.streamNarration(filtered, {
+      append: true,
+      chatVisible: !this.approvedPlanBuild && !this.buildFixResume,
+    });
   }
 
   /** FASE 1 — abertura única no chat [2], nunca no inspector. */

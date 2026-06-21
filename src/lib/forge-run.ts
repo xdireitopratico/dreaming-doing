@@ -1,5 +1,6 @@
 import type { AgentProgress, PendingPlan, PlanStep, SSEEvent } from "@/lib/agent-progress";
 import { emitStreamingTelemetry } from "@/lib/streaming-telemetry";
+import { checkpointSummary, formatSkillInvocation, sanitizeRunText } from "@/lib/run-story-hygiene";
 
 export type MiniCardStatus = "thinking" | "working" | "done" | "failed";
 export type MiniCardTaskStatus = "done" | "active" | "pending" | "failed";
@@ -186,7 +187,7 @@ export function buildForgeTimeline(timeline: SSEEvent[], running = false): Forge
     if (thoughtId) flushThought(ts);
 
     if (ev.type === "explore") {
-      const label = typeof data.message === "string" ? data.message.trim() : "";
+      const label = sanitizeRunText(data.message);
       if (label) {
         items.push({ type: "TASK", id: `explore-${ts}`, label: truncate(label, 120) });
       }
@@ -199,12 +200,7 @@ export function buildForgeTimeline(timeline: SSEEvent[], running = false): Forge
       ev.type === "stuck" ||
       ev.type === "error"
     ) {
-      const label =
-        typeof data.message === "string"
-          ? data.message.trim()
-          : typeof data.error === "string"
-            ? data.error.trim()
-            : "";
+      const label = sanitizeRunText(data.message) ?? sanitizeRunText(data.error);
       if (label) {
         items.push({ type: "TASK", id: `status-${ts}`, label: truncate(label, 120) });
       }
@@ -213,19 +209,13 @@ export function buildForgeTimeline(timeline: SSEEvent[], running = false): Forge
 
     if (ev.type === "phase" || ev.type === "memory") {
       const phase = typeof data.phase === "string" ? data.phase : undefined;
-      const label =
-        typeof data.message === "string"
-          ? data.message
-          : typeof data.phase === "string"
-            ? data.phase
-            : "Task";
-      if (isInternalPhaseNoise(label, phase)) continue;
+      const label = sanitizeRunText(data.message ?? data.phase);
+      if (!label || isInternalPhaseNoise(label, phase)) continue;
       items.push({ type: "TASK", id: `task-${ts}`, label: truncate(label, 120) });
       continue;
     }
 
     if (ev.type === "checkpoint_resume" || ev.type === "delivery_checkpoint_silent") {
-      items.push({ type: "TASK", id: `task-${ts}`, label: "Continuando" });
       continue;
     }
 
@@ -256,13 +246,14 @@ export function buildForgeTimeline(timeline: SSEEvent[], running = false): Forge
     }
 
     if (ev.type === "delivery_checkpoint") {
-      const files = Array.isArray(data.files) ? (data.files as string[]) : [];
+      const checkpoint = checkpointSummary(data);
+      if (!checkpoint) continue;
       items.push({
         type: "RESULT",
         id: `result-${ts}`,
         ok: true,
-        text: files.length ? `Checkpoint · ${files.length} arquivo(s)` : "Checkpoint salvo",
-        evidence: files.map(fileBase),
+        text: checkpoint.text,
+        evidence: checkpoint.files.map(fileBase),
       });
       continue;
     }
@@ -278,15 +269,13 @@ export function buildForgeTimeline(timeline: SSEEvent[], running = false): Forge
     }
 
     if (ev.type === "classify") {
-      const model = typeof data.model === "string" ? data.model : "modelo";
-      items.push({ type: "TASK", id: `classify-${ts}`, label: `Classificando com ${model}` });
       continue;
     }
 
     if (ev.type === "skills") {
-      const active = Array.isArray(data.active) ? data.active : [];
-      if (active.length > 0) {
-        items.push({ type: "TASK", id: `skills-${ts}`, label: `Skills: ${active.join(", ")}` });
+      const label = formatSkillInvocation(data);
+      if (label) {
+        items.push({ type: "TASK", id: `skills-${ts}`, label });
       }
       continue;
     }
@@ -325,8 +314,6 @@ export function buildForgeTimeline(timeline: SSEEvent[], running = false): Forge
     }
 
     if (ev.type === "fsm_transition") {
-      const to = typeof data.to === "string" ? data.to : "unknown";
-      items.push({ type: "TASK", id: `fsm-${ts}`, label: `Estado: ${to}` });
       continue;
     }
 
@@ -352,7 +339,7 @@ export function buildForgeTimeline(timeline: SSEEvent[], running = false): Forge
     }
 
     if (ev.type === "robin_rotate") {
-      items.push({ type: "TASK", id: `robin-${ts}`, label: "ROBIN rotacionando chave" });
+      items.push({ type: "TASK", id: `robin-${ts}`, label: "Robin rotating API key" });
       continue;
     }
 
@@ -362,23 +349,21 @@ export function buildForgeTimeline(timeline: SSEEvent[], running = false): Forge
     }
 
     if (ev.type === "context_pressure") {
-      const message = typeof data.message === "string" ? data.message : "Contexto sob pressão";
-      items.push({ type: "TASK", id: `pressure-${ts}`, label: truncate(message, 120) });
+      const message = sanitizeRunText(data.message);
+      if (message)
+        items.push({ type: "TASK", id: `pressure-${ts}`, label: truncate(message, 120) });
       continue;
     }
 
     if (ev.type === "context_compress") {
-      items.push({ type: "TASK", id: `compress-${ts}`, label: "Comprimindo contexto" });
       continue;
     }
 
     if (ev.type === "start") {
-      items.push({ type: "TASK", id: `start-${ts}`, label: "Iniciando execução" });
       continue;
     }
 
     if (ev.type === "resume") {
-      items.push({ type: "TASK", id: `resume-${ts}`, label: "Continuando" });
       continue;
     }
 
@@ -512,6 +497,8 @@ export function hasInspectorThoughtStream(progress: AgentProgress): boolean {
 export function normalizeMiniCardBriefing(line: string): string | null {
   const t = line.trim();
   if (!t) return null;
+  const sanitized = sanitizeRunText(t, 80);
+  if (!sanitized) return null;
   if (/^explorando/i.test(t)) return null;
   if (/explorando(\s+o)?\s+projeto/i.test(t)) return null;
   if (/^indexando/i.test(t)) return null;
@@ -527,7 +514,7 @@ export function normalizeMiniCardBriefing(line: string): string | null {
   if (/retomando do passo/i.test(t)) return null;
   if (/conectando ao agente/i.test(t)) return null;
   if (/^iniciando[.…]*$/i.test(t)) return null;
-  return truncate(t, 80);
+  return truncate(sanitized, 80);
 }
 
 function isInternalPhaseNoise(label: string, phase?: string): boolean {

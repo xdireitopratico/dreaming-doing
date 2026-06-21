@@ -178,4 +178,28 @@ describe("agent-job-stream tree", () => {
     expect(result?.kind === "result" && result.summary).toBe("Build passou");
     expect(result?.kind === "result" && result.evidence).toContain("typecheck OK");
   });
+
+  it("higieniza eventos internos antes de montar card/inspector", () => {
+    const timeline: SSEEvent[] = [
+      ev("classify", { model: "Nemotron" }, 1),
+      ev("fsm_transition", { to: "planning" }, 2),
+      ev("skills", { active: ["react-tailwind"], stack: ["react-tailwind"] }, 3),
+      ev("delivery_checkpoint_silent", {}, 4),
+      ev("checkpoint_resume", {}, 5),
+      ev("delivery_checkpoint", { files: [] }, 6),
+      ev("skills", { user: ["design-system"], invoked: ["design-system"] }, 7),
+      ev("delivery_checkpoint", { deliveryFiles: ["src/App.tsx"] }, 8),
+    ];
+
+    const nodes = buildJobStreamTree(timeline, { running: false });
+    const text = nodes
+      .map((node) =>
+        node.kind === "task" ? node.title : node.kind === "result" ? node.summary : "",
+      )
+      .join(" ");
+
+    expect(text).not.toMatch(/Nemotron|react-tailwind|Continuando|Checkpoint salvo/i);
+    expect(text).toContain("Skill: design-system");
+    expect(text).toContain("Checkpoint · 1 arquivo(s)");
+  });
 });

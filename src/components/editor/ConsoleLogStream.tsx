@@ -18,6 +18,7 @@ import {
   X,
 } from "lucide-react";
 import type { SSEEvent } from "@/lib/agent-progress";
+import { formatSkillInvocation, sanitizeRunText } from "@/lib/run-story-hygiene";
 
 interface ConsoleLogStreamProps {
   /** Timeline de eventos do agente (Realtime / replay do DB) */
@@ -36,7 +37,7 @@ const PHASE_META: Record<
 > = {
   plan: { label: "Planejando", icon: Brain, color: "text-[var(--forge-primary)]" },
   build: { label: "Implementando", icon: Wrench, color: "text-[var(--forge-primary)]" },
-    resume: { label: "Continuando", icon: ListChecks, color: "text-[var(--forge-primary)]" },
+  resume: { label: "Continuando", icon: ListChecks, color: "text-[var(--forge-primary)]" },
   execute: { label: "Executando", icon: Wrench, color: "text-[var(--forge-primary)]" },
   observe: { label: "Verificando build", icon: Eye, color: "text-amber-400" },
   summarize: { label: "Finalizando", icon: CheckCircle2, color: "text-emerald-400" },
@@ -62,6 +63,13 @@ function buildLines(timeline: SSEEvent[]): LogLine[] {
     switch (ev.type) {
       case "phase": {
         const phase = String(data.phase ?? "");
+        const detail = sanitizeRunText(data.message);
+        if (
+          !detail &&
+          ["checkpoint", "resume", "execute", "build", "observe", "summarize"].includes(phase)
+        ) {
+          break;
+        }
         const meta = PHASE_META[phase] ?? {
           label: phase || "Trabalhando",
           icon: Brain,
@@ -72,7 +80,7 @@ function buildLines(timeline: SSEEvent[]): LogLine[] {
           kind: "phase",
           icon: meta.icon,
           text: meta.label,
-          detail: typeof data.message === "string" ? data.message : undefined,
+          detail: detail ?? undefined,
           ts,
         });
         break;
@@ -135,17 +143,45 @@ function buildLines(timeline: SSEEvent[]): LogLine[] {
       case "context_pressure":
       case "context_compress":
       case "rate_limit":
-      case "robin_rotate":
       case "connection_retry":
-        if (typeof data.message === "string") {
+        {
+          const text = sanitizeRunText(data.message);
+          if (!text) break;
           lines.push({
             id: `${ev.type}-${ts}-${lines.length}`,
             kind: "info",
             icon: Loader2,
-            text: data.message,
+            text,
             ts,
           });
         }
+        break;
+      case "robin_rotate": {
+        lines.push({
+          id: `${ev.type}-${ts}-${lines.length}`,
+          kind: "info",
+          icon: Loader2,
+          text: "Robin rotating API key",
+          ts,
+        });
+        break;
+      }
+      case "skills": {
+        const text = formatSkillInvocation(data);
+        if (!text) break;
+        lines.push({
+          id: `${ev.type}-${ts}-${lines.length}`,
+          kind: "info",
+          icon: ListChecks,
+          text,
+          ts,
+        });
+        break;
+      }
+      case "classify":
+      case "fsm_transition":
+      case "checkpoint_resume":
+      case "delivery_checkpoint_silent":
         break;
       case "error":
         lines.push({
@@ -172,6 +208,9 @@ export function ConsoleLogStream({
   const visible = lines.slice(-maxLines);
   const lastPhase = [...visible].reverse().find((l) => l.kind === "phase");
   const hasError = visible.some((l) => l.kind === "error" || l.kind === "fail");
+  const shouldAutoExpand = visible.some(
+    (l) => l.kind === "tool_start" || l.kind === "fail" || l.kind === "error",
+  );
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -183,10 +222,8 @@ export function ConsoleLogStream({
   // Auto-expand na primeira fase "execute" / primeiro tool
   useEffect(() => {
     if (initiallyExpanded) return;
-    if (visible.some((l) => l.kind === "tool_start" || l.kind === "fail" || l.kind === "error")) {
-      setExpanded(true);
-    }
-  }, [visible.length, initiallyExpanded]);
+    if (shouldAutoExpand) setExpanded(true);
+  }, [shouldAutoExpand, initiallyExpanded]);
 
   if (lines.length === 0) return null;
 
