@@ -6,11 +6,14 @@ import { CHUNK_HANDOFF_GAP_MS } from "./agent-chunk-limits.ts";
 import { appendStreamEvent } from "./agent-stream.ts";
 import { logger } from "./logger.ts";
 
-const STALE_RUN_MS = 8 * 60 * 1000;
+/** H8 fix: STALE_RUN_MS 8min → 15min, BUSY_ZOMBIE_GAP_MS 3min → 8min.
+ *  Alinhado com heartbeat 30s + tempo máximo de observe() (5min).
+ *  Evita falso "zumbi" quando o agente está vivo processando build longo. */
+const STALE_RUN_MS = 15 * 60 * 1000;
 /** Com itens na fila, runs sem heartbeat expiram mais cedo para destravar drain. */
-const QUEUE_STALE_RUN_MS = 2 * 60 * 1000;
-/** Gap sem eventos de stream — UX "zumbi" no toast busy (88764445 ~52 min). */
-export const BUSY_ZOMBIE_GAP_MS = 3 * 60 * 1000;
+const QUEUE_STALE_RUN_MS = 5 * 60 * 1000;
+/** Gap sem eventos de stream — UX "zumbi" no toast busy. */
+export const BUSY_ZOMBIE_GAP_MS = 8 * 60 * 1000;
 
 export type AgentBusyReason = "zombie" | "running" | "other_conversation";
 

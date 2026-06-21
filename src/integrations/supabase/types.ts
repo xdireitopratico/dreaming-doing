@@ -12,31 +12,6 @@ export type Database = {
   __InternalSupabase: {
     PostgrestVersion: "14.5"
   }
-  graphql_public: {
-    Tables: {
-      [_ in never]: never
-    }
-    Views: {
-      [_ in never]: never
-    }
-    Functions: {
-      graphql: {
-        Args: {
-          extensions?: Json
-          operationName?: string
-          query?: string
-          variables?: Json
-        }
-        Returns: Json
-      }
-    }
-    Enums: {
-      [_ in never]: never
-    }
-    CompositeTypes: {
-      [_ in never]: never
-    }
-  }
   public: {
     Tables: {
       agent_alert_rules: {
@@ -268,10 +243,13 @@ export type Database = {
       agent_executions: {
         Row: {
           completed_at: string | null
+          conversation_id: string | null
           cost_budget_cents: number | null
           created_at: string | null
           current_state: string | null
           deployment_id: string | null
+          duration_ms: number | null
+          error: string | null
           error_code: string | null
           error_message: string | null
           error_node_id: string | null
@@ -281,13 +259,20 @@ export type Database = {
           fsm_snapshot: Json | null
           id: string
           idempotency_key: string | null
+          input_tokens: number | null
           is_paused: boolean | null
+          model: string | null
           nodes_executed: number | null
+          output_tokens: number | null
           pause_fallback_action: string | null
           pause_reason: string | null
           pause_timeout_at: string | null
           paused_at: string | null
+          prompt: string | null
+          provider: string | null
           quality_score: number | null
+          request_id: string | null
+          response: string | null
           retry_count: number | null
           session_id: string
           started_at: string | null
@@ -297,14 +282,18 @@ export type Database = {
           total_latency_ms: number | null
           total_tokens_in: number | null
           total_tokens_out: number | null
+          user_id: string | null
           user_satisfaction_score: number | null
         }
         Insert: {
           completed_at?: string | null
+          conversation_id?: string | null
           cost_budget_cents?: number | null
           created_at?: string | null
           current_state?: string | null
           deployment_id?: string | null
+          duration_ms?: number | null
+          error?: string | null
           error_code?: string | null
           error_message?: string | null
           error_node_id?: string | null
@@ -314,13 +303,20 @@ export type Database = {
           fsm_snapshot?: Json | null
           id?: string
           idempotency_key?: string | null
+          input_tokens?: number | null
           is_paused?: boolean | null
+          model?: string | null
           nodes_executed?: number | null
+          output_tokens?: number | null
           pause_fallback_action?: string | null
           pause_reason?: string | null
           pause_timeout_at?: string | null
           paused_at?: string | null
+          prompt?: string | null
+          provider?: string | null
           quality_score?: number | null
+          request_id?: string | null
+          response?: string | null
           retry_count?: number | null
           session_id: string
           started_at?: string | null
@@ -330,14 +326,18 @@ export type Database = {
           total_latency_ms?: number | null
           total_tokens_in?: number | null
           total_tokens_out?: number | null
+          user_id?: string | null
           user_satisfaction_score?: number | null
         }
         Update: {
           completed_at?: string | null
+          conversation_id?: string | null
           cost_budget_cents?: number | null
           created_at?: string | null
           current_state?: string | null
           deployment_id?: string | null
+          duration_ms?: number | null
+          error?: string | null
           error_code?: string | null
           error_message?: string | null
           error_node_id?: string | null
@@ -347,13 +347,20 @@ export type Database = {
           fsm_snapshot?: Json | null
           id?: string
           idempotency_key?: string | null
+          input_tokens?: number | null
           is_paused?: boolean | null
+          model?: string | null
           nodes_executed?: number | null
+          output_tokens?: number | null
           pause_fallback_action?: string | null
           pause_reason?: string | null
           pause_timeout_at?: string | null
           paused_at?: string | null
+          prompt?: string | null
+          provider?: string | null
           quality_score?: number | null
+          request_id?: string | null
+          response?: string | null
           retry_count?: number | null
           session_id?: string
           started_at?: string | null
@@ -363,9 +370,17 @@ export type Database = {
           total_latency_ms?: number | null
           total_tokens_in?: number | null
           total_tokens_out?: number | null
+          user_id?: string | null
           user_satisfaction_score?: number | null
         }
         Relationships: [
+          {
+            foreignKeyName: "agent_executions_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "vibe_agent_conversations"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "agent_executions_deployment_id_fkey"
             columns: ["deployment_id"]
@@ -532,41 +547,73 @@ export type Database = {
       }
       agent_flow_versions: {
         Row: {
+          applied_at: string | null
+          applied_by: string | null
+          conversation_id: string | null
           created_at: string
           created_by: string | null
           flow_definition: Json
           flow_id: string
           flow_name: string | null
           id: string
+          metadata: Json | null
           notes: string | null
+          parent_version_id: string | null
+          patch: Json | null
           version: number
         }
         Insert: {
+          applied_at?: string | null
+          applied_by?: string | null
+          conversation_id?: string | null
           created_at?: string
           created_by?: string | null
           flow_definition?: Json
           flow_id: string
           flow_name?: string | null
           id?: string
+          metadata?: Json | null
           notes?: string | null
+          parent_version_id?: string | null
+          patch?: Json | null
           version: number
         }
         Update: {
+          applied_at?: string | null
+          applied_by?: string | null
+          conversation_id?: string | null
           created_at?: string
           created_by?: string | null
           flow_definition?: Json
           flow_id?: string
           flow_name?: string | null
           id?: string
+          metadata?: Json | null
           notes?: string | null
+          parent_version_id?: string | null
+          patch?: Json | null
           version?: number
         }
         Relationships: [
+          {
+            foreignKeyName: "agent_flow_versions_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "vibe_agent_conversations"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "agent_flow_versions_flow_id_fkey"
             columns: ["flow_id"]
             isOneToOne: false
             referencedRelation: "agent_flows"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agent_flow_versions_parent_version_id_fkey"
+            columns: ["parent_version_id"]
+            isOneToOne: false
+            referencedRelation: "agent_flow_versions"
             referencedColumns: ["id"]
           },
         ]
@@ -1179,6 +1226,33 @@ export type Database = {
           },
         ]
       }
+      agent_streaming_telemetry: {
+        Row: {
+          created_at: string
+          event_name: string
+          id: number
+          payload: Json
+          project_id: string
+          run_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          event_name: string
+          id?: number
+          payload?: Json
+          project_id: string
+          run_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          event_name?: string
+          id?: number
+          payload?: Json
+          project_id?: string
+          run_id?: string | null
+        }
+        Relationships: []
+      }
       agent_test_suites: {
         Row: {
           baseline_version: number | null
@@ -1541,6 +1615,371 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      design_dna: {
+        Row: {
+          category: string
+          color: Json | null
+          compatible_languages: string[] | null
+          compatible_moods: string[] | null
+          component: Json | null
+          created_at: string
+          extracted_at: string
+          id: string
+          interaction: Json | null
+          layout: Json | null
+          motion: Json | null
+          name: string
+          quality_score: number | null
+          quality_source: string | null
+          serves_domains: string[] | null
+          source_url: string
+          typography: Json | null
+          validated: boolean | null
+        }
+        Insert: {
+          category?: string
+          color?: Json | null
+          compatible_languages?: string[] | null
+          compatible_moods?: string[] | null
+          component?: Json | null
+          created_at?: string
+          extracted_at?: string
+          id: string
+          interaction?: Json | null
+          layout?: Json | null
+          motion?: Json | null
+          name: string
+          quality_score?: number | null
+          quality_source?: string | null
+          serves_domains?: string[] | null
+          source_url: string
+          typography?: Json | null
+          validated?: boolean | null
+        }
+        Update: {
+          category?: string
+          color?: Json | null
+          compatible_languages?: string[] | null
+          compatible_moods?: string[] | null
+          component?: Json | null
+          created_at?: string
+          extracted_at?: string
+          id?: string
+          interaction?: Json | null
+          layout?: Json | null
+          motion?: Json | null
+          name?: string
+          quality_score?: number | null
+          quality_source?: string | null
+          serves_domains?: string[] | null
+          source_url?: string
+          typography?: Json | null
+          validated?: boolean | null
+        }
+        Relationships: []
+      }
+      design_dna_checkpoints: {
+        Row: {
+          created_at: string
+          id: string
+          job_id: string
+          state: Json
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          job_id: string
+          state?: Json
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          job_id?: string
+          state?: Json
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "design_dna_checkpoints_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: true
+            referencedRelation: "design_dna_jobs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      design_dna_events: {
+        Row: {
+          created_at: string
+          event_type: string
+          id: string
+          job_id: string
+          payload: Json
+          seq: number
+        }
+        Insert: {
+          created_at?: string
+          event_type: string
+          id?: string
+          job_id: string
+          payload?: Json
+          seq: number
+        }
+        Update: {
+          created_at?: string
+          event_type?: string
+          id?: string
+          job_id?: string
+          payload?: Json
+          seq?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "design_dna_events_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "design_dna_jobs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      design_dna_job_queue: {
+        Row: {
+          body: Json
+          created_at: string
+          id: string
+          user_id: string | null
+        }
+        Insert: {
+          body?: Json
+          created_at?: string
+          id?: string
+          user_id?: string | null
+        }
+        Update: {
+          body?: Json
+          created_at?: string
+          id?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
+      design_dna_jobs: {
+        Row: {
+          canceled_at: string | null
+          categories: string[]
+          current_url_index: number
+          depth: string
+          error: string | null
+          errors: Json
+          finished_at: string | null
+          heartbeat_at: string | null
+          id: string
+          meta: Json
+          results: Json
+          sandbox_id: string | null
+          started_at: string
+          status: string
+          urls: string[]
+          user_id: string | null
+        }
+        Insert: {
+          canceled_at?: string | null
+          categories?: string[]
+          current_url_index?: number
+          depth?: string
+          error?: string | null
+          errors?: Json
+          finished_at?: string | null
+          heartbeat_at?: string | null
+          id?: string
+          meta?: Json
+          results?: Json
+          sandbox_id?: string | null
+          started_at?: string
+          status?: string
+          urls?: string[]
+          user_id?: string | null
+        }
+        Update: {
+          canceled_at?: string | null
+          categories?: string[]
+          current_url_index?: number
+          depth?: string
+          error?: string | null
+          errors?: Json
+          finished_at?: string | null
+          heartbeat_at?: string | null
+          id?: string
+          meta?: Json
+          results?: Json
+          sandbox_id?: string | null
+          started_at?: string
+          status?: string
+          urls?: string[]
+          user_id?: string | null
+        }
+        Relationships: []
+      }
+      design_library_chat_messages: {
+        Row: {
+          actions: Json | null
+          content: string
+          created_at: string
+          id: string
+          meta: Json | null
+          role: string
+          session_id: string
+        }
+        Insert: {
+          actions?: Json | null
+          content: string
+          created_at?: string
+          id?: string
+          meta?: Json | null
+          role: string
+          session_id: string
+        }
+        Update: {
+          actions?: Json | null
+          content?: string
+          created_at?: string
+          id?: string
+          meta?: Json | null
+          role?: string
+          session_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "design_library_chat_messages_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "design_library_chat_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      design_library_chat_sessions: {
+        Row: {
+          created_at: string
+          id: string
+          job_id: string
+          title: string | null
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          job_id: string
+          title?: string | null
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          job_id?: string
+          title?: string | null
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "design_library_chat_sessions_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: true
+            referencedRelation: "design_dna_jobs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      design_system_library: {
+        Row: {
+          category: string
+          compatible_languages: string[]
+          compatible_moods: string[]
+          created_at: string
+          design_dna: Json | null
+          embedding: string | null
+          extracted_at: string
+          extracted_by: string | null
+          id: string
+          is_archived: boolean
+          name: string
+          notes: string | null
+          quality_score: number
+          quality_source: string
+          raw_markdown: string | null
+          screenshot_base64: string | null
+          screenshot_url: string | null
+          serves_domains: string[]
+          source_url: string
+          tags: string[]
+          updated_at: string
+          validated: boolean
+          validated_at: string | null
+          validated_by: string | null
+          view_count: number
+        }
+        Insert: {
+          category?: string
+          compatible_languages?: string[]
+          compatible_moods?: string[]
+          created_at?: string
+          design_dna?: Json | null
+          embedding?: string | null
+          extracted_at?: string
+          extracted_by?: string | null
+          id?: string
+          is_archived?: boolean
+          name: string
+          notes?: string | null
+          quality_score?: number
+          quality_source?: string
+          raw_markdown?: string | null
+          screenshot_base64?: string | null
+          screenshot_url?: string | null
+          serves_domains?: string[]
+          source_url: string
+          tags?: string[]
+          updated_at?: string
+          validated?: boolean
+          validated_at?: string | null
+          validated_by?: string | null
+          view_count?: number
+        }
+        Update: {
+          category?: string
+          compatible_languages?: string[]
+          compatible_moods?: string[]
+          created_at?: string
+          design_dna?: Json | null
+          embedding?: string | null
+          extracted_at?: string
+          extracted_by?: string | null
+          id?: string
+          is_archived?: boolean
+          name?: string
+          notes?: string | null
+          quality_score?: number
+          quality_source?: string
+          raw_markdown?: string | null
+          screenshot_base64?: string | null
+          screenshot_url?: string | null
+          serves_domains?: string[]
+          source_url?: string
+          tags?: string[]
+          updated_at?: string
+          validated?: boolean
+          validated_at?: string | null
+          validated_by?: string | null
+          view_count?: number
+        }
+        Relationships: []
       }
       execution_dead_letter_queue: {
         Row: {
@@ -2070,6 +2509,7 @@ export type Database = {
         Row: {
           created_at: string
           description: string | null
+          design_signature: Json | null
           id: string
           kind: string
           meta: Json
@@ -2082,6 +2522,7 @@ export type Database = {
         Insert: {
           created_at?: string
           description?: string | null
+          design_signature?: Json | null
           id?: string
           kind?: string
           meta?: Json
@@ -2094,6 +2535,7 @@ export type Database = {
         Update: {
           created_at?: string
           description?: string | null
+          design_signature?: Json | null
           id?: string
           kind?: string
           meta?: Json
@@ -2861,6 +3303,76 @@ export type Database = {
         }
         Relationships: []
       }
+      vibe_agent_conversations: {
+        Row: {
+          created_at: string
+          flow_id: string
+          id: string
+          title: string | null
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          flow_id: string
+          id?: string
+          title?: string | null
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          flow_id?: string
+          id?: string
+          title?: string | null
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vibe_agent_conversations_flow_id_fkey"
+            columns: ["flow_id"]
+            isOneToOne: false
+            referencedRelation: "agent_flows"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      vibe_agent_messages: {
+        Row: {
+          content: string
+          conversation_id: string
+          created_at: string
+          id: string
+          meta: Json
+          role: string
+        }
+        Insert: {
+          content: string
+          conversation_id: string
+          created_at?: string
+          id?: string
+          meta?: Json
+          role: string
+        }
+        Update: {
+          content?: string
+          conversation_id?: string
+          created_at?: string
+          id?: string
+          meta?: Json
+          role?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vibe_agent_messages_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "vibe_agent_conversations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       webhook_inbox: {
         Row: {
           body: Json
@@ -2958,6 +3470,7 @@ export type Database = {
         Returns: string
       }
       cleanup_expired_agent_memories: { Args: never; Returns: number }
+      cleanup_expired_idempotency_keys: { Args: never; Returns: undefined }
       forge_agent_sql_readonly: { Args: { p_sql: string }; Returns: Json }
       forge_describe_table: { Args: { p_table: string }; Returns: Json }
       forge_list_public_tables: {
@@ -2965,6 +3478,10 @@ export type Database = {
         Returns: {
           table_name: string
         }[]
+      }
+      get_design_dna_catalog: {
+        Args: { limit_count?: number; min_quality?: number }
+        Returns: Json
       }
       has_role: {
         Args: {
@@ -3058,6 +3575,27 @@ export type Database = {
           name: string
           similarity: number
         }[]
+      }
+      search_design_library: {
+        Args: {
+          limit_count?: number
+          min_quality?: number
+          query_category?: string
+          query_domain?: string
+          query_language?: string
+          query_mood?: string
+          query_tags?: string[]
+        }
+        Returns: Json
+      }
+      search_design_library_semantic: {
+        Args: {
+          match_count?: number
+          match_threshold?: number
+          min_quality?: number
+          query_embedding: string
+        }
+        Returns: Json
       }
       search_rag_chunks: {
         Args: {
@@ -3216,9 +3754,6 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
-  graphql_public: {
-    Enums: {},
-  },
   public: {
     Enums: {
       app_role: ["admin", "user"],

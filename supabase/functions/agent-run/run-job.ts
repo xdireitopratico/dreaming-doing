@@ -150,7 +150,12 @@ function buildDesignDirectiveBlock(designRaw: unknown): string {
     for (const ap of antiPatterns) lines.push(`- ${ap}`);
   }
 
-  lines.push("", "Siga esta direção ao construir. Não improvise — execute a síntese aprovada.", "---", "");
+  lines.push(
+    "",
+    "Siga esta direção ao construir. Não improvise — execute a síntese aprovada.",
+    "---",
+    "",
+  );
 
   return lines.join("\n");
 }
@@ -444,14 +449,14 @@ export async function executeAgentJob(
                 : undefined,
           planHeadline: typeof preMeta.planHeadline === "string" ? preMeta.planHeadline : undefined,
           planSteps: coercePlanStepsFromMeta(preMeta.steps),
-          planDesign: preMeta.design ? (() => {
-            const d = preMeta.design as Record<string, unknown>;
-            return {
-              references: Array.isArray(d.references)
-                ? d.references
-                : [],
-            };
-          })() : undefined,
+          planDesign: preMeta.design
+            ? (() => {
+                const d = preMeta.design as Record<string, unknown>;
+                return {
+                  references: Array.isArray(d.references) ? d.references : [],
+                };
+              })()
+            : undefined,
           buildFixResume: preMeta.buildFix === true,
           chunkGeneration:
             typeof preMeta.chunkGeneration === "number" ? preMeta.chunkGeneration : 0,
@@ -468,7 +473,7 @@ export async function executeAgentJob(
     canceled?: boolean;
     toolsUsed?: string[];
   };
-  loop.startHeartbeatTimer(90_000);
+  loop.startHeartbeatTimer(30_000); // H8: 90s → 30s (observe() pode demorar 2-5min)
   try {
     result = await loop.run();
   } catch (e) {

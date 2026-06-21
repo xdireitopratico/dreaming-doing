@@ -494,11 +494,9 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
         finished: false,
         error: null,
         currentStep:
-          data.plan === true && typeof data.step === "number" ? data.step : prev.currentStep,
+          typeof data.step === "number" ? data.step : prev.currentStep,
         totalSteps:
-          data.plan === true && typeof data.totalSteps === "number"
-            ? data.totalSteps
-            : prev.totalSteps,
+          typeof data.totalSteps === "number" ? data.totalSteps : prev.totalSteps,
         streamText: prev.streamText,
         narrationText: narration || prev.narrationText,
         deliveryFiles,

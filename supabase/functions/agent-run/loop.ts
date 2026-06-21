@@ -173,14 +173,16 @@ export class AgentLoop {
   private narrationBuffer: string;
   /** Abertura FASE 1 — uma vez por turno, só chat [2]. */
   private openingEmitted: boolean;
-  /** Heartbeat timer (90s) que mantém `agent_runs.heartbeat_at` fresco durante silêncios longos.
-   *  Garante que F5 e snapshot-restore continuem funcionando em runs de design+build > 5min. */
+  /** Heartbeat timer (30s) que mantém `agent_runs.heartbeat_at` fresco durante silêncios longos.
+   *  Garante que F5 e snapshot-restore continuem funcionando em runs de design+build > 5min.
+   *  H8 fix: reduzido de 90s → 30s. observe() pode demorar 2-5min (npm install + build + tsc).
+   *  Sem heartbeat frequente, o cliente (BUSY_ZOMBIE_GAP_MS=3min) marca a run como zumbi
+   *  enquanto o agente ainda está vivo trabalhando. 30s é seguro porque o cliente tolera
+   *  até 5min de inatividade (H8 alinha com o threshold do cliente). */
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
 
-  /** Inicia um timer que chama `touchHeartbeat()` a cada 90s enquanto o loop roda.
-   *  Complementa o `touchHeartbeat` reativo (chamado em transições) cobrindo
-   *  os silêncios longos onde o agente pensa mas não emite eventos. */
-  startHeartbeatTimer(intervalMs = 90_000): void {
+  /** Inicia um timer que chama `touchHeartbeat()` a cada 30s enquanto o loop roda. */
+  startHeartbeatTimer(intervalMs = 30_000): void {
     if (this.heartbeatTimer) return;
     this.heartbeatTimer = setInterval(() => {
       void this.touchHeartbeat();

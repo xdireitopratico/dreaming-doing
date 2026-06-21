@@ -36,4 +36,10 @@ Deno.test("deriveClassificationFromPrompt — heurística por tamanho e modo", (
   );
   assertEquals(big.type, "new_project");
   assertEquals(big.complexity >= 3, true);
+
+  const explanatory = deriveClassificationFromPrompt(
+    "Explique detalhadamente como funciona React Server Components e suas vantagens",
+    false,
+  );
+  assertEquals(explanatory.type, "other");
 });
