@@ -83,6 +83,14 @@ function shellOutput(result: { output?: unknown; error?: string }): string {
   return result.error ?? "";
 }
 
+/** H2 fix: strip ANSI escape codes do output.
+ *  npm, vite, tsc e esbuild jogam códigos ANSI (\u001b[31m, \u001b[0m)
+ *  que ocupam tokens do LLM sem informação útil. */
+function stripAnsi(s: string): string {
+  // eslint-disable-next-line no-control-regex
+  return s.replace(/\u001b\[[0-9;]*[a-zA-Z]/g, "").replace(/\u001b\][^\u0007]*\u0007/g, "");
+}
+
 export class RuntimeObserver {
   private reg: ToolRegistry;
   private fileCache: Map<string, string> | null;
@@ -105,7 +113,7 @@ export class RuntimeObserver {
           name: "shell_exec",
           arguments: { command: "npm install 2>&1" },
         });
-        const installOutput = shellOutput(install);
+        const installOutput = stripAnsi(shellOutput(install));
         checks.push({ name: "install", ok: install.ok, output: installOutput.slice(0, 3000) });
         if (!install.ok) {
           return { passed: false, checks, feedback: `[install] ${installOutput.slice(0, 2000)}` };
@@ -128,7 +136,7 @@ export class RuntimeObserver {
         name: "shell_exec",
         arguments: { command: "npm run build 2>&1" },
       });
-      const buildOutput = shellOutput(build);
+      const buildOutput = stripAnsi(shellOutput(build));
       const buildOk = build.ok && !outputIndicatesBuildFailure(buildOutput);
       checks.push({ name: "build", ok: buildOk, output: buildOutput.slice(0, 8000) });
     } catch (e: unknown) {
@@ -145,7 +153,7 @@ export class RuntimeObserver {
           name: "shell_exec",
           arguments: { command: "npx tsc --noEmit --project tsconfig.json 2>&1 || true" },
         });
-        const tscOutput = shellOutput(tsc);
+        const tscOutput = stripAnsi(shellOutput(tsc));
         const ok = !outputIndicatesBuildFailure(tscOutput);
         checks.push({ name: "typescript", ok, output: tscOutput.slice(0, 2000) });
       } catch (e: unknown) {
@@ -167,10 +175,11 @@ export class RuntimeObserver {
           name: "shell_exec",
           arguments: { command: "npm run lint 2>&1 || true" },
         });
-        const lintOutput =
+        const lintOutput = stripAnsi(
           typeof lint.output === "object"
             ? ((lint.output as any).stderr ?? (lint.output as any).stdout ?? "")
-            : String(lint.output ?? "");
+            : String(lint.output ?? ""),
+        );
         const lintOk = lint.ok && !outputIndicatesBuildFailure(lintOutput);
         checks.push({ name: "lint", ok: lintOk, output: lintOutput.slice(0, 2000) });
       } catch {
