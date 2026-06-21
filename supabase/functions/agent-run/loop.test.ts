@@ -1305,4 +1305,115 @@ Deno.test("plan-mode — validateApprovedSteps pula steps com enabled=false", ()
   }
 });
 
+// ─── Session 2.0 — contrato canônico do emissor ────────────────────────────
+
+Deno.test("S2.0-C1 — plan_proposed inclui design + ttlMs + proposedAt", async () => {
+  const { loop, main, events } = f({
+    msgs: [{ role: "user", content: "crie uma landing page vibrante" }],
+    files: [{ path: "src/App.tsx", content: "export default () => <p>oi</p>" }],
+    planMode: true,
+  });
+  main.queue(
+    er(
+      "",
+      tc("p1", "create_plan", {
+        summary: "Landing vibrante",
+        rationale: "Hero com parallax serve ao objetivo",
+        steps: [
+          { id: "s1", type: "create_file", description: "Hero", filePath: "src/Hero.tsx" },
+          { id: "s2", type: "create_file", description: "CTA", filePath: "src/CTA.tsx" },
+        ],
+        design: {
+          voice: ["bold", "kinetic"],
+          moment: "Hero com parallax",
+          techniques: ["parallax", "grid-asymmetry"],
+          mood: "vibrant",
+        },
+      }),
+    ),
+  );
+  main.queue(tr("Plano: landing vibrante — revisar antes de codar."));
+  await loop.run();
+  const pp = ef(events, "plan_proposed")[0]?.data as {
+    design?: { voice?: string[]; moment?: string };
+    ttlMs?: number;
+    proposedAt?: string;
+  };
+  assertExists(pp, "plan_proposed deve ser emitido");
+  assertEquals(pp.design?.voice, ["bold", "kinetic"]);
+  assertEquals(pp.design?.moment, "Hero com parallax");
+  assertEquals(typeof pp.ttlMs, "number");
+  assertEquals(typeof pp.proposedAt, "string");
+});
+
+Deno.test("S2.0-C2 — tool_start/tool_done incluem toolCallId", async () => {
+  const { loop, main, events } = f({ files: [] });
+  main.queue(er("Criando...", tc("call-xyz", "fs_write", { path: "src/App.tsx", content: "x" })));
+  main.queue(tr("Pronto!"));
+  await loop.run();
+  const starts = ef(events, "tool_start");
+  const dones = ef(events, "tool_done");
+  assert(starts.length > 0, "tool_start emitido");
+  assertEquals((starts[0]!.data as { toolCallId?: string }).toolCallId, "call-xyz");
+  assert(dones.length > 0, "tool_done emitido");
+  assertEquals((dones[0]!.data as { toolCallId?: string }).toolCallId, "call-xyz");
+});
+
+Deno.test("S2.0-C2b — build_log emitido para npm/vite (não só gradle)", async () => {
+  const { loop, main, events } = f({ files: [] });
+  main.queue(
+    er("Buildando...", tc("t1", "shell_exec", { command: "npm run build" })),
+  );
+  main.queue(tr("Pronto!"));
+  await loop.run();
+  const logs = ef(events, "build_log");
+  assert(logs.length > 0, "build_log emitido para npm run build");
+  assertEquals((logs[0]!.data as { command?: string }).command, "npm run build");
+});
+
+Deno.test("S2.0-C3 — path de sucesso emite done com tokens/cost", async () => {
+  const { loop, main, events } = f({ files: [] });
+  main.queue(er("Criando...", tc("t1", "fs_write", { path: "src/App.tsx", content: "// app" })));
+  main.queue(tr("Pronto!"));
+  const r = await loop.run();
+  assertEquals(r.ok, true);
+  const doneEv = ef(events, "done")[0]?.data as {
+    totalInputTokens?: number;
+    totalOutputTokens?: number;
+    totalTokens?: number;
+    costUsd?: number;
+  };
+  assertExists(doneEv, "done emitido");
+  assertEquals(typeof doneEv.totalTokens, "number");
+  assert((doneEv.totalTokens ?? 0) > 0, "totalTokens > 0");
+  assertEquals(typeof doneEv.costUsd, "number");
+});
+
+Deno.test("S2.0-C8 — classify restored em resume", async () => {
+  const { loop, main, events } = f({
+    msgs: [
+      { role: "user", content: "Crie landing" },
+      { role: "assistant", content: "ok" },
+    ],
+    resume: true,
+    checkpoint: true,
+    resumePhase: LoopPhase.EXECUTE_STEP,
+    score: 3,
+    maxFromCk: 8,
+    stepIdx: 2,
+    intent: { type: "new_project", scope: [], complexity: "medium", summary: "Landing" },
+  });
+  main.queue(er("Continuando...", tc("t2", "fs_write", { path: "src/x.ts", content: "x" })));
+  main.queue(tr("Pronto!"));
+  await loop.run();
+  const cv = ef(events, "classify")[0]?.data as {
+    restored?: boolean;
+    complexity?: string;
+    summary?: string;
+  };
+  assertEquals(cv?.restored, true);
+  assertEquals(cv?.complexity, "medium");
+  assertEquals(cv?.summary, "Landing");
+});
+
 (crypto as { randomUUID: typeof crypto.randomUUID }).randomUUID = _origUUID;

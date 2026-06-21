@@ -711,7 +711,8 @@ export class AgentLoop {
         restored: true,
       });
       this.emit("classify", {
-        complexity: this.complexityScore,
+        complexity: this.state.intent?.complexity ?? "unknown",
+        complexityScore: this.complexityScore,
         summary: this.state.intent?.summary ?? "Retomada",
         restored: true,
       });
