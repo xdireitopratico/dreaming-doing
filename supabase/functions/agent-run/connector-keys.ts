@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { FORGE_ADMIN_EMAIL } from "../_shared/forge-admin.ts";
 import { applyOpenAiConnectorToken } from "../_shared/provider-wire.ts";
+import { enrichConnectorKeysWithCustomProviders } from "./custom-providers-db.ts";
 
 export type AgentPreferencesPayload = {
   mode?: "auto" | "robin" | "rob" | "fixed";
@@ -119,7 +120,7 @@ export async function loadConnectorKeys(
       Object.assign(keys, applyOpenAiConnectorToken(p, token, meta));
     }
   }
-  return keys;
+  return enrichConnectorKeysWithCustomProviders(supabase, ownerId, keys);
 }
 
 const DEPLOY_KIND_TO_KEY: Record<string, string> = {

@@ -132,6 +132,9 @@ function nvidiaModelFromSlug(slug: string): string {
   if (bare.includes("nemotron-3-ultra-550b") && !bare.includes("-a55b")) {
     nimSlug = "nvidia/nemotron-3-ultra-550b-a55b";
   }
+  if (bare.includes("nemotron-3-super-120b") && !bare.includes("-a12b")) {
+    nimSlug = "nvidia/nemotron-3-super-120b-a12b";
+  }
   return nimSlug;
 }
 

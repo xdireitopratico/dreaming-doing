@@ -19,6 +19,9 @@ export function normalizeNvidiaApiModel(slug: string): string {
   if (bare.includes("nemotron-3-ultra-550b") && !bare.includes("-a55b")) {
     return NEMOTRON_SLUG;
   }
+  if (bare.includes("nemotron-3-super-120b") && !bare.includes("-a12b")) {
+    return "nvidia/nemotron-3-super-120b-a12b";
+  }
   return s.includes("/") ? s : `nvidia/${bare}`;
 }
 

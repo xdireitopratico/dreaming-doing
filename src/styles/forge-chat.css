@@ -8,43 +8,46 @@
   min-width: 0;
   flex: 1;
   flex-direction: column;
-  overflow-x: hidden;
-  overflow-y: auto;
-  /* Sem auto-scroll programático — evita o browser puxar a posição ao crescer o thread */
-  overflow-anchor: none;
-  overscroll-behavior: contain;
-  scrollbar-width: thin;
-  scrollbar-color: color-mix(in srgb, var(--border-forge) 65%, #52525b 35%) transparent;
+  overflow: hidden;
 }
 
 .forge-messages {
   position: relative;
-  flex-grow: 1;
-  overflow: visible;
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  /* Âncora de scroll: respiro no topo ao alinhar a bolha do usuário
+     via scrollIntoView({ block: 'start' }), e scroll anchoring nativo
+     que mantém a bolha no topo enquanto o conteúdo do agente cresce abaixo. */
+  scroll-padding-top: 8px;
+  overflow-anchor: auto;
+  overscroll-behavior: contain;
   padding: var(--chat-padding) var(--chat-padding) 120px;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--border-forge) 65%, #52525b 35%) transparent;
   font: var(--font-chat);
   color: var(--text-primary);
 }
 
-/* Scrollbar escuro — painel do chat + composer (Chrome/Edge/Safari) */
-.forge-chat-inner::-webkit-scrollbar,
+/* Scrollbar escuro — área de mensagens + composer (Chrome/Edge/Safari) */
+.forge-messages::-webkit-scrollbar,
 .forge-composer-input::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
 
-.forge-chat-inner::-webkit-scrollbar-track,
+.forge-messages::-webkit-scrollbar-track,
 .forge-composer-input::-webkit-scrollbar-track {
   background: transparent;
 }
 
-.forge-chat-inner::-webkit-scrollbar-thumb,
+.forge-messages::-webkit-scrollbar-thumb,
 .forge-composer-input::-webkit-scrollbar-thumb {
   background: color-mix(in srgb, var(--border-forge) 70%, #52525b 30%);
   border-radius: 999px;
 }
 
-.forge-chat-inner::-webkit-scrollbar-thumb:hover,
+.forge-messages::-webkit-scrollbar-thumb:hover,
 .forge-composer-input::-webkit-scrollbar-thumb:hover {
   background: color-mix(in srgb, var(--text-muted) 45%, var(--border-forge) 55%);
 }
@@ -149,6 +152,7 @@
   flex-direction: column;
   align-items: flex-end;
   width: 100%;
+  scroll-margin-top: 8px;
 }
 
 .forge-chat-item-assistant {
@@ -404,30 +408,9 @@
 
 .forge-plan-dock {
   flex-shrink: 0;
-  /* Plan dock vive dentro de .forge-messages agora (composer fica fixo fora).
-     Margem lateral zero — o padding de .forge-messages cuida do respiro. */
-  margin: var(--space-sm) 0;
+  margin: 0 var(--chat-padding) var(--space-sm);
 }
 
-/* ─── Card shell base — fonte única do padrão visual ────────────────
- * Usada por: ChatPlanDock, ChatJobCard (mini card), ChatClarify.
- * Azul-zinc (bg-input), radius 16px, shadow profundo — igual ao composer.
- * UI interativa vive direto na shell; inner dark (#0a0a0f) só em markdown
- * body passivo do plano (texto legível), nunca em botões/opções/steps. */
-.forge-card-shell {
-  width: 100%;
-  max-width: min(100%, 520px);
-  padding: 12px 14px 10px;
-  border-radius: 16px;
-  background: color-mix(in srgb, var(--bg-input) 92%, var(--bg-card) 8%);
-  border: 1px solid color-mix(in srgb, var(--border-forge) 75%, #52525b 25%);
-  box-shadow:
-    0 0 0 1px rgba(255, 255, 255, 0.02) inset,
-    0 6px 24px rgba(0, 0, 0, 0.28);
-  box-sizing: border-box;
-}
-
-/* Alias — plan dock usa a shell base. Mantido por compatibilidade. */
 .forge-plan-dock-shell {
   width: 100%;
   max-width: min(100%, 520px);
@@ -476,24 +459,19 @@
   align-items: center;
   justify-content: center;
   gap: 6px;
-  height: 34px;
-  padding: 0 16px;
+  height: 28px;
+  padding: 0 12px;
   border-radius: var(--chat-cta-radius);
   border: 1px solid color-mix(in srgb, var(--border-forge) 80%, transparent);
   background: color-mix(in srgb, var(--bg-input) 85%, transparent);
   color: var(--text-secondary);
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 500;
   cursor: pointer;
   transition:
     background 0.15s,
     color 0.15s,
     border-color 0.15s;
-}
-
-.forge-plan-dock-btn:focus-visible {
-  outline: 2px solid var(--text-accent);
-  outline-offset: 2px;
 }
 
 .forge-plan-dock-btn:hover:not(:disabled) {
@@ -530,154 +508,6 @@
   );
   background-size: 200% 100%;
   animation: forge-plan-shimmer 1.4s ease-in-out infinite;
-}
-
-/* Structured shimmer — multiple lines that hint at phase/step structure */
-.forge-plan-dock-shimmer-lines {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.forge-plan-dock-shimmer-line {
-  height: 10px;
-  border-radius: 4px;
-  background: linear-gradient(
-    90deg,
-    color-mix(in srgb, var(--bg-input) 92%, var(--bg-card) 8%) 0%,
-    color-mix(in srgb, var(--bg-input) 70%, #52525b 30%) 50%,
-    color-mix(in srgb, var(--bg-input) 92%, var(--bg-card) 8%) 100%
-  );
-  background-size: 200% 100%;
-  animation: forge-plan-shimmer 1.4s ease-in-out infinite;
-}
-
-.forge-plan-dock-shimmer-line:nth-child(1) { animation-delay: 0ms; }
-.forge-plan-dock-shimmer-line:nth-child(2) { animation-delay: 100ms; }
-.forge-plan-dock-shimmer-line:nth-child(3) { animation-delay: 200ms; }
-.forge-plan-dock-shimmer-line:nth-child(4) { animation-delay: 300ms; }
-
-/* Plan header — label + step count metadata */
-.forge-plan-dock-header {
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-  margin-bottom: var(--space-sm);
-}
-
-.forge-plan-dock-step-count {
-  font: var(--font-task-label);
-  font-size: 10px;
-  font-weight: 500;
-  letter-spacing: 0.03em;
-  color: var(--text-muted);
-  padding: 2px 8px;
-  border-radius: 6px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-}
-
-/* ─── Plan phases container ──────────────────────────────────────── */
-.forge-plan-phases {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-md);
-}
-
-/* Mini-card variant — herda o fundo do mini card (sem inner panel escuro).
-   Quando o mini card tem plano driven, renderiza as fases inline sem o
-   "Plan" header duplicado (compact mode do PlanPhaseList). */
-.forge-plan-phases--in-card {
-  gap: var(--space-sm);
-  margin-top: var(--space-sm);
-}
-
-/* ─── Plan phase block ───────────────────────────────────────────── */
-.forge-plan-phase {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.forge-plan-phase-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.forge-plan-phase-index {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 18px;
-  height: 18px;
-  border-radius: 6px;
-  background: color-mix(in srgb, var(--text-accent) 15%, transparent);
-  color: var(--text-accent);
-  font-family: "JetBrains Mono", ui-monospace, monospace;
-  font-size: 10px;
-  font-weight: 700;
-  flex-shrink: 0;
-}
-
-.forge-plan-phase-title {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text-primary);
-  line-height: 1.35;
-}
-
-/* ─── Plan step list ─────────────────────────────────────────────── */
-.forge-plan-step-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  padding-left: 26px;
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-}
-
-.forge-plan-step {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  font: var(--font-task);
-  font-size: 13px;
-  color: var(--text-secondary);
-  line-height: 1.45;
-}
-
-.forge-plan-step-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  margin-top: 2px;
-  color: var(--text-muted);
-  transition: color 0.15s ease;
-}
-
-.forge-plan-step-icon[data-type="create_file"] {
-  color: color-mix(in srgb, var(--status-done) 85%, white);
-}
-
-.forge-plan-step-icon[data-type="edit_file"] {
-  color: color-mix(in srgb, var(--status-working) 80%, white);
-}
-
-.forge-plan-step-icon[data-type="shell_exec"] {
-  color: color-mix(in srgb, var(--status-thinking) 85%, white);
-}
-
-.forge-plan-step-icon[data-type="install_dep"] {
-  color: color-mix(in srgb, #a78bfa 85%, white);
-}
-
-.forge-plan-step-text {
-  flex: 1;
-  min-width: 0;
-  word-break: break-word;
 }
 
 .forge-plan-dock-creating-label {
@@ -986,31 +816,29 @@
   color: var(--text-muted);
 }
 
-/* Mini card — unificado com .forge-card-shell (padrão create_plan).
- * Herda radius 16px, bg-input azul-zinc, shadow profundo. */
+/* Mini card — card destacado (referência Lovable) */
 .forge-mini-card {
   display: block;
   width: 100%;
   align-self: stretch;
   margin: 0;
-  border-radius: 16px;
-  background: color-mix(in srgb, var(--bg-input) 92%, var(--bg-card) 8%);
-  border: 1px solid color-mix(in srgb, var(--border-forge) 75%, #52525b 25%);
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--border-forge) 70%, #3f3f46 30%);
+  background: color-mix(in srgb, var(--bg-card) 88%, #18181b 12%);
   box-shadow:
-    0 0 0 1px rgba(255, 255, 255, 0.02) inset,
-    0 6px 24px rgba(0, 0, 0, 0.28);
+    0 0 0 1px rgba(255, 255, 255, 0.03) inset,
+    0 4px 20px rgba(0, 0, 0, 0.22);
   transition:
     border-color 0.15s ease,
     box-shadow 0.15s ease;
   text-align: left;
   overflow: hidden;
-  box-sizing: border-box;
 }
 
 .forge-mini-card-body {
   display: block;
   width: 100%;
-  padding: 12px 14px 10px;
+  padding: 16px 18px;
   border: none;
   border-radius: inherit;
   background: none;
@@ -1232,82 +1060,6 @@
   color: var(--text-muted);
 }
 
-/* ─── Activity stream — trabalho happening em tempo real ────────────
- * 3-4 linhas de tools/results com status (done/active/failed).
- * Linha ativa ganha gradiente leve + border-left accent (vida, não neon). */
-.forge-mini-card-activity {
-  list-style: none;
-  margin: 10px 0 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-
-.forge-mini-card-activity-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 8px 6px 6px;
-  border-radius: 8px;
-  border-left: 2px solid transparent;
-  font-size: 12px;
-  line-height: 1.4;
-  color: var(--text-muted);
-  transition: background 0.2s ease, border-color 0.2s ease;
-}
-
-.forge-mini-card-activity-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  width: 16px;
-  height: 16px;
-  border-radius: 999px;
-}
-
-.forge-mini-card-activity-icon[data-status="done"] {
-  color: color-mix(in srgb, var(--status-done) 85%, white);
-}
-
-.forge-mini-card-activity-icon[data-status="active"] {
-  color: color-mix(in srgb, var(--text-accent) 90%, white);
-}
-
-.forge-mini-card-activity-icon[data-status="failed"] {
-  color: color-mix(in srgb, var(--status-failed) 90%, white);
-}
-
-.forge-mini-card-activity-label {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* Linha ativa — gradiente leve + border-left accent (efeito Disney sutil). */
-.forge-mini-card-activity-item--active {
-  background: linear-gradient(
-    90deg,
-    color-mix(in srgb, var(--text-accent) 10%, transparent) 0%,
-    transparent 100%
-  );
-  border-left-color: var(--text-accent);
-  color: var(--text-primary);
-  font-weight: 500;
-}
-
-.forge-mini-card-activity-item--done {
-  color: var(--text-secondary);
-}
-
-.forge-mini-card-activity-item--failed {
-  color: color-mix(in srgb, var(--status-failed) 88%, white);
-  border-left-color: color-mix(in srgb, var(--status-failed) 50%, transparent);
-}
-
 .forge-mini-card-hint {
   margin: 10px 0 0;
   font-size: 10px;
@@ -1403,123 +1155,6 @@
 .forge-new-messages-pill:hover {
   background: color-mix(in srgb, var(--bg-chat) 75%, var(--text-accent) 25%);
   border-color: var(--text-accent);
-}
-
-/* ─── Clarify dock — padronizado com ChatPlanDock ────────────────── */
-
-.forge-clarify-dock {
-  /* Herda margin do .forge-plan-dock — fica dentro de .forge-messages. */
-}
-
-.forge-clarify-dock-shell {
-  /* Mesma shell do plano — padrão visual unificado (.forge-card-shell). */
-}
-
-/* Conteúdo direto na shell azul-zinc (sem inner dark — UI interativa). */
-.forge-clarify-content {
-  margin-bottom: var(--space-sm);
-}
-
-.forge-clarify-intro {
-  margin: 0 0 var(--space-sm);
-  font: var(--font-chat);
-  font-size: 13px;
-  line-height: 1.55;
-  color: var(--text-secondary);
-}
-
-.forge-clarify-question {
-  margin: 0 0 var(--space-md);
-  font: var(--font-chat);
-  font-size: 14px;
-  font-weight: 600;
-  line-height: 1.45;
-  color: var(--text-primary);
-}
-
-.forge-clarify-options {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-sm);
-}
-
-.forge-clarify-option {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 2px;
-  width: 100%;
-  padding: 10px var(--space-md);
-  border-radius: var(--chat-cta-radius);
-  border: 1px solid var(--border-forge);
-  background: var(--bg-input);
-  color: var(--text-primary);
-  text-align: left;
-  cursor: pointer;
-  transition:
-    border-color 0.15s,
-    background 0.15s;
-}
-
-.forge-clarify-option:hover:not(:disabled) {
-  border-color: color-mix(in srgb, var(--text-accent) 55%, var(--border-forge));
-  background: var(--bg-hover);
-}
-
-.forge-clarify-option--disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
-}
-
-.forge-clarify-option-label {
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.forge-clarify-option-desc {
-  font-size: 12px;
-  line-height: 1.45;
-  color: var(--text-secondary);
-}
-
-/* Bloco de texto próprio + actions — fora do inner escuro, na base da shell. */
-.forge-clarify-custom {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-sm);
-  padding-top: var(--space-sm);
-}
-
-.forge-clarify-input {
-  width: 100%;
-  min-height: 36px;
-  max-height: 120px;
-  resize: none;
-  padding: var(--space-sm) var(--space-xs);
-  border: 1px solid var(--border-forge);
-  border-radius: var(--chat-cta-radius);
-  background: color-mix(in srgb, var(--bg-input) 85%, transparent);
-  color: var(--text-primary);
-  font-size: 13px;
-  line-height: 1.5;
-  outline: none;
-  transition: border-color 0.15s;
-}
-
-.forge-clarify-input::placeholder {
-  color: var(--text-muted);
-}
-
-.forge-clarify-input:focus {
-  border-color: var(--border-active);
-}
-
-.forge-clarify-input:disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
 }
 
 /* Composer — bolha própria (referência Lovable), separada da área de mensagens */
@@ -2008,32 +1643,4 @@
 
 .chat-review-callout-btn:hover {
   background: var(--bg-hover, rgba(255, 255, 255, 0.06));
-}
-
-/* ─── C1: Shimmer → Ready transition ───────────────────────────────── */
-
-.forge-plan-dock-shell--ready {
-  animation: forge-card-appear 0.35s var(--ease-out-expo) both;
-}
-
-/* ─── C2: Stagger steps on appear ───────────────────────────────────── */
-
-.forge-plan-step {
-  animation: forge-card-appear 0.3s var(--ease-out-expo) both;
-  animation-delay: calc(var(--step-index, 0) * 60ms);
-}
-
-/* ─── D1: Reduced motion ────────────────────────────────────────────── */
-
-@media (prefers-reduced-motion: reduce) {
-  .forge-plan-dock-shell,
-  .forge-plan-dock-shell--ready,
-  .forge-plan-step,
-  .forge-plan-dock-shimmer-line,
-  .forge-animate-thinking,
-  .forge-animate-card-appear,
-  .forge-animate-task-check {
-    animation: none !important;
-    transition-duration: 0.01ms !important;
-  }
 }

@@ -49,6 +49,7 @@ export function ChatMessage({
           content={item.message.content}
           parts={item.message.parts}
           queued={isQueued}
+          timestamp={item.message.timestamp}
         />
         <ChatToolbar
           text={item.message.content}

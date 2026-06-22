@@ -705,7 +705,7 @@ export function createLLMProvider(config: {
       return new OpenAIAdapter(config.apiKey, config.baseUrl, config.model);
     case "gemini":
     case "google":
-      return new GeminiAdapter(config.apiKey, undefined, config.model);
+      return new GeminiAdapter(config.apiKey, config.baseUrl, config.model);
     case "openrouter":
       return new OpenRouterAdapter(config.apiKey, config.model);
     case "ollama":

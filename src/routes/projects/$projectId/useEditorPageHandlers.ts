@@ -9,7 +9,10 @@ import type { AgentComposerMode } from "@/lib/chat-types";
 import type { ChatMessage } from "@/lib/chat-types";
 import { buildEditorActions, type PaletteAction } from "@/components/editor/CommandPalette";
 import { createLogEntry, type LogEntry } from "@/components/editor/LogPanel";
-import { loadAgentPreferences } from "@/lib/agent-preferences";
+import {
+  loadAgentPreferences,
+  loadAgentPreferencesForAgentRun,
+} from "@/lib/agent-preferences";
 import { isAgentPreferencesConfigured, getAgentSetupBlockMessage } from "@/lib/agent-setup";
 import type { ForgeSessionKind, TasteAction } from "@/lib/taste";
 import { canSendTasteChat, canStartTasteProject, resolveSessionKind } from "@/lib/taste";
@@ -371,14 +374,31 @@ export function useEditorPageHandlers({
         return;
       }
 
+      const pp = resolvePendingPlan(
+        agent.progress.pendingPlan,
+        chatMessages,
+        agent.activeRunId,
+      );
       const planAwaiting =
-        needsPlanApprovalNow(agent.progress.pendingPlan, chatMessages, agent.activeRunId) &&
-        !!resolvePendingPlan(agent.progress.pendingPlan, chatMessages, agent.activeRunId);
+        needsPlanApprovalNow(agent.progress.pendingPlan, chatMessages, agent.activeRunId) && !!pp;
 
       const sendMode = (mode ?? composerMode) as AgentComposerMode;
 
       void qc.invalidateQueries({ queryKey: ["agent-runs", projectId] });
       agent.refreshPendingQueue(projectId, conversation.id).catch(() => {});
+
+      if (planAwaiting && pp) {
+        try {
+          await planRejectFn({
+            data: { runId: pp.runId, planId: pp.planId, graciosa: false },
+          });
+          agent.clearPendingPlan();
+          await qc.invalidateQueries({ queryKey: ["messages", conversation.id] });
+        } catch (e) {
+          toast.error((e as Error)?.message ?? "Falha ao dispensar plano");
+          return;
+        }
+      }
 
       const kind = resolveSessionKind(tasteQuota);
       const agentBusy = isAgentBusy();
@@ -393,7 +413,7 @@ export function useEditorPageHandlers({
           projectId,
           kind,
           agentBusy,
-          planAwaiting,
+          queuePaused: agent.queuePaused,
         },
         {
           insertUserMessage: async (conversationId, messageParts, meta) => {
@@ -444,8 +464,8 @@ export function useEditorPageHandlers({
             );
             return { error: null };
           },
-          queueMessage: async (pid, cid, sessionKind, queueMode) =>
-            agent.queueMessage(pid, cid, sessionKind, undefined, queueMode),
+          queueMessage: async (pid, cid, sessionKind, queueMode, payload) =>
+            agent.queueMessage(pid, cid, sessionKind, undefined, queueMode, payload),
           runAgent: (sessionKind, runMode) => runAgent(sessionKind, undefined, runMode),
           beginPendingTurn: () => agent.beginPendingTurn(),
           clearPendingTurn: () => agent.clearPendingTurn(),
@@ -626,7 +646,7 @@ export function useEditorPageHandlers({
         return;
       }
 
-      const prefs = loadAgentPreferences();
+      const prefs = await loadAgentPreferencesForAgentRun();
       const sessionKind = resolveSessionKind(tasteQuota);
       if (sessionKind === "byok" && !isAgentPreferencesConfigured(prefs)) {
         toast.error(getAgentSetupBlockMessage(prefs));
@@ -721,44 +741,20 @@ export function useEditorPageHandlers({
         toast.error("Plano não encontrado.");
         return;
       }
-      const conversationId = conversation?.id;
-      if (conversationId) {
-        qc.setQueryData(["messages", conversationId], (old: typeof chatMessages | undefined) => {
-          if (!old) return old;
-          return old.map((m) => {
-            if (m.role !== "assistant") return m;
-            const meta = m.meta as Record<string, unknown> | undefined;
-            if (meta?.planId !== pp.planId || meta?.runId !== pp.runId) return m;
-            return { ...m, meta: { ...meta, planStatus: "rejected" } };
-          });
-        });
-      }
-      agent.clearPendingPlan();
 
       try {
         await planRejectFn({
           data: { runId: pp.runId, planId: pp.planId, reason },
         });
+        agent.clearPendingPlan();
         await qc.invalidateQueries({ queryKey: ["messages", conversation?.id] });
         qc.invalidateQueries({ queryKey: ["conversation", projectId] });
         qc.invalidateQueries({ queryKey: ["agent-runs", projectId] });
       } catch (e) {
-        if (conversationId) {
-          qc.setQueryData(["messages", conversationId], (old: typeof chatMessages | undefined) => {
-            if (!old) return old;
-            return old.map((m) => {
-              if (m.role !== "assistant") return m;
-              const meta = m.meta as Record<string, unknown> | undefined;
-              if (meta?.planId !== pp.planId || meta?.runId !== pp.runId) return m;
-              return { ...m, meta: { ...meta, planStatus: "pending" } };
-            });
-          });
-        }
-        agent.hydratePendingPlan(pp);
         toast.error((e as Error)?.message ?? "Falha ao rejeitar plano");
       }
     },
-    [agent, getPendingPlan, conversation?.id, projectId, qc, planRejectFn, chatMessages],
+    [agent, getPendingPlan, conversation?.id, projectId, qc, planRejectFn],
   );
 
   const liveSiteUrl = useMemo(() => {

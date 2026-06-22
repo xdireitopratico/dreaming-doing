@@ -12,7 +12,8 @@ export type SendMessageInput = {
   projectId: string;
   kind: ForgeSessionKind;
   agentBusy: boolean;
-  planAwaiting: boolean;
+  /** Fila global pausada — composer livre; mensagem vai direto (não enfileira). */
+  queuePaused?: boolean;
 };
 
 export type SendMessageDeps = {
@@ -26,6 +27,7 @@ export type SendMessageDeps = {
     conversationId: string,
     kind: ForgeSessionKind,
     mode: AgentRunMode,
+    payload: { text: string; parts: StoredMessagePart[]; repeat?: number },
   ) => Promise<{ ok: boolean; message?: string }>;
   runAgent: (kind: ForgeSessionKind, mode: AgentRunMode) => Promise<boolean>;
   beginPendingTurn: () => void;
@@ -42,9 +44,10 @@ function messageParts(text: string, parts?: StoredMessagePart[]): StoredMessageP
 
 /**
  * Caminho único de envio — sempre resposta (run), fila ou toast de erro.
+ * Mensagens enfileiradas NÃO entram no chat (só no dock Q até o drain).
  */
 export async function sendMessage(input: SendMessageInput, deps: SendMessageDeps): Promise<void> {
-  const shouldQueue = input.agentBusy || input.planAwaiting;
+  const shouldQueue = input.agentBusy && !input.queuePaused;
   const parts = messageParts(input.text, input.parts);
   const intent = resolveTurnIntent({
     text: input.text,
@@ -71,63 +74,42 @@ export async function sendMessage(input: SendMessageInput, deps: SendMessageDeps
     deps.beginPendingTurn();
   }
 
-  const { error } = await deps.insertUserMessage(
-    input.conversationId,
-    parts,
-    shouldQueue
-      ? { mode: sendMode, turnIntent: intent.kind, queued: true }
-      : { mode: sendMode, turnIntent: intent.kind },
-  );
+  if (shouldQueue) {
+    const queued = await deps.queueMessage(
+      input.projectId,
+      input.conversationId,
+      input.kind,
+      sendMode,
+      { text: input.text.trim(), parts, repeat: 1 },
+    );
+
+    if (!queued.ok) {
+      deps.onError?.(queued.message ?? "Erro ao enfileirar mensagem");
+      return;
+    }
+
+    deps.onQueued?.(
+      queued.message ?? "Mensagem na fila — o agente processará quando terminar a tarefa atual.",
+    );
+    return;
+  }
+
+  const { error } = await deps.insertUserMessage(input.conversationId, parts, {
+    mode: sendMode,
+    turnIntent: intent.kind,
+  });
 
   if (error) {
-    if (!shouldQueue && !directChat) deps.clearPendingTurn();
+    if (!directChat) deps.clearPendingTurn();
     deps.onError?.("Erro ao enviar mensagem");
     return;
   }
 
   deps.onInserted?.();
 
-  if (!shouldQueue) {
-    const ok = await deps.runAgent(input.kind, intent.runMode);
-    if (!ok && !directChat) {
-      deps.clearPendingTurn();
-      deps.onRunFailed?.();
-    }
-    return;
+  const ok = await deps.runAgent(input.kind, intent.runMode);
+  if (!ok && !directChat) {
+    deps.clearPendingTurn();
+    deps.onRunFailed?.();
   }
-
-  const queued = await deps.queueMessage(
-    input.projectId,
-    input.conversationId,
-    input.kind,
-    sendMode,
-  );
-
-  if (!queued.ok) {
-    if (input.planAwaiting) {
-      deps.onError?.(
-        queued.message ??
-          "Não foi possível enfileirar com o plano pendente — aprove ou rejeite o plano e envie de novo.",
-      );
-      return;
-    }
-    if (!input.agentBusy) {
-      deps.beginPendingTurn();
-      const ok = await deps.runAgent(input.kind, intent.runMode);
-      if (!ok) {
-        deps.clearPendingTurn();
-        deps.onRunFailed?.();
-      }
-      return;
-    }
-    deps.onError?.(queued.message ?? "Erro ao enfileirar mensagem");
-    return;
-  }
-
-  deps.onQueued?.(
-    queued.message ??
-      (input.planAwaiting
-        ? "Mensagem na fila — aprove ou rejeite o plano no inspector para continuar."
-        : "Mensagem na fila — o agente processará quando terminar."),
-  );
 }

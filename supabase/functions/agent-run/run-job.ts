@@ -11,7 +11,11 @@ import { registerShellTool } from "./tools/shell.ts";
 import { type AgentState, LoopPhase } from "./types.ts";
 import { type AgentPreferencesPayload, loadDeployConnectorKeys } from "./connector-keys.ts";
 import type { ProviderConfig } from "./providers.ts";
-import { loadUserLlmContext, resolveAgentProvider } from "./run-setup.ts";
+import {
+  loadUserLlmContext,
+  resolveAgentProvider,
+  resolveEffectiveAgentPreferences,
+} from "./run-setup.ts";
 import { buildStackContext, stackPromptAddon } from "../_shared/stack-context.ts";
 import { buildChatHistory } from "./memory.ts";
 import { ResilientLLM, RobinKeyPool } from "./robin-pool.ts";
@@ -242,6 +246,8 @@ export async function executeAgentJob(
   }
   const preMeta = (pre?.meta ?? {}) as Record<string, unknown>;
 
+  const effectivePreferences = await resolveEffectiveAgentPreferences(supabase, userId);
+
   // Paraleliza queries independentes de inicialização (reduz cold-start)
   const [projectResult, profileResult, historyResult, userLlmResult] = await Promise.all([
     supabase.from("projects").select("id, owner_id, template, meta").eq("id", projectId).single(),
@@ -252,7 +258,7 @@ export async function executeAgentJob(
       .eq("conversation_id", conversationId)
       .order("created_at", { ascending: true })
       .limit(120),
-    loadUserLlmContext(supabase, userId, preferences),
+    loadUserLlmContext(supabase, userId, effectivePreferences),
   ]);
 
   const { data: project } = projectResult;
@@ -279,7 +285,7 @@ export async function executeAgentJob(
     await resolveAgentProvider({
       supabase,
       userId,
-      preferences,
+      preferences: effectivePreferences,
       sessionKind,
       userOnlyKeys,
     });

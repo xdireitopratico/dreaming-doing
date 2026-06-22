@@ -1,11 +1,10 @@
 import type { Dispatch, SetStateAction } from "react";
 import type { ForgeSessionKind, TasteAction } from "@/lib/taste";
-import { loadAgentPreferences } from "@/lib/agent-preferences";
+import { loadAgentPreferencesForAgentRun } from "@/lib/agent-preferences";
 import { loadAgentSessionExtensions } from "@/lib/agent-session-extensions";
-import { formatAgentFetchError } from "@/lib/agent-fetch-errors";
-import { logEditorTelemetryEvent } from "@/lib/editor-telemetry";
 import type { AgentProgress } from "@/lib/agent-progress";
-import type { PendingQueueItem } from "@/components/editor/PendingQueuePanel";
+import type { PendingQueueItem } from "@/components/chat/ChatQueueDock";
+import type { StoredMessagePart } from "@/lib/chat-attachments";
 import {
   formatQueueBlockReason,
   parseErrorResponse,
@@ -16,8 +15,22 @@ export type QueueHandlersDeps = {
   setProgress: Dispatch<SetStateAction<AgentProgress>>;
   setPendingQueueItems: Dispatch<SetStateAction<PendingQueueItem[]>>;
   setQueueBlockingReason: Dispatch<SetStateAction<string | null>>;
+  setQueuePaused: Dispatch<SetStateAction<boolean>>;
   subscribeToRun: (runId: string, opts?: { resetProgress?: boolean }) => Promise<void>;
 };
+
+function mapQueueItems(raw: unknown[]): PendingQueueItem[] {
+  return raw.map((row) => {
+    const r = row as Record<string, unknown>;
+    return {
+      id: String(r.id ?? ""),
+      createdAt: String(r.createdAt ?? r.created_at ?? ""),
+      preview: String(r.preview ?? ""),
+      repeat: typeof r.repeat === "number" ? r.repeat : 1,
+      paused: r.paused === true,
+    };
+  });
+}
 
 export function createQueueHandlers(deps: QueueHandlersDeps) {
   const refreshPendingQueue = async (projectId: string, conversationId: string) => {
@@ -30,12 +43,16 @@ export function createQueueHandlers(deps: QueueHandlersDeps) {
       if (!res.ok) return;
       const body = (await res.json()) as {
         pendingCount?: number;
-        items?: PendingQueueItem[];
+        items?: unknown[];
+        queuePaused?: boolean;
       };
       if (typeof body.pendingCount === "number") {
         deps.setProgress((p) => ({ ...p, pendingQueueCount: body.pendingCount! }));
       }
-      deps.setPendingQueueItems(body.items ?? []);
+      deps.setPendingQueueItems(mapQueueItems(body.items ?? []));
+      if (typeof body.queuePaused === "boolean") {
+        deps.setQueuePaused(body.queuePaused);
+      }
       if ((body.pendingCount ?? 0) === 0) {
         deps.setQueueBlockingReason(null);
       }
@@ -70,6 +87,40 @@ export function createQueueHandlers(deps: QueueHandlersDeps) {
     await refreshPendingQueue(projectId, conversationId);
   };
 
+  const updatePendingItem = async (
+    projectId: string,
+    conversationId: string,
+    messageId: string,
+    patch: { repeat?: number; paused?: boolean },
+  ) => {
+    const res = await postAgentRun({
+      action: "update_pending",
+      projectId,
+      conversationId,
+      messageId,
+      ...patch,
+    });
+    if (!res.ok) return;
+    await refreshPendingQueue(projectId, conversationId);
+  };
+
+  const setQueuePaused = async (
+    projectId: string,
+    conversationId: string,
+    paused: boolean,
+  ) => {
+    const res = await postAgentRun({
+      action: "set_queue_paused",
+      projectId,
+      conversationId,
+      paused,
+    });
+    if (!res.ok) return;
+    const body = (await res.json()) as { queuePaused?: boolean };
+    deps.setQueuePaused(body.queuePaused === true);
+    await refreshPendingQueue(projectId, conversationId);
+  };
+
   const drainQueue = async (
     projectId: string,
     conversationId: string,
@@ -101,7 +152,6 @@ export function createQueueHandlers(deps: QueueHandlersDeps) {
       if (body.runId) {
         deps.setQueueBlockingReason(null);
         await deps.subscribeToRun(body.runId);
-        logEditorTelemetryEvent("agent_run", "drain_ok", "info", body.runId.slice(0, 8));
         return {
           ok: true,
           runId: body.runId,
@@ -114,7 +164,7 @@ export function createQueueHandlers(deps: QueueHandlersDeps) {
         reason: body.reason,
       };
     } catch (e) {
-      return { ok: false, reason: formatAgentFetchError(e) };
+      return { ok: false, reason: String(e) };
     }
   };
 
@@ -124,15 +174,20 @@ export function createQueueHandlers(deps: QueueHandlersDeps) {
     sessionKind?: ForgeSessionKind,
     tasteAction?: TasteAction,
     mode?: "plan" | "build" | "chat",
+    payload?: { text: string; parts: StoredMessagePart[]; repeat?: number },
   ): Promise<{ ok: boolean; pendingCount?: number; message?: string }> => {
     try {
+      const preferences = await loadAgentPreferencesForAgentRun();
       const res = await postAgentRun({
         projectId,
         conversationId,
-        preferences: loadAgentPreferences(),
+        preferences,
         sessionKind,
         enqueue: true,
         mode: mode ?? "build",
+        text: payload?.text,
+        parts: payload?.parts,
+        repeat: payload?.repeat ?? 1,
         ...(sessionKind === "taste" && tasteAction ? { tasteAction } : {}),
         ...loadAgentSessionExtensions(),
       });
@@ -173,7 +228,7 @@ export function createQueueHandlers(deps: QueueHandlersDeps) {
         message: body.message ?? "Não foi possível enfileirar a mensagem.",
       };
     } catch (e) {
-      return { ok: false, message: formatAgentFetchError(e) };
+      return { ok: false, message: String(e) };
     }
   };
 
@@ -182,6 +237,8 @@ export function createQueueHandlers(deps: QueueHandlersDeps) {
     syncPendingCount: refreshPendingQueue,
     clearPendingItem,
     clearAllPending,
+    updatePendingItem,
+    setQueuePaused,
     drainQueue,
     queueMessage,
   };

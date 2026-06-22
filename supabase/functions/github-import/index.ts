@@ -145,6 +145,10 @@ Deno.serve(async (req) => {
         },
       ],
       tool_calls: [],
+      meta: {
+        kind: "repo_import",
+        source: { owner: parsed.owner, repo: parsed.repo, fileCount: entries.length },
+      },
     });
 
     return json({

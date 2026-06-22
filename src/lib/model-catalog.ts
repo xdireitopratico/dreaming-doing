@@ -283,6 +283,9 @@ function apiModelForEnv(env: AiEnvId | string, slug: string): string {
     if (bare.includes("nemotron-3-ultra-550b") && !bare.includes("-a55b")) {
       return "nvidia/nemotron-3-ultra-550b-a55b";
     }
+    if (bare.includes("nemotron-3-super-120b") && !bare.includes("-a12b")) {
+      return "nvidia/nemotron-3-super-120b-a12b";
+    }
     return slug.includes("/") ? slug : `nvidia/${bare}`;
   }
   if (env === "minimax") {
@@ -749,6 +752,8 @@ const LEGACY_PRESET_IDS: Record<string, string> = {
   "pool-groq-flash": "pool-groq-flash",
   "nvidia-llama70": PLATFORM_ROBIN_TASTE_PRESET_ID,
   "pool-nemotron-super": PLATFORM_ROBIN_TASTE_PRESET_ID,
+  "nvidia/nemotron-3-ultra-550b-a55b": PLATFORM_ROBIN_TASTE_PRESET_ID,
+  "nvidia/nemotron-3-ultra-550b": "nvidia--nemotron-3-ultra-550b",
 };
 
 export {

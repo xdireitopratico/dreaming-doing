@@ -13,11 +13,83 @@
  *                 posso melhora-lo?") into the chat, return rejectedRunId.
  */
 import { createServerFn } from "@tanstack/react-start";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import type { Json } from "@/integrations/supabase/types";
 import type { AgentPreferences } from "@/lib/agent-preferences";
 import type { ForgeSessionKind } from "@/lib/taste";
 import { transitionRun } from "@/inngest/functions/run-lifecycle";
+import {
+  findAssistantMessageForPlan,
+  patchPlanMessageMetaRejected,
+} from "@/lib/plan-message-meta";
+import type { AgentRunStatus } from "@forge/agent-contract/events";
+import { canTransitionRunStatus } from "@forge/agent-contract/lifecycle";
+
+async function persistPlanRejectOnRun(
+  supabase: SupabaseClient,
+  runId: string,
+  rejectMeta: Record<string, unknown>,
+  initialStatus: AgentRunStatus,
+): Promise<void> {
+  const { data: fresh } = await supabase
+    .from("agent_runs")
+    .select("status")
+    .eq("id", runId)
+    .maybeSingle();
+
+  const status = (fresh?.status as AgentRunStatus | undefined) ?? initialStatus;
+
+  if (canTransitionRunStatus(status, "completed")) {
+    const result = await transitionRun(runId, "completed", { meta: rejectMeta }, supabase);
+    if (result.ok) return;
+  }
+
+  const { error: metaErr } = await supabase
+    .from("agent_runs")
+    .update({ meta: rejectMeta })
+    .eq("id", runId);
+  if (metaErr) {
+    throw new Error(`Falha ao atualizar run: ${metaErr.message}`);
+  }
+}
+
+async function resolvePlanAssistantMessage(
+  supabase: SupabaseClient,
+  conversationId: string,
+  runId: string,
+  planId: string,
+): Promise<{ id: string; meta: Record<string, unknown> } | null> {
+  const { data: byPlanId } = await supabase
+    .from("messages")
+    .select("id, meta")
+    .eq("conversation_id", conversationId)
+    .eq("role", "assistant")
+    .eq("meta->>planId", planId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (byPlanId?.id) {
+    const meta = (byPlanId.meta ?? {}) as Record<string, unknown>;
+    if (meta.runId === runId || !meta.runId) {
+      return { id: byPlanId.id as string, meta };
+    }
+  }
+
+  const { data: rows } = await supabase
+    .from("messages")
+    .select("id, meta")
+    .eq("conversation_id", conversationId)
+    .eq("role", "assistant")
+    .order("created_at", { ascending: false })
+    .limit(120);
+
+  const found = findAssistantMessageForPlan(rows ?? [], runId, planId);
+  if (!found?.id) return null;
+  return { id: found.id, meta: (found.meta ?? {}) as Record<string, unknown> };
+}
 
 function prefsFromRunMeta(meta: Record<string, unknown>): AgentPreferences | undefined {
   const raw = meta.preferences;
@@ -54,7 +126,8 @@ const agentPreferencesSchema = z
   })
   .passthrough();
 
-const INNGEST_GRACIOSA_MESSAGE = "Vi que rejeitou o plano , como posso melhora-lo?";
+export const PLAN_REJECT_GRACIOSA_MESSAGE =
+  "Vi que você rejeitou o plano. O que posso melhorar nele?";
 
 // PLAN_APPROVED_PREFIX source of truth is run-context.ts (exported); literal aqui por cross-runtime.
 
@@ -98,6 +171,8 @@ function isActionableStepDescription(description: string): boolean {
 const planRejectSchema = z.object({
   runId: z.string().uuid(),
   planId: z.string().min(1),
+  /** false = auto-skip ao enviar mensagem (sem mensagem graciosa no chat). */
+  graciosa: z.boolean().optional(),
   reason: z.string().optional(),
 });
 
@@ -326,7 +401,7 @@ export const planReject = createServerFn({ method: "POST" })
   .inputValidator((input: unknown) => planRejectSchema.parse(input))
   .handler(async ({ data, context }): Promise<DecideResponse> => {
     const { supabase, userId } = context;
-    const { runId, planId } = data;
+    const { runId, planId, graciosa = true } = data;
 
     const { data: run, error: rErr } = await supabase
       .from("agent_runs")
@@ -340,66 +415,61 @@ export const planReject = createServerFn({ method: "POST" })
     const now = new Date().toISOString();
     const prevMeta = (run.meta ?? {}) as Record<string, unknown>;
 
-    const rejectResult = await transitionRun(
-      runId,
-      "completed",
-      {
-        meta: {
-          ...prevMeta,
-          planMode: true,
-          planRejected: true,
-          rejectedAt: now,
-          rejectedPlanId: planId,
-        },
-      },
+    const rejectMeta = {
+      ...prevMeta,
+      planMode: true,
+      planRejected: true,
+      rejectedAt: now,
+      rejectedPlanId: planId,
+    };
+
+    await persistPlanRejectOnRun(
       supabase,
+      runId,
+      rejectMeta,
+      run.status as AgentRunStatus,
     );
-    if (!rejectResult.ok) {
-      throw new Error(
-        `Falha ao atualizar run: transição inválida ${rejectResult.from ?? "?"}→completed`,
-      );
-    }
 
-    const { data: planMsgs } = await supabase
-      .from("messages")
-      .select("id, meta")
-      .eq("conversation_id", run.conversation_id)
-      .eq("role", "assistant")
-      .order("created_at", { ascending: false })
-      .limit(30);
-
-    const planMsg = (planMsgs ?? []).find((m) => {
-      const meta = (m.meta ?? {}) as Record<string, unknown>;
-      return meta.runId === runId && meta.planId === planId;
-    });
+    const planMsg = await resolvePlanAssistantMessage(
+      supabase,
+      run.conversation_id as string,
+      runId,
+      planId,
+    );
 
     if (planMsg) {
-      const prev = (planMsg.meta ?? {}) as Record<string, unknown>;
-      await supabase
+      const { error: msgUpdateErr } = await supabase
         .from("messages")
         .update({
-          meta: { ...prev, planStatus: "rejected", planRejectedAt: now },
+          meta: patchPlanMessageMetaRejected(planMsg.meta, now) as Json,
         })
         .eq("id", planMsg.id);
+      if (msgUpdateErr) {
+        throw new Error(`Falha ao marcar plano como rejeitado: ${msgUpdateErr.message}`);
+      }
     }
 
-    const { data: msg, error: msgErr } = await supabase
-      .from("messages")
-      .insert({
-        conversation_id: run.conversation_id,
-        role: "assistant",
-        parts: [{ type: "text", text: INNGEST_GRACIOSA_MESSAGE }],
-        meta: { graciosa: true, planRejectedRunId: runId, planId },
-      })
-      .select("id")
-      .single();
-    if (msgErr) {
-      throw new Error(`Falha ao inserir mensagem graciosa: ${msgErr.message}`);
+    let graciosaMessageId: string | undefined;
+    if (graciosa) {
+      const { data: msg, error: msgErr } = await supabase
+        .from("messages")
+        .insert({
+          conversation_id: run.conversation_id,
+          role: "assistant",
+          parts: [{ type: "text", text: PLAN_REJECT_GRACIOSA_MESSAGE }],
+          meta: { graciosa: true, planRejectedRunId: runId, planId },
+        })
+        .select("id")
+        .single();
+      if (msgErr) {
+        throw new Error(`Falha ao inserir mensagem graciosa: ${msgErr.message}`);
+      }
+      graciosaMessageId = msg?.id;
     }
 
     return {
       ok: true,
       rejectedRunId: runId,
-      graciosaMessageId: msg?.id,
+      graciosaMessageId,
     };
   });

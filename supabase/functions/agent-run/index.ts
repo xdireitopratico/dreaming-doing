@@ -3,14 +3,19 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 
 import { type AgentPreferencesPayload } from "./connector-keys.ts";
 import { buildProvider, type ProviderConfig } from "./providers.ts";
-import { loadUserLlmContext, resolveAgentProvider, validateAgentPreferences } from "./run-setup.ts";
+import {
+  loadUserLlmContext,
+  resolveAgentProvider,
+  resolveEffectiveAgentPreferences,
+  validateAgentPreferences,
+} from "./run-setup.ts";
 
 import { buildChatHistory } from "./memory.ts";
 import { RobinKeyPool } from "./robin-pool.ts";
 import { E2B_SETUP_USER_MESSAGE, loadUserE2bApiKey } from "../_shared/user-e2b.ts";
 import { buildSessionExtensionsPrompt, normalizeIdList } from "../_shared/session-extensions.ts";
 import { loadTasteNvidiaConfig, runTasteChat } from "./taste-session.ts";
-import { isAdvisoryQuestion, runAdvisoryPhase, runDirectChatPhase } from "./conversational.ts";
+import { runDirectChatPhase } from "./conversational.ts";
 import { corsPreflightResponse, FORGE_CORS_HEADERS } from "../_shared/cors.ts";
 import {
   correlationIdFromRequest,
@@ -256,7 +261,7 @@ Deno.serve(async (req) => {
 
       projectId = typeof body.projectId === "string" ? body.projectId : undefined;
       const conversationId = body.conversationId;
-      const preferences = body.preferences as AgentPreferencesPayload | undefined;
+      const preferences = await resolveEffectiveAgentPreferences(supabase, userData.user.id);
       const sessionKindRaw = body.sessionKind as string | undefined;
       const tasteActionRaw = body.tasteAction as string | undefined;
       const resumeRun = body.resume === true;
@@ -314,12 +319,46 @@ Deno.serve(async (req) => {
       }
 
       if (body.action === "list_pending") {
-        const { sanitizePendingQueue, listPendingMessages, countPendingMessages } =
-          await import("../_shared/agent-pending-queue.ts");
+        const {
+          sanitizePendingQueue,
+          listPendingMessages,
+          countPendingMessages,
+          getProjectQueuePaused,
+        } = await import("../_shared/agent-pending-queue.ts");
         await sanitizePendingQueue(supabase, projectId, userData.user.id, conversationId);
         const items = await listPendingMessages(supabase, projectId, userData.user.id);
         const pendingCount = await countPendingMessages(supabase, projectId, userData.user.id);
-        return json({ pendingCount, items });
+        const queuePaused = await getProjectQueuePaused(supabase, projectId);
+        return json({ pendingCount, items, queuePaused });
+      }
+
+      if (body.action === "update_pending") {
+        const { updatePendingMessage, countPendingMessages } =
+          await import("../_shared/agent-pending-queue.ts");
+        const pendingId = typeof body.messageId === "string" ? body.messageId : undefined;
+        if (!pendingId) return json({ error: "messageId obrigatório" }, 400);
+        const patch: { repeat?: number; paused?: boolean } = {};
+        if (typeof body.repeat === "number") patch.repeat = body.repeat;
+        if (typeof body.paused === "boolean") patch.paused = body.paused;
+        const item = await updatePendingMessage(
+          supabase,
+          projectId,
+          userData.user.id,
+          pendingId,
+          patch,
+        );
+        if (!item) return json({ error: "Item não encontrado" }, 404);
+        const pendingCount = await countPendingMessages(supabase, projectId, userData.user.id);
+        return json({ ok: true, item, pendingCount });
+      }
+
+      if (body.action === "set_queue_paused") {
+        const { setProjectQueuePaused, countPendingMessages } =
+          await import("../_shared/agent-pending-queue.ts");
+        const paused = body.paused === true;
+        await setProjectQueuePaused(supabase, projectId, paused);
+        const pendingCount = await countPendingMessages(supabase, projectId, userData.user.id);
+        return json({ ok: true, queuePaused: paused, pendingCount });
       }
 
       if (body.action === "clear_pending") {
@@ -450,9 +489,12 @@ Deno.serve(async (req) => {
           });
         }
 
-        const { buildQueueInsertBody, countPendingMessages } =
+        const { buildEnqueueBody, countPendingMessages } =
           await import("../_shared/agent-pending-queue.ts");
-        const queueBody = await buildQueueInsertBody(supabase, conversationId, {
+        const queueBody = buildEnqueueBody({
+          text: typeof body.text === "string" ? body.text : undefined,
+          parts: body.parts,
+          repeat: typeof body.repeat === "number" ? body.repeat : undefined,
           preferences,
           sessionKind: sessionKindRaw,
           enabledSkillIds,
@@ -460,6 +502,9 @@ Deno.serve(async (req) => {
           allocateSandbox: allocateSandboxForQueue,
           mode: body.mode ?? "build",
         });
+        if (!queueBody.text && !Array.isArray(queueBody.parts)) {
+          return json({ error: "text ou parts obrigatório para enfileirar" }, 400);
+        }
         await supabase.from("agent_pending_messages").insert({
           project_id: projectId,
           conversation_id: conversationId,
@@ -472,39 +517,6 @@ Deno.serve(async (req) => {
           pendingCount === 1
             ? "Mensagem na fila — o agente processará quando terminar a tarefa atual."
             : `${pendingCount} mensagens na fila — processando em ordem.`;
-        return json({
-          ok: true,
-          queued: true,
-          pendingCount,
-          preview,
-          activeRunId: awaitingRun?.id ?? null,
-          message: queueMsg,
-        });
-      }
-
-      if (isAwaiting && !resumeRun && enqueueIntent) {
-        const { buildQueueInsertBody, countPendingMessages } =
-          await import("../_shared/agent-pending-queue.ts");
-        const queueBody = await buildQueueInsertBody(supabase, conversationId, {
-          preferences,
-          sessionKind: sessionKindRaw,
-          enabledSkillIds,
-          enabledMcpIds,
-          allocateSandbox: allocateSandboxForQueue,
-          mode: body.mode ?? "build",
-        });
-        await supabase.from("agent_pending_messages").insert({
-          project_id: projectId,
-          conversation_id: conversationId,
-          user_id: userData.user.id,
-          body: queueBody,
-        });
-        const pendingCount = await countPendingMessages(supabase, projectId, userData.user.id);
-        const preview = typeof queueBody.text === "string" ? queueBody.text.slice(0, 120) : null;
-        const queueMsg =
-          pendingCount === 1
-            ? "Mensagem na fila — aprove ou rejeite o plano no inspector para continuar."
-            : `${pendingCount} mensagens na fila — processando após o plano.`;
         return json({
           ok: true,
           queued: true,
@@ -666,9 +678,9 @@ Deno.serve(async (req) => {
       if (mode === "chat" && !resumeRun) {
         try {
           const model = buildProvider(mainCfg);
-          const content = isAdvisoryQuestion(lastUserContent)
-            ? await runAdvisoryPhase(model, messages, { userRequest: lastUserContent })
-            : await runDirectChatPhase(model, messages, { userRequest: lastUserContent });
+          const content = await runDirectChatPhase(model, messages, {
+            userRequest: lastUserContent,
+          });
 
           await supabase.from("messages").insert({
             conversation_id: conversationId,
@@ -816,9 +828,12 @@ Deno.serve(async (req) => {
               message: "Agente ocupado em outra conversa.",
             });
           }
-          const { buildQueueInsertBody, countPendingMessages } =
+          const { buildEnqueueBody, countPendingMessages } =
             await import("../_shared/agent-pending-queue.ts");
-          const queueBody = await buildQueueInsertBody(supabase, conversationId, {
+          const queueBody = buildEnqueueBody({
+            text: typeof body.text === "string" ? body.text : undefined,
+            parts: body.parts,
+            repeat: typeof body.repeat === "number" ? body.repeat : undefined,
             preferences,
             sessionKind: sessionKindRaw,
             enabledSkillIds,
@@ -826,6 +841,9 @@ Deno.serve(async (req) => {
             allocateSandbox: allocateSandboxForQueue,
             mode: body.mode ?? "build",
           });
+          if (!queueBody.text && !Array.isArray(queueBody.parts)) {
+            return json({ error: "text ou parts obrigatório para enfileirar" }, 400);
+          }
           await supabase.from("agent_pending_messages").insert({
             project_id: projectId,
             conversation_id: conversationId,

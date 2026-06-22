@@ -31,6 +31,8 @@ type ChatComposerProps = {
   /** Callback pra "Tomar controle" — cancela a run ativa e libera o lock. */
   onTakeOver?: () => void;
   planPending?: boolean;
+  /** Fila global pausada — composer livre para envio direto. */
+  queuePaused?: boolean;
   composerMode?: AgentComposerMode;
   onComposerModeChange?: (mode: AgentComposerMode) => void;
   onSend: (text: string, mode?: AgentComposerMode, parts?: StoredMessagePart[]) => void;
@@ -47,6 +49,7 @@ export function ChatComposer({
   busyReason = null,
   onTakeOver,
   planPending = false,
+  queuePaused = false,
   composerMode = "plan",
   onComposerModeChange,
   onSend,
@@ -72,7 +75,7 @@ export function ChatComposer({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const isRunning = running || agentBusy;
+  const isRunning = (running || agentBusy) && !queuePaused;
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -103,15 +106,11 @@ export function ChatComposer({
     el.style.height = `${Math.min(el.scrollHeight, 140)}px`;
   }, [text]);
 
-  const placeholder = planPending
-    ? "Tell Lovable what to do instead..."
-    : isRunning
-      ? "Queue follow-up..."
-      : composerMode === "chat"
-        ? "Pergunte, diagnostique ou proponha por escrito…"
-        : composerMode === "plan"
-          ? "Descreva o que quer construir…"
-          : "Let's Build...";
+  const placeholder = isRunning
+    ? "Queue follow-up..."
+    : composerMode === "chat"
+      ? "Pergunte, diagnostique ou proponha por escrito…"
+      : "Let's build...";
 
   const addFiles = useCallback((files: File[]) => {
     const { accepted } = filterAcceptedFiles(files);

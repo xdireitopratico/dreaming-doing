@@ -1,4 +1,3 @@
-import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ChatWorkingState } from "@/lib/chat/types";
 
@@ -17,7 +16,6 @@ export function ChatWorkingLine({ working }: ChatWorkingLineProps) {
     >
       <span aria-hidden>💡</span>
       <span>{label}</span>
-      {working.status === "active" && <Loader2 className="size-3 animate-spin" />}
     </p>
   );
 }

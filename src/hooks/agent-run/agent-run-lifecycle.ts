@@ -1,6 +1,6 @@
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import type { ForgeSessionKind, TasteAction } from "@/lib/taste";
-import { loadAgentPreferences } from "@/lib/agent-preferences";
+import { loadAgentPreferencesForAgentRun } from "@/lib/agent-preferences";
 import { loadAgentSessionExtensions } from "@/lib/agent-session-extensions";
 import { formatAgentFetchError } from "@/lib/agent-fetch-errors";
 import { releaseAgentConnect, tryAcquireAgentConnect } from "@/lib/agent-session-guards";
@@ -79,10 +79,11 @@ export function createLifecycleHandlers(deps: LifecycleHandlersDeps) {
     logEditorTelemetryEvent("agent_run", "connect_start", "info", sessionKind ?? "auto");
 
     try {
+      const preferences = await loadAgentPreferencesForAgentRun();
       const res = await postAgentRun({
         projectId,
         conversationId,
-        preferences: loadAgentPreferences(),
+        preferences,
         sessionKind,
         ...(sessionKind === "taste" && options?.tasteAction
           ? { tasteAction: options.tasteAction }

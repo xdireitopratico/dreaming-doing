@@ -22,8 +22,8 @@ import { DashboardShell } from "@/components/dashboard/DashboardShell";
 import { useAuth } from "@/lib/auth";
 import { useConnectors } from "@/hooks/useConnectors";
 import {
-  loadAgentPreferences,
-  saveAgentPreferences,
+  loadAgentPreferencesFromDb,
+  saveAgentPreferencesToDb,
   EMPTY_AGENT_PREFERENCES,
   type AgentPreferences,
 } from "@/lib/agent-preferences";
@@ -70,7 +70,7 @@ function OnboardingPage() {
   useEffect(() => {
     const local = loadOnboardingState();
     setState(local);
-    setPrefs(loadAgentPreferences());
+    void loadAgentPreferencesFromDb().then(setPrefs);
     if (user?.id) {
       checkOnboardingCompleted(user.id).then((r) => {
         setServerCompleted(r.completed);
@@ -236,7 +236,7 @@ function OnboardingPage() {
                 onChangePrefs={setPrefs}
                 done={modelOk}
                 onComplete={() => {
-                  saveAgentPreferences(prefs);
+                  void saveAgentPreferencesToDb(prefs);
                   void completeStep("model");
                 }}
               />
@@ -499,7 +499,7 @@ function ModelStep({
               ...prefs,
               mode: "robin",
               poolProvider: "nvidia",
-              robinPoolModelId: "nvidia/nemotron-3-ultra-550b-a55b",
+              robinPoolModelId: "pool-nemotron-ultra-550b",
             })
           }
         />

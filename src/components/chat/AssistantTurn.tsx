@@ -5,6 +5,7 @@ import type { ThreadItem } from "@/lib/chat/types";
 import { assistantTurnCopyText } from "@/lib/chat/assistant-turn-copy";
 import { resolveClosingProse, sanitizeChatProseForDisplay } from "@/lib/chat/stream-prose";
 import { loadAgentPreferences } from "@/lib/agent-preferences";
+import { formatChatTimestamp } from "@/lib/chat/format-timestamp";
 import { llmErrorHint, staleStreamHint, timeoutHint, zombieRunHint } from "@/lib/llm-error-hints";
 import { ForgeThinking } from "@/components/chat/ForgeThinking";
 import { ChatWorkingLine } from "@/components/chat/ChatWorkingLine";
@@ -47,10 +48,11 @@ export function AssistantTurn({
   onShowOutput,
   onShowPreview,
 }: AssistantTurnProps) {
+  const failedTurn = item.lastFinishOk === false;
   const rawClosing =
     item.streamText?.trim() ||
-    item.error?.trim() ||
-    (!item.isActive ? item.message?.content?.trim() : null) ||
+    (!failedTurn ? item.error?.trim() : null) ||
+    (!item.isActive && !failedTurn ? item.message?.content?.trim() : null) ||
     null;
   const narrationText = sanitizeChatProseForDisplay(item.narration);
   const closingText = resolveClosingProse(narrationText, sanitizeChatProseForDisplay(rawClosing));
@@ -64,6 +66,11 @@ export function AssistantTurn({
   const showClarify = !!item.clarify?.choices?.length;
   const showReviewCallout = item.miniCard?.status === "done" && (item.miniCard.fileCount ?? 0) > 0;
   const showClosing = !showClarify && !!closingText;
+
+  const robinActive =
+    item.message?.meta && typeof item.message.meta === "object" && item.message.meta.robin === true
+      ? true
+      : loadAgentPreferences().mode === "robin";
 
   const errorHint = useMemo(() => {
     const err = item.error?.trim();
@@ -82,7 +89,7 @@ export function AssistantTurn({
     }
     if (item.resumable || lower.includes("continuar") || lower.includes("checkpoint")) {
       return {
-        ...llmErrorHint(err, loadAgentPreferences().mode === "robin"),
+        ...llmErrorHint(err, robinActive),
         action: "Continuar execução",
         link: null as string | null,
       };
@@ -90,11 +97,12 @@ export function AssistantTurn({
     if (lower.includes("zumbi") || lower.includes("expirado")) return zombieRunHint();
     if (lower.includes("timeout") && !lower.includes("interrompida")) return timeoutHint();
     if (lower.includes("interrompida")) return staleStreamHint();
-    return llmErrorHint(err, loadAgentPreferences().mode === "robin");
-  }, [item.error, item.isActive, item.lastFinishOk, item.resumable]);
+    return llmErrorHint(err, robinActive);
+  }, [item.error, item.isActive, item.lastFinishOk, item.resumable, robinActive]);
 
   const showErrorHint = !!errorHint;
   const copyText = assistantTurnCopyText(item);
+  const timeLabel = formatChatTimestamp(item.message?.timestamp);
 
   return (
     <article
@@ -102,6 +110,14 @@ export function AssistantTurn({
       data-testid="chat-message-assistant"
     >
       <div className="forge-assistant-turn" data-testid="assistant-turn">
+        {timeLabel && (
+          <time
+            className="forge-msg-timestamp"
+            dateTime={new Date(item.message?.timestamp ?? 0).toISOString()}
+          >
+            {timeLabel}
+          </time>
+        )}
         {showThought && item.thought && <ForgeThinking thought={item.thought} />}
 
         {showWorking && item.working && <ChatWorkingLine working={item.working} />}

@@ -74,8 +74,72 @@ export type PendingQueueItem = {
   id: string;
   createdAt: string;
   preview: string;
+  repeat: number;
+  paused: boolean;
   body: Record<string, unknown>;
 };
+
+const QUEUE_REPEAT_MIN = 1;
+const QUEUE_REPEAT_MAX = 50;
+
+export function clampQueueRepeat(value: unknown): number {
+  const n = typeof value === "number" && Number.isFinite(value) ? Math.floor(value) : 1;
+  return Math.min(QUEUE_REPEAT_MAX, Math.max(QUEUE_REPEAT_MIN, n));
+}
+
+export function readQueuePausedFromProjectMeta(meta: unknown): boolean {
+  if (!meta || typeof meta !== "object" || Array.isArray(meta)) return false;
+  return (meta as Record<string, unknown>).queue_paused === true;
+}
+
+export async function getProjectQueuePaused(
+  supabase: SupabaseClient,
+  projectId: string,
+): Promise<boolean> {
+  const { data } = await supabase.from("projects").select("meta").eq("id", projectId).maybeSingle();
+  return readQueuePausedFromProjectMeta(data?.meta);
+}
+
+export async function setProjectQueuePaused(
+  supabase: SupabaseClient,
+  projectId: string,
+  paused: boolean,
+): Promise<void> {
+  const { data } = await supabase.from("projects").select("meta").eq("id", projectId).maybeSingle();
+  const prev = ((data?.meta ?? {}) as Record<string, unknown>);
+  await supabase
+    .from("projects")
+    .update({ meta: { ...prev, queue_paused: paused } })
+    .eq("id", projectId);
+}
+
+/** Corpo da fila a partir do POST (texto no body — não espelha no chat até o drain). */
+export function buildEnqueueBody(input: {
+  text?: string;
+  parts?: unknown;
+  repeat?: number;
+  mode?: string;
+  preferences: unknown;
+  sessionKind: unknown;
+  enabledSkillIds: unknown;
+  enabledMcpIds: unknown;
+  allocateSandbox: boolean;
+}): Record<string, unknown> {
+  const text = typeof input.text === "string" ? input.text.trim() : "";
+  const parts = Array.isArray(input.parts) ? input.parts : undefined;
+  return {
+    ...(text ? { text } : {}),
+    ...(parts?.length ? { parts } : {}),
+    repeat: clampQueueRepeat(input.repeat),
+    paused: false,
+    preferences: input.preferences,
+    sessionKind: input.sessionKind,
+    enabledSkillIds: input.enabledSkillIds,
+    enabledMcpIds: input.enabledMcpIds,
+    allocateSandbox: input.allocateSandbox,
+    mode: input.mode ?? "build",
+  };
+}
 
 /** Run em handoff entre chunks — não expirar como zumbi dentro da janela de graça. */
 export function shouldSkipStaleExpiry(input: {
@@ -327,9 +391,44 @@ export async function listPendingMessages(
       id: row.id as string,
       createdAt: row.created_at as string,
       preview: previewFromQueueBody(body),
+      repeat: clampQueueRepeat(body.repeat),
+      paused: body.paused === true,
       body,
     };
   });
+}
+
+export async function updatePendingMessage(
+  supabase: SupabaseClient,
+  projectId: string,
+  userId: string,
+  pendingId: string,
+  patch: { repeat?: number; paused?: boolean },
+): Promise<PendingQueueItem | null> {
+  const { data: row } = await supabase
+    .from("agent_pending_messages")
+    .select("id, body, created_at")
+    .eq("id", pendingId)
+    .eq("project_id", projectId)
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (!row?.id) return null;
+
+  const body = { ...((row.body ?? {}) as Record<string, unknown>) };
+  if (patch.repeat != null) body.repeat = clampQueueRepeat(patch.repeat);
+  if (patch.paused != null) body.paused = patch.paused;
+
+  await supabase.from("agent_pending_messages").update({ body }).eq("id", pendingId);
+
+  return {
+    id: row.id as string,
+    createdAt: row.created_at as string,
+    preview: previewFromQueueBody(body),
+    repeat: clampQueueRepeat(body.repeat),
+    paused: body.paused === true,
+    body,
+  };
 }
 
 /** Snapshot da última mensagem user para exibir/copiar na fila. */
@@ -391,26 +490,85 @@ export type PendingMessagePeek = {
   body: Record<string, unknown>;
 };
 
-/** Lê o mais antigo sem remover — commit só após dispatch bem-sucedido. */
+/** Lê o mais antigo não pausado — commit só após dispatch bem-sucedido. */
 export async function peekOldestPendingMessage(
   supabase: SupabaseClient,
   projectId: string,
   userId: string,
 ): Promise<PendingMessagePeek | null> {
-  const { data: row } = await supabase
+  if (await getProjectQueuePaused(supabase, projectId)) return null;
+
+  const { data: rows } = await supabase
     .from("agent_pending_messages")
     .select("id, body")
     .eq("project_id", projectId)
     .eq("user_id", userId)
-    .order("created_at", { ascending: true })
-    .limit(1)
-    .maybeSingle();
+    .order("created_at", { ascending: true });
 
-  if (!row?.id) return null;
-  return {
-    id: row.id as string,
-    body: (row.body ?? {}) as Record<string, unknown>,
-  };
+  for (const row of rows ?? []) {
+    const body = (row.body ?? {}) as Record<string, unknown>;
+    if (body.paused === true) continue;
+    return { id: row.id as string, body };
+  }
+  return null;
+}
+
+/** Insere mensagem user no chat no drain (fila não espelha no envio). */
+export async function materializeQueuedUserMessage(
+  supabase: SupabaseClient,
+  conversationId: string,
+  pendingBody: Record<string, unknown>,
+): Promise<string | null> {
+  const existingId =
+    typeof pendingBody.messageId === "string" ? pendingBody.messageId : null;
+  if (existingId) {
+    const { data } = await supabase
+      .from("messages")
+      .select("id")
+      .eq("id", existingId)
+      .maybeSingle();
+    if (data?.id) return existingId;
+  }
+
+  const text = typeof pendingBody.text === "string" ? pendingBody.text.trim() : "";
+  const parts = Array.isArray(pendingBody.parts)
+    ? pendingBody.parts
+    : text
+      ? [{ type: "text", text }]
+      : [];
+  if (!parts.length) return null;
+
+  const mode = typeof pendingBody.mode === "string" ? pendingBody.mode : "build";
+  const { data: msg, error } = await supabase
+    .from("messages")
+    .insert({
+      conversation_id: conversationId,
+      role: "user",
+      parts,
+      meta: { mode, fromQueue: true },
+    })
+    .select("id")
+    .single();
+
+  if (error || !msg?.id) return null;
+  return msg.id as string;
+}
+
+/** Após dispatch: decrementa repeat ou remove da fila. */
+export async function commitPendingAfterDispatch(
+  supabase: SupabaseClient,
+  pendingId: string,
+  body: Record<string, unknown>,
+): Promise<void> {
+  const repeat = clampQueueRepeat(body.repeat);
+  if (repeat <= 1) {
+    await removePendingMessageById(supabase, pendingId);
+    return;
+  }
+  await supabase
+    .from("agent_pending_messages")
+    .update({ body: { ...body, repeat: repeat - 1 } })
+    .eq("id", pendingId);
 }
 
 export async function removePendingMessageById(
@@ -511,8 +669,10 @@ export async function evaluateQueueDrain(
   const pendingCount = await countPendingMessages(supabase, projectId, userId);
   const needsResponse = await conversationNeedsAgentResponse(supabase, conversationId);
   const blockingRunId = await hasBlockingActiveRun(supabase, projectId);
+  const queuePaused = await getProjectQueuePaused(supabase, projectId);
 
-  const shouldContinue = (pendingCount > 0 || needsResponse) && !blockingRunId;
+  const shouldContinue =
+    !queuePaused && (pendingCount > 0 || needsResponse) && !blockingRunId;
 
   return { shouldContinue, pendingCount, needsResponse, blockingRunId };
 }

@@ -9,6 +9,7 @@ import { enforceAssistantTurnInvariant } from "@/lib/chat/invariants";
 import {
   hasRenderedTurnContent,
   resolveChatWorking,
+  freezeActiveThoughtAsDone,
   resolveTurnNarration,
   resolveTurnThinking,
 } from "@/lib/chat/turn-display";
@@ -78,12 +79,19 @@ export function mapAssistantTurn(
     resolved = resolveHistoricalRunProgress(item.runId, messages);
   }
   if (!resolved && item.message?.content?.trim()) {
-    resolved = {
-      ...initialAgentProgress,
-      finished: true,
-      streamText: item.message.content.trim(),
-      conversational: true,
-    };
+    const meta = item.message.meta;
+    const isFailure =
+      (meta && typeof meta === "object" && meta.buildFailed === true) ||
+      (meta && typeof meta === "object" && meta.lastFinishOk === false) ||
+      item.message.content.trim().startsWith("Erro:");
+    if (!isFailure) {
+      resolved = {
+        ...initialAgentProgress,
+        finished: true,
+        streamText: item.message.content.trim(),
+        conversational: true,
+      };
+    }
   }
 
   const anchoredLive =
@@ -184,7 +192,13 @@ export function mapAssistantTurn(
   const rawStreamText = closingText ?? resolved?.streamText ?? null;
   const narration = resolveTurnNarration(resolved, runView, rawStreamText);
   let streamText = rawStreamText;
-  if (!streamText && resolved?.error?.trim() && resolved.finished && !slotActive) {
+  if (
+    !streamText &&
+    resolved?.error?.trim() &&
+    resolved.finished &&
+    !slotActive &&
+    resolved.lastFinishOk !== false
+  ) {
     streamText = resolved.error.trim();
   }
   if (slotActive && showJobCard && streamText) streamText = null;
@@ -197,14 +211,23 @@ export function mapAssistantTurn(
   const persistMiniCard =
     !!runView && (showJobCard || (!!item.message && hasMaterializedCardSnapshot(item.message)));
   const miniCard = persistMiniCard && runView ? toMiniCard(runView) : null;
-  const thought = resolveTurnThinking(resolved, slotActive);
+  const hasVisibleContent = hasRenderedTurnContent({ narration, streamText, miniCard });
+
+  let thought = resolveTurnThinking(resolved, slotActive);
+  if (thought?.status === "active" && hasVisibleContent) {
+    thought = freezeActiveThoughtAsDone(thought, {
+      workingDurationMs: resolved?.workingDurationMs,
+      runStartedAtMs,
+    });
+  }
+
   const working = thought
     ? null
     : resolveChatWorking({
         slotActive,
         runStartedAtMs,
         workingDurationMs: resolved?.workingDurationMs,
-        hasVisibleContent: hasRenderedTurnContent({ narration, streamText, miniCard }),
+        hasVisibleContent,
       });
 
   const turn: Extract<ThreadItem, { kind: "assistant" }> = {

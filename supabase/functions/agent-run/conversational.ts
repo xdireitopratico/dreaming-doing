@@ -7,40 +7,14 @@ const GREETING_RE =
 
 const THANKS_RE = /^(obrigad[oa]|valeu|thanks|thank\s+you|brigad[ão]|tmj)[\s!.,?]*$/i;
 
-const CONVERSATIONAL_LLM_FALLBACK_GREETING =
-  "Olá! Como posso ajudar você hoje?";
-const CONVERSATIONAL_LLM_FALLBACK_THANKS =
-  "Por nada! Precisa de mais alguma coisa?";
-const CONVERSATIONAL_LLM_FALLBACK_RECALL =
-  "Pelo histórico da conversa, posso retomar de onde paramos — o que você quer fazer agora?";
-const ADVISORY_LLM_FALLBACK =
-  "Posso sugerir uma direção — me diga o que você quer priorizar no visual.";
-const DIRECT_CHAT_LLM_FALLBACK =
-  "Não consegui gerar uma resposta agora. Reformule o pedido ou tente outro modelo.";
+const MIN_REPLY_CHARS = 12;
 
 /** Perguntas sobre memória/histórico — early exit social no loop. */
 const RECALL_RE =
   /(?:você\s+)?lembra|lembr(a|ou|ar)|(?:do\s+)?que\s+(?:a\s+gente\s+)?(?:falamos|conversamos|discutimos|combinamos)|o\s+que\s+(?:a\s+gente\s+)?(?:falamos|conversamos|discutimos)|(?:qual\s+(?:foi|era)\s+)?(?:o\s+)?(?:assunto|tema|tópico)|(?:do\s+)?que\s+(?:se\s+)?trata(?:va|mos)?|what\s+(?:did\s+we|we)\s+(?:talk|discuss)|remember\s+what|recap|resumo\s+da\s+conversa|retomar\s+(?:a\s+)?conversa|(?:no\s+)?in[ií]cio\s+(?:da\s+)?conversa/i;
 
-/** Perguntas de opinião/sugestão — paleta, design, escolhas sem pedido de implementação. */
-const ADVISORY_RE =
-  /(?:qual|que)\s+(?:paleta|cor(?:es)?|fonte|tipografia|layout|estilo|tema|visual|tom)|(?:sugere|sugira|recomenda|recomende|indica)|(?:o\s+que\s+(?:você\s+)?(?:acha|pensa|opina))|(?:você\s+)?(?:prefere|escolheria)|(?:dark|claro|neutro)\s+(?:ou|vs)|design\s+(?:system|visual)|paleta\s+de\s+cor/i;
-
 export function isConversationRecallQuestion(text: string): boolean {
   return RECALL_RE.test(text.trim());
-}
-
-export function isAdvisoryQuestion(text: string): boolean {
-  const t = text.trim();
-  if (!t) return false;
-  if (
-    /^(crie|criar|implemente|implementar|faça|fazer|monte|montar|adicione|adicionar|corrija|corrigir|build)\b/i.test(
-      t,
-    )
-  ) {
-    return false;
-  }
-  return ADVISORY_RE.test(t);
 }
 
 /** Cumprimento, agradecimento ou recall — gate antes do agente principal. */
@@ -56,6 +30,17 @@ export function isConversationalTurnEarly(text: string): boolean {
 /** Alias compatível com loop.ts — segundo arg ignorado (legado classify). */
 export function isConversationalTurn(text: string, _classification?: unknown): boolean {
   return isConversationalTurnEarly(text);
+}
+
+function requireLlmReply(text: string, context: string): string {
+  const clean = sanitizeUserFacingProse(text).trim();
+  if (clean.length >= MIN_REPLY_CHARS) return clean;
+  throw new Error(`Resposta do LLM vazia ou insuficiente (${context}).`);
+}
+
+function rethrowLlmError(err: unknown, context: string): never {
+  if (err instanceof Error) throw err;
+  throw new Error(`Falha ao chamar LLM (${context}): ${String(err)}`);
 }
 
 const SOCIAL_SYSTEM = `Você é o parceiro de vibe-coding do FORGE — caloroso, direto, em português.
@@ -106,30 +91,11 @@ export async function runConversationalPhase(
       max_tokens: recall ? 500 : 400,
       temperature: 0.4,
     });
-    const text = (resp.content ?? "").trim();
-    if (text) return text;
-  } catch {
-    // fallback abaixo
+    return requireLlmReply(resp.content ?? "", "conversacional");
+  } catch (err) {
+    rethrowLlmError(err, "conversacional");
   }
-
-  if (recall) return CONVERSATIONAL_LLM_FALLBACK_RECALL;
-  if (userRequest && THANKS_RE.test(userRequest)) return CONVERSATIONAL_LLM_FALLBACK_THANKS;
-  if (userRequest && GREETING_RE.test(userRequest)) return CONVERSATIONAL_LLM_FALLBACK_GREETING;
-  return CONVERSATIONAL_LLM_FALLBACK_GREETING;
 }
-
-const ADVISORY_SYSTEM = `Você é o parceiro de vibe-coding do FORGE — caloroso, direto, em português.
-
-O usuário pediu opinião ou sugestão (design, paleta, estilo) — NÃO pediu para codar ainda.
-
-Regras:
-- 2–4 frases curtas em prosa humana.
-- Use o contexto do projeto só para embasar a sugestão — **nunca** cite paths, blocos de código, tokens CSS (\`--color-*\`, \`@theme\`) nem arquivos do seed.
-- Cores: nome humano + no máximo 1 hex entre parênteses (ex.: "âmbar quente (#FFB627)").
-- Dê UMA recomendação clara e, se fizer sentido, uma pergunta de follow-up.
-- NÃO proponha plano formal nem liste passos técnicos.
-
-${FORGE_CHAT_MARKDOWN}`;
 
 const DIRECT_CHAT_SYSTEM = `Você é o parceiro de vibe-coding do FORGE — engenheiro sênior, direto e humano, em português.
 
@@ -143,51 +109,6 @@ Regras:
 - Não use markdown pesado; use bullets só quando aumentar a clareza.
 
 ${FORGE_CHAT_MARKDOWN}`;
-
-/** Resposta consultiva leve — paleta, design, sugestões sem execução. */
-export async function runAdvisoryPhase(
-  model: LLMProvider,
-  messages: ChatMessage[],
-  opts?: { userRequest?: string; projectContext?: string },
-): Promise<string> {
-  const userRequest = opts?.userRequest?.trim() ?? "";
-  const recent = messages
-    .filter((m) => m.role === "user" || m.role === "assistant")
-    .slice(-10)
-    .map((m) => {
-      const content = typeof m.content === "string" ? m.content : "";
-      return `${m.role}: ${content.slice(0, 600)}`;
-    })
-    .join("\n");
-
-  const context = (opts?.projectContext ?? "").slice(0, 3000);
-
-  try {
-    const resp = await model.chat({
-      messages: [
-        { role: "system", content: ADVISORY_SYSTEM },
-        {
-          role: "user",
-          content: [
-            `Pergunta do usuário:\n${userRequest || "(consulta)"}`,
-            context ? `Contexto interno (não citar paths nem código):\n${context}` : "",
-            `Histórico recente:\n${recent || "(primeira mensagem)"}`,
-          ]
-            .filter(Boolean)
-            .join("\n\n"),
-        },
-      ],
-      max_tokens: 450,
-      temperature: 0.45,
-    });
-    const text = sanitizeUserFacingProse(resp.content ?? "");
-    if (text.length >= 12) return text;
-  } catch {
-    /* fallback */
-  }
-
-  return ADVISORY_LLM_FALLBACK;
-}
 
 export async function runDirectChatPhase(
   model: LLMProvider,
@@ -219,11 +140,8 @@ export async function runDirectChatPhase(
       max_tokens: 700,
       temperature: 0.35,
     });
-    const text = sanitizeUserFacingProse(resp.content ?? "");
-    if (text.length >= 12) return text;
-  } catch {
-    /* fallback */
+    return requireLlmReply(resp.content ?? "", "chat direto");
+  } catch (err) {
+    rethrowLlmError(err, "chat direto");
   }
-
-  return DIRECT_CHAT_LLM_FALLBACK;
 }

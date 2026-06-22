@@ -2,6 +2,9 @@ import { assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import {
   buildCardSnapshot,
   diffsFromTimeline,
+  
+  toolsFromTimeline,
+} from "./snapshot.ts";
 
 Deno.test("toolsFromTimeline — pareia tool_start com tool_done", () => {
   const timeline = [
@@ -27,6 +30,7 @@ Deno.test("diffsFromTimeline — file_diff vira entrada estruturada", () => {
   assertEquals(diffs[0].path, "src/a.ts");
   assertEquals(diffs[0].op, "edit");
 });
+
 
 Deno.test("buildCardSnapshot — monta snapshot terminal", () => {
   const runStart = 5000;

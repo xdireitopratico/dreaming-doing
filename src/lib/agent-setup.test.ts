@@ -1,22 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { isAgentPreferencesConfigured } from "@/lib/agent-setup";
-
-const store = new Map<string, string>();
-
-beforeEach(() => {
-  store.clear();
-  store.set("forge:agent-preferences", "{}");
-  vi.stubGlobal("localStorage", {
-    getItem: (k: string) => store.get(k) ?? null,
-    setItem: (k: string, v: string) => {
-      store.set(k, v);
-    },
-    removeItem: (k: string) => {
-      store.delete(k);
-    },
-  });
-  vi.stubGlobal("window", { localStorage: localStorage });
-});
 
 describe("isAgentPreferencesConfigured", () => {
   it("aceita fixed com customModelId (E2E OpenRouter)", () => {

@@ -4,7 +4,7 @@ import type { AgentProgress } from "@/lib/agent-progress";
 import { initialAgentProgress } from "@/lib/agent-progress";
 import type { ChatMessage } from "@/lib/chat-types";
 import { setStreamingTelemetryContext } from "@/lib/streaming-telemetry";
-import type { PendingQueueItem } from "@/components/editor/PendingQueuePanel";
+import type { PendingQueueItem } from "@/components/chat/ChatQueueDock";
 import {
   planAwaitingProgressRestore,
   planLiveRunRestore,

@@ -10,9 +10,10 @@ import type { ProviderConfig } from "./providers.ts";
 import {
   loadUserLlmContext,
   resolveAgentProvider,
+  resolveEffectiveAgentPreferences,
   resolveExecuteIdList,
-  resolveExecutePreferences,
   resolveExecuteSessionKindRaw,
+  validateAgentPreferences,
 } from "./run-setup.ts";
 import { buildStackContext, stackPromptAddon } from "../_shared/stack-context.ts";
 import { buildChatHistory } from "./memory.ts";
@@ -116,7 +117,27 @@ export async function executeAgentRun(
     };
   }
 
-  const effectivePreferences = resolveExecutePreferences(params.preferences, runMeta);
+  const effectivePreferences = await resolveEffectiveAgentPreferences(supabase, userId);
+  const effectiveSessionKindRawEarly = resolveExecuteSessionKindRaw(
+    params.sessionKindRaw,
+    runMeta,
+  );
+  if (effectiveSessionKindRawEarly === "byok") {
+    const prefError = validateAgentPreferences(effectivePreferences);
+    if (prefError) {
+      await transitionRun(supabase, runId, "failed", { error: prefError });
+      return {
+        ok: false,
+        runId,
+        mode: planMode ? "plan" : "build",
+        resumable: false,
+        canceled: false,
+        error: prefError,
+        stepsCompleted: 0,
+        durationMs: Date.now() - startMs,
+      };
+    }
+  }
   const effectiveSkillIds = resolveExecuteIdList(
     params.enabledSkillIds,
     runMeta,
@@ -248,9 +269,12 @@ export async function executeAgentRun(
       runId,
       provider: mainCfg.label,
       model: mainCfg.model,
+      baseUrl: mainCfg.baseUrl ?? "(default)",
+      llmProvider: mainCfg.provider,
       effectiveRobin,
       tasteStart,
       poolSize: robinPool?.size ?? 0,
+      keyNames: Object.keys(connectorKeys),
     });
   } catch (err: unknown) {
     // Infra-debug: loga o erro raw antes de marcar o run como failed.

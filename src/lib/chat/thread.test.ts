@@ -9,6 +9,22 @@ function msg(id: string, role: ChatMessage["role"], content: string): ChatMessag
 }
 
 describe("buildChatThread", () => {
+  it("deduplica assistant consecutivo com mesmo texto sem runId", () => {
+    const importText =
+      "Importei **1104** arquivos do repositório `xdireitopratico/dreaming-doing`. Manda o que você quer mudar.";
+    const messages = [
+      msg("a1", "assistant", importText),
+      msg("a2", "assistant", importText),
+      msg("a3", "assistant", importText),
+      msg("u1", "user", "build"),
+    ];
+    const thread = buildChatThread(messages, initialAgentProgress, {
+      sessionProgress: initialAgentProgress,
+    });
+    const assistants = thread.filter((t) => t.kind === "assistant");
+    expect(assistants).toHaveLength(1);
+  });
+
   it("ordem cronológica estrita do DB", () => {
     const messages = [
       msg("u1", "user", "oi"),

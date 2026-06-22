@@ -4,7 +4,7 @@ import {
   initialAgentProgress,
   type SSEEvent,
 } from "@/lib/agent-progress";
-import { resolveTurnThinking } from "@/lib/chat/turn-display";
+import { freezeActiveThoughtAsDone, resolveTurnThinking } from "@/lib/chat/turn-display";
 
 function ev(type: string, data: Record<string, unknown>, ts = Date.now()): SSEEvent {
   return { type, data, timestamp: ts };
@@ -52,6 +52,20 @@ describe("resolveTurnThinking", () => {
     if (thought?.status === "done") {
       expect(thought.durationSec).toBeGreaterThanOrEqual(1);
       expect(thought.text).toContain("Raciocínio");
+    }
+  });
+});
+
+describe("freezeActiveThoughtAsDone", () => {
+  it("congela Pensando ativo em Pensou por Xs quando mini-card entra", () => {
+    const frozen = freezeActiveThoughtAsDone(
+      { status: "active", text: "Analisando dependências." },
+      { workingDurationMs: 3200 },
+    );
+    expect(frozen.status).toBe("done");
+    if (frozen.status === "done") {
+      expect(frozen.durationSec).toBe(3);
+      expect(frozen.text).toContain("dependências");
     }
   });
 });

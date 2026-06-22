@@ -218,6 +218,74 @@ export function resolveJobPlanForRun(
 
 export type StoredPlanStatus = "pending" | "rejected" | "approved";
 
+/** runId/planId no topo ou dentro de cardSnapshot.pendingPlan (run 88764445). */
+export function planIdsFromMessageMeta(meta: Record<string, unknown>): {
+  runId: string | null;
+  planId: string | null;
+} {
+  const runId = typeof meta.runId === "string" ? meta.runId : null;
+  const planId = typeof meta.planId === "string" ? meta.planId : null;
+  if (runId && planId) return { runId, planId };
+
+  const snap = cardSnapshotRecord(meta);
+  const nested = snap?.pendingPlan;
+  if (nested && typeof nested === "object") {
+    const n = nested as Record<string, unknown>;
+    return {
+      runId: typeof n.runId === "string" ? n.runId : runId,
+      planId: typeof n.planId === "string" ? n.planId : planId,
+    };
+  }
+  return { runId, planId };
+}
+
+export function messageMetaMatchesPlan(
+  meta: Record<string, unknown> | undefined,
+  runId: string,
+  planId: string,
+): boolean {
+  if (!meta) return false;
+  const ids = planIdsFromMessageMeta(meta);
+  return ids.runId === runId && ids.planId === planId;
+}
+
+/** Atualiza meta da mensagem assistant ao rejeitar (inclui cardSnapshot-only). */
+/** Localiza mensagem assistant do plano (topo ou cardSnapshot). */
+export function findAssistantMessageForPlan<
+  T extends { id: string; meta?: unknown },
+>(messages: T[], runId: string, planId: string): T | null {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const m = messages[i];
+    if (!m) continue;
+    if (messageMetaMatchesPlan(m.meta as Record<string, unknown> | undefined, runId, planId)) {
+      return m;
+    }
+  }
+  return null;
+}
+
+export function patchPlanMessageMetaRejected(
+  meta: Record<string, unknown>,
+  rejectedAt: string,
+): Record<string, unknown> {
+  const ids = planIdsFromMessageMeta(meta);
+  const next: Record<string, unknown> = {
+    ...meta,
+    planStatus: "rejected",
+    planRejectedAt: rejectedAt,
+  };
+  if (ids.planId) next.planId = ids.planId;
+  if (ids.runId) next.runId = ids.runId;
+
+  const snap = cardSnapshotRecord(meta);
+  if (snap) {
+    const patchedSnap: Record<string, unknown> = { ...snap, awaiting: false };
+    delete patchedSnap.awaitingKind;
+    next.cardSnapshot = patchedSnap;
+  }
+  return next;
+}
+
 export type InspectorPlanState = {
   plan: PendingPlan;
   status: StoredPlanStatus;

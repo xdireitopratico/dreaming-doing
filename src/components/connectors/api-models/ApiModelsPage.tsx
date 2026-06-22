@@ -18,10 +18,9 @@ import {
   type AiProvider,
   type AiProviderId,
   type CustomProviderId,
-  removeCustomProvider,
 } from "@/lib/ai-provider-registry";
+import { disconnectProvider } from "@/lib/api-models/actions";
 import {
-  loadAgentPreferences,
   loadAgentPreferencesFromDb,
   saveAgentPreferencesToDb,
   type AgentPreferences,
@@ -41,7 +40,6 @@ import {
   saveAiProviderKey,
   appendKeyToPool,
   removeKeyFromPool,
-  disconnectAiProvider,
   type PoolSlotPublic,
 } from "@/lib/save-connector";
 import { saveE2bApiKey, disconnectE2bApiKey } from "@/lib/save-e2b-key";
@@ -152,7 +150,7 @@ function buildProviderStates(
 export function ApiModelsPage() {
   const { user } = useAuth();
   const qc = useQueryClient();
-  const [prefs, setPrefs] = useState<AgentPreferences>(() => loadAgentPreferences());
+  const [prefs, setPrefs] = useState<AgentPreferences>({});
   const [prefsLoaded, setPrefsLoaded] = useState(false);
   const [providers, setProviders] = useState<ProviderUiState[]>(buildInitialProviderStates);
   const [savingId, setSavingId] = useState<string | null>(null);
@@ -265,9 +263,7 @@ export function ApiModelsPage() {
   useEffect(() => {
     if (prefsLoaded || !user) return;
     loadAgentPreferencesFromDb().then((dbPrefs) => {
-      if (dbPrefs.mode) {
-        setPrefs(dbPrefs);
-      }
+      setPrefs(dbPrefs);
       setPrefsLoaded(true);
     });
   }, [user, prefsLoaded]);
@@ -388,10 +384,7 @@ export function ApiModelsPage() {
           : undefined;
       setSavingId(id);
       try {
-        await disconnectAiProvider(id, baseUrl);
-        if (id.startsWith("custom-")) {
-          removeCustomProvider(id as CustomProviderId);
-        }
+        await disconnectProvider(id, baseUrl);
         setProviders((prev) =>
           prev.map((p) =>
             p.id === id

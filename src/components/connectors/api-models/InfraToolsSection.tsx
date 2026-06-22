@@ -61,7 +61,7 @@ export function InfraToolsSection({
   const [webSearchKey, setWebSearchKey] = useState("");
 
   const webSearchMeta = useMemo(() => {
-    if (!webSearchRow || webSearchRow.kind !== "web-search") return null;
+    if (!webSearchRow || webSearchRow.kind !== "web_search") return null;
     return (webSearchRow.meta ?? {}) as { provider?: string };
   }, [webSearchRow]);
 

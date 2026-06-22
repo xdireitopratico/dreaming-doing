@@ -67,6 +67,23 @@ export function resolveTurnThinking(
   };
 }
 
+/** Pensando ativo → Pensou por Xs quando o turno já tem conteúdo visível (mini-card, etc.). */
+export function freezeActiveThoughtAsDone(
+  thought: ChatThoughtState,
+  opts: { workingDurationMs?: number | null; runStartedAtMs?: number | null },
+): ChatThoughtState {
+  if (thought.status === "done") return thought;
+
+  let durationSec = 1;
+  if (opts.workingDurationMs != null && opts.workingDurationMs > 0) {
+    durationSec = Math.max(1, Math.round(opts.workingDurationMs / 1000));
+  } else if (opts.runStartedAtMs != null) {
+    durationSec = Math.max(1, Math.round((Date.now() - opts.runStartedAtMs) / 1000));
+  }
+
+  return { status: "done", durationSec, text: thought.text };
+}
+
 /** Uma linha por turno: Pensando… → Pensou por Xs (congela uma vez). */
 export function resolveChatWorking(opts: {
   slotActive: boolean;

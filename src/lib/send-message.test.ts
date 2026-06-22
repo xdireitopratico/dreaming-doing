@@ -23,7 +23,6 @@ describe("sendMessage", () => {
         projectId: "proj",
         kind: "byok",
         agentBusy: false,
-        planAwaiting: false,
       },
       d,
     );
@@ -47,7 +46,6 @@ describe("sendMessage", () => {
         projectId: "proj",
         kind: "byok",
         agentBusy: false,
-        planAwaiting: false,
       },
       d,
     );
@@ -66,7 +64,6 @@ describe("sendMessage", () => {
         projectId: "proj",
         kind: "byok",
         agentBusy: false,
-        planAwaiting: false,
       },
       d,
     );
@@ -88,7 +85,6 @@ describe("sendMessage", () => {
         projectId: "proj",
         kind: "byok",
         agentBusy: false,
-        planAwaiting: false,
       },
       d,
     );
@@ -96,5 +92,45 @@ describe("sendMessage", () => {
     expect(onError).toHaveBeenCalledWith("Para executar código, mude o modo para Build.");
     expect(d.insertUserMessage).not.toHaveBeenCalled();
     expect(d.runAgent).not.toHaveBeenCalled();
+  });
+
+  it("enfileira sem inserir no chat quando agentBusy", async () => {
+    const d = deps();
+
+    await sendMessage(
+      {
+        text: "próximo passo",
+        composerMode: "build",
+        conversationId: "conv",
+        projectId: "proj",
+        kind: "byok",
+        agentBusy: true,
+      },
+      d,
+    );
+
+    expect(d.insertUserMessage).not.toHaveBeenCalled();
+    expect(d.queueMessage).toHaveBeenCalled();
+    expect(d.runAgent).not.toHaveBeenCalled();
+  });
+
+  it("fila pausada envia direto mesmo com agentBusy", async () => {
+    const d = deps();
+
+    await sendMessage(
+      {
+        text: "urgente",
+        composerMode: "build",
+        conversationId: "conv",
+        projectId: "proj",
+        kind: "byok",
+        agentBusy: true,
+        queuePaused: true,
+      },
+      d,
+    );
+
+    expect(d.insertUserMessage).toHaveBeenCalled();
+    expect(d.queueMessage).not.toHaveBeenCalled();
   });
 });

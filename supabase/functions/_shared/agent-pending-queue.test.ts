@@ -68,6 +68,19 @@ Deno.test("peekOldestPendingMessage — não remove até commit explícito", asy
   const deleted: string[] = [];
   const mockSupabase = {
     from(table: string) {
+      if (table === "projects") {
+        return {
+          select() {
+            return this;
+          },
+          eq() {
+            return this;
+          },
+          async maybeSingle() {
+            return { data: { meta: {} } };
+          },
+        };
+      }
       if (table !== "agent_pending_messages") throw new Error("unexpected table");
       return {
         select() {
@@ -77,15 +90,9 @@ Deno.test("peekOldestPendingMessage — não remove até commit explícito", asy
           return this;
         },
         order() {
-          return this;
-        },
-        limit() {
-          return this;
-        },
-        async maybeSingle() {
-          return {
-            data: { id: "pending-1", body: { text: "hello", messageId: "m1" } },
-          };
+          return Promise.resolve({
+            data: [{ id: "pending-1", body: { text: "hello", messageId: "m1" } }],
+          });
         },
         delete() {
           return {

@@ -487,21 +487,27 @@ export function EditorPageLayout({
                   externalPrompt={promptDraft}
                   onExternalPromptConsumed={() => setPromptDraft(null)}
                   pendingQueueItems={agent.pendingQueueItems}
-                  queueBlockingReason={agent.queueBlockingReason}
+                  queuePaused={agent.queuePaused}
+                  onUpdateQueueRepeat={(id, repeat) =>
+                    conversationId
+                      ? agent.updatePendingItem(projectId, conversationId, id, { repeat })
+                      : Promise.resolve()
+                  }
+                  onToggleQueueItemPaused={(id, paused) =>
+                    conversationId
+                      ? agent.updatePendingItem(projectId, conversationId, id, { paused })
+                      : Promise.resolve()
+                  }
+                  onToggleQueuePaused={(paused) =>
+                    conversationId
+                      ? agent.setQueuePaused(projectId, conversationId, paused)
+                      : Promise.resolve()
+                  }
                   onClearPendingItem={(id) =>
                     conversationId
                       ? agent.clearPendingItem(projectId, conversationId, id)
                       : Promise.resolve()
                   }
-                  onClearAllPending={() =>
-                    conversationId
-                      ? agent.clearAllPending(projectId, conversationId)
-                      : Promise.resolve()
-                  }
-                  onDrainQueue={async () => {
-                    if (!conversationId) return;
-                    await agent.drainQueue(projectId, conversationId, composerMode);
-                  }}
                   onVisualEdits={handleVisualEdits}
                   visualEditsActive={pickMode}
                 />

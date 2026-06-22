@@ -46,6 +46,7 @@ import {
 } from "@/lib/model-catalog";
 import { isAgentPreferencesConfigured } from "@/lib/agent-setup";
 import { type ConnectorRow, connectedEnvsFromRows } from "@/lib/connector-env-status";
+import { providerById, type AiProviderId } from "@/lib/ai-provider-registry";
 
 const ENV_ICONS: Record<AiEnvId, React.ReactNode> = {
   alibaba: <Globe className="size-4" />,
@@ -335,7 +336,11 @@ export function AiModelStudio({ connectorRows, keysSectionHref = "/api" }: AiMod
 
   const cardDisabled = (m: ForgeModelPreset): { disabled: boolean; reason?: string } => {
     if (!connected[m.env]) {
-      return { disabled: true, reason: `Sem chave ${AI_ENV_META[m.env].label} em API` };
+      const label =
+        AI_ENV_META[m.env as keyof typeof AI_ENV_META]?.label ??
+        providerById(m.env as AiProviderId)?.label ??
+        m.env;
+      return { disabled: true, reason: `Sem chave ${label} em API` };
     }
     if (prefs.mode === "robin" && !robinCanSelect(m)) {
       return {

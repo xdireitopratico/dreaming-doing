@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ChevronDown, Loader2 } from "lucide-react";
+import { ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ChatThoughtState } from "@/lib/chat/types";
 
@@ -17,7 +17,13 @@ export function ForgeThinking({ thought }: ForgeThinkingProps) {
       : `Pensou por ${thought.durationSec}s`;
 
   return (
-    <div className="forge-chat-thought-line" data-testid="forge-thinking">
+    <div
+      className={cn(
+        "forge-chat-thought-line",
+        thought.status === "active" && "forge-animate-thinking",
+      )}
+      data-testid="forge-thinking"
+    >
       {hasBody ? (
         <>
           <button
@@ -28,7 +34,6 @@ export function ForgeThinking({ thought }: ForgeThinkingProps) {
           >
             <span aria-hidden>💡</span>
             <span>{label}</span>
-            {thought.status === "active" && <Loader2 className="size-3 animate-spin" />}
             <ChevronDown
               className={cn("forge-details-chevron size-3.5", open && "forge-details-chevron--open")}
             />
@@ -39,7 +44,6 @@ export function ForgeThinking({ thought }: ForgeThinkingProps) {
         <p className="forge-chat-thought-label">
           <span aria-hidden>💡</span>
           <span>{label}</span>
-          {thought.status === "active" && <Loader2 className="size-3 animate-spin" />}
         </p>
       )}
     </div>

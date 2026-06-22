@@ -1,11 +1,10 @@
-import { assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
+import { assertEquals, assertRejects } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import {
-  isAdvisoryQuestion,
   isConversationRecallQuestion,
   isConversationalTurn,
   isConversationalTurnEarly,
-  runAdvisoryPhase,
   runConversationalPhase,
+  runDirectChatPhase,
 } from "./conversational.ts";
 
 Deno.test("isConversationalTurnEarly — cumprimentos sociais", () => {
@@ -36,27 +35,37 @@ Deno.test("isConversationalTurn — alias de early exit social", () => {
   assertEquals(isConversationalTurn("você lembra do que conversamos?"), true);
 });
 
-Deno.test("isAdvisoryQuestion — paleta e sugestões sem implementação", () => {
-  assertEquals(isAdvisoryQuestion("qual paleta de cor você sugere?"), true);
-  assertEquals(isAdvisoryQuestion("o que você acha desse layout?"), true);
-  assertEquals(isAdvisoryQuestion("crie uma landing com paleta azul"), false);
-  assertEquals(isAdvisoryQuestion("implemente o tema dark"), false);
-});
-
-Deno.test("runConversationalPhase — fallback PT quando LLM falha", async () => {
+Deno.test("runConversationalPhase — fail-close quando LLM falha", async () => {
   const model = {
     chat: async () => {
       throw new Error("provider down");
     },
   };
-  const text = await runConversationalPhase(model, [], { userRequest: "bom dia" });
-  assertEquals(text.includes("ajudar"), true);
+  await assertRejects(
+    () => runConversationalPhase(model, [], { userRequest: "bom dia" }),
+    Error,
+    "provider down",
+  );
 });
 
-Deno.test("runAdvisoryPhase — fallback PT quando LLM retorna vazio", async () => {
+Deno.test("runConversationalPhase — fail-close quando LLM retorna vazio", async () => {
   const model = {
     chat: async () => ({ content: "" }),
   };
-  const text = await runAdvisoryPhase(model, [], { userRequest: "qual paleta?" });
-  assertEquals(text.includes("direção"), true);
+  await assertRejects(
+    () => runConversationalPhase(model, [], { userRequest: "bom dia" }),
+    Error,
+    "conversacional",
+  );
+});
+
+Deno.test("runDirectChatPhase — fail-close quando LLM retorna vazio", async () => {
+  const model = {
+    chat: async () => ({ content: "curto" }),
+  };
+  await assertRejects(
+    () => runDirectChatPhase(model, [], { userRequest: "qual paleta?" }),
+    Error,
+    "chat direto",
+  );
 });

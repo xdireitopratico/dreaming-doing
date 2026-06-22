@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   awaitingKindFromMessageMeta,
+  findAssistantMessageForPlan,
+  messageMetaMatchesPlan,
   needsPlanApprovalNow,
+  patchPlanMessageMetaRejected,
   planParagraphFromPlan,
   resolveInspectorPlanForRun,
   resolvePendingPlan,
@@ -112,6 +115,53 @@ describe("storedPlanFromMessage", () => {
     };
     expect(resolvePendingPlan(live, [pending])?.planId).toBe("live");
     expect(resolvePendingPlan(null, [pending])?.planId).toBe("plan-1");
+  });
+
+  it("findAssistantMessageForPlan encontra mensagem antiga no histórico", () => {
+    const pending: ChatMessage = {
+      id: "m-old",
+      role: "assistant",
+      content: "Plano",
+      timestamp: 0,
+      meta: {
+        runId: "run-old",
+        planId: "plan-old",
+        planStatus: "pending",
+        planSteps: [{ id: "1", type: "custom", description: "x", enabled: true }],
+      },
+    };
+    const newer: ChatMessage = {
+      id: "m-new",
+      role: "assistant",
+      content: "outro",
+      timestamp: 1,
+      meta: { runId: "run-other" },
+    };
+    const found = findAssistantMessageForPlan([newer, pending], "run-old", "plan-old");
+    expect(found?.id).toBe("m-old");
+  });
+
+  it("messageMetaMatchesPlan encontra plano só no cardSnapshot", () => {
+    const meta = {
+      runId: "run-snap",
+      cardSnapshot: {
+        awaitingKind: "plan_approval",
+        pendingPlan: {
+          planId: "plan-snap",
+          runId: "run-snap",
+          summary: "Landing",
+          steps: [{ id: "1", type: "custom", description: "Hero", enabled: true }],
+        },
+      },
+    };
+    expect(messageMetaMatchesPlan(meta, "run-snap", "plan-snap")).toBe(true);
+    expect(messageMetaMatchesPlan(meta, "run-snap", "other")).toBe(false);
+
+    const patched = patchPlanMessageMetaRejected(meta, "2026-06-22T00:00:00.000Z");
+    expect(patched.planStatus).toBe("rejected");
+    expect(patched.planId).toBe("plan-snap");
+    expect((patched.cardSnapshot as Record<string, unknown>).awaiting).toBe(false);
+    expect((patched.cardSnapshot as Record<string, unknown>).awaitingKind).toBeUndefined();
   });
 
   it("storedPlanFromMessage lê pendingPlan só no cardSnapshot (88764445)", () => {

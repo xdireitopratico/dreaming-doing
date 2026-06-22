@@ -1,9 +1,7 @@
-// runtime/phases/gate-replies.ts — Gates conversacional, advisory, inventory (Fase 2.2)
+// runtime/phases/gate-replies.ts — Gates conversacional e inventory (Fase 2.2)
 import {
-  isAdvisoryQuestion,
   isConversationalTurn,
   isConversationalTurnEarly,
-  runAdvisoryPhase,
   runConversationalPhase,
 } from "../../conversational.ts";
 import {
@@ -11,7 +9,6 @@ import {
   INVENTORY_SYSTEM,
   isProjectInventoryQuestion,
 } from "../../run-context.ts";
-import { sanitizeUserFacingProse } from "../../sanitize-prose.ts";
 import {
   findLatestStoredPlan,
   isShowExistingPlanRequest,
@@ -70,37 +67,11 @@ export type GateReplyDeps = {
   clearCheckpoint: () => Promise<void>;
 };
 
-function nonEmptyReply(text: string, fallback: string): string {
-  const clean = sanitizeUserFacingProse(text);
-  return clean.trim() || fallback;
-}
-
 export async function runConversationalGate(deps: GateReplyDeps): Promise<PlanTurnRunResult> {
-  const reply = nonEmptyReply(
-    await runConversationalPhase(deps.configuredModel(), deps.state.messages, {
-      planMode: deps.planMode,
-      userRequest: deps.originalUserRequest ?? undefined,
-    }),
-    "Olá! Como posso ajudar você hoje?",
-  );
-  deps.emit("assistant_text", { text: reply, final: true });
-  await deps.persistFinal(reply, { lastFinishOk: true, conversational: true });
-  await deps.clearCheckpoint();
-  deps.emit("done", { summary: reply, conversational: true });
-  return { ok: true, summary: reply, steps: 0, toolsUsed: [] };
-}
-
-export async function runAdvisoryGate(deps: GateReplyDeps): Promise<PlanTurnRunResult> {
-  const ctx = deps.context
-    ? `${deps.context.projectConfig}\n\n${deps.context.manifest}`.slice(0, 4000)
-    : "";
-  const reply = nonEmptyReply(
-    await runAdvisoryPhase(deps.configuredModel(), deps.state.messages, {
-      userRequest: deps.originalUserRequest ?? undefined,
-      projectContext: ctx,
-    }),
-    "Posso sugerir uma direção — me diga o que você quer priorizar no visual.",
-  );
+  const reply = await runConversationalPhase(deps.configuredModel(), deps.state.messages, {
+    planMode: deps.planMode,
+    userRequest: deps.originalUserRequest ?? undefined,
+  });
   deps.emit("assistant_text", { text: reply, final: true });
   await deps.persistFinal(reply, { lastFinishOk: true, conversational: true });
   await deps.clearCheckpoint();
@@ -191,6 +162,5 @@ export async function runShowExistingPlanGate(
 export {
   isConversationalTurnEarly,
   isConversationalTurn,
-  isAdvisoryQuestion,
   isProjectInventoryQuestion,
 };

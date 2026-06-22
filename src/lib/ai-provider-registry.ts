@@ -5,8 +5,7 @@
  * URL de docs, base URL OpenAI-compatible, suporte a pool, model presets).
  *
  * Providers built-in são declarados aqui. Providers adicionados pelo usuário
- * vivem no banco (custom_providers) e são mergeados em runtime — fallback
- * localStorage durante migração.
+ * vivem no banco (custom_providers).
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
@@ -324,23 +323,18 @@ export const BUILT_IN_PROVIDERS: AiProvider[] = [
 
 const BUILT_IN_BY_ID = new Map(BUILT_IN_PROVIDERS.map((p) => [p.id, p]));
 
-const CUSTOM_PROVIDERS_KEY = "forge:custom-providers";
+let customProvidersCache: AiProvider[] = [];
 
 export function loadCustomProviders(): AiProvider[] {
-  if (typeof window === "undefined") return [];
-  try {
-    const raw = window.localStorage.getItem(CUSTOM_PROVIDERS_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw) as AiProvider[];
-    return parsed.filter((p) => p.isUserAdded && p.id?.startsWith("custom-"));
-  } catch {
-    return [];
-  }
+  return customProvidersCache;
 }
 
-export function saveCustomProviders(providers: AiProvider[]) {
-  if (typeof window === "undefined") return;
-  window.localStorage.setItem(CUSTOM_PROVIDERS_KEY, JSON.stringify(providers));
+export function setCustomProvidersCache(providers: AiProvider[]) {
+  customProvidersCache = providers.filter((p) => p.isUserAdded && p.id?.startsWith("custom-"));
+}
+
+export function clearCustomProvidersCache() {
+  customProvidersCache = [];
 }
 
 export function addCustomProvider(input: CustomProviderInput): AiProvider {
@@ -362,14 +356,12 @@ export function addCustomProvider(input: CustomProviderInput): AiProvider {
     isUserAdded: true,
     models: [],
   };
-  const current = loadCustomProviders();
-  saveCustomProviders([...current, provider]);
+  setCustomProvidersCache([...loadCustomProviders(), provider]);
   return provider;
 }
 
 export function removeCustomProvider(id: CustomProviderId) {
-  const current = loadCustomProviders();
-  saveCustomProviders(current.filter((p) => p.id !== id));
+  setCustomProvidersCache(loadCustomProviders().filter((p) => p.id !== id));
 }
 
 // ─── Persistência no banco (custom_providers) ───
@@ -381,10 +373,7 @@ export async function loadCustomProvidersFromDb(supabase: SupabaseClient): Promi
     .select("*")
     .order("created_at");
 
-  if (error) {
-    console.warn("Falha ao carregar custom_providers:", error.message);
-    return migrateCustomProvidersToDb(supabase);
-  }
+  if (error) throw new Error(`Falha ao carregar custom_providers: ${error.message}`);
 
   const fromDb = (data ?? []).map((row: CustomProviderDbRow) => {
     const id = `custom-${row.provider_id}` as CustomProviderId;
@@ -406,19 +395,8 @@ export async function loadCustomProvidersFromDb(supabase: SupabaseClient): Promi
     };
   });
 
-  // Carregar localStorage legado e migrar para DB se necessário
-  const local = loadCustomProviders();
-  const dbIds = new Set<string>(fromDb.map((p) => p.id));
-  const needsMigration = [...local].some((p) => !dbIds.has(p.id));
-  if (needsMigration) {
-    await migrateCustomProvidersToDb(supabase);
-  }
-
-  // Manter localStorage sincronizado com DB (cache síncrono para allProviders())
-  const merged = [...fromDb, ...local.filter((p) => !dbIds.has(p.id))];
-  saveCustomProviders(merged);
-
-  return merged;
+  setCustomProvidersCache(fromDb);
+  return fromDb;
 }
 
 type CustomProviderDbRow = {
@@ -467,33 +445,6 @@ export async function removeCustomProviderFromDb(
     .eq("owner_id", user.id)
     .eq("provider_id", providerId);
   if (error) throw new Error(`Falha ao remover provider: ${error.message}`);
-}
-
-/** Migra localStorage → banco (mantém localStorage como cache síncrono). */
-export async function migrateCustomProvidersToDb(supabase: SupabaseClient): Promise<AiProvider[]> {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return [];
-
-  const local = loadCustomProviders();
-  if (local.length === 0) return [];
-
-  const migrated: AiProvider[] = [];
-  for (const p of local) {
-    const providerId = p.id.replace(/^custom-/, "");
-    const { error } = await supabase.from("custom_providers").upsert(
-      {
-        owner_id: user.id,
-        provider_id: providerId,
-        label: p.label,
-        base_url: p.baseUrl,
-        icon: p.icon,
-      },
-      { onConflict: "owner_id,provider_id" },
-    );
-    if (!error) migrated.push(p);
-  }
-
-  return migrated;
 }
 
 export function allProviders(): AiProvider[] {

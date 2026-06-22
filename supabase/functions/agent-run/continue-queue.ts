@@ -4,15 +4,19 @@
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { appendStreamEvent } from "../_shared/agent-stream.ts";
 import {
+  commitPendingAfterDispatch,
   countPendingMessages,
   evaluateQueueDrain,
   latestUserMessageSnapshot,
+  materializeQueuedUserMessage,
   peekOldestPendingMessage,
-  removePendingMessageById,
   resolveQueuedPlanMode,
 } from "../_shared/agent-pending-queue.ts";
-import { loadUserLlmContext, resolveAgentProvider } from "./run-setup.ts";
-import type { AgentPreferencesPayload } from "./connector-keys.ts";
+import {
+  loadUserLlmContext,
+  resolveAgentProvider,
+  resolveEffectiveAgentPreferences,
+} from "./run-setup.ts";
 import { enqueueAgentJobOnDispatch } from "../_shared/agent-jobs.ts";
 import { transitionRun } from "../_shared/run-lifecycle.ts";
 
@@ -73,14 +77,18 @@ export async function handleContinueQueue(
   const decision = await evaluateQueueDrain(supabase, projectId, conversationId, userId);
 
   if (!decision.shouldContinue) {
+    const { getProjectQueuePaused } = await import("../_shared/agent-pending-queue.ts");
+    const queuePaused = await getProjectQueuePaused(supabase, projectId);
     return {
       continued: false,
       pendingCount: decision.pendingCount,
-      reason: decision.blockingRunId
-        ? `blocking_run:${decision.blockingRunId}`
-        : decision.pendingCount === 0 && !decision.needsResponse
-          ? "nothing_pending"
-          : "blocked",
+      reason: queuePaused
+        ? "queue_paused"
+        : decision.blockingRunId
+          ? `blocking_run:${decision.blockingRunId}`
+          : decision.pendingCount === 0 && !decision.needsResponse
+            ? "nothing_pending"
+            : "blocked",
     };
   }
 
@@ -101,7 +109,16 @@ export async function handleContinueQueue(
     };
   }
 
-  const preferences = (pendingBody.preferences ?? null) as AgentPreferencesPayload | null;
+  const materializedId = await materializeQueuedUserMessage(
+    supabase,
+    conversationId,
+    pendingBody,
+  );
+  if (materializedId) {
+    pendingBody = { ...pendingBody, messageId: materializedId };
+  }
+
+  const preferences = await resolveEffectiveAgentPreferences(supabase, userId);
   const pendingSessionKind =
     typeof pendingBody?.sessionKind === "string" ? pendingBody.sessionKind : null;
 
@@ -245,7 +262,7 @@ export async function handleContinueQueue(
   });
 
   if (pendingRowId) {
-    await removePendingMessageById(supabase, pendingRowId);
+    await commitPendingAfterDispatch(supabase, pendingRowId, pendingBody);
   }
 
   const remaining = await evaluateQueueDrain(supabase, projectId, conversationId, userId);

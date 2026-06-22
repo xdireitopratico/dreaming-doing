@@ -314,6 +314,7 @@ export function buildExecuteDeps(
   executionModel: LLMProvider,
 ): BuildExecuteDeps {
   return {
+    robinActive: ctx.robinActive,
     approvedPlanBuild: ctx.approvedPlanBuild,
     approvedPlanSteps: ctx.approvedPlanSteps,
     getApprovedPlanStepIndex: ctx.getApprovedPlanStepIndex,

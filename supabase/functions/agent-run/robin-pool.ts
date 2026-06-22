@@ -111,7 +111,13 @@ export class ResilientLLM implements LLMProvider {
         }
       }
 
-      if (!apiKey) throw new Error("Nenhuma chave API no pool ROBIN. Adicione chaves em /api.");
+      if (!apiKey) {
+        throw new Error(
+          this.pool
+            ? "Nenhuma chave API no pool ROBIN. Adicione chaves em /api."
+            : "Chave de API ausente para o modelo configurado. Adicione em /api.",
+        );
+      }
 
       this.requestCount++;
       const keyHint =
@@ -217,12 +223,7 @@ export class ResilientLLM implements LLMProvider {
           lastErrorMessage: errMessage.slice(0, 500),
           lastErrorName: (err as Error)?.name,
         });
-        const friendly = friendlyLlmError(err, !!this.pool);
-        this.emit("error", {
-          message: friendly,
-          recoverable: isRetryableLlmError(err),
-        });
-        throw new Error(friendly);
+        throw new Error(friendlyLlmError(err, !!this.pool));
       }
     }
 

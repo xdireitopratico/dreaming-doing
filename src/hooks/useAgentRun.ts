@@ -14,7 +14,7 @@ import {
 import { PENDING_RUN_ID } from "@/lib/pending-run-id";
 import { shouldRetainLiveRunSlot } from "@/lib/live-run-overlay";
 import { setStreamingTelemetryContext } from "@/lib/streaming-telemetry";
-import type { PendingQueueItem } from "@/components/editor/PendingQueuePanel";
+import type { PendingQueueItem } from "@/components/chat/ChatQueueDock";
 import { createRunActionHandlers } from "@/hooks/agent-run/agent-run-actions";
 import { createFrozenProgressHandlers } from "@/hooks/agent-run/agent-run-frozen";
 import {
@@ -47,6 +47,7 @@ export function useAgentRun() {
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const [pendingQueueItems, setPendingQueueItems] = useState<PendingQueueItem[]>([]);
   const [queueBlockingReason, setQueueBlockingReason] = useState<string | null>(null);
+  const [queuePaused, setQueuePaused] = useState(false);
   const [activeRunStartedAtMs, setActiveRunStartedAtMs] = useState<number | null>(null);
   const [frozenProgressTick, setFrozenProgressTick] = useState(0);
 
@@ -131,6 +132,8 @@ export function useAgentRun() {
     syncPendingCount,
     clearPendingItem,
     clearAllPending,
+    updatePendingItem,
+    setQueuePaused: setQueuePausedRemote,
     drainQueue,
     queueMessage,
   } = useMemo(
@@ -139,6 +142,7 @@ export function useAgentRun() {
         setProgress,
         setPendingQueueItems,
         setQueueBlockingReason,
+        setQueuePaused,
         subscribeToRun,
       }),
     [subscribeToRun],
@@ -264,8 +268,11 @@ export function useAgentRun() {
     refreshPendingQueue,
     pendingQueueItems,
     queueBlockingReason,
+    queuePaused,
     clearPendingItem,
     clearAllPending,
+    updatePendingItem,
+    setQueuePaused: setQueuePausedRemote,
     disconnect,
     stop,
     clearPendingPlan,

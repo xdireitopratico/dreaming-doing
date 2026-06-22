@@ -3,13 +3,14 @@
  * Usado por agent-run/index.ts, run-executor.ts e run-job.ts.
  */
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import { loadAgentPreferencesFromDb } from "./agent-preferences-db.ts";
 import {
   loadConnectorKeys,
   loadConnectorPools,
   loadForgeTrialRobinPool,
   type AgentPreferencesPayload,
 } from "./connector-keys.ts";
-import { pickMain, type ProviderConfig, detectVisionSupport } from "./providers.ts";
+import { type ProviderConfig, detectVisionSupport } from "./providers.ts";
 import {
   defaultRobinModel,
   PLATFORM_ROBIN_TASTE_PRESET_ID,
@@ -40,20 +41,20 @@ export function isRobinMode(p?: AgentPreferencesPayload | null): boolean {
 
 export function validateAgentPreferences(p?: AgentPreferencesPayload): string | null {
   if (!p?.mode) {
-    return "Setup obrigatório: configure modo e modelo em Modelos (/models).";
+    return "Setup obrigatório: configure modo e modelo em Api & Models (/api-models).";
   }
   if (p.mode === "auto") return null;
   if (p.mode === "fixed") {
     if (p.fixedPresetId?.trim()) return null;
     if (p.useCustomModel && p.customModelId?.trim()) return null;
     if ((p.userModelEntries?.length ?? 0) > 0) return null;
-    return "Setup: selecione um modelo fixo em Modelos (/models).";
+    return "Setup: selecione um modelo fixo em Api & Models (/api-models).";
   }
   if (isRobinMode(p) && !p.robinPoolModelId?.trim()) {
-    return "Setup: selecione o modelo do pool ROBIN em Modelos (/models).";
+    return "Setup: selecione o modelo do pool ROBIN em Api & Models (/api-models).";
   }
   if (isRobinMode(p) && !p.poolProvider) {
-    return "Setup: selecione o provedor do pool ROBIN em Modelos (/models).";
+    return "Setup: selecione o provedor do pool ROBIN em Api & Models (/api-models).";
   }
   return null;
 }
@@ -95,21 +96,12 @@ export function hasUserLlmKeyFromKeys(
   );
 }
 
-/** Inngest execute may arrive without preferences — fall back to run meta from connect. */
-export function resolveExecutePreferences(
-  eventPrefs: AgentPreferencesPayload | null | undefined,
-  runMeta: Record<string, unknown> | null | undefined,
-): AgentPreferencesPayload | undefined {
-  const metaPrefs =
-    runMeta?.preferences &&
-    typeof runMeta.preferences === "object" &&
-    !Array.isArray(runMeta.preferences)
-      ? (runMeta.preferences as AgentPreferencesPayload)
-      : undefined;
-  const evt = eventPrefs ?? undefined;
-  if (evt?.mode) return { ...metaPrefs, ...evt };
-  if (metaPrefs?.mode) return metaPrefs;
-  return evt ?? metaPrefs;
+/** SSOT: profiles.agent_preferences. Sem fallback para body, run.meta ou chaves. */
+export async function resolveEffectiveAgentPreferences(
+  supabase: SupabaseClient,
+  userId: string,
+): Promise<AgentPreferencesPayload | undefined> {
+  return loadAgentPreferencesFromDb(supabase, userId);
 }
 
 export function resolveExecuteIdList(
@@ -174,49 +166,24 @@ export type ResolveProviderInput = {
 
 /**
  * Resolve mainCfg + connector keys for agent execution.
- * taste_start uses platform NVIDIA trial pool; byok uses user prefs / robin / auto / fixed.
+ * Modo (auto/fixed/robin) vem exclusivamente de agent_preferences no DB.
  */
-/** Quando prefs vazias (smoke/Inngest) mas o usuário tem chaves — inferir modo. */
-export async function coalesceAgentPreferences(
-  supabase: SupabaseClient,
-  userId: string,
-  userOnlyKeys: Record<string, string>,
-  preferences?: AgentPreferencesPayload,
-): Promise<AgentPreferencesPayload> {
-  if (preferences?.mode) return preferences;
-
-  const nvidiaPool = await loadConnectorPools(supabase, userId, "nvidia");
-  if (nvidiaPool.length > 0) {
-    return {
-      mode: "robin",
-      poolProvider: "nvidia",
-      robinPoolModelId: "nvidia--nemotron-3-ultra-550b",
-    };
-  }
-
-  const groqPool = await loadConnectorPools(supabase, userId, "groq");
-  if (groqPool.length > 0) {
-    return { mode: "robin", poolProvider: "groq", robinPoolModelId: "pool-groq-flash" };
-  }
-
-  if (Object.keys(userOnlyKeys).length > 0) {
-    return { mode: "auto" };
-  }
-  return preferences ?? {};
-}
-
 export async function resolveAgentProvider(
   input: ResolveProviderInput,
 ): Promise<AgentProviderSetup> {
   const { supabase, userId, sessionKind, userOnlyKeys } = input;
-  const preferences = await coalesceAgentPreferences(
-    supabase,
-    userId,
-    userOnlyKeys,
-    input.preferences,
-  );
+  const preferences = input.preferences;
+  if (!preferences?.mode) {
+    throw new Error(
+      validateAgentPreferences(preferences) ??
+        "Setup obrigatório: configure modo e modelo em Api & Models (/api-models).",
+    );
+  }
   const userWantsRobin = isRobinMode(preferences);
-  const poolProvider = preferences?.poolProvider ?? "groq";
+  const poolProvider = preferences.poolProvider;
+  if (userWantsRobin && !poolProvider) {
+    throw new Error("Setup: selecione o provedor do pool ROBIN em Api & Models (/api-models).");
+  }
 
   if (sessionKind === "taste_start") {
     const poolKeys = await loadForgeTrialRobinPool(supabase);
@@ -296,7 +263,7 @@ export async function resolveAgentProvider(
       supportsVision: detectVisionSupport(resolved.provider, resolved.model),
     };
   } else {
-    throw new Error("Modo de modelo inválido. Configure Auto ou Fixo em /models.");
+    throw new Error("Modo de modelo inválido. Configure Auto, Fixo ou ROBIN em /api-models.");
   }
 
   return {

@@ -2,7 +2,7 @@
 import { createFileRoute, useNavigate, useParams, useSearch } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { loadAgentPreferences } from "@/lib/agent-preferences";
+import { hydrateAgentPreferences, loadAgentPreferences } from "@/lib/agent-preferences";
 
 import { useConnectors } from "@/hooks/useConnectors";
 import { useTasteUiActions } from "@/hooks/useTasteUiActions";
@@ -55,6 +55,7 @@ function EditorPage() {
 
   const [agentPrefs, setAgentPrefs] = useState(loadAgentPreferences);
   useEffect(() => {
+    void hydrateAgentPreferences().then(setAgentPrefs);
     const refresh = () => setAgentPrefs(loadAgentPreferences());
     window.addEventListener("forge:prefs-updated", refresh);
     return () => window.removeEventListener("forge:prefs-updated", refresh);

@@ -639,8 +639,10 @@ async function main() {
 
   await mkdir(OUT_DIR, { recursive: true });
 
+  // Prompt natural: não força web_search nem outra tool — o agente decide se precisa.
+  // Inspector-live valida timeline/stream (phase, explore, tool_*), não um tool específico.
   const defaultPrompt = PHASES.has("inspector-live")
-    ? `[e2e-journey] Responda em 2 bullets sobre Vite 7 — sem editar arquivos nem tools (${Date.now()})`
+    ? `[e2e-journey] Responda em 2 bullets sobre Vite 7 — sem editar arquivos (${Date.now()})`
     : PHASES.has("plan-dock")
       ? `[e2e-journey] Proponha um plano curto para adicionar um botão de contador no app — sem editar ainda (${Date.now()})`
       : `[e2e-journey] Responda apenas "ok" — sem editar arquivos (${Date.now()})`;

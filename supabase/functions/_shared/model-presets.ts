@@ -258,7 +258,10 @@ const PRESETS: Record<string, PresetWire> = {
     "nvidia/nemotron-3-ultra-550b-a55b",
     "Nemotron 3 Ultra (550B)",
   ),
-  "nvidia--nemotron-3-super-120b": nvidia("nvidia/nemotron-3-super-120b", "Nemotron 3 Super"),
+  "nvidia--nemotron-3-super-120b": nvidia(
+    "nvidia/nemotron-3-super-120b-a12b",
+    "Nemotron 3 Super",
+  ),
   "pool-groq-flash": {
     provider: "openai",
     model: "llama-3.3-70b-versatile",
@@ -287,6 +290,8 @@ const LEGACY: Record<string, string> = {
   "groq-llama70": "pool-groq-flash",
   "nvidia-llama70": PLATFORM_ROBIN_TASTE_PRESET_ID,
   "pool-nemotron-super": PLATFORM_ROBIN_TASTE_PRESET_ID,
+  "nvidia/nemotron-3-ultra-550b-a55b": PLATFORM_ROBIN_TASTE_PRESET_ID,
+  "nvidia/nemotron-3-ultra-550b": "nvidia--nemotron-3-ultra-550b",
 };
 
 export function normalizePresetId(id?: string): string {

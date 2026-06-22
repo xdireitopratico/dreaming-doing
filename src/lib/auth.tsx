@@ -2,6 +2,12 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from "
 import type { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import { syncSupabaseRealtimeAuth } from "@/lib/supabase-realtime";
+import { hydrateAgentPreferences } from "@/lib/agent-preferences";
+import { clearAgentPreferencesCache } from "@/lib/agent-preferences-store";
+import {
+  clearCustomProvidersCache,
+  loadCustomProvidersFromDb,
+} from "@/lib/ai-provider-registry";
 
 type AuthContextValue = {
   user: User | null;
@@ -23,15 +29,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     // Set listener BEFORE getSession to avoid race.
+    const syncUserData = (s: Session | null) => {
+      if (s?.user) {
+        void hydrateAgentPreferences();
+        void loadCustomProvidersFromDb(supabase);
+      } else {
+        clearAgentPreferencesCache();
+        clearCustomProvidersCache();
+      }
+    };
+
     const { data: sub } = supabase.auth.onAuthStateChange((_event, s) => {
       setSession(s);
       setLoading(false);
       void syncSupabaseRealtimeAuth(s?.access_token ?? null);
+      syncUserData(s);
     });
     supabase.auth.getSession().then(({ data }) => {
       setSession(data.session);
       setLoading(false);
       void syncSupabaseRealtimeAuth(data.session?.access_token ?? null);
+      syncUserData(data.session);
     });
     return () => sub.subscription.unsubscribe();
   }, []);
@@ -44,6 +62,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         loading,
         signOut: async () => {
           await supabase.auth.signOut();
+          clearAgentPreferencesCache();
           await syncSupabaseRealtimeAuth(null);
         },
       }}

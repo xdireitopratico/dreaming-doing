@@ -43,9 +43,10 @@ import type {
 } from "../../types.ts";
 import { LoopPhase as LoopPhaseEnum } from "../../types.ts";
 import type { LoopUpdateContext } from "../../loop-status.ts";
-import { BUILD_OPENING_FALLBACK, CLOSING_FALLBACK } from "../phase-messages.ts";
+import { friendlyLlmError, shouldFailFastLlmError } from "../../llm-errors.ts";
 
 export type BuildExecuteDeps = {
+  robinActive: boolean;
   approvedPlanBuild: boolean;
   approvedPlanSteps: PlanStep[];
   getApprovedPlanStepIndex: () => number;
@@ -254,10 +255,24 @@ export async function runBuildExecutePhase(
           forceTools,
         );
       } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : "Erro no modelo";
+        const friendly = friendlyLlmError(err, deps.robinActive);
+        if (shouldFailFastLlmError(err)) {
+          const failMsg = `Erro: ${friendly}`;
+          await deps.persistFinal(failMsg, {
+            lastFinishOk: false,
+            buildFailed: true,
+          });
+          return {
+            ok: false,
+            error: failMsg,
+            steps: loopStep,
+            resumable: false,
+            toolsUsed: [...deps.toolsUsed],
+          };
+        }
         const retries = await deps.bumpLlmRetries();
         if (retries >= EXECUTE_MAX_LLM_RETRIES) {
-          const failMsg = `Erro: ${message}`;
+          const failMsg = `Erro: ${friendly}`;
           await deps.persistFinal(failMsg, {
             lastFinishOk: false,
             buildFailed: true,
@@ -271,7 +286,7 @@ export async function runBuildExecutePhase(
           };
         }
         await deps.saveCheckpoint(LoopPhaseEnum.ERROR, true);
-        deps.notifyLoopStatus({ kind: "model_error", errorDetail: message });
+        deps.notifyLoopStatus({ kind: "model_error", errorDetail: friendly });
         return deps.returnResumableChunk(loopStep, deps.toolsUsed);
       }
 
@@ -383,7 +398,7 @@ export async function runBuildExecutePhase(
         }
         deps.state.messages.push({
           role: "assistant",
-          content: response.content ?? "Concluído.",
+          content: response.content ?? "",
         });
         break;
       }
@@ -394,8 +409,6 @@ export async function runBuildExecutePhase(
 
       if (assistantText) {
         deps.emitAgentProse(assistantText, deps.state.currentStepIndex);
-      } else if (loopStep === 1 && !deps.buildFixResume) {
-        deps.ensureOpeningBeforeWork(BUILD_OPENING_FALLBACK);
       }
 
       deps.emit("phase", {
@@ -698,16 +711,18 @@ export async function runBuildExecutePhase(
     }),
   );
 
-  const finalClosing = closingText.trim() || CLOSING_FALLBACK;
-  deps.emit("assistant_text", {
-    text: finalClosing,
-    append: false,
-    final: true,
-  });
-  try {
-    await deps.persistFinal(finalClosing, { lastFinishOk: true });
-  } catch (e) {
-    console.error("[loop] persistFinal failed", e);
+  const finalClosing = closingText.trim();
+  if (finalClosing) {
+    deps.emit("assistant_text", {
+      text: finalClosing,
+      append: false,
+      final: true,
+    });
+    try {
+      await deps.persistFinal(finalClosing, { lastFinishOk: true });
+    } catch (e) {
+      console.error("[loop] persistFinal failed", e);
+    }
   }
   try {
     await deps.clearCheckpoint();

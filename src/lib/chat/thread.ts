@@ -60,6 +60,33 @@ function lastVisibleUserIndex(items: RawThreadItem[]): number {
   return -1;
 }
 
+function assistantMessageText(msg: ChatMessage): string {
+  const parts = msg.parts;
+  if (Array.isArray(parts)) {
+    return parts
+      .filter((p) => p && typeof p === "object" && (p as { type?: string }).type === "text")
+      .map((p) => (p as { text?: string }).text ?? "")
+      .join("\n")
+      .trim();
+  }
+  return msg.content?.trim() ?? "";
+}
+
+function isRepoImportMessage(msg: ChatMessage): boolean {
+  const meta = msg.meta;
+  return !!meta && typeof meta === "object" && meta.kind === "repo_import";
+}
+
+function isFailedAssistantMessage(msg: ChatMessage): boolean {
+  const meta = msg.meta;
+  if (meta && typeof meta === "object") {
+    if (meta.buildFailed === true) return true;
+    if (meta.lastFinishOk === false) return true;
+  }
+  const text = assistantMessageText(msg);
+  return text.startsWith("Erro:");
+}
+
 function assistantVisibleText(item: Extract<RawThreadItem, { kind: "assistant" }>): string {
   const msg = item.message;
   if (!msg) return "";
@@ -116,6 +143,9 @@ function buildDbThread(messages: ChatMessage[]): RawThreadItem[] {
     if (msg.role === "tool") continue;
 
     if (msg.role === "user") {
+      const userMeta = (msg.meta ?? {}) as Record<string, unknown>;
+      if (userMeta.queued === true) continue;
+
       // H12 fix: plano aprovado aparece no chat como card de confirmação,
       // não como mensagem filtrada. Usuário precisa ver qual plano foi
       // aprovado (steps, headline) depois que ele clica "Aprovar".
@@ -153,6 +183,33 @@ function buildDbThread(messages: ChatMessage[]): RawThreadItem[] {
 
     const runId = runIdFromAssistantMessage(msg);
     const last = items[items.length - 1];
+    const visibleText = assistantMessageText(msg);
+
+    if (
+      last?.kind === "assistant" &&
+      !last.live &&
+      !last.isActive &&
+      !last.runId &&
+      !runId &&
+      visibleText &&
+      last.message &&
+      assistantMessageText(last.message) === visibleText
+    ) {
+      continue;
+    }
+
+    if (
+      last?.kind === "assistant" &&
+      !last.live &&
+      !last.isActive &&
+      isRepoImportMessage(msg) &&
+      last.message &&
+      isRepoImportMessage(last.message) &&
+      assistantMessageText(last.message) === visibleText
+    ) {
+      continue;
+    }
+
     if (
       runId &&
       last?.kind === "assistant" &&

@@ -1,3 +1,4 @@
+// runtime/phases/snapshot.ts — Timeline → cardSnapshot (Fase 2.2)
 import type { ProposedPlan } from "../../types.ts";
 
 export type StreamTimelineEntry = {
@@ -106,6 +107,7 @@ export function buildCardSnapshot(ctx: BuildCardSnapshotContext): Record<string,
   const lastFinishOk = opts.lastFinishOk ?? (finished ? true : null);
   const narration = ctx.narrationBuffer.trim();
   const now = ctx.now ?? Date.now();
+
 
   const snapshot: Record<string, unknown> = {
     timeline,
