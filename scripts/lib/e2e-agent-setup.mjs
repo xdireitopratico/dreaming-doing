@@ -13,6 +13,11 @@ export const E2E_AGENT_PREFERENCES = {
   robinPoolModelId: process.env.E2E_ROBIN_MODEL ?? "pool-groq-flash",
 };
 
+/** Chave Groq dedicada — evita rate limit do pool admin (compartilhado com smoke). */
+export function hasDedicatedE2eGroqKey(env = process.env) {
+  return Boolean((env.E2E_GROQ_KEY ?? "").trim());
+}
+
 function restHeaders(serviceKey, extra = {}) {
   return {
     apikey: serviceKey,
@@ -44,9 +49,35 @@ async function fetchConnector(supabaseUrl, serviceKey, ownerId, kind, provider =
   return rows?.[0] ?? null;
 }
 
-async function upsertConnector(supabaseUrl, serviceKey, ownerId, { kind, provider = "", tokenEncrypted, meta = {} }) {
+async function upsertConnector(
+  supabaseUrl,
+  serviceKey,
+  ownerId,
+  { kind, provider = "", tokenEncrypted, meta = {}, forceUpdate = false },
+) {
   const existing = await fetchConnector(supabaseUrl, serviceKey, ownerId, kind, provider);
-  if (existing?.token_encrypted) return { seeded: false, reason: `already_has_${kind}` };
+
+  if (existing?.token_encrypted && !forceUpdate) {
+    return { seeded: false, reason: `already_has_${kind}` };
+  }
+
+  if (existing?.token_encrypted && forceUpdate) {
+    let patchUrl = `${supabaseUrl}/rest/v1/connectors?owner_id=eq.${ownerId}&kind=eq.${kind}`;
+    if (provider) patchUrl += `&provider=eq.${provider}`;
+    const res = await fetch(patchUrl, {
+      method: "PATCH",
+      headers: restHeaders(serviceKey),
+      body: JSON.stringify({
+        token_encrypted: tokenEncrypted,
+        meta: { ...(existing.meta ?? {}), e2e: true, ...meta },
+      }),
+    });
+    if (!res.ok) {
+      const t = await res.text();
+      throw new Error(`upsertConnector patch(${kind}): ${res.status} ${t.slice(0, 200)}`);
+    }
+    return { seeded: true, reason: "updated" };
+  }
 
   const body = {
     owner_id: ownerId,
@@ -116,6 +147,7 @@ export async function seedE2eAgentSetup({ supabaseUrl, serviceKey, userId }) {
     provider: "groq",
     tokenEncrypted: groqToken,
     meta: { provider: "groq", keySource: groqSource },
+    forceUpdate: groqSource === "E2E_GROQ_KEY",
   });
 
   const envE2b = (process.env.E2E_E2B_KEY ?? "").trim();

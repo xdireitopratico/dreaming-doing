@@ -19,6 +19,8 @@
  *   E2E_CLEANUP=0
  *   E2E_REQUIRED=1
  *   E2E_PHASES=dashboard,inspector-live,f5,second-turn
+ *   E2E_GROQ_KEY=gsk_...           # obrigatório para plan-dock (evita rate limit)
+ *   E2E_PLAN_DOCK_REQUIRED=1        # falha se plan-dock pedido sem E2E_GROQ_KEY
  */
 import { chromium } from "playwright";
 import { readFileSync } from "node:fs";
@@ -30,6 +32,7 @@ import { buildSupabaseAuthStorage } from "./lib/supabase-auth-storage.mjs";
 import { resolveE2eCredentials } from "./lib/e2e-credentials.mjs";
 import {
   E2E_AGENT_PREFERENCES,
+  hasDedicatedE2eGroqKey,
   localStoragePrefsScript,
   seedE2eAgentSetup,
 } from "./lib/e2e-agent-setup.mjs";
@@ -61,12 +64,27 @@ function arg(name, fallback) {
   return hit ? hit.split("=").slice(1).join("=") : fallback;
 }
 
-const PHASES = new Set(
+const PHASES_RAW = new Set(
   (process.env.E2E_PHASES ?? arg("phases", "dashboard,inspector-live,f5,second-turn"))
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean),
 );
+
+const PHASES = new Set(PHASES_RAW);
+
+if (PHASES_RAW.has("plan-dock") && process.env.E2E_PLAN_DOCK_REQUIRED === "1" && !hasDedicatedE2eGroqKey()) {
+  console.error("FAIL: plan-dock requer E2E_GROQ_KEY dedicada (evita rate limit do pool admin)");
+  process.exit(1);
+}
+
+if (PHASES.has("plan-dock") && !hasDedicatedE2eGroqKey() && process.env.E2E_PLAN_DOCK_REQUIRED !== "1") {
+  PHASES.delete("plan-dock");
+  console.log(
+    "SKIP: fase plan-dock — defina E2E_GROQ_KEY (pool admin compartilhado com smoke causa rate limit). " +
+      "Para forçar: E2E_PLAN_DOCK_REQUIRED=1",
+  );
+}
 
 const OUT_DIR = resolve(__dirname, "../.e2e-screenshots");
 const TERMINAL_RUN = new Set(["completed", "failed", "canceled", "awaiting_user"]);

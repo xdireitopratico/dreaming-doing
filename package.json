@@ -23,6 +23,7 @@
     "test:agent-journey": "vitest run src/lib/chat/agent-turn-flow.test.ts src/lib/lovable-acceptance.test.ts src/lib/chat-reliability.test.ts src/lib/inspector-live-stream.test.ts",
     "check:lovable-visual": "node scripts/lovable-visual-check.mjs",
     "check:dashboard-journey": "node scripts/dashboard-editor-journey.mjs",
+    "check:plan-dock-journey": "E2E_PHASES=dashboard,plan-dock E2E_PLAN_DOCK_REQUIRED=1 node scripts/dashboard-editor-journey.mjs",
     "check:agent-browser": "node scripts/lovable-visual-check.mjs && node scripts/dashboard-editor-journey.mjs",
     "setup:e2e-auth": "node scripts/setup-e2e-auth.mjs",
     "check:agent-gates": "npm run test:agent-journey && npm run smoke:agent && node scripts/check-stale-runs.mjs --cleanup",
