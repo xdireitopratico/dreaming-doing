@@ -49,11 +49,15 @@ const DEFAULT_USER = process.env.SMOKE_USER_ID ?? "2e8aca9f-1161-4246-9b33-3f2ca
 const SMOKE_PROMPT =
   "[smoke] Liste os arquivos na raiz do projeto (resposta curta, sem editar código).";
 
-/** Preferências estáveis — robin/nemotron, não mimo (402 em BYOK). */
+/**
+ * Preferências de smoke — Groq flash por padrão (terminal em <5min).
+ * Nemotron 550B costuma estourar timeout por thinking longo + robin_wait.
+ * Override: SMOKE_POOL_PROVIDER=nvidia SMOKE_ROBIN_MODEL=nvidia--nemotron-3-ultra-550b
+ */
 const SMOKE_PREFERENCES = {
-  mode: "robin",
-  poolProvider: "nvidia",
-  robinPoolModelId: "nvidia--nemotron-3-ultra-550b",
+  mode: process.env.SMOKE_MODE ?? "robin",
+  poolProvider: process.env.SMOKE_POOL_PROVIDER ?? "groq",
+  robinPoolModelId: process.env.SMOKE_ROBIN_MODEL ?? "pool-groq-flash",
 };
 
 function arg(name, fallback) {
@@ -352,9 +356,18 @@ async function main() {
     await sleep(pollMs);
   }
 
-  console.error("\nFAIL: timeout — sem progresso no stream");
-  console.error("Events:", JSON.stringify(lastEvents, null, 2));
+  const lastEv = lastEvents.at(-1);
+  const stallHint =
+    lastEvents.length > 1
+      ? `run ainda ${lastRun?.status} após ${timeoutMs / 1000}s — último evento: ${lastEv?.event_type ?? "?"} (seq ${lastEv?.seq ?? "?"})`
+      : "sem progresso no stream após dispatch";
+  console.error(`\nFAIL: timeout — ${stallHint}`);
+  console.error("Preferences:", JSON.stringify(SMOKE_PREFERENCES));
+  console.error("Events:", JSON.stringify(lastEvents.slice(-8), null, 2));
   console.error("Run:", JSON.stringify(lastRun, null, 2));
+  console.error(
+    "Hint: pool lento? SMOKE_POOL_PROVIDER=groq (default) ou aumente --timeout-ms=600000",
+  );
   console.error("Hint: Inngest dashboard → agent-build → execute-loop-0");
   process.exit(1);
 }
