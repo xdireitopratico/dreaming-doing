@@ -274,6 +274,165 @@ export function planParagraphFromPlan(plan: PendingPlan): string {
   return plan.summary?.trim() || "Plano proposto";
 }
 
+/* ─── Structured plan view (ChatPlanDock A1) ──────────────────────────── */
+
+export type PlanStepView = {
+  id: string;
+  description: string;
+  type: PlanStep["type"];
+  filePath?: string;
+  enabled: boolean;
+};
+
+export type PlanPhaseView = {
+  index: number;
+  title: string;
+  steps: PlanStepView[];
+};
+
+/**
+ * Extract structured phases + steps from PendingPlan for visual rendering.
+ *
+ * Priority:
+ *  1. If `plan.markdown` contains `## Fases` → parse phases from markdown headings
+ *  2. If `plan.steps` has >= 1 step → group by step type into logical phases
+ *  3. Fallback → single "Entregas" phase with `planParagraphFromPlan` as description
+ */
+export function planPhasesFromPlan(plan: PendingPlan): PlanPhaseView[] {
+  const markdown = plan.markdown?.trim();
+
+  // ── Strategy 1: markdown with ## Fases ──
+  if (markdown && /##\s+Fases/im.test(markdown)) {
+    const phases = parsePhasesFromMarkdown(markdown);
+    if (phases.length > 0) return phases;
+  }
+
+  // ── Strategy 2: structured steps array ──
+  const enabledSteps = (plan.steps ?? []).filter((s) => s.enabled !== false);
+  if (enabledSteps.length > 0) {
+    return groupStepsByType(enabledSteps);
+  }
+
+  // ── Strategy 3: fallback to mission/summary ──
+  const body = planParagraphFromPlan(plan);
+  if (body && body !== "Plano proposto") {
+    return [
+      {
+        index: 0,
+        title: "Plano",
+        steps: [{ id: "s0", description: body, type: "custom", enabled: true }],
+      },
+    ];
+  }
+
+  return [];
+}
+
+function parsePhasesFromMarkdown(markdown: string): PlanPhaseView[] {
+  const phases: PlanPhaseView[] = [];
+  const phaseBlocks = markdown.split(/^###\s+/m).filter(Boolean);
+
+  // First block before any ### is usually preamble — skip if no checklist
+  for (let i = 0; i < phaseBlocks.length; i++) {
+    const block = phaseBlocks[i];
+    const lines = block.split("\n");
+
+    // Extract phase title from first line (after ###)
+    const titleMatch = lines[0]?.match(/^###\s+(.+)$/i);
+    const title = titleMatch?.[1]?.trim() || (i === 0 ? "Visão Geral" : `Fase ${i + 1}`);
+
+    // Extract bullet/checklist items as steps
+    const steps: PlanStepView[] = [];
+    for (const line of lines) {
+      const trimmed = line.trim();
+
+      // Checkbox items: - [ ] or - [x]
+      const check = trimmed.match(/^[-*]\s+\[[ xX]\]\s+(.+)$/);
+      if (check?.[1]) {
+        steps.push({
+          id: `phase-${i + 1}-${steps.length}`,
+          description: check[1].trim(),
+          type: inferStepType(check[1]),
+          enabled: !/[xX]/.test(trimmed.split("[")[1]?.[0] ?? ""),
+        });
+        continue;
+      }
+
+      // Regular bullets (only if inside a ### block)
+      if (i > 0) {
+        const bullet = trimmed.match(/^[-*]\s+(.+)$/);
+        if (bullet?.[1]) {
+          steps.push({
+            id: `phase-${i + 1}-${steps.length}`,
+            description: bullet[1].trim(),
+            type: inferStepType(bullet[1]),
+            enabled: true,
+          });
+        }
+      }
+    }
+
+    // Only add phases that have actual steps (skip preamble with no items)
+    if (steps.length > 0 || i === 0) {
+      if (steps.length > 0) {
+        phases.push({ index: phases.length, title, steps });
+      }
+    }
+  }
+
+  return phases;
+}
+
+function inferStepType(description: string): PlanStep["type"] {
+  const lower = description.toLowerCase();
+  if (/criar|create|new file|novo ficheiro/i.test(lower)) return "create_file";
+  if (/editar|edit|modif|alterar|update/i.test(lower)) return "edit_file";
+  if (/instal|npm|bun|dep/i.test(lower)) return "install_dep";
+  if (/executar|run|script|command/i.test(lower)) return "shell_exec";
+  if (/verificar|check|valid|observ/i.test(lower)) return "observe";
+  return "custom";
+}
+
+function groupStepsByType(steps: PlanStep[]): PlanPhaseView[] {
+  const groups = new Map<string, PlanStepView[]>();
+
+  for (const step of steps) {
+    const group = phaseLabelForType(step.type);
+    if (!groups.has(group)) groups.set(group, []);
+    groups.get(group)!.push({
+      id: step.id,
+      description: step.description,
+      type: step.type,
+      filePath: step.filePath,
+      enabled: step.enabled,
+    });
+  }
+
+  const phases: PlanPhaseView[] = [];
+  groups.forEach((steps, title) => {
+    phases.push({ index: phases.length, title, steps });
+  });
+
+  return phases;
+}
+
+function phaseLabelForType(type: PlanStep["type"]): string {
+  switch (type) {
+    case "create_file":
+      return "Criação de arquivos";
+    case "edit_file":
+      return "Edições";
+    case "shell_exec":
+      return "Execução de comandos";
+    case "install_dep":
+      return "Dependências";
+    case "observe":
+      return "Verificação";
+    default:
+      return "Entregas";
+  }
+}
+
 export type StoredPlanMeta = {
   status: StoredPlanStatus;
   plan: PendingPlan;

@@ -468,6 +468,146 @@
   animation: forge-plan-shimmer 1.4s ease-in-out infinite;
 }
 
+/* Structured shimmer — multiple lines that hint at phase/step structure */
+.forge-plan-dock-shimmer-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.forge-plan-dock-shimmer-line {
+  height: 10px;
+  border-radius: 4px;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--bg-input) 92%, var(--bg-card) 8%) 0%,
+    color-mix(in srgb, var(--bg-input) 70%, #52525b 30%) 50%,
+    color-mix(in srgb, var(--bg-input) 92%, var(--bg-card) 8%) 100%
+  );
+  background-size: 200% 100%;
+  animation: forge-plan-shimmer 1.4s ease-in-out infinite;
+}
+
+.forge-plan-dock-shimmer-line:nth-child(1) { animation-delay: 0ms; }
+.forge-plan-dock-shimmer-line:nth-child(2) { animation-delay: 100ms; }
+.forge-plan-dock-shimmer-line:nth-child(3) { animation-delay: 200ms; }
+.forge-plan-dock-shimmer-line:nth-child(4) { animation-delay: 300ms; }
+
+/* Plan header — label + step count metadata */
+.forge-plan-dock-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-sm);
+}
+
+.forge-plan-dock-step-count {
+  font: var(--font-task-label);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.03em;
+  color: var(--text-muted);
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+/* ─── Plan phases container ──────────────────────────────────────── */
+.forge-plan-phases {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+/* ─── Plan phase block ───────────────────────────────────────────── */
+.forge-plan-phase {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.forge-plan-phase-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.forge-plan-phase-index {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--text-accent) 15%, transparent);
+  color: var(--text-accent);
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 10px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.forge-plan-phase-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+  line-height: 1.35;
+}
+
+/* ─── Plan step list ─────────────────────────────────────────────── */
+.forge-plan-step-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  padding-left: 26px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.forge-plan-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font: var(--font-task);
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.45;
+}
+
+.forge-plan-step-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: var(--text-muted);
+  transition: color 0.15s ease;
+}
+
+.forge-plan-step-icon[data-type="create_file"] {
+  color: color-mix(in srgb, var(--status-done) 85%, white);
+}
+
+.forge-plan-step-icon[data-type="edit_file"] {
+  color: color-mix(in srgb, var(--status-working) 80%, white);
+}
+
+.forge-plan-step-icon[data-type="shell_exec"] {
+  color: color-mix(in srgb, var(--status-thinking) 85%, white);
+}
+
+.forge-plan-step-icon[data-type="install_dep"] {
+  color: color-mix(in srgb, #a78bfa 85%, white);
+}
+
+.forge-plan-step-text {
+  flex: 1;
+  min-width: 0;
+  word-break: break-word;
+}
+
 .forge-plan-dock-creating-label {
   margin: var(--space-xs) 0 0;
   font-size: 13px;
