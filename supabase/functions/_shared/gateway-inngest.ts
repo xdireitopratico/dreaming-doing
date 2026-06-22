@@ -1,16 +1,18 @@
+import { resolveInngestEventUrl } from "./inngest-event-url.ts";
+
 /**
  * Enqueue long-running gateway executions via Inngest
  */
 export async function sendGatewayInngestEvent(
   data: Record<string, unknown>,
 ): Promise<{ ok: boolean; ids?: string[]; error?: string }> {
-  const key = Deno.env.get("INNGEST_EVENT_KEY") ?? "";
-  if (!key) {
-    return { ok: false, error: "INNGEST_EVENT_KEY not configured" };
+  const eventUrl = resolveInngestEventUrl();
+  if (!eventUrl) {
+    return { ok: false, error: "INNGEST_WEBHOOK or INNGEST_EVENT_KEY not configured" };
   }
 
   try {
-    const res = await fetch(`https://inn.gs/e/${key}`, {
+    const res = await fetch(eventUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({

@@ -8,6 +8,7 @@
  */
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { resolveInngestEventUrl } from "./lib/inngest-event-url.mjs";
 
 function loadEnvLocal() {
   const path = resolve(process.cwd(), ".env.local");
@@ -37,7 +38,7 @@ loadEnvLocal();
 
 const SUPABASE_URL = process.env.SUPABASE_URL ?? process.env.VITE_SUPABASE_URL ?? "";
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
-const INNGEST_EVENT_KEY = process.env.INNGEST_EVENT_KEY ?? "";
+const INNGEST_EVENT_URL = resolveInngestEventUrl();
 
 const DEFAULT_PROJECT = process.env.SMOKE_PROJECT_ID ?? "";
 const DEFAULT_CONVERSATION = process.env.SMOKE_CONVERSATION_ID ?? "";
@@ -97,9 +98,9 @@ async function resolveSmokeIds() {
 }
 
 async function main() {
-  if (!SUPABASE_URL || !SERVICE_KEY || !INNGEST_EVENT_KEY) {
+  if (!SUPABASE_URL || !SERVICE_KEY || !INNGEST_EVENT_URL) {
     console.error(
-      "FAIL: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, INNGEST_EVENT_KEY required (must be set in Supabase Edge secrets; see docs/EDGE-SECRETS.md)",
+      "FAIL: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, INNGEST_WEBHOOK (or INNGEST_EVENT_KEY) required",
     );
     process.exit(1);
   }
@@ -155,7 +156,7 @@ async function main() {
     resume: false,
   };
 
-  const inngestRes = await fetch(`https://inn.gs/e/${INNGEST_EVENT_KEY}`, {
+  const inngestRes = await fetch(INNGEST_EVENT_URL, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({

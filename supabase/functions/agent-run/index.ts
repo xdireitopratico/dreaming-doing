@@ -24,6 +24,7 @@ import { appendStreamEvent } from "../_shared/agent-stream.ts";
 import { isServiceRoleRequest } from "../_shared/service-auth.ts";
 import { extractOriginalUserRequest, resolveAllocateSandbox } from "./run-context.ts";
 import { enqueueAgentJobOnDispatch } from "../_shared/agent-jobs.ts";
+import { resolveInngestEventKey, resolveInngestEventUrl } from "../_shared/inngest-event-url.ts";
 
 const runningLocks = new Map<string, Promise<unknown>>();
 
@@ -56,7 +57,7 @@ const corsHeaders = FORGE_CORS_HEADERS;
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-const INNGEST_EVENT_KEY = Deno.env.get("INNGEST_EVENT_KEY") ?? "";
+const INNGEST_EVENT_KEY = resolveInngestEventKey() ?? "";
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return corsPreflightResponse();
@@ -1128,12 +1129,14 @@ async function sendInngestEvent(
   data: Record<string, unknown>,
   explicitKey?: string,
 ): Promise<{ ok: boolean; ids?: string[]; error?: string }> {
-  const key = explicitKey ?? INNGEST_EVENT_KEY;
-  if (!key) {
-    return { ok: false, error: "INNGEST_EVENT_KEY not configured" };
+  const eventUrl = explicitKey
+    ? `https://inn.gs/e/${explicitKey}`
+    : resolveInngestEventUrl();
+  if (!eventUrl) {
+    return { ok: false, error: "INNGEST_WEBHOOK or INNGEST_EVENT_KEY not configured" };
   }
   try {
-    const res = await fetch("https://inn.gs/e/" + key, {
+    const res = await fetch(eventUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name, data, ts: Date.now() }),

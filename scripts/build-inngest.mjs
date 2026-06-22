@@ -1,4 +1,7 @@
 import esbuild from "esbuild";
+import { resolve } from "node:path";
+
+const root = resolve(process.cwd());
 
 const result = await esbuild.build({
   entryPoints: ["src/inngest/handler.ts"],
@@ -12,7 +15,15 @@ const result = await esbuild.build({
   sourcemap: false,
   legalComments: "none",
   packages: "external",
-  external: ["node:*", "./agent-executor.js"],
+  external: ["node:*", "./agent-executor.js", "inngest", "@supabase/supabase-js"],
+  alias: {
+    "@forge/agent-contract/lifecycle": resolve(
+      root,
+      "packages/agent-contract/src/lifecycle.ts",
+    ),
+    "@forge/agent-contract/events": resolve(root, "packages/agent-contract/src/events.ts"),
+    "@forge/agent-contract": resolve(root, "packages/agent-contract/src/index.ts"),
+  },
   logLevel: "info",
 });
 
