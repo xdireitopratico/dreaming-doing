@@ -3,6 +3,8 @@
  */
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { CHUNK_HANDOFF_GAP_MS } from "./agent-chunk-limits.ts";
+
+export { CHUNK_HANDOFF_GAP_MS };
 import { appendStreamEvent } from "./agent-stream.ts";
 import { logger } from "./logger.ts";
 
@@ -74,6 +76,32 @@ export type PendingQueueItem = {
   body: Record<string, unknown>;
 };
 
+/** Run em handoff entre chunks — não expirar como zumbi dentro da janela de graça. */
+export function shouldSkipStaleExpiry(input: {
+  meta: Record<string, unknown>;
+  lastEventType?: string | null;
+  lastEventAt?: string | null;
+  nowMs?: number;
+}): boolean {
+  const nowMs = input.nowMs ?? Date.now();
+  const chunkHandoffGraceMs = CHUNK_HANDOFF_GAP_MS * 2;
+  const meta = input.meta;
+
+  if (meta.betweenChunks === true) {
+    const lastChunkAt = meta.lastChunkAt as string | undefined;
+    if (!lastChunkAt) return true;
+    const chunkAgeMs = nowMs - new Date(lastChunkAt).getTime();
+    if (chunkAgeMs <= chunkHandoffGraceMs) return true;
+  }
+
+  if (input.lastEventType === "chunk_resume" && input.lastEventAt) {
+    const chunkAgeMs = nowMs - new Date(input.lastEventAt).getTime();
+    if (chunkAgeMs <= chunkHandoffGraceMs) return true;
+  }
+
+  return false;
+}
+
 export async function expireStaleRuns(
   supabase: SupabaseClient,
   projectId: string,
@@ -95,26 +123,8 @@ export async function expireStaleRuns(
   if (!candidates?.length) return 0;
 
   const staleIds: string[] = [];
-  const chunkHandoffGraceMs = CHUNK_HANDOFF_GAP_MS * 2;
   for (const run of candidates) {
     const meta = (run.meta ?? {}) as Record<string, unknown>;
-
-    // Run entre chunks do Inngest — gap intencional, não é zumbi.
-    if (meta.betweenChunks === true) {
-      const lastChunkAt = meta.lastChunkAt as string | undefined;
-      if (lastChunkAt) {
-        const chunkAgeMs = Date.now() - new Date(lastChunkAt).getTime();
-        if (chunkAgeMs <= chunkHandoffGraceMs) continue;
-      } else {
-        continue;
-      }
-    }
-
-    const heartbeat = (run.heartbeat_at ?? run.started_at) as string | null;
-    if (heartbeat && heartbeat < cutoff) {
-      staleIds.push(run.id as string);
-      continue;
-    }
 
     const { data: lastEv } = await supabase
       .from("agent_stream_events")
@@ -124,9 +134,20 @@ export async function expireStaleRuns(
       .limit(1)
       .maybeSingle();
 
-    if (lastEv?.event_type === "chunk_resume") {
-      const chunkAgeMs = Date.now() - new Date(lastEv.created_at as string).getTime();
-      if (chunkAgeMs <= chunkHandoffGraceMs) continue;
+    if (
+      shouldSkipStaleExpiry({
+        meta,
+        lastEventType: (lastEv?.event_type as string | undefined) ?? null,
+        lastEventAt: (lastEv?.created_at as string | undefined) ?? null,
+      })
+    ) {
+      continue;
+    }
+
+    const heartbeat = (run.heartbeat_at ?? run.started_at) as string | null;
+    if (heartbeat && heartbeat < cutoff) {
+      staleIds.push(run.id as string);
+      continue;
     }
 
     const lastActivity = (lastEv?.created_at ?? run.started_at) as string | null;

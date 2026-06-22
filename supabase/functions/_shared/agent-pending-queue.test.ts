@@ -1,9 +1,11 @@
 import { assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import {
   BUSY_ZOMBIE_GAP_MS,
+  CHUNK_HANDOFF_GAP_MS,
   classifyAgentBusyReason,
   previewFromQueueBody,
   resolveQueuedPlanMode,
+  shouldSkipStaleExpiry,
 } from "./agent-pending-queue.ts";
 
 Deno.test("previewFromQueueBody — texto direto", () => {
@@ -105,6 +107,46 @@ Deno.test("peekOldestPendingMessage — não remove até commit explícito", asy
   assertEquals(peeked?.id, "pending-1");
   assertEquals(peeked?.body.text, "hello");
   assertEquals(deleted.length, 0);
+});
+
+Deno.test("shouldSkipStaleExpiry — betweenChunks com lastChunkAt recente", () => {
+  const now = Date.now();
+  assertEquals(
+    shouldSkipStaleExpiry({
+      meta: { betweenChunks: true, lastChunkAt: new Date(now - 30_000).toISOString() },
+      nowMs: now,
+    }),
+    true,
+  );
+});
+
+Deno.test("shouldSkipStaleExpiry — betweenChunks sem lastChunkAt sempre skip", () => {
+  assertEquals(shouldSkipStaleExpiry({ meta: { betweenChunks: true } }), true);
+});
+
+Deno.test("shouldSkipStaleExpiry — chunk_resume recente", () => {
+  const now = Date.now();
+  assertEquals(
+    shouldSkipStaleExpiry({
+      meta: {},
+      lastEventType: "chunk_resume",
+      lastEventAt: new Date(now - 10_000).toISOString(),
+      nowMs: now,
+    }),
+    true,
+  );
+});
+
+Deno.test("shouldSkipStaleExpiry — handoff expirado não skip", () => {
+  const now = Date.now();
+  const grace = CHUNK_HANDOFF_GAP_MS * 2;
+  assertEquals(
+    shouldSkipStaleExpiry({
+      meta: { betweenChunks: true, lastChunkAt: new Date(now - grace - 1).toISOString() },
+      nowMs: now,
+    }),
+    false,
+  );
 });
 
 Deno.test("classifyAgentBusyReason — gap longo em running vira zombie (88764445)", () => {
