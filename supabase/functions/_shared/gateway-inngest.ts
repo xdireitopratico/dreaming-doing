@@ -8,7 +8,7 @@ export async function sendGatewayInngestEvent(
 ): Promise<{ ok: boolean; ids?: string[]; error?: string }> {
   const eventUrl = resolveInngestEventUrl();
   if (!eventUrl) {
-    return { ok: false, error: "INNGEST_WEBHOOK or INNGEST_EVENT_KEY not configured" };
+    return { ok: false, error: "INNGEST_EVENT_KEY not configured" };
   }
 
   try {

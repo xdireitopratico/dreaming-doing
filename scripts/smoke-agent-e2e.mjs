@@ -179,7 +179,7 @@ function isTerminalSuccess(types, status) {
 async function main() {
   if (!SUPABASE_URL || !SERVICE_KEY || !INNGEST_EVENT_URL) {
     console.error(
-      "FAIL: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, INNGEST_WEBHOOK (or INNGEST_EVENT_KEY) required",
+      "FAIL: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, INNGEST_EVENT_KEY required",
     );
     process.exit(1);
   }
