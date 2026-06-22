@@ -14,6 +14,7 @@ import {
 import { loadUserLlmContext, resolveAgentProvider } from "./run-setup.ts";
 import type { AgentPreferencesPayload } from "./connector-keys.ts";
 import { enqueueAgentJobOnDispatch } from "../_shared/agent-jobs.ts";
+import { transitionRun } from "../_shared/run-lifecycle.ts";
 
 type InngestEventName = "agent/plan.requested" | "agent/build.requested";
 
@@ -192,14 +193,7 @@ export async function handleContinueQueue(
       })
       .eq("id", agentRunId);
   } catch (e) {
-    await supabase
-      .from("agent_runs")
-      .update({
-        status: "failed",
-        finished_at: new Date().toISOString(),
-        error: (e as Error).message,
-      })
-      .eq("id", agentRunId);
+    await transitionRun(supabase, agentRunId, "failed", { error: (e as Error).message });
     return { continued: false, reason: "provider_setup_failed" };
   }
 
@@ -219,14 +213,9 @@ export async function handleContinueQueue(
   const { sendInngestEvent } = await import("./index.ts");
   const eventResult = await sendInngestEvent(eventName, eventPayload, inngestEventKey);
   if (!eventResult.ok) {
-    await supabase
-      .from("agent_runs")
-      .update({
-        status: "failed",
-        finished_at: new Date().toISOString(),
-        error: `Inngest send failed: ${eventResult.error}`,
-      })
-      .eq("id", agentRunId);
+    await transitionRun(supabase, agentRunId, "failed", {
+      error: `Inngest send failed: ${eventResult.error}`,
+    });
     // Append finish so no run is left without terminal event (even on queue drain path)
     await appendStreamEvent(supabase, agentRunId, "finish", {
       type: "finish",

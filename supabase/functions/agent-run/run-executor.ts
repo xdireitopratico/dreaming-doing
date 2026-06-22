@@ -31,6 +31,8 @@ import {
   shadowCompleteJob,
   shadowEnqueueNextChunk,
 } from "../_shared/agent-jobs.ts";
+import { transitionRun } from "../_shared/run-lifecycle.ts";
+import type { AgentRunStatus } from "../_shared/agent-contract-lifecycle.ts";
 
 export type ExecuteParams = {
   runId: string;
@@ -139,15 +141,10 @@ export async function executeAgentRun(
     .neq("id", runId);
   for (const dupe of duplicateRuns ?? []) {
     const dupeId = dupe.id as string;
-    await supabase
-      .from("agent_runs")
-      .update({
-        status: "failed",
-        finished_at: new Date().toISOString(),
-        error: "Run duplicado cancelado — outra execução assumiu.",
-        meta: { duplicateCanceled: true },
-      })
-      .eq("id", dupeId);
+    await transitionRun(supabase, dupeId, "failed", {
+      error: "Run duplicado cancelado — outra execução assumiu.",
+      meta: { duplicateCanceled: true },
+    });
     await appendStreamEvent(supabase, dupeId, "finish", {
       type: "finish",
       ok: false,
@@ -247,14 +244,7 @@ export async function executeAgentRun(
       errorName: (err as Error)?.name,
     });
     const msg = (err as Error)?.message ?? "Provider LLM não configurado";
-    await supabase
-      .from("agent_runs")
-      .update({
-        status: "failed",
-        finished_at: new Date().toISOString(),
-        error: msg,
-      })
-      .eq("id", runId);
+    await transitionRun(supabase, runId, "failed", { error: msg });
     return {
       ok: false,
       runId,
@@ -322,19 +312,15 @@ export async function executeAgentRun(
     .eq("id", runId)
     .maybeSingle();
   const currentMeta = (currentRun?.meta ?? {}) as Record<string, unknown>;
-  await supabase
-    .from("agent_runs")
-    .update({
-      status: "running",
-      meta: {
-        ...currentMeta,
-        ...runMetaBase,
-        betweenChunks: false,
-        plan: params.plan ?? currentMeta.plan ?? null,
-        planSourceRunId: params.planSourceRunId ?? currentMeta.planSourceRunId ?? null,
-      },
-    })
-    .eq("id", runId);
+  await transitionRun(supabase, runId, "running", {
+    meta: {
+      ...currentMeta,
+      ...runMetaBase,
+      betweenChunks: false,
+      plan: params.plan ?? currentMeta.plan ?? null,
+      planSourceRunId: params.planSourceRunId ?? currentMeta.planSourceRunId ?? null,
+    },
+  });
 
   const jobParams: AgentJobParams = {
     projectId,
@@ -362,14 +348,7 @@ export async function executeAgentRun(
     result = await executeAgentJob(supabase, { ...jobParams, resumeRun }, onEvent);
   } catch (err: unknown) {
     const msg = (err as Error)?.message ?? "Agent execution failed";
-    await supabase
-      .from("agent_runs")
-      .update({
-        status: "failed",
-        finished_at: new Date().toISOString(),
-        error: msg,
-      })
-      .eq("id", runId);
+    await transitionRun(supabase, runId, "failed", { error: msg });
     return {
       ok: false,
       runId,
@@ -404,22 +383,17 @@ export async function executeAgentRun(
 
     if (chunkLimits.exceeded) {
       const capError = chunkCapErrorMessage(chunkLimits.reason);
-      await supabase
-        .from("agent_runs")
-        .update({
-          status: "failed",
-          finished_at: new Date().toISOString(),
-          steps: result.steps,
-          error: capError,
-          heartbeat_at: new Date().toISOString(),
-          meta: {
-            ...prevMeta,
-            chunkGeneration: chunkLimits.chunkGeneration,
-            chunkCapExceeded: true,
-            chunkCapReason: chunkLimits.reason ?? null,
-          },
-        })
-        .eq("id", runId);
+      await transitionRun(supabase, runId, "failed", {
+        steps: result.steps,
+        error: capError,
+        heartbeat_at: new Date().toISOString(),
+        meta: {
+          ...prevMeta,
+          chunkGeneration: chunkLimits.chunkGeneration,
+          chunkCapExceeded: true,
+          chunkCapReason: chunkLimits.reason ?? null,
+        },
+      });
 
       await appendStreamEvent(supabase, runId, "finish", {
         type: "finish",
@@ -459,26 +433,22 @@ export async function executeAgentRun(
       };
     }
 
-    await supabase
-      .from("agent_runs")
-      .update({
-        status: "running",
-        steps: result.steps,
-        error: null,
-        heartbeat_at: new Date().toISOString(),
-        meta: {
-          ...prevMeta,
-          chunkGeneration: chunkLimits.chunkGeneration,
-          ...(chunkLimits.buildFixAttempts != null
-            ? { buildFixAttempts: chunkLimits.buildFixAttempts }
-            : {}),
-          buildFix: result.buildFix === true || prevMeta.buildFix === true,
-          lastChunkAt: new Date().toISOString(),
-          lastChunkMessage: result.error ?? null,
-          betweenChunks: true,
-        },
-      })
-      .eq("id", runId);
+    await transitionRun(supabase, runId, "running", {
+      steps: result.steps,
+      error: null,
+      heartbeat_at: new Date().toISOString(),
+      meta: {
+        ...prevMeta,
+        chunkGeneration: chunkLimits.chunkGeneration,
+        ...(chunkLimits.buildFixAttempts != null
+          ? { buildFixAttempts: chunkLimits.buildFixAttempts }
+          : {}),
+        buildFix: result.buildFix === true || prevMeta.buildFix === true,
+        lastChunkAt: new Date().toISOString(),
+        lastChunkMessage: result.error ?? null,
+        betweenChunks: true,
+      },
+    });
 
     // Session 2.0 — sinaliza retomada de chunk ao consumidor (antes só em meta).
     await appendStreamEvent(supabase, runId, "chunk_resume", {
@@ -519,33 +489,28 @@ export async function executeAgentRun(
     };
   }
 
-  let status: string;
+  let terminalStatus: AgentRunStatus;
   if (result.canceled) {
-    status = "canceled";
+    terminalStatus = "canceled";
   } else if (isAwaiting) {
-    status = finalStatus!;
+    terminalStatus = (finalStatus as AgentRunStatus) ?? "awaiting_user";
   } else if (result.ok) {
-    status = "completed";
+    terminalStatus = "completed";
   } else {
-    status = "failed";
+    terminalStatus = "failed";
   }
 
-  await supabase
-    .from("agent_runs")
-    .update({
-      status,
-      finished_at: isAwaiting ? null : new Date().toISOString(),
-      steps: result.steps,
-      error: result.error ?? null,
-      heartbeat_at: new Date().toISOString(),
-      meta: {
-        ...prevMeta,
-        ...(result.summary ? { summary: result.summary } : {}),
-        ...(result.toolsUsed?.length ? { toolsUsed: result.toolsUsed } : {}),
-      },
-      ...(result.canceled ? { canceled_at: new Date().toISOString() } : {}),
-    })
-    .eq("id", runId);
+  await transitionRun(supabase, runId, terminalStatus, {
+    steps: result.steps,
+    error: result.error ?? null,
+    heartbeat_at: new Date().toISOString(),
+    ...(result.canceled ? { canceled_at: new Date().toISOString() } : {}),
+    meta: {
+      ...prevMeta,
+      ...(result.summary ? { summary: result.summary } : {}),
+      ...(result.toolsUsed?.length ? { toolsUsed: result.toolsUsed } : {}),
+    },
+  });
 
   await appendStreamEvent(supabase, runId, "finish", {
     type: "finish",

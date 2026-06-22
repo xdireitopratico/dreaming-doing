@@ -6,7 +6,7 @@ import {
 } from "@forge/agent-contract/lifecycle";
 import { getSupabaseAdmin } from "./_shared";
 
-const PATCH_COLUMNS = new Set(["error", "steps", "canceled_at"]);
+const PATCH_COLUMNS = new Set(["error", "steps", "canceled_at", "heartbeat_at"]);
 
 export function partitionRunExtras(extras: Record<string, unknown>): {
   columns: Record<string, unknown>;
@@ -62,7 +62,7 @@ export async function transitionRun(
   if (shouldSetFinishedAt(to)) {
     patch.finished_at = new Date().toISOString();
   }
-  if (to === "awaiting_user") {
+  if (to === "awaiting_user" || (to === "running" && from === "failed")) {
     patch.finished_at = null;
   }
 

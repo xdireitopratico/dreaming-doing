@@ -22,8 +22,15 @@ describe("canTransitionRunStatus", () => {
     expect(canTransitionRunStatus("completed", "running")).toBe(false);
   });
 
-  it("terminal não muda", () => {
-    expect(canTransitionRunStatus("failed", "running")).toBe(false);
+  it("failed → running (resume)", () => {
+    expect(canTransitionRunStatus("failed", "running")).toBe(true);
+  });
+
+  it("completed → awaiting_user (repair histórico)", () => {
+    expect(canTransitionRunStatus("completed", "awaiting_user")).toBe(true);
+  });
+
+  it("canceled permanece terminal", () => {
     expect(canTransitionRunStatus("canceled", "completed")).toBe(false);
   });
 });

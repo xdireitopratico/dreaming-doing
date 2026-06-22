@@ -58,6 +58,8 @@ import {
   TOOL_FAIL_USER_MESSAGE,
 } from "./tool-progress.ts";
 import { logger } from "../_shared/logger.ts";
+import { transitionRun } from "../_shared/run-lifecycle.ts";
+import type { AgentRunStatus } from "../_shared/agent-contract-lifecycle.ts";
 import { appendExecutionLogEntry, buildExecutionLogMeta } from "./executionLogMeta.ts";
 import {
   collapseNarrationBuffer,
@@ -2136,33 +2138,27 @@ export class AgentLoop {
   ): Promise<void> {
     if (!this.runId) return;
     try {
-      const { data: existing } = await this.sb
-        .from("agent_runs")
-        .select("meta")
-        .eq("id", this.runId)
-        .maybeSingle();
-      const prevMeta = (existing?.meta ?? {}) as Record<string, unknown>;
-      const nextMeta: Record<string, unknown> = {
-        ...prevMeta,
-        planMode: this.planMode,
-      };
+      const metaDelta: Record<string, unknown> = { planMode: this.planMode };
       if (extra && Object.prototype.hasOwnProperty.call(extra, "plan")) {
         if (extra.plan === null) {
-          delete nextMeta.plan;
+          metaDelta.plan = null;
         } else if (extra.plan) {
-          nextMeta.plan = extra.plan;
+          metaDelta.plan = extra.plan;
         }
       }
       if (extra?.awaitingUser) {
-        nextMeta.awaitingUser = extra.awaitingUser;
+        metaDelta.awaitingUser = extra.awaitingUser;
       }
-      const updateFields: Record<string, unknown> = { status, meta: nextMeta };
-      if (status === "awaiting_user") {
-        updateFields.finished_at = null;
-      } else if (status === "completed") {
-        updateFields.finished_at = new Date().toISOString();
+      const result = await transitionRun(this.sb, this.runId, status as AgentRunStatus, {
+        meta: metaDelta,
+      });
+      if (!result.ok && result.skipped) {
+        logger.warn("agent_run.mark_status_skipped", {
+          runId: this.runId,
+          from: result.from,
+          to: status,
+        });
       }
-      await this.sb.from("agent_runs").update(updateFields).eq("id", this.runId);
     } catch (err) {
       logger.error("agent_run.mark_status_failed", {
         runId: this.runId ?? undefined,

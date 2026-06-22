@@ -25,6 +25,8 @@ import { isServiceRoleRequest } from "../_shared/service-auth.ts";
 import { extractOriginalUserRequest, resolveAllocateSandbox } from "./run-context.ts";
 import { enqueueAgentJobOnDispatch } from "../_shared/agent-jobs.ts";
 import { resolveInngestEventKey, resolveInngestEventUrl } from "../_shared/inngest-event-url.ts";
+import { transitionRun } from "../_shared/run-lifecycle.ts";
+import type { AgentRunStatus } from "../_shared/agent-contract-events.ts";
 
 const runningLocks = new Map<string, Promise<unknown>>();
 
@@ -142,14 +144,7 @@ Deno.serve(async (req) => {
         }
 
         const now = new Date().toISOString();
-        await supabase
-          .from("agent_runs")
-          .update({
-            status: "canceled",
-            canceled_at: now,
-            finished_at: now,
-          })
-          .eq("id", runId);
+        await transitionRun(supabase, runId, "canceled", { canceled_at: now });
 
         await appendStreamEvent(supabase, runId, "canceled", {
           type: "canceled",
@@ -232,14 +227,9 @@ Deno.serve(async (req) => {
             error: eventResult.error ?? "unknown",
             resumable: false,
           });
-          await supabase
-            .from("agent_runs")
-            .update({
-              status: "failed",
-              finished_at: new Date().toISOString(),
-              error: `dispatch_failed: ${eventResult.error ?? "unknown"}`,
-            })
-            .eq("id", runId);
+          await transitionRun(supabase, runId, "failed", {
+            error: `dispatch_failed: ${eventResult.error ?? "unknown"}`,
+          });
           return json(
             {
               error: `Falha ao iniciar build: ${eventResult.error ?? "unknown"}`,
@@ -258,14 +248,9 @@ Deno.serve(async (req) => {
             error: "INNGEST_EVENT_KEY not configured (no eventId)",
             resumable: false,
           });
-          await supabase
-            .from("agent_runs")
-            .update({
-              status: "failed",
-              finished_at: new Date().toISOString(),
-              error: "dispatch_failed: INNGEST_EVENT_KEY not configured (no eventId)",
-            })
-            .eq("id", runId);
+          await transitionRun(supabase, runId, "failed", {
+            error: "dispatch_failed: INNGEST_EVENT_KEY not configured (no eventId)",
+          });
           return json(
             {
               error:
@@ -444,10 +429,7 @@ Deno.serve(async (req) => {
         if (completedAwaiting) {
           awaitingRun = completedAwaiting;
           // Corrigir o status para refletir a realidade
-          await supabase
-            .from("agent_runs")
-            .update({ status: "awaiting_user", finished_at: null })
-            .eq("id", completedAwaiting.id);
+          await transitionRun(supabase, completedAwaiting.id as string, "awaiting_user");
         }
       }
 
@@ -563,10 +545,7 @@ Deno.serve(async (req) => {
       // Mensagem do usuário durante awaiting_user: finaliza run de espera,
       // nova run começa do histórico (agente vê clarify + resposta no contexto).
       if (isAwaiting && awaitingRun?.id && !resumeRun) {
-        await supabase
-          .from("agent_runs")
-          .update({ status: "completed", finished_at: new Date().toISOString() })
-          .eq("id", awaitingRun.id);
+        await transitionRun(supabase, awaitingRun.id as string, "completed");
       }
 
       if (resumeRun) runningLocks.delete(projectId);
@@ -840,19 +819,14 @@ Deno.serve(async (req) => {
         if (existingRun?.id) {
           agentRunId = existingRun.id;
           const prevMeta = (existingRun.meta ?? {}) as Record<string, unknown>;
-          await supabase
-            .from("agent_runs")
-            .update({
-              status: "running",
-              finished_at: null,
-              error: null,
-              meta: {
-                ...prevMeta,
-                ...runMetaBase,
-                resumedAt: new Date().toISOString(),
-              },
-            })
-            .eq("id", agentRunId);
+          await transitionRun(supabase, agentRunId, "running", {
+            error: null,
+            meta: {
+              ...prevMeta,
+              ...runMetaBase,
+              resumedAt: new Date().toISOString(),
+            },
+          });
         }
       }
 
@@ -967,15 +941,15 @@ Deno.serve(async (req) => {
         const isAwaiting =
           awaitingStates.includes(currentStatus ?? "") || !!currentMeta.awaitingUser;
 
-        let status: string;
+        let terminalStatus: AgentRunStatus;
         if (result.canceled) {
-          status = "canceled";
+          terminalStatus = "canceled";
         } else if (isAwaiting) {
-          status = currentStatus!; // Preserva awaiting_user
+          terminalStatus = (currentStatus as AgentRunStatus) ?? "awaiting_user";
         } else if (result.ok) {
-          status = "completed";
+          terminalStatus = "completed";
         } else {
-          status = "failed";
+          terminalStatus = "failed";
         }
 
         const prevMeta = (current?.meta ?? runMetaBase) as Record<string, unknown>;
@@ -995,17 +969,12 @@ Deno.serve(async (req) => {
           ...(typeof result.costUsd === "number" ? { costUsd: result.costUsd } : {}),
         });
 
-        await supabase
-          .from("agent_runs")
-          .update({
-            status,
-            finished_at: isAwaiting ? null : new Date().toISOString(),
-            steps: result.steps,
-            error: result.error ?? null,
-            meta: builtMeta,
-            ...(result.canceled ? { canceled_at: new Date().toISOString() } : {}),
-          })
-          .eq("id", agentRunId);
+        await transitionRun(supabase, agentRunId, terminalStatus, {
+          steps: result.steps,
+          error: result.error ?? null,
+          ...(result.canceled ? { canceled_at: new Date().toISOString() } : {}),
+          meta: builtMeta,
+        });
       };
 
       // P0: Inngest handles durable execution. The "run" action is a thin

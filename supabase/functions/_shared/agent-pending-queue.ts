@@ -7,6 +7,7 @@ import { CHUNK_HANDOFF_GAP_MS } from "./agent-chunk-limits.ts";
 export { CHUNK_HANDOFF_GAP_MS };
 import { appendStreamEvent } from "./agent-stream.ts";
 import { logger } from "./logger.ts";
+import { transitionRun } from "./run-lifecycle.ts";
 
 /** H8 fix: STALE_RUN_MS 8min → 15min, BUSY_ZOMBIE_GAP_MS 3min → 8min.
  *  Alinhado com heartbeat 30s + tempo máximo de observe() (5min).
@@ -166,15 +167,10 @@ export async function expireStaleRuns(
       ? "Execução interrompida (worker expirou). Clique em **Continuar** para retomar do checkpoint."
       : "Run expirado (zumbi) — tente enviar de novo.";
 
-    await supabase
-      .from("agent_runs")
-      .update({
-        status: "failed",
-        finished_at: new Date().toISOString(),
-        error,
-        meta: { ...meta, staleExpired: true, resumable },
-      })
-      .eq("id", id);
+    await transitionRun(supabase, id, "failed", {
+      error,
+      meta: { ...meta, staleExpired: true, resumable },
+    });
 
     await appendStreamEvent(supabase, id, "finish", {
       type: "finish",

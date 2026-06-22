@@ -6,8 +6,8 @@ const ALLOWED: Record<AgentRunStatus, readonly AgentRunStatus[]> = {
   pending: ["running", "failed", "canceled"],
   running: ["running", "awaiting_user", "completed", "failed", "canceled"],
   awaiting_user: ["completed", "failed", "canceled"],
-  completed: [],
-  failed: [],
+  completed: ["awaiting_user"],
+  failed: ["running"],
   canceled: [],
 };
 
@@ -15,7 +15,8 @@ const TERMINAL = new Set<AgentRunStatus>(["completed", "failed", "canceled"]);
 
 export function canTransitionRunStatus(from: AgentRunStatus, to: AgentRunStatus): boolean {
   if (from === to) return true;
-  if (TERMINAL.has(from)) return false;
+  if (from === "canceled") return false;
+  if (TERMINAL.has(from) && !(ALLOWED[from] ?? []).includes(to)) return false;
   if (to === "running" && (from === "awaiting_user" || from === "completed")) return false;
   return (ALLOWED[from] ?? []).includes(to);
 }
