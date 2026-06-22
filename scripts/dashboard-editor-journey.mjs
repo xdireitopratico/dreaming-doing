@@ -1,20 +1,21 @@
 #!/usr/bin/env node
 /**
- * Browser E2E — Fase S checklist §4 (dashboard → editor).
+ * Browser E2E — Fase S checklist §4.
  *
- * Prova:
- *  1. Prompt no dashboard cria projeto e navega ao editor
- *  2. Mensagem do usuário aparece sem re-envio
- *  3. «Pensando…» visível em < thinkingTimeoutMs (default 8s — rede + createProject)
+ * Fases (E2E_PHASES ou --phases=):
+ *   dashboard    — prompt → editor, user bubble, Pensando
+ *   f5           — F5 mid-run, UI recupera (working ou running)
+ *   second-turn  — 2ª mensagem, mesma jornada (Pensando de novo)
  *
  * Uso:
  *   npm run dev
- *   E2E_EMAIL=... E2E_PASSWORD=... node scripts/dashboard-editor-journey.mjs
- *   node scripts/dashboard-editor-journey.mjs http://127.0.0.1:8080
+ *   E2E_EMAIL=... E2E_PASSWORD=... npm run check:dashboard-journey
  *
- * Opcional: E2E_STORAGE_STATE=.e2e/auth.json (pula login)
- *           E2E_CLEANUP=0 (não apaga projeto criado)
- *           E2E_REQUIRED=1 (exit 1 se credenciais ausentes)
+ * Opcional:
+ *   E2E_STORAGE_STATE=.e2e/auth.json
+ *   E2E_CLEANUP=0
+ *   E2E_REQUIRED=1
+ *   E2E_PHASES=dashboard,f5,second-turn
  */
 import { chromium } from "playwright";
 import { mkdir, readFileSync } from "node:fs";
@@ -36,6 +37,9 @@ const E2E_PASSWORD = process.env.E2E_PASSWORD ?? "";
 const STORAGE_STATE_PATH = process.env.E2E_STORAGE_STATE ?? "";
 const THINKING_TIMEOUT_MS = Number(process.env.E2E_THINKING_TIMEOUT_MS ?? "8000");
 const NAV_TIMEOUT_MS = Number(process.env.E2E_NAV_TIMEOUT_MS ?? "90000");
+const RUN_ACTIVE_TIMEOUT_MS = Number(process.env.E2E_RUN_ACTIVE_TIMEOUT_MS ?? "90000");
+const RUN_IDLE_TIMEOUT_MS = Number(process.env.E2E_RUN_IDLE_TIMEOUT_MS ?? "300000");
+const F5_RECOVER_TIMEOUT_MS = Number(process.env.E2E_F5_RECOVER_TIMEOUT_MS ?? "20000");
 const CLEANUP = process.env.E2E_CLEANUP !== "0";
 const REQUIRED = process.env.E2E_REQUIRED === "1";
 
@@ -44,7 +48,19 @@ function arg(name, fallback) {
   return hit ? hit.split("=").slice(1).join("=") : fallback;
 }
 
+const PHASES = new Set(
+  (process.env.E2E_PHASES ?? arg("phases", "dashboard,f5,second-turn"))
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean),
+);
+
 const OUT_DIR = resolve(__dirname, "../.e2e-screenshots");
+const TERMINAL_RUN = new Set(["completed", "failed", "canceled", "awaiting_user"]);
+
+function sleep(ms) {
+  return new Promise((r) => setTimeout(r, ms));
+}
 
 async function rest(path, init = {}) {
   const url = `${SUPABASE_URL}/rest/v1/${path}`;
@@ -64,6 +80,30 @@ async function deleteProject(projectId) {
   await rest(`projects?id=eq.${projectId}`, { method: "DELETE" });
 }
 
+async function fetchConversationId(projectId) {
+  const res = await rest(`conversations?project_id=eq.${projectId}&select=id&order=created_at.desc&limit=1`);
+  const rows = await res.json();
+  return rows?.[0]?.id ?? null;
+}
+
+async function fetchLatestRun(conversationId) {
+  const res = await rest(
+    `agent_runs?conversation_id=eq.${conversationId}&select=id,status,finished_at&order=created_at.desc&limit=1`,
+  );
+  const rows = await res.json();
+  return rows?.[0] ?? null;
+}
+
+async function pollRunStatus(conversationId, predicate, timeoutMs, label) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const run = await fetchLatestRun(conversationId);
+    if (run && predicate(run)) return run;
+    await sleep(2000);
+  }
+  throw new Error(`timeout aguardando run ${label} (${timeoutMs}ms)`);
+}
+
 async function ensureAuthContext(browser) {
   if (STORAGE_STATE_PATH) {
     try {
@@ -74,9 +114,7 @@ async function ensureAuthContext(browser) {
     }
   }
 
-  if (!E2E_EMAIL || !E2E_PASSWORD) {
-    return null;
-  }
+  if (!E2E_EMAIL || !E2E_PASSWORD) return null;
   if (!SUPABASE_URL || !ANON_KEY) {
     throw new Error("SUPABASE_URL e VITE_SUPABASE_PUBLISHABLE_KEY necessários para login E2E");
   }
@@ -108,6 +146,156 @@ async function ensureAuthContext(browser) {
   return context;
 }
 
+async function waitForWorkingLine(page, timeoutMs, failures, label) {
+  const working = page.locator("[data-testid=chat-working-line]");
+  try {
+    await working.waitFor({ state: "visible", timeout: timeoutMs });
+    const text = (await working.innerText()).trim();
+    if (!/Pensando|Pensou/i.test(text)) {
+      failures.push(`${label}: working line inesperada — "${text}"`);
+      return false;
+    }
+    return true;
+  } catch {
+    failures.push(`${label}: «Pensando…» não apareceu em ${timeoutMs}ms`);
+    return false;
+  }
+}
+
+async function waitForHeaderState(page, state, timeoutMs) {
+  const el = page.locator(`[data-testid=forge-header-state][data-state="${state}"]`);
+  await el.waitFor({ state: "visible", timeout: timeoutMs });
+}
+
+async function sendComposerMessage(page, text) {
+  const input = page.locator("[data-testid=chat-composer] .forge-composer-input");
+  await input.waitFor({ state: "visible", timeout: 15_000 });
+  await input.fill(text);
+  await page.locator("[data-testid=chat-composer] .forge-composer-send").click();
+}
+
+async function openInspectorFromCard(page) {
+  const card = page.locator("[data-testid=chat-job-card] .forge-mini-card-body").first();
+  if ((await card.count()) > 0) {
+    await card.click();
+    await page.locator("[data-testid=job-inspector]").waitFor({ state: "visible", timeout: 10_000 });
+  }
+}
+
+async function phaseDashboard(page, failures, prompt) {
+  console.log("→ fase dashboard");
+  await page.goto(`${BASE}/projects`, { waitUntil: "domcontentloaded", timeout: NAV_TIMEOUT_MS });
+
+  if (page.url().includes("/auth")) {
+    failures.push("dashboard: redirecionou para /auth — sessão inválida");
+    return null;
+  }
+
+  const textarea = page.locator(".dashboard-prompt-wrap textarea");
+  await textarea.waitFor({ state: "visible", timeout: 15_000 });
+  await textarea.fill(prompt);
+  await page.locator(".dashboard-prompt-wrap button[type=submit]").click();
+
+  await page.waitForURL(/\/projects\/[0-9a-f-]{36}/i, { timeout: NAV_TIMEOUT_MS });
+  const projectId = page.url().match(/\/projects\/([0-9a-f-]{36})/i)?.[1] ?? null;
+
+  const userBubble = page.locator("[data-testid=chat-message-user]").first();
+  await userBubble.waitFor({ state: "visible", timeout: 15_000 });
+  const userText = (await userBubble.innerText()).trim();
+  if (!userText.includes("[e2e-journey]")) {
+    failures.push(`dashboard: mensagem do usuário inesperada — ${userText.slice(0, 80)}…`);
+  }
+
+  await waitForWorkingLine(page, THINKING_TIMEOUT_MS, failures, "dashboard");
+  await page.locator("[data-testid=chat-composer]").waitFor({ state: "visible", timeout: 10_000 });
+  await page.screenshot({ path: resolve(OUT_DIR, "phase-dashboard.png"), fullPage: true });
+
+  return projectId;
+}
+
+async function phaseF5(page, conversationId, failures) {
+  console.log("→ fase f5 (mid-run)");
+  if (!SERVICE_KEY || !conversationId) {
+    failures.push("f5: SUPABASE_SERVICE_ROLE_KEY ou conversationId ausente — não dá para poll run");
+    return;
+  }
+
+  try {
+    await pollRunStatus(conversationId, (r) => r.status === "running", RUN_ACTIVE_TIMEOUT_MS, "running");
+  } catch (e) {
+    failures.push(`f5: ${e instanceof Error ? e.message : e}`);
+    return;
+  }
+
+  await openInspectorFromCard(page);
+  const trackBefore = await page.locator("[data-testid=inspector-timeline-track]").count();
+
+  await page.reload({ waitUntil: "domcontentloaded", timeout: NAV_TIMEOUT_MS });
+
+  const deadline = Date.now() + F5_RECOVER_TIMEOUT_MS;
+  let recovered = false;
+  while (Date.now() < deadline) {
+    const runningHeader = await page
+      .locator('[data-testid=forge-header-state][data-state="running"]')
+      .count();
+    const working = await page.locator("[data-testid=chat-working-line]").count();
+    const userOk = await page.locator("[data-testid=chat-message-user]").count();
+    const trackAfter = await page.locator("[data-testid=inspector-timeline-track]").count();
+
+    if (userOk > 0 && (runningHeader > 0 || working > 0 || trackAfter >= trackBefore)) {
+      recovered = true;
+      break;
+    }
+    await sleep(500);
+  }
+
+  if (!recovered) {
+    failures.push(`f5: UI não recuperou em ${F5_RECOVER_TIMEOUT_MS}ms após reload`);
+  }
+
+  await page.screenshot({ path: resolve(OUT_DIR, "phase-f5.png"), fullPage: true });
+}
+
+async function phaseSecondTurn(page, conversationId, failures) {
+  console.log("→ fase second-turn");
+  if (SERVICE_KEY && conversationId) {
+    try {
+      await pollRunStatus(
+        conversationId,
+        (r) => TERMINAL_RUN.has(r.status),
+        RUN_IDLE_TIMEOUT_MS,
+        "terminal",
+      );
+    } catch (e) {
+      failures.push(`second-turn: ${e instanceof Error ? e.message : e}`);
+      return;
+    }
+  } else {
+    try {
+      await waitForHeaderState(page, "idle", 30_000);
+    } catch {
+      /* composer pode estar liberado com plan-pending */
+    }
+  }
+
+  const secondPrompt = `[e2e-journey-2] ok (${Date.now()})`;
+  const userCountBefore = await page.locator("[data-testid=chat-message-user]").count();
+  await sendComposerMessage(page, secondPrompt);
+
+  await page
+    .locator("[data-testid=chat-message-user]")
+    .nth(userCountBefore)
+    .waitFor({ state: "visible", timeout: 15_000 });
+
+  const secondText = await page.locator("[data-testid=chat-message-user]").nth(userCountBefore).innerText();
+  if (!secondText.includes("[e2e-journey-2]")) {
+    failures.push("second-turn: 2ª mensagem do usuário não apareceu");
+  }
+
+  await waitForWorkingLine(page, THINKING_TIMEOUT_MS, failures, "second-turn");
+  await page.screenshot({ path: resolve(OUT_DIR, "phase-second-turn.png"), fullPage: true });
+}
+
 async function main() {
   const hasAuth = STORAGE_STATE_PATH || (E2E_EMAIL && E2E_PASSWORD);
   if (!hasAuth) {
@@ -128,6 +316,8 @@ async function main() {
     `[e2e-journey] Responda apenas "ok" — sem editar arquivos (${Date.now()})`,
   );
 
+  console.log("Fases:", [...PHASES].join(", "));
+
   const browser = await chromium.launch({ headless: true });
   let context;
   try {
@@ -141,48 +331,32 @@ async function main() {
 
   const page = await context.newPage({ viewport: { width: 1280, height: 900 } });
   let projectId = null;
+  let conversationId = null;
   const failures = [];
 
   try {
-    await page.goto(`${BASE}/projects`, { waitUntil: "domcontentloaded", timeout: NAV_TIMEOUT_MS });
+    if (PHASES.has("dashboard")) {
+      projectId = await phaseDashboard(page, failures, prompt);
+      if (projectId) conversationId = await fetchConversationId(projectId);
+    } else if (arg("project-id", "")) {
+      projectId = arg("project-id", "");
+      await page.goto(`${BASE}/projects/${projectId}`, { waitUntil: "domcontentloaded" });
+      conversationId = await fetchConversationId(projectId);
+    }
 
-    if (page.url().includes("/auth")) {
-      failures.push("redirecionou para /auth — sessão inválida");
-    } else {
-      const textarea = page.locator(".dashboard-prompt-wrap textarea");
-      await textarea.waitFor({ state: "visible", timeout: 15_000 });
-      await textarea.fill(prompt);
-      await page.locator(".dashboard-prompt-wrap button[type=submit]").click();
-
-      await page.waitForURL(/\/projects\/[0-9a-f-]{36}/i, { timeout: NAV_TIMEOUT_MS });
-      projectId = page.url().match(/\/projects\/([0-9a-f-]{36})/i)?.[1] ?? null;
-
-      const userBubble = page.locator("[data-testid=chat-message-user]").first();
-      await userBubble.waitFor({ state: "visible", timeout: 15_000 });
-      const userText = (await userBubble.innerText()).trim();
-      if (!userText.includes("[e2e-journey]")) {
-        failures.push(`mensagem do usuário não veio do dashboard (got: ${userText.slice(0, 80)}…)`);
+    if (PHASES.has("f5") && !failures.length) {
+      await phaseF5(page, conversationId, failures);
+      if (conversationId) {
+        conversationId = (await fetchConversationId(projectId)) ?? conversationId;
       }
+    }
 
-      const working = page.locator("[data-testid=chat-working-line]");
-      try {
-        await working.waitFor({ state: "visible", timeout: THINKING_TIMEOUT_MS });
-        const label = (await working.innerText()).trim();
-        if (!/Pensando|Pensou/i.test(label)) {
-          failures.push(`working line inesperada: "${label}"`);
-        }
-      } catch {
-        failures.push(`«Pensando…» não apareceu em ${THINKING_TIMEOUT_MS}ms`);
-      }
-
-      const composer = page.locator("[data-testid=chat-composer]");
-      await composer.waitFor({ state: "visible", timeout: 10_000 });
-
-      await page.screenshot({ path: resolve(OUT_DIR, "dashboard-editor-journey.png"), fullPage: true });
+    if (PHASES.has("second-turn") && !failures.length) {
+      await phaseSecondTurn(page, conversationId, failures);
     }
   } catch (e) {
     failures.push(e instanceof Error ? e.message : String(e));
-    await page.screenshot({ path: resolve(OUT_DIR, "dashboard-editor-journey-fail.png"), fullPage: true }).catch(() => {});
+    await page.screenshot({ path: resolve(OUT_DIR, "journey-fail.png"), fullPage: true }).catch(() => {});
   } finally {
     if (CLEANUP && projectId) {
       await deleteProject(projectId);
@@ -199,8 +373,8 @@ async function main() {
     process.exit(1);
   }
 
-  console.log("PASS: dashboard → editor — user message + Pensando visível");
-  console.log(`Screenshot: ${resolve(OUT_DIR, "dashboard-editor-journey.png")}`);
+  console.log(`PASS: fases [${[...PHASES].join(", ")}]`);
+  console.log(`Screenshots: ${OUT_DIR}`);
 }
 
 main().catch((e) => {
