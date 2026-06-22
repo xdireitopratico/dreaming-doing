@@ -9,6 +9,8 @@ lerna-debug.log*
 
 node_modules
 .lovable-screenshots
+.e2e-screenshots
+.e2e/
 dist
 dist-ssr
 .output
