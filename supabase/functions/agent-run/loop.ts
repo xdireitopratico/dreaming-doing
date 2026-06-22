@@ -37,33 +37,19 @@ import { attemptGracefulClosing as attemptGracefulClosingPhase } from "./runtime
 import { runGatherContextForHost } from "./runtime/phases/gather-context.ts";
 import { createAgentLoopMutableState } from "./runtime/loop-mutable-state.ts";
 import { NarrationPhase } from "./runtime/phases/narration.ts";
+import type { PlanModeStreamState } from "./runtime/phases/plan-turn.ts";
 import {
-  finishPlanProposal as finishPlanTurnProposal,
-  runPlanModeAgentTurn as runPlanModeAgentTurnPhase,
-  type PlanModeStreamState,
-} from "./runtime/phases/plan-turn.ts";
+  finishPlanProposalForHost,
+  runPlanModeAgentTurnForHost,
+} from "./runtime/phases/plan-turn-host.ts";
+import type { AgentLoopOptions } from "./runtime/loop-options.ts";
 import { runBuildExecutePhase } from "./runtime/phases/execute.ts";
 import { runAgentOrchestrator } from "./runtime/phases/orchestrator.ts";
+import type { AgentLoopRunResult } from "./runtime/loop-result.ts";
 
 const LOOP_BUDGET_MS = readLoopBudgetMsFromRuntime();
 
-export type AgentLoopRunResult = {
-  ok: boolean;
-  summary?: string;
-  error?: string;
-  steps: number;
-  resumable?: boolean;
-  buildFix?: boolean;
-  canceled?: boolean;
-  toolsUsed?: string[];
-  awaiting?: boolean;
-  awaitingUser?: Record<string, unknown>;
-  plan?: ProposedPlan;
-  totalInputTokens?: number;
-  totalOutputTokens?: number;
-  totalTokens?: number;
-  costUsd?: number;
-};
+export type { AgentLoopRunResult } from "./runtime/loop-result.ts";
 
 export class AgentLoop {
   private reg: ToolRegistry;
@@ -151,35 +137,7 @@ export class AgentLoop {
     robinActive = false,
     projectTemplate = "vite-react",
     stackAddon = "",
-    options?: {
-      maxSteps?: number;
-      tasteStart?: boolean;
-      sessionAddon?: string;
-      userSkillNames?: string[];
-      resumeRun?: boolean;
-      hasCheckpoint?: boolean;
-      resumePhase?: LoopPhase | null;
-      complexityScore?: number;
-      maxStepsFromCheckpoint?: number;
-      runId?: string | null;
-      /** Fase 4.6 plan mode: emite plan_proposed + pausa pra aprovação do usuário. */
-      planMode?: boolean;
-      /** Run de build disparada por planApprove — pula qualify e usa planSummary. */
-      approvedPlanBuild?: boolean;
-      /** Pula gate conversacional pós-stub (build pós-plano aprovado / follow-up). */
-      skipConversationalGate?: boolean;
-      planSummary?: string;
-      planHeadline?: string;
-      planSteps?: PlanStep[];
-      /** Retomada após falha de build — pula re-narração de intenção. */
-      buildFixResume?: boolean;
-      /** mainCfg de resolveAgentProvider — label/modelo exatos do BYOK do usuário */
-      resolvedMainCfg?: ProviderConfig;
-      /** Preferências /models — Auto troca modelo por complexidade; Fixo/ROBIN não */
-      preferences?: AgentPreferencesPayload;
-      /** Retomada Inngest entre chunks — alimenta mensagem explore na timeline. */
-      chunkGeneration?: number;
-    },
+    options?: AgentLoopOptions,
   ) {
     this.reg = reg;
     this.llm = llm;
@@ -397,7 +355,7 @@ export class AgentLoop {
       state: this.state,
       skills: this.skills,
       userSkillNames: this.userSkillNames,
-        lastEmittedSkills: this.lastEmittedSkills,
+      lastEmittedSkills: this.lastEmittedSkills,
       fileContentCache: this.fileContentCache,
       touchHeartbeat: () => this.bindings.touchHeartbeat(),
       emit: (type, data) => this.emit(type, data),
@@ -411,21 +369,25 @@ export class AgentLoop {
     proposedPlan: ProposedPlan,
     toolsUsed: string[] = [],
   ): Promise<AgentLoopRunResult> {
-    return finishPlanTurnProposal(this.bindings.planTurnFinish(), proposedPlan, toolsUsed);
+    return finishPlanProposalForHost(this.planTurnHost(), proposedPlan, toolsUsed);
   }
 
   private async runPlanModeAgentTurn(model: LLMProvider): Promise<AgentLoopRunResult> {
-    const skillPrompt = this.state.context
-      ? this.skills.buildSkillPrompt(this.state.context.files)
-      : "";
-    this.planStreamState.llmResponseWasStreamed = this.mutable.llmResponseWasStreamed;
-    this.planStreamState.thinkingStreamStartedAt = this.thinkingStreamStartedAt;
+    return runPlanModeAgentTurnForHost(this.planTurnHost(), model);
+  }
 
-    const result = await runPlanModeAgentTurnPhase(this.bindings.buildPlanTurn(skillPrompt), model);
-
-    this.mutable.llmResponseWasStreamed = this.planStreamState.llmResponseWasStreamed;
-    this.thinkingStreamStartedAt = this.planStreamState.thinkingStreamStartedAt;
-    return result;
+  private planTurnHost() {
+    return {
+      state: this.state,
+      skills: this.skills,
+      mutable: this.mutable,
+      planStreamState: this.planStreamState,
+      thinkingStreamStartedAt: this.thinkingStreamStartedAt,
+      setThinkingStreamStartedAt: (value: number | null) => {
+        this.thinkingStreamStartedAt = value;
+      },
+      bindings: this.bindings,
+    };
   }
 
   /**
@@ -447,7 +409,7 @@ export class AgentLoop {
         messages: this.state.messages,
         configuredModel: () => this.configuredModel(),
         finishPlanProposal: async (proposed) => {
-          await finishPlanTurnProposal(this.bindings.planTurnFinish(), proposed);
+          await finishPlanProposalForHost(this.planTurnHost(), proposed);
         },
       },
       reason,

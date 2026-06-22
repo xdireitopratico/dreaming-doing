@@ -4,7 +4,7 @@
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { ToolRegistry } from "./registry.ts";
 import { registerMetaTools } from "./tools/meta.ts";
-import { AgentLoop } from "./loop.ts";
+import { createAgentRuntime } from "./runtime/agent-runtime.ts";
 import { createSandboxProvider } from "./sandbox.ts";
 import { registerFsTools } from "./tools/fs.ts";
 import { registerShellTool } from "./tools/shell.ts";
@@ -429,18 +429,18 @@ export async function executeAgentJob(
   const streamEmit = (type: string, data: Record<string, unknown>) => onEvent(type, data);
   const resilientMain = new ResilientLLM(mainCfg, robinPool, streamEmit);
 
-  const loop = new AgentLoop(
+  const runtime = createAgentRuntime({
     reg,
-    resilientMain,
+    llm: resilientMain,
     supabase,
-    buildState(),
-    (event) => onEvent(event.type, event.data as Record<string, unknown>),
-    connectorKeys,
-    { main: resilientMain, cheap: resilientMain },
-    effectiveRobin,
+    state: buildState(),
+    onStream: (event) => onEvent(event.type, event.data as Record<string, unknown>),
+    injectedKeys: connectorKeys,
+    routerOverrides: { main: resilientMain, cheap: resilientMain },
+    robinActive: effectiveRobin,
     projectTemplate,
     stackAddon,
-    tasteStart
+    options: tasteStart
       ? {
           resolvedMainCfg: mainCfg,
           preferences,
@@ -473,19 +473,11 @@ export async function executeAgentJob(
                 : undefined,
           planHeadline: typeof preMeta.planHeadline === "string" ? preMeta.planHeadline : undefined,
           planSteps: coercePlanStepsFromMeta(preMeta.steps),
-          planDesign: preMeta.design
-            ? (() => {
-                const d = preMeta.design as Record<string, unknown>;
-                return {
-                  references: Array.isArray(d.references) ? d.references : [],
-                };
-              })()
-            : undefined,
           buildFixResume: preMeta.buildFix === true,
           chunkGeneration:
             typeof preMeta.chunkGeneration === "number" ? preMeta.chunkGeneration : 0,
         },
-  );
+  });
 
   let result: {
     ok: boolean;
@@ -504,14 +496,11 @@ export async function executeAgentJob(
     totalTokens?: number;
     costUsd?: number;
   };
-  loop.startHeartbeatTimer(30_000); // H8: 90s → 30s (observe() pode demorar 2-5min)
   try {
-    result = await loop.run();
+    result = await runtime.run(30_000); // H8: heartbeat 30s durante observe() longo
   } catch (e) {
     await sandbox.kill().catch(() => {});
     throw e;
-  } finally {
-    loop.stopHeartbeatTimer();
   }
   // C2 fix: NÃO mata sandbox se a run é resumable. Antes, o caminho
   // resumable (loop budget estourou) matava o sandbox, e o próximo
