@@ -3,7 +3,7 @@
 export const MAX_TOOL_MISSES = 3;
 
 export const TOOL_NUDGE_MESSAGE =
-  "Use ferramentas (fs_read, fs_write, fs_edit ou shell_exec) para implementar agora. " +
+  "Por favor, agora use ferramentas (fs_read, fs_write, fs_edit ou shell_exec) para implementar. " +
   "Pode manter 1 frase curta de narração junto com as tool_calls.";
 
 export const TOOL_FAIL_USER_MESSAGE =

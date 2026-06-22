@@ -71,6 +71,8 @@ export type ThreadItem =
       lastFinishOk?: boolean;
       resumable?: boolean;
       isFocused?: boolean;
+      /** Session 2.0 — flag de thinking para compat com testes/dev routes. */
+      thinking?: boolean | null;
     }
   | {
       kind: "plan_status";

@@ -34,13 +34,27 @@ export type ResolveAllocateSandboxInput = {
 
 /**
  * Whether shell_exec / E2B should be wired for this run.
- * - Build: pode criar sandbox novo.
  * - Plan: só reconecta sandbox já criado (nunca cria).
+ * - Build: pode criar sandbox novo.
  * - Conversa vaga sem sandbox: false.
+ *
+ * P2 fix: hasApprovedPlanInHistory é um sinalizador, não forçador.
+ * Antes: qualquer mensagem após aprovação de plano alocava sandbox,
+ * mesmo sendo conversa social ("entendi, mas e o CSS?" — 90+ chars).
+ * Agora: se tem plano aprovado MAS a mensagem é conversacional,
+ * ainda aloca só se já existe sandbox (não cria).
  */
 export function resolveAllocateSandbox(input: ResolveAllocateSandboxInput): boolean {
   if (input.planMode) return input.projectHasSandbox;
-  if (input.isApprovedPlanBuild || input.hasApprovedPlanInHistory) return true;
+  // Plan→Build explícito: aloca sempre (aprovação explícita do user)
+  if (input.isApprovedPlanBuild) return true;
+  // Plano aprovado no histórico: aloca SE mensagem é implementável.
+  // Se for conversa, só usa sandbox se já existe (não cria novo).
+  if (input.hasApprovedPlanInHistory) {
+    if (looksLikeInteractionOnly(input.userContent)) return input.projectHasSandbox;
+    return true;
+  }
+  // Sem plano: conversa sem sandbox não aloca.
   if (looksLikeInteractionOnly(input.userContent)) return input.projectHasSandbox;
   return true;
 }
@@ -303,9 +317,11 @@ export async function callOllamaVision(
  * Verifica se o modelo principal suporta vision; se não, prepara fallback Ollama.
  * Retorna objeto com: { hasVision: boolean, ollamaAvailable: boolean }
  */
-export async function checkVisionCapability(
-  providerConfig: { supportsVision?: boolean; provider: string; model: string },
-): Promise<{ hasVision: boolean; ollamaAvailable: boolean }> {
+export async function checkVisionCapability(providerConfig: {
+  supportsVision?: boolean;
+  provider: string;
+  model: string;
+}): Promise<{ hasVision: boolean; ollamaAvailable: boolean }> {
   const hasVision = providerConfig.supportsVision ?? false;
   let ollamaAvailable = false;
 

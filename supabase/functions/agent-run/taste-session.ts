@@ -84,8 +84,18 @@ export async function runTasteChat(params: {
   enabledMcpIds?: string[];
   activeSkills?: string[];
   activeMcps?: string[];
-}): Promise<{ ok: boolean; content: string }> {
+}): Promise<{ ok: boolean; content: string; uiActions?: Array<Record<string, unknown>> }> {
   const { supabase, userId, conversationId, cfg, emit, sessionAddon } = params;
+
+  // Session 2.0 — coleta ui_action events para retornar no JSON (taste é HTTP,
+  // não stream). O frontend despacha via dispatchTasteUiAction ao receber.
+  const uiActions: Array<Record<string, unknown>> = [];
+  const wrappedEmit: TasteUiEmit = (type: string, data: Record<string, unknown>) => {
+    if (type === "ui_action" && data && typeof data === "object") {
+      uiActions.push({ ...data });
+    }
+    emit(type, data);
+  };
 
   const { data: history } = await supabase
     .from("messages")
@@ -103,10 +113,10 @@ export async function runTasteChat(params: {
   });
 
   const reg = new ToolRegistry();
-  registerTasteTools(reg, { supabase, userId, emit });
+  registerTasteTools(reg, { supabase, userId, emit: wrappedEmit });
 
-  emit("phase", { phase: "taste_chat", message: "Concierge FORGE (NVIDIA Taste)…" });
-  emit("start", {
+  wrappedEmit("phase", { phase: "taste_chat", message: "Concierge FORGE (NVIDIA Taste)…" });
+  wrappedEmit("start", {
     provider: cfg.label,
     taste: true,
     sessionKind: "taste_chat",
@@ -125,7 +135,7 @@ export async function runTasteChat(params: {
   const content = await runTasteToolLoop(llm, reg, chatMessages);
 
   if (content?.trim()) {
-    emit("assistant_text", { text: content.trim(), final: true });
+    wrappedEmit("assistant_text", { text: content.trim(), final: true });
   }
 
   await supabase.from("messages").insert({
@@ -134,8 +144,12 @@ export async function runTasteChat(params: {
     parts: [{ type: "text", text: content }],
   });
 
-  emit("phase", { phase: "done", message: "Resposta Taste enviada." });
-  return { ok: true, content };
+  wrappedEmit("phase", { phase: "done", message: "Resposta Taste enviada." });
+  return {
+    ok: true,
+    content,
+    ...(uiActions.length > 0 ? { uiActions } : {}),
+  };
 }
 
 export function tasteProviderResilient(cfg: ProviderConfig) {

@@ -123,7 +123,16 @@ describe("mapAssistantTurn — contrato Lovable imutável", () => {
       phase: "execute" as const,
       finished: false,
       tools: [{ name: "fs_edit", args: { path: "Dockerfile.lara" }, ok: true }],
-      diffs: [{ path: "Dockerfile.lara", patch: "..." }],
+      diffs: [
+        {
+          id: "diff-1",
+          path: "Dockerfile.lara",
+          before: "",
+          after: "...",
+          op: "edit" as const,
+          timestamp: 1,
+        },
+      ],
       message: "Checking browser route wiring",
       statusHint: "Diagnosing Lara container gaps",
     };

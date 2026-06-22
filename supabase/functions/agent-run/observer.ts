@@ -21,26 +21,92 @@ export interface TypeCheckResult {
   output: string;
 }
 
+/** C6 fix: regex mais amplo para detectar falhas de build/TypeScript/Vite/eslint.
+ *  Antes: só pegava "error ts*", "failed to resolve", "module not found".
+ *  Erros TS comuns (Cannot find name, Property does not exist, etc) passavam
+ *  despercebidos e o build reportava 'ok: true' mesmo quebrado.
+ *  Agora: cobre TS errors, Vite errors, esbuild errors, eslint errors,
+ *  dependency conflicts (ERESOLVE), e exit codes não-zero. */
 function outputIndicatesBuildFailure(output: string): boolean {
   const o = output.toLowerCase();
+  // Exit code não-zero no output (caso tenha sido capturado)
+  if (/exit\s*code\s*[1-9]\d*/i.test(o)) return true;
   return (
+    // TypeScript errors
     o.includes("error ts") ||
+    o.includes("cannot find name") ||
+    o.includes("cannot find module") ||
+    (o.includes("property ") && o.includes("does not exist on type")) ||
+    (o.includes("argument of type") && o.includes("is not assignable")) ||
+    (o.includes("type ") && o.includes("is not assignable to type")) ||
+    o.includes("ts(") || // ts(2304), ts(2322), etc
+    o.includes("ts error") ||
+    // Import/Module errors
     o.includes("failed to resolve import") ||
+    o.includes("failed to resolve") ||
     o.includes("could not resolve") ||
     o.includes("module not found") ||
+    o.includes("cannot find package") ||
+    // Vite/Rollup/esbuild errors
     o.includes("build failed") ||
     o.includes("rollup failed") ||
+    o.includes("esbuild error") ||
+    o.includes("vite error") ||
     o.includes("✘ [") ||
-    o.includes("[plugin:vite")
+    o.includes("[plugin:vite") ||
+    o.includes("internal server error") ||
+    // ESLint
+    o.includes("eslint error") ||
+    o.includes("lint error") ||
+    // Dependency conflicts
+    o.includes("eresolve") ||
+    o.includes("peer dep") ||
+    o.includes("peer dependency") ||
+    // npm/yarn/pnpm errors
+    o.includes("npm err!") ||
+    o.includes("npm error") ||
+    o.includes("yarn error") ||
+    o.includes("pnpm error") ||
+    // tsc / build direct errors
+    o.includes("compilation failed") ||
+    o.includes("type error:") ||
+    o.includes("syntax error:")
   );
 }
 
-function shellOutput(result: { output?: unknown }): string {
-  return typeof result.output === "object"
-    ? ((result.output as { stderr?: string; stdout?: string }).stderr ??
-        (result.output as { stderr?: string; stdout?: string }).stdout ??
-        "")
-    : String(result.output ?? "");
+function shellOutput(result: { output?: unknown; error?: string }): string {
+  if (typeof result.output === "object" && result.output) {
+    const o = result.output as { stderr?: string; stdout?: string };
+    return o.stderr ?? o.stdout ?? result.error ?? "";
+  }
+  if (typeof result.output === "string" && result.output) return result.output;
+  return result.error ?? "";
+}
+
+/** H2 fix: strip ANSI escape codes do output.
+ *  npm, vite, tsc e esbuild jogam códigos ANSI (\u001b[31m, \u001b[0m)
+ *  que ocupam tokens do LLM sem informação útil. */
+function stripAnsi(s: string): string {
+  // eslint-disable-next-line no-control-regex
+  return s.replace(/\u001b\[[0-9;]*[a-zA-Z]/g, "").replace(/\u001b\][^\u0007]*\u0007/g, "");
+}
+
+/** H1 fix: check budget entre comandos de observe().
+ *  Se o budget estourou, retorna checks parciais + early-exit
+ *  para evitar gastar tempo em comandos subsequentes. */
+type BudgetChecker = () => boolean;
+function makeBudgetGate(budgetExceeded: BudgetChecker): {
+  check: () => boolean;
+  exceeded: () => boolean;
+} {
+  let _exceeded = false;
+  return {
+    check: () => {
+      if (budgetExceeded()) _exceeded = true;
+      return _exceeded;
+    },
+    exceeded: () => _exceeded,
+  };
 }
 
 export class RuntimeObserver {
@@ -52,8 +118,16 @@ export class RuntimeObserver {
     this.fileCache = fileCache ?? null;
   }
 
-  async observe(): Promise<ObservationResult> {
+  async observe(budgetExceeded?: () => boolean): Promise<ObservationResult> {
     const checks: Array<{ name: string; ok: boolean; output: string }> = [];
+    const isOverBudget = () => budgetExceeded?.() === true;
+    if (isOverBudget()) {
+      return {
+        passed: false,
+        checks,
+        feedback: "[budget] Loop budget exhausted before observe() started",
+      };
+    }
 
     // 0. Ensure dependencies are installed (sandbox FS — not Supabase project_files)
     try {
@@ -65,7 +139,7 @@ export class RuntimeObserver {
           name: "shell_exec",
           arguments: { command: "npm install 2>&1" },
         });
-        const installOutput = shellOutput(install);
+        const installOutput = stripAnsi(shellOutput(install));
         checks.push({ name: "install", ok: install.ok, output: installOutput.slice(0, 3000) });
         if (!install.ok) {
           return { passed: false, checks, feedback: `[install] ${installOutput.slice(0, 2000)}` };
@@ -82,13 +156,16 @@ export class RuntimeObserver {
     checks.push({ name: "design-system", ok: designCheck.ok, output: designCheck.output });
 
     // 1. Build check
+    if (isOverBudget()) {
+      return { passed: false, checks, feedback: "[budget] Skipped build check" };
+    }
     try {
       const build = await this.reg.execute({
         id: crypto.randomUUID(),
         name: "shell_exec",
         arguments: { command: "npm run build 2>&1" },
       });
-      const buildOutput = shellOutput(build);
+      const buildOutput = stripAnsi(shellOutput(build));
       const buildOk = build.ok && !outputIndicatesBuildFailure(buildOutput);
       checks.push({ name: "build", ok: buildOk, output: buildOutput.slice(0, 8000) });
     } catch (e: unknown) {
@@ -97,6 +174,9 @@ export class RuntimeObserver {
     }
 
     // 2. TypeScript check (se existir tsconfig)
+    if (isOverBudget()) {
+      return { passed: false, checks, feedback: "[budget] Skipped typescript check" };
+    }
     const hasTs = await this.sandboxPathExists("tsconfig.json");
     if (hasTs) {
       try {
@@ -105,7 +185,7 @@ export class RuntimeObserver {
           name: "shell_exec",
           arguments: { command: "npx tsc --noEmit --project tsconfig.json 2>&1 || true" },
         });
-        const tscOutput = shellOutput(tsc);
+        const tscOutput = stripAnsi(shellOutput(tsc));
         const ok = !outputIndicatesBuildFailure(tscOutput);
         checks.push({ name: "typescript", ok, output: tscOutput.slice(0, 2000) });
       } catch (e: unknown) {
@@ -115,6 +195,9 @@ export class RuntimeObserver {
     }
 
     // 3. Lint check (se existir eslint config)
+    if (isOverBudget()) {
+      return { passed: false, checks, feedback: "[budget] Skipped lint check" };
+    }
     const hasLint =
       (await this.sandboxPathExists(".eslintrc")) ||
       (await this.sandboxPathExists(".eslintrc.json")) ||
@@ -127,10 +210,11 @@ export class RuntimeObserver {
           name: "shell_exec",
           arguments: { command: "npm run lint 2>&1 || true" },
         });
-        const lintOutput =
+        const lintOutput = stripAnsi(
           typeof lint.output === "object"
             ? ((lint.output as any).stderr ?? (lint.output as any).stdout ?? "")
-            : String(lint.output ?? "");
+            : String(lint.output ?? ""),
+        );
         const lintOk = lint.ok && !outputIndicatesBuildFailure(lintOutput);
         checks.push({ name: "lint", ok: lintOk, output: lintOutput.slice(0, 2000) });
       } catch {

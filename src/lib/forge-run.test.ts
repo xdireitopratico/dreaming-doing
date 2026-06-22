@@ -80,7 +80,14 @@ describe("buildForgeTimeline", () => {
       },
     ]);
 
-    const visible = items.map((item) => ("label" in item ? item.label : item.text)).join(" ");
+    const visible = items
+      .map((item) => {
+        if ("label" in item) return item.label;
+        if ("text" in item) return item.text;
+        if ("name" in item) return item.name;
+        return "";
+      })
+      .join(" ");
     expect(visible).not.toMatch(
       /Classificando|Kimi|Estado|Continuando|parte 1\/12|passo 3\/70|Skills:|Checkpoint salvo/i,
     );
@@ -164,7 +171,7 @@ describe("shouldShowJobCard", () => {
           path: "Dockerfile.lara",
           before: "",
           after: "...",
-          op: "edit",
+          op: "edit" as const,
           timestamp: 1,
         },
       ],

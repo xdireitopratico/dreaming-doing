@@ -1,6 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { applyAgentProgressEvent, awaitingKindFromRunMeta } from "@/lib/agent-progress";
 import type { AgentProgress, SSEEvent } from "@/lib/agent-progress";
+import { clearDiagnostics, getDiagnostics } from "@/hooks/useDiagnostics";
+import { TASTE_UI_EVENT } from "@/lib/taste-ui-actions";
 
 const base: AgentProgress = {
   phase: null,
@@ -389,5 +391,287 @@ describe("applyAgentProgressEvent", () => {
     );
     expect(next.streamText).toBeFalsy();
     expect(next.narrationText).toBeFalsy();
+  });
+});
+
+// ─── Session 2.0 — contrato canônico ───────────────────────────────────────
+// Testes RED que documentam as divergências produtor→consumidor.
+// Devem passar após a Frente B (receptor) + Frente C (emissor) serem
+// implementadas. Veja docs/AGENT_RUN_STABILIZATION.md — Session 2.0.
+
+describe("Session 2.0 — contrato agent_run", () => {
+  beforeEach(() => {
+    clearDiagnostics();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  describe("B1 — step sem plan:true atualiza progresso (build normal)", () => {
+    it("step sem plan atualiza currentStep/totalSteps (build não-planejado)", () => {
+      const next = applyAgentProgressEvent(
+        { ...base, finished: false },
+        ev("step", { current: 7, total: 60 }),
+      );
+      expect(next.currentStep).toBe(7);
+      expect(next.totalSteps).toBe(60);
+    });
+
+    it("step com plan:true continua atualizando (plan aprovado)", () => {
+      const next = applyAgentProgressEvent(
+        { ...base, finished: false },
+        ev("step", { current: 3, total: 5, plan: true }),
+      );
+      expect(next.currentStep).toBe(3);
+      expect(next.totalSteps).toBe(5);
+    });
+  });
+
+  describe("B2 — done deixa de ser terminal (só sumário/tokens/cost)", () => {
+    it("done NÃO seta finished (terminal virou responsabilidade do finish)", () => {
+      const next = applyAgentProgressEvent(
+        { ...base, finished: false, error: null },
+        ev("done", { summary: "Pronto." }),
+      );
+      expect(next.finished).toBe(false);
+      expect(next.summary).toBe("Pronto.");
+    });
+
+    it("done propaga totalTokens e costUsd para progress", () => {
+      const next = applyAgentProgressEvent(
+        { ...base, finished: false, error: null },
+        ev("done", {
+          summary: "Pronto.",
+          totalInputTokens: 1000,
+          totalOutputTokens: 500,
+          totalTokens: 1500,
+          costUsd: 0.012,
+        }),
+      );
+      expect(next.tokens).toEqual({ input: 1000, output: 500, total: 1500 });
+      expect(next.cost).toBeCloseTo(0.012, 5);
+    });
+  });
+
+  describe("B3 — finish enriquecido (terminal canônico)", () => {
+    it("finish ok seta terminal + sumário + tokens + cost", () => {
+      const next = applyAgentProgressEvent(
+        { ...base, finished: false, error: null },
+        ev("finish", {
+          ok: true,
+          summary: "Landing criada.",
+          totalInputTokens: 2000,
+          totalOutputTokens: 800,
+          totalTokens: 2800,
+          costUsd: 0.025,
+        }),
+      );
+      expect(next.finished).toBe(true);
+      expect(next.lastFinishOk).toBe(true);
+      expect(next.summary).toBe("Landing criada.");
+      expect(next.tokens).toEqual({ input: 2000, output: 800, total: 2800 });
+      expect(next.cost).toBeCloseTo(0.025, 5);
+    });
+
+    it("finish com chunkCap + resumableExhausted + resumeAttempts", () => {
+      const next = applyAgentProgressEvent(
+        { ...base, finished: false, error: null },
+        ev("finish", {
+          ok: false,
+          error: "Loop budget exausto após 3 chunks",
+          resumable: false,
+          chunkCap: true,
+          resumableExhausted: true,
+          resumeAttempts: 3,
+        }),
+      );
+      expect(next.finished).toBe(true);
+      expect(next.lastFinishOk).toBe(false);
+      expect(next.chunkCap).toBe(true);
+      expect(next.resumableExhausted).toBe(true);
+      expect(next.resumeAttempts).toBe(3);
+      expect(next.resumable).toBe(false);
+      expect(next.error).toContain("3 chunks");
+    });
+  });
+
+  describe("B4 — plan_proposed com design + ttlMs + proposedAt", () => {
+    it("plan_proposed com design popula pendingPlan.design", () => {
+      const next = applyAgentProgressEvent(
+        { ...base, finished: false },
+        ev("plan_proposed", {
+          planId: "p-1",
+          summary: "Landing page",
+          steps: [{ id: "s1", type: "create_file", description: "Hero", enabled: true }],
+          runId: "r1",
+          projectId: "p1",
+          design: {
+            voice: ["bold", "kinetic"],
+            moment: "Hero com parallax",
+            techniques: ["parallax", "grid-asymmetry"],
+            mood: "vibrant",
+          },
+          ttlMs: 120_000,
+          proposedAt: "2026-06-21T18:00:00.000Z",
+        }),
+      );
+      expect(next.pendingPlan?.design).not.toBeNull();
+      expect(next.pendingPlan?.design?.voice).toEqual(["bold", "kinetic"]);
+      expect(next.pendingPlan?.design?.moment).toBe("Hero com parallax");
+      expect(next.pendingPlan?.design?.mood).toBe("vibrant");
+      expect(next.pendingPlan?.ttlMs).toBe(120_000);
+      expect(next.pendingPlan?.proposedAt).toBe(Date.parse("2026-06-21T18:00:00.000Z"));
+    });
+
+    it("plan_proposed sem ttlMs usa fallback 60s (não MAX_SAFE_INTEGER)", () => {
+      const next = applyAgentProgressEvent(
+        { ...base, finished: false },
+        ev("plan_proposed", {
+          planId: "p-1",
+          summary: "Plano",
+          steps: [{ id: "s1", type: "custom", description: "x", enabled: true }],
+          runId: "r1",
+          projectId: "p1",
+        }),
+      );
+      expect(next.pendingPlan?.ttlMs).toBe(60_000);
+    });
+  });
+
+  describe("B5 — classify com restored/complexity/summary", () => {
+    it("classify restored:true marca checkpoint restaurado", () => {
+      const next = applyAgentProgressEvent(
+        { ...base, finished: false },
+        ev("classify", {
+          model: "gpt-4",
+          complexity: "medium",
+          summary: "Landing de cafeteria",
+          restored: true,
+        }),
+      );
+      expect(next.model).toBe("gpt-4");
+      expect(next.classifyComplexity).toBe("medium");
+      expect(next.classifySummary).toBe("Landing de cafeteria");
+      expect(next.classifyRestored).toBe(true);
+    });
+  });
+
+  describe("B6 — novos cases: stuck / typecheck_fail / timeout_warning / chunk_resume", () => {
+    it("stuck atualiza statusHint com mensagem de modelo preso", () => {
+      const next = applyAgentProgressEvent(
+        { ...base, finished: false, statusHint: null },
+        ev("stuck", { message: "Modelo preso em leitura — forçando saída", reason: "read-only-loop" }),
+      );
+      expect(next.statusHint).toContain("preso");
+    });
+
+    it("typecheck_fail faz pushDiagnostics com erros TS", () => {
+      applyAgentProgressEvent(
+        { ...base, finished: false },
+        ev("typecheck_fail", {
+          message: "src/App.tsx:10:5 - error TS2322: Type 'string' is not assignable to type 'number'",
+          files: ["src/App.tsx"],
+        }),
+      );
+      const diags = getDiagnostics();
+      expect(diags.diagnostics.length).toBeGreaterThan(0);
+      expect(diags.diagnostics[0]?.filePath).toBe("src/App.tsx");
+    });
+
+    it("timeout_warning atualiza statusHint", () => {
+      const next = applyAgentProgressEvent(
+        { ...base, finished: false, statusHint: null },
+        ev("timeout_warning", { message: "Loop budget quase esgotado", silentMs: 120000 }),
+      );
+      expect(next.statusHint).toContain("budget");
+    });
+
+    it("chunk_resume seta autoResuming + resumeAttempts", () => {
+      const next = applyAgentProgressEvent(
+        { ...base, finished: false, autoResuming: false },
+        ev("chunk_resume", { attempt: 2, maxAttempts: 3, reason: "step budget exceeded" }),
+      );
+      expect(next.autoResuming).toBe(true);
+      expect(next.resumeAttempts).toBe(2);
+      expect(next.statusHint?.toLowerCase()).toContain("retomando");
+    });
+  });
+
+  describe("B7 — tool_done correlaciona por toolCallId", () => {
+    it("tool_done por toolCallId fecha a tool correta em paralelo", () => {
+      let state = applyAgentProgressEvent(
+        { ...base, finished: false },
+        ev("tool_start", { name: "fs_read", args: { path: "a.ts" }, toolCallId: "tc-1" }),
+      );
+      state = applyAgentProgressEvent(
+        state,
+        ev("tool_start", { name: "fs_read", args: { path: "b.ts" }, toolCallId: "tc-2" }),
+      );
+      state = applyAgentProgressEvent(
+        state,
+        ev("tool_done", { name: "fs_read", ok: true, toolCallId: "tc-2" }),
+      );
+      expect(state.tools[0]?.ok).toBeUndefined();
+      expect(state.tools[1]?.ok).toBe(true);
+    });
+
+    it("tool_done sem toolCallId mantém comportamento legado (por nome)", () => {
+      let state = applyAgentProgressEvent(
+        { ...base, finished: false },
+        ev("tool_start", { name: "fs_read", args: { path: "a.ts" } }),
+      );
+      state = applyAgentProgressEvent(state, ev("tool_done", { name: "fs_read", ok: true }));
+      expect(state.tools[0]?.ok).toBe(true);
+    });
+  });
+
+  describe("B8 — cases mortos removidos (resume/memory)", () => {
+    it("resume event NÃO tem handler dedicado (cai em default, só timeline)", () => {
+      const next = applyAgentProgressEvent(
+        { ...base, finished: true, error: "x" },
+        ev("resume", {}),
+      );
+      expect(next.finished).toBe(true);
+      expect(next.error).toBe("x");
+      expect(next.timeline).toHaveLength(1);
+    });
+
+    it("memory event NÃO tem handler dedicado (cai em default, só timeline)", () => {
+      const next = applyAgentProgressEvent(
+        { ...base, finished: false, statusHint: "Trabalhando…" },
+        ev("memory", { message: "x" }),
+      );
+      expect(next.statusHint).toBe("Trabalhando…");
+      expect(next.timeline).toHaveLength(1);
+    });
+  });
+
+  describe("B9 — ui_action dispatcha evento Taste", () => {
+    it("ui_action open_connector dispatcha CustomEvent no window", () => {
+      const dispatched: CustomEvent[] = [];
+      const fakeWindow = {
+        dispatchEvent: (e: CustomEvent) => {
+          dispatched.push(e);
+          return true;
+        },
+      };
+      vi.stubGlobal("window", fakeWindow);
+      applyAgentProgressEvent(
+        { ...base, finished: false },
+        ev("ui_action", {
+          action: "open_connector",
+          connector: "anthropic",
+          reason: "Configure sua chave",
+        }),
+      );
+      expect(dispatched).toHaveLength(1);
+      expect(dispatched[0]?.type).toBe(TASTE_UI_EVENT);
+      expect(dispatched[0]?.detail).toMatchObject({
+        action: "open_connector",
+        connector: "anthropic",
+      });
+      vi.unstubAllGlobals();
+    });
   });
 });

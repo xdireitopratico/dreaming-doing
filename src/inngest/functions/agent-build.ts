@@ -60,6 +60,12 @@ export const agentBuildFunction = inngest.createFunction(
           error: final.error ?? "canceled",
         });
       });
+      // H6 fix: drain pending queue after cancel. Sem isso, mensagens
+      // enfileiradas durante a run ficam stuck — o usuário tinha que
+      // enviar nova mensagem para destravar o drain.
+      await step.run("drain-pending-queue-after-cancel", async () => {
+        return await drainPendingQueue(payload);
+      });
       return { runId, ok: false, canceled: true };
     }
 
@@ -111,6 +117,10 @@ export const agentBuildFunction = inngest.createFunction(
             canceled: false,
             resumable: false,
             error: exhaustedError,
+            // Session 2.0 — sinaliza exaustão de chunks no evento (antes só em meta)
+            chunkCap: true,
+            resumableExhausted: true,
+            resumeAttempts: 3,
           },
         });
       });

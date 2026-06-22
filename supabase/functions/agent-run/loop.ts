@@ -110,6 +110,15 @@ function isGradleCommand(command: string): boolean {
   return /gradle|gradlew|assembleDebug|assembleRelease/i.test(command);
 }
 
+// Session 2.0 — build_log para qualquer comando de build/test/lint web,
+// não só Gradle. Cobre npm/yarn/pnpm/vite/tsc/eslint/jest/vitest.
+function isBuildCommand(command: string): boolean {
+  if (isGradleCommand(command)) return true;
+  return /\b(npm|yarn|pnpm|bun|npx)\s+(run\s+)?(build|dev|preview|test|lint|typecheck|check)|\bvite\s+(build|preview|dev)\b|\btsc\b|--noEmit|eslint|vitest|jest\s+run/i.test(
+    command,
+  );
+}
+
 function resolveLoopBudgetMs(): number {
   const raw =
     (typeof globalThis.Deno !== "undefined" ? Deno.env.get("AGENT_LOOP_BUDGET_MS") : undefined) ??
@@ -136,6 +145,50 @@ function calculateMaxSteps(complexity: 1 | 2 | 3 | 4 | 5): number {
     5: 100,
   };
   return limits[complexity] ?? 60;
+}
+
+/** H9 fix: cap meta JSONB em 50KB para não estourar Realtime.
+ *  executionLog e streamTail podem crescer indefinidamente em runs longas.
+ *  Supabase Realtime tem limite de payload (~1MB por UPDATE) — quando meta
+ *  passa de algumas centenas de KB, o canal desconecta ("Reconnecting...")
+ *  e o usuário perde o stream. Cap em 50KB preserva o Realtime funcionando. */
+const META_MAX_BYTES = 50_000;
+
+function capMetaSize(meta: Record<string, unknown>): Record<string, unknown> {
+  const json = JSON.stringify(meta);
+  if (json.length <= META_MAX_BYTES) return meta;
+
+  // Trunca executionLog (mantém apenas os últimos 20 entries)
+  if (Array.isArray(meta.executionLog) && meta.executionLog.length > 20) {
+    meta.executionLog = (meta.executionLog as unknown[]).slice(-20);
+  }
+  // Trunca streamTail
+  if (typeof meta.streamTail === "string" && meta.streamTail.length > 2000) {
+    meta.streamTail = (meta.streamTail as string).slice(-2000);
+  }
+  // Trunca cardSnapshot se existir
+  if (meta.cardSnapshot && typeof meta.cardSnapshot === "object") {
+    const cs = meta.cardSnapshot as Record<string, unknown>;
+    if (Array.isArray(cs.timeline) && cs.timeline.length > 30) {
+      cs.timeline = (cs.timeline as unknown[]).slice(-30);
+    }
+  }
+  return meta;
+}
+
+/** H4 fix: max_tokens dinâmico por complexidade.
+ *  Antes: hard-coded 4096 em todos os LLMs. TSX de página inteira (Hero+Section+Footer)
+ *  precisa 6-8k tokens. Lovable/Claude Code usam 16-32k.
+ *  Complexity 5 (mais alto) = output máximo de 32k tokens. */
+function calculateMaxTokens(complexity: 1 | 2 | 3 | 4 | 5): number {
+  const limits: Record<1 | 2 | 3 | 4 | 5, number> = {
+    1: 8192,
+    2: 12288,
+    3: 16384,
+    4: 24576,
+    5: 32768,
+  };
+  return limits[complexity] ?? 16384;
 }
 
 export class AgentLoop {
@@ -173,14 +226,16 @@ export class AgentLoop {
   private narrationBuffer: string;
   /** Abertura FASE 1 — uma vez por turno, só chat [2]. */
   private openingEmitted: boolean;
-  /** Heartbeat timer (90s) que mantém `agent_runs.heartbeat_at` fresco durante silêncios longos.
-   *  Garante que F5 e snapshot-restore continuem funcionando em runs de design+build > 5min. */
+  /** Heartbeat timer (30s) que mantém `agent_runs.heartbeat_at` fresco durante silêncios longos.
+   *  Garante que F5 e snapshot-restore continuem funcionando em runs de design+build > 5min.
+   *  H8 fix: reduzido de 90s → 30s. observe() pode demorar 2-5min (npm install + build + tsc).
+   *  Sem heartbeat frequente, o cliente (BUSY_ZOMBIE_GAP_MS=3min) marca a run como zumbi
+   *  enquanto o agente ainda está vivo trabalhando. 30s é seguro porque o cliente tolera
+   *  até 5min de inatividade (H8 alinha com o threshold do cliente). */
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
 
-  /** Inicia um timer que chama `touchHeartbeat()` a cada 90s enquanto o loop roda.
-   *  Complementa o `touchHeartbeat` reativo (chamado em transições) cobrindo
-   *  os silêncios longos onde o agente pensa mas não emite eventos. */
-  startHeartbeatTimer(intervalMs = 90_000): void {
+  /** Inicia um timer que chama `touchHeartbeat()` a cada 30s enquanto o loop roda. */
+  startHeartbeatTimer(intervalMs = 30_000): void {
     if (this.heartbeatTimer) return;
     this.heartbeatTimer = setInterval(() => {
       void this.touchHeartbeat();
@@ -655,6 +710,12 @@ export class AgentLoop {
         summary: this.state.intent?.summary ?? "Retomada",
         restored: true,
       });
+      this.emit("classify", {
+        complexity: this.state.intent?.complexity ?? "unknown",
+        complexityScore: this.complexityScore,
+        summary: this.state.intent?.summary ?? "Retomada",
+        restored: true,
+      });
       if (!this.planMode) {
         await this.emitTransition("no_plan_needed");
       }
@@ -711,6 +772,11 @@ export class AgentLoop {
         });
       }
 
+      // C8 fix: budget check ANTES de gatherContext (5-10s de I/O caro).
+      // Se o budget já estourou, gatherContext seria desperdício.
+      if (this.loopBudgetExceeded()) {
+        return this.returnResumableChunk(0, toolsUsed);
+      }
       await this.gatherContext();
       if (this.loopBudgetExceeded()) {
         return this.returnResumableChunk(0, toolsUsed);
@@ -833,7 +899,13 @@ export class AgentLoop {
         ? resumeStepStart(this.resumePhase ?? this.state.phase, this.state.currentStepIndex)
         : 0;
 
+    // H3 fix: separar buildAttempts em dois counters independentes.
+    // Antes: per-step e final-gate compartilhavam o mesmo counter.
+    // Build passava no meio do loop, zerava, aí final-gate só tinha 3
+    // retries a partir de 0. A mensagem "Build não passou após 3
+    // tentativas" podia ser 1 (final-gate) ou 5+ (intercalado).
     let buildAttempts = 0;
+    let finalGateAttempts = 0;
     const maxRetries = 3;
     let loopStep = step;
     let finalGateOk = false;
@@ -882,6 +954,10 @@ export class AgentLoop {
           }
         } else {
           this.state.totalSteps = this.maxStepsLimit;
+          this.emit("step", {
+            current: loopStep,
+            total: this.maxStepsLimit,
+          });
           this.emit("phase", {
             phase: "execute",
             message: "Trabalhando no pedido…",
@@ -1144,15 +1220,28 @@ export class AgentLoop {
             }
           }
 
-          this.emit("tool_start", { name: call.name, args: call.arguments });
+          this.emit("tool_start", {
+            name: call.name,
+            args: call.arguments,
+            toolCallId: call.id,
+          });
           const result = await this.reg.execute(call);
           this.emit("tool_done", {
             name: call.name,
+            toolCallId: call.id,
             ok: result.ok,
             error: result.error,
+            output:
+              typeof result.output === "object"
+                ? JSON.stringify(result.output).slice(0, 2000)
+                : String(result.output ?? "").slice(0, 2000),
           });
 
-          if (call.name === "shell_exec" && isGradleCommand(String(call.arguments.command ?? ""))) {
+          // Session 2.0 — build_log para qualquer comando de build (npm/vite/tsc/gradle)
+          if (
+            call.name === "shell_exec" &&
+            isBuildCommand(String(call.arguments.command ?? ""))
+          ) {
             const output =
               typeof result.output === "string"
                 ? result.output
@@ -1380,7 +1469,7 @@ export class AgentLoop {
             message: "Verificando build...",
           });
           await this.saveCheckpoint(LoopPhase.VALIDATE_STEP);
-          const observation = await this.observer.observe();
+          const observation = await this.observer.observe(() => this.loopBudgetExceeded());
           if (!observation.passed) {
             buildAttempts++;
             this.emit("validate_fail", {
@@ -1437,7 +1526,7 @@ export class AgentLoop {
         message: "Verificação final de build...",
       });
       await this.saveCheckpoint(LoopPhase.VALIDATE_STEP);
-      const finalObservation = await this.observer.observe();
+      const finalObservation = await this.observer.observe(() => this.loopBudgetExceeded());
       if (finalObservation.passed) {
         this.notifyLoopStatus({ kind: "build_ok" });
         this.emit("validate_ok", { message: "Build OK (gate final)" });
@@ -1445,15 +1534,15 @@ export class AgentLoop {
         continue;
       }
 
-      buildAttempts++;
+      finalGateAttempts++; // H3: counter separado do per-step
       this.emit("validate_fail", {
-        attempt: buildAttempts,
+        attempt: finalGateAttempts,
         checks: finalObservation.checks.filter((c) => !c.ok).map((c) => c.name),
         feedback: finalObservation.feedback?.slice(0, 500),
         finalGate: true,
       });
 
-      if (buildAttempts > maxRetries) {
+      if (finalGateAttempts > maxRetries) {
         const closing = await this.attemptGracefulClosing("build_fail");
         const failMsg =
           `Build não passou após ${maxRetries} tentativas.\n\n` +
@@ -1671,6 +1760,10 @@ export class AgentLoop {
       steps: proposedPlan.steps,
       runId: this.runId,
       projectId: this.state.projectId,
+      // Session 2.0 — design + ttlMs + proposedAt (antes descartados pelo reducer)
+      design: proposedPlan.design,
+      ttlMs: proposedPlan.ttlMs,
+      proposedAt: proposedPlan.proposedAt ?? new Date().toISOString(),
     });
     logger.event("agent_run.plan_proposed", {
       runId: this.runId ?? undefined,
@@ -1961,10 +2054,15 @@ export class AgentLoop {
 
       const execResults = await parallelExecute(execCalls, async (call) => {
         toolsUsed.add(call.name);
-        this.emit("tool_start", { name: call.name, args: call.arguments });
+        this.emit("tool_start", {
+          name: call.name,
+          args: call.arguments,
+          toolCallId: call.id,
+        });
         const result = await this.reg.execute(call);
         this.emit("tool_done", {
           name: call.name,
+          toolCallId: call.id,
           ok: result.ok,
           error: result.error,
           summary: result.ok ? "ok" : (result.error ?? "erro"),
@@ -2030,7 +2128,7 @@ export class AgentLoop {
       ],
       tools: mergePlanModeToolDefinitions(this.reg.getDefinitions()),
       tool_choice: "auto",
-      max_tokens: 4096,
+      max_tokens: calculateMaxTokens(this.complexityScore as 1 | 2 | 3 | 4 | 5), // H4
       onTokenDelta: (delta) => {
         if (!delta) return;
         if (this.thinkingStreamStartedAt == null) {
@@ -2339,7 +2437,7 @@ export class AgentLoop {
         messages,
         tools: tools ?? mergeExecutionToolDefinitions(this.reg.getDefinitions(), false),
         tool_choice: forceTools ? "required" : "auto",
-        max_tokens: 4096,
+        max_tokens: calculateMaxTokens(this.complexityScore as 1 | 2 | 3 | 4 | 5), // H4
         onTokenDelta: forceTools
           ? undefined
           : (delta) => {
@@ -2511,15 +2609,22 @@ export class AgentLoop {
     execResults: Array<{ call: any; result: any }>,
     step: number,
   ): Promise<void> {
+    // H10 fix: sempre atualizar status de TODOS os tool calls (ok/error/running).
+    // Antes, se um tool falhava, ficava "running" pra sempre. Agora,
+    // - se result.ok: "ok"
+    // - se !result.ok: "error" + error message + output resumido
+    // - se não está em execResults (não executou): "running" (legítimo)
+    const execMap = new Map(execResults.map((r) => [r.call.id, r.result]));
     const tool_calls = (response.tool_calls ?? []).map((tc) => {
-      const found = execResults.find((r) => r.call.id === tc.id);
+      const result = execMap.get(tc.id);
+      const hasResult = result !== undefined;
       return {
         id: tc.id,
         name: tc.name,
         args: tc.arguments,
-        status: found?.result.ok ? "ok" : "error",
-        error: found?.result.error ?? null,
-        artifacts: found?.result.artifacts ?? [],
+        status: hasResult ? (result.ok ? "ok" : "error") : "running",
+        error: hasResult ? (result.error ?? null) : null,
+        artifacts: hasResult ? (result.artifacts ?? []) : [],
       };
     });
     const meta = buildExecutionLogMeta(null, this.state.executionLog, step);
@@ -2803,6 +2908,7 @@ export class AgentLoop {
       narrationText:
         typeof cardSnapshot.narrationText === "string" ? cardSnapshot.narrationText : undefined,
     };
+    const cappedMeta = capMetaSize(meta); // H9
 
     const existingId = await this.resolveExistingRunMessageId();
     if (existingId) {
@@ -2811,7 +2917,7 @@ export class AgentLoop {
         .update({
           parts: [{ type: "text", text }],
           tool_calls: [],
-          meta,
+          meta: cappedMeta,
         })
         .eq("id", existingId);
       await this.sb
@@ -2828,7 +2934,7 @@ export class AgentLoop {
       role: "assistant",
       parts: [{ type: "text", text }],
       tool_calls: [],
-      meta,
+      meta: cappedMeta,
     });
     await this.sb
       .from("projects")

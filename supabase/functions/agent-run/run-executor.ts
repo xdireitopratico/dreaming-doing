@@ -53,6 +53,11 @@ export type ExecuteResult = {
   error?: string;
   stepsCompleted: number;
   durationMs: number;
+  // Session 2.0 — tokens/cost para o finish terminal
+  totalInputTokens?: number;
+  totalOutputTokens?: number;
+  totalTokens?: number;
+  costUsd?: number;
 };
 
 export async function executeAgentRun(
@@ -411,6 +416,8 @@ export async function executeAgentRun(
         resumable: false,
         error: capError,
         chunkCap: true,
+        resumableExhausted: true,
+        resumeAttempts: chunkLimits.chunkGeneration,
         steps: result.steps,
       });
 
@@ -461,6 +468,14 @@ export async function executeAgentRun(
         },
       })
       .eq("id", runId);
+
+    // Session 2.0 — sinaliza retomada de chunk ao consumidor (antes só em meta).
+    await appendStreamEvent(supabase, runId, "chunk_resume", {
+      type: "chunk_resume",
+      attempt: chunkLimits.chunkGeneration,
+      maxAttempts: 5,
+      reason: result.error ?? "step budget exceeded",
+    });
 
     logger.info("agent_run.chunk_resumable", {
       runId,
@@ -519,6 +534,11 @@ export async function executeAgentRun(
     awaiting: isAwaiting,
     steps: result.steps,
     summary: result.summary ?? null,
+    // Session 2.0 — tokens/cost propagados do loop.run()
+    totalInputTokens: result.totalInputTokens ?? undefined,
+    totalOutputTokens: result.totalOutputTokens ?? undefined,
+    totalTokens: result.totalTokens ?? undefined,
+    costUsd: result.costUsd ?? undefined,
   });
 
   if (!result.ok && !result.canceled && !isAwaiting) {
@@ -550,5 +570,9 @@ export async function executeAgentRun(
     error: result.error,
     stepsCompleted: result.steps,
     durationMs: Date.now() - startMs,
+    totalInputTokens: result.totalInputTokens,
+    totalOutputTokens: result.totalOutputTokens,
+    totalTokens: result.totalTokens,
+    costUsd: result.costUsd,
   };
 }

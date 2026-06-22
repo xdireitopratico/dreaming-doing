@@ -116,11 +116,38 @@ function buildDbThread(messages: ChatMessage[]): RawThreadItem[] {
     if (msg.role === "tool") continue;
 
     if (msg.role === "user") {
-      items.push({
-        kind: "user",
-        message: msg,
-        internal: isPlanApprovedUserMessage(msg) ? true : undefined,
-      });
+      // H12 fix: plano aprovado aparece no chat como card de confirmação,
+      // não como mensagem filtrada. Usuário precisa ver qual plano foi
+      // aprovado (steps, headline) depois que ele clica "Aprovar".
+      if (isPlanApprovedUserMessage(msg)) {
+        const meta = (msg.meta ?? {}) as Record<string, unknown>;
+        const headline = typeof meta.planHeadline === "string" ? meta.planHeadline : null;
+        const steps = Array.isArray(meta.steps)
+          ? (meta.steps as Array<{ title?: string }>).map((s) => s.title).filter(Boolean)
+          : [];
+        const summary = headline ?? "Plano aprovado";
+        items.push({
+          kind: "user",
+          message: {
+            ...msg,
+            content: `✅ **Plano aprovado**${headline ? ` — ${headline}` : ""}\n\n${
+              steps.length > 0
+                ? `Executando:\n${steps
+                    .slice(0, 7)
+                    .map((t) => `• ${t}`)
+                    .join("\n")}`
+                : ""
+            }`,
+          },
+          internal: undefined,
+        });
+      } else {
+        items.push({
+          kind: "user",
+          message: msg,
+          internal: undefined,
+        });
+      }
       continue;
     }
 

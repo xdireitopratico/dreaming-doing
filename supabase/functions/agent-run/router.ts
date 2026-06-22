@@ -25,13 +25,23 @@ export function deriveClassificationFromPrompt(
   else if (len < 280) complexity = 4;
   else complexity = 5;
 
+  const isDependencyRequest = /npm install|depend[eê]ncia|adiciona(r)?\s+pacote/i.test(text);
+  const isFixRequest = /fix|bug|erro|corrige|corrigir/i.test(text);
+  const isCreationRequest = /cri(e|ar)|implementa|monte|construa|adiciona/i.test(text);
+  const isProjectRequest = /novo projeto|landing|aplicativo|app\b|site\b/i.test(text) && len >= 30;
+  const isExplanatoryRequest =
+    /\b(explique|explica|explique-me|como funciona|o que [eé]|quais s[aã]o|vantagens|desvantagens)\b/i
+      .test(text);
+
   let type = "modify";
-  if (/npm install|depend[eê]ncia|adiciona(r)?\s+pacote/i.test(text)) type = "add_dep";
-  else if (/fix|bug|erro|corrige|corrigir/i.test(text)) type = "fix";
-  else if (/cri(e|ar)|implementa|monte|construa|adiciona/i.test(text)) {
+  if (isDependencyRequest) type = "add_dep";
+  else if (isFixRequest) type = "fix";
+  else if (isCreationRequest) {
     type = len >= 90 ? "new_project" : "modify";
-  } else if (/novo projeto|landing|aplicativo|app\b|site\b/i.test(text) && len >= 30) {
+  } else if (isProjectRequest) {
     type = len >= 90 ? "new_project" : "modify";
+  } else if (isExplanatoryRequest) {
+    type = "other";
   } else if (len < 40) type = "other";
 
   return {

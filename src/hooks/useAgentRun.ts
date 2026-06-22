@@ -22,6 +22,7 @@ import {
   initialAgentProgress,
   streamRowToSSEEvent,
 } from "@/lib/agent-progress";
+import { dispatchTasteUiAction, isTasteUiAction } from "@/lib/taste-ui-actions";
 import { PENDING_RUN_ID } from "@/lib/pending-run-id";
 import { hasFirstInspectorToken } from "@/lib/forge-run";
 import { shouldRetainLiveRunSlot } from "@/lib/live-run-overlay";
@@ -885,6 +886,14 @@ export function useAgentRun() {
 
         // Chat direto — JSON inline, sem runId (mensagem já salva no DB).
         if (body.ok && body.content && !body.runId) {
+          // Session 2.0 — despacha uiActions retornadas pelo taste (open_connector,
+          // navigate_setup, lead_saved) como se fossem eventos de stream.
+          const uiActions = Array.isArray(body.uiActions) ? body.uiActions : [];
+          for (const action of uiActions) {
+            if (action && typeof action === "object" && isTasteUiAction(action)) {
+              dispatchTasteUiAction(action);
+            }
+          }
           runIdRef.current = null;
           setActiveRunId(null);
           setActiveRunStartedAtMs(null);

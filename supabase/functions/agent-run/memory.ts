@@ -73,9 +73,19 @@ export async function buildChatHistory(
     }
 
     if (m.role === "tool") {
+      // C9 fix: tentar casar tool_call_id com o último assistant tool_call.
+      // Se a DB tem um row standalone "tool" (sem assistant correspondente
+      // imediato), o loop acima gera IDs estáveis baseados em created_at.
+      // Como o loop processa em ordem cronológica, o último assistant
+      // tool_call é provavelmente o par.
+      const lastAssistant = [...out]
+        .reverse()
+        .find((x) => x.role === "assistant" && x.tool_calls?.length);
+      const lastToolCall = lastAssistant?.tool_calls?.[lastAssistant.tool_calls.length - 1];
+      const toolCallId = lastToolCall?.id ?? "";
       out.push({
         role: "tool",
-        tool_call_id: "",
+        tool_call_id: toolCallId,
         content: plainText,
       });
       continue;

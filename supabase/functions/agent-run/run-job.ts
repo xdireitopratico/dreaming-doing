@@ -150,7 +150,12 @@ function buildDesignDirectiveBlock(designRaw: unknown): string {
     for (const ap of antiPatterns) lines.push(`- ${ap}`);
   }
 
-  lines.push("", "Siga esta direção ao construir. Não improvise — execute a síntese aprovada.", "---", "");
+  lines.push(
+    "",
+    "Siga esta direção ao construir. Não improvise — execute a síntese aprovada.",
+    "---",
+    "",
+  );
 
   return lines.join("\n");
 }
@@ -186,8 +191,14 @@ export async function executeAgentJob(
   error?: string;
   steps: number;
   resumable?: boolean;
+  buildFix?: boolean;
   canceled?: boolean;
   toolsUsed?: string[];
+  // Session 2.0 — tokens/cost propagados do loop.run() para o finish terminal
+  totalInputTokens?: number;
+  totalOutputTokens?: number;
+  totalTokens?: number;
+  costUsd?: number;
 }> {
   const {
     projectId,
@@ -307,6 +318,21 @@ export async function executeAgentJob(
   // Qualify/conversa pura NUNCA deve carregar chave nem criar container.
   let sandbox: { destroy: () => Promise<void>; kill: () => Promise<void> };
   if (allocateSandbox) {
+    // P4 fix: rejeitar allocateSandbox sem files ANTES de criar classe
+    // E2BSandbox. Antes: shellExecTool era registrado e o erro
+    // "Nenhum arquivo no projeto" só aparecia quando o LLM tentava
+    // shell_exec pela primeira vez (lazy). Agora: falha explícita
+    // no agent-run com mensagem clara.
+    const { count: fileCountBeforeAlloc } = await supabase
+      .from("project_files")
+      .select("id", { count: "exact", head: true })
+      .eq("project_id", projectId);
+    if (!fileCountBeforeAlloc || fileCountBeforeAlloc === 0) {
+      throw new Error(
+        "Projeto sem arquivos — o agente ainda não gerou código. " +
+          "Sandbox não pode ser alocado.",
+      );
+    }
     const e2bKey = await loadUserE2bApiKey(supabase, userId);
     if (!e2bKey?.trim()) throw new Error("Sandbox E2B não configurado");
     const realSandbox = createSandboxProvider(e2bKey, undefined, supabase, projectId, {
@@ -444,14 +470,14 @@ export async function executeAgentJob(
                 : undefined,
           planHeadline: typeof preMeta.planHeadline === "string" ? preMeta.planHeadline : undefined,
           planSteps: coercePlanStepsFromMeta(preMeta.steps),
-          planDesign: preMeta.design ? (() => {
-            const d = preMeta.design as Record<string, unknown>;
-            return {
-              references: Array.isArray(d.references)
-                ? d.references
-                : [],
-            };
-          })() : undefined,
+          planDesign: preMeta.design
+            ? (() => {
+                const d = preMeta.design as Record<string, unknown>;
+                return {
+                  references: Array.isArray(d.references) ? d.references : [],
+                };
+              })()
+            : undefined,
           buildFixResume: preMeta.buildFix === true,
           chunkGeneration:
             typeof preMeta.chunkGeneration === "number" ? preMeta.chunkGeneration : 0,
@@ -467,8 +493,12 @@ export async function executeAgentJob(
     buildFix?: boolean;
     canceled?: boolean;
     toolsUsed?: string[];
+    totalInputTokens?: number;
+    totalOutputTokens?: number;
+    totalTokens?: number;
+    costUsd?: number;
   };
-  loop.startHeartbeatTimer(90_000);
+  loop.startHeartbeatTimer(30_000); // H8: 90s → 30s (observe() pode demorar 2-5min)
   try {
     result = await loop.run();
   } catch (e) {
@@ -477,12 +507,19 @@ export async function executeAgentJob(
   } finally {
     loop.stopHeartbeatTimer();
   }
-  // Só mata sandbox se falhou ou não produziu nada.
-  // Se criou/alterou arquivos, mantém vivo para preview.
+  // C2 fix: NÃO mata sandbox se a run é resumable. Antes, o caminho
+  // resumable (loop budget estourou) matava o sandbox, e o próximo
+  // chunk tinha que recriar do zero (perdendo node_modules, npm install
+  // de novo = 60-120s).
+  // Agora: só mata se a run terminou definitivamente (ok ou fail/canceled).
   const hasOutput = (result.toolsUsed ?? []).some((t) =>
     ["fs_write", "fs_edit", "shell_exec"].includes(t),
   );
-  if (!result.ok || !hasOutput) {
+  const isResumable = !!result.resumable;
+  if (isResumable) {
+    // Preserva sandbox para o próximo chunk.
+    await sandbox.destroy().catch(() => {}); // libera in-memory ref mas mantém o sandbox E2B
+  } else if (!result.ok || !hasOutput) {
     await sandbox.kill().catch(() => {});
   } else {
     await sandbox.destroy().catch(() => {});
