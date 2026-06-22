@@ -19,7 +19,8 @@ import {
 } from "@/lib/ai-provider-registry";
 import {
   loadAgentPreferences,
-  saveAgentPreferences,
+  loadAgentPreferencesFromDb,
+  saveAgentPreferencesToDb,
   type AgentPreferences,
   type ModelPowerMode,
   type SttProviderId,
@@ -84,6 +85,7 @@ export function ApiModelsPage() {
   const { user } = useAuth();
   const qc = useQueryClient();
   const [prefs, setPrefs] = useState<AgentPreferences>(() => loadAgentPreferences());
+  const [prefsLoaded, setPrefsLoaded] = useState(false);
   const [providers, setProviders] = useState<ProviderUiState[]>(buildInitialProviderStates);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [pulseId, setPulseId] = useState<string | null>(null);
@@ -198,10 +200,21 @@ export function ApiModelsPage() {
     return () => window.clearTimeout(t);
   }, [pulseId]);
 
+  // Load preferências do banco na montagem
+  useEffect(() => {
+    if (prefsLoaded || !user) return;
+    loadAgentPreferencesFromDb().then((dbPrefs) => {
+      if (dbPrefs.mode) {
+        setPrefs(dbPrefs);
+      }
+      setPrefsLoaded(true);
+    });
+  }, [user, prefsLoaded]);
+
   const patchPrefs = useCallback((partial: Partial<AgentPreferences>) => {
     setPrefs((p) => {
       const next = { ...p, ...partial };
-      saveAgentPreferences(next);
+      saveAgentPreferencesToDb(next);
       return next;
     });
   }, []);
@@ -440,16 +453,18 @@ export function ApiModelsPage() {
           poolProviders.find((p) => p.id === selectedEnv)?.id ??
           poolProviders[0]?.id ??
           "nvidia";
+        const defaultModelId =
+          target === "nvidia" ? PLATFORM_ROBIN_TASTE_PRESET_ID : "pool-groq-flash";
         patchPrefs({
           mode: "robin",
-          poolProvider: target as AgentPreferences["poolProvider"],
-          robinPoolModelId:
-            target === "nvidia" ? PLATFORM_ROBIN_TASTE_PRESET_ID : "pool-groq-flash",
+          poolProvider: target,
+          robinPoolModelId: defaultModelId,
         });
         setSelectedEnv(target);
         return;
       }
-      patchPrefs({ mode: nextMode });
+      // Limpar campos específicos de ROBIN ao sair do modo
+      patchPrefs({ mode: nextMode, poolProvider: undefined, robinPoolModelId: undefined });
     },
     [patchPrefs, selectedEnv, connected],
   );
@@ -470,7 +485,7 @@ export function ApiModelsPage() {
         }
         patchPrefs({
           robinPoolModelId: presetId,
-          poolProvider: preset.env as AgentPreferences["poolProvider"],
+          poolProvider: preset.env,
         });
         return;
       }

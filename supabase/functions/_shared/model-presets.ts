@@ -472,18 +472,20 @@ export function resolveModelFromPreferences(
 }
 
 export function defaultRobinModel(
-  poolProvider: "nvidia" | "groq",
+  poolProvider: string,
   modelPresetId?: string,
 ): PresetWire {
   if (modelPresetId) {
     const p = getPresetWire(modelPresetId);
-    if (p) {
-      if (poolProvider === "groq" && p.secretKey === "GROQ_API_KEY") return p;
-      if (poolProvider === "nvidia" && p.secretKey === "NVIDIA_API_KEY") return p;
-    }
+    if (p) return p;
   }
   if (poolProvider === "nvidia") return PRESETS[PLATFORM_ROBIN_TASTE_PRESET_ID]!;
-  const groq = PRESETS["pool-groq-flash"];
-  if (!groq) throw new Error("Preset pool Groq ausente");
-  return groq;
+  if (poolProvider === "groq") {
+    const groq = PRESETS["pool-groq-flash"];
+    if (!groq) throw new Error("Preset pool Groq ausente");
+    return groq;
+  }
+  throw new Error(
+    `Selecione um modelo para o pool ${poolProvider} em Modelos → ROBIN.`,
+  );
 }

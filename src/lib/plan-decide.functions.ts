@@ -37,7 +37,7 @@ const agentPreferencesSchema = z
   .object({
     mode: z.enum(["auto", "robin", "fixed"]).optional(),
     fixedPresetId: z.string().optional(),
-    poolProvider: z.enum(["nvidia", "groq"]).optional(),
+    poolProvider: z.string().optional(),
     robinPoolModelId: z.string().optional(),
     customModelId: z.string().optional(),
     useCustomModel: z.boolean().optional(),

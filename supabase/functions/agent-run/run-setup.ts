@@ -50,19 +50,19 @@ export function validateAgentPreferences(p?: AgentPreferencesPayload): string | 
     return "Setup: selecione o modelo do pool ROBIN em Modelos (/models).";
   }
   if (isRobinMode(p) && !p.poolProvider) {
-    return "Setup: selecione o provedor do pool ROBIN (Groq ou NVIDIA).";
+    return "Setup: selecione o provedor do pool ROBIN em Modelos (/models).";
   }
   return null;
 }
 
 export function robinProviderConfig(
-  poolProvider: "nvidia" | "groq",
+  poolProvider: string,
   keys: string[],
   modelPresetId?: string,
 ): ProviderConfig {
   if (keys.length === 0) {
     throw new Error(
-      `Modo ROBIN ativo, mas nenhuma chave ${poolProvider.toUpperCase()} no pool. Adicione chaves em /api → Adicionar ao pool.`,
+      `Modo ROBIN ativo, mas nenhuma chave no pool ${poolProvider}. Adicione chaves em /api → Adicionar ao pool.`,
     );
   }
   const wire = defaultRobinModel(poolProvider, modelPresetId);
@@ -78,12 +78,10 @@ export function robinProviderConfig(
 
 export function hasUserLlmKeyFromKeys(
   userOnlyKeys: Record<string, string>,
-  groqPool: string[],
-  nvidiaPool: string[],
+  poolKeys: string[] = [],
 ): boolean {
   return (
-    groqPool.length > 0 ||
-    nvidiaPool.length > 0 ||
+    poolKeys.length > 0 ||
     Object.keys(userOnlyKeys).some((k) =>
       USER_LLM_KEY_NAMES.includes(k as (typeof USER_LLM_KEY_NAMES)[number]),
     )
@@ -133,18 +131,19 @@ export async function loadUserLlmContext(
   preferences?: AgentPreferencesPayload,
 ): Promise<{
   userOnlyKeys: Record<string, string>;
-  groqPool: string[];
-  nvidiaPool: string[];
+  poolKeys: string[];
   hasUserLlmKey: boolean;
 }> {
   const userOnlyKeys = await loadConnectorKeys(supabase, userId, preferences);
-  const groqPool = await loadConnectorPools(supabase, userId, "groq");
-  const nvidiaPool = await loadConnectorPools(supabase, userId, "nvidia");
+  const isRobin = isRobinMode(preferences);
+  const poolProvider = preferences?.poolProvider;
+  const poolKeys = isRobin && poolProvider
+    ? await loadConnectorPools(supabase, userId, poolProvider)
+    : [];
   return {
     userOnlyKeys,
-    groqPool,
-    nvidiaPool,
-    hasUserLlmKey: hasUserLlmKeyFromKeys(userOnlyKeys, groqPool, nvidiaPool),
+    poolKeys,
+    hasUserLlmKey: hasUserLlmKeyFromKeys(userOnlyKeys, poolKeys),
   };
 }
 
@@ -171,13 +170,15 @@ export type ResolveProviderInput = {
  * taste_start uses platform NVIDIA trial pool; byok uses user prefs / robin / auto / fixed.
  */
 /** Quando prefs vazias (smoke/Inngest) mas o usuário tem chaves — inferir modo. */
-export function coalesceAgentPreferences(
-  preferences: AgentPreferencesPayload | undefined,
+export async function coalesceAgentPreferences(
+  supabase: SupabaseClient,
+  userId: string,
   userOnlyKeys: Record<string, string>,
-  groqPool: string[],
-  nvidiaPool: string[],
-): AgentPreferencesPayload {
+  preferences?: AgentPreferencesPayload,
+): Promise<AgentPreferencesPayload> {
   if (preferences?.mode) return preferences;
+
+  const nvidiaPool = await loadConnectorPools(supabase, userId, "nvidia");
   if (nvidiaPool.length > 0) {
     return {
       mode: "robin",
@@ -185,9 +186,12 @@ export function coalesceAgentPreferences(
       robinPoolModelId: "nvidia--nemotron-3-ultra-550b",
     };
   }
+
+  const groqPool = await loadConnectorPools(supabase, userId, "groq");
   if (groqPool.length > 0) {
     return { mode: "robin", poolProvider: "groq", robinPoolModelId: "pool-groq-flash" };
   }
+
   if (Object.keys(userOnlyKeys).length > 0) {
     return { mode: "auto" };
   }
@@ -198,13 +202,11 @@ export async function resolveAgentProvider(
   input: ResolveProviderInput,
 ): Promise<AgentProviderSetup> {
   const { supabase, userId, sessionKind, userOnlyKeys } = input;
-  const groqPool = await loadConnectorPools(supabase, userId, "groq");
-  const nvidiaPool = await loadConnectorPools(supabase, userId, "nvidia");
-  const preferences = coalesceAgentPreferences(
-    input.preferences,
+  const preferences = await coalesceAgentPreferences(
+    supabase,
+    userId,
     userOnlyKeys,
-    groqPool,
-    nvidiaPool,
+    input.preferences,
   );
   const userWantsRobin = isRobinMode(preferences);
   const poolProvider = preferences?.poolProvider ?? "groq";
@@ -231,15 +233,14 @@ export async function resolveAgentProvider(
   }
 
   if (userWantsRobin) {
-    const poolKeys = poolProvider === "nvidia" ? nvidiaPool : groqPool;
+    const poolKeys = await loadConnectorPools(supabase, userId, poolProvider);
     const robinPool = new RobinKeyPool(poolKeys);
+    const wire = defaultRobinModel(poolProvider, preferences?.robinPoolModelId);
     const mainCfg = robinProviderConfig(poolProvider, poolKeys, preferences?.robinPoolModelId);
+    const envKeyName = wire.secretKey || `${poolProvider.toUpperCase()}_API_KEY`;
     return {
       mainCfg,
-      connectorKeys:
-        poolProvider === "nvidia"
-          ? { NVIDIA_API_KEY: poolKeys[0]! }
-          : { GROQ_API_KEY: poolKeys[0]! },
+      connectorKeys: { [envKeyName]: poolKeys[0]! },
       robinPool,
       effectiveRobin: true,
       tasteStart: false,

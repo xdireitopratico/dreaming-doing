@@ -3,7 +3,7 @@ import { FORGE_ADMIN_EMAIL } from "../_shared/forge-admin.ts";
 
 export type AgentPreferencesPayload = {
   mode?: "auto" | "robin" | "rob" | "fixed";
-  poolProvider?: "nvidia" | "groq";
+  poolProvider?: string;
   fixedPresetId?: string;
   robinPoolModelId?: string;
   /** ID exato do modelo na API (ex.: anthropic/claude-sonnet-4-6, openrouter slug) */
@@ -42,7 +42,7 @@ function openAiProvider(row: { provider?: string | null; meta?: unknown }): stri
 export async function loadConnectorPools(
   supabase: SupabaseClient,
   ownerId: string,
-  poolProvider: "nvidia" | "groq" = "groq",
+  poolProvider: string = "groq",
 ): Promise<string[]> {
   const { data, error } = await supabase
     .from("connectors")
@@ -58,7 +58,7 @@ export async function loadConnectorPools(
 
   // Chave salva com «Salvar chave» (token único) — reutiliza como pool de 1
   const keys = await loadConnectorKeys(supabase, ownerId);
-  const fallback = poolProvider === "nvidia" ? keys.NVIDIA_API_KEY : keys.GROQ_API_KEY;
+  const fallback = keys[`${poolProvider.toUpperCase()}_API_KEY`] ?? keys.GROQ_API_KEY;
   return fallback ? [fallback] : [];
 }
 
