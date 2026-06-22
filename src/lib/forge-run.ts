@@ -2,6 +2,7 @@ import type { AgentProgress, PendingPlan, PlanStep, SSEEvent } from "@/lib/agent
 import { lifecycleLabel, resolveAgentLifecycle } from "@/lib/agent-lifecycle";
 import { emitStreamingTelemetry } from "@/lib/streaming-telemetry";
 import { checkpointSummary, formatSkillInvocation, sanitizeRunText } from "@/lib/run-story-hygiene";
+import { isToolDoneEvent, isToolDoneOk, toolDoneName } from "@/lib/timeline-tool-events";
 
 export type MiniCardStatus = "thinking" | "working" | "done" | "failed";
 export type MiniCardTaskStatus = "done" | "active" | "pending" | "failed";
@@ -48,7 +49,15 @@ export type ForgeTimelineItem =
       active?: boolean;
       startedAtMs?: number;
     }
-  | { type: "TOOL"; id: string; name: string; path?: string; detail?: string; active?: boolean }
+  | {
+      type: "TOOL";
+      id: string;
+      name: string;
+      path?: string;
+      detail?: string;
+      active?: boolean;
+      ok?: boolean;
+    }
   | { type: "RESULT"; id: string; ok: boolean; text: string; evidence?: string[] };
 
 export type AgentRunView = {
@@ -217,12 +226,13 @@ export function buildForgeTimeline(timeline: SSEEvent[], running = false): Forge
       continue;
     }
 
-    if (ev.type === "tool_done" || ev.type === "tool_result" || ev.type === "tool_end") {
-      const ok = data.ok !== false && data.error == null;
+    if (isToolDoneEvent(ev)) {
+      const ok = isToolDoneOk(data);
+      const toolName = toolDoneName(data);
       for (let i = items.length - 1; i >= 0; i--) {
         const item = items[i];
-        if (item?.type !== "TOOL" || item.active === false) continue;
-        items[i] = { ...item, active: false };
+        if (item?.type !== "TOOL") continue;
+        items[i] = { ...item, name: toolName, active: false, ok };
         break;
       }
       if (ev.type !== "tool_done") {

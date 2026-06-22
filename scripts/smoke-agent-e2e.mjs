@@ -64,7 +64,7 @@ function arg(name, fallback) {
 const projectId = arg("project-id", DEFAULT_PROJECT);
 const conversationId = arg("conversation-id", DEFAULT_CONVERSATION);
 const userId = arg("user-id", DEFAULT_USER);
-const timeoutMs = Number(arg("timeout-ms", "120000"));
+const timeoutMs = Number(arg("timeout-ms", "300000"));
 const dispatchTimeoutMs = Number(arg("dispatch-timeout-ms", "45000"));
 const pollMs = 2000;
 

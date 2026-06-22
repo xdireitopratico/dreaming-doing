@@ -2,13 +2,11 @@
 
 export const MAX_TOOL_MISSES = 3;
 
-export const TOOL_NUDGE_MESSAGE = "";
-
 export const TOOL_FAIL_USER_MESSAGE = "O modelo não usou ferramentas após 3 tentativas.";
 
 export type ToolProgressDecision =
   | { kind: "ok" }
-  | { kind: "retry"; attempt: number; exploreMessage: string; userNudge: string; forceToolsNext: boolean }
+  | { kind: "retry"; attempt: number; exploreMessage: string; forceToolsNext: boolean }
   | { kind: "fail"; exploreMessage: string; userMessage: string };
 
 export function decideToolProgress(input: {
@@ -32,8 +30,7 @@ export function decideToolProgress(input: {
   return {
     kind: "retry",
     attempt,
-    exploreMessage: `Sem ferramentas (${attempt}/${MAX_TOOL_MISSES})`,
-    userNudge: TOOL_NUDGE_MESSAGE,
+    exploreMessage: `Sem ferramentas (${attempt}/${MAX_TOOL_MISSES})${streamedNote}`,
     forceToolsNext: attempt >= 2,
   };
 }
@@ -49,6 +46,6 @@ export function assistantContentForHistory(
   if (trimmed) return trimmed;
   const narration = narrationBuffer.trim();
   if (narration) return narration.slice(0, 2000);
-  if (wasStreamed) return "";
+  if (wasStreamed) return "[raciocínio interno sem ferramentas]";
   return responseContent?.trim() || "";
 }

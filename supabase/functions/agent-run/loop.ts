@@ -2220,13 +2220,6 @@ export class AgentLoop {
       role: "assistant",
       content: historyContent,
     });
-    const nudge = decision.userNudge.trim();
-    if (nudge) {
-      this.state.messages.push({
-        role: "user",
-        content: nudge,
-      });
-    }
     return false;
   }
 

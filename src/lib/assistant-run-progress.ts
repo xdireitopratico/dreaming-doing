@@ -292,10 +292,6 @@ function progressFromCardSnapshot(snap: Record<string, unknown>, msg: ChatMessag
         ? snap.workingDurationMs
         : null;
 
-  const statusChips = Array.isArray(snap.statusChips)
-    ? snap.statusChips.filter((c): c is string => typeof c === "string")
-    : undefined;
-
   return {
     ...initialAgentProgress,
     phase: typeof snap.phase === "string" ? snap.phase : null,
@@ -325,7 +321,6 @@ function progressFromCardSnapshot(snap: Record<string, unknown>, msg: ChatMessag
     conversational: snap.conversational === true,
     planSummary:
       typeof snap.planSummary === "string" ? snap.planSummary : (pendingPlan?.summary ?? null),
-    ...(statusChips?.length ? { statusChips } : {}),
   };
 }
 

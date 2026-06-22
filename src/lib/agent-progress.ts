@@ -121,8 +121,6 @@ export interface AgentProgress {
   fsmState?: string | null;
   /** Sumário do último plano proposto (FORGE 2.0). */
   planSummary?: string | null;
-  /** Chips de status materializados no cardSnapshot — permanecem pós-F5 (Lovable img 15). */
-  statusChips?: string[];
   /** Turno social/conversacional — só bubble no chat, sem mini-card de job. */
   conversational?: boolean;
   /** Estado da conexão Realtime — usado para feedback visual durante reconnect
