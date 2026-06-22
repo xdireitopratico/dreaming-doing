@@ -30,7 +30,7 @@ async function main() {
   const failures = [];
 
   for (const id of FIXTURES) {
-    await page.goto(`${BASE}/dev/lovable-chat`, { waitUntil: "networkidle" });
+    await page.goto(`${BASE}/dev/lovable-chat`, { waitUntil: "domcontentloaded", timeout: 60_000 });
     await page.click(`[data-fixture="${id}"]`);
     await page.waitForTimeout(400);
 

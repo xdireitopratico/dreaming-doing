@@ -11,7 +11,12 @@ export function hasStoredAgentPreferences(): boolean {
 export function isAgentPreferencesConfigured(prefs: AgentPreferences): boolean {
   if (!hasStoredAgentPreferences()) return false;
   if (prefs.mode === "auto") return true;
-  if (prefs.mode === "fixed") return !!prefs.fixedPresetId?.trim();
+  if (prefs.mode === "fixed") {
+    if (prefs.fixedPresetId?.trim()) return true;
+    if (prefs.useCustomModel && prefs.customModelId?.trim()) return true;
+    if ((prefs.userModelEntries?.length ?? 0) > 0) return true;
+    return false;
+  }
   if (prefs.mode === "robin") {
     return !!prefs.robinPoolModelId?.trim() && !!prefs.poolProvider;
   }
@@ -23,7 +28,12 @@ export function getAgentSetupBlockMessage(prefs: AgentPreferences): string {
     return "Setup obrigatório: abra Modelos (/models), escolha Fixo ou ROBIN, Nemotron 550B e salve.";
   }
 
-  if (prefs.mode === "fixed" && !prefs.fixedPresetId?.trim()) {
+  if (
+    prefs.mode === "fixed" &&
+    !prefs.fixedPresetId?.trim() &&
+    !(prefs.useCustomModel && prefs.customModelId?.trim()) &&
+    (prefs.userModelEntries?.length ?? 0) === 0
+  ) {
     return "Setup: selecione um modelo fixo em Modelos (/models) e salve.";
   }
   if (prefs.mode === "robin" && (!prefs.robinPoolModelId?.trim() || !prefs.poolProvider)) {

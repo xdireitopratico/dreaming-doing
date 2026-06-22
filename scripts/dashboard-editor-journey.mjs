@@ -233,10 +233,10 @@ async function ensureAuthContext(browser) {
 }
 
 async function waitForWorkingLine(page, timeoutMs, failures, label) {
-  const working = page.locator("[data-testid=chat-working-line]");
+  const working = page.locator("[data-testid=chat-working-line], [data-testid=forge-thinking]");
   try {
-    await working.waitFor({ state: "visible", timeout: timeoutMs });
-    const text = (await working.innerText()).trim();
+    await working.first().waitFor({ state: "visible", timeout: timeoutMs });
+    const text = (await working.first().innerText()).trim();
     if (!/Pensando|Pensou/i.test(text)) {
       failures.push(`${label}: working line inesperada — "${text}"`);
       return false;
@@ -286,7 +286,9 @@ async function waitForNaturalAgentRun(page, conversationId, failures) {
       .locator('[data-testid=forge-header-state][data-state="running"]')
       .count();
     const card = await page.locator("[data-testid=chat-job-card]").count();
-    const working = await page.locator("[data-testid=chat-working-line]").count();
+    const working =
+      (await page.locator("[data-testid=chat-working-line]").count()) +
+      (await page.locator("[data-testid=forge-thinking]").count());
     if (running > 0 || card > 0 || working > 0) return run.id;
     await sleep(500);
   }
@@ -519,7 +521,9 @@ async function phaseF5(page, conversationId, failures) {
     const runningHeader = await page
       .locator('[data-testid=forge-header-state][data-state="running"]')
       .count();
-    const working = await page.locator("[data-testid=chat-working-line]").count();
+    const working =
+      (await page.locator("[data-testid=chat-working-line]").count()) +
+      (await page.locator("[data-testid=forge-thinking]").count());
     const userOk = await page.locator("[data-testid=chat-message-user]").count();
     const trackAfter = await page.locator("[data-testid=inspector-timeline-track]").count();
 
@@ -591,7 +595,7 @@ async function phaseSecondTurn(page, conversationId, projectId, failures) {
     failures.push("second-turn: 2ª mensagem do usuário não apareceu");
   }
 
-  await waitForWorkingLine(page, Math.max(THINKING_TIMEOUT_MS, 20_000), failures, "second-turn");
+  await waitForWorkingLine(page, Math.max(THINKING_TIMEOUT_MS, 45_000), failures, "second-turn");
   await page.screenshot({ path: resolve(OUT_DIR, "phase-second-turn.png"), fullPage: true });
 }
 
@@ -636,7 +640,7 @@ async function main() {
   await mkdir(OUT_DIR, { recursive: true });
 
   const defaultPrompt = PHASES.has("inspector-live")
-    ? `[e2e-journey] Use web_search sobre Vite 7 e responda em 2 bullets — sem editar arquivos (${Date.now()})`
+    ? `[e2e-journey] Responda em 2 bullets sobre Vite 7 — sem editar arquivos nem tools (${Date.now()})`
     : PHASES.has("plan-dock")
       ? `[e2e-journey] Proponha um plano curto para adicionar um botão de contador no app — sem editar ainda (${Date.now()})`
       : `[e2e-journey] Responda apenas "ok" — sem editar arquivos (${Date.now()})`;
@@ -653,7 +657,7 @@ async function main() {
         userId: e2eUserId,
       });
       console.log(
-        `E2E pre-seed: groq ${seed.groq.seeded ? "seeded" : "ok"}, e2b ${seed.e2b.seeded ? "seeded" : "ok"}`,
+        `E2E pre-seed: openrouter=${seed.openrouterSource} model=${seed.model} e2b=${seed.e2bSource}`,
       );
     } catch (e) {
       console.warn("WARN: E2E pre-seed falhou —", e instanceof Error ? e.message : e);

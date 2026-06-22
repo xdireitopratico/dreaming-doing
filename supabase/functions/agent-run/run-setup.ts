@@ -43,7 +43,10 @@ export function validateAgentPreferences(p?: AgentPreferencesPayload): string | 
     return "Setup obrigatório: configure modo e modelo em Modelos (/models).";
   }
   if (p.mode === "auto") return null;
-  if (p.mode === "fixed" && !p.fixedPresetId?.trim()) {
+  if (p.mode === "fixed") {
+    if (p.fixedPresetId?.trim()) return null;
+    if (p.useCustomModel && p.customModelId?.trim()) return null;
+    if ((p.userModelEntries?.length ?? 0) > 0) return null;
     return "Setup: selecione um modelo fixo em Modelos (/models).";
   }
   if (isRobinMode(p) && !p.robinPoolModelId?.trim()) {

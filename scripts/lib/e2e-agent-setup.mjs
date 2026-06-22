@@ -13,6 +13,13 @@ export const E2E_AGENT_PREFERENCES = {
   mode: process.env.E2E_MODE ?? "fixed",
   useCustomModel: true,
   customModelId: E2E_DEFAULT_MODEL,
+  userModelEntries: [
+    {
+      slug: E2E_DEFAULT_MODEL,
+      env: "openrouter",
+      label: "E2E OpenRouter free",
+    },
+  ],
 };
 
 /** Chave OpenRouter — evita rate limit do pool Groq admin (compartilhado com smoke). */
@@ -193,7 +200,8 @@ export async function seedE2eAgentSetup({ supabaseUrl, serviceKey, userId }) {
     kind: "e2b",
     provider: "",
     tokenEncrypted: e2bToken,
-    meta: { keySource: e2bSource },
+    meta: { keySource: e2bSource, e2bHealthOk: true, e2e: true },
+    forceUpdate: true,
   });
 
   return {

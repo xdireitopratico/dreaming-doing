@@ -1,9 +1,8 @@
 import { readFileSync } from "node:fs";
+import { homedir } from "node:os";
 import { resolve } from "node:path";
 
-/** Carrega .env.local sem sobrescrever variáveis já definidas no ambiente. */
-export function loadEnvLocal(cwd = process.cwd()) {
-  const path = resolve(cwd, ".env.local");
+function loadEnvFile(path) {
   try {
     const raw = readFileSync(path, "utf8");
     for (const line of raw.split("\n")) {
@@ -24,4 +23,10 @@ export function loadEnvLocal(cwd = process.cwd()) {
   } catch {
     // optional
   }
+}
+
+/** Carrega .env.local (projeto + ~/.env.local) sem sobrescrever o ambiente. */
+export function loadEnvLocal(cwd = process.cwd()) {
+  loadEnvFile(resolve(cwd, ".env.local"));
+  loadEnvFile(resolve(homedir(), ".env.local"));
 }
