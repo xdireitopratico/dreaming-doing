@@ -8,6 +8,7 @@ import {
   type AgentLoopDepsContext,
 } from "./deps-factory.ts";
 import { LoopPhase } from "../types.ts";
+import { createAgentLoopMutableState } from "./loop-mutable-state.ts";
 
 function mockDepsContext(overrides?: Partial<AgentLoopDepsContext>): AgentLoopDepsContext {
   const state = {
@@ -136,7 +137,7 @@ function mockHost(overrides?: Partial<AgentLoopHost>): AgentLoopHost {
     context: null,
     intent: null,
   };
-  let checkpointStep = 0;
+  const mutable = createAgentLoopMutableState({ lastCheckpointStep: 2 });
   let emitted: Array<{ type: string; data: unknown }> = [];
   const host: AgentLoopHost = {
     sb: {},
@@ -162,27 +163,7 @@ function mockHost(overrides?: Partial<AgentLoopHost>): AgentLoopHost {
     touchedPaths: new Set(["src/App.tsx"]),
     narrationBuffer: "note",
     runStartTime: Date.now() - 1000,
-    getLastCheckpointStep: () => checkpointStep,
-    setLastCheckpointStep: (step) => {
-      checkpointStep = step;
-    },
-    getApprovedPlanStepIndex: () => 0,
-    setApprovedPlanStepIndex: () => {},
-    getToolMissCount: () => 0,
-    setToolMissCount: () => {},
-    getForceToolsNext: () => false,
-    setForceToolsNext: () => {},
-    getToolsInvoked: () => false,
-    setToolsInvoked: () => {},
-    getConsecutiveNoContentReadSteps: () => 0,
-    setConsecutiveNoContentReadSteps: () => {},
-    getLlmResponseWasStreamed: () => false,
-    getLastExecutePhaseMessage: () => null,
-    setLastExecutePhaseMessage: () => {},
-    getLastRunMessageId: () => null,
-    setLastRunMessageId: () => {},
-    getLastActivityAt: () => Date.now(),
-    setLastActivityAt: () => {},
+    mutable,
     narrationTrim: () => "trimmed",
     tailSlice: (count) => Array(count).fill("x"),
     getTimeline: () => [{ type: "tool_start", data: {} }],

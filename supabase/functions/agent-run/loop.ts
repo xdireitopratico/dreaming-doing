@@ -6,7 +6,6 @@ import type {
   AgentState,
   ChatMessage,
   ChatResponse,
-  FileEntry,
   LLMProvider,
   PlanStep,
   ProposedPlan,
@@ -34,7 +33,8 @@ import { readLoopBudgetMsFromRuntime } from "./runtime/loop-config.ts";
 import { chatBuildModeForLoop } from "./runtime/llm-chat.ts";
 import { runDesignPreflightIfNeeded as runDesignPreflightIfNeededPhase } from "./runtime/phases/design-preflight-phase.ts";
 import { attemptGracefulClosing as attemptGracefulClosingPhase } from "./runtime/phases/graceful-closing.ts";
-import { runGatherContextPhase } from "./runtime/phases/gather-context.ts";
+import { runGatherContextForHost } from "./runtime/phases/gather-context.ts";
+import { createAgentLoopMutableState } from "./runtime/loop-mutable-state.ts";
 import { NarrationPhase } from "./runtime/phases/narration.ts";
 import {
   finishPlanProposal as finishPlanTurnProposal,
@@ -86,15 +86,13 @@ export class AgentLoop {
   private complexityScore: number;
   private runId: string | null;
   private originalUserRequest: string;
-  private toolsInvoked: boolean;
   private runStartTime: number;
-  private lastCheckpointStep: number;
   private planMode: boolean;
   private approvedPlanBuild: boolean;
   private skipConversationalGate: boolean;
   private approvedPlanSteps: PlanStep[];
-  private approvedPlanStepIndex: number;
   private narration: NarrationPhase;
+  readonly mutable = createAgentLoopMutableState();
   private readonly planStreamState: PlanModeStreamState = {
     llmResponseWasStreamed: false,
     thinkingStreamStartedAt: null,
@@ -122,16 +120,9 @@ export class AgentLoop {
     }
   }
 
-  private llmResponseWasStreamed: boolean;
-  private toolMissCount: number;
-  private forceToolsNext: boolean;
   private thinkingStreamStartedAt: number | null;
-  private lastExecutePhaseMessage: string | null;
   private chunkGeneration: number;
-  private consecutiveNoContentReadSteps: number;
   private touchedPaths: Set<string>;
-  private lastActivityAt: number;
-  private lastRunMessageId: string | null;
   private buildFixResume: boolean;
   /** FSM state tracking (FORGE 2.0) — validado a cada transição de fase */
   private fsmState: AgentStateData;
@@ -215,24 +206,17 @@ export class AgentLoop {
     this.skipConversationalGate =
       options?.skipConversationalGate ?? options?.approvedPlanBuild ?? false;
     this.approvedPlanSteps = options?.planSteps ?? [];
-    this.approvedPlanStepIndex = 0;
     const extracted = extractOriginalUserRequest(state.messages);
     const planDocument = options?.planSummary?.trim() ?? "";
     this.originalUserRequest = this.approvedPlanBuild && planDocument ? planDocument : extracted;
-    this.toolsInvoked = false;
 
-
-    this.llmResponseWasStreamed = false;
-    this.toolMissCount = 0;
-    this.forceToolsNext = false;
     this.thinkingStreamStartedAt = null;
-    this.lastExecutePhaseMessage = null;
     this.chunkGeneration = options?.chunkGeneration ?? 0;
-    this.consecutiveNoContentReadSteps = 0;
     this.touchedPaths = new Set();
-    this.lastActivityAt = Date.now();
-    this.lastRunMessageId = null;
     this.buildFixResume = options?.buildFixResume ?? false;
+    if (options?.hasCheckpoint) {
+      this.mutable.lastCheckpointStep = state.currentStepIndex ?? 0;
+    }
     this.fsmState = { name: "idle", since: Date.now() };
     this.emitter = new RuntimeEmitter(onStream, {
       getTaskPhase: () => String(this.state.phase),
@@ -244,12 +228,11 @@ export class AgentLoop {
       },
       (type, data) => this.emitter.emit(type, data),
       () => {
-        this.lastActivityAt = Date.now();
+        this.mutable.lastActivityAt = Date.now();
       },
     );
     this.fileContentCache = new Map();
     this.runStartTime = Date.now();
-    this.lastCheckpointStep = options?.hasCheckpoint ? (state.currentStepIndex ?? 0) : 0;
     this.router = new ModelRouter(injectedKeys, routerOverrides, options?.resolvedMainCfg);
     this.observer = new RuntimeObserver(reg, this.fileContentCache);
     this.skills = new SkillRegistry();
@@ -326,82 +309,6 @@ export class AgentLoop {
     });
   }
 
-  private getLastCheckpointStep(): number {
-    return this.lastCheckpointStep;
-  }
-
-  private setLastCheckpointStep(step: number): void {
-    this.lastCheckpointStep = step;
-  }
-
-  private getApprovedPlanStepIndex(): number {
-    return this.approvedPlanStepIndex;
-  }
-
-  private setApprovedPlanStepIndex(index: number): void {
-    this.approvedPlanStepIndex = index;
-  }
-
-  private getToolMissCount(): number {
-    return this.toolMissCount;
-  }
-
-  private setToolMissCount(count: number): void {
-    this.toolMissCount = count;
-  }
-
-  private getForceToolsNext(): boolean {
-    return this.forceToolsNext;
-  }
-
-  private setForceToolsNext(value: boolean): void {
-    this.forceToolsNext = value;
-  }
-
-  private getToolsInvoked(): boolean {
-    return this.toolsInvoked;
-  }
-
-  private setToolsInvoked(value: boolean): void {
-    this.toolsInvoked = value;
-  }
-
-  private getConsecutiveNoContentReadSteps(): number {
-    return this.consecutiveNoContentReadSteps;
-  }
-
-  private setConsecutiveNoContentReadSteps(value: number): void {
-    this.consecutiveNoContentReadSteps = value;
-  }
-
-  private getLlmResponseWasStreamed(): boolean {
-    return this.llmResponseWasStreamed;
-  }
-
-  private getLastExecutePhaseMessage(): string | null {
-    return this.lastExecutePhaseMessage;
-  }
-
-  private setLastExecutePhaseMessage(value: string | null): void {
-    this.lastExecutePhaseMessage = value;
-  }
-
-  private getLastRunMessageId(): string | null {
-    return this.lastRunMessageId;
-  }
-
-  private setLastRunMessageId(id: string | null): void {
-    this.lastRunMessageId = id;
-  }
-
-  private getLastActivityAt(): number {
-    return this.lastActivityAt;
-  }
-
-  private setLastActivityAt(ms: number): void {
-    this.lastActivityAt = ms;
-  }
-
   private narrationTrim(): string {
     return this.narration.trim();
   }
@@ -431,11 +338,11 @@ export class AgentLoop {
   }
 
   private markToolsInvoked(): void {
-    this.toolsInvoked = true;
+    this.mutable.toolsInvoked = true;
   }
 
   private onActivity(): void {
-    this.lastActivityAt = Date.now();
+    this.mutable.lastActivityAt = Date.now();
   }
 
   private getPlanLlmResponseWasStreamed(): boolean {
@@ -444,7 +351,7 @@ export class AgentLoop {
 
   private setPlanLlmResponseWasStreamed(value: boolean): void {
     this.planStreamState.llmResponseWasStreamed = value;
-    this.llmResponseWasStreamed = value;
+    this.mutable.llmResponseWasStreamed = value;
   }
 
   private async emitTransition(eventType: string, data?: unknown): Promise<void> {
@@ -471,7 +378,7 @@ export class AgentLoop {
       this.state.executionLog = [];
     }
     this.compression.reset();
-    this.consecutiveNoContentReadSteps = 0;
+    this.mutable.consecutiveNoContentReadSteps = 0;
     const toolsUsed = new Set<string>();
 
     return runAgentOrchestrator({
@@ -514,24 +421,17 @@ export class AgentLoop {
   }
 
   private async gatherContext(): Promise<void> {
-    this.state.context = await runGatherContextPhase({
-      touchHeartbeat: () => this.bindings.touchHeartbeat(),
-      fetchProjectFiles: async () => {
-        const { data: files } = await this.sb
-          .from("project_files")
-          .select("path, content, updated_at")
-          .eq("project_id", this.state.projectId);
-        return files ?? [];
-      },
-      detectStackSkillNames: (fileList) =>
-        this.skills.detectActive(fileList as FileEntry[]).map((s) => s.name),
-      messages: this.state.messages,
+    await runGatherContextForHost({
+      sb: this.sb,
+      state: this.state,
+      skills: this.skills,
       userSkillNames: this.userSkillNames,
       lastEmittedSkills: this.lastEmittedSkills,
-      onFileCached: (path, content) => this.fileContentCache.set(path, content),
-      emitSkills: (payload) => {
-        this.lastEmittedSkills = payload.invoked;
-        this.emit("skills", payload);
+      fileContentCache: this.fileContentCache,
+      touchHeartbeat: () => this.bindings.touchHeartbeat(),
+      emit: (type, data) => this.emit(type, data),
+      onSkillsEmitted: (invoked) => {
+        this.lastEmittedSkills = invoked;
       },
     });
   }
@@ -547,12 +447,12 @@ export class AgentLoop {
     const skillPrompt = this.state.context
       ? this.skills.buildSkillPrompt(this.state.context.files)
       : "";
-    this.planStreamState.llmResponseWasStreamed = this.llmResponseWasStreamed;
+    this.planStreamState.llmResponseWasStreamed = this.mutable.llmResponseWasStreamed;
     this.planStreamState.thinkingStreamStartedAt = this.thinkingStreamStartedAt;
 
     const result = await runPlanModeAgentTurnPhase(this.bindings.buildPlanTurn(skillPrompt), model);
 
-    this.llmResponseWasStreamed = this.planStreamState.llmResponseWasStreamed;
+    this.mutable.llmResponseWasStreamed = this.planStreamState.llmResponseWasStreamed;
     this.thinkingStreamStartedAt = this.planStreamState.thinkingStreamStartedAt;
     return result;
   }
@@ -606,9 +506,9 @@ export class AgentLoop {
       skillPrompt,
       toolDefinitions: this.reg.getDefinitions(),
       complexityScore: this.complexityScore,
-      getLlmResponseWasStreamed: () => this.llmResponseWasStreamed,
+      getLlmResponseWasStreamed: () => this.mutable.llmResponseWasStreamed,
       setLlmResponseWasStreamed: (value) => {
-        this.llmResponseWasStreamed = value;
+        this.mutable.llmResponseWasStreamed = value;
       },
       getThinkingStreamStartedAt: () => this.thinkingStreamStartedAt,
       setThinkingStreamStartedAt: (value) => {
@@ -617,7 +517,7 @@ export class AgentLoop {
       emit: (type, data) => this.emit(type, data),
       onActivity: () => this.onActivity(),
       onThinkingCapExceeded: () => {
-        this.forceToolsNext = true;
+        this.mutable.forceToolsNext = true;
       },
       runId: this.runId,
       robinActive: this.robinActive,

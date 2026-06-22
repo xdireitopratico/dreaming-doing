@@ -1,7 +1,8 @@
 // runtime/phases/gather-context.ts — Inventário do projeto antes do LLM (Fase 2.2)
 import { buildAgentContextForLlm } from "../../run-context.ts";
 import { lastPlanContextFromMessages } from "../../plan-mode.ts";
-import type { AgentContext, ChatMessage, FileEntry } from "../../types.ts";
+import type { SkillRegistry } from "../../skills.ts";
+import type { AgentContext, AgentState, ChatMessage, FileEntry } from "../../types.ts";
 
 export const GATHER_KEY_FILES = [
   "package.json",
@@ -144,4 +145,39 @@ export async function runGatherContextPhase(
   }
 
   return assembly.context;
+}
+
+export type GatherContextHost = {
+  sb: any;
+  state: AgentState;
+  skills: SkillRegistry;
+  userSkillNames: string[];
+  lastEmittedSkills: string[] | null;
+  fileContentCache: Map<string, string>;
+  touchHeartbeat: () => Promise<void>;
+  emit: (type: string, data: unknown) => void;
+  onSkillsEmitted: (invoked: string[]) => void;
+};
+
+export async function runGatherContextForHost(host: GatherContextHost): Promise<void> {
+  host.state.context = await runGatherContextPhase({
+    touchHeartbeat: () => host.touchHeartbeat(),
+    fetchProjectFiles: async () => {
+      const { data: files } = await host.sb
+        .from("project_files")
+        .select("path, content, updated_at")
+        .eq("project_id", host.state.projectId);
+      return files ?? [];
+    },
+    detectStackSkillNames: (fileList) =>
+      host.skills.detectActive(fileList as FileEntry[]).map((s) => s.name),
+    messages: host.state.messages,
+    userSkillNames: host.userSkillNames,
+    lastEmittedSkills: host.lastEmittedSkills,
+    onFileCached: (path, content) => host.fileContentCache.set(path, content),
+    emitSkills: (payload) => {
+      host.onSkillsEmitted(payload.invoked);
+      host.emit("skills", payload);
+    },
+  });
 }

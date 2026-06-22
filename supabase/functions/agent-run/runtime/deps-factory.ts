@@ -38,6 +38,49 @@ import type { RunInfraDeps } from "./infra.ts";
 import type { AgentPersistDeps, PersistFinalOpts } from "./phases/persist.ts";
 import type { BuildExecuteDeps } from "./phases/execute.ts";
 import type { PlanModeStreamState, PlanTurnDeps, PlanTurnFinishDeps } from "./phases/plan-turn.ts";
+import type { AgentLoopMutableState } from "./loop-mutable-state.ts";
+
+function mutableAccessors(mutable: AgentLoopMutableState) {
+  return {
+    getLastCheckpointStep: () => mutable.lastCheckpointStep,
+    setLastCheckpointStep: (step: number) => {
+      mutable.lastCheckpointStep = step;
+    },
+    getApprovedPlanStepIndex: () => mutable.approvedPlanStepIndex,
+    setApprovedPlanStepIndex: (index: number) => {
+      mutable.approvedPlanStepIndex = index;
+    },
+    getToolMissCount: () => mutable.toolMissCount,
+    setToolMissCount: (count: number) => {
+      mutable.toolMissCount = count;
+    },
+    getForceToolsNext: () => mutable.forceToolsNext,
+    setForceToolsNext: (value: boolean) => {
+      mutable.forceToolsNext = value;
+    },
+    getToolsInvoked: () => mutable.toolsInvoked,
+    setToolsInvoked: (value: boolean) => {
+      mutable.toolsInvoked = value;
+    },
+    getConsecutiveNoContentReadSteps: () => mutable.consecutiveNoContentReadSteps,
+    setConsecutiveNoContentReadSteps: (value: number) => {
+      mutable.consecutiveNoContentReadSteps = value;
+    },
+    getLlmResponseWasStreamed: () => mutable.llmResponseWasStreamed,
+    getLastExecutePhaseMessage: () => mutable.lastExecutePhaseMessage,
+    setLastExecutePhaseMessage: (value: string | null) => {
+      mutable.lastExecutePhaseMessage = value;
+    },
+    getLastRunMessageId: () => mutable.lastRunMessageId,
+    setLastRunMessageId: (id: string | null) => {
+      mutable.lastRunMessageId = id;
+    },
+    getLastActivityAt: () => mutable.lastActivityAt,
+    setLastActivityAt: (ms: number) => {
+      mutable.lastActivityAt = ms;
+    },
+  };
+}
 
 /** Superfície do AgentLoop exposta ao factory — evita depsContext() gigante no loop. */
 export type AgentLoopHost = {
@@ -64,25 +107,7 @@ export type AgentLoopHost = {
   touchedPaths: Set<string>;
   narrationBuffer: string;
   runStartTime: number;
-  getLastCheckpointStep: () => number;
-  setLastCheckpointStep: (step: number) => void;
-  getApprovedPlanStepIndex: () => number;
-  setApprovedPlanStepIndex: (index: number) => void;
-  getToolMissCount: () => number;
-  setToolMissCount: (count: number) => void;
-  getForceToolsNext: () => boolean;
-  setForceToolsNext: (value: boolean) => void;
-  getToolsInvoked: () => boolean;
-  setToolsInvoked: (value: boolean) => void;
-  getConsecutiveNoContentReadSteps: () => number;
-  setConsecutiveNoContentReadSteps: (value: number) => void;
-  getLlmResponseWasStreamed: () => boolean;
-  getLastExecutePhaseMessage: () => string | null;
-  setLastExecutePhaseMessage: (value: string | null) => void;
-  getLastRunMessageId: () => string | null;
-  setLastRunMessageId: (id: string | null) => void;
-  getLastActivityAt: () => number;
-  setLastActivityAt: (ms: number) => void;
+  mutable: AgentLoopMutableState;
   narrationTrim: () => string;
   tailSlice: (count: number) => unknown[];
   getTimeline: () => Array<{ type: string; data: Record<string, unknown>; timestamp?: number }>;
@@ -382,6 +407,7 @@ export function createDepsContext(
   let ctx!: AgentLoopDepsContext;
   const persistDeps = () => buildPersistDeps(ctx, loopBudgetMs);
   const infraDeps = () => buildInfraDeps(ctx, loopBudgetMs);
+  const accessors = mutableAccessors(host.mutable);
 
   ctx = {
     sb: host.sb,
@@ -407,25 +433,7 @@ export function createDepsContext(
     touchedPaths: host.touchedPaths,
     narrationBuffer: host.narrationBuffer,
     runStartTime: host.runStartTime,
-    getLastCheckpointStep: () => host.getLastCheckpointStep(),
-    setLastCheckpointStep: (step) => host.setLastCheckpointStep(step),
-    getApprovedPlanStepIndex: () => host.getApprovedPlanStepIndex(),
-    setApprovedPlanStepIndex: (index) => host.setApprovedPlanStepIndex(index),
-    getToolMissCount: () => host.getToolMissCount(),
-    setToolMissCount: (count) => host.setToolMissCount(count),
-    getForceToolsNext: () => host.getForceToolsNext(),
-    setForceToolsNext: (value) => host.setForceToolsNext(value),
-    getToolsInvoked: () => host.getToolsInvoked(),
-    setToolsInvoked: (value) => host.setToolsInvoked(value),
-    getConsecutiveNoContentReadSteps: () => host.getConsecutiveNoContentReadSteps(),
-    setConsecutiveNoContentReadSteps: (value) => host.setConsecutiveNoContentReadSteps(value),
-    getLlmResponseWasStreamed: () => host.getLlmResponseWasStreamed(),
-    getLastExecutePhaseMessage: () => host.getLastExecutePhaseMessage(),
-    setLastExecutePhaseMessage: (value) => host.setLastExecutePhaseMessage(value),
-    getLastRunMessageId: () => host.getLastRunMessageId(),
-    setLastRunMessageId: (id) => host.setLastRunMessageId(id),
-    getLastActivityAt: () => host.getLastActivityAt(),
-    setLastActivityAt: (ms) => host.setLastActivityAt(ms),
+    ...accessors,
     narrationTrim: () => host.narrationTrim(),
     tailSlice: (count) => host.tailSlice(count),
     getTimeline: () => host.getTimeline(),
