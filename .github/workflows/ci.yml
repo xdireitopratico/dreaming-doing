@@ -19,6 +19,8 @@ jobs:
       - run: npm run lint
       - run: npm run typecheck
       - run: npm run test
+      - name: Agent journey contract (vitest)
+        run: npm run test:agent-journey
       - uses: denoland/setup-deno@v2
       - run: deno test --allow-env supabase/functions/_shared/agent-pending-queue.test.ts
       - run: npm run smoke:stability
@@ -64,8 +66,8 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           INNGEST_EVENT_KEY: ${{ secrets.INNGEST_EVENT_KEY }}
         run: npm run smoke:queue
-      - name: No stale agent runs after smoke
+      - name: No stale agent runs after smoke (cleanup handoff-safe)
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-        run: npm run check:stale-runs
+        run: node scripts/check-stale-runs.mjs --cleanup

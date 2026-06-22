@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 /**
  * Métricas de agent_runs — últimos N dias (default 7).
- * Exit 1 se failed_rate > threshold (default 25%).
+ * Exit 1 se failed_rate > threshold (default 25%) entre runs terminais.
+ * Reporta running/pending separados (não entram no denominador de failed rate).
  */
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -36,6 +37,7 @@ const SUPABASE_URL = process.env.SUPABASE_URL ?? process.env.VITE_SUPABASE_URL ?
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
 const DAYS = Number(process.env.AGENT_METRICS_DAYS ?? "7");
 const THRESHOLD = Number(process.env.AGENT_FAILED_THRESHOLD_PCT ?? "25");
+const ACTIVE_WARN = Number(process.env.AGENT_ACTIVE_WARN_COUNT ?? "20");
 
 function arg(name) {
   const hit = process.argv.find((a) => a.startsWith(`--${name}=`));
@@ -78,15 +80,28 @@ async function main() {
   const terminalTotal = terminal.reduce((n, s) => n + (counts[s] ?? 0), 0);
   const failed = counts.failed ?? 0;
   const completed = counts.completed ?? 0;
+  const active = (counts.running ?? 0) + (counts.pending ?? 0);
+  const awaiting = counts.awaiting_user ?? 0;
+  const total = Object.values(counts).reduce((n, c) => n + c, 0);
   const failedRate = terminalTotal > 0 ? (failed / terminalTotal) * 100 : 0;
+  const activeShare = total > 0 ? (active / total) * 100 : 0;
 
   console.log(`=== Agent runs (${days}d, since ${cutoff.slice(0, 10)}) ===`);
   console.log(JSON.stringify(counts, null, 2));
+  console.log(`Total: ${total}`);
+  console.log(`Active (excl. do failed rate): running+pending=${active}, awaiting_user=${awaiting}`);
   console.log(`Terminal: ${terminalTotal} (completed=${completed}, failed=${failed})`);
-  console.log(`Failed rate: ${failedRate.toFixed(1)}% (threshold ${threshold}%)`);
+  console.log(`Failed rate (terminal only): ${failedRate.toFixed(1)}% (threshold ${threshold}%)`);
+  console.log(`Active share of window: ${activeShare.toFixed(1)}%`);
+
+  if (active >= ACTIVE_WARN) {
+    console.warn(
+      `WARN: ${active} active runs — verifique check:stale-runs (handoff entre chunks é ignorado)`,
+    );
+  }
 
   if (terminalTotal === 0) {
-    console.log("WARN: no terminal runs in window");
+    console.log("WARN: no terminal runs in window — failed rate não calculável");
     process.exit(0);
   }
 

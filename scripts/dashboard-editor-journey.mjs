@@ -147,6 +147,11 @@ function isRunAwaitingPlan(run) {
   return run.status === "awaiting_user";
 }
 
+function isRateLimitError(error) {
+  const msg = typeof error === "string" ? error : "";
+  return /limite por minuto|rate.?limit/i.test(msg);
+}
+
 async function fetchStreamEvents(runId) {
   const res = await rest(
     `agent_stream_events?run_id=eq.${runId}&select=seq,event_type,payload&order=seq.asc`,
@@ -458,6 +463,11 @@ async function phasePlanDock(page, conversationId, failures) {
   while (Date.now() < deadline) {
     const run = await fetchLatestRun(conversationId);
     if (run?.status === "failed") {
+      if (isRateLimitError(run.error)) {
+        console.log("plan-dock: rate limit Groq — aguardando 65s antes de novo poll");
+        await sleep(65_000);
+        continue;
+      }
       failures.push(`plan-dock: run falhou — ${run.error ?? "sem erro"}`);
       await page.screenshot({ path: resolve(OUT_DIR, "phase-plan-dock.png"), fullPage: true }).catch(() => {});
       return;

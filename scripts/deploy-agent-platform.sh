@@ -72,8 +72,8 @@ if [[ "$SKIP_SMOKE" -eq 0 ]]; then
   echo "→ check:agent-gates (journey vitest + smoke terminal + stale cleanup)"
   npm run check:agent-gates
 
-  echo "→ check:agent-metrics (7d)"
-  npm run check:agent-metrics || echo "WARN: agent metrics above threshold — review prod runs"
+  echo "→ check:agent-metrics (7d, blocking)"
+  npm run check:agent-metrics
 
   echo "→ check:shadow-parity"
   npm run check:shadow-parity
