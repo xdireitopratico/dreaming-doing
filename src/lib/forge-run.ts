@@ -862,7 +862,12 @@ export function buildAgentRunView(
         text: lastThought?.type === "THOUGHT" ? lastThought.text : undefined,
       }
     : latencyThinking
-      ? { active: true, durationMs: Math.max(500, Date.now() - latencyThinking.startedAtMs) }
+      ? {
+          active: latencyThinking.active,
+          durationMs:
+            latencyThinking.durationMs ??
+            Math.max(500, Date.now() - latencyThinking.startedAtMs),
+        }
       : null;
 
   const streamBody = progress.streamText?.trim() || null;

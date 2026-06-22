@@ -4,6 +4,7 @@ import { motion } from "framer-motion";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "@/lib/toast";
 import { supabase } from "@/integrations/supabase/client";
+import { markPendingAgentRun } from "@/lib/agent-auto-run";
 import { createProjectFromPrompt } from "@/lib/projects.functions";
 import { bootstrapComposerMode } from "@/lib/composer-mode";
 
@@ -122,15 +123,7 @@ export function PromptEngine({
       const res = await createProject({ data: { prompt: v, kind: projectKind } });
       if (projectKind === "app") {
         bootstrapComposerMode(res.projectId, "plan");
-        supabase.functions
-          .invoke("agent-run", {
-            body: {
-              projectId: res.projectId,
-              conversationId: res.conversationId,
-              mode: "plan",
-            },
-          })
-          .catch(() => {});
+        markPendingAgentRun(res.projectId, res.conversationId);
         warp.cancel();
         clearForgeTransitionOverlays();
         navigate({ to: "/projects/$projectId", params: { projectId: res.projectId } });

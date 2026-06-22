@@ -30,6 +30,8 @@ export function isAssistantRunMaterialized(message: ChatMessage): boolean {
 
   const m = meta as Record<string, unknown>;
   if (m.partial === true) return false;
+  if (m.checkpoint === true) return false;
+  if (m.betweenChunks === true) return false;
   if (typeof m.finishedAt !== "string" || !m.finishedAt.trim()) return false;
 
   return hasVisibleText(message);

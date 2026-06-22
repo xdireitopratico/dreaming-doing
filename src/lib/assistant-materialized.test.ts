@@ -58,6 +58,23 @@ describe("isAssistantRunMaterialized", () => {
     expect(canReleaseLiveSlot(msg({ runId: "r1", content: "wip" }))).toBe(false);
   });
 
+  it("rejeita checkpoint entre chunks mesmo com finishedAt", () => {
+    expect(
+      isAssistantRunMaterialized(
+        msg({
+          runId: "r1",
+          content: "Retomando…",
+          meta: {
+            runId: "r1",
+            finishedAt: "2026-06-08T00:00:00Z",
+            checkpoint: true,
+            betweenChunks: true,
+          },
+        }),
+      ),
+    ).toBe(false);
+  });
+
   it("rejeita partial com finishedAt se partial ainda true", () => {
     expect(
       isAssistantRunMaterialized(

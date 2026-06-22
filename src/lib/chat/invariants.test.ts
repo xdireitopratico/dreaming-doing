@@ -95,7 +95,7 @@ describe("mapAssistantTurn — contrato Lovable imutável", () => {
     assertAssistantTurnInvariant(turn);
   });
 
-  it("run ativa com activeRunStartedAtMs: sem thinking (apagado)", () => {
+  it("run ativa com activeRunStartedAtMs: exibe Pensando (latency)", () => {
     const progress = {
       ...initialAgentProgress,
       phase: "build" as const,
@@ -113,7 +113,11 @@ describe("mapAssistantTurn — contrato Lovable imutável", () => {
       activeRunStartedAtMs: startedAt,
       sessionProgress: progress,
     });
-    expect(turn.thinking).toBeUndefined();
+    expect(turn.thinking).toEqual({
+      variant: "latency",
+      active: true,
+      startedAtMs: startedAt,
+    });
     assertAssistantTurnInvariant(turn);
   });
 

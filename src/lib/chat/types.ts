@@ -47,6 +47,14 @@ export type ClarifyPrompt = {
   choices: ClarifyChoice[];
 };
 
+/** Estado do bloco Thought no chat (Lovable). */
+export type TurnThinkingState = {
+  variant: "latency" | "reasoning";
+  active: boolean;
+  startedAtMs?: number;
+  durationMs?: number;
+};
+
 /** @deprecated Use ClarifyChoice */
 export type QualifyChoice = ClarifyChoice;
 /** @deprecated Use ClarifyPrompt */
@@ -71,8 +79,7 @@ export type ThreadItem =
       lastFinishOk?: boolean;
       resumable?: boolean;
       isFocused?: boolean;
-      /** Session 2.0 — flag de thinking para compat com testes/dev routes. */
-      thinking?: boolean | null;
+      thinking?: TurnThinkingState | null;
     }
   | {
       kind: "plan_status";

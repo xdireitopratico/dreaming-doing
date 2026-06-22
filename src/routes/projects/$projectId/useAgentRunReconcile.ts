@@ -1,9 +1,14 @@
-import { useEffect, useRef } from "react";
+import { useEffect } from "react";
+import type { RealtimeChannel } from "@supabase/supabase-js";
 
 import { supabase } from "@/integrations/supabase/client";
+import { removeRealtimeChannel, subscribePostgresChanges } from "@/lib/supabase-realtime";
 import type { useAgentRun } from "@/hooks/useAgentRun";
 
 type AgentRun = ReturnType<typeof useAgentRun>;
+
+const RECONCILE_POLL_MS = 500;
+const RECONCILE_WINDOW_MS = 5000;
 
 async function fetchLiveRunForConversation(
   projectId: string,
@@ -30,23 +35,45 @@ export function useAgentRunReconcile(
   conversationId: string | undefined,
   agent: AgentRun,
 ) {
-  const mountReconciledRef = useRef<string | null>(null);
-
   const { watch, syncPendingCount, activeRunId, progress } = agent;
 
   useEffect(() => {
     if (!conversationId) return;
-    if (mountReconciledRef.current === conversationId) return;
-    mountReconciledRef.current = conversationId;
 
-    void (async () => {
+    let cancelled = false;
+    let channel: RealtimeChannel | null = null;
+
+    const tryAttach = async (): Promise<boolean> => {
       const runId = await fetchLiveRunForConversation(projectId, conversationId);
-      if (!runId) return;
-      if (activeRunId === runId && !progress.finished) return;
+      if (cancelled || !runId) return false;
+      if (activeRunId === runId && !progress.finished) return true;
       if (!activeRunId || progress.finished) {
         await watch(projectId, conversationId, runId);
       }
+      return true;
+    };
+
+    void (async () => {
+      const deadline = Date.now() + RECONCILE_WINDOW_MS;
+      while (!cancelled && Date.now() < deadline) {
+        if (await tryAttach()) return;
+        await new Promise((resolve) => setTimeout(resolve, RECONCILE_POLL_MS));
+      }
     })();
+
+    channel = subscribePostgresChanges({
+      channelName: `agent-runs-reconcile-${projectId}-${conversationId}`,
+      table: "agent_runs",
+      filter: `conversation_id=eq.${conversationId}`,
+      onChange: () => {
+        void tryAttach();
+      },
+    });
+
+    return () => {
+      cancelled = true;
+      removeRealtimeChannel(channel);
+    };
   }, [projectId, conversationId, watch, activeRunId, progress.finished]);
 
   useEffect(() => {

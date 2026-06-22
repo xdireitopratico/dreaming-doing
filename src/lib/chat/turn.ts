@@ -6,7 +6,7 @@ import { resolveJobPlanForRun } from "@/lib/plan-message-meta";
 import { parseClarifyChoices } from "@/lib/clarify-choices";
 import { resolveAssistantProgress } from "@/lib/chat/resolve-progress";
 import { enforceAssistantTurnInvariant } from "@/lib/chat/invariants";
-import { resolveTurnNarration } from "@/lib/chat/turn-display";
+import { resolveTurnNarration, resolveTurnThinking } from "@/lib/chat/turn-display";
 import { resolveHistoricalRunProgress } from "@/lib/assistant-run-progress";
 import { initialAgentProgress } from "@/lib/agent-progress";
 import type {
@@ -189,6 +189,10 @@ export function mapAssistantTurn(
   const persistMiniCard =
     !!runView && (showJobCard || (!!item.message && hasMaterializedCardSnapshot(item.message)));
   const miniCard = persistMiniCard && runView ? toMiniCard(runView) : null;
+  const thinking = resolveTurnThinking(runView, {
+    slotActive,
+    runStartedAtMs,
+  });
 
   const turn: Extract<ThreadItem, { kind: "assistant" }> = {
     kind: "assistant",
@@ -207,6 +211,7 @@ export function mapAssistantTurn(
     lastFinishOk: runView?.lastFinishOk ?? resolved?.lastFinishOk ?? undefined,
     resumable: runView?.resumable ?? resolved?.resumable ?? false,
     isFocused: !!focusedRunId && focusedRunId === runId,
+    thinking,
   };
 
   return enforceAssistantTurnInvariant(turn);
