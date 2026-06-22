@@ -62,9 +62,8 @@ const FIXTURES: {
         runId: "run-img4",
         isActive: true,
         streamText: null,
-        thinking: { variant: "latency", active: false, durationMs: 4000 },
+        working: { status: "done", durationSec: 4 },
         narration: "Vou investigar o estado atual do container DP Lara antes de organizar a higienização.",
-        statusChips: [],
         miniCard: {
           title: "Orchestrating Lara container cleanup",
           header: "Working",
@@ -93,7 +92,7 @@ const FIXTURES: {
         runId: "run-img5",
         isActive: true,
         streamText: null,
-        thinking: { variant: "latency", active: false, durationMs: 4000 },
+        working: { status: "done", durationSec: 4 },
         narration: "Vou investigar o estado atual do container DP Lara antes de organizar a higienização.",
         miniCard: {
           title: "Orchestrating Lara container cleanup",
@@ -127,7 +126,7 @@ const FIXTURES: {
         runId: "run-img8",
         isActive: true,
         streamText: null,
-        thinking: { variant: "latency", active: false, durationMs: 4000 },
+        working: { status: "done", durationSec: 4 },
         narration: "Vou investigar o estado atual do container DP Lara antes de organizar a higienização.",
         miniCard: {
           title: "Configuring Lara workspace safeguards now",
@@ -161,7 +160,7 @@ const FIXTURES: {
         runId: "run-img9",
         isActive: true,
         streamText: null,
-        thinking: { variant: "latency", active: false, durationMs: 4000 },
+        working: { status: "done", durationSec: 4 },
         narration: "Vou investigar o estado atual do container DP Lara antes de organizar a higienização.",
         miniCard: {
           title: "Configuring Lara workspace safeguards now",

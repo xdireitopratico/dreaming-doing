@@ -1,11 +1,13 @@
 #!/usr/bin/env node
 /**
  * Lista runs zumbis (running/pending > 15 min) e sai com código 1 se houver.
+ * Ignora handoff entre chunks (betweenChunks / chunk_resume recente).
  *
  * Usage: node scripts/check-stale-runs.mjs [--project-id=UUID]
  */
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { shouldSkipStaleExpiry } from "./lib/stale-run-filter.mjs";
 
 function loadEnvLocal() {
   const path = resolve(process.cwd(), ".env.local");
@@ -45,36 +47,70 @@ function arg(name) {
 const projectId = arg("project-id");
 const cutoff = new Date(Date.now() - STALE_MS).toISOString();
 
+function restHeaders() {
+  return {
+    apikey: SERVICE_KEY,
+    Authorization: `Bearer ${SERVICE_KEY}`,
+  };
+}
+
+async function lastStreamEvent(runId) {
+  const url = `${SUPABASE_URL}/rest/v1/agent_stream_events?run_id=eq.${runId}&select=event_type,created_at&order=seq.desc&limit=1`;
+  const res = await fetch(url, { headers: restHeaders() });
+  const rows = await res.json();
+  if (!res.ok || !rows?.[0]) return { lastEventType: null, lastEventAt: null };
+  return {
+    lastEventType: rows[0].event_type ?? null,
+    lastEventAt: rows[0].created_at ?? null,
+  };
+}
+
 async function main() {
   if (!SUPABASE_URL || !SERVICE_KEY) {
     console.error("FAIL: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY required");
     process.exit(1);
   }
 
-  let url = `${SUPABASE_URL}/rest/v1/agent_runs?status=in.(running,pending)&started_at=lt.${cutoff}&select=id,project_id,status,started_at,error&order=started_at.asc`;
+  let url = `${SUPABASE_URL}/rest/v1/agent_runs?status=in.(running,pending)&started_at=lt.${cutoff}&select=id,project_id,status,started_at,error,meta&order=started_at.asc`;
   if (projectId) {
     url += `&project_id=eq.${projectId}`;
   }
 
-  const res = await fetch(url, {
-    headers: {
-      apikey: SERVICE_KEY,
-      Authorization: `Bearer ${SERVICE_KEY}`,
-    },
-  });
+  const res = await fetch(url, { headers: restHeaders() });
   const rows = await res.json();
   if (!res.ok) {
     console.error("FAIL: query", res.status, JSON.stringify(rows));
     process.exit(1);
   }
 
-  if (!rows.length) {
-    console.log("OK: 0 stale runs");
+  const stale = [];
+  for (const r of rows ?? []) {
+    const meta = r.meta && typeof r.meta === "object" ? r.meta : {};
+    const { lastEventType, lastEventAt } = await lastStreamEvent(r.id);
+    if (
+      shouldSkipStaleExpiry({
+        meta,
+        lastEventType,
+        lastEventAt,
+      })
+    ) {
+      continue;
+    }
+    stale.push(r);
+  }
+
+  if (!stale.length) {
+    const skipped = (rows?.length ?? 0) - stale.length;
+    if (skipped > 0) {
+      console.log(`OK: 0 stale runs (${skipped} em handoff entre chunks ignorada(s))`);
+    } else {
+      console.log("OK: 0 stale runs");
+    }
     process.exit(0);
   }
 
-  console.error(`STALE RUNS (${rows.length}):`);
-  for (const r of rows) {
+  console.error(`STALE RUNS (${stale.length}):`);
+  for (const r of stale) {
     console.error(`  ${r.id} project=${r.project_id} status=${r.status} started=${r.started_at}`);
   }
   console.error("\nCleanup SQL (substitua PROJECT_ID):");

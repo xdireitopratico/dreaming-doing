@@ -51,27 +51,9 @@ export type ForgeTimelineItem =
   | { type: "TOOL"; id: string; name: string; path?: string; detail?: string; active?: boolean }
   | { type: "RESULT"; id: string; ok: boolean; text: string; evidence?: string[] };
 
-/** Timer imediato ao enviar mensagem — congela e permanece no chat. */
-export type LatencyThinking = {
-  active: boolean;
-  startedAtMs: number;
-  /** Duração fixa após congelar — «Thought for Xs» permanente. */
-  durationMs?: number;
-};
-
-/** Raciocínio interno (thinking:true SSE) — «Thought for Xs» no inspector. */
-export type ReasoningThought = {
-  active: boolean;
-  durationMs: number;
-};
-
 export type AgentRunView = {
   runId: string;
   miniCard: ForgeMiniCardData;
-  /** @deprecated use latencyThinking / reasoningThought */
-  thinking: { active: boolean; durationMs: number; text?: string } | null;
-  latencyThinking: LatencyThinking | null;
-  reasoningThought: ReasoningThought | null;
   narration: string | null;
   closingText: string | null;
   timeline: ForgeTimelineItem[];
@@ -230,19 +212,24 @@ export function buildForgeTimeline(timeline: SSEEvent[], running = false): Forge
         name,
         path: path || undefined,
         detail: path ? undefined : JSON.stringify(args ?? {}).slice(0, 200),
+        active: running,
       });
       continue;
     }
 
-    if (ev.type === "tool_result" || ev.type === "tool_end") {
+    if (ev.type === "tool_done" || ev.type === "tool_result" || ev.type === "tool_end") {
       const ok = data.ok !== false && data.error == null;
-      const text =
-        typeof data.summary === "string"
-          ? data.summary
-          : ok
-            ? "Concluído"
-            : "Erro";
-      items.push({ type: "RESULT", id: `result-${ts}`, ok, text });
+      for (let i = items.length - 1; i >= 0; i--) {
+        const item = items[i];
+        if (item?.type !== "TOOL" || item.active === false) continue;
+        items[i] = { ...item, active: false };
+        break;
+      }
+      if (ev.type !== "tool_done") {
+        const text =
+          typeof data.summary === "string" ? data.summary : ok ? "Concluído" : "Erro";
+        items.push({ type: "RESULT", id: `result-${ts}`, ok, text });
+      }
       continue;
     }
 
@@ -446,59 +433,6 @@ export function toolBriefing(name: string, path?: string): string {
   const file = path ? fileBase(path) : "";
   if (name === "shell_exec") return file ? `Executando ${file}…` : "Executando comando…";
   return file ? `${verb} ${file}…` : `${verb}…`;
-}
-
-/** 1º token no inspector ou no chat — congela Thinking → Thought for Xs. */
-export function hasFirstInspectorToken(progress: AgentProgress): boolean {
-  if (progress.streamText?.trim() || progress.narrationText?.trim()) return true;
-  return progress.timeline.some(
-    (ev) =>
-      ev.type === "assistant_text" &&
-      typeof ev.data?.text === "string" &&
-      String(ev.data.text).trim().length > 0,
-  );
-}
-
-/** Think latency — congela ao 1º token e permanece no chat (append-only). */
-export function resolveLatencyThinking(
-  progress: AgentProgress,
-  running: boolean,
-  runStartedAtMs: number | null | undefined,
-  forgeTimeline?: ForgeTimelineItem[],
-): LatencyThinking | null {
-  const storedMs = progress.latencyThoughtMs;
-  if (storedMs != null && storedMs > 0) {
-    return {
-      active: false,
-      startedAtMs: runStartedAtMs ?? Date.now() - storedMs,
-      durationMs: storedMs,
-    };
-  }
-
-  if (!runStartedAtMs) return null;
-
-  const timeline = forgeTimeline ?? buildForgeTimeline(progress.timeline, running);
-  const thoughtItems = timeline.filter((i) => i.type === "THOUGHT");
-  const shouldFreeze = hasFirstInspectorToken(progress) || thoughtItems.length > 0;
-
-  if (shouldFreeze) {
-    const durationMs = Math.max(500, Date.now() - runStartedAtMs);
-    return { active: false, startedAtMs: runStartedAtMs, durationMs };
-  }
-
-  if (!running) return null;
-
-  return { active: true, startedAtMs: runStartedAtMs };
-}
-
-export function hasInspectorThoughtStream(progress: AgentProgress): boolean {
-  return progress.timeline.some(
-    (ev) =>
-      ev.type === "assistant_text" &&
-      ev.data?.thinking === true &&
-      typeof ev.data?.text === "string" &&
-      String(ev.data.text).trim().length > 0,
-  );
 }
 
 /** Briefing do mini card — sem gather/explore genérico (só trabalho real). */
@@ -836,40 +770,6 @@ export function buildAgentRunView(
         : liveBriefings;
   const { tasks, currentTaskIndex } = deriveMiniCardTasks(progress, jobPlan, jobActive);
 
-  const thoughtItems = forgeTimeline.filter((i) => i.type === "THOUGHT");
-  const lastThought = thoughtItems[thoughtItems.length - 1];
-
-  let reasoningThought: ReasoningThought | null = null;
-  if (lastThought?.type === "THOUGHT") {
-    reasoningThought = {
-      active: !!lastThought.active,
-      durationMs: lastThought.durationMs,
-    };
-  }
-
-  const runStartedAtMs = opts?.runStartedAtMs;
-  const latencyThinking = resolveLatencyThinking(
-    progress,
-    jobActive,
-    runStartedAtMs,
-    forgeTimeline,
-  );
-
-  const thinking: AgentRunView["thinking"] = reasoningThought
-    ? {
-        active: reasoningThought.active,
-        durationMs: reasoningThought.durationMs,
-        text: lastThought?.type === "THOUGHT" ? lastThought.text : undefined,
-      }
-    : latencyThinking
-      ? {
-          active: latencyThinking.active,
-          durationMs:
-            latencyThinking.durationMs ??
-            Math.max(500, Date.now() - latencyThinking.startedAtMs),
-        }
-      : null;
-
   const streamBody = progress.streamText?.trim() || null;
   const narrationBody = progress.narrationText?.trim() || null;
   const summaryBody = progress.summary?.trim();
@@ -940,9 +840,6 @@ export function buildAgentRunView(
       hasPlan: !!jobPlan?.steps?.length,
       lastTool,
     },
-    thinking,
-    latencyThinking,
-    reasoningThought,
     narration: narrationForLine,
     closingText,
     timeline: forgeTimeline,

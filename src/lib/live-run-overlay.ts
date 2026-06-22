@@ -14,7 +14,7 @@ export function shouldRetainLiveRunSlot(progress: AgentProgress): boolean {
   if (progress.pendingPlan?.steps?.length) return true;
   if (progress.awaiting) return true;
   if (lifecycle === "stale" || lifecycle === "failed") return true;
-  if (progress.latencyThoughtMs != null && progress.latencyThoughtMs > 0) return true;
+  if (progress.workingDurationMs != null && progress.workingDurationMs > 0) return true;
   if (progress.streamText?.trim() || progress.narrationText?.trim()) return true;
   if ((progress.deliveryFiles?.length ?? 0) > 0) return true;
   if ((progress.timeline?.length ?? 0) > 0) return true;

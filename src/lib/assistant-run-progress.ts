@@ -127,12 +127,14 @@ export function enrichProgressFromMessageMeta(
     if (body) next = { ...next, streamText: body };
   }
 
-  if (next.latencyThoughtMs == null) {
-    const metaLatency =
-      typeof meta.latencyThoughtMs === "number" && meta.latencyThoughtMs > 0
-        ? meta.latencyThoughtMs
-        : null;
-    if (metaLatency != null) next = { ...next, latencyThoughtMs: metaLatency };
+  if (next.workingDurationMs == null) {
+    const metaDuration =
+      typeof meta.workingDurationMs === "number" && meta.workingDurationMs > 0
+        ? meta.workingDurationMs
+        : typeof meta.latencyThoughtMs === "number" && meta.latencyThoughtMs > 0
+          ? meta.latencyThoughtMs
+          : null;
+    if (metaDuration != null) next = { ...next, workingDurationMs: metaDuration };
   }
 
   if (!next.narrationText?.trim()) {
@@ -283,10 +285,12 @@ function progressFromCardSnapshot(snap: Record<string, unknown>, msg: ChatMessag
   const narrationText =
     typeof snap.narrationText === "string" && snap.narrationText.trim() ? snap.narrationText : null;
 
-  const latencyThoughtMs =
-    typeof snap.latencyThoughtMs === "number" && snap.latencyThoughtMs > 0
-      ? snap.latencyThoughtMs
-      : null;
+  const workingDurationMs =
+    typeof snap.workingDurationMs === "number" && snap.workingDurationMs > 0
+      ? snap.workingDurationMs
+      : typeof snap.workingDurationMs === "number" && snap.workingDurationMs > 0
+        ? snap.workingDurationMs
+        : null;
 
   const statusChips = Array.isArray(snap.statusChips)
     ? snap.statusChips.filter((c): c is string => typeof c === "string")
@@ -306,7 +310,7 @@ function progressFromCardSnapshot(snap: Record<string, unknown>, msg: ChatMessag
     resumable: snap.resumable === true,
     streamText,
     narrationText,
-    latencyThoughtMs,
+    workingDurationMs,
     lastFinishOk: typeof snap.lastFinishOk === "boolean" ? snap.lastFinishOk : null,
     diffs,
     pendingPlan,
@@ -354,10 +358,12 @@ export function progressFromAssistantMessage(msg: ChatMessage): AgentProgress | 
     );
   }
 
-  const metaLatency =
-    typeof meta.latencyThoughtMs === "number" && meta.latencyThoughtMs > 0
-      ? meta.latencyThoughtMs
-      : null;
+  const metaDuration =
+    typeof meta.workingDurationMs === "number" && meta.workingDurationMs > 0
+      ? meta.workingDurationMs
+      : typeof meta.workingDurationMs === "number" && meta.workingDurationMs > 0
+        ? meta.workingDurationMs
+        : null;
 
   const finishedAt = typeof meta.finishedAt === "string";
   const deliveryFiles = Array.isArray(meta.deliveryFiles) ? (meta.deliveryFiles as string[]) : [];
@@ -404,7 +410,7 @@ export function progressFromAssistantMessage(msg: ChatMessage): AgentProgress | 
     lastFinishOk,
     streamText: body,
     narrationText,
-    latencyThoughtMs: metaLatency,
+    workingDurationMs: metaDuration,
     summary: null,
     deliveryFiles,
     pendingPlan: planPending,

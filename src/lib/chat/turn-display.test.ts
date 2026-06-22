@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { initialAgentProgress } from "@/lib/agent-progress";
 import { buildAgentRunView } from "@/lib/forge-run";
-import { resolveTurnNarration, resolveTurnThinking } from "@/lib/chat/turn-display";
+import { resolveChatWorking, resolveTurnNarration } from "@/lib/chat/turn-display";
 
 describe("turn-display — entrou, permanece", () => {
   it("resolveTurnNarration — permanece distinta do stream final", () => {
@@ -29,23 +29,25 @@ describe("turn-display — entrou, permanece", () => {
     expect(narration).toBe(narrationLine);
   });
 
-  it("resolveTurnThinking — run ativa mostra latency Pensando", () => {
+  it("resolveChatWorking — run ativa sem conteúdo mostra Pensando", () => {
     const startedAt = Date.now() - 1200;
-    const thinking = resolveTurnThinking(null, { slotActive: true, runStartedAtMs: startedAt });
-    expect(thinking).toEqual({ variant: "latency", active: true, startedAtMs: startedAt });
+    const working = resolveChatWorking({
+      slotActive: true,
+      runStartedAtMs: startedAt,
+      hasVisibleContent: false,
+    });
+    expect(working).toEqual({ status: "active" });
   });
 
-  it("resolveTurnThinking — frozen latency após 1º token", () => {
+  it("resolveChatWorking — congela após conteúdo visível", () => {
     const startedAt = Date.now() - 4000;
-    const view = buildAgentRunView(
-      "run-1",
-      { ...initialAgentProgress, finished: false, latencyThoughtMs: 4000 },
-      { running: true, runStartedAtMs: startedAt },
-    );
-    const thinking = resolveTurnThinking(view, { slotActive: true, runStartedAtMs: startedAt });
-    expect(thinking?.variant).toBe("latency");
-    expect(thinking?.active).toBe(false);
-    expect(thinking?.durationMs).toBe(4000);
+    const working = resolveChatWorking({
+      slotActive: true,
+      runStartedAtMs: startedAt,
+      workingDurationMs: 4000,
+      hasVisibleContent: true,
+    });
+    expect(working).toEqual({ status: "done", durationSec: 4 });
   });
 
   it("buildAgentRunView — narration line persiste quando terminal", () => {

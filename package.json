@@ -20,6 +20,7 @@
     "format": "prettier --write .",
     "typecheck": "tsc --noEmit --project tsconfig.json",
     "test": "vitest run",
+    "test:agent-journey": "vitest run src/lib/chat/agent-turn-flow.test.ts src/lib/chat/lovable-acceptance.test.ts src/lib/chat-reliability.test.ts",
     "smoke:agent": "node scripts/smoke-agent-e2e.mjs",
     "smoke:aetherforge": "node scripts/smoke-aetherforge-e2e.mjs",
     "smoke:prometheus": "node scripts/smoke-prometheus-e2e.mjs --with-gateway",

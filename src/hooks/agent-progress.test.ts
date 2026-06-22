@@ -75,13 +75,13 @@ describe("applyAgentProgressEvent", () => {
       ...base,
       streamText: "Plano: landing viva e convertendo",
       narrationText: "Vou montar o plano.",
-      latencyThoughtMs: 83_000,
+      workingDurationMs: 83_000,
       timeline: [ev("phase", { phase: "creating_plan" })],
     };
     const next = applyAgentProgressEvent(stale, ev("start", {}));
     expect(next.streamText).toBeNull();
     expect(next.narrationText).toBeNull();
-    expect(next.latencyThoughtMs).toBeNull();
+    expect(next.workingDurationMs).toBeNull();
     expect(next.timeline).toHaveLength(1);
     expect(next.timeline[0]?.type).toBe("start");
   });

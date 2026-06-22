@@ -305,7 +305,7 @@ function attachFrozenProgressToRun(
   return items.map((item) => {
     if (item.kind !== "assistant" || item.runId !== runId) return item;
     if (item.message && hasMaterializedCardSnapshot(item.message)) {
-      if (progress.latencyThoughtMs != null && progress.latencyThoughtMs > 0) {
+      if (progress.workingDurationMs != null && progress.workingDurationMs > 0) {
         return {
           ...item,
           live: item.live ?? progress,

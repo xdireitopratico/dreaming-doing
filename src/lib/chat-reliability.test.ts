@@ -383,10 +383,9 @@ function baseProgress() {
     buildLogLines: [],
     stackForkSuggested: null,
     narrationText: null,
-    latencyThoughtMs: null,
+    workingDurationMs: null,
     fsmState: null,
     planSummary: null,
-    statusChips: [],
     conversational: false,
   };
 }

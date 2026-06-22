@@ -36,15 +36,6 @@ describe("assertAssistantTurnInvariant", () => {
     streamText: null,
   };
 
-  it("rejeita status chips no chat", () => {
-    expect(() =>
-      assertAssistantTurnInvariant({
-        ...base,
-        statusChips: ["chip"],
-      }),
-    ).toThrow(/status chips removed/);
-  });
-
   it("rejeita fechamento durante run ativa com mini-card", () => {
     expect(() =>
       assertAssistantTurnInvariant({
@@ -89,13 +80,12 @@ describe("mapAssistantTurn — contrato Lovable imutável", () => {
 
     expect(turn.miniCard).not.toBeNull();
     expect(turn.miniCard?.header).toBe("Working");
-    expect(turn.statusChips).toHaveLength(0);
     expect(turn.narration).toBe("Vou investigar o estado atual.");
     expect(turn.streamText).toBeNull();
     assertAssistantTurnInvariant(turn);
   });
 
-  it("run ativa com activeRunStartedAtMs: exibe Pensando (latency)", () => {
+  it("run ativa com activeRunStartedAtMs: exibe Pensando", () => {
     const progress = {
       ...initialAgentProgress,
       phase: "build" as const,
@@ -113,11 +103,7 @@ describe("mapAssistantTurn — contrato Lovable imutável", () => {
       activeRunStartedAtMs: startedAt,
       sessionProgress: progress,
     });
-    expect(turn.thinking).toEqual({
-      variant: "latency",
-      active: true,
-      startedAtMs: startedAt,
-    });
+    expect(turn.working).toEqual({ status: "active" });
     assertAssistantTurnInvariant(turn);
   });
 
@@ -153,7 +139,6 @@ describe("mapAssistantTurn — contrato Lovable imutável", () => {
 
     expect(turn.miniCard).not.toBeNull();
     expect(turn.miniCard?.header).toMatch(/^Edited /);
-    expect(turn.statusChips).toHaveLength(0);
     assertAssistantTurnInvariant(turn);
   });
 
@@ -176,7 +161,6 @@ describe("mapAssistantTurn — contrato Lovable imutável", () => {
     });
 
     expect(turn.miniCard?.header).toBe("Running command");
-    expect(turn.statusChips).toHaveLength(0);
     assertAssistantTurnInvariant(turn);
   });
 
@@ -209,7 +193,6 @@ describe("mapAssistantTurn — contrato Lovable imutável", () => {
     });
 
     expect(turn.miniCard).toBeNull();
-    expect(turn.statusChips).toHaveLength(0);
     assertAssistantTurnInvariant(turn);
   });
 
@@ -218,7 +201,7 @@ describe("mapAssistantTurn — contrato Lovable imutável", () => {
       ...initialAgentProgress,
       streamText: "Plano: landing viva e convertendo",
       narrationText: "Missão: entregar landing viva",
-      latencyThoughtMs: 83_000,
+      workingDurationMs: 83_000,
       finished: false,
     };
     const messages = [
@@ -281,7 +264,7 @@ describe("mapAssistantTurn — contrato Lovable imutável", () => {
     expect(turn.miniCard).toBeNull();
   });
 
-  it("Terminal img15: chips de plano, sem mini-card", () => {
+  it("Terminal img15: plano pendente, sem mini-card", () => {
     const plan = {
       planId: "p1",
       summary: "Defining cross-view deletion strategy planning",
@@ -307,11 +290,6 @@ describe("mapAssistantTurn — contrato Lovable imutável", () => {
           runId: "run-plan",
           cardSnapshot: {
             ...progress,
-            statusChips: [
-              "Reading approved plan",
-              "Defining cross-view deletion strategy planning",
-              "Plan: Desbloquear exclusão do documento travado (vínculo com proposta no banco)",
-            ],
           },
         },
       }),
@@ -332,7 +310,6 @@ describe("mapAssistantTurn — contrato Lovable imutável", () => {
     });
 
     expect(turn.miniCard).toBeNull();
-    expect(turn.statusChips).toHaveLength(0);
     assertAssistantTurnInvariant(turn);
   });
 });

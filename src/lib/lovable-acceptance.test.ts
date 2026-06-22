@@ -124,7 +124,7 @@ describe("Lovable acceptance — Chat (imgs 4/5/9/15)", () => {
           cardSnapshot: {
             finished: true,
             lastFinishOk: true,
-            latencyThoughtMs: 4000,
+            workingDurationMs: 4000,
             narrationText: "Vou investigar o estado atual do container DP Lara.",
             streamText: "Pronto.",
             timeline: [],

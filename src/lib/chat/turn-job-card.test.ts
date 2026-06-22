@@ -24,7 +24,7 @@ describe("mapAssistantTurn — mini-card permanece", () => {
             tools: [{ name: "fs_read", args: { path: "Dockerfile.lara" }, ok: true }],
             diffs: [],
             streamText: "Pronto.",
-            latencyThoughtMs: 4000,
+            workingDurationMs: 4000,
             narrationText: "Vou investigar o estado atual.",
           },
         },

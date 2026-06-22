@@ -25,7 +25,7 @@ import { type LogEntry, LogPanel } from "@/components/editor/LogPanel";
 import { AiDiffViewer, type DiffEntry } from "@/components/editor/AiDiffViewer";
 import { usePendingPlan } from "@/hooks/usePendingPlan";
 import { PENDING_RUN_ID } from "@/lib/pending-run-id";
-import { hasFirstInspectorToken } from "@/lib/forge-run";
+
 import { resolveInspectorRunProgress } from "@/lib/assistant-run-progress";
 import type { AgentProgress } from "@/lib/agent-progress";
 import { VisualEditorPanel } from "@/components/editor/visual-editor/VisualEditorPanel";

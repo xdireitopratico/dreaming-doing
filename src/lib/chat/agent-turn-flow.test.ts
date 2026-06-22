@@ -39,7 +39,7 @@ describe("S15 agent turn flow", () => {
       ev("assistant_text", { text: "Pronto — confere o preview.", final: true }),
       ev("done", { summary: "Pronto — confere o preview." }),
     ]);
-    progress = { ...progress, finished: true, streamText: "Pronto — confere o preview.", latencyThoughtMs: 4800 };
+    progress = { ...progress, finished: true, streamText: "Pronto — confere o preview.", workingDurationMs: 4800 };
 
     const messages: ChatMessage[] = [msg("u1", "user", "landing oficina")];
     const thread = buildChatThread(messages, progress, {
@@ -54,6 +54,7 @@ describe("S15 agent turn flow", () => {
     expect(turn?.kind).toBe("assistant");
     if (turn?.kind !== "assistant") return;
 
+    expect(turn.working?.status).toBe("done");
     expect(turn.narration).toContain("hero");
     expect(turn.narration).not.toMatch(/hero[\s\S]*hero/i);
     expect(turn.miniCard).toBeTruthy();
@@ -75,7 +76,7 @@ describe("S15 agent turn flow", () => {
           partial: false,
           finishedAt: "2026-06-12T12:00:00Z",
           narrationText: "Entendi: vou criar.\n\nEntendi: vou ajustar cores.",
-          latencyThoughtMs: 2400,
+          workingDurationMs: 2400,
           streamTail: [
             {
               type: "tool_start",
@@ -89,7 +90,7 @@ describe("S15 agent turn flow", () => {
             finished: true,
             streamText: "Pronto — landing da oficina.",
             narrationText: "Entendi: vou criar.\n\nEntendi: vou ajustar cores.",
-            latencyThoughtMs: 2400,
+            workingDurationMs: 2400,
           },
         },
       },
@@ -141,6 +142,25 @@ describe("S15 agent turn flow", () => {
       expect(thread[1].runId).toBe("run-order");
       expect(thread[1].isActive).toBe(true);
     }
+  });
+
+  it("run ativa sem conteúdo: linha Pensando", () => {
+    const startedAt = Date.now() - 900;
+    const progress = {
+      ...initialAgentProgress,
+      phase: "build" as const,
+      finished: false,
+    };
+    const thread = buildChatThread([msg("u1", "user", "landing")], progress, {
+      running: true,
+      activeRunId: "run-pensando",
+      activeRunStartedAtMs: startedAt,
+      sessionProgress: progress,
+    });
+    const turn = thread[1];
+    expect(turn?.kind).toBe("assistant");
+    if (turn?.kind !== "assistant") return;
+    expect(turn.working).toEqual({ status: "active" });
   });
 
   it("loop natural: abertura no chat, progresso factual só no inspector", () => {

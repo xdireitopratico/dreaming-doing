@@ -58,8 +58,7 @@ import {
   TOOL_FAIL_USER_MESSAGE,
 } from "./tool-progress.ts";
 import { logger } from "../_shared/logger.ts";
-import { transitionRun } from "../_shared/run-lifecycle.ts";
-import type { AgentRunStatus } from "../_shared/agent-contract-lifecycle.ts";
+
 import { appendExecutionLogEntry, buildExecutionLogMeta } from "./executionLogMeta.ts";
 import {
   collapseNarrationBuffer,
@@ -90,7 +89,7 @@ import { resolveAutoForComplexity } from "../_shared/model-presets.ts";
 import { ResilientLLM } from "./robin-pool.ts";
 import { formatLoopStatus, resolveClosureText, type LoopUpdateContext } from "./loop-status.ts";
 import { type AgentStateData, applyTransition, isTerminal } from "./agent-fsm.ts";
-import { RuntimeEmitter } from "./runtime/emitter.ts";
+import { RuntimeEmitter, type StreamCallback } from "./runtime/emitter.ts";
 
 const CHECKPOINT_INTERVAL_STEPS = 2;
 const MAX_LLM_RETRIES = 3;
@@ -142,6 +141,24 @@ function calculateMaxSteps(complexity: 1 | 2 | 3 | 4 | 5): number {
   };
   return limits[complexity] ?? 60;
 }
+
+export type AgentLoopRunResult = {
+  ok: boolean;
+  summary?: string;
+  error?: string;
+  steps: number;
+  resumable?: boolean;
+  buildFix?: boolean;
+  canceled?: boolean;
+  toolsUsed?: string[];
+  awaiting?: boolean;
+  awaitingUser?: Record<string, unknown>;
+  plan?: ProposedPlan;
+  totalInputTokens?: number;
+  totalOutputTokens?: number;
+  totalTokens?: number;
+  costUsd?: number;
+};
 
 /** H9 fix: cap meta JSONB em 50KB para não estourar Realtime.
  *  executionLog e streamTail podem crescer indefinidamente em runs longas.
@@ -645,19 +662,7 @@ export class AgentLoop {
     });
   }
 
-  async run(): Promise<{
-    ok: boolean;
-    summary?: string;
-    error?: string;
-    steps: number;
-    resumable?: boolean;
-    canceled?: boolean;
-    toolsUsed?: string[];
-    totalInputTokens?: number;
-    totalOutputTokens?: number;
-    totalTokens?: number;
-    costUsd?: number;
-  }> {
+  async run(): Promise<AgentLoopRunResult> {
     if (!this.resumeRun) {
       this.state.executionLog = [];
     }
@@ -686,6 +691,8 @@ export class AgentLoop {
       });
       if (!this.planMode) {
         await this.emitTransition("no_plan_needed");
+      } else {
+        return await this.runPlanModeAgentTurn(executionModel);
       }
 
       // Plan runs terminate after proposing (no in-memory decision wait).
@@ -722,11 +729,11 @@ export class AgentLoop {
           };
           return await this.finishPlanProposal(reopened);
         }
-        const reply = "";
+        const reply =
+          "Não encontrei um plano salvo para mostrar. Descreva o que você quer construir.";
         this.emit("assistant_text", { text: reply, final: true });
         await this.persistFinal(reply, { lastFinishOk: true, conversational: true });
         await this.clearCheckpoint();
-        await this.markRunStatus("completed");
         this.emit("done", { summary: reply, conversational: true });
         return { ok: true, summary: reply, steps: 0, toolsUsed: [] };
       }
@@ -744,6 +751,7 @@ export class AgentLoop {
       if (this.loopBudgetExceeded()) {
         return this.returnResumableChunk(0, toolsUsed);
       }
+      this.emit("phase", { phase: "gather", message: "" });
       await this.gatherContext();
       if (this.loopBudgetExceeded()) {
         return this.returnResumableChunk(0, toolsUsed);
@@ -822,7 +830,6 @@ export class AgentLoop {
         this.emit("assistant_text", { text: inv, final: true });
         await this.persistFinal(inv);
         await this.clearCheckpoint();
-        await this.markRunStatus("completed");
         this.emit("done", { summary: inv, inventory: true });
         return { ok: true, summary: inv, steps: 0, toolsUsed: [] };
       }
@@ -1091,12 +1098,6 @@ export class AgentLoop {
               const closing = await this.attemptGracefulClosing("tool_miss");
               const msg = closing ?? TOOL_FAIL_USER_MESSAGE;
               await this.persistFinal(msg, { lastFinishOk: false });
-              await this.markRunStatus("failed");
-              this.emit("finish", {
-                ok: false,
-                resumable: false,
-                error: msg,
-              });
               return {
                 ok: false,
                 error: msg,
@@ -1120,10 +1121,6 @@ export class AgentLoop {
 
         if (assistantText) {
           this.emitAgentProse(assistantText);
-        } else if (!this.openingEmitted && !this.buildFixResume) {
-          this.emitOpeningToChat(
-            "",
-          );
         }
 
         this.emit("phase", {
@@ -1677,7 +1674,6 @@ export class AgentLoop {
     this.emit("assistant_text", { text: message, final: true });
     await this.persistFinal(message, { lastFinishOk: false });
     await this.clearCheckpoint();
-    await this.markRunStatus("failed");
     return {
       ok: false,
       summary: message,
@@ -1690,12 +1686,7 @@ export class AgentLoop {
   private async finishPlanProposal(
     proposedPlan: ProposedPlan,
     toolsUsed: string[] = [],
-  ): Promise<{
-    ok: boolean;
-    summary: string;
-    steps: number;
-    toolsUsed: string[];
-  }> {
+  ): Promise<AgentLoopRunResult> {
     const planChatText = await generatePlanChatMessage(this.configuredModel(), proposedPlan);
     if (!planChatText) {
       return {
@@ -1729,10 +1720,6 @@ export class AgentLoop {
     await this.emitTransition("plan_proposed", proposedPlan);
     await this.persistPlanFinal(planChatText, proposedPlan);
     await this.clearCheckpoint();
-    await this.markRunStatus("awaiting_user", {
-      plan: proposedPlan,
-      awaitingUser: { type: "plan_approval", planId: proposedPlan.planId },
-    });
     this.emit("done", {
       summary: proposedPlan.summary,
       plan: proposedPlan,
@@ -1744,6 +1731,9 @@ export class AgentLoop {
       summary: proposedPlan.summary,
       steps: 0,
       toolsUsed,
+      awaiting: true,
+      awaitingUser: { type: "plan_approval", planId: proposedPlan.planId },
+      plan: proposedPlan,
     };
   }
 
@@ -1751,7 +1741,7 @@ export class AgentLoop {
     message: string,
     steps: number,
     toolsUsed: string[],
-  ): Promise<{ ok: boolean; summary: string; steps: number; toolsUsed: string[] }> {
+  ): Promise<AgentLoopRunResult> {
     const text = message.trim();
     if (!text) {
       return {
@@ -1772,11 +1762,15 @@ export class AgentLoop {
       awaitingKind: "clarify",
     });
     await this.clearCheckpoint();
-    await this.markRunStatus("awaiting_user", {
-      awaitingUser: { type: "clarify", message: text.slice(0, 200) },
-    });
     this.emit("done", { summary: text, qualified: true, awaiting: true });
-    return { ok: true, summary: text, steps, toolsUsed };
+    return {
+      ok: true,
+      summary: text,
+      steps,
+      toolsUsed,
+      awaiting: true,
+      awaitingUser: { type: "clarify", message: text.slice(0, 200) },
+    };
   }
 
   private buildPlanModeInstruction(): string {
@@ -1795,15 +1789,7 @@ export class AgentLoop {
     });
   }
 
-  private async runPlanModeAgentTurn(model: LLMProvider): Promise<{
-    ok: boolean;
-    summary: string;
-    steps: number;
-    toolsUsed: string[];
-    error?: string;
-    resumable?: boolean;
-    buildFix?: boolean;
-  }> {
+  private async runPlanModeAgentTurn(model: LLMProvider): Promise<AgentLoopRunResult> {
     const MAX_PLAN_EXPLORE = 10;
     const toolsUsed = new Set<string>();
 
@@ -1945,20 +1931,16 @@ export class AgentLoop {
           this.emit("assistant_text", { text: clean, final: true });
           await this.persistFinal(clean, { lastFinishOk: true, conversational: true });
           await this.clearCheckpoint();
-          await this.markRunStatus("completed");
           this.emit("done", { summary: clean, conversational: true });
           return { ok: true, summary: clean, steps: step, toolsUsed: [...toolsUsed] };
         }
-        // Se thinking foi streamed mas content vazio, não falhar — modelo processou via thinking
         if (this.llmResponseWasStreamed) {
-          const fallback = "";
-          const clean = sanitizeUserFacingProse(fallback);
-          this.emit("assistant_text", { text: clean, final: true });
-          await this.persistFinal(clean, { lastFinishOk: true, conversational: true });
-          await this.clearCheckpoint();
-          await this.markRunStatus("completed");
-          this.emit("done", { summary: clean, conversational: true });
-          return { ok: true, summary: clean, steps: step, toolsUsed: [...toolsUsed] };
+          return await this.finishPlanModeFailure(
+            "O modelo respondeu sem texto nem ferramentas. Reformule o pedido do plano.",
+            step,
+            [...toolsUsed],
+            "plan_stream_empty",
+          );
         }
         // Infra-debug: log estruturado quando o modelo não retorna nada útil.
         // Esse é o caminho do Erro #1 ("Resposta sem tool nem texto") — sem
@@ -2114,50 +2096,6 @@ export class AgentLoop {
     });
   }
 
-  /**
-   * Atualiza agent_runs.status e meta. Best-effort.
-   * Status possíveis: running, completed, awaiting_user.
-   * Em plan mode, marca a run como completed com `plan` em meta.
-   */
-  private async markRunStatus(
-    status: "running" | "completed" | "failed" | "awaiting_user",
-    extra?: {
-      plan?: ProposedPlan | null;
-      awaitingUser?: Record<string, unknown>;
-    },
-  ): Promise<void> {
-    if (!this.runId) return;
-    try {
-      const metaDelta: Record<string, unknown> = { planMode: this.planMode };
-      if (extra && Object.prototype.hasOwnProperty.call(extra, "plan")) {
-        if (extra.plan === null) {
-          metaDelta.plan = null;
-        } else if (extra.plan) {
-          metaDelta.plan = extra.plan;
-        }
-      }
-      if (extra?.awaitingUser) {
-        metaDelta.awaitingUser = extra.awaitingUser;
-      }
-      const result = await transitionRun(this.sb, this.runId, status as AgentRunStatus, {
-        meta: metaDelta,
-      });
-      if (!result.ok && result.skipped) {
-        logger.warn("agent_run.mark_status_skipped", {
-          runId: this.runId,
-          from: result.from,
-          to: status,
-        });
-      }
-    } catch (err) {
-      logger.error("agent_run.mark_status_failed", {
-        runId: this.runId ?? undefined,
-        status,
-        error: (err as Error)?.message,
-      });
-    }
-  }
-
   private async runAdvisoryReply(): Promise<{
     ok: boolean;
     summary: string;
@@ -2179,7 +2117,6 @@ export class AgentLoop {
       conversational: true,
     });
     await this.clearCheckpoint();
-    await this.markRunStatus("completed");
     this.emit("done", { summary: reply, conversational: true });
     return { ok: true, summary: reply, steps: 0, toolsUsed: [] };
   }
@@ -2202,7 +2139,6 @@ export class AgentLoop {
       conversational: true,
     });
     await this.clearCheckpoint();
-    await this.markRunStatus("completed");
     this.emit("done", { summary: reply, conversational: true });
     return { ok: true, summary: reply, steps: 0, toolsUsed: [] };
   }
@@ -2284,10 +2220,13 @@ export class AgentLoop {
       role: "assistant",
       content: historyContent,
     });
-    this.state.messages.push({
-      role: "user",
-      content: decision.userNudge,
-    });
+    const nudge = decision.userNudge.trim();
+    if (nudge) {
+      this.state.messages.push({
+        role: "user",
+        content: nudge,
+      });
+    }
     return false;
   }
 

@@ -47,13 +47,10 @@ export type ClarifyPrompt = {
   choices: ClarifyChoice[];
 };
 
-/** Estado do bloco Thought no chat (Lovable). */
-export type TurnThinkingState = {
-  variant: "latency" | "reasoning";
-  active: boolean;
-  startedAtMs?: number;
-  durationMs?: number;
-};
+/** Linha única de trabalho no chat — Pensando… ou Pensou por Xs. */
+export type ChatWorkingState =
+  | { status: "active" }
+  | { status: "done"; durationSec: number };
 
 /** @deprecated Use ClarifyChoice */
 export type QualifyChoice = ClarifyChoice;
@@ -69,17 +66,15 @@ export type ThreadItem =
       isActive: boolean;
       streamText: string | null;
       phase?: RunPhase;
-      phaseMessage?: string | null;
       narration?: string | null;
       miniCard?: MiniCardData | null;
-      statusChips?: string[];
       clarify?: ClarifyPrompt | null;
       error?: string | null;
       finished?: boolean;
       lastFinishOk?: boolean;
       resumable?: boolean;
       isFocused?: boolean;
-      thinking?: TurnThinkingState | null;
+      working?: ChatWorkingState | null;
     }
   | {
       kind: "plan_status";

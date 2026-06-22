@@ -1,7 +1,7 @@
 import type { AgentProgress } from "@/lib/agent-progress";
 import type { AgentRunView } from "@/lib/forge-run";
 import { collapseNarrationBuffer } from "@/lib/narration-dedupe";
-import type { TurnThinkingState } from "@/lib/chat/types";
+import type { ChatWorkingState, MiniCardData } from "@/lib/chat/types";
 
 export function resolveTurnNarration(
   resolved: AgentProgress | null,
@@ -14,30 +14,58 @@ export function resolveTurnNarration(
   return collapsed || null;
 }
 
-/** Mapeia thinking do run view para o bloco Thought do chat. */
-export function resolveTurnThinking(
-  runView: Pick<AgentRunView, "thinking"> | null,
-  opts: { slotActive: boolean; runStartedAtMs?: number | null },
-): TurnThinkingState | null {
-  const t = runView?.thinking;
+/** Conteúdo que o usuário já vê no turno do chat (não inclui raciocínio interno). */
+export function hasTurnVisibleContent(progress: AgentProgress): boolean {
+  if (progress.narrationText?.trim()) return true;
+  if (progress.streamText?.trim()) return true;
+  if ((progress.tools?.length ?? 0) > 0) return true;
+  if ((progress.diffs?.length ?? 0) > 0) return true;
+  return false;
+}
 
-  if (t) {
-    const isLatency = !t.text?.trim();
-    if (t.active && isLatency && opts.runStartedAtMs) {
-      return { variant: "latency", active: true, startedAtMs: opts.runStartedAtMs };
-    }
-    if (t.durationMs > 0) {
-      return {
-        variant: isLatency ? "latency" : "reasoning",
-        active: t.active,
-        durationMs: t.durationMs,
-        startedAtMs: opts.runStartedAtMs ?? undefined,
-      };
-    }
+export function miniCardShowsInChat(card: MiniCardData | null | undefined): boolean {
+  if (!card) return false;
+  if (card.editedFile) return true;
+  if ((card.fileCount ?? 0) > 0) return true;
+  if (card.tasks.some((t) => t.status !== "pending")) return true;
+  if (card.header.trim() && card.header !== "Working") return true;
+  return false;
+}
+
+export function hasRenderedTurnContent(opts: {
+  narration?: string | null;
+  streamText?: string | null;
+  miniCard?: MiniCardData | null;
+}): boolean {
+  if (opts.narration?.trim()) return true;
+  if (opts.streamText?.trim()) return true;
+  if (miniCardShowsInChat(opts.miniCard)) return true;
+  return false;
+}
+
+/** Uma linha por turno: Pensando… → Pensou por Xs (congela uma vez). */
+export function resolveChatWorking(opts: {
+  slotActive: boolean;
+  runStartedAtMs?: number | null;
+  workingDurationMs?: number | null;
+  hasVisibleContent: boolean;
+}): ChatWorkingState | null {
+  const { slotActive, runStartedAtMs, workingDurationMs, hasVisibleContent } = opts;
+
+  if (workingDurationMs != null && workingDurationMs > 0) {
+    return {
+      status: "done",
+      durationSec: Math.max(1, Math.round(workingDurationMs / 1000)),
+    };
   }
 
-  if (opts.slotActive && opts.runStartedAtMs) {
-    return { variant: "latency", active: true, startedAtMs: opts.runStartedAtMs };
+  if (hasVisibleContent && runStartedAtMs) {
+    const ms = Math.max(1000, Date.now() - runStartedAtMs);
+    return { status: "done", durationSec: Math.max(1, Math.round(ms / 1000)) };
+  }
+
+  if (slotActive && runStartedAtMs) {
+    return { status: "active" };
   }
 
   return null;

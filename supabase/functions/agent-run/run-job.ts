@@ -194,6 +194,9 @@ export async function executeAgentJob(
   buildFix?: boolean;
   canceled?: boolean;
   toolsUsed?: string[];
+  awaiting?: boolean;
+  awaitingUser?: Record<string, unknown>;
+  plan?: unknown;
   // Session 2.0 — tokens/cost propagados do loop.run() para o finish terminal
   totalInputTokens?: number;
   totalOutputTokens?: number;
@@ -493,6 +496,9 @@ export async function executeAgentJob(
     buildFix?: boolean;
     canceled?: boolean;
     toolsUsed?: string[];
+    awaiting?: boolean;
+    awaitingUser?: Record<string, unknown>;
+    plan?: unknown;
     totalInputTokens?: number;
     totalOutputTokens?: number;
     totalTokens?: number;

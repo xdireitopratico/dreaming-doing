@@ -169,9 +169,10 @@ function isRichProgress(types) {
   );
 }
 
-function isTerminalSuccess(types, status) {
+function isTerminalHonest(types, status) {
+  if (types.includes("chunk_resume")) return true;
   if (status === "completed" || status === "awaiting_user") {
-    return types.includes("assistant_text") || types.includes("done");
+    return types.includes("finish") || types.includes("done");
   }
   return false;
 }
@@ -327,14 +328,8 @@ async function main() {
       process.exit(1);
     }
 
-    const rich = isRichProgress(types);
-    const progressed =
-      (lastEvents.length > 1 && rich) ||
-      lastRun?.status === "running" ||
-      isTerminalSuccess(types, lastRun?.status);
-
-    if (progressed) {
-      console.log("PASS: stream events", lastEvents.length, "types:", types.join(", "));
+    if (isTerminalHonest(types, lastRun?.status)) {
+      console.log("PASS: terminal honesto —", lastEvents.length, "events:", types.join(", "));
       console.log("Run status:", lastRun?.status, lastRun?.error ?? "");
       process.exit(0);
     }

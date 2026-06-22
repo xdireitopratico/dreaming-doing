@@ -43,7 +43,7 @@ describe("scopeLiveState", () => {
       finished: true,
       lastFinishOk: true,
       streamText: "Pronto!",
-      latencyThoughtMs: 3200,
+      workingDurationMs: 3200,
     };
     const messages = [msg("u1", "user", "oi")];
 

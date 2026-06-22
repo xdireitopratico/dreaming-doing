@@ -8,7 +8,6 @@ import {
   deriveBrainstormTitle,
   deriveSessionTitle,
   isRunEffectivelyActive,
-  resolveLatencyThinking,
   shouldShowJobCard,
 } from "@/lib/forge-run";
 
@@ -306,7 +305,6 @@ describe("forge-run terminal state", () => {
     });
 
     expect(view.miniCard.status).toBe("done");
-    expect(view.thinking?.active ?? false).toBe(false);
     const thought = buildForgeTimeline(progress.timeline, false).at(-1);
     expect(thought).toBeUndefined();
   });
@@ -446,54 +444,6 @@ describe("forge-run mini card briefing e título", () => {
     expect(deriveSessionTitle(progress, null, "quero um app mobile")).toBe("Working");
   });
 
-  it("resolveLatencyThinking — ativo antes do 1º token", () => {
-    const startedAt = Date.now() - 1500;
-    expect(
-      resolveLatencyThinking({ ...initialAgentProgress, finished: false }, true, startedAt)?.active,
-    ).toBe(true);
-  });
-
-  it("resolveLatencyThinking — congela e permanece após 1º thinking:true", () => {
-    const startedAt = Date.now() - 1500;
-    const frozen = resolveLatencyThinking(
-      {
-        ...initialAgentProgress,
-        finished: false,
-        timeline: [
-          {
-            type: "assistant_text",
-            data: { text: "Analisando…", thinking: true, delta: true },
-            timestamp: Date.now(),
-          },
-        ],
-      },
-      true,
-      startedAt,
-      buildForgeTimeline(
-        [
-          {
-            type: "assistant_text",
-            data: { text: "Analisando…", thinking: true, delta: true },
-            timestamp: Date.now(),
-          },
-        ],
-        true,
-      ),
-    );
-    expect(frozen?.active).toBe(false);
-    expect(frozen?.durationMs).toBeGreaterThanOrEqual(500);
-  });
-
-  it("resolveLatencyThinking — reidrata latencyThoughtMs do progress", () => {
-    const lat = resolveLatencyThinking(
-      { ...initialAgentProgress, latencyThoughtMs: 3200 },
-      false,
-      null,
-    );
-    expect(lat?.active).toBe(false);
-    expect(lat?.durationMs).toBe(3200);
-  });
-
   it("narration line persiste no chat quando terminal com stream distinto", () => {
     const view = buildAgentRunView("run-1", {
       ...initialAgentProgress,
@@ -515,52 +465,6 @@ describe("forge-run mini card briefing e título", () => {
     });
     expect(view.closingText).toContain("Vou criar a landing");
     expect(view.narration).toBe("Vou criar a landing com Hero e CTA.");
-  });
-
-  it("latencyThinking ativo antes do 1º token com runStartedAtMs", () => {
-    const startedAt = Date.now() - 2000;
-    const view = buildAgentRunView(
-      "run-1",
-      { ...initialAgentProgress, finished: false },
-      { running: true, runStartedAtMs: startedAt, userPrompt: "landing page" },
-    );
-    expect(view.latencyThinking?.active).toBe(true);
-    expect(view.latencyThinking?.startedAtMs).toBe(startedAt);
-    expect(view.reasoningThought).toBeNull();
-  });
-
-  it("latencyThinking congela após 1º token; reasoningThought só com thinking:true", () => {
-    const withStream = buildAgentRunView(
-      "run-1",
-      {
-        ...initialAgentProgress,
-        phase: "execute",
-        streamText: "Vou criar a landing.",
-        finished: false,
-      },
-      { running: true, runStartedAtMs: Date.now() - 3000 },
-    );
-    expect(withStream.latencyThinking?.active).toBe(false);
-    expect(withStream.latencyThinking?.durationMs).toBeGreaterThanOrEqual(500);
-
-    const withReasoning = buildAgentRunView(
-      "run-1",
-      {
-        ...initialAgentProgress,
-        finished: false,
-        timeline: [
-          {
-            type: "assistant_text",
-            data: { text: "Analisando stack…", thinking: true, delta: true },
-            timestamp: Date.now() - 4000,
-          },
-        ],
-      },
-      { running: true, runStartedAtMs: Date.now() - 5000 },
-    );
-    expect(withReasoning.reasoningThought?.active).toBe(true);
-    expect(withReasoning.latencyThinking?.active).toBe(false);
-    expect(withReasoning.latencyThinking?.durationMs).toBeGreaterThanOrEqual(500);
   });
 
   it("filtra mensagens genéricas de gather/explorando", () => {
@@ -605,6 +509,21 @@ describe("forge-run mini card briefing e título", () => {
         /package\.json|Analisando|Explorando|Lendo arquivos/i.test(b),
       ),
     ).toBe(false);
+  });
+
+  it("tool_done fecha TOOL ativo no forge timeline", () => {
+    const items = buildForgeTimeline(
+      [
+        { type: "tool_start", data: { name: "web_search", args: {} }, timestamp: 1 },
+        { type: "tool_done", data: { name: "web_search", ok: true }, timestamp: 2 },
+      ],
+      false,
+    );
+    const tool = items.find((i) => i.type === "TOOL");
+    expect(tool?.type).toBe("TOOL");
+    if (tool?.type === "TOOL") {
+      expect(tool.active).toBe(false);
+    }
   });
 
   it("thinking_text vira THOUGHT no inspector (PR 1 — Gap 1)", () => {

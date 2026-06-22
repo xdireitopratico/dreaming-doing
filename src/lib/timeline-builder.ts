@@ -1,15 +1,7 @@
-import type { SSEEvent, AgentProgress } from "@/lib/agent-progress";
+import type { SSEEvent } from "@/lib/agent-progress";
+import { toolBriefing } from "@/lib/forge-run";
 import { checkpointSummary, formatSkillInvocation, sanitizeRunText } from "@/lib/run-story-hygiene";
-
-function hasFirstInspectorToken(progress: AgentProgress): boolean {
-  if (progress.streamText?.trim() || progress.narrationText?.trim()) return true;
-  return progress.timeline.some(
-    (ev) =>
-      ev.type === "assistant_text" &&
-      typeof ev.data?.text === "string" &&
-      String(ev.data.text).trim().length > 0,
-  );
-}
+import { isToolDoneEvent, isToolDoneOk, toolDoneName } from "@/lib/timeline-tool-events";
 
 export type TimelineEntryKind = "thought" | "tool" | "result" | "phase" | "checkpoint";
 
@@ -69,11 +61,14 @@ function normalizeProse(prose: string): string {
 }
 
 function toolLabel(name: string, path?: string): string {
-  return name;
+  const brief = toolBriefing(name, path);
+  return brief.replace(/…$/, "") || name;
 }
 
-function toolDoneLabel(_name: string, _path?: string): string | null {
-  return null;
+function toolDoneLabel(name: string, path?: string): string | null {
+  const brief = toolBriefing(name, path);
+  if (!brief) return null;
+  return brief.replace(/…$/, "");
 }
 
 function findLastToolItem(items: TimelineEntry[]): TimelineEntry | null {
@@ -171,7 +166,7 @@ export function buildTimeline(events: SSEEvent[], running = false): TimelineEntr
       kind: "thought",
       ts: thoughtStart,
       durationMs,
-      label: `Thought for ${Math.round(durationMs / 1000)}s`,
+      label: `Pensou por ${Math.max(1, Math.round(durationMs / 1000))}s`,
       detail: normalizeProse(thoughtText),
       active: false,
     });
@@ -299,11 +294,11 @@ export function buildTimeline(events: SSEEvent[], running = false): TimelineEntr
       continue;
     }
 
-    if (ev.type === "tool_result" || ev.type === "tool_end") {
-      const ok = data.ok !== false && data.error == null;
+    if (isToolDoneEvent(ev)) {
+      const ok = isToolDoneOk(data);
       const lastTool = findLastToolItem(items);
       if (lastTool) {
-        const toolName = String(data.name ?? "tool");
+        const toolName = toolDoneName(data);
         const pastLabel = toolDoneLabel(toolName, lastTool.path);
         lastTool.label = pastLabel ?? lastTool.label;
         lastTool.ok = ok;
@@ -456,30 +451,4 @@ function markActiveThought(items: TimelineEntry[]): void {
   }
 }
 
-export function resolveLatencyThinking(
-  progress: AgentProgress,
-  running: boolean,
-  runStartedAtMs: number | null | undefined,
-): { active: boolean; startedAtMs: number; durationMs?: number } | null {
-  const storedMs = progress.latencyThoughtMs;
-  if (storedMs != null && storedMs > 0) {
-    return {
-      active: false,
-      startedAtMs: runStartedAtMs ?? Date.now() - storedMs,
-      durationMs: storedMs,
-    };
-  }
-  if (!runStartedAtMs) return null;
 
-  const hasToken = hasFirstInspectorToken(progress);
-  const timelineThoughts = progress.timeline.some(
-    (ev) => ev.type === "thinking_text" || ev.data?.thinking === true,
-  );
-
-  if (hasToken || timelineThoughts || !running) {
-    const durationMs = Math.max(500, Date.now() - runStartedAtMs);
-    return { active: false, startedAtMs: runStartedAtMs, durationMs };
-  }
-
-  return { active: true, startedAtMs: runStartedAtMs };
-}

@@ -75,7 +75,7 @@ describe("buildChatThread", () => {
     const progress = {
       ...initialAgentProgress,
       finished: true,
-      latencyThoughtMs: 3800,
+      workingDurationMs: 3800,
       narrationText: "Vou investigar o estado atual.",
       streamText: "Olá!",
     };

@@ -6,7 +6,11 @@ import { resolveJobPlanForRun } from "@/lib/plan-message-meta";
 import { parseClarifyChoices } from "@/lib/clarify-choices";
 import { resolveAssistantProgress } from "@/lib/chat/resolve-progress";
 import { enforceAssistantTurnInvariant } from "@/lib/chat/invariants";
-import { resolveTurnNarration, resolveTurnThinking } from "@/lib/chat/turn-display";
+import {
+  hasRenderedTurnContent,
+  resolveChatWorking,
+  resolveTurnNarration,
+} from "@/lib/chat/turn-display";
 import { resolveHistoricalRunProgress } from "@/lib/assistant-run-progress";
 import { initialAgentProgress } from "@/lib/agent-progress";
 import type {
@@ -189,9 +193,11 @@ export function mapAssistantTurn(
   const persistMiniCard =
     !!runView && (showJobCard || (!!item.message && hasMaterializedCardSnapshot(item.message)));
   const miniCard = persistMiniCard && runView ? toMiniCard(runView) : null;
-  const thinking = resolveTurnThinking(runView, {
+  const working = resolveChatWorking({
     slotActive,
     runStartedAtMs,
+    workingDurationMs: resolved?.workingDurationMs,
+    hasVisibleContent: hasRenderedTurnContent({ narration, streamText, miniCard }),
   });
 
   const turn: Extract<ThreadItem, { kind: "assistant" }> = {
@@ -201,17 +207,15 @@ export function mapAssistantTurn(
     isActive: slotActive,
     streamText,
     phase: (resolved?.phase as RunPhase) ?? null,
-    phaseMessage: resolved?.message ?? resolved?.statusHint ?? null,
     narration,
     miniCard,
-    statusChips: [],
     clarify,
     error: runView?.error ?? resolved?.error ?? null,
     finished: runView?.finished ?? resolved?.finished ?? false,
     lastFinishOk: runView?.lastFinishOk ?? resolved?.lastFinishOk ?? undefined,
     resumable: runView?.resumable ?? resolved?.resumable ?? false,
     isFocused: !!focusedRunId && focusedRunId === runId,
-    thinking,
+    working,
   };
 
   return enforceAssistantTurnInvariant(turn);

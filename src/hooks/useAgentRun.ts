@@ -24,7 +24,7 @@ import {
 } from "@/lib/agent-progress";
 import { dispatchTasteUiAction, isTasteUiAction } from "@/lib/taste-ui-actions";
 import { PENDING_RUN_ID } from "@/lib/pending-run-id";
-import { hasFirstInspectorToken } from "@/lib/forge-run";
+import { hasTurnVisibleContent } from "@/lib/chat/turn-display";
 import { shouldRetainLiveRunSlot } from "@/lib/live-run-overlay";
 import { isAssistantRunMaterialized } from "@/lib/assistant-materialized";
 import { inspectorProgressWeight } from "@/lib/assistant-run-progress";
@@ -37,12 +37,12 @@ import { shouldRestoreLiveRun } from "@/lib/agent-snapshot-restore";
 import { clientStaleStreamMs } from "@/lib/agent-stale-thresholds";
 import { emitStreamingTelemetry, setStreamingTelemetryContext } from "@/lib/streaming-telemetry";
 
-function withFrozenLatencyThought(next: AgentProgress, startedAtMs: number | null): AgentProgress {
-  if (next.latencyThoughtMs != null || !startedAtMs) return next;
-  if (!hasFirstInspectorToken(next)) return next;
+function freezeWorkingDuration(next: AgentProgress, startedAtMs: number | null): AgentProgress {
+  if (next.workingDurationMs != null || !startedAtMs) return next;
+  if (!hasTurnVisibleContent(next)) return next;
   return {
     ...next,
-    latencyThoughtMs: Math.max(500, Date.now() - startedAtMs),
+    workingDurationMs: Math.max(1000, Date.now() - startedAtMs),
   };
 }
 
@@ -322,12 +322,12 @@ export function useAgentRun() {
       const terminal = t === "finish" || t === "canceled" || t === "error" || t === "done";
       setProgress((prev) => {
         let next = applyAgentProgressEvent(prev, event);
-        next = withFrozenLatencyThought(next, activeRunStartedAtMsRef.current);
+        next = freezeWorkingDuration(next, activeRunStartedAtMsRef.current);
         return next;
       });
       // Nota: activeRunStartedAtMs é limpo em syncRunStatus/releaseLiveRunSlot,
-      // não aqui, para evitar race onde withFrozenLatencyThought perde o ref
-      // antes de poder congelar latencyThoughtMs.
+      // não aqui, para evitar race onde freezeWorkingDuration perde o ref
+      // antes de poder congelar workingDurationMs.
       return terminal;
     },
     [],
@@ -440,7 +440,7 @@ export function useAgentRun() {
           ...next,
           streamText: streamText ?? next.streamText ?? next.summary ?? p.streamText,
         };
-        return withFrozenLatencyThought(merged, activeRunStartedAtMsRef.current);
+        return freezeWorkingDuration(merged, activeRunStartedAtMsRef.current);
       });
       setActiveRunStartedAtMs(null);
       teardownChannels();

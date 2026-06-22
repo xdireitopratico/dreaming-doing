@@ -369,7 +369,10 @@ export async function executeAgentRun(
   const finalStatus = finalRun?.status as string | undefined;
   const finalMeta = (finalRun?.meta ?? {}) as Record<string, unknown>;
   const awaitingStates = ["awaiting_user"];
-  const isAwaiting = awaitingStates.includes(finalStatus ?? "") || !!finalMeta.awaitingUser;
+  const isAwaiting =
+    awaitingStates.includes(finalStatus ?? "") ||
+    !!finalMeta.awaitingUser ||
+    result.awaiting === true;
   const prevMeta = (finalRun?.meta ?? runMetaBase) as Record<string, unknown>;
 
   // Chunk resumable: Inngest chama execute de novo — não finalizar a run.
@@ -454,7 +457,7 @@ export async function executeAgentRun(
     await appendStreamEvent(supabase, runId, "chunk_resume", {
       type: "chunk_resume",
       attempt: chunkLimits.chunkGeneration,
-      maxAttempts: 5,
+      maxAttempts: 12,
       reason: result.error ?? "step budget exceeded",
     });
 
@@ -509,6 +512,8 @@ export async function executeAgentRun(
       ...prevMeta,
       ...(result.summary ? { summary: result.summary } : {}),
       ...(result.toolsUsed?.length ? { toolsUsed: result.toolsUsed } : {}),
+      ...(result.awaitingUser ? { awaitingUser: result.awaitingUser } : {}),
+      ...(result.plan ? { plan: result.plan } : {}),
     },
   });
 

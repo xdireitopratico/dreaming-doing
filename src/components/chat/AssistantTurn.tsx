@@ -6,7 +6,7 @@ import { assistantTurnCopyText } from "@/lib/chat/assistant-turn-copy";
 import { resolveClosingProse, sanitizeChatProseForDisplay } from "@/lib/chat/stream-prose";
 import { loadAgentPreferences } from "@/lib/agent-preferences";
 import { llmErrorHint, staleStreamHint, timeoutHint, zombieRunHint } from "@/lib/llm-error-hints";
-import { ForgeThinking } from "@/components/editor/ForgeThinking";
+import { ChatWorkingLine } from "@/components/chat/ChatWorkingLine";
 import { ChatNarration } from "./ChatNarration";
 import { ChatJobCard } from "./ChatJobCard";
 import { ChatToolbar } from "./ChatToolbar";
@@ -29,7 +29,7 @@ type AssistantTurnProps = {
 
 /**
  * Fluxo fixo do chat — só 4 blocos, ordem imutável, estado permanente:
- * Thought → Mensagem LLM (abertura) → Mini Card → Mensagem LLM (fechamento)
+ * Working → Mensagem LLM (abertura) → Mini Card → Mensagem LLM (fechamento)
  */
 export function AssistantTurn({
   item,
@@ -52,7 +52,7 @@ export function AssistantTurn({
   const narrationStreaming = !!item.isActive && !!narrationText;
   const closingStreaming = !!item.isActive && !!item.streamText?.trim();
 
-  const showThought = !!item.thinking;
+  const showWorking = !!item.working;
   const showNarration = !!narrationText;
   const showJobCard = !!item.miniCard;
   const showClarify = !!item.clarify?.choices?.length;
@@ -96,14 +96,7 @@ export function AssistantTurn({
       data-testid="chat-message-assistant"
     >
       <div className="forge-assistant-turn" data-testid="assistant-turn">
-        {showThought && item.thinking && (
-          <ForgeThinking
-            variant={item.thinking.variant}
-            active={item.thinking.active}
-            startedAtMs={item.thinking.startedAtMs}
-            durationMs={item.thinking.durationMs}
-          />
-        )}
+        {showWorking && item.working && <ChatWorkingLine working={item.working} />}
 
         {showNarration && <ChatNarration text={narrationText!} streaming={narrationStreaming} />}
 

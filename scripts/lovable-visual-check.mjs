@@ -14,12 +14,12 @@ const BASE = process.argv[2] ?? "http://127.0.0.1:5173";
 const FIXTURES = ["img4", "img5", "img8", "img9", "img14", "img15"];
 
 const EXPECT = {
-  img4: { chips: 2, jobCard: 0, thought: 1, narration: 1, showMore: 1 },
-  img5: { chips: 0, jobCard: 1, thought: 1, edited: 1 },
-  img8: { chips: 0, jobCard: 1, thought: 1, edited: 1 },
-  img9: { chips: 0, jobCard: 1, runningCommand: 1, activeTask: 1 },
-  img14: { chips: 0, jobCard: 0, planDock: 1, planDockCta: 1 },
-  img15: { chips: 0, jobCard: 0, planDock: 1, userBubble: 1, showMore: 1 },
+  img4: { jobCard: 1, working: 1, narration: 1, showMore: 1 },
+  img5: { jobCard: 1, working: 1, edited: 1 },
+  img8: { jobCard: 1, working: 1, edited: 1 },
+  img9: { jobCard: 1, working: 1, runningCommand: 1, activeTask: 1 },
+  img14: { jobCard: 0, planDock: 1, planDockCta: 1 },
+  img15: { jobCard: 0, planDock: 1, userBubble: 1, showMore: 1 },
 };
 
 async function main() {
@@ -35,9 +35,8 @@ async function main() {
     await page.waitForTimeout(400);
 
     const counts = {
-      chips: await page.locator("[data-testid=forge-status-chip]").count(),
       jobCard: await page.locator("[data-testid=chat-job-card]").count(),
-      thought: await page.locator("[data-testid=chat-thinking]").count(),
+      working: await page.locator("[data-testid=chat-working-line]").count(),
       narration: await page.locator("[data-testid=chat-narration]").count(),
       edited: await page.locator(".forge-mini-card-badge--edited-tag").count(),
       runningCommand: await page.locator(".forge-mini-card-header-line--command").count(),

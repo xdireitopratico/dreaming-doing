@@ -51,6 +51,21 @@ describe("buildTimeline thinking", () => {
   });
 });
 
+describe("buildTimeline tool_done", () => {
+  it("fecha a última tool aberta no tool_done", () => {
+    const items = buildTimeline(
+      [
+        { type: "tool_start", data: { name: "fs_read", args: { path: "src/App.tsx" } }, timestamp: 1 },
+        { type: "tool_done", data: { name: "fs_read", ok: true }, timestamp: 2 },
+      ],
+      false,
+    );
+    const tool = items.find((i) => i.kind === "tool");
+    expect(tool?.active).toBe(false);
+    expect(tool?.ok).toBe(true);
+  });
+});
+
 describe("buildTimeline hygiene", () => {
   it("remove lixo interno e preserva Robin/skill explícito", () => {
     const items = buildTimeline([
