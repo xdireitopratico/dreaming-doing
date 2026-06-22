@@ -26,6 +26,12 @@ import { logger } from "../_shared/logger.ts";
 import { appendStreamEvent } from "../_shared/agent-stream.ts";
 import { chunkCapErrorMessage, evaluateChunkLimits } from "../_shared/agent-chunk-limits.ts";
 import { ensureTerminalRunMessage } from "../_shared/ensure-terminal-message.ts";
+import {
+  getNextJobGeneration,
+  shadowCompleteJob,
+  shadowEnqueueNextChunk,
+  shadowUpsertAgentJob,
+} from "../_shared/agent-jobs.ts";
 
 export type ExecuteParams = {
   runId: string;
@@ -87,6 +93,19 @@ export async function executeAgentRun(
     .eq("id", runId)
     .maybeSingle();
   const runMeta = (preCheck?.meta ?? {}) as Record<string, unknown>;
+  const chunkGeneration =
+    typeof runMeta.chunkGeneration === "number" ? runMeta.chunkGeneration : 0;
+  const jobGeneration = resumeParam ? Math.max(1, chunkGeneration) : await getNextJobGeneration(
+    supabase,
+    runId,
+  );
+  await shadowUpsertAgentJob(supabase, {
+    runId,
+    generation: jobGeneration,
+    status: "leased",
+    payload: { planMode, resume: resumeParam, planSourceRunId: params.planSourceRunId ?? null },
+  });
+
   const effectivePreferences = resolveExecutePreferences(params.preferences, runMeta);
   const effectiveSkillIds = resolveExecuteIdList(
     params.enabledSkillIds,
@@ -477,6 +496,17 @@ export async function executeAgentRun(
       reason: result.error ?? "step budget exceeded",
     });
 
+    await shadowCompleteJob(supabase, runId, jobGeneration, {
+      resumable: true,
+      steps: result.steps,
+      error: result.error ?? null,
+      chunkGeneration: chunkLimits.chunkGeneration,
+    }, false);
+    await shadowEnqueueNextChunk(supabase, runId, chunkLimits.chunkGeneration + 1, {
+      planMode,
+      resume: true,
+    });
+
     logger.info("agent_run.chunk_resumable", {
       runId,
       mode: planMode ? "plan" : "build",
@@ -551,6 +581,20 @@ export async function executeAgentRun(
       buildFailed: !planMode,
     });
   }
+
+  await shadowCompleteJob(
+    supabase,
+    runId,
+    jobGeneration,
+    {
+      ok: result.ok,
+      canceled: result.canceled,
+      steps: result.steps,
+      error: result.error ?? null,
+      awaiting: isAwaiting,
+    },
+    result.ok && !result.canceled,
+  );
 
   logger.info("agent_run.executed", {
     runId,

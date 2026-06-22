@@ -202,39 +202,9 @@ export async function markRunFinal(
   status: AgentRunStatus,
   extras: Record<string, unknown> = {},
 ): Promise<void> {
-  const current = await getRunStatus(runId);
-
-  // Não reverter awaiting_user/completed para running (evita reattach zumbi no mesmo runId).
-  if (status === "running" && (current === "awaiting_user" || current === "completed")) {
-    return;
-  }
-
-  // Não sobrescrever status terminal — se já falhou/cancelou, não reverter pra running
-  if (TERMINAL_STATUSES.has(status)) {
-    // Só permite marcar terminal se não está num terminal diferente
-    if (current === "failed" || current === "canceled") {
-      return;
-    }
-  }
-
-  const { columns, metaDelta } = partitionAgentRunExtras(extras);
-  const patch: Record<string, unknown> = { status, ...columns };
-  if (status === "completed" || status === "failed" || status === "canceled") {
-    patch.finished_at = new Date().toISOString();
-  }
-
-  if (Object.keys(metaDelta).length > 0) {
-    const { data: existing } = await getSupabaseAdmin()
-      .from("agent_runs")
-      .select("meta")
-      .eq("id", runId)
-      .maybeSingle();
-    const prevMeta = (existing?.meta ?? {}) as Record<string, unknown>;
-    patch.meta = { ...prevMeta, ...metaDelta };
-  }
-
-  const { error } = await getSupabaseAdmin().from("agent_runs").update(patch).eq("id", runId);
-  if (error) throw new Error(`Failed to mark run ${runId} as ${status}: ${error.message}`);
+  const { transitionRun } = await import("./run-lifecycle.ts");
+  const result = await transitionRun(runId, status, extras);
+  if (!result.ok && result.skipped) return;
 }
 
 /** Cancela outras runs ativas no mesmo projeto (evita 2× running na mesma conversa).

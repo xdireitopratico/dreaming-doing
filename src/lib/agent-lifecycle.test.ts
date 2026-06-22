@@ -1,57 +1,49 @@
 import { describe, expect, it } from "vitest";
-import { initialAgentProgress } from "@/lib/agent-progress";
-import { resolveAgentLifecycle } from "@/lib/agent-lifecycle";
+import {
+  canTransitionJobStatus,
+  canTransitionRunStatus,
+  isAgentRuntimeV2ShadowEnabled,
+} from "@forge/agent-contract/lifecycle";
 
-describe("resolveAgentLifecycle", () => {
-  it("classifica estado vazio como dispatch", () => {
-    expect(resolveAgentLifecycle({ progress: initialAgentProgress, activeRunId: "run-1" })).toBe(
-      "dispatch",
-    );
+describe("canTransitionRunStatus", () => {
+  it("pending → running", () => {
+    expect(canTransitionRunStatus("pending", "running")).toBe(true);
   });
 
-  it("classifica awaiting como waiting_user", () => {
-    expect(
-      resolveAgentLifecycle({
-        progress: { ...initialAgentProgress, awaiting: true },
-        activeRunId: "run-1",
-        running: false,
-      }),
-    ).toBe("waiting_user");
+  it("running → awaiting_user", () => {
+    expect(canTransitionRunStatus("running", "awaiting_user")).toBe(true);
   });
 
-  it("classifica execução ativa sem evidência como running", () => {
-    expect(
-      resolveAgentLifecycle({
-        progress: initialAgentProgress,
-        activeRunId: "run-1",
-        running: true,
-      }),
-    ).toBe("running");
+  it("não reverte awaiting_user → running (nova run no dispatch)", () => {
+    expect(canTransitionRunStatus("awaiting_user", "running")).toBe(false);
   });
 
-  it("classifica sucesso terminal como complete", () => {
-    expect(
-      resolveAgentLifecycle({
-        progress: { ...initialAgentProgress, finished: true, lastFinishOk: true },
-        activeRunId: null,
-        running: false,
-      }),
-    ).toBe("complete");
+  it("não reverte completed → running", () => {
+    expect(canTransitionRunStatus("completed", "running")).toBe(false);
   });
 
-  it("classifica erro recuperável como stale", () => {
-    expect(
-      resolveAgentLifecycle({
-        progress: {
-          ...initialAgentProgress,
-          finished: true,
-          lastFinishOk: false,
-          resumable: true,
-          error: "Execução interrompida",
-        },
-        activeRunId: null,
-        running: false,
-      }),
-    ).toBe("stale");
+  it("terminal não muda", () => {
+    expect(canTransitionRunStatus("failed", "running")).toBe(false);
+    expect(canTransitionRunStatus("canceled", "completed")).toBe(false);
+  });
+});
+
+describe("canTransitionJobStatus", () => {
+  it("queued → leased → completed", () => {
+    expect(canTransitionJobStatus("queued", "leased")).toBe(true);
+    expect(canTransitionJobStatus("leased", "completed")).toBe(true);
+  });
+
+  it("leased → queued (re-queue após lease expirado)", () => {
+    expect(canTransitionJobStatus("leased", "queued")).toBe(true);
+  });
+});
+
+describe("isAgentRuntimeV2ShadowEnabled", () => {
+  it("aceita shadow/1/true", () => {
+    expect(isAgentRuntimeV2ShadowEnabled("shadow")).toBe(true);
+    expect(isAgentRuntimeV2ShadowEnabled("1")).toBe(true);
+    expect(isAgentRuntimeV2ShadowEnabled("true")).toBe(true);
+    expect(isAgentRuntimeV2ShadowEnabled("")).toBe(false);
   });
 });

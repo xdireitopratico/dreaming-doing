@@ -91,13 +91,13 @@ export function resolveAgentLifecycle(input: AgentLifecycleInput): AgentLifecycl
 export function lifecycleLabel(stage: AgentLifecycleStage): string {
   switch (stage) {
     case "dispatch":
-      return "Conectando ao agente";
+      return "Conectando…";
     case "running":
-      return "Trabalhando no pedido";
+      return "Executando";
     case "waiting_user":
-      return "Aguardando sua resposta";
+      return "Aguardando…";
     case "finish":
-      return "Finalizando entrega";
+      return "Finalizando…";
     case "complete":
       return "Concluído";
     case "failed":
@@ -105,8 +105,8 @@ export function lifecycleLabel(stage: AgentLifecycleStage): string {
     case "cancel":
       return "Cancelado";
     case "stale":
-      return "Execução interrompida";
+      return "Interrompido";
     default:
-      return "Aguardando";
+      return "…";
   }
 }

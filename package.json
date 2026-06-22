@@ -7,6 +7,7 @@
     "packages/*"
   ],
   "scripts": {
+    "sync:agent-contract": "node scripts/sync-agent-contract.mjs",
     "dev": "vite dev",
     "build": "cross-env VERCEL=1 vite build",
     "build:cloudflare": "vite build",
@@ -32,6 +33,7 @@
   },
   "dependencies": {
     "@cloudflare/vite-plugin": "^1.25.5",
+    "@forge/agent-contract": "workspace:*",
     "@forge/ui": "workspace:*",
     "@hookform/resolvers": "^5.2.2",
     "@lovable.dev/cloud-auth-js": "^1.1.2",
