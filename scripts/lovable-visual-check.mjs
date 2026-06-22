@@ -10,7 +10,7 @@ import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const OUT = resolve(__dirname, "../.lovable-screenshots");
-const BASE = process.argv[2] ?? "http://127.0.0.1:5173";
+const BASE = process.argv[2] ?? process.env.DEV_URL ?? "http://127.0.0.1:8080";
 const FIXTURES = ["img4", "img5", "img8", "img9", "img14", "img15"];
 
 const EXPECT = {
@@ -41,7 +41,7 @@ async function main() {
       edited: await page.locator(".forge-mini-card-badge--edited-tag").count(),
       runningCommand: await page.locator(".forge-mini-card-header-line--command").count(),
       planDock: await page.locator("[data-testid=chat-plan-dock-ready]").count(),
-      planDockCta: await page.locator(".forge-plan-prompt-cta").count(),
+      planDockCta: await page.getByRole("button", { name: "Review" }).count(),
       userBubble: await page.locator("[data-testid=chat-message-user]").count(),
       showMore: await page.locator(".forge-msg-user-show-more").count(),
       activeTask: await page.locator('.forge-task-item[data-status="active"]').count(),

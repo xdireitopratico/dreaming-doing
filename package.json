@@ -21,6 +21,7 @@
     "typecheck": "tsc --noEmit --project tsconfig.json",
     "test": "vitest run",
     "test:agent-journey": "vitest run src/lib/chat/agent-turn-flow.test.ts src/lib/lovable-acceptance.test.ts src/lib/chat-reliability.test.ts",
+    "check:lovable-visual": "node scripts/lovable-visual-check.mjs",
     "smoke:agent": "node scripts/smoke-agent-e2e.mjs",
     "smoke:aetherforge": "node scripts/smoke-aetherforge-e2e.mjs",
     "smoke:prometheus": "node scripts/smoke-prometheus-e2e.mjs --with-gateway",

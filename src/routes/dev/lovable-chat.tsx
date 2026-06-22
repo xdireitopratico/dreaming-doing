@@ -194,7 +194,6 @@ const FIXTURES: {
         runId: "run-img14",
         isActive: false,
         streamText: null,
-        thinking: { variant: "latency", active: false, durationMs: 5000 },
         narration: "Vou propor um plano para desbloquear a exclusão do documento travado.",
         finished: false,
       },
