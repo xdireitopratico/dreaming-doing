@@ -69,6 +69,10 @@ export type ChatWorkingState =
   | { status: "active" }
   | { status: "done"; durationSec: number };
 
+/** Bloco Thought no topo do turno — raciocínio LLM isolado do chat. */
+export type ChatThoughtState =
+  | { status: "active"; text?: string | null }
+  | { status: "done"; durationSec: number; text?: string | null };
 export type ThreadItem =
   | { kind: "user"; message: ChatMessage }
   | {
@@ -86,6 +90,7 @@ export type ThreadItem =
       lastFinishOk?: boolean;
       resumable?: boolean;
       isFocused?: boolean;
+      thought?: ChatThoughtState | null;
       working?: ChatWorkingState | null;
     }
   | {

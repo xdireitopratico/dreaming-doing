@@ -1,7 +1,7 @@
 import type { AgentProgress } from "@/lib/agent-progress";
-import type { AgentRunView } from "@/lib/forge-run";
+import { buildForgeTimeline, type AgentRunView } from "@/lib/forge-run";
 import { collapseNarrationBuffer } from "@/lib/narration-dedupe";
-import type { ChatWorkingState, MiniCardData } from "@/lib/chat/types";
+import type { ChatThoughtState, ChatWorkingState, MiniCardData } from "@/lib/chat/types";
 
 export function resolveTurnNarration(
   resolved: AgentProgress | null,
@@ -41,6 +41,30 @@ export function hasRenderedTurnContent(opts: {
   if (opts.streamText?.trim()) return true;
   if (miniCardShowsInChat(opts.miniCard)) return true;
   return false;
+}
+
+/** Thought no chat — fonte: buildForgeTimeline (thinking_text / legado). */
+export function resolveTurnThinking(
+  resolved: AgentProgress | null,
+  slotActive: boolean,
+): ChatThoughtState | null {
+  if (!resolved) return null;
+  const timeline = resolved.timeline ?? [];
+  if (timeline.length === 0) return null;
+
+  const items = buildForgeTimeline(timeline, slotActive);
+  const thought = items.find((i) => i.type === "THOUGHT");
+  if (!thought || thought.type !== "THOUGHT") return null;
+
+  const text = thought.text?.trim() || null;
+  if (thought.active) {
+    return { status: "active", text };
+  }
+  return {
+    status: "done",
+    durationSec: Math.max(1, Math.round(thought.durationMs / 1000)),
+    text,
+  };
 }
 
 /** Uma linha por turno: Pensando… → Pensou por Xs (congela uma vez). */

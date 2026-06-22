@@ -41,7 +41,7 @@
 | **2** Runtime decomposto | **✅ 100%** | `loop.ts` 439 LOC; `runtime/phases/*`; Deno 113 pass |
 | **3** Frontend | **~70%** | 3.1 ✅ `useAgentRun` 280 LOC; 3.2 ✅ SSOT materialização; 3.4 ✅ sem sessionStorage |
 | **3.3** E2E browser | ❌ | Smoke ainda não bloqueante |
-| **S** Contrato Jornada | **~15%** | Dispatch único no dashboard (`markPendingAgentRun`); Thought/inspector pendentes |
+| **S** Contrato Jornada | **~30%** | S.1 dispatch ok; S.2 Thought no chat (`ForgeThinking` + `resolveTurnThinking`) |
 
 ### Decisão estratégica (revisada 2026-06-22)
 
@@ -148,7 +148,7 @@ Detalhes: §3.2–3.7 do plano original (agent_jobs, lifecycle, decomposição l
 | # | Entrega | Auditoria ref |
 |---|---------|---------------|
 | S.1 | **Dispatch único** — dashboard usa `agent-auto-run` + editor `connect`; remove `invoke` | P0-CHAT-1,2 |
-| S.2 | **Thought no chat** — `ForgeThinking` em `AssistantTurn`; `mapAssistantTurn` | P0-CHAT-3 |
+| S.2 | **Thought no chat** — `ForgeThinking` em `AssistantTurn`; `mapAssistantTurn` | P0-CHAT-3 ✅ |
 | S.3 | **Runtime fala** — opening, gather phase, LLM fail fallback, no double finish | P0-RT-1,2,3 |
 | S.4 | **Inspector vivo** — checkpoint não materializa; `tool_done`; builder único | P0-INS-1,2,3 |
 | S.5 | **Gates honestos** — smoke terminal; stale aware; journey E2E blocking | P0-GATE-1 |

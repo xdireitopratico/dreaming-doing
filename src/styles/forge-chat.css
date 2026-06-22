@@ -235,12 +235,41 @@
 
 .forge-chat-thought-line {
   display: flex;
-  align-items: center;
-  gap: var(--space-sm);
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-xs);
   margin: 10px 0 0;
   padding-top: 2px;
   font: var(--font-thought);
   color: var(--text-muted);
+}
+
+.forge-chat-thought-trigger,
+.forge-chat-thought-label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  font: inherit;
+  color: inherit;
+  cursor: default;
+}
+
+.forge-chat-thought-trigger {
+  cursor: pointer;
+}
+
+.forge-chat-thought-body {
+  margin: 0;
+  padding-left: calc(var(--space-sm) + 1.1em);
+  max-width: min(100%, 640px);
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--text-secondary);
+  white-space: pre-wrap;
 }
 
 .forge-chat-latency-line {

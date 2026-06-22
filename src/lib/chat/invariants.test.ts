@@ -86,6 +86,40 @@ describe("mapAssistantTurn — contrato Lovable imutável", () => {
     assertAssistantTurnInvariant(turn);
   });
 
+  it("thinking_text no progress expõe thought no turn (não suprime raciocínio)", () => {
+    const now = Date.now();
+    const progress = {
+      ...initialAgentProgress,
+      phase: "build" as const,
+      finished: false,
+      timeline: [
+        {
+          type: "thinking_text",
+          data: { text: "Verificando estado do container. " },
+          timestamp: now - 400,
+        },
+        { type: "thinking_text", data: { text: "Talvez rebuild.", append: true }, timestamp: now - 200 },
+      ],
+    };
+    const thread: RawThreadItem[] = [
+      { kind: "user", message: msg("u1", "user", "fix lara") },
+      { kind: "assistant", live: progress, runId: "run-thought", isActive: true },
+    ];
+
+    const turn = mapAssistantTurn(thread[1] as Extract<RawThreadItem, { kind: "assistant" }>, {
+      ...assistantCtx(thread, 1),
+      running: true,
+      activeRunId: "run-thought",
+      activeRunStartedAtMs: Date.now() - 500,
+      sessionProgress: progress,
+    });
+
+    expect(turn.thought).toBeTruthy();
+    expect(turn.thought?.status).toBe("active");
+    expect(turn.working).toBeNull();
+    assertAssistantTurnInvariant(turn);
+  });
+
   it("run ativa com activeRunStartedAtMs: exibe Pensando", () => {
     const progress = {
       ...initialAgentProgress,

@@ -1,63 +1,57 @@
 import { describe, expect, it } from "vitest";
-import { initialAgentProgress } from "@/lib/agent-progress";
-import { buildAgentRunView } from "@/lib/forge-run";
-import { resolveChatWorking, resolveTurnNarration } from "@/lib/chat/turn-display";
+import {
+  applyAgentProgressEvent,
+  initialAgentProgress,
+  type SSEEvent,
+} from "@/lib/agent-progress";
+import { resolveTurnThinking } from "@/lib/chat/turn-display";
 
-describe("turn-display — entrou, permanece", () => {
-  it("resolveTurnNarration — permanece distinta do stream final", () => {
-    const progress = {
-      ...initialAgentProgress,
-      finished: true,
-      narrationText: "Vou investigar o estado atual do container DP Lara.",
-      streamText: "Olá! Como posso ajudar?",
-    };
-    const runView = buildAgentRunView("run-1", progress, { running: false });
-    const narration = resolveTurnNarration(progress, runView, "Olá! Como posso ajudar?");
-    expect(narration).toBe("Vou investigar o estado atual do container DP Lara.");
+function ev(type: string, data: Record<string, unknown>, ts = Date.now()): SSEEvent {
+  return { type, data, timestamp: ts };
+}
+
+describe("resolveTurnThinking", () => {
+  it("retorna null sem timeline", () => {
+    expect(resolveTurnThinking(initialAgentProgress, true)).toBeNull();
   });
 
-  it("resolveTurnNarration — permanece mesmo se stream contém o texto", () => {
-    const narrationLine = "Vou investigar o estado atual do container DP Lara.";
-    const progress = {
-      ...initialAgentProgress,
-      finished: true,
-      narrationText: narrationLine,
-      streamText: `${narrationLine} Pronto no preview.`,
-    };
-    const runView = buildAgentRunView("run-1", progress, { running: false });
-    const narration = resolveTurnNarration(progress, runView, progress.streamText);
-    expect(narration).toBe(narrationLine);
+  it("thinking_text ativo vira thought streaming", () => {
+    const now = Date.now();
+    let progress = applyAgentProgressEvent(
+      initialAgentProgress,
+      ev("thinking_text", { text: "Vou analisar ", append: true, delta: true }, now - 400),
+    );
+    progress = applyAgentProgressEvent(
+      progress,
+      ev("thinking_text", { text: "as dependências.", append: true, delta: true }, now - 200),
+    );
+
+    const thought = resolveTurnThinking(progress, true);
+    expect(thought?.status).toBe("active");
+    if (thought?.status === "active") {
+      expect(thought.text).toContain("dependências");
+    }
   });
 
-  it("resolveChatWorking — run ativa sem conteúdo mostra Pensando", () => {
-    const startedAt = Date.now() - 1200;
-    const working = resolveChatWorking({
-      slotActive: true,
-      runStartedAtMs: startedAt,
-      hasVisibleContent: false,
-    });
-    expect(working).toEqual({ status: "active" });
-  });
+  it("legado assistant_text thinking vira thought quando run termina", () => {
+    let progress = applyAgentProgressEvent(
+      initialAgentProgress,
+      ev("assistant_text", { text: "Raciocínio ", thinking: true, append: true, delta: true }, 100),
+    );
+    progress = applyAgentProgressEvent(
+      progress,
+      ev("assistant_text", { text: "completo.", thinking: true, append: true, delta: true }, 300),
+    );
+    progress = applyAgentProgressEvent(
+      progress,
+      ev("assistant_text", { text: "Abertura.", opening: true }, 500),
+    );
 
-  it("resolveChatWorking — congela após conteúdo visível", () => {
-    const startedAt = Date.now() - 4000;
-    const working = resolveChatWorking({
-      slotActive: true,
-      runStartedAtMs: startedAt,
-      workingDurationMs: 4000,
-      hasVisibleContent: true,
-    });
-    expect(working).toEqual({ status: "done", durationSec: 4 });
-  });
-
-  it("buildAgentRunView — narration line persiste quando terminal", () => {
-    const view = buildAgentRunView("run-1", {
-      ...initialAgentProgress,
-      finished: true,
-      streamText: "Pronto!",
-      narrationText: "Vou criar a landing com Hero e CTA.",
-    });
-    expect(view.narration).toBe("Vou criar a landing com Hero e CTA.");
-    expect(view.closingText).toBe("Pronto!");
+    const thought = resolveTurnThinking(progress, false);
+    expect(thought?.status).toBe("done");
+    if (thought?.status === "done") {
+      expect(thought.durationSec).toBeGreaterThanOrEqual(1);
+      expect(thought.text).toContain("Raciocínio");
+    }
   });
 });

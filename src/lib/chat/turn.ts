@@ -10,6 +10,7 @@ import {
   hasRenderedTurnContent,
   resolveChatWorking,
   resolveTurnNarration,
+  resolveTurnThinking,
 } from "@/lib/chat/turn-display";
 import { resolveHistoricalRunProgress } from "@/lib/assistant-run-progress";
 import { initialAgentProgress } from "@/lib/agent-progress";
@@ -196,12 +197,15 @@ export function mapAssistantTurn(
   const persistMiniCard =
     !!runView && (showJobCard || (!!item.message && hasMaterializedCardSnapshot(item.message)));
   const miniCard = persistMiniCard && runView ? toMiniCard(runView) : null;
-  const working = resolveChatWorking({
-    slotActive,
-    runStartedAtMs,
-    workingDurationMs: resolved?.workingDurationMs,
-    hasVisibleContent: hasRenderedTurnContent({ narration, streamText, miniCard }),
-  });
+  const thought = resolveTurnThinking(resolved, slotActive);
+  const working = thought
+    ? null
+    : resolveChatWorking({
+        slotActive,
+        runStartedAtMs,
+        workingDurationMs: resolved?.workingDurationMs,
+        hasVisibleContent: hasRenderedTurnContent({ narration, streamText, miniCard }),
+      });
 
   const turn: Extract<ThreadItem, { kind: "assistant" }> = {
     kind: "assistant",
@@ -218,6 +222,7 @@ export function mapAssistantTurn(
     lastFinishOk: runView?.lastFinishOk ?? resolved?.lastFinishOk ?? undefined,
     resumable: runView?.resumable ?? resolved?.resumable ?? false,
     isFocused: !!focusedRunId && focusedRunId === runId,
+    thought,
     working,
   };
 

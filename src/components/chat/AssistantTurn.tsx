@@ -6,6 +6,7 @@ import { assistantTurnCopyText } from "@/lib/chat/assistant-turn-copy";
 import { resolveClosingProse, sanitizeChatProseForDisplay } from "@/lib/chat/stream-prose";
 import { loadAgentPreferences } from "@/lib/agent-preferences";
 import { llmErrorHint, staleStreamHint, timeoutHint, zombieRunHint } from "@/lib/llm-error-hints";
+import { ForgeThinking } from "@/components/chat/ForgeThinking";
 import { ChatWorkingLine } from "@/components/chat/ChatWorkingLine";
 import { ChatNarration } from "./ChatNarration";
 import { ChatJobCard } from "./ChatJobCard";
@@ -56,6 +57,7 @@ export function AssistantTurn({
   const narrationStreaming = !!item.isActive && !!narrationText;
   const closingStreaming = !!item.isActive && !!item.streamText?.trim();
 
+  const showThought = !!item.thought;
   const showWorking = !!item.working;
   const showNarration = !!narrationText;
   const showJobCard = !!item.miniCard;
@@ -100,6 +102,8 @@ export function AssistantTurn({
       data-testid="chat-message-assistant"
     >
       <div className="forge-assistant-turn" data-testid="assistant-turn">
+        {showThought && item.thought && <ForgeThinking thought={item.thought} />}
+
         {showWorking && item.working && <ChatWorkingLine working={item.working} />}
 
         {showNarration && <ChatNarration text={narrationText!} streaming={narrationStreaming} />}

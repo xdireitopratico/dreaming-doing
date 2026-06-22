@@ -54,7 +54,8 @@ describe("S15 agent turn flow", () => {
     expect(turn?.kind).toBe("assistant");
     if (turn?.kind !== "assistant") return;
 
-    expect(turn.working?.status).toBe("done");
+    expect(turn.thought?.status).toBe("done");
+    expect(turn.working).toBeNull();
     expect(turn.narration).toContain("hero");
     expect(turn.narration).not.toMatch(/hero[\s\S]*hero/i);
     expect(turn.miniCard).toBeTruthy();
