@@ -23,5 +23,4 @@ export type AgentLoopOptions = {
   buildFixResume?: boolean;
   resolvedMainCfg?: ProviderConfig;
   preferences?: AgentPreferencesPayload;
-  chunkGeneration?: number;
 };

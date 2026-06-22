@@ -19,12 +19,17 @@ import { ModelRouter } from "./router.ts";
 import { CompressionManager } from "./compression.ts";
 import { RuntimeObserver } from "./observer.ts";
 import { SkillRegistry } from "./skills.ts";
-import { extractOriginalUserRequest } from "./run-context.ts";
+import {
+  resolveLoopOriginalUserRequest,
+  resolveMaxStepsLimit,
+  resolveSkipConversationalGate,
+} from "./runtime/loop-init.ts";
+import { buildOrchestratorDeps } from "./runtime/loop-orchestrator-deps.ts";
 
 import type { AgentPreferencesPayload } from "./connector-keys.ts";
 import type { LoopUpdateContext } from "./loop-status.ts";
 import type { AgentStateData } from "./agent-fsm.ts";
-import { applyAutoModelForComplexity } from "./runtime/loop-auto-model.ts";
+
 import { emitLoopFsmTransition } from "./runtime/loop-fsm.ts";
 import { notifyLoopStatusFromHost } from "./runtime/loop-notify.ts";
 import { RuntimeEmitter, type StreamCallback } from "./runtime/emitter.ts";
@@ -33,7 +38,7 @@ import { isRunCanceled, loopBudgetExceeded as loopBudgetExceededInfra } from "./
 import { readLoopBudgetMsFromRuntime } from "./runtime/loop-config.ts";
 import { runLlmChatForHost } from "./runtime/llm-chat.ts";
 import { runDesignPreflightIfNeeded as runDesignPreflightIfNeededPhase } from "./runtime/phases/design-preflight-phase.ts";
-import { attemptGracefulClosing as attemptGracefulClosingPhase } from "./runtime/phases/graceful-closing.ts";
+import { attemptGracefulClosingForHost } from "./runtime/phases/graceful-closing-host.ts";
 import { runGatherContextForHost } from "./runtime/phases/gather-context.ts";
 import { createAgentLoopMutableState } from "./runtime/loop-mutable-state.ts";
 import { NarrationPhase } from "./runtime/phases/narration.ts";
@@ -43,7 +48,6 @@ import {
   runPlanModeAgentTurnForHost,
 } from "./runtime/phases/plan-turn-host.ts";
 import type { AgentLoopOptions } from "./runtime/loop-options.ts";
-import { runBuildExecutePhase } from "./runtime/phases/execute.ts";
 import { runAgentOrchestrator } from "./runtime/phases/orchestrator.ts";
 import type { AgentLoopRunResult } from "./runtime/loop-result.ts";
 
@@ -108,7 +112,6 @@ export class AgentLoop {
   }
 
   private thinkingStreamStartedAt: number | null;
-  private chunkGeneration: number;
   private touchedPaths: Set<string>;
   private buildFixResume: boolean;
   /** FSM state tracking (FORGE 2.0) — validado a cada transição de fase */
@@ -148,7 +151,7 @@ export class AgentLoop {
     this.robinActive = robinActive;
     this.projectTemplate = projectTemplate;
     this.stackAddon = stackAddon;
-    this.maxStepsLimit = options?.maxSteps ?? 20;
+    this.maxStepsLimit = resolveMaxStepsLimit(options);
     this.tasteStart = options?.tasteStart ?? false;
     this.sessionAddon = options?.sessionAddon ?? "";
     this.userSkillNames = options?.userSkillNames ?? [];
@@ -156,21 +159,14 @@ export class AgentLoop {
     this.hasCheckpoint = options?.hasCheckpoint ?? false;
     this.resumePhase = options?.resumePhase ?? null;
     this.complexityScore = options?.complexityScore ?? 3;
-    if (options?.maxStepsFromCheckpoint && options.maxStepsFromCheckpoint > 0) {
-      this.maxStepsLimit = options.maxStepsFromCheckpoint;
-    }
     this.runId = options?.runId ?? null;
     this.planMode = options?.planMode ?? false;
     this.approvedPlanBuild = options?.approvedPlanBuild ?? false;
-    this.skipConversationalGate =
-      options?.skipConversationalGate ?? options?.approvedPlanBuild ?? false;
+    this.skipConversationalGate = resolveSkipConversationalGate(options);
     this.approvedPlanSteps = options?.planSteps ?? [];
-    const extracted = extractOriginalUserRequest(state.messages);
-    const planDocument = options?.planSummary?.trim() ?? "";
-    this.originalUserRequest = this.approvedPlanBuild && planDocument ? planDocument : extracted;
+    this.originalUserRequest = resolveLoopOriginalUserRequest(state.messages, options);
 
     this.thinkingStreamStartedAt = null;
-    this.chunkGeneration = options?.chunkGeneration ?? 0;
     this.touchedPaths = new Set();
     this.buildFixResume = options?.buildFixResume ?? false;
     if (options?.hasCheckpoint) {
@@ -303,50 +299,43 @@ export class AgentLoop {
     this.mutable.consecutiveNoContentReadSteps = 0;
     const toolsUsed = new Set<string>();
 
-    return runAgentOrchestrator({
+    return runAgentOrchestrator(buildOrchestratorDeps(this.orchestratorHost(), toolsUsed));
+  }
+
+  private orchestratorHost() {
+    return {
       state: this.state,
-      context: this.state.context,
       originalUserRequest: this.originalUserRequest,
       planMode: this.planMode,
-      emit: (type, data) => this.emit(type, data),
-      configuredModel: () => this.configuredModel(),
-      persistFinal: (summary, opts) => this.bindings.persistFinal(summary, opts),
-      clearCheckpoint: () => this.bindings.clearCheckpoint(),
       resumeRun: this.resumeRun,
       hasCheckpoint: this.hasCheckpoint,
       resumePhase: this.resumePhase,
       approvedPlanBuild: this.approvedPlanBuild,
       skipConversationalGate: this.skipConversationalGate,
       complexityScore: this.complexityScore,
-      setComplexityScore: (score) => {
+      setComplexityScore: (score: number) => {
         this.complexityScore = score;
       },
       maxStepsLimit: this.maxStepsLimit,
-      setMaxStepsLimit: (limit) => {
+      setMaxStepsLimit: (limit: number) => {
         this.maxStepsLimit = limit;
       },
-      toolsUsed,
-      fsmStateName: this.fsmState.name,
-      emitTransition: (eventType, data) => this.emitTransition(eventType, data),
-      notifyLoopStatus: (ctx) => this.notifyLoopStatus(ctx),
-      applyAutoModelForComplexity: (complexity) =>
-        applyAutoModelForComplexity({
-          preferences: this.preferences,
-          connectorKeys: this.connectorKeys,
-          complexity,
-          llm: this.llm,
-          router: this.router,
-        }),
-      loopBudgetExceeded: () => this.loopBudgetExceeded(),
-      returnResumableChunk: (steps, used) => this.bindings.returnResumableChunk(steps, used),
-      gatherContext: () => this.gatherContext(),
-      saveCheckpoint: (phase) => this.bindings.saveCheckpoint(phase),
-      runPlanModeAgentTurn: (model) => this.runPlanModeAgentTurn(model),
-      finishPlanProposal: (plan) => this.finishPlanProposal(plan),
-      runBuildExecute: (used, model, step) =>
-        runBuildExecutePhase(this.bindings.buildExecute(used, model), step),
       buildFixResume: this.buildFixResume,
-    });
+      fsmState: this.fsmState,
+      preferences: this.preferences,
+      connectorKeys: this.connectorKeys,
+      llm: this.llm,
+      router: this.router,
+      bindings: this.bindings,
+      emit: (type: string, data: unknown) => this.emit(type, data),
+      emitTransition: (eventType: string, data?: unknown) => this.emitTransition(eventType, data),
+      notifyLoopStatus: (ctx: LoopUpdateContext) => this.notifyLoopStatus(ctx),
+      configuredModel: () => this.configuredModel(),
+      loopBudgetExceeded: () => this.loopBudgetExceeded(),
+      gatherContext: () => this.gatherContext(),
+      runPlanModeAgentTurn: (model: LLMProvider) => this.runPlanModeAgentTurn(model),
+      finishPlanProposal: (plan: ProposedPlan) => this.finishPlanProposal(plan),
+    };
   }
 
   private async gatherContext(): Promise<void> {
@@ -404,9 +393,9 @@ export class AgentLoop {
   private async attemptGracefulClosing(
     reason: "tool_miss" | "build_fail" | "plan_stuck",
   ): Promise<string | null> {
-    return attemptGracefulClosingPhase(
+    return attemptGracefulClosingForHost(
       {
-        messages: this.state.messages,
+        state: this.state,
         configuredModel: () => this.configuredModel(),
         finishPlanProposal: async (proposed) => {
           await finishPlanProposalForHost(this.planTurnHost(), proposed);
