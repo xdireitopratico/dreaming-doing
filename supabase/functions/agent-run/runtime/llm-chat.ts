@@ -147,3 +147,63 @@ export async function chatBuildModeLlm(input: {
     throw new Error(message);
   }
 }
+
+export type BuildModeLlmLoopInput = {
+  model: LLMProvider;
+  instruction: string;
+  history: ChatMessage[];
+  forceTools?: boolean;
+  tools?: ToolDefinition[];
+  context: AgentContext | null;
+  projectTemplate: string;
+  stackAddon: string;
+  sessionAddon: string;
+  tasteStart: boolean;
+  skillPrompt: string;
+  toolDefinitions: ToolDefinition[];
+  complexityScore: number;
+  getLlmResponseWasStreamed: () => boolean;
+  setLlmResponseWasStreamed: (value: boolean) => void;
+  getThinkingStreamStartedAt: () => number | null;
+  setThinkingStreamStartedAt: (value: number | null) => void;
+  emit: PlanTurnEmit;
+  onActivity: () => void;
+  onThinkingCapExceeded: () => void;
+  runId: string | null;
+  robinActive: boolean;
+};
+
+export async function chatBuildModeForLoop(
+  input: BuildModeLlmLoopInput,
+): Promise<ChatResponse> {
+  const streamState: BuildLlmStreamState = {
+    llmResponseWasStreamed: input.getLlmResponseWasStreamed(),
+    thinkingStreamStartedAt: input.getThinkingStreamStartedAt(),
+  };
+  const response = await chatBuildModeLlm({
+    model: input.model,
+    instruction: input.instruction,
+    history: input.history,
+    contextBlock: buildBuildContextBlock(input.context),
+    fullSystemPrompt: buildBuildAgentSystemPrompt({
+      projectTemplate: input.projectTemplate,
+      stackAddon: input.stackAddon,
+      sessionAddon: input.sessionAddon,
+      tasteStart: input.tasteStart,
+      skillPrompt: input.skillPrompt,
+    }),
+    toolDefinitions: input.toolDefinitions,
+    complexityScore: input.complexityScore,
+    forceTools: input.forceTools ?? false,
+    tools: input.tools,
+    streamState,
+    emit: input.emit,
+    onActivity: input.onActivity,
+    onThinkingCapExceeded: input.onThinkingCapExceeded,
+    runId: input.runId,
+    robinActive: input.robinActive,
+  });
+  input.setLlmResponseWasStreamed(streamState.llmResponseWasStreamed);
+  input.setThinkingStreamStartedAt(streamState.thinkingStreamStartedAt);
+  return response;
+}

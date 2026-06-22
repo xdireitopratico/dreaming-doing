@@ -15,10 +15,104 @@ import type {
   ToolResult,
 } from "../types.ts";
 import { LoopPhase } from "../types.ts";
+import {
+  bumpLlmRetries,
+  loopBudgetExceeded,
+  maybeEmitSilenceHeartbeat,
+  resetLlmRetries,
+  returnResumableChunk,
+  touchHeartbeat,
+  type ResumableChunkResult,
+} from "./infra.ts";
+import {
+  clearCheckpoint,
+  persistAssistantStep,
+  persistCheckpointChat,
+  persistFinal,
+  persistPlanFinal,
+  saveCheckpoint,
+  updateAssistantStep,
+} from "./phases/persist.ts";
+import { finishClarify } from "./phases/plan-turn.ts";
 import type { RunInfraDeps } from "./infra.ts";
 import type { AgentPersistDeps, PersistFinalOpts } from "./phases/persist.ts";
 import type { BuildExecuteDeps } from "./phases/execute.ts";
 import type { PlanModeStreamState, PlanTurnDeps, PlanTurnFinishDeps } from "./phases/plan-turn.ts";
+
+/** Superfície do AgentLoop exposta ao factory — evita depsContext() gigante no loop. */
+export type AgentLoopHost = {
+  sb: any;
+  runId: string | null;
+  state: AgentState;
+  reg: ToolRegistry;
+  compression: CompressionManager;
+  observer: RuntimeObserver;
+  router: ModelRouter;
+  robinActive: boolean;
+  projectTemplate: string;
+  stackAddon: string;
+  sessionAddon: string;
+  tasteStart: boolean;
+  maxStepsLimit: number;
+  complexityScore: number;
+  originalUserRequest: string;
+  approvedPlanBuild: boolean;
+  approvedPlanSteps: PlanStep[];
+  buildFixResume: boolean;
+  planStreamState: PlanModeStreamState;
+  fileContentCache: Map<string, string>;
+  touchedPaths: Set<string>;
+  narrationBuffer: string;
+  runStartTime: number;
+  getLastCheckpointStep: () => number;
+  setLastCheckpointStep: (step: number) => void;
+  getApprovedPlanStepIndex: () => number;
+  setApprovedPlanStepIndex: (index: number) => void;
+  getToolMissCount: () => number;
+  setToolMissCount: (count: number) => void;
+  getForceToolsNext: () => boolean;
+  setForceToolsNext: (value: boolean) => void;
+  getToolsInvoked: () => boolean;
+  setToolsInvoked: (value: boolean) => void;
+  getConsecutiveNoContentReadSteps: () => number;
+  setConsecutiveNoContentReadSteps: (value: number) => void;
+  getLlmResponseWasStreamed: () => boolean;
+  getLastExecutePhaseMessage: () => string | null;
+  setLastExecutePhaseMessage: (value: string | null) => void;
+  getLastRunMessageId: () => string | null;
+  setLastRunMessageId: (id: string | null) => void;
+  getLastActivityAt: () => number;
+  setLastActivityAt: (ms: number) => void;
+  narrationTrim: () => string;
+  tailSlice: (count: number) => unknown[];
+  getTimeline: () => Array<{ type: string; data: Record<string, unknown>; timestamp?: number }>;
+  emitAgentProse: (raw: string, loopStep: number) => void;
+  emit: (type: string, data: unknown) => void;
+  configuredModel: () => LLMProvider;
+  gatherContext: () => Promise<void>;
+  runDesignPreflightIfNeeded: () => Promise<void>;
+  requiresFinalBuildGate: () => boolean;
+  enabledApprovedPlanSteps: () => PlanStep[];
+  isCanceled: () => Promise<boolean>;
+  notifyLoopStatus: (ctx: LoopUpdateContext) => void;
+  recordTouchedPath: (path: string) => void;
+  attemptGracefulClosing: (
+    reason: "tool_miss" | "build_fail" | "plan_stuck",
+  ) => Promise<string | null>;
+  emitTransition: (eventType: string, data?: unknown) => Promise<void>;
+  llmChat: (
+    model: LLMProvider,
+    instruction: string,
+    history: ChatMessage[],
+    forceTools: boolean,
+  ) => Promise<ChatResponse | null>;
+  compressMessages: (messages: ChatMessage[]) => Promise<ChatMessage[]>;
+  executeTool: (call: ToolCall) => Promise<ToolResult>;
+  markToolsInvoked: () => void;
+  onActivity: () => void;
+  getPlanLlmResponseWasStreamed: () => boolean;
+  setPlanLlmResponseWasStreamed: (value: boolean) => void;
+};
 
 export type AgentLoopDepsContext = {
   sb: any;
@@ -278,5 +372,139 @@ export function buildPlanTurnDeps(
     onActivity: ctx.onActivity,
     getLlmResponseWasStreamed: ctx.getPlanLlmResponseWasStreamed,
     setLlmResponseWasStreamed: ctx.setPlanLlmResponseWasStreamed,
+  };
+}
+
+export function createDepsContext(
+  host: AgentLoopHost,
+  loopBudgetMs: number,
+): AgentLoopDepsContext {
+  let ctx!: AgentLoopDepsContext;
+  const persistDeps = () => buildPersistDeps(ctx, loopBudgetMs);
+  const infraDeps = () => buildInfraDeps(ctx, loopBudgetMs);
+
+  ctx = {
+    sb: host.sb,
+    runId: host.runId,
+    state: host.state,
+    reg: host.reg,
+    compression: host.compression,
+    observer: host.observer,
+    router: host.router,
+    robinActive: host.robinActive,
+    projectTemplate: host.projectTemplate,
+    stackAddon: host.stackAddon,
+    sessionAddon: host.sessionAddon,
+    tasteStart: host.tasteStart,
+    maxStepsLimit: host.maxStepsLimit,
+    complexityScore: host.complexityScore,
+    originalUserRequest: host.originalUserRequest,
+    approvedPlanBuild: host.approvedPlanBuild,
+    approvedPlanSteps: host.approvedPlanSteps,
+    buildFixResume: host.buildFixResume,
+    planStreamState: host.planStreamState,
+    fileContentCache: host.fileContentCache,
+    touchedPaths: host.touchedPaths,
+    narrationBuffer: host.narrationBuffer,
+    runStartTime: host.runStartTime,
+    getLastCheckpointStep: () => host.getLastCheckpointStep(),
+    setLastCheckpointStep: (step) => host.setLastCheckpointStep(step),
+    getApprovedPlanStepIndex: () => host.getApprovedPlanStepIndex(),
+    setApprovedPlanStepIndex: (index) => host.setApprovedPlanStepIndex(index),
+    getToolMissCount: () => host.getToolMissCount(),
+    setToolMissCount: (count) => host.setToolMissCount(count),
+    getForceToolsNext: () => host.getForceToolsNext(),
+    setForceToolsNext: (value) => host.setForceToolsNext(value),
+    getToolsInvoked: () => host.getToolsInvoked(),
+    setToolsInvoked: (value) => host.setToolsInvoked(value),
+    getConsecutiveNoContentReadSteps: () => host.getConsecutiveNoContentReadSteps(),
+    setConsecutiveNoContentReadSteps: (value) => host.setConsecutiveNoContentReadSteps(value),
+    getLlmResponseWasStreamed: () => host.getLlmResponseWasStreamed(),
+    getLastExecutePhaseMessage: () => host.getLastExecutePhaseMessage(),
+    setLastExecutePhaseMessage: (value) => host.setLastExecutePhaseMessage(value),
+    getLastRunMessageId: () => host.getLastRunMessageId(),
+    setLastRunMessageId: (id) => host.setLastRunMessageId(id),
+    getLastActivityAt: () => host.getLastActivityAt(),
+    setLastActivityAt: (ms) => host.setLastActivityAt(ms),
+    narrationTrim: () => host.narrationTrim(),
+    tailSlice: (count) => host.tailSlice(count),
+    getTimeline: () => host.getTimeline(),
+    emitAgentProse: (raw, loopStep) => host.emitAgentProse(raw, loopStep),
+    emit: (type, data) => host.emit(type, data),
+    configuredModel: () => host.configuredModel(),
+    loopBudgetExceeded: () =>
+      loopBudgetExceeded({ runStartTime: host.runStartTime, loopBudgetMs }),
+    returnResumableChunk: (steps, used, options) =>
+      returnResumableChunk(infraDeps(), steps, used, options),
+    runDesignPreflightIfNeeded: () => host.runDesignPreflightIfNeeded(),
+    requiresFinalBuildGate: () => host.requiresFinalBuildGate(),
+    enabledApprovedPlanSteps: () => host.enabledApprovedPlanSteps(),
+    isCanceled: () => host.isCanceled(),
+    touchHeartbeat: () => touchHeartbeat(infraDeps()),
+    maybeEmitSilenceHeartbeat: () => maybeEmitSilenceHeartbeat(infraDeps()),
+    bumpLlmRetries: () => bumpLlmRetries(infraDeps()),
+    resetLlmRetries: () => resetLlmRetries(infraDeps()),
+    saveCheckpoint: (phase, force) => saveCheckpoint(persistDeps(), phase, force),
+    persistFinal: (summary, opts) => persistFinal(persistDeps(), summary, opts),
+    persistPlanFinal: (summary, plan) => persistPlanFinal(persistDeps(), summary, plan),
+    clearCheckpoint: () => clearCheckpoint(persistDeps()),
+    persistAssistantStep: (response) => persistAssistantStep(persistDeps(), response),
+    updateAssistantStep: (msgId, response, execResults, step) =>
+      updateAssistantStep(persistDeps(), msgId, response, execResults, step),
+    persistCheckpointChat: (steps, buildFix) =>
+      persistCheckpointChat(persistDeps(), steps, buildFix),
+    notifyLoopStatus: (ctx) => host.notifyLoopStatus(ctx),
+    recordTouchedPath: (path) => host.recordTouchedPath(path),
+    finishClarify: (message, steps, used) =>
+      finishClarify(buildPlanTurnFinishDeps(ctx), message, steps, used),
+    attemptGracefulClosing: (reason) => host.attemptGracefulClosing(reason),
+    emitTransition: (eventType, data) => host.emitTransition(eventType, data),
+    llmChat: (model, instruction, history, forceTools) =>
+      host.llmChat(model, instruction, history, forceTools),
+    compressMessages: (messages) => host.compressMessages(messages),
+    executeTool: (call) => host.executeTool(call),
+    markToolsInvoked: () => host.markToolsInvoked(),
+    onActivity: () => host.onActivity(),
+    getPlanLlmResponseWasStreamed: () => host.getPlanLlmResponseWasStreamed(),
+    setPlanLlmResponseWasStreamed: (value) => host.setPlanLlmResponseWasStreamed(value),
+  };
+  return ctx;
+}
+
+export type LoopBindings = {
+  deps: () => AgentLoopDepsContext;
+  persistFinal: (summary: string, opts?: PersistFinalOpts) => Promise<void>;
+  clearCheckpoint: () => Promise<void>;
+  saveCheckpoint: (phase: LoopPhase, force?: boolean) => Promise<void>;
+  touchHeartbeat: () => Promise<void>;
+  returnResumableChunk: (
+    steps: number,
+    toolsUsed: Set<string>,
+    options?: { buildFix?: boolean },
+  ) => Promise<ResumableChunkResult>;
+  buildExecute: (toolsUsed: Set<string>, executionModel: LLMProvider) => BuildExecuteDeps;
+  buildPlanTurn: (skillPrompt: string) => PlanTurnDeps;
+  planTurnFinish: () => PlanTurnFinishDeps;
+};
+
+export function createLoopBindings(
+  host: AgentLoopHost,
+  loopBudgetMs: number,
+): LoopBindings {
+  const deps = () => createDepsContext(host, loopBudgetMs);
+  const persistDeps = () => buildPersistDeps(deps(), loopBudgetMs);
+  const infraDeps = () => buildInfraDeps(deps(), loopBudgetMs);
+
+  return {
+    deps,
+    persistFinal: (summary, opts) => persistFinal(persistDeps(), summary, opts),
+    clearCheckpoint: () => clearCheckpoint(persistDeps()),
+    saveCheckpoint: (phase, force) => saveCheckpoint(persistDeps(), phase, force),
+    touchHeartbeat: () => touchHeartbeat(infraDeps()),
+    returnResumableChunk: (steps, used, options) =>
+      returnResumableChunk(infraDeps(), steps, used, options),
+    buildExecute: (toolsUsed, model) => buildExecuteDeps(deps(), toolsUsed, model),
+    buildPlanTurn: (skillPrompt) => buildPlanTurnDeps(deps(), skillPrompt),
+    planTurnFinish: () => buildPlanTurnFinishDeps(deps()),
   };
 }

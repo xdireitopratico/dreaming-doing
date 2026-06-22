@@ -118,6 +118,16 @@ export function emitDeliveryCheckpoint(deps: RunInfraDeps, step: number): void {
   });
 }
 
+export async function isRunCanceled(sb: any, runId: string | null): Promise<boolean> {
+  if (!runId) return false;
+  const { data } = await sb
+    .from("agent_runs")
+    .select("canceled_at")
+    .eq("id", runId)
+    .maybeSingle();
+  return !!data?.canceled_at;
+}
+
 export async function returnResumableChunk(
   deps: RunInfraDeps,
   steps: number,
