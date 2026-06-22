@@ -1,10 +1,10 @@
 // index.ts — Edge Function agent-run (build: agentloop-only 2026-06-06).
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 
-import { type AgentPreferencesPayload, loadDeployConnectorKeys } from "./connector-keys.ts";
+import { type AgentPreferencesPayload } from "./connector-keys.ts";
 import { buildProvider, type ProviderConfig } from "./providers.ts";
 import { loadUserLlmContext, resolveAgentProvider, validateAgentPreferences } from "./run-setup.ts";
-import { buildStackContext, stackPromptAddon } from "../_shared/stack-context.ts";
+
 import { buildChatHistory } from "./memory.ts";
 import { RobinKeyPool } from "./robin-pool.ts";
 import { E2B_SETUP_USER_MESSAGE, loadUserE2bApiKey } from "../_shared/user-e2b.ts";
@@ -27,8 +27,6 @@ import { enqueueAgentJobOnDispatch } from "../_shared/agent-jobs.ts";
 import { resolveInngestEventKey, resolveInngestEventUrl } from "../_shared/inngest-event-url.ts";
 import { transitionRun } from "../_shared/run-lifecycle.ts";
 import type { AgentRunStatus } from "../_shared/agent-contract-events.ts";
-
-const runningLocks = new Map<string, Promise<unknown>>();
 
 /** H9 fix: cap meta em 50KB para não estourar Realtime UPDATE.
  *  Trunca executionLog/streamTail/cardSnapshot mantendo os mais recentes. */
@@ -439,9 +437,7 @@ Deno.serve(async (req) => {
       // Run ativo (running/pending): enfileira com enqueue=true.
       // awaiting_user (plano pendente): também enfileira — mensagens do chat ficam na fila até aprovar/rejeitar.
       const isRunning =
-        awaitingRun?.status === "running" ||
-        awaitingRun?.status === "pending" ||
-        runningLocks.has(projectId);
+        awaitingRun?.status === "running" || awaitingRun?.status === "pending";
 
       const enqueueIntent = body.enqueue === true;
 
@@ -548,9 +544,6 @@ Deno.serve(async (req) => {
         await transitionRun(supabase, awaitingRun.id as string, "completed");
       }
 
-      if (resumeRun) runningLocks.delete(projectId);
-      runningLocks.set(projectId, Promise.resolve());
-
       const { data: history } = await supabase
         .from("messages")
         .select("role, parts, tool_calls, meta, created_at")
@@ -588,7 +581,6 @@ Deno.serve(async (req) => {
       if (sessionKindRaw === "taste_chat") sessionKind = "taste_chat";
 
       if (sessionKind === "taste_chat" && tasteChatRemaining <= 0) {
-        runningLocks.delete(projectId);
         return json(
           {
             error: "Limite Taste Chat (50) atingido. Configure suas API em /api para continuar.",
@@ -597,7 +589,6 @@ Deno.serve(async (req) => {
         );
       }
       if (sessionKind === "taste_start" && tasteStartRemaining <= 0) {
-        runningLocks.delete(projectId);
         return json(
           {
             error: "Start Project já utilizado. Configure API para construir sem limites.",
@@ -606,7 +597,6 @@ Deno.serve(async (req) => {
         );
       }
       if (!hasUserLlmKey && sessionKind === "byok") {
-        runningLocks.delete(projectId);
         return json(
           {
             error: "Configure suas API em /api ou use o Taste Chat / Start Project.",
@@ -618,14 +608,12 @@ Deno.serve(async (req) => {
       if (sessionKind === "byok") {
         const prefError = validateAgentPreferences(preferences);
         if (prefError) {
-          runningLocks.delete(projectId);
           return json({ error: prefError }, 400);
         }
       }
 
       // ─── Taste Chat: concierge NVIDIA, sem agent loop (JSON; mensagem salva no DB) ───
       if (sessionKind === "taste_chat") {
-        const cleanup = () => runningLocks.delete(projectId!);
         try {
           const tasteCfg = await loadTasteNvidiaConfig(supabase);
           const result = await runTasteChat({
@@ -646,10 +634,8 @@ Deno.serve(async (req) => {
               taste_chat_remaining: Math.max(0, tasteChatRemaining - 1),
             })
             .eq("id", userData.user.id);
-          cleanup();
           return json(result);
         } catch (err: unknown) {
-          cleanup();
           return json(
             {
               error: (err as Error)?.message ?? "Taste indisponível",
@@ -688,7 +674,6 @@ Deno.serve(async (req) => {
         effectiveRobin = setup.effectiveRobin;
         tasteStart = setup.tasteStart;
       } catch (err: unknown) {
-        runningLocks.delete(projectId);
         return json(
           {
             error: (err as Error)?.message ?? "Provider LLM não configurado",
@@ -720,10 +705,8 @@ Deno.serve(async (req) => {
             },
           });
 
-          runningLocks.delete(projectId);
           return json({ ok: true, content, chat: true });
         } catch (err: unknown) {
-          runningLocks.delete(projectId);
           return json(
             {
               error: (err as Error)?.message ?? "Falha ao responder no chat",
@@ -753,32 +736,12 @@ Deno.serve(async (req) => {
         hasApprovedPlanInHistory,
       });
 
-      // Fase 4.7: o código abaixo (reg + sandbox local) era DEAD CODE — o
-      // executeAgentJob em run-job.ts cria seu próprio ToolRegistry e sandbox.
-      // A única coisa útil era a checagem antecipada de e2bKey (early 403 antes
-      // de gastar tempo de loop), que mantemos como validação rápida.
-
-      const cleanup = () => runningLocks.delete(projectId!);
-
-      const projectTemplate = (project as { template?: string }).template ?? "vite-react";
-      const projectMeta = ((project as { meta?: Record<string, unknown> }).meta ?? {}) as Record<
-        string,
-        unknown
-      >;
-      const deployKeys = await loadDeployConnectorKeys(supabase, userData.user.id);
-      const stackCtx = buildStackContext(profile?.integration_prefs, projectMeta, {
-        ...connectorKeys,
-        ...deployKeys,
-      });
-      const stackAddon = stackPromptAddon(stackCtx);
-
       // Early e2bKey check: se vamos alocar E2B mas o usuário não tem chave,
       // retornamos 403 AGORA (sem gastar tempo no agent loop). É duplicado
       // com o check em run-job.ts:204 mas falha mais rápido e com mensagem clara.
       if (allocateSandboxLocal) {
         const e2bKey = await loadUserE2bApiKey(supabase, userData.user.id);
         if (!e2bKey?.trim()) {
-          runningLocks.delete(projectId);
           return json(
             {
               error: E2B_SETUP_USER_MESSAGE,
@@ -838,7 +801,6 @@ Deno.serve(async (req) => {
         });
 
         if (lockErr || !lockedId) {
-          runningLocks.delete(projectId);
           return json({ error: "Erro ao iniciar agente — tente novamente." }, 500);
         }
 
@@ -853,7 +815,6 @@ Deno.serve(async (req) => {
           .single();
 
         if (createdRun && createdRun.conversation_id !== conversationId) {
-          runningLocks.delete(projectId);
           if (!enqueueIntent) {
             const { countPendingMessages, resolveAgentBusyReason } =
               await import("../_shared/agent-pending-queue.ts");
@@ -1014,7 +975,6 @@ Deno.serve(async (req) => {
           error: eventResult.error ?? "Inngest dispatch failed",
           resumable: false,
         });
-        cleanup();
         return json({ error: "Falha ao iniciar agente (Inngest)" }, 500);
       }
 
@@ -1047,8 +1007,6 @@ Deno.serve(async (req) => {
         eventId: eventResult.ids?.[0] ?? null,
       });
 
-      cleanup();
-
       // Persiste meta.queued=false na última user message desta conversa
       // para que o badge "Na fila…" suma no client via Realtime UPDATE
       // (cobrado pelo listener em useAgentRealtime).
@@ -1069,7 +1027,6 @@ Deno.serve(async (req) => {
         queued: false,
       });
     } catch (e: unknown) {
-      if (projectId) runningLocks.delete(projectId);
       logger.error("agent_run.unhandled_error", {
         error: (e as Error)?.message,
         stack: (e as Error)?.stack,
