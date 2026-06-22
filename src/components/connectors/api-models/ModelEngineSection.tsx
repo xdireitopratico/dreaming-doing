@@ -15,7 +15,7 @@ import {
   X,
   RotateCcw,
 } from "lucide-react";
-import { allProviders, providerById, type AiProviderId } from "@/lib/ai-provider-registry";
+import { providerById, type AiProvider, type AiProviderId } from "@/lib/ai-provider-registry";
 import type { AgentPreferences, ModelPowerMode, SttProviderId } from "@/lib/agent-preferences";
 import {
   type ForgeModelPreset,
@@ -165,6 +165,7 @@ function ModelCard({
 interface ModelEngineSectionProps {
   prefs: AgentPreferences;
   connected: Record<string, boolean>;
+  providers: AiProvider[];
   selectedEnv: AiProviderId;
   envModels: ForgeModelPreset[];
   onSetMode: (mode: ModelPowerMode) => void;
@@ -178,6 +179,7 @@ interface ModelEngineSectionProps {
 export function ModelEngineSection({
   prefs,
   connected,
+  providers,
   selectedEnv,
   envModels,
   onSetMode,
@@ -323,7 +325,7 @@ export function ModelEngineSection({
           2 · Provider
         </p>
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2">
-          {allProviders().map((env) => {
+          {providers.map((env) => {
             const hasKey = connected[env.id];
             const active = selectedEnv === env.id;
             return (

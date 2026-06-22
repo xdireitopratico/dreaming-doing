@@ -12,7 +12,10 @@ import {
 } from "@/lib/connector-env-status";
 import {
   allProviders,
+  customProviderSecretKey,
+  loadCustomProvidersFromDb,
   providerById,
+  type AiProvider,
   type AiProviderId,
   type CustomProviderId,
   removeCustomProvider,
@@ -81,6 +84,38 @@ function rowProviderId(row: ConnectorRow): string {
   return (row.provider ?? meta.provider ?? "openai").trim();
 }
 
+function syntheticProviderFromRow(row: ConnectorRow): AiProvider | null {
+  const id = rowProviderId(row);
+  if (!id.startsWith("custom-")) return null;
+  const meta = (row.meta ?? {}) as { baseUrl?: string; label?: string };
+  return {
+    id: id as CustomProviderId,
+    label: meta.label?.trim() || id.replace(/^custom-/, "").replace(/-/g, " "),
+    icon: "globe",
+    docUrl: "",
+    keyPrefix: "sk-",
+    keyPlaceholder: "sk-...",
+    costPerM: 0,
+    openAiCompatible: true,
+    supportsPool: true,
+    baseUrl: meta.baseUrl?.trim().replace(/\/$/, "") || "",
+    secretKey: customProviderSecretKey(id),
+    llmProvider: "openai",
+    isUserAdded: true,
+    models: [],
+  };
+}
+
+function mergeProviderList(connectorRows?: ConnectorRow[]): AiProvider[] {
+  const base = allProviders();
+  const byId = new Map(base.map((p) => [p.id, p]));
+  for (const row of connectorRows ?? []) {
+    const synthetic = syntheticProviderFromRow(row);
+    if (synthetic && !byId.has(synthetic.id)) byId.set(synthetic.id, synthetic);
+  }
+  return [...byId.values()];
+}
+
 export function ApiModelsPage() {
   const { user } = useAuth();
   const qc = useQueryClient();
@@ -108,6 +143,11 @@ export function ApiModelsPage() {
     prefs.userModelEntries,
   );
   const [selectedEnv, setSelectedEnv] = useState<AiProviderId>(activePreset.env as AiProviderId);
+
+  useEffect(() => {
+    if (!user) return;
+    void loadCustomProvidersFromDb(supabase);
+  }, [user]);
 
   const { data: connectorRows } = useQuery({
     queryKey: ["connectors-public", user?.id],
@@ -168,7 +208,7 @@ export function ApiModelsPage() {
 
     setProviders((prev) => {
       const byId = new Map(prev.map((p) => [p.id, p]));
-      const next: ProviderUiState[] = allProviders().map((p) => {
+      const next: ProviderUiState[] = mergeProviderList(connectorRows).map((p) => {
         const existing = byId.get(p.id);
         const row = connectorRows.find((r) => rowProviderId(r) === p.id);
         if (!row) {
@@ -219,6 +259,10 @@ export function ApiModelsPage() {
     });
   }, []);
 
+  const studioProviders = useMemo(
+    () => mergeProviderList(connectorRows),
+    [connectorRows],
+  );
   const connected = useMemo(() => connectedEnvsFromRows(connectorRows), [connectorRows]);
   const connectedCount = useMemo(
     () => Object.values(connected).filter(Boolean).length,
@@ -613,6 +657,7 @@ export function ApiModelsPage() {
       <ModelEngineSection
         prefs={prefs}
         connected={connected}
+        providers={studioProviders}
         selectedEnv={selectedEnv}
         envModels={envModels}
         onSetMode={handleSetMode}

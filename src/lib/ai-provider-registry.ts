@@ -20,6 +20,14 @@ import {
 } from "lucide-react";
 import type { ForgeModelPreset, ModelTier } from "@/lib/model-catalog";
 
+export type LlmProviderKind = "anthropic" | "openai" | "gemini" | "ollama";
+
+export type ProviderWire = {
+  llmProvider: LlmProviderKind;
+  secretKey: string;
+  baseUrl?: string;
+};
+
 export type BuiltInProviderId =
   | "alibaba"
   | "anthropic"
@@ -57,6 +65,10 @@ export interface AiProvider {
   supportsPool: boolean;
   /** Base URL para providers OpenAI-compatible. */
   baseUrl: string;
+  /** Nome da variável de runtime (connector-keys / agent-run). */
+  secretKey: string;
+  /** Adapter LLM usado pelo agent-run. */
+  llmProvider: LlmProviderKind;
   /** Se foi adicionado pelo usuário via UI */
   isUserAdded?: boolean;
   /** Modelos pré-carregados do catálogo para este provider */
@@ -85,6 +97,42 @@ export function providerIcon(id: AiProviderIcon): LucideIcon {
 
 const OPENROUTER_BASE = "https://openrouter.ai/api/v1";
 
+export function customProviderSecretKey(providerId: string): string {
+  return `${providerId.toUpperCase().replace(/-/g, "_")}_API_KEY`;
+}
+
+export function customProviderBaseUrlKey(secretKey: string): string {
+  return secretKey.replace(/_API_KEY$/, "_BASE_URL");
+}
+
+/** Wire de runtime — built-in do registry ou custom cadastrado pelo usuário. */
+export function providerWire(providerId: string, baseUrlOverride?: string): ProviderWire {
+  const p = providerById(providerId);
+  if (p) {
+    return {
+      llmProvider: p.llmProvider,
+      secretKey: p.secretKey,
+      baseUrl: baseUrlOverride?.trim().replace(/\/$/, "") || p.baseUrl || undefined,
+    };
+  }
+  if (providerId.startsWith("custom-")) {
+    return {
+      llmProvider: "openai",
+      secretKey: customProviderSecretKey(providerId),
+      baseUrl: baseUrlOverride?.trim().replace(/\/$/, "") || undefined,
+    };
+  }
+  return {
+    llmProvider: "openai",
+    secretKey: "OPENROUTER_API_KEY",
+    baseUrl: OPENROUTER_BASE,
+  };
+}
+
+export function builtInProviderIds(): BuiltInProviderId[] {
+  return BUILT_IN_PROVIDERS.map((p) => p.id);
+}
+
 function buildProvider(p: Omit<AiProvider, "models"> & { models?: ForgeModelPreset[] }): AiProvider {
   return { ...p, models: p.models ?? [] };
 }
@@ -101,6 +149,8 @@ export const BUILT_IN_PROVIDERS: AiProvider[] = [
     openAiCompatible: true,
     supportsPool: false,
     baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+    secretKey: "DASHSCOPE_API_KEY",
+    llmProvider: "openai",
   }),
   buildProvider({
     id: "anthropic",
@@ -113,6 +163,8 @@ export const BUILT_IN_PROVIDERS: AiProvider[] = [
     openAiCompatible: false,
     supportsPool: false,
     baseUrl: "https://api.anthropic.com",
+    secretKey: "ANTHROPIC_API_KEY",
+    llmProvider: "anthropic",
   }),
   buildProvider({
     id: "deepseek",
@@ -125,6 +177,8 @@ export const BUILT_IN_PROVIDERS: AiProvider[] = [
     openAiCompatible: true,
     supportsPool: false,
     baseUrl: "https://api.deepseek.com",
+    secretKey: "DEEPSEEK_API_KEY",
+    llmProvider: "openai",
   }),
   buildProvider({
     id: "gemini",
@@ -137,6 +191,8 @@ export const BUILT_IN_PROVIDERS: AiProvider[] = [
     openAiCompatible: true,
     supportsPool: false,
     baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai/",
+    secretKey: "GEMINI_API_KEY",
+    llmProvider: "gemini",
   }),
   buildProvider({
     id: "groq",
@@ -149,6 +205,8 @@ export const BUILT_IN_PROVIDERS: AiProvider[] = [
     openAiCompatible: true,
     supportsPool: true,
     baseUrl: "https://api.groq.com/openai/v1",
+    secretKey: "GROQ_API_KEY",
+    llmProvider: "openai",
   }),
   buildProvider({
     id: "minimax",
@@ -161,6 +219,8 @@ export const BUILT_IN_PROVIDERS: AiProvider[] = [
     openAiCompatible: true,
     supportsPool: false,
     baseUrl: "https://api.minimax.io/v1",
+    secretKey: "MINIMAX_API_KEY",
+    llmProvider: "openai",
   }),
   buildProvider({
     id: "moonshotai",
@@ -173,6 +233,8 @@ export const BUILT_IN_PROVIDERS: AiProvider[] = [
     openAiCompatible: true,
     supportsPool: false,
     baseUrl: "https://api.moonshot.ai/v1",
+    secretKey: "MOONSHOT_API_KEY",
+    llmProvider: "openai",
   }),
   buildProvider({
     id: "nvidia",
@@ -185,6 +247,8 @@ export const BUILT_IN_PROVIDERS: AiProvider[] = [
     openAiCompatible: true,
     supportsPool: true,
     baseUrl: "https://integrate.api.nvidia.com/v1",
+    secretKey: "NVIDIA_API_KEY",
+    llmProvider: "openai",
   }),
   buildProvider({
     id: "ollama",
@@ -197,6 +261,8 @@ export const BUILT_IN_PROVIDERS: AiProvider[] = [
     openAiCompatible: true,
     supportsPool: false,
     baseUrl: "http://localhost:11434/v1",
+    secretKey: "OLLAMA_BASE_URL",
+    llmProvider: "ollama",
   }),
   buildProvider({
     id: "openai",
@@ -209,6 +275,8 @@ export const BUILT_IN_PROVIDERS: AiProvider[] = [
     openAiCompatible: true,
     supportsPool: true,
     baseUrl: "https://api.openai.com/v1",
+    secretKey: "OPENAI_API_KEY",
+    llmProvider: "openai",
   }),
   buildProvider({
     id: "openrouter",
@@ -221,6 +289,8 @@ export const BUILT_IN_PROVIDERS: AiProvider[] = [
     openAiCompatible: true,
     supportsPool: true,
     baseUrl: OPENROUTER_BASE,
+    secretKey: "OPENROUTER_API_KEY",
+    llmProvider: "openai",
   }),
   buildProvider({
     id: "xai",
@@ -233,6 +303,8 @@ export const BUILT_IN_PROVIDERS: AiProvider[] = [
     openAiCompatible: true,
     supportsPool: false,
     baseUrl: "https://api.x.ai/v1",
+    secretKey: "XAI_API_KEY",
+    llmProvider: "openai",
   }),
   buildProvider({
     id: "xiaomi",
@@ -245,6 +317,8 @@ export const BUILT_IN_PROVIDERS: AiProvider[] = [
     openAiCompatible: true,
     supportsPool: false,
     baseUrl: "https://api.xiaomimimo.com/v1",
+    secretKey: "MIMO_API_KEY",
+    llmProvider: "openai",
   }),
 ];
 
@@ -283,6 +357,8 @@ export function addCustomProvider(input: CustomProviderInput): AiProvider {
     openAiCompatible: true,
     supportsPool: true,
     baseUrl: input.baseUrl.trim().replace(/\/$/, ""),
+    secretKey: customProviderSecretKey(id),
+    llmProvider: "openai",
     isUserAdded: true,
     models: [],
   };
@@ -310,20 +386,25 @@ export async function loadCustomProvidersFromDb(supabase: SupabaseClient): Promi
     return migrateCustomProvidersToDb(supabase);
   }
 
-  const fromDb = (data ?? []).map((row: CustomProviderDbRow) => ({
-    id: `custom-${row.provider_id}` as CustomProviderId,
-    label: row.label,
-    icon: (row.icon ?? "globe") as AiProviderIcon,
-    docUrl: "",
-    keyPrefix: "sk-",
-    keyPlaceholder: "sk-...",
-    costPerM: 0,
-    openAiCompatible: true,
-    supportsPool: true,
-    baseUrl: row.base_url ?? "",
-    isUserAdded: true,
-    models: [],
-  }));
+  const fromDb = (data ?? []).map((row: CustomProviderDbRow) => {
+    const id = `custom-${row.provider_id}` as CustomProviderId;
+    return {
+      id,
+      label: row.label,
+      icon: (row.icon ?? "globe") as AiProviderIcon,
+      docUrl: "",
+      keyPrefix: "sk-",
+      keyPlaceholder: "sk-...",
+      costPerM: 0,
+      openAiCompatible: true,
+      supportsPool: true,
+      baseUrl: row.base_url ?? "",
+      secretKey: customProviderSecretKey(id),
+      llmProvider: "openai" as const,
+      isUserAdded: true,
+      models: [],
+    };
+  });
 
   // Carregar localStorage legado e migrar para DB se necessário
   const local = loadCustomProviders();
@@ -486,9 +567,9 @@ export function makePresetForProvider(
     tier: opts?.tier ?? "balanced",
     brand: p?.label ?? id,
     rank: 5000,
-    llmProvider: id === "anthropic" ? "anthropic" : "openai",
+    llmProvider: p?.llmProvider ?? "openai",
     baseUrl: p?.baseUrl,
-    secretKey: p?.keyPrefix ?? "API_KEY",
+    secretKey: p?.secretKey ?? providerWire(id, p?.baseUrl).secretKey,
     recommended: opts?.recommended,
   };
 }

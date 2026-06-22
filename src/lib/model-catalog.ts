@@ -4,6 +4,7 @@
  * provedor nativo (Anthropic, OpenAI, Gemini, xAI, NVIDIA) quando o FORGE tem conector.
  * Só modelos sem API dedicada no app usam env openrouter (ex.: Zhipu).
  */
+import { providerWire } from "@/lib/ai-provider-registry";
 
 export type AiEnvId =
   | "alibaba"
@@ -194,7 +195,8 @@ const ENV_DISPLAY_ORDER: Partial<Record<AiEnvId, string[]>> = {
 
 export type UserModelEntry = {
   slug: string;
-  env: AiEnvId;
+  /** Built-in (AiEnvId) ou custom-* cadastrado em Providers & Keys. */
+  env: AiEnvId | `custom-${string}`;
   label?: string;
 };
 
@@ -270,9 +272,10 @@ function routeEnv(brand: string, slug: string): AiEnvId {
   return "openrouter";
 }
 
-function apiModelForEnv(env: AiEnvId, slug: string): string {
+function apiModelForEnv(env: AiEnvId | string, slug: string): string {
   const slash = slug.indexOf("/");
   const bare = slash >= 0 ? slug.slice(slash + 1) : slug;
+  if (typeof env === "string" && env.startsWith("custom-")) return bare;
   if (env === "openrouter") return slug;
   if (env === "nvidia") {
     if (bare.includes("nemotron-3-ultra-550b") && !bare.includes("-a55b")) {
@@ -297,11 +300,14 @@ function apiModelForEnv(env: AiEnvId, slug: string): string {
   return bare;
 }
 
-function wireForEnv(env: AiEnvId): {
+function wireForEnv(env: AiEnvId | string): {
   llmProvider: ForgeModelPreset["llmProvider"];
   secretKey: string;
   baseUrl?: string;
 } {
+  if (typeof env === "string" && env.startsWith("custom-")) {
+    return providerWire(env);
+  }
   switch (env) {
     case "anthropic":
       return { llmProvider: "anthropic", secretKey: "ANTHROPIC_API_KEY" };

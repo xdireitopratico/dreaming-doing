@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { FORGE_ADMIN_EMAIL } from "../_shared/forge-admin.ts";
+import { applyOpenAiConnectorToken } from "../_shared/provider-wire.ts";
 
 export type AgentPreferencesPayload = {
   mode?: "auto" | "robin" | "rob" | "fixed";
@@ -114,22 +115,8 @@ export async function loadConnectorKeys(
       const p = openAiProvider(row);
       if (robinMode && p !== poolProvider) continue;
 
-      if (p === "groq") keys.GROQ_API_KEY = token;
-      else if (p === "xai") keys.XAI_API_KEY = token;
-      else if (p === "nvidia") keys.NVIDIA_API_KEY = token;
-      else if (p === "gemini") keys.GEMINI_API_KEY = token;
-      else if (p === "openrouter") keys.OPENROUTER_API_KEY = token;
-      else if (p === "deepseek") keys.DEEPSEEK_API_KEY = token;
-      else if (p === "alibaba") keys.DASHSCOPE_API_KEY = token;
-      else if (p === "minimax") keys.MINIMAX_API_KEY = token;
-      else if (p === "moonshotai") keys.MOONSHOT_API_KEY = token;
-      else if (p === "xiaomi") keys.MIMO_API_KEY = token;
-      else if (p === "ollama") {
-        const meta = (row.meta ?? {}) as { baseUrl?: string; defaultModel?: string };
-        const base = meta.baseUrl?.trim().replace(/\/$/, "");
-        if (base) keys.OLLAMA_BASE_URL = base;
-        if (meta.defaultModel?.trim()) keys.OLLAMA_MODEL = meta.defaultModel.trim();
-      } else keys.OPENAI_API_KEY = token;
+      const meta = (row.meta ?? {}) as { baseUrl?: string; defaultModel?: string };
+      Object.assign(keys, applyOpenAiConnectorToken(p, token, meta));
     }
   }
   return keys;

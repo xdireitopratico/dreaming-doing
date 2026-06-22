@@ -85,6 +85,24 @@ export function isModelNotFoundError(err: unknown): boolean {
   );
 }
 
+function isAuthLlmError(err: unknown): boolean {
+  const msg = errorMessage(err).toLowerCase();
+  return (
+    /\b(401|402|403)\b/.test(msg) ||
+    /unauthorized|invalid api key|invalid_token|forbidden|payment required|insufficient credits/i.test(
+      msg,
+    )
+  );
+}
+
+/** Erros que não melhoram com retry na mesma config — falha imediata com mensagem amigável. */
+export function shouldFailFastLlmError(err: unknown): boolean {
+  if (isModelNotFoundError(err)) return true;
+  if (isAuthLlmError(err)) return true;
+  if (isProviderError(err)) return true;
+  return false;
+}
+
 export function friendlyLlmError(err: unknown, robinActive: boolean): string {
   const msg = errorMessage(err);
   const lower = msg.toLowerCase();

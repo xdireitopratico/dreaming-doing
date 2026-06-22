@@ -263,7 +263,11 @@ export function ProvidersKeysSection({
         )}
       </AnimatePresence>
 
-      <AddProviderModal open={addOpen} onClose={() => setAddOpen(false)} />
+      <AddProviderModal
+        open={addOpen}
+        onClose={() => setAddOpen(false)}
+        onAdded={() => window.dispatchEvent(new Event("forge:prefs-updated"))}
+      />
     </section>
   );
 }

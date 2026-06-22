@@ -14,6 +14,7 @@ import {
   shouldUseOpenAiResponsesApi,
 } from "./openai-responses.ts";
 import { isNvidiaNimBaseUrl, normalizeMessagesForNim } from "./nim-messages.ts";
+import { normalizeMessagesForAnthropic } from "./anthropic-messages.ts";
 
 /** Parâmetros oficiais Nemotron (thinking + reasoning budget) — ver build.nvidia.com */
 function nvidiaNimChatExtras(model: string): Record<string, unknown> | undefined {
@@ -87,12 +88,9 @@ class ClaudeAdapter implements LLMProvider {
       .filter((m) => m.role === "system")
       .map((m) => m.content)
       .join("\n\n");
-    const messages = params.messages
-      .filter((m) => m.role !== "system")
-      .map((m) => ({
-        role: m.role,
-        content: m.content ?? "",
-      }));
+    const messages = normalizeMessagesForAnthropic(
+      params.messages.filter((m) => m.role !== "system"),
+    );
 
     const body: any = {
       model: this.model,

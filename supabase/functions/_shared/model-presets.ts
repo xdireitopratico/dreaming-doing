@@ -1,5 +1,10 @@
 /** Presets — sync com src/lib/model-catalog.ts (IDs = slug com / → --) */
 
+import {
+  customProviderBaseUrlKey,
+  wireFromProviderEntry,
+} from "./provider-wire.ts";
+
 export type ModelTier = "frontier" | "balanced" | "fast" | "pool";
 
 export type PresetWire = {
@@ -298,61 +303,8 @@ export function getPresetWire(id?: string): PresetWire | null {
 /** Restringe chaves BYOK aos presets permitidos no modo Auto. */
 type UserModelEntryPayload = { slug: string; env: string; label?: string };
 
-const ENV_SECRET: Record<string, string> = {
-  anthropic: "ANTHROPIC_API_KEY",
-  openai: "OPENAI_API_KEY",
-  gemini: "GEMINI_API_KEY",
-  xai: "XAI_API_KEY",
-  groq: "GROQ_API_KEY",
-  nvidia: "NVIDIA_API_KEY",
-  openrouter: "OPENROUTER_API_KEY",
-  deepseek: "DEEPSEEK_API_KEY",
-  alibaba: "DASHSCOPE_API_KEY",
-  minimax: "MINIMAX_API_KEY",
-  moonshotai: "MOONSHOT_API_KEY",
-  xiaomi: "MIMO_API_KEY",
-  ollama: "OLLAMA_BASE_URL",
-};
-
 function wireFromUserEntry(entry: UserModelEntryPayload): PresetWire | null {
-  const key = ENV_SECRET[entry.env];
-  if (!key) return null;
-  const slug = entry.slug.includes("/") ? entry.slug : `${entry.env}/${entry.slug}`;
-  if (entry.env === "openrouter") {
-    return openrouter(slug, entry.label ?? slug);
-  }
-  if (entry.env === "anthropic")
-    return anthropic(slug.split("/").pop() ?? slug, entry.label ?? slug);
-  if (entry.env === "deepseek") return deepseek("deepseek-chat", entry.label ?? slug);
-  if (entry.env === "alibaba") {
-    const model = slug.split("/").pop() ?? slug;
-    return dashscope(model, entry.label ?? slug);
-  }
-  if (entry.env === "minimax") {
-    const model = slug.split("/").pop() ?? slug;
-    return minimax(model, entry.label ?? slug);
-  }
-  if (entry.env === "moonshotai") {
-    const model = slug.split("/").pop() ?? slug;
-    return moonshot(model, entry.label ?? slug);
-  }
-  if (entry.env === "xiaomi") {
-    const model = slug.split("/").pop() ?? slug;
-    return mimo(model, entry.label ?? slug);
-  }
-  if (entry.env === "nvidia") {
-    let nimSlug = slug.includes("/") ? slug : `nvidia/${slug}`;
-    const bare = nimSlug.includes("/") ? (nimSlug.split("/").pop() ?? nimSlug) : nimSlug;
-    if (bare.includes("nemotron-3-ultra-550b") && !bare.includes("-a55b")) {
-      nimSlug = "nvidia/nemotron-3-ultra-550b-a55b";
-    }
-    return nvidia(nimSlug, entry.label ?? nimSlug);
-  }
-  if (entry.env === "ollama") {
-    const model = slug.includes("/") ? (slug.split("/").pop() ?? slug) : slug;
-    return ollama(model, entry.label ?? model);
-  }
-  return openai(slug.split("/").pop() ?? slug, entry.label ?? slug, "https://api.openai.com/v1");
+  return wireFromProviderEntry(entry);
 }
 
 export function resolveWireFromPresetId(
@@ -408,7 +360,8 @@ export function resolveFixedFromKeys(
   }
   const apiKey = keys[preset.secretKey];
   if (!apiKey) return null;
-  return { ...preset, apiKey };
+  const baseUrl = preset.baseUrl ?? keys[customProviderBaseUrlKey(preset.secretKey)];
+  return baseUrl ? { ...preset, apiKey, baseUrl } : { ...preset, apiKey };
 }
 
 type PrefsLike = {
@@ -429,7 +382,8 @@ export function wireWithKey(
   }
   const apiKey = keys[wire.secretKey];
   if (!apiKey) return null;
-  return { ...wire, apiKey };
+  const baseUrl = wire.baseUrl ?? keys[customProviderBaseUrlKey(wire.secretKey)];
+  return baseUrl ? { ...wire, apiKey, baseUrl } : { ...wire, apiKey };
 }
 
 /** Slug custom (formato OpenRouter) → sempre roteador OpenRouter se houver chave */

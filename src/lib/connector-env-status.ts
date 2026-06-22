@@ -1,5 +1,6 @@
 import { allProviders, type AiProviderId } from "@/lib/ai-provider-registry";
 import type { AiEnvId } from "@/lib/model-catalog";
+import { builtInProviderIds } from "@/lib/ai-provider-registry";
 
 export type ConnectorRow = {
   kind: string;
@@ -12,10 +13,6 @@ function openAiProvider(row: ConnectorRow): string {
   if (col) return col;
   const meta = (row.meta ?? {}) as { provider?: string };
   return meta.provider ?? "openai";
-}
-
-function knownProviderIds(): Set<string> {
-  return new Set(allProviders().map((p) => p.id));
 }
 
 /** Quais ambientes LLM têm chave salva (connectors_public). Inclui providers custom. */
@@ -38,6 +35,9 @@ export function connectedEnvsFromRows(
     xiaomi: false,
   };
 
+  for (const id of builtInProviderIds()) {
+    if (!(id in out)) out[id as AiEnvId] = false;
+  }
   for (const p of allProviders()) {
     if (!(p.id in out)) out[p.id] = false;
   }
@@ -49,7 +49,7 @@ export function connectedEnvsFromRows(
     }
     if (row.kind === "openai") {
       const p = openAiProvider(row);
-      if (knownProviderIds().has(p)) out[p] = true;
+      if (p) out[p] = true;
     }
   }
   return out;
