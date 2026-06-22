@@ -21,11 +21,19 @@
  *   E2E_PHASES=dashboard,inspector-live,f5,second-turn
  */
 import { chromium } from "playwright";
-import { mkdir, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
+import { mkdir } from "node:fs/promises";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { loadEnvLocal } from "./lib/load-env-local.mjs";
 import { buildSupabaseAuthStorage } from "./lib/supabase-auth-storage.mjs";
+import { resolveE2eCredentials } from "./lib/e2e-credentials.mjs";
+import {
+  E2E_AGENT_PREFERENCES,
+  localStoragePrefsScript,
+  seedE2eAgentSetup,
+} from "./lib/e2e-agent-setup.mjs";
+import { bootstrapAgentRun, waitForRunStatus } from "./lib/bootstrap-agent-run.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 loadEnvLocal();
@@ -37,6 +45,7 @@ const ANON_KEY =
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
 const E2E_EMAIL = process.env.E2E_EMAIL ?? "";
 const E2E_PASSWORD = process.env.E2E_PASSWORD ?? "";
+const DEFAULT_STORAGE = resolve(__dirname, "../.e2e/auth.json");
 const STORAGE_STATE_PATH = process.env.E2E_STORAGE_STATE ?? "";
 const THINKING_TIMEOUT_MS = Number(process.env.E2E_THINKING_TIMEOUT_MS ?? "8000");
 const NAV_TIMEOUT_MS = Number(process.env.E2E_NAV_TIMEOUT_MS ?? "90000");
@@ -92,9 +101,12 @@ async function fetchConversationId(projectId) {
 
 async function fetchLatestRun(conversationId) {
   const res = await rest(
-    `agent_runs?conversation_id=eq.${conversationId}&select=id,status,finished_at&order=created_at.desc&limit=1`,
+    `agent_runs?conversation_id=eq.${conversationId}&select=id,status,finished_at&order=started_at.desc&limit=1`,
   );
   const rows = await res.json();
+  if (!res.ok) {
+    throw new Error(`fetchLatestRun: ${res.status} ${JSON.stringify(rows).slice(0, 200)}`);
+  }
   return rows?.[0] ?? null;
 }
 
@@ -125,17 +137,34 @@ async function pollRunStatus(conversationId, predicate, timeoutMs, label) {
   throw new Error(`timeout aguardando run ${label} (${timeoutMs}ms)`);
 }
 
+function resolveStoragePath() {
+  if (STORAGE_STATE_PATH) return STORAGE_STATE_PATH;
+  try {
+    readFileSync(DEFAULT_STORAGE, "utf8");
+    return DEFAULT_STORAGE;
+  } catch {
+    return null;
+  }
+}
+
 async function ensureAuthContext(browser) {
-  if (STORAGE_STATE_PATH) {
+  const prefsScript = localStoragePrefsScript(E2E_AGENT_PREFERENCES);
+
+  const storagePath = resolveStoragePath();
+  if (storagePath) {
     try {
-      readFileSync(STORAGE_STATE_PATH, "utf8");
-      return browser.newContext({ storageState: STORAGE_STATE_PATH });
+      readFileSync(storagePath, "utf8");
+      const context = await browser.newContext({ storageState: storagePath });
+      await context.addInitScript(prefsScript);
+      return context;
     } catch {
-      console.warn(`WARN: E2E_STORAGE_STATE inválido (${STORAGE_STATE_PATH}) — tentando login`);
+      console.warn(`WARN: storage state inválido (${storagePath}) — tentando login`);
     }
   }
 
-  if (!E2E_EMAIL || !E2E_PASSWORD) return null;
+  const email = process.env.E2E_EMAIL ?? E2E_EMAIL;
+  const password = process.env.E2E_PASSWORD ?? E2E_PASSWORD;
+  if (!email || !password) return null;
   if (!SUPABASE_URL || !ANON_KEY) {
     throw new Error("SUPABASE_URL e VITE_SUPABASE_PUBLISHABLE_KEY necessários para login E2E");
   }
@@ -143,11 +172,12 @@ async function ensureAuthContext(browser) {
   const auth = await buildSupabaseAuthStorage({
     url: SUPABASE_URL,
     anonKey: ANON_KEY,
-    email: E2E_EMAIL,
-    password: E2E_PASSWORD,
+    email,
+    password,
   });
 
   const context = await browser.newContext();
+  await context.addInitScript(prefsScript);
   await context.addInitScript(
     ({ key, json }) => {
       localStorage.setItem(key, json);
@@ -155,13 +185,12 @@ async function ensureAuthContext(browser) {
     { key: auth.storageKey, json: auth.sessionJson },
   );
 
-  if (STORAGE_STATE_PATH) {
-    try {
-      await mkdir(dirname(resolve(STORAGE_STATE_PATH)), { recursive: true });
-      await context.storageState({ path: STORAGE_STATE_PATH });
-    } catch {
-      /* best-effort cache */
-    }
+  const cachePath = STORAGE_STATE_PATH || DEFAULT_STORAGE;
+  try {
+    await mkdir(dirname(resolve(cachePath)), { recursive: true });
+    await context.storageState({ path: cachePath });
+  } catch {
+    /* best-effort cache */
   }
 
   return context;
@@ -195,8 +224,23 @@ async function sendComposerMessage(page, text) {
   await page.locator("[data-testid=chat-composer] .forge-composer-send").click();
 }
 
+async function syncBrowserAfterBootstrap(page, failures) {
+  await page.reload({ waitUntil: "domcontentloaded", timeout: NAV_TIMEOUT_MS });
+  const deadline = Date.now() + 60_000;
+  while (Date.now() < deadline) {
+    const running = await page
+      .locator('[data-testid=forge-header-state][data-state="running"]')
+      .count();
+    const card = await page.locator("[data-testid=chat-job-card]").count();
+    if (running > 0 || card > 0) return true;
+    await sleep(500);
+  }
+  failures.push("bootstrap: UI não anexou à run após reload (sem header running nem mini-card)");
+  return false;
+}
+
 async function openInspectorFromCard(page, opts = {}) {
-  const waitMs = opts.waitForCardMs ?? 60_000;
+  const waitMs = opts.waitForCardMs ?? 120_000;
   const card = page.locator("[data-testid=chat-job-card] .forge-mini-card-body").first();
   try {
     await card.waitFor({ state: "visible", timeout: waitMs });
@@ -211,7 +255,7 @@ async function openInspectorFromCard(page, opts = {}) {
 
 async function phaseDashboard(page, failures, prompt) {
   console.log("→ fase dashboard");
-  await page.goto(`${BASE}/projects`, { waitUntil: "domcontentloaded", timeout: NAV_TIMEOUT_MS });
+  await page.goto(`${BASE}/projects`, { waitUntil: "networkidle", timeout: NAV_TIMEOUT_MS });
 
   if (page.url().includes("/auth")) {
     failures.push("dashboard: redirecionou para /auth — sessão inválida");
@@ -221,9 +265,21 @@ async function phaseDashboard(page, failures, prompt) {
   const textarea = page.locator(".dashboard-prompt-wrap textarea");
   await textarea.waitFor({ state: "visible", timeout: 15_000 });
   await textarea.fill(prompt);
-  await page.locator(".dashboard-prompt-wrap button[type=submit]").click();
 
-  await page.waitForURL(/\/projects\/[0-9a-f-]{36}/i, { timeout: NAV_TIMEOUT_MS });
+  const serverFnDone = page
+    .waitForResponse(
+      (r) => r.ok() && r.url().includes("_serverFn") && r.request().method() === "POST",
+      { timeout: NAV_TIMEOUT_MS },
+    )
+    .catch(() => null);
+
+  await page.locator(".dashboard-prompt-wrap button[type=submit]").click();
+  await serverFnDone;
+
+  await page.waitForURL(/\/projects\/[0-9a-f-]{36}/i, {
+    timeout: NAV_TIMEOUT_MS,
+    waitUntil: "domcontentloaded",
+  });
   const projectId = page.url().match(/\/projects\/([0-9a-f-]{36})/i)?.[1] ?? null;
 
   const userBubble = page.locator("[data-testid=chat-message-user]").first();
@@ -240,24 +296,42 @@ async function phaseDashboard(page, failures, prompt) {
   return projectId;
 }
 
-async function phaseInspectorLive(page, conversationId, failures) {
+async function phaseInspectorLive(page, conversationId, failures, bootstrappedRunId = null) {
   console.log("→ fase inspector-live");
   if (!SERVICE_KEY || !conversationId) {
     failures.push("inspector-live: SUPABASE_SERVICE_ROLE_KEY ou conversationId ausente");
     return;
   }
 
-  let run;
-  try {
-    run = await pollRunStatus(conversationId, (r) => r.status === "running", RUN_ACTIVE_TIMEOUT_MS, "running");
-  } catch (e) {
-    failures.push(`inspector-live: ${e instanceof Error ? e.message : e}`);
-    return;
+  let run = bootstrappedRunId ? { id: bootstrappedRunId, status: "running" } : null;
+  if (!run) {
+    try {
+      run = await pollRunStatus(
+        conversationId,
+        (r) => r.status === "running",
+        RUN_ACTIVE_TIMEOUT_MS,
+        "running",
+      );
+    } catch (e) {
+      failures.push(`inspector-live: ${e instanceof Error ? e.message : e}`);
+      await page.screenshot({ path: resolve(OUT_DIR, "phase-inspector-live.png"), fullPage: true }).catch(() => {});
+      return;
+    }
+  } else {
+    const statusRes = await rest(`agent_runs?id=eq.${bootstrappedRunId}&select=id,status,error&limit=1`);
+    const [latest] = await statusRes.json();
+    if (latest?.status === "failed") {
+      failures.push(`inspector-live: run falhou — ${latest.error ?? "sem erro"}`);
+      await page.screenshot({ path: resolve(OUT_DIR, "phase-inspector-live.png"), fullPage: true }).catch(() => {});
+      return;
+    }
+    if (latest) run = latest;
   }
 
   const opened = await openInspectorFromCard(page);
   if (!opened) {
     failures.push("inspector-live: mini-card não apareceu — não abriu inspector");
+    await page.screenshot({ path: resolve(OUT_DIR, "phase-inspector-live.png"), fullPage: true }).catch(() => {});
     return;
   }
 
@@ -427,11 +501,36 @@ async function phaseSecondTurn(page, conversationId, failures) {
   await page.screenshot({ path: resolve(OUT_DIR, "phase-second-turn.png"), fullPage: true });
 }
 
+function needsAgentBootstrap() {
+  return PHASES.has("inspector-live") || PHASES.has("f5") || PHASES.has("plan-dock") || PHASES.has("second-turn");
+}
+
+async function resolveE2eUserId(creds) {
+  if (creds?.userId) return creds.userId;
+  const email = creds?.email ?? process.env.E2E_EMAIL;
+  if (!email || !SUPABASE_URL || !SERVICE_KEY) return null;
+  const { createClient } = await import("@supabase/supabase-js");
+  const admin = createClient(SUPABASE_URL, SERVICE_KEY, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+  const { data, error } = await admin.auth.admin.listUsers({ perPage: 500, page: 1 });
+  if (error) return null;
+  const hit = data.users.find((u) => u.email?.trim().toLowerCase() === email.trim().toLowerCase());
+  return hit?.id ?? null;
+}
+
 async function main() {
-  const hasAuth = STORAGE_STATE_PATH || (E2E_EMAIL && E2E_PASSWORD);
+  const creds = await resolveE2eCredentials({
+    supabaseUrl: SUPABASE_URL,
+    serviceKey: SERVICE_KEY,
+    anonKey: ANON_KEY,
+  });
+
+  const hasAuth =
+    resolveStoragePath() || (process.env.E2E_EMAIL && process.env.E2E_PASSWORD) || (E2E_EMAIL && E2E_PASSWORD);
   if (!hasAuth) {
     const msg =
-      "SKIP: defina E2E_EMAIL + E2E_PASSWORD (ou E2E_STORAGE_STATE) para rodar o journey browser";
+      "SKIP: defina E2E_EMAIL/E2E_PASSWORD, E2E_STORAGE_STATE, ou SUPABASE_SERVICE_ROLE_KEY (auto-provision)";
     if (REQUIRED) {
       console.error(`FAIL: ${msg}`);
       process.exit(1);
@@ -465,6 +564,8 @@ async function main() {
   const page = await context.newPage({ viewport: { width: 1280, height: 900 } });
   let projectId = null;
   let conversationId = null;
+  let e2eUserId = await resolveE2eUserId(creds);
+  let bootstrappedRunId = null;
   const failures = [];
 
   try {
@@ -477,8 +578,61 @@ async function main() {
       conversationId = await fetchConversationId(projectId);
     }
 
+    if (
+      needsAgentBootstrap() &&
+      !failures.length &&
+      SERVICE_KEY &&
+      projectId &&
+      conversationId
+    ) {
+      if (!e2eUserId) {
+        const ownerRes = await rest(`projects?id=eq.${projectId}&select=owner_id&limit=1`);
+        const [proj] = await ownerRes.json();
+        e2eUserId = proj?.owner_id ?? null;
+      }
+      if (!e2eUserId) {
+        failures.push("bootstrap: userId E2E não resolvido");
+      } else {
+        try {
+          const seed = await seedE2eAgentSetup({
+            supabaseUrl: SUPABASE_URL,
+            serviceKey: SERVICE_KEY,
+            userId: e2eUserId,
+          });
+          console.log(
+            `E2E setup: prefs ok, groq ${seed.groq.seeded ? "seeded" : "ok"}, e2b ${seed.e2b.seeded ? "seeded" : "ok"}`,
+          );
+          await page.evaluate(localStoragePrefsScript(E2E_AGENT_PREFERENCES));
+
+          const planMode = PHASES.has("plan-dock") && !PHASES.has("inspector-live");
+          const boot = await bootstrapAgentRun({
+            supabaseUrl: SUPABASE_URL,
+            serviceKey: SERVICE_KEY,
+            projectId,
+            conversationId,
+            userId: e2eUserId,
+            planMode,
+          });
+          bootstrappedRunId = boot.runId;
+          await waitForRunStatus({
+            supabaseUrl: SUPABASE_URL,
+            serviceKey: SERVICE_KEY,
+            runId: bootstrappedRunId,
+            predicate: (r) => r.status === "running",
+            timeoutMs: RUN_ACTIVE_TIMEOUT_MS,
+            label: "running",
+          });
+          if (!(await syncBrowserAfterBootstrap(page, failures))) {
+            /* failure já registrada */
+          }
+        } catch (e) {
+          failures.push(`bootstrap: ${e instanceof Error ? e.message : e}`);
+        }
+      }
+    }
+
     if (PHASES.has("inspector-live") && !failures.length) {
-      await phaseInspectorLive(page, conversationId, failures);
+      await phaseInspectorLive(page, conversationId, failures, bootstrappedRunId);
     }
 
     if (PHASES.has("f5") && !failures.length) {

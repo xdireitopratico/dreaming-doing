@@ -25,7 +25,7 @@
     "check:dashboard-journey": "node scripts/dashboard-editor-journey.mjs",
     "check:agent-browser": "node scripts/lovable-visual-check.mjs && node scripts/dashboard-editor-journey.mjs",
     "setup:e2e-auth": "node scripts/setup-e2e-auth.mjs",
-    "check:agent-gates": "npm run test:agent-journey && npm run smoke:agent && npm run check:stale-runs",
+    "check:agent-gates": "npm run test:agent-journey && npm run smoke:agent && node scripts/check-stale-runs.mjs --cleanup",
     "smoke:agent": "node scripts/smoke-agent-e2e.mjs",
     "smoke:aetherforge": "node scripts/smoke-aetherforge-e2e.mjs",
     "smoke:prometheus": "node scripts/smoke-prometheus-e2e.mjs --with-gateway",

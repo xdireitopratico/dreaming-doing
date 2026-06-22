@@ -3,11 +3,12 @@
  * Lista runs zumbis (running/pending > 15 min) e sai com código 1 se houver.
  * Ignora handoff entre chunks (betweenChunks / chunk_resume recente).
  *
- * Usage: node scripts/check-stale-runs.mjs [--project-id=UUID]
+ * Usage: node scripts/check-stale-runs.mjs [--project-id=UUID] [--cleanup]
  */
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { shouldSkipStaleExpiry } from "./lib/stale-run-filter.mjs";
+import { cleanupStaleRuns } from "./lib/cleanup-stale-runs.mjs";
 
 function loadEnvLocal() {
   const path = resolve(process.cwd(), ".env.local");
@@ -45,6 +46,7 @@ function arg(name) {
 }
 
 const projectId = arg("project-id");
+const doCleanup = process.argv.includes("--cleanup");
 const cutoff = new Date(Date.now() - STALE_MS).toISOString();
 
 function restHeaders() {
@@ -107,6 +109,16 @@ async function main() {
       console.log("OK: 0 stale runs");
     }
     process.exit(0);
+  }
+
+  if (doCleanup) {
+    const { cleaned } = await cleanupStaleRuns({
+      supabaseUrl: SUPABASE_URL,
+      serviceKey: SERVICE_KEY,
+      projectId,
+    });
+    console.log(`Cleanup: ${cleaned} stale run(s) marcada(s) failed`);
+    process.exit(cleaned > 0 ? 0 : 1);
   }
 
   console.error(`STALE RUNS (${stale.length}):`);
