@@ -1,6 +1,6 @@
 import type { AgentComposerMode } from "@/lib/chat-types";
 
-export type AgentRunMode = AgentComposerMode | "chat";
+export type AgentRunMode = AgentComposerMode;
 
 export type TurnIntent =
   | { kind: "chat"; runMode: "chat"; reason: string }
@@ -32,12 +32,23 @@ const PLAN_RE =
 const BUILD_RE =
   /\b(?:pode\s+executar|executa|execute|implemente|implementa|corrija|corrigir|conserte|arrume|fa[cç]a|crie|criar|adicione|remova|delete|exclua|refatore|altere|mude|instale|rode|roda|build|deploy|commit|push|programar|codar|mexer\s+nos\s+arquivos)\b/i;
 
+export function isExplicitBuildRequest(text: string): boolean {
+  return BUILD_RE.test(text.trim());
+}
+
 export function resolveTurnIntent(input: ResolveTurnIntentInput): TurnIntent {
   const text = input.text.trim();
   const requestedMode = input.explicitMode ?? input.composerMode;
 
   if (!text && !input.hasAttachments) {
     return { kind: "chat", runMode: "chat", reason: "empty" };
+  }
+
+  if (requestedMode === "chat") {
+    if (isExplicitBuildRequest(text)) {
+      return { kind: "chat", runMode: "chat", reason: "action_verb_in_chat_mode" };
+    }
+    return { kind: "chat", runMode: "chat", reason: "composer_chat_mode" };
   }
 
   if (HARD_CHAT_RE.test(text)) {

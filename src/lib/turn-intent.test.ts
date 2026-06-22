@@ -37,4 +37,22 @@ describe("resolveTurnIntent", () => {
       }),
     ).toMatchObject({ kind: "plan", runMode: "plan" });
   });
+
+  it("composer Chat força runMode chat", () => {
+    expect(
+      resolveTurnIntent({
+        text: "qual a raiz do problema da timeline?",
+        composerMode: "chat",
+      }),
+    ).toMatchObject({ kind: "chat", runMode: "chat", reason: "composer_chat_mode" });
+  });
+
+  it("composer Chat não vira build mesmo com verbo de ação", () => {
+    expect(
+      resolveTurnIntent({
+        text: "crie um botão vermelho no hero",
+        composerMode: "chat",
+      }),
+    ).toMatchObject({ kind: "chat", runMode: "chat", reason: "action_verb_in_chat_mode" });
+  });
 });

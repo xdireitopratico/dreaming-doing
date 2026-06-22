@@ -54,4 +54,47 @@ describe("sendMessage", () => {
 
     expect(d.runAgent).toHaveBeenCalledWith("byok", "build");
   });
+
+  it("composer Chat envia mode chat sem pending turn", async () => {
+    const d = deps();
+
+    await sendMessage(
+      {
+        text: "explique o que aconteceu no último run",
+        composerMode: "chat",
+        conversationId: "conv",
+        projectId: "proj",
+        kind: "byok",
+        agentBusy: false,
+        planAwaiting: false,
+      },
+      d,
+    );
+
+    expect(d.beginPendingTurn).not.toHaveBeenCalled();
+    expect(d.runAgent).toHaveBeenCalledWith("byok", "chat");
+  });
+
+  it("composer Chat bloqueia verbo de execução com toast", async () => {
+    const d = deps();
+    const onError = vi.fn();
+    d.onError = onError;
+
+    await sendMessage(
+      {
+        text: "implemente o plano agora",
+        composerMode: "chat",
+        conversationId: "conv",
+        projectId: "proj",
+        kind: "byok",
+        agentBusy: false,
+        planAwaiting: false,
+      },
+      d,
+    );
+
+    expect(onError).toHaveBeenCalledWith("Para executar código, mude o modo para Build.");
+    expect(d.insertUserMessage).not.toHaveBeenCalled();
+    expect(d.runAgent).not.toHaveBeenCalled();
+  });
 });

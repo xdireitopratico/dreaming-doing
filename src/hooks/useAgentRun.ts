@@ -808,17 +808,25 @@ export function useAgentRun() {
         };
       }
       const manualResume = options?.resume === true;
+      const directChatMode = options?.mode === "chat";
       teardownChannels();
       setQueueBlockingReason(null);
       const keepPending = activeRunStartedAtMs != null;
       if (keepPending) {
         setProgress((p) => ({
           ...p,
-          statusHint: "Conectando ao agente…",
+          statusHint: directChatMode ? "Respondendo…" : "Conectando ao agente…",
           finished: false,
           resumable: false,
           phase: p.phase ?? null,
         }));
+      } else if (directChatMode) {
+        setProgress({
+          ...initialAgentProgress,
+          statusHint: "Respondendo…",
+          finished: false,
+          conversational: true,
+        });
       } else {
         setProgress({
           ...initialAgentProgress,
@@ -901,6 +909,7 @@ export function useAgentRun() {
             ...p,
             finished: true,
             lastFinishOk: true,
+            conversational: true,
             streamText: typeof body.content === "string" ? body.content : null,
             statusHint: body.chat ? "Resposta enviada." : "Resposta Taste enviada.",
           }));

@@ -34,6 +34,8 @@ describe("composer-mode", () => {
     expect(loadComposerMode(PROJECT)).toBe("build");
     saveComposerMode(PROJECT, "plan");
     expect(loadComposerMode(PROJECT)).toBe("plan");
+    saveComposerMode(PROJECT, "chat");
+    expect(loadComposerMode(PROJECT)).toBe("chat");
   });
 
   it("bootstrap do primeiro prompt grava plan e consome sessionStorage", () => {

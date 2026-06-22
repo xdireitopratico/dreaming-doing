@@ -1,4 +1,4 @@
-import { Check, ChevronDown, Hammer, ListTodo } from "lucide-react";
+import { Check, ChevronDown, Hammer, ListTodo, MessageCircle } from "lucide-react";
 import {
   ForgeEditorDropdownContent,
   ForgeEditorDropdownItem,
@@ -8,6 +8,7 @@ import type { AgentComposerMode } from "@/lib/chat-types";
 
 /**
  * Modos estilo Lovable (docs.lovable.dev/features/plan-mode + agent-mode).
+ *  - Chat: conversa, diagnóstico, proposta por escrito — sem agent loop.
  *  - Plan: pensar, perguntar, propor plano — sem mexer no código.
  *  - Build: implementar direto quando o pedido for claro.
  */
@@ -19,6 +20,7 @@ export function ComposerModeSelect({
   onChange: (mode: AgentComposerMode) => void;
 }) {
   const opts: { key: AgentComposerMode; label: string; icon: typeof ListTodo }[] = [
+    { key: "chat", label: "Chat", icon: MessageCircle },
     { key: "plan", label: "Plan", icon: ListTodo },
     { key: "build", label: "Build", icon: Hammer },
   ];
@@ -34,7 +36,7 @@ export function ComposerModeSelect({
           <ChevronDown className="size-3 shrink-0 opacity-60" aria-hidden />
         </button>
       </DropdownMenuTrigger>
-      <ForgeEditorDropdownContent align="end" side="top" sideOffset={6} className="min-w-[120px]">
+      <ForgeEditorDropdownContent align="end" side="top" sideOffset={6} className="min-w-[132px]">
         {opts.map(({ key, label, icon: Icon }) => {
           const isCurrent = key === value;
           return (

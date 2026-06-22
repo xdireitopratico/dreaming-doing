@@ -254,14 +254,17 @@ export function useEditorPageHandlers({
         return false;
       }
 
+      const runMode = explicitMode ?? composerMode;
       const label =
-        kind === "taste" && tasteAction === "start"
-          ? "Start Project (Taste · NVIDIA)"
-          : kind === "taste"
-            ? "Concierge Taste"
-            : agent.progress.resumable
-              ? "Continuando execução anterior"
-              : "Agente FORGE iniciado";
+        runMode === "chat"
+          ? "Chat FORGE"
+          : kind === "taste" && tasteAction === "start"
+            ? "Start Project (Taste · NVIDIA)"
+            : kind === "taste"
+              ? "Concierge Taste"
+              : agent.progress.resumable
+                ? "Continuando execução anterior"
+                : "Agente FORGE iniciado";
       setLogs((prev) => [...prev, createLogEntry("info", label, "agent")]);
       void qc.invalidateQueries({ queryKey: ["messages", conversation.id] });
       logEditorTelemetryEvent(
@@ -274,7 +277,7 @@ export function useEditorPageHandlers({
       try {
         const result = await agent.connect(projectId, conversation.id, kind, {
           tasteAction,
-          mode: explicitMode ?? composerMode,
+          mode: runMode,
         });
         void qc.invalidateQueries({ queryKey: ["messages", conversation.id] });
         if (!result.ok) {

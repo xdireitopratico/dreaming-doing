@@ -19,10 +19,10 @@ export function loadComposerMode(projectId: string): AgentComposerMode {
   if (!storageAvailable()) return DEFAULT_MODE;
   try {
     const saved = localStorage.getItem(projectKey(projectId));
-    if (saved === "plan" || saved === "build") return saved;
+    if (saved === "chat" || saved === "plan" || saved === "build") return saved;
 
     const bootstrap = sessionStorage.getItem(bootstrapKey(projectId));
-    if (bootstrap === "plan" || bootstrap === "build") {
+    if (bootstrap === "chat" || bootstrap === "plan" || bootstrap === "build") {
       sessionStorage.removeItem(bootstrapKey(projectId));
       localStorage.setItem(projectKey(projectId), bootstrap);
       return bootstrap;

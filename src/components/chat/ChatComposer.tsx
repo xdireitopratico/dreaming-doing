@@ -107,7 +107,11 @@ export function ChatComposer({
     ? "Tell Lovable what to do instead..."
     : isRunning
       ? "Queue follow-up..."
-      : "Let's Build...";
+      : composerMode === "chat"
+        ? "Pergunte, diagnostique ou proponha por escrito…"
+        : composerMode === "plan"
+          ? "Descreva o que quer construir…"
+          : "Let's Build...";
 
   const addFiles = useCallback((files: File[]) => {
     const { accepted } = filterAcceptedFiles(files);

@@ -1,6 +1,6 @@
 import type { StoredMessagePart } from "@/lib/chat-attachments";
 
-export type AgentComposerMode = "plan" | "build";
+export type AgentComposerMode = "chat" | "plan" | "build";
 
 export interface ChatMessage {
   id: string;

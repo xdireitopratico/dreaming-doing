@@ -1,7 +1,7 @@
 import type { AgentComposerMode } from "@/lib/chat-types";
 import type { ForgeSessionKind } from "@/lib/taste";
 import { buildOutgoingParts, type StoredMessagePart } from "@/lib/chat-attachments";
-import { resolveTurnIntent, type AgentRunMode } from "@/lib/turn-intent";
+import { isExplicitBuildRequest, resolveTurnIntent, type AgentRunMode } from "@/lib/turn-intent";
 
 export type SendMessageInput = {
   text: string;
@@ -56,7 +56,18 @@ export async function sendMessage(input: SendMessageInput, deps: SendMessageDeps
     ? ((input.mode ?? input.composerMode) as AgentComposerMode)
     : intent.runMode;
 
-  if (!shouldQueue) {
+  if (
+    !shouldQueue &&
+    input.composerMode === "chat" &&
+    isExplicitBuildRequest(input.text)
+  ) {
+    deps.onError?.("Para executar código, mude o modo para Build.");
+    return;
+  }
+
+  const directChat = !shouldQueue && intent.runMode === "chat";
+
+  if (!shouldQueue && !directChat) {
     deps.beginPendingTurn();
   }
 
@@ -69,7 +80,7 @@ export async function sendMessage(input: SendMessageInput, deps: SendMessageDeps
   );
 
   if (error) {
-    if (!shouldQueue) deps.clearPendingTurn();
+    if (!shouldQueue && !directChat) deps.clearPendingTurn();
     deps.onError?.("Erro ao enviar mensagem");
     return;
   }
@@ -78,7 +89,7 @@ export async function sendMessage(input: SendMessageInput, deps: SendMessageDeps
 
   if (!shouldQueue) {
     const ok = await deps.runAgent(input.kind, intent.runMode);
-    if (!ok) {
+    if (!ok && !directChat) {
       deps.clearPendingTurn();
       deps.onRunFailed?.();
     }
