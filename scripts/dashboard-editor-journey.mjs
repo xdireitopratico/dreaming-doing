@@ -3,9 +3,11 @@
  * Browser E2E — Fase S checklist §4.
  *
  * Fases (E2E_PHASES ou --phases=):
- *   dashboard    — prompt → editor, user bubble, Pensando
- *   f5           — F5 mid-run, UI recupera (working ou running)
- *   second-turn  — 2ª mensagem, mesma jornada (Pensando de novo)
+ *   dashboard       — prompt → editor, user bubble, Pensando
+ *   inspector-live  — timeline do inspector cresce durante run (tool_start/done)
+ *   f5              — F5 mid-run, UI recupera (working ou running)
+ *   plan-dock       — plan mode: dock com Review após awaiting_user
+ *   second-turn     — 2ª mensagem, mesma jornada (Pensando de novo)
  *
  * Uso:
  *   npm run dev
@@ -40,6 +42,7 @@ const NAV_TIMEOUT_MS = Number(process.env.E2E_NAV_TIMEOUT_MS ?? "90000");
 const RUN_ACTIVE_TIMEOUT_MS = Number(process.env.E2E_RUN_ACTIVE_TIMEOUT_MS ?? "90000");
 const RUN_IDLE_TIMEOUT_MS = Number(process.env.E2E_RUN_IDLE_TIMEOUT_MS ?? "300000");
 const F5_RECOVER_TIMEOUT_MS = Number(process.env.E2E_F5_RECOVER_TIMEOUT_MS ?? "20000");
+const INSPECTOR_LIVE_TIMEOUT_MS = Number(process.env.E2E_INSPECTOR_LIVE_TIMEOUT_MS ?? "120000");
 const CLEANUP = process.env.E2E_CLEANUP !== "0";
 const REQUIRED = process.env.E2E_REQUIRED === "1";
 
@@ -49,7 +52,7 @@ function arg(name, fallback) {
 }
 
 const PHASES = new Set(
-  (process.env.E2E_PHASES ?? arg("phases", "dashboard,f5,second-turn"))
+  (process.env.E2E_PHASES ?? arg("phases", "dashboard,inspector-live,f5,second-turn"))
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean),
@@ -92,6 +95,23 @@ async function fetchLatestRun(conversationId) {
   );
   const rows = await res.json();
   return rows?.[0] ?? null;
+}
+
+async function fetchStreamEvents(runId) {
+  const res = await rest(
+    `agent_stream_events?run_id=eq.${runId}&select=seq,event_type,payload&order=seq.asc`,
+  );
+  return (await res.json()) ?? [];
+}
+
+function streamHasToolActivity(events) {
+  return events.some((e) => {
+    if (e.event_type === "tool_start" || e.event_type === "tool_call" || e.event_type === "tool_done") {
+      return true;
+    }
+    if (e.event_type === "explore" || e.event_type === "phase") return true;
+    return false;
+  });
 }
 
 async function pollRunStatus(conversationId, predicate, timeoutMs, label) {
@@ -174,12 +194,18 @@ async function sendComposerMessage(page, text) {
   await page.locator("[data-testid=chat-composer] .forge-composer-send").click();
 }
 
-async function openInspectorFromCard(page) {
+async function openInspectorFromCard(page, opts = {}) {
+  const waitMs = opts.waitForCardMs ?? 60_000;
   const card = page.locator("[data-testid=chat-job-card] .forge-mini-card-body").first();
-  if ((await card.count()) > 0) {
-    await card.click();
-    await page.locator("[data-testid=job-inspector]").waitFor({ state: "visible", timeout: 10_000 });
+  try {
+    await card.waitFor({ state: "visible", timeout: waitMs });
+  } catch {
+    return false;
   }
+  await card.click();
+  await page.locator("[data-testid=job-inspector]").waitFor({ state: "visible", timeout: 10_000 });
+  await page.locator('[role=tab][data-active="true"]').first().waitFor({ state: "visible", timeout: 5000 }).catch(() => {});
+  return true;
 }
 
 async function phaseDashboard(page, failures, prompt) {
@@ -211,6 +237,110 @@ async function phaseDashboard(page, failures, prompt) {
   await page.screenshot({ path: resolve(OUT_DIR, "phase-dashboard.png"), fullPage: true });
 
   return projectId;
+}
+
+async function phaseInspectorLive(page, conversationId, failures) {
+  console.log("→ fase inspector-live");
+  if (!SERVICE_KEY || !conversationId) {
+    failures.push("inspector-live: SUPABASE_SERVICE_ROLE_KEY ou conversationId ausente");
+    return;
+  }
+
+  let run;
+  try {
+    run = await pollRunStatus(conversationId, (r) => r.status === "running", RUN_ACTIVE_TIMEOUT_MS, "running");
+  } catch (e) {
+    failures.push(`inspector-live: ${e instanceof Error ? e.message : e}`);
+    return;
+  }
+
+  const opened = await openInspectorFromCard(page);
+  if (!opened) {
+    failures.push("inspector-live: mini-card não apareceu — não abriu inspector");
+    return;
+  }
+
+  let lastEntryCount = 0;
+  let entryGrew = false;
+  let sawToolInDom = false;
+  let sawStreamActivity = false;
+  let succeeded = false;
+
+  const deadline = Date.now() + INSPECTOR_LIVE_TIMEOUT_MS;
+  while (Date.now() < deadline) {
+    const entries = await page.locator("[data-testid=inspector-timeline-track] [data-kind]").count();
+    if (entries > lastEntryCount) {
+      entryGrew = true;
+      lastEntryCount = entries;
+    }
+
+    if ((await page.locator("[data-testid=timeline-tool]").count()) > 0) {
+      sawToolInDom = true;
+    }
+
+    const events = await fetchStreamEvents(run.id);
+    if (streamHasToolActivity(events)) sawStreamActivity = true;
+
+    if (entryGrew && (sawToolInDom || sawStreamActivity)) {
+      succeeded = true;
+      break;
+    }
+    await sleep(1500);
+  }
+
+  if (!succeeded) {
+    if (!entryGrew) failures.push("inspector-live: timeline não cresceu durante a run");
+    if (!sawToolInDom && !sawStreamActivity) {
+      failures.push("inspector-live: sem tool/fase no DOM nem no stream");
+    }
+  }
+
+  const finalEvents = await fetchStreamEvents(run.id);
+  const hadToolStart = eventsHadToolStart(finalEvents);
+  const hadToolDone = finalEvents.some((e) => e.event_type === "tool_done");
+  if (hadToolStart && hadToolDone && !sawToolInDom) {
+    failures.push("inspector-live: tool_done no stream mas tool ausente no inspector");
+  }
+
+  await page.screenshot({ path: resolve(OUT_DIR, "phase-inspector-live.png"), fullPage: true });
+}
+
+function eventsHadToolStart(events) {
+  return events.some((e) => e.event_type === "tool_start" || e.event_type === "tool_call");
+}
+
+async function phasePlanDock(page, conversationId, failures) {
+  console.log("→ fase plan-dock");
+  if (!SERVICE_KEY || !conversationId) {
+    failures.push("plan-dock: SUPABASE_SERVICE_ROLE_KEY ou conversationId ausente");
+    return;
+  }
+
+  try {
+    await pollRunStatus(
+      conversationId,
+      (r) => r.status === "awaiting_user",
+      RUN_IDLE_TIMEOUT_MS,
+      "awaiting_user",
+    );
+  } catch (e) {
+    failures.push(`plan-dock: ${e instanceof Error ? e.message : e}`);
+    return;
+  }
+
+  const dock = page.locator("[data-testid=chat-plan-dock-ready]");
+  try {
+    await dock.waitFor({ state: "visible", timeout: 15_000 });
+  } catch {
+    failures.push("plan-dock: chat-plan-dock-ready não visível");
+    return;
+  }
+
+  if ((await page.getByRole("button", { name: "Review" }).count()) < 1) {
+    failures.push("plan-dock: botão Review ausente");
+  }
+
+  await page.screenshot({ path: resolve(OUT_DIR, "phase-plan-dock.png"), fullPage: true });
 }
 
 async function phaseF5(page, conversationId, failures) {
@@ -311,10 +441,12 @@ async function main() {
 
   await mkdir(OUT_DIR, { recursive: true });
 
-  const prompt = arg(
-    "prompt",
-    `[e2e-journey] Responda apenas "ok" — sem editar arquivos (${Date.now()})`,
-  );
+  const defaultPrompt = PHASES.has("inspector-live")
+    ? `[e2e-journey] Use web_search sobre Vite 7 e responda em 2 bullets — sem editar arquivos (${Date.now()})`
+    : PHASES.has("plan-dock")
+      ? `[e2e-journey] Proponha um plano curto para adicionar um botão de contador no app — sem editar ainda (${Date.now()})`
+      : `[e2e-journey] Responda apenas "ok" — sem editar arquivos (${Date.now()})`;
+  const prompt = arg("prompt", defaultPrompt);
 
   console.log("Fases:", [...PHASES].join(", "));
 
@@ -344,11 +476,19 @@ async function main() {
       conversationId = await fetchConversationId(projectId);
     }
 
+    if (PHASES.has("inspector-live") && !failures.length) {
+      await phaseInspectorLive(page, conversationId, failures);
+    }
+
     if (PHASES.has("f5") && !failures.length) {
       await phaseF5(page, conversationId, failures);
       if (conversationId) {
         conversationId = (await fetchConversationId(projectId)) ?? conversationId;
       }
+    }
+
+    if (PHASES.has("plan-dock") && !failures.length) {
+      await phasePlanDock(page, conversationId, failures);
     }
 
     if (PHASES.has("second-turn") && !failures.length) {
