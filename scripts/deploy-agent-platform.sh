@@ -44,8 +44,9 @@ npm run test
 echo "→ build inngest bundle"
 npm run build:inngest
 
-echo "→ deno: agent-pending-queue"
+echo "→ deno: agent lifecycle tests"
 deno test --allow-env supabase/functions/_shared/agent-pending-queue.test.ts
+deno test supabase/functions/_shared/run-lifecycle.test.ts
 
 echo "→ deploy edge: agent-run"
 supabase functions deploy agent-run --no-verify-jwt
@@ -69,6 +70,12 @@ if [[ "$SKIP_SMOKE" -eq 0 ]]; then
 
   echo "→ check:stale-runs"
   npm run check:stale-runs
+
+  echo "→ check:agent-metrics (7d)"
+  npm run check:agent-metrics || echo "WARN: agent metrics above threshold — review prod runs"
+
+  echo "→ check:shadow-parity"
+  npm run check:shadow-parity
 fi
 
 echo "✓ Agent platform deploy gate passed"

@@ -410,7 +410,7 @@ export function buildTimeline(events: SSEEvent[], running = false): TimelineEntr
         id: `robin-${ts}`,
         kind: "phase",
         ts,
-        label: "Alternando chave",
+        label: "Robin rotating API key",
       });
       continue;
     }

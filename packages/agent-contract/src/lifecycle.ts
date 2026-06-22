@@ -2,7 +2,7 @@ import type { AgentRunStatus } from "./events.ts";
 
 /** Transições válidas de agent_runs.status — única fonte para writers. */
 const ALLOWED: Record<AgentRunStatus, readonly AgentRunStatus[]> = {
-  pending: ["running", "failed", "canceled"],
+  pending: ["running", "failed", "canceled", "completed"],
   running: ["running", "awaiting_user", "completed", "failed", "canceled"],
   awaiting_user: ["completed", "failed", "canceled"],
   completed: ["awaiting_user"],

@@ -29,6 +29,8 @@
     "smoke:queue": "node scripts/smoke-queue-e2e.mjs",
     "smoke:stability": "npm run test -- --run src/lib/assistant-materialized.test.ts src/lib/chat/thread.test.ts src/lib/forge-run.test.ts",
     "check:stale-runs": "node scripts/check-stale-runs.mjs",
+    "check:agent-metrics": "node scripts/check-agent-run-metrics.mjs",
+    "check:shadow-parity": "node scripts/check-shadow-parity.mjs",
     "check:inngest": "node scripts/check-inngest-health.mjs",
     "bundle:skills": "node scripts/bundle-forge-skills.mjs",
     "bundle:forge-ui": "node scripts/bundle-forge-ui-seed.mjs"

@@ -10,6 +10,10 @@ describe("canTransitionRunStatus", () => {
     expect(canTransitionRunStatus("pending", "running")).toBe(true);
   });
 
+  it("pending → completed (fechar plan run sem dispatch)", () => {
+    expect(canTransitionRunStatus("pending", "completed")).toBe(true);
+  });
+
   it("running → awaiting_user", () => {
     expect(canTransitionRunStatus("running", "awaiting_user")).toBe(true);
   });

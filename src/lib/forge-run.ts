@@ -340,7 +340,7 @@ export function buildForgeTimeline(timeline: SSEEvent[], running = false): Forge
     }
 
     if (ev.type === "robin_rotate") {
-      items.push({ type: "TASK", id: `robin-${ts}`, label: "Alternando chave" });
+      items.push({ type: "TASK", id: `robin-${ts}`, label: "Robin rotating API key" });
       continue;
     }
 
@@ -428,10 +428,24 @@ function deriveMiniCardStatus(progress: AgentProgress, jobActive: boolean): Mini
   return "done";
 }
 
-const TOOL_BRIEF_VERBS: Record<string, string> = {};
+const TOOL_BRIEF_VERBS: Record<string, string> = {
+  fs_read: "Lendo",
+  fs_read_many: "Lendo arquivos",
+  fs_list: "Listando",
+  fs_search: "Buscando em",
+  fs_glob: "Buscando",
+  fs_write: "Criando",
+  fs_edit: "Editando",
+  shell_exec: "Executando",
+  web_search: "Pesquisando",
+  web_fetch: "Consultando",
+};
 
 export function toolBriefing(name: string, path?: string): string {
-  return path ? `${name} ${fileBase(path)}` : name;
+  const verb = TOOL_BRIEF_VERBS[name] ?? `Usando ${name}`;
+  const file = path ? fileBase(path) : "";
+  if (name === "shell_exec") return file ? `Executando ${file}…` : "Executando comando…";
+  return file ? `${verb} ${file}…` : `${verb}…`;
 }
 
 /** 1º token no inspector ou no chat — congela Thinking → Thought for Xs. */
@@ -706,13 +720,13 @@ export function buildMiniCardHeader(
   const subtitle = opts.liveBriefings[0] ?? opts.sessionTitle;
 
   if (edited && (running || !progress.finished)) {
-    return { header: edited, subtitle };
+    return { header: `Edited ${edited}`, subtitle };
   }
   if (hasActiveShellTool(progress) && running) {
-    return { header: "Executando", subtitle };
+    return { header: "Running command", subtitle };
   }
   if (opts.planDriven && running) {
-    return { header: "Plano", subtitle };
+    return { header: "Reading approved plan", subtitle };
   }
   const lifecycle = resolveAgentLifecycle({
     progress,
@@ -729,10 +743,10 @@ export function buildMiniCardHeader(
     return { header: lifecycleLabel(lifecycle), subtitle };
   }
   if (progress.finished && edited) {
-    return { header: edited, subtitle: opts.sessionTitle };
+    return { header: `Edited ${edited}`, subtitle: opts.sessionTitle };
   }
   if (running) {
-    return { header: "Executando", subtitle };
+    return { header: "Working", subtitle };
   }
   return { header: opts.sessionTitle, subtitle };
 }

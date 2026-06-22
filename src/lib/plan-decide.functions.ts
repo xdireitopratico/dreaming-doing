@@ -17,6 +17,7 @@ import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import type { AgentPreferences } from "@/lib/agent-preferences";
 import type { ForgeSessionKind } from "@/lib/taste";
+import { transitionRun } from "@/inngest/functions/run-lifecycle";
 
 function prefsFromRunMeta(meta: Record<string, unknown>): AgentPreferences | undefined {
   const raw = meta.preferences;
@@ -292,21 +293,23 @@ export const planApprove = createServerFn({ method: "POST" })
     }
 
     const { awaitingUser: _awaitingUser, ...sourceMetaWithoutAwaiting } = sourceMeta;
-    const { error: closePlanRunErr } = await supabase
-      .from("agent_runs")
-      .update({
-        status: "completed",
-        finished_at: now,
+    const closeResult = await transitionRun(
+      runId,
+      "completed",
+      {
         meta: {
           ...sourceMetaWithoutAwaiting,
           planApproved: true,
           planApprovedAt: now,
           buildRunId: newRun.id,
         },
-      })
-      .eq("id", runId);
-    if (closePlanRunErr) {
-      throw new Error(`Falha ao encerrar run do plano: ${closePlanRunErr.message}`);
+      },
+      supabase,
+    );
+    if (!closeResult.ok) {
+      throw new Error(
+        `Falha ao encerrar run do plano: transição inválida ${closeResult.from ?? "?"}→completed`,
+      );
     }
 
     return {
@@ -337,11 +340,10 @@ export const planReject = createServerFn({ method: "POST" })
     const now = new Date().toISOString();
     const prevMeta = (run.meta ?? {}) as Record<string, unknown>;
 
-    const { error: updErr } = await supabase
-      .from("agent_runs")
-      .update({
-        status: "completed",
-        finished_at: now,
+    const rejectResult = await transitionRun(
+      runId,
+      "completed",
+      {
         meta: {
           ...prevMeta,
           planMode: true,
@@ -349,10 +351,13 @@ export const planReject = createServerFn({ method: "POST" })
           rejectedAt: now,
           rejectedPlanId: planId,
         },
-      })
-      .eq("id", runId);
-    if (updErr) {
-      throw new Error(`Falha ao atualizar run: ${updErr.message}`);
+      },
+      supabase,
+    );
+    if (!rejectResult.ok) {
+      throw new Error(
+        `Falha ao atualizar run: transição inválida ${rejectResult.from ?? "?"}→completed`,
+      );
     }
 
     const { data: planMsgs } = await supabase
