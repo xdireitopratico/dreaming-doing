@@ -1,21 +1,46 @@
 /**
- * Seed agent_preferences + Groq pool para usuário E2E provisionado.
- * Fonte da chave: E2E_GROQ_KEY (recomendado — evita rate limit do pool admin)
- * → pool Groq do admin FORGE → falha explícita.
+ * Seed agent_preferences + OpenRouter (free model) para usuário E2E provisionado.
+ * Fonte da chave: OPENROUTER_API_KEY / E2E_OPENROUTER_KEY (recomendado)
+ * → pool OpenRouter do admin FORGE → falha explícita.
  */
 import { createClient } from "@supabase/supabase-js";
 
 const FORGE_ADMIN_EMAIL = "xdireitopratico@gmail.com";
 
+export const E2E_DEFAULT_MODEL = process.env.E2E_MODEL ?? "nex-agi/nex-n2-pro:free";
+
 export const E2E_AGENT_PREFERENCES = {
-  mode: process.env.E2E_MODE ?? "robin",
-  poolProvider: process.env.E2E_POOL_PROVIDER ?? "groq",
-  robinPoolModelId: process.env.E2E_ROBIN_MODEL ?? "pool-groq-flash",
+  mode: process.env.E2E_MODE ?? "fixed",
+  useCustomModel: true,
+  customModelId: E2E_DEFAULT_MODEL,
 };
 
-/** Chave Groq dedicada — evita rate limit do pool admin (compartilhado com smoke). */
+/** Chave OpenRouter — evita rate limit do pool Groq admin (compartilhado com smoke). */
+export function resolveE2eOpenRouterKey(env = process.env) {
+  return (env.OPENROUTER_API_KEY ?? env.E2E_OPENROUTER_KEY ?? "").trim();
+}
+
+export function hasDedicatedE2eLlmKey(env = process.env) {
+  return Boolean(resolveE2eOpenRouterKey(env));
+}
+
+/** @deprecated use hasDedicatedE2eLlmKey */
 export function hasDedicatedE2eGroqKey(env = process.env) {
-  return Boolean((env.E2E_GROQ_KEY ?? "").trim());
+  return hasDedicatedE2eLlmKey(env);
+}
+
+function parseTokenField(tokenField) {
+  if (!tokenField?.trim()) return [];
+  const t = tokenField.trim();
+  if (t.startsWith("[")) {
+    try {
+      const arr = JSON.parse(t);
+      if (Array.isArray(arr)) return arr.filter((x) => typeof x === "string" && x.length > 0);
+    } catch {
+      /* single token */
+    }
+  }
+  return [t];
 }
 
 function restHeaders(serviceKey, extra = {}) {
@@ -112,7 +137,7 @@ async function patchProfilePreferences(supabaseUrl, serviceKey, userId, preferen
 }
 
 /**
- * Garante prefs + chave Groq para o usuário E2E executar runs BYOK.
+ * Garante prefs + chave OpenRouter para o usuário E2E executar runs BYOK.
  */
 export async function seedE2eAgentSetup({ supabaseUrl, serviceKey, userId }) {
   if (!supabaseUrl || !serviceKey || !userId) {
@@ -124,30 +149,30 @@ export async function seedE2eAgentSetup({ supabaseUrl, serviceKey, userId }) {
   const adminId = await resolveAdminUserId(supabaseUrl, serviceKey);
   if (!adminId) {
     throw new Error(
-      "seedE2eAgentSetup: admin FORGE não encontrado — defina E2E_GROQ_KEY/E2E_E2B_KEY ou configure conectores do admin",
+      "seedE2eAgentSetup: admin FORGE não encontrado — defina OPENROUTER_API_KEY/E2E_E2B_KEY ou configure conectores do admin",
     );
   }
 
-  const envGroq = (process.env.E2E_GROQ_KEY ?? "").trim();
-  let groqToken = envGroq || null;
-  let groqSource = envGroq ? "E2E_GROQ_KEY" : null;
-  if (!groqToken) {
-    const adminGroq = await fetchConnector(supabaseUrl, serviceKey, adminId, "openai", "groq");
-    groqToken = adminGroq?.token_encrypted ?? null;
-    groqSource = groqToken ? "admin_pool_copy" : null;
+  const envOr = resolveE2eOpenRouterKey();
+  let orToken = envOr || null;
+  let orSource = envOr ? (process.env.OPENROUTER_API_KEY ? "OPENROUTER_API_KEY" : "E2E_OPENROUTER_KEY") : null;
+  if (!orToken) {
+    const adminOr = await fetchConnector(supabaseUrl, serviceKey, adminId, "openai", "openrouter");
+    orToken = parseTokenField(adminOr?.token_encrypted ?? null)[0] ?? null;
+    orSource = orToken ? "admin_pool_copy" : null;
   }
-  if (!groqToken) {
+  if (!orToken) {
     throw new Error(
-      "seedE2eAgentSetup: sem chave Groq — defina E2E_GROQ_KEY ou configure pool Groq do admin em /api",
+      "seedE2eAgentSetup: sem chave OpenRouter — defina OPENROUTER_API_KEY ou configure OpenRouter do admin em /api",
     );
   }
 
-  const groqConn = await upsertConnector(supabaseUrl, serviceKey, userId, {
+  const orConn = await upsertConnector(supabaseUrl, serviceKey, userId, {
     kind: "openai",
-    provider: "groq",
-    tokenEncrypted: groqToken,
-    meta: { provider: "groq", keySource: groqSource },
-    forceUpdate: groqSource === "E2E_GROQ_KEY",
+    provider: "openrouter",
+    tokenEncrypted: orToken,
+    meta: { provider: "openrouter", keySource: orSource, e2eModel: E2E_DEFAULT_MODEL },
+    forceUpdate: Boolean(envOr),
   });
 
   const envE2b = (process.env.E2E_E2B_KEY ?? "").trim();
@@ -155,7 +180,7 @@ export async function seedE2eAgentSetup({ supabaseUrl, serviceKey, userId }) {
   let e2bSource = envE2b ? "E2E_E2B_KEY" : null;
   if (!e2bToken) {
     const adminE2b = await fetchConnector(supabaseUrl, serviceKey, adminId, "e2b");
-    e2bToken = adminE2b?.token_encrypted ?? null;
+    e2bToken = parseTokenField(adminE2b?.token_encrypted ?? null)[0] ?? null;
     e2bSource = e2bToken ? "admin_e2b_copy" : null;
   }
   if (!e2bToken) {
@@ -173,10 +198,11 @@ export async function seedE2eAgentSetup({ supabaseUrl, serviceKey, userId }) {
 
   return {
     preferences: E2E_AGENT_PREFERENCES,
-    groq: groqConn,
+    openrouter: orConn,
     e2b: e2bConn,
-    groqSource,
+    openrouterSource: orSource,
     e2bSource,
+    model: E2E_DEFAULT_MODEL,
   };
 }
 

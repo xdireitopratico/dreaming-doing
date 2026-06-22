@@ -9,6 +9,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { resolveInngestEventUrl } from "./lib/inngest-event-url.mjs";
+import { seedE2eAgentSetup } from "./lib/e2e-agent-setup.mjs";
 
 function loadEnvLocal() {
   const path = resolve(process.cwd(), ".env.local");
@@ -50,15 +51,22 @@ const SMOKE_PROMPT =
   "[smoke] Liste os arquivos na raiz do projeto (resposta curta, sem editar código).";
 
 /**
- * Preferências de smoke — Groq flash por padrão (terminal em <5min).
- * Nemotron 550B costuma estourar timeout por thinking longo + robin_wait.
- * Override: SMOKE_POOL_PROVIDER=nvidia SMOKE_ROBIN_MODEL=nvidia--nemotron-3-ultra-550b
+ * Preferências de smoke — OpenRouter free por padrão (sem rate limit Groq).
+ * Override: SMOKE_MODE=robin SMOKE_POOL_PROVIDER=groq SMOKE_ROBIN_MODEL=pool-groq-flash
  */
 const SMOKE_PREFERENCES = {
-  mode: process.env.SMOKE_MODE ?? "robin",
-  poolProvider: process.env.SMOKE_POOL_PROVIDER ?? "groq",
-  robinPoolModelId: process.env.SMOKE_ROBIN_MODEL ?? "pool-groq-flash",
+  mode: process.env.SMOKE_MODE ?? "fixed",
+  useCustomModel: process.env.SMOKE_MODE ? undefined : true,
+  customModelId: process.env.SMOKE_MODEL ?? "nex-agi/nex-n2-pro:free",
+  poolProvider: process.env.SMOKE_POOL_PROVIDER,
+  robinPoolModelId: process.env.SMOKE_ROBIN_MODEL,
 };
+if (SMOKE_PREFERENCES.mode === "robin") {
+  delete SMOKE_PREFERENCES.useCustomModel;
+  delete SMOKE_PREFERENCES.customModelId;
+  SMOKE_PREFERENCES.poolProvider = SMOKE_PREFERENCES.poolProvider ?? "groq";
+  SMOKE_PREFERENCES.robinPoolModelId = SMOKE_PREFERENCES.robinPoolModelId ?? "pool-groq-flash";
+}
 
 function arg(name, fallback) {
   const hit = process.argv.find((a) => a.startsWith(`--${name}=`));
@@ -202,6 +210,15 @@ async function main() {
   }
 
   await cleanupStaleSmokeRuns(projectIdResolved);
+
+  const seed = await seedE2eAgentSetup({
+    supabaseUrl: SUPABASE_URL,
+    serviceKey: SERVICE_KEY,
+    userId: userIdResolved,
+  });
+  console.log(
+    `Seed: openrouter=${seed.openrouterSource} model=${seed.model} e2b=${seed.e2bSource}`,
+  );
 
   const msgRes = await rest("messages", {
     method: "POST",

@@ -19,8 +19,9 @@
  *   E2E_CLEANUP=0
  *   E2E_REQUIRED=1
  *   E2E_PHASES=dashboard,inspector-live,f5,second-turn
- *   E2E_GROQ_KEY=gsk_...           # obrigatório para plan-dock (evita rate limit)
- *   E2E_PLAN_DOCK_REQUIRED=1        # falha se plan-dock pedido sem E2E_GROQ_KEY
+ *   OPENROUTER_API_KEY=sk-or-...   # recomendado (modelo free, sem rate limit Groq)
+ *   E2E_MODEL=nex-agi/nex-n2-pro:free
+ *   E2E_PLAN_DOCK_REQUIRED=1        # falha se plan-dock pedido sem chave LLM
  */
 import { chromium } from "playwright";
 import { readFileSync } from "node:fs";
@@ -32,7 +33,7 @@ import { buildSupabaseAuthStorage } from "./lib/supabase-auth-storage.mjs";
 import { resolveE2eCredentials } from "./lib/e2e-credentials.mjs";
 import {
   E2E_AGENT_PREFERENCES,
-  hasDedicatedE2eGroqKey,
+  hasDedicatedE2eLlmKey,
   localStoragePrefsScript,
   seedE2eAgentSetup,
 } from "./lib/e2e-agent-setup.mjs";
@@ -73,16 +74,9 @@ const PHASES_RAW = new Set(
 
 const PHASES = new Set(PHASES_RAW);
 
-if (PHASES_RAW.has("plan-dock") && process.env.E2E_PLAN_DOCK_REQUIRED === "1" && !hasDedicatedE2eGroqKey()) {
-  console.error("FAIL: plan-dock requer E2E_GROQ_KEY dedicada (evita rate limit do pool admin)");
-  process.exit(1);
-}
-
-if (PHASES.has("plan-dock") && !hasDedicatedE2eGroqKey() && process.env.E2E_PLAN_DOCK_REQUIRED !== "1") {
-  PHASES.delete("plan-dock");
+if (PHASES_RAW.has("plan-dock") && process.env.E2E_PLAN_DOCK_REQUIRED === "1" && !hasDedicatedE2eLlmKey()) {
   console.log(
-    "SKIP: fase plan-dock — defina E2E_GROQ_KEY (pool admin compartilhado com smoke causa rate limit). " +
-      "Para forçar: E2E_PLAN_DOCK_REQUIRED=1",
+    "WARN: OPENROUTER_API_KEY ausente — seed usará pool OpenRouter do admin (nex-agi/nex-n2-pro:free)",
   );
 }
 
