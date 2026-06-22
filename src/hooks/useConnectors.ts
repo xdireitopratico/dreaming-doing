@@ -177,7 +177,7 @@ export function useConnectors() {
 
       if (kind === "e2b") {
         setModal(null);
-        void navigate({ to: "/api", hash: "forge-key-e2b" });
+        void navigate({ to: "/api-models", hash: "forge-key-e2b" });
         return;
       }
 
@@ -214,7 +214,7 @@ export function useConnectors() {
   const openConnector = useCallback(
     (id: ConnectorId) => {
       if (id === "e2b") {
-        void navigate({ to: "/api", hash: "forge-key-e2b" });
+        void navigate({ to: "/api-models", hash: "forge-key-e2b" });
         return;
       }
       setModal(id);

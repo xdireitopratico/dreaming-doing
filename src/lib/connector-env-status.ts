@@ -1,21 +1,5 @@
+import { allProviders, type AiProviderId } from "@/lib/ai-provider-registry";
 import type { AiEnvId } from "@/lib/model-catalog";
-import type { AiProviderId } from "@/lib/save-connector";
-
-const ENV_TO_PROVIDER: Record<AiEnvId, AiProviderId> = {
-  alibaba: "alibaba",
-  anthropic: "anthropic",
-  deepseek: "deepseek",
-  gemini: "gemini",
-  openai: "openai",
-  xai: "xai",
-  groq: "groq",
-  minimax: "minimax",
-  moonshotai: "moonshotai",
-  nvidia: "nvidia",
-  ollama: "ollama",
-  openrouter: "openrouter",
-  xiaomi: "xiaomi",
-};
 
 export type ConnectorRow = {
   kind: string;
@@ -30,9 +14,15 @@ function openAiProvider(row: ConnectorRow): string {
   return meta.provider ?? "openai";
 }
 
-/** Quais ambientes LLM têm chave salva (connectors_public). */
-export function connectedEnvsFromRows(rows: ConnectorRow[] | undefined): Record<AiEnvId, boolean> {
-  const out: Record<AiEnvId, boolean> = {
+function knownProviderIds(): Set<string> {
+  return new Set(allProviders().map((p) => p.id));
+}
+
+/** Quais ambientes LLM têm chave salva (connectors_public). Inclui providers custom. */
+export function connectedEnvsFromRows(
+  rows: ConnectorRow[] | undefined,
+): Record<AiEnvId, boolean> & Record<string, boolean> {
+  const out: Record<AiEnvId, boolean> & Record<string, boolean> = {
     alibaba: false,
     anthropic: false,
     deepseek: false,
@@ -48,23 +38,30 @@ export function connectedEnvsFromRows(rows: ConnectorRow[] | undefined): Record<
     xiaomi: false,
   };
 
+  for (const p of allProviders()) {
+    if (!(p.id in out)) out[p.id] = false;
+  }
+
   for (const row of rows ?? []) {
     if (row.kind === "anthropic") {
       out.anthropic = true;
       continue;
     }
     if (row.kind === "openai") {
-      const p = openAiProvider(row) as AiEnvId;
-      if (p in out) out[p] = true;
+      const p = openAiProvider(row);
+      if (knownProviderIds().has(p)) out[p] = true;
     }
   }
   return out;
 }
 
-export function isEnvConnected(env: AiEnvId, connected: Record<AiEnvId, boolean>): boolean {
+export function isEnvConnected(
+  env: AiEnvId | string,
+  connected: Record<string, boolean>,
+): boolean {
   return connected[env] === true;
 }
 
 export function providerIdForEnv(env: AiEnvId): AiProviderId {
-  return ENV_TO_PROVIDER[env];
+  return env as AiProviderId;
 }

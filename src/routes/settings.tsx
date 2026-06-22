@@ -211,7 +211,7 @@ function SettingsPage() {
         </h2>
         <div className="grid gap-3 sm:grid-cols-2">
           <Link
-            to="/api"
+            to="/api-models"
             className="flex items-center gap-3 rounded-lg border border-[var(--border)] p-4 hover:bg-[var(--surface-2)] transition-colors"
           >
             <Key className="size-5 text-[var(--primary)] shrink-0" />

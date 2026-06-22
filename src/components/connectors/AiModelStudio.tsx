@@ -731,7 +731,7 @@ export function AiModelStudioSummary() {
 
   return (
     <Link
-      to="/models"
+      to="/api-models"
       className="forge-composer-chip max-w-[200px] hover:border-[var(--primary)]/50"
       title="Configurar ambiente e modelo"
     >

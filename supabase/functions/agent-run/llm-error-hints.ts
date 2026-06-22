@@ -26,8 +26,7 @@ export type ErrorHint = {
 };
 
 const LINKS = {
-  apiKeys: "/api",
-  models: "/models",
+  apiModels: "/api-models",
   onboarding: "/onboarding",
   apiConnectors: "/connectors",
 };
@@ -43,7 +42,7 @@ function hintFromStatus(status: number | undefined, msg: string): ErrorHint | nu
     return {
       message: "Sua chave de API está inválida ou expirou.",
       action: "Atualizar chave",
-      link: LINKS.apiKeys,
+      link: LINKS.apiModels,
       severity: "error",
       code: "auth.invalid_key",
       tip: "A última requisição foi rejeitada pelo provedor antes de qualquer chamada custosa.",
@@ -53,7 +52,7 @@ function hintFromStatus(status: number | undefined, msg: string): ErrorHint | nu
     return {
       message: "Provedor recusou a chave (403). Pode estar sem permissão para o modelo escolhido.",
       action: "Trocar modelo ou chave",
-      link: LINKS.models,
+      link: LINKS.apiModels,
       severity: "error",
       code: "auth.forbidden",
     };
@@ -62,7 +61,7 @@ function hintFromStatus(status: number | undefined, msg: string): ErrorHint | nu
     return {
       message: "Sem créditos ou quota esgotada na sua conta do provedor.",
       action: "Recarregar créditos",
-      link: LINKS.apiKeys,
+      link: LINKS.apiModels,
       severity: "error",
       code: "billing.no_credits",
     };
@@ -87,7 +86,7 @@ export function llmErrorHint(err: unknown, robinActive: boolean): ErrorHint {
       return {
         message: "Modelo NVIDIA não encontrado. Pode estar deprecado ou sua chave não tem acesso.",
         action: "Trocar modelo",
-        link: LINKS.models,
+        link: LINKS.apiModels,
         severity: "error",
         code: "model.not_found.nvidia",
         tip: "Tente o preset Llama 3.3 70B ou Groq Llama 3.3 70B Versatile.",
@@ -96,7 +95,7 @@ export function llmErrorHint(err: unknown, robinActive: boolean): ErrorHint {
     return {
       message: "Modelo não encontrado no provedor (404).",
       action: "Escolher outro modelo",
-      link: LINKS.models,
+      link: LINKS.apiModels,
       severity: "error",
       code: "model.not_found",
     };
@@ -118,7 +117,7 @@ export function llmErrorHint(err: unknown, robinActive: boolean): ErrorHint {
       return {
         message: "Limite por minuto nesta chave. ROBIN está alternando para a próxima…",
         action: "Adicionar mais chaves",
-        link: LINKS.apiKeys,
+        link: LINKS.apiModels,
         severity: "warning",
         code: "rate_limit.robin_rotating",
         tip: "Cada chave adicionada multiplica o throughput do pool.",
@@ -127,7 +126,7 @@ export function llmErrorHint(err: unknown, robinActive: boolean): ErrorHint {
     return {
       message: "Limite por minuto atingido no provedor.",
       action: "Adicionar chaves (ROBIN) ou aguardar",
-      link: LINKS.apiKeys,
+      link: LINKS.apiModels,
       severity: "warning",
       code: "rate_limit.single_key",
     };
@@ -173,7 +172,7 @@ export function e2bErrorHint(err: unknown): ErrorHint {
     return {
       message: "Sua chave E2B foi rejeitada.",
       action: "Atualizar chave E2B",
-      link: LINKS.apiKeys,
+      link: LINKS.apiModels,
       severity: "error",
       code: "e2b.invalid_key",
     };

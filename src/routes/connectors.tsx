@@ -57,7 +57,7 @@ function ConnectorsPage() {
         </div>
         <span className="text-[var(--border)]">|</span>
         <Link
-          to="/api"
+          to="/api-models"
           className="flex items-center gap-1.5 font-mono text-[10px] text-[var(--primary)] hover:underline"
         >
           <Key className="size-3" />
@@ -95,7 +95,7 @@ function ConnectorsPage() {
             Tokens ficam cifrados no servidor — nunca no navegador.
           </span>
         </div>
-        <Link to="/models" className="font-mono text-[9px] text-[var(--primary)] hover:underline">
+        <Link to="/api-models" className="font-mono text-[9px] text-[var(--primary)] hover:underline">
           Modelos →
         </Link>
       </motion.footer>

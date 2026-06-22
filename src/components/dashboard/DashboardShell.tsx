@@ -2,7 +2,7 @@ import { Link, Navigate, useLocation, useNavigate } from "@tanstack/react-router
 import {
   BookOpen,
   Bot,
-  Brain,
+  BrainCircuit,
   ChevronDown,
   Grid3X3,
   Home,
@@ -30,8 +30,7 @@ type NavId =
   | "projects"
   | "agents"
   | "connectors"
-  | "api"
-  | "models"
+  | "api-models"
   | "mcp"
   | "skills"
   | "settings"
@@ -109,22 +108,13 @@ function DashboardSidebarPanel({
 
         <span className="dashboard-nav-label">Configuração</span>
         <Link
-          to="/api"
+          to="/api-models"
           className="dashboard-nav-item"
-          data-active={activeNav === "api" ? "true" : undefined}
+          data-active={activeNav === "api-models" ? "true" : undefined}
           onClick={onNavClick}
         >
-          <Key className="size-4 shrink-0" />
-          API Keys
-        </Link>
-        <Link
-          to="/models"
-          className="dashboard-nav-item"
-          data-active={activeNav === "models" ? "true" : undefined}
-          onClick={onNavClick}
-        >
-          <Brain className="size-4 shrink-0" />
-          Modelos
+          <BrainCircuit className="size-4 shrink-0" />
+          Api & Models
         </Link>
         <Link
           to="/connectors"
@@ -202,20 +192,12 @@ function DashboardSidebarPanel({
         </div>
         <div className="flex gap-1">
           <Link
-            to="/api"
+            to="/api-models"
             className="dashboard-upgrade flex-1 text-[10px] py-2 justify-center"
             onClick={onNavClick}
           >
-            <Key className="size-3 text-[var(--forge-primary)]" />
-            API Keys
-          </Link>
-          <Link
-            to="/models"
-            className="dashboard-upgrade flex-1 text-[10px] py-2 justify-center"
-            onClick={onNavClick}
-          >
-            <Brain className="size-3 text-[var(--forge-primary)]" />
-            Modelos
+            <BrainCircuit className="size-3 text-[var(--forge-primary)]" />
+            Api & Models
           </Link>
         </div>
         <div className="dashboard-footer-row">

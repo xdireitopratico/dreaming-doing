@@ -12,14 +12,14 @@ describe("llmErrorHint", () => {
   it("returns auth.invalid_key for 401", () => {
     const hint = llmErrorHint(new Error("401 Unauthorized: invalid api key"), false);
     expect(hint.code).toBe("auth.invalid_key");
-    expect(hint.link).toBe("/api");
+    expect(hint.link).toBe("/api-models");
     expect(hint.severity).toBe("error");
   });
 
   it("returns auth.forbidden for 403", () => {
     const hint = llmErrorHint(new Error("403 forbidden - permission denied"), false);
     expect(hint.code).toBe("auth.forbidden");
-    expect(hint.link).toBe("/models");
+    expect(hint.link).toBe("/api-models");
   });
 
   it("returns billing.no_credits for 402 or quota", () => {

@@ -444,7 +444,7 @@ function ApiKeysStep({
       <div className="rounded-lg border border-[var(--forge-border)] bg-[var(--forge-surface-2)]/40 p-4">
         <p className="font-mono text-[10px] text-[var(--forge-muted)] mb-2">Adicionar chaves em</p>
         <Link
-          to="/api"
+          to="/api-models"
           className="inline-flex items-center gap-2 font-mono text-xs text-[var(--forge-primary)] hover:underline"
         >
           <Key className="size-3.5" />
@@ -520,7 +520,7 @@ function ModelStep({
       <div className="mt-4 rounded-lg border border-[var(--forge-border)] bg-[var(--forge-surface-2)]/40 p-4">
         <p className="font-mono text-[10px] text-[var(--forge-muted)] mb-2">Ajustar presets em</p>
         <Link
-          to="/models"
+          to="/api-models"
           className="inline-flex items-center gap-2 font-mono text-xs text-[var(--forge-primary)] hover:underline"
         >
           <Brain className="size-3.5" />
@@ -598,7 +598,7 @@ function SandboxStep({
           Adicionar chave E2B em
         </p>
         <Link
-          to="/api"
+          to="/api-models"
           hash="forge-key-e2b"
           className="inline-flex items-center gap-2 font-mono text-xs text-[var(--forge-primary)] hover:underline"
         >
@@ -696,11 +696,11 @@ function DoneStep({
             <strong className="text-[var(--forge-text)]">TASTE não existe mais</strong> na sua
             conta. Tudo o que você configurou aqui vale. Pode refazer qualquer passo a qualquer
             momento em{" "}
-            <Link to="/api" className="text-[var(--forge-primary)] hover:underline">
+            <Link to="/api-models" className="text-[var(--forge-primary)] hover:underline">
               /api
             </Link>{" "}
             e{" "}
-            <Link to="/models" className="text-[var(--forge-primary)] hover:underline">
+            <Link to="/api-models" className="text-[var(--forge-primary)] hover:underline">
               /models
             </Link>
             .

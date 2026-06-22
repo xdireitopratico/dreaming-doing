@@ -22,13 +22,13 @@ export function TastePostStartBanner() {
         </p>
         <span className="mt-2 flex flex-wrap gap-3">
           <Link
-            to="/api"
+            to="/api-models"
             className="font-mono text-[10px] text-[var(--forge-primary)] hover:underline"
           >
             API →
           </Link>
           <Link
-            to="/models"
+            to="/api-models"
             hash="forge-ai-studio"
             className="font-mono text-[10px] text-[var(--forge-primary)] hover:underline"
           >

@@ -102,7 +102,7 @@ export function TasteSetupChecklist({ userMessageCount, onOpenConnector, onStart
         ))}
       </ul>
       <Link
-        to="/models"
+        to="/api-models"
         hash="forge-ai-studio"
         className="mt-2 inline-block font-mono text-[9px] text-[var(--forge-primary)] hover:underline"
       >

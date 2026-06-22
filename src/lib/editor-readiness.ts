@@ -55,7 +55,7 @@ export function buildEditorReadiness(input: {
       level: "error",
       label: "Sandbox E2B",
       detail: "Obrigatório para o agente construir e para o preview ao vivo.",
-      href: "/api#forge-key-e2b",
+      href: "/api-models#forge-key-e2b",
     });
   } else {
     items.push({
@@ -71,7 +71,7 @@ export function buildEditorReadiness(input: {
       label: "Modo Taste",
       detail:
         "Sem chave LLM sua: chat = concierge (sem MVP completo). Use Start Project (1×) ou chaves em API.",
-      href: "/api",
+      href: "/api-models",
     });
     return items;
   }
@@ -82,7 +82,7 @@ export function buildEditorReadiness(input: {
       label: "Modelo no editor",
       detail:
         "Abra Modelos, escolha Fixo ou ROBIN (Nemotron 550B), salve — sem isso o agente não inicia.",
-      href: "/models",
+      href: "/api-models",
     });
     return items;
   }
@@ -96,7 +96,7 @@ export function buildEditorReadiness(input: {
           level: "error",
           label: "Pool NVIDIA",
           detail: "Modo ROBIN + NVIDIA: salve a chave NVIDIA em API (Salvar ou Adicionar ao pool).",
-          href: "/api",
+          href: "/api-models",
         });
       } else {
         items.push({
@@ -119,7 +119,7 @@ export function buildEditorReadiness(input: {
         level: "error",
         label: "Chave NVIDIA",
         detail: `Modelo fixo ${model} — falta chave NVIDIA em API.`,
-        href: "/api",
+        href: "/api-models",
       });
     } else {
       items.push({

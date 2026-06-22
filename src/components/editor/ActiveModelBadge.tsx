@@ -33,7 +33,7 @@ export function ActiveModelBadge({ className = "" }: { className?: string }) {
 
   return (
     <Link
-      to="/models"
+      to="/api-models"
       title="Abrir Modelos — ranking completo e pool ROBIN"
       className={`inline-flex items-center gap-1 rounded-md border border-[var(--forge-border)] bg-[var(--forge-surface-3)]/80 px-2 py-0.5 font-mono text-[9px] text-[var(--forge-silver)] hover:border-[var(--forge-primary)]/35 hover:text-[var(--forge-text)] transition-colors ${className}`}
       onClick={(e) => e.stopPropagation()}

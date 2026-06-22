@@ -19,7 +19,7 @@ export function E2bStatusBadge({ e2bConnected }: E2bStatusBadgeProps) {
 
   return (
     <Link
-      to="/api"
+      to="/api-models"
       className="forge-e2b-badge inline-flex items-center gap-1.5 rounded-md border border-[var(--forge-border)] px-2 py-1 text-[10px] font-mono text-[var(--forge-muted)] hover:text-[var(--forge-foreground)] hover:bg-[var(--forge-surface-2)] transition-colors"
       title={label}
       data-testid="e2b-status-badge"

@@ -12,15 +12,13 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as SkillsRouteImport } from './routes/skills'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as OnboardingRouteImport } from './routes/onboarding'
-import { Route as ModelsRouteImport } from './routes/models'
 import { Route as McpRouteImport } from './routes/mcp'
 import { Route as HealthzRouteImport } from './routes/healthz'
 import { Route as DesignLibraryRouteImport } from './routes/design-library'
 import { Route as CostsRouteImport } from './routes/costs'
 import { Route as ConnectorsRouteImport } from './routes/connectors'
 import { Route as AuthRouteImport } from './routes/auth'
-import { Route as ApiKeysRouteImport } from './routes/api-keys'
-import { Route as ApiRouteImport } from './routes/api'
+import { Route as ApiModelsRouteImport } from './routes/api-models'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ProjectsIndexRouteImport } from './routes/projects/index'
 import { Route as AgentsIndexRouteImport } from './routes/agents/index'
@@ -42,11 +40,6 @@ const SettingsRoute = SettingsRouteImport.update({
 const OnboardingRoute = OnboardingRouteImport.update({
   id: '/onboarding',
   path: '/onboarding',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ModelsRoute = ModelsRouteImport.update({
-  id: '/models',
-  path: '/models',
   getParentRoute: () => rootRouteImport,
 } as any)
 const McpRoute = McpRouteImport.update({
@@ -79,14 +72,9 @@ const AuthRoute = AuthRouteImport.update({
   path: '/auth',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiKeysRoute = ApiKeysRouteImport.update({
-  id: '/api-keys',
-  path: '/api-keys',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiRoute = ApiRouteImport.update({
-  id: '/api',
-  path: '/api',
+const ApiModelsRoute = ApiModelsRouteImport.update({
+  id: '/api-models',
+  path: '/api-models',
   getParentRoute: () => rootRouteImport,
 } as any)
 const IndexRoute = IndexRouteImport.update({
@@ -128,15 +116,13 @@ const ProjectsProjectIdHistoryRoute =
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/api': typeof ApiRoute
-  '/api-keys': typeof ApiKeysRoute
+  '/api-models': typeof ApiModelsRoute
   '/auth': typeof AuthRoute
   '/connectors': typeof ConnectorsRoute
   '/costs': typeof CostsRoute
   '/design-library': typeof DesignLibraryRoute
   '/healthz': typeof HealthzRoute
   '/mcp': typeof McpRoute
-  '/models': typeof ModelsRoute
   '/onboarding': typeof OnboardingRoute
   '/settings': typeof SettingsRoute
   '/skills': typeof SkillsRoute
@@ -149,15 +135,13 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/api': typeof ApiRoute
-  '/api-keys': typeof ApiKeysRoute
+  '/api-models': typeof ApiModelsRoute
   '/auth': typeof AuthRoute
   '/connectors': typeof ConnectorsRoute
   '/costs': typeof CostsRoute
   '/design-library': typeof DesignLibraryRoute
   '/healthz': typeof HealthzRoute
   '/mcp': typeof McpRoute
-  '/models': typeof ModelsRoute
   '/onboarding': typeof OnboardingRoute
   '/settings': typeof SettingsRoute
   '/skills': typeof SkillsRoute
@@ -171,15 +155,13 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/api': typeof ApiRoute
-  '/api-keys': typeof ApiKeysRoute
+  '/api-models': typeof ApiModelsRoute
   '/auth': typeof AuthRoute
   '/connectors': typeof ConnectorsRoute
   '/costs': typeof CostsRoute
   '/design-library': typeof DesignLibraryRoute
   '/healthz': typeof HealthzRoute
   '/mcp': typeof McpRoute
-  '/models': typeof ModelsRoute
   '/onboarding': typeof OnboardingRoute
   '/settings': typeof SettingsRoute
   '/skills': typeof SkillsRoute
@@ -194,15 +176,13 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
-    | '/api'
-    | '/api-keys'
+    | '/api-models'
     | '/auth'
     | '/connectors'
     | '/costs'
     | '/design-library'
     | '/healthz'
     | '/mcp'
-    | '/models'
     | '/onboarding'
     | '/settings'
     | '/skills'
@@ -215,15 +195,13 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
-    | '/api'
-    | '/api-keys'
+    | '/api-models'
     | '/auth'
     | '/connectors'
     | '/costs'
     | '/design-library'
     | '/healthz'
     | '/mcp'
-    | '/models'
     | '/onboarding'
     | '/settings'
     | '/skills'
@@ -236,15 +214,13 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
-    | '/api'
-    | '/api-keys'
+    | '/api-models'
     | '/auth'
     | '/connectors'
     | '/costs'
     | '/design-library'
     | '/healthz'
     | '/mcp'
-    | '/models'
     | '/onboarding'
     | '/settings'
     | '/skills'
@@ -258,15 +234,13 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  ApiRoute: typeof ApiRoute
-  ApiKeysRoute: typeof ApiKeysRoute
+  ApiModelsRoute: typeof ApiModelsRoute
   AuthRoute: typeof AuthRoute
   ConnectorsRoute: typeof ConnectorsRoute
   CostsRoute: typeof CostsRoute
   DesignLibraryRoute: typeof DesignLibraryRoute
   HealthzRoute: typeof HealthzRoute
   McpRoute: typeof McpRoute
-  ModelsRoute: typeof ModelsRoute
   OnboardingRoute: typeof OnboardingRoute
   SettingsRoute: typeof SettingsRoute
   SkillsRoute: typeof SkillsRoute
@@ -299,13 +273,6 @@ declare module '@tanstack/react-router' {
       path: '/onboarding'
       fullPath: '/onboarding'
       preLoaderRoute: typeof OnboardingRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/models': {
-      id: '/models'
-      path: '/models'
-      fullPath: '/models'
-      preLoaderRoute: typeof ModelsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/mcp': {
@@ -350,18 +317,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api-keys': {
-      id: '/api-keys'
-      path: '/api-keys'
-      fullPath: '/api-keys'
-      preLoaderRoute: typeof ApiKeysRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api': {
-      id: '/api'
-      path: '/api'
-      fullPath: '/api'
-      preLoaderRoute: typeof ApiRouteImport
+    '/api-models': {
+      id: '/api-models'
+      path: '/api-models'
+      fullPath: '/api-models'
+      preLoaderRoute: typeof ApiModelsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/': {
@@ -418,15 +378,13 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  ApiRoute: ApiRoute,
-  ApiKeysRoute: ApiKeysRoute,
+  ApiModelsRoute: ApiModelsRoute,
   AuthRoute: AuthRoute,
   ConnectorsRoute: ConnectorsRoute,
   CostsRoute: CostsRoute,
   DesignLibraryRoute: DesignLibraryRoute,
   HealthzRoute: HealthzRoute,
   McpRoute: McpRoute,
-  ModelsRoute: ModelsRoute,
   OnboardingRoute: OnboardingRoute,
   SettingsRoute: SettingsRoute,
   SkillsRoute: SkillsRoute,

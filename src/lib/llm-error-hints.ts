@@ -12,8 +12,7 @@ export type ErrorHint = {
 };
 
 const LINKS = {
-  apiKeys: "/api",
-  models: "/models",
+  apiModels: "/api-models",
   onboarding: "/onboarding",
   apiConnectors: "/connectors",
 };
@@ -32,7 +31,7 @@ function hintFromStatus(status: number | undefined, msg: string): ErrorHint | nu
     return {
       message: "Chave inválida ou expirada.",
       action: "→ /api",
-      link: LINKS.apiKeys,
+      link: LINKS.apiModels,
       severity: "error",
       code: "auth.invalid_key",
 
@@ -42,7 +41,7 @@ function hintFromStatus(status: number | undefined, msg: string): ErrorHint | nu
     return {
       message: "Chave sem permissão (403).",
       action: "→ /models",
-      link: LINKS.models,
+      link: LINKS.apiModels,
       severity: "error",
       code: "auth.forbidden",
     };
@@ -51,7 +50,7 @@ function hintFromStatus(status: number | undefined, msg: string): ErrorHint | nu
     return {
       message: "Sem créditos.",
       action: "→ /api",
-      link: LINKS.apiKeys,
+      link: LINKS.apiModels,
       severity: "error",
       code: "billing.no_credits",
     };
@@ -76,7 +75,7 @@ export function llmErrorHint(err: unknown, robinActive: boolean): ErrorHint {
       return {
       message: "Modelo NVIDIA 404.",
       action: "→ /models",
-      link: LINKS.models,
+      link: LINKS.apiModels,
       severity: "error",
       code: "model.not_found.nvidia",
       };
@@ -84,7 +83,7 @@ export function llmErrorHint(err: unknown, robinActive: boolean): ErrorHint {
     return {
       message: "Modelo 404.",
       action: "→ /models",
-      link: LINKS.models,
+      link: LINKS.apiModels,
       severity: "error",
       code: "model.not_found",
     };
@@ -109,7 +108,7 @@ export function llmErrorHint(err: unknown, robinActive: boolean): ErrorHint {
       return {
         message: "Rate limit — ROBIN alternando.",
         action: "→ /api",
-        link: LINKS.apiKeys,
+        link: LINKS.apiModels,
         severity: "warning",
         code: "rate_limit.robin_rotating",
 
@@ -118,7 +117,7 @@ export function llmErrorHint(err: unknown, robinActive: boolean): ErrorHint {
     return {
       message: "Rate limit.",
       action: "→ /api",
-      link: LINKS.apiKeys,
+      link: LINKS.apiModels,
       severity: "warning",
       code: "rate_limit.single_key",
     };
@@ -167,7 +166,7 @@ export function e2bErrorHint(err: unknown): ErrorHint {
     return {
       message: "Chave E2B inválida.",
       action: "→ /api",
-      link: LINKS.apiKeys,
+      link: LINKS.apiModels,
       severity: "error",
       code: "e2b.invalid_key",
     };

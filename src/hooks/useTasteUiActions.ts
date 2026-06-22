@@ -15,7 +15,7 @@ export function useTasteUiActions() {
       switch (detail.action) {
         case "open_connector": {
           if (detail.connector === "e2b") {
-            void navigate({ to: "/api", hash: "forge-key-e2b" });
+            void navigate({ to: "/api-models", hash: "forge-key-e2b" });
             break;
           }
           window.dispatchEvent(
@@ -35,12 +35,12 @@ export function useTasteUiActions() {
             break;
           }
           if (detail.step === "models") {
-            void navigate({ to: "/models", hash: detail.hash ?? "forge-ai-studio" });
+            void navigate({ to: "/api-models", hash: detail.hash ?? "forge-ai-studio" });
             break;
           }
           const hash =
             detail.hash ?? (detail.connector ? `forge-key-${detail.connector}` : undefined);
-          void navigate({ to: "/api", hash });
+          void navigate({ to: "/api-models", hash });
           break;
         }
         case "lead_saved":
