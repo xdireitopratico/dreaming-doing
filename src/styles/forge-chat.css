@@ -366,7 +366,9 @@
 
 .forge-plan-dock {
   flex-shrink: 0;
-  margin: 0 var(--chat-padding) var(--space-sm);
+  /* Plan dock vive dentro de .forge-messages agora (composer fica fixo fora).
+     Margem lateral zero — o padding de .forge-messages cuida do respiro. */
+  margin: var(--space-sm) 0;
 }
 
 .forge-plan-dock-shell {
@@ -518,6 +520,14 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-md);
+}
+
+/* Mini-card variant — herda o fundo do mini card (sem inner panel escuro).
+   Quando o mini card tem plano driven, renderiza as fases inline sem o
+   "Plan" header duplicado (compact mode do PlanPhaseList). */
+.forge-plan-phases--in-card {
+  gap: var(--space-sm);
+  margin-top: var(--space-sm);
 }
 
 /* ─── Plan phase block ───────────────────────────────────────────── */
@@ -1253,6 +1263,118 @@
 .forge-new-messages-pill:hover {
   background: color-mix(in srgb, var(--bg-chat) 75%, var(--text-accent) 25%);
   border-color: var(--text-accent);
+}
+
+/* ─── Clarify dock — padronizado com ChatPlanDock ────────────────── */
+
+.forge-clarify-dock {
+  /* Herda margin do .forge-plan-dock — fica dentro de .forge-messages. */
+}
+
+.forge-clarify-dock-shell {
+  /* Mesma shell do plano — padrão visual unificado. */
+}
+
+.forge-clarify-intro {
+  margin: 0 0 var(--space-sm);
+  font: var(--font-chat);
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text-secondary);
+}
+
+.forge-clarify-question {
+  margin: 0 0 var(--space-md);
+  font: var(--font-chat);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.45;
+  color: var(--text-primary);
+}
+
+.forge-clarify-options {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.forge-clarify-option {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  width: 100%;
+  padding: 10px var(--space-md);
+  border-radius: var(--chat-cta-radius);
+  border: 1px solid var(--border-forge);
+  background: var(--bg-input);
+  color: var(--text-primary);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 0.15s,
+    background 0.15s;
+}
+
+.forge-clarify-option:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--text-accent) 55%, var(--border-forge));
+  background: var(--bg-hover);
+}
+
+.forge-clarify-option--disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.forge-clarify-option-label {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.forge-clarify-option-desc {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-secondary);
+}
+
+/* Bloco de texto próprio + actions — fora do inner escuro, na base da shell. */
+.forge-clarify-custom {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  padding-top: var(--space-sm);
+}
+
+.forge-clarify-input {
+  width: 100%;
+  min-height: 36px;
+  max-height: 120px;
+  resize: none;
+  padding: var(--space-sm) var(--space-xs);
+  border: 1px solid var(--border-forge);
+  border-radius: var(--chat-cta-radius);
+  background: color-mix(in srgb, var(--bg-input) 85%, transparent);
+  color: var(--text-primary);
+  font-size: 13px;
+  line-height: 1.5;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.forge-clarify-input::placeholder {
+  color: var(--text-muted);
+}
+
+.forge-clarify-input:focus {
+  border-color: var(--border-active);
+}
+
+.forge-clarify-input:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
 /* Composer — bolha própria (referência Lovable), separada da área de mensagens */

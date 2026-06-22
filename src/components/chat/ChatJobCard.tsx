@@ -10,6 +10,7 @@ import {
   Terminal,
   XCircle,
 } from "lucide-react";
+import { PlanPhaseListFromPlan } from "./PlanPhaseList";
 
 type ChatJobCardProps = {
   data: MiniCardData;
@@ -187,7 +188,13 @@ export function ChatJobCard({
           </div>
         )}
 
-        {visibleTasks.length > 0 && (
+        {data.pendingPlan && data.pendingPlan.steps.length > 0 ? (
+          <PlanPhaseListFromPlan
+            plan={data.pendingPlan}
+            compact
+            className="forge-plan-phases forge-plan-phases--in-card"
+          />
+        ) : visibleTasks.length > 0 ? (
           <ul className="forge-task-list" data-testid="chat-mini-card-task-list">
             {visibleTasks.map((task) => {
               const Icon =
@@ -219,7 +226,7 @@ export function ChatJobCard({
               </li>
             )}
           </ul>
-        )}
+        ) : null}
 
         <p className="forge-mini-card-hint">{hint()}</p>
       </button>

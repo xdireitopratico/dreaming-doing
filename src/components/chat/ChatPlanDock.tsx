@@ -1,39 +1,10 @@
 import { useCallback, useState } from "react";
-import {
-  Check,
-  Circle,
-  FileCode,
-  FileText,
-  Loader2,
-  Package,
-  Play,
-  SkipForward,
-  Terminal,
-  Eye,
-} from "lucide-react";
+import { Check, FileText, Loader2, Play, SkipForward } from "lucide-react";
 import type { PendingPlan, PlanStep } from "@/lib/agent-progress";
 import { buildForgePlanMarkdown } from "@/lib/plan-document";
 import { enabledPlanSteps } from "@/lib/forge-run";
 import { planParagraphFromPlan, planPhasesFromPlan } from "@/lib/plan-message-meta";
-
-/* ─── Step type → icon mapping ──────────────────────────────────────── */
-
-function stepIcon(type: PlanStep["type"]) {
-  switch (type) {
-    case "create_file":
-      return <FileCode className="size-3.5" />;
-    case "edit_file":
-      return <FileText className="size-3.5" />;
-    case "shell_exec":
-      return <Terminal className="size-3.5" />;
-    case "install_dep":
-      return <Package className="size-3.5" />;
-    case "observe":
-      return <Eye className="size-3.5" />;
-    default:
-      return <Circle className="size-3.5" />;
-  }
-}
+import { PlanPhaseList } from "./PlanPhaseList";
 
 export type ChatPlanDockProps = {
   pendingPlan: PendingPlan | null;
@@ -103,7 +74,13 @@ export function ChatPlanDock({
             {phases.length > 0 ? (
               <PlanPhaseList phases={phases} />
             ) : (
-              <p className="forge-plan-dock-body">{planParagraphFromPlan(pendingPlan)}</p>
+              <>
+                <p className="forge-plan-dock-label forge-plan-dock-label--icon">
+                  <FileText className="size-3" aria-hidden />
+                  Plan
+                </p>
+                <p className="forge-plan-dock-body">{planParagraphFromPlan(pendingPlan)}</p>
+              </>
             )}
           </div>
           {onReview && (
@@ -148,29 +125,21 @@ export function ChatPlanDock({
 
   /* ─── Ready — structured plan ────────────────────────────────────── */
   const phases = planPhasesFromPlan(pendingPlan);
-  const stepCount = phases.reduce((acc, p) => acc + p.steps.length, 0);
 
   return (
     <div className="forge-plan-dock">
       <div className="forge-plan-dock-shell" data-testid="chat-plan-dock-ready">
         <div className="forge-plan-dock-inner">
-          <div className="forge-plan-dock-header">
-            <p className="forge-plan-dock-label forge-plan-dock-label--icon">
-              <Play className="size-3" aria-hidden />
-              Plan
-            </p>
-            {stepCount > 0 && (
-              <span className="forge-plan-dock-step-count">
-                {phases.length} {phases.length === 1 ? "fase" : "fases"} · {stepCount}{" "}
-                {stepCount === 1 ? "step" : "steps"}
-              </span>
-            )}
-          </div>
-
           {phases.length > 0 ? (
             <PlanPhaseList phases={phases} />
           ) : (
-            <p className="forge-plan-dock-body">{planParagraphFromPlan(pendingPlan)}</p>
+            <>
+              <p className="forge-plan-dock-label forge-plan-dock-label--icon">
+                <Play className="size-3" aria-hidden />
+                Plan
+              </p>
+              <p className="forge-plan-dock-body">{planParagraphFromPlan(pendingPlan)}</p>
+            </>
           )}
         </div>
 
@@ -215,35 +184,6 @@ export function ChatPlanDock({
           </div>
         </div>
       </div>
-    </div>
-  );
-}
-
-/* ─── PlanPhaseList — renders structured phases + steps ───────────── */
-
-function PlanPhaseList({ phases }: { phases: ReturnType<typeof planPhasesFromPlan> }) {
-  if (phases.length === 0) return null;
-
-  return (
-    <div className="forge-plan-phases">
-      {phases.map((phase) => (
-        <div key={phase.index} className="forge-plan-phase">
-          <div className="forge-plan-phase-header">
-            <span className="forge-plan-phase-index">{phase.index + 1}</span>
-            <span className="forge-plan-phase-title">{phase.title}</span>
-          </div>
-          <ul className="forge-plan-step-list">
-            {phase.steps.map((step) => (
-              <li key={step.id} className="forge-plan-step">
-                <span className="forge-plan-step-icon" data-type={step.type}>
-                  {stepIcon(step.type)}
-                </span>
-                <span className="forge-plan-step-text">{step.description}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      ))}
     </div>
   );
 }

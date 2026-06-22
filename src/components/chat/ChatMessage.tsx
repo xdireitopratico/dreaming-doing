@@ -10,6 +10,8 @@ type ChatMessageProps = {
   item: ThreadItem;
   onOpenInspector?: (runId: string, tab?: "timeline" | "changes" | "plan") => void;
   onClarifySelect?: (choice: ClarifyChoice) => void;
+  onClarifyCustomReply?: (text: string) => void;
+  onClarifySkip?: () => void;
   onRollback?: (messageId: string, role: "user" | "assistant") => void;
   canRollbackUser?: boolean;
   canRollbackAssistant?: boolean;
@@ -25,6 +27,8 @@ export function ChatMessage({
   item,
   onOpenInspector,
   onClarifySelect,
+  onClarifyCustomReply,
+  onClarifySkip,
   onRollback,
   canRollbackUser,
   canRollbackAssistant,
@@ -80,6 +84,8 @@ export function ChatMessage({
       item={item}
       onOpenInspector={onOpenInspector}
       onClarifySelect={onClarifySelect}
+      onClarifyCustomReply={onClarifyCustomReply}
+      onClarifySkip={onClarifySkip}
       canRollback={canRollbackAssistant && !!messageId}
       onRollback={
         onRollback && canRollbackAssistant && messageId

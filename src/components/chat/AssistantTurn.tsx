@@ -17,6 +17,8 @@ type AssistantTurnProps = {
   item: Extract<ThreadItem, { kind: "assistant" }>;
   onOpenInspector?: (runId: string, tab?: "timeline" | "changes" | "plan") => void;
   onClarifySelect?: (choice: ClarifyChoice) => void;
+  onClarifyCustomReply?: (text: string) => void;
+  onClarifySkip?: () => void;
   canRollback?: boolean;
   onRollback?: () => void;
   onResume?: () => void;
@@ -35,6 +37,8 @@ export function AssistantTurn({
   item,
   onOpenInspector,
   onClarifySelect,
+  onClarifyCustomReply,
+  onClarifySkip,
   canRollback,
   onRollback,
   onResume,
@@ -146,6 +150,8 @@ export function AssistantTurn({
             data={item.clarify}
             disabled={item.isActive || !onClarifySelect}
             onSelect={onClarifySelect}
+            onCustomReply={onClarifyCustomReply}
+            onSkip={onClarifySkip}
           />
         )}
 

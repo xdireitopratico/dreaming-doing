@@ -178,14 +178,15 @@ export function InspectorPlan({ state, onApprove, onReject, onEditRequest }: Ins
     }
   }, [onReject]);
 
+  // O inspector mostra apenas o estado persistido do plano.
+  // O "aguardando aprovação" já vive no mini card / plan dock do chat —
+  // duplicar aqui cria dissonância visual (Issue 2 do polish A1).
   const statusCopy =
     status === "approved"
       ? "Aprovado"
       : status === "rejected"
         ? "Rejeitado"
-        : awaitingApproval
-          ? "Aguardando"
-          : "Plano";
+        : "Plano";
 
   return (
     <div className="forge-inspector-plan" data-testid="inspector-plan">

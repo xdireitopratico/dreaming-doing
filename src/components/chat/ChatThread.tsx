@@ -5,6 +5,8 @@ type ChatThreadProps = {
   items: ThreadItem[];
   onOpenInspector?: (runId: string, tab?: "timeline" | "changes" | "plan") => void;
   onClarifySelect?: (choice: ClarifyChoice) => void;
+  onClarifyCustomReply?: (text: string) => void;
+  onClarifySkip?: () => void;
   onRollback?: (messageId: string, role: "user" | "assistant") => void;
   lastUserMessageId?: string | null;
   lastAssistantMessageId?: string | null;
@@ -15,6 +17,8 @@ export function ChatThread({
   items,
   onOpenInspector,
   onClarifySelect,
+  onClarifyCustomReply,
+  onClarifySkip,
   onRollback,
   lastUserMessageId,
   lastAssistantMessageId,
@@ -36,6 +40,8 @@ export function ChatThread({
             item={item}
             onOpenInspector={onOpenInspector}
             onClarifySelect={onClarifySelect}
+            onClarifyCustomReply={onClarifyCustomReply}
+            onClarifySkip={onClarifySkip}
             onRollback={onRollback}
             canRollbackUser={
               item.kind === "user" && !!lastUserMessageId && item.message.id === lastUserMessageId

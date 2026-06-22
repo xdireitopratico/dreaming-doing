@@ -28,6 +28,9 @@ export type ForgeMiniCardData = {
   editedFile?: string | null;
   fileCount?: number;
   hasPlan?: boolean;
+  /** Plano completo quando o run tem plano associado (driven plan).
+   *  Permite que o mini card renderize fases/steps com o mesmo componente do ChatPlanDock. */
+  pendingPlan?: PendingPlan | null;
   /** Fase 2.2 — action chips: o último tool executado vira chip clicável
    *  no mini card (Show file / Show diff / Show output / Show preview). */
   lastTool?: {
@@ -848,6 +851,7 @@ export function buildAgentRunView(
       editedFile,
       fileCount: progress.diffs.length || progress.deliveryFiles?.length,
       hasPlan: !!jobPlan?.steps?.length,
+      pendingPlan: jobPlan ?? null,
       lastTool,
     },
     narration: narrationForLine,

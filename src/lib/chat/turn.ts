@@ -46,6 +46,7 @@ function toMiniCard(runView: NonNullable<ReturnType<typeof buildAgentRunView>>):
     editedFile: m.editedFile,
     fileCount: m.fileCount,
     hasPlan: m.hasPlan,
+    pendingPlan: m.pendingPlan ?? null,
     lastTool: m.lastTool ?? null,
   };
 }
@@ -171,6 +172,7 @@ export function mapAssistantTurn(
       intro: parsedClarify.intro || undefined,
       question: parsedClarify.question || undefined,
       choices: parsedClarify.choices.map((c) => ({
+        id: c.id,
         label: c.label,
         description: c.description,
       })),

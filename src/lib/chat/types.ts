@@ -1,6 +1,11 @@
 import type { ChatMessage } from "@/lib/chat-types";
 import type { AgentProgress } from "@/lib/agent-progress";
 import type { PendingPlan } from "@/lib/agent-progress";
+import type { ClarifyChoice as CanonicalClarifyChoice } from "@/lib/clarify-choices";
+
+/** ClarifyChoice — fonte única de verdade em @/lib/clarify-choices.
+ *  Reexportado aqui para conveniência dos consumers de chat/types. */
+export type ClarifyChoice = CanonicalClarifyChoice;
 
 export type RunPhase = "plan" | "build" | "execute" | "observe" | "summarize" | "resume" | null;
 
@@ -27,6 +32,9 @@ export type MiniCardData = {
   editedFile?: string | null;
   fileCount?: number;
   hasPlan?: boolean;
+  /** Plano completo para renderização estruturada (fases/steps) no mini card.
+   *  Quando presente, o mini card renderiza o mesmo componente do ChatPlanDock. */
+  pendingPlan?: PendingPlan | null;
   /** Fase 2.2 — action chips: último tool executado vira chip clicável
    *  (Show file / Show diff / Show output / Show preview). */
   lastTool?: {
@@ -34,11 +42,6 @@ export type MiniCardData = {
     path?: string;
     ok?: boolean;
   } | null;
-};
-
-export type ClarifyChoice = {
-  label: string;
-  description?: string;
 };
 
 export type ClarifyPrompt = {
@@ -51,11 +54,6 @@ export type ClarifyPrompt = {
 export type ChatWorkingState =
   | { status: "active" }
   | { status: "done"; durationSec: number };
-
-/** @deprecated Use ClarifyChoice */
-export type QualifyChoice = ClarifyChoice;
-/** @deprecated Use ClarifyPrompt */
-export type QualifyPrompt = ClarifyPrompt;
 
 export type ThreadItem =
   | { kind: "user"; message: ChatMessage }

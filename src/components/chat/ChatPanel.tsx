@@ -285,6 +285,15 @@ export function ChatPanel({
     setShowPill(true);
   }, [thread.length, holdUserAnchor, pendingQueueItems.length, scrollToBottom]);
 
+  // Quando o plano aparece (pendingPlan de null → objeto), leva ao fim para
+  // mostrar o card de plano + os botões de aprovação acima do composer fixo.
+  const planSignature = pendingPlan ? `${pendingPlan.planId}:${pendingPlan.steps.length}` : null;
+  useEffect(() => {
+    if (!planSignature) return;
+    const raf = requestAnimationFrame(() => scrollToBottom("smooth"));
+    return () => cancelAnimationFrame(raf);
+  }, [planSignature, scrollToBottom]);
+
   const handleSend = useCallback(
     (text: string, mode?: AgentComposerMode, parts?: StoredMessagePart[]) => {
       userJustSentRef.current = true;
@@ -299,6 +308,19 @@ export function ChatPanel({
     },
     [onSend, composerMode],
   );
+
+  // Clarify — texto próprio: usuário digita resposta livre e envia como user msg.
+  const handleClarifyCustomReply = useCallback(
+    (text: string) => {
+      onSend(text, composerMode);
+    },
+    [onSend, composerMode],
+  );
+
+  // Clarify — skip: usuário decide pular a pergunta. Sinal explícito pro agente.
+  const handleClarifySkip = useCallback(() => {
+    onSend("[skip] Prefiro pollar essa pergunta.", composerMode);
+  }, [onSend, composerMode]);
 
   const lastAssistantMessageId = useMemo(() => {
     for (let i = thread.length - 1; i >= 0; i--) {
@@ -316,6 +338,9 @@ export function ChatPanel({
     },
     [onRollbackMessage],
   );
+
+  const showPlanDock =
+    !!pendingPlan || (running && agent.progress.phase === "creating_plan");
 
   return (
     <div className="forge-chat-inner">
@@ -340,11 +365,23 @@ export function ChatPanel({
               items={thread}
               onOpenInspector={onOpenInspector}
               onClarifySelect={handleClarifySelect}
+              onClarifyCustomReply={handleClarifyCustomReply}
+              onClarifySkip={handleClarifySkip}
               onRollback={onRollbackMessage ? handleRollback : undefined}
               onResume={onResume}
               lastUserMessageId={lastUserMessageId}
               lastAssistantMessageId={lastAssistantMessageId}
             />
+
+            {showPlanDock && (
+              <ChatPlanDock
+                pendingPlan={pendingPlan}
+                creating={running && agent.progress.phase === "creating_plan" && !pendingPlan}
+                onReview={(runId) => onOpenInspector?.(runId, "plan")}
+                onApprove={onPlanApprove}
+                onReject={onPlanReject}
+              />
+            )}
           </>
         )}
 
@@ -358,14 +395,6 @@ export function ChatPanel({
           </button>
         )}
       </div>
-
-      <ChatPlanDock
-        pendingPlan={pendingPlan}
-        creating={running && agent.progress.phase === "creating_plan" && !pendingPlan}
-        onReview={(runId) => onOpenInspector?.(runId, "plan")}
-        onApprove={onPlanApprove}
-        onReject={onPlanReject}
-      />
 
       {((agent.progress.pendingQueueCount ?? 0) > 0 && pendingQueueItems.length > 0) ||
       (queueBlockingReason && running) ? (
