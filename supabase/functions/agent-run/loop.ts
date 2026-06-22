@@ -20,17 +20,18 @@ import { CompressionManager } from "./compression.ts";
 import { RuntimeObserver } from "./observer.ts";
 import { SkillRegistry } from "./skills.ts";
 import { extractOriginalUserRequest } from "./run-context.ts";
-import type { ProviderConfig } from "./providers.ts";
+
 import type { AgentPreferencesPayload } from "./connector-keys.ts";
-import { resolveAutoForComplexity } from "../_shared/model-presets.ts";
-import { ResilientLLM } from "./robin-pool.ts";
-import { formatLoopStatus, type LoopUpdateContext } from "./loop-status.ts";
-import { type AgentStateData, applyTransition } from "./agent-fsm.ts";
+import type { LoopUpdateContext } from "./loop-status.ts";
+import type { AgentStateData } from "./agent-fsm.ts";
+import { applyAutoModelForComplexity } from "./runtime/loop-auto-model.ts";
+import { emitLoopFsmTransition } from "./runtime/loop-fsm.ts";
+import { notifyLoopStatusFromHost } from "./runtime/loop-notify.ts";
 import { RuntimeEmitter, type StreamCallback } from "./runtime/emitter.ts";
 import { createLoopBindings, type LoopBindings } from "./runtime/deps-factory.ts";
 import { isRunCanceled, loopBudgetExceeded as loopBudgetExceededInfra } from "./runtime/infra.ts";
 import { readLoopBudgetMsFromRuntime } from "./runtime/loop-config.ts";
-import { chatBuildModeForLoop } from "./runtime/llm-chat.ts";
+import { runLlmChatForHost } from "./runtime/llm-chat.ts";
 import { runDesignPreflightIfNeeded as runDesignPreflightIfNeededPhase } from "./runtime/phases/design-preflight-phase.ts";
 import { attemptGracefulClosing as attemptGracefulClosingPhase } from "./runtime/phases/graceful-closing.ts";
 import { runGatherContextForHost } from "./runtime/phases/gather-context.ts";
@@ -247,41 +248,6 @@ export class AgentLoop {
     return this.llm;
   }
 
-  /**
-   * AUTO: escolhe preset por potência da demanda (complexidade fixa ou do checkpoint).
-   * FIXO / ROBIN: no-op — o nome do modo já define o comportamento.
-   */
-  private applyAutoModelForComplexity(complexity: number): void {
-    if (this.preferences?.mode !== "auto") return;
-
-    const wire = resolveAutoForComplexity(
-      this.connectorKeys,
-      complexity,
-      this.preferences.autoAllowedPresetIds,
-      this.preferences.userModelEntries,
-    );
-    if (!wire) return;
-
-    const newCfg: ProviderConfig = {
-      provider: wire.provider,
-      apiKey: wire.apiKey,
-      model: wire.model,
-      baseUrl: wire.baseUrl,
-      label: `${wire.label} (Auto · exec c${complexity})`,
-    };
-
-    const cur = this.router.mainCfg;
-    if (cur.provider === newCfg.provider && cur.model === newCfg.model) {
-      this.router.setResolvedCfg(newCfg);
-      return;
-    }
-
-    if (this.llm instanceof ResilientLLM) {
-      this.llm.updateCfg(newCfg);
-    }
-    this.router.setResolvedCfg(newCfg);
-  }
-
   private loopBudgetExceeded(): boolean {
     return loopBudgetExceededInfra({
       runStartTime: this.runStartTime,
@@ -345,6 +311,14 @@ export class AgentLoop {
     this.mutable.lastActivityAt = Date.now();
   }
 
+  private getThinkingStreamStartedAt(): number | null {
+    return this.thinkingStreamStartedAt;
+  }
+
+  private setThinkingStreamStartedAt(value: number | null): void {
+    this.thinkingStreamStartedAt = value;
+  }
+
   private getPlanLlmResponseWasStreamed(): boolean {
     return this.planStreamState.llmResponseWasStreamed;
   }
@@ -355,22 +329,12 @@ export class AgentLoop {
   }
 
   private async emitTransition(eventType: string, data?: unknown): Promise<void> {
-    const result = applyTransition(this.fsmState, {
-      type: eventType as any,
+    this.fsmState = await emitLoopFsmTransition(
+      this.fsmState,
+      eventType,
+      (type, payload) => this.emit(type, payload),
       data,
-      timestamp: Date.now(),
-    });
-    if (result.ok) {
-      this.fsmState = result.state;
-    }
-    this.emit("fsm_transition", {
-      from: result.from,
-      to: result.to,
-      event: eventType,
-      ok: result.ok,
-      error: result.error,
-      stateName: this.fsmState.name,
-    });
+    );
   }
 
   async run(): Promise<AgentLoopRunResult> {
@@ -407,7 +371,14 @@ export class AgentLoop {
       fsmStateName: this.fsmState.name,
       emitTransition: (eventType, data) => this.emitTransition(eventType, data),
       notifyLoopStatus: (ctx) => this.notifyLoopStatus(ctx),
-      applyAutoModelForComplexity: (complexity) => this.applyAutoModelForComplexity(complexity),
+      applyAutoModelForComplexity: (complexity) =>
+        applyAutoModelForComplexity({
+          preferences: this.preferences,
+          connectorKeys: this.connectorKeys,
+          complexity,
+          llm: this.llm,
+          router: this.router,
+        }),
       loopBudgetExceeded: () => this.loopBudgetExceeded(),
       returnResumableChunk: (steps, used) => this.bindings.returnResumableChunk(steps, used),
       gatherContext: () => this.gatherContext(),
@@ -426,7 +397,7 @@ export class AgentLoop {
       state: this.state,
       skills: this.skills,
       userSkillNames: this.userSkillNames,
-      lastEmittedSkills: this.lastEmittedSkills,
+        lastEmittedSkills: this.lastEmittedSkills,
       fileContentCache: this.fileContentCache,
       touchHeartbeat: () => this.bindings.touchHeartbeat(),
       emit: (type, data) => this.emit(type, data),
@@ -490,38 +461,7 @@ export class AgentLoop {
     forceTools = false,
     _tools?: ToolDefinition[],
   ): Promise<ChatResponse | null> {
-    const skillPrompt = this.state.context
-      ? this.skills.buildSkillPrompt(this.state.context.files)
-      : "";
-    return chatBuildModeForLoop({
-      model,
-      instruction,
-      history,
-      forceTools,
-      context: this.state.context,
-      projectTemplate: this.projectTemplate,
-      stackAddon: this.stackAddon,
-      sessionAddon: this.sessionAddon,
-      tasteStart: this.tasteStart,
-      skillPrompt,
-      toolDefinitions: this.reg.getDefinitions(),
-      complexityScore: this.complexityScore,
-      getLlmResponseWasStreamed: () => this.mutable.llmResponseWasStreamed,
-      setLlmResponseWasStreamed: (value) => {
-        this.mutable.llmResponseWasStreamed = value;
-      },
-      getThinkingStreamStartedAt: () => this.thinkingStreamStartedAt,
-      setThinkingStreamStartedAt: (value) => {
-        this.thinkingStreamStartedAt = value;
-      },
-      emit: (type, data) => this.emit(type, data),
-      onActivity: () => this.onActivity(),
-      onThinkingCapExceeded: () => {
-        this.mutable.forceToolsNext = true;
-      },
-      runId: this.runId,
-      robinActive: this.robinActive,
-    });
+    return runLlmChatForHost(this, model, instruction, history, forceTools);
   }
 
   private async isCanceled(): Promise<boolean> {
@@ -534,18 +474,12 @@ export class AgentLoop {
   }
 
   private notifyLoopStatus(ctx: LoopUpdateContext): void {
-    const text = formatLoopStatus({
-      ...ctx,
-      userRequest: this.originalUserRequest ?? undefined,
-      touchedPaths: [...this.touchedPaths],
-    });
-    if (!text) return;
-    this.notifyExecution(text);
-  }
-
-  /** Progresso factual do loop — sempre inspector (FASE 2..N). */
-  private notifyExecution(text: string): void {
-    this.narration.emitInspectorNote(text);
+    notifyLoopStatusFromHost(
+      this.narration,
+      ctx,
+      this.originalUserRequest,
+      this.touchedPaths,
+    );
   }
 
   private emit(type: string, data: unknown): void {

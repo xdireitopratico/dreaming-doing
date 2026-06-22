@@ -207,3 +207,60 @@ export async function chatBuildModeForLoop(
   input.setThinkingStreamStartedAt(streamState.thinkingStreamStartedAt);
   return response;
 }
+
+export type LlmChatHost = {
+  state: { context: AgentContext | null };
+  skills: { buildSkillPrompt: (files: unknown[]) => string };
+  projectTemplate: string;
+  stackAddon: string;
+  sessionAddon: string;
+  tasteStart: boolean;
+  reg: { getDefinitions: () => ToolDefinition[] };
+  complexityScore: number;
+  mutable: { llmResponseWasStreamed: boolean; forceToolsNext: boolean };
+  getThinkingStreamStartedAt: () => number | null;
+  setThinkingStreamStartedAt: (value: number | null) => void;
+  emit: PlanTurnEmit;
+  onActivity: () => void;
+  runId: string | null;
+  robinActive: boolean;
+};
+
+export async function runLlmChatForHost(
+  host: LlmChatHost,
+  model: LLMProvider,
+  instruction: string,
+  history: ChatMessage[],
+  forceTools = false,
+): Promise<ChatResponse | null> {
+  const skillPrompt = host.state.context
+    ? host.skills.buildSkillPrompt(host.state.context.files)
+    : "";
+  return chatBuildModeForLoop({
+    model,
+    instruction,
+    history,
+    forceTools,
+    context: host.state.context,
+    projectTemplate: host.projectTemplate,
+    stackAddon: host.stackAddon,
+    sessionAddon: host.sessionAddon,
+    tasteStart: host.tasteStart,
+    skillPrompt,
+    toolDefinitions: host.reg.getDefinitions(),
+    complexityScore: host.complexityScore,
+    getLlmResponseWasStreamed: () => host.mutable.llmResponseWasStreamed,
+    setLlmResponseWasStreamed: (value) => {
+      host.mutable.llmResponseWasStreamed = value;
+    },
+    getThinkingStreamStartedAt: () => host.getThinkingStreamStartedAt(),
+    setThinkingStreamStartedAt: (value) => host.setThinkingStreamStartedAt(value),
+    emit: (type, data) => host.emit(type, data),
+    onActivity: () => host.onActivity(),
+    onThinkingCapExceeded: () => {
+      host.mutable.forceToolsNext = true;
+    },
+    runId: host.runId,
+    robinActive: host.robinActive,
+  });
+}
