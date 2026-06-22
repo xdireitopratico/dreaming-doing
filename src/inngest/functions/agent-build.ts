@@ -5,6 +5,7 @@ import {
   getRunStatus,
   getSupabaseAdmin,
   markRunFinal,
+  resolveChunkResumeDecision,
   runAgentLoopWithResume,
   type AgentRunRequest,
 } from "./_shared";
@@ -80,11 +81,26 @@ export const agentBuildFunction = inngest.createFunction(
     }
 
     if (!final.ok && final.resumable) {
-      const exhaustedError = final.error ?? "loop budget exhausted";
+      const decision = await step.run("resolve-chunk-resume", () =>
+        resolveChunkResumeDecision(runId),
+      );
+
+      if (decision.action === "redispatch") {
+        await step.sendEvent("re-dispatch-chunk", {
+          name: "agent/build.requested",
+          data: { ...payload, resume: true },
+        });
+        return { runId, ok: false, resumable: true, continued: true };
+      }
+
+      const exhaustedError = decision.error;
       await step.run("mark-failed-resumable-exhausted", async () => {
         await markRunFinal(runId, "failed", {
           error: exhaustedError,
-          meta: { resumableExhausted: true, resumeAttempts: 3 },
+          meta: {
+            resumableExhausted: true,
+            resumeAttempts: decision.chunkGeneration,
+          },
         });
       });
       await step.run("ensure-terminal-message-resumable", async () => {
@@ -117,10 +133,9 @@ export const agentBuildFunction = inngest.createFunction(
             canceled: false,
             resumable: false,
             error: exhaustedError,
-            // Session 2.0 — sinaliza exaustão de chunks no evento (antes só em meta)
             chunkCap: true,
             resumableExhausted: true,
-            resumeAttempts: 3,
+            resumeAttempts: decision.chunkGeneration,
           },
         });
       });

@@ -511,7 +511,7 @@ export class AgentLoop {
     await this.persistCheckpointChat(steps, options?.buildFix);
     return {
       ok: false,
-      error: "Limite de iterações — execução continua em segundo plano.",
+      error: "Retomando automaticamente em novo chunk…",
       steps,
       resumable: true,
       buildFix: options?.buildFix === true,
@@ -1845,6 +1845,8 @@ export class AgentLoop {
     steps: number;
     toolsUsed: string[];
     error?: string;
+    resumable?: boolean;
+    buildFix?: boolean;
   }> {
     const MAX_PLAN_EXPLORE = 10;
     const toolsUsed = new Set<string>();
@@ -1861,10 +1863,12 @@ export class AgentLoop {
         const chunk = await this.returnResumableChunk(step, toolsUsed);
         return {
           ok: false,
+          resumable: true,
           summary: chunk.error,
           steps: chunk.steps,
           toolsUsed: chunk.toolsUsed,
           error: chunk.error,
+          buildFix: chunk.buildFix,
         };
       }
 

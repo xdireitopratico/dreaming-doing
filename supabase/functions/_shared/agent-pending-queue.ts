@@ -95,7 +95,21 @@ export async function expireStaleRuns(
   if (!candidates?.length) return 0;
 
   const staleIds: string[] = [];
+  const chunkHandoffGraceMs = CHUNK_HANDOFF_GAP_MS * 2;
   for (const run of candidates) {
+    const meta = (run.meta ?? {}) as Record<string, unknown>;
+
+    // Run entre chunks do Inngest — gap intencional, não é zumbi.
+    if (meta.betweenChunks === true) {
+      const lastChunkAt = meta.lastChunkAt as string | undefined;
+      if (lastChunkAt) {
+        const chunkAgeMs = Date.now() - new Date(lastChunkAt).getTime();
+        if (chunkAgeMs <= chunkHandoffGraceMs) continue;
+      } else {
+        continue;
+      }
+    }
+
     const heartbeat = (run.heartbeat_at ?? run.started_at) as string | null;
     if (heartbeat && heartbeat < cutoff) {
       staleIds.push(run.id as string);
@@ -104,11 +118,16 @@ export async function expireStaleRuns(
 
     const { data: lastEv } = await supabase
       .from("agent_stream_events")
-      .select("created_at")
+      .select("created_at, event_type")
       .eq("run_id", run.id)
       .order("seq", { ascending: false })
       .limit(1)
       .maybeSingle();
+
+    if (lastEv?.event_type === "chunk_resume") {
+      const chunkAgeMs = Date.now() - new Date(lastEv.created_at as string).getTime();
+      if (chunkAgeMs <= chunkHandoffGraceMs) continue;
+    }
 
     const lastActivity = (lastEv?.created_at ?? run.started_at) as string | null;
     if (lastActivity && lastActivity < cutoff) {

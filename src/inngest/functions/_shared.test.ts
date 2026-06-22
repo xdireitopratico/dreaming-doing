@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   drainPendingQueue,
+  evaluateChunkResumptionExhausted,
+  MAX_CHUNK_GENERATIONS,
   MAX_LOOP_RESUME_STEPS,
   partitionAgentRunExtras,
   type AgentRunRequest,
@@ -17,8 +19,27 @@ const drainPayload: AgentRunRequest = {
 };
 
 describe("MAX_LOOP_RESUME_STEPS", () => {
-  it("permite até 3 chunks antes de resumableExhausted", () => {
+  it("permite até 3 chunks por invocação Inngest", () => {
     expect(MAX_LOOP_RESUME_STEPS).toBe(3);
+  });
+});
+
+describe("evaluateChunkResumptionExhausted", () => {
+  it("permite redispatch até MAX_CHUNK_GENERATIONS", () => {
+    const result = evaluateChunkResumptionExhausted(
+      { chunkGeneration: MAX_CHUNK_GENERATIONS },
+      new Date().toISOString(),
+    );
+    expect(result.exhausted).toBe(false);
+  });
+
+  it("esgota após MAX_CHUNK_GENERATIONS", () => {
+    const result = evaluateChunkResumptionExhausted(
+      { chunkGeneration: MAX_CHUNK_GENERATIONS + 1 },
+      new Date().toISOString(),
+    );
+    expect(result.exhausted).toBe(true);
+    expect(result.reason).toBe("chunk_cap");
   });
 });
 

@@ -63,6 +63,75 @@ import { runAgentLoop } from "../executor/run-agent-loop.ts";
 /** Chunks Inngest por invocação — cada um com budget ~270s; alinhado a resumeAttempts: 3. */
 export const MAX_LOOP_RESUME_STEPS = 3;
 
+/** Alinhado com supabase/functions/_shared/agent-chunk-limits.ts */
+export const MAX_CHUNK_GENERATIONS = 12;
+export const MAX_RUN_WALL_MS = 45 * 60 * 1000;
+
+export type ChunkExhaustReason = "chunk_cap" | "wall_clock";
+
+export function chunkCapErrorMessage(reason?: ChunkExhaustReason): string {
+  if (reason === "wall_clock") {
+    return "Execução atingiu o tempo máximo (~45 min). Envie outra mensagem para continuar.";
+  }
+  return "Execução atingiu o limite de retomadas automáticas. Clique em Continuar ou envie nova mensagem.";
+}
+
+export function evaluateChunkResumptionExhausted(
+  meta: Record<string, unknown>,
+  startedAt: string | null | undefined,
+  nowMs = Date.now(),
+): { exhausted: boolean; reason?: ChunkExhaustReason; chunkGeneration: number } {
+  const chunkGeneration = typeof meta.chunkGeneration === "number" ? meta.chunkGeneration : 0;
+  if (chunkGeneration > MAX_CHUNK_GENERATIONS) {
+    return { exhausted: true, reason: "chunk_cap", chunkGeneration };
+  }
+  if (startedAt) {
+    const wallMs = nowMs - new Date(startedAt).getTime();
+    if (wallMs > MAX_RUN_WALL_MS) {
+      return { exhausted: true, reason: "wall_clock", chunkGeneration };
+    }
+  }
+  return { exhausted: false, chunkGeneration };
+}
+
+export async function getRunChunkContext(runId: string): Promise<{
+  meta: Record<string, unknown>;
+  startedAt: string | null;
+}> {
+  const { data } = await getSupabaseAdmin()
+    .from("agent_runs")
+    .select("meta, started_at")
+    .eq("id", runId)
+    .maybeSingle();
+  return {
+    meta: (data?.meta ?? {}) as Record<string, unknown>,
+    startedAt: (data?.started_at as string | null) ?? null,
+  };
+}
+
+export type ChunkResumeDecision =
+  | { action: "redispatch" }
+  | {
+      action: "exhausted";
+      error: string;
+      chunkGeneration: number;
+      reason?: ChunkExhaustReason;
+    };
+
+export async function resolveChunkResumeDecision(runId: string): Promise<ChunkResumeDecision> {
+  const { meta, startedAt } = await getRunChunkContext(runId);
+  const limits = evaluateChunkResumptionExhausted(meta, startedAt);
+  if (!limits.exhausted) {
+    return { action: "redispatch" };
+  }
+  return {
+    action: "exhausted",
+    error: chunkCapErrorMessage(limits.reason),
+    chunkGeneration: limits.chunkGeneration,
+    reason: limits.reason,
+  };
+}
+
 type InngestStep = {
   run: <T>(id: string, fn: () => Promise<T> | T) => Promise<T>;
 };
