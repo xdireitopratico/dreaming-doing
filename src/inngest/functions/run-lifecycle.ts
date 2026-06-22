@@ -1,35 +1,13 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   canTransitionRunStatus,
+  partitionRunExtras,
   shouldSetFinishedAt,
   type AgentRunStatus,
 } from "@forge/agent-contract/lifecycle";
 import { getSupabaseAdmin } from "./_shared";
 
-const PATCH_COLUMNS = new Set(["error", "steps", "canceled_at", "heartbeat_at"]);
-
-export function partitionRunExtras(extras: Record<string, unknown>): {
-  columns: Record<string, unknown>;
-  metaDelta: Record<string, unknown>;
-} {
-  const columns: Record<string, unknown> = {};
-  const metaDelta: Record<string, unknown> = {};
-
-  for (const [key, value] of Object.entries(extras)) {
-    if (key === "meta" && value && typeof value === "object" && !Array.isArray(value)) {
-      Object.assign(metaDelta, value as Record<string, unknown>);
-      continue;
-    }
-    if (PATCH_COLUMNS.has(key)) {
-      columns[key] = value;
-      continue;
-    }
-    if (key === "status" || key === "finished_at") continue;
-    metaDelta[key] = value;
-  }
-
-  return { columns, metaDelta };
-}
+export { partitionRunExtras };
 
 export type TransitionRunResult = {
   ok: boolean;

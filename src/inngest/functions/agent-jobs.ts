@@ -96,3 +96,40 @@ export async function leaseQueuedAgentJob(
   if (error) return null;
   return generation;
 }
+
+export async function hasQueuedAgentJob(
+  client: SupabaseClient,
+  runId: string,
+): Promise<boolean> {
+  if (!agentJobsEnabled()) return true;
+
+  const { data } = await client
+    .from("agent_jobs")
+    .select("generation")
+    .eq("run_id", runId)
+    .eq("status", "queued")
+    .order("generation", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+
+  return data?.generation != null;
+}
+
+/** Worker: aguarda job queued (chunk handoff) antes de redispatch Inngest. */
+export async function waitForQueuedAgentJob(
+  client: SupabaseClient,
+  runId: string,
+  opts?: { timeoutMs?: number; pollMs?: number },
+): Promise<boolean> {
+  if (!agentRuntimeV2WorkerEnabled()) return true;
+
+  const timeoutMs = opts?.timeoutMs ?? 15_000;
+  const pollMs = opts?.pollMs ?? 500;
+  const deadline = Date.now() + timeoutMs;
+
+  while (Date.now() < deadline) {
+    if (await hasQueuedAgentJob(client, runId)) return true;
+    await new Promise((r) => setTimeout(r, pollMs));
+  }
+  return false;
+}

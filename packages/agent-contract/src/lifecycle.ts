@@ -28,6 +28,32 @@ export function shouldSetFinishedAt(to: AgentRunStatus): boolean {
   return TERMINAL.has(to);
 }
 
+const RUN_PATCH_COLUMNS = new Set(["error", "steps", "canceled_at", "heartbeat_at"]);
+
+/** Separa colunas de agent_runs vs merge em meta — único writer de transitionRun. */
+export function partitionRunExtras(extras: Record<string, unknown>): {
+  columns: Record<string, unknown>;
+  metaDelta: Record<string, unknown>;
+} {
+  const columns: Record<string, unknown> = {};
+  const metaDelta: Record<string, unknown> = {};
+
+  for (const [key, value] of Object.entries(extras)) {
+    if (key === "meta" && value && typeof value === "object" && !Array.isArray(value)) {
+      Object.assign(metaDelta, value as Record<string, unknown>);
+      continue;
+    }
+    if (RUN_PATCH_COLUMNS.has(key)) {
+      columns[key] = value;
+      continue;
+    }
+    if (key === "status" || key === "finished_at") continue;
+    metaDelta[key] = value;
+  }
+
+  return { columns, metaDelta };
+}
+
 export type AgentJobStatus = "queued" | "leased" | "completed" | "failed" | "canceled";
 
 const JOB_ALLOWED: Record<AgentJobStatus, readonly AgentJobStatus[]> = {

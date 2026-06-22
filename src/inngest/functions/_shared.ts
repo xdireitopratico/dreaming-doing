@@ -1,3 +1,4 @@
+import { partitionRunExtras } from "@forge/agent-contract/lifecycle";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 export type AgentRunStatus =
@@ -171,31 +172,8 @@ export async function getRunStatus(runId: string): Promise<AgentRunStatus | null
   return (data as { status: AgentRunStatus }).status;
 }
 
-/** Colunas reais de agent_runs — demais chaves em extras viram merge em meta (ex.: plan). */
-const AGENT_RUN_PATCH_COLUMNS = new Set(["error", "steps", "canceled_at", "heartbeat_at"]);
-
-export function partitionAgentRunExtras(extras: Record<string, unknown>): {
-  columns: Record<string, unknown>;
-  metaDelta: Record<string, unknown>;
-} {
-  const columns: Record<string, unknown> = {};
-  const metaDelta: Record<string, unknown> = {};
-
-  for (const [key, value] of Object.entries(extras)) {
-    if (key === "meta" && value && typeof value === "object" && !Array.isArray(value)) {
-      Object.assign(metaDelta, value as Record<string, unknown>);
-      continue;
-    }
-    if (AGENT_RUN_PATCH_COLUMNS.has(key)) {
-      columns[key] = value;
-      continue;
-    }
-    if (key === "status" || key === "finished_at") continue;
-    metaDelta[key] = value;
-  }
-
-  return { columns, metaDelta };
-}
+/** @deprecated Use partitionRunExtras from @forge/agent-contract/lifecycle */
+export const partitionAgentRunExtras = partitionRunExtras;
 
 export async function markRunFinal(
   runId: string,

@@ -6,7 +6,21 @@ import {
   isAgentRuntimeV2ShadowEnabled,
   isAgentRuntimeV2WorkerEnabled,
   parseAgentRuntimeV2Mode,
+  partitionRunExtras,
 } from "@forge/agent-contract/lifecycle";
+
+describe("partitionRunExtras", () => {
+  it("separa colunas e meta", () => {
+    const { columns, metaDelta } = partitionRunExtras({
+      error: "x",
+      meta: { chunkGeneration: 2 },
+      planMode: true,
+    });
+    expect(columns.error).toBe("x");
+    expect(metaDelta.chunkGeneration).toBe(2);
+    expect(metaDelta.planMode).toBe(true);
+  });
+});
 
 describe("canTransitionRunStatus", () => {
   it("pending → running", () => {

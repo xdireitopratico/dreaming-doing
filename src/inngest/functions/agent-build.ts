@@ -99,6 +99,15 @@ export const agentBuildFunction = inngest.createFunction(
       );
 
       if (decision.action === "redispatch") {
+        await step.run("wait-queued-job", async () => {
+          const { waitForQueuedAgentJob } = await import("./agent-jobs.ts");
+          const ready = await waitForQueuedAgentJob(getSupabaseAdmin(), runId);
+          if (!ready) {
+            throw new NonRetriableError(
+              `Worker mode: chunk job não enfileirado antes do redispatch (${runId.slice(0, 8)})`,
+            );
+          }
+        });
         await step.sendEvent("re-dispatch-chunk", {
           name: "agent/build.requested",
           data: { ...payload, resume: true },

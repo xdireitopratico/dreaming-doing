@@ -2,34 +2,14 @@
  * transitionRun — writer canônico de agent_runs.status (Edge/Deno).
  */
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
-import { canTransitionRunStatus, shouldSetFinishedAt } from "./agent-contract-lifecycle.ts";
+import {
+  canTransitionRunStatus,
+  partitionRunExtras,
+  shouldSetFinishedAt,
+} from "./agent-contract-lifecycle.ts";
 import type { AgentRunStatus } from "./agent-contract-events.ts";
 
-
-const PATCH_COLUMNS = new Set(["error", "steps", "canceled_at", "heartbeat_at"]);
-
-export function partitionRunExtras(extras: Record<string, unknown>): {
-  columns: Record<string, unknown>;
-  metaDelta: Record<string, unknown>;
-} {
-  const columns: Record<string, unknown> = {};
-  const metaDelta: Record<string, unknown> = {};
-
-  for (const [key, value] of Object.entries(extras)) {
-    if (key === "meta" && value && typeof value === "object" && !Array.isArray(value)) {
-      Object.assign(metaDelta, value as Record<string, unknown>);
-      continue;
-    }
-    if (PATCH_COLUMNS.has(key)) {
-      columns[key] = value;
-      continue;
-    }
-    if (key === "status" || key === "finished_at") continue;
-    metaDelta[key] = value;
-  }
-
-  return { columns, metaDelta };
-}
+export { partitionRunExtras };
 
 export type TransitionRunResult = {
   ok: boolean;
