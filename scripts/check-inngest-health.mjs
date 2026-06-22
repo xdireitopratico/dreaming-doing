@@ -6,7 +6,7 @@
  */
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { resolveInngestEventUrl } from "./lib/inngest-event-url.mjs";
+import { resolveInngestEventConfig } from "./lib/inngest-event-url.mjs";
 
 function loadEnvLocal() {
   const path = resolve(process.cwd(), ".env.local");
@@ -41,7 +41,7 @@ const SERVE_ORIGIN =
   (process.env.VERCEL_PROJECT_PRODUCTION_URL
     ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
     : "https://dreaming-doing.vercel.app");
-const SERVE_PATH = process.env.INNGEST_VERCEL_PATH ?? "/api/inngest";
+const SERVE_PATH = "/api/inngest";
 const BYPASS = process.env.INNGEST_VERCEL_DEPLOYMENT_PROTECTION_KEY ?? "";
 
 async function probeServe() {
@@ -60,9 +60,8 @@ async function probeServe() {
   return { url, status: res.status, json, text: text.slice(0, 400) };
 }
 
-async function probeEventSend() {
-  const eventUrl = resolveInngestEventUrl();
-  if (!eventUrl) return { ok: false, error: "INNGEST_WEBHOOK / INNGEST_EVENT_KEY missing" };
+async function probeEventSend(eventUrl) {
+  if (!eventUrl) return { ok: false, error: "dispatch URL missing" };
 
   const res = await fetch(eventUrl, {
     method: "POST",
@@ -95,8 +94,18 @@ async function recentSmokeRuns() {
 async function main() {
   console.log("=== Inngest health ===\n");
 
-  const eventUrl = resolveInngestEventUrl();
-  console.log("Event URL:", eventUrl ?? "(not configured)");
+  const cfg = resolveInngestEventConfig();
+  console.log("Webhook URL (visibilidade):", cfg.webhookUrl ?? "(not configured)");
+  console.log("Event key URL (worker):", cfg.eventKeyUrl ?? "(not configured)");
+  console.log("Dispatch URL (usada):", cfg.dispatchUrl ?? "(not configured)");
+  if (cfg.keyMismatch) {
+    console.log(
+      "⚠ KEY MISMATCH: INNGEST_WEBHOOK e INNGEST_EVENT_KEY são apps diferentes — dispatch usa event key",
+    );
+    console.log(
+      "  → Para unificar: copie o Signing Key do app do webhook para INNGEST_SIGNING_KEY na Vercel",
+    );
+  }
   console.log("Serve URL:", `${SERVE_ORIGIN}${SERVE_PATH}`);
 
   const serve = await probeServe();
@@ -109,7 +118,7 @@ async function main() {
     console.log("  body:", serve.text);
   }
 
-  const ping = await probeEventSend();
+  const ping = await probeEventSend(cfg.dispatchUrl);
   console.log("\nEvent ingest POST:", ping.ok ? "ok" : "FAIL", ping.status ?? "");
   if (!ping.ok) console.log("  error:", ping.error ?? ping.body);
 
@@ -119,14 +128,34 @@ async function main() {
     for (const r of runs) {
       console.log(`  ${r.id?.slice(0, 8)} ${r.status} ${r.error ?? ""}`);
     }
+    const stuckPending = runs.filter((r) => r.status === "pending");
+    if (stuckPending.length) {
+      console.log(
+        `  ⚠ ${stuckPending.length} smoke run(s) stuck pending — verifique key mismatch ou sync Inngest`,
+      );
+    }
   }
 
-  const healthy = serve.status === 200 && ping.ok;
+  const workerAlive =
+    serve.status === 200 ||
+    (serve.status === 401 && !serve.text.includes("FUNCTION_INVOCATION_FAILED"));
+  const healthy = workerAlive && ping.ok && !cfg.keyMismatch;
+
   if (!healthy) {
-    console.error("\nFAIL: Inngest pipeline unhealthy — fix worker 500 before smoke E2E");
+    console.error("\nFAIL: Inngest pipeline unhealthy");
+    if (!workerAlive) console.error("  → worker /api/inngest must return 200 or 401 (not 500)");
+    if (!ping.ok) console.error("  → event ingest failed — check INNGEST_EVENT_KEY / INNGEST_WEBHOOK");
+    if (cfg.keyMismatch) {
+      console.error(
+        "  → INNGEST_WEBHOOK ≠ INNGEST_EVENT_KEY — eventos no webhook não chegam ao worker Vercel",
+      );
+    }
     process.exit(1);
   }
-  console.log("\nOK: Inngest event + worker reachable");
+  console.log(
+    "\nOK: Inngest event ingest + worker alive",
+    serve.status === 401 ? "(401 = signing required in prod)" : "",
+  );
 }
 
 main().catch((e) => {
