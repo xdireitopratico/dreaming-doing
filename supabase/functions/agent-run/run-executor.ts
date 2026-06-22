@@ -27,10 +27,9 @@ import { appendStreamEvent } from "../_shared/agent-stream.ts";
 import { chunkCapErrorMessage, evaluateChunkLimits } from "../_shared/agent-chunk-limits.ts";
 import { ensureTerminalRunMessage } from "../_shared/ensure-terminal-message.ts";
 import {
-  getNextJobGeneration,
+  resolveJobGenerationForChunk,
   shadowCompleteJob,
   shadowEnqueueNextChunk,
-  shadowUpsertAgentJob,
 } from "../_shared/agent-jobs.ts";
 
 export type ExecuteParams = {
@@ -93,17 +92,10 @@ export async function executeAgentRun(
     .eq("id", runId)
     .maybeSingle();
   const runMeta = (preCheck?.meta ?? {}) as Record<string, unknown>;
-  const chunkGeneration =
-    typeof runMeta.chunkGeneration === "number" ? runMeta.chunkGeneration : 0;
-  const jobGeneration = resumeParam ? Math.max(1, chunkGeneration) : await getNextJobGeneration(
-    supabase,
-    runId,
-  );
-  await shadowUpsertAgentJob(supabase, {
-    runId,
-    generation: jobGeneration,
-    status: "leased",
-    payload: { planMode, resume: resumeParam, planSourceRunId: params.planSourceRunId ?? null },
+  const jobGeneration = await resolveJobGenerationForChunk(supabase, runId, {
+    planMode,
+    resume: resumeParam,
+    planSourceRunId: params.planSourceRunId ?? null,
   });
 
   const effectivePreferences = resolveExecutePreferences(params.preferences, runMeta);

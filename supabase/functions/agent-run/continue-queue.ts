@@ -13,6 +13,7 @@ import {
 } from "../_shared/agent-pending-queue.ts";
 import { loadUserLlmContext, resolveAgentProvider } from "./run-setup.ts";
 import type { AgentPreferencesPayload } from "./connector-keys.ts";
+import { enqueueAgentJobOnDispatch } from "../_shared/agent-jobs.ts";
 
 type InngestEventName = "agent/plan.requested" | "agent/build.requested";
 
@@ -235,6 +236,12 @@ export async function handleContinueQueue(
     });
     return { continued: false, reason: "inngest_failed" };
   }
+
+  await enqueueAgentJobOnDispatch(supabase, agentRunId, {
+    planMode,
+    continuedFromQueue: true,
+    eventName,
+  });
 
   await appendStreamEvent(supabase, agentRunId, "start", {
     type: "start",

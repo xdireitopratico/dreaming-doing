@@ -99,3 +99,17 @@ describe("drainPendingQueue", () => {
     expect(body.planMode).toBeUndefined();
   });
 });
+
+describe("maxLoopResumeStepsForRuntime", () => {
+  it("v2 shadow usa 1 chunk por invocação Inngest", async () => {
+    vi.stubEnv("AGENT_RUNTIME_V2", "shadow");
+    const { maxLoopResumeStepsForRuntime } = await import("./agent-jobs.ts");
+    expect(maxLoopResumeStepsForRuntime()).toBe(1);
+  });
+
+  it("v1 usa MAX_LOOP_RESUME_STEPS", async () => {
+    vi.unstubAllEnvs();
+    const { maxLoopResumeStepsForRuntime } = await import("./agent-jobs.ts");
+    expect(maxLoopResumeStepsForRuntime()).toBe(3);
+  });
+});

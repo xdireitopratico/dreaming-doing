@@ -43,6 +43,11 @@ export const agentBuildFunction = inngest.createFunction(
       await markRunFinal(runId, "running");
     });
 
+    await step.run("lease-agent-job", async () => {
+      const { leaseQueuedAgentJob } = await import("./agent-jobs.ts");
+      return await leaseQueuedAgentJob(getSupabaseAdmin(), runId);
+    });
+
     const final = await runAgentLoopWithResume(
       step as Parameters<typeof runAgentLoopWithResume>[0],
       payload,

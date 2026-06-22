@@ -136,15 +136,17 @@ type InngestStep = {
   run: <T>(id: string, fn: () => Promise<T> | T) => Promise<T>;
 };
 
-/** Executa o loop no handler Inngest; retoma no máximo 3 vezes se o budget expirar. */
+/** Executa o loop no handler Inngest; retoma no máximo 3 vezes se o budget expirar (v1) ou 1× (v2 shadow). */
 export async function runAgentLoopWithResume(
   step: InngestStep,
   payload: AgentRunRequest,
   planMode: boolean,
 ): Promise<ExecuteResponse> {
+  const { maxLoopResumeStepsForRuntime } = await import("./agent-jobs.ts");
+  const maxSteps = maxLoopResumeStepsForRuntime();
   let lastResult: ExecuteResponse | null = null;
 
-  for (let i = 0; i < MAX_LOOP_RESUME_STEPS; i++) {
+  for (let i = 0; i < maxSteps; i++) {
     const result = await step.run(`execute-loop-${i}`, async () => {
       return await runAgentLoop({ ...payload, planMode, resume: i > 0 });
     });
@@ -168,8 +170,6 @@ export async function getRunStatus(runId: string): Promise<AgentRunStatus | null
   if (error || !data) return null;
   return (data as { status: AgentRunStatus }).status;
 }
-
-const TERMINAL_STATUSES = new Set<AgentRunStatus>(["failed", "canceled"]);
 
 /** Colunas reais de agent_runs — demais chaves em extras viram merge em meta (ex.: plan). */
 const AGENT_RUN_PATCH_COLUMNS = new Set(["error", "steps", "canceled_at"]);
