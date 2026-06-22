@@ -58,20 +58,8 @@ function toolSummary(call: ToolCallLike): string {
 function formatToolBatch(ctx: LoopUpdateContext): string | null {
   const tools = ctx.tools ?? [];
   if (tools.length === 0) return null;
-
-  const summaries = tools.map(toolSummary);
   const ok = ctx.allOk !== false;
-
-  if (tools.length === 1) {
-    const action = summaries[0]!;
-    return ok ? `Concluído: ${action}.` : `Falhou ao ${action} — vou corrigir.`;
-  }
-
-  const joined = summaries.slice(0, 3).join(", ");
-  const extra = summaries.length > 3 ? ` e mais ${summaries.length - 3}` : "";
-  return ok
-    ? `Concluído: ${joined}${extra}.`
-    : `Algumas ferramentas falharam (${joined}${extra}) — vou corrigir.`;
+  return ok ? "Feito." : "Falhou — vou corrigir.";
 }
 
 /** Mensagem curta e factual para o chat — nunca inventa intenção do agente. */
@@ -80,32 +68,12 @@ export function formatLoopStatus(ctx: LoopUpdateContext): string | null {
     case "tool_batch":
       return formatToolBatch(ctx);
 
-    case "typecheck_fail":
-      return "TypeScript apontou erro no que acabei de mexer — corrigindo antes de seguir.";
-
-    case "build_check":
-      return "Conferindo se o projeto compila…";
-
-    case "build_ok":
-      return "Build passou — sigo para o próximo passo.";
-
-    case "stuck":
-      return "Percebi repetição nas mesmas ações — vou mudar de abordagem.";
-
-    case "build_fix":
-      return "Build ainda falhou — corrijo os erros antes de entregar.";
-
     case "resume":
-      if (ctx.fixResume) {
-        return "Corrigindo erros de build.";
-      }
+      if (ctx.fixResume) return null;
       return null;
 
-    case "processing":
-      return "Ainda processando — continuo em instantes.";
-
-    case "model_error":
-      return `Erro temporário no modelo (${ctx.errorDetail ?? "falha de API"}) — tentando de novo.`;
+    default:
+      return null;
 
     default:
       return null;
@@ -133,23 +101,10 @@ export function lastAssistantProse(messages: ChatMessage[]): string | null {
 }
 
 function formatClosureFallback(input: ClosureResolveInput): string {
-  const paths = input.touchedPaths.filter(Boolean);
   if (input.errorMessage?.trim()) {
-    const files = paths.length > 0 ? ` Arquivos tocados: ${paths.slice(-5).join(", ")}.` : "";
-    return `Não consegui concluir: ${input.errorMessage.trim()}.${files}`;
+    return `Erro: ${input.errorMessage.trim()}`;
   }
-  if (paths.length === 0) {
-    return "Pronto — confere o preview. Quer ajustar algo ou seguimos para o próximo passo?";
-  }
-  if (paths.length === 1) {
-    return `Pronto — mexi em \`${paths[0]}\`. Confere o preview. Quer ajustar algo ou seguimos?`;
-  }
-  const listed = paths
-    .slice(-4)
-    .map((p) => `\`${p}\``)
-    .join(", ");
-  const extra = paths.length > 4 ? ` e mais ${paths.length - 4}` : "";
-  return `Pronto — alterei ${listed}${extra}. Confere o preview. O que quer fazer a seguir?`;
+  return "";
 }
 
 /** Fechamento do mesmo agente — sem LLM narrador paralelo. */

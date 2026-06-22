@@ -38,7 +38,7 @@ export function ForgeThinking({
       ? Math.max(500, now - startedAtMs)
       : (frozenMs ?? durationMs);
 
-  const label = variant === "latency" && active ? "Thinking…" : formatThoughtSeconds(liveMs);
+  const label = variant === "latency" && active ? "Pensando…" : formatThoughtSeconds(liveMs);
 
   return (
     <p

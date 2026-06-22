@@ -241,7 +241,7 @@ export function buildForgeTimeline(timeline: SSEEvent[], running = false): Forge
           ? data.summary
           : ok
             ? "Concluído"
-            : String(data.error ?? "Falhou");
+            : "Erro";
       items.push({ type: "RESULT", id: `result-${ts}`, ok, text });
       continue;
     }
@@ -264,7 +264,7 @@ export function buildForgeTimeline(timeline: SSEEvent[], running = false): Forge
         type: "RESULT",
         id: `error-${ts}`,
         ok: false,
-        text: typeof data.message === "string" ? data.message.slice(0, 200) : "Erro na execução",
+        text: typeof data.message === "string" ? data.message.slice(0, 200) : "Erro",
       });
       continue;
     }
@@ -288,7 +288,7 @@ export function buildForgeTimeline(timeline: SSEEvent[], running = false): Forge
         type: "RESULT",
         id: `build-${ts}`,
         ok,
-        text: `Build ${command}: ${ok ? "sucesso" : "falha"}`,
+        text: `Build: ${ok ? "Ok" : "Erro"}`,
       });
       continue;
     }
@@ -297,7 +297,7 @@ export function buildForgeTimeline(timeline: SSEEvent[], running = false): Forge
       const path = typeof data.path === "string" ? data.path : "";
       const op = typeof data.op === "string" ? data.op : "edit";
       if (path) {
-        const label = op === "write" ? `Criando ${fileBase(path)}` : `Editando ${fileBase(path)}`;
+        const label = op === "write" ? fileBase(path) : fileBase(path);
         items.push({ type: "TASK", id: `diff-${ts}`, label: truncate(label, 120) });
       }
       continue;
@@ -309,7 +309,7 @@ export function buildForgeTimeline(timeline: SSEEvent[], running = false): Forge
         type: "RESULT",
         id: `typecheck-${ts}`,
         ok: false,
-        text: `Type check: ${errors.length} erro(s)`,
+        text: `TS: ${errors.length} erro(s)`,
       });
       continue;
     }
@@ -319,7 +319,7 @@ export function buildForgeTimeline(timeline: SSEEvent[], running = false): Forge
     }
 
     if (ev.type === "plan_proposed") {
-      const summary = typeof data.summary === "string" ? data.summary : "Plano proposto";
+      const summary = typeof data.summary === "string" ? data.summary : "Plano";
       items.push({ type: "TASK", id: `plan-${ts}`, label: truncate(summary, 120) });
       continue;
     }
@@ -329,23 +329,23 @@ export function buildForgeTimeline(timeline: SSEEvent[], running = false): Forge
       items.push({
         type: "TASK",
         id: `gate-${ts}`,
-        label: awaiting ? "Aguardando aprovação" : "Gate decidido",
+        label: awaiting ? "Aguardando" : "Decidido",
       });
       continue;
     }
 
     if (ev.type === "rate_limit") {
-      items.push({ type: "TASK", id: `rate-${ts}`, label: "Rate limit — aguardando" });
+      items.push({ type: "TASK", id: `rate-${ts}`, label: "Rate limit" });
       continue;
     }
 
     if (ev.type === "robin_rotate") {
-      items.push({ type: "TASK", id: `robin-${ts}`, label: "Robin rotating API key" });
+      items.push({ type: "TASK", id: `robin-${ts}`, label: "Alternando chave" });
       continue;
     }
 
     if (ev.type === "connection_retry") {
-      items.push({ type: "TASK", id: `retry-${ts}`, label: "Reconectando..." });
+      items.push({ type: "TASK", id: `retry-${ts}`, label: "Reconectando…" });
       continue;
     }
 
@@ -428,24 +428,10 @@ function deriveMiniCardStatus(progress: AgentProgress, jobActive: boolean): Mini
   return "done";
 }
 
-const TOOL_BRIEF_VERBS: Record<string, string> = {
-  fs_read: "Lendo",
-  fs_read_many: "Lendo arquivos",
-  fs_list: "Listando",
-  fs_search: "Buscando em",
-  fs_glob: "Buscando",
-  fs_write: "Criando",
-  fs_edit: "Editando",
-  shell_exec: "Executando",
-  web_search: "Pesquisando",
-  web_fetch: "Consultando",
-};
+const TOOL_BRIEF_VERBS: Record<string, string> = {};
 
 export function toolBriefing(name: string, path?: string): string {
-  const verb = TOOL_BRIEF_VERBS[name] ?? `Usando ${name}`;
-  const file = path ? fileBase(path) : "";
-  if (name === "shell_exec") return file ? `Executando ${file}…` : "Executando comando…";
-  return file ? `${verb} ${file}…` : `${verb}…`;
+  return path ? `${name} ${fileBase(path)}` : name;
 }
 
 /** 1º token no inspector ou no chat — congela Thinking → Thought for Xs. */
@@ -585,7 +571,7 @@ export function collectMiniCardBriefings(
 
   const planAwaiting =
     progress.awaitingKind === "plan_approval" && (progress.pendingPlan?.steps?.length ?? 0) > 0;
-  if (progress.phase === "plan" || planAwaiting) return ["Plano aguardando revisão…"];
+  if (progress.phase === "plan" || planAwaiting) return [""];
 
   return [];
 }
@@ -595,7 +581,7 @@ function normalizePlanTaskLabel(description: string): string {
     .replace(/^[-*\d.)\s]+/, "")
     .replace(/\s+/g, " ")
     .trim();
-  return truncate(label || "Etapa do plano", 58);
+  return truncate(label || "", 58);
 }
 
 function deriveMiniCardTasks(
@@ -661,11 +647,11 @@ export function deriveSessionTitle(
   }
 
   if (progress.diffs.length > 0) {
-    return `Entrega · ${progress.diffs.length} arquivo(s)`;
+    return `Arquivos: ${progress.diffs.length}`;
   }
 
   if (progress.deliveryFiles?.length) {
-    return `Entrega · ${progress.deliveryFiles.length} arquivo(s)`;
+    return `Arquivos: ${progress.deliveryFiles.length}`;
   }
 
   if (!progress.finished) return "Working";
@@ -720,13 +706,13 @@ export function buildMiniCardHeader(
   const subtitle = opts.liveBriefings[0] ?? opts.sessionTitle;
 
   if (edited && (running || !progress.finished)) {
-    return { header: `Edited ${edited}`, subtitle };
+    return { header: edited, subtitle };
   }
   if (hasActiveShellTool(progress) && running) {
-    return { header: "Running command", subtitle };
+    return { header: "Executando", subtitle };
   }
   if (opts.planDriven && running) {
-    return { header: "Reading approved plan", subtitle };
+    return { header: "Plano", subtitle };
   }
   const lifecycle = resolveAgentLifecycle({
     progress,
@@ -743,10 +729,10 @@ export function buildMiniCardHeader(
     return { header: lifecycleLabel(lifecycle), subtitle };
   }
   if (progress.finished && edited) {
-    return { header: `Edited ${edited}`, subtitle: opts.sessionTitle };
+    return { header: edited, subtitle: opts.sessionTitle };
   }
   if (running) {
-    return { header: "Working", subtitle };
+    return { header: "Executando", subtitle };
   }
   return { header: opts.sessionTitle, subtitle };
 }
@@ -832,7 +818,7 @@ export function buildAgentRunView(
     liveBriefings.length > 0
       ? liveBriefings
       : jobActive && jobPlan?.steps?.length
-        ? ["Defining approved plan execution"]
+        ? ["Executando plano"]
         : liveBriefings;
   const { tasks, currentTaskIndex } = deriveMiniCardTasks(progress, jobPlan, jobActive);
 

@@ -180,12 +180,12 @@ export function InspectorPlan({ state, onApprove, onReject, onEditRequest }: Ins
 
   const statusCopy =
     status === "approved"
-      ? "Approved plan"
+      ? "Aprovado"
       : status === "rejected"
-        ? "Rejected plan"
+        ? "Rejeitado"
         : awaitingApproval
-          ? "Waiting for approval"
-          : "Plan";
+          ? "Aguardando"
+          : "Plano";
 
   return (
     <div className="forge-inspector-plan" data-testid="inspector-plan">
@@ -212,7 +212,7 @@ export function InspectorPlan({ state, onApprove, onReject, onEditRequest }: Ins
               disabled={busy !== null}
             >
               <Pencil className="size-3.5" />
-              Edit in chat
+              Editar
             </button>
             <button
               type="button"
@@ -225,7 +225,7 @@ export function InspectorPlan({ state, onApprove, onReject, onEditRequest }: Ins
               ) : (
                 <SkipForward className="size-3.5" />
               )}
-              Reject
+              Rejeitar
             </button>
             <button
               type="button"
@@ -238,7 +238,7 @@ export function InspectorPlan({ state, onApprove, onReject, onEditRequest }: Ins
               ) : (
                 <Check className="size-3.5" />
               )}
-              Approve and build
+              Aprovar e construir
             </button>
           </>
         ) : (
@@ -248,7 +248,7 @@ export function InspectorPlan({ state, onApprove, onReject, onEditRequest }: Ins
             onClick={() => onEditRequest?.(plan)}
           >
             <Pencil className="size-3.5" />
-            Use as edit request
+            Usar como edição
           </button>
         )}
       </div>

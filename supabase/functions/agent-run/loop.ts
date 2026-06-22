@@ -436,30 +436,12 @@ export class AgentLoop {
 
     const files = this.state.context?.files ?? [];
     const inventory = auditDesignInventory(files);
-    if (!inventory.ok) {
-      this.state.messages.push({
-        role: "user",
-        content:
-          `PREFLIGHT INVENTÁRIO FALHOU — faltam no projeto:\n${inventory.missing.join("\n")}\n\n` +
-          `Corrija com fs_write (package.json, packages/forge-ui) antes de editar UI.`,
-      });
-      return;
-    }
-
-    if (inventory.warnings.length > 0) {
-      this.state.messages.push({
-        role: "user",
-        content:
-          `AVISO PREFLIGHT — imports inválidos detectados no DB:\n${inventory.warnings.slice(0, 8).join("\n")}\n\n` +
-          `Use apenas import de "@forge/ui".`,
-      });
-    }
+    const preflightErrors: string[] = [];
+    if (!inventory.ok) preflightErrors.push(`Faltam: ${inventory.missing.join(", ")}`);
+    if (inventory.warnings.length > 0) preflightErrors.push(`Imports: ${inventory.warnings.slice(0, 3).join(", ")}`);
 
     await this.touchHeartbeat();
-    this.emit("phase", {
-      phase: "preflight",
-      message: "Preparando design system (@forge/ui)…",
-    });
+    this.emit("phase", { phase: "preflight", message: "Executando..." });
 
     const preflight = await runDesignPreflight(this.reg);
     const manifest = preflight.availableComponents;
@@ -468,26 +450,20 @@ export class AgentLoop {
     }
 
     if (!preflight.passed) {
-      const failed = preflight.checks
-        .filter((c) => !c.ok)
-        .map((c) => c.name)
-        .join(", ");
+      const failed = preflight.checks.filter((c) => !c.ok).map((c) => c.name).join(", ");
       this.emit("validate_fail", {
         attempt: 0,
         checks: failed ? [failed] : ["preflight"],
         feedback: preflight.feedback?.slice(0, 500),
         preflight: true,
       });
-      this.state.messages.push({
-        role: "user",
-        content:
-          `PREFLIGHT DESIGN SYSTEM FALHOU:\n\n${preflight.feedback?.slice(0, 6000) ?? "erro desconhecido"}\n\n` +
-          `${manifest}\n\nCorrija infra (npm install, paths, package.json) com shell_exec/fs_edit antes de editar UI.`,
-      });
-      return;
+      preflightErrors.push(`Design system: ${preflight.feedback?.slice(0, 500) ?? "erro"}`);
     }
 
-    this.emit("validate_ok", { message: "Design system pronto (preflight)" });
+    if (preflightErrors.length > 0) {
+      this.state.messages.push({ role: "user", content: `PREFLIGHT FALHOU:\n${preflightErrors.join("\n")}\nCorrija antes de continuar.` });
+      return;
+    }
   }
 
   private async returnResumableChunk(
@@ -506,7 +482,7 @@ export class AgentLoop {
     await this.emitDeliveryCheckpoint(steps);
     await this.touchHeartbeat();
     this.emit("explore", {
-      message: this.narrationBuffer || "Continuando…",
+      message: this.narrationBuffer || "",
     });
     await this.persistCheckpointChat(steps, options?.buildFix);
     return {
@@ -754,8 +730,7 @@ export class AgentLoop {
           };
           return await this.finishPlanProposal(reopened);
         }
-        const reply =
-          "Ainda não há plano nesta conversa. Descreva o que quer construir e eu monto um para você revisar.";
+        const reply = "";
         this.emit("assistant_text", { text: reply, final: true });
         await this.persistFinal(reply, { lastFinishOk: true, conversational: true });
         await this.clearCheckpoint();
@@ -768,7 +743,7 @@ export class AgentLoop {
         this.appendResumeInstruction();
         this.emit("phase", {
           phase: "resume",
-          message: "Continuando execução…",
+          message: "",
         });
       }
 
@@ -866,14 +841,14 @@ export class AgentLoop {
 
       this.emit("phase", {
         phase: "build",
-        message: "Implementando mudanças…",
+        message: "",
         intent: this.state.intent,
       });
 
       if (this.approvedPlanBuild) {
         this.emit("phase", {
           phase: "build",
-          message: "Executando plano aprovado…",
+          message: "",
         });
       }
 
@@ -917,7 +892,7 @@ export class AgentLoop {
         }
 
         if (await this.isCanceled()) {
-          await this.persistFinal("Execução cancelada pelo usuário.");
+          await this.persistFinal(          "Cancelado pelo usuário");
           this.emit("canceled", { message: "Cancelado pelo usuário" });
           return {
             ok: false,
@@ -944,7 +919,7 @@ export class AgentLoop {
           const activeStep = enabled[this.approvedPlanStepIndex];
           const stepMessage = activeStep
             ? activeStep.description.slice(0, 120)
-            : "Trabalhando no plano aprovado…";
+            : "";
           if (stepMessage !== this.lastExecutePhaseMessage) {
             this.emit("phase", {
               phase: "execute",
@@ -960,7 +935,7 @@ export class AgentLoop {
           });
           this.emit("phase", {
             phase: "execute",
-            message: "Trabalhando no pedido…",
+            message: "",
           });
         }
 
@@ -994,7 +969,7 @@ export class AgentLoop {
           const message = err instanceof Error ? err.message : "Erro no modelo";
           const retries = await this.bumpLlmRetries();
           if (retries >= MAX_LLM_RETRIES) {
-            const failMsg = `Erro no modelo após ${retries} tentativas: ${message}`;
+            const failMsg = `Erro: ${message}`;
             await this.persistFinal(failMsg, {
               lastFinishOk: false,
               buildFailed: true,
@@ -1042,15 +1017,13 @@ export class AgentLoop {
             message: `Modelo preso em leitura por ${this.consecutiveNoContentReadSteps} passos sem produzir output`,
           });
           await this.persistFinal(
-            "idle timeout — O modelo não foi capaz de produzir output após várias tentativas. " +
-              "Tente enviar um novo prompt ou considere trocar o modelo nas configurações.",
+            "Modelo sem resposta. Troque o modelo ou envie de novo.",
             { lastFinishOk: false, buildFailed: true },
           );
           return {
             ok: false,
             error:
-              "idle timeout — O modelo não produziu output após leituras consecutivas. " +
-              "Tente novamente ou troque o modelo.",
+              "Modelo sem resposta. Troque o modelo ou envie de novo.",
             steps: loopStep,
             resumable: false,
             toolsUsed: [...toolsUsed],
@@ -1064,14 +1037,12 @@ export class AgentLoop {
             .filter(Boolean);
           const fileList = filesRead.length > 0 ? ` (${filesRead.join(", ")})` : "";
           this.emit("stuck", {
-            message: `Modelo lendo sem produzir output — forçando produção de código`,
+            message: "",
           });
           this.state.messages.push({
             role: "user",
             content:
-              `ATENÇÃO: Você já leu${fileList} nos últimos passos, mas não produziu nenhum código ou texto. ` +
-              "Você tem informação suficiente. Agora IMPLEMENTE a solução usando fs_write ou fs_edit. " +
-              "Comece a escrever o código agora — não leia mais arquivos.",
+              "PARE. Lendo sem produzir. Use fs_write ou fs_edit agora.",
           });
         }
 
@@ -1088,8 +1059,7 @@ export class AgentLoop {
           this.state.messages.push({
             role: "user",
             content:
-              "Não misture clarify/create_plan com ferramentas de execução no mesmo turno. " +
-              "Use só clarify (para perguntar) OU só fs_read/fs_write/fs_edit/shell_exec (para implementar).",
+              "PARE. Não misture clarify com ferramentas de execução. Use só um tipo por turno.",
           });
           continue;
         }
@@ -1160,7 +1130,7 @@ export class AgentLoop {
           this.emitAgentProse(assistantText);
         } else if (!this.openingEmitted && !this.buildFixResume) {
           this.emitOpeningToChat(
-            "Vou trabalhar nisso agora e te manter atualizado conforme eu validar as mudanças.",
+            "",
           );
         }
 
@@ -1409,7 +1379,7 @@ export class AgentLoop {
         // Extra cancel check after potentially long tool execution (shell, writes, observer).
         // Combined with per-step check this makes stop responsive without full AbortSignal everywhere.
         if (await this.isCanceled()) {
-          await this.persistFinal("Execução cancelada pelo usuário.");
+          await this.persistFinal(          "Cancelado pelo usuário");
           this.emit("canceled", { message: "Cancelado pelo usuário" });
           return {
             ok: false,
@@ -1452,9 +1422,9 @@ export class AgentLoop {
             });
             this.state.messages.push({
               role: "user",
-              content: `TYPECHECK FALHOU nos arquivos modificados:\n\n${typeCheck.errors
-                .map((e) => `${e.file}:${e.line}:${e.column} - ${e.code}: ${e.message}`)
-                .join("\n")}\n\nCorrija os erros acima com fs_edit antes de continuar.`,
+            content: `BUILD FALHOU:\n${typeCheck.errors
+              .map((e) => `${e.file}:${e.line} - ${e.message}`)
+              .join("\n")}\nCorrija com fs_edit.`,
             });
             continue;
           }
@@ -1466,7 +1436,7 @@ export class AgentLoop {
           this.notifyLoopStatus({ kind: "build_check" });
           this.emit("phase", {
             phase: "observe",
-            message: "Verificando build...",
+            message: "",
           });
           await this.saveCheckpoint(LoopPhase.VALIDATE_STEP);
           const observation = await this.observer.observe(() => this.loopBudgetExceeded());
@@ -1479,10 +1449,7 @@ export class AgentLoop {
             });
             this.state.messages.push({
               role: "user",
-              content: `VERIFICAÇÃO FALHOU (${buildAttempts}/${maxRetries}). Analise e corrija:\n\n\`\`\`\n${observation.feedback?.slice(
-                0,
-                8000,
-              )}\n\`\`\`\n\nNÃO peça ajuda. Use fs_search/fs_edit para corrigir.`,
+              content: `BUILD FALHOU:\n${observation.feedback?.slice(0, 2000) ?? ""}\nCorrija com fs_edit.`,
             });
             continue;
           } else {
@@ -1495,13 +1462,12 @@ export class AgentLoop {
         if (isExecutionStuck(this.state.executionLog)) {
           this.notifyLoopStatus({ kind: "stuck" });
           this.emit("stuck", {
-            message: "Padrão repetitivo detectado — injetando instrução para nova abordagem",
+            message: "",
           });
           this.state.messages.push({
             role: "user",
             content:
-              "ATENÇÃO: Você está repetindo as mesmas ferramentas. PARE e tente uma abordagem DIFERENTE. " +
-              "Use fs_search para entender o código atual, depois fs_edit para corrigir. Não repita fs_write no mesmo arquivo.",
+              "PARE. Repetindo mesmas ferramentas. Mude de abordagem.",
           });
         }
 
@@ -1523,7 +1489,7 @@ export class AgentLoop {
       this.state.phase = LoopPhase.VALIDATE_STEP;
       this.emit("phase", {
         phase: "observe",
-        message: "Verificação final de build...",
+        message: "",
       });
       await this.saveCheckpoint(LoopPhase.VALIDATE_STEP);
       const finalObservation = await this.observer.observe(() => this.loopBudgetExceeded());
@@ -1569,17 +1535,15 @@ export class AgentLoop {
 
       this.state.messages.push({
         role: "user",
-        content:
-          `BUILD GATE FINAL FALHOU (${buildAttempts}/${maxRetries}). Corrija antes de finalizar:\n\n` +
-          `\`\`\`\n${finalObservation.feedback?.slice(0, 10000) ?? ""}\n\`\`\`\n\n` +
-          `Os erros reais de compilação estão acima — corrija cada um com fs_edit. Verifique imports, tipos e sintaxe.`,
+          content:
+            `BUILD FALHOU:\n${finalObservation.feedback?.slice(0, 2000) ?? ""}\nCorrija com fs_edit.`,
       });
       this.notifyLoopStatus({ kind: "build_fix" });
     }
 
     this.state.phase = LoopPhase.SUMMARIZE;
     await this.emitTransition("delivered");
-    this.emit("phase", { phase: "summarize", message: "Finalizando..." });
+    this.emit("phase", { phase: "summarize", message: "" });
     await this.saveCheckpoint(LoopPhase.SUMMARIZE, true);
     const closingText = sanitizeUserFacingProse(
       resolveClosureText({
@@ -1598,7 +1562,7 @@ export class AgentLoop {
     }
 
     try {
-      await this.persistFinal(closingText || "Pronto.", {
+      await this.persistFinal(closingText || "", {
         lastFinishOk: true,
       });
     } catch (e) {
@@ -1612,7 +1576,7 @@ export class AgentLoop {
     const tokens = this.compression.getTotalTokens();
     const costUsd = this.compression.getEstimatedCostUsd(this.router.mainCfg.model);
     this.emit("done", {
-      summary: (closingText || "Pronto.").slice(0, 2000),
+      summary: (closingText || "").slice(0, 2000),
       totalInputTokens: tokens.input,
       totalOutputTokens: tokens.output,
       totalTokens: tokens.total,
@@ -1620,7 +1584,7 @@ export class AgentLoop {
     });
     return {
       ok: true,
-      summary: (closingText || "Pronto.").slice(0, 2000),
+      summary: (closingText || "").slice(0, 2000),
       steps: loopStep,
       toolsUsed: [...toolsUsed],
       totalInputTokens: tokens.input,
@@ -1853,7 +1817,7 @@ export class AgentLoop {
 
     this.emit("phase", {
       phase: "plan",
-      message: "Explorando projeto antes do plano…",
+      message: "",
       intent: this.state.intent ?? undefined,
     });
     await this.saveCheckpoint(LoopPhase.PLAN_MODE);
@@ -1935,8 +1899,7 @@ export class AgentLoop {
         this.state.messages.push({
           role: "user",
           content:
-            "Não misture clarify/create_plan com ferramentas de exploração no mesmo turno. " +
-            "Use só clarify OU só fs_read/fs_search/shell_exec.",
+            "PARE. Não misture clarify com ferramentas de exploração. Use só um tipo por turno.",
         });
         continue;
       }
@@ -1949,7 +1912,7 @@ export class AgentLoop {
 
       if (planCall) {
         toolsUsed.add("create_plan");
-        this.emit("phase", { phase: "creating_plan", message: "Criando plano…" });
+        this.emit("phase", { phase: "creating_plan", message: "" });
         const proposed = proposedPlanFromToolArgs(planCall.arguments);
         if (!proposed) {
           return await this.finishPlanModeFailure(
@@ -1972,7 +1935,7 @@ export class AgentLoop {
       if (!response.tool_calls?.length) {
         if (assistantText) {
           if (isPlanShapedMarkdown(assistantText)) {
-            this.emit("phase", { phase: "creating_plan", message: "Criando plano…" });
+            this.emit("phase", { phase: "creating_plan", message: "" });
             const toolArgs = planToolArgsFromMarkdown(assistantText);
             const proposed = toolArgs ? proposedPlanFromToolArgs(toolArgs) : null;
             if (proposed) {
@@ -1996,7 +1959,7 @@ export class AgentLoop {
         }
         // Se thinking foi streamed mas content vazio, não falhar — modelo processou via thinking
         if (this.llmResponseWasStreamed) {
-          const fallback = "Pensamento processado. Use create_plan ou clarify para continuar.";
+          const fallback = "";
           const clean = sanitizeUserFacingProse(fallback);
           this.emit("assistant_text", { text: clean, final: true });
           await this.persistFinal(clean, { lastFinishOk: true, conversational: true });
@@ -2054,7 +2017,7 @@ export class AgentLoop {
       }
 
       this.toolsInvoked = true;
-      this.emit("phase", { phase: "plan", message: "Explorando…", toolCount: execCalls.length });
+      this.emit("phase", { phase: "plan", message: "", toolCount: execCalls.length });
 
       const execResults = await parallelExecute(execCalls, async (call) => {
         toolsUsed.add(call.name);
@@ -2261,7 +2224,7 @@ export class AgentLoop {
   private async runInventoryPhase(model: LLMProvider): Promise<string> {
     this.emit("phase", {
       phase: "inventory",
-      message: "Resumindo estado do projeto…",
+      message: "",
     });
     const ctx = this.state.context?.projectConfig?.slice(0, 4000) ?? "(sem arquivos)";
     const manifest = this.state.context?.manifest?.slice(0, 2000) ?? "";

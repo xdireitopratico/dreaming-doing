@@ -35,14 +35,9 @@ const PHASE_META: Record<
   string,
   { label: string; icon: React.ComponentType<{ className?: string }>; color: string }
 > = {
-  plan: { label: "Planejando", icon: Brain, color: "text-[var(--forge-primary)]" },
-  build: { label: "Implementando", icon: Wrench, color: "text-[var(--forge-primary)]" },
-  resume: { label: "Continuando", icon: ListChecks, color: "text-[var(--forge-primary)]" },
   execute: { label: "Executando", icon: Wrench, color: "text-[var(--forge-primary)]" },
-  observe: { label: "Verificando build", icon: Eye, color: "text-amber-400" },
-  summarize: { label: "Finalizando", icon: CheckCircle2, color: "text-emerald-400" },
-  taste_chat: { label: "Concierge", icon: Brain, color: "text-[var(--forge-primary)]" },
-  taste: { label: "Concierge", icon: Brain, color: "text-[var(--forge-primary)]" },
+  build: { label: "Construindo", icon: Wrench, color: "text-[var(--forge-primary)]" },
+  observe: { label: "Testando", icon: Eye, color: "text-amber-400" },
   done: { label: "Concluído", icon: CheckCircle2, color: "text-emerald-400" },
 };
 
@@ -161,7 +156,7 @@ function buildLines(timeline: SSEEvent[]): LogLine[] {
           id: `${ev.type}-${ts}-${lines.length}`,
           kind: "info",
           icon: Loader2,
-          text: "Robin rotating API key",
+          text: "Alternando chave",
           ts,
         });
         break;
@@ -188,7 +183,7 @@ function buildLines(timeline: SSEEvent[]): LogLine[] {
           id: `${ev.type}-${ts}-${lines.length}`,
           kind: "error",
           icon: AlertCircle,
-          text: typeof data.message === "string" ? data.message : "Erro do agente",
+          text: typeof data.message === "string" ? data.message : "Erro",
           ts,
         });
         break;

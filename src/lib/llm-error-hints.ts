@@ -30,18 +30,18 @@ function hintFromStatus(status: number | undefined, msg: string): ErrorHint | nu
   const lower = msg.toLowerCase();
   if (status === 401 || /unauthorized|invalid api key|invalid_token/i.test(lower)) {
     return {
-      message: "Sua chave de API está inválida ou expirou.",
-      action: "Atualizar chave",
+      message: "Chave inválida ou expirada.",
+      action: "→ /api",
       link: LINKS.apiKeys,
       severity: "error",
       code: "auth.invalid_key",
-      tip: "A última requisição foi rejeitada pelo provedor antes de qualquer chamada custosa.",
+
     };
   }
   if (status === 403 || /forbidden|permission/i.test(lower)) {
     return {
-      message: "Provedor recusou a chave (403). Pode estar sem permissão para o modelo escolhido.",
-      action: "Trocar modelo ou chave",
+      message: "Chave sem permissão (403).",
+      action: "→ /models",
       link: LINKS.models,
       severity: "error",
       code: "auth.forbidden",
@@ -49,8 +49,8 @@ function hintFromStatus(status: number | undefined, msg: string): ErrorHint | nu
   }
   if (status === 402 || /payment|insufficient credits|quota exceeded/i.test(lower)) {
     return {
-      message: "Sem créditos ou quota esgotada na sua conta do provedor.",
-      action: "Recarregar créditos",
+      message: "Sem créditos.",
+      action: "→ /api",
       link: LINKS.apiKeys,
       severity: "error",
       code: "billing.no_credits",
@@ -74,17 +74,16 @@ export function llmErrorHint(err: unknown, robinActive: boolean): ErrorHint {
   ) {
     if (lower.includes("nvidia")) {
       return {
-        message: "Modelo NVIDIA não encontrado. Pode estar deprecado ou sua chave não tem acesso.",
-        action: "Trocar modelo",
-        link: LINKS.models,
-        severity: "error",
-        code: "model.not_found.nvidia",
-        tip: "Tente o preset Llama 3.3 70B ou Groq Llama 3.3 70B Versatile.",
+      message: "Modelo NVIDIA 404.",
+      action: "→ /models",
+      link: LINKS.models,
+      severity: "error",
+      code: "model.not_found.nvidia",
       };
     }
     return {
-      message: "Modelo não encontrado no provedor (404).",
-      action: "Escolher outro modelo",
+      message: "Modelo 404.",
+      action: "→ /models",
       link: LINKS.models,
       severity: "error",
       code: "model.not_found",
@@ -93,12 +92,12 @@ export function llmErrorHint(err: unknown, robinActive: boolean): ErrorHint {
 
   if (/\b529\b/.test(msg) || /\b503\b/.test(msg) || /overloaded|service unavailable/i.test(lower)) {
     return {
-      message: "Servidor do modelo sobrecarregado (529/503).",
-      action: "Aguardar e continuar",
+      message: "Modelo sobrecarregado (529/503).",
+      action: "Retry automático",
       link: null,
       severity: "warning",
       code: "model.overloaded",
-      tip: "O FORGE aplica backoff automático. Se persistir, troque o pool no modo ROBIN.",
+
     };
   }
 
@@ -108,17 +107,17 @@ export function llmErrorHint(err: unknown, robinActive: boolean): ErrorHint {
   ) {
     if (robinActive) {
       return {
-        message: "Limite por minuto nesta chave. ROBIN está alternando para a próxima…",
-        action: "Adicionar mais chaves",
+        message: "Rate limit — ROBIN alternando.",
+        action: "→ /api",
         link: LINKS.apiKeys,
         severity: "warning",
         code: "rate_limit.robin_rotating",
-        tip: "Cada chave adicionada multiplica o throughput do pool.",
+
       };
     }
     return {
-      message: "Limite por minuto atingido no provedor.",
-      action: "Adicionar chaves (ROBIN) ou aguardar",
+      message: "Rate limit.",
+      action: "→ /api",
       link: LINKS.apiKeys,
       severity: "warning",
       code: "rate_limit.single_key",
@@ -131,12 +130,12 @@ export function llmErrorHint(err: unknown, robinActive: boolean): ErrorHint {
     )
   ) {
     return {
-      message: "Conexão com o modelo instável. O estado foi salvo.",
-      action: "Continuar run",
+      message: "Conexão instável. Estado salvo.",
+      action: "→ Continuar",
       link: null,
       severity: "warning",
       code: "connection.unstable",
-      tip: "O agente retoma exatamente de onde parou — sem perder trabalho.",
+
     };
   }
 
@@ -155,19 +154,19 @@ export function e2bErrorHint(err: unknown): ErrorHint {
 
   if (/e2b.*(not configured|missing|api key)/i.test(lower) || /e2b_setup/.test(lower)) {
     return {
-      message: "Você ainda não configurou sua chave E2B (sandbox de preview).",
-      action: "Configurar E2B",
+      message: "E2B não configurado.",
+      action: "→ /api",
       link: LINKS.onboarding,
       severity: "info",
       code: "e2b.not_configured",
-      tip: "Você pode pegar uma chave grátis em e2b.dev/dashboard.",
+
     };
   }
 
   if (/401|403|invalid.*key|unauthorized/i.test(lower)) {
     return {
-      message: "Sua chave E2B foi rejeitada.",
-      action: "Atualizar chave E2B",
+      message: "Chave E2B inválida.",
+      action: "→ /api",
       link: LINKS.apiKeys,
       severity: "error",
       code: "e2b.invalid_key",
@@ -176,19 +175,19 @@ export function e2bErrorHint(err: unknown): ErrorHint {
 
   if (/template.*not found|template.*unavailable/i.test(lower)) {
     return {
-      message: "Template E2B solicitado indisponível. FORGE vai usar o fallback automaticamente.",
-      action: "Aguardar recriação",
+      message: "Template E2B indisponível — usando fallback.",
+      action: "Retry",
       link: null,
       severity: "warning",
       code: "e2b.template_fallback",
-      tip: "Se persistir, salve o projeto e reabra — o sandbox será recriado.",
+
     };
   }
 
   if (/timeout|killed|sandbox.*dead/i.test(lower)) {
     return {
-      message: "Sandbox E2B travou ou foi morto pelo timeout (limite de 5 min).",
-      action: "Reabrir preview",
+      message: "E2B travou — recarregue.",
+      action: "Recarregar",
       link: null,
       severity: "warning",
       code: "e2b.sandbox_dead",
@@ -206,44 +205,44 @@ export function e2bErrorHint(err: unknown): ErrorHint {
 
 export function timeoutHint(): ErrorHint {
   return {
-    message: "O agente atingiu uma janela de execução e salvou o progresso.",
-    action: "Continuar run",
+    message: "Timeout — progresso salvo.",
+    action: "→ Continuar",
     link: null,
     severity: "warning",
     code: "agent.execution_window",
-    tip: "Continue retoma do último checkpoint sem perder trabalho.",
+
   };
 }
 
 export function staleStreamHint(): ErrorHint {
   return {
-    message: "A conexão com o agente foi interrompida antes do início da execução.",
-    action: "Continuar run",
+    message: "Conexão perdida.",
+    action: "→ Continuar",
     link: null,
     severity: "warning",
     code: "agent.stale_stream",
-    tip: "Isso pode ocorrer quando o servidor demora para iniciar. Tente novamente com Continuar.",
+
   };
 }
 
 export function zombieRunHint(): ErrorHint {
   return {
-    message: "A execução expirou (run zumbi) — o servidor marcou como falha após 15 minutos.",
-    action: "Reenviar mensagem",
+    message: "Run expirou.",
+    action: "Reenviar",
     link: null,
     severity: "warning",
     code: "agent.zombie_run",
-    tip: "Envie o pedido de novo no chat. Se a fila estava presa, ela deve drenar no próximo agent-run.",
+
   };
 }
 
 export function inngestQueueHint(): ErrorHint {
   return {
-    message: "A fila do agente não conseguiu disparar o Inngest (secret ausente ou inválido).",
-    action: "Verificar INNGEST_EVENT_KEY",
+    message: "Inngest não configurado.",
+    action: "→ Secrets",
     link: null,
     severity: "error",
     code: "inngest.queue_failed",
-    tip: "Configure INNGEST_EVENT_KEY em Supabase → Edge Functions → Secrets. Ver docs/EDGE-SECRETS.md.",
+
   };
 }

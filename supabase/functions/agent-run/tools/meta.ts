@@ -251,7 +251,7 @@ export function formatClarifyMessage(args: Record<string, unknown>): string {
     const desc = typeof c.description === "string" ? c.description.trim() : "";
     parts.push(desc ? `- **${label}** — ${desc}` : `- **${label}**`);
   }
-  return parts.join("\n\n").trim() || question || intro || "Preciso de mais um detalhe para continuar.";
+  return parts.join("\n\n").trim() || question || intro || "";
 }
 
 function coercePlanSteps(raw: unknown): PlanStep[] {

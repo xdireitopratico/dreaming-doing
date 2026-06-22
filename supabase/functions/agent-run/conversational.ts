@@ -101,11 +101,7 @@ export async function runConversationalPhase(
     // fallback abaixo
   }
 
-  if (recall) {
-    return "Lembro sim — pelo histórico recente estávamos discutindo o projeto. Quer que eu retome de onde paramos?";
-  }
-
-  return "Bom dia! Como posso ajudar você hoje — quer revisar o plano, discutir a ideia ou partir para implementar?";
+  return "";
 }
 
 const ADVISORY_SYSTEM = `Você é o parceiro de vibe-coding do FORGE — caloroso, direto, em português.
@@ -176,7 +172,7 @@ export async function runAdvisoryPhase(
     /* fallback */
   }
 
-  return "Eu iria de dark industrial com âmbar quente como destaque — passa confiança e não cansa à noite. Quer manter esse tom ou prefere algo mais claro/neutro?";
+  return "";
 }
 
 export async function runDirectChatPhase(
@@ -215,5 +211,5 @@ export async function runDirectChatPhase(
     /* fallback */
   }
 
-  return "Entendi. A raiz provável é que conversa e execução estão passando pelo mesmo caminho, então perguntas simples viram job e aparecem como ruído operacional. A correção robusta é separar o contrato do turno: chat responde no chat; plan cria plano; build executa com ferramentas.";
+  return "";
 }

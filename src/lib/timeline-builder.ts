@@ -68,26 +68,11 @@ function normalizeProse(prose: string): string {
   return prose.trim();
 }
 
-function toolLabel(name: string, path?: string, detail?: string): string {
-  if (path) {
-    const file = fileBase(path);
-    if (READ_TOOLS.test(name)) return `Read ${file}`;
-    if (WRITE_TOOLS.test(name)) return `Edited ${file}`;
-    return `${name} ${path}`;
-  }
-  if (/search|grep|find|scan/i.test(name)) {
-    const hint = detail ? truncate(detail, 48) : "results";
-    return `Searching ${hint}`;
-  }
-  if (SHELL_TOOLS.test(name)) return "Running command";
+function toolLabel(name: string, path?: string): string {
   return name;
 }
 
-function toolDoneLabel(name: string, path?: string): string | null {
-  if (!path) return null;
-  const file = fileBase(path);
-  if (READ_TOOLS.test(name)) return `Read ${file}`;
-  if (WRITE_TOOLS.test(name)) return `Edited ${file}`;
+function toolDoneLabel(_name: string, _path?: string): string | null {
   return null;
 }
 
@@ -144,14 +129,6 @@ function extractLabel(ev: SSEEvent, data: Record<string, unknown>): string | nul
     case "memory":
     case "explore":
       return typeof data.message === "string" ? data.message.trim() : null;
-    case "build_log":
-      return `Build: ${data.ok !== false ? "sucesso" : "falha"}`;
-    case "tool_start":
-    case "tool_call":
-      return toolLabel(
-        String(data.name ?? data.tool ?? "tool"),
-        pathFromArgs((data.args ?? data.input) as Record<string, unknown>),
-      );
     default:
       return null;
   }
@@ -233,7 +210,7 @@ export function buildTimeline(events: SSEEvent[], running = false): TimelineEntr
     if (ev.type === "step_result") {
       if (thoughtId) flushThought(ts);
       const ok = data.ok !== false;
-      const text = typeof data.summary === "string" ? data.summary : ok ? "Concluído" : "Falhou";
+      const text = typeof data.summary === "string" ? data.summary : ok ? "Ok" : "Erro";
       items.push({
         id: `result-${ts}`,
         kind: "result",
@@ -283,7 +260,7 @@ export function buildTimeline(events: SSEEvent[], running = false): TimelineEntr
         id: `build-${ts}`,
         kind: "result",
         ts,
-        label: ok ? "Build passed" : "Build failed",
+        label: ok ? "Build OK" : "Build ERRO",
         ok,
       });
       continue;
@@ -346,7 +323,7 @@ export function buildTimeline(events: SSEEvent[], running = false): TimelineEntr
           id: `diff-${ts}`,
           kind: "phase",
           ts,
-          label: `Edited ${fileBase(path)}`,
+          label: fileBase(path),
         });
       }
       continue;
@@ -358,7 +335,7 @@ export function buildTimeline(events: SSEEvent[], running = false): TimelineEntr
         id: `typecheck-${ts}`,
         kind: "result",
         ts,
-        label: `TypeScript: ${errors.length} error(s)`,
+        label: `TS: ${errors.length} erro(s)`,
         ok: false,
       });
       continue;
@@ -369,7 +346,7 @@ export function buildTimeline(events: SSEEvent[], running = false): TimelineEntr
         id: `error-${ts}`,
         kind: "result",
         ts,
-        label: "Execution failed",
+        label: "Erro",
         detail: typeof data.message === "string" ? data.message.slice(0, 200) : undefined,
         ok: false,
       });
@@ -394,7 +371,7 @@ export function buildTimeline(events: SSEEvent[], running = false): TimelineEntr
     }
 
     if (ev.type === "plan_proposed") {
-      const summary = typeof data.summary === "string" ? data.summary : "Plano proposto";
+      const summary = typeof data.summary === "string" ? data.summary : "Plano";
       items.push({
         id: `plan-${ts}`,
         kind: "phase",
@@ -413,7 +390,7 @@ export function buildTimeline(events: SSEEvent[], running = false): TimelineEntr
         id: `gate-${ts}`,
         kind: "phase",
         ts,
-        label: data.awaiting === true ? "Waiting for approval" : "Gate decided",
+        label: data.awaiting === true ? "Aguardando" : "Decidido",
       });
       continue;
     }
@@ -423,7 +400,7 @@ export function buildTimeline(events: SSEEvent[], running = false): TimelineEntr
         id: `rate-${ts}`,
         kind: "phase",
         ts,
-        label: "Rate limit — waiting",
+        label: "Rate limit",
       });
       continue;
     }
@@ -433,7 +410,7 @@ export function buildTimeline(events: SSEEvent[], running = false): TimelineEntr
         id: `robin-${ts}`,
         kind: "phase",
         ts,
-        label: "Robin rotating API key",
+        label: "Alternando chave",
       });
       continue;
     }
@@ -443,7 +420,7 @@ export function buildTimeline(events: SSEEvent[], running = false): TimelineEntr
         id: `retry-${ts}`,
         kind: "phase",
         ts,
-        label: "Reconnecting…",
+        label: "Reconectando…",
       });
       continue;
     }

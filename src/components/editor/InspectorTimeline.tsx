@@ -78,7 +78,7 @@ export function InspectorTimeline({
                 active
               />
             ) : (
-              <span>Thinking…</span>
+              <span>Pensando…</span>
             )}
           </div>
         )}
