@@ -8,6 +8,7 @@
   ],
   "scripts": {
     "sync:agent-contract": "node scripts/sync-agent-contract.mjs",
+    "check:agent-contract": "node scripts/sync-agent-contract.mjs --check",
     "dev": "vite dev",
     "build": "cross-env VERCEL=1 vite build",
     "build:cloudflare": "vite build",

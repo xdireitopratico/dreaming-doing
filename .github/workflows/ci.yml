@@ -20,11 +20,33 @@ jobs:
       - run: npm run typecheck
       - run: npm run test
       - uses: denoland/setup-deno@v2
-      - run: deno test supabase/functions/_shared/agent-pending-queue.test.ts
+      - run: deno test --allow-env supabase/functions/_shared/agent-pending-queue.test.ts
       - run: npm run smoke:stability
       - run: VERCEL=1 npm run build && npm run build:inngest
-      - name: Smoke agent E2E (optional)
-        if: ${{ secrets.SMOKE_PROJECT_ID != '' }}
+      - name: Agent contract mirrors in sync
+        run: npm run check:agent-contract
+
+  # Requer secrets no repo (Settings → Secrets). Falha se INNGEST_EVENT_KEY ausente.
+  agent-platform:
+    runs-on: ubuntu-latest
+    needs: quality
+    if: ${{ secrets.INNGEST_EVENT_KEY != '' && secrets.SUPABASE_SERVICE_ROLE_KEY != '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - run: npm run build:inngest
+      - name: Inngest pipeline health
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          INNGEST_EVENT_KEY: ${{ secrets.INNGEST_EVENT_KEY }}
+          INNGEST_SERVE_ORIGIN: ${{ secrets.INNGEST_SERVE_ORIGIN }}
+        run: npm run check:inngest
+      - name: Smoke agent E2E
         env:
           SMOKE_PROJECT_ID: ${{ secrets.SMOKE_PROJECT_ID }}
           SMOKE_CONVERSATION_ID: ${{ secrets.SMOKE_CONVERSATION_ID }}
@@ -33,8 +55,7 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           INNGEST_EVENT_KEY: ${{ secrets.INNGEST_EVENT_KEY }}
         run: npm run smoke:agent
-      - name: Smoke queue E2E (optional)
-        if: ${{ secrets.SMOKE_PROJECT_ID != '' }}
+      - name: Smoke queue E2E
         env:
           SMOKE_PROJECT_ID: ${{ secrets.SMOKE_PROJECT_ID }}
           SMOKE_CONVERSATION_ID: ${{ secrets.SMOKE_CONVERSATION_ID }}
@@ -43,3 +64,8 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           INNGEST_EVENT_KEY: ${{ secrets.INNGEST_EVENT_KEY }}
         run: npm run smoke:queue
+      - name: No stale agent runs after smoke
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: npm run check:stale-runs
