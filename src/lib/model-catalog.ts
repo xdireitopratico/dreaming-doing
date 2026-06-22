@@ -5,6 +5,13 @@
  * Só modelos sem API dedicada no app usam env openrouter (ex.: Zhipu).
  */
 import { providerWire } from "@/lib/ai-provider-registry";
+import {
+  normalizePresetId as normalizePresetIdContract,
+  PLATFORM_ROBIN_TASTE_PRESET_ID,
+  slugToPresetId,
+} from "@/lib/preset-contract";
+
+export { normalizePresetIdContract as normalizePresetId, PLATFORM_ROBIN_TASTE_PRESET_ID };
 
 export type AiEnvId =
   | "alibaba"
@@ -302,6 +309,17 @@ function apiModelForEnv(env: AiEnvId | string, slug: string): string {
   if (env === "xiaomi") {
     return bare.includes("v2-5") || bare.includes("v2.5") ? "mimo-v2.5-pro" : bare;
   }
+  if (env === "deepseek") {
+    return "deepseek-chat";
+  }
+  if (env === "alibaba") {
+    if (bare.includes("qwen3.7-max") || bare.includes("qwen3-7-max")) return "qwen-max";
+    if (bare.includes("qwen3.7-plus") || bare.includes("qwen3-7-plus")) return "qwen-plus";
+    if (bare.includes("qwen3.6-plus") || bare.includes("qwen3-6-plus")) return "qwen-plus";
+    if (bare.includes("qwen3.6-flash") || bare.includes("qwen3-6-flash")) return "qwen-turbo";
+    if (bare.includes("coder")) return "qwen-coder-plus";
+    return bare;
+  }
   return bare;
 }
 
@@ -380,7 +398,7 @@ function wireForEnv(env: AiEnvId | string): {
 }
 
 function slugToId(slug: string): string {
-  return slug.replace(/\//g, "--").replace(/\./g, "-");
+  return slugToPresetId(slug);
 }
 
 function buildPreset(row: RankedInput): ForgeModelPreset {
@@ -634,9 +652,6 @@ const RANKED: RankedInput[] = [
 /** Ranking completo — Estúdio IA em /models */
 export const RANKED_MODEL_PRESETS: ForgeModelPreset[] = RANKED.map(buildPreset);
 
-/** Gosto da plataforma no pool ROBIN NVIDIA — único preset “taste” do FORGE */
-export const PLATFORM_ROBIN_TASTE_PRESET_ID = "pool-nemotron-ultra-550b";
-
 /** Pool ROBIN — APIs nativas Groq/NVIDIA (usuário escolhe; sem default silencioso) */
 const NATIVE_POOL: ForgeModelPreset[] = [
   {
@@ -743,19 +758,6 @@ export const EDITOR_MODEL_PRESETS = RANKED_MODEL_PRESETS.filter(
   (p) => p.editorPick || p.recommended,
 );
 
-const LEGACY_PRESET_IDS: Record<string, string> = {
-  "or-anthropic--claude-sonnet-4-6": slugToId("anthropic/claude-sonnet-4-6"),
-  "anthropic-sonnet": slugToId("anthropic/claude-sonnet-4-6"),
-  "anthropic-opus": slugToId("anthropic/claude-opus-4-8"),
-  "xai-grok3": slugToId("xai/grok-4.3"),
-  "groq-llama70": "pool-groq-flash",
-  "pool-groq-flash": "pool-groq-flash",
-  "nvidia-llama70": PLATFORM_ROBIN_TASTE_PRESET_ID,
-  "pool-nemotron-super": PLATFORM_ROBIN_TASTE_PRESET_ID,
-  "nvidia/nemotron-3-ultra-550b-a55b": PLATFORM_ROBIN_TASTE_PRESET_ID,
-  "nvidia/nemotron-3-ultra-550b": "nvidia--nemotron-3-ultra-550b",
-};
-
 export {
   STT_OPTIONS,
   STT_DEFAULT_PROVIDER,
@@ -781,13 +783,8 @@ export const UNCONFIGURED_PRESET: ForgeModelPreset = {
   secretKey: "OPENROUTER_API_KEY",
 };
 
-export function normalizePresetId(id?: string): string {
-  if (!id?.trim()) return "";
-  return LEGACY_PRESET_IDS[id] ?? id;
-}
-
 export function getPresetById(id?: string, userModels?: UserModelEntry[]): ForgeModelPreset {
-  const norm = normalizePresetId(id);
+  const norm = normalizePresetIdContract(id);
   if (!norm) return UNCONFIGURED_PRESET;
   const catalog = PRESET_BY_ID.get(norm);
   if (catalog) return catalog;

@@ -3,19 +3,7 @@
  */
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import type { AgentPreferencesPayload } from "./connector-keys.ts";
-
-const LEGACY_PRESET_IDS: Record<string, string> = {
-  "groq-llama70": "pool-groq-flash",
-  "nvidia-llama70": "pool-nemotron-ultra-550b",
-  "pool-nemotron-super": "pool-nemotron-ultra-550b",
-  "nvidia/nemotron-3-ultra-550b-a55b": "pool-nemotron-ultra-550b",
-  "nvidia/nemotron-3-ultra-550b": "nvidia--nemotron-3-ultra-550b",
-};
-
-function normalizePresetId(id?: string): string {
-  if (!id?.trim()) return "";
-  return LEGACY_PRESET_IDS[id] ?? id;
-}
+import { normalizePresetId } from "../_shared/preset-contract.ts";
 
 type UserModelEntry = { slug: string; env: string; label?: string };
 

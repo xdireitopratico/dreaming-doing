@@ -512,7 +512,7 @@ function ModelStep({
             onChangePrefs({
               ...prefs,
               mode: "fixed",
-              fixedPresetId: prefs.fixedPresetId ?? "anthropic/claude-sonnet-4-5",
+              fixedPresetId: prefs.fixedPresetId ?? "anthropic--claude-sonnet-4-6",
             })
           }
         />

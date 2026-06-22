@@ -1,6 +1,10 @@
 /** Presets — sync com src/lib/model-catalog.ts (IDs = slug com / → --) */
 
 import {
+  normalizePresetId,
+  PLATFORM_ROBIN_TASTE_PRESET_ID,
+} from "./preset-contract.ts";
+import {
   customProviderBaseUrlKey,
   wireFromProviderEntry,
 } from "./provider-wire.ts";
@@ -283,21 +287,7 @@ const PRESETS: Record<string, PresetWire> = {
   "ollama--mistral": ollama("mistral", "Mistral"),
 };
 
-/** Gosto da plataforma — único preset ROBIN NVIDIA do FORGE */
-export const PLATFORM_ROBIN_TASTE_PRESET_ID = "pool-nemotron-ultra-550b";
-
-const LEGACY: Record<string, string> = {
-  "groq-llama70": "pool-groq-flash",
-  "nvidia-llama70": PLATFORM_ROBIN_TASTE_PRESET_ID,
-  "pool-nemotron-super": PLATFORM_ROBIN_TASTE_PRESET_ID,
-  "nvidia/nemotron-3-ultra-550b-a55b": PLATFORM_ROBIN_TASTE_PRESET_ID,
-  "nvidia/nemotron-3-ultra-550b": "nvidia--nemotron-3-ultra-550b",
-};
-
-export function normalizePresetId(id?: string): string {
-  if (!id?.trim()) return "";
-  return LEGACY[id] ?? id;
-}
+export { PLATFORM_ROBIN_TASTE_PRESET_ID };
 
 export function getPresetWire(id?: string): PresetWire | null {
   const key = normalizePresetId(id);

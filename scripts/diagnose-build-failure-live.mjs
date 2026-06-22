@@ -131,7 +131,7 @@ async function main() {
       mode: "build",
       preferences: {
         mode: "fixed",
-        fixedPresetId: "nvidia/qwen3.5-397b-a17b",
+        fixedPresetId: "qwen--qwen3-5-397b-a17b",
       },
     },
   });

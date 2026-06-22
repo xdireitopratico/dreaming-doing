@@ -189,6 +189,52 @@ export function wireFromProviderEntry(entry: {
     };
   }
 
+  if (entry.env === "minimax") {
+    const bare = bareModelFromSlug(entry.env, slug);
+    let model = "MiniMax-M3";
+    if (bare.includes("m3")) model = "MiniMax-M3";
+    else if (bare.includes("2.7")) model = "MiniMax-M2.7";
+    else if (bare.includes("2.5")) model = "MiniMax-M2.5";
+    return {
+      provider: spec.provider,
+      model,
+      label,
+      secretKey: spec.secretKey,
+      baseUrl: spec.baseUrl,
+    };
+  }
+
+  if (entry.env === "moonshotai") {
+    const bare = bareModelFromSlug(entry.env, slug);
+    let model = bare.replace(/-/g, ".");
+    if (bare.includes("k2.6") || bare.includes("k2-6")) model = "kimi-k2.6";
+    else if (bare.includes("k2.5") || bare.includes("k2-5")) model = "kimi-k2.5";
+    return {
+      provider: spec.provider,
+      model,
+      label,
+      secretKey: spec.secretKey,
+      baseUrl: spec.baseUrl,
+    };
+  }
+
+  if (entry.env === "alibaba") {
+    const bare = bareModelFromSlug(entry.env, slug);
+    let model = bare;
+    if (bare.includes("qwen3.7-max") || bare.includes("qwen3-7-max")) model = "qwen-max";
+    else if (bare.includes("qwen3.7-plus") || bare.includes("qwen3-7-plus")) model = "qwen-plus";
+    else if (bare.includes("qwen3.6-plus") || bare.includes("qwen3-6-plus")) model = "qwen-plus";
+    else if (bare.includes("qwen3.6-flash") || bare.includes("qwen3-6-flash")) model = "qwen-turbo";
+    else if (bare.includes("coder")) model = "qwen-coder-plus";
+    return {
+      provider: spec.provider,
+      model,
+      label,
+      secretKey: spec.secretKey,
+      baseUrl: spec.baseUrl,
+    };
+  }
+
   if (entry.env === "ollama") {
     const model = slug.includes("/") ? (slug.split("/").pop() ?? slug) : slug;
     return { provider: "ollama", model, label, secretKey: spec.secretKey };
