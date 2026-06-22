@@ -4,13 +4,12 @@
  * Flow: POST agent-run → { runId } → subscribe postgres_changes.
  * One-time catch-up on subscribe; no polling.
  */
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { getSupabaseEnv } from "@/lib/supabase-env";
 import { loadAgentPreferences } from "@/lib/agent-preferences";
 import { loadAgentSessionExtensions } from "@/lib/agent-session-extensions";
 import type { ForgeSessionKind, TasteAction } from "@/lib/taste";
-import { formatAgentFetchError, formatAgentHttpError } from "@/lib/agent-fetch-errors";
+import { formatAgentFetchError } from "@/lib/agent-fetch-errors";
 import { releaseAgentConnect, tryAcquireAgentConnect } from "@/lib/agent-session-guards";
 import { logEditorTelemetryEvent } from "@/lib/editor-telemetry";
 import { cancelAgentRun } from "@/lib/agent-cancel";
@@ -18,13 +17,11 @@ import {
   type AgentConnectOptions,
   type AgentProgress,
   applyAgentProgressEvent,
-  awaitingKindFromRunMeta,
   initialAgentProgress,
   streamRowToSSEEvent,
 } from "@/lib/agent-progress";
 import { dispatchTasteUiAction, isTasteUiAction } from "@/lib/taste-ui-actions";
 import { PENDING_RUN_ID } from "@/lib/pending-run-id";
-import { hasTurnVisibleContent } from "@/lib/chat/turn-display";
 import { shouldRetainLiveRunSlot } from "@/lib/live-run-overlay";
 import { isAssistantRunMaterialized } from "@/lib/assistant-materialized";
 import { inspectorProgressWeight } from "@/lib/assistant-run-progress";
@@ -34,98 +31,25 @@ import { parseAgentBusyResponse } from "@/lib/agent-busy";
 
 import type { PendingQueueItem } from "@/components/editor/PendingQueuePanel";
 import { shouldRestoreLiveRun } from "@/lib/agent-snapshot-restore";
-import { clientStaleStreamMs } from "@/lib/agent-stale-thresholds";
-import { emitStreamingTelemetry, setStreamingTelemetryContext } from "@/lib/streaming-telemetry";
-
-function freezeWorkingDuration(next: AgentProgress, startedAtMs: number | null): AgentProgress {
-  if (next.workingDurationMs != null || !startedAtMs) return next;
-  if (!hasTurnVisibleContent(next)) return next;
-  return {
-    ...next,
-    workingDurationMs: Math.max(1000, Date.now() - startedAtMs),
-  };
-}
+import { setStreamingTelemetryContext } from "@/lib/streaming-telemetry";
+import {
+  formatQueueBlockReason,
+  parseErrorResponse,
+  postAgentRun,
+} from "@/hooks/agent-run/agent-run-connect";
+import {
+  clearAgentSnapshot,
+  loadAgentSnapshot,
+  saveAgentSnapshot,
+  SNAPSHOT_MAX_AGE_MS,
+} from "@/hooks/agent-run/agent-run-snapshot";
+import { createRunSubscriptionHandlers } from "@/hooks/agent-run/agent-run-subscribe";
+import {
+  createStreamRowHandlers,
+  type AgentStreamRow,
+} from "@/hooks/agent-run/agent-run-stream";
 
 export type AgentConnectResult = { ok: true } | { ok: false; error: string; busy?: AgentBusyInfo };
-
-function formatQueueBlockReason(reason?: string): string | null {
-  if (!reason) return null;
-  if (reason.startsWith("blocking_run:")) {
-    return "Agente ainda em execução — a fila processa quando liberar (ou após ~5 min sem atividade).";
-  }
-  if (reason === "inngest_failed") {
-    return "Falha ao disparar o worker — verifique INNGEST_EVENT_KEY no servidor.";
-  }
-  if (reason === "lock_failed") {
-    return "Não foi possível adquirir lock do agente — tente Processar de novo.";
-  }
-  if (reason === "taste_limit") {
-    return "Limite Taste Chat atingido — configure API em /api.";
-  }
-  return reason;
-}
-
-const TERMINAL_STATUSES = new Set(["completed", "failed", "canceled", "awaiting_user"]);
-
-const SESSION_STORAGE_KEY = "forge:agent-snapshot";
-const SNAPSHOT_MAX_AGE_MS = 30 * 60 * 1000;
-
-function saveAgentSnapshot(snapshot: {
-  projectId: string;
-  conversationId: string;
-  activeRunId: string | null;
-  lastSeq: number;
-  progress: AgentProgress;
-}) {
-  try {
-    const payload = JSON.stringify({ ...snapshot, timestamp: Date.now() });
-    sessionStorage.setItem(SESSION_STORAGE_KEY, payload);
-  } catch {
-    // ignore quota exceeded
-  }
-}
-
-function loadAgentSnapshot(): {
-  projectId?: string;
-  conversationId?: string;
-  activeRunId: string | null;
-  lastSeq: number;
-  progress: AgentProgress;
-  timestamp: number;
-} | null {
-  try {
-    const raw = sessionStorage.getItem(SESSION_STORAGE_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as ReturnType<typeof loadAgentSnapshot>;
-    if (!parsed || typeof parsed.timestamp !== "number") return null;
-    return parsed;
-  } catch {
-    return null;
-  }
-}
-
-function clearAgentSnapshot() {
-  try {
-    sessionStorage.removeItem(SESSION_STORAGE_KEY);
-  } catch {
-    // ignore
-  }
-}
-
-async function parseErrorResponse(res: Response): Promise<string> {
-  const txt = await res.text().catch(() => "");
-  try {
-    const body = JSON.parse(txt) as {
-      error?: string;
-      message?: string;
-      code?: string;
-    };
-    const raw = body.error ?? body.message ?? txt.slice(0, 280);
-    return formatAgentHttpError(raw, body.code);
-  } catch {
-    return txt.slice(0, 280) || `HTTP ${res.status}`;
-  }
-}
 
 export type {
   AgentConnectOptions,
@@ -156,15 +80,7 @@ export function useAgentRun() {
   // pode aplicar rows com seq > lastSeqRef enquanto Realtime entrega uma row
   // nova, e o resultado depende da ordem de resolução dos dois `await`.
   const streamProcessingRef = useRef(false);
-  const streamBufferRef = useRef<
-    Array<{
-      seq: number;
-      event_type: string;
-      payload: Record<string, unknown>;
-      created_at?: string;
-      run_id?: string;
-    }>
-  >([]);
+  const streamBufferRef = useRef<AgentStreamRow[]>([]);
 
   useEffect(() => {
     pendingQueueCountRef.current = progress.pendingQueueCount ?? 0;
@@ -237,7 +153,6 @@ export function useAgentRun() {
   const stalePollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const reconnectAttemptsRef = useRef(0);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const MAX_REALTIME_RECONNECT = 3;
 
   // Libera slot live só quando não há conteúdo a mostrar até o DB materializar.
   useEffect(() => {
@@ -277,429 +192,43 @@ export function useAgentRun() {
     return () => clearTimeout(timer);
   }, [progress, saveSnapshot]);
 
-  const applyStreamRow = useCallback(
-    (row: {
-      seq: number;
-      event_type: string;
-      payload: Record<string, unknown>;
-      created_at?: string;
-      run_id?: string;
-    }): boolean => {
-      const event = streamRowToSSEEvent(row);
-      const t = event.type;
-      // Fase 1.3 — bypass por runId, não por lastSeq.
-      // Antes: `t === "start" && lastSeqRef.current === 0` deixava start
-      // atrasado entrar, mas se catchup já tinha setado lastSeq=5, uma start
-      // event do novo runId era descartada como duplicada. Agora: se o runId
-      // da row é diferente do runId ativo, reseta lastSeq (mudança de run)
-      // e aceita o start.
-      const rowRunId = row.run_id;
-      const activeId = runIdRef.current;
-      if (rowRunId && activeId && rowRunId !== activeId && t === "start") {
-        lastSeqRef.current = 0;
-      }
-      if (row.seq <= lastSeqRef.current) {
-        emitStreamingTelemetry("agent.stream_seq_dropped", {
-          seq: row.seq,
-          lastSeq: lastSeqRef.current,
-          eventType: t,
-        });
-        return false;
-      }
-      // Detecta gap (espera-se contíguo: lastSeqRef+1 === row.seq)
-      if (row.seq > lastSeqRef.current + 1) {
-        emitStreamingTelemetry("agent.stream_seq_gap", {
-          lastSeq: lastSeqRef.current,
-          receivedSeq: row.seq,
-          gap: row.seq - lastSeqRef.current - 1,
-        });
-      }
-      lastSeqRef.current = row.seq;
-      emitStreamingTelemetry("agent.stream_seq_processed", {
-        seq: row.seq,
-        eventType: t,
-      });
-      const terminal = t === "finish" || t === "canceled" || t === "error" || t === "done";
-      setProgress((prev) => {
-        let next = applyAgentProgressEvent(prev, event);
-        next = freezeWorkingDuration(next, activeRunStartedAtMsRef.current);
-        return next;
-      });
-      // Nota: activeRunStartedAtMs é limpo em syncRunStatus/releaseLiveRunSlot,
-      // não aqui, para evitar race onde freezeWorkingDuration perde o ref
-      // antes de poder congelar workingDurationMs.
-      return terminal;
-    },
+  const { enqueueStreamRow } = useMemo(
+    () =>
+      createStreamRowHandlers(
+        {
+          runIdRef,
+          lastSeqRef,
+          activeRunStartedAtMsRef,
+          streamProcessingRef,
+          streamBufferRef,
+        },
+        setProgress,
+      ),
     [],
   );
 
-  // Fase 1.2 — serializa aplicação de rows entre catchup (async) e Realtime
-  // (sync delivery). Cada row entra por enqueueStreamRow, que checa o mutex:
-  // se ninguém está processando, processa; senão, enfileira. Quando termina,
-  // drena o buffer até esvaziar.
-  const enqueueStreamRow = useCallback(
-    (row: {
-      seq: number;
-      event_type: string;
-      payload: Record<string, unknown>;
-      created_at?: string;
-      run_id?: string;
-    }): boolean => {
-      if (streamProcessingRef.current) {
-        streamBufferRef.current.push(row);
-        return false;
-      }
-      streamProcessingRef.current = true;
-      try {
-        const isTerminal = applyStreamRow(row);
-        // Drena o buffer em ordem, mas só aplica rows do mesmo runId ativo
-        // (rows de runs antigos são descartadas —它们的 runId não bate).
-        while (streamBufferRef.current.length > 0) {
-          const next = streamBufferRef.current.shift()!;
-          if (next.run_id && runIdRef.current && next.run_id !== runIdRef.current) {
-            continue;
-          }
-          applyStreamRow(next);
-        }
-        return isTerminal;
-      } finally {
-        streamProcessingRef.current = false;
-      }
-    },
-    [applyStreamRow],
-  );
-
-  const teardownChannels = useCallback(() => {
-    if (reconnectTimerRef.current) {
-      clearTimeout(reconnectTimerRef.current);
-      reconnectTimerRef.current = null;
-    }
-    if (stalePollRef.current) {
-      clearInterval(stalePollRef.current);
-      stalePollRef.current = null;
-    }
-    if (eventChannelRef.current) {
-      void supabase.removeChannel(eventChannelRef.current);
-      eventChannelRef.current = null;
-    }
-    if (statusChannelRef.current) {
-      void supabase.removeChannel(statusChannelRef.current);
-      statusChannelRef.current = null;
-    }
-    setConnected(false);
-  }, []);
-
-  const syncRunStatus = useCallback(
-    (
-      status: string,
-      error: string | null,
-      streamText?: string | null,
-      runMeta?: Record<string, unknown> | null,
-    ) => {
-      setProgress((p) => {
-        let next: AgentProgress;
-        if (status === "awaiting_user") {
-          const fromMeta = awaitingKindFromRunMeta(runMeta);
-          const planPending =
-            fromMeta === "plan_approval" ||
-            p.awaitingKind === "plan_approval" ||
-            (p.pendingPlan?.steps?.length ?? 0) > 0;
-          next = {
-            ...p,
-            finished: true,
-            awaiting: true,
-            awaitingKind: fromMeta ?? (planPending ? "plan_approval" : "clarify"),
-          };
-        } else if (status === "canceled") {
-          next = {
-            ...p,
-            finished: true,
-            canceled: true,
-            resumable: false,
-            error: error ?? p.error,
-          };
-        } else if (status === "completed") {
-          next = {
-            ...p,
-            finished: true,
-            lastFinishOk: p.lastFinishOk === false ? false : (p.lastFinishOk ?? true),
-            resumable: false,
-          };
-        } else if (status === "failed") {
-          next = {
-            ...p,
-            finished: true,
-            lastFinishOk: false,
-            error: error ?? p.error ?? "Agente falhou",
-            resumable: false,
-          };
-        } else {
-          return p;
-        }
-        const merged = {
-          ...next,
-          streamText: streamText ?? next.streamText ?? next.summary ?? p.streamText,
-        };
-        return freezeWorkingDuration(merged, activeRunStartedAtMsRef.current);
-      });
-      setActiveRunStartedAtMs(null);
-      teardownChannels();
-      setConnected(false);
-      setProgress((p) => {
-        if (!shouldRetainLiveRunSlot(p) && runIdRef.current) {
-          releaseLiveRunSlot(runIdRef.current);
-          if (status !== "awaiting_user") {
-            clearAgentSnapshot();
-          }
-        }
-        return p;
-      });
-    },
-    [teardownChannels, releaseLiveRunSlot],
-  );
-
-  const catchUpRun = useCallback(
-    async (runId: string): Promise<boolean> => {
-      const { data: rows, error } = await supabase
-        .from("agent_stream_events")
-        .select("seq, event_type, payload, created_at")
-        .eq("run_id", runId)
-        .gt("seq", lastSeqRef.current)
-        .order("seq", { ascending: true });
-
-      if (error) {
-        logEditorTelemetryEvent("agent_run", "catchup_error", "warn", error.message.slice(0, 120));
-      }
-
-      let terminal = false;
-      for (const row of rows ?? []) {
-        if (
-          enqueueStreamRow({
-            seq: row.seq as number,
-            event_type: row.event_type as string,
-            payload: (row.payload ?? {}) as Record<string, unknown>,
-            created_at: row.created_at as string | undefined,
-            run_id: runId,
-          })
-        ) {
-          terminal = true;
-        }
-      }
-
-      const { data: run } = await supabase
-        .from("agent_runs")
-        .select("status, error, canceled_at, meta, heartbeat_at, started_at")
-        .eq("id", runId)
-        .maybeSingle();
-
-      const runMeta = (run?.meta ?? null) as Record<string, unknown> | null;
-
-      if (run?.canceled_at || run?.status === "canceled") {
-        syncRunStatus("canceled", run.error, undefined, runMeta);
-        return true;
-      }
-      if (run?.status && TERMINAL_STATUSES.has(run.status)) {
-        syncRunStatus(run.status, run.error, undefined, runMeta);
-        return true;
-      }
-
-      if (run?.status === "running" || run?.status === "pending") {
-        const lastRow = rows?.[rows.length - 1];
-        const lastActivity =
-          (lastRow?.created_at as string | undefined) ??
-          (run.heartbeat_at as string | null) ??
-          (run.started_at as string | null);
-        const staleMs = clientStaleStreamMs(pendingQueueCountRef.current);
-        const stale = lastActivity && Date.now() - new Date(lastActivity).getTime() > staleMs;
-        if (stale) {
-          const meta = (run.meta ?? {}) as Record<string, unknown>;
-          const resumable = meta.checkpoint === true || meta.resume === true;
-          const error =
-            (run.error as string | null) ??
-            (resumable
-              ? "Execução interrompida — use Continuar para retomar do checkpoint."
-              : "Execução interrompida — envie outra mensagem para tentar de novo.");
-          logEditorTelemetryEvent("agent_run", "stale_stream_detected", "warn", runId.slice(0, 8));
-          const finishEvent = {
-            type: "finish",
-            data: { ok: false, resumable, error, stale: true },
-            timestamp: Date.now(),
-          };
-          setProgress((p) => applyAgentProgressEvent(p, finishEvent));
-          teardownChannels();
-          setConnected(false);
-          setProgress((p) => {
-            if (!shouldRetainLiveRunSlot(p) && runIdRef.current === runId) {
-              releaseLiveRunSlot(runId);
-            }
-            return p;
-          });
-          return true;
-        }
-      }
-
-      return terminal;
-    },
-    [applyStreamRow, syncRunStatus, teardownChannels, releaseLiveRunSlot],
-  );
-
-  const subscribeToRun = useCallback(
-    async (runId: string, opts?: { resetProgress?: boolean }) => {
-      const isSame = runIdRef.current === runId;
-      if (isSame && eventChannelRef.current) {
-        // Idempotent channels per runId for rapid successive runs (no teardown/reset on re-sub for same;
-        // avoids losing events or resetting seq on coordinator/orchestration re-watch).
-        setConnected(true);
-        setQueueBlockingReason(null);
-        return;
-      }
-      if (!isSame) {
-        // Bug #11: descarta rows da run antiga que estavam no buffer.
-        // Sem isso, enqueueStreamRow aplica rows de run morta contra
-        // o novo lastSeq=0 e dispara stream_seq_gap fantasma.
-        streamBufferRef.current = [];
-        teardownChannels();
-      }
-      runIdRef.current = runId;
-      setActiveRunId(runId);
-      setQueueBlockingReason(null);
-      if (!isSame && opts?.resetProgress !== false) {
-        lastSeqRef.current = 0;
-        setProgress({
-          ...initialAgentProgress,
-          statusHint: "Conectando ao agente…",
-        });
-      } else if (!isSame) {
-        lastSeqRef.current = 0;
-      }
-
-      setConnected(true);
-
-      const terminal = await catchUpRun(runId);
-      if (terminal) return;
-
-      const eventChannel = supabase
-        .channel(`agent-events-${runId}`)
-        .on(
-          "postgres_changes",
-          {
-            event: "INSERT",
-            schema: "public",
-            table: "agent_stream_events",
-            filter: `run_id=eq.${runId}`,
-          },
-          (payload) => {
-            if (runIdRef.current !== runId) return; // stale callback from prior subscription's channel (rapid run switch/terminal-while-second); closed-over runId is per-listener subscribe value. Prevents old listener apply/teardown stomping current run's live state or refs.
-            const row = payload.new as {
-              seq: number;
-              event_type: string;
-              payload: Record<string, unknown>;
-              created_at?: string;
-              run_id?: string;
-            };
-            if (enqueueStreamRow(row)) {
-              teardownChannels();
-              setConnected(false);
-              setProgress((p) => {
-                if (!shouldRetainLiveRunSlot(p) && runIdRef.current === runId) {
-                  releaseLiveRunSlot(runId);
-                }
-                return p;
-              });
-            }
-          },
-        )
-        .subscribe((status) => {
-          if (status === "SUBSCRIBED") {
-            reconnectAttemptsRef.current = 0;
-            emitStreamingTelemetry("agent.realtime_reconnected", { runId: runId.slice(0, 8) });
-            setProgress((p) => ({ ...p, connectionState: "connected" }));
-          }
-          if (
-            (status === "CHANNEL_ERROR" || status === "TIMED_OUT") &&
-            runIdRef.current === runId
-          ) {
-            emitStreamingTelemetry("agent.realtime_channel_error", {
-              runId: runId.slice(0, 8),
-              status,
-              attempt: reconnectAttemptsRef.current + 1,
-            });
-            setProgress((p) => ({ ...p, connectionState: "reconnecting" }));
-            if (reconnectAttemptsRef.current >= MAX_REALTIME_RECONNECT) {
-              setProgress((p) => ({ ...p, connectionState: "disconnected" }));
-              return;
-            }
-            reconnectAttemptsRef.current += 1;
-            const delay = Math.min(500 * 2 ** reconnectAttemptsRef.current, 8000);
-            emitStreamingTelemetry("agent.realtime_reconnect", {
-              runId: runId.slice(0, 8),
-              attempt: reconnectAttemptsRef.current,
-              delayMs: delay,
-            });
-            logEditorTelemetryEvent(
-              "agent_run",
-              "realtime_reconnect",
-              "warn",
-              `${runId.slice(0, 8)}:${reconnectAttemptsRef.current}`,
-            );
-            if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
-            reconnectTimerRef.current = setTimeout(() => {
-              if (runIdRef.current !== runId) return;
-              void catchUpRun(runId).then(() => {
-                if (runIdRef.current !== runId) return;
-                if (eventChannelRef.current) {
-                  void supabase.removeChannel(eventChannelRef.current);
-                  eventChannelRef.current = null;
-                }
-                if (statusChannelRef.current) {
-                  void supabase.removeChannel(statusChannelRef.current);
-                  statusChannelRef.current = null;
-                }
-                void subscribeToRun(runId, { resetProgress: false });
-              });
-            }, delay);
-          }
-        });
-      eventChannelRef.current = eventChannel;
-
-      const statusChannel = supabase
-        .channel(`agent-status-${runId}`)
-        .on(
-          "postgres_changes",
-          {
-            event: "UPDATE",
-            schema: "public",
-            table: "agent_runs",
-            filter: `id=eq.${runId}`,
-          },
-          async (payload) => {
-            if (runIdRef.current !== runId) return; // stale callback from prior subscription's channel (rapid successive runs, terminal on first while second running); closed-over runId per this listener. Prevents cross-run catchUp (on live ref) or sync of old row's terminal status (which would stomp progress for new runId).
-            const row = payload.new as {
-              status: string;
-              error: string | null;
-              canceled_at: string | null;
-              meta?: Record<string, unknown> | null;
-            };
-            if (!runIdRef.current) return;
-            await catchUpRun(runIdRef.current);
-            const runMeta = (row.meta ?? null) as Record<string, unknown> | null;
-            if (row.canceled_at || row.status === "canceled") {
-              syncRunStatus("canceled", row.error, undefined, runMeta);
-            } else if (TERMINAL_STATUSES.has(row.status)) {
-              syncRunStatus(row.status, row.error, undefined, runMeta);
-            }
-          },
-        )
-        .subscribe();
-      statusChannelRef.current = statusChannel;
-
-      if (stalePollRef.current) clearInterval(stalePollRef.current);
-      stalePollRef.current = setInterval(() => {
-        if (!runIdRef.current) return;
-        void catchUpRun(runIdRef.current);
-      }, 12_000);
-    },
-    [applyStreamRow, catchUpRun, syncRunStatus, teardownChannels, releaseLiveRunSlot],
+  const { teardownChannels, catchUpRun, subscribeToRun } = useMemo(
+    () =>
+      createRunSubscriptionHandlers({
+        runIdRef,
+        lastSeqRef,
+        pendingQueueCountRef,
+        activeRunStartedAtMsRef,
+        streamBufferRef,
+        eventChannelRef,
+        statusChannelRef,
+        stalePollRef,
+        reconnectAttemptsRef,
+        reconnectTimerRef,
+        setProgress,
+        setConnected,
+        setActiveRunId,
+        setActiveRunStartedAtMs,
+        setQueueBlockingReason,
+        enqueueStreamRow,
+        releaseLiveRunSlot,
+      }),
+    [enqueueStreamRow, releaseLiveRunSlot],
   );
 
   useEffect(() => {
@@ -707,30 +236,6 @@ export function useAgentRun() {
       teardownChannels();
     };
   }, [teardownChannels]);
-
-  const postAgentRun = useCallback(async (body: Record<string, unknown>): Promise<Response> => {
-    const { url, publishableKey } = getSupabaseEnv();
-    if (!url || !publishableKey) {
-      throw new Error(
-        "Supabase não configurado. Verifique VITE_SUPABASE_URL e VITE_SUPABASE_PUBLISHABLE_KEY.",
-      );
-    }
-    const { data: sess } = await supabase.auth.getSession();
-    const accessToken = sess.session?.access_token;
-    if (!accessToken) {
-      throw new Error("Sessão expirada. Faça login novamente.");
-    }
-
-    return fetch(`${url}/functions/v1/agent-run`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${accessToken}`,
-        apikey: publishableKey,
-      },
-      body: JSON.stringify(body),
-    });
-  }, []);
 
   const refreshPendingQueue = useCallback(
     async (projectId: string, conversationId: string) => {
