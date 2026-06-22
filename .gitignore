@@ -55,3 +55,4 @@ deno.lock
 .windsurf/
 .github/instructions/
 .cursor/
+.mimocode/
