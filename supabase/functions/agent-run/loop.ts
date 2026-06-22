@@ -29,17 +29,11 @@ import {
 } from "./tools/meta.ts";
 import { MAX_CHUNK_GENERATIONS } from "../_shared/agent-chunk-limits.ts";
 
-import { logger } from "../_shared/logger.ts";
-
-import { buildExecutionLogMeta } from "./executionLogMeta.ts";
-
-import { checkpointChatText } from "./checkpoint-chat.ts";
 import {
   auditDesignInventory,
   needsDesignPreflight,
   runDesignPreflight,
 } from "./design-preflight.ts";
-import { type CheckpointExtra, serializeCheckpointPayload } from "./checkpoint.ts";
 import type { ProviderConfig } from "./providers.ts";
 import type { AgentPreferencesPayload } from "./connector-keys.ts";
 import { resolveAutoForComplexity } from "../_shared/model-presets.ts";
@@ -47,14 +41,23 @@ import { ResilientLLM } from "./robin-pool.ts";
 import { formatLoopStatus, type LoopUpdateContext } from "./loop-status.ts";
 import { type AgentStateData, applyTransition, isTerminal } from "./agent-fsm.ts";
 import { RuntimeEmitter, type StreamCallback } from "./runtime/emitter.ts";
-import { capMetaSize, readLoopBudgetMsFromRuntime } from "./runtime/loop-config.ts";
+import { readLoopBudgetMsFromRuntime } from "./runtime/loop-config.ts";
 import {
   buildBuildAgentSystemPrompt,
   buildBuildContextBlock,
   chatBuildModeLlm,
 } from "./runtime/llm-chat.ts";
-import { buildCardSnapshot as buildCardSnapshotFromTimeline } from "./runtime/phases/snapshot.ts";
 import { runGatherContextPhase } from "./runtime/phases/gather-context.ts";
+import {
+  clearCheckpoint as clearAgentCheckpoint,
+  persistAssistantStep as persistAssistantStepPhase,
+  persistCheckpointChat as persistCheckpointChatPhase,
+  persistFinal as persistFinalPhase,
+  persistPlanFinal as persistPlanFinalPhase,
+  saveCheckpoint as saveAgentCheckpoint,
+  updateAssistantStep as updateAssistantStepPhase,
+  type AgentPersistDeps,
+} from "./runtime/phases/persist.ts";
 import { NarrationPhase } from "./runtime/phases/narration.ts";
 import {
   attemptPlanStuckClosing,
@@ -68,7 +71,6 @@ import {
 import { runBuildExecutePhase } from "./runtime/phases/execute.ts";
 import { runAgentOrchestrator } from "./runtime/phases/orchestrator.ts";
 
-const CHECKPOINT_INTERVAL_STEPS = 2;
 const MAX_LLM_RETRIES = 3;
 
 const LOOP_BUDGET_MS = readLoopBudgetMsFromRuntime();
@@ -481,54 +483,37 @@ export class AgentLoop {
     });
   }
 
+  private buildPersistDeps(): AgentPersistDeps {
+    return {
+      sb: this.sb,
+      runId: this.runId,
+      state: this.state,
+      getLastRunMessageId: () => this.lastRunMessageId,
+      setLastRunMessageId: (id) => {
+        this.lastRunMessageId = id;
+      },
+      getMaxStepsLimit: () => this.maxStepsLimit,
+      getComplexityScore: () => this.complexityScore,
+      touchedPaths: this.touchedPaths,
+      narrationBuffer: this.narration.buffer,
+      tailSlice: (count) => this.emitter.tailSlice(count),
+      getTimeline: () => this.emitter.getTailBuffer().slice(),
+      runStartTime: this.runStartTime,
+      getLastCheckpointStep: () => this.lastCheckpointStep,
+      setLastCheckpointStep: (step) => {
+        this.lastCheckpointStep = step;
+      },
+      emit: (type, data) => this.emit(type, data),
+      loopBudgetMs: LOOP_BUDGET_MS,
+    };
+  }
+
   private async clearCheckpoint(): Promise<void> {
-    try {
-      await this.sb
-        .from("agent_checkpoints")
-        .delete()
-        .eq("project_id", this.state.projectId)
-        .eq("conversation_id", this.state.conversationId);
-    } catch {
-      /* não bloqueia conclusão */
-    }
+    await clearAgentCheckpoint(this.buildPersistDeps());
   }
 
   private async saveCheckpoint(phase: LoopPhase, force = false): Promise<void> {
-    if (!this.runId) return;
-    const step = this.state.currentStepIndex;
-    if (!force && step - this.lastCheckpointStep < CHECKPOINT_INTERVAL_STEPS) {
-      return;
-    }
-    if (Date.now() - this.runStartTime > LOOP_BUDGET_MS) {
-      this.emit("timeout_warning", {
-        message: "Janela de execução concluída — progresso salvo para continuar",
-        elapsedMs: Date.now() - this.runStartTime,
-      });
-    }
-    try {
-      const extra: CheckpointExtra = {
-        complexityScore: this.complexityScore,
-        maxStepsLimit: this.maxStepsLimit,
-      };
-      await this.sb.from("agent_checkpoints").upsert(
-        {
-          project_id: this.state.projectId,
-          conversation_id: this.state.conversationId,
-          phase,
-          state: serializeCheckpointPayload(this.state, extra),
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: "project_id,conversation_id" },
-      );
-      this.lastCheckpointStep = step;
-    } catch (err) {
-      logger.error("agent.checkpoint_save_failed", {
-        runId: this.runId ?? undefined,
-        step,
-        phase: phase as string,
-        error: (err as Error)?.message,
-      });
-    }
+    await saveAgentCheckpoint(this.buildPersistDeps(), phase, force);
   }
 
   private async emitTransition(eventType: string, data?: unknown): Promise<void> {
@@ -911,88 +896,7 @@ export class AgentLoop {
   }
 
   private async persistAssistantStep(response: ChatResponse): Promise<string | null> {
-    const tool_calls = (response.tool_calls ?? []).map((tc) => ({
-      id: tc.id,
-      name: tc.name,
-      args: tc.arguments,
-      status: "running",
-    }));
-    const meta: Record<string, unknown> = {
-      runId: this.runId ?? undefined,
-      step: this.state.currentStepIndex,
-      partial: true,
-    };
-    const stepText = (response.content ?? "").trim();
-
-    const existingId = await this.resolveExistingRunMessageId();
-    if (existingId) {
-      let parts: Array<{ type: string; text: string }> = [];
-      if (stepText) {
-        const { data: existing } = await this.sb
-          .from("messages")
-          .select("parts")
-          .eq("id", existingId)
-          .maybeSingle();
-        const prevParts =
-          (existing as { parts?: Array<{ type?: string; text?: string }> } | null)?.parts ?? [];
-        const prevText = prevParts
-          .filter((p) => p?.type === "text" && typeof p.text === "string")
-          .map((p) => p.text!.trim())
-          .filter(Boolean)
-          .join("\n\n");
-        const merged = [prevText, stepText].filter(Boolean).join("\n\n");
-        parts = merged ? [{ type: "text", text: merged }] : [];
-      }
-      await this.sb
-        .from("messages")
-        .update({
-          ...(parts.length > 0 ? { parts } : {}),
-          tool_calls,
-          meta,
-        })
-        .eq("id", existingId);
-      return existingId;
-    }
-
-    const { data } = await this.sb
-      .from("messages")
-      .insert({
-        conversation_id: this.state.conversationId,
-        role: "assistant",
-        parts: stepText ? [{ type: "text", text: stepText }] : [],
-        tool_calls,
-        meta,
-      })
-      .select("id")
-      .single();
-    const id = data?.id ?? null;
-    if (id) this.lastRunMessageId = id;
-    return id;
-  }
-
-  private async resolveExistingRunMessageId(): Promise<string | null> {
-    if (this.lastRunMessageId) return this.lastRunMessageId;
-    if (!this.runId) return null;
-    try {
-      const query = this.sb
-        .from("messages")
-        .select("id")
-        .eq("conversation_id", this.state.conversationId)
-        .eq("role", "assistant");
-      const filtered =
-        typeof query.filter === "function" ? query.filter("meta->>runId", "eq", this.runId) : query;
-      const ordered =
-        typeof filtered.order === "function"
-          ? filtered.order("created_at", { ascending: false })
-          : filtered;
-      const limited = typeof ordered.limit === "function" ? ordered.limit(1) : ordered;
-      const { data: existing } = await limited.maybeSingle();
-      const id = (existing as { id?: string } | null)?.id ?? null;
-      if (id) this.lastRunMessageId = id;
-      return id;
-    } catch {
-      return null;
-    }
+    return persistAssistantStepPhase(this.buildPersistDeps(), response);
   }
 
   private async updateAssistantStep(
@@ -1001,130 +905,11 @@ export class AgentLoop {
     execResults: Array<{ call: any; result: any }>,
     step: number,
   ): Promise<void> {
-    // H10 fix: sempre atualizar status de TODOS os tool calls (ok/error/running).
-    // Antes, se um tool falhava, ficava "running" pra sempre. Agora,
-    // - se result.ok: "ok"
-    // - se !result.ok: "error" + error message + output resumido
-    // - se não está em execResults (não executou): "running" (legítimo)
-    const execMap = new Map(execResults.map((r) => [r.call.id, r.result]));
-    const tool_calls = (response.tool_calls ?? []).map((tc) => {
-      const result = execMap.get(tc.id);
-      const hasResult = result !== undefined;
-      return {
-        id: tc.id,
-        name: tc.name,
-        args: tc.arguments,
-        status: hasResult ? (result.ok ? "ok" : "error") : "running",
-        error: hasResult ? (result.error ?? null) : null,
-        artifacts: hasResult ? (result.artifacts ?? []) : [],
-      };
-    });
-    const meta = buildExecutionLogMeta(null, this.state.executionLog, step);
-    await this.sb.from("messages").update({ tool_calls, meta }).eq("id", msgId);
-  }
-
-  private buildCardSnapshot(opts: {
-    streamText: string;
-    deliveryFiles: string[];
-    finished?: boolean;
-    lastFinishOk?: boolean | null;
-    awaiting?: boolean;
-    awaitingKind?: "clarify" | "plan_approval" | null;
-    pendingPlan?: ProposedPlan | null;
-    conversational?: boolean;
-    phase?: string | null;
-    currentStep?: number | null;
-    totalSteps?: number | null;
-    error?: string | null;
-    resumable?: boolean;
-  }): Record<string, unknown> {
-    return buildCardSnapshotFromTimeline({
-      timeline: this.emitter.getTailBuffer().slice(),
-      narrationBuffer: this.narration.buffer,
-      runStartTime: this.runStartTime,
-      runId: this.runId,
-      projectId: this.state.projectId,
-      currentStepIndex: this.state.currentStepIndex,
-      maxStepsLimit: this.maxStepsLimit,
-      opts,
-    });
+    await updateAssistantStepPhase(this.buildPersistDeps(), msgId, response, execResults, step);
   }
 
   private async persistCheckpointChat(steps: number, buildFix?: boolean): Promise<void> {
-    const buildFixFlag = buildFix === true;
-    const text = checkpointChatText(this.narration.buffer, buildFixFlag);
-    const deliveryFiles = [...this.touchedPaths];
-    const cardSnapshot = this.buildCardSnapshot({
-      streamText: text,
-      deliveryFiles,
-      finished: false,
-      lastFinishOk: null,
-      resumable: true,
-      phase: this.state.phase,
-      currentStep: steps,
-    });
-    const meta: Record<string, unknown> = {
-      runId: this.runId ?? undefined,
-      partial: false,
-      checkpoint: true,
-      betweenChunks: true,
-      resumable: true,
-      buildFix: buildFixFlag || undefined,
-      deliveryFiles,
-      executionLog: this.state.executionLog,
-      finishedAt: new Date().toISOString(),
-      currentStep: steps,
-      totalSteps: this.maxStepsLimit,
-      streamTail: this.emitter.tailSlice(120),
-      cardSnapshot,
-      latencyThoughtMs:
-        typeof cardSnapshot.latencyThoughtMs === "number"
-          ? cardSnapshot.latencyThoughtMs
-          : undefined,
-      narrationText:
-        typeof cardSnapshot.narrationText === "string" ? cardSnapshot.narrationText : undefined,
-    };
-
-    const existingId = await this.resolveExistingRunMessageId();
-    if (existingId) {
-      const updateData: Record<string, unknown> = {
-        tool_calls: [],
-        meta,
-      };
-      if (text) {
-        updateData.parts = [{ type: "text", text }];
-      }
-      await this.sb.from("messages").update(updateData).eq("id", existingId);
-      await this.sb
-        .from("projects")
-        .update({
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", this.state.projectId);
-      return;
-    }
-
-    if (!text) return;
-
-    const { data } = await this.sb
-      .from("messages")
-      .insert({
-        conversation_id: this.state.conversationId,
-        role: "assistant",
-        parts: [{ type: "text", text }],
-        tool_calls: [],
-        meta,
-      })
-      .select("id")
-      .single();
-    const id = data?.id ?? null;
-    if (id) this.lastRunMessageId = id;
-    await this.sb
-      .from("projects")
-      .update({
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", this.state.projectId);
+    await persistCheckpointChatPhase(this.buildPersistDeps(), steps, buildFix);
   }
 
   private async persistFinal(
@@ -1137,152 +922,11 @@ export class AgentLoop {
       conversational?: boolean;
     },
   ): Promise<void> {
-    const conversational = opts?.conversational === true;
-    const deliveryFiles = [...this.touchedPaths];
-    const closing = summary.trim();
-    const text = conversational ? closing : closing;
-    const lastFinishOk = opts?.lastFinishOk ?? true;
-    const cardSnapshot = this.buildCardSnapshot({
-      streamText: text,
-      deliveryFiles,
-      finished: true,
-      lastFinishOk,
-      awaiting: opts?.awaiting,
-      awaitingKind: opts?.awaitingKind,
-      conversational,
-      phase: opts?.awaiting ? null : "done",
-    });
-    const meta: Record<string, unknown> = {
-      runId: this.runId ?? undefined,
-      partial: false,
-      conversational: conversational || undefined,
-      deliveryFiles,
-      executionLog: this.state.executionLog,
-      finishedAt: new Date().toISOString(),
-      currentStep: this.state.currentStepIndex,
-      totalSteps: this.maxStepsLimit,
-      lastFinishOk,
-      buildFailed: opts?.buildFailed === true || lastFinishOk === false,
-      streamTail: this.emitter.tailSlice(120),
-      cardSnapshot,
-      latencyThoughtMs:
-        typeof cardSnapshot.latencyThoughtMs === "number"
-          ? cardSnapshot.latencyThoughtMs
-          : undefined,
-      narrationText:
-        typeof cardSnapshot.narrationText === "string" ? cardSnapshot.narrationText : undefined,
-    };
-    const cappedMeta = capMetaSize(meta); // H9
-
-    const existingId = await this.resolveExistingRunMessageId();
-    if (existingId) {
-      await this.sb
-        .from("messages")
-        .update({
-          parts: [{ type: "text", text }],
-          tool_calls: [],
-          meta: cappedMeta,
-        })
-        .eq("id", existingId);
-      await this.sb
-        .from("projects")
-        .update({
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", this.state.projectId);
-      return;
-    }
-
-    await this.sb.from("messages").insert({
-      conversation_id: this.state.conversationId,
-      role: "assistant",
-      parts: [{ type: "text", text }],
-      tool_calls: [],
-      meta: cappedMeta,
-    });
-    await this.sb
-      .from("projects")
-      .update({
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", this.state.projectId);
+    await persistFinalPhase(this.buildPersistDeps(), summary, opts);
   }
 
   private async persistPlanFinal(summary: string, plan: ProposedPlan): Promise<void> {
-    const cardSnapshot = this.buildCardSnapshot({
-      streamText: summary,
-      deliveryFiles: [],
-      finished: true,
-      lastFinishOk: true,
-      awaiting: true,
-      awaitingKind: "plan_approval",
-      pendingPlan: plan,
-      phase: null,
-    });
-    const meta: Record<string, unknown> = {
-      runId: this.runId ?? undefined,
-      partial: false,
-      projectId: this.state.projectId,
-      planMode: true,
-      planStatus: "pending",
-      planId: plan.planId,
-      planSummary: plan.summary,
-      planRationale: plan.rationale ?? null,
-      planMission: plan.mission ?? null,
-      planObjective: plan.objective ?? null,
-      planMarkdown: plan.markdown ?? null,
-      planAssumptions: plan.assumptions ?? null,
-      planOutOfScope: plan.outOfScope ?? null,
-      planPhases: plan.phases ?? null,
-      planSteps: plan.steps,
-      finishedAt: new Date().toISOString(),
-      cardSnapshot,
-      latencyThoughtMs:
-        typeof cardSnapshot.latencyThoughtMs === "number"
-          ? cardSnapshot.latencyThoughtMs
-          : undefined,
-      narrationText:
-        typeof cardSnapshot.narrationText === "string" ? cardSnapshot.narrationText : undefined,
-    };
-
-    const existingId = await this.resolveExistingRunMessageId();
-    if (existingId) {
-      await this.sb
-        .from("messages")
-        .update({
-          parts: [{ type: "text", text: summary }],
-          tool_calls: [],
-          meta,
-        })
-        .eq("id", existingId);
-      await this.sb
-        .from("projects")
-        .update({
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", this.state.projectId);
-      return;
-    }
-
-    const { data } = await this.sb
-      .from("messages")
-      .insert({
-        conversation_id: this.state.conversationId,
-        role: "assistant",
-        parts: [{ type: "text", text: summary }],
-        tool_calls: [],
-        meta,
-      })
-      .select("id")
-      .single();
-    const id = data?.id ?? null;
-    if (id) this.lastRunMessageId = id;
-    await this.sb
-      .from("projects")
-      .update({
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", this.state.projectId);
+    await persistPlanFinalPhase(this.buildPersistDeps(), summary, plan);
   }
 
   private enabledApprovedPlanSteps(): PlanStep[] {
