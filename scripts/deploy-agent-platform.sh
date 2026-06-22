@@ -44,9 +44,10 @@ npm run test
 echo "→ build inngest bundle"
 npm run build:inngest
 
-echo "→ deno: agent lifecycle tests"
+echo "→ deno: agent lifecycle + runtime emitter tests"
 deno test --allow-env supabase/functions/_shared/agent-pending-queue.test.ts
 deno test supabase/functions/_shared/run-lifecycle.test.ts
+deno test --allow-env --no-check supabase/functions/agent-run/runtime/emitter.test.ts
 
 echo "→ deploy edge: agent-run"
 supabase functions deploy agent-run --no-verify-jwt

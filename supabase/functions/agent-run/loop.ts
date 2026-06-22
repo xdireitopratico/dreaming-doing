@@ -89,14 +89,8 @@ import type { AgentPreferencesPayload } from "./connector-keys.ts";
 import { resolveAutoForComplexity } from "../_shared/model-presets.ts";
 import { ResilientLLM } from "./robin-pool.ts";
 import { formatLoopStatus, resolveClosureText, type LoopUpdateContext } from "./loop-status.ts";
-import {
-  buildPhaseTaskTitle,
-  describeStepExpectation,
-  extractStepFilePaths,
-} from "../_shared/step-intent.ts";
 import { type AgentStateData, applyTransition, isTerminal } from "./agent-fsm.ts";
-
-type StreamCallback = (event: { type: string; data: unknown }) => void;
+import { RuntimeEmitter } from "./runtime/emitter.ts";
 
 const CHECKPOINT_INTERVAL_STEPS = 2;
 const MAX_LLM_RETRIES = 3;
@@ -198,7 +192,6 @@ export class AgentLoop {
   private state: AgentState;
   private llm: LLMProvider;
   private sb: any;
-  private onStream: StreamCallback;
   private router: ModelRouter;
   private compression: CompressionManager;
   private observer: RuntimeObserver;
@@ -264,11 +257,7 @@ export class AgentLoop {
   private buildFixResume: boolean;
   /** FSM state tracking (FORGE 2.0) — validado a cada transição de fase */
   private fsmState: AgentStateData;
-  private streamTailBuffer: Array<{
-    type: string;
-    data: Record<string, unknown>;
-    timestamp: number;
-  }>;
+  private emitter: RuntimeEmitter;
   /** Cache de conteúdo de arquivos para evitar N+1 queries ao Supabase durante execução */
   private fileContentCache: Map<string, string>;
   private preferences: AgentPreferencesPayload | null;
@@ -323,7 +312,6 @@ export class AgentLoop {
     this.preferences = options?.preferences ?? null;
     this.sb = supabase;
     this.state = state;
-    this.onStream = onStream;
     this.robinActive = robinActive;
     this.projectTemplate = projectTemplate;
     this.stackAddon = stackAddon;
@@ -365,7 +353,9 @@ export class AgentLoop {
     this.lastRunMessageId = null;
     this.buildFixResume = options?.buildFixResume ?? false;
     this.fsmState = { name: "idle", since: Date.now() };
-    this.streamTailBuffer = [];
+    this.emitter = new RuntimeEmitter(onStream, {
+      getTaskPhase: () => String(this.state.phase),
+    });
     this.fileContentCache = new Map();
     this.runStartTime = Date.now();
     this.lastCheckpointStep = options?.hasCheckpoint ? (state.currentStepIndex ?? 0) : 0;
@@ -373,7 +363,7 @@ export class AgentLoop {
     this.observer = new RuntimeObserver(reg, this.fileContentCache);
     this.skills = new SkillRegistry();
     this.compression = new CompressionManager(this.configuredModel(), (type, data) =>
-      this.emit(type, data),
+      this.emitter.emit(type, data),
     );
   }
 
@@ -2693,7 +2683,7 @@ export class AgentLoop {
     error?: string | null;
     resumable?: boolean;
   }): Record<string, unknown> {
-    const timeline = this.streamTailBuffer.slice();
+    const timeline = this.emitter.getTailBuffer().slice();
     const tools = this.toolsFromTimeline(timeline);
     const diffs = this.diffsFromTimeline(timeline);
     const finished = opts.finished ?? true;
@@ -2774,7 +2764,7 @@ export class AgentLoop {
       finishedAt: new Date().toISOString(),
       currentStep: steps,
       totalSteps: this.maxStepsLimit,
-      streamTail: this.streamTailBuffer.slice(-120),
+      streamTail: this.emitter.tailSlice(120),
       cardSnapshot,
       latencyThoughtMs:
         typeof cardSnapshot.latencyThoughtMs === "number"
@@ -2862,7 +2852,7 @@ export class AgentLoop {
       totalSteps: this.maxStepsLimit,
       lastFinishOk,
       buildFailed: opts?.buildFailed === true || lastFinishOk === false,
-      streamTail: this.streamTailBuffer.slice(-120),
+      streamTail: this.emitter.tailSlice(120),
       cardSnapshot,
       latencyThoughtMs:
         typeof cardSnapshot.latencyThoughtMs === "number"
@@ -3074,85 +3064,6 @@ export class AgentLoop {
   }
 
   private emit(type: string, data: unknown): void {
-    let payload = data;
-    if (payload && typeof payload === "object") {
-      const d = { ...(payload as Record<string, unknown>) };
-      if (type === "phase" && typeof d.phase === "string") {
-        d.task_title =
-          d.task_title ??
-          buildPhaseTaskTitle(
-            String(d.phase),
-            typeof d.message === "string" ? d.message : undefined,
-          );
-        payload = d;
-      }
-      if (type === "tool_start" && typeof d.name === "string") {
-        const args = (d.args as Record<string, unknown> | undefined) ?? {};
-        d.step_intent = d.step_intent ?? describeStepExpectation(String(d.name), args);
-        d.task_phase = d.task_phase ?? this.state.phase;
-        d.file_paths = d.file_paths ?? extractStepFilePaths(String(d.name), args);
-        payload = d;
-      }
-      if (type === "validate_ok") {
-        this.onStream({
-          type: "step_result",
-          data: {
-            summary: typeof d.message === "string" ? d.message : "Build passou",
-            evidence: ["Compilação OK", "Preview pronto para abrir"],
-            ok: true,
-          },
-        });
-      }
-      if (type === "validate_fail") {
-        this.onStream({
-          type: "step_result",
-          data: {
-            summary: "Build falhou — corrigindo antes de entregar",
-            evidence: [
-              typeof d.feedback === "string"
-                ? d.feedback.slice(0, 120)
-                : typeof d.message === "string"
-                  ? d.message.slice(0, 120)
-                  : "Erro de compilação",
-            ],
-            ok: false,
-          },
-        });
-      }
-    }
-    const timelineTypes = new Set([
-      "phase",
-      "explore",
-      "memory",
-      "classify",
-      "skills",
-      "tool_start",
-      "tool_done",
-      "step_result",
-      "assistant_text",
-      "thinking_text",
-      "validate_ok",
-      "validate_fail",
-      "delivery_checkpoint",
-      "file_diff",
-      "done",
-      "finish",
-      "timeout_warning",
-      "heartbeat",
-      "error",
-      "stuck",
-    ]);
-    if (timelineTypes.has(type) && payload && typeof payload === "object") {
-      this.streamTailBuffer.push({
-        type,
-        data: { ...(payload as Record<string, unknown>) },
-        timestamp: Date.now(),
-      });
-      if (this.streamTailBuffer.length > 200) {
-        this.streamTailBuffer.shift();
-      }
-    }
-
-    this.onStream({ type, data: payload });
+    this.emitter.emit(type, data);
   }
 }

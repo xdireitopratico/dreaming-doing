@@ -878,12 +878,8 @@ Deno.test("9 forceTools — LLM retorna texto sem tools", async () => {
   main.queue(tr("Pronto!"));
   const r = await loop.run();
   assertEquals(r.ok, true);
-  const force = main.calls.find((c) =>
-    c.messages.some(
-      (m) => typeof m.content === "string" && m.content.includes("agora use ferramentas"),
-    ),
-  );
-  assertExists(force);
+  const forcedCall = main.calls.find((c) => c.tool_choice === "required");
+  assertExists(forcedCall, "2ª tentativa deve forçar tool_choice=required");
   const narration = events.filter((e) => e.type === "assistant_text");
   assert(narration.length > 0, "deve emitir assistant_text (briefing/narração)");
 });
