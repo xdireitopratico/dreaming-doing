@@ -32,7 +32,6 @@ import {
 import { sanitizeUserFacingProse } from "./sanitize-prose.ts";
 import {
   ANTI_LEAK_RULE,
-  buildAgentContextForLlm,
   buildExecuteInstruction,
   extractOriginalUserRequest,
   INVENTORY_SYSTEM,
@@ -60,11 +59,7 @@ import {
 import { logger } from "../_shared/logger.ts";
 
 import { appendExecutionLogEntry, buildExecutionLogMeta } from "./executionLogMeta.ts";
-import {
-  collapseNarrationBuffer,
-  filterLoopAgentProseForChat,
-  isDuplicateNarrationChunk,
-} from "./narration-dedupe.ts";
+
 import { checkpointChatText } from "./checkpoint-chat.ts";
 import {
   auditDesignInventory,
@@ -76,7 +71,6 @@ import {
   generatePlanChatMessage,
   findLatestStoredPlan,
   isShowExistingPlanRequest,
-  lastPlanContextFromMessages,
   PLAN_APPROVAL_TTL_MS,
   sanitizePlanHeadline,
 } from "./plan-mode.ts";
@@ -100,6 +94,8 @@ import {
   THINKING_STREAM_CAP_MS,
 } from "./runtime/loop-config.ts";
 import { buildCardSnapshot as buildCardSnapshotFromTimeline } from "./runtime/phases/snapshot.ts";
+import { runGatherContextPhase } from "./runtime/phases/gather-context.ts";
+import { NarrationPhase } from "./runtime/phases/narration.ts";
 
 const CHECKPOINT_INTERVAL_STEPS = 2;
 const MAX_LLM_RETRIES = 3;
@@ -154,10 +150,7 @@ export class AgentLoop {
   private skipConversationalGate: boolean;
   private approvedPlanSteps: PlanStep[];
   private approvedPlanStepIndex: number;
-  private narrationStarted: boolean;
-  private narrationBuffer: string;
-  /** Abertura FASE 1 — uma vez por turno, só chat [2]. */
-  private openingEmitted: boolean;
+  private narration: NarrationPhase;
   /** Heartbeat timer (30s) que mantém `agent_runs.heartbeat_at` fresco durante silêncios longos.
    *  Garante que F5 e snapshot-restore continuem funcionando em runs de design+build > 5min.
    *  H8 fix: reduzido de 90s → 30s. observe() pode demorar 2-5min (npm install + build + tsc).
@@ -274,9 +267,7 @@ export class AgentLoop {
     const planDocument = options?.planSummary?.trim() ?? "";
     this.originalUserRequest = this.approvedPlanBuild && planDocument ? planDocument : extracted;
     this.toolsInvoked = false;
-    this.narrationStarted = false;
-    this.narrationBuffer = "";
-    this.openingEmitted = false;
+
 
     this.llmResponseWasStreamed = false;
     this.toolMissCount = 0;
@@ -293,6 +284,16 @@ export class AgentLoop {
     this.emitter = new RuntimeEmitter(onStream, {
       getTaskPhase: () => String(this.state.phase),
     });
+    this.narration = new NarrationPhase(
+      {
+        approvedPlanBuild: options?.approvedPlanBuild ?? false,
+        buildFixResume: options?.buildFixResume ?? false,
+      },
+      (type, data) => this.emitter.emit(type, data),
+      () => {
+        this.lastActivityAt = Date.now();
+      },
+    );
     this.fileContentCache = new Map();
     this.runStartTime = Date.now();
     this.lastCheckpointStep = options?.hasCheckpoint ? (state.currentStepIndex ?? 0) : 0;
@@ -411,7 +412,7 @@ export class AgentLoop {
     await this.emitDeliveryCheckpoint(steps);
     await this.touchHeartbeat();
     this.emit("explore", {
-      message: this.narrationBuffer || "",
+      message: this.narration.buffer || "",
     });
     await this.persistCheckpointChat(steps, options?.buildFix);
     return {
@@ -422,14 +423,6 @@ export class AgentLoop {
       buildFix: options?.buildFix === true,
       toolsUsed: [...toolsUsed],
     };
-  }
-
-  private appendToNarration(text: string): void {
-    const chunk = text.trim();
-    if (!chunk) return;
-    const merged = this.narrationBuffer ? `${this.narrationBuffer}\n\n${chunk}` : chunk;
-    this.narrationBuffer = collapseNarrationBuffer(merged);
-    this.lastActivityAt = Date.now();
   }
 
   private recordTouchedPath(path: string): void {
@@ -498,7 +491,7 @@ export class AgentLoop {
 
   private async emitDeliveryCheckpoint(step: number): Promise<void> {
     const deliveryFiles = [...this.touchedPaths];
-    const narration = this.narrationBuffer.trim();
+    const narration = this.narration.trim();
     this.emit("delivery_checkpoint", {
       step,
       totalSteps: this.maxStepsLimit,
@@ -1040,7 +1033,7 @@ export class AgentLoop {
         this.toolsInvoked = true;
 
         if (assistantText) {
-          this.emitAgentProse(assistantText);
+          this.narration.emitAgentProse(assistantText, this.state.currentStepIndex);
         }
 
         this.emit("phase", {
@@ -1504,67 +1497,26 @@ export class AgentLoop {
   }
 
   private async gatherContext(): Promise<void> {
-    await this.touchHeartbeat();
-    const { data: files } = await this.sb
-      .from("project_files")
-      .select("path, content, updated_at")
-      .eq("project_id", this.state.projectId);
-
-    const fileList: FileEntry[] = files ?? [];
-    // Preenche cache de arquivos para evitar N+1 queries durante execução
-    for (const f of fileList) {
-      if (f.content != null) {
-        this.fileContentCache.set(f.path, f.content);
-      }
-    }
-    const manifest = fileList.map((f) => `  ${f.path}`).join("\n");
-
-    let projectConfig = "";
-    const keyFiles = fileList.filter((f) =>
-      [
-        "package.json",
-        "tsconfig.json",
-        "vite.config.ts",
-        "tailwind.config.ts",
-        "index.html",
-        "src/App.tsx",
-        "src/main.tsx",
-        "src/index.css",
-      ].includes(f.path),
-    );
-    for (const f of keyFiles) {
-      projectConfig += `\n### ${f.path}\n\`\`\`\n${(f.content ?? "").slice(0, 2000)}\n\`\`\`\n`;
-    }
-
-    const stackSkills = this.skills.detectActive(fileList).map((s) => s.name);
-    const invokedSkills = [...new Set(this.userSkillNames)];
-    if (
-      invokedSkills.length > 0 &&
-      JSON.stringify(invokedSkills) !== JSON.stringify(this.lastEmittedSkills)
-    ) {
-      this.lastEmittedSkills = invokedSkills;
-      this.emit("skills", {
-        active: invokedSkills,
-        stack: stackSkills,
-        user: invokedSkills,
-        invoked: invokedSkills,
-      });
-    }
-
-    const agentCtx = buildAgentContextForLlm(
-      fileList,
-      projectConfig || "(projeto vazio — sem arquivos de configuração)",
-      manifest || "(projeto vazio)",
-    );
-
-    this.state.context = {
-      files: fileList,
-      manifest: agentCtx.manifest,
-      projectConfig: agentCtx.projectConfig,
-      gitLog: "(não disponível ainda)",
-      dbSchema: "(não disponível)",
-      lastPlan: lastPlanContextFromMessages(this.state.messages),
-    };
+    this.state.context = await runGatherContextPhase({
+      touchHeartbeat: () => this.touchHeartbeat(),
+      fetchProjectFiles: async () => {
+        const { data: files } = await this.sb
+          .from("project_files")
+          .select("path, content, updated_at")
+          .eq("project_id", this.state.projectId);
+        return files ?? [];
+      },
+      detectStackSkillNames: (fileList) =>
+        this.skills.detectActive(fileList as FileEntry[]).map((s) => s.name),
+      messages: this.state.messages,
+      userSkillNames: this.userSkillNames,
+      lastEmittedSkills: this.lastEmittedSkills,
+      onFileCached: (path, content) => this.fileContentCache.set(path, content),
+      emitSkills: (payload) => {
+        this.lastEmittedSkills = payload.invoked;
+        this.emit("skills", payload);
+      },
+    });
   }
 
   private async finishPlanModeFailure(
@@ -2129,11 +2081,11 @@ export class AgentLoop {
     const historyContent = assistantContentForHistory(
       response.content,
       assistantText,
-      this.narrationBuffer,
+      this.narration.buffer,
       this.llmResponseWasStreamed,
     );
     if (assistantText.trim()) {
-      this.emitAgentProse(assistantText);
+      this.narration.emitAgentProse(assistantText, this.state.currentStepIndex);
     }
 
     this.state.messages.push({
@@ -2453,7 +2405,7 @@ export class AgentLoop {
   }): Record<string, unknown> {
     return buildCardSnapshotFromTimeline({
       timeline: this.emitter.getTailBuffer().slice(),
-      narrationBuffer: this.narrationBuffer,
+      narrationBuffer: this.narration.buffer,
       runStartTime: this.runStartTime,
       runId: this.runId,
       projectId: this.state.projectId,
@@ -2465,7 +2417,7 @@ export class AgentLoop {
 
   private async persistCheckpointChat(steps: number, buildFix?: boolean): Promise<void> {
     const buildFixFlag = buildFix === true;
-    const text = checkpointChatText(this.narrationBuffer, buildFixFlag);
+    const text = checkpointChatText(this.narration.buffer, buildFixFlag);
     const deliveryFiles = [...this.touchedPaths];
     const cardSnapshot = this.buildCardSnapshot({
       streamText: text,
@@ -2703,42 +2655,6 @@ export class AgentLoop {
     return enabled.length > 0 ? enabled : this.approvedPlanSteps;
   }
 
-  private emitAgentProse(raw: string): void {
-    const clean = sanitizeUserFacingProse(raw);
-    if (!clean) return;
-    const step = this.state.currentStepIndex;
-    const filtered = filterLoopAgentProseForChat(clean, {
-      loopStep: step,
-      skipAck: this.buildFixResume,
-    });
-    if (!filtered) return;
-    if (!this.openingEmitted && !this.buildFixResume) {
-      this.emitOpeningToChat(filtered);
-      return;
-    }
-    this.streamNarration(filtered, {
-      append: true,
-      chatVisible: !this.approvedPlanBuild && !this.buildFixResume,
-    });
-  }
-
-  /** FASE 1 — abertura única no chat [2], nunca no inspector. */
-  private emitOpeningToChat(text: string): void {
-    if (this.openingEmitted) return;
-    const chunk = text.trim();
-    if (!chunk) return;
-    if (isDuplicateNarrationChunk(this.narrationBuffer, chunk)) return;
-    this.appendToNarration(chunk);
-    this.emit("assistant_text", {
-      text: chunk,
-      append: false,
-      final: false,
-      opening: true,
-    });
-    this.openingEmitted = true;
-    this.narrationStarted = true;
-  }
-
   private notifyLoopStatus(ctx: LoopUpdateContext): void {
     const text = formatLoopStatus({
       ...ctx,
@@ -2751,40 +2667,7 @@ export class AgentLoop {
 
   /** Progresso factual do loop — sempre inspector (FASE 2..N). */
   private notifyExecution(text: string): void {
-    this.emitInspectorNote(text);
-  }
-
-  private emitInspectorNote(message: string): void {
-    const chunk = message.trim();
-    if (!chunk) return;
-    this.emit("phase", {
-      phase: "checkpoint",
-      message: chunk,
-      task_title: chunk.slice(0, 120),
-    });
-  }
-
-  /** Checkpoint de comunicação — chat só quando chatVisible; build aprovado usa Inspector por padrão. */
-  private streamNarration(text: string, opts?: { append?: boolean; chatVisible?: boolean }): void {
-    const chunk = text.trim();
-    if (!chunk) return;
-    if (isDuplicateNarrationChunk(this.narrationBuffer, chunk)) return;
-    const chatVisible = this.approvedPlanBuild
-      ? opts?.chatVisible === true
-      : opts?.chatVisible !== false;
-    if (!chatVisible) {
-      this.emitInspectorNote(chunk);
-      return;
-    }
-    this.appendToNarration(chunk);
-    const shouldAppend = opts?.append ?? this.narrationStarted;
-    this.emit("assistant_text", {
-      text: shouldAppend ? `\n\n${chunk}` : chunk,
-      append: shouldAppend,
-      final: false,
-      narration: true,
-    });
-    this.narrationStarted = true;
+    this.narration.emitInspectorNote(text);
   }
 
   private emit(type: string, data: unknown): void {
