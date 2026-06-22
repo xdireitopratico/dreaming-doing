@@ -74,9 +74,6 @@ export function formatLoopStatus(ctx: LoopUpdateContext): string | null {
 
     default:
       return null;
-
-    default:
-      return null;
   }
 }
 
