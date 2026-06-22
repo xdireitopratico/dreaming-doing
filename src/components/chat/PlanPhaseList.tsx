@@ -75,8 +75,12 @@ export function PlanPhaseList({ phases, compact = false, className }: PlanPhaseL
             <span className="forge-plan-phase-title">{phase.title}</span>
           </div>
           <ul className="forge-plan-step-list">
-            {phase.steps.map((step) => (
-              <li key={step.id} className="forge-plan-step">
+            {phase.steps.map((step, index) => (
+              <li
+                key={step.id}
+                className="forge-plan-step"
+                style={{ "--step-index": index } as React.CSSProperties}
+              >
                 <span className="forge-plan-step-icon" data-type={step.type}>
                   {stepIcon(step.type)}
                 </span>

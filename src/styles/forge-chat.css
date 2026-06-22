@@ -438,19 +438,24 @@
   align-items: center;
   justify-content: center;
   gap: 6px;
-  height: 28px;
-  padding: 0 12px;
+  height: 34px;
+  padding: 0 16px;
   border-radius: var(--chat-cta-radius);
   border: 1px solid color-mix(in srgb, var(--border-forge) 80%, transparent);
   background: color-mix(in srgb, var(--bg-input) 85%, transparent);
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 500;
   cursor: pointer;
   transition:
     background 0.15s,
     color 0.15s,
     border-color 0.15s;
+}
+
+.forge-plan-dock-btn:focus-visible {
+  outline: 2px solid var(--text-accent);
+  outline-offset: 2px;
 }
 
 .forge-plan-dock-btn:hover:not(:disabled) {
@@ -1830,4 +1835,32 @@
 
 .chat-review-callout-btn:hover {
   background: var(--bg-hover, rgba(255, 255, 255, 0.06));
+}
+
+/* ─── C1: Shimmer → Ready transition ───────────────────────────────── */
+
+.forge-plan-dock-shell--ready {
+  animation: forge-card-appear 0.35s var(--ease-out-expo) both;
+}
+
+/* ─── C2: Stagger steps on appear ───────────────────────────────────── */
+
+.forge-plan-step {
+  animation: forge-card-appear 0.3s var(--ease-out-expo) both;
+  animation-delay: calc(var(--step-index, 0) * 60ms);
+}
+
+/* ─── D1: Reduced motion ────────────────────────────────────────────── */
+
+@media (prefers-reduced-motion: reduce) {
+  .forge-plan-dock-shell,
+  .forge-plan-dock-shell--ready,
+  .forge-plan-step,
+  .forge-plan-dock-shimmer-line,
+  .forge-animate-thinking,
+  .forge-animate-card-appear,
+  .forge-animate-task-check {
+    animation: none !important;
+    transition-duration: 0.01ms !important;
+  }
 }

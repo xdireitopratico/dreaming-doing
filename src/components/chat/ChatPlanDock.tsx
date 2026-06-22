@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Check, FileText, Loader2, Play, SkipForward } from "lucide-react";
 import type { PendingPlan, PlanStep } from "@/lib/agent-progress";
 import { buildForgePlanMarkdown } from "@/lib/plan-document";
@@ -25,6 +25,16 @@ export function ChatPlanDock({
   status,
 }: ChatPlanDockProps) {
   const [busy, setBusy] = useState<"approve" | "reject" | null>(null);
+  const [justReady, setJustReady] = useState(false);
+
+  /* C1: Trigger ready animation when transitioning creating → plan ready */
+  useEffect(() => {
+    if (creating || !pendingPlan) {
+      setJustReady(false);
+    } else if (!justReady) {
+      setJustReady(true);
+    }
+  }, [creating, pendingPlan, justReady]);
 
   const handleApprove = useCallback(async () => {
     if (!pendingPlan || !onApprove) return;
@@ -127,8 +137,11 @@ export function ChatPlanDock({
   const phases = planPhasesFromPlan(pendingPlan);
 
   return (
-    <div className="forge-plan-dock">
-      <div className="forge-plan-dock-shell" data-testid="chat-plan-dock-ready">
+      <div className="forge-plan-dock">
+      <div
+        className={`forge-plan-dock-shell${justReady ? " forge-plan-dock-shell--ready" : ""}`}
+        data-testid="chat-plan-dock-ready"
+      >
         <div className="forge-plan-dock-inner">
           {phases.length > 0 ? (
             <PlanPhaseList phases={phases} />
