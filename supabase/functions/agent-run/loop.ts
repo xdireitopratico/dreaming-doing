@@ -29,13 +29,20 @@ import { formatLoopStatus, type LoopUpdateContext } from "./loop-status.ts";
 import { type AgentStateData, applyTransition } from "./agent-fsm.ts";
 import { RuntimeEmitter, type StreamCallback } from "./runtime/emitter.ts";
 import {
+  buildExecuteDeps,
+  buildInfraDeps,
+  buildPersistDeps,
+  buildPlanTurnDeps,
+  buildPlanTurnFinishDeps,
+  type AgentLoopDepsContext,
+} from "./runtime/deps-factory.ts";
+import {
   bumpLlmRetries as bumpLlmRetriesInfra,
   loopBudgetExceeded as loopBudgetExceededInfra,
   maybeEmitSilenceHeartbeat as maybeEmitSilenceHeartbeatInfra,
   resetLlmRetries as resetLlmRetriesInfra,
   returnResumableChunk as returnResumableChunkInfra,
   touchHeartbeat as touchHeartbeatInfra,
-  type RunInfraDeps,
 } from "./runtime/infra.ts";
 import { readLoopBudgetMsFromRuntime } from "./runtime/loop-config.ts";
 import {
@@ -54,7 +61,6 @@ import {
   persistPlanFinal as persistPlanFinalPhase,
   saveCheckpoint as saveAgentCheckpoint,
   updateAssistantStep as updateAssistantStepPhase,
-  type AgentPersistDeps,
 } from "./runtime/phases/persist.ts";
 import { NarrationPhase } from "./runtime/phases/narration.ts";
 import {
@@ -63,7 +69,6 @@ import {
   finishPlanProposal as finishPlanTurnProposal,
   runPlanModeAgentTurn as runPlanModeAgentTurnPhase,
   type PlanModeStreamState,
-  type PlanTurnFinishDeps,
 } from "./runtime/phases/plan-turn.ts";
 import { runBuildExecutePhase } from "./runtime/phases/execute.ts";
 import { runAgentOrchestrator } from "./runtime/phases/orchestrator.ts";
@@ -135,7 +140,7 @@ export class AgentLoop {
   startHeartbeatTimer(intervalMs = 30_000): void {
     if (this.heartbeatTimer) return;
     this.heartbeatTimer = setInterval(() => {
-      void touchHeartbeatInfra(this.buildInfraDeps());
+      void touchHeartbeatInfra(buildInfraDeps(this.depsContext(), LOOP_BUDGET_MS));
     }, intervalMs);
   }
 
@@ -349,7 +354,7 @@ export class AgentLoop {
     toolsUsed: Set<string>,
     options?: { buildFix?: boolean },
   ) {
-    return returnResumableChunkInfra(this.buildInfraDeps(), steps, toolsUsed, options);
+    return returnResumableChunkInfra(buildInfraDeps(this.depsContext(), LOOP_BUDGET_MS), steps, toolsUsed, options);
   }
 
   private recordTouchedPath(path: string): void {
@@ -357,73 +362,136 @@ export class AgentLoop {
   }
 
   private async touchHeartbeat(): Promise<void> {
-    await touchHeartbeatInfra(this.buildInfraDeps());
+    await touchHeartbeatInfra(buildInfraDeps(this.depsContext(), LOOP_BUDGET_MS));
   }
 
   private async bumpLlmRetries(): Promise<number> {
-    return bumpLlmRetriesInfra(this.buildInfraDeps());
+    return bumpLlmRetriesInfra(buildInfraDeps(this.depsContext(), LOOP_BUDGET_MS));
   }
 
   private async resetLlmRetries(): Promise<void> {
-    await resetLlmRetriesInfra(this.buildInfraDeps());
+    await resetLlmRetriesInfra(buildInfraDeps(this.depsContext(), LOOP_BUDGET_MS));
   }
 
   private maybeEmitSilenceHeartbeat(): void {
-    maybeEmitSilenceHeartbeatInfra(this.buildInfraDeps());
+    maybeEmitSilenceHeartbeatInfra(buildInfraDeps(this.depsContext(), LOOP_BUDGET_MS));
   }
 
-  private buildInfraDeps(): RunInfraDeps {
-    return {
-      sb: this.sb,
-      runId: this.runId,
-      runStartTime: this.runStartTime,
-      loopBudgetMs: LOOP_BUDGET_MS,
-      getLastActivityAt: () => this.lastActivityAt,
-      setLastActivityAt: (ms) => {
-        this.lastActivityAt = ms;
-      },
-      getMaxStepsLimit: () => this.maxStepsLimit,
-      touchedPaths: this.touchedPaths,
-      narrationTrim: () => this.narration.trim(),
-      narrationBuffer: this.narration.buffer,
-      emit: (type, data) => this.emit(type, data),
-      getPhase: () => this.state.phase,
-      saveCheckpoint: (phase, force) => this.saveCheckpoint(phase, force),
-      persistCheckpointChat: (steps, buildFix) => this.persistCheckpointChat(steps, buildFix),
-    };
-  }
-
-  private buildPersistDeps(): AgentPersistDeps {
+  private depsContext(): AgentLoopDepsContext {
     return {
       sb: this.sb,
       runId: this.runId,
       state: this.state,
-      getLastRunMessageId: () => this.lastRunMessageId,
-      setLastRunMessageId: (id) => {
-        this.lastRunMessageId = id;
-      },
-      getMaxStepsLimit: () => this.maxStepsLimit,
-      getComplexityScore: () => this.complexityScore,
+      reg: this.reg,
+      compression: this.compression,
+      observer: this.observer,
+      router: this.router,
+      robinActive: this.robinActive,
+      projectTemplate: this.projectTemplate,
+      stackAddon: this.stackAddon,
+      sessionAddon: this.sessionAddon,
+      tasteStart: this.tasteStart,
+      maxStepsLimit: this.maxStepsLimit,
+      complexityScore: this.complexityScore,
+      originalUserRequest: this.originalUserRequest,
+      approvedPlanBuild: this.approvedPlanBuild,
+      approvedPlanSteps: this.approvedPlanSteps,
+      buildFixResume: this.buildFixResume,
+      planStreamState: this.planStreamState,
+      fileContentCache: this.fileContentCache,
       touchedPaths: this.touchedPaths,
       narrationBuffer: this.narration.buffer,
-      tailSlice: (count) => this.emitter.tailSlice(count),
-      getTimeline: () => this.emitter.getTailBuffer().slice(),
       runStartTime: this.runStartTime,
       getLastCheckpointStep: () => this.lastCheckpointStep,
       setLastCheckpointStep: (step) => {
         this.lastCheckpointStep = step;
       },
+      getApprovedPlanStepIndex: () => this.approvedPlanStepIndex,
+      setApprovedPlanStepIndex: (index) => {
+        this.approvedPlanStepIndex = index;
+      },
+      getToolMissCount: () => this.toolMissCount,
+      setToolMissCount: (count) => {
+        this.toolMissCount = count;
+      },
+      getForceToolsNext: () => this.forceToolsNext,
+      setForceToolsNext: (value) => {
+        this.forceToolsNext = value;
+      },
+      getToolsInvoked: () => this.toolsInvoked,
+      setToolsInvoked: (value) => {
+        this.toolsInvoked = value;
+      },
+      getConsecutiveNoContentReadSteps: () => this.consecutiveNoContentReadSteps,
+      setConsecutiveNoContentReadSteps: (value) => {
+        this.consecutiveNoContentReadSteps = value;
+      },
+      getLlmResponseWasStreamed: () => this.llmResponseWasStreamed,
+      getLastExecutePhaseMessage: () => this.lastExecutePhaseMessage,
+      setLastExecutePhaseMessage: (value) => {
+        this.lastExecutePhaseMessage = value;
+      },
+      getLastRunMessageId: () => this.lastRunMessageId,
+      setLastRunMessageId: (id) => {
+        this.lastRunMessageId = id;
+      },
+      getLastActivityAt: () => this.lastActivityAt,
+      setLastActivityAt: (ms) => {
+        this.lastActivityAt = ms;
+      },
+      narrationTrim: () => this.narration.trim(),
+      tailSlice: (count) => this.emitter.tailSlice(count),
+      getTimeline: () => this.emitter.getTailBuffer().slice(),
+      emitAgentProse: (raw, loopStep) => this.narration.emitAgentProse(raw, loopStep),
       emit: (type, data) => this.emit(type, data),
-      loopBudgetMs: LOOP_BUDGET_MS,
+      configuredModel: () => this.configuredModel(),
+      loopBudgetExceeded: () => this.loopBudgetExceeded(),
+      returnResumableChunk: (steps, used, options) => this.returnResumableChunk(steps, used, options),
+      runDesignPreflightIfNeeded: () => this.runDesignPreflightIfNeeded(),
+      requiresFinalBuildGate: () => this.requiresFinalBuildGate(),
+      enabledApprovedPlanSteps: () => this.enabledApprovedPlanSteps(),
+      isCanceled: () => this.isCanceled(),
+      touchHeartbeat: () => this.touchHeartbeat(),
+      maybeEmitSilenceHeartbeat: () => this.maybeEmitSilenceHeartbeat(),
+      bumpLlmRetries: () => this.bumpLlmRetries(),
+      resetLlmRetries: () => this.resetLlmRetries(),
+      saveCheckpoint: (phase, force) => this.saveCheckpoint(phase, force),
+      persistFinal: (summary, opts) => this.persistFinal(summary, opts),
+      persistPlanFinal: (summary, plan) => this.persistPlanFinal(summary, plan),
+      clearCheckpoint: () => this.clearCheckpoint(),
+      persistAssistantStep: (response) => this.persistAssistantStep(response),
+      updateAssistantStep: (msgId, response, execResults, step) =>
+        this.updateAssistantStep(msgId, response, execResults, step),
+      persistCheckpointChat: (steps, buildFix) => this.persistCheckpointChat(steps, buildFix),
+      notifyLoopStatus: (ctx) => this.notifyLoopStatus(ctx),
+      recordTouchedPath: (path) => this.recordTouchedPath(path),
+      finishClarify: (message, steps, used) => this.finishClarify(message, steps, used),
+      attemptGracefulClosing: (reason) => this.attemptGracefulClosing(reason),
+      emitTransition: (eventType, data) => this.emitTransition(eventType, data),
+      llmChat: (model, instruction, history, forceTools) =>
+        this.llmChat(model, instruction, history, forceTools),
+      compressMessages: (messages) => this.compression.compress(messages),
+      executeTool: (call) => this.reg.execute(call),
+      markToolsInvoked: () => {
+        this.toolsInvoked = true;
+      },
+      onActivity: () => {
+        this.lastActivityAt = Date.now();
+      },
+      getPlanLlmResponseWasStreamed: () => this.planStreamState.llmResponseWasStreamed,
+      setPlanLlmResponseWasStreamed: (value) => {
+        this.planStreamState.llmResponseWasStreamed = value;
+        this.llmResponseWasStreamed = value;
+      },
     };
   }
 
   private async clearCheckpoint(): Promise<void> {
-    await clearAgentCheckpoint(this.buildPersistDeps());
+    await clearAgentCheckpoint(buildPersistDeps(this.depsContext(), LOOP_BUDGET_MS));
   }
 
   private async saveCheckpoint(phase: LoopPhase, force = false): Promise<void> {
-    await saveAgentCheckpoint(this.buildPersistDeps(), phase, force);
+    await saveAgentCheckpoint(buildPersistDeps(this.depsContext(), LOOP_BUDGET_MS), phase, force);
   }
 
   private async emitTransition(eventType: string, data?: unknown): Promise<void> {
@@ -487,89 +555,10 @@ export class AgentLoop {
       runPlanModeAgentTurn: (model) => this.runPlanModeAgentTurn(model),
       finishPlanProposal: (plan) => this.finishPlanProposal(plan),
       runBuildExecute: (used, model, step) =>
-        runBuildExecutePhase(this.buildExecuteDeps(used, model), step),
+        runBuildExecutePhase(buildExecuteDeps(this.depsContext(), used, model), step),
       buildFixResume: this.buildFixResume,
     });
   }
-
-  private buildExecuteDeps(
-    toolsUsed: Set<string>,
-    executionModel: LLMProvider,
-  ) {
-    return {
-      approvedPlanBuild: this.approvedPlanBuild,
-      approvedPlanSteps: this.approvedPlanSteps,
-      getApprovedPlanStepIndex: () => this.approvedPlanStepIndex,
-      setApprovedPlanStepIndex: (index: number) => {
-        this.approvedPlanStepIndex = index;
-      },
-      buildFixResume: this.buildFixResume,
-      originalUserRequest: this.originalUserRequest,
-      projectTemplate: this.projectTemplate,
-      maxStepsLimit: this.maxStepsLimit,
-      state: this.state,
-      toolsUsed,
-      fileContentCache: this.fileContentCache,
-      getToolMissCount: () => this.toolMissCount,
-      setToolMissCount: (count: number) => {
-        this.toolMissCount = count;
-      },
-      getForceToolsNext: () => this.forceToolsNext,
-      setForceToolsNext: (value: boolean) => {
-        this.forceToolsNext = value;
-      },
-      getToolsInvoked: () => this.toolsInvoked,
-      setToolsInvoked: (value: boolean) => {
-        this.toolsInvoked = value;
-      },
-      getConsecutiveNoContentReadSteps: () => this.consecutiveNoContentReadSteps,
-      setConsecutiveNoContentReadSteps: (value: number) => {
-        this.consecutiveNoContentReadSteps = value;
-      },
-      getLlmResponseWasStreamed: () => this.llmResponseWasStreamed,
-      getLastExecutePhaseMessage: () => this.lastExecutePhaseMessage,
-      setLastExecutePhaseMessage: (value: string | null) => {
-        this.lastExecutePhaseMessage = value;
-      },
-      touchedPaths: this.touchedPaths,
-      executionModel,
-      reg: this.reg,
-      compression: this.compression,
-      observer: this.observer,
-      router: this.router,
-      emitAgentProse: (raw: string, loopStep: number) => {
-        this.narration.emitAgentProse(raw, loopStep);
-      },
-      narrationBuffer: this.narration.buffer,
-      emit: (type: string, data: unknown) => this.emit(type, data),
-      loopBudgetExceeded: () => this.loopBudgetExceeded(),
-      returnResumableChunk: (steps, used, options) =>
-        this.returnResumableChunk(steps, used, options),
-      runDesignPreflightIfNeeded: () => this.runDesignPreflightIfNeeded(),
-      requiresFinalBuildGate: () => this.requiresFinalBuildGate(),
-      enabledApprovedPlanSteps: () => this.enabledApprovedPlanSteps(),
-      isCanceled: () => this.isCanceled(),
-      touchHeartbeat: () => this.touchHeartbeat(),
-      maybeEmitSilenceHeartbeat: () => this.maybeEmitSilenceHeartbeat(),
-      bumpLlmRetries: () => this.bumpLlmRetries(),
-      resetLlmRetries: () => this.resetLlmRetries(),
-      saveCheckpoint: (phase, force) => this.saveCheckpoint(phase, force),
-      persistFinal: (summary, opts) => this.persistFinal(summary, opts),
-      clearCheckpoint: () => this.clearCheckpoint(),
-      persistAssistantStep: (response) => this.persistAssistantStep(response),
-      updateAssistantStep: (msgId, response, execResults, step) =>
-        this.updateAssistantStep(msgId, response, execResults, step),
-      notifyLoopStatus: (ctx) => this.notifyLoopStatus(ctx),
-      recordTouchedPath: (path) => this.recordTouchedPath(path),
-      finishClarify: (message, steps, used) => this.finishClarify(message, steps, used),
-      attemptGracefulClosing: (reason) => this.attemptGracefulClosing(reason),
-      emitTransition: (eventType, data) => this.emitTransition(eventType, data),
-      llmChat: (model, instruction, history, forceTools) =>
-        this.llmChat(model, instruction, history, forceTools),
-      getContextFiles: () => this.state.context?.files ?? [],
-    };
-  }
-
 
   private async gatherContext(): Promise<void> {
     this.state.context = await runGatherContextPhase({
@@ -594,20 +583,6 @@ export class AgentLoop {
     });
   }
 
-  private buildPlanTurnFinishDeps(): PlanTurnFinishDeps {
-    return {
-      runId: this.runId,
-      projectId: this.state.projectId,
-      llmResponseWasStreamed: this.llmResponseWasStreamed,
-      emit: (type, data) => this.emit(type, data),
-      configuredModel: () => this.configuredModel(),
-      persistFinal: (summary, opts) => this.persistFinal(summary, opts),
-      persistPlanFinal: (summary, plan) => this.persistPlanFinal(summary, plan),
-      clearCheckpoint: () => this.clearCheckpoint(),
-      emitTransition: (eventType, data) => this.emitTransition(eventType, data),
-    };
-  }
-
   private async finishPlanModeFailure(
     summary: string,
     steps: number,
@@ -615,7 +590,7 @@ export class AgentLoop {
     error?: string,
   ) {
     return finishPlanTurnFailure(
-      this.buildPlanTurnFinishDeps(),
+      buildPlanTurnFinishDeps(this.depsContext()),
       summary,
       steps,
       toolsUsed,
@@ -628,7 +603,7 @@ export class AgentLoop {
     toolsUsed: string[] = [],
   ): Promise<AgentLoopRunResult> {
     return finishPlanTurnProposal(
-      this.buildPlanTurnFinishDeps(),
+      buildPlanTurnFinishDeps(this.depsContext()),
       proposedPlan,
       toolsUsed,
     );
@@ -639,7 +614,7 @@ export class AgentLoop {
     steps: number,
     toolsUsed: string[],
   ): Promise<AgentLoopRunResult> {
-    return finishPlanClarify(this.buildPlanTurnFinishDeps(), message, steps, toolsUsed);
+    return finishPlanClarify(buildPlanTurnFinishDeps(this.depsContext()), message, steps, toolsUsed);
   }
 
   private async runPlanModeAgentTurn(model: LLMProvider): Promise<AgentLoopRunResult> {
@@ -649,42 +624,7 @@ export class AgentLoop {
     this.planStreamState.llmResponseWasStreamed = this.llmResponseWasStreamed;
     this.planStreamState.thinkingStreamStartedAt = this.thinkingStreamStartedAt;
 
-    const result = await runPlanModeAgentTurnPhase(
-      {
-        ...this.buildPlanTurnFinishDeps(),
-        robinActive: this.robinActive,
-        originalUserRequest: this.originalUserRequest,
-        state: this.state,
-        context: this.state.context,
-        intent: this.state.intent,
-        complexityScore: this.complexityScore,
-        projectTemplate: this.projectTemplate,
-        stackAddon: this.stackAddon,
-        sessionAddon: this.sessionAddon,
-        tasteStart: this.tasteStart,
-        skillPrompt,
-        toolDefinitions: this.reg.getDefinitions(),
-        streamState: this.planStreamState,
-        compressMessages: (messages) => this.compression.compress(messages),
-        loopBudgetExceeded: () => this.loopBudgetExceeded(),
-        returnResumableChunk: (steps, toolsUsed) => this.returnResumableChunk(steps, toolsUsed),
-        saveCheckpoint: (phase) => this.saveCheckpoint(phase),
-        attemptGracefulClosing: (reason) => this.attemptGracefulClosing(reason),
-        executeTool: (call) => this.reg.execute(call),
-        markToolsInvoked: () => {
-          this.toolsInvoked = true;
-        },
-        onActivity: () => {
-          this.lastActivityAt = Date.now();
-        },
-        getLlmResponseWasStreamed: () => this.planStreamState.llmResponseWasStreamed,
-        setLlmResponseWasStreamed: (value) => {
-          this.planStreamState.llmResponseWasStreamed = value;
-          this.llmResponseWasStreamed = value;
-        },
-      },
-      model,
-    );
+    const result = await runPlanModeAgentTurnPhase(buildPlanTurnDeps(this.depsContext(), skillPrompt), model);
 
     this.llmResponseWasStreamed = this.planStreamState.llmResponseWasStreamed;
     this.thinkingStreamStartedAt = this.planStreamState.thinkingStreamStartedAt;
@@ -710,7 +650,7 @@ export class AgentLoop {
         messages: this.state.messages,
         configuredModel: () => this.configuredModel(),
         finishPlanProposal: async (proposed) => {
-          await finishPlanTurnProposal(this.buildPlanTurnFinishDeps(), proposed);
+          await finishPlanTurnProposal(buildPlanTurnFinishDeps(this.depsContext()), proposed);
         },
       },
       reason,
@@ -776,7 +716,7 @@ export class AgentLoop {
   }
 
   private async persistAssistantStep(response: ChatResponse): Promise<string | null> {
-    return persistAssistantStepPhase(this.buildPersistDeps(), response);
+    return persistAssistantStepPhase(buildPersistDeps(this.depsContext(), LOOP_BUDGET_MS), response);
   }
 
   private async updateAssistantStep(
@@ -785,11 +725,11 @@ export class AgentLoop {
     execResults: Array<{ call: any; result: any }>,
     step: number,
   ): Promise<void> {
-    await updateAssistantStepPhase(this.buildPersistDeps(), msgId, response, execResults, step);
+    await updateAssistantStepPhase(buildPersistDeps(this.depsContext(), LOOP_BUDGET_MS), msgId, response, execResults, step);
   }
 
   private async persistCheckpointChat(steps: number, buildFix?: boolean): Promise<void> {
-    await persistCheckpointChatPhase(this.buildPersistDeps(), steps, buildFix);
+    await persistCheckpointChatPhase(buildPersistDeps(this.depsContext(), LOOP_BUDGET_MS), steps, buildFix);
   }
 
   private async persistFinal(
@@ -802,11 +742,11 @@ export class AgentLoop {
       conversational?: boolean;
     },
   ): Promise<void> {
-    await persistFinalPhase(this.buildPersistDeps(), summary, opts);
+    await persistFinalPhase(buildPersistDeps(this.depsContext(), LOOP_BUDGET_MS), summary, opts);
   }
 
   private async persistPlanFinal(summary: string, plan: ProposedPlan): Promise<void> {
-    await persistPlanFinalPhase(this.buildPersistDeps(), summary, plan);
+    await persistPlanFinalPhase(buildPersistDeps(this.depsContext(), LOOP_BUDGET_MS), summary, plan);
   }
 
   private enabledApprovedPlanSteps(): PlanStep[] {
