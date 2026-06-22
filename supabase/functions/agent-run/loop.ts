@@ -7,7 +7,6 @@ import type {
   ChatMessage,
   ChatResponse,
   FileEntry,
-  IntentAnalysis,
   LLMProvider,
   PlanStep,
   ProposedPlan,
@@ -21,29 +20,13 @@ import { ModelRouter } from "./router.ts";
 import { CompressionManager } from "./compression.ts";
 import { RuntimeObserver } from "./observer.ts";
 import { SkillRegistry } from "./skills.ts";
-import { buildForgeAgentSystemInput } from "./agent-system-input.ts";
-import {
-  isAdvisoryQuestion,
-  isConversationalTurn,
-  isConversationalTurnEarly,
-  runAdvisoryPhase,
-  runConversationalPhase,
-} from "./conversational.ts";
 import { sanitizeUserFacingProse } from "./sanitize-prose.ts";
-import {
-  ANTI_LEAK_RULE,
-  extractOriginalUserRequest,
-  INVENTORY_SYSTEM,
-  isProjectInventoryQuestion,
-} from "./run-context.ts";
+import { extractOriginalUserRequest } from "./run-context.ts";
 import {
   formatClarifyMessage,
   hasMixedMetaAndExecution,
-  mergeExecutionToolDefinitions,
   splitMetaToolCalls,
 } from "./tools/meta.ts";
-
-import { friendlyLlmError } from "./llm-errors.ts";
 import { MAX_CHUNK_GENERATIONS } from "../_shared/agent-chunk-limits.ts";
 
 import { logger } from "../_shared/logger.ts";
@@ -56,16 +39,7 @@ import {
   needsDesignPreflight,
   runDesignPreflight,
 } from "./design-preflight.ts";
-import { type CheckpointExtra, resumeStepStart, serializeCheckpointPayload } from "./checkpoint.ts";
-import {
-  findLatestStoredPlan,
-  isShowExistingPlanRequest,
-  PLAN_APPROVAL_TTL_MS,
-  sanitizePlanHeadline,
-} from "./plan-mode.ts";
-
-
-import { deriveClassificationFromPrompt, type ClassificationResult } from "./router.ts";
+import { type CheckpointExtra, serializeCheckpointPayload } from "./checkpoint.ts";
 import type { ProviderConfig } from "./providers.ts";
 import type { AgentPreferencesPayload } from "./connector-keys.ts";
 import { resolveAutoForComplexity } from "../_shared/model-presets.ts";
@@ -73,13 +47,12 @@ import { ResilientLLM } from "./robin-pool.ts";
 import { formatLoopStatus, type LoopUpdateContext } from "./loop-status.ts";
 import { type AgentStateData, applyTransition, isTerminal } from "./agent-fsm.ts";
 import { RuntimeEmitter, type StreamCallback } from "./runtime/emitter.ts";
+import { capMetaSize, readLoopBudgetMsFromRuntime } from "./runtime/loop-config.ts";
 import {
-  calculateMaxSteps,
-  calculateMaxTokens,
-  capMetaSize,
-  readLoopBudgetMsFromRuntime,
-  THINKING_STREAM_CAP_MS,
-} from "./runtime/loop-config.ts";
+  buildBuildAgentSystemPrompt,
+  buildBuildContextBlock,
+  chatBuildModeLlm,
+} from "./runtime/llm-chat.ts";
 import { buildCardSnapshot as buildCardSnapshotFromTimeline } from "./runtime/phases/snapshot.ts";
 import { runGatherContextPhase } from "./runtime/phases/gather-context.ts";
 import { NarrationPhase } from "./runtime/phases/narration.ts";
@@ -93,6 +66,7 @@ import {
   type PlanTurnFinishDeps,
 } from "./runtime/phases/plan-turn.ts";
 import { runBuildExecutePhase } from "./runtime/phases/execute.ts";
+import { runAgentOrchestrator } from "./runtime/phases/orchestrator.ts";
 
 const CHECKPOINT_INTERVAL_STEPS = 2;
 const MAX_LLM_RETRIES = 3;
@@ -583,212 +557,44 @@ export class AgentLoop {
     this.compression.reset();
     this.consecutiveNoContentReadSteps = 0;
     const toolsUsed = new Set<string>();
-    let executionModel = this.configuredModel();
 
-    if (this.resumeRun && this.hasCheckpoint) {
-      await this.emitTransition("send");
-      this.applyAutoModelForComplexity(this.complexityScore);
-      this.notifyLoopStatus({
-        kind: "resume",
-        fixResume: this.buildFixResume,
-      });
-      await this.emitTransition("classified", {
-        complexity: this.complexityScore,
-        summary: this.state.intent?.summary ?? "Retomada",
-        restored: true,
-      });
-      this.emit("classify", {
-        complexity: this.state.intent?.complexity ?? "unknown",
-        complexityScore: this.complexityScore,
-        summary: this.state.intent?.summary ?? "Retomada",
-        restored: true,
-      });
-      if (!this.planMode) {
-        await this.emitTransition("no_plan_needed");
-      } else {
-        return await this.runPlanModeAgentTurn(executionModel);
-      }
-
-      // Plan runs terminate after proposing (no in-memory decision wait).
-      // The plan is emitted to the client via Realtime; approval/rejection
-      // creates a new build run via the plan-decide server action.
-    } else {
-      if (
-        !this.resumeRun &&
-        !this.approvedPlanBuild &&
-        this.originalUserRequest &&
-        isConversationalTurnEarly(this.originalUserRequest)
-      ) {
-        return await this.runConversationalReply();
-      }
-
-      if (
-        !this.resumeRun &&
-        !this.approvedPlanBuild &&
-        this.planMode &&
-        this.originalUserRequest &&
-        isShowExistingPlanRequest(this.originalUserRequest)
-      ) {
-        const stored = findLatestStoredPlan(this.state.messages);
-        if (stored) {
-          const reopened: ProposedPlan = {
-            ...stored.plan,
-            planId: crypto.randomUUID(),
-            summary: sanitizePlanHeadline(
-              stored.plan.mission ?? stored.plan.summary,
-              "Plano proposto",
-            ),
-            proposedAt: new Date().toISOString(),
-            ttlMs: PLAN_APPROVAL_TTL_MS,
-          };
-          return await this.finishPlanProposal(reopened);
-        }
-        const reply =
-          "Não encontrei um plano salvo para mostrar. Descreva o que você quer construir.";
-        this.emit("assistant_text", { text: reply, final: true });
-        await this.persistFinal(reply, { lastFinishOk: true, conversational: true });
-        await this.clearCheckpoint();
-        this.emit("done", { summary: reply, conversational: true });
-        return { ok: true, summary: reply, steps: 0, toolsUsed: [] };
-      }
-
-      if (this.resumeRun) {
-        this.appendResumeInstruction();
-        this.emit("phase", {
-          phase: "resume",
-          message: "",
-        });
-      }
-
-      // C8 fix: budget check ANTES de gatherContext (5-10s de I/O caro).
-      // Se o budget já estourou, gatherContext seria desperdício.
-      if (this.loopBudgetExceeded()) {
-        return this.returnResumableChunk(0, toolsUsed);
-      }
-      this.emit("phase", { phase: "gather", message: "" });
-      await this.gatherContext();
-      if (this.loopBudgetExceeded()) {
-        return this.returnResumableChunk(0, toolsUsed);
-      }
-      await this.saveCheckpoint(LoopPhase.GATHER_CONTEXT);
-
-      const isApprovedOrSkip = this.approvedPlanBuild || this.skipConversationalGate;
-      const userPrompt =
-        this.originalUserRequest?.trim() ||
-        (() => {
-          const last = this.state.messages.filter((m) => m.role === "user").pop()?.content;
-          return typeof last === "string" ? last.trim() : "";
-        })();
-
-      const classification: ClassificationResult = isApprovedOrSkip
-        ? {
-            complexity: (this.complexityScore || 3) as 1 | 2 | 3 | 4 | 5,
-            type: "modify",
-            summary: (userPrompt || "Executar plano aprovado").slice(0, 200),
-            needsBuild: true,
-            needsDeps: false,
-          }
-        : deriveClassificationFromPrompt(userPrompt, this.planMode);
-
-      if (this.loopBudgetExceeded()) {
-        return this.returnResumableChunk(0, toolsUsed);
-      }
-
-      this.complexityScore = classification.complexity;
-      this.state.intent = {
-        type: classification.type as IntentAnalysis["type"],
-        summary: classification.summary,
-        scope: [],
-        complexity: "medium",
-      };
-      this.maxStepsLimit = calculateMaxSteps(classification.complexity);
-      this.applyAutoModelForComplexity(classification.complexity);
-      executionModel = this.configuredModel();
-
-      if (this.fsmState.name === "idle") {
-        await this.emitTransition("send");
-      }
-      await this.emitTransition("classified", classification);
-
-      if (
-        !isApprovedOrSkip &&
-        this.originalUserRequest &&
-        isConversationalTurn(this.originalUserRequest, classification)
-      ) {
-        return await this.runConversationalReply();
-      }
-
-      // Inventário do projeto — responde com contexto real, sem fs_write.
-      if (
-        this.originalUserRequest &&
-        isAdvisoryQuestion(this.originalUserRequest) &&
-        !this.approvedPlanBuild
-      ) {
-        return await this.runAdvisoryReply();
-      }
-
-      if (
-        this.originalUserRequest &&
-        isProjectInventoryQuestion(this.originalUserRequest) &&
-        !this.planMode
-      ) {
-        const inv = (await this.runInventoryPhase(executionModel)).trim();
-        if (!inv) {
-          return {
-            ok: false,
-            error: "Não foi possível resumir o estado do projeto.",
-            steps: 0,
-            toolsUsed: [],
-          };
-        }
-        this.emit("assistant_text", { text: inv, final: true });
-        await this.persistFinal(inv);
-        await this.clearCheckpoint();
-        this.emit("done", { summary: inv, inventory: true });
-        return { ok: true, summary: inv, steps: 0, toolsUsed: [] };
-      }
-
-      if (this.planMode) {
-        return await this.runPlanModeAgentTurn(executionModel);
-      }
-
-      this.emit("phase", {
-        phase: "build",
-        message: "",
-        intent: this.state.intent,
-      });
-
-      if (this.approvedPlanBuild) {
-        this.emit("phase", {
-          phase: "build",
-          message: "",
-        });
-      }
-
-      if (this.fsmState.name === "planning") {
-        await this.emitTransition("no_plan_needed");
-      }
-    }
-
-    if (this.planMode) {
-      await this.clearCheckpoint();
-      return {
-        ok: false,
-        error: "Plan mode não executa ferramentas — apenas propõe plano.",
-        steps: 0,
-        toolsUsed: [...toolsUsed],
-      };
-    }
-
-    const step =
-      this.resumeRun && this.hasCheckpoint
-        ? resumeStepStart(this.resumePhase ?? this.state.phase, this.state.currentStepIndex)
-        : 0;
-
-    return runBuildExecutePhase(
-      this.buildExecuteDeps(toolsUsed, executionModel),
-      step,
-    );
+    return runAgentOrchestrator({
+      state: this.state,
+      context: this.state.context,
+      originalUserRequest: this.originalUserRequest,
+      planMode: this.planMode,
+      emit: (type, data) => this.emit(type, data),
+      configuredModel: () => this.configuredModel(),
+      persistFinal: (summary, opts) => this.persistFinal(summary, opts),
+      clearCheckpoint: () => this.clearCheckpoint(),
+      resumeRun: this.resumeRun,
+      hasCheckpoint: this.hasCheckpoint,
+      resumePhase: this.resumePhase,
+      approvedPlanBuild: this.approvedPlanBuild,
+      skipConversationalGate: this.skipConversationalGate,
+      complexityScore: this.complexityScore,
+      setComplexityScore: (score) => {
+        this.complexityScore = score;
+      },
+      maxStepsLimit: this.maxStepsLimit,
+      setMaxStepsLimit: (limit) => {
+        this.maxStepsLimit = limit;
+      },
+      toolsUsed,
+      fsmStateName: this.fsmState.name,
+      emitTransition: (eventType, data) => this.emitTransition(eventType, data),
+      notifyLoopStatus: (ctx) => this.notifyLoopStatus(ctx),
+      applyAutoModelForComplexity: (complexity) => this.applyAutoModelForComplexity(complexity),
+      loopBudgetExceeded: () => this.loopBudgetExceeded(),
+      returnResumableChunk: (steps, used) => this.returnResumableChunk(steps, used),
+      gatherContext: () => this.gatherContext(),
+      saveCheckpoint: (phase) => this.saveCheckpoint(phase),
+      runPlanModeAgentTurn: (model) => this.runPlanModeAgentTurn(model),
+      finishPlanProposal: (plan) => this.finishPlanProposal(plan),
+      runBuildExecute: (used, model, step) =>
+        runBuildExecutePhase(this.buildExecuteDeps(used, model), step),
+      buildFixResume: this.buildFixResume,
+    });
   }
 
   private buildExecuteDeps(
@@ -941,18 +747,6 @@ export class AgentLoop {
     return finishPlanClarify(this.buildPlanTurnFinishDeps(), message, steps, toolsUsed);
   }
 
-  private buildAgentSystemPrompt(planMode: boolean, skillPrompt: string): string {
-    return buildForgeAgentSystemInput({
-      planMode,
-      projectTemplate: this.projectTemplate,
-      stackAddon: this.stackAddon,
-      skillPrompt,
-      sessionAddon: this.sessionAddon,
-      antiLeakRule: ANTI_LEAK_RULE,
-      tasteStart: this.tasteStart,
-    });
-  }
-
   private async runPlanModeAgentTurn(model: LLMProvider): Promise<AgentLoopRunResult> {
     const skillPrompt = this.state.context
       ? this.skills.buildSkillPrompt(this.state.context.files)
@@ -1000,94 +794,6 @@ export class AgentLoop {
     this.llmResponseWasStreamed = this.planStreamState.llmResponseWasStreamed;
     this.thinkingStreamStartedAt = this.planStreamState.thinkingStreamStartedAt;
     return result;
-  }
-
-  private async runAdvisoryReply(): Promise<{
-    ok: boolean;
-    summary: string;
-    steps: number;
-    toolsUsed: string[];
-  }> {
-    const ctx = this.state.context
-      ? `${this.state.context.projectConfig}\n\n${this.state.context.manifest}`.slice(0, 4000)
-      : "";
-    const reply = sanitizeUserFacingProse(
-      await runAdvisoryPhase(this.configuredModel(), this.state.messages, {
-        userRequest: this.originalUserRequest ?? undefined,
-        projectContext: ctx,
-      }),
-    );
-    this.emit("assistant_text", { text: reply, final: true });
-    await this.persistFinal(reply, {
-      lastFinishOk: true,
-      conversational: true,
-    });
-    await this.clearCheckpoint();
-    this.emit("done", { summary: reply, conversational: true });
-    return { ok: true, summary: reply, steps: 0, toolsUsed: [] };
-  }
-
-  private async runConversationalReply(): Promise<{
-    ok: boolean;
-    summary: string;
-    steps: number;
-    toolsUsed: string[];
-  }> {
-    const reply = sanitizeUserFacingProse(
-      await runConversationalPhase(this.configuredModel(), this.state.messages, {
-        planMode: this.planMode,
-        userRequest: this.originalUserRequest ?? undefined,
-      }),
-    );
-    this.emit("assistant_text", { text: reply, final: true });
-    await this.persistFinal(reply, {
-      lastFinishOk: true,
-      conversational: true,
-    });
-    await this.clearCheckpoint();
-    this.emit("done", { summary: reply, conversational: true });
-    return { ok: true, summary: reply, steps: 0, toolsUsed: [] };
-  }
-
-  private async runInventoryPhase(model: LLMProvider): Promise<string> {
-    this.emit("phase", {
-      phase: "inventory",
-      message: "",
-    });
-    const ctx = this.state.context?.projectConfig?.slice(0, 4000) ?? "(sem arquivos)";
-    const manifest = this.state.context?.manifest?.slice(0, 2000) ?? "";
-    try {
-      const resp = await model.chat({
-        messages: [
-          {
-            role: "system",
-            content: `${INVENTORY_SYSTEM}\n\n${ANTI_LEAK_RULE}`,
-          },
-          {
-            role: "user",
-            content: `Contexto de arquivos:\n${ctx}\n\nLista:\n${manifest}`,
-          },
-        ],
-        max_tokens: 900,
-        temperature: 0.2,
-      });
-      const text = (resp.content ?? "").trim();
-      if (text.length >= 12) return text;
-      const retry = await model.chat({
-        messages: [
-          { role: "system", content: `${INVENTORY_SYSTEM}\n\n${ANTI_LEAK_RULE}` },
-          {
-            role: "user",
-            content: `Contexto de arquivos:\n${ctx}\n\nLista:\n${manifest}\n\nResuma o estado do projeto em linguagem natural.`,
-          },
-        ],
-        max_tokens: 900,
-        temperature: 0.35,
-      });
-      return (retry.content ?? "").trim();
-    } catch {
-      return "";
-    }
   }
 
   /**
@@ -1153,101 +859,45 @@ export class AgentLoop {
     forceTools = false,
     tools?: ToolDefinition[],
   ): Promise<ChatResponse | null> {
-    const contextBlock = this.state.context
-      ? `## Contexto do Projeto\n${this.state.context.projectConfig}\n\n## Arquivos\n${this.state.context.manifest}`
-      : "(projeto novo)";
     const skillPrompt = this.state.context
       ? this.skills.buildSkillPrompt(this.state.context.files)
       : "";
-    const fullSystemPrompt = this.buildAgentSystemPrompt(false, skillPrompt);
+    const streamState = {
+      llmResponseWasStreamed: this.llmResponseWasStreamed,
+      thinkingStreamStartedAt: this.thinkingStreamStartedAt,
+    };
 
-    const messages: ChatMessage[] = [
-      { role: "system", content: fullSystemPrompt },
-      { role: "system", content: contextBlock },
-      ...history,
-      { role: "user", content: instruction },
-    ];
-
-    this.llmResponseWasStreamed = false;
-    this.thinkingStreamStartedAt = null;
-    // Infra-debug: log pré-LLM com instruction resumida + forceTools.
-    // Esse é o caminho do Erro #2 (NVIDIA NIM 500) — sem timing, não dá
-    // pra saber se foi timeout do provider ou serialização rejeitada.
-    const buildModeStartedAt = Date.now();
-    try {
-      const response = await model.chat({
-        messages,
-        tools: tools ?? mergeExecutionToolDefinitions(this.reg.getDefinitions(), false),
-        tool_choice: forceTools ? "required" : "auto",
-        max_tokens: calculateMaxTokens(this.complexityScore as 1 | 2 | 3 | 4 | 5), // H4
-        onTokenDelta: forceTools
-          ? undefined
-          : (delta) => {
-              if (!delta) return;
-              if (this.thinkingStreamStartedAt == null) {
-                this.thinkingStreamStartedAt = Date.now();
-              }
-              const elapsed = Date.now() - this.thinkingStreamStartedAt;
-              if (elapsed > THINKING_STREAM_CAP_MS) {
-                this.forceToolsNext = true;
-                return;
-              }
-              this.llmResponseWasStreamed = true;
-              this.lastActivityAt = Date.now();
-              this.emit("assistant_text", {
-                text: delta,
-                append: true,
-                delta: true,
-                final: false,
-                thinking: true,
-              });
-              this.emit("thinking_text", {
-                text: delta,
-                append: true,
-                delta: true,
-                final: false,
-              });
-            },
-      });
-      // Infra-debug: log pós-LLM com o que o build loop recebeu. Mesmo
-      // formato do plan loop pra debug cruzado.
-      logger.info("agent.build_llm_response", {
-        runId: this.runId ?? undefined,
-        durationMs: Date.now() - buildModeStartedAt,
-        hasContent: typeof response.content === "string" && response.content.trim().length > 0,
-        contentLength: typeof response.content === "string" ? response.content.length : 0,
-        contentPreview:
-          typeof response.content === "string" ? response.content.slice(0, 200) : null,
-        toolCallCount: response.tool_calls?.length ?? 0,
-        toolCallNames: (response.tool_calls ?? []).map((tc) => tc.name).join(",") || null,
-        streamed: this.llmResponseWasStreamed,
-        forceTools,
-      });
-      return response;
-    } catch (err: unknown) {
-      // Infra-debug: loga o err raw (mesma razão do plan loop).
-      logger.error("agent.build_llm_call_failed", {
-        runId: this.runId ?? undefined,
-        durationMs: Date.now() - buildModeStartedAt,
-        forceTools,
-        errorMessage: (err as Error)?.message,
-        errorName: (err as Error)?.name,
-      });
-      const message = friendlyLlmError(err, this.robinActive);
-      this.emit("error", { message, recoverable: true });
-      throw new Error(message);
-    }
-  }
-
-  private appendResumeInstruction(): void {
-    const last = this.state.messages[this.state.messages.length - 1];
-    if (last?.role === "user") return;
-    this.state.messages.push({
-      role: "user",
-      content:
-        "[Retomar] Continue a tarefa a partir do estado atual do projeto e do histórico acima. " +
-        "Não recomece do zero; use os arquivos já criados ou alterados.",
+    const response = await chatBuildModeLlm({
+      model,
+      instruction,
+      history,
+      contextBlock: buildBuildContextBlock(this.state.context),
+      fullSystemPrompt: buildBuildAgentSystemPrompt({
+        projectTemplate: this.projectTemplate,
+        stackAddon: this.stackAddon,
+        sessionAddon: this.sessionAddon,
+        tasteStart: this.tasteStart,
+        skillPrompt,
+      }),
+      toolDefinitions: this.reg.getDefinitions(),
+      complexityScore: this.complexityScore,
+      forceTools,
+      tools,
+      streamState,
+      emit: (type, data) => this.emit(type, data),
+      onActivity: () => {
+        this.lastActivityAt = Date.now();
+      },
+      onThinkingCapExceeded: () => {
+        this.forceToolsNext = true;
+      },
+      runId: this.runId,
+      robinActive: this.robinActive,
     });
+
+    this.llmResponseWasStreamed = streamState.llmResponseWasStreamed;
+    this.thinkingStreamStartedAt = streamState.thinkingStreamStartedAt;
+    return response;
   }
 
   private async isCanceled(): Promise<boolean> {
