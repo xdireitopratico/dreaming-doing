@@ -42,6 +42,7 @@ supabase/.temp
 # Secrets locais
 .env
 .env.local
+.env.debug
 
 # Deno lockfile (muitas vezes ruidoso em projetos mistos Bun + Deno/Supabase)
 # Se quiser versionar as dependências das Edge Functions, remova esta linha.
