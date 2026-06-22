@@ -191,6 +191,7 @@ interface ProvidersKeysSectionProps {
   onSave: (id: AiProviderId, appendPool: boolean) => void;
   onRemoveSlot: (id: AiProviderId, keyId: string) => void;
   onDelete: (id: AiProviderId) => void;
+  onProviderAdded?: () => void;
 }
 
 export function ProvidersKeysSection({
@@ -204,6 +205,7 @@ export function ProvidersKeysSection({
   onSave,
   onRemoveSlot,
   onDelete,
+  onProviderAdded,
 }: ProvidersKeysSectionProps) {
   const [addOpen, setAddOpen] = useState(false);
 
@@ -266,7 +268,10 @@ export function ProvidersKeysSection({
       <AddProviderModal
         open={addOpen}
         onClose={() => setAddOpen(false)}
-        onAdded={() => window.dispatchEvent(new Event("forge:prefs-updated"))}
+        onAdded={(id) => {
+          onProviderAdded?.();
+          window.dispatchEvent(new Event("forge:prefs-updated"));
+        }}
       />
     </section>
   );

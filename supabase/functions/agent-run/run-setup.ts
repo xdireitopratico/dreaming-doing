@@ -79,15 +79,19 @@ export function robinProviderConfig(
   };
 }
 
+function isUserLlmKeyName(key: string): boolean {
+  if (key === "OLLAMA_BASE_URL") return true;
+  if (USER_LLM_KEY_NAMES.includes(key as (typeof USER_LLM_KEY_NAMES)[number])) return true;
+  return key.endsWith("_API_KEY");
+}
+
 export function hasUserLlmKeyFromKeys(
   userOnlyKeys: Record<string, string>,
   poolKeys: string[] = [],
 ): boolean {
   return (
     poolKeys.length > 0 ||
-    Object.keys(userOnlyKeys).some((k) =>
-      USER_LLM_KEY_NAMES.includes(k as (typeof USER_LLM_KEY_NAMES)[number]),
-    )
+    Object.keys(userOnlyKeys).some((k) => isUserLlmKeyName(k) && !!userOnlyKeys[k]?.trim())
   );
 }
 

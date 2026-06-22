@@ -23,9 +23,11 @@ export type AiEnvId =
 
 export type ModelTier = "frontier" | "balanced" | "fast" | "pool";
 
+export type ModelEnvId = AiEnvId | `custom-${string}`;
+
 export interface ForgeModelPreset {
   id: string;
-  env: AiEnvId;
+  env: ModelEnvId;
   /** Ordem de força no ambiente (menor = mais forte). */
   envStrength?: number;
   /** ID enviado à API do provedor escolhido em `env` */
@@ -792,7 +794,7 @@ export function getPresetById(id?: string, userModels?: UserModelEntry[]): Forge
 }
 
 export function presetsForEnv(
-  env: AiEnvId,
+  env: ModelEnvId,
   opts?: { userModels?: UserModelEntry[] },
 ): ForgeModelPreset[] {
   const list = RANKED_MODEL_PRESETS.filter((p) => p.env === env);
@@ -815,7 +817,7 @@ export function presetsForEnv(
 
 /** Catálogo completo do ambiente + modelos que o usuário adicionou neste provedor. */
 export function modelsForStudioStep(
-  env: AiEnvId,
+  env: ModelEnvId,
   _mode?: "auto" | "robin" | "fixed" | undefined,
   userModels?: UserModelEntry[],
 ): ForgeModelPreset[] {

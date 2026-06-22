@@ -130,7 +130,7 @@ export function providerWire(providerId: string, baseUrlOverride?: string): Prov
 }
 
 export function builtInProviderIds(): BuiltInProviderId[] {
-  return BUILT_IN_PROVIDERS.map((p) => p.id);
+  return BUILT_IN_PROVIDERS.map((p) => p.id as BuiltInProviderId);
 }
 
 function buildProvider(p: Omit<AiProvider, "models"> & { models?: ForgeModelPreset[] }): AiProvider {

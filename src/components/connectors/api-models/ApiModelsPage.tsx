@@ -116,6 +116,39 @@ function mergeProviderList(connectorRows?: ConnectorRow[]): AiProvider[] {
   return [...byId.values()];
 }
 
+function buildProviderStates(
+  connectorRows: ConnectorRow[] | undefined,
+  prev: ProviderUiState[],
+): ProviderUiState[] {
+  const byId = new Map(prev.map((p) => [p.id, p]));
+  return mergeProviderList(connectorRows).map((p) => {
+    const existing = byId.get(p.id);
+    const row = connectorRows?.find((r) => rowProviderId(r) === p.id);
+    if (!row) {
+      return existing
+        ? { ...existing, baseUrl: p.baseUrl, status: "available" as const, poolCount: 0, poolSlots: [] }
+        : {
+            id: p.id,
+            status: "available" as const,
+            keyValue: "",
+            baseUrl: p.baseUrl,
+            poolCount: 0,
+            poolSlots: [],
+          };
+    }
+    const meta = (row.meta ?? {}) as { poolCount?: number; poolSlots?: PoolSlotPublic[] };
+    const slots = meta.poolSlots ?? [];
+    const count = meta.poolCount ?? slots.length ?? 1;
+    return {
+      ...(existing ?? { id: p.id, keyValue: "", baseUrl: p.baseUrl }),
+      baseUrl: p.baseUrl || existing?.baseUrl || "",
+      status: "connected" as const,
+      poolCount: count,
+      poolSlots: slots,
+    };
+  });
+}
+
 export function ApiModelsPage() {
   const { user } = useAuth();
   const qc = useQueryClient();
@@ -177,6 +210,19 @@ export function ApiModelsPage() {
     },
   });
 
+  const refreshProviders = useCallback(async () => {
+    if (user) await loadCustomProvidersFromDb(supabase);
+    setProviders((prev) => buildProviderStates(connectorRows, prev));
+  }, [user, connectorRows]);
+
+  useEffect(() => {
+    const onPrefsUpdated = () => {
+      void refreshProviders();
+    };
+    window.addEventListener("forge:prefs-updated", onPrefsUpdated);
+    return () => window.removeEventListener("forge:prefs-updated", onPrefsUpdated);
+  }, [refreshProviders]);
+
   useEffect(() => {
     if (!connectorRows) return;
     const connected = connectedEnvsFromRows(connectorRows);
@@ -206,32 +252,7 @@ export function ApiModelsPage() {
       setOllamaModel(ollamaMeta.defaultModel);
     }
 
-    setProviders((prev) => {
-      const byId = new Map(prev.map((p) => [p.id, p]));
-      const next: ProviderUiState[] = mergeProviderList(connectorRows).map((p) => {
-        const existing = byId.get(p.id);
-        const row = connectorRows.find((r) => rowProviderId(r) === p.id);
-        if (!row) {
-          return existing
-            ? { ...existing, status: "available", poolCount: 0, poolSlots: [] }
-            : { id: p.id, status: "available", keyValue: "", baseUrl: p.baseUrl, poolCount: 0, poolSlots: [] };
-        }
-        const meta = (row.meta ?? {}) as { poolCount?: number; poolSlots?: PoolSlotPublic[] };
-        const slots = meta.poolSlots ?? [];
-        const count = meta.poolCount ?? slots.length ?? 1;
-        return {
-          ...(existing ?? {
-            id: p.id,
-            keyValue: "",
-            baseUrl: p.baseUrl,
-          }),
-          status: "connected",
-          poolCount: count,
-          poolSlots: slots,
-        };
-      });
-      return next;
-    });
+    setProviders((prev) => buildProviderStates(connectorRows, prev));
   }, [connectorRows]);
 
   useEffect(() => {
@@ -305,7 +326,10 @@ export function ApiModelsPage() {
         return;
       }
       const prov = providerById(id);
-      const baseUrl = prov?.id === "ollama" ? p.baseUrl : undefined;
+      const baseUrl =
+        prov?.id === "ollama" || prov?.id.startsWith("custom-")
+          ? (p.baseUrl.trim() || prov?.baseUrl)
+          : undefined;
       setSavingId(id);
       try {
         if (appendPool && prov?.supportsPool) {
@@ -328,7 +352,11 @@ export function ApiModelsPage() {
   const handleRemoveSlot = useCallback(
     async (id: AiProviderId, keyId: string) => {
       const p = providerById(id);
-      const baseUrl = p?.id === "ollama" ? providers.find((x) => x.id === id)?.baseUrl : undefined;
+      const ui = providers.find((x) => x.id === id);
+      const baseUrl =
+        p?.id === "ollama" || p?.id.startsWith("custom-")
+          ? (ui?.baseUrl.trim() || p?.baseUrl)
+          : undefined;
       setSavingId(id);
       try {
         const res = await removeKeyFromPool(id, keyId, baseUrl);
@@ -353,7 +381,11 @@ export function ApiModelsPage() {
   const handleDeleteProvider = useCallback(
     async (id: AiProviderId) => {
       const p = providerById(id);
-      const baseUrl = p?.id === "ollama" ? providers.find((x) => x.id === id)?.baseUrl : undefined;
+      const ui = providers.find((x) => x.id === id);
+      const baseUrl =
+        p?.id === "ollama" || p?.id.startsWith("custom-")
+          ? (ui?.baseUrl.trim() || p?.baseUrl)
+          : undefined;
       setSavingId(id);
       try {
         await disconnectAiProvider(id, baseUrl);
@@ -679,6 +711,10 @@ export function ApiModelsPage() {
         onSave={handleSaveKey}
         onRemoveSlot={handleRemoveSlot}
         onDelete={handleDeleteProvider}
+        onProviderAdded={() => {
+          void refreshProviders();
+          setKeysExpanded(true);
+        }}
       />
 
       <InfraToolsSection
