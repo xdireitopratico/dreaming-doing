@@ -1,16 +1,10 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Loader2 } from "lucide-react";
 import type { AgentComposerMode, ChatMessage } from "@/lib/chat-types";
 import { formatClarifyChoiceReply } from "@/lib/clarify-choices";
 import type { ClarifyChoice } from "@/lib/chat/types";
 import type { StoredMessagePart } from "@/lib/chat-attachments";
 import { useChat } from "@/hooks/useChat";
-import {
-  scrollOffsetToAlignUserMessage,
-  shouldAnchorNewUserMessage,
-  shouldHoldUserMessageAnchor,
-  type ChatScrollMode,
-} from "@/lib/chat/user-message-anchor";
 import { ChatThread } from "./ChatThread";
 import { ChatPlanDock } from "./ChatPlanDock";
 import { ChatComposer } from "./ChatComposer";
@@ -101,110 +95,9 @@ export function ChatPanel({
   });
   // busyReason + takeOver vêm do useChat (Fase 1.9).
 
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const pinnedToBottom = useRef(true);
-  const scrollModeRef = useRef<ChatScrollMode>("bottom");
-  const anchoredUserIdRef = useRef<string | null>(null);
-  const prevLastUserMessageIdRef = useRef<string | null>(null);
-  const initialScrollDoneRef = useRef(false);
-  const isProgrammaticScrollRef = useRef(false);
-  const userScrolledAwayRef = useRef(false);
-  const userJustSentRef = useRef(false);
-  const [showPill, setShowPill] = useState(false);
   /** Fase 2.5 — quando o user clica num card de sugestão do empty state,
    *  setamos este state que alimenta `externalPrompt` no ChatComposer. */
   const [suggestionPrompt, setSuggestionPrompt] = useState<string | null>(null);
-  const PIN_THRESHOLD_PX = 100;
-
-  const holdUserAnchor = shouldHoldUserMessageAnchor({
-    isPendingRun: agent.isPendingRun,
-    running,
-    activeRunId: agent.activeRunId,
-    finished: agent.progress.finished,
-  });
-
-  const runProgrammaticScroll = useCallback((fn: () => void) => {
-    isProgrammaticScrollRef.current = true;
-    fn();
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        isProgrammaticScrollRef.current = false;
-      });
-    });
-  }, []);
-
-  const scrollToBottom = useCallback(
-    (behavior: ScrollBehavior = "auto") => {
-      const el = scrollRef.current;
-      if (!el) return;
-      runProgrammaticScroll(() => {
-        el.scrollTo({ top: el.scrollHeight, behavior });
-        pinnedToBottom.current = true;
-        scrollModeRef.current = "bottom";
-        anchoredUserIdRef.current = null;
-        userScrolledAwayRef.current = false;
-        setShowPill(false);
-      });
-    },
-    [runProgrammaticScroll],
-  );
-
-  /**
-   * Ancora a bolha do usuário no topo do painel UMA vez, via scrollIntoView.
-   * O scroll anchoring nativo do navegador (overflow-anchor: auto) mantém a
-   * bolha no topo enquanto o conteúdo do agente cresce abaixo — sem re-ancoragem
-   * contínua, sem spacer, sem ResizeObserver. Isso elimina a race que jogava
-   * o scroll para o meio do chat durante o streaming.
-   */
-  const anchorUserBubble = useCallback(
-    (messageId: string, behavior: ScrollBehavior = "auto"): boolean => {
-      const container = scrollRef.current;
-      if (!container) return false;
-      const bubble = container.querySelector<HTMLElement>(`[data-user-msg-id="${messageId}"]`);
-      if (!bubble) return false;
-      runProgrammaticScroll(() => {
-        bubble.scrollIntoView({ block: "start", behavior });
-        pinnedToBottom.current = false;
-        scrollModeRef.current = "user-anchor";
-        anchoredUserIdRef.current = messageId;
-        userScrolledAwayRef.current = false;
-        setShowPill(false);
-      });
-      return true;
-    },
-    [runProgrammaticScroll],
-  );
-
-  const handleScroll = useCallback(() => {
-    if (isProgrammaticScrollRef.current) return;
-    const el = scrollRef.current;
-    if (!el) return;
-    const dist = el.scrollHeight - el.scrollTop - el.clientHeight;
-    pinnedToBottom.current = dist <= PIN_THRESHOLD_PX;
-
-    const messageId = anchoredUserIdRef.current;
-    if (
-      holdUserAnchor &&
-      scrollModeRef.current === "user-anchor" &&
-      messageId &&
-      !userScrolledAwayRef.current
-    ) {
-      const bubble = el.querySelector<HTMLElement>(`[data-user-msg-id="${messageId}"]`);
-      if (bubble) {
-        const anchorTop = scrollOffsetToAlignUserMessage(el, bubble);
-        if (Math.abs(el.scrollTop - anchorTop) > 48) {
-          userScrolledAwayRef.current = true;
-        }
-      }
-    }
-
-    if (pinnedToBottom.current && !holdUserAnchor) {
-      scrollModeRef.current = "bottom";
-      anchoredUserIdRef.current = null;
-      userScrolledAwayRef.current = false;
-      setShowPill(false);
-    }
-  }, [holdUserAnchor]);
 
   const lastUserMessageId = useMemo(() => {
     for (let i = thread.length - 1; i >= 0; i--) {
@@ -344,7 +237,7 @@ export function ChatPanel({
 
   return (
     <div className="forge-chat-inner">
-      <div ref={scrollRef} className="forge-messages" onScroll={handleScroll}>
+      <div className="forge-messages">
         {chatLoading && messages.length === 0 ? (
           <div
             className="flex items-center gap-2 py-6 text-[var(--text-muted)]"
@@ -384,16 +277,6 @@ export function ChatPanel({
             )}
           </>
         )}
-
-        {showPill && (
-          <button
-            type="button"
-            className="forge-new-messages-pill"
-            onClick={() => scrollToBottom("smooth")}
-          >
-            Novas mensagens
-          </button>
-        )}
       </div>
 
       {((agent.progress.pendingQueueCount ?? 0) > 0 && pendingQueueItems.length > 0) ||
@@ -419,6 +302,7 @@ export function ChatPanel({
       <ChatComposer
         running={running}
         agentBusy={agentBusy}
+
         busyReason={busyReason}
         onTakeOver={takeOver}
         planPending={!!pendingPlan}
