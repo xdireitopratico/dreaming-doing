@@ -39,12 +39,8 @@ import {
 } from "./run-context.ts";
 import {
   formatClarifyMessage,
-  getMetaToolDefinitions,
   hasMixedMetaAndExecution,
-  isPlanModePatchTool,
   mergeExecutionToolDefinitions,
-  mergePlanModeToolDefinitions,
-  proposedPlanFromToolArgs,
   splitMetaToolCalls,
 } from "./tools/meta.ts";
 
@@ -68,14 +64,13 @@ import {
 } from "./design-preflight.ts";
 import { type CheckpointExtra, resumeStepStart, serializeCheckpointPayload } from "./checkpoint.ts";
 import {
-  generatePlanChatMessage,
   findLatestStoredPlan,
   isShowExistingPlanRequest,
   PLAN_APPROVAL_TTL_MS,
   sanitizePlanHeadline,
 } from "./plan-mode.ts";
-import { isPlanShapedMarkdown, planToolArgsFromMarkdown } from "./plan-markdown-parse.ts";
-import { buildPlanModeTurnInstruction } from "./plan-mode.ts";
+
+
 import { deriveClassificationFromPrompt, type ClassificationResult } from "./router.ts";
 import type { ProviderConfig } from "./providers.ts";
 import type { AgentPreferencesPayload } from "./connector-keys.ts";
@@ -96,6 +91,15 @@ import {
 import { buildCardSnapshot as buildCardSnapshotFromTimeline } from "./runtime/phases/snapshot.ts";
 import { runGatherContextPhase } from "./runtime/phases/gather-context.ts";
 import { NarrationPhase } from "./runtime/phases/narration.ts";
+import {
+  attemptPlanStuckClosing,
+  finishClarify as finishPlanClarify,
+  finishPlanModeFailure as finishPlanTurnFailure,
+  finishPlanProposal as finishPlanTurnProposal,
+  runPlanModeAgentTurn as runPlanModeAgentTurnPhase,
+  type PlanModeStreamState,
+  type PlanTurnFinishDeps,
+} from "./runtime/phases/plan-turn.ts";
 
 const CHECKPOINT_INTERVAL_STEPS = 2;
 const MAX_LLM_RETRIES = 3;
@@ -151,6 +155,10 @@ export class AgentLoop {
   private approvedPlanSteps: PlanStep[];
   private approvedPlanStepIndex: number;
   private narration: NarrationPhase;
+  private readonly planStreamState: PlanModeStreamState = {
+    llmResponseWasStreamed: false,
+    thinkingStreamStartedAt: null,
+  };
   /** Heartbeat timer (30s) que mantém `agent_runs.heartbeat_at` fresco durante silêncios longos.
    *  Garante que F5 e snapshot-restore continuem funcionando em runs de design+build > 5min.
    *  H8 fix: reduzido de 90s → 30s. observe() pode demorar 2-5min (npm install + build + tsc).
@@ -1519,94 +1527,44 @@ export class AgentLoop {
     });
   }
 
+  private buildPlanTurnFinishDeps(): PlanTurnFinishDeps {
+    return {
+      runId: this.runId,
+      projectId: this.state.projectId,
+      llmResponseWasStreamed: this.llmResponseWasStreamed,
+      emit: (type, data) => this.emit(type, data),
+      configuredModel: () => this.configuredModel(),
+      persistFinal: (summary, opts) => this.persistFinal(summary, opts),
+      persistPlanFinal: (summary, plan) => this.persistPlanFinal(summary, plan),
+      clearCheckpoint: () => this.clearCheckpoint(),
+      emitTransition: (eventType, data) => this.emitTransition(eventType, data),
+    };
+  }
+
   private async finishPlanModeFailure(
     summary: string,
     steps: number,
     toolsUsed: readonly string[],
     error?: string,
-  ): Promise<{
-    ok: false;
-    summary: string;
-    steps: number;
-    toolsUsed: string[];
-    error: string;
-  }> {
-    const message = summary.trim() || "Erro no modo Plan.";
-    const err = (error ?? message).trim() || message;
-    // Infra-debug: estruturado com runId/step/tools/streamed pra correlacionar
-    // com o que o usuário viu no chat e com os agent_stream_events do DB.
-    logger.error("agent.plan_mode_failure", {
-      runId: this.runId ?? undefined,
-      step: steps,
-      tools: toolsUsed.join(","),
-      streamed: this.llmResponseWasStreamed,
-      error: err,
-      message,
-    });
-    this.emit("assistant_text", { text: message, final: true });
-    await this.persistFinal(message, { lastFinishOk: false });
-    await this.clearCheckpoint();
-    return {
-      ok: false,
-      summary: message,
+  ) {
+    return finishPlanTurnFailure(
+      this.buildPlanTurnFinishDeps(),
+      summary,
       steps,
-      toolsUsed: [...toolsUsed],
-      error: err,
-    };
+      toolsUsed,
+      error,
+    );
   }
 
   private async finishPlanProposal(
     proposedPlan: ProposedPlan,
     toolsUsed: string[] = [],
   ): Promise<AgentLoopRunResult> {
-    const planChatText = await generatePlanChatMessage(this.configuredModel(), proposedPlan);
-    if (!planChatText) {
-      return {
-        ok: false,
-        summary: "Não foi possível gerar a mensagem do plano.",
-        steps: 0,
-        toolsUsed: [],
-      };
-    }
-    this.emit("assistant_text", { text: planChatText, final: true });
-    this.emit("plan_proposed", {
-      planId: proposedPlan.planId,
-      summary: proposedPlan.summary,
-      rationale: proposedPlan.rationale,
-      markdown: proposedPlan.markdown,
-      mission: proposedPlan.mission,
-      objective: proposedPlan.objective,
-      steps: proposedPlan.steps,
-      runId: this.runId,
-      projectId: this.state.projectId,
-      // Session 2.0 — design + ttlMs + proposedAt (antes descartados pelo reducer)
-      design: proposedPlan.design,
-      ttlMs: proposedPlan.ttlMs,
-      proposedAt: proposedPlan.proposedAt ?? new Date().toISOString(),
-    });
-    logger.event("agent_run.plan_proposed", {
-      runId: this.runId ?? undefined,
-      planId: proposedPlan.planId,
-      stepCount: proposedPlan.steps.length,
-    });
-    await this.emitTransition("plan_proposed", proposedPlan);
-    await this.persistPlanFinal(planChatText, proposedPlan);
-    await this.clearCheckpoint();
-    this.emit("done", {
-      summary: proposedPlan.summary,
-      plan: proposedPlan,
-      planProposed: true,
-      awaiting: true,
-    });
-    return {
-      ok: true,
-      summary: proposedPlan.summary,
-      steps: 0,
+    return finishPlanTurnProposal(
+      this.buildPlanTurnFinishDeps(),
+      proposedPlan,
       toolsUsed,
-      awaiting: true,
-      awaitingUser: { type: "plan_approval", planId: proposedPlan.planId },
-      plan: proposedPlan,
-    };
+    );
   }
 
   private async finishClarify(
@@ -1614,39 +1572,7 @@ export class AgentLoop {
     steps: number,
     toolsUsed: string[],
   ): Promise<AgentLoopRunResult> {
-    const text = message.trim();
-    if (!text) {
-      return {
-        ok: false,
-        summary: "Não foi possível gerar a pergunta de esclarecimento.",
-        steps,
-        toolsUsed,
-      };
-    }
-    this.emit("assistant_text", { text, final: true });
-    this.emit("gate_decision", {
-      phase: "clarify",
-      reason: "clarify tool",
-      awaiting: true,
-    });
-    await this.persistFinal(text, {
-      awaiting: true,
-      awaitingKind: "clarify",
-    });
-    await this.clearCheckpoint();
-    this.emit("done", { summary: text, qualified: true, awaiting: true });
-    return {
-      ok: true,
-      summary: text,
-      steps,
-      toolsUsed,
-      awaiting: true,
-      awaitingUser: { type: "clarify", message: text.slice(0, 200) },
-    };
-  }
-
-  private buildPlanModeInstruction(): string {
-    return buildPlanModeTurnInstruction(this.originalUserRequest ?? "");
+    return finishPlanClarify(this.buildPlanTurnFinishDeps(), message, steps, toolsUsed);
   }
 
   private buildAgentSystemPrompt(planMode: boolean, skillPrompt: string): string {
@@ -1662,310 +1588,52 @@ export class AgentLoop {
   }
 
   private async runPlanModeAgentTurn(model: LLMProvider): Promise<AgentLoopRunResult> {
-    const MAX_PLAN_EXPLORE = 10;
-    const toolsUsed = new Set<string>();
-
-    this.emit("phase", {
-      phase: "plan",
-      message: "",
-      intent: this.state.intent ?? undefined,
-    });
-    await this.saveCheckpoint(LoopPhase.PLAN_MODE);
-
-    for (let step = 0; step < MAX_PLAN_EXPLORE; step++) {
-      if (this.loopBudgetExceeded()) {
-        const chunk = await this.returnResumableChunk(step, toolsUsed);
-        return {
-          ok: false,
-          resumable: true,
-          summary: chunk.error,
-          steps: chunk.steps,
-          toolsUsed: chunk.toolsUsed,
-          error: chunk.error,
-          buildFix: chunk.buildFix,
-        };
-      }
-
-      const compressed = await this.compression.compress(this.state.messages);
-      let response: ChatResponse | null = null;
-      // Infra-debug: log pré-LLM com step/instruction/tools pra correlacionar
-      // com o que o LLM respondeu e com os agent_stream_events do DB.
-      const planModeStartedAt = Date.now();
-      try {
-        response = await this.llmChatPlanMode(
-          model,
-          step === 0 ? this.buildPlanModeInstruction() : "Continue explorando ou proponha o plano.",
-          compressed,
-        );
-      } catch (err: unknown) {
-        // Loga o err raw além da friendlyLlmError — `err.message` pode
-        // conter o que o provider externo rejeitou (ex: NVIDIA NIM 500 com
-        // "invalid type: unit variant"). Sem isso, perdemos a causa raiz.
-        logger.error("agent.plan_llm_call_failed", {
-          runId: this.runId ?? undefined,
-          step,
-          durationMs: Date.now() - planModeStartedAt,
-          errorMessage: (err as Error)?.message,
-          errorName: (err as Error)?.name,
-        });
-        const message = friendlyLlmError(err, this.robinActive);
-        return await this.finishPlanModeFailure(message, step, [...toolsUsed], message);
-      }
-      if (!response) {
-        return await this.finishPlanModeFailure(
-          "Sem resposta do modelo.",
-          step,
-          [...toolsUsed],
-          "Sem resposta do modelo.",
-        );
-      }
-      // Infra-debug: log pós-LLM com o que o modelo retornou. Sem content/tool_calls
-      // aqui, não dá pra reproduzir o Erro #1 ("Resposta sem tool nem texto").
-      logger.info("agent.plan_llm_response", {
-        runId: this.runId ?? undefined,
-        step,
-        durationMs: Date.now() - planModeStartedAt,
-        hasContent: typeof response.content === "string" && response.content.trim().length > 0,
-        contentLength: typeof response.content === "string" ? response.content.length : 0,
-        contentPreview:
-          typeof response.content === "string" ? response.content.slice(0, 200) : null,
-        toolCallCount: response.tool_calls?.length ?? 0,
-        toolCallNames: (response.tool_calls ?? []).map((tc) => tc.name).join(",") || null,
-        streamed: this.llmResponseWasStreamed,
-      });
-
-      const assistantText = (response.content ?? "").trim();
-
-      if (hasMixedMetaAndExecution(response.tool_calls)) {
-        this.state.messages.push({
-          role: "assistant",
-          content: response.content ?? assistantText,
-          tool_calls: response.tool_calls?.map((tc) => ({
-            id: tc.id,
-            type: "function" as const,
-            function: { name: tc.name, arguments: JSON.stringify(tc.arguments) },
-          })),
-        });
-        this.state.messages.push({
-          role: "user",
-          content:
-            "PARE. Não misture clarify com ferramentas de exploração. Use só um tipo por turno.",
-        });
-        continue;
-      }
-
-      const {
-        clarify: clarifyCall,
-        createPlan: planCall,
-        execution: execCalls,
-      } = splitMetaToolCalls(response.tool_calls ?? []);
-
-      if (planCall) {
-        toolsUsed.add("create_plan");
-        this.emit("phase", { phase: "creating_plan", message: "" });
-        const proposed = proposedPlanFromToolArgs(planCall.arguments);
-        if (!proposed) {
-          return await this.finishPlanModeFailure(
-            "create_plan inválido — faltam summary ou steps.",
-            step,
-            [...toolsUsed],
-            "create_plan inválido",
-          );
-        }
-        return await this.finishPlanProposal(proposed, [...toolsUsed]);
-      }
-
-      if (clarifyCall && execCalls.length === 0) {
-        toolsUsed.add("clarify");
-        const clarifyMsg = formatClarifyMessage(clarifyCall.arguments);
-        const combined = [assistantText, clarifyMsg].filter(Boolean).join("\n\n").trim();
-        return await this.finishClarify(combined, step, [...toolsUsed]);
-      }
-
-      if (!response.tool_calls?.length) {
-        if (assistantText) {
-          if (isPlanShapedMarkdown(assistantText)) {
-            this.emit("phase", { phase: "creating_plan", message: "" });
-            const toolArgs = planToolArgsFromMarkdown(assistantText);
-            const proposed = toolArgs ? proposedPlanFromToolArgs(toolArgs) : null;
-            if (proposed) {
-              return await this.finishPlanProposal(proposed, [...toolsUsed]);
-            }
-            return await this.finishPlanModeFailure(
-              "Plano no chat inválido — use create_plan com 2–7 passos.",
-              step,
-              [...toolsUsed],
-              "plan_markdown_invalid",
-            );
-          }
-
-          const clean = sanitizeUserFacingProse(assistantText);
-          this.emit("assistant_text", { text: clean, final: true });
-          await this.persistFinal(clean, { lastFinishOk: true, conversational: true });
-          await this.clearCheckpoint();
-          this.emit("done", { summary: clean, conversational: true });
-          return { ok: true, summary: clean, steps: step, toolsUsed: [...toolsUsed] };
-        }
-        if (this.llmResponseWasStreamed) {
-          return await this.finishPlanModeFailure(
-            "O modelo respondeu sem texto nem ferramentas. Reformule o pedido do plano.",
-            step,
-            [...toolsUsed],
-            "plan_stream_empty",
-          );
-        }
-        // Infra-debug: log estruturado quando o modelo não retorna nada útil.
-        // Esse é o caminho do Erro #1 ("Resposta sem tool nem texto") — sem
-        // essa info, não dá pra saber se o LLM retornou null, "", ou algo
-        // que o parser descartou.
-        logger.warn("agent.plan_empty_response", {
-          runId: this.runId ?? undefined,
-          step,
-          streamed: this.llmResponseWasStreamed,
-          contentType: typeof response.content,
-          contentIsNull: response.content === null,
-          contentIsEmptyString: response.content === "",
-          contentLength: typeof response.content === "string" ? response.content.length : 0,
-          toolCallCount: response.tool_calls?.length ?? 0,
-          assistantText: assistantText.slice(0, 200),
-        });
-        {
-          const closing = await this.attemptGracefulClosing("plan_stuck");
-          if (closing)
-            return { ok: true, summary: closing, steps: step, toolsUsed: [...toolsUsed] };
-        }
-        return await this.finishPlanModeFailure(
-          "O modelo não completou a resposta. Tente reformular seu pedido ou escolha outro modelo.",
-          step,
-          [...toolsUsed],
-          "Resposta sem tool nem texto",
-        );
-      }
-
-      const patchCalls = execCalls.filter((c) => isPlanModePatchTool(c.name));
-      if (patchCalls.length > 0) {
-        this.state.messages.push({
-          role: "assistant",
-          content: response.content ?? assistantText,
-          tool_calls: response.tool_calls.map((tc) => ({
-            id: tc.id,
-            type: "function" as const,
-            function: { name: tc.name, arguments: JSON.stringify(tc.arguments) },
-          })),
-        });
-        this.state.messages.push({
-          role: "user",
-          content:
-            "Modo Plan: fs_write, fs_edit e fs_delete estão bloqueados. " +
-            "Use fs_read, fs_search, fs_list ou shell_exec (grep, cat, ls) para explorar.",
-        });
-        continue;
-      }
-
-      this.toolsInvoked = true;
-      this.emit("phase", { phase: "plan", message: "", toolCount: execCalls.length });
-
-      const execResults = await parallelExecute(execCalls, async (call) => {
-        toolsUsed.add(call.name);
-        this.emit("tool_start", {
-          name: call.name,
-          args: call.arguments,
-          toolCallId: call.id,
-        });
-        const result = await this.reg.execute(call);
-        this.emit("tool_done", {
-          name: call.name,
-          toolCallId: call.id,
-          ok: result.ok,
-          error: result.error,
-          summary: result.ok ? "ok" : (result.error ?? "erro"),
-        });
-        return result;
-      });
-
-      this.state.messages.push({
-        role: "assistant",
-        content: response.content ?? assistantText,
-        tool_calls: execCalls.map((tc) => ({
-          id: tc.id,
-          type: "function" as const,
-          function: { name: tc.name, arguments: JSON.stringify(tc.arguments) },
-        })),
-      });
-
-      for (const { call, result } of execResults) {
-        this.state.messages.push({
-          role: "tool",
-          tool_call_id: call.id,
-          content: JSON.stringify(result).slice(0, 8000),
-        });
-      }
-    }
-
-    {
-      const closing = await this.attemptGracefulClosing("plan_stuck");
-      if (closing) {
-        return { ok: true, summary: closing, steps: MAX_PLAN_EXPLORE, toolsUsed: [...toolsUsed] };
-      }
-    }
-    return await this.finishPlanModeFailure(
-      "Limite de exploração no modo Plan — tente create_plan ou clarify.",
-      MAX_PLAN_EXPLORE,
-      [...toolsUsed],
-      "plan_explore_limit",
-    );
-  }
-
-  private async llmChatPlanMode(
-    model: LLMProvider,
-    instruction: string,
-    history: ChatMessage[],
-  ): Promise<ChatResponse | null> {
-    const contextBlock = this.state.context
-      ? `## Contexto do Projeto\n${this.state.context.projectConfig}\n\n## Arquivos\n${this.state.context.manifest}`
-      : "(projeto novo)";
     const skillPrompt = this.state.context
       ? this.skills.buildSkillPrompt(this.state.context.files)
       : "";
-    const fullSystemPrompt = this.buildAgentSystemPrompt(true, skillPrompt);
+    this.planStreamState.llmResponseWasStreamed = this.llmResponseWasStreamed;
+    this.planStreamState.thinkingStreamStartedAt = this.thinkingStreamStartedAt;
 
-    this.llmResponseWasStreamed = false;
-    this.thinkingStreamStartedAt = null;
-
-    return model.chat({
-      messages: [
-        { role: "system", content: fullSystemPrompt },
-        { role: "system", content: contextBlock },
-        ...history,
-        { role: "user", content: instruction },
-      ],
-      tools: mergePlanModeToolDefinitions(this.reg.getDefinitions()),
-      tool_choice: "auto",
-      max_tokens: calculateMaxTokens(this.complexityScore as 1 | 2 | 3 | 4 | 5), // H4
-      onTokenDelta: (delta) => {
-        if (!delta) return;
-        if (this.thinkingStreamStartedAt == null) {
-          this.thinkingStreamStartedAt = Date.now();
-        }
-        const elapsed = Date.now() - this.thinkingStreamStartedAt;
-        if (elapsed > THINKING_STREAM_CAP_MS) return;
-        this.llmResponseWasStreamed = true;
-        this.lastActivityAt = Date.now();
-        this.emit("assistant_text", {
-          text: delta,
-          append: true,
-          delta: true,
-          final: false,
-          thinking: true,
-        });
-        this.emit("thinking_text", {
-          text: delta,
-          append: true,
-          delta: true,
-          final: false,
-        });
+    const result = await runPlanModeAgentTurnPhase(
+      {
+        ...this.buildPlanTurnFinishDeps(),
+        robinActive: this.robinActive,
+        originalUserRequest: this.originalUserRequest,
+        state: this.state,
+        context: this.state.context,
+        intent: this.state.intent,
+        complexityScore: this.complexityScore,
+        projectTemplate: this.projectTemplate,
+        stackAddon: this.stackAddon,
+        sessionAddon: this.sessionAddon,
+        tasteStart: this.tasteStart,
+        skillPrompt,
+        toolDefinitions: this.reg.getDefinitions(),
+        streamState: this.planStreamState,
+        compressMessages: (messages) => this.compression.compress(messages),
+        loopBudgetExceeded: () => this.loopBudgetExceeded(),
+        returnResumableChunk: (steps, toolsUsed) => this.returnResumableChunk(steps, toolsUsed),
+        saveCheckpoint: (phase) => this.saveCheckpoint(phase),
+        attemptGracefulClosing: (reason) => this.attemptGracefulClosing(reason),
+        executeTool: (call) => this.reg.execute(call),
+        markToolsInvoked: () => {
+          this.toolsInvoked = true;
+        },
+        onActivity: () => {
+          this.lastActivityAt = Date.now();
+        },
+        getLlmResponseWasStreamed: () => this.planStreamState.llmResponseWasStreamed,
+        setLlmResponseWasStreamed: (value) => {
+          this.planStreamState.llmResponseWasStreamed = value;
+          this.llmResponseWasStreamed = value;
+        },
       },
-    });
+      model,
+    );
+
+    this.llmResponseWasStreamed = this.planStreamState.llmResponseWasStreamed;
+    this.thinkingStreamStartedAt = this.planStreamState.thinkingStreamStartedAt;
+    return result;
   }
 
   private async runAdvisoryReply(): Promise<{
@@ -2109,7 +1777,17 @@ export class AgentLoop {
   private async attemptGracefulClosing(
     reason: "tool_miss" | "build_fail" | "plan_stuck",
   ): Promise<string | null> {
-    const nudge: Record<string, string> = {
+    if (reason === "plan_stuck") {
+      return attemptPlanStuckClosing({
+        messages: this.state.messages,
+        model: this.configuredModel(),
+        finishProposal: async (proposed) => {
+          await finishPlanTurnProposal(this.buildPlanTurnFinishDeps(), proposed);
+        },
+      });
+    }
+
+    const nudge: Record<"tool_miss" | "build_fail", string> = {
       tool_miss:
         "O sistema detectou que você não está progredindo. " +
         "Sem usar ferramentas, escreva uma mensagem amigável para o usuário " +
@@ -2120,38 +1798,18 @@ export class AgentLoop {
         "Sem usar ferramentas, escreva uma mensagem para o usuário " +
         "explicando qual foi o erro, o que foi tentado, e perguntando " +
         "se pode continuar corrigindo na próxima sessão.",
-      plan_stuck:
-        "Você explorou o suficiente mas não conseguiu finalizar o plano. " +
-        "Use create_plan para propor o plano baseado no que já explorou, " +
-        "ou se não for possível, explique ao usuário o que encontrou " +
-        "e pergunte se pode continuar na próxima sessão.",
     };
-
-    const isPlan = reason === "plan_stuck";
-    const toolChoice = isPlan ? "auto" : "none";
-    const tools = isPlan ? getMetaToolDefinitions(true) : [];
 
     this.state.messages.push({ role: "user", content: nudge[reason] });
 
     try {
       const response = await this.configuredModel().chat({
         messages: this.state.messages,
-        tool_choice: toolChoice,
-        tools,
+        tool_choice: "none",
+        tools: [],
         max_tokens: 1024,
         temperature: 0.7,
       });
-
-      if (isPlan && response.tool_calls?.length) {
-        const { createPlan } = splitMetaToolCalls(response.tool_calls);
-        if (createPlan) {
-          const proposed = proposedPlanFromToolArgs(createPlan.arguments);
-          if (proposed) {
-            await this.finishPlanProposal(proposed);
-            return proposed.summary;
-          }
-        }
-      }
 
       const text = (response.content ?? "").trim();
       if (!text) return null;
