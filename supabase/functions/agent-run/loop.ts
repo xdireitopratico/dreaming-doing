@@ -20,33 +20,31 @@ import { ModelRouter } from "./router.ts";
 import { CompressionManager } from "./compression.ts";
 import { RuntimeObserver } from "./observer.ts";
 import { SkillRegistry } from "./skills.ts";
-import { sanitizeUserFacingProse } from "./sanitize-prose.ts";
 import { extractOriginalUserRequest } from "./run-context.ts";
-import {
-  formatClarifyMessage,
-  hasMixedMetaAndExecution,
-  splitMetaToolCalls,
-} from "./tools/meta.ts";
-import { MAX_CHUNK_GENERATIONS } from "../_shared/agent-chunk-limits.ts";
-
-import {
-  auditDesignInventory,
-  needsDesignPreflight,
-  runDesignPreflight,
-} from "./design-preflight.ts";
 import type { ProviderConfig } from "./providers.ts";
 import type { AgentPreferencesPayload } from "./connector-keys.ts";
 import { resolveAutoForComplexity } from "../_shared/model-presets.ts";
 import { ResilientLLM } from "./robin-pool.ts";
 import { formatLoopStatus, type LoopUpdateContext } from "./loop-status.ts";
-import { type AgentStateData, applyTransition, isTerminal } from "./agent-fsm.ts";
+import { type AgentStateData, applyTransition } from "./agent-fsm.ts";
 import { RuntimeEmitter, type StreamCallback } from "./runtime/emitter.ts";
+import {
+  bumpLlmRetries as bumpLlmRetriesInfra,
+  loopBudgetExceeded as loopBudgetExceededInfra,
+  maybeEmitSilenceHeartbeat as maybeEmitSilenceHeartbeatInfra,
+  resetLlmRetries as resetLlmRetriesInfra,
+  returnResumableChunk as returnResumableChunkInfra,
+  touchHeartbeat as touchHeartbeatInfra,
+  type RunInfraDeps,
+} from "./runtime/infra.ts";
 import { readLoopBudgetMsFromRuntime } from "./runtime/loop-config.ts";
 import {
   buildBuildAgentSystemPrompt,
   buildBuildContextBlock,
   chatBuildModeLlm,
 } from "./runtime/llm-chat.ts";
+import { runDesignPreflightIfNeeded as runDesignPreflightIfNeededPhase } from "./runtime/phases/design-preflight-phase.ts";
+import { attemptGracefulClosing as attemptGracefulClosingPhase } from "./runtime/phases/graceful-closing.ts";
 import { runGatherContextPhase } from "./runtime/phases/gather-context.ts";
 import {
   clearCheckpoint as clearAgentCheckpoint,
@@ -60,7 +58,6 @@ import {
 } from "./runtime/phases/persist.ts";
 import { NarrationPhase } from "./runtime/phases/narration.ts";
 import {
-  attemptPlanStuckClosing,
   finishClarify as finishPlanClarify,
   finishPlanModeFailure as finishPlanTurnFailure,
   finishPlanProposal as finishPlanTurnProposal,
@@ -70,8 +67,6 @@ import {
 } from "./runtime/phases/plan-turn.ts";
 import { runBuildExecutePhase } from "./runtime/phases/execute.ts";
 import { runAgentOrchestrator } from "./runtime/phases/orchestrator.ts";
-
-const MAX_LLM_RETRIES = 3;
 
 const LOOP_BUDGET_MS = readLoopBudgetMsFromRuntime();
 
@@ -140,7 +135,7 @@ export class AgentLoop {
   startHeartbeatTimer(intervalMs = 30_000): void {
     if (this.heartbeatTimer) return;
     this.heartbeatTimer = setInterval(() => {
-      void this.touchHeartbeat();
+      void touchHeartbeatInfra(this.buildInfraDeps());
     }, intervalMs);
   }
 
@@ -323,7 +318,10 @@ export class AgentLoop {
   }
 
   private loopBudgetExceeded(): boolean {
-    return Date.now() - this.runStartTime > LOOP_BUDGET_MS;
+    return loopBudgetExceededInfra({
+      runStartTime: this.runStartTime,
+      loopBudgetMs: LOOP_BUDGET_MS,
+    });
   }
 
   private requiresFinalBuildGate(): boolean {
@@ -331,75 +329,27 @@ export class AgentLoop {
     return this.touchedPaths.size > 0;
   }
 
-  /** Inventário + npm install/build no sandbox antes do 1º fs_* em templates web. */
   private async runDesignPreflightIfNeeded(): Promise<void> {
-    if (this.planMode || !needsDesignPreflight(this.projectTemplate)) return;
-    if (this.resumeRun && this.touchedPaths.size > 0) return;
-    if (this.loopBudgetExceeded()) return;
-
-    if (!this.state.context?.files?.length) {
-      await this.gatherContext();
-    }
-
-    const files = this.state.context?.files ?? [];
-    const inventory = auditDesignInventory(files);
-    const preflightErrors: string[] = [];
-    if (!inventory.ok) preflightErrors.push(`Faltam: ${inventory.missing.join(", ")}`);
-    if (inventory.warnings.length > 0) preflightErrors.push(`Imports: ${inventory.warnings.slice(0, 3).join(", ")}`);
-
-    await this.touchHeartbeat();
-    this.emit("phase", { phase: "preflight", message: "Executando..." });
-
-    const preflight = await runDesignPreflight(this.reg);
-    const manifest = preflight.availableComponents;
-    if (this.state.context) {
-      this.state.context.projectConfig += `\n\n## Design System (@forge/ui)\n${manifest}`;
-    }
-
-    if (!preflight.passed) {
-      const failed = preflight.checks.filter((c) => !c.ok).map((c) => c.name).join(", ");
-      this.emit("validate_fail", {
-        attempt: 0,
-        checks: failed ? [failed] : ["preflight"],
-        feedback: preflight.feedback?.slice(0, 500),
-        preflight: true,
-      });
-      preflightErrors.push(`Design system: ${preflight.feedback?.slice(0, 500) ?? "erro"}`);
-    }
-
-    if (preflightErrors.length > 0) {
-      this.state.messages.push({ role: "user", content: `PREFLIGHT FALHOU:\n${preflightErrors.join("\n")}\nCorrija antes de continuar.` });
-      return;
-    }
+    await runDesignPreflightIfNeededPhase({
+      planMode: this.planMode,
+      projectTemplate: this.projectTemplate,
+      resumeRun: this.resumeRun,
+      touchedPaths: this.touchedPaths,
+      state: this.state,
+      reg: this.reg,
+      loopBudgetExceeded: () => this.loopBudgetExceeded(),
+      gatherContext: () => this.gatherContext(),
+      touchHeartbeat: () => this.touchHeartbeat(),
+      emit: (type, data) => this.emit(type, data),
+    });
   }
 
   private async returnResumableChunk(
     steps: number,
     toolsUsed: Set<string>,
     options?: { buildFix?: boolean },
-  ): Promise<{
-    ok: false;
-    error: string;
-    steps: number;
-    resumable: true;
-    buildFix?: boolean;
-    toolsUsed: string[];
-  }> {
-    await this.saveCheckpoint(this.state.phase, true);
-    await this.emitDeliveryCheckpoint(steps);
-    await this.touchHeartbeat();
-    this.emit("explore", {
-      message: this.narration.buffer || "",
-    });
-    await this.persistCheckpointChat(steps, options?.buildFix);
-    return {
-      ok: false,
-      error: "Retomando automaticamente em novo chunk…",
-      steps,
-      resumable: true,
-      buildFix: options?.buildFix === true,
-      toolsUsed: [...toolsUsed],
-    };
+  ) {
+    return returnResumableChunkInfra(this.buildInfraDeps(), steps, toolsUsed, options);
   }
 
   private recordTouchedPath(path: string): void {
@@ -407,80 +357,40 @@ export class AgentLoop {
   }
 
   private async touchHeartbeat(): Promise<void> {
-    if (!this.runId) return;
-    try {
-      await this.sb
-        .from("agent_runs")
-        .update({ heartbeat_at: new Date().toISOString() })
-        .eq("id", this.runId);
-    } catch {
-      /* best-effort */
-    }
-    this.lastActivityAt = Date.now();
+    await touchHeartbeatInfra(this.buildInfraDeps());
   }
 
   private async bumpLlmRetries(): Promise<number> {
-    if (!this.runId) return MAX_LLM_RETRIES;
-    try {
-      const { data: row } = await this.sb
-        .from("agent_runs")
-        .select("meta")
-        .eq("id", this.runId)
-        .maybeSingle();
-      const meta = (row?.meta ?? {}) as Record<string, unknown>;
-      const next = (typeof meta.llmRetries === "number" ? meta.llmRetries : 0) + 1;
-      await this.sb
-        .from("agent_runs")
-        .update({ meta: { ...meta, llmRetries: next } })
-        .eq("id", this.runId);
-      return next;
-    } catch {
-      return MAX_LLM_RETRIES;
-    }
+    return bumpLlmRetriesInfra(this.buildInfraDeps());
   }
 
   private async resetLlmRetries(): Promise<void> {
-    if (!this.runId) return;
-    try {
-      const { data: row } = await this.sb
-        .from("agent_runs")
-        .select("meta")
-        .eq("id", this.runId)
-        .maybeSingle();
-      const meta = (row?.meta ?? {}) as Record<string, unknown>;
-      if (typeof meta.llmRetries !== "number" || meta.llmRetries === 0) return;
-      await this.sb
-        .from("agent_runs")
-        .update({ meta: { ...meta, llmRetries: 0 } })
-        .eq("id", this.runId);
-    } catch {
-      /* best-effort */
-    }
+    await resetLlmRetriesInfra(this.buildInfraDeps());
   }
 
   private maybeEmitSilenceHeartbeat(): void {
-    if (Date.now() - this.lastActivityAt < 90_000) return;
-    this.emit("heartbeat", {
-      message: "Ainda processando o modelo…",
-      silentMs: Date.now() - this.lastActivityAt,
-    });
+    maybeEmitSilenceHeartbeatInfra(this.buildInfraDeps());
   }
 
-  private async emitDeliveryCheckpoint(step: number): Promise<void> {
-    const deliveryFiles = [...this.touchedPaths];
-    const narration = this.narration.trim();
-    this.emit("delivery_checkpoint", {
-      step,
-      totalSteps: this.maxStepsLimit,
-      deliveryFiles,
-      narration: narration.slice(0, 4000),
-      resumable: true,
-      silent: true,
-      message:
-        deliveryFiles.length > 0
-          ? `${deliveryFiles.length} arquivo(s) prontos — continuo em seguida`
-          : "Continuo em seguida",
-    });
+  private buildInfraDeps(): RunInfraDeps {
+    return {
+      sb: this.sb,
+      runId: this.runId,
+      runStartTime: this.runStartTime,
+      loopBudgetMs: LOOP_BUDGET_MS,
+      getLastActivityAt: () => this.lastActivityAt,
+      setLastActivityAt: (ms) => {
+        this.lastActivityAt = ms;
+      },
+      getMaxStepsLimit: () => this.maxStepsLimit,
+      touchedPaths: this.touchedPaths,
+      narrationTrim: () => this.narration.trim(),
+      narrationBuffer: this.narration.buffer,
+      emit: (type, data) => this.emit(type, data),
+      getPhase: () => this.state.phase,
+      saveCheckpoint: (phase, force) => this.saveCheckpoint(phase, force),
+      persistCheckpointChat: (steps, buildFix) => this.persistCheckpointChat(steps, buildFix),
+    };
   }
 
   private buildPersistDeps(): AgentPersistDeps {
@@ -795,46 +705,16 @@ export class AgentLoop {
   private async attemptGracefulClosing(
     reason: "tool_miss" | "build_fail" | "plan_stuck",
   ): Promise<string | null> {
-    if (reason === "plan_stuck") {
-      return attemptPlanStuckClosing({
+    return attemptGracefulClosingPhase(
+      {
         messages: this.state.messages,
-        model: this.configuredModel(),
-        finishProposal: async (proposed) => {
+        configuredModel: () => this.configuredModel(),
+        finishPlanProposal: async (proposed) => {
           await finishPlanTurnProposal(this.buildPlanTurnFinishDeps(), proposed);
         },
-      });
-    }
-
-    const nudge: Record<"tool_miss" | "build_fail", string> = {
-      tool_miss:
-        "O sistema detectou que você não está progredindo. " +
-        "Sem usar ferramentas, escreva uma mensagem amigável para o usuário " +
-        "explicando o que estava tentando fazer, o que deu errado, e perguntando " +
-        "se pode continuar na próxima sessão.",
-      build_fail:
-        "O build falhou após várias tentativas. " +
-        "Sem usar ferramentas, escreva uma mensagem para o usuário " +
-        "explicando qual foi o erro, o que foi tentado, e perguntando " +
-        "se pode continuar corrigindo na próxima sessão.",
-    };
-
-    this.state.messages.push({ role: "user", content: nudge[reason] });
-
-    try {
-      const response = await this.configuredModel().chat({
-        messages: this.state.messages,
-        tool_choice: "none",
-        tools: [],
-        max_tokens: 1024,
-        temperature: 0.7,
-      });
-
-      const text = (response.content ?? "").trim();
-      if (!text) return null;
-      return sanitizeUserFacingProse(text);
-    } catch {
-      return null;
-    }
+      },
+      reason,
+    );
   }
 
   private async llmChat(
