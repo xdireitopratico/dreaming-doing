@@ -228,6 +228,7 @@ describe("Fase 2.2 — lastTool é extraído do timeline e exposto em MiniCardDa
       liveBriefings: [],
       status: "done",
       tasks: [],
+      activity: [],
       currentTaskIndex: 0,
       lastTool: { name: "fs_read", path: "src/app.tsx", ok: true },
     };

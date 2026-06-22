@@ -371,6 +371,25 @@
   margin: var(--space-sm) 0;
 }
 
+/* ─── Card shell base — fonte única do padrão visual ────────────────
+ * Usada por: ChatPlanDock, ChatJobCard (mini card), ChatClarify.
+ * Azul-zinc (bg-input), radius 16px, shadow profundo — igual ao composer.
+ * UI interativa vive direto na shell; inner dark (#0a0a0f) só em markdown
+ * body passivo do plano (texto legível), nunca em botões/opções/steps. */
+.forge-card-shell {
+  width: 100%;
+  max-width: min(100%, 520px);
+  padding: 12px 14px 10px;
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--bg-input) 92%, var(--bg-card) 8%);
+  border: 1px solid color-mix(in srgb, var(--border-forge) 75%, #52525b 25%);
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.02) inset,
+    0 6px 24px rgba(0, 0, 0, 0.28);
+  box-sizing: border-box;
+}
+
+/* Alias — plan dock usa a shell base. Mantido por compatibilidade. */
 .forge-plan-dock-shell {
   width: 100%;
   max-width: min(100%, 520px);
@@ -924,29 +943,31 @@
   color: var(--text-muted);
 }
 
-/* Mini card — card destacado (referência Lovable) */
+/* Mini card — unificado com .forge-card-shell (padrão create_plan).
+ * Herda radius 16px, bg-input azul-zinc, shadow profundo. */
 .forge-mini-card {
   display: block;
   width: 100%;
   align-self: stretch;
   margin: 0;
-  border-radius: 14px;
-  border: 1px solid color-mix(in srgb, var(--border-forge) 70%, #3f3f46 30%);
-  background: color-mix(in srgb, var(--bg-card) 88%, #18181b 12%);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--bg-input) 92%, var(--bg-card) 8%);
+  border: 1px solid color-mix(in srgb, var(--border-forge) 75%, #52525b 25%);
   box-shadow:
-    0 0 0 1px rgba(255, 255, 255, 0.03) inset,
-    0 4px 20px rgba(0, 0, 0, 0.22);
+    0 0 0 1px rgba(255, 255, 255, 0.02) inset,
+    0 6px 24px rgba(0, 0, 0, 0.28);
   transition:
     border-color 0.15s ease,
     box-shadow 0.15s ease;
   text-align: left;
   overflow: hidden;
+  box-sizing: border-box;
 }
 
 .forge-mini-card-body {
   display: block;
   width: 100%;
-  padding: 16px 18px;
+  padding: 12px 14px 10px;
   border: none;
   border-radius: inherit;
   background: none;
@@ -1168,6 +1189,82 @@
   color: var(--text-muted);
 }
 
+/* ─── Activity stream — trabalho happening em tempo real ────────────
+ * 3-4 linhas de tools/results com status (done/active/failed).
+ * Linha ativa ganha gradiente leve + border-left accent (vida, não neon). */
+.forge-mini-card-activity {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.forge-mini-card-activity-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px 6px 6px;
+  border-radius: 8px;
+  border-left: 2px solid transparent;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-muted);
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.forge-mini-card-activity-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+}
+
+.forge-mini-card-activity-icon[data-status="done"] {
+  color: color-mix(in srgb, var(--status-done) 85%, white);
+}
+
+.forge-mini-card-activity-icon[data-status="active"] {
+  color: color-mix(in srgb, var(--text-accent) 90%, white);
+}
+
+.forge-mini-card-activity-icon[data-status="failed"] {
+  color: color-mix(in srgb, var(--status-failed) 90%, white);
+}
+
+.forge-mini-card-activity-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Linha ativa — gradiente leve + border-left accent (efeito Disney sutil). */
+.forge-mini-card-activity-item--active {
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--text-accent) 10%, transparent) 0%,
+    transparent 100%
+  );
+  border-left-color: var(--text-accent);
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.forge-mini-card-activity-item--done {
+  color: var(--text-secondary);
+}
+
+.forge-mini-card-activity-item--failed {
+  color: color-mix(in srgb, var(--status-failed) 88%, white);
+  border-left-color: color-mix(in srgb, var(--status-failed) 50%, transparent);
+}
+
 .forge-mini-card-hint {
   margin: 10px 0 0;
   font-size: 10px;
@@ -1272,7 +1369,12 @@
 }
 
 .forge-clarify-dock-shell {
-  /* Mesma shell do plano — padrão visual unificado. */
+  /* Mesma shell do plano — padrão visual unificado (.forge-card-shell). */
+}
+
+/* Conteúdo direto na shell azul-zinc (sem inner dark — UI interativa). */
+.forge-clarify-content {
+  margin-bottom: var(--space-sm);
 }
 
 .forge-clarify-intro {

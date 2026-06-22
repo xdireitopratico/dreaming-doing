@@ -19,6 +19,17 @@ export type MiniCardTask = {
   status: MiniCardTaskStatus;
 };
 
+/** Activity stream — últimas ações reais do agente (tools/results/tasks)
+ *  com status visual. Substitui o briefing único por 3-4 linhas humanizadas
+ *  que mostram o trabalho happening em tempo real. */
+export type ActivityStatus = "done" | "active" | "failed";
+
+export type ActivityLine = {
+  id: string;
+  label: string;
+  status: ActivityStatus;
+};
+
 export type MiniCardData = {
   title: string;
   /** Header Lovable: «Edited App.tsx», «Running command», «Plan ready». */
@@ -28,6 +39,9 @@ export type MiniCardData = {
   liveBriefings: string[];
   status: MiniCardStatus;
   tasks: MiniCardTask[];
+  /** Activity stream humanizado — últimos 3-4 itens da timeline com status.
+   *  Mostra trabalho happening em tempo real (vs briefing único raso). */
+  activity: ActivityLine[];
   currentTaskIndex: number;
   editedFile?: string | null;
   fileCount?: number;

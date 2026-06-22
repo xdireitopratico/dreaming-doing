@@ -1,6 +1,7 @@
 import { cn } from "@/lib/utils";
 import type { MiniCardData } from "@/lib/chat/types";
 import {
+  Check,
   CheckCircle2,
   Circle,
   ExternalLink,
@@ -8,6 +9,7 @@ import {
   GitCompareArrows,
   Loader2,
   Terminal,
+  X,
   XCircle,
 } from "lucide-react";
 import { PlanPhaseListFromPlan } from "./PlanPhaseList";
@@ -28,6 +30,19 @@ function parseEditedHeader(header: string): { edited: boolean; file: string | nu
   const match = /^Edited\s+(.+)$/i.exec(header.trim());
   if (!match) return { edited: false, file: null };
   return { edited: true, file: match[1].trim() };
+}
+
+function activityIcon(status: MiniCardData["activity"][number]["status"]) {
+  switch (status) {
+    case "done":
+      return <Check className="size-3" />;
+    case "active":
+      return <Loader2 className="size-3 animate-spin" />;
+    case "failed":
+      return <X className="size-3" />;
+    default:
+      return <Circle className="size-3" />;
+  }
 }
 
 export function ChatJobCard({
@@ -113,8 +128,11 @@ export function ChatJobCard({
     },
   ];
   const visibleChips = chips.filter((c) => c.visible);
-  const visibleTasks = data.tasks.slice(0, 6);
-  const hiddenTaskCount = Math.max(0, data.tasks.length - visibleTasks.length);
+
+  // Activity stream — trabalho happening em tempo real (3-4 linhas).
+  // Prioridade sobre tasks estáticas do plano: mostra o que o agente FAZ agora.
+  const hasActivity = data.activity.length > 0;
+  const visibleActivity = data.activity.slice(0, 4);
 
   const cardVariant =
     (isRunningCommand || edited) && isLive
@@ -188,44 +206,36 @@ export function ChatJobCard({
           </div>
         )}
 
-        {data.pendingPlan && data.pendingPlan.steps.length > 0 ? (
+        {/* Activity stream humanizado — trabalho happening em tempo real.
+            Substitui a task list estática do plano pela janela de atividade
+            real do agente (tools/results com status). */}
+        {hasActivity ? (
+          <ul className="forge-mini-card-activity" data-testid="chat-mini-card-activity">
+            {visibleActivity.map((line) => (
+              <li
+                key={line.id}
+                className={cn(
+                  "forge-mini-card-activity-item",
+                  `forge-mini-card-activity-item--${line.status}`,
+                )}
+              >
+                <span
+                  className="forge-mini-card-activity-icon"
+                  data-status={line.status}
+                  aria-hidden
+                >
+                  {activityIcon(line.status)}
+                </span>
+                <span className="forge-mini-card-activity-label">{line.label}</span>
+              </li>
+            ))}
+          </ul>
+        ) : data.pendingPlan && data.pendingPlan.steps.length > 0 ? (
           <PlanPhaseListFromPlan
             plan={data.pendingPlan}
             compact
             className="forge-plan-phases forge-plan-phases--in-card"
           />
-        ) : visibleTasks.length > 0 ? (
-          <ul className="forge-task-list" data-testid="chat-mini-card-task-list">
-            {visibleTasks.map((task) => {
-              const Icon =
-                task.status === "done"
-                  ? CheckCircle2
-                  : task.status === "failed"
-                    ? XCircle
-                    : task.status === "active"
-                      ? Loader2
-                      : Circle;
-              return (
-                <li key={task.id} className="forge-task-item" data-status={task.status}>
-                  <Icon
-                    className={cn(
-                      "forge-task-icon size-3.5 shrink-0",
-                      task.status === "active" && "forge-task-icon--active animate-spin",
-                    )}
-                  />
-                  <span className="forge-task-label">{task.label}</span>
-                </li>
-              );
-            })}
-            {hiddenTaskCount > 0 && (
-              <li className="forge-task-item forge-task-item--more">
-                <span className="forge-task-icon forge-task-icon--more" aria-hidden>
-                  +{hiddenTaskCount}
-                </span>
-                <span className="forge-task-label">more plan steps</span>
-              </li>
-            )}
-          </ul>
         ) : null}
 
         <p className="forge-mini-card-hint">{hint()}</p>

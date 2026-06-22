@@ -56,8 +56,8 @@ export function ChatClarify({ data, disabled, onSelect, onCustomReply, onSkip }:
 
   return (
     <div className="forge-plan-dock forge-clarify-dock" data-testid="chat-clarify">
-      <div className="forge-plan-dock-shell forge-clarify-dock-shell">
-        <div className="forge-plan-dock-inner">
+      <div className="forge-card-shell forge-clarify-dock-shell">
+        <div className="forge-clarify-content">
           <div className="forge-plan-dock-header">
             <p className="forge-plan-dock-label forge-plan-dock-label--icon">
               <HelpCircle className="size-3" aria-hidden />

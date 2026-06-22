@@ -13,6 +13,14 @@ export type ForgeMiniCardTask = {
   status: MiniCardTaskStatus;
 };
 
+export type ForgeActivityStatus = "done" | "active" | "failed";
+
+export type ForgeActivityLine = {
+  id: string;
+  label: string;
+  status: ForgeActivityStatus;
+};
+
 export type ForgeMiniCardData = {
   /** Título da sessão quando terminal (ex.: «Brainstorm de app mobile»). */
   title: string;
@@ -24,6 +32,9 @@ export type ForgeMiniCardData = {
   liveBriefings: string[];
   status: MiniCardStatus;
   tasks: ForgeMiniCardTask[];
+  /** Activity stream — últimos 3-4 itens da timeline com status visual.
+   *  Substitui briefing único por janela de atividade real happening. */
+  activity: ForgeActivityLine[];
   currentTaskIndex: number;
   editedFile?: string | null;
   fileCount?: number;
@@ -537,6 +548,79 @@ export function collectMiniCardBriefings(
   return [];
 }
 
+/**
+ * Activity stream humanizado — últimos 3-4 itens relevantes da timeline
+ * com status visual (done/active/failed). Mostra o trabalho happening em
+ * tempo real em vez de um briefing único raso.
+ *
+ * Sanitização mantida (explorar/indexar/classify continuam filtrados — ruído
+ * interno). Inclui:
+ *  - tool em execução (active) se houver
+ *  - últimos tools/results finalizados (done)
+ *  - falha recente (failed) se aplicável
+ */
+export function collectMiniCardActivity(
+  progress: AgentProgress,
+  timeline: ForgeTimelineItem[],
+  jobActive: boolean,
+): ForgeActivityLine[] {
+  // Após término: mostra últimos 3 concluídos (ou falha) — snapshot final.
+  const lines: ForgeActivityLine[] = [];
+
+  // 1) Tool em execução AGORA (active) — topo do stream
+  const pendingTool = [...progress.tools].reverse().find((t) => t.ok === undefined);
+  if (pendingTool && jobActive) {
+    const label = normalizeMiniCardBriefing(
+      toolBriefing(pendingTool.name, pathFromArgs(pendingTool.args)),
+    );
+    if (label) {
+      lines.push({ id: `activity-active-${pendingTool.name}-${Date.now()}`, label, status: "active" });
+    }
+  }
+
+  // 2) Últimos tools/results finalizados — histórico enxuto (done/failed)
+  const seenLabels = new Set<string>();
+  for (const item of [...timeline].reverse()) {
+    if (lines.length >= 4) break;
+
+    if (item.type === "RESULT" && item.text) {
+      const label = normalizeMiniCardBriefing(item.text);
+      if (label && !seenLabels.has(label)) {
+        seenLabels.add(label);
+        lines.push({
+          id: item.id,
+          label,
+          status: item.ok === false ? "failed" : "done",
+        });
+        continue;
+      }
+    }
+
+    if (item.type === "TOOL" && item.ok !== undefined) {
+      const label = normalizeMiniCardBriefing(toolBriefing(item.name, item.path));
+      if (label && !seenLabels.has(label)) {
+        seenLabels.add(label);
+        lines.push({
+          id: item.id,
+          label,
+          status: item.ok === false ? "failed" : "done",
+        });
+        continue;
+      }
+    }
+  }
+
+  // 3) Fallback: thought ativo se nada mais sobreviveu à sanitização
+  if (lines.length === 0) {
+    const activeThought = [...timeline].reverse().find((i) => i.type === "THOUGHT" && i.active);
+    if (activeThought?.type === "THOUGHT" && jobActive) {
+      lines.push({ id: "activity-thinking", label: "Raciocinando…", status: "active" });
+    }
+  }
+
+  return lines;
+}
+
 function normalizePlanTaskLabel(description: string): string {
   const label = description
     .replace(/^[-*\d.)\s]+/, "")
@@ -782,6 +866,7 @@ export function buildAgentRunView(
         ? ["Executando plano"]
         : liveBriefings;
   const { tasks, currentTaskIndex } = deriveMiniCardTasks(progress, jobPlan, jobActive);
+  const activity = collectMiniCardActivity(progress, forgeTimeline, jobActive);
 
   const streamBody = progress.streamText?.trim() || null;
   const narrationBody = progress.narrationText?.trim() || null;
@@ -847,6 +932,7 @@ export function buildAgentRunView(
       liveBriefings: normalizedBriefings,
       status,
       tasks,
+      activity,
       currentTaskIndex,
       editedFile,
       fileCount: progress.diffs.length || progress.deliveryFiles?.length,

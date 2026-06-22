@@ -42,6 +42,7 @@ function toMiniCard(runView: NonNullable<ReturnType<typeof buildAgentRunView>>):
     liveBriefings: m.liveBriefings.length > 0 ? m.liveBriefings : [m.subtitle || m.header],
     status: m.status,
     tasks: m.tasks,
+    activity: m.activity ?? [],
     currentTaskIndex: m.currentTaskIndex,
     editedFile: m.editedFile,
     fileCount: m.fileCount,
