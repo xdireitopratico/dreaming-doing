@@ -1,6 +1,7 @@
 /**
  * Seed agent_preferences + Groq pool para usuário E2E provisionado.
- * Fonte da chave: E2E_GROQ_KEY → pool do admin FORGE → falha explícita.
+ * Fonte da chave: E2E_GROQ_KEY (recomendado — evita rate limit do pool admin)
+ * → pool Groq do admin FORGE → falha explícita.
  */
 import { createClient } from "@supabase/supabase-js";
 

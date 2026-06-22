@@ -101,13 +101,37 @@ async function fetchConversationId(projectId) {
 
 async function fetchLatestRun(conversationId) {
   const res = await rest(
-    `agent_runs?conversation_id=eq.${conversationId}&select=id,status,finished_at&order=started_at.desc&limit=1`,
+    `agent_runs?conversation_id=eq.${conversationId}&select=id,status,error,finished_at,meta&order=started_at.desc&limit=1`,
   );
   const rows = await res.json();
   if (!res.ok) {
     throw new Error(`fetchLatestRun: ${res.status} ${JSON.stringify(rows).slice(0, 200)}`);
   }
   return rows?.[0] ?? null;
+}
+
+async function fetchRunById(runId) {
+  const res = await rest(
+    `agent_runs?id=eq.${runId}&select=id,status,error,finished_at,meta&limit=1`,
+  );
+  const rows = await res.json();
+  if (!res.ok) {
+    throw new Error(`fetchRunById: ${res.status} ${JSON.stringify(rows).slice(0, 200)}`);
+  }
+  return rows?.[0] ?? null;
+}
+
+function isRunAwaitingPlan(run) {
+  if (!run) return false;
+  const meta = run.meta && typeof run.meta === "object" ? run.meta : {};
+  const awaiting = meta.awaitingUser;
+  if (awaiting && typeof awaiting === "object" && awaiting.type === "plan_approval") return true;
+  return run.status === "awaiting_user";
+}
+
+function isRateLimitError(error) {
+  const msg = typeof error === "string" ? error : "";
+  return /limite por minuto|rate.?limit/i.test(msg);
 }
 
 async function fetchStreamEvents(runId) {
@@ -224,10 +248,16 @@ async function sendComposerMessage(page, text) {
   await page.locator("[data-testid=chat-composer] .forge-composer-send").click();
 }
 
-async function syncBrowserAfterBootstrap(page, failures) {
+async function syncBrowserAfterBootstrap(page, failures, opts = {}) {
+  const wantPlanDock = opts.planDock === true;
   await page.reload({ waitUntil: "domcontentloaded", timeout: NAV_TIMEOUT_MS });
   const deadline = Date.now() + 60_000;
   while (Date.now() < deadline) {
+    if (wantPlanDock) {
+      const dock = await page.locator("[data-testid=chat-plan-dock-ready]").count();
+      const creating = await page.locator("[data-testid=chat-plan-dock-creating]").count();
+      if (dock > 0 || creating > 0) return true;
+    }
     const running = await page
       .locator('[data-testid=forge-header-state][data-state="running"]')
       .count();
@@ -235,7 +265,11 @@ async function syncBrowserAfterBootstrap(page, failures) {
     if (running > 0 || card > 0) return true;
     await sleep(500);
   }
-  failures.push("bootstrap: UI não anexou à run após reload (sem header running nem mini-card)");
+  failures.push(
+    wantPlanDock
+      ? "bootstrap: UI não mostrou plan-dock após reload"
+      : "bootstrap: UI não anexou à run após reload (sem header running nem mini-card)",
+  );
   return false;
 }
 
@@ -343,6 +377,13 @@ async function phaseInspectorLive(page, conversationId, failures, bootstrappedRu
 
   const deadline = Date.now() + INSPECTOR_LIVE_TIMEOUT_MS;
   while (Date.now() < deadline) {
+    const live = await fetchRunById(run.id);
+    if (live?.status === "failed") {
+      failures.push(`inspector-live: run falhou — ${live.error ?? "sem erro"}`);
+      await page.screenshot({ path: resolve(OUT_DIR, "phase-inspector-live.png"), fullPage: true }).catch(() => {});
+      return;
+    }
+
     const entries = await page.locator("[data-testid=inspector-timeline-track] [data-kind]").count();
     if (entries > lastEntryCount) {
       entryGrew = true;
@@ -384,30 +425,42 @@ function eventsHadToolStart(events) {
   return events.some((e) => e.event_type === "tool_start" || e.event_type === "tool_call");
 }
 
-async function phasePlanDock(page, conversationId, failures) {
+async function phasePlanDock(page, conversationId, failures, bootstrappedRunId = null) {
   console.log("→ fase plan-dock");
   if (!SERVICE_KEY || !conversationId) {
     failures.push("plan-dock: SUPABASE_SERVICE_ROLE_KEY ou conversationId ausente");
     return;
   }
 
-  try {
-    await pollRunStatus(
-      conversationId,
-      (r) => r.status === "awaiting_user",
-      RUN_IDLE_TIMEOUT_MS,
-      "awaiting_user",
-    );
-  } catch (e) {
-    failures.push(`plan-dock: ${e instanceof Error ? e.message : e}`);
+  const deadline = Date.now() + RUN_IDLE_TIMEOUT_MS;
+  let planReady = false;
+  while (Date.now() < deadline) {
+    const run = bootstrappedRunId
+      ? await fetchRunById(bootstrappedRunId)
+      : await fetchLatestRun(conversationId);
+    if (run?.status === "failed") {
+      failures.push(`plan-dock: run falhou — ${run.error ?? "sem erro"}`);
+      await page.screenshot({ path: resolve(OUT_DIR, "phase-plan-dock.png"), fullPage: true }).catch(() => {});
+      return;
+    }
+    if (isRunAwaitingPlan(run)) {
+      planReady = true;
+      break;
+    }
+    await sleep(2000);
+  }
+  if (!planReady) {
+    failures.push(`plan-dock: timeout aguardando plano (${RUN_IDLE_TIMEOUT_MS}ms)`);
+    await page.screenshot({ path: resolve(OUT_DIR, "phase-plan-dock.png"), fullPage: true }).catch(() => {});
     return;
   }
 
   const dock = page.locator("[data-testid=chat-plan-dock-ready]");
   try {
-    await dock.waitFor({ state: "visible", timeout: 15_000 });
+    await dock.waitFor({ state: "visible", timeout: 60_000 });
   } catch {
     failures.push("plan-dock: chat-plan-dock-ready não visível");
+    await page.screenshot({ path: resolve(OUT_DIR, "phase-plan-dock.png"), fullPage: true }).catch(() => {});
     return;
   }
 
@@ -497,7 +550,7 @@ async function phaseSecondTurn(page, conversationId, failures) {
     failures.push("second-turn: 2ª mensagem do usuário não apareceu");
   }
 
-  await waitForWorkingLine(page, THINKING_TIMEOUT_MS, failures, "second-turn");
+  await waitForWorkingLine(page, Math.max(THINKING_TIMEOUT_MS, 20_000), failures, "second-turn");
   await page.screenshot({ path: resolve(OUT_DIR, "phase-second-turn.png"), fullPage: true });
 }
 
@@ -550,6 +603,22 @@ async function main() {
 
   console.log("Fases:", [...PHASES].join(", "));
 
+  let e2eUserId = await resolveE2eUserId(creds);
+  if (e2eUserId && SERVICE_KEY) {
+    try {
+      const seed = await seedE2eAgentSetup({
+        supabaseUrl: SUPABASE_URL,
+        serviceKey: SERVICE_KEY,
+        userId: e2eUserId,
+      });
+      console.log(
+        `E2E pre-seed: groq ${seed.groq.seeded ? "seeded" : "ok"}, e2b ${seed.e2b.seeded ? "seeded" : "ok"}`,
+      );
+    } catch (e) {
+      console.warn("WARN: E2E pre-seed falhou —", e instanceof Error ? e.message : e);
+    }
+  }
+
   const browser = await chromium.launch({ headless: true });
   let context;
   try {
@@ -564,7 +633,6 @@ async function main() {
   const page = await context.newPage({ viewport: { width: 1280, height: 900 } });
   let projectId = null;
   let conversationId = null;
-  let e2eUserId = await resolveE2eUserId(creds);
   let bootstrappedRunId = null;
   const failures = [];
 
@@ -594,35 +662,64 @@ async function main() {
         failures.push("bootstrap: userId E2E não resolvido");
       } else {
         try {
-          const seed = await seedE2eAgentSetup({
-            supabaseUrl: SUPABASE_URL,
-            serviceKey: SERVICE_KEY,
-            userId: e2eUserId,
-          });
-          console.log(
-            `E2E setup: prefs ok, groq ${seed.groq.seeded ? "seeded" : "ok"}, e2b ${seed.e2b.seeded ? "seeded" : "ok"}`,
-          );
           await page.evaluate(localStoragePrefsScript(E2E_AGENT_PREFERENCES));
 
           const planMode = PHASES.has("plan-dock") && !PHASES.has("inspector-live");
-          const boot = await bootstrapAgentRun({
+          const bootstrapParams = {
             supabaseUrl: SUPABASE_URL,
             serviceKey: SERVICE_KEY,
             projectId,
             conversationId,
             userId: e2eUserId,
             planMode,
-          });
-          bootstrappedRunId = boot.runId;
-          await waitForRunStatus({
-            supabaseUrl: SUPABASE_URL,
-            serviceKey: SERVICE_KEY,
-            runId: bootstrappedRunId,
-            predicate: (r) => r.status === "running",
-            timeoutMs: RUN_ACTIVE_TIMEOUT_MS,
-            label: "running",
-          });
-          if (!(await syncBrowserAfterBootstrap(page, failures))) {
+          };
+
+          for (let attempt = 1; attempt <= 3; attempt++) {
+            const boot = await bootstrapAgentRun(bootstrapParams);
+            bootstrappedRunId = boot.runId;
+
+            if (planMode) {
+              const planDeadline = Date.now() + RUN_IDLE_TIMEOUT_MS;
+              let planReady = false;
+              while (Date.now() < planDeadline) {
+                const run = await fetchRunById(bootstrappedRunId);
+                if (isRunAwaitingPlan(run)) {
+                  planReady = true;
+                  break;
+                }
+                if (run?.status === "failed") {
+                  if (isRateLimitError(run.error) && attempt < 3) {
+                    console.log(`E2E bootstrap: rate limit — retry ${attempt}/3 em 65s`);
+                    await sleep(65_000);
+                    break;
+                  }
+                  throw new Error(run.error);
+                }
+                await sleep(2000);
+              }
+              if (planReady) break;
+              if (attempt >= 3) throw new Error("bootstrap plan: timeout aguardando awaiting_user");
+              continue;
+            }
+
+            await waitForRunStatus({
+              supabaseUrl: SUPABASE_URL,
+              serviceKey: SERVICE_KEY,
+              runId: bootstrappedRunId,
+              predicate: (r) => r.status === "running",
+              timeoutMs: RUN_ACTIVE_TIMEOUT_MS,
+              label: "running",
+            });
+            const run = await fetchRunById(bootstrappedRunId);
+            if (run?.status === "failed" && isRateLimitError(run.error) && attempt < 3) {
+              console.log(`E2E bootstrap: rate limit — retry ${attempt}/3 em 65s`);
+              await sleep(65_000);
+              continue;
+            }
+            break;
+          }
+
+          if (!(await syncBrowserAfterBootstrap(page, failures, { planDock: planMode }))) {
             /* failure já registrada */
           }
         } catch (e) {
@@ -643,7 +740,7 @@ async function main() {
     }
 
     if (PHASES.has("plan-dock") && !failures.length) {
-      await phasePlanDock(page, conversationId, failures);
+      await phasePlanDock(page, conversationId, failures, bootstrappedRunId);
     }
 
     if (PHASES.has("second-turn") && !failures.length) {

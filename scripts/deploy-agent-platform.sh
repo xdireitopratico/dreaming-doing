@@ -69,11 +69,8 @@ if [[ "$SKIP_SMOKE" -eq 0 ]]; then
   echo "→ check:inngest"
   npm run check:inngest
 
-  echo "→ smoke:agent"
-  npm run smoke:agent
-
-  echo "→ check:stale-runs"
-  npm run check:stale-runs
+  echo "→ check:agent-gates (journey vitest + smoke terminal + stale cleanup)"
+  npm run check:agent-gates
 
   echo "→ check:agent-metrics (7d)"
   npm run check:agent-metrics || echo "WARN: agent metrics above threshold — review prod runs"
