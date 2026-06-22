@@ -215,10 +215,6 @@ export async function persistCheckpointChat(
     totalSteps: deps.getMaxStepsLimit(),
     streamTail: deps.tailSlice(120),
     cardSnapshot,
-    latencyThoughtMs:
-      typeof cardSnapshot.latencyThoughtMs === "number"
-        ? cardSnapshot.latencyThoughtMs
-        : undefined,
     narrationText:
       typeof cardSnapshot.narrationText === "string" ? cardSnapshot.narrationText : undefined,
   };
@@ -288,10 +284,6 @@ export async function persistFinal(
     buildFailed: opts?.buildFailed === true || lastFinishOk === false,
     streamTail: deps.tailSlice(120),
     cardSnapshot,
-    latencyThoughtMs:
-      typeof cardSnapshot.latencyThoughtMs === "number"
-        ? cardSnapshot.latencyThoughtMs
-        : undefined,
     narrationText:
       typeof cardSnapshot.narrationText === "string" ? cardSnapshot.narrationText : undefined,
   };
@@ -354,10 +346,6 @@ export async function persistPlanFinal(
     planSteps: plan.steps,
     finishedAt: new Date().toISOString(),
     cardSnapshot,
-    latencyThoughtMs:
-      typeof cardSnapshot.latencyThoughtMs === "number"
-        ? cardSnapshot.latencyThoughtMs
-        : undefined,
     narrationText:
       typeof cardSnapshot.narrationText === "string" ? cardSnapshot.narrationText : undefined,
   };

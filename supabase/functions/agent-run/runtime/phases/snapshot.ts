@@ -1,4 +1,3 @@
-// runtime/phases/snapshot.ts — Timeline → cardSnapshot (Fase 2.2)
 import type { ProposedPlan } from "../../types.ts";
 
 export type StreamTimelineEntry = {
@@ -71,21 +70,6 @@ export function diffsFromTimeline(timeline: StreamTimelineEntry[]): TimelineDiff
   return diffs;
 }
 
-export function latencyThoughtMsFromTimeline(
-  timeline: StreamTimelineEntry[],
-  runStartTime: number,
-): number | null {
-  const first = timeline.find(
-    (e) =>
-      e.type === "assistant_text" &&
-      typeof e.data?.text === "string" &&
-      String(e.data.text).trim().length > 0,
-  );
-  if (!first) return null;
-  const ts = typeof first.timestamp === "number" ? first.timestamp : Date.now();
-  return Math.max(500, ts - runStartTime);
-}
-
 export type BuildCardSnapshotOpts = {
   streamText: string;
   deliveryFiles: string[];
@@ -123,18 +107,12 @@ export function buildCardSnapshot(ctx: BuildCardSnapshotContext): Record<string,
   const narration = ctx.narrationBuffer.trim();
   const now = ctx.now ?? Date.now();
 
-  let latencyThoughtMs = latencyThoughtMsFromTimeline(timeline, ctx.runStartTime);
-  if (latencyThoughtMs == null && (opts.finished ?? true)) {
-    latencyThoughtMs = Math.max(500, now - ctx.runStartTime);
-  }
-
   const snapshot: Record<string, unknown> = {
     timeline,
     tools,
     diffs,
     streamText: opts.streamText,
     narrationText: narration || undefined,
-    latencyThoughtMs: latencyThoughtMs ?? undefined,
     phase: opts.phase ?? (finished ? "done" : null),
     message: null,
     summary: null,

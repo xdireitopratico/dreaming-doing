@@ -116,9 +116,7 @@ export function enrichProgressFromMessageMeta(
     const metaDuration =
       typeof meta.workingDurationMs === "number" && meta.workingDurationMs > 0
         ? meta.workingDurationMs
-        : typeof meta.latencyThoughtMs === "number" && meta.latencyThoughtMs > 0
-          ? meta.latencyThoughtMs
-          : null;
+        : null;
     if (metaDuration != null) next = { ...next, workingDurationMs: metaDuration };
   }
 
@@ -273,8 +271,8 @@ function progressFromCardSnapshot(snap: Record<string, unknown>, msg: ChatMessag
   const workingDurationMs =
     typeof snap.workingDurationMs === "number" && snap.workingDurationMs > 0
       ? snap.workingDurationMs
-      : typeof snap.workingDurationMs === "number" && snap.workingDurationMs > 0
-        ? snap.workingDurationMs
+      : typeof snap.latencyThoughtMs === "number" && snap.latencyThoughtMs > 0
+        ? snap.latencyThoughtMs
         : null;
 
   return {
@@ -341,8 +339,8 @@ export function progressFromAssistantMessage(msg: ChatMessage): AgentProgress | 
   const metaDuration =
     typeof meta.workingDurationMs === "number" && meta.workingDurationMs > 0
       ? meta.workingDurationMs
-      : typeof meta.workingDurationMs === "number" && meta.workingDurationMs > 0
-        ? meta.workingDurationMs
+      : typeof meta.latencyThoughtMs === "number" && meta.latencyThoughtMs > 0
+        ? meta.latencyThoughtMs
         : null;
 
   const finishedAt = typeof meta.finishedAt === "string";
