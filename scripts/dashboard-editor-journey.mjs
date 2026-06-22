@@ -13,11 +13,12 @@
  *   npm run dev
  *   E2E_EMAIL=... E2E_PASSWORD=... npm run check:dashboard-journey
  *
+ * Auth cache: npm run setup:e2e-auth  →  E2E_STORAGE_STATE=.e2e/auth.json
+ *
  * Opcional:
- *   E2E_STORAGE_STATE=.e2e/auth.json
  *   E2E_CLEANUP=0
  *   E2E_REQUIRED=1
- *   E2E_PHASES=dashboard,f5,second-turn
+ *   E2E_PHASES=dashboard,inspector-live,f5,second-turn
  */
 import { chromium } from "playwright";
 import { mkdir, readFileSync } from "node:fs";

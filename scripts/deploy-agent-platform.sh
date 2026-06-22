@@ -38,6 +38,9 @@ echo "=== Agent platform deploy ==="
 echo "→ check agent-contract mirrors"
 npm run check:agent-contract
 
+echo "→ agent journey contract (vitest)"
+npm run test:agent-journey
+
 echo "→ unit tests"
 npm run test
 
