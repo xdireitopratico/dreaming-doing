@@ -4,25 +4,71 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   canTransitionJobStatus,
-  isAgentRuntimeV2ShadowEnabled,
+  isAgentJobsEnabled,
+  isAgentRuntimeV2WorkerEnabled,
   type AgentJobStatus,
 } from "@forge/agent-contract/lifecycle";
 
 const DEFAULT_LEASE_MS = 5 * 60 * 1000;
 
+function runtimeV2Env(): string | undefined {
+  return process.env.AGENT_RUNTIME_V2;
+}
+
+export function agentJobsEnabled(): boolean {
+  return isAgentJobsEnabled(runtimeV2Env());
+}
+
+/** @deprecated Use agentJobsEnabled */
 export function agentRuntimeV2ShadowEnabled(): boolean {
-  return isAgentRuntimeV2ShadowEnabled(process.env.AGENT_RUNTIME_V2);
+  return agentJobsEnabled();
+}
+
+export function agentRuntimeV2WorkerEnabled(): boolean {
+  return isAgentRuntimeV2WorkerEnabled(runtimeV2Env());
 }
 
 export function maxLoopResumeStepsForRuntime(): number {
-  return agentRuntimeV2ShadowEnabled() ? 1 : 3;
+  return agentJobsEnabled() ? 1 : 3;
+}
+
+export async function reclaimExpiredLeasedJobs(
+  client: SupabaseClient,
+  runId?: string,
+): Promise<number> {
+  if (!agentJobsEnabled()) return 0;
+
+  const now = new Date().toISOString();
+  let query = client
+    .from("agent_jobs")
+    .select("run_id, generation")
+    .eq("status", "leased")
+    .lt("lease_until", now);
+  if (runId) query = query.eq("run_id", runId);
+
+  const { data, error } = await query;
+  if (error || !data?.length) return 0;
+
+  let reclaimed = 0;
+  for (const row of data) {
+    const { error: updErr } = await client
+      .from("agent_jobs")
+      .update({ status: "queued", lease_until: null })
+      .eq("run_id", row.run_id as string)
+      .eq("generation", row.generation as number)
+      .eq("status", "leased");
+    if (!updErr) reclaimed += 1;
+  }
+  return reclaimed;
 }
 
 export async function leaseQueuedAgentJob(
   client: SupabaseClient,
   runId: string,
 ): Promise<number | null> {
-  if (!agentRuntimeV2ShadowEnabled()) return null;
+  if (!agentJobsEnabled()) return null;
+
+  await reclaimExpiredLeasedJobs(client, runId);
 
   const { data: row } = await client
     .from("agent_jobs")

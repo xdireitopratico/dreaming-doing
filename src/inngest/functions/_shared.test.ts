@@ -101,10 +101,14 @@ describe("drainPendingQueue", () => {
 });
 
 describe("maxLoopResumeStepsForRuntime", () => {
-  it("v2 shadow usa 1 chunk por invocação Inngest", async () => {
+  it("v2 shadow/worker usa 1 chunk por invocação Inngest", async () => {
     vi.stubEnv("AGENT_RUNTIME_V2", "shadow");
     const { maxLoopResumeStepsForRuntime } = await import("./agent-jobs.ts");
     expect(maxLoopResumeStepsForRuntime()).toBe(1);
+    vi.stubEnv("AGENT_RUNTIME_V2", "worker");
+    const mod = await import("./agent-jobs.ts");
+    expect(mod.maxLoopResumeStepsForRuntime()).toBe(1);
+    expect(mod.agentRuntimeV2WorkerEnabled()).toBe(true);
   });
 
   it("v1 usa MAX_LOOP_RESUME_STEPS", async () => {

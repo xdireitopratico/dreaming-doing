@@ -81,8 +81,17 @@ async function main() {
     if (latestByRun.size >= limit) break;
   }
 
+  const runtimeV2 = (process.env.AGENT_RUNTIME_V2 ?? "").trim().toLowerCase();
+  const jobsExpected = runtimeV2 === "shadow" || runtimeV2 === "worker" || runtimeV2 === "1" || runtimeV2 === "true";
+
   if (latestByRun.size === 0) {
-    console.log("WARN: no terminal agent_jobs yet (shadow may be off or no runs)");
+    if (jobsExpected) {
+      console.error(
+        "FAIL: AGENT_RUNTIME_V2 ativo mas sem agent_jobs terminais — shadow/worker não está gravando",
+      );
+      process.exit(1);
+    }
+    console.log("SKIP: shadow off (AGENT_RUNTIME_V2 unset) — nada para comparar");
     process.exit(0);
   }
 

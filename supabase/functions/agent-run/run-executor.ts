@@ -27,6 +27,7 @@ import { appendStreamEvent } from "../_shared/agent-stream.ts";
 import { chunkCapErrorMessage, evaluateChunkLimits } from "../_shared/agent-chunk-limits.ts";
 import { ensureTerminalRunMessage } from "../_shared/ensure-terminal-message.ts";
 import {
+  agentRuntimeV2WorkerEnabled,
   resolveJobGenerationForChunk,
   shadowCompleteJob,
   shadowEnqueueNextChunk,
@@ -99,6 +100,21 @@ export async function executeAgentRun(
     resume: resumeParam,
     planSourceRunId: params.planSourceRunId ?? null,
   });
+
+  if (agentRuntimeV2WorkerEnabled() && jobGeneration == null) {
+    const msg = "Worker mode: nenhum agent_job disponível para este chunk";
+    await transitionRun(supabase, runId, "failed", { error: msg });
+    return {
+      ok: false,
+      runId,
+      mode: planMode ? "plan" : "build",
+      resumable: false,
+      canceled: false,
+      error: msg,
+      stepsCompleted: 0,
+      durationMs: Date.now() - startMs,
+    };
+  }
 
   const effectivePreferences = resolveExecutePreferences(params.preferences, runMeta);
   const effectiveSkillIds = resolveExecuteIdList(

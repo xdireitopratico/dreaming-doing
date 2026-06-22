@@ -4,14 +4,28 @@
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import {
   canTransitionJobStatus,
-  isAgentRuntimeV2ShadowEnabled,
+  isAgentJobsEnabled,
+  isAgentRuntimeV2WorkerEnabled,
   type AgentJobStatus,
 } from "./agent-contract-lifecycle.ts";
 
 const DEFAULT_LEASE_MS = 5 * 60 * 1000;
 
+function runtimeV2Env(): string | undefined {
+  return Deno.env.get("AGENT_RUNTIME_V2");
+}
+
+export function agentJobsEnabled(): boolean {
+  return isAgentJobsEnabled(runtimeV2Env());
+}
+
+/** @deprecated Use agentJobsEnabled */
 export function agentRuntimeV2ShadowEnabled(): boolean {
-  return isAgentRuntimeV2ShadowEnabled(Deno.env.get("AGENT_RUNTIME_V2"));
+  return agentJobsEnabled();
+}
+
+export function agentRuntimeV2WorkerEnabled(): boolean {
+  return isAgentRuntimeV2WorkerEnabled(runtimeV2Env());
 }
 
 export type AgentJobRow = {
@@ -48,7 +62,7 @@ async function upsertAgentJob(
     result?: Record<string, unknown> | null;
   },
 ): Promise<string | null> {
-  if (!agentRuntimeV2ShadowEnabled()) return null;
+  if (!agentJobsEnabled()) return null;
 
   const leaseUntil =
     input.status === "leased"
@@ -89,7 +103,7 @@ export async function enqueueAgentJobOnDispatch(
   payload: Record<string, unknown>,
   opts?: { skipIfQueued?: boolean },
 ): Promise<number | null> {
-  if (!agentRuntimeV2ShadowEnabled()) return null;
+  if (!agentJobsEnabled()) return null;
 
   if (opts?.skipIfQueued) {
     const { data: existing } = await supabase
@@ -113,12 +127,45 @@ export async function enqueueAgentJobOnDispatch(
   return generation;
 }
 
+/** Devolve jobs leased expirados à fila `queued`. */
+export async function reclaimExpiredLeasedJobs(
+  supabase: SupabaseClient,
+  runId?: string,
+): Promise<number> {
+  if (!agentJobsEnabled()) return 0;
+
+  const now = new Date().toISOString();
+  let query = supabase
+    .from("agent_jobs")
+    .select("run_id, generation")
+    .eq("status", "leased")
+    .lt("lease_until", now);
+  if (runId) query = query.eq("run_id", runId);
+
+  const { data, error } = await query;
+  if (error || !data?.length) return 0;
+
+  let reclaimed = 0;
+  for (const row of data) {
+    const { error: updErr } = await supabase
+      .from("agent_jobs")
+      .update({ status: "queued", lease_until: null })
+      .eq("run_id", row.run_id as string)
+      .eq("generation", row.generation as number)
+      .eq("status", "leased");
+    if (!updErr) reclaimed += 1;
+  }
+  return reclaimed;
+}
+
 /** Fase 1.5 — Worker faz lease do job `queued` mais antigo. */
 export async function leaseQueuedAgentJob(
   supabase: SupabaseClient,
   runId: string,
 ): Promise<number | null> {
-  if (!agentRuntimeV2ShadowEnabled()) return null;
+  if (!agentJobsEnabled()) return null;
+
+  await reclaimExpiredLeasedJobs(supabase, runId);
 
   const { data: row } = await supabase
     .from("agent_jobs")
@@ -171,13 +218,18 @@ export async function resolveJobGenerationForChunk(
   runId: string,
   payload: Record<string, unknown>,
 ): Promise<number | null> {
-  if (!agentRuntimeV2ShadowEnabled()) return null;
+  if (!agentJobsEnabled()) return null;
 
   const active = await getActiveLeasedGeneration(supabase, runId);
   if (active != null) return active;
 
   const leased = await leaseQueuedAgentJob(supabase, runId);
   if (leased != null) return leased;
+
+  if (agentRuntimeV2WorkerEnabled()) {
+    console.warn("[agent_jobs] worker mode: nenhum job queued para lease", runId);
+    return null;
+  }
 
   const generation = await getNextJobGeneration(supabase, runId);
   await upsertAgentJob(supabase, {
@@ -209,7 +261,7 @@ export async function shadowCompleteJob(
   result: Record<string, unknown>,
   ok: boolean,
 ): Promise<void> {
-  if (!agentRuntimeV2ShadowEnabled() || generation == null) return;
+  if (!agentJobsEnabled() || generation == null) return;
 
   const { data: row } = await supabase
     .from("agent_jobs")
@@ -240,7 +292,7 @@ export async function shadowEnqueueNextChunk(
   nextGeneration: number,
   payload: Record<string, unknown>,
 ): Promise<void> {
-  if (!agentRuntimeV2ShadowEnabled()) return;
+  if (!agentJobsEnabled()) return;
   await upsertAgentJob(supabase, {
     runId,
     generation: nextGeneration,

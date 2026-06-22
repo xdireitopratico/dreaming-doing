@@ -47,8 +47,27 @@ export function canTransitionJobStatus(from: AgentJobStatus, to: AgentJobStatus)
 
 export const AGENT_RUNTIME_V2_SHADOW_ENV = "AGENT_RUNTIME_V2";
 
-/** Shadow mode: grava agent_jobs sem mudar executor v1. */
-export function isAgentRuntimeV2ShadowEnabled(envValue?: string | null): boolean {
+export type AgentRuntimeV2Mode = "off" | "shadow" | "worker";
+
+/** off | shadow (observability + fallback) | worker (1 job/chunk, sem fallback). */
+export function parseAgentRuntimeV2Mode(envValue?: string | null): AgentRuntimeV2Mode {
   const v = (envValue ?? "").trim().toLowerCase();
-  return v === "1" || v === "true" || v === "shadow";
+  if (v === "worker") return "worker";
+  if (v === "1" || v === "true" || v === "shadow") return "shadow";
+  return "off";
+}
+
+/** Fila agent_jobs ativa (shadow ou worker). */
+export function isAgentJobsEnabled(envValue?: string | null): boolean {
+  return parseAgentRuntimeV2Mode(envValue) !== "off";
+}
+
+/** Shadow/worker legacy alias — grava agent_jobs. */
+export function isAgentRuntimeV2ShadowEnabled(envValue?: string | null): boolean {
+  return isAgentJobsEnabled(envValue);
+}
+
+/** Worker real: executor exige lease; sem upsert fallback. */
+export function isAgentRuntimeV2WorkerEnabled(envValue?: string | null): boolean {
+  return parseAgentRuntimeV2Mode(envValue) === "worker";
 }
