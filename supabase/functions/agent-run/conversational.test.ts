@@ -4,6 +4,8 @@ import {
   isConversationRecallQuestion,
   isConversationalTurn,
   isConversationalTurnEarly,
+  runAdvisoryPhase,
+  runConversationalPhase,
 } from "./conversational.ts";
 
 Deno.test("isConversationalTurnEarly — cumprimentos sociais", () => {
@@ -39,4 +41,22 @@ Deno.test("isAdvisoryQuestion — paleta e sugestões sem implementação", () =
   assertEquals(isAdvisoryQuestion("o que você acha desse layout?"), true);
   assertEquals(isAdvisoryQuestion("crie uma landing com paleta azul"), false);
   assertEquals(isAdvisoryQuestion("implemente o tema dark"), false);
+});
+
+Deno.test("runConversationalPhase — fallback PT quando LLM falha", async () => {
+  const model = {
+    chat: async () => {
+      throw new Error("provider down");
+    },
+  };
+  const text = await runConversationalPhase(model, [], { userRequest: "bom dia" });
+  assertEquals(text.includes("ajudar"), true);
+});
+
+Deno.test("runAdvisoryPhase — fallback PT quando LLM retorna vazio", async () => {
+  const model = {
+    chat: async () => ({ content: "" }),
+  };
+  const text = await runAdvisoryPhase(model, [], { userRequest: "qual paleta?" });
+  assertEquals(text.includes("direção"), true);
 });

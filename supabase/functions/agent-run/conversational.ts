@@ -7,6 +7,17 @@ const GREETING_RE =
 
 const THANKS_RE = /^(obrigad[oa]|valeu|thanks|thank\s+you|brigad[ão]|tmj)[\s!.,?]*$/i;
 
+const CONVERSATIONAL_LLM_FALLBACK_GREETING =
+  "Olá! Como posso ajudar você hoje?";
+const CONVERSATIONAL_LLM_FALLBACK_THANKS =
+  "Por nada! Precisa de mais alguma coisa?";
+const CONVERSATIONAL_LLM_FALLBACK_RECALL =
+  "Pelo histórico da conversa, posso retomar de onde paramos — o que você quer fazer agora?";
+const ADVISORY_LLM_FALLBACK =
+  "Posso sugerir uma direção — me diga o que você quer priorizar no visual.";
+const DIRECT_CHAT_LLM_FALLBACK =
+  "Não consegui gerar uma resposta agora. Reformule o pedido ou tente outro modelo.";
+
 /** Perguntas sobre memória/histórico — early exit social no loop. */
 const RECALL_RE =
   /(?:você\s+)?lembra|lembr(a|ou|ar)|(?:do\s+)?que\s+(?:a\s+gente\s+)?(?:falamos|conversamos|discutimos|combinamos)|o\s+que\s+(?:a\s+gente\s+)?(?:falamos|conversamos|discutimos)|(?:qual\s+(?:foi|era)\s+)?(?:o\s+)?(?:assunto|tema|tópico)|(?:do\s+)?que\s+(?:se\s+)?trata(?:va|mos)?|what\s+(?:did\s+we|we)\s+(?:talk|discuss)|remember\s+what|recap|resumo\s+da\s+conversa|retomar\s+(?:a\s+)?conversa|(?:no\s+)?in[ií]cio\s+(?:da\s+)?conversa/i;
@@ -101,7 +112,10 @@ export async function runConversationalPhase(
     // fallback abaixo
   }
 
-  return "";
+  if (recall) return CONVERSATIONAL_LLM_FALLBACK_RECALL;
+  if (userRequest && THANKS_RE.test(userRequest)) return CONVERSATIONAL_LLM_FALLBACK_THANKS;
+  if (userRequest && GREETING_RE.test(userRequest)) return CONVERSATIONAL_LLM_FALLBACK_GREETING;
+  return CONVERSATIONAL_LLM_FALLBACK_GREETING;
 }
 
 const ADVISORY_SYSTEM = `Você é o parceiro de vibe-coding do FORGE — caloroso, direto, em português.
@@ -172,7 +186,7 @@ export async function runAdvisoryPhase(
     /* fallback */
   }
 
-  return "";
+  return ADVISORY_LLM_FALLBACK;
 }
 
 export async function runDirectChatPhase(
@@ -211,5 +225,5 @@ export async function runDirectChatPhase(
     /* fallback */
   }
 
-  return "";
+  return DIRECT_CHAT_LLM_FALLBACK;
 }

@@ -168,6 +168,7 @@ function mockHost(overrides?: Partial<AgentLoopHost>): AgentLoopHost {
     tailSlice: (count) => Array(count).fill("x"),
     getTimeline: () => [{ type: "tool_start", data: {} }],
     emitAgentProse: () => {},
+    ensureOpeningBeforeWork: () => {},
     emit: (type, data) => {
       emitted.push({ type, data });
     },

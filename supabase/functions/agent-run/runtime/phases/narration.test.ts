@@ -15,6 +15,14 @@ function captureNarration(config?: { approvedPlanBuild?: boolean; buildFixResume
   return { phase, events };
 }
 
+Deno.test("ensureOpeningBeforeWork — emite fallback quando ainda sem abertura", () => {
+  const { phase, events } = captureNarration();
+  phase.ensureOpeningBeforeWork("Vou explorar o projeto.");
+  phase.ensureOpeningBeforeWork("Segunda tentativa.");
+  assertEquals(events.length, 1);
+  assertEquals(events[0].data.opening, true);
+});
+
 Deno.test("emitOpening — assistant_text com opening:true uma vez", () => {
   const { phase, events } = captureNarration();
   phase.emitOpening("Vou começar pelo layout.");

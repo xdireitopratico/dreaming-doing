@@ -30,6 +30,7 @@ import type {
   ToolResult,
 } from "../../types.ts";
 import { LoopPhase } from "../../types.ts";
+import { PLAN_OPENING_FALLBACK } from "../phase-messages.ts";
 
 export const MAX_PLAN_EXPLORE = 10;
 
@@ -345,6 +346,7 @@ export type PlanTurnDeps = PlanTurnFinishDeps & {
   executeTool: (call: ToolCall) => Promise<ToolResult>;
   markToolsInvoked: () => void;
   onActivity: () => void;
+  ensureOpeningBeforeWork: (fallback: string) => void;
   getLlmResponseWasStreamed: () => boolean;
   setLlmResponseWasStreamed: (value: boolean) => void;
 };
@@ -586,6 +588,7 @@ export async function runPlanModeAgentTurn(
     }
 
     deps.markToolsInvoked();
+    deps.ensureOpeningBeforeWork(assistantText || PLAN_OPENING_FALLBACK);
     deps.emit("phase", { phase: "plan", message: "", toolCount: execCalls.length });
 
     const execResults = await parallelExecute(execCalls, async (call) => {

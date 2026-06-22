@@ -70,12 +70,18 @@ export type GateReplyDeps = {
   clearCheckpoint: () => Promise<void>;
 };
 
+function nonEmptyReply(text: string, fallback: string): string {
+  const clean = sanitizeUserFacingProse(text);
+  return clean.trim() || fallback;
+}
+
 export async function runConversationalGate(deps: GateReplyDeps): Promise<PlanTurnRunResult> {
-  const reply = sanitizeUserFacingProse(
+  const reply = nonEmptyReply(
     await runConversationalPhase(deps.configuredModel(), deps.state.messages, {
       planMode: deps.planMode,
       userRequest: deps.originalUserRequest ?? undefined,
     }),
+    "Olá! Como posso ajudar você hoje?",
   );
   deps.emit("assistant_text", { text: reply, final: true });
   await deps.persistFinal(reply, { lastFinishOk: true, conversational: true });
@@ -88,11 +94,12 @@ export async function runAdvisoryGate(deps: GateReplyDeps): Promise<PlanTurnRunR
   const ctx = deps.context
     ? `${deps.context.projectConfig}\n\n${deps.context.manifest}`.slice(0, 4000)
     : "";
-  const reply = sanitizeUserFacingProse(
+  const reply = nonEmptyReply(
     await runAdvisoryPhase(deps.configuredModel(), deps.state.messages, {
       userRequest: deps.originalUserRequest ?? undefined,
       projectContext: ctx,
     }),
+    "Posso sugerir uma direção — me diga o que você quer priorizar no visual.",
   );
   deps.emit("assistant_text", { text: reply, final: true });
   await deps.persistFinal(reply, { lastFinishOk: true, conversational: true });

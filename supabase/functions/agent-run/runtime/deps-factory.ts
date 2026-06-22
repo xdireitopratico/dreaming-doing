@@ -112,6 +112,7 @@ export type AgentLoopHost = {
   tailSlice: (count: number) => unknown[];
   getTimeline: () => Array<{ type: string; data: Record<string, unknown>; timestamp?: number }>;
   emitAgentProse: (raw: string, loopStep: number) => void;
+  ensureOpeningBeforeWork: (fallback: string) => void;
   emit: (type: string, data: unknown) => void;
   configuredModel: () => LLMProvider;
   gatherContext: () => Promise<void>;
@@ -186,6 +187,7 @@ export type AgentLoopDepsContext = {
   tailSlice: (count: number) => unknown[];
   getTimeline: () => Array<{ type: string; data: Record<string, unknown>; timestamp?: number }>;
   emitAgentProse: (raw: string, loopStep: number) => void;
+  ensureOpeningBeforeWork: (fallback: string) => void;
   emit: (type: string, data: unknown) => void;
   configuredModel: () => LLMProvider;
   loopBudgetExceeded: () => boolean;
@@ -341,6 +343,7 @@ export function buildExecuteDeps(
     observer: ctx.observer,
     router: ctx.router,
     emitAgentProse: ctx.emitAgentProse,
+    ensureOpeningBeforeWork: ctx.ensureOpeningBeforeWork,
     narrationBuffer: ctx.narrationBuffer,
     emit: ctx.emit,
     loopBudgetExceeded: ctx.loopBudgetExceeded,
@@ -395,6 +398,7 @@ export function buildPlanTurnDeps(
     executeTool: ctx.executeTool,
     markToolsInvoked: ctx.markToolsInvoked,
     onActivity: ctx.onActivity,
+    ensureOpeningBeforeWork: ctx.ensureOpeningBeforeWork,
     getLlmResponseWasStreamed: ctx.getPlanLlmResponseWasStreamed,
     setLlmResponseWasStreamed: ctx.setPlanLlmResponseWasStreamed,
   };
@@ -438,6 +442,7 @@ export function createDepsContext(
     tailSlice: (count) => host.tailSlice(count),
     getTimeline: () => host.getTimeline(),
     emitAgentProse: (raw, loopStep) => host.emitAgentProse(raw, loopStep),
+    ensureOpeningBeforeWork: (fallback) => host.ensureOpeningBeforeWork(fallback),
     emit: (type, data) => host.emit(type, data),
     configuredModel: () => host.configuredModel(),
     loopBudgetExceeded: () =>

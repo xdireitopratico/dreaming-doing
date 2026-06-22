@@ -22,6 +22,7 @@ import {
   type GateReplyDeps,
 } from "./gate-replies.ts";
 import type { ProposedPlan } from "../../types.ts";
+import { GATHER_PHASE_MESSAGE } from "../phase-messages.ts";
 
 export type OrchestratorDeps = GateReplyDeps & {
   resumeRun: boolean;
@@ -111,7 +112,8 @@ export async function runAgentOrchestrator(
     if (deps.loopBudgetExceeded()) {
       return deps.returnResumableChunk(0, deps.toolsUsed);
     }
-    deps.emit("phase", { phase: "gather", message: "" });
+    deps.emit("phase", { phase: "gather", message: GATHER_PHASE_MESSAGE });
+    deps.emit("explore", { message: GATHER_PHASE_MESSAGE, phase: "gather" });
     await deps.gatherContext();
     if (deps.loopBudgetExceeded()) {
       return deps.returnResumableChunk(0, deps.toolsUsed);

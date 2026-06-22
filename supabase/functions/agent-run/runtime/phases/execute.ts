@@ -43,6 +43,7 @@ import type {
 } from "../../types.ts";
 import { LoopPhase as LoopPhaseEnum } from "../../types.ts";
 import type { LoopUpdateContext } from "../../loop-status.ts";
+import { BUILD_OPENING_FALLBACK, CLOSING_FALLBACK } from "../phase-messages.ts";
 
 export type BuildExecuteDeps = {
   approvedPlanBuild: boolean;
@@ -74,6 +75,7 @@ export type BuildExecuteDeps = {
   observer: RuntimeObserver;
   router: ModelRouter;
   emitAgentProse: (raw: string, loopStep: number) => void;
+  ensureOpeningBeforeWork: (fallback: string) => void;
   narrationBuffer: string;
   emit: PlanTurnEmit;
   loopBudgetExceeded: () => boolean;
@@ -392,6 +394,8 @@ export async function runBuildExecutePhase(
 
       if (assistantText) {
         deps.emitAgentProse(assistantText, deps.state.currentStepIndex);
+      } else if (loopStep === 1 && !deps.buildFixResume) {
+        deps.ensureOpeningBeforeWork(BUILD_OPENING_FALLBACK);
       }
 
       deps.emit("phase", {
@@ -694,16 +698,14 @@ export async function runBuildExecutePhase(
     }),
   );
 
-  if (closingText) {
-    deps.emit("assistant_text", {
-      text: closingText,
-      append: false,
-      final: true,
-    });
-  }
-
+  const finalClosing = closingText.trim() || CLOSING_FALLBACK;
+  deps.emit("assistant_text", {
+    text: finalClosing,
+    append: false,
+    final: true,
+  });
   try {
-    await deps.persistFinal(closingText || "", { lastFinishOk: true });
+    await deps.persistFinal(finalClosing, { lastFinishOk: true });
   } catch (e) {
     console.error("[loop] persistFinal failed", e);
   }
@@ -716,7 +718,7 @@ export async function runBuildExecutePhase(
   const tokens = deps.compression.getTotalTokens();
   const costUsd = deps.compression.getEstimatedCostUsd(deps.router.mainCfg.model);
   deps.emit("done", {
-    summary: (closingText || "").slice(0, 2000),
+    summary: finalClosing.slice(0, 2000),
     totalInputTokens: tokens.input,
     totalOutputTokens: tokens.output,
     totalTokens: tokens.total,
@@ -724,7 +726,7 @@ export async function runBuildExecutePhase(
   });
   return {
     ok: true,
-    summary: (closingText || "").slice(0, 2000),
+    summary: finalClosing.slice(0, 2000),
     steps: loopStep,
     toolsUsed: [...deps.toolsUsed],
     totalInputTokens: tokens.input,

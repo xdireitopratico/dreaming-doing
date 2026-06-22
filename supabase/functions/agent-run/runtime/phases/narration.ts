@@ -51,6 +51,14 @@ export class NarrationPhase {
     });
   }
 
+  /** Garante abertura no chat antes do mini-card quando o LLM só envia tool_calls. */
+  ensureOpeningBeforeWork(fallback: string): void {
+    if (this.openingEmitted) return;
+    const chunk = fallback.trim();
+    if (!chunk) return;
+    this.emitOpening(chunk);
+  }
+
   emitOpening(text: string): void {
     if (this.openingEmitted) return;
     const chunk = text.trim();

@@ -245,6 +245,10 @@ export class AgentLoop {
     this.narration.emitAgentProse(raw, loopStep);
   }
 
+  ensureOpeningBeforeWork(fallback: string): void {
+    this.narration.ensureOpeningBeforeWork(fallback);
+  }
+
   private recordTouchedPath(path: string): void {
     if (path) this.touchedPaths.add(path);
   }
