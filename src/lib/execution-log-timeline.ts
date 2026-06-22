@@ -7,12 +7,6 @@ export interface StepFileRef {
   fileName: string;
 }
 
-function fileBase(path: string): string {
-  const p = path.replace(/^\/+/, "");
-  const i = p.lastIndexOf("/");
-  return i >= 0 ? p.slice(i + 1) : p;
-}
-
 /** Reidrata timeline mínima a partir de executionLog persistido no DB. */
 export function timelineFromExecutionLog(lines: string[]): SSEEvent[] {
   const out: SSEEvent[] = [];
@@ -51,4 +45,3 @@ export function timelineFromExecutionLog(lines: string[]): SSEEvent[] {
   }
   return out;
 }
-

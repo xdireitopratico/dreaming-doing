@@ -10,6 +10,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { resolveInngestEventUrl } from "./lib/inngest-event-url.mjs";
 import { seedE2eAgentSetup } from "./lib/e2e-agent-setup.mjs";
+import { isTerminalHonest } from "./lib/smoke-terminal.mjs";
 
 function loadEnvLocal() {
   const path = resolve(process.cwd(), ".env.local");
@@ -167,26 +168,6 @@ async function cleanupStaleSmokeRuns(projectIdResolved) {
   if (rows?.length) {
     console.log(`Cleanup: ${rows.length} smoke run(s) pendente(s) marcada(s) failed`);
   }
-}
-
-function isRichProgress(types) {
-  return types.some(
-    (t) =>
-      t === "phase" ||
-      t === "classify" ||
-      t === "assistant_text" ||
-      t === "text_delta" ||
-      t.startsWith("tool_") ||
-      t === "fsm_transition",
-  );
-}
-
-function isTerminalHonest(types, status) {
-  if (types.includes("chunk_resume")) return true;
-  if (status === "completed" || status === "awaiting_user") {
-    return types.includes("finish") || types.includes("done");
-  }
-  return false;
 }
 
 async function main() {

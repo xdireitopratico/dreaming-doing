@@ -1,6 +1,6 @@
 import { getFileIcon } from "@/components/editor/fileIcons";
 import { cn } from "@/lib/utils";
-import type { StepFileRef } from "@/lib/agent-job-stream";
+import type { StepFileRef } from "@/lib/execution-log-timeline";
 
 type FileRefChipProps = {
   file: StepFileRef;

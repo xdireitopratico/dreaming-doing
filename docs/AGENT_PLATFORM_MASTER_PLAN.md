@@ -1,7 +1,7 @@
 # Agent Platform — Master Engineering Plan
 
-> **Status:** Fases 2 + 3.1–3.2 + 3.4 concluídas · **próximo: Fase S** (jornada browser)  
-> **Data:** 2026-06-21 (plano) · 2026-06-22 (auditoria) · 2026-06-22 (revisão pós-decomposição)  
+> **Status:** Fase S ~85% · **bloqueador restante:** gate browser §1 (passo 20)  
+> **Data:** 2026-06-21 (plano) · 2026-06-22 (auditoria) · 2026-06-22 (revisão S.3–S.5)  
 > **Horizonte:** Contrato de Jornada verde → depois control plane 1.5  
 > **Métrica norte:** Usuário completa turno no browser (dashboard→editor→plan→2º turno) sem intervenção
 
@@ -9,46 +9,49 @@
 
 ---
 
-## 0. Verdade pós-auditoria (2026-06-22)
+## 0. Verdade pós-implementação (2026-06-22, revisado)
 
-### O que os testes NÃO provam
+### Gates — estado real
 
-| Gate atual | Passa? | Mentira |
-|------------|--------|---------|
-| Vitest 426 | ✅ | Não cobre dashboard→editor, nem browser |
-| Deno loop 48 + emitter 9 | ✅ | Contrato de eventos, não jornada UX |
-| `smoke-agent-e2e` | ⚠️ | Aceita `running` sem `completed` |
-| `check:agent-metrics` | ⚠️ | Non-blocking no deploy; ~53% failed histórico |
+| Gate | Passa? | Notas |
+|------|--------|-------|
+| Vitest `test:agent-journey` | ✅ | agent-turn-flow, lovable, invariants, inspector, forge-run, assistant-run-progress |
+| Deno `runtime/` + conversational | ✅ | 122+ testes (loop.test.ts separado, precisa `--allow-env`) |
+| `test:smoke-terminal` | ✅ | Rejeita `running` sem terminal; exige progresso rico em `completed` |
+| `smoke-agent-e2e` | ✅ código | Terminal honesto via `smoke-terminal.mjs`; CI `agent-platform` job |
+| `check:stale-runs` | ✅ | `shouldSkipStaleExpiry` + cleanup no deploy/CI |
+| `check:agent-metrics` | ✅ CI | Blocking no job `agent-platform` e `check:deploy-gates` |
 | `check:shadow-parity` | ⚠️ | Exit 0 se `AGENT_RUNTIME_V2` off |
+| Browser §1 checklist | ❌ | Único bloqueador restante da Fase S |
 
-### O que o usuário vive hoje
+### Sintomas — o que mudou
 
-| Sintoma | Causa (evidência em código) |
-|---------|----------------------------|
-| Dashboard → editor, LLM morto | `PromptEngine` `invoke` paralelo + reconcile one-shot (`PromptEngine.tsx:125-133`) |
-| Sem "Pensando…" | `ForgeThinking` só no inspector; teste proíbe thinking no chat |
-| Card parado / silêncio 2min | Eventos vazios + sem heartbeat UX; `phase: ""` |
-| Sem abertura antes do card | `emitOpeningToChat("")` no-op |
-| 2º turno / timeline morre | Checkpoint materializa cedo → live slot liberado |
-| Timeline só web research | `tool_done` ignorado; snapshot truncado |
+| Sintoma (auditoria) | Status | Evidência |
+|---------------------|--------|-----------|
+| Dashboard → editor, LLM morto | ✅ | `PromptEngine` usa `markPendingAgentRun`; coordinator `connect` |
+| Sem "Pensando…" no chat | ✅ | `ForgeThinking` em `AssistantTurn`; `resolveTurnThinking` |
+| Card parado / `phase: ""` | ✅ | `GATHER_PHASE_MESSAGE`, explore, opening fallback |
+| Sem abertura antes do card | ✅ | `ensureOpeningBeforeWork` plan/build |
+| 2º turno / timeline morre | ✅ | `assistant-materialized.ts` rejeita checkpoint; restore DB-only |
+| Timeline só web research | ✅ | `tool_done` em `buildForgeTimeline`; inspector via `buildTimeline` |
+| LLM fail retorna `""` | ✅ | Fallbacks PT em `conversational.ts` + `gate-replies.ts` |
 
-### Estado real das fases (atualizado 2026-06-22)
+### Estado real das fases
 
 | Fase | % real | Notas |
 |------|--------|-------|
-| **0** Parar hemorragia | ~55% | Lógica chunk ok; gates fracos |
-| **1** Control plane | ~35% | `agent_jobs` schema + shadow; execução ainda v1 |
-| **2** Runtime decomposto | **✅ 100%** | `loop.ts` 439 LOC; `runtime/phases/*`; Deno 113 pass |
-| **3** Frontend | **~70%** | 3.1 ✅ `useAgentRun` 280 LOC; 3.2 ✅ SSOT materialização; 3.4 ✅ sem sessionStorage |
-| **3.3** E2E browser | ❌ | Smoke ainda não bloqueante |
-| **S** Contrato Jornada | **~30%** | S.1 dispatch ok; S.2 Thought no chat (`ForgeThinking` + `resolveTurnThinking`) |
+| **0** Parar hemorragia | **~85%** | Smoke + metrics + stale no CI/deploy |
+| **1** Control plane | ~35% | Shadow ok; executor real pausado |
+| **2** Runtime decomposto | **✅ 100%** | `loop.ts` 443 LOC; `runtime/phases/*` |
+| **3** Frontend | **~85%** | 3.1–3.2–3.4 ✅; 3.3 smoke no CI |
+| **S** Contrato Jornada | **~85%** | S.1–S.5 ✅ código; S.6 parcial; §1 browser pendente |
 
-### Decisão estratégica (revisada 2026-06-22)
+### Decisão estratégica (vigente)
 
-1. **Fase 2 + 3.1–3.2 + 3.4 concluídas** — decomposição runtime e frontend feita.  
-2. **EXECUTAR Fase S** — jornada browser verde é o bloqueador restante (não mais LOC).  
-3. **PAUSAR** `agent_jobs` executor real (shadow continua observabilidade).  
-4. **Depois de S verde:** Fase 3.3 (E2E blocking) → Fase 1.5 → Fases 4–5.
+1. **Fases 2 + 3.1–3.2 + 3.4 + S.1–S.5 concluídas em código.**  
+2. **Fechar Fase S** = checklist browser §1 verde em staging (passo 20).  
+3. **PAUSAR** `agent_jobs` executor real (shadow continua).  
+4. **Depois de S verde:** Fase 1.5 → Fases 4–5.
 
 ---
 
@@ -68,15 +71,15 @@ Referência visual: `/dev/lovable-chat` · testes: `lovable-acceptance.test.ts`,
 6. Terminal   → 1 message assistant materializada
 ```
 
-### Invariantes técnicas (constituição revisada)
+### Invariantes técnicas
 
-1. **Um dispatch** — `sendMessage` / `connect`; zero `invoke` paralelo.
+1. **Um dispatch** — `sendMessage` / `connect`; zero `invoke` paralelo no agent path.
 2. **Um stream live** — `agent_stream_events` + reducer durante run.
 3. **Checkpoint ≠ terminal** — `meta.checkpoint` / `betweenChunks` não libera slot.
-4. **Um finish** — um evento `finish` por run (executor único).
-5. **Um status writer** — `transitionRun` só no executor/Inngest (loop sai).
-6. **Um timeline builder** — chat + inspector compartilham `buildForgeTimeline`.
-7. **Deletar, não esconder** — proibido `""` como fallback de mensagem user-facing.
+4. **Um finish** — um evento `finish` por run (executor único; loop emite `done`).
+5. **Um status writer** — `transitionRun` no executor/Inngest.
+6. **Um timeline builder** — `buildTimeline` → `buildForgeTimeline`.
+7. **Deletar, não esconder** — proibido `""` como fallback user-facing.
 
 ### Gate de fechamento Fase S (browser + CI)
 
@@ -85,7 +88,7 @@ Referência visual: `/dev/lovable-chat` · testes: `lovable-acceptance.test.ts`,
 - [ ] 2º turno: mesma jornada
 - [ ] F5 mid-run: timeline = stream catch-up
 - [ ] Inspector não congela após web_research
-- [ ] `agent-turn-flow` + smoke terminal verdes
+- [x] `agent-turn-flow` + smoke terminal verdes (CI)
 
 ---
 
@@ -101,210 +104,143 @@ Referência visual: `/dev/lovable-chat` · testes: `lovable-acceptance.test.ts`,
 
 ---
 
-## 3. Arquitetura alvo (v2) — inalterada em visão, repriorizada em execução
+## 3. Arquitetura alvo (v2)
 
 ```
 UI: useAgentSession · useAgentStream · reducer · AssistantTurn (Thought→…→closing)
      ↓ POST agent-run (thin edge, preferences obrigatórias)
 Control: agent_runs · agent_jobs (shadow) · agent_stream_events · pending_messages
      ↓ 1 chunk / 1 Inngest event (Fase 1.5 — após S)
-Execution: AgentRuntime.runChunk() (Fase 2 — após 1.5)
+Execution: AgentRuntime.runChunk() (Fase 2 — ✅)
 ```
 
-Detalhes: §3.2–3.7 do plano original (agent_jobs, lifecycle, decomposição loop, hooks) permanecem válidos como **destino**, não como **próximo passo**.
+### Demolição — status
 
-### O que preservamos
-
-| Componente | Por quê |
-|------------|---------|
-| `ChatComposer`, `ChatPlanDock` | Funcionam |
-| `agent_stream_events` + Realtime | Spine correto |
-| `applyAgentProgressEvent` | Reducer testado |
-| `RuntimeEmitter` | Fase 2.1 feita |
-| `packages/agent-contract` (events + lifecycle) | SSOT parcial |
-| `/dev/lovable-chat` | Oráculo UX |
-
-### O que demolimos (Fase S + depois)
-
-| Componente | Quando | Substituto |
+| Componente | Status | Substituto |
 |------------|--------|------------|
-| `PromptEngine` invoke paralelo | **S.1** | `agent-auto-run` + `connect` |
-| `buildTimeline` duplicado | **S.4** | `buildForgeTimeline` único |
-| `agent-job-stream` tree UI | **S.4** | delete |
-| `statusChips`, `phaseMessage` mortos | **S.2** | delete |
-| `TOOL_NUDGE=""` + push vazio | **S.3** | delete branch |
-| `loop.markRunStatus` | **S.3** | executor only |
-| `runningLocks` edge | P2 | DB lock only |
-| `loop.ts` monólito | Fase 2 | `runtime/phases/*` |
+| `PromptEngine` invoke paralelo | ✅ removido | `markPendingAgentRun` + coordinator |
+| `buildTimeline` duplicado | ✅ unificado | delega a `buildForgeTimeline` |
+| `agent-job-stream` tree UI | ✅ removido | `execution-log-timeline.ts` (só reidratação) |
+| `statusChips`, `phaseMessage` | ✅ removido | — |
+| `TOOL_NUDGE=""` | ✅ removido | `decideToolProgress` |
+| `loop.markRunStatus` | ✅ removido | `transitionRun` no executor |
+| `forge:agent-snapshot` | ✅ removido | `agent-run-restore.ts` DB-only |
+| `runningLocks` edge | ✅ removido | DB lock |
+| `loop.ts` monólito | ✅ | `runtime/phases/*` |
 
 ---
 
 ## 4. Roadmap revisado
 
-### Fase S — Contrato de Jornada (AGORA) · ~80h
+### Fase S — Contrato de Jornada · ~85% concluída
 
-**Objetivo:** experiência Lovable no browser; gates honestos.
-
-| # | Entrega | Auditoria ref |
-|---|---------|---------------|
-| S.1 | **Dispatch único** — dashboard usa `agent-auto-run` + editor `connect`; remove `invoke` | P0-CHAT-1,2 |
-| S.2 | **Thought no chat** — `ForgeThinking` em `AssistantTurn`; `mapAssistantTurn` | P0-CHAT-3 ✅ |
-| S.3 | **Runtime fala** — opening, gather phase, LLM fail fallback, no double finish | P0-RT-1,2,3 |
-| S.4 | **Inspector vivo** — checkpoint não materializa; `tool_done`; builder único | P0-INS-1,2,3 |
-| S.5 | **Gates honestos** — smoke terminal; stale aware; journey E2E blocking | P0-GATE-1 |
-| S.6 | **Delete pass** — lista §6 da auditoria | — |
+| # | Status | Entrega |
+|---|--------|---------|
+| S.1 | ✅ | Dispatch único dashboard → editor |
+| S.2 | ✅ | Thought no chat (`ForgeThinking`) |
+| S.3 | ✅ | Runtime fala: gather, opening, fallbacks PT |
+| S.4 | ✅ | Inspector vivo: checkpoint gate, `tool_done`, builder único |
+| S.5 | ✅ | Gates: smoke-terminal, stale, metrics no CI/deploy |
+| S.6 | ⚠️ parcial | `agent-job-stream` → `execution-log-timeline`; P2 dead code pendente |
 
 **Critério de saída:** Gate §1 completo no browser staging.
 
 ---
 
-### Fase 0 — Parar hemorragia · ~40h (paralelo S.3/S.5)
+### Fase 0 — Parar hemorragia · ~85%
 
 | # | Status | Entrega |
 |---|--------|---------|
-| 0.1 | ✅ código | Plan mode `resumable` |
-| 0.2 | ✅ código | Inngest re-dispatch |
-| 0.3 | ⚠️ | Stale-aware (lógica ok, gate CI mente) |
-| 0.4 | ❌ | Smoke blocking real |
-| 0.5 | ⚠️ | Deploy script (metrics warn only) |
-
-**Critério:** 7d failed <25% **com smoke que exige completed**.
+| 0.1 | ✅ | Plan mode `resumable` |
+| 0.2 | ✅ | Inngest re-dispatch |
+| 0.3 | ✅ | Stale-aware + gate CI |
+| 0.4 | ✅ | Smoke blocking (CI + deploy) |
+| 0.5 | ✅ | Deploy script metrics blocking |
 
 ---
 
-### Fase 1 — Control Plane · ~120h (após S verde)
+### Fases 1–5 — inalteradas em visão
 
-| # | Status | Entrega |
-|---|--------|---------|
-| 1.1 | ✅ | Migration `agent_jobs` |
-| 1.2 | ⚠️ | `agent-contract` (2/7 mirrors) |
-| 1.3 | ⚠️ | `transitionRun` (4 writers ainda) |
-| 1.4 | ✅ shadow | Edge enqueue job |
-| 1.5 | ❌ | 1 job/chunk worker real |
-| 1.6 | ✅ código | Shadow mode |
-| 1.7 | ✅ | Chat mode UX |
-
-**Critério:** 100 runs shadow parity; 0 divergência terminal.
-
----
-
-### Fase 2 — Runtime decomposto · ✅ concluída
-
-| # | Status | Entrega |
-|---|--------|---------|
-| 2.1 | ✅ | `runtime/emitter` |
-| 2.2–2.5 | ✅ | phases, orchestrator, AgentRuntime, dead code |
-
-**Critério:** `loop.ts` <500 LOC (439); Deno 113 pass em `runtime/` + `loop.test.ts`.
-
----
-
-### Fase 3 — Frontend decomposição · ~70% concluída
-
-| # | Status | Entrega |
-|---|--------|---------|
-| 3.1 | ✅ | `useAgentRun` → `src/hooks/agent-run/*` (286 LOC fachada) |
-| 3.2 | ✅ | SSOT `assistant-materialized.ts` (meta + card + inspector gates) |
-| 3.3 | ❌ | E2E browser verde (smoke blocking) |
-| 3.4 | ✅ | `forge:agent-snapshot` removido; restore DB-only (`agent-run-restore.ts`) |
-
----
-
-### Fases 4–5 — Inalteradas
-
-Confiabilidade produção (≥90% smoke) → Excelência (≥95%, 30 dias).
+Control plane 1.5 após S verde → produção ≥90% → excelência ≥95%.
 
 ---
 
 ## 5. Plano de execução S.1–S.6 (20 passos)
 
-Execução contínua até gate §1 verde. Cada passo = PR pequeno + verificação browser.
-
-| Passo | Ação | Arquivos principais |
-|-------|------|---------------------|
-| 1 | Deletar `invoke` em `PromptEngine`; `markPendingAgentRun` | `PromptEngine.tsx`, `agent-auto-run.ts` |
-| 2 | Coordinator: `peekPending` → `beginPendingTurn` → `runAgent(plan)` | `useAgentSessionCoordinator.ts` |
-| 3 | Reconcile: retry 5s + realtime `agent_runs` INSERT | `useAgentRunReconcile.ts` |
-| 4 | `ForgeThinking` em `AssistantTurn` (topo DOM) | `AssistantTurn.tsx` |
-| 5 | `mapAssistantTurn` + `resolveTurnThinking` | `turn.ts`, `turn-display.ts` |
-| 6 | Reverter teste "sem thinking" | `invariants.test.ts` |
-| 7 | `isAssistantRunMaterialized`: rejeitar `checkpoint` | `assistant-materialized.ts` |
-| 8 | `useChat`: não clear frozen em checkpoint | `useChat.ts` |
-| 9 | `tool_done` no builder; merge builders | `forge-run.ts`, `timeline-builder.ts` |
-| 10 | `resolveInspectorRunProgress`: `pickRicherProgress` | `assistant-run-progress.ts` |
-| 11 | Remover `finish` do loop (tool-miss) | `loop.ts:1095` |
-| 12 | Loop não chama `markRunStatus` | `loop.ts` |
-| 13 | Plan resume → `runPlanModeAgentTurn` | `loop.ts:669-860` |
-| 14 | `chunk_resume.maxAttempts = 12` | `run-executor.ts:457` |
-| 15 | Opening obrigatório plan/build; `phase: gather` | `loop.ts` |
-| 16 | LLM fail → mensagem PT, não `""` completed | `conversational.ts`, `loop.ts` |
-| 17 | Deletar `TOOL_NUDGE` push vazio | `tool-progress.ts`, `loop.ts` |
-| 18 | Deletar `statusChips`, `phaseMessage`, dead branches | `turn.ts`, `types.ts` |
-| 19 | Smoke: exige `completed` ou `chunk_resume` cycle | `smoke-agent-e2e.mjs` |
-| 20 | Gate browser checklist §1 em staging | manual + `agent-turn-flow` |
+| Passo | Status | Ação |
+|-------|--------|------|
+| 1–3 | ✅ | Dispatch único dashboard |
+| 4–6 | ✅ | Thought no chat |
+| 7–8 | ✅ | Materialização checkpoint |
+| 9–10 | ✅ | `tool_done` + `pickRicherProgress` |
+| 11–14 | ✅ | Sem double finish; plan resume; `maxAttempts: 12` |
+| 15–17 | ✅ | Gather, opening, fallbacks PT, sem TOOL_NUDGE |
+| 18 | ✅ | `statusChips`/`phaseMessage` removidos |
+| 19 | ✅ | Smoke terminal honesto + `test:smoke-terminal` |
+| 20 | ❌ | **Checklist browser §1 em staging** |
 
 ---
 
-## 6. CI/CD — definição de "pronto" (revisada)
+## 6. CI/CD — definição de "pronto"
 
 ```yaml
-# Bloqueante em PR agent/*
-- npm run test -- agent-turn-flow lovable-acceptance chat-reliability
-- deno test supabase/functions/agent-run/runtime/emitter.test.ts
-- deno test supabase/functions/agent-run/loop.test.ts
+# Job quality (todo PR)
+- npm run test:agent-journey
+- deno test runtime/ + conversational.test.ts
 - npm run check:agent-contract
 
-# Bloqueante staging deploy (Fase S.5)
-- node scripts/smoke-agent-e2e.mjs  # terminal honesto
-- node scripts/check-stale-runs.mjs   # usa shouldSkipStaleExpiry
-- node scripts/check-agent-run-metrics.mjs  # blocking em staging
+# Job agent-platform (secrets required)
+- npm run test:smoke-terminal
+- npm run smoke:agent
+- npm run check:agent-metrics
+- node scripts/check-stale-runs.mjs --cleanup
 
-# Informativo até Fase 1.5
-- node scripts/check-shadow-parity.mjs  # blocking quando AGENT_RUNTIME_V2=shadow
+# Deploy staging (deploy-agent-platform.sh)
+- check:agent-gates + check:agent-metrics + check:shadow-parity
 ```
 
-**Regra:** merge em `agent/*` exige **um** verificador humano com checklist browser §1.
+**Regra:** merge em `agent/*` exige verificador humano com checklist browser §1.
 
 ---
 
-## 7. Métricas (revisadas)
+## 7. Métricas
 
-| Métrica | Hoje | Meta Fase S | Meta Final |
-|---------|------|-------------|------------|
-| Jornada browser §1 | ❌ 0/6 | 6/6 | 6/6 |
-| Failed rate 7d | ~53% | <30% | <5% |
-| Dashboard→editor sem reenvio | ❌ | 100% | 100% |
-| Inspector congela mid-run | frequente | 0 | 0 |
-| Double finish | sim | 0 | 0 |
-| Writers de status | 4 | 1 | 1 |
-| `loop.ts` LOC | 3069 | **439** ✅ | <500 |
-| `useAgentRun.ts` LOC | 1423 | **286** ✅ | <300 |
-| Gates que mentem | 5+ | 0 | 0 |
+| Métrica | Hoje | Meta Fase S |
+|---------|------|-------------|
+| Jornada browser §1 | ❌ 0/6 | 6/6 |
+| Gates CI honestos | ✅ | ✅ |
+| `loop.ts` LOC | **443** ✅ | <500 |
+| `useAgentRun.ts` LOC | **286** ✅ | <300 |
+| Double finish | 0 | 0 |
+| Deno runtime tests | 122+ | mantido |
 
 ---
 
 ## 8. Governança
 
-- **Fase S bloqueia** qualquer refactor estrutural (2.2+, 3.1, 1.5) até gate §1 verde.
-- **PR de delete** — obrigatório na mesma entrega que liga o caminho novo.
+- **Fase S bloqueia** refactor estrutural até gate §1 verde.
+- **PR de delete** — obrigatório na mesma entrega que liga caminho novo.
 - **ADR** para mudança de evento ou transição de status.
-- **Auditoria** — atualizar `2026-06-22-journey-contract-audit.md` ao fechar cada S.n.
 
 ---
 
 ## 9. Próxima ação imediata
 
-**Fase S (jornada browser)** — passos 4–20 do §5. Itens 1–3 (dispatch) e 7–8 (materialização) já feitos.
+**Passo 20 — validação browser em staging:**
 
-Ordem: 4 → 5 → 6 (Thought no chat) → 9–10 (inspector vivo) → 11–18 (runtime UX) → 19–20 (gates) → browser §1.
+1. `npm run check:agent-browser` (lovable-visual + dashboard→editor)
+2. Plan mode 1º e 2º turno manual
+3. F5 mid-run + inspector após `web_search`
+4. Marcar §1 completo → fechar Fase S → iniciar Fase 1.5
+
+Comandos locais pré-browser:
+
+```bash
+npm run test:smoke-terminal
+npm run test:agent-journey
+deno test --allow-env --no-check supabase/functions/agent-run/runtime/
+```
 
 ---
 
-## Apêndices (inalterados em essência)
-
-- **ADR-001:** `agent_jobs` vs loops Inngest — válido; implementar após Fase S.
-- **Mapa arquivos → alvo:** `loop.ts` → `runtime/phases/*`; `useAgentRun` → hooks — após S.
-
----
-
-*Documento vivo. Última auditoria: 2026-06-22. Próxima revisão: ao fechar Fase S.*
+*Documento vivo. Última revisão: 2026-06-22 (pós S.3–S.5). Próxima: ao fechar gate §1.*

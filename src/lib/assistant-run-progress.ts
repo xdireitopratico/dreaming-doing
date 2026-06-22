@@ -7,7 +7,7 @@ import {
   type PlanStep,
   type SSEEvent,
 } from "@/lib/agent-progress";
-import { timelineFromExecutionLog } from "@/lib/agent-job-stream";
+import { timelineFromExecutionLog } from "@/lib/execution-log-timeline";
 import {
   hasInspectorReadySnapshot,
   hasMaterializedCardSnapshot,
