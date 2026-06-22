@@ -2,7 +2,10 @@ import { describe, expect, it } from "vitest";
 import type { ChatMessage } from "@/lib/chat-types";
 import {
   canReleaseLiveSlot,
+  hasInspectorReadySnapshot,
+  hasMaterializedCardSnapshot,
   isAssistantRunMaterialized,
+  isTerminalAssistantMeta,
 } from "@/lib/assistant-materialized";
 
 function msg(overrides: Partial<ChatMessage> = {}): ChatMessage {
@@ -82,6 +85,60 @@ describe("isAssistantRunMaterialized", () => {
           runId: "r1",
           content: "Chunk",
           meta: { partial: true, finishedAt: "2026-06-08T00:00:00Z", runId: "r1" },
+        }),
+      ),
+    ).toBe(false);
+  });
+});
+
+describe("isTerminalAssistantMeta", () => {
+  it("aceita meta terminal", () => {
+    expect(isTerminalAssistantMeta({ finishedAt: "2026-06-08T00:00:00Z" })).toBe(true);
+  });
+
+  it("rejeita checkpoint", () => {
+    expect(
+      isTerminalAssistantMeta({
+        finishedAt: "2026-06-08T00:00:00Z",
+        checkpoint: true,
+      }),
+    ).toBe(false);
+  });
+});
+
+describe("hasMaterializedCardSnapshot", () => {
+  it("exige materialização + cardSnapshot", () => {
+    expect(
+      hasMaterializedCardSnapshot(
+        msg({
+          content: "Done",
+          meta: { finishedAt: "2026-06-08T00:00:00Z", cardSnapshot: { timeline: [] } },
+        }),
+      ),
+    ).toBe(true);
+    expect(
+      hasMaterializedCardSnapshot(
+        msg({ content: "Done", meta: { finishedAt: "2026-06-08T00:00:00Z" } }),
+      ),
+    ).toBe(false);
+  });
+});
+
+describe("hasInspectorReadySnapshot", () => {
+  it("exige timeline, streamTail ou tools", () => {
+    const base = msg({
+      content: "Done",
+      meta: {
+        finishedAt: "2026-06-08T00:00:00Z",
+        cardSnapshot: { timeline: [{ type: "tool_start", data: {}, timestamp: 0 }] },
+      },
+    });
+    expect(hasInspectorReadySnapshot(base)).toBe(true);
+    expect(
+      hasInspectorReadySnapshot(
+        msg({
+          content: "Done",
+          meta: { finishedAt: "2026-06-08T00:00:00Z", cardSnapshot: {} },
         }),
       ),
     ).toBe(false);

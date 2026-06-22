@@ -22,7 +22,6 @@ import {
   type AgentConnectResult,
 } from "@/hooks/agent-run/agent-run-lifecycle";
 import { createQueueHandlers } from "@/hooks/agent-run/agent-run-queue";
-import { saveAgentSnapshot } from "@/hooks/agent-run/agent-run-snapshot";
 import {
   createSessionHandlers,
   subscribePendingQueueRealtime,
@@ -237,23 +236,6 @@ export function useAgentRun() {
     progress,
     releaseLiveRunSlot,
   ]);
-
-  const saveSnapshot = useCallback(() => {
-    const ctx = sessionContextRef.current;
-    if (!ctx) return;
-    saveAgentSnapshot({
-      projectId: ctx.projectId,
-      conversationId: ctx.conversationId,
-      activeRunId: runIdRef.current,
-      lastSeq: lastSeqRef.current,
-      progress,
-    });
-  }, [progress]);
-
-  useEffect(() => {
-    const timer = setTimeout(saveSnapshot, 200);
-    return () => clearTimeout(timer);
-  }, [progress, saveSnapshot]);
 
   useEffect(() => {
     return () => {

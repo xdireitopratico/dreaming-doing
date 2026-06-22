@@ -36,6 +36,7 @@ const GENERIC_FAILURE_RE = /loop budget|resumable/i;
 export function isTerminalAssistantMeta(meta: Record<string, unknown> | null | undefined): boolean {
   if (!meta || typeof meta !== "object") return false;
   if (meta.partial === true) return false;
+  if (meta.checkpoint === true || meta.betweenChunks === true) return false;
   return typeof meta.finishedAt === "string" && meta.finishedAt.trim().length > 0;
 }
 

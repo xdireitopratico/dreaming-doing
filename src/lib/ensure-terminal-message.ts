@@ -34,11 +34,9 @@ const TIMELINE_TYPES = new Set([
 
 const GENERIC_FAILURE_RE = /loop budget|resumable/i;
 
-export function isTerminalAssistantMeta(meta: Record<string, unknown> | null | undefined): boolean {
-  if (!meta || typeof meta !== "object") return false;
-  if (meta.partial === true) return false;
-  return typeof meta.finishedAt === "string" && meta.finishedAt.trim().length > 0;
-}
+import { isTerminalAssistantMeta } from "@/lib/assistant-materialized";
+
+export { isTerminalAssistantMeta };
 
 export function hasVisibleMessageText(
   parts: MessageParts | null | undefined,

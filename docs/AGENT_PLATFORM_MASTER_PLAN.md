@@ -1,8 +1,8 @@
 # Agent Platform — Master Engineering Plan
 
-> **Status:** Auditoria 2026-06-22 concluída · execução reiniciada em **Fase S**  
-> **Data:** 2026-06-21 (plano) · 2026-06-22 (auditoria + replanejamento)  
-> **Horizonte:** Contrato de Jornada verde → depois demolição controlada  
+> **Status:** Fases 2 + 3.1–3.2 + 3.4 concluídas · **próximo: Fase S** (jornada browser)  
+> **Data:** 2026-06-21 (plano) · 2026-06-22 (auditoria) · 2026-06-22 (revisão pós-decomposição)  
+> **Horizonte:** Contrato de Jornada verde → depois control plane 1.5  
 > **Métrica norte:** Usuário completa turno no browser (dashboard→editor→plan→2º turno) sem intervenção
 
 **Auditoria detalhada:** [`docs/superpowers/plans/2026-06-22-journey-contract-audit.md`](superpowers/plans/2026-06-22-journey-contract-audit.md)
@@ -32,22 +32,23 @@
 | 2º turno / timeline morre | Checkpoint materializa cedo → live slot liberado |
 | Timeline só web research | `tool_done` ignorado; snapshot truncado |
 
-### Estado real das fases (honesto)
+### Estado real das fases (atualizado 2026-06-22)
 
 | Fase | % real | Notas |
 |------|--------|-------|
 | **0** Parar hemorragia | ~55% | Lógica chunk ok; gates fracos |
 | **1** Control plane | ~35% | `agent_jobs` schema + shadow; execução ainda v1 |
-| **2** Runtime decomposto | ~8% | Só 2.1 `RuntimeEmitter` |
-| **3** Frontend | ~15% | Composer/plan ok; jornada quebrada |
-| **S** Contrato Jornada | **0%** | **Nova fase prioritária** |
+| **2** Runtime decomposto | **✅ 100%** | `loop.ts` 439 LOC; `runtime/phases/*`; Deno 113 pass |
+| **3** Frontend | **~70%** | 3.1 ✅ `useAgentRun` 280 LOC; 3.2 ✅ SSOT materialização; 3.4 ✅ sem sessionStorage |
+| **3.3** E2E browser | ❌ | Smoke ainda não bloqueante |
+| **S** Contrato Jornada | **~15%** | Dispatch único no dashboard (`markPendingAgentRun`); Thought/inspector pendentes |
 
-### Decisão estratégica (revisada)
+### Decisão estratégica (revisada 2026-06-22)
 
-1. **PAUSAR** Fase 2.2+ (demolir `loop.ts`) até jornada browser verde.  
-2. **PAUSAR** `agent_jobs` executor real (shadow continua observabilidade).  
-3. **EXECUTAR** Fase S — contrato de jornada ponta a ponta, deletar lixo, gates honestos.  
-4. **Depois** retomar Fase 1.5 → 2 → 3 na ordem original.
+1. **Fase 2 + 3.1–3.2 + 3.4 concluídas** — decomposição runtime e frontend feita.  
+2. **EXECUTAR Fase S** — jornada browser verde é o bloqueador restante (não mais LOC).  
+3. **PAUSAR** `agent_jobs` executor real (shadow continua observabilidade).  
+4. **Depois de S verde:** Fase 3.3 (E2E blocking) → Fase 1.5 → Fases 4–5.
 
 ---
 
@@ -187,25 +188,25 @@ Detalhes: §3.2–3.7 do plano original (agent_jobs, lifecycle, decomposição l
 
 ---
 
-### Fase 2 — Runtime decomposto · ~160h (após 1.5)
+### Fase 2 — Runtime decomposto · ✅ concluída
 
 | # | Status | Entrega |
 |---|--------|---------|
 | 2.1 | ✅ | `runtime/emitter` |
-| 2.2–2.5 | ❌ | phases, orchestrator, AgentRuntime, dead code |
+| 2.2–2.5 | ✅ | phases, orchestrator, AgentRuntime, dead code |
 
-**Critério:** `loop.ts` <500 LOC; Deno ≥200.
+**Critério:** `loop.ts` <500 LOC (439); Deno 113 pass em `runtime/` + `loop.test.ts`.
 
 ---
 
-### Fase 3 — Frontend decomposição · ~100h (após 2)
+### Fase 3 — Frontend decomposição · ~70% concluída
 
-| # | Entrega |
-|---|---------|
-| 3.1 | Decompor `useAgentRun` |
-| 3.2 | Materialização única |
-| 3.3 | E2E verde |
-| 3.4 | Remover sessionStorage |
+| # | Status | Entrega |
+|---|--------|---------|
+| 3.1 | ✅ | `useAgentRun` → `src/hooks/agent-run/*` (286 LOC fachada) |
+| 3.2 | ✅ | SSOT `assistant-materialized.ts` (meta + card + inspector gates) |
+| 3.3 | ❌ | E2E browser verde (smoke blocking) |
+| 3.4 | ✅ | `forge:agent-snapshot` removido; restore DB-only (`agent-run-restore.ts`) |
 
 ---
 
@@ -276,7 +277,8 @@ Execução contínua até gate §1 verde. Cada passo = PR pequeno + verificaçã
 | Inspector congela mid-run | frequente | 0 | 0 |
 | Double finish | sim | 0 | 0 |
 | Writers de status | 4 | 1 | 1 |
-| `loop.ts` LOC | 3069 | 3000 | <500 |
+| `loop.ts` LOC | 3069 | **439** ✅ | <500 |
+| `useAgentRun.ts` LOC | 1423 | **286** ✅ | <300 |
 | Gates que mentem | 5+ | 0 | 0 |
 
 ---
@@ -292,9 +294,9 @@ Execução contínua até gate §1 verde. Cada passo = PR pequeno + verificaçã
 
 ## 9. Próxima ação imediata
 
-**Executar passos 1–6 (S.1 + S.2)** — dispatch único + Thought no chat.
+**Fase S (jornada browser)** — passos 4–20 do §5. Itens 1–3 (dispatch) e 7–8 (materialização) já feitos.
 
-Ordem: 1 → 2 → 3 (dispatch) → 4 → 5 → 6 (UX) → verificar browser → 7–20 sem parar.
+Ordem: 4 → 5 → 6 (Thought no chat) → 9–10 (inspector vivo) → 11–18 (runtime UX) → 19–20 (gates) → browser §1.
 
 ---
 

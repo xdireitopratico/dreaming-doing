@@ -2,16 +2,13 @@ import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import type { AgentProgress } from "@/lib/agent-progress";
 import { initialAgentProgress } from "@/lib/agent-progress";
-import { isAssistantRunMaterialized } from "@/lib/assistant-materialized";
 import type { ChatMessage } from "@/lib/chat-types";
-import { shouldRestoreLiveRun } from "@/lib/agent-snapshot-restore";
 import { setStreamingTelemetryContext } from "@/lib/streaming-telemetry";
 import type { PendingQueueItem } from "@/components/editor/PendingQueuePanel";
 import {
-  clearAgentSnapshot,
-  loadAgentSnapshot,
-  SNAPSHOT_MAX_AGE_MS,
-} from "@/hooks/agent-run/agent-run-snapshot";
+  planAwaitingProgressRestore,
+  planLiveRunRestore,
+} from "@/hooks/agent-run/agent-run-restore";
 
 export type SessionContext = { projectId: string; conversationId: string };
 
@@ -51,7 +48,6 @@ export function createSessionHandlers(deps: SessionHandlersDeps) {
       deps.bumpFrozenProgressTick();
     }
     deps.teardownChannels();
-    clearAgentSnapshot();
   };
 
   const tryRestoreSnapshot = async (
@@ -59,108 +55,63 @@ export function createSessionHandlers(deps: SessionHandlersDeps) {
     conversationId: string,
     messages: ChatMessage[] = [],
   ) => {
-    const snap = loadAgentSnapshot();
-    if (!snap) return;
-    const age = Date.now() - snap.timestamp;
-    if (age > SNAPSHOT_MAX_AGE_MS) {
-      clearAgentSnapshot();
-      return;
-    }
-    if (snap.projectId !== projectId || snap.conversationId !== conversationId) {
-      clearAgentSnapshot();
-      return;
-    }
+    if (deps.runIdRef.current) return;
 
-    const idleProgress = { ...initialAgentProgress };
+    const { data: run } = await supabase
+      .from("agent_runs")
+      .select("id, status, heartbeat_at, started_at, canceled_at")
+      .eq("project_id", projectId)
+      .eq("conversation_id", conversationId)
+      .in("status", ["running", "pending"])
+      .order("started_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
 
-    const restoreProgressOnly = (progress: AgentProgress) => {
-      deps.setProgress((prev) => {
-        if (prev !== initialAgentProgress && prev.streamText != null) return prev;
-        return { ...progress };
-      });
-    };
-
-    if (snap.activeRunId) {
-      const alreadyInDb = messages.some(
-        (m) => m.runId === snap.activeRunId && isAssistantRunMaterialized(m),
-      );
-      if (alreadyInDb && snap.progress.finished) {
-        clearAgentSnapshot();
-        return;
-      }
-
-      const { data: run } = await supabase
-        .from("agent_runs")
-        .select("id, status, heartbeat_at, started_at, canceled_at")
-        .eq("id", snap.activeRunId)
-        .maybeSingle();
-
+    let lastStreamAt: string | null = null;
+    if (run?.id) {
       const { data: lastStream } = await supabase
         .from("agent_stream_events")
         .select("created_at")
-        .eq("run_id", snap.activeRunId)
+        .eq("run_id", run.id)
         .order("seq", { ascending: false })
         .limit(1)
         .maybeSingle();
+      lastStreamAt = (lastStream?.created_at as string | null) ?? null;
+    }
 
-      const fresh = shouldRestoreLiveRun({
-        status: run?.status ?? null,
-        canceledAt: (run?.canceled_at as string | null) ?? null,
-        heartbeatAt: (run?.heartbeat_at as string | null) ?? null,
-        startedAt: (run?.started_at as string | null) ?? null,
-        lastStreamAt: (lastStream?.created_at as string | null) ?? null,
+    const livePlan = planLiveRunRestore(
+      run
+        ? {
+            id: run.id as string,
+            status: run.status as string | null,
+            heartbeat_at: run.heartbeat_at as string | null,
+            started_at: run.started_at as string | null,
+            canceled_at: run.canceled_at as string | null,
+          }
+        : null,
+      lastStreamAt,
+      messages,
+    );
+
+    if (livePlan.kind === "subscribe") {
+      deps.runIdRef.current = livePlan.runId;
+      deps.setActiveRunId(livePlan.runId);
+      deps.lastSeqRef.current = 0;
+      void deps.subscribeToRun(livePlan.runId, { resetProgress: false });
+      return;
+    }
+
+    const awaitingProgress = planAwaitingProgressRestore(messages);
+    if (awaitingProgress) {
+      deps.setProgress((prev) => {
+        if (prev !== initialAgentProgress && prev.streamText != null) return prev;
+        return awaitingProgress;
       });
-
-      if (!fresh) {
-        clearAgentSnapshot();
-        deps.setActiveRunId(null);
-        deps.runIdRef.current = null;
-        const awaitingClarify =
-          snap.progress.awaiting &&
-          (snap.progress.awaitingKind === "clarify" ||
-            (snap.progress.awaitingKind as string | null) === "qualify");
-        const awaitingPlan =
-          snap.progress.awaitingKind === "plan_approval" && !!snap.progress.pendingPlan;
-        if (awaitingClarify || awaitingPlan) {
-          restoreProgressOnly({
-            ...snap.progress,
-            finished: true,
-          });
-        } else {
-          restoreProgressOnly(idleProgress);
-        }
-        return;
-      }
-
-      deps.runIdRef.current = snap.activeRunId;
-      deps.setActiveRunId(snap.activeRunId);
-      deps.lastSeqRef.current = snap.lastSeq;
-      restoreProgressOnly(snap.progress);
-      void deps.subscribeToRun(snap.activeRunId, { resetProgress: false });
       return;
     }
 
-    if (snap.progress.finished) {
-      clearAgentSnapshot();
-      return;
-    }
-
-    if (
-      snap.progress.awaiting &&
-      (snap.progress.awaitingKind === "clarify" ||
-        (snap.progress.awaitingKind as string | null) === "qualify")
-    ) {
-      restoreProgressOnly(snap.progress);
-      return;
-    }
-
-    if (snap.progress.pendingPlan || snap.progress.awaitingKind === "plan_approval") {
-      restoreProgressOnly(snap.progress);
-      return;
-    }
-
-    clearAgentSnapshot();
-    deps.setProgress(idleProgress);
+    deps.setActiveRunId(null);
+    deps.runIdRef.current = null;
   };
 
   return { bindSession, resetSession, tryRestoreSnapshot };

@@ -11,7 +11,6 @@ import { logEditorTelemetryEvent } from "@/lib/editor-telemetry";
 import { shouldRetainLiveRunSlot } from "@/lib/live-run-overlay";
 import { emitStreamingTelemetry } from "@/lib/streaming-telemetry";
 import { TERMINAL_STATUSES } from "@/hooks/agent-run/agent-run-connect";
-import { clearAgentSnapshot } from "@/hooks/agent-run/agent-run-snapshot";
 import { freezeWorkingDuration, type AgentStreamRow } from "@/hooks/agent-run/agent-run-stream";
 
 export const MAX_REALTIME_RECONNECT = 3;
@@ -117,9 +116,6 @@ export function createRunSubscriptionHandlers(deps: RunSubscriptionDeps) {
     deps.setProgress((p) => {
       if (!shouldRetainLiveRunSlot(p) && deps.runIdRef.current) {
         deps.releaseLiveRunSlot(deps.runIdRef.current);
-        if (status !== "awaiting_user") {
-          clearAgentSnapshot();
-        }
       }
       return p;
     });

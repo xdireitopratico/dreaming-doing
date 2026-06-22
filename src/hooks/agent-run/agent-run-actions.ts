@@ -10,8 +10,6 @@ import {
   initialAgentProgress,
   streamRowToSSEEvent,
 } from "@/lib/agent-progress";
-import { clearAgentSnapshot } from "@/hooks/agent-run/agent-run-snapshot";
-
 export type RunActionHandlersDeps = {
   runIdRef: MutableRefObject<string | null>;
   lastSeqRef: MutableRefObject<number>;
@@ -61,7 +59,6 @@ export function createRunActionHandlers(deps: RunActionHandlersDeps) {
     deps.runIdRef.current = null;
     deps.setActiveRunId(null);
     deps.teardownChannels();
-    clearAgentSnapshot();
   };
 
   const disconnect = () => {
@@ -69,7 +66,6 @@ export function createRunActionHandlers(deps: RunActionHandlersDeps) {
     deps.setActiveRunId(null);
     deps.teardownChannels();
     deps.setProgress((p) => ({ ...p, finished: true }));
-    clearAgentSnapshot();
   };
 
   const replay = async (projectId: string, conversationId: string, runId: string) => {

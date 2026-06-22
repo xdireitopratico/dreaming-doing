@@ -8,7 +8,13 @@ import {
   type SSEEvent,
 } from "@/lib/agent-progress";
 import { timelineFromExecutionLog } from "@/lib/agent-job-stream";
-import { isAssistantRunMaterialized } from "@/lib/assistant-materialized";
+import {
+  hasInspectorReadySnapshot,
+  hasMaterializedCardSnapshot,
+  isAssistantRunMaterialized,
+} from "@/lib/assistant-materialized";
+
+export { hasInspectorReadySnapshot, hasMaterializedCardSnapshot };
 import { storedPlanFromMessage } from "@/lib/plan-message-meta";
 import { emitStreamingTelemetry } from "@/lib/streaming-telemetry";
 
@@ -33,13 +39,6 @@ export function isAgentJobMessage(msg?: ChatMessage): boolean {
   return false;
 }
 
-/** Terminal no DB com cardSnapshot completo — fonte de verdade pós-F5. */
-export function hasMaterializedCardSnapshot(msg?: ChatMessage): boolean {
-  if (!msg || !isAssistantRunMaterialized(msg)) return false;
-  const snap = (msg.meta as Record<string, unknown> | undefined)?.cardSnapshot;
-  return snap !== null && typeof snap === "object";
-}
-
 /** Peso da timeline para escolher a fonte mais rica (inspector pós-job). */
 export function progressTimelineWeight(progress: AgentProgress | null | undefined): number {
   if (!progress) return 0;
@@ -56,20 +55,6 @@ export function inspectorProgressWeight(progress: AgentProgress | null | undefin
 
 export function hasInspectorProgressContent(progress: AgentProgress | null | undefined): boolean {
   return inspectorProgressWeight(progress) > 0;
-}
-
-/** Banco tem snapshot terminal com timeline útil para o inspector. */
-export function hasInspectorReadySnapshot(msg?: ChatMessage): boolean {
-  if (!hasMaterializedCardSnapshot(msg)) return false;
-  const meta = (msg!.meta ?? {}) as Record<string, unknown>;
-  const snap = meta.cardSnapshot as Record<string, unknown>;
-  const timeline = snap.timeline;
-  if (Array.isArray(timeline) && timeline.length > 0) return true;
-  const streamTail = meta.streamTail;
-  if (Array.isArray(streamTail) && streamTail.length > 0) return true;
-  const tools = snap.tools;
-  if (Array.isArray(tools) && tools.length > 0) return true;
-  return false;
 }
 
 function findAssistantMessageForRun(runId: string, messages: ChatMessage[]): ChatMessage | null {
