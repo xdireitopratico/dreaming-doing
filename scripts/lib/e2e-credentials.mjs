@@ -82,6 +82,17 @@ export async function resolveE2eCredentials({
   if (saved) {
     process.env.E2E_EMAIL = saved.email;
     process.env.E2E_PASSWORD = saved.password;
+    if (saved.userId && process.env.E2E_SEED_AGENT_SETUP !== "0" && serviceKey && supabaseUrl) {
+      try {
+        const { seedE2eAgentSetup } = await import("./e2e-agent-setup.mjs");
+        await seedE2eAgentSetup({ supabaseUrl, serviceKey, userId: saved.userId });
+      } catch (e) {
+        console.warn(
+          "E2E: seed agent setup falhou (journey fará retry):",
+          e instanceof Error ? e.message : e,
+        );
+      }
+    }
     return { email: saved.email, password: saved.password, userId: saved.userId, source: "file" };
   }
 

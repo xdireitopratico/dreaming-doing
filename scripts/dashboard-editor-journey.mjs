@@ -36,7 +36,7 @@ import {
   localStoragePrefsScript,
   seedE2eAgentSetup,
 } from "./lib/e2e-agent-setup.mjs";
-import { bootstrapAgentRun, waitForRunStatus } from "./lib/bootstrap-agent-run.mjs";
+
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 loadEnvLocal();
@@ -145,11 +145,6 @@ function isRunAwaitingPlan(run) {
   const awaiting = meta.awaitingUser;
   if (awaiting && typeof awaiting === "object" && awaiting.type === "plan_approval") return true;
   return run.status === "awaiting_user";
-}
-
-function isRateLimitError(error) {
-  const msg = typeof error === "string" ? error : "";
-  return /limite por minuto|rate.?limit/i.test(msg);
 }
 
 async function fetchStreamEvents(runId) {
@@ -266,29 +261,41 @@ async function sendComposerMessage(page, text) {
   await page.locator("[data-testid=chat-composer] .forge-composer-send").click();
 }
 
-async function syncBrowserAfterBootstrap(page, failures, opts = {}) {
-  const wantPlanDock = opts.planDock === true;
-  await page.reload({ waitUntil: "domcontentloaded", timeout: NAV_TIMEOUT_MS });
+/** Aguarda coordinator + connect criarem run real (sem bootstrap Inngest). */
+async function waitForNaturalAgentRun(page, conversationId, failures) {
+  if (!SERVICE_KEY || !conversationId) {
+    failures.push("agent-run: SUPABASE_SERVICE_ROLE_KEY ou conversationId ausente");
+    return null;
+  }
+  console.log("→ aguardando run natural (coordinator + connect)");
+  let run = null;
+  try {
+    run = await pollRunStatus(
+      conversationId,
+      (r) => r.status === "running" || r.status === "pending",
+      RUN_ACTIVE_TIMEOUT_MS,
+      "active",
+    );
+  } catch (e) {
+    failures.push(`agent-run: ${e instanceof Error ? e.message : e}`);
+    return null;
+  }
+
   const deadline = Date.now() + 60_000;
   while (Date.now() < deadline) {
-    if (wantPlanDock) {
-      const dock = await page.locator("[data-testid=chat-plan-dock-ready]").count();
-      const creating = await page.locator("[data-testid=chat-plan-dock-creating]").count();
-      if (dock > 0 || creating > 0) return true;
-    }
     const running = await page
       .locator('[data-testid=forge-header-state][data-state="running"]')
       .count();
     const card = await page.locator("[data-testid=chat-job-card]").count();
-    if (running > 0 || card > 0) return true;
+    const working = await page.locator("[data-testid=chat-working-line]").count();
+    if (running > 0 || card > 0 || working > 0) return run.id;
     await sleep(500);
   }
+
   failures.push(
-    wantPlanDock
-      ? "bootstrap: UI não mostrou plan-dock após reload"
-      : "bootstrap: UI não anexou à run após reload (sem header running nem mini-card)",
+    "agent-run: UI não anexou à run (sem header running, mini-card nem working line)",
   );
-  return false;
+  return run.id;
 }
 
 async function openInspectorFromCard(page, opts = {}) {
@@ -348,14 +355,14 @@ async function phaseDashboard(page, failures, prompt) {
   return projectId;
 }
 
-async function phaseInspectorLive(page, conversationId, failures, bootstrappedRunId = null) {
+async function phaseInspectorLive(page, conversationId, failures, activeRunId = null) {
   console.log("→ fase inspector-live");
   if (!SERVICE_KEY || !conversationId) {
     failures.push("inspector-live: SUPABASE_SERVICE_ROLE_KEY ou conversationId ausente");
     return;
   }
 
-  let run = bootstrappedRunId ? { id: bootstrappedRunId, status: "running" } : null;
+  let run = activeRunId ? await fetchRunById(activeRunId) : null;
   if (!run) {
     try {
       run = await pollRunStatus(
@@ -369,15 +376,11 @@ async function phaseInspectorLive(page, conversationId, failures, bootstrappedRu
       await page.screenshot({ path: resolve(OUT_DIR, "phase-inspector-live.png"), fullPage: true }).catch(() => {});
       return;
     }
-  } else {
-    const statusRes = await rest(`agent_runs?id=eq.${bootstrappedRunId}&select=id,status,error&limit=1`);
-    const [latest] = await statusRes.json();
-    if (latest?.status === "failed") {
-      failures.push(`inspector-live: run falhou — ${latest.error ?? "sem erro"}`);
-      await page.screenshot({ path: resolve(OUT_DIR, "phase-inspector-live.png"), fullPage: true }).catch(() => {});
-      return;
-    }
-    if (latest) run = latest;
+  }
+  if (run?.status === "failed") {
+    failures.push(`inspector-live: run falhou — ${run.error ?? "sem erro"}`);
+    await page.screenshot({ path: resolve(OUT_DIR, "phase-inspector-live.png"), fullPage: true }).catch(() => {});
+    return;
   }
 
   const opened = await openInspectorFromCard(page);
@@ -443,7 +446,7 @@ function eventsHadToolStart(events) {
   return events.some((e) => e.event_type === "tool_start" || e.event_type === "tool_call");
 }
 
-async function phasePlanDock(page, conversationId, failures, bootstrappedRunId = null) {
+async function phasePlanDock(page, conversationId, failures) {
   console.log("→ fase plan-dock");
   if (!SERVICE_KEY || !conversationId) {
     failures.push("plan-dock: SUPABASE_SERVICE_ROLE_KEY ou conversationId ausente");
@@ -453,9 +456,7 @@ async function phasePlanDock(page, conversationId, failures, bootstrappedRunId =
   const deadline = Date.now() + RUN_IDLE_TIMEOUT_MS;
   let planReady = false;
   while (Date.now() < deadline) {
-    const run = bootstrappedRunId
-      ? await fetchRunById(bootstrappedRunId)
-      : await fetchLatestRun(conversationId);
+    const run = await fetchLatestRun(conversationId);
     if (run?.status === "failed") {
       failures.push(`plan-dock: run falhou — ${run.error ?? "sem erro"}`);
       await page.screenshot({ path: resolve(OUT_DIR, "phase-plan-dock.png"), fullPage: true }).catch(() => {});
@@ -532,7 +533,17 @@ async function phaseF5(page, conversationId, failures) {
   await page.screenshot({ path: resolve(OUT_DIR, "phase-f5.png"), fullPage: true });
 }
 
-async function phaseSecondTurn(page, conversationId, failures) {
+async function dismissPlanDockIfPresent(page) {
+  const dock = page.locator("[data-testid=chat-plan-dock-ready]");
+  if ((await dock.count()) < 1) return;
+  const skip = dock.getByRole("button", { name: "Skip" });
+  if ((await skip.count()) > 0) {
+    await skip.click();
+    await dock.waitFor({ state: "hidden", timeout: 30_000 }).catch(() => {});
+  }
+}
+
+async function phaseSecondTurn(page, conversationId, projectId, failures) {
   console.log("→ fase second-turn");
   if (SERVICE_KEY && conversationId) {
     try {
@@ -554,6 +565,14 @@ async function phaseSecondTurn(page, conversationId, failures) {
     }
   }
 
+  await dismissPlanDockIfPresent(page);
+
+  if (projectId) {
+    await page.evaluate((pid) => {
+      localStorage.setItem(`forge:composer-mode:${pid}`, "build");
+    }, projectId);
+  }
+
   const secondPrompt = `[e2e-journey-2] ok (${Date.now()})`;
   const userCountBefore = await page.locator("[data-testid=chat-message-user]").count();
   await sendComposerMessage(page, secondPrompt);
@@ -572,7 +591,7 @@ async function phaseSecondTurn(page, conversationId, failures) {
   await page.screenshot({ path: resolve(OUT_DIR, "phase-second-turn.png"), fullPage: true });
 }
 
-function needsAgentBootstrap() {
+function needsNaturalAgentRun() {
   return PHASES.has("inspector-live") || PHASES.has("f5") || PHASES.has("plan-dock") || PHASES.has("second-turn");
 }
 
@@ -651,7 +670,7 @@ async function main() {
   const page = await context.newPage({ viewport: { width: 1280, height: 900 } });
   let projectId = null;
   let conversationId = null;
-  let bootstrappedRunId = null;
+  let activeRunId = null;
   const failures = [];
 
   try {
@@ -664,90 +683,12 @@ async function main() {
       conversationId = await fetchConversationId(projectId);
     }
 
-    if (
-      needsAgentBootstrap() &&
-      !failures.length &&
-      SERVICE_KEY &&
-      projectId &&
-      conversationId
-    ) {
-      if (!e2eUserId) {
-        const ownerRes = await rest(`projects?id=eq.${projectId}&select=owner_id&limit=1`);
-        const [proj] = await ownerRes.json();
-        e2eUserId = proj?.owner_id ?? null;
-      }
-      if (!e2eUserId) {
-        failures.push("bootstrap: userId E2E não resolvido");
-      } else {
-        try {
-          await page.evaluate(localStoragePrefsScript(E2E_AGENT_PREFERENCES));
-
-          const planMode = PHASES.has("plan-dock") && !PHASES.has("inspector-live");
-          const bootstrapParams = {
-            supabaseUrl: SUPABASE_URL,
-            serviceKey: SERVICE_KEY,
-            projectId,
-            conversationId,
-            userId: e2eUserId,
-            planMode,
-          };
-
-          for (let attempt = 1; attempt <= 3; attempt++) {
-            const boot = await bootstrapAgentRun(bootstrapParams);
-            bootstrappedRunId = boot.runId;
-
-            if (planMode) {
-              const planDeadline = Date.now() + RUN_IDLE_TIMEOUT_MS;
-              let planReady = false;
-              while (Date.now() < planDeadline) {
-                const run = await fetchRunById(bootstrappedRunId);
-                if (isRunAwaitingPlan(run)) {
-                  planReady = true;
-                  break;
-                }
-                if (run?.status === "failed") {
-                  if (isRateLimitError(run.error) && attempt < 3) {
-                    console.log(`E2E bootstrap: rate limit — retry ${attempt}/3 em 65s`);
-                    await sleep(65_000);
-                    break;
-                  }
-                  throw new Error(run.error);
-                }
-                await sleep(2000);
-              }
-              if (planReady) break;
-              if (attempt >= 3) throw new Error("bootstrap plan: timeout aguardando awaiting_user");
-              continue;
-            }
-
-            await waitForRunStatus({
-              supabaseUrl: SUPABASE_URL,
-              serviceKey: SERVICE_KEY,
-              runId: bootstrappedRunId,
-              predicate: (r) => r.status === "running",
-              timeoutMs: RUN_ACTIVE_TIMEOUT_MS,
-              label: "running",
-            });
-            const run = await fetchRunById(bootstrappedRunId);
-            if (run?.status === "failed" && isRateLimitError(run.error) && attempt < 3) {
-              console.log(`E2E bootstrap: rate limit — retry ${attempt}/3 em 65s`);
-              await sleep(65_000);
-              continue;
-            }
-            break;
-          }
-
-          if (!(await syncBrowserAfterBootstrap(page, failures, { planDock: planMode }))) {
-            /* failure já registrada */
-          }
-        } catch (e) {
-          failures.push(`bootstrap: ${e instanceof Error ? e.message : e}`);
-        }
-      }
+    if (needsNaturalAgentRun() && !failures.length && projectId && conversationId) {
+      activeRunId = await waitForNaturalAgentRun(page, conversationId, failures);
     }
 
     if (PHASES.has("inspector-live") && !failures.length) {
-      await phaseInspectorLive(page, conversationId, failures, bootstrappedRunId);
+      await phaseInspectorLive(page, conversationId, failures, activeRunId);
     }
 
     if (PHASES.has("f5") && !failures.length) {
@@ -758,11 +699,11 @@ async function main() {
     }
 
     if (PHASES.has("plan-dock") && !failures.length) {
-      await phasePlanDock(page, conversationId, failures, bootstrappedRunId);
+      await phasePlanDock(page, conversationId, failures);
     }
 
     if (PHASES.has("second-turn") && !failures.length) {
-      await phaseSecondTurn(page, conversationId, failures);
+      await phaseSecondTurn(page, conversationId, projectId, failures);
     }
   } catch (e) {
     failures.push(e instanceof Error ? e.message : String(e));

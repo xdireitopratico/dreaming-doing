@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 
 import type { AgentComposerMode } from "@/lib/chat-types";
+import { loadComposerMode } from "@/lib/composer-mode";
 import type { ForgeSessionKind, TasteAction } from "@/lib/taste";
 import {
   clearPendingAgentRun,
@@ -70,7 +71,7 @@ export function useAgentSessionCoordinator({
     clearPendingAgentRun(projectId);
 
     beginPendingTurn();
-    void runAgent(undefined, undefined, "plan");
+    void runAgent(undefined, undefined, loadComposerMode(projectId));
   }, [
     projectId,
     conversation?.id,
