@@ -531,15 +531,20 @@ function isInternalPhaseNoise(label: string, phase?: string): boolean {
     phase === "classify" ||
     phase === "clarify" ||
     phase === "qualify" ||
-    phase === "build"
+    phase === "build" ||
+    phase === "checkpoint" ||
+    phase === "execute" ||
+    phase === "execute_step" ||
+    phase === "observe"
   ) {
     return true;
   }
   const t = label.trim();
   if (!t) return true;
   if (/^executando passo \d+/i.test(t)) return true;
-  if (/^passo \d+\s*\/\s*\d+/i.test(t)) return true;
+  if (/\bpasso\s+\d+\s*\/\s*\d+\b/i.test(t)) return true;
   if (/retomando do passo \d+/i.test(t)) return true;
+  if (/^concluído:/i.test(t)) return true;
   return normalizeMiniCardBriefing(t) === null;
 }
 

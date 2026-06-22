@@ -85,6 +85,15 @@ export function resolveAgentLifecycle(input: AgentLifecycleInput): AgentLifecycl
 
   if (progress.error?.trim()) return isStaleError(progress) ? "stale" : "failed";
 
+  // `done` pode chegar antes de `finish` — mantém slot live até materializar no DB.
+  if (
+    hasWorkEvidence(progress) ||
+    progress.streamText?.trim() ||
+    progress.narrationText?.trim()
+  ) {
+    return "finish";
+  }
+
   return "complete";
 }
 

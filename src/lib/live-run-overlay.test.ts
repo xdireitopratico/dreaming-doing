@@ -47,6 +47,17 @@ describe("shouldRetainLiveRunSlot", () => {
     ).toBe(true);
   });
 
+  it("mantém slot entre done e finish (lastFinishOk ainda null)", () => {
+    expect(
+      shouldRetainLiveRunSlot({
+        ...initialAgentProgress,
+        finished: true,
+        streamText: "Pronto — confere o preview.",
+        tools: [{ name: "fs_write", args: { path: "src/App.tsx" }, ok: true }],
+      }),
+    ).toBe(true);
+  });
+
   it("mantém plano pendente", () => {
     expect(
       shouldRetainLiveRunSlot({
