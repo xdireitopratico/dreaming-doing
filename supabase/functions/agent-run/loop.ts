@@ -90,57 +90,21 @@ import { ResilientLLM } from "./robin-pool.ts";
 import { formatLoopStatus, resolveClosureText, type LoopUpdateContext } from "./loop-status.ts";
 import { type AgentStateData, applyTransition, isTerminal } from "./agent-fsm.ts";
 import { RuntimeEmitter, type StreamCallback } from "./runtime/emitter.ts";
+import {
+  calculateMaxSteps,
+  calculateMaxTokens,
+  capMetaSize,
+  isAndroidNativePath,
+  isBuildCommand,
+  readLoopBudgetMsFromRuntime,
+  THINKING_STREAM_CAP_MS,
+} from "./runtime/loop-config.ts";
+import { buildCardSnapshot as buildCardSnapshotFromTimeline } from "./runtime/phases/snapshot.ts";
 
 const CHECKPOINT_INTERVAL_STEPS = 2;
 const MAX_LLM_RETRIES = 3;
 
-const ANDROID_NATIVE_PATH_RE =
-  /(^|\/)(build\.gradle(\.kts)?|settings\.gradle(\.kts)?|gradle\.properties|gradlew|app\/src\/main\/|\.kt$|AndroidManifest\.xml)/i;
-
-function isAndroidNativePath(path: string): boolean {
-  return ANDROID_NATIVE_PATH_RE.test(path.replace(/^\//, ""));
-}
-
-function isGradleCommand(command: string): boolean {
-  return /gradle|gradlew|assembleDebug|assembleRelease/i.test(command);
-}
-
-// Session 2.0 — build_log para qualquer comando de build/test/lint web,
-// não só Gradle. Cobre npm/yarn/pnpm/vite/tsc/eslint/jest/vitest.
-function isBuildCommand(command: string): boolean {
-  if (isGradleCommand(command)) return true;
-  return /\b(npm|yarn|pnpm|bun|npx)\s+(run\s+)?(build|dev|preview|test|lint|typecheck|check)|\bvite\s+(build|preview|dev)\b|\btsc\b|--noEmit|eslint|vitest|jest\s+run/i.test(
-    command,
-  );
-}
-
-function resolveLoopBudgetMs(): number {
-  const raw =
-    (typeof globalThis.Deno !== "undefined" ? Deno.env.get("AGENT_LOOP_BUDGET_MS") : undefined) ??
-    (typeof process !== "undefined" ? process.env.AGENT_LOOP_BUDGET_MS : undefined);
-  if (raw) {
-    const parsed = Number(raw);
-    if (Number.isFinite(parsed) && parsed > 0) return parsed;
-  }
-  const inngest =
-    (typeof process !== "undefined" && process.env.INNGEST_EXECUTOR === "1") ||
-    (typeof globalThis.Deno !== "undefined" && Deno.env.get("INNGEST_EXECUTOR") === "1");
-  // Edge: ~90s; Inngest/Vercel step: ~4.5m (fits vercel maxDuration 300s).
-  return inngest ? 270_000 : 90_000;
-}
-
-const LOOP_BUDGET_MS = resolveLoopBudgetMs();
-const THINKING_STREAM_CAP_MS = 45_000;
-function calculateMaxSteps(complexity: 1 | 2 | 3 | 4 | 5): number {
-  const limits: Record<1 | 2 | 3 | 4 | 5, number> = {
-    1: 50,
-    2: 60,
-    3: 70,
-    4: 85,
-    5: 100,
-  };
-  return limits[complexity] ?? 60;
-}
+const LOOP_BUDGET_MS = readLoopBudgetMsFromRuntime();
 
 export type AgentLoopRunResult = {
   ok: boolean;
@@ -159,50 +123,6 @@ export type AgentLoopRunResult = {
   totalTokens?: number;
   costUsd?: number;
 };
-
-/** H9 fix: cap meta JSONB em 50KB para não estourar Realtime.
- *  executionLog e streamTail podem crescer indefinidamente em runs longas.
- *  Supabase Realtime tem limite de payload (~1MB por UPDATE) — quando meta
- *  passa de algumas centenas de KB, o canal desconecta ("Reconnecting...")
- *  e o usuário perde o stream. Cap em 50KB preserva o Realtime funcionando. */
-const META_MAX_BYTES = 50_000;
-
-function capMetaSize(meta: Record<string, unknown>): Record<string, unknown> {
-  const json = JSON.stringify(meta);
-  if (json.length <= META_MAX_BYTES) return meta;
-
-  // Trunca executionLog (mantém apenas os últimos 20 entries)
-  if (Array.isArray(meta.executionLog) && meta.executionLog.length > 20) {
-    meta.executionLog = (meta.executionLog as unknown[]).slice(-20);
-  }
-  // Trunca streamTail
-  if (typeof meta.streamTail === "string" && meta.streamTail.length > 2000) {
-    meta.streamTail = (meta.streamTail as string).slice(-2000);
-  }
-  // Trunca cardSnapshot se existir
-  if (meta.cardSnapshot && typeof meta.cardSnapshot === "object") {
-    const cs = meta.cardSnapshot as Record<string, unknown>;
-    if (Array.isArray(cs.timeline) && cs.timeline.length > 30) {
-      cs.timeline = (cs.timeline as unknown[]).slice(-30);
-    }
-  }
-  return meta;
-}
-
-/** H4 fix: max_tokens dinâmico por complexidade.
- *  Antes: hard-coded 4096 em todos os LLMs. TSX de página inteira (Hero+Section+Footer)
- *  precisa 6-8k tokens. Lovable/Claude Code usam 16-32k.
- *  Complexity 5 (mais alto) = output máximo de 32k tokens. */
-function calculateMaxTokens(complexity: 1 | 2 | 3 | 4 | 5): number {
-  const limits: Record<1 | 2 | 3 | 4 | 5, number> = {
-    1: 8192,
-    2: 12288,
-    3: 16384,
-    4: 24576,
-    5: 32768,
-  };
-  return limits[complexity] ?? 16384;
-}
 
 export class AgentLoop {
   private reg: ToolRegistry;
@@ -2516,90 +2436,6 @@ export class AgentLoop {
     await this.sb.from("messages").update({ tool_calls, meta }).eq("id", msgId);
   }
 
-  private toolsFromTimeline(
-    timeline: Array<{ type: string; data: Record<string, unknown> }>,
-  ): Array<{ name: string; args: Record<string, unknown>; ok?: boolean; error?: string }> {
-    const tools: Array<{
-      name: string;
-      args: Record<string, unknown>;
-      ok?: boolean;
-      error?: string;
-    }> = [];
-    for (const ev of timeline) {
-      if (ev.type === "tool_start") {
-        tools.push({
-          name: typeof ev.data.name === "string" ? ev.data.name : "?",
-          args: (ev.data.args as Record<string, unknown> | undefined) ?? {},
-        });
-        continue;
-      }
-      if (ev.type === "tool_done") {
-        const toolName = typeof ev.data.name === "string" ? ev.data.name : "?";
-        for (let i = tools.length - 1; i >= 0; i--) {
-          if (tools[i].name === toolName && tools[i].ok === undefined) {
-            tools[i] = {
-              ...tools[i],
-              ok: ev.data.ok === true,
-              error: typeof ev.data.error === "string" ? ev.data.error : undefined,
-            };
-            break;
-          }
-        }
-      }
-    }
-    return tools;
-  }
-
-  private diffsFromTimeline(
-    timeline: Array<{ type: string; data: Record<string, unknown>; timestamp?: number }>,
-  ): Array<{
-    id: string;
-    path: string;
-    before: string;
-    after: string;
-    op: "write" | "edit";
-    timestamp: number;
-  }> {
-    const diffs: Array<{
-      id: string;
-      path: string;
-      before: string;
-      after: string;
-      op: "write" | "edit";
-      timestamp: number;
-    }> = [];
-    for (const ev of timeline) {
-      if (ev.type !== "file_diff") continue;
-      const path = typeof ev.data.path === "string" ? ev.data.path : "unknown";
-      const before = typeof ev.data.before === "string" ? ev.data.before : "";
-      const after = typeof ev.data.after === "string" ? ev.data.after : "";
-      const op = ev.data.op === "edit" ? "edit" : "write";
-      const ts = typeof ev.timestamp === "number" ? ev.timestamp : Date.now();
-      diffs.push({
-        id: `${path}::${diffs.length}::${ts}`,
-        path,
-        before,
-        after,
-        op,
-        timestamp: ts,
-      });
-    }
-    return diffs;
-  }
-
-  private latencyThoughtMsFromTimeline(
-    timeline: Array<{ type: string; data?: Record<string, unknown>; timestamp: number }>,
-  ): number | null {
-    const first = timeline.find(
-      (e) =>
-        e.type === "assistant_text" &&
-        typeof e.data?.text === "string" &&
-        String(e.data.text).trim().length > 0,
-    );
-    if (!first) return null;
-    return Math.max(500, first.timestamp - this.runStartTime);
-  }
-
   private buildCardSnapshot(opts: {
     streamText: string;
     deliveryFiles: string[];
@@ -2615,60 +2451,16 @@ export class AgentLoop {
     error?: string | null;
     resumable?: boolean;
   }): Record<string, unknown> {
-    const timeline = this.emitter.getTailBuffer().slice();
-    const tools = this.toolsFromTimeline(timeline);
-    const diffs = this.diffsFromTimeline(timeline);
-    const finished = opts.finished ?? true;
-    const lastFinishOk = opts.lastFinishOk ?? (finished ? true : null);
-    const narration = this.narrationBuffer.trim();
-    let latencyThoughtMs = this.latencyThoughtMsFromTimeline(timeline);
-    if (latencyThoughtMs == null && (opts.finished ?? true)) {
-      latencyThoughtMs = Math.max(500, Date.now() - this.runStartTime);
-    }
-
-    const snapshot: Record<string, unknown> = {
-      timeline,
-      tools,
-      diffs,
-      streamText: opts.streamText,
-      narrationText: narration || undefined,
-      latencyThoughtMs: latencyThoughtMs ?? undefined,
-      phase: opts.phase ?? (finished ? "done" : null),
-      message: null,
-      summary: null,
-      error: opts.error ?? null,
-      finished,
-      resumable: opts.resumable ?? false,
-      lastFinishOk,
-      currentStep: opts.currentStep ?? this.state.currentStepIndex,
-      totalSteps: opts.totalSteps ?? this.maxStepsLimit,
-      deliveryFiles: opts.deliveryFiles,
-      buildLogLines: [],
-      stackForkSuggested: null,
-      awaiting: opts.awaiting ?? false,
-      awaitingKind: opts.awaitingKind ?? null,
-      conversational: opts.conversational === true,
-    };
-
-    if (opts.pendingPlan) {
-      const plan = opts.pendingPlan;
-      snapshot.pendingPlan = {
-        planId: plan.planId,
-        summary: plan.summary,
-        rationale: plan.rationale ?? undefined,
-        markdown: plan.markdown ?? undefined,
-        mission: plan.mission ?? undefined,
-        objective: plan.objective ?? undefined,
-        steps: plan.steps,
-        ttlMs: Number.MAX_SAFE_INTEGER,
-        proposedAt: Date.now(),
-        runId: this.runId ?? undefined,
-        projectId: this.state.projectId,
-      };
-      snapshot.planSummary = plan.summary;
-    }
-
-    return snapshot;
+    return buildCardSnapshotFromTimeline({
+      timeline: this.emitter.getTailBuffer().slice(),
+      narrationBuffer: this.narrationBuffer,
+      runStartTime: this.runStartTime,
+      runId: this.runId,
+      projectId: this.state.projectId,
+      currentStepIndex: this.state.currentStepIndex,
+      maxStepsLimit: this.maxStepsLimit,
+      opts,
+    });
   }
 
   private async persistCheckpointChat(steps: number, buildFix?: boolean): Promise<void> {

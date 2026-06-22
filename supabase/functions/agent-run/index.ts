@@ -28,30 +28,7 @@ import { resolveInngestEventKey, resolveInngestEventUrl } from "../_shared/innge
 import { transitionRun } from "../_shared/run-lifecycle.ts";
 import type { AgentRunStatus } from "../_shared/agent-contract-events.ts";
 
-/** H9 fix: cap meta em 50KB para não estourar Realtime UPDATE.
- *  Trunca executionLog/streamTail/cardSnapshot mantendo os mais recentes. */
-const META_MAX_BYTES = 50_000;
-function capAgentRunMeta(meta: Record<string, unknown>): Record<string, unknown> {
-  const json = JSON.stringify(meta);
-  if (json.length <= META_MAX_BYTES) return meta;
-
-  // Trunca executionLog (mantém últimos 20)
-  if (Array.isArray(meta.executionLog) && meta.executionLog.length > 20) {
-    meta.executionLog = (meta.executionLog as unknown[]).slice(-20);
-  }
-  // Trunca streamTail
-  if (typeof meta.streamTail === "string" && meta.streamTail.length > 2000) {
-    meta.streamTail = (meta.streamTail as string).slice(-2000);
-  }
-  // Trunca cardSnapshot.timeline se existir
-  if (meta.cardSnapshot && typeof meta.cardSnapshot === "object") {
-    const cs = meta.cardSnapshot as Record<string, unknown>;
-    if (Array.isArray(cs.timeline) && cs.timeline.length > 30) {
-      cs.timeline = (cs.timeline as unknown[]).slice(-30);
-    }
-  }
-  return meta;
-}
+import { capMetaSize as capAgentRunMeta } from "./runtime/loop-config.ts";
 
 const corsHeaders = FORGE_CORS_HEADERS;
 
