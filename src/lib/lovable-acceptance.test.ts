@@ -274,6 +274,20 @@ describe("Fase 2.3 — Version history (snapshot list + tab)", () => {
 
 
 
+describe("ChatPlanDock — hooks estáveis (React #310)", () => {
+  it("useCallback declarado antes de returns condicionais", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { resolve } = await import("node:path");
+    const src = readFileSync(
+      resolve(import.meta.dirname, "../components/chat/ChatPlanDock.tsx"),
+      "utf8",
+    );
+    const hooksBlock = src.slice(0, src.indexOf("if (creating && !pendingPlan)"));
+    expect(hooksBlock).toContain("useCallback");
+    expect(hooksBlock).not.toContain("return null");
+  });
+});
+
 describe("Chat — sem empty state nem flash de carregamento", () => {
   it("ChatPanel não referencia empty state", async () => {
     const { readFileSync } = await import("node:fs");

@@ -23,27 +23,6 @@ export function ChatPlanDock({
 }: ChatPlanDockProps) {
   const [busy, setBusy] = useState<"approve" | "reject" | null>(null);
 
-  /* ─── Skeleton: show while creating plan ────────────────────────── */
-  if (creating && !pendingPlan) {
-    return (
-      <div className="forge-plan-dock" data-testid="chat-plan-dock-creating">
-        <div className="forge-plan-dock-shell">
-          <div className="forge-plan-dock-shimmer-lines" aria-hidden>
-            <div className="forge-plan-dock-shimmer-line" style={{ width: "45%" }} />
-            <div className="forge-plan-dock-shimmer-line" style={{ width: "78%" }} />
-            <div className="forge-plan-dock-shimmer-line" style={{ width: "62%" }} />
-            <div className="forge-plan-dock-shimmer-line" style={{ width: "38%" }} />
-          </div>
-          <p className="forge-plan-dock-creating-label">Creating plan…</p>
-        </div>
-      </div>
-    );
-  }
-
-  /* ─── Nothing to show ───────────────────────────────────────────── */
-  if (!pendingPlan) return null;
-
-  /* ─── Handlers ──────────────────────────────────────────────────── */
   const handleApprove = useCallback(async () => {
     if (!pendingPlan || !onApprove) return;
     setBusy("approve");
@@ -72,6 +51,26 @@ export function ChatPlanDock({
       setBusy(null);
     }
   }, [onReject]);
+
+  /* ─── Skeleton: show while creating plan ────────────────────────── */
+  if (creating && !pendingPlan) {
+    return (
+      <div className="forge-plan-dock" data-testid="chat-plan-dock-creating">
+        <div className="forge-plan-dock-shell">
+          <div className="forge-plan-dock-shimmer-lines" aria-hidden>
+            <div className="forge-plan-dock-shimmer-line" style={{ width: "45%" }} />
+            <div className="forge-plan-dock-shimmer-line" style={{ width: "78%" }} />
+            <div className="forge-plan-dock-shimmer-line" style={{ width: "62%" }} />
+            <div className="forge-plan-dock-shimmer-line" style={{ width: "38%" }} />
+          </div>
+          <p className="forge-plan-dock-creating-label">Creating plan…</p>
+        </div>
+      </div>
+    );
+  }
+
+  /* ─── Nothing to show ───────────────────────────────────────────── */
+  if (!pendingPlan) return null;
 
   /* ─── Ready plan — structured phases or markdown fallback ──────── */
   const phases = planPhasesFromPlan(pendingPlan);
