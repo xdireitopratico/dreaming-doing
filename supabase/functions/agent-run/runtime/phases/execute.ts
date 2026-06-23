@@ -714,25 +714,26 @@ export async function runBuildExecutePhase(
   deps.emit("phase", { phase: "summarize", message: "" });
   await deps.saveCheckpoint(LoopPhaseEnum.SUMMARIZE, true);
   const closingText = sanitizeUserFacingProse(
-    resolveClosureText({
+    await resolveClosureText({
       messages: deps.state.messages,
       touchedPaths: [...deps.touchedPaths],
       userRequest: deps.originalUserRequest ?? undefined,
+      model: deps.router.main,
     }),
   );
 
-  const finalClosing = closingText.trim();
-  if (finalClosing) {
-    deps.emit("assistant_text", {
-      text: finalClosing,
-      append: false,
-      final: true,
-    });
-    try {
-      await deps.persistFinal(finalClosing, { lastFinishOk: true });
-    } catch (e) {
-      console.error("[loop] persistFinal failed", e);
-    }
+  // Inviolabilidade: o loop sempre termina com mensagem visível pro usuário.
+  // Se a síntese retornou vazio (LLM indisponível e sem prosa), usamos fallback mínimo.
+  const finalClosing = closingText.trim() || "Pronto. Quer que eu ajuste algo?";
+  deps.emit("assistant_text", {
+    text: finalClosing,
+    append: false,
+    final: true,
+  });
+  try {
+    await deps.persistFinal(finalClosing, { lastFinishOk: true });
+  } catch (e) {
+    console.error("[loop] persistFinal failed", e);
   }
   try {
     await deps.clearCheckpoint();

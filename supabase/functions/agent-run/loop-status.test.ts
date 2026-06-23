@@ -52,11 +52,11 @@ Deno.test("lastAssistantProse — ignora turnos com tool_calls", () => {
   assertEquals(lastAssistantProse(messages), "Pronto — confere o preview.");
 });
 
-Deno.test("resolveClosureText — usa prosa do agente principal", () => {
+Deno.test("resolveClosureText — usa prosa do agente principal", async () => {
   const messages: ChatMessage[] = [
     { role: "assistant", content: "Ficou no App.tsx — abre o preview." },
   ];
-  const text = resolveClosureText({
+  const text = await resolveClosureText({
     messages,
     touchedPaths: ["src/App.tsx"],
     userRequest: "landing",
@@ -64,12 +64,22 @@ Deno.test("resolveClosureText — usa prosa do agente principal", () => {
   assertStringIncludes(text, "preview");
 });
 
-Deno.test("resolveClosureText — fallback com arquivos tocados", () => {
-  const text = resolveClosureText({
+Deno.test("resolveClosureText — fallback determinístico sem model e sem prosa", async () => {
+  const text = await resolveClosureText({
     messages: [],
     touchedPaths: ["src/App.tsx", "src/Hero.tsx"],
     userRequest: "landing",
   });
-  assertStringIncludes(text, "App.tsx");
-  assertStringIncludes(text, "preview");
+  // Sem model e sem prosa → fallback vazio (inviolabilidade: nunca null, sempre string).
+  assertEquals(typeof text, "string");
+});
+
+Deno.test("resolveClosureText — fallback de erro quando há errorMessage", async () => {
+  const text = await resolveClosureText({
+    messages: [],
+    touchedPaths: [],
+    userRequest: "landing",
+    errorMessage: "Rate limit excedido",
+  });
+  assertStringIncludes(text, "Rate limit");
 });

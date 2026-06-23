@@ -1,6 +1,7 @@
 // loop-status.ts — Status determinístico no chat durante o loop (sem LLM narrador).
 
-import type { ChatMessage } from "./types.ts";
+import type { ChatMessage, LLMProvider } from "./types.ts";
+import { sanitizeUserFacingProse } from "./sanitize-prose.ts";
 
 type ToolCallLike = {
   name: string;
@@ -104,9 +105,68 @@ function formatClosureFallback(input: ClosureResolveInput): string {
   return "";
 }
 
-/** Fechamento do mesmo agente — sem LLM narrador paralelo. */
-export function resolveClosureText(input: ClosureResolveInput): string {
+const SUCCESS_CLOSING_SYSTEM = `Você é o agente FORGE terminando um trabalho com sucesso.
+Escreva a mensagem final pro usuário em português, direto e caloroso. Estrutura (2-4 frases):
+1. O que mudou / foi entregue (1-2 frases concretas).
+2. Convite ao preview se houver UI (1 frase).
+3. Pergunta aberta sobre o próximo passo (1 frase — ex: "Quer ajustar algo ou seguimos em frente?").
+Sem botões, sem listas longas, sem jargão. Sem repetir o que já disse.`;
+
+/** Síntese LLM de sucesso quando o agente não fechou sozinho. Garante arremate. */
+async function synthesizeSuccessClosing(
+  model: LLMProvider,
+  input: ClosureResolveInput,
+): Promise<string | null> {
+  const userPrompt = [
+    input.userRequest ? `Pedido do usuário: ${input.userRequest}` : "",
+    input.touchedPaths.length
+      ? `Arquivos modificados:\n${input.touchedPaths.slice(0, 30).map((p) => `- ${p}`).join("\n")}`
+      : "Nenhum arquivo modificado.",
+    "",
+    "Escreva a mensagem final agora.",
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  try {
+    const response = await model.chat({
+      messages: [
+        { role: "system", content: SUCCESS_CLOSING_SYSTEM },
+        { role: "user", content: userPrompt },
+      ],
+      tool_choice: "none",
+      tools: [],
+      max_tokens: 400,
+      temperature: 0.6,
+    });
+    const text = (response.content ?? "").trim();
+    if (!text) return null;
+    return sanitizeUserFacingProse(text);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Fechamento garantido — 3 camadas em cascata:
+ *   1. Última prosa do agente (se razoável, ≥ 24 chars).
+ *   2. Síntese LLM de sucesso (chamada dedicada com prompt de apresentação + chamada pra ação).
+ *   3. Fallback determinístico (erro ou vazio — mas sempre retorna string).
+ *
+ * Inviolabilidade: o loop nunca termina sem mensagem visível pro usuário.
+ */
+export async function resolveClosureText(input: ClosureResolveInput & {
+  model?: LLMProvider;
+}): Promise<string> {
   const fromAgent = lastAssistantProse(input.messages);
-  if (fromAgent) return fromAgent;
+  if (fromAgent && fromAgent.length >= 24) return fromAgent;
+
+  // Sem prosa do agente → síntese LLM garantida (se model disponível).
+  if (input.model) {
+    const synthesized = await synthesizeSuccessClosing(input.model, input);
+    if (synthesized && synthesized.trim()) return synthesized;
+  }
+
+  // Última rede: fallback determinístico. Nunca devolve null.
   return formatClosureFallback(input);
 }

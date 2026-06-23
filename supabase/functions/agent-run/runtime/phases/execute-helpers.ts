@@ -167,6 +167,35 @@ export function buildStructuredToolContent(call: ToolCall, result: ToolResult): 
     );
   }
 
+  // Framing de falha — direto, prático, sem loop cognitivo. 3 cenários:
+  //   1. Tool externa bloqueante (web/scrape/research/screenshot/mcp) → avisa + pergunta como avançar
+  //   2. Tool local falhou mas pode continuar → entrega contraprestação, informa a falha
+  //   3. Erro de build/typecheck → só empurra feedback técnico (fluxo próprio de correção)
+  const isExternalLookup = /^(web_research|web_scrape|web_fetch|http_fetch|screenshot_capture|mcp_|extract_design_dna)$/.test(
+    toolName,
+  );
+  const isLocalBuildNoise =
+    toolName === "shell_exec" && /npm (run build|run tsc|test)/i.test(String(args.command ?? ""));
+
+  let framing: string;
+  if (isLocalBuildNoise) {
+    // Cenário 3: feedback técnico cru, sem framing comportamental (build tem fluxo próprio).
+    framing = hints.length > 0 ? hints.join(" ") : "";
+  } else if (isExternalLookup) {
+    // Cenário 1: tool externa falhou — pode ser bloqueante.
+    framing =
+      `A ferramenta ${toolName} falhou. ` +
+      "Decida rápido: (a) se é essencial para o pedido, informe o usuário da falha e pergunte como ele quer avançar sem ela; " +
+      "(b) se dá pra seguir sem, informe a falha brevemente e entregue o que conseguir com o restante. " +
+      "Não pare só por causa desta falha.";
+  } else {
+    // Cenário 2: tool local falhou (fs/shell comum) — geralmente dá pra seguir.
+    framing =
+      `A ferramenta ${toolName} falhou, mas isso não impede o trabalho. ` +
+      "Informe o usuário da falha se for relevante e continue produzindo valor com as outras ferramentas. " +
+      "Não pare por causa deste erro.";
+  }
+
   return JSON.stringify({
     ok: false,
     tool: toolName,
@@ -174,6 +203,7 @@ export function buildStructuredToolContent(call: ToolCall, result: ToolResult): 
     ...(path ? { path } : {}),
     ...(outputSample ? { output: outputSample.slice(0, 500) } : {}),
     hint: hints.length > 0 ? hints.join(" ") : undefined,
+    framing,
   });
 }
 
