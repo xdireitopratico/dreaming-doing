@@ -61,23 +61,45 @@ export async function createExtractionJob(
 }
 
 export async function validateEntry(id: string, validated: boolean): Promise<void> {
-  const { error } = await supabase.from("design_system_library").update({ validated }).eq("id", id);
+  const { data, error } = await supabase
+    .from("design_system_library")
+    .update({ validated })
+    .eq("id", id)
+    .select("id")
+    .maybeSingle();
 
   if (error) throw new Error(error.message);
+  if (!data) {
+    throw new Error("Nenhuma linha foi alterada. Verifique permissão ou se o item ainda existe.");
+  }
 }
 
 export async function archiveEntry(id: string, archived: boolean): Promise<void> {
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from("design_system_library")
     .update({ is_archived: archived })
-    .eq("id", id);
+    .eq("id", id)
+    .select("id")
+    .maybeSingle();
 
   if (error) throw new Error(error.message);
+  if (!data) {
+    throw new Error("Nenhuma linha foi alterada. Verifique permissão ou se o item ainda existe.");
+  }
 }
 
 export async function deleteEntry(id: string): Promise<void> {
-  const { error } = await supabase.from("design_system_library").delete().eq("id", id);
+  const { data, error } = await supabase
+    .from("design_system_library")
+    .delete()
+    .eq("id", id)
+    .select("id")
+    .maybeSingle();
+
   if (error) throw new Error(error.message);
+  if (!data) {
+    throw new Error("Nenhuma linha foi removida. Verifique permissão ou se o item ainda existe.");
+  }
 }
 
 export async function fetchJobDetails(jobId: string): Promise<DesignDnaJob | null> {
