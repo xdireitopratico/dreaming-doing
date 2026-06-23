@@ -274,6 +274,23 @@ describe("Fase 2.3 — Version history (snapshot list + tab)", () => {
 
 
 
+describe("debug-log.sh — telemetria Fase 1", () => {
+  it("consulta agent_streaming_telemetry com --run-id e --telemetry-only", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { resolve } = await import("node:path");
+    const script = readFileSync(resolve(import.meta.dirname, "../../scripts/debug-log.sh"), "utf8");
+    const sql = readFileSync(resolve(import.meta.dirname, "../../docs/debug-runs.sql"), "utf8");
+
+    expect(script).toContain("fetch_telemetry_logs");
+    expect(script).toContain("agent_streaming_telemetry");
+    expect(script).toContain("--telemetry-only");
+    expect(script).toContain("--run-id");
+    expect(script).toContain("TELEMETRY_ERROR_EVENTS");
+    expect(sql).toContain("Q6: Timeline de telemetria por run");
+    expect(sql).toContain("Q7: Eventos de degradação");
+  });
+});
+
 describe("Inspector Plan — layout de leitura (preview)", () => {
   it("aba Plan move nav pro workspace header e plano usa scroll único", async () => {
     const { readFileSync } = await import("node:fs");

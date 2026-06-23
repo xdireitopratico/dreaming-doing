@@ -16,9 +16,17 @@ Por favor, execute imediatamente:
 ./scripts/debug-log.sh --hours 6 --errors-only
 ```
 
+Se o bug for de chat/stream/plano e você tiver o `run_id`:
+
+```bash
+./scripts/debug-log.sh --run-id RUN_ID_AQUI --telemetry-only --hours 12
+```
+
 Analise a saída e identifique a causa raiz antes de sugerir qualquer alteração de código.
 
-Se alguma fonte retornou erro, comece por ela.
+Seções: SUPABASE (functions/edge/postgres), VERCEL, INNGEST, **TELEMETRY** (eventos estruturados do cliente/servidor).
+
+Se alguma fonte retornou erro, comece por ela. Para bugs de UX no chat, priorize **TELEMETRY** + `docs/debug-runs.sql` Q6.
 
 ## Regras
 1. NUNCA sugira código antes de ver os logs

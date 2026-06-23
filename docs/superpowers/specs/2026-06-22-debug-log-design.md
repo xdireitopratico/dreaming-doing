@@ -124,8 +124,21 @@ source scripts/setup-debug.sh
 3. **jq dependency** — necessário para parsing JSON. Instalado automaticamente
    pelo setup.
 
+## Telemetry (Fase 1 — 2026-06-23)
+
+`debug-log.sh` consulta `agent_streaming_telemetry` via PostgREST (service role).
+
+- Seção **TELEMETRY** na saída padrão
+- `--telemetry-only` — só telemetria
+- `--run-id UUID` — filtra por run
+- `--errors-only` — só eventos de degradação (seq_gap, realtime_error, etc.)
+- Credenciais: `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` em `.env.debug` ou fallback `.env.local`
+
+SQL correlato: `docs/debug-runs.sql` Q6 (timeline por run), Q7 (frequência 24h).
+
 ## Future
 
+- [x] Streaming telemetry integration (agent_streaming_telemetry)
 - [ ] Vercel Log Drains integration (Pro+)
 - [ ] Sentry/DataDog integration
 - [ ] Rate limiting / backoff

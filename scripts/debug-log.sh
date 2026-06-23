@@ -8,6 +8,8 @@
 #   ./scripts/debug-log.sh --supabase                # Só Supabase
 #   ./scripts/debug-log.sh --json                    # JSON estruturado
 #   ./scripts/debug-log.sh --follow                  # Tail mode (repetir)
+#   ./scripts/debug-log.sh --run-id UUID             # Telemetria de um run específico
+#   ./scripts/debug-log.sh --telemetry-only          # Só agent_streaming_telemetry
 #
 # Config: variáveis em .env.debug (ver .env.debug.example)
 # ═══════════════════════════════════════════════════════════════════════
@@ -42,6 +44,22 @@ OUTPUT_JSON=false
 ERRORS_ONLY=false
 FOLLOW=false
 FOLLOW_INTERVAL=30
+SHOW_TELEMETRY=true
+RUN_ID=""
+
+# Eventos de telemetria que indicam falha/degradação (ver src/lib/streaming-telemetry.ts)
+TELEMETRY_ERROR_EVENTS=(
+  "agent.stream_seq_gap"
+  "agent.stream_seq_dropped"
+  "agent.realtime_channel_error"
+  "agent.materialized_shape_mismatch"
+  "agent.materialized_release_pending"
+  "agent.plan_source_runid_missing"
+  "agent.narration_stream_overlap"
+  "agent.stale_stream_detected"
+  "agent.dual_tab_detected"
+  "agent.run_dispatch_failed"
+)
 
 # ─── Carrega config ───
 load_config() {
@@ -60,6 +78,26 @@ load_config() {
   INNGEST_SIGNING_KEY="${INNGEST_SIGNING_KEY:-}"
   INNGEST_API_KEY="${INNGEST_API_KEY:-}"
   INNGEST_ENV_ID="${INNGEST_ENV_ID:-}"
+
+  # REST (PostgREST) — telemetria em agent_streaming_telemetry
+  SUPABASE_URL="${SUPABASE_URL:-}"
+  SUPABASE_SERVICE_ROLE_KEY="${SUPABASE_SERVICE_ROLE_KEY:-}"
+  if [[ (-z "$SUPABASE_URL" || -z "$SUPABASE_SERVICE_ROLE_KEY") && -f "$PROJECT_DIR/.env.local" ]]; then
+    set -a
+    # shellcheck source=/dev/null
+    source "$PROJECT_DIR/.env.local"
+    set +a
+    SUPABASE_URL="${SUPABASE_URL:-${VITE_SUPABASE_URL:-}}"
+  fi
+}
+
+telemetry_is_error_event() {
+  local name=$1
+  local evt
+  for evt in "${TELEMETRY_ERROR_EVENTS[@]}"; do
+    [[ "$evt" == "$name" ]] && return 0
+  done
+  return 1
 }
 
 # ─── Utilitários ───
@@ -234,6 +272,77 @@ fetch_supabase_logs() {
   done
 }
 
+# ─── Coletor: Streaming Telemetry (PostgREST) ───
+fetch_telemetry_logs() {
+  local url="${SUPABASE_URL}"
+  local key="${SUPABASE_SERVICE_ROLE_KEY}"
+  if [[ -z "$url" || -z "$key" ]]; then
+    logmsg WARN "telemetry" "SKIP: SUPABASE_URL ou SUPABASE_SERVICE_ROLE_KEY vazio (.env.debug ou .env.local)" "$(iso_timestamp)"
+    return
+  fi
+
+  local start_iso
+  start_iso=$(date -u -d "${HOURS} hours ago" +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || \
+              date -u -v "-${HOURS}H" +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null)
+
+  local cache="$CACHE_DIR/supabase_telemetry.json"
+
+  curl -sf --max-time 15 -G "${url}/rest/v1/agent_streaming_telemetry" \
+    --data-urlencode "select=created_at,event_name,run_id,project_id,payload" \
+    --data-urlencode "order=created_at.desc" \
+    --data-urlencode "limit=100" \
+    --data-urlencode "created_at=gte.${start_iso}" \
+    $( [[ -n "$RUN_ID" ]] && printf -- "--data-urlencode run_id=eq.%s" "$RUN_ID" ) \
+    -H "apikey: ${key}" \
+    -H "Authorization: Bearer ${key}" > "$cache" 2>/dev/null || true
+
+  local count=0
+  local entries=""
+
+  if [[ -s "$cache" ]]; then
+    while IFS= read -r row; do
+      [[ -z "$row" ]] && continue
+      local ts name run_id project_id payload_short
+      ts=$(jq -r '.created_at // empty' <<<"$row")
+      name=$(jq -r '.event_name // empty' <<<"$row")
+      run_id=$(jq -r '.run_id // ""' <<<"$row")
+      project_id=$(jq -r '.project_id // ""' <<<"$row")
+      payload_short=$(jq -c '.payload // {}' <<<"$row" 2>/dev/null | head -c 180)
+      [[ -z "$ts" || -z "$name" ]] && continue
+      if [[ "$ERRORS_ONLY" == "true" ]] && ! telemetry_is_error_event "$name"; then
+        continue
+      fi
+      local level="INFO"
+      if telemetry_is_error_event "$name"; then
+        level="ERROR"
+      fi
+      local run_short="${run_id:0:8}"
+      [[ -z "$run_short" ]] && run_short="-"
+      local project_short="${project_id:0:8}"
+      [[ -z "$project_short" ]] && project_short="-"
+      local msg="${name} run=${run_short} project=${project_short} ${payload_short}"
+      entries+="$ts|$level|telemetry|$msg"$'\n'
+      count=$((count + 1))
+    done < <(jq -c '.[]?' "$cache" 2>/dev/null || true)
+  fi
+
+  rm -f "$cache" 2>/dev/null || true
+
+  if [[ "$count" -eq 0 ]]; then
+    local hint="Nenhum evento no período"
+    [[ -n "$RUN_ID" ]] && hint+=" (run_id=${RUN_ID})"
+    [[ "$ERRORS_ONLY" == "true" ]] && hint+=" (modo --errors-only: só eventos de degradação)"
+    logmsg INFO "telemetry" "$hint" "$(iso_timestamp)"
+    return
+  fi
+
+  section "TELEMETRY" "$count"
+  echo "$entries" | sort | while IFS='|' read -r ts level source msg; do
+    [[ -z "$ts" ]] && continue
+    logmsg "$level" "$source" "$msg" "$ts"
+  done
+}
+
 # ─── Coletor: Vercel ───
 fetch_vercel_logs() {
   local token="${VERCEL_TOKEN}"
@@ -379,6 +488,10 @@ run_once() {
     "$first" || true; first=false
     fetch_inngest_logs
   fi
+  if [[ "$SHOW_TELEMETRY" == "true" ]]; then
+    "$first" || true; first=false
+    fetch_telemetry_logs
+  fi
 
   if [[ "$OUTPUT_JSON" != "true" ]]; then
     echo ""
@@ -397,15 +510,18 @@ Opções:
   -s, --supabase      Apenas logs do Supabase
   -v, --vercel        Apenas logs da Vercel
   -i, --inngest       Apenas logs do Inngest
+  -t, --telemetry-only  Apenas telemetria (agent_streaming_telemetry)
   -j, --json          Saída em JSON (pipe-friendly)
   -h, --hours N       Janela de horas (default: 6)
   -e, --errors-only   Apenas entradas com ERROR/FAILED
   -f, --follow        Modo tail (atualiza a cada 30s)
   -c, --config FILE   Caminho do arquivo .env.debug
+  --run-id UUID       Filtra telemetria por run_id
   --help              Mostra esta ajuda
 
 Config: variáveis em .env.debug (ver .env.debug.example)
   SUPABASE_PROJECT_REF, SUPABASE_PAT
+  SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY (telemetria; fallback: .env.local)
   VERCEL_TOKEN, VERCEL_PROJECT
   INNGEST_SIGNING_KEY, INNGEST_ENV_ID
 
@@ -422,7 +538,9 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     -s|--supabase) SHOW_VERCEL=false; SHOW_INNGEST=false; shift;;
     -v|--vercel) SHOW_SUPABASE=false; SHOW_INNGEST=false; shift;;
-    -i|--inngest) SHOW_SUPABASE=false; SHOW_VERCEL=false; shift;;
+    -i|--inngest) SHOW_SUPABASE=false; SHOW_VERCEL=false; SHOW_TELEMETRY=false; shift;;
+    -t|--telemetry-only) SHOW_SUPABASE=false; SHOW_VERCEL=false; SHOW_INNGEST=false; shift;;
+    --run-id) RUN_ID="$2"; shift 2;;
     -j|--json) OUTPUT_JSON=true; shift;;
     -h|--hours) HOURS="$2"; shift 2;;
     -e|--errors-only) ERRORS_ONLY=true; shift;;

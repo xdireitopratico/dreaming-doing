@@ -112,3 +112,43 @@ WHERE started_at > NOW() - INTERVAL '7 days'
   AND meta->>'model' IS NOT NULL
 GROUP BY model
 ORDER BY runs DESC;
+
+-- ============================================================================
+-- Q6: Timeline de telemetria por run (cliente + servidor — falhas de UX/stream)
+-- ============================================================================
+-- Substituir 'RUN_ID_AQUI' pelo id do run. Complementa Q3 (stream events) com
+-- o que o browser/servidor reportou: seq gaps, realtime reconnect, plan missing, etc.
+-- Também via CLI: ./scripts/debug-log.sh --run-id RUN_ID_AQUI --telemetry-only
+SELECT
+  created_at,
+  event_name,
+  run_id,
+  LEFT(project_id::text, 8) AS project,
+  payload
+FROM agent_streaming_telemetry
+WHERE run_id = 'RUN_ID_AQUI'
+ORDER BY created_at ASC;
+
+-- ============================================================================
+-- Q7: Eventos de degradação mais frequentes (últimas 24h — todos os projetos)
+-- ============================================================================
+SELECT
+  event_name,
+  COUNT(*) AS count,
+  MAX(created_at) AS last_seen
+FROM agent_streaming_telemetry
+WHERE created_at > NOW() - INTERVAL '24 hours'
+  AND event_name IN (
+    'agent.stream_seq_gap',
+    'agent.stream_seq_dropped',
+    'agent.realtime_channel_error',
+    'agent.materialized_shape_mismatch',
+    'agent.materialized_release_pending',
+    'agent.plan_source_runid_missing',
+    'agent.narration_stream_overlap',
+    'agent.stale_stream_detected',
+    'agent.dual_tab_detected',
+    'agent.run_dispatch_failed'
+  )
+GROUP BY event_name
+ORDER BY count DESC;
