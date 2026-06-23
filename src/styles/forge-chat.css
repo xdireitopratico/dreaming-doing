@@ -413,7 +413,7 @@
 
 .forge-plan-dock-shell {
   width: 100%;
-  max-width: min(100%, 520px);
+  max-width: none;
   padding: 12px 14px 10px;
   border-radius: 16px;
   background: color-mix(in srgb, var(--bg-input) 92%, var(--bg-card) 8%);
@@ -1006,6 +1006,180 @@
 .forge-mini-card-in-chat .forge-mini-card-title {
   font-size: 14px;
   color: color-mix(in srgb, var(--text-secondary) 92%, var(--text-primary));
+}
+
+/* ─── Live header — badge "Working" inline com dot animado ──────── */
+
+.forge-mini-card-live-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: var(--space-xs);
+}
+
+.forge-mini-card-live-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--status-working);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--status-working) 60%, transparent);
+  animation: forge-task-pulse 1.5s ease-in-out infinite;
+}
+
+.forge-mini-card-live-badge {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: color-mix(in srgb, var(--status-working) 95%, white);
+}
+
+.forge-mini-card-live-subtitle {
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+/* ─── Activity stream — timeline rica no mini card ─────────────────── */
+
+.forge-mini-card-activity {
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.forge-mini-card-activity-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 5px 8px;
+  border-radius: var(--radius-sm, 6px);
+  border-left: 2px solid transparent;
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+  transition: background 0.15s ease;
+}
+
+.forge-mini-card-activity-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-top: 1px;
+  color: var(--text-muted);
+  min-width: 14px;
+}
+
+.forge-mini-card-activity-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  flex: 1;
+  min-width: 0;
+}
+
+.forge-mini-card-activity-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-primary);
+  line-height: 1.35;
+  word-break: break-word;
+}
+
+.forge-mini-card-activity-desc {
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.3;
+  word-break: break-word;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+}
+
+.forge-mini-card-activity-status {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+/* ─── Active item — gradiente leve + border-left accent ───────────── */
+
+.forge-mini-card-activity-item--active {
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--status-working) 8%, transparent) 0%,
+    transparent 100%
+  );
+  border-left-color: var(--status-working);
+}
+
+.forge-mini-card-activity-item--active .forge-mini-card-activity-icon {
+  color: var(--status-working);
+}
+
+.forge-mini-card-activity-item--active .forge-mini-card-activity-label {
+  color: var(--text-primary);
+}
+
+/* ─── Done item — mais discreto ──────────────────────────────────── */
+
+.forge-mini-card-activity-item--done {
+  opacity: 0.65;
+  border-left-color: color-mix(in srgb, var(--status-done) 40%, transparent);
+}
+
+.forge-mini-card-activity-item--done .forge-mini-card-activity-icon {
+  color: color-mix(in srgb, var(--status-done) 70%, var(--text-muted));
+}
+
+/* ─── Failed item — vermelho sutil ────────────────────────────────── */
+
+.forge-mini-card-activity-item--failed {
+  border-left-color: color-mix(in srgb, var(--status-failed) 50%, transparent);
+}
+
+.forge-mini-card-activity-item--failed .forge-mini-card-activity-icon {
+  color: var(--status-failed);
+}
+
+.forge-mini-card-activity-item--failed .forge-mini-card-activity-label {
+  color: color-mix(in srgb, var(--status-failed) 85%, var(--text-primary));
+}
+
+/* ─── Tool-type icon colors ──────────────────────────────────────── */
+
+.forge-mini-card-activity-item--tool-fs_edit .forge-mini-card-activity-icon,
+.forge-mini-card-activity-item--tool-fs_write .forge-mini-card-activity-icon {
+  color: color-mix(in srgb, var(--status-done) 80%, white);
+}
+
+.forge-mini-card-activity-item--tool-shell_exec .forge-mini-card-activity-icon {
+  color: color-mix(in srgb, var(--status-working) 80%, white);
+}
+
+.forge-mini-card-activity-item--tool-fs_search .forge-mini-card-activity-icon,
+.forge-mini-card-activity-item--tool-fs_glob .forge-mini-card-activity-icon,
+.forge-mini-card-activity-item--tool-web_search .forge-mini-card-activity-icon {
+  color: color-mix(in srgb, var(--status-thinking) 80%, white);
+}
+
+.forge-mini-card-activity-item--tool-web_fetch .forge-mini-card-activity-icon,
+.forge-mini-card-activity-item--tool-observe .forge-mini-card-activity-icon {
+  color: color-mix(in srgb, var(--text-accent) 80%, white);
+}
+
+.forge-mini-card-activity-item--tool-install_dep .forge-mini-card-activity-icon,
+.forge-mini-card-activity-item--tool-package_install .forge-mini-card-activity-icon {
+  color: color-mix(in srgb, #a78bfa 80%, white);
 }
 
 .forge-task-list {
@@ -1638,3 +1812,69 @@
   margin: 0 var(--space-xs) var(--space-xs);
 }
 
+/* Review callout — aparece entre mini-card e closing quando job done com fileCount > 0 */
+.chat-review-callout {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm, 8px);
+  margin: var(--space-xs, 4px) 0;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--bg-subtle, rgba(255, 255, 255, 0.04));
+  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.08));
+  font-size: 13px;
+}
+
+.chat-review-callout-label {
+  color: var(--text-secondary, #6b7280);
+}
+
+.chat-review-callout-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.chat-review-callout-btn {
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.12));
+  background: transparent;
+  color: var(--text-primary, inherit);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.chat-review-callout-btn:hover {
+  background: var(--bg-hover, rgba(255, 255, 255, 0.06));
+}
+
+/* ─── C1: Shimmer → Ready transition ───────────────────────────────── */
+
+.forge-plan-dock-shell--ready {
+  animation: forge-card-appear 0.35s var(--ease-out-expo) both;
+}
+
+/* ─── C2: Stagger steps on appear ───────────────────────────────────── */
+
+.forge-plan-step {
+  animation: forge-card-appear 0.3s var(--ease-out-expo) both;
+  animation-delay: calc(var(--step-index, 0) * 60ms);
+}
+
+/* ─── D1: Reduced motion ────────────────────────────────────────────── */
+
+@media (prefers-reduced-motion: reduce) {
+  .forge-plan-dock-shell,
+  .forge-plan-dock-shell--ready,
+  .forge-plan-step,
+  .forge-plan-dock-shimmer-line,
+  .forge-mini-card-live-dot,
+  .forge-animate-thinking,
+  .forge-animate-card-appear,
+  .forge-animate-task-check,
+  .forge-mini-card-activity-item--active .forge-mini-card-activity-icon svg {
+    animation: none !important;
+    transition-duration: 0.01ms !important;
+  }
+}

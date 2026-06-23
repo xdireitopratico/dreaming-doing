@@ -2,15 +2,18 @@ import { cn } from "@/lib/utils";
 import type { MiniCardData } from "@/lib/chat/types";
 import {
   Check,
-  CheckCircle2,
   Circle,
   ExternalLink,
+  Eye,
+  FileCode,
   FileText,
   GitCompareArrows,
+  Globe,
   Loader2,
+  Package,
+  Search,
   Terminal,
   X,
-  XCircle,
 } from "lucide-react";
 import { PlanPhaseListFromPlan } from "./PlanPhaseList";
 
@@ -19,7 +22,6 @@ type ChatJobCardProps = {
   runId: string;
   isFocused?: boolean;
   onClick?: () => void;
-  /** Fase 2.2 — handlers de action chips. */
   onOpenFile?: (path: string) => void;
   onShowDiff?: (runId: string) => void;
   onShowOutput?: (runId: string) => void;
@@ -32,16 +34,44 @@ function parseEditedHeader(header: string): { edited: boolean; file: string | nu
   return { edited: true, file: match[1].trim() };
 }
 
-function activityIcon(status: MiniCardData["activity"][number]["status"]) {
+/** Ícone semântico por tipo de tool — não genérico check/loader. */
+function toolTypeIcon(toolName?: string): React.ReactNode {
+  switch (toolName) {
+    case "fs_read":
+    case "fs_list":
+    case "fs_read_many":
+      return <FileText className="size-3.5" />;
+    case "fs_write":
+    case "fs_edit":
+      return <FileCode className="size-3.5" />;
+    case "shell_exec":
+      return <Terminal className="size-3.5" />;
+    case "fs_search":
+    case "fs_glob":
+    case "web_search":
+      return <Search className="size-3.5" />;
+    case "web_fetch":
+    case "observe":
+      return <Globe className="size-3.5" />;
+    case "install_dep":
+    case "package_install":
+      return <Package className="size-3.5" />;
+    default:
+      return <Eye className="size-3.5" />;
+  }
+}
+
+/** Ícone de status overlay — pequeno, ao lado do ícone de tool type. */
+function statusDotIcon(status: MiniCardData["activity"][number]["status"]) {
   switch (status) {
     case "done":
-      return <Check className="size-3" />;
+      return <Check className="size-2.5 text-[var(--status-done)]" />;
     case "active":
-      return <Loader2 className="size-3 animate-spin" />;
+      return <Loader2 className="size-2.5 animate-spin text-[var(--status-working)]" />;
     case "failed":
-      return <X className="size-3" />;
+      return <X className="size-2.5 text-[var(--status-failed)]" />;
     default:
-      return <Circle className="size-3" />;
+      return <Circle className="size-2.5 text-[var(--text-muted)]" />;
   }
 }
 
@@ -57,7 +87,6 @@ export function ChatJobCard({
 }: ChatJobCardProps) {
   const isLive = data.status === "working" || data.status === "thinking";
   const latestBriefing = data.liveBriefings[0] ?? (data.subtitle || data.title);
-  const displaySubtitle = isLive ? latestBriefing : data.subtitle || data.title;
 
   const { edited, file } = parseEditedHeader(data.header);
   const isRunningCommand = /^Running command$/i.test(data.header.trim());
@@ -70,10 +99,6 @@ export function ChatJobCard({
     return "Timeline completa →";
   };
 
-  // Fase 2.2 — action chips Lovable-style. Cada chip dispara uma ação
-  // contextual: abrir o arquivo, ver o diff completo no inspector, abrir o
-  // output de shell, ou abrir o preview. Só renderiza chips que têm handler
-  // (evita botão quebrado).
   const chips: Array<{
     key: string;
     label: string;
@@ -129,10 +154,9 @@ export function ChatJobCard({
   ];
   const visibleChips = chips.filter((c) => c.visible);
 
-  // Activity stream — trabalho happening em tempo real (3-4 linhas).
-  // Prioridade sobre tasks estáticas do plano: mostra o que o agente FAZ agora.
+  // Activity stream — 5 itens com ícone semântico + subtítulo.
   const hasActivity = data.activity.length > 0;
-  const visibleActivity = data.activity.slice(0, 4);
+  const visibleActivity = data.activity.slice(0, 5);
 
   const cardVariant =
     (isRunningCommand || edited) && isLive
@@ -181,13 +205,28 @@ export function ChatJobCard({
           </div>
         )}
 
-        {!edited && !isRunningCommand && data.header && !isDone && !isFailed && (
+        {/* Header live — badge compacto "Working" + briefing real como subtítulo.
+            Elimina a duplicação de duas linhas "Working" que existia antes. */}
+        {isLive && !edited && !isRunningCommand && !isDone && !isFailed && (
+          <div className="forge-mini-card-live-header">
+            <span className="forge-mini-card-live-dot" aria-hidden />
+            <span className="forge-mini-card-live-badge">Working</span>
+            {latestBriefing && latestBriefing !== "Working" && (
+              <span className="forge-mini-card-live-subtitle">{latestBriefing}</span>
+            )}
+          </div>
+        )}
+
+        {!isLive && !edited && !isRunningCommand && data.header && !isDone && !isFailed && (
           <p className="forge-mini-card-header-line">{data.header}</p>
         )}
 
-        <p className={cn("forge-mini-card-title", isLive && "forge-mini-card-title--live")}>
-          {displaySubtitle}
-        </p>
+        {/* Sem activity: mostra briefing como título (fallback). */}
+        {!isLive && !hasActivity && (
+          <p className={cn("forge-mini-card-title")}>
+            {data.subtitle || data.title}
+          </p>
+        )}
 
         {visibleChips.length > 0 && (
           <div className="forge-mini-card-chips" data-testid="chat-mini-card-chips">
@@ -206,9 +245,8 @@ export function ChatJobCard({
           </div>
         )}
 
-        {/* Activity stream humanizado — trabalho happening em tempo real.
-            Substitui a task list estática do plano pela janela de atividade
-            real do agente (tools/results com status). */}
+        {/* Activity stream rica — ícone semântico + título + subtítulo + status visual.
+            Cada item mostra o que o agente FAZ em tempo real, não só um label flat. */}
         {hasActivity ? (
           <ul className="forge-mini-card-activity" data-testid="chat-mini-card-activity">
             {visibleActivity.map((line) => (
@@ -216,17 +254,22 @@ export function ChatJobCard({
                 key={line.id}
                 className={cn(
                   "forge-mini-card-activity-item",
+                  line.toolName && `forge-mini-card-activity-item--tool-${line.toolName}`,
                   `forge-mini-card-activity-item--${line.status}`,
                 )}
               >
-                <span
-                  className="forge-mini-card-activity-icon"
-                  data-status={line.status}
-                  aria-hidden
-                >
-                  {activityIcon(line.status)}
+                <span className="forge-mini-card-activity-icon" aria-hidden>
+                  {line.toolName ? toolTypeIcon(line.toolName) : toolTypeIcon()}
                 </span>
-                <span className="forge-mini-card-activity-label">{line.label}</span>
+                <span className="forge-mini-card-activity-body">
+                  <span className="forge-mini-card-activity-label">{line.label}</span>
+                  {line.description && (
+                    <span className="forge-mini-card-activity-desc">{line.description}</span>
+                  )}
+                </span>
+                <span className="forge-mini-card-activity-status" aria-hidden>
+                  {statusDotIcon(line.status)}
+                </span>
               </li>
             ))}
           </ul>

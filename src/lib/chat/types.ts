@@ -18,7 +18,12 @@ export type ActivityStatus = "done" | "active" | "failed";
 
 export type ActivityLine = {
   id: string;
+  /** Título curto: "Editando App.tsx", "Executando npm build". */
   label: string;
+  /** Subtítulo descritivo: path completo, contexto extra, output resumido. */
+  description?: string;
+  /** Nome do tool original: "fs_edit", "shell_exec" → ícone semântico no render. */
+  toolName?: string;
   status: ActivityStatus;
 };
 

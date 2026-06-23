@@ -10,7 +10,12 @@ export type ForgeActivityStatus = "done" | "active" | "failed";
 
 export type ForgeActivityLine = {
   id: string;
+  /** Título curto: "Editando App.tsx", "Executando npm build". */
   label: string;
+  /** Subtítulo descritivo: path completo, detalhe do tool, output resumido. */
+  description?: string;
+  /** Nome do tool original: "fs_edit", "shell_exec" → ícone semântico. */
+  toolName?: string;
   status: ForgeActivityStatus;
 };
 
@@ -559,26 +564,33 @@ export function collectMiniCardActivity(
   timeline: ForgeTimelineItem[],
   jobActive: boolean,
 ): ForgeActivityLine[] {
-  // Após término: mostra últimos 3 concluídos (ou falha) — snapshot final.
+  // Após término: mostra últimos 5 concluídos (ou falha) — snapshot final.
   const lines: ForgeActivityLine[] = [];
 
   // 1) Tool em execução AGORA (active) — topo do stream
   const pendingTool = [...progress.tools].reverse().find((t) => t.ok === undefined);
   if (pendingTool && jobActive) {
+    const toolPath = pathFromArgs(pendingTool.args);
     const label = normalizeMiniCardBriefing(
-      toolBriefing(pendingTool.name, pathFromArgs(pendingTool.args)),
+      toolBriefing(pendingTool.name, toolPath),
     );
     if (label) {
       // id estável (sem Date.now) para evitar remount em cada re-render do live progress
       const argKey = JSON.stringify(pendingTool.args ?? {}).slice(0, 32);
-      lines.push({ id: `activity-active-${pendingTool.name}-${argKey}`, label, status: "active" });
+      lines.push({
+        id: `activity-active-${pendingTool.name}-${argKey}`,
+        label,
+        description: toolPath && toolPath.length > 30 ? toolPath : undefined,
+        toolName: pendingTool.name,
+        status: "active",
+      });
     }
   }
 
   // 2) Últimos tools/results finalizados — histórico enxuto (done/failed)
   const seenLabels = new Set<string>();
   for (const item of [...timeline].reverse()) {
-    if (lines.length >= 4) break;
+    if (lines.length >= 5) break;
 
     if (item.type === "RESULT" && item.text) {
       const label = normalizeMiniCardBriefing(item.text);
@@ -587,6 +599,7 @@ export function collectMiniCardActivity(
         lines.push({
           id: item.id,
           label,
+          description: item.evidence?.length ? item.evidence.slice(0, 2).join(", ") : undefined,
           status: item.ok === false ? "failed" : "done",
         });
         continue;
@@ -600,6 +613,8 @@ export function collectMiniCardActivity(
         lines.push({
           id: item.id,
           label,
+          description: item.path && item.path.length > 30 ? item.path : item.detail || undefined,
+          toolName: item.name,
           status: item.ok === false ? "failed" : "done",
         });
         continue;
