@@ -195,7 +195,7 @@ export function mapAssistantTurn(
   }
 
   const rawStreamText = closingText ?? resolved?.streamText ?? null;
-  const narration = resolveTurnNarration(resolved, runView, rawStreamText);
+  let narration = resolveTurnNarration(resolved, runView, rawStreamText);
   let streamText = rawStreamText;
   if (
     !streamText &&
@@ -212,6 +212,15 @@ export function mapAssistantTurn(
     !!ctx.pendingPlan &&
     (resolved?.awaitingKind === "plan_approval" || item.runId === ctx.pendingPlan.runId);
   if (planDockActive) streamText = null;
+
+  const syntheticLiveSlot =
+    !item.message && !!activeRunId && item.runId === activeRunId && !!(item.isActive || item.live);
+  if (syntheticLiveSlot) {
+    // Antes do DB materializar a mensagem real, o slot só deve mostrar estado,
+    // não um texto "fantasma" que depois é sobreposto.
+    streamText = null;
+    narration = null;
+  }
 
   const persistMiniCard =
     !!runView && (showJobCard || (!!item.message && hasMaterializedCardSnapshot(item.message)));

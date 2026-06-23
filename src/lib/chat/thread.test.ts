@@ -236,6 +236,28 @@ describe("buildChatThread", () => {
     expect(asstIdx).toBeGreaterThan(userIdx);
   });
 
+  it("slot live sintético não mostra texto antes da mensagem do DB", () => {
+    const messages = [msg("u1", "user", "novo projeto")];
+    const progress = {
+      ...initialAgentProgress,
+      finished: false,
+      narrationText: "Vou investigar o estado atual.",
+      streamText: "Pronto — começando.",
+    };
+    const thread = buildChatThread(messages, progress, {
+      running: true,
+      activeRunId: "run-new",
+      sessionProgress: progress,
+    });
+    const slot = thread.find((t) => t.kind === "assistant" && t.runId === "run-new");
+    expect(slot).toBeDefined();
+    if (slot?.kind === "assistant") {
+      expect(slot.isActive).toBe(true);
+      expect(slot.narration).toBeNull();
+      expect(slot.streamText).toBeNull();
+    }
+  });
+
   it("focusedRunId histórico suprime overlay live do activeRunId", () => {
     const messages = [
       msg("u1", "user", "old"),
