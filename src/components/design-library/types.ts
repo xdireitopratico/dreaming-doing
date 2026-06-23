@@ -7,8 +7,13 @@ export interface LibraryEntry {
   quality_source: string;
   validated: boolean;
   raw_markdown: string | null;
+  raw_html: string | null;
+  clean_html: string | null;
   screenshot_url: string | null;
   screenshot_base64?: string | null;
+  provider_trace: string[] | null;
+  confidence: number | null;
+  blocked_reason: string | null;
   design_dna: DesignDna | null;
   serves_domains: string[];
   compatible_languages: string[];

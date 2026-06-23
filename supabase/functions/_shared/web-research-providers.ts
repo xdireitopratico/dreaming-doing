@@ -46,6 +46,58 @@ async function scrapeViaJina(
   };
 }
 
+function stripHtmlToText(html: string): string {
+  return html
+    .replace(/<script[\s\S]*?<\/script>/gi, "")
+    .replace(/<style[\s\S]*?<\/style>/gi, "")
+    .replace(/<noscript[\s\S]*?<\/noscript>/gi, "")
+    .replace(/<!--[\s\S]*?-->/g, "")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+async function scrapeViaBrowserless(
+  url: string,
+  apiKey: string,
+  input: Record<string, unknown>,
+  format: string,
+): Promise<Record<string, unknown>> {
+  const browserlessUrl = new URL("https://chrome.browserless.io/content");
+  browserlessUrl.searchParams.set("token", apiKey);
+
+  const response = await fetch(browserlessUrl.toString(), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      url,
+      waitFor: input.wait_for || 0,
+      bestAttempt: true,
+      blockAds: true,
+      gotoOptions: {
+        waitUntil: "networkidle2",
+        timeout: 30000,
+      },
+    }),
+    signal: AbortSignal.timeout(45000),
+  });
+
+  if (!response.ok) {
+    const errText = await response.text().catch(() => "unknown");
+    throw new Error(`Browserless content failed: HTTP ${response.status} — ${errText.substring(0, 200)}`);
+  }
+
+  const html = await response.text();
+  const content = format === "html" ? html : stripHtmlToText(html);
+  return {
+    title: "",
+    content,
+    url,
+    word_count: content.split(/\s+/).filter(Boolean).length,
+    provider: "browserless",
+  };
+}
+
 async function scrapeViaFirecrawl(
   url: string,
   apiKey: string,
@@ -118,6 +170,7 @@ export async function scrapeWebPage(
   const format = String(input.format || "markdown");
   const provider = String(input.provider || "auto");
   const firecrawlKey = pickSecret(secrets, ["FIRECRAWL_API_KEY"]);
+  const browserlessKey = pickSecret(secrets, ["BROWSERLESS_API_KEY"]);
 
   if (firecrawlKey && (provider === "firecrawl" || provider === "auto")) {
     try {
@@ -125,6 +178,15 @@ export async function scrapeWebPage(
     } catch (err) {
       if (provider === "firecrawl") throw err;
       console.warn("[web_scrape] Firecrawl failed, trying fallback:", (err as Error).message);
+    }
+  }
+
+  if (browserlessKey && mode !== "screenshot" && (provider === "browserless" || provider === "auto")) {
+    try {
+      return await scrapeViaBrowserless(url, browserlessKey, input, format);
+    } catch (err) {
+      if (provider === "browserless") throw err;
+      console.warn("[web_scrape] Browserless failed, trying fallback:", (err as Error).message);
     }
   }
 

@@ -235,8 +235,13 @@ export async function executeDesignDnaJob(
           quality_source: (dna.quality_source as string) || (depth === "deep" ? "deep_extraction" : "shallow_extraction"),
           validated: false,
           raw_markdown: dnaResult.rawMarkdown,
+          raw_html: dnaResult.rawHtml,
+          clean_html: dnaResult.cleanHtml,
           screenshot_url: dnaResult.screenshotUrl,
           screenshot_base64: dnaResult.screenshotBase64 ?? null,
+          provider_trace: dnaResult.providerTrace,
+          confidence: dnaResult.confidence,
+          blocked_reason: dnaResult.blockedReason,
           design_dna: {
             layout: dna.layout ?? null,
             color: dna.color ?? null,

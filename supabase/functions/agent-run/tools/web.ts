@@ -26,6 +26,7 @@ async function loadWebSearchSecrets(
   for (const [k, v] of Object.entries(fallbackKeys)) {
     if (
       k === "FIRECRAWL_API_KEY" ||
+      k === "BROWSERLESS_API_KEY" ||
       k === "TAVILY_API_KEY" ||
       k === "SERPER_API_KEY" ||
       k === "SERPER_KEY" ||
@@ -76,6 +77,7 @@ async function loadWebSearchSecrets(
           tavily: "TAVILY_API_KEY",
           serper: "SERPER_API_KEY",
           firecrawl: "FIRECRAWL_API_KEY",
+          browserless: "BROWSERLESS_API_KEY",
         };
         const keyName = providerKeyMap[provider];
         if (keyName) secrets[keyName] = token;
@@ -251,7 +253,7 @@ export function registerWebTools(reg: ToolRegistry, ctx: WebToolsContext): void 
           },
           provider: {
             type: "string",
-            description: "Provedor: auto (default), firecrawl, jina, http.",
+            description: "Provedor: auto (default), firecrawl, browserless, jina, http.",
           },
           only_main_content: {
             type: "boolean",

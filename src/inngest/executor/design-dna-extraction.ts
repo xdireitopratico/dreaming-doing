@@ -23,6 +23,7 @@ export type DesignDnaExtractionResult = {
   providerTrace: string[];
   confidence: number;
   notes: string[];
+  blockedReason: string | null;
 };
 
 type LLMConfig = {
@@ -96,6 +97,7 @@ async function loadWebSecrets(
 
   const envFallbacks: Record<string, string | undefined> = {
     FIRECRAWL_API_KEY: process.env.FIRECRAWL_API_KEY,
+    BROWSERLESS_API_KEY: process.env.BROWSERLESS_API_KEY,
     TAVILY_API_KEY: process.env.TAVILY_API_KEY,
     SERPER_API_KEY: process.env.SERPER_API_KEY,
     SERPER_KEY: process.env.SERPER_KEY,
@@ -119,6 +121,7 @@ async function loadWebSecrets(
     tavily: "TAVILY_API_KEY",
     serper: "SERPER_API_KEY",
     firecrawl: "FIRECRAWL_API_KEY",
+    browserless: "BROWSERLESS_API_KEY",
   };
 
   for (const row of data ?? []) {
@@ -386,24 +389,37 @@ export async function extractDesignDnaForUrl(
   let screenshots: string[] = [];
   let screenshotBase64 = "";
   let screenshotUrl = `https://image.thum.io/get/width/1280/crop/720/fullpage/${encodeURIComponent(input.url)}`;
+  let blockedReason: string | null = null;
 
   if (input.depth === "deep" && input.sandboxExecUrl) {
-    const playwrightData = await execPlaywrightInSandbox(input.url, input.sandboxExecUrl, input.sandboxToken);
-    providerTrace.push("sandbox:playwright");
-    enrichedMarkdown = [
-      playwrightData.markdown,
-      `\n\n## CSS Computado (sections principais)\n${playwrightData.css_computed}`,
-      `\n\n## Motion Traces\n${playwrightData.motion_traces}`,
-      playwrightData.color_scheme ? `\n\n## Color Scheme\n${playwrightData.color_scheme}` : "",
-      playwrightData.page_height ? `\n\n## Page Metrics\n- Full page height: ${playwrightData.page_height}px` : "",
-    ].join("");
+    try {
+      const playwrightData = await execPlaywrightInSandbox(input.url, input.sandboxExecUrl, input.sandboxToken);
+      providerTrace.push("sandbox:playwright");
+      enrichedMarkdown = [
+        playwrightData.markdown,
+        `\n\n## CSS Computado (sections principais)\n${playwrightData.css_computed}`,
+        `\n\n## Motion Traces\n${playwrightData.motion_traces}`,
+        playwrightData.color_scheme ? `\n\n## Color Scheme\n${playwrightData.color_scheme}` : "",
+        playwrightData.page_height ? `\n\n## Page Metrics\n- Full page height: ${playwrightData.page_height}px` : "",
+      ].join("");
 
-    screenshots = playwrightData.screenshots ?? [];
-    screenshotBase64 = screenshots[0] ?? playwrightData.screenshot_base64 ?? "";
-    screenshotUrl = screenshotBase64 ? `data:image/png;base64,${screenshotBase64}` : screenshotUrl;
-    notes.push("deep sandbox extraction completed");
+      screenshots = playwrightData.screenshots ?? [];
+      screenshotBase64 = screenshots[0] ?? playwrightData.screenshot_base64 ?? "";
+      screenshotUrl = screenshotBase64 ? `data:image/png;base64,${screenshotBase64}` : screenshotUrl;
+      notes.push("deep sandbox extraction completed");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      notes.push(`deep sandbox extraction failed: ${msg}`);
+      providerTrace.push("sandbox:error");
+      if (!rawMarkdown.trim() && !cleanHtml.trim()) {
+        blockedReason = msg;
+      }
+    }
   } else if (input.depth === "deep") {
     notes.push("sandbox unavailable, deep request downgraded to web scrape");
+    if (!rawMarkdown.trim() && !cleanHtml.trim()) {
+      blockedReason = "sandbox unavailable for deep extraction";
+    }
   }
 
   if (!enrichedMarkdown.trim()) {
@@ -411,9 +427,13 @@ export async function extractDesignDnaForUrl(
   }
 
   const density = Math.min(1, (enrichedMarkdown.length + cleanHtml.length) / 50000);
-  const confidence = input.depth === "deep"
+  let confidence = input.depth === "deep"
     ? Math.round(60 + density * 35 + (screenshots.length > 0 ? 5 : 0))
     : Math.round(35 + density * 35 + (screenshotBase64 ? 5 : 0));
+
+  if (blockedReason) {
+    confidence = Math.min(confidence, 25);
+  }
 
   const dna = await llmExtractDNA(
     input.url,
@@ -445,5 +465,6 @@ export async function extractDesignDnaForUrl(
     providerTrace,
     confidence,
     notes,
+    blockedReason,
   };
 }

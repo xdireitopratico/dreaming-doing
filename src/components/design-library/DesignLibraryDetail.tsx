@@ -6,7 +6,6 @@ import {
   DialogClose,
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ExternalLink, Globe } from "lucide-react";
 import { getQualityColor, type LibraryEntry } from "./types";
@@ -19,6 +18,10 @@ interface DesignLibraryDetailProps {
 
 export function DesignLibraryDetail({ entry, open, onOpenChange }: DesignLibraryDetailProps) {
   if (!entry) return null;
+
+  const confidenceLabel = entry.confidence !== null && entry.confidence !== undefined
+    ? `${entry.confidence}%`
+    : "n/d";
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -65,6 +68,12 @@ export function DesignLibraryDetail({ entry, open, onOpenChange }: DesignLibrary
                 <TabsTrigger value="dna" className="text-xs h-7">
                   Design DNA
                 </TabsTrigger>
+                <TabsTrigger value="audit" className="text-xs h-7">
+                  Audit
+                </TabsTrigger>
+                <TabsTrigger value="html" className="text-xs h-7">
+                  HTML
+                </TabsTrigger>
                 <TabsTrigger value="markdown" className="text-xs h-7">
                   Markdown
                 </TabsTrigger>
@@ -104,6 +113,67 @@ export function DesignLibraryDetail({ entry, open, onOpenChange }: DesignLibrary
               ) : (
                 <p className="text-sm text-muted-foreground">Design DNA não disponível</p>
               )}
+            </TabsContent>
+
+            <TabsContent value="audit" className="flex-1 overflow-auto p-6 m-0 space-y-4">
+              <div className="grid grid-cols-2 gap-4 text-xs">
+                <div>
+                  <p className="text-muted-foreground mb-1">Confidence</p>
+                  <Badge variant="outline">{confidenceLabel}</Badge>
+                </div>
+                <div>
+                  <p className="text-muted-foreground mb-1">Blocked reason</p>
+                  <p className="text-sm">
+                    {entry.blocked_reason || "Nenhum bloqueio registrado"}
+                  </p>
+                </div>
+              </div>
+
+              {entry.provider_trace && entry.provider_trace.length > 0 && (
+                <div>
+                  <p className="text-xs text-muted-foreground mb-2">Provider trace</p>
+                  <div className="flex flex-wrap gap-1">
+                    {entry.provider_trace.map((trace) => (
+                      <Badge key={trace} variant="secondary">
+                        {trace}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {entry.notes && (
+                <div>
+                  <p className="text-xs text-muted-foreground mb-2">Notas</p>
+                  <p className="text-sm whitespace-pre-wrap">{entry.notes}</p>
+                </div>
+              )}
+            </TabsContent>
+
+            <TabsContent value="html" className="flex-1 overflow-auto p-6 m-0 space-y-4">
+              <div>
+                <p className="text-xs text-muted-foreground mb-2">Raw HTML</p>
+                {entry.raw_html ? (
+                  <pre className="text-xs font-mono bg-surface-2 rounded-lg p-4 overflow-x-auto whitespace-pre-wrap break-words max-h-72">
+                    {entry.raw_html.slice(0, 20000)}
+                    {entry.raw_html.length > 20000 && "\n\n… (truncado)"}
+                  </pre>
+                ) : (
+                  <p className="text-sm text-muted-foreground">Raw HTML não disponível</p>
+                )}
+              </div>
+
+              <div>
+                <p className="text-xs text-muted-foreground mb-2">Clean HTML</p>
+                {entry.clean_html ? (
+                  <pre className="text-xs font-mono bg-surface-2 rounded-lg p-4 overflow-x-auto whitespace-pre-wrap break-words max-h-72">
+                    {entry.clean_html.slice(0, 20000)}
+                    {entry.clean_html.length > 20000 && "\n\n… (truncado)"}
+                  </pre>
+                ) : (
+                  <p className="text-sm text-muted-foreground">Clean HTML não disponível</p>
+                )}
+              </div>
             </TabsContent>
 
             <TabsContent value="markdown" className="flex-1 overflow-auto p-6 m-0">
@@ -186,13 +256,6 @@ export function DesignLibraryDetail({ entry, open, onOpenChange }: DesignLibrary
                       </Badge>
                     ))}
                   </div>
-                </div>
-              )}
-
-              {entry.notes && (
-                <div>
-                  <p className="text-xs text-muted-foreground mb-2">Notas</p>
-                  <p className="text-sm">{entry.notes}</p>
                 </div>
               )}
             </TabsContent>

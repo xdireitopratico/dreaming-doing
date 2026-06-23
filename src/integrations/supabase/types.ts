@@ -1913,9 +1913,14 @@ export type Database = {
           notes: string | null
           quality_score: number
           quality_source: string
+          raw_html: string | null
           raw_markdown: string | null
+          clean_html: string | null
           screenshot_base64: string | null
           screenshot_url: string | null
+          provider_trace: string[]
+          confidence: number | null
+          blocked_reason: string | null
           serves_domains: string[]
           source_url: string
           tags: string[]
@@ -1940,9 +1945,14 @@ export type Database = {
           notes?: string | null
           quality_score?: number
           quality_source?: string
+          raw_html?: string | null
           raw_markdown?: string | null
+          clean_html?: string | null
           screenshot_base64?: string | null
           screenshot_url?: string | null
+          provider_trace?: string[]
+          confidence?: number | null
+          blocked_reason?: string | null
           serves_domains?: string[]
           source_url: string
           tags?: string[]
@@ -1967,9 +1977,14 @@ export type Database = {
           notes?: string | null
           quality_score?: number
           quality_source?: string
+          raw_html?: string | null
           raw_markdown?: string | null
+          clean_html?: string | null
           screenshot_base64?: string | null
           screenshot_url?: string | null
+          provider_trace?: string[]
+          confidence?: number | null
+          blocked_reason?: string | null
           serves_domains?: string[]
           source_url?: string
           tags?: string[]
