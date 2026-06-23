@@ -6,7 +6,7 @@ import type { ClarifyChoice } from "@/lib/chat/types";
 import type { StoredMessagePart } from "@/lib/chat-attachments";
 import { useChat } from "@/hooks/useChat";
 import {
-  scrollOffsetToAlignUserMessage,
+  type ChatScrollMode,
   shouldAnchorNewUserMessage,
   shouldHoldUserMessageAnchor,
 } from "@/lib/chat/user-message-anchor";
@@ -111,10 +111,12 @@ export function ChatPanel({
   const pinnedToBottom = useRef(true);
   const initialScrollDoneRef = useRef(false);
   const isProgrammaticScrollRef = useRef(false);
+  const previousUserMessageIdRef = useRef<string | null>(null);
   const userScrolledAwayRef = useRef(false);
   const userJustSentRef = useRef(false);
   const [showPill, setShowPill] = useState(false);
   const [suggestionPrompt, setSuggestionPrompt] = useState<string | null>(null);
+  const [scrollMode, setScrollMode] = useState<ChatScrollMode>("bottom");
   const PIN_THRESHOLD_PX = 100;
 
   const holdUserAnchor = shouldHoldUserMessageAnchor({
@@ -141,6 +143,7 @@ export function ChatPanel({
       runProgrammaticScroll(() => {
         el.scrollTo({ top: el.scrollHeight, behavior });
         pinnedToBottom.current = true;
+        setScrollMode("bottom");
         userScrolledAwayRef.current = false;
         setShowPill(false);
       });
@@ -157,6 +160,7 @@ export function ChatPanel({
       runProgrammaticScroll(() => {
         bubble.scrollIntoView({ block: "start", behavior });
         pinnedToBottom.current = false;
+        setScrollMode("user-anchor");
         userScrolledAwayRef.current = false;
         setShowPill(false);
       });
@@ -173,6 +177,7 @@ export function ChatPanel({
     pinnedToBottom.current = dist <= PIN_THRESHOLD_PX;
 
     if (pinnedToBottom.current && !holdUserAnchor) {
+      setScrollMode("bottom");
       userScrolledAwayRef.current = false;
       setShowPill(false);
     }
@@ -188,9 +193,11 @@ export function ChatPanel({
 
   useEffect(() => {
     initialScrollDoneRef.current = false;
+    previousUserMessageIdRef.current = null;
     userScrolledAwayRef.current = false;
     userJustSentRef.current = false;
     pinnedToBottom.current = true;
+    setScrollMode("bottom");
   }, [conversationId]);
 
   useEffect(() => {
@@ -198,21 +205,19 @@ export function ChatPanel({
     if (initialScrollDoneRef.current) return;
     initialScrollDoneRef.current = true;
     pinnedToBottom.current = true;
+    setScrollMode("bottom");
     const raf = requestAnimationFrame(() => scrollToBottom("auto"));
     return () => cancelAnimationFrame(raf);
   }, [chatLoading, scrollToBottom]);
 
-  // Simplified scroll: scroll to bottom on new user message or thread growth, unless user scrolled away
   useEffect(() => {
-    if (
-      !shouldAnchorNewUserMessage(
-        null, // simplified, no prev
-        lastUserMessageId,
-        initialScrollDoneRef.current,
-      )
-    ) {
+    const prevUserMessageId = previousUserMessageIdRef.current;
+    previousUserMessageIdRef.current = lastUserMessageId;
+
+    if (!shouldAnchorNewUserMessage(prevUserMessageId, lastUserMessageId, initialScrollDoneRef.current)) {
       return;
     }
+    setScrollMode("user-anchor");
     if (userJustSentRef.current) {
       userScrolledAwayRef.current = false;
       userJustSentRef.current = false;
@@ -225,18 +230,19 @@ export function ChatPanel({
   }, [lastUserMessageId, anchorUserBubble]);
 
   useEffect(() => {
-    if (pinnedToBottom.current) {
+    if (scrollMode === "bottom" && pinnedToBottom.current) {
       const raf = requestAnimationFrame(() => scrollToBottom());
       return () => cancelAnimationFrame(raf);
     }
     if (!holdUserAnchor) {
       setShowPill(true);
     }
-  }, [thread.length, holdUserAnchor, pendingQueueItems.length, scrollToBottom]);
+  }, [thread.length, holdUserAnchor, pendingQueueItems.length, scrollMode, scrollToBottom]);
 
   const handleSend = useCallback(
     (text: string, mode?: AgentComposerMode, parts?: StoredMessagePart[]) => {
       userJustSentRef.current = true;
+      setScrollMode("user-anchor");
       onSend(text, mode ?? composerMode, parts);
     },
     [onSend, composerMode],
