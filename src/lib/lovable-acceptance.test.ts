@@ -274,6 +274,41 @@ describe("Fase 2.3 — Version history (snapshot list + tab)", () => {
 
 
 
+describe("Inspector Plan — layout de leitura (preview)", () => {
+  it("aba Plan move nav pro workspace header e plano usa scroll único", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { resolve } = await import("node:path");
+    const header = readFileSync(
+      resolve(import.meta.dirname, "../components/editor/EditorWorkspaceHeader.tsx"),
+      "utf8",
+    );
+    const inspector = readFileSync(
+      resolve(import.meta.dirname, "../components/editor/JobInspector.tsx"),
+      "utf8",
+    );
+    const plan = readFileSync(
+      resolve(import.meta.dirname, "../components/editor/InspectorPlan.tsx"),
+      "utf8",
+    );
+    const layout = readFileSync(
+      resolve(import.meta.dirname, "../routes/projects/$projectId/EditorPageLayout.tsx"),
+      "utf8",
+    );
+
+    expect(header).toContain("inspectorPlanNav");
+    expect(header).toContain("forge-workspace-header-inner--inspector-plan");
+    expect(layout).toContain('tab === "plan"');
+    expect(layout).toContain("inspectorPlanNav={inspectorPlanNav}");
+    expect(inspector).toContain('resolvedTab !== "plan"');
+    expect(inspector).toContain("forge-inspector-body--plan");
+    expect(plan).toContain("forge-inspector-plan-intro");
+    expect(plan).toContain("forge-inspector-plan-actions");
+    expect(plan).not.toContain('className="forge-inspector-plan-header"');
+    expect(plan).not.toContain("forge-inspector-plan-footer");
+    expect(plan.match(/<PlanActionBar/g)?.length).toBe(2);
+  });
+});
+
 describe("ChatPlanDock — hooks estáveis (React #310)", () => {
   it("useCallback declarado antes de returns condicionais", async () => {
     const { readFileSync } = await import("node:fs");

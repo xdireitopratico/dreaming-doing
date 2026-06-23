@@ -292,6 +292,10 @@
   color: var(--text-secondary);
 }
 
+.forge-inspector-body--plan {
+  padding: var(--space-lg) clamp(var(--space-lg), 4vw, 48px);
+}
+
 .forge-inspector-empty {
   margin: var(--space-xl) 0;
   text-align: center;
@@ -777,17 +781,18 @@
 .forge-inspector-plan {
   display: flex;
   flex-direction: column;
-  min-height: 0;
-  height: 100%;
-  gap: var(--space-md);
+  gap: var(--space-lg);
+  max-width: 720px;
+  margin: 0 auto;
+  width: 100%;
 }
 
-/* ─── Header fino: status pill + sinais meta + título ──────────────── */
+/* ─── Intro no fluxo do documento (pill + meta + missão) ───────────── */
 
-.forge-inspector-plan-header {
+.forge-inspector-plan-intro {
   display: flex;
   flex-direction: column;
-  gap: var(--space-xs);
+  gap: var(--space-sm);
 }
 
 .forge-inspector-plan-header-row {
@@ -831,17 +836,14 @@
 
 .forge-inspector-plan-title {
   margin: 0;
-  font-size: 17px;
+  font-size: 20px;
   font-weight: 600;
-  line-height: 1.35;
+  line-height: 1.4;
   color: var(--text-primary);
 }
 
 .forge-inspector-plan-doc {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  padding: var(--space-sm) var(--space-xs);
+  padding: 0;
 }
 
 /* ─── Documento markdown fino (o herói) ────────────────────────────── */
@@ -867,7 +869,7 @@
 
 .forge-inspector-plan-markdown h2 {
   margin: var(--space-lg) 0 var(--space-xs);
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 600;
   letter-spacing: 0.02em;
   color: var(--text-primary);
@@ -879,7 +881,7 @@
 
 .forge-inspector-plan-markdown h3 {
   margin: var(--space-md) 0 var(--space-xs);
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 600;
   color: var(--text-secondary);
 }
@@ -965,11 +967,12 @@
   border-top: 1px solid color-mix(in srgb, var(--border-forge) 60%, transparent);
 }
 
-.forge-inspector-plan-footer {
+.forge-inspector-plan-actions {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-sm);
+  padding: var(--space-sm) 0;
 }
 
 .forge-inspector-plan-btn {

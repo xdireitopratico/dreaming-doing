@@ -6,6 +6,7 @@ import { resolveInspectorPlanForRun } from "@/lib/plan-message-meta";
 import { InspectorTimeline } from "@/components/editor/InspectorTimeline";
 import { InspectorChanges } from "@/components/editor/InspectorChanges";
 import { InspectorPlan } from "@/components/editor/InspectorPlan";
+import { InspectorNavControls } from "@/components/editor/InspectorNavControls";
 import { emitStreamingTelemetry } from "@/lib/streaming-telemetry";
 
 export type JobInspectorProps = {
@@ -25,11 +26,6 @@ export type JobInspectorProps = {
   /** Inspector ocupa o workspace inteiro (Lovable: job aberto = sem preview). */
   fullWidth?: boolean;
 };
-
-const TABS: { id: JobInspectorTab; label: string }[] = [
-  { id: "timeline", label: "Timeline" },
-  { id: "changes", label: "Changes" },
-];
 
 export function JobInspector({
   run,
@@ -92,41 +88,21 @@ export function JobInspector({
       className={`forge-inspector${fullWidth ? " forge-inspector-full" : " forge-inspector-rail"}`}
       data-testid="job-inspector"
     >
-      <div className="forge-inspector-header">
-        <button type="button" className="forge-inspector-back-btn" onClick={onBackToLatest}>
-          Back to latest
-        </button>
-        <div className="forge-inspector-title">Details</div>
-        <div className="forge-inspector-tabs" role="tablist" aria-label="Inspector">
-          {TABS.map((tab) => (
-            <button
-              key={tab.id}
-              type="button"
-              role="tab"
-              aria-selected={resolvedTab === tab.id}
-              className="forge-inspector-tab"
-              data-active={resolvedTab === tab.id}
-              onClick={() => onTabChange(tab.id)}
-            >
-              {tab.label}
-            </button>
-          ))}
-          {showPlanTab && (
-            <button
-              type="button"
-              role="tab"
-              aria-selected={resolvedTab === "plan"}
-              className="forge-inspector-tab"
-              data-active={resolvedTab === "plan"}
-              onClick={() => onTabChange("plan")}
-            >
-              Plan
-            </button>
-          )}
+      {resolvedTab !== "plan" && (
+        <div className="forge-inspector-header">
+          <InspectorNavControls
+            activeTab={activeTab}
+            showPlanTab={showPlanTab}
+            onTabChange={onTabChange}
+            onBackToLatest={onBackToLatest}
+            showDetailsTitle
+          />
         </div>
-      </div>
+      )}
 
-      <div className="forge-inspector-body forge-scrollbar-dark">
+      <div
+        className={`forge-inspector-body forge-scrollbar-dark${resolvedTab === "plan" ? " forge-inspector-body--plan" : ""}`}
+      >
         {resolvedTab === "timeline" && (
           <InspectorTimeline
             progress={run}

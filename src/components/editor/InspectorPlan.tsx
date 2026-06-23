@@ -21,6 +21,81 @@ function planMetaSignals(plan: PendingPlan): { size: string; reversible: string 
   return { size, reversible };
 }
 
+type PlanActionBarProps = {
+  awaitingApproval: boolean;
+  busy: "approve" | "reject" | null;
+  onEditRequest?: (plan: PendingPlan) => void;
+  plan: PendingPlan;
+  onReject?: (reason?: string) => void | Promise<void>;
+  onApprove?: (steps: PlanStep[], markdown?: string) => void | Promise<void>;
+  handleReject: () => void | Promise<void>;
+  handleApprove: () => void | Promise<void>;
+};
+
+function PlanActionBar({
+  awaitingApproval,
+  busy,
+  onEditRequest,
+  plan,
+  onReject,
+  onApprove,
+  handleReject,
+  handleApprove,
+}: PlanActionBarProps) {
+  return (
+    <div className="forge-inspector-plan-actions">
+      {awaitingApproval ? (
+        <>
+          <button
+            type="button"
+            className="forge-inspector-plan-btn"
+            onClick={() => onEditRequest?.(plan)}
+            disabled={busy !== null}
+          >
+            <Pencil className="size-3.5" />
+            Editar
+          </button>
+          <button
+            type="button"
+            className="forge-inspector-plan-btn forge-inspector-plan-btn--danger"
+            onClick={handleReject}
+            disabled={busy !== null || !onReject}
+          >
+            {busy === "reject" ? (
+              <Loader2 className="size-3.5 animate-spin" />
+            ) : (
+              <SkipForward className="size-3.5" />
+            )}
+            Rejeitar
+          </button>
+          <button
+            type="button"
+            className="forge-inspector-plan-approve"
+            onClick={handleApprove}
+            disabled={busy !== null || !onApprove}
+          >
+            {busy === "approve" ? (
+              <Loader2 className="size-3.5 animate-spin" />
+            ) : (
+              <Check className="size-3.5" />
+            )}
+            Aprovar e construir
+          </button>
+        </>
+      ) : (
+        <button
+          type="button"
+          className="forge-inspector-plan-btn"
+          onClick={() => onEditRequest?.(plan)}
+        >
+          <Pencil className="size-3.5" />
+          Usar como edição
+        </button>
+      )}
+    </div>
+  );
+}
+
 export function InspectorPlan({ state, onApprove, onReject, onEditRequest }: InspectorPlanProps) {
   const { plan, status, awaitingApproval } = state;
   const [busy, setBusy] = useState<"approve" | "reject" | null>(null);
@@ -64,11 +139,22 @@ export function InspectorPlan({ state, onApprove, onReject, onEditRequest }: Ins
         : "Plano";
 
   const { size, reversible } = planMetaSignals(plan);
+  const missionTitle = plan.mission?.trim() || plan.summary;
+
+  const actionBarProps: PlanActionBarProps = {
+    awaitingApproval,
+    busy,
+    onEditRequest,
+    plan,
+    onReject,
+    onApprove,
+    handleReject,
+    handleApprove,
+  };
 
   return (
     <div className="forge-inspector-plan" data-testid="inspector-plan">
-      {/* Header fino: status pill + sinais meta + título */}
-      <div className="forge-inspector-plan-header" data-testid="inspector-plan-status">
+      <div className="forge-inspector-plan-intro" data-testid="inspector-plan-status">
         <div className="forge-inspector-plan-header-row">
           <span className={`forge-inspector-plan-pill forge-inspector-plan-pill--${status}`}>
             {statusCopy}
@@ -77,67 +163,16 @@ export function InspectorPlan({ state, onApprove, onReject, onEditRequest }: Ins
             {size} · {reversible}
           </span>
         </div>
-        <h2 className="forge-inspector-plan-title">
-          {plan.mission?.trim() || plan.summary}
-        </h2>
+        <h1 className="forge-inspector-plan-title">{missionTitle}</h1>
       </div>
 
-      {/* Documento markdown — o herói */}
+      <PlanActionBar {...actionBarProps} />
+
       <div className="forge-inspector-plan-doc">
         <MarkdownRenderer className="forge-inspector-plan-markdown">{markdown}</MarkdownRenderer>
       </div>
 
-      {/* Footer — alavancas de ação */}
-      <div className="forge-inspector-plan-footer">
-        {awaitingApproval ? (
-          <>
-            <button
-              type="button"
-              className="forge-inspector-plan-btn"
-              onClick={() => onEditRequest?.(plan)}
-              disabled={busy !== null}
-            >
-              <Pencil className="size-3.5" />
-              Editar
-            </button>
-            <button
-              type="button"
-              className="forge-inspector-plan-btn forge-inspector-plan-btn--danger"
-              onClick={handleReject}
-              disabled={busy !== null || !onReject}
-            >
-              {busy === "reject" ? (
-                <Loader2 className="size-3.5 animate-spin" />
-              ) : (
-                <SkipForward className="size-3.5" />
-              )}
-              Rejeitar
-            </button>
-            <button
-              type="button"
-              className="forge-inspector-plan-approve"
-              onClick={handleApprove}
-              disabled={busy !== null || !onApprove}
-            >
-              {busy === "approve" ? (
-                <Loader2 className="size-3.5 animate-spin" />
-              ) : (
-                <Check className="size-3.5" />
-              )}
-              Aprovar e construir
-            </button>
-          </>
-        ) : (
-          <button
-            type="button"
-            className="forge-inspector-plan-btn"
-            onClick={() => onEditRequest?.(plan)}
-          >
-            <Pencil className="size-3.5" />
-            Usar como edição
-          </button>
-        )}
-      </div>
+      <PlanActionBar {...actionBarProps} />
     </div>
   );
 }

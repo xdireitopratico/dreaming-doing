@@ -27,6 +27,7 @@ import { usePendingPlan } from "@/hooks/usePendingPlan";
 import { PENDING_RUN_ID } from "@/lib/pending-run-id";
 
 import { resolveInspectorRunProgress } from "@/lib/assistant-run-progress";
+import { resolveInspectorPlanForRun } from "@/lib/plan-message-meta";
 import type { AgentProgress } from "@/lib/agent-progress";
 import { VisualEditorPanel } from "@/components/editor/visual-editor/VisualEditorPanel";
 import type { useVisualEditor } from "@/hooks/useVisualEditor";
@@ -343,6 +344,24 @@ export function EditorPageLayout({
     agent.frozenProgressTick,
   ]);
 
+  const focusedInspectorPlan = useMemo(() => {
+    if (!jobWorkspaceFocus) return null;
+    return resolveInspectorPlanForRun(jobWorkspaceFocus.runId, chatMessages, {
+      livePlan: pendingPlan?.runId === jobWorkspaceFocus.runId ? pendingPlan : null,
+      progressPlan: focusedJobProgress?.pendingPlan ?? null,
+    });
+  }, [jobWorkspaceFocus, chatMessages, pendingPlan, focusedJobProgress?.pendingPlan]);
+
+  const inspectorPlanNav =
+    isJobFocused && jobWorkspaceFocus?.tab === "plan" && focusedInspectorPlan
+      ? {
+          onBackToLatest: closeJobWorkspace,
+          activeTab: jobWorkspaceFocus.tab,
+          onTabChange: setJobTab,
+          showPlanTab: true,
+        }
+      : undefined;
+
   const previewStatusLabel = useMemo(() => {
     if (running && isMobile) return "Agente trabalhando";
     if (isMobile && pendingPlan) return "Plano aguardando";
@@ -461,6 +480,7 @@ export function EditorPageLayout({
                 }}
                 previewStatusLabel={previewStatusLabel}
                 jobInspectorActive={isJobFocused}
+                inspectorPlanNav={inspectorPlanNav}
               />
             }
             chat={

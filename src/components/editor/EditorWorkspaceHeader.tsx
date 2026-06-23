@@ -9,6 +9,10 @@ import { PreviewRouteNav } from "@/components/editor/PreviewRouteNav";
 import { previewDeviceWidth, type PreviewDevice } from "@/components/editor/PreviewViewportChrome";
 import { Monitor, Smartphone, Tablet } from "lucide-react";
 import { E2bStatusBadge } from "@/components/editor/E2bStatusBadge";
+import {
+  InspectorNavControls,
+  type InspectorNavControlsProps,
+} from "@/components/editor/InspectorNavControls";
 
 interface EditorWorkspaceHeaderProps {
   activeView: EditorMainView;
@@ -31,6 +35,8 @@ interface EditorWorkspaceHeaderProps {
   e2bConnected?: boolean;
   previewStatusLabel?: string | null;
   jobInspectorActive?: boolean;
+  /** Aba Plan aberta: nav do inspector no header; chrome do preview some. */
+  inspectorPlanNav?: InspectorNavControlsProps;
 }
 
 const DEVICES: Array<{ id: PreviewDevice; label: string; icon: typeof Monitor }> = [
@@ -51,6 +57,7 @@ export function EditorWorkspaceHeader({
   e2bConnected = false,
   previewStatusLabel,
   jobInspectorActive = false,
+  inspectorPlanNav,
 }: EditorWorkspaceHeaderProps) {
   const { user } = useAuth();
 
@@ -60,6 +67,14 @@ export function EditorWorkspaceHeader({
     "U";
 
   const showPreviewControls = activeView === "preview" && preview && !jobInspectorActive;
+
+  if (inspectorPlanNav) {
+    return (
+      <div className="forge-workspace-header-inner forge-workspace-header-inner--inspector-plan">
+        <InspectorNavControls {...inspectorPlanNav} />
+      </div>
+    );
+  }
 
   return (
     <div className="forge-workspace-header-inner">
