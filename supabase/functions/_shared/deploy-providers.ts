@@ -308,8 +308,8 @@ export async function deployToCloudflare(
   const cfAccountId = await resolveCloudflareAccountId(token, accountId);
   const projectName = existingProjectName?.trim() || `forge-${slugify(projectSlug)}`;
 
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 60_000);
+  const createController = new AbortController();
+  const createTimeoutId = setTimeout(() => createController.abort(), 60_000);
   const createRes = await fetch(
     `https://api.cloudflare.com/client/v4/accounts/${cfAccountId}/pages/projects`,
     {
@@ -322,10 +322,10 @@ export async function deployToCloudflare(
         name: projectName,
         production_branch: "main",
       }),
-      signal: controller.signal,
+      signal: createController.signal,
     },
   );
-  clearTimeout(timeoutId);
+  clearTimeout(createTimeoutId);
   if (!createRes.ok && createRes.status !== 409) {
     const errBody = (await createRes.json().catch(() => ({}))) as {
       errors?: { message?: string }[];
@@ -340,15 +340,15 @@ export async function deployToCloudflare(
   const form = new FormData();
   form.append("file", new Blob([zipBytes], { type: "application/zip" }), "deploy.zip");
 
-  const controller = getDeploymentController();
-  
+  const deployController = getDeploymentController();
+
   const deployRes = await fetch(
     `https://api.cloudflare.com/client/v4/accounts/${cfAccountId}/pages/projects/${projectName}/deployments`,
     {
       method: "POST",
       headers: { Authorization: `Bearer ${token}` },
       body: form,
-      signal: controller.signal,
+      signal: deployController.signal,
     },
   );
   cleanupDeploymentController();
