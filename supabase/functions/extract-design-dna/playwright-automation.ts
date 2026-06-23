@@ -97,7 +97,7 @@ const { chromium } = require('playwright');
       } else if (tag === 'img') {
         const alt = el.alt;
         const src = el.src;
-        if (src) parts.push('![${alt || 'image'}](' + src + ')');
+        if (src) parts.push('![' + (alt || 'image') + '](' + src + ')');
       }
     }
     return parts.join('\\n').slice(0, 50000);

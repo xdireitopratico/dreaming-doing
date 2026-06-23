@@ -44,22 +44,29 @@ Deno.serve(async (req) => {
     const token = auth.replace(/^Bearer\s+/i, "");
 
     // Service-role client (for DB operations + Inngest calls)
-    const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
+    const supabase: any = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
 
     // If there's a user token, also create a user-scoped client (for auth.getUser)
     // Use anon key + user JWT for proper user identification
-    let userClient: ReturnType<typeof createClient> | null = null;
+    let userClient: any = null;
     if (token && token !== SERVICE_ROLE_KEY) {
       userClient = createClient(SUPABASE_URL, Deno.env.get("SUPABASE_ANON_KEY") ?? SERVICE_ROLE_KEY, {
         global: { headers: { Authorization: auth } },
       });
     }
 
-    const { action, urls, depth, categories, jobId } = await req.json().catch(() => ({}));
+    const { action, urls, depth, categories, jobId, userId } = await req.json().catch(() => ({}));
 
     switch (action) {
       case "schedule":
-        return await handleSchedule(supabase, userClient, urls, depth ?? "deep", categories ?? CATEGORIES);
+        return await handleSchedule(
+          supabase,
+          userClient,
+          urls,
+          depth ?? "deep",
+          categories ?? CATEGORIES,
+          userId ?? null,
+        );
       case "trigger_curated":
         return await handleTriggerCurated(supabase, userClient);
       case "continue_queue":
@@ -77,11 +84,12 @@ Deno.serve(async (req) => {
 });
 
 async function handleSchedule(
-  supabase: ReturnType<typeof createClient>,
-  userClient: ReturnType<typeof createClient> | null,
+  supabase: any,
+  userClient: any,
   urls: string[],
   depth: string,
   categories: string[],
+  explicitUserId: string | null = null,
 ): Promise<Response> {
   if (!urls?.length || urls.length > 5) {
     return json({ error: "1-5 URLs required" }, 400);
@@ -95,9 +103,12 @@ async function handleSchedule(
     userId = user?.user?.id ?? null;
     userEmail = user?.user?.email ?? null;
   }
+  if (!userId && explicitUserId) {
+    userId = explicitUserId;
+  }
 
-  // service_role (Inngest/cron) bypassa auth check
-  const isServiceRole = !userId;
+  // service_role (Inngest/cron/tool interno) bypassa auth check
+  const isServiceRole = !userClient;
   // Admin: email check (mesma regra do frontend via isForgeAdminEmail)
   if (!isServiceRole && !isAdminEmail(userEmail)) {
     return json({ error: "Apenas administradores podem agendar extração de DesignDNA" }, 403);
@@ -142,8 +153,8 @@ async function handleSchedule(
 }
 
 async function handleTriggerCurated(
-  supabase: ReturnType<typeof createClient>,
-  userClient: ReturnType<typeof createClient> | null,
+  supabase: any,
+  userClient: any,
 ): Promise<Response> {
   const weekOffset = Math.floor(Date.now() / (7 * 24 * 3600 * 1000));
   const batch = getBatchForWeek(weekOffset, SITES_PER_RUN);
@@ -161,7 +172,7 @@ async function handleTriggerCurated(
   return await handleSchedule(supabase, userClient, urls, "deep", CATEGORIES);
 }
 
-async function handleContinueQueue(supabase: ReturnType<typeof createClient>): Promise<Response> {
+async function handleContinueQueue(supabase: any): Promise<Response> {
   const { data: nextJob } = await supabase
     .from("design_dna_job_queue")
     .select("*")
@@ -195,7 +206,7 @@ async function handleContinueQueue(supabase: ReturnType<typeof createClient>): P
   return json({ continued: true, jobId: body.jobId });
 }
 
-async function handleStatus(supabase: ReturnType<typeof createClient>, jobId: string): Promise<Response> {
+async function handleStatus(supabase: any, jobId: string): Promise<Response> {
   if (!jobId) return json({ error: "jobId required" }, 400);
 
   const { data: job } = await supabase
@@ -210,7 +221,7 @@ async function handleStatus(supabase: ReturnType<typeof createClient>, jobId: st
 }
 
 async function handleEmitEvent(
-  supabase: ReturnType<typeof createClient>,
+  supabase: any,
   jobId: string,
   req: Request,
 ): Promise<Response> {

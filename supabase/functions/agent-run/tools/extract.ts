@@ -21,12 +21,11 @@ export function registerExtractTools(reg: ToolRegistry, ctx: ExtractToolsContext
     {
       name: "extract_design_dna",
       description:
-        "Extrai DesignDNA estruturado de 1-5 URLs de referência. " +
-        "Retorna layout, motion, typography, color_application, component_patterns e interactions. " +
-        "Modo shallow (grátis, HTTP+Jina+thum.io): funciona no Plan mode, extrai DNA parcial. " +
-        "Modo deep (pago, Playwright no sandbox): só no Build mode, extrai CSS computado + motion traces. " +
+        "Enfileira a extração de DesignDNA estruturado de 1-5 URLs de referência. " +
+        "Retorna layout, motion, typography, color_application, component_patterns e interactions via job assíncrono. " +
+        "Modo shallow usa web scrape + limpeza; modo deep usa Playwright no sandbox e pode levar minutos. " +
         "Use para analisar sites que o usuário forneceu ou que você encontrou via web_research. " +
-        "O DNA extraído é auto-adicionado ao store para uso na síntese de design.",
+        "O job é auto-adicionado ao store para uso na síntese de design e pode ser acompanhado pelo design library.",
       parameters: {
         type: "object",
         properties: {
@@ -38,10 +37,10 @@ export function registerExtractTools(reg: ToolRegistry, ctx: ExtractToolsContext
           },
           depth: {
             type: "string",
-            enum: ["shallow", "deep"],
-            description:
-              "shallow (default): grátis, HTTP+Jina+thum.io, extrai DNA parcial (sem motion/interactions reais). " +
-              "deep: pago, Playwright no sandbox (Build mode only), extrai CSS computado + motion traces + hover states. " +
+              enum: ["shallow", "deep"],
+              description:
+              "shallow (default): web scrape limpo, gera job rápido com evidência parcial. " +
+              "deep: Playwright no sandbox (Build mode only), extrai CSS computado + motion traces + hover states, em job assíncrono. " +
               "Use shallow no Plan mode. Use deep no Build mode quando precisar de motion/interactions precisos.",
           },
           categories: {
@@ -106,51 +105,22 @@ export function registerExtractTools(reg: ToolRegistry, ctx: ExtractToolsContext
           };
         }
 
-        // Constrói LLM config a partir das chaves de conectores do usuário
-        const userLlmApiKey = ctx.connectorKeys.OPENAI_API_KEY
-          || ctx.connectorKeys.OPENROUTER_API_KEY
-          || ctx.connectorKeys.GROQ_API_KEY
-          || ctx.connectorKeys.DEEPSEEK_API_KEY
-          || ctx.connectorKeys.XAI_API_KEY
-          || ctx.connectorKeys.GEMINI_API_KEY
-          || undefined;
-
-        // Deriva baseUrl do provedor
-        let userLlmBaseUrl: string | undefined;
-        if (ctx.connectorKeys.OPENROUTER_API_KEY) {
-          userLlmBaseUrl = "https://openrouter.ai/api/v1";
-        } else if (ctx.connectorKeys.GROQ_API_KEY) {
-          userLlmBaseUrl = "https://api.groq.com/openai/v1";
-        } else if (ctx.connectorKeys.DEEPSEEK_API_KEY) {
-          userLlmBaseUrl = "https://api.deepseek.com/v1";
-        } else if (ctx.connectorKeys.XAI_API_KEY) {
-          userLlmBaseUrl = "https://api.x.ai/v1";
-        } else if (ctx.connectorKeys.GEMINI_API_KEY) {
-          userLlmBaseUrl = "https://generativelanguage.googleapis.com/v1beta/openai";
-        } else if (ctx.connectorKeys.OLLAMA_BASE_URL) {
-          userLlmBaseUrl = ctx.connectorKeys.OLLAMA_BASE_URL;
-        }
-
-        // Chama a edge function extract-design-dna
+        // Enfileira o job em background para evitar timeout da edge function
         const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
         const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-        const response = await fetch(`${supabaseUrl}/functions/v1/extract-design-dna`, {
+        const response = await fetch(`${supabaseUrl}/functions/v1/design-dna-scheduler`, {
           method: "POST",
           headers: {
             Authorization: `Bearer ${serviceKey}`,
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
+            action: "schedule",
             urls,
             depth,
             categories,
-            projectId: ctx.projectId,
-            sandboxExecUrl: ctx.sandboxExecUrl,
-            sandboxToken: ctx.sandboxToken,
-            llmApiKey: userLlmApiKey,
-            llmBaseUrl: userLlmBaseUrl,
-            llmModel: ctx.connectorKeys.OLLAMA_MODEL || undefined,
+            userId: ctx.userId,
           }),
           signal: AbortSignal.timeout(depth === "deep" ? 120000 : 60000),
         });
@@ -173,8 +143,9 @@ export function registerExtractTools(reg: ToolRegistry, ctx: ExtractToolsContext
           projectId: ctx.projectId,
           urlCount: urls.length,
           depth,
-          dnasExtracted: result.dnas?.length ?? 0,
-          errors: result.errors?.length ?? 0,
+          queued: !!result.queued,
+          jobId: result.jobId,
+          eventIds: Array.isArray(result.eventIds) ? result.eventIds.length : 0,
         });
 
         return {

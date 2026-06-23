@@ -75,9 +75,16 @@ export function DesignLibraryDetail({ entry, open, onOpenChange }: DesignLibrary
             </div>
 
             <TabsContent value="preview" className="flex-1 overflow-auto p-6 m-0">
-              {entry.screenshot_url ? (
+              {entry.screenshot_url || entry.screenshot_base64 ? (
                 <div className="rounded-lg overflow-hidden border border-border bg-surface-2">
-                  <img src={entry.screenshot_url} alt={entry.name} className="w-full h-auto" />
+                  <img
+                    src={
+                      entry.screenshot_url
+                        ?? (entry.screenshot_base64 ? `data:image/png;base64,${entry.screenshot_base64}` : "")
+                    }
+                    alt={entry.name}
+                    className="w-full h-auto"
+                  />
                 </div>
               ) : (
                 <div className="flex items-center justify-center h-64 text-muted-foreground">

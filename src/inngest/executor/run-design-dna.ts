@@ -5,6 +5,7 @@ import {
   saveJobCheckpoint,
   type DesignDnaExecuteResponse,
 } from "../functions/_shared-design-dna";
+import { extractDesignDnaForUrl } from "./design-dna-extraction.ts";
 
 const E2B_API_BASE = process.env.E2B_API_BASE || "https://api.e2b.app";
 const E2B_DOMAIN = process.env.E2B_DOMAIN || "e2b.app";
@@ -212,46 +213,59 @@ export async function executeDesignDnaJob(
         previewUrl,
       });
 
-      const resp = await fetch(`${supabaseUrl}/functions/v1/extract-design-dna`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${serviceRoleKey}` },
-        body: JSON.stringify({
-          urls: [url],
-          depth,
-          categories,
-          projectId: jobId,
-          sandboxExecUrl,
-          sandboxToken: serviceRoleKey,
-          e2bApiKey,
-          sandboxId,
-        }),
-        signal: AbortSignal.timeout(150_000),
+      const dnaResult = await extractDesignDnaForUrl(serviceClient, {
+        url,
+        depth,
+        categories: categories as string[],
+        userId,
+        sandboxExecUrl,
+        sandboxToken: serviceRoleKey,
       });
 
-      if (!resp.ok) {
-        const errBody = await resp.json().catch(() => ({ error: "unknown" }));
-        throw new Error(`HTTP ${resp.status}: ${errBody.error}`);
-      }
-
-      const data = await resp.json();
-      const dnaResult = data.result || data;
-
-      if (dnaResult.dnas?.length > 0) {
-        const dna = dnaResult.dnas[0] as Record<string, unknown>;
+      if (dnaResult.dna) {
+        const dna = dnaResult.dna as Record<string, unknown>;
         results.push(dna);
+
+        const { error: insertError } = await supabase.from("design_system_library").insert({
+          name: (dna.name as string) || url,
+          source_url: url,
+          category: (dna.category as string) || "full_page",
+          extracted_by: userId,
+          quality_score: Math.max(0, Math.min(10, Number(dna.quality_score ?? (depth === "deep" ? 7 : 5)))),
+          quality_source: (dna.quality_source as string) || (depth === "deep" ? "deep_extraction" : "shallow_extraction"),
+          validated: false,
+          raw_markdown: dnaResult.rawMarkdown,
+          screenshot_url: dnaResult.screenshotUrl,
+          screenshot_base64: dnaResult.screenshotBase64 ?? null,
+          design_dna: {
+            layout: dna.layout ?? null,
+            color: dna.color ?? null,
+            typography: dna.typography ?? null,
+            motion: dna.motion ?? null,
+            interaction: dna.interaction ?? null,
+            component: dna.component ?? null,
+            implementation_notes: dna.implementation_notes ?? null,
+          },
+          serves_domains: (dna.serves_domains as string[]) || [],
+          compatible_languages: (dna.compatible_languages as string[]) || [],
+          compatible_moods: (dna.compatible_moods as string[]) || [],
+          tags: [categories.join(",")],
+          notes: dnaResult.notes.join(" | ") || null,
+        });
+        if (insertError) {
+          console.warn(`[design-dna] Failed to persist library entry for ${url}: ${insertError.message}`);
+        }
       }
 
       // Emite screenshots como eventos separados (para timeline real-time)
-      const screenshotsMap = dnaResult.screenshots as Record<string, string[]> | undefined;
-      const screenshots = screenshotsMap?.[url];
-      if (screenshots && screenshots.length > 0) {
-        const maxShots = Math.min(screenshots.length, 5);
+      if (dnaResult.screenshots.length > 0) {
+        const maxShots = Math.min(dnaResult.screenshots.length, 5);
         for (let si = 0; si < maxShots; si++) {
           await appendJobEvent(supabase, jobId, "screenshot_taken", {
             url,
             index: si,
             total: maxShots,
-            screenshot: screenshots[si].slice(0, 5000),
+            screenshot: dnaResult.screenshots[si].slice(0, 5000),
           });
         }
       }
@@ -269,7 +283,17 @@ export async function executeDesignDnaJob(
         ok: true,
         index: i,
         resultsCount: results.length,
+        confidence: dnaResult.confidence,
+        providerTrace: dnaResult.providerTrace,
       });
+
+      if (dnaResult.notes.length > 0) {
+        await appendJobEvent(supabase, jobId, "url_note", {
+          url,
+          index: i,
+          notes: dnaResult.notes.slice(0, 10),
+        });
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       await appendJobEvent(supabase, jobId, "url_error", { url, error: msg, index: i });

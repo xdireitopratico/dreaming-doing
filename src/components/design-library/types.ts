@@ -8,6 +8,7 @@ export interface LibraryEntry {
   validated: boolean;
   raw_markdown: string | null;
   screenshot_url: string | null;
+  screenshot_base64?: string | null;
   design_dna: DesignDna | null;
   serves_domains: string[];
   compatible_languages: string[];
