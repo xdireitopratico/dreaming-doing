@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Check, FileText, Loader2, Play, SkipForward } from "lucide-react";
 import type { PendingPlan, PlanStep } from "@/lib/agent-progress";
 import { buildForgePlanMarkdown } from "@/lib/plan-document";
@@ -25,6 +25,9 @@ export function ChatPlanDock({
   status,
 }: ChatPlanDockProps) {
   const [busy, setBusy] = useState<"approve" | "reject" | null>(null);
+  const [showCreatingSkeleton, setShowCreatingSkeleton] = useState(false);
+  const skeletonStartedAtRef = useRef<number | null>(null);
+  const skeletonHideTimerRef = useRef<number | null>(null);
 
   const handleApprove = useCallback(async () => {
     if (!pendingPlan || !onApprove) return;
@@ -54,6 +57,49 @@ export function ChatPlanDock({
       setBusy(null);
     }
   }, [onReject]);
+
+  useEffect(() => {
+    if (skeletonHideTimerRef.current !== null) {
+      window.clearTimeout(skeletonHideTimerRef.current);
+      skeletonHideTimerRef.current = null;
+    }
+
+    if (creating && !pendingPlan) {
+      if (skeletonStartedAtRef.current === null) {
+        skeletonStartedAtRef.current = Date.now();
+      }
+      setShowCreatingSkeleton(true);
+      return undefined;
+    }
+
+    const startedAt = skeletonStartedAtRef.current;
+    if (startedAt === null) {
+      setShowCreatingSkeleton(false);
+      return undefined;
+    }
+
+    const elapsed = Date.now() - startedAt;
+    const minVisibleMs = 420;
+
+    if (elapsed < minVisibleMs) {
+      setShowCreatingSkeleton(true);
+      skeletonHideTimerRef.current = window.setTimeout(() => {
+        setShowCreatingSkeleton(false);
+        skeletonStartedAtRef.current = null;
+        skeletonHideTimerRef.current = null;
+      }, minVisibleMs - elapsed);
+      return () => {
+        if (skeletonHideTimerRef.current !== null) {
+          window.clearTimeout(skeletonHideTimerRef.current);
+          skeletonHideTimerRef.current = null;
+        }
+      };
+    }
+
+    setShowCreatingSkeleton(false);
+    skeletonStartedAtRef.current = null;
+    return undefined;
+  }, [creating, pendingPlan]);
 
   if (status && pendingPlan) {
     const phases = planPhasesFromPlan(pendingPlan);
@@ -102,7 +148,7 @@ export function ChatPlanDock({
 
   if (!creating && !pendingPlan) return null;
 
-  if (creating && !pendingPlan) {
+  if (showCreatingSkeleton) {
     return (
       <div className="forge-plan-dock" data-testid="chat-plan-dock-creating">
         <div className="forge-plan-dock-shell">

@@ -413,7 +413,7 @@
 
 .forge-plan-dock-shell {
   width: 100%;
-  max-width: none;
+  max-width: min(100%, 520px);
   padding: 12px 14px 10px;
   border-radius: 16px;
   background: color-mix(in srgb, var(--bg-input) 92%, var(--bg-card) 8%);
