@@ -60,15 +60,15 @@ function resolveThinkingDurationSec(opts: {
   if (opts.workingDurationMs != null && opts.workingDurationMs > 0) {
     return Math.max(1, Math.round(opts.workingDurationMs / 1000));
   }
+  if (opts.slotActive && opts.runStartedAtMs) {
+    return Math.max(1, Math.round((Date.now() - opts.runStartedAtMs) / 1000));
+  }
   if (opts.resolved?.timeline?.length) {
     const items = buildForgeTimeline(opts.resolved.timeline, false);
     const thought = items.find((i) => i.type === "THOUGHT");
     if (thought?.type === "THOUGHT" && thought.durationMs > 0) {
       return Math.max(1, Math.round(thought.durationMs / 1000));
     }
-  }
-  if (opts.slotActive && opts.runStartedAtMs) {
-    return Math.max(1, Math.round((Date.now() - opts.runStartedAtMs) / 1000));
   }
   return 1;
 }

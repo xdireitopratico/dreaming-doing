@@ -5,7 +5,7 @@ import type { ThreadItem } from "@/lib/chat/types";
 import { assistantTurnCopyText } from "@/lib/chat/assistant-turn-copy";
 import { resolveClosingProse, sanitizeChatProseForDisplay } from "@/lib/chat/stream-prose";
 import { loadAgentPreferences } from "@/lib/agent-preferences";
-import { formatChatTimestamp } from "@/lib/chat/format-timestamp";
+
 import { llmErrorHint, staleStreamHint, timeoutHint, zombieRunHint } from "@/lib/llm-error-hints";
 import { ForgeThinking } from "@/components/chat/ForgeThinking";
 import { ChatNarration } from "./ChatNarration";
@@ -60,7 +60,6 @@ export function AssistantTurn({
 
   const showThinking = !!item.thinking;
   const showNarration = !!narrationText;
-  const showJobCard = !!item.miniCard;
   const showClarify = !!item.clarify?.choices?.length;
   const showClosing = !showClarify && !!closingText;
 
@@ -98,8 +97,8 @@ export function AssistantTurn({
   }, [item.error, item.isActive, item.lastFinishOk, item.resumable, robinActive]);
 
   const showErrorHint = !!errorHint;
+  const showJobCard = !!item.miniCard && !showErrorHint;
   const copyText = assistantTurnCopyText(item);
-  const timeLabel = formatChatTimestamp(item.message?.timestamp ?? item.runStartedAtMs);
 
   return (
     <article
@@ -107,14 +106,6 @@ export function AssistantTurn({
       data-testid="chat-message-assistant"
     >
       <div className="forge-assistant-turn" data-testid="assistant-turn">
-        {timeLabel && (
-          <time
-            className="forge-msg-timestamp"
-            dateTime={new Date(item.message?.timestamp ?? item.runStartedAtMs ?? 0).toISOString()}
-          >
-            {timeLabel}
-          </time>
-        )}
         {showThinking && item.thinking && <ForgeThinking state={item.thinking} />}
 
         {showNarration && <ChatNarration text={narrationText!} streaming={narrationStreaming} />}

@@ -23,7 +23,14 @@ export function freezeWorkingDuration(
   // Capture sempre em terminal (finish/canceled) para estabilizar "Pensou por Xs"
   // mesmo que o evento terminal chegue antes de "conteúdo visível" no snapshot.
   const isTerminal = next.finished || next.canceled || next.lastFinishOk != null;
-  if (!isTerminal && !hasTurnVisibleContent(next)) return next;
+  const hasThinking =
+    (next.timeline?.some((ev) => ev.type === "thinking_text") ?? false) ||
+    next.timeline?.some(
+      (ev) =>
+        ev.type === "assistant_text" &&
+        (ev.data as Record<string, unknown>)?.thinking === true,
+    );
+  if (!isTerminal && !hasTurnVisibleContent(next) && !hasThinking) return next;
   return {
     ...next,
     workingDurationMs: Math.max(1000, Date.now() - startedAtMs),

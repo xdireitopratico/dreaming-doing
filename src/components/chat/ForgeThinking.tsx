@@ -11,15 +11,17 @@ export function ForgeThinking({ state }: ForgeThinkingProps) {
     state.status === "active" ? "Pensando…" : `Pensou por ${state.durationSec}s`;
 
   return (
-    <p
+    <div
       className={cn(
-        "forge-chat-thought-line forge-chat-thought-label",
+        "forge-chat-thinking-line",
         state.status === "active" && "forge-animate-thinking",
       )}
       data-testid="forge-thinking"
     >
-      <span aria-hidden>💡</span>
-      <span>{label}</span>
-    </p>
+      <span className="forge-chat-thinking-icon" aria-hidden>
+        💡
+      </span>
+      <span className="forge-chat-thinking-label">{label}</span>
+    </div>
   );
 }

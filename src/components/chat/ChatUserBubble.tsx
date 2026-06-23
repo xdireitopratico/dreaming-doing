@@ -1,18 +1,14 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import type { StoredMessagePart } from "@/lib/chat-attachments";
-import { formatChatTimestamp } from "@/lib/chat/format-timestamp";
-
 const CLAMP_LINES = 4;
 
 type ChatUserBubbleProps = {
   content: string;
   queued?: boolean;
   parts?: StoredMessagePart[];
-  timestamp?: number | null;
 };
 
-export function ChatUserBubble({ content, queued = false, parts, timestamp }: ChatUserBubbleProps) {
-  const timeLabel = formatChatTimestamp(timestamp);
+export function ChatUserBubble({ content, queued = false, parts }: ChatUserBubbleProps) {
   const [expanded, setExpanded] = useState(false);
   const [overflows, setOverflows] = useState(false);
   const textRef = useRef<HTMLParagraphElement>(null);
@@ -28,11 +24,6 @@ export function ChatUserBubble({ content, queued = false, parts, timestamp }: Ch
 
   return (
     <div className={`forge-msg-user${queued ? " forge-msg-user--queued" : ""}`}>
-      {timeLabel && (
-        <time className="forge-msg-timestamp" dateTime={new Date(timestamp ?? 0).toISOString()}>
-          {timeLabel}
-        </time>
-      )}
       {content && (
         <p
           ref={textRef}

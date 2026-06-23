@@ -12,6 +12,7 @@ import {
   resolveHistoricalRunProgress,
   resolveInspectorRunProgress,
   runIdFromAssistantMessage,
+  pickRicherProgress,
 } from "@/lib/assistant-run-progress";
 
 describe("assistant-run-progress", () => {
@@ -25,6 +26,26 @@ describe("assistant-run-progress", () => {
     };
     expect(runIdFromAssistantMessage(msg)).toBe("run-1");
     expect(isAgentJobMessage(msg)).toBe(true);
+  });
+
+  it("pickRicherProgress preserva workingDurationMs do progresso mais leve", () => {
+    const live = {
+      ...initialAgentProgress,
+      workingDurationMs: 143_000,
+      timeline: [{ type: "start", data: {}, timestamp: 1 }],
+    };
+    const db = {
+      ...initialAgentProgress,
+      timeline: [
+        { type: "start", data: {}, timestamp: 1 },
+        { type: "thinking_text", data: { text: "x" }, timestamp: 2 },
+        { type: "tool_start", data: { name: "web_search" }, timestamp: 3 },
+      ],
+      finished: true,
+      lastFinishOk: false,
+    };
+    const merged = pickRicherProgress(live, db);
+    expect(merged?.workingDurationMs).toBe(143_000);
   });
 
   it("reidrata progresso finished para mini-card histórico", () => {

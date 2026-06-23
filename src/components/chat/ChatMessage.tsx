@@ -5,6 +5,7 @@ import { ChatToolbar } from "./ChatToolbar";
 import { ChatPlanDock } from "./ChatPlanDock";
 
 import type { ClarifyChoice } from "@/lib/chat/types";
+import { formatChatTimestamp } from "@/lib/chat/format-timestamp";
 
 type ChatMessageProps = {
   item: ThreadItem;
@@ -39,17 +40,25 @@ export function ChatMessage({
 }: ChatMessageProps) {
   if (item.kind === "user") {
     const isQueued = item.message.meta?.queued === true;
+    const timeLabel = formatChatTimestamp(item.message.timestamp);
     return (
       <article
         className="forge-chat-item forge-chat-item-user"
         data-testid="chat-message-user"
         data-user-msg-id={item.message.id}
       >
+        {timeLabel && (
+          <time
+            className="forge-msg-timestamp forge-msg-timestamp--user"
+            dateTime={new Date(item.message.timestamp ?? 0).toISOString()}
+          >
+            {timeLabel}
+          </time>
+        )}
         <ChatUserBubble
           content={item.message.content}
           parts={item.message.parts}
           queued={isQueued}
-          timestamp={item.message.timestamp}
         />
         <ChatToolbar
           text={item.message.content}

@@ -73,6 +73,16 @@ export function mapAssistantTurn(
   if (!resolved && item.runId) {
     resolved = resolveHistoricalRunProgress(item.runId, messages);
   }
+  if (
+    resolved &&
+    item.runId &&
+    item.runId === activeRunId &&
+    sessionProgress.workingDurationMs != null &&
+    sessionProgress.workingDurationMs > 0 &&
+    (resolved.workingDurationMs == null || resolved.workingDurationMs <= 0)
+  ) {
+    resolved = { ...resolved, workingDurationMs: sessionProgress.workingDurationMs };
+  }
   if (!resolved && item.message?.content?.trim()) {
     const meta = item.message.meta;
     const isFailure =

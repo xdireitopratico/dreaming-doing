@@ -74,7 +74,16 @@ export function pickRicherProgress(
   const wb = inspectorProgressWeight(b);
   if (!a) return b;
   if (!b) return a;
-  return wa >= wb ? a : b;
+  const picked = wa >= wb ? a : b;
+  const other = picked === a ? b : a;
+  if (
+    (picked.workingDurationMs == null || picked.workingDurationMs <= 0) &&
+    other.workingDurationMs != null &&
+    other.workingDurationMs > 0
+  ) {
+    return { ...picked, workingDurationMs: other.workingDurationMs };
+  }
+  return picked;
 }
 
 function toolsFromMessageToolCalls(msg: ChatMessage): AgentProgress["tools"] {
