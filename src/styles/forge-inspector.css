@@ -650,227 +650,187 @@
   gap: var(--space-md);
 }
 
-.forge-inspector-plan-status {
+/* ─── Header fino: status pill + sinais meta + título ──────────────── */
+
+.forge-inspector-plan-header {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  padding: 12px 14px;
-  border-radius: 10px;
-  border: 1px solid color-mix(in srgb, var(--border-forge) 80%, transparent);
-  background: color-mix(in srgb, var(--bg-card) 88%, transparent);
+  gap: var(--space-xs);
 }
 
-.forge-inspector-plan-status--pending {
-  border-color: color-mix(in srgb, var(--status-working) 45%, var(--border-forge));
+.forge-inspector-plan-header-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
 }
 
-.forge-inspector-plan-status--approved {
-  border-color: color-mix(in srgb, var(--status-done) 45%, var(--border-forge));
-}
-
-.forge-inspector-plan-status--rejected {
-  border-color: color-mix(in srgb, var(--status-failed) 35%, var(--border-forge));
-}
-
-.forge-inspector-plan-status-label {
-  font: var(--font-task-label);
+.forge-inspector-plan-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--text-muted);
+  background: color-mix(in srgb, var(--bg-input) 60%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border-forge) 70%, transparent);
 }
 
-.forge-inspector-plan-status-summary {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--text-primary);
-  line-height: 1.45;
+.forge-inspector-plan-pill--approved {
+  color: var(--status-done);
+  border-color: color-mix(in srgb, var(--status-done) 40%, var(--border-forge));
+  background: color-mix(in srgb, var(--status-done) 10%, transparent);
 }
 
-.forge-inspector-plan-mission {
-  margin: var(--space-xs) 0 0;
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--text-primary);
+.forge-inspector-plan-pill--rejected {
+  color: var(--status-failed);
+  border-color: color-mix(in srgb, var(--status-failed) 40%, var(--border-forge));
+  background: color-mix(in srgb, var(--status-failed) 10%, transparent);
 }
 
-.forge-inspector-plan-textarea {
-  font: var(--font-tool);
-  font-size: 13px;
-  color: var(--text-primary);
+.forge-inspector-plan-meta {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-muted);
+  letter-spacing: 0.02em;
 }
 
-.forge-inspector-plan-paragraph {
+.forge-inspector-plan-title {
   margin: 0;
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 1.35;
   color: var(--text-primary);
-  white-space: pre-wrap;
 }
 
 .forge-inspector-plan-doc {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  border-radius: 12px;
-  border: 1px solid var(--border-forge);
-  background: var(--bg-card);
-  padding: var(--space-lg);
+  padding: var(--space-sm) var(--space-xs);
 }
 
-.forge-inspector-plan-doc--preview {
-  border: none;
-  background: transparent;
-  padding: var(--space-md) var(--space-lg);
-}
-
-/* ─── Design Direction Card ─────────────────────────────────────────── */
-
-.forge-plan-design {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-sm);
-  padding: var(--space-md);
-  border-radius: 12px;
-  border: 1px solid color-mix(in srgb, var(--border-forge) 80%, transparent);
-  background: color-mix(in srgb, var(--bg-card) 70%, transparent);
-}
-
-.forge-plan-design-heading {
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: var(--text-muted);
-}
-
-.forge-plan-design-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.forge-plan-design-tag {
-  font-size: 11px;
-  font-weight: 500;
-  padding: 2px 10px;
-  border-radius: 9999px;
-  background: color-mix(in srgb, var(--bg-input) 60%, transparent);
-  color: var(--text-secondary);
-  border: 1px solid color-mix(in srgb, var(--border-forge) 60%, transparent);
-}
-
-.forge-plan-design-tag--brand {
-  background: var(--text-accent);
-  color: #0a0a0a;
-  border-color: transparent;
-}
-
-.forge-plan-design-moment {
-  margin: 0;
-  font-size: 13px;
-  line-height: 1.5;
-  color: var(--text-secondary);
-}
-
-.forge-plan-design-moment strong {
-  color: var(--text-primary);
-}
-
-.forge-plan-design-synthesis {
-  margin: 0;
-  font-size: 12px;
-  line-height: 1.5;
-  color: var(--text-muted);
-}
-
-.forge-plan-design-section {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.forge-plan-design-section-label {
-  font-size: 11px;
-  color: var(--text-muted);
-}
-
-.forge-plan-design-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-}
-
-.forge-plan-design-chip {
-  font-size: 10px;
-  padding: 1px 8px;
-  border-radius: 4px;
-  background: color-mix(in srgb, var(--bg-input) 50%, transparent);
-  color: var(--text-secondary);
-}
-
-.forge-plan-design-ref {
-  font-size: 11px;
-  color: var(--text-accent);
-  text-decoration: none;
-  opacity: 0.8;
-  display: inline-block;
-  margin-right: 8px;
-}
-
-.forge-plan-design-ref:hover {
-  text-decoration: underline;
-}
-
-.forge-plan-design-antipatterns {
-  margin-top: var(--space-xs);
-}
-
-.forge-plan-design-antipatterns summary {
-  font-size: 11px;
-  cursor: pointer;
-  color: var(--text-muted);
-}
-
-.forge-plan-design-antipatterns ul {
-  font-size: 11px;
-  color: var(--text-muted);
-  padding-left: 16px;
-  margin: 4px 0 0;
-}
+/* ─── Documento markdown fino (o herói) ────────────────────────────── */
 
 .forge-inspector-plan-markdown {
   font: var(--font-chat);
   font-size: 14px;
-  line-height: 1.55;
-  color: var(--text-primary);
+  line-height: 1.65;
+  color: var(--text-secondary);
 }
 
 .forge-inspector-plan-markdown h1 {
-  margin: 0 0 var(--space-md);
-  font-size: 18px;
+  margin: 0 0 var(--space-sm);
+  font-size: 17px;
   font-weight: 600;
   line-height: 1.35;
+  color: var(--text-primary);
+}
+
+.forge-inspector-plan-markdown h1:first-child {
+  margin-top: 0;
 }
 
 .forge-inspector-plan-markdown h2 {
-  margin: var(--space-lg) 0 var(--space-sm);
+  margin: var(--space-lg) 0 var(--space-xs);
   font-size: 13px;
   font-weight: 600;
-  color: var(--text-secondary);
+  letter-spacing: 0.02em;
+  color: var(--text-primary);
 }
 
 .forge-inspector-plan-markdown h2:first-of-type {
   margin-top: 0;
 }
 
+.forge-inspector-plan-markdown h3 {
+  margin: var(--space-md) 0 var(--space-xs);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
 .forge-inspector-plan-markdown p {
   margin: 0 0 var(--space-sm);
 }
 
-.forge-inspector-plan-markdown ul {
+.forge-inspector-plan-markdown p:last-child {
+  margin-bottom: 0;
+}
+
+.forge-inspector-plan-markdown strong {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.forge-inspector-plan-markdown ul,
+.forge-inspector-plan-markdown ol {
   margin: 0 0 var(--space-sm);
   padding-left: 1.25rem;
 }
 
 .forge-inspector-plan-markdown li {
   margin-bottom: var(--space-xs);
+  color: var(--text-secondary);
+}
+
+.forge-inspector-plan-markdown li::marker {
+  color: var(--text-muted);
+}
+
+.forge-inspector-plan-markdown code {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 0.85em;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--bg-input) 70%, transparent);
+  color: var(--text-primary);
+}
+
+.forge-inspector-plan-markdown pre {
+  margin: 0 0 var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg-input) 60%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border-forge) 60%, transparent);
+  overflow-x: auto;
+}
+
+.forge-inspector-plan-markdown pre code {
+  padding: 0;
+  background: none;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+/* Blockquote = material subjetivo (considerações, raciocínio, sugestões) */
+.forge-inspector-plan-markdown blockquote {
+  margin: var(--space-md) 0 0;
+  padding: var(--space-sm) var(--space-md);
+  border-left: 2px solid color-mix(in srgb, var(--text-accent) 45%, transparent);
+  background: color-mix(in srgb, var(--text-accent) 5%, transparent);
+  border-radius: 0 6px 6px 0;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.55;
+  font-style: italic;
+}
+
+.forge-inspector-plan-markdown blockquote p {
+  margin: 0;
+}
+
+.forge-inspector-plan-markdown blockquote p + p {
+  margin-top: var(--space-xs);
+}
+
+/* Separador horizontal — separa seções do plano */
+.forge-inspector-plan-markdown hr {
+  margin: var(--space-lg) 0;
+  border: none;
+  border-top: 1px solid color-mix(in srgb, var(--border-forge) 60%, transparent);
 }
 
 .forge-inspector-plan-footer {

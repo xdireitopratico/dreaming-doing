@@ -62,79 +62,36 @@ export const CREATE_PLAN_TOOL: ToolDefinition = {
   description:
     "Proponha um plano para revisão do usuário (modo Plan). " +
     "2 a 7 steps = entregas de produto em linguagem humana (seções, fluxos, UX). " +
-    "Proibido: paths (src/), npm, tokens CSS, nomes de componentes internos.",
+    "Proibido: paths (src/), npm, tokens CSS, nomes de componentes internos. " +
+    "O documento final é o campo `markdown` — escreva você mesmo, em texto fino e adaptado ao contexto. " +
+    "Nunca invente seção vazia; o documento escala com a complexidade.",
   parameters: {
     type: "object",
     properties: {
       summary: { type: "string", description: "Título curto do plano." },
-      rationale: {
-        type: "string",
-        description: "Princípio/regra do plano (1–3 frases, linguagem de negócio).",
-      },
       mission: {
         type: "string",
         description: "Parágrafo único para o card de aprovação (como no chat Lovable).",
       },
-      objective: { type: "string", description: "Resultado mensurável em linguagem humana." },
-      assumptions: {
-        type: "array",
-        items: { type: "string" },
-        description: "Estado atual / o que está errado (bullets).",
-      },
-      outOfScope: { type: "array", items: { type: "string" } },
-      design: {
-        type: "object",
+      markdown: {
+        type: "string",
         description:
-          "Direção de design (apenas para projetos com UI/web). " +
-          "Define a síntese visual antes de construir — voice, momento-memorável, técnicas, referências. " +
-          "O usuário aprova a direção junto com o plano.",
-        properties: {
-          voice: {
-            type: "array",
-            items: { type: "string" },
-            description: "Linguagens visuais escolhidas (ex: ['editorial', 'brutalist']). 2-3 do léxico.",
-          },
-          moment: {
-            type: "string",
-            description: "O gesto-memorável concreto e específico do domínio (ex: 'Hero tipográfico gigante com grain + sticky stack de produtos').",
-          },
-          techniques: {
-            type: "array",
-            items: { type: "string" },
-            description: "Técnicas do catálogo @forge/ui (ex: ['kinetic-typography', 'grain-texture-overlay']).",
-          },
-          mood: {
-            type: "string",
-            description: "Mood escolhido do catálogo (ember, ocean, forest, mono, neon, sand, royal, sunset).",
-          },
-          references: {
-            type: "array",
-            items: {
-              type: "object",
-              properties: {
-                url: { type: "string" },
-                title: { type: "string" },
-                screenshot_url: { type: "string" },
-              },
-            },
-            description: "Referências visuais extraídas via web_research/web_scrape/screenshot_capture.",
-          },
-          anti_patterns: {
-            type: "array",
-            items: { type: "string" },
-            description: "Anti-padrões que você está evitando (ex: 'hero centralizado com 3 cards').",
-          },
-          synthesis_reasoning: {
-            type: "string",
-            description: "Por que esta combinação de linguagens serve ao domínio (1-2 frases).",
-          },
-          relevant_dnas: {
-            type: "array",
-            items: { type: "string" },
-            description: "IDs de DesignDNAs relevantes do catálogo.",
-          },
-        },
-        required: ["voice", "moment", "techniques"],
+          "Documento markdown fino do plano — é o que o usuário lê no inspector. " +
+          "Escreva você mesmo, adaptado ao contexto deste pedido específico. " +
+          "ESTRUTURA RECOMENDADA (use só as seções que agregarem valor; nunca invente seção vazia):\n" +
+          "1. Conexão — ancora no pedido literal do usuário.\n" +
+          "2. O que encontrei — bugs, estado atual, evidência. Constroi confiança.\n" +
+          "3. Entregáveis — o que existirá depois, contável e concreto.\n" +
+          "4. Fases & Etapas — sequência com contagem upfront (ex: '3 fases, 12 etapas').\n" +
+          "5. Expectativa — estado 'depois'. Fecha o loop com a conexão.\n" +
+          "6. Como validar — prova concreta que o usuário consegue executar.\n" +
+          "7. Riscos — o que pode dar errado, com severidade.\n" +
+          "8. Premissas — no que o plano está apostando.\n" +
+          "9. Fora do escopo — explicitamente NÃO será feito.\n" +
+          "10. Perguntas — só se houver ambiguidade genuína bloqueante.\n" +
+          "11. Considerações — alternativas descartadas + por quê; observações, sugestões.\n" +
+          "Use blockquote (>) para material subjetivo após o plano fechado. " +
+          "Plano simples = documento curto. Migração complexa = documento completo.",
       },
       steps: {
         type: "array",
@@ -153,7 +110,7 @@ export const CREATE_PLAN_TOOL: ToolDefinition = {
         },
       },
     },
-    required: ["summary", "steps"],
+    required: ["summary", "steps", "markdown"],
   },
 };
 
@@ -341,6 +298,12 @@ export function proposedPlanFromToolArgs(
   }
 
   const headline = sanitizePlanHeadline(missionRaw ?? summaryRaw, "Plano proposto");
+
+  // Prioridade 1: markdown fino escrito pelo LLM (paradigma novo).
+  const llmMarkdown =
+    typeof args.markdown === "string" && args.markdown.trim() ? args.markdown.trim() : undefined;
+
+  // Fallback: documento gerado a partir dos campos estruturados (legado, transição).
   const doc = buildPlanDocumentMarkdown({
     summary: headline,
     rationale,
@@ -360,7 +323,7 @@ export function proposedPlanFromToolArgs(
     assumptions,
     outOfScope: doc.outOfScope,
     phases: doc.phases,
-    markdown: doc.markdown,
+    markdown: llmMarkdown ?? doc.markdown,
     steps,
     design,
     ttlMs: PLAN_APPROVAL_TTL_MS,

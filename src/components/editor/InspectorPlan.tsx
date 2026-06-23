@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState } from "react";
 import { Check, Loader2, Pencil, SkipForward } from "lucide-react";
-import type { DesignPlanField, PendingPlan, PlanStep } from "@/lib/agent-progress";
+import type { PendingPlan, PlanStep } from "@/lib/agent-progress";
 import { buildForgePlanMarkdown } from "@/lib/plan-document";
 import { MarkdownRenderer } from "@/components/ui/markdown-renderer";
 import { enabledPlanSteps } from "@/lib/forge-run";
@@ -13,75 +13,13 @@ type InspectorPlanProps = {
   onEditRequest?: (plan: PendingPlan) => void;
 };
 
-/* ─── Design Direction Card (voice, mood, moment, techniques, refs) ── */
-
-function DesignDirectionCard({ design }: { design: DesignPlanField }) {
-  return (
-    <div className="forge-plan-design" data-testid="inspector-plan-design">
-      <span className="forge-plan-design-heading">Direção Visual</span>
-
-      <div className="forge-plan-design-tags">
-        {design.voice.map((lang) => (
-          <span key={lang} className="forge-plan-design-tag forge-plan-design-tag--brand">
-            {lang}
-          </span>
-        ))}
-        {design.mood && (
-          <span className="forge-plan-design-tag">{design.mood}</span>
-        )}
-      </div>
-
-      <p className="forge-plan-design-moment">
-        <strong>Momento-memorável:</strong> {design.moment}
-      </p>
-
-      {design.synthesis_reasoning && (
-        <p className="forge-plan-design-synthesis">{design.synthesis_reasoning}</p>
-      )}
-
-      {design.techniques.length > 0 && (
-        <div className="forge-plan-design-section">
-          <span className="forge-plan-design-section-label">Técnicas:</span>
-          <div className="forge-plan-design-chips">
-            {design.techniques.map((tech) => (
-              <span key={tech} className="forge-plan-design-chip">{tech}</span>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {design.references && design.references.length > 0 && (
-        <div className="forge-plan-design-section">
-          <span className="forge-plan-design-section-label">Referências:</span>
-          {design.references.map((ref, i) => (
-            <a
-              key={i}
-              href={ref.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="forge-plan-design-ref"
-            >
-              {ref.title || ref.url}
-            </a>
-          ))}
-        </div>
-      )}
-
-      {design.anti_patterns && design.anti_patterns.length > 0 && (
-        <details className="forge-plan-design-antipatterns">
-          <summary>Anti-padrões evitados ({design.anti_patterns.length})</summary>
-          <ul>
-            {design.anti_patterns.map((ap, i) => (
-              <li key={i}>{ap}</li>
-            ))}
-          </ul>
-        </details>
-      )}
-    </div>
-  );
+/* Sinais meta derivados do plano — escaneáveis em 1 segundo. */
+function planMetaSignals(plan: PendingPlan): { size: string; reversible: string } {
+  const stepCount = enabledPlanSteps(plan.steps).length;
+  const size = stepCount <= 3 ? "S" : stepCount <= 8 ? "M" : "L";
+  const reversible = "git revert";
+  return { size, reversible };
 }
-
-/* ─── Inspector Plan ──────────────────────────────────────────────── */
 
 export function InspectorPlan({ state, onApprove, onReject, onEditRequest }: InspectorPlanProps) {
   const { plan, status, awaitingApproval } = state;
@@ -125,21 +63,31 @@ export function InspectorPlan({ state, onApprove, onReject, onEditRequest }: Ins
         ? "Rejeitado"
         : "Plano";
 
+  const { size, reversible } = planMetaSignals(plan);
+
   return (
     <div className="forge-inspector-plan" data-testid="inspector-plan">
-      <div className={`forge-inspector-plan-status forge-inspector-plan-status--${status}`} data-testid="inspector-plan-status">
-        <span className="forge-inspector-plan-status-label">{statusCopy}</span>
-        <span className="forge-inspector-plan-status-summary">
+      {/* Header fino: status pill + sinais meta + título */}
+      <div className="forge-inspector-plan-header" data-testid="inspector-plan-status">
+        <div className="forge-inspector-plan-header-row">
+          <span className={`forge-inspector-plan-pill forge-inspector-plan-pill--${status}`}>
+            {statusCopy}
+          </span>
+          <span className="forge-inspector-plan-meta">
+            {size} · {reversible}
+          </span>
+        </div>
+        <h2 className="forge-inspector-plan-title">
           {plan.mission?.trim() || plan.summary}
-        </span>
+        </h2>
       </div>
 
-      {plan.design && <DesignDirectionCard design={plan.design} />}
-
+      {/* Documento markdown — o herói */}
       <div className="forge-inspector-plan-doc">
         <MarkdownRenderer className="forge-inspector-plan-markdown">{markdown}</MarkdownRenderer>
       </div>
 
+      {/* Footer — alavancas de ação */}
       <div className="forge-inspector-plan-footer">
         {awaitingApproval ? (
           <>

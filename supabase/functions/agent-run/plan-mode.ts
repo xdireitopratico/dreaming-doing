@@ -71,7 +71,7 @@ export function isExplicitPlanProposalRequest(text: string): boolean {
 }
 
 export const PLAN_MODE_CREATE_PLAN_NUDGE =
-  "IMPORTANTE: o usuário pediu um plano formal. Explore o repo se precisar, mas feche este turno com a tool `create_plan` (2–7 passos). Não responda só com markdown (## Estado Atual, ## Fases, etc.) — isso não gera o card de aprovação.";
+  "IMPORTANTE: o usuário pediu um plano formal. Explore o repo se precisar, mas feche este turno com a tool `create_plan` (summary, mission, markdown fino, 2–7 passos). Não responda só com markdown no chat — isso não gera o card de aprovação. O campo `markdown` é o documento do inspector: escreva fino, adaptado ao contexto, sem template fixo.";
 
 /** Instrução do turno 0 em plan mode — repete o pedido + nudge quando aplicável. */
 export function buildPlanModeTurnInstruction(userRequest: string): string {
