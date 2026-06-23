@@ -2,12 +2,13 @@ import { useState, type ComponentType, type ReactNode } from "react";
 import {
   CheckCircle2,
   ChevronDown,
-  Circle,
   CircleDashed,
   Database,
   FileText,
+  GitCompare,
   Lightbulb,
   Loader2,
+  MessageSquare,
   Search,
   TerminalSquare,
   XCircle,
@@ -25,11 +26,14 @@ type TimelineIcon = ComponentType<{ className?: string }>;
 
 function iconForEntry(entry: TimelineEntry): TimelineIcon {
   if (entry.kind === "thought") return Lightbulb;
+  if (entry.kind === "briefing") return MessageSquare;
+  if (entry.kind === "diff") return GitCompare;
+  if (entry.kind === "closure") return entry.canceled ? XCircle : CheckCircle2;
   if (entry.kind === "checkpoint") return FileText;
   if (entry.kind === "result") return entry.ok === false ? XCircle : CheckCircle2;
   if (entry.kind === "tool") {
-    if (/command|shell|terminal/i.test(entry.label)) return TerminalSquare;
-    if (/search/i.test(entry.label)) return Search;
+    if (/command|shell|terminal|executing/i.test(entry.label)) return TerminalSquare;
+    if (/search|pesquisando/i.test(entry.label)) return Search;
     if (/database/i.test(entry.label)) return Database;
     return FileText;
   }
@@ -44,6 +48,7 @@ function TimelineShell({ entry, children }: { entry: TimelineEntry; children: Re
         "forge-inspector-timeline-entry",
         `forge-timeline-entry--${entry.kind}`,
         entry.kind === "result" && entry.ok === false && "forge-timeline-entry--failed",
+        entry.kind === "closure" && entry.canceled && "forge-timeline-entry--failed",
         entry.active && "forge-timeline-entry--active",
       )}
       data-kind={entry.kind}
@@ -82,6 +87,18 @@ function ThoughtBlock({ entry, defaultOpen }: { entry: TimelineEntry; defaultOpe
         </button>
         {open && entry.detail && <p className="forge-details-thought-body">{entry.detail}</p>}
       </div>
+    </TimelineShell>
+  );
+}
+
+/* Briefing — fala do agente pro usuário durante o loop. Tom mais próximo do chat. */
+function BriefingBlock({ entry }: { entry: TimelineEntry }) {
+  if (!entry.text) return null;
+  return (
+    <TimelineShell entry={entry}>
+      <p className="forge-timeline-briefing" data-testid="timeline-briefing">
+        {entry.text}
+      </p>
     </TimelineShell>
   );
 }
@@ -135,6 +152,59 @@ function ToolBlock({
   );
 }
 
+/* Diff — edição de arquivo com before/after, expansível. */
+function DiffBlock({
+  entry,
+  onOpenFile,
+}: {
+  entry: TimelineEntry;
+  onOpenFile?: (path: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const hasDiff = !!entry.before || !!entry.after;
+  const opLabel = entry.op === "write" ? "Criado" : "Editado";
+
+  return (
+    <TimelineShell entry={entry}>
+      <div className="forge-timeline-diff" data-testid="timeline-diff">
+        <button
+          type="button"
+          className="forge-timeline-diff-header"
+          onClick={() => hasDiff && setOpen((v) => !v)}
+          aria-expanded={open}
+          disabled={!hasDiff}
+        >
+          <span className="forge-timeline-diff-op">{opLabel}</span>
+          <span className="forge-timeline-diff-path">{entry.path}</span>
+          {hasDiff && (
+            <ChevronDown
+              className={cn(
+                "forge-timeline-tool-chevron size-3.5",
+                open && "forge-timeline-tool-chevron--open",
+              )}
+            />
+          )}
+        </button>
+        {open && hasDiff && (
+          <div className="forge-timeline-diff-body">
+            {entry.before && <pre className="forge-timeline-diff-before">{entry.before}</pre>}
+            {entry.after && <pre className="forge-timeline-diff-after">{entry.after}</pre>}
+            {entry.path && onOpenFile && (
+              <button
+                type="button"
+                className="forge-timeline-tool-link"
+                onClick={() => onOpenFile(entry.path!)}
+              >
+                Abrir {entry.path}
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+    </TimelineShell>
+  );
+}
+
 function ResultBlock({ entry }: { entry: TimelineEntry }) {
   return (
     <TimelineShell entry={entry}>
@@ -146,6 +216,20 @@ function ResultBlock({ entry }: { entry: TimelineEntry }) {
         data-testid="timeline-result"
       >
         <span className="forge-timeline-result-label">{entry.label}</span>
+      </div>
+    </TimelineShell>
+  );
+}
+
+/* Closure — fechamento do loop. Presença: check verde (ok) ou X (falha/cancelado). */
+function ClosureBlock({ entry }: { entry: TimelineEntry }) {
+  return (
+    <TimelineShell entry={entry}>
+      <div className="forge-timeline-closure" data-testid="timeline-closure">
+        <span className="forge-timeline-closure-label">
+          {entry.canceled ? "Cancelado" : entry.ok === false ? "Encerrado" : "Concluído"}
+        </span>
+        {entry.text && <p className="forge-timeline-closure-text">{entry.text}</p>}
       </div>
     </TimelineShell>
   );
@@ -209,6 +293,15 @@ export function InspectorActivityFeed({ items, onOpenFile }: InspectorActivityFe
           return (
             <ThoughtBlock key={entry.id} entry={entry} defaultOpen={entry.active || index === 0} />
           );
+        }
+        if (entry.kind === "briefing") {
+          return <BriefingBlock key={entry.id} entry={entry} />;
+        }
+        if (entry.kind === "diff") {
+          return <DiffBlock key={entry.id} entry={entry} onOpenFile={onOpenFile} />;
+        }
+        if (entry.kind === "closure") {
+          return <ClosureBlock key={entry.id} entry={entry} />;
         }
         if (entry.kind === "tool") {
           return <ToolBlock key={entry.id} entry={entry} onOpenFile={onOpenFile} />;

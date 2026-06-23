@@ -544,6 +544,138 @@
   display: block;
 }
 
+/* ─── Briefing — fala do agente pro usuário durante o loop ─────────── */
+.forge-timeline-briefing {
+  margin: 0;
+  font: var(--font-task-body);
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text-primary);
+}
+
+.forge-timeline-entry--briefing .forge-timeline-entry-icon {
+  color: var(--text-accent);
+}
+
+/* ─── Diff — edição de arquivo com before/after ────────────────────── */
+.forge-timeline-diff {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.forge-timeline-diff-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  width: 100%;
+  border: none;
+  background: none;
+  color: inherit;
+  font: var(--font-task-body);
+  font-size: 13px;
+  cursor: pointer;
+  text-align: left;
+  padding: 0;
+}
+
+.forge-timeline-diff-header:disabled {
+  cursor: default;
+}
+
+.forge-timeline-diff-op {
+  font: var(--font-task-label);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--status-working);
+  flex-shrink: 0;
+}
+
+.forge-timeline-diff-op--write {
+  color: var(--status-done);
+}
+
+.forge-timeline-diff-path {
+  color: var(--text-primary);
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  min-width: 0;
+}
+
+.forge-timeline-diff-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  margin-top: var(--space-xs);
+}
+
+.forge-timeline-diff-before,
+.forge-timeline-diff-after {
+  margin: 0;
+  padding: var(--space-sm) var(--space-md);
+  border-radius: 6px;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 20rem;
+  overflow: auto;
+}
+
+.forge-timeline-diff-before {
+  background: color-mix(in srgb, var(--status-failed) 6%, var(--bg-input));
+  border: 1px solid color-mix(in srgb, var(--status-failed) 18%, var(--border-forge));
+  color: var(--text-secondary);
+}
+
+.forge-timeline-diff-after {
+  background: color-mix(in srgb, var(--status-done) 6%, var(--bg-input));
+  border: 1px solid color-mix(in srgb, var(--status-done) 18%, var(--border-forge));
+  color: var(--text-secondary);
+}
+
+.forge-timeline-entry--diff .forge-timeline-entry-icon {
+  color: var(--text-secondary);
+}
+
+/* ─── Closure — fechamento do loop ─────────────────────────────────── */
+.forge-timeline-closure {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.forge-timeline-closure-label {
+  font: var(--font-task-label);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--status-done);
+}
+
+.forge-timeline-entry--closure .forge-timeline-entry-icon {
+  color: var(--status-done);
+}
+
+.forge-timeline-entry--closure.forge-timeline-entry--failed .forge-timeline-entry-icon,
+.forge-timeline-entry--failed .forge-timeline-closure-label {
+  color: var(--status-failed);
+}
+
+.forge-timeline-closure-text {
+  margin: 0;
+  font: var(--font-task-body);
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text-primary);
+}
+
 .forge-timeline-result--failed .forge-timeline-result-label {
   color: var(--status-failed);
 }

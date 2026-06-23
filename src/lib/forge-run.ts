@@ -49,7 +49,7 @@ export type ForgeMiniCardData = {
   } | null;
 };
 
-export type TimelineItemType = "TASK" | "THOUGHT" | "TOOL" | "RESULT";
+export type TimelineItemType = "TASK" | "THOUGHT" | "TOOL" | "RESULT" | "BRIEFING" | "DIFF" | "CLOSURE";
 
 export type ForgeTimelineItem =
   | { type: "TASK"; id: string; label: string }
@@ -69,8 +69,19 @@ export type ForgeTimelineItem =
       detail?: string;
       active?: boolean;
       ok?: boolean;
+      intent?: string;
     }
-  | { type: "RESULT"; id: string; ok: boolean; text: string; evidence?: string[] };
+  | { type: "RESULT"; id: string; ok: boolean; text: string; evidence?: string[] }
+  | { type: "BRIEFING"; id: string; text: string }
+  | {
+      type: "DIFF";
+      id: string;
+      path: string;
+      op: "write" | "edit";
+      before?: string;
+      after?: string;
+    }
+  | { type: "CLOSURE"; id: string; ok: boolean; text: string; canceled?: boolean };
 
 export type AgentRunView = {
   runId: string;
@@ -167,6 +178,21 @@ export function buildForgeTimeline(timeline: SSEEvent[], running = false): Forge
         } else {
           thoughtText += chunk;
         }
+        continue;
+      }
+      // Briefing pro usuário durante o loop (assistant_text não-thinking, não-final, não-narration).
+      // O fechamento final (final/narration) vira CLOSURE em done/finish, não aqui.
+      if (
+        ev.type === "assistant_text" &&
+        !data.final &&
+        !data.narration &&
+        !data.thinking
+      ) {
+        const text = String(data.text ?? "").trim();
+        if (text) {
+          if (thoughtId) flushThought(ts);
+          items.push({ type: "BRIEFING", id: `briefing-${ts}`, text });
+        }
       }
       continue;
     }
@@ -227,6 +253,10 @@ export function buildForgeTimeline(timeline: SSEEvent[], running = false): Forge
       const name = String(data.name ?? data.tool ?? "tool");
       const args = (data.args ?? data.input) as Record<string, unknown> | undefined;
       const path = pathFromArgs(args);
+      const stepIntent =
+        typeof data.step_intent === "string" && data.step_intent.trim()
+          ? data.step_intent.trim()
+          : undefined;
       items.push({
         type: "TOOL",
         id: `tool-${ts}`,
@@ -234,6 +264,7 @@ export function buildForgeTimeline(timeline: SSEEvent[], running = false): Forge
         path: path || undefined,
         detail: path ? undefined : JSON.stringify(args ?? {}).slice(0, 200),
         active: running,
+        intent: stepIntent,
       });
       continue;
     }
@@ -241,15 +272,28 @@ export function buildForgeTimeline(timeline: SSEEvent[], running = false): Forge
     if (isToolDoneEvent(ev)) {
       const ok = isToolDoneOk(data);
       const toolName = toolDoneName(data);
+      const doneSummary =
+        typeof data.summary === "string" && data.summary.trim() ? data.summary.trim() : undefined;
+      const doneOutput =
+        typeof data.output === "string" && data.output.trim() ? data.output.trim() : undefined;
+      const doneError =
+        typeof data.error === "string" && data.error.trim() ? data.error.trim() : undefined;
       for (let i = items.length - 1; i >= 0; i--) {
         const item = items[i];
         if (item?.type !== "TOOL") continue;
-        items[i] = { ...item, name: toolName, active: false, ok };
+        // Detalhe: prioriza summary > output > erro. Limita tamanho.
+        const detail = doneSummary ?? (ok ? doneOutput : doneError);
+        items[i] = {
+          ...item,
+          name: toolName,
+          active: false,
+          ok,
+          detail: item.detail ?? (detail ? truncate(detail, 400) : undefined),
+        };
         break;
       }
       if (ev.type !== "tool_done") {
-        const text =
-          typeof data.summary === "string" ? data.summary : ok ? "Concluído" : "Erro";
+        const text = doneSummary ?? (ok ? "Concluído" : doneError ?? "Erro");
         items.push({ type: "RESULT", id: `result-${ts}`, ok, text });
       }
       continue;
@@ -306,8 +350,16 @@ export function buildForgeTimeline(timeline: SSEEvent[], running = false): Forge
       const path = typeof data.path === "string" ? data.path : "";
       const op = typeof data.op === "string" ? data.op : "edit";
       if (path) {
-        const label = op === "write" ? fileBase(path) : fileBase(path);
-        items.push({ type: "TASK", id: `diff-${ts}`, label: truncate(label, 120) });
+        const before = typeof data.before === "string" ? data.before : undefined;
+        const after = typeof data.after === "string" ? data.after : undefined;
+        items.push({
+          type: "DIFF",
+          id: `diff-${ts}`,
+          path,
+          op: op === "write" ? "write" : "edit",
+          before: before && before.trim() ? before : undefined,
+          after: after && after.trim() ? after : undefined,
+        });
       }
       continue;
     }
@@ -380,10 +432,45 @@ export function buildForgeTimeline(timeline: SSEEvent[], running = false): Forge
     if (ev.type === "canceled") {
       const message = typeof data.message === "string" ? data.message : "Cancelado";
       items.push({
-        type: "RESULT",
+        type: "CLOSURE",
         id: `canceled-${ts}`,
         ok: false,
-        text: truncate(message, 120),
+        canceled: true,
+        text: truncate(message, 200),
+      });
+      continue;
+    }
+
+    if (ev.type === "finish") {
+      if (thoughtId) flushThought(ts);
+      const ok = data.ok !== false && !data.canceled;
+      const summary = typeof data.summary === "string" && data.summary.trim()
+        ? data.summary.trim()
+        : ok
+          ? "Trabalho concluído"
+          : "Encerrado";
+      items.push({
+        type: "CLOSURE",
+        id: `finish-${ts}`,
+        ok,
+        canceled: data.canceled === true,
+        text: truncate(summary, 240),
+      });
+      continue;
+    }
+
+    if (ev.type === "done") {
+      const summary = typeof data.summary === "string" && data.summary.trim()
+        ? data.summary.trim()
+        : undefined;
+      // done sem summary: sinal operacional (tokens/cost) — não gera fechamento visual.
+      if (!summary) continue;
+      if (thoughtId) flushThought(ts);
+      items.push({
+        type: "CLOSURE",
+        id: `done-${ts}`,
+        ok: true,
+        text: truncate(summary, 240),
       });
       continue;
     }
@@ -452,7 +539,12 @@ const TOOL_BRIEF_VERBS: Record<string, string> = {
   web_fetch: "Consultando",
 };
 
-export function toolBriefing(name: string, path?: string): string {
+export function toolBriefing(name: string, path?: string, intent?: string): string {
+  // Intenção explícita do agente (step_intent) vence — traduz o "porquê", não só o "o quê".
+  if (intent && intent.trim()) {
+    const t = intent.trim();
+    return `${t.charAt(0).toUpperCase()}${t.slice(1)}…`;
+  }
   const verb = TOOL_BRIEF_VERBS[name] ?? `Usando ${name}`;
   const file = path ? fileBase(path) : "";
   if (name === "shell_exec") return file ? `Executando ${file}…` : "Executando comando…";

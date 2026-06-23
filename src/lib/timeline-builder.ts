@@ -1,7 +1,15 @@
 import type { SSEEvent } from "@/lib/agent-progress";
 import { buildForgeTimeline, toolBriefing, type ForgeTimelineItem } from "@/lib/forge-run";
 
-export type TimelineEntryKind = "thought" | "tool" | "result" | "phase" | "checkpoint";
+export type TimelineEntryKind =
+  | "thought"
+  | "tool"
+  | "result"
+  | "phase"
+  | "checkpoint"
+  | "briefing"
+  | "diff"
+  | "closure";
 
 export type TimelineEntry = {
   id: string;
@@ -15,6 +23,12 @@ export type TimelineEntry = {
   emoji?: string;
   active?: boolean;
   evidence?: string[];
+  // Novos campos para os tipos ricos
+  text?: string; // briefing (texto pro usuário) / closure (síntese)
+  before?: string; // diff: conteúdo anterior
+  after?: string; // diff: conteúdo novo
+  op?: "write" | "edit"; // diff: tipo de operação
+  canceled?: boolean; // closure cancelada
 };
 
 function tsFromId(id: string): number {
@@ -42,7 +56,7 @@ function mapForgeItem(item: ForgeTimelineItem, running: boolean): TimelineEntry 
         active: item.active,
       };
     case "TOOL": {
-      const brief = toolBriefing(item.name, item.path);
+      const brief = toolBriefing(item.name, item.path, item.intent);
       const label = brief ? brief.replace(/…$/, "") : item.name;
       return {
         id: item.id,
@@ -73,6 +87,35 @@ function mapForgeItem(item: ForgeTimelineItem, running: boolean): TimelineEntry 
         label: item.text,
         ok: item.ok,
         detail: item.text,
+      };
+    case "BRIEFING":
+      return {
+        id: item.id,
+        kind: "briefing",
+        ts: tsFromId(item.id),
+        label: item.text.slice(0, 80),
+        text: item.text,
+      };
+    case "DIFF":
+      return {
+        id: item.id,
+        kind: "diff",
+        ts: tsFromId(item.id),
+        label: item.path,
+        path: item.path,
+        op: item.op,
+        before: item.before,
+        after: item.after,
+      };
+    case "CLOSURE":
+      return {
+        id: item.id,
+        kind: "closure",
+        ts: tsFromId(item.id),
+        label: item.canceled ? "Cancelado" : item.ok ? "Concluído" : "Encerrado",
+        text: item.text,
+        ok: item.ok,
+        canceled: item.canceled,
       };
   }
 }
