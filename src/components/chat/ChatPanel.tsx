@@ -1,19 +1,14 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Loader2 } from "lucide-react";
+import { useCallback, useMemo } from "react";
 import type { AgentComposerMode, ChatMessage } from "@/lib/chat-types";
 import { formatClarifyChoiceReply } from "@/lib/clarify-choices";
 import type { ClarifyChoice } from "@/lib/chat/types";
 import type { StoredMessagePart } from "@/lib/chat-attachments";
 import { useChat } from "@/hooks/useChat";
-import {
-  type ChatScrollMode,
-  shouldAnchorNewUserMessage,
-  shouldHoldUserMessageAnchor,
-} from "@/lib/chat/user-message-anchor";
+import { useChatScroll } from "@/hooks/useChatScroll";
+import { shouldHoldUserMessageAnchor } from "@/lib/chat/user-message-anchor";
 import { ChatThread } from "./ChatThread";
 import { ChatPlanDock } from "./ChatPlanDock";
 import { ChatComposer } from "./ChatComposer";
-import { ChatEmptyState } from "./ChatEmptyState";
 import { PendingQueuePanel, type PendingQueueItem } from "@/components/editor/PendingQueuePanel";
 import type { PlanStep } from "@/lib/agent-progress";
 import type { useAgentRun } from "@/hooks/useAgentRun";
@@ -91,7 +86,6 @@ export function ChatPanel({
   const {
     thread,
     pendingPlan,
-    showEmptyState,
     messagesLoading: chatLoading,
     agentBusy,
     busyReason,
@@ -107,81 +101,12 @@ export function ChatPanel({
     focusedRunId,
   });
 
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const pinnedToBottom = useRef(true);
-  const initialScrollDoneRef = useRef(false);
-  const isProgrammaticScrollRef = useRef(false);
-  const previousUserMessageIdRef = useRef<string | null>(null);
-  const userScrolledAwayRef = useRef(false);
-  const userJustSentRef = useRef(false);
-  const [showPill, setShowPill] = useState(false);
-  const [suggestionPrompt, setSuggestionPrompt] = useState<string | null>(null);
-  const [scrollMode, setScrollMode] = useState<ChatScrollMode>("bottom");
-  const PIN_THRESHOLD_PX = 100;
-
   const holdUserAnchor = shouldHoldUserMessageAnchor({
     isPendingRun: agent.isPendingRun,
     running,
     activeRunId: agent.activeRunId,
     finished: agent.progress.finished,
   });
-
-  const runProgrammaticScroll = useCallback((fn: () => void) => {
-    isProgrammaticScrollRef.current = true;
-    fn();
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        isProgrammaticScrollRef.current = false;
-      });
-    });
-  }, []);
-
-  const scrollToBottom = useCallback(
-    (behavior: ScrollBehavior = "auto") => {
-      const el = scrollRef.current;
-      if (!el) return;
-      runProgrammaticScroll(() => {
-        el.scrollTo({ top: el.scrollHeight, behavior });
-        pinnedToBottom.current = true;
-        setScrollMode("bottom");
-        userScrolledAwayRef.current = false;
-        setShowPill(false);
-      });
-    },
-    [runProgrammaticScroll],
-  );
-
-  const anchorUserBubble = useCallback(
-    (messageId: string, behavior: ScrollBehavior = "auto"): boolean => {
-      const container = scrollRef.current;
-      if (!container) return false;
-      const bubble = container.querySelector<HTMLElement>(`[data-user-msg-id="${messageId}"]`);
-      if (!bubble) return false;
-      runProgrammaticScroll(() => {
-        bubble.scrollIntoView({ block: "start", behavior });
-        pinnedToBottom.current = false;
-        setScrollMode("user-anchor");
-        userScrolledAwayRef.current = false;
-        setShowPill(false);
-      });
-      return true;
-    },
-    [runProgrammaticScroll],
-  );
-
-  const handleScroll = useCallback(() => {
-    if (isProgrammaticScrollRef.current) return;
-    const el = scrollRef.current;
-    if (!el) return;
-    const dist = el.scrollHeight - el.scrollTop - el.clientHeight;
-    pinnedToBottom.current = dist <= PIN_THRESHOLD_PX;
-
-    if (pinnedToBottom.current && !holdUserAnchor) {
-      setScrollMode("bottom");
-      userScrolledAwayRef.current = false;
-      setShowPill(false);
-    }
-  }, [holdUserAnchor]);
 
   const lastUserMessageId = useMemo(() => {
     for (let i = thread.length - 1; i >= 0; i--) {
@@ -191,68 +116,28 @@ export function ChatPanel({
     return null;
   }, [thread]);
 
-  useEffect(() => {
-    initialScrollDoneRef.current = false;
-    previousUserMessageIdRef.current = null;
-    userScrolledAwayRef.current = false;
-    userJustSentRef.current = false;
-    pinnedToBottom.current = true;
-    setScrollMode("bottom");
-  }, [conversationId]);
-
-  useEffect(() => {
-    if (chatLoading) return;
-    if (initialScrollDoneRef.current) return;
-    initialScrollDoneRef.current = true;
-    pinnedToBottom.current = true;
-    setScrollMode("bottom");
-    const raf = requestAnimationFrame(() => scrollToBottom("auto"));
-    return () => cancelAnimationFrame(raf);
-  }, [chatLoading, scrollToBottom]);
-
-  useEffect(() => {
-    const prevUserMessageId = previousUserMessageIdRef.current;
-    previousUserMessageIdRef.current = lastUserMessageId;
-
-    if (!shouldAnchorNewUserMessage(prevUserMessageId, lastUserMessageId, initialScrollDoneRef.current)) {
-      return;
-    }
-    setScrollMode("user-anchor");
-    if (userJustSentRef.current) {
-      userScrolledAwayRef.current = false;
-      userJustSentRef.current = false;
-    }
-    const id = lastUserMessageId;
-    const raf = requestAnimationFrame(() => {
-      if (id) anchorUserBubble(id, "smooth");
-    });
-    return () => cancelAnimationFrame(raf);
-  }, [lastUserMessageId, anchorUserBubble]);
-
-  useEffect(() => {
-    if (scrollMode === "bottom" && pinnedToBottom.current) {
-      const raf = requestAnimationFrame(() => scrollToBottom());
-      return () => cancelAnimationFrame(raf);
-    }
-    if (!holdUserAnchor) {
-      setShowPill(true);
-    }
-  }, [thread.length, holdUserAnchor, pendingQueueItems.length, scrollMode, scrollToBottom]);
+  const { scrollRef, handleScroll, notifyUserSend, showPill, followToBottom } = useChatScroll({
+    conversationId,
+    chatLoading,
+    thread,
+    lastUserMessageId,
+    holdUserAnchor,
+  });
 
   const handleSend = useCallback(
     (text: string, mode?: AgentComposerMode, parts?: StoredMessagePart[]) => {
-      userJustSentRef.current = true;
-      setScrollMode("user-anchor");
+      notifyUserSend();
       onSend(text, mode ?? composerMode, parts);
     },
-    [onSend, composerMode],
+    [notifyUserSend, onSend, composerMode],
   );
 
   const handleClarifySelect = useCallback(
     (choice: ClarifyChoice) => {
+      notifyUserSend();
       onSend(formatClarifyChoiceReply(choice), composerMode);
     },
-    [onSend, composerMode],
+    [notifyUserSend, onSend, composerMode],
   );
 
   const lastAssistantMessageId = useMemo(() => {
@@ -272,24 +157,12 @@ export function ChatPanel({
     [onRollbackMessage],
   );
 
+  const chatHydrating = chatLoading;
+
   return (
     <div className="forge-chat-inner">
-      <div ref={scrollRef} className="forge-messages" onScroll={handleScroll}>
-        {chatLoading && messages.length === 0 ? (
-          <div
-            className="flex items-center gap-2 py-6 text-[var(--text-muted)]"
-            data-testid="forge-chat-loading"
-          >
-            <Loader2 className="size-4 shrink-0 animate-spin" />
-            <span className="text-sm">Carregando conversa…</span>
-          </div>
-        ) : showEmptyState && messages.length === 0 ? (
-          <ChatEmptyState
-            onPickSuggestion={(prompt) => {
-              setSuggestionPrompt(prompt);
-            }}
-          />
-        ) : (
+      <div ref={scrollRef} className="forge-messages" onScroll={handleScroll} tabIndex={0}>
+        {!chatHydrating && (
           <ChatThread
             items={thread}
             onOpenInspector={onOpenInspector}
@@ -305,7 +178,7 @@ export function ChatPanel({
           <button
             type="button"
             className="forge-new-messages-pill"
-            onClick={() => scrollToBottom("smooth")}
+            onClick={followToBottom}
           >
             Novas mensagens
           </button>
@@ -353,11 +226,8 @@ export function ChatPanel({
         onStop={onStop}
         onVisualEdits={onVisualEdits}
         visualEditsActive={visualEditsActive}
-        externalPrompt={externalPrompt ?? suggestionPrompt}
-        onExternalPromptConsumed={() => {
-          setSuggestionPrompt(null);
-          onExternalPromptConsumed?.();
-        }}
+        externalPrompt={externalPrompt}
+        onExternalPromptConsumed={onExternalPromptConsumed}
       />
     </div>
   );

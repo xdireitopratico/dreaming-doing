@@ -272,31 +272,32 @@ describe("Fase 2.3 — Version history (snapshot list + tab)", () => {
 });
 
 
-describe("Fase 2.5 — Empty state tem 4 cards de sugestão", () => {
-  it("ChatEmptyState exporta e tem 4 cards", async () => {
-    const { readFileSync } = await import("node:fs");
-    const { resolve } = await import("node:path");
-    const src = readFileSync(
-      resolve(import.meta.dirname, "../components/chat/ChatEmptyState.tsx"),
-      "utf8",
-    );
-    expect(src).toContain("Build a TODO app");
-    expect(src).toContain("Create a landing page");
-    expect(src).toContain("Add user authentication");
-    expect(src).toContain("Connect to a database");
-    // Verifica que cada card tem onClick
-    expect(src).toContain("onPickSuggestion");
-  });
 
-  it("ChatPanel renderiza ChatEmptyState quando showEmptyState", async () => {
+
+describe("Chat — sem empty state nem flash de carregamento", () => {
+  it("ChatPanel não referencia empty state", async () => {
     const { readFileSync } = await import("node:fs");
     const { resolve } = await import("node:path");
-    const src = readFileSync(
+    const panel = readFileSync(
       resolve(import.meta.dirname, "../components/chat/ChatPanel.tsx"),
       "utf8",
     );
-    expect(src).toContain("ChatEmptyState");
-    expect(src).toContain("setSuggestionPrompt");
+    expect(panel).not.toContain("ChatEmptyState");
+    expect(panel).not.toContain("showEmptyState");
+    expect(panel).not.toContain("Vamos construir");
+    expect(panel).not.toContain("Carregando conversa");
+    expect(panel).toContain("chatHydrating");
+  });
+
+  it("useEditorPageData bloqueia até conversation + messages", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { resolve } = await import("node:path");
+    const src = readFileSync(
+      resolve(import.meta.dirname, "../routes/projects/$projectId/useEditorPageData.ts"),
+      "utf8",
+    );
+    expect(src).toContain("conversationPending");
+    expect(src).toContain("chatMessagesLoading = conversationPending");
   });
 });
 

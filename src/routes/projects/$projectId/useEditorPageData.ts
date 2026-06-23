@@ -34,7 +34,7 @@ export function useEditorPageData({ projectId, search, agent, navigate }: UseEdi
     },
   });
 
-  const { data: conversation } = useQuery({
+  const { data: conversation, isPending: conversationPending } = useQuery({
     queryKey: ["conversation", projectId],
     queryFn: async () => {
       const { data } = await supabase
@@ -64,8 +64,8 @@ export function useEditorPageData({ projectId, search, agent, navigate }: UseEdi
     enabled: !!conversation,
   });
 
-  /** Só bloqueia no 1º load (sem cache). Refetch pós-envio mantém o thread visível — evita flash. */
-  const chatMessagesLoading = !!conversation?.id && messagesPending;
+  /** Só bloqueia no 1º load (sem cache). Inclui conversation para não flashar empty state. */
+  const chatMessagesLoading = conversationPending || (!!conversation?.id && messagesPending);
 
   const { data: files } = useQuery({
     queryKey: ["files", projectId],

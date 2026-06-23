@@ -146,16 +146,6 @@ export function useChat({
     focusedRunId,
   ]);
 
-  const showEmptyState = useMemo(() => {
-    if (messagesLoading) return false;
-    if (messages.length > 0) return false;
-    if (agentHasRun) return false;
-    if (agent.activeRunId) return false;
-    return true;
-  }, [messagesLoading, messages.length, agentHasRun, agent.activeRunId]);
-
-
-
   const agentBusy = !!(
     agent.activeRunId &&
     !agent.progress.finished &&
@@ -185,7 +175,6 @@ export function useChat({
     thread,
     progress,
     pendingPlan,
-    showEmptyState,
     messagesLoading,
     agentBusy,
     activeRunId: agent.activeRunId,
