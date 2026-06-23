@@ -138,9 +138,20 @@ export function llmErrorHint(err: unknown, robinActive: boolean): ErrorHint {
     };
   }
 
+  if (/create_plan.*modo plan/i.test(lower)) {
+    return {
+      message: "O modelo tentou usar create_plan fora do modo Plan.",
+      action: "Copiar detalhes",
+      link: null,
+      severity: "warning",
+      code: "mode.create_plan_mismatch",
+      tip: "Composer: Chat = conversa direta; Plan = planos (create_plan); Build = código.",
+    };
+  }
+
   return {
     message: msg.slice(0, 300),
-    action: "Reportar problema",
+    action: "Copiar detalhes",
     link: null,
     severity: "error",
     code: "llm.unknown",

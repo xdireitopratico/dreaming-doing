@@ -354,13 +354,23 @@ export async function runBuildExecutePhase(
       } = splitMetaToolCalls(response.tool_calls ?? []);
 
       if (createPlanCall) {
-        return {
-          ok: false,
-          error: "create_plan só é válido em modo Plan.",
-          summary: "create_plan só é válido em modo Plan.",
-          steps: loopStep,
-          toolsUsed: [...deps.toolsUsed, "create_plan"],
-        };
+        deps.state.messages.push({
+          role: "assistant",
+          content: response.content ?? assistantText,
+          tool_calls: response.tool_calls?.map((tc) => ({
+            id: tc.id,
+            type: "function" as const,
+            function: { name: tc.name, arguments: JSON.stringify(tc.arguments) },
+          })),
+        });
+        deps.state.messages.push({
+          role: "user",
+          content:
+            "create_plan só existe no modo Plan (dropdown do composer). " +
+            "Você está em modo Build — use fs_read/fs_edit/shell_exec ou responda em texto. " +
+            "Se o usuário pediu um plano formal, peça para mudar o composer para Plan.",
+        });
+        continue;
       }
 
       if (clarifyCall && execCalls.length === 0) {

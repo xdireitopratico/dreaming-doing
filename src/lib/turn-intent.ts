@@ -32,6 +32,10 @@ const PLAN_RE =
 const BUILD_RE =
   /\b(?:pode\s+executar|executa|execute|implemente|implementa|corrija|corrigir|conserte|arrume|fa[cç]a|crie|criar|adicione|remova|delete|exclua|refatore|altere|mude|instale|rode|roda|build|deploy|commit|push|programar|codar|mexer\s+nos\s+arquivos)\b/i;
 
+/** Pedido explícito de executar plano já aprovado — mesmo com composer em Plan. */
+const EXECUTE_PLAN_RE =
+  /\b(?:pode\s+executar|execut[ae]\s+o\s+plano|rodar\s+o\s+plano|implement[ae]\s+o\s+plano)\b/i;
+
 export function isExplicitBuildRequest(text: string): boolean {
   return BUILD_RE.test(text.trim());
 }
@@ -55,14 +59,6 @@ export function resolveTurnIntent(input: ResolveTurnIntentInput): TurnIntent {
     return { kind: "chat", runMode: "chat", reason: "explicit_chat_only" };
   }
 
-  if (BUILD_RE.test(text)) {
-    return { kind: "build", runMode: "build", reason: "action_verb" };
-  }
-
-  if (input.hasAttachments && requestedMode === "build") {
-    return { kind: "build", runMode: "build", reason: "attachment_build_mode" };
-  }
-
   if (SOCIAL_RE.test(text)) {
     return { kind: "chat", runMode: "chat", reason: "social" };
   }
@@ -71,13 +67,29 @@ export function resolveTurnIntent(input: ResolveTurnIntentInput): TurnIntent {
     return { kind: "chat", runMode: "chat", reason: "question_or_status" };
   }
 
-  if (requestedMode === "plan" || PLAN_RE.test(text)) {
-    return { kind: "plan", runMode: "plan", reason: "plan_mode_or_terms" };
+  /** Composer Plan: default plan — não deixar BUILD_RE ("crie") roubar o modo. */
+  if (requestedMode === "plan") {
+    if (EXECUTE_PLAN_RE.test(text)) {
+      return { kind: "build", runMode: "build", reason: "execute_in_plan_composer" };
+    }
+    return { kind: "plan", runMode: "plan", reason: "composer_plan_mode" };
+  }
+
+  if (BUILD_RE.test(text)) {
+    return { kind: "build", runMode: "build", reason: "action_verb" };
+  }
+
+  if (input.hasAttachments && requestedMode === "build") {
+    return { kind: "build", runMode: "build", reason: "attachment_build_mode" };
+  }
+
+  if (PLAN_RE.test(text)) {
+    return { kind: "plan", runMode: "plan", reason: "plan_terms" };
   }
 
   if (text.length <= 280 && !/[.!?]?\s*(?:agora|hoje|nessa tela|nesse arquivo)\b/i.test(text)) {
     return { kind: "chat", runMode: "chat", reason: "short_non_action" };
   }
 
-  return { kind: "build", runMode: "build", reason: "build_mode_default" };
+  return { kind: "build", runMode: "build", reason: "composer_build_default" };
 }

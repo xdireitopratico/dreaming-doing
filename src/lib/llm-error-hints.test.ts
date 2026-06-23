@@ -62,6 +62,12 @@ describe("llmErrorHint", () => {
   it("falls back to llm.unknown for unclassified errors", () => {
     const hint = llmErrorHint(new Error("alguma coisa estranha"), false);
     expect(hint.code).toBe("llm.unknown");
+    expect(hint.action).toBe("Copiar detalhes");
+  });
+
+  it("detecta create_plan fora do modo Plan", () => {
+    const hint = llmErrorHint(new Error("create_plan só é válido em modo Plan."), false);
+    expect(hint.code).toBe("mode.create_plan_mismatch");
   });
 
   it("truncates long messages to 300 chars", () => {

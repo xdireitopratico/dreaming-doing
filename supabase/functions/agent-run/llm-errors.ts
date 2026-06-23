@@ -134,6 +134,12 @@ export function friendlyLlmError(err: unknown, robinActive: boolean): string {
   if (isConnectionError(err)) {
     return "Conexão com o modelo instável. Seu histórico está salvo — use Continuar para retomar.";
   }
+  if (lower.includes("create_plan") && lower.includes("modo plan")) {
+    return (
+      "O modelo tentou usar create_plan fora do modo Plan. " +
+      "No composer: Chat = conversa; Plan = planos formais; Build = implementação."
+    );
+  }
   if (isProviderError(err)) {
     return (
       "Provedor de modelo retornou erro 5xx (provavelmente incompatibilidade de payload). " +

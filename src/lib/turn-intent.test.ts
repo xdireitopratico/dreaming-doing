@@ -38,6 +38,15 @@ describe("resolveTurnIntent", () => {
     ).toMatchObject({ kind: "plan", runMode: "plan" });
   });
 
+  it("composer Plan não vira build só por verbo criar", () => {
+    expect(
+      resolveTurnIntent({
+        text: "crie um plano detalhado para a landing",
+        composerMode: "plan",
+      }),
+    ).toMatchObject({ kind: "plan", runMode: "plan", reason: "composer_plan_mode" });
+  });
+
   it("composer Chat força runMode chat", () => {
     expect(
       resolveTurnIntent({

@@ -76,7 +76,15 @@ export function ErrorHintCard({ hint, onAction }: ErrorHintCardProps) {
               ) : (
                 <button
                   type="button"
-                  onClick={onAction}
+                  onClick={() => {
+                    if (onAction) {
+                      onAction();
+                      return;
+                    }
+                    void navigator.clipboard?.writeText(
+                      [hint.message, hint.tip, hint.code].filter(Boolean).join("\n"),
+                    );
+                  }}
                   className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-current/30 font-mono text-[10px] uppercase tracking-wider transition-colors ${style.actionClass}`}
                   data-testid="error-hint-action"
                 >

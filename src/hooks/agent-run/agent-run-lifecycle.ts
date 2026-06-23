@@ -90,7 +90,7 @@ export function createLifecycleHandlers(deps: LifecycleHandlersDeps) {
           : {}),
         resume: manualResume,
         autoResume: false,
-        mode: options?.mode ?? "build",
+        mode: options?.mode ?? "chat",
         ...loadAgentSessionExtensions(),
       });
 
