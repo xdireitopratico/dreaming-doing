@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { Check, FileText, Loader2, Play, SkipForward } from "lucide-react";
+import { useCallback, useState } from "react";
+import { Check, Loader2, Play, SkipForward } from "lucide-react";
 import type { PendingPlan, PlanStep } from "@/lib/agent-progress";
 import { buildForgePlanMarkdown } from "@/lib/plan-document";
 import { enabledPlanSteps } from "@/lib/forge-run";
@@ -12,8 +12,6 @@ export type ChatPlanDockProps = {
   onReview?: (runId: string) => void;
   onApprove?: (steps: PlanStep[], markdown?: string) => void | Promise<void>;
   onReject?: (reason?: string) => void | Promise<void>;
-  /** When set, renders in read-only mode showing plan status (approved/rejected). */
-  status?: "approved" | "rejected";
 };
 
 export function ChatPlanDock({
@@ -22,13 +20,30 @@ export function ChatPlanDock({
   onReview,
   onApprove,
   onReject,
-  status,
 }: ChatPlanDockProps) {
   const [busy, setBusy] = useState<"approve" | "reject" | null>(null);
-  const [showCreatingSkeleton, setShowCreatingSkeleton] = useState(false);
-  const skeletonStartedAtRef = useRef<number | null>(null);
-  const skeletonHideTimerRef = useRef<number | null>(null);
 
+  /* ─── Skeleton: show while creating plan ────────────────────────── */
+  if (creating && !pendingPlan) {
+    return (
+      <div className="forge-plan-dock" data-testid="chat-plan-dock-creating">
+        <div className="forge-plan-dock-shell">
+          <div className="forge-plan-dock-shimmer-lines" aria-hidden>
+            <div className="forge-plan-dock-shimmer-line" style={{ width: "45%" }} />
+            <div className="forge-plan-dock-shimmer-line" style={{ width: "78%" }} />
+            <div className="forge-plan-dock-shimmer-line" style={{ width: "62%" }} />
+            <div className="forge-plan-dock-shimmer-line" style={{ width: "38%" }} />
+          </div>
+          <p className="forge-plan-dock-creating-label">Creating plan…</p>
+        </div>
+      </div>
+    );
+  }
+
+  /* ─── Nothing to show ───────────────────────────────────────────── */
+  if (!pendingPlan) return null;
+
+  /* ─── Handlers ──────────────────────────────────────────────────── */
   const handleApprove = useCallback(async () => {
     if (!pendingPlan || !onApprove) return;
     setBusy("approve");
@@ -58,135 +73,26 @@ export function ChatPlanDock({
     }
   }, [onReject]);
 
-  useEffect(() => {
-    if (skeletonHideTimerRef.current !== null) {
-      window.clearTimeout(skeletonHideTimerRef.current);
-      skeletonHideTimerRef.current = null;
-    }
-
-    if (creating && !pendingPlan) {
-      if (skeletonStartedAtRef.current === null) {
-        skeletonStartedAtRef.current = Date.now();
-      }
-      setShowCreatingSkeleton(true);
-      return undefined;
-    }
-
-    const startedAt = skeletonStartedAtRef.current;
-    if (startedAt === null) {
-      setShowCreatingSkeleton(false);
-      return undefined;
-    }
-
-    const elapsed = Date.now() - startedAt;
-    const minVisibleMs = 420;
-
-    if (elapsed < minVisibleMs) {
-      setShowCreatingSkeleton(true);
-      skeletonHideTimerRef.current = window.setTimeout(() => {
-        setShowCreatingSkeleton(false);
-        skeletonStartedAtRef.current = null;
-        skeletonHideTimerRef.current = null;
-      }, minVisibleMs - elapsed);
-      return () => {
-        if (skeletonHideTimerRef.current !== null) {
-          window.clearTimeout(skeletonHideTimerRef.current);
-          skeletonHideTimerRef.current = null;
-        }
-      };
-    }
-
-    setShowCreatingSkeleton(false);
-    skeletonStartedAtRef.current = null;
-    return undefined;
-  }, [creating, pendingPlan]);
-
-  if (status && pendingPlan) {
-    const phases = planPhasesFromPlan(pendingPlan);
-    const approved = status === "approved";
-    return (
-      <div className="forge-plan-dock" data-testid="chat-plan-status-readonly">
-        <div className={`forge-plan-status-card forge-plan-status-card--${status}`}>
-          <div className="forge-plan-status-header">
-            <span className={`forge-plan-status-badge forge-plan-status-badge--${status}`}>
-              {approved ? "Approved" : "Rejected"}
-            </span>
-            <span className="forge-plan-status-label">
-              {approved ? "Plano aprovado" : "Plano rejeitado"}
-            </span>
-          </div>
-          <div className="forge-plan-dock-inner">
-            {phases.length > 0 ? (
-              <PlanPhaseList phases={phases} />
-            ) : (
-              <>
-                <p className="forge-plan-dock-label forge-plan-dock-label--icon">
-                  <FileText className="size-3" aria-hidden />
-                  Plan
-                </p>
-                <p className="forge-plan-dock-body">{planParagraphFromPlan(pendingPlan)}</p>
-              </>
-            )}
-          </div>
-          {onReview && (
-            <div className="forge-composer-row">
-              <div className="forge-composer-row-start">
-                <button
-                  type="button"
-                  className="forge-plan-dock-btn"
-                  onClick={() => onReview(pendingPlan.runId)}
-                >
-                  {approved ? "Open approved plan" : "Open rejected plan"}
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  }
-
-  if (!creating && !pendingPlan) return null;
-
-  if (showCreatingSkeleton) {
-    return (
-      <div className="forge-plan-dock" data-testid="chat-plan-dock-creating">
-        <div className="forge-plan-dock-shell">
-          <div className="forge-plan-dock-inner">
-            <div className="forge-plan-dock-shimmer-lines" aria-hidden>
-              <div className="forge-plan-dock-shimmer-line" style={{ width: "45%" }} />
-              <div className="forge-plan-dock-shimmer-line" style={{ width: "78%" }} />
-              <div className="forge-plan-dock-shimmer-line" style={{ width: "62%" }} />
-              <div className="forge-plan-dock-shimmer-line" style={{ width: "38%" }} />
-            </div>
-          </div>
-          <p className="forge-plan-dock-creating-label">Creating plan…</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (!pendingPlan) return null;
-
-  /* ─── Ready plan from create_plan tool — structured phases (pre-regression) ── */
+  /* ─── Ready plan — structured phases or markdown fallback ──────── */
   const phases = planPhasesFromPlan(pendingPlan);
+  const hasPhases = phases.length > 0;
 
   return (
     <div className="forge-plan-dock" data-testid="chat-plan-dock-ready">
-      <div className="forge-plan-dock-shell">
-        <div className="forge-plan-dock-inner">
-          {phases.length > 0 ? (
-            <PlanPhaseList phases={phases} />
-          ) : (
-            <>
-              <p className="forge-plan-dock-label forge-plan-dock-label--icon">
-                <Play className="size-3" aria-hidden />
-                Plan
-              </p>
-              <p className="forge-plan-dock-body">{planParagraphFromPlan(pendingPlan)}</p>
-            </>
-          )}
-        </div>
+      <div className="forge-plan-dock-shell forge-plan-dock-shell--ready">
+        {hasPhases ? (
+          /* Structured plan — PlanPhaseList renders directly (no inner-dark panel) */
+          <PlanPhaseList phases={phases} />
+        ) : (
+          /* Markdown fallback — inner-dark panel is correct here */
+          <div className="forge-plan-dock-inner">
+            <p className="forge-plan-dock-label forge-plan-dock-label--icon">
+              <Play className="size-3" aria-hidden />
+              Plan
+            </p>
+            <p className="forge-plan-dock-body">{planParagraphFromPlan(pendingPlan)}</p>
+          </div>
+        )}
 
         <div className="forge-composer-row">
           <div className="forge-composer-row-start">

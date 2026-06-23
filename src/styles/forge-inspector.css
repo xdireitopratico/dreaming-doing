@@ -720,6 +720,121 @@
   padding: var(--space-md) var(--space-lg);
 }
 
+/* ─── Design Direction Card ─────────────────────────────────────────── */
+
+.forge-plan-design {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  padding: var(--space-md);
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--border-forge) 80%, transparent);
+  background: color-mix(in srgb, var(--bg-card) 70%, transparent);
+}
+
+.forge-plan-design-heading {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.forge-plan-design-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.forge-plan-design-tag {
+  font-size: 11px;
+  font-weight: 500;
+  padding: 2px 10px;
+  border-radius: 9999px;
+  background: color-mix(in srgb, var(--bg-input) 60%, transparent);
+  color: var(--text-secondary);
+  border: 1px solid color-mix(in srgb, var(--border-forge) 60%, transparent);
+}
+
+.forge-plan-design-tag--brand {
+  background: var(--text-accent);
+  color: #0a0a0a;
+  border-color: transparent;
+}
+
+.forge-plan-design-moment {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+.forge-plan-design-moment strong {
+  color: var(--text-primary);
+}
+
+.forge-plan-design-synthesis {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.forge-plan-design-section {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.forge-plan-design-section-label {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.forge-plan-design-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.forge-plan-design-chip {
+  font-size: 10px;
+  padding: 1px 8px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--bg-input) 50%, transparent);
+  color: var(--text-secondary);
+}
+
+.forge-plan-design-ref {
+  font-size: 11px;
+  color: var(--text-accent);
+  text-decoration: none;
+  opacity: 0.8;
+  display: inline-block;
+  margin-right: 8px;
+}
+
+.forge-plan-design-ref:hover {
+  text-decoration: underline;
+}
+
+.forge-plan-design-antipatterns {
+  margin-top: var(--space-xs);
+}
+
+.forge-plan-design-antipatterns summary {
+  font-size: 11px;
+  cursor: pointer;
+  color: var(--text-muted);
+}
+
+.forge-plan-design-antipatterns ul {
+  font-size: 11px;
+  color: var(--text-muted);
+  padding-left: 16px;
+  margin: 4px 0 0;
+}
+
 .forge-inspector-plan-markdown {
   font: var(--font-chat);
   font-size: 14px;
