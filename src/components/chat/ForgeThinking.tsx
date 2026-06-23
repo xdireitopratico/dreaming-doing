@@ -1,51 +1,25 @@
-import { useState } from "react";
-import { ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { ChatThoughtState } from "@/lib/chat/types";
+import type { ChatThinkingState } from "@/lib/chat/types";
 
 type ForgeThinkingProps = {
-  thought: ChatThoughtState;
+  state: ChatThinkingState;
 };
 
-/** Topo do AssistantTurn — «Pensando…» / «Pensou por Xs» com raciocínio colapsável. */
-export function ForgeThinking({ thought }: ForgeThinkingProps) {
-  const [open, setOpen] = useState(thought.status === "active");
-  const hasBody = !!thought.text?.trim();
+/** Topo do AssistantTurn — só estado: «Pensando…» / «Pensou por Xs». Raciocínio no inspector. */
+export function ForgeThinking({ state }: ForgeThinkingProps) {
   const label =
-    thought.status === "active"
-      ? "Pensando…"
-      : `Pensou por ${thought.durationSec}s`;
+    state.status === "active" ? "Pensando…" : `Pensou por ${state.durationSec}s`;
 
   return (
-    <div
+    <p
       className={cn(
-        "forge-chat-thought-line",
-        thought.status === "active" && "forge-animate-thinking",
+        "forge-chat-thought-line forge-chat-thought-label",
+        state.status === "active" && "forge-animate-thinking",
       )}
       data-testid="forge-thinking"
     >
-      {hasBody ? (
-        <>
-          <button
-            type="button"
-            className="forge-chat-thought-trigger"
-            onClick={() => setOpen((v) => !v)}
-            aria-expanded={open}
-          >
-            <span aria-hidden>💡</span>
-            <span>{label}</span>
-            <ChevronDown
-              className={cn("forge-details-chevron size-3.5", open && "forge-details-chevron--open")}
-            />
-          </button>
-          {open && <p className="forge-chat-thought-body">{thought.text}</p>}
-        </>
-      ) : (
-        <p className="forge-chat-thought-label">
-          <span aria-hidden>💡</span>
-          <span>{label}</span>
-        </p>
-      )}
-    </div>
+      <span aria-hidden>💡</span>
+      <span>{label}</span>
+    </p>
   );
 }

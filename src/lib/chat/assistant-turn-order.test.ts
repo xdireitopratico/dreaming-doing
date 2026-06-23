@@ -12,6 +12,7 @@ describe("AssistantTurn — ordem de renderização", () => {
   it("sequência: Narração → mini-card → fechamento LLM", () => {
     const source = readFileSync(ASSISTANT_TURN_PATH, "utf8");
     const markers = [
+      "{showThinking &&",
       "{showNarration &&",
       "{showJobCard &&",
       "{showClarify &&",

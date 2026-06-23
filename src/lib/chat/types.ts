@@ -58,15 +58,17 @@ export type ClarifyPrompt = {
   choices: ClarifyChoice[];
 };
 
-/** Linha única de trabalho no chat — Pensando… ou Pensou por Xs. */
-export type ChatWorkingState =
+/** Linha única no chat — só estado; raciocínio fica no inspector. */
+export type ChatThinkingState =
   | { status: "active" }
   | { status: "done"; durationSec: number };
 
-/** Bloco Thought no topo do turno — raciocínio LLM isolado do chat. */
-export type ChatThoughtState =
-  | { status: "active"; text?: string | null }
-  | { status: "done"; durationSec: number; text?: string | null };
+/** @deprecated Use ChatThinkingState — mantido para migração de testes legados. */
+export type ChatWorkingState = ChatThinkingState;
+
+/** @deprecated Use ChatThinkingState — texto de pensamento não vai ao chat. */
+export type ChatThoughtState = ChatThinkingState;
+
 export type ThreadItem =
   | { kind: "user"; message: ChatMessage }
   | {
@@ -84,8 +86,9 @@ export type ThreadItem =
       lastFinishOk?: boolean;
       resumable?: boolean;
       isFocused?: boolean;
-      thought?: ChatThoughtState | null;
-      working?: ChatWorkingState | null;
+      /** Uma linha: Pensando… → Pensou por Xs (mesma posição DOM). */
+      thinking?: ChatThinkingState | null;
+      runStartedAtMs?: number | null;
     }
 
 

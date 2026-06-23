@@ -54,8 +54,7 @@ describe("S15 agent turn flow", () => {
     expect(turn?.kind).toBe("assistant");
     if (turn?.kind !== "assistant") return;
 
-    expect(turn.thought?.status).toBe("done");
-    expect(turn.working).toBeNull();
+    expect(turn.thinking?.status).toBe("done");
     expect(turn.narration).toContain("hero");
     expect(turn.narration).not.toMatch(/hero[\s\S]*hero/i);
     expect(turn.miniCard).toBeTruthy();
@@ -161,7 +160,7 @@ describe("S15 agent turn flow", () => {
     const turn = thread[1];
     expect(turn?.kind).toBe("assistant");
     if (turn?.kind !== "assistant") return;
-    expect(turn.working).toEqual({ status: "active" });
+    expect(turn.thinking).toEqual({ status: "active" });
   });
 
   it("loop natural: abertura no chat, progresso factual só no inspector", () => {

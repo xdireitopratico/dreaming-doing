@@ -188,6 +188,35 @@ describe("buildChatThread", () => {
     }
   });
 
+  it("suprime órfão Entendi quando slot live existe após o último user", () => {
+    const messages: ChatMessage[] = [
+      {
+        id: "a-orphan",
+        role: "assistant",
+        content: "",
+        timestamp: 0,
+        parts: [{ type: "text", text: "Entendi: vou ler o projeto." }],
+      },
+      msg("u1", "user", "continua"),
+    ];
+    const progress = {
+      ...initialAgentProgress,
+      finished: false,
+      narrationText: "Conferindo build…",
+    };
+    const thread = buildChatThread(messages, progress, {
+      running: true,
+      activeRunId: "run-live",
+      sessionProgress: progress,
+    });
+    expect(thread.map((t) => t.kind)).toEqual(["user", "assistant"]);
+    const asst = thread[1];
+    expect(asst?.kind).toBe("assistant");
+    if (asst?.kind === "assistant") {
+      expect(asst.runId).toBe("run-live");
+    }
+  });
+
   it("reordena narração órfã Entendi para depois do último user", () => {
     const messages: ChatMessage[] = [
       {
@@ -236,7 +265,7 @@ describe("buildChatThread", () => {
     expect(asstIdx).toBeGreaterThan(userIdx);
   });
 
-  it("slot live sintético não mostra texto antes da mensagem do DB", () => {
+  it("slot live sintético: intro sim, fechamento só após materializar no DB", () => {
     const messages = [msg("u1", "user", "novo projeto")];
     const progress = {
       ...initialAgentProgress,
@@ -253,7 +282,8 @@ describe("buildChatThread", () => {
     expect(slot).toBeDefined();
     if (slot?.kind === "assistant") {
       expect(slot.isActive).toBe(true);
-      expect(slot.narration).toBeNull();
+      expect(slot.narration).toContain("Vou investigar");
+      expect(slot.thinking?.status).toBe("done");
       expect(slot.streamText).toBeNull();
     }
   });

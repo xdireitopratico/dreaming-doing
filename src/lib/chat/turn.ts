@@ -7,11 +7,8 @@ import { parseClarifyChoices } from "@/lib/clarify-choices";
 import { resolveAssistantProgress } from "@/lib/chat/resolve-progress";
 import { enforceAssistantTurnInvariant } from "@/lib/chat/invariants";
 import {
-  hasRenderedTurnContent,
-  resolveChatWorking,
-  freezeActiveThoughtAsDone,
   resolveTurnNarration,
-  resolveTurnThinking,
+  resolveTurnThinkingLine,
 } from "@/lib/chat/turn-display";
 import { resolveHistoricalRunProgress } from "@/lib/assistant-run-progress";
 import { initialAgentProgress } from "@/lib/agent-progress";
@@ -214,42 +211,31 @@ export function mapAssistantTurn(
   if (planDockActive) streamText = null;
 
   const syntheticLiveSlot =
-    !item.message && !!activeRunId && item.runId === activeRunId && !!(item.isActive || item.live);
+    slotActive &&
+    !item.message &&
+    !!activeRunId &&
+    item.runId === activeRunId &&
+    !!(item.isActive || item.live);
   if (syntheticLiveSlot) {
-    // Antes do DB materializar a mensagem real, o slot só deve mostrar estado,
-    // não um texto "fantasma" que depois é sobreposto.
+    // Fechamento só após materializar no DB; intro (narração) e pensando seguem no live.
     streamText = null;
-    narration = null;
   }
 
+  const { line: thinking, frozen: thinkingFrozen } = resolveTurnThinkingLine({
+    resolved,
+    slotActive,
+    runStartedAtMs,
+    narration,
+    streamText,
+    isClarifyOnly,
+  });
+
+  const canShowMiniCardLive = !slotActive || thinkingFrozen;
   const persistMiniCard =
-    !!runView && (showJobCard || (!!item.message && hasMaterializedCardSnapshot(item.message)));
+    canShowMiniCardLive &&
+    !!runView &&
+    (showJobCard || (!!item.message && hasMaterializedCardSnapshot(item.message)));
   const miniCard = persistMiniCard && runView ? toMiniCard(runView) : null;
-  const hasVisibleContent = hasRenderedTurnContent({ narration, streamText, miniCard });
-
-  let thought = resolveTurnThinking(resolved, slotActive);
-  // Congela o "Thought" só em estados não-ativos (ou finished). Enquanto slotActive, manter "Pensando"
-  // para não congelar num "Pensou por Xs" imediatamente (satisfaz testes de thinking_text + UX live).
-  const hasStrongVisible =
-    !!narration ||
-    !!streamText ||
-    !!(miniCard && (miniCard.editedFile || (miniCard.fileCount ?? 0) > 0 || (miniCard.activity?.length ?? 0) > 0));
-  if (thought?.status === "active" && hasVisibleContent && hasStrongVisible && !slotActive) {
-    thought = freezeActiveThoughtAsDone(thought, {
-      workingDurationMs: resolved?.workingDurationMs,
-      runStartedAtMs,
-      slotActive,
-    });
-  }
-
-  const working = thought
-    ? null
-    : resolveChatWorking({
-        slotActive,
-        runStartedAtMs,
-        workingDurationMs: resolved?.workingDurationMs,
-        hasVisibleContent,
-      });
 
   const turn: Extract<ThreadItem, { kind: "assistant" }> = {
     kind: "assistant",
@@ -266,8 +252,8 @@ export function mapAssistantTurn(
     lastFinishOk: runView?.lastFinishOk ?? resolved?.lastFinishOk ?? undefined,
     resumable: runView?.resumable ?? resolved?.resumable ?? false,
     isFocused: !!focusedRunId && focusedRunId === runId,
-    thought,
-    working,
+    thinking,
+    runStartedAtMs,
   };
 
   return enforceAssistantTurnInvariant(turn);

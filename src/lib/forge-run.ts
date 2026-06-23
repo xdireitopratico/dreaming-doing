@@ -736,7 +736,8 @@ export function buildMiniCardHeader(
     return { header: `Edited ${edited}`, subtitle: opts.sessionTitle };
   }
   if (running) {
-    return { header: "Working", subtitle };
+    // Estado «Pensando…» fica na linha do chat — card só com conteúdo factual.
+    return { header: "", subtitle };
   }
   return { header: opts.sessionTitle, subtitle };
 }

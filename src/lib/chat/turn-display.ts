@@ -1,7 +1,7 @@
 import type { AgentProgress } from "@/lib/agent-progress";
 import { buildForgeTimeline, type AgentRunView } from "@/lib/forge-run";
 import { collapseNarrationBuffer } from "@/lib/narration-dedupe";
-import type { ChatThoughtState, ChatWorkingState, MiniCardData } from "@/lib/chat/types";
+import type { ChatThinkingState, MiniCardData } from "@/lib/chat/types";
 
 export function resolveTurnNarration(
   resolved: AgentProgress | null,
@@ -27,7 +27,7 @@ export function miniCardShowsInChat(card: MiniCardData | null | undefined): bool
   if (!card) return false;
   if (card.editedFile) return true;
   if ((card.fileCount ?? 0) > 0) return true;
-  if (card.activity && card.activity.some((a) => a.status === 'active' || a.status === 'done')) return true;
+  if (card.activity && card.activity.some((a) => a.status === "active" || a.status === "done")) return true;
   if (card.header.trim() && card.header !== "Working") return true;
   return false;
 }
@@ -43,75 +43,103 @@ export function hasRenderedTurnContent(opts: {
   return false;
 }
 
-/** Thought no chat — fonte: buildForgeTimeline (thinking_text / legado). */
-export function resolveTurnThinking(
-  resolved: AgentProgress | null,
-  slotActive: boolean,
-): ChatThoughtState | null {
-  if (!resolved) return null;
-  const timeline = resolved.timeline ?? [];
-  if (timeline.length === 0) return null;
-
-  const items = buildForgeTimeline(timeline, slotActive);
-  const thought = items.find((i) => i.type === "THOUGHT");
-  if (!thought || thought.type !== "THOUGHT") return null;
-
-  const text = thought.text?.trim() || null;
-  if (thought.active || slotActive) {
-    return { status: "active", text };
-  }
-  return {
-    status: "done",
-    durationSec: Math.max(1, Math.round(thought.durationMs / 1000)),
-    text,
-  };
+function hasThinkingTimeline(resolved: AgentProgress | null): boolean {
+  if (!resolved?.timeline?.length) return false;
+  if (resolved.timeline.some((ev) => ev.type === "thinking_text")) return true;
+  return resolved.timeline.some(
+    (ev) => ev.type === "assistant_text" && (ev.data as Record<string, unknown>)?.thinking === true,
+  );
 }
 
-/** Pensando ativo → Pensou por Xs quando o turno já tem conteúdo visível (mini-card, etc.). */
-export function freezeActiveThoughtAsDone(
-  thought: ChatThoughtState,
-  opts: { workingDurationMs?: number | null; runStartedAtMs?: number | null; slotActive?: boolean },
-): ChatThoughtState {
-  if (thought.status === "done") return thought;
-
-  let durationSec = 1;
-  if (opts.workingDurationMs != null && opts.workingDurationMs > 0) {
-    durationSec = Math.max(1, Math.round(opts.workingDurationMs / 1000));
-  } else if (opts.slotActive && opts.runStartedAtMs != null) {
-    durationSec = Math.max(1, Math.round((Date.now() - opts.runStartedAtMs) / 1000));
-  }
-
-  return { status: "done", durationSec, text: thought.text };
-}
-
-/** Uma linha por turno: Pensando… → Pensou por Xs (congela uma vez).
- *  Só usa relógio client (Date.now) para o slot *ativo e em execução*.
- *  Finished/históricos usam workingDurationMs capturado no finish (determinístico).
- */
-export function resolveChatWorking(opts: {
+function resolveThinkingDurationSec(opts: {
+  workingDurationMs?: number | null;
+  resolved: AgentProgress | null;
   slotActive: boolean;
   runStartedAtMs?: number | null;
-  workingDurationMs?: number | null;
-  hasVisibleContent: boolean;
-}): ChatWorkingState | null {
-  const { slotActive, runStartedAtMs, workingDurationMs, hasVisibleContent } = opts;
+}): number {
+  if (opts.workingDurationMs != null && opts.workingDurationMs > 0) {
+    return Math.max(1, Math.round(opts.workingDurationMs / 1000));
+  }
+  if (opts.resolved?.timeline?.length) {
+    const items = buildForgeTimeline(opts.resolved.timeline, false);
+    const thought = items.find((i) => i.type === "THOUGHT");
+    if (thought?.type === "THOUGHT" && thought.durationMs > 0) {
+      return Math.max(1, Math.round(thought.durationMs / 1000));
+    }
+  }
+  if (opts.slotActive && opts.runStartedAtMs) {
+    return Math.max(1, Math.round((Date.now() - opts.runStartedAtMs) / 1000));
+  }
+  return 1;
+}
 
-  if (workingDurationMs != null && workingDurationMs > 0) {
+/** Congela «Pensando…» → «Pensou por Xs» — mesmos gatilhos em Chat/Plan/Build. */
+export function shouldFreezeThinkingLine(opts: {
+  resolved: AgentProgress | null;
+  narration?: string | null;
+  streamText?: string | null;
+}): boolean {
+  const { resolved, narration, streamText } = opts;
+  if (resolved?.workingDurationMs != null && resolved.workingDurationMs > 0) return true;
+  if (resolved?.finished) return true;
+  if (narration?.trim()) return true;
+  if (streamText?.trim() && resolved?.conversational) return true;
+  if ((resolved?.tools?.length ?? 0) > 0) return true;
+  if ((resolved?.diffs?.length ?? 0) > 0) return true;
+  if ((resolved?.deliveryFiles?.length ?? 0) > 0) return true;
+  return false;
+}
+
+/**
+ * Uma linha por turno — só estado (Pensando… / Pensou por Xs).
+ * Texto do raciocínio fica no inspector (privateThoughtText / timeline).
+ */
+export function resolveTurnThinkingLine(opts: {
+  resolved: AgentProgress | null;
+  slotActive: boolean;
+  runStartedAtMs?: number | null;
+  narration?: string | null;
+  streamText?: string | null;
+  isClarifyOnly?: boolean;
+}): { line: ChatThinkingState | null; frozen: boolean } {
+  const { resolved, slotActive, runStartedAtMs, narration, streamText, isClarifyOnly } = opts;
+
+  if (isClarifyOnly) return { line: null, frozen: false };
+
+  const frozen = shouldFreezeThinkingLine({ resolved, narration, streamText });
+  const hasDuration =
+    resolved?.workingDurationMs != null && resolved.workingDurationMs > 0;
+  const conversational = resolved?.conversational === true;
+
+  const shouldShow =
+    slotActive ||
+    hasDuration ||
+    (conversational && (slotActive || frozen)) ||
+    (!conversational &&
+      (hasThinkingTimeline(resolved) ||
+        frozen ||
+        (!!resolved?.finished && hasTurnVisibleContent(resolved))));
+
+  if (!shouldShow) return { line: null, frozen };
+
+  if (frozen) {
     return {
-      status: "done",
-      durationSec: Math.max(1, Math.round(workingDurationMs / 1000)),
+      line: {
+        status: "done",
+        durationSec: resolveThinkingDurationSec({
+          workingDurationMs: resolved?.workingDurationMs,
+          resolved,
+          slotActive,
+          runStartedAtMs,
+        }),
+      },
+      frozen: true,
     };
   }
 
-  // Só calcula elapsed "ao vivo" se é o slot ativo corrente.
-  // Evita "Thought for 999s" em turns históricos ou após finish.
-  if (slotActive && runStartedAtMs) {
-    if (hasVisibleContent) {
-      const ms = Math.max(1000, Date.now() - runStartedAtMs);
-      return { status: "done", durationSec: Math.max(1, Math.round(ms / 1000)) };
-    }
-    return { status: "active" };
+  if (slotActive) {
+    return { line: { status: "active" }, frozen: false };
   }
 
-  return null;
+  return { line: null, frozen: false };
 }

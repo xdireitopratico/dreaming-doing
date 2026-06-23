@@ -2,7 +2,7 @@ import type { ThreadItem } from "@/lib/chat/types";
 
 /** Ordem DOM fixa — Thought → LLM → Mini Card → LLM. */
 export const ASSISTANT_TURN_DOM_ORDER = [
-  "thought",
+  "thinking",
   "narration",
   "miniCard",
   "prose",

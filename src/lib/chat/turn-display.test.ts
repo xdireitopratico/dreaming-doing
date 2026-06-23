@@ -4,68 +4,73 @@ import {
   initialAgentProgress,
   type SSEEvent,
 } from "@/lib/agent-progress";
-import { freezeActiveThoughtAsDone, resolveTurnThinking } from "@/lib/chat/turn-display";
+import {
+  resolveTurnThinkingLine,
+  shouldFreezeThinkingLine,
+} from "@/lib/chat/turn-display";
 
 function ev(type: string, data: Record<string, unknown>, ts = Date.now()): SSEEvent {
   return { type, data, timestamp: ts };
 }
 
-describe("resolveTurnThinking", () => {
-  it("retorna null sem timeline", () => {
-    expect(resolveTurnThinking(initialAgentProgress, true)).toBeNull();
+describe("resolveTurnThinkingLine", () => {
+  it("retorna null em turno clarify-only", () => {
+    expect(
+      resolveTurnThinkingLine({
+        resolved: initialAgentProgress,
+        slotActive: true,
+        isClarifyOnly: true,
+      }),
+    ).toEqual({ line: null, frozen: false });
   });
 
-  it("thinking_text ativo vira thought streaming", () => {
-    const now = Date.now();
-    let progress = applyAgentProgressEvent(
-      initialAgentProgress,
-      ev("thinking_text", { text: "Vou analisar ", append: true, delta: true }, now - 400),
-    );
-    progress = applyAgentProgressEvent(
-      progress,
-      ev("thinking_text", { text: "as dependências.", append: true, delta: true }, now - 200),
-    );
+  it("slot ativo sem conteúdo: Pensando…", () => {
+    const result = resolveTurnThinkingLine({
+      resolved: { ...initialAgentProgress, phase: "build", finished: false },
+      slotActive: true,
+    });
+    expect(result).toEqual({ line: { status: "active" }, frozen: false });
+  });
 
-    const thought = resolveTurnThinking(progress, true);
-    expect(thought?.status).toBe("active");
-    if (thought?.status === "active") {
-      expect(thought.text).toContain("dependências");
+  it("congela com slotActive quando narração chega", () => {
+    const result = resolveTurnThinkingLine({
+      resolved: {
+        ...initialAgentProgress,
+        phase: "build",
+        finished: false,
+        timeline: [ev("thinking_text", { text: "Analisando.", append: true, delta: true })],
+      },
+      slotActive: true,
+      runStartedAtMs: Date.now() - 3200,
+      narration: "Vou investigar o estado atual.",
+    });
+    expect(result.frozen).toBe(true);
+    expect(result.line?.status).toBe("done");
+    if (result.line?.status === "done") {
+      expect(result.line.durationSec).toBeGreaterThanOrEqual(1);
     }
   });
 
-  it("legado assistant_text thinking vira thought quando run termina", () => {
-    let progress = applyAgentProgressEvent(
-      initialAgentProgress,
-      ev("assistant_text", { text: "Raciocínio ", thinking: true, append: true, delta: true }, 100),
-    );
-    progress = applyAgentProgressEvent(
-      progress,
-      ev("assistant_text", { text: "completo.", thinking: true, append: true, delta: true }, 300),
-    );
-    progress = applyAgentProgressEvent(
-      progress,
-      ev("assistant_text", { text: "Abertura.", opening: true }, 500),
-    );
-
-    const thought = resolveTurnThinking(progress, false);
-    expect(thought?.status).toBe("done");
-    if (thought?.status === "done") {
-      expect(thought.durationSec).toBeGreaterThanOrEqual(1);
-      expect(thought.text).toContain("Raciocínio");
-    }
+  it("workingDurationMs histórico: Pensou por Xs determinístico", () => {
+    const result = resolveTurnThinkingLine({
+      resolved: {
+        ...initialAgentProgress,
+        finished: true,
+        workingDurationMs: 4800,
+        timeline: [ev("thinking_text", { text: "ok", append: true, delta: true })],
+      },
+      slotActive: false,
+    });
+    expect(result.line).toEqual({ status: "done", durationSec: 5 });
+    expect(result.frozen).toBe(true);
   });
-});
 
-describe("freezeActiveThoughtAsDone", () => {
-  it("congela Pensando ativo em Pensou por Xs quando mini-card entra", () => {
-    const frozen = freezeActiveThoughtAsDone(
-      { status: "active", text: "Analisando dependências." },
-      { workingDurationMs: 3200 },
-    );
-    expect(frozen.status).toBe("done");
-    if (frozen.status === "done") {
-      expect(frozen.durationSec).toBe(3);
-      expect(frozen.text).toContain("dependências");
-    }
+  it("chat conversacional congela quando streamText chega", () => {
+    expect(
+      shouldFreezeThinkingLine({
+        resolved: { ...initialAgentProgress, conversational: true },
+        streamText: "Bom dia!",
+      }),
+    ).toBe(true);
   });
 });

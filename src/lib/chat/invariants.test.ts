@@ -77,8 +77,9 @@ describe("mapAssistantTurn — contrato Lovable imutável", () => {
       sessionProgress: progress,
     });
 
+    expect(turn.thinking?.status).toBe("done");
     expect(turn.miniCard).not.toBeNull();
-    expect(turn.miniCard?.header).toBe("Working");
+    expect(turn.miniCard?.header).not.toBe("Working");
     expect(turn.narration).toBe("Vou investigar o estado atual.");
     expect(turn.streamText).toBeNull();
     assertAssistantTurnInvariant(turn);
@@ -112,9 +113,9 @@ describe("mapAssistantTurn — contrato Lovable imutável", () => {
       sessionProgress: progress,
     });
 
-    expect(turn.thought).toBeTruthy();
-    expect(turn.thought?.status).toBe("active");
-    expect(turn.working).toBeNull();
+    expect(turn.thinking).toBeTruthy();
+    expect(turn.thinking?.status).toBe("active");
+    expect(turn.miniCard).toBeNull();
     assertAssistantTurnInvariant(turn);
   });
 
@@ -136,7 +137,7 @@ describe("mapAssistantTurn — contrato Lovable imutável", () => {
       activeRunStartedAtMs: startedAt,
       sessionProgress: progress,
     });
-    expect(turn.working).toEqual({ status: "active" });
+    expect(turn.thinking).toEqual({ status: "active" });
     assertAssistantTurnInvariant(turn);
   });
 
