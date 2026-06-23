@@ -1,6 +1,32 @@
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import type { DeployTarget } from "./stack-context.ts";
 
+// Module-level deployment controller for preview deployments - prevents "Cannot access
+// deployController before initialization" errors
+let deploymentController: AbortController | null = null;
+let deploymentTimeoutId: NodeJS.Timeout | null = null;
+
+// Returns the shared deployment controller, creating it if necessary
+function getDeploymentController(): AbortController {
+  if (!deploymentController) {
+    deploymentController = new AbortController();
+    deploymentTimeoutId = setTimeout(() => deploymentController?.abort(), 60_000);
+  }
+  return deploymentController;
+}
+
+// Cleans up the module-level deployment controller and its timeout
+function cleanupDeploymentController() {
+  if (deploymentTimeoutId) {
+    clearTimeout(deploymentTimeoutId);
+    deploymentTimeoutId = null;
+  }
+  if (deploymentController) {
+    deploymentController.abort();
+    deploymentController = null;
+  }
+}
+
 export type DeployFile = { path: string; content: string };
 
 export type ProviderDeployResult = {
@@ -314,18 +340,18 @@ export async function deployToCloudflare(
   const form = new FormData();
   form.append("file", new Blob([zipBytes], { type: "application/zip" }), "deploy.zip");
 
-  const deployController = new AbortController();
-  const deployTimeoutId = setTimeout(() => deployController.abort(), 60_000);
+  const controller = getDeploymentController();
+  
   const deployRes = await fetch(
     `https://api.cloudflare.com/client/v4/accounts/${cfAccountId}/pages/projects/${projectName}/deployments`,
     {
       method: "POST",
       headers: { Authorization: `Bearer ${token}` },
       body: form,
-      signal: deployController.signal,
+      signal: controller.signal,
     },
   );
-  clearTimeout(deployTimeoutId);
+  cleanupDeploymentController();
 
   const deployed = (await deployRes.json().catch(() => ({}))) as {
     result?: { url?: string; id?: string };
@@ -382,3 +408,6 @@ export async function deployWithProvider(
 
   return { ok: false, error: `Provider ${provider} não suporta deploy de produção.` };
 }
+
+// Export module-level deployment controller for external use
+export { getDeploymentController, cleanupDeploymentController };
