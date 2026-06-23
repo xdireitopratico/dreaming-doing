@@ -262,6 +262,10 @@ function sortPresetsForDisplay(env: AiEnvId, presets: ForgeModelPreset[]): Forge
   return [...presets].sort((a, b) => (a.envStrength ?? a.rank) - (b.envStrength ?? b.rank));
 }
 
+function isAiEnv(env: ModelEnvId): env is AiEnvId {
+  return env in AI_ENV_META;
+}
+
 /** Roteamento: provedor nativo vs OpenRouter só quando não há conector dedicado */
 function routeEnv(brand: string, slug: string): AiEnvId {
   if (slug.startsWith("anthropic/")) return "anthropic";
@@ -814,6 +818,7 @@ export function presetsForEnv(
     seen.add(key);
     return true;
   });
+  if (!isAiEnv(env)) return merged;
   return sortPresetsForDisplay(env, merged);
 }
 
@@ -823,6 +828,11 @@ export function modelsForStudioStep(
   _mode?: "auto" | "robin" | "fixed" | undefined,
   userModels?: UserModelEntry[],
 ): ForgeModelPreset[] {
+  if (!isAiEnv(env)) {
+    return (userModels ?? [])
+      .filter((e) => e.env === env)
+      .map(buildUserModelPreset);
+  }
   return presetsForEnv(env, { userModels });
 }
 
@@ -845,7 +855,7 @@ export function poolPresetsForProvider(poolProvider: "groq" | "nvidia"): ForgeMo
 export function presetToProviderOption(p: ForgeModelPreset) {
   return {
     id: p.id,
-    provider: AI_ENV_META[p.env].label,
+    provider: AI_ENV_META[p.env as AiEnvId].label,
     model: p.model,
     label: p.label,
     description: p.description,

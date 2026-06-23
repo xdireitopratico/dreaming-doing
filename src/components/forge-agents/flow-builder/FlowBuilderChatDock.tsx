@@ -5,7 +5,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { History, MessageCircle, Minimize2, Plus, X } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import type { Node, Edge } from "@xyflow/react";
+import type { Node, Edge } from "@/types/xyflow-react-shim";
 import { ChatThread } from "@/components/chat/ChatThread";
 import { ChatComposer } from "@/components/chat/ChatComposer";
 import { useFlowBuilderChat } from "./hooks/useFlowBuilderChat";
@@ -71,6 +71,8 @@ export function FlowBuilderChatDock({
   } = useFlowBuilderChat({
     flowId,
     enabled,
+    nodes,
+    edges,
     onApplyPatch,
     onHighlightNodes,
   });

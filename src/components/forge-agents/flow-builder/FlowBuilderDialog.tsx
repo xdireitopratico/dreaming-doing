@@ -3,7 +3,7 @@
  * Themed: Prometheus Deep Blue (prometheus-studio class)
  */
 import { lazy, Suspense, useCallback, useMemo, useRef } from "react";
-import { type Node } from "@xyflow/react";
+import { type Node } from "@/types/xyflow-react-shim";
 import { useFlowShortcuts } from "./hooks/useFlowShortcuts";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { NodePalette } from "./NodePalette";
@@ -105,7 +105,7 @@ export function FlowBuilderDialog({ flowId, open, onClose }: FlowBuilderDialogPr
 
   return (
     <Dialog open={open} onOpenChange={() => onClose()}>
-      <DialogContent hideClose className="prometheus-studio max-w-[100vw] w-[100vw] h-[100vh] max-h-[100vh] p-0 gap-0 rounded-none border-none" style={{ background: 'var(--ps-bg-deep)' }}>
+      <DialogContent className="prometheus-studio max-w-[100vw] w-[100vw] h-[100vh] max-h-[100vh] p-0 gap-0 rounded-none border-none" style={{ background: 'var(--ps-bg-deep)' }}>
         <FlowToolbar
           flowName={s.flowName}
           flowStatus={s.flowStatus}

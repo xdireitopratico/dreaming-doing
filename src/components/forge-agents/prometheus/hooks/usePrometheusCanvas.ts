@@ -4,7 +4,7 @@
  * Limite: < 100 linhas
  */
 import { useState, useCallback } from "react";
-import { type Node, type Edge } from "@xyflow/react";
+import { type Node, type Edge } from "@/types/xyflow-react-shim";
 import type { PrometheusPhase } from "./prometheus-types";
 
 export interface BuildEvent {

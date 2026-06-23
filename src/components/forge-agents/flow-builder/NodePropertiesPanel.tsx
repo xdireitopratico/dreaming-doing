@@ -2,7 +2,7 @@
  * NodePropertiesPanel — Thin orchestrator for node config sub-components
  * Refactored: split from 454-line monolith into focused config modules
  */
-import { type Node } from "@xyflow/react";
+import { type Node } from "@/types/xyflow-react-shim";
 import { X, Bot, Zap, Wrench, GitBranch, Shield, Mic, Volume2, Search, Brain, Clock, ArrowRightLeft, Package, Settings, AlertTriangle, Users, Eye, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";

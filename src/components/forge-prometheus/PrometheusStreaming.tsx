@@ -11,7 +11,7 @@ import { PrometheusBoardroomProgress } from "./PrometheusBoardroomProgress";
 import { PrometheusTrialPlayground } from "./PrometheusTrialPlayground";
 import { PROMETHEUS_AGENTS } from "./PrometheusBoardroom";
 import type { BoardroomMessage, BoardroomPhase } from "./PrometheusBoardroom";
-import type { Node, Edge } from "@xyflow/react";
+import type { Node, Edge } from "@/types/xyflow-react-shim";
 import "./prometheus-studio.css";
 
 interface Props {

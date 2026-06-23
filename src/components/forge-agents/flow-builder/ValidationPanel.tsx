@@ -13,7 +13,7 @@ import {
   CheckCircle2,
   Lightbulb,
 } from "lucide-react";
-import type { Node, Edge } from "@xyflow/react";
+import type { Node, Edge } from "@/types/xyflow-react-shim";
 import { validateFlow, type ValidationIssue } from "./utils/schema-validator";
 
 interface ValidationPanelProps {

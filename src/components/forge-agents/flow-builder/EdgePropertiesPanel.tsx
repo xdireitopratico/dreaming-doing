@@ -2,7 +2,7 @@
  * EdgePropertiesPanel — Configuração de condições e labels nas conexões
  */
 import { useState, useEffect } from "react";
-import { type Edge } from "@xyflow/react";
+import { type Edge } from "@/types/xyflow-react-shim";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";

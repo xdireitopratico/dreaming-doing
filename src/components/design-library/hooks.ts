@@ -118,11 +118,11 @@ export function useJobEvents(jobId: string | null) {
           table: "design_dna_events",
           filter: `job_id=eq.${jobId}`,
         },
-        (payload) => {
+        (payload: { new?: unknown }) => {
           setEvents((prev) => [...prev, payload.new as RealtimeEvent]);
         },
       )
-      .subscribe((status) => {
+      .subscribe((status: string) => {
         setConnected(status === "SUBSCRIBED");
       });
 

@@ -3,7 +3,7 @@
  * All 17 node types use this for consistent, minimal canvas representation.
  * Layers: Visual (compact pill) → title tooltip (hover) → Properties panel (click)
  */
-import { Handle, Position } from "@xyflow/react";
+import { Handle, Position } from "@/types/xyflow-react-shim";
 
 const COLORS: Record<string, {
   bg: string; border: string; borderActive: string; ring: string; handle: string;

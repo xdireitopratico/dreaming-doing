@@ -242,7 +242,7 @@ export function createRunSubscriptionHandlers(deps: RunSubscriptionDeps) {
           table: "agent_stream_events",
           filter: `run_id=eq.${runId}`,
         },
-        (payload) => {
+        (payload: { new: AgentStreamRow }) => {
           if (deps.runIdRef.current !== runId) return;
           const row = payload.new as AgentStreamRow;
           if (deps.enqueueStreamRow(row)) {
@@ -257,7 +257,7 @@ export function createRunSubscriptionHandlers(deps: RunSubscriptionDeps) {
           }
         },
       )
-      .subscribe((status) => {
+      .subscribe((status: string) => {
         if (status === "SUBSCRIBED") {
           deps.reconnectAttemptsRef.current = 0;
           emitStreamingTelemetry("agent.realtime_reconnected", { runId: runId.slice(0, 8) });
@@ -320,7 +320,7 @@ export function createRunSubscriptionHandlers(deps: RunSubscriptionDeps) {
           table: "agent_runs",
           filter: `id=eq.${runId}`,
         },
-        async (payload) => {
+        async (payload: { new: { status: string; error: string | null; canceled_at: string | null; meta?: Record<string, unknown> | null } }) => {
           if (deps.runIdRef.current !== runId) return;
           const row = payload.new as {
             status: string;

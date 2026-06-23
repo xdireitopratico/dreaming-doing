@@ -8,7 +8,7 @@ import {
   useReactFlow,
   type Node, type Edge, type Connection, type OnNodesChange, type OnEdgesChange,
   addEdge,
-} from "@xyflow/react";
+} from "@/types/xyflow-react-shim";
 import "@xyflow/react/dist/style.css";
 import { TriggerNode } from "./nodes/TriggerNode";
 import { LLMNode } from "./nodes/LLMNode";
@@ -107,6 +107,8 @@ export const FlowCanvas = memo(function FlowCanvas({
       type: "conditional", animated: true,
       data: { label: "", condition: "", edge_type: "default", priority: 0 },
       style: { stroke: "hsl(var(--primary))" },
+      source: params.source ?? "",
+      target: params.target ?? "",
     }, eds));
   }, [onSetEdges]);
 
@@ -160,7 +162,7 @@ export const FlowCanvas = memo(function FlowCanvas({
           <Background gap={20} size={1.5} color="rgba(255,255,255,0.10)" />
           <Controls className="!bg-[hsl(225,30%,10%)] !border-white/10 !shadow-lg [&>button]:!bg-[hsl(225,30%,12%)] [&>button]:!border-white/10 [&>button]:!text-white/60 [&>button:hover]:!bg-[hsl(225,30%,16%)]" />
           <MiniMap
-            nodeColor={(node) => MINIMAP_COLORS[node.type || ""] || "#94a3b8"}
+            nodeColor={(node: Node) => MINIMAP_COLORS[node.type || ""] || "#94a3b8"}
             style={{ background: 'hsl(225, 30%, 8%)' }}
             maskColor="rgba(0,0,0,0.6)"
           />

@@ -1,7 +1,6 @@
-import { Link } from "@tanstack/react-router";
-import { ChevronDown, PanelLeftClose } from "lucide-react";
+import { PanelLeftClose } from "lucide-react";
 import { ForgeLogoMark } from "@/components/editor/ForgeLogoMark";
-import { projectDisplayName } from "@/lib/project-display-name";
+import { ProjectHeaderMenu } from "@/components/editor/ProjectHeaderMenu";
 
 interface EditorChatHeaderProps {
   projectId: string;
@@ -47,21 +46,12 @@ export function EditorChatHeader({
     <div className="forge-chat-header-inner">
       <ForgeLogoMark size={18} linkTo="/projects" title="Todos os projetos" />
       <span className="forge-topbar-divider" aria-hidden />
-      <Link to="/projects/$projectId" params={{ projectId }} className="forge-project-trigger">
-        <span className="forge-project-name" title={projectName ?? "Projeto"}>
-          {projectDisplayName(projectName)}
-          <ChevronDown className="size-3 shrink-0 opacity-50" />
-        </span>
-        {subLabel ? (
-          <span
-            className="forge-project-sub"
-            data-testid="forge-header-state"
-            data-state={headerState}
-          >
-            {subLabel}
-          </span>
-        ) : null}
-      </Link>
+      <ProjectHeaderMenu
+        projectId={projectId}
+        projectName={projectName}
+        subLabel={subLabel}
+        subLabelState={headerState}
+      />
       <button
         type="button"
         className="forge-chat-collapse-btn ml-auto"

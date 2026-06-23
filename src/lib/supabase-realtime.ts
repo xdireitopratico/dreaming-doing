@@ -1,4 +1,3 @@
-import type { RealtimeChannel } from "@supabase/supabase-js";
 import { supabase, isSupabaseConfigured } from "@/integrations/supabase/client";
 
 /** Sincroniza JWT do usuário com o Realtime (obrigatório com RLS em realtime.messages). */
@@ -30,7 +29,7 @@ type SubscribeOpts = {
 };
 
 /** Inscreve em postgres_changes com log de status (debug de quebras). */
-export function subscribePostgresChanges(opts: SubscribeOpts): RealtimeChannel | null {
+export function subscribePostgresChanges(opts: SubscribeOpts): ReturnType<typeof supabase.channel> | null {
   if (!isSupabaseConfigured()) {
     opts.onStatus?.("SKIPPED", new Error("Supabase não configurado"));
     return null;
@@ -46,7 +45,7 @@ export function subscribePostgresChanges(opts: SubscribeOpts): RealtimeChannel |
         table: opts.table,
         ...(opts.filter ? { filter: opts.filter } : {}),
       },
-      (payload) => {
+      (payload: { eventType: string; new?: unknown; old?: unknown }) => {
         opts.onChange({
           eventType: payload.eventType,
           new: (payload.new ?? {}) as Record<string, unknown>,
@@ -54,7 +53,7 @@ export function subscribePostgresChanges(opts: SubscribeOpts): RealtimeChannel |
         });
       },
     )
-    .subscribe((status, err) => {
+    .subscribe((status: string, err?: Error) => {
       if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
         console.error(`[FORGE Realtime] ${opts.channelName} → ${status}`, err);
       }
@@ -64,6 +63,6 @@ export function subscribePostgresChanges(opts: SubscribeOpts): RealtimeChannel |
   return channel;
 }
 
-export function removeRealtimeChannel(channel: RealtimeChannel | null) {
+export function removeRealtimeChannel(channel: ReturnType<typeof supabase.channel> | null) {
   if (channel) void supabase.removeChannel(channel);
 }

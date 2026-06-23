@@ -98,7 +98,7 @@ export function PromptEngine({
   }, [user]);
 
   async function submit(text?: string) {
-    const v = (text ?? value).trim();
+    const v = (text ?? value ?? "").trim();
     if (!v || busy) return;
     if (onSubmit) {
       onSubmit(v);
@@ -122,6 +122,8 @@ export function PromptEngine({
     try {
       const res = await createProject({ data: { prompt: v, kind: projectKind } });
       if (projectKind === "app") {
+        if (!res.projectId) throw new Error("Project id missing");
+        if (!res.conversationId) throw new Error("Conversation id missing");
         bootstrapComposerMode(res.projectId, "plan");
         markPendingAgentRun(res.projectId, res.conversationId);
         warp.cancel();

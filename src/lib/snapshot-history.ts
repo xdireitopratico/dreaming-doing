@@ -41,11 +41,11 @@ export async function listProjectSnapshots(
     return [];
   }
 
-  const userMessages = messages
-    .filter((m) => m.role === "user" && m.timestamp)
+  const userMessages = (messages as ChatMessage[])
+    .filter((m: ChatMessage) => m.role === "user" && m.timestamp)
     .sort((a, b) => (a.timestamp < b.timestamp ? -1 : 1));
 
-  return (data ?? []).map((row) => {
+  return ((data ?? []) as Array<{ id: string; label: string | null; created_at: string }>).map((row) => {
     const snapTs = row.created_at as string;
     const snapMs = new Date(snapTs).getTime();
     const source = [...userMessages]

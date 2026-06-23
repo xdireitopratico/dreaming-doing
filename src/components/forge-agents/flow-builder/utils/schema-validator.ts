@@ -4,7 +4,7 @@
  * @version 2.0.0 — Round 34: BYOK secrets validation per provider
  */
 
-import type { Node, Edge } from "@xyflow/react";
+import type { Node, Edge } from "@/types/xyflow-react-shim";
 import { findModel, PROVIDERS } from "../model-catalog-frontend";
 
 export interface ValidationIssue {

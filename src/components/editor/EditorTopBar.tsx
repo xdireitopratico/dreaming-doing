@@ -1,8 +1,9 @@
 import { Link } from "@tanstack/react-router";
-import { ChevronDown, Code2, Eye, Moon, Share2 } from "lucide-react";
+import { Code2, Eye, Moon, Share2 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import type { EditorMainView } from "@/components/editor/editor-views";
 import { ForgeLogoMark } from "@/components/editor/ForgeLogoMark";
+import { ProjectHeaderMenu } from "@/components/editor/ProjectHeaderMenu";
 import {
   EditorIntegrationsMenu,
   type EditorIntegrationsMenuProps,
@@ -53,18 +54,15 @@ export function EditorTopBar({
         <ForgeLogoMark size={18} linkTo="/projects" title="Todos os projetos" />
         <span className="forge-topbar-divider" aria-hidden />
         {projectId ? (
-          <Link to="/projects/$projectId" params={{ projectId }} className="forge-project-trigger">
-            <span className="forge-project-name" title={projectName ?? "Projeto"}>
-              {projectName ?? "Projeto"}
-              <ChevronDown className="size-3 shrink-0 opacity-50" />
-            </span>
-            {running ? <span className="forge-project-sub">Construindo alterações…</span> : null}
-          </Link>
+          <ProjectHeaderMenu
+            projectId={projectId}
+            projectName={projectName}
+            subLabel={running ? "Construindo alterações…" : null}
+          />
         ) : (
           <Link to="/projects" className="forge-project-trigger">
             <span className="forge-project-name" title={projectName ?? "Projeto"}>
               {projectName ?? "Projeto"}
-              <ChevronDown className="size-3 shrink-0 opacity-50" />
             </span>
             {running ? <span className="forge-project-sub">Construindo alterações…</span> : null}
           </Link>

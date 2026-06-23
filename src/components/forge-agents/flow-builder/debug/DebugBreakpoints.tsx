@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Circle, CircleDot, Trash2 } from "lucide-react";
-import type { Node } from "@xyflow/react";
+import type { Node } from "@/types/xyflow-react-shim";
 import type { BreakpointInfo } from "./debug-types";
 
 interface Props {

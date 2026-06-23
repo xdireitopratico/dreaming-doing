@@ -1,7 +1,6 @@
-import { Link } from "@tanstack/react-router";
 import { Code2, Eye, MessageSquare, RefreshCw, Share2 } from "lucide-react";
 import { ForgeLogoMark } from "@/components/editor/ForgeLogoMark";
-import { projectDisplayName } from "@/lib/project-display-name";
+import { ProjectHeaderMenu } from "@/components/editor/ProjectHeaderMenu";
 
 export type EditorMobilePanel = "chat" | "preview" | "code";
 
@@ -70,13 +69,11 @@ export function EditorMobileHeader({
     <div className="forge-mobile-editor-header-inner">
       <div className="forge-mobile-editor-header-row">
         <ForgeLogoMark size={16} linkTo="/projects" title="Todos os projetos" />
-        <Link
-          to="/projects/$projectId"
-          params={{ projectId }}
+        <ProjectHeaderMenu
+          projectId={projectId}
+          projectName={projectName}
           className="forge-mobile-project-link"
-        >
-          <span className="truncate">{projectDisplayName(projectName)}</span>
-        </Link>
+        />
         {statusLabel ? <span className="forge-mobile-status-pill">{statusLabel}</span> : null}
         <div className="forge-mobile-editor-actions">
           {mobilePanel === "preview" && onPreviewRefresh && (

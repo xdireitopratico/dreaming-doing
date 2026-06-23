@@ -243,7 +243,13 @@ export function BrowserPreviewPanel({ jobId, onClose }: BrowserPreviewPanelProps
           .eq("session_id", sessions.id)
           .order("created_at", { ascending: true });
         setChatMessages(
-          (msgs ?? []).map((m) => ({
+          ((msgs ?? []) as Array<{
+            id: string;
+            role: string;
+            content: string;
+            actions: ChatMessage["actions"];
+            created_at: string;
+          }>).map((m) => ({
             id: m.id as string,
             role: m.role as "user" | "assistant",
             content: m.content as string,

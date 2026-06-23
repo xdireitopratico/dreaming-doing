@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
-import type { Session, User } from "@supabase/supabase-js";
+import type { AuthSession as Session, AuthUser as User } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import { syncSupabaseRealtimeAuth } from "@/lib/supabase-realtime";
 import { hydrateAgentPreferences } from "@/lib/agent-preferences";
@@ -39,13 +39,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     };
 
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, s) => {
+    const { data: sub } = supabase.auth.onAuthStateChange((_event: string, s: Session | null) => {
       setSession(s);
       setLoading(false);
       void syncSupabaseRealtimeAuth(s?.access_token ?? null);
       syncUserData(s);
     });
-    supabase.auth.getSession().then(({ data }) => {
+    supabase.auth.getSession().then(({ data }: { data: { session: Session | null } }) => {
       setSession(data.session);
       setLoading(false);
       void syncSupabaseRealtimeAuth(data.session?.access_token ?? null);

@@ -37,10 +37,12 @@ import {
   sttProviderName,
   modelsForStudioStep,
   getPresetById,
+  inferEnvFromSlug,
   normalizePresetId,
   userModelPresetId,
   PLATFORM_ROBIN_TASTE_PRESET_ID,
   type AiEnvId,
+  type ModelEnvId,
   type UserModelEntry,
   type ForgeModelPreset,
 } from "@/lib/model-catalog";
@@ -188,6 +190,10 @@ function robinCanSelect(preset: ForgeModelPreset): boolean {
   return preset.env === "groq" || preset.env === "nvidia";
 }
 
+function isKnownAiEnv(env: ModelEnvId): env is AiEnvId {
+  return env in AI_ENV_META;
+}
+
 interface AiModelStudioProps {
   connectorRows?: ConnectorRow[];
   keysSectionHref?: string;
@@ -202,7 +208,10 @@ export function AiModelStudio({ connectorRows, keysSectionHref = "/api" }: AiMod
     prefs.mode === "robin" ? prefs.robinPoolModelId : prefs.fixedPresetId,
     userModels,
   );
-  const [selectedEnv, setSelectedEnv] = useState<AiEnvId>(activePreset.env);
+  const initialEnv = isKnownAiEnv(activePreset.env)
+    ? activePreset.env
+    : inferEnvFromSlug(activePreset.openRouterSlug || activePreset.id || "openrouter/openai");
+  const [selectedEnv, setSelectedEnv] = useState<AiEnvId>(initialEnv);
   const [draftModelSlug, setDraftModelSlug] = useState("");
 
   useEffect(() => {
@@ -210,7 +219,7 @@ export function AiModelStudio({ connectorRows, keysSectionHref = "/api" }: AiMod
       prefs.mode === "robin" ? prefs.robinPoolModelId : prefs.fixedPresetId,
       userModels,
     );
-    if (p.id) setSelectedEnv(p.env);
+    if (p.id) setSelectedEnv(isKnownAiEnv(p.env) ? p.env : inferEnvFromSlug(p.openRouterSlug || p.id));
   }, [prefs.fixedPresetId, prefs.robinPoolModelId, prefs.mode, userModels]);
 
   const patch = (partial: Partial<AgentPreferences>) =>
@@ -295,8 +304,12 @@ export function AiModelStudio({ connectorRows, keysSectionHref = "/api" }: AiMod
 
   const selectModel = (presetId: string) => {
     const preset = getPresetById(presetId, userModels);
-    if (!connected[preset.env]) {
-      toast.error(`Cadastre a chave ${AI_ENV_META[preset.env].label} em API primeiro.`);
+    const presetEnv = preset.env;
+    const presetLabel = isKnownAiEnv(presetEnv)
+      ? AI_ENV_META[presetEnv].label
+      : providerById(presetEnv)?.label ?? presetEnv;
+    if (!connected[presetEnv as string]) {
+      toast.error(`Cadastre a chave ${presetLabel} em API primeiro.`);
       return;
     }
     if (prefs.mode === "robin") {
@@ -308,7 +321,7 @@ export function AiModelStudio({ connectorRows, keysSectionHref = "/api" }: AiMod
       }
       patch({
         robinPoolModelId: presetId,
-        poolProvider: preset.env as PoolProviderId,
+        poolProvider: presetEnv as PoolProviderId,
       });
       return;
     }
@@ -335,9 +348,9 @@ export function AiModelStudio({ connectorRows, keysSectionHref = "/api" }: AiMod
   };
 
   const cardDisabled = (m: ForgeModelPreset): { disabled: boolean; reason?: string } => {
-    if (!connected[m.env]) {
+    if (!connected[m.env as string]) {
       const label =
-        AI_ENV_META[m.env as keyof typeof AI_ENV_META]?.label ??
+        (isKnownAiEnv(m.env) ? AI_ENV_META[m.env].label : undefined) ??
         providerById(m.env as AiProviderId)?.label ??
         m.env;
       return { disabled: true, reason: `Sem chave ${label} em API` };
@@ -353,7 +366,7 @@ export function AiModelStudio({ connectorRows, keysSectionHref = "/api" }: AiMod
 
   const selectAllInEnv = () => {
     const ids = envModels
-      .filter((m) => connected[m.env] && (prefs.mode !== "robin" || robinCanSelect(m)))
+      .filter((m) => connected[m.env as string] && (prefs.mode !== "robin" || robinCanSelect(m)))
       .map((m) => m.id);
     patch({ mode: "auto", autoAllowedPresetIds: [...new Set([...autoAllowed, ...ids])] });
   };

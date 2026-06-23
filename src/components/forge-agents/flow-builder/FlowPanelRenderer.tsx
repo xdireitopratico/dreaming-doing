@@ -4,7 +4,7 @@
  */
 import { lazy, Suspense, memo } from "react";
 import { Loader2 } from "lucide-react";
-import type { Node, Edge } from "@xyflow/react";
+import type { Node, Edge } from "@/types/xyflow-react-shim";
 import type { PanelType } from "./flow-builder-types";
 
 // Lazy-loaded panels

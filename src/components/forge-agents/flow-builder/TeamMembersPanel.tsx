@@ -96,8 +96,8 @@ export function TeamMembersPanel({ flowId, onClose }: TeamMembersPanelProps) {
     // Look up user by email in profiles
     const { data: profileData } = await supabase
       .from("profiles")
-      .select("id")
-      .eq("email", inviteEmail.trim().toLowerCase())
+      .select("id, taste_lead_email")
+      .eq("taste_lead_email", inviteEmail.trim().toLowerCase())
       .single();
 
     const userId = (profileData as any)?.id;

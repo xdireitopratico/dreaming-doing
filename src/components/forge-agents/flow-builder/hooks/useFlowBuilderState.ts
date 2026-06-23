@@ -3,15 +3,15 @@
  * Extraído de FlowBuilderDialog (R57 Higiene Arquitetural)
  */
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
-import { useNodesState, useEdgesState, type Node, type Edge } from "@xyflow/react";
+import { useNodesState, useEdgesState, type Node, type Edge } from "@/types/xyflow-react-shim";
 import { toast } from "@/lib/toast";
 import { supabase } from "@/integrations/supabase/client";
 import { validateFlow } from "../utils/schema-validator";
 import type { PanelType } from "../flow-builder-types";
 
 export function useFlowBuilderState(flowId: string, open: boolean) {
-  const [nodes, setNodes, onNodesChange] = useNodesState([]);
-  const [edges, setEdges, onEdgesChange] = useEdgesState([]);
+  const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
+  const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const [flowName, setFlowName] = useState("Novo Agente");
   const [flowStatus, setFlowStatus] = useState("draft");
   const [saving, setSaving] = useState(false);

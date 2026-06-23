@@ -3,7 +3,6 @@
 import { useEffect, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import type { RealtimeChannel } from "@supabase/supabase-js";
 
 export type AgentRealtimeEvent = {
   type: string;
@@ -21,7 +20,7 @@ export function useAgentRealtime(
   onEvent?: OnEvent,
 ): void {
   const queryClient = useQueryClient();
-  const channelRef = useRef<RealtimeChannel | null>(null);
+  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const projectIdRef = useRef(projectId);
   projectIdRef.current = projectId;
 
@@ -32,7 +31,7 @@ export function useAgentRealtime(
     channel.on(
       "postgres_changes",
       { event: "*", schema: "public", table: "agent_runs", filter: `project_id=eq.${projectId}` },
-      () => {
+      (_payload: unknown) => {
         queryClient.invalidateQueries({ queryKey: ["agent-runs", projectId] });
       },
     );
@@ -41,7 +40,7 @@ export function useAgentRealtime(
     channel.on(
       "postgres_changes",
       { event: "INSERT", schema: "public", table: "agent_stream_events" },
-      (payload) => {
+      (payload: { new: Record<string, unknown> }) => {
         const row = payload.new as Record<string, unknown>;
 
         if (onEvent) {
@@ -82,7 +81,7 @@ export function useAgentRealtime(
         table: "messages",
         ...(messagesFilter ? { filter: messagesFilter } : {}),
       },
-      (payload) => {
+      (payload: { new: Record<string, unknown>; old?: Record<string, unknown> | null }) => {
         const row = payload.new as Record<string, unknown>;
         // Só refetcha a janela quando um novo assistant chega — user messages
         // são otimistas e o cache já está em sync via mutation.
@@ -101,7 +100,7 @@ export function useAgentRealtime(
         table: "messages",
         ...(messagesFilter ? { filter: messagesFilter } : {}),
       },
-      (payload) => {
+      (payload: { new: Record<string, unknown>; old: Record<string, unknown> | null }) => {
         const row = payload.new as Record<string, unknown>;
         const old = payload.old as Record<string, unknown> | null;
         const newMeta = (row?.meta ?? {}) as Record<string, unknown>;
@@ -113,7 +112,7 @@ export function useAgentRealtime(
       },
     );
 
-    channel.subscribe((status, err) => {
+    channel.subscribe((status: string, err?: Error) => {
       if (status === "CLOSED" || status === "CHANNEL_ERROR") {
         console.error(`[FORGE Realtime] agent-v2-${projectId} → ${status}`, err);
       }

@@ -12,7 +12,7 @@ import {
   AlertDialogCancel,
 } from "@/components/ui/alert-dialog";
 import { supabase } from "@/integrations/supabase/client";
-import type { Node } from "@xyflow/react";
+import type { Node } from "@/types/xyflow-react-shim";
 import { findModel, findProvider } from "./model-catalog-frontend";
 import { extractToolSecrets, NVIDIA_MODEL_SECRET_MAP } from "./flow-tool-secrets";
 

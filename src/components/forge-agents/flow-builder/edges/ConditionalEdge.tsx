@@ -6,7 +6,7 @@ import {
   EdgeLabelRenderer,
   getBezierPath,
   type EdgeProps,
-} from "@xyflow/react";
+} from "@/types/xyflow-react-shim";
 
 const EDGE_COLORS: Record<string, string> = {
   default: "hsl(var(--primary))",

@@ -1,7 +1,7 @@
 /**
  * Debug types and shared utilities
  */
-import type { Node, Edge } from "@xyflow/react";
+import type { Node, Edge } from "@/types/xyflow-react-shim";
 
 export interface BreakpointInfo {
   nodeId: string;

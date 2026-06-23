@@ -2,7 +2,7 @@
  * useFlowBuilderChat — Vibe Agent chat (conversas próprias, isolado do boardroom)
  */
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { Node, Edge } from "@xyflow/react";
+import type { Node, Edge } from "@/types/xyflow-react-shim";
 import { supabase } from "@/integrations/supabase/client";
 import type { ChatMessage } from "@/lib/chat-types";
 import type { ThreadItem } from "@/lib/chat/types";
@@ -20,6 +20,7 @@ export type VibeConversation = {
 
 type MessageRow = {
   id: string;
+  conversation_id?: string;
   role: "user" | "assistant";
   content: string;
   meta: Record<string, unknown> | null;

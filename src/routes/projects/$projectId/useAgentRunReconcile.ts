@@ -1,5 +1,4 @@
 import { useEffect } from "react";
-import type { RealtimeChannel } from "@supabase/supabase-js";
 
 import { supabase } from "@/integrations/supabase/client";
 import { removeRealtimeChannel, subscribePostgresChanges } from "@/lib/supabase-realtime";
@@ -41,7 +40,7 @@ export function useAgentRunReconcile(
     if (!conversationId) return;
 
     let cancelled = false;
-    let channel: RealtimeChannel | null = null;
+    let channel: ReturnType<typeof supabase.channel> | null = null;
 
     const tryAttach = async (): Promise<boolean> => {
       const runId = await fetchLiveRunForConversation(projectId, conversationId);

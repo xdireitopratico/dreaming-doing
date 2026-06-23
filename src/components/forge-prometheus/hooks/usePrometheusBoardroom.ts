@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/lib/toast";
 import type { BoardroomMessage, BoardroomPhase } from "../PrometheusBoardroom";
-import type { Node, Edge } from "@xyflow/react";
+import type { Node, Edge } from "@/types/xyflow-react-shim";
 
 const PHASE_ORDER: BoardroomPhase[] = [
   "discovery", "clarification", "planning", "approval",

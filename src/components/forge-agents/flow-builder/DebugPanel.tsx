@@ -10,7 +10,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { X, Bug, Play, SkipForward, StopCircle, Zap, Wifi, WifiOff, AlertTriangle } from "lucide-react";
-import type { Node, Edge } from "@xyflow/react";
+import type { Node, Edge } from "@/types/xyflow-react-shim";
 import type { BreakpointInfo } from "./debug/debug-types";
 import { useDebugExecution } from "./debug/useDebugExecution";
 import { DebugBreakpoints } from "./debug/DebugBreakpoints";

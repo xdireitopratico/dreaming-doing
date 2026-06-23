@@ -1,4 +1,4 @@
-import { type NodeProps } from "@xyflow/react";
+import { type NodeProps } from "@/types/xyflow-react-shim";
 import { Bot, FlaskConical } from "lucide-react";
 import { BaseNode } from "./BaseNode";
 import { findModel, getProviderForModel } from "../model-catalog-frontend";

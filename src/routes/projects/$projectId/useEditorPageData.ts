@@ -4,7 +4,6 @@ import type { NavigateOptions } from "@tanstack/react-router";
 
 import { supabase } from "@/integrations/supabase/client";
 import { removeRealtimeChannel } from "@/lib/supabase-realtime";
-import type { RealtimeChannel } from "@supabase/supabase-js";
 import type { ChatMessage } from "@/lib/chat-types";
 import { logEditorTelemetryEvent } from "@/lib/editor-telemetry";
 import { collapseForgeUiBundle } from "@/lib/file-tree-display";
@@ -119,7 +118,7 @@ export function useEditorPageData({ projectId, search, agent, navigate }: UseEdi
 
   // ─── Realtime project_files (canal editor-{projectId}) ───
   useEffect(() => {
-    const channel: RealtimeChannel = supabase
+    const channel: ReturnType<typeof supabase.channel> = supabase
       .channel(`editor-${projectId}`)
       .on(
         "postgres_changes",
@@ -131,7 +130,7 @@ export function useEditorPageData({ projectId, search, agent, navigate }: UseEdi
         },
         () => qc.invalidateQueries({ queryKey: ["files", projectId] }),
       )
-      .subscribe((status, err) => {
+      .subscribe((status: string, err?: Error) => {
         if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
           console.error(`[FORGE Realtime] editor-${projectId}`, status, err);
           logEditorTelemetryEvent(

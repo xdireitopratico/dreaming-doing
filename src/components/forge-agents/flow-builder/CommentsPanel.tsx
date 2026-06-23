@@ -20,7 +20,7 @@ import {
   Trash2,
   Filter,
 } from "lucide-react";
-import type { Node } from "@xyflow/react";
+import type { Node } from "@/types/xyflow-react-shim";
 
 interface Comment {
   id: string;

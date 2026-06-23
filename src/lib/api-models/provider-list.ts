@@ -2,6 +2,7 @@ import {
   allProviders,
   customProviderSecretKey,
   type AiProvider,
+  type AiProviderId,
   type CustomProviderId,
 } from "@/lib/ai-provider-registry";
 import type { ConnectorRow } from "@/lib/connector-env-status";

@@ -8,7 +8,7 @@ describe("createFrozenProgressHandlers", () => {
     const progress = {
       ...initialAgentProgress,
       streamText: "working",
-      timeline: [{ id: "t1", label: "step", status: "done" as const }],
+      timeline: [{ type: "done", data: {}, timestamp: Date.now() }],
     };
     const progressRef = { current: progress };
     const frozenRunProgressRef = { current: new Map() };
@@ -42,7 +42,7 @@ describe("createFrozenProgressHandlers", () => {
       current: {
         ...initialAgentProgress,
         streamText: "x",
-        timeline: [{ id: "t1", label: "step", status: "done" as const }],
+        timeline: [{ type: "done", data: {}, timestamp: Date.now() }],
       },
     };
     const frozenRunProgressRef = { current: new Map() };

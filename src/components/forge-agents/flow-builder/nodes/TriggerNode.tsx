@@ -1,4 +1,4 @@
-import { type NodeProps } from "@xyflow/react";
+import { type NodeProps } from "@/types/xyflow-react-shim";
 import { Zap } from "lucide-react";
 import { BaseNode } from "./BaseNode";
 

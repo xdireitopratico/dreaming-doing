@@ -337,10 +337,10 @@ export function clearCustomProvidersCache() {
   customProvidersCache = [];
 }
 
-export function addCustomProvider(input: CustomProviderInput): AiProvider {
+export function addCustomProvider(input: CustomProviderInput): AiProvider & { id: CustomProviderId } {
   const slug = input.label.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
   const id: CustomProviderId = `custom-${slug || crypto.randomUUID().slice(0, 8)}`;
-  const provider: AiProvider = {
+  const provider = {
     id,
     label: input.label.trim(),
     icon: "globe",
@@ -355,7 +355,7 @@ export function addCustomProvider(input: CustomProviderInput): AiProvider {
     llmProvider: "openai",
     isUserAdded: true,
     models: [],
-  };
+  } as AiProvider & { id: CustomProviderId };
   setCustomProvidersCache([...loadCustomProviders(), provider]);
   return provider;
 }

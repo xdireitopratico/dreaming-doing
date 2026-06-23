@@ -24,7 +24,7 @@ import {
   KeyRound,
   Info,
 } from "lucide-react";
-import type { Node, Edge } from "@xyflow/react";
+import type { Node, Edge } from "@/types/xyflow-react-shim";
 
 interface ExportImportPanelProps {
   flowId: string;

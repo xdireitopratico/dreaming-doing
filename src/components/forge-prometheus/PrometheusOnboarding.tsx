@@ -99,7 +99,7 @@ export default function PrometheusOnboarding({ onComplete, isProcessing, launchC
       : `ps_onboarding_legacy_${launchConfig.prompt.slice(0, 32).replace(/\s+/g, "_")}`,
   ).current;
 
-  const [step, setStep] = useState(() => {
+  const [step, setStep] = useState<number>(() => {
     try {
       const saved = localStorage.getItem(storageKey);
       return saved ? JSON.parse(saved)?.step || 0 : 0;

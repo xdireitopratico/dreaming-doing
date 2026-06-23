@@ -3,7 +3,7 @@
  * ROADMAP-03 Phase 1: Usa action "test" com flow_id direto — sem deploy obrigatório
  */
 import { useState, useCallback, useEffect, useRef } from "react";
-import { type Node, type Edge } from "@xyflow/react";
+import { type Node, type Edge } from "@/types/xyflow-react-shim";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";

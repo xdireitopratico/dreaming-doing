@@ -11,7 +11,6 @@ import { ForgeIcon } from "@/components/icons/ForgeIcon";
 import { useAuth } from "@/lib/auth";
 import { removeRealtimeChannel, subscribePostgresChanges } from "@/lib/supabase-realtime";
 import { isAgentProject, type ProjectListRow } from "@/lib/project-kind";
-import type { RealtimeChannel } from "@supabase/supabase-js";
 
 function formatRelative(dateStr: string | null) {
   if (!dateStr) return "—";
@@ -44,7 +43,7 @@ export function AgentsDashboard() {
 
   useEffect(() => {
     if (!user?.id) return;
-    let channel: RealtimeChannel | null = null;
+    let channel: ReturnType<typeof subscribePostgresChanges> = null;
 
     const setup = async () => {
       channel = subscribePostgresChanges({

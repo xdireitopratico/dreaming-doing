@@ -7,7 +7,7 @@ import { memo, useMemo } from "react";
 import {
   ReactFlow, Background, Controls, MiniMap, ReactFlowProvider,
   type Node, type Edge,
-} from "@xyflow/react";
+} from "@/types/xyflow-react-shim";
 import "@xyflow/react/dist/style.css";
 import { TriggerNode } from "../flow-builder/nodes/TriggerNode";
 import { LLMNode } from "../flow-builder/nodes/LLMNode";
@@ -52,7 +52,7 @@ const PrometheusLiveCanvasInner = memo(function PrometheusLiveCanvasInner({ node
     >
       <Background gap={20} size={1} />
       <Controls showInteractive={false} />
-      <MiniMap nodeColor={(node) => MINIMAP_COLORS[node.type || ""] || "#94a3b8"} />
+      <MiniMap nodeColor={(node: Node) => MINIMAP_COLORS[node.type || ""] || "#94a3b8"} />
     </ReactFlow>
   );
 });

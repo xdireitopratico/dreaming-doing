@@ -2,6 +2,7 @@
   "include": [
     "src/**/*.ts",
     "src/**/*.tsx",
+    "src/**/*.d.ts",
     "vite.config.ts",
     "vitest.config.ts",
     "eslint.config.js"
@@ -26,8 +27,12 @@
     "noUnusedParameters": false,
     "noFallthroughCasesInSwitch": true,
     "noUncheckedSideEffectImports": true,
+    "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@forge/agent-contract": ["./packages/agent-contract/src/index.ts"],
+      "@forge/agent-contract/*": ["./packages/agent-contract/src/*"],
+      "@xyflow/react": ["./src/types/xyflow-react-shim.ts"]
     }
   }
 }

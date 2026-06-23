@@ -98,7 +98,7 @@ export function DeployPanel({ flowId, flowName, onClose }: DeployPanelProps) {
       .select("status")
       .eq("id", flowId)
       .single();
-    if (data) setFlowStatus(data.status);
+    if (data) setFlowStatus(data.status ?? "draft");
   };
 
   const isTrial = flowStatus === "trial";
@@ -118,7 +118,7 @@ export function DeployPanel({ flowId, flowName, onClose }: DeployPanelProps) {
       // Update deployment config to production mode
       const webDep = deployments.find(d => d.channel === "web");
       if (webDep) {
-        await supabase
+        await (supabase as any)
           .from("agent_deployments")
           .update({ deployment_config: { mode: "production" }, updated_at: new Date().toISOString() })
           .eq("id", webDep.id);
@@ -130,7 +130,7 @@ export function DeployPanel({ flowId, flowName, onClose }: DeployPanelProps) {
   };
 
   const loadEvolutionInstances = async () => {
-    const { data } = await supabase
+    const { data } = await (supabase as any)
       .from("evolution_instances")
       .select("id, instance_name, status, api_url")
       .eq("is_active", true);
@@ -150,7 +150,7 @@ export function DeployPanel({ flowId, flowName, onClose }: DeployPanelProps) {
       .eq("flow_id", flowId);
 
     if (data) {
-      const typed = data.map((d) => ({
+      const typed = (data as any[]).map((d) => ({
         ...d,
         channel_config: d.channel_config as Record<string, unknown> | null,
       }));
@@ -180,8 +180,9 @@ export function DeployPanel({ flowId, flowName, onClose }: DeployPanelProps) {
       .limit(100);
 
     if (executions && executions.length > 0) {
-      const errors = executions.filter((e) => e.status === "failed").length;
-      const completed = executions.filter((e) => e.started_at && e.completed_at);
+      const items = executions as Array<{ status: string; started_at: string | null; completed_at: string | null }>;
+      const errors = items.filter((e) => e.status === "failed").length;
+      const completed = items.filter((e) => e.started_at && e.completed_at);
       const avgMs = completed.length > 0
         ? completed.reduce((acc, e) => {
             const start = new Date(e.started_at!).getTime();
@@ -207,7 +208,7 @@ export function DeployPanel({ flowId, flowName, onClose }: DeployPanelProps) {
       : { widget_version: "1.0" };
 
     if (existing) {
-      const { error } = await supabase
+      const { error } = await (supabase as any)
         .from("agent_deployments")
         .update({
           endpoint_slug: slug,
@@ -223,7 +224,7 @@ export function DeployPanel({ flowId, flowName, onClose }: DeployPanelProps) {
         toast({ title: `Deploy ${channel} atualizado!` });
       }
     } else {
-      const { error } = await supabase
+      const { error } = await (supabase as any)
         .from("agent_deployments")
         .insert({
           flow_id: flowId,
@@ -246,7 +247,7 @@ export function DeployPanel({ flowId, flowName, onClose }: DeployPanelProps) {
   };
 
   const toggleDeploy = async (deployId: string, active: boolean) => {
-    await supabase
+    await (supabase as any)
       .from("agent_deployments")
       .update({ is_active: active, updated_at: new Date().toISOString() })
       .eq("id", deployId);
@@ -570,7 +571,7 @@ console.log(data.output);`;
                   setCanaryUpdating(true);
                   const webDep = deployments.find(d => d.channel === "web");
                   if (webDep) {
-                    await supabase
+                    await (supabase as any)
                       .from("agent_deployments")
                       .update({ canary_percent: canaryPercent, updated_at: new Date().toISOString() })
                       .eq("id", webDep.id);

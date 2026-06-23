@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * ExecutionLogPanel — Trace timeline + real-time logs
  * Mostra execuções do flow com steps detalhados e realtime

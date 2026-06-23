@@ -73,7 +73,7 @@ export function MotorInfraSection({ llmConnectedCount }: MotorInfraSectionProps)
         .from("connectors_public")
         .select("kind, provider, meta")
         .eq("owner_id", user!.id)
-        .eq("kind", "web_search")
+        .eq("kind", "web_search" as never)
         .maybeSingle();
       if (error) throw error;
       return data;

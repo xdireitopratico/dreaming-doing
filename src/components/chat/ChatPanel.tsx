@@ -46,6 +46,10 @@ export type ChatPanelProps = {
   onExternalPromptConsumed?: () => void;
   pendingQueueItems?: PendingQueueItem[];
   queueBlockingReason?: string | null;
+  queuePaused?: boolean;
+  onUpdateQueueRepeat?: (id: string, repeat: number) => Promise<void>;
+  onToggleQueueItemPaused?: (id: string, paused: boolean) => Promise<void>;
+  onToggleQueuePaused?: (paused: boolean) => Promise<void>;
   onClearPendingItem?: (id: string) => Promise<void>;
   onClearAllPending?: () => Promise<void>;
   onDrainQueue?: () => Promise<void>;
@@ -75,6 +79,10 @@ export function ChatPanel({
   onExternalPromptConsumed,
   pendingQueueItems = [],
   queueBlockingReason,
+  queuePaused,
+  onUpdateQueueRepeat,
+  onToggleQueueItemPaused,
+  onToggleQueuePaused,
   onClearPendingItem,
   onClearAllPending,
   onDrainQueue,
@@ -375,6 +383,7 @@ export function ChatPanel({
         busyReason={busyReason}
         onTakeOver={takeOver}
         planPending={!!pendingPlan}
+        queuePaused={queuePaused}
         composerMode={composerMode}
         onComposerModeChange={onComposerModeChange}
         onSend={handleSend}

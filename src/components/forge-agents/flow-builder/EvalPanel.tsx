@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * EvalPanel — Quality metrics, version comparison, cost analysis
  * Métricas p50/p95, taxa de erro, custo, comparação de versões

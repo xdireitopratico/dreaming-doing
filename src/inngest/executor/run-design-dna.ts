@@ -127,18 +127,18 @@ export async function executeDesignDnaJob(
     if (!resp.ok) throw new Error(`E2B create ${resp.status}: ${text.slice(0, 400)}`);
 
     const data = JSON.parse(text) as { sandboxID?: string; sandboxId?: string };
-    sandboxId = data.sandboxID ?? data.sandboxId;
+    sandboxId = data.sandboxID ?? data.sandboxId ?? "";
     if (!sandboxId) throw new Error("E2B: no sandboxID in response");
 
     previewUrl = `https://${CHROMIUM_DEBUG_PORT}-${sandboxId}.${E2B_DOMAIN}`;
 
-    const { error: connectErr } = await fetch(`${E2B_API_BASE}/sandboxes/${sandboxId}/connect`, {
+    const connectResp = await fetch(`${E2B_API_BASE}/sandboxes/${sandboxId}/connect`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-API-Key": e2bApiKey },
       body: JSON.stringify({ timeout: 3600 }),
     });
-    if (connectErr) {
-      const raw = await connectErr.text().catch(() => "unknown");
+    if (!connectResp.ok) {
+      const raw = await connectResp.text().catch(() => "unknown");
       console.warn("[design-dna] sandbox connect warning:", raw);
     }
 

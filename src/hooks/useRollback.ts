@@ -60,7 +60,7 @@ export function useRollback({ projectId, enabled }: UseRollbackOptions) {
       if (!files || files.length === 0) return null;
 
       const tree: Record<string, string> = {};
-      files.forEach((f) => {
+      (files as Array<{ path: string; content: string | null }>).forEach((f) => {
         tree[f.path] = f.content ?? "";
       });
 

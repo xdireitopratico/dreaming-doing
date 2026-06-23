@@ -1,4 +1,4 @@
-import type { Node } from "@xyflow/react";
+import type { Node } from "@/types/xyflow-react-shim";
 
 /** Per-model NVIDIA secret names (aligned with llm-router NVIDIA_SECRET_MAP). */
 export const NVIDIA_MODEL_SECRET_MAP: Record<string, string> = {
@@ -48,6 +48,7 @@ export function extractFlowTools(nodes: Node[]): FlowToolRef[] {
     if (node.type !== "tool") continue;
     const data = node.data as Record<string, unknown> | undefined;
     const config = data?.config as Record<string, unknown> | undefined;
+    if (!config) continue;
     const toolName = config?.tool_name;
     if (typeof toolName !== "string" || !toolName.trim()) continue;
 

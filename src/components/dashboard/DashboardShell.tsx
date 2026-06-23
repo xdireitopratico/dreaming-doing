@@ -1,6 +1,5 @@
 import { Link, Navigate, useLocation, useNavigate } from "@tanstack/react-router";
 import {
-  BookOpen,
   Bot,
   BrainCircuit,
   ChevronDown,
@@ -147,11 +146,6 @@ function DashboardSidebarPanel({
           <Puzzle className="size-4 shrink-0" />
           MCP
         </Link>
-
-        <a href="/#how-it-works" className="dashboard-nav-item" onClick={onNavClick}>
-          <BookOpen className="size-4 shrink-0" />
-          Recursos
-        </a>
 
         <span className="dashboard-nav-label">Projetos</span>
         <Link

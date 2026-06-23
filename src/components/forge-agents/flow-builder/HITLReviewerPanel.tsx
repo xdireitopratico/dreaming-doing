@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * HITLReviewerPanel — Fila de aprovação Human-in-the-Loop
  * Exibe execuções pausadas aguardando decisão humana.

@@ -1,4 +1,4 @@
-import { Handle, Position, type NodeProps } from "@xyflow/react";
+import { Handle, Position, type NodeProps } from "@/types/xyflow-react-shim";
 import { GitBranch } from "lucide-react";
 import { BaseNode } from "./BaseNode";
 

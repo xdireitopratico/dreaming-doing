@@ -4,7 +4,7 @@
  */
 import { useState, useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import type { Node, Edge } from "@xyflow/react";
+import type { Node, Edge } from "@/types/xyflow-react-shim";
 import { buildExecutionOrder, type BreakpointInfo, type DebugStep, type DebugState, type ConsoleEntry } from "./debug-types";
 
 interface UseDebugExecutionProps {

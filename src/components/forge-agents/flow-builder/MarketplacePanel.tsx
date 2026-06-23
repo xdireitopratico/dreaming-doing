@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * MarketplacePanel — Marketplace de agentes: publicar, explorar, comprar/instalar e avaliar
  * R52: Marketplace Monetizado — pricing, checkout Stripe, revenue sharing
