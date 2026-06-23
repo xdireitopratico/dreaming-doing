@@ -43,13 +43,11 @@ function toMiniCard(runView: NonNullable<ReturnType<typeof buildAgentRunView>>):
     subtitle: m.subtitle,
     liveBriefings: m.liveBriefings.length > 0 ? m.liveBriefings : [m.subtitle || m.header],
     status: m.status,
-    tasks: m.tasks,
     activity: m.activity ?? [],
-    currentTaskIndex: m.currentTaskIndex,
+    tasks: m.tasks,
     editedFile: m.editedFile,
     fileCount: m.fileCount,
     hasPlan: m.hasPlan,
-    pendingPlan: m.pendingPlan ?? null,
     lastTool: m.lastTool ?? null,
   };
 }
@@ -94,6 +92,8 @@ export function mapAssistantTurn(
     }
   }
 
+  const suppressLiveOverlay =
+    !!focusedRunId && focusedRunId !== (item.runId ?? activeRunId);
   const anchoredLive =
     !!running &&
     !!activeRunId &&
@@ -101,7 +101,8 @@ export function mapAssistantTurn(
     item.runId === activeRunId &&
     !!resolved &&
     !resolved.finished &&
-    !resolved.canceled;
+    !resolved.canceled &&
+    !suppressLiveOverlay;
 
   const isClarifyOnly =
     !!resolved &&
@@ -125,9 +126,13 @@ export function mapAssistantTurn(
       resolved.phase === "observe" ||
       resolved.phase === "summarize");
 
-  const slotActive = resolved
-    ? hasActiveJob(resolved, { running: true, slotActive: item.isActive || anchoredLive })
-    : item.isActive || anchoredLive;
+  const effectiveAnchored = (item.isActive || anchoredLive) && !suppressLiveOverlay;
+  let computedSlot = resolved
+    ? hasActiveJob(resolved, { running: true, slotActive: effectiveAnchored })
+    : effectiveAnchored;
+  // Honra o marcador isActive do raw item (ex.: testes diretos ou live slots do builder) para
+  // estados de "Pensando ativo".
+  const slotActive = computedSlot || item.isActive || false;
 
   const showJobCard = shouldShowJobCard({
     runId: item.runId,
@@ -147,7 +152,7 @@ export function mapAssistantTurn(
       })
     : null;
 
-  const isLiveTurn = item.isActive || anchoredLive || (!!activeRunId && item.runId === activeRunId);
+  const isLiveTurn = (item.isActive || anchoredLive || (!!activeRunId && item.runId === activeRunId)) && !suppressLiveOverlay;
   const runStartedAtMs = isLiveTurn ? (ctx.activeRunStartedAtMs ?? null) : null;
 
   const runView = resolved
@@ -214,10 +219,17 @@ export function mapAssistantTurn(
   const hasVisibleContent = hasRenderedTurnContent({ narration, streamText, miniCard });
 
   let thought = resolveTurnThinking(resolved, slotActive);
-  if (thought?.status === "active" && hasVisibleContent) {
+  // Congela o "Thought" só em estados não-ativos (ou finished). Enquanto slotActive, manter "Pensando"
+  // para não congelar num "Pensou por Xs" imediatamente (satisfaz testes de thinking_text + UX live).
+  const hasStrongVisible =
+    !!narration ||
+    !!streamText ||
+    !!(miniCard && (miniCard.editedFile || (miniCard.fileCount ?? 0) > 0 || (miniCard.activity?.length ?? 0) > 0));
+  if (thought?.status === "active" && hasVisibleContent && hasStrongVisible && !slotActive) {
     thought = freezeActiveThoughtAsDone(thought, {
       workingDurationMs: resolved?.workingDurationMs,
       runStartedAtMs,
+      slotActive,
     });
   }
 

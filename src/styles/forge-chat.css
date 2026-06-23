@@ -510,6 +510,25 @@
   animation: forge-plan-shimmer 1.4s ease-in-out infinite;
 }
 
+/* Structural shimmer for create_plan (hints phases + steps) */
+.forge-plan-dock-shimmer-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.forge-plan-dock-shimmer-line {
+  height: 10px;
+  border-radius: 4px;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--bg-input) 92%, var(--bg-card) 8%) 0%,
+    color-mix(in srgb, var(--bg-input) 70%, #52525b 30%) 50%,
+    color-mix(in srgb, var(--bg-input) 92%, var(--bg-card) 8%) 100%
+  );
+  background-size: 200% 100%;
+  animation: forge-plan-shimmer 1.4s ease-in-out infinite;
+}
+
 .forge-plan-dock-creating-label {
   margin: var(--space-xs) 0 0;
   font-size: 13px;
@@ -524,6 +543,129 @@
   100% {
     background-position: -100% 0;
   }
+}
+
+/* ─── Structured plan phases (PlanPhaseList for create_plan tool output) ── */
+.forge-plan-dock-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-sm);
+}
+
+.forge-plan-dock-step-count {
+  font: var(--font-task-label);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.03em;
+  color: var(--text-muted);
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+/* ─── Plan phases container ──────────────────────────────────────── */
+.forge-plan-phases {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+/* Mini-card variant — herda o fundo do mini card (sem inner panel escuro).
+   Quando o mini card tem plano driven, renderiza as fases inline sem o
+   "Plan" header duplicado (compact mode do PlanPhaseList). */
+.forge-plan-phases--in-card {
+  gap: var(--space-sm);
+  margin-top: var(--space-sm);
+}
+
+/* ─── Plan phase block ───────────────────────────────────────────── */
+.forge-plan-phase {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.forge-plan-phase-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.forge-plan-phase-index {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--text-accent) 15%, transparent);
+  color: var(--text-accent);
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 10px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.forge-plan-phase-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+  line-height: 1.35;
+}
+
+/* ─── Plan step list ─────────────────────────────────────────────── */
+.forge-plan-step-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  padding-left: 26px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.forge-plan-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font: var(--font-task);
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.45;
+}
+
+.forge-plan-step-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: var(--text-muted);
+  transition: color 0.15s ease;
+}
+
+.forge-plan-step-icon[data-type="create_file"] {
+  color: color-mix(in srgb, var(--status-done) 85%, white);
+}
+
+.forge-plan-step-icon[data-type="edit_file"] {
+  color: color-mix(in srgb, var(--status-working) 80%, white);
+}
+
+.forge-plan-step-icon[data-type="shell_exec"] {
+  color: color-mix(in srgb, var(--status-thinking) 85%, white);
+}
+
+.forge-plan-step-icon[data-type="install_dep"] {
+  color: color-mix(in srgb, #a78bfa 85%, white);
+}
+
+.forge-plan-step-text {
+  flex: 1;
+  min-width: 0;
+  word-break: break-word;
 }
 
 .forge-plan-status-card {
@@ -588,118 +730,6 @@
   font-size: 13px;
   line-height: 1.55;
   color: var(--text-primary);
-}
-
-.forge-plan-prompt {
-  width: 100%;
-  max-width: min(100%, 520px);
-  margin: 0 0 var(--space-sm);
-  padding: var(--space-md) var(--space-lg);
-  border-radius: 12px;
-  border: 1px solid color-mix(in srgb, var(--status-thinking) 40%, var(--border-forge));
-  background: color-mix(in srgb, var(--bg-card) 90%, var(--status-thinking) 10%);
-}
-
-.forge-plan-prompt-header {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--space-sm);
-  margin-bottom: var(--space-sm);
-  color: var(--status-thinking);
-}
-
-.forge-plan-prompt-kicker {
-  margin: 0;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--text-secondary);
-}
-
-.forge-plan-prompt-title {
-  margin: 2px 0 0;
-  font: var(--font-chat);
-  font-size: 15px;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.forge-plan-prompt-label {
-  display: block;
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-  color: var(--text-secondary);
-  margin-bottom: 2px;
-}
-
-.forge-plan-prompt-mission,
-.forge-plan-prompt-objective {
-  margin: 0 0 var(--space-sm);
-  font: var(--font-chat);
-  font-size: 13px;
-  line-height: 1.5;
-  color: var(--text-primary);
-}
-
-.forge-plan-prompt-phases {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-sm);
-  margin: var(--space-sm) 0;
-}
-
-.forge-plan-prompt-phase-title {
-  margin: 0 0 4px;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.forge-plan-prompt-phase-list {
-  margin: 0;
-  padding-left: 1.1rem;
-  font-size: 12px;
-  line-height: 1.45;
-  color: var(--text-secondary);
-}
-
-.forge-plan-prompt-more {
-  margin: 0 0 var(--space-sm);
-  font-size: 11px;
-  color: var(--text-secondary);
-}
-
-.forge-plan-prompt-cta {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-xs);
-  width: 100%;
-  margin-top: var(--space-xs);
-  padding: 10px var(--space-md);
-  border-radius: var(--chat-cta-radius);
-  border: 1px solid color-mix(in srgb, var(--text-accent) 55%, var(--border-forge));
-  background: color-mix(in srgb, var(--text-accent) 12%, var(--bg-input));
-  color: var(--text-primary);
-  font-size: 14px;
-  font-weight: 600;
-  cursor: pointer;
-  transition:
-    border-color 0.15s,
-    background 0.15s;
-}
-
-.forge-plan-prompt-cta:hover:not(:disabled) {
-  border-color: var(--text-accent);
-  background: color-mix(in srgb, var(--text-accent) 18%, var(--bg-input));
-}
-
-.forge-plan-prompt-cta--disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
 }
 
 .forge-message-toolbar {
@@ -1608,39 +1638,3 @@
   margin: 0 var(--space-xs) var(--space-xs);
 }
 
-/* Review callout — aparece entre mini-card e closing quando job done com fileCount > 0 */
-.chat-review-callout {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-sm, 8px);
-  margin: var(--space-xs, 4px) 0;
-  padding: 8px 12px;
-  border-radius: 8px;
-  background: var(--bg-subtle, rgba(255, 255, 255, 0.04));
-  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.08));
-  font-size: 13px;
-}
-
-.chat-review-callout-label {
-  color: var(--text-secondary, #6b7280);
-}
-
-.chat-review-callout-actions {
-  display: flex;
-  gap: 6px;
-}
-
-.chat-review-callout-btn {
-  padding: 4px 10px;
-  border-radius: 6px;
-  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.12));
-  background: transparent;
-  color: var(--text-primary, inherit);
-  font-size: 12px;
-  cursor: pointer;
-}
-
-.chat-review-callout-btn:hover {
-  background: var(--bg-hover, rgba(255, 255, 255, 0.06));
-}

@@ -230,13 +230,20 @@ export function ChatJobCard({
               </li>
             ))}
           </ul>
-        ) : data.pendingPlan && data.pendingPlan.steps.length > 0 ? (
-          <PlanPhaseListFromPlan
-            plan={data.pendingPlan}
-            compact
-            className="forge-plan-phases forge-plan-phases--in-card"
-          />
         ) : null}
+
+        {!hasActivity && data.tasks && data.tasks.length > 0 && (
+          <ul className="forge-task-list">
+            {data.tasks.slice(0, 5).map((task, idx) => (
+              <li key={task.id || idx} className="forge-task-item" data-status={task.status}>
+                <span className="forge-task-icon">
+                  {task.status === 'done' ? '☑' : task.status === 'active' ? '◐' : '○'}
+                </span>
+                <span className="forge-task-label">{task.label}</span>
+              </li>
+            ))}
+          </ul>
+        )}
 
         <p className="forge-mini-card-hint">{hint()}</p>
       </button>

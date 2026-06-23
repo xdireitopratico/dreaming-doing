@@ -1,19 +1,15 @@
 import type { ChatMessage } from "@/lib/chat-types";
 import type { AgentProgress } from "@/lib/agent-progress";
-import { isAssistantRunMaterialized } from "@/lib/assistant-materialized";
 import {
   hasMaterializedCardSnapshot,
   runIdFromAssistantMessage,
 } from "@/lib/assistant-run-progress";
-import { storedPlanFromMessage } from "@/lib/plan-message-meta";
-import { shouldRetainLiveRunSlot } from "@/lib/live-run-overlay";
+
 import { isEntendiOpener } from "@/lib/narration-dedupe";
-import { PENDING_RUN_ID } from "@/lib/pending-run-id";
-import { scopeLiveState } from "@/lib/chat/session";
 import { mapAssistantTurn } from "@/lib/chat/turn";
+import { PENDING_RUN_ID } from "@/lib/pending-run-id";
 import type {
   BuildChatThreadOptions,
-  ChatLiveState,
   RawThreadItem,
   ThreadItem,
 } from "@/lib/chat/types";
@@ -23,17 +19,6 @@ function buildRunIdFromUser(msg: ChatMessage): string | null {
   if (!meta || typeof meta !== "object") return null;
   if (typeof meta.buildRunId === "string") return meta.buildRunId;
   return null;
-}
-
-/** Mensagem user só para LLM/âncora de build — não exibir no chat (espelha run-context.ts). */
-export function isPlanApprovedUserMessage(msg: ChatMessage): boolean {
-  const meta = msg.meta;
-  if (!meta || typeof meta !== "object") return false;
-  if (meta.kind === "plan_approved") return true;
-  if (typeof meta.planSourceRunId === "string") return true;
-  const text = msg.content?.trim() ?? "";
-  if (text.startsWith("[Plano aprovado]")) return true;
-  return /^Plano aprovado — executar em modo Build/i.test(text);
 }
 
 function mergeMessageContent(a?: ChatMessage, b?: ChatMessage): ChatMessage | undefined {
@@ -146,38 +131,11 @@ function buildDbThread(messages: ChatMessage[]): RawThreadItem[] {
       const userMeta = (msg.meta ?? {}) as Record<string, unknown>;
       if (userMeta.queued === true) continue;
 
-      // H12 fix: plano aprovado aparece no chat como card de confirmação,
-      // não como mensagem filtrada. Usuário precisa ver qual plano foi
-      // aprovado (steps, headline) depois que ele clica "Aprovar".
-      if (isPlanApprovedUserMessage(msg)) {
-        const meta = (msg.meta ?? {}) as Record<string, unknown>;
-        const headline = typeof meta.planHeadline === "string" ? meta.planHeadline : null;
-        const steps = Array.isArray(meta.steps)
-          ? (meta.steps as Array<{ title?: string }>).map((s) => s.title).filter(Boolean)
-          : [];
-        const summary = headline ?? "Plano aprovado";
-        items.push({
-          kind: "user",
-          message: {
-            ...msg,
-            content: `✅ **Plano aprovado**${headline ? ` — ${headline}` : ""}\n\n${
-              steps.length > 0
-                ? `Executando:\n${steps
-                    .slice(0, 7)
-                    .map((t) => `• ${t}`)
-                    .join("\n")}`
-                : ""
-            }`,
-          },
-          internal: undefined,
-        });
-      } else {
-        items.push({
-          kind: "user",
-          message: msg,
-          internal: undefined,
-        });
-      }
+      items.push({
+        kind: "user",
+        message: msg,
+        internal: undefined,
+      });
       continue;
     }
 
@@ -230,213 +188,81 @@ function buildDbThread(messages: ChatMessage[]): RawThreadItem[] {
         isActive: false,
       });
     }
-
-    const meta = msg.meta as Record<string, unknown> | undefined;
-    if (meta?.planStatus === "approved" || meta?.planStatus === "rejected") {
-      items.push({
-        kind: "plan_status",
-        status: meta.planStatus,
-        message: msg,
-      });
-    }
   }
 
   return normalizeThreadOrder(items);
 }
 
-function isRunMaterializedInThread(items: RawThreadItem[], runId: string): boolean {
-  for (const item of items) {
-    if (item.kind !== "assistant" || item.runId !== runId) continue;
-    if (item.message && isAssistantRunMaterialized(item.message)) return true;
-  }
-  return false;
-}
 
-function lastUnansweredUserIndex(items: RawThreadItem[]): number {
-  for (let i = items.length - 1; i >= 0; i--) {
-    const item = items[i];
-    if (item?.kind !== "user") continue;
-    const next = items[i + 1];
-    if (!next || next.kind !== "assistant") return i;
-    if (
-      next.kind === "assistant" &&
-      !next.live &&
-      !next.message?.content?.trim() &&
-      !hasMaterializedCardSnapshot(next.message)
-    ) {
-      return i;
-    }
-  }
-  return -1;
-}
 
-function anchorIndexForRun(items: RawThreadItem[], runId: string): number | null {
-  for (let i = 0; i < items.length; i++) {
-    const item = items[i];
-    if (item?.kind === "user" && buildRunIdFromUser(item.message) === runId) {
-      return i + 1;
-    }
-  }
-  for (let i = 0; i < items.length; i++) {
-    const item = items[i];
-    if (item?.kind === "assistant" && item.runId === runId) return i;
-  }
-  return null;
-}
 
-function upsertLiveSlot(
-  items: RawThreadItem[],
-  insertAt: number,
-  slot: Extract<RawThreadItem, { kind: "assistant" }>,
-  minInsertAt = 0,
-): RawThreadItem[] {
-  const next = [...items];
-  const at = Math.max(insertAt, minInsertAt);
-
-  if (slot.runId) {
-    for (let i = 0; i < next.length; i++) {
-      const ex = next[i];
-      if (ex?.kind !== "assistant") continue;
-      if (ex.runId === PENDING_RUN_ID && slot.runId !== PENDING_RUN_ID) {
-        next[i] = {
-          ...ex,
-          ...slot,
-          message: mergeMessageContent(ex.message, slot.message),
-          runId: slot.runId,
-        };
-        return next;
-      }
-      if (ex.runId === slot.runId) {
-        const merged: Extract<RawThreadItem, { kind: "assistant" }> = {
-          ...ex,
-          ...slot,
-          message: mergeMessageContent(ex.message, slot.message),
-          live: slot.live ?? ex.live,
-          isActive: slot.isActive || ex.isActive,
-        };
-        if (i < minInsertAt) {
-          next.splice(i, 1);
-          next.splice(Math.min(at, next.length), 0, merged);
-        } else {
-          next[i] = merged;
-        }
-        return next;
-      }
-    }
-  }
-
-  const existing = next[at];
-  if (existing?.kind === "assistant" && slot.runId && existing.runId === slot.runId) {
-    next[at] = {
-      ...existing,
-      ...slot,
-      message: mergeMessageContent(existing.message, slot.message),
-      live: slot.live ?? existing.live,
-    };
-    return next;
-  }
-
-  next.splice(at, 0, slot);
-  return next;
-}
-
-function shouldShowLiveOverlay(items: RawThreadItem[], live: ChatLiveState): boolean {
-  const { activeRunId, progress, running } = live;
-  if (!activeRunId) return true;
-
-  if (activeRunId !== PENDING_RUN_ID && isRunMaterializedInThread(items, activeRunId)) {
-    return false;
-  }
-
-  const isPending = activeRunId === PENDING_RUN_ID;
-  if (running || isPending || !progress.finished) return true;
-  return shouldRetainLiveRunSlot(progress);
-}
-
-/** Congela progresso live no slot DB quando cardSnapshot ainda não chegou. */
-function attachFrozenProgressToRun(
-  items: RawThreadItem[],
-  runId: string,
-  progress: AgentProgress,
-): RawThreadItem[] {
-  return items.map((item) => {
-    if (item.kind !== "assistant" || item.runId !== runId) return item;
-    if (item.message && hasMaterializedCardSnapshot(item.message)) {
-      if (progress.workingDurationMs != null && progress.workingDurationMs > 0) {
-        return {
-          ...item,
-          live: item.live ?? progress,
-          isActive: false,
-        };
-      }
-      return item;
-    }
-    return {
-      ...item,
-      live: item.live ?? progress,
-      isActive: false,
-    };
-  });
-}
-
-function applyLiveOverlay(items: RawThreadItem[], live: ChatLiveState): RawThreadItem[] {
-  const { activeRunId, progress, running } = live;
-
-  if (activeRunId && !shouldShowLiveOverlay(items, live)) {
-    return attachFrozenProgressToRun(items, activeRunId, progress);
-  }
-
-  const isPending = activeRunId === PENDING_RUN_ID;
-  const slotActive = activeRunId ? (running || isPending) && !progress.finished : false;
-
-  const slot: Extract<RawThreadItem, { kind: "assistant" }> = {
-    kind: "assistant",
-    live: progress,
-    runId: activeRunId ?? undefined,
-    isActive: slotActive,
-  };
-
-  const lastUserIdx = lastVisibleUserIndex(items);
-  const minInsertAt = lastUserIdx >= 0 ? lastUserIdx + 1 : 0;
-
-  if (activeRunId) {
-    let anchored = anchorIndexForRun(items, activeRunId);
-    if (anchored != null && anchored < minInsertAt) anchored = null;
-    const insertAt =
-      anchored ??
-      (() => {
-        const u = lastUnansweredUserIndex(items);
-        return u >= 0 ? u + 1 : items.length;
-      })();
-    return upsertLiveSlot(items, insertAt, slot, minInsertAt);
-  }
-
-  const insertAt = lastUnansweredUserIndex(items);
-  if (insertAt < 0) return items;
-  return upsertLiveSlot(items, insertAt + 1, { ...slot, isActive: false }, minInsertAt);
-}
 
 function buildRawThread(
   messages: ChatMessage[],
   progress: AgentProgress,
   opts: Pick<BuildChatThreadOptions, "activeRunId" | "running" | "focusedRunId">,
 ): RawThreadItem[] {
-  const running = opts.running ?? false;
-  const live = scopeLiveState(messages, progress, opts.activeRunId, running);
   let items = buildDbThread(messages);
-  if (!live) return items;
+  const running = opts.running ?? false;
+  const activeRunId = opts.activeRunId;
 
-  const focusedRunId = opts.focusedRunId;
-  if (
-    focusedRunId &&
-    live.activeRunId &&
-    focusedRunId !== live.activeRunId &&
-    live.activeRunId !== PENDING_RUN_ID
-  ) {
-    return attachFrozenProgressToRun(items, live.activeRunId, live.progress);
+  // Anexar .live (fonte de dados rica: narration, timeline, duration etc) para o activeRunId da sessão.
+  // Sempre que o runId casa com um item do DB (mesmo finished), para hidratar o turn até o cardSnapshot materializar.
+  // Synthetic (append) só se ainda executando (não duplicar finished no thread).
+  // isActive só para execução + running da UI + não suprimido por foco no inspector histórico.
+  if (activeRunId && progress) {
+    const isExecuting = !progress.finished && !progress.canceled && !progress.awaiting;
+    const suppressActive = !!opts.focusedRunId && opts.focusedRunId !== activeRunId;
+    const isActiveOverlay = isExecuting && running && !suppressActive;
+
+    // sempre tentar overlay no matching runId (permite "freeze" do progresso na mensagem DB fraca)
+    let found = false;
+    for (let i = items.length - 1; i >= 0; i--) {
+      const it = items[i];
+      if (it.kind === 'assistant' && it.runId === activeRunId) {
+        items[i] = {
+          ...it,
+          live: progress,
+          isActive: isActiveOverlay,
+        } as RawThreadItem;
+        found = true;
+        break;
+      }
+    }
+    if (!found) {
+      // Injeta slot sintético para activeRunId para carregar narração / miniCard final do progresso
+      // (mesmo finished) quando não há msg DB ainda. Evita vazar runs "stale" com awaiting/plan.
+      const canSynthesizeFinished = !progress.awaiting && !progress.awaitingKind;
+      if (isExecuting || canSynthesizeFinished) {
+        items.push({
+          kind: 'assistant',
+          runId: activeRunId,
+          live: progress,
+          isActive: isActiveOverlay,
+        } as RawThreadItem);
+      }
+    }
   }
 
-  return applyLiveOverlay(items, live);
+  // Posiciona o live run logo após o último user (para que turn[1] seja o live quando há user recente).
+  // Órfãos reorderáveis (Entendi sem run) ficam em suas posições relativas.
+  items = ensureLiveRunAfterLastUser(items, activeRunId);
+
+  return items;
+}
+
+function ensureLiveRunAfterLastUser(items: RawThreadItem[], activeRunId?: string | null): RawThreadItem[] {
+  if (!activeRunId) return items;
+  const liveIdx = items.findIndex(
+    (it) => it.kind === "assistant" && it.runId === activeRunId && (it.live || it.isActive),
+  );
+  if (liveIdx < 0) return items;
+  const lastUser = lastVisibleUserIndex(items);
+  if (liveIdx > lastUser + 1) {
+    const [liveItem] = items.splice(liveIdx, 1);
+    items.splice(lastUser + 1, 0, liveItem);
+  }
+  return items;
 }
 
 /**
@@ -454,17 +280,6 @@ export function buildChatThread(
     if (item.kind === "user") {
       if (item.internal) return [];
       return [{ kind: "user", message: item.message }];
-    }
-    if (item.kind === "plan_status") {
-      const stored = storedPlanFromMessage(item.message);
-      return [
-        {
-          kind: "plan_status",
-          status: item.status,
-          plan: stored?.plan ?? null,
-          message: item.message,
-        },
-      ];
     }
     return [
       mapAssistantTurn(item, {

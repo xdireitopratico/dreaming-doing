@@ -64,7 +64,6 @@ export function AssistantTurn({
   const showNarration = !!narrationText;
   const showJobCard = !!item.miniCard;
   const showClarify = !!item.clarify?.choices?.length;
-  const showReviewCallout = item.miniCard?.status === "done" && (item.miniCard.fileCount ?? 0) > 0;
   const showClosing = !showClarify && !!closingText;
 
   const robinActive =
@@ -135,34 +134,6 @@ export function AssistantTurn({
             onShowOutput={onShowOutput}
             onShowPreview={onShowPreview}
           />
-        )}
-
-        {showReviewCallout && item.runId && (
-          <div className="chat-review-callout" data-testid="assistant-review-callout">
-            <span className="chat-review-callout-label">
-              {item.miniCard?.fileCount === 1
-                ? "1 arquivo modificado"
-                : `${item.miniCard?.fileCount ?? 0} arquivos modificados`}
-            </span>
-            <div className="chat-review-callout-actions">
-              <button
-                type="button"
-                className="chat-review-callout-btn"
-                onClick={() => onOpenInspector?.(item.runId!, "changes")}
-              >
-                Ver diff
-              </button>
-              {onShowOutput && (
-                <button
-                  type="button"
-                  className="chat-review-callout-btn"
-                  onClick={() => onShowOutput(item.runId!)}
-                >
-                  Ver output
-                </button>
-              )}
-            </div>
-          </div>
         )}
 
         {showClarify && item.clarify && (

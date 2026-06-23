@@ -27,7 +27,7 @@ export function miniCardShowsInChat(card: MiniCardData | null | undefined): bool
   if (!card) return false;
   if (card.editedFile) return true;
   if ((card.fileCount ?? 0) > 0) return true;
-  if (card.tasks.some((t) => t.status !== "pending")) return true;
+  if (card.activity && card.activity.some((a) => a.status === 'active' || a.status === 'done')) return true;
   if (card.header.trim() && card.header !== "Working") return true;
   return false;
 }
@@ -57,7 +57,7 @@ export function resolveTurnThinking(
   if (!thought || thought.type !== "THOUGHT") return null;
 
   const text = thought.text?.trim() || null;
-  if (thought.active) {
+  if (thought.active || slotActive) {
     return { status: "active", text };
   }
   return {
@@ -70,21 +70,24 @@ export function resolveTurnThinking(
 /** Pensando ativo → Pensou por Xs quando o turno já tem conteúdo visível (mini-card, etc.). */
 export function freezeActiveThoughtAsDone(
   thought: ChatThoughtState,
-  opts: { workingDurationMs?: number | null; runStartedAtMs?: number | null },
+  opts: { workingDurationMs?: number | null; runStartedAtMs?: number | null; slotActive?: boolean },
 ): ChatThoughtState {
   if (thought.status === "done") return thought;
 
   let durationSec = 1;
   if (opts.workingDurationMs != null && opts.workingDurationMs > 0) {
     durationSec = Math.max(1, Math.round(opts.workingDurationMs / 1000));
-  } else if (opts.runStartedAtMs != null) {
+  } else if (opts.slotActive && opts.runStartedAtMs != null) {
     durationSec = Math.max(1, Math.round((Date.now() - opts.runStartedAtMs) / 1000));
   }
 
   return { status: "done", durationSec, text: thought.text };
 }
 
-/** Uma linha por turno: Pensando… → Pensou por Xs (congela uma vez). */
+/** Uma linha por turno: Pensando… → Pensou por Xs (congela uma vez).
+ *  Só usa relógio client (Date.now) para o slot *ativo e em execução*.
+ *  Finished/históricos usam workingDurationMs capturado no finish (determinístico).
+ */
 export function resolveChatWorking(opts: {
   slotActive: boolean;
   runStartedAtMs?: number | null;
@@ -100,12 +103,13 @@ export function resolveChatWorking(opts: {
     };
   }
 
-  if (hasVisibleContent && runStartedAtMs) {
-    const ms = Math.max(1000, Date.now() - runStartedAtMs);
-    return { status: "done", durationSec: Math.max(1, Math.round(ms / 1000)) };
-  }
-
+  // Só calcula elapsed "ao vivo" se é o slot ativo corrente.
+  // Evita "Thought for 999s" em turns históricos ou após finish.
   if (slotActive && runStartedAtMs) {
+    if (hasVisibleContent) {
+      const ms = Math.max(1000, Date.now() - runStartedAtMs);
+      return { status: "done", durationSec: Math.max(1, Math.round(ms / 1000)) };
+    }
     return { status: "active" };
   }
 

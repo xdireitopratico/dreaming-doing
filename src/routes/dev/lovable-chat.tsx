@@ -70,12 +70,10 @@ const FIXTURES: {
           subtitle: "Orchestrating Lara container cleanup",
           liveBriefings: ["Orchestrating Lara container cleanup"],
           status: "working",
-          tasks: [
+          activity: [
             { id: "t1", label: "Higienizar Dockerfile.lara", status: "active" },
             { id: "t2", label: "Conectar rota browser execute", status: "pending" },
           ],
-          activity: [],
-          currentTaskIndex: 0,
         },
         finished: false,
       },
@@ -101,14 +99,13 @@ const FIXTURES: {
           subtitle: "Orchestrating Lara container cleanup",
           liveBriefings: ["Orchestrating Lara container cleanup"],
           status: "working",
-          tasks: [
+          activity: [
             { id: "t1", label: "Higienizar Dockerfile.lara", status: "pending" },
             { id: "t2", label: "Conectar rota browser execute", status: "pending" },
             { id: "t3", label: "Proteção anti-destrutivo", status: "pending" },
             { id: "t4", label: "Auto-save de scripts persistente", status: "pending" },
             { id: "t5", label: "Regenerar bundles e redeploy", status: "pending" },
           ],
-          activity: [],
           currentTaskIndex: 0,
           editedFile: "Dockerfile.lara",
         },
@@ -136,14 +133,13 @@ const FIXTURES: {
           subtitle: "Configuring Lara workspace safeguards now",
           liveBriefings: ["Configuring Lara workspace safeguards now"],
           status: "working",
-          tasks: [
+          activity: [
             { id: "t1", label: "Higienizar Dockerfile.lara", status: "pending" },
             { id: "t2", label: "Conectar rota browser execute", status: "pending" },
             { id: "t3", label: "Proteção anti-destrutivo", status: "pending" },
             { id: "t4", label: "Auto-save de scripts persistente", status: "pending" },
             { id: "t5", label: "Regenerar bundles e redeploy", status: "pending" },
           ],
-          activity: [],
           currentTaskIndex: 0,
           editedFile: "index.ts",
         },
@@ -171,15 +167,13 @@ const FIXTURES: {
           subtitle: "Configuring Lara workspace safeguards now",
           liveBriefings: ["Configuring Lara workspace safeguards now"],
           status: "working",
-          tasks: [
+          activity: [
             { id: "t1", label: "Higienizar Dockerfile.lara", status: "pending" },
             { id: "t2", label: "Conectar rota browser execute", status: "pending" },
             { id: "t3", label: "Proteção anti-destrutivo", status: "pending" },
             { id: "t4", label: "Auto-save de scripts persistente", status: "pending" },
             { id: "t5", label: "Regenerar bundles e redeploy", status: "active" },
           ],
-          activity: [],
-          currentTaskIndex: 4,
         },
         finished: false,
       },

@@ -31,9 +31,7 @@ export function ChatThread({
         const key =
           item.kind === "user"
             ? `user-${item.message.id}`
-            : item.kind === "plan_status"
-              ? `plan-status-${item.message.id}`
-              : `assistant-${item.runId ?? item.message?.id ?? `fallback-${index}`}`;
+            : `assistant-${item.runId ?? item.message?.id ?? `fallback-${index}`}`;
         return (
           <ChatMessage
             key={key}

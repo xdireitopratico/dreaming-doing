@@ -227,9 +227,7 @@ describe("Fase 2.2 — lastTool é extraído do timeline e exposto em MiniCardDa
       subtitle: "",
       liveBriefings: [],
       status: "done",
-      tasks: [],
       activity: [],
-      currentTaskIndex: 0,
       lastTool: { name: "fs_read", path: "src/app.tsx", ok: true },
     };
     expect(sample.lastTool?.name).toBe("fs_read");
@@ -273,19 +271,6 @@ describe("Fase 2.3 — Version history (snapshot list + tab)", () => {
   });
 });
 
-describe("Fase 2.4 — Review callout aparece quando job done com fileCount > 0", () => {
-  it("AssistantTurn renderiza callout entre mini-card e closing", async () => {
-    const { readFileSync } = await import("node:fs");
-    const { resolve } = await import("node:path");
-    const src = readFileSync(
-      resolve(import.meta.dirname, "../components/chat/AssistantTurn.tsx"),
-      "utf8",
-    );
-    expect(src).toContain("chat-review-callout");
-    expect(src).toContain('item.miniCard?.status === "done"');
-    expect(src).toContain('item.miniCard.fileCount ?? 0) > 0');
-  });
-});
 
 describe("Fase 2.5 — Empty state tem 4 cards de sugestão", () => {
   it("ChatEmptyState exporta e tem 4 cards", async () => {

@@ -9,7 +9,6 @@ import {
   scrollOffsetToAlignUserMessage,
   shouldAnchorNewUserMessage,
   shouldHoldUserMessageAnchor,
-  type ChatScrollMode,
 } from "@/lib/chat/user-message-anchor";
 import { ChatThread } from "./ChatThread";
 import { ChatPlanDock } from "./ChatPlanDock";
@@ -110,9 +109,6 @@ export function ChatPanel({
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const pinnedToBottom = useRef(true);
-  const scrollModeRef = useRef<ChatScrollMode>("bottom");
-  const anchoredUserIdRef = useRef<string | null>(null);
-  const prevLastUserMessageIdRef = useRef<string | null>(null);
   const initialScrollDoneRef = useRef(false);
   const isProgrammaticScrollRef = useRef(false);
   const userScrolledAwayRef = useRef(false);
@@ -145,8 +141,6 @@ export function ChatPanel({
       runProgrammaticScroll(() => {
         el.scrollTo({ top: el.scrollHeight, behavior });
         pinnedToBottom.current = true;
-        scrollModeRef.current = "bottom";
-        anchoredUserIdRef.current = null;
         userScrolledAwayRef.current = false;
         setShowPill(false);
       });
@@ -163,8 +157,6 @@ export function ChatPanel({
       runProgrammaticScroll(() => {
         bubble.scrollIntoView({ block: "start", behavior });
         pinnedToBottom.current = false;
-        scrollModeRef.current = "user-anchor";
-        anchoredUserIdRef.current = messageId;
         userScrolledAwayRef.current = false;
         setShowPill(false);
       });
@@ -180,25 +172,7 @@ export function ChatPanel({
     const dist = el.scrollHeight - el.scrollTop - el.clientHeight;
     pinnedToBottom.current = dist <= PIN_THRESHOLD_PX;
 
-    const messageId = anchoredUserIdRef.current;
-    if (
-      holdUserAnchor &&
-      scrollModeRef.current === "user-anchor" &&
-      messageId &&
-      !userScrolledAwayRef.current
-    ) {
-      const bubble = el.querySelector<HTMLElement>(`[data-user-msg-id="${messageId}"]`);
-      if (bubble) {
-        const anchorTop = scrollOffsetToAlignUserMessage(el, bubble);
-        if (Math.abs(el.scrollTop - anchorTop) > 48) {
-          userScrolledAwayRef.current = true;
-        }
-      }
-    }
-
     if (pinnedToBottom.current && !holdUserAnchor) {
-      scrollModeRef.current = "bottom";
-      anchoredUserIdRef.current = null;
       userScrolledAwayRef.current = false;
       setShowPill(false);
     }
@@ -214,9 +188,6 @@ export function ChatPanel({
 
   useEffect(() => {
     initialScrollDoneRef.current = false;
-    prevLastUserMessageIdRef.current = null;
-    scrollModeRef.current = "bottom";
-    anchoredUserIdRef.current = null;
     userScrolledAwayRef.current = false;
     userJustSentRef.current = false;
     pinnedToBottom.current = true;
@@ -226,25 +197,22 @@ export function ChatPanel({
     if (chatLoading) return;
     if (initialScrollDoneRef.current) return;
     initialScrollDoneRef.current = true;
-    prevLastUserMessageIdRef.current = lastUserMessageId;
-    scrollModeRef.current = "bottom";
-    anchoredUserIdRef.current = null;
     pinnedToBottom.current = true;
     const raf = requestAnimationFrame(() => scrollToBottom("auto"));
     return () => cancelAnimationFrame(raf);
-  }, [chatLoading, lastUserMessageId, scrollToBottom]);
+  }, [chatLoading, scrollToBottom]);
 
+  // Simplified scroll: scroll to bottom on new user message or thread growth, unless user scrolled away
   useEffect(() => {
     if (
       !shouldAnchorNewUserMessage(
-        prevLastUserMessageIdRef.current,
+        null, // simplified, no prev
         lastUserMessageId,
         initialScrollDoneRef.current,
       )
     ) {
       return;
     }
-    prevLastUserMessageIdRef.current = lastUserMessageId;
     if (userJustSentRef.current) {
       userScrolledAwayRef.current = false;
       userJustSentRef.current = false;
@@ -257,24 +225,13 @@ export function ChatPanel({
   }, [lastUserMessageId, anchorUserBubble]);
 
   useEffect(() => {
-    if (scrollModeRef.current === "user-anchor" && holdUserAnchor) return;
-
-    if (scrollModeRef.current === "user-anchor" && !holdUserAnchor) {
-      scrollModeRef.current = "bottom";
-      anchoredUserIdRef.current = null;
-      if (userScrolledAwayRef.current) {
-        setShowPill(true);
-        return;
-      }
-      const raf = requestAnimationFrame(() => scrollToBottom("smooth"));
-      return () => cancelAnimationFrame(raf);
-    }
-
     if (pinnedToBottom.current) {
       const raf = requestAnimationFrame(() => scrollToBottom());
       return () => cancelAnimationFrame(raf);
     }
-    setShowPill(true);
+    if (!holdUserAnchor) {
+      setShowPill(true);
+    }
   }, [thread.length, holdUserAnchor, pendingQueueItems.length, scrollToBottom]);
 
   const handleSend = useCallback(

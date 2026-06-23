@@ -5,13 +5,6 @@ import { checkpointSummary, formatSkillInvocation, sanitizeRunText } from "@/lib
 import { isToolDoneEvent, isToolDoneOk, toolDoneName } from "@/lib/timeline-tool-events";
 
 export type MiniCardStatus = "thinking" | "working" | "done" | "failed";
-export type MiniCardTaskStatus = "done" | "active" | "pending" | "failed";
-
-export type ForgeMiniCardTask = {
-  id: string;
-  label: string;
-  status: MiniCardTaskStatus;
-};
 
 export type ForgeActivityStatus = "done" | "active" | "failed";
 
@@ -31,11 +24,11 @@ export type ForgeMiniCardData = {
   /** Briefings rotativos enquanto o job está ativo — resumo miniatura da timeline. */
   liveBriefings: string[];
   status: MiniCardStatus;
-  tasks: ForgeMiniCardTask[];
   /** Activity stream — últimos 3-4 itens da timeline com status visual.
    *  Substitui briefing único por janela de atividade real happening. */
   activity: ForgeActivityLine[];
-  currentTaskIndex: number;
+  /** Task list derivada do plano para checklist no mini-card do chat. */
+  tasks?: Array<{ id: string; label: string; status: 'pending' | 'active' | 'done' | 'failed' }>;
   editedFile?: string | null;
   fileCount?: number;
   hasPlan?: boolean;
@@ -394,7 +387,9 @@ export function buildForgeTimeline(timeline: SSEEvent[], running = false): Forge
   if (thoughtId) {
     const lastEventTs = timeline.at(-1)?.timestamp ?? thoughtStart;
     const staleMs = running ? Date.now() - lastEventTs : 0;
-    const active = running && staleMs < 12_000;
+    // Marcar ativo enquanto job "running" e não muito stale. Janela generosa para testes e
+    // casos de catch-up lento; prod atualiza timeline com novos eventos mantendo fresco.
+    const active = running && staleMs < 60_000;
     const endTs = active ? Date.now() : Math.max(thoughtStart + 1000, lastEventTs);
     const durationMs = Math.max(1000, endTs - thoughtStart);
     items.push({
@@ -574,7 +569,9 @@ export function collectMiniCardActivity(
       toolBriefing(pendingTool.name, pathFromArgs(pendingTool.args)),
     );
     if (label) {
-      lines.push({ id: `activity-active-${pendingTool.name}-${Date.now()}`, label, status: "active" });
+      // id estável (sem Date.now) para evitar remount em cada re-render do live progress
+      const argKey = JSON.stringify(pendingTool.args ?? {}).slice(0, 32);
+      lines.push({ id: `activity-active-${pendingTool.name}-${argKey}`, label, status: "active" });
     }
   }
 
@@ -619,56 +616,6 @@ export function collectMiniCardActivity(
   }
 
   return lines;
-}
-
-function normalizePlanTaskLabel(description: string): string {
-  const label = description
-    .replace(/^[-*\d.)\s]+/, "")
-    .replace(/\s+/g, " ")
-    .trim();
-  return truncate(label || "", 58);
-}
-
-function deriveMiniCardTasks(
-  progress: AgentProgress,
-  jobPlan: PendingPlan | null | undefined,
-  jobActive: boolean,
-): { tasks: ForgeMiniCardTask[]; currentTaskIndex: number } {
-  const steps = (jobPlan?.steps ?? []).filter((step) => step.enabled !== false);
-  if (steps.length === 0) return { tasks: [], currentTaskIndex: -1 };
-
-  const rawCurrent =
-    typeof progress.currentStep === "number" && Number.isFinite(progress.currentStep)
-      ? progress.currentStep
-      : null;
-  const currentTaskIndex =
-    rawCurrent == null
-      ? jobActive
-        ? 0
-        : progress.finished && progress.lastFinishOk !== false
-          ? steps.length - 1
-          : -1
-      : Math.max(0, Math.min(steps.length - 1, rawCurrent > 0 ? rawCurrent - 1 : rawCurrent));
-
-  const tasks = steps.map((step, index): ForgeMiniCardTask => {
-    let status: MiniCardTaskStatus = "pending";
-    if (progress.finished) {
-      status =
-        progress.lastFinishOk === false && index >= Math.max(0, currentTaskIndex)
-          ? "failed"
-          : "done";
-    } else if (jobActive) {
-      if (index < currentTaskIndex) status = "done";
-      else if (index === currentTaskIndex) status = "active";
-    }
-    return {
-      id: step.id || `plan-step-${index}`,
-      label: normalizePlanTaskLabel(step.description),
-      status,
-    };
-  });
-
-  return { tasks, currentTaskIndex };
 }
 
 function isWrapUpPhrase(text: string): boolean {
@@ -755,9 +702,6 @@ export function buildMiniCardHeader(
   }
   if (hasActiveShellTool(progress) && running) {
     return { header: "Running command", subtitle };
-  }
-  if (opts.planDriven && running) {
-    return { header: "Reading approved plan", subtitle };
   }
   const lifecycle = resolveAgentLifecycle({
     progress,
@@ -865,8 +809,22 @@ export function buildAgentRunView(
       : jobActive && jobPlan?.steps?.length
         ? ["Executando plano"]
         : liveBriefings;
-  const { tasks, currentTaskIndex } = deriveMiniCardTasks(progress, jobPlan, jobActive);
   const activity = collectMiniCardActivity(progress, forgeTimeline, jobActive);
+
+  // Compute tasks from plan for mini-card checklist (to match Lovable images 4-9)
+  const tasks = (jobPlan?.steps ?? []).map((step, index) => {
+    let status: 'pending' | 'active' | 'done' | 'failed' = 'pending';
+    if (progress.finished) {
+      status = progress.lastFinishOk === false ? 'failed' : 'done';
+    } else if (jobActive) {
+      status = index === 0 ? 'active' : 'pending';
+    }
+    return {
+      id: step.id || `plan-step-${index}`,
+      label: step.description,
+      status,
+    };
+  });
 
   const streamBody = progress.streamText?.trim() || null;
   const narrationBody = progress.narrationText?.trim() || null;
@@ -931,13 +889,11 @@ export function buildAgentRunView(
       subtitle,
       liveBriefings: normalizedBriefings,
       status,
-      tasks,
       activity,
-      currentTaskIndex,
+      tasks,
       editedFile,
       fileCount: progress.diffs.length || progress.deliveryFiles?.length,
       hasPlan: !!jobPlan?.steps?.length,
-      pendingPlan: jobPlan ?? null,
       lastTool,
     },
     narration: narrationForLine,

@@ -48,9 +48,7 @@ describe("assertAssistantTurnInvariant", () => {
           subtitle: "s",
           liveBriefings: ["s"],
           status: "working",
-          tasks: [],
           activity: [],
-          currentTaskIndex: 0,
         },
       }),
     ).toThrow(/closing prose only after job/);

@@ -20,7 +20,10 @@ export function freezeWorkingDuration(
   startedAtMs: number | null,
 ): AgentProgress {
   if (next.workingDurationMs != null || !startedAtMs) return next;
-  if (!hasTurnVisibleContent(next)) return next;
+  // Capture sempre em terminal (finish/canceled) para estabilizar "Pensou por Xs"
+  // mesmo que o evento terminal chegue antes de "conteúdo visível" no snapshot.
+  const isTerminal = next.finished || next.canceled || next.lastFinishOk != null;
+  if (!isTerminal && !hasTurnVisibleContent(next)) return next;
   return {
     ...next,
     workingDurationMs: Math.max(1000, Date.now() - startedAtMs),

@@ -11,14 +11,6 @@ export type RunPhase = "plan" | "build" | "execute" | "observe" | "summarize" | 
 
 export type MiniCardStatus = "thinking" | "working" | "done" | "failed";
 
-export type MiniCardTaskStatus = "done" | "active" | "pending" | "failed";
-
-export type MiniCardTask = {
-  id: string;
-  label: string;
-  status: MiniCardTaskStatus;
-};
-
 /** Activity stream — últimas ações reais do agente (tools/results/tasks)
  *  com status visual. Substitui o briefing único por 3-4 linhas humanizadas
  *  que mostram o trabalho happening em tempo real. */
@@ -38,17 +30,14 @@ export type MiniCardData = {
   subtitle: string;
   liveBriefings: string[];
   status: MiniCardStatus;
-  tasks: MiniCardTask[];
   /** Activity stream humanizado — últimos 3-4 itens da timeline com status.
    *  Mostra trabalho happening em tempo real (vs briefing único raso). */
   activity: ActivityLine[];
-  currentTaskIndex: number;
+  /** Task list for plan-driven mini cards (to match Lovable screenshots). */
+  tasks?: Array<{ id: string; label: string; status: 'pending' | 'active' | 'done' | 'failed' }>;
   editedFile?: string | null;
   fileCount?: number;
   hasPlan?: boolean;
-  /** Plano completo para renderização estruturada (fases/steps) no mini card.
-   *  Quando presente, o mini card renderiza o mesmo componente do ChatPlanDock. */
-  pendingPlan?: PendingPlan | null;
   /** Fase 2.2 — action chips: último tool executado vira chip clicável
    *  (Show file / Show diff / Show output / Show preview). */
   lastTool?: {
@@ -93,12 +82,7 @@ export type ThreadItem =
       thought?: ChatThoughtState | null;
       working?: ChatWorkingState | null;
     }
-  | {
-      kind: "plan_status";
-      status: "approved" | "rejected";
-      plan: PendingPlan | null;
-      message: ChatMessage;
-    };
+
 
 /** Item interno antes do mapeamento para UI. */
 export type RawThreadItem =
@@ -110,11 +94,7 @@ export type RawThreadItem =
       isActive: boolean;
       live?: AgentProgress;
     }
-  | {
-      kind: "plan_status";
-      status: "approved" | "rejected";
-      message: ChatMessage;
-    };
+
 
 export type BuildChatThreadOptions = {
   activeRunId?: string | null;

@@ -1,10 +1,10 @@
 import { useCallback, useState } from "react";
-import { Check, FileText, Loader2, SkipForward } from "lucide-react";
+import { Check, FileText, Loader2, Play, SkipForward } from "lucide-react";
 import type { PendingPlan, PlanStep } from "@/lib/agent-progress";
 import { buildForgePlanMarkdown } from "@/lib/plan-document";
 import { enabledPlanSteps } from "@/lib/forge-run";
-import { planParagraphFromPlan } from "@/lib/plan-message-meta";
-import { buildPlanPromptPreview } from "@/lib/plan-prompt";
+import { planParagraphFromPlan, planPhasesFromPlan } from "@/lib/plan-message-meta";
+import { PlanPhaseList } from "./PlanPhaseList";
 
 export type ChatPlanDockProps = {
   pendingPlan: PendingPlan | null;
@@ -56,7 +56,7 @@ export function ChatPlanDock({
   }, [onReject]);
 
   if (status && pendingPlan) {
-    const body = planParagraphFromPlan(pendingPlan);
+    const phases = planPhasesFromPlan(pendingPlan);
     const approved = status === "approved";
     return (
       <div className="forge-plan-dock" data-testid="chat-plan-status-readonly">
@@ -70,11 +70,17 @@ export function ChatPlanDock({
             </span>
           </div>
           <div className="forge-plan-dock-inner">
-            <p className="forge-plan-dock-label forge-plan-dock-label--icon">
-              <FileText className="size-3" aria-hidden />
-              Plan
-            </p>
-            <p className="forge-plan-dock-body">{body}</p>
+            {phases.length > 0 ? (
+              <PlanPhaseList phases={phases} />
+            ) : (
+              <>
+                <p className="forge-plan-dock-label forge-plan-dock-label--icon">
+                  <FileText className="size-3" aria-hidden />
+                  Plan
+                </p>
+                <p className="forge-plan-dock-body">{planParagraphFromPlan(pendingPlan)}</p>
+              </>
+            )}
           </div>
           {onReview && (
             <div className="forge-composer-row">
@@ -101,7 +107,12 @@ export function ChatPlanDock({
       <div className="forge-plan-dock" data-testid="chat-plan-dock-creating">
         <div className="forge-plan-dock-shell">
           <div className="forge-plan-dock-inner">
-            <div className="forge-plan-dock-shimmer" aria-hidden />
+            <div className="forge-plan-dock-shimmer-lines" aria-hidden>
+              <div className="forge-plan-dock-shimmer-line" style={{ width: "45%" }} />
+              <div className="forge-plan-dock-shimmer-line" style={{ width: "78%" }} />
+              <div className="forge-plan-dock-shimmer-line" style={{ width: "62%" }} />
+              <div className="forge-plan-dock-shimmer-line" style={{ width: "38%" }} />
+            </div>
           </div>
           <p className="forge-plan-dock-creating-label">Creating plan…</p>
         </div>
@@ -111,54 +122,25 @@ export function ChatPlanDock({
 
   if (!pendingPlan) return null;
 
-  const preview = buildPlanPromptPreview(pendingPlan);
+  /* ─── Ready plan from create_plan tool — structured phases (pre-regression) ── */
+  const phases = planPhasesFromPlan(pendingPlan);
 
   return (
     <div className="forge-plan-dock" data-testid="chat-plan-dock-ready">
-      <div className="forge-plan-prompt">
-        <div className="forge-plan-prompt-header">
-          <FileText className="size-4 shrink-0" aria-hidden />
-          <div>
-            <p className="forge-plan-prompt-kicker">Plan ready</p>
-            <h3 className="forge-plan-prompt-title">{preview.title}</h3>
-          </div>
+      <div className="forge-plan-dock-shell">
+        <div className="forge-plan-dock-inner">
+          {phases.length > 0 ? (
+            <PlanPhaseList phases={phases} />
+          ) : (
+            <>
+              <p className="forge-plan-dock-label forge-plan-dock-label--icon">
+                <Play className="size-3" aria-hidden />
+                Plan
+              </p>
+              <p className="forge-plan-dock-body">{planParagraphFromPlan(pendingPlan)}</p>
+            </>
+          )}
         </div>
-
-        {preview.mission ? (
-          <div>
-            <span className="forge-plan-prompt-label">Missão</span>
-            <p className="forge-plan-prompt-mission">{preview.mission}</p>
-          </div>
-        ) : null}
-
-        {preview.objective ? (
-          <div>
-            <span className="forge-plan-prompt-label">Objetivo</span>
-            <p className="forge-plan-prompt-objective">{preview.objective}</p>
-          </div>
-        ) : null}
-
-        {preview.phases.length > 0 ? (
-          <div className="forge-plan-prompt-phases">
-            {preview.phases.map((phase) => (
-              <div key={phase.title}>
-                <p className="forge-plan-prompt-phase-title">{phase.title}</p>
-                <ul className="forge-plan-prompt-phase-list">
-                  {phase.items.map((item) => (
-                    <li key={item}>{item}</li>
-                  ))}
-                </ul>
-              </div>
-            ))}
-          </div>
-        ) : null}
-
-        {preview.hasMoreSteps ? (
-          <p className="forge-plan-prompt-more">
-            +{preview.stepCount - preview.phases.reduce((n, p) => n + p.items.length, 0)} passos no
-            inspector
-          </p>
-        ) : null}
 
         <div className="forge-composer-row">
           <div className="forge-composer-row-start">

@@ -138,15 +138,11 @@ describe("buildChatThread", () => {
       activeRunId: "run-build",
       sessionProgress: progress,
     });
-    // H12 fix: plano aprovado aparece como user card (não é mais internal).
-    // Esperado: 4 itens: user original, assistant plan, user "Plano aprovado",
-    // assistant build (active).
     const users = thread.filter((t) => t.kind === "user");
     expect(users).toHaveLength(2);
     expect(users[0].kind === "user" && users[0].message.content).toBe("landing viva");
     const approveCard = users[1];
     expect(approveCard.kind === "user" && approveCard.message.content).toContain("Plano aprovado");
-    expect(approveCard.kind === "user" && approveCard.message.content).toContain("Landing viva");
     const buildSlot = thread.find((t) => t.kind === "assistant" && t.runId === "run-build");
     expect(buildSlot?.kind).toBe("assistant");
     if (buildSlot?.kind === "assistant") {

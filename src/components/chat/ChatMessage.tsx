@@ -63,22 +63,6 @@ export function ChatMessage({
     );
   }
 
-  if (item.kind === "plan_status") {
-    return (
-      <article
-        className="forge-chat-item forge-chat-item-plan-status"
-        data-testid="chat-plan-status"
-      >
-        <ChatPlanDock
-          pendingPlan={item.plan}
-          creating={false}
-          status={item.status}
-          onReview={(runId) => onOpenInspector?.(runId, "plan")}
-        />
-      </article>
-    );
-  }
-
   const messageId = item.message?.id;
   return (
     <AssistantTurn
