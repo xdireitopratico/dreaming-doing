@@ -1,5 +1,5 @@
 import type { AgentProgress } from "@/lib/agent-progress";
-import { buildForgeTimeline, type AgentRunView } from "@/lib/forge-run";
+import type { AgentRunView } from "@/lib/forge-run";
 import { collapseNarrationBuffer } from "@/lib/narration-dedupe";
 import type { ChatThinkingState, MiniCardData } from "@/lib/chat/types";
 
@@ -51,26 +51,10 @@ function hasThinkingTimeline(resolved: AgentProgress | null): boolean {
   );
 }
 
-function resolveThinkingDurationSec(opts: {
-  workingDurationMs?: number | null;
-  resolved: AgentProgress | null;
-  slotActive: boolean;
-  runStartedAtMs?: number | null;
-}): number {
-  if (opts.workingDurationMs != null && opts.workingDurationMs > 0) {
-    return Math.max(1, Math.round(opts.workingDurationMs / 1000));
-  }
-  if (opts.slotActive && opts.runStartedAtMs) {
-    return Math.max(1, Math.round((Date.now() - opts.runStartedAtMs) / 1000));
-  }
-  if (opts.resolved?.timeline?.length) {
-    const items = buildForgeTimeline(opts.resolved.timeline, false);
-    const thought = items.find((i) => i.type === "THOUGHT");
-    if (thought?.type === "THOUGHT" && thought.durationMs > 0) {
-      return Math.max(1, Math.round(thought.durationMs / 1000));
-    }
-  }
-  return 1;
+/** Só duração congelada — nunca relógio ao vivo no render. */
+function resolveThinkingDurationSec(workingDurationMs?: number | null): number | null {
+  if (workingDurationMs == null || workingDurationMs <= 0) return null;
+  return Math.max(1, Math.round(workingDurationMs / 1000));
 }
 
 /** Congela «Pensando…» → «Pensou por Xs» — mesmos gatilhos em Chat/Plan/Build. */
@@ -97,12 +81,11 @@ export function shouldFreezeThinkingLine(opts: {
 export function resolveTurnThinkingLine(opts: {
   resolved: AgentProgress | null;
   slotActive: boolean;
-  runStartedAtMs?: number | null;
   narration?: string | null;
   streamText?: string | null;
   isClarifyOnly?: boolean;
 }): { line: ChatThinkingState | null; frozen: boolean } {
-  const { resolved, slotActive, runStartedAtMs, narration, streamText, isClarifyOnly } = opts;
+  const { resolved, slotActive, narration, streamText, isClarifyOnly } = opts;
 
   if (isClarifyOnly) return { line: null, frozen: false };
 
@@ -123,18 +106,15 @@ export function resolveTurnThinkingLine(opts: {
   if (!shouldShow) return { line: null, frozen };
 
   if (frozen) {
-    return {
-      line: {
-        status: "done",
-        durationSec: resolveThinkingDurationSec({
-          workingDurationMs: resolved?.workingDurationMs,
-          resolved,
-          slotActive,
-          runStartedAtMs,
-        }),
-      },
-      frozen: true,
-    };
+    const durationSec = resolveThinkingDurationSec(resolved?.workingDurationMs);
+    if (durationSec != null) {
+      return { line: { status: "done", durationSec }, frozen: true };
+    }
+    // Conteúdo visível (narração/tools) libera mini-card; label segue «Pensando…» até captura.
+    if (slotActive) {
+      return { line: { status: "active" }, frozen: true };
+    }
+    return { line: null, frozen: false };
   }
 
   if (slotActive) {

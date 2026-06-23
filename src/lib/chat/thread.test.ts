@@ -283,7 +283,7 @@ describe("buildChatThread", () => {
     if (slot?.kind === "assistant") {
       expect(slot.isActive).toBe(true);
       expect(slot.narration).toContain("Vou investigar");
-      expect(slot.thinking?.status).toBe("done");
+      expect(slot.thinking?.status).toBe("active");
       expect(slot.streamText).toBeNull();
     }
   });

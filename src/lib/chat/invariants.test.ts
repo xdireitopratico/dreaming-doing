@@ -77,7 +77,7 @@ describe("mapAssistantTurn — contrato Lovable imutável", () => {
       sessionProgress: progress,
     });
 
-    expect(turn.thinking?.status).toBe("done");
+    expect(turn.thinking?.status).toBe("active");
     expect(turn.miniCard).not.toBeNull();
     expect(turn.miniCard?.header).not.toBe("Working");
     expect(turn.narration).toBe("Vou investigar o estado atual.");

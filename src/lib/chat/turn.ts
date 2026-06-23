@@ -234,7 +234,6 @@ export function mapAssistantTurn(
   const { line: thinking, frozen: thinkingFrozen } = resolveTurnThinkingLine({
     resolved,
     slotActive,
-    runStartedAtMs,
     narration,
     streamText,
     isClarifyOnly,

@@ -14,8 +14,7 @@ export function shouldAnchorNewUserMessage(
 /**
  * Offset de scroll que alinha a bolha do usuário ao topo do painel.
  * Usado apenas para detectar se o usuário rolou para longe da âncora —
- * o ancoramento em si usa `scrollIntoView({ block: "start" })` + scroll
- * anchoring nativo do navegador, sem spacer nem medições contínuas.
+ * o ancoramento em si é feito por `useChatScroll` (offset determinístico + RAF).
  */
 export function scrollOffsetToAlignUserMessage(
   container: HTMLElement,

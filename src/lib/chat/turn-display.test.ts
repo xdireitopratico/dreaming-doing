@@ -32,7 +32,7 @@ describe("resolveTurnThinkingLine", () => {
     expect(result).toEqual({ line: { status: "active" }, frozen: false });
   });
 
-  it("congela com slotActive quando narração chega", () => {
+  it("congela visualmente com narração mas mantém Pensando… até workingDurationMs", () => {
     const result = resolveTurnThinkingLine({
       resolved: {
         ...initialAgentProgress,
@@ -41,14 +41,24 @@ describe("resolveTurnThinkingLine", () => {
         timeline: [ev("thinking_text", { text: "Analisando.", append: true, delta: true })],
       },
       slotActive: true,
-      runStartedAtMs: Date.now() - 3200,
       narration: "Vou investigar o estado atual.",
     });
-    expect(result.frozen).toBe(true);
-    expect(result.line?.status).toBe("done");
-    if (result.line?.status === "done") {
-      expect(result.line.durationSec).toBeGreaterThanOrEqual(1);
-    }
+    expect(result).toEqual({ line: { status: "active" }, frozen: true });
+  });
+
+  it("workingDurationMs capturado: Pensou por Xs", () => {
+    const result = resolveTurnThinkingLine({
+      resolved: {
+        ...initialAgentProgress,
+        phase: "build",
+        finished: false,
+        workingDurationMs: 3200,
+        timeline: [ev("thinking_text", { text: "Analisando.", append: true, delta: true })],
+      },
+      slotActive: true,
+      narration: "Vou investigar o estado atual.",
+    });
+    expect(result).toEqual({ line: { status: "done", durationSec: 3 }, frozen: true });
   });
 
   it("workingDurationMs histórico: Pensou por Xs determinístico", () => {
