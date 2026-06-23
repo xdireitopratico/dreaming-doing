@@ -322,7 +322,7 @@ describe("Inspector Plan — layout de leitura (preview)", () => {
     expect(plan).toContain("forge-inspector-plan-actions");
     expect(plan).not.toContain('className="forge-inspector-plan-header"');
     expect(plan).not.toContain("forge-inspector-plan-footer");
-    expect(plan.match(/<PlanActionBar/g)?.length).toBe(2);
+    expect(plan.match(/<PlanActionBar/g)?.length).toBe(1);
   });
 });
 

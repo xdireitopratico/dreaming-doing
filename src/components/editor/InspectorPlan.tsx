@@ -166,8 +166,6 @@ export function InspectorPlan({ state, onApprove, onReject, onEditRequest }: Ins
         <h1 className="forge-inspector-plan-title">{missionTitle}</h1>
       </div>
 
-      <PlanActionBar {...actionBarProps} />
-
       <div className="forge-inspector-plan-doc">
         <MarkdownRenderer className="forge-inspector-plan-markdown">{markdown}</MarkdownRenderer>
       </div>
