@@ -109,8 +109,10 @@ export function ChatComposer({
   const placeholder = isRunning
     ? "Queue follow-up..."
     : composerMode === "chat"
-      ? "Pergunte, diagnostique ou proponha por escrito…"
-      : "Let's build...";
+      ? "Conversa por escrito — sem ferramentas…"
+      : composerMode === "plan"
+        ? "Descreva o que quer — vou propor um plano…"
+        : "Let's build...";
 
   const addFiles = useCallback((files: File[]) => {
     const { accepted } = filterAcceptedFiles(files);

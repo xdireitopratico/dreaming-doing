@@ -12,7 +12,7 @@ function deps(): SendMessageDeps {
 }
 
 describe("sendMessage", () => {
-  it("não transforma pergunta/status em build job", async () => {
+  it("pergunta em modo build segue build (composer manda)", async () => {
     const d = deps();
 
     await sendMessage(
@@ -30,12 +30,12 @@ describe("sendMessage", () => {
     expect(d.insertUserMessage).toHaveBeenCalledWith(
       "conv",
       [{ type: "text", text: "O que você fez nesses 15 minutos?" }],
-      { mode: "chat", turnIntent: "chat" },
+      { mode: "build", turnIntent: "build" },
     );
-    expect(d.runAgent).toHaveBeenCalledWith("byok", "chat");
+    expect(d.runAgent).toHaveBeenCalledWith("byok", "build");
   });
 
-  it("mantém execução explícita como build", async () => {
+  it("execução explícita em modo plan permanece plan", async () => {
     const d = deps();
 
     await sendMessage(
@@ -50,7 +50,7 @@ describe("sendMessage", () => {
       d,
     );
 
-    expect(d.runAgent).toHaveBeenCalledWith("byok", "build");
+    expect(d.runAgent).toHaveBeenCalledWith("byok", "plan");
   });
 
   it("composer Chat envia mode chat sem pending turn", async () => {
@@ -72,10 +72,8 @@ describe("sendMessage", () => {
     expect(d.runAgent).toHaveBeenCalledWith("byok", "chat");
   });
 
-  it("composer Chat bloqueia verbo de execução com toast", async () => {
+  it("composer Chat aceita verbo de execução (sem bloqueio)", async () => {
     const d = deps();
-    const onError = vi.fn();
-    d.onError = onError;
 
     await sendMessage(
       {
@@ -89,9 +87,8 @@ describe("sendMessage", () => {
       d,
     );
 
-    expect(onError).toHaveBeenCalledWith("Para executar código, mude o modo para Build.");
-    expect(d.insertUserMessage).not.toHaveBeenCalled();
-    expect(d.runAgent).not.toHaveBeenCalled();
+    expect(d.insertUserMessage).toHaveBeenCalled();
+    expect(d.runAgent).toHaveBeenCalledWith("byok", "chat");
   });
 
   it("enfileira sem inserir no chat quando agentBusy", async () => {

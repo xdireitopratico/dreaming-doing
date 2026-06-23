@@ -545,22 +545,30 @@ Deno.test("3j Plan mode — erro LLM persiste assistant com lastFinishOk false",
   assertEquals(ef(events, "assistant_text").length, 1);
 });
 
-Deno.test("3d plan mode bom dia — conversacional, sem plan_proposed nem gather", async () => {
-  const { loop, cheap, main, events } = f({
+Deno.test("3d plan mode bom dia — segue fluxo Plan (sem gate conversacional)", async () => {
+  const { loop, main, events } = f({
     msgs: [{ role: "user", content: "bom dia" }],
     files: [],
     planMode: true,
   });
-  main.queue(tr("Bom dia! Como posso ajudar você hoje?"));
+  main.queue(
+    er(
+      "",
+      tc("c1", "clarify", {
+        question: "O que você quer construir hoje?",
+        choices: [{ label: "Landing" }, { label: "App" }],
+      }),
+    ),
+  );
   const r = await loop.run();
   assertEquals(r.ok, true);
   assertEquals(r.steps, 0);
   assertEquals(ef(events, "plan_proposed").length, 0);
-  assertEquals(ef(events, "tool_start").length, 0);
   const phases = ef(events, "phase").map((e) => (e.data as { phase?: string }).phase);
-  assertEquals(phases.includes("gather"), false);
-  const de = ef(events, "done")[0]?.data as { conversational?: boolean };
-  assertEquals(de?.conversational, true);
+  assertEquals(phases.includes("gather"), true);
+  const de = ef(events, "done")[0]?.data as { conversational?: boolean; qualified?: boolean };
+  assertEquals(de?.conversational, undefined);
+  assertEquals(de?.qualified, true);
 });
 
 Deno.test("3 plan mode — pedido vago propõe plano", async () => {

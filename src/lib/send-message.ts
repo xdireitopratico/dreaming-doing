@@ -1,7 +1,7 @@
 import type { AgentComposerMode } from "@/lib/chat-types";
 import type { ForgeSessionKind } from "@/lib/taste";
 import { buildOutgoingParts, type StoredMessagePart } from "@/lib/chat-attachments";
-import { isExplicitBuildRequest, resolveTurnIntent, type AgentRunMode } from "@/lib/turn-intent";
+import { resolveTurnIntent, type AgentRunMode } from "@/lib/turn-intent";
 
 export type SendMessageInput = {
   text: string;
@@ -58,15 +58,6 @@ export async function sendMessage(input: SendMessageInput, deps: SendMessageDeps
   const sendMode = shouldQueue
     ? ((input.mode ?? input.composerMode) as AgentComposerMode)
     : intent.runMode;
-
-  if (
-    !shouldQueue &&
-    input.composerMode === "chat" &&
-    isExplicitBuildRequest(input.text)
-  ) {
-    deps.onError?.("Para executar código, mude o modo para Build.");
-    return;
-  }
 
   const directChat = !shouldQueue && intent.runMode === "chat";
 

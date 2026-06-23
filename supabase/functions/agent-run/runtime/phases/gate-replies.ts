@@ -1,9 +1,4 @@
-// runtime/phases/gate-replies.ts — Gates conversacional e inventory (Fase 2.2)
-import {
-  isConversationalTurn,
-  isConversationalTurnEarly,
-  runConversationalPhase,
-} from "../../conversational.ts";
+// runtime/phases/gate-replies.ts — Gates de inventário e plano existente (Fase 2.2)
 import {
   ANTI_LEAK_RULE,
   INVENTORY_SYSTEM,
@@ -66,18 +61,6 @@ export type GateReplyDeps = {
   ) => Promise<void>;
   clearCheckpoint: () => Promise<void>;
 };
-
-export async function runConversationalGate(deps: GateReplyDeps): Promise<PlanTurnRunResult> {
-  const reply = await runConversationalPhase(deps.configuredModel(), deps.state.messages, {
-    planMode: deps.planMode,
-    userRequest: deps.originalUserRequest ?? undefined,
-  });
-  deps.emit("assistant_text", { text: reply, final: true });
-  await deps.persistFinal(reply, { lastFinishOk: true, conversational: true });
-  await deps.clearCheckpoint();
-  deps.emit("done", { summary: reply, conversational: true });
-  return { ok: true, summary: reply, steps: 0, toolsUsed: [] };
-}
 
 export async function runInventoryGate(
   deps: GateReplyDeps,
@@ -159,8 +142,4 @@ export async function runShowExistingPlanGate(
   return { ok: true, summary: reply, steps: 0, toolsUsed: [] };
 }
 
-export {
-  isConversationalTurnEarly,
-  isConversationalTurn,
-  isProjectInventoryQuestion,
-};
+export { isProjectInventoryQuestion };

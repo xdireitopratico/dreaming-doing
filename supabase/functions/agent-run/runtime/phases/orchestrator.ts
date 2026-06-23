@@ -10,11 +10,8 @@ import type { LoopUpdateContext } from "../../loop-status.ts";
 import {
   appendResumeInstruction,
   buildApprovedClassification,
-  isConversationalTurn,
-  isConversationalTurnEarly,
   isProjectInventoryQuestion,
   resolveUserPrompt,
-  runConversationalGate,
   runInventoryGate,
   runShowExistingPlanGate,
   type GateReplyDeps,
@@ -86,15 +83,6 @@ export async function runAgentOrchestrator(
     if (
       !deps.resumeRun &&
       !deps.approvedPlanBuild &&
-      deps.originalUserRequest &&
-      isConversationalTurnEarly(deps.originalUserRequest)
-    ) {
-      return runConversationalGate(deps);
-    }
-
-    if (
-      !deps.resumeRun &&
-      !deps.approvedPlanBuild &&
       deps.planMode &&
       deps.originalUserRequest
     ) {
@@ -144,14 +132,6 @@ export async function runAgentOrchestrator(
       await deps.emitTransition("send");
     }
     await deps.emitTransition("classified", classification);
-
-    if (
-      !isApprovedOrSkip &&
-      deps.originalUserRequest &&
-      isConversationalTurn(deps.originalUserRequest, classification)
-    ) {
-      return runConversationalGate(deps);
-    }
 
     if (
       deps.originalUserRequest &&
