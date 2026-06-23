@@ -1,5 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { cleanHtmlDocument, htmlToMarkdownDocument } from "@/lib/html-hygiene";
 import { scrapeWebPage } from "../../../supabase/functions/_shared/web-research-providers.ts";
+import { finalizeDocumentMarkdown } from "../../../supabase/functions/_shared/document-sanitize.ts";
 import { buildPlaywrightScript } from "../../../supabase/functions/extract-design-dna/playwright-automation.ts";
 import { CATEGORY_PROMPTS, MASTER_EXTRACTION_PROMPT, type ExtractionCategory } from "../../../supabase/functions/extract-design-dna/prompts.ts";
 
@@ -15,8 +17,17 @@ export type DesignDnaExtractionInput = {
 export type DesignDnaExtractionResult = {
   dna: Record<string, unknown> | null;
   rawMarkdown: string;
+  cleanMarkdown: string;
   rawHtml: string;
   cleanHtml: string;
+  contentHygiene: {
+    title: string;
+    rootSelector: string;
+    rawMarkdownChars: number;
+    cleanMarkdownChars: number;
+    rawHtmlChars: number;
+    cleanHtmlChars: number;
+  };
   screenshotUrl: string;
   screenshotBase64?: string;
   screenshots: string[];
@@ -48,23 +59,6 @@ function parseTokenField(tokenField: string | null | undefined): string[] {
     /* single token */
   }
   return [trimmed];
-}
-
-function normalizeHtml(html: string): string {
-  return html
-    .replace(/<script[\s\S]*?<\/script>/gi, "")
-    .replace(/<style[\s\S]*?<\/style>/gi, "")
-    .replace(/<noscript[\s\S]*?<\/noscript>/gi, "")
-    .replace(/<!--[\s\S]*?-->/g, "")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function htmlToText(html: string): string {
-  return normalizeHtml(html)
-    .replace(/<[^>]+>/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
 }
 
 function buildFallbackDna(url: string, reason: string): Record<string, unknown> {
@@ -382,10 +376,21 @@ export async function extractDesignDnaForUrl(
 
   const rawMarkdown = String(markdownRes.content ?? "").trim();
   const rawHtml = String(htmlRes.content ?? "").trim();
-  const cleanHtml = normalizeHtml(rawHtml);
-  const cleanText = htmlToText(rawHtml);
+  const cleaned = cleanHtmlDocument(rawHtml);
+  const cleanHtml = cleaned.cleanHtml;
+  const cleanText = cleaned.cleanText;
+  const cleanMarkdown = htmlToMarkdownDocument(rawHtml);
+  const cleanedMarkdown = finalizeDocumentMarkdown(cleanMarkdown || cleanText, { maxChars: 24_000 }).markdown;
+  const contentHygiene = {
+    title: cleaned.title,
+    rootSelector: cleaned.rootSelector,
+    rawMarkdownChars: rawMarkdown.length,
+    cleanMarkdownChars: cleanedMarkdown.length,
+    rawHtmlChars: rawHtml.length,
+    cleanHtmlChars: cleanHtml.length,
+  };
 
-  let enrichedMarkdown = rawMarkdown || cleanText;
+  let enrichedMarkdown = rawMarkdown || cleanedMarkdown;
   let screenshots: string[] = [];
   let screenshotBase64 = "";
   let screenshotUrl = `https://image.thum.io/get/width/1280/crop/720/fullpage/${encodeURIComponent(input.url)}`;
@@ -397,6 +402,7 @@ export async function extractDesignDnaForUrl(
       providerTrace.push("sandbox:playwright");
       enrichedMarkdown = [
         playwrightData.markdown,
+        cleanedMarkdown,
         `\n\n## CSS Computado (sections principais)\n${playwrightData.css_computed}`,
         `\n\n## Motion Traces\n${playwrightData.motion_traces}`,
         playwrightData.color_scheme ? `\n\n## Color Scheme\n${playwrightData.color_scheme}` : "",
@@ -411,13 +417,13 @@ export async function extractDesignDnaForUrl(
       const msg = err instanceof Error ? err.message : String(err);
       notes.push(`deep sandbox extraction failed: ${msg}`);
       providerTrace.push("sandbox:error");
-      if (!rawMarkdown.trim() && !cleanHtml.trim()) {
+      if (!rawMarkdown.trim() && !cleanHtml.trim() && !cleanedMarkdown.trim()) {
         blockedReason = msg;
       }
     }
   } else if (input.depth === "deep") {
     notes.push("sandbox unavailable, deep request downgraded to web scrape");
-    if (!rawMarkdown.trim() && !cleanHtml.trim()) {
+    if (!rawMarkdown.trim() && !cleanHtml.trim() && !cleanedMarkdown.trim()) {
       blockedReason = "sandbox unavailable for deep extraction";
     }
   }
@@ -426,7 +432,7 @@ export async function extractDesignDnaForUrl(
     notes.push("markdown empty after scrape");
   }
 
-  const density = Math.min(1, (enrichedMarkdown.length + cleanHtml.length) / 50000);
+  const density = Math.min(1, (enrichedMarkdown.length + cleanHtml.length + cleanText.length + cleanedMarkdown.length) / 50000);
   let confidence = input.depth === "deep"
     ? Math.round(60 + density * 35 + (screenshots.length > 0 ? 5 : 0))
     : Math.round(35 + density * 35 + (screenshotBase64 ? 5 : 0));
@@ -456,9 +462,11 @@ export async function extractDesignDnaForUrl(
 
   return {
     dna: finalDna,
-    rawMarkdown: enrichedMarkdown || rawMarkdown || cleanText,
+    rawMarkdown,
+    cleanMarkdown: cleanedMarkdown,
     rawHtml,
     cleanHtml,
+    contentHygiene,
     screenshotUrl,
     screenshotBase64: screenshotBase64 || undefined,
     screenshots,

@@ -799,7 +799,7 @@ export type Database = {
           price_cents: number
           seller_amount_cents: number
           seller_id: string
-          status: string
+          status: "pending" | "running" | "partial" | "blocked" | "completed" | "failed" | "canceled"
           stripe_checkout_session_id: string | null
           stripe_payment_intent_id: string | null
         }
@@ -813,7 +813,7 @@ export type Database = {
           price_cents: number
           seller_amount_cents?: number
           seller_id: string
-          status?: string
+          status?: "pending" | "running" | "partial" | "blocked" | "completed" | "failed" | "canceled"
           stripe_checkout_session_id?: string | null
           stripe_payment_intent_id?: string | null
         }
@@ -827,7 +827,7 @@ export type Database = {
           price_cents?: number
           seller_amount_cents?: number
           seller_id?: string
-          status?: string
+          status?: "pending" | "running" | "partial" | "blocked" | "completed" | "failed" | "canceled"
           stripe_checkout_session_id?: string | null
           stripe_payment_intent_id?: string | null
         }
@@ -1916,7 +1916,9 @@ export type Database = {
           quality_source: string
           raw_html: string | null
           raw_markdown: string | null
+          clean_markdown: string | null
           clean_html: string | null
+          content_hygiene: Json
           screenshot_base64: string | null
           screenshot_url: string | null
           provider_trace: string[]
@@ -1949,7 +1951,9 @@ export type Database = {
           quality_source?: string
           raw_html?: string | null
           raw_markdown?: string | null
+          clean_markdown?: string | null
           clean_html?: string | null
+          content_hygiene?: Json
           screenshot_base64?: string | null
           screenshot_url?: string | null
           provider_trace?: string[]
@@ -1982,7 +1986,9 @@ export type Database = {
           quality_source?: string
           raw_html?: string | null
           raw_markdown?: string | null
+          clean_markdown?: string | null
           clean_html?: string | null
+          content_hygiene?: Json
           screenshot_base64?: string | null
           screenshot_url?: string | null
           provider_trace?: string[]
@@ -3499,6 +3505,10 @@ export type Database = {
       }
       get_design_dna_catalog: {
         Args: { limit_count?: number; min_quality?: number }
+        Returns: Json
+      }
+      design_library_overview: {
+        Args: { include_archived?: boolean }
         Returns: Json
       }
       has_role: {

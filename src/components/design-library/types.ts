@@ -8,8 +8,10 @@ export interface LibraryEntry {
   quality_source: string;
   validated: boolean;
   raw_markdown: string | null;
+  clean_markdown: string | null;
   raw_html: string | null;
   clean_html: string | null;
+  content_hygiene: Record<string, unknown> | null;
   screenshot_url: string | null;
   screenshot_base64?: string | null;
   provider_trace: string[] | null;
@@ -40,7 +42,7 @@ export interface DesignDna {
 export interface DesignDnaJob {
   id: string;
   user_id: string | null;
-  status: "pending" | "running" | "completed" | "failed" | "canceled";
+  status: "pending" | "running" | "partial" | "blocked" | "completed" | "failed" | "canceled";
   depth: "shallow" | "deep";
   categories: string[];
   urls: string[];
@@ -67,6 +69,18 @@ export interface LibraryFilters {
   minQuality: number;
   validatedOnly: boolean;
   search: string;
+}
+
+export interface LibraryOverview {
+  total_rows: number;
+  production_rows: number;
+  curated_rows: number;
+  smoke_rows: number;
+  manual_rows: number;
+  archived_rows: number;
+  distinct_source_urls: number;
+  duplicate_groups: number;
+  duplicate_rows: number;
 }
 
 export interface RealtimeEvent {
@@ -103,10 +117,20 @@ export type ViewMode = (typeof VIEW_MODES)[number];
 export const JOB_STATUS_COLORS: Record<string, string> = {
   pending: "bg-yellow-500/10 text-yellow-500 border-yellow-500/30",
   running: "bg-blue-500/10 text-blue-500 border-blue-500/30",
+  partial: "bg-amber-500/10 text-amber-400 border-amber-500/30",
+  blocked: "bg-slate-500/10 text-slate-300 border-slate-500/30",
   completed: "bg-green-500/10 text-green-500 border-green-500/30",
   failed: "bg-red-500/10 text-red-500 border-red-500/30",
   canceled: "bg-gray-500/10 text-gray-400 border-gray-500/30",
 };
+
+export const JOB_TERMINAL_STATUSES = [
+  "partial",
+  "blocked",
+  "completed",
+  "failed",
+  "canceled",
+] as const;
 
 export function getQualityColor(score: number): string {
   if (score <= 3) return "bg-red-500/15 text-red-400 border-red-500/30";

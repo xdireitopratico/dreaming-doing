@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -17,6 +17,7 @@ import { DesignLibraryCard } from "./DesignLibraryCard";
 import { DesignLibraryDetail } from "./DesignLibraryDetail";
 import { BrowserPreviewPanel } from "./BrowserPreviewPanel";
 import { validateEntry, archiveEntry, deleteEntry, createExtractionJob } from "./api";
+import { groupEntriesBySourceUrl } from "./grouping";
 import {
   JOB_STATUS_COLORS,
   DEFAULT_FILTERS,
@@ -33,8 +34,15 @@ export function DesignLibraryPage() {
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
 
-  const { entries, loading: entriesLoading, reload: reloadEntries } = useLibrary(filters);
+  const { entries, overview, loading: entriesLoading, reload: reloadEntries } = useLibrary(filters);
   const { jobs, loading: jobsLoading, reload: reloadJobs } = useJobs();
+  const sourceClusters = useMemo(() => groupEntriesBySourceUrl(entries), [entries]);
+  const groupedMode = filters.ingestKind === "all";
+  const renderedGroups = groupedMode ? sourceClusters : null;
+  const relatedEntries = useMemo(
+    () => (selectedEntry ? entries.filter((entry) => entry.source_url === selectedEntry.source_url) : []),
+    [entries, selectedEntry],
+  );
 
   // Auto-refresh entries when a job completes
   useEffect(() => {
@@ -96,6 +104,8 @@ export function DesignLibraryPage() {
 
   const activeJobs = jobs.filter((j) => j.status === "running" || j.status === "pending");
   const recentJobs = jobs.slice(0, 5);
+  const hasSmoke = (overview?.smoke_rows ?? 0) > 0;
+  const hasDuplicates = (overview?.duplicate_groups ?? 0) > 0;
 
   return (
     <div className="flex flex-col h-full">
@@ -125,6 +135,36 @@ export function DesignLibraryPage() {
           </Button>
         </div>
       </div>
+
+      {overview && (
+        <div className="px-6 pt-3">
+          <div className="rounded-lg border border-border bg-surface-1 p-3 space-y-2">
+            <div className="flex flex-wrap items-center gap-2 text-[11px]">
+              <Badge variant="outline">Total {overview.total_rows}</Badge>
+              <Badge variant="outline">Produção {overview.production_rows}</Badge>
+              <Badge variant="outline">Curado {overview.curated_rows}</Badge>
+              <Badge variant="outline">Smoke {overview.smoke_rows}</Badge>
+              <Badge variant="outline">Manual {overview.manual_rows}</Badge>
+              <Badge variant="outline">URLs únicas {overview.distinct_source_urls}</Badge>
+              <Badge variant="outline">Duplicadas {overview.duplicate_groups}</Badge>
+            </div>
+            {(hasSmoke || hasDuplicates) && (
+              <div className="flex flex-wrap items-center gap-2 text-[11px]">
+                {hasSmoke && (
+                  <span className="rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-1 text-amber-400">
+                    Há {overview.smoke_rows} entrada(s) smoke. O filtro padrão mantém a library limpa.
+                  </span>
+                )}
+                {hasDuplicates && (
+                  <span className="rounded-md border border-red-500/30 bg-red-500/10 px-2 py-1 text-red-400">
+                    Existem {overview.duplicate_groups} grupo(s) com URLs repetidas. A visualização em todas as origens agrupa por URL.
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Active Jobs Banner */}
       {activeJobs.length > 0 && (
@@ -205,58 +245,120 @@ export function DesignLibraryPage() {
             <Library className="size-12 mx-auto text-muted-foreground/30 mb-3" />
             <h3 className="text-sm font-medium mb-1">Nenhuma entrada encontrada</h3>
             <p className="text-xs text-muted-foreground">
-              Clique em "Extrair URLs" para começar a popular a biblioteca
+              {hasSmoke && filters.ingestKind === "production"
+                ? "Há entradas smoke/test na biblioteca. Troque a origem para revisar esses dados."
+                : "Clique em \"Extrair URLs\" para começar a popular a biblioteca"}
             </p>
           </div>
         ) : viewMode === "grid" ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-            {entries.map((entry) => (
-              <DesignLibraryCard
-                key={entry.id}
-                entry={entry}
-                onView={() => setSelectedEntry(entry)}
-                onValidate={() => handleValidate(entry)}
-                onArchive={() => handleArchive(entry)}
-                onDelete={() => handleDelete(entry)}
-              />
-            ))}
+            {groupedMode
+              ? (renderedGroups ?? []).map((cluster) => {
+                  const entry = cluster.primary;
+                  return (
+                    <DesignLibraryCard
+                      key={`${entry.id}:${cluster.sourceUrl}`}
+                      entry={entry}
+                      duplicateCount={cluster.count - 1}
+                      variantCount={cluster.count}
+                      relatedKinds={cluster.ingestKinds}
+                      onView={() => setSelectedEntry(entry)}
+                      onValidate={() => handleValidate(entry)}
+                      onArchive={() => handleArchive(entry)}
+                      onDelete={() => handleDelete(entry)}
+                    />
+                  );
+                })
+              : entries.map((entry) => (
+                  <DesignLibraryCard
+                    key={entry.id}
+                    entry={entry}
+                    onView={() => setSelectedEntry(entry)}
+                    onValidate={() => handleValidate(entry)}
+                    onArchive={() => handleArchive(entry)}
+                    onDelete={() => handleDelete(entry)}
+                  />
+                ))}
           </div>
         ) : (
           <div className="space-y-1">
-            {entries.map((entry) => (
-              <div
-                key={entry.id}
-                className="flex items-center gap-3 p-2 rounded border border-border bg-surface-1 hover:border-primary/30 cursor-pointer"
-                onClick={() => setSelectedEntry(entry)}
-              >
-                <div className="w-16 h-10 rounded bg-surface-3 overflow-hidden shrink-0">
-                  {entry.screenshot_url && (
-                    <img src={entry.screenshot_url} alt="" className="w-full h-full object-cover" />
-                  )}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <h3 className="text-sm font-medium truncate">{entry.name}</h3>
-                  <p className="text-[10px] text-muted-foreground truncate">{entry.source_url}</p>
-                </div>
-                <Badge variant="secondary" className="text-[10px]">
-                  {entry.category}
-                </Badge>
-                <Badge variant="outline" className="text-[10px]">
-                  {entry.ingest_kind}
-                </Badge>
-                <Badge
-                  variant="outline"
-                  className={`text-[10px] ${entry.quality_score >= 7 ? "border-green-500/30 text-green-400" : "border-yellow-500/30 text-yellow-400"}`}
-                >
-                  Q {entry.quality_score.toFixed(1)}
-                </Badge>
-                {entry.validated && (
-                  <Badge variant="default" className="text-[10px] bg-green-500/20 text-green-400">
-                    ✓
-                  </Badge>
-                )}
-              </div>
-            ))}
+            {groupedMode
+              ? (renderedGroups ?? []).map((cluster) => {
+                  const entry = cluster.primary;
+                  return (
+                    <div
+                      key={`${entry.id}:${cluster.sourceUrl}`}
+                      className={`flex items-center gap-3 p-2 rounded border border-border bg-surface-1 hover:border-primary/30 cursor-pointer ${cluster.hasDuplicates ? "ring-1 ring-amber-500/15" : ""}`}
+                      onClick={() => setSelectedEntry(entry)}
+                    >
+                      <div className="w-16 h-10 rounded bg-surface-3 overflow-hidden shrink-0">
+                        {entry.screenshot_url && (
+                          <img src={entry.screenshot_url} alt="" className="w-full h-full object-cover" />
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <h3 className="text-sm font-medium truncate">{entry.name}</h3>
+                        <p className="text-[10px] text-muted-foreground truncate">{entry.source_url}</p>
+                      </div>
+                      <Badge variant="secondary" className="text-[10px]">
+                        {entry.category}
+                      </Badge>
+                      <Badge variant="outline" className="text-[10px]">
+                        {entry.ingest_kind}
+                      </Badge>
+                      {cluster.count > 1 && (
+                        <Badge variant="outline" className="text-[10px] border-amber-500/30 text-amber-400">
+                          {cluster.count} versões
+                        </Badge>
+                      )}
+                      <Badge
+                        variant="outline"
+                        className={`text-[10px] ${entry.quality_score >= 7 ? "border-green-500/30 text-green-400" : "border-yellow-500/30 text-yellow-400"}`}
+                      >
+                        Q {entry.quality_score.toFixed(1)}
+                      </Badge>
+                      {entry.validated && (
+                        <Badge variant="default" className="text-[10px] bg-green-500/20 text-green-400">
+                          ✓
+                        </Badge>
+                      )}
+                    </div>
+                  );
+                })
+              : entries.map((entry) => (
+                  <div
+                    key={entry.id}
+                    className="flex items-center gap-3 p-2 rounded border border-border bg-surface-1 hover:border-primary/30 cursor-pointer"
+                    onClick={() => setSelectedEntry(entry)}
+                  >
+                    <div className="w-16 h-10 rounded bg-surface-3 overflow-hidden shrink-0">
+                      {entry.screenshot_url && (
+                        <img src={entry.screenshot_url} alt="" className="w-full h-full object-cover" />
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h3 className="text-sm font-medium truncate">{entry.name}</h3>
+                      <p className="text-[10px] text-muted-foreground truncate">{entry.source_url}</p>
+                    </div>
+                    <Badge variant="secondary" className="text-[10px]">
+                      {entry.category}
+                    </Badge>
+                    <Badge variant="outline" className="text-[10px]">
+                      {entry.ingest_kind}
+                    </Badge>
+                    <Badge
+                      variant="outline"
+                      className={`text-[10px] ${entry.quality_score >= 7 ? "border-green-500/30 text-green-400" : "border-yellow-500/30 text-yellow-400"}`}
+                    >
+                      Q {entry.quality_score.toFixed(1)}
+                    </Badge>
+                    {entry.validated && (
+                      <Badge variant="default" className="text-[10px] bg-green-500/20 text-green-400">
+                        ✓
+                      </Badge>
+                    )}
+                  </div>
+                ))}
           </div>
         )}
       </div>
@@ -264,6 +366,7 @@ export function DesignLibraryPage() {
       {/* Detail Dialog */}
       <DesignLibraryDetail
         entry={selectedEntry}
+        relatedEntries={relatedEntries}
         open={!!selectedEntry}
         onOpenChange={(open) => !open && setSelectedEntry(null)}
       />

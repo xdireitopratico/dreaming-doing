@@ -33,10 +33,18 @@ export async function executeDesignDnaJob(
 
   let startIndex = 0;
   const results: Record<string, unknown>[] = [];
+  const errors: Record<string, unknown>[] = [];
+  let blockedCount = 0;
   if (resume && checkpoint) {
     startIndex = (checkpoint.currentUrlIndex as number) ?? 0;
     if (Array.isArray(checkpoint.results)) {
       results.push(...(checkpoint.results as Record<string, unknown>[]));
+    }
+    if (Array.isArray(checkpoint.errors)) {
+      errors.push(...(checkpoint.errors as Record<string, unknown>[]));
+    }
+    if (typeof checkpoint.blockedCount === "number") {
+      blockedCount = checkpoint.blockedCount;
     }
   }
 
@@ -83,13 +91,22 @@ export async function executeDesignDnaJob(
 
   if (!e2bApiKey) {
     const msg = "Configure sua chave E2B em API Keys (/api)";
-    await appendJobEvent(supabase, jobId, "url_error", { error: msg });
+    const errorRecord = { scope: "job", error: msg, code: "missing_e2b_key" };
+    errors.push(errorRecord);
+    await appendJobEvent(supabase, jobId, "url_error", errorRecord);
     await supabase
       .from("design_dna_jobs")
-      .update({ status: "failed", error: msg, finished_at: new Date().toISOString() })
+      .update({
+        status: "failed",
+        error: msg,
+        results,
+        errors,
+        finished_at: new Date().toISOString(),
+      })
       .eq("id", jobId);
     return {
       ok: false,
+      status: "failed",
       jobId,
       resumable: false,
       canceled: false,
@@ -196,9 +213,10 @@ export async function executeDesignDnaJob(
   for (let i = startIndex; i < urls.length; i++) {
     const budgetElapsed = Date.now() - startMs;
     if (budgetElapsed > LOOP_BUDGET_MS * 0.8) {
-      await saveJobCheckpoint(supabase, jobId, { currentUrlIndex: i, results });
+      await saveJobCheckpoint(supabase, jobId, { currentUrlIndex: i, results, errors, blockedCount });
       return {
         ok: false,
+        status: results.length > 0 || blockedCount > 0 || errors.length > 0 ? "partial" : "blocked",
         jobId,
         resumable: true,
         canceled: false,
@@ -230,6 +248,7 @@ export async function executeDesignDnaJob(
       if (dnaResult.dna) {
         const dna = dnaResult.dna as Record<string, unknown>;
         results.push(dna);
+        if (dnaResult.blockedReason) blockedCount += 1;
 
         const { error: insertError } = await supabase.from("design_system_library").upsert({
           name: (dna.name as string) || url,
@@ -241,8 +260,10 @@ export async function executeDesignDnaJob(
           quality_source: (dna.quality_source as string) || (depth === "deep" ? "deep_extraction" : "shallow_extraction"),
           validated: false,
           raw_markdown: dnaResult.rawMarkdown,
+          clean_markdown: dnaResult.cleanMarkdown,
           raw_html: dnaResult.rawHtml,
           clean_html: dnaResult.cleanHtml,
+          content_hygiene: dnaResult.contentHygiene,
           screenshot_url: dnaResult.screenshotUrl,
           screenshot_base64: dnaResult.screenshotBase64 ?? null,
           provider_trace: dnaResult.providerTrace,
@@ -264,6 +285,7 @@ export async function executeDesignDnaJob(
           notes: dnaResult.notes.join(" | ") || null,
         }, { onConflict: "source_url,ingest_kind" });
         if (insertError) {
+          errors.push({ url, index: i, error: insertError.message, kind: "library_upsert" });
           console.warn(`[design-dna] Failed to persist library entry for ${url}: ${insertError.message}`);
         }
       }
@@ -307,16 +329,43 @@ export async function executeDesignDnaJob(
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      await appendJobEvent(supabase, jobId, "url_error", { url, error: msg, index: i });
+      const errorRecord = { url, error: msg, index: i };
+      errors.push(errorRecord);
+      await appendJobEvent(supabase, jobId, "url_error", errorRecord);
     }
   }
 
+  const completedCount = results.length;
+  const status = blockedCount > 0 && blockedCount >= urls.length
+    ? "blocked"
+    : completedCount === 0 && errors.length > 0
+      ? "failed"
+      : errors.length > 0 || blockedCount > 0
+        ? "partial"
+        : "completed";
+
+  await supabase
+    .from("design_dna_jobs")
+    .update({
+      results,
+      errors,
+      meta: {
+        previewUrl,
+        ingestKind,
+        current_url_index: urls.length,
+        urls_completed: completedCount,
+        blocked_urls: blockedCount,
+      },
+    })
+    .eq("id", jobId);
+
   return {
-    ok: true,
+    ok: status === "completed",
+    status,
     jobId,
     resumable: false,
     canceled: false,
-    urlsCompleted: results.length,
+    urlsCompleted: completedCount,
     durationMs: Date.now() - startMs,
   };
 }

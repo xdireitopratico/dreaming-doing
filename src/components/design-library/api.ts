@@ -1,5 +1,11 @@
 import { supabase } from "@/integrations/supabase/client";
-import type { LibraryEntry, DesignDnaJob, LibraryFilters, RealtimeEvent } from "./types";
+import type {
+  LibraryEntry,
+  DesignDnaJob,
+  LibraryFilters,
+  LibraryOverview,
+  RealtimeEvent,
+} from "./types";
 
 export async function fetchLibraryEntries(filters: LibraryFilters): Promise<LibraryEntry[]> {
   let query = supabase
@@ -37,6 +43,19 @@ export async function fetchLibraryEntries(filters: LibraryFilters): Promise<Libr
   const { data, error } = await query;
   if (error) throw new Error(error.message);
   return (data ?? []) as LibraryEntry[];
+}
+
+export async function fetchLibraryOverview(): Promise<LibraryOverview | null> {
+  const { data, error } = await supabase.rpc("design_library_overview", {
+    include_archived: false,
+  });
+
+  if (error) {
+    console.warn("[design-library] overview failed:", error.message);
+    return null;
+  }
+
+  return (data ?? null) as LibraryOverview | null;
 }
 
 export async function fetchJobHistory(): Promise<DesignDnaJob[]> {

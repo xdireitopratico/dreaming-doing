@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { X, Send, Globe, Loader2, ExternalLink, Paperclip, Square } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useJobEvents, useJobPolling } from "./hooks";
-import { JOB_STATUS_COLORS, type RealtimeEvent } from "./types";
+import { JOB_STATUS_COLORS, JOB_TERMINAL_STATUSES, type RealtimeEvent } from "./types";
 
 interface BrowserPreviewPanelProps {
   jobId: string | null;
@@ -29,7 +29,7 @@ interface JobContext {
   libraryEntries: { name: string; source_url: string; quality_score: number }[];
 }
 
-const TERMINAL_STATUSES = new Set(["completed", "failed", "canceled"]);
+const TERMINAL_STATUSES = new Set<string>(JOB_TERMINAL_STATUSES);
 
 function formatRelativeTime(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();

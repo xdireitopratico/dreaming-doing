@@ -13,6 +13,7 @@ export type DesignDnaJobRequest = {
 export type DesignDnaExecuteResponse = {
   ok: boolean;
   jobId: string;
+  status?: "completed" | "partial" | "blocked" | "failed" | "canceled";
   resumable: boolean;
   canceled: boolean;
   error?: string;
@@ -93,7 +94,7 @@ export async function markJobFinal(
   extras: Record<string, unknown> = {},
 ): Promise<void> {
   const patch: Record<string, unknown> = { status, ...extras };
-  if (status === "completed" || status === "failed" || status === "canceled") {
+  if (status === "completed" || status === "partial" || status === "blocked" || status === "failed" || status === "canceled") {
     patch.finished_at = new Date().toISOString();
   }
   const { error } = await supabase.from("design_dna_jobs").update(patch).eq("id", jobId);

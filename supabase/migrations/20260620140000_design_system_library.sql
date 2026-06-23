@@ -1,7 +1,7 @@
 -- Migration: Cria design_system_library — biblioteca curada de referências de design.
 --
 -- Cada entrada tem "lastro" (proveniência completa): quem extraiu, de onde, quando,
--- qual a qualidade. O raw_markdown + screenshot_url permitem que o LLM consulte
+-- qual a qualidade. O raw_markdown + clean_markdown + screenshot_url permitem que o LLM consulte
 -- o conteúdo original. O design_dna JSONB guarda a estrutura extraída.
 -- O embedding vector permite busca semântica futura.
 --
@@ -32,8 +32,10 @@ CREATE TABLE IF NOT EXISTS design_system_library (
 
   -- Conteúdo bruto (para consulta do LLM)
   raw_markdown TEXT,
+  clean_markdown TEXT,
   screenshot_url TEXT,
   screenshot_base64 TEXT,
+  content_hygiene JSONB DEFAULT '{}'::jsonb,
 
   -- DNA estruturado
   design_dna JSONB DEFAULT NULL,

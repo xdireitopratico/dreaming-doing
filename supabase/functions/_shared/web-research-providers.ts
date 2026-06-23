@@ -3,6 +3,8 @@
  * Tenant secrets (editor) drive provider choice; free fallbacks when unset.
  */
 
+import { htmlToMarkdownDocument, htmlToVisibleText } from "../../../src/lib/html-hygiene.ts";
+
 export type WebSecrets = Record<string, string>;
 
 function pickSecret(secrets: WebSecrets, names: string[]): string | undefined {
@@ -13,48 +15,66 @@ function pickSecret(secrets: WebSecrets, names: string[]): string | undefined {
   return undefined;
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function withRetry<T>(
+  label: string,
+  fn: () => Promise<T>,
+  attempts = 3,
+  baseDelayMs = 350,
+): Promise<T> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    try {
+      return await fn();
+    } catch (error) {
+      lastError = error;
+      const message = error instanceof Error ? error.message : String(error);
+      const transient = /timeout|429|5\d\d|network|fetch failed|ECONNRESET|ETIMEDOUT|rate limit/i.test(message);
+      if (!transient || attempt === attempts - 1) break;
+      const delay = baseDelayMs * Math.pow(2, attempt);
+      console.warn(`[web_scrape] ${label} retry ${attempt + 1}/${attempts}: ${message}`);
+      await sleep(delay);
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error(`${label} failed`);
+}
+
 async function scrapeViaJina(
   url: string,
   format: string,
   mode: string,
 ): Promise<Record<string, unknown>> {
-  const jinaUrl = mode === "screenshot"
-    ? `https://s.jina.ai/${encodeURIComponent(url)}`
-    : `https://r.jina.ai/${encodeURIComponent(url)}`;
+  return withRetry("jina", async () => {
+    const jinaUrl = mode === "screenshot"
+      ? `https://s.jina.ai/${encodeURIComponent(url)}`
+      : `https://r.jina.ai/${encodeURIComponent(url)}`;
 
-  const headers: Record<string, string> = { Accept: "application/json" };
-  if (format === "html") headers["X-Return-Format"] = "html";
+    const headers: Record<string, string> = { Accept: "application/json" };
+    if (format === "html") headers["X-Return-Format"] = "html";
 
-  const response = await fetch(jinaUrl, { headers, signal: AbortSignal.timeout(30000) });
-  if (!response.ok) throw new Error(`Jina Reader failed: HTTP ${response.status}`);
+    const response = await fetch(jinaUrl, { headers, signal: AbortSignal.timeout(30000) });
+    if (!response.ok) throw new Error(`Jina Reader failed: HTTP ${response.status}`);
 
-  if (mode === "screenshot") {
-    const blob = await response.blob();
-    const buffer = await blob.arrayBuffer();
-    const base64 = btoa(String.fromCharCode(...new Uint8Array(buffer)));
-    return { screenshot_base64: base64, url, provider: "jina" };
-  }
+    if (mode === "screenshot") {
+      const blob = await response.blob();
+      const buffer = await blob.arrayBuffer();
+      const base64 = btoa(String.fromCharCode(...new Uint8Array(buffer)));
+      return { screenshot_base64: base64, url, provider: "jina" };
+    }
 
-  const data = await response.json();
-  const content = data.data?.content || data.data?.text || "";
-  return {
-    title: data.data?.title || "",
-    content,
-    url: data.data?.url || url,
-    word_count: content.split(/\s+/).filter(Boolean).length,
-    provider: "jina",
-  };
-}
-
-function stripHtmlToText(html: string): string {
-  return html
-    .replace(/<script[\s\S]*?<\/script>/gi, "")
-    .replace(/<style[\s\S]*?<\/style>/gi, "")
-    .replace(/<noscript[\s\S]*?<\/noscript>/gi, "")
-    .replace(/<!--[\s\S]*?-->/g, "")
-    .replace(/<[^>]+>/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
+    const data = await response.json();
+    const content = data.data?.content || data.data?.text || "";
+    return {
+      title: data.data?.title || "",
+      content,
+      url: data.data?.url || url,
+      word_count: content.split(/\s+/).filter(Boolean).length,
+      provider: "jina",
+    };
+  }, 2);
 }
 
 async function scrapeViaBrowserless(
@@ -63,39 +83,41 @@ async function scrapeViaBrowserless(
   input: Record<string, unknown>,
   format: string,
 ): Promise<Record<string, unknown>> {
-  const browserlessUrl = new URL("https://chrome.browserless.io/content");
-  browserlessUrl.searchParams.set("token", apiKey);
+  return withRetry("browserless", async () => {
+    const browserlessUrl = new URL("https://chrome.browserless.io/content");
+    browserlessUrl.searchParams.set("token", apiKey);
 
-  const response = await fetch(browserlessUrl.toString(), {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
+    const response = await fetch(browserlessUrl.toString(), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        url,
+        waitFor: input.wait_for || 0,
+        bestAttempt: true,
+        blockAds: true,
+        gotoOptions: {
+          waitUntil: "networkidle2",
+          timeout: 30000,
+        },
+      }),
+      signal: AbortSignal.timeout(45000),
+    });
+
+    if (!response.ok) {
+      const errText = await response.text().catch(() => "unknown");
+      throw new Error(`Browserless content failed: HTTP ${response.status} — ${errText.substring(0, 200)}`);
+    }
+
+    const html = await response.text();
+    const content = format === "html" ? html : htmlToMarkdownDocument(html) || htmlToVisibleText(html);
+    return {
+      title: "",
+      content,
       url,
-      waitFor: input.wait_for || 0,
-      bestAttempt: true,
-      blockAds: true,
-      gotoOptions: {
-        waitUntil: "networkidle2",
-        timeout: 30000,
-      },
-    }),
-    signal: AbortSignal.timeout(45000),
-  });
-
-  if (!response.ok) {
-    const errText = await response.text().catch(() => "unknown");
-    throw new Error(`Browserless content failed: HTTP ${response.status} — ${errText.substring(0, 200)}`);
-  }
-
-  const html = await response.text();
-  const content = format === "html" ? html : stripHtmlToText(html);
-  return {
-    title: "",
-    content,
-    url,
-    word_count: content.split(/\s+/).filter(Boolean).length,
-    provider: "browserless",
-  };
+      word_count: content.split(/\s+/).filter(Boolean).length,
+      provider: "browserless",
+    };
+  }, 2);
 }
 
 async function scrapeViaFirecrawl(
@@ -104,59 +126,57 @@ async function scrapeViaFirecrawl(
   input: Record<string, unknown>,
   format: string,
 ): Promise<Record<string, unknown>> {
-  const fcResponse = await fetch("https://api.firecrawl.dev/v1/scrape", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      url,
-      formats: [format === "html" ? "html" : "markdown"],
-      onlyMainContent: input.only_main_content !== false,
-      waitFor: input.wait_for || 0,
-    }),
-    signal: AbortSignal.timeout(45000),
-  });
+  return withRetry("firecrawl", async () => {
+    const fcResponse = await fetch("https://api.firecrawl.dev/v1/scrape", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        url,
+        formats: [format === "html" ? "html" : "markdown"],
+        onlyMainContent: input.only_main_content !== false,
+        waitFor: input.wait_for || 0,
+      }),
+      signal: AbortSignal.timeout(45000),
+    });
 
-  if (!fcResponse.ok) {
-    const errText = await fcResponse.text().catch(() => "unknown");
-    throw new Error(`Firecrawl scrape failed: HTTP ${fcResponse.status} — ${errText.substring(0, 200)}`);
-  }
+    if (!fcResponse.ok) {
+      const errText = await fcResponse.text().catch(() => "unknown");
+      throw new Error(`Firecrawl scrape failed: HTTP ${fcResponse.status} — ${errText.substring(0, 200)}`);
+    }
 
-  const fcData = await fcResponse.json();
-  const content = fcData.data?.markdown || fcData.data?.html || "";
-  return {
-    title: fcData.data?.metadata?.title || "",
-    content,
-    url: fcData.data?.metadata?.sourceURL || url,
-    word_count: content.split(/\s+/).filter(Boolean).length,
-    metadata: fcData.data?.metadata || {},
-    provider: "firecrawl",
-  };
+    const fcData = await fcResponse.json();
+    const content = fcData.data?.markdown || fcData.data?.html || "";
+    return {
+      title: fcData.data?.metadata?.title || "",
+      content,
+      url: fcData.data?.metadata?.sourceURL || url,
+      word_count: content.split(/\s+/).filter(Boolean).length,
+      metadata: fcData.data?.metadata || {},
+      provider: "firecrawl",
+    };
+  }, 2);
 }
 
 async function scrapeViaHttp(url: string): Promise<Record<string, unknown>> {
-  const response = await fetch(url, {
-    headers: { "User-Agent": "AetherForge/1.0 (web_scrape fallback)" },
-    signal: AbortSignal.timeout(20000),
-  });
-  if (!response.ok) throw new Error(`HTTP fetch failed: ${response.status}`);
-  const html = await response.text();
-  const text = html
-    .replace(/<script[\s\S]*?<\/script>/gi, "")
-    .replace(/<style[\s\S]*?<\/style>/gi, "")
-    .replace(/<[^>]+>/g, " ")
-    .replace(/\s+/g, " ")
-    .trim()
-    .slice(0, 50000);
-  return {
-    title: "",
-    content: text,
-    url,
-    word_count: text.split(/\s+/).filter(Boolean).length,
-    provider: "http",
-  };
+  return withRetry("http", async () => {
+    const response = await fetch(url, {
+      headers: { "User-Agent": "AetherForge/1.0 (web_scrape fallback)" },
+      signal: AbortSignal.timeout(20000),
+    });
+    if (!response.ok) throw new Error(`HTTP fetch failed: ${response.status}`);
+    const html = await response.text();
+    const text = (htmlToMarkdownDocument(html) || htmlToVisibleText(html)).slice(0, 50000);
+    return {
+      title: "",
+      content: text,
+      url,
+      word_count: text.split(/\s+/).filter(Boolean).length,
+      provider: "http",
+    };
+  }, 2);
 }
 
 export async function scrapeWebPage(

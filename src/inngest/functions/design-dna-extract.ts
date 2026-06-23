@@ -39,7 +39,7 @@ export const designDnaExtractFunction = inngest.createFunction(
       return data?.status as string | undefined;
     });
 
-    if (initialStatus === "completed" || initialStatus === "failed") {
+    if (initialStatus === "completed" || initialStatus === "partial" || initialStatus === "blocked" || initialStatus === "failed") {
       return { jobId, ok: true, alreadyDone: true };
     }
 
@@ -110,6 +110,28 @@ export const designDnaExtractFunction = inngest.createFunction(
       return { jobId, ok: false, canceled: true };
     }
 
+    if (final.status === "blocked") {
+      await step.run("mark-blocked", async () => {
+        const sb = getSupabaseAdmin();
+        await markJobFinal(sb, jobId, "blocked", {
+          error: final.error ?? "blocked",
+          blocked_at: new Date().toISOString(),
+        });
+      });
+      return { jobId, ok: false, status: "blocked", error: final.error };
+    }
+
+    if (final.status === "partial") {
+      await step.run("mark-partial", async () => {
+        const sb = getSupabaseAdmin();
+        await markJobFinal(sb, jobId, "partial", {
+          error: final.error ?? null,
+          partial_at: new Date().toISOString(),
+        });
+      });
+      return { jobId, ok: true, status: "partial" };
+    }
+
     if (!final.ok && !final.resumable) {
       await step.run("mark-failed", async () => {
         const sb = getSupabaseAdmin();
@@ -117,7 +139,7 @@ export const designDnaExtractFunction = inngest.createFunction(
           error: final.error ?? "extraction failed",
         });
       });
-      return { jobId, ok: false, error: final.error };
+      return { jobId, ok: false, status: "failed", error: final.error };
     }
 
     if (!final.ok && final.resumable) {
@@ -129,7 +151,7 @@ export const designDnaExtractFunction = inngest.createFunction(
           meta: { resumableExhausted: true, resumeAttempts: 3 },
         });
       });
-      return { jobId, ok: false, error: exhaustedError };
+      return { jobId, ok: false, status: "failed", error: exhaustedError };
     }
 
     await step.run("mark-completed", async () => {

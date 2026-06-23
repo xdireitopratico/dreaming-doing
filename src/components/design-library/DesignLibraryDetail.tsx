@@ -12,11 +12,12 @@ import { getQualityColor, type LibraryEntry } from "./types";
 
 interface DesignLibraryDetailProps {
   entry: LibraryEntry | null;
+  relatedEntries?: LibraryEntry[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
 
-export function DesignLibraryDetail({ entry, open, onOpenChange }: DesignLibraryDetailProps) {
+export function DesignLibraryDetail({ entry, relatedEntries = [], open, onOpenChange }: DesignLibraryDetailProps) {
   if (!entry) return null;
 
   const confidenceLabel = entry.confidence !== null && entry.confidence !== undefined
@@ -77,6 +78,9 @@ export function DesignLibraryDetail({ entry, open, onOpenChange }: DesignLibrary
                 <TabsTrigger value="markdown" className="text-xs h-7">
                   Markdown
                 </TabsTrigger>
+                <TabsTrigger value="clean-markdown" className="text-xs h-7">
+                  Clean Markdown
+                </TabsTrigger>
                 <TabsTrigger value="meta" className="text-xs h-7">
                   Metadata
                 </TabsTrigger>
@@ -128,6 +132,42 @@ export function DesignLibraryDetail({ entry, open, onOpenChange }: DesignLibrary
                   </p>
                 </div>
               </div>
+
+              {entry.content_hygiene && (
+                <div>
+                  <p className="text-xs text-muted-foreground mb-2">Content hygiene</p>
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div className="rounded-md border border-border bg-surface-2 p-3">
+                      <p className="text-muted-foreground mb-1">Root selector</p>
+                      <p className="font-mono text-[11px] break-all">
+                        {String(entry.content_hygiene.rootSelector ?? "n/a")}
+                      </p>
+                    </div>
+                    <div className="rounded-md border border-border bg-surface-2 p-3">
+                      <p className="text-muted-foreground mb-1">Title</p>
+                      <p className="font-mono text-[11px] break-all">
+                        {String(entry.content_hygiene.title ?? "n/a")}
+                      </p>
+                    </div>
+                    <div className="rounded-md border border-border bg-surface-2 p-3">
+                      <p className="text-muted-foreground mb-1">Raw markdown chars</p>
+                      <p>{String(entry.content_hygiene.rawMarkdownChars ?? "n/a")}</p>
+                    </div>
+                    <div className="rounded-md border border-border bg-surface-2 p-3">
+                      <p className="text-muted-foreground mb-1">Clean markdown chars</p>
+                      <p>{String(entry.content_hygiene.cleanMarkdownChars ?? "n/a")}</p>
+                    </div>
+                    <div className="rounded-md border border-border bg-surface-2 p-3">
+                      <p className="text-muted-foreground mb-1">Raw HTML chars</p>
+                      <p>{String(entry.content_hygiene.rawHtmlChars ?? "n/a")}</p>
+                    </div>
+                    <div className="rounded-md border border-border bg-surface-2 p-3">
+                      <p className="text-muted-foreground mb-1">Clean HTML chars</p>
+                      <p>{String(entry.content_hygiene.cleanHtmlChars ?? "n/a")}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {entry.provider_trace && entry.provider_trace.length > 0 && (
                 <div>
@@ -184,6 +224,17 @@ export function DesignLibraryDetail({ entry, open, onOpenChange }: DesignLibrary
                 </pre>
               ) : (
                 <p className="text-sm text-muted-foreground">Markdown não disponível</p>
+              )}
+            </TabsContent>
+
+            <TabsContent value="clean-markdown" className="flex-1 overflow-auto p-6 m-0">
+              {entry.clean_markdown ? (
+                <pre className="text-xs font-mono bg-surface-2 rounded-lg p-4 overflow-x-auto whitespace-pre-wrap">
+                  {entry.clean_markdown.slice(0, 20000)}
+                  {entry.clean_markdown.length > 20000 && "\n\n… (truncado)"}
+                </pre>
+              ) : (
+                <p className="text-sm text-muted-foreground">Markdown limpo não disponível</p>
               )}
             </TabsContent>
 
@@ -259,6 +310,32 @@ export function DesignLibraryDetail({ entry, open, onOpenChange }: DesignLibrary
                         {t}
                       </Badge>
                     ))}
+                  </div>
+                </div>
+              )}
+
+              {relatedEntries.length > 1 && (
+                <div>
+                  <p className="text-xs text-muted-foreground mb-2">Outras versões da mesma URL</p>
+                  <div className="space-y-2">
+                    {relatedEntries
+                      .filter((item) => item.id !== entry.id)
+                      .map((item) => (
+                        <div
+                          key={item.id}
+                          className="flex items-center justify-between gap-3 rounded-md border border-border bg-surface-2 px-3 py-2 text-xs"
+                        >
+                          <div className="min-w-0">
+                            <p className="font-medium truncate">{item.name}</p>
+                            <p className="text-muted-foreground truncate">
+                              {item.ingest_kind} · Q {item.quality_score.toFixed(1)}
+                            </p>
+                          </div>
+                          <Badge variant="outline" className="shrink-0">
+                            {item.category}
+                          </Badge>
+                        </div>
+                      ))}
                   </div>
                 </div>
               )}

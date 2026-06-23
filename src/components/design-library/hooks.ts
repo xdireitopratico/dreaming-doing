@@ -1,10 +1,23 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { fetchLibraryEntries, fetchJobHistory, fetchJobDetails, fetchJobEvents } from "./api";
-import type { LibraryEntry, DesignDnaJob, LibraryFilters, RealtimeEvent } from "./types";
+import {
+  fetchLibraryEntries,
+  fetchLibraryOverview,
+  fetchJobHistory,
+  fetchJobDetails,
+  fetchJobEvents,
+} from "./api";
+import type {
+  LibraryEntry,
+  DesignDnaJob,
+  LibraryFilters,
+  LibraryOverview,
+  RealtimeEvent,
+} from "./types";
 
 export function useLibrary(filters: LibraryFilters) {
   const [entries, setEntries] = useState<LibraryEntry[]>([]);
+  const [overview, setOverview] = useState<LibraryOverview | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const filtersRef = useRef(filters);
@@ -14,8 +27,22 @@ export function useLibrary(filters: LibraryFilters) {
     setLoading(true);
     setError(null);
     try {
-      const data = await fetchLibraryEntries(filtersRef.current);
-      setEntries(data);
+      const [entriesResult, overviewResult] = await Promise.allSettled([
+        fetchLibraryEntries(filtersRef.current),
+        fetchLibraryOverview(),
+      ]);
+
+      if (entriesResult.status === "fulfilled") {
+        setEntries(entriesResult.value);
+      } else {
+        throw entriesResult.reason;
+      }
+
+      if (overviewResult.status === "fulfilled") {
+        setOverview(overviewResult.value);
+      } else {
+        setOverview(null);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load entries");
     } finally {
@@ -37,7 +64,7 @@ export function useLibrary(filters: LibraryFilters) {
     filters.search,
   ]);
 
-  return { entries, loading, error, reload: load };
+  return { entries, overview, loading, error, reload: load };
 }
 
 export function useJobs() {

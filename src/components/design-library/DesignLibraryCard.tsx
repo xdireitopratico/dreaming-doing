@@ -10,6 +10,9 @@ interface DesignLibraryCardProps {
   onValidate: () => void;
   onArchive: () => void;
   onDelete: () => void;
+  duplicateCount?: number;
+  variantCount?: number;
+  relatedKinds?: string[];
 }
 
 function truncate(str: string, len: number): string {
@@ -23,9 +26,12 @@ export function DesignLibraryCard({
   onValidate,
   onArchive,
   onDelete,
+  duplicateCount = 0,
+  variantCount = 1,
+  relatedKinds = [],
 }: DesignLibraryCardProps) {
   return (
-    <Card className="group overflow-hidden flex flex-col bg-surface-1 border-border hover:border-primary/30 transition-colors">
+    <Card className={`group overflow-hidden flex flex-col bg-surface-1 border-border hover:border-primary/30 transition-colors ${duplicateCount > 0 ? "ring-1 ring-amber-500/15" : ""}`}>
       <div className="relative aspect-video bg-surface-3 overflow-hidden">
         {entry.screenshot_url ? (
           <img
@@ -40,6 +46,11 @@ export function DesignLibraryCard({
           </div>
         )}
         <div className="absolute top-2 right-2 flex gap-1.5">
+          {variantCount > 1 && (
+            <span className="inline-flex items-center rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold leading-none text-amber-400">
+              +{variantCount - 1}
+            </span>
+          )}
           <span
             className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold leading-none ${getQualityColor(entry.quality_score)}`}
           >
@@ -77,6 +88,11 @@ export function DesignLibraryCard({
           <Badge variant="outline" className="text-[10px] px-1.5 py-0">
             {entry.ingest_kind}
           </Badge>
+          {duplicateCount > 0 && (
+            <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-amber-500/30 text-amber-400">
+              {variantCount} versões
+            </Badge>
+          )}
           {entry.serves_domains.slice(0, 2).map((d) => (
             <Badge key={d} variant="outline" className="text-[10px] px-1.5 py-0">
               {d}
@@ -89,6 +105,11 @@ export function DesignLibraryCard({
               className="text-[10px] px-1.5 py-0 border-accent/30 text-accent"
             >
               {m}
+            </Badge>
+          ))}
+          {relatedKinds.slice(0, 3).map((kind) => (
+            <Badge key={kind} variant="secondary" className="text-[10px] px-1.5 py-0 opacity-80">
+              {kind}
             </Badge>
           ))}
         </div>

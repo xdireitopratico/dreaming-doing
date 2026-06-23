@@ -4,6 +4,7 @@
 ALTER TABLE design_system_library
   ADD COLUMN IF NOT EXISTS raw_html TEXT,
   ADD COLUMN IF NOT EXISTS clean_html TEXT,
+  ADD COLUMN IF NOT EXISTS content_hygiene JSONB DEFAULT '{}'::jsonb,
   ADD COLUMN IF NOT EXISTS provider_trace TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
   ADD COLUMN IF NOT EXISTS confidence INTEGER,
   ADD COLUMN IF NOT EXISTS blocked_reason TEXT;
