@@ -194,6 +194,10 @@ export function DesignLibraryDetail({ entry, open, onOpenChange }: DesignLibrary
                   <Badge variant="secondary">{entry.category}</Badge>
                 </div>
                 <div>
+                  <p className="text-muted-foreground mb-1">Origem</p>
+                  <Badge variant="outline">{entry.ingest_kind}</Badge>
+                </div>
+                <div>
                   <p className="text-muted-foreground mb-1">Quality Source</p>
                   <p>{entry.quality_source}</p>
                 </div>

@@ -74,6 +74,9 @@ export function DesignLibraryCard({
           <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
             {entry.category}
           </Badge>
+          <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+            {entry.ingest_kind}
+          </Badge>
           {entry.serves_domains.slice(0, 2).map((d) => (
             <Badge key={d} variant="outline" className="text-[10px] px-1.5 py-0">
               {d}

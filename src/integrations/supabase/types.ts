@@ -1904,6 +1904,7 @@ export type Database = {
           compatible_moods: string[]
           created_at: string
           design_dna: Json | null
+          ingest_kind: string
           embedding: string | null
           extracted_at: string
           extracted_by: string | null
@@ -1936,6 +1937,7 @@ export type Database = {
           compatible_moods?: string[]
           created_at?: string
           design_dna?: Json | null
+          ingest_kind?: string
           embedding?: string | null
           extracted_at?: string
           extracted_by?: string | null
@@ -1968,6 +1970,7 @@ export type Database = {
           compatible_moods?: string[]
           created_at?: string
           design_dna?: Json | null
+          ingest_kind?: string
           embedding?: string | null
           extracted_at?: string
           extracted_by?: string | null

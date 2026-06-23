@@ -6,6 +6,7 @@ export type DesignDnaJobRequest = {
   depth: "shallow" | "deep";
   categories: string[];
   urls: string[];
+  ingestKind?: "production" | "curated" | "smoke" | "manual";
   resume?: boolean;
 };
 

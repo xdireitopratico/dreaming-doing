@@ -2,6 +2,7 @@ export interface LibraryEntry {
   id: string;
   name: string;
   source_url: string;
+  ingest_kind: "production" | "curated" | "smoke" | "manual";
   category: string;
   quality_score: number;
   quality_source: string;
@@ -62,6 +63,7 @@ export interface LibraryFilters {
   mood: string;
   language: string;
   category: string;
+  ingestKind: "all" | "production" | "curated" | "smoke" | "manual";
   minQuality: number;
   validatedOnly: boolean;
   search: string;
@@ -87,6 +89,14 @@ export const CATEGORIES = [
   "full_page",
 ] as const;
 
+export const INGEST_KINDS = [
+  "all",
+  "production",
+  "curated",
+  "smoke",
+  "manual",
+] as const;
+
 export const VIEW_MODES = ["grid", "list"] as const;
 export type ViewMode = (typeof VIEW_MODES)[number];
 
@@ -110,6 +120,7 @@ export const DEFAULT_FILTERS: LibraryFilters = {
   mood: "",
   language: "",
   category: "all",
+  ingestKind: "production",
   minQuality: 0,
   validatedOnly: false,
   search: "",

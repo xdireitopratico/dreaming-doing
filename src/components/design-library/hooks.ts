@@ -31,6 +31,7 @@ export function useLibrary(filters: LibraryFilters) {
     filters.mood,
     filters.language,
     filters.category,
+    filters.ingestKind,
     filters.minQuality,
     filters.validatedOnly,
     filters.search,

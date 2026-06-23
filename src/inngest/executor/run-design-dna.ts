@@ -108,6 +108,11 @@ export async function executeDesignDnaJob(
     .eq("id", jobId)
     .single();
 
+  const jobMeta = (job?.meta ?? {}) as Record<string, unknown>;
+  const ingestKind = typeof jobMeta.ingestKind === "string" && jobMeta.ingestKind.trim()
+    ? jobMeta.ingestKind.trim()
+    : "production";
+
   if (job?.sandbox_id) {
     sandboxId = job.sandbox_id as string;
     const meta = (job.meta ?? {}) as Record<string, unknown>;
@@ -226,9 +231,10 @@ export async function executeDesignDnaJob(
         const dna = dnaResult.dna as Record<string, unknown>;
         results.push(dna);
 
-        const { error: insertError } = await supabase.from("design_system_library").insert({
+        const { error: insertError } = await supabase.from("design_system_library").upsert({
           name: (dna.name as string) || url,
           source_url: url,
+          ingest_kind: ingestKind,
           category: (dna.category as string) || "full_page",
           extracted_by: userId,
           quality_score: Math.max(0, Math.min(10, Number(dna.quality_score ?? (depth === "deep" ? 7 : 5)))),
@@ -256,7 +262,7 @@ export async function executeDesignDnaJob(
           compatible_moods: (dna.compatible_moods as string[]) || [],
           tags: [categories.join(",")],
           notes: dnaResult.notes.join(" | ") || null,
-        });
+        }, { onConflict: "source_url,ingest_kind" });
         if (insertError) {
           console.warn(`[design-dna] Failed to persist library entry for ${url}: ${insertError.message}`);
         }

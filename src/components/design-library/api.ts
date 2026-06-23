@@ -21,6 +21,9 @@ export async function fetchLibraryEntries(filters: LibraryFilters): Promise<Libr
   if (filters.category && filters.category !== "all") {
     query = query.eq("category", filters.category);
   }
+  if (filters.ingestKind && filters.ingestKind !== "all") {
+    query = query.eq("ingest_kind", filters.ingestKind);
+  }
   if (filters.minQuality > 0) {
     query = query.gte("quality_score", filters.minQuality);
   }
@@ -51,9 +54,10 @@ export async function createExtractionJob(
   urls: string[],
   depth: string,
   categories: string[],
+  ingestKind: "production" | "curated" | "smoke" | "manual" = "production",
 ): Promise<{ jobId: string }> {
   const { data, error } = await supabase.functions.invoke("design-dna-scheduler", {
-    body: { action: "schedule", urls, depth, categories },
+    body: { action: "schedule", urls, depth, categories, ingestKind },
   });
 
   if (error) throw new Error(error.message ?? "Failed to create extraction job");

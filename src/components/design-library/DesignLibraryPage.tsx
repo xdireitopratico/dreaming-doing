@@ -241,6 +241,9 @@ export function DesignLibraryPage() {
                 <Badge variant="secondary" className="text-[10px]">
                   {entry.category}
                 </Badge>
+                <Badge variant="outline" className="text-[10px]">
+                  {entry.ingest_kind}
+                </Badge>
                 <Badge
                   variant="outline"
                   className={`text-[10px] ${entry.quality_score >= 7 ? "border-green-500/30 text-green-400" : "border-yellow-500/30 text-yellow-400"}`}

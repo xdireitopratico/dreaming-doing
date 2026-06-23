@@ -72,6 +72,7 @@ function buildContextMessage(ctx: {
   jobStatus: string;
   urls: string[];
   previewUrl: string | null;
+  ingestKind: string;
   errors: string[];
   recentEvents: { type: string; payload: Record<string, unknown> }[];
   libraryEntries: { name: string; source_url: string; quality_score: number }[];
@@ -79,6 +80,7 @@ function buildContextMessage(ctx: {
   const lines: string[] = [];
   lines.push(`## Contexto do job`);
   lines.push(`- Status: ${ctx.jobStatus}`);
+  lines.push(`- Origem: ${ctx.ingestKind}`);
   lines.push(`- URLs: ${ctx.urls.join(", ") || "(nenhuma)"}`);
   lines.push(`- Sandbox: ${ctx.previewUrl ?? "FECHADO (job completed, sandbox encerrado pela E2B)"}`);
   if (ctx.errors.length > 0) {
@@ -176,7 +178,7 @@ Deno.serve(async (req: Request) => {
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const supabase = createClient(supabaseUrl, supabaseKey);
+    const supabase: any = createClient(supabaseUrl, supabaseKey);
 
     const token = auth.replace(/^Bearer\s+/i, "");
 
@@ -192,7 +194,7 @@ Deno.serve(async (req: Request) => {
     let userId: string | null = null;
     let userEmail: string | null = null;
     if (!isServiceRole) {
-      const userClient = createClient(supabaseUrl, Deno.env.get("SUPABASE_ANON_KEY") ?? supabaseKey, {
+      const userClient: any = createClient(supabaseUrl, Deno.env.get("SUPABASE_ANON_KEY") ?? supabaseKey, {
         global: { headers: { Authorization: auth } },
       });
       const { data: userData } = await userClient.auth.getUser();
@@ -238,26 +240,30 @@ Deno.serve(async (req: Request) => {
       .order("seq", { ascending: false })
       .limit(5);
 
+    const jobMeta = (job.meta ?? {}) as { previewUrl?: string; ingestKind?: string };
+    const ingestKind = jobMeta.ingestKind ?? "production";
+
     const { data: libraryEntries } = await supabase
       .from("design_system_library")
       .select("name, source_url, quality_score")
       .in("source_url", (job.urls as string[]) ?? [])
+      .eq("ingest_kind", ingestKind)
       .limit(5);
 
-    const jobMeta = (job.meta ?? {}) as { previewUrl?: string };
     const ctx = {
       jobStatus: job.status,
       urls: (job.urls as string[]) ?? [],
       previewUrl: jobMeta.previewUrl ?? null,
+      ingestKind,
       errors: ((job.results as unknown[]) ?? [])
         .filter((r) => r && typeof r === "object" && "error" in (r as Record<string, unknown>))
         .map((r) => (r as { error: string }).error)
         .slice(0, 3),
-      recentEvents: (recentEvents ?? []).map((e) => ({
+      recentEvents: (recentEvents ?? []).map((e: { event_type?: string; payload?: Record<string, unknown> }) => ({
         type: e.event_type as string,
         payload: (e.payload as Record<string, unknown>) ?? {},
       })),
-      libraryEntries: (libraryEntries ?? []).map((e) => ({
+      libraryEntries: (libraryEntries ?? []).map((e: { name?: string; source_url?: string; quality_score?: number }) => ({
         name: e.name as string,
         source_url: e.source_url as string,
         quality_score: e.quality_score as number,
@@ -339,7 +345,7 @@ Deno.serve(async (req: Request) => {
     if (!targetUserId) {
       const { data: users } = await supabase.auth.admin.listUsers({ perPage: 500 });
       targetUserId =
-        users?.users?.find((u) => u.email?.toLowerCase() === "xdireitopratico@gmail.com")?.id ?? null;
+        users?.users?.find((u: { email?: string; id?: string }) => u.email?.toLowerCase() === "xdireitopratico@gmail.com")?.id ?? null;
     }
     if (!targetUserId) {
       return new Response(
@@ -348,7 +354,7 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    const connectorKeys = await loadConnectorKeys(supabase, targetUserId);
+    const connectorKeys = await loadConnectorKeys(supabase as any, targetUserId);
     const llmConfig = resolveLLMConfig(connectorKeys);
 
     if (!llmConfig) {

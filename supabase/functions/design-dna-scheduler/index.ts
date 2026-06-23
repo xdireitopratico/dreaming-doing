@@ -55,7 +55,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    const { action, urls, depth, categories, jobId, userId } = await req.json().catch(() => ({}));
+    const { action, urls, depth, categories, jobId, userId, ingestKind } = await req.json().catch(() => ({}));
 
     switch (action) {
       case "schedule":
@@ -66,6 +66,7 @@ Deno.serve(async (req) => {
           depth ?? "deep",
           categories ?? CATEGORIES,
           userId ?? null,
+          (ingestKind as string | undefined) ?? "production",
         );
       case "trigger_curated":
         return await handleTriggerCurated(supabase, userClient);
@@ -90,6 +91,7 @@ async function handleSchedule(
   depth: string,
   categories: string[],
   explicitUserId: string | null = null,
+  ingestKind: string = "production",
 ): Promise<Response> {
   if (!urls?.length || urls.length > 5) {
     return json({ error: "1-5 URLs required" }, 400);
@@ -126,6 +128,7 @@ async function handleSchedule(
       current_url_index: 0,
       results: [],
       errors: [],
+      meta: { ingestKind },
     })
     .select("id")
     .single();
@@ -142,7 +145,7 @@ async function handleSchedule(
     return json({ error: "INNGEST_EVENT_KEY not configured" }, 500);
   }
 
-  const eventResult = await sendInngestEvent("design-dna/extract.requested", { jobId, userId, depth, categories, urls });
+  const eventResult = await sendInngestEvent("design-dna/extract.requested", { jobId, userId, depth, categories, urls, ingestKind });
 
   if (!eventResult.ok) {
     await supabase.from("design_dna_jobs").update({ status: "failed", error: eventResult.error }).eq("id", jobId);
@@ -169,7 +172,7 @@ async function handleTriggerCurated(
   if (urls.length === 0) return json({ ok: true, note: "no direct URLs this week" });
 
   // Quando chamado por cron/service_role, handleSchedule faz bypass do check admin
-  return await handleSchedule(supabase, userClient, urls, "deep", CATEGORIES);
+  return await handleSchedule(supabase, userClient, urls, "deep", CATEGORIES, null, "curated");
 }
 
 async function handleContinueQueue(supabase: any): Promise<Response> {
@@ -194,6 +197,7 @@ async function handleContinueQueue(supabase: any): Promise<Response> {
     depth: body.depth ?? "deep",
     categories: body.categories ?? CATEGORIES,
     urls: body.urls ?? [],
+    ingestKind: body.ingestKind ?? "production",
   });
 
   if (!eventResult.ok) {

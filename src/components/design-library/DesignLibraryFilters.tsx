@@ -8,7 +8,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Search, X } from "lucide-react";
-import { CATEGORIES, type LibraryFilters as Filters } from "./types";
+import { CATEGORIES, INGEST_KINDS, type LibraryFilters as Filters } from "./types";
 
 interface DesignLibraryFiltersProps {
   filters: Filters;
@@ -23,6 +23,7 @@ export function DesignLibraryFilters({ filters, onChange, onClear }: DesignLibra
     filters.mood ||
     filters.language ||
     filters.category !== "all" ||
+    filters.ingestKind !== "production" ||
     filters.minQuality > 0 ||
     filters.validatedOnly ||
     filters.search;
@@ -68,6 +69,19 @@ export function DesignLibraryFilters({ filters, onChange, onClear }: DesignLibra
           {CATEGORIES.map((c) => (
             <SelectItem key={c} value={c}>
               {c === "all" ? "Todas categorias" : c}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+
+      <Select value={filters.ingestKind} onValueChange={(v) => update({ ingestKind: v as Filters["ingestKind"] })}>
+        <SelectTrigger className="w-36 h-8 text-xs">
+          <SelectValue placeholder="Origem" />
+        </SelectTrigger>
+        <SelectContent>
+          {INGEST_KINDS.map((kind) => (
+            <SelectItem key={kind} value={kind}>
+              {kind === "all" ? "Todas origens" : kind}
             </SelectItem>
           ))}
         </SelectContent>

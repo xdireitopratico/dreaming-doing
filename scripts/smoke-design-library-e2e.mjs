@@ -63,7 +63,13 @@ async function test1_ScheduleJob() {
   console.log("\n── Test 1: schedule job (manual) ──");
   try {
     const { data, error } = await adminClient.functions.invoke("design-dna-scheduler", {
-      body: { action: "schedule", urls: [TEST_URL], depth: "shallow", categories: ["hero"] },
+      body: {
+        action: "schedule",
+        urls: [TEST_URL],
+        depth: "shallow",
+        categories: ["hero"],
+        ingestKind: "smoke",
+      },
     });
 
     if (error) {
@@ -147,8 +153,9 @@ async function test4_LibraryEntry() {
   console.log("\n── Test 4: library entry (admin SELECT) ──");
   const { data, error } = await adminClient
     .from("design_system_library")
-    .select("id, name, source_url, quality_score")
+    .select("id, name, source_url, quality_score, ingest_kind")
     .eq("source_url", TEST_URL)
+    .eq("ingest_kind", "smoke")
     .limit(1);
 
   if (error) {
@@ -156,10 +163,10 @@ async function test4_LibraryEntry() {
     return;
   }
   if (!data || data.length === 0) {
-    log("library entry from example.com", false, "no row");
+    log("smoke library entry from example.com", false, "no row");
     return;
   }
-  log("library entry exists", true, `quality=${data[0].quality_score}`);
+  log("smoke library entry exists", true, `quality=${data[0].quality_score} kind=${data[0].ingest_kind}`);
 }
 
 async function test5_RlsBlocksAnon() {
