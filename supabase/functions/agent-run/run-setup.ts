@@ -18,6 +18,7 @@ import {
   resolveModelFromPreferences,
 } from "../_shared/model-presets.ts";
 import { RobinKeyPool } from "./robin-pool.ts";
+import { normalizeNimBaseUrl, normalizeNvidiaApiModel } from "../_shared/nvidia-model.ts";
 
 export const USER_LLM_KEY_NAMES = [
   "ANTHROPIC_API_KEY",
@@ -59,6 +60,18 @@ export function validateAgentPreferences(p?: AgentPreferencesPayload): string | 
   return null;
 }
 
+function finalizeProviderConfig(cfg: ProviderConfig): ProviderConfig {
+  const baseUrl = normalizeNimBaseUrl(cfg.baseUrl) ?? cfg.baseUrl;
+  const isNim =
+    (baseUrl?.includes("integrate.api.nvidia.com") ?? false) ||
+    cfg.model.includes("nemotron") ||
+    cfg.model.startsWith("nvidia/") ||
+    cfg.model.startsWith("qwen/");
+  const model = isNim ? normalizeNvidiaApiModel(cfg.model) : cfg.model;
+  if (model === cfg.model && baseUrl === cfg.baseUrl) return cfg;
+  return { ...cfg, model, baseUrl };
+}
+
 export function robinProviderConfig(
   poolProvider: string,
   keys: string[],
@@ -70,14 +83,14 @@ export function robinProviderConfig(
     );
   }
   const wire = defaultRobinModel(poolProvider, modelPresetId);
-  return {
+  return finalizeProviderConfig({
     provider: wire.provider,
     apiKey: keys[0]!,
     model: wire.model,
     baseUrl: wire.baseUrl,
     label: `ROBIN · ${wire.label} (${keys.length} chaves)`,
     supportsVision: detectVisionSupport(wire.provider, wire.model),
-  };
+  });
 }
 
 function isUserLlmKeyName(key: string): boolean {
@@ -239,14 +252,14 @@ export async function resolveAgentProvider(
           : "Modo Auto: cadastre pelo menos uma chave LLM em /api.",
       );
     }
-    mainCfg = {
+    mainCfg = finalizeProviderConfig({
       provider: autoWire.provider,
       apiKey: autoWire.apiKey,
       model: autoWire.model,
       baseUrl: autoWire.baseUrl,
       label: `${autoWire.label} (Auto)`,
       supportsVision: detectVisionSupport(autoWire.provider, autoWire.model),
-    };
+    });
   } else if (preferences?.mode === "fixed") {
     const resolved = resolveModelFromPreferences(preferences, userOnlyKeys);
     if (!resolved) {
@@ -254,14 +267,14 @@ export async function resolveAgentProvider(
         "Chave ausente para o modelo fixo. Adicione a API Key do provedor em /api.",
       );
     }
-    mainCfg = {
+    mainCfg = finalizeProviderConfig({
       provider: resolved.provider,
       apiKey: resolved.apiKey,
       model: resolved.model,
       baseUrl: resolved.baseUrl,
       label: `${resolved.label} (fixo)`,
       supportsVision: detectVisionSupport(resolved.provider, resolved.model),
-    };
+    });
   } else {
     throw new Error("Modo de modelo inválido. Configure Auto, Fixo ou ROBIN em /api-models.");
   }

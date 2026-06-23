@@ -278,8 +278,8 @@ const PRESETS: Record<string, PresetWire> = {
     "NVIDIA · Nemotron 3 Ultra (550B)",
   ),
   "pool-nemotron-super": nvidia(
-    "nvidia/nemotron-3-ultra-550b-a55b",
-    "NVIDIA · Nemotron 3 Ultra (550B)",
+    "nvidia/nemotron-3-super-120b-a12b",
+    "NVIDIA · Nemotron 3 Super (120B)",
   ),
   "ollama--llama3-2": ollama("llama3.2", "Llama 3.2"),
   "ollama--qwen2-5-coder": ollama("qwen2.5-coder:7b", "Qwen 2.5 Coder 7B"),

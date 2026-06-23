@@ -5,6 +5,8 @@
 import { createLLMProvider } from "./adapters/llm.ts";
 import type { LLMProvider } from "./types.ts";
 import { logger } from "../_shared/logger.ts";
+import { defaultRobinModel, PLATFORM_ROBIN_TASTE_PRESET_ID } from "../_shared/model-presets.ts";
+import { normalizeNimBaseUrl, normalizeNvidiaApiModel } from "../_shared/nvidia-model.ts";
 
 export interface ProviderConfig {
   provider: string;
@@ -73,12 +75,13 @@ export function pickMain(injected?: Record<string, string>): ProviderConfig {
       label: "Groq · Llama 3.3 70B",
     };
   if (NVIDIA) {
+    const wire = defaultRobinModel("nvidia", PLATFORM_ROBIN_TASTE_PRESET_ID);
     return {
-      provider: "openai",
+      provider: wire.provider,
       apiKey: NVIDIA,
-      model: "meta/llama-3.3-70b-instruct",
-      baseUrl: "https://integrate.api.nvidia.com/v1",
-      label: "NVIDIA NIM · Llama 3.3 70B",
+      model: normalizeNvidiaApiModel(wire.model),
+      baseUrl: normalizeNimBaseUrl(wire.baseUrl) ?? wire.baseUrl,
+      label: wire.label,
     };
   }
   if (MINIMAX) {

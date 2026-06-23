@@ -40,6 +40,8 @@ describe("preset-contract", () => {
     expect(normalizePresetId("nvidia/nemotron-3-ultra-550b-a55b")).toBe(
       PLATFORM_ROBIN_TASTE_PRESET_ID,
     );
+    expect(normalizePresetId("nvidia/nemotron-3-super-120b")).toBe("nvidia--nemotron-3-super-120b");
+    expect(normalizePresetId("pool-nemotron-super")).toBe("nvidia--nemotron-3-super-120b");
     expect(normalizePresetId("nvidia/qwen3.5-397b-a17b")).toBe("qwen--qwen3-5-397b-a17b");
   });
 

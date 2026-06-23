@@ -2,6 +2,7 @@
  * Runtime wire — espelha src/lib/ai-provider-registry.ts (secretKey, baseUrl, llmProvider).
  * Não duplica catálogo de modelos; só metadados de conexão por provider.
  */
+import { normalizeNvidiaApiModel } from "./nvidia-model.ts";
 
 export type PresetWireShape = {
   provider: string;
@@ -127,15 +128,8 @@ function bareModelFromSlug(env: string, slug: string): string {
 }
 
 function nvidiaModelFromSlug(slug: string): string {
-  let nimSlug = slug.includes("/") ? slug : `nvidia/${slug}`;
-  const bare = nimSlug.includes("/") ? (nimSlug.split("/").pop() ?? nimSlug) : nimSlug;
-  if (bare.includes("nemotron-3-ultra-550b") && !bare.includes("-a55b")) {
-    nimSlug = "nvidia/nemotron-3-ultra-550b-a55b";
-  }
-  if (bare.includes("nemotron-3-super-120b") && !bare.includes("-a12b")) {
-    nimSlug = "nvidia/nemotron-3-super-120b-a12b";
-  }
-  return nimSlug;
+  const nimSlug = slug.includes("/") ? slug : `nvidia/${slug}`;
+  return normalizeNvidiaApiModel(nimSlug);
 }
 
 /** Resolve wire para modelo adicionado pelo usuário (passo 3 — cadastrar modelo). */

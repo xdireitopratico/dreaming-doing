@@ -20,8 +20,8 @@ export function formatAgentFetchError(err: unknown): string {
 
   if (/\b404\b/.test(raw) && (lower.includes("nvidia nim") || lower.includes("nemotron"))) {
     return (
-      "NVIDIA NIM retornou 404 (modelo Nemotron). Recarregue o editor e tente de novo — o ID correto é " +
-      "nvidia/nemotron-3-ultra-550b-a55b. Confira chave NVIDIA no pool ROBIN em /api."
+      "NVIDIA NIM retornou 404 (modelo Nemotron). Recarregue o editor — IDs oficiais: Ultra " +
+      "nvidia/nemotron-3-ultra-550b-a55b, Super 120B nvidia/nemotron-3-super-120b-a12b. Confira /models e chave em /api."
     );
   }
 

@@ -28,7 +28,7 @@ let CONVERSATION_ID = process.env.VALIDATE_CONVERSATION_ID ?? "";
 const FIXED_PRESET_BY_PROVIDER = {
   anthropic: "anthropic--claude-sonnet-4-6",
   groq: "pool-groq-flash",
-  nvidia: "nvidia--nemotron-3-ultra-550b",
+  nvidia: "nvidia--nemotron-3-super-120b",
   openai: "openai--gpt-5-4",
   gemini: "google--gemini-3-5-flash",
   xai: "xai--grok-4-3",

@@ -15,6 +15,8 @@ import {
 } from "./openai-responses.ts";
 import { isNvidiaNimBaseUrl, normalizeMessagesForNim } from "./nim-messages.ts";
 import { normalizeMessagesForAnthropic } from "./anthropic-messages.ts";
+import { normalizeNimBaseUrl } from "../../_shared/nvidia-model.ts";
+import { logger } from "../../_shared/logger.ts";
 
 /** Parâmetros oficiais Nemotron (thinking + reasoning budget) — ver build.nvidia.com */
 function nvidiaNimChatExtras(model: string): Record<string, unknown> | undefined {
@@ -151,9 +153,24 @@ class ClaudeAdapter implements LLMProvider {
 class OpenAIAdapter implements LLMProvider {
   constructor(
     private apiKey: string,
-    private baseUrl: string = "https://api.openai.com/v1",
+    baseUrl: string = "https://api.openai.com/v1",
     private model: string = "gpt-4o",
-  ) {}
+  ) {
+    this.baseUrl = isNvidiaNimBaseUrl(baseUrl)
+      ? (normalizeNimBaseUrl(baseUrl) ?? baseUrl)
+      : baseUrl;
+  }
+
+  private baseUrl: string;
+
+  private logNimRequest(): void {
+    if (!isNvidiaNimBaseUrl(this.baseUrl)) return;
+    logger.info("agent.nim_request", {
+      model: this.model,
+      baseUrl: this.baseUrl,
+      endpoint: `${this.baseUrl}/chat/completions`,
+    });
+  }
 
   async chat(params: ChatParams): Promise<ChatResponse> {
     if (shouldUseOpenAiResponsesApi(this.model, this.baseUrl)) {
@@ -220,6 +237,7 @@ class OpenAIAdapter implements LLMProvider {
       if (extras) Object.assign(body, extras);
     }
 
+    this.logNimRequest();
     const resp = await fetch(`${this.baseUrl}/chat/completions`, {
       method: "POST",
       headers: {
@@ -294,6 +312,7 @@ class OpenAIAdapter implements LLMProvider {
       if (extras) Object.assign(body, extras);
     }
 
+    this.logNimRequest();
     const resp = await fetch(`${this.baseUrl}/chat/completions`, {
       method: "POST",
       headers: {

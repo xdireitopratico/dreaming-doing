@@ -110,8 +110,9 @@ export function friendlyLlmError(err: unknown, robinActive: boolean): string {
   if (isModelNotFoundError(err)) {
     if (lower.includes("nvidia nim")) {
       return (
-        "NVIDIA NIM retornou 404 para o Nemotron. O FORGE agora usa o ID oficial " +
-        "`nvidia/nemotron-3-ultra-550b-a55b`. Recarregue a página e reenvie; confira a chave NVIDIA em /api (pool ROBIN)."
+        "NVIDIA NIM retornou 404 para o Nemotron. IDs oficiais: Ultra " +
+        "`nvidia/nemotron-3-ultra-550b-a55b`, Super 120B `nvidia/nemotron-3-super-120b-a12b`. " +
+        "Recarregue a página, confira o modelo em /models e a chave NVIDIA em /api."
       );
     }
     if (lower.includes("openai api error") || lower.includes("openai")) {

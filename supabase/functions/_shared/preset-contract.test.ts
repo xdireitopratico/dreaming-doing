@@ -18,6 +18,15 @@ Deno.test("normalizePresetId — Nemotron Super usa sufixo -a12b no wire", () =>
   assertEquals(wire?.model, "nvidia/nemotron-3-super-120b-a12b");
 });
 
+Deno.test("normalizePresetId — slug API Super 120B sem -a12b", () => {
+  assertEquals(normalizePresetId("nvidia/nemotron-3-super-120b"), "nvidia--nemotron-3-super-120b");
+  assertEquals(getPresetWire("nvidia/nemotron-3-super-120b")?.model, "nvidia/nemotron-3-super-120b-a12b");
+});
+
+Deno.test("normalizePresetId — pool-nemotron-super aponta para Super 120B", () => {
+  assertEquals(normalizePresetId("pool-nemotron-super"), "nvidia--nemotron-3-super-120b");
+});
+
 Deno.test("normalizePresetId — qwen NVIDIA legado", () => {
   assertEquals(normalizePresetId("nvidia/qwen3.5-397b-a17b"), "qwen--qwen3-5-397b-a17b");
 });

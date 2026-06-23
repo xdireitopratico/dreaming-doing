@@ -17,9 +17,11 @@ export const LEGACY_PRESET_ALIASES: Record<string, string> = {
   "groq-llama70": "pool-groq-flash",
   "pool-groq-flash": "pool-groq-flash",
   "nvidia-llama70": PLATFORM_ROBIN_TASTE_PRESET_ID,
-  "pool-nemotron-super": PLATFORM_ROBIN_TASTE_PRESET_ID,
+  "pool-nemotron-super": "nvidia--nemotron-3-super-120b",
   "nvidia/nemotron-3-ultra-550b-a55b": PLATFORM_ROBIN_TASTE_PRESET_ID,
   "nvidia/nemotron-3-ultra-550b": "nvidia--nemotron-3-ultra-550b",
+  "nvidia/nemotron-3-super-120b-a12b": "nvidia--nemotron-3-super-120b",
+  "nvidia/nemotron-3-super-120b": "nvidia--nemotron-3-super-120b",
   "nvidia/qwen3.5-397b-a17b": "qwen--qwen3-5-397b-a17b",
   "nvidia/qwen3-5-397b-a17b": "qwen--qwen3-5-397b-a17b",
 };

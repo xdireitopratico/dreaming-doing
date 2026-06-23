@@ -6,6 +6,7 @@ import { loadForgeTrialRobinPool } from "./connector-keys.ts";
 import { defaultRobinModel, PLATFORM_ROBIN_TASTE_PRESET_ID } from "../_shared/model-presets.ts";
 import { TASTE_CONCIERGE_SYSTEM } from "./prompts-taste.ts";
 import { buildProvider, type ProviderConfig } from "./providers.ts";
+import { normalizeNimBaseUrl, normalizeNvidiaApiModel } from "../_shared/nvidia-model.ts";
 import { ToolRegistry } from "./registry.ts";
 import { registerTasteTools, type TasteUiEmit } from "./tools/taste.ts";
 
@@ -18,8 +19,8 @@ export async function loadTasteNvidiaConfig(supabase: SupabaseClient): Promise<P
   return {
     provider: wire.provider,
     apiKey: poolKeys[0]!,
-    model: wire.model,
-    baseUrl: wire.baseUrl,
+    model: normalizeNvidiaApiModel(wire.model),
+    baseUrl: normalizeNimBaseUrl(wire.baseUrl) ?? wire.baseUrl,
     label: `Taste · ${wire.label}`,
   };
 }
