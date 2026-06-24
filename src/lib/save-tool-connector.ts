@@ -3,6 +3,7 @@ import {
   providerDefinitionFor,
   type ToolConnectorKind,
 } from "@/lib/tool-connectors";
+import { assertEdgeFunctionOk } from "@/lib/edge-function-response";
 
 export type ToolConnectorUpsertResult = {
   ok?: boolean;
@@ -33,9 +34,13 @@ export async function saveToolConnector(opts: {
 
   const token = opts.token?.trim();
   if (token) body.token = token;
-  const { data, error } = await supabase.functions.invoke("connector-upsert", { body });
-  if (error) throw new Error(error.message);
-  const res = data as ToolConnectorUpsertResult;
+  const { data, error, response } = await supabase.functions.invoke("connector-upsert", { body });
+  const res = await assertEdgeFunctionOk(
+    data as ToolConnectorUpsertResult | null,
+    error,
+    undefined,
+    response,
+  );
   if (res?.error) throw new Error(res.error);
   return res;
 }
@@ -52,8 +57,12 @@ export async function disconnectToolConnector(opts: {
   if (opts.provider) {
     body.meta = { provider: opts.provider, ...(opts.baseUrl ? { baseUrl: opts.baseUrl } : {}) };
   }
-  const { data, error } = await supabase.functions.invoke("connector-upsert", { body });
-  if (error) throw new Error(error.message);
-  const res = data as { error?: string };
+  const { data, error, response } = await supabase.functions.invoke("connector-upsert", { body });
+  const res = await assertEdgeFunctionOk(
+    data as { error?: string } | null,
+    error,
+    undefined,
+    response,
+  );
   if (res?.error) throw new Error(res.error);
 }

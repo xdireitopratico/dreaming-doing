@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { assertEdgeFunctionOk } from "@/lib/edge-function-response";
 
 export type OllamaConnectorMeta = {
   baseUrl: string;
@@ -24,7 +25,7 @@ export async function saveOllamaConnector(opts: {
   const defaultModel = opts.defaultModel.trim() || "llama3.2";
   const token = opts.apiKey?.trim() || "ollama";
 
-  const { data, error } = await supabase.functions.invoke("connector-upsert", {
+  const { data, error, response } = await supabase.functions.invoke("connector-upsert", {
     body: {
       kind: "openai",
       token,
@@ -37,21 +38,29 @@ export async function saveOllamaConnector(opts: {
       },
     },
   });
-  if (error) throw new Error(error.message);
-  const res = data as { error?: string };
+  const res = await assertEdgeFunctionOk(
+    data as { error?: string } | null,
+    error,
+    undefined,
+    response,
+  );
   if (res?.error) throw new Error(res.error);
 }
 
 export async function disconnectOllamaConnector() {
-  const { data, error } = await supabase.functions.invoke("connector-upsert", {
+  const { data, error, response } = await supabase.functions.invoke("connector-upsert", {
     body: {
       kind: "openai",
       meta: { provider: "ollama", label: "Ollama" },
       disconnect: true,
     },
   });
-  if (error) throw new Error(error.message);
-  const res = data as { error?: string };
+  const res = await assertEdgeFunctionOk(
+    data as { error?: string } | null,
+    error,
+    undefined,
+    response,
+  );
   if (res?.error) throw new Error(res.error);
 }
 

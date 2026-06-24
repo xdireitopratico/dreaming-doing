@@ -3,6 +3,7 @@ import {
   toConnectorPayload as registryToConnectorPayload,
   type AiProviderId,
 } from "@/lib/ai-provider-registry";
+import { assertEdgeFunctionOk } from "@/lib/edge-function-response";
 
 export type { AiProviderId } from "@/lib/ai-provider-registry";
 
@@ -23,43 +24,59 @@ export type ConnectorUpsertResult = {
 
 export async function saveAiProviderKey(id: AiProviderId, token: string, baseUrl?: string) {
   const { kind, meta } = toConnectorPayload(id, baseUrl);
-  const { data, error } = await supabase.functions.invoke("connector-upsert", {
+  const { data, error, response } = await supabase.functions.invoke("connector-upsert", {
     body: { kind, token: token.trim(), meta },
   });
-  if (error) throw new Error(error.message);
-  const res = data as ConnectorUpsertResult;
+  const res = await assertEdgeFunctionOk(
+    data as ConnectorUpsertResult | null,
+    error,
+    undefined,
+    response,
+  );
   if (res?.error) throw new Error(res.error);
   return res;
 }
 
 export async function appendKeyToPool(id: AiProviderId, token: string, baseUrl?: string) {
   const { kind, meta } = toConnectorPayload(id, baseUrl);
-  const { data, error } = await supabase.functions.invoke("connector-upsert", {
+  const { data, error, response } = await supabase.functions.invoke("connector-upsert", {
     body: { kind, token: token.trim(), meta, appendToPool: true },
   });
-  if (error) throw new Error(error.message);
-  const res = data as ConnectorUpsertResult;
+  const res = await assertEdgeFunctionOk(
+    data as ConnectorUpsertResult | null,
+    error,
+    undefined,
+    response,
+  );
   if (res?.error) throw new Error(res.error);
   return res;
 }
 
 export async function removeKeyFromPool(id: AiProviderId, keyId: string, baseUrl?: string) {
   const { kind, meta } = toConnectorPayload(id, baseUrl);
-  const { data, error } = await supabase.functions.invoke("connector-upsert", {
+  const { data, error, response } = await supabase.functions.invoke("connector-upsert", {
     body: { kind, meta, removePoolKey: keyId },
   });
-  if (error) throw new Error(error.message);
-  const res = data as ConnectorUpsertResult;
+  const res = await assertEdgeFunctionOk(
+    data as ConnectorUpsertResult | null,
+    error,
+    undefined,
+    response,
+  );
   if (res?.error) throw new Error(res.error);
   return res;
 }
 
 export async function disconnectAiProvider(id: AiProviderId, baseUrl?: string) {
   const { kind, meta } = toConnectorPayload(id, baseUrl);
-  const { data, error } = await supabase.functions.invoke("connector-upsert", {
+  const { data, error, response } = await supabase.functions.invoke("connector-upsert", {
     body: { kind, meta, disconnect: true },
   });
-  if (error) throw new Error(error.message);
-  const res = data as { error?: string };
+  const res = await assertEdgeFunctionOk(
+    data as { error?: string } | null,
+    error,
+    undefined,
+    response,
+  );
   if (res?.error) throw new Error(res.error);
 }

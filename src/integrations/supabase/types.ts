@@ -3654,6 +3654,9 @@ export type Database = {
         | "netlify"
         | "supabase"
         | "e2b"
+        | "web_search"
+        | "web_scrape"
+        | "browser_runtime"
       deploy_provider: "vercel" | "cloudflare" | "netlify"
       deploy_status: "queued" | "building" | "ready" | "error" | "cancelled"
       message_role: "user" | "assistant" | "system" | "tool"
@@ -3794,6 +3797,9 @@ export const Constants = {
         "netlify",
         "supabase",
         "e2b",
+        "web_search",
+        "web_scrape",
+        "browser_runtime",
       ],
       deploy_provider: ["vercel", "cloudflare", "netlify"],
       deploy_status: ["queued", "building", "ready", "error", "cancelled"],

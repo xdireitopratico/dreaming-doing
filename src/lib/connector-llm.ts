@@ -7,6 +7,9 @@ const NON_LLM_CONNECTOR_KINDS = new Set([
   "cloudflare",
   "supabase",
   "e2b",
+  "web_search",
+  "web_scrape",
+  "browser_runtime",
 ]);
 
 export function hasLlmConnectorRows(
