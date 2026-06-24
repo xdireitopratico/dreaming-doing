@@ -700,7 +700,7 @@ Legenda: `— ok feito` | `— pendente`
 
 **Básicos (9):** HeroSignature, BentoGrid, FeatureMatrix, StatsRibbon, CTASignature, NavShell, FooterColumns, PricingTiers, TestimonialCarousel
 
-**Opinionated (11):** HeroEditorialSplit, HeroBrutalistTypography, HeroCinematicSpotlight, StickyStackNarrative, BentoDenseShowcase, EditorialMagazineSplit, KineticHeadlineReveal, SpotlightShowcaseGrid, ParallaxProductShowcase, GlassNavFloating, GrainArtisanalOverlay
+**Opinionated (15):** HeroEditorialSplit, HeroBrutalistTypography, HeroCinematicSpotlight, StickyStackNarrative, BentoDenseShowcase, EditorialMagazineSplit, KineticHeadlineReveal, SpotlightShowcaseGrid, ParallaxProductShowcase, GlassNavFloating, GrainArtisanalOverlay, SectionTabsFeatureLanes, ProcessStepsHowItWorks, FAQAccordionCraft, InteractiveHeroDemo
 
 **Fantasmas a banir (29):** LogoWall, FAQAccordion, TeamGrid, MarqueeStrip, SplitFeature, MediaGallery, ContactForm, NewsletterSignup, AppScreenshot, ComparisonTable, TimelineVertical, ProcessSteps, TrustBar, CaseStudyCard, AnnouncementBar, StickyCTA, SplitHero, VideoHero, ProductShowcase, ServiceGrid, LocationMap, BookingWidget, ReviewGrid, GalleryMasonry, PressMentions, IntegrationGrid, DashboardPreview, MetricCards, OnboardingSteps
 
@@ -708,9 +708,9 @@ Legenda: `— ok feito` | `— pendente`
 
 elevenlabs-hero-split, vercel-edge-hero, apple-product-hero-cinematic, stripe-editorial-density, linear-motion-choreography, awwwards-brutalist-typography, editorial-magazine-split, bento-dense-showcase, sticky-stack-narrative, spotlight-showcase-portfolio, kinetic-headline-reveal, glassmorphism-nav-floating, grain-texture-artisanal, parallax-depth-3layer
 
-## Apêndice C — 12 técnicas atuais
+## Apêndice C — 17 técnicas atuais
 
-scroll-reveal, sticky-stack, parallax-depth, magnetic-interaction, kinetic-typography, spotlight-cursor, tilt-hover, count-up-metrics, infinite-marquee, animated-mesh-background, glassmorphism-layers, grain-texture-overlay
+scroll-reveal, sticky-stack, parallax-depth, magnetic-interaction, kinetic-typography, spotlight-cursor, tilt-hover, count-up-metrics, infinite-marquee, animated-mesh-background, glassmorphism-layers, grain-texture-overlay, smooth-scroll-lenis, section-tabs-visual, process-steps-scroll, logo-marquee-social-proof, interactive-demo-embed
 
 ## Apêndice D — Specs P3 (ano 2)
 
