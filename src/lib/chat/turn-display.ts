@@ -94,12 +94,14 @@ export function resolveTurnThinkingLine(opts: {
     resolved?.workingDurationMs != null && resolved.workingDurationMs > 0;
   const conversational = resolved?.conversational === true;
 
+  const thinkingTimeline = hasThinkingTimeline(resolved);
+
   const shouldShow =
     slotActive ||
     hasDuration ||
-    (conversational && (slotActive || frozen)) ||
+    (conversational && (slotActive || frozen || thinkingTimeline)) ||
     (!conversational &&
-      (hasThinkingTimeline(resolved) ||
+      (thinkingTimeline ||
         frozen ||
         (!!resolved?.finished && hasTurnVisibleContent(resolved))));
 
@@ -117,7 +119,7 @@ export function resolveTurnThinkingLine(opts: {
     return { line: null, frozen: false };
   }
 
-  if (slotActive) {
+  if (slotActive || thinkingTimeline) {
     return { line: { status: "active" }, frozen: false };
   }
 

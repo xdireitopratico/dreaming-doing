@@ -83,4 +83,32 @@ describe("resolveTurnThinkingLine", () => {
       }),
     ).toBe(true);
   });
+
+  it("chat conversacional com thinking_text: Pensando… via timeline (sem slot ativo)", () => {
+    const result = resolveTurnThinkingLine({
+      resolved: {
+        ...initialAgentProgress,
+        conversational: true,
+        finished: false,
+        timeline: [ev("thinking_text", { text: "Analisando o pedido.", append: true, delta: true })],
+      },
+      slotActive: false,
+    });
+    expect(result).toEqual({ line: { status: "active" }, frozen: false });
+  });
+
+  it("chat conversacional histórico: Pensou por Xs com thinking_text", () => {
+    const result = resolveTurnThinkingLine({
+      resolved: {
+        ...initialAgentProgress,
+        conversational: true,
+        finished: true,
+        workingDurationMs: 2100,
+        streamText: "Claro, posso ajudar com isso.",
+        timeline: [ev("thinking_text", { text: "ok", append: true, delta: true })],
+      },
+      slotActive: false,
+    });
+    expect(result).toEqual({ line: { status: "done", durationSec: 2 }, frozen: true });
+  });
 });
