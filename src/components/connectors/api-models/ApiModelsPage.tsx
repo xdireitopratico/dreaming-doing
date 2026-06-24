@@ -201,6 +201,21 @@ export function ApiModelsPage() {
     resolveStudioSelectedEnv(prefs),
   );
   const parserProvider = (prefs.parserProvider ?? "builtin") as ParserIndexProviderId;
+  const activePreset = useMemo(() => {
+    if (mode === "robin") {
+      return getPresetById(prefs.robinPoolModelId, prefs.userModelEntries);
+    }
+    if (mode === "auto") {
+      return getPresetById(prefs.autoAllowedPresetIds?.[0], prefs.userModelEntries);
+    }
+    return getPresetById(prefs.fixedPresetId, prefs.userModelEntries);
+  }, [
+    mode,
+    prefs.robinPoolModelId,
+    prefs.fixedPresetId,
+    prefs.autoAllowedPresetIds,
+    prefs.userModelEntries,
+  ]);
 
   useEffect(() => {
     if (!user) return;
@@ -288,14 +303,7 @@ export function ApiModelsPage() {
   useEffect(() => {
     if (!prefsLoaded) return;
     setSelectedEnv(resolveStudioSelectedEnv(prefs, connected));
-  }, [
-    prefsLoaded,
-    prefs.mode,
-    prefs.fixedPresetId,
-    prefs.robinPoolModelId,
-    prefs.poolProvider,
-    autoAllowedKey,
-  ]);
+  }, [prefsLoaded, prefs, autoAllowedKey, connected]);
 
   const patchPrefs = useCallback((partial: Partial<AgentPreferences>) => {
     setPrefs((p) => {

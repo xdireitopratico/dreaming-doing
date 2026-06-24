@@ -234,6 +234,47 @@ describe("buildChatThread", () => {
     expect(thread.map((t) => t.kind)).toEqual(["user", "assistant"]);
   });
 
+  it("recolapsa assistants do mesmo runId após reordenar órfão", () => {
+    const messages: ChatMessage[] = [
+      msg("u1", "user", "A"),
+      {
+        id: "a1",
+        role: "assistant",
+        content: "Primeira resposta",
+        timestamp: 1,
+        meta: { runId: "run-1", partial: false, finishedAt: "2026-06-24T00:00:00Z" },
+      },
+      {
+        id: "a-orphan",
+        role: "assistant",
+        content: "",
+        timestamp: 2,
+        parts: [{ type: "text", text: "Entendi: vou continuar." }],
+      },
+      {
+        id: "a2",
+        role: "assistant",
+        content: "Resposta final",
+        timestamp: 3,
+        meta: { runId: "run-1", partial: false, finishedAt: "2026-06-24T00:00:01Z" },
+      },
+      msg("u2", "user", "B"),
+    ];
+
+    const thread = buildChatThread(messages, initialAgentProgress, {
+      sessionProgress: initialAgentProgress,
+    });
+
+    const assistants = thread.filter((t) => t.kind === "assistant");
+    const sameRun = assistants.filter((t) => t.kind === "assistant" && t.runId === "run-1");
+
+    expect(sameRun).toHaveLength(1);
+    expect(assistants.map((t) => (t.kind === "assistant" ? t.runId : null))).toEqual([
+      "run-1",
+      "slot-3",
+    ]);
+  });
+
   it("slot live nunca ancora antes do último user visível", () => {
     const messages = [
       msg("u0", "user", "pedido antigo"),

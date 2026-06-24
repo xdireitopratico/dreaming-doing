@@ -27,11 +27,14 @@ export function ChatThread({
   return (
     <div className="forge-chat-stream" role="log" aria-live="polite">
       {items.map((item, index) => {
-        // Índice estável — runId muda (__pending__ → UUID) sem remontar o turno inteiro.
         const key =
           item.kind === "user"
             ? `user-${item.message.id}`
-            : `assistant-${item.runId ?? item.message?.id ?? `fallback-${index}`}`;
+            : item.message?.id
+              ? `assistant-msg-${item.message.id}`
+              : item.runId
+                ? `assistant-live-${item.runId}`
+                : `assistant-fallback-${index}`;
         return (
           <ChatMessage
             key={key}

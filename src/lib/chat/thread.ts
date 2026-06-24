@@ -8,11 +8,7 @@ import {
 import { isEntendiOpener } from "@/lib/narration-dedupe";
 import { mapAssistantTurn } from "@/lib/chat/turn";
 import { PENDING_RUN_ID } from "@/lib/pending-run-id";
-import type {
-  BuildChatThreadOptions,
-  RawThreadItem,
-  ThreadItem,
-} from "@/lib/chat/types";
+import type { BuildChatThreadOptions, RawThreadItem, ThreadItem } from "@/lib/chat/types";
 
 function buildRunIdFromUser(msg: ChatMessage): string | null {
   const meta = msg.meta;
@@ -121,6 +117,34 @@ function normalizeThreadOrder(items: RawThreadItem[]): RawThreadItem[] {
   return [...head, ...deferred, ...tail];
 }
 
+function mergeAdjacentAssistantRuns(items: RawThreadItem[]): RawThreadItem[] {
+  const merged: RawThreadItem[] = [];
+
+  for (const item of items) {
+    const last = merged[merged.length - 1];
+    if (
+      item.kind === "assistant" &&
+      last?.kind === "assistant" &&
+      item.runId &&
+      last.runId === item.runId &&
+      !item.live &&
+      !last.live &&
+      !item.isActive &&
+      !last.isActive
+    ) {
+      merged[merged.length - 1] = {
+        ...last,
+        message: mergeMessageContent(last.message, item.message),
+        runId: item.runId,
+      };
+      continue;
+    }
+    merged.push(item);
+  }
+
+  return merged;
+}
+
 function buildDbThread(messages: ChatMessage[]): RawThreadItem[] {
   const items: RawThreadItem[] = [];
 
@@ -190,12 +214,8 @@ function buildDbThread(messages: ChatMessage[]): RawThreadItem[] {
     }
   }
 
-  return normalizeThreadOrder(items);
+  return mergeAdjacentAssistantRuns(normalizeThreadOrder(items));
 }
-
-
-
-
 
 function buildRawThread(
   messages: ChatMessage[],
@@ -219,7 +239,7 @@ function buildRawThread(
     let found = false;
     for (let i = items.length - 1; i >= 0; i--) {
       const it = items[i];
-      if (it.kind === 'assistant' && it.runId === activeRunId) {
+      if (it.kind === "assistant" && it.runId === activeRunId) {
         items[i] = {
           ...it,
           live: progress,
@@ -235,7 +255,7 @@ function buildRawThread(
       const canSynthesizeFinished = !progress.awaiting && !progress.awaitingKind;
       if (isExecuting || canSynthesizeFinished) {
         items.push({
-          kind: 'assistant',
+          kind: "assistant",
           runId: activeRunId,
           live: progress,
           isActive: isActiveOverlay,
@@ -276,7 +296,10 @@ function pruneOrphanAssistantsWhenLive(
   });
 }
 
-function ensureLiveRunAfterLastUser(items: RawThreadItem[], activeRunId?: string | null): RawThreadItem[] {
+function ensureLiveRunAfterLastUser(
+  items: RawThreadItem[],
+  activeRunId?: string | null,
+): RawThreadItem[] {
   if (!activeRunId) return items;
   const liveIdx = items.findIndex(
     (it) => it.kind === "assistant" && it.runId === activeRunId && (it.live || it.isActive),
