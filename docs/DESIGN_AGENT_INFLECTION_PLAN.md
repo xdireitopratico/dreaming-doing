@@ -610,9 +610,9 @@ Legenda: `— ok feito` | `— pendente`
 
 | # | Tarefa | Status |
 |---|--------|--------|
-| B7 | `countManifestImports()` substitui contagem por string | — pendente |
-| B8 | Reescrever `scanProjectForLandingQuality()` | — pendente |
-| B9 | Atualizar `design-enforcement.test.ts` (phantom falha) | — pendente |
+| B7 | `countManifestImports()` substitui contagem por string | — ok feito |
+| B8 | Reescrever `scanProjectForLandingQuality()` | — ok feito |
+| B9 | Atualizar `design-enforcement.test.ts` (phantom falha) | — ok feito |
 
 ### Fase C — Skill e prompt (5)
 
@@ -692,7 +692,7 @@ Legenda: `— ok feito` | `— pendente`
 | I51 | `node scripts/bundle-forge-ui-seed.mjs` | — pendente |
 | I52 | `npm run design:check` pós-expansão | — pendente |
 
-**Total:** 52 tarefas | **Concluídas:** 6 | **Pendentes:** 46
+**Total:** 52 tarefas | **Concluídas:** 9 | **Pendentes:** 43
 
 ---
 

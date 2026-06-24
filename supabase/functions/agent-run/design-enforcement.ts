@@ -40,13 +40,39 @@ export interface DesignViolation {
   message: string;
 }
 
+/** @deprecated Prefer countManifestImports — contagem por substring infla falsos positivos. */
 export function countForgeComposites(code: string): number {
-  return KNOWN_FORGE_COMPOSITES.filter((c) => code.includes(c)).length;
+  return listUsedCompositeExports(code).length;
 }
 
-export function countPhantomCompositeMentions(code: string): number {
-  return PHANTOM_BANNED_COMPOSITES.filter((c) => code.includes(c)).length;
+export function countManifestImports(code: string): number {
+  return listUsedCompositeExports(code).length;
 }
+
+/** Composites @forge/ui realmente importados ou usados em JSX. */
+export function listUsedCompositeExports(code: string): string[] {
+  const used = new Set<string>();
+  for (const m of code.matchAll(/import\s*\{([^}]+)\}\s*from\s*["']@forge\/ui["']/g)) {
+    for (const part of m[1].split(",")) {
+      const name = part.trim().split(/\s+as\s+/)[0].trim();
+      if (KNOWN_FORGE_COMPOSITES.includes(name)) used.add(name);
+    }
+  }
+  for (const composite of KNOWN_FORGE_COMPOSITES) {
+    if (new RegExp(`<${composite}[\\s/>]`).test(code)) used.add(composite);
+  }
+  return [...used];
+}
+
+const OPINIONATED_HERO_EXPORTS = [
+  "HeroCinematicSpotlight",
+  "HeroEditorialSplit",
+  "HeroBrutalistTypography",
+  "KineticHeadlineReveal",
+];
+
+const MOTION_SIGNATURE =
+  /FadeIn|SlideIn|ScaleIn|StaggerContainer|StaggerItem|HoverLift|Reveal|Parallax|useScrollProgress|TextShimmer|CountUp|Marquee/;
 
 export function scanFileForViolations(file: string, code: string): DesignViolation[] {
   const violations: DesignViolation[] = [];
@@ -107,21 +133,32 @@ export function scanProjectForLandingQuality(files: Map<string, string>): Design
   );
 
   for (const [file, code] of appFiles) {
-    const compositeCount = countForgeComposites(code);
-    const isLanding = /<main|<HeroSignature|<section/.test(code);
+    const used = listUsedCompositeExports(code);
+    const compositeCount = used.length;
+    const isLanding =
+      /<main|<section|@forge\/ui/.test(code) &&
+      (/<Hero|<Bento|<FeatureMatrix|<CTASignature|<NavShell/.test(code) || compositeCount > 0);
 
     if (isLanding && compositeCount < LANDING_MIN_COMPOSITES) {
       violations.push({
         file,
-        message: `Landing precisa de ≥${LANDING_MIN_COMPOSITES} composites @forge/ui (qualquer combinação adequada ao domínio) — encontrados: ${compositeCount}`,
+        message: `Landing precisa de ≥${LANDING_MIN_COMPOSITES} composites @forge/ui reais (manifest) — encontrados: ${compositeCount} [${used.join(", ")}]`,
       });
     }
 
-    const hasMotion = /FadeIn|SlideIn|StaggerContainer|HoverLift|ScaleIn/.test(code);
-    if (isLanding && !hasMotion) {
+    const hasOpinionatedHero = used.some((n) => OPINIONATED_HERO_EXPORTS.includes(n));
+    if (isLanding && used.includes("HeroSignature") && used.includes("BentoGrid") && !hasOpinionatedHero) {
       violations.push({
         file,
-        message: "Landing sem motion — adicione FadeIn, StaggerContainer ou HoverLift",
+        message:
+          "Stack genérica HeroSignature+BentoGrid — prefira composição opinionated do manifest (ex: HeroCinematicSpotlight)",
+      });
+    }
+
+    if (isLanding && !MOTION_SIGNATURE.test(code)) {
+      violations.push({
+        file,
+        message: "Landing sem motion — use FadeIn, Reveal, StaggerContainer, Parallax ou useScrollProgress",
       });
     }
 
