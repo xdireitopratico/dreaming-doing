@@ -54,7 +54,7 @@ async function loadWebSearchSecrets(
   try {
     const { data, error } = await supabase
       .from("connectors")
-      .select("token_encrypted, provider")
+      .select("token_encrypted, provider, meta")
       .eq("owner_id", userId)
       .in("kind", ["web_search", "web_scrape", "browser_runtime"])
       .order("updated_at", { ascending: false })
@@ -99,6 +99,32 @@ async function loadWebSearchSecrets(
           const keyName = providerKeyMap[provider];
           if (keyName) secrets[keyName] = token;
         }
+
+        const metaRaw = (row as { meta?: unknown }).meta;
+        let meta: Record<string, unknown> | null = null;
+        if (metaRaw && typeof metaRaw === "object") {
+          meta = metaRaw as Record<string, unknown>;
+        } else if (typeof metaRaw === "string" && metaRaw.trim()) {
+          try {
+            const parsed = JSON.parse(metaRaw) as unknown;
+            if (parsed && typeof parsed === "object") meta = parsed as Record<string, unknown>;
+          } catch {
+            meta = null;
+          }
+        }
+
+        const baseUrl = typeof meta?.baseUrl === "string" ? meta.baseUrl.trim() : "";
+        if (baseUrl) {
+          const providerBaseUrlMap: Record<string, string> = {
+            crawl4ai: "CRAWL4AI_BASE_URL",
+            scrapegraphai: "SCRAPEGRAPHAI_BASE_URL",
+            "browser-use": "BROWSER_USE_BASE_URL",
+            exa: "EXA_BASE_URL",
+            parallel: "PARALLEL_BASE_URL",
+          };
+          const baseUrlKey = providerBaseUrlMap[provider];
+          if (baseUrlKey) secrets[baseUrlKey] = baseUrl;
+        }
       }
     }
   } catch (err) {
@@ -124,7 +150,10 @@ export function registerWebTools(reg: ToolRegistry, ctx: WebToolsContext): void 
   // Preferências de fallback das tools — primary vem do conector conectado,
   // fallback do agent_preferences (default "jina" se não configurado).
   function getWebSearchPrefs(): WebProviderPrefs {
-    return { fallback: preferences?.webSearchFallback || "jina" };
+    return {
+      fallback: preferences?.webSearchFallback || "jina",
+      parser: preferences?.parserProvider || "builtin",
+    };
   }
 
   // ── http_fetch: fetch HTTP direto e gratuito (sem API key) ──
@@ -204,7 +233,7 @@ export function registerWebTools(reg: ToolRegistry, ctx: WebToolsContext): void 
         "Pesquisa web e extrai conteúdo das melhores páginas em uma chamada. " +
         "Retorna lista de URLs com título, snippet E o conteúdo markdown das top-N páginas. " +
         "Use para encontrar referências visuais, documentação ou inspiração e já ler o conteúdo. " +
-        "Funciona sem API key (Jina gratuito); melhores resultados com Tavily/Serper/Brave/Firecrawl configurados.",
+        "Funciona sem API key (Jina gratuito); melhores resultados com Exa, Parallel, Tavily, Serper, Brave ou Firecrawl configurados.",
       parameters: {
         type: "object",
         properties: {
@@ -223,7 +252,7 @@ export function registerWebTools(reg: ToolRegistry, ctx: WebToolsContext): void 
           },
           provider: {
             type: "string",
-            description: "Provedor de busca preferido: auto, tavily, serper, brave, firecrawl, jina, searxng. Default: auto.",
+            description: "Provedor de busca preferido: auto, exa, parallel, tavily, serper, brave, firecrawl, jina, searxng. Default: auto.",
           },
         },
         required: ["query"],
@@ -270,7 +299,7 @@ export function registerWebTools(reg: ToolRegistry, ctx: WebToolsContext): void 
       description:
         "Extrai conteúdo de uma URL específica — retorna markdown limpo da página. " +
         "Use para analisar a estrutura, layout e design de um site de referência. " +
-        "Suporta Firecrawl (com key) e Jina Reader (gratuito). " +
+        "Suporta Firecrawl, ScrapeGraphAI, Crawl4AI, Browserless e Jina Reader. " +
         "Para capturar screenshot visual, use screenshot_capture.",
       parameters: {
         type: "object",
@@ -289,7 +318,7 @@ export function registerWebTools(reg: ToolRegistry, ctx: WebToolsContext): void 
           },
           provider: {
             type: "string",
-            description: "Provedor: auto (default), firecrawl, browserless, jina, http.",
+            description: "Provedor: auto (default), firecrawl, scrapegraphai, crawl4ai, browserless, jina, http.",
           },
           only_main_content: {
             type: "boolean",
@@ -309,6 +338,7 @@ export function registerWebTools(reg: ToolRegistry, ctx: WebToolsContext): void 
             mode: args.mode ?? "read",
             provider: args.provider ?? "auto",
             only_main_content: args.only_main_content ?? true,
+            parser: preferences?.parserProvider || "builtin",
           },
           secrets,
         );

@@ -7,9 +7,19 @@ declare const Deno: {
   env: { get(name: string): string | undefined };
 };
 
-import { htmlToMarkdownDocument, htmlToVisibleText } from "../../../src/lib/html-hygiene.ts";
+import {
+  cleanHtmlDocument,
+  htmlToMarkdownDocument,
+  htmlToVisibleText,
+} from "../../../src/lib/html-hygiene.ts";
+import {
+  finalizeDocumentMarkdown,
+  sanitizeDocumentMarkdown,
+  structurePlainTextAsMarkdown,
+} from "./document-sanitize.ts";
 
 export type WebSecrets = Record<string, string>;
+export type WebParserProvider = "builtin" | "cheerio" | "llamaindex" | "markitdown";
 
 function pickSecret(secrets: WebSecrets, names: string[]): string | undefined {
   for (const name of names) {
@@ -44,6 +54,159 @@ async function withRetry<T>(
     }
   }
   throw lastError instanceof Error ? lastError : new Error(`${label} failed`);
+}
+
+function normalizeParserProvider(parser?: string): WebParserProvider {
+  switch (String(parser || "").trim()) {
+    case "cheerio":
+    case "llamaindex":
+    case "markitdown":
+      return parser as WebParserProvider;
+    default:
+      return "builtin";
+  }
+}
+
+function normalizeContentByParser(
+  rawHtml: string,
+  format: string,
+  parser: string | undefined,
+): { title: string; content: string; cleanHtml: string; cleanText: string; parser: WebParserProvider } {
+  const parserName = normalizeParserProvider(parser);
+  const hygiene = cleanHtmlDocument(rawHtml || "");
+  const cleanHtml = hygiene.cleanHtml || rawHtml || "";
+  const cleanText = hygiene.cleanText || "";
+  const builtinMarkdown = htmlToMarkdownDocument(rawHtml || "");
+
+  if (format === "html") {
+    return {
+      title: hygiene.title,
+      content: cleanHtml,
+      cleanHtml,
+      cleanText,
+      parser: parserName,
+    };
+  }
+
+  const fallbackText = cleanText || htmlToVisibleText(rawHtml || "");
+  let content = builtinMarkdown || fallbackText;
+
+  switch (parserName) {
+    case "cheerio":
+      content = structurePlainTextAsMarkdown(fallbackText) || content;
+      break;
+    case "llamaindex":
+      content = structurePlainTextAsMarkdown(fallbackText) || content;
+      break;
+    case "markitdown":
+      content = finalizeDocumentMarkdown(
+        sanitizeDocumentMarkdown(builtinMarkdown || fallbackText),
+        { structure: true },
+      ).markdown;
+      break;
+    default:
+      content = builtinMarkdown || fallbackText;
+      break;
+  }
+
+  return {
+    title: hygiene.title,
+    content,
+    cleanHtml,
+    cleanText,
+    parser: parserName,
+  };
+}
+
+function normalizeTextByParser(text: string, parser: string | undefined): string {
+  const parserName = normalizeParserProvider(parser);
+  const clean = String(text || "").trim();
+  if (!clean) return "";
+
+  switch (parserName) {
+    case "cheerio":
+    case "llamaindex":
+      return structurePlainTextAsMarkdown(clean) || clean;
+    case "markitdown":
+      return finalizeDocumentMarkdown(sanitizeDocumentMarkdown(clean), { structure: true }).markdown;
+    default:
+      return clean;
+  }
+}
+
+function normalizeProviderBaseUrl(baseUrl: string | undefined, fallback: string): string {
+  const raw = String(baseUrl || fallback || "").trim();
+  return raw.replace(/\/$/, "");
+}
+
+async function readResponseBody(response: Response): Promise<unknown> {
+  const contentType = response.headers.get("content-type") || "";
+  if (contentType.includes("application/json") || contentType.includes("application/problem+json")) {
+    return await response.json();
+  }
+  const text = await response.text();
+  try {
+    return JSON.parse(text);
+  } catch {
+    return text;
+  }
+}
+
+function buildSearchQueries(query: string): string[] {
+  const normalized = String(query || "").trim();
+  if (!normalized) return [];
+  const compact = normalized.replace(/\s+/g, " ");
+  const tokens = compact.split(" ").filter(Boolean);
+  const variants = [compact];
+  if (tokens.length >= 3) variants.push(tokens.slice(0, Math.min(tokens.length, 5)).join(" "));
+  if (tokens.length >= 5) variants.push(tokens.slice(-5).join(" "));
+  return Array.from(new Set(variants)).filter(Boolean).slice(0, 3);
+}
+
+function extractTextFromJsonPayload(payload: unknown): string {
+  if (!payload || typeof payload !== "object") return "";
+  const record = payload as Record<string, unknown>;
+  const candidates = [
+    record.markdown,
+    record.content,
+    record.text,
+    record.raw_markdown,
+    record.fit_markdown,
+    record.html,
+    record.excerpts,
+    record.results,
+  ];
+
+  for (const candidate of candidates) {
+    if (typeof candidate === "string" && candidate.trim()) return candidate;
+    if (Array.isArray(candidate)) {
+      const joined = candidate
+        .map((item) => {
+          if (typeof item === "string") return item;
+          if (!item || typeof item !== "object") return "";
+          const itemRecord = item as Record<string, unknown>;
+          return [
+            itemRecord.content,
+            itemRecord.markdown,
+            itemRecord.text,
+            itemRecord.excerpt,
+            itemRecord.excerpts,
+            itemRecord.full_content,
+          ]
+            .flatMap((entry) => {
+              if (typeof entry === "string") return [entry];
+              if (Array.isArray(entry)) return entry.filter((x) => typeof x === "string") as string[];
+              return [];
+            })
+            .join("\n");
+        })
+        .filter(Boolean)
+        .join("\n");
+      if (joined.trim()) return joined;
+    }
+  }
+
+  return "";
 }
 
 async function scrapeViaJina(
@@ -164,6 +327,148 @@ async function scrapeViaFirecrawl(
   }, 2);
 }
 
+async function scrapeViaScrapeGraphAI(
+  url: string,
+  apiKey: string,
+  input: Record<string, unknown>,
+  format: string,
+  baseUrl = "https://v2-api.scrapegraphai.com",
+): Promise<Record<string, unknown>> {
+  return withRetry("scrapegraphai", async () => {
+    const res = await fetch(`${normalizeProviderBaseUrl(baseUrl, "https://v2-api.scrapegraphai.com")}/api/scrape`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "SGAI-APIKEY": apiKey,
+      },
+      body: JSON.stringify({
+        url,
+        format: format === "html" ? "html" : "markdown",
+        formats: [{ type: format === "html" ? "html" : "markdown" }],
+        fetchConfig: {
+          wait: input.wait_for || 0,
+          mode: "js",
+          stealth: true,
+        },
+      }),
+      signal: AbortSignal.timeout(45000),
+    });
+
+    if (!res.ok) {
+      const errText = await res.text().catch(() => "unknown");
+      throw new Error(`ScrapeGraphAI scrape failed: HTTP ${res.status} — ${errText.substring(0, 200)}`);
+    }
+
+    const data = await readResponseBody(res);
+    const payload = data && typeof data === "object" ? (data as Record<string, unknown>) : {};
+    const rawResults = Array.isArray(payload.results) ? payload.results : [];
+    const first = rawResults.length > 0 && typeof rawResults[0] === "object"
+      ? rawResults[0] as Record<string, unknown>
+      : {};
+    const parser = String(input.parser || input.parser_provider || "builtin");
+    const rawContent = String(
+      payload.content ||
+        payload.markdown ||
+        payload.html ||
+        first.content ||
+        first.markdown ||
+        first.html ||
+        extractTextFromJsonPayload(payload) ||
+        "",
+    );
+    const normalized = format === "html"
+      ? normalizeContentByParser(rawContent, "html", parser)
+      : {
+          title: String(payload.title || first.title || ""),
+          content: normalizeTextByParser(rawContent, parser),
+        };
+
+    return {
+      title: normalized.title || String(payload.title || first.title || ""),
+      content: normalized.content || rawContent,
+      url: String(payload.url || first.url || url),
+      word_count: String(normalized.content || rawContent).split(/\s+/).filter(Boolean).length,
+      metadata: payload.metadata || {},
+      provider: "scrapegraphai",
+    };
+  }, 2);
+}
+
+async function scrapeViaCrawl4AI(
+  url: string,
+  apiKey: string,
+  input: Record<string, unknown>,
+  format: string,
+  baseUrl = "http://localhost:11235",
+): Promise<Record<string, unknown>> {
+  return withRetry("crawl4ai", async () => {
+    const root = normalizeProviderBaseUrl(baseUrl, "http://localhost:11235");
+    const parser = String(input.parser || input.parser_provider || "builtin");
+    const encodedUrl = encodeURIComponent(url);
+    const getPath = format === "html" ? `/html/${encodedUrl}` : `/md/${encodedUrl}`;
+    const headers: Record<string, string> = {};
+    if (apiKey) headers["X-API-KEY"] = apiKey;
+
+    let payload: unknown;
+    const getRes = await fetch(`${root}${getPath}`, {
+      method: "GET",
+      headers,
+      signal: AbortSignal.timeout(45000),
+    });
+
+    if (getRes.ok) {
+      payload = await readResponseBody(getRes);
+    } else {
+      const postRes = await fetch(`${root}/crawl`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(apiKey ? { "X-API-KEY": apiKey } : {}),
+        },
+        body: JSON.stringify({
+          url,
+          urls: [url],
+          format: format === "html" ? "html" : "markdown",
+          markdown: format !== "html",
+        }),
+        signal: AbortSignal.timeout(45000),
+      });
+      if (!postRes.ok) {
+        const errText = await postRes.text().catch(() => "unknown");
+        throw new Error(`Crawl4AI scrape failed: HTTP ${postRes.status} — ${errText.substring(0, 200)}`);
+      }
+      payload = await readResponseBody(postRes);
+    }
+
+    const record = payload && typeof payload === "object" ? (payload as Record<string, unknown>) : {};
+    const rawContent = String(
+      record.markdown ||
+        record.content ||
+        record.text ||
+        record.raw_markdown ||
+        record.fit_markdown ||
+        record.html ||
+        extractTextFromJsonPayload(record) ||
+        (typeof payload === "string" ? payload : ""),
+    );
+    const normalized = format === "html"
+      ? normalizeContentByParser(rawContent, "html", parser)
+      : {
+          title: String(record.title || (record.metadata as Record<string, unknown> | undefined)?.title || ""),
+          content: normalizeTextByParser(rawContent, parser),
+        };
+
+    return {
+      title: normalized.title || String(record.title || (record.metadata as Record<string, unknown> | undefined)?.title || ""),
+      content: normalized.content || rawContent,
+      url: String(record.url || (record.metadata as Record<string, unknown> | undefined)?.url || url),
+      word_count: String(normalized.content || rawContent).split(/\s+/).filter(Boolean).length,
+      metadata: record.metadata || {},
+      provider: "crawl4ai",
+    };
+  }, 2);
+}
+
 async function scrapeViaHttp(url: string): Promise<Record<string, unknown>> {
   return withRetry("http", async () => {
     const response = await fetch(url, {
@@ -183,6 +488,16 @@ async function scrapeViaHttp(url: string): Promise<Record<string, unknown>> {
   }, 2);
 }
 
+function applyParserToScrapeResult(
+  result: Record<string, unknown>,
+  format: string,
+  parser: string | undefined,
+): Record<string, unknown> {
+  if (format === "html") return result;
+  const content = normalizeTextByParser(String(result.content || ""), parser);
+  return { ...result, content };
+}
+
 export async function scrapeWebPage(
   input: Record<string, unknown>,
   secrets: WebSecrets,
@@ -193,21 +508,52 @@ export async function scrapeWebPage(
   const mode = String(input.mode || "read");
   const format = String(input.format || "markdown");
   const provider = String(input.provider || "auto");
+  const parser = String(input.parser || input.parser_provider || "builtin");
   const firecrawlKey = pickSecret(secrets, ["FIRECRAWL_API_KEY"]);
   const browserlessKey = pickSecret(secrets, ["BROWSERLESS_API_KEY"]);
+  const scrapeGraphKey = pickSecret(secrets, ["SCRAPEGRAPHAI_API_KEY"]);
+  const scrapeGraphBaseUrl = pickSecret(secrets, ["SCRAPEGRAPHAI_BASE_URL"]);
+  const crawl4aiKey = pickSecret(secrets, ["CRAWL4AI_API_KEY"]);
+  const crawl4aiBaseUrl = pickSecret(secrets, ["CRAWL4AI_BASE_URL"]);
 
   if (firecrawlKey && (provider === "firecrawl" || provider === "auto")) {
     try {
-      return await scrapeViaFirecrawl(url, firecrawlKey, input, format);
+      return applyParserToScrapeResult(await scrapeViaFirecrawl(url, firecrawlKey, input, format), format, parser);
     } catch (err) {
       if (provider === "firecrawl") throw err;
       console.warn("[web_scrape] Firecrawl failed, trying fallback:", (err as Error).message);
     }
   }
 
+  if (scrapeGraphKey && (provider === "scrapegraphai" || provider === "auto")) {
+    try {
+      return applyParserToScrapeResult(
+        await scrapeViaScrapeGraphAI(url, scrapeGraphKey, { ...input, parser }, format, scrapeGraphBaseUrl || undefined),
+        format,
+        parser,
+      );
+    } catch (err) {
+      if (provider === "scrapegraphai") throw err;
+      console.warn("[web_scrape] ScrapeGraphAI failed, trying fallback:", (err as Error).message);
+    }
+  }
+
+  if ((crawl4aiKey || crawl4aiBaseUrl) && (provider === "crawl4ai" || provider === "auto")) {
+    try {
+      return applyParserToScrapeResult(
+        await scrapeViaCrawl4AI(url, crawl4aiKey || "", { ...input, parser }, format, crawl4aiBaseUrl || undefined),
+        format,
+        parser,
+      );
+    } catch (err) {
+      if (provider === "crawl4ai") throw err;
+      console.warn("[web_scrape] Crawl4AI failed, trying fallback:", (err as Error).message);
+    }
+  }
+
   if (browserlessKey && mode !== "screenshot" && (provider === "browserless" || provider === "auto")) {
     try {
-      return await scrapeViaBrowserless(url, browserlessKey, input, format);
+      return applyParserToScrapeResult(await scrapeViaBrowserless(url, browserlessKey, input, format), format, parser);
     } catch (err) {
       if (provider === "browserless") throw err;
       console.warn("[web_scrape] Browserless failed, trying fallback:", (err as Error).message);
@@ -220,14 +566,14 @@ export async function scrapeWebPage(
 
   if (provider !== "firecrawl") {
     try {
-      return await scrapeViaJina(url, format, mode);
+      return applyParserToScrapeResult(await scrapeViaJina(url, format, mode), format, parser);
     } catch (err) {
       if (provider === "jina") throw err;
       console.warn("[web_scrape] Jina failed, trying HTTP:", (err as Error).message);
     }
   }
 
-  return scrapeViaHttp(url);
+  return applyParserToScrapeResult(await scrapeViaHttp(url), format, parser);
 }
 
 async function searchViaSerper(query: string, apiKey: string, limit: number) {
@@ -307,6 +653,98 @@ async function searchViaFirecrawl(query: string, apiKey: string, limit: number) 
   return { query, results, provider: "firecrawl", count: results.length };
 }
 
+async function searchViaExa(
+  query: string,
+  apiKey: string,
+  limit: number,
+  baseUrl = "https://api.exa.ai",
+): Promise<Record<string, unknown>> {
+  return withRetry("exa", async () => {
+    const res = await fetch(`${normalizeProviderBaseUrl(baseUrl, "https://api.exa.ai")}/search`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": apiKey,
+      },
+      body: JSON.stringify({
+        query,
+        numResults: limit,
+        contents: { text: true },
+      }),
+      signal: AbortSignal.timeout(30000),
+    });
+    if (!res.ok) throw new Error(`Exa search failed: HTTP ${res.status}`);
+    const data = await readResponseBody(res);
+    const payload = data && typeof data === "object" ? (data as Record<string, unknown>) : {};
+    const raw = Array.isArray(payload.results)
+      ? payload.results
+      : Array.isArray(payload.data)
+        ? payload.data
+        : Array.isArray(payload.items)
+          ? payload.items
+          : [];
+    const results = raw
+      .slice(0, limit)
+      .map((r: Record<string, unknown>) => ({
+        title: String(r.title || r.name || ""),
+        url: String(r.url || r.link || ""),
+        snippet: String(
+          r.text ||
+            r.content ||
+            r.snippet ||
+            r.summary ||
+            (Array.isArray(r.highlights) ? r.highlights[0] : "") ||
+            "",
+        ).slice(0, 300),
+      }))
+      .filter((r: { url: string }) => !!r.url);
+    return { query, results, provider: "exa", count: results.length };
+  }, 2);
+}
+
+async function searchViaParallel(
+  query: string,
+  apiKey: string,
+  limit: number,
+  baseUrl = "https://api.parallel.ai",
+): Promise<Record<string, unknown>> {
+  return withRetry("parallel", async () => {
+    const res = await fetch(`${normalizeProviderBaseUrl(baseUrl, "https://api.parallel.ai")}/v1/search`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": apiKey,
+      },
+      body: JSON.stringify({
+        objective: query,
+        search_queries: buildSearchQueries(query),
+        mode: "advanced",
+        max_chars_total: Math.max(3000, limit * 1200),
+      }),
+      signal: AbortSignal.timeout(30000),
+    });
+    if (!res.ok) throw new Error(`Parallel search failed: HTTP ${res.status}`);
+    const data = await readResponseBody(res);
+    const payload = data && typeof data === "object" ? (data as Record<string, unknown>) : {};
+    const raw = Array.isArray(payload.results)
+      ? payload.results
+      : Array.isArray(payload.data)
+        ? payload.data
+        : Array.isArray(payload.items)
+          ? payload.items
+          : [];
+    const results = raw
+      .slice(0, limit)
+      .map((r: Record<string, unknown>) => ({
+        title: String(r.title || r.name || ""),
+        url: String(r.url || r.link || ""),
+        snippet: String(r.content || r.text || r.snippet || r.excerpt || "").slice(0, 300),
+      }))
+      .filter((r: { url: string }) => !!r.url);
+    return { query, results, provider: "parallel", count: results.length };
+  }, 2);
+}
+
 async function searchViaJina(query: string, limit: number): Promise<Record<string, unknown>> {
   return withRetry("jina-search", async () => {
     // Jina AI Search — gratuito sem key, melhor com key. Substitui DuckDuckGo (Instant Answer
@@ -375,12 +813,14 @@ async function searchViaSearXNG(
 }
 
 export type WebProviderPrefs = {
-  /** Provider primário: auto | serper | tavily | brave | firecrawl | jina | searxng. */
+  /** Provider primário: auto | serper | tavily | brave | firecrawl | exa | parallel | jina | searxng. */
   primary?: string;
   /** Fallback (segundo provider). Default vira "jina" se não configurado. */
   fallback?: string;
   /** Base URL do SearXNG (se aplicável). */
   searxngBaseUrl?: string;
+  /** Parser desejado para higienização final do conteúdo. */
+  parser?: string;
 };
 
 type SearchFn = () => Promise<Record<string, unknown>>;
@@ -408,6 +848,16 @@ function resolveSearchProvider(
     case "firecrawl": {
       const key = pickSecret(secrets, ["FIRECRAWL_API_KEY"]);
       return key ? () => searchViaFirecrawl(query, key, limit) : null;
+    }
+    case "exa": {
+      const key = pickSecret(secrets, ["EXA_API_KEY"]);
+      const baseUrl = pickSecret(secrets, ["EXA_BASE_URL"]);
+      return key ? () => searchViaExa(query, key, limit, baseUrl) : null;
+    }
+    case "parallel": {
+      const key = pickSecret(secrets, ["PARALLEL_API_KEY"]);
+      const baseUrl = pickSecret(secrets, ["PARALLEL_BASE_URL"]);
+      return key ? () => searchViaParallel(query, key, limit, baseUrl) : null;
     }
     case "jina":
       return () => searchViaJina(query, limit);
@@ -440,7 +890,7 @@ export async function researchWebQuery(
   // Resolve primary. "auto" = primeiro provider pago com key, senão jina.
   let primaryFn: SearchFn | null = null;
   if (primaryName === "auto") {
-    const paidProviders = ["serper", "tavily", "brave", "firecrawl"];
+    const paidProviders = ["exa", "parallel", "serper", "tavily", "brave", "firecrawl"];
     for (const name of paidProviders) {
       const fn = resolveSearchProvider(name, query, limit, secrets, prefs);
       if (fn) {
@@ -520,7 +970,7 @@ export async function researchAndScrape(
       if (!url) return;
       try {
         const page = await scrapeWebPage(
-          { url, format: "markdown", mode: "read", only_main_content: true },
+          { url, format: "markdown", mode: "read", only_main_content: true, parser: prefs.parser },
           secrets,
         );
         scraped.push({

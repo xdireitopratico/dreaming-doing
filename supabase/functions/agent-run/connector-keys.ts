@@ -11,6 +11,7 @@ export type AgentPreferencesPayload = {
   /** ID exato do modelo na API (ex.: anthropic/claude-sonnet-4-6, openrouter slug) */
   customModelId?: string;
   useCustomModel?: boolean;
+  parserProvider?: string;
   autoAllowedPresetIds?: string[];
   userModelEntries?: { slug: string; env: string; label?: string }[];
   // Tools fallback chain — primary é o provider conectado, fallback é o segundo.

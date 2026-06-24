@@ -49,6 +49,7 @@ export function normalizeAgentPreferences(
       : undefined,
     customModelId: typeof r.customModelId === "string" ? r.customModelId : undefined,
     useCustomModel: r.useCustomModel === true,
+    parserProvider: typeof r.parserProvider === "string" ? r.parserProvider : undefined,
     autoAllowedPresetIds: Array.isArray(r.autoAllowedPresetIds)
       ? r.autoAllowedPresetIds
           .filter((x): x is string => typeof x === "string")

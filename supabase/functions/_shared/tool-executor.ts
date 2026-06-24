@@ -2759,10 +2759,77 @@ Contexto: ${input.context || "dados de negócio"}`,
     }
 
     case "browser_automate": {
-      // Browser automation via Browserbase (tenant key) or Browserless (tenant key)
+      // Browser automation via Browser Use Cloud, Browserbase (tenant key) or Browserless (tenant key)
       const url = input.url;
       const actions = input.actions || []; // Array of { type, selector, value, ... }
       if (!url) throw new Error("url is required");
+
+      // Browser Use Cloud — prefer when configured, since it's the new browser runtime path.
+      if (secrets["BROWSER_USE_API_KEY"] && (input.provider === "browser-use" || input.provider === "auto" || !input.provider)) {
+        const baseUrl = String(secrets["BROWSER_USE_BASE_URL"] || "https://api.browser-use.com/api/v3").replace(/\/$/, "");
+        const task = String(
+          input.task ||
+            input.prompt ||
+            input.instructions ||
+            (actions.length > 0
+              ? `Open ${url} and execute these browser actions in order: ${JSON.stringify(actions)}`
+              : `Open ${url} and return the main useful page content, title, and any relevant metadata.`),
+        );
+
+        const createRes = await fetch(`${baseUrl}/sessions`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Browser-Use-API-Key": secrets["BROWSER_USE_API_KEY"],
+          },
+          body: JSON.stringify({ task }),
+          signal: AbortSignal.timeout(30000),
+        });
+
+        if (!createRes.ok) {
+          const errText = await createRes.text().catch(() => "unknown");
+          throw new Error(`Browser Use session failed: HTTP ${createRes.status} — ${errText.substring(0, 200)}`);
+        }
+
+        const created = await createRes.json();
+        const sessionId = created.id || created.session_id;
+        if (!sessionId) throw new Error("Browser Use session response missing id");
+
+        let latest: any = created;
+        for (let attempt = 0; attempt < 20; attempt++) {
+          await new Promise((resolve) => setTimeout(resolve, 3000));
+          const pollRes = await fetch(`${baseUrl}/sessions/${sessionId}`, {
+            headers: { "X-Browser-Use-API-Key": secrets["BROWSER_USE_API_KEY"] },
+            signal: AbortSignal.timeout(15000),
+          });
+          if (!pollRes.ok) continue;
+          latest = await pollRes.json();
+          const status = String(latest.status || latest.state || "").toLowerCase();
+          const output = latest.output;
+          if (
+            output !== undefined &&
+            output !== null &&
+            output !== "" &&
+            !["queued", "running", "in_progress", "pending", "created"].includes(status)
+          ) {
+            break;
+          }
+          if (["completed", "done", "success", "failed", "cancelled", "stopped"].includes(status)) {
+            break;
+          }
+        }
+
+        return {
+          session_id: sessionId,
+          status: latest.status || "completed",
+          live_url: latest.liveUrl || latest.live_url || null,
+          output: latest.output ?? null,
+          provider: "browser-use",
+          url,
+          actions_queued: actions.length,
+          message: "Browser Use session completed.",
+        };
+      }
 
       // Browserbase API
       if (secrets["BROWSERBASE_API_KEY"]) {
@@ -2841,7 +2908,7 @@ Contexto: ${input.context || "dados de negócio"}`,
         }
       }
 
-      throw new Error("Browser automation requires BROWSERBASE_API_KEY or BROWSERLESS_API_KEY in tenant_secrets");
+      throw new Error("Browser automation requires BROWSER_USE_API_KEY, BROWSERBASE_API_KEY or BROWSERLESS_API_KEY in tenant_secrets");
     }
 
     // ═══════════════════════════════════════════════════════════
