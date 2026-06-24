@@ -6,10 +6,7 @@ import { ArrowLeft, Cpu, CheckCircle2, AlertCircle } from "lucide-react";
 import { toast } from "@/lib/toast";
 import { useAuth } from "@/lib/auth";
 import { supabase } from "@/integrations/supabase/client";
-import {
-  type ConnectorRow,
-  connectedEnvsFromRows,
-} from "@/lib/connector-env-status";
+import { type ConnectorRow, connectedEnvsFromRows } from "@/lib/connector-env-status";
 import {
   allProviders,
   customProviderSecretKey,
@@ -51,7 +48,11 @@ import {
   readOllamaMetaFromRows,
   saveOllamaConnector,
 } from "@/lib/save-ollama-connector";
-import { saveWebSearchKey, disconnectWebSearch, type WebSearchProviderId } from "@/lib/save-web-search-key";
+import {
+  saveWebSearchKey,
+  disconnectWebSearch,
+  type WebSearchProviderId,
+} from "@/lib/save-web-search-key";
 import type {
   BrowserRuntimeProviderId,
   ParserIndexProviderId,
@@ -130,7 +131,13 @@ function buildProviderStates(
     const row = connectorRows?.find((r) => rowProviderId(r) === p.id);
     if (!row) {
       return existing
-        ? { ...existing, baseUrl: p.baseUrl, status: "available" as const, poolCount: 0, poolSlots: [] }
+        ? {
+            ...existing,
+            baseUrl: p.baseUrl,
+            status: "available" as const,
+            poolCount: 0,
+            poolSlots: [],
+          }
         : {
             id: p.id,
             status: "available" as const,
@@ -268,10 +275,7 @@ export function ApiModelsPage() {
     });
   }, []);
 
-  const studioProviders = useMemo(
-    () => mergeProviderList(connectorRows),
-    [connectorRows],
-  );
+  const studioProviders = useMemo(() => mergeProviderList(connectorRows), [connectorRows]);
   const connected = useMemo(() => connectedEnvsFromRows(connectorRows), [connectorRows]);
   const connectedCount = useMemo(
     () => Object.values(connected).filter(Boolean).length,
@@ -329,7 +333,7 @@ export function ApiModelsPage() {
       const prov = providerById(id);
       const baseUrl =
         prov?.id === "ollama" || prov?.id.startsWith("custom-")
-          ? (p.baseUrl.trim() || prov?.baseUrl)
+          ? p.baseUrl.trim() || prov?.baseUrl
           : undefined;
       setSavingId(id);
       try {
@@ -356,7 +360,7 @@ export function ApiModelsPage() {
       const ui = providers.find((x) => x.id === id);
       const baseUrl =
         p?.id === "ollama" || p?.id.startsWith("custom-")
-          ? (ui?.baseUrl.trim() || p?.baseUrl)
+          ? ui?.baseUrl.trim() || p?.baseUrl
           : undefined;
       setSavingId(id);
       try {
@@ -385,7 +389,7 @@ export function ApiModelsPage() {
       const ui = providers.find((x) => x.id === id);
       const baseUrl =
         p?.id === "ollama" || p?.id.startsWith("custom-")
-          ? (ui?.baseUrl.trim() || p?.baseUrl)
+          ? ui?.baseUrl.trim() || p?.baseUrl
           : undefined;
       setSavingId(id);
       try {
@@ -496,8 +500,10 @@ export function ApiModelsPage() {
       try {
         await saveWebSearchKey(provider, token);
         await qc.invalidateQueries({ queryKey: ["web-search-connector"] });
+        return true;
       } catch (e: unknown) {
         toast.error(e instanceof Error ? e.message : "Falha ao salvar");
+        return false;
       } finally {
         setSavingId(null);
       }
@@ -528,8 +534,10 @@ export function ApiModelsPage() {
           baseUrl,
         });
         await qc.invalidateQueries({ queryKey: ["connectors-public"] });
+        return true;
       } catch (e: unknown) {
         toast.error(e instanceof Error ? e.message : "Falha ao salvar scrape");
+        return false;
       } finally {
         setSavingId(null);
       }
@@ -563,8 +571,10 @@ export function ApiModelsPage() {
           baseUrl,
         });
         await qc.invalidateQueries({ queryKey: ["connectors-public"] });
+        return true;
       } catch (e: unknown) {
         toast.error(e instanceof Error ? e.message : "Falha ao salvar browser runtime");
+        return false;
       } finally {
         setSavingId(null);
       }
@@ -611,13 +621,9 @@ export function ApiModelsPage() {
   const handleSetMode = useCallback(
     (nextMode: ModelPowerMode) => {
       if (nextMode === "robin") {
-        const poolProviders = allProviders().filter(
-          (p) => p.supportsPool && connected[p.id],
-        );
+        const poolProviders = allProviders().filter((p) => p.supportsPool && connected[p.id]);
         const target =
-          poolProviders.find((p) => p.id === selectedEnv)?.id ??
-          poolProviders[0]?.id ??
-          "nvidia";
+          poolProviders.find((p) => p.id === selectedEnv)?.id ?? poolProviders[0]?.id ?? "nvidia";
         const defaultModelId =
           target === "nvidia" ? PLATFORM_ROBIN_TASTE_PRESET_ID : "pool-groq-flash";
         patchPrefs({
@@ -638,7 +644,9 @@ export function ApiModelsPage() {
     (presetId: string) => {
       const preset = getPresetById(presetId, prefs.userModelEntries);
       if (!connected[preset.env]) {
-        toast.error(`Cadastre a chave ${providerById(preset.env as AiProviderId)?.label ?? preset.env} em Providers & Keys.`);
+        toast.error(
+          `Cadastre a chave ${providerById(preset.env as AiProviderId)?.label ?? preset.env} em Providers & Keys.`,
+        );
         setKeysExpanded(true);
         return;
       }

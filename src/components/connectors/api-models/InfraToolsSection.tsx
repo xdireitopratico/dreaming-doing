@@ -27,7 +27,11 @@ import {
   type WebSearchProviderId,
 } from "@/lib/tool-connectors";
 
-type ConnectorRowLike = { kind: string; meta?: Record<string, unknown> | null; provider?: string | null };
+type ConnectorRowLike = {
+  kind: string;
+  meta?: Record<string, unknown> | null;
+  provider?: string | null;
+};
 
 interface InfraToolsSectionProps {
   expanded: boolean;
@@ -55,15 +59,19 @@ interface InfraToolsSectionProps {
   parserProvider: ParserIndexProviderId;
   onParserProviderChange: (value: ParserIndexProviderId) => void;
   savingId: string | null;
-  onSaveWebSearch: (provider: WebSearchProviderId, token: string) => void;
+  onSaveWebSearch: (provider: WebSearchProviderId, token: string) => Promise<boolean>;
   onDeleteWebSearch: () => void;
-  onSaveWebScrape: (provider: WebScrapeProviderId, token: string, baseUrl?: string) => void;
+  onSaveWebScrape: (
+    provider: WebScrapeProviderId,
+    token: string,
+    baseUrl?: string,
+  ) => Promise<boolean>;
   onDeleteWebScrape: (provider: WebScrapeProviderId) => void;
   onSaveBrowserRuntime: (
     provider: BrowserRuntimeProviderId,
     token: string,
     baseUrl?: string,
-  ) => void;
+  ) => Promise<boolean>;
   onDeleteBrowserRuntime: (provider: BrowserRuntimeProviderId) => void;
   // Fallback chain — segundo provider se o primário falhar. Vai em agent_preferences.
   webSearchFallback?: string;
@@ -75,7 +83,11 @@ interface InfraToolsSectionProps {
 }
 
 function rowProvider(row: ConnectorRowLike | null | undefined): string {
-  return (row?.provider?.trim() || (row?.meta as { provider?: string } | undefined)?.provider || "").trim();
+  return (
+    row?.provider?.trim() ||
+    (row?.meta as { provider?: string } | undefined)?.provider ||
+    ""
+  ).trim();
 }
 
 function rowBaseUrl(row: ConnectorRowLike | null | undefined): string {
@@ -182,8 +194,7 @@ export function InfraToolsSection({
         className="w-full flex items-center justify-between px-5 py-4 hover:bg-[var(--surface-2)]/40 transition-colors"
       >
         <h2 className="flex items-center gap-2 font-mono text-[10px] tracking-[0.2em] uppercase text-[var(--text-dim)]">
-          <Box className="size-3 text-[var(--primary)]" />
-          3 · Infra & Tools
+          <Box className="size-3 text-[var(--primary)]" />3 · Infra & Tools
         </h2>
         {expanded ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />}
       </button>
@@ -225,11 +236,14 @@ export function InfraToolsSection({
                     <Label className="font-mono text-[9px] text-[var(--text-dim)]">
                       {webSearchMeta?.tokenLabel ?? "Chave"}
                     </Label>
-                    <Input
+                    <ApiKeyInput
+                      label={webSearchMeta?.tokenLabel ?? "Chave"}
                       value={webSearchKey}
-                      onChange={(e) => setWebSearchKey(e.target.value)}
+                      onChange={setWebSearchKey}
+                      provider={webSearchProvider}
                       placeholder={(webSearchMeta?.keyPrefix ?? "sk-") + "..."}
-                      className="mt-1 font-mono text-xs"
+                      saved={!!webSearchRow?.provider}
+                      disabled={savingId === `websearch-${webSearchProvider}`}
                     />
                   </div>
                 </div>
@@ -278,8 +292,14 @@ export function InfraToolsSection({
                     type="button"
                     size="sm"
                     className="bg-[var(--primary)] text-[#0a0a0a]"
-                    disabled={savingId === `websearch-${webSearchProvider}` || saveDisabled(webSearchKey, true, "", false)}
-                    onClick={() => onSaveWebSearch(webSearchProvider, webSearchKey)}
+                    disabled={
+                      savingId === `websearch-${webSearchProvider}` ||
+                      saveDisabled(webSearchKey, true, "", false)
+                    }
+                    onClick={async () => {
+                      const ok = await onSaveWebSearch(webSearchProvider, webSearchKey);
+                      if (ok) setWebSearchKey("");
+                    }}
                   >
                     {savingId === `websearch-${webSearchProvider}` ? "Salvando…" : "Salvar"}
                   </Button>
@@ -339,11 +359,14 @@ export function InfraToolsSection({
                       <Label className="font-mono text-[9px] text-[var(--text-dim)]">
                         {webScrapeMeta.tokenLabel ?? "Chave"}
                       </Label>
-                      <Input
+                      <ApiKeyInput
+                        label={webScrapeMeta.tokenLabel ?? "Chave"}
                         value={webScrapeKey}
-                        onChange={(e) => setWebScrapeKey(e.target.value)}
+                        onChange={setWebScrapeKey}
+                        provider={webScrapeProvider}
                         placeholder={(webScrapeMeta?.keyPrefix ?? "sk-") + "..."}
-                        className="mt-1 font-mono text-xs"
+                        saved={!!webScrapeRow?.provider}
+                        disabled={savingId === `webscrape-${webScrapeProvider}`}
                       />
                     </div>
                   )}
@@ -401,7 +424,14 @@ export function InfraToolsSection({
                         !!webScrapeMeta?.needsBaseUrl,
                       )
                     }
-                    onClick={() => onSaveWebScrape(webScrapeProvider, webScrapeKey, webScrapeBaseUrl)}
+                    onClick={async () => {
+                      const ok = await onSaveWebScrape(
+                        webScrapeProvider,
+                        webScrapeKey,
+                        webScrapeBaseUrl,
+                      );
+                      if (ok) setWebScrapeKey("");
+                    }}
                   >
                     {savingId === `webscrape-${webScrapeProvider}` ? "Salvando…" : "Salvar"}
                   </Button>
@@ -469,7 +499,9 @@ export function InfraToolsSection({
                         type="button"
                         size="sm"
                         variant="outline"
-                        disabled={e2bTesting || savingId === "e2b" || (!e2bKeyValue.trim() && !e2bConnected)}
+                        disabled={
+                          e2bTesting || savingId === "e2b" || (!e2bKeyValue.trim() && !e2bConnected)
+                        }
                         onClick={onTestE2b}
                       >
                         {e2bTesting ? "Testando…" : "Testar"}
@@ -484,10 +516,14 @@ export function InfraToolsSection({
                     </div>
                     <div className="grid gap-3 sm:grid-cols-2 mb-3">
                       <div>
-                        <Label className="font-mono text-[9px] text-[var(--text-dim)]">Provider</Label>
+                        <Label className="font-mono text-[9px] text-[var(--text-dim)]">
+                          Provider
+                        </Label>
                         <select
                           value={browserProvider}
-                          onChange={(e) => setBrowserProvider(e.target.value as BrowserRuntimeProviderId)}
+                          onChange={(e) =>
+                            setBrowserProvider(e.target.value as BrowserRuntimeProviderId)
+                          }
                           className="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--surface-1)] px-3 py-2 font-mono text-xs text-[var(--foreground)]"
                         >
                           {browserRuntimeProviders().map((p) => (
@@ -515,11 +551,14 @@ export function InfraToolsSection({
                           <Label className="font-mono text-[9px] text-[var(--text-dim)]">
                             {browserMeta.tokenLabel ?? "Chave"}
                           </Label>
-                          <Input
+                          <ApiKeyInput
+                            label={browserMeta.tokenLabel ?? "Chave"}
                             value={browserRuntimeKey}
-                            onChange={(e) => setBrowserRuntimeKey(e.target.value)}
+                            onChange={setBrowserRuntimeKey}
+                            provider={browserProvider}
                             placeholder={(browserMeta?.keyPrefix ?? "sk-") + "..."}
-                            className="mt-1 font-mono text-xs"
+                            saved={!!browserRuntimeRow?.provider}
+                            disabled={savingId === `browserruntime-${browserProvider}`}
                           />
                         </div>
                       )}
@@ -577,9 +616,14 @@ export function InfraToolsSection({
                             !!browserMeta?.needsBaseUrl,
                           )
                         }
-                        onClick={() =>
-                          onSaveBrowserRuntime(browserProvider, browserRuntimeKey, browserRuntimeBaseUrl)
-                        }
+                        onClick={async () => {
+                          const ok = await onSaveBrowserRuntime(
+                            browserProvider,
+                            browserRuntimeKey,
+                            browserRuntimeBaseUrl,
+                          );
+                          if (ok) setBrowserRuntimeKey("");
+                        }}
                       >
                         {savingId === `browserruntime-${browserProvider}` ? "Salvando…" : "Salvar"}
                       </Button>
@@ -613,7 +657,9 @@ export function InfraToolsSection({
                     <Label className="font-mono text-[9px] text-[var(--text-dim)]">Provider</Label>
                     <select
                       value={parserProvider}
-                      onChange={(e) => onParserProviderChange(e.target.value as ParserIndexProviderId)}
+                      onChange={(e) =>
+                        onParserProviderChange(e.target.value as ParserIndexProviderId)
+                      }
                       className="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--surface-1)] px-3 py-2 font-mono text-xs text-[var(--foreground)]"
                     >
                       {parserOptions.map((p) => (
