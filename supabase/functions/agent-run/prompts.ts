@@ -13,54 +13,22 @@ export type ProjectTemplateId =
   | "static-html"
   | "custom";
 
-/** Guia orientacional — ferramentas e princípios, não receita fixa. O pedido manda. */
+/** Guia enxuto — catálogo completo no design manifest + skill forge-design. */
 export const DESIGN_GUIDE = `## Design
-O pedido do usuário define forma, tom e paleta. **Proibido** receita fixa (NavShell + Hero + Bento + Stats em todo projeto). Adapte a composição ao domínio.
+O pedido do usuário define forma, tom e paleta. **Proibido** receita fixa repetida entre projetos.
 
-### Moods (identidade visual)
-O projeto nasce com um mood em src/index.css (tokens @theme). Escolha/customize um adequado ao domínio — o mood controla cor, glow e contraste:
-- **ember** (laranja/escuro): food, criativo, identidade FORGE
-- **ocean** (azul): SaaS, fintech, dev tools, data
-- **forest** (verde): eco, saúde, natureza, bem-estar
-- **mono** (cinza/preto): minimal premium, editorial, portfólio
-- **neon** (magenta/ciano, dark): cyberpunk, gaming, web3
-- **sand** (terracota, claro): padaria, gourmet, lifestyle
-- **royal** (roxo/dourado): luxo, criativo, imobiliário premium
-- **sunset** (rosa/laranja): moda, beleza, lifestyle jovem
-Para trocar: edite os tokens @theme em src/index.css. Nunca hardcoded hex em componentes.
+### Moods (@theme)
+ember · ocean · forest · mono · neon · sand · royal · sunset — escolha conforme domínio. Sem hex hardcoded.
 
-### Princípios (amador → profissional)
-1. Ritmo vertical: alterne densidade e respiro entre seções (py-20 hero, py-12 densa, py-24 respirada). Sem isso é página plana.
-2. Hierarquia tipográfica: h1 display → h2 → h3, contraste de tamanho e peso.
-3. Camadas de superfície: bg-background → bg-surface-1/2/3 pra profundidade, nunca cor chapada.
-4. Motion com intenção: revelar no scroll, parallax sutil, hover com física (spring). Excesso ou ausência = amador.
-5. Assinatura: cada página tem UM momento memorável (hero com glow, bento assimétrico, prova social). Seja específico do domínio.
-6. Acessibilidade: focus-visible, aria-label, contraste AA, alvo >= 40px.
+### Princípios
+Ritmo vertical entre seções · hierarquia tipográfica · superfícies em camadas · motion com intenção · UM gesto memorável por página · a11y AA.
 
-### Catálogo @forge/ui (use, modifique ou ignore conforme o contexto)
-Importe só de \`@forge/ui\` (paths profundos quebram o bundle).
-- Primitivas: Button, Card, Badge, Dialog, Input, Avatar, Tooltip, Skeleton, Toast, Separator
-- Motion: FadeIn, Reveal, StaggerContainer/Item, Parallax, MagneticButton, HoverLift, TextShimmer, ScrollProgress, Tilt3D, Spotlight, CountUp, Marquee, RevealMask, useScrollProgress, useReducedMotion
-- Compositions (marketing): HeroSignature, BentoGrid, FeatureMatrix, CTASignature, StatsRibbon, PricingTiers, TestimonialCarousel, FooterColumns, NavShell
+### @forge/ui
+Importe só de \`@forge/ui\`. **Catálogo verdadeiro:** design manifest no system prompt (9 básicos + 11 opinionated + 12 técnicas). Prefira composições **opinionated** para craft. \`fs_read\` técnicas on-demand e adapte.
 
-### Catálogo de técnicas (packages/forge-ui/src/techniques/)
-O shopping center de design. \`fs_read\` as que seu brief chamar e **adapte** — nunca plugue cego. A composição de 2-4 técnicas é o que transforma simples em excepcional.
-- ScrollReveal (scroll-reveal): revelação escalonada com ritmo
-- StickyStack (sticky-stack): seções fixam e empilham
-- ParallaxDepth (parallax-depth): parallax multi-camada
-- MagneticInteraction (magnetic-interaction): elementos atraem o cursor
-- KineticTypography (kinetic-typography): tipografia animada (máscara, brilho, split)
-- SpotlightCursor (spotlight-cursor): gradiente segue o cursor
-- TiltHover (tilt-hover): perspectiva 3D no hover
-- CountUpMetrics (count-up-metrics): números animam ao revelar
-- InfiniteMarquee (infinite-marquee): scroll infinito seamless
-- AnimatedMeshBackground (animated-mesh-background): atmosfera de gradiente em movimento
-- GlassmorphismLayers (glassmorphism-layers): profundidade via blur + translucência
-- GrainTextureOverlay (grain-texture-overlay): textura de grão premium (use em toda página)
+Detalhes de enforcement, workflow e tokens: skill **forge-design**.
 
-Landing/marketing pede riqueza visual. App/dashboard pede clareza e densidade. Adapte — não aplique a mesma estrutura para tudo.
-
-**Nunca cite** paths, \`@theme\`, \`--color-*\` ou \`@forge/ui\` ao usuário. UI profissional: contraste ok, sem página branca + CTA azul genérico.`;
+**Nunca cite** paths internos nem \`@forge/ui\` ao usuário no chat/plano.`;
 
 export const STACK_FLEX = `## Stack flexível
 - Padrão deste projeto: seção acima.

@@ -170,7 +170,9 @@ export async function runGatherContextForHost(host: GatherContextHost): Promise<
       return files ?? [];
     },
     detectStackSkillNames: (fileList) =>
-      host.skills.detectActive(fileList as FileEntry[]).map((s) => s.name),
+      host.skills.resolveDisplayNames(
+        host.skills.detectActive(fileList as FileEntry[]).map((s) => s.name),
+      ),
     messages: host.state.messages,
     userSkillNames: host.userSkillNames,
     lastEmittedSkills: host.lastEmittedSkills,

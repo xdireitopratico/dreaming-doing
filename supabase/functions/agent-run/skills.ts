@@ -156,59 +156,40 @@ Vitest para testes. @vitejs/plugin-react para Fast Refresh.`,
           files.some((f) => f.path === "vite.config.ts" || f.path === "vite.config.js"),
       },
       {
-        name: "design-system",
-        description: "Design System enforcement — tokens, accessibility, component patterns",
+        name: "forge-design",
+        description: "FORGE design craft — @forge/ui manifest, opinionated compositions, techniques",
         systemPrompt: `
-## Design System Enforcement (OBRIGATÓRIO)
+## FORGE Design (OBRIGATÓRIO para UI)
 
-**MISSÃO:** Design absurdamente único, multi-componente, alta complexidade — NUNCA página branca + CTA azul.
+**MISSÃO:** Design único por domínio — multi-seção, alto craft. **Proibido** default HeroSignature+BentoGrid sem composição opinionated.
 
-### 1. USE @FORGE/UI — PRIMITIVOS + COMPOSITES
+### Workflow
+1. **Plan UI:** use tool \`design_resolve\` (quando disponível) ou leia o design manifest no system prompt.
+2. **Build:** \`fs_read\` os paths do pacote resolve antes do 1º patch; **adapte** composição ao domínio.
+3. **Valide:** observer checa assinaturas (motion, opinionated hero, anti-phantom).
+
+### @forge/ui
+Importe só de \`@forge/ui\`. Catálogo completo está no **design manifest** (Tier 0) — 9 básicos + **11 opinionated** (preferir para craft).
+**Proibido** imports da lista phantom (ProcessSteps, LogoWall, ServiceGrid, etc.).
+
+Exemplo adaptado (estúdio de podcast — não copie para outros domínios):
 \`\`\`tsx
-import { Button, FadeIn, HeroSignature, BentoGrid } from "@forge/ui";
+import { HeroCinematicSpotlight, StickyStackNarrative, Reveal, Button } from "@forge/ui";
 \`\`\`
 
-**Composição por domínio (≥3 seções, variadas):** escolha 3–5 composites adequados ao **pedido do usuário** (oficina ≠ SaaS ≠ padaria). Varie a stack entre projetos — **proibido** repetir a mesma receita de seções em pedidos diferentes.
+### Tokens @theme (Tailwind v4)
+Sem hex hardcoded. Cores: bg-brand-500, bg-background, bg-surface-1. Radius: rounded-lg/xl/2xl. Nunca cite paths CSS ao usuário.
 
-**Primitives:** Button, Input, Card, Badge, Avatar, Dialog, Toast, Motion
+### Motion (obrigatório)
+Reveal, Parallax, StaggerContainer, FadeIn, useScrollProgress — conforme técnicas do brief.
 
-### 2. TOKENS VIA @THEME (Tailwind v4)
-Leia tokens internamente no CSS do projeto — **nunca cite** \`src/index.css\`, \`@theme\` nem \`--color-*\` ao usuário no chat ou no plano.
-**NÃO use valores hardcoded** (px, rem arbitrários, hex colors) — use tokens semânticos:
-- Cores: bg-brand-500, text-brand-600, border-brand-500, ring-brand-500
-- Espaçamento: p-4, m-6, gap-4 (usa scale do @theme)
-- Radius: rounded-lg, rounded-xl, rounded-2xl
-- Shadows: shadow-glow, shadow-glow-silver, shadow-lg
-- Fontes: font-display, font-body, font-mono
+### A11y
+Focus-visible, aria-label, contraste AA, semantic HTML, prefers-reduced-motion.
 
-### 3. ACESSIBILIDADE (WCAG AA) — ENFORÇADA PELOS COMPONENTES @FORGE/UI:
-- Contraste 4.5:1 (texto), 3:1 (UI elements) — tokens garantem
-- Focus-visible SEMPRE visível (ring-2 ring-offset-2 ring-brand-500) — built-in
-- Labels em TODOS inputs — Input component exige label
-- aria-label/aria-labelledby em botões icon-only — Button component suporta
-- Semantic HTML: <main>, <nav>, <section>, <article>, <header>, <footer>
-- Heading hierarchy: h1 → h2 → h3 (não pule níveis)
-- Reduced motion: @media (prefers-reduced-motion) { transition: none } — respeitado por Motion components
-
-### 4. MOTION & MICRO-INTERAÇÕES (OBRIGATÓRIO PARA UI PROFISSIONAL):
-- **FadeIn/SlideIn/ScaleIn** para entrada de elementos
-- **StaggerContainer + StaggerItem** para listas
-- **HoverScale** (1.02) em botões e cards interativos
-- **HoverLift** (y: -4px + shadow-xl) em cards
-- **Pulse** para estados de loading/atenção
-- **Shimmer** para skeleton loading
-- Transitions: 150-250ms ease-out (tokens: transition-fast, transition-normal)
-- Respeita prefers-reduced-motion automaticamente
-
-### 5. RESPONSIVO MOBILE-FIRST:
-- Breakpoints: sm: 640px, md: 768px, lg: 1024px, xl: 1280px, 2xl: 1536px
-- Container: max-w-7xl mx-auto px-4 sm:px-6 lg:px-8
-- Grid/Flex com gap, não margin
-
-### 6. PROIBIDO (Observer rejeita):
-- bg-white, bg-blue-600/500, landing com <3 composites @forge/ui, sem motion
-- Tailwind raw (bg-zinc-*, text-blue-*), hex hardcoded, <button> manual
-- Reimplementar Button/Card/Dialog — importe @forge/ui`,
+### Proibido (observer)
+- Stack genérica HeroSignature+BentoGrid sem hero opinionated
+- Composites phantom do manifest
+- bg-zinc-950/bg-blue-600 genérico, <button> manual, reimplementar Button/Card`,
         tools: [],
         validate: (files) =>
           files.some(
@@ -292,6 +273,11 @@ PATTERNS:
     if (active.length === 0) return "";
 
     return active.map((s) => s.systemPrompt).join("\n\n");
+  }
+
+  /** Nomes exibidos na timeline — alias retrocompat design-system. */
+  resolveDisplayNames(internalNames: string[]): string[] {
+    return internalNames.map((n) => (n === "forge-design" ? "design-system" : n));
   }
 
   registerTools(registry: ToolRegistry, files: FileEntry[]): void {

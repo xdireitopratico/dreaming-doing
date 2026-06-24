@@ -618,11 +618,11 @@ Legenda: `— ok feito` | `— pendente`
 
 | # | Tarefa | Status |
 |---|--------|--------|
-| C10 | Renomear/reescrever skill → `forge-design` | — pendente |
-| C11 | Alias `design-system` → `forge-design` | — pendente |
-| C12 | Encurtar `DESIGN_GUIDE` em `prompts.ts` | — pendente |
-| C13 | Injetar manifest em `agent-system-input.ts` + flag env | — pendente |
-| C14 | Testes snapshot system prompt / skill | — pendente |
+| C10 | Renomear/reescrever skill → `forge-design` | — ok feito |
+| C11 | Alias `design-system` → `forge-design` | — ok feito |
+| C12 | Encurtar `DESIGN_GUIDE` em `prompts.ts` | — ok feito |
+| C13 | Injetar manifest em `agent-system-input.ts` + flag env | — ok feito |
+| C14 | Testes snapshot system prompt / skill | — ok feito |
 
 ### Fase D — Resolve e tools (4)
 
@@ -692,7 +692,7 @@ Legenda: `— ok feito` | `— pendente`
 | I51 | `node scripts/bundle-forge-ui-seed.mjs` | — pendente |
 | I52 | `npm run design:check` pós-expansão | — pendente |
 
-**Total:** 52 tarefas | **Concluídas:** 9 | **Pendentes:** 43
+**Total:** 52 tarefas | **Concluídas:** 14 | **Pendentes:** 38
 
 ---
 

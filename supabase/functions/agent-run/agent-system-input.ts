@@ -27,6 +27,7 @@ import {
   type ProjectTemplateId,
 } from "./prompts.ts";
 import { getTasteStartSystemPrompt } from "./prompts-taste.ts";
+import { buildDesignManifestSummary } from "./design-manifest.ts";
 
 const WEB_UI_TEMPLATES = new Set<ProjectTemplateId>([
   "vite-react",
@@ -51,6 +52,14 @@ export type ForgeAgentSystemInputOpts = {
 
 const SECTION = "\n\n---\n\n";
 
+function isDesignManifestInjectionEnabled(): boolean {
+  try {
+    return Deno.env.get("FORGE_DESIGN_MANIFEST") !== "0";
+  } catch {
+    return true;
+  }
+}
+
 /** System prompt enxuto — pedido do usuário vem por último nas messages, não aqui. */
 export function buildForgeAgentSystemInput(opts: ForgeAgentSystemInputOpts): string {
   const templateId = (opts.projectTemplate ?? "vite-react") as ProjectTemplateId;
@@ -72,7 +81,12 @@ export function buildForgeAgentSystemInput(opts: ForgeAgentSystemInputOpts): str
     stackBlock,
   ];
 
-  if (WEB_UI_TEMPLATES.has(templateId)) parts.push(DESIGN_GUIDE);
+  if (WEB_UI_TEMPLATES.has(templateId)) {
+    parts.push(DESIGN_GUIDE);
+    if (isDesignManifestInjectionEnabled()) {
+      parts.push(buildDesignManifestSummary());
+    }
+  }
   if (opts.skillPrompt?.trim()) parts.push(opts.skillPrompt.trim());
   if (opts.sessionAddon?.trim()) parts.push(opts.sessionAddon.trim());
   parts.push(opts.planMode ? VIBE_PLAN_TAIL : VIBE_EXECUTE_TAIL);
