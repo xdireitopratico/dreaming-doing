@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 import { COMPOSITIONS, findCompositions, compositionCatalogSummary } from "./index";
 
 describe("Composition Catalog", () => {
-  it("tem 11 composições definidas", () => {
-    expect(COMPOSITIONS.length).toBe(11);
+  it("tem 15 composições definidas", () => {
+    expect(COMPOSITIONS.length).toBe(15);
   });
 
   it("cada composição tem campos obrigatórios", () => {
@@ -68,7 +68,9 @@ describe("Composition Catalog", () => {
     const validTechniques = ["scroll-reveal", "grain-texture-overlay", "parallax-depth",
       "kinetic-typography", "spotlight-cursor", "animated-mesh-background",
       "sticky-stack", "stagger", "glassmorphism-layers", "magnetic-interaction",
-      "tilt-hover", "infinite-marquee", "count-up-metrics"];
+      "tilt-hover", "infinite-marquee", "count-up-metrics", "section-tabs-visual",
+      "process-steps-scroll", "smooth-scroll-lenis", "logo-marquee-social-proof",
+      "interactive-demo-embed"];
     for (const comp of COMPOSITIONS) {
       for (const t of comp.techniques) {
         expect(validTechniques).toContain(t);

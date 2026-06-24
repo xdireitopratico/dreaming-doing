@@ -8,6 +8,8 @@ import {
   scanProjectForLandingQuality,
   type DesignViolation,
 } from "./design-enforcement.ts";
+import { validateDesignImplementation } from "./design-validate.ts";
+import type { DesignPlanField } from "./types.ts";
 
 export interface ObservationResult {
   passed: boolean;
@@ -112,10 +114,15 @@ function makeBudgetGate(budgetExceeded: BudgetChecker): {
 export class RuntimeObserver {
   private reg: ToolRegistry;
   private fileCache: Map<string, string> | null;
+  private approvedDesign?: DesignPlanField;
 
   constructor(reg: ToolRegistry, fileCache?: Map<string, string> | null) {
     this.reg = reg;
     this.fileCache = fileCache ?? null;
+  }
+
+  setApprovedDesign(design?: DesignPlanField): void {
+    this.approvedDesign = design;
   }
 
   async observe(budgetExceeded?: () => boolean): Promise<ObservationResult> {
@@ -354,6 +361,23 @@ export class RuntimeObserver {
 
       designViolations.push(...scanProjectForLandingQuality(fileContents));
 
+      if (this.approvedDesign && fileContents.size > 0) {
+        const craft = validateDesignImplementation({
+          expected: {
+            compositions: this.approvedDesign.compositions ?? [],
+            composition_exports: this.approvedDesign.composition_exports ?? [],
+            techniques: this.approvedDesign.techniques ?? [],
+          },
+          files: fileContents,
+        });
+        if (!craft.pass) {
+          designViolations.push({
+            file: "design-validate",
+            message: craft.feedback,
+          });
+        }
+      }
+
       // 3. Verifica tokens @theme no CSS (usa cache ou grep como fallback)
       let hasThemeTokens = false;
       for (const [path, code] of this.fileCache ?? []) {
@@ -395,7 +419,11 @@ export class RuntimeObserver {
       /* design check é best-effort — silencia erros */
     }
 
-    const blocking = designViolations.filter((v) => v.message === INVALID_FORGE_UI_IMPORT_MESSAGE);
+    const blocking = designViolations.filter(
+      (v) =>
+        v.message === INVALID_FORGE_UI_IMPORT_MESSAGE ||
+        (this.approvedDesign != null && v.file === "design-validate"),
+    );
     return {
       name: "design-system",
       ok: blocking.length === 0,

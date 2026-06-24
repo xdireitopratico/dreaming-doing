@@ -7,6 +7,7 @@ import type {
   ChatMessage,
   ChatResponse,
   LLMProvider,
+  DesignPlanField,
   PlanStep,
   ProposedPlan,
   ToolDefinition,
@@ -84,6 +85,7 @@ export class AgentLoop {
   private approvedPlanBuild: boolean;
   private skipConversationalGate: boolean;
   private approvedPlanSteps: PlanStep[];
+  private approvedPlanDesign?: DesignPlanField;
   private narration: NarrationPhase;
   readonly mutable = createAgentLoopMutableState();
   private readonly planStreamState: PlanModeStreamState = {
@@ -115,6 +117,7 @@ export class AgentLoop {
 
   private thinkingStreamStartedAt: number | null;
   private touchedPaths: Set<string>;
+  private designReadPathsDone = new Set<string>();
   private buildFixResume: boolean;
   /** FSM state tracking (FORGE 2.0) — validado a cada transição de fase */
   private fsmState: AgentStateData;
@@ -167,6 +170,7 @@ export class AgentLoop {
     this.approvedPlanBuild = options?.approvedPlanBuild ?? false;
     this.skipConversationalGate = resolveSkipConversationalGate(options);
     this.approvedPlanSteps = options?.planSteps ?? [];
+    this.approvedPlanDesign = options?.approvedPlanDesign;
     this.originalUserRequest = resolveLoopOriginalUserRequest(state.messages, options);
 
     this.thinkingStreamStartedAt = null;
@@ -193,6 +197,7 @@ export class AgentLoop {
     this.runStartTime = Date.now();
     this.router = new ModelRouter(injectedKeys, routerOverrides, options?.resolvedMainCfg);
     this.observer = new RuntimeObserver(reg, this.fileContentCache);
+    this.observer.setApprovedDesign(this.approvedPlanDesign);
     this.skills = new SkillRegistry();
     this.compression = new CompressionManager(this.configuredModel(), (type, data) =>
       this.emitter.emit(type, data),
@@ -329,6 +334,7 @@ export class AgentLoop {
         this.maxStepsLimit = limit;
       },
       buildFixResume: this.buildFixResume,
+      designReadPathsDone: this.designReadPathsDone,
       fsmState: this.fsmState,
       preferences: this.preferences,
       connectorKeys: this.connectorKeys,

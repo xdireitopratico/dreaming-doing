@@ -30,6 +30,7 @@ export type LoopOrchestratorHost = {
   maxStepsLimit: number;
   setMaxStepsLimit: (limit: number) => void;
   buildFixResume: boolean;
+  designReadPathsDone: Set<string>;
   fsmState: AgentStateData;
   preferences: AgentPreferencesPayload | null;
   connectorKeys: Record<string, string>;
@@ -89,7 +90,10 @@ export function buildOrchestratorDeps(
     runPlanModeAgentTurn: (model) => host.runPlanModeAgentTurn(model),
     finishPlanProposal: (plan) => host.finishPlanProposal(plan),
     runBuildExecute: (used, model, step) =>
-      runBuildExecutePhase(host.bindings.buildExecute(used, model), step),
+      runBuildExecutePhase(
+        host.bindings.buildExecute(used, model, host.designReadPathsDone),
+        step,
+      ),
     buildFixResume: host.buildFixResume,
   };
 }

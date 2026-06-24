@@ -1,7 +1,7 @@
 // runtime/loop-options.ts — Opções do AgentLoop (Fase 2.3)
 import type { AgentPreferencesPayload } from "../connector-keys.ts";
 import type { ProviderConfig } from "../providers.ts";
-import type { LoopPhase, PlanStep } from "../types.ts";
+import type { DesignPlanField, LoopPhase, PlanStep } from "../types.ts";
 
 export type AgentLoopOptions = {
   maxSteps?: number;
@@ -21,6 +21,7 @@ export type AgentLoopOptions = {
   planSummary?: string;
   planHeadline?: string;
   planSteps?: PlanStep[];
+  approvedPlanDesign?: DesignPlanField;
   buildFixResume?: boolean;
   resolvedMainCfg?: ProviderConfig;
   preferences?: AgentPreferencesPayload;

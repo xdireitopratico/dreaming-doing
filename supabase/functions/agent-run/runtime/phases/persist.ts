@@ -344,6 +344,7 @@ export async function persistPlanFinal(
     planOutOfScope: plan.outOfScope ?? null,
     planPhases: plan.phases ?? null,
     planSteps: plan.steps,
+    design: plan.design ?? null,
     finishedAt: new Date().toISOString(),
     cardSnapshot,
     narrationText:

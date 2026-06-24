@@ -14,6 +14,59 @@ export const NO_CONTENT_NUDGE = 3;
 export const EXECUTE_MAX_RETRIES = 3;
 export const EXECUTE_MAX_LLM_RETRIES = 3;
 
+const UI_PATCH_RE = /\.(tsx|jsx|css)$/i;
+
+export function normalizeDesignReadPath(path: string): string {
+  return path.replace(/^\//, "").trim();
+}
+
+export function isUiPatchCall(call: ToolCall): boolean {
+  if (call.name !== "fs_write" && call.name !== "fs_edit") return false;
+  const filePath = String(call.arguments.path ?? "");
+  return UI_PATCH_RE.test(filePath);
+}
+
+export function recordDesignReadPath(
+  call: ToolCall,
+  done: Set<string>,
+): void {
+  if (call.name !== "fs_read" && call.name !== "fs_read_many") return;
+  if (call.name === "fs_read") {
+    const p = normalizeDesignReadPath(String(call.arguments.path ?? ""));
+    if (p) done.add(p);
+    return;
+  }
+  const paths = call.arguments.paths;
+  if (Array.isArray(paths)) {
+    for (const p of paths) {
+      if (typeof p === "string" && p.trim()) done.add(normalizeDesignReadPath(p));
+    }
+  }
+}
+
+export function assertDesignReadsDone(input: {
+  readPaths?: string[];
+  readsDone: Set<string>;
+  patchCalls: ToolCall[];
+}): { ok: boolean; missing: string[]; message: string } {
+  const required = (input.readPaths ?? [])
+    .map(normalizeDesignReadPath)
+    .filter(Boolean);
+  if (required.length === 0 || !input.patchCalls.some(isUiPatchCall)) {
+    return { ok: true, missing: [], message: "" };
+  }
+  const missing = required.filter((p) => !input.readsDone.has(p));
+  if (missing.length === 0) {
+    return { ok: true, missing: [], message: "" };
+  }
+  return {
+    ok: false,
+    missing,
+    message:
+      `Bloqueado: leia com fs_read antes de patch UI — paths pendentes: ${missing.join(", ")}`,
+  };
+}
+
 export function isActionableIntent(type: IntentAnalysis["type"] | undefined): boolean {
   return (
     type === "modify" ||

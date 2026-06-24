@@ -240,6 +240,27 @@ export const planApprove = createServerFn({ method: "POST" })
       data.enabledMcpIds ??
       (Array.isArray(sourceMeta.enabledMcpIds) ? (sourceMeta.enabledMcpIds as string[]) : []);
 
+    const { data: planMsgsEarly } = await supabase
+      .from("messages")
+      .select("meta")
+      .eq("conversation_id", run.conversation_id)
+      .eq("role", "assistant")
+      .order("created_at", { ascending: false })
+      .limit(30);
+    const planMsgEarly = (planMsgsEarly ?? []).find((m) => {
+      const meta = (m.meta ?? {}) as Record<string, unknown>;
+      return meta.runId === runId && meta.planId === planId;
+    });
+    const planMsgMeta = (planMsgEarly?.meta ?? {}) as Record<string, unknown>;
+    const approvedDesign =
+      planMsgMeta.design && typeof planMsgMeta.design === "object"
+        ? planMsgMeta.design
+        : (() => {
+            const card = planMsgMeta.cardSnapshot as Record<string, unknown> | undefined;
+            const pending = card?.pendingPlan as Record<string, unknown> | undefined;
+            return pending?.design && typeof pending.design === "object" ? pending.design : undefined;
+          })();
+
     const now = new Date().toISOString();
     const { data: newRun, error: insertErr } = await supabase
       .from("agent_runs")
@@ -257,6 +278,7 @@ export const planApprove = createServerFn({ method: "POST" })
           planDocument,
           planSummary: planDocument,
           steps: (steps ?? []) as unknown as never,
+          design: approvedDesign,
           preferences: (preferences ?? {}) as Record<string, unknown>,
           sessionKind,
           enabledSkillIds,

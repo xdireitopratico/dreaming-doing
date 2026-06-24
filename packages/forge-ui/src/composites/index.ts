@@ -30,3 +30,7 @@ export { SpotlightShowcaseGrid, type SpotlightShowcaseGridProps, type SpotlightC
 export { ParallaxProductShowcase, type ParallaxProductShowcaseProps } from "../compositions/opinionated/ParallaxProductShowcase";
 export { GlassNavFloating, type GlassNavFloatingProps, type GlassNavLink } from "../compositions/opinionated/GlassNavFloating";
 export { GrainArtisanalOverlay, type GrainArtisanalOverlayProps } from "../compositions/opinionated/GrainArtisanalOverlay";
+export { SectionTabsFeatureLanes, type SectionTabsFeatureLanesProps, type FeatureLane } from "../compositions/opinionated/SectionTabsFeatureLanes";
+export { ProcessStepsHowItWorks, type ProcessStepsHowItWorksProps, type ProcessStep } from "../compositions/opinionated/ProcessStepsHowItWorks";
+export { FAQAccordionCraft, type FAQAccordionCraftProps, type FAQItem } from "../compositions/opinionated/FAQAccordionCraft";
+export { InteractiveHeroDemo, type InteractiveHeroDemoProps } from "../compositions/opinionated/InteractiveHeroDemo";

@@ -44,6 +44,9 @@ export interface DesignPlanField {
   anti_patterns?: string[];
   synthesis_reasoning?: string;
   relevant_dnas?: string[];
+  compositions?: string[];
+  composition_exports?: string[];
+  read_paths?: string[];
 }
 
 export interface PendingPlan {
@@ -309,6 +312,15 @@ function parseDesignPlanField(d: Record<string, unknown>): DesignPlanField {
       typeof d.synthesis_reasoning === "string" ? d.synthesis_reasoning : undefined,
     relevant_dnas: Array.isArray(d.relevant_dnas)
       ? (d.relevant_dnas as unknown[]).filter((x): x is string => typeof x === "string")
+      : undefined,
+    compositions: Array.isArray(d.compositions)
+      ? (d.compositions as unknown[]).filter((x): x is string => typeof x === "string")
+      : undefined,
+    composition_exports: Array.isArray(d.composition_exports)
+      ? (d.composition_exports as unknown[]).filter((x): x is string => typeof x === "string")
+      : undefined,
+    read_paths: Array.isArray(d.read_paths)
+      ? (d.read_paths as unknown[]).filter((x): x is string => typeof x === "string")
       : undefined,
   };
 }

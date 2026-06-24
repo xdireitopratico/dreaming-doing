@@ -101,6 +101,7 @@ export type AgentLoopHost = {
   originalUserRequest: string;
   approvedPlanBuild: boolean;
   approvedPlanSteps: PlanStep[];
+  approvedPlanDesign?: import("../types.ts").DesignPlanField;
   buildFixResume: boolean;
   planStreamState: PlanModeStreamState;
   fileContentCache: Map<string, string>;
@@ -158,6 +159,7 @@ export type AgentLoopDepsContext = {
   originalUserRequest: string;
   approvedPlanBuild: boolean;
   approvedPlanSteps: PlanStep[];
+  approvedPlanDesign?: import("../types.ts").DesignPlanField;
   buildFixResume: boolean;
   planStreamState: PlanModeStreamState;
   fileContentCache: Map<string, string>;
@@ -312,11 +314,14 @@ export function buildExecuteDeps(
   ctx: AgentLoopDepsContext,
   toolsUsed: Set<string>,
   executionModel: LLMProvider,
+  designReadPathsDone: Set<string>,
 ): BuildExecuteDeps {
   return {
     robinActive: ctx.robinActive,
     approvedPlanBuild: ctx.approvedPlanBuild,
     approvedPlanSteps: ctx.approvedPlanSteps,
+    approvedPlanDesign: ctx.approvedPlanDesign,
+    designReadPathsDone,
     getApprovedPlanStepIndex: ctx.getApprovedPlanStepIndex,
     setApprovedPlanStepIndex: ctx.setApprovedPlanStepIndex,
     buildFixResume: ctx.buildFixResume,
@@ -432,6 +437,7 @@ export function createDepsContext(
     originalUserRequest: host.originalUserRequest,
     approvedPlanBuild: host.approvedPlanBuild,
     approvedPlanSteps: host.approvedPlanSteps,
+    approvedPlanDesign: host.approvedPlanDesign,
     buildFixResume: host.buildFixResume,
     planStreamState: host.planStreamState,
     fileContentCache: host.fileContentCache,
@@ -496,7 +502,11 @@ export type LoopBindings = {
     toolsUsed: Set<string>,
     options?: { buildFix?: boolean },
   ) => Promise<ResumableChunkResult>;
-  buildExecute: (toolsUsed: Set<string>, executionModel: LLMProvider) => BuildExecuteDeps;
+  buildExecute: (
+    toolsUsed: Set<string>,
+    executionModel: LLMProvider,
+    designReadPathsDone: Set<string>,
+  ) => BuildExecuteDeps;
   buildPlanTurn: (skillPrompt: string) => PlanTurnDeps;
   planTurnFinish: () => PlanTurnFinishDeps;
 };
@@ -517,7 +527,8 @@ export function createLoopBindings(
     touchHeartbeat: () => touchHeartbeat(infraDeps()),
     returnResumableChunk: (steps, used, options) =>
       returnResumableChunk(infraDeps(), steps, used, options),
-    buildExecute: (toolsUsed, model) => buildExecuteDeps(deps(), toolsUsed, model),
+    buildExecute: (toolsUsed, model, designReadPathsDone) =>
+      buildExecuteDeps(deps(), toolsUsed, model, designReadPathsDone),
     buildPlanTurn: (skillPrompt) => buildPlanTurnDeps(deps(), skillPrompt),
     planTurnFinish: () => buildPlanTurnFinishDeps(deps()),
   };

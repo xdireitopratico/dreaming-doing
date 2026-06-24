@@ -208,7 +208,7 @@ Deno.test("createLoopBindings — buildExecute repassa host state", () => {
   const bindings = createLoopBindings(host, 60_000);
   const toolsUsed = new Set(["fs_write"]);
   const model = { chat: async () => ({ content: "" }) };
-  const exec = bindings.buildExecute(toolsUsed, model);
+  const exec = bindings.buildExecute(toolsUsed, model, new Set());
   assertEquals(exec.approvedPlanBuild, true);
   assertEquals(exec.projectTemplate, "nextjs");
   assertEquals(exec.toolsUsed, toolsUsed);

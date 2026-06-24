@@ -11,6 +11,11 @@ import { INFINITE_MARQUEE } from "./infinite-marquee";
 import { ANIMATED_MESH_BACKGROUND } from "./animated-mesh-background";
 import { GLASSMORPHISM_LAYERS } from "./glassmorphism-layers";
 import { GRAIN_TEXTURE_OVERLAY } from "./grain-texture-overlay";
+import { SMOOTH_SCROLL_LENIS } from "./smooth-scroll-lenis";
+import { SECTION_TABS_VISUAL } from "./section-tabs-visual";
+import { PROCESS_STEPS_SCROLL } from "./process-steps-scroll";
+import { LOGO_MARQUEE_SOCIAL_PROOF } from "./logo-marquee-social-proof";
+import { INTERACTIVE_DEMO_EMBED } from "./interactive-demo-embed";
 
 export type { Technique } from "./types";
 
@@ -28,6 +33,11 @@ export const TECHNIQUES: Technique[] = [
   ANIMATED_MESH_BACKGROUND,
   GLASSMORPHISM_LAYERS,
   GRAIN_TEXTURE_OVERLAY,
+  SMOOTH_SCROLL_LENIS,
+  SECTION_TABS_VISUAL,
+  PROCESS_STEPS_SCROLL,
+  LOGO_MARQUEE_SOCIAL_PROOF,
+  INTERACTIVE_DEMO_EMBED,
 ];
 
 export const TECHNIQUE_BY_ID = Object.fromEntries(

@@ -10,13 +10,17 @@ export interface ExtractToolsContext {
   supabase: SupabaseClient;
   userId: string;
   projectId: string;
+  planMode?: boolean;
   sandboxExecUrl?: string;
   sandboxToken?: string;
   /** Chaves de conectores do usuário (para passar LLM config à extração) */
   connectorKeys: Record<string, string>;
 }
 
+const PLAN_EXTRACT_DNA_QUOTA = 2;
+
 export function registerExtractTools(reg: ToolRegistry, ctx: ExtractToolsContext): void {
+  let planExtractCalls = 0;
   reg.register(
     {
       name: "extract_design_dna",
@@ -92,7 +96,20 @@ export function registerExtractTools(reg: ToolRegistry, ctx: ExtractToolsContext
           };
         }
 
-        const depth = (args.depth as string) ?? "shallow";
+        if (ctx.planMode) {
+          planExtractCalls++;
+          if (planExtractCalls > PLAN_EXTRACT_DNA_QUOTA) {
+            return {
+              toolCallId: "",
+              ok: false,
+              error: `Quota Plan: máximo ${PLAN_EXTRACT_DNA_QUOTA} chamadas extract_design_dna por run`,
+              output: null,
+            };
+          }
+        }
+
+        let depth = (args.depth as string) ?? "shallow";
+        if (ctx.planMode) depth = "shallow";
         const categories = Array.isArray(args.categories) ? args.categories : undefined;
 
         // Deep mode requer sandbox — só disponível no Build

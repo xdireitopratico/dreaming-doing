@@ -29,7 +29,7 @@ Deno.test("formatClarifyMessage monta markdown com opções", () => {
 });
 
 Deno.test("formatClarifyMessage fallback sem args úteis", () => {
-  assertEquals(formatClarifyMessage({}), "Preciso de mais um detalhe para continuar.");
+  assertEquals(formatClarifyMessage({}), "");
 });
 
 Deno.test("proposedPlanFromToolArgs exige 2-7 passos", () => {
@@ -121,6 +121,31 @@ Deno.test("mergePlanModeToolDefinitions oculta patch e mantém shell", () => {
   for (const hidden of PLAN_MODE_PATCH_TOOLS) {
     assertEquals(merged.some((d) => d.name === hidden), false);
   }
+});
+
+Deno.test("proposedPlanFromToolArgs persiste design com compositions e read_paths", () => {
+  const plan = proposedPlanFromToolArgs({
+    summary: "Landing SaaS",
+    markdown: "## Plano",
+    steps: [{ description: "Hero editorial" }, { description: "Seção features" }],
+    design: {
+      voice: ["swiss", "editorial"],
+      moment: "Hero cinematic com spotlight",
+      techniques: ["parallax-depth", "scroll-reveal"],
+      compositions: ["hero-cinematic-spotlight"],
+      composition_exports: ["HeroCinematicSpotlight"],
+      read_paths: ["packages/forge-ui/src/compositions/opinionated/HeroCinematicSpotlight.tsx"],
+    },
+  });
+  assertEquals(plan?.design?.compositions, ["hero-cinematic-spotlight"]);
+  assertEquals(plan?.design?.read_paths?.length, 1);
+});
+
+Deno.test("CREATE_PLAN_TOOL schema expõe design", () => {
+  const defs = getMetaToolDefinitions(true);
+  const createPlan = defs.find((d) => d.name === "create_plan");
+  const props = (createPlan?.parameters as { properties?: Record<string, unknown> })?.properties;
+  assertEquals(typeof props?.design, "object");
 });
 
 Deno.test("mergeExecutionToolDefinitions deduplica meta tools", () => {

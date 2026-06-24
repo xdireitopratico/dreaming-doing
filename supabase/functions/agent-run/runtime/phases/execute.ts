@@ -20,6 +20,7 @@ import {
 import { isAndroidNativePath, isBuildCommand } from "../loop-config.ts";
 import type { PlanTurnRunResult, PlanTurnEmit } from "./plan-turn.ts";
 import {
+  assertDesignReadsDone,
   buildStructuredToolContent,
   computeFilePreDiff,
   computeForceTools,
@@ -27,6 +28,8 @@ import {
   EXECUTE_MAX_LLM_RETRIES,
   EXECUTE_MAX_RETRIES,
   isActionableIntent,
+  isUiPatchCall,
+  recordDesignReadPath,
   shouldEnforceNoToolCalls,
   shouldSuggestStackFork,
   updateReadOnlyTracker,
@@ -35,6 +38,7 @@ import type {
   AgentState,
   ChatMessage,
   ChatResponse,
+  DesignPlanField,
   LLMProvider,
   PlanStep,
   ToolCall,
@@ -49,6 +53,8 @@ export type BuildExecuteDeps = {
   robinActive: boolean;
   approvedPlanBuild: boolean;
   approvedPlanSteps: PlanStep[];
+  approvedPlanDesign?: DesignPlanField;
+  designReadPathsDone: Set<string>;
   getApprovedPlanStepIndex: () => number;
   setApprovedPlanStepIndex: (index: number) => void;
   buildFixResume: boolean;
@@ -227,6 +233,7 @@ export async function runBuildExecutePhase(
       const executeInstruction = buildExecuteInstruction(deps.originalUserRequest, {
         loopStep,
         buildFixResume: deps.buildFixResume,
+        design: deps.approvedPlanDesign,
       });
       const actionableIntent = isActionableIntent(deps.state.intent?.type);
       const forceTools = computeForceTools({
@@ -429,6 +436,22 @@ export async function runBuildExecutePhase(
 
       const liveMsgId = await deps.persistAssistantStep(response);
 
+      const readGate = assertDesignReadsDone({
+        readPaths: deps.approvedPlanDesign?.read_paths,
+        readsDone: deps.designReadPathsDone,
+        patchCalls: response.tool_calls,
+      });
+      if (!readGate.ok) {
+        deps.state.messages.push({
+          role: "user",
+          content: readGate.message,
+        });
+        if (liveMsgId) {
+          await deps.updateAssistantStep(liveMsgId, response, [], loopStep);
+        }
+        continue;
+      }
+
       const execResults = await parallelExecute(response.tool_calls, async (call) => {
         deps.toolsUsed.add(call.name);
         const preDiff = computeFilePreDiff(call, deps.fileContentCache);
@@ -439,6 +462,7 @@ export async function runBuildExecutePhase(
           toolCallId: call.id,
         });
         const result = await deps.reg.execute(call);
+        if (result.ok) recordDesignReadPath(call, deps.designReadPathsDone);
         deps.emit("tool_done", {
           name: call.name,
           toolCallId: call.id,

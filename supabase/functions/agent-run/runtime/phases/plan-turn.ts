@@ -31,6 +31,7 @@ import type {
 } from "../../types.ts";
 import { LoopPhase } from "../../types.ts";
 import { PLAN_OPENING_FALLBACK } from "../phase-messages.ts";
+import { enrichProposedPlanDesign } from "../../plan-design-enrich.ts";
 
 export const MAX_PLAN_EXPLORE = 10;
 
@@ -515,7 +516,12 @@ export async function runPlanModeAgentTurn(
           "create_plan inválido",
         );
       }
-      return await finishPlanProposal(finishDeps, proposed, [...toolsUsed]);
+      const enriched = enrichProposedPlanDesign(
+        proposed,
+        deps.originalUserRequest || proposed.summary,
+        deps.projectTemplate,
+      );
+      return await finishPlanProposal(finishDeps, enriched, [...toolsUsed]);
     }
 
     if (clarifyCall && execCalls.length === 0) {

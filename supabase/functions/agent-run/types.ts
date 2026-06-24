@@ -141,6 +141,7 @@ export interface DesignReference {
   url: string;
   title?: string;
   screenshot_url?: string;
+  screenshot_base64?: string;
   extracted_dna?: string;
 }
 
@@ -163,6 +164,12 @@ export interface DesignPlanField {
   auto_check?: { id: string; answer: string; pass: boolean }[];
   /** DesignDNAs relevantes do catálogo (IDs). */
   relevant_dnas?: string[];
+  /** IDs de composições opinionated (manifest). */
+  compositions?: string[];
+  /** Exports React das composições escolhidas. */
+  composition_exports?: string[];
+  /** Paths obrigatórios para fs_read antes do 1º patch UI. */
+  read_paths?: string[];
 }
 
 export interface ProposedPlan {

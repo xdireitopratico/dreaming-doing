@@ -109,6 +109,33 @@ export const CREATE_PLAN_TOOL: ToolDefinition = {
           required: ["description"],
         },
       },
+      design: {
+        type: "object",
+        description: "Direção de design (projetos com UI) — voice, moment, techniques, compositions, read_paths.",
+        properties: {
+          voice: { type: "array", items: { type: "string" } },
+          moment: { type: "string" },
+          techniques: { type: "array", items: { type: "string" } },
+          mood: { type: "string" },
+          compositions: { type: "array", items: { type: "string" } },
+          composition_exports: { type: "array", items: { type: "string" } },
+          relevant_dnas: { type: "array", items: { type: "string" } },
+          read_paths: { type: "array", items: { type: "string" } },
+          anti_patterns: { type: "array", items: { type: "string" } },
+          synthesis_reasoning: { type: "string" },
+          references: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                url: { type: "string" },
+                title: { type: "string" },
+                screenshot_url: { type: "string" },
+              },
+            },
+          },
+        },
+      },
     },
     required: ["summary", "steps", "markdown"],
   },
@@ -280,6 +307,15 @@ export function proposedPlanFromToolArgs(
             }))
             .filter((r) => r.url)
         : [];
+      const compositions = Array.isArray(d.compositions)
+        ? (d.compositions as unknown[]).filter((x): x is string => typeof x === "string")
+        : undefined;
+      const composition_exports = Array.isArray(d.composition_exports)
+        ? (d.composition_exports as unknown[]).filter((x): x is string => typeof x === "string")
+        : undefined;
+      const read_paths = Array.isArray(d.read_paths)
+        ? (d.read_paths as unknown[]).filter((x): x is string => typeof x === "string")
+        : undefined;
       design = {
         voice,
         moment,
@@ -293,6 +329,9 @@ export function proposedPlanFromToolArgs(
         relevant_dnas: Array.isArray(d.relevant_dnas)
           ? (d.relevant_dnas as unknown[]).filter((x): x is string => typeof x === "string")
           : undefined,
+        compositions: compositions?.length ? compositions : undefined,
+        composition_exports: composition_exports?.length ? composition_exports : undefined,
+        read_paths: read_paths?.length ? read_paths : undefined,
       };
     }
   }

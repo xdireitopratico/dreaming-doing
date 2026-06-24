@@ -25,11 +25,13 @@ import { registerMcpForgeTools } from "./tools/mcp-forge.ts";
 import { registerDeployTool } from "./tools/deploy.ts";
 import { registerWebTools } from "./tools/web.ts";
 import { registerExtractTools } from "./tools/extract.ts";
+import { registerDesignTools } from "./tools/design.ts";
 import { restoreExecutionLogFromRows } from "./executionLogMeta.ts";
 import { loadCheckpoint } from "./checkpoint.ts";
 import { buildSandboxEnv } from "./sandbox-env.ts";
+import { buildDesignDirectiveBlock } from "./design-directive.ts";
 import { PLAN_APPROVED_PREFIX } from "./run-context.ts";
-import type { ChatMessage, PlanStep } from "./types.ts";
+import type { ChatMessage, DesignPlanField, PlanStep } from "./types.ts";
 import { logger } from "../_shared/logger.ts";
 
 export type AgentJobParams = {
@@ -121,49 +123,39 @@ function injectPlanApprovalMessage(
   return [...baseMessages, injected];
 }
 
-function buildDesignDirectiveBlock(designRaw: unknown): string {
-  if (!designRaw || typeof designRaw !== "object") return "";
-  const d = designRaw as Record<string, unknown>;
-  const voice = Array.isArray(d.voice) ? (d.voice as string[]).join(" + ") : "";
-  const moment = typeof d.moment === "string" ? d.moment : "";
-  const techniques = Array.isArray(d.techniques) ? (d.techniques as string[]).join(", ") : "";
-  const mood = typeof d.mood === "string" ? d.mood : "";
-  const reasoning = typeof d.synthesis_reasoning === "string" ? d.synthesis_reasoning : "";
-  const antiPatterns = Array.isArray(d.anti_patterns) ? (d.anti_patterns as string[]) : [];
-  const references = Array.isArray(d.references) ? (d.references as Record<string, unknown>[]) : [];
-
-  if (!voice && !moment) return "";
-
-  const lines: string[] = ["", "---", "## DIREÇÃO DE DESIGN APROVADA", ""];
-
-  if (voice) lines.push(`**Voice:** ${voice}`);
-  if (mood) lines.push(`**Mood:** ${mood}`);
-  if (moment) lines.push(`**Momento-memorável:** ${moment}`);
-  if (techniques) lines.push(`**Técnicas:** ${techniques}`);
-  if (reasoning) lines.push(`**Reasoning:** ${reasoning}`);
-
-  if (references.length > 0) {
-    lines.push("", "**Referências visuais:**");
-    for (const ref of references) {
-      const url = typeof ref.url === "string" ? ref.url : "";
-      const title = typeof ref.title === "string" ? ref.title : url;
-      if (url) lines.push(`- ${title} — ${url}`);
-    }
-  }
-
-  if (antiPatterns.length > 0) {
-    lines.push("", "**Anti-padrões a evitar:**");
-    for (const ap of antiPatterns) lines.push(`- ${ap}`);
-  }
-
-  lines.push(
-    "",
-    "Siga esta direção ao construir. Não improvise — execute a síntese aprovada.",
-    "---",
-    "",
-  );
-
-  return lines.join("\n");
+function coerceDesignPlanField(raw: unknown): DesignPlanField | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const d = raw as Record<string, unknown>;
+  const voice = Array.isArray(d.voice)
+    ? (d.voice as unknown[]).filter((x): x is string => typeof x === "string")
+    : [];
+  const moment = typeof d.moment === "string" ? d.moment.trim() : "";
+  const techniques = Array.isArray(d.techniques)
+    ? (d.techniques as unknown[]).filter((x): x is string => typeof x === "string")
+    : [];
+  if (!voice.length || !moment) return undefined;
+  return {
+    voice,
+    moment,
+    techniques,
+    mood: typeof d.mood === "string" ? d.mood : undefined,
+    compositions: Array.isArray(d.compositions)
+      ? (d.compositions as unknown[]).filter((x): x is string => typeof x === "string")
+      : undefined,
+    composition_exports: Array.isArray(d.composition_exports)
+      ? (d.composition_exports as unknown[]).filter((x): x is string => typeof x === "string")
+      : undefined,
+    relevant_dnas: Array.isArray(d.relevant_dnas)
+      ? (d.relevant_dnas as unknown[]).filter((x): x is string => typeof x === "string")
+      : undefined,
+    read_paths: Array.isArray(d.read_paths)
+      ? (d.read_paths as unknown[]).filter((x): x is string => typeof x === "string")
+      : undefined,
+    anti_patterns: Array.isArray(d.anti_patterns)
+      ? (d.anti_patterns as unknown[]).filter((x): x is string => typeof x === "string")
+      : undefined,
+    synthesis_reasoning: typeof d.synthesis_reasoning === "string" ? d.synthesis_reasoning : undefined,
+  };
 }
 
 function coercePlanStepsFromMeta(raw: unknown): PlanStep[] {
@@ -306,6 +298,7 @@ export async function executeAgentJob(
 
   const reg = new ToolRegistry();
   registerMetaTools(reg, { planMode });
+  registerDesignTools(reg);
   const projectTemplate = (project as { template?: string }).template ?? "vite-react";
   const projectMeta = ((project as { meta?: Record<string, unknown> }).meta ?? {}) as Record<
     string,
@@ -395,7 +388,7 @@ export async function executeAgentJob(
     preferences,
   });
 
-  // extract_design_dna — sandbox exec URL só no Build mode (sandbox ativo)
+  // extract_design_dna — shallow no Plan; deep no Build com sandbox
   const sandboxExecUrl = allocateSandbox
     ? `${Deno.env.get("SUPABASE_URL")}/functions/v1/prometheus-tool-executor`
     : undefined;
@@ -403,6 +396,7 @@ export async function executeAgentJob(
     supabase,
     userId,
     projectId,
+    planMode,
     sandboxExecUrl,
     sandboxToken: Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? undefined,
     connectorKeys,
@@ -486,6 +480,7 @@ export async function executeAgentJob(
                 : undefined,
           planHeadline: typeof preMeta.planHeadline === "string" ? preMeta.planHeadline : undefined,
           planSteps: coercePlanStepsFromMeta(preMeta.steps),
+          approvedPlanDesign: coerceDesignPlanField(preMeta.design),
           buildFixResume: preMeta.buildFix === true,
         },
   });

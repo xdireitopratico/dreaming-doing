@@ -40,6 +40,9 @@ export interface DesignPlanFieldPayload {
   synthesis_reasoning?: string;
   auto_check?: { id: string; answer: string; pass: boolean }[];
   relevant_dnas?: string[];
+  compositions?: string[];
+  composition_exports?: string[];
+  read_paths?: string[];
 }
 
 // ─── Discriminated union de eventos de stream ──────────────────────────────

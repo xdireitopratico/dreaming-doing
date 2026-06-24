@@ -2,7 +2,7 @@
 
 **Versão:** 2.1  
 **Data:** 2026-06-24  
-**Status:** Em implementação — commits direto em `main`  
+**Status:** Implementação concluída (fases A–I) — commits direto em `main`  
 **Horizonte:** ~24 meses sem redesign arquitetural
 
 ---
@@ -628,71 +628,71 @@ Legenda: `— ok feito` | `— pendente`
 
 | # | Tarefa | Status |
 |---|--------|--------|
-| D15 | Criar `design-resolve.ts` | — pendente |
-| D16 | Criar `design-resolve.test.ts` | — pendente |
-| D17 | Criar `tools/design.ts` | — pendente |
-| D18 | Registrar tools no factory/deps | — pendente |
+| D15 | Criar `design-resolve.ts` | — ok feito |
+| D16 | Criar `design-resolve.test.ts` | — ok feito |
+| D17 | Criar `tools/design.ts` | — ok feito |
+| D18 | Registrar tools no factory/deps | — ok feito |
 
 ### Fase E — Contrato do plano (6)
 
 | # | Tarefa | Status |
 |---|--------|--------|
-| E19 | Campo `design` no schema `CREATE_PLAN_TOOL` | — pendente |
-| E20 | Estender `DesignPlanField` em `types.ts` | — pendente |
-| E21 | Parser `compositions` + `read_paths` em `meta.ts` | — pendente |
-| E22 | Sync `agent-contract` + `_shared/agent-contract-events` | — pendente |
-| E23 | Parse em `src/lib/agent-progress.ts` | — pendente |
-| E24 | Teste `meta.test.ts` | — pendente |
+| E19 | Campo `design` no schema `CREATE_PLAN_TOOL` | — ok feito |
+| E20 | Estender `DesignPlanField` em `types.ts` | — ok feito |
+| E21 | Parser `compositions` + `read_paths` em `meta.ts` | — ok feito |
+| E22 | Sync `agent-contract` + `_shared/agent-contract-events` | — ok feito |
+| E23 | Parse em `src/lib/agent-progress.ts` | — ok feito |
+| E24 | Teste `meta.test.ts` | — ok feito |
 
 ### Fase F — Plan → Build (7)
 
 | # | Tarefa | Status |
 |---|--------|--------|
-| F25 | Auto-resolve em `plan-turn` quando pedido tem UI | — pendente |
-| F26 | Teste `plan-turn` (plano UI com design) | — pendente |
-| F27 | Expandir `buildDesignDirectiveBlock` em `run-job.ts` | — pendente |
-| F28 | Estender `buildExecuteInstruction` em `run-context.ts` | — pendente |
-| F29 | Passar `approvedDesign` no `execute.ts` | — pendente |
-| F30 | Wire `approvedDesign` em `deps-factory` / `loop.ts` | — pendente |
-| F31 | Teste `run-context` com bloco design | — pendente |
+| F25 | Auto-resolve em `plan-turn` quando pedido tem UI | — ok feito |
+| F26 | Teste `plan-turn` (plano UI com design) | — ok feito |
+| F27 | Expandir `buildDesignDirectiveBlock` em `run-job.ts` | — ok feito |
+| F28 | Estender `buildExecuteInstruction` em `run-context.ts` | — ok feito |
+| F29 | Passar `approvedDesign` no `execute.ts` | — ok feito |
+| F30 | Wire `approvedDesign` em `deps-factory` / `loop.ts` | — ok feito |
+| F31 | Teste `run-context` com bloco design | — ok feito |
 
 ### Fase G — Gates e observer (7)
 
 | # | Tarefa | Status |
 |---|--------|--------|
-| G32 | `assertDesignReadsDone()` em `execute-helpers.ts` | — pendente |
-| G33 | Gate no `execute.ts` antes do 1º patch UI | — pendente |
-| G34 | Teste `execute-helpers` (patch bloqueado) | — pendente |
-| G35 | Criar `design-validate.ts` | — pendente |
-| G36 | Criar `design-validate.test.ts` | — pendente |
-| G37 | Integrar validate no `observer.ts` | — pendente |
-| G38 | Passar `approvedDesign` para observer via deps | — pendente |
+| G32 | `assertDesignReadsDone()` em `execute-helpers.ts` | — ok feito |
+| G33 | Gate no `execute.ts` antes do 1º patch UI | — ok feito |
+| G34 | Teste `execute-helpers` (patch bloqueado) | — ok feito |
+| G35 | Criar `design-validate.ts` | — ok feito |
+| G36 | Criar `design-validate.test.ts` | — ok feito |
+| G37 | Integrar validate no `observer.ts` | — ok feito |
+| G38 | Passar `approvedDesign` para observer via deps | — ok feito |
 
 ### Fase H — DNA do usuário (2)
 
 | # | Tarefa | Status |
 |---|--------|--------|
-| H39 | Abrir `extract_design_dna` no Plan (quota) | — pendente |
-| H40 | Merge DNA extraído no `design-resolve` | — pendente |
+| H39 | Abrir `extract_design_dna` no Plan (quota) | — ok feito |
+| H40 | Merge DNA extraído no `design-resolve` | — ok feito |
 
 ### Fase I — Novas peças forge-ui (12)
 
 | # | Tarefa | Status |
 |---|--------|--------|
-| I41 | Técnica `smooth-scroll-lenis` | — pendente |
-| I42 | Técnica `section-tabs-visual` | — pendente |
-| I43 | Técnica `process-steps-scroll` | — pendente |
-| I44 | Técnica `logo-marquee-social-proof` | — pendente |
-| I45 | Composição `SectionTabsFeatureLanes` | — pendente |
-| I46 | Composição `ProcessStepsHowItWorks` | — pendente |
-| I47 | Composição `FAQAccordionCraft` | — pendente |
-| I48 | Composição `InteractiveHeroDemo` | — pendente |
-| I49 | Registrar exports (techniques + opinionated + composites) | — pendente |
-| I50 | Vitest das 4 composições | — pendente |
-| I51 | `node scripts/bundle-forge-ui-seed.mjs` | — pendente |
-| I52 | `npm run design:check` pós-expansão | — pendente |
+| I41 | Técnica `smooth-scroll-lenis` | — ok feito |
+| I42 | Técnica `section-tabs-visual` | — ok feito |
+| I43 | Técnica `process-steps-scroll` | — ok feito |
+| I44 | Técnica `logo-marquee-social-proof` | — ok feito |
+| I45 | Composição `SectionTabsFeatureLanes` | — ok feito |
+| I46 | Composição `ProcessStepsHowItWorks` | — ok feito |
+| I47 | Composição `FAQAccordionCraft` | — ok feito |
+| I48 | Composição `InteractiveHeroDemo` | — ok feito |
+| I49 | Registrar exports (techniques + opinionated + composites) | — ok feito |
+| I50 | Vitest das 4 composições | — ok feito |
+| I51 | `node scripts/bundle-forge-ui-seed.mjs` | — ok feito |
+| I52 | `npm run design:check` pós-expansão | — ok feito |
 
-**Total:** 52 tarefas | **Concluídas:** 14 | **Pendentes:** 38
+**Total:** 52 tarefas | **Concluídas:** 52 | **Pendentes:** 0
 
 ---
 

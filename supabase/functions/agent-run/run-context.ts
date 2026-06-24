@@ -1,6 +1,7 @@
 // run-context.ts — contexto da run (ex-qualify.ts: utilitários, não é fase qualify antiga).
 import { FORGE_CHAT_MARKDOWN } from "./chat-markdown.ts";
-import type { ChatMessage } from "./types.ts";
+import { buildDesignDirectiveFromField } from "./design-directive.ts";
+import type { ChatMessage, DesignPlanField } from "./types.ts";
 
 export const RESUME_PREFIX = "[Retomar]";
 export const PLAN_APPROVED_PREFIX = "[Plano aprovado]";
@@ -96,15 +97,8 @@ export type ExecuteInstructionOpts = {
   loopStep?: number;
   /** Retomada pós-falha de build — sem re-narração de intenção. */
   buildFixResume?: boolean;
-  /** Direção de design aprovada no plan (inclui referências visuais). */
-  design?: {
-    references?: Array<{
-      url: string;
-      title?: string;
-      screenshot_url?: string;
-      screenshot_base64?: string;
-    }>;
-  };
+  /** Direção de design aprovada no plan (pacote técnico completo). */
+  design?: DesignPlanField;
 };
 
 function executeCommunicationRules(isContinuation: boolean): string[] {
@@ -166,6 +160,11 @@ export function buildExecuteInstruction(
 
   if (referencesBlock) {
     baseParts.push("", referencesBlock);
+  }
+
+  const designBlock = buildDesignDirectiveFromField(opts?.design);
+  if (designBlock && loopStep === 1) {
+    baseParts.push(designBlock);
   }
 
   return baseParts.join("\n");

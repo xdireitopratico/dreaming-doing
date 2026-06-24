@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated_at": "2026-06-24T08:26:23.976Z",
+  "generated_at": "2026-06-24T08:35:43.678Z",
   "compositions_basic": [
     {
       "export": "BentoGrid",
@@ -286,6 +286,96 @@
       ],
       "code_path": "packages/forge-ui/src/compositions/opinionated/GrainArtisanalOverlay.tsx",
       "sandbox_read_path": "packages/forge-ui/src/compositions/opinionated/GrainArtisanalOverlay.tsx"
+    },
+    {
+      "id": "section-tabs-feature-lanes",
+      "name": "Section Tabs Feature Lanes",
+      "export": "SectionTabsFeatureLanes",
+      "moment": "Abas com preview visual por capacidade — Voice/Video/API lanes com swap animado",
+      "voice": [
+        "high-tech",
+        "swiss"
+      ],
+      "techniques": [
+        "section-tabs-visual",
+        "scroll-reveal",
+        "magnetic-interaction"
+      ],
+      "compatible_moods": [
+        "ocean",
+        "mono",
+        "neon",
+        "ember"
+      ],
+      "code_path": "packages/forge-ui/src/compositions/opinionated/SectionTabsFeatureLanes.tsx",
+      "sandbox_read_path": "packages/forge-ui/src/compositions/opinionated/SectionTabsFeatureLanes.tsx"
+    },
+    {
+      "id": "process-steps-how-it-works",
+      "name": "Process Steps How It Works",
+      "export": "ProcessStepsHowItWorks",
+      "moment": "Steps numerados revelados no scroll — narrativa sequencial how-it-works",
+      "voice": [
+        "swiss",
+        "editorial"
+      ],
+      "techniques": [
+        "process-steps-scroll",
+        "scroll-reveal",
+        "count-up-metrics"
+      ],
+      "compatible_moods": [
+        "ocean",
+        "mono",
+        "sand",
+        "forest"
+      ],
+      "code_path": "packages/forge-ui/src/compositions/opinionated/ProcessStepsHowItWorks.tsx",
+      "sandbox_read_path": "packages/forge-ui/src/compositions/opinionated/ProcessStepsHowItWorks.tsx"
+    },
+    {
+      "id": "faq-accordion-craft",
+      "name": "FAQ Accordion Craft",
+      "export": "FAQAccordionCraft",
+      "moment": "FAQ com accordion craft — conversão sem parecer template de suporte",
+      "voice": [
+        "editorial",
+        "minimal"
+      ],
+      "techniques": [
+        "scroll-reveal"
+      ],
+      "compatible_moods": [
+        "mono",
+        "sand",
+        "ocean",
+        "ember"
+      ],
+      "code_path": "packages/forge-ui/src/compositions/opinionated/FAQAccordionCraft.tsx",
+      "sandbox_read_path": "packages/forge-ui/src/compositions/opinionated/FAQAccordionCraft.tsx"
+    },
+    {
+      "id": "interactive-hero-demo",
+      "name": "Interactive Hero Demo",
+      "export": "InteractiveHeroDemo",
+      "moment": "Hero split com demo interativo embutido — produto visível, não só copy",
+      "voice": [
+        "high-tech",
+        "editorial"
+      ],
+      "techniques": [
+        "interactive-demo-embed",
+        "scroll-reveal",
+        "spotlight-cursor"
+      ],
+      "compatible_moods": [
+        "ocean",
+        "neon",
+        "mono",
+        "ember"
+      ],
+      "code_path": "packages/forge-ui/src/compositions/opinionated/InteractiveHeroDemo.tsx",
+      "sandbox_read_path": "packages/forge-ui/src/compositions/opinionated/InteractiveHeroDemo.tsx"
     }
   ],
   "techniques": [
@@ -325,11 +415,25 @@
       "sandbox_read_path": "packages/forge-ui/src/techniques/infinite-marquee.ts"
     },
     {
+      "id": "interactive-demo-embed",
+      "name": "InteractiveDemoEmbed",
+      "concept": "Demo embutido no hero — iframe, player ou widget interativo como prova imediata do produto.",
+      "file_path": "packages/forge-ui/src/techniques/interactive-demo-embed.ts",
+      "sandbox_read_path": "packages/forge-ui/src/techniques/interactive-demo-embed.ts"
+    },
+    {
       "id": "kinetic-typography",
       "name": "KineticTypography",
       "concept": "Tipografia animada — letras surgem escalonadas, máscara revela o título, brilho desliza. O hero ganha personalidade.",
       "file_path": "packages/forge-ui/src/techniques/kinetic-typography.ts",
       "sandbox_read_path": "packages/forge-ui/src/techniques/kinetic-typography.ts"
+    },
+    {
+      "id": "logo-marquee-social-proof",
+      "name": "LogoMarqueeSocialProof",
+      "concept": "Faixa dupla de logos/clientes com marquee infinito — densidade de prova social sem carousel pesado.",
+      "file_path": "packages/forge-ui/src/techniques/logo-marquee-social-proof.ts",
+      "sandbox_read_path": "packages/forge-ui/src/techniques/logo-marquee-social-proof.ts"
     },
     {
       "id": "magnetic-interaction",
@@ -346,11 +450,32 @@
       "sandbox_read_path": "packages/forge-ui/src/techniques/parallax-depth.ts"
     },
     {
+      "id": "process-steps-scroll",
+      "name": "ProcessStepsScroll",
+      "concept": "How-it-works com steps numerados revelados no scroll — narrativa sequencial, não grid estático.",
+      "file_path": "packages/forge-ui/src/techniques/process-steps-scroll.ts",
+      "sandbox_read_path": "packages/forge-ui/src/techniques/process-steps-scroll.ts"
+    },
+    {
       "id": "scroll-reveal",
       "name": "ScrollReveal",
       "concept": "Revelação escalonada ao entrar no viewport — elementos surgem em sequência com ritmo, não todos de uma vez.",
       "file_path": "packages/forge-ui/src/techniques/scroll-reveal.ts",
       "sandbox_read_path": "packages/forge-ui/src/techniques/scroll-reveal.ts"
+    },
+    {
+      "id": "section-tabs-visual",
+      "name": "SectionTabsVisual",
+      "concept": "Abas com preview visual — cada lane mostra screenshot/diagrama ao trocar (Voice/Video/Robotics).",
+      "file_path": "packages/forge-ui/src/techniques/section-tabs-visual.ts",
+      "sandbox_read_path": "packages/forge-ui/src/techniques/section-tabs-visual.ts"
+    },
+    {
+      "id": "smooth-scroll-lenis",
+      "name": "SmoothScrollLenis",
+      "concept": "Scroll inercial premium com Lenis — páginas marketing parecem produto craft, não template.",
+      "file_path": "packages/forge-ui/src/techniques/smooth-scroll-lenis.ts",
+      "sandbox_read_path": "packages/forge-ui/src/techniques/smooth-scroll-lenis.ts"
     },
     {
       "id": "spotlight-cursor",
@@ -750,7 +875,11 @@
     "SpotlightShowcaseGrid",
     "ParallaxProductShowcase",
     "GlassNavFloating",
-    "GrainArtisanalOverlay"
+    "GrainArtisanalOverlay",
+    "SectionTabsFeatureLanes",
+    "ProcessStepsHowItWorks",
+    "FAQAccordionCraft",
+    "InteractiveHeroDemo"
   ],
   "catalog_exports": [
     "BentoGrid",
@@ -773,6 +902,10 @@
     "ParallaxProductShowcase",
     "GlassNavFloating",
     "GrainArtisanalOverlay",
+    "SectionTabsFeatureLanes",
+    "ProcessStepsHowItWorks",
+    "FAQAccordionCraft",
+    "InteractiveHeroDemo",
     "Button",
     "Badge",
     "Avatar",

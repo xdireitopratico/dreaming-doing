@@ -62,6 +62,22 @@ Deno.test("buildExecuteInstruction passo 1 — contrato FASE 4 fechamento", () =
   assertEquals(text.includes("pergunta aberta"), true);
 });
 
+Deno.test("buildExecuteInstruction inclui bloco design no passo 1", () => {
+  const text = buildExecuteInstruction("landing padaria", {
+    loopStep: 1,
+    design: {
+      voice: ["organic", "editorial"],
+      moment: "Hero artesanal com grain",
+      techniques: ["grain-texture-overlay"],
+      compositions: ["hero-editorial-split"],
+      read_paths: ["packages/forge-ui/src/compositions/opinionated/HeroEditorialSplit.tsx"],
+    },
+  });
+  assertEquals(text.includes("DIREÇÃO DE DESIGN APROVADA"), true);
+  assertEquals(text.includes("HeroEditorialSplit"), true);
+  assertEquals(text.includes("fs_read OBRIGATÓRIO"), true);
+});
+
 Deno.test("buildExecuteInstruction buildFixResume — continuação sem ack", () => {
   const text = buildExecuteInstruction("corrigir build", { loopStep: 1, buildFixResume: true });
   assertEquals(text.includes("NÃO reconfirme"), true);
