@@ -8,6 +8,9 @@ type ServerEntry = {
 };
 
 let serverEntryPromise: Promise<ServerEntry> | undefined;
+let inngestHandlerPromise:
+  | Promise<(request: Request) => Promise<Response> | Response>
+  | undefined;
 
 async function getServerEntry(): Promise<ServerEntry> {
   if (!serverEntryPromise) {
@@ -16,6 +19,13 @@ async function getServerEntry(): Promise<ServerEntry> {
     );
   }
   return serverEntryPromise;
+}
+
+async function getInngestHandler(): Promise<(request: Request) => Promise<Response> | Response> {
+  if (!inngestHandlerPromise) {
+    inngestHandlerPromise = import("./inngest/handler").then((m) => m.inngestHandler);
+  }
+  return inngestHandlerPromise;
 }
 
 function brandedErrorResponse(): Response {
@@ -69,6 +79,12 @@ async function normalizeCatastrophicSsrResponse(response: Response): Promise<Res
 export default {
   async fetch(request: Request, env: unknown, ctx: unknown) {
     try {
+      const url = new URL(request.url);
+      if (url.pathname === "/api/inngest") {
+        const inngestHandler = await getInngestHandler();
+        return await inngestHandler(request);
+      }
+
       const handler = await getServerEntry();
       const response = await handler.fetch(request, env, ctx);
       return await normalizeCatastrophicSsrResponse(response);

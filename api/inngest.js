@@ -1,4 +1,27 @@
-import { inngestHandler as handler } from "../dist/server/inngest-handler.js";
+import { constants } from "node:fs";
+import { access } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
+
+const DIST_HANDLER_URL = new URL("../dist/server/inngest-handler.js", import.meta.url);
+const SRC_HANDLER_URL = new URL("../src/inngest/handler.ts", import.meta.url);
+
+let handlerPromise;
+
+async function resolveHandler() {
+  try {
+    await access(fileURLToPath(DIST_HANDLER_URL), constants.F_OK);
+    const mod = await import(/* @vite-ignore */ DIST_HANDLER_URL.href);
+    return mod.inngestHandler;
+  } catch {
+    const mod = await import(/* @vite-ignore */ SRC_HANDLER_URL.href);
+    return mod.inngestHandler;
+  }
+}
+
+function getHandler() {
+  handlerPromise ??= resolveHandler();
+  return handlerPromise;
+}
 
 function buildRequestUrl(req) {
   const raw = req.url ?? "/api/inngest";
@@ -12,6 +35,7 @@ function buildRequestUrl(req) {
 }
 
 export default async function inngestHandler(req, res) {
+  const handler = await getHandler();
   const host =
     req.headers["x-forwarded-host"] ||
     req.headers["host"] ||
