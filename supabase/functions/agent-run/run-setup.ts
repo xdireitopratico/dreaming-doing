@@ -5,7 +5,6 @@
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import {
   loadAgentPreferencesFromDb,
-  normalizeAgentPreferences,
 } from "./agent-preferences-db.ts";
 import {
   loadConnectorKeys,
@@ -112,19 +111,12 @@ export function hasUserLlmKeyFromKeys(
   );
 }
 
-/**
- * SSOT: profiles.agent_preferences.
- * Exceção: run.meta.smoke + meta.preferences (smoke CI — não polui o perfil).
- */
+/** SSOT absoluto: profiles.agent_preferences. */
 export async function resolveEffectiveAgentPreferences(
   supabase: SupabaseClient,
   userId: string,
-  runMeta?: Record<string, unknown> | null,
+  _runMeta?: Record<string, unknown> | null,
 ): Promise<AgentPreferencesPayload | undefined> {
-  if (runMeta?.smoke === true && runMeta.preferences) {
-    const fromRun = normalizeAgentPreferences(runMeta.preferences);
-    if (fromRun?.mode) return fromRun;
-  }
   return loadAgentPreferencesFromDb(supabase, userId);
 }
 
@@ -231,11 +223,16 @@ export async function resolveAgentProvider(
   }
 
   if (userWantsRobin) {
-    const poolKeys = await loadConnectorPools(supabase, userId, poolProvider);
+    const robinPoolProvider = poolProvider!;
+    const poolKeys = await loadConnectorPools(supabase, userId, robinPoolProvider);
     const robinPool = new RobinKeyPool(poolKeys);
-    const wire = defaultRobinModel(poolProvider, preferences?.robinPoolModelId);
-    const mainCfg = robinProviderConfig(poolProvider, poolKeys, preferences?.robinPoolModelId);
-    const envKeyName = wire.secretKey || `${poolProvider.toUpperCase()}_API_KEY`;
+    const wire = defaultRobinModel(robinPoolProvider, preferences?.robinPoolModelId);
+    const mainCfg = robinProviderConfig(
+      robinPoolProvider,
+      poolKeys,
+      preferences?.robinPoolModelId,
+    );
+    const envKeyName = wire.secretKey || `${robinPoolProvider.toUpperCase()}_API_KEY`;
     return {
       mainCfg,
       connectorKeys: { [envKeyName]: poolKeys[0]! },

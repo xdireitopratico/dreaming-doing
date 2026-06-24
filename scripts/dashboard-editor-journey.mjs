@@ -31,18 +31,13 @@ import { fileURLToPath } from "node:url";
 import { loadEnvLocal } from "./lib/load-env-local.mjs";
 import { buildSupabaseAuthStorage } from "./lib/supabase-auth-storage.mjs";
 import { resolveE2eCredentials } from "./lib/e2e-credentials.mjs";
-import {
-  E2E_AGENT_PREFERENCES,
-  hasDedicatedE2eLlmKey,
-  localStoragePrefsScript,
-  seedE2eAgentSetup,
-} from "./lib/e2e-agent-setup.mjs";
-
+import { hasDedicatedE2eLlmKey, seedE2eAgentSetup } from "./lib/e2e-agent-setup.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 loadEnvLocal();
 
-const BASE = process.argv.find((a) => a.startsWith("http")) ?? process.env.DEV_URL ?? "http://127.0.0.1:8080";
+const BASE =
+  process.argv.find((a) => a.startsWith("http")) ?? process.env.DEV_URL ?? "http://127.0.0.1:8080";
 const SUPABASE_URL = process.env.SUPABASE_URL ?? process.env.VITE_SUPABASE_URL ?? "";
 const ANON_KEY =
   process.env.SUPABASE_PUBLISHABLE_KEY ?? process.env.VITE_SUPABASE_PUBLISHABLE_KEY ?? "";
@@ -74,9 +69,13 @@ const PHASES_RAW = new Set(
 
 const PHASES = new Set(PHASES_RAW);
 
-if (PHASES_RAW.has("plan-dock") && process.env.E2E_PLAN_DOCK_REQUIRED === "1" && !hasDedicatedE2eLlmKey()) {
+if (
+  PHASES_RAW.has("plan-dock") &&
+  process.env.E2E_PLAN_DOCK_REQUIRED === "1" &&
+  !hasDedicatedE2eLlmKey()
+) {
   console.log(
-    "WARN: OPENROUTER_API_KEY ausente — seed usará pool OpenRouter do admin (nex-agi/nex-n2-pro:free)",
+    "WARN: OPENROUTER_API_KEY ausente — o journey E2E só roda com chave OpenRouter dedicada no ambiente deste projeto.",
   );
 }
 
@@ -106,7 +105,9 @@ async function deleteProject(projectId) {
 }
 
 async function fetchConversationId(projectId) {
-  const res = await rest(`conversations?project_id=eq.${projectId}&select=id&order=created_at.desc&limit=1`);
+  const res = await rest(
+    `conversations?project_id=eq.${projectId}&select=id&order=created_at.desc&limit=1`,
+  );
   const rows = await res.json();
   return rows?.[0]?.id ?? null;
 }
@@ -155,7 +156,11 @@ async function fetchStreamEvents(runId) {
 
 function streamHasToolActivity(events) {
   return events.some((e) => {
-    if (e.event_type === "tool_start" || e.event_type === "tool_call" || e.event_type === "tool_done") {
+    if (
+      e.event_type === "tool_start" ||
+      e.event_type === "tool_call" ||
+      e.event_type === "tool_done"
+    ) {
       return true;
     }
     if (e.event_type === "explore" || e.event_type === "phase") return true;
@@ -184,15 +189,11 @@ function resolveStoragePath() {
 }
 
 async function ensureAuthContext(browser) {
-  const prefsScript = localStoragePrefsScript(E2E_AGENT_PREFERENCES);
-
   const storagePath = resolveStoragePath();
   if (storagePath) {
     try {
       readFileSync(storagePath, "utf8");
-      const context = await browser.newContext({ storageState: storagePath });
-      await context.addInitScript(prefsScript);
-      return context;
+      return await browser.newContext({ storageState: storagePath });
     } catch {
       console.warn(`WARN: storage state inválido (${storagePath}) — tentando login`);
     }
@@ -213,7 +214,6 @@ async function ensureAuthContext(browser) {
   });
 
   const context = await browser.newContext();
-  await context.addInitScript(prefsScript);
   await context.addInitScript(
     ({ key, json }) => {
       localStorage.setItem(key, json);
@@ -293,9 +293,7 @@ async function waitForNaturalAgentRun(page, conversationId, failures) {
     await sleep(500);
   }
 
-  failures.push(
-    "agent-run: UI não anexou à run (sem header running, mini-card nem working line)",
-  );
+  failures.push("agent-run: UI não anexou à run (sem header running, mini-card nem working line)");
   return run.id;
 }
 
@@ -309,7 +307,11 @@ async function openInspectorFromCard(page, opts = {}) {
   }
   await card.click();
   await page.locator("[data-testid=job-inspector]").waitFor({ state: "visible", timeout: 10_000 });
-  await page.locator('[role=tab][data-active="true"]').first().waitFor({ state: "visible", timeout: 5000 }).catch(() => {});
+  await page
+    .locator('[role=tab][data-active="true"]')
+    .first()
+    .waitFor({ state: "visible", timeout: 5000 })
+    .catch(() => {});
   return true;
 }
 
@@ -374,20 +376,26 @@ async function phaseInspectorLive(page, conversationId, failures, activeRunId = 
       );
     } catch (e) {
       failures.push(`inspector-live: ${e instanceof Error ? e.message : e}`);
-      await page.screenshot({ path: resolve(OUT_DIR, "phase-inspector-live.png"), fullPage: true }).catch(() => {});
+      await page
+        .screenshot({ path: resolve(OUT_DIR, "phase-inspector-live.png"), fullPage: true })
+        .catch(() => {});
       return;
     }
   }
   if (run?.status === "failed") {
     failures.push(`inspector-live: run falhou — ${run.error ?? "sem erro"}`);
-    await page.screenshot({ path: resolve(OUT_DIR, "phase-inspector-live.png"), fullPage: true }).catch(() => {});
+    await page
+      .screenshot({ path: resolve(OUT_DIR, "phase-inspector-live.png"), fullPage: true })
+      .catch(() => {});
     return;
   }
 
   const opened = await openInspectorFromCard(page);
   if (!opened) {
     failures.push("inspector-live: mini-card não apareceu — não abriu inspector");
-    await page.screenshot({ path: resolve(OUT_DIR, "phase-inspector-live.png"), fullPage: true }).catch(() => {});
+    await page
+      .screenshot({ path: resolve(OUT_DIR, "phase-inspector-live.png"), fullPage: true })
+      .catch(() => {});
     return;
   }
 
@@ -402,11 +410,15 @@ async function phaseInspectorLive(page, conversationId, failures, activeRunId = 
     const live = await fetchRunById(run.id);
     if (live?.status === "failed") {
       failures.push(`inspector-live: run falhou — ${live.error ?? "sem erro"}`);
-      await page.screenshot({ path: resolve(OUT_DIR, "phase-inspector-live.png"), fullPage: true }).catch(() => {});
+      await page
+        .screenshot({ path: resolve(OUT_DIR, "phase-inspector-live.png"), fullPage: true })
+        .catch(() => {});
       return;
     }
 
-    const entries = await page.locator("[data-testid=inspector-timeline-track] [data-kind]").count();
+    const entries = await page
+      .locator("[data-testid=inspector-timeline-track] [data-kind]")
+      .count();
     if (entries > lastEntryCount) {
       entryGrew = true;
       lastEntryCount = entries;
@@ -465,7 +477,9 @@ async function phasePlanDock(page, conversationId, failures) {
         continue;
       }
       failures.push(`plan-dock: run falhou — ${run.error ?? "sem erro"}`);
-      await page.screenshot({ path: resolve(OUT_DIR, "phase-plan-dock.png"), fullPage: true }).catch(() => {});
+      await page
+        .screenshot({ path: resolve(OUT_DIR, "phase-plan-dock.png"), fullPage: true })
+        .catch(() => {});
       return;
     }
     if (isRunAwaitingPlan(run)) {
@@ -476,7 +490,9 @@ async function phasePlanDock(page, conversationId, failures) {
   }
   if (!planReady) {
     failures.push(`plan-dock: timeout aguardando plano (${RUN_IDLE_TIMEOUT_MS}ms)`);
-    await page.screenshot({ path: resolve(OUT_DIR, "phase-plan-dock.png"), fullPage: true }).catch(() => {});
+    await page
+      .screenshot({ path: resolve(OUT_DIR, "phase-plan-dock.png"), fullPage: true })
+      .catch(() => {});
     return;
   }
 
@@ -485,7 +501,9 @@ async function phasePlanDock(page, conversationId, failures) {
     await dock.waitFor({ state: "visible", timeout: 60_000 });
   } catch {
     failures.push("plan-dock: chat-plan-dock-ready não visível");
-    await page.screenshot({ path: resolve(OUT_DIR, "phase-plan-dock.png"), fullPage: true }).catch(() => {});
+    await page
+      .screenshot({ path: resolve(OUT_DIR, "phase-plan-dock.png"), fullPage: true })
+      .catch(() => {});
     return;
   }
 
@@ -504,7 +522,12 @@ async function phaseF5(page, conversationId, failures) {
   }
 
   try {
-    await pollRunStatus(conversationId, (r) => r.status === "running", RUN_ACTIVE_TIMEOUT_MS, "running");
+    await pollRunStatus(
+      conversationId,
+      (r) => r.status === "running",
+      RUN_ACTIVE_TIMEOUT_MS,
+      "running",
+    );
   } catch (e) {
     failures.push(`f5: ${e instanceof Error ? e.message : e}`);
     return;
@@ -590,7 +613,10 @@ async function phaseSecondTurn(page, conversationId, projectId, failures) {
     .nth(userCountBefore)
     .waitFor({ state: "visible", timeout: 15_000 });
 
-  const secondText = await page.locator("[data-testid=chat-message-user]").nth(userCountBefore).innerText();
+  const secondText = await page
+    .locator("[data-testid=chat-message-user]")
+    .nth(userCountBefore)
+    .innerText();
   if (!secondText.includes("[e2e-journey-2]")) {
     failures.push("second-turn: 2ª mensagem do usuário não apareceu");
   }
@@ -600,7 +626,12 @@ async function phaseSecondTurn(page, conversationId, projectId, failures) {
 }
 
 function needsNaturalAgentRun() {
-  return PHASES.has("inspector-live") || PHASES.has("f5") || PHASES.has("plan-dock") || PHASES.has("second-turn");
+  return (
+    PHASES.has("inspector-live") ||
+    PHASES.has("f5") ||
+    PHASES.has("plan-dock") ||
+    PHASES.has("second-turn")
+  );
 }
 
 async function resolveE2eUserId(creds) {
@@ -625,7 +656,9 @@ async function main() {
   });
 
   const hasAuth =
-    resolveStoragePath() || (process.env.E2E_EMAIL && process.env.E2E_PASSWORD) || (E2E_EMAIL && E2E_PASSWORD);
+    resolveStoragePath() ||
+    (process.env.E2E_EMAIL && process.env.E2E_PASSWORD) ||
+    (E2E_EMAIL && E2E_PASSWORD);
   if (!hasAuth) {
     const msg =
       "SKIP: defina E2E_EMAIL/E2E_PASSWORD, E2E_STORAGE_STATE, ou SUPABASE_SERVICE_ROLE_KEY (auto-provision)";
@@ -663,7 +696,7 @@ async function main() {
         `E2E pre-seed: openrouter=${seed.openrouterSource} model=${seed.model} e2b=${seed.e2bSource}`,
       );
     } catch (e) {
-      console.warn("WARN: E2E pre-seed falhou —", e instanceof Error ? e.message : e);
+      console.warn("WARN: E2E pre-seed isolado falhou —", e instanceof Error ? e.message : e);
     }
   }
 
@@ -718,7 +751,9 @@ async function main() {
     }
   } catch (e) {
     failures.push(e instanceof Error ? e.message : String(e));
-    await page.screenshot({ path: resolve(OUT_DIR, "journey-fail.png"), fullPage: true }).catch(() => {});
+    await page
+      .screenshot({ path: resolve(OUT_DIR, "journey-fail.png"), fullPage: true })
+      .catch(() => {});
   } finally {
     if (CLEANUP && projectId) {
       await deleteProject(projectId);

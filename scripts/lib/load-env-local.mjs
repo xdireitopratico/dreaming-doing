@@ -1,5 +1,4 @@
 import { readFileSync } from "node:fs";
-import { homedir } from "node:os";
 import { resolve } from "node:path";
 
 function loadEnvFile(path) {
@@ -25,8 +24,7 @@ function loadEnvFile(path) {
   }
 }
 
-/** Carrega .env.local (projeto + ~/.env.local) sem sobrescrever o ambiente. */
+/** Carrega apenas o .env.local do projeto, sem buscar fallback global no computador. */
 export function loadEnvLocal(cwd = process.cwd()) {
   loadEnvFile(resolve(cwd, ".env.local"));
-  loadEnvFile(resolve(homedir(), ".env.local"));
 }

@@ -1,11 +1,8 @@
 /**
- * Seed agent_preferences + OpenRouter (free model) para usuário E2E provisionado.
- * Fonte da chave: OPENROUTER_API_KEY / E2E_OPENROUTER_KEY (recomendado)
- * → pool OpenRouter do admin FORGE → falha explícita.
+ * Seed isolado para usuário E2E dedicado.
+ * Não usa localStorage, não copia chave do admin e não toca perfil real por default.
  */
 import { createClient } from "@supabase/supabase-js";
-
-const FORGE_ADMIN_EMAIL = "xdireitopratico@gmail.com";
 
 export const E2E_DEFAULT_MODEL = process.env.E2E_MODEL ?? "cohere/north-mini-code:free";
 
@@ -73,18 +70,6 @@ export async function isDedicatedE2eUser(supabaseUrl, serviceKey, userId) {
   return false;
 }
 
-async function resolveAdminUserId(supabaseUrl, serviceKey) {
-  const admin = createClient(supabaseUrl, serviceKey, {
-    auth: { autoRefreshToken: false, persistSession: false },
-  });
-  const { data, error } = await admin.auth.admin.listUsers({ perPage: 500, page: 1 });
-  if (error) throw new Error(`resolveAdminUserId: ${error.message}`);
-  const hit = data.users.find(
-    (u) => u.email?.trim().toLowerCase() === FORGE_ADMIN_EMAIL.toLowerCase(),
-  );
-  return hit?.id ?? null;
-}
-
 async function fetchConnector(supabaseUrl, serviceKey, ownerId, kind, provider = "") {
   let url = `${supabaseUrl}/rest/v1/connectors?owner_id=eq.${ownerId}&kind=eq.${kind}&select=token_encrypted,meta,provider&limit=1`;
   if (provider) url += `&provider=eq.${provider}`;
@@ -134,12 +119,16 @@ async function upsertConnector(
 
   const res = await fetch(`${supabaseUrl}/rest/v1/connectors`, {
     method: "POST",
-    headers: restHeaders(serviceKey, { Prefer: "resolution=merge-duplicates,return=representation" }),
+    headers: restHeaders(serviceKey, {
+      Prefer: "resolution=merge-duplicates,return=representation",
+    }),
     body: JSON.stringify(body),
   });
   const payload = await res.json();
   if (!res.ok) {
-    throw new Error(`upsertConnector(${kind}): ${res.status} ${JSON.stringify(payload).slice(0, 200)}`);
+    throw new Error(
+      `upsertConnector(${kind}): ${res.status} ${JSON.stringify(payload).slice(0, 200)}`,
+    );
   }
   return { seeded: true, reason: "inserted" };
 }
@@ -159,47 +148,39 @@ async function patchProfilePreferences(supabaseUrl, serviceKey, userId, preferen
 /**
  * Garante conectores BYOK (+ opcionalmente prefs) para usuário E2E.
  * @param {object} opts
- * @param {boolean} [opts.patchPreferences=true] — false em smoke: prefs só em agent_runs.meta
+ * @param {boolean} [opts.patchPreferences=false] — por default não grava agent_preferences
  */
 export async function seedE2eAgentSetup({
   supabaseUrl,
   serviceKey,
   userId,
-  patchPreferences = true,
+  patchPreferences = false,
 }) {
   if (!supabaseUrl || !serviceKey || !userId) {
     throw new Error("seedE2eAgentSetup: supabaseUrl, serviceKey e userId obrigatórios");
   }
 
-  if (patchPreferences) {
-    const dedicated = await isDedicatedE2eUser(supabaseUrl, serviceKey, userId);
-    if (dedicated) {
-      await patchProfilePreferences(supabaseUrl, serviceKey, userId, E2E_AGENT_PREFERENCES);
-    } else {
-      console.warn(
-        `seedE2eAgentSetup: skip patchProfilePreferences — user ${userId.slice(0, 8)} não é E2E dedicado`,
-      );
-    }
-  }
-
-  const adminId = await resolveAdminUserId(supabaseUrl, serviceKey);
-  if (!adminId) {
+  const dedicated = await isDedicatedE2eUser(supabaseUrl, serviceKey, userId);
+  if (!dedicated) {
     throw new Error(
-      "seedE2eAgentSetup: admin FORGE não encontrado — defina OPENROUTER_API_KEY/E2E_E2B_KEY ou configure conectores do admin",
+      `seedE2eAgentSetup: usuário ${userId.slice(0, 8)} não é E2E dedicado; abortando seed.`,
     );
   }
 
-  const envOr = resolveE2eOpenRouterKey();
-  let orToken = envOr || null;
-  let orSource = envOr ? (process.env.OPENROUTER_API_KEY ? "OPENROUTER_API_KEY" : "E2E_OPENROUTER_KEY") : null;
-  if (!orToken) {
-    const adminOr = await fetchConnector(supabaseUrl, serviceKey, adminId, "openai", "openrouter");
-    orToken = parseTokenField(adminOr?.token_encrypted ?? null)[0] ?? null;
-    orSource = orToken ? "admin_pool_copy" : null;
+  if (patchPreferences) {
+    await patchProfilePreferences(supabaseUrl, serviceKey, userId, E2E_AGENT_PREFERENCES);
   }
+
+  const envOr = resolveE2eOpenRouterKey();
+  const orToken = envOr || null;
+  const orSource = envOr
+    ? process.env.OPENROUTER_API_KEY
+      ? "OPENROUTER_API_KEY"
+      : "E2E_OPENROUTER_KEY"
+    : null;
   if (!orToken) {
     throw new Error(
-      "seedE2eAgentSetup: sem chave OpenRouter — defina OPENROUTER_API_KEY ou configure OpenRouter do admin em /api",
+      "seedE2eAgentSetup: sem chave OpenRouter dedicada — defina OPENROUTER_API_KEY ou E2E_OPENROUTER_KEY para o smoke.",
     );
   }
 
@@ -212,17 +193,10 @@ export async function seedE2eAgentSetup({
   });
 
   const envE2b = (process.env.E2E_E2B_KEY ?? "").trim();
-  let e2bToken = envE2b || null;
-  let e2bSource = envE2b ? "E2E_E2B_KEY" : null;
+  const e2bToken = envE2b || null;
+  const e2bSource = envE2b ? "E2E_E2B_KEY" : null;
   if (!e2bToken) {
-    const adminE2b = await fetchConnector(supabaseUrl, serviceKey, adminId, "e2b");
-    e2bToken = parseTokenField(adminE2b?.token_encrypted ?? null)[0] ?? null;
-    e2bSource = e2bToken ? "admin_e2b_copy" : null;
-  }
-  if (!e2bToken) {
-    throw new Error(
-      "seedE2eAgentSetup: sem chave E2B — defina E2E_E2B_KEY ou configure Sandbox E2B do admin em /api",
-    );
+    throw new Error("seedE2eAgentSetup: sem chave E2B dedicada — defina E2E_E2B_KEY para o smoke.");
   }
 
   const e2bConn = await upsertConnector(supabaseUrl, serviceKey, userId, {
@@ -241,13 +215,4 @@ export async function seedE2eAgentSetup({
     e2bSource,
     model: E2E_DEFAULT_MODEL,
   };
-}
-
-/** Injeta prefs no localStorage do browser (loadAgentPreferences síncrono). */
-export function localStoragePrefsScript(preferences = E2E_AGENT_PREFERENCES) {
-  return `(() => {
-    try {
-      localStorage.setItem("forge:agent-preferences", ${JSON.stringify(JSON.stringify(preferences))});
-    } catch { /* quota */ }
-  })();`;
 }
