@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
-import { Check, Copy, Loader2, Pencil, SkipForward } from "lucide-react";
+import { Check, Copy, Loader2, Pencil, SkipForward, X } from "lucide-react";
 import type { PendingPlan, PlanStep } from "@/lib/agent-progress";
 import { buildForgePlanMarkdown } from "@/lib/plan-document";
 import { MarkdownRenderer } from "@/components/ui/markdown-renderer";
@@ -184,6 +184,22 @@ export function InspectorPlan({ state, onApprove, onReject, onEditRequest }: Ins
         >
           <Pencil className="size-3.5" />
         </button>
+        {awaitingApproval && (
+          <button
+            type="button"
+            className="forge-inspector-plan-icon-btn forge-inspector-plan-icon-btn--danger"
+            onClick={handleReject}
+            disabled={busy !== null || !onReject}
+            title="Rejeitar"
+            aria-label="Rejeitar plano"
+          >
+            {busy === "reject" ? (
+              <Loader2 className="size-3.5 animate-spin" />
+            ) : (
+              <X className="size-3.5" />
+            )}
+          </button>
+        )}
         {awaitingApproval && (
           <button
             type="button"

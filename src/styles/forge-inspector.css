@@ -826,6 +826,10 @@
   opacity: 1;
 }
 
+.forge-inspector-plan-icon-btn--danger:hover:not(:disabled) {
+  color: color-mix(in srgb, var(--status-failed) 85%, white);
+}
+
 .forge-inspector-plan-icon-btn--approve:hover:not(:disabled) {
   color: var(--text-accent);
 }
