@@ -779,12 +779,60 @@
 }
 
 .forge-inspector-plan {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: var(--space-lg);
-  max-width: 720px;
-  margin: 0 auto;
   width: 100%;
+  min-width: 0;
+  padding-top: var(--space-xs);
+}
+
+.forge-inspector-plan-toolbar {
+  position: absolute;
+  top: 0;
+  right: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.forge-inspector-plan-icon-btn {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  opacity: 0.72;
+  transition:
+    background 0.15s,
+    color 0.15s,
+    opacity 0.15s;
+}
+
+.forge-inspector-plan-icon-btn:hover:not(:disabled) {
+  opacity: 1;
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.forge-inspector-plan-icon-btn[data-copied="true"] {
+  color: var(--text-accent);
+  opacity: 1;
+}
+
+.forge-inspector-plan-icon-btn--approve:hover:not(:disabled) {
+  color: var(--text-accent);
+}
+
+.forge-inspector-plan-icon-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
 }
 
 /* ─── Intro no fluxo do documento (pill + meta + missão) ───────────── */

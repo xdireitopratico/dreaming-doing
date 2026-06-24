@@ -437,7 +437,6 @@
 
 .forge-plan-dock-shell {
   width: 100%;
-  max-width: min(100%, 520px);
   padding: 12px 14px 10px;
   border-radius: 16px;
   background: color-mix(in srgb, var(--bg-input) 92%, var(--bg-card) 8%);
@@ -445,6 +444,40 @@
   box-shadow:
     0 0 0 1px rgba(255, 255, 255, 0.02) inset,
     0 6px 24px rgba(0, 0, 0, 0.28);
+}
+
+/* create_plan pronto: conteúdo rolável, CTAs fixos — mesma largura do composer */
+.forge-plan-dock-shell--ready {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.forge-plan-dock-shell--ready > .forge-plan-phases,
+.forge-plan-dock-shell--ready > .forge-plan-dock-inner {
+  flex: 0 1 auto;
+  min-height: 0;
+  max-height: clamp(160px, 32vh, 340px);
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--border-forge) 65%, #52525b 35%) transparent;
+}
+
+.forge-plan-dock-shell--ready > .forge-plan-phases::-webkit-scrollbar,
+.forge-plan-dock-shell--ready > .forge-plan-dock-inner::-webkit-scrollbar {
+  width: 6px;
+}
+
+.forge-plan-dock-shell--ready > .forge-plan-phases::-webkit-scrollbar-thumb,
+.forge-plan-dock-shell--ready > .forge-plan-dock-inner::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--border-forge) 70%, #52525b 30%);
+  border-radius: 999px;
+}
+
+.forge-plan-dock-shell--ready > .forge-composer-row {
+  flex-shrink: 0;
+  margin-top: 8px;
 }
 
 .forge-plan-dock-inner {

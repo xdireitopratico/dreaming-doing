@@ -1,10 +1,11 @@
 import { useCallback, useMemo, useState } from "react";
-import { Check, Loader2, Pencil, SkipForward } from "lucide-react";
+import { Check, Copy, Loader2, Pencil, SkipForward } from "lucide-react";
 import type { PendingPlan, PlanStep } from "@/lib/agent-progress";
 import { buildForgePlanMarkdown } from "@/lib/plan-document";
 import { MarkdownRenderer } from "@/components/ui/markdown-renderer";
 import { enabledPlanSteps } from "@/lib/forge-run";
 import type { InspectorPlanState } from "@/lib/plan-message-meta";
+import { copyToClipboard } from "@/lib/copy-to-clipboard";
 
 type InspectorPlanProps = {
   state: InspectorPlanState;
@@ -140,6 +141,15 @@ export function InspectorPlan({ state, onApprove, onReject, onEditRequest }: Ins
 
   const { size, reversible } = planMetaSignals(plan);
   const missionTitle = plan.mission?.trim() || plan.summary;
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = useCallback(async () => {
+    const ok = await copyToClipboard(markdown);
+    if (ok) {
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2000);
+    }
+  }, [markdown]);
 
   const actionBarProps: PlanActionBarProps = {
     awaitingApproval,
@@ -154,6 +164,44 @@ export function InspectorPlan({ state, onApprove, onReject, onEditRequest }: Ins
 
   return (
     <div className="forge-inspector-plan" data-testid="inspector-plan">
+      <div className="forge-inspector-plan-toolbar" data-testid="inspector-plan-toolbar">
+        <button
+          type="button"
+          className="forge-inspector-plan-icon-btn"
+          onClick={handleCopy}
+          title={copied ? "Copiado!" : "Copiar plano"}
+          aria-label={copied ? "Copiado" : "Copiar plano"}
+          data-copied={copied ? "true" : undefined}
+        >
+          <Copy className="size-3.5" />
+        </button>
+        <button
+          type="button"
+          className="forge-inspector-plan-icon-btn"
+          onClick={() => onEditRequest?.(plan)}
+          title="Editar"
+          aria-label="Editar plano"
+        >
+          <Pencil className="size-3.5" />
+        </button>
+        {awaitingApproval && (
+          <button
+            type="button"
+            className="forge-inspector-plan-icon-btn forge-inspector-plan-icon-btn--approve"
+            onClick={handleApprove}
+            disabled={busy !== null || !onApprove}
+            title="Aprovar e construir"
+            aria-label="Aprovar e construir"
+          >
+            {busy === "approve" ? (
+              <Loader2 className="size-3.5 animate-spin" />
+            ) : (
+              <Check className="size-3.5" />
+            )}
+          </button>
+        )}
+      </div>
+
       <div className="forge-inspector-plan-intro" data-testid="inspector-plan-status">
         <div className="forge-inspector-plan-header-row">
           <span className={`forge-inspector-plan-pill forge-inspector-plan-pill--${status}`}>

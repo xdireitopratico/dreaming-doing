@@ -323,6 +323,21 @@ describe("Inspector Plan — layout de leitura (preview)", () => {
     expect(plan).not.toContain('className="forge-inspector-plan-header"');
     expect(plan).not.toContain("forge-inspector-plan-footer");
     expect(plan.match(/<PlanActionBar/g)?.length).toBe(1);
+    expect(plan).toContain("inspector-plan-toolbar");
+    expect(plan).toContain("copyToClipboard");
+  });
+});
+
+describe("ChatPlanDock — create_plan scroll e largura (CSS)", () => {
+  it("shell ready: altura fixa no conteúdo, largura 100%, CTAs fora do scroll", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { resolve } = await import("node:path");
+    const css = readFileSync(resolve(import.meta.dirname, "../styles/forge-chat.css"), "utf8");
+
+    expect(css).toContain(".forge-plan-dock-shell--ready > .forge-plan-phases");
+    expect(css).toContain("max-height: clamp(160px, 32vh, 340px)");
+    expect(css).not.toMatch(/\.forge-plan-dock-shell\s*\{[^}]*max-width:\s*min\(100%,\s*520px\)/s);
+    expect(css).toContain(".forge-plan-dock-shell--ready > .forge-composer-row");
   });
 });
 
