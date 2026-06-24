@@ -11,19 +11,9 @@ export const Route = createFileRoute("/design-library")({
 function DesignLibraryRoute() {
   const { user, loading } = useAuth();
 
-  if (loading) {
-    return (
-      <DashboardShell requireAuth activeNav="design-library">
-        <div className="flex items-center justify-center h-full">
-          <div className="text-sm text-muted-foreground">Carregando...</div>
-        </div>
-      </DashboardShell>
-    );
-  }
-
   // Admin gate: apenas xdireitopratico@gmail.com
   // (RLS no Supabase reforça no banco; aqui bloqueia UI e flash de conteúdo)
-  if (!isForgeAdminEmail(user?.email)) {
+  if (!loading && !isForgeAdminEmail(user?.email)) {
     return <Navigate to="/projects" replace />;
   }
 

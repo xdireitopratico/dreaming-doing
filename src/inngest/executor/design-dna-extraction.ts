@@ -106,9 +106,9 @@ async function loadWebSecrets(
     .from("connectors")
     .select("provider, token_encrypted, kind")
     .eq("owner_id", userId)
-    .eq("kind", "web_search")
+    .in("kind", ["web_search", "web_scrape", "browser_runtime"])
     .order("updated_at", { ascending: false })
-    .limit(5);
+    .limit(20);
 
   const providerKeyMap: Record<string, string> = {
     brave: "BRAVE_SEARCH_API_KEY",
@@ -116,6 +116,11 @@ async function loadWebSecrets(
     serper: "SERPER_API_KEY",
     firecrawl: "FIRECRAWL_API_KEY",
     browserless: "BROWSERLESS_API_KEY",
+    exa: "EXA_API_KEY",
+    parallel: "PARALLEL_API_KEY",
+    crawl4ai: "CRAWL4AI_API_KEY",
+    scrapegraphai: "SCRAPEGRAPHAI_API_KEY",
+    "browser-use": "BROWSER_USE_API_KEY",
   };
 
   for (const row of data ?? []) {

@@ -34,7 +34,13 @@ export function DesignLibraryPage() {
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
 
-  const { entries, overview, loading: entriesLoading, reload: reloadEntries } = useLibrary(filters);
+  const {
+    entries,
+    overview,
+    loading: entriesLoading,
+    refreshing: entriesRefreshing,
+    reload: reloadEntries,
+  } = useLibrary(filters);
   const { jobs, loading: jobsLoading, reload: reloadJobs } = useJobs();
   const sourceClusters = useMemo(() => groupEntriesBySourceUrl(entries), [entries]);
   const groupedMode = filters.ingestKind === "all";
@@ -43,14 +49,6 @@ export function DesignLibraryPage() {
     () => (selectedEntry ? entries.filter((entry) => entry.source_url === selectedEntry.source_url) : []),
     [entries, selectedEntry],
   );
-
-  // Auto-refresh entries when a job completes
-  useEffect(() => {
-    const completed = jobs.filter((j) => j.status === "completed");
-    if (completed.length > 0) {
-      reloadEntries();
-    }
-  }, [jobs, reloadEntries]);
 
   const handleValidate = async (entry: LibraryEntry) => {
     try {
@@ -251,6 +249,13 @@ export function DesignLibraryPage() {
             </p>
           </div>
         ) : viewMode === "grid" ? (
+          <>
+            {entriesRefreshing && (
+              <div className="mb-2 text-[11px] text-muted-foreground flex items-center gap-2">
+                <Loader2 className="size-3 animate-spin" />
+                Atualizando biblioteca…
+              </div>
+            )}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
             {groupedMode
               ? (renderedGroups ?? []).map((cluster) => {
@@ -280,7 +285,15 @@ export function DesignLibraryPage() {
                   />
                 ))}
           </div>
+          </>
         ) : (
+          <>
+            {entriesRefreshing && (
+              <div className="mb-2 text-[11px] text-muted-foreground flex items-center gap-2">
+                <Loader2 className="size-3 animate-spin" />
+                Atualizando biblioteca…
+              </div>
+            )}
           <div className="space-y-1">
             {groupedMode
               ? (renderedGroups ?? []).map((cluster) => {
@@ -360,6 +373,7 @@ export function DesignLibraryPage() {
                   </div>
                 ))}
           </div>
+          </>
         )}
       </div>
 

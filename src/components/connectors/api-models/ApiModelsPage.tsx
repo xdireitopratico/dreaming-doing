@@ -42,6 +42,7 @@ import {
   removeKeyFromPool,
   type PoolSlotPublic,
 } from "@/lib/save-connector";
+import { saveToolConnector, disconnectToolConnector } from "@/lib/save-tool-connector";
 import { saveE2bApiKey, disconnectE2bApiKey } from "@/lib/save-e2b-key";
 import { isE2bConnected, isE2bHealthOk } from "@/lib/e2b-status";
 import { testE2bApiKey, type E2bHealthResponse } from "@/lib/test-e2b-key";
@@ -51,6 +52,11 @@ import {
   saveOllamaConnector,
 } from "@/lib/save-ollama-connector";
 import { saveWebSearchKey, disconnectWebSearch, type WebSearchProviderId } from "@/lib/save-web-search-key";
+import type {
+  BrowserRuntimeProviderId,
+  ParserIndexProviderId,
+  WebScrapeProviderId,
+} from "@/lib/tool-connectors";
 import { Button } from "@/components/ui/button";
 import { ModelEngineSection } from "./ModelEngineSection";
 import { ProvidersKeysSection } from "./ProvidersKeysSection";
@@ -174,6 +180,7 @@ export function ApiModelsPage() {
     prefs.userModelEntries,
   );
   const [selectedEnv, setSelectedEnv] = useState<AiProviderId>(activePreset.env as AiProviderId);
+  const parserProvider = (prefs.parserProvider ?? "builtin") as ParserIndexProviderId;
 
   useEffect(() => {
     if (!user) return;
@@ -190,21 +197,6 @@ export function ApiModelsPage() {
         .eq("owner_id", user!.id);
       if (error) throw error;
       return (data ?? []) as ConnectorRow[];
-    },
-  });
-
-  const { data: webSearchRow } = useQuery({
-    queryKey: ["web-search-connector", user?.id],
-    enabled: !!user?.id,
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("connectors_public")
-        .select("kind, meta")
-        .eq("owner_id", user!.id)
-        .eq("kind", "web_search" as unknown as "github")
-        .single();
-      if (error && error.code !== "PGRST116") throw error;
-      return (data as { kind: string; meta?: Record<string, unknown> | null } | null) ?? null;
     },
   });
 
@@ -284,6 +276,19 @@ export function ApiModelsPage() {
   const connectedCount = useMemo(
     () => Object.values(connected).filter(Boolean).length,
     [connected],
+  );
+
+  const webSearchRow = useMemo(
+    () => connectorRows?.find((r) => r.kind === "web_search") ?? null,
+    [connectorRows],
+  );
+  const webScrapeRow = useMemo(
+    () => connectorRows?.find((r) => r.kind === "web_scrape") ?? null,
+    [connectorRows],
+  );
+  const browserRuntimeRow = useMemo(
+    () => connectorRows?.find((r) => r.kind === "browser_runtime") ?? null,
+    [connectorRows],
   );
 
   const handleProviderKeyChange = useCallback((id: AiProviderId, value: string) => {
@@ -512,6 +517,83 @@ export function ApiModelsPage() {
     }
   }, [qc]);
 
+  const handleSaveWebScrape = useCallback(
+    async (provider: WebScrapeProviderId, token: string, baseUrl?: string) => {
+      setSavingId(`webscrape-${provider}`);
+      try {
+        await saveToolConnector({
+          kind: "web_scrape",
+          provider,
+          token,
+          baseUrl,
+        });
+        await qc.invalidateQueries({ queryKey: ["connectors-public"] });
+      } catch (e: unknown) {
+        toast.error(e instanceof Error ? e.message : "Falha ao salvar scrape");
+      } finally {
+        setSavingId(null);
+      }
+    },
+    [qc],
+  );
+
+  const handleDeleteWebScrape = useCallback(
+    async (provider: WebScrapeProviderId) => {
+      setSavingId("webscrape");
+      try {
+        await disconnectToolConnector({ kind: "web_scrape", provider });
+        await qc.invalidateQueries({ queryKey: ["connectors-public"] });
+      } catch (e: unknown) {
+        toast.error(e instanceof Error ? e.message : "Falha ao remover scrape");
+      } finally {
+        setSavingId(null);
+      }
+    },
+    [qc],
+  );
+
+  const handleSaveBrowserRuntime = useCallback(
+    async (provider: BrowserRuntimeProviderId, token: string, baseUrl?: string) => {
+      setSavingId(`browserruntime-${provider}`);
+      try {
+        await saveToolConnector({
+          kind: "browser_runtime",
+          provider,
+          token,
+          baseUrl,
+        });
+        await qc.invalidateQueries({ queryKey: ["connectors-public"] });
+      } catch (e: unknown) {
+        toast.error(e instanceof Error ? e.message : "Falha ao salvar browser runtime");
+      } finally {
+        setSavingId(null);
+      }
+    },
+    [qc],
+  );
+
+  const handleDeleteBrowserRuntime = useCallback(
+    async (provider: BrowserRuntimeProviderId) => {
+      setSavingId("browserruntime");
+      try {
+        await disconnectToolConnector({ kind: "browser_runtime", provider });
+        await qc.invalidateQueries({ queryKey: ["connectors-public"] });
+      } catch (e: unknown) {
+        toast.error(e instanceof Error ? e.message : "Falha ao remover browser runtime");
+      } finally {
+        setSavingId(null);
+      }
+    },
+    [qc],
+  );
+
+  const handleParserProviderChange = useCallback(
+    (next: ParserIndexProviderId) => {
+      patchPrefs({ parserProvider: next });
+    },
+    [patchPrefs],
+  );
+
   const handleSetMode = useCallback(
     (nextMode: ModelPowerMode) => {
       if (nextMode === "robin") {
@@ -731,9 +813,17 @@ export function ApiModelsPage() {
         onSaveOllama={handleSaveOllama}
         onDeleteOllama={handleDeleteOllama}
         webSearchRow={webSearchRow}
+        webScrapeRow={webScrapeRow}
+        browserRuntimeRow={browserRuntimeRow}
+        parserProvider={parserProvider}
+        onParserProviderChange={handleParserProviderChange}
         savingId={savingId}
         onSaveWebSearch={handleSaveWebSearch}
         onDeleteWebSearch={handleDeleteWebSearch}
+        onSaveWebScrape={handleSaveWebScrape}
+        onDeleteWebScrape={handleDeleteWebScrape}
+        onSaveBrowserRuntime={handleSaveBrowserRuntime}
+        onDeleteBrowserRuntime={handleDeleteBrowserRuntime}
       />
     </div>
   );

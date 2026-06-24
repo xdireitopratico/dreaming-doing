@@ -255,11 +255,7 @@ export function DashboardShell({
   }, [loc.pathname]);
 
   if (loading) {
-    return (
-      <div className="dashboard-workspace grid place-items-center">
-        <Loader2 className="size-6 animate-spin text-[var(--forge-primary)]" />
-      </div>
-    );
+    return <DashboardShellLoading immersive={immersive} />;
   }
 
   if (requireAuth && !user) {
@@ -326,4 +322,49 @@ function AdminOnly({ children }: { children: ReactNode }) {
   const { isAdmin } = useAdmin();
   if (!isAdmin) return null;
   return <>{children}</>;
+}
+
+function DashboardShellLoading({ immersive }: { immersive: boolean }) {
+  return (
+    <div className={`dashboard-workspace${immersive ? " dashboard-immersive" : ""}`}>
+      {!immersive && (
+        <aside className="dashboard-sidebar" aria-hidden="true">
+          <div className="dashboard-sidebar-brand">
+            <div className="h-[18px] w-[18px] rounded-[5px] border border-[var(--forge-border)] bg-[var(--forge-surface-2)]" />
+            <div className="h-3.5 w-24 rounded bg-[var(--forge-surface-2)] animate-pulse" />
+          </div>
+          <div className="flex flex-1 flex-col gap-2 overflow-hidden px-1">
+            {Array.from({ length: 8 }).map((_, index) => (
+              <div
+                key={`nav-skel-${index}`}
+                className="h-8 rounded-md bg-[var(--forge-surface-2)] animate-pulse"
+              />
+            ))}
+          </div>
+          <div className="dashboard-sidebar-footer">
+            <div className="rounded-xl border border-[var(--forge-border)] bg-[var(--forge-surface-2)] p-3">
+              <div className="h-3 w-20 rounded bg-[var(--forge-border-strong)] animate-pulse" />
+              <div className="mt-2 h-3 w-full rounded bg-[var(--forge-border-strong)] animate-pulse" />
+              <div className="mt-1 h-3 w-4/5 rounded bg-[var(--forge-border-strong)] animate-pulse" />
+            </div>
+          </div>
+        </aside>
+      )}
+
+      <div className="dashboard-main">
+        {!immersive && (
+          <header className="dashboard-mobile-header" aria-hidden="true">
+            <div className="h-[18px] w-[86px] rounded bg-[var(--forge-surface-2)] animate-pulse" />
+            <div className="size-10 rounded-[10px] border border-[var(--forge-border)] bg-[var(--forge-surface-2)] animate-pulse" />
+          </header>
+        )}
+        <div className="flex flex-1 items-center justify-center px-6 py-10">
+          <div className="flex flex-col items-center gap-3 text-center">
+            <Loader2 className="size-6 animate-spin text-[var(--forge-primary)]" />
+            <p className="text-xs text-[var(--forge-muted)]">Carregando sessão…</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }

@@ -20,9 +20,20 @@ const ALLOWED = new Set([
   "e2b",
   "supabase",
   "web_search",
+  "web_scrape",
+  "browser_runtime",
 ]);
 
-const WEB_SEARCH_PROVIDERS = new Set(["brave", "tavily", "serper", "firecrawl"]);
+const WEB_SEARCH_PROVIDERS = new Set(["brave", "tavily", "serper", "firecrawl", "exa", "parallel"]);
+const WEB_SCRAPE_PROVIDERS = new Set(["jina", "firecrawl", "browserless", "crawl4ai", "scrapegraphai"]);
+const BROWSER_RUNTIME_PROVIDERS = new Set(["browserless", "browser-use"]);
+const SINGLE_ROW_KINDS = new Set(["web_search", "web_scrape", "browser_runtime"]);
+const TOKEN_OPTIONAL_PROVIDERS = new Set([
+  "jina",
+  "browser-use",
+  "crawl4ai",
+  "scrapegraphai",
+]);
 
 type PoolSlot = { id: string; hint: string; addedAt: string };
 
@@ -34,7 +45,7 @@ function json(body: unknown, status = 200) {
 }
 
 function resolveProvider(kind: string, meta: Record<string, unknown>): string {
-  if (kind === "web_search") {
+  if (kind === "web_search" || kind === "web_scrape" || kind === "browser_runtime") {
     return typeof meta.provider === "string" ? meta.provider.trim() : "";
   }
   if (kind !== "openai") return "";
@@ -118,7 +129,21 @@ Deno.serve(async (req) => {
     if (kind === "web_search") {
       const wp = resolveProvider(kind, metaIn);
       if (!WEB_SEARCH_PROVIDERS.has(wp)) {
-        return json({ error: "meta.provider obrigatório (brave, tavily, serper, firecrawl)" }, 400);
+        return json({ error: "meta.provider obrigatório (brave, tavily, serper, firecrawl, exa, parallel)" }, 400);
+      }
+    }
+
+    if (kind === "web_scrape") {
+      const wp = resolveProvider(kind, metaIn);
+      if (!WEB_SCRAPE_PROVIDERS.has(wp)) {
+        return json({ error: "meta.provider obrigatório (jina, firecrawl, browserless, crawl4ai, scrapegraphai)" }, 400);
+      }
+    }
+
+    if (kind === "browser_runtime") {
+      const wp = resolveProvider(kind, metaIn);
+      if (!BROWSER_RUNTIME_PROVIDERS.has(wp)) {
+        return json({ error: "meta.provider obrigatório (browserless, browser-use)" }, 400);
       }
     }
 
@@ -160,15 +185,9 @@ Deno.serve(async (req) => {
           .eq("owner_id", user.id)
           .eq("kind", "openai")
           .eq("provider", providerKey);
-      } else if (kind === "web_search") {
-        await admin.from("connectors").delete().eq("owner_id", user.id).eq("kind", "web_search");
       } else {
-        await admin
-          .from("connectors")
-          .delete()
-          .eq("owner_id", user.id)
-          .eq("kind", kind)
-          .eq("provider", "");
+        const deleteQuery = admin.from("connectors").delete().eq("owner_id", user.id).eq("kind", kind);
+        await (providerKey ? deleteQuery.eq("provider", providerKey) : deleteQuery);
       }
       if (kind === "github") {
         await admin.from("profiles").update({ github_username: null }).eq("id", user.id);
@@ -227,8 +246,16 @@ Deno.serve(async (req) => {
     if (!token && kind === "supabase") {
       return json({ error: "Chave Supabase obrigatória" }, 400);
     }
-    if (!token && kind === "web_search") {
+    const tokenOptional = TOKEN_OPTIONAL_PROVIDERS.has(providerKey);
+
+    if (!token && kind === "web_search" && !tokenOptional) {
       return json({ error: "Chave de pesquisa web obrigatória" }, 400);
+    }
+    if (!token && kind === "web_scrape" && !tokenOptional) {
+      return json({ error: "Chave de scrape obrigatória ou provider sem chave" }, 400);
+    }
+    if (!token && kind === "browser_runtime" && !tokenOptional) {
+      return json({ error: "Chave de browser runtime obrigatória ou provider sem chave" }, 400);
     }
     if (!token && kind === "openai" && metaIn.provider === "ollama") {
       const baseUrl = typeof metaIn.baseUrl === "string" ? metaIn.baseUrl.trim() : "";
@@ -295,9 +322,9 @@ Deno.serve(async (req) => {
       label: metaIn.label ?? kind,
     };
 
-    // Motor Prometheus: uma provedora de pesquisa por usuário
-    if (kind === "web_search" && token) {
-      await admin.from("connectors").delete().eq("owner_id", user.id).eq("kind", "web_search");
+    if (SINGLE_ROW_KINDS.has(kind)) {
+      const deleteQuery = admin.from("connectors").delete().eq("owner_id", user.id).eq("kind", kind);
+      await (providerKey ? deleteQuery.eq("provider", providerKey) : deleteQuery);
     }
 
     const row: Record<string, unknown> = {
@@ -309,11 +336,9 @@ Deno.serve(async (req) => {
     };
     if (tokenEncrypted) row.token_encrypted = tokenEncrypted;
 
-    const { error } = kind === "web_search"
-      ? await admin.from("connectors").insert(row)
-      : await admin.from("connectors").upsert(row, {
-        onConflict: "owner_id,kind,provider",
-      });
+    const { error } = await admin.from("connectors").upsert(row, {
+      onConflict: "owner_id,kind,provider",
+    });
     if (error) return json({ error: error.message }, 500);
 
     if (kind === "github" && typeof metaIn.githubUsername === "string") {

@@ -19,12 +19,19 @@ export function useLibrary(filters: LibraryFilters) {
   const [entries, setEntries] = useState<LibraryEntry[]>([]);
   const [overview, setOverview] = useState<LibraryOverview | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const filtersRef = useRef(filters);
+  const hasLoadedOnceRef = useRef(false);
   filtersRef.current = filters;
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  const load = useCallback(async (options?: { silent?: boolean }) => {
+    const silent = options?.silent ?? false;
+    if (hasLoadedOnceRef.current) {
+      setRefreshing(!silent);
+    } else {
+      setLoading(true);
+    }
     setError(null);
     try {
       const [entriesResult, overviewResult] = await Promise.allSettled([
@@ -43,10 +50,12 @@ export function useLibrary(filters: LibraryFilters) {
       } else {
         setOverview(null);
       }
+      hasLoadedOnceRef.current = true;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load entries");
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   }, []);
 
@@ -64,7 +73,7 @@ export function useLibrary(filters: LibraryFilters) {
     filters.search,
   ]);
 
-  return { entries, overview, loading, error, reload: load };
+  return { entries, overview, loading, refreshing, error, reload: load };
 }
 
 export function useJobs() {

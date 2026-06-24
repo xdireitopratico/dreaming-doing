@@ -27,6 +27,7 @@ export interface AgentPreferences {
   poolProvider?: PoolProviderId;
   robinPoolModelId?: string;
   sttProvider?: SttProviderId;
+  parserProvider?: string;
   customModelId?: string;
   useCustomModel?: boolean;
   hiddenPresetIds?: string[];
@@ -71,6 +72,7 @@ export function normalizeAgentPreferences(
     mode,
     poolProvider: raw.poolProvider,
     sttProvider: raw.sttProvider,
+    parserProvider: typeof raw.parserProvider === "string" ? raw.parserProvider : undefined,
     customModelId: raw.customModelId,
     useCustomModel: raw.useCustomModel,
     fixedPresetId: raw.fixedPresetId ? normalizePresetId(raw.fixedPresetId) : undefined,

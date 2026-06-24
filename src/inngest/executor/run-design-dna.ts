@@ -54,71 +54,6 @@ export async function executeDesignDnaJob(
     auth: { autoRefreshToken: false, persistSession: false },
   });
 
-  const { data: connectors } = await serviceClient
-    .from("connectors")
-    .select("token_encrypted")
-    .eq("owner_id", userId)
-    .eq("kind", "e2b")
-    .order("updated_at", { ascending: false })
-    .limit(5);
-
-  let e2bApiKey = "";
-  for (const row of connectors ?? []) {
-    const raw = (row.token_encrypted as string) ?? "";
-    const trimmed = raw.trim();
-    if (!trimmed) continue;
-    if (trimmed.startsWith("[")) {
-      try {
-        const parsed = JSON.parse(trimmed);
-        if (Array.isArray(parsed)) {
-          const first = parsed.find(
-            (x: unknown) => typeof x === "string" && (x as string).trim().length > 8,
-          );
-          if (first) {
-            e2bApiKey = (first as string).trim();
-            break;
-          }
-        }
-      } catch {
-        /* single token */
-      }
-    }
-    if (trimmed.length > 8) {
-      e2bApiKey = trimmed;
-      break;
-    }
-  }
-
-  if (!e2bApiKey) {
-    const msg = "Configure sua chave E2B em API Keys (/api)";
-    const errorRecord = { scope: "job", error: msg, code: "missing_e2b_key" };
-    errors.push(errorRecord);
-    await appendJobEvent(supabase, jobId, "url_error", errorRecord);
-    await supabase
-      .from("design_dna_jobs")
-      .update({
-        status: "failed",
-        error: msg,
-        results,
-        errors,
-        finished_at: new Date().toISOString(),
-      })
-      .eq("id", jobId);
-    return {
-      ok: false,
-      status: "failed",
-      jobId,
-      resumable: false,
-      canceled: false,
-      error: msg,
-      urlsCompleted: 0,
-      durationMs: Date.now() - startMs,
-    };
-  }
-
-  let sandboxId = "";
-  let previewUrl = "";
-
   const { data: job } = await supabase
     .from("design_dna_jobs")
     .select("sandbox_id, meta")
@@ -129,84 +64,152 @@ export async function executeDesignDnaJob(
   const ingestKind = typeof jobMeta.ingestKind === "string" && jobMeta.ingestKind.trim()
     ? jobMeta.ingestKind.trim()
     : "production";
+  const isDeep = depth === "deep";
+  let sandboxId = "";
+  let previewUrl = "";
+  let sandboxExecUrl: string | undefined;
 
-  if (job?.sandbox_id) {
-    sandboxId = job.sandbox_id as string;
-    const meta = (job.meta ?? {}) as Record<string, unknown>;
-    previewUrl =
-      (meta.previewUrl as string) ?? `https://${CHROMIUM_DEBUG_PORT}-${sandboxId}.${E2B_DOMAIN}`;
-  } else {
-    const resp = await fetch(`${E2B_API_BASE}/sandboxes`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-API-Key": e2bApiKey },
-      body: JSON.stringify({
-        templateID: E2B_TEMPLATE_ID,
-        timeout: 3600,
-        metadata: { forge_app: "dreaming-doing", forge_job_id: jobId, forge_user_id: userId },
-      }),
-    });
+  if (isDeep) {
+    const { data: connectors } = await serviceClient
+      .from("connectors")
+      .select("token_encrypted")
+      .eq("owner_id", userId)
+      .eq("kind", "e2b")
+      .order("updated_at", { ascending: false })
+      .limit(5);
 
-    const text = await resp.text();
-    if (!resp.ok) throw new Error(`E2B create ${resp.status}: ${text.slice(0, 400)}`);
-
-    const data = JSON.parse(text) as { sandboxID?: string; sandboxId?: string };
-    sandboxId = data.sandboxID ?? data.sandboxId ?? "";
-    if (!sandboxId) throw new Error("E2B: no sandboxID in response");
-
-    previewUrl = `https://${CHROMIUM_DEBUG_PORT}-${sandboxId}.${E2B_DOMAIN}`;
-
-    const connectResp = await fetch(`${E2B_API_BASE}/sandboxes/${sandboxId}/connect`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-API-Key": e2bApiKey },
-      body: JSON.stringify({ timeout: 3600 }),
-    });
-    if (!connectResp.ok) {
-      const raw = await connectResp.text().catch(() => "unknown");
-      console.warn("[design-dna] sandbox connect warning:", raw);
+    let e2bApiKey = "";
+    for (const row of connectors ?? []) {
+      const raw = (row.token_encrypted as string) ?? "";
+      const trimmed = raw.trim();
+      if (!trimmed) continue;
+      if (trimmed.startsWith("[")) {
+        try {
+          const parsed = JSON.parse(trimmed);
+          if (Array.isArray(parsed)) {
+            const first = parsed.find(
+              (x: unknown) => typeof x === "string" && (x as string).trim().length > 8,
+            );
+            if (first) {
+              e2bApiKey = (first as string).trim();
+              break;
+            }
+          }
+        } catch {
+          /* single token */
+        }
+      }
+      if (trimmed.length > 8) {
+        e2bApiKey = trimmed;
+        break;
+      }
     }
 
-    await supabase
-      .from("design_dna_jobs")
-      .update({ sandbox_id: sandboxId, meta: { previewUrl } })
-      .eq("id", jobId);
-  }
+    if (job?.sandbox_id) {
+      sandboxId = job.sandbox_id as string;
+      const meta = (job.meta ?? {}) as Record<string, unknown>;
+      previewUrl =
+        (meta.previewUrl as string) ?? `https://${CHROMIUM_DEBUG_PORT}-${sandboxId}.${E2B_DOMAIN}`;
+    } else {
+      if (!e2bApiKey) {
+        const msg = "Configure sua chave E2B em API Keys (/api)";
+        const errorRecord = { scope: "job", error: msg, code: "missing_e2b_key" };
+        errors.push(errorRecord);
+        await appendJobEvent(supabase, jobId, "url_error", errorRecord);
+        await supabase
+          .from("design_dna_jobs")
+          .update({
+            status: "failed",
+            error: msg,
+            results,
+            errors,
+            finished_at: new Date().toISOString(),
+          })
+          .eq("id", jobId);
+        return {
+          ok: false,
+          status: "failed",
+          jobId,
+          resumable: false,
+          canceled: false,
+          error: msg,
+          urlsCompleted: 0,
+          durationMs: Date.now() - startMs,
+        };
+      }
 
-  const sandboxExecUrl = `${supabaseUrl}/functions/v1/prometheus-tool-executor`;
-
-  // Verifica que Chromium está acessível via DevTools na porta 9222
-  // (template custom já tem Chromium rodando, então só pingamos o endpoint JSON)
-  if (startIndex === 0) {
-    await appendJobEvent(supabase, jobId, "sandbox_setup", { sandboxId });
-    try {
-      const devtoolsVersionUrl = `${previewUrl}/json/version`;
-      const cdpResp = await fetch(devtoolsVersionUrl, {
-        signal: AbortSignal.timeout(10_000),
+      const resp = await fetch(`${E2B_API_BASE}/sandboxes`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-API-Key": e2bApiKey },
+        body: JSON.stringify({
+          templateID: E2B_TEMPLATE_ID,
+          timeout: 3600,
+          metadata: { forge_app: "dreaming-doing", forge_job_id: jobId, forge_user_id: userId },
+        }),
       });
-      if (cdpResp.ok) {
-        const cdpData = await cdpResp.json().catch(() => ({}));
-        console.log("[design-dna] CDP ready:", JSON.stringify(cdpData).slice(0, 200));
-        await appendJobEvent(supabase, jobId, "sandbox_ready", {
-          sandboxId,
-          previewUrl,
-          chromium: cdpData.Browser ?? "ready",
+
+      const text = await resp.text();
+      if (!resp.ok) throw new Error(`E2B create ${resp.status}: ${text.slice(0, 400)}`);
+
+      const data = JSON.parse(text) as { sandboxID?: string; sandboxId?: string };
+      sandboxId = data.sandboxID ?? data.sandboxId ?? "";
+      if (!sandboxId) throw new Error("E2B: no sandboxID in response");
+
+      previewUrl = `https://${CHROMIUM_DEBUG_PORT}-${sandboxId}.${E2B_DOMAIN}`;
+
+      const connectResp = await fetch(`${E2B_API_BASE}/sandboxes/${sandboxId}/connect`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-API-Key": e2bApiKey },
+        body: JSON.stringify({ timeout: 3600 }),
+      });
+      if (!connectResp.ok) {
+        const raw = await connectResp.text().catch(() => "unknown");
+        console.warn("[design-dna] sandbox connect warning:", raw);
+      }
+
+      await supabase
+        .from("design_dna_jobs")
+        .update({ sandbox_id: sandboxId, meta: { previewUrl } })
+        .eq("id", jobId);
+    }
+
+    sandboxExecUrl = `${supabaseUrl}/functions/v1/prometheus-tool-executor`;
+
+    // Verifica que Chromium está acessível via DevTools na porta 9222
+    // (template custom já tem Chromium rodando, então só pingamos o endpoint JSON)
+    if (startIndex === 0) {
+      await appendJobEvent(supabase, jobId, "sandbox_setup", { sandboxId });
+      try {
+        const devtoolsVersionUrl = `${previewUrl}/json/version`;
+        const cdpResp = await fetch(devtoolsVersionUrl, {
+          signal: AbortSignal.timeout(10_000),
         });
-      } else {
-        console.warn(
-          `[design-dna] CDP not reachable at ${devtoolsVersionUrl}: HTTP ${cdpResp.status}`,
-        );
+        if (cdpResp.ok) {
+          const cdpData = await cdpResp.json().catch(() => ({}));
+          console.log("[design-dna] CDP ready:", JSON.stringify(cdpData).slice(0, 200));
+          await appendJobEvent(supabase, jobId, "sandbox_ready", {
+            sandboxId,
+            previewUrl,
+            chromium: cdpData.Browser ?? "ready",
+          });
+        } else {
+          console.warn(
+            `[design-dna] CDP not reachable at ${devtoolsVersionUrl}: HTTP ${cdpResp.status}`,
+          );
+          await appendJobEvent(supabase, jobId, "sandbox_ready", {
+            sandboxId,
+            previewUrl,
+            chromium: `CDP HTTP ${cdpResp.status} — preview iframe pode não funcionar`,
+          });
+        }
+      } catch (cdpErr) {
+        console.warn("[design-dna] CDP check failed:", cdpErr);
         await appendJobEvent(supabase, jobId, "sandbox_ready", {
           sandboxId,
           previewUrl,
-          chromium: `CDP HTTP ${cdpResp.status} — preview iframe pode não funcionar`,
+          chromium: `CDP unreachable: ${cdpErr instanceof Error ? cdpErr.message : "unknown"}`,
         });
       }
-    } catch (cdpErr) {
-      console.warn("[design-dna] CDP check failed:", cdpErr);
-      await appendJobEvent(supabase, jobId, "sandbox_ready", {
-        sandboxId,
-        previewUrl,
-        chromium: `CDP unreachable: ${cdpErr instanceof Error ? cdpErr.message : "unknown"}`,
-      });
     }
   }
 
@@ -242,7 +245,7 @@ export async function executeDesignDnaJob(
         categories: categories as string[],
         userId,
         sandboxExecUrl,
-        sandboxToken: serviceRoleKey,
+        sandboxToken: isDeep ? serviceRoleKey : undefined,
       });
 
       if (dnaResult.dna) {

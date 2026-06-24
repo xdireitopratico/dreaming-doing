@@ -14,7 +14,7 @@ export interface WebToolsContext {
   connectorKeys: Record<string, string>;
 }
 
-/** Carrega secrets de web search do connectors table (kind = 'web_search'). */
+/** Carrega secrets de web search / scrape / browser runtime do connectors table. */
 async function loadWebSearchSecrets(
   supabase: SupabaseClient,
   userId: string,
@@ -32,55 +32,66 @@ async function loadWebSearchSecrets(
       k === "SERPER_KEY" ||
       k === "BRAVE_SEARCH_API_KEY" ||
       k === "BRAVE_API_KEY" ||
+      k === "EXA_API_KEY" ||
+      k === "PARALLEL_API_KEY" ||
+      k === "CRAWL4AI_API_KEY" ||
+      k === "SCRAPEGRAPHAI_API_KEY" ||
+      k === "BROWSER_USE_API_KEY" ||
       k === "SCREENSHOTONE_API_KEY"
     ) {
       if (typeof v === "string" && v.trim()) secrets[k] = v.trim();
     }
   }
 
-  // 2. Busca connectors do tipo web_search (mesmo pattern do motor-research.ts)
+  // 2. Busca connectors do tipo web_search/web_scrape/browser_runtime
   try {
     const { data, error } = await supabase
       .from("connectors")
       .select("token_encrypted, provider")
       .eq("owner_id", userId)
-      .eq("kind", "web_search")
+      .in("kind", ["web_search", "web_scrape", "browser_runtime"])
       .order("updated_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
+      .limit(20);
 
     if (!error && data) {
-      const provider = (data.provider?.trim() || "") as string;
-      const tokenRaw = data.token_encrypted;
-      let token: string | null = null;
+      for (const row of data) {
+        const provider = (row.provider?.trim() || "") as string;
+        const tokenRaw = row.token_encrypted;
+        let token: string | null = null;
 
-      if (typeof tokenRaw === "string" && tokenRaw.trim().length >= 4) {
-        const t = tokenRaw.trim();
-        if (t.startsWith("[")) {
-          try {
-            const arr = JSON.parse(t) as unknown;
-            if (Array.isArray(arr)) {
-              const first = arr.find((x) => typeof x === "string" && x.trim().length >= 4);
-              if (typeof first === "string") token = first.trim();
+        if (typeof tokenRaw === "string" && tokenRaw.trim().length >= 4) {
+          const t = tokenRaw.trim();
+          if (t.startsWith("[")) {
+            try {
+              const arr = JSON.parse(t) as unknown;
+              if (Array.isArray(arr)) {
+                const first = arr.find((x) => typeof x === "string" && x.trim().length >= 4);
+                if (typeof first === "string") token = first.trim();
+              }
+            } catch {
+              token = t;
             }
-          } catch {
+          } else {
             token = t;
           }
-        } else {
-          token = t;
         }
-      }
 
-      if (token) {
-        const providerKeyMap: Record<string, string> = {
-          brave: "BRAVE_SEARCH_API_KEY",
-          tavily: "TAVILY_API_KEY",
-          serper: "SERPER_API_KEY",
-          firecrawl: "FIRECRAWL_API_KEY",
-          browserless: "BROWSERLESS_API_KEY",
-        };
-        const keyName = providerKeyMap[provider];
-        if (keyName) secrets[keyName] = token;
+        if (token) {
+          const providerKeyMap: Record<string, string> = {
+            brave: "BRAVE_SEARCH_API_KEY",
+            tavily: "TAVILY_API_KEY",
+            serper: "SERPER_API_KEY",
+            firecrawl: "FIRECRAWL_API_KEY",
+            browserless: "BROWSERLESS_API_KEY",
+            exa: "EXA_API_KEY",
+            parallel: "PARALLEL_API_KEY",
+            crawl4ai: "CRAWL4AI_API_KEY",
+            scrapegraphai: "SCRAPEGRAPHAI_API_KEY",
+            "browser-use": "BROWSER_USE_API_KEY",
+          };
+          const keyName = providerKeyMap[provider];
+          if (keyName) secrets[keyName] = token;
+        }
       }
     }
   } catch (err) {
