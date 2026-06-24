@@ -39,6 +39,7 @@ function mockDepsContext(overrides?: Partial<AgentLoopDepsContext>): AgentLoopDe
     originalUserRequest: "crie landing",
     approvedPlanBuild: false,
     approvedPlanSteps: [],
+    approvedPlanDesign: undefined,
     buildFixResume: false,
     planStreamState: { llmResponseWasStreamed: false, thinkingStreamStartedAt: null },
     fileContentCache: new Map(),
@@ -117,13 +118,28 @@ Deno.test("buildPlanTurnFinishDeps — projectId e runId", () => {
   assertEquals(deps.projectId, "proj-1");
 });
 
-Deno.test("buildExecuteDeps — repassa template e toolsUsed", () => {
+Deno.test("buildExecuteDeps — repassa template, toolsUsed e approvedPlanDesign", () => {
   const toolsUsed = new Set(["fs_read"]);
-  const model = { chat: async () => ({ content: "" }) };
-  const deps = buildExecuteDeps(mockDepsContext(), toolsUsed, model);
+  const model = {
+    chat: async () => ({ role: "assistant" as const, content: "", tool_calls: [] }),
+  };
+  const design = {
+    voice: ["swiss"],
+    moment: "Hero craft",
+    techniques: ["scroll-reveal"],
+    read_paths: ["packages/forge-ui/src/compositions/opinionated/HeroCinematicSpotlight.tsx"],
+  };
+  const deps = buildExecuteDeps(
+    mockDepsContext({ approvedPlanDesign: design }),
+    toolsUsed,
+    model,
+    new Set(),
+  );
   assertEquals(deps.projectTemplate, "vite-react");
   assertEquals(deps.toolsUsed, toolsUsed);
   assertEquals(deps.executionModel, model);
+  assertEquals(deps.approvedPlanDesign?.moment, "Hero craft");
+  assertEquals(deps.designReadPathsDone.size, 0);
 });
 
 function mockHost(overrides?: Partial<AgentLoopHost>): AgentLoopHost {
@@ -157,6 +173,11 @@ function mockHost(overrides?: Partial<AgentLoopHost>): AgentLoopHost {
     originalUserRequest: "build app",
     approvedPlanBuild: true,
     approvedPlanSteps: [],
+    approvedPlanDesign: {
+      voice: ["editorial"],
+      moment: "Split editorial",
+      techniques: ["grain-texture-overlay"],
+    },
     buildFixResume: false,
     planStreamState: { llmResponseWasStreamed: false, thinkingStreamStartedAt: null },
     fileContentCache: new Map(),
@@ -210,6 +231,7 @@ Deno.test("createLoopBindings — buildExecute repassa host state", () => {
   const model = { chat: async () => ({ content: "" }) };
   const exec = bindings.buildExecute(toolsUsed, model, new Set());
   assertEquals(exec.approvedPlanBuild, true);
+  assertEquals(exec.approvedPlanDesign?.moment, "Split editorial");
   assertEquals(exec.projectTemplate, "nextjs");
   assertEquals(exec.toolsUsed, toolsUsed);
   assertEquals(bindings.deps().runId, "run-host");

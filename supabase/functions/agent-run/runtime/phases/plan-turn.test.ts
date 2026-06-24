@@ -1,4 +1,6 @@
-import { assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
+import { assert, assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
+import { enrichProposedPlanDesign } from "../../plan-design-enrich.ts";
+import { proposedPlanFromToolArgs } from "../../tools/meta.ts";
 import {
   finishClarify,
   finishPlanModeFailure,
@@ -65,6 +67,24 @@ Deno.test("resolvePlanModeNoToolsResponse — conversational", () => {
   if (resolution.kind === "conversational") {
     assertEquals(resolution.text, "Posso ajudar com isso.");
   }
+});
+
+Deno.test("plan-turn — create_plan UI sem design recebe enrich", () => {
+  const proposed = proposedPlanFromToolArgs({
+    summary: "Landing padaria artesanal",
+    markdown: "## Plano\nHero e cardápio.",
+    steps: [{ description: "Hero editorial com grain" }, { description: "Seção cardápio" }],
+  });
+  assert(proposed);
+  const enriched = enrichProposedPlanDesign(
+    proposed,
+    "padaria artesanal premium",
+    "vite-react",
+  );
+  assert(enriched.design?.voice?.length);
+  assert(enriched.design?.moment?.trim());
+  assert((enriched.design?.read_paths?.length ?? 0) >= 2);
+  assert((enriched.design?.compositions?.length ?? 0) >= 1);
 });
 
 Deno.test("resolvePlanModeNoToolsResponse — stream_empty", () => {
