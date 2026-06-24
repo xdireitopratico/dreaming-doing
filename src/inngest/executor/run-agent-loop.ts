@@ -43,7 +43,7 @@ function loadExecutor() {
 
 /** Executa o agent loop in-process no handler Inngest (Node/Vercel). */
 export async function runAgentLoop(
-  payload: AgentRunRequest & { planMode: boolean; resume?: boolean },
+  payload: AgentRunRequest & { resume?: boolean },
 ): Promise<ExecuteResponse> {
   process.env.INNGEST_EXECUTOR = "1";
   process.env.AGENT_LOOP_BUDGET_MS = INNGEST_LOOP_BUDGET_MS;
@@ -65,7 +65,8 @@ export async function runAgentLoop(
     enabledSkillIds: payload.enabledSkillIds ?? [],
     enabledMcpIds: payload.enabledMcpIds ?? [],
     resume: payload.resume === true,
-    planMode: payload.planMode,
+    planMode: payload.planMode === true,
+    chatMode: payload.chatMode === true,
     plan: payload.plan,
     planSourceRunId: payload.planSourceRunId,
   });

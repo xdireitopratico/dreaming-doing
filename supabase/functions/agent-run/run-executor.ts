@@ -36,6 +36,12 @@ import {
 import { transitionRun } from "../_shared/run-lifecycle.ts";
 import type { AgentRunStatus } from "../_shared/agent-contract-lifecycle.ts";
 
+function executorRunMode(planMode: boolean, chatMode: boolean): "plan" | "build" | "chat" {
+  if (chatMode) return "chat";
+  if (planMode) return "plan";
+  return "build";
+}
+
 export type ExecuteParams = {
   runId: string;
   projectId: string;
@@ -47,6 +53,7 @@ export type ExecuteParams = {
   enabledMcpIds: string[];
   resume: boolean;
   planMode: boolean;
+  chatMode?: boolean;
   plan?: string;
   planSourceRunId?: string;
   /** Pula gate conversacional no loop (build pós-plano aprovado). */
@@ -56,7 +63,7 @@ export type ExecuteParams = {
 export type ExecuteResult = {
   ok: boolean;
   runId: string;
-  mode: "plan" | "build";
+  mode: "plan" | "build" | "chat";
   resumable: boolean;
   canceled: boolean;
   error?: string;
@@ -74,7 +81,16 @@ export async function executeAgentRun(
   params: ExecuteParams,
 ): Promise<ExecuteResult> {
   const startMs = Date.now();
-  const { runId, projectId, conversationId, userId, resume: resumeParam, planMode } = params;
+  const {
+    runId,
+    projectId,
+    conversationId,
+    userId,
+    resume: resumeParam,
+    planMode,
+    chatMode = false,
+  } = params;
+  const runMode = executorRunMode(planMode, chatMode);
 
   // Infra-debug: log estruturado do início do executor. Sem isso, o
   // caminho entre Inngest e o AgentLoop é invisível.
@@ -98,6 +114,7 @@ export async function executeAgentRun(
   const runMeta = (preCheck?.meta ?? {}) as Record<string, unknown>;
   const jobGeneration = await resolveJobGenerationForChunk(supabase, runId, {
     planMode,
+    chatMode,
     resume: resumeParam,
     planSourceRunId: params.planSourceRunId ?? null,
   });
@@ -108,7 +125,7 @@ export async function executeAgentRun(
     return {
       ok: false,
       runId,
-      mode: planMode ? "plan" : "build",
+      mode: runMode,
       resumable: false,
       canceled: false,
       error: msg,
@@ -129,7 +146,7 @@ export async function executeAgentRun(
       return {
         ok: false,
         runId,
-        mode: planMode ? "plan" : "build",
+        mode: runMode,
         resumable: false,
         canceled: false,
         error: prefError,
@@ -150,7 +167,7 @@ export async function executeAgentRun(
     return {
       ok: false,
       runId,
-      mode: planMode ? "plan" : "build",
+      mode: runMode,
       resumable: false,
       canceled: true,
       error: "Cancelado",
@@ -162,7 +179,7 @@ export async function executeAgentRun(
     return {
       ok: true,
       runId,
-      mode: planMode ? "plan" : "build",
+      mode: runMode,
       resumable: false,
       canceled: false,
       stepsCompleted: 0,
@@ -207,7 +224,7 @@ export async function executeAgentRun(
     return {
       ok: false,
       runId,
-      mode: planMode ? "plan" : "build",
+      mode: runMode,
       resumable: false,
       canceled: false,
       error: "Projeto não encontrado",
@@ -288,7 +305,7 @@ export async function executeAgentRun(
     return {
       ok: false,
       runId,
-      mode: planMode ? "plan" : "build",
+      mode: runMode,
       resumable: false,
       canceled: false,
       error: msg,
@@ -320,6 +337,7 @@ export async function executeAgentRun(
   );
   const allocateSandboxLocal = resolveAllocateSandbox({
     planMode,
+    chatMode,
     userContent: lastUserContent,
     projectHasSandbox,
     hasApprovedPlanInHistory,
@@ -373,6 +391,7 @@ export async function executeAgentRun(
     enabledSkillIds: effectiveSkillIds,
     enabledMcpIds: effectiveMcpIds,
     planMode,
+    chatMode,
     allocateSandbox: allocateSandboxLocal,
     skipConversationalGate:
       isApprovedPlanBuild || hasApprovedPlanInHistory || params.skipConversationalGate === true,
@@ -392,7 +411,7 @@ export async function executeAgentRun(
     return {
       ok: false,
       runId,
-      mode: planMode ? "plan" : "build",
+      mode: runMode,
       resumable: false,
       canceled: false,
       error: msg,
@@ -461,13 +480,13 @@ export async function executeAgentRun(
         runId,
         reason: chunkLimits.reason,
         chunkGeneration: chunkLimits.chunkGeneration,
-        mode: planMode ? "plan" : "build",
+        mode: runMode,
       });
 
       return {
         ok: false,
         runId,
-        mode: planMode ? "plan" : "build",
+        mode: runMode,
         resumable: false,
         canceled: false,
         error: capError,
@@ -514,7 +533,7 @@ export async function executeAgentRun(
 
     logger.info("agent_run.chunk_resumable", {
       runId,
-      mode: planMode ? "plan" : "build",
+      mode: runMode,
       steps: result.steps,
       chunkGeneration: chunkLimits.chunkGeneration,
       durationMs: Date.now() - startMs,
@@ -523,7 +542,7 @@ export async function executeAgentRun(
     return {
       ok: false,
       runId,
-      mode: planMode ? "plan" : "build",
+      mode: runMode,
       resumable: true,
       canceled: false,
       error: result.error,
@@ -600,7 +619,7 @@ export async function executeAgentRun(
 
   logger.info("agent_run.executed", {
     runId,
-    mode: planMode ? "plan" : "build",
+    mode: runMode,
     ok: result.ok,
     resumable: result.resumable,
     canceled: result.canceled,
@@ -610,7 +629,7 @@ export async function executeAgentRun(
   return {
     ok: result.ok,
     runId,
-    mode: planMode ? "plan" : "build",
+    mode: runMode,
     resumable: !!result.resumable,
     canceled: !!result.canceled,
     error: result.error,

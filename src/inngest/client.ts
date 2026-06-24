@@ -12,6 +12,10 @@ const buildRequestedEvent = eventType("agent/build.requested", {
   schema: staticSchema<PlanRequestedData>(),
 });
 
+const chatRequestedEvent = eventType("agent/chat.requested", {
+  schema: staticSchema<PlanRequestedData>(),
+});
+
 const designDnaExtractRequestedEvent = eventType("design-dna/extract.requested", {
   schema: staticSchema<DesignDnaJobRequest>(),
 });
@@ -24,5 +28,6 @@ export const inngest = new Inngest({
 export const events = {
   planRequested: planRequestedEvent,
   buildRequested: buildRequestedEvent,
+  chatRequested: chatRequestedEvent,
   designDnaExtractRequested: designDnaExtractRequestedEvent,
 } as const;

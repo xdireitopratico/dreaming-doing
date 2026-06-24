@@ -6,6 +6,7 @@ import {
   expireStaleRuns,
   previewFromQueueBody,
   resolveQueuedPlanMode,
+  resolveQueuedRunMode,
   shouldSkipStaleExpiry,
 } from "./agent-pending-queue.ts";
 
@@ -54,6 +55,16 @@ Deno.test("resolveQueuedPlanMode — meta.mode plan quando body sem mode (d7de3a
       messageMetaMode: "plan",
     }),
     true,
+  );
+});
+
+Deno.test("resolveQueuedRunMode — chat mode na fila", () => {
+  assertEquals(
+    resolveQueuedRunMode({
+      pendingBody: { mode: "chat", messageId: "m-chat" },
+      inputPlanMode: true,
+    }),
+    "chat",
   );
 });
 

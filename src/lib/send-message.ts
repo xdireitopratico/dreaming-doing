@@ -61,7 +61,7 @@ export async function sendMessage(input: SendMessageInput, deps: SendMessageDeps
 
   const directChat = !shouldQueue && intent.runMode === "chat";
 
-  if (!shouldQueue && !directChat) {
+  if (!shouldQueue) {
     deps.beginPendingTurn();
   }
 

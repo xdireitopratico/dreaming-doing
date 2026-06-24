@@ -42,6 +42,8 @@ export type OrchestratorDeps = GateReplyDeps & {
   ) => Promise<PlanTurnRunResult>;
   gatherContext: () => Promise<void>;
   saveCheckpoint: (phase: LoopPhaseEnum) => Promise<void>;
+  chatMode: boolean;
+  runChatModeAgentTurn: (model: LLMProvider) => Promise<PlanTurnRunResult>;
   runPlanModeAgentTurn: (model: LLMProvider) => Promise<PlanTurnRunResult>;
   finishPlanProposal: (plan: ProposedPlan) => Promise<PlanTurnRunResult>;
   runBuildExecute: (
@@ -55,6 +57,16 @@ export type OrchestratorDeps = GateReplyDeps & {
 export async function runAgentOrchestrator(
   deps: OrchestratorDeps,
 ): Promise<PlanTurnRunResult> {
+  if (deps.chatMode) {
+    await deps.emitTransition("send");
+    deps.emit("classify", {
+      complexity: "low",
+      complexityScore: 2,
+      summary: "Chat",
+    });
+    return deps.runChatModeAgentTurn(deps.configuredModel());
+  }
+
   let executionModel = deps.configuredModel();
 
   if (deps.resumeRun && deps.hasCheckpoint) {

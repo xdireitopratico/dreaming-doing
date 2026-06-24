@@ -15,7 +15,7 @@ import { RobinKeyPool } from "./robin-pool.ts";
 import { E2B_SETUP_USER_MESSAGE, loadUserE2bApiKey } from "../_shared/user-e2b.ts";
 import { buildSessionExtensionsPrompt, normalizeIdList } from "../_shared/session-extensions.ts";
 import { loadTasteNvidiaConfig, runTasteChat } from "./taste-session.ts";
-import { runDirectChatPhase } from "./conversational.ts";
+
 import { corsPreflightResponse, FORGE_CORS_HEADERS } from "../_shared/cors.ts";
 import {
   correlationIdFromRequest,
@@ -272,6 +272,7 @@ Deno.serve(async (req) => {
       const modeRaw = typeof body.mode === "string" ? body.mode.toLowerCase() : "chat";
       const mode: "chat" | "plan" | "build" =
         modeRaw === "plan" || modeRaw === "build" ? modeRaw : "chat";
+      const chatMode = mode === "chat";
       const planMode = mode === "plan";
       const enabledSkillIds = normalizeIdList(body.enabledSkillIds);
       const enabledMcpIds = normalizeIdList(body.enabledMcpIds);
@@ -306,6 +307,7 @@ Deno.serve(async (req) => {
       ).trim();
       const allocateSandboxForQueue = resolveAllocateSandbox({
         planMode,
+        chatMode,
         userContent: enqueueUserContent,
         projectHasSandbox,
       });
@@ -675,36 +677,6 @@ Deno.serve(async (req) => {
       const fromBody = (body as any).prompt || (body as any).message || "";
       const lastUserContent = fromBody ? String(fromBody) : extractOriginalUserRequest(messages);
 
-      if (mode === "chat" && !resumeRun) {
-        try {
-          const model = buildProvider(mainCfg);
-          const content = await runDirectChatPhase(model, messages, {
-            userRequest: lastUserContent,
-          });
-
-          await supabase.from("messages").insert({
-            conversation_id: conversationId,
-            role: "assistant",
-            parts: [{ type: "text", text: content }],
-            meta: {
-              mode: "chat",
-              turnIntent: "chat",
-              provider: mainCfg.label,
-              model: mainCfg.model,
-            },
-          });
-
-          return json({ ok: true, content, chat: true });
-        } catch (err: unknown) {
-          return json(
-            {
-              error: (err as Error)?.message ?? "Falha ao responder no chat",
-            },
-            500,
-          );
-        }
-      }
-
       // === Decisão "caminho barato primeiro" (o que o usuário pediu) ===
       // Se o prompt parece pedido explícito de interação/perguntas ("quero uma mensagem claramente de interação, não de execução")
       // ou é curto/vago, e ainda não existe sandbox alocado para o projeto, NÃO alocamos E2B para este run.
@@ -720,6 +692,7 @@ Deno.serve(async (req) => {
       });
       const allocateSandboxLocal = resolveAllocateSandbox({
         planMode,
+        chatMode,
         userContent: lastUserContent,
         projectHasSandbox,
         hasApprovedPlanInHistory,
@@ -935,9 +908,11 @@ Deno.serve(async (req) => {
 
       // P0: Inngest handles durable execution. The "run" action is a thin
       // dispatcher: enqueue the run + send Inngest event + return <1s.
-      const eventName: InngestEventName = planMode
-        ? "agent/plan.requested"
-        : "agent/build.requested";
+      const eventName: InngestEventName = chatMode
+        ? "agent/chat.requested"
+        : planMode
+          ? "agent/plan.requested"
+          : "agent/build.requested";
       const eventPayload = {
         runId: agentRunId,
         projectId,
@@ -948,6 +923,7 @@ Deno.serve(async (req) => {
         enabledSkillIds,
         enabledMcpIds,
         planMode,
+        chatMode,
         resume: resumeRun,
       };
 
@@ -978,6 +954,7 @@ Deno.serve(async (req) => {
         agentRunId!,
         {
           planMode,
+          chatMode,
           resume: resumeRun,
           eventName,
         },
@@ -998,7 +975,7 @@ Deno.serve(async (req) => {
         checkpoint: !!loadedCheckpoint,
         sessionKind: tasteStart ? "taste_start" : hasUserLlmKey ? "byok" : "taste_chat",
         memoryMessages: loadedCheckpoint?.state.messages.length ?? messages.length,
-        mode: planMode ? "plan" : "build",
+        mode: chatMode ? "chat" : planMode ? "plan" : "build",
         eventId: eventResult.ids?.[0] ?? null,
       });
 
@@ -1017,7 +994,7 @@ Deno.serve(async (req) => {
       return json({
         ok: true,
         runId: agentRunId,
-        mode: planMode ? "plan" : "build",
+        mode: chatMode ? "chat" : planMode ? "plan" : "build",
         eventId: eventResult.ids?.[0] ?? null,
         queued: false,
       });
@@ -1043,7 +1020,10 @@ function json(body: unknown, status = 200) {
   });
 }
 
-type InngestEventName = "agent/plan.requested" | "agent/build.requested";
+type InngestEventName =
+  | "agent/chat.requested"
+  | "agent/plan.requested"
+  | "agent/build.requested";
 
 async function sendInngestEvent(
   name: InngestEventName,

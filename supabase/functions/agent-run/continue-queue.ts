@@ -10,7 +10,8 @@ import {
   latestUserMessageSnapshot,
   materializeQueuedUserMessage,
   peekOldestPendingMessage,
-  resolveQueuedPlanMode,
+  resolveQueuedRunMode,
+  type QueuedRunMode,
 } from "../_shared/agent-pending-queue.ts";
 import {
   loadUserLlmContext,
@@ -20,7 +21,16 @@ import {
 import { enqueueAgentJobOnDispatch } from "../_shared/agent-jobs.ts";
 import { transitionRun } from "../_shared/run-lifecycle.ts";
 
-type InngestEventName = "agent/plan.requested" | "agent/build.requested";
+type InngestEventName =
+  | "agent/chat.requested"
+  | "agent/plan.requested"
+  | "agent/build.requested";
+
+function inngestEventForMode(mode: QueuedRunMode): InngestEventName {
+  if (mode === "chat") return "agent/chat.requested";
+  if (mode === "plan") return "agent/plan.requested";
+  return "agent/build.requested";
+}
 
 const ACQUIRE_LOCK_RETRIES = 3;
 const ACQUIRE_LOCK_BASE_DELAY_MS = 350;
@@ -70,6 +80,7 @@ export async function handleContinueQueue(
     conversationId: string;
     userId: string;
     planMode?: boolean; // fallback only; prefer pendingBody.mode (send-time from queueMessage)
+    chatMode?: boolean;
   },
 ): Promise<ContinueQueueResult> {
   const { projectId, conversationId, userId } = input;
@@ -136,11 +147,14 @@ export async function handleContinueQueue(
     messageMetaMode = typeof raw === "string" ? raw : null;
   }
 
-  const planMode = resolveQueuedPlanMode({
+  const queuedMode = resolveQueuedRunMode({
     pendingBody,
     messageMetaMode,
     inputPlanMode: input.planMode,
+    inputChatMode: input.chatMode,
   });
+  const planMode = queuedMode === "plan";
+  const chatMode = queuedMode === "chat";
 
   const { hasUserLlmKey, userOnlyKeys } = await loadUserLlmContext(supabase, userId, preferences);
   const sessionKind = hasUserLlmKey ? "byok" : "taste_chat";
@@ -214,7 +228,7 @@ export async function handleContinueQueue(
     return { continued: false, reason: "provider_setup_failed" };
   }
 
-  const eventName: InngestEventName = planMode ? "agent/plan.requested" : "agent/build.requested";
+  const eventName = inngestEventForMode(queuedMode);
   const eventPayload = {
     runId: agentRunId,
     projectId,
@@ -223,6 +237,7 @@ export async function handleContinueQueue(
     sessionKind: hasUserLlmKey ? "byok" : "taste",
     preferences: preferences ?? {},
     planMode,
+    chatMode,
     resume: false,
   };
 
@@ -245,6 +260,7 @@ export async function handleContinueQueue(
 
   await enqueueAgentJobOnDispatch(supabase, agentRunId, {
     planMode,
+    chatMode,
     continuedFromQueue: true,
     eventName,
   });
@@ -257,7 +273,7 @@ export async function handleContinueQueue(
     provider: mainCfg.label,
     model: mainCfg.model,
     continuedFromQueue: true,
-    mode: planMode ? "plan" : "build",
+    mode: queuedMode,
     eventId: eventResult.ids?.[0] ?? null,
   });
 

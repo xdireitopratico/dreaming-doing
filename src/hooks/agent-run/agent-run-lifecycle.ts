@@ -133,7 +133,7 @@ export function createLifecycleHandlers(deps: LifecycleHandlersDeps) {
         return { ok: true };
       }
 
-      if (body.ok && body.content && !body.runId) {
+      if (body.ok && body.content && !body.runId && body.chat !== true) {
         const uiActions = Array.isArray(body.uiActions) ? body.uiActions : [];
         for (const action of uiActions) {
           if (action && typeof action === "object" && isTasteUiAction(action)) {

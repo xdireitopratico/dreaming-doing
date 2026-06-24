@@ -44,6 +44,8 @@ export type AgentJobParams = {
   enabledMcpIds: string[];
   /** Fase 4.6 plan mode: emite plan_proposed + pausa pra aprovação. */
   planMode?: boolean;
+  /** Modo Chat: um turno LLM, sem tools nem sandbox. */
+  chatMode?: boolean;
   /**
    * Se false: caminho leve (clarify/conversa) — sem E2B nem shell tool.
    * Default true para compatibilidade.
@@ -218,6 +220,7 @@ export async function executeAgentJob(
     enabledSkillIds,
     enabledMcpIds,
     planMode = false,
+    chatMode = false,
     skipConversationalGate = false,
   } = params;
 
@@ -229,6 +232,7 @@ export async function executeAgentJob(
     projectId,
     conversationId,
     planMode,
+    chatMode,
     resumeRun,
     enabledSkillCount: enabledSkillIds?.length ?? 0,
     enabledMcpCount: enabledMcpIds?.length ?? 0,
@@ -293,8 +297,8 @@ export async function executeAgentJob(
   const messages = await buildChatHistory(historyRows, 120, mainCfg.model);
   const sessionExt = await buildSessionExtensionsPrompt(enabledSkillIds, enabledMcpIds);
 
-  // Plan: shell só se sandbox já existe (reuso). Build: pode criar sandbox novo.
-  let allocateSandbox = params.allocateSandbox !== false;
+  // Chat: nunca aloca sandbox. Plan: shell só se sandbox já existe. Build: pode criar.
+  let allocateSandbox = chatMode ? false : params.allocateSandbox !== false;
   const isPlanApprovedBuild = !planMode && !!preMeta.planSourceRunId;
   if (isPlanApprovedBuild) {
     allocateSandbox = true; // force for approved builds + follow-ups (meta-aware contract)
@@ -457,6 +461,7 @@ export async function executeAgentJob(
           userSkillNames: sessionExt.skillNames,
           runId: agentRunId,
           planMode,
+          chatMode,
         }
       : {
           resolvedMainCfg: mainCfg,
@@ -470,6 +475,7 @@ export async function executeAgentJob(
           maxStepsFromCheckpoint: loadedCheckpoint?.extra.maxStepsLimit,
           runId: agentRunId,
           planMode,
+          chatMode,
           approvedPlanBuild: isPlanApprovedBuild,
           skipConversationalGate: skipConversationalGate || isPlanApprovedBuild,
           planSummary:

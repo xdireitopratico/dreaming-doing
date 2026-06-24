@@ -466,12 +466,15 @@ export async function latestUserMessageSnapshot(
   };
 }
 
+export type QueuedRunMode = "chat" | "plan" | "build";
+
 /** Modo do próximo run ao drenar fila — pendingBody.mode > user msg meta > input fallback. */
-export function resolveQueuedPlanMode(input: {
+export function resolveQueuedRunMode(input: {
   pendingBody: Record<string, unknown> | null;
   messageMetaMode?: string | null;
   inputPlanMode?: boolean;
-}): boolean {
+  inputChatMode?: boolean;
+}): QueuedRunMode {
   const bodyMode =
     typeof input.pendingBody?.mode === "string"
       ? String(input.pendingBody.mode).toLowerCase()
@@ -480,9 +483,21 @@ export function resolveQueuedPlanMode(input: {
     typeof input.messageMetaMode === "string" ? input.messageMetaMode.toLowerCase() : null;
   const storedMode = bodyMode ?? metaMode;
 
-  if (storedMode === "plan") return true;
-  if (storedMode === "build" || storedMode === "chat") return false;
-  return input.inputPlanMode === true;
+  if (storedMode === "chat") return "chat";
+  if (storedMode === "plan") return "plan";
+  if (storedMode === "build") return "build";
+  if (input.inputChatMode) return "chat";
+  if (input.inputPlanMode) return "plan";
+  return "build";
+}
+
+/** @deprecated Use resolveQueuedRunMode — mantido para compat. */
+export function resolveQueuedPlanMode(input: {
+  pendingBody: Record<string, unknown> | null;
+  messageMetaMode?: string | null;
+  inputPlanMode?: boolean;
+}): boolean {
+  return resolveQueuedRunMode(input) === "plan";
 }
 
 export type PendingMessagePeek = {

@@ -97,7 +97,7 @@ export async function runConversationalPhase(
   }
 }
 
-const DIRECT_CHAT_SYSTEM = `Você é o parceiro de vibe-coding do FORGE — engenheiro sênior, direto e humano, em português.
+export const DIRECT_CHAT_SYSTEM = `Você é o parceiro de vibe-coding do FORGE — engenheiro sênior, direto e humano, em português.
 
 O usuário pediu conversa, diagnóstico, explicação, proposta escrita ou status. Responda no chat; NÃO inicie execução, NÃO prometa que mexeu em arquivos e NÃO narre bastidores.
 

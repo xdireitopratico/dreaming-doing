@@ -43,6 +43,7 @@ import { runGatherContextForHost } from "./runtime/phases/gather-context.ts";
 import { createAgentLoopMutableState } from "./runtime/loop-mutable-state.ts";
 import { NarrationPhase } from "./runtime/phases/narration.ts";
 import type { PlanModeStreamState } from "./runtime/phases/plan-turn.ts";
+import { runChatModeAgentTurnForHost } from "./runtime/phases/chat-turn-host.ts";
 import {
   finishPlanProposalForHost,
   runPlanModeAgentTurnForHost,
@@ -79,6 +80,7 @@ export class AgentLoop {
   private originalUserRequest: string;
   private runStartTime: number;
   private planMode: boolean;
+  private chatMode: boolean;
   private approvedPlanBuild: boolean;
   private skipConversationalGate: boolean;
   private approvedPlanSteps: PlanStep[];
@@ -161,6 +163,7 @@ export class AgentLoop {
     this.complexityScore = options?.complexityScore ?? 3;
     this.runId = options?.runId ?? null;
     this.planMode = options?.planMode ?? false;
+    this.chatMode = options?.chatMode ?? false;
     this.approvedPlanBuild = options?.approvedPlanBuild ?? false;
     this.skipConversationalGate = resolveSkipConversationalGate(options);
     this.approvedPlanSteps = options?.planSteps ?? [];
@@ -210,7 +213,7 @@ export class AgentLoop {
   }
 
   private requiresFinalBuildGate(): boolean {
-    if (this.planMode || this.tasteStart) return false;
+    if (this.planMode || this.chatMode || this.tasteStart) return false;
     return this.touchedPaths.size > 0;
   }
 
@@ -311,6 +314,7 @@ export class AgentLoop {
       state: this.state,
       originalUserRequest: this.originalUserRequest,
       planMode: this.planMode,
+      chatMode: this.chatMode,
       resumeRun: this.resumeRun,
       hasCheckpoint: this.hasCheckpoint,
       resumePhase: this.resumePhase,
@@ -337,6 +341,7 @@ export class AgentLoop {
       configuredModel: () => this.configuredModel(),
       loopBudgetExceeded: () => this.loopBudgetExceeded(),
       gatherContext: () => this.gatherContext(),
+      runChatModeAgentTurn: (model: LLMProvider) => this.runChatModeAgentTurn(model),
       runPlanModeAgentTurn: (model: LLMProvider) => this.runPlanModeAgentTurn(model),
       finishPlanProposal: (plan: ProposedPlan) => this.finishPlanProposal(plan),
     };
@@ -365,8 +370,28 @@ export class AgentLoop {
     return finishPlanProposalForHost(this.planTurnHost(), proposedPlan, toolsUsed);
   }
 
+  private async runChatModeAgentTurn(model: LLMProvider): Promise<AgentLoopRunResult> {
+    return runChatModeAgentTurnForHost(this.chatTurnHost(), model);
+  }
+
   private async runPlanModeAgentTurn(model: LLMProvider): Promise<AgentLoopRunResult> {
     return runPlanModeAgentTurnForHost(this.planTurnHost(), model);
+  }
+
+  private chatTurnHost() {
+    return {
+      state: this.state,
+      mutable: this.mutable,
+      planStreamState: this.planStreamState,
+      thinkingStreamStartedAt: this.thinkingStreamStartedAt,
+      setThinkingStreamStartedAt: (value: number | null) => {
+        this.thinkingStreamStartedAt = value;
+      },
+      bindings: this.bindings,
+      originalUserRequest: this.originalUserRequest,
+      robinActive: this.robinActive,
+      onActivity: () => this.onActivity(),
+    };
   }
 
   private planTurnHost() {

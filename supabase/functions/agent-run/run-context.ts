@@ -26,6 +26,7 @@ export function looksLikeInteractionOnly(text: string): boolean {
 
 export type ResolveAllocateSandboxInput = {
   planMode?: boolean;
+  chatMode?: boolean;
   userContent: string;
   projectHasSandbox: boolean;
   hasApprovedPlanInHistory?: boolean;
@@ -45,6 +46,7 @@ export type ResolveAllocateSandboxInput = {
  * ainda aloca só se já existe sandbox (não cria).
  */
 export function resolveAllocateSandbox(input: ResolveAllocateSandboxInput): boolean {
+  if (input.chatMode) return false;
   if (input.planMode) return input.projectHasSandbox;
   // Plan→Build explícito: aloca sempre (aprovação explícita do user)
   if (input.isApprovedPlanBuild) return true;

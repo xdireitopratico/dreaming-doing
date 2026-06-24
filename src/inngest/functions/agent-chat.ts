@@ -14,14 +14,14 @@ class NonRetriableError extends Error {
   override readonly name = "NonRetriableError";
 }
 
-export const agentBuildFunction = inngest.createFunction(
+export const agentChatFunction = inngest.createFunction(
   {
-    id: "agent-build",
-    name: "Agent: Build Mode",
+    id: "agent-chat",
+    name: "Agent: Chat Mode",
     retries: 0,
     concurrency: { limit: 5 },
-    timeouts: { finish: "14m" },
-    triggers: [{ event: "agent/build.requested" }],
+    timeouts: { finish: "5m" },
+    triggers: [{ event: "agent/chat.requested" }],
   },
   async ({ event, step }) => {
     const payload = event.data as AgentRunRequest;
@@ -35,7 +35,11 @@ export const agentBuildFunction = inngest.createFunction(
       return status;
     });
 
-    if (initialStatus === "completed" || initialStatus === "failed") {
+    if (
+      initialStatus === "completed" ||
+      initialStatus === "failed" ||
+      initialStatus === "awaiting_user"
+    ) {
       return { runId, ok: true, alreadyDone: true };
     }
 
@@ -58,26 +62,12 @@ export const agentBuildFunction = inngest.createFunction(
 
     const final = await runAgentLoopWithResume(
       step as Parameters<typeof runAgentLoopWithResume>[0],
-      { ...payload, planMode: false, chatMode: false },
+      { ...payload, planMode: false, chatMode: true },
     );
 
     if (final.canceled) {
       await step.run("mark-canceled", async () => {
         await markRunFinal(runId, "canceled", { error: final.error ?? "canceled" });
-      });
-      await step.run("ensure-terminal-message-canceled", async () => {
-        return await ensureTerminalRunMessage({
-          runId,
-          conversationId: payload.conversationId,
-          projectId: payload.projectId,
-          error: final.error ?? "canceled",
-        });
-      });
-      // H6 fix: drain pending queue after cancel. Sem isso, mensagens
-      // enfileiradas durante a run ficam stuck — o usuário tinha que
-      // enviar nova mensagem para destravar o drain.
-      await step.run("drain-pending-queue-after-cancel", async () => {
-        return await drainPendingQueue(payload);
       });
       return { runId, ok: false, canceled: true };
     }
@@ -98,17 +88,8 @@ export const agentBuildFunction = inngest.createFunction(
       );
 
       if (decision.action === "redispatch") {
-        await step.run("wait-queued-job", async () => {
-          const { waitForQueuedAgentJob } = await import("./agent-jobs.ts");
-          const ready = await waitForQueuedAgentJob(getSupabaseAdmin(), runId);
-          if (!ready) {
-            throw new NonRetriableError(
-              `Worker mode: chunk job não enfileirado antes do redispatch (${runId.slice(0, 8)})`,
-            );
-          }
-        });
         await step.sendEvent("re-dispatch-chunk", {
-          name: "agent/build.requested",
+          name: "agent/chat.requested",
           data: { ...payload, resume: true },
         });
         return { runId, ok: false, resumable: true, continued: true };
@@ -118,46 +99,7 @@ export const agentBuildFunction = inngest.createFunction(
       await step.run("mark-failed-resumable-exhausted", async () => {
         await markRunFinal(runId, "failed", {
           error: exhaustedError,
-          meta: {
-            resumableExhausted: true,
-            resumeAttempts: decision.chunkGeneration,
-          },
-        });
-      });
-      await step.run("ensure-terminal-message-resumable", async () => {
-        return await ensureTerminalRunMessage({
-          runId,
-          conversationId: payload.conversationId,
-          projectId: payload.projectId,
-          error: exhaustedError,
-          buildFailed: true,
-        });
-      });
-      await step.run("emit-finish-resumable", async () => {
-        const sb = getSupabaseAdmin();
-        const { data: lastRow } = await sb
-          .from("agent_stream_events")
-          .select("seq")
-          .eq("run_id", runId)
-          .order("seq", { ascending: false })
-          .limit(1)
-          .maybeSingle();
-        const nextSeq = (typeof lastRow?.seq === "number" ? lastRow.seq : 0) + 1;
-        await sb.from("agent_stream_events").insert({
-          id: crypto.randomUUID(),
-          run_id: runId,
-          seq: nextSeq,
-          event_type: "finish",
-          payload: {
-            type: "finish",
-            ok: false,
-            canceled: false,
-            resumable: false,
-            error: exhaustedError,
-            chunkCap: true,
-            resumableExhausted: true,
-            resumeAttempts: decision.chunkGeneration,
-          },
+          meta: { resumableExhausted: true, resumeAttempts: decision.chunkGeneration },
         });
       });
       return { runId, ok: false, error: exhaustedError };
@@ -169,7 +111,6 @@ export const agentBuildFunction = inngest.createFunction(
       await markRunFinal(runId, "completed");
     });
 
-    // Bug #4: garantir linha assistant materializada mesmo em sucesso.
     await step.run("ensure-terminal-message-success", async () => {
       return await ensureTerminalRunMessage({
         runId,
@@ -180,8 +121,6 @@ export const agentBuildFunction = inngest.createFunction(
     });
 
     await step.run("drain-pending-queue", async () => {
-      const status = await getRunStatus(runId);
-      if (status === "awaiting_user") return { continued: false };
       return await drainPendingQueue(payload);
     });
 

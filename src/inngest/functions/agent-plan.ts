@@ -62,8 +62,7 @@ export const agentPlanFunction = inngest.createFunction(
 
     const final = await runAgentLoopWithResume(
       step as Parameters<typeof runAgentLoopWithResume>[0],
-      payload,
-      true,
+      { ...payload, planMode: true, chatMode: false },
     );
 
     if (final.canceled) {

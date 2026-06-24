@@ -53,7 +53,7 @@ describe("sendMessage", () => {
     expect(d.runAgent).toHaveBeenCalledWith("byok", "plan");
   });
 
-  it("composer Chat envia mode chat sem pending turn", async () => {
+  it("composer Chat envia mode chat com pending turn (run + SSE)", async () => {
     const d = deps();
 
     await sendMessage(
@@ -68,7 +68,7 @@ describe("sendMessage", () => {
       d,
     );
 
-    expect(d.beginPendingTurn).not.toHaveBeenCalled();
+    expect(d.beginPendingTurn).toHaveBeenCalled();
     expect(d.runAgent).toHaveBeenCalledWith("byok", "chat");
   });
 

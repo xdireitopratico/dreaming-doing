@@ -19,6 +19,7 @@ export type LoopOrchestratorHost = {
   state: AgentState;
   originalUserRequest: string;
   planMode: boolean;
+  chatMode: boolean;
   resumeRun: boolean;
   hasCheckpoint: boolean;
   resumePhase: LoopPhase | null;
@@ -54,6 +55,7 @@ export function buildOrchestratorDeps(
     context: host.state.context,
     originalUserRequest: host.originalUserRequest,
     planMode: host.planMode,
+    chatMode: host.chatMode,
     emit: (type, data) => host.emit(type, data),
     configuredModel: () => host.configuredModel(),
     persistFinal: (summary, opts) => host.bindings.persistFinal(summary, opts),
@@ -83,6 +85,7 @@ export function buildOrchestratorDeps(
     returnResumableChunk: (steps, used) => host.bindings.returnResumableChunk(steps, used),
     gatherContext: () => host.gatherContext(),
     saveCheckpoint: (phase) => host.bindings.saveCheckpoint(phase),
+    runChatModeAgentTurn: (model) => host.runChatModeAgentTurn(model),
     runPlanModeAgentTurn: (model) => host.runPlanModeAgentTurn(model),
     finishPlanProposal: (plan) => host.finishPlanProposal(plan),
     runBuildExecute: (used, model, step) =>

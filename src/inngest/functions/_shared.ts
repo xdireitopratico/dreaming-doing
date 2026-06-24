@@ -19,6 +19,7 @@ export type AgentRunRequest = {
   enabledSkillIds?: string[];
   enabledMcpIds?: string[];
   planMode: boolean;
+  chatMode?: boolean;
   plan?: string;
   planSourceRunId?: string;
   resume?: boolean;
@@ -27,7 +28,7 @@ export type AgentRunRequest = {
 export type ExecuteResponse = {
   ok: boolean;
   runId: string;
-  mode: "plan" | "build";
+  mode: "plan" | "build" | "chat";
   resumable: boolean;
   canceled: boolean;
   error?: string;
@@ -141,7 +142,6 @@ type InngestStep = {
 export async function runAgentLoopWithResume(
   step: InngestStep,
   payload: AgentRunRequest,
-  planMode: boolean,
 ): Promise<ExecuteResponse> {
   const { maxLoopResumeStepsForRuntime } = await import("./agent-jobs.ts");
   const maxSteps = maxLoopResumeStepsForRuntime();
@@ -149,7 +149,7 @@ export async function runAgentLoopWithResume(
 
   for (let i = 0; i < maxSteps; i++) {
     const result = await step.run(`execute-loop-${i}`, async () => {
-      return await runAgentLoop({ ...payload, planMode, resume: i > 0 });
+      return await runAgentLoop({ ...payload, resume: i > 0 });
     });
     lastResult = result;
     if (result.ok || result.canceled || !result.resumable) break;

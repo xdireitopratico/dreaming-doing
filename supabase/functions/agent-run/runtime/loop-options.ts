@@ -15,6 +15,7 @@ export type AgentLoopOptions = {
   maxStepsFromCheckpoint?: number;
   runId?: string | null;
   planMode?: boolean;
+  chatMode?: boolean;
   approvedPlanBuild?: boolean;
   skipConversationalGate?: boolean;
   planSummary?: string;

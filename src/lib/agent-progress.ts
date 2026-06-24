@@ -318,16 +318,22 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
   const { type, data } = event;
 
   switch (type) {
-    case "start":
+    case "start": {
+      const modeRaw = data.mode;
+      const mode =
+        modeRaw === "chat" || modeRaw === "plan" || modeRaw === "build" ? modeRaw : undefined;
       return {
         ...initialAgentProgress,
         pendingQueueCount: prev.pendingQueueCount,
         error: null,
         finished: false,
         resumable: false,
-        statusHint: "Trabalhando no projeto…",
+        statusHint: mode === "chat" ? "Respondendo…" : "Trabalhando no projeto…",
+        conversational: mode === "chat" ? true : prev.conversational,
+        mode,
         timeline: [event],
       };
+    }
 
     case "canceled":
       return {
