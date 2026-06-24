@@ -773,9 +773,12 @@ export type { SttProviderId } from "@/lib/stt-config";
 
 const PRESET_BY_ID = new Map(CODING_MODEL_PRESETS.map((p) => [p.id, p]));
 
+/** Provider exibido no studio quando ainda não há modelo ativo — nunca OpenRouter por default. */
+export const DEFAULT_STUDIO_ENV: AiEnvId = "groq";
+
 export const UNCONFIGURED_PRESET: ForgeModelPreset = {
   id: "",
-  env: "openrouter",
+  env: DEFAULT_STUDIO_ENV,
   model: "",
   openRouterSlug: "",
   label: "Não configurado",
@@ -784,8 +787,55 @@ export const UNCONFIGURED_PRESET: ForgeModelPreset = {
   brand: "—",
   rank: 9999,
   llmProvider: "openai",
-  secretKey: "OPENROUTER_API_KEY",
+  secretKey: "GROQ_API_KEY",
 };
+
+/** Deriva o provider ativo no Model Engine a partir das prefs (inclui modo auto). */
+export function resolveStudioSelectedEnv(
+  prefs: {
+    mode?: "auto" | "robin" | "fixed";
+    fixedPresetId?: string;
+    robinPoolModelId?: string;
+    poolProvider?: string;
+    autoAllowedPresetIds?: string[];
+    userModelEntries?: UserModelEntry[];
+  },
+  connected?: Partial<Record<string, boolean>>,
+): AiEnvId {
+  const mode = prefs.mode ?? "fixed";
+
+  if (mode === "robin") {
+    const pool = prefs.poolProvider?.trim();
+    if (pool && isAiEnv(pool as ModelEnvId)) return pool as AiEnvId;
+    const robin = getPresetById(prefs.robinPoolModelId, prefs.userModelEntries);
+    if (robin.id && isAiEnv(robin.env)) return robin.env;
+  }
+
+  if (mode === "fixed") {
+    const fixed = getPresetById(prefs.fixedPresetId, prefs.userModelEntries);
+    if (fixed.id && isAiEnv(fixed.env)) return fixed.env;
+    const custom = prefs.userModelEntries?.[0];
+    if (custom?.env && isAiEnv(custom.env as ModelEnvId)) return custom.env as AiEnvId;
+  }
+
+  if (mode === "auto") {
+    for (const id of prefs.autoAllowedPresetIds ?? []) {
+      const p = getPresetById(id, prefs.userModelEntries);
+      if (p.id && isAiEnv(p.env)) return p.env;
+    }
+  }
+
+  if (connected) {
+    for (const env of AI_ENVS_SORTED) {
+      if (env !== "openrouter" && connected[env]) return env;
+    }
+    for (const env of AI_ENVS_SORTED) {
+      if (connected[env]) return env;
+    }
+  }
+
+  return DEFAULT_STUDIO_ENV;
+}
 
 export function getPresetById(id?: string, userModels?: UserModelEntry[]): ForgeModelPreset {
   const norm = normalizePresetIdContract(id);

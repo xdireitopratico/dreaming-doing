@@ -39,6 +39,7 @@ import {
   getPresetById,
   inferEnvFromSlug,
   normalizePresetId,
+  resolveStudioSelectedEnv,
   userModelPresetId,
   PLATFORM_ROBIN_TASTE_PRESET_ID,
   type AiEnvId,
@@ -204,23 +205,15 @@ export function AiModelStudio({ connectorRows, keysSectionHref = "/api" }: AiMod
   const connected = connectedEnvsFromRows(connectorRows);
   const userModels = prefs.userModelEntries;
   const mode = prefs.mode ?? "fixed";
-  const activePreset = getPresetById(
-    prefs.mode === "robin" ? prefs.robinPoolModelId : prefs.fixedPresetId,
-    userModels,
+  const [selectedEnv, setSelectedEnv] = useState<AiEnvId>(() =>
+    resolveStudioSelectedEnv(prefs, connected),
   );
-  const initialEnv = isKnownAiEnv(activePreset.env)
-    ? activePreset.env
-    : inferEnvFromSlug(activePreset.openRouterSlug || activePreset.id || "openrouter/openai");
-  const [selectedEnv, setSelectedEnv] = useState<AiEnvId>(initialEnv);
   const [draftModelSlug, setDraftModelSlug] = useState("");
+  const autoAllowedKey = (prefs.autoAllowedPresetIds ?? []).join(",");
 
   useEffect(() => {
-    const p = getPresetById(
-      prefs.mode === "robin" ? prefs.robinPoolModelId : prefs.fixedPresetId,
-      userModels,
-    );
-    if (p.id) setSelectedEnv(isKnownAiEnv(p.env) ? p.env : inferEnvFromSlug(p.openRouterSlug || p.id));
-  }, [prefs.fixedPresetId, prefs.robinPoolModelId, prefs.mode, userModels]);
+    setSelectedEnv(resolveStudioSelectedEnv(prefs, connected));
+  }, [prefs.mode, prefs.fixedPresetId, prefs.robinPoolModelId, prefs.poolProvider, autoAllowedKey, connected, userModels]);
 
   const patch = (partial: Partial<AgentPreferences>) =>
     setPrefs((p) => {

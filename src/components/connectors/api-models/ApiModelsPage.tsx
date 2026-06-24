@@ -28,6 +28,7 @@ import {
   getPresetById,
   normalizePresetId,
   modelsForStudioStep,
+  resolveStudioSelectedEnv,
   type ForgeModelPreset,
   type UserModelEntry,
   userModelPresetId,
@@ -196,11 +197,9 @@ export function ApiModelsPage() {
   const [ollamaConnected, setOllamaConnected] = useState(false);
 
   const mode = prefs.mode ?? "fixed";
-  const activePreset = getPresetById(
-    mode === "robin" ? prefs.robinPoolModelId : prefs.fixedPresetId,
-    prefs.userModelEntries,
+  const [selectedEnv, setSelectedEnv] = useState<AiProviderId>(() =>
+    resolveStudioSelectedEnv(prefs),
   );
-  const [selectedEnv, setSelectedEnv] = useState<AiProviderId>(activePreset.env as AiProviderId);
   const parserProvider = (prefs.parserProvider ?? "builtin") as ParserIndexProviderId;
 
   useEffect(() => {
@@ -282,17 +281,21 @@ export function ApiModelsPage() {
     });
   }, [user, prefsLoaded]);
 
+  const connected = useMemo(() => connectedEnvsFromRows(connectorRows), [connectorRows]);
+
+  const autoAllowedKey = (prefs.autoAllowedPresetIds ?? []).join(",");
+
   useEffect(() => {
     if (!prefsLoaded) return;
-    const m = prefs.mode ?? "fixed";
-    const preset = getPresetById(
-      m === "robin" ? prefs.robinPoolModelId : prefs.fixedPresetId,
-      prefs.userModelEntries,
-    );
-    if (preset.id) {
-      setSelectedEnv(preset.env as AiProviderId);
-    }
-  }, [prefsLoaded, prefs.mode, prefs.fixedPresetId, prefs.robinPoolModelId, prefs.userModelEntries]);
+    setSelectedEnv(resolveStudioSelectedEnv(prefs, connected));
+  }, [
+    prefsLoaded,
+    prefs.mode,
+    prefs.fixedPresetId,
+    prefs.robinPoolModelId,
+    prefs.poolProvider,
+    autoAllowedKey,
+  ]);
 
   const patchPrefs = useCallback((partial: Partial<AgentPreferences>) => {
     setPrefs((p) => {
@@ -303,7 +306,6 @@ export function ApiModelsPage() {
   }, []);
 
   const studioProviders = useMemo(() => mergeProviderList(connectorRows), [connectorRows]);
-  const connected = useMemo(() => connectedEnvsFromRows(connectorRows), [connectorRows]);
   const connectedCount = useMemo(
     () => Object.values(connected).filter(Boolean).length,
     [connected],
@@ -727,6 +729,7 @@ export function ApiModelsPage() {
         patchPrefs({ autoAllowedPresetIds: [...current] });
         return;
       }
+      setSelectedEnv(preset.env as AiProviderId);
       patchPrefs({
         fixedPresetId: presetId,
         useCustomModel: undefined,
