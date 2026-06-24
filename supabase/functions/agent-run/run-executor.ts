@@ -134,7 +134,11 @@ export async function executeAgentRun(
     };
   }
 
-  const effectivePreferences = await resolveEffectiveAgentPreferences(supabase, userId);
+  const effectivePreferences = await resolveEffectiveAgentPreferences(
+    supabase,
+    userId,
+    runMeta,
+  );
   const effectiveSessionKindRawEarly = resolveExecuteSessionKindRaw(
     params.sessionKindRaw,
     runMeta,

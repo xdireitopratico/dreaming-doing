@@ -232,6 +232,7 @@ async function main() {
     supabaseUrl: SUPABASE_URL,
     serviceKey: SERVICE_KEY,
     userId: userIdResolved,
+    patchPreferences: false,
   });
   console.log(
     `Seed: openrouter=${seed.openrouterSource} model=${seed.model} e2b=${seed.e2bSource}`,

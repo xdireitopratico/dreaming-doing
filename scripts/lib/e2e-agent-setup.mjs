@@ -144,14 +144,23 @@ async function patchProfilePreferences(supabaseUrl, serviceKey, userId, preferen
 }
 
 /**
- * Garante prefs + chave OpenRouter para o usuário E2E executar runs BYOK.
+ * Garante conectores BYOK (+ opcionalmente prefs) para usuário E2E.
+ * @param {object} opts
+ * @param {boolean} [opts.patchPreferences=true] — false em smoke: prefs só em agent_runs.meta
  */
-export async function seedE2eAgentSetup({ supabaseUrl, serviceKey, userId }) {
+export async function seedE2eAgentSetup({
+  supabaseUrl,
+  serviceKey,
+  userId,
+  patchPreferences = true,
+}) {
   if (!supabaseUrl || !serviceKey || !userId) {
     throw new Error("seedE2eAgentSetup: supabaseUrl, serviceKey e userId obrigatórios");
   }
 
-  await patchProfilePreferences(supabaseUrl, serviceKey, userId, E2E_AGENT_PREFERENCES);
+  if (patchPreferences) {
+    await patchProfilePreferences(supabaseUrl, serviceKey, userId, E2E_AGENT_PREFERENCES);
+  }
 
   const adminId = await resolveAdminUserId(supabaseUrl, serviceKey);
   if (!adminId) {

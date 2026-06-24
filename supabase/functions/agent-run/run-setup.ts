@@ -3,7 +3,10 @@
  * Usado por agent-run/index.ts, run-executor.ts e run-job.ts.
  */
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
-import { loadAgentPreferencesFromDb } from "./agent-preferences-db.ts";
+import {
+  loadAgentPreferencesFromDb,
+  normalizeAgentPreferences,
+} from "./agent-preferences-db.ts";
 import {
   loadConnectorKeys,
   loadConnectorPools,
@@ -109,11 +112,19 @@ export function hasUserLlmKeyFromKeys(
   );
 }
 
-/** SSOT: profiles.agent_preferences. Sem fallback para body, run.meta ou chaves. */
+/**
+ * SSOT: profiles.agent_preferences.
+ * Exceção: run.meta.smoke + meta.preferences (smoke CI — não polui o perfil).
+ */
 export async function resolveEffectiveAgentPreferences(
   supabase: SupabaseClient,
   userId: string,
+  runMeta?: Record<string, unknown> | null,
 ): Promise<AgentPreferencesPayload | undefined> {
+  if (runMeta?.smoke === true && runMeta.preferences) {
+    const fromRun = normalizeAgentPreferences(runMeta.preferences);
+    if (fromRun?.mode) return fromRun;
+  }
   return loadAgentPreferencesFromDb(supabase, userId);
 }
 

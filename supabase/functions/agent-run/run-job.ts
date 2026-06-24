@@ -249,7 +249,11 @@ export async function executeAgentJob(
   const preMeta = (pre?.meta ?? {}) as Record<string, unknown>;
   const isSmokeRun = preMeta.smoke === true;
 
-  const effectivePreferences = await resolveEffectiveAgentPreferences(supabase, userId);
+  const effectivePreferences = await resolveEffectiveAgentPreferences(
+    supabase,
+    userId,
+    preMeta,
+  );
 
   // Paraleliza queries independentes de inicialização (reduz cold-start)
   const [projectResult, profileResult, historyResult, userLlmResult] = await Promise.all([
