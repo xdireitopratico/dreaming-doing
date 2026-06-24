@@ -191,6 +191,24 @@ export function ModelEngineSection({
 }: ModelEngineSectionProps) {
   const mode = prefs.mode ?? "fixed";
   const modeGuide = MODE_GUIDE[mode];
+  const sortedProviders = useMemo(
+    () =>
+      [...providers].sort((a, b) => {
+        const cmp = a.label.localeCompare(b.label, "pt-BR", { sensitivity: "base" });
+        if (cmp !== 0) return cmp;
+        return a.id.localeCompare(b.id, "pt-BR", { sensitivity: "base" });
+      }),
+    [providers],
+  );
+  const sortedEnvModels = useMemo(
+    () =>
+      [...envModels].sort((a, b) => {
+        const cmp = a.label.localeCompare(b.label, "pt-BR", { sensitivity: "base" });
+        if (cmp !== 0) return cmp;
+        return a.id.localeCompare(b.id, "pt-BR", { sensitivity: "base" });
+      }),
+    [envModels],
+  );
   const autoAllowed = useMemo(
     () => new Set((prefs.autoAllowedPresetIds ?? []).map((id) => normalizePresetId(id))),
     [prefs.autoAllowedPresetIds],
@@ -257,7 +275,7 @@ export function ModelEngineSection({
         <div>
           <h2 className="flex items-center gap-2 font-display text-lg tracking-tight text-[var(--foreground)]">
             <Zap className="size-5 text-[var(--primary)]" />
-            Model Engine
+            1 · Model Engine
           </h2>
           <p className="mt-1 font-mono text-[10px] text-[var(--text-dim)] max-w-2xl leading-relaxed">
             Escolha o modo, o provider e o modelo que o agente vai usar.
@@ -325,7 +343,7 @@ export function ModelEngineSection({
           2 · Provider
         </p>
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2">
-          {providers.map((env) => {
+          {sortedProviders.map((env) => {
             const hasKey = connected[env.id];
             const active = selectedEnv === env.id;
             return (
@@ -443,7 +461,7 @@ export function ModelEngineSection({
           </p>
         ) : (
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-            {envModels.map((m) => {
+            {sortedEnvModels.map((m) => {
               const isCustom = m.id.startsWith("custom--");
               const { disabled, reason } = cardDisabled(m);
               const badges = [

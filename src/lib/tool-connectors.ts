@@ -32,6 +32,14 @@ export type ToolProviderDefinition = {
   docUrl?: string;
 };
 
+function sortProvidersByLabel(list: ToolProviderDefinition[]): ToolProviderDefinition[] {
+  return [...list].sort((a, b) => {
+    const labelCmp = a.label.localeCompare(b.label, "pt-BR", { sensitivity: "base" });
+    if (labelCmp !== 0) return labelCmp;
+    return a.id.localeCompare(b.id, "pt-BR", { sensitivity: "base" });
+  });
+}
+
 const WEB_SEARCH_PROVIDER_LIST: ToolProviderDefinition[] = [
   {
     id: "brave",
@@ -187,19 +195,19 @@ const PARSER_INDEX_PROVIDER_LIST: ToolProviderDefinition[] = [
 ];
 
 export function webSearchProviders(): ToolProviderDefinition[] {
-  return WEB_SEARCH_PROVIDER_LIST;
+  return sortProvidersByLabel(WEB_SEARCH_PROVIDER_LIST);
 }
 
 export function webScrapeProviders(): ToolProviderDefinition[] {
-  return WEB_SCRAPE_PROVIDER_LIST;
+  return sortProvidersByLabel(WEB_SCRAPE_PROVIDER_LIST);
 }
 
 export function browserRuntimeProviders(): ToolProviderDefinition[] {
-  return BROWSER_RUNTIME_PROVIDER_LIST;
+  return sortProvidersByLabel(BROWSER_RUNTIME_PROVIDER_LIST);
 }
 
 export function parserIndexProviders(): ToolProviderDefinition[] {
-  return PARSER_INDEX_PROVIDER_LIST;
+  return sortProvidersByLabel(PARSER_INDEX_PROVIDER_LIST);
 }
 
 export function providerDefinitionFor(

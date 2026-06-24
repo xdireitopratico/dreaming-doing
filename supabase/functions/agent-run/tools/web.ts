@@ -1,17 +1,24 @@
 // tools/web.ts — Web research, scrape e screenshot tools para o agent-run.
 // Expõe ao LLM a capacidade de buscar referências visuais reais na web
 // durante o Plan e o Build. Usa os providers já implementados em
-// _shared/web-research-providers.ts (Firecrawl, Jina, Tavily, Serper, Brave, DuckDuckGo).
+// _shared/web-research-providers.ts (Firecrawl, Jina, Tavily, Serper, Brave).
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import type { ToolRegistry } from "../registry.ts";
-import { researchWebQuery, scrapeWebPage } from "../../_shared/web-research-providers.ts";
+import {
+  researchAndScrape,
+  scrapeWebPage,
+  type WebProviderPrefs,
+} from "../../_shared/web-research-providers.ts";
 import { logger } from "../../_shared/logger.ts";
+import type { AgentPreferencesPayload } from "../connector-keys.ts";
 
 export interface WebToolsContext {
   supabase: SupabaseClient;
   userId: string;
   /** Keys carregadas de connectors — inclui FIRECRAWL_API_KEY, TAVILY_API_KEY, etc. */
   connectorKeys: Record<string, string>;
+  /** Preferências do usuário (agent_preferences) — inclui fallback chain das tools. */
+  preferences?: AgentPreferencesPayload;
 }
 
 /** Carrega secrets de web search / scrape / browser runtime do connectors table. */
@@ -104,7 +111,7 @@ async function loadWebSearchSecrets(
 }
 
 export function registerWebTools(reg: ToolRegistry, ctx: WebToolsContext): void {
-  const { supabase, userId, connectorKeys } = ctx;
+  const { supabase, userId, connectorKeys, preferences } = ctx;
 
   // Cache de secrets — carregado sob demanda na primeira chamada
   let secretsCache: Record<string, string> | null = null;
@@ -112,6 +119,12 @@ export function registerWebTools(reg: ToolRegistry, ctx: WebToolsContext): void 
     if (secretsCache) return secretsCache;
     secretsCache = await loadWebSearchSecrets(supabase, userId, connectorKeys);
     return secretsCache;
+  }
+
+  // Preferências de fallback das tools — primary vem do conector conectado,
+  // fallback do agent_preferences (default "jina" se não configurado).
+  function getWebSearchPrefs(): WebProviderPrefs {
+    return { fallback: preferences?.webSearchFallback || "jina" };
   }
 
   // ── http_fetch: fetch HTTP direto e gratuito (sem API key) ──
@@ -183,15 +196,15 @@ export function registerWebTools(reg: ToolRegistry, ctx: WebToolsContext): void 
     },
   );
 
-  // ── web_research: busca web agnóstica (Serper/Tavily/Brave/Firecrawl/DuckDuckGo) ──
+  // ── web_research: busca web + scrape encadeado (search → top-N URLs → markdown) ──
   reg.register(
     {
       name: "web_research",
       description:
-        "Pesquisa web para encontrar sites, referências de design, documentação ou inspiração. " +
-        "Retorna lista de URLs com título e snippet. Use para encontrar referências visuais " +
-        "antes de definir o brief de design (ex: 'brutalist editorial bakery website'). " +
-        "Funciona sem API key (DuckDuckGo fallback); melhores resultados com Tavily/Serper/Brave configurados.",
+        "Pesquisa web e extrai conteúdo das melhores páginas em uma chamada. " +
+        "Retorna lista de URLs com título, snippet E o conteúdo markdown das top-N páginas. " +
+        "Use para encontrar referências visuais, documentação ou inspiração e já ler o conteúdo. " +
+        "Funciona sem API key (Jina gratuito); melhores resultados com Tavily/Serper/Brave/Firecrawl configurados.",
       parameters: {
         type: "object",
         properties: {
@@ -201,11 +214,16 @@ export function registerWebTools(reg: ToolRegistry, ctx: WebToolsContext): void 
           },
           limit: {
             type: "number",
-            description: "Máximo de resultados (default 5, max 20).",
+            description: "Máximo de resultados de busca (default 5, max 20).",
+          },
+          scrape_depth: {
+            type: "number",
+            description:
+              "Quantas das top URLs extrair conteúdo markdown após a busca (default 3, max 5, 0 = só busca sem scrape).",
           },
           provider: {
             type: "string",
-            description: "Provedor preferido: auto, tavily, serper, brave, firecrawl, duckduckgo. Default: auto.",
+            description: "Provedor de busca preferido: auto, tavily, serper, brave, firecrawl, jina, searxng. Default: auto.",
           },
         },
         required: ["query"],
@@ -214,13 +232,20 @@ export function registerWebTools(reg: ToolRegistry, ctx: WebToolsContext): void 
     async (args) => {
       try {
         const secrets = await getSecrets();
-        const result = await researchWebQuery(
+        const providerName = typeof args.provider === "string" ? args.provider : "auto";
+        const prefs: WebProviderPrefs = {
+          ...getWebSearchPrefs(),
+          primary: providerName,
+        };
+        const result = await researchAndScrape(
           {
             query: args.query,
             limit: args.limit ?? 5,
-            provider: args.provider ?? "auto",
+            scrape_depth: args.scrape_depth ?? 3,
+            provider: providerName,
           },
           secrets,
+          prefs,
         );
         return {
           toolCallId: "",

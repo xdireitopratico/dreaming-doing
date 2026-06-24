@@ -112,12 +112,21 @@ function slugify(name: string): string {
 }
 
 async function buildZip(files: DeployFile[]): Promise<Uint8Array> {
-  const { default: JSZip } = await import("https://esm.sh/jszip@3.10.1");
-  const zip = new JSZip();
+  const JSZipModule = (await import("https://esm.sh/jszip@3.10.1")) as unknown as {
+    default: new () => {
+      file(path: string, content: string): void;
+      generateAsync(options: { type: "uint8array"; compression: "DEFLATE" }): Promise<Uint8Array>;
+    };
+  };
+  const zip = new JSZipModule.default();
   for (const file of files) {
     zip.file(file.path, file.content);
   }
   return await zip.generateAsync({ type: "uint8array", compression: "DEFLATE" });
+}
+
+function zipBytesToBlob(zipBytes: Uint8Array): Blob {
+  return new Blob([zipBytes.buffer as ArrayBuffer], { type: "application/zip" });
 }
 
 export async function deployToVercel(
@@ -241,7 +250,7 @@ export async function deployToNetlify(
       Authorization: `Bearer ${token}`,
       "Content-Type": "application/zip",
     },
-    body: zipBytes,
+    body: zipBytesToBlob(zipBytes),
     signal: controller.signal,
   });
   clearTimeout(timeoutId);
@@ -338,7 +347,7 @@ export async function deployToCloudflare(
 
   const zipBytes = await buildZip(files);
   const form = new FormData();
-  form.append("file", new Blob([zipBytes], { type: "application/zip" }), "deploy.zip");
+  form.append("file", zipBytesToBlob(zipBytes), "deploy.zip");
 
   const deployController = getDeploymentController();
 

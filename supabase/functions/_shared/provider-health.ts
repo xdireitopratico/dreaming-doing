@@ -64,6 +64,7 @@ async function checkOllama(): Promise<ProviderHealthStatus> {
     return {
       provider: "ollama",
       status: "offline",
+      latency_ms: null,
       error: "OLLAMA_URL not configured",
       checked_at: new Date().toISOString(),
     };
@@ -91,7 +92,13 @@ async function checkApiProvider(
 ): Promise<ProviderHealthStatus> {
   const apiKey = Deno.env.get(secretEnv);
   if (!apiKey) {
-    return { provider: name, status: "offline", latency_ms: null, error: `${secretEnv} not configured`, checked_at: new Date().toISOString() };
+    return {
+      provider: name,
+      status: "offline",
+      latency_ms: null,
+      error: `${secretEnv} not configured`,
+      checked_at: new Date().toISOString(),
+    };
   }
 
   const start = Date.now();
@@ -131,7 +138,13 @@ async function checkApiProvider(
 async function checkLovableGemini(): Promise<ProviderHealthStatus> {
   const apiKey = Deno.env.get("LOVABLE_API_KEY");
   if (!apiKey) {
-    return { provider: "lovable", status: "offline", latency_ms: null, error: "LOVABLE_API_KEY not configured", checked_at: new Date().toISOString() };
+    return {
+      provider: "lovable",
+      status: "offline",
+      latency_ms: null,
+      error: "LOVABLE_API_KEY not configured",
+      checked_at: new Date().toISOString(),
+    };
   }
 
   const start = Date.now();

@@ -39,7 +39,7 @@ export async function resolveConnectorApiKey(
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    const keys = await loadConnectorKeys(supabase, ownerId);
+    const keys = await loadConnectorKeys(supabase as never, ownerId);
     return pickConnectorKey(keys, secretName);
   } catch (err) {
     console.warn(`[connector-llm-bridge] Failed for ${secretName} owner=${ownerId}:`, err);

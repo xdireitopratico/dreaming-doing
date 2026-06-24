@@ -65,6 +65,13 @@ interface InfraToolsSectionProps {
     baseUrl?: string,
   ) => void;
   onDeleteBrowserRuntime: (provider: BrowserRuntimeProviderId) => void;
+  // Fallback chain — segundo provider se o primário falhar. Vai em agent_preferences.
+  webSearchFallback?: string;
+  webScrapeFallback?: string;
+  browserFallback?: string;
+  onWebSearchFallbackChange: (value: string) => void;
+  onWebScrapeFallbackChange: (value: string) => void;
+  onBrowserFallbackChange: (value: string) => void;
 }
 
 function rowProvider(row: ConnectorRowLike | null | undefined): string {
@@ -114,6 +121,12 @@ export function InfraToolsSection({
   onDeleteWebScrape,
   onSaveBrowserRuntime,
   onDeleteBrowserRuntime,
+  webSearchFallback,
+  webScrapeFallback,
+  browserFallback,
+  onWebSearchFallbackChange,
+  onWebScrapeFallbackChange,
+  onBrowserFallbackChange,
 }: InfraToolsSectionProps) {
   const [webSearchProvider, setWebSearchProvider] = useState<WebSearchProviderId>("brave");
   const [webSearchKey, setWebSearchKey] = useState("");
@@ -183,8 +196,8 @@ export function InfraToolsSection({
             exit={{ height: 0, opacity: 0 }}
             className="overflow-hidden"
           >
-            <div className="px-5 pb-5 space-y-6">
-              <div className="p-4 rounded-xl border border-[var(--border)] bg-[var(--surface-1)]/30">
+            <div className="px-5 pb-5 flex flex-col gap-6">
+              <div className="order-3 p-4 rounded-xl border border-[var(--border)] bg-[var(--surface-1)]/30">
                 <h3 className="font-mono text-[11px] mb-1 flex items-center gap-2">
                   <Search className="size-3.5 text-[var(--primary)]" />
                   Web Search
@@ -219,6 +232,27 @@ export function InfraToolsSection({
                       className="mt-1 font-mono text-xs"
                     />
                   </div>
+                </div>
+
+                <div className="mb-3">
+                  <Label className="font-mono text-[9px] text-[var(--text-dim)]">
+                    Fallback (segundo provider se o primário falhar)
+                  </Label>
+                  <select
+                    value={webSearchFallback ?? "jina"}
+                    onChange={(e) => onWebSearchFallbackChange(e.target.value)}
+                    className="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--surface-1)] px-3 py-2 font-mono text-xs text-[var(--foreground)]"
+                  >
+                    <option value="jina">Jina Search (gratuito)</option>
+                    <option value="searxng">SearXNG (self-hosted)</option>
+                    {webSearchProviders()
+                      .filter((p) => p.id !== webSearchProvider)
+                      .map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.label}
+                        </option>
+                      ))}
+                  </select>
                 </div>
 
                 {webSearchMeta?.docUrl && (
@@ -263,7 +297,7 @@ export function InfraToolsSection({
                 </div>
               </div>
 
-              <div className="p-4 rounded-xl border border-[var(--border)] bg-[var(--surface-1)]/30">
+              <div className="order-4 p-4 rounded-xl border border-[var(--border)] bg-[var(--surface-1)]/30">
                 <h3 className="font-mono text-[11px] mb-1 flex items-center gap-2">
                   <Globe className="size-3.5 text-[var(--primary)]" />
                   Web Scrape
@@ -287,7 +321,7 @@ export function InfraToolsSection({
                       ))}
                     </select>
                   </div>
-                  {webScrapeMeta?.needsBaseUrl ? (
+                  {webScrapeMeta?.needsBaseUrl && (
                     <div>
                       <Label className="font-mono text-[9px] text-[var(--text-dim)]">
                         {webScrapeMeta.baseUrlLabel ?? "Base URL"}
@@ -299,10 +333,11 @@ export function InfraToolsSection({
                         className="mt-1 font-mono text-xs"
                       />
                     </div>
-                  ) : (
+                  )}
+                  {webScrapeMeta?.needsToken && (
                     <div>
                       <Label className="font-mono text-[9px] text-[var(--text-dim)]">
-                        {webScrapeMeta?.tokenLabel ?? "Chave"}
+                        {webScrapeMeta.tokenLabel ?? "Chave"}
                       </Label>
                       <Input
                         value={webScrapeKey}
@@ -314,19 +349,25 @@ export function InfraToolsSection({
                   )}
                 </div>
 
-                {webScrapeMeta?.needsToken && (
-                  <div className="mb-3">
-                    <Label className="font-mono text-[9px] text-[var(--text-dim)]">
-                      {webScrapeMeta.tokenLabel ?? "Chave"}
-                    </Label>
-                    <Input
-                      value={webScrapeKey}
-                      onChange={(e) => setWebScrapeKey(e.target.value)}
-                      placeholder={(webScrapeMeta?.keyPrefix ?? "sk-") + "..."}
-                      className="mt-1 font-mono text-xs"
-                    />
-                  </div>
-                )}
+                <div className="mb-3">
+                  <Label className="font-mono text-[9px] text-[var(--text-dim)]">
+                    Fallback (segundo provider se o primário falhar)
+                  </Label>
+                  <select
+                    value={webScrapeFallback ?? "http"}
+                    onChange={(e) => onWebScrapeFallbackChange(e.target.value)}
+                    className="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--surface-1)] px-3 py-2 font-mono text-xs text-[var(--foreground)]"
+                  >
+                    <option value="http">HTTP direto (gratuito)</option>
+                    {webScrapeProviders()
+                      .filter((p) => p.id !== webScrapeProvider)
+                      .map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.label}
+                        </option>
+                      ))}
+                  </select>
+                </div>
 
                 {webScrapeMeta?.docUrl && (
                   <a
@@ -378,7 +419,7 @@ export function InfraToolsSection({
                 </div>
               </div>
 
-              <div className="p-4 rounded-xl border border-[var(--border)] bg-[var(--surface-1)]/30">
+              <div className="order-1 p-4 rounded-xl border border-[var(--border)] bg-[var(--surface-1)]/30">
                 <h3 className="font-mono text-[11px] mb-1 flex items-center gap-2">
                   <Database className="size-3.5 text-[var(--primary)]" />
                   Browser Runtime
@@ -456,7 +497,7 @@ export function InfraToolsSection({
                           ))}
                         </select>
                       </div>
-                      {browserMeta?.needsBaseUrl ? (
+                      {browserMeta?.needsBaseUrl && (
                         <div>
                           <Label className="font-mono text-[9px] text-[var(--text-dim)]">
                             {browserMeta.baseUrlLabel ?? "Endpoint"}
@@ -468,10 +509,11 @@ export function InfraToolsSection({
                             className="mt-1 font-mono text-xs"
                           />
                         </div>
-                      ) : (
+                      )}
+                      {browserMeta?.needsToken && (
                         <div>
                           <Label className="font-mono text-[9px] text-[var(--text-dim)]">
-                            {browserMeta?.tokenLabel ?? "Chave"}
+                            {browserMeta.tokenLabel ?? "Chave"}
                           </Label>
                           <Input
                             value={browserRuntimeKey}
@@ -483,19 +525,25 @@ export function InfraToolsSection({
                       )}
                     </div>
 
-                    {browserMeta?.needsToken && (
-                      <div className="mb-3">
-                        <Label className="font-mono text-[9px] text-[var(--text-dim)]">
-                          {browserMeta.tokenLabel ?? "Chave"}
-                        </Label>
-                        <Input
-                          value={browserRuntimeKey}
-                          onChange={(e) => setBrowserRuntimeKey(e.target.value)}
-                          placeholder={(browserMeta?.keyPrefix ?? "sk-") + "..."}
-                          className="mt-1 font-mono text-xs"
-                        />
-                      </div>
-                    )}
+                    <div className="mb-1">
+                      <Label className="font-mono text-[9px] text-[var(--text-dim)]">
+                        Fallback (segundo provider se o primário falhar)
+                      </Label>
+                      <select
+                        value={browserFallback ?? "none"}
+                        onChange={(e) => onBrowserFallbackChange(e.target.value)}
+                        className="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--surface-1)] px-3 py-2 font-mono text-xs text-[var(--foreground)]"
+                      >
+                        <option value="none">Nenhum (só o primário)</option>
+                        {browserRuntimeProviders()
+                          .filter((p) => p.id !== browserProvider)
+                          .map((p) => (
+                            <option key={p.id} value={p.id}>
+                              {p.label}
+                            </option>
+                          ))}
+                      </select>
+                    </div>
 
                     {browserMeta?.docUrl && (
                       <a
@@ -551,7 +599,7 @@ export function InfraToolsSection({
                 </div>
               </div>
 
-              <div className="p-4 rounded-xl border border-[var(--border)] bg-[var(--surface-1)]/30">
+              <div className="order-2 p-4 rounded-xl border border-[var(--border)] bg-[var(--surface-1)]/30">
                 <h3 className="font-mono text-[11px] mb-1 flex items-center gap-2">
                   <Layers3 className="size-3.5 text-[var(--primary)]" />
                   Parser & Index

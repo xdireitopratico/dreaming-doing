@@ -33,6 +33,10 @@ export interface AgentPreferences {
   hiddenPresetIds?: string[];
   autoAllowedPresetIds?: string[];
   userModelEntries?: UserModelEntry[];
+  // Tools fallback chain — primary é o provider conectado, fallback é o segundo.
+  webSearchFallback?: string;
+  webScrapeFallback?: string;
+  browserFallback?: string;
 }
 
 export const EMPTY_AGENT_PREFERENCES: AgentPreferences = {};
@@ -88,6 +92,9 @@ export function normalizeAgentPreferences(
           .map(normalizePresetId)
       : undefined,
     userModelEntries: normalizeUserModelEntries(raw),
+    webSearchFallback: typeof raw.webSearchFallback === "string" ? raw.webSearchFallback : undefined,
+    webScrapeFallback: typeof raw.webScrapeFallback === "string" ? raw.webScrapeFallback : undefined,
+    browserFallback: typeof raw.browserFallback === "string" ? raw.browserFallback : undefined,
   };
 }
 

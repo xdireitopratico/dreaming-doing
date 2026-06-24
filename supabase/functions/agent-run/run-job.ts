@@ -388,6 +388,7 @@ export async function executeAgentJob(
     supabase,
     userId,
     connectorKeys,
+    preferences,
   });
 
   // extract_design_dna — sandbox exec URL só no Build mode (sandbox ativo)

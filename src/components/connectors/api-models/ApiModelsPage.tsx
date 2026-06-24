@@ -594,6 +594,20 @@ export function ApiModelsPage() {
     [patchPrefs],
   );
 
+  // Tools fallback chain — gravado em agent_preferences (JSONB).
+  const handleWebSearchFallbackChange = useCallback(
+    (next: string) => patchPrefs({ webSearchFallback: next }),
+    [patchPrefs],
+  );
+  const handleWebScrapeFallbackChange = useCallback(
+    (next: string) => patchPrefs({ webScrapeFallback: next }),
+    [patchPrefs],
+  );
+  const handleBrowserFallbackChange = useCallback(
+    (next: string) => patchPrefs({ browserFallback: next === "none" ? undefined : next }),
+    [patchPrefs],
+  );
+
   const handleSetMode = useCallback(
     (nextMode: ModelPowerMode) => {
       if (nextMode === "robin") {
@@ -824,6 +838,12 @@ export function ApiModelsPage() {
         onDeleteWebScrape={handleDeleteWebScrape}
         onSaveBrowserRuntime={handleSaveBrowserRuntime}
         onDeleteBrowserRuntime={handleDeleteBrowserRuntime}
+        webSearchFallback={prefs.webSearchFallback}
+        webScrapeFallback={prefs.webScrapeFallback}
+        browserFallback={prefs.browserFallback}
+        onWebSearchFallbackChange={handleWebSearchFallbackChange}
+        onWebScrapeFallbackChange={handleWebScrapeFallbackChange}
+        onBrowserFallbackChange={handleBrowserFallbackChange}
       />
     </div>
   );

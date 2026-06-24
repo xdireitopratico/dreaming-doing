@@ -65,14 +65,6 @@ interface CircuitState {
 const circuitCache = new Map<string, { state: CircuitState; fetchedAt: number }>();
 const CIRCUIT_CACHE_TTL_MS = 5000; // 5s cache
 
-function supabaseForCircuit() {
-  return (globalThis as any).__circuitBreakerClient ??= (() => {
-    const { createClient } = globalThis.__supabaseCreateClient ?? {};
-    // Lazy import handled at call site
-    return null;
-  })();
-}
-
 async function getCircuitFromDB(toolName: string): Promise<CircuitState> {
   // Check in-memory cache first
   const cached = circuitCache.get(toolName);
@@ -803,22 +795,52 @@ If the question cannot be answered with these tables, set "error": "<reason>" in
           for (const f of querySpec.filters) {
             const op = f.operator || "eq";
             switch (op) {
-              case "eq": q = q.eq(f.column, f.value); break;
-              case "neq": q = q.neq(f.column, f.value); break;
-              case "gt": q = q.gt(f.column, f.value); break;
-              case "gte": q = q.gte(f.column, f.value); break;
-              case "lt": q = q.lt(f.column, f.value); break;
-              case "lte": q = q.lte(f.column, f.value); break;
-              case "like": q = q.like(f.column, f.value); break;
-              case "ilike": q = q.ilike(f.column, f.value); break;
-              case "in": q = q.in(f.column, Array.isArray(f.value) ? f.value : [f.value]); break;
-              case "is": q = q.is(f.column, f.value); break;
+              case "eq": {
+                q = (q as any).eq(f.column, f.value);
+                break;
+              }
+              case "neq": {
+                q = (q as any).neq(f.column, f.value);
+                break;
+              }
+              case "gt": {
+                q = (q as any).gt(f.column, f.value);
+                break;
+              }
+              case "gte": {
+                q = (q as any).gte(f.column, f.value);
+                break;
+              }
+              case "lt": {
+                q = (q as any).lt(f.column, f.value);
+                break;
+              }
+              case "lte": {
+                q = (q as any).lte(f.column, f.value);
+                break;
+              }
+              case "like": {
+                q = (q as any).like(f.column, f.value);
+                break;
+              }
+              case "ilike": {
+                q = (q as any).ilike(f.column, f.value);
+                break;
+              }
+              case "in": {
+                q = (q as any).in(f.column, Array.isArray(f.value) ? f.value : [f.value]);
+                break;
+              }
+              case "is": {
+                q = (q as any).is(f.column, f.value);
+                break;
+              }
             }
           }
         }
 
-        if (querySpec.order_by) q = q.order(querySpec.order_by, { ascending: querySpec.ascending ?? true });
-        if (querySpec.limit) q = q.limit(querySpec.limit);
+        if (querySpec.order_by) q = (q as any).order(querySpec.order_by, { ascending: querySpec.ascending ?? true });
+        if (querySpec.limit) q = (q as any).limit(querySpec.limit);
 
         const { data, error } = await q;
         if (error) {

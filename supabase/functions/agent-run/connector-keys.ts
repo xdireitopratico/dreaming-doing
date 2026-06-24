@@ -13,6 +13,10 @@ export type AgentPreferencesPayload = {
   useCustomModel?: boolean;
   autoAllowedPresetIds?: string[];
   userModelEntries?: { slug: string; env: string; label?: string }[];
+  // Tools fallback chain — primary é o provider conectado, fallback é o segundo.
+  webSearchFallback?: string;
+  webScrapeFallback?: string;
+  browserFallback?: string;
 };
 
 function isRobinMode(preferences?: AgentPreferencesPayload): boolean {

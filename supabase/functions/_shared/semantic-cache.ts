@@ -94,13 +94,11 @@ export async function cacheLookup(
       const age = Date.now() - new Date(exactMatch.created_at).getTime();
       if (age < CACHE_TTL_DAYS * 86400 * 1000) {
         // Update hit count
-        await supabase
-          .from("semantic_cache")
-          .update({ hit_count: supabase.rpc ? undefined : 1 }) // increment handled below
-          .eq("id", exactMatch.id);
-
-        // Increment hit_count via raw update
-        await supabase.rpc("increment_cache_hit", { cache_id: exactMatch.id }).catch(() => {});
+        try {
+          await supabase.rpc("increment_cache_hit", { cache_id: exactMatch.id });
+        } catch {
+          /* best-effort counter */
+        }
 
         console.log(`[SemanticCache] ✓ EXACT HIT for "${inputText.substring(0, 50)}" (hash=${inputHash})`);
         return {
@@ -186,19 +184,23 @@ export async function cacheSave(req: CacheSaveRequest): Promise<boolean> {
 
     if (error) {
       // If upsert fails on conflict resolution, just insert
-      await supabase.from("semantic_cache").insert({
-        flow_id: req.flow_id,
-        flow_version: req.flow_version || 1,
-        input_text: req.input_text,
-        input_hash: inputHash,
-        response_text: req.response_text,
-        model_id: req.model_id,
-        quality_score: req.quality_score ?? 0.85,
-        tokens_saved: req.tokens_saved || 0,
-        cost_saved_cents: req.cost_saved_cents || 0,
-        hit_count: 0,
-        similarity_score: 1.0,
-      }).catch(() => {});
+      try {
+        await supabase.from("semantic_cache").insert({
+          flow_id: req.flow_id,
+          flow_version: req.flow_version || 1,
+          input_text: req.input_text,
+          input_hash: inputHash,
+          response_text: req.response_text,
+          model_id: req.model_id,
+          quality_score: req.quality_score ?? 0.85,
+          tokens_saved: req.tokens_saved || 0,
+          cost_saved_cents: req.cost_saved_cents || 0,
+          hit_count: 0,
+          similarity_score: 1.0,
+        });
+      } catch {
+        /* best-effort insert fallback */
+      }
     }
 
     console.log(`[SemanticCache] ✓ Saved cache for "${req.input_text.substring(0, 50)}" (hash=${inputHash})`);

@@ -55,6 +55,9 @@ export function normalizeAgentPreferences(
           .map(normalizePresetId)
       : undefined,
     userModelEntries: normalizeUserModelEntries(r),
+    webSearchFallback: typeof r.webSearchFallback === "string" ? r.webSearchFallback : undefined,
+    webScrapeFallback: typeof r.webScrapeFallback === "string" ? r.webScrapeFallback : undefined,
+    browserFallback: typeof r.browserFallback === "string" ? r.browserFallback : undefined,
   };
 }
 

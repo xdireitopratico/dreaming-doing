@@ -1,8 +1,7 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Key, ChevronDown, ChevronRight, Plus, ExternalLink, Trash2 } from "lucide-react";
 import {
-  allProviders,
   providerById,
   providerIcon,
   type AiProviderId,
@@ -208,6 +207,17 @@ export function ProvidersKeysSection({
   onProviderAdded,
 }: ProvidersKeysSectionProps) {
   const [addOpen, setAddOpen] = useState(false);
+  const sortedProviders = useMemo(
+    () =>
+      [...providers].sort((a, b) => {
+        const labelA = providerById(a.id)?.label ?? a.id;
+        const labelB = providerById(b.id)?.label ?? b.id;
+        const cmp = labelA.localeCompare(labelB, "pt-BR", { sensitivity: "base" });
+        if (cmp !== 0) return cmp;
+        return a.id.localeCompare(b.id, "pt-BR", { sensitivity: "base" });
+      }),
+    [providers],
+  );
 
   return (
     <section className="mb-6 rounded-xl border border-[var(--border)] bg-[var(--surface-1)]/30 overflow-hidden">
@@ -246,7 +256,7 @@ export function ProvidersKeysSection({
               </div>
 
               <div className="space-y-3">
-                {providers.map((p) => (
+                {sortedProviders.map((p) => (
                   <ProviderKeyCard
                     key={p.id}
                     state={p}
