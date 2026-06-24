@@ -24,12 +24,12 @@ Deno.test("scanProjectForLandingQuality — exige ≥3 composites quaisquer, nã
   const files = new Map([
     [
       "src/App.tsx",
-      `import { HeroSignature, ServiceGrid, TestimonialCarousel, FadeIn } from "@forge/ui";
+      `import { HeroSignature, FeatureMatrix, TestimonialCarousel, FadeIn } from "@forge/ui";
 export default function App() {
   return (
     <main>
       <HeroSignature title="Oficina" primaryCta={{ label: "Agendar" }} />
-      <ServiceGrid items={[]} />
+      <FeatureMatrix items={[]} />
       <TestimonialCarousel items={[]} />
       <FadeIn><p>ok</p></FadeIn>
     </main>

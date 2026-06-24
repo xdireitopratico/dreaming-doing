@@ -1,49 +1,15 @@
 // design-enforcement.ts — Regras anti-genérico espelhadas do @forge/ui (Edge/Deno standalone).
 
+import { getCompositeExports, getPhantomBanned } from "./design-manifest.ts";
+
 export const DESIGN_MISSION =
   "O usuário recebe, sem esforço, design absurdamente único — multi-componente, alta complexidade, NUNCA página branca + CTA azul. O design system é uma ESTRUTURA que deve ser ADAPTADA ao domínio específico do pedido (padaria usa composições quentes e de produto; app usa técnicas; sales usa conversão).";
 
-/** Catálogo de composites conhecidos — qualquer subconjunto válido, não lista fixa obrigatória. */
-export const KNOWN_FORGE_COMPOSITES = [
-  "HeroSignature",
-  "BentoGrid",
-  "FeatureMatrix",
-  "CTASignature",
-  "NavShell",
-  "StatsRibbon",
-  "PricingTiers",
-  "TestimonialCarousel",
-  "FooterColumns",
-  "LogoWall",
-  "FAQAccordion",
-  "TeamGrid",
-  "MarqueeStrip",
-  "SplitFeature",
-  "MediaGallery",
-  "ContactForm",
-  "NewsletterSignup",
-  "AppScreenshot",
-  "ComparisonTable",
-  "TimelineVertical",
-  "ProcessSteps",
-  "TrustBar",
-  "CaseStudyCard",
-  "AnnouncementBar",
-  "StickyCTA",
-  "SplitHero",
-  "VideoHero",
-  "ProductShowcase",
-  "ServiceGrid",
-  "LocationMap",
-  "BookingWidget",
-  "ReviewGrid",
-  "GalleryMasonry",
-  "PressMentions",
-  "IntegrationGrid",
-  "DashboardPreview",
-  "MetricCards",
-  "OnboardingSteps",
-] as const;
+/** Composites exportados de verdade — gerado de design_manifest.generated.json. */
+export const KNOWN_FORGE_COMPOSITES: readonly string[] = getCompositeExports();
+
+/** Nomes legados sem código — rejeitar se aparecerem como import. */
+export const PHANTOM_BANNED_COMPOSITES: readonly string[] = getPhantomBanned();
 
 /** @deprecated Use KNOWN_FORGE_COMPOSITES — mantido para compat de imports. */
 export const REQUIRED_COMPOSITES = KNOWN_FORGE_COMPOSITES;
@@ -76,6 +42,10 @@ export interface DesignViolation {
 
 export function countForgeComposites(code: string): number {
   return KNOWN_FORGE_COMPOSITES.filter((c) => code.includes(c)).length;
+}
+
+export function countPhantomCompositeMentions(code: string): number {
+  return PHANTOM_BANNED_COMPOSITES.filter((c) => code.includes(c)).length;
 }
 
 export function scanFileForViolations(file: string, code: string): DesignViolation[] {
@@ -115,6 +85,16 @@ export function scanFileForViolations(file: string, code: string): DesignViolati
       file,
       message: "Use <Button> de @forge/ui em vez de <button> estilizado manualmente",
     });
+  }
+
+  for (const phantom of PHANTOM_BANNED_COMPOSITES) {
+    if (new RegExp(`\\b${phantom}\\b`).test(code)) {
+      violations.push({
+        file,
+        message: `${phantom} não existe em @forge/ui — use manifest (opinionated ou básico real)`,
+      });
+      break;
+    }
   }
 
   return violations;

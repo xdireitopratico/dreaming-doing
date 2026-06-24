@@ -48,10 +48,12 @@ Deno.test("auditDesignInventory — avisa import profundo", () => {
   assertEquals(r.warnings.some((w) => w.includes("components/Motion")), true);
 });
 
-Deno.test("buildAvailableComponentsManifest — lista composites", () => {
+Deno.test("buildAvailableComponentsManifest — manifest verdadeiro", () => {
   const m = buildAvailableComponentsManifest();
   assertStringIncludes(m, "HeroSignature");
-  assertStringIncludes(m, 'SOMENTE de "@forge/ui"');
+  assertStringIncludes(m, "HeroCinematicSpotlight");
+  assertStringIncludes(m, "PROIBIDO importar");
+  assertStringIncludes(m, "ProcessSteps");
 });
 
 Deno.test("needsDesignPreflight — vite-react sim, android não", () => {

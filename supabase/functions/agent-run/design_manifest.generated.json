@@ -1,0 +1,857 @@
+{
+  "version": 1,
+  "generated_at": "2026-06-24T08:26:23.976Z",
+  "compositions_basic": [
+    {
+      "export": "BentoGrid",
+      "file": "composites/BentoGrid.tsx"
+    },
+    {
+      "export": "HeroSignature",
+      "file": "composites/HeroSignature.tsx"
+    },
+    {
+      "export": "FeatureMatrix",
+      "file": "composites/FeatureMatrix.tsx"
+    },
+    {
+      "export": "StatsRibbon",
+      "file": "composites/StatsRibbon.tsx"
+    },
+    {
+      "export": "CTASignature",
+      "file": "composites/CTASignature.tsx"
+    },
+    {
+      "export": "NavShell",
+      "file": "composites/NavShell.tsx"
+    },
+    {
+      "export": "FooterColumns",
+      "file": "composites/FooterColumns.tsx"
+    },
+    {
+      "export": "PricingTiers",
+      "file": "composites/PricingTiers.tsx"
+    },
+    {
+      "export": "TestimonialCarousel",
+      "file": "composites/TestimonialCarousel.tsx"
+    }
+  ],
+  "compositions_opinionated": [
+    {
+      "id": "hero-editorial-split",
+      "name": "Hero Editorial Split",
+      "export": "HeroEditorialSplit",
+      "moment": "Serif display gigante à esquerda + visual/grão à direita + grain overlay",
+      "voice": [
+        "editorial",
+        "brutalist"
+      ],
+      "techniques": [
+        "scroll-reveal",
+        "grain-texture-overlay",
+        "parallax-depth"
+      ],
+      "compatible_moods": [
+        "mono",
+        "sand",
+        "ember",
+        "sunset"
+      ],
+      "code_path": "packages/forge-ui/src/compositions/opinionated/HeroEditorialSplit.tsx",
+      "sandbox_read_path": "packages/forge-ui/src/compositions/opinionated/HeroEditorialSplit.tsx"
+    },
+    {
+      "id": "hero-brutalist-typography",
+      "name": "Hero Brutalist Typography",
+      "export": "HeroBrutalistTypography",
+      "moment": "Tipografia gigante full-viewport com kinetic reveal + grain — type IS the design",
+      "voice": [
+        "brutalist"
+      ],
+      "techniques": [
+        "kinetic-typography",
+        "grain-texture-overlay"
+      ],
+      "compatible_moods": [
+        "mono",
+        "sand",
+        "ember",
+        "sunset"
+      ],
+      "code_path": "packages/forge-ui/src/compositions/opinionated/HeroBrutalistTypography.tsx",
+      "sandbox_read_path": "packages/forge-ui/src/compositions/opinionated/HeroBrutalistTypography.tsx"
+    },
+    {
+      "id": "hero-cinematic-spotlight",
+      "name": "Hero Cinematic Spotlight",
+      "export": "HeroCinematicSpotlight",
+      "moment": "Product/visual centrado + parallax 3-layer + spotlight cursor + mesh gradient bg",
+      "voice": [
+        "high-tech",
+        "editorial"
+      ],
+      "techniques": [
+        "parallax-depth",
+        "spotlight-cursor",
+        "animated-mesh-background"
+      ],
+      "compatible_moods": [
+        "ocean",
+        "mono",
+        "neon",
+        "ember"
+      ],
+      "code_path": "packages/forge-ui/src/compositions/opinionated/HeroCinematicSpotlight.tsx",
+      "sandbox_read_path": "packages/forge-ui/src/compositions/opinionated/HeroCinematicSpotlight.tsx"
+    },
+    {
+      "id": "sticky-stack-narrative",
+      "name": "Sticky Stack Narrative",
+      "export": "StickyStackNarrative",
+      "moment": "Coluna sticky à esquerda (título + descrição) + coluna scroll à direita (items com visual)",
+      "voice": [
+        "editorial",
+        "swiss"
+      ],
+      "techniques": [
+        "sticky-stack",
+        "scroll-reveal",
+        "parallax-depth"
+      ],
+      "compatible_moods": [
+        "mono",
+        "ocean",
+        "sand",
+        "ember",
+        "forest"
+      ],
+      "code_path": "packages/forge-ui/src/compositions/opinionated/StickyStackNarrative.tsx",
+      "sandbox_read_path": "packages/forge-ui/src/compositions/opinionated/StickyStackNarrative.tsx"
+    },
+    {
+      "id": "bento-dense-showcase",
+      "name": "Bento Dense Showcase",
+      "export": "BentoDenseShowcase",
+      "moment": "Grid 4-col assimétrico com cards de tamanhos variados + spotlight cursor no bento",
+      "voice": [
+        "swiss",
+        "high-tech"
+      ],
+      "techniques": [
+        "spotlight-cursor",
+        "scroll-reveal",
+        "stagger"
+      ],
+      "compatible_moods": [
+        "ocean",
+        "mono",
+        "ember",
+        "sand"
+      ],
+      "code_path": "packages/forge-ui/src/compositions/opinionated/BentoDenseShowcase.tsx",
+      "sandbox_read_path": "packages/forge-ui/src/compositions/opinionated/BentoDenseShowcase.tsx"
+    },
+    {
+      "id": "editorial-magazine-split",
+      "name": "Editorial Magazine Split",
+      "export": "EditorialMagazineSplit",
+      "moment": "Coluna estreita de texto (3 col) + visual fotográfico largo (9 col) + serif display",
+      "voice": [
+        "editorial"
+      ],
+      "techniques": [
+        "scroll-reveal",
+        "parallax-depth"
+      ],
+      "compatible_moods": [
+        "mono",
+        "sunset",
+        "royal",
+        "sand",
+        "ember"
+      ],
+      "code_path": "packages/forge-ui/src/compositions/opinionated/EditorialMagazineSplit.tsx",
+      "sandbox_read_path": "packages/forge-ui/src/compositions/opinionated/EditorialMagazineSplit.tsx"
+    },
+    {
+      "id": "kinetic-headline-reveal",
+      "name": "Kinetic Headline Reveal",
+      "export": "KineticHeadlineReveal",
+      "moment": "Headline gigante com reveal por máscara (palavra por palavra) + grain overlay + cursor custom",
+      "voice": [
+        "brutalist",
+        "editorial"
+      ],
+      "techniques": [
+        "kinetic-typography",
+        "grain-texture-overlay"
+      ],
+      "compatible_moods": [
+        "mono",
+        "ember",
+        "sunset",
+        "neon"
+      ],
+      "code_path": "packages/forge-ui/src/compositions/opinionated/KineticHeadlineReveal.tsx",
+      "sandbox_read_path": "packages/forge-ui/src/compositions/opinionated/KineticHeadlineReveal.tsx"
+    },
+    {
+      "id": "spotlight-showcase-grid",
+      "name": "Spotlight Showcase Grid",
+      "export": "SpotlightShowcaseGrid",
+      "moment": "Grid minimal de cards simples + spotlight cursor que cria profundidade radial",
+      "voice": [
+        "swiss",
+        "minimal"
+      ],
+      "techniques": [
+        "spotlight-cursor",
+        "scroll-reveal"
+      ],
+      "compatible_moods": [
+        "mono",
+        "ocean",
+        "ember"
+      ],
+      "code_path": "packages/forge-ui/src/compositions/opinionated/SpotlightShowcaseGrid.tsx",
+      "sandbox_read_path": "packages/forge-ui/src/compositions/opinionated/SpotlightShowcaseGrid.tsx"
+    },
+    {
+      "id": "parallax-product-showcase",
+      "name": "Parallax Product Showcase",
+      "export": "ParallaxProductShowcase",
+      "moment": "3-layer parallax com product image + scroll-triggered reveals + mesh gradient bg",
+      "voice": [
+        "high-tech",
+        "editorial"
+      ],
+      "techniques": [
+        "parallax-depth",
+        "scroll-reveal",
+        "animated-mesh-background"
+      ],
+      "compatible_moods": [
+        "ocean",
+        "mono",
+        "ember",
+        "neon",
+        "sand"
+      ],
+      "code_path": "packages/forge-ui/src/compositions/opinionated/ParallaxProductShowcase.tsx",
+      "sandbox_read_path": "packages/forge-ui/src/compositions/opinionated/ParallaxProductShowcase.tsx"
+    },
+    {
+      "id": "glass-nav-floating",
+      "name": "Glass Nav Floating",
+      "export": "GlassNavFloating",
+      "moment": "Nav flutuante sticky top-4 com glassmorphism (backdrop-blur) + mesh bg atrás",
+      "voice": [
+        "swiss",
+        "high-tech"
+      ],
+      "techniques": [
+        "glassmorphism-layers",
+        "animated-mesh-background"
+      ],
+      "compatible_moods": [
+        "ocean",
+        "mono",
+        "neon",
+        "ember"
+      ],
+      "code_path": "packages/forge-ui/src/compositions/opinionated/GlassNavFloating.tsx",
+      "sandbox_read_path": "packages/forge-ui/src/compositions/opinionated/GlassNavFloating.tsx"
+    },
+    {
+      "id": "grain-artisanal-overlay",
+      "name": "Grain Artisanal Overlay",
+      "export": "GrainArtisanalOverlay",
+      "moment": "Overlay de grain texture sobre toda a página + tipografia com personalidade + paleta terrosa",
+      "voice": [
+        "brutalist",
+        "organic"
+      ],
+      "techniques": [
+        "grain-texture-overlay",
+        "scroll-reveal"
+      ],
+      "compatible_moods": [
+        "sand",
+        "mono",
+        "ember",
+        "forest"
+      ],
+      "code_path": "packages/forge-ui/src/compositions/opinionated/GrainArtisanalOverlay.tsx",
+      "sandbox_read_path": "packages/forge-ui/src/compositions/opinionated/GrainArtisanalOverlay.tsx"
+    }
+  ],
+  "techniques": [
+    {
+      "id": "animated-mesh-background",
+      "name": "AnimatedMeshBackground",
+      "concept": "Gradientes em movimento lento e contínuo no fundo — um céu que respira, definindo o mood antes do conteúdo.",
+      "file_path": "packages/forge-ui/src/techniques/animated-mesh-background.ts",
+      "sandbox_read_path": "packages/forge-ui/src/techniques/animated-mesh-background.ts"
+    },
+    {
+      "id": "count-up-metrics",
+      "name": "CountUpMetrics",
+      "concept": "Números contam do zero ao valor ao entrar no viewport — stats e provas sociais ganham dinamismo e credibilidade.",
+      "file_path": "packages/forge-ui/src/techniques/count-up-metrics.ts",
+      "sandbox_read_path": "packages/forge-ui/src/techniques/count-up-metrics.ts"
+    },
+    {
+      "id": "glassmorphism-layers",
+      "name": "GlassmorphismLayers",
+      "concept": "Camadas semi-transparentes com blur — vidro fosco premium que mostra o que há atrás, criando profundidade real.",
+      "file_path": "packages/forge-ui/src/techniques/glassmorphism-layers.ts",
+      "sandbox_read_path": "packages/forge-ui/src/techniques/glassmorphism-layers.ts"
+    },
+    {
+      "id": "grain-texture-overlay",
+      "name": "GrainTextureOverlay",
+      "concept": "Textura de grão (noise) ultrassutil sobre a página — o detalhe que sites premium têm e amadores não. Reduz artificialidade.",
+      "file_path": "packages/forge-ui/src/techniques/grain-texture-overlay.ts",
+      "sandbox_read_path": "packages/forge-ui/src/techniques/grain-texture-overlay.ts"
+    },
+    {
+      "id": "infinite-marquee",
+      "name": "InfiniteMarquee",
+      "concept": "Faixa rola horizontalmente pra sempre, sem corte visível — prova social contínua e densa.",
+      "file_path": "packages/forge-ui/src/techniques/infinite-marquee.ts",
+      "sandbox_read_path": "packages/forge-ui/src/techniques/infinite-marquee.ts"
+    },
+    {
+      "id": "kinetic-typography",
+      "name": "KineticTypography",
+      "concept": "Tipografia animada — letras surgem escalonadas, máscara revela o título, brilho desliza. O hero ganha personalidade.",
+      "file_path": "packages/forge-ui/src/techniques/kinetic-typography.ts",
+      "sandbox_read_path": "packages/forge-ui/src/techniques/kinetic-typography.ts"
+    },
+    {
+      "id": "magnetic-interaction",
+      "name": "MagneticInteraction",
+      "concept": "Elementos-chave atraem suavemente o cursor — micro-interação que dá vida e dirige atenção ao CTA principal.",
+      "file_path": "packages/forge-ui/src/techniques/magnetic-interaction.ts",
+      "sandbox_read_path": "packages/forge-ui/src/techniques/magnetic-interaction.ts"
+    },
+    {
+      "id": "parallax-depth",
+      "name": "ParallaxDepth",
+      "concept": "Camadas movem-se a velocidades diferentes no scroll — fundo lento, frente rápida — criando ilusão de profundidade 3D.",
+      "file_path": "packages/forge-ui/src/techniques/parallax-depth.ts",
+      "sandbox_read_path": "packages/forge-ui/src/techniques/parallax-depth.ts"
+    },
+    {
+      "id": "scroll-reveal",
+      "name": "ScrollReveal",
+      "concept": "Revelação escalonada ao entrar no viewport — elementos surgem em sequência com ritmo, não todos de uma vez.",
+      "file_path": "packages/forge-ui/src/techniques/scroll-reveal.ts",
+      "sandbox_read_path": "packages/forge-ui/src/techniques/scroll-reveal.ts"
+    },
+    {
+      "id": "spotlight-cursor",
+      "name": "SpotlightCursor",
+      "concept": "Gradiente radial segue o cursor iluminando cards/elementos — sensação de lanterna sobre produtos numa vitrine.",
+      "file_path": "packages/forge-ui/src/techniques/spotlight-cursor.ts",
+      "sandbox_read_path": "packages/forge-ui/src/techniques/spotlight-cursor.ts"
+    },
+    {
+      "id": "sticky-stack",
+      "name": "StickyStack",
+      "concept": "Seções fixam no topo e empilham — cada nova cobre a anterior com leve recuo de escala, criando profundidade narrativa.",
+      "file_path": "packages/forge-ui/src/techniques/sticky-stack.ts",
+      "sandbox_read_path": "packages/forge-ui/src/techniques/sticky-stack.ts"
+    },
+    {
+      "id": "tilt-hover",
+      "name": "TiltHover",
+      "concept": "Elementos inclinam-se em 3D seguindo o cursor no hover — profundidade tátil, o card vira um objeto físico.",
+      "file_path": "packages/forge-ui/src/techniques/tilt-hover.ts",
+      "sandbox_read_path": "packages/forge-ui/src/techniques/tilt-hover.ts"
+    }
+  ],
+  "dna_seeds": [
+    {
+      "id": "elevenlabs-hero-split",
+      "name": "Eleven Labs Hero Split",
+      "category": "hero",
+      "serves_domains": [
+        "AI",
+        "SaaS",
+        "voice tech",
+        "tech product"
+      ]
+    },
+    {
+      "id": "vercel-edge-hero",
+      "name": "Vercel Edge Hero",
+      "category": "hero",
+      "serves_domains": [
+        "SaaS",
+        "dev tools",
+        "platform",
+        "infrastructure"
+      ]
+    },
+    {
+      "id": "apple-product-hero-cinematic",
+      "name": "Apple Product Hero Cinematic",
+      "category": "hero",
+      "serves_domains": [
+        "product",
+        "premium",
+        "consumer tech",
+        "lifestyle"
+      ]
+    },
+    {
+      "id": "stripe-editorial-density",
+      "name": "Stripe Editorial Density",
+      "category": "layout",
+      "serves_domains": [
+        "fintech",
+        "SaaS",
+        "payments",
+        "enterprise",
+        "documentation"
+      ]
+    },
+    {
+      "id": "linear-motion-choreography",
+      "name": "Linear Motion Choreography",
+      "category": "motion",
+      "serves_domains": [
+        "SaaS",
+        "dev tools",
+        "project management",
+        "productivity"
+      ]
+    },
+    {
+      "id": "awwwards-brutalist-typography",
+      "name": "Awwwards Brutalist Typography Hero",
+      "category": "hero",
+      "serves_domains": [
+        "creative agency",
+        "studio",
+        "portfolio",
+        "art",
+        "fashion",
+        "artisanal"
+      ]
+    },
+    {
+      "id": "editorial-magazine-split",
+      "name": "Editorial Magazine Split Layout",
+      "category": "layout",
+      "serves_domains": [
+        "fashion",
+        "lifestyle",
+        "magazine",
+        "editorial",
+        "luxury",
+        "beauty"
+      ]
+    },
+    {
+      "id": "bento-dense-showcase",
+      "name": "Bento Dense Showcase",
+      "category": "component_pattern",
+      "serves_domains": [
+        "SaaS",
+        "product",
+        "marketplace",
+        "creator tools",
+        "portfolio"
+      ]
+    },
+    {
+      "id": "sticky-stack-narrative",
+      "name": "Sticky Stack Narrative",
+      "category": "component_pattern",
+      "serves_domains": [
+        "product",
+        "storytelling",
+        "showcase",
+        "portfolio",
+        "feature deep-dive"
+      ]
+    },
+    {
+      "id": "spotlight-showcase-portfolio",
+      "name": "Spotlight Showcase Portfolio",
+      "category": "interaction",
+      "serves_domains": [
+        "portfolio",
+        "studio",
+        "creative",
+        "designer",
+        "agency"
+      ]
+    },
+    {
+      "id": "kinetic-headline-reveal",
+      "name": "Kinetic Headline Reveal",
+      "category": "motion",
+      "serves_domains": [
+        "brand",
+        "manifesto",
+        "about",
+        "agency",
+        "studio",
+        "launch"
+      ]
+    },
+    {
+      "id": "glassmorphism-nav-floating",
+      "name": "Glassmorphism Floating Nav",
+      "category": "navigation",
+      "serves_domains": [
+        "SaaS",
+        "product",
+        "portfolio",
+        "agency",
+        "tech"
+      ]
+    },
+    {
+      "id": "grain-texture-artisanal",
+      "name": "Grain Texture Artisanal",
+      "category": "component_pattern",
+      "serves_domains": [
+        "artisanal",
+        "craft",
+        "food",
+        "bakery",
+        "coffee",
+        "handmade",
+        "fashion"
+      ]
+    },
+    {
+      "id": "parallax-depth-3layer",
+      "name": "Parallax Depth 3-Layer",
+      "category": "motion",
+      "serves_domains": [
+        "product",
+        "showcase",
+        "storytelling",
+        "hero",
+        "premium"
+      ]
+    }
+  ],
+  "visual_languages": [
+    {
+      "id": "combines_with",
+      "name": "Swiss International Style",
+      "serves": []
+    },
+    {
+      "id": "swiss",
+      "name": "Swiss International Style",
+      "serves": [
+        "SaaS",
+        "fintech",
+        "dashboard",
+        "documentation",
+        "enterprise",
+        "data",
+        "dev tools"
+      ]
+    },
+    {
+      "id": "brutalist",
+      "name": "Neo-Brutalism",
+      "serves": [
+        "creative agency",
+        "studio",
+        "portfolio",
+        "artisanal",
+        "brand",
+        "fashion",
+        "art",
+        "music"
+      ]
+    },
+    {
+      "id": "editorial",
+      "name": "Editorial Magazine",
+      "serves": [
+        "magazine",
+        "fashion",
+        "lifestyle",
+        "editorial",
+        "luxury",
+        "beauty",
+        "art",
+        "culture"
+      ]
+    },
+    {
+      "id": "bauhaus",
+      "name": "Bauhaus Geometric",
+      "serves": [
+        "art school",
+        "design education",
+        "architecture",
+        "creative",
+        "brand",
+        "poster",
+        "cultural"
+      ]
+    },
+    {
+      "id": "cyberpunk",
+      "name": "Cyberpunk Terminal",
+      "serves": [
+        "gaming",
+        "web3",
+        "crypto",
+        "hacker",
+        "tech extreme",
+        "music electronic",
+        "cyberpunk"
+      ]
+    },
+    {
+      "id": "memphis",
+      "name": "Memphis Post-Modern",
+      "serves": [
+        "creative",
+        "kids",
+        "fun brand",
+        "music",
+        "art",
+        "event",
+        "playful product"
+      ]
+    },
+    {
+      "id": "organic",
+      "name": "Organic Natural",
+      "serves": [
+        "eco",
+        "health",
+        "wellness",
+        "food organic",
+        "nature",
+        "skincare",
+        "sustainable",
+        "yoga"
+      ]
+    },
+    {
+      "id": "minimal",
+      "name": "Pure Minimal",
+      "serves": [
+        "portfolio",
+        "brand minimal",
+        "product minimal",
+        "agency minimal",
+        "studio",
+        "photographer"
+      ]
+    }
+  ],
+  "motion_primitives": [
+    "FadeIn",
+    "SlideIn",
+    "ScaleIn",
+    "StaggerContainer",
+    "StaggerItem",
+    "HoverScale",
+    "HoverLift",
+    "Pulse",
+    "Shimmer",
+    "Reveal",
+    "Parallax",
+    "MagneticButton",
+    "TextShimmer",
+    "useScrollProgress",
+    "ScrollProgress",
+    "Tilt3D",
+    "Spotlight",
+    "CountUp",
+    "Marquee",
+    "RevealMask"
+  ],
+  "primitives": [
+    "Button",
+    "Badge",
+    "Avatar",
+    "AvatarImage",
+    "AvatarFallback",
+    "Separator",
+    "Skeleton",
+    "Tooltip",
+    "TooltipTrigger",
+    "TooltipContent",
+    "TooltipProvider",
+    "Input",
+    "Card",
+    "CardHeader",
+    "CardFooter",
+    "CardTitle",
+    "CardDescription",
+    "CardContent",
+    "Dialog",
+    "DialogPortal",
+    "DialogOverlay",
+    "DialogClose",
+    "DialogTrigger",
+    "DialogContent",
+    "DialogHeader",
+    "DialogFooter",
+    "DialogTitle",
+    "DialogDescription",
+    "Toaster",
+    "FadeIn",
+    "SlideIn",
+    "ScaleIn",
+    "StaggerContainer",
+    "StaggerItem",
+    "HoverScale",
+    "HoverLift",
+    "Pulse",
+    "Shimmer",
+    "Reveal",
+    "Parallax",
+    "MagneticButton",
+    "TextShimmer",
+    "ScrollProgress",
+    "Tilt3D",
+    "Spotlight",
+    "CountUp",
+    "Marquee",
+    "RevealMask"
+  ],
+  "composite_exports": [
+    "BentoGrid",
+    "HeroSignature",
+    "FeatureMatrix",
+    "StatsRibbon",
+    "CTASignature",
+    "NavShell",
+    "FooterColumns",
+    "PricingTiers",
+    "TestimonialCarousel",
+    "HeroEditorialSplit",
+    "HeroBrutalistTypography",
+    "HeroCinematicSpotlight",
+    "StickyStackNarrative",
+    "BentoDenseShowcase",
+    "EditorialMagazineSplit",
+    "KineticHeadlineReveal",
+    "SpotlightShowcaseGrid",
+    "ParallaxProductShowcase",
+    "GlassNavFloating",
+    "GrainArtisanalOverlay"
+  ],
+  "catalog_exports": [
+    "BentoGrid",
+    "HeroSignature",
+    "FeatureMatrix",
+    "StatsRibbon",
+    "CTASignature",
+    "NavShell",
+    "FooterColumns",
+    "PricingTiers",
+    "TestimonialCarousel",
+    "HeroEditorialSplit",
+    "HeroBrutalistTypography",
+    "HeroCinematicSpotlight",
+    "StickyStackNarrative",
+    "BentoDenseShowcase",
+    "EditorialMagazineSplit",
+    "KineticHeadlineReveal",
+    "SpotlightShowcaseGrid",
+    "ParallaxProductShowcase",
+    "GlassNavFloating",
+    "GrainArtisanalOverlay",
+    "Button",
+    "Badge",
+    "Avatar",
+    "AvatarImage",
+    "AvatarFallback",
+    "Separator",
+    "Skeleton",
+    "Tooltip",
+    "TooltipTrigger",
+    "TooltipContent",
+    "TooltipProvider",
+    "Input",
+    "Card",
+    "CardHeader",
+    "CardFooter",
+    "CardTitle",
+    "CardDescription",
+    "CardContent",
+    "Dialog",
+    "DialogPortal",
+    "DialogOverlay",
+    "DialogClose",
+    "DialogTrigger",
+    "DialogContent",
+    "DialogHeader",
+    "DialogFooter",
+    "DialogTitle",
+    "DialogDescription",
+    "Toaster",
+    "FadeIn",
+    "SlideIn",
+    "ScaleIn",
+    "StaggerContainer",
+    "StaggerItem",
+    "HoverScale",
+    "HoverLift",
+    "Pulse",
+    "Shimmer",
+    "Reveal",
+    "Parallax",
+    "MagneticButton",
+    "TextShimmer",
+    "ScrollProgress",
+    "Tilt3D",
+    "Spotlight",
+    "CountUp",
+    "Marquee",
+    "RevealMask",
+    "useScrollProgress"
+  ],
+  "phantom_banned": [
+    "LogoWall",
+    "FAQAccordion",
+    "TeamGrid",
+    "MarqueeStrip",
+    "SplitFeature",
+    "MediaGallery",
+    "ContactForm",
+    "NewsletterSignup",
+    "AppScreenshot",
+    "ComparisonTable",
+    "TimelineVertical",
+    "ProcessSteps",
+    "TrustBar",
+    "CaseStudyCard",
+    "AnnouncementBar",
+    "StickyCTA",
+    "SplitHero",
+    "VideoHero",
+    "ProductShowcase",
+    "ServiceGrid",
+    "LocationMap",
+    "BookingWidget",
+    "ReviewGrid",
+    "GalleryMasonry",
+    "PressMentions",
+    "IntegrationGrid",
+    "DashboardPreview",
+    "MetricCards",
+    "OnboardingSteps"
+  ]
+}

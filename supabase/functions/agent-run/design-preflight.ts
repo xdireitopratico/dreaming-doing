@@ -3,9 +3,9 @@
 import type { ToolRegistry } from "./registry.ts";
 import {
   INVALID_FORGE_UI_IMPORT_MESSAGE,
-  KNOWN_FORGE_COMPOSITES,
   scanFileForViolations,
 } from "./design-enforcement.ts";
+import { buildDesignManifestSummary } from "./design-manifest.ts";
 
 export const DESIGN_PREFLIGHT_TEMPLATES = new Set([
   "vite-react",
@@ -95,14 +95,9 @@ export function auditDesignInventory(
   return { ok: missing.length === 0, missing, warnings };
 }
 
-/** Manifesta composites exportáveis para o contexto do LLM. */
+/** Manifesta catálogo verdadeiro para o contexto do LLM (Tier 0 resumido). */
 export function buildAvailableComponentsManifest(): string {
-  const list = KNOWN_FORGE_COMPOSITES.join(", ");
-  return (
-    `Importe SOMENTE de "@forge/ui" (nunca @forge/ui/components/... ou paths profundos).\n` +
-    `Composites disponíveis: ${list}.\n` +
-    `Primitives: Button, Input, Card, Badge, Avatar, Dialog, Toast, FadeIn, SlideIn, StaggerContainer, HoverLift, etc.`
-  );
+  return buildDesignManifestSummary();
 }
 
 async function sandboxPathExists(reg: ToolRegistry, path: string): Promise<boolean> {

@@ -42,7 +42,9 @@
     "check:shadow-parity": "node scripts/check-shadow-parity.mjs",
     "check:inngest": "node scripts/check-inngest-health.mjs",
     "bundle:skills": "node scripts/bundle-forge-skills.mjs",
-    "bundle:forge-ui": "node scripts/bundle-forge-ui-seed.mjs"
+    "bundle:forge-ui": "node scripts/bundle-forge-ui-seed.mjs",
+    "design:manifest": "node scripts/generate-design-manifest.mjs",
+    "design:check": "node scripts/generate-design-manifest.mjs --check"
   },
   "dependencies": {
     "@cloudflare/vite-plugin": "^1.25.5",
