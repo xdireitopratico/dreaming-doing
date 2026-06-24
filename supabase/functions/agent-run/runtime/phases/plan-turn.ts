@@ -259,6 +259,25 @@ export function createPlanModeTokenHandler(
   };
 }
 
+/** Modo Chat — tokens visíveis no bubble (não timeline de thinking). */
+export function createChatModeTokenHandler(
+  streamState: PlanModeStreamState,
+  emit: PlanTurnEmit,
+  onActivity: () => void,
+): (delta: string) => void {
+  return (delta: string) => {
+    if (!delta) return;
+    streamState.llmResponseWasStreamed = true;
+    onActivity();
+    emit("assistant_text", {
+      text: delta,
+      append: true,
+      delta: true,
+      final: false,
+    });
+  };
+}
+
 export async function chatPlanModeLlm(input: {
   model: LLMProvider;
   instruction: string;

@@ -226,8 +226,8 @@ export function mapAssistantTurn(
     !!activeRunId &&
     item.runId === activeRunId &&
     !!(item.isActive || item.live);
-  if (syntheticLiveSlot) {
-    // Fechamento só após materializar no DB; intro (narração) e pensando seguem no live.
+  if (syntheticLiveSlot && resolved?.conversational !== true) {
+    // Plan/Build: fechamento só após materializar no DB. Chat: stream visível no bubble.
     streamText = null;
   }
 

@@ -6,16 +6,18 @@ type ChatNarrationProps = {
   streaming?: boolean;
 };
 
-const STREAMING_MD_THRESHOLD = 200;
+const STREAMING_MD_THRESHOLD = 80;
+
+function looksLikeMarkdown(text: string): boolean {
+  return /```|(^|\n)#{1,3}\s|(^|\n)[-*]\s/m.test(text);
+}
 
 export function ChatNarration({ text, streaming = false }: ChatNarrationProps) {
-  // Bug #17: durante streaming, só renderiza Markdown quando o texto passa
-  // de um limiar. Antes disso, plain text evita re-render do parser
-  // a cada token (causa "lag" visível em respostas longas).
   const shouldRenderMarkdown = useMemo(() => {
     if (!streaming) return true;
+    if (looksLikeMarkdown(text)) return true;
     return text.length >= STREAMING_MD_THRESHOLD;
-  }, [streaming, text.length]);
+  }, [streaming, text]);
 
   if (!text?.trim()) return null;
 

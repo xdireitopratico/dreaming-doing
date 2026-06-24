@@ -5,7 +5,7 @@ import remarkGfm from "remark-gfm";
 import { CodeBlock } from "@/components/ui/code-block";
 import { MermaidDiagram } from "@/components/chat/MermaidDiagram";
 import { WireframeBlock } from "@/components/chat/WireframeBlock";
-import { isChatDiagramFence } from "@/lib/chat/diagram-fences";
+import { resolveChatFenceRenderKind } from "@/lib/chat/diagram-fences";
 
 interface MarkdownRendererProps {
   children: string;
@@ -53,19 +53,19 @@ const defaultComponents: Components = {
   },
 };
 
-function chatDiagramLanguage(className: string | undefined): string | null {
-  if (!className) return null;
+function fenceLangFromClassName(className: string | undefined): string {
+  if (!className) return "";
   const match = className.match(/language-([\w-]+)/);
-  const lang = match?.[1] ?? "";
-  return isChatDiagramFence(lang) ? lang.toLowerCase() : null;
+  return match?.[1] ?? "";
 }
 
 const chatComponents: Components = {
   code({ children, className, ...props }) {
-    const lang = chatDiagramLanguage(typeof className === "string" ? className : undefined);
-    if (lang) return null;
-    const isBlock = typeof className === "string" && className.includes("language-");
-    if (isBlock) return null;
+    const lang = fenceLangFromClassName(typeof className === "string" ? className : undefined);
+    const kind = resolveChatFenceRenderKind(lang);
+    if (kind !== "hidden" && typeof className === "string" && className.includes("language-")) {
+      return null;
+    }
     return (
       <code
         className="font-mono text-[11px] bg-[var(--forge-surface-2)] px-1 py-0.5 rounded"
@@ -79,10 +79,11 @@ const chatComponents: Components = {
     const codeChild = (node as { children?: Array<{ tagName?: string; properties?: { className?: string[] }; children?: Array<{ value?: string }> }> })?.children?.[0];
     if (codeChild?.tagName !== "code") return null;
     const className = codeChild.properties?.className?.[0] ?? "";
-    const lang = chatDiagramLanguage(className);
+    const lang = fenceLangFromClassName(className);
+    const kind = resolveChatFenceRenderKind(lang);
     const code = codeChild.children?.[0]?.value ?? "";
-    if (lang === "mermaid") return <MermaidDiagram chart={code} {...props} />;
-    if (lang === "wireframe") return <WireframeBlock text={code} {...props} />;
+    if (kind === "mermaid") return <MermaidDiagram chart={code} {...props} />;
+    if (kind === "drawing") return <WireframeBlock text={code} {...props} />;
     return null;
   },
 };

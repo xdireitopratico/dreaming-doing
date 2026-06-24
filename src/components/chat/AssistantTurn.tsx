@@ -152,12 +152,10 @@ export function AssistantTurn({
         )}
 
         {showClosing && !showErrorHint && (
-          <div className={`forge-chat-closing-line${closingStreaming ? "" : " forge-chat-prose"}`}>
-            {closingStreaming ? (
-              <p className="forge-chat-streaming-text whitespace-pre-wrap">{closingText}</p>
-            ) : (
-              <MarkdownRenderer variant="chat">{closingText!}</MarkdownRenderer>
-            )}
+          <div
+            className={`forge-chat-closing-line forge-chat-prose${closingStreaming ? " forge-chat-streaming-text" : ""}`}
+          >
+            <MarkdownRenderer variant="chat">{closingText!}</MarkdownRenderer>
           </div>
         )}
 

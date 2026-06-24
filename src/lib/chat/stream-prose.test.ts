@@ -26,6 +26,13 @@ describe("sanitizeChatProseForDisplay", () => {
     expect(sanitizeChatProseForDisplay(raw)).toBe("Tokens em :\n\nDark industrial.");
   });
 
+  it("preserva desenho ASCII em fence sem linguagem", () => {
+    const raw = "Layout:\n```\n┌────┐\n│hero│\n└────┘\n```\nFim.";
+    const out = sanitizeChatProseForDisplay(raw)!;
+    expect(out).toContain("┌────┐");
+    expect(out).toContain("│hero│");
+  });
+
   it("preserva mermaid e wireframe", () => {
     const raw = [
       "Proposta de layout:",

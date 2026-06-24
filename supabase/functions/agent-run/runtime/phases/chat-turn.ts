@@ -5,7 +5,7 @@ import { logger } from "../../../_shared/logger.ts";
 import { calculateMaxTokens } from "../loop-config.ts";
 import { DIRECT_CHAT_SYSTEM } from "../../conversational.ts";
 import {
-  createPlanModeTokenHandler,
+  createChatModeTokenHandler,
   type PlanModeStreamState,
   type PlanTurnEmit,
   type PlanTurnFinishDeps,
@@ -77,7 +77,7 @@ export async function runChatModeAgentTurn(
       ],
       max_tokens: calculateMaxTokens(2),
       temperature: 0.35,
-      onTokenDelta: createPlanModeTokenHandler(deps.streamState, deps.emit, deps.onActivity),
+      onTokenDelta: createChatModeTokenHandler(deps.streamState, deps.emit, deps.onActivity),
     });
     responseContent = (response.content ?? "").trim();
   } catch (err: unknown) {
