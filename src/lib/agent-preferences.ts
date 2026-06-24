@@ -44,6 +44,82 @@ export interface AgentPreferences {
 
 export const EMPTY_AGENT_PREFERENCES: AgentPreferences = {};
 
+/** Slugs gravados por scripts de smoke/E2E — nunca devem poluir perfil real. */
+const SMOKE_POISONED_MODEL_SLUGS = new Set([
+  "cohere/north-mini-code:free",
+  "nex-agi/nex-n2-pro:free",
+]);
+
+export function isSmokePoisonedUserModelEntry(entry: UserModelEntry): boolean {
+  if (entry.label && /\be2e\b/i.test(entry.label)) return true;
+  if (SMOKE_POISONED_MODEL_SLUGS.has(entry.slug.trim())) {
+    return /\be2e\b/i.test(entry.label ?? "") || entry.label === "E2E OpenRouter free";
+  }
+  return false;
+}
+
+function isSmokePoisonedCustomModel(slug?: string, label?: string): boolean {
+  const s = slug?.trim();
+  if (!s) return false;
+  if (label && /\be2e\b/i.test(label)) return true;
+  return SMOKE_POISONED_MODEL_SLUGS.has(s);
+}
+
+/** Remove resíduos de smoke/E2E e estados conflitantes (fixedPresetId + useCustomModel). */
+export function sanitizeSmokePoisonedPreferences(prefs: AgentPreferences): {
+  prefs: AgentPreferences;
+  changed: boolean;
+} {
+  let changed = false;
+  const next: AgentPreferences = { ...prefs };
+
+  const entries = (next.userModelEntries ?? []).filter((e) => {
+    if (isSmokePoisonedUserModelEntry(e)) {
+      changed = true;
+      return false;
+    }
+    return true;
+  });
+  if (entries.length !== (next.userModelEntries ?? []).length) {
+    next.userModelEntries = entries.length > 0 ? entries : undefined;
+  }
+
+  if (
+    next.useCustomModel &&
+    isSmokePoisonedCustomModel(next.customModelId, next.userModelEntries?.[0]?.label)
+  ) {
+    next.useCustomModel = undefined;
+    next.customModelId = undefined;
+    changed = true;
+  }
+
+  if (next.mode === "fixed" && next.fixedPresetId?.trim()) {
+    if (next.useCustomModel || next.customModelId) {
+      next.useCustomModel = undefined;
+      next.customModelId = undefined;
+      changed = true;
+    }
+  }
+
+  if (next.mode === "fixed" && !next.fixedPresetId?.trim()) {
+    const hasValidCustom =
+      next.useCustomModel &&
+      next.customModelId?.trim() &&
+      !isSmokePoisonedCustomModel(next.customModelId);
+    const hasValidEntries = (next.userModelEntries ?? []).length > 0;
+    if (!hasValidCustom && !hasValidEntries) {
+      next.mode = "auto";
+      next.useCustomModel = undefined;
+      next.customModelId = undefined;
+      next.userModelEntries = undefined;
+      changed = true;
+    }
+  }
+
+  const normalized = normalizeAgentPreferences(next);
+  return { prefs: normalized, changed };
+}
+
 function normalizeUserModelEntries(
   parsed: Partial<AgentPreferences> & { customModelId?: string; useCustomModel?: boolean },
 ): UserModelEntry[] | undefined {
@@ -132,8 +208,18 @@ export async function loadAgentPreferencesFromDb(): Promise<AgentPreferences> {
   }
 
   const parsed = normalizeAgentPreferences(raw as Partial<AgentPreferences> & { mode?: string });
-  setAgentPreferencesCache(parsed);
-  return parsed;
+  const { prefs: sanitized, changed } = sanitizeSmokePoisonedPreferences(parsed);
+  if (changed) {
+    const { error: writeError } = await supabase
+      .from("profiles")
+      .update({ agent_preferences: sanitized as unknown as Record<string, unknown> } as never)
+      .eq("id", user.id);
+    if (writeError) {
+      console.warn("[agent-preferences] falha ao sanitizar prefs E2E:", writeError.message);
+    }
+  }
+  setAgentPreferencesCache(sanitized);
+  return sanitized;
 }
 
 /** Sempre fresco do banco — usado ao disparar agent-run. */

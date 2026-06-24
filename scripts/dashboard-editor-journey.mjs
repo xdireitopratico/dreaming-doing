@@ -657,6 +657,7 @@ async function main() {
         supabaseUrl: SUPABASE_URL,
         serviceKey: SERVICE_KEY,
         userId: e2eUserId,
+        patchPreferences: false,
       });
       console.log(
         `E2E pre-seed: openrouter=${seed.openrouterSource} model=${seed.model} e2b=${seed.e2bSource}`,

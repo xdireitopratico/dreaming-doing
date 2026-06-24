@@ -282,6 +282,18 @@ export function ApiModelsPage() {
     });
   }, [user, prefsLoaded]);
 
+  useEffect(() => {
+    if (!prefsLoaded) return;
+    const m = prefs.mode ?? "fixed";
+    const preset = getPresetById(
+      m === "robin" ? prefs.robinPoolModelId : prefs.fixedPresetId,
+      prefs.userModelEntries,
+    );
+    if (preset.id) {
+      setSelectedEnv(preset.env as AiProviderId);
+    }
+  }, [prefsLoaded, prefs.mode, prefs.fixedPresetId, prefs.robinPoolModelId, prefs.userModelEntries]);
+
   const patchPrefs = useCallback((partial: Partial<AgentPreferences>) => {
     setPrefs((p) => {
       const next = { ...p, ...partial };
@@ -673,8 +685,14 @@ export function ApiModelsPage() {
         setSelectedEnv(target);
         return;
       }
-      // Limpar campos específicos de ROBIN ao sair do modo
-      patchPrefs({ mode: nextMode, poolProvider: undefined, robinPoolModelId: undefined });
+      // Limpar campos específicos de ROBIN / legacy E2E ao sair do modo
+      patchPrefs({
+        mode: nextMode,
+        poolProvider: undefined,
+        robinPoolModelId: undefined,
+        useCustomModel: undefined,
+        customModelId: undefined,
+      });
     },
     [patchPrefs, selectedEnv, connected],
   );
@@ -709,7 +727,11 @@ export function ApiModelsPage() {
         patchPrefs({ autoAllowedPresetIds: [...current] });
         return;
       }
-      patchPrefs({ fixedPresetId: presetId });
+      patchPrefs({
+        fixedPresetId: presetId,
+        useCustomModel: undefined,
+        customModelId: undefined,
+      });
     },
     [connected, mode, patchPrefs, prefs.autoAllowedPresetIds, prefs.userModelEntries],
   );

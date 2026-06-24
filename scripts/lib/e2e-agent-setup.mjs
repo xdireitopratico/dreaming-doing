@@ -60,6 +60,19 @@ function restHeaders(serviceKey, extra = {}) {
   };
 }
 
+/** Só usuários provisionados para E2E podem receber patch em profiles.agent_preferences. */
+export async function isDedicatedE2eUser(supabaseUrl, serviceKey, userId) {
+  const admin = createClient(supabaseUrl, serviceKey, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+  const { data, error } = await admin.auth.admin.getUserById(userId);
+  if (error || !data?.user) return false;
+  const email = data.user.email?.trim().toLowerCase() ?? "";
+  if (email.endsWith("@forge-e2e.local")) return true;
+  if (data.user.user_metadata?.e2e === true) return true;
+  return false;
+}
+
 async function resolveAdminUserId(supabaseUrl, serviceKey) {
   const admin = createClient(supabaseUrl, serviceKey, {
     auth: { autoRefreshToken: false, persistSession: false },
@@ -159,7 +172,14 @@ export async function seedE2eAgentSetup({
   }
 
   if (patchPreferences) {
-    await patchProfilePreferences(supabaseUrl, serviceKey, userId, E2E_AGENT_PREFERENCES);
+    const dedicated = await isDedicatedE2eUser(supabaseUrl, serviceKey, userId);
+    if (dedicated) {
+      await patchProfilePreferences(supabaseUrl, serviceKey, userId, E2E_AGENT_PREFERENCES);
+    } else {
+      console.warn(
+        `seedE2eAgentSetup: skip patchProfilePreferences — user ${userId.slice(0, 8)} não é E2E dedicado`,
+      );
+    }
   }
 
   const adminId = await resolveAdminUserId(supabaseUrl, serviceKey);
