@@ -6,6 +6,7 @@ export type ConnectorRow = {
   kind: string;
   meta?: Record<string, unknown> | null;
   provider?: string | null;
+  updated_at?: string | null;
 };
 
 function openAiProvider(row: ConnectorRow): string {
@@ -55,10 +56,7 @@ export function connectedEnvsFromRows(
   return out;
 }
 
-export function isEnvConnected(
-  env: AiEnvId | string,
-  connected: Record<string, boolean>,
-): boolean {
+export function isEnvConnected(env: AiEnvId | string, connected: Record<string, boolean>): boolean {
   return connected[env] === true;
 }
 

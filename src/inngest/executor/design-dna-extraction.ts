@@ -3,7 +3,11 @@ import { cleanHtmlDocument, htmlToMarkdownDocument } from "@/lib/html-hygiene";
 import { scrapeWebPage } from "../../../supabase/functions/_shared/web-research-providers.ts";
 import { finalizeDocumentMarkdown } from "../../../supabase/functions/_shared/document-sanitize.ts";
 import { buildPlaywrightScript } from "../../../supabase/functions/extract-design-dna/playwright-automation.ts";
-import { CATEGORY_PROMPTS, MASTER_EXTRACTION_PROMPT, type ExtractionCategory } from "../../../supabase/functions/extract-design-dna/prompts.ts";
+import {
+  CATEGORY_PROMPTS,
+  MASTER_EXTRACTION_PROMPT,
+  type ExtractionCategory,
+} from "../../../supabase/functions/extract-design-dna/prompts.ts";
 
 export type DesignDnaExtractionInput = {
   url: string;
@@ -83,10 +87,7 @@ function buildFallbackDna(url: string, reason: string): Record<string, unknown> 
   };
 }
 
-async function loadWebSecrets(
-  supabase: SupabaseClient,
-  userId: string,
-): Promise<WebSecrets> {
+async function loadWebSecrets(supabase: SupabaseClient, userId: string): Promise<WebSecrets> {
   const secrets: WebSecrets = {};
 
   const envFallbacks: Record<string, string | undefined> = {
@@ -133,7 +134,10 @@ async function loadWebSecrets(
   return secrets;
 }
 
-async function resolveLLMConfig(supabase: SupabaseClient, userId: string): Promise<LLMConfig | null> {
+async function resolveLLMConfig(
+  supabase: SupabaseClient,
+  userId: string,
+): Promise<LLMConfig | null> {
   const { data } = await supabase
     .from("connectors")
     .select("kind, provider, token_encrypted, meta")
@@ -154,31 +158,66 @@ async function resolveLLMConfig(supabase: SupabaseClient, userId: string): Promi
     const kind = String((row as { kind?: string | null }).kind ?? "").trim();
     const provider = String((row as { provider?: string | null }).provider ?? kind).trim();
     const token = parseTokenField((row as { token_encrypted?: string | null }).token_encrypted)[0];
-    const meta = ((row as { meta?: Record<string, unknown> | null }).meta ?? {}) as Record<string, unknown>;
+    const meta = ((row as { meta?: Record<string, unknown> | null }).meta ?? {}) as Record<
+      string,
+      unknown
+    >;
     if (!token) continue;
 
-    if (provider === "openrouter") return pick(token, "https://openrouter.ai/api/v1", "openai/gpt-4o-mini", "OpenRouter");
-    if (provider === "groq") return pick(token, "https://api.groq.com/openai/v1", "llama-3.1-8b-instant", "Groq");
-    if (provider === "deepseek") return pick(token, "https://api.deepseek.com/v1", "deepseek-chat", "DeepSeek");
+    if (provider === "openrouter")
+      return pick(token, "https://openrouter.ai/api/v1", "openai/gpt-4o-mini", "OpenRouter");
+    if (provider === "groq")
+      return pick(token, "https://api.groq.com/openai/v1", "llama-3.1-8b-instant", "Groq");
+    if (provider === "deepseek")
+      return pick(token, "https://api.deepseek.com/v1", "deepseek-chat", "DeepSeek");
     if (provider === "xai") return pick(token, "https://api.x.ai/v1", "grok-2-latest", "xAI");
     if (provider === "gemini") {
-      return pick(token, "https://generativelanguage.googleapis.com/v1beta/openai", "gemini-1.5-flash", "Gemini");
+      return pick(
+        token,
+        "https://generativelanguage.googleapis.com/v1beta/openai",
+        "gemini-1.5-flash",
+        "Gemini",
+      );
     }
     if (provider === "openai" || kind === "openai") {
       return pick(token, "https://api.openai.com/v1", "gpt-4o-mini", "OpenAI");
     }
     if (provider === "ollama" || kind === "ollama") {
-      const baseUrl = String(meta.baseUrl ?? meta.base_url ?? process.env.OLLAMA_BASE_URL ?? "").trim();
-      const model = String(meta.defaultModel ?? meta.model ?? process.env.OLLAMA_MODEL ?? "llama3.1").trim();
+      const baseUrl = String(
+        meta.baseUrl ?? meta.base_url ?? process.env.OLLAMA_BASE_URL ?? "",
+      ).trim();
+      const model = String(
+        meta.defaultModel ?? meta.model ?? process.env.OLLAMA_MODEL ?? "llama3.1",
+      ).trim();
       if (baseUrl) return pick("ollama", baseUrl.replace(/\/$/, ""), model, "Ollama");
     }
   }
 
-  const envKey = process.env.OPENAI_API_KEY || process.env.OPENROUTER_API_KEY || process.env.GROQ_API_KEY;
-  if (process.env.OPENROUTER_API_KEY) return pick(process.env.OPENROUTER_API_KEY, "https://openrouter.ai/api/v1", "openai/gpt-4o-mini", "OpenRouter");
-  if (process.env.GROQ_API_KEY) return pick(process.env.GROQ_API_KEY, "https://api.groq.com/openai/v1", "llama-3.1-8b-instant", "Groq");
-  if (process.env.DEEPSEEK_API_KEY) return pick(process.env.DEEPSEEK_API_KEY, "https://api.deepseek.com/v1", "deepseek-chat", "DeepSeek");
-  if (process.env.XAI_API_KEY) return pick(process.env.XAI_API_KEY, "https://api.x.ai/v1", "grok-2-latest", "xAI");
+  const envKey =
+    process.env.OPENAI_API_KEY || process.env.OPENROUTER_API_KEY || process.env.GROQ_API_KEY;
+  if (process.env.OPENROUTER_API_KEY)
+    return pick(
+      process.env.OPENROUTER_API_KEY,
+      "https://openrouter.ai/api/v1",
+      "openai/gpt-4o-mini",
+      "OpenRouter",
+    );
+  if (process.env.GROQ_API_KEY)
+    return pick(
+      process.env.GROQ_API_KEY,
+      "https://api.groq.com/openai/v1",
+      "llama-3.1-8b-instant",
+      "Groq",
+    );
+  if (process.env.DEEPSEEK_API_KEY)
+    return pick(
+      process.env.DEEPSEEK_API_KEY,
+      "https://api.deepseek.com/v1",
+      "deepseek-chat",
+      "DeepSeek",
+    );
+  if (process.env.XAI_API_KEY)
+    return pick(process.env.XAI_API_KEY, "https://api.x.ai/v1", "grok-2-latest", "xAI");
   if (process.env.GEMINI_API_KEY) {
     return pick(
       process.env.GEMINI_API_KEY,
@@ -187,7 +226,8 @@ async function resolveLLMConfig(supabase: SupabaseClient, userId: string): Promi
       "Gemini",
     );
   }
-  if (process.env.OPENAI_API_KEY) return pick(process.env.OPENAI_API_KEY, "https://api.openai.com/v1", "gpt-4o-mini", "OpenAI");
+  if (process.env.OPENAI_API_KEY)
+    return pick(process.env.OPENAI_API_KEY, "https://api.openai.com/v1", "gpt-4o-mini", "OpenAI");
   if (process.env.OLLAMA_BASE_URL) {
     return pick(
       "ollama",
@@ -385,7 +425,9 @@ export async function extractDesignDnaForUrl(
   const cleanHtml = cleaned.cleanHtml;
   const cleanText = cleaned.cleanText;
   const cleanMarkdown = htmlToMarkdownDocument(rawHtml);
-  const cleanedMarkdown = finalizeDocumentMarkdown(cleanMarkdown || cleanText, { maxChars: 24_000 }).markdown;
+  const cleanedMarkdown = finalizeDocumentMarkdown(cleanMarkdown || cleanText, {
+    maxChars: 24_000,
+  }).markdown;
   const contentHygiene = {
     title: cleaned.title,
     rootSelector: cleaned.rootSelector,
@@ -403,7 +445,11 @@ export async function extractDesignDnaForUrl(
 
   if (input.depth === "deep" && input.sandboxExecUrl) {
     try {
-      const playwrightData = await execPlaywrightInSandbox(input.url, input.sandboxExecUrl, input.sandboxToken);
+      const playwrightData = await execPlaywrightInSandbox(
+        input.url,
+        input.sandboxExecUrl,
+        input.sandboxToken,
+      );
       providerTrace.push("sandbox:playwright");
       enrichedMarkdown = [
         playwrightData.markdown,
@@ -411,12 +457,16 @@ export async function extractDesignDnaForUrl(
         `\n\n## CSS Computado (sections principais)\n${playwrightData.css_computed}`,
         `\n\n## Motion Traces\n${playwrightData.motion_traces}`,
         playwrightData.color_scheme ? `\n\n## Color Scheme\n${playwrightData.color_scheme}` : "",
-        playwrightData.page_height ? `\n\n## Page Metrics\n- Full page height: ${playwrightData.page_height}px` : "",
+        playwrightData.page_height
+          ? `\n\n## Page Metrics\n- Full page height: ${playwrightData.page_height}px`
+          : "",
       ].join("");
 
       screenshots = playwrightData.screenshots ?? [];
       screenshotBase64 = screenshots[0] ?? playwrightData.screenshot_base64 ?? "";
-      screenshotUrl = screenshotBase64 ? `data:image/png;base64,${screenshotBase64}` : screenshotUrl;
+      screenshotUrl = screenshotBase64
+        ? `data:image/png;base64,${screenshotBase64}`
+        : screenshotUrl;
       notes.push("deep sandbox extraction completed");
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -437,10 +487,15 @@ export async function extractDesignDnaForUrl(
     notes.push("markdown empty after scrape");
   }
 
-  const density = Math.min(1, (enrichedMarkdown.length + cleanHtml.length + cleanText.length + cleanedMarkdown.length) / 50000);
-  let confidence = input.depth === "deep"
-    ? Math.round(60 + density * 35 + (screenshots.length > 0 ? 5 : 0))
-    : Math.round(35 + density * 35 + (screenshotBase64 ? 5 : 0));
+  const density = Math.min(
+    1,
+    (enrichedMarkdown.length + cleanHtml.length + cleanText.length + cleanedMarkdown.length) /
+      50000,
+  );
+  let confidence =
+    input.depth === "deep"
+      ? Math.round(60 + density * 35 + (screenshots.length > 0 ? 5 : 0))
+      : Math.round(35 + density * 35 + (screenshotBase64 ? 5 : 0));
 
   if (blockedReason) {
     confidence = Math.min(confidence, 25);
@@ -455,13 +510,18 @@ export async function extractDesignDnaForUrl(
     llmConfig,
   );
 
-  const finalDna = dna ?? buildFallbackDna(input.url, llmConfig ? "LLM extraction unavailable" : "no LLM key available");
+  const finalDna =
+    dna ??
+    buildFallbackDna(input.url, llmConfig ? "LLM extraction unavailable" : "no LLM key available");
 
   if (!llmConfig) {
     notes.push("no LLM config available; using heuristic fallback");
   }
 
-  if ((finalDna.quality_score as number | undefined) !== undefined && (finalDna.quality_score as number) <= 3) {
+  if (
+    (finalDna.quality_score as number | undefined) !== undefined &&
+    (finalDna.quality_score as number) <= 3
+  ) {
     notes.push("low-confidence output");
   }
 

@@ -1,6 +1,7 @@
 export type ToolConnectorKind = "web_search" | "web_scrape" | "browser_runtime";
 
 export type WebSearchProviderId =
+  | "jina"
   | "brave"
   | "tavily"
   | "serper"
@@ -17,7 +18,7 @@ export type WebScrapeProviderId =
 
 export type BrowserRuntimeProviderId = "browserless" | "browser-use";
 
-export type ParserIndexProviderId = "builtin" | "llamaindex" | "cheerio" | "markitdown";
+export type ParserIndexProviderId = "builtin";
 
 export type ToolProviderDefinition = {
   id: string;
@@ -25,11 +26,13 @@ export type ToolProviderDefinition = {
   description: string;
   keyPrefix?: string;
   tokenLabel?: string;
+  supportsOptionalToken?: boolean;
   baseUrlLabel?: string;
   defaultBaseUrl?: string;
   needsToken: boolean;
   needsBaseUrl?: boolean;
   docUrl?: string;
+  isFreeByDefault?: boolean;
 };
 
 function sortProvidersByLabel(list: ToolProviderDefinition[]): ToolProviderDefinition[] {
@@ -41,6 +44,17 @@ function sortProvidersByLabel(list: ToolProviderDefinition[]): ToolProviderDefin
 }
 
 const WEB_SEARCH_PROVIDER_LIST: ToolProviderDefinition[] = [
+  {
+    id: "jina",
+    label: "Jina",
+    description: "Busca gratuita por default; com API key usa sua cota paga.",
+    keyPrefix: "jina_",
+    tokenLabel: "Jina API Key (opcional)",
+    supportsOptionalToken: true,
+    needsToken: false,
+    isFreeByDefault: true,
+    docUrl: "https://jina.ai/",
+  },
   {
     id: "brave",
     label: "Brave",
@@ -101,8 +115,12 @@ const WEB_SCRAPE_PROVIDER_LIST: ToolProviderDefinition[] = [
   {
     id: "jina",
     label: "Jina Reader",
-    description: "Reader leve, sem chave na maioria dos casos.",
+    description: "Reader gratuito por default; com API key usa sua cota paga.",
+    keyPrefix: "jina_",
+    tokenLabel: "Jina API Key (opcional)",
+    supportsOptionalToken: true,
     needsToken: false,
+    isFreeByDefault: true,
     docUrl: "https://jina.ai/reader/",
   },
   {
@@ -176,30 +194,10 @@ const BROWSER_RUNTIME_PROVIDER_LIST: ToolProviderDefinition[] = [
 const PARSER_INDEX_PROVIDER_LIST: ToolProviderDefinition[] = [
   {
     id: "builtin",
-    label: "Builtin parser",
-    description: "Parser interno limpo e rápido.",
+    label: "Forge Default",
+    description:
+      "Parser padrão do FORGE para conteúdo web: equilibrado, gratuito e pronto para uso imediato na plataforma.",
     needsToken: false,
-  },
-  {
-    id: "llamaindex",
-    label: "LlamaIndex",
-    description: "Indexação e parsing com ecossistema LlamaIndex.",
-    needsToken: false,
-    docUrl: "https://github.com/run-llama/llama_index",
-  },
-  {
-    id: "cheerio",
-    label: "Cheerio",
-    description: "Parser DOM leve para HTML estruturado.",
-    needsToken: false,
-    docUrl: "https://cheerio.js.org/",
-  },
-  {
-    id: "markitdown",
-    label: "MarkItDown",
-    description: "Conversão de conteúdo para Markdown com foco em limpeza.",
-    needsToken: false,
-    docUrl: "https://github.com/microsoft/markitdown",
   },
 ];
 

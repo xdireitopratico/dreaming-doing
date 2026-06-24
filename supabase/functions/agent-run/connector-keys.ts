@@ -12,6 +12,9 @@ export type AgentPreferencesPayload = {
   customModelId?: string;
   useCustomModel?: boolean;
   parserProvider?: string;
+  webSearchProvider?: string;
+  webScrapeProvider?: string;
+  browserRuntimeProvider?: string;
   autoAllowedPresetIds?: string[];
   userModelEntries?: { slug: string; env: string; label?: string }[];
   // Tools fallback chain — primary é o provider conectado, fallback é o segundo.

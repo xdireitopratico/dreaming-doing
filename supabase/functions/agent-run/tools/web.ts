@@ -41,6 +41,7 @@ async function loadWebSearchSecrets(
       k === "BRAVE_API_KEY" ||
       k === "EXA_API_KEY" ||
       k === "PARALLEL_API_KEY" ||
+      k === "JINA_API_KEY" ||
       k === "CRAWL4AI_API_KEY" ||
       k === "SCRAPEGRAPHAI_API_KEY" ||
       k === "BROWSER_USE_API_KEY" ||
@@ -92,12 +93,13 @@ async function loadWebSearchSecrets(
             browserless: "BROWSERLESS_API_KEY",
             exa: "EXA_API_KEY",
             parallel: "PARALLEL_API_KEY",
+            jina: "JINA_API_KEY",
             crawl4ai: "CRAWL4AI_API_KEY",
             scrapegraphai: "SCRAPEGRAPHAI_API_KEY",
             "browser-use": "BROWSER_USE_API_KEY",
           };
           const keyName = providerKeyMap[provider];
-          if (keyName) secrets[keyName] = token;
+          if (keyName && !secrets[keyName]) secrets[keyName] = token;
         }
 
         const metaRaw = (row as { meta?: unknown }).meta;
@@ -123,7 +125,7 @@ async function loadWebSearchSecrets(
             parallel: "PARALLEL_BASE_URL",
           };
           const baseUrlKey = providerBaseUrlMap[provider];
-          if (baseUrlKey) secrets[baseUrlKey] = baseUrl;
+          if (baseUrlKey && !secrets[baseUrlKey]) secrets[baseUrlKey] = baseUrl;
         }
       }
     }
@@ -150,8 +152,10 @@ export function registerWebTools(reg: ToolRegistry, ctx: WebToolsContext): void 
   // Preferências de fallback das tools — primary vem do conector conectado,
   // fallback do agent_preferences (default "jina" se não configurado).
   function getWebSearchPrefs(): WebProviderPrefs {
+    const primary = preferences?.webSearchProvider || "jina";
     return {
-      fallback: preferences?.webSearchFallback || "jina",
+      primary,
+      fallback: preferences?.webSearchFallback || (primary === "jina" ? "none" : "jina"),
       parser: preferences?.parserProvider || "builtin",
     };
   }
@@ -239,7 +243,8 @@ export function registerWebTools(reg: ToolRegistry, ctx: WebToolsContext): void 
         properties: {
           query: {
             type: "string",
-            description: "Query de busca — seja específico para encontrar design de qualidade (ex: 'awwwards bakery website brutalist').",
+            description:
+              "Query de busca — seja específico para encontrar design de qualidade (ex: 'awwwards bakery website brutalist').",
           },
           limit: {
             type: "number",
@@ -252,7 +257,8 @@ export function registerWebTools(reg: ToolRegistry, ctx: WebToolsContext): void 
           },
           provider: {
             type: "string",
-            description: "Provedor de busca preferido: auto, exa, parallel, tavily, serper, brave, firecrawl, jina, searxng. Default: auto.",
+            description:
+              "Provedor de busca preferido: auto, exa, parallel, tavily, serper, brave, firecrawl, jina, searxng. Default: auto.",
           },
         },
         required: ["query"],
@@ -261,7 +267,10 @@ export function registerWebTools(reg: ToolRegistry, ctx: WebToolsContext): void 
     async (args) => {
       try {
         const secrets = await getSecrets();
-        const providerName = typeof args.provider === "string" ? args.provider : "auto";
+        const providerName =
+          typeof args.provider === "string" && args.provider.trim()
+            ? args.provider.trim()
+            : getWebSearchPrefs().primary || "jina";
         const prefs: WebProviderPrefs = {
           ...getWebSearchPrefs(),
           primary: providerName,
@@ -318,7 +327,8 @@ export function registerWebTools(reg: ToolRegistry, ctx: WebToolsContext): void 
           },
           provider: {
             type: "string",
-            description: "Provedor: auto (default), firecrawl, scrapegraphai, crawl4ai, browserless, jina, http.",
+            description:
+              "Provedor: auto (default), firecrawl, scrapegraphai, crawl4ai, browserless, jina, http.",
           },
           only_main_content: {
             type: "boolean",
@@ -331,16 +341,25 @@ export function registerWebTools(reg: ToolRegistry, ctx: WebToolsContext): void 
     async (args) => {
       try {
         const secrets = await getSecrets();
+        const providerName =
+          typeof args.provider === "string" && args.provider.trim()
+            ? args.provider.trim()
+            : preferences?.webScrapeProvider || "jina";
         const result = await scrapeWebPage(
           {
             url: args.url,
             format: args.format ?? "markdown",
             mode: args.mode ?? "read",
-            provider: args.provider ?? "auto",
+            provider: providerName,
             only_main_content: args.only_main_content ?? true,
             parser: preferences?.parserProvider || "builtin",
           },
           secrets,
+          {
+            primary: providerName,
+            fallback: preferences?.webScrapeFallback || "http",
+            parser: preferences?.parserProvider || "builtin",
+          },
         );
         return {
           toolCallId: "",
@@ -427,7 +446,10 @@ export function registerWebTools(reg: ToolRegistry, ctx: WebToolsContext): void 
 
         if (secrets["SCREENSHOTONE_API_KEY"]) {
           const authUrl = `${screenshotUrl}&access_key=${secrets["SCREENSHOTONE_API_KEY"]}`;
-          const response = await fetch(authUrl, { method: "HEAD", signal: AbortSignal.timeout(10000) });
+          const response = await fetch(authUrl, {
+            method: "HEAD",
+            signal: AbortSignal.timeout(10000),
+          });
           if (response.ok) {
             return {
               toolCallId: "",

@@ -4,6 +4,7 @@ import { type WebSearchProviderId } from "@/lib/tool-connectors";
 export type { WebSearchProviderId } from "@/lib/tool-connectors";
 
 const LABELS: Record<WebSearchProviderId, string> = {
+  jina: "Jina",
   brave: "Brave Search",
   tavily: "Tavily",
   serper: "Serper",
@@ -21,8 +22,9 @@ export async function saveWebSearchKey(provider: WebSearchProviderId, token: str
   });
 }
 
-export async function disconnectWebSearch() {
+export async function disconnectWebSearch(provider?: WebSearchProviderId) {
   await disconnectToolConnector({
     kind: "web_search",
+    provider,
   });
 }

@@ -58,6 +58,11 @@ import type {
   ParserIndexProviderId,
   WebScrapeProviderId,
 } from "@/lib/tool-connectors";
+import {
+  browserRuntimeProviders,
+  webScrapeProviders,
+  webSearchProviders,
+} from "@/lib/tool-connectors";
 import { Button } from "@/components/ui/button";
 import { ModelEngineSection } from "./ModelEngineSection";
 import { ProvidersKeysSection } from "./ProvidersKeysSection";
@@ -160,6 +165,15 @@ function buildProviderStates(
   });
 }
 
+function normalizeToolProviderId<T extends string>(
+  value: string | null | undefined,
+  allowed: readonly T[],
+  fallback: T,
+): T {
+  if (!value) return fallback;
+  return (allowed as readonly string[]).includes(value) ? (value as T) : fallback;
+}
+
 export function ApiModelsPage() {
   const { user } = useAuth();
   const qc = useQueryClient();
@@ -200,8 +214,9 @@ export function ApiModelsPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("connectors_public")
-        .select("kind, meta, provider")
-        .eq("owner_id", user!.id);
+        .select("kind, meta, provider, updated_at")
+        .eq("owner_id", user!.id)
+        .order("updated_at", { ascending: false });
       if (error) throw error;
       return (data ?? []) as ConnectorRow[];
     },
@@ -281,19 +296,40 @@ export function ApiModelsPage() {
     () => Object.values(connected).filter(Boolean).length,
     [connected],
   );
+  const infraRows = useMemo(
+    () =>
+      (connectorRows ?? []).filter((row) =>
+        ["web_search", "web_scrape", "browser_runtime"].includes(row.kind),
+      ),
+    [connectorRows],
+  );
 
-  const webSearchRow = useMemo(
-    () => connectorRows?.find((r) => r.kind === "web_search") ?? null,
-    [connectorRows],
-  );
-  const webScrapeRow = useMemo(
-    () => connectorRows?.find((r) => r.kind === "web_scrape") ?? null,
-    [connectorRows],
-  );
-  const browserRuntimeRow = useMemo(
-    () => connectorRows?.find((r) => r.kind === "browser_runtime") ?? null,
-    [connectorRows],
-  );
+  const webSearchProvider = useMemo(() => {
+    const fallbackProvider = connectorRows?.find((row) => row.kind === "web_search")?.provider;
+    return normalizeToolProviderId(
+      prefs.webSearchProvider ?? fallbackProvider,
+      webSearchProviders().map((provider) => provider.id) as WebSearchProviderId[],
+      "jina",
+    );
+  }, [connectorRows, prefs.webSearchProvider]);
+
+  const webScrapeProvider = useMemo(() => {
+    const fallbackProvider = connectorRows?.find((row) => row.kind === "web_scrape")?.provider;
+    return normalizeToolProviderId(
+      prefs.webScrapeProvider ?? fallbackProvider,
+      webScrapeProviders().map((provider) => provider.id) as WebScrapeProviderId[],
+      "jina",
+    );
+  }, [connectorRows, prefs.webScrapeProvider]);
+
+  const browserRuntimeProvider = useMemo(() => {
+    const fallbackProvider = connectorRows?.find((row) => row.kind === "browser_runtime")?.provider;
+    return normalizeToolProviderId(
+      prefs.browserRuntimeProvider ?? fallbackProvider,
+      browserRuntimeProviders().map((provider) => provider.id) as BrowserRuntimeProviderId[],
+      "browserless",
+    );
+  }, [connectorRows, prefs.browserRuntimeProvider]);
 
   const handleProviderKeyChange = useCallback((id: AiProviderId, value: string) => {
     setProviders((prev) => prev.map((p) => (p.id === id ? { ...p, keyValue: value } : p)));
@@ -499,7 +535,7 @@ export function ApiModelsPage() {
       setSavingId(`websearch-${provider}`);
       try {
         await saveWebSearchKey(provider, token);
-        await qc.invalidateQueries({ queryKey: ["web-search-connector"] });
+        await qc.invalidateQueries({ queryKey: ["connectors-public"] });
         return true;
       } catch (e: unknown) {
         toast.error(e instanceof Error ? e.message : "Falha ao salvar");
@@ -511,17 +547,20 @@ export function ApiModelsPage() {
     [qc],
   );
 
-  const handleDeleteWebSearch = useCallback(async () => {
-    setSavingId("websearch");
-    try {
-      await disconnectWebSearch();
-      await qc.invalidateQueries({ queryKey: ["web-search-connector"] });
-    } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : "Falha ao remover");
-    } finally {
-      setSavingId(null);
-    }
-  }, [qc]);
+  const handleDeleteWebSearch = useCallback(
+    async (provider: WebSearchProviderId) => {
+      setSavingId("websearch");
+      try {
+        await disconnectWebSearch(provider);
+        await qc.invalidateQueries({ queryKey: ["connectors-public"] });
+      } catch (e: unknown) {
+        toast.error(e instanceof Error ? e.message : "Falha ao remover");
+      } finally {
+        setSavingId(null);
+      }
+    },
+    [qc],
+  );
 
   const handleSaveWebScrape = useCallback(
     async (provider: WebScrapeProviderId, token: string, baseUrl?: string) => {
@@ -834,9 +873,13 @@ export function ApiModelsPage() {
         ollamaConnected={ollamaConnected}
         onSaveOllama={handleSaveOllama}
         onDeleteOllama={handleDeleteOllama}
-        webSearchRow={webSearchRow}
-        webScrapeRow={webScrapeRow}
-        browserRuntimeRow={browserRuntimeRow}
+        infraRows={infraRows}
+        webSearchProvider={webSearchProvider}
+        onWebSearchProviderChange={(value) => patchPrefs({ webSearchProvider: value })}
+        webScrapeProvider={webScrapeProvider}
+        onWebScrapeProviderChange={(value) => patchPrefs({ webScrapeProvider: value })}
+        browserRuntimeProvider={browserRuntimeProvider}
+        onBrowserRuntimeProviderChange={(value) => patchPrefs({ browserRuntimeProvider: value })}
         parserProvider={parserProvider}
         onParserProviderChange={handleParserProviderChange}
         savingId={savingId}

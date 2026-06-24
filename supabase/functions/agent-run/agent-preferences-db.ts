@@ -32,13 +32,11 @@ export function normalizeAgentPreferences(
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
   const r = raw as Record<string, unknown>;
   const modeRaw = r.mode === "rob" ? "robin" : r.mode;
-  const mode =
+  const mode: AgentPreferencesPayload["mode"] =
     modeRaw === "robin" || modeRaw === "fixed" || modeRaw === "auto"
       ? modeRaw
       : undefined;
-  if (!mode) return undefined;
-
-  return {
+  const normalized = {
     mode,
     poolProvider: typeof r.poolProvider === "string" ? r.poolProvider : undefined,
     fixedPresetId: typeof r.fixedPresetId === "string"
@@ -50,6 +48,10 @@ export function normalizeAgentPreferences(
     customModelId: typeof r.customModelId === "string" ? r.customModelId : undefined,
     useCustomModel: r.useCustomModel === true,
     parserProvider: typeof r.parserProvider === "string" ? r.parserProvider : undefined,
+    webSearchProvider: typeof r.webSearchProvider === "string" ? r.webSearchProvider : undefined,
+    webScrapeProvider: typeof r.webScrapeProvider === "string" ? r.webScrapeProvider : undefined,
+    browserRuntimeProvider:
+      typeof r.browserRuntimeProvider === "string" ? r.browserRuntimeProvider : undefined,
     autoAllowedPresetIds: Array.isArray(r.autoAllowedPresetIds)
       ? r.autoAllowedPresetIds
           .filter((x): x is string => typeof x === "string")
@@ -60,9 +62,16 @@ export function normalizeAgentPreferences(
     webScrapeFallback: typeof r.webScrapeFallback === "string" ? r.webScrapeFallback : undefined,
     browserFallback: typeof r.browserFallback === "string" ? r.browserFallback : undefined,
   };
+
+  return Object.values(normalized).some((value) => {
+    if (Array.isArray(value)) return value.length > 0;
+    return value !== undefined;
+  })
+    ? normalized
+    : undefined;
 }
 
-/** Carrega preferências do perfil. Fail-closed: undefined se vazio ou sem mode. */
+/** Carrega preferências do perfil. Fail-closed: undefined se vazio. */
 export async function loadAgentPreferencesFromDb(
   supabase: SupabaseClient,
   userId: string,

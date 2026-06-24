@@ -28,6 +28,9 @@ export interface AgentPreferences {
   robinPoolModelId?: string;
   sttProvider?: SttProviderId;
   parserProvider?: string;
+  webSearchProvider?: string;
+  webScrapeProvider?: string;
+  browserRuntimeProvider?: string;
   customModelId?: string;
   useCustomModel?: boolean;
   hiddenPresetIds?: string[];
@@ -77,12 +80,16 @@ export function normalizeAgentPreferences(
     poolProvider: raw.poolProvider,
     sttProvider: raw.sttProvider,
     parserProvider: typeof raw.parserProvider === "string" ? raw.parserProvider : undefined,
+    webSearchProvider:
+      typeof raw.webSearchProvider === "string" ? raw.webSearchProvider : undefined,
+    webScrapeProvider:
+      typeof raw.webScrapeProvider === "string" ? raw.webScrapeProvider : undefined,
+    browserRuntimeProvider:
+      typeof raw.browserRuntimeProvider === "string" ? raw.browserRuntimeProvider : undefined,
     customModelId: raw.customModelId,
     useCustomModel: raw.useCustomModel,
     fixedPresetId: raw.fixedPresetId ? normalizePresetId(raw.fixedPresetId) : undefined,
-    robinPoolModelId: raw.robinPoolModelId
-      ? normalizePresetId(raw.robinPoolModelId)
-      : undefined,
+    robinPoolModelId: raw.robinPoolModelId ? normalizePresetId(raw.robinPoolModelId) : undefined,
     hiddenPresetIds: Array.isArray(raw.hiddenPresetIds)
       ? raw.hiddenPresetIds.filter((x): x is string => typeof x === "string")
       : undefined,
@@ -92,15 +99,19 @@ export function normalizeAgentPreferences(
           .map(normalizePresetId)
       : undefined,
     userModelEntries: normalizeUserModelEntries(raw),
-    webSearchFallback: typeof raw.webSearchFallback === "string" ? raw.webSearchFallback : undefined,
-    webScrapeFallback: typeof raw.webScrapeFallback === "string" ? raw.webScrapeFallback : undefined,
+    webSearchFallback:
+      typeof raw.webSearchFallback === "string" ? raw.webSearchFallback : undefined,
+    webScrapeFallback:
+      typeof raw.webScrapeFallback === "string" ? raw.webScrapeFallback : undefined,
     browserFallback: typeof raw.browserFallback === "string" ? raw.browserFallback : undefined,
   };
 }
 
 /** Carrega do banco e atualiza cache em memória. Fail-closed: {} se vazio. */
 export async function loadAgentPreferencesFromDb(): Promise<AgentPreferences> {
-  const { data: { user } } = await supabase.auth.getUser();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
   if (!user) {
     clearAgentPreferencesCache();
     return EMPTY_AGENT_PREFERENCES;
@@ -143,7 +154,9 @@ export function loadAgentPreferences(): AgentPreferences {
 export async function saveAgentPreferencesToDb(prefs: AgentPreferences): Promise<void> {
   const normalized = normalizeAgentPreferences(prefs);
 
-  const { data: { user } } = await supabase.auth.getUser();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
   if (!user) throw new Error("Usuário não autenticado");
 
   const { error } = await supabase
