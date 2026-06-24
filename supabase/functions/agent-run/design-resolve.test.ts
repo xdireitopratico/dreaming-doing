@@ -1,5 +1,5 @@
 import { assert, assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
-import { resolveDesignPackage } from "./design-resolve.ts";
+import { dnaIdsFromReferences, resolveDesignPackage } from "./design-resolve.ts";
 
 Deno.test("resolveDesignPackage — fintech ≠ padaria em compositions", () => {
   const fintech = resolveDesignPackage({ domain: "fintech saas dashboard" });
@@ -13,6 +13,14 @@ Deno.test("resolveDesignPackage — summary compacto e critic pass", () => {
   assert(pkg.summary.length <= 2500);
   assert(pkg.read_paths.length >= 2);
   assert(pkg.techniques.length >= 1);
+});
+
+Deno.test("dnaIdsFromReferences — extrai IDs válidos do manifest (H40)", () => {
+  const ids = dnaIdsFromReferences([
+    { url: "https://a.com", extracted_dna: "linear-motion-choreography" },
+    { url: "https://b.com", extracted_dna: "invalid-id" },
+  ]);
+  assertEquals(ids, ["linear-motion-choreography"]);
 });
 
 Deno.test("resolveDesignPackage — merge extractedDnaIds prioritário", () => {

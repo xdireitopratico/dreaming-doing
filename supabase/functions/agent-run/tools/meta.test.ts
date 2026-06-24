@@ -107,6 +107,15 @@ Deno.test("splitMetaToolCalls e hasMixedMetaAndExecution", () => {
   assertEquals(hasMixedMetaAndExecution(undefined), false);
 });
 
+Deno.test("mergePlanModeToolDefinitions — mantém extract_design_dna (H39)", () => {
+  const merged = mergePlanModeToolDefinitions([
+    { name: "fs_read", description: "r", parameters: { type: "object", properties: {} } },
+    { name: "extract_design_dna", description: "dna", parameters: { type: "object", properties: {} } },
+    { name: "fs_write", description: "w", parameters: { type: "object", properties: {} } },
+  ]);
+  assertEquals(merged.some((d) => d.name === "extract_design_dna"), true);
+});
+
 Deno.test("mergePlanModeToolDefinitions oculta patch e mantém shell", () => {
   const merged = mergePlanModeToolDefinitions([
     { name: "fs_read", description: "r", parameters: { type: "object", properties: {} } },

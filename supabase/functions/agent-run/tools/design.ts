@@ -28,6 +28,11 @@ export function registerDesignTools(reg: ToolRegistry): void {
           exclude_voices: { type: "array", items: { type: "string" } },
           exclude_techniques: { type: "array", items: { type: "string" } },
           rotation_key: { type: "string", description: "Chave para variar composição entre projetos" },
+          extracted_dna_ids: {
+            type: "array",
+            items: { type: "string" },
+            description: "IDs de DNA seeds de extract_design_dna (merge prioritário)",
+          },
         },
         required: ["domain"],
       },
@@ -45,6 +50,9 @@ export function registerDesignTools(reg: ToolRegistry): void {
           ? (args.exclude_techniques as unknown[]).filter((x): x is string => typeof x === "string")
           : undefined,
         rotationKey: typeof args.rotation_key === "string" ? args.rotation_key : undefined,
+        extractedDnaIds: Array.isArray(args.extracted_dna_ids)
+          ? (args.extracted_dna_ids as unknown[]).filter((x): x is string => typeof x === "string")
+          : undefined,
       };
       const pkg = resolveDesignPackage(input);
       return ok({

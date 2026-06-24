@@ -17,7 +17,20 @@ export interface ExtractToolsContext {
   connectorKeys: Record<string, string>;
 }
 
-const PLAN_EXTRACT_DNA_QUOTA = 2;
+export const PLAN_EXTRACT_DNA_QUOTA = 2;
+
+export function planExtractQuotaError(callIndex: number, planMode: boolean): string | null {
+  if (!planMode) return null;
+  if (callIndex > PLAN_EXTRACT_DNA_QUOTA) {
+    return `Quota Plan: máximo ${PLAN_EXTRACT_DNA_QUOTA} chamadas extract_design_dna por run`;
+  }
+  return null;
+}
+
+export function resolveExtractDepth(planMode: boolean, requested?: string): "shallow" | "deep" {
+  if (planMode) return "shallow";
+  return requested === "deep" ? "deep" : "shallow";
+}
 
 export function registerExtractTools(reg: ToolRegistry, ctx: ExtractToolsContext): void {
   let planExtractCalls = 0;
@@ -98,18 +111,13 @@ export function registerExtractTools(reg: ToolRegistry, ctx: ExtractToolsContext
 
         if (ctx.planMode) {
           planExtractCalls++;
-          if (planExtractCalls > PLAN_EXTRACT_DNA_QUOTA) {
-            return {
-              toolCallId: "",
-              ok: false,
-              error: `Quota Plan: máximo ${PLAN_EXTRACT_DNA_QUOTA} chamadas extract_design_dna por run`,
-              output: null,
-            };
+          const quotaErr = planExtractQuotaError(planExtractCalls, true);
+          if (quotaErr) {
+            return { toolCallId: "", ok: false, error: quotaErr, output: null };
           }
         }
 
-        let depth = (args.depth as string) ?? "shallow";
-        if (ctx.planMode) depth = "shallow";
+        const depth = resolveExtractDepth(!!ctx.planMode, args.depth as string);
         const categories = Array.isArray(args.categories) ? args.categories : undefined;
 
         // Deep mode requer sandbox — só disponível no Build

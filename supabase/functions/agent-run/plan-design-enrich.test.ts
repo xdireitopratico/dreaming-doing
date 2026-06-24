@@ -39,3 +39,22 @@ Deno.test("enrichProposedPlanDesign — ignora templates sem UI", () => {
   const enriched = enrichProposedPlanDesign(basePlan(), "api only", "android-native");
   assertEquals(enriched.design, undefined);
 });
+
+Deno.test("enrichProposedPlanDesign — merge DNA de references (H40)", () => {
+  const plan = {
+    ...basePlan(),
+    design: {
+      voice: ["swiss"],
+      moment: "Hero editorial",
+      techniques: ["scroll-reveal"],
+      references: [
+        {
+          url: "https://stripe.com",
+          extracted_dna: "stripe-editorial-density",
+        },
+      ],
+    },
+  };
+  const enriched = enrichProposedPlanDesign(plan, "fintech", "vite-react");
+  assertEquals(enriched.design?.relevant_dnas?.[0], "stripe-editorial-density");
+});

@@ -1,5 +1,27 @@
 // design-resolve.ts — Síntese determinística de design (zero LLM) para agent-run.
 import { loadDesignManifest } from "./design-manifest.ts";
+import type { DesignReference } from "./types.ts";
+
+/** IDs de DNA seeds válidos a partir de referências (extract_design_dna → extracted_dna). */
+export function dnaIdsFromReferences(references?: DesignReference[]): string[] {
+  if (!references?.length) return [];
+  const valid = new Set(
+    (loadDesignManifest().dna_seeds as { id: string }[]).map((d) => d.id),
+  );
+  const out: string[] = [];
+  for (const ref of references) {
+    const raw = ref.extracted_dna?.trim();
+    if (!raw) continue;
+    if (valid.has(raw)) {
+      out.push(raw);
+      continue;
+    }
+    for (const id of valid) {
+      if (raw.includes(id)) out.push(id);
+    }
+  }
+  return [...new Set(out)];
+}
 
 export type DesignResolveInput = {
   domain: string;

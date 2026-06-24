@@ -1,5 +1,5 @@
 // plan-design-enrich.ts — Auto-resolve design para planos UI sem campo design.
-import { resolveDesignPackage } from "./design-resolve.ts";
+import { dnaIdsFromReferences, resolveDesignPackage } from "./design-resolve.ts";
 import type { DesignPlanField, ProposedPlan } from "./types.ts";
 
 const WEB_UI_TEMPLATES = new Set([
@@ -19,9 +19,30 @@ export function enrichProposedPlanDesign(
   projectTemplate: string,
 ): ProposedPlan {
   if (!WEB_UI_TEMPLATES.has(projectTemplate)) return plan;
-  if (plan.design?.voice?.length && plan.design.moment?.trim()) return plan;
 
-  const pkg = resolveDesignPackage({ domain: domain.trim() || plan.summary, rotationKey: plan.planId });
+  const domainLabel = domain.trim() || plan.summary;
+  const extractedDnaIds = dnaIdsFromReferences(plan.design?.references);
+
+  if (plan.design?.voice?.length && plan.design.moment?.trim()) {
+    if (extractedDnaIds.length && !plan.design.relevant_dnas?.length) {
+      const pkg = resolveDesignPackage({
+        domain: domainLabel,
+        rotationKey: plan.planId,
+        extractedDnaIds,
+      });
+      return {
+        ...plan,
+        design: { ...plan.design, relevant_dnas: pkg.relevant_dnas },
+      };
+    }
+    return plan;
+  }
+
+  const pkg = resolveDesignPackage({
+    domain: domainLabel,
+    rotationKey: plan.planId,
+    extractedDnaIds: extractedDnaIds.length ? extractedDnaIds : undefined,
+  });
   const design: DesignPlanField = {
     voice: pkg.proposal.voice,
     moment: pkg.proposal.moment,
