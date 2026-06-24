@@ -28,6 +28,7 @@ const ACCEPT = {
     ".pdf",
     ".doc",
     ".docx",
+    ".pptx",
     ".xls",
     ".xlsx",
     ".csv",
@@ -40,6 +41,7 @@ const ACCEPT = {
     "application/pdf",
     "application/msword",
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
     "application/vnd.ms-excel",
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     "text/csv",
@@ -120,6 +122,9 @@ function isBinaryDoc(file: File): boolean {
     /\.pdf$/i.test(file.name) ||
     file.type.includes("word") ||
     /\.docx?$/i.test(file.name) ||
+    file.type.includes("presentation") ||
+    file.type.includes("powerpoint") ||
+    /\.pptx$/i.test(file.name) ||
     file.type.includes("sheet") ||
     file.type.includes("excel") ||
     /\.xlsx?$/i.test(file.name)
@@ -180,4 +185,4 @@ export function buildOutgoingParts(
 }
 
 export const CHAT_ATTACHMENT_ACCEPT =
-  "image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.md,.json,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+  "image/*,.pdf,.doc,.docx,.pptx,.xls,.xlsx,.csv,.txt,.md,.json,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";

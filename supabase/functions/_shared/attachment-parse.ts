@@ -16,14 +16,21 @@ function b64ToBytes(b64: string): Uint8Array {
   return out;
 }
 
-function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
-  return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
-}
-
 function wrapDocument(name: string, markdown: string, note?: string): string {
   const header = `# ${name.replace(/\.[^.]+$/, "") || name}`;
   const body = note ? `${note}\n\n${markdown}` : markdown;
   return `${header}\n\n${body}`;
+}
+
+function decodeXmlEntities(text: string): string {
+  return text
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&#x([0-9a-f]+);/gi, (_, hex) => String.fromCodePoint(Number.parseInt(hex, 16)))
+    .replace(/&#(\d+);/g, (_, dec) => String.fromCodePoint(Number.parseInt(dec, 10)));
 }
 
 async function parsePdf(bytes: Uint8Array, name: string): Promise<string> {
@@ -52,20 +59,50 @@ async function parsePdf(bytes: Uint8Array, name: string): Promise<string> {
 
 async function parseDocx(bytes: Uint8Array, name: string): Promise<string> {
   try {
-    const mammoth = await import("https://esm.sh/mammoth@1.8.0");
-    const m = (mammoth as unknown as { default?: typeof mammoth }).default ?? mammoth;
-    const ab = toArrayBuffer(bytes);
-    const res = await (
-      m as unknown as {
-        convertToMarkdown: (opts: { arrayBuffer: ArrayBuffer }) => Promise<{ value: string }>;
+    const JSZipModule = (await import("https://esm.sh/jszip@3.10.1")) as unknown as {
+      default: {
+        loadAsync: (input: Uint8Array) => Promise<{
+          files: Record<string, unknown>;
+          file: (path: string) => { async: (type: "string") => Promise<string> } | null;
+        }>;
+      };
+    };
+    const zip = await JSZipModule.default.loadAsync(bytes);
+    const xmlPaths = Object.keys(zip.files)
+      .filter((path) => /^word\/(document|header\d+|footer\d+)\.xml$/i.test(path))
+      .sort();
+
+    const paragraphs: string[] = [];
+    for (const xmlPath of xmlPaths) {
+      const xml = await zip.file(xmlPath)?.async("string");
+      if (!xml) continue;
+
+      const blocks = Array.from(
+        xml.matchAll(/<w:p\b[\s\S]*?>([\s\S]*?)<\/w:p>/gi) as IterableIterator<RegExpMatchArray>,
+      );
+
+      for (const block of blocks) {
+        const body = (block[1] ?? "")
+          .replace(/<w:tab\/>/gi, "\t")
+          .replace(/<w:br\/>/gi, "\n")
+          .replace(/<w:cr\/>/gi, "\n");
+        const text = Array.from(
+          body.matchAll(/<w:t\b[^>]*>([\s\S]*?)<\/w:t>/gi) as IterableIterator<RegExpMatchArray>,
+        )
+          .map((match) => decodeXmlEntities(match[1] ?? ""))
+          .join("")
+          .trim();
+        if (text) paragraphs.push(text);
       }
-    ).convertToMarkdown({ arrayBuffer: ab });
-    const raw = (res.value ?? "").trim();
+    }
+
+    const raw = paragraphs.join("\n\n").trim();
     if (!raw) {
       return wrapDocument(name, "_Documento Word vazio._");
     }
-    const { markdown } = finalizeDocumentMarkdown(raw, { structure: false });
-    return wrapDocument(name, markdown, "_Fonte: Word (.docx) → Markdown._");
+    const { markdown, meta } = finalizeDocumentMarkdown(raw, { structure: true });
+    const note = `_Fonte: Word (.docx).${meta.truncated ? " Conteudo truncado." : ""}_`;
+    return wrapDocument(name, markdown, note);
   } catch (e) {
     return `[Word ${name}: falha ao extrair — ${(e as Error).message}]`;
   }
@@ -102,6 +139,55 @@ async function parseXlsx(bytes: Uint8Array, name: string): Promise<string> {
   }
 }
 
+async function parsePptx(bytes: Uint8Array, name: string): Promise<string> {
+  try {
+    const JSZipModule = (await import("https://esm.sh/jszip@3.10.1")) as unknown as {
+      default: {
+        loadAsync: (input: Uint8Array) => Promise<{
+          files: Record<string, unknown>;
+          file: (path: string) => { async: (type: "string") => Promise<string> } | null;
+        }>;
+      };
+    };
+    const zip = await JSZipModule.default.loadAsync(bytes);
+    const slidePaths = Object.keys(zip.files)
+      .filter((path) => /^ppt\/slides\/slide\d+\.xml$/i.test(path))
+      .sort((a, b) => {
+        const aNum = Number.parseInt(a.match(/slide(\d+)\.xml$/i)?.[1] ?? "0", 10);
+        const bNum = Number.parseInt(b.match(/slide(\d+)\.xml$/i)?.[1] ?? "0", 10);
+        return aNum - bNum;
+      });
+
+    if (!slidePaths.length) {
+      return wrapDocument(name, "_Apresentacao PowerPoint sem slides legiveis._");
+    }
+
+    const sections: string[] = [];
+    for (const [index, slidePath] of slidePaths.entries()) {
+      const xml = await zip.file(slidePath)?.async("string");
+      if (!xml) continue;
+
+      const textRuns = Array.from(
+        xml.matchAll(/<a:t[^>]*>([\s\S]*?)<\/a:t>/gi) as IterableIterator<RegExpMatchArray>,
+      )
+        .map((match) => decodeXmlEntities(match[1] ?? "").trim())
+        .filter(Boolean);
+
+      const slideBody = textRuns.length ? textRuns.join("\n") : "_Slide sem texto extraivel._";
+      sections.push(`## Slide ${index + 1}\n\n${slideBody}`);
+    }
+
+    const joined = sections.join("\n\n").trim();
+    const { markdown, meta } = finalizeDocumentMarkdown(joined, { structure: false });
+    const note = `_Fonte: PowerPoint (.pptx), ${slidePaths.length} slide(s).${
+      meta.truncated ? " Conteudo truncado." : ""
+    }_`;
+    return wrapDocument(name, markdown, note);
+  } catch (e) {
+    return `[PowerPoint ${name}: falha ao extrair — ${(e as Error).message}]`;
+  }
+}
+
 async function parsePlainText(bytes: Uint8Array, name: string): Promise<string> {
   const decoder = new TextDecoder("utf-8", { fatal: false });
   const raw = decoder.decode(bytes).trim();
@@ -129,6 +215,9 @@ export async function parseFileBlobPart(part: BlobPart): Promise<string> {
     lower.endsWith(".xls")
   ) {
     return parseXlsx(bytes, name);
+  }
+  if (mime.includes("presentation") || mime.includes("powerpoint") || lower.endsWith(".pptx")) {
+    return parsePptx(bytes, name);
   }
   if (
     mime.startsWith("text/") ||
