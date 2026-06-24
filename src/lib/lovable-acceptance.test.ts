@@ -325,6 +325,8 @@ describe("Inspector Plan — layout de leitura (preview)", () => {
     expect(plan.match(/<PlanActionBar/g)?.length).toBe(1);
     expect(plan).toContain("inspector-plan-toolbar");
     expect(plan).toContain("copyToClipboard");
+    expect(plan).toContain("forge-inspector-plan-icon-btn--danger");
+    expect(plan).toContain('aria-label="Rejeitar plano"');
   });
 });
 

@@ -257,8 +257,30 @@
   align-self: flex-start;
   margin: 0;
   padding: 0;
+  border: none;
+  background: transparent;
   font: var(--font-thought);
   color: var(--text-muted);
+  text-align: left;
+}
+
+.forge-chat-thinking-line--clickable {
+  cursor: pointer;
+  border-radius: 6px;
+  padding: 2px 6px 2px 2px;
+  margin: -2px -6px -2px -2px;
+  transition:
+    background 0.15s,
+    color 0.15s;
+}
+
+.forge-chat-thinking-line--clickable:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--text-secondary);
+}
+
+.forge-chat-thinking-line:disabled {
+  cursor: default;
 }
 
 .forge-chat-thinking-icon {

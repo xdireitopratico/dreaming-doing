@@ -106,7 +106,16 @@ export function AssistantTurn({
       data-testid="chat-message-assistant"
     >
       <div className="forge-assistant-turn" data-testid="assistant-turn">
-        {showThinking && item.thinking && <ForgeThinking state={item.thinking} />}
+        {showThinking && item.thinking && (
+          <ForgeThinking
+            state={item.thinking}
+            onOpenInspector={
+              item.runId && onOpenInspector
+                ? () => onOpenInspector(item.runId!, "timeline")
+                : undefined
+            }
+          />
+        )}
 
         {showNarration && <ChatNarration text={narrationText!} streaming={narrationStreaming} />}
 
