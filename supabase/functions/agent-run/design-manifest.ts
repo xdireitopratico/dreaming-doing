@@ -33,12 +33,12 @@ export function buildDesignManifestSummary(): string {
     "### Composites básicos (9)",
     ...(m.compositions_basic as { export: string }[]).map((c) => `- ${c.export}`),
     "",
-    "### Composições opinionated (11) — preferir para craft alto",
+    `### Composições opinionated (${(m.compositions_opinionated as unknown[]).length}) — preferir para craft alto`,
     ...(m.compositions_opinionated as { id: string; export: string; moment: string; techniques: string[] }[]).map(
       (c) => `- ${c.export} (${c.id}): ${c.moment} [${c.techniques.join(", ")}]`,
     ),
     "",
-    "### Técnicas (12) — fs_read on-demand",
+    `### Técnicas (${(m.techniques as unknown[]).length}) — fs_read on-demand`,
     ...(m.techniques as { id: string; name: string; concept: string }[]).map(
       (t) => `- ${t.name} (${t.id}): ${t.concept}`,
     ),

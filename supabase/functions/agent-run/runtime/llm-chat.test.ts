@@ -7,11 +7,14 @@ Deno.test("buildBuildContextBlock — projeto novo", () => {
 });
 
 Deno.test("buildBuildContextBlock — inclui config e manifest", () => {
-  const context = {
+  const context: AgentContext = {
     projectConfig: "stack: next",
     manifest: "- app/page.tsx",
     files: [],
-  } as AgentContext;
+    gitLog: "",
+    dbSchema: "",
+    lastPlan: "",
+  };
   const block = buildBuildContextBlock(context);
   assertEquals(block.includes("## Contexto do Projeto"), true);
   assertEquals(block.includes("stack: next"), true);

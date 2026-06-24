@@ -268,10 +268,13 @@ export function shouldEnforceNoToolCalls(input: {
   actionableIntent: boolean;
   toolsInvoked: boolean;
 }): boolean {
+  // Streamed prose após tools já executadas = fechamento válido (ex. smoke fs_list → resumo).
+  // Só penaliza stream sem tool_calls quando ainda não houve nenhuma execução.
+  const streamedWithoutAction = input.llmResponseWasStreamed && !input.toolsInvoked;
   return (
     input.forceTools ||
     input.narrationOnlyStep ||
-    input.llmResponseWasStreamed ||
+    streamedWithoutAction ||
     input.approvedPlanBuild ||
     (input.actionableIntent && !input.toolsInvoked)
   );

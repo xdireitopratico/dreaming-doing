@@ -37,6 +37,7 @@ const PACKAGE_JSON = `{
     "tailwind-merge": "^3.0.0"
   },
   "devDependencies": {
+    "@rolldown/pluginutils": "1.0.0-rc.3",
     "@tailwindcss/vite": "^4.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",

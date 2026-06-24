@@ -34,10 +34,10 @@ import type { AgentStateData } from "./agent-fsm.ts";
 import { emitLoopFsmTransition } from "./runtime/loop-fsm.ts";
 import { notifyLoopStatusFromHost } from "./runtime/loop-notify.ts";
 import { RuntimeEmitter, type StreamCallback } from "./runtime/emitter.ts";
-import { createLoopBindings, type LoopBindings } from "./runtime/deps-factory.ts";
+import { createLoopBindings, type AgentLoopHost, type LoopBindings } from "./runtime/deps-factory.ts";
 import { isRunCanceled, loopBudgetExceeded as loopBudgetExceededInfra } from "./runtime/infra.ts";
 import { readLoopBudgetMsFromRuntime } from "./runtime/loop-config.ts";
-import { runLlmChatForHost } from "./runtime/llm-chat.ts";
+import { runLlmChatForHost, type LlmChatHost } from "./runtime/llm-chat.ts";
 import { runDesignPreflightIfNeeded as runDesignPreflightIfNeededPhase } from "./runtime/phases/design-preflight-phase.ts";
 import { attemptGracefulClosingForHost } from "./runtime/phases/graceful-closing-host.ts";
 import { runGatherContextForHost } from "./runtime/phases/gather-context.ts";
@@ -119,6 +119,7 @@ export class AgentLoop {
   private touchedPaths: Set<string>;
   private designReadPathsDone = new Set<string>();
   private buildFixResume: boolean;
+  private smokeRun: boolean;
   /** FSM state tracking (FORGE 2.0) — validado a cada transição de fase */
   private fsmState: AgentStateData;
   private emitter: RuntimeEmitter;
@@ -176,6 +177,7 @@ export class AgentLoop {
     this.thinkingStreamStartedAt = null;
     this.touchedPaths = new Set();
     this.buildFixResume = options?.buildFixResume ?? false;
+    this.smokeRun = options?.smokeRun ?? false;
     if (options?.hasCheckpoint) {
       this.mutable.lastCheckpointStep = state.currentStepIndex ?? 0;
     }
@@ -202,7 +204,81 @@ export class AgentLoop {
     this.compression = new CompressionManager(this.configuredModel(), (type, data) =>
       this.emitter.emit(type, data),
     );
-    this.bindings = createLoopBindings(this, LOOP_BUDGET_MS);
+    this.bindings = createLoopBindings(this.loopHost(), LOOP_BUDGET_MS);
+  }
+
+  private loopHost(): AgentLoopHost {
+    return {
+      sb: this.sb,
+      runId: this.runId,
+      state: this.state,
+      reg: this.reg,
+      compression: this.compression,
+      observer: this.observer,
+      router: this.router,
+      robinActive: this.robinActive,
+      projectTemplate: this.projectTemplate,
+      stackAddon: this.stackAddon,
+      sessionAddon: this.sessionAddon,
+      tasteStart: this.tasteStart,
+      maxStepsLimit: this.maxStepsLimit,
+      complexityScore: this.complexityScore,
+      originalUserRequest: this.originalUserRequest,
+      approvedPlanBuild: this.approvedPlanBuild,
+      approvedPlanSteps: this.approvedPlanSteps,
+      approvedPlanDesign: this.approvedPlanDesign,
+      buildFixResume: this.buildFixResume,
+      planStreamState: this.planStreamState,
+      fileContentCache: this.fileContentCache,
+      touchedPaths: this.touchedPaths,
+      narrationBuffer: this.narrationBuffer,
+      runStartTime: this.runStartTime,
+      mutable: this.mutable,
+      narrationTrim: () => this.narrationTrim(),
+      tailSlice: (count) => this.tailSlice(count),
+      getTimeline: () => this.getTimeline(),
+      emitAgentProse: (raw, loopStep) => this.emitAgentProse(raw, loopStep),
+      ensureOpeningBeforeWork: (fallback) => this.ensureOpeningBeforeWork(fallback),
+      emit: (type, data) => this.emit(type, data),
+      configuredModel: () => this.configuredModel(),
+      gatherContext: () => this.gatherContext(),
+      runDesignPreflightIfNeeded: () => this.runDesignPreflightIfNeeded(),
+      requiresFinalBuildGate: () => this.requiresFinalBuildGate(),
+      enabledApprovedPlanSteps: () => this.enabledApprovedPlanSteps(),
+      isCanceled: () => this.isCanceled(),
+      notifyLoopStatus: (ctx) => this.notifyLoopStatus(ctx),
+      recordTouchedPath: (path) => this.recordTouchedPath(path),
+      attemptGracefulClosing: (reason) => this.attemptGracefulClosing(reason),
+      emitTransition: (eventType, data) => this.emitTransition(eventType, data),
+      llmChat: (model, instruction, history, forceTools) =>
+        this.llmChat(model, instruction, history, forceTools),
+      compressMessages: (messages) => this.compressMessages(messages),
+      executeTool: (call) => this.executeTool(call),
+      markToolsInvoked: () => this.markToolsInvoked(),
+      onActivity: () => this.onActivity(),
+      getPlanLlmResponseWasStreamed: () => this.getPlanLlmResponseWasStreamed(),
+      setPlanLlmResponseWasStreamed: (value) => this.setPlanLlmResponseWasStreamed(value),
+    };
+  }
+
+  private llmChatHost(): LlmChatHost {
+    return {
+      state: this.state,
+      skills: this.skills,
+      projectTemplate: this.projectTemplate,
+      stackAddon: this.stackAddon,
+      sessionAddon: this.sessionAddon,
+      tasteStart: this.tasteStart,
+      reg: this.reg,
+      complexityScore: this.complexityScore,
+      mutable: this.mutable,
+      getThinkingStreamStartedAt: () => this.getThinkingStreamStartedAt(),
+      setThinkingStreamStartedAt: (value) => this.setThinkingStreamStartedAt(value),
+      emit: (type, data) => this.emit(type, data),
+      onActivity: () => this.onActivity(),
+      runId: this.runId,
+      robinActive: this.robinActive,
+    };
   }
 
   /** Modelo BYOK configurado pelo usuário — única voz do chat e da execução. */
@@ -225,6 +301,7 @@ export class AgentLoop {
   private async runDesignPreflightIfNeeded(): Promise<void> {
     await runDesignPreflightIfNeededPhase({
       planMode: this.planMode,
+      smokeRun: this.smokeRun,
       projectTemplate: this.projectTemplate,
       resumeRun: this.resumeRun,
       touchedPaths: this.touchedPaths,
@@ -447,7 +524,7 @@ export class AgentLoop {
     forceTools = false,
     _tools?: ToolDefinition[],
   ): Promise<ChatResponse | null> {
-    return runLlmChatForHost(this, model, instruction, history, forceTools);
+    return runLlmChatForHost(this.llmChatHost(), model, instruction, history, forceTools);
   }
 
   private async isCanceled(): Promise<boolean> {

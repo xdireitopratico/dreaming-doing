@@ -7,25 +7,40 @@ import {
   type AgentLoopHost,
   type AgentLoopDepsContext,
 } from "./deps-factory.ts";
-import { LoopPhase } from "../types.ts";
+import { LoopPhase, type AgentState } from "../types.ts";
 import { createAgentLoopMutableState } from "./loop-mutable-state.ts";
 
-function mockDepsContext(overrides?: Partial<AgentLoopDepsContext>): AgentLoopDepsContext {
-  const state = {
+function minimalAgentState(overrides?: Partial<AgentState>): AgentState {
+  return {
     projectId: "proj-1",
     conversationId: "conv-1",
+    userId: "user-1",
     messages: [],
     phase: LoopPhase.GATHER_CONTEXT,
     currentStepIndex: 0,
     executionLog: [],
     context: null,
     intent: null,
+    plan: null,
+    validationResults: [],
+    retryFeedback: null,
+    totalSteps: 0,
+    ...overrides,
   };
+}
+
+const mockToolResult = { toolCallId: "tc-mock", ok: true, output: null };
+
+function mockDepsContext(overrides?: Partial<AgentLoopDepsContext>): AgentLoopDepsContext {
+  const state = minimalAgentState();
   return {
     sb: {},
     runId: "run-1",
     state,
-    reg: { getDefinitions: () => [], execute: async () => ({ ok: true }) } as AgentLoopDepsContext["reg"],
+    reg: {
+      getDefinitions: () => [],
+      execute: async () => mockToolResult,
+    } as unknown as AgentLoopDepsContext["reg"],
     compression: { compress: async (m) => m } as AgentLoopDepsContext["compression"],
     observer: {} as AgentLoopDepsContext["observer"],
     router: {} as AgentLoopDepsContext["router"],
@@ -69,6 +84,7 @@ function mockDepsContext(overrides?: Partial<AgentLoopDepsContext>): AgentLoopDe
     tailSlice: () => [],
     getTimeline: () => [],
     emitAgentProse: () => {},
+    ensureOpeningBeforeWork: () => {},
     emit: () => {},
     configuredModel: () => {
       throw new Error("not used");
@@ -103,7 +119,7 @@ function mockDepsContext(overrides?: Partial<AgentLoopDepsContext>): AgentLoopDe
     emitTransition: async () => {},
     llmChat: async () => null,
     compressMessages: async (m) => m,
-    executeTool: async () => ({ ok: true }),
+    executeTool: async () => mockToolResult,
     markToolsInvoked: () => {},
     onActivity: () => {},
     getPlanLlmResponseWasStreamed: () => false,
@@ -142,24 +158,22 @@ Deno.test("buildExecuteDeps — repassa template, toolsUsed e approvedPlanDesign
   assertEquals(deps.designReadPathsDone.size, 0);
 });
 
-function mockHost(overrides?: Partial<AgentLoopHost>): AgentLoopHost {
-  const state = {
-    projectId: "proj-1",
-    conversationId: "conv-1",
-    messages: [],
-    phase: LoopPhase.GATHER_CONTEXT,
-    currentStepIndex: 0,
-    executionLog: [],
-    context: null,
-    intent: null,
-  };
+type MockHostWithEmitted = AgentLoopHost & {
+  _emitted: () => Array<{ type: string; data: unknown }>;
+};
+
+function mockHost(overrides?: Partial<AgentLoopHost>): MockHostWithEmitted {
+  const state = minimalAgentState();
   const mutable = createAgentLoopMutableState({ lastCheckpointStep: 2 });
   let emitted: Array<{ type: string; data: unknown }> = [];
   const host: AgentLoopHost = {
     sb: {},
     runId: "run-host",
     state,
-    reg: { getDefinitions: () => [], execute: async () => ({ ok: true }) } as AgentLoopHost["reg"],
+    reg: {
+      getDefinitions: () => [],
+      execute: async () => mockToolResult,
+    } as unknown as AgentLoopHost["reg"],
     compression: { compress: async (m) => m } as AgentLoopHost["compression"],
     observer: {} as AgentLoopHost["observer"],
     router: {} as AgentLoopHost["router"],
@@ -193,7 +207,9 @@ function mockHost(overrides?: Partial<AgentLoopHost>): AgentLoopHost {
     emit: (type, data) => {
       emitted.push({ type, data });
     },
-    configuredModel: () => ({ chat: async () => ({ content: "" }) }),
+    configuredModel: () => ({
+      chat: async () => ({ role: "assistant" as const, content: "", tool_calls: [] }),
+    }),
     gatherContext: async () => {},
     runDesignPreflightIfNeeded: async () => {},
     requiresFinalBuildGate: () => true,
@@ -205,7 +221,7 @@ function mockHost(overrides?: Partial<AgentLoopHost>): AgentLoopHost {
     emitTransition: async () => {},
     llmChat: async () => null,
     compressMessages: async (m) => m,
-    executeTool: async () => ({ ok: true }),
+    executeTool: async () => mockToolResult,
     markToolsInvoked: () => {},
     onActivity: () => {},
     getPlanLlmResponseWasStreamed: () => false,
@@ -219,7 +235,7 @@ Deno.test("createDepsContext — preserva binding de emit do host", () => {
   const host = mockHost();
   const ctx = createDepsContext(host, 60_000);
   ctx.emit("ping", { ok: true });
-  assertEquals((host as { _emitted: () => Array<{ type: string }> })._emitted().length, 1);
+  assertEquals(host._emitted().length, 1);
   assertEquals(ctx.projectTemplate, "nextjs");
   assertEquals(ctx.narrationTrim(), "trimmed");
 });
@@ -228,7 +244,9 @@ Deno.test("createLoopBindings — buildExecute repassa host state", () => {
   const host = mockHost();
   const bindings = createLoopBindings(host, 60_000);
   const toolsUsed = new Set(["fs_write"]);
-  const model = { chat: async () => ({ content: "" }) };
+  const model = {
+    chat: async () => ({ role: "assistant" as const, content: "", tool_calls: [] }),
+  };
   const exec = bindings.buildExecute(toolsUsed, model, new Set());
   assertEquals(exec.approvedPlanBuild, true);
   assertEquals(exec.approvedPlanDesign?.moment, "Split editorial");

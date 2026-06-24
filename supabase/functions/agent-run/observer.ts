@@ -10,6 +10,7 @@ import {
 } from "./design-enforcement.ts";
 import { validateDesignImplementation } from "./design-validate.ts";
 import type { DesignPlanField } from "./types.ts";
+import { designTelemetryEntry } from "./design-telemetry.ts";
 
 export interface ObservationResult {
   passed: boolean;
@@ -115,6 +116,7 @@ export class RuntimeObserver {
   private reg: ToolRegistry;
   private fileCache: Map<string, string> | null;
   private approvedDesign?: DesignPlanField;
+  private craftEnforcement = false;
 
   constructor(reg: ToolRegistry, fileCache?: Map<string, string> | null) {
     this.reg = reg;
@@ -123,6 +125,11 @@ export class RuntimeObserver {
 
   setApprovedDesign(design?: DesignPlanField): void {
     this.approvedDesign = design;
+    this.craftEnforcement = !!design?.read_paths?.length;
+  }
+
+  setCraftEnforcement(enabled: boolean): void {
+    this.craftEnforcement = enabled;
   }
 
   async observe(budgetExceeded?: () => boolean): Promise<ObservationResult> {
@@ -367,13 +374,20 @@ export class RuntimeObserver {
             compositions: this.approvedDesign.compositions ?? [],
             composition_exports: this.approvedDesign.composition_exports ?? [],
             techniques: this.approvedDesign.techniques ?? [],
+            proposal: {
+              voice: this.approvedDesign.voice ?? [],
+              moment: this.approvedDesign.moment ?? "",
+              techniques: this.approvedDesign.techniques ?? [],
+              mood: this.approvedDesign.mood ?? "ember",
+              confidence: 0.85,
+            },
           },
           files: fileContents,
         });
         if (!craft.pass) {
           designViolations.push({
             file: "design-validate",
-            message: craft.feedback,
+            message: `${craft.feedback}${craft.critic_warnings?.length ? ` | ${craft.critic_warnings.join("; ")}` : ""}`,
           });
         }
       }
@@ -422,7 +436,8 @@ export class RuntimeObserver {
     const blocking = designViolations.filter(
       (v) =>
         v.message === INVALID_FORGE_UI_IMPORT_MESSAGE ||
-        (this.approvedDesign != null && v.file === "design-validate"),
+        v.file === "design-validate" ||
+        (this.craftEnforcement && fileContents.size > 0),
     );
     return {
       name: "design-system",

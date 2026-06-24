@@ -29,6 +29,15 @@ export function buildDesignDirectiveBlock(designRaw: unknown): string {
   if (compositions) lines.push(`**Compositions:** ${compositions}`);
   if (compositionExports) lines.push(`**Exports:** ${compositionExports}`);
   if (dnas) lines.push(`**DNA:** ${dnas}`);
+  const dnaSummaries = d.dna_summaries;
+  if (dnaSummaries && typeof dnaSummaries === "object") {
+    lines.push("", "**DNA resumos (leia seeds se precisar adaptar):**");
+    for (const [id, text] of Object.entries(dnaSummaries as Record<string, string>)) {
+      if (text?.trim()) lines.push(`- ${id}: ${text.slice(0, 500)}`);
+    }
+  }
+  const research = Array.isArray(d.research_queries) ? (d.research_queries as string[]) : [];
+  if (research.length) lines.push(`**Research queries:** ${research.join("; ")}`);
   if (readPaths) {
     lines.push("", "**fs_read OBRIGATÓRIO antes do 1º patch UI:**");
     lines.push(`  - ${readPaths}`);

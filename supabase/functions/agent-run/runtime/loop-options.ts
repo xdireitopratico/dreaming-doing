@@ -23,6 +23,8 @@ export type AgentLoopOptions = {
   planSteps?: PlanStep[];
   approvedPlanDesign?: DesignPlanField;
   buildFixResume?: boolean;
+  /** CI smoke — sem preflight pesado nem auto-resolve de design. */
+  smokeRun?: boolean;
   resolvedMainCfg?: ProviderConfig;
   preferences?: AgentPreferencesPayload;
 };

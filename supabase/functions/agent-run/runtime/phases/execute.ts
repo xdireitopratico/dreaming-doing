@@ -42,12 +42,15 @@ import type {
   LLMProvider,
   PlanStep,
   ToolCall,
-  ToolRegistry,
   ToolResult,
 } from "../../types.ts";
+import type { ToolRegistry } from "../../registry.ts";
+import type { PersistFinalOpts } from "./persist.ts";
 import { LoopPhase as LoopPhaseEnum } from "../../types.ts";
 import type { LoopUpdateContext } from "../../loop-status.ts";
 import { friendlyLlmError, shouldFailFastLlmError } from "../../llm-errors.ts";
+import { designTelemetryEntry } from "../../design-telemetry.ts";
+import { signatureFromDesignField } from "../../design-plan-field.ts";
 
 export type BuildExecuteDeps = {
   robinActive: boolean;
@@ -100,16 +103,7 @@ export type BuildExecuteDeps = {
   bumpLlmRetries: () => Promise<number>;
   resetLlmRetries: () => Promise<void>;
   saveCheckpoint: (phase: LoopPhaseEnum, force?: boolean) => Promise<void>;
-  persistFinal: (
-    summary: string,
-    opts?: {
-      lastFinishOk?: boolean;
-      buildFailed?: boolean;
-      awaiting?: boolean;
-      awaitingKind?: "clarify" | "plan_approval" | null;
-      conversational?: boolean;
-    },
-  ) => Promise<void>;
+  persistFinal: (summary: string, opts?: PersistFinalOpts) => Promise<void>;
   clearCheckpoint: () => Promise<void>;
   persistAssistantStep: (response: ChatResponse) => Promise<string | null>;
   updateAssistantStep: (
@@ -184,8 +178,10 @@ export async function runBuildExecutePhase(
   let finalGateAttempts = 0;
   let loopStep = initialStep;
   let finalGateOk = false;
+  let agentTextComplete = false;
 
   while (!finalGateOk) {
+    agentTextComplete = false;
     while (loopStep < deps.maxStepsLimit) {
       if (deps.loopBudgetExceeded()) {
         return deps.returnResumableChunk(loopStep, deps.toolsUsed);
@@ -417,6 +413,7 @@ export async function runBuildExecutePhase(
           role: "assistant",
           content: response.content ?? "",
         });
+        agentTextComplete = true;
         break;
       }
 
@@ -442,6 +439,10 @@ export async function runBuildExecutePhase(
         patchCalls: response.tool_calls,
       });
       if (!readGate.ok) {
+        deps.state.executionLog = appendExecutionLogEntry(
+          deps.state.executionLog,
+          designTelemetryEntry("read_paths_gate", false, readGate.message),
+        );
         deps.state.messages.push({
           role: "user",
           content: readGate.message,
@@ -450,6 +451,12 @@ export async function runBuildExecutePhase(
           await deps.updateAssistantStep(liveMsgId, response, [], loopStep);
         }
         continue;
+      }
+      if ((deps.approvedPlanDesign?.read_paths?.length ?? 0) > 0) {
+        deps.state.executionLog = appendExecutionLogEntry(
+          deps.state.executionLog,
+          designTelemetryEntry("read_paths_gate", true, "read_paths satisfied"),
+        );
       }
 
       const execResults = await parallelExecute(response.tool_calls, async (call) => {
@@ -485,7 +492,7 @@ export async function runBuildExecutePhase(
             command: String(call.arguments.command ?? "").slice(0, 240),
             lines: output
               .split("\n")
-              .map((l) => l.trim())
+              .map((l: string) => l.trim())
               .filter(Boolean)
               .slice(-40),
             ok: result.ok,
@@ -517,7 +524,7 @@ export async function runBuildExecutePhase(
           const pathArg = (call.arguments.path as string) ?? call.name;
           deps.emit("preview_sync", { path: pathArg, reason: "fs_change" });
         }
-        return result;
+        return { ...result, toolCallId: call.id };
       });
 
       const modifiedPaths = execResults
@@ -671,7 +678,7 @@ export async function runBuildExecutePhase(
       await deps.saveCheckpoint(LoopPhaseEnum.DECIDE_NEXT);
     }
 
-    if (loopStep >= deps.maxStepsLimit) {
+    if (loopStep >= deps.maxStepsLimit && !agentTextComplete) {
       await deps.saveCheckpoint(LoopPhaseEnum.DECIDE_NEXT, true);
       return deps.returnResumableChunk(loopStep, deps.toolsUsed, {
         buildFix: deps.requiresFinalBuildGate(),
@@ -742,7 +749,7 @@ export async function runBuildExecutePhase(
       messages: deps.state.messages,
       touchedPaths: [...deps.touchedPaths],
       userRequest: deps.originalUserRequest ?? undefined,
-      model: deps.router.main,
+      model: deps.executionModel,
     }),
   );
 
@@ -755,7 +762,12 @@ export async function runBuildExecutePhase(
     final: true,
   });
   try {
-    await deps.persistFinal(finalClosing, { lastFinishOk: true });
+    await deps.persistFinal(finalClosing, {
+      lastFinishOk: true,
+      designSignature: deps.approvedPlanDesign
+        ? (signatureFromDesignField(deps.approvedPlanDesign) as Record<string, unknown>)
+        : undefined,
+    });
   } catch (e) {
     console.error("[loop] persistFinal failed", e);
   }

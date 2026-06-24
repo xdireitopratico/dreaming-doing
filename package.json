@@ -28,7 +28,7 @@
     "check:agent-browser": "node scripts/lovable-visual-check.mjs && node scripts/dashboard-editor-journey.mjs",
     "setup:e2e-auth": "node scripts/setup-e2e-auth.mjs",
     "check:agent-gates": "npm run test:smoke-terminal && npm run test:agent-journey && npm run smoke:agent && node scripts/check-stale-runs.mjs --cleanup",
-    "check:deploy-gates": "npm run check:agent-contract && npm run test:agent-journey && npm run check:agent-gates && npm run check:agent-metrics && npm run check:shadow-parity",
+    "check:deploy-gates": "npm run check:agent-contract && npm run design:check && npm run test:agent-journey && npm run check:agent-gates && npm run check:agent-metrics && npm run check:shadow-parity",
     "smoke:agent": "node scripts/smoke-agent-e2e.mjs",
     "smoke:aetherforge": "node scripts/smoke-aetherforge-e2e.mjs",
     "smoke:prometheus": "node scripts/smoke-prometheus-e2e.mjs --with-gateway",
@@ -42,7 +42,7 @@
     "check:shadow-parity": "node scripts/check-shadow-parity.mjs",
     "check:inngest": "node scripts/check-inngest-health.mjs",
     "bundle:skills": "node scripts/bundle-forge-skills.mjs",
-    "bundle:forge-ui": "node scripts/bundle-forge-ui-seed.mjs",
+    "bundle:forge-ui": "node scripts/bundle-forge-ui-seed.mjs && npm run design:manifest",
     "design:manifest": "node scripts/generate-design-manifest.mjs",
     "design:check": "node scripts/generate-design-manifest.mjs --check"
   },

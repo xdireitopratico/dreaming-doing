@@ -9,6 +9,7 @@ import type { ToolRegistry } from "../../registry.ts";
 
 export type DesignPreflightDeps = {
   planMode: boolean;
+  smokeRun?: boolean;
   projectTemplate: string;
   resumeRun: boolean;
   touchedPaths: Set<string>;
@@ -21,7 +22,7 @@ export type DesignPreflightDeps = {
 };
 
 export async function runDesignPreflightIfNeeded(deps: DesignPreflightDeps): Promise<void> {
-  if (deps.planMode || !needsDesignPreflight(deps.projectTemplate)) return;
+  if (deps.planMode || deps.smokeRun || !needsDesignPreflight(deps.projectTemplate)) return;
   if (deps.resumeRun && deps.touchedPaths.size > 0) return;
   if (deps.loopBudgetExceeded()) return;
 

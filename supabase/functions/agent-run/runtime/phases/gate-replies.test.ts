@@ -6,14 +6,17 @@ import {
   runShowExistingPlanGate,
 } from "./gate-replies.ts";
 import type { GateReplyDeps } from "./gate-replies.ts";
-import type { ChatMessage } from "../../types.ts";
+import type { AgentState, ChatMessage } from "../../types.ts";
+import { LoopPhase } from "../../types.ts";
 
 Deno.test("appendResumeInstruction — adiciona nudge quando último não é user", () => {
   const messages: ChatMessage[] = [{ role: "assistant", content: "ok" }];
   appendResumeInstruction(messages);
   assertEquals(messages.length, 2);
   assertEquals(messages[1].role, "user");
-  assertEquals(messages[1].content?.includes("[Retomar]"), true);
+  const content = messages[1].content;
+  const text = typeof content === "string" ? content : "";
+  assertEquals(text.includes("[Retomar]"), true);
 });
 
 Deno.test("appendResumeInstruction — não duplica se último já é user", () => {
@@ -60,11 +63,19 @@ function mockGateDeps(overrides?: Partial<GateReplyDeps>): GateReplyDeps & {
   return {
     state: {
       projectId: "proj-1",
+      conversationId: "conv-1",
+      userId: "user-1",
       messages: [],
-      phase: "gather",
+      phase: LoopPhase.GATHER_CONTEXT,
       currentStepIndex: 0,
       executionLog: [],
-    },
+      context: null,
+      intent: null,
+      plan: null,
+      validationResults: [],
+      retryFeedback: null,
+      totalSteps: 0,
+    } as AgentState,
     context: null,
     originalUserRequest: "",
     planMode: false,

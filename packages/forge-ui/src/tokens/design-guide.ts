@@ -48,7 +48,9 @@ ${DESIGN_PRINCIPLES.map((p, i) => `${i + 1}. ${p}`).join("\n")}
 CATÁLOGO @forge/ui (use, modifique ou ignore conforme o contexto pede):
 - Componentes: Button, Card, Badge, Dialog, Input, Avatar, Tooltip, Skeleton, Toast, Separator
 - Motion: FadeIn, SlideIn, ScaleIn, StaggerContainer/Item, HoverLift, HoverScale, Reveal, Parallax, MagneticButton, TextShimmer
-- Compositions (marketing): HeroSignature, BentoGrid, FeatureMatrix, CTASignature, StatsRibbon, PricingTiers, TestimonialCarousel, FooterColumns, NavShell
+- Composites básicos (9): HeroSignature, BentoGrid, FeatureMatrix, CTASignature, StatsRibbon, PricingTiers, TestimonialCarousel, FooterColumns, NavShell
+- Composições opinionated (15): HeroEditorialSplit, HeroBrutalistTypography, HeroCinematicSpotlight, StickyStackNarrative, BentoDenseShowcase, EditorialMagazineSplit, KineticHeadlineReveal, SpotlightShowcaseGrid, ParallaxProductShowcase, GlassNavFloating, GrainArtisanalOverlay, SectionTabsFeatureLanes, ProcessStepsHowItWorks, FAQAccordionCraft, InteractiveHeroDemo
+- Técnicas (17): ver manifest / fs_read on-demand
 
-Landing/marketing pede riqueza visual (hero + bento + prova + CTA). App/dashboard pede clareza e densidade. Adapte — não aplique a mesma estrutura para tudo.`;
+Landing/marketing: prefira composições **opinionated** + técnicas do brief — nunca default HeroSignature+BentoGrid. App/dashboard pede clareza e densidade. Adapte ao domínio.`;
 }

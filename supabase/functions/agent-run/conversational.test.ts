@@ -50,7 +50,7 @@ Deno.test("runConversationalPhase — fail-close quando LLM falha", async () => 
 
 Deno.test("runConversationalPhase — fail-close quando LLM retorna vazio", async () => {
   const model = {
-    chat: async () => ({ content: "" }),
+    chat: async () => ({ role: "assistant" as const, content: "", tool_calls: [] }),
   };
   await assertRejects(
     () => runConversationalPhase(model, [], { userRequest: "bom dia" }),
@@ -61,7 +61,7 @@ Deno.test("runConversationalPhase — fail-close quando LLM retorna vazio", asyn
 
 Deno.test("runDirectChatPhase — fail-close quando LLM retorna vazio", async () => {
   const model = {
-    chat: async () => ({ content: "curto" }),
+    chat: async () => ({ role: "assistant" as const, content: "curto", tool_calls: [] }),
   };
   await assertRejects(
     () => runDirectChatPhase(model, [], { userRequest: "qual paleta?" }),

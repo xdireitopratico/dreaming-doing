@@ -16,6 +16,10 @@ import { SECTION_TABS_VISUAL } from "./section-tabs-visual";
 import { PROCESS_STEPS_SCROLL } from "./process-steps-scroll";
 import { LOGO_MARQUEE_SOCIAL_PROOF } from "./logo-marquee-social-proof";
 import { INTERACTIVE_DEMO_EMBED } from "./interactive-demo-embed";
+import { PAGE_VIEW_TRANSITION } from "./page-view-transition";
+import { LIQUID_BLOB_BACKGROUND } from "./liquid-blob-background";
+import { VIDEO_HERO_BACKGROUND } from "./video-hero-background";
+import { WEBGL_HERO_LIGHT } from "./webgl-hero-light";
 
 export type { Technique } from "./types";
 
@@ -38,6 +42,10 @@ export const TECHNIQUES: Technique[] = [
   PROCESS_STEPS_SCROLL,
   LOGO_MARQUEE_SOCIAL_PROOF,
   INTERACTIVE_DEMO_EMBED,
+  PAGE_VIEW_TRANSITION,
+  LIQUID_BLOB_BACKGROUND,
+  VIDEO_HERO_BACKGROUND,
+  WEBGL_HERO_LIGHT,
 ];
 
 export const TECHNIQUE_BY_ID = Object.fromEntries(

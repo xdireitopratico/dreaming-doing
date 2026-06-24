@@ -170,6 +170,10 @@ export interface DesignPlanField {
   composition_exports?: string[];
   /** Paths obrigatórios para fs_read antes do 1º patch UI. */
   read_paths?: string[];
+  /** Queries sugeridas para web_research (síntese). */
+  research_queries?: string[];
+  /** Resumos compactos dos DNAs escolhidos (id → texto). */
+  dna_summaries?: Record<string, string>;
 }
 
 export interface ProposedPlan {

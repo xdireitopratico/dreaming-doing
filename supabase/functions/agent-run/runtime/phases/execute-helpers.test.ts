@@ -7,9 +7,38 @@ import {
   isActionableIntent,
   isUiPatchCall,
   recordDesignReadPath,
+  shouldEnforceNoToolCalls,
   updateReadOnlyTracker,
 } from "./execute-helpers.ts";
 import type { ChatResponse } from "../../types.ts";
+
+Deno.test("shouldEnforceNoToolCalls — stream após tools = fechamento OK", () => {
+  assertEquals(
+    shouldEnforceNoToolCalls({
+      forceTools: false,
+      narrationOnlyStep: false,
+      llmResponseWasStreamed: true,
+      approvedPlanBuild: false,
+      actionableIntent: true,
+      toolsInvoked: true,
+    }),
+    false,
+  );
+});
+
+Deno.test("shouldEnforceNoToolCalls — stream sem tools ainda = retry", () => {
+  assertEquals(
+    shouldEnforceNoToolCalls({
+      forceTools: false,
+      narrationOnlyStep: false,
+      llmResponseWasStreamed: true,
+      approvedPlanBuild: false,
+      actionableIntent: true,
+      toolsInvoked: false,
+    }),
+    true,
+  );
+});
 
 Deno.test("isActionableIntent — modify e fix", () => {
   assertEquals(isActionableIntent("modify"), true);

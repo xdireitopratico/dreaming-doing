@@ -49,7 +49,8 @@ const DEFAULT_CONVERSATION =
 const DEFAULT_USER = process.env.SMOKE_USER_ID ?? "2e8aca9f-1161-4246-9b33-3f2ca6c247d2";
 
 const SMOKE_PROMPT =
-  "[smoke] Liste os arquivos na raiz do projeto (resposta curta, sem editar código).";
+  "[smoke] Use fs_list com path vazio para listar arquivos na raiz. Responda em texto curto com os nomes. " +
+  "PROIBIDO: fs_write, fs_edit, shell_exec, npm, build.";
 
 /**
  * Preferências de smoke — OpenRouter free por padrão (sem rate limit Groq).
@@ -58,7 +59,7 @@ const SMOKE_PROMPT =
 const SMOKE_PREFERENCES = {
   mode: process.env.SMOKE_MODE ?? "fixed",
   useCustomModel: process.env.SMOKE_MODE ? undefined : true,
-  customModelId: process.env.SMOKE_MODEL ?? "nex-agi/nex-n2-pro:free",
+  customModelId: process.env.SMOKE_MODEL ?? "cohere/north-mini-code:free",
   poolProvider: process.env.SMOKE_POOL_PROVIDER,
   robinPoolModelId: process.env.SMOKE_ROBIN_MODEL,
 };
@@ -170,6 +171,30 @@ async function cleanupStaleSmokeRuns(projectIdResolved) {
   }
 }
 
+/** Conversa efêmera — evita histórico de plano/editor poluir o smoke. */
+async function createSmokeConversation(projectIdResolved) {
+  const res = await rest("conversations", {
+    method: "POST",
+    body: JSON.stringify({
+      project_id: projectIdResolved,
+      title: `[smoke] ${new Date().toISOString()}`,
+    }),
+  });
+  if (!res.ok) {
+    const t = await res.text();
+    throw new Error(`createSmokeConversation: ${res.status} ${t.slice(0, 200)}`);
+  }
+  const [row] = await res.json();
+  return row?.id ?? "";
+}
+
+async function clearSmokeCheckpoints(projectIdResolved, conversationIdResolved) {
+  await rest(
+    `agent_checkpoints?project_id=eq.${projectIdResolved}&conversation_id=eq.${conversationIdResolved}`,
+    { method: "DELETE" },
+  );
+}
+
 async function main() {
   if (!SUPABASE_URL || !SERVICE_KEY || !INNGEST_EVENT_URL) {
     console.error(
@@ -180,17 +205,28 @@ async function main() {
 
   const resolved = await resolveSmokeIds();
   const projectIdResolved = resolved.pid;
-  const conversationIdResolved = resolved.cid;
+  let conversationIdResolved = resolved.cid;
   const userIdResolved = resolved.uid;
 
-  if (!projectIdResolved || !conversationIdResolved || !userIdResolved) {
+  if (!projectIdResolved || !userIdResolved) {
     console.error(
-      "FAIL: project/conversation/user não encontrados — defina SMOKE_PROJECT_ID, SMOKE_CONVERSATION_ID, SMOKE_USER_ID",
+      "FAIL: project/user não encontrados — defina SMOKE_PROJECT_ID e SMOKE_USER_ID",
     );
     process.exit(1);
   }
 
   await cleanupStaleSmokeRuns(projectIdResolved);
+
+  const freshConversationId = await createSmokeConversation(projectIdResolved);
+  if (freshConversationId) {
+    conversationIdResolved = freshConversationId;
+    console.log(`Smoke conversation: ${conversationIdResolved.slice(0, 8)} (ephemeral)`);
+  } else if (!conversationIdResolved) {
+    console.error("FAIL: não foi possível criar nem resolver conversation para smoke");
+    process.exit(1);
+  }
+
+  await clearSmokeCheckpoints(projectIdResolved, conversationIdResolved);
 
   const seed = await seedE2eAgentSetup({
     supabaseUrl: SUPABASE_URL,

@@ -1,7 +1,7 @@
 // runtime/loop-auto-model.ts — Auto model swap por complexidade (Fase 2.2)
 import { resolveAutoForComplexity } from "../../_shared/model-presets.ts";
 import type { ModelRouter } from "../router.ts";
-import type { ResilientLLM } from "../robin-pool.ts";
+import { ResilientLLM } from "../robin-pool.ts";
 import type { LLMProvider } from "../types.ts";
 import type { ProviderConfig } from "../providers.ts";
 import type { AgentPreferencesPayload } from "../connector-keys.ts";

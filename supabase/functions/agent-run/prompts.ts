@@ -24,7 +24,7 @@ ember · ocean · forest · mono · neon · sand · royal · sunset — escolha 
 Ritmo vertical entre seções · hierarquia tipográfica · superfícies em camadas · motion com intenção · UM gesto memorável por página · a11y AA.
 
 ### @forge/ui
-Importe só de \`@forge/ui\`. **Catálogo verdadeiro:** design manifest no system prompt (9 básicos + 11 opinionated + 12 técnicas). Prefira composições **opinionated** para craft. \`fs_read\` técnicas on-demand e adapte.
+Importe só de \`@forge/ui\`. **Catálogo verdadeiro:** design manifest no system prompt (9 básicos + 15 opinionated + 17 técnicas). Prefira composições **opinionated** para craft. \`fs_read\` técnicas on-demand e adapte.
 
 Detalhes de enforcement, workflow e tokens: skill **forge-design**.
 

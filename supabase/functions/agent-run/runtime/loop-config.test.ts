@@ -43,5 +43,6 @@ Deno.test("capMetaSize — trunca executionLog e streamTail", () => {
   const capped = capMetaSize(meta);
   assertEquals((capped.executionLog as unknown[]).length, 20);
   assertEquals((capped.streamTail as string).length, 2000);
-  assertEquals((capped.cardSnapshot as Record<string, unknown>).timeline.length, 30);
+  const snapshot = capped.cardSnapshot as { timeline?: unknown[] };
+  assertEquals(snapshot.timeline?.length, 30);
 });

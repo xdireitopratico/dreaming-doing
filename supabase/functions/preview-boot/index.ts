@@ -18,15 +18,18 @@ import {
   readDevLogTail,
 } from "../_shared/preview-dev.ts";
 import { autoPublishIfNeeded } from "../_shared/auto-publish.ts";
-import { getDeploymentController, cleanupDeploymentController } from "./_shared/deploy-providers.ts";
+import {
+  getDeploymentController,
+  cleanupDeploymentController,
+} from "../_shared/deploy-providers.ts";
 import { FORGE_CORS_HEADERS, corsPreflightResponse } from "../_shared/cors.ts";
 
 const corsHeaders = FORGE_CORS_HEADERS;
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-// Deployment controller for preview deployments - prevents "Cannot access \"deployController\" before initialization" errors
-// Initialize early to avoid race condition where autoPublishIfNeeded calls deployment functions
+// Warm module-level controller before autoPublishIfNeeded → deployWithProvider (TDZ guard).
+getDeploymentController();
 
 
 type ProjectFile = { path: string; content?: string | null };

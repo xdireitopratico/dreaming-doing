@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated_at": "2026-06-24T08:35:43.678Z",
+  "generated_at": "2026-06-24T09:47:24.059Z",
   "compositions_basic": [
     {
       "export": "BentoGrid",
@@ -429,6 +429,13 @@
       "sandbox_read_path": "packages/forge-ui/src/techniques/kinetic-typography.ts"
     },
     {
+      "id": "liquid-blob-background",
+      "name": "LiquidBlobBackground",
+      "concept": "Blobs orgânicos com efeito gooey — líquido vivo no fundo, mais expressivo que gradiente estático.",
+      "file_path": "packages/forge-ui/src/techniques/liquid-blob-background.ts",
+      "sandbox_read_path": "packages/forge-ui/src/techniques/liquid-blob-background.ts"
+    },
+    {
       "id": "logo-marquee-social-proof",
       "name": "LogoMarqueeSocialProof",
       "concept": "Faixa dupla de logos/clientes com marquee infinito — densidade de prova social sem carousel pesado.",
@@ -441,6 +448,13 @@
       "concept": "Elementos-chave atraem suavemente o cursor — micro-interação que dá vida e dirige atenção ao CTA principal.",
       "file_path": "packages/forge-ui/src/techniques/magnetic-interaction.ts",
       "sandbox_read_path": "packages/forge-ui/src/techniques/magnetic-interaction.ts"
+    },
+    {
+      "id": "page-view-transition",
+      "name": "PageViewTransition",
+      "concept": "Transições nativas entre páginas ou estados — morph suave de layout sem libs extras, sensação de app premium.",
+      "file_path": "packages/forge-ui/src/techniques/page-view-transition.ts",
+      "sandbox_read_path": "packages/forge-ui/src/techniques/page-view-transition.ts"
     },
     {
       "id": "parallax-depth",
@@ -497,6 +511,20 @@
       "concept": "Elementos inclinam-se em 3D seguindo o cursor no hover — profundidade tátil, o card vira um objeto físico.",
       "file_path": "packages/forge-ui/src/techniques/tilt-hover.ts",
       "sandbox_read_path": "packages/forge-ui/src/techniques/tilt-hover.ts"
+    },
+    {
+      "id": "video-hero-background",
+      "name": "VideoHeroBackground",
+      "concept": "Vídeo loop no hero com poster e lazy load — impacto cinematográfico sem sacrificar LCP nem mobile.",
+      "file_path": "packages/forge-ui/src/techniques/video-hero-background.ts",
+      "sandbox_read_path": "packages/forge-ui/src/techniques/video-hero-background.ts"
+    },
+    {
+      "id": "webgl-hero-light",
+      "name": "WebGLHeroLight",
+      "concept": "Luz volumétrica 3D no hero — glow orgânico que reage ao scroll ou cursor, sensação de produto high-end.",
+      "file_path": "packages/forge-ui/src/techniques/webgl-hero-light.ts",
+      "sandbox_read_path": "packages/forge-ui/src/techniques/webgl-hero-light.ts"
     }
   ],
   "dna_seeds": [
@@ -509,7 +537,20 @@
         "SaaS",
         "voice tech",
         "tech product"
-      ]
+      ],
+      "compatible_languages": [
+        "swiss",
+        "high-tech",
+        "editorial",
+        "minimal"
+      ],
+      "compatible_moods": [
+        "ocean",
+        "mono",
+        "neon"
+      ],
+      "summary": "split asymmetric 60/40 — headline crosses fold, proof strip integrated · 3-layer parallax: bg mesh 0.15x, mid visual 0.4x, content 1.0x · Headline gigante domina; subtítulo discreto; CTA pair claro",
+      "sandbox_read_path": "packages/forge-ui/src/design-dna/seeds.ts"
     },
     {
       "id": "vercel-edge-hero",
@@ -520,7 +561,19 @@
         "dev tools",
         "platform",
         "infrastructure"
-      ]
+      ],
+      "compatible_languages": [
+        "swiss",
+        "high-tech",
+        "minimal"
+      ],
+      "compatible_moods": [
+        "ocean",
+        "mono",
+        "ember"
+      ],
+      "summary": "centered max-w-5xl com conic gradient bg + grid pattern overlay · Conic gradient rotaciona lentamente (30s linear infinite) · Headline gigante centralizado, subtítulo below, CTA pair",
+      "sandbox_read_path": "packages/forge-ui/src/design-dna/seeds.ts"
     },
     {
       "id": "apple-product-hero-cinematic",
@@ -531,7 +584,19 @@
         "premium",
         "consumer tech",
         "lifestyle"
-      ]
+      ],
+      "compatible_languages": [
+        "editorial",
+        "minimal",
+        "high-tech"
+      ],
+      "compatible_moods": [
+        "mono",
+        "sand",
+        "sunset"
+      ],
+      "summary": "full-bleed cinematic — product image centered, headline above, minimal text · Product image parallax sutil, text fade out on scroll, next section fade in · Product image é o hero. Headline complementa, não domina.",
+      "sandbox_read_path": "packages/forge-ui/src/design-dna/seeds.ts"
     },
     {
       "id": "stripe-editorial-density",
@@ -543,7 +608,19 @@
         "payments",
         "enterprise",
         "documentation"
-      ]
+      ],
+      "compatible_languages": [
+        "swiss",
+        "editorial",
+        "high-tech"
+      ],
+      "compatible_moods": [
+        "ocean",
+        "mono",
+        "royal"
+      ],
+      "summary": "editorial multi-column com alta densidade de informação · Gradient mesh animado no bg, content reveal staggerado por seção · H1 + H2 editorial com serifa display + body sans-serif. Dual-column com visual supporting text.",
+      "sandbox_read_path": "packages/forge-ui/src/design-dna/seeds.ts"
     },
     {
       "id": "linear-motion-choreography",
@@ -554,7 +631,19 @@
         "dev tools",
         "project management",
         "productivity"
-      ]
+      ],
+      "compatible_languages": [
+        "swiss",
+        "high-tech",
+        "minimal"
+      ],
+      "compatible_moods": [
+        "ocean",
+        "mono",
+        "neon"
+      ],
+      "summary": "centered max-w-4xl com visual abaixo do fold · Cada seção revela com stagger. Visual abaixo do fold tem parallax 3-layer. Mesh bg sutil animado. · Headline + subhead + CTA → visual rico abaixo. Simples mas executado impecavelmente.",
+      "sandbox_read_path": "packages/forge-ui/src/design-dna/seeds.ts"
     },
     {
       "id": "awwwards-brutalist-typography",
@@ -567,7 +656,19 @@
         "art",
         "fashion",
         "artisanal"
-      ]
+      ],
+      "compatible_languages": [
+        "brutalist",
+        "editorial",
+        "swiss"
+      ],
+      "compatible_moods": [
+        "mono",
+        "sand",
+        "ember"
+      ],
+      "summary": "full-bleed typographic — headline gigante ocupa viewport inteiro · Letras revelam por máscara, escalonadas. Grain texture sutil overlay em tudo. · Type IS the design. Sem imagem, sem card, sem decoração. Apenas tipografia gigante.",
+      "sandbox_read_path": "packages/forge-ui/src/design-dna/seeds.ts"
     },
     {
       "id": "editorial-magazine-split",
@@ -580,7 +681,20 @@
         "editorial",
         "luxury",
         "beauty"
-      ]
+      ],
+      "compatible_languages": [
+        "editorial",
+        "art-deco",
+        "minimal"
+      ],
+      "compatible_moods": [
+        "mono",
+        "sunset",
+        "royal",
+        "sand"
+      ],
+      "summary": "editorial split assimétrico — visual grande à direita, texto coluna estreita à esquerda · Visual parallax sutil, texto fade in. Scroll reveals próxima story. · Visual domina. Texto é complementar, em coluna estreita com serifa.",
+      "sandbox_read_path": "packages/forge-ui/src/design-dna/seeds.ts"
     },
     {
       "id": "bento-dense-showcase",
@@ -592,7 +706,20 @@
         "marketplace",
         "creator tools",
         "portfolio"
-      ]
+      ],
+      "compatible_languages": [
+        "swiss",
+        "high-tech",
+        "minimal"
+      ],
+      "compatible_moods": [
+        "ocean",
+        "mono",
+        "ember",
+        "sand"
+      ],
+      "summary": "bento grid denso — cards de tamanhos variados organizados em grid assimétrico · Cards revelam em cascade pelo grid. Spotlight segue cursor dentro do bento. · Card maior (span 2x2) é o destaque. Cards menores agrupam features secundárias.",
+      "sandbox_read_path": "packages/forge-ui/src/design-dna/seeds.ts"
     },
     {
       "id": "sticky-stack-narrative",
@@ -604,7 +731,21 @@
         "showcase",
         "portfolio",
         "feature deep-dive"
-      ]
+      ],
+      "compatible_languages": [
+        "editorial",
+        "minimal",
+        "swiss",
+        "high-tech"
+      ],
+      "compatible_moods": [
+        "mono",
+        "ocean",
+        "sand",
+        "ember"
+      ],
+      "summary": "sticky scroll storytelling — seção fixa enquanto conteúdo rola ao lado · Col esquerda sticky. Col direita items revelam um a um no scroll. Parallax sutil no visual. · Col esquerda: título + descrição fixos. Col direita: 3-5 items que scroll.",
+      "sandbox_read_path": "packages/forge-ui/src/design-dna/seeds.ts"
     },
     {
       "id": "spotlight-showcase-portfolio",
@@ -616,7 +757,19 @@
         "creative",
         "designer",
         "agency"
-      ]
+      ],
+      "compatible_languages": [
+        "swiss",
+        "minimal",
+        "editorial"
+      ],
+      "compatible_moods": [
+        "mono",
+        "ocean",
+        "ember"
+      ],
+      "summary": "minimal grid com spotlight interativo — cards simples que ganham vida no hover · Cards revelam staggerado. Spotlight segue cursor com lag suave. · Simplicidade extrema. O spotlight é o diferencial — não a estrutura.",
+      "sandbox_read_path": "packages/forge-ui/src/design-dna/seeds.ts"
     },
     {
       "id": "kinetic-headline-reveal",
@@ -629,7 +782,21 @@
         "agency",
         "studio",
         "launch"
-      ]
+      ],
+      "compatible_languages": [
+        "brutalist",
+        "editorial",
+        "swiss",
+        "bauhaus"
+      ],
+      "compatible_moods": [
+        "mono",
+        "ember",
+        "sunset",
+        "neon"
+      ],
+      "summary": "centered ou split com headline como protagonista absoluto · Letras/palavras revelam por máscara, escalonadas. Grain sobre tudo. Scroll = próxima reveal. · Headline é 80% do impacto. Resto é silêncio.",
+      "sandbox_read_path": "packages/forge-ui/src/design-dna/seeds.ts"
     },
     {
       "id": "glassmorphism-nav-floating",
@@ -641,7 +808,21 @@
         "portfolio",
         "agency",
         "tech"
-      ]
+      ],
+      "compatible_languages": [
+        "swiss",
+        "high-tech",
+        "minimal",
+        "editorial"
+      ],
+      "compatible_moods": [
+        "ocean",
+        "mono",
+        "neon",
+        "ember"
+      ],
+      "summary": "nav flutuante com glassmorphism — sticky top-4, rounded-2xl, backdrop-blur · Nav fade in on load. Em scroll down, nav pode hide; em scroll up, nav show. · Nav discreta mas presente. Glass cria profundidade sem bloquear conteúdo.",
+      "sandbox_read_path": "packages/forge-ui/src/design-dna/seeds.ts"
     },
     {
       "id": "grain-texture-artisanal",
@@ -655,7 +836,21 @@
         "coffee",
         "handmade",
         "fashion"
-      ]
+      ],
+      "compatible_languages": [
+        "brutalist",
+        "editorial",
+        "japanese-minimalism",
+        "scandinavian"
+      ],
+      "compatible_moods": [
+        "sand",
+        "mono",
+        "ember",
+        "forest"
+      ],
+      "summary": "qualquer — grain é overlay, não estrutura · Grain estático ou com movimento sutil (opacity flicker 0.03→0.05) · Grain adiciona textura tátil — sensação de papel/material real",
+      "sandbox_read_path": "packages/forge-ui/src/design-dna/seeds.ts"
     },
     {
       "id": "parallax-depth-3layer",
@@ -667,15 +862,25 @@
         "storytelling",
         "hero",
         "premium"
-      ]
+      ],
+      "compatible_languages": [
+        "swiss",
+        "editorial",
+        "high-tech",
+        "minimal"
+      ],
+      "compatible_moods": [
+        "ocean",
+        "mono",
+        "ember",
+        "neon",
+        "sand"
+      ],
+      "summary": "independente — parallax é técnica de motion, não estrutura · 3 camadas: bg (0.2x scroll speed), mid (0.5x), fg (1.0x). Diferença cria ilusão de profundidade. · Parallax cria profundidade entre camadas — bg, mid, fg",
+      "sandbox_read_path": "packages/forge-ui/src/design-dna/seeds.ts"
     }
   ],
   "visual_languages": [
-    {
-      "id": "combines_with",
-      "name": "Swiss International Style",
-      "serves": []
-    },
     {
       "id": "swiss",
       "name": "Swiss International Style",
@@ -687,6 +892,35 @@
         "enterprise",
         "data",
         "dev tools"
+      ],
+      "combines_with": [],
+      "conflicts_with": [
+        "memphis",
+        "cyberpunk",
+        "y2k"
+      ],
+      "anti_patterns": [
+        "Gradient violeta-índigo (Swiss é mono ou restrained color)",
+        "Glassmorphism heavy (Swiss prefere surfaces sólidas e claras)",
+        "Decorative illustrations (Swiss usa fotografia ou nada)"
+      ],
+      "compatible_moods": [
+        "ocean",
+        "mono",
+        "ember"
+      ],
+      "reference_queries": [
+        "swiss international style web design",
+        "helvetica grid based website design awwwards",
+        "minimal SaaS dashboard swiss design"
+      ],
+      "principles": [
+        "Grid 12 colunas rígido — alinhamento perfeito",
+        "Tipografia grotesca (Helvetica, Inter, Geist) sem serifa",
+        "Espaço negativo generoso — respiro entre elementos",
+        "Hierarquia por tamanho e peso, não por cor",
+        "Fotografia reta, sem manipulação",
+        "Sem decoração — cada elemento serve uma função"
       ]
     },
     {
@@ -701,6 +935,37 @@
         "fashion",
         "art",
         "music"
+      ],
+      "combines_with": [],
+      "conflicts_with": [
+        "art-deco",
+        "royal",
+        "luxury"
+      ],
+      "anti_patterns": [
+        "Sombras suaves e difusas (Brutalist é hard shadow ou nada)",
+        "Rounded corners excessivas (Brutalist é edges retas ou mínimo radius)",
+        "Glassmorphism (Brutalist é opaque, honesto)",
+        "Gradient suave (Brutalist é cor chapada ou mono)"
+      ],
+      "compatible_moods": [
+        "mono",
+        "sand",
+        "ember",
+        "sunset"
+      ],
+      "reference_queries": [
+        "brutalist web design awwwards 2024",
+        "neo brutalism website typography giant",
+        "raw HTML aesthetic web design"
+      ],
+      "principles": [
+        "Tipografia gigante — headlines que ocupam viewport inteiro",
+        "Sem sombras suaves — borders hard ou nenhum",
+        "Cores primárias chapadas (quando há cor)",
+        "Grão/textura overlay — sensação de material real",
+        "Grid intencionalmente quebrado ou assimétrico",
+        "Raw HTML feel — bordas retas, sem rounded corners excessivas"
       ]
     },
     {
@@ -715,6 +980,130 @@
         "beauty",
         "art",
         "culture"
+      ],
+      "combines_with": [],
+      "conflicts_with": [
+        "cyberpunk",
+        "memphis",
+        "y2k",
+        "neon"
+      ],
+      "anti_patterns": [
+        "Gradient neon (Editorial é sofisticado, não brilhante)",
+        "Glassmorphism (Editorial é papel, não vidro)",
+        "Kinetic typography agressivo (Editorial é calmo, revela sutil)",
+        "3-card grid simétrico (Editorial é assimétrico por natureza)"
+      ],
+      "compatible_moods": [
+        "mono",
+        "sunset",
+        "royal",
+        "sand",
+        "ember"
+      ],
+      "reference_queries": [
+        "editorial magazine website design vogue style",
+        "serif display headline website design awwwards",
+        "asymmetric column layout web design premium"
+      ],
+      "principles": [
+        "Serifa display no headline (Playfair, Bodoni, ou similar)",
+        "Sans-serif no body (Inter, Söhne) com line-height generoso (1.6-1.8)",
+        "Colunas assimétricas — texto estreito, visual largo",
+        "Whitespace como elemento de design — não medo do vazio",
+        "Hierarquia por contraste tipográfico, não por cor",
+        "Captions e metadata em small caps ou italic"
+      ]
+    },
+    {
+      "id": "high-tech",
+      "name": "High-Tech Industrial",
+      "serves": [
+        "SaaS",
+        "dev tools",
+        "AI",
+        "platform",
+        "infrastructure",
+        "cloud",
+        "API",
+        "tech product"
+      ],
+      "combines_with": [],
+      "conflicts_with": [
+        "memphis",
+        "art-deco",
+        "editorial",
+        "japanese-minimalism"
+      ],
+      "anti_patterns": [
+        "Serifa display (High-tech é grotesk only)",
+        "Grain texture (High-tech é digital puro, sem analog)",
+        "Colunas assimétricas editoriais (High-tech é grid técnico)"
+      ],
+      "compatible_moods": [
+        "ocean",
+        "mono",
+        "neon",
+        "ember"
+      ],
+      "reference_queries": [
+        "vercel linear stripe website design",
+        "high tech SaaS landing page design 2024",
+        "mesh gradient dark mode website design"
+      ],
+      "principles": [
+        "Mesh gradient animado sutil no bg (conic ou radial)",
+        "Grid pattern overlay como textura técnica",
+        "Tipografia grotesca tight tracking (-0.03em)",
+        "Micro-interações precisas (hover, magnetic, spotlight)",
+        "Dark mode dominante com accent vibrante",
+        "Code snippets e syntax highlight como elementos de design"
+      ]
+    },
+    {
+      "id": "japanese-minimalism",
+      "name": "Japanese Minimalism (Ma)",
+      "serves": [
+        "wellness",
+        "zen",
+        "tea",
+        "ceramics",
+        "fashion minimal",
+        "architecture",
+        "art",
+        "philosophy"
+      ],
+      "combines_with": [],
+      "conflicts_with": [
+        "cyberpunk",
+        "memphis",
+        "y2k",
+        "high-tech",
+        "neon"
+      ],
+      "anti_patterns": [
+        "Mesh gradient animado (Japanese minimalism é estático, calmo)",
+        "Multiple cards em grid (Japanese minimalism é 1 elemento por seção)",
+        "Neon glow (Japanese minimalism é natural, não digital)",
+        "Kinetic typography (Japanese minimalism é slow reveal, não aggressive)"
+      ],
+      "compatible_moods": [
+        "mono",
+        "sand",
+        "forest"
+      ],
+      "reference_queries": [
+        "japanese minimalism web design ma",
+        "kenya hara design philosophy website",
+        "zen minimal website design premium"
+      ],
+      "principles": [
+        "Espaço negativo DOMINA — 60-70% da tela é vazio",
+        "1 elemento por seção — sem clusters, sem grids densos",
+        "Paleta mono + 1 accent natural (areia, terra, cinza)",
+        "Tipografia discreta — peso light, tracking normal",
+        "Motion sutil — reveal lento, sem parallax agressivo",
+        "Materialidade — textura sutil de papel, madeira, tecido"
       ]
     },
     {
@@ -728,6 +1117,36 @@
         "brand",
         "poster",
         "cultural"
+      ],
+      "combines_with": [],
+      "conflicts_with": [
+        "editorial",
+        "japanese-minimalism",
+        "art-deco"
+      ],
+      "anti_patterns": [
+        "Serifa display (Bauhaus é sans-serif geométrica)",
+        "Gradient suave (Bauhaus é cor chapada primária)",
+        "Fotografia realista (Bauhaus é geometria abstrata)"
+      ],
+      "compatible_moods": [
+        "ember",
+        "ocean",
+        "sunset",
+        "mono"
+      ],
+      "reference_queries": [
+        "bauhaus web design geometric",
+        "primary colors geometric website design",
+        "bauhaus poster style web design modern"
+      ],
+      "principles": [
+        "Formas geométricas primárias como elementos visuais",
+        "Cores primárias (vermelho, azul, amarelo) + preto e branco",
+        "Grid rigoroso baseado em geometria",
+        "Tipografia sans-serif geométrica (Futura, Avenir)",
+        "Sem ilustração figurativa — apenas geometria abstrata",
+        "Composição equilibrada mas dinâmica"
       ]
     },
     {
@@ -741,6 +1160,82 @@
         "tech extreme",
         "music electronic",
         "cyberpunk"
+      ],
+      "combines_with": [],
+      "conflicts_with": [
+        "editorial",
+        "japanese-minimalism",
+        "swiss",
+        "art-deco",
+        "brutalist"
+      ],
+      "anti_patterns": [
+        "Serifa display elegante (Cyberpunk é monospace ou display tech)",
+        "Whitespace generoso (Cyberpunk é denso, agressivo)",
+        "Cores pastel (Cyberpunk é neon vibrante)",
+        "Grain texture sutil (Cyberpunk é glitch, scanlines, RGB split)"
+      ],
+      "compatible_moods": [
+        "neon",
+        "mono"
+      ],
+      "reference_queries": [
+        "cyberpunk website design neon",
+        "terminal aesthetic web design",
+        "glitch effect website design awwwards"
+      ],
+      "principles": [
+        "Neon vibrante sobre bg ultra-escuro (neon green, magenta, cyan)",
+        "Tipografia monospace ou display tech (JetBrains Mono, Space Mono)",
+        "Glitch effects — RGB split, scanlines, distortion",
+        "Grid pattern ou scanline overlay como textura",
+        "Motion agressivo — flicker, glitch, instant transitions",
+        "UI elements como terminal — prompts, cursors, code blocks"
+      ]
+    },
+    {
+      "id": "art-deco",
+      "name": "Art Deco Luxury",
+      "serves": [
+        "luxury",
+        "jewelry",
+        "real estate premium",
+        "hotel",
+        "fine dining",
+        "fashion luxury",
+        "event"
+      ],
+      "combines_with": [],
+      "conflicts_with": [
+        "brutalist",
+        "cyberpunk",
+        "memphis",
+        "y2k",
+        "japanese-minimalism"
+      ],
+      "anti_patterns": [
+        "Grotesk sans-serif (Art deco é serif display elegante)",
+        "Grain texture (Art deco é polido, perfeito)",
+        "Monospace (Art deco é display elegante)",
+        "Raw HTML feel (Art deco é ornamentado)"
+      ],
+      "compatible_moods": [
+        "royal",
+        "sunset",
+        "mono"
+      ],
+      "reference_queries": [
+        "art deco luxury website design",
+        "gold foil geometric website design",
+        "1920s modern luxury web design"
+      ],
+      "principles": [
+        "Simetria rigorosa — espelhamento horizontal e vertical",
+        "Gold foil ou metallic accents (dourado, prateado, rose gold)",
+        "Padrões geométricos radiais e zigzag",
+        "Tipografia display elegante (Didot, Bodoni) com tracking wide",
+        "Bg escuro profundo com gold overlay",
+        "Ornamentação geométrica — leques, raios, zigzags"
       ]
     },
     {
@@ -754,6 +1249,83 @@
         "art",
         "event",
         "playful product"
+      ],
+      "combines_with": [],
+      "conflicts_with": [
+        "swiss",
+        "japanese-minimalism",
+        "art-deco",
+        "high-tech",
+        "editorial"
+      ],
+      "anti_patterns": [
+        "Grid rígido (Memphis é caos controlado)",
+        "Mono color (Memphis é vibrante)",
+        "Whitespace generoso (Memphis é denso e caótico)",
+        "Serif display elegante (Memphis é bold playful)"
+      ],
+      "compatible_moods": [
+        "sunset",
+        "neon",
+        "ember",
+        "forest"
+      ],
+      "reference_queries": [
+        "memphis design web design colorful",
+        "post modern playful website design",
+        "memphis group aesthetic web modern"
+      ],
+      "principles": [
+        "Cores vibrantes e contrastantes (rosa, azul, amarelo, verde)",
+        "Formas geométricas lúdicas — círculos, zigzags, squiggles",
+        "Padrões absurdos e assímetricos",
+        "Tipografia bold e playful",
+        "Mix de texturas e materiais visuais",
+        "Quebra intencional de grid e hierarquia"
+      ]
+    },
+    {
+      "id": "y2k",
+      "name": "Y2K Retro-Futurist",
+      "serves": [
+        "music",
+        "fashion young",
+        "gaming",
+        "web3",
+        "creative young",
+        "social",
+        "trend brand"
+      ],
+      "combines_with": [],
+      "conflicts_with": [
+        "swiss",
+        "editorial",
+        "japanese-minimalism",
+        "art-deco"
+      ],
+      "anti_patterns": [
+        "Serif display (Y2K é tech round)",
+        "Monochrome (Y2K é holográfico, iridescent)",
+        "Grid rígido (Y2K é blob shapes, orgânico)",
+        "Grain texture (Y2K é chrome, gloss, polished)"
+      ],
+      "compatible_moods": [
+        "neon",
+        "sunset",
+        "ocean"
+      ],
+      "reference_queries": [
+        "y2k aesthetic web design chrome",
+        "retro futurist website design 2000s",
+        "holographic gradient web design modern"
+      ],
+      "principles": [
+        "Chrome e metallic gradients (prateado, holográfico)",
+        "Blob shapes e formas orgânicas com CSS",
+        "Tipografia tech round (Eurostile, Chakra Petch)",
+        "Bg com gradient holográfico ou iridescent",
+        "UI elements com gloss e reflection",
+        "Motion com spring physics — bouncy, playful"
       ]
     },
     {
@@ -768,6 +1340,38 @@
         "skincare",
         "sustainable",
         "yoga"
+      ],
+      "combines_with": [],
+      "conflicts_with": [
+        "cyberpunk",
+        "memphis",
+        "y2k",
+        "high-tech"
+      ],
+      "anti_patterns": [
+        "Neon vibrante (Organic é terroso, natural)",
+        "Grid rígido (Organic é fluido, curvas)",
+        "Monospace (Organic é humanista)",
+        "Glitch effects (Organic é suave, natural)"
+      ],
+      "compatible_moods": [
+        "sand",
+        "forest",
+        "ember",
+        "sunset"
+      ],
+      "reference_queries": [
+        "organic natural website design curves",
+        "biomorphic web design eco wellness",
+        "nature inspired website design premium"
+      ],
+      "principles": [
+        "Curvas e formas orgânicas (border-radius generoso, blob shapes)",
+        "Paleta terrosa — terra, areia, verde natural, marrom",
+        "Tipografia humanista sans-serif (Söhne, Suisse Int'l)",
+        "Fotografia de natureza e texturas orgânicas",
+        "Motion fluido — spring physics, curves naturais",
+        "Whitespace generoso com elementos que fluem"
       ]
     },
     {
@@ -780,6 +1384,38 @@
         "agency minimal",
         "studio",
         "photographer"
+      ],
+      "combines_with": [],
+      "conflicts_with": [
+        "memphis",
+        "cyberpunk",
+        "y2k",
+        "bauhaus",
+        "art-deco"
+      ],
+      "anti_patterns": [
+        "Múltiplos cards em grid (Minimal é 1 elemento)",
+        "Gradient colorido (Minimal é mono + 1 accent)",
+        "Kinetic typography agressivo (Minimal é slow fade)",
+        "Parallax multi-layer (Minimal é flat, contido)"
+      ],
+      "compatible_moods": [
+        "mono",
+        "ocean",
+        "sand"
+      ],
+      "reference_queries": [
+        "minimal website design awwwards",
+        "pure minimal portfolio website",
+        "extreme whitespace web design"
+      ],
+      "principles": [
+        "1 elemento por seção — máximo 2",
+        "Paleta mono + 1 accent máximo",
+        "Tipografia minimal (1 peso, 1 tamanho para cada nível)",
+        "Whitespace EXTREMO — 70%+ da tela é vazio",
+        "Motion sutil — fade lento, sem parallax",
+        "Sem decoração — cada elemento é essencial"
       ]
     }
   ],
@@ -986,5 +1622,287 @@
     "DashboardPreview",
     "MetricCards",
     "OnboardingSteps"
-  ]
+  ],
+  "opinionated_hero_exports": [
+    "HeroEditorialSplit",
+    "HeroBrutalistTypography",
+    "HeroCinematicSpotlight",
+    "InteractiveHeroDemo"
+  ],
+  "composition_signatures": [
+    {
+      "id": "hero-editorial-split",
+      "export": "HeroEditorialSplit",
+      "pattern": "HeroEditorialSplit"
+    },
+    {
+      "id": "hero-brutalist-typography",
+      "export": "HeroBrutalistTypography",
+      "pattern": "HeroBrutalistTypography"
+    },
+    {
+      "id": "hero-cinematic-spotlight",
+      "export": "HeroCinematicSpotlight",
+      "pattern": "HeroCinematicSpotlight"
+    },
+    {
+      "id": "sticky-stack-narrative",
+      "export": "StickyStackNarrative",
+      "pattern": "StickyStackNarrative"
+    },
+    {
+      "id": "bento-dense-showcase",
+      "export": "BentoDenseShowcase",
+      "pattern": "BentoDenseShowcase"
+    },
+    {
+      "id": "editorial-magazine-split",
+      "export": "EditorialMagazineSplit",
+      "pattern": "EditorialMagazineSplit"
+    },
+    {
+      "id": "kinetic-headline-reveal",
+      "export": "KineticHeadlineReveal",
+      "pattern": "KineticHeadlineReveal"
+    },
+    {
+      "id": "spotlight-showcase-grid",
+      "export": "SpotlightShowcaseGrid",
+      "pattern": "SpotlightShowcaseGrid"
+    },
+    {
+      "id": "parallax-product-showcase",
+      "export": "ParallaxProductShowcase",
+      "pattern": "ParallaxProductShowcase"
+    },
+    {
+      "id": "glass-nav-floating",
+      "export": "GlassNavFloating",
+      "pattern": "GlassNavFloating"
+    },
+    {
+      "id": "grain-artisanal-overlay",
+      "export": "GrainArtisanalOverlay",
+      "pattern": "GrainArtisanalOverlay"
+    },
+    {
+      "id": "section-tabs-feature-lanes",
+      "export": "SectionTabsFeatureLanes",
+      "pattern": "SectionTabsFeatureLanes"
+    },
+    {
+      "id": "process-steps-how-it-works",
+      "export": "ProcessStepsHowItWorks",
+      "pattern": "ProcessStepsHowItWorks"
+    },
+    {
+      "id": "faq-accordion-craft",
+      "export": "FAQAccordionCraft",
+      "pattern": "FAQAccordionCraft"
+    },
+    {
+      "id": "interactive-hero-demo",
+      "export": "InteractiveHeroDemo",
+      "pattern": "InteractiveHeroDemo"
+    }
+  ],
+  "technique_signatures": [
+    {
+      "id": "animated-mesh-background",
+      "patterns": [
+        "mesh",
+        "@keyframes",
+        "AnimatedMesh",
+        "meshColors"
+      ]
+    },
+    {
+      "id": "count-up-metrics",
+      "patterns": [
+        "CountUp",
+        "count-up",
+        "tabular-nums"
+      ]
+    },
+    {
+      "id": "glassmorphism-layers",
+      "patterns": [
+        "backdrop-blur",
+        "glassmorphism",
+        "GlassNavFloating"
+      ]
+    },
+    {
+      "id": "grain-texture-overlay",
+      "patterns": [
+        "GrainArtisanalOverlay",
+        "mix-blend-mode:\\s*overlay",
+        "grain"
+      ]
+    },
+    {
+      "id": "infinite-marquee",
+      "patterns": [
+        "Marquee",
+        "marquee",
+        "animate-marquee"
+      ]
+    },
+    {
+      "id": "interactive-demo-embed",
+      "patterns": [
+        "InteractiveHeroDemo",
+        "interactive-demo",
+        "demoCaption"
+      ]
+    },
+    {
+      "id": "kinetic-typography",
+      "patterns": [
+        "KineticHeadlineReveal",
+        "TextShimmer",
+        "kinetic"
+      ]
+    },
+    {
+      "id": "liquid-blob-background",
+      "patterns": [
+        "LiquidBlobBackground",
+        "liquid-blob-background"
+      ]
+    },
+    {
+      "id": "logo-marquee-social-proof",
+      "patterns": [
+        "logo-marquee",
+        "LogoMarquee",
+        "infinite-marquee"
+      ]
+    },
+    {
+      "id": "magnetic-interaction",
+      "patterns": [
+        "MagneticButton",
+        "magnetic"
+      ]
+    },
+    {
+      "id": "page-view-transition",
+      "patterns": [
+        "PageViewTransition",
+        "page-view-transition"
+      ]
+    },
+    {
+      "id": "parallax-depth",
+      "patterns": [
+        "Parallax",
+        "useScrollProgress",
+        "parallax"
+      ]
+    },
+    {
+      "id": "process-steps-scroll",
+      "patterns": [
+        "ProcessStepsHowItWorks",
+        "process-steps"
+      ]
+    },
+    {
+      "id": "scroll-reveal",
+      "patterns": [
+        "Reveal",
+        "StaggerContainer",
+        "FadeIn"
+      ]
+    },
+    {
+      "id": "section-tabs-visual",
+      "patterns": [
+        "SectionTabsFeatureLanes",
+        "section-tabs",
+        "defaultLaneId"
+      ]
+    },
+    {
+      "id": "smooth-scroll-lenis",
+      "patterns": [
+        "Lenis",
+        "smooth-scroll",
+        "SmoothScrollLenis"
+      ]
+    },
+    {
+      "id": "spotlight-cursor",
+      "patterns": [
+        "Spotlight",
+        "spotlight"
+      ]
+    },
+    {
+      "id": "sticky-stack",
+      "patterns": [
+        "StickyStackNarrative",
+        "position:\\s*sticky"
+      ]
+    },
+    {
+      "id": "tilt-hover",
+      "patterns": [
+        "Tilt3D",
+        "tilt"
+      ]
+    },
+    {
+      "id": "video-hero-background",
+      "patterns": [
+        "VideoHeroBackground",
+        "video-hero-background"
+      ]
+    },
+    {
+      "id": "webgl-hero-light",
+      "patterns": [
+        "WebGLHeroLight",
+        "webgl-hero-light"
+      ]
+    }
+  ],
+  "section_composition_map": {
+    "hero": [
+      "hero-editorial-split",
+      "hero-brutalist-typography",
+      "hero-cinematic-spotlight",
+      "interactive-hero-demo"
+    ],
+    "features": [
+      "bento-dense-showcase",
+      "spotlight-showcase-grid",
+      "section-tabs-feature-lanes"
+    ],
+    "narrative": [
+      "sticky-stack-narrative",
+      "editorial-magazine-split",
+      "parallax-product-showcase"
+    ],
+    "tabs": [
+      "section-tabs-feature-lanes"
+    ],
+    "steps": [
+      "process-steps-how-it-works"
+    ],
+    "faq": [
+      "faq-accordion-craft"
+    ],
+    "nav": [
+      "glass-nav-floating"
+    ],
+    "overlay": [
+      "grain-artisanal-overlay"
+    ],
+    "showcase": [
+      "kinetic-headline-reveal",
+      "bento-dense-showcase"
+    ]
+  }
 }

@@ -30,6 +30,12 @@ import { restoreExecutionLogFromRows } from "./executionLogMeta.ts";
 import { loadCheckpoint } from "./checkpoint.ts";
 import { buildSandboxEnv } from "./sandbox-env.ts";
 import { buildDesignDirectiveBlock } from "./design-directive.ts";
+import {
+  autoResolveDesignField,
+  excludesFromSignature,
+  isWebUiTemplate,
+  type DesignSignatureRecord,
+} from "./design-plan-field.ts";
 import { PLAN_APPROVED_PREFIX } from "./run-context.ts";
 import type { ChatMessage, DesignPlanField, PlanStep } from "./types.ts";
 import { logger } from "../_shared/logger.ts";
@@ -241,12 +247,17 @@ export async function executeAgentJob(
     return { ok: false, error: "Cancelado", steps: 0, canceled: true };
   }
   const preMeta = (pre?.meta ?? {}) as Record<string, unknown>;
+  const isSmokeRun = preMeta.smoke === true;
 
   const effectivePreferences = await resolveEffectiveAgentPreferences(supabase, userId);
 
   // Paraleliza queries independentes de inicialização (reduz cold-start)
   const [projectResult, profileResult, historyResult, userLlmResult] = await Promise.all([
-    supabase.from("projects").select("id, owner_id, template, meta").eq("id", projectId).single(),
+    supabase
+      .from("projects")
+      .select("id, owner_id, template, meta, design_signature")
+      .eq("id", projectId)
+      .single(),
     supabase.from("profiles").select("integration_prefs").eq("id", userId).maybeSingle(),
     supabase
       .from("messages")
@@ -434,6 +445,48 @@ export async function executeAgentJob(
   const streamEmit = (type: string, data: Record<string, unknown>) => onEvent(type, data);
   const resilientMain = new ResilientLLM(mainCfg, robinPool, streamEmit);
 
+  function lastUserRequestText(msgs: ChatMessage[]): string {
+    for (let i = msgs.length - 1; i >= 0; i--) {
+      const m = msgs[i];
+      if (m.role !== "user") continue;
+      if (typeof m.content === "string" && m.content.trim()) return m.content.trim();
+      if (Array.isArray(m.content)) {
+        const text = m.content
+          .filter((b) => b.type === "text" && b.text)
+          .map((b) => b.text)
+          .join("\n")
+          .trim();
+        if (text) return text;
+      }
+    }
+    return "";
+  }
+
+  let approvedPlanDesign = coerceDesignPlanField(preMeta.design);
+  if (
+    !isSmokeRun &&
+    !planMode &&
+    !chatMode &&
+    !approvedPlanDesign &&
+    isWebUiTemplate(projectTemplate)
+  ) {
+    const sig = (project as { design_signature?: DesignSignatureRecord | null }).design_signature;
+    const { excludeVoices, excludeTechniques } = excludesFromSignature(
+      sig && typeof sig === "object" ? sig : null,
+    );
+    const domain =
+      (typeof preMeta.planSummary === "string" && preMeta.planSummary.trim()) ||
+      lastUserRequestText(messages) ||
+      "produto digital";
+    approvedPlanDesign = autoResolveDesignField({
+      domain,
+      projectTemplate,
+      rotationKey: projectId,
+      excludeVoices,
+      excludeTechniques,
+    });
+  }
+
   const runtime = createAgentRuntime({
     reg,
     llm: resilientMain,
@@ -480,8 +533,9 @@ export async function executeAgentJob(
                 : undefined,
           planHeadline: typeof preMeta.planHeadline === "string" ? preMeta.planHeadline : undefined,
           planSteps: coercePlanStepsFromMeta(preMeta.steps),
-          approvedPlanDesign: coerceDesignPlanField(preMeta.design),
+          approvedPlanDesign,
           buildFixResume: preMeta.buildFix === true,
+          smokeRun: isSmokeRun,
         },
   });
 

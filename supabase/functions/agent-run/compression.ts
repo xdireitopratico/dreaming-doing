@@ -1,5 +1,5 @@
 // compression.ts — Conversation Compression + token-aware context (C17)
-import type { LLMProvider, ChatMessage, ToolCall, ChatResponse } from "./types.ts";
+import type { LLMProvider, ChatMessage, ToolCall, ChatResponse, ToolResult } from "./types.ts";
 import {
   estimateMessageTokens,
   INPUT_TOKEN_FORCE,
@@ -220,8 +220,8 @@ export async function parallelExecute(
   calls: ToolCall[],
   executor: (
     call: ToolCall,
-  ) => Promise<{ toolCallId: string; ok: boolean; output: unknown; error?: string }>,
-): Promise<Array<{ call: ToolCall; result: { ok: boolean; output: unknown; error?: string } }>> {
+  ) => Promise<ToolResult>,
+): Promise<Array<{ call: ToolCall; result: ToolResult }>> {
   const reads = calls.filter(
     (c) =>
       c.name === "fs_read" ||
@@ -231,10 +231,7 @@ export async function parallelExecute(
   );
   const writes = calls.filter((c) => !reads.includes(c));
 
-  const results: Array<{
-    call: ToolCall;
-    result: { ok: boolean; output: unknown; error?: string };
-  }> = [];
+  const results: Array<{ call: ToolCall; result: ToolResult }> = [];
 
   if (reads.length > 0) {
     const readResults = await Promise.all(

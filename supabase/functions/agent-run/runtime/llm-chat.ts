@@ -10,6 +10,7 @@ import type {
   AgentContext,
   ChatMessage,
   ChatResponse,
+  FileEntry,
   LLMProvider,
   ToolDefinition,
 } from "../types.ts";
@@ -210,7 +211,7 @@ export async function chatBuildModeForLoop(
 
 export type LlmChatHost = {
   state: { context: AgentContext | null };
-  skills: { buildSkillPrompt: (files: unknown[]) => string };
+  skills: { buildSkillPrompt: (files: FileEntry[]) => string };
   projectTemplate: string;
   stackAddon: string;
   sessionAddon: string;

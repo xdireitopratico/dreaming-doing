@@ -31,8 +31,49 @@ Deno.test("resolveDesignPackage — merge extractedDnaIds prioritário", () => {
   assertEquals(pkg.relevant_dnas[0], "stripe-editorial-density");
 });
 
-Deno.test("resolveDesignPackage — 5 domínios geram variação", () => {
-  const domains = ["fintech", "padaria", "gaming cyber", "yoga wellness", "fashion boutique"];
-  const sets = new Set(domains.map((d) => resolveDesignPackage({ domain: d }).compositions[0]));
-  assert(sets.size >= 3);
+const S1_DOMAINS = [
+  { id: "fintech", domain: "fintech saas dashboard pagamentos" },
+  { id: "padaria", domain: "padaria artesanal premium sourdough" },
+  { id: "gaming", domain: "gaming cyber arena esports neon" },
+  { id: "yoga", domain: "yoga wellness retreat mindfulness" },
+  { id: "fashion", domain: "fashion boutique luxury editorial" },
+] as const;
+
+Deno.test("resolveDesignPackage — S1 cinco domínios geram variação de hero", () => {
+  const heroes = new Set(
+    S1_DOMAINS.map((d) => resolveDesignPackage({ domain: d.domain }).compositions[0]),
+  );
+  assert(heroes.size >= 3, `esperado ≥3 heroes distintos, obteve ${heroes.size}`);
+});
+
+Deno.test("resolveDesignPackage — S1 cinco domínios geram variação de mood", () => {
+  const moods = new Set(
+    S1_DOMAINS.map((d) => resolveDesignPackage({ domain: d.domain }).proposal.mood),
+  );
+  assert(moods.size >= 2, `esperado ≥2 moods distintos, obteve ${moods.size}`);
+});
+
+Deno.test("resolveDesignPackage — S1 cinco domínios geram variação de techniques", () => {
+  const techniqueSets = new Set(
+    S1_DOMAINS.map((d) => resolveDesignPackage({ domain: d.domain }).techniques.join(",")),
+  );
+  assert(techniqueSets.size >= 3, `esperado ≥3 sets de técnicas, obteve ${techniqueSets.size}`);
+});
+
+Deno.test("resolveDesignPackage — S1 cada domínio passa critic e tem read_paths", () => {
+  for (const { id, domain } of S1_DOMAINS) {
+    const pkg = resolveDesignPackage({ domain });
+    assertEquals(pkg.critic.pass, true, `critic falhou para ${id}`);
+    assert(pkg.compositions.length >= 1, `sem compositions para ${id}`);
+    assert(pkg.read_paths.length >= 2, `read_paths insuficiente para ${id}`);
+    assert(pkg.summary.length > 80, `summary curto para ${id}`);
+  }
+});
+
+Deno.test("resolveDesignPackage — rotationKey distingue projetos do mesmo domínio", () => {
+  const a = resolveDesignPackage({ domain: "fintech saas", rotationKey: "project-alpha" });
+  const b = resolveDesignPackage({ domain: "fintech saas", rotationKey: "project-beta" });
+  const fingerprint = (p: ReturnType<typeof resolveDesignPackage>) =>
+    [p.compositions.join(","), p.techniques.join(","), p.proposal.mood].join("|");
+  assert(fingerprint(a) !== fingerprint(b));
 });

@@ -155,25 +155,141 @@ function parseDnaSeeds() {
     const category = block.match(/category:\s*"([^"]+)"/)?.[1];
     const serves = block.match(/serves_domains:\s*\[([^\]]+)\]/)?.[1];
     const serves_domains = serves ? [...serves.matchAll(/"([^"]+)"/g)].map((m) => m[1]) : [];
+    const layoutType = block.match(/type:\s*"([^"]+)"/)?.[1] ?? "";
+    const motionChoreo = block.match(/scroll_choreography:\s*"([^"]+)"/)?.[1] ?? "";
+    const typoNotes = block.match(/notes:\s*"([^"]+)"/)?.[1] ?? "";
+    const langs = block.match(/compatible_languages:\s*\[([^\]]+)\]/)?.[1];
+    const compatible_languages = langs ? [...langs.matchAll(/"([^"]+)"/g)].map((m) => m[1]) : [];
+    const moods = block.match(/compatible_moods:\s*\[([^\]]+)\]/)?.[1];
+    const compatible_moods = moods ? [...moods.matchAll(/"([^"]+)"/g)].map((m) => m[1]) : [];
+    const summaryRaw = [layoutType, motionChoreo, typoNotes].filter(Boolean).join(" · ");
+    const summary = summaryRaw.slice(0, 500);
+    const seedPath = `packages/forge-ui/src/design-dna/seeds.ts`;
     if (!id) continue;
-    out.push({ id, name: name ?? id, category: category ?? "full_page", serves_domains });
+    out.push({
+      id,
+      name: name ?? id,
+      category: category ?? "full_page",
+      serves_domains,
+      compatible_languages,
+      compatible_moods,
+      summary,
+      sandbox_read_path: seedPath,
+    });
+  }
+  return out;
+}
+
+function extractBalancedBlocks(src, entryRe) {
+  const out = [];
+  let m;
+  while ((m = entryRe.exec(src)) !== null) {
+    const id = m[1];
+    let depth = 1;
+    let i = m.index + m[0].length;
+    while (i < src.length && depth > 0) {
+      if (src[i] === "{") depth++;
+      else if (src[i] === "}") depth--;
+      i++;
+    }
+    out.push({ id, block: src.slice(m.index, i) });
+  }
+  return out;
+}
+
+function parseStringArray(block, key) {
+  const re = new RegExp(`${key}:\\s*\\[([^\\]]*)\\]`, "s");
+  const hit = block.match(re)?.[1] ?? "";
+  return [...hit.matchAll(/"([^"]+)"/g)].map((x) => x[1]);
+}
+
+function parseCombinesWith(block) {
+  const out = [];
+  for (const m of block.matchAll(
+    /\{\s*id:\s*"([^"]+)",\s*reasoning:\s*"([^"]+)",\s*moment:\s*"([^"]+)"\s*\}/g,
+  )) {
+    out.push({ id: m[1], reasoning: m[2], moment: m[3] });
   }
   return out;
 }
 
 function parseVisualLanguages() {
   const src = read("tokens/languages.ts");
+  const blocks = extractBalancedBlocks(src, /^\s{2}"?([\w-]+)"?:\s*\{/gm);
   const out = [];
-  for (const m of src.matchAll(/^\s{2}(\w+):\s*\{/gm)) {
-    const id = m[1];
-    const chunk = src.slice(m.index, m.index + 800);
-    const name = chunk.match(/name:\s*"([^"]+)"/)?.[1] ?? id;
-    const servesBlock = chunk.match(/serves:\s*\[([^\]]+)\]/)?.[1] ?? "";
-    const serves = [...servesBlock.matchAll(/"([^"]+)"/g)].map((x) => x[1]);
-    out.push({ id, name, serves });
+  for (const { id, block } of blocks) {
+    if (id === "export" || id === "combines_with" || block.includes("Record<string")) continue;
+    if (out.some((row) => row.id === id)) continue;
+    const name = block.match(/name:\s*"([^"]+)"/)?.[1] ?? id;
+    out.push({
+      id,
+      name,
+      serves: parseStringArray(block, "serves"),
+      combines_with: parseCombinesWith(block),
+      conflicts_with: parseStringArray(block, "conflicts_with"),
+      anti_patterns: parseStringArray(block, "anti_patterns"),
+      compatible_moods: parseStringArray(block, "compatible_moods"),
+      reference_queries: parseStringArray(block, "reference_queries"),
+      principles: parseStringArray(block, "principles"),
+    });
   }
   return out;
 }
+
+/** Assinaturas regex para design-validate (manifest = fonte única). */
+const TECHNIQUE_SIGNATURE_PATTERNS = {
+  "parallax-depth": ["Parallax", "useScrollProgress", "parallax"],
+  "animated-mesh-background": ["mesh", "@keyframes", "AnimatedMesh", "meshColors"],
+  "grain-texture-overlay": ["GrainArtisanalOverlay", "mix-blend-mode:\\s*overlay", "grain"],
+  "sticky-stack": ["StickyStackNarrative", "position:\\s*sticky"],
+  "scroll-reveal": ["Reveal", "StaggerContainer", "FadeIn"],
+  "kinetic-typography": ["KineticHeadlineReveal", "TextShimmer", "kinetic"],
+  "spotlight-cursor": ["Spotlight", "spotlight"],
+  "magnetic-interaction": ["MagneticButton", "magnetic"],
+  "tilt-hover": ["Tilt3D", "tilt"],
+  "count-up-metrics": ["CountUp", "count-up", "tabular-nums"],
+  "infinite-marquee": ["Marquee", "marquee", "animate-marquee"],
+  "glassmorphism-layers": ["backdrop-blur", "glassmorphism", "GlassNavFloating"],
+  "smooth-scroll-lenis": ["Lenis", "smooth-scroll", "SmoothScrollLenis"],
+  "section-tabs-visual": ["SectionTabsFeatureLanes", "section-tabs", "defaultLaneId"],
+  "process-steps-scroll": ["ProcessStepsHowItWorks", "process-steps"],
+  "logo-marquee-social-proof": ["logo-marquee", "LogoMarquee", "infinite-marquee"],
+  "interactive-demo-embed": ["InteractiveHeroDemo", "interactive-demo", "demoCaption"],
+};
+
+function buildTechniqueSignatures(techniques) {
+  return techniques.map((t) => ({
+    id: t.id,
+    patterns: TECHNIQUE_SIGNATURE_PATTERNS[t.id] ?? [t.name, t.id],
+  }));
+}
+
+function buildCompositionSignatures(opinionated) {
+  return opinionated.map((c) => ({
+    id: c.id,
+    export: c.export,
+    pattern: c.export,
+  }));
+}
+
+function buildOpinionatedHeroExports(opinionated) {
+  return opinionated
+    .filter((c) => c.id.startsWith("hero-") || c.export === "InteractiveHeroDemo")
+    .map((c) => c.export);
+}
+
+/** Mapeamento seção → ids de composição para resolve por sections[]. */
+const SECTION_COMPOSITION_MAP = {
+  hero: ["hero-editorial-split", "hero-brutalist-typography", "hero-cinematic-spotlight", "interactive-hero-demo"],
+  features: ["bento-dense-showcase", "spotlight-showcase-grid", "section-tabs-feature-lanes"],
+  narrative: ["sticky-stack-narrative", "editorial-magazine-split", "parallax-product-showcase"],
+  tabs: ["section-tabs-feature-lanes"],
+  steps: ["process-steps-how-it-works"],
+  faq: ["faq-accordion-craft"],
+  nav: ["glass-nav-floating"],
+  overlay: ["grain-artisanal-overlay"],
+  showcase: ["kinetic-headline-reveal", "bento-dense-showcase"],
+};
 
 function parseMotionPrimitives() {
   const src = read("components/Motion.tsx");
@@ -214,6 +330,10 @@ function buildManifest() {
     composite_exports,
     catalog_exports,
     phantom_banned,
+    opinionated_hero_exports: buildOpinionatedHeroExports(compositions_opinionated),
+    composition_signatures: buildCompositionSignatures(compositions_opinionated),
+    technique_signatures: buildTechniqueSignatures(techniques),
+    section_composition_map: SECTION_COMPOSITION_MAP,
   };
 }
 

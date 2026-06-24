@@ -18,7 +18,7 @@ Deno.test("applyAutoModelForComplexity — no-op for modo fixed", () => {
     preferences: { mode: "fixed", fixedPresetId: "pool-groq-flash" },
     connectorKeys: { GROQ_API_KEY: "gsk-test" },
     complexity: 5,
-    llm: { chat: async () => ({ content: "" }) },
+    llm: { chat: async () => ({ role: "assistant" as const, content: "", tool_calls: [] }) },
     router,
   });
   assertEquals(router.mainCfg.model, before);

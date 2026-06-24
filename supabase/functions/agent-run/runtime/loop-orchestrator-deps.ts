@@ -43,6 +43,7 @@ export type LoopOrchestratorHost = {
   configuredModel: () => LLMProvider;
   loopBudgetExceeded: () => boolean;
   gatherContext: () => Promise<void>;
+  runChatModeAgentTurn: (model: LLMProvider) => Promise<AgentLoopRunResult>;
   runPlanModeAgentTurn: (model: LLMProvider) => Promise<AgentLoopRunResult>;
   finishPlanProposal: (plan: ProposedPlan) => Promise<AgentLoopRunResult>;
 };

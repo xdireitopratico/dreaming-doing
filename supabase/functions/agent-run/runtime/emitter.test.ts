@@ -1,7 +1,7 @@
 // runtime/emitter.test.ts — Contrato do RuntimeEmitter (Fase 2.1)
 import { assertEquals, assert } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import { RuntimeEmitter, TIMELINE_EVENT_TYPES } from "./emitter.ts";
-import { AGENT_STREAM_EVENT_TYPES } from "../_events.ts";
+import { AGENT_STREAM_EVENT_TYPES, type AgentStreamEventType } from "../_events.ts";
 
 type Captured = { type: string; data: unknown };
 
@@ -97,6 +97,6 @@ Deno.test("contrato — TIMELINE_EVENT_TYPES ⊆ AGENT_STREAM_EVENT_TYPES (excet
   const contract = new Set(AGENT_STREAM_EVENT_TYPES);
   for (const t of TIMELINE_EVENT_TYPES) {
     if (t === "memory") continue; // deprecated, sem emissor ativo
-    assert(contract.has(t), `timeline type "${t}" missing from contract`);
+    assert(contract.has(t as AgentStreamEventType), `timeline type "${t}" missing from contract`);
   }
 });

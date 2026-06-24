@@ -169,7 +169,7 @@ Vitest para testes. @vitejs/plugin-react para Fast Refresh.`,
 3. **Valide:** observer checa assinaturas (motion, opinionated hero, anti-phantom).
 
 ### @forge/ui
-Importe só de \`@forge/ui\`. Catálogo completo está no **design manifest** (Tier 0) — 9 básicos + **11 opinionated** (preferir para craft).
+Importe só de \`@forge/ui\`. Catálogo completo está no **design manifest** (Tier 0) — 9 básicos + **15 opinionated** + **17 técnicas** (preferir opinionated para craft).
 **Proibido** imports da lista phantom (ProcessSteps, LogoWall, ServiceGrid, etc.).
 
 Exemplo adaptado (estúdio de podcast — não copie para outros domínios):

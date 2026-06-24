@@ -25,6 +25,7 @@ export type PersistFinalOpts = {
   awaiting?: boolean;
   awaitingKind?: "clarify" | "plan_approval" | null;
   conversational?: boolean;
+  designSignature?: Record<string, unknown>;
 };
 
 export type AgentPersistDeps = {
@@ -299,17 +300,22 @@ export async function persistFinal(
         meta: cappedMeta,
       })
       .eq("id", existingId);
-    await touchProjectUpdatedAt(deps);
-    return;
-  }
-
-  await deps.sb.from("messages").insert({
+  } else {
+    await deps.sb.from("messages").insert({
       conversation_id: deps.state.conversationId,
       role: "assistant",
       parts: [{ type: "text", text }],
       tool_calls: [],
       meta: cappedMeta,
     });
+  }
+
+  if (lastFinishOk && opts?.designSignature && deps.state.projectId) {
+    await deps.sb
+      .from("projects")
+      .update({ design_signature: opts.designSignature })
+      .eq("id", deps.state.projectId);
+  }
   await touchProjectUpdatedAt(deps);
 }
 

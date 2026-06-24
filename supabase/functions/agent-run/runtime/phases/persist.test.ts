@@ -20,10 +20,17 @@ function mockPersistDeps(overrides?: Partial<AgentPersistDeps>): AgentPersistDep
   const state: AgentState = {
     projectId: "proj-1",
     conversationId: "conv-1",
+    userId: "user-1",
     messages: [],
     phase: LoopPhase.GATHER_CONTEXT,
     currentStepIndex: 4,
     executionLog: [],
+    context: null,
+    intent: null,
+    plan: null,
+    validationResults: [],
+    retryFeedback: null,
+    totalSteps: 0,
   };
   const sb = {
     from(table: string) {

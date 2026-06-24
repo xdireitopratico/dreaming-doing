@@ -7,7 +7,7 @@ import { createClient } from "@supabase/supabase-js";
 
 const FORGE_ADMIN_EMAIL = "xdireitopratico@gmail.com";
 
-export const E2E_DEFAULT_MODEL = process.env.E2E_MODEL ?? "nex-agi/nex-n2-pro:free";
+export const E2E_DEFAULT_MODEL = process.env.E2E_MODEL ?? "cohere/north-mini-code:free";
 
 export const E2E_AGENT_PREFERENCES = {
   mode: process.env.E2E_MODE ?? "fixed",

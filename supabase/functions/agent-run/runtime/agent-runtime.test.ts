@@ -7,6 +7,7 @@ Deno.test("AgentRuntime — run com heartbeat start/stop", async () => {
   const reg = new ToolRegistry();
   const llm = {
     chat: async () => ({
+      role: "assistant" as const,
       content: "ok",
       tool_calls: [],
     }),

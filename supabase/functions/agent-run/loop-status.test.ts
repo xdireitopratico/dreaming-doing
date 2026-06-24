@@ -17,7 +17,7 @@ Deno.test("formatLoopStatus — lote de tools", () => {
     step: 2,
     total: 8,
   });
-  assertStringIncludes(text!, "Hero");
+  assertEquals(text, "Feito.");
   assertFalse(text!.includes("passo 2/8"));
 });
 
@@ -37,7 +37,7 @@ Deno.test("formatLoopStatus — null sem tools no batch", () => {
 
 Deno.test("formatLoopStatus — build_ok", () => {
   const text = formatLoopStatus({ kind: "build_ok" });
-  assertStringIncludes(text!, "Build passou");
+  assertEquals(text, null);
 });
 
 Deno.test("lastAssistantProse — ignora turnos com tool_calls", () => {

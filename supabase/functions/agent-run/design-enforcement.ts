@@ -1,6 +1,7 @@
 // design-enforcement.ts — Regras anti-genérico espelhadas do @forge/ui (Edge/Deno standalone).
 
 import { getCompositeExports, getPhantomBanned } from "./design-manifest.ts";
+import { getOpinionatedHeroExports } from "./design-validate-signatures.ts";
 
 export const DESIGN_MISSION =
   "O usuário recebe, sem esforço, design absurdamente único — multi-componente, alta complexidade, NUNCA página branca + CTA azul. O design system é uma ESTRUTURA que deve ser ADAPTADA ao domínio específico do pedido (padaria usa composições quentes e de produto; app usa técnicas; sales usa conversão).";
@@ -64,12 +65,7 @@ export function listUsedCompositeExports(code: string): string[] {
   return [...used];
 }
 
-const OPINIONATED_HERO_EXPORTS = [
-  "HeroCinematicSpotlight",
-  "HeroEditorialSplit",
-  "HeroBrutalistTypography",
-  "KineticHeadlineReveal",
-];
+const OPINIONATED_HERO_EXPORTS = getOpinionatedHeroExports();
 
 const MOTION_SIGNATURE =
   /FadeIn|SlideIn|ScaleIn|StaggerContainer|StaggerItem|HoverLift|Reveal|Parallax|useScrollProgress|TextShimmer|CountUp|Marquee/;

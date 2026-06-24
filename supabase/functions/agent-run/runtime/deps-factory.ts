@@ -3,6 +3,7 @@ import type { CompressionManager } from "../compression.ts";
 import type { RuntimeObserver } from "../observer.ts";
 import type { ModelRouter } from "../router.ts";
 import type { LoopUpdateContext } from "../loop-status.ts";
+import type { ToolRegistry } from "../registry.ts";
 import type {
   AgentState,
   ChatMessage,
@@ -11,7 +12,6 @@ import type {
   PlanStep,
   ProposedPlan,
   ToolCall,
-  ToolRegistry,
   ToolResult,
 } from "../types.ts";
 import { LoopPhase } from "../types.ts";
@@ -37,7 +37,12 @@ import { finishClarify } from "./phases/plan-turn.ts";
 import type { RunInfraDeps } from "./infra.ts";
 import type { AgentPersistDeps, PersistFinalOpts } from "./phases/persist.ts";
 import type { BuildExecuteDeps } from "./phases/execute.ts";
-import type { PlanModeStreamState, PlanTurnDeps, PlanTurnFinishDeps } from "./phases/plan-turn.ts";
+import type {
+  PlanModeStreamState,
+  PlanTurnDeps,
+  PlanTurnFinishDeps,
+  PlanTurnRunResult,
+} from "./phases/plan-turn.ts";
 import type { AgentLoopMutableState } from "./loop-mutable-state.ts";
 
 function mutableAccessors(mutable: AgentLoopMutableState) {
@@ -231,7 +236,7 @@ export type AgentLoopDepsContext = {
     message: string,
     steps: number,
     toolsUsed: string[],
-  ) => Promise<unknown>;
+  ) => Promise<PlanTurnRunResult>;
   attemptGracefulClosing: (
     reason: "tool_miss" | "build_fail" | "plan_stuck",
   ) => Promise<string | null>;
