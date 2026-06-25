@@ -6,23 +6,33 @@ body:has(.editor-workspace) {
 
 .editor-workspace {
   cursor: auto;
-  --forge-bg: var(--bg-chat);
-  --forge-surface: var(--bg-card);
-  --forge-surface-2: var(--bg-hover);
-  --forge-surface-3: var(--bg-input);
-  --forge-chat: var(--bg-chat);
-  --forge-preview: #0a0a0f;
+  /* Tema A — paleta padronizada (4 tokens + 2 borders translúcidos) */
+  --forge-bg: #0b0d12;
+  --forge-surface: #0b0d12;
+  --forge-surface-2: #12151c;
+  --forge-surface-3: #16191f;
+  --forge-accent-on: #1e2229;
+  --forge-chat: #0b0d12;
+  --forge-preview: #0b0d12;
   --forge-primary: var(--text-accent);
   --forge-primary-hot: #f59e0b;
   --forge-silver: var(--text-secondary);
   --forge-text: var(--text-primary);
   --forge-muted: var(--text-muted);
   --forge-ghost: color-mix(in srgb, var(--text-muted) 60%, transparent);
-  --forge-border: var(--border-forge);
-  --forge-border-strong: color-mix(in srgb, var(--border-forge) 75%, var(--text-primary));
-  --forge-radius-lg: 18px;
-  --forge-radius-md: 12px;
+  --forge-border: rgba(237, 239, 242, 0.08);
+  --forge-border-strong: rgba(237, 239, 242, 0.14);
+  --forge-radius-lg: 20px;
+  --forge-radius-md: 16px;
   --forge-radius-sm: 10px;
+
+  /* Reaponta tokens antigos do forge-tokens.css para os 4 tokens Tema A
+     (mantém compatibilidade com seletores legados que usam --bg-*) */
+  --bg-chat: var(--forge-surface);
+  --bg-card: var(--forge-surface-2);
+  --bg-hover: var(--forge-surface-3);
+  --bg-input: var(--forge-accent-on);
+  --border-forge: var(--forge-border);
 
   /* ─── Status tokens (Forge 2.0) ─── */
   --forge-status-thinking: #f59e0b;
@@ -152,7 +162,7 @@ body:has(.editor-workspace) {
   padding: 2px 6px 2px 8px;
   border-radius: 8px;
   border: 1px solid var(--forge-border-strong);
-  background: var(--forge-surface-2);
+  background: linear-gradient(135deg, #1a1e27, #0b0d12);
 }
 
 .forge-address-bar-scheme {
@@ -546,13 +556,10 @@ body:has(.editor-workspace) {
   min-height: 0;
   height: 100%;
   max-height: 100%;
-  border-radius: 14px;
-  background: var(--bg-chat);
-  border: 1px solid color-mix(in srgb, var(--border-forge) 80%, #3f3f46 20%);
+  border-radius: var(--forge-radius-lg);
+  background: var(--forge-bg);
+  border: 1px solid var(--forge-border);
   overflow: hidden;
-  box-shadow:
-    0 0 0 1px rgba(255, 255, 255, 0.02) inset,
-    0 8px 32px rgba(0, 0, 0, 0.18);
 }
 
 .forge-chat-column {
@@ -652,7 +659,7 @@ body:has(.editor-workspace) {
 
 .forge-workspace-panel--code,
 .lovable-workspace--code {
-  background: #14161c;
+  background: var(--forge-surface-2);
   border-color: var(--forge-border);
 }
 
@@ -978,7 +985,7 @@ body:has(.editor-workspace) {
 .forge-workspace-header-url .forge-address-bar--chrome {
   width: 100%;
   max-width: 100%;
-  background: var(--forge-surface-2);
+  background: linear-gradient(135deg, #1a1e27, #0b0d12);
   border-color: var(--forge-border-strong);
   padding: 2px 6px 2px 8px;
 }
@@ -994,7 +1001,7 @@ body:has(.editor-workspace) {
 
 /* Dark header refresh + device-toggle variants */
 .forge-workspace-header-center .forge-preview-device-toggle {
-  background: var(--forge-surface-2);
+  background: linear-gradient(135deg, #1a1e27, #0b0d12);
   border-color: var(--forge-border-strong);
 }
 
@@ -1013,7 +1020,7 @@ body:has(.editor-workspace) {
 }
 
 .forge-preview-refresh-btn--dark {
-  background: var(--forge-surface-2);
+  background: linear-gradient(135deg, #1a1e27, #0b0d12);
   border-color: var(--forge-border-strong);
   color: var(--forge-muted);
 }
@@ -1168,7 +1175,7 @@ body:has(.editor-workspace) {
   flex-shrink: 0;
   padding: 8px 10px;
   border-bottom: 1px solid var(--forge-border);
-  background: #14161c;
+  background: var(--forge-surface-2);
 }
 
 /* Fase 2.6 — slide-in animation when the mobile tab bar switches panels
@@ -1380,6 +1387,53 @@ body:has(.editor-workspace) {
 [data-radix-popper-content-wrapper] .forge-dropdown-item[data-highlighted] {
   background-color: #252a36 !important;
   color: var(--forge-text) !important;
+}
+
+/* ============================================================
+ * Tema B (legacy) — paleta original pré-dashboard
+ * Ativado quando .editor-workspace tem data-theme="legacy"
+ * Valores literais (não dependem de --bg-* porque o Tema A reapontou)
+ * ============================================================ */
+.editor-workspace[data-theme="legacy"] {
+  /* Reaponta os --bg-* para os valores ORIGINAIS do forge-tokens.css
+     para que qualquer seletor que ainda use --bg-* continue funcionando */
+  --bg-chat: #0a0a0f;
+  --bg-card: #13131f;
+  --bg-hover: #1a1a2e;
+  --bg-input: #1e1e2e;
+  --border-forge: #27273a;
+
+  --forge-bg: #0a0a0f;
+  --forge-surface: #13131f;
+  --forge-surface-2: #1a1a2e;
+  --forge-surface-3: #1e1e2e;
+  --forge-chat: #0a0a0f;
+  --forge-preview: #0a0a0f;
+  --forge-border: #27273a;
+  --forge-border-strong: color-mix(in srgb, #27273a 75%, #e2e8f0);
+  --forge-radius-lg: 18px;
+  --forge-radius-md: 12px;
+}
+
+.editor-workspace[data-theme="legacy"] .forge-chat-panel,
+.editor-workspace[data-theme="legacy"] .lovable-chat-column {
+  border-radius: 14px;
+  background: #0a0a0f;
+  border: 1px solid color-mix(in srgb, #27273a 80%, #3f3f46 20%);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.02) inset,
+    0 8px 32px rgba(0, 0, 0, 0.18);
+}
+
+.editor-workspace[data-theme="legacy"] .forge-workspace-panel--code,
+.editor-workspace[data-theme="legacy"] .lovable-workspace--code {
+  background: #14161c;
+}
+
+.editor-workspace[data-theme="legacy"] .forge-mobile-code-bar {
+  background: #14161c;
 }
 
 

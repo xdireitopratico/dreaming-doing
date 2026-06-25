@@ -1,5 +1,6 @@
-import { Code2, Eye, Moon, RefreshCw, Share2 } from "lucide-react";
+import { Code2, Eye, Moon, RefreshCw, Share2, Sun } from "lucide-react";
 import { useAuth } from "@/lib/auth";
+import { useEditorTheme } from "@/lib/editor-theme";
 import type { EditorMainView } from "@/components/editor/editor-views";
 import {
   EditorIntegrationsMenu,
@@ -60,6 +61,7 @@ export function EditorWorkspaceHeader({
   inspectorPlanNav,
 }: EditorWorkspaceHeaderProps) {
   const { user } = useAuth();
+  const { theme: editorTheme, toggle: toggleEditorTheme } = useEditorTheme();
 
   const initials =
     user?.email?.slice(0, 2).toUpperCase() ??
@@ -161,8 +163,14 @@ export function EditorWorkspaceHeader({
         <span className="forge-avatar" title={user?.email ?? ""}>
           {initials}
         </span>
-        <button type="button" className="forge-connector-btn" title="Tema">
-          <Moon className="size-4" />
+        <button
+          type="button"
+          className="forge-connector-btn"
+          title="Tema"
+          onClick={toggleEditorTheme}
+          aria-label={editorTheme === "default" ? "Mudar para tema legacy" : "Mudar para tema padrão"}
+        >
+          {editorTheme === "default" ? <Moon className="size-4" /> : <Sun className="size-4" />}
         </button>
         <button
           type="button"

@@ -7,6 +7,7 @@ import { sanitizeNext } from "@/lib/sanitize-next";
 import { EditorTopBar } from "@/components/editor/EditorTopBar";
 import type { EditorIntegrationsMenuProps } from "@/components/editor/EditorIntegrationsMenu";
 import type { EditorMainView } from "@/components/editor/editor-views";
+import { useEditorTheme } from "@/lib/editor-theme";
 
 export function EditorShell({
   children,
@@ -44,6 +45,7 @@ export function EditorShell({
 }) {
   const { user, loading } = useAuth();
   const loc = useLocation();
+  const { theme: editorTheme } = useEditorTheme();
 
   useEffect(() => {
     clearForgeTransitionOverlays();
@@ -51,7 +53,7 @@ export function EditorShell({
 
   if (loading) {
     return (
-      <div className="editor-workspace grid h-screen place-items-center">
+      <div className="editor-workspace grid h-screen place-items-center" data-theme={editorTheme}>
         <Loader2 className="size-5 animate-spin text-[var(--forge-primary)]" />
       </div>
     );
@@ -63,7 +65,10 @@ export function EditorShell({
   }
 
   return (
-    <div className="editor-workspace flex h-screen flex-col overflow-hidden">
+    <div
+      className="editor-workspace flex h-screen flex-col overflow-hidden"
+      data-theme={editorTheme}
+    >
       {topBar === "full" && activeView && onViewChange && (
         <EditorTopBar
           projectId={projectId}

@@ -3,7 +3,7 @@
 import type { editor } from "monaco-editor";
 
 /** Mesmo cinza do painel Explorer (pastas) — evita diff/code em preto puro. */
-export const FORGE_EDITOR_SURFACE = "#1a1a2e";
+export const FORGE_EDITOR_SURFACE = "#1a1e27";
 
 export const FORGE_THEME: editor.IStandaloneThemeData = {
   base: "vs-dark",

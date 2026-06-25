@@ -102,8 +102,8 @@
   min-width: 0;
   padding: 9px 12px;
   border-radius: 12px;
-  background: color-mix(in srgb, var(--bg-card) 72%, #3f3f46 28%);
-  border: 1px solid color-mix(in srgb, var(--border) 85%, #52525b 15%);
+  background: var(--forge-surface-2, #12151c);
+  border: 1px solid var(--forge-border, rgba(237, 239, 242, 0.08));
   font-family: "JetBrains Mono", ui-monospace, monospace;
   font-size: 11px;
   font-weight: 500;
@@ -184,8 +184,8 @@
   max-width: min(88%, 520px);
   padding: 10px 14px;
   border-radius: 12px 12px 12px 4px;
-  border: 1px solid var(--border-forge);
-  background: var(--bg-card);
+  border: 1px solid var(--forge-border, rgba(237, 239, 242, 0.08));
+  background: var(--forge-surface-2, #12151c);
   color: var(--text-primary);
   font-size: 14px;
   line-height: 1.5;
@@ -389,8 +389,8 @@
   margin: 0 0 var(--space-sm);
   padding: var(--space-md) var(--space-lg);
   border-radius: 12px;
-  border: 1px solid color-mix(in srgb, var(--text-accent) 35%, var(--border-forge));
-  background: color-mix(in srgb, var(--bg-card) 92%, var(--text-accent) 8%);
+  border: 1px solid color-mix(in srgb, var(--text-accent) 35%, var(--forge-border, rgba(237, 239, 242, 0.08)));
+  background: color-mix(in srgb, var(--forge-surface-2, #12151c) 92%, var(--text-accent) 8%);
 }
 
 .forge-qualify-prompt-intro,
@@ -460,12 +460,14 @@
 .forge-plan-dock-shell {
   width: 100%;
   padding: 12px 14px 10px;
-  border-radius: 16px;
-  background: color-mix(in srgb, var(--bg-input) 92%, var(--bg-card) 8%);
-  border: 1px solid color-mix(in srgb, var(--border-forge) 75%, #52525b 25%);
+  border-radius: var(--forge-radius-lg, 20px);
+  background: linear-gradient(135deg, #1a1e27, #0b0d12);
+  border: 1px solid var(--forge-border-strong, rgba(237, 239, 242, 0.14));
+  backdrop-filter: blur(28px) saturate(140%);
+  -webkit-backdrop-filter: blur(28px) saturate(140%);
   box-shadow:
-    0 0 0 1px rgba(255, 255, 255, 0.02) inset,
-    0 6px 24px rgba(0, 0, 0, 0.28);
+    0 24px 80px rgba(0, 0, 0, 0.45),
+    0 0 0 1px rgba(255, 182, 39, 0.04) inset;
 }
 
 /* create_plan pronto: conteúdo rolável, CTAs fixos — mesma largura do composer */
@@ -814,8 +816,8 @@
   max-width: 280px;
   padding: var(--space-lg) var(--space-xl);
   border-radius: 12px;
-  border: 1px solid var(--border-forge);
-  background: var(--bg-card);
+  border: 1px solid var(--forge-border, rgba(237, 239, 242, 0.08));
+  background: var(--forge-surface-2, #12151c);
   text-align: center;
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.25);
 }
@@ -838,8 +840,8 @@
   margin: var(--space-sm) 0;
   padding: 10px var(--space-md);
   border-radius: 10px;
-  border: 1px solid var(--border-forge);
-  background: var(--bg-card);
+  border: 1px solid var(--forge-border, rgba(237, 239, 242, 0.08));
+  background: var(--forge-surface-2, #12151c);
   display: flex;
   align-items: flex-start;
   gap: var(--space-sm);
@@ -868,8 +870,8 @@
   align-self: stretch;
   margin: 0;
   border-radius: 14px;
-  border: 1px solid color-mix(in srgb, var(--border-forge) 70%, #3f3f46 30%);
-  background: color-mix(in srgb, var(--bg-card) 88%, #18181b 12%);
+  border: 1px solid var(--forge-border, rgba(237, 239, 242, 0.08));
+  background: linear-gradient(135deg, #1a1e27, #0b0d12);
   box-shadow:
     0 0 0 1px rgba(255, 255, 255, 0.03) inset,
     0 4px 20px rgba(0, 0, 0, 0.22);
@@ -1345,8 +1347,8 @@
   gap: var(--space-sm);
   padding: 10px var(--space-md);
   border-radius: 10px;
-  border: 1px solid var(--border-forge);
-  background: var(--bg-card);
+  border: 1px solid var(--forge-border, rgba(237, 239, 242, 0.08));
+  background: var(--forge-surface-2, #12151c);
 }
 
 .forge-new-messages-pill {
@@ -1381,12 +1383,14 @@
   flex-shrink: 0;
   margin: 0 var(--chat-padding) var(--chat-padding);
   padding: 12px 14px 10px;
-  border-radius: 16px;
-  background: color-mix(in srgb, var(--bg-input) 92%, var(--bg-card) 8%);
-  border: 1px solid color-mix(in srgb, var(--border-forge) 75%, #52525b 25%);
+  border-radius: var(--forge-radius-lg, 20px);
+  background: linear-gradient(135deg, #1a1e27, #0b0d12);
+  border: 1px solid var(--forge-border-strong, rgba(237, 239, 242, 0.14));
+  backdrop-filter: blur(28px) saturate(140%);
+  -webkit-backdrop-filter: blur(28px) saturate(140%);
   box-shadow:
-    0 0 0 1px rgba(255, 255, 255, 0.02) inset,
-    0 6px 24px rgba(0, 0, 0, 0.28);
+    0 24px 80px rgba(0, 0, 0, 0.45),
+    0 0 0 1px rgba(255, 182, 39, 0.04) inset;
 }
 
 .forge-composer--drag-over {
@@ -1639,8 +1643,8 @@
   gap: 8px;
   padding: 8px 10px;
   border-radius: 10px;
-  border: 1px solid color-mix(in srgb, var(--border-forge) 55%, transparent);
-  background: var(--forge-preview, #0a0a0f);
+  border: 1px solid color-mix(in srgb, var(--forge-border, rgba(237, 239, 242, 0.08)) 55%, transparent);
+  background: linear-gradient(135deg, #1a1e27, #0b0d12);
 }
 
 .forge-queue-dock-item + .forge-queue-dock-item {
@@ -1727,11 +1731,11 @@
   gap: 4px;
   padding: 3px var(--space-sm);
   border-radius: 6px;
-  border: 1px solid var(--border-forge);
+  border: 1px solid var(--forge-border, rgba(237, 239, 242, 0.08));
   font-family: "JetBrains Mono", ui-monospace, monospace;
   font-size: 9px;
   color: var(--text-secondary);
-  background: var(--bg-input);
+  background: var(--forge-surface-2, #12151c);
   cursor: pointer;
 }
 
@@ -1892,4 +1896,66 @@
     animation: none !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+/* ============================================================
+ * Tema B (legacy) — paleta original pré-dashboard
+ * Seletores que precisam voltar ao visual antigo quando
+ * .editor-workspace tem data-theme="legacy"
+ * ============================================================ */
+.editor-workspace[data-theme="legacy"] .forge-composer,
+.editor-workspace[data-theme="legacy"] .forge-plan-dock-shell {
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--bg-input) 92%, var(--bg-card) 8%);
+  border: 1px solid color-mix(in srgb, var(--border-forge) 75%, #52525b 25%);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.02) inset,
+    0 6px 24px rgba(0, 0, 0, 0.28);
+}
+
+.editor-workspace[data-theme="legacy"] .forge-status-chip {
+  background: color-mix(in srgb, var(--bg-card) 72%, #3f3f46 28%);
+  border: 1px solid color-mix(in srgb, var(--border) 85%, #52525b 15%);
+}
+
+.editor-workspace[data-theme="legacy"] .forge-msg-user {
+  border: 1px solid var(--border-forge);
+  background: var(--bg-card);
+}
+
+.editor-workspace[data-theme="legacy"] .forge-qualify-prompt {
+  border: 1px solid color-mix(in srgb, var(--text-accent) 35%, var(--border-forge));
+  background: color-mix(in srgb, var(--bg-card) 92%, var(--text-accent) 8%);
+}
+
+.editor-workspace[data-theme="legacy"] .forge-rollback-lock-card {
+  border: 1px solid var(--border-forge);
+  background: var(--bg-card);
+}
+
+.editor-workspace[data-theme="legacy"] .forge-awaiting-banner {
+  border: 1px solid var(--border-forge);
+  background: var(--bg-card);
+}
+
+.editor-workspace[data-theme="legacy"] .forge-mini-card {
+  border: 1px solid color-mix(in srgb, var(--border-forge) 70%, #3f3f46 30%);
+  background: color-mix(in srgb, var(--bg-card) 88%, #18181b 12%);
+}
+
+.editor-workspace[data-theme="legacy"] .forge-chat-resume {
+  border: 1px solid var(--border-forge);
+  background: var(--bg-card);
+}
+
+.editor-workspace[data-theme="legacy"] .forge-queue-dock-item {
+  border: 1px solid color-mix(in srgb, var(--border-forge) 55%, transparent);
+  background: var(--forge-preview, #0a0a0f);
+}
+
+.editor-workspace[data-theme="legacy"] .forge-pending-queue-action {
+  border: 1px solid var(--border-forge);
+  background: var(--bg-input);
 }
