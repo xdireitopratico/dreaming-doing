@@ -32,10 +32,28 @@ export function MicButton({
     [],
   );
 
+  const ensureBrowserMicSupport = useCallback(() => {
+    const host = typeof window !== "undefined" ? window.location.hostname : "";
+    const isLocalHost =
+      host === "localhost" || host === "127.0.0.1" || host === "::1" || host === "[::1]";
+    const secure = typeof window !== "undefined" ? window.isSecureContext : false;
+
+    if (!secure && !isLocalHost) {
+      throw new Error("Microfone exige HTTPS ou localhost. Nesse link HTTP por IP o navegador bloqueia a captura.");
+    }
+    if (!navigator.mediaDevices?.getUserMedia) {
+      throw new Error("Este navegador não expôs acesso ao microfone.");
+    }
+    if (typeof MediaRecorder === "undefined") {
+      throw new Error("Este navegador não suporta gravação de áudio.");
+    }
+  }, []);
+
   const start = useCallback(async () => {
     const requested = loadAgentPreferences().sttProvider ?? STT_DEFAULT_PROVIDER;
 
     try {
+      ensureBrowserMicSupport();
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
       const mime = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
@@ -89,7 +107,7 @@ export function MicButton({
       toast.error(err instanceof Error ? err.message : "Acesso ao microfone negado");
       setState("idle");
     }
-  }, [onTranscript]);
+  }, [ensureBrowserMicSupport, onTranscript]);
 
   const stop = useCallback(() => {
     recRef.current?.stop();

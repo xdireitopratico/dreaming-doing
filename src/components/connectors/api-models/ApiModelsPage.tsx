@@ -193,7 +193,7 @@ export function ApiModelsPage() {
     resolveStudioSelectedEnv(prefs),
   );
   const parserProvider = (prefs.parserProvider ?? "builtin") as ParserIndexProviderId;
-  const activePreset = useMemo(() => {
+  const resolvedPreset = useMemo(() => {
     if (mode === "robin") {
       return getPresetById(prefs.robinPoolModelId, prefs.userModelEntries);
     }
@@ -208,6 +208,7 @@ export function ApiModelsPage() {
     prefs.autoAllowedPresetIds,
     prefs.userModelEntries,
   ]);
+  const resolvedPresetLabel = resolvedPreset?.label?.trim() || "Não configurado";
 
   useEffect(() => {
     if (!user) return;
@@ -766,7 +767,7 @@ export function ApiModelsPage() {
         <span className="text-[var(--border)]">|</span>
         <div className="flex items-center gap-2">
           <span className="font-mono text-[10px] text-[var(--text-dim)]">
-            Modelo: {activePreset.label} · {mode}
+            Modelo: {resolvedPresetLabel} · {mode}
           </span>
         </div>
         <span className="text-[var(--border)]">|</span>
