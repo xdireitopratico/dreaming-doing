@@ -23,10 +23,13 @@ import { enableSkillLocal } from "@/lib/agent-extensions-prefs";
 const DRAFT_KEY = "forge:chat-draft";
 
 /** Slash commands → skill id. Ativa a skill on-demand (load direto) sem precisar abrir o painel. */
-const SLASH_SKILLS: Record<string, string> = {
-  "/designsystem": "design-system",
-  "/extractdesign": "extract-design",
+const SLASH_SKILL_META: Record<string, { id: string; label: string; desc: string }> = {
+  "/designsystem": { id: "design-system", label: "Design System", desc: "Composto criacional + 7 principios" },
+  "/extractdesign": { id: "extract-design", label: "Extract Design", desc: "Fluxo extract, see, apply de DesignDNA" },
 };
+const SLASH_SKILLS: Record<string, string> = Object.fromEntries(
+  Object.entries(SLASH_SKILL_META).map(([cmd, m]) => [cmd, m.id]),
+);
 const DRAFT_MAX_AGE = 24 * 60 * 60 * 1000;
 
 type ChatComposerProps = {
@@ -166,12 +169,27 @@ export function ChatComposer({
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent<HTMLTextAreaElement>) => {
+      const t = text.trim();
+      const slashMatches =
+        t.startsWith("/") && !text.includes(" ")
+          ? Object.keys(SLASH_SKILL_META).filter((cmd) => cmd.startsWith(t.toLowerCase()))
+          : [];
+      if (e.key === "Tab" && slashMatches.length) {
+        e.preventDefault();
+        setText(slashMatches[0] + " ");
+        return;
+      }
       if (e.key === "Enter" && !e.shiftKey) {
+        if (slashMatches.length && !SLASH_SKILL_META[t]) {
+          e.preventDefault();
+          setText(slashMatches[0] + " ");
+          return;
+        }
         e.preventDefault();
         void handleSend();
       }
     },
-    [handleSend],
+    [handleSend, text],
   );
 
   const handlePaste = useCallback(
@@ -275,16 +293,73 @@ export function ChatComposer({
         </div>
       )}
 
-      <textarea
-        ref={textareaRef}
-        className="forge-composer-input"
-        placeholder={placeholder}
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        onKeyDown={handleKeyDown}
-        onPaste={handlePaste}
-        rows={1}
-      />
+      <div style={{ position: "relative" }}>
+        {(() => {
+          const t = text.trim();
+          if (!t.startsWith("/") || text.includes(" ")) return null;
+          const matches = Object.entries(SLASH_SKILL_META).filter(([cmd]) =>
+            cmd.startsWith(t.toLowerCase()),
+          );
+          if (!matches.length) return null;
+          return (
+            <div
+              style={{
+                position: "absolute",
+                bottom: "100%",
+                left: 0,
+                right: 0,
+                marginBottom: 4,
+                background: "var(--forge-bg, #111)",
+                border: "1px solid var(--forge-border, #2a2a2a)",
+                borderRadius: 10,
+                boxShadow: "0 -8px 24px rgba(0,0,0,0.45)",
+                padding: 4,
+                zIndex: 50,
+                maxHeight: 220,
+                overflowY: "auto",
+              }}
+            >
+              {matches.map(([cmd, m]) => (
+                <button
+                  key={cmd}
+                  type="button"
+                  onClick={() => {
+                    setText(cmd + " ");
+                    textareaRef.current?.focus();
+                  }}
+                  style={{
+                    display: "block",
+                    width: "100%",
+                    textAlign: "left",
+                    background: "transparent",
+                    border: "none",
+                    color: "inherit",
+                    padding: "8px 10px",
+                    borderRadius: 8,
+                    cursor: "pointer",
+                  }}
+                >
+                  <div style={{ display: "flex", gap: 8, alignItems: "baseline" }}>
+                    <strong style={{ color: "var(--forge-accent, #7dd3fc)" }}>{cmd}</strong>
+                    <span style={{ opacity: 0.85, fontSize: 13 }}>{m.label}</span>
+                  </div>
+                  <div style={{ fontSize: 11, opacity: 0.6, marginTop: 2 }}>{m.desc}</div>
+                </button>
+              ))}
+            </div>
+          );
+        })()}
+        <textarea
+          ref={textareaRef}
+          className="forge-composer-input"
+          placeholder={placeholder}
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={handleKeyDown}
+          onPaste={handlePaste}
+          rows={1}
+        />
+      </div>
 
       <div className="forge-composer-row">
         <div className="forge-composer-row-start">
