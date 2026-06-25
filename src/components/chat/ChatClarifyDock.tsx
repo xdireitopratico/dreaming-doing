@@ -73,31 +73,16 @@ export function ChatClarifyDock({
   const [step, setStep] = useState<number>(0); // 0..total-1 = questions, total = review
   const [busy, setBusy] = useState(false);
 
+  const questionIds = useMemo(
+    () => data?.questions?.map((q) => q.id).join(",") ?? "",
+    [data?.questions],
+  );
+
   // Reset state when questions change (new clarify session)
   useEffect(() => {
     setAnswers({});
     setStep(0);
-  }, [data?.question, data?.intro, data?.questions?.map((q) => q.id).join(",")]);
-
-  /* ── Skeleton: agent is analyzing ── */
-  if (creating && !data) {
-    return (
-      <div className="forge-clarify-dock" data-testid="chat-clarify-dock-creating">
-        <div className="forge-clarify-dock-shell forge-clarify-dock-shell--skeleton">
-          <div className="forge-clarify-shimmer-lines" aria-hidden>
-            <div className="forge-clarify-shimmer-line" style={{ width: "40%" }} />
-            <div className="forge-clarify-shimmer-line" style={{ width: "72%" }} />
-            <div className="forge-clarify-shimmer-line" style={{ width: "55%" }} />
-            <div className="forge-clarify-shimmer-line" style={{ width: "35%" }} />
-          </div>
-          <p className="forge-clarify-skeleton-label">Analyzing...</p>
-        </div>
-      </div>
-    );
-  }
-
-  /* ── Nothing to show ── */
-  if (!data || questions.length === 0) return null;
+  }, [data?.question, data?.intro, questionIds]);
 
   const isReview = step >= total;
   const currentQuestion = isReview ? null : questions[step];
@@ -122,7 +107,14 @@ export function ChatClarifyDock({
       });
     } else {
       setBusy(true);
-      onSubmit?.([{ question: currentQuestion.question, choice, choiceId: choice.id, questionId: currentQuestion.id }]);
+      onSubmit?.([
+        {
+          question: currentQuestion.question,
+          choice,
+          choiceId: choice.id,
+          questionId: currentQuestion.id,
+        },
+      ]);
     }
   };
 
@@ -165,6 +157,24 @@ export function ChatClarifyDock({
     onSkip?.();
   };
 
+  if (creating && !data) {
+    return (
+      <div className="forge-clarify-dock" data-testid="chat-clarify-dock-creating">
+        <div className="forge-clarify-dock-shell forge-clarify-dock-shell--skeleton">
+          <div className="forge-clarify-shimmer-lines" aria-hidden>
+            <div className="forge-clarify-shimmer-line" style={{ width: "40%" }} />
+            <div className="forge-clarify-shimmer-line" style={{ width: "72%" }} />
+            <div className="forge-clarify-shimmer-line" style={{ width: "55%" }} />
+            <div className="forge-clarify-shimmer-line" style={{ width: "35%" }} />
+          </div>
+          <p className="forge-clarify-skeleton-label">Analyzing...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!data || questions.length === 0) return null;
+
   return (
     <div className="forge-clarify-dock" data-testid="chat-clarify-dock">
       <div className="forge-clarify-dock-shell">
@@ -178,9 +188,7 @@ export function ChatClarifyDock({
                 · {step + 1} of {total}
               </span>
             )}
-            {multi && isReview && (
-              <span className="forge-clarify-count">· {total} perguntas</span>
-            )}
+            {multi && isReview && <span className="forge-clarify-count">· {total} perguntas</span>}
           </p>
         </div>
 
@@ -272,7 +280,8 @@ export function ChatClarifyDock({
                 value={currentAnswer?.text ?? ""}
                 disabled={disabled || busy}
                 onChange={(e) =>
-                  currentQuestion && setAnswer(currentQuestion.id, { text: e.target.value, choiceId: undefined })
+                  currentQuestion &&
+                  setAnswer(currentQuestion.id, { text: e.target.value, choiceId: undefined })
                 }
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && !e.shiftKey) {
@@ -309,7 +318,11 @@ export function ChatClarifyDock({
               disabled={disabled || busy}
               onClick={handleSkip}
             >
-              {busy ? <Loader2 className="size-3.5 animate-spin" /> : <SkipForward className="size-3.5" />}
+              {busy ? (
+                <Loader2 className="size-3.5 animate-spin" />
+              ) : (
+                <SkipForward className="size-3.5" />
+              )}
               Skip
             </button>
           </div>
@@ -334,7 +347,11 @@ export function ChatClarifyDock({
                   disabled={disabled || busy || hasUnanswered}
                   onClick={handleReviewSubmit}
                 >
-                  {busy ? <Loader2 className="size-3.5 animate-spin" /> : <Send className="size-3.5" />}
+                  {busy ? (
+                    <Loader2 className="size-3.5 animate-spin" />
+                  ) : (
+                    <Send className="size-3.5" />
+                  )}
                   Enviar respostas
                 </button>
               </>
@@ -364,7 +381,11 @@ export function ChatClarifyDock({
                 disabled={disabled || busy || !currentAnswer?.text?.trim()}
                 onClick={handleCustomReply}
               >
-                {busy ? <Loader2 className="size-3.5 animate-spin" /> : <Send className="size-3.5" />}
+                {busy ? (
+                  <Loader2 className="size-3.5 animate-spin" />
+                ) : (
+                  <Send className="size-3.5" />
+                )}
                 Send
               </button>
             )}
