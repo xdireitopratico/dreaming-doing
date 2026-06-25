@@ -250,6 +250,12 @@ export default function AdminAgentBuilderView({
     void handleCreate();
   }, [initialOpenFlow, loading, flows, openBuilder, handleCreate]);
 
+  // Home sem prompt → redireciona para dashboard (protótipo arquivado)
+  useEffect(() => {
+    if (phase !== "home" || loading || autoLaunching || skipHomePrompt) return;
+    handleGoHome();
+  }, [phase, loading, autoLaunching, skipHomePrompt]);
+
   // Dashboard prompt → boardroom direto (sem PrometheusHome duplicado)
   useEffect(() => {
     if (initialOpenFlow) return;
@@ -827,11 +833,7 @@ export default function AdminAgentBuilderView({
   }
 
   // Protótipo PrometheusHome removido do runtime (arquivado em src/components/_archive/forge-prometheus-prototype).
-  // Home agora redireciona para o dashboard de agentes; o boardroom/editor são acessados pelos caminhos oficiais.
-  useEffect(() => {
-    handleGoHome();
-  }, []);
-
+  // Home redireciona para o dashboard via useEffect acima; o boardroom/editor são acessados pelos caminhos oficiais.
   return (
     <div className={`${fullScreenClass} overflow-auto`}>
       <PrometheusLoadingSkeleton />
