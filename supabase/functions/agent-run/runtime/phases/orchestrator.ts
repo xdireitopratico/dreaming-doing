@@ -111,7 +111,6 @@ export async function runAgentOrchestrator(
       return deps.returnResumableChunk(0, deps.toolsUsed);
     }
     deps.emit("phase", { phase: "gather", message: GATHER_PHASE_MESSAGE });
-    deps.emit("explore", { message: GATHER_PHASE_MESSAGE, phase: "gather" });
     await deps.gatherContext();
     if (deps.loopBudgetExceeded()) {
       return deps.returnResumableChunk(0, deps.toolsUsed);

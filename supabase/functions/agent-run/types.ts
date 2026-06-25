@@ -32,6 +32,8 @@ export interface ChatParams {
   response_format?: { type: "json_object" } | { type: "text" };
   /** Quando definido, adapters compatíveis emitem deltas de texto durante a geração. */
   onTokenDelta?: (delta: string) => void;
+  /** Quando definido, adapters compatíveis emitem deltas de RACIOCÍNIO (reasoning_content) — o trace real do modelo. */
+  onReasoningDelta?: (delta: string) => void;
 }
 
 export type ChatContentBlock = {

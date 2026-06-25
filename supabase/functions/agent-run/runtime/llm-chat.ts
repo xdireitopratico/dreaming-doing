@@ -62,19 +62,25 @@ export function createBuildModeTokenHandler(
     }
     streamState.llmResponseWasStreamed = true;
     onActivity();
+    // Content = narração/resposta do agente (NÃO é thinking). Vai pro chat.
     emit("assistant_text", {
       text: delta,
       append: true,
       delta: true,
       final: false,
-      thinking: true,
     });
-    emit("thinking_text", {
-      text: delta,
-      append: true,
-      delta: true,
-      final: false,
-    });
+  };
+}
+
+/** Reasoning real do modelo (reasoning_content) -> thinking_text -> THOUGHT no inspector. */
+export function createBuildModeReasoningHandler(
+  emit: PlanTurnEmit,
+  onActivity: () => void,
+): (delta: string) => void {
+  return (delta: string) => {
+    if (!delta) return;
+    onActivity();
+    emit("thinking_text", { text: delta, append: true, delta: true, final: false });
   };
 }
 
@@ -120,6 +126,7 @@ export async function chatBuildModeLlm(input: {
           input.onActivity,
           input.onThinkingCapExceeded,
         ),
+      onReasoningDelta: createBuildModeReasoningHandler(input.emit, input.onActivity),
     });
 
     logger.info("agent.build_llm_response", {

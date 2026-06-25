@@ -193,7 +193,7 @@ class OpenAIAdapter implements LLMProvider {
   }
 
   private async chatCompletions(params: ChatParams): Promise<ChatResponse> {
-    if (params.onTokenDelta) {
+    if (params.onTokenDelta || params.onReasoningDelta) {
       return this.chatCompletionsStream(params);
     }
 
@@ -446,6 +446,12 @@ class OpenAIAdapter implements LLMProvider {
         params.onTokenDelta?.(delta.content);
       }
 
+      // Raciocínio real do modelo (reasoning models) — a VERDADE que deve ir pro inspector.
+      const reasoning = (delta as any).reasoning_content ?? (delta as any).reasoning;
+      if (reasoning) {
+        params.onReasoningDelta?.(reasoning);
+      }
+
       if (Array.isArray(delta.tool_calls)) {
         for (const raw of delta.tool_calls) {
           const idx = typeof raw.index === "number" ? raw.index : 0;
@@ -597,7 +603,7 @@ class OpenRouterAdapter implements LLMProvider {
   ) {}
 
   async chat(params: ChatParams): Promise<ChatResponse> {
-    if (params.onTokenDelta) {
+    if (params.onTokenDelta || params.onReasoningDelta) {
       const adapter = new OpenAIAdapter(this.apiKey, this.baseUrl, this.model);
       return adapter.chat(params);
     }

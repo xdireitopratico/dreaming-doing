@@ -47,7 +47,7 @@ class MockLLM implements LLMProvider {
     this.q.push(...r);
   }
   async chat(p: ChatParams): Promise<ChatResponse> {
-    const { onTokenDelta, ...serializable } = p;
+    const { onTokenDelta, onReasoningDelta, ...serializable } = p;
     this.calls.push(structuredClone(serializable));
     const r = this.q.shift();
     const fallback = {
@@ -73,6 +73,9 @@ class MockLLM implements LLMProvider {
     }
     if (onTokenDelta && resolved.tool_calls?.length === 0 && !String(resolved.content ?? "").trim()) {
       onTokenDelta("Vou analisar o projeto…");
+    }
+    if (onReasoningDelta && resolved.tool_calls?.length === 0 && !String(resolved.content ?? "").trim()) {
+      onReasoningDelta("Raciocínio do modelo sobre o pedido.");
     }
     return resolved;
   }
