@@ -231,6 +231,13 @@ export async function runBuildExecutePhase(
         buildFixResume: deps.buildFixResume,
         design: deps.approvedPlanDesign,
       });
+      // Serializa o directive pro inspector (ACT III do simulacro) -- so no 1o passo do build.
+      if (loopStep === 1 && deps.approvedPlanDesign) {
+        const d = deps.approvedPlanDesign;
+        const gesture = typeof d.moment === "string" ? d.moment : "(sem gesto)";
+        const techniques = Array.isArray(d.techniques) ? d.techniques : [];
+        deps.emit("directive", { brief: deps.originalUserRequest, gesture, techniques });
+      }
       const actionableIntent = isActionableIntent(deps.state.intent?.type);
       const forceTools = computeForceTools({
         forceToolsNext: deps.getForceToolsNext(),

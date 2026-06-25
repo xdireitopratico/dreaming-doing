@@ -17,6 +17,7 @@ export function enrichProposedPlanDesign(
   plan: ProposedPlan,
   domain: string,
   projectTemplate: string,
+  emit?: (type: string, data: unknown) => void,
 ): ProposedPlan {
   if (!WEB_UI_TEMPLATES.has(projectTemplate)) return plan;
 
@@ -29,7 +30,7 @@ export function enrichProposedPlanDesign(
         domain: domainLabel,
         rotationKey: plan.planId,
         extractedDnaIds,
-      });
+      }, emit);
       return {
         ...plan,
         design: { ...plan.design, relevant_dnas: pkg.relevant_dnas },
@@ -42,7 +43,7 @@ export function enrichProposedPlanDesign(
     domain: domainLabel,
     rotationKey: plan.planId,
     extractedDnaIds: extractedDnaIds.length ? extractedDnaIds : undefined,
-  });
+  }, emit);
   const design: DesignPlanField = {
     voice: pkg.proposal.voice,
     moment: pkg.proposal.moment,

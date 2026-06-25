@@ -520,6 +520,7 @@ export async function runPlanModeAgentTurn(
         proposed,
         deps.originalUserRequest || proposed.summary,
         deps.projectTemplate,
+        deps.emit,
       );
       return await finishPlanProposal(finishDeps, enriched, [...toolsUsed]);
     }
@@ -578,18 +579,20 @@ export async function runPlanModeAgentTurn(
           toolCallCount: response.tool_calls?.length ?? 0,
           assistantText: assistantText.slice(0, 200),
         });
-        const closing = await deps.attemptGracefulClosing("plan_stuck");
-        if (closing) {
-          return { ok: true, summary: closing, steps: step, toolsUsed: [...toolsUsed] };
-        }
       }
-      return await finishPlanModeFailure(
-        finishDeps,
-        "O modelo não completou a resposta. Tente reformular seu pedido ou escolha outro modelo.",
-        step,
-        [...toolsUsed],
-        "Resposta sem tool nem texto",
-      );
+      // ponytail: stale = fechamento honesto (o que fez + pendente), nunca "modelo não completou".
+      const staleClosing = await deps.attemptGracefulClosing("plan_stuck");
+      if (staleClosing) {
+        return { ok: true, summary: staleClosing, steps: step, toolsUsed: [...toolsUsed] };
+      }
+      let done: string;
+      if (toolsUsed.size !== 0) {
+        const list = [...toolsUsed].slice(0, 5).join(", ");
+        done = `Parei aqui — usei ${toolsUsed.size} ferramenta(s): ${list}. Não consegui sintetizar a resposta final agora; retome para continuar.`;
+      } else {
+        done = "Não consegui sintetizar a resposta final agora. Reformule o pedido ou retome o agente.";
+      }
+      return await finishPlanModeFailure(finishDeps, done, step, [...toolsUsed], "plan_stale_close");
     }
 
     const patchCalls = execCalls.filter((c) => isPlanModePatchTool(c.name));

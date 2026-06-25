@@ -257,7 +257,10 @@ function dnaSummariesFor(ids: string[]): Record<string, string> {
   return out;
 }
 
-export function resolveDesignPackage(input: DesignResolveInput): DesignResolvePackage {
+export function resolveDesignPackage(
+  input: DesignResolveInput,
+  emit?: (type: string, data: unknown) => void,
+): DesignResolvePackage {
   const m = loadDesignManifest();
   const domain = input.domain.trim() || "produto digital";
   const rotation = hashRotation(input.rotationKey ?? domain);
@@ -389,6 +392,12 @@ export function resolveDesignPackage(input: DesignResolveInput): DesignResolvePa
 
   const summary = compositeInvocation + "\n" + mechanicalSummary;
 
+  emit?.("design_resolve", {
+    voices: proposal.voice,
+    mood: proposal.mood,
+    techniques: proposal.techniques,
+    composite: proposal.moment,
+  });
   return {
     proposal,
     compositions: selected.map((c) => c.id),
