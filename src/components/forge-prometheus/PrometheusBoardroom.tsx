@@ -40,20 +40,20 @@ interface Props {
 }
 
 export const PROMETHEUS_AGENTS = [
-  { id: "cortex",    name: "Cortex",    icon: "🧠", color: "hsl(210 100% 60%)", role: "Orquestrador" },
-  { id: "analyst",   name: "Analyst",   icon: "🔍", color: "hsl(142 70% 45%)",  role: "Requisitos" },
-  { id: "architect", name: "Architect", icon: "🏗️", color: "hsl(25 100% 50%)",  role: "Fluxos" },
-  { id: "scribe",    name: "Scribe",    icon: "✍️", color: "hsl(271 80% 55%)",  role: "Prompts" },
-  { id: "sentinel",  name: "Sentinel",  icon: "🛡️", color: "hsl(0 70% 50%)",   role: "Testes" },
+  { id: "cortex",    name: "Cortex",    icon: "🧠", color: "var(--ps-blue)",   role: "Orquestrador" },
+  { id: "analyst",   name: "Analyst",   icon: "🔍", color: "var(--ps-green)",  role: "Requisitos" },
+  { id: "architect", name: "Architect", icon: "🏗️", color: "var(--ps-orange)", role: "Fluxos" },
+  { id: "scribe",    name: "Scribe",    icon: "✍️", color: "var(--ps-purple)", role: "Prompts" },
+  { id: "sentinel",  name: "Sentinel",  icon: "🛡️", color: "var(--ps-red)",    role: "Testes" },
 ] as const;
 
 const TYPE_LABELS: Record<string, { label: string; color: string }> = {
-  analysis:      { label: "Analisa",    color: "hsl(142 70% 45%)" },
-  architecture:  { label: "Projeta",    color: "hsl(25 100% 50%)" },
-  prompt_write:  { label: "Escreve",    color: "hsl(271 80% 55%)" },
-  test_result:   { label: "Testa",      color: "hsl(0 70% 50%)" },
-  decision:      { label: "Decide",     color: "hsl(210 100% 60%)" },
-  user_input:    { label: "Você",       color: "hsl(40 30% 85%)" },
+  analysis:      { label: "Analisa",    color: "var(--ps-green)" },
+  architecture:  { label: "Projeta",    color: "var(--ps-orange)" },
+  prompt_write:  { label: "Escreve",    color: "var(--ps-purple)" },
+  test_result:   { label: "Testa",      color: "var(--ps-red)" },
+  decision:      { label: "Decide",     color: "var(--ps-blue)" },
+  user_input:    { label: "Você",       color: "var(--ps-cream)" },
 };
 
 function humanizeError(error: string): string {
@@ -101,7 +101,7 @@ export function PrometheusBoardroom({
     if (messages.length > 0) setActiveAgent(messages[messages.length - 1].agent);
   }, [messages]);
 
-  const getAgent = (id: string) => PROMETHEUS_AGENTS.find(a => a.id === id) || { id, name: id === "user" ? "Você" : id, icon: id === "user" ? "👤" : "🤖", color: "hsl(40 30% 85%)", role: id === "user" ? "Usuário" : id };
+  const getAgent = (id: string) => PROMETHEUS_AGENTS.find(a => a.id === id) || { id, name: id === "user" ? "Você" : id, icon: id === "user" ? "👤" : "🤖", color: "var(--ps-cream)", role: id === "user" ? "Usuário" : id };
 
   const agentsSpokeSet = useMemo(() => new Set(messages.map(m => m.agent)), [messages]);
   const planningDone = !isStreaming && !PLANNING_PHASES.includes(currentPhase) && messages.length > 0;
@@ -168,7 +168,11 @@ export function PrometheusBoardroom({
                   type="button"
                   onClick={onSkip}
                   className="rounded-lg px-2.5 py-1.5 text-[10px] font-semibold transition-all hover:opacity-80 sm:px-3 sm:text-xs"
-                  style={{ background: "rgba(239,68,68,0.12)", color: "hsl(0 70% 65%)", border: "1px solid rgba(239,68,68,0.25)" }}
+                  style={{
+                    background: "color-mix(in srgb, var(--ps-red) 12%, transparent)",
+                    color: "color-mix(in srgb, var(--ps-red) 80%, var(--ps-cream))",
+                    border: "1px solid color-mix(in srgb, var(--ps-red) 25%, transparent)",
+                  }}
                 >
                   Parar
                 </button>
@@ -181,9 +185,12 @@ export function PrometheusBoardroom({
         {error && (
           <div
             className="mx-4 mt-1 flex flex-shrink-0 items-center justify-between gap-2 rounded-lg px-3 py-2"
-            style={{ background: "rgba(239,68,68,0.06)", border: "1px solid rgba(239,68,68,0.2)" }}
+            style={{
+              background: "color-mix(in srgb, var(--ps-red) 6%, transparent)",
+              border: "1px solid color-mix(in srgb, var(--ps-red) 20%, transparent)",
+            }}
           >
-            <span className="text-xs" style={{ color: "hsl(0 70% 65%)" }}>
+            <span className="text-xs" style={{ color: "color-mix(in srgb, var(--ps-red) 80%, var(--ps-cream))" }}>
               ⚠️ {humanizeError(error)}
             </span>
             <div className="flex items-center gap-2">
@@ -191,7 +198,10 @@ export function PrometheusBoardroom({
                 <button
                   onClick={onBack}
                   className="flex-shrink-0 rounded px-3 py-1 text-[10px] font-semibold"
-                  style={{ background: "rgba(239,68,68,0.1)", color: "hsl(0 70% 65%)" }}
+                  style={{
+                    background: "color-mix(in srgb, var(--ps-red) 10%, transparent)",
+                    color: "color-mix(in srgb, var(--ps-red) 80%, var(--ps-cream))",
+                  }}
                 >
                   ← Voltar
                 </button>
@@ -213,7 +223,10 @@ export function PrometheusBoardroom({
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 0 }}
                   className="flex items-center gap-2 rounded-lg px-3 py-2"
-                  style={{ background: "rgba(59,130,246,0.06)", border: "1px solid rgba(59,130,246,0.15)" }}
+                  style={{
+                    background: "var(--ps-accent-subtle)",
+                    border: "1px solid color-mix(in srgb, var(--ps-accent) 15%, transparent)",
+                  }}
                 >
                   <span className="text-base">🧠</span>
                   <span className="text-xs" style={{ color: "var(--ps-cream-80)" }}>
@@ -264,7 +277,10 @@ export function PrometheusBoardroom({
         {showLeaveDialog && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             className="fixed inset-0 z-[100] flex items-center justify-center"
-            style={{ background: "rgba(0,0,0,0.7)", backdropFilter: "blur(4px)" }}
+            style={{
+              background: "color-mix(in srgb, var(--ps-bg-deep) 70%, transparent)",
+              backdropFilter: "blur(4px)",
+            }}
             onClick={() => setShowLeaveDialog(false)}>
             <motion.div initial={{ scale: 0.95 }} animate={{ scale: 1 }} exit={{ scale: 0.95 }}
               className="w-full max-w-sm mx-4 rounded-xl p-5"
@@ -278,12 +294,16 @@ export function PrometheusBoardroom({
               <div className="flex gap-2">
                 <button onClick={() => setShowLeaveDialog(false)}
                   className="flex-1 px-3 py-2 rounded-lg text-xs font-semibold"
-                  style={{ background: "rgba(255,255,255,0.06)", color: "var(--ps-cream-60)", border: "1px solid var(--ps-border)" }}>
+                  style={{ background: "var(--ps-bg-surface-hover)", color: "var(--ps-cream-60)", border: "1px solid var(--ps-border)" }}>
                   Continuar
                 </button>
                 <button onClick={confirmLeave}
                   className="flex-1 px-3 py-2 rounded-lg text-xs font-semibold"
-                  style={{ background: "rgba(239,68,68,0.15)", color: "hsl(0 70% 65%)", border: "1px solid rgba(239,68,68,0.3)" }}>
+                  style={{
+                    background: "color-mix(in srgb, var(--ps-red) 15%, transparent)",
+                    color: "color-mix(in srgb, var(--ps-red) 80%, var(--ps-cream))",
+                    border: "1px solid color-mix(in srgb, var(--ps-red) 30%, transparent)",
+                  }}>
                   Sair
                 </button>
               </div>

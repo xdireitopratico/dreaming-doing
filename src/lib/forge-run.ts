@@ -186,7 +186,8 @@ export function buildForgeTimeline(timeline: SSEEvent[], running = false): Forge
         ev.type === "assistant_text" &&
         !data.final &&
         !data.narration &&
-        !data.thinking
+        !data.thinking &&
+        !data.delta // delta = fragmento de stream, não briefing completo (critério 2: sem render absurdo)
       ) {
         const text = String(data.text ?? "").trim();
         if (text) {
@@ -262,7 +263,7 @@ export function buildForgeTimeline(timeline: SSEEvent[], running = false): Forge
         id: `tool-${ts}`,
         name,
         path: path || undefined,
-        detail: path ? undefined : JSON.stringify(args ?? {}).slice(0, 200),
+        detail: undefined, // sem JSON hardcore — o label (toolBriefing) carrega o humano; tool_done preenche o resultado
         active: running,
         intent: stepIntent,
       });
@@ -546,6 +547,9 @@ export function buildForgeTimeline(timeline: SSEEvent[], running = false): Forge
       });
       continue;
     }
+
+    // Accountability (critério 1): evento sem mapeamento vira linha factual — nada cai no vazio.
+    items.push({ type: "TASK", id: `unknown-${ts}`, label: truncate(String(ev.type), 60) });
   }
 
   if (thoughtId) {

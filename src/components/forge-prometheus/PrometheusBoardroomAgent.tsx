@@ -20,9 +20,11 @@ export function PrometheusBoardroomAgent({ agent, isActive, hasSpoken, isStreami
       <div
         className="w-12 h-12 rounded-full flex items-center justify-center text-[20px] relative transition-all duration-300"
         style={{
-          background: isActive ? `${agent.color.replace(")", " / 0.12)")}` : "rgba(255,255,255,0.04)",
-          border: `2px solid ${isActive ? agent.color : hasSpoken ? agent.color.replace(")", " / 0.4)") : "rgba(255,255,255,0.08)"}`,
-          boxShadow: isActive ? `0 0 20px ${agent.color.replace(")", " / 0.2)")}` : "none",
+          background: isActive
+            ? `color-mix(in srgb, ${agent.color} 12%, transparent)`
+            : "var(--ps-bg-surface)",
+          border: `2px solid ${isActive ? agent.color : hasSpoken ? `color-mix(in srgb, ${agent.color} 40%, transparent)` : "var(--ps-border)"}`,
+          boxShadow: isActive ? `0 0 20px color-mix(in srgb, ${agent.color} 20%, transparent)` : "none",
         }}
       >
         {agent.icon}

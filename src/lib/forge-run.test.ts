@@ -579,3 +579,23 @@ describe("forge-run mini card briefing e título", () => {
     }
   });
 });
+
+describe("timeline accountability (critério 1 — nada cai no vazio)", () => {
+  it("evento de tipo desconhecido vira linha factual, nunca drop silencioso", () => {
+    const items = buildForgeTimeline(
+      [{ type: "tipo_que_nenhum_renderer_cobre", data: {}, timestamp: Date.now() }],
+      false,
+    );
+    const row = items.at(-1);
+    expect(row).toBeDefined();
+    expect(row?.type).toBe("TASK");
+  });
+
+  it("fragmento delta de stream não vira BRIEFING (critério 2 — sem render absurdo)", () => {
+    const items = buildForgeTimeline(
+      [{ type: "assistant_text", data: { delta: true, text: "Pensando…" }, timestamp: Date.now() }],
+      false,
+    );
+    expect(items.find((i) => i.type === "BRIEFING")).toBeUndefined();
+  });
+});

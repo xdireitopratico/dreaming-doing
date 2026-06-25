@@ -23,7 +23,14 @@ export function PrometheusBoardroomFeedbackBar({ isStreaming, onSendFeedback }: 
   }, [feedbackText, onSendFeedback, isSending]);
 
   return (
-    <div className="flex-shrink-0 px-6 py-3" style={{ borderTop: "1px solid var(--ps-border)", background: "rgba(10,12,20,0.8)", backdropFilter: "blur(8px)" }}>
+    <div
+      className="flex-shrink-0 px-6 py-3"
+      style={{
+        borderTop: "1px solid var(--ps-border)",
+        background: "color-mix(in srgb, var(--ps-bg-deep) 80%, transparent)",
+        backdropFilter: "blur(8px)",
+      }}
+    >
       {isStreaming && (
         <p className="text-[10px] italic mb-1.5" style={{ color: "var(--ps-cream-25)" }}>
           💡 Seu direcionamento será aplicado na próxima fase automaticamente.

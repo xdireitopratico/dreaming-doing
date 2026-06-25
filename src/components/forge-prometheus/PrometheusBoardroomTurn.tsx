@@ -30,8 +30,8 @@ export function PrometheusBoardroomTurn({ message, agent, typeLabel }: Props) {
       <div
         className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-[14px]"
         style={{
-          background: `${agent.color.replace(")", " / 0.1)")}`,
-          border: `1px solid ${agent.color.replace(")", " / 0.25)")}`,
+          background: `color-mix(in srgb, ${agent.color} 10%, transparent)`,
+          border: `1px solid color-mix(in srgb, ${agent.color} 25%, transparent)`,
         }}
       >
         {agent.icon}
@@ -44,9 +44,9 @@ export function PrometheusBoardroomTurn({ message, agent, typeLabel }: Props) {
           <span
             className="text-[9px] px-1.5 py-0.5 rounded-full"
             style={{
-              background: `${typeLabel.color.replace(")", " / 0.1)")}`,
+              background: `color-mix(in srgb, ${typeLabel.color} 10%, transparent)`,
               color: typeLabel.color,
-              border: `1px solid ${typeLabel.color.replace(")", " / 0.2)")}`,
+              border: `1px solid color-mix(in srgb, ${typeLabel.color} 20%, transparent)`,
             }}
           >
             {typeLabel.label}
@@ -80,8 +80,8 @@ function SessionSummaryCard({
       transition={{ duration: 0.5, ease: "easeOut" }}
       className="rounded-xl overflow-hidden cursor-pointer select-none"
       style={{
-        background: "linear-gradient(135deg, rgba(59,130,246,0.08) 0%, rgba(139,92,246,0.06) 100%)",
-        border: "1px solid rgba(59,130,246,0.2)",
+        background: `linear-gradient(135deg, var(--ps-accent-subtle) 0%, color-mix(in srgb, var(--ps-purple) 6%, transparent) 100%)`,
+        border: "1px solid color-mix(in srgb, var(--ps-accent) 20%, transparent)",
       }}
       onClick={() => setExpanded((p) => !p)}
     >
@@ -90,11 +90,11 @@ function SessionSummaryCard({
         <div
           className="flex-shrink-0 w-9 h-9 rounded-lg flex items-center justify-center"
           style={{
-            background: "rgba(59,130,246,0.15)",
-            border: "1px solid rgba(59,130,246,0.25)",
+            background: "color-mix(in srgb, var(--ps-accent) 15%, transparent)",
+            border: "1px solid color-mix(in srgb, var(--ps-accent) 25%, transparent)",
           }}
         >
-          <FileText className="w-4 h-4" style={{ color: "hsl(210 100% 60%)" }} />
+          <FileText className="w-4 h-4" style={{ color: "var(--ps-accent)" }} />
         </div>
 
         <div className="flex-1 min-w-0">
@@ -105,9 +105,9 @@ function SessionSummaryCard({
             <span
               className="text-[9px] px-1.5 py-0.5 rounded-full"
               style={{
-                background: "rgba(59,130,246,0.12)",
-                color: "hsl(210 100% 65%)",
-                border: "1px solid rgba(59,130,246,0.2)",
+                background: "color-mix(in srgb, var(--ps-accent) 12%, transparent)",
+                color: "color-mix(in srgb, var(--ps-accent) 80%, var(--ps-cream))",
+                border: "1px solid color-mix(in srgb, var(--ps-accent) 20%, transparent)",
               }}
             >
               {agent.name}
@@ -140,7 +140,7 @@ function SessionSummaryCard({
               className="px-4 pb-4 pt-1 text-[12px] leading-relaxed whitespace-pre-wrap"
               style={{
                 color: "var(--ps-cream-60)",
-                borderTop: "1px solid rgba(59,130,246,0.1)",
+                borderTop: "1px solid color-mix(in srgb, var(--ps-accent) 10%, transparent)",
               }}
             >
               {message.content}

@@ -43,8 +43,20 @@ export function describeStepExpectation(name: string, args: Record<string, unkno
       return "Pesquisar referências na web";
     case "web_fetch":
       return "Buscar documentação relevante";
+    case "web_research":
+      return "Pesquisar referências na web";
+    case "web_scrape":
+      return "Buscar o conteúdo da página";
+    case "extract_design_dna":
+      return "Extrair o DesignDNA da referência";
+    case "read_design_library":
+      return "Ler o DesignDNA já extraído";
+    case "find_skills":
+      return "Buscar skills de capacitação";
+    case "load_skill":
+      return "Carregar uma skill";
     default:
-      return `Avançar com ${name.replace(/_/g, " ")}`;
+      return `Executar ${name.replace(/_/g, " ")}`;
   }
 }
 
