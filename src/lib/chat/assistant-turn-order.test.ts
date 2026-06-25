@@ -15,12 +15,12 @@ describe("AssistantTurn — ordem de renderização", () => {
       "{showThinking &&",
       "{showNarration &&",
       "{showJobCard &&",
-      "{showClarify &&",
+      "forge-chat-error-hint",
       "forge-chat-closing-line",
       "forge-assistant-turn-toolbar",
     ];
     expect(source).not.toContain("ChatDone");
-    expect(source).toContain("ChatClarify");
+    expect(source).not.toContain("ChatClarify");
     expect(source).toContain("onOpenInspector");
     expect(source).toContain('"timeline"');
     expect(source).not.toContain("ChatError");

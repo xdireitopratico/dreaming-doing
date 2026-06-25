@@ -5,7 +5,8 @@ export { ChatThread } from "./ChatThread";
 export { ChatMessage } from "./ChatMessage";
 export { ChatComposer } from "./ChatComposer";
 export { AssistantTurn } from "./AssistantTurn";
-export { ChatClarify } from "./ChatClarify";
+export { ChatClarifyDock } from "./ChatClarifyDock";
+export type { ChatClarifyDockProps } from "./ChatClarifyDock";
 export { ChatUserBubble } from "./ChatUserBubble";
 export { ChatNarration } from "./ChatNarration";
 

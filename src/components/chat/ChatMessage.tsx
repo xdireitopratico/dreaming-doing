@@ -2,17 +2,11 @@ import type { ThreadItem } from "@/lib/chat/types";
 import { AssistantTurn } from "./AssistantTurn";
 import { ChatUserBubble } from "./ChatUserBubble";
 import { ChatToolbar } from "./ChatToolbar";
-import { ChatPlanDock } from "./ChatPlanDock";
-
-import type { ClarifyChoice } from "@/lib/chat/types";
 import { formatChatTimestamp } from "@/lib/chat/format-timestamp";
 
 type ChatMessageProps = {
   item: ThreadItem;
   onOpenInspector?: (runId: string, tab?: "timeline" | "changes" | "plan") => void;
-  onClarifySelect?: (choice: ClarifyChoice) => void;
-  onClarifyCustomReply?: (text: string) => void;
-  onClarifySkip?: () => void;
   onRollback?: (messageId: string, role: "user" | "assistant") => void;
   canRollbackUser?: boolean;
   canRollbackAssistant?: boolean;
@@ -27,9 +21,6 @@ type ChatMessageProps = {
 export function ChatMessage({
   item,
   onOpenInspector,
-  onClarifySelect,
-  onClarifyCustomReply,
-  onClarifySkip,
   onRollback,
   canRollbackUser,
   canRollbackAssistant,
@@ -77,9 +68,6 @@ export function ChatMessage({
     <AssistantTurn
       item={item}
       onOpenInspector={onOpenInspector}
-      onClarifySelect={onClarifySelect}
-      onClarifyCustomReply={onClarifyCustomReply}
-      onClarifySkip={onClarifySkip}
       canRollback={canRollbackAssistant && !!messageId}
       onRollback={
         onRollback && canRollbackAssistant && messageId

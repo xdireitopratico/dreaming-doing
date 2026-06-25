@@ -11,15 +11,10 @@ import { ForgeThinking } from "@/components/chat/ForgeThinking";
 import { ChatNarration } from "./ChatNarration";
 import { ChatJobCard } from "./ChatJobCard";
 import { ChatToolbar } from "./ChatToolbar";
-import { ChatClarify } from "./ChatClarify";
-import type { ClarifyChoice } from "@/lib/chat/types";
 
 type AssistantTurnProps = {
   item: Extract<ThreadItem, { kind: "assistant" }>;
   onOpenInspector?: (runId: string, tab?: "timeline" | "changes" | "plan") => void;
-  onClarifySelect?: (choice: ClarifyChoice) => void;
-  onClarifyCustomReply?: (text: string) => void;
-  onClarifySkip?: () => void;
   canRollback?: boolean;
   onRollback?: () => void;
   onResume?: () => void;
@@ -37,9 +32,6 @@ type AssistantTurnProps = {
 export function AssistantTurn({
   item,
   onOpenInspector,
-  onClarifySelect,
-  onClarifyCustomReply,
-  onClarifySkip,
   canRollback,
   onRollback,
   onResume,
@@ -60,8 +52,7 @@ export function AssistantTurn({
 
   const showThinking = !!item.thinking;
   const showNarration = !!narrationText;
-  const showClarify = !!item.clarify?.choices?.length;
-  const showClosing = !showClarify && !!closingText;
+  const showClosing = !!closingText;
 
   const robinActive =
     item.message?.meta && typeof item.message.meta === "object" && item.message.meta.robin === true
@@ -129,16 +120,6 @@ export function AssistantTurn({
             onShowDiff={(rid) => onOpenInspector?.(rid, "changes")}
             onShowOutput={onShowOutput}
             onShowPreview={onShowPreview}
-          />
-        )}
-
-        {showClarify && item.clarify && (
-          <ChatClarify
-            data={item.clarify}
-            disabled={item.isActive || !onClarifySelect}
-            onSelect={onClarifySelect}
-            onCustomReply={onClarifyCustomReply}
-            onSkip={onClarifySkip}
           />
         )}
 

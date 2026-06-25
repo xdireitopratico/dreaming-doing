@@ -1,13 +1,14 @@
 import { useCallback, useMemo } from "react";
 import type { AgentComposerMode, ChatMessage } from "@/lib/chat-types";
+import type { ClarifyAnswer, ClarifyChoice, ClarifyPrompt } from "@/lib/chat/types";
 import { formatClarifyChoiceReply } from "@/lib/clarify-choices";
-import type { ClarifyChoice } from "@/lib/chat/types";
 import type { StoredMessagePart } from "@/lib/chat-attachments";
 import { useChat } from "@/hooks/useChat";
 import { useChatScroll } from "@/hooks/useChatScroll";
 import { shouldHoldUserMessageAnchor } from "@/lib/chat/user-message-anchor";
 import { ChatThread } from "./ChatThread";
 import { ChatPlanDock } from "./ChatPlanDock";
+import { ChatClarifyDock } from "./ChatClarifyDock";
 import { ChatComposer } from "./ChatComposer";
 import { ChatQueueDock, type PendingQueueItem } from "./ChatQueueDock";
 import type { PlanStep } from "@/lib/agent-progress";
@@ -136,13 +137,41 @@ export function ChatPanel({
     [notifyUserSend, onSend, composerMode],
   );
 
-  const handleClarifySelect = useCallback(
-    (choice: ClarifyChoice) => {
+  const handleClarifySubmit = useCallback(
+    (answers: ClarifyAnswer[]) => {
       notifyUserSend();
-      onSend(formatClarifyChoiceReply(choice), composerMode);
+      const lines = answers.map((ans, idx) => {
+        const reply =
+          ans.text?.trim() ??
+          (ans.choice ? formatClarifyChoiceReply(ans.choice) : "Pular");
+        return `${idx + 1}. ${reply}`;
+      });
+      const text = `Respostas do clarify:\n${lines.join("\n")}`;
+      onSend(text, composerMode);
     },
     [notifyUserSend, onSend, composerMode],
   );
+
+  const handleClarifySkip = useCallback(
+    () => {
+      notifyUserSend();
+      onSend("/skip", composerMode);
+    },
+    [notifyUserSend, onSend, composerMode],
+  );
+
+  /** Extract last clarify prompt from the thread (docked at composer level). */
+  const activeClarify: ClarifyPrompt | null = useMemo(() => {
+    for (let i = thread.length - 1; i >= 0; i--) {
+      const item = thread[i];
+      if (item?.kind === "assistant" && item.clarify && !item.isActive) {
+        return item.clarify;
+      }
+    }
+    return null;
+  }, [thread]);
+
+  const clarifyCreating = running && agent.progress.phase === "clarify" && !activeClarify;
 
   const lastAssistantMessageId = useMemo(() => {
     for (let i = thread.length - 1; i >= 0; i--) {
@@ -170,7 +199,6 @@ export function ChatPanel({
           <ChatThread
             items={thread}
             onOpenInspector={onOpenInspector}
-            onClarifySelect={handleClarifySelect}
             onRollback={onRollbackMessage ? handleRollback : undefined}
             onResume={onResume}
             lastUserMessageId={lastUserMessageId}
@@ -195,6 +223,14 @@ export function ChatPanel({
         onReview={(runId) => onOpenInspector?.(runId, "plan")}
         onApprove={onPlanApprove}
         onReject={onPlanReject}
+      />
+
+      <ChatClarifyDock
+        data={activeClarify}
+        creating={clarifyCreating}
+        disabled={running}
+        onSubmit={handleClarifySubmit}
+        onSkip={handleClarifySkip}
       />
 
       {(agent.progress.pendingQueueCount ?? 0) > 0 && pendingQueueItems.length > 0 ? (

@@ -452,6 +452,361 @@
   color: var(--text-secondary);
 }
 
+/* ════════════════════════════════════════════════════════════
+   ChatClarifyDock — same visual shell as PlanDock / QueueDock
+   ════════════════════════════════════════════════════════════ */
+.forge-clarify-dock {
+  flex-shrink: 0;
+  margin: 0 var(--chat-padding) var(--space-sm);
+}
+
+.forge-clarify-dock-shell {
+  width: 100%;
+  padding: 12px 14px 10px;
+  border-radius: var(--forge-radius-lg, 20px);
+  background: linear-gradient(135deg, #1a1e27, #0b0d12);
+  border: 1px solid var(--forge-border-strong, rgba(237, 239, 242, 0.14));
+  backdrop-filter: blur(28px) saturate(140%);
+  -webkit-backdrop-filter: blur(28px) saturate(140%);
+  box-shadow:
+    0 24px 80px rgba(0, 0, 0, 0.45),
+    0 0 0 1px rgba(255, 182, 39, 0.04) inset;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.forge-clarify-dock-shell--skeleton {
+  padding: 12px 14px;
+}
+
+.forge-clarify-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.forge-clarify-label {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.forge-clarify-label svg {
+  width: 12px;
+  height: 12px;
+  color: var(--text-accent);
+}
+
+.forge-clarify-count {
+  color: var(--text-secondary);
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.forge-clarify-body {
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(237, 239, 242, 0.08);
+}
+
+.forge-clarify-intro {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  margin-bottom: 6px;
+}
+
+.forge-clarify-question {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary);
+  line-height: 1.55;
+}
+
+.forge-clarify-choices {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.forge-clarify-choice {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(237, 239, 242, 0.1);
+  color: var(--text-primary);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.forge-clarify-choice:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--text-accent) 55%, var(--border-forge));
+  background: var(--bg-hover);
+}
+
+.forge-clarify-choice:disabled,
+.forge-clarify-choice--disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.forge-clarify-choice-letter {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(237, 239, 242, 0.12);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  margin-top: 1px;
+}
+
+.forge-clarify-choice:hover:not(:disabled) .forge-clarify-choice-letter {
+  border-color: var(--text-accent);
+  color: var(--text-accent);
+}
+
+.forge-clarify-choice-content {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.forge-clarify-choice-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.forge-clarify-choice-desc {
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+.forge-clarify-input-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.forge-clarify-input {
+  flex: 1;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(237, 239, 242, 0.14);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-primary);
+  font-size: 13px;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.forge-clarify-input::placeholder {
+  color: var(--text-secondary);
+}
+
+.forge-clarify-input:focus {
+  border-color: rgba(245, 200, 66, 0.4);
+}
+
+.forge-clarify-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(237, 239, 242, 0.14);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.forge-clarify-btn:hover:not(:disabled) {
+  border-color: rgba(237, 239, 242, 0.28);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.forge-clarify-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.forge-clarify-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+.forge-clarify-btn--approve {
+  background: linear-gradient(135deg, rgba(245, 200, 66, 0.15), rgba(232, 168, 23, 0.1));
+  border-color: rgba(245, 200, 66, 0.28);
+  color: var(--text-accent);
+}
+
+.forge-clarify-btn--approve:hover:not(:disabled) {
+  background: linear-gradient(135deg, rgba(245, 200, 66, 0.25), rgba(232, 168, 23, 0.18));
+  border-color: rgba(245, 200, 66, 0.45);
+}
+
+.forge-clarify-btn--danger {
+  color: #f87171;
+  border-color: rgba(248, 113, 113, 0.2);
+}
+
+.forge-clarify-btn--danger:hover:not(:disabled) {
+  background: rgba(248, 113, 113, 0.08);
+  border-color: rgba(248, 113, 113, 0.35);
+}
+
+/* Shimmer skeleton */
+.forge-clarify-shimmer-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.forge-clarify-shimmer-line {
+  height: 10px;
+  border-radius: 6px;
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.04) 0%, rgba(255, 255, 255, 0.08) 50%, rgba(255, 255, 255, 0.04) 100%);
+  background-size: 200% 100%;
+  animation: forge-clarify-shimmer 1.8s infinite;
+}
+
+@keyframes forge-clarify-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+.forge-clarify-skeleton-label {
+  margin-top: 10px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+/* Review step */
+.forge-clarify-review {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.forge-clarify-review-hint {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+.forge-clarify-review-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.forge-clarify-review-item {
+  margin: 0;
+  padding: 0;
+}
+
+.forge-clarify-review-edit {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(237, 239, 242, 0.1);
+  color: var(--text-primary);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.forge-clarify-review-edit:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--text-accent) 55%, var(--border-forge));
+  background: var(--bg-hover);
+}
+
+.forge-clarify-review-edit:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.forge-clarify-review-index {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(237, 239, 242, 0.12);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+
+.forge-clarify-review-edit:hover:not(:disabled) .forge-clarify-review-index {
+  border-color: var(--text-accent);
+  color: var(--text-accent);
+}
+
+.forge-clarify-review-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.forge-clarify-review-question {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.forge-clarify-review-answer {
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+.forge-clarify-review-chevron {
+  flex-shrink: 0;
+  color: var(--text-secondary);
+}
+
 .forge-plan-dock {
   flex-shrink: 0;
   margin: 0 var(--chat-padding) var(--space-sm);

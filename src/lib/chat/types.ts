@@ -52,10 +52,28 @@ export type MiniCardData = {
   } | null;
 };
 
+export type ClarifyAnswer = {
+  questionId: string;
+  choiceId?: string;
+  text?: string;
+  /** Enriched payload for the consumer to format the final message. */
+  question?: string;
+  choice?: ClarifyChoice;
+};
+
+export type ClarifyQuestion = {
+  id: string;
+  intro?: string;
+  question: string;
+  choices: ClarifyChoice[];
+};
+
 export type ClarifyPrompt = {
   intro?: string;
   question?: string;
   choices: ClarifyChoice[];
+  /** Multi-question mode: when present, UI shows a wizard with review step. */
+  questions?: ClarifyQuestion[];
 };
 
 /** Linha única no chat — só estado; raciocínio fica no inspector. */
