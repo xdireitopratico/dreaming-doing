@@ -181,7 +181,7 @@ export function AgentsDashboard() {
             >
               <button
                 type="button"
-                className="absolute right-2 top-2 z-10 grid size-8 place-items-center rounded-lg text-neutral-400 opacity-0 transition-opacity hover:bg-red-50 hover:text-red-600 group-hover:opacity-100"
+                className="absolute right-2 top-2 z-10 grid size-8 place-items-center rounded-lg text-[var(--forge-muted)] opacity-0 transition-opacity hover:bg-[color-mix(in_srgb,var(--status-failed)_18%,transparent)] hover:text-[var(--status-failed)] group-hover:opacity-100"
                 title="Excluir agente"
                 aria-label={`Excluir ${p.name}`}
                 onClick={(e) => void handleDelete(e, p.id, p.name)}
