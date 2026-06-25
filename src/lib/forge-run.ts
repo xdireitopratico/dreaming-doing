@@ -537,6 +537,10 @@ const TOOL_BRIEF_VERBS: Record<string, string> = {
   shell_exec: "Executando",
   web_search: "Pesquisando",
   web_fetch: "Consultando",
+  find_skills: "Buscando skills",
+  load_skill: "Carregando skill",
+  extract_design_dna: "Extraindo DesignDNA",
+  read_design_library: "Lendo design library",
 };
 
 export function toolBriefing(name: string, path?: string, intent?: string): string {
