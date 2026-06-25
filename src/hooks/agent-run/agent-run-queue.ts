@@ -91,7 +91,7 @@ export function createQueueHandlers(deps: QueueHandlersDeps) {
     projectId: string,
     conversationId: string,
     messageId: string,
-    patch: { repeat?: number; paused?: boolean },
+    patch: { repeat?: number; paused?: boolean; text?: string },
   ) => {
     const res = await postAgentRun({
       action: "update_pending",
@@ -99,6 +99,23 @@ export function createQueueHandlers(deps: QueueHandlersDeps) {
       conversationId,
       messageId,
       ...patch,
+    });
+    if (!res.ok) return;
+    await refreshPendingQueue(projectId, conversationId);
+  };
+
+  const reorderPendingItem = async (
+    projectId: string,
+    conversationId: string,
+    messageId: string,
+    sortOrder: number,
+  ) => {
+    const res = await postAgentRun({
+      action: "reorder_pending",
+      projectId,
+      conversationId,
+      messageId,
+      sortOrder,
     });
     if (!res.ok) return;
     await refreshPendingQueue(projectId, conversationId);
@@ -238,6 +255,7 @@ export function createQueueHandlers(deps: QueueHandlersDeps) {
     clearPendingItem,
     clearAllPending,
     updatePendingItem,
+    reorderPendingItem,
     setQueuePaused,
     drainQueue,
     queueMessage,

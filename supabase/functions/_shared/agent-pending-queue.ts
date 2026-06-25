@@ -337,6 +337,32 @@ export async function hasBlockingActiveRun(
   return data.id;
 }
 
+/** Reordena um item na fila movendo-o para uma nova posição (sort_order). */
+export async function reorderPendingMessage(
+  supabase: SupabaseClient,
+  projectId: string,
+  userId: string,
+  pendingId: string,
+  newSortOrder: number,
+): Promise<boolean> {
+  const { data: row } = await supabase
+    .from("agent_pending_messages")
+    .select("id")
+    .eq("id", pendingId)
+    .eq("project_id", projectId)
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (!row?.id) return false;
+
+  await supabase
+    .from("agent_pending_messages")
+    .update({ sort_order: newSortOrder })
+    .eq("id", pendingId);
+
+  return true;
+}
+
 export async function clearPendingMessages(
   supabase: SupabaseClient,
   projectId: string,
@@ -380,9 +406,10 @@ export async function listPendingMessages(
 ): Promise<PendingQueueItem[]> {
   const { data } = await supabase
     .from("agent_pending_messages")
-    .select("id, body, created_at")
+    .select("id, body, created_at, sort_order")
     .eq("project_id", projectId)
     .eq("user_id", userId)
+    .order("sort_order", { ascending: true })
     .order("created_at", { ascending: true });
 
   return (data ?? []).map((row) => {
@@ -394,6 +421,7 @@ export async function listPendingMessages(
       repeat: clampQueueRepeat(body.repeat),
       paused: body.paused === true,
       body,
+      sortOrder: typeof row.sort_order === "number" ? row.sort_order : 0,
     };
   });
 }
@@ -403,11 +431,11 @@ export async function updatePendingMessage(
   projectId: string,
   userId: string,
   pendingId: string,
-  patch: { repeat?: number; paused?: boolean },
+  patch: { repeat?: number; paused?: boolean; text?: string },
 ): Promise<PendingQueueItem | null> {
   const { data: row } = await supabase
     .from("agent_pending_messages")
-    .select("id, body, created_at")
+    .select("id, body, created_at, sort_order")
     .eq("id", pendingId)
     .eq("project_id", projectId)
     .eq("user_id", userId)
@@ -418,6 +446,7 @@ export async function updatePendingMessage(
   const body = { ...((row.body ?? {}) as Record<string, unknown>) };
   if (patch.repeat != null) body.repeat = clampQueueRepeat(patch.repeat);
   if (patch.paused != null) body.paused = patch.paused;
+  if (typeof patch.text === "string") body.text = patch.text.trim();
 
   await supabase.from("agent_pending_messages").update({ body }).eq("id", pendingId);
 
@@ -428,6 +457,7 @@ export async function updatePendingMessage(
     repeat: clampQueueRepeat(body.repeat),
     paused: body.paused === true,
     body,
+    sortOrder: typeof row.sort_order === "number" ? row.sort_order : 0,
   };
 }
 
@@ -518,6 +548,7 @@ export async function peekOldestPendingMessage(
     .select("id, body")
     .eq("project_id", projectId)
     .eq("user_id", userId)
+    .order("sort_order", { ascending: true })
     .order("created_at", { ascending: true });
 
   for (const row of rows ?? []) {

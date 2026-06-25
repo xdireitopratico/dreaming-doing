@@ -1590,6 +1590,8 @@
   color: var(--text-primary);
 }
 
+/* ─── Queue Dock (reuses plan-dock-shell visual) ─────────────────────── */
+
 .forge-queue-dock {
   flex-shrink: 0;
   margin: 0 var(--chat-padding) var(--space-sm);
@@ -1609,23 +1611,65 @@
   margin-bottom: var(--space-xs);
 }
 
-.forge-queue-dock-global-pause {
+.forge-queue-dock-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 0;
+}
+
+.forge-queue-dock-count {
+  font-weight: 400;
+  color: var(--text-secondary);
+}
+
+.forge-queue-dock-badge {
+  font-size: 8px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(250, 204, 21, 0.08);
+  color: #facc15;
+  border: 1px solid rgba(250, 204, 21, 0.15);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 600;
+  margin-left: 6px;
+}
+
+.forge-queue-dock-global-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   padding: 4px 10px;
   border-radius: var(--chat-cta-radius);
   border: 1px solid color-mix(in srgb, var(--border-forge) 80%, transparent);
   background: color-mix(in srgb, var(--bg-input) 85%, transparent);
   color: var(--text-secondary);
-  font-size: 11px;
+  font-size: 10px;
   cursor: pointer;
+  transition: all 0.15s;
 }
 
-.forge-queue-dock-global-pause:hover:not(:disabled) {
+.forge-queue-dock-global-toggle:hover:not(:disabled) {
   color: var(--text-primary);
   border-color: var(--border-active);
 }
+
+.forge-queue-dock-global-toggle:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.forge-queue-dock-toggle-icon {
+  width: 11px;
+  height: 11px;
+}
+
+/* ── Queue list ── */
 
 .forge-queue-dock-list {
   list-style: none;
@@ -1633,37 +1677,84 @@
   padding: 0;
   overflow-y: auto;
   max-height: 200px;
-  scrollbar-color: color-mix(in srgb, var(--text-accent) 45%, transparent) transparent;
+  scrollbar-color: color-mix(in srgb, var(--border-forge) 65%, #52525b 35%) transparent;
   scrollbar-width: thin;
 }
+
+.forge-queue-dock-list::-webkit-scrollbar {
+  width: 4px;
+}
+
+.forge-queue-dock-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.forge-queue-dock-list::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--border-forge) 65%, #52525b 35%);
+  border-radius: 999px;
+}
+
+/* ── Queue item ── */
 
 .forge-queue-dock-item {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 10px;
+  padding: 7px 10px;
   border-radius: 10px;
   border: 1px solid color-mix(in srgb, var(--forge-border, rgba(237, 239, 242, 0.08)) 55%, transparent);
   background: linear-gradient(135deg, #1a1e27, #0b0d12);
+  transition: border-color 0.15s;
 }
 
 .forge-queue-dock-item + .forge-queue-dock-item {
   margin-top: 6px;
 }
 
+.forge-queue-dock-item:hover {
+  border-color: color-mix(in srgb, var(--forge-border, rgba(237, 239, 242, 0.08)) 55%, rgba(237, 239, 242, 0.16));
+}
+
+.forge-queue-dock-item--paused {
+  opacity: 0.4;
+}
+
+/* ── Grip (drag handle) ── */
+
+.forge-queue-dock-grip {
+  flex-shrink: 0;
+  width: 14px;
+  display: flex;
+  align-items: center;
+  color: rgba(255, 255, 255, 0.15);
+  font-size: 9px;
+  cursor: grab;
+  user-select: none;
+  letter-spacing: -1px;
+  line-height: 1;
+}
+
+.forge-queue-dock-grip:active {
+  cursor: grabbing;
+}
+
+/* ── Index badge ── */
+
 .forge-queue-dock-index {
   flex-shrink: 0;
-  width: 20px;
-  height: 20px;
+  width: 18px;
+  height: 18px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 6px;
-  font-size: 10px;
+  border-radius: 5px;
+  font-size: 9px;
   font-weight: 600;
-  color: var(--text-accent);
-  background: color-mix(in srgb, var(--text-accent) 12%, transparent);
+  color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.04);
 }
+
+/* ── Preview text ── */
 
 .forge-queue-dock-preview {
   flex: 1;
@@ -1671,59 +1762,232 @@
   margin: 0;
   font-size: 12px;
   line-height: 1.4;
-  color: var(--text-primary);
+  color: var(--text-secondary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  cursor: default;
 }
 
-.forge-queue-dock-controls {
+.forge-queue-dock-preview:hover {
+  color: var(--text-primary);
+}
+
+/* ── Inline repeat badge (only when > 1) ── */
+
+.forge-queue-dock-inline-repeat {
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+/* ── Edit mode ── */
+
+.forge-queue-dock-edit-input {
+  flex: 1;
+  min-width: 0;
+  padding: 3px 6px;
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(237, 239, 242, 0.2);
+  color: var(--text-primary);
+  font-size: 12px;
+  line-height: 1.4;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.forge-queue-dock-edit-input:focus {
+  border-color: rgba(237, 239, 242, 0.35);
+}
+
+.forge-queue-dock-edit-actions {
   display: flex;
-  align-items: center;
-  gap: 4px;
+  gap: 2px;
   flex-shrink: 0;
 }
 
-.forge-queue-dock-repeat input {
-  width: 42px;
-  height: 26px;
-  padding: 0 4px;
-  border-radius: 6px;
-  border: 1px solid color-mix(in srgb, var(--border-forge) 70%, transparent);
-  background: color-mix(in srgb, var(--bg-input) 90%, transparent);
-  color: var(--text-primary);
-  font-size: 11px;
-  text-align: center;
-}
-
-.forge-queue-dock-icon {
+.forge-queue-dock-edit-save {
+  width: 24px;
+  height: 24px;
+  border-radius: 5px;
+  border: none;
+  background: transparent;
+  color: #6a9;
+  cursor: pointer;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  font-size: 12px;
+  transition: color 0.15s;
+}
+
+.forge-queue-dock-edit-save:hover {
+  color: #8bc;
+}
+
+.forge-queue-dock-edit-cancel {
+  width: 24px;
+  height: 24px;
+  border-radius: 5px;
+  border: none;
+  background: transparent;
+  color: #c77;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  transition: color 0.15s;
+}
+
+.forge-queue-dock-edit-cancel:hover {
+  color: #f87171;
+}
+
+/* ── Controls + Dots button ── */
+
+.forge-queue-dock-controls {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.forge-queue-dock-dots {
   width: 26px;
   height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   border-radius: 6px;
-  border: 1px solid color-mix(in srgb, var(--border-forge) 70%, transparent);
+  border: 1px solid transparent;
   background: transparent;
-  color: var(--text-secondary);
+  color: rgba(255, 255, 255, 0.25);
   cursor: pointer;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: -1px;
+  line-height: 1;
+  transition: all 0.15s;
 }
 
-.forge-queue-dock-icon:hover:not(:disabled) {
-  color: var(--text-primary);
-  border-color: var(--border-active);
+.forge-queue-dock-dots:hover:not(:disabled) {
+  color: rgba(255, 255, 255, 0.6);
+  background: rgba(255, 255, 255, 0.04);
+  border-color: color-mix(in srgb, var(--forge-border, rgba(237, 239, 242, 0.08)) 55%, transparent);
 }
 
-.forge-queue-dock-icon--danger:hover:not(:disabled) {
-  color: #f87171;
-  border-color: color-mix(in srgb, #f87171 40%, transparent);
-}
-
-.forge-queue-dock-icon:disabled,
-.forge-queue-dock-global-pause:disabled {
+.forge-queue-dock-dots:disabled {
   opacity: 0.4;
   cursor: not-allowed;
 }
+
+/* ── Dropdown menu ── */
+
+.forge-queue-dock-dropdown {
+  position: absolute;
+  right: 0;
+  top: 100%;
+  margin-top: 4px;
+  width: 180px;
+  padding: 4px;
+  border-radius: 10px;
+  z-index: 10;
+  background: linear-gradient(135deg, #1a1e27, #0b0d12);
+  border: 1px solid var(--forge-border-strong, rgba(237, 239, 242, 0.14));
+  backdrop-filter: blur(28px) saturate(140%);
+  -webkit-backdrop-filter: blur(28px) saturate(140%);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+  animation: forge-card-appear 0.15s var(--ease-out-expo) both;
+}
+
+.forge-queue-dock-dd-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 10px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.12s;
+  text-align: left;
+}
+
+.forge-queue-dock-dd-item:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-primary);
+}
+
+.forge-queue-dock-dd-icon {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
+.forge-queue-dock-dd-item--danger {
+  color: #c77;
+}
+
+.forge-queue-dock-dd-item--danger:hover {
+  background: rgba(248, 113, 113, 0.06);
+  color: #f87171;
+}
+
+.forge-queue-dock-dd-sep {
+  height: 1px;
+  margin: 4px 8px;
+  background: color-mix(in srgb, var(--forge-border, rgba(237, 239, 242, 0.08)) 55%, transparent);
+}
+
+/* ── Repeat controls in dropdown ── */
+
+.forge-queue-dock-dd-repeat {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+}
+
+.forge-queue-dock-dd-repeat-btn {
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.12s;
+}
+
+.forge-queue-dock-dd-repeat-btn:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-primary);
+}
+
+.forge-queue-dock-dd-repeat-icon {
+  width: 12px;
+  height: 12px;
+}
+
+.forge-queue-dock-dd-repeat-value {
+  width: 28px;
+  text-align: center;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+/* ── Legacy pending-queue (keep for backward compat) ── */
 
 .forge-pending-queue-action {
   display: inline-flex;

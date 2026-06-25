@@ -9,7 +9,7 @@ import { shouldHoldUserMessageAnchor } from "@/lib/chat/user-message-anchor";
 import { ChatThread } from "./ChatThread";
 import { ChatPlanDock } from "./ChatPlanDock";
 import { ChatComposer } from "./ChatComposer";
-import { PendingQueuePanel, type PendingQueueItem } from "@/components/editor/PendingQueuePanel";
+import { ChatQueueDock, type PendingQueueItem } from "./ChatQueueDock";
 import type { PlanStep } from "@/lib/agent-progress";
 import type { useAgentRun } from "@/hooks/useAgentRun";
 
@@ -42,6 +42,8 @@ export type ChatPanelProps = {
   queueBlockingReason?: string | null;
   queuePaused?: boolean;
   onUpdateQueueRepeat?: (id: string, repeat: number) => Promise<void>;
+  onUpdateQueueText?: (id: string, text: string) => Promise<void>;
+  onReorderQueueItem?: (id: string, sortOrder: number) => Promise<void>;
   onToggleQueueItemPaused?: (id: string, paused: boolean) => Promise<void>;
   onToggleQueuePaused?: (paused: boolean) => Promise<void>;
   onClearPendingItem?: (id: string) => Promise<void>;
@@ -75,6 +77,8 @@ export function ChatPanel({
   queueBlockingReason,
   queuePaused,
   onUpdateQueueRepeat,
+  onUpdateQueueText,
+  onReorderQueueItem,
   onToggleQueueItemPaused,
   onToggleQueuePaused,
   onClearPendingItem,
@@ -193,22 +197,25 @@ export function ChatPanel({
         onReject={onPlanReject}
       />
 
-      {((agent.progress.pendingQueueCount ?? 0) > 0 && pendingQueueItems.length > 0) ||
-      (queueBlockingReason && running) ? (
-        <PendingQueuePanel
+      {(agent.progress.pendingQueueCount ?? 0) > 0 && pendingQueueItems.length > 0 ? (
+        <ChatQueueDock
           items={pendingQueueItems}
           pendingCount={agent.progress.pendingQueueCount ?? 0}
-          running={running}
-          blockingReason={queueBlockingReason}
-          onCopy={(text) => void navigator.clipboard.writeText(text)}
+          queuePaused={queuePaused ?? false}
+          onUpdateRepeat={async (id, repeat) => {
+            if (onUpdateQueueRepeat) await onUpdateQueueRepeat(id, repeat);
+          }}
+          onUpdateText={async (id, text) => {
+            if (onUpdateQueueText) await onUpdateQueueText(id, text);
+          }}
+          onReorder={async (id, sortOrder) => {
+            if (onReorderQueueItem) await onReorderQueueItem(id, sortOrder);
+          }}
+          onToggleQueuePaused={async (paused) => {
+            if (onToggleQueuePaused) await onToggleQueuePaused(paused);
+          }}
           onRemove={async (id) => {
             if (onClearPendingItem) await onClearPendingItem(id);
-          }}
-          onClearAll={async () => {
-            if (onClearAllPending) await onClearAllPending();
-          }}
-          onDrain={async () => {
-            if (onDrainQueue) await onDrainQueue();
           }}
         />
       ) : null}

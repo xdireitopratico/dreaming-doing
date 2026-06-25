@@ -513,6 +513,16 @@ export function EditorPageLayout({
                       ? agent.updatePendingItem(projectId, conversationId, id, { repeat })
                       : Promise.resolve()
                   }
+                  onUpdateQueueText={(id, text) =>
+                    conversationId
+                      ? agent.updatePendingItem(projectId, conversationId, id, { text })
+                      : Promise.resolve()
+                  }
+                  onReorderQueueItem={(id, sortOrder) =>
+                    conversationId
+                      ? agent.reorderPendingItem(projectId, conversationId, id, sortOrder)
+                      : Promise.resolve()
+                  }
                   onToggleQueueItemPaused={(id, paused) =>
                     conversationId
                       ? agent.updatePendingItem(projectId, conversationId, id, { paused })

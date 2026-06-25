@@ -339,9 +339,10 @@ Deno.serve(async (req) => {
           await import("../_shared/agent-pending-queue.ts");
         const pendingId = typeof body.messageId === "string" ? body.messageId : undefined;
         if (!pendingId) return json({ error: "messageId obrigatório" }, 400);
-        const patch: { repeat?: number; paused?: boolean } = {};
+        const patch: { repeat?: number; paused?: boolean; text?: string } = {};
         if (typeof body.repeat === "number") patch.repeat = body.repeat;
         if (typeof body.paused === "boolean") patch.paused = body.paused;
+        if (typeof body.text === "string") patch.text = body.text;
         const item = await updatePendingMessage(
           supabase,
           projectId,
@@ -352,6 +353,25 @@ Deno.serve(async (req) => {
         if (!item) return json({ error: "Item não encontrado" }, 404);
         const pendingCount = await countPendingMessages(supabase, projectId, userData.user.id);
         return json({ ok: true, item, pendingCount });
+      }
+
+      if (body.action === "reorder_pending") {
+        const { reorderPendingMessage } =
+          await import("../_shared/agent-pending-queue.ts");
+        const pendingId = typeof body.messageId === "string" ? body.messageId : undefined;
+        const newSortOrder = typeof body.sortOrder === "number" ? body.sortOrder : undefined;
+        if (!pendingId || newSortOrder == null) {
+          return json({ error: "messageId e sortOrder obrigatórios" }, 400);
+        }
+        const ok = await reorderPendingMessage(
+          supabase,
+          projectId,
+          userData.user.id,
+          pendingId,
+          newSortOrder,
+        );
+        if (!ok) return json({ error: "Item não encontrado" }, 404);
+        return json({ ok: true });
       }
 
       if (body.action === "set_queue_paused") {
