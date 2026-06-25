@@ -87,3 +87,41 @@ export default () => <main><HeroCinematicSpotlight title="x" primaryCta={{label:
     assertEquals(r.pass, true, `technique ${tech.id} (token ${token})`);
   }
 });
+
+Deno.test("validateDesignImplementation — substituição criativa passa (premissa)", () => {
+  // Página com ofício (composite + técnica) mas que OMITE a composição/técnica prescrita,
+  // substituindo por outras. Divergência deve ser AVISO, não bloqueio.
+  const files = new Map([
+    [
+      "src/App.tsx",
+      `import { BentoDenseShowcase, Parallax } from "@forge/ui";
+export default () => <main><BentoDenseShowcase cards={[]} /><Parallax>ok</Parallax></main>;`,
+    ],
+  ]);
+  const r = validateDesignImplementation({
+    expected: {
+      compositions: ["hero-cinematic-spotlight"],
+      composition_exports: ["HeroCinematicSpotlight"],
+      techniques: ["spotlight-cursor"],
+    },
+    files,
+  });
+  assertEquals(r.pass, true, `Substituição criativa deveria passar: ${r.missing.join("; ")}`);
+  assertEquals(r.missing.length, 0, "Nenhuma divergência deve virar bloqueio");
+  assert(
+    !!r.critic_warnings && r.critic_warnings.some((w) => w.includes("substituições criativas")),
+    "Divergências devem aparecer como warnings",
+  );
+});
+
+Deno.test("validateDesignImplementation — sem ofício nenhum falha (premissa)", () => {
+  // Página que não usa NENHUM composite nem técnica @forge/ui é rasa → bloqueia.
+  const files = new Map([
+    ["src/App.tsx", `export default () => <main><h1>Olá</h1></main>;`],
+  ]);
+  const r = validateDesignImplementation({
+    expected: { compositions: ["hero-cinematic-spotlight"], composition_exports: ["HeroCinematicSpotlight"], techniques: [] },
+    files,
+  });
+  assert(!r.pass, "Página sem ofício deve falhar");
+});

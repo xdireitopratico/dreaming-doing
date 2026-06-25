@@ -135,10 +135,21 @@ export function scanProjectForLandingQuality(files: Map<string, string>): Design
       /<main|<section|@forge\/ui/.test(code) &&
       (/<Hero|<Bento|<FeatureMatrix|<CTASignature|<NavShell/.test(code) || compositeCount > 0);
 
-    if (isLanding && compositeCount < LANDING_MIN_COMPOSITES) {
+    // ponytail: composto criacional — não exige mais o MANDATO de ≥3 composites opinionated.
+    // Aceita craft (≥4 seções distintas + motion) OU ≥3 composites @forge/ui. Assim uma página
+    // ORIGINAL (sem colar composições) com ofício real passa; a rasa continua bloqueada.
+    const sectionCount =
+      (code.match(/<section\b/gi)?.length ?? 0) +
+      (/hero/i.test(code) ? 1 : 0) +
+      (/footer/i.test(code) ? 1 : 0) +
+      (/<nav\b|navbar|navigation/i.test(code) ? 1 : 0);
+    const hasMotion = MOTION_SIGNATURE.test(code);
+    const craftSatisfied =
+      compositeCount >= LANDING_MIN_COMPOSITES || (sectionCount >= 4 && hasMotion);
+    if (isLanding && !craftSatisfied) {
       violations.push({
         file,
-        message: `Landing precisa de ≥${LANDING_MIN_COMPOSITES} composites @forge/ui reais (manifest) — encontrados: ${compositeCount} [${used.join(", ")}]`,
+        message: `Landing sem ofício suficiente — use ≥${LANDING_MIN_COMPOSITES} composites @forge/ui OU ≥4 seções com motion. Composites: ${compositeCount}, seções: ${sectionCount} [${used.join(", ")}]`,
       });
     }
 

@@ -18,8 +18,15 @@ import {
   filterAcceptedFiles,
   type StoredMessagePart,
 } from "@/lib/chat-attachments";
+import { enableSkillLocal } from "@/lib/agent-extensions-prefs";
 
 const DRAFT_KEY = "forge:chat-draft";
+
+/** Slash commands → skill id. Ativa a skill on-demand (load direto) sem precisar abrir o painel. */
+const SLASH_SKILLS: Record<string, string> = {
+  "/designsystem": "design-system",
+  "/extractdesign": "extract-design",
+};
 const DRAFT_MAX_AGE = 24 * 60 * 60 * 1000;
 
 type ChatComposerProps = {
@@ -123,12 +130,30 @@ export function ChatComposer({
     const trimmed = text.trim();
     if (!trimmed && attachments.length === 0) return;
 
+    // Slash → ativa skill on-demand e tira o token da mensagem.
+    let messageText = trimmed;
+    const slashCmd = Object.keys(SLASH_SKILLS).find(
+      (cmd) => trimmed === cmd || trimmed.startsWith(cmd + " "),
+    );
+    if (slashCmd) {
+      enableSkillLocal(SLASH_SKILLS[slashCmd]);
+      messageText = trimmed.slice(slashCmd.length).trim();
+      if (!messageText && attachments.length === 0) {
+        // Só o slash: carrega a skill e limpa o composer, sem enviar mensagem.
+        setText("");
+        setAttachments([]);
+        try { sessionStorage.removeItem(DRAFT_KEY); } catch { /* ignore */ }
+        if (textareaRef.current) textareaRef.current.style.height = "auto";
+        return;
+      }
+    }
+
     let parts: StoredMessagePart[] | undefined;
     if (attachments.length > 0) {
       parts = await filesToMessageParts(attachments);
     }
 
-    onSend(trimmed, composerMode, parts);
+    onSend(messageText, composerMode, parts);
     setText("");
     setAttachments([]);
     try {
@@ -302,27 +327,31 @@ export function ChatComposer({
             onTranscript={(t) => setText((cur: string) => (cur ? `${cur} ${t}` : t))}
           />
 
-          {running && (
-            <button
-              type="button"
-              className="forge-composer-stop"
-              onClick={onStop}
-              title="Parar"
-              aria-label="Parar"
-            >
-              <Square className="size-3.5 fill-current" />
-            </button>
-          )}
-
           <button
             type="button"
-            className="forge-composer-send"
-            onClick={() => void handleSend()}
-            disabled={!canSubmit}
-            title={isRunning ? "Enfileirar" : "Enviar"}
-            aria-label={isRunning ? "Enfileirar" : "Enviar"}
+            className={running ? "forge-composer-stop" : "forge-composer-send"}
+            onClick={running ? onStop : () => void handleSend()}
+            disabled={!running && !canSubmit}
+            title={
+              running
+                ? "Parar"
+                : isRunning
+                  ? "Enfileirar"
+                  : "Enviar"
+            }
+            aria-label={
+              running
+                ? "Parar"
+                : isRunning
+                  ? "Enfileirar"
+                  : "Enviar"
+            }
           >
-            <ArrowUp className="size-4" />
+            {running ? (
+              <Square className="size-3.5 fill-current" />
+            ) : (
+              <ArrowUp className="size-4" />
+            )}
           </button>
         </div>
       </div>

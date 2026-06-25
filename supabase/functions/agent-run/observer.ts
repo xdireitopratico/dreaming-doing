@@ -9,6 +9,15 @@ import {
   type DesignViolation,
 } from "./design-enforcement.ts";
 import { validateDesignImplementation } from "./design-validate.ts";
+import {
+  validateDesignFidelity,
+  formatFidelityFeedback,
+} from "./design-fidelity.ts";
+import {
+  evaluateDesignUniqueness,
+  formatUniquenessFeedback,
+} from "./design-uniqueness.ts";
+import type { DesignSignatureRecord } from "./design-plan-field.ts";
 import type { DesignPlanField } from "./types.ts";
 import { designTelemetryEntry } from "./design-telemetry.ts";
 
@@ -117,6 +126,8 @@ export class RuntimeObserver {
   private fileCache: Map<string, string> | null;
   private approvedDesign?: DesignPlanField;
   private craftEnforcement = false;
+  /** Histórico de designs de projetos anteriores — para verificação de unicidade. */
+  private designHistory: DesignSignatureRecord[] = [];
 
   constructor(reg: ToolRegistry, fileCache?: Map<string, string> | null) {
     this.reg = reg;
@@ -130,6 +141,11 @@ export class RuntimeObserver {
 
   setCraftEnforcement(enabled: boolean): void {
     this.craftEnforcement = enabled;
+  }
+
+  /** Injeta histórico de projetos anteriores para verificação de unicidade. */
+  setDesignHistory(history: DesignSignatureRecord[]): void {
+    this.designHistory = history;
   }
 
   async observe(budgetExceeded?: () => boolean): Promise<ObservationResult> {
@@ -168,6 +184,41 @@ export class RuntimeObserver {
     // 0.5. Design System — deep imports @forge/ui bloqueiam; demais violações são warnings
     const designCheck = await this.checkDesignSystem();
     checks.push({ name: "design-system", ok: designCheck.ok, output: designCheck.output });
+
+    // 0.6. Design Fidelity — o código gerado corresponde ao approvedDesign?
+    if (this.approvedDesign && this.fileCache && this.fileCache.size > 0) {
+      const fidelity = validateDesignFidelity(this.approvedDesign, this.fileCache);
+      const fidelityOutput = formatFidelityFeedback(fidelity);
+      checks.push({ name: "design-fidelity", ok: fidelity.pass, output: fidelityOutput });
+      if (!fidelity.pass) {
+        // Telemetry do resultado de fidelidade
+        this.reg.execute({
+          id: crypto.randomUUID(),
+          name: "shell_exec",
+          arguments: { command: "echo design-fidelity check registered" },
+        }).catch(() => {});
+      }
+    } else {
+      checks.push({
+        name: "design-fidelity",
+        ok: true,
+        output: "(fidelity check skipped — sem approvedDesign ou fileCache vazio)",
+      });
+    }
+
+    // 0.7. Design Uniqueness — este design é único em relação ao histórico?
+    if (this.approvedDesign && this.designHistory.length > 0) {
+      const uniqueness = evaluateDesignUniqueness(this.approvedDesign, this.designHistory);
+      const uniquenessOutput = formatUniquenessFeedback(uniqueness);
+      // Uniqueness é WARNING, não blocking — informa o LLM mas não quebra o build
+      checks.push({ name: "design-uniqueness", ok: uniqueness.pass, output: uniquenessOutput });
+    } else {
+      checks.push({
+        name: "design-uniqueness",
+        ok: true,
+        output: `(uniqueness check skipped — ${this.designHistory.length > 0 ? "sem approvedDesign" : "sem histórico de designs"})`,
+      });
+    }
 
     // 1. Build check
     if (isOverBudget()) {

@@ -49,6 +49,16 @@ function saveLocalSkills(ids: string[]) {
   window.dispatchEvent(new Event("forge:skills-updated"));
 }
 
+/** Ativa uma skill localmente (sem persistir no perfil) — usado por slash commands
+ * (ex: /designsystem) pra carregar a skill na sessão corrente. A fila do agent-run lê
+ * localStorage no enqueue, então a skill entra nesta run. Dispara evento pra UI refletir. */
+export function enableSkillLocal(id: string): void {
+  if (typeof window === "undefined") return;
+  const current = loadEnabledSkillIdsLocal();
+  if (current.includes(id)) return;
+  saveLocalSkills([...current, id]);
+}
+
 function saveLocalMcps(ids: string[]) {
   localStorage.setItem(MCP_KEY, JSON.stringify(ids));
   window.dispatchEvent(new Event("forge:mcp-updated"));

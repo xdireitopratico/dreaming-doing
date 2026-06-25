@@ -51,13 +51,64 @@ const SOURCES = {
   review: path.join(HOME, ".grok/bundled/skills/review/SKILL.md"),
   design: path.join(HOME, ".grok/bundled/skills/design/SKILL.md"),
   "pr-babysit": path.join(HOME, ".grok/bundled/skills/pr-babysit/SKILL.md"),
+  "design-system": path.join(ROOT, "skills/design-system/SKILL.md"),
+  "extract-design": path.join(ROOT, "skills/extract-design/SKILL.md"),
 };
 
 fs.mkdirSync(OUT, { recursive: true });
 
 const manifest = [];
+const indexEntries = [];
 let copied = 0;
 let missing = 0;
+
+function parseFrontmatter(raw) {
+  const m = raw.match(/^---\r?\n([\s\S]*?)\r?\n---/);
+  if (!m) return { name: "", description: "" };
+  const lines = (m[1] ?? "").split(/\r?\n/);
+  let name = "";
+  let description = "";
+  const stripQuotes = (s) =>
+    (s.length >= 2 && ((s[0] === '"' && s[s.length - 1] === '"') || (s[0] === "'" && s[s.length - 1] === "'")))
+      ? s.slice(1, -1)
+      : s;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const nameMatch = line.match(/^name:\s*(.+)$/);
+    if (nameMatch) { name = nameMatch[1].trim(); continue; }
+    const descMatch = line.match(/^description:\s*(.*)$/);
+    if (descMatch) {
+      let val = descMatch[1].trim();
+      if (val === ">" || val === ">-" || val === "|" || val === "|-") {
+        const folded = val.startsWith(">");
+        const parts = [];
+        for (let j = i + 1; j < lines.length; j++) {
+          if (/^\s*$/.test(lines[j])) { parts.push(""); continue; }
+          if (!/^[\s\t]/.test(lines[j])) break;
+          parts.push(lines[j].replace(/^[\s\t]+/, ""));
+        }
+        description = folded
+          ? parts.join(" ").replace(/\s+/g, " ").trim()
+          : parts.join("\n").trim();
+      } else {
+        description = stripQuotes(val);
+      }
+    }
+  }
+  return { name, description };
+}
+
+const FORGE_NATIVE_SKILL_IDS = new Set([
+  "design-system",
+  "extract-design",
+  "help-grok",
+  "check-work",
+  "implement",
+  "review",
+  "design",
+  "pr-babysit",
+  "create-skill",
+]);
 
 for (const [id, src] of Object.entries(SOURCES)) {
   if (!fs.existsSync(src)) {
@@ -69,6 +120,13 @@ for (const [id, src] of Object.entries(SOURCES)) {
   fs.copyFileSync(src, dest);
   const stat = fs.statSync(dest);
   manifest.push({ id, bytes: stat.size });
+  const fm = parseFrontmatter(fs.readFileSync(src, "utf8"));
+  indexEntries.push({
+    id,
+    name: fm.name || id,
+    description: fm.description,
+    forgeNative: FORGE_NATIVE_SKILL_IDS.has(id),
+  });
   copied++;
 }
 
@@ -103,3 +161,16 @@ fs.writeFileSync(
 console.log(`Bundle: ${copied} skills → ${OUT} (${missing} ausentes)`);
 console.log(`Manifest TS → ${tsOut}`);
 console.log(`Edge bundles → ${edgeOut}`);
+
+const indexOut = path.join(ROOT, "supabase/functions/_shared/forge-skills-index.generated.ts");
+const indexLines = indexEntries
+  .map(
+    (e) =>
+      `  { id: ${JSON.stringify(e.id)}, name: ${JSON.stringify(e.name)}, description: ${JSON.stringify(e.description)}, forgeNative: ${e.forgeNative} },`,
+  )
+  .join("\n");
+fs.writeFileSync(
+  indexOut,
+  `/** Gerado por scripts/bundle-forge-skills.mjs — não editar */\nexport type ForgeSkillIndexEntry = { id: string; name: string; description: string; forgeNative: boolean };\nexport const FORGE_SKILLS_INDEX: ForgeSkillIndexEntry[] = [\n${indexLines}\n];\n`,
+);
+console.log(`Skills index → ${indexOut} (${indexEntries.length} entries, ${indexEntries.filter((e) => e.forgeNative).length} forge-native)`);

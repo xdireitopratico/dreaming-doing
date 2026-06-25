@@ -1,4 +1,4 @@
-import { assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
+import { assert, assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import {
   countManifestImports,
   scanFileForViolations,
@@ -79,4 +79,39 @@ export default function App() {
     violations.some((v) => v.message.includes("HeroSignature+BentoGrid")),
     true,
   );
+});
+
+Deno.test("scanProjectForLandingQuality — página ORIGINAL com craft passa (premissa)", () => {
+  // <3 composites mas ≥4 seções + motion → ofício suficiente, não cola composições.
+  const files = new Map([
+    [
+      "src/App.tsx",
+      `import { FeatureMatrix, FadeIn } from "@forge/ui";
+export default function App() {
+  return (
+    <main>
+      <section className="hero"><h1>Studio</h1></section>
+      <section className="features"><FeatureMatrix items={[]} /></section>
+      <section className="narrative"><FadeIn><p>ok</p></FadeIn></section>
+      <section className="cta">Comece agora</section>
+      <footer>rodapé</footer>
+    </main>
+  );
+}`,
+    ],
+  ]);
+  assertEquals(scanProjectForLandingQuality(files).length, 0);
+});
+
+Deno.test("scanProjectForLandingQuality — página rasa sem craft falha (premissa)", () => {
+  // 1 composite, 1 seção, sem profundidade → bloqueia por ofício insuficiente.
+  const files = new Map([
+    [
+      "src/App.tsx",
+      `import { FeatureMatrix, FadeIn } from "@forge/ui";
+export default function App() { return <main><section><FeatureMatrix items={[]} /><FadeIn><p>ok</p></FadeIn></section></main>; }`,
+    ],
+  ]);
+  const v = scanProjectForLandingQuality(files);
+  assert(v.some((x) => x.message.includes("ofício suficiente")), `Deveria bloquear por ofício: ${JSON.stringify(v.map((x) => x.message))}`);
 });

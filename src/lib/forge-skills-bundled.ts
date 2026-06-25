@@ -30,6 +30,8 @@ export const BUNDLED_SKILL_IDS = new Set<string>([
   "review",
   "design",
   "pr-babysit",
+  "design-system",
+  "extract-design",
 ]);
 export function isSkillBundled(id: string): boolean {
   return BUNDLED_SKILL_IDS.has(id);

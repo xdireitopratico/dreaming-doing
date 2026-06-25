@@ -38,6 +38,18 @@ export const SKILLS_CATALOG: SkillCatalogEntry[] = [
     "Framework",
   ),
   skill("shadcn", "shadcn/ui", "Componentes e theming.", "UI"),
+  skill(
+    "design-system",
+    "FORGE Design",
+    "Composto criacional: peça única por projeto. /designsystem",
+    "UI",
+  ),
+  skill(
+    "extract-design",
+    "FORGE Extract",
+    "Extrair DNA de referências e aplicar no design. /extractdesign",
+    "UI",
+  ),
   skill("web-design-guidelines", "Web UI", "Acessibilidade e UX.", "UI"),
   skill("deploy-to-vercel", "Deploy Vercel", "Publicar na Vercel.", "Deploy"),
   skill("vercel-cli", "Vercel CLI", "CLI, env e logs.", "Deploy"),

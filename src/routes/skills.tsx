@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
-import { ArrowLeft, Plus, Wrench, Check, BookOpen, Search, X, Sparkles } from "lucide-react";
+import { ArrowLeft, Plus, Wrench, Check, BookOpen, Search, X, Sparkles, Terminal } from "lucide-react";
 import { toast } from "@/lib/toast";
 import { DashboardShell } from "@/components/dashboard/DashboardShell";
 import { SKILLS_CATALOG } from "@/lib/skills-catalog";
@@ -12,7 +12,14 @@ import {
   mergeExtensionsFromProfile,
   toggleSkillIdPersisted,
   setSkillIdsPersisted,
+  enableSkillLocal,
 } from "@/lib/agent-extensions-prefs";
+
+/** Atalhos slash → skill id (carregamento direto no chat). */
+const SLASH_BY_SKILL: Record<string, string> = {
+  "design-system": "/designsystem",
+  "extract-design": "/extractdesign",
+};
 
 export const Route = createFileRoute("/skills")({
   component: () => (
@@ -139,12 +146,11 @@ function SkillsPage() {
           <div>
             <h1 className="font-display text-3xl tracking-tight">Skills</h1>
             <p className="font-mono text-[10px] text-[var(--text-dim)] mt-0.5 max-w-xl">
-              {bundledCount} skills com SKILL.md no servidor — o agente recebe o playbook completo
-              (comprimido com orçamento inteligente). Não é MCP — ferramentas externas em{" "}
-              <Link to="/mcp" className="text-[var(--primary)] hover:underline">
-                MCP
-              </Link>
-              .
+              {bundledCount} skills com SKILL.md no servidor. Modelo híbrido: as FORGE nativas
+              são sempre visíveis ao agente (resumo compacto) — ele carrega o conteúdo completo
+              on-demand via <code>find_skills</code>/<code>load_skill</code>. Ativar aqui injeta
+              em toda run. Atalhos no chat: <code>/designsystem</code>, <code>/extractdesign</code>.
+              Não é MCP — externas em <Link to="/mcp" className="text-[var(--primary)] hover:underline">MCP</Link>.
             </p>
           </div>
         </div>
@@ -255,6 +261,21 @@ function SkillsPage() {
                       <p className="font-mono text-[9px] text-[var(--text-ghost)] mt-0.5">
                         {s.description}
                       </p>
+                      {SLASH_BY_SKILL[s.id] && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            enableSkillLocal(s.id);
+                            toast.success(
+                              `Skill “${s.name}” carregada para esta sessão. Use ${SLASH_BY_SKILL[s.id]} no chat, ou o agente carrega on-demand via load_skill.`,
+                            );
+                          }}
+                          className="mt-1.5 inline-flex items-center gap-1 font-mono text-[9px] text-[var(--primary)] hover:underline"
+                        >
+                          <Terminal className="size-3" />
+                          {SLASH_BY_SKILL[s.id]} · carregar agora
+                        </button>
+                      )}
                     </div>
                     <button
                       type="button"

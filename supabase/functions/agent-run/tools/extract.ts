@@ -176,13 +176,95 @@ export function registerExtractTools(reg: ToolRegistry, ctx: ExtractToolsContext
         return {
           toolCallId: "",
           ok: true,
-          output: result,
+          output: {
+            ...result,
+            urls,
+            hint:
+              "DNA enfileirado e será salvo automaticamente em design_system_library (job assíncrono). " +
+              "Quando o job concluir, chame read_design_library({ source_url: \"<url>\" }) para cada URL e LEIA o design_dna " +
+              "(layout, color, typography, motion, interaction, component). Aplique criativamente (skill extract-design) — extraia a intenção, não copie.",
+          },
         };
       } catch (err) {
         return {
           toolCallId: "",
           ok: false,
           error: `extract_design_dna falhou: ${(err as Error).message}`,
+          output: null,
+        };
+      }
+    },
+  );
+
+  reg.register(
+    {
+      name: "read_design_library",
+      description:
+        "Lê DesignDNA extraído (salvo por extract_design_dna) da design_system_library. " +
+        "Use DEPOIS de extract_design_dna concluir, com a source_url, para VER o que foi extraído " +
+        "(layout, color, typography, motion, interaction, component) e aplicar criativamente no design. " +
+        "Sem source_url, lista as extrações mais recentes (máx 10).",
+      parameters: {
+        type: "object",
+        properties: {
+          source_url: { type: "string", description: "URL exata da referência extraída para ler." },
+          limit: { type: "number", description: "Máximo de entradas ao listar (default 5, máx 10)." },
+        },
+      },
+    },
+    async (args) => {
+      try {
+        const sourceUrl = typeof args.source_url === "string" ? args.source_url.trim() : "";
+        const limit = Math.min(10, Math.max(1, typeof args.limit === "number" ? args.limit : 5));
+        let query = ctx.supabase
+          .from("design_system_library")
+          .select(
+            "source_url, name, quality_score, confidence, screenshot_url, design_dna, clean_html, serves_domains, compatible_languages, compatible_moods, extracted_at",
+          );
+        if (sourceUrl) {
+          query = query.eq("source_url", sourceUrl).limit(1);
+        } else {
+          query = query.order("extracted_at", { ascending: false }).limit(limit);
+        }
+        const { data, error } = await query;
+        if (error) {
+          return {
+            toolCallId: "",
+            ok: false,
+            error: `read_design_library falhou: ${error.message}`,
+            output: null,
+          };
+        }
+        const rows = (data ?? []).map((r: Record<string, unknown>) => ({
+          source_url: r.source_url,
+          name: r.name,
+          quality_score: r.quality_score,
+          confidence: r.confidence,
+          screenshot_url: r.screenshot_url,
+          design_dna: r.design_dna,
+          clean_html_preview: typeof r.clean_html === "string" ? r.clean_html.slice(0, 2000) : null,
+          serves_domains: r.serves_domains,
+          compatible_languages: r.compatible_languages,
+          compatible_moods: r.compatible_moods,
+          extracted_at: r.extracted_at,
+        }));
+        return {
+          toolCallId: "",
+          ok: true,
+          output: {
+            count: rows.length,
+            entries: rows,
+            hint:
+              rows.length === 0
+                ? "Nenhuma entrada — o job de extract_design_dna pode ainda estar rodando, ou a URL não foi extraída. Tente novamente em alguns segundos (shallow) ou minutos (deep)."
+                : "Leia o design_dna de cada entrada e aplique criativamente (skill extract-design): extraia o gesto e a intenção, adapte ao domínio, não copie.",
+          },
+        };
+      } catch (err) {
+        return {
+          toolCallId: "",
+          ok: false,
+          error: `read_design_library falhou: ${(err as Error).message}`,
           output: null,
         };
       }

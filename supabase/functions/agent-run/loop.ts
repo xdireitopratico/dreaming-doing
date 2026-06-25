@@ -200,6 +200,7 @@ export class AgentLoop {
     this.router = new ModelRouter(injectedKeys, routerOverrides, options?.resolvedMainCfg);
     this.observer = new RuntimeObserver(reg, this.fileContentCache);
     this.observer.setApprovedDesign(this.approvedPlanDesign);
+    this.observer.setDesignHistory(options?.designHistory ?? []);
     this.skills = new SkillRegistry();
     this.compression = new CompressionManager(this.configuredModel(), (type, data) =>
       this.emitter.emit(type, data),

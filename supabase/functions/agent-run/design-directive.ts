@@ -58,9 +58,35 @@ export function buildDesignDirectiveBlock(designRaw: unknown): string {
     for (const ap of antiPatterns) lines.push(`- ${ap}`);
   }
 
+  // ponytail: composto criacional — o brief entrega a PALETA e o CONVITE, não a receita.
+  // "frase simples → memorável" depende disto: explicitar o espaço combinatório e desafiar o LLM
+  // a inventar o gesto. Sem este bloco, o LLM recebe campos soltos e tende a colar o template.
+  lines.push("", "## 🧬 COMPOSTO CRIACIONAL");
+  lines.push("O que acontece se você juntar **isto** com **aquilo** — e adicionar **aquilo outro**?");
+  lines.push("Sua paleta combinatória:");
+  if (voice) lines.push(`- **Vozes:** ${voice} — leia a FILOSOFIA de cada uma, não só o nome.`);
+  if (mood) lines.push(`- **Mood:** ${mood} — a temperatura emocional da página.`);
+  if (techniques) {
+    lines.push(
+      `- **Técnicas (paleta, não mandato):** ${techniques} — combine-as pelo EFEITO perceptual. Troque livremente se outra servir melhor ao gesto memorável; o que importa é a INTENÇÃO, não a lista.`,
+    );
+  }
+  if (compositions) {
+    lines.push(
+      `- **Composições opinionated:** ${compositions} — inspiração e lições de design. Absorva a INTENÇÃO; NÃO COPIE o JSX. O que constrói é seu.`,
+    );
+  }
+  lines.push("");
+  lines.push(
+    "**Seu gesto-memorável é por inventar** — uma página, um momento que o usuário LEVARÁ ao fechar o laptop. Concreto. Específico deste domínio. Surpreendente. O restante da página EXISTE para servir a este gesto.",
+  );
+
   lines.push(
     "",
-    "Siga esta direção ao construir. Não improvise — execute a síntese aprovada.",
+    "Esta direção é seu PONTO DE PARTIDA. O framework criativo, o domínio perceptual",
+    "das técnicas e seu olhar de diretor de criação vão TRANSFORMAR este conceito",
+    "em uma experiência única. Permita-se surpreender — desde que cada escolha",
+    "sirva ao conceito central e ao domínio do projeto.",
     "---",
     "",
   );

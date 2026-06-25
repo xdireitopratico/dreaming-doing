@@ -79,6 +79,36 @@ type OpinionatedRow = {
   sandbox_read_path: string;
 };
 
+// Mapa de seção para cada composição — usado para garantir diversidade.
+const SECTION_ROLES: Record<string, string> = {
+  "hero-editorial-split": "hero",
+  "hero-brutalist-typography": "hero",
+  "hero-cinematic-spotlight": "hero",
+  "interactive-hero-demo": "hero",
+  "parallax-product-showcase": "hero",
+  "kinetic-headline-reveal": "hero",
+  "bento-dense-showcase": "features",
+  "spotlight-showcase-grid": "features",
+  "section-tabs-feature-lanes": "features",
+  "sticky-stack-narrative": "narrative",
+  "editorial-magazine-split": "narrative",
+  "glass-nav-floating": "nav",
+  "grain-artisanal-overlay": "overlay",
+  "process-steps-how-it-works": "steps",
+  "faq-accordion-craft": "faq",
+};
+
+/** Ordem de prioridade de seções — hero sempre primeiro, depois features/narrative, depois o resto. */
+const SECTION_PRIORITY: Record<string, number> = {
+  hero: 0,
+  nav: 1,
+  features: 2,
+  narrative: 3,
+  steps: 4,
+  overlay: 5,
+  faq: 6,
+};
+
 function scoreComposition(
   comp: OpinionatedRow,
   voice: string[],
@@ -90,7 +120,10 @@ function scoreComposition(
   for (const v of voice) if (comp.voice.includes(v)) score += 3;
   if (comp.compatible_moods.includes(mood)) score += 2;
   if (sectionBoost.has(comp.id)) score += 5;
-  score += (hashRotation(comp.id + String(rotation)) % 5) * 0.1;
+  // Rotação: composições menos usadas recebem boost para evitar repetição
+  // O rotation é derivado do rotationKey, garantindo que mesmo domínios iguais
+  // com projects diferentes gerem seleções distintas.
+  score += (hashRotation(comp.id + String(rotation)) % 20) * 0.08;
   return score;
 }
 
@@ -105,6 +138,16 @@ function sectionBoostIds(sections?: string[]): Set<string> {
   return boost;
 }
 
+/**
+ * Seleciona 3-5 composições garantindo diversidade de seção.
+ *
+ * Algoritmo:
+ * 1. Pontua TODAS as composições
+ * 2. Agrupa por seção (SECTION_ROLES)
+ * 3. Pega a melhor composição de cada seção disponível
+ * 4. Ordena por prioridade de seção (hero → nav → features → narrative → ...)
+ * 5. Retorna as primeiras N (mínimo 3, máximo 5)
+ */
 function pickCompositions(
   opinionated: OpinionatedRow[],
   voice: string[],
@@ -112,21 +155,59 @@ function pickCompositions(
   rotation: number,
   sections?: string[],
   excludeIds: string[] = [],
-): [OpinionatedRow, OpinionatedRow] {
+  minCount = 3,
+  maxCount = 5,
+): OpinionatedRow[] {
   const boost = sectionBoostIds(sections);
-  const ranked = [...opinionated]
-    .filter((c) => !excludeIds.includes(c.id))
-    .map((c) => ({ c, score: scoreComposition(c, voice, mood, rotation, boost) }))
-    .sort((a, b) => b.score - a.score);
+  const filtered = opinionated.filter((c) => !excludeIds.includes(c.id));
 
-  const primary = ranked[0]?.c ?? opinionated[0];
-  const secondary = ranked.find((r) => r.c.id !== primary.id)?.c ?? ranked[1]?.c ?? primary;
-  return [primary, secondary];
+  // 1. Pontua todas
+  const scored = filtered.map((c) => ({
+    c,
+    score: scoreComposition(c, voice, mood, rotation, boost),
+    section: SECTION_ROLES[c.id] ?? "other",
+  }));
+
+  // 2. Agrupa por seção, pega a melhor de cada
+  const bySection = new Map<string, typeof scored[0]>();
+  for (const item of scored) {
+    const existing = bySection.get(item.section);
+    if (!existing || item.score > existing.score) {
+      bySection.set(item.section, item);
+    }
+  }
+
+  // 3. Ordena por prioridade de seção
+  const selected = [...bySection.entries()]
+    .sort((a, b) => (SECTION_PRIORITY[a[0]] ?? 99) - (SECTION_PRIORITY[b[0]] ?? 99))
+    .map(([, item]) => item.c);
+
+  // 4. Se ainda não temos o mínimo, completa com as melhores pontuações restantes
+  if (selected.length < minCount) {
+    const usedIds = new Set(selected.map((c) => c.id));
+    const remaining = scored
+      .filter((item) => !usedIds.has(item.c.id))
+      .sort((a, b) => b.score - a.score);
+
+    for (const item of remaining) {
+      if (selected.length >= maxCount) break;
+      selected.push(item.c);
+    }
+  }
+
+  // 5. Garante mínimo, corta no máximo
+  const result = selected.slice(0, maxCount);
+  while (result.length < minCount && opinionated.length > 0) {
+    const fallback = opinionated.find((c) => !result.some((r) => r.id === c.id));
+    if (fallback) result.push(fallback);
+    else break;
+  }
+
+  return result;
 }
 
 function buildReadPaths(
-  primary: OpinionatedRow,
-  secondary: OpinionatedRow,
+  compositions: OpinionatedRow[],
   techniques: string[],
   dnaIds: string[],
 ): string[] {
@@ -143,11 +224,11 @@ function buildReadPaths(
     .filter(Boolean)
     .map((d) => d!.sandbox_read_path ?? `packages/forge-ui/src/design-dna/seeds.ts`);
 
+  const compPaths = compositions.map((c) => c.sandbox_read_path);
   return [
-    primary.sandbox_read_path,
-    secondary.sandbox_read_path,
-    ...techPaths.slice(0, 2),
-    ...dnaPaths.slice(0, 1),
+    ...compPaths,
+    ...techPaths.slice(0, 3),
+    ...dnaPaths.slice(0, 2),
   ].filter((p, i, arr) => p && arr.indexOf(p) === i) as string[];
 }
 
@@ -176,7 +257,7 @@ export function resolveDesignPackage(input: DesignResolveInput): DesignResolvePa
     extractedDnaIds: input.extractedDnaIds,
   });
 
-  let [primary, secondary] = pickCompositions(
+  let selected = pickCompositions(
     opinionated,
     core.voice,
     core.mood,
@@ -184,10 +265,21 @@ export function resolveDesignPackage(input: DesignResolveInput): DesignResolvePa
     input.sections,
   );
 
+  let primary = selected[0];
+  let momentSeed = primary?.moment ?? "Hero com hierarquia clara";
+
+  // Momento rico e verificável: gesto da composição + técnicas + mood + adaptação ao domínio
+  const momentVerifiers = [
+    `técnicas: ${core.techniques.join(", ")}`,
+    `mood: ${core.mood}`,
+    `vozes: ${core.voice.join(" + ")}`,
+  ];
+  const enrichedMoment = `${momentSeed} — ${momentVerifiers[0]} | ${momentVerifiers[1]} | adaptado para ${domain}`;
+
   let proposal: SynthesisProposal = {
     voice: core.voice,
     reasoning: core.reasoning,
-    moment: `${primary.moment} — adaptado para ${domain}`,
+    moment: enrichedMoment,
     techniques: core.techniques,
     relevant_dnas: core.relevant_dnas,
     mood: core.mood,
@@ -207,18 +299,24 @@ export function resolveDesignPackage(input: DesignResolveInput): DesignResolvePa
       rotationKey: `${input.rotationKey ?? domain}-fallback`,
       extractedDnaIds: input.extractedDnaIds,
     });
-    [primary, secondary] = pickCompositions(
+    selected = pickCompositions(
       opinionated,
       altCore.voice,
       altCore.mood,
       rotation + 1,
       input.sections,
-      [primary.id],
+      selected.map((c) => c.id),
     );
+    primary = selected[0];
+    const fallbackVerifiers = [
+      `técnicas: ${altCore.techniques.join(", ")}`,
+      `mood: ${altCore.mood}`,
+      `vozes: ${altCore.voice.join(" + ")}`,
+    ];
     proposal = {
       voice: altCore.voice,
       reasoning: `Fallback: ${altCore.reasoning}`,
-      moment: `${secondary.moment} — craft para ${domain}`,
+      moment: `${primary?.moment ?? "Hero"} — ${fallbackVerifiers[0]} | ${fallbackVerifiers[1]} | craft para ${domain}`,
       techniques: altCore.techniques,
       relevant_dnas: altCore.relevant_dnas,
       mood: altCore.mood,
@@ -229,15 +327,40 @@ export function resolveDesignPackage(input: DesignResolveInput): DesignResolvePa
     critic = reviewSynthesisFull(proposal);
   }
 
-  const read_paths = buildReadPaths(primary, secondary, proposal.techniques, proposal.relevant_dnas);
+  const read_paths = buildReadPaths(selected, proposal.techniques, proposal.relevant_dnas);
   const dna_summaries = dnaSummariesFor(proposal.relevant_dnas);
 
-  const summary = [
+  const compsStr = selected.map((c) => `${c.id} (${c.export})`).join(", ");
+  const sectionsStr = [...new Set(selected.map((c) => SECTION_ROLES[c.id] ?? "other").filter(Boolean))].join(", ");
+
+  // ponytail: composto criacional — a síntese entrega a PALETA e o convite, não a receita.
+  // Frase simples → gesto memorável: o espaço combinatório (vozes × mood × técnicas) é explicitado
+  // e as composições são LIÇÕES a absorver, não templates a colar. O gesto concreto é do LLM.
+  const compositeInvocation = [
+    "## 🧬 COMPOSTO CRIACIONAL",
+    "",
+    "O que acontece se você juntar **isto** com **aquilo** — e adicionar **aquilo outro**?",
+    "Sua paleta combinatória:",
+    `- **Vozes:** ${proposal.voice.join(" + ")} — leia a FILOSOFIA de cada uma, não só o nome.`,
+    `- **Mood:** ${proposal.mood} — a temperatura emocional da página.`,
+    `- **Técnicas (paleta, não mandatory):** ${proposal.techniques.join(", ")} — cada uma tem um EFEITO perceptual. Combine-as pelo que elas FAZEM com o usuário, troque livremente se outra servir melhor ao gesto.`,
+    "",
+    `**Composições opinionated (${selected.length}):** ${compsStr}.`,
+    "São **inspiração e lições de design** — absorva a INTENÇÃO, NÃO COPIE o JSX. Use-as como estudo e ponto de partida; o que constrói é seu.",
+    "",
+    "**Seu gesto-memorável é por inventar.** Uma página, um momento que o usuário LEVARÁ ao fechar o laptop. Concreto. Específico deste domínio. Surpreendente. O restante da página EXISTE para servir a este gesto.",
+    "",
+    "---",
+    "",
+  ].join("\n");
+
+  const mechanicalSummary = [
     `**Domain:** ${domain}`,
     `**Voice:** ${proposal.voice.join(" + ")}`,
     `**Mood:** ${proposal.mood}`,
-    `**Moment:** ${proposal.moment}`,
-    `**Compositions:** ${primary.id}, ${secondary.id} (${primary.export}, ${secondary.export})`,
+    `**Moment (SEED — transcenda):** ${proposal.moment}`,
+    `**Compositions (${selected.length}):** ${compsStr}`,
+    `**Seções cobertas:** ${sectionsStr}`,
     `**Techniques:** ${proposal.techniques.join(", ")}`,
     `**DNA:** ${proposal.relevant_dnas.join(", ")}`,
     `**Read paths:** ${read_paths.join("; ")}`,
@@ -246,10 +369,12 @@ export function resolveDesignPackage(input: DesignResolveInput): DesignResolvePa
     `**Reasoning:** ${proposal.reasoning}`,
   ].join("\n");
 
+  const summary = compositeInvocation + "\n" + mechanicalSummary;
+
   return {
     proposal,
-    compositions: [primary.id, secondary.id],
-    composition_exports: [primary.export, secondary.export],
+    compositions: selected.map((c) => c.id),
+    composition_exports: selected.map((c) => c.export),
     techniques: proposal.techniques,
     relevant_dnas: proposal.relevant_dnas,
     read_paths,

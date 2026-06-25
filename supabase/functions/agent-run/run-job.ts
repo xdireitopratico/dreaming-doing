@@ -26,6 +26,7 @@ import { registerDeployTool } from "./tools/deploy.ts";
 import { registerWebTools } from "./tools/web.ts";
 import { registerExtractTools } from "./tools/extract.ts";
 import { registerDesignTools } from "./tools/design.ts";
+import { registerSkillsTools } from "./tools/skills.ts";
 import { restoreExecutionLogFromRows } from "./executionLogMeta.ts";
 import { loadCheckpoint } from "./checkpoint.ts";
 import { buildSandboxEnv } from "./sandbox-env.ts";
@@ -256,21 +257,31 @@ export async function executeAgentJob(
   );
 
   // Paraleliza queries independentes de inicialização (reduz cold-start)
-  const [projectResult, profileResult, historyResult, userLlmResult] = await Promise.all([
-    supabase
-      .from("projects")
-      .select("id, owner_id, template, meta, design_signature")
-      .eq("id", projectId)
-      .single(),
-    supabase.from("profiles").select("integration_prefs").eq("id", userId).maybeSingle(),
-    supabase
-      .from("messages")
-      .select("role, parts, tool_calls, meta, created_at")
-      .eq("conversation_id", conversationId)
-      .order("created_at", { ascending: true })
-      .limit(120),
-    loadUserLlmContext(supabase, userId, effectivePreferences),
-  ]);
+  const [projectResult, profileResult, historyResult, userLlmResult, siblingSigResult] =
+    await Promise.all([
+      supabase
+        .from("projects")
+        .select("id, owner_id, template, meta, design_signature")
+        .eq("id", projectId)
+        .single(),
+      supabase.from("profiles").select("integration_prefs").eq("id", userId).maybeSingle(),
+      supabase
+        .from("messages")
+        .select("role, parts, tool_calls, meta, created_at")
+        .eq("conversation_id", conversationId)
+        .order("created_at", { ascending: true })
+        .limit(120),
+      loadUserLlmContext(supabase, userId, effectivePreferences),
+      // Assinaturas de design de projetos irmãos — alimenta o check de unicidade (anti-repetição).
+      supabase
+        .from("projects")
+        .select("design_signature")
+        .eq("owner_id", userId)
+        .neq("id", projectId)
+        .not("design_signature", "is", null)
+        .order("updated_at", { ascending: false })
+        .limit(20),
+    ]);
 
   const { data: project } = projectResult;
   if (!project || project.owner_id !== userId) {
@@ -282,6 +293,12 @@ export async function executeAgentJob(
   const { userOnlyKeys } = userLlmResult;
 
   const historyRows = history ?? [];
+  // Assinaturas de design dos projetos irmãos do owner (max 20). Cast seguro: rows já filtradas
+  // por `not is null`; descarta qualquer valor não-objeto remanescente (JSON antigo/migrado).
+  const siblingSigs = (siblingSigResult.data ?? []) as Array<{ design_signature: unknown }>;
+  const designHistory: DesignSignatureRecord[] = siblingSigs
+    .map((r) => r.design_signature)
+    .filter((s): s is DesignSignatureRecord => !!s && typeof s === "object");
   const restoredExecutionLog = resumeRun ? restoreExecutionLogFromRows(historyRows) : [];
   const loadedCheckpoint = resumeRun
     ? await loadCheckpoint(supabase, projectId, conversationId)
@@ -314,6 +331,7 @@ export async function executeAgentJob(
   const reg = new ToolRegistry();
   registerMetaTools(reg, { planMode });
   registerDesignTools(reg);
+  registerSkillsTools(reg);
   const projectTemplate = (project as { template?: string }).template ?? "vite-react";
   const projectMeta = ((project as { meta?: Record<string, unknown> }).meta ?? {}) as Record<
     string,
@@ -538,6 +556,7 @@ export async function executeAgentJob(
           planHeadline: typeof preMeta.planHeadline === "string" ? preMeta.planHeadline : undefined,
           planSteps: coercePlanStepsFromMeta(preMeta.steps),
           approvedPlanDesign,
+          designHistory,
           buildFixResume: preMeta.buildFix === true,
           smokeRun: isSmokeRun,
         },

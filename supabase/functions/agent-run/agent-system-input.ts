@@ -28,6 +28,7 @@ import {
 } from "./prompts.ts";
 import { getTasteStartSystemPrompt } from "./prompts-taste.ts";
 import { buildDesignManifestSummary } from "./design-manifest.ts";
+import { FORGE_SKILLS_INDEX } from "../_shared/forge-skills-index.generated.ts";
 
 const WEB_UI_TEMPLATES = new Set<ProjectTemplateId>([
   "vite-react",
@@ -60,6 +61,25 @@ function isDesignManifestInjectionEnabled(): boolean {
   }
 }
 
+/** Bloco compacto de skills FORGE nativas — one-liner cada (id + descrição).
+ * Sem bloat: só as curadas/forge-native entram no prompt; a cauda longa fica atrás de `find_skills`.
+ * O conteúdo COMPLETO da skill carrega on-demand via `load_skill`. */
+function buildAvailableSkillsBlock(): string {
+  const forgeNative = FORGE_SKILLS_INDEX.filter((e) => e.forgeNative);
+  if (forgeNative.length === 0) return "";
+  const lines = forgeNative
+    .map((e) => `- ${e.id}: ${(e.description || e.name).slice(0, 160)}`)
+    .join("\n");
+  return [
+    "<available_skills>",
+    "Skills FORGE nativas disponíveis. Você vê só o resumo — carregue o conteúdo completo só quando for usar:",
+    lines,
+    "",
+    "Para descobrir OUTRAS skills (cauda longa), chame a tool `find_skills` com uma query (ex: find_skills({ query: \"design\" })). Para carregar o conteúdo completo de uma skill, chame `load_skill` com o id (ex: load_skill({ id: \"design-system\" })).",
+    "</available_skills>",
+  ].join("\n");
+}
+
 /** System prompt enxuto — pedido do usuário vem por último nas messages, não aqui. */
 export function buildForgeAgentSystemInput(opts: ForgeAgentSystemInputOpts): string {
   const templateId = (opts.projectTemplate ?? "vite-react") as ProjectTemplateId;
@@ -78,6 +98,7 @@ export function buildForgeAgentSystemInput(opts: ForgeAgentSystemInputOpts): str
     VIBE_CODING_CORE,
     forgeSessionModeBanner(opts.planMode),
     buildToolsReference(opts.planMode),
+    buildAvailableSkillsBlock(),
     stackBlock,
   ];
 

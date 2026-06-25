@@ -64,9 +64,33 @@ Deno.test("resolveDesignPackage — S1 cada domínio passa critic e tem read_pat
   for (const { id, domain } of S1_DOMAINS) {
     const pkg = resolveDesignPackage({ domain });
     assertEquals(pkg.critic.pass, true, `critic falhou para ${id}`);
-    assert(pkg.compositions.length >= 1, `sem compositions para ${id}`);
-    assert(pkg.read_paths.length >= 2, `read_paths insuficiente para ${id}`);
+    assert(pkg.compositions.length >= 3, `mínimo 3 compositions para ${id}, obteve ${pkg.compositions.length}`);
+    assert(pkg.read_paths.length >= 3, `mínimo 3 read_paths para ${id}, obteve ${pkg.read_paths.length}`);
     assert(pkg.summary.length > 80, `summary curto para ${id}`);
+  }
+});
+
+Deno.test("resolveDesignPackage — composições têm diversidade de seção (não repete mesma seção)", () => {
+  for (const { id, domain } of S1_DOMAINS) {
+    const pkg = resolveDesignPackage({ domain });
+    assert(pkg.compositions.length >= 3, `mínimo 3 compositions para ${id}`);
+    // Verifica que as composições são diferentes entre si
+    const unique = new Set(pkg.compositions);
+    assert(unique.size === pkg.compositions.length, `compositions duplicadas em ${id}`);
+  }
+});
+
+Deno.test("resolveDesignPackage — 3-5 composições por pacote", () => {
+  for (const { id, domain } of S1_DOMAINS) {
+    const pkg = resolveDesignPackage({ domain });
+    assert(
+      pkg.compositions.length >= 3 && pkg.compositions.length <= 5,
+      `${id}: esperado 3-5 compositions, obteve ${pkg.compositions.length}`,
+    );
+    assert(
+      pkg.composition_exports.length === pkg.compositions.length,
+      `${id}: composition_exports (${pkg.composition_exports.length}) ≠ compositions (${pkg.compositions.length})`,
+    );
   }
 });
 

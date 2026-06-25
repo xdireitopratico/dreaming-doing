@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-06-05T03:24:04.310Z",
+  "generatedAt": "2026-06-25T05:37:59.588Z",
   "skills": [
     {
       "id": "brainstorming",
@@ -103,7 +103,7 @@
     },
     {
       "id": "check-work",
-      "bytes": 12820
+      "bytes": 12834
     },
     {
       "id": "implement",
@@ -120,6 +120,14 @@
     {
       "id": "pr-babysit",
       "bytes": 52522
+    },
+    {
+      "id": "design-system",
+      "bytes": 6267
+    },
+    {
+      "id": "extract-design",
+      "bytes": 3333
     }
   ]
 }

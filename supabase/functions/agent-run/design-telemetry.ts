@@ -1,6 +1,6 @@
 // design-telemetry.ts — Métricas de craft para observer e execution log.
 export type DesignTelemetryEvent = {
-  kind: "read_paths_gate" | "design_validate" | "plan_design_field" | "design_resolve";
+  kind: "read_paths_gate" | "design_validate" | "plan_design_field" | "design_resolve" | "design_fidelity" | "design_uniqueness";
   ok: boolean;
   detail?: string;
   at: string;
