@@ -3,7 +3,12 @@ import { useConnectors, type ConnectorId, type ConnectorStatus } from "@/hooks/u
 import { CONNECTOR_REGISTRY, isConnectorActive } from "@/lib/connectors/registry";
 import type { IntegrationPrefs } from "@/lib/connectors/integration-prefs";
 import { ConnectorGuideModal } from "@/components/connectors/ConnectorGuideModal";
-import { DropdownMenu, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { E2bStatusBadge } from "@/components/editor/E2bStatusBadge";
+import {
+  DropdownMenu,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   ForgeEditorDropdownContent,
   ForgeEditorDropdownItem,
@@ -29,6 +34,7 @@ export interface EditorIntegrationsMenuProps {
     kind: ConnectorId,
     payload: { token?: string; meta?: Record<string, unknown>; disconnect?: boolean },
   ) => Promise<void>;
+  e2bConnected?: boolean;
 }
 
 export function EditorIntegrationsMenu(props?: Partial<EditorIntegrationsMenuProps>) {
@@ -39,6 +45,7 @@ export function EditorIntegrationsMenu(props?: Partial<EditorIntegrationsMenuPro
   const openConnector = props?.openConnector ?? internal.openConnector;
   const closeModal = props?.closeModal ?? internal.closeModal;
   const saveConnector = props?.saveConnector ?? internal.saveConnector;
+  const e2bConnected = props?.e2bConnected ?? false;
 
   const connectedCount = MENU_IDS.filter((id) =>
     isConnectorActive(id, modes[id], status[id]),
@@ -65,6 +72,10 @@ export function EditorIntegrationsMenu(props?: Partial<EditorIntegrationsMenuPro
           sideOffset={6}
           className="min-w-[200px]"
         >
+          <div className="px-2 py-2">
+            <E2bStatusBadge e2bConnected={e2bConnected} />
+          </div>
+          <DropdownMenuSeparator className="mx-0 my-0" />
           {MENU_IDS.map((id) => {
             const entry = CONNECTOR_REGISTRY[id];
             const active = isConnectorActive(id, modes[id], status[id]);

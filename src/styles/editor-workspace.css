@@ -679,7 +679,7 @@ body:has(.editor-workspace) {
 
 .editor-workspace [role="menu"],
 .editor-workspace [data-radix-menu-content] {
-  background-color: var(--forge-surface-3) !important;
+  background: linear-gradient(135deg, #1a1e27, #0b0d12) !important;
   color: var(--forge-text) !important;
   border-color: var(--forge-primary) !important;
 }
@@ -691,7 +691,7 @@ body:has(.editor-workspace) {
 
 .editor-workspace [role="menuitem"][data-highlighted],
 .editor-workspace [role="menuitem"]:focus {
-  background-color: var(--forge-surface-3) !important;
+  background: linear-gradient(135deg, #1e2229, #12151c) !important;
   color: var(--forge-text) !important;
 }
 
@@ -1373,7 +1373,7 @@ body:has(.editor-workspace) {
 
 /* Ensure dropdowns over preview have solid dark bg (fix screenshot bug) */
 [data-radix-popper-content-wrapper] .forge-dropdown-panel {
-  background-color: #1a1e27 !important;
+  background: linear-gradient(135deg, #1a1e27, #0b0d12) !important;
   color: var(--forge-text) !important;
   border-color: var(--forge-primary) !important;
   opacity: 1 !important;
@@ -1385,7 +1385,7 @@ body:has(.editor-workspace) {
 
 [data-radix-popper-content-wrapper] .forge-dropdown-item:focus,
 [data-radix-popper-content-wrapper] .forge-dropdown-item[data-highlighted] {
-  background-color: #252a36 !important;
+  background: linear-gradient(135deg, #1e2229, #12151c) !important;
   color: var(--forge-text) !important;
 }
 

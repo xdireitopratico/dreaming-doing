@@ -456,7 +456,7 @@
 
 /* Radix dropdowns do editor (portal no body — fora de .editor-workspace) */
 .forge-dropdown-panel {
-  background-color: #1a1e27 !important;
+  background: linear-gradient(135deg, #1a1e27, #0b0d12) !important;
   opacity: 1 !important;
   backdrop-filter: none !important;
   border-color: rgba(237, 239, 242, 0.14) !important;
@@ -465,6 +465,6 @@
 
 .forge-dropdown-panel .forge-dropdown-item[data-highlighted],
 .forge-dropdown-panel .forge-dropdown-item:focus {
-  background-color: #252a36 !important;
+  background: linear-gradient(135deg, #1e2229, #12151c) !important;
   color: #edeff2 !important;
 }

@@ -544,7 +544,7 @@
   padding: 0 12px;
   border-radius: var(--chat-cta-radius);
   border: 1px solid color-mix(in srgb, var(--border-forge) 80%, transparent);
-  background: color-mix(in srgb, var(--bg-input) 85%, transparent);
+  background: linear-gradient(135deg, #1a1e27, #0b0d12);
   color: var(--text-secondary);
   font-size: 12px;
   font-weight: 500;
@@ -1461,7 +1461,7 @@
   height: 28px;
   border-radius: var(--chat-cta-radius);
   border: 1px solid color-mix(in srgb, var(--border-forge) 80%, transparent);
-  background: color-mix(in srgb, var(--bg-input) 85%, transparent);
+  background: linear-gradient(135deg, #1a1e27, #0b0d12);
   color: var(--text-muted);
   cursor: pointer;
   transition:
@@ -1484,7 +1484,7 @@
   padding: 0 10px;
   border-radius: var(--chat-cta-radius);
   border: 1px solid color-mix(in srgb, var(--border-forge) 80%, transparent);
-  background: color-mix(in srgb, var(--bg-input) 85%, transparent);
+  background: linear-gradient(135deg, #1a1e27, #0b0d12);
   font-size: 11px;
   font-weight: 500;
   color: var(--text-secondary);
@@ -1497,7 +1497,7 @@
 }
 
 .forge-composer-visual-edits:hover {
-  background: var(--bg-hover);
+  background: linear-gradient(135deg, #1e2229, #12151c);
   color: var(--text-primary);
   border-color: var(--border-active);
 }
@@ -1519,7 +1519,7 @@
   height: 28px;
   border-radius: var(--chat-cta-radius);
   border: 1px solid color-mix(in srgb, var(--border-forge) 80%, transparent);
-  background: color-mix(in srgb, var(--bg-input) 85%, transparent);
+  background: linear-gradient(135deg, #1a1e27, #0b0d12);
   color: var(--text-muted);
   cursor: pointer;
   transition:
@@ -1572,7 +1572,7 @@
   padding: 0 10px;
   border-radius: var(--chat-cta-radius);
   border: 1px solid color-mix(in srgb, var(--border-forge) 80%, transparent);
-  background: color-mix(in srgb, var(--bg-input) 85%, transparent);
+  background: linear-gradient(135deg, #1a1e27, #0b0d12);
   font-size: 11px;
   font-weight: 600;
   color: var(--text-secondary);
@@ -1647,7 +1647,7 @@
   padding: 4px 10px;
   border-radius: var(--chat-cta-radius);
   border: 1px solid color-mix(in srgb, var(--border-forge) 80%, transparent);
-  background: color-mix(in srgb, var(--bg-input) 85%, transparent);
+  background: linear-gradient(135deg, #1a1e27, #0b0d12);
   color: var(--text-secondary);
   font-size: 10px;
   cursor: pointer;
@@ -1999,7 +1999,7 @@
   font-family: "JetBrains Mono", ui-monospace, monospace;
   font-size: 9px;
   color: var(--text-secondary);
-  background: var(--forge-surface-2, #12151c);
+  background: linear-gradient(135deg, #1a1e27, #0b0d12);
   cursor: pointer;
 }
 

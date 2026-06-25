@@ -9,7 +9,6 @@ import {
 import { PreviewRouteNav } from "@/components/editor/PreviewRouteNav";
 import { previewDeviceWidth, type PreviewDevice } from "@/components/editor/PreviewViewportChrome";
 import { Monitor, Smartphone, Tablet } from "lucide-react";
-import { E2bStatusBadge } from "@/components/editor/E2bStatusBadge";
 import {
   InspectorNavControls,
   type InspectorNavControlsProps,
@@ -107,8 +106,7 @@ export function EditorWorkspaceHeader({
         </div>
 
         <span className="forge-topbar-divider mx-1 shrink-0" aria-hidden />
-        <EditorIntegrationsMenu {...integrations} />
-        <E2bStatusBadge e2bConnected={e2bConnected} />
+        <EditorIntegrationsMenu {...integrations} e2bConnected={e2bConnected} />
         {previewStatusLabel && activeView === "preview" && (
           <span className="forge-preview-status-pill">{previewStatusLabel}</span>
         )}
