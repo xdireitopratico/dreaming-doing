@@ -31,8 +31,7 @@
     "paths": {
       "@/*": ["./src/*"],
       "@forge/agent-contract": ["./packages/agent-contract/src/index.ts"],
-      "@forge/agent-contract/*": ["./packages/agent-contract/src/*"],
-      "@xyflow/react": ["./src/types/xyflow-react-shim.ts"]
+      "@forge/agent-contract/*": ["./packages/agent-contract/src/*"]
     }
   }
 }

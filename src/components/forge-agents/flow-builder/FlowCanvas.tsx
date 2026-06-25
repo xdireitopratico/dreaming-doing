@@ -4,10 +4,9 @@
  */
 import { memo, useCallback, useEffect, useMemo } from "react";
 import {
-  ReactFlow, Background, Controls, MiniMap, ReactFlowProvider,
-  useReactFlow,
+  ReactFlow, ReactFlowProvider, Background, Controls, MiniMap,
+  useReactFlow, addEdge,
   type Node, type Edge, type Connection, type OnNodesChange, type OnEdgesChange,
-  addEdge,
 } from "@/types/xyflow-react-shim";
 import "@xyflow/react/dist/style.css";
 import { TriggerNode } from "./nodes/TriggerNode";

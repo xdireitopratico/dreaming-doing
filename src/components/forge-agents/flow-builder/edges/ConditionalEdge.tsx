@@ -1,12 +1,7 @@
 /**
  * ConditionalEdge — Edge customizado com label, cor condicional e badge de condição
  */
-import {
-  BaseEdge,
-  EdgeLabelRenderer,
-  getBezierPath,
-  type EdgeProps,
-} from "@/types/xyflow-react-shim";
+import { BaseEdge, EdgeLabelRenderer, getBezierPath, type EdgeProps } from "@/types/xyflow-react-shim";
 
 const EDGE_COLORS: Record<string, string> = {
   default: "hsl(var(--primary))",
