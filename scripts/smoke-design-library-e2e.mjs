@@ -1,4 +1,9 @@
 #!/usr/bin/env node
+// ⚠️ DEPREPRECATED / QUEBRADO — não usar. Este smoke sintético causou regressão ontem
+// (poluiu agent_preferences da conta admin — já mitigado por commit e99c389 + guard isSmokeRun).
+// Validação REAL do pipeline de extract = uma run agent de verdade com /extractdesign <url>
+// (admin) → extract_design_dna → read_design_library → aplicar. NÃO apagar ainda (decisão
+// do dono); substituir quando a validação real estiver documentada.
 /**
  * E2E smoke: Design DNA Library
  *
