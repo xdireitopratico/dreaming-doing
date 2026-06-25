@@ -6,7 +6,6 @@
 import { lazy, Suspense, useCallback, useEffect, useReducer, useState, useMemo, useRef } from "react";
 
 import { PrometheusLoadingSkeleton } from "@/components/forge-prometheus/PrometheusLoadingSkeleton";
-import { PrometheusHome } from "@/components/forge-prometheus/PrometheusHome";
 import { PrometheusPhaseHeader } from "@/components/forge-prometheus/PrometheusPhaseHeader";
 import { PrometheusPhaseTransition } from "@/components/forge-prometheus/PrometheusPhaseTransition";
 import { FlowBuilderDialog } from "./flow-builder/FlowBuilderDialog";
@@ -827,27 +826,15 @@ export default function AdminAgentBuilderView({
     );
   }
 
-  // Home
+  // Protótipo PrometheusHome removido do runtime (arquivado em src/components/_archive/forge-prometheus-prototype).
+  // Home agora redireciona para o dashboard de agentes; o boardroom/editor são acessados pelos caminhos oficiais.
+  useEffect(() => {
+    handleGoHome();
+  }, []);
+
   return (
     <div className={`${fullScreenClass} overflow-auto`}>
-      <PrometheusHome
-        initialPrompt={hydratedPrompt}
-        onLaunch={handleLaunch}
-        onOpenBuilder={handleCreate}
-        onOpenBuilderWithFlow={handleResumeOrOpenFlow}
-        resumeSession={resumeSession}
-        recentAgents={recentAgents}
-        onOpenAgent={handleResumeOrOpenFlow}
-        onDeleteAgent={handleDelete}
-        onOpenMonitoring={handleOpenMonitoring}
-      />
-      {builderOpen && selectedFlowId && (
-        <FlowBuilderDialog
-          flowId={selectedFlowId}
-          open={builderOpen}
-          onClose={handleBuilderClose}
-        />
-      )}
+      <PrometheusLoadingSkeleton />
     </div>
   );
 }
