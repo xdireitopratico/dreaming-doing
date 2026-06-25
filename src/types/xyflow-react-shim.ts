@@ -1,5 +1,19 @@
 import type { CSSProperties, ComponentType, ReactNode } from "react";
-import * as XY from "@xyflow/react";
+import {
+  ReactFlow as XYReactFlow,
+  ReactFlowProvider as XYReactFlowProvider,
+  Background as XYBackground,
+  Controls as XYControls,
+  MiniMap as XYMiniMap,
+  Panel as XYPanel,
+  Handle as XYHandle,
+  useReactFlow as xyUseReactFlow,
+  useNodesState as xyUseNodesState,
+  useEdgesState as xyUseEdgesState,
+  addEdge as xyAddEdge,
+  applyNodeChanges as xyApplyNodeChanges,
+  applyEdgeChanges as xyApplyEdgeChanges,
+} from "@xyflow/react";
 
 export type Node<Data = Record<string, unknown>, Type extends string = string> = {
   id: string;
@@ -88,13 +102,13 @@ export const Position = {
   Left: "left",
 } as const;
 
-export const ReactFlow = XY.ReactFlow as unknown as ComponentType<any>;
-export const ReactFlowProvider = XY.ReactFlowProvider as unknown as ComponentType<{ children?: ReactNode }>;
-export const Background = XY.Background as unknown as ComponentType<any>;
-export const Controls = XY.Controls as unknown as ComponentType<any>;
-export const MiniMap = XY.MiniMap as unknown as ComponentType<any>;
-export const Panel = XY.Panel as unknown as ComponentType<any>;
-export const Handle = XY.Handle as unknown as ComponentType<any>;
+export const ReactFlow = XYReactFlow as unknown as ComponentType<any>;
+export const ReactFlowProvider = XYReactFlowProvider as unknown as ComponentType<{ children?: ReactNode }>;
+export const Background = XYBackground as unknown as ComponentType<any>;
+export const Controls = XYControls as unknown as ComponentType<any>;
+export const MiniMap = XYMiniMap as unknown as ComponentType<any>;
+export const Panel = XYPanel as unknown as ComponentType<any>;
+export const Handle = XYHandle as unknown as ComponentType<any>;
 export const BaseEdge = ((props: {
   id?: string;
   path?: string;
@@ -125,34 +139,34 @@ export function useReactFlow<TNode extends Node = Node, TEdge extends Edge = Edg
   setEdges: (edges: TEdge[] | ((edges: TEdge[]) => TEdge[])) => void;
   project: (position: { x: number; y: number }) => { x: number; y: number };
 } {
-  return XY.useReactFlow() as any;
+  return xyUseReactFlow() as any;
 }
 
 export function useNodesState<TNode extends Node = Node>(
   initialNodes: TNode[] = [],
 ): [TNode[], (value: TNode[] | ((nodes: TNode[]) => TNode[])) => void, OnNodesChange] {
-  return XY.useNodesState(initialNodes as any) as any;
+  return xyUseNodesState(initialNodes as any) as any;
 }
 
 export function useEdgesState<TEdge extends Edge = Edge>(
   initialEdges: TEdge[] = [],
 ): [TEdge[], (value: TEdge[] | ((edges: TEdge[]) => TEdge[])) => void, OnEdgesChange] {
-  return XY.useEdgesState(initialEdges as any) as any;
+  return xyUseEdgesState(initialEdges as any) as any;
 }
 
 export function addEdge<TEdge extends Edge = Edge>(
   edge: Partial<TEdge> & { source: string | null | undefined; target: string | null | undefined },
   edges: TEdge[],
 ): TEdge[] {
-  return XY.addEdge(edge as any, edges as any) as TEdge[];
+  return xyAddEdge(edge as any, edges as any) as TEdge[];
 }
 
 export function applyNodeChanges<TNode extends Node>(changes: unknown[], nodes: TNode[]): TNode[] {
-  return XY.applyNodeChanges(changes as any, nodes as any) as TNode[];
+  return xyApplyNodeChanges(changes as any, nodes as any) as TNode[];
 }
 
 export function applyEdgeChanges<TEdge extends Edge>(changes: unknown[], edges: TEdge[]): TEdge[] {
-  return XY.applyEdgeChanges(changes as any, edges as any) as TEdge[];
+  return xyApplyEdgeChanges(changes as any, edges as any) as TEdge[];
 }
 
 export const MarkerType = {

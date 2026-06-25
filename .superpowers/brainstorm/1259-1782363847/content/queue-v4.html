@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Queue — Design Final v4</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family: system-ui,-apple-system,sans-serif; background:#0c0d11; color:#e0e0e6; padding:2rem; }
+  h1 { font-size:18px; font-weight:600; color:#b0b0c0; margin-bottom:4px; }
+  .sub { font-size:12px; color:#666; margin-bottom:24px; }
+  .grid { display:flex; flex-direction:column; gap:40px; }
+  .label { font-size:10px; font-weight:600; text-transform:uppercase; letter-spacing:.06em; color:#555; margin-bottom:10px; }
+
+  /* ── Shell (composer/plan-dock/queue — MESMO visual) ── */
+  .shell {
+    margin: 0 0 8px 0;
+    padding: 12px 14px 10px;
+    border-radius: 20px;
+    background: linear-gradient(135deg, #1a1e27, #0b0d12);
+    border: 1px solid rgba(237,239,242,0.14);
+    backdrop-filter: blur(28px) saturate(140%);
+    box-shadow: 0 24px 80px rgba(0,0,0,0.45), 0 0 0 1px rgba(255,182,39,0.04) inset;
+  }
+
+  /* ── Chat column ── */
+  .col {
+    width: 380px; margin: 0 auto;
+    display: flex; flex-direction: column;
+    border-radius: 14px; background: #101018;
+    border: 1px solid #222; overflow: hidden;
+    padding: 14px; min-height: 420px;
+  }
+  .msgs {
+    flex:1; padding-bottom:14px; color:#555; font-size:11px;
+    text-align:center; display:flex; align-items:center;
+    justify-content:center; min-height:70px;
+  }
+
+  /* ── Queue header ── */
+  .qh { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; }
+  .ql { font-size:11px; font-weight:600; letter-spacing:.04em; text-transform:uppercase; color:#777; }
+  .qc { color:#999; font-weight:400; }
+  .qbadge {
+    font-size:8px; padding:1px 6px; border-radius:4px;
+    background:rgba(250,204,21,0.08); color:#facc15;
+    border:1px solid rgba(250,204,21,0.15);
+    text-transform:uppercase; letter-spacing:.04em; font-weight:600;
+    margin-left:6px;
+  }
+
+  .qgp {
+    display:inline-flex; align-items:center; gap:5px;
+    padding:4px 10px; border-radius:8px;
+    border:1px solid rgba(237,239,242,0.1);
+    background:rgba(26,30,39,0.6);
+    color:#888; font-size:10px; cursor:default;
+    transition: all .15s;
+  }
+  .qgp:hover { color:#bbb; border-color:rgba(237,239,242,0.2); }
+  .qgp .ico { font-size:11px; }
+
+  /* ── Queue list ── */
+  .qlist {
+    display:flex; flex-direction:column; gap:6px;
+    max-height:168px; overflow-y:auto;
+  }
+  .qlist::-webkit-scrollbar { width:4px; }
+  .qlist::-webkit-scrollbar-track { background:transparent; }
+  .qlist::-webkit-scrollbar-thumb { background:#2a2a35; border-radius:4px; }
+
+  /* ── Queue item — MESMA cor do shell, sem fundo preto ── */
+  .qi {
+    display:flex; align-items:center; gap:8px;
+    padding:7px 10px; border-radius:10px;
+    background: linear-gradient(135deg, #1a1e27, #0b0d12);
+    border: 1px solid rgba(237,239,242,0.08);
+    transition: border-color .15s;
+  }
+  .qi:hover { border-color:rgba(237,239,242,0.16); }
+  .qi.paused { opacity:0.45; }
+
+  .qgrip {
+    flex-shrink:0; width:14px; display:flex; align-items:center;
+    color:#333; font-size:9px; cursor:grab; user-select:none;
+    letter-spacing:-1px; line-height:1;
+  }
+
+  .qi-num {
+    flex-shrink:0; width:18px; height:18px;
+    display:inline-flex; align-items:center; justify-content:center;
+    border-radius:5px; font-size:9px; font-weight:600;
+    color:#888; background:rgba(255,255,255,0.04);
+  }
+
+  .qi-text {
+    flex:1; min-width:0; margin:0;
+    font-size:12px; line-height:1.4; color:#b0b0c0;
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  }
+
+  /* ── Dropdown "..." button ── */
+  .qi-dots {
+    flex-shrink:0; width:26px; height:26px;
+    display:inline-flex; align-items:center; justify-content:center;
+    border-radius:6px; border:1px solid transparent;
+    background:transparent; color:#555; cursor:default;
+    font-size:14px; font-weight:700; letter-spacing:-1px;
+    transition: all .15s;
+  }
+  .qi-dots:hover { color:#bbb; background:rgba(255,255,255,0.04); border-color:rgba(237,239,242,0.1); }
+
+  /* ── Dropdown menu ── */
+  .dd {
+    position:absolute; right:0; top:100%; margin-top:4px;
+    width:160px; padding:4px;
+    border-radius:10px; z-index:10;
+    background:linear-gradient(135deg, #1a1e27, #0b0d12);
+    border:1px solid rgba(237,239,242,0.14);
+    backdrop-filter:blur(28px) saturate(140%);
+    box-shadow:0 12px 40px rgba(0,0,0,0.5);
+  }
+  .dd-item {
+    display:flex; align-items:center; gap:8px;
+    padding:7px 10px; border-radius:6px;
+    color:#888; font-size:12px; cursor:default;
+    transition: all .12s;
+  }
+  .dd-item:hover { background:rgba(255,255,255,0.05); color:#ccc; }
+  .dd-item .dd-ico { width:16px; text-align:center; font-size:13px; }
+  .dd-item.danger { color:#c77; }
+  .dd-item.danger:hover { background:rgba(248,113,113,0.06); color:#f87171; }
+  .dd-sep { height:1px; margin:4px 8px; background:rgba(237,239,242,0.08); }
+
+  /* ── Edit mode ── */
+  .qi-edit {
+    flex:1; min-width:0;
+  }
+  .qi-edit-input {
+    width:100%; padding:3px 6px; border-radius:5px;
+    background:rgba(255,255,255,0.04);
+    border:1px solid rgba(237,239,242,0.2);
+    color:#ccc; font-size:12px; line-height:1.4; outline:none;
+  }
+  .qi-edit-input:focus { border-color:rgba(237,239,242,0.35); }
+  .qi-edit-btns { display:flex; gap:2px; flex-shrink:0; }
+  .qi-edit-btn {
+    width:24px; height:24px; border-radius:5px; border:none;
+    background:transparent; color:#666; cursor:default;
+    display:inline-flex; align-items:center; justify-content:center;
+    font-size:12px; transition: color .15s;
+  }
+  .qi-edit-btn.save { color:#6a9; }
+  .qi-edit-btn.save:hover { color:#8bc; }
+  .qi-edit-btn.cancel { color:#c77; }
+  .qi-edit-btn.cancel:hover { color:#f87171; }
+
+  /* ── Repeat input (inline) ── */
+  .qi-repeat {
+    flex-shrink:0; display:flex; align-items:center; gap:3px;
+    font-size:10px; color:#555;
+  }
+  .qi-repeat input {
+    width:32px; height:22px; padding:0 2px; border-radius:4px;
+    border:1px solid rgba(237,239,242,0.1);
+    background:rgba(255,255,255,0.03);
+    color:#999; font-size:10px; text-align:center; outline:none;
+  }
+  .qi-repeat input:focus { border-color:rgba(237,239,242,0.25); }
+
+  /* ── Shimmer (reference) ── */
+  .shimmer-lines { display:flex; flex-direction:column; gap:8px; }
+  .shimmer-line {
+    height:10px; border-radius:4px;
+    background:linear-gradient(90deg, rgba(26,30,39,0.8) 0%, rgba(26,30,39,0.5) 50%, rgba(26,30,39,0.8) 100%);
+    background-size:200% 100%;
+    animation:shimmer 1.4s ease-in-out infinite;
+  }
+  @keyframes shimmer { 0%{background-position:100% 0} 100%{background-position:-100% 0} }
+  .creating-label { margin-top:6px; font-size:13px; font-weight:500; color:#777; }
+
+  /* ── Composer ── */
+  .comp {
+    margin-top:8px; padding:12px 14px 10px;
+    border-radius:20px;
+    background:linear-gradient(135deg,#1a1e27,#0b0d12);
+    border:1px solid rgba(237,239,242,0.14);
+    backdrop-filter:blur(28px) saturate(140%);
+    box-shadow:0 24px 80px rgba(0,0,0,0.45),0 0 0 1px rgba(255,182,39,0.04) inset;
+  }
+  .comp-ta {
+    width:100%; min-height:26px; background:transparent;
+    border:none; outline:none; color:#555; font-size:13px;
+    line-height:1.6; resize:none;
+  }
+  .comp-row { display:flex; align-items:center; gap:6px; margin-top:8px; }
+  .comp-sp { flex:1; }
+  .comp-btn {
+    width:28px; height:28px; border-radius:8px;
+    background:rgba(26,30,39,0.6); color:#666;
+    border:1px solid rgba(237,239,242,0.1);
+    display:grid; place-items:center; font-size:13px; cursor:default;
+  }
+  .comp-btn-a { background:#888; color:#0a0a0a; border-color:transparent; }
+
+  .note {
+    display:flex; gap:8px; align-items:flex-start;
+    padding:10px 12px; border-radius:8px; margin-top:16px;
+    background:rgba(255,255,255,0.02); border:1px solid rgba(237,239,242,0.06);
+    font-size:12px; color:#777; line-height:1.5;
+  }
+  .note .n { font-size:14px; flex-shrink:0; }
+</style>
+</head>
+<body>
+
+<h1>Queue — Design Final v4</h1>
+<p class="sub">Cores reais do composer. Dropdown "..." nas ações. Sem fundo preto. Uniformidade.</p>
+
+<div class="grid">
+
+  <!-- ═══ A · Fila ativa ═══ -->
+  <div>
+    <div class="label">A · Fila ativa — auto-processa após done</div>
+    <div class="col">
+      <div class="msgs">── mensagens do chat ──</div>
+      <div class="shell">
+        <div class="qh">
+          <p class="ql">Queue <span class="qc">· 4</span></p>
+          <button class="qgp"><span class="ico">⏸</span> Pausar</button>
+        </div>
+        <div class="qlist">
+          <div class="qi">
+            <span class="qgrip">⠿</span>
+            <span class="qi-num">1</span>
+            <p class="qi-text">Kill a task de deploy e rode os testes novamente</p>
+            <span class="qi-repeat">×</span>
+            <span class="qi-repeat"><input type="text" value="3" readonly></span>
+            <div style="position:relative">
+              <button class="qi-dots">···</button>
+            </div>
+          </div>
+          <div class="qi">
+            <span class="qgrip">⠿</span>
+            <span class="qi-num">2</span>
+            <p class="qi-text">Ajusta o CSS do header pra responsividade mobile</p>
+            <span class="qi-repeat">×</span>
+            <span class="qi-repeat"><input type="text" value="1" readonly></span>
+            <div style="position:relative">
+              <button class="qi-dots">···</button>
+            </div>
+          </div>
+          <div class="qi">
+            <span class="qgrip">⠿</span>
+            <span class="qi-num">3</span>
+            <p class="qi-text">Refatora o hook de autenticação pra usar context API</p>
+            <span class="qi-repeat">×</span>
+            <span class="qi-repeat"><input type="text" value="50" readonly></span>
+            <div style="position:relative">
+              <button class="qi-dots">···</button>
+            </div>
+          </div>
+          <div class="qi">
+            <span class="qgrip">⠿</span>
+            <span class="qi-num">4</span>
+            <p class="qi-text">Cria a página de configurações com formulário de…</p>
+            <span class="qi-repeat">×</span>
+            <span class="qi-repeat"><input type="text" value="1" readonly></span>
+            <div style="position:relative">
+              <button class="qi-dots">···</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="comp">
+        <textarea class="comp-ta" placeholder="Queue follow-up..."></textarea>
+        <div class="comp-row">
+          <div class="comp-btn">+</div>
+          <div class="comp-sp"></div>
+          <div class="comp-btn">■</div>
+          <div class="comp-btn comp-btn-a">↑</div>
+        </div>
+      </div>
+    </div>
+    <div class="note">
+      <span class="n">▸</span>
+      <span>Cada item: grip drag + índice + preview truncado + ×repeat + <strong>···</strong> (dropdown). Tudo na mesma cor do shell — sem fundo preto. Dropdown abre opções: Editar, Remover.</span>
+    </div>
+  </div>
+
+  <!-- ═══ B · Dropdown aberto ═══ -->
+  <div>
+    <div class="label">B · Dropdown "···" aberto</div>
+    <div class="col">
+      <div class="msgs">── mensagens do chat ──</div>
+      <div class="shell">
+        <div class="qh">
+          <p class="ql">Queue <span class="qc">· 3</span></p>
+          <button class="qgp"><span class="ico">⏸</span> Pausar</button>
+        </div>
+        <div class="qlist" style="max-height:none;">
+          <div class="qi" style="border-color:rgba(237,239,242,0.2);">
+            <span class="qgrip">⠿</span>
+            <span class="qi-num">1</span>
+            <p class="qi-text">Kill a task de deploy e rode os testes novamente</p>
+            <span class="qi-repeat">×</span>
+            <span class="qi-repeat"><input type="text" value="3" readonly></span>
+            <div style="position:relative">
+              <button class="qi-dots" style="color:#bbb;background:rgba(255,255,255,0.04);border-color:rgba(237,239,242,0.14);">···</button>
+              <div class="dd">
+                <div class="dd-item"><span class="dd-ico">✎</span> Editar texto</div>
+                <div class="dd-item"><span class="dd-ico">×</span> Repetições: 3</div>
+                <div class="dd-sep"></div>
+                <div class="dd-item danger"><span class="dd-ico">✕</span> Remover</div>
+              </div>
+            </div>
+          </div>
+          <div class="qi">
+            <span class="qgrip">⠿</span>
+            <span class="qi-num">2</span>
+            <p class="qi-text">Ajusta o CSS do header pra responsividade</p>
+            <span class="qi-repeat">×</span>
+            <span class="qi-repeat"><input type="text" value="1" readonly></span>
+            <div style="position:relative"><button class="qi-dots">···</button></div>
+          </div>
+          <div class="qi">
+            <span class="qgrip">⠿</span>
+            <span class="qi-num">3</span>
+            <p class="qi-text">Refatora o hook de autenticação pra usar context API</p>
+            <span class="qi-repeat">×</span>
+            <span class="qi-repeat"><input type="text" value="50" readonly></span>
+            <div style="position:relative"><button class="qi-dots">···</button></div>
+          </div>
+        </div>
+      </div>
+      <div class="comp">
+        <textarea class="comp-ta" placeholder="Queue follow-up..."></textarea>
+        <div class="comp-row">
+          <div class="comp-btn">+</div>
+          <div class="comp-sp"></div>
+          <div class="comp-btn">■</div>
+          <div class="comp-btn comp-btn-a">↑</div>
+        </div>
+      </div>
+    </div>
+    <div class="note">
+      <span class="n">▸</span>
+      <span>Dropdown <strong>"···"</strong> abre: Editar texto, Repetições (inline input), Remover. Mesmo estilo visual do composer — cinza degradê, sem preto.</span>
+    </div>
+  </div>
+
+  <!-- ═══ C · Editando inline ═══ -->
+  <div>
+    <div class="label">C · Editando item (via dropdown ou duplo-clique)</div>
+    <div class="col">
+      <div class="msgs">── mensagens do chat ──</div>
+      <div class="shell">
+        <div class="qh">
+          <p class="ql">Queue <span class="qc">· 2</span></p>
+          <button class="qgp"><span class="ico">⏸</span> Pausar</button>
+        </div>
+        <div class="qlist" style="max-height:none;">
+          <div class="qi" style="border-color:rgba(237,239,242,0.25);">
+            <span class="qgrip" style="opacity:0.3">⠿</span>
+            <span class="qi-num" style="color:#aaa;background:rgba(255,255,255,0.06);">1</span>
+            <div class="qi-edit">
+              <input class="qi-edit-input" type="text" value="Kill a task de deploy e rode os testes novamente">
+            </div>
+            <div class="qi-edit-btns">
+              <button class="qi-edit-btn save">✓</button>
+              <button class="qi-edit-btn cancel">✕</button>
+            </div>
+          </div>
+          <div class="qi">
+            <span class="qgrip">⠿</span>
+            <span class="qi-num">2</span>
+            <p class="qi-text">Ajusta o CSS do header pra responsividade</p>
+            <span class="qi-repeat">×</span>
+            <span class="qi-repeat"><input type="text" value="1" readonly></span>
+            <div style="position:relative"><button class="qi-dots">···</button></div>
+          </div>
+        </div>
+      </div>
+      <div class="comp">
+        <textarea class="comp-ta" placeholder="Queue follow-up..."></textarea>
+        <div class="comp-row">
+          <div class="comp-btn">+</div>
+          <div class="comp-sp"></div>
+          <div class="comp-btn">■</div>
+          <div class="comp-btn comp-btn-a">↑</div>
+        </div>
+      </div>
+    </div>
+    <div class="note">
+      <span class="n">▸</span>
+      <span>Preview vira input com borda sutil. ✓ salva (Enter), ✕ cancela (Esc). Grip desabilitado durante edição.</span>
+    </div>
+  </div>
+
+  <!-- ═══ D · Fila pausada ═══ -->
+  <div>
+    <div class="label">D · Fila pausada</div>
+    <div class="col">
+      <div class="msgs">── mensagens do chat ──</div>
+      <div class="shell">
+        <div class="qh">
+          <p class="ql">Queue <span class="qc">· 2</span> <span class="qbadge">pausada</span></p>
+          <button class="qgp" style="border-color:rgba(250,204,21,0.15);color:#facc15;"><span class="ico">▶</span> Retomar</button>
+        </div>
+        <div class="qlist" style="max-height:none;">
+          <div class="qi paused">
+            <span class="qgrip">⠿</span>
+            <span class="qi-num">1</span>
+            <p class="qi-text">Kill a task de deploy e rode os testes novamente</p>
+            <span class="qi-repeat">×</span>
+            <span class="qi-repeat"><input type="text" value="3" readonly></span>
+            <div style="position:relative"><button class="qi-dots">···</button></div>
+          </div>
+          <div class="qi paused">
+            <span class="qgrip">⠿</span>
+            <span class="qi-num">2</span>
+            <p class="qi-text">Ajusta o CSS do header pra responsividade</p>
+            <span class="qi-repeat">×</span>
+            <span class="qi-repeat"><input type="text" value="1" readonly></span>
+            <div style="position:relative"><button class="qi-dots">···</button></div>
+          </div>
+        </div>
+      </div>
+      <div class="comp">
+        <textarea class="comp-ta" placeholder="Descreva o que quer — vou propor um plano…"></textarea>
+        <div class="comp-row">
+          <div class="comp-btn">+</div>
+          <div class="comp-sp"></div>
+          <div class="comp-btn comp-btn-a">↑</div>
+        </div>
+      </div>
+    </div>
+    <div class="note">
+      <span class="n">▸</span>
+      <span>Pausada: itens com opacidade reduzida + badge amarela "pausada". Botão muda pra ▶ Retomar (cor amarela). Editar/repeat/remover continuam funcionando mesmo pausado.</span>
+    </div>
+  </div>
+
+  <!-- ═══ E · Comparação: Plan Skeleton vs Queue (mesmas cores) ═══ -->
+  <div>
+    <div class="label">E · Altura comparada — Plan Skeleton vs Queue</div>
+    <div style="display:flex; gap:20px; justify-content:center; align-items:flex-end; flex-wrap:wrap;">
+      <div style="width:180px;">
+        <div style="font-size:9px; color:#555; text-transform:uppercase; letter-spacing:.06em; margin-bottom:8px; text-align:center;">Plan Skeleton</div>
+        <div class="shell" style="width:180px;">
+          <div class="shimmer-lines">
+            <div class="shimmer-line" style="width:45%"></div>
+            <div class="shimmer-line" style="width:78%"></div>
+            <div class="shimmer-line" style="width:62%"></div>
+            <div class="shimmer-line" style="width:38%"></div>
+          </div>
+          <p class="creating-label">Creating plan…</p>
+        </div>
+      </div>
+      <div style="width:180px;">
+        <div style="font-size:9px; color:#555; text-transform:uppercase; letter-spacing:.06em; margin-bottom:8px; text-align:center;">Queue · 2 itens</div>
+        <div class="shell" style="width:180px;">
+          <div class="qh"><p class="ql">Queue <span class="qc">· 2</span></p></div>
+          <div style="display:flex; flex-direction:column; gap:6px;">
+            <div class="qi">
+              <span class="qgrip">⠿</span>
+              <span class="qi-num">1</span>
+              <p class="qi-text">Kill a task de deploy…</p>
+              <span class="qi-repeat">×</span>
+              <span class="qi-repeat"><input type="text" value="3" readonly></span>
+              <button class="qi-dots">···</button>
+            </div>
+            <div class="qi">
+              <span class="qgrip">⠿</span>
+              <span class="qi-num">2</span>
+              <p class="qi-text">Ajusta CSS do header…</p>
+              <span class="qi-repeat">×</span>
+              <span class="qi-repeat"><input type="text" value="1" readonly></span>
+              <button class="qi-dots">···</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="note">
+      <span class="n">▸</span>
+      <span>Mesmo shell visual (degradê, border, backdrop-filter). Queue com 2 itens ≈ altura do Plan Skeleton. Scroll a partir do 3º-4º item.</span>
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>

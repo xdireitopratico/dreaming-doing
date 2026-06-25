@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Queue Component — Design Final</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: system-ui, -apple-system, sans-serif; background: #0e0e12; color: #e0e0e6; padding: 2rem; }
+  h1 { font-size: 20px; font-weight: 600; color: #c0c0d0; margin-bottom: 4px; }
+  .subtitle { font-size: 13px; color: #888; margin-bottom: 24px; }
+  .layout-grid { display: flex; flex-direction: column; gap: 40px; }
+  .section-label {
+    font-size: 11px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.06em; color: #6a6a80; margin-bottom: 12px;
+  }
+  
+  .chat-column {
+    width: 380px; margin: 0 auto;
+    display: flex; flex-direction: column;
+    border-radius: 14px; background: #13131a;
+    border: 1px solid #2a2a35; overflow: hidden;
+    padding: 16px; min-height: 440px;
+  }
+  .messages-area {
+    flex: 1; padding-bottom: 16px; color: #666; font-size: 12px;
+    text-align: center; display: flex; align-items: center;
+    justify-content: center; min-height: 80px;
+  }
+  
+  .shell {
+    margin: 0 0 8px 0; padding: 12px 14px 10px;
+    border-radius: 16px; background: rgba(18,18,26,0.92);
+    border: 1px solid #2e2e3a;
+    box-shadow: 0 0 0 1px rgba(255,255,255,0.02) inset, 0 6px 24px rgba(0,0,0,0.28);
+  }
+  
+  .shimmer-lines { display: flex; flex-direction: column; gap: 8px; }
+  .shimmer-line {
+    height: 10px; border-radius: 4px;
+    background: linear-gradient(90deg, #1a1a24 0%, #252530 50%, #1a1a24 100%);
+    background-size: 200% 100%;
+    animation: shimmer 1.4s ease-in-out infinite;
+  }
+  @keyframes shimmer { 0% { background-position: 100% 0; } 100% { background-position: -100% 0; } }
+  .creating-label { margin-top: 6px; font-size: 13px; font-weight: 500; color: #888; }
+  
+  .queue-header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 8px;
+  }
+  .queue-label {
+    font-size: 11px; font-weight: 600; letter-spacing: 0.04em;
+    text-transform: uppercase; color: #888;
+  }
+  .queue-count { color: #6366f1; }
+  .queue-global-btn {
+    font-size: 10px; color: #666; background: #1a1a24;
+    border: 1px solid #2a2a35; padding: 3px 8px; border-radius: 6px; cursor: default;
+    display: inline-flex; align-items: center; gap: 4px;
+  }
+  .queue-global-btn .icon { font-size: 11px; }
+  
+  .queue-list {
+    display: flex; flex-direction: column; gap: 6px;
+    max-height: 168px; overflow-y: auto;
+  }
+  .queue-list::-webkit-scrollbar { width: 4px; }
+  .queue-list::-webkit-scrollbar-track { background: transparent; }
+  .queue-list::-webkit-scrollbar-thumb { background: #2a2a35; border-radius: 4px; }
+  
+  .queue-item {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 10px; border-radius: 10px;
+    background: #0a0a0f; border: 1px solid #1e1e28;
+    cursor: default; transition: border-color 0.15s;
+  }
+  .queue-item:hover { border-color: #3a3a48; }
+  .queue-item.drag-handle { cursor: grab; }
+  
+  .queue-grip {
+    flex-shrink: 0; width: 16px; display: flex; align-items: center;
+    justify-content: center; color: #333; font-size: 10px; cursor: grab;
+    letter-spacing: -1px; user-select: none;
+  }
+  
+  .queue-index {
+    flex-shrink: 0; width: 20px; height: 20px;
+    display: inline-flex; align-items: center; justify-content: center;
+    border-radius: 6px; font-size: 10px; font-weight: 600;
+    color: #6366f1; background: rgba(99,102,241,0.12);
+  }
+  
+  .queue-preview {
+    flex: 1; min-width: 0; margin: 0;
+    font-size: 12px; line-height: 1.4; color: #c0c0d0;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  
+  .queue-controls {
+    display: flex; align-items: center; gap: 4px; flex-shrink: 0;
+  }
+  
+  .queue-icon-btn {
+    width: 26px; height: 26px; border-radius: 6px; border: 1px solid #2a2a35;
+    background: transparent; color: #666; cursor: default;
+    display: inline-flex; align-items: center; justify-content: center; font-size: 12px;
+  }
+  .queue-icon-btn.danger { color: #f87171; }
+  .queue-icon-btn.edit { color: #a0a0b0; }
+  
+  .queue-repeat-input {
+    width: 42px; height: 26px; padding: 0 4px; border-radius: 6px;
+    border: 1px solid #2a2a35; background: #1a1a24; color: #c0c0d0;
+    font-size: 11px; text-align: center; outline: none;
+  }
+  .queue-repeat-label {
+    font-size: 9px; color: #555; text-transform: uppercase; letter-spacing: 0.04em;
+  }
+  
+  .queue-edit-area { flex: 1; min-width: 0; }
+  .queue-edit-input {
+    width: 100%; padding: 4px 6px; border-radius: 4px;
+    background: #1a1a24; border: 1px solid #6366f1; color: #c0c0d0;
+    font-size: 12px; line-height: 1.4; outline: none;
+  }
+  
+  .composer {
+    margin-top: 8px; padding: 12px 14px 10px;
+    border-radius: 16px; background: rgba(18,18,26,0.92);
+    border: 1px solid #2e2e3a;
+    box-shadow: 0 0 0 1px rgba(255,255,255,0.02) inset, 0 6px 24px rgba(0,0,0,0.28);
+  }
+  .composer-textarea {
+    width: 100%; min-height: 28px; background: transparent;
+    border: none; outline: none; color: #666; font-size: 14px; line-height: 1.6; resize: none;
+  }
+  .composer-row { display: flex; align-items: center; gap: 6px; margin-top: 8px; }
+  .composer-spacer { flex: 1; }
+  .composer-btn {
+    width: 28px; height: 28px; border-radius: 8px;
+    background: #1a1a24; color: #666; border: 1px solid #2a2a35;
+    display: grid; place-items: center; font-size: 14px; cursor: default;
+  }
+  .composer-btn-accent { background: #6366f1; color: #0a0a0a; border-color: transparent; }
+  
+  .callout {
+    display: flex; gap: 8px; align-items: flex-start;
+    padding: 10px 12px; border-radius: 8px; margin-top: 16px;
+    background: rgba(99,102,241,0.06); border: 1px solid rgba(99,102,241,0.15);
+    font-size: 12px; color: #a0a0b0; line-height: 1.5;
+  }
+  .callout-icon { font-size: 16px; flex-shrink: 0; }
+  
+  /* Paused state */
+  .queue-item.paused { opacity: 0.5; }
+  .queue-badge-paused {
+    font-size: 8px; padding: 1px 5px; border-radius: 3px;
+    background: #f59e0b20; color: #f59e0b; border: 1px solid #f59e0b30;
+    text-transform: uppercase; letter-spacing: 0.04em; font-weight: 600;
+  }
+</style>
+</head>
+<body>
+
+<h1>Queue Component — Design Final</h1>
+<p class="subtitle">Simplificado: sem pause individual, sem drain, sem clear all. Drag-and-drop + edição + repeat.</p>
+
+<div class="layout-grid">
+  
+  <!-- ═══ A: Queue rodando (auto-processa) ═══ -->
+  <div>
+    <div class="section-label">A · Fila ativa — auto-processa após done</div>
+    <div class="chat-column">
+      <div class="messages-area">── mensagens do chat ──</div>
+      
+      <div class="shell">
+        <div class="queue-header">
+          <p class="queue-label">Queue · <span class="queue-count">4</span></p>
+          <button class="queue-global-btn">
+            <span class="icon">⏸</span> Pausar
+          </button>
+        </div>
+        <div class="queue-list">
+          <div class="queue-item drag-handle">
+            <span class="queue-grip">⠿</span>
+            <span class="queue-index">1</span>
+            <p class="queue-preview">Kill a task de deploy e rode os testes novamente</p>
+            <div class="queue-controls">
+              <label><span class="queue-repeat-label">×</span><input class="queue-repeat-input" type="text" value="3" readonly></label>
+              <button class="queue-icon-btn edit" title="Editar">✎</button>
+              <button class="queue-icon-btn danger" title="Remover">✕</button>
+            </div>
+          </div>
+          <div class="queue-item drag-handle">
+            <span class="queue-grip">⠿</span>
+            <span class="queue-index">2</span>
+            <p class="queue-preview">Ajusta o CSS do header pra responsividade mobile</p>
+            <div class="queue-controls">
+              <label><span class="queue-repeat-label">×</span><input class="queue-repeat-input" type="text" value="1" readonly></label>
+              <button class="queue-icon-btn edit" title="Editar">✎</button>
+              <button class="queue-icon-btn danger" title="Remover">✕</button>
+            </div>
+          </div>
+          <div class="queue-item drag-handle">
+            <span class="queue-grip">⠿</span>
+            <span class="queue-index">3</span>
+            <p class="queue-preview">Refatora o hook de autenticação pra usar context API</p>
+            <div class="queue-controls">
+              <label><span class="queue-repeat-label">×</span><input class="queue-repeat-input" type="text" value="50" readonly></label>
+              <button class="queue-icon-btn edit" title="Editar">✎</button>
+              <button class="queue-icon-btn danger" title="Remover">✕</button>
+            </div>
+          </div>
+          <div class="queue-item drag-handle">
+            <span class="queue-grip">⠿</span>
+            <span class="queue-index">4</span>
+            <p class="queue-preview">Cria a página de configurações com formulário de…</p>
+            <div class="queue-controls">
+              <label><span class="queue-repeat-label">×</span><input class="queue-repeat-input" type="text" value="1" readonly></label>
+              <button class="queue-icon-btn edit" title="Editar">✎</button>
+              <button class="queue-icon-btn danger" title="Remover">✕</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <div class="composer">
+        <textarea class="composer-textarea" placeholder="Queue follow-up..."></textarea>
+        <div class="composer-row">
+          <div class="composer-btn">+</div>
+          <div class="composer-spacer"></div>
+          <div class="composer-btn">■</div>
+          <div class="composer-btn composer-btn-accent">↑</div>
+        </div>
+      </div>
+    </div>
+    
+    <div class="callout">
+      <span class="callout-icon">▶</span>
+      <span>Auto-processa: quando o agente termina o item atual, pega o próximo automaticamente. Botão "⏸ Pausar" pra segurar toda a fila. Grip "⠿" à esquerda indica que é arrastável.</span>
+    </div>
+  </div>
+  
+  <!-- ═══ B: Fila pausada ═══ -->
+  <div>
+    <div class="section-label">B · Fila pausada — itens na espera</div>
+    <div class="chat-column">
+      <div class="messages-area">── mensagens do chat ──</div>
+      
+      <div class="shell">
+        <div class="queue-header">
+          <p class="queue-label">Queue · <span class="queue-count">3</span> <span class="queue-badge-paused" style="margin-left:6px">pausada</span></p>
+          <button class="queue-global-btn">
+            <span class="icon">▶</span> Retomar
+          </button>
+        </div>
+        <div class="queue-list" style="max-height:none;">
+          <div class="queue-item drag-handle paused">
+            <span class="queue-grip">⠿</span>
+            <span class="queue-index">1</span>
+            <p class="queue-preview">Kill a task de deploy e rode os testes novamente</p>
+            <div class="queue-controls">
+              <label><span class="queue-repeat-label">×</span><input class="queue-repeat-input" type="text" value="3" readonly></label>
+              <button class="queue-icon-btn edit" title="Editar">✎</button>
+              <button class="queue-icon-btn danger" title="Remover">✕</button>
+            </div>
+          </div>
+          <div class="queue-item drag-handle paused">
+            <span class="queue-grip">⠿</span>
+            <span class="queue-index">2</span>
+            <p class="queue-preview">Ajusta o CSS do header pra responsividade</p>
+            <div class="queue-controls">
+              <label><span class="queue-repeat-label">×</span><input class="queue-repeat-input" type="text" value="1" readonly></label>
+              <button class="queue-icon-btn edit" title="Editar">✎</button>
+              <button class="queue-icon-btn danger" title="Remover">✕</button>
+            </div>
+          </div>
+          <div class="queue-item drag-handle paused">
+            <span class="queue-grip">⠿</span>
+            <span class="queue-index">3</span>
+            <p class="queue-preview">Refatora o hook de autenticação pra usar context API</p>
+            <div class="queue-controls">
+              <label><span class="queue-repeat-label">×</span><input class="queue-repeat-input" type="text" value="50" readonly></label>
+              <button class="queue-icon-btn edit" title="Editar">✎</button>
+              <button class="queue-icon-btn danger" title="Remover">✕</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <div class="composer">
+        <textarea class="composer-textarea" placeholder="Descreva o que quer — vou propor um plano…"></textarea>
+        <div class="composer-row">
+          <div class="composer-btn">+</div>
+          <div class="composer-spacer"></div>
+          <div class="composer-btn composer-btn-accent">↑</div>
+        </div>
+      </div>
+    </div>
+    
+    <div class="callout">
+      <span class="callout-icon">⏸</span>
+      <span>Fila pausada: itens ficam com <strong>opacidade reduzida</strong> + badge "pausada" no header. O agente continua rodando o item atual até done, mas não pega o próximo. Botão muda pra "▶ Retomar".</span>
+    </div>
+  </div>
+  
+  <!-- ═══ C: Editando inline ═══ -->
+  <div>
+    <div class="section-label">C · Editando item inline (✎ ou duplo-clique)</div>
+    <div class="chat-column">
+      <div class="messages-area">── mensagens do chat ──</div>
+      
+      <div class="shell">
+        <div class="queue-header">
+          <p class="queue-label">Queue · <span class="queue-count">3</span></p>
+          <button class="queue-global-btn"><span class="icon">⏸</span> Pausar</button>
+        </div>
+        <div class="queue-list" style="max-height:none;">
+          <div class="queue-item">
+            <span class="queue-grip">⠿</span>
+            <span class="queue-index">1</span>
+            <div class="queue-edit-area">
+              <input class="queue-edit-input" type="text" value="Kill a task de deploy e rode os testes novamente">
+            </div>
+            <div class="queue-controls">
+              <button class="queue-icon-btn" style="color:#22c55e;border-color:#22c55e40" title="Salvar (Enter)">✓</button>
+              <button class="queue-icon-btn" title="Cancelar (Esc)">✕</button>
+            </div>
+          </div>
+          <div class="queue-item drag-handle">
+            <span class="queue-grip">⠿</span>
+            <span class="queue-index">2</span>
+            <p class="queue-preview">Ajusta o CSS do header pra responsividade</p>
+            <div class="queue-controls">
+              <label><span class="queue-repeat-label">×</span><input class="queue-repeat-input" type="text" value="1" readonly></label>
+              <button class="queue-icon-btn edit" title="Editar">✎</button>
+              <button class="queue-icon-btn danger" title="Remover">✕</button>
+            </div>
+          </div>
+          <div class="queue-item drag-handle">
+            <span class="queue-grip">⠿</span>
+            <span class="queue-index">3</span>
+            <p class="queue-preview">Refatora o hook de autenticação pra usar context API</p>
+            <div class="queue-controls">
+              <label><span class="queue-repeat-label">×</span><input class="queue-repeat-input" type="text" value="50" readonly></label>
+              <button class="queue-icon-btn edit" title="Editar">✎</button>
+              <button class="queue-icon-btn danger" title="Remover">✕</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <div class="composer">
+        <textarea class="composer-textarea" placeholder="Queue follow-up..."></textarea>
+        <div class="composer-row">
+          <div class="composer-btn">+</div>
+          <div class="composer-spacer"></div>
+          <div class="composer-btn">■</div>
+          <div class="composer-btn composer-btn-accent">↑</div>
+        </div>
+      </div>
+    </div>
+    
+    <div class="callout">
+      <span class="callout-icon">✏️</span>
+      <span>Duplo-clique no preview OU clique no ✎ → vira input editável. <strong>Enter</strong> salva (call update_pending com novo texto). <strong>Esc</strong> cancela. Botões de ✓/✕ substituem controles normais. Item não é arrastável durante edição.</span>
+    </div>
+  </div>
+  
+  <!-- ═══ D: Drag-and-drop visual ═══ -->
+  <div>
+    <div class="section-label">D · Drag-and-drop — arrastando #3 pra cima</div>
+    <div class="chat-column">
+      <div class="messages-area">── mensagens do chat ──</div>
+      
+      <div class="shell">
+        <div class="queue-header">
+          <p class="queue-label">Queue · <span class="queue-count">3</span></p>
+          <button class="queue-global-btn"><span class="icon">⏸</span> Pausar</button>
+        </div>
+        <div class="queue-list" style="max-height:none;">
+          <!-- Drop target indicator -->
+          <div style="height: 3px; margin: -3px 0 3px 0; border-radius: 2px; background: #6366f1;"></div>
+          <div class="queue-item drag-handle" style="opacity:0.3;">
+            <span class="queue-grip">⠿</span>
+            <span class="queue-index">1</span>
+            <p class="queue-preview">Kill a task de deploy e rode os testes novamente</p>
+            <div class="queue-controls">
+              <label><span class="queue-repeat-label">×</span><input class="queue-repeat-input" type="text" value="3" readonly></label>
+              <button class="queue-icon-btn danger">✕</button>
+            </div>
+          </div>
+          <!-- Dragged item (ghost) -->
+          <div class="queue-item drag-handle" style="opacity:0.95; border-color:#6366f1; box-shadow: 0 4px 16px rgba(99,102,241,0.2); transform: translateY(-4px);">
+            <span class="queue-grip">⠿</span>
+            <span class="queue-index" style="background:#6366f1;color:#0a0a0a;">3</span>
+            <p class="queue-preview" style="color:#fff">Refatora o hook de autenticação pra usar context API</p>
+            <div class="queue-controls">
+              <label><span class="queue-repeat-label">×</span><input class="queue-repeat-input" type="text" value="50" readonly style="border-color:#6366f160"></label>
+              <button class="queue-icon-btn danger">✕</button>
+            </div>
+          </div>
+          <div class="queue-item drag-handle">
+            <span class="queue-grip">⠿</span>
+            <span class="queue-index">2</span>
+            <p class="queue-preview">Ajusta o CSS do header pra responsividade</p>
+            <div class="queue-controls">
+              <label><span class="queue-repeat-label">×</span><input class="queue-repeat-input" type="text" value="1" readonly></label>
+              <button class="queue-icon-btn danger">✕</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <div class="composer">
+        <textarea class="composer-textarea" placeholder="Queue follow-up..."></textarea>
+        <div class="composer-row">
+          <div class="composer-btn">+</div>
+          <div class="composer-spacer"></div>
+          <div class="composer-btn">■</div>
+          <div class="composer-btn composer-btn-accent">↑</div>
+        </div>
+      </div>
+    </div>
+    
+    <div class="callout">
+      <span class="callout-icon">⠿</span>
+      <span>Durante o drag: linha accent horizontal indica posição de drop. Item sendo arrastado fica destacado (borda accent + sombra). Itens abaixo da posição alvo ficam translúcidos. Ao soltar, chama <code>reorder_pending</code> com o novo índice.</span>
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>

@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Queue Component — Layout Corrigido</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: system-ui, -apple-system, sans-serif; background: #0e0e12; color: #e0e0e6; padding: 2rem; }
+  
+  h1 { font-size: 20px; font-weight: 600; color: #c0c0d0; margin-bottom: 4px; }
+  .subtitle { font-size: 13px; color: #888; margin-bottom: 24px; }
+  
+  .layout-grid { display: flex; flex-direction: column; gap: 40px; }
+  
+  .section-label {
+    font-size: 11px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.06em; color: #6a6a80; margin-bottom: 12px;
+  }
+  
+  /* ── Chat column ── */
+  .chat-column {
+    width: 380px; margin: 0 auto;
+    display: flex; flex-direction: column; gap: 0;
+    border-radius: 14px; background: #13131a;
+    border: 1px solid #2a2a35; overflow: hidden;
+    padding: 16px; min-height: 440px;
+  }
+  .messages-area {
+    flex: 1; padding-bottom: 16px; color: #666; font-size: 12px;
+    text-align: center; display: flex; align-items: center;
+    justify-content: center; min-height: 100px;
+  }
+  
+  /* ── Shell (plan-dock / queue-dock) ── */
+  .shell {
+    margin: 0 0 8px 0;
+    padding: 12px 14px 10px;
+    border-radius: 16px;
+    background: rgba(18,18,26,0.92);
+    border: 1px solid #2e2e3a;
+    box-shadow: 0 0 0 1px rgba(255,255,255,0.02) inset, 0 6px 24px rgba(0,0,0,0.28);
+  }
+  
+  /* ── Plan skeleton (reference) ── */
+  .shimmer-lines { display: flex; flex-direction: column; gap: 8px; }
+  .shimmer-line {
+    height: 10px; border-radius: 4px;
+    background: linear-gradient(90deg, #1a1a24 0%, #252530 50%, #1a1a24 100%);
+    background-size: 200% 100%;
+    animation: shimmer 1.4s ease-in-out infinite;
+  }
+  @keyframes shimmer {
+    0% { background-position: 100% 0; }
+    100% { background-position: -100% 0; }
+  }
+  .creating-label {
+    margin-top: 6px; font-size: 13px; font-weight: 500; color: #888;
+  }
+  
+  /* ── Queue ── */
+  .queue-header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 8px;
+  }
+  .queue-label {
+    font-size: 11px; font-weight: 600; letter-spacing: 0.04em;
+    text-transform: uppercase; color: #888;
+  }
+  .queue-count { color: #6366f1; }
+  .queue-global-pause {
+    font-size: 10px; color: #666; background: #1a1a24;
+    border: 1px solid #2a2a35; padding: 3px 8px; border-radius: 6px; cursor: default;
+  }
+  
+  .queue-list {
+    display: flex; flex-direction: column; gap: 6px;
+    max-height: 168px; overflow-y: auto;
+  }
+  .queue-list::-webkit-scrollbar { width: 4px; }
+  .queue-list::-webkit-scrollbar-track { background: transparent; }
+  .queue-list::-webkit-scrollbar-thumb { background: #2a2a35; border-radius: 4px; }
+  
+  .queue-item {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 10px; border-radius: 10px;
+    background: #0a0a0f; border: 1px solid #1e1e28;
+    cursor: default;
+  }
+  .queue-item:hover { border-color: #3a3a48; }
+  
+  .queue-index {
+    flex-shrink: 0; width: 20px; height: 20px;
+    display: inline-flex; align-items: center; justify-content: center;
+    border-radius: 6px; font-size: 10px; font-weight: 600;
+    color: #6366f1; background: rgba(99,102,241,0.12);
+  }
+  
+  .queue-preview {
+    flex: 1; min-width: 0; margin: 0;
+    font-size: 12px; line-height: 1.4; color: #c0c0d0;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  
+  .queue-controls {
+    display: flex; align-items: center; gap: 4px; flex-shrink: 0;
+  }
+  
+  .queue-repeat-input {
+    width: 42px; height: 26px; padding: 0 4px; border-radius: 6px;
+    border: 1px solid #2a2a35; background: #1a1a24; color: #c0c0d0;
+    font-size: 11px; text-align: center; outline: none;
+  }
+  .queue-repeat-label {
+    font-size: 9px; color: #555; text-transform: uppercase; letter-spacing: 0.04em;
+  }
+  
+  .queue-icon-btn {
+    width: 26px; height: 26px; border-radius: 6px; border: 1px solid #2a2a35;
+    background: transparent; color: #666; cursor: default;
+    display: inline-flex; align-items: center; justify-content: center; font-size: 12px;
+  }
+  .queue-icon-btn.danger { color: #f87171; }
+  
+  /* ── Edit mode ── */
+  .queue-edit-area { flex: 1; min-width: 0; }
+  .queue-edit-input {
+    width: 100%; padding: 4px 6px; border-radius: 4px;
+    background: #1a1a24; border: 1px solid #6366f1; color: #c0c0d0;
+    font-size: 12px; line-height: 1.4; outline: none;
+  }
+  
+  /* ── Composer ── */
+  .composer {
+    margin-top: 8px; padding: 12px 14px 10px;
+    border-radius: 16px; background: rgba(18,18,26,0.92);
+    border: 1px solid #2e2e3a;
+    box-shadow: 0 0 0 1px rgba(255,255,255,0.02) inset, 0 6px 24px rgba(0,0,0,0.28);
+  }
+  .composer-textarea {
+    width: 100%; min-height: 28px; background: transparent;
+    border: none; outline: none; color: #666; font-size: 14px; line-height: 1.6; resize: none;
+  }
+  .composer-row { display: flex; align-items: center; gap: 6px; margin-top: 8px; }
+  .composer-spacer { flex: 1; }
+  .composer-btn {
+    width: 28px; height: 28px; border-radius: 8px;
+    background: #1a1a24; color: #666; border: 1px solid #2a2a35;
+    display: grid; place-items: center; font-size: 14px; cursor: default;
+  }
+  .composer-btn-accent { background: #6366f1; color: #0a0a0a; border-color: transparent; }
+  
+  .callout {
+    display: flex; gap: 8px; align-items: flex-start;
+    padding: 10px 12px; border-radius: 8px; margin-top: 16px;
+    background: rgba(99,102,241,0.06); border: 1px solid rgba(99,102,241,0.15);
+    font-size: 12px; color: #a0a0b0; line-height: 1.5;
+  }
+  .callout-icon { font-size: 16px; flex-shrink: 0; }
+</style>
+</head>
+<body>
+
+<h1>Queue Component — Apenas itens pendentes</h1>
+<p class="subtitle">Sem indicador de "running" — quando roda, sai do queue. Um único componente refatorado.</p>
+
+<div class="layout-grid">
+  
+  <!-- ═══ SCENARIO A: 4+ itens, com scroll ═══ -->
+  <div>
+    <div class="section-label">A · 4 itens na fila — scroll a partir do 4º</div>
+    <div class="chat-column">
+      <div class="messages-area">── mensagens do chat ──</div>
+      
+      <div class="shell">
+        <div class="queue-header">
+          <p class="queue-label">Queue · <span class="queue-count">4</span></p>
+          <button class="queue-global-pause">⏸ Pausar fila</button>
+        </div>
+        <div class="queue-list">
+          <div class="queue-item">
+            <span class="queue-index">1</span>
+            <p class="queue-preview">Kill a task de deploy e rode os testes novamente</p>
+            <div class="queue-controls">
+              <label><span class="queue-repeat-label">×</span><input class="queue-repeat-input" type="text" value="3" readonly></label>
+              <button class="queue-icon-btn" title="Pausar">⏸</button>
+              <button class="queue-icon-btn danger" title="Remover">✕</button>
+            </div>
+          </div>
+          <div class="queue-item">
+            <span class="queue-index">2</span>
+            <p class="queue-preview">Ajusta o CSS do header pra responsividade</p>
+            <div class="queue-controls">
+              <label><span class="queue-repeat-label">×</span><input class="queue-repeat-input" type="text" value="1" readonly></label>
+              <button class="queue-icon-btn" title="Pausar">⏸</button>
+              <button class="queue-icon-btn danger" title="Remover">✕</button>
+            </div>
+          </div>
+          <div class="queue-item">
+            <span class="queue-index">3</span>
+            <p class="queue-preview">Refatora o hook de autenticação pra usar context API</p>
+            <div class="queue-controls">
+              <label><span class="queue-repeat-label">×</span><input class="queue-repeat-input" type="text" value="50" readonly></label>
+              <button class="queue-icon-btn" title="Retomar">▶</button>
+              <button class="queue-icon-btn danger" title="Remover">✕</button>
+            </div>
+          </div>
+          <div class="queue-item">
+            <span class="queue-index">4</span>
+            <p class="queue-preview">Cria a página de configurações com formulário de prefere…</p>
+            <div class="queue-controls">
+              <label><span class="queue-repeat-label">×</span><input class="queue-repeat-input" type="text" value="1" readonly></label>
+              <button class="queue-icon-btn" title="Pausar">⏸</button>
+              <button class="queue-icon-btn danger" title="Remover">✕</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <div class="composer">
+        <textarea class="composer-textarea" placeholder="Queue follow-up..."></textarea>
+        <div class="composer-row">
+          <div class="composer-btn">+</div>
+          <div class="composer-spacer"></div>
+          <div class="composer-btn">■</div>
+          <div class="composer-btn composer-btn-accent">↑</div>
+        </div>
+      </div>
+    </div>
+    
+    <div class="callout">
+      <span class="callout-icon">📋</span>
+      <span>Todos os itens são <strong>pendentes</strong>. Quando o agente pega o #1, ele some daqui e aparece como mensagem no chat. A lista reindexa automaticamente. Limite: 50 itens.</span>
+    </div>
+  </div>
+  
+  <!-- ═══ SCENARIO B: Editando inline ═══ -->
+  <div>
+    <div class="section-label">B · Editando item inline</div>
+    <div class="chat-column">
+      <div class="messages-area">── mensagens do chat ──</div>
+      
+      <div class="shell">
+        <div class="queue-header">
+          <p class="queue-label">Queue · <span class="queue-count">3</span></p>
+          <button class="queue-global-pause">⏸ Pausar fila</button>
+        </div>
+        <div class="queue-list">
+          <div class="queue-item">
+            <span class="queue-index">1</span>
+            <div class="queue-edit-area">
+              <input class="queue-edit-input" type="text" value="Kill a task de deploy e rode os testes novamente">
+            </div>
+            <div class="queue-controls">
+              <button class="queue-icon-btn" style="color:#22c55e;border-color:#22c55e40">✓</button>
+              <button class="queue-icon-btn">✕</button>
+            </div>
+          </div>
+          <div class="queue-item">
+            <span class="queue-index">2</span>
+            <p class="queue-preview">Ajusta o CSS do header pra responsividade</p>
+            <div class="queue-controls">
+              <label><span class="queue-repeat-label">×</span><input class="queue-repeat-input" type="text" value="1" readonly></label>
+              <button class="queue-icon-btn">⏸</button>
+              <button class="queue-icon-btn danger">✕</button>
+            </div>
+          </div>
+          <div class="queue-item">
+            <span class="queue-index">3</span>
+            <p class="queue-preview">Refatora o hook de autenticação pra usar context API</p>
+            <div class="queue-controls">
+              <label><span class="queue-repeat-label">×</span><input class="queue-repeat-input" type="text" value="50" readonly></label>
+              <button class="queue-icon-btn">⏸</button>
+              <button class="queue-icon-btn danger">✕</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <div class="composer">
+        <textarea class="composer-textarea" placeholder="Queue follow-up..."></textarea>
+        <div class="composer-row">
+          <div class="composer-btn">+</div>
+          <div class="composer-spacer"></div>
+          <div class="composer-btn">■</div>
+          <div class="composer-btn composer-btn-accent">↑</div>
+        </div>
+      </div>
+    </div>
+    
+    <div class="callout">
+      <span class="callout-icon">✏️</span>
+      <span>Duplo-clique no preview → vira input. <strong>Enter</strong> salva, <strong>Esc</strong> cancela. Botões de ✓ e ✕ substituem os controles normais durante edição.</span>
+    </div>
+  </div>
+  
+  <!-- ═══ SCENARIO C: Altura comparada ao Plan Skeleton ═══ -->
+  <div>
+    <div class="section-label">C · Referência de altura — Plan Skeleton vs Queue</div>
+    <div style="display:flex; gap:24px; justify-content:center; align-items:flex-end; flex-wrap:wrap;">
+      
+      <!-- Plan skeleton -->
+      <div style="width:180px;">
+        <div style="font-size:10px; color:#6a6a80; text-transform:uppercase; letter-spacing:0.06em; margin-bottom:8px; text-align:center;">Plan Skeleton</div>
+        <div class="shell" style="width:180px;">
+          <div class="shimmer-lines">
+            <div class="shimmer-line" style="width:45%"></div>
+            <div class="shimmer-line" style="width:78%"></div>
+            <div class="shimmer-line" style="width:62%"></div>
+            <div class="shimmer-line" style="width:38%"></div>
+          </div>
+          <p class="creating-label">Creating plan…</p>
+        </div>
+      </div>
+      
+      <!-- Queue 1 item -->
+      <div style="width:180px;">
+        <div style="font-size:10px; color:#6a6a80; text-transform:uppercase; letter-spacing:0.06em; margin-bottom:8px; text-align:center;">Queue · 1 item</div>
+        <div class="shell" style="width:180px;">
+          <div class="queue-header">
+            <p class="queue-label">Queue · <span class="queue-count">1</span></p>
+          </div>
+          <div class="queue-item">
+            <span class="queue-index">1</span>
+            <p class="queue-preview">Kill a task de deploy…</p>
+            <div class="queue-controls">
+              <label><span class="queue-repeat-label">×</span><input class="queue-repeat-input" type="text" value="1" readonly style="width:36px"></label>
+              <button class="queue-icon-btn danger">✕</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Queue 3 items -->
+      <div style="width:180px;">
+        <div style="font-size:10px; color:#6a6a80; text-transform:uppercase; letter-spacing:0.06em; margin-bottom:8px; text-align:center;">Queue · 3 itens</div>
+        <div class="shell" style="width:180px;">
+          <div class="queue-header">
+            <p class="queue-label">Queue · <span class="queue-count">3</span></p>
+          </div>
+          <div class="queue-list" style="max-height:none;">
+            <div class="queue-item">
+              <span class="queue-index">1</span>
+              <p class="queue-preview">Kill a task de deploy…</p>
+              <div class="queue-controls">
+                <label><span class="queue-repeat-label">×</span><input class="queue-repeat-input" type="text" value="1" readonly style="width:36px"></label>
+                <button class="queue-icon-btn danger">✕</button>
+              </div>
+            </div>
+            <div class="queue-item">
+              <span class="queue-index">2</span>
+              <p class="queue-preview">Ajusta CSS do header…</p>
+              <div class="queue-controls">
+                <label><span class="queue-repeat-label">×</span><input class="queue-repeat-input" type="text" value="1" readonly style="width:36px"></label>
+                <button class="queue-icon-btn danger">✕</button>
+              </div>
+            </div>
+            <div class="queue-item">
+              <span class="queue-index">3</span>
+              <p class="queue-preview">Refatora o hook de…</p>
+              <div class="queue-controls">
+                <label><span class="queue-repeat-label">×</span><input class="queue-repeat-input" type="text" value="50" readonly style="width:36px"></label>
+                <button class="queue-icon-btn danger">✕</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <div class="callout">
+      <span class="callout-icon">📏</span>
+      <span>Com 3 itens, a altura do Queue é <strong>similar ao Plan Skeleton</strong>. O scroll interno só entra no 4º item em diante, até o limite de 50.</span>
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>
