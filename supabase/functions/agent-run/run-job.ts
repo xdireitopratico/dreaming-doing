@@ -30,6 +30,7 @@ import { registerSkillsTools } from "./tools/skills.ts";
 import { restoreExecutionLogFromRows } from "./executionLogMeta.ts";
 import { loadCheckpoint } from "./checkpoint.ts";
 import { buildSandboxEnv } from "./sandbox-env.ts";
+import { readLoopBudgetMsFromRuntime } from "./runtime/loop-config.ts";
 import { buildDesignDirectiveBlock } from "./design-directive.ts";
 import {
   autoResolveDesignField,
@@ -208,6 +209,8 @@ export async function executeAgentJob(
   totalTokens?: number;
   costUsd?: number;
 }> {
+  const runStartTime = Date.now();
+  const loopBudgetMs = readLoopBudgetMsFromRuntime();
   const {
     projectId,
     conversationId,
@@ -434,6 +437,7 @@ export async function executeAgentJob(
     sandboxToken: Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? undefined,
     connectorKeys,
     emit: (type, data) => onEvent(type, data as Record<string, unknown>),
+    getRemainingBudgetMs: () => loopBudgetMs - (Date.now() - runStartTime),
   });
 
   const buildState = (): AgentState => {

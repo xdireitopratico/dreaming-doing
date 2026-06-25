@@ -17,6 +17,8 @@ export interface ExtractToolsContext {
   connectorKeys: Record<string, string>;
   /** Serializa atos do extract pro inspector (dna_ready / background_*). */
   emit?: (type: string, data: unknown) => void;
+  /** Budget de wall-clock restante da run (ms) — o poll nunca estoura isso. */
+  getRemainingBudgetMs?: () => number;
 }
 
 export const PLAN_EXTRACT_DNA_QUOTA = 2;
@@ -40,11 +42,11 @@ export function registerExtractTools(reg: ToolRegistry, ctx: ExtractToolsContext
     {
       name: "extract_design_dna",
       description:
-        "Enfileira a extração de DesignDNA estruturado de 1-5 URLs de referência. " +
-        "Retorna layout, motion, typography, color_application, component_patterns e interactions via job assíncrono. " +
-        "Modo shallow usa web scrape + limpeza; modo deep usa Playwright no sandbox e pode levar minutos. " +
-        "Use para analisar sites que o usuário forneceu ou que você encontrou via web_research. " +
-        "O job é auto-adicionado ao store para uso na síntese de design e pode ser acompanhado pelo design library.",
+        "Extrai DesignDNA estruturado de 1-5 URLs de referência e BLOQUEIA até o DNA ficar pronto (shallow ~30-60s, deep até ~150s). " +
+        "Devolve o design_dna DIRETO neste resultado (layout, color, typography, motion, interaction, component) — " +
+        "NÃO chame read_design_library depois, e NÃO re-chame extract_design_dna para a mesma URL. " +
+        "Aplique criativamente (skill extract-design): extraia a intenção/gesto, adapte ao domínio, não copie. " +
+        "Se retornar status 'still_running', a extração passou do limite de tempo — continue outro trabalho do plano e retome depois, NÃO faça poll.",
       parameters: {
         type: "object",
         properties: {
@@ -175,16 +177,85 @@ export function registerExtractTools(reg: ToolRegistry, ctx: ExtractToolsContext
           eventIds: Array.isArray(result.eventIds) ? result.eventIds.length : 0,
         });
 
+        // ── Poll síncrono adaptativo: bloqueia até o job concluir e devolve o DNA direto.
+        // ponytail: mata o loop "Avançar com read ×6" — o LLM chama uma vez, espera, recebe o DNA.
+        // Cap adaptativo: nunca estoura o budget restante da run (deixa 20s pra síntese).
+        const jobId = (result.jobId as string | undefined) ?? "";
+        ctx.emit?.("background_wait", {
+          jobId,
+          source_url: urls[0],
+          etaSec: depth === "shallow" ? 60 : 180,
+          reason: "extraindo DesignDNA em background",
+        });
+        const remaining = ctx.getRemainingBudgetMs?.() ?? 90_000;
+        const capMs = Math.max(15_000, Math.min(depth === "shallow" ? 90_000 : 150_000, remaining - 20_000));
+        const pollStart = Date.now();
+        let jobStatus = "pending";
+        while (Date.now() - pollStart < capMs) {
+          await new Promise((r) => setTimeout(r, 5000));
+          const { data: jobRow } = await ctx.supabase
+            .from("design_dna_jobs")
+            .select("status")
+            .eq("id", jobId)
+            .maybeSingle();
+          jobStatus = (jobRow?.status as string) ?? "pending";
+          if (["completed", "failed", "partial", "blocked"].includes(jobStatus)) break;
+        }
+        if (jobStatus === "failed" || jobStatus === "blocked") {
+          return {
+            toolCallId: "",
+            ok: false,
+            error: `Extração falhou (status: ${jobStatus}). Verifique design_dna_jobs ${jobId}.`,
+            output: null,
+          };
+        }
+        if (jobStatus === "completed" || jobStatus === "partial") {
+          const { data: dnaRows } = await ctx.supabase
+            .from("design_system_library")
+            .select("source_url, name, design_dna, quality_score, confidence, compatible_moods, serves_domains")
+            .in("source_url", urls);
+          const entries = (dnaRows ?? []).map((r: Record<string, unknown>) => ({
+            source_url: r.source_url,
+            name: r.name,
+            design_dna: r.design_dna,
+            quality_score: r.quality_score,
+            compatible_moods: r.compatible_moods,
+            serves_domains: r.serves_domains,
+          }));
+          const first = (entries[0] as Record<string, unknown>) ?? {};
+          const dna = (first.design_dna ?? {}) as Record<string, unknown>;
+          ctx.emit?.("dna_ready", {
+            source_url: first.source_url ?? urls[0],
+            signature:
+              typeof dna.signature === "string" ? dna.signature
+                : typeof first.name === "string" ? (first.name as string)
+                  : "DesignDNA",
+            layers: Array.isArray(dna.layers) ? (dna.layers as string[]) : undefined,
+          });
+          return {
+            toolCallId: "",
+            ok: true,
+            output: {
+              status: jobStatus,
+              jobId,
+              urls,
+              entries,
+              hint:
+                "DNA extraído e pronto (em entries[].design_dna). Aplique criativamente — " +
+                "extraia o gesto e a intenção, adapte ao domínio do usuário, NÃO copie. NÃO chame read_design_library.",
+            },
+          };
+        }
+        // cap reached — still running: anti-loop explícito
         return {
           toolCallId: "",
           ok: true,
           output: {
-            ...result,
+            status: "still_running",
+            jobId,
             urls,
             hint:
-              "DNA enfileirado e será salvo automaticamente em design_system_library (job assíncrono). " +
-              "Quando o job concluir, chame read_design_library({ source_url: \"<url>\" }) para cada URL e LEIA o design_dna " +
-              "(layout, color, typography, motion, interaction, component). Aplique criativamente (skill extract-design) — extraia a intenção, não copie.",
+              `Extração ainda rodando em background (passou de ${Math.round(capMs / 1000)}s). Continue outro trabalho do plano; NÃO chame read_design_library, NÃO re-chame extract_design_dna pra mesma URL. O DNA será salvo em design_system_library quando concluir — retome depois.`,
           },
         };
       } catch (err) {
