@@ -15,6 +15,8 @@ export interface ExtractToolsContext {
   sandboxToken?: string;
   /** Chaves de conectores do usuário (para passar LLM config à extração) */
   connectorKeys: Record<string, string>;
+  /** Serializa atos do extract pro inspector (dna_ready / background_*). */
+  emit?: (type: string, data: unknown) => void;
 }
 
 export const PLAN_EXTRACT_DNA_QUOTA = 2;
@@ -248,6 +250,20 @@ export function registerExtractTools(reg: ToolRegistry, ctx: ExtractToolsContext
           compatible_moods: r.compatible_moods,
           extracted_at: r.extracted_at,
         }));
+        // Serializa DNA pronto pro inspector (ACT II do simulacro).
+        if (rows.length > 0) {
+          const first = rows[0] as Record<string, unknown>;
+          const dna = (first.design_dna ?? {}) as Record<string, unknown>;
+          const signature =
+            typeof dna.signature === "string" ? dna.signature
+              : typeof first.name === "string" ? first.name
+                : "DesignDNA";
+          ctx.emit?.("dna_ready", {
+            source_url: first.source_url,
+            signature,
+            layers: Array.isArray(dna.layers) ? (dna.layers as string[]) : undefined,
+          });
+        }
         return {
           toolCallId: "",
           ok: true,

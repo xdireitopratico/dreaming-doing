@@ -198,7 +198,7 @@ export class AgentLoop {
     this.fileContentCache = new Map();
     this.runStartTime = Date.now();
     this.router = new ModelRouter(injectedKeys, routerOverrides, options?.resolvedMainCfg);
-    this.observer = new RuntimeObserver(reg, this.fileContentCache);
+    this.observer = new RuntimeObserver(reg, this.fileContentCache, (type, data) => this.emit(type, data));
     this.observer.setApprovedDesign(this.approvedPlanDesign);
     this.observer.setDesignHistory(options?.designHistory ?? []);
     this.skills = new SkillRegistry();

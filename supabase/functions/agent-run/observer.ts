@@ -124,14 +124,21 @@ function makeBudgetGate(budgetExceeded: BudgetChecker): {
 export class RuntimeObserver {
   private reg: ToolRegistry;
   private fileCache: Map<string, string> | null;
+  /** Serializa os gates de design pro inspector (ACT IV do simulacro). */
+  private emit?: (type: string, data: unknown) => void;
   private approvedDesign?: DesignPlanField;
   private craftEnforcement = false;
   /** Histórico de designs de projetos anteriores — para verificação de unicidade. */
   private designHistory: DesignSignatureRecord[] = [];
 
-  constructor(reg: ToolRegistry, fileCache?: Map<string, string> | null) {
+  constructor(
+    reg: ToolRegistry,
+    fileCache?: Map<string, string> | null,
+    emit?: (type: string, data: unknown) => void,
+  ) {
     this.reg = reg;
     this.fileCache = fileCache ?? null;
+    this.emit = emit;
   }
 
   setApprovedDesign(design?: DesignPlanField): void {
@@ -150,6 +157,12 @@ export class RuntimeObserver {
 
   async observe(budgetExceeded?: () => boolean): Promise<ObservationResult> {
     const checks: Array<{ name: string; ok: boolean; output: string }> = [];
+    // ponytail: pushGate = checks.push + serialização do gate pro inspector.
+    // Só gates de DESIGN usam pushGate (infra checks ficam em checks.push, já vistos via build_log).
+    const pushGate = (name: string, ok: boolean, output: string) => {
+      checks.push({ name, ok, output });
+      this.emit?.("gate", { dimension: name, verdict: ok ? "pass" : "fail", reason: output.slice(0, 240) });
+    };
     const isOverBudget = () => budgetExceeded?.() === true;
     if (isOverBudget()) {
       return {
@@ -183,13 +196,13 @@ export class RuntimeObserver {
 
     // 0.5. Design System — deep imports @forge/ui bloqueiam; demais violações são warnings
     const designCheck = await this.checkDesignSystem();
-    checks.push({ name: "design-system", ok: designCheck.ok, output: designCheck.output });
+    pushGate("design-system", designCheck.ok, designCheck.output);
 
     // 0.6. Design Fidelity — o código gerado corresponde ao approvedDesign?
     if (this.approvedDesign && this.fileCache && this.fileCache.size > 0) {
       const fidelity = validateDesignFidelity(this.approvedDesign, this.fileCache);
       const fidelityOutput = formatFidelityFeedback(fidelity);
-      checks.push({ name: "design-fidelity", ok: fidelity.pass, output: fidelityOutput });
+      pushGate("design-fidelity", fidelity.pass, fidelityOutput);
       if (!fidelity.pass) {
         // Telemetry do resultado de fidelidade
         this.reg.execute({
@@ -199,11 +212,11 @@ export class RuntimeObserver {
         }).catch(() => {});
       }
     } else {
-      checks.push({
-        name: "design-fidelity",
-        ok: true,
-        output: "(fidelity check skipped — sem approvedDesign ou fileCache vazio)",
-      });
+      pushGate(
+        "design-fidelity",
+        true,
+        "(fidelity check skipped — sem approvedDesign ou fileCache vazio)",
+      );
     }
 
     // 0.7. Design Uniqueness — este design é único em relação ao histórico?
@@ -211,13 +224,13 @@ export class RuntimeObserver {
       const uniqueness = evaluateDesignUniqueness(this.approvedDesign, this.designHistory);
       const uniquenessOutput = formatUniquenessFeedback(uniqueness);
       // Uniqueness é WARNING, não blocking — informa o LLM mas não quebra o build
-      checks.push({ name: "design-uniqueness", ok: uniqueness.pass, output: uniquenessOutput });
+      pushGate("design-uniqueness", uniqueness.pass, uniquenessOutput);
     } else {
-      checks.push({
-        name: "design-uniqueness",
-        ok: true,
-        output: `(uniqueness check skipped — ${this.designHistory.length > 0 ? "sem approvedDesign" : "sem histórico de designs"})`,
-      });
+      pushGate(
+        "design-uniqueness",
+        true,
+        `(uniqueness check skipped — ${this.designHistory.length > 0 ? "sem approvedDesign" : "sem histórico de designs"})`,
+      );
     }
 
     // 1. Build check

@@ -395,6 +395,78 @@ export function buildForgeTimeline(timeline: SSEEvent[], running = false): Forge
       continue;
     }
 
+    // ── Simulacro: atos de design serializados (backend ↔ frontend mesma língua) ──
+    if (ev.type === "gate") {
+      const dim = String(data.dimension ?? "gate");
+      const verdict = String(data.verdict ?? "?");
+      items.push({
+        type: "TASK",
+        id: `gate-v-${ts}`,
+        label: `⚖ ${dim} · ${verdict.toUpperCase()}`,
+      });
+      continue;
+    }
+    if (ev.type === "design_resolve") {
+      const voices = Array.isArray(data.voices) ? (data.voices as string[]).join(", ") : "";
+      const composite = String(data.composite ?? "");
+      items.push({
+        type: "BRIEFING",
+        id: `resolve-${ts}`,
+        text: `🎨 Paleta resolvida — vozes: ${voices} · gesto: ${truncate(composite, 140)}`,
+      });
+      continue;
+    }
+    if (ev.type === "directive") {
+      const gesture = String(data.gesture ?? "");
+      const brief = String(data.brief ?? "");
+      items.push({
+        type: "BRIEFING",
+        id: `directive-${ts}`,
+        text: `📋 Directive — gesto: ${truncate(gesture, 120)}${brief ? ` · ${truncate(brief, 100)}` : ""}`,
+      });
+      continue;
+    }
+    if (ev.type === "build_step") {
+      const section = String(data.section ?? "?");
+      const technique = String(data.technique ?? "");
+      const layer = data.layer ? ` · ${String(data.layer)}` : "";
+      items.push({
+        type: "TASK",
+        id: `build-${ts}`,
+        label: `🏗 ${section} · ${technique}${layer}`,
+      });
+      continue;
+    }
+    if (ev.type === "dna_ready") {
+      const sig = String(data.signature ?? "");
+      items.push({
+        type: "RESULT",
+        id: `dna-${ts}`,
+        ok: true,
+        text: `🧬 DNA pronto · ${truncate(sig, 120)}`,
+      });
+      continue;
+    }
+    if (ev.type === "background_wait") {
+      const eta = typeof data.etaSec === "number" ? data.etaSec : "?";
+      const url = String(data.source_url ?? "");
+      items.push({
+        type: "TASK",
+        id: `wait-${ts}`,
+        label: `⏸ Aguardando extração · ${eta}s · ${truncate(url, 60)}`,
+      });
+      continue;
+    }
+    if (ev.type === "background_resume") {
+      items.push({
+        type: "RESULT",
+        id: `resume-${ts}`,
+        ok: true,
+        text: "▶ Background concluído — retomando",
+      });
+      continue;
+    }
+
     if (ev.type === "rate_limit") {
       items.push({ type: "TASK", id: `rate-${ts}`, label: "Rate limit" });
       continue;
