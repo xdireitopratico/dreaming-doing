@@ -117,7 +117,21 @@ for (const [id, src] of Object.entries(SOURCES)) {
     continue;
   }
   const dest = path.join(OUT, `${id}.md`);
-  fs.copyFileSync(src, dest);
+  let content = fs.readFileSync(src, "utf8");
+  // ponytail: single-source — se a skill marca CREATIVE_FRAMEWORK, injeta o framework
+  // extraído de creative-framework.ts (fonte única dos 7 princípios). Evita duplicação.
+  if (content.includes("<!-- CREATIVE_FRAMEWORK -->")) {
+    const cfPath = path.join(ROOT, "supabase/functions/agent-run/creative-framework.ts");
+    try {
+      const cfRaw = fs.readFileSync(cfPath, "utf8");
+      const m = cfRaw.match(/export const CREATIVE_FRAMEWORK = `([\s\S]*?)`;\n/);
+      const framework = m ? m[1].trim() : "";
+      content = content.replace("<!-- CREATIVE_FRAMEWORK -->", framework || "<!-- framework ausente -->");
+    } catch (e) {
+      console.warn(`[design-system] não foi possível injetar CREATIVE_FRAMEWORK: ${e.message}`);
+    }
+  }
+  fs.writeFileSync(dest, content);
   const stat = fs.statSync(dest);
   manifest.push({ id, bytes: stat.size });
   const fm = parseFrontmatter(fs.readFileSync(src, "utf8"));

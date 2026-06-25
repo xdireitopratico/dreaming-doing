@@ -2,6 +2,7 @@
 import { reviewSynthesisFull } from "./design-critic-edge.ts";
 import { loadDesignManifest } from "./design-manifest.ts";
 import { hashRotation, synthesizeCore } from "./design-synthesis.ts";
+import { TECHNIQUE_MASTERY } from "./techniques-mastery.ts";
 import type { DesignReference } from "./types.ts";
 
 /** IDs de DNA seeds válidos a partir de referências (extract_design_dna → extracted_dna). */
@@ -232,6 +233,20 @@ function buildReadPaths(
   ].filter((p, i, arr) => p && arr.indexOf(p) === i) as string[];
 }
 
+function techniqueBlurbsFor(ids: string[]): string {
+  // ponytail: conecta techniques-mastery ao resolve — só as técnicas ESCOLHIDAS (2-4),
+  // não as 21. Cada uma vem com o efeito perceptual: o LLM sabe o que ela FAZ, não só o nome.
+  const lines: string[] = [];
+  for (const id of ids) {
+    const m = TECHNIQUE_MASTERY[id];
+    if (!m) continue;
+    lines.push(`  - ${id} — ${m.perceptual_effect}`);
+  }
+  return lines.length
+    ? lines.join("\n")
+    : `  - ${ids.join(", ")} (sem domínio perceptual catalogado — faça fs_read da técnica real para entender o efeito)`;
+}
+
 function dnaSummariesFor(ids: string[]): Record<string, string> {
   const m = loadDesignManifest();
   const out: Record<string, string> = {};
@@ -336,6 +351,7 @@ export function resolveDesignPackage(input: DesignResolveInput): DesignResolvePa
   // ponytail: composto criacional — a síntese entrega a PALETA e o convite, não a receita.
   // Frase simples → gesto memorável: o espaço combinatório (vozes × mood × técnicas) é explicitado
   // e as composições são LIÇÕES a absorver, não templates a colar. O gesto concreto é do LLM.
+  const techBlurbs = techniqueBlurbsFor(proposal.techniques);
   const compositeInvocation = [
     "## 🧬 COMPOSTO CRIACIONAL",
     "",
@@ -343,7 +359,9 @@ export function resolveDesignPackage(input: DesignResolveInput): DesignResolvePa
     "Sua paleta combinatória:",
     `- **Vozes:** ${proposal.voice.join(" + ")} — leia a FILOSOFIA de cada uma, não só o nome.`,
     `- **Mood:** ${proposal.mood} — a temperatura emocional da página.`,
-    `- **Técnicas (paleta, não mandatory):** ${proposal.techniques.join(", ")} — cada uma tem um EFEITO perceptual. Combine-as pelo que elas FAZEM com o usuário, troque livremente se outra servir melhor ao gesto.`,
+    `- **Técnicas (paleta, não mandato) — o que cada uma FAZ com o usuário:**`,
+    techBlurbs,
+    `  Troque livremente se outra servir melhor ao gesto memorável — importa a INTENÇÃO, não a lista.`,
     "",
     `**Composições opinionated (${selected.length}):** ${compsStr}.`,
     "São **inspiração e lições de design** — absorva a INTENÇÃO, NÃO COPIE o JSX. Use-as como estudo e ponto de partida; o que constrói é seu.",

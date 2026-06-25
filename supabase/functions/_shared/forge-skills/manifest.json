@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-06-25T06:46:40.688Z",
+  "generatedAt": "2026-06-25T07:50:04.886Z",
   "skills": [
     {
       "id": "brainstorming",
@@ -123,7 +123,7 @@
     },
     {
       "id": "design-system",
-      "bytes": 6267
+      "bytes": 10985
     },
     {
       "id": "extract-design",

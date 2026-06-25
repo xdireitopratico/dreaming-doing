@@ -31,15 +31,8 @@ Quando o pedido envolve UI, o FORGE resolve um design package (vozes, mood, téc
 
 Cada página tem direito a **UM** gesto que o usuário LEMBRA ao fechar o laptop. Não dois. Concreto. Específico do domínio. Surpreendente. O restante da página existe para **servir a este gesto**. Se uma seção não o fortalece, é distração.
 
-## 3. Os 7 princípios (como pensar)
+<!-- CREATIVE_FRAMEWORK -->
 
-1. **Intencionalidade** — toda técnica precisa de um POR QUÊ. Se não explica em uma frase, não está.
-2. **O gesto memorável** — uma página, um momento (acima).
-3. **Contraste** — técnica vive da diferença. Se tudo se move, nada se move. Alterne: motion → estática → motion.
-4. **Camadas de profundidade** — background (atmosfera), midground (estrutura), foreground (conteúdo), interaction (resposta). Mínimo 3 camadas ativas por seção.
-5. **Silêncio e descanso** — entre duas seções intensas, espaço de respiro. O olho do usuário não é uma GPU.
-6. **Ritmo** — abertura → desenvolvimento → clímax → resolução → pausa. Cada seção tem um papel na narrativa.
-7. **Personalidade acima de tudo** — se você remove o logo, ainda dá pra identificar a marca? Inesperado é memorável; esperado é genérico.
 
 ## 4. Mastery on-demand (como aprender uma técnica)
 
