@@ -182,13 +182,12 @@ export function buildForgeTimeline(timeline: SSEEvent[], running = false): Forge
       }
       // Briefing pro usuário durante o loop (assistant_text não-thinking, não-final, não-narration).
       // O fechamento final (final/narration) vira CLOSURE em done/finish, não aqui.
-      // Narração/fala do LLM (content: não-thinking, não-final, não-delta) — VERDADE no inspector.
-      // delta = fragmento de stream (vai só pro chat); final = CLOSURE em done/finish.
       if (
         ev.type === "assistant_text" &&
         !data.final &&
+        !data.narration &&
         !data.thinking &&
-        !data.delta
+        !data.delta // delta = fragmento de stream, não briefing completo (critério 2: sem render absurdo)
       ) {
         const text = String(data.text ?? "").trim();
         if (text) {

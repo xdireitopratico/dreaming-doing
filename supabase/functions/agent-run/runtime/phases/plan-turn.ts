@@ -244,8 +244,14 @@ export function createPlanModeTokenHandler(
     if (elapsed > THINKING_STREAM_CAP_MS) return;
     streamState.llmResponseWasStreamed = true;
     onActivity();
-    // Content = narração/resposta (NÃO é thinking). Vai pro chat.
     emit("assistant_text", {
+      text: delta,
+      append: true,
+      delta: true,
+      final: false,
+      thinking: true,
+    });
+    emit("thinking_text", {
       text: delta,
       append: true,
       delta: true,
@@ -254,7 +260,7 @@ export function createPlanModeTokenHandler(
   };
 }
 
-/** Reasoning real do modelo (reasoning_content) -> thinking_text -> THOUGHT no inspector. */
+/** Reasoning real do modelo (reasoning_content) -> thinking_text -> THOUGHT no inspector. Aditivo. */
 export function createPlanModeReasoningHandler(
   emit: PlanTurnEmit,
   onActivity: () => void,
@@ -623,7 +629,7 @@ export async function runPlanModeAgentTurn(
     }
 
     deps.markToolsInvoked();
-    if (assistantText?.trim()) deps.ensureOpeningBeforeWork(assistantText);
+    deps.ensureOpeningBeforeWork(assistantText || PLAN_OPENING_FALLBACK);
     deps.emit("phase", { phase: "plan", message: "", toolCount: execCalls.length });
 
     const execResults = await parallelExecute(execCalls, async (call) => {

@@ -74,9 +74,6 @@ class MockLLM implements LLMProvider {
     if (onTokenDelta && resolved.tool_calls?.length === 0 && !String(resolved.content ?? "").trim()) {
       onTokenDelta("Vou analisar o projeto…");
     }
-    if (onReasoningDelta && resolved.tool_calls?.length === 0 && !String(resolved.content ?? "").trim()) {
-      onReasoningDelta("Raciocínio do modelo sobre o pedido.");
-    }
     return resolved;
   }
 }
