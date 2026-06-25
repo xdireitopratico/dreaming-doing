@@ -10,6 +10,16 @@ metadata:
 
 Referências reais elevam o design do genérico ao extraordinário. Esta skill orquestra o ciclo: **extrair** DesignDNA de URLs → **ver** o que foi extraído → **aplicar** criativamente no projeto, seguindo a lógica de craft (skill `design-system`).
 
+## Comunicação e paralelismo (sem zona morta de interação)
+
+`extract_design_dna` é **assíncrono** — enfileira o job e ** retorna na hora** (com jobId + hint). Você **NÃO fica bloqueado** esperando. Portanto:
+
+1. **Avise o usuário imediatamente** (1 frase, antes de qualquer outra tool): "Comecei a extração de DesignDNA em background — pode levar ~30-60s (shallow) ou 1-4 min (deep). Quer seguir no brainstorm/plano enquanto roda, ou prefere aguardar?"
+2. **Prossiga com trabalho útil** (a menos que o usuário queira só aguardar): chame `design_resolve` com o catálogo, estruture as seções, pesquise mais referências, esboce o gesto memorável. Mantenha o turno vivo.
+3. **Quando o job concluir**, chame `read_design_library({ source_url })` para cada URL, **leia o design_dna** e aplique (seção 3 acima). Se ainda não tiver pronto, continue outra coisa e volte em seguida.
+
+Estimativas: **shallow** ≈ 30-60s (scrape + extração por LLM). **deep** ≈ 1-4 min (Playwright no sandbox, captura motion/hover/CSS computado). O usuário pode continuar conversando normalmente durante a extração.
+
 ## Quando usar
 
 - O usuário trouxer 1-5 URLs de sites que admira ("quero algo nesse estilo").
