@@ -144,6 +144,13 @@ export interface AgentProgress {
   classifySummary?: string | null;
   /** Session 2.0 — true quando classify indicou checkpoint restaurado. */
   classifyRestored?: boolean;
+  /** Clarify multi-pergunta — questões estruturadas vindas do edge function. */
+  clarifyQuestions?: Array<{
+    id: string;
+    intro?: string;
+    question: string;
+    choices: Array<{ id: string; label: string; description?: string }>;
+  }>;
 }
 
 export type AgentConnectOptions = {

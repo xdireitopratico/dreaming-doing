@@ -7,6 +7,7 @@ import { isPlanShapedMarkdown, planToolArgsFromMarkdown } from "../../plan-markd
 import { sanitizeUserFacingProse } from "../../sanitize-prose.ts";
 import {
   formatClarifyMessage,
+  extractClarifyQuestions,
   getMetaToolDefinitions,
   hasMixedMetaAndExecution,
   isPlanModePatchTool,
@@ -68,6 +69,12 @@ export type PlanTurnFinishDeps = {
       awaiting?: boolean;
       awaitingKind?: "clarify" | "plan_approval" | null;
       conversational?: boolean;
+      clarifyQuestions?: Array<{
+        id: string;
+        intro?: string;
+        question: string;
+        choices: Array<{ id: string; label: string; description?: string }>;
+      }>;
     },
   ) => Promise<void>;
   persistPlanFinal: (summary: string, plan: ProposedPlan) => Promise<void>;
@@ -169,6 +176,12 @@ export async function finishClarify(
   message: string,
   steps: number,
   toolsUsed: string[],
+  clarifyQuestions?: Array<{
+    id: string;
+    intro?: string;
+    question: string;
+    choices: Array<{ id: string; label: string; description?: string }>;
+  }>,
 ): Promise<PlanTurnRunResult> {
   const text = message.trim();
   if (!text) {
@@ -184,10 +197,12 @@ export async function finishClarify(
     phase: "clarify",
     reason: "clarify tool",
     awaiting: true,
+    clarifyQuestions: clarifyQuestions ?? undefined,
   });
   await deps.persistFinal(text, {
     awaiting: true,
     awaitingKind: "clarify",
+    clarifyQuestions: clarifyQuestions ?? undefined,
   });
   await deps.clearCheckpoint();
   deps.emit("done", { summary: text, qualified: true, awaiting: true });
@@ -542,7 +557,8 @@ export async function runPlanModeAgentTurn(
       toolsUsed.add("clarify");
       const clarifyMsg = formatClarifyMessage(clarifyCall.arguments);
       const combined = [assistantText, clarifyMsg].filter(Boolean).join("\n\n").trim();
-      return await finishClarify(finishDeps, combined, step, [...toolsUsed]);
+      const clarifyQuestions = extractClarifyQuestions(clarifyCall.arguments);
+      return await finishClarify(finishDeps, combined, step, [...toolsUsed], clarifyQuestions);
     }
 
     if (!response.tool_calls?.length) {

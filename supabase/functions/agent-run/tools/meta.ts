@@ -35,7 +35,8 @@ export const CLARIFY_TOOL: ToolDefinition = {
   description:
     "Pergunte ao usuário APENAS quando uma ambiguidade for bloqueante para continuar. " +
     "Não use para curiosidade — prefira assumir defaults razoáveis. " +
-    "Ofereça 2–4 opções claras quando fizer sentido.",
+    "Ofereça 2–4 opções claras quando fizer sentido. " +
+    "Para múltiplas perguntas, use `questions` (array) em vez de `question` (string única).",
   parameters: {
     type: "object",
     properties: {
@@ -45,12 +46,41 @@ export const CLARIFY_TOOL: ToolDefinition = {
       },
       question: {
         type: "string",
-        description: "Pergunta objetiva para o usuário.",
+        description: "Pergunta objetiva para o usuário (modo single-question).",
       },
       choices: {
         type: "array",
         items: CHOICE_SCHEMA,
         description: "Opções clicáveis (mínimo 2 quando houver escolha discreta).",
+      },
+      questions: {
+        type: "array",
+        description:
+          "Múltiplas perguntas para fechar escopo. Use quando precisar de 2+ perguntas " +
+          "antes de prosseguir. O usuário responderá todas em wizard com revisão final.",
+        items: {
+          type: "object",
+          properties: {
+            id: {
+              type: "string",
+              description: "ID único da pergunta (ex: 'q1', 'q2').",
+            },
+            intro: {
+              type: "string",
+              description: "Contexto opcional da pergunta.",
+            },
+            question: {
+              type: "string",
+              description: "Pergunta objetiva.",
+            },
+            choices: {
+              type: "array",
+              items: CHOICE_SCHEMA,
+              description: "Opções clicáveis (mínimo 2 quando houver escolha discreta).",
+            },
+          },
+          required: ["id", "question"],
+        },
       },
     },
     required: ["question"],
@@ -221,6 +251,26 @@ async function metaPlanHandler(args: Record<string, unknown>): Promise<ToolResul
 
 /** Formata args da tool clarify em markdown para o chat. */
 export function formatClarifyMessage(args: Record<string, unknown>): string {
+  const questions = extractClarifyQuestions(args);
+  if (questions.length > 1) {
+    // Multi-question: render each question with its choices as sections
+    const blocks: string[] = [];
+    const intro = typeof args.intro === "string" ? args.intro.trim() : "";
+    if (intro) blocks.push(intro);
+    for (let i = 0; i < questions.length; i++) {
+      const q = questions[i];
+      const lines: string[] = [];
+      if (q.intro) lines.push(q.intro);
+      lines.push(`**Q${i + 1}: ${q.question}**`);
+      for (const c of q.choices) {
+        lines.push(c.description ? `- **${c.label}** — ${c.description}` : `- **${c.label}**`);
+      }
+      blocks.push(lines.join("\n"));
+    }
+    return blocks.join("\n\n").trim();
+  }
+
+  // Single-question mode (legacy)
   const parts: string[] = [];
   const intro = typeof args.intro === "string" ? args.intro.trim() : "";
   const question = typeof args.question === "string" ? args.question.trim() : "";
@@ -236,6 +286,55 @@ export function formatClarifyMessage(args: Record<string, unknown>): string {
     parts.push(desc ? `- **${label}** — ${desc}` : `- **${label}**`);
   }
   return parts.join("\n\n").trim() || question || intro || "";
+}
+
+/** Extrai questions estruturadas dos args da tool clarify. */
+export type ClarifyQuestionOut = {
+  id: string;
+  intro?: string;
+  question: string;
+  choices: Array<{ id: string; label: string; description?: string }>;
+};
+
+export function extractClarifyQuestions(args: Record<string, unknown>): ClarifyQuestionOut[] {
+  // Multi-question mode
+  if (Array.isArray(args.questions) && args.questions.length > 0) {
+    const out: ClarifyQuestionOut[] = [];
+    for (let i = 0; i < args.questions.length; i++) {
+      const raw = args.questions[i];
+      if (!raw || typeof raw !== "object") continue;
+      const o = raw as Record<string, unknown>;
+      const question = typeof o.question === "string" ? o.question.trim() : "";
+      if (!question) continue;
+      const id = typeof o.id === "string" && o.id ? o.id : `q${i + 1}`;
+      const intro = typeof o.intro === "string" && o.intro.trim() ? o.intro.trim() : undefined;
+      const choices = parseChoiceArray(o.choices);
+      out.push({ id, intro, question, choices });
+    }
+    if (out.length > 0) return out;
+  }
+
+  // Single-question fallback
+  const question = typeof args.question === "string" ? args.question.trim() : "";
+  if (!question) return [];
+  const intro = typeof args.intro === "string" && args.intro.trim() ? args.intro.trim() : undefined;
+  const choices = parseChoiceArray(args.choices);
+  return [{ id: "q1", intro, question, choices }];
+}
+
+function parseChoiceArray(raw: unknown): Array<{ id: string; label: string; description?: string }> {
+  if (!Array.isArray(raw)) return [];
+  const out: Array<{ id: string; label: string; description?: string }> = [];
+  for (let i = 0; i < raw.length; i++) {
+    const r = raw[i];
+    if (!r || typeof r !== "object") continue;
+    const c = r as Record<string, unknown>;
+    const label = typeof c.label === "string" ? c.label.trim() : "";
+    if (!label) continue;
+    const desc = typeof c.description === "string" && c.description.trim() ? c.description.trim() : undefined;
+    out.push({ id: `c${i}`, label, description: desc });
+  }
+  return out;
 }
 
 function coercePlanSteps(raw: unknown): PlanStep[] {

@@ -313,6 +313,9 @@ function progressFromCardSnapshot(snap: Record<string, unknown>, msg: ChatMessag
     conversational: snap.conversational === true,
     planSummary:
       typeof snap.planSummary === "string" ? snap.planSummary : (pendingPlan?.summary ?? null),
+    clarifyQuestions: Array.isArray(snap.clarifyQuestions)
+      ? (snap.clarifyQuestions as AgentProgress["clarifyQuestions"])
+      : undefined,
   };
 }
 

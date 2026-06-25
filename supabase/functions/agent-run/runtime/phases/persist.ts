@@ -26,6 +26,12 @@ export type PersistFinalOpts = {
   awaitingKind?: "clarify" | "plan_approval" | null;
   conversational?: boolean;
   designSignature?: Record<string, unknown>;
+  clarifyQuestions?: Array<{
+    id: string;
+    intro?: string;
+    question: string;
+    choices: Array<{ id: string; label: string; description?: string }>;
+  }>;
 };
 
 export type AgentPersistDeps = {
@@ -271,6 +277,7 @@ export async function persistFinal(
     awaitingKind: opts?.awaitingKind,
     conversational,
     phase: opts?.awaiting ? null : "done",
+    clarifyQuestions: opts?.clarifyQuestions,
   });
   const meta: Record<string, unknown> = {
     runId: deps.runId ?? undefined,

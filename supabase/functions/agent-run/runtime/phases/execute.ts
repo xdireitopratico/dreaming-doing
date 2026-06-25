@@ -14,6 +14,7 @@ import { sanitizeUserFacingProse } from "../../sanitize-prose.ts";
 import { resolveClosureText } from "../../loop-status.ts";
 import {
   formatClarifyMessage,
+  extractClarifyQuestions,
   hasMixedMetaAndExecution,
   splitMetaToolCalls,
 } from "../../tools/meta.ts";
@@ -118,6 +119,12 @@ export type BuildExecuteDeps = {
     message: string,
     steps: number,
     toolsUsed: string[],
+    clarifyQuestions?: Array<{
+      id: string;
+      intro?: string;
+      question: string;
+      choices: Array<{ id: string; label: string; description?: string }>;
+    }>,
   ) => Promise<PlanTurnRunResult>;
   attemptGracefulClosing: (reason: "tool_miss" | "build_fail") => Promise<string | null>;
   emitTransition: (eventType: string, data?: unknown) => Promise<void>;
@@ -387,7 +394,8 @@ export async function runBuildExecutePhase(
         deps.toolsUsed.add("clarify");
         const clarifyMsg = formatClarifyMessage(clarifyCall.arguments);
         const combined = [assistantText, clarifyMsg].filter(Boolean).join("\n\n").trim();
-        return deps.finishClarify(combined, 0, [...deps.toolsUsed]);
+        const clarifyQuestions = extractClarifyQuestions(clarifyCall.arguments);
+        return deps.finishClarify(combined, 0, [...deps.toolsUsed], clarifyQuestions);
       }
 
       if (!response.tool_calls || response.tool_calls.length === 0) {

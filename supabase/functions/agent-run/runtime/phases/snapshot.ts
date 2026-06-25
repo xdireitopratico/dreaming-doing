@@ -85,6 +85,12 @@ export type BuildCardSnapshotOpts = {
   totalSteps?: number | null;
   error?: string | null;
   resumable?: boolean;
+  clarifyQuestions?: Array<{
+    id: string;
+    intro?: string;
+    question: string;
+    choices: Array<{ id: string; label: string; description?: string }>;
+  }>;
 };
 
 export type BuildCardSnapshotContext = {
@@ -131,6 +137,7 @@ export function buildCardSnapshot(ctx: BuildCardSnapshotContext): Record<string,
     awaiting: opts.awaiting ?? false,
     awaitingKind: opts.awaitingKind ?? null,
     conversational: opts.conversational === true,
+    clarifyQuestions: opts.clarifyQuestions ?? undefined,
   };
 
   if (opts.pendingPlan) {

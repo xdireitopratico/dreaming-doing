@@ -236,6 +236,12 @@ export type AgentLoopDepsContext = {
     message: string,
     steps: number,
     toolsUsed: string[],
+    clarifyQuestions?: Array<{
+      id: string;
+      intro?: string;
+      question: string;
+      choices: Array<{ id: string; label: string; description?: string }>;
+    }>,
   ) => Promise<PlanTurnRunResult>;
   attemptGracefulClosing: (
     reason: "tool_miss" | "build_fail" | "plan_stuck",
@@ -480,8 +486,8 @@ export function createDepsContext(
       persistCheckpointChat(persistDeps(), steps, buildFix),
     notifyLoopStatus: (ctx) => host.notifyLoopStatus(ctx),
     recordTouchedPath: (path) => host.recordTouchedPath(path),
-    finishClarify: (message, steps, used) =>
-      finishClarify(buildPlanTurnFinishDeps(ctx), message, steps, used),
+    finishClarify: (message, steps, used, clarifyQuestions) =>
+      finishClarify(buildPlanTurnFinishDeps(ctx), message, steps, used, clarifyQuestions),
     attemptGracefulClosing: (reason) => host.attemptGracefulClosing(reason),
     emitTransition: (eventType, data) => host.emitTransition(eventType, data),
     llmChat: (model, instruction, history, forceTools) =>

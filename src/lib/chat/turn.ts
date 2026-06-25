@@ -176,12 +176,14 @@ export function mapAssistantTurn(
     !thread.slice(itemIndex + 1).some((t) => t.kind === "assistant");
   const closingText = runView?.closingText ?? item.message?.content?.trim() ?? null;
   const parsedClarify = closingText ? parseClarifyChoices(closingText) : null;
+  const structuredClarifyQuestions = resolved?.clarifyQuestions ?? sessionProgress.clarifyQuestions;
+  const hasStructuredClarify = !!structuredClarifyQuestions && structuredClarifyQuestions.length > 0;
 
   const clarifyInteractive =
     isLastTurn &&
     !running &&
     !slotActive &&
-    !!parsedClarify &&
+    (!!parsedClarify || hasStructuredClarify) &&
     (sessionProgress.awaitingKind === "clarify" ||
       (sessionProgress.awaitingKind as string | null) === "qualify" ||
       sessionProgress.awaiting ||
@@ -189,16 +191,49 @@ export function mapAssistantTurn(
       (resolved?.awaitingKind as string | null) === "qualify");
 
   let clarify: ClarifyPrompt | null = null;
-  if (clarifyInteractive && parsedClarify) {
-    clarify = {
-      intro: parsedClarify.intro || undefined,
-      question: parsedClarify.question || undefined,
-      choices: parsedClarify.choices.map((c) => ({
-        id: c.id,
-        label: c.label,
-        description: c.description,
-      })),
-    };
+  if (clarifyInteractive) {
+    // Prefer structured clarifyQuestions from the edge function (multi-question mode)
+    const structuredQuestions = resolved?.clarifyQuestions ?? sessionProgress.clarifyQuestions;
+    if (structuredQuestions && structuredQuestions.length > 0) {
+      if (structuredQuestions.length > 1) {
+        clarify = {
+          choices: [],
+          questions: structuredQuestions.map((q) => ({
+            id: q.id,
+            intro: q.intro,
+            question: q.question,
+            choices: q.choices.map((c) => ({
+              id: c.id,
+              label: c.label,
+              description: c.description,
+            })),
+          })),
+        };
+      } else {
+        // Single structured question — use legacy format
+        const q = structuredQuestions[0];
+        clarify = {
+          intro: q.intro,
+          question: q.question,
+          choices: q.choices.map((c) => ({
+            id: c.id,
+            label: c.label,
+            description: c.description,
+          })),
+        };
+      }
+    } else if (parsedClarify) {
+      // Fallback: parse choices from markdown text
+      clarify = {
+        intro: parsedClarify.intro || undefined,
+        question: parsedClarify.question || undefined,
+        choices: parsedClarify.choices.map((c) => ({
+          id: c.id,
+          label: c.label,
+          description: c.description,
+        })),
+      };
+    }
   }
 
   const rawStreamText = closingText ?? resolved?.streamText ?? null;
