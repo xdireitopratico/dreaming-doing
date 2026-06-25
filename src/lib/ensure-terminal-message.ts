@@ -172,6 +172,10 @@ export function buildTerminalCardSnapshot(opts: {
   buildFailed?: boolean;
 }): Record<string, unknown> {
   const tools = toolsFromTimeline(opts.timeline);
+  const firstTs = opts.timeline[0]?.timestamp ?? null;
+  const lastTs = opts.timeline.at(-1)?.timestamp ?? null;
+  const workingDurationMs =
+    firstTs != null && lastTs != null ? Math.max(1000, lastTs - firstTs) : undefined;
   return {
     timeline: opts.timeline,
     tools,
@@ -184,6 +188,7 @@ export function buildTerminalCardSnapshot(opts: {
     finished: true,
     resumable: false,
     lastFinishOk: false,
+    workingDurationMs,
     deliveryFiles: [],
     buildLogLines: [],
     stackForkSuggested: null,

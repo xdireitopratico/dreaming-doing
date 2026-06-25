@@ -41,9 +41,6 @@ import {
   type PoolSlotPublic,
 } from "@/lib/save-connector";
 import { saveToolConnector, disconnectToolConnector } from "@/lib/save-tool-connector";
-import { saveE2bApiKey, disconnectE2bApiKey } from "@/lib/save-e2b-key";
-import { isE2bConnected, isE2bHealthOk } from "@/lib/e2b-status";
-import { testE2bApiKey, type E2bHealthResponse } from "@/lib/test-e2b-key";
 import {
   disconnectOllamaConnector,
   readOllamaMetaFromRows,
@@ -186,11 +183,6 @@ export function ApiModelsPage() {
   const [keysExpanded, setKeysExpanded] = useState(false);
   const [infraExpanded, setInfraExpanded] = useState(false);
 
-  const [e2bKeyValue, setE2bKeyValue] = useState("");
-  const [e2bConnected, setE2bConnected] = useState(false);
-  const [e2bHealth, setE2bHealth] = useState<E2bHealthResponse | null>(null);
-  const [e2bTesting, setE2bTesting] = useState(false);
-
   const [ollamaBaseUrl, setOllamaBaseUrl] = useState("http://localhost:11434");
   const [ollamaModel, setOllamaModel] = useState("llama3.2");
   const [ollamaApiKey, setOllamaApiKey] = useState("");
@@ -252,24 +244,6 @@ export function ApiModelsPage() {
   useEffect(() => {
     if (!connectorRows) return;
     const connected = connectedEnvsFromRows(connectorRows);
-
-    setE2bConnected(isE2bConnected(connectorRows));
-    const e2bRow = connectorRows.find((r) => r.kind === "e2b");
-    if (isE2bHealthOk(e2bRow?.meta)) {
-      const meta = (e2bRow?.meta ?? {}) as {
-        e2bTemplate?: string;
-        e2bNodeVersion?: string;
-        e2bNpmVersion?: string;
-      };
-      setE2bHealth({
-        ok: true,
-        templateUsed: meta.e2bTemplate,
-        nodeVersion: meta.e2bNodeVersion,
-        npmVersion: meta.e2bNpmVersion,
-      });
-    } else if (!isE2bConnected(connectorRows)) {
-      setE2bHealth(null);
-    }
 
     const ollamaMeta = readOllamaMetaFromRows(connectorRows);
     setOllamaConnected(!!ollamaMeta);
@@ -468,58 +442,6 @@ export function ApiModelsPage() {
     },
     [qc, providers],
   );
-
-  const handleTestE2b = useCallback(async () => {
-    setE2bTesting(true);
-    try {
-      const token = e2bKeyValue.trim().startsWith("e2b") ? e2bKeyValue : undefined;
-      const result = await testE2bApiKey(token);
-      setE2bHealth(result);
-      if (result.ok) {
-        await qc.invalidateQueries({ queryKey: ["connectors-public"] });
-        if (!token) setE2bConnected(true);
-      } else {
-        toast.error(result.error ?? "Teste E2B falhou");
-      }
-    } catch (e: unknown) {
-      setE2bHealth({ ok: false, error: e instanceof Error ? e.message : "Falha no teste" });
-      toast.error(e instanceof Error ? e.message : "Falha no teste E2B");
-    } finally {
-      setE2bTesting(false);
-    }
-  }, [e2bKeyValue, qc]);
-
-  const handleSaveE2b = useCallback(async () => {
-    if (!e2bKeyValue.trim().startsWith("e2b")) {
-      toast.error("Cole uma chave E2B válida (prefixo e2b_)");
-      return;
-    }
-    setSavingId("e2b");
-    try {
-      await saveE2bApiKey(e2bKeyValue);
-      setE2bKeyValue("");
-      setE2bConnected(true);
-      await qc.invalidateQueries({ queryKey: ["connectors-public"] });
-    } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : "Falha ao salvar E2B");
-    } finally {
-      setSavingId(null);
-    }
-  }, [e2bKeyValue, qc]);
-
-  const handleDeleteE2b = useCallback(async () => {
-    setSavingId("e2b");
-    try {
-      await disconnectE2bApiKey();
-      setE2bConnected(false);
-      setE2bKeyValue("");
-      await qc.invalidateQueries({ queryKey: ["connectors-public"] });
-    } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : "Falha ao remover E2B");
-    } finally {
-      setSavingId(null);
-    }
-  }, [qc]);
 
   const handleSaveOllama = useCallback(async () => {
     setSavingId("ollama");
@@ -889,14 +811,6 @@ export function ApiModelsPage() {
       <InfraToolsSection
         expanded={infraExpanded}
         onToggle={() => setInfraExpanded((v) => !v)}
-        e2bKeyValue={e2bKeyValue}
-        onE2bKeyChange={setE2bKeyValue}
-        e2bConnected={e2bConnected}
-        e2bHealth={e2bHealth}
-        e2bTesting={e2bTesting}
-        onSaveE2b={handleSaveE2b}
-        onTestE2b={handleTestE2b}
-        onDeleteE2b={handleDeleteE2b}
         ollamaBaseUrl={ollamaBaseUrl}
         onOllamaBaseUrlChange={setOllamaBaseUrl}
         ollamaModel={ollamaModel}

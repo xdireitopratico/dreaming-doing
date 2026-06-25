@@ -1,11 +1,10 @@
 // chat-turn.ts — Turno único do modo Chat (run + SSE, sem tools)
 import { friendlyLlmError } from "../../llm-errors.ts";
-import { sanitizeUserFacingProse } from "../../sanitize-prose.ts";
+import { splitUserFacingChatReply } from "../../sanitize-prose.ts";
 import { logger } from "../../../_shared/logger.ts";
 import { calculateMaxTokens } from "../loop-config.ts";
 import { DIRECT_CHAT_SYSTEM } from "../../conversational.ts";
 import {
-  createChatModeTokenHandler,
   type PlanModeStreamState,
   type PlanTurnEmit,
   type PlanTurnFinishDeps,
@@ -57,6 +56,20 @@ async function finishChatFailure(
   };
 }
 
+function createSilentChatProgressHandler(
+  streamState: PlanModeStreamState,
+  onActivity: () => void,
+): (delta: string) => void {
+  return (delta: string) => {
+    if (!delta) return;
+    streamState.llmResponseWasStreamed = true;
+    if (streamState.thinkingStreamStartedAt == null) {
+      streamState.thinkingStreamStartedAt = Date.now();
+    }
+    onActivity();
+  };
+}
+
 export async function runChatModeAgentTurn(
   deps: ChatTurnDeps,
   model: LLMProvider,
@@ -77,7 +90,7 @@ export async function runChatModeAgentTurn(
       ],
       max_tokens: calculateMaxTokens(2),
       temperature: 0.35,
-      onTokenDelta: createChatModeTokenHandler(deps.streamState, deps.emit, deps.onActivity),
+      onTokenDelta: createSilentChatProgressHandler(deps.streamState, deps.onActivity),
     });
     responseContent = (response.content ?? "").trim();
   } catch (err: unknown) {
@@ -97,7 +110,8 @@ export async function runChatModeAgentTurn(
     contentLength: responseContent.length,
   });
 
-  const text = sanitizeUserFacingProse(responseContent).trim();
+  const { userText, reasoningText } = splitUserFacingChatReply(responseContent);
+  const text = userText.trim();
   if (!text) {
     if (deps.streamState.llmResponseWasStreamed) {
       return await finishChatFailure(
@@ -109,6 +123,14 @@ export async function runChatModeAgentTurn(
     return await finishChatFailure(deps, "Resposta vazia do modelo.", "chat_empty_response");
   }
 
+  if (reasoningText?.trim()) {
+    deps.emit("thinking_text", {
+      text: reasoningText.trim(),
+      append: false,
+      delta: false,
+      final: true,
+    });
+  }
   deps.emit("assistant_text", { text, final: true });
   await deps.persistFinal(text, { lastFinishOk: true, conversational: true });
   await deps.clearCheckpoint();

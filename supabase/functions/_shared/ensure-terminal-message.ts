@@ -175,6 +175,10 @@ function buildTerminalMessageMeta(opts: {
   error?: string | null;
 }): Record<string, unknown> {
   const tools = toolsFromTimeline(opts.streamTail);
+  const firstTs = opts.streamTail[0]?.timestamp ?? null;
+  const lastTs = opts.streamTail.at(-1)?.timestamp ?? null;
+  const workingDurationMs =
+    firstTs != null && lastTs != null ? Math.max(1000, lastTs - firstTs) : undefined;
   const cardSnapshot: Record<string, unknown> = {
     timeline: opts.streamTail,
     tools,
@@ -187,6 +191,7 @@ function buildTerminalMessageMeta(opts: {
     finished: true,
     resumable: false,
     lastFinishOk: false,
+    workingDurationMs,
     deliveryFiles: [],
     buildLogLines: [],
     stackForkSuggested: null,

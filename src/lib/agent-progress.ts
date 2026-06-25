@@ -65,6 +65,7 @@ export interface PendingPlan {
 }
 
 export interface AgentProgress {
+  mode?: "chat" | "plan" | "build";
   phase: string | null;
   message: string | null;
   currentStep: number | null;
@@ -127,7 +128,7 @@ export interface AgentProgress {
   /** Turno social/conversacional — só bubble no chat, sem mini-card de job. */
   conversational?: boolean;
   /** Estado da conexão Realtime — usado para feedback visual durante reconnect
-    *  (Fase 1.6: «Reconectando…» no ChatThinking enquanto o canal refaz handshake). */
+   *  (Fase 1.6: «Reconectando…» no ChatThinking enquanto o canal refaz handshake). */
   connectionState?: "connected" | "reconnecting" | "disconnected";
   /** Session 2.0 — tokens consumidos pela run (lidos do finish/done enriquecido). */
   tokens?: { input: number; output: number; total: number } | null;
@@ -151,6 +152,7 @@ export type AgentConnectOptions = {
 };
 
 export const initialAgentProgress: AgentProgress = {
+  mode: undefined,
   phase: null,
   message: null,
   currentStep: null,
@@ -495,10 +497,8 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
         ...prev,
         finished: false,
         error: null,
-        currentStep:
-          typeof data.step === "number" ? data.step : prev.currentStep,
-        totalSteps:
-          typeof data.totalSteps === "number" ? data.totalSteps : prev.totalSteps,
+        currentStep: typeof data.step === "number" ? data.step : prev.currentStep,
+        totalSteps: typeof data.totalSteps === "number" ? data.totalSteps : prev.totalSteps,
         streamText: prev.streamText,
         narrationText: narration || prev.narrationText,
         deliveryFiles,
@@ -514,8 +514,7 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
         model: (data.model as string) ?? prev.model,
         classifyComplexity:
           typeof data.complexity === "string" ? data.complexity : prev.classifyComplexity,
-        classifySummary:
-          typeof data.summary === "string" ? data.summary : prev.classifySummary,
+        classifySummary: typeof data.summary === "string" ? data.summary : prev.classifySummary,
         classifyRestored: data.restored === true ? true : prev.classifyRestored,
         timeline: [...prev.timeline, event],
       };
@@ -536,9 +535,7 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
           {
             name: (data.name as string) ?? "?",
             args: (data.args as Record<string, unknown>) ?? {},
-            ...(typeof data.toolCallId === "string"
-              ? { toolCallId: data.toolCallId }
-              : {}),
+            ...(typeof data.toolCallId === "string" ? { toolCallId: data.toolCallId } : {}),
           },
         ],
         timeline: [...prev.timeline, event],
@@ -745,9 +742,7 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
       const resumeAttempts =
         typeof data.resumeAttempts === "number" ? data.resumeAttempts : prev.resumeAttempts;
       const summary =
-        typeof data.summary === "string" && data.summary.trim()
-          ? data.summary
-          : prev.summary;
+        typeof data.summary === "string" && data.summary.trim() ? data.summary : prev.summary;
       return {
         ...prev,
         finished: true,
@@ -814,8 +809,7 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
     case "stuck":
       return {
         ...prev,
-        statusHint:
-          (data.message as string) ?? "Modelo preso — tentando destravar…",
+        statusHint: (data.message as string) ?? "Modelo preso — tentando destravar…",
         timeline: [...prev.timeline, event],
       };
 
@@ -824,8 +818,7 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
       pushDiagnostics(diags);
       return {
         ...prev,
-        statusHint:
-          (data.message as string) ?? "Erros de TypeScript — veja o editor",
+        statusHint: (data.message as string) ?? "Erros de TypeScript — veja o editor",
         timeline: [...prev.timeline, event],
       };
     }
@@ -833,8 +826,7 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
     case "timeout_warning":
       return {
         ...prev,
-        statusHint:
-          (data.message as string) ?? "Loop budget quase esgotado…",
+        statusHint: (data.message as string) ?? "Loop budget quase esgotado…",
         timeline: [...prev.timeline, event],
       };
 

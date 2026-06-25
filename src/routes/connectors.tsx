@@ -1,4 +1,4 @@
-// Integrações de plataforma: GitHub, Supabase, Vercel, Cloudflare, E2B (separado de API / Modelos)
+// Integrações de plataforma: GitHub, Supabase, Vercel, Cloudflare e E2B.
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { motion } from "framer-motion";
 import { ArrowLeft, Plug, Shield, CheckCircle2, Key } from "lucide-react";
@@ -42,7 +42,7 @@ function ConnectorsPage() {
           <div>
             <h1 className="font-display text-3xl tracking-tight">Conectores</h1>
             <p className="font-mono text-[10px] text-[var(--text-dim)] mt-0.5">
-              GitHub, Supabase, Vercel e Cloudflare — chaves de API ficam em API Keys
+              GitHub, Supabase, Vercel, Cloudflare e E2B — modelos e tools ficam em Api & Models
             </p>
           </div>
         </div>
@@ -95,7 +95,10 @@ function ConnectorsPage() {
             Tokens ficam cifrados no servidor — nunca no navegador.
           </span>
         </div>
-        <Link to="/api-models" className="font-mono text-[9px] text-[var(--primary)] hover:underline">
+        <Link
+          to="/api-models"
+          className="font-mono text-[9px] text-[var(--primary)] hover:underline"
+        >
           Modelos →
         </Link>
       </motion.footer>

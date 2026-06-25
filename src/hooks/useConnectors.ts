@@ -1,5 +1,4 @@
 import { useCallback, useState } from "react";
-import { useNavigate } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
@@ -28,7 +27,6 @@ export type { ConnectorId, IntegrationMode, IntegrationPrefs };
 export function useConnectors() {
   const { user } = useAuth();
   const qc = useQueryClient();
-  const navigate = useNavigate();
   const [modal, setModal] = useState<ConnectorId | null>(null);
 
   const { data: profile } = useQuery({
@@ -175,12 +173,6 @@ export function useConnectors() {
     ) => {
       const entry = CONNECTOR_REGISTRY[kind];
 
-      if (kind === "e2b") {
-        setModal(null);
-        void navigate({ to: "/api-models", hash: "forge-key-e2b" });
-        return;
-      }
-
       const upsertKind = entry.upsertKind;
       if (!upsertKind) {
         setModal(null);
@@ -211,16 +203,9 @@ export function useConnectors() {
     [qc, setMode],
   );
 
-  const openConnector = useCallback(
-    (id: ConnectorId) => {
-      if (id === "e2b") {
-        void navigate({ to: "/api-models", hash: "forge-key-e2b" });
-        return;
-      }
-      setModal(id);
-    },
-    [navigate],
-  );
+  const openConnector = useCallback((id: ConnectorId) => {
+    setModal(id);
+  }, []);
   const closeModal = useCallback(() => setModal(null), []);
 
   return {

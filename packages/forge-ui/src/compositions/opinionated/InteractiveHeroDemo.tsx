@@ -32,7 +32,7 @@ export function InteractiveHeroDemo({
           <StaggerContainer>
             {eyebrow && (
               <StaggerItem>
-                <Badge variant="secondary" className="mb-4">
+                <Badge variant="accent" className="mb-4">
                   {eyebrow}
                 </Badge>
               </StaggerItem>
@@ -49,13 +49,19 @@ export function InteractiveHeroDemo({
             )}
             <StaggerItem>
               <Button className="mt-8" onClick={primaryCta.onClick} asChild={!!primaryCta.href}>
-                {primaryCta.href ? <a href={primaryCta.href}>{primaryCta.label}</a> : primaryCta.label}
+                {primaryCta.href ? (
+                  <a href={primaryCta.href}>{primaryCta.label}</a>
+                ) : (
+                  primaryCta.label
+                )}
               </Button>
             </StaggerItem>
           </StaggerContainer>
           <div className="relative">
             <div className="rounded-2xl border border-border bg-surface-1 p-3 shadow-glow">
-              <div className="overflow-hidden rounded-xl border border-border/60 bg-background">{demo}</div>
+              <div className="overflow-hidden rounded-xl border border-border/60 bg-background">
+                {demo}
+              </div>
             </div>
             {demoCaption && (
               <p className="mt-4 text-center text-sm text-muted-foreground">{demoCaption}</p>

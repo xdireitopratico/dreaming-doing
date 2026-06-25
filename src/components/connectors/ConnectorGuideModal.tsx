@@ -105,9 +105,6 @@ export function ConnectorGuideModal({
             label: cfAccount.trim() || "Cloudflare",
           },
         });
-      } else if (connector === "e2b") {
-        resetAndClose();
-        window.location.assign("/api-models#forge-key-e2b");
       } else if (connector === "supabase") {
         if (!supabaseUrl.trim() || !token.trim()) {
           toast.error("Informe a URL do projeto e a chave anon ou service role");

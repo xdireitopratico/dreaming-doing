@@ -107,7 +107,7 @@ export function buildCardSnapshot(ctx: BuildCardSnapshotContext): Record<string,
   const lastFinishOk = opts.lastFinishOk ?? (finished ? true : null);
   const narration = ctx.narrationBuffer.trim();
   const now = ctx.now ?? Date.now();
-
+  const workingDurationMs = ctx.runStartTime > 0 ? Math.max(1000, now - ctx.runStartTime) : null;
 
   const snapshot: Record<string, unknown> = {
     timeline,
@@ -122,6 +122,7 @@ export function buildCardSnapshot(ctx: BuildCardSnapshotContext): Record<string,
     finished,
     resumable: opts.resumable ?? false,
     lastFinishOk,
+    workingDurationMs: workingDurationMs ?? undefined,
     currentStep: opts.currentStep ?? ctx.currentStepIndex,
     totalSteps: opts.totalSteps ?? ctx.maxStepsLimit,
     deliveryFiles: opts.deliveryFiles,

@@ -1,10 +1,5 @@
 import { assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
-import {
-  buildCardSnapshot,
-  diffsFromTimeline,
-  
-  toolsFromTimeline,
-} from "./snapshot.ts";
+import { buildCardSnapshot, diffsFromTimeline, toolsFromTimeline } from "./snapshot.ts";
 
 Deno.test("toolsFromTimeline — pareia tool_start com tool_done", () => {
   const timeline = [
@@ -31,12 +26,9 @@ Deno.test("diffsFromTimeline — file_diff vira entrada estruturada", () => {
   assertEquals(diffs[0].op, "edit");
 });
 
-
 Deno.test("buildCardSnapshot — monta snapshot terminal", () => {
   const runStart = 5000;
-  const timeline = [
-    { type: "assistant_text", data: { text: "Pronto." }, timestamp: 6000 },
-  ];
+  const timeline = [{ type: "assistant_text", data: { text: "Pronto." }, timestamp: 6000 }];
   const snapshot = buildCardSnapshot({
     timeline,
     narrationBuffer: "Narração",
@@ -57,4 +49,5 @@ Deno.test("buildCardSnapshot — monta snapshot terminal", () => {
   assertEquals(snapshot.narrationText, "Narração");
   assertEquals(snapshot.currentStep, 3);
   assertEquals(snapshot.totalSteps, 70);
+  assertEquals(snapshot.workingDurationMs, 2000);
 });

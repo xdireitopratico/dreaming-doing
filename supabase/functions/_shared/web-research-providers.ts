@@ -5,9 +5,6 @@
 
 declare const Deno: {
   env: { get(name: string): string | undefined };
-  makeTempFile(options?: { prefix?: string; suffix?: string }): Promise<string>;
-  writeTextFile(path: string, data: string): Promise<void>;
-  remove(path: string): Promise<void>;
 };
 
 import {
@@ -15,14 +12,10 @@ import {
   htmlToMarkdownDocument,
   htmlToVisibleText,
 } from "../../../src/lib/html-hygiene.ts";
-import {
-  finalizeDocumentMarkdown,
-  sanitizeDocumentMarkdown,
-  structurePlainTextAsMarkdown,
-} from "./document-sanitize.ts";
+import { finalizeDocumentMarkdown, sanitizeDocumentMarkdown } from "./document-sanitize.ts";
 
 export type WebSecrets = Record<string, string>;
-export type WebParserProvider = "builtin" | "cheerio" | "llamaindex" | "markitdown";
+export type WebParserProvider = "builtin";
 
 function pickSecret(secrets: WebSecrets, names: string[]): string | undefined {
   for (const name of names) {
@@ -61,75 +54,7 @@ async function withRetry<T>(
 }
 
 function normalizeParserProvider(parser?: string): WebParserProvider {
-  switch (String(parser || "").trim()) {
-    case "cheerio":
-    case "llamaindex":
-    case "markitdown":
-      return parser as WebParserProvider;
-    default:
-      return "builtin";
-  }
-}
-
-async function parseWithCheerio(rawHtml: string, fallbackText: string): Promise<string> {
-  const hygiene = cleanHtmlDocument(rawHtml || "");
-  const cheerioMarkdown = htmlToMarkdownDocument(hygiene.cleanHtml || rawHtml || "");
-  const candidate = cheerioMarkdown || hygiene.cleanText || fallbackText;
-  return finalizeDocumentMarkdown(candidate, { structure: true }).markdown;
-}
-
-async function parseWithLlamaIndex(rawHtml: string, fallbackText: string): Promise<string> {
-  const sourceMarkdown = htmlToMarkdownDocument(rawHtml || "") || fallbackText;
-  const cleanMarkdown = finalizeDocumentMarkdown(sourceMarkdown, { structure: false }).markdown;
-
-  try {
-    const { Document, MarkdownNodeParser } = await import("npm:llamaindex");
-    const parser = new MarkdownNodeParser();
-    const docs = [new Document({ text: cleanMarkdown })];
-    const nodes = await parser.getNodesFromDocuments(docs);
-    const content = nodes
-      .map((node: { text?: string }) => String(node.text || "").trim())
-      .filter(Boolean)
-      .join("\n\n");
-
-    return content || cleanMarkdown;
-  } catch (error) {
-    console.warn(
-      `[web_parser] llamaindex failed, using Forge Default: ${(error as Error).message}`,
-    );
-    return finalizeDocumentMarkdown(cleanMarkdown, { structure: true }).markdown;
-  }
-}
-
-async function parseWithMarkItDown(rawHtml: string, fallbackText: string): Promise<string> {
-  const payload = rawHtml || fallbackText;
-  if (!payload.trim()) return "";
-
-  let tempPath = "";
-  try {
-    const { runMarkitdown } = await import("npm:@mote-software/markitdown");
-    tempPath = await Deno.makeTempFile({
-      prefix: "forge-web-parser-",
-      suffix: rawHtml ? ".html" : ".md",
-    });
-    await Deno.writeTextFile(tempPath, payload);
-    const markdown = await runMarkitdown(tempPath);
-    const normalized = typeof markdown === "string" ? markdown : String(markdown ?? "");
-    return finalizeDocumentMarkdown(normalized || fallbackText, { structure: true }).markdown;
-  } catch (error) {
-    console.warn(
-      `[web_parser] markitdown failed, using Forge Default: ${(error as Error).message}`,
-    );
-    return finalizeDocumentMarkdown(payload, { structure: true }).markdown;
-  } finally {
-    if (tempPath) {
-      try {
-        await Deno.remove(tempPath);
-      } catch {
-        /* noop */
-      }
-    }
-  }
+  return String(parser || "").trim() === "builtin" ? "builtin" : "builtin";
 }
 
 async function normalizeContentByParser(
@@ -160,24 +85,9 @@ async function normalizeContentByParser(
   }
 
   const fallbackText = cleanText || htmlToVisibleText(rawHtml || "");
-  let content = builtinMarkdown || fallbackText;
-
-  switch (parserName) {
-    case "cheerio":
-      content = await parseWithCheerio(cleanHtml, fallbackText);
-      break;
-    case "llamaindex":
-      content = await parseWithLlamaIndex(cleanHtml, fallbackText);
-      break;
-    case "markitdown":
-      content = await parseWithMarkItDown(cleanHtml, fallbackText);
-      break;
-    default:
-      content = finalizeDocumentMarkdown(builtinMarkdown || fallbackText, {
-        structure: true,
-      }).markdown;
-      break;
-  }
+  const content = finalizeDocumentMarkdown(builtinMarkdown || fallbackText, {
+    structure: true,
+  }).markdown;
 
   return {
     title: hygiene.title,
@@ -189,21 +99,10 @@ async function normalizeContentByParser(
 }
 
 async function normalizeTextByParser(text: string, parser: string | undefined): Promise<string> {
-  const parserName = normalizeParserProvider(parser);
   const clean = String(text || "").trim();
   if (!clean) return "";
 
-  switch (parserName) {
-    case "cheerio":
-      return structurePlainTextAsMarkdown(clean) || clean;
-    case "llamaindex":
-      return await parseWithLlamaIndex("", clean);
-    case "markitdown":
-      return await parseWithMarkItDown("", clean);
-    default:
-      return finalizeDocumentMarkdown(sanitizeDocumentMarkdown(clean), { structure: true })
-        .markdown;
-  }
+  return finalizeDocumentMarkdown(sanitizeDocumentMarkdown(clean), { structure: true }).markdown;
 }
 
 function normalizeProviderBaseUrl(baseUrl: string | undefined, fallback: string): string {

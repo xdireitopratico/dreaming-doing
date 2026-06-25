@@ -14,7 +14,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ApiKeyInput } from "@/components/connectors/ApiKeyInput";
-import type { E2bHealthResponse } from "@/lib/test-e2b-key";
 import {
   browserRuntimeProviders,
   parserIndexProviders,
@@ -48,14 +47,6 @@ type ConnectionState = {
 interface InfraToolsSectionProps {
   expanded: boolean;
   onToggle: () => void;
-  e2bKeyValue: string;
-  onE2bKeyChange: (v: string) => void;
-  e2bConnected: boolean;
-  e2bHealth: E2bHealthResponse | null;
-  e2bTesting: boolean;
-  onSaveE2b: () => void;
-  onTestE2b: () => void;
-  onDeleteE2b: () => void;
   ollamaBaseUrl: string;
   onOllamaBaseUrlChange: (v: string) => void;
   ollamaModel: string;
@@ -209,16 +200,9 @@ function helperToneClass(tone: "success" | "warning" | "neutral") {
 }
 
 function parserExecutionHint(parser: ParserIndexProviderId): string {
-  switch (parser) {
-    case "llamaindex":
-      return "Melhor para organizar secções e blocos longos quando a página tem hierarquia clara de conteúdo.";
-    case "cheerio":
-      return "Melhor para páginas com HTML semântico forte, quando headings, listas e containers importam.";
-    case "markitdown":
-      return "Melhor para obter um Markdown final mais uniforme e pronto para leitura ou pós-processamento.";
-    default:
-      return "Melhor ponto de partida: rápido, estável e equilibrado para a maior parte das extrações web.";
-  }
+  return parser === "builtin"
+    ? "Melhor ponto de partida: rápido, estável e equilibrado para a maior parte das extrações web."
+    : "Melhor ponto de partida: rápido, estável e equilibrado para a maior parte das extrações web.";
 }
 
 function providerTokenHint(meta: ReturnType<typeof providerDefinitionFor> | undefined) {
@@ -322,14 +306,6 @@ function fallbackHint(
 export function InfraToolsSection({
   expanded,
   onToggle,
-  e2bKeyValue,
-  onE2bKeyChange,
-  e2bConnected,
-  e2bHealth,
-  e2bTesting,
-  onSaveE2b,
-  onTestE2b,
-  onDeleteE2b,
   ollamaBaseUrl,
   onOllamaBaseUrlChange,
   ollamaModel,
@@ -433,7 +409,7 @@ export function InfraToolsSection({
         className="flex w-full items-center justify-between px-5 py-4 transition-colors hover:bg-[var(--surface-2)]/40"
       >
         <h2 className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.2em] text-[var(--text-dim)]">
-          <Box className="size-3 text-[var(--primary)]" />3 · Infra & Tools
+          <Box className="size-3 text-[var(--primary)]" />3 · Tools
         </h2>
         {expanded ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />}
       </button>
@@ -739,60 +715,10 @@ export function InfraToolsSection({
                   Browser Runtime
                 </h3>
                 <p className="mb-3 font-mono text-[9px] text-[var(--text-ghost)]">
-                  Runtime para automação real. E2B continua como caminho principal do deep.
+                  Runtime para automação real dos browsers e fluxos que exigem navegação.
                 </p>
 
                 <div className="space-y-4">
-                  <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)]/30 p-3">
-                    <h4 className="mb-1 font-mono text-[10px]">E2B Sandbox</h4>
-                    <p className="mb-3 font-mono text-[9px] text-[var(--text-ghost)]">
-                      Preview ao vivo e execução do agente.
-                    </p>
-                    <ApiKeyInput
-                      label="Chave API E2B"
-                      value={e2bKeyValue}
-                      onChange={onE2bKeyChange}
-                      onDelete={e2bConnected ? onDeleteE2b : undefined}
-                      provider="e2b"
-                      placeholder="e2b_..."
-                      saved={e2bConnected}
-                      disabled={savingId === "e2b"}
-                    />
-                    {e2bHealth && (
-                      <p
-                        className={`mt-2 font-mono text-[9px] ${
-                          e2bHealth.ok ? "text-[var(--success)]" : "text-[var(--destructive)]"
-                        }`}
-                      >
-                        {e2bHealth.ok
-                          ? `OK · ${e2bHealth.templateUsed ?? "?"}`
-                          : `Falha: ${e2bHealth.error ?? "teste não passou"}`}
-                      </p>
-                    )}
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      <Button
-                        type="button"
-                        size="sm"
-                        className="bg-[var(--primary)] text-[#0a0a0a]"
-                        disabled={savingId === "e2b" || !e2bKeyValue.trim()}
-                        onClick={onSaveE2b}
-                      >
-                        {savingId === "e2b" ? "Validando…" : e2bConnected ? "Atualizar" : "Salvar"}
-                      </Button>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        disabled={
-                          e2bTesting || savingId === "e2b" || (!e2bKeyValue.trim() && !e2bConnected)
-                        }
-                        onClick={onTestE2b}
-                      >
-                        {e2bTesting ? "Testando…" : "Testar"}
-                      </Button>
-                    </div>
-                  </div>
-
                   <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)]/30 p-3">
                     <div className="mb-2 flex items-center gap-2">
                       <Box className="size-3.5 text-[var(--primary)]" />
