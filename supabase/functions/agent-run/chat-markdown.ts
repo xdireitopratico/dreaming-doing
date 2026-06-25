@@ -11,7 +11,7 @@ export const FORGE_CHAT_MARKDOWN = `## Markdown no chat (padrão FORGE)
 - \`inline code\` para caminhos (\`src/App.tsx\`) e comandos curtos.
 - Listas com \`-\` apenas com 2+ itens distintos; evite listas numeradas no chat ao vivo.
 - Títulos \`##\` só em planos/documentos — não em mensagens curtas de progresso.
-- **Wireframe / diagrama:** use bloco \`\`\`mermaid\`\`\` (flowchart, block-beta) ou \`\`\`wireframe\`\`\` (ASCII) — o chat renderiza visualmente. Máx. 1 diagrama por mensagem.
+- **Wireframe / diagrama:** prefira bloco \`\`\`mermaid\`\`\` (flowchart, block-beta) sempre que quiser mostrar estrutura visual. Use \`\`\`wireframe\`\`\` (ASCII) só como fallback quando mermaid ficar rígido demais ou o usuário pedir ASCII. O chat renderiza ambos visualmente. Máx. 1 diagrama por mensagem.
 
 **Emojis:**
 - Opcionais e discretos (0–1 por mensagem, nunca obrigatórios).

@@ -415,6 +415,36 @@ export async function listForgeOrphanSandboxes(
   return orphans;
 }
 
+/**
+ * Segunda varredura de higiene para sandboxes FORGE órfãos.
+ * Usado após exclusão do projeto para matar resíduos legados que escaparam do cleanup primário.
+ */
+export async function purgeForgeOrphanSandboxes(
+  apiKey: string,
+  supabase: SupabaseClient,
+  opts?: { projectId?: string },
+): Promise<{
+  orphans: Array<{ sandboxID: string; projectId: string | null }>;
+  killed: string[];
+  failed: string[];
+}> {
+  const projectId = opts?.projectId?.trim();
+  const allOrphans = await listForgeOrphanSandboxes(apiKey, supabase);
+  const orphans = projectId
+    ? allOrphans.filter((row) => row.projectId === projectId)
+    : allOrphans;
+
+  const killed: string[] = [];
+  const failed: string[] = [];
+  for (const orphan of orphans) {
+    const ok = await e2bDeleteSandboxWithRetry(apiKey, orphan.sandboxID);
+    if (ok) killed.push(orphan.sandboxID);
+    else failed.push(orphan.sandboxID);
+  }
+
+  return { orphans, killed, failed };
+}
+
 export async function syncProjectFilesToSandbox(
   sandbox: E2bRestSandbox,
   files: Array<{ path: string; content?: string | null }>,
