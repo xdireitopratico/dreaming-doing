@@ -37,7 +37,8 @@ export function InspectorTimeline({
 
     const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
     if (distFromBottom < 100 && !userScrolledRef.current) {
-      el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+      // Direto (instantâneo): smooth disparado a cada novo evento anima pra um alvo que cresce a cada frame → treme-treme.
+      el.scrollTop = el.scrollHeight;
     }
   }, [timelineItems.length, running]);
 
