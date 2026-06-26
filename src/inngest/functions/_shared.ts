@@ -1,5 +1,8 @@
 import { partitionRunExtras } from "@forge/agent-contract/lifecycle";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { errorMessage } from "@/lib/error-utils";
+
+export { errorMessage };
 
 export type AgentRunStatus =
   | "pending"
@@ -37,7 +40,11 @@ export type ExecuteResponse = {
   durationMs: number;
 };
 
-function requireEnv(): { url: string; serviceKey: string } {
+export class NonRetriableError extends Error {
+  override readonly name = "NonRetriableError";
+}
+
+export function requireEnv(): { url: string; serviceKey: string } {
   const url = process.env.SUPABASE_URL ?? process.env.VITE_SUPABASE_URL ?? "";
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
   if (!url || !serviceKey) {
@@ -212,6 +219,28 @@ export async function cancelDuplicateRuns(projectId: string, activeRunId: string
     canceled++;
   }
   return canceled;
+}
+
+export async function emitStreamFinishEvent(
+  runId: string,
+  payload: Record<string, unknown>,
+): Promise<void> {
+  const sb = getSupabaseAdmin();
+  const { data: lastRow } = await sb
+    .from("agent_stream_events")
+    .select("seq")
+    .eq("run_id", runId)
+    .order("seq", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const nextSeq = (typeof lastRow?.seq === "number" ? lastRow.seq : 0) + 1;
+  await sb.from("agent_stream_events").insert({
+    id: crypto.randomUUID(),
+    run_id: runId,
+    seq: nextSeq,
+    event_type: "finish",
+    payload,
+  });
 }
 
 export type ContinueQueueResponse = {

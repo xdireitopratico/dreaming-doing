@@ -2,17 +2,15 @@ import { inngest } from "../client";
 import { ensureTerminalRunMessage } from "./ensure-terminal-message";
 import {
   drainPendingQueue,
+  emitStreamFinishEvent,
   getRunStatus,
   getSupabaseAdmin,
   markRunFinal,
+  NonRetriableError,
   resolveChunkResumeDecision,
   runAgentLoopWithResume,
   type AgentRunRequest,
 } from "./_shared";
-
-class NonRetriableError extends Error {
-  override readonly name = "NonRetriableError";
-}
 
 export const agentBuildFunction = inngest.createFunction(
   {
@@ -134,30 +132,15 @@ export const agentBuildFunction = inngest.createFunction(
         });
       });
       await step.run("emit-finish-resumable", async () => {
-        const sb = getSupabaseAdmin();
-        const { data: lastRow } = await sb
-          .from("agent_stream_events")
-          .select("seq")
-          .eq("run_id", runId)
-          .order("seq", { ascending: false })
-          .limit(1)
-          .maybeSingle();
-        const nextSeq = (typeof lastRow?.seq === "number" ? lastRow.seq : 0) + 1;
-        await sb.from("agent_stream_events").insert({
-          id: crypto.randomUUID(),
-          run_id: runId,
-          seq: nextSeq,
-          event_type: "finish",
-          payload: {
-            type: "finish",
-            ok: false,
-            canceled: false,
-            resumable: false,
-            error: exhaustedError,
-            chunkCap: true,
-            resumableExhausted: true,
-            resumeAttempts: decision.chunkGeneration,
-          },
+        await emitStreamFinishEvent(runId, {
+          type: "finish",
+          ok: false,
+          canceled: false,
+          resumable: false,
+          error: exhaustedError,
+          chunkCap: true,
+          resumableExhausted: true,
+          resumeAttempts: decision.chunkGeneration,
         });
       });
       return { runId, ok: false, error: exhaustedError };

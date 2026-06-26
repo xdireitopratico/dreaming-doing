@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import type { AgentRunRequest, ExecuteResponse } from "../functions/_shared.ts";
+import { requireEnv } from "../functions/_shared.ts";
 
 const INNGEST_LOOP_BUDGET_MS = "270000";
 
@@ -13,15 +14,6 @@ type AgentPreferencesPayload = {
   autoAllowedPresetIds?: string[];
   userModelEntries?: { slug: string; env: string; label?: string }[];
 };
-
-function requireEnv(): { url: string; serviceKey: string } {
-  const url = process.env.SUPABASE_URL ?? process.env.VITE_SUPABASE_URL ?? "";
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
-  if (!url || !serviceKey) {
-    throw new Error("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required for agent loop");
-  }
-  return { url, serviceKey };
-}
 
 const executorHref = new URL("./agent-executor.js", import.meta.url).href;
 let executorImport: Promise<{
