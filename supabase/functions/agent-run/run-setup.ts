@@ -104,7 +104,11 @@ function isUserLlmKeyName(key: string): boolean {
 export function hasUserLlmKeyFromKeys(
   userOnlyKeys: Record<string, string>,
   poolKeys: string[] = [],
+  preferences?: AgentPreferencesPayload,
 ): boolean {
+  // FAIL-CLOSE: se o usuário configurou agent_preferences em /api-models, BYOK vale
+  // mesmo sem key salva no `connectors` ainda.
+  if (preferences?.mode) return true;
   return (
     poolKeys.length > 0 ||
     Object.keys(userOnlyKeys).some((k) => isUserLlmKeyName(k) && !!userOnlyKeys[k]?.trim())
@@ -158,7 +162,7 @@ export async function loadUserLlmContext(
   return {
     userOnlyKeys,
     poolKeys,
-    hasUserLlmKey: hasUserLlmKeyFromKeys(userOnlyKeys, poolKeys),
+    hasUserLlmKey: hasUserLlmKeyFromKeys(userOnlyKeys, poolKeys, preferences),
   };
 }
 

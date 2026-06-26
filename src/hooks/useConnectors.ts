@@ -14,6 +14,8 @@ import {
 import { CONNECTOR_REGISTRY } from "@/lib/connectors/registry";
 import { hasLlmConnectorRows } from "@/lib/connector-llm";
 import { isE2bConfigured, isE2bConnected } from "@/lib/e2b-status";
+import { loadAgentPreferences } from "@/lib/agent-preferences";
+import { isAgentPreferencesConfigured } from "@/lib/agent-setup";
 
 export type ConnectorStatus = {
   connected: boolean;
@@ -69,6 +71,11 @@ export function useConnectors() {
   });
 
   const hasUserLlmKey = hasLlmConnectorRows(rows);
+  // FAIL-CLOSE: TASTE anula BYOK apenas se o usuário NÃO configurou nada em /api-models.
+  // Se ele configurou `agent_preferences` (mode/preset/pool) mas ainda não salvou a key,
+  // TASTE não deve rodar — a config dele vale.
+  const isByokConfigured = isAgentPreferencesConfigured(loadAgentPreferences());
+  const effectiveHasByok = hasUserLlmKey || isByokConfigured;
 
   const githubRow = rows.find((r) => r.kind === "github");
   const vercelRow = rows.find((r) => r.kind === "vercel");
@@ -220,6 +227,6 @@ export function useConnectors() {
     trialMessagesRemaining,
     tasteChatRemaining: tasteQuota.tasteChatRemaining,
     tasteStartRemaining: tasteQuota.tasteStartRemaining,
-    hasUserLlmKey,
+    hasUserLlmKey: effectiveHasByok,
   };
 }
