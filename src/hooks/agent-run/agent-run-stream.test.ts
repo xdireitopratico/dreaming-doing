@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { AgentProgress } from "@/lib/agent-progress";
 import { initialAgentProgress } from "@/lib/agent-progress";
 import {
@@ -108,5 +108,35 @@ describe("createStreamRowHandlers", () => {
 
     enqueueStreamRow(startRow(1, "run-new"));
     expect(refs.lastSeqRef.current).toBe(2);
+  });
+
+  it("reordena eventos fora de ordem dentro da janela (preenche gap)", () => {
+    const refs = makeRefs({ lastSeq: 0 });
+    const applied: number[] = [];
+    let progress = initialAgentProgress;
+    const { enqueueStreamRow } = createStreamRowHandlers(refs, (updater) => {
+      progress = typeof updater === "function" ? updater(progress) : updater;
+      applied.push(refs.lastSeqRef.current);
+    });
+    // seq 2 chega antes da 1 (Realtime fora de ordem) → buffer; 1 chega → aplica 1 depois 2.
+    enqueueStreamRow(startRow(2));
+    expect(refs.lastSeqRef.current).toBe(0); // 2 bufferizado, nada aplicado
+    enqueueStreamRow(startRow(1));
+    expect(refs.lastSeqRef.current).toBe(2); // 1 aplicou, drenou 2 em ordem
+    expect(applied).toEqual([1, 2]);
+  });
+
+  it("aceita gap após janela expirar (seq realmente perdido)", () => {
+    vi.useFakeTimers();
+    const refs = makeRefs({ lastSeq: 0 });
+    let progress = initialAgentProgress;
+    const { enqueueStreamRow } = createStreamRowHandlers(refs, (updater) => {
+      progress = typeof updater === "function" ? updater(progress) : updater;
+    });
+    enqueueStreamRow(startRow(3)); // gap (3 > 0+1) → bufferizado
+    expect(refs.lastSeqRef.current).toBe(0);
+    vi.advanceTimersByTime(80); // janela expira
+    expect(refs.lastSeqRef.current).toBe(3); // aceita o gap
+    vi.useRealTimers();
   });
 });
