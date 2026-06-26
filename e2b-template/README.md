@@ -37,6 +37,8 @@ E2B_TEMPLATE=dreaming-doing-chromium
 
 Quando o executor `run-design-dna` criar o sandbox, ele usa este template. Chromium já estará rodando em `:9222` e o `previewUrl` será `https://9222-<sandboxId>.e2b.app` — acessível externamente via E2B.
 
+O script Playwright (`buildPlaywrightScript`) é executado dentro do sandbox via `e2b-client.ts` (protocolo Connect E2B), não via `prometheus-tool-executor` (que é de outro contexto).
+
 ## Arquitetura
 
 ```

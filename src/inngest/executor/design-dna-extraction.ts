@@ -5,6 +5,7 @@ import { scrapeWebPage } from "../../../supabase/functions/_shared/web-research-
 import { BUILTIN_RUNTIME } from "../../../supabase/functions/_shared/provider-wire.ts";
 import { finalizeDocumentMarkdown } from "../../../supabase/functions/_shared/document-sanitize.ts";
 import { buildPlaywrightScript } from "../../../supabase/functions/extract-design-dna/playwright-automation.ts";
+import { runInSandbox } from "./e2b-client";
 import {
   CATEGORY_PROMPTS,
   MASTER_EXTRACTION_PROMPT,
@@ -16,8 +17,8 @@ export type DesignDnaExtractionInput = {
   depth: "shallow" | "deep";
   categories: string[];
   userId: string;
-  sandboxExecUrl?: string;
-  sandboxToken?: string;
+  sandboxId?: string;
+  sandboxAccessToken?: string;
 };
 
 export type DesignDnaExtractionResult = {
@@ -410,8 +411,8 @@ async function resolveLLMConfig(
 
 async function execPlaywrightInSandbox(
   url: string,
-  sandboxExecUrl: string,
-  sandboxToken?: string,
+  sandboxId: string,
+  accessToken: string | null,
 ): Promise<{
   markdown: string;
   css_computed: string;
@@ -422,31 +423,31 @@ async function execPlaywrightInSandbox(
   page_height?: number;
 }> {
   const script = buildPlaywrightScript(url);
-  const response = await fetch(sandboxExecUrl, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...(sandboxToken ? { Authorization: `Bearer ${sandboxToken}` } : {}),
-    },
-    body: JSON.stringify({ command: "node -e", stdin: script, timeout: 120000 }),
-    signal: AbortSignal.timeout(150000),
+  const result = await runInSandbox(sandboxId, accessToken, `node -e "${script.replace(/"/g, '\\"')}"`, {
+    timeoutMs: 150000,
   });
 
-  if (!response.ok) {
-    const errText = await response.text().catch(() => "");
-    throw new Error(`Sandbox exec failed: HTTP ${response.status} — ${errText.slice(0, 200)}`);
+  if (result.exitCode !== 0 && result.exitCode !== undefined) {
+    throw new Error(`Sandbox exec failed (exit ${result.exitCode}): ${result.stderr || result.stdout?.slice(0, 200)}`);
   }
 
-  const data = await response.json();
-  const result = JSON.parse(data.output || data.stdout || "{}");
+  const raw = result.stdout || result.stderr || "{}";
+  let parsed: Record<string, unknown>;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    const jsonMatch = raw.match(/\{[\s\S]*\}/);
+    parsed = jsonMatch ? JSON.parse(jsonMatch[0]) : {};
+  }
+
   return {
-    markdown: result.markdown ?? "",
-    css_computed: result.css_computed ?? "[]",
-    motion_traces: result.motion_traces ?? "[]",
-    color_scheme: result.color_scheme ?? "{}",
-    screenshots: result.screenshots ?? [],
-    screenshot_base64: result.screenshots?.[0],
-    page_height: result.page_height,
+    markdown: (parsed.markdown as string) ?? "",
+    css_computed: (parsed.css_computed as string) ?? "[]",
+    motion_traces: (parsed.motion_traces as string) ?? "[]",
+    color_scheme: (parsed.color_scheme as string) ?? "{}",
+    screenshots: (parsed.screenshots as string[]) ?? [],
+    screenshot_base64: (parsed.screenshots as string[])?.[0],
+    page_height: parsed.page_height as number | undefined,
   };
 }
 
@@ -777,12 +778,12 @@ export async function extractDesignDnaForUrl(
   let screenshotUrl = `https://image.thum.io/get/width/1280/crop/720/fullpage/${encodeURIComponent(input.url)}`;
   let blockedReason: string | null = null;
 
-  if (input.depth === "deep" && input.sandboxExecUrl) {
+  if (input.depth === "deep" && input.sandboxId) {
     try {
       const playwrightData = await execPlaywrightInSandbox(
         input.url,
-        input.sandboxExecUrl,
-        input.sandboxToken,
+        input.sandboxId,
+        input.sandboxAccessToken ?? null,
       );
       providerTrace.push("sandbox:playwright");
       enrichedMarkdown = [
