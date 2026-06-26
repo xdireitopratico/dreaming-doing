@@ -53,6 +53,11 @@ export const CLARIFY_TOOL: ToolDefinition = {
         items: CHOICE_SCHEMA,
         description: "Opções clicáveis (mínimo 2 quando houver escolha discreta).",
       },
+      multiple: {
+        type: "boolean",
+        description:
+          "Modo single-question: permite selecionar várias opções ao mesmo tempo.",
+      },
       questions: {
         type: "array",
         description:
@@ -72,6 +77,10 @@ export const CLARIFY_TOOL: ToolDefinition = {
             question: {
               type: "string",
               description: "Pergunta objetiva.",
+            },
+            multiple: {
+              type: "boolean",
+              description: "Permite selecionar várias opções ao mesmo tempo.",
             },
             choices: {
               type: "array",
@@ -293,6 +302,7 @@ export type ClarifyQuestionOut = {
   id: string;
   intro?: string;
   question: string;
+  multiple?: boolean;
   choices: Array<{ id: string; label: string; description?: string }>;
 };
 
@@ -308,8 +318,9 @@ export function extractClarifyQuestions(args: Record<string, unknown>): ClarifyQ
       if (!question) continue;
       const id = typeof o.id === "string" && o.id ? o.id : `q${i + 1}`;
       const intro = typeof o.intro === "string" && o.intro.trim() ? o.intro.trim() : undefined;
+      const multiple = o.multiple === true;
       const choices = parseChoiceArray(o.choices);
-      out.push({ id, intro, question, choices });
+      out.push({ id, intro, question, multiple, choices });
     }
     if (out.length > 0) return out;
   }
@@ -318,8 +329,9 @@ export function extractClarifyQuestions(args: Record<string, unknown>): ClarifyQ
   const question = typeof args.question === "string" ? args.question.trim() : "";
   if (!question) return [];
   const intro = typeof args.intro === "string" && args.intro.trim() ? args.intro.trim() : undefined;
+  const multiple = args.multiple === true;
   const choices = parseChoiceArray(args.choices);
-  return [{ id: "q1", intro, question, choices }];
+  return [{ id: "q1", intro, question, multiple, choices }];
 }
 
 function parseChoiceArray(raw: unknown): Array<{ id: string; label: string; description?: string }> {

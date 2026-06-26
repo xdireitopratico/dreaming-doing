@@ -8,16 +8,21 @@ import {
   Loader2,
   Send,
   SkipForward,
+  Square,
 } from "lucide-react";
 import type { ClarifyChoice, ClarifyPrompt, ClarifyQuestion } from "@/lib/chat/types";
 
 export type ClarifyAnswer = {
   questionId: string;
+  /** Single-choice answer. */
   choiceId?: string;
+  /** Multi-choice answer. */
+  choiceIds?: string[];
   text?: string;
   /** Enriched payload for the consumer to format the final message. */
   question?: string;
   choice?: ClarifyChoice;
+  choices?: ClarifyChoice[];
 };
 
 export type ChatClarifyDockProps = {
@@ -48,14 +53,30 @@ function formatChoiceReply(choice: ClarifyChoice): string {
   return `${choice.label}${choice.description ? ` — ${choice.description}` : ""}`;
 }
 
+function formatChoicesReply(choices: ClarifyChoice[]): string {
+  return choices.map(formatChoiceReply).join("; ");
+}
+
 function getAnswerDisplay(answer: ClarifyAnswer | undefined, question: ClarifyQuestion): string {
   if (!answer) return "Não respondida";
-  if (answer.choiceId) {
+  const multi = question.multiple;
+  if (multi) {
+    if (answer.choiceIds && answer.choiceIds.length > 0) {
+      const choices = question.choices.filter((c) => answer.choiceIds?.includes(c.id));
+      if (choices.length > 0) return formatChoicesReply(choices);
+    }
+  } else if (answer.choiceId) {
     const choice = question.choices.find((c) => c.id === answer.choiceId);
     if (choice) return formatChoiceReply(choice);
   }
   if (answer.text?.trim()) return answer.text.trim();
   return "Não respondida";
+}
+
+function isAnswered(answer: ClarifyAnswer | undefined, multiple?: boolean): boolean {
+  if (!answer) return false;
+  if (multiple) return !!answer.choiceIds && answer.choiceIds.length > 0;
+  return !!(answer.choiceId || answer.text?.trim());
 }
 
 export function ChatClarifyDock({
@@ -87,7 +108,7 @@ export function ChatClarifyDock({
   const isReview = step >= total;
   const currentQuestion = isReview ? null : questions[step];
   const currentAnswer = currentQuestion ? answers[currentQuestion.id] : undefined;
-  const hasUnanswered = questions.some((q) => !answers[q.id]);
+  const hasUnanswered = questions.some((q) => !isAnswered(answers[q.id], q.multiple));
 
   const setAnswer = useCallback((questionId: string, patch: Partial<ClarifyAnswer>) => {
     setAnswers((prev) => ({
@@ -98,13 +119,34 @@ export function ChatClarifyDock({
 
   const handleSelectChoice = (choice: ClarifyChoice) => {
     if (!currentQuestion || disabled || busy) return;
-    if (multi) {
-      setAnswer(currentQuestion.id, {
-        question: currentQuestion.question,
-        choice,
-        choiceId: choice.id,
-        text: undefined,
-      });
+    const multiple = currentQuestion.multiple;
+    if (multi || multiple) {
+      if (multiple) {
+        // Toggle multi-select
+        const currentIds = currentAnswer?.choiceIds ?? [];
+        const selected = currentIds.includes(choice.id);
+        const nextIds = selected
+          ? currentIds.filter((id) => id !== choice.id)
+          : [...currentIds, choice.id];
+        const selectedChoices = currentQuestion.choices.filter((c) => nextIds.includes(c.id));
+        setAnswer(currentQuestion.id, {
+          question: currentQuestion.question,
+          choices: selectedChoices,
+          choiceIds: nextIds,
+          choice: undefined,
+          choiceId: undefined,
+          text: undefined,
+        });
+      } else {
+        // Single choice in multi-question wizard
+        setAnswer(currentQuestion.id, {
+          question: currentQuestion.question,
+          choice,
+          choiceId: choice.id,
+          choiceIds: undefined,
+          text: undefined,
+        });
+      }
     } else {
       setBusy(true);
       onSubmit?.([
@@ -127,7 +169,9 @@ export function ChatClarifyDock({
         question: currentQuestion.question,
         text,
         choice: undefined,
+        choices: undefined,
         choiceId: undefined,
+        choiceIds: undefined,
       });
     } else {
       setBusy(true);
@@ -212,6 +256,9 @@ export function ChatClarifyDock({
                       <span className="forge-clarify-review-index">{idx + 1}</span>
                       <span className="forge-clarify-review-text">
                         <span className="forge-clarify-review-question">{q.question}</span>
+                        {q.multiple && (
+                          <span className="forge-clarify-review-hint">Várias respostas permitidas</span>
+                        )}
                         <span className="forge-clarify-review-answer">
                           {ans ? getAnswerDisplay(ans, q) : "Não respondida"}
                         </span>
@@ -233,14 +280,19 @@ export function ChatClarifyDock({
                 <p className="forge-clarify-intro">{currentQuestion.intro}</p>
               )}
               <p className="forge-clarify-question">{currentQuestion?.question}</p>
+              {currentQuestion?.multiple && (
+                <p className="forge-clarify-hint">Selecione uma ou mais opções</p>
+              )}
             </div>
 
             {/* Choices */}
             {currentQuestion && currentQuestion.choices.length > 0 && (
               <ul className="forge-clarify-choices">
                 {currentQuestion.choices.map((choice, i) => {
-                  const letter = String.fromCharCode(65 + i);
-                  const selected = currentAnswer?.choiceId === choice.id;
+                  const multiple = currentQuestion.multiple;
+                  const selected = multiple
+                    ? (currentAnswer?.choiceIds ?? []).includes(choice.id)
+                    : currentAnswer?.choiceId === choice.id;
                   return (
                     <li key={choice.id}>
                       <button
@@ -252,7 +304,17 @@ export function ChatClarifyDock({
                         onClick={() => handleSelectChoice(choice)}
                       >
                         <span className="forge-clarify-choice-letter" aria-hidden>
-                          {selected ? <Check className="size-3" /> : letter}
+                          {multiple ? (
+                            selected ? (
+                              <Check className="size-3" />
+                            ) : (
+                              <Square className="size-3" />
+                            )
+                          ) : selected ? (
+                            <Check className="size-3" />
+                          ) : (
+                            String.fromCharCode(65 + i)
+                          )}
                         </span>
                         <span className="forge-clarify-choice-content">
                           <span className="forge-clarify-choice-label">{choice.label}</span>
@@ -281,7 +343,13 @@ export function ChatClarifyDock({
                 disabled={disabled || busy}
                 onChange={(e) =>
                   currentQuestion &&
-                  setAnswer(currentQuestion.id, { text: e.target.value, choiceId: undefined })
+                  setAnswer(currentQuestion.id, {
+                    text: e.target.value,
+                    choiceId: undefined,
+                    choiceIds: undefined,
+                    choice: undefined,
+                    choices: undefined,
+                  })
                 }
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && !e.shiftKey) {

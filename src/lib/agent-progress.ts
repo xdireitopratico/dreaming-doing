@@ -149,6 +149,7 @@ export interface AgentProgress {
     id: string;
     intro?: string;
     question: string;
+    multiple?: boolean;
     choices: Array<{ id: string; label: string; description?: string }>;
   }>;
 }

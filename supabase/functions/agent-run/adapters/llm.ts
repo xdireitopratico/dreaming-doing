@@ -30,14 +30,25 @@ function nvidiaNimChatExtras(model: string): Record<string, unknown> | undefined
 }
 
 function toToolCall(raw: any): ToolCall {
-  return {
-    id: raw.id ?? crypto.randomUUID(),
-    name: raw.function?.name ?? raw.name ?? "",
-    arguments:
-      typeof raw.function?.arguments === "string"
-        ? JSON.parse(raw.function.arguments)
-        : (raw.function?.arguments ?? raw.arguments ?? {}),
-  };
+  const id = raw.id ?? crypto.randomUUID();
+  const name = raw.function?.name ?? raw.name ?? "";
+  const argsRaw = raw.function?.arguments ?? raw.arguments ?? {};
+
+  if (typeof argsRaw === "string") {
+    try {
+      return { id, name, arguments: JSON.parse(argsRaw) };
+    } catch (err) {
+      logger.warn("agent.llm.tool_arguments_parse_failed", {
+        toolName: name,
+        rawLength: argsRaw.length,
+        rawPreview: argsRaw.slice(0, 200),
+        error: err instanceof Error ? err.message : String(err),
+      });
+      return { id, name, arguments: { raw: argsRaw } };
+    }
+  }
+
+  return { id, name, arguments: argsRaw };
 }
 
 function parseXmlToolCalls(content: string): ToolCall[] {
@@ -521,13 +532,23 @@ class GeminiAdapter implements LLMProvider {
         if (m.content) parts.push({ text: m.content });
         if (m.tool_calls) {
           for (const tc of m.tool_calls) {
+            let args: Record<string, unknown> = tc.function.arguments ?? {};
+            if (typeof tc.function.arguments === "string") {
+              try {
+                args = JSON.parse(tc.function.arguments) as Record<string, unknown>;
+              } catch (err) {
+                logger.warn("agent.llm.gemini_tool_arguments_parse_failed", {
+                  toolName: tc.function.name,
+                  rawLength: tc.function.arguments.length,
+                  error: err instanceof Error ? err.message : String(err),
+                });
+                args = { raw: tc.function.arguments };
+              }
+            }
             parts.push({
               functionCall: {
                 name: tc.function.name,
-                args:
-                  typeof tc.function.arguments === "string"
-                    ? JSON.parse(tc.function.arguments)
-                    : tc.function.arguments,
+                args,
               },
             });
           }

@@ -554,6 +554,13 @@
   line-height: 1.55;
 }
 
+.forge-clarify-hint {
+  font-size: 12px;
+  color: var(--text-accent);
+  margin-top: 6px;
+  line-height: 1.4;
+}
+
 .forge-clarify-choices {
   list-style: none;
   display: flex;

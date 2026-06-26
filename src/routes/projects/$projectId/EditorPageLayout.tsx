@@ -1,4 +1,4 @@
-import { type RefObject, useEffect, useMemo, useRef, useState } from "react";
+import { type RefObject, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { EditorShell } from "@/components/EditorShell";
 import { EditorResizableLayout } from "@/components/editor/EditorResizableLayout";
 import { EditorChatHeader } from "@/components/editor/EditorChatHeader";
@@ -265,6 +265,15 @@ export function EditorPageLayout({
     }
   };
 
+  const closeInspectorAndReturnToChat = useCallback(() => {
+    closeJobWorkspace();
+    if (isMobile) {
+      onMobilePanelChange?.("chat");
+    } else {
+      onMainViewChange("code");
+    }
+  }, [closeJobWorkspace, isMobile, onMobilePanelChange, onMainViewChange]);
+
   useEffect(() => {
     const onOpenConnector = (ev: Event) => {
       const { connector } = (ev as CustomEvent<{ connector: ConnectorId }>).detail;
@@ -500,8 +509,14 @@ export function EditorPageLayout({
                   onStop={handleStop}
                   onResume={handleResumeAgent}
                   onOpenInspector={handleOpenInspector}
-                  onPlanApprove={handlePlanApprove}
-                  onPlanReject={handlePlanReject}
+                  onPlanApprove={(steps, markdown) => {
+                    handlePlanApprove(steps, markdown);
+                    closeInspectorAndReturnToChat();
+                  }}
+                  onPlanReject={(reason) => {
+                    handlePlanReject(reason);
+                    closeInspectorAndReturnToChat();
+                  }}
                   onRollbackMessage={handleRollbackMessage}
                   focusedRunId={jobWorkspaceFocus?.runId ?? null}
                   externalPrompt={promptDraft}
@@ -635,8 +650,14 @@ export function EditorPageLayout({
                                 onMainViewChange("code");
                                 if (isMobile) onMobilePanelChange?.("code");
                               }}
-                              onPlanApprove={handlePlanApprove}
-                              onPlanReject={handlePlanReject}
+                              onPlanApprove={(steps, markdown) => {
+                                handlePlanApprove(steps, markdown);
+                                closeInspectorAndReturnToChat();
+                              }}
+                              onPlanReject={(reason) => {
+                                handlePlanReject(reason);
+                                closeInspectorAndReturnToChat();
+                              }}
                               onPlanEditRequest={(plan) => {
                                 const headline =
                                   plan.mission?.trim() || plan.summary?.trim() || "este plano";

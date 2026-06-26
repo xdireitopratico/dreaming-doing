@@ -54,17 +54,23 @@ export type MiniCardData = {
 
 export type ClarifyAnswer = {
   questionId: string;
+  /** Single-choice answer. */
   choiceId?: string;
+  /** Multi-choice answer. */
+  choiceIds?: string[];
   text?: string;
   /** Enriched payload for the consumer to format the final message. */
   question?: string;
   choice?: ClarifyChoice;
+  choices?: ClarifyChoice[];
 };
 
 export type ClarifyQuestion = {
   id: string;
   intro?: string;
   question: string;
+  /** When true, user can select multiple choices at once. */
+  multiple?: boolean;
   choices: ClarifyChoice[];
 };
 

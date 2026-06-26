@@ -73,6 +73,7 @@ export type PlanTurnFinishDeps = {
         id: string;
         intro?: string;
         question: string;
+        multiple?: boolean;
         choices: Array<{ id: string; label: string; description?: string }>;
       }>;
     },
@@ -180,6 +181,7 @@ export async function finishClarify(
     id: string;
     intro?: string;
     question: string;
+    multiple?: boolean;
     choices: Array<{ id: string; label: string; description?: string }>;
   }>,
 ): Promise<PlanTurnRunResult> {

@@ -202,6 +202,7 @@ export function mapAssistantTurn(
             id: q.id,
             intro: q.intro,
             question: q.question,
+            multiple: q.multiple,
             choices: q.choices.map((c) => ({
               id: c.id,
               label: c.label,

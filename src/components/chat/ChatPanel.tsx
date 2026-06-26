@@ -141,10 +141,14 @@ export function ChatPanel({
     (answers: ClarifyAnswer[]) => {
       notifyUserSend();
       const lines = answers.map((ans, idx) => {
-        const reply =
-          ans.text?.trim() ??
-          (ans.choice ? formatClarifyChoiceReply(ans.choice) : "Pular");
-        return `${idx + 1}. ${reply}`;
+        if (ans.text?.trim()) return `${idx + 1}. ${ans.text.trim()}`;
+        if (ans.choices && ans.choices.length > 0) {
+          return `${idx + 1}. ${ans.choices
+            .map((c) => formatClarifyChoiceReply(c))
+            .join("; ")}`;
+        }
+        if (ans.choice) return `${idx + 1}. ${formatClarifyChoiceReply(ans.choice)}`;
+        return `${idx + 1}. Pular`;
       });
       const text = `Respostas do clarify:\n${lines.join("\n")}`;
       onSend(text, composerMode);
