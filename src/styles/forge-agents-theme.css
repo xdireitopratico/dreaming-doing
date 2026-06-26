@@ -2,9 +2,13 @@
  * FORGE Agents — bridge Prometheus studio tokens → dashboard palette.
  * Importar globalmente; componentes usam .prometheus-studio como scope.
  * prometheus-studio.css é importado separadamente no styles.css ANTES deste arquivo.
+ *
+ * Aplica APENAS no Tema A (default, Vibecoding palette).
+ * No Tema B (legacy), prometheus-studio.css define os valores originais
+ * via [data-prometheus-theme="legacy"] — esta bridge não deve sobrescrever.
  */
 
-.prometheus-studio {
+.prometheus-studio:not([data-prometheus-theme="legacy"]) {
   --ps-bg: var(--forge-surface, #0b0d12);
   --ps-bg-deep: var(--forge-surface, #0b0d12);
   --ps-bg-surface: var(--forge-surface-2, #12151c);

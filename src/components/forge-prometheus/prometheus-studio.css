@@ -1,12 +1,97 @@
 /**
  * PROMETHEUS STUDIO — Deep Blue / Graph Theme
  * Fork of video-studio.css adapted for AI Agent creation.
+ *
+ * 2 temas (default + legacy):
+ * - data-prometheus-theme="default" (ou ausente) → Tema A (Vibecoding palette)
+ * - data-prometheus-theme="legacy" → Tema B (Deep Blue / Cream, valores originais)
+ *
+ * Defaults: tokens base em .prometheus-studio correspondem ao Tema A.
+ * Tema B reaponta os mesmos tokens para os valores legacy.
  */
 
 /* ═══════════════════════════════════════════════════════════
-   DESIGN TOKENS — Deep Blue Palette
+   DESIGN TOKENS — Tema A (Vibecoding palette, default)
+   Reaponta os tokens --ps-* para a paleta dashboard FORGE.
+   Mantém os nomes para compatibilidade com todos os componentes
+   que consomem var(--ps-*) sem precisar de refactor.
    ═══════════════════════════════════════════════════════════ */
 .prometheus-studio {
+  /* Superfícies (4 tokens dashboard + gradiente) */
+  --ps-bg: #0b0d12;
+  --ps-bg-deep: #0b0d12;
+  --ps-bg-surface: rgba(237, 239, 242, 0.02);
+  --ps-bg-surface-hover: rgba(237, 239, 242, 0.05);
+  --ps-bg-surface-active: rgba(251, 191, 36, 0.08);
+  --ps-bg-glass: rgba(0, 0, 0, 0.4);
+
+  /* Accent (mantém azul para preservar identidade de agent types) */
+  --ps-accent: hsl(210 100% 60%);
+  --ps-accent-glow: rgba(59, 130, 246, 0.3);
+  --ps-accent-dim: rgba(59, 130, 246, 0.6);
+  --ps-accent-subtle: rgba(59, 130, 246, 0.08);
+
+  /* Texto (mantém "cream" semântico mas aponta para texto Vibecoding) */
+  --ps-cream: #e2e8f0;
+  --ps-cream-80: rgba(226, 232, 240, 0.80);
+  --ps-cream-60: rgba(226, 232, 240, 0.60);
+  --ps-cream-40: rgba(226, 232, 240, 0.40);
+  --ps-cream-25: rgba(226, 232, 240, 0.25);
+  --ps-cream-15: rgba(226, 232, 240, 0.15);
+  --ps-cream-08: rgba(226, 232, 240, 0.08);
+
+  /* Borders translúcidos (mesma fórmula do Vibecoding) */
+  --ps-border: rgba(237, 239, 242, 0.08);
+  --ps-border-hover: rgba(237, 239, 242, 0.14);
+  --ps-border-accent: rgba(59, 130, 246, 0.4);
+  --ps-border-accent-dim: rgba(59, 130, 246, 0.2);
+
+  /* Cores semânticas (mantém) */
+  --ps-green: hsl(142 70% 45%);
+  --ps-blue: hsl(217 90% 60%);
+  --ps-purple: hsl(271 80% 55%);
+  --ps-orange: hsl(25 100% 55%);
+  --ps-red: hsl(0 70% 55%);
+
+  --ps-node-green: hsl(142 70% 45%);
+  --ps-node-blue: hsl(217 90% 60%);
+  --ps-node-purple: hsl(271 80% 55%);
+  --ps-node-orange: hsl(25 100% 55%);
+
+  --ps-radius: 10px;
+  --ps-radius-lg: 16px;
+
+  font-family: 'Ubuntu', system-ui, sans-serif;
+  color: var(--ps-cream);
+  background: var(--ps-bg);
+
+  /* Override Tailwind semantic tokens inside Prometheus context (Tema A) */
+  --background: 222 24% 7%;
+  --foreground: 215 20% 92%;
+  --card: 222 18% 10%;
+  --card-foreground: 215 20% 92%;
+  --popover: 222 20% 8%;
+  --popover-foreground: 215 20% 92%;
+  --primary: 210 100% 60%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 222 14% 14%;
+  --secondary-foreground: 215 20% 92%;
+  --muted: 222 14% 12%;
+  --muted-foreground: 215 12% 60%;
+  --accent: 210 100% 60%;
+  --accent-foreground: 0 0% 100%;
+  --border: 222 10% 18%;
+  --input: 222 10% 18%;
+  --ring: 210 100% 60%;
+  --destructive: 0 70% 55%;
+  --destructive-foreground: 40 30% 96%;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   DESIGN TOKENS — Tema B (legacy, valores originais Deep Blue)
+   Ativado quando .prometheus-studio tem data-prometheus-theme="legacy"
+   ═══════════════════════════════════════════════════════════ */
+.prometheus-studio[data-prometheus-theme="legacy"] {
   --ps-bg: hsl(225 30% 6%);
   --ps-bg-deep: hsl(225 30% 4%);
   --ps-bg-surface: rgba(255, 255, 255, 0.02);
@@ -43,14 +128,7 @@
   --ps-node-purple: hsl(271 80% 55%);
   --ps-node-orange: hsl(25 100% 55%);
 
-  --ps-radius: 10px;
-  --ps-radius-lg: 16px;
-
-  font-family: 'Ubuntu', system-ui, sans-serif;
-  color: var(--ps-cream);
-  background: var(--ps-bg);
-
-  /* Override Tailwind semantic tokens inside Prometheus context */
+  /* Override Tailwind semantic tokens (Tema B - valores originais) */
   --background: 225 30% 6%;
   --foreground: 40 30% 92%;
   --card: 225 30% 8%;

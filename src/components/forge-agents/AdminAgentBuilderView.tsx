@@ -27,6 +27,7 @@ import {
   writePsPipelineField,
 } from "@/lib/prometheus-pipeline-storage";
 import { findProjectDraft, upsertProjectDraftFlow } from "@/lib/agent-project-draft";
+import { usePrometheusEditorTheme } from "@/lib/prometheus-editor-theme";
 
 const PrometheusBoardroomPage = lazy(() =>
   import("@/components/forge-prometheus/PrometheusBoardroomPage").then(m => ({ default: m.PrometheusBoardroomPage }))
@@ -475,6 +476,7 @@ export default function AdminAgentBuilderView({
   const [currentRound, setCurrentRound] = useState(1);
   const [resolvedQualityModel, setResolvedQualityModel] = useState(pipeline.launchQualityModel);
   const [isHeaderCollapsed, setIsHeaderCollapsed] = useState(true);
+  const { theme: prometheusTheme } = usePrometheusEditorTheme();
 
   const handleConvergenceChange = useCallback((score: number, round: number) => {
     setConvergenceScore(score);
@@ -735,7 +737,7 @@ export default function AdminAgentBuilderView({
 
   if (phase === "monitoring") {
     return (
-      <div className={`${fullScreenClass} overflow-hidden`}>
+      <div className={`${fullScreenClass} overflow-hidden`} data-prometheus-theme={prometheusTheme}>
         <Suspense fallback={loader}>
           <AgentMonitoringDashboard onBack={handleGoHome} />
         </Suspense>
@@ -745,7 +747,7 @@ export default function AdminAgentBuilderView({
 
   if (phase !== "home") {
     return (
-      <div className={`${fullScreenClass} flex min-h-0 min-w-0 flex-col overflow-hidden`}>
+      <div className={`${fullScreenClass} flex min-h-0 min-w-0 flex-col overflow-hidden`} data-prometheus-theme={prometheusTheme}>
         {showPhaseHeader && (
           <PrometheusPhaseHeader
             currentPhase={phase}

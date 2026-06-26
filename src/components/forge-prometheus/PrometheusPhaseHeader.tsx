@@ -1,7 +1,8 @@
 /**
  * PrometheusPhaseHeader — workflow rail (fases pós-boardroom)
  */
-import { X, ChevronRight, ChevronDown, ChevronUp } from "lucide-react";
+import { X, ChevronRight, ChevronDown, ChevronUp, Moon, Sun } from "lucide-react";
+import { usePrometheusEditorTheme } from "@/lib/prometheus-editor-theme";
 import type { BoardroomPhase } from "./PrometheusBoardroom";
 import { findModel } from "./prometheusCatalog";
 import "./prometheus-studio.css";
@@ -58,6 +59,7 @@ export function PrometheusPhaseHeader({
   onToggleCollapse,
 }: Props) {
   const activeWorkflow = workflowPhase ?? DEFAULT_WORKFLOW_BY_SCREEN[currentPhase] ?? "discovery";
+  const { theme: prometheusTheme, toggle: togglePrometheusTheme } = usePrometheusEditorTheme();
   const currentWorkflowIdx = Math.max(
     0,
     WORKFLOW_STAGES.findIndex((stage) => stage.id === activeWorkflow),
@@ -159,6 +161,23 @@ export function PrometheusPhaseHeader({
             {isCollapsed ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
           </button>
         )}
+
+        <button
+          type="button"
+          onClick={togglePrometheusTheme}
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border transition-colors"
+          style={{
+            borderColor: "var(--ps-border)",
+            background: "var(--ps-bg-surface)",
+            color: "var(--ps-cream-80)",
+          }}
+          title={prometheusTheme === "default" ? "Trocar para tema legacy" : "Trocar para tema padrão (Vibecoding)"}
+          aria-label="Alternar tema do editor"
+          data-testid="prometheus-theme-toggle"
+          data-theme-current={prometheusTheme}
+        >
+          {prometheusTheme === "default" ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
+        </button>
       </div>
 
       {!isCollapsed && (
