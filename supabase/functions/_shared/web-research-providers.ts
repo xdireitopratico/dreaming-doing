@@ -11,7 +11,7 @@ import {
   cleanHtmlDocument,
   htmlToMarkdownDocument,
   htmlToVisibleText,
-} from "../../../src/lib/html-hygiene.ts";
+} from "./html-hygiene-edge.ts";
 import { finalizeDocumentMarkdown, sanitizeDocumentMarkdown } from "./document-sanitize.ts";
 
 export type WebSecrets = Record<string, string>;
