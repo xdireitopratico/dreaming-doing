@@ -77,7 +77,6 @@ load_config() {
   VERCEL_PROJECT="${VERCEL_PROJECT:-}"
   INNGEST_SIGNING_KEY="${INNGEST_SIGNING_KEY:-}"
   INNGEST_API_KEY="${INNGEST_API_KEY:-}"
-  INNGEST_ENV_ID="${INNGEST_ENV_ID:-}"
 
   # REST (PostgREST) — telemetria em agent_streaming_telemetry
   SUPABASE_URL="${SUPABASE_URL:-}"
@@ -413,41 +412,49 @@ fetch_vercel_logs() {
 
 # ─── Coletor: Inngest ───
 fetch_inngest_logs() {
-  local key="${INNGEST_SIGNING_KEY:-${INNGEST_API_KEY:-}}"
-  local env_id="${INNGEST_ENV_ID:-}"
-
+  local key="${INNGEST_API_KEY:-${INNGEST_SIGNING_KEY:-}}"
   if [[ -z "$key" ]]; then
-    logmsg WARN "inngest" "SKIP: INNGEST_SIGNING_KEY e INNGEST_API_KEY vazios" "$(iso_timestamp)"
+    logmsg WARN "inngest" "SKIP: INNGEST_API_KEY (ou SIGNING_KEY) vazio — preencha .env.debug" "$(iso_timestamp)"
     return
   fi
 
-  local url="https://api.inngest.com/v1/runs?limit=20"
-  [[ -n "$env_id" ]] && url+="&environment_id=${env_id}"
+  local start_iso
+  start_iso=$(date -u -d "${HOURS} hours ago" +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || \
+              date -u -v "-${HOURS}H" +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null)
 
-  local runs_cache="$CACHE_DIR/inngest_runs.json"
-  curl -sf --max-time 15 "$url" \
-    -H "Authorization: Bearer ${key}" > "$runs_cache" 2>/dev/null || true
+  local cache="$CACHE_DIR/inngest_events.json"
+  # Eventos de ciclo de vida de função (inngest/function.*) carregam status real (Completed/Failed/...)
+  # e, em falha, a mensagem/stack do erro. Substitui o antigo /v1/runs (404 hoje; env_id não existe mais).
+  curl -sf --max-time 20 "https://api.inngest.com/v1/events?limit=${INNGEST_LIMIT:-100}" \
+    -H "Authorization: Bearer ${key}" > "$cache" 2>/dev/null || true
 
   local count=0
   local entries=""
-  if [[ -s "$runs_cache" ]]; then
-    while IFS=$'\t' read -r run_id status name started_at ended_at; do
-      [[ -z "$run_id" ]] && continue
-      local ts="${started_at:-$ended_at}"
+  if [[ -s "$cache" ]]; then
+    while IFS=$'\t' read -r ts fn status run_id err; do
       [[ -z "$ts" || "$ts" == "null" ]] && continue
-      local msg="Run $name ($run_id): $status"
+      # Filtro de janela temporal (ISO 8601 UTC ordena lexicograficamente).
+      [[ "$ts" < "$start_iso" ]] && continue
       local level="INFO"
       case "$status" in
-        FAILED|CANCELLED) level="ERROR";;
-        RUNNING) level="DEBUG";;
+        Failed|Cancelled) level="ERROR";;
+        Running) level="DEBUG";;
       esac
       [[ "$ERRORS_ONLY" == "true" && "$level" != "ERROR" ]] && continue
-      entries+="$ts|$level|run:$run_id|$msg"$'\n'
+      local msg="Run ${fn:-?} (${run_id:-?}): ${status}"
+      [[ -n "$err" ]] && msg+=" — ${err}"
+      entries+="$ts|$level|${fn:-run}|$msg"$'\n'
       count=$((count + 1))
-    done < <(jq -r '.data[]? | [.id, .status, .name // "-", .started_at // "null", .ended_at // "null"] | @tsv' "$runs_cache" 2>/dev/null || true)
+    done < <(jq -r '
+      [.data[]? | select(.name | startswith("inngest/function."))]
+      | unique_by(.data.run_id // .id)
+      | sort_by(.received_at)
+      | .[]
+      | [.received_at, (.data.function_id // "-"), (.data._inngest.status // "-"), (.data.run_id // "-"), ((.data.error.message // "") | gsub("\n";" "))]
+      | @tsv' "$cache" 2>/dev/null || true)
   fi
 
-  rm -f "$runs_cache" 2>/dev/null || true
+  rm -f "$cache" 2>/dev/null || true
 
   if [[ "$count" -gt 0 ]]; then
     section "INNGEST" "$count"
