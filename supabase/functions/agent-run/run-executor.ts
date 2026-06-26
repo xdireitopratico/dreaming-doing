@@ -34,7 +34,7 @@ import {
   shadowEnqueueNextChunk,
 } from "../_shared/agent-jobs.ts";
 import { transitionRun } from "../_shared/run-lifecycle.ts";
-import type { AgentRunStatus } from "../_shared/agent-contract-lifecycle.ts";
+import type { AgentRunStatus } from "../_shared/agent-contract-events.ts";
 
 function executorRunMode(planMode: boolean, chatMode: boolean): "plan" | "build" | "chat" {
   if (chatMode) return "chat";
@@ -402,9 +402,13 @@ export async function executeAgentRun(
       isApprovedPlanBuild || hasApprovedPlanInHistory || params.skipConversationalGate === true,
   };
 
+  // Coleta as promises de stream para dar flush antes de qualquer transição terminal —
+  // sem isso, eventos fire-and-forget se perdem quando o run morre (timeline some, só o 1º pensou fica).
+  const pendingStream: Promise<unknown>[] = [];
   const onEvent = (type: string, data: Record<string, unknown>) => {
-    void appendStreamEvent(supabase, runId, type, { type, ...data });
+    pendingStream.push(appendStreamEvent(supabase, runId, type, { type, ...data }));
   };
+  const flushStreamEvents = () => Promise.allSettled(pendingStream.splice(0));
 
   // Inngest executa o loop in-process; resume só se o budget do step expirar.
   let result: Awaited<ReturnType<typeof executeAgentJob>>;
@@ -412,6 +416,7 @@ export async function executeAgentRun(
     result = await executeAgentJob(supabase, { ...jobParams, resumeRun }, onEvent);
   } catch (err: unknown) {
     const msg = (err as Error)?.message ?? "Agent execution failed";
+    await flushStreamEvents();
     await transitionRun(supabase, runId, "failed", { error: msg });
     return {
       ok: false,
@@ -450,6 +455,7 @@ export async function executeAgentRun(
 
     if (chunkLimits.exceeded) {
       const capError = chunkCapErrorMessage(chunkLimits.reason);
+      await flushStreamEvents();
       await transitionRun(supabase, runId, "failed", {
         steps: result.steps,
         error: capError,
@@ -567,6 +573,7 @@ export async function executeAgentRun(
     terminalStatus = "failed";
   }
 
+  await flushStreamEvents();
   await transitionRun(supabase, runId, terminalStatus, {
     steps: result.steps,
     error: result.error ?? null,

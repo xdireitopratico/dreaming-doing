@@ -42,11 +42,11 @@ export function registerExtractTools(reg: ToolRegistry, ctx: ExtractToolsContext
     {
       name: "extract_design_dna",
       description:
-        "Extrai DesignDNA estruturado de 1-5 URLs de referência e BLOQUEIA até o DNA ficar pronto (shallow ~30-60s, deep até ~150s). " +
+        "Extrai DesignDNA estruturado de 1-5 URLs de referência e BLOQUEIA até o DNA ficar pronto (shallow ~120s, deep até ~180s). " +
         "Devolve o design_dna DIRETO neste resultado (layout, color, typography, motion, interaction, component) — " +
-        "NÃO chame read_design_library depois, e NÃO re-chame extract_design_dna para a mesma URL. " +
+        "NÃO chame read_design_library depois. " +
         "Aplique criativamente (skill extract-design): extraia a intenção/gesto, adapte ao domínio, não copie. " +
-        "Se retornar status 'still_running', a extração passou do limite de tempo — continue outro trabalho do plano e retome depois, NÃO faça poll.",
+        "Se retornar status 'still_running', a extração ainda NÃO terminou — chame extract_design_dna NOVAMENTE com a mesma URL para CONTINUAR esperando (retoma o mesmo job, NÃO cria um novo). Repita até receber status 'completed'.",
       parameters: {
         type: "object",
         properties: {
@@ -134,61 +134,90 @@ export function registerExtractTools(reg: ToolRegistry, ctx: ExtractToolsContext
           };
         }
 
-        // Enfileira o job em background para evitar timeout da edge function
         const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
         const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-        const response = await fetch(`${supabaseUrl}/functions/v1/design-dna-scheduler`, {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${serviceKey}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            action: "schedule",
-            urls,
-            depth,
-            categories,
-            userId: ctx.userId,
-          }),
-          signal: AbortSignal.timeout(depth === "deep" ? 120000 : 60000),
-        });
+        // ── Resumível: se já existe job em andamento pra esta URL (recente), retoma em vez de criar novo.
+        // ponytail: mata o loop de "novos jobs a cada re-call" — re-chamar = continuar esperando o MESMO job.
+        let jobId = "";
+        let resumed = false;
+        try {
+          const { data: existingJob } = await ctx.supabase
+            .from("design_dna_jobs")
+            .select("id, status")
+            .contains("urls", [urls[0]])
+            .in("status", ["pending", "running"])
+            .gte("created_at", new Date(Date.now() - 15 * 60 * 1000).toISOString())
+            .order("created_at", { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          if (existingJob?.id) {
+            jobId = existingJob.id as string;
+            resumed = true;
+          }
+        } catch { /* ignora — fallback agenda novo */ }
 
-        if (!response.ok) {
-          const errData = await response.json().catch(() => ({}));
-          return {
-            toolCallId: "",
-            ok: false,
-            error: `extract_design_dna falhou: HTTP ${response.status} — ${errData.error || "unknown"}`,
-            output: null,
-          };
+        if (!jobId) {
+          const response = await fetch(`${supabaseUrl}/functions/v1/design-dna-scheduler`, {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${serviceKey}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              action: "schedule",
+              urls,
+              depth,
+              categories,
+              userId: ctx.userId,
+            }),
+            signal: AbortSignal.timeout(depth === "deep" ? 120000 : 60000),
+          });
+
+          if (!response.ok) {
+            const errData = await response.json().catch(() => ({}));
+            return {
+              toolCallId: "",
+              ok: false,
+              error: `extract_design_dna falhou: HTTP ${response.status} — ${errData.error || "unknown"}`,
+              output: null,
+            };
+          }
+
+          const data = await response.json();
+          const result = data.result || data;
+          jobId = (result.jobId as string | undefined) ?? "";
+
+          logger.info("agent.extract_design_dna", {
+            userId: ctx.userId,
+            projectId: ctx.projectId,
+            urlCount: urls.length,
+            depth,
+            queued: !!result.queued,
+            jobId,
+            eventIds: Array.isArray(result.eventIds) ? result.eventIds.length : 0,
+          });
+        } else {
+          logger.info("agent.extract_design_dna_resume", {
+            userId: ctx.userId,
+            projectId: ctx.projectId,
+            urlCount: urls.length,
+            depth,
+            jobId,
+          });
         }
 
-        const data = await response.json();
-        const result = data.result || data;
-
-        logger.info("agent.extract_design_dna", {
-          userId: ctx.userId,
-          projectId: ctx.projectId,
-          urlCount: urls.length,
-          depth,
-          queued: !!result.queued,
-          jobId: result.jobId,
-          eventIds: Array.isArray(result.eventIds) ? result.eventIds.length : 0,
-        });
-
-        // ── Poll síncrono adaptativo: bloqueia até o job concluir e devolve o DNA direto.
-        // ponytail: mata o loop "Avançar com read ×6" — o LLM chama uma vez, espera, recebe o DNA.
-        // Cap adaptativo: nunca estoura o budget restante da run (deixa 20s pra síntese).
-        const jobId = (result.jobId as string | undefined) ?? "";
+        // ── Poll síncrono: bloqueia até o job concluir e devolve o DNA direto.
+        // Cap 120s (shallow) / 180s (deep); nunca estoura o budget restante da run (deixa 20s pra síntese).
+        // Re-call retoma o MESMO job (resumível) → acumula tempo de espera entre turnos.
         ctx.emit?.("background_wait", {
           jobId,
           source_url: urls[0],
-          etaSec: depth === "shallow" ? 60 : 180,
-          reason: "extraindo DesignDNA em background",
+          etaSec: depth === "shallow" ? 120 : 180,
+          reason: resumed ? "retomando extração em andamento" : "extraindo DesignDNA em background",
         });
-        const remaining = ctx.getRemainingBudgetMs?.() ?? 90_000;
-        const capMs = Math.max(15_000, Math.min(depth === "shallow" ? 90_000 : 150_000, remaining - 20_000));
+        const remaining = ctx.getRemainingBudgetMs?.() ?? 270_000;
+        const capMs = Math.max(15_000, Math.min(depth === "shallow" ? 120_000 : 180_000, remaining - 20_000));
         const pollStart = Date.now();
         let jobStatus = "pending";
         while (Date.now() - pollStart < capMs) {
@@ -255,7 +284,7 @@ export function registerExtractTools(reg: ToolRegistry, ctx: ExtractToolsContext
             jobId,
             urls,
             hint:
-              `Extração ainda rodando em background (passou de ${Math.round(capMs / 1000)}s). Continue outro trabalho do plano; NÃO chame read_design_library, NÃO re-chame extract_design_dna pra mesma URL. O DNA será salvo em design_system_library quando concluir — retome depois.`,
+              `Extração ainda rodando (passaram ${Math.round(capMs / 1000)}s, job ${jobId}). Chame extract_design_dna NOVAMENTE com a MESMA url para CONTINUAR esperando — retoma o mesmo job, NÃO cria um novo. NÃO chame read_design_library até receber status 'completed'.`,
           },
         };
       } catch (err) {

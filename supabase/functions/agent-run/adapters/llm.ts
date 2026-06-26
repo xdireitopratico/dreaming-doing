@@ -537,7 +537,7 @@ class GeminiAdapter implements LLMProvider {
         if (m.content) parts.push({ text: m.content });
         if (m.tool_calls) {
           for (const tc of m.tool_calls) {
-            let args: Record<string, unknown> = tc.function.arguments ?? {};
+            let args: Record<string, unknown> = {};
             if (typeof tc.function.arguments === "string") {
               try {
                 args = JSON.parse(tc.function.arguments) as Record<string, unknown>;

@@ -640,18 +640,34 @@ Deno.test("3f Plan mode — clarify sem create_plan", async () => {
   assertEquals(ef(events, "gate_decision").length, 1);
 });
 
-Deno.test("3g Plan mode — create_plan inválido (1 passo)", async () => {
+Deno.test("3g Plan mode — create_plan inválido corrige e re-tenta (guard-rail de loop)", async () => {
   const { loop, main, events } = f({
     msgs: [{ role: "user", content: "site" }],
     files: [],
     planMode: true,
   });
+  // passo 0: create_plan malformado (steps não-actionable) → NÃO é falha terminal; empurra correção e re-tenta.
   main.queue(
     er("", tc("p1", "create_plan", { summary: "Site", steps: [{ description: "único" }] })),
   );
+  // passo 1: LLM corrige e envia create_plan válido.
+  main.queue(
+    er(
+      "",
+      tc("p2", "create_plan", {
+        summary: "Site",
+        steps: [
+          { description: "Ler contexto", type: "observe" },
+          { description: "Criar hero", type: "create_file", filePath: "src/App.tsx" },
+        ],
+      }),
+    ),
+  );
+  // generatePlanChatMessage.
+  main.queue(tr("Plano pronto para revisão."));
   const r = await loop.run();
-  assertEquals(r.ok, false);
-  assertEquals(ef(events, "plan_proposed").length, 0);
+  assertEquals(r.ok, true);
+  assertEquals(ef(events, "plan_proposed").length, 1);
 });
 
 Deno.test("3h Plan mode — create_plan vence clarify no mesmo turno", async () => {
