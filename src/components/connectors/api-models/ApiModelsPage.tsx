@@ -65,6 +65,7 @@ import { Button } from "@/components/ui/button";
 import { ModelEngineSection } from "./ModelEngineSection";
 import { ProvidersKeysSection } from "./ProvidersKeysSection";
 import { InfraToolsSection } from "./InfraToolsSection";
+import { SessionKindBadge } from "./SessionKindBadge";
 
 export interface ProviderUiState {
   id: AiProviderId;
@@ -747,6 +748,9 @@ export function ApiModelsPage() {
             <p className="font-mono text-[10px] text-[var(--text-dim)] mt-0.5">
               Provedores, chaves e como o agente consome modelos.
             </p>
+          </div>
+          <div className="ml-auto">
+            <SessionKindBadge />
           </div>
         </div>
       </motion.div>

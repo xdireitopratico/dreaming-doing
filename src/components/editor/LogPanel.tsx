@@ -2,7 +2,6 @@
 // Abas: Terminal (build logs), Console (preview output), Problems (diagnostics list)
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Sparkles, KeyRound } from "lucide-react";
 import {
   Terminal,
   Monitor,
@@ -385,7 +384,6 @@ export function LogPanel({
             LIVE
           </span>
         )}
-        <SessionKindIndicator />
         <span className="ml-auto font-mono text-[8px] text-[var(--text-ghost)]">
           {activeTab === "problems"
             ? `${diagnostics.length} problema${diagnostics.length !== 1 ? "s" : ""}`
@@ -395,23 +393,6 @@ export function LogPanel({
         </span>
       </div>
     </motion.div>
-  );
-}
-
-function SessionKindIndicator() {
-  const kind = getTroubleshootingShot().snapshot.agent.sessionKindResolved;
-  if (!kind) return null;
-  const isByok = kind === "byok";
-  return (
-    <span
-      className="ml-3 inline-flex items-center gap-1 font-mono text-[8px] uppercase tracking-wider"
-      style={{ color: isByok ? "#10b981" : "#fbbf24" }}
-      title={isByok ? "BYOK (sua config em /api-models)" : "TASTE (pool da plataforma)"}
-      data-testid="logpanel-session-kind"
-    >
-      {isByok ? <KeyRound className="size-2.5" /> : <Sparkles className="size-2.5" />}
-      {isByok ? "BYOK" : "TASTE"}
-    </span>
   );
 }
 

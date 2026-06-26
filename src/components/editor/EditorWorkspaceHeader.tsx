@@ -9,7 +9,6 @@ import {
 import { PreviewRouteNav } from "@/components/editor/PreviewRouteNav";
 import { previewDeviceWidth, type PreviewDevice } from "@/components/editor/PreviewViewportChrome";
 import { Monitor, Smartphone, Tablet } from "lucide-react";
-import { SessionKindBadge } from "@/components/editor/SessionKindBadge";
 import {
   InspectorNavControls,
   type InspectorNavControlsProps,
@@ -162,7 +161,6 @@ export function EditorWorkspaceHeader({
         <span className="forge-avatar" title={user?.email ?? ""}>
           {initials}
         </span>
-        <SessionKindBadge />
         <button
           type="button"
           className="forge-connector-btn"
