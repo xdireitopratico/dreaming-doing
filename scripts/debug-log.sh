@@ -238,7 +238,7 @@ fetch_supabase_logs() {
       ts_iso=$(ms_to_iso "$ts_ms")
       local msg_short="$(echo "$msg" | head -c 200)"
       local level="INFO"
-      echo "$msg" | grep -qiE "error|fail|5[0-9][0-9]" && level="ERROR"
+      echo "$msg" | grep -qiE "error|fail|\| [45][0-9][0-9] \|" && level="ERROR"
       [[ "$ERRORS_ONLY" == "true" && "$level" != "ERROR" ]] && continue
       entries+="$ts_iso|$level|api-gateway|$msg_short"$'\n'
       count=$((count + 1))
@@ -357,12 +357,14 @@ fetch_vercel_logs() {
     -H "Authorization: Bearer ${token}" > "$deploys_cache" 2>/dev/null || true
 
   local count=0
+  local deploys_found=0
   local entries=""
 
   if [[ -s "$deploys_cache" ]]; then
     # Parse deployments
     while IFS=$'\t' read -r deploy_id created_at state name; do
       [[ -z "$deploy_id" ]] && continue
+      deploys_found=$((deploys_found + 1))
       local ts_iso
       ts_iso=$(ms_to_iso "$created_at")
       local msg="Deploy ${name:-$deploy_id}: ${state}"
@@ -399,7 +401,11 @@ fetch_vercel_logs() {
   rm -f "$deploys_cache" 2>/dev/null || true
 
   if [[ "$count" -eq 0 ]]; then
-    logmsg INFO "vercel" "Nenhum deploy no período (ou token inválido)" "$(iso_timestamp)"
+    if [[ "$deploys_found" -gt 0 ]]; then
+      logmsg INFO "vercel" "${deploys_found} deploy(s) no período, nenhum com erro" "$(iso_timestamp)"
+    else
+      logmsg INFO "vercel" "Nenhum deploy no período (ou token inválido)" "$(iso_timestamp)"
+    fi
     return
   fi
 
