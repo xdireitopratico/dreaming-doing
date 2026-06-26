@@ -226,21 +226,27 @@ export async function emitStreamFinishEvent(
   payload: Record<string, unknown>,
 ): Promise<void> {
   const sb = getSupabaseAdmin();
-  const { data: lastRow } = await sb
+  const { data: lastRow, error: seqError } = await sb
     .from("agent_stream_events")
     .select("seq")
     .eq("run_id", runId)
     .order("seq", { ascending: false })
     .limit(1)
     .maybeSingle();
+  if (seqError) {
+    throw new Error(`Failed to read last seq for run ${runId}: ${seqError.message}`);
+  }
   const nextSeq = (typeof lastRow?.seq === "number" ? lastRow.seq : 0) + 1;
-  await sb.from("agent_stream_events").insert({
+  const { error: insertError } = await sb.from("agent_stream_events").insert({
     id: crypto.randomUUID(),
     run_id: runId,
     seq: nextSeq,
     event_type: "finish",
     payload,
   });
+  if (insertError) {
+    throw new Error(`Failed to insert finish event for run ${runId}: ${insertError.message}`);
+  }
 }
 
 export type ContinueQueueResponse = {
