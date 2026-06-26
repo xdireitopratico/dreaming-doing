@@ -203,22 +203,46 @@ class OpenAIAdapter implements LLMProvider {
     return normalizeMessagesForNim(params.messages);
   }
 
+  private normalizeMessagesForProvider(messages: ChatParams["messages"]): ChatParams["messages"] {
+    const out: ChatParams["messages"] = [];
+    for (const m of messages) {
+      const role = m.role;
+      let content = m.content ?? "";
+      const hasToolCalls = Array.isArray(m.tool_calls) && m.tool_calls.length > 0;
+      const hasToolCallId = typeof m.tool_call_id === "string" && m.tool_call_id.length > 0;
+      const isEmptyContent = content === "" || (Array.isArray(content) && content.length === 0);
+
+      // Cohere/OpenRouter rejeita mensagens sem content e sem tool_calls/tool_call_id.
+      if (isEmptyContent && !hasToolCalls && !hasToolCallId) continue;
+
+      // Cohere exige content não-vazio em mensagens assistant que carregam tool_calls.
+      if (role === "assistant" && hasToolCalls && isEmptyContent) {
+        content = ".";
+      }
+
+      out.push({ ...m, content });
+    }
+    return out;
+  }
+
   private async chatCompletions(params: ChatParams): Promise<ChatResponse> {
     if (params.onTokenDelta || params.onReasoningDelta) {
       return this.chatCompletionsStream(params);
     }
 
-    const messages = this.nimNormalizedMessages(params).map((m) => {
-      const msg: any = { role: m.role, content: m.content ?? "" };
-      if (Array.isArray(m.content)) msg.content = m.content;
-      if (m.tool_calls) msg.tool_calls = m.tool_calls;
-      if (m.tool_call_id) {
-        msg.tool_call_id = m.tool_call_id;
-        msg.role = "tool";
-      }
-      if (m.name) msg.name = m.name;
-      return msg;
-    });
+    const messages = this.normalizeMessagesForProvider(this.nimNormalizedMessages(params)).map(
+      (m) => {
+        const msg: any = { role: m.role, content: m.content ?? "" };
+        if (Array.isArray(m.content)) msg.content = m.content;
+        if (m.tool_calls) msg.tool_calls = m.tool_calls;
+        if (m.tool_call_id) {
+          msg.tool_call_id = m.tool_call_id;
+          msg.role = "tool";
+        }
+        if (m.name) msg.name = m.name;
+        return msg;
+      },
+    );
 
     const body: any = {
       model: this.model,
@@ -287,17 +311,19 @@ class OpenAIAdapter implements LLMProvider {
   }
 
   private async chatCompletionsStream(params: ChatParams): Promise<ChatResponse> {
-    const messages = this.nimNormalizedMessages(params).map((m) => {
-      const msg: any = { role: m.role, content: m.content ?? "" };
-      if (Array.isArray(m.content)) msg.content = m.content;
-      if (m.tool_calls) msg.tool_calls = m.tool_calls;
-      if (m.tool_call_id) {
-        msg.tool_call_id = m.tool_call_id;
-        msg.role = "tool";
-      }
-      if (m.name) msg.name = m.name;
-      return msg;
-    });
+    const messages = this.normalizeMessagesForProvider(this.nimNormalizedMessages(params)).map(
+      (m) => {
+        const msg: any = { role: m.role, content: m.content ?? "" };
+        if (Array.isArray(m.content)) msg.content = m.content;
+        if (m.tool_calls) msg.tool_calls = m.tool_calls;
+        if (m.tool_call_id) {
+          msg.tool_call_id = m.tool_call_id;
+          msg.role = "tool";
+        }
+        if (m.name) msg.name = m.name;
+        return msg;
+      },
+    );
 
     const body: any = {
       model: this.model,
