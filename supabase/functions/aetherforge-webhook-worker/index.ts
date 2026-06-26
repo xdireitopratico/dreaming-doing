@@ -2,16 +2,18 @@
  * AetherForge Webhook Worker
  * Receives external webhooks, stores in webhook_inbox with dedup + HMAC,
  * and triggers the associated flow via gateway.
- * 
+ *
  * BUG FIXES: 27 (timing-safe HMAC), 28 (empty sig bypass), 29 (flow_id→slug), 58 (strip sensitive headers)
  * Max: 160 lines | ADR-022
  */
 
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { forgeOrigin } from "../_shared/cors.ts";
 
 const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-flow-id, x-webhook-secret, x-dedup-key",
+  "Access-Control-Allow-Origin": forgeOrigin(),
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type, x-flow-id, x-webhook-secret, x-dedup-key",
 };
 
 // BUG 27 FIX: Use crypto.subtle for timing-safe HMAC comparison
@@ -19,22 +21,28 @@ async function hmacVerify(secret: string, signature: string, body: string): Prom
   try {
     if (!signature || !secret) return false; // BUG 28 FIX: empty signature = fail
     const encoder = new TextEncoder();
-    const key = await crypto.subtle.importKey("raw", encoder.encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign", "verify"]);
-    
+    const key = await crypto.subtle.importKey(
+      "raw",
+      encoder.encode(secret),
+      { name: "HMAC", hash: "SHA-256" },
+      false,
+      ["sign", "verify"],
+    );
+
     // Compute expected signature
     const sig = await crypto.subtle.sign("HMAC", key, encoder.encode(body));
     const expected = new Uint8Array(sig);
-    
+
     // Parse provided signature (strip "sha256=" prefix)
     const providedHex = signature.replace("sha256=", "");
     const providedBytes = new Uint8Array(providedHex.length / 2);
     for (let i = 0; i < providedHex.length; i += 2) {
       providedBytes[i / 2] = parseInt(providedHex.substring(i, i + 2), 16);
     }
-    
+
     // Length check first
     if (expected.length !== providedBytes.length) return false;
-    
+
     // Timing-safe comparison via subtle crypto verify
     // Alternatively, constant-time byte compare:
     let diff = 0;
@@ -48,7 +56,13 @@ async function hmacVerify(secret: string, signature: string, body: string): Prom
 }
 
 // BUG 58 FIX: Strip sensitive headers before persisting
-const SENSITIVE_HEADERS = new Set(["authorization", "cookie", "set-cookie", "x-webhook-secret", "x-api-key"]);
+const SENSITIVE_HEADERS = new Set([
+  "authorization",
+  "cookie",
+  "set-cookie",
+  "x-webhook-secret",
+  "x-api-key",
+]);
 
 function sanitizeHeaders(headers: Headers): Record<string, string> {
   const result: Record<string, string> = {};
@@ -71,11 +85,16 @@ Deno.serve(async (req) => {
     const supabase = createClient(supabaseUrl, serviceKey);
 
     const flowId = req.headers.get("x-flow-id");
-    const signature = req.headers.get("x-webhook-secret") || req.headers.get("x-hub-signature-256") || "";
+    const signature =
+      req.headers.get("x-webhook-secret") || req.headers.get("x-hub-signature-256") || "";
     const dedupKey = req.headers.get("x-dedup-key") || "";
     const rawBody = await req.text();
     let body: Record<string, unknown> = {};
-    try { body = JSON.parse(rawBody); } catch { body = { raw: rawBody }; }
+    try {
+      body = JSON.parse(rawBody);
+    } catch {
+      body = { raw: rawBody };
+    }
 
     const source = req.headers.get("user-agent")?.split("/")[0] || "unknown";
 
@@ -88,7 +107,8 @@ Deno.serve(async (req) => {
         .maybeSingle();
       if (existing) {
         return new Response(JSON.stringify({ status: "duplicate", id: existing.id }), {
-          status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
     }
@@ -112,13 +132,15 @@ Deno.serve(async (req) => {
           // If secret is configured, signature MUST be present and valid
           if (!signature) {
             return new Response(JSON.stringify({ error: "Signature required" }), {
-              status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+              status: 401,
+              headers: { ...corsHeaders, "Content-Type": "application/json" },
             });
           }
           signatureVerified = await hmacVerify(sec.secret_value, signature, rawBody);
           if (!signatureVerified) {
             return new Response(JSON.stringify({ error: "Invalid signature" }), {
-              status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+              status: 401,
+              headers: { ...corsHeaders, "Content-Type": "application/json" },
             });
           }
         }
@@ -155,10 +177,21 @@ Deno.serve(async (req) => {
         .maybeSingle();
 
       if (!deployment?.endpoint_slug) {
-        await supabase.from("webhook_inbox").update({ status: "failed", error_message: "No active deployment for flow" }).eq("id", webhook.id);
-        return new Response(JSON.stringify({ status: "failed", webhook_id: webhook.id, error: "No active deployment" }), {
-          status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        await supabase
+          .from("webhook_inbox")
+          .update({ status: "failed", error_message: "No active deployment for flow" })
+          .eq("id", webhook.id);
+        return new Response(
+          JSON.stringify({
+            status: "failed",
+            webhook_id: webhook.id,
+            error: "No active deployment",
+          }),
+          {
+            status: 404,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          },
+        );
       }
 
       const gatewayUrl = `${supabaseUrl}/functions/v1/aetherforge-gateway`;
@@ -178,29 +211,43 @@ Deno.serve(async (req) => {
       });
 
       let result;
-      try { result = await res.json(); } catch { result = { error: "Invalid gateway response" }; }
+      try {
+        result = await res.json();
+      } catch {
+        result = { error: "Invalid gateway response" };
+      }
 
       await supabase
         .from("webhook_inbox")
         .update({
           status: res.ok ? "processed" : "failed",
           processed_at: new Date().toISOString(),
-          error_message: res.ok ? null : (result.error || "Gateway error"),
+          error_message: res.ok ? null : result.error || "Gateway error",
         })
         .eq("id", webhook.id);
 
-      return new Response(JSON.stringify({ status: res.ok ? "processed" : "failed", webhook_id: webhook.id, execution: result }), {
-        status: res.ok ? 200 : 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return new Response(
+        JSON.stringify({
+          status: res.ok ? "processed" : "failed",
+          webhook_id: webhook.id,
+          execution: result,
+        }),
+        {
+          status: res.ok ? 200 : 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
+      );
     }
 
     return new Response(JSON.stringify({ status: "pending", webhook_id: webhook.id }), {
-      status: 202, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      status: 202,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error) {
     console.error("[WebhookWorker] Error:", error);
     return new Response(JSON.stringify({ error: "Internal error" }), {
-      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      status: 500,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 });

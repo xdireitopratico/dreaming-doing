@@ -1,9 +1,10 @@
 // deploy-publish — registra deployment conforme alvo (Vercel / Netlify / Cloudflare / preview E2B)
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { executeDeployPublish } from "../_shared/deploy-publish-core.ts";
+import { forgeOrigin } from "../_shared/cors.ts";
 
 const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Origin": forgeOrigin(),
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 

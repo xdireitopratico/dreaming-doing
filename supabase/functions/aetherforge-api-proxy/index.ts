@@ -1,21 +1,22 @@
 /**
  * AetherForge API Proxy — Public REST API for agent execution
- * 
+ *
  * Auth: API key (from tenant_secrets) or Supabase JWT
  * Rate limit: Simple in-memory counter per tenant (resets on cold start)
  * Forwards to aetherforge-gateway for actual execution
- * 
+ *
  * Endpoints:
  *   POST /  → Execute agent (body: { slug, message, session_id? })
  *   GET  /  → API info + health
- * 
+ *
  * Max: ~140 linhas (anti-monolítico)
  */
 
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { forgeOrigin } from "../_shared/cors.ts";
 
 const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Origin": forgeOrigin(),
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type, x-api-key, x-tenant-id",
 };
@@ -51,23 +52,27 @@ Deno.serve(async (req: Request) => {
 
   // GET → API info
   if (req.method === "GET") {
-    return new Response(JSON.stringify({
-      api: "AetherForge Public API",
-      version: "1.0",
-      endpoints: {
-        "POST /": "Execute agent — body: { slug, message, session_id?, channel? }",
+    return new Response(
+      JSON.stringify({
+        api: "AetherForge Public API",
+        version: "1.0",
+        endpoints: {
+          "POST /": "Execute agent — body: { slug, message, session_id?, channel? }",
+        },
+        auth: "Header X-API-Key or Authorization: Bearer <jwt>",
+        rate_limit: `${RATE_LIMIT_PER_MINUTE} requests/minute per tenant`,
+      }),
+      {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       },
-      auth: "Header X-API-Key or Authorization: Bearer <jwt>",
-      rate_limit: `${RATE_LIMIT_PER_MINUTE} requests/minute per tenant`,
-    }), {
-      status: 200,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    );
   }
 
   if (req.method !== "POST") {
     return new Response(JSON.stringify({ error: "Method not allowed" }), {
-      status: 405, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      status: 405,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 
@@ -101,7 +106,8 @@ Deno.serve(async (req: Request) => {
 
       if (!matchedTenantId) {
         return new Response(JSON.stringify({ error: "Invalid API key" }), {
-          status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 401,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
       tenantId = matchedTenantId;
@@ -109,52 +115,70 @@ Deno.serve(async (req: Request) => {
       // JWT auth — verify via Supabase
       const supabase = createClient(supabaseUrl, supabaseKey);
       const token = authHeader.replace("Bearer ", "");
-      const { data: { user }, error } = await supabase.auth.getUser(token);
+      const {
+        data: { user },
+        error,
+      } = await supabase.auth.getUser(token);
       if (error || !user) {
         return new Response(JSON.stringify({ error: "Invalid JWT token" }), {
-          status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 401,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
       tenantId = user.id;
     } else {
-      return new Response(JSON.stringify({ error: "Authentication required. Use X-API-Key or Authorization: Bearer <jwt>" }), {
-        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return new Response(
+        JSON.stringify({
+          error: "Authentication required. Use X-API-Key or Authorization: Bearer <jwt>",
+        }),
+        {
+          status: 401,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
+      );
     }
 
     // 2. Rate limit
     const rateCheck = checkRateLimit(tenantId);
     if (!rateCheck.allowed) {
-      return new Response(JSON.stringify({ error: "Rate limit exceeded", retry_after_seconds: 60 }), {
-        status: 429,
-        headers: {
-          ...corsHeaders, "Content-Type": "application/json",
-          "X-RateLimit-Remaining": "0",
-          "Retry-After": "60",
+      return new Response(
+        JSON.stringify({ error: "Rate limit exceeded", retry_after_seconds: 60 }),
+        {
+          status: 429,
+          headers: {
+            ...corsHeaders,
+            "Content-Type": "application/json",
+            "X-RateLimit-Remaining": "0",
+            "Retry-After": "60",
+          },
         },
-      });
+      );
     }
 
     // 3. Forward to gateway
     const body = await req.json();
     if (!body.slug || !body.message) {
       return new Response(JSON.stringify({ error: "slug and message are required" }), {
-        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
     const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
     if (!anonKey) {
-      console.error("[API Proxy] SUPABASE_ANON_KEY not set — refusing to fall back to service role key");
+      console.error(
+        "[API Proxy] SUPABASE_ANON_KEY not set — refusing to fall back to service role key",
+      );
       return new Response(JSON.stringify({ error: "Server misconfigured" }), {
-        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
     const gatewayResponse = await fetch(`${supabaseUrl}/functions/v1/aetherforge-gateway`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "Authorization": `Bearer ${anonKey}`,
+        Authorization: `Bearer ${anonKey}`,
       },
       body: JSON.stringify({
         slug: body.slug,
@@ -176,7 +200,8 @@ Deno.serve(async (req: Request) => {
     return new Response(JSON.stringify(result), {
       status: gatewayResponse.status,
       headers: {
-        ...corsHeaders, "Content-Type": "application/json",
+        ...corsHeaders,
+        "Content-Type": "application/json",
         "X-RateLimit-Remaining": String(rateCheck.remaining),
         // BUG 73 FIX: Don't expose tenant UUID
       },
@@ -184,7 +209,8 @@ Deno.serve(async (req: Request) => {
   } catch (err) {
     console.error("[API Proxy] Error:", (err as Error).message);
     return new Response(JSON.stringify({ error: "Internal server error" }), {
-      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      status: 500,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 });

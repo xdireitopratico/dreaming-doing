@@ -1,15 +1,16 @@
 /**
  * prometheus-tool-executor — Edge function for Python VPS to call any Prometheus tool
- * 
+ *
  * D4: TS reference engine + Python proxy. Python VPS calls this function
  * to execute tools instead of reimplementing them.
- * 
+ *
  * Auth: Bearer VPS_TOKEN or service_role key
  * POST { tool_name, params, session_id, tenant_id? }
  */
 
 import { supabaseAdmin } from "../_shared/prometheus-db.ts";
 import { dispatchTool, type ToolContext } from "../_shared/prometheus-tools.ts";
+import { forgeOrigin } from "../_shared/cors.ts";
 
 const VPS_TOKEN = Deno.env.get("VPS_BRIDGE_TOKEN") || Deno.env.get("VPS_TOKEN") || "";
 
@@ -18,7 +19,7 @@ Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response(null, {
       headers: {
-        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Origin": forgeOrigin(),
         "Access-Control-Allow-Methods": "POST, OPTIONS",
         "Access-Control-Allow-Headers": "Authorization, Content-Type",
       },
@@ -35,7 +36,9 @@ Deno.serve(async (req: Request) => {
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
 
   if (!token || (!VPS_TOKEN && !serviceKey)) {
-    return new Response(JSON.stringify({ error: "Server misconfigured: auth tokens not set" }), { status: 500 });
+    return new Response(JSON.stringify({ error: "Server misconfigured: auth tokens not set" }), {
+      status: 500,
+    });
   }
 
   const encoder = new TextEncoder();
@@ -44,8 +47,16 @@ Deno.serve(async (req: Request) => {
   async function timingSafeEqual(a: Uint8Array, b: string): Promise<boolean> {
     const bBytes = encoder.encode(b);
     if (a.length !== bBytes.length) return false;
-    const ka = await crypto.subtle.importKey("raw", a, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
-    const kb = await crypto.subtle.importKey("raw", bBytes, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+    const ka = await crypto.subtle.importKey("raw", a, { name: "HMAC", hash: "SHA-256" }, false, [
+      "sign",
+    ]);
+    const kb = await crypto.subtle.importKey(
+      "raw",
+      bBytes,
+      { name: "HMAC", hash: "SHA-256" },
+      false,
+      ["sign"],
+    );
     const sa = await crypto.subtle.sign("HMAC", ka, new Uint8Array(32));
     const sb = await crypto.subtle.sign("HMAC", kb, new Uint8Array(32));
     const va = new Uint8Array(sa);

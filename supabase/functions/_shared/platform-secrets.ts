@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import { decryptSecret } from "./crypto.ts";
 
 function keyHint(value: string): string {
   const t = value.trim();
@@ -15,7 +16,7 @@ export async function getPlatformSecret(admin: SupabaseClient, name: string): Pr
     .maybeSingle();
 
   const fromDb = data?.value_encrypted?.trim();
-  if (fromDb) return fromDb;
+  if (fromDb) return await decryptSecret(fromDb);
   return Deno.env.get(name)?.trim() ?? "";
 }
 

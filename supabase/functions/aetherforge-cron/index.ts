@@ -2,19 +2,19 @@
  * aetherforge-cron — Cron Processor for AetherForge
  * Reads agent_schedules due for execution and triggers them via gateway.
  * Also evaluates agent_alert_rules and creates notifications.
- * 
+ *
  * BUG FIXES: 30 (endpoint_slug), 31 (flow_id filter on alerts), 53 (P95 calc), 54-55 (cron day-of-week), 56 (advisory lock comment), 57 (is_active vs status)
- * 
+ *
  * Invoked every minute by pg_cron.
  * @version 1.1.0 — Batch 2 fixes
  */
 
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { forgeOrigin } from "../_shared/cors.ts";
 
 const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Origin": forgeOrigin(),
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
 Deno.serve(async (req: Request) => {
@@ -26,7 +26,8 @@ Deno.serve(async (req: Request) => {
   const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
   if (!supabaseUrl || !supabaseKey) {
     return new Response(JSON.stringify({ error: "Missing env vars" }), {
-      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      status: 500,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
   const supabase = createClient(supabaseUrl, supabaseKey);
@@ -65,11 +66,14 @@ Deno.serve(async (req: Request) => {
             .maybeSingle();
 
           if (!deployment?.endpoint_slug) {
-            await supabase.from("agent_schedules").update({
-              last_run_at: now,
-              last_status: "error",
-              last_error: "No active deployment found",
-            }).eq("id", schedule.id);
+            await supabase
+              .from("agent_schedules")
+              .update({
+                last_run_at: now,
+                last_status: "error",
+                last_error: "No active deployment found",
+              })
+              .eq("id", schedule.id);
             results.schedules_failed++;
             continue;
           }
@@ -83,7 +87,7 @@ Deno.serve(async (req: Request) => {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
-              "Authorization": `Bearer ${anonKey}`,
+              Authorization: `Bearer ${anonKey}`,
             },
             body: JSON.stringify({
               slug: deployment.endpoint_slug, // BUG 30 FIX
@@ -102,13 +106,16 @@ Deno.serve(async (req: Request) => {
           const resBody = await res.json().catch(() => ({}));
           const nextRun = calculateNextRun(schedule.cron_expression);
 
-          await supabase.from("agent_schedules").update({
-            last_run_at: now,
-            last_status: res.ok ? "success" : "error",
-            last_error: res.ok ? null : (resBody.error || `HTTP ${res.status}`),
-            next_run_at: nextRun,
-            run_count: schedule.run_count + 1,
-          }).eq("id", schedule.id);
+          await supabase
+            .from("agent_schedules")
+            .update({
+              last_run_at: now,
+              last_status: res.ok ? "success" : "error",
+              last_error: res.ok ? null : resBody.error || `HTTP ${res.status}`,
+              next_run_at: nextRun,
+              run_count: schedule.run_count + 1,
+            })
+            .eq("id", schedule.id);
 
           if (res.ok) {
             results.schedules_triggered++;
@@ -116,11 +123,14 @@ Deno.serve(async (req: Request) => {
             results.schedules_failed++;
           }
         } catch (err: any) {
-          await supabase.from("agent_schedules").update({
-            last_run_at: now,
-            last_status: "error",
-            last_error: err.message,
-          }).eq("id", schedule.id);
+          await supabase
+            .from("agent_schedules")
+            .update({
+              last_run_at: now,
+              last_status: "error",
+              last_error: err.message,
+            })
+            .eq("id", schedule.id);
           results.schedules_failed++;
         }
       }
@@ -169,14 +179,21 @@ Deno.serve(async (req: Request) => {
         const fallback = exec.pause_fallback_action || "abort";
         const newStatus = fallback === "continue" ? "completed" : "failed";
 
-        await supabase.from("agent_executions").update({
-          is_paused: false,
-          status: newStatus,
-          error_message: fallback === "abort" ? "HITL timeout — auto-aborted" : null,
-        }).eq("id", exec.id);
+        await supabase
+          .from("agent_executions")
+          .update({
+            is_paused: false,
+            status: newStatus,
+            error_message: fallback === "abort" ? "HITL timeout — auto-aborted" : null,
+          })
+          .eq("id", exec.id);
 
         if (exec.flow_id) {
-          const { data: flow } = await supabase.from("agent_flows").select("user_id").eq("id", exec.flow_id).maybeSingle();
+          const { data: flow } = await supabase
+            .from("agent_flows")
+            .select("user_id")
+            .eq("id", exec.flow_id)
+            .maybeSingle();
           if (flow?.user_id) {
             await supabase.from("agent_notifications").insert({
               flow_id: exec.flow_id,
@@ -240,7 +257,7 @@ function calculateNextRun(cronExpr: string): string {
     const next = new Date(now);
     next.setHours(targetHour, targetMin, 0, 0);
     if (next <= now) next.setDate(next.getDate() + 1);
-    
+
     // BUG 55 FIX: Advance to correct day-of-week
     if (hasDow) {
       while (next.getDay() !== dowTarget) {
@@ -255,7 +272,7 @@ function calculateNextRun(cronExpr: string): string {
     const next = new Date(now);
     next.setMinutes(targetMin, 0, 0);
     if (next <= now) next.setHours(next.getHours() + 1);
-    
+
     if (hasDow) {
       while (next.getDay() !== dowTarget) {
         next.setDate(next.getDate() + 1);
@@ -312,7 +329,11 @@ async function evaluateAlertRule(
 
       const rate = total && total > 0 ? ((failed || 0) / total) * 100 : 0;
       if (rate >= threshold) {
-        return { message: `Taxa de erro ${rate.toFixed(1)}% excede limite de ${threshold}%`, value: rate, threshold };
+        return {
+          message: `Taxa de erro ${rate.toFixed(1)}% excede limite de ${threshold}%`,
+          value: rate,
+          threshold,
+        };
       }
       return null;
     }
@@ -328,7 +349,11 @@ async function evaluateAlertRule(
 
       const totalCost = (data || []).reduce((sum: number, s: any) => sum + (s.cost_cents || 0), 0);
       if (totalCost >= budgetCents) {
-        return { message: `Custo $${(totalCost / 100).toFixed(2)} excede budget $${(budgetCents / 100).toFixed(2)}`, value: totalCost, threshold: budgetCents };
+        return {
+          message: `Custo $${(totalCost / 100).toFixed(2)} excede budget $${(budgetCents / 100).toFixed(2)}`,
+          value: totalCost,
+          threshold: budgetCents,
+        };
       }
       return null;
     }
@@ -349,7 +374,11 @@ async function evaluateAlertRule(
         const p95Index = Math.floor(data.length * 0.95);
         const p95 = data[Math.min(p95Index, data.length - 1)]?.duration_ms || 0;
         if (p95 >= thresholdMs) {
-          return { message: `P95 latência ${p95}ms excede limite de ${thresholdMs}ms`, value: p95, threshold: thresholdMs };
+          return {
+            message: `P95 latência ${p95}ms excede limite de ${thresholdMs}ms`,
+            value: p95,
+            threshold: thresholdMs,
+          };
         }
       }
       return null;
