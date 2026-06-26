@@ -46,8 +46,8 @@ Deno.test("stream — approvedPlanBuild vai para inspector", () => {
   const { phase, events } = captureNarration({ approvedPlanBuild: true });
   phase.stream("Só inspector.");
   assertEquals(events.length, 1);
-  assertEquals(events[0].type, "phase");
-  assertEquals(events[0].data.phase, "checkpoint");
+  assertEquals(events[0].type, "agent_note");
+  assertEquals(events[0].data.text, "Só inspector.");
 });
 
 Deno.test("emitAgentProse — primeira frase vira abertura", () => {

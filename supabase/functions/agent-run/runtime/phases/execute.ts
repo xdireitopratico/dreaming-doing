@@ -52,6 +52,7 @@ import type { LoopUpdateContext } from "../../loop-status.ts";
 import { friendlyLlmError, shouldFailFastLlmError } from "../../llm-errors.ts";
 import { designTelemetryEntry } from "../../design-telemetry.ts";
 import { signatureFromDesignField } from "../../design-plan-field.ts";
+import { NarrationPhase } from "./narration.ts";
 
 export type BuildExecuteDeps = {
   robinActive: boolean;
@@ -87,6 +88,7 @@ export type BuildExecuteDeps = {
   router: ModelRouter;
   emitAgentProse: (raw: string, loopStep: number) => void;
   ensureOpeningBeforeWork: (fallback: string) => void;
+  narrationPhase?: NarrationPhase;
   narrationBuffer: string;
   emit: PlanTurnEmit;
   loopBudgetExceeded: () => boolean;
@@ -176,6 +178,108 @@ function applyNoToolCallsEnforcement(
   return false;
 }
 
+const OPENING_SYSTEM_PROMPT =
+  "Você precisa começar respondendo ao usuário com UMA frase curta (máximo 140 caracteres) explicando o que vai fazer, antes de usar ferramentas. Não use templates genéricos como 'Entendi:'. Seja específico ao pedido.";
+
+const CLOSING_SYSTEM_PROMPT =
+  "Você deve terminar esta interação com uma frase curta para o usuário (máximo 200 caracteres) explicando o resultado real: o que conseguiu, o que falhou, ou por que parou. Não invente sucesso. Seja específico.";
+
+async function forceOpeningOrFail(
+  deps: BuildExecuteDeps,
+  instruction: string,
+  history: ChatMessage[],
+): Promise<boolean> {
+  for (let attempt = 0; attempt < 2; attempt++) {
+    if (deps.narrationPhase?.openingEmitted) return true;
+    const nudgeResponse = await deps.llmChat(
+      deps.executionModel,
+      instruction,
+      [...history, { role: "system", content: OPENING_SYSTEM_PROMPT }],
+      false,
+    );
+    const text = nudgeResponse?.content?.trim();
+    if (text && deps.narrationPhase) {
+      deps.narrationPhase.emitOpening(text);
+      if (deps.narrationPhase.openingEmitted) return true;
+    }
+  }
+  return false;
+}
+
+/** Força o LLM a emitir um fechamento honesto quando o caminho de saída não produziu um.
+ *  Zero fallback hardcoded — se o LLM não responder, falha com erro técnico honesto. */
+async function forceFinalClosingOrFail(
+  deps: BuildExecuteDeps,
+  instruction: string,
+  history: ChatMessage[],
+): Promise<string | null> {
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const nudgeResponse = await deps.llmChat(
+      deps.executionModel,
+      instruction,
+      [...history, { role: "system", content: CLOSING_SYSTEM_PROMPT }],
+      false,
+    );
+    const text = nudgeResponse?.content?.trim();
+    if (text) {
+      deps.narrationPhase?.emitFinalClosing(text);
+      return text;
+    }
+  }
+  return null;
+}
+
+/** Wrapper de saída: garante `assistant_text` final visível antes de persistir.
+ *  Se já houver `closing` (gerado por graceful closing ou sintético), emite;
+ *  senão força via LLM. Falha honesta se o LLM não responder. */
+async function emitClosingAndPersist(
+  deps: BuildExecuteDeps,
+  loopStep: number,
+  opts: {
+    closing?: string | null;
+    instruction?: string;
+    ok?: boolean;
+    error?: string;
+    buildFailed?: boolean;
+    canceled?: boolean;
+  },
+): Promise<PlanTurnRunResult> {
+  const instruction = opts.instruction ?? deps.originalUserRequest;
+  const history = deps.state.messages;
+  let finalText = (opts.closing ?? "").trim();
+  if (!finalText) {
+    const forced = await forceFinalClosingOrFail(deps, instruction, history);
+    finalText = forced ?? "";
+  }
+  if (!finalText) {
+    const err = "O modelo não respondeu com a mensagem esperada.";
+    await deps.persistFinal(err, { lastFinishOk: false, buildFailed: true });
+    return {
+      ok: false,
+      error: err,
+      steps: loopStep,
+      resumable: false,
+      toolsUsed: [...deps.toolsUsed],
+    };
+  }
+  // emitFinalClosing já disparou se forceFinalClosingOrFail rodou; mas se o closing veio de
+  // graceful closing externo, garantimos o evento aqui sem duplicar (emit final é idempotente no reducer).
+  deps.emit("assistant_text", { text: finalText, final: true, append: false });
+  const ok = opts.ok === true;
+  await deps.persistFinal(finalText, {
+    lastFinishOk: ok,
+    buildFailed: opts.buildFailed,
+  });
+  return {
+    ok,
+    error: opts.error,
+    steps: loopStep,
+    resumable: false,
+    canceled: opts.canceled,
+    toolsUsed: [...deps.toolsUsed],
+  };
+}
+
 export async function runBuildExecutePhase(
   deps: BuildExecuteDeps,
   initialStep: number,
@@ -188,6 +292,25 @@ export async function runBuildExecutePhase(
   let finalGateOk = false;
   let agentTextComplete = false;
 
+  const compressedInitial = await deps.compression.compress(deps.state.messages);
+  const initialInstruction = buildExecuteInstruction(deps.originalUserRequest, {
+    loopStep: 0,
+    buildFixResume: deps.buildFixResume,
+    design: deps.approvedPlanDesign,
+  });
+  const openingOk = await forceOpeningOrFail(deps, initialInstruction, compressedInitial);
+  if (!openingOk) {
+    const err = "O modelo não respondeu com a mensagem esperada.";
+    await deps.persistFinal(err, { lastFinishOk: false, buildFailed: true });
+    return {
+      ok: false,
+      error: err,
+      steps: loopStep,
+      resumable: false,
+      toolsUsed: [...deps.toolsUsed],
+    };
+  }
+
   while (!finalGateOk) {
     agentTextComplete = false;
     while (loopStep < deps.maxStepsLimit) {
@@ -196,15 +319,14 @@ export async function runBuildExecutePhase(
       }
 
       if (await deps.isCanceled()) {
-        await deps.persistFinal("Cancelado pelo usuário");
-        deps.emit("canceled", { message: "Cancelado pelo usuário" });
-        return {
-          ok: false,
+        const cancelText = "Cancelado pelo usuário";
+        deps.emit("canceled", { message: cancelText });
+        return emitClosingAndPersist(deps, loopStep, {
+          closing: cancelText,
           error: "Cancelado",
-          steps: Math.max(0, loopStep),
+          ok: false,
           canceled: true,
-          toolsUsed: [...deps.toolsUsed],
-        };
+        });
       }
 
       loopStep++;
@@ -276,32 +398,22 @@ export async function runBuildExecutePhase(
         const friendly = friendlyLlmError(err, deps.robinActive);
         if (shouldFailFastLlmError(err)) {
           const failMsg = `Erro: ${friendly}`;
-          await deps.persistFinal(failMsg, {
-            lastFinishOk: false,
+          return emitClosingAndPersist(deps, loopStep, {
+            closing: failMsg,
+            error: failMsg,
+            ok: false,
             buildFailed: true,
           });
-          return {
-            ok: false,
-            error: failMsg,
-            steps: loopStep,
-            resumable: false,
-            toolsUsed: [...deps.toolsUsed],
-          };
         }
         const retries = await deps.bumpLlmRetries();
         if (retries >= EXECUTE_MAX_LLM_RETRIES) {
           const failMsg = `Erro: ${friendly}`;
-          await deps.persistFinal(failMsg, {
-            lastFinishOk: false,
+          return emitClosingAndPersist(deps, loopStep, {
+            closing: failMsg,
+            error: failMsg,
+            ok: false,
             buildFailed: true,
           });
-          return {
-            ok: false,
-            error: failMsg,
-            steps: loopStep,
-            resumable: false,
-            toolsUsed: [...deps.toolsUsed],
-          };
         }
         await deps.saveCheckpoint(LoopPhaseEnum.ERROR, true);
         deps.notifyLoopStatus({ kind: "model_error", errorDetail: friendly });
@@ -326,17 +438,12 @@ export async function runBuildExecutePhase(
           message:
             `Modelo preso em leitura por ${readOnlyUpdate.consecutive} passos sem produzir output`,
         });
-        await deps.persistFinal("Modelo sem resposta. Troque o modelo ou envie de novo.", {
-          lastFinishOk: false,
+        return emitClosingAndPersist(deps, loopStep, {
+          closing: "Modelo sem resposta. Troque o modelo ou envie de novo.",
+          error: "Modelo sem resposta. Troque o modelo ou envie de novo.",
+          ok: false,
           buildFailed: true,
         });
-        return {
-          ok: false,
-          error: "Modelo sem resposta. Troque o modelo ou envie de novo.",
-          steps: loopStep,
-          resumable: false,
-          toolsUsed: [...deps.toolsUsed],
-        };
       }
 
       if (readOnlyUpdate.shouldNudge) {
@@ -368,8 +475,60 @@ export async function runBuildExecutePhase(
       const {
         clarify: clarifyCall,
         createPlan: createPlanCall,
+        declareTasks: declareTasksCall,
         execution: execCalls,
       } = splitMetaToolCalls(response.tool_calls ?? []);
+
+      if (declareTasksCall) {
+        deps.toolsUsed.add("declare_tasks");
+        const rawTasks = Array.isArray(declareTasksCall.arguments.tasks)
+          ? declareTasksCall.arguments.tasks
+          : [];
+        for (const t of rawTasks) {
+          if (!t || typeof t !== "object") continue;
+          const id = String((t as Record<string, unknown>).id ?? crypto.randomUUID());
+          const label = String((t as Record<string, unknown>).label ?? "");
+          if (!label) continue;
+          const criteriaRaw = (t as Record<string, unknown>).criteria;
+          deps.emit("task", {
+            id,
+            label,
+            criteria: typeof criteriaRaw === "string" ? criteriaRaw : undefined,
+            active: false,
+            done: false,
+            failed: false,
+          });
+        }
+        deps.state.messages.push({
+          role: "assistant",
+          content: response.content ?? assistantText,
+          tool_calls: [
+            {
+              id: declareTasksCall.id,
+              type: "function" as const,
+              function: {
+                name: declareTasksCall.name,
+                arguments: JSON.stringify(declareTasksCall.arguments),
+              },
+            },
+          ],
+        });
+        deps.state.messages.push({
+          role: "tool",
+          tool_call_id: declareTasksCall.id,
+          content: JSON.stringify({ ok: true, declared: rawTasks.length }),
+        });
+        // Se houver tool_calls de execução junto com declare_tasks, solte elas no próximo turno.
+        if (execCalls.length > 0) {
+          deps.state.messages.push({
+            role: "user",
+            content:
+              "PARE. Não misture declare_tasks com ferramentas de execução. " +
+              "Use declare_tasks sozinho primeiro; depois execute na próxima rodada.",
+          });
+        }
+        continue;
+      }
 
       if (createPlanCall) {
         deps.state.messages.push({
@@ -413,15 +572,11 @@ export async function runBuildExecutePhase(
           const fail = applyNoToolCallsEnforcement(deps, response, assistantText);
           if (fail) {
             const closing = await deps.attemptGracefulClosing("tool_miss");
-            const msg = closing ?? TOOL_FAIL_USER_MESSAGE;
-            await deps.persistFinal(msg, { lastFinishOk: false });
-            return {
+            return emitClosingAndPersist(deps, loopStep, {
+              closing: closing ?? TOOL_FAIL_USER_MESSAGE,
+              error: closing ?? TOOL_FAIL_USER_MESSAGE,
               ok: false,
-              error: msg,
-              steps: loopStep,
-              resumable: false,
-              toolsUsed: [...deps.toolsUsed],
-            };
+            });
           }
           continue;
         }
@@ -612,15 +767,14 @@ export async function runBuildExecutePhase(
       }
 
       if (await deps.isCanceled()) {
-        await deps.persistFinal("Cancelado pelo usuário");
-        deps.emit("canceled", { message: "Cancelado pelo usuário" });
-        return {
-          ok: false,
+        const cancelText = "Cancelado pelo usuário";
+        deps.emit("canceled", { message: cancelText });
+        return emitClosingAndPersist(deps, loopStep, {
+          closing: cancelText,
           error: "Cancelado",
-          steps: Math.max(0, loopStep),
+          ok: false,
           canceled: true,
-          toolsUsed: [...deps.toolsUsed],
-        };
+        });
       }
 
       const stepHash = hashToolBatch(
@@ -730,18 +884,12 @@ export async function runBuildExecutePhase(
       const failMsg =
         `Build não passou após ${EXECUTE_MAX_RETRIES} tentativas.\n\n` +
         `${finalObservation.feedback?.slice(0, 2000) ?? "Erros de compilação no sandbox."}`;
-      const msg = closing ?? failMsg;
-      await deps.persistFinal(msg, {
-        lastFinishOk: false,
+      return emitClosingAndPersist(deps, loopStep, {
+        closing: closing ?? failMsg,
+        error: closing ?? failMsg,
+        ok: false,
         buildFailed: true,
       });
-      return {
-        ok: false,
-        error: msg,
-        steps: loopStep,
-        resumable: false,
-        toolsUsed: [...deps.toolsUsed],
-      };
     }
 
     if (deps.loopBudgetExceeded()) {
@@ -770,8 +918,24 @@ export async function runBuildExecutePhase(
   );
 
   // Inviolabilidade: o loop sempre termina com mensagem visível pro usuário.
-  // Se a síntese retornou vazio (LLM indisponível e sem prosa), usamos fallback mínimo.
-  const finalClosing = closingText.trim() || "Pronto. Quer que eu ajuste algo?";
+  // Se a síntese retornou vazio (LLM indisponível e sem prosa), forçamos nova chamada LLM
+  // — zero fallback hardcoded.
+  let finalClosing = closingText.trim();
+  if (!finalClosing) {
+    const forced = await forceFinalClosingOrFail(deps, deps.originalUserRequest, deps.state.messages);
+    finalClosing = forced ?? "";
+  }
+  if (!finalClosing) {
+    const err = "O modelo não respondeu com a mensagem esperada.";
+    await deps.persistFinal(err, { lastFinishOk: false, buildFailed: true });
+    return {
+      ok: false,
+      error: err,
+      steps: loopStep,
+      resumable: false,
+      toolsUsed: [...deps.toolsUsed],
+    };
+  }
   deps.emit("assistant_text", {
     text: finalClosing,
     append: false,

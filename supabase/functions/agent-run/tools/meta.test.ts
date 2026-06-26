@@ -8,6 +8,7 @@ import {
   PLAN_MODE_PATCH_TOOLS,
   META_CLARIFY_KIND,
   META_PLAN_KIND,
+  META_DECLARE_TASKS_KIND,
   proposedPlanFromToolArgs,
   registerMetaTools,
   splitMetaToolCalls,
@@ -63,14 +64,16 @@ Deno.test("proposedPlanFromToolArgs exige 2-7 passos", () => {
 });
 
 Deno.test("getMetaToolDefinitions e registerMetaTools respeitam planMode", () => {
-  assertEquals(getMetaToolDefinitions(false).map((d) => d.name), ["clarify"]);
+  assertEquals(getMetaToolDefinitions(false).map((d) => d.name), ["clarify", "declare_tasks"]);
   assertEquals(getMetaToolDefinitions(true).map((d) => d.name), ["clarify", "create_plan"]);
   const reg = new ToolRegistry();
   registerMetaTools(reg, { planMode: false });
   assertEquals(reg.getDefinitions().some((d) => d.name === "create_plan"), false);
+  assertEquals(reg.getDefinitions().some((d) => d.name === "declare_tasks"), true);
   const regPlan = new ToolRegistry();
   registerMetaTools(regPlan, { planMode: true });
   assertEquals(regPlan.getDefinitions().some((d) => d.name === "create_plan"), true);
+  assertEquals(regPlan.getDefinitions().some((d) => d.name === "declare_tasks"), false);
 });
 
 Deno.test("registerMetaTools handlers retornam kind meta", async () => {
@@ -91,19 +94,35 @@ Deno.test("registerMetaTools handlers retornam kind meta", async () => {
     },
   });
   assertEquals((plan.output as Record<string, unknown>).kind, META_PLAN_KIND);
+  const regBuild = new ToolRegistry();
+  registerMetaTools(regBuild, { planMode: false });
+  const tasks = await regBuild.execute({
+    id: "t1",
+    name: "declare_tasks",
+    arguments: { tasks: [{ id: "t1", label: "Criar endpoint" }] },
+  });
+  assertEquals((tasks.output as Record<string, unknown>).kind, META_DECLARE_TASKS_KIND);
 });
 
 Deno.test("splitMetaToolCalls e hasMixedMetaAndExecution", () => {
   const clarifyCall = { id: "1", name: "clarify", arguments: { question: "?" } };
   const planCall = { id: "2", name: "create_plan", arguments: { summary: "x", steps: [] } };
+  const declareTasksCall = {
+    id: "4",
+    name: "declare_tasks",
+    arguments: { tasks: [{ id: "t1", label: "Criar endpoint" }] },
+  };
   const execCall = { id: "3", name: "fs_write", arguments: { path: "a.tsx", content: "x" } };
 
   const split = splitMetaToolCalls([clarifyCall, execCall]);
   assertEquals(split.clarify?.name, "clarify");
   assertEquals(split.execution.length, 1);
+  assertEquals(split.declareTasks, null);
   assertEquals(hasMixedMetaAndExecution([clarifyCall, ...split.execution]), true);
   assertEquals(hasMixedMetaAndExecution([clarifyCall]), false);
   assertEquals(hasMixedMetaAndExecution([planCall, execCall]), true);
+  assertEquals(hasMixedMetaAndExecution([declareTasksCall, execCall]), true);
+  assertEquals(hasMixedMetaAndExecution([declareTasksCall]), false);
   assertEquals(hasMixedMetaAndExecution(undefined), false);
 });
 

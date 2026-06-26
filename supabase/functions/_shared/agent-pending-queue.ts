@@ -77,6 +77,7 @@ export type PendingQueueItem = {
   repeat: number;
   paused: boolean;
   body: Record<string, unknown>;
+  sortOrder: number;
 };
 
 const QUEUE_REPEAT_MIN = 1;

@@ -159,7 +159,7 @@ export async function handleContinueQueue(
   const { hasUserLlmKey, userOnlyKeys } = await loadUserLlmContext(supabase, userId, preferences);
   const sessionKind = hasUserLlmKey ? "byok" : "taste_chat";
   const providerSessionKind =
-    pendingSessionKind === "taste_start" || sessionKind === "taste_start" ? "taste_start" : "byok";
+    pendingSessionKind === "taste_start" ? "taste_start" : "byok";
 
   if (sessionKind === "taste_chat") {
     const { data: profile } = await supabase

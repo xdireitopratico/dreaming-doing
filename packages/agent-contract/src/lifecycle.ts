@@ -1,6 +1,6 @@
 import type { AgentRunStatus } from "./events.ts";
 
-export type { AgentRunStatus } from "./events.ts";
+export type { AgentRunStatus } from "./agent-contract-events.ts";
 
 /** Transições válidas de agent_runs.status — única fonte para writers. */
 const ALLOWED: Record<AgentRunStatus, readonly AgentRunStatus[]> = {

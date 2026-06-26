@@ -455,7 +455,7 @@ Deno.serve(async (req) => {
       if (!awaitingRun) {
         const { data: completedAwaiting } = await supabase
           .from("agent_runs")
-          .select("id, status, meta")
+          .select("id, status, meta, started_at")
           .eq("project_id", projectId)
           .eq("status", "completed")
           .not("meta->awaitingUser", "is", null)
@@ -463,7 +463,7 @@ Deno.serve(async (req) => {
           .limit(1)
           .maybeSingle();
         if (completedAwaiting) {
-          awaitingRun = completedAwaiting;
+          awaitingRun = completedAwaiting as unknown as typeof awaitingRun;
           // Corrigir o status para refletir a realidade
           await transitionRun(supabase, completedAwaiting.id as string, "awaiting_user");
         }
@@ -489,7 +489,7 @@ Deno.serve(async (req) => {
                 id: awaitingRun.id as string,
                 status: awaitingRun.status as string,
                 meta: awaitingRun.meta,
-                started_at: (awaitingRun as { started_at?: string | null }).started_at ?? null,
+                started_at: awaitingRun.started_at ?? null,
               })
             : "running";
           logger.info("agent_run.busy_no_enqueue", {
@@ -764,7 +764,7 @@ Deno.serve(async (req) => {
         if (existingRun?.id) {
           agentRunId = existingRun.id;
           const prevMeta = (existingRun.meta ?? {}) as Record<string, unknown>;
-          await transitionRun(supabase, agentRunId, "running", {
+          await transitionRun(supabase, agentRunId as string, "running", {
             error: null,
             meta: {
               ...prevMeta,
@@ -792,7 +792,7 @@ Deno.serve(async (req) => {
         // Se a conversation não bater, o run pertence a outra conversa → enfileirar.
         const { data: createdRun } = await supabase
           .from("agent_runs")
-          .select("id, conversation_id, meta")
+          .select("id, conversation_id, status, meta")
           .eq("id", agentRunId)
           .single();
 
