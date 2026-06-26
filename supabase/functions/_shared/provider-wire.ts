@@ -22,14 +22,22 @@ export const BUILTIN_RUNTIME: Record<
     provider: "openai",
     baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
   },
-  anthropic: { secretKey: "ANTHROPIC_API_KEY", provider: "anthropic" },
+  anthropic: {
+    secretKey: "ANTHROPIC_API_KEY",
+    provider: "anthropic",
+    baseUrl: "https://api.anthropic.com/v1",
+  },
   deepseek: {
     secretKey: "DEEPSEEK_API_KEY",
     provider: "openai",
     baseUrl: "https://api.deepseek.com",
     deepseekChat: true,
   },
-  gemini: { secretKey: "GEMINI_API_KEY", provider: "gemini" },
+  gemini: {
+    secretKey: "GEMINI_API_KEY",
+    provider: "gemini",
+    baseUrl: "https://generativelanguage.googleapis.com/v1beta",
+  },
   groq: {
     secretKey: "GROQ_API_KEY",
     provider: "openai",

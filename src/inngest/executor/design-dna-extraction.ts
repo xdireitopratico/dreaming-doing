@@ -48,6 +48,8 @@ type LLMConfig = {
   baseUrl: string;
   model: string;
   label: string;
+  /** Protocolo de transporte HTTP — dispatch em llmExtractDNA. */
+  protocol: "openai" | "anthropic" | "gemini";
 };
 
 type WebSecrets = Record<string, string>;
@@ -237,6 +239,13 @@ function readConnectorProvider(row: {
   return { provider, token };
 }
 
+/** Infere o protocolo de transporte a partir do provider id. */
+function protocolForProvider(provider: LlmKind): "openai" | "anthropic" | "gemini" {
+  if (provider === "anthropic") return "anthropic";
+  if (provider === "gemini") return "gemini";
+  return "openai";
+}
+
 /** Monta ResolvedLLM a partir de um provider+token+meta, com baseUrl do BUILTIN_RUNTIME ou meta. */
 function buildLlmConfig(
   provider: LlmKind,
@@ -256,16 +265,9 @@ function buildLlmConfig(
       baseUrl: base,
       model,
       label: LLM_LABEL.ollama ?? "Ollama",
+      protocol: "openai",
       resolvedFrom,
     };
-  }
-
-  if (provider === "anthropic") {
-    // Anthropic Messages API é diferente do OpenAI-compatible — exigimos
-    // o caminho próprio em vez de tentar mandar pro endpoint OpenAI.
-    // Como o design-dna-extract hoje só fala OpenAI-compatible chat/completions,
-    // retornamos null e o caller degrada para heuristic.
-    return null;
   }
 
   if (provider.startsWith("custom-")) {
@@ -280,6 +282,7 @@ function buildLlmConfig(
       baseUrl: specBase,
       model,
       label: provider,
+      protocol: "openai",
       resolvedFrom,
     };
   }
@@ -298,6 +301,7 @@ function buildLlmConfig(
     baseUrl,
     model,
     label: LLM_LABEL[provider] ?? provider,
+    protocol: protocolForProvider(provider),
     resolvedFrom,
   };
 }
@@ -446,6 +450,147 @@ async function execPlaywrightInSandbox(
   };
 }
 
+type ChatContent = string | Array<{ type: string; text?: string; image_url?: { url: string } }>;
+
+function openAiChat(
+  cfg: LLMConfig,
+  systemPrompt: string,
+  userContent: string,
+  screenshot: string,
+): Promise<{ content: string }> {
+  const messages: Array<{ role: "system" | "user"; content: ChatContent }> = [
+    { role: "system", content: systemPrompt },
+    {
+      role: "user",
+      content: screenshot.startsWith("data:")
+        ? [
+            { type: "text", text: userContent },
+            { type: "image_url", image_url: { url: screenshot } },
+          ]
+        : userContent,
+    },
+  ];
+  return fetch(`${cfg.baseUrl}/chat/completions`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${cfg.apiKey}`,
+    },
+    body: JSON.stringify({
+      model: cfg.model,
+      messages,
+      max_tokens: 4096,
+      temperature: 0.3,
+      response_format: { type: "json_object" },
+    }),
+    signal: AbortSignal.timeout(60000),
+  }).then(async (response) => {
+    if (!response.ok) {
+      const errText = await response.text().catch(() => "");
+      throw new Error(
+        `LLM extraction failed (${cfg.label} /chat/completions): HTTP ${response.status} — ${errText.slice(0, 200)}`,
+      );
+    }
+    const data = await response.json();
+    return { content: data.choices?.[0]?.message?.content || "{}" };
+  });
+}
+
+function anthropicChat(
+  cfg: LLMConfig,
+  systemPrompt: string,
+  userContent: string,
+  screenshot: string,
+): Promise<{ content: string }> {
+  // Anthropic Messages API: system vai no top-level, user content em blocos.
+  const hasImage = screenshot.startsWith("data:");
+  const userBlocks: Array<Record<string, unknown>> = [{ type: "text", text: userContent }];
+  if (hasImage) {
+    const base64Match = screenshot.match(/^data:image\/(\w+);base64,(.+)$/s);
+    if (base64Match) {
+      userBlocks.push({
+        type: "image",
+        source: { type: "base64", media_type: `image/${base64Match[1]}`, data: base64Match[2] },
+      });
+    }
+  }
+  return fetch(`${cfg.baseUrl}/messages`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": cfg.apiKey,
+      "anthropic-version": "2023-06-01",
+    },
+    body: JSON.stringify({
+      model: cfg.model,
+      system: systemPrompt,
+      max_tokens: 4096,
+      temperature: 0.3,
+      messages: [{ role: "user", content: userBlocks }],
+    }),
+    signal: AbortSignal.timeout(60000),
+  }).then(async (response) => {
+    if (!response.ok) {
+      const errText = await response.text().catch(() => "");
+      throw new Error(
+        `LLM extraction failed (${cfg.label} /messages): HTTP ${response.status} — ${errText.slice(0, 200)}`,
+      );
+    }
+    const data = await response.json();
+    const blocks = Array.isArray(data.content) ? data.content : [];
+    const text = blocks
+      .map((b: { type?: string; text?: string }) => (b.type === "text" ? b.text : ""))
+      .join("");
+    return { content: text || "{}" };
+  });
+}
+
+function geminiChat(
+  cfg: LLMConfig,
+  systemPrompt: string,
+  userContent: string,
+  screenshot: string,
+): Promise<{ content: string }> {
+  // Gemini generateContent: API key vai como ?key=, contents em parts, systemInstruction separado.
+  const parts: Array<Record<string, unknown>> = [{ text: userContent }];
+  if (screenshot.startsWith("data:")) {
+    const base64Match = screenshot.match(/^data:image\/(\w+);base64,(.+)$/s);
+    if (base64Match) {
+      parts.push({
+        inline_data: { mime_type: `image/${base64Match[1]}`, data: base64Match[2] },
+      });
+    }
+  }
+  const url = `${cfg.baseUrl.replace(/\/$/, "")}/models/${encodeURIComponent(cfg.model)}:generateContent?key=${encodeURIComponent(cfg.apiKey)}`;
+  return fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      systemInstruction: { parts: [{ text: systemPrompt }] },
+      contents: [{ role: "user", parts }],
+      generationConfig: {
+        temperature: 0.3,
+        maxOutputTokens: 4096,
+        responseMimeType: "application/json",
+      },
+    }),
+    signal: AbortSignal.timeout(60000),
+  }).then(async (response) => {
+    if (!response.ok) {
+      const errText = await response.text().catch(() => "");
+      throw new Error(
+        `LLM extraction failed (${cfg.label} generateContent): HTTP ${response.status} — ${errText.slice(0, 200)}`,
+      );
+    }
+    const data = await response.json();
+    const candidateParts = data?.candidates?.[0]?.content?.parts;
+    const text = Array.isArray(candidateParts)
+      ? candidateParts.map((p: { text?: string }) => p.text ?? "").join("")
+      : "";
+    return { content: text || "{}" };
+  });
+}
+
 async function llmExtractDNA(
   url: string,
   markdown: string,
@@ -485,47 +630,24 @@ ${markdown.slice(0, 30000)}
 
 Extraia o DesignDNA deste site.`;
 
-  const messages = [
-    { role: "system", content: systemPrompt },
-    {
-      role: "user",
-      content: screenshot.startsWith("data:")
-        ? [
-            { type: "text", text: userContent },
-            { type: "image_url", image_url: { url: screenshot } },
-          ]
-        : userContent,
-    },
-  ];
-
-  const response = await fetch(`${llmConfig.baseUrl}/chat/completions`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${llmConfig.apiKey}`,
-    },
-    body: JSON.stringify({
-      model: llmConfig.model,
-      messages,
-      max_tokens: 4096,
-      temperature: 0.3,
-      response_format: { type: "json_object" },
-    }),
-    signal: AbortSignal.timeout(60000),
-  });
-
-  if (!response.ok) {
-    throw new Error(`LLM extraction failed: HTTP ${response.status}`);
+  let rawContent: string;
+  try {
+    const result =
+      llmConfig.protocol === "anthropic"
+        ? await anthropicChat(llmConfig, systemPrompt, userContent, screenshot)
+        : llmConfig.protocol === "gemini"
+          ? await geminiChat(llmConfig, systemPrompt, userContent, screenshot)
+          : await openAiChat(llmConfig, systemPrompt, userContent, screenshot);
+    rawContent = result.content;
+  } catch (err) {
+    throw new Error(errorMessage(err));
   }
-
-  const data = await response.json();
-  const content = data.choices?.[0]?.message?.content || "{}";
 
   let parsed: Record<string, unknown>;
   try {
-    parsed = JSON.parse(content);
+    parsed = JSON.parse(rawContent);
   } catch {
-    const jsonMatch = content.match(/\{[\s\S]*\}/);
+    const jsonMatch = rawContent.match(/\{[\s\S]*\}/);
     parsed = jsonMatch ? JSON.parse(jsonMatch[0]) : {};
   }
 
@@ -565,6 +687,7 @@ export async function extractDesignDnaForUrl(
         baseUrl: resolvedLlm.baseUrl,
         model: resolvedLlm.model,
         label: resolvedLlm.label,
+        protocol: resolvedLlm.protocol,
       }
     : null;
 
