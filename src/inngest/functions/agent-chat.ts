@@ -5,14 +5,11 @@ import {
   getRunStatus,
   getSupabaseAdmin,
   markRunFinal,
+  NonRetriableError,
   resolveChunkResumeDecision,
   runAgentLoopWithResume,
   type AgentRunRequest,
 } from "./_shared";
-
-class NonRetriableError extends Error {
-  override readonly name = "NonRetriableError";
-}
 
 export const agentChatFunction = inngest.createFunction(
   {

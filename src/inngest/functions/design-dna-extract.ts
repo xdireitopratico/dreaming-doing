@@ -1,14 +1,12 @@
 import { inngest } from "../client";
+import { errorMessage } from "@/lib/error-utils";
+import { NonRetriableError } from "./_shared";
 import {
   getSupabaseAdmin,
   markJobFinal,
   type DesignDnaJobRequest,
   type DesignDnaExecuteResponse,
 } from "./_shared-design-dna";
-
-class NonRetriableError extends Error {
-  override readonly name = "NonRetriableError";
-}
 
 export const designDnaExtractFunction = inngest.createFunction(
   {
@@ -66,7 +64,7 @@ export const designDnaExtractFunction = inngest.createFunction(
         lastResult = result;
         if (result.ok || result.canceled || !result.resumable) break;
       } catch (err) {
-        lastError = err instanceof Error ? err.message : String(err);
+        lastError = errorMessage(err);
         console.error(`[design-dna-extract] extract-loop-${i} threw:`, lastError);
         // Marcar como failed imediatamente em vez de propagar (que deixaria job em running)
         lastResult = {

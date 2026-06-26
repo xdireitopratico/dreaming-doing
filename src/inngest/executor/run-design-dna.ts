@@ -1,4 +1,5 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { errorMessage } from "@/lib/error-utils";
 import {
   appendJobEvent,
   loadJobCheckpoint,
@@ -207,7 +208,7 @@ export async function executeDesignDnaJob(
         await appendJobEvent(supabase, jobId, "sandbox_ready", {
           sandboxId,
           previewUrl,
-          chromium: `CDP unreachable: ${cdpErr instanceof Error ? cdpErr.message : "unknown"}`,
+          chromium: `CDP unreachable: ${errorMessage(cdpErr, "unknown")}`,
         });
       }
     }
@@ -331,7 +332,7 @@ export async function executeDesignDnaJob(
         });
       }
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
+      const msg = errorMessage(err);
       const errorRecord = { url, error: msg, index: i };
       errors.push(errorRecord);
       await appendJobEvent(supabase, jobId, "url_error", errorRecord);

@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { errorMessage } from "@/lib/error-utils";
 import { cleanHtmlDocument, htmlToMarkdownDocument } from "@/lib/html-hygiene";
 import { scrapeWebPage } from "../../../supabase/functions/_shared/web-research-providers.ts";
 import { finalizeDocumentMarkdown } from "../../../supabase/functions/_shared/document-sanitize.ts";
@@ -469,7 +470,7 @@ export async function extractDesignDnaForUrl(
         : screenshotUrl;
       notes.push("deep sandbox extraction completed");
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
+      const msg = errorMessage(err);
       notes.push(`deep sandbox extraction failed: ${msg}`);
       providerTrace.push("sandbox:error");
       if (!rawMarkdown.trim() && !cleanHtml.trim() && !cleanedMarkdown.trim()) {

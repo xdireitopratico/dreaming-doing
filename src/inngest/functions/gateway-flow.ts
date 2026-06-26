@@ -1,11 +1,8 @@
 import { inngest } from "../client";
+import { NonRetriableError } from "./_shared";
 
 const SUPABASE_URL = process.env.SUPABASE_URL ?? process.env.VITE_SUPABASE_URL ?? "";
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
-
-class NonRetriableError extends Error {
-  override readonly name = "NonRetriableError";
-}
 
 async function invokeGatewayStep(executionId: string): Promise<{
   done: boolean;
