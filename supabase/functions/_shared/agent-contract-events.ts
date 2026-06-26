@@ -107,6 +107,15 @@ export type AgentStreamEventData =
     }
   | { type: "step"; current: number; total: number; plan?: boolean }
   | {
+      type: "task";
+      id: string;
+      label: string;
+      criteria?: string;
+      active?: boolean;
+      done?: boolean;
+      failed?: boolean;
+    }
+  | {
       type: "context_pressure";
       message?: string;
     }
@@ -284,6 +293,7 @@ export const AGENT_STREAM_EVENT_TYPES: ReadonlyArray<AgentStreamEventType> = [
   "design",
   "step_result",
   "step",
+  "task",
   "context_pressure",
   "context_compress",
   "rate_limit",
