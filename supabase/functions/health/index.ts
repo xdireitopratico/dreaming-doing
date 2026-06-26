@@ -169,13 +169,24 @@ Deno.serve(async (req) => {
   const llmAnyOk = nvidia.ok || groq.ok;
   const ok = criticalOk && llmAnyOk && e2b.ok;
 
+  const authHeader = req.headers.get("Authorization") || "";
+  const isAuthed = authHeader.startsWith("Bearer ") && authHeader.length > 10;
+
   const report: HealthReport = {
     ok,
-    version: PLATFORM_VERSION,
-    buildSha: BUILD_SHA,
-    projectRef: PROJECT_REF,
+    version: isAuthed ? PLATFORM_VERSION : "ok",
+    buildSha: isAuthed ? BUILD_SHA : "redacted",
+    projectRef: isAuthed ? PROJECT_REF : "redacted",
     timestamp: new Date().toISOString(),
-    checks: allChecks,
+    checks: isAuthed ? allChecks : {
+      db: { ok: db.ok, latencyMs: db.latencyMs },
+      auth: { ok: auth.ok, latencyMs: auth.latencyMs },
+      llm: {
+        nvidia: { ok: nvidia.ok, latencyMs: nvidia.latencyMs },
+        groq: { ok: groq.ok, latencyMs: groq.latencyMs },
+      },
+      e2b: { ok: e2b.ok, latencyMs: e2b.latencyMs },
+    } as HealthReport["checks"],
   };
 
   return new Response(JSON.stringify(report, null, 2), {

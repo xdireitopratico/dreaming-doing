@@ -38,7 +38,26 @@ Deno.serve(async (req: Request) => {
     return new Response(JSON.stringify({ error: "Server misconfigured: auth tokens not set" }), { status: 500 });
   }
 
-  if (token !== VPS_TOKEN && token !== serviceKey) {
+  const encoder = new TextEncoder();
+  const tokenBytes = encoder.encode(token);
+
+  async function timingSafeEqual(a: Uint8Array, b: string): Promise<boolean> {
+    const bBytes = encoder.encode(b);
+    if (a.length !== bBytes.length) return false;
+    const ka = await crypto.subtle.importKey("raw", a, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+    const kb = await crypto.subtle.importKey("raw", bBytes, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+    const sa = await crypto.subtle.sign("HMAC", ka, new Uint8Array(32));
+    const sb = await crypto.subtle.sign("HMAC", kb, new Uint8Array(32));
+    const va = new Uint8Array(sa);
+    const vb = new Uint8Array(sb);
+    let diff = 0;
+    for (let i = 0; i < va.length; i++) diff |= va[i] ^ vb[i];
+    return diff === 0;
+  }
+
+  const matchesVps = VPS_TOKEN ? await timingSafeEqual(tokenBytes, VPS_TOKEN) : false;
+  const matchesService = serviceKey ? await timingSafeEqual(tokenBytes, serviceKey) : false;
+  if (!matchesVps && !matchesService) {
     return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401 });
   }
 
