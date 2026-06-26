@@ -270,7 +270,8 @@ export function EditorPageLayout({
     if (isMobile) {
       onMobilePanelChange?.("chat");
     } else {
-      onMainViewChange("code");
+      // Volta o workspace para o preview (toggle de preview), nunca para o Monaco.
+      onMainViewChange("preview");
     }
   }, [closeJobWorkspace, isMobile, onMobilePanelChange, onMainViewChange]);
 

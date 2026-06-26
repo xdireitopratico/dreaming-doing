@@ -9,3 +9,4 @@ export {
   patchEditorTelemetrySnapshot,
   subscribeEditorTelemetry,
 } from "./store";
+export { useEditorTelemetrySnapshot } from "./useSnapshot";

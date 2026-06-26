@@ -55,36 +55,36 @@ function parseXmlToolCalls(content: string): ToolCall[] {
   const calls: ToolCall[] = [];
   const toolCallRegex = /<tool_call>([\s\S]*?)<\/tool_call>/g;
   const toolCallMatches = content.matchAll(toolCallRegex);
-  
+
   for (const match of toolCallMatches) {
     const inner = match[1];
     const funcMatch = inner.match(/<function=([^>]+)>/);
     if (!funcMatch) continue;
-    
+
     const name = funcMatch[1];
     const args: Record<string, unknown> = {};
-    
+
     const paramRegex = /<parameter=([^>]+)>([\s\S]*?)<\/parameter>/g;
     const paramMatches = inner.matchAll(paramRegex);
-    
+
     for (const pm of paramMatches) {
       const paramName = pm[1];
       const paramValue = pm[2].trim();
-      
+
       try {
         args[paramName] = JSON.parse(paramValue);
       } catch {
         args[paramName] = paramValue;
       }
     }
-    
+
     calls.push({
       id: crypto.randomUUID(),
       name,
       arguments: args,
     });
   }
-  
+
   return calls;
 }
 
@@ -266,10 +266,15 @@ class OpenAIAdapter implements LLMProvider {
     const data = await resp.json();
     const choice = data.choices?.[0];
     const msg = choice?.message;
-    
+
     let toolCalls = (msg?.tool_calls ?? []).map(toToolCall);
-    
-    if (toolCalls.length === 0 && msg?.content && typeof msg.content === "string" && msg.content.includes("<tool_call>")) {
+
+    if (
+      toolCalls.length === 0 &&
+      msg?.content &&
+      typeof msg.content === "string" &&
+      msg.content.includes("<tool_call>")
+    ) {
       toolCalls = parseXmlToolCalls(msg.content);
     }
 
@@ -487,9 +492,9 @@ class OpenAIAdapter implements LLMProvider {
           function: { name: tc.name, arguments: tc.arguments },
         }),
       );
-    
+
     let finalToolCalls = parsedToolCalls;
-    
+
     if (finalToolCalls.length === 0 && text && text.includes("<tool_call>")) {
       finalToolCalls = parseXmlToolCalls(text);
     }

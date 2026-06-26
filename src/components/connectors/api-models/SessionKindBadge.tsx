@@ -7,12 +7,12 @@
  * - nada quando estado vazio (não renderiza)
  */
 import { Sparkles, KeyRound } from "lucide-react";
-import { useEditorTelemetry } from "@/hooks/useEditorTelemetry";
+import { useEditorTelemetrySnapshot } from "@/lib/editor-telemetry";
 import { useConnectors } from "@/hooks/useConnectors";
 import { cn } from "@/lib/utils";
 
 export function SessionKindBadge() {
-  const { snapshot } = useEditorTelemetry();
+  const snapshot = useEditorTelemetrySnapshot();
   const { tasteChatRemaining, tasteStartRemaining } = useConnectors();
   const kind = snapshot.agent.sessionKindResolved;
 
@@ -31,11 +31,7 @@ export function SessionKindBadge() {
       data-testid="session-kind-badge"
       data-session-kind={kind}
     >
-      {isByok ? (
-        <KeyRound className="size-3 shrink-0" />
-      ) : (
-        <Sparkles className="size-3 shrink-0" />
-      )}
+      {isByok ? <KeyRound className="size-3 shrink-0" /> : <Sparkles className="size-3 shrink-0" />}
       <span
         className={cn(
           "size-1.5 rounded-full shrink-0",
@@ -43,11 +39,7 @@ export function SessionKindBadge() {
         )}
         aria-hidden
       />
-      <span>
-        {isByok
-          ? "BYOK"
-          : `TASTE ${tasteChatRemaining}/${tasteStartRemaining}`}
-      </span>
+      <span>{isByok ? "BYOK" : `TASTE ${tasteChatRemaining}/${tasteStartRemaining}`}</span>
     </span>
   );
 }

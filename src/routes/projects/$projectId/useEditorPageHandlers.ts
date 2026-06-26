@@ -9,10 +9,7 @@ import type { AgentComposerMode } from "@/lib/chat-types";
 import type { ChatMessage } from "@/lib/chat-types";
 import { buildEditorActions, type PaletteAction } from "@/components/editor/CommandPalette";
 import { createLogEntry, type LogEntry } from "@/components/editor/LogPanel";
-import {
-  loadAgentPreferences,
-  loadAgentPreferencesForAgentRun,
-} from "@/lib/agent-preferences";
+import { loadAgentPreferences, loadAgentPreferencesForAgentRun } from "@/lib/agent-preferences";
 import { isAgentPreferencesConfigured, getAgentSetupBlockMessage } from "@/lib/agent-setup";
 import type { ForgeSessionKind, TasteAction } from "@/lib/taste";
 import { canSendTasteChat, canStartTasteProject, resolveSessionKind } from "@/lib/taste";
@@ -374,11 +371,7 @@ export function useEditorPageHandlers({
         return;
       }
 
-      const pp = resolvePendingPlan(
-        agent.progress.pendingPlan,
-        chatMessages,
-        agent.activeRunId,
-      );
+      const pp = resolvePendingPlan(agent.progress.pendingPlan, chatMessages, agent.activeRunId);
       const planAwaiting =
         needsPlanApprovalNow(agent.progress.pendingPlan, chatMessages, agent.activeRunId) && !!pp;
 
