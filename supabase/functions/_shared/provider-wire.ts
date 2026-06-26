@@ -13,7 +13,7 @@ export type PresetWireShape = {
 };
 
 /** Sync com BUILT_IN_PROVIDERS em ai-provider-registry.ts */
-const BUILTIN_RUNTIME: Record<
+export const BUILTIN_RUNTIME: Record<
   string,
   { secretKey: string; provider: string; baseUrl?: string; deepseekChat?: boolean }
 > = {
