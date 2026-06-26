@@ -31,7 +31,6 @@ const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 // Warm module-level controller before autoPublishIfNeeded → deployWithProvider (TDZ guard).
 getDeploymentController();
 
-
 type ProjectFile = { path: string; content?: string | null };
 
 function clearedPreviewMeta(existing: Record<string, unknown>): Record<string, unknown> {
@@ -48,10 +47,14 @@ async function loadProjectFiles(
   supabase: ReturnType<typeof createClient>,
   projectId: string,
 ): Promise<ProjectFile[]> {
-  const { data: files } = await supabase
+  const { data: files, error } = await supabase
     .from("project_files")
     .select("path, content")
     .eq("project_id", projectId);
+  if (error) {
+    console.error("[preview-boot] loadProjectFiles failed:", error.message);
+    return [];
+  }
   return files ?? [];
 }
 

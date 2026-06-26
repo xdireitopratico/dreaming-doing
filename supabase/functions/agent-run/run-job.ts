@@ -162,7 +162,8 @@ function coerceDesignPlanField(raw: unknown): DesignPlanField | undefined {
     anti_patterns: Array.isArray(d.anti_patterns)
       ? (d.anti_patterns as unknown[]).filter((x): x is string => typeof x === "string")
       : undefined,
-    synthesis_reasoning: typeof d.synthesis_reasoning === "string" ? d.synthesis_reasoning : undefined,
+    synthesis_reasoning:
+      typeof d.synthesis_reasoning === "string" ? d.synthesis_reasoning : undefined,
   };
 }
 
@@ -253,11 +254,7 @@ export async function executeAgentJob(
   const preMeta = (pre?.meta ?? {}) as Record<string, unknown>;
   const isSmokeRun = preMeta.smoke === true;
 
-  const effectivePreferences = await resolveEffectiveAgentPreferences(
-    supabase,
-    userId,
-    preMeta,
-  );
+  const effectivePreferences = await resolveEffectiveAgentPreferences(supabase, userId, preMeta);
 
   // Paraleliza queries independentes de inicialização (reduz cold-start)
   const [projectResult, profileResult, historyResult, userLlmResult, siblingSigResult] =
@@ -587,7 +584,9 @@ export async function executeAgentJob(
   try {
     result = await runtime.run(30_000); // H8: heartbeat 30s durante observe() longo
   } catch (e) {
-    await sandbox.kill().catch(() => {});
+    await sandbox.kill().catch((err) => {
+      console.warn("[run-job] sandbox kill failed:", (err as Error).message);
+    });
     throw e;
   }
   // C2 fix: NÃO mata sandbox se a run é resumable. Antes, o caminho
@@ -601,11 +600,17 @@ export async function executeAgentJob(
   const isResumable = !!result.resumable;
   if (isResumable) {
     // Preserva sandbox para o próximo chunk.
-    await sandbox.destroy().catch(() => {}); // libera in-memory ref mas mantém o sandbox E2B
+    await sandbox.destroy().catch((err) => {
+      console.warn("[run-job] sandbox destroy failed:", (err as Error).message);
+    }); // libera in-memory ref mas mantém o sandbox E2B
   } else if (!result.ok || !hasOutput) {
-    await sandbox.kill().catch(() => {});
+    await sandbox.kill().catch((err) => {
+      console.warn("[run-job] sandbox kill failed:", (err as Error).message);
+    });
   } else {
-    await sandbox.destroy().catch(() => {});
+    await sandbox.destroy().catch((err) => {
+      console.warn("[run-job] sandbox destroy failed:", (err as Error).message);
+    });
   }
   // Infra-debug: log de fim do job. Cobre o caminho "feliz" e o "fim com
   // erro do loop" (canceled, resumable, failed). Soma com agent.run_job_threw

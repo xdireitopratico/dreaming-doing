@@ -37,7 +37,9 @@ class E2BSandbox implements SandboxProvider {
         this.e2bApiKey,
       );
       this.sandbox = sandbox;
-      console.log(`Sandbox E2B reutilizado (sem criar): ${sandbox.sandboxId} (projeto ${this.projectId})`);
+      console.log(
+        `Sandbox E2B reutilizado (sem criar): ${sandbox.sandboxId} (projeto ${this.projectId})`,
+      );
       return sandbox;
     }
 
@@ -117,7 +119,9 @@ class E2BSandbox implements SandboxProvider {
       await this.sandbox.kill();
     } catch (e) {
       console.warn("[sandbox] kill failed:", (e as Error).message);
-      await killProjectSandbox(this.e2bApiKey, sandboxId).catch(() => {});
+      await killProjectSandbox(this.e2bApiKey, sandboxId).catch((err) => {
+        console.warn("[sandbox] killProjectSandbox fallback failed:", (err as Error).message);
+      });
     }
     this.sandbox = null;
     try {

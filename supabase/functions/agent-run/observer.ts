@@ -9,14 +9,8 @@ import {
   type DesignViolation,
 } from "./design-enforcement.ts";
 import { validateDesignImplementation } from "./design-validate.ts";
-import {
-  validateDesignFidelity,
-  formatFidelityFeedback,
-} from "./design-fidelity.ts";
-import {
-  evaluateDesignUniqueness,
-  formatUniquenessFeedback,
-} from "./design-uniqueness.ts";
+import { validateDesignFidelity, formatFidelityFeedback } from "./design-fidelity.ts";
+import { evaluateDesignUniqueness, formatUniquenessFeedback } from "./design-uniqueness.ts";
 import type { DesignSignatureRecord } from "./design-plan-field.ts";
 import type { DesignPlanField } from "./types.ts";
 import { designTelemetryEntry } from "./design-telemetry.ts";
@@ -161,7 +155,11 @@ export class RuntimeObserver {
     // Só gates de DESIGN usam pushGate (infra checks ficam em checks.push, já vistos via build_log).
     const pushGate = (name: string, ok: boolean, output: string) => {
       checks.push({ name, ok, output });
-      this.emit?.("gate", { dimension: name, verdict: ok ? "pass" : "fail", reason: output.slice(0, 240) });
+      this.emit?.("gate", {
+        dimension: name,
+        verdict: ok ? "pass" : "fail",
+        reason: output.slice(0, 240),
+      });
     };
     const isOverBudget = () => budgetExceeded?.() === true;
     if (isOverBudget()) {
@@ -205,11 +203,15 @@ export class RuntimeObserver {
       pushGate("design-fidelity", fidelity.pass, fidelityOutput);
       if (!fidelity.pass) {
         // Telemetry do resultado de fidelidade
-        this.reg.execute({
-          id: crypto.randomUUID(),
-          name: "shell_exec",
-          arguments: { command: "echo design-fidelity check registered" },
-        }).catch(() => {});
+        this.reg
+          .execute({
+            id: crypto.randomUUID(),
+            name: "shell_exec",
+            arguments: { command: "echo design-fidelity check registered" },
+          })
+          .catch((err) => {
+            console.warn("[observer] telemetry dispatch failed:", (err as Error).message);
+          });
       }
     } else {
       pushGate(

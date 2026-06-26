@@ -28,13 +28,32 @@ const CURATED_SOURCES = [
   { name: "Active Theory", url: "https://activetheory.com/", type: "direct" as const },
   { name: "Ryoji Ikeda", url: "https://www.ryojiikeda.com/", type: "direct" as const },
   { name: "DRIBBBLE", url: "https://dribbble.com/tags/landing_page", type: "aggregator" as const },
-  { name: "Behance", url: "https://www.behance.net/search/projects?search=landing+page", type: "aggregator" as const },
-  { name: "CSS Design Awards", url: "https://www.cssdesignawards.com/", type: "aggregator" as const },
-  { name: "Awwwards Nominees", url: "https://www.awwwards.com/websites/nominees/", type: "aggregator" as const },
+  {
+    name: "Behance",
+    url: "https://www.behance.net/search/projects?search=landing+page",
+    type: "aggregator" as const,
+  },
+  {
+    name: "CSS Design Awards",
+    url: "https://www.cssdesignawards.com/",
+    type: "aggregator" as const,
+  },
+  {
+    name: "Awwwards Nominees",
+    url: "https://www.awwwards.com/websites/nominees/",
+    type: "aggregator" as const,
+  },
 ];
 
 const SITES_PER_RUN = 5;
-const CATEGORIES = ["hero", "motion", "typography", "color_application", "components", "interactions"];
+const CATEGORIES = [
+  "hero",
+  "motion",
+  "typography",
+  "color_application",
+  "components",
+  "interactions",
+];
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
@@ -50,12 +69,24 @@ Deno.serve(async (req) => {
     // Use anon key + user JWT for proper user identification
     let userClient: any = null;
     if (token && token !== SERVICE_ROLE_KEY) {
-      userClient = createClient(SUPABASE_URL, Deno.env.get("SUPABASE_ANON_KEY") ?? SERVICE_ROLE_KEY, {
-        global: { headers: { Authorization: auth } },
-      });
+      userClient = createClient(
+        SUPABASE_URL,
+        Deno.env.get("SUPABASE_ANON_KEY") ?? SERVICE_ROLE_KEY,
+        {
+          global: { headers: { Authorization: auth } },
+        },
+      );
     }
 
-    const { action, urls, depth, categories, jobId, userId, ingestKind } = await req.json().catch(() => ({}));
+    const { action, urls, depth, categories, jobId, userId, ingestKind } = await req
+      .json()
+      .catch((err) => {
+        console.warn(
+          "[design-dna-scheduler] Failed to parse request body:",
+          (err as Error).message,
+        );
+        return {};
+      });
 
     switch (action) {
       case "schedule":
@@ -141,24 +172,34 @@ async function handleSchedule(
 
   // Dispara Inngest event
   if (!INNGEST_EVENT_KEY) {
-    await supabase.from("design_dna_jobs").update({ status: "failed", error: "INNGEST_EVENT_KEY not configured" }).eq("id", jobId);
+    await supabase
+      .from("design_dna_jobs")
+      .update({ status: "failed", error: "INNGEST_EVENT_KEY not configured" })
+      .eq("id", jobId);
     return json({ error: "INNGEST_EVENT_KEY not configured" }, 500);
   }
 
-  const eventResult = await sendInngestEvent("design-dna/extract.requested", { jobId, userId, depth, categories, urls, ingestKind });
+  const eventResult = await sendInngestEvent("design-dna/extract.requested", {
+    jobId,
+    userId,
+    depth,
+    categories,
+    urls,
+    ingestKind,
+  });
 
   if (!eventResult.ok) {
-    await supabase.from("design_dna_jobs").update({ status: "failed", error: eventResult.error }).eq("id", jobId);
+    await supabase
+      .from("design_dna_jobs")
+      .update({ status: "failed", error: eventResult.error })
+      .eq("id", jobId);
     return json({ error: eventResult.error }, 500);
   }
 
   return json({ ok: true, jobId, eventIds: eventResult.ids });
 }
 
-async function handleTriggerCurated(
-  supabase: any,
-  userClient: any,
-): Promise<Response> {
+async function handleTriggerCurated(supabase: any, userClient: any): Promise<Response> {
   const weekOffset = Math.floor(Date.now() / (7 * 24 * 3600 * 1000));
   const batch = getBatchForWeek(weekOffset, SITES_PER_RUN);
 
@@ -176,16 +217,20 @@ async function handleTriggerCurated(
 }
 
 async function handleContinueQueue(supabase: any): Promise<Response> {
-  const { data: nextJob } = await supabase
+  const { data: nextJob, error: queueErr } = await supabase
     .from("design_dna_job_queue")
     .select("*")
     .order("created_at", { ascending: true })
     .limit(1)
     .maybeSingle();
+  if (queueErr) {
+    console.error("[design-dna-scheduler] queue fetch failed:", queueErr.message);
+    return json({ continued: false, reason: queueErr.message }, 500);
+  }
 
   if (!nextJob) return json({ continued: false, reason: "queue empty" });
 
-  const body = (nextJob as Record<string, unknown>).body as Record<string, unknown> ?? {};
+  const body = ((nextJob as Record<string, unknown>).body as Record<string, unknown>) ?? {};
 
   if (!INNGEST_EVENT_KEY) {
     return json({ continued: false, reason: "INNGEST_EVENT_KEY not configured" });
@@ -205,7 +250,12 @@ async function handleContinueQueue(supabase: any): Promise<Response> {
   }
 
   // Remove da fila
-  await supabase.from("design_dna_job_queue").delete().eq("id", (nextJob as Record<string, unknown>).id as string);
+  const { error: deleteErr } = await supabase
+    .from("design_dna_job_queue")
+    .delete()
+    .eq("id", (nextJob as Record<string, unknown>).id as string);
+  if (deleteErr)
+    console.warn("[design-dna-scheduler] queue item delete failed:", deleteErr.message);
 
   return json({ continued: true, jobId: body.jobId });
 }
@@ -213,34 +263,37 @@ async function handleContinueQueue(supabase: any): Promise<Response> {
 async function handleStatus(supabase: any, jobId: string): Promise<Response> {
   if (!jobId) return json({ error: "jobId required" }, 400);
 
-  const { data: job } = await supabase
+  const { data: job, error: jobErr } = await supabase
     .from("design_dna_jobs")
     .select("*")
     .eq("id", jobId)
     .maybeSingle();
-
+  if (jobErr) {
+    console.error("[design-dna-scheduler] job fetch failed:", jobErr.message);
+    return json({ error: jobErr.message }, 500);
+  }
   if (!job) return json({ error: "Job not found" }, 404);
 
   return json({ ok: true, job });
 }
 
-async function handleEmitEvent(
-  supabase: any,
-  jobId: string,
-  req: Request,
-): Promise<Response> {
+async function handleEmitEvent(supabase: any, jobId: string, req: Request): Promise<Response> {
   if (!jobId) return json({ error: "jobId required" }, 400);
 
-  const { event_type, payload } = await req.json().catch(() => ({}));
+  const { event_type, payload } = await req.json().catch((err) => {
+    console.warn("[design-dna-scheduler] Failed to parse emit_event body:", (err as Error).message);
+    return {};
+  });
   if (!event_type) return json({ error: "event_type required" }, 400);
 
-  const { data: lastRow } = await supabase
+  const { data: lastRow, error: seqErr } = await supabase
     .from("design_dna_events")
     .select("seq")
     .eq("job_id", jobId)
     .order("seq", { ascending: false })
     .limit(1)
     .maybeSingle();
+  if (seqErr) console.warn("[design-dna-scheduler] seq fetch failed:", seqErr.message);
   const nextSeq = (typeof lastRow?.seq === "number" ? lastRow.seq : 0) + 1;
 
   const { error } = await supabase.from("design_dna_events").insert({
@@ -263,7 +316,10 @@ function getBatchForWeek(weekOffset: number, count: number) {
   const rotated = [...shuffled.slice(shift), ...shuffled.slice(0, shift)];
   const aggregators = rotated.filter((s) => s.type === "aggregator");
   const directs = rotated.filter((s) => s.type === "direct");
-  return [...aggregators.slice(0, Math.min(2, count)), ...directs.slice(0, count - 2)].slice(0, count);
+  return [...aggregators.slice(0, Math.min(2, count)), ...directs.slice(0, count - 2)].slice(
+    0,
+    count,
+  );
 }
 
 async function sendInngestEvent(

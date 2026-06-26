@@ -5,7 +5,15 @@ import { cacheLookup, cacheSave } from "./semantic-cache.ts";
 import { applyOutputGuards, getDefaultGuardConfig, type GuardConfig } from "./output-guards.ts";
 import { evaluateOutput, type EvalScores } from "./eval-layer.ts";
 import { routeCanary, type CanaryConfig } from "./canary-router.ts";
-import { HITLPauseSignal, executeLLMNode, executeNodeInline, executeToolNode, executeMemoryNode, executeSubFlowNode, executeVisionNode } from "./gateway-core.ts";
+import {
+  HITLPauseSignal,
+  executeLLMNode,
+  executeNodeInline,
+  executeToolNode,
+  executeMemoryNode,
+  executeSubFlowNode,
+  executeVisionNode,
+} from "./gateway-core.ts";
 import { executeSTTNode, executeTTSNode } from "./gateway-voice.ts";
 import { executeSagaCompensation } from "./gateway-saga.ts";
 import {
@@ -19,7 +27,12 @@ import {
 
 export interface GatewayFlowContext {
   flow: { id: string; name: string; flow_definition: any; status: string };
-  flowDef: { nodes?: any[]; edges?: any[]; settings?: Record<string, unknown>; briefing?: Record<string, unknown> };
+  flowDef: {
+    nodes?: any[];
+    edges?: any[];
+    settings?: Record<string, unknown>;
+    briefing?: Record<string, unknown>;
+  };
   deploymentId: string | null;
   message: string;
   sessionId: string;
@@ -46,7 +59,13 @@ export interface GatewayBfsState {
   pausePayload?: Record<string, unknown>;
 }
 
-export function initGatewayBfsState(nodes: any[], triggerNode: any, message: string, channel: string, metadata: Record<string, any>): GatewayBfsState {
+export function initGatewayBfsState(
+  nodes: any[],
+  triggerNode: any,
+  message: string,
+  channel: string,
+  metadata: Record<string, any>,
+): GatewayBfsState {
   return {
     queue: [{ nodeId: triggerNode.id, input: { message, channel, metadata } }],
     visited: [],
@@ -104,8 +123,13 @@ async function executeGatewayNode(
       stepCostCents = output.cost_cents || 0;
       if (cacheEnabled && output.response && !output.error) {
         const inputText = input.message || input.response || message;
-        const hashBuffer = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(inputText));
-        const inputHash = Array.from(new Uint8Array(hashBuffer)).map((b) => b.toString(16).padStart(2, "0")).join("");
+        const hashBuffer = await crypto.subtle.digest(
+          "SHA-256",
+          new TextEncoder().encode(inputText),
+        );
+        const inputHash = Array.from(new Uint8Array(hashBuffer))
+          .map((b) => b.toString(16).padStart(2, "0"))
+          .join("");
         cacheSave({
           flow_id: flow.id,
           input_text: inputText,
@@ -114,7 +138,9 @@ async function executeGatewayNode(
           model_id: output.model || "",
           tokens_saved: output.tokens?.total || 0,
           cost_saved_cents: output.cost_cents || 0,
-        }).catch(() => {});
+        }).catch((err) => {
+          console.warn("[gateway-bfs] cacheSave failed:", (err as Error).message);
+        });
       }
     }
   } else if (node.type === "memory") {
@@ -128,7 +154,16 @@ async function executeGatewayNode(
   } else if (node.type === "sub_flow" && node.data?.config?.flow_id) {
     const depth = (metadata?.depth as number) || 0;
     const ancestors = (metadata?.ancestor_flow_ids as string[]) || [];
-    output = await executeSubFlowNode(node, input, flow.id, executionId, sessionId || "default", channel, depth, ancestors);
+    output = await executeSubFlowNode(
+      node,
+      input,
+      flow.id,
+      executionId,
+      sessionId || "default",
+      channel,
+      depth,
+      ancestors,
+    );
   } else if (node.type === "vision") {
     output = await executeVisionNode(node, input, message, flow.id);
     stepCostCents = output.cost_cents || 0;
@@ -181,8 +216,12 @@ function enqueueNextNodes(
   }
 
   if (node.type === "loop") {
-    const doneEdges = outEdges.filter((e: any) => e.sourceHandle === "done" || e.sourceHandle === "exit");
-    const bodyEdges = outEdges.filter((e: any) => e.sourceHandle !== "done" && e.sourceHandle !== "exit");
+    const doneEdges = outEdges.filter(
+      (e: any) => e.sourceHandle === "done" || e.sourceHandle === "exit",
+    );
+    const bodyEdges = outEdges.filter(
+      (e: any) => e.sourceHandle !== "done" && e.sourceHandle !== "exit",
+    );
 
     if (output.completed) {
       const targets = doneEdges.length ? doneEdges : outEdges;
@@ -261,25 +300,28 @@ export async function executeGatewayBfsStep(
         node_id: nodeId,
         step_order: state.stepOrder,
       };
-      await supabase.from("agent_executions").update({
-        status: "paused",
-        is_paused: true,
-        paused_at: new Date().toISOString(),
-        pause_reason: err.pauseMessage,
-        pause_timeout_at: timeoutAt,
-        pause_fallback_action: err.fallbackAction,
-        current_state: nodeId,
-        fsm_snapshot: {
-          channel: ctx.channel,
-          metadata: ctx.metadata,
-          message: ctx.message,
-          bfs: state,
-          last_output: state.finalOutput,
-          proposed_response: state.finalOutput?.response || null,
-          steps_count: state.stepOrder,
-          hitl_node_id: nodeId,
-        },
-      }).eq("id", executionId);
+      await supabase
+        .from("agent_executions")
+        .update({
+          status: "paused",
+          is_paused: true,
+          paused_at: new Date().toISOString(),
+          pause_reason: err.pauseMessage,
+          pause_timeout_at: timeoutAt,
+          pause_fallback_action: err.fallbackAction,
+          current_state: nodeId,
+          fsm_snapshot: {
+            channel: ctx.channel,
+            metadata: ctx.metadata,
+            message: ctx.message,
+            bfs: state,
+            last_output: state.finalOutput,
+            proposed_response: state.finalOutput?.response || null,
+            steps_count: state.stepOrder,
+            hitl_node_id: nodeId,
+          },
+        })
+        .eq("id", executionId);
 
       const { error: hitlStepErr } = await supabase.from("agent_execution_steps").insert({
         execution_id: executionId,
@@ -287,7 +329,11 @@ export async function executeGatewayBfsStep(
         node_type: "hitl",
         step_order: state.stepOrder,
         input_data: input,
-        output_data: { status: "paused", timeout_minutes: err.timeoutMinutes, fallback: err.fallbackAction },
+        output_data: {
+          status: "paused",
+          timeout_minutes: err.timeoutMinutes,
+          fallback: err.fallbackAction,
+        },
         status: "paused",
         started_at: new Date(stepStart).toISOString(),
         completed_at: new Date().toISOString(),
@@ -329,9 +375,15 @@ export async function executeGatewayBfsStep(
     latency_ms: stepDuration,
     cost_cents: stepCostCents,
     ...(node.type === "tool" && output?.tool_name ? { tool_name: output.tool_name } : {}),
-    ...(node.type === "tool" && output?.idempotency_key ? { tool_idempotency_key: output.idempotency_key } : {}),
+    ...(node.type === "tool" && output?.idempotency_key
+      ? { tool_idempotency_key: output.idempotency_key }
+      : {}),
   });
-  if (stepErr) console.error("[gateway-bfs] step insert failed:", stepErr.message, { nodeId, nodeType: node.type });
+  if (stepErr)
+    console.error("[gateway-bfs] step insert failed:", stepErr.message, {
+      nodeId,
+      nodeType: node.type,
+    });
 
   state.executionSteps.push({
     node_id: nodeId,
@@ -364,7 +416,12 @@ export async function finalizeGatewayExecution(
   ctx: GatewayFlowContext,
   state: GatewayBfsState,
   executionStart: number,
-  canaryDecision: { is_canary: boolean; version_id: string | null; reason: string; percent: number },
+  canaryDecision: {
+    is_canary: boolean;
+    version_id: string | null;
+    reason: string;
+    percent: number;
+  },
 ): Promise<{
   finalStatus: string;
   guardedOutput: any;
@@ -377,7 +434,8 @@ export async function finalizeGatewayExecution(
   let guardInfo: any = null;
 
   if (flowGuardConfig.enabled && state.finalOutput && !state.sagaTriggered) {
-    const textToGuard = state.finalOutput.response || state.finalOutput.text || state.finalOutput.transformed || "";
+    const textToGuard =
+      state.finalOutput.response || state.finalOutput.text || state.finalOutput.transformed || "";
     if (textToGuard) {
       const guardResult = applyOutputGuards(textToGuard, flowGuardConfig);
       if (guardResult.was_modified || guardResult.was_blocked) {
@@ -398,13 +456,14 @@ export async function finalizeGatewayExecution(
   let evalScores: EvalScores | null = null;
   const evalEnabled = flowSettings.eval_enabled !== false;
   if (evalEnabled && !state.sagaTriggered && state.finalOutput) {
-    const evalOutput = guardedOutput?.response || guardedOutput?.text || guardedOutput?.transformed || "";
+    const evalOutput =
+      guardedOutput?.response || guardedOutput?.text || guardedOutput?.transformed || "";
     if (evalOutput && evalOutput.length > 10) {
       try {
         const evalModelId =
-          flowSettings.eval_model_id
-          || ctx.flowDef?.briefing?.quality_model
-          || "google/gemini-2.5-flash";
+          flowSettings.eval_model_id ||
+          ctx.flowDef?.briefing?.quality_model ||
+          "google/gemini-2.5-flash";
         evalScores = await evaluateOutput(ctx.message, evalOutput, ctx.flow.id, evalModelId);
       } catch (err) {
         console.log(`[Gateway] Eval failed: ${(err as Error).message}`);
@@ -412,52 +471,57 @@ export async function finalizeGatewayExecution(
     }
   }
 
-  const finalStatus = state.paused ? "paused" : (state.sagaTriggered ? "failed" : "completed");
+  const finalStatus = state.paused ? "paused" : state.sagaTriggered ? "failed" : "completed";
 
-  await supabase.from("agent_executions").update({
-    status: finalStatus,
-    current_state: null,
-    completed_at: state.paused ? null : new Date().toISOString(),
-    total_latency_ms: Date.now() - executionStart,
-    nodes_executed: state.stepOrder,
-    total_tokens_in: state.totalTokensIn,
-    total_tokens_out: state.totalTokensOut,
-    total_cost_cents: state.totalCostCents,
-    quality_score: evalScores?.aggregate || null,
-    eval_details: evalScores
-      ? {
-        relevance: evalScores.relevance,
-        completeness: evalScores.completeness,
-        safety: evalScores.safety,
-        hallucination: evalScores.hallucination,
-        aggregate: evalScores.aggregate,
-        reasoning: evalScores.reasoning,
-        model_used: evalScores.model_used,
-      }
-      : null,
-    fsm_snapshot: {
-      channel: ctx.channel,
-      metadata: ctx.metadata,
-      message: ctx.message,
-      final_output: guardedOutput,
-      steps_count: state.stepOrder,
-      saga_triggered: state.sagaTriggered,
-      output_guards: guardInfo,
-      bfs: state,
-      canary: canaryDecision.is_canary ? { version: canaryDecision.version_id, percent: canaryDecision.percent } : null,
-      eval_scores: evalScores
+  await supabase
+    .from("agent_executions")
+    .update({
+      status: finalStatus,
+      current_state: null,
+      completed_at: state.paused ? null : new Date().toISOString(),
+      total_latency_ms: Date.now() - executionStart,
+      nodes_executed: state.stepOrder,
+      total_tokens_in: state.totalTokensIn,
+      total_tokens_out: state.totalTokensOut,
+      total_cost_cents: state.totalCostCents,
+      quality_score: evalScores?.aggregate || null,
+      eval_details: evalScores
         ? {
-          relevance: evalScores.relevance,
-          completeness: evalScores.completeness,
-          safety: evalScores.safety,
-          hallucination: evalScores.hallucination,
-          aggregate: evalScores.aggregate,
-          reasoning: evalScores.reasoning,
-          model_used: evalScores.model_used,
-        }
+            relevance: evalScores.relevance,
+            completeness: evalScores.completeness,
+            safety: evalScores.safety,
+            hallucination: evalScores.hallucination,
+            aggregate: evalScores.aggregate,
+            reasoning: evalScores.reasoning,
+            model_used: evalScores.model_used,
+          }
         : null,
-    },
-  }).eq("id", executionId);
+      fsm_snapshot: {
+        channel: ctx.channel,
+        metadata: ctx.metadata,
+        message: ctx.message,
+        final_output: guardedOutput,
+        steps_count: state.stepOrder,
+        saga_triggered: state.sagaTriggered,
+        output_guards: guardInfo,
+        bfs: state,
+        canary: canaryDecision.is_canary
+          ? { version: canaryDecision.version_id, percent: canaryDecision.percent }
+          : null,
+        eval_scores: evalScores
+          ? {
+              relevance: evalScores.relevance,
+              completeness: evalScores.completeness,
+              safety: evalScores.safety,
+              hallucination: evalScores.hallucination,
+              aggregate: evalScores.aggregate,
+              reasoning: evalScores.reasoning,
+              model_used: evalScores.model_used,
+            }
+          : null,
+      },
+    })
+    .eq("id", executionId);
 
   return { finalStatus, guardedOutput, guardInfo, evalScores };
 }
@@ -467,7 +531,12 @@ export async function runGatewayBfsInline(
   executionId: string,
   ctx: GatewayFlowContext,
   initialState: GatewayBfsState,
-  canaryDecision: { is_canary: boolean; version_id: string | null; reason: string; percent: number },
+  canaryDecision: {
+    is_canary: boolean;
+    version_id: string | null;
+    reason: string;
+    percent: number;
+  },
   executionStart: number,
 ): Promise<GatewayBfsState> {
   let state = initialState;
@@ -476,14 +545,26 @@ export async function runGatewayBfsInline(
   }
 
   if (!state.paused) {
-    await finalizeGatewayExecution(supabase, executionId, ctx, state, executionStart, canaryDecision);
+    await finalizeGatewayExecution(
+      supabase,
+      executionId,
+      ctx,
+      state,
+      executionStart,
+      canaryDecision,
+    );
   }
 
   return state;
 }
 
 export function buildCanaryDecision(sessionId: string, canaryConfig: CanaryConfig | null) {
-  let canaryDecision = { is_canary: false, version_id: null as string | null, reason: "no_canary", percent: 0 };
+  let canaryDecision = {
+    is_canary: false,
+    version_id: null as string | null,
+    reason: "no_canary",
+    percent: 0,
+  };
   if (canaryConfig && canaryConfig.canary_percent > 0) {
     canaryDecision = routeCanary(sessionId, canaryConfig);
   }
