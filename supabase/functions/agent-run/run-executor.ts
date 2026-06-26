@@ -288,6 +288,7 @@ export async function executeAgentRun(
     tasteStart = setup.tasteStart;
     logger.info("agent_run.provider_resolved", {
       runId,
+      sessionKind,
       provider: mainCfg.label,
       model: mainCfg.model,
       baseUrl: mainCfg.baseUrl ?? "(default)",

@@ -1,16 +1,16 @@
 /**
  * FORGE Agents — bridge Prometheus studio tokens → dashboard palette.
  * Importar globalmente; componentes usam .prometheus-studio como scope.
+ * prometheus-studio.css é importado separadamente no styles.css ANTES deste arquivo.
  */
-@import "../components/forge-prometheus/prometheus-studio.css";
 
 .prometheus-studio {
-  --ps-bg: var(--forge-bg, #05060a);
-  --ps-bg-deep: var(--forge-bg, #05060a);
-  --ps-bg-surface: var(--forge-surface, #0b0d12);
-  --ps-bg-surface-hover: var(--forge-surface-2, #12151c);
+  --ps-bg: var(--forge-surface, #0b0d12);
+  --ps-bg-deep: var(--forge-surface, #0b0d12);
+  --ps-bg-surface: var(--forge-surface-2, #12151c);
+  --ps-bg-surface-hover: var(--forge-surface-3, #16191f);
   --ps-bg-surface-active: color-mix(in srgb, var(--forge-primary, #ffb627) 12%, transparent);
-  --ps-bg-glass: color-mix(in srgb, var(--forge-bg, #05060a) 75%, transparent);
+  --ps-bg-glass: color-mix(in srgb, var(--forge-surface, #0b0d12) 75%, transparent);
 
   --ps-accent: var(--forge-primary, #ffb627);
   --ps-accent-glow: color-mix(in srgb, var(--forge-primary, #ffb627) 35%, transparent);

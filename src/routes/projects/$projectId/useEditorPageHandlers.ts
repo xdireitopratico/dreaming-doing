@@ -514,7 +514,9 @@ export function useEditorPageHandlers({
       toast.error("Conversa ainda carregando — tente de novo em instantes.");
       return;
     }
-    if (!canStartTasteProject(tasteQuota)) {
+    // BYOK detection per /api-models (FAIL-CLOSE: se configurado, TASTE não existe).
+    const hasByok = isAgentPreferencesConfigured(loadAgentPreferences());
+    if (!hasByok && !canStartTasteProject(tasteQuota)) {
       toast.error("Start Project já utilizado. Configure API para continuar.");
       return;
     }
@@ -530,7 +532,7 @@ export function useEditorPageHandlers({
       conversation_id: conversation.id,
       role: "user",
       parts: [{ type: "text", text: seed }],
-      meta: { mode: "build", kind: "start_project" },
+      meta: { mode: "build", kind: "start_project", kindSource: hasByok ? "byok" : "taste" },
     });
 
     if (error) {
@@ -540,7 +542,8 @@ export function useEditorPageHandlers({
 
     void qc.invalidateQueries({ queryKey: ["messages", conversation.id] });
 
-    await runAgent("taste", "start");
+    // BYOK anula TASTE: se o usuário configurou /api-models, usa o provider dele.
+    await runAgent(hasByok ? "byok" : "taste", hasByok ? undefined : "start");
   }, [conversation, tasteQuota, isAgentBusy, qc, runAgent]);
 
   const handleStop = useCallback(() => {

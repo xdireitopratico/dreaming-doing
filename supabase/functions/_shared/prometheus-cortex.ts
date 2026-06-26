@@ -53,7 +53,7 @@ async function resolveBoardroomModel(userId: string): Promise<string> {
   const { mainCfg } = await resolveAgentProvider({
     supabase: sb, userId, sessionKind: "byok", userOnlyKeys,
   });
-  console.log(`[cortex] Resolved model: ${mainCfg.model} (${mainCfg.label})`);
+  console.log(`[cortex] Resolved model: ${mainCfg.model} (${mainCfg.label}) [sessionKind=byok]`);
   return mainCfg.model;
 }
 
