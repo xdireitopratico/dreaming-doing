@@ -1,11 +1,8 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { assertForgeAdmin, isForgeAdminEmail } from "../_shared/forge-admin.ts";
 import { buildSecretHint } from "../_shared/platform-secrets.ts";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+import { forgeCorsHeaders, corsPreflightResponse } from "../_shared/cors.ts";
+import { encryptSecret } from "../_shared/crypto.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -20,10 +17,10 @@ const ALLOWED_NAMES = new Set([
   "FIRECRAWL_API_KEY",
 ]);
 
-function json(body: unknown, status = 200) {
+function json(body: unknown, status = 200, origin?: string | null) {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
+    headers: { ...forgeCorsHeaders(origin), "Content-Type": "application/json" },
   });
 }
 
@@ -34,11 +31,12 @@ async function ensureAdminRole(admin: ReturnType<typeof createClient>, userId: s
 }
 
 Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+  const reqOrigin = req.headers.get("origin");
+  if (req.method === "OPTIONS") return corsPreflightResponse(reqOrigin);
 
   try {
     const auth = req.headers.get("Authorization");
-    if (!auth) return json({ error: "Não autenticado" }, 401);
+    if (!auth) return json({ error: "Não autenticado" }, 401, reqOrigin);
 
     const userClient = createClient(SUPABASE_URL, ANON_KEY, {
       global: { headers: { Authorization: auth } },
@@ -47,10 +45,10 @@ Deno.serve(async (req) => {
       data: { user },
       error: userErr,
     } = await userClient.auth.getUser();
-    if (userErr || !user) return json({ error: "Sessão inválida" }, 401);
+    if (userErr || !user) return json({ error: "Sessão inválida" }, 401, reqOrigin);
 
     if (!isForgeAdminEmail(user.email)) {
-      return json({ error: "Acesso negado" }, 403);
+      return json({ error: "Acesso negado" }, 403, reqOrigin);
     }
 
     assertForgeAdmin(user);
@@ -62,7 +60,7 @@ Deno.serve(async (req) => {
     const action = body?.action as string;
 
     if (action === "status") {
-      return json({ ok: true, isAdmin: true, email: user.email });
+      return json({ ok: true, isAdmin: true, email: user.email }, 200, reqOrigin);
     }
 
     if (action === "list") {
@@ -70,7 +68,7 @@ Deno.serve(async (req) => {
         .from("platform_secrets")
         .select("name, hint, updated_at")
         .order("name");
-      if (error) return json({ error: error.message }, 500);
+      if (error) return json({ error: error.message }, 500, reqOrigin);
 
       const configured = new Set((rows ?? []).map((r) => r.name));
       const secrets = [...ALLOWED_NAMES].sort().map((name) => {
@@ -84,46 +82,51 @@ Deno.serve(async (req) => {
         };
       });
 
-      return json({ ok: true, secrets });
+      return json({ ok: true, secrets }, 200, reqOrigin);
     }
 
     if (action === "upsert") {
       const name = typeof body?.name === "string" ? body.name.trim() : "";
       const value = typeof body?.value === "string" ? body.value.trim() : "";
-      if (!ALLOWED_NAMES.has(name)) return json({ error: "Secret não permitida" }, 400);
-      if (!value) return json({ error: "Valor obrigatório" }, 400);
+      if (!ALLOWED_NAMES.has(name)) return json({ error: "Secret não permitida" }, 400, reqOrigin);
+      if (!value) return json({ error: "Valor obrigatório" }, 400, reqOrigin);
 
+      const encrypted = await encryptSecret(value);
       const { error } = await admin.from("platform_secrets").upsert({
         name,
-        value_encrypted: value,
+        value_encrypted: encrypted,
         hint: buildSecretHint(value),
         updated_at: new Date().toISOString(),
         updated_by: user.id,
       });
-      if (error) return json({ error: error.message }, 500);
+      if (error) return json({ error: error.message }, 500, reqOrigin);
 
-      return json({
-        ok: true,
-        name,
-        hint: buildSecretHint(value),
-        configured: true,
-      });
+      return json(
+        {
+          ok: true,
+          name,
+          hint: buildSecretHint(value),
+          configured: true,
+        },
+        200,
+        reqOrigin,
+      );
     }
 
     if (action === "delete") {
       const name = typeof body?.name === "string" ? body.name.trim() : "";
-      if (!ALLOWED_NAMES.has(name)) return json({ error: "Secret não permitida" }, 400);
+      if (!ALLOWED_NAMES.has(name)) return json({ error: "Secret não permitida" }, 400, reqOrigin);
 
       const { error } = await admin.from("platform_secrets").delete().eq("name", name);
-      if (error) return json({ error: error.message }, 500);
+      if (error) return json({ error: error.message }, 500, reqOrigin);
 
-      return json({ ok: true, name, configured: false });
+      return json({ ok: true, name, configured: false }, 200, reqOrigin);
     }
 
-    return json({ error: "action inválida" }, 400);
+    return json({ error: "action inválida" }, 400, reqOrigin);
   } catch (e) {
     const msg = (e as Error).message ?? "Erro interno";
     const status = msg.includes("Acesso negado") ? 403 : 500;
-    return json({ error: msg }, status);
+    return json({ error: msg }, status, reqOrigin);
   }
 });

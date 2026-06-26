@@ -1,21 +1,21 @@
 /**
  * AetherForge Health Check — /healthz endpoint for K8s probes
- * 
+ *
  * Verifica conectividade com banco, latência, e status de serviços.
  * Usado por liveness/readiness probes no Kubernetes.
- * 
+ *
  * GET / → Health summary
  * GET /?deep=true → Deep check (DB + services)
- * 
+ *
  * Max: ~120 linhas (anti-monolítico)
  */
 
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { forgeOrigin } from "../_shared/cors.ts";
 
 const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Origin": forgeOrigin(),
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
 interface HealthCheck {
@@ -23,11 +23,14 @@ interface HealthCheck {
   version: string;
   uptime_seconds: number;
   timestamp: string;
-  checks: Record<string, {
-    status: "pass" | "fail";
-    latency_ms: number;
-    message?: string;
-  }>;
+  checks: Record<
+    string,
+    {
+      status: "pass" | "fail";
+      latency_ms: number;
+      message?: string;
+    }
+  >;
 }
 
 const startTime = Date.now();
@@ -87,7 +90,11 @@ Deno.serve(async (req: Request) => {
         health.checks.database = { status: "fail", latency_ms: dbLatency, message: error.message };
         health.status = "degraded";
       } else {
-        health.checks.database = { status: "pass", latency_ms: dbLatency, message: `${count ?? 0} flows` };
+        health.checks.database = {
+          status: "pass",
+          latency_ms: dbLatency,
+          message: `${count ?? 0} flows`,
+        };
       }
     } catch (err) {
       health.checks.database = { status: "fail", latency_ms: 0, message: (err as Error).message };
@@ -96,11 +103,14 @@ Deno.serve(async (req: Request) => {
 
     // Deep: check critical env vars
     const requiredEnvs = ["SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"];
-    const missingEnvs = requiredEnvs.filter(e => !Deno.env.get(e));
+    const missingEnvs = requiredEnvs.filter((e) => !Deno.env.get(e));
     health.checks.environment = {
       status: missingEnvs.length === 0 ? "pass" : "fail",
       latency_ms: 0,
-      message: missingEnvs.length === 0 ? "All required vars present" : `Missing: ${missingEnvs.join(", ")}`,
+      message:
+        missingEnvs.length === 0
+          ? "All required vars present"
+          : `Missing: ${missingEnvs.join(", ")}`,
     };
     if (missingEnvs.length > 0) health.status = "unhealthy";
 

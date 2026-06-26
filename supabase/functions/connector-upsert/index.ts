@@ -1,8 +1,9 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { runE2bSmokeTest } from "../_shared/e2b-smoke.ts";
+import { forgeOrigin } from "../_shared/cors.ts";
 
 const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Origin": forgeOrigin(),
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
@@ -25,15 +26,16 @@ const ALLOWED = new Set([
 ]);
 
 const WEB_SEARCH_PROVIDERS = new Set(["brave", "tavily", "serper", "firecrawl", "exa", "parallel"]);
-const WEB_SCRAPE_PROVIDERS = new Set(["jina", "firecrawl", "browserless", "crawl4ai", "scrapegraphai"]);
-const BROWSER_RUNTIME_PROVIDERS = new Set(["browserless", "browser-use"]);
-const SINGLE_ROW_KINDS = new Set(["web_search", "web_scrape", "browser_runtime"]);
-const TOKEN_OPTIONAL_PROVIDERS = new Set([
+const WEB_SCRAPE_PROVIDERS = new Set([
   "jina",
-  "browser-use",
+  "firecrawl",
+  "browserless",
   "crawl4ai",
   "scrapegraphai",
 ]);
+const BROWSER_RUNTIME_PROVIDERS = new Set(["browserless", "browser-use"]);
+const SINGLE_ROW_KINDS = new Set(["web_search", "web_scrape", "browser_runtime"]);
+const TOKEN_OPTIONAL_PROVIDERS = new Set(["jina", "browser-use", "crawl4ai", "scrapegraphai"]);
 
 type PoolSlot = { id: string; hint: string; addedAt: string };
 
@@ -129,14 +131,23 @@ Deno.serve(async (req) => {
     if (kind === "web_search") {
       const wp = resolveProvider(kind, metaIn);
       if (!WEB_SEARCH_PROVIDERS.has(wp)) {
-        return json({ error: "meta.provider obrigatório (brave, tavily, serper, firecrawl, exa, parallel)" }, 400);
+        return json(
+          { error: "meta.provider obrigatório (brave, tavily, serper, firecrawl, exa, parallel)" },
+          400,
+        );
       }
     }
 
     if (kind === "web_scrape") {
       const wp = resolveProvider(kind, metaIn);
       if (!WEB_SCRAPE_PROVIDERS.has(wp)) {
-        return json({ error: "meta.provider obrigatório (jina, firecrawl, browserless, crawl4ai, scrapegraphai)" }, 400);
+        return json(
+          {
+            error:
+              "meta.provider obrigatório (jina, firecrawl, browserless, crawl4ai, scrapegraphai)",
+          },
+          400,
+        );
       }
     }
 
@@ -186,7 +197,11 @@ Deno.serve(async (req) => {
           .eq("kind", "openai")
           .eq("provider", providerKey);
       } else {
-        const deleteQuery = admin.from("connectors").delete().eq("owner_id", user.id).eq("kind", kind);
+        const deleteQuery = admin
+          .from("connectors")
+          .delete()
+          .eq("owner_id", user.id)
+          .eq("kind", kind);
         await (providerKey ? deleteQuery.eq("provider", providerKey) : deleteQuery);
       }
       if (kind === "github") {
@@ -323,7 +338,11 @@ Deno.serve(async (req) => {
     };
 
     if (SINGLE_ROW_KINDS.has(kind)) {
-      const deleteQuery = admin.from("connectors").delete().eq("owner_id", user.id).eq("kind", kind);
+      const deleteQuery = admin
+        .from("connectors")
+        .delete()
+        .eq("owner_id", user.id)
+        .eq("kind", kind);
       await (providerKey ? deleteQuery.eq("provider", providerKey) : deleteQuery);
     }
 

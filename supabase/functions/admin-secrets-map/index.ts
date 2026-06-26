@@ -4,9 +4,10 @@
  */
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { isForgeAdminEmail } from "../_shared/forge-admin.ts";
+import { forgeOrigin } from "../_shared/cors.ts";
 
 const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Origin": forgeOrigin(),
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
@@ -63,7 +64,10 @@ Deno.serve(async (req) => {
       { global: { headers: { Authorization: authHeader } } },
     );
 
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser();
     if (authError || !user) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
@@ -93,10 +97,7 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
 
-    const { data: rows } = await sbAdmin
-      .from("platform_secrets")
-      .select("name")
-      .order("name");
+    const { data: rows } = await sbAdmin.from("platform_secrets").select("name").order("name");
 
     const fromDb = new Set((rows ?? []).map((r) => r.name));
     const available: string[] = [];

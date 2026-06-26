@@ -2,9 +2,10 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { loadConnectorKeys, loadConnectorPools } from "../agent-run/connector-keys.ts";
 import { STT_MODEL_BY_PROVIDER } from "../_shared/stt-config.ts";
+import { forgeOrigin } from "../_shared/cors.ts";
 
 const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Origin": forgeOrigin(),
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 

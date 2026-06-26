@@ -4,9 +4,10 @@
  */
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { createMarketplaceCheckout } from "../_shared/marketplace-billing.ts";
+import { forgeOrigin } from "../_shared/cors.ts";
 
 const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Origin": forgeOrigin(),
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
@@ -26,16 +27,19 @@ Deno.serve(async (req) => {
 
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
 
     // Get user from JWT
     const userClient = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_ANON_KEY")!,
-      { global: { headers: { Authorization: authHeader } } }
+      { global: { headers: { Authorization: authHeader } } },
     );
-    const { data: { user }, error: authErr } = await userClient.auth.getUser();
+    const {
+      data: { user },
+      error: authErr,
+    } = await userClient.auth.getUser();
     if (authErr || !user) {
       return new Response(JSON.stringify({ error: "Invalid token" }), {
         status: 401,
@@ -106,16 +110,19 @@ Deno.serve(async (req) => {
     // BUG 65 FIX: Use env var instead of hardcoded domain
     const siteUrl = Deno.env.get("SITE_URL") || "https://vibrant-visionary-craft1.lovable.app";
 
-    const result = await createMarketplaceCheckout({
-      listingId: listing.id,
-      listingName: listing.name,
-      priceCents: listing.price_cents,
-      revenueSharePercent: listing.revenue_share_percent,
-      buyerId: user.id,
-      sellerId: listing.publisher_id,
-      successUrl: success_url || `${siteUrl}/admin/agent-builder`,
-      cancelUrl: cancel_url || `${siteUrl}/admin/agent-builder`,
-    }, supabase);
+    const result = await createMarketplaceCheckout(
+      {
+        listingId: listing.id,
+        listingName: listing.name,
+        priceCents: listing.price_cents,
+        revenueSharePercent: listing.revenue_share_percent,
+        buyerId: user.id,
+        sellerId: listing.publisher_id,
+        successUrl: success_url || `${siteUrl}/admin/agent-builder`,
+        cancelUrl: cancel_url || `${siteUrl}/admin/agent-builder`,
+      },
+      supabase,
+    );
 
     return new Response(JSON.stringify(result), {
       status: result.success ? 200 : 400,

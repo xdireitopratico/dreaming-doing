@@ -7,9 +7,10 @@ import {
   purgeForgeOrphanSandboxes,
   readSandboxMeta,
 } from "../_shared/project-sandbox.ts";
+import { forgeOrigin } from "../_shared/cors.ts";
 
 const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Origin": forgeOrigin(),
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
@@ -42,9 +43,11 @@ Deno.serve(async (req) => {
     const e2bKey = await loadUserE2bApiKey(supabase, userData.user.id);
 
     let sandboxCleanup: { killed: string[]; failed: string[]; listed: string[] } | null = null;
-    let orphanCleanup:
-      | { orphans: Array<{ sandboxID: string; projectId: string | null }>; killed: string[]; failed: string[] }
-      | null = null;
+    let orphanCleanup: {
+      orphans: Array<{ sandboxID: string; projectId: string | null }>;
+      killed: string[];
+      failed: string[];
+    } | null = null;
     if (e2bKey) {
       sandboxCleanup = await killAllProjectSandboxes(e2bKey, projectId, sm.previewSandboxId);
       if (sandboxCleanup.failed.length > 0) {
@@ -62,9 +65,9 @@ Deno.serve(async (req) => {
     const corpusSnapshot = await snapshotProjectFilesToCorpus(
       supabase as unknown as Parameters<typeof snapshotProjectFilesToCorpus>[0],
       {
-      projectId,
-      userId: userData.user.id,
-      projectTemplate: (project as { template?: string }).template ?? "vite-react",
+        projectId,
+        userId: userData.user.id,
+        projectTemplate: (project as { template?: string }).template ?? "vite-react",
       },
     );
     if (corpusSnapshot.error) {

@@ -3,9 +3,10 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { e2bDeleteSandboxWithRetry, e2bListSandboxes } from "../_shared/e2b.ts";
 import { listForgeOrphanSandboxes } from "../_shared/project-sandbox.ts";
 import { loadUserE2bApiKey } from "../_shared/user-e2b.ts";
+import { forgeOrigin } from "../_shared/cors.ts";
 
 const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Origin": forgeOrigin(),
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 

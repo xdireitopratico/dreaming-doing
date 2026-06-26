@@ -7,6 +7,7 @@
 import { evaluateCondition, type ConditionConfig } from "./condition-evaluator.ts";
 import { applyOutputGuards, type GuardConfig } from "./output-guards.ts";
 import { checkAllProviders } from "./provider-health.ts";
+import { forgeOrigin } from "./cors.ts";
 
 // Re-export executors from dedicated files
 export { executeLLMNode } from "./executor-llm.ts";
@@ -16,7 +17,7 @@ export { executeSubFlowNode } from "./executor-subflow.ts";
 export { executeVisionNode } from "./executor-vision.ts";
 
 export const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Origin": forgeOrigin(),
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version, x-aetherforge-api-key",
 };
@@ -45,33 +46,92 @@ export function executeNodeInline(node: any, input: any, originalMessage: string
 
   switch (nodeType) {
     case "trigger":
-      return { message: originalMessage, channel: input.channel || "web", session_id: crypto.randomUUID(), metadata: input.metadata || {} };
+      return {
+        message: originalMessage,
+        channel: input.channel || "web",
+        session_id: crypto.randomUUID(),
+        metadata: input.metadata || {},
+      };
     case "llm":
-      console.warn(`[Gateway] LLM node ${node.id} hit inline fallback — model: ${config.model_id || config.model || "none"}`);
-      return { response: "Desculpe, não consegui processar sua mensagem no momento. Tente novamente.", model: config.model_id || config.model || "unknown", tokens: { prompt: 0, completion: 0, total: 0 }, fallback: true };
+      console.warn(
+        `[Gateway] LLM node ${node.id} hit inline fallback — model: ${config.model_id || config.model || "none"}`,
+      );
+      return {
+        response: "Desculpe, não consegui processar sua mensagem no momento. Tente novamente.",
+        model: config.model_id || config.model || "unknown",
+        tokens: { prompt: 0, completion: 0, total: 0 },
+        fallback: true,
+      };
     case "tool":
-      console.warn(`[Gateway] Tool node ${node.id} hit inline fallback — tool: ${config.tool_name || "none"}`);
-      return { tool_name: config.tool_name || "unknown", status: "error", result: null, error: "Ferramenta indisponível no momento.", fallback: true };
+      console.warn(
+        `[Gateway] Tool node ${node.id} hit inline fallback — tool: ${config.tool_name || "none"}`,
+      );
+      return {
+        tool_name: config.tool_name || "unknown",
+        status: "error",
+        result: null,
+        error: "Ferramenta indisponível no momento.",
+        fallback: true,
+      };
     case "condition": {
       const condResult = evaluateCondition(input, config as ConditionConfig);
-      console.log(`[Gateway/Condition] ${condResult.expression} → ${condResult.branch} (field=${JSON.stringify(condResult.field_value)})`);
+      console.log(
+        `[Gateway/Condition] ${condResult.expression} → ${condResult.branch} (field=${JSON.stringify(condResult.field_value)})`,
+      );
       return condResult;
     }
     case "output_guard": {
-      const guardRules = config.guard_config || { enabled: true, rules: (config.rules || ["pii_mask"]).map((r: string) => ({ id: r, enabled: true })) };
-      const guardResult = applyOutputGuards(input.response || input.text || input.message || originalMessage, guardRules as GuardConfig);
-      return { filtered: guardResult.was_modified, blocked: guardResult.was_blocked, rules_applied: guardResult.rules_applied, rules_blocked: guardResult.rules_blocked, text: guardResult.filtered_text, response: guardResult.filtered_text, block_reason: guardResult.block_reason };
+      const guardRules = config.guard_config || {
+        enabled: true,
+        rules: (config.rules || ["pii_mask"]).map((r: string) => ({ id: r, enabled: true })),
+      };
+      const guardResult = applyOutputGuards(
+        input.response || input.text || input.message || originalMessage,
+        guardRules as GuardConfig,
+      );
+      return {
+        filtered: guardResult.was_modified,
+        blocked: guardResult.was_blocked,
+        rules_applied: guardResult.rules_applied,
+        rules_blocked: guardResult.rules_blocked,
+        text: guardResult.filtered_text,
+        response: guardResult.filtered_text,
+        block_reason: guardResult.block_reason,
+      };
     }
     case "stt":
-      return { text: input.audio_text || originalMessage, confidence: 0.95, language: config.language || "pt-BR", engine: "inline_fallback" };
+      return {
+        text: input.audio_text || originalMessage,
+        confidence: 0.95,
+        language: config.language || "pt-BR",
+        engine: "inline_fallback",
+      };
     case "tts":
-      return { audio_url: null, text: input.response || input.text || originalMessage, voice: config.voice || "pf_dora", engine: "inline_fallback" };
+      return {
+        audio_url: null,
+        text: input.response || input.text || originalMessage,
+        voice: config.voice || "pf_dora",
+        engine: "inline_fallback",
+      };
     case "rag_search":
-      return { chunks: ["Chunk relevante encontrado..."], sources: ["knowledge_base"], top_k: config.top_k || 5 };
+      return {
+        chunks: ["Chunk relevante encontrado..."],
+        sources: ["knowledge_base"],
+        top_k: config.top_k || 5,
+      };
     case "memory":
-      return { operation: config.operation || "read", key: config.key || "default", value: null, engine: "inline_fallback" };
+      return {
+        operation: config.operation || "read",
+        key: config.key || "default",
+        value: null,
+        engine: "inline_fallback",
+      };
     case "hitl":
-      throw new HITLPauseSignal(config.timeout_minutes || 60, config.message || "Aguardando aprovação", config.fallback_action || "abort");
+      throw new HITLPauseSignal(
+        config.timeout_minutes || 60,
+        config.message || "Aguardando aprovação",
+        config.fallback_action || "abort",
+      );
     case "loop":
       return { iteration: 1, max: config.max_iterations || 10, completed: true };
     case "switch":
@@ -79,10 +139,19 @@ export function executeNodeInline(node: any, input: any, originalMessage: string
     case "delay":
       return { waited_seconds: config.seconds || 5 };
     case "sub_flow":
-      return { flow_name: config.flow_name || "unknown", status: "pending_real_execution", output: {}, note: "Use executeSubFlowNode for real invocation" };
+      return {
+        flow_name: config.flow_name || "unknown",
+        status: "pending_real_execution",
+        output: {},
+        note: "Use executeSubFlowNode for real invocation",
+      };
     case "vision":
       console.warn(`[Gateway] Vision node ${node.id} hit inline fallback`);
-      return { response: "Análise visual indisponível no momento.", model: config.model_id || "unknown", fallback: true };
+      return {
+        response: "Análise visual indisponível no momento.",
+        model: config.model_id || "unknown",
+        fallback: true,
+      };
     case "transformer":
       return { transformed: JSON.stringify(input).toUpperCase() };
     case "error_handler":

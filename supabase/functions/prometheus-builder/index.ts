@@ -6,13 +6,19 @@
  */
 
 import { createClient } from "npm:@supabase/supabase-js@2";
-import { startSession, processMessage, processIntent, summarizeSession } from "../_shared/prometheus-cortex.ts";
+import {
+  startSession,
+  processMessage,
+  processIntent,
+  summarizeSession,
+} from "../_shared/prometheus-cortex.ts";
 import { runPhysician } from "../_shared/prometheus-physician.ts";
 import { getCodexReport, generateOptimizationInsights } from "../_shared/prometheus-codex.ts";
 import type { PrometheusRequest } from "../_shared/prometheus-types.ts";
+import { forgeOrigin } from "../_shared/cors.ts";
 
 const CORS_HEADERS = {
-  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Origin": forgeOrigin(),
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
@@ -37,7 +43,10 @@ Deno.serve(async (req) => {
       { global: { headers: { Authorization: authHeader } } },
     );
 
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser();
     if (authError || !user) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
@@ -49,7 +58,6 @@ Deno.serve(async (req) => {
     let result: unknown;
 
     switch (body.action) {
-
       case "start": {
         const qualityModel = body.model_id || (body.briefing?.quality_model as string) || "";
         if (!qualityModel) {
@@ -80,11 +88,7 @@ Deno.serve(async (req) => {
           });
         }
 
-        const { ok, backgroundTask } = await processMessage(
-          body.session_id,
-          user.id,
-          body.message,
-        );
+        const { ok, backgroundTask } = await processMessage(body.session_id, user.id, body.message);
         EdgeRuntime.waitUntil(backgroundTask);
         result = { ok };
         break;
