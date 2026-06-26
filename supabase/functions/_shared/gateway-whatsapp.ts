@@ -4,13 +4,22 @@
  */
 
 import { createClient } from "npm:@supabase/supabase-js@2";
-import { corsHeaders, HITLPauseSignal, executeLLMNode, executeNodeInline, executeToolNode } from "./gateway-core.ts";
+import {
+  corsHeaders,
+  HITLPauseSignal,
+  executeLLMNode,
+  executeNodeInline,
+  executeToolNode,
+} from "./gateway-core.ts";
 
 /**
  * Send a WhatsApp message via Evolution API V1
  */
 export async function sendWhatsAppViaEvolutionV1(
-  supabase: any, phone: string, message: string, instanceName?: string
+  supabase: any,
+  phone: string,
+  message: string,
+  instanceName?: string,
 ): Promise<boolean> {
   try {
     const targetInstance = instanceName || Deno.env.get("EVOLUTION_DEFAULT_INSTANCE") || "";
@@ -31,7 +40,9 @@ export async function sendWhatsAppViaEvolutionV1(
     }
 
     if (config.status !== "open" && config.status !== "connected") {
-      console.error(`[Gateway/WhatsApp] Instance ${targetInstance} not connected (${config.status})`);
+      console.error(
+        `[Gateway/WhatsApp] Instance ${targetInstance} not connected (${config.status})`,
+      );
       return false;
     }
 
@@ -43,7 +54,7 @@ export async function sendWhatsAppViaEvolutionV1(
 
     const response = await fetch(sendUrl, {
       method: "POST",
-      headers: { "apikey": config.api_key, "Content-Type": "application/json" },
+      headers: { apikey: config.api_key, "Content-Type": "application/json" },
       body: JSON.stringify({ number: formattedPhone, text: message }),
     });
 
@@ -54,11 +65,20 @@ export async function sendWhatsAppViaEvolutionV1(
     }
 
     console.log(`[Gateway/WhatsApp] ✓ Sent to ${formattedPhone}`);
-    await supabase.from("whatsapp_message_logs").insert({
-      phone_number: formattedPhone, message_content: message.substring(0, 500),
-      direction: "outgoing", status: "sent", provider: "evolution_v1",
-      instance_name: config.instance_name, metadata: { source: "aetherforge_agent" },
-    }).catch(() => {});
+    await supabase
+      .from("whatsapp_message_logs")
+      .insert({
+        phone_number: formattedPhone,
+        message_content: message.substring(0, 500),
+        direction: "outgoing",
+        status: "sent",
+        provider: "evolution_v1",
+        instance_name: config.instance_name,
+        metadata: { source: "aetherforge_agent" },
+      })
+      .catch((err) => {
+        console.warn("[gateway-whatsapp] message log insert failed:", (err as Error).message);
+      });
 
     return true;
   } catch (err) {
@@ -79,11 +99,14 @@ export async function handleWhatsAppIncoming(body: any): Promise<Response> {
 
   if (!phone || !message) {
     return new Response(JSON.stringify({ error: "phone and message are required" }), {
-      status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      status: 400,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 
-  console.log(`[Gateway/WhatsApp] Incoming from ${phone} via ${instance_name}: ${message.substring(0, 100)}`);
+  console.log(
+    `[Gateway/WhatsApp] Incoming from ${phone} via ${instance_name}: ${message.substring(0, 100)}`,
+  );
 
   try {
     // 1. Find active WhatsApp deployment
@@ -99,9 +122,12 @@ export async function handleWhatsAppIncoming(body: any): Promise<Response> {
     });
 
     if (!deployment) {
-      console.log(`[Gateway/WhatsApp] No active WhatsApp deployment for instance: ${instance_name}`);
+      console.log(
+        `[Gateway/WhatsApp] No active WhatsApp deployment for instance: ${instance_name}`,
+      );
       return new Response(JSON.stringify({ status: "no_deployment", instance_name }), {
-        status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
@@ -114,9 +140,12 @@ export async function handleWhatsAppIncoming(body: any): Promise<Response> {
       .single();
 
     if (!flow) {
-      console.log(`[Gateway/WhatsApp] Flow not found or not published for deployment ${deployment.id}`);
+      console.log(
+        `[Gateway/WhatsApp] Flow not found or not published for deployment ${deployment.id}`,
+      );
       return new Response(JSON.stringify({ status: "flow_not_found" }), {
-        status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
@@ -147,7 +176,8 @@ export async function handleWhatsAppIncoming(body: any): Promise<Response> {
           status: "running",
           input_message: message,
           state_snapshot: {
-            channel: "whatsapp", phone,
+            channel: "whatsapp",
+            phone,
             sender_name: sender_name || phone,
             instance_name,
             metadata: { message_id, media },
@@ -170,13 +200,17 @@ export async function handleWhatsAppIncoming(body: any): Promise<Response> {
 
     if (!triggerNode) {
       return new Response(JSON.stringify({ error: "No trigger node" }), {
-        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
     const visited = new Set<string>();
     const queue: { nodeId: string; input: any }[] = [
-      { nodeId: triggerNode.id, input: { message, channel: "whatsapp", metadata: { phone, sender_name, instance_name } } },
+      {
+        nodeId: triggerNode.id,
+        input: { message, channel: "whatsapp", metadata: { phone, sender_name, instance_name } },
+      },
     ];
     let finalOutput: any = null;
     let stepOrder = 0;
@@ -206,17 +240,22 @@ export async function handleWhatsAppIncoming(body: any): Promise<Response> {
         }
       } catch (err) {
         if (err instanceof HITLPauseSignal) {
-          await supabase.from("agent_executions").update({
-            status: "paused", is_paused: true,
-            paused_at: new Date().toISOString(),
-            pause_reason: err.pauseMessage,
-            pause_timeout_at: new Date(Date.now() + err.timeoutMinutes * 60000).toISOString(),
-            pause_fallback_action: err.fallbackAction,
-            fsm_snapshot: { channel: "whatsapp", phone, message, last_output: finalOutput },
-          }).eq("id", executionId);
+          await supabase
+            .from("agent_executions")
+            .update({
+              status: "paused",
+              is_paused: true,
+              paused_at: new Date().toISOString(),
+              pause_reason: err.pauseMessage,
+              pause_timeout_at: new Date(Date.now() + err.timeoutMinutes * 60000).toISOString(),
+              pause_fallback_action: err.fallbackAction,
+              fsm_snapshot: { channel: "whatsapp", phone, message, last_output: finalOutput },
+            })
+            .eq("id", executionId);
 
           return new Response(JSON.stringify({ status: "paused", execution_id: executionId }), {
-            status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
+            status: 200,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
           });
         }
         output = { error: (err as Error).message };
@@ -224,10 +263,16 @@ export async function handleWhatsAppIncoming(body: any): Promise<Response> {
       }
 
       await supabase.from("agent_execution_steps").insert({
-        execution_id: executionId, node_id: nodeId, node_type: node.type,
-        step_order: stepOrder, input_data: input, output_data: output,
-        status: stepStatus, started_at: new Date(stepStart).toISOString(),
-        completed_at: new Date().toISOString(), duration_ms: Date.now() - stepStart,
+        execution_id: executionId,
+        node_id: nodeId,
+        node_type: node.type,
+        step_order: stepOrder,
+        input_data: input,
+        output_data: output,
+        status: stepStatus,
+        started_at: new Date(stepStart).toISOString(),
+        completed_at: new Date().toISOString(),
+        duration_ms: Date.now() - stepStart,
         cost_cents: stepCostCents,
       });
 
@@ -242,10 +287,19 @@ export async function handleWhatsAppIncoming(body: any): Promise<Response> {
     }
 
     // 6. Mark completed
-    await supabase.from("agent_executions").update({
-      status: "completed", current_node_id: null,
-      state_snapshot: { channel: "whatsapp", phone, final_output: finalOutput, steps_count: stepOrder },
-    }).eq("id", executionId);
+    await supabase
+      .from("agent_executions")
+      .update({
+        status: "completed",
+        current_node_id: null,
+        state_snapshot: {
+          channel: "whatsapp",
+          phone,
+          final_output: finalOutput,
+          steps_count: stepOrder,
+        },
+      })
+      .eq("id", executionId);
 
     // 7. Send response via Evolution API V1
     const responseText = finalOutput?.response || finalOutput?.text || JSON.stringify(finalOutput);
@@ -253,17 +307,23 @@ export async function handleWhatsAppIncoming(body: any): Promise<Response> {
       await sendWhatsAppViaEvolutionV1(supabase, phone, responseText, instance_name);
     }
 
-    return new Response(JSON.stringify({
-      execution_id: executionId, status: "completed",
-      output: finalOutput, response_sent: !!responseText,
-    }), {
-      status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-
+    return new Response(
+      JSON.stringify({
+        execution_id: executionId,
+        status: "completed",
+        output: finalOutput,
+        response_sent: !!responseText,
+      }),
+      {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      },
+    );
   } catch (err) {
     console.error("[Gateway/WhatsApp] Error:", err);
     return new Response(JSON.stringify({ error: (err as Error).message }), {
-      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      status: 500,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 }
@@ -279,12 +339,14 @@ export async function handleWhatsAppSend(body: any): Promise<Response> {
   const { phone, message, instance_name } = body;
   if (!phone || !message) {
     return new Response(JSON.stringify({ error: "phone and message required" }), {
-      status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      status: 400,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 
   const sent = await sendWhatsAppViaEvolutionV1(supabase, phone, message, instance_name);
   return new Response(JSON.stringify({ sent, phone }), {
-    status: sent ? 200 : 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+    status: sent ? 200 : 500,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
 }

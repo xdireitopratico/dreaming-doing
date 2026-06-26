@@ -1,7 +1,7 @@
 /**
  * tool-executor.ts — Real Tool Execution Engine for AetherForge
  * Implements: secret injection, retry w/ backoff, circuit breaker, idempotency, built-in tools.
- * 
+ *
  * @version 1.0.0 — Round 37
  */
 
@@ -68,13 +68,16 @@ const CIRCUIT_CACHE_TTL_MS = 5000; // 5s cache
 async function getCircuitFromDB(toolName: string): Promise<CircuitState> {
   // Check in-memory cache first
   const cached = circuitCache.get(toolName);
-  if (cached && (Date.now() - cached.fetchedAt) < CIRCUIT_CACHE_TTL_MS) {
+  if (cached && Date.now() - cached.fetchedAt < CIRCUIT_CACHE_TTL_MS) {
     return cached.state;
   }
 
   try {
     const { createClient } = await import("npm:@supabase/supabase-js@2");
-    const sb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+    const sb = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    );
 
     const { data } = await sb
       .from("tool_circuit_breaker_state")
@@ -83,13 +86,21 @@ async function getCircuitFromDB(toolName: string): Promise<CircuitState> {
       .maybeSingle();
 
     const state: CircuitState = data
-      ? { state: data.state, failures: data.failures, lastFailure: data.last_failure_at ? new Date(data.last_failure_at).getTime() : 0, openedAt: data.opened_at ? new Date(data.opened_at).getTime() : 0 }
+      ? {
+          state: data.state,
+          failures: data.failures,
+          lastFailure: data.last_failure_at ? new Date(data.last_failure_at).getTime() : 0,
+          openedAt: data.opened_at ? new Date(data.opened_at).getTime() : 0,
+        }
       : { state: "closed", failures: 0, lastFailure: 0, openedAt: 0 };
 
     circuitCache.set(toolName, { state, fetchedAt: Date.now() });
     return state;
   } catch (err) {
-    console.warn(`[circuit-breaker] DB read failed for ${toolName}, using in-memory fallback:`, (err as Error).message);
+    console.warn(
+      `[circuit-breaker] DB read failed for ${toolName}, using in-memory fallback:`,
+      (err as Error).message,
+    );
     return cached?.state || { state: "closed", failures: 0, lastFailure: 0, openedAt: 0 };
   }
 }
@@ -97,16 +108,22 @@ async function getCircuitFromDB(toolName: string): Promise<CircuitState> {
 async function persistCircuitState(toolName: string, circuit: CircuitState): Promise<void> {
   try {
     const { createClient } = await import("npm:@supabase/supabase-js@2");
-    const sb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+    const sb = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    );
 
-    await sb.from("tool_circuit_breaker_state").upsert({
-      tool_name: toolName,
-      state: circuit.state,
-      failures: circuit.failures,
-      last_failure_at: circuit.lastFailure ? new Date(circuit.lastFailure).toISOString() : null,
-      opened_at: circuit.openedAt ? new Date(circuit.openedAt).toISOString() : null,
-      updated_at: new Date().toISOString(),
-    }, { onConflict: "tool_name" });
+    await sb.from("tool_circuit_breaker_state").upsert(
+      {
+        tool_name: toolName,
+        state: circuit.state,
+        failures: circuit.failures,
+        last_failure_at: circuit.lastFailure ? new Date(circuit.lastFailure).toISOString() : null,
+        opened_at: circuit.openedAt ? new Date(circuit.openedAt).toISOString() : null,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "tool_name" },
+    );
 
     // Update cache
     circuitCache.set(toolName, { state: circuit, fetchedAt: Date.now() });
@@ -115,7 +132,11 @@ async function persistCircuitState(toolName: string, circuit: CircuitState): Pro
   }
 }
 
-async function checkCircuit(toolName: string, threshold: number, timeoutSec: number): Promise<{ allowed: boolean; state: string }> {
+async function checkCircuit(
+  toolName: string,
+  threshold: number,
+  timeoutSec: number,
+): Promise<{ allowed: boolean; state: string }> {
   const circuit = await getCircuitFromDB(toolName);
 
   if (circuit.state === "open") {
@@ -145,7 +166,9 @@ async function recordFailure(toolName: string, threshold: number): Promise<void>
   if (circuit.failures >= threshold) {
     circuit.state = "open";
     circuit.openedAt = Date.now();
-    console.log(`[circuit-breaker] ${toolName}: → OPEN (${circuit.failures} failures >= ${threshold})`);
+    console.log(
+      `[circuit-breaker] ${toolName}: → OPEN (${circuit.failures} failures >= ${threshold})`,
+    );
   }
   await persistCircuitState(toolName, circuit);
 }
@@ -165,7 +188,11 @@ function computeIdempotencyKey(toolName: string, inputData: any, executionId: st
   return `idem_${(hash >>> 0).toString(16)}`;
 }
 
-async function checkIdempotency(supabase: any, executionId: string, idempotencyKey: string): Promise<any | null> {
+async function checkIdempotency(
+  supabase: any,
+  executionId: string,
+  idempotencyKey: string,
+): Promise<any | null> {
   const { data } = await supabase
     .from("agent_execution_steps")
     .select("output_data, status")
@@ -210,7 +237,9 @@ async function injectSecrets(
     // PADR-014: No platform env fallback for user tools.
     // Secret not found — will be missing from resolved map.
     // Caller must check and throw appropriate error.
-    console.warn(`[tool-executor] Secret ${secretName} not found for tenant ${tenantId}. User must configure it.`);
+    console.warn(
+      `[tool-executor] Secret ${secretName} not found for tenant ${tenantId}. User must configure it.`,
+    );
   }
 
   return resolved;
@@ -229,7 +258,9 @@ async function executeBuiltinTool(
   switch (toolName) {
     case "llm_generate": {
       const modelId = input.model_id || input.model || "groq/llama-3.1-8b-instant";
-      const messages = input.messages || [{ role: "user", content: input.prompt || input.text || "" }];
+      const messages = input.messages || [
+        { role: "user", content: input.prompt || input.text || "" },
+      ];
       const result = await routeLLM({
         model_id: modelId,
         messages,
@@ -237,7 +268,13 @@ async function executeBuiltinTool(
         max_tokens: input.max_tokens ?? 1024,
         tenant_id: tenantId,
       });
-      return { response: result.content, model: result.model, provider: result.provider, tokens: result.tokens_in + result.tokens_out, cost_cents: result.cost_cents };
+      return {
+        response: result.content,
+        model: result.model,
+        provider: result.provider,
+        tokens: result.tokens_in + result.tokens_out,
+        cost_cents: result.cost_cents,
+      };
     }
 
     case "rag_search": {
@@ -283,7 +320,11 @@ async function executeBuiltinTool(
       if (!url) throw new Error("http_request requires 'url' in input");
 
       // Validate URL
-      try { new URL(url); } catch { throw new Error(`Invalid URL: ${url}`); }
+      try {
+        new URL(url);
+      } catch {
+        throw new Error(`Invalid URL: ${url}`);
+      }
 
       const method = (input.method || "GET").toUpperCase();
       const headers: Record<string, string> = { ...(input.headers || {}) };
@@ -308,7 +349,11 @@ async function executeBuiltinTool(
 
       const body = await res.text();
       let parsed: any;
-      try { parsed = JSON.parse(body); } catch { parsed = { raw: body }; }
+      try {
+        parsed = JSON.parse(body);
+      } catch {
+        parsed = { raw: body };
+      }
 
       return { status: res.status, ok: res.ok, data: parsed };
     }
@@ -328,7 +373,8 @@ async function executeBuiltinTool(
         }
       }
       if (input.limit) query = query.limit(input.limit);
-      if (input.order_by) query = query.order(input.order_by, { ascending: input.ascending ?? true });
+      if (input.order_by)
+        query = query.order(input.order_by, { ascending: input.ascending ?? true });
 
       const { data, error } = await query;
       if (error) throw new Error(`db_query error: ${error.message}`);
@@ -487,7 +533,7 @@ async function executeBuiltinTool(
       const resendResponse = await fetch("https://api.resend.com/emails", {
         method: "POST",
         headers: {
-          "Authorization": `Bearer ${resendKey}`,
+          Authorization: `Bearer ${resendKey}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify(emailPayload),
@@ -496,7 +542,9 @@ async function executeBuiltinTool(
       const resendResult = await resendResponse.json();
 
       if (!resendResponse.ok) {
-        throw new Error(`Resend error ${resendResponse.status}: ${JSON.stringify(resendResult).substring(0, 300)}`);
+        throw new Error(
+          `Resend error ${resendResponse.status}: ${JSON.stringify(resendResult).substring(0, 300)}`,
+        );
       }
 
       return {
@@ -513,7 +561,8 @@ async function executeBuiltinTool(
       if (!resendKey) throw new Error("email_batch_send requires RESEND_API_KEY in tenant_secrets");
 
       const emails = input.emails || [];
-      if (!Array.isArray(emails) || emails.length === 0) throw new Error("email_batch_send requires 'emails' array");
+      if (!Array.isArray(emails) || emails.length === 0)
+        throw new Error("email_batch_send requires 'emails' array");
       if (emails.length > 100) throw new Error("Resend batch limit is 100 emails per call");
 
       const batch = emails.map((e: any) => ({
@@ -528,7 +577,7 @@ async function executeBuiltinTool(
       const resendResponse = await fetch("https://api.resend.com/emails/batch", {
         method: "POST",
         headers: {
-          "Authorization": `Bearer ${resendKey}`,
+          Authorization: `Bearer ${resendKey}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify(batch),
@@ -537,7 +586,9 @@ async function executeBuiltinTool(
       const resendResult = await resendResponse.json();
 
       if (!resendResponse.ok) {
-        throw new Error(`Resend batch error ${resendResponse.status}: ${JSON.stringify(resendResult).substring(0, 300)}`);
+        throw new Error(
+          `Resend batch error ${resendResponse.status}: ${JSON.stringify(resendResult).substring(0, 300)}`,
+        );
       }
 
       return {
@@ -550,13 +601,14 @@ async function executeBuiltinTool(
     case "email_check_status": {
       // Check email delivery status via Resend
       const resendKey = secrets["RESEND_API_KEY"];
-      if (!resendKey) throw new Error("email_check_status requires RESEND_API_KEY in tenant_secrets");
+      if (!resendKey)
+        throw new Error("email_check_status requires RESEND_API_KEY in tenant_secrets");
 
       const emailId = input.email_id;
       if (!emailId) throw new Error("email_check_status requires 'email_id'");
 
       const response = await fetch(`https://api.resend.com/emails/${emailId}`, {
-        headers: { "Authorization": `Bearer ${resendKey}` },
+        headers: { Authorization: `Bearer ${resendKey}` },
       });
 
       const result = await response.json();
@@ -588,7 +640,7 @@ async function executeBuiltinTool(
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${supabaseKey}`,
+          Authorization: `Bearer ${supabaseKey}`,
         },
         body: JSON.stringify({
           tenant_id: tenantId,
@@ -651,7 +703,9 @@ Only include emotions that are actually detected. Respond in ${language}.`;
       try {
         // Extract JSON from response (handle markdown code blocks)
         const jsonMatch = responseText.match(/\{[\s\S]*\}/);
-        parsed = jsonMatch ? JSON.parse(jsonMatch[0]) : { sentiment: "neutral", score: 0, confidence: 0 };
+        parsed = jsonMatch
+          ? JSON.parse(jsonMatch[0])
+          : { sentiment: "neutral", score: 0, confidence: 0 };
       } catch {
         parsed = { sentiment: "neutral", score: 0, confidence: 0, raw: responseText };
       }
@@ -704,7 +758,9 @@ Available categories: ${JSON.stringify(categories)}`;
       let parsed: any;
       try {
         const jsonMatch = responseText.match(/\{[\s\S]*\}/);
-        parsed = jsonMatch ? JSON.parse(jsonMatch[0]) : { classifications: [], primary_category: "unknown" };
+        parsed = jsonMatch
+          ? JSON.parse(jsonMatch[0])
+          : { classifications: [], primary_category: "unknown" };
       } catch {
         parsed = { classifications: [], primary_category: "unknown", raw: responseText };
       }
@@ -725,7 +781,8 @@ Available categories: ${JSON.stringify(categories)}`;
       const tables = input.tables || [];
       const schema_hint = input.schema_hint || "";
 
-      if (!tables.length) throw new Error("nl_to_sql requires 'tables' array with allowed table names");
+      if (!tables.length)
+        throw new Error("nl_to_sql requires 'tables' array with allowed table names");
 
       // Security: Only allow querying specific tenant-approved tables
       const allowedTables = tables.filter((t: string) => /^[a-z_][a-z0-9_]*$/.test(t));
@@ -769,7 +826,9 @@ If the question cannot be answered with these tables, set "error": "<reason>" in
       let querySpec: any;
       try {
         const jsonMatch = responseText.match(/\{[\s\S]*\}/);
-        querySpec = jsonMatch ? JSON.parse(jsonMatch[0]) : { error: "Failed to parse query specification" };
+        querySpec = jsonMatch
+          ? JSON.parse(jsonMatch[0])
+          : { error: "Failed to parse query specification" };
       } catch {
         return { error: "Failed to parse LLM response", raw: responseText };
       }
@@ -779,7 +838,10 @@ If the question cannot be answered with these tables, set "error": "<reason>" in
         return { error: querySpec.error, question };
       }
       if (!allowedTables.includes(querySpec.table)) {
-        return { error: `Table '${querySpec.table}' is not in allowed tables list`, allowed: allowedTables };
+        return {
+          error: `Table '${querySpec.table}' is not in allowed tables list`,
+          allowed: allowedTables,
+        };
       }
 
       // Execute the structured query safely via Supabase client
@@ -839,7 +901,8 @@ If the question cannot be answered with these tables, set "error": "<reason>" in
           }
         }
 
-        if (querySpec.order_by) q = (q as any).order(querySpec.order_by, { ascending: querySpec.ascending ?? true });
+        if (querySpec.order_by)
+          q = (q as any).order(querySpec.order_by, { ascending: querySpec.ascending ?? true });
         if (querySpec.limit) q = (q as any).limit(querySpec.limit);
 
         const { data, error } = await q;
@@ -851,13 +914,29 @@ If the question cannot be answered with these tables, set "error": "<reason>" in
         let aggregationResult: any = null;
         if (querySpec.aggregation && data) {
           const agg = querySpec.aggregation;
-          const values = data.map((r: any) => Number(r[agg.column])).filter((v: number) => !isNaN(v));
+          const values = data
+            .map((r: any) => Number(r[agg.column]))
+            .filter((v: number) => !isNaN(v));
           switch (agg.type) {
-            case "count": aggregationResult = { count: data.length }; break;
-            case "sum": aggregationResult = { sum: values.reduce((a: number, b: number) => a + b, 0) }; break;
-            case "avg": aggregationResult = { avg: values.length ? values.reduce((a: number, b: number) => a + b, 0) / values.length : 0 }; break;
-            case "min": aggregationResult = { min: values.length ? Math.min(...values) : null }; break;
-            case "max": aggregationResult = { max: values.length ? Math.max(...values) : null }; break;
+            case "count":
+              aggregationResult = { count: data.length };
+              break;
+            case "sum":
+              aggregationResult = { sum: values.reduce((a: number, b: number) => a + b, 0) };
+              break;
+            case "avg":
+              aggregationResult = {
+                avg: values.length
+                  ? values.reduce((a: number, b: number) => a + b, 0) / values.length
+                  : 0,
+              };
+              break;
+            case "min":
+              aggregationResult = { min: values.length ? Math.min(...values) : null };
+              break;
+            case "max":
+              aggregationResult = { max: values.length ? Math.max(...values) : null };
+              break;
           }
         }
 
@@ -909,13 +988,20 @@ If the question cannot be answered with these tables, set "error": "<reason>" in
       const computeAgg = (rows: any[], column: string, aggType: string) => {
         const values = rows.map((r: any) => Number(r[column])).filter((v: number) => !isNaN(v));
         switch (aggType) {
-          case "count": return rows.length;
-          case "sum": return values.reduce((a, b) => a + b, 0);
-          case "avg": return values.length ? values.reduce((a, b) => a + b, 0) / values.length : 0;
-          case "min": return values.length ? Math.min(...values) : null;
-          case "max": return values.length ? Math.max(...values) : null;
-          case "distinct": return [...new Set(rows.map((r: any) => r[column]))].length;
-          default: return null;
+          case "count":
+            return rows.length;
+          case "sum":
+            return values.reduce((a, b) => a + b, 0);
+          case "avg":
+            return values.length ? values.reduce((a, b) => a + b, 0) / values.length : 0;
+          case "min":
+            return values.length ? Math.min(...values) : null;
+          case "max":
+            return values.length ? Math.max(...values) : null;
+          case "distinct":
+            return [...new Set(rows.map((r: any) => r[column]))].length;
+          default:
+            return null;
         }
       };
 
@@ -955,7 +1041,8 @@ If the question cannot be answered with these tables, set "error": "<reason>" in
       // Send Instagram/Messenger message via Meta Graph API
       // Requires: META_PAGE_ACCESS_TOKEN in tenant_secrets
       const pageToken = secrets["META_PAGE_ACCESS_TOKEN"];
-      if (!pageToken) throw new Error("instagram_send requires META_PAGE_ACCESS_TOKEN in tenant_secrets");
+      if (!pageToken)
+        throw new Error("instagram_send requires META_PAGE_ACCESS_TOKEN in tenant_secrets");
 
       const recipientId = input.recipient_id || input.to;
       if (!recipientId) throw new Error("instagram_send requires 'recipient_id'");
@@ -964,7 +1051,7 @@ If the question cannot be answered with these tables, set "error": "<reason>" in
       const apiVersion = input.api_version || "v19.0";
       const pageId = input.page_id || secrets["META_PAGE_ID"] || "";
 
-      let messagePayload: Record<string, any> = {
+      const messagePayload: Record<string, any> = {
         recipient: { id: recipientId },
         messaging_type: input.messaging_type || "RESPONSE",
       };
@@ -984,7 +1071,9 @@ If the question cannot be answered with these tables, set "error": "<reason>" in
           messagePayload.message = {
             attachment: {
               type: "image",
-              payload: input.image_url ? { url: input.image_url, is_reusable: true } : { attachment_id: input.attachment_id },
+              payload: input.image_url
+                ? { url: input.image_url, is_reusable: true }
+                : { attachment_id: input.attachment_id },
             },
           };
           break;
@@ -1002,22 +1091,25 @@ If the question cannot be answered with these tables, set "error": "<reason>" in
 
       // Determine endpoint: Instagram Messaging or Messenger
       const platform = input.platform || "instagram"; // instagram | messenger
-      const endpoint = platform === "messenger"
-        ? `https://graph.facebook.com/${apiVersion}/${pageId}/messages`
-        : `https://graph.facebook.com/${apiVersion}/${pageId}/messages`;
+      const endpoint =
+        platform === "messenger"
+          ? `https://graph.facebook.com/${apiVersion}/${pageId}/messages`
+          : `https://graph.facebook.com/${apiVersion}/${pageId}/messages`;
 
       const response = await fetch(endpoint, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${pageToken}`,
+          Authorization: `Bearer ${pageToken}`,
         },
         body: JSON.stringify(messagePayload),
       });
 
       const result = await response.json();
       if (!response.ok) {
-        throw new Error(`Meta API error ${response.status}: ${JSON.stringify(result).substring(0, 300)}`);
+        throw new Error(
+          `Meta API error ${response.status}: ${JSON.stringify(result).substring(0, 300)}`,
+        );
       }
 
       return {
@@ -1032,7 +1124,8 @@ If the question cannot be answered with these tables, set "error": "<reason>" in
     case "instagram_read": {
       // Read Instagram/Messenger conversations via Meta Graph API
       const pageToken = secrets["META_PAGE_ACCESS_TOKEN"];
-      if (!pageToken) throw new Error("instagram_read requires META_PAGE_ACCESS_TOKEN in tenant_secrets");
+      if (!pageToken)
+        throw new Error("instagram_read requires META_PAGE_ACCESS_TOKEN in tenant_secrets");
 
       const apiVersion = input.api_version || "v19.0";
       const pageId = input.page_id || secrets["META_PAGE_ID"] || "";
@@ -1040,17 +1133,20 @@ If the question cannot be answered with these tables, set "error": "<reason>" in
       const limit = Math.min(input.limit || 10, 25);
 
       // Get conversations
-      const conversationsUrl = platform === "instagram"
-        ? `https://graph.facebook.com/${apiVersion}/${pageId}/conversations?platform=instagram&limit=${limit}`
-        : `https://graph.facebook.com/${apiVersion}/${pageId}/conversations?limit=${limit}`;
+      const conversationsUrl =
+        platform === "instagram"
+          ? `https://graph.facebook.com/${apiVersion}/${pageId}/conversations?platform=instagram&limit=${limit}`
+          : `https://graph.facebook.com/${apiVersion}/${pageId}/conversations?limit=${limit}`;
 
       const convResponse = await fetch(conversationsUrl, {
-        headers: { "Authorization": `Bearer ${pageToken}` },
+        headers: { Authorization: `Bearer ${pageToken}` },
       });
 
       const convResult = await convResponse.json();
       if (!convResponse.ok) {
-        throw new Error(`Meta API error ${convResponse.status}: ${JSON.stringify(convResult).substring(0, 300)}`);
+        throw new Error(
+          `Meta API error ${convResponse.status}: ${JSON.stringify(convResult).substring(0, 300)}`,
+        );
       }
 
       const conversations = convResult.data || [];
@@ -1059,7 +1155,7 @@ If the question cannot be answered with these tables, set "error": "<reason>" in
       if (input.conversation_id) {
         const msgsUrl = `https://graph.facebook.com/${apiVersion}/${input.conversation_id}/messages?fields=id,message,from,created_time&limit=${limit}`;
         const msgsResponse = await fetch(msgsUrl, {
-          headers: { "Authorization": `Bearer ${pageToken}` },
+          headers: { Authorization: `Bearer ${pageToken}` },
         });
         const msgsResult = await msgsResponse.json();
 
@@ -1089,8 +1185,14 @@ If the question cannot be answered with these tables, set "error": "<reason>" in
       const authToken = secrets["TWILIO_AUTH_TOKEN"];
       const fromNumber = secrets["TWILIO_PHONE_NUMBER"] || input.from;
 
-      if (!accountSid || !authToken) throw new Error("voip_call requires TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN in tenant_secrets");
-      if (!fromNumber) throw new Error("voip_call requires TWILIO_PHONE_NUMBER in tenant_secrets or 'from' in input");
+      if (!accountSid || !authToken)
+        throw new Error(
+          "voip_call requires TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN in tenant_secrets",
+        );
+      if (!fromNumber)
+        throw new Error(
+          "voip_call requires TWILIO_PHONE_NUMBER in tenant_secrets or 'from' in input",
+        );
 
       const toNumber = input.to || input.phone;
       if (!toNumber) throw new Error("voip_call requires 'to' phone number");
@@ -1101,7 +1203,9 @@ If the question cannot be answered with these tables, set "error": "<reason>" in
       switch (action) {
         case "twiml":
           // Custom TwiML provided by the agent
-          twiml = input.twiml || `<Response><Say language="${input.language || "pt-BR"}">${input.message || "Olá, esta é uma chamada automática."}</Say></Response>`;
+          twiml =
+            input.twiml ||
+            `<Response><Say language="${input.language || "pt-BR"}">${input.message || "Olá, esta é uma chamada automática."}</Say></Response>`;
           break;
         case "connect":
           // Connect to another number or SIP
@@ -1125,18 +1229,23 @@ If the question cannot be answered with these tables, set "error": "<reason>" in
       if (input.timeout) formData.append("Timeout", String(input.timeout));
       if (input.record_call) formData.append("Record", "true");
 
-      const response = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Calls.json`, {
-        method: "POST",
-        headers: {
-          "Authorization": `Basic ${btoa(`${accountSid}:${authToken}`)}`,
-          "Content-Type": "application/x-www-form-urlencoded",
+      const response = await fetch(
+        `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Calls.json`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Basic ${btoa(`${accountSid}:${authToken}`)}`,
+            "Content-Type": "application/x-www-form-urlencoded",
+          },
+          body: formData.toString(),
         },
-        body: formData.toString(),
-      });
+      );
 
       const result = await response.json();
       if (!response.ok) {
-        throw new Error(`Twilio error ${response.status}: ${JSON.stringify(result).substring(0, 300)}`);
+        throw new Error(
+          `Twilio error ${response.status}: ${JSON.stringify(result).substring(0, 300)}`,
+        );
       }
 
       return {
@@ -1153,14 +1262,18 @@ If the question cannot be answered with these tables, set "error": "<reason>" in
       // Check call status via Twilio
       const accountSid = secrets["TWILIO_ACCOUNT_SID"];
       const authToken = secrets["TWILIO_AUTH_TOKEN"];
-      if (!accountSid || !authToken) throw new Error("voip_status requires TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN");
+      if (!accountSid || !authToken)
+        throw new Error("voip_status requires TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN");
 
       const callSid = input.call_sid;
       if (!callSid) throw new Error("voip_status requires 'call_sid'");
 
-      const response = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Calls/${callSid}.json`, {
-        headers: { "Authorization": `Basic ${btoa(`${accountSid}:${authToken}`)}` },
-      });
+      const response = await fetch(
+        `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Calls/${callSid}.json`,
+        {
+          headers: { Authorization: `Basic ${btoa(`${accountSid}:${authToken}`)}` },
+        },
+      );
 
       const result = await response.json();
       if (!response.ok) {
@@ -1193,7 +1306,8 @@ If the question cannot be answered with these tables, set "error": "<reason>" in
       try {
         // Download audio
         const audioResponse = await fetch(recordingUrl);
-        if (!audioResponse.ok) throw new Error(`Failed to download recording: HTTP ${audioResponse.status}`);
+        if (!audioResponse.ok)
+          throw new Error(`Failed to download recording: HTTP ${audioResponse.status}`);
         const audioBlob = await audioResponse.blob();
 
         const formData = new FormData();
@@ -1232,13 +1346,18 @@ If the question cannot be answered with these tables, set "error": "<reason>" in
 
           const openaiResponse = await fetch("https://api.openai.com/v1/audio/transcriptions", {
             method: "POST",
-            headers: { "Authorization": `Bearer ${secrets["OPENAI_API_KEY"]}` },
+            headers: { Authorization: `Bearer ${secrets["OPENAI_API_KEY"]}` },
             body: formData,
           });
 
           if (openaiResponse.ok) {
             const result = await openaiResponse.json();
-            return { text: result.text, language, source: "tenant_openai", recording_url: recordingUrl };
+            return {
+              text: result.text,
+              language,
+              source: "tenant_openai",
+              recording_url: recordingUrl,
+            };
           }
         }
         throw new Error(`voip_transcribe failed: ${whisperErr.message}`);
@@ -1273,7 +1392,9 @@ If the question cannot be answered with these tables, set "error": "<reason>" in
 
           if (kokoroResponse.ok) {
             const audioBuffer = await kokoroResponse.arrayBuffer();
-            const base64Audio = btoa(String.fromCharCode(...new Uint8Array(audioBuffer.slice(0, 1024 * 1024)))); // cap at 1MB for response
+            const base64Audio = btoa(
+              String.fromCharCode(...new Uint8Array(audioBuffer.slice(0, 1024 * 1024))),
+            ); // cap at 1MB for response
 
             return {
               audio_base64: base64Audio,
@@ -1292,7 +1413,10 @@ If the question cannot be answered with these tables, set "error": "<reason>" in
 
       // Secundário: ElevenLabs (tenant's key) — usado apenas se Kokoro indisponível
       const elevenLabsKey = secrets["ELEVENLABS_API_KEY"];
-      if (!elevenLabsKey) throw new Error("tts_synthesize: Kokoro unavailable and no ELEVENLABS_API_KEY in tenant_secrets");
+      if (!elevenLabsKey)
+        throw new Error(
+          "tts_synthesize: Kokoro unavailable and no ELEVENLABS_API_KEY in tenant_secrets",
+        );
 
       const elVoiceId = input.elevenlabs_voice_id || voiceId || "JBFqnCBsd6RMkjVDRZzb"; // George default
       const model = input.model || "eleven_multilingual_v2";
@@ -1348,7 +1472,8 @@ If the question cannot be answered with these tables, set "error": "<reason>" in
       // Clone a voice via ElevenLabs Instant Voice Cloning
       // Requires: ELEVENLABS_API_KEY in tenant_secrets
       const elevenLabsKey = secrets["ELEVENLABS_API_KEY"];
-      if (!elevenLabsKey) throw new Error("voice_clone requires ELEVENLABS_API_KEY in tenant_secrets");
+      if (!elevenLabsKey)
+        throw new Error("voice_clone requires ELEVENLABS_API_KEY in tenant_secrets");
 
       const name = input.name || "Cloned Voice";
       const description = input.description || "";
@@ -1367,7 +1492,8 @@ If the question cannot be answered with these tables, set "error": "<reason>" in
       // Download and attach audio files
       for (let i = 0; i < audioUrls.length; i++) {
         const audioResponse = await fetch(audioUrls[i]);
-        if (!audioResponse.ok) throw new Error(`Failed to download audio sample ${i}: HTTP ${audioResponse.status}`);
+        if (!audioResponse.ok)
+          throw new Error(`Failed to download audio sample ${i}: HTTP ${audioResponse.status}`);
         const blob = await audioResponse.blob();
         formData.append("files", blob, `sample_${i}.mp3`);
       }
@@ -1387,7 +1513,9 @@ If the question cannot be answered with these tables, set "error": "<reason>" in
 
       const result = await response.json();
       if (!response.ok) {
-        throw new Error(`ElevenLabs voice clone error ${response.status}: ${JSON.stringify(result).substring(0, 300)}`);
+        throw new Error(
+          `ElevenLabs voice clone error ${response.status}: ${JSON.stringify(result).substring(0, 300)}`,
+        );
       }
 
       return {
@@ -1410,15 +1538,21 @@ If the question cannot be answered with these tables, set "error": "<reason>" in
           const kokoroResponse = await fetch("http://187.77.239.8:8880/v1/audio/voices");
           if (kokoroResponse.ok) {
             const kokoroVoices = await kokoroResponse.json();
-            const voiceList = Array.isArray(kokoroVoices) ? kokoroVoices : (kokoroVoices.voices || []);
-            voices.push(...voiceList.map((v: any) => ({
-              id: typeof v === "string" ? v : v.id || v.name,
-              name: typeof v === "string" ? v : v.name || v.id,
-              provider: "kokoro",
-              cost: "free",
-            })));
+            const voiceList = Array.isArray(kokoroVoices)
+              ? kokoroVoices
+              : kokoroVoices.voices || [];
+            voices.push(
+              ...voiceList.map((v: any) => ({
+                id: typeof v === "string" ? v : v.id || v.name,
+                name: typeof v === "string" ? v : v.name || v.id,
+                provider: "kokoro",
+                cost: "free",
+              })),
+            );
           }
-        } catch { /* Kokoro unavailable */ }
+        } catch {
+          /* Kokoro unavailable */
+        }
       }
 
       // ElevenLabs voices (tenant key)
@@ -1431,24 +1565,28 @@ If the question cannot be answered with these tables, set "error": "<reason>" in
             });
             if (elResponse.ok) {
               const elResult = await elResponse.json();
-              voices.push(...(elResult.voices || []).map((v: any) => ({
-                id: v.voice_id,
-                name: v.name,
-                category: v.category,
-                provider: "elevenlabs",
-                labels: v.labels,
-                preview_url: v.preview_url,
-                cost: "paid",
-              })));
+              voices.push(
+                ...(elResult.voices || []).map((v: any) => ({
+                  id: v.voice_id,
+                  name: v.name,
+                  category: v.category,
+                  provider: "elevenlabs",
+                  labels: v.labels,
+                  preview_url: v.preview_url,
+                  cost: "paid",
+                })),
+              );
             }
-          } catch { /* ElevenLabs unavailable */ }
+          } catch {
+            /* ElevenLabs unavailable */
+          }
         }
       }
 
       return {
         voices,
         total: voices.length,
-        providers: [...new Set(voices.map(v => v.provider))],
+        providers: [...new Set(voices.map((v) => v.provider))],
       };
     }
 
@@ -1456,7 +1594,8 @@ If the question cannot be answered with these tables, set "error": "<reason>" in
       // Speech-to-Text — Primário: Whisper local (VPS KVM8, custo zero) | Secundário: ElevenLabs Scribe (tenant)
       const audioUrl = input.audio_url || input.url || "";
       const audioBase64 = input.audio_base64 || "";
-      if (!audioUrl && !audioBase64) throw new Error("stt_transcribe requires 'audio_url' or 'audio_base64'");
+      if (!audioUrl && !audioBase64)
+        throw new Error("stt_transcribe requires 'audio_url' or 'audio_base64'");
 
       const language = input.language || "pt";
       const provider = input.provider || "auto"; // auto, whisper, elevenlabs
@@ -1465,7 +1604,8 @@ If the question cannot be answered with these tables, set "error": "<reason>" in
       let audioBlob: Blob;
       if (audioUrl) {
         const audioResponse = await fetch(audioUrl);
-        if (!audioResponse.ok) throw new Error(`Failed to download audio: HTTP ${audioResponse.status}`);
+        if (!audioResponse.ok)
+          throw new Error(`Failed to download audio: HTTP ${audioResponse.status}`);
         audioBlob = await audioResponse.blob();
       } else {
         const binary = atob(audioBase64);
@@ -1506,7 +1646,10 @@ If the question cannot be answered with these tables, set "error": "<reason>" in
 
       // Secundário: ElevenLabs Scribe — usado apenas se Whisper indisponível
       const elevenLabsKey = secrets["ELEVENLABS_API_KEY"];
-      if (!elevenLabsKey) throw new Error("stt_transcribe: Whisper unavailable and no ELEVENLABS_API_KEY in tenant_secrets");
+      if (!elevenLabsKey)
+        throw new Error(
+          "stt_transcribe: Whisper unavailable and no ELEVENLABS_API_KEY in tenant_secrets",
+        );
 
       const formData = new FormData();
       formData.append("file", audioBlob, "audio.wav");
@@ -1552,12 +1695,13 @@ If the question cannot be answered with these tables, set "error": "<reason>" in
       // OpenAI DALL-E
       if (provider === "openai" || (provider === "auto" && secrets["OPENAI_API_KEY"])) {
         const apiKey = secrets["OPENAI_API_KEY"];
-        if (!apiKey) throw new Error("image_generate (openai) requires OPENAI_API_KEY in tenant_secrets");
+        if (!apiKey)
+          throw new Error("image_generate (openai) requires OPENAI_API_KEY in tenant_secrets");
 
         const model = input.model || "dall-e-3";
         const response = await fetch("https://api.openai.com/v1/images/generations", {
           method: "POST",
-          headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
+          headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
           body: JSON.stringify({
             model,
             prompt: prompt.substring(0, 4000),
@@ -1570,7 +1714,10 @@ If the question cannot be answered with these tables, set "error": "<reason>" in
         });
 
         const result = await response.json();
-        if (!response.ok) throw new Error(`OpenAI image error ${response.status}: ${JSON.stringify(result).substring(0, 300)}`);
+        if (!response.ok)
+          throw new Error(
+            `OpenAI image error ${response.status}: ${JSON.stringify(result).substring(0, 300)}`,
+          );
 
         return {
           images: (result.data || []).map((img: any) => ({
@@ -1586,15 +1733,18 @@ If the question cannot be answered with these tables, set "error": "<reason>" in
       // Stability AI
       if (provider === "stability" || (provider === "auto" && secrets["STABILITY_API_KEY"])) {
         const apiKey = secrets["STABILITY_API_KEY"];
-        if (!apiKey) throw new Error("image_generate (stability) requires STABILITY_API_KEY in tenant_secrets");
+        if (!apiKey)
+          throw new Error(
+            "image_generate (stability) requires STABILITY_API_KEY in tenant_secrets",
+          );
 
         const [width, height] = size.split("x").map(Number);
         const response = await fetch("https://api.stability.ai/v2beta/stable-image/generate/sd3", {
           method: "POST",
           headers: {
-            "Authorization": `Bearer ${apiKey}`,
+            Authorization: `Bearer ${apiKey}`,
             "Content-Type": "application/json",
-            "Accept": "application/json",
+            Accept: "application/json",
           },
           body: JSON.stringify({
             prompt: prompt.substring(0, 10000),
@@ -1605,7 +1755,10 @@ If the question cannot be answered with these tables, set "error": "<reason>" in
         });
 
         const result = await response.json();
-        if (!response.ok) throw new Error(`Stability AI error ${response.status}: ${JSON.stringify(result).substring(0, 300)}`);
+        if (!response.ok)
+          throw new Error(
+            `Stability AI error ${response.status}: ${JSON.stringify(result).substring(0, 300)}`,
+          );
 
         return {
           images: [{ base64: result.image, format: "png" }],
@@ -1618,14 +1771,15 @@ If the question cannot be answered with these tables, set "error": "<reason>" in
       // Together AI (cheap option)
       if (provider === "together" || (provider === "auto" && secrets["TOGETHER_API_KEY"])) {
         const apiKey = secrets["TOGETHER_API_KEY"];
-        if (!apiKey) throw new Error("image_generate (together) requires TOGETHER_API_KEY in tenant_secrets");
+        if (!apiKey)
+          throw new Error("image_generate (together) requires TOGETHER_API_KEY in tenant_secrets");
 
         const model = input.model || "black-forest-labs/FLUX.1-schnell-Free";
         const [width, height] = size.split("x").map(Number);
 
         const response = await fetch("https://api.together.xyz/v1/images/generations", {
           method: "POST",
-          headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
+          headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
           body: JSON.stringify({
             model,
             prompt: prompt.substring(0, 4000),
@@ -1638,7 +1792,10 @@ If the question cannot be answered with these tables, set "error": "<reason>" in
         });
 
         const result = await response.json();
-        if (!response.ok) throw new Error(`Together AI error ${response.status}: ${JSON.stringify(result).substring(0, 300)}`);
+        if (!response.ok)
+          throw new Error(
+            `Together AI error ${response.status}: ${JSON.stringify(result).substring(0, 300)}`,
+          );
 
         return {
           images: (result.data || []).map((img: any) => ({ url: img.url })),
@@ -1648,7 +1805,9 @@ If the question cannot be answered with these tables, set "error": "<reason>" in
         };
       }
 
-      throw new Error("image_generate requires OPENAI_API_KEY, STABILITY_API_KEY, or TOGETHER_API_KEY in tenant_secrets");
+      throw new Error(
+        "image_generate requires OPENAI_API_KEY, STABILITY_API_KEY, or TOGETHER_API_KEY in tenant_secrets",
+      );
     }
 
     case "image_edit": {
@@ -1678,12 +1837,13 @@ If the question cannot be answered with these tables, set "error": "<reason>" in
 
         const response = await fetch("https://api.openai.com/v1/images/edits", {
           method: "POST",
-          headers: { "Authorization": `Bearer ${secrets["OPENAI_API_KEY"]}` },
+          headers: { Authorization: `Bearer ${secrets["OPENAI_API_KEY"]}` },
           body: formData,
         });
 
         const result = await response.json();
-        if (!response.ok) throw new Error(`OpenAI edit error: ${JSON.stringify(result).substring(0, 300)}`);
+        if (!response.ok)
+          throw new Error(`OpenAI edit error: ${JSON.stringify(result).substring(0, 300)}`);
 
         return {
           images: (result.data || []).map((img: any) => ({ url: img.url })),
@@ -1732,7 +1892,10 @@ paginate: true
         model_id: modelId,
         messages: [
           { role: "system", content: systemPrompt },
-          { role: "user", content: `Create a presentation about: ${topic}${input.outline ? `\n\nOutline: ${input.outline}` : ""}${input.audience ? `\nAudience: ${input.audience}` : ""}` },
+          {
+            role: "user",
+            content: `Create a presentation about: ${topic}${input.outline ? `\n\nOutline: ${input.outline}` : ""}${input.audience ? `\nAudience: ${input.audience}` : ""}`,
+          },
         ],
         temperature: 0.7,
         max_tokens: 3000,
@@ -1758,7 +1921,11 @@ paginate: true
       const url = input.url || "";
       if (!url) throw new Error("screenshot_capture requires 'url'");
 
-      try { new URL(url); } catch { throw new Error(`Invalid URL: ${url}`); }
+      try {
+        new URL(url);
+      } catch {
+        throw new Error(`Invalid URL: ${url}`);
+      }
 
       const width = input.width || 1280;
       const height = input.height || 720;
@@ -1806,7 +1973,8 @@ paginate: true
       // HeyGen
       if (provider === "heygen" || (provider === "auto" && secrets["HEYGEN_API_KEY"])) {
         const apiKey = secrets["HEYGEN_API_KEY"];
-        if (!apiKey) throw new Error("video_avatar (heygen) requires HEYGEN_API_KEY in tenant_secrets");
+        if (!apiKey)
+          throw new Error("video_avatar (heygen) requires HEYGEN_API_KEY in tenant_secrets");
 
         const response = await fetch("https://api.heygen.com/v2/video/generate", {
           method: "POST",
@@ -1815,20 +1983,22 @@ paginate: true
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            video_inputs: [{
-              character: {
-                type: "avatar",
-                avatar_id: avatarId || "default",
-                avatar_style: input.avatar_style || "normal",
+            video_inputs: [
+              {
+                character: {
+                  type: "avatar",
+                  avatar_id: avatarId || "default",
+                  avatar_style: input.avatar_style || "normal",
+                },
+                voice: {
+                  type: "text",
+                  input_text: text.substring(0, 5000),
+                  voice_id: voiceId || undefined,
+                  speed: input.speed || 1.0,
+                },
+                background: input.background || undefined,
               },
-              voice: {
-                type: "text",
-                input_text: text.substring(0, 5000),
-                voice_id: voiceId || undefined,
-                speed: input.speed || 1.0,
-              },
-              background: input.background || undefined,
-            }],
+            ],
             dimension: {
               width: input.width || 1920,
               height: input.height || 1080,
@@ -1838,7 +2008,10 @@ paginate: true
         });
 
         const result = await response.json();
-        if (!response.ok) throw new Error(`HeyGen error ${response.status}: ${JSON.stringify(result).substring(0, 300)}`);
+        if (!response.ok)
+          throw new Error(
+            `HeyGen error ${response.status}: ${JSON.stringify(result).substring(0, 300)}`,
+          );
 
         return {
           video_id: result.data?.video_id,
@@ -1856,14 +2029,16 @@ paginate: true
         const response = await fetch("https://api.d-id.com/talks", {
           method: "POST",
           headers: {
-            "Authorization": `Basic ${apiKey}`,
+            Authorization: `Basic ${apiKey}`,
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
             script: {
               type: "text",
               input: text.substring(0, 5000),
-              provider: input.tts_provider ? { type: input.tts_provider, voice_id: voiceId } : undefined,
+              provider: input.tts_provider
+                ? { type: input.tts_provider, voice_id: voiceId }
+                : undefined,
             },
             source_url: input.source_image_url || avatarId || undefined,
             config: {
@@ -1874,7 +2049,10 @@ paginate: true
         });
 
         const result = await response.json();
-        if (!response.ok) throw new Error(`D-ID error ${response.status}: ${JSON.stringify(result).substring(0, 300)}`);
+        if (!response.ok)
+          throw new Error(
+            `D-ID error ${response.status}: ${JSON.stringify(result).substring(0, 300)}`,
+          );
 
         return {
           video_id: result.id,
@@ -1887,28 +2065,34 @@ paginate: true
       // Synthesia
       if (provider === "synthesia" || (provider === "auto" && secrets["SYNTHESIA_API_KEY"])) {
         const apiKey = secrets["SYNTHESIA_API_KEY"];
-        if (!apiKey) throw new Error("video_avatar (synthesia) requires SYNTHESIA_API_KEY in tenant_secrets");
+        if (!apiKey)
+          throw new Error("video_avatar (synthesia) requires SYNTHESIA_API_KEY in tenant_secrets");
 
         const response = await fetch("https://api.synthesia.io/v2/videos", {
           method: "POST",
           headers: {
-            "Authorization": apiKey,
+            Authorization: apiKey,
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
             test: input.test ?? true,
-            input: [{
-              scriptText: text.substring(0, 5000),
-              avatar: avatarId || "anna_costume1_cameraA",
-              avatarSettings: { voice: voiceId || undefined, language },
-              background: input.background_color || "#ffffff",
-            }],
+            input: [
+              {
+                scriptText: text.substring(0, 5000),
+                avatar: avatarId || "anna_costume1_cameraA",
+                avatarSettings: { voice: voiceId || undefined, language },
+                background: input.background_color || "#ffffff",
+              },
+            ],
             aspectRatio: input.aspect_ratio || "16:9",
           }),
         });
 
         const result = await response.json();
-        if (!response.ok) throw new Error(`Synthesia error ${response.status}: ${JSON.stringify(result).substring(0, 300)}`);
+        if (!response.ok)
+          throw new Error(
+            `Synthesia error ${response.status}: ${JSON.stringify(result).substring(0, 300)}`,
+          );
 
         return {
           video_id: result.id,
@@ -1917,7 +2101,9 @@ paginate: true
         };
       }
 
-      throw new Error("video_avatar requires HEYGEN_API_KEY, DID_API_KEY, or SYNTHESIA_API_KEY in tenant_secrets");
+      throw new Error(
+        "video_avatar requires HEYGEN_API_KEY, DID_API_KEY, or SYNTHESIA_API_KEY in tenant_secrets",
+      );
     }
 
     case "video_avatar_status": {
@@ -1928,9 +2114,12 @@ paginate: true
       const provider = input.provider || "heygen";
 
       if (provider === "heygen" && secrets["HEYGEN_API_KEY"]) {
-        const response = await fetch(`https://api.heygen.com/v1/video_status.get?video_id=${videoId}`, {
-          headers: { "X-Api-Key": secrets["HEYGEN_API_KEY"] },
-        });
+        const response = await fetch(
+          `https://api.heygen.com/v1/video_status.get?video_id=${videoId}`,
+          {
+            headers: { "X-Api-Key": secrets["HEYGEN_API_KEY"] },
+          },
+        );
         const result = await response.json();
         return {
           video_id: videoId,
@@ -1944,7 +2133,7 @@ paginate: true
 
       if (provider === "did" && secrets["DID_API_KEY"]) {
         const response = await fetch(`https://api.d-id.com/talks/${videoId}`, {
-          headers: { "Authorization": `Basic ${secrets["DID_API_KEY"]}` },
+          headers: { Authorization: `Basic ${secrets["DID_API_KEY"]}` },
         });
         const result = await response.json();
         return {
@@ -1958,7 +2147,7 @@ paginate: true
 
       if (provider === "synthesia" && secrets["SYNTHESIA_API_KEY"]) {
         const response = await fetch(`https://api.synthesia.io/v2/videos/${videoId}`, {
-          headers: { "Authorization": secrets["SYNTHESIA_API_KEY"] },
+          headers: { Authorization: secrets["SYNTHESIA_API_KEY"] },
         });
         const result = await response.json();
         return {
@@ -1994,7 +2183,7 @@ paginate: true
 
       if (provider === "did" && secrets["DID_API_KEY"]) {
         const response = await fetch("https://api.d-id.com/clips/actors", {
-          headers: { "Authorization": `Basic ${secrets["DID_API_KEY"]}` },
+          headers: { Authorization: `Basic ${secrets["DID_API_KEY"]}` },
         });
         const result = await response.json();
         return {
@@ -2013,7 +2202,10 @@ paginate: true
     // ── P31: Knowledge Graphs (Postgres-native property graph) ──
 
     case "kg_node_create": {
-      const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+      const supabase = createClient(
+        Deno.env.get("SUPABASE_URL")!,
+        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+      );
       const graphId = input.graph_id || "default";
       const { data: node, error } = await supabase
         .from("kg_nodes")
@@ -2032,7 +2224,10 @@ paginate: true
     }
 
     case "kg_edge_create": {
-      const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+      const supabase = createClient(
+        Deno.env.get("SUPABASE_URL")!,
+        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+      );
       const graphId = input.graph_id || "default";
       const { data: edge, error } = await supabase
         .from("kg_edges")
@@ -2053,7 +2248,10 @@ paginate: true
     }
 
     case "kg_query": {
-      const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+      const supabase = createClient(
+        Deno.env.get("SUPABASE_URL")!,
+        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+      );
       const queryType = input.query_type;
       const graphId = input.graph_id || "default";
 
@@ -2071,7 +2269,8 @@ paginate: true
       }
 
       if (queryType === "shortest_path") {
-        if (!input.node_id || !input.target_node_id) throw new Error("node_id and target_node_id required");
+        if (!input.node_id || !input.target_node_id)
+          throw new Error("node_id and target_node_id required");
         const { data, error } = await supabase.rpc("kg_shortest_path", {
           p_source_id: input.node_id,
           p_target_id: input.target_node_id,
@@ -2089,12 +2288,12 @@ paginate: true
           .select("id, label, node_type, properties")
           .eq("tenant_id", tenantId)
           .eq("graph_id", graphId);
-        
+
         if (input.node_type) query = query.eq("node_type", input.node_type);
-        
+
         const { data: nodes, error: nErr } = await query.limit(input.max_nodes || 100);
         if (nErr) throw new Error(`kg_query subgraph nodes failed: ${nErr.message}`);
-        
+
         const nodeIds = (nodes || []).map((n: any) => n.id);
         let edges: any[] = [];
         if (nodeIds.length > 0) {
@@ -2107,8 +2306,13 @@ paginate: true
             .limit(500);
           edges = edgeData || [];
         }
-        
-        return { nodes: nodes || [], edges, query_type: "subgraph", stats: { node_count: (nodes || []).length, edge_count: edges.length } };
+
+        return {
+          nodes: nodes || [],
+          edges,
+          query_type: "subgraph",
+          stats: { node_count: (nodes || []).length, edge_count: edges.length },
+        };
       }
 
       if (queryType === "search") {
@@ -2128,13 +2332,16 @@ paginate: true
     }
 
     case "kg_visualize": {
-      const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+      const supabase = createClient(
+        Deno.env.get("SUPABASE_URL")!,
+        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+      );
       const graphId = input.graph_id || "default";
       const format = input.format || "visjs";
       const maxNodes = input.max_nodes || 50;
 
       // Fetch nodes
-      let nodeQuery = supabase
+      const nodeQuery = supabase
         .from("kg_nodes")
         .select("id, label, node_type, properties")
         .eq("tenant_id", tenantId)
@@ -2159,10 +2366,10 @@ paginate: true
           .select("id, label, node_type, properties")
           .eq("id", input.center_node_id)
           .single();
-        
+
         const neighborIds = (data || []).map((n: any) => n.node_id);
         const allIds = [input.center_node_id, ...neighborIds];
-        
+
         if (centerNode) nodes.push(centerNode);
         // Fetch full node data for neighbors
         if (neighborIds.length > 0) {
@@ -2172,7 +2379,7 @@ paginate: true
             .in("id", neighborIds);
           nodes.push(...(nData || []));
         }
-        
+
         // Fetch edges between these nodes
         if (allIds.length > 1) {
           const { data: eData } = await supabase
@@ -2201,21 +2408,29 @@ paginate: true
 
       // Format output
       const typeColors: Record<string, string> = {
-        person: "#4A90D9", organization: "#E74C3C", concept: "#2ECC71",
-        document: "#F39C12", event: "#9B59B6", location: "#1ABC9C",
+        person: "#4A90D9",
+        organization: "#E74C3C",
+        concept: "#2ECC71",
+        document: "#F39C12",
+        event: "#9B59B6",
+        location: "#1ABC9C",
         default: "#95A5A6",
       };
 
       if (format === "visjs") {
         return {
           nodes: nodes.map((n: any) => ({
-            id: n.id, label: n.label, group: n.node_type,
+            id: n.id,
+            label: n.label,
+            group: n.node_type,
             color: typeColors[n.node_type] || typeColors.default,
             title: JSON.stringify(n.properties),
           })),
           edges: edges.map((e: any) => ({
-            from: e.source_node_id, to: e.target_node_id,
-            label: e.relationship, value: e.weight,
+            from: e.source_node_id,
+            to: e.target_node_id,
+            label: e.relationship,
+            value: e.weight,
           })),
           format: "visjs",
           stats: { node_count: nodes.length, edge_count: edges.length },
@@ -2225,12 +2440,16 @@ paginate: true
       if (format === "d3") {
         return {
           nodes: nodes.map((n: any) => ({
-            id: n.id, name: n.label, group: n.node_type,
+            id: n.id,
+            name: n.label,
+            group: n.node_type,
             color: typeColors[n.node_type] || typeColors.default,
           })),
           links: edges.map((e: any) => ({
-            source: e.source_node_id, target: e.target_node_id,
-            label: e.relationship, value: e.weight,
+            source: e.source_node_id,
+            target: e.target_node_id,
+            label: e.relationship,
+            value: e.weight,
           })),
           format: "d3",
           stats: { node_count: nodes.length, edge_count: edges.length },
@@ -2244,7 +2463,13 @@ paginate: true
             data: { id: n.id, label: n.label, type: n.node_type, ...n.properties },
           })),
           edges: edges.map((e: any) => ({
-            data: { id: e.id, source: e.source_node_id, target: e.target_node_id, label: e.relationship, weight: e.weight },
+            data: {
+              id: e.id,
+              source: e.source_node_id,
+              target: e.target_node_id,
+              label: e.relationship,
+              weight: e.weight,
+            },
           })),
         },
         format: "cytoscape",
@@ -2265,8 +2490,10 @@ paginate: true
       }
 
       // Sort by timestamp
-      const sorted = [...dataPoints].sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
-      const values = sorted.map(d => d.value);
+      const sorted = [...dataPoints].sort(
+        (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime(),
+      );
+      const values = sorted.map((d) => d.value);
       const n = values.length;
 
       // Calculate basic stats
@@ -2278,7 +2505,9 @@ paginate: true
       function linearRegression(vals: number[]): { slope: number; intercept: number; r2: number } {
         const xMean = (vals.length - 1) / 2;
         const yMean = vals.reduce((a, b) => a + b, 0) / vals.length;
-        let ssXY = 0, ssXX = 0, ssYY = 0;
+        let ssXY = 0,
+          ssXX = 0,
+          ssYY = 0;
         for (let i = 0; i < vals.length; i++) {
           ssXY += (i - xMean) * (vals[i] - yMean);
           ssXX += (i - xMean) ** 2;
@@ -2286,12 +2515,16 @@ paginate: true
         }
         const slope = ssXX === 0 ? 0 : ssXY / ssXX;
         const intercept = yMean - slope * xMean;
-        const r2 = ssYY === 0 ? 0 : (ssXY ** 2) / (ssXX * ssYY);
+        const r2 = ssYY === 0 ? 0 : ssXY ** 2 / (ssXX * ssYY);
         return { slope, intercept, r2 };
       }
 
       // Exponential smoothing (Holt's method for trend)
-      function holtSmoothing(vals: number[], alpha = 0.3, beta = 0.1): { level: number; trend: number; fitted: number[] } {
+      function holtSmoothing(
+        vals: number[],
+        alpha = 0.3,
+        beta = 0.1,
+      ): { level: number; trend: number; fitted: number[] } {
         let level = vals[0];
         let trend = vals.length > 1 ? vals[1] - vals[0] : 0;
         const fitted: number[] = [level];
@@ -2329,11 +2562,11 @@ paginate: true
 
       // Generate forecast
       const lastTimestamp = new Date(sorted[n - 1].timestamp).getTime();
-      const avgInterval = n > 1
-        ? (lastTimestamp - new Date(sorted[0].timestamp).getTime()) / (n - 1)
-        : 86400000; // default 1 day
+      const avgInterval =
+        n > 1 ? (lastTimestamp - new Date(sorted[0].timestamp).getTime()) / (n - 1) : 86400000; // default 1 day
 
-      const forecast: Array<{ timestamp: string; value: number; lower: number; upper: number }> = [];
+      const forecast: Array<{ timestamp: string; value: number; lower: number; upper: number }> =
+        [];
       const confidenceMultiplier = 1.96; // 95% CI
 
       for (let i = 1; i <= periods; i++) {
@@ -2347,7 +2580,7 @@ paginate: true
         } else {
           // Moving average: extend last MA value with slight trend
           const lastMA = ma[ma.length - 1];
-          const maTrend = ma.length > 1 ? (ma[ma.length - 1] - ma[ma.length - 2]) : 0;
+          const maTrend = ma.length > 1 ? ma[ma.length - 1] - ma[ma.length - 2] : 0;
           predicted = lastMA + maTrend * i;
         }
 
@@ -2366,25 +2599,35 @@ paginate: true
         try {
           const interpResult = await routeLLM({
             model_id: input.model_id || "groq/llama-3.1-8b-instant",
-            messages: [{
-              role: "user",
-              content: `Analise esta série temporal e previsão de forma concisa (max 3 frases em PT-BR):
+            messages: [
+              {
+                role: "user",
+                content: `Analise esta série temporal e previsão de forma concisa (max 3 frases em PT-BR):
 Dados históricos (${n} pontos): média=${mean.toFixed(2)}, desvio=${stdDev.toFixed(2)}, tendência=${lr.slope > 0 ? "crescente" : lr.slope < 0 ? "decrescente" : "estável"} (slope=${lr.slope.toFixed(4)}, R²=${lr.r2.toFixed(3)})
 Método usado: ${selectedMethod}
 Previsão (${periods} períodos): de ${forecast[0].value} a ${forecast[forecast.length - 1].value}
 Contexto: ${input.context || "dados genéricos"}`,
-            }],
+              },
+            ],
             temperature: 0.3,
             max_tokens: 200,
             tenant_id: tenantId,
           });
           interpretation = interpResult.content;
-        } catch { /* interpretation is optional */ }
+        } catch {
+          /* interpretation is optional */
+        }
       }
 
       return {
         method: selectedMethod,
-        stats: { mean: Math.round(mean * 100) / 100, std_dev: Math.round(stdDev * 100) / 100, r2: Math.round(lr.r2 * 1000) / 1000, trend_slope: Math.round(lr.slope * 10000) / 10000, data_points: n },
+        stats: {
+          mean: Math.round(mean * 100) / 100,
+          std_dev: Math.round(stdDev * 100) / 100,
+          r2: Math.round(lr.r2 * 1000) / 1000,
+          trend_slope: Math.round(lr.slope * 10000) / 10000,
+          data_points: n,
+        },
         forecast,
         interpretation,
       };
@@ -2392,14 +2635,18 @@ Contexto: ${input.context || "dados genéricos"}`,
 
     case "anomaly_detect": {
       // Statistical anomaly detection: Z-score + IQR + moving window
-      const dataPoints: Array<{ timestamp: string; value: number; label?: string }> = input.data || [];
+      const dataPoints: Array<{ timestamp: string; value: number; label?: string }> =
+        input.data || [];
       const sensitivity = input.sensitivity || "medium"; // low, medium, high
       const methodPref = input.method || "auto"; // zscore, iqr, moving_window, auto
 
-      if (dataPoints.length < 5) throw new Error("At least 5 data points required for anomaly detection");
+      if (dataPoints.length < 5)
+        throw new Error("At least 5 data points required for anomaly detection");
 
-      const sorted = [...dataPoints].sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
-      const values = sorted.map(d => d.value);
+      const sorted = [...dataPoints].sort(
+        (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime(),
+      );
+      const values = sorted.map((d) => d.value);
       const n = values.length;
 
       const mean = values.reduce((a, b) => a + b, 0) / n;
@@ -2417,7 +2664,7 @@ Contexto: ${input.context || "dados genéricos"}`,
         label: sorted[i].label,
         z_score: stdDev === 0 ? 0 : Math.abs((v - mean) / stdDev),
         is_anomaly: stdDev === 0 ? false : Math.abs((v - mean) / stdDev) > zThreshold,
-        direction: v > mean ? "high" as const : "low" as const,
+        direction: v > mean ? ("high" as const) : ("low" as const),
       }));
 
       // IQR method
@@ -2434,7 +2681,12 @@ Contexto: ${input.context || "dados genéricos"}`,
         timestamp: sorted[i].timestamp,
         value: v,
         is_anomaly: v < lowerFence || v > upperFence,
-        direction: v > upperFence ? "high" as const : v < lowerFence ? "low" as const : "normal" as const,
+        direction:
+          v > upperFence
+            ? ("high" as const)
+            : v < lowerFence
+              ? ("low" as const)
+              : ("normal" as const),
       }));
 
       // Moving window (local anomalies)
@@ -2463,10 +2715,14 @@ Contexto: ${input.context || "dados genéricos"}`,
           movingAnomalies[i].is_anomaly,
         ].filter(Boolean).length;
 
-        const isAnomaly = methodPref === "zscore" ? zScoreAnomalies[i].is_anomaly
-          : methodPref === "iqr" ? iqrAnomalies[i].is_anomaly
-          : methodPref === "moving_window" ? movingAnomalies[i].is_anomaly
-          : detections >= 2; // auto: consensus
+        const isAnomaly =
+          methodPref === "zscore"
+            ? zScoreAnomalies[i].is_anomaly
+            : methodPref === "iqr"
+              ? iqrAnomalies[i].is_anomaly
+              : methodPref === "moving_window"
+                ? movingAnomalies[i].is_anomaly
+                : detections >= 2; // auto: consensus
 
         return {
           timestamp: d.timestamp,
@@ -2476,11 +2732,18 @@ Contexto: ${input.context || "dados genéricos"}`,
           z_score: Math.round(zScoreAnomalies[i].z_score * 100) / 100,
           direction: zScoreAnomalies[i].direction,
           detection_methods: detections,
-          severity: detections >= 3 ? "critical" : detections >= 2 ? "warning" : isAnomaly ? "info" : "normal",
+          severity:
+            detections >= 3
+              ? "critical"
+              : detections >= 2
+                ? "warning"
+                : isAnomaly
+                  ? "info"
+                  : "normal",
         };
       });
 
-      const detectedAnomalies = anomalies.filter(a => a.is_anomaly);
+      const detectedAnomalies = anomalies.filter((a) => a.is_anomaly);
 
       return {
         total_points: n,
@@ -2504,23 +2767,28 @@ Contexto: ${input.context || "dados genéricos"}`,
     case "trend_analyze": {
       // Trend analysis: decomposition, seasonality detection, change points
       const dataPoints: Array<{ timestamp: string; value: number }> = input.data || [];
-      if (dataPoints.length < 7) throw new Error("At least 7 data points required for trend analysis");
+      if (dataPoints.length < 7)
+        throw new Error("At least 7 data points required for trend analysis");
 
-      const sorted = [...dataPoints].sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
-      const values = sorted.map(d => d.value);
+      const sorted = [...dataPoints].sort(
+        (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime(),
+      );
+      const values = sorted.map((d) => d.value);
       const n = values.length;
 
       // Overall trend (linear regression)
       const xMean = (n - 1) / 2;
       const yMean = values.reduce((a, b) => a + b, 0) / n;
-      let ssXY = 0, ssXX = 0, ssYY = 0;
+      let ssXY = 0,
+        ssXX = 0,
+        ssYY = 0;
       for (let i = 0; i < n; i++) {
         ssXY += (i - xMean) * (values[i] - yMean);
         ssXX += (i - xMean) ** 2;
         ssYY += (values[i] - yMean) ** 2;
       }
       const slope = ssXX === 0 ? 0 : ssXY / ssXX;
-      const r2 = ssYY === 0 ? 0 : (ssXY ** 2) / (ssXX * ssYY);
+      const r2 = ssYY === 0 ? 0 : ssXY ** 2 / (ssXX * ssYY);
 
       // Trend direction
       const trendDirection = slope > 0.01 ? "increasing" : slope < -0.01 ? "decreasing" : "stable";
@@ -2537,7 +2805,12 @@ Contexto: ${input.context || "dados genéricos"}`,
 
       // Change point detection (simple: largest deviation from linear trend)
       const residuals = values.map((v, i) => v - (yMean + slope * (i - xMean)));
-      const changePoints: Array<{ index: number; timestamp: string; value: number; magnitude: number }> = [];
+      const changePoints: Array<{
+        index: number;
+        timestamp: string;
+        value: number;
+        magnitude: number;
+      }> = [];
 
       // Split data and find where regression changes most
       for (let split = 3; split < n - 3; split++) {
@@ -2547,7 +2820,8 @@ Contexto: ${input.context || "dados genéricos"}`,
         const rightMean = rightVals.reduce((a, b) => a + b, 0) / rightVals.length;
         const magnitude = Math.abs(rightMean - leftMean) / (Math.sqrt(ssYY / n) || 1);
 
-        if (magnitude > 1.5) { // Significant change
+        if (magnitude > 1.5) {
+          // Significant change
           changePoints.push({
             index: split,
             timestamp: sorted[split].timestamp,
@@ -2558,9 +2832,7 @@ Contexto: ${input.context || "dados genéricos"}`,
       }
 
       // Keep only top 3 most significant change points
-      const topChangePoints = changePoints
-        .sort((a, b) => b.magnitude - a.magnitude)
-        .slice(0, 3);
+      const topChangePoints = changePoints.sort((a, b) => b.magnitude - a.magnitude).slice(0, 3);
 
       // Seasonality detection (autocorrelation)
       let dominantPeriod: number | null = null;
@@ -2569,7 +2841,9 @@ Contexto: ${input.context || "dados genéricos"}`,
         const maxLag = Math.min(Math.floor(n / 2), 30);
         let bestCorr = 0;
         for (let lag = 2; lag <= maxLag; lag++) {
-          let num = 0, den1 = 0, den2 = 0;
+          let num = 0,
+            den1 = 0,
+            den2 = 0;
           for (let i = 0; i < n - lag; i++) {
             const a = values[i] - yMean;
             const b = values[i + lag] - yMean;
@@ -2592,11 +2866,18 @@ Contexto: ${input.context || "dados genéricos"}`,
         const start = Math.max(0, i - volWindow + 1);
         const slice = values.slice(start, i + 1);
         const m = slice.reduce((a, b) => a + b, 0) / slice.length;
-        return Math.round(Math.sqrt(slice.reduce((s, v) => s + (v - m) ** 2, 0) / slice.length) * 100) / 100;
+        return (
+          Math.round(Math.sqrt(slice.reduce((s, v) => s + (v - m) ** 2, 0) / slice.length) * 100) /
+          100
+        );
       });
       const avgVolatility = volatility.reduce((a, b) => a + b, 0) / volatility.length;
-      const volatilityTrend = volatility[volatility.length - 1] > avgVolatility * 1.3 ? "increasing"
-        : volatility[volatility.length - 1] < avgVolatility * 0.7 ? "decreasing" : "stable";
+      const volatilityTrend =
+        volatility[volatility.length - 1] > avgVolatility * 1.3
+          ? "increasing"
+          : volatility[volatility.length - 1] < avgVolatility * 0.7
+            ? "decreasing"
+            : "stable";
 
       // LLM interpretation
       let interpretation: string | null = null;
@@ -2604,30 +2885,55 @@ Contexto: ${input.context || "dados genéricos"}`,
         try {
           const interpResult = await routeLLM({
             model_id: input.model_id || "groq/llama-3.1-8b-instant",
-            messages: [{
-              role: "user",
-              content: `Analise esta tendência de dados em 3 frases (PT-BR):
+            messages: [
+              {
+                role: "user",
+                content: `Analise esta tendência de dados em 3 frases (PT-BR):
 Dados: ${n} pontos, tendência ${trendDirection} (${trendStrength}, R²=${r2.toFixed(3)}), slope=${slope.toFixed(4)}
 Mudanças significativas: ${topChangePoints.length} detectadas
 Sazonalidade: ${dominantPeriod ? `período ~${dominantPeriod} (correlação ${seasonalityStrength.toFixed(2)})` : "não detectada"}
 Volatilidade: ${volatilityTrend} (média ${avgVolatility.toFixed(2)})
 Contexto: ${input.context || "dados de negócio"}`,
-            }],
+              },
+            ],
             temperature: 0.3,
             max_tokens: 200,
             tenant_id: tenantId,
           });
           interpretation = interpResult.content;
-        } catch { /* optional */ }
+        } catch {
+          /* optional */
+        }
       }
 
       return {
-        trend: { direction: trendDirection, strength: trendStrength, slope: Math.round(slope * 10000) / 10000, r2: Math.round(r2 * 1000) / 1000 },
-        seasonality: dominantPeriod ? { detected: true, period: dominantPeriod, strength: Math.round(seasonalityStrength * 100) / 100 } : { detected: false },
+        trend: {
+          direction: trendDirection,
+          strength: trendStrength,
+          slope: Math.round(slope * 10000) / 10000,
+          r2: Math.round(r2 * 1000) / 1000,
+        },
+        seasonality: dominantPeriod
+          ? {
+              detected: true,
+              period: dominantPeriod,
+              strength: Math.round(seasonalityStrength * 100) / 100,
+            }
+          : { detected: false },
         change_points: topChangePoints,
-        volatility: { current: volatility[volatility.length - 1], average: Math.round(avgVolatility * 100) / 100, trend: volatilityTrend },
+        volatility: {
+          current: volatility[volatility.length - 1],
+          average: Math.round(avgVolatility * 100) / 100,
+          trend: volatilityTrend,
+        },
         smoothed_values: smoothed,
-        stats: { mean: Math.round(yMean * 100) / 100, min: Math.min(...values), max: Math.max(...values), range: Math.max(...values) - Math.min(...values), data_points: n },
+        stats: {
+          mean: Math.round(yMean * 100) / 100,
+          min: Math.min(...values),
+          max: Math.max(...values),
+          range: Math.max(...values) - Math.min(...values),
+          data_points: n,
+        },
         interpretation,
       };
     }
@@ -2639,7 +2945,8 @@ Contexto: ${input.context || "dados de negócio"}`,
 
     case "web_crawl": {
       // Crawl multiple pages from a domain via Firecrawl (tenant key required)
-      if (!secrets["FIRECRAWL_API_KEY"]) throw new Error("FIRECRAWL_API_KEY required in tenant_secrets for web_crawl");
+      if (!secrets["FIRECRAWL_API_KEY"])
+        throw new Error("FIRECRAWL_API_KEY required in tenant_secrets for web_crawl");
       const url = input.url;
       if (!url) throw new Error("url is required");
 
@@ -2647,7 +2954,7 @@ Contexto: ${input.context || "dados de negócio"}`,
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${secrets["FIRECRAWL_API_KEY"]}`,
+          Authorization: `Bearer ${secrets["FIRECRAWL_API_KEY"]}`,
         },
         body: JSON.stringify({
           url,
@@ -2683,7 +2990,7 @@ Contexto: ${input.context || "dados de negócio"}`,
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            "Authorization": `Bearer ${secrets["E2B_API_KEY"]}`,
+            Authorization: `Bearer ${secrets["E2B_API_KEY"]}`,
           },
           body: JSON.stringify({
             template: language === "python" ? "Python3" : "Node18",
@@ -2692,27 +2999,33 @@ Contexto: ${input.context || "dados de negócio"}`,
           signal: AbortSignal.timeout(15000),
         });
 
-        if (!e2bResponse.ok) throw new Error(`E2B sandbox creation failed: HTTP ${e2bResponse.status}`);
+        if (!e2bResponse.ok)
+          throw new Error(`E2B sandbox creation failed: HTTP ${e2bResponse.status}`);
         const sandbox = await e2bResponse.json();
 
         // Execute code in sandbox
-        const execResponse = await fetch(`https://api.e2b.dev/v1/sandboxes/${sandbox.sandboxID}/code/execute`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${secrets["E2B_API_KEY"]}`,
+        const execResponse = await fetch(
+          `https://api.e2b.dev/v1/sandboxes/${sandbox.sandboxID}/code/execute`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${secrets["E2B_API_KEY"]}`,
+            },
+            body: JSON.stringify({ code, language }),
+            signal: AbortSignal.timeout(input.timeout ? input.timeout * 1000 : 30000),
           },
-          body: JSON.stringify({ code, language }),
-          signal: AbortSignal.timeout(input.timeout ? input.timeout * 1000 : 30000),
-        });
+        );
 
         const execResult = await execResponse.json();
 
         // Cleanup sandbox
         fetch(`https://api.e2b.dev/v1/sandboxes/${sandbox.sandboxID}`, {
           method: "DELETE",
-          headers: { "Authorization": `Bearer ${secrets["E2B_API_KEY"]}` },
-        }).catch(() => {});
+          headers: { Authorization: `Bearer ${secrets["E2B_API_KEY"]}` },
+        }).catch((err) => {
+          console.warn("[tool-executor] sandbox cleanup failed:", (err as Error).message);
+        });
 
         return {
           stdout: execResult.stdout || "",
@@ -2727,11 +3040,25 @@ Contexto: ${input.context || "dados de negócio"}`,
       // Strategy 2: Simple eval for safe math/JSON expressions only (no E2B key)
       if (language === "javascript") {
         // Only allow simple expressions (no imports, no fetch, no require)
-        const forbidden = ["import", "require", "fetch", "eval", "Function", "process", "Deno", "globalThis", "window"];
-        const hasForbidden = forbidden.some(f => code.includes(f));
-        if (hasForbidden) throw new Error("Code contains forbidden operations. Add E2B_API_KEY to tenant_secrets for full code execution.");
+        const forbidden = [
+          "import",
+          "require",
+          "fetch",
+          "eval",
+          "Function",
+          "process",
+          "Deno",
+          "globalThis",
+          "window",
+        ];
+        const hasForbidden = forbidden.some((f) => code.includes(f));
+        if (hasForbidden)
+          throw new Error(
+            "Code contains forbidden operations. Add E2B_API_KEY to tenant_secrets for full code execution.",
+          );
 
-        if (code.length > 500) throw new Error("Code too long for inline eval. Add E2B_API_KEY for full sandbox.");
+        if (code.length > 500)
+          throw new Error("Code too long for inline eval. Add E2B_API_KEY for full sandbox.");
 
         try {
           const fn = new Function(`"use strict"; return (${code});`);
@@ -2765,8 +3092,13 @@ Contexto: ${input.context || "dados de negócio"}`,
       if (!url) throw new Error("url is required");
 
       // Browser Use Cloud — prefer when configured, since it's the new browser runtime path.
-      if (secrets["BROWSER_USE_API_KEY"] && (input.provider === "browser-use" || input.provider === "auto" || !input.provider)) {
-        const baseUrl = String(secrets["BROWSER_USE_BASE_URL"] || "https://api.browser-use.com/api/v3").replace(/\/$/, "");
+      if (
+        secrets["BROWSER_USE_API_KEY"] &&
+        (input.provider === "browser-use" || input.provider === "auto" || !input.provider)
+      ) {
+        const baseUrl = String(
+          secrets["BROWSER_USE_BASE_URL"] || "https://api.browser-use.com/api/v3",
+        ).replace(/\/$/, "");
         const task = String(
           input.task ||
             input.prompt ||
@@ -2788,7 +3120,9 @@ Contexto: ${input.context || "dados de negócio"}`,
 
         if (!createRes.ok) {
           const errText = await createRes.text().catch(() => "unknown");
-          throw new Error(`Browser Use session failed: HTTP ${createRes.status} — ${errText.substring(0, 200)}`);
+          throw new Error(
+            `Browser Use session failed: HTTP ${createRes.status} — ${errText.substring(0, 200)}`,
+          );
         }
 
         const created = await createRes.json();
@@ -2846,7 +3180,8 @@ Contexto: ${input.context || "dados de negócio"}`,
           signal: AbortSignal.timeout(15000),
         });
 
-        if (!sessionRes.ok) throw new Error(`Browserbase session failed: HTTP ${sessionRes.status}`);
+        if (!sessionRes.ok)
+          throw new Error(`Browserbase session failed: HTTP ${sessionRes.status}`);
         const session = await sessionRes.json();
 
         return {
@@ -2863,27 +3198,33 @@ Contexto: ${input.context || "dados de negócio"}`,
       // BrowserlessAPI
       if (secrets["BROWSERLESS_API_KEY"]) {
         // Use /content endpoint for simple scraping, /function for complex automation
-        const endpoint = actions.length > 0
-          ? `https://chrome.browserless.io/function?token=${secrets["BROWSERLESS_API_KEY"]}`
-          : `https://chrome.browserless.io/content?token=${secrets["BROWSERLESS_API_KEY"]}`;
+        const endpoint =
+          actions.length > 0
+            ? `https://chrome.browserless.io/function?token=${secrets["BROWSERLESS_API_KEY"]}`
+            : `https://chrome.browserless.io/content?token=${secrets["BROWSERLESS_API_KEY"]}`;
 
-        const body = actions.length > 0
-          ? {
-              code: `module.exports = async ({ page }) => {
+        const body =
+          actions.length > 0
+            ? {
+                code: `module.exports = async ({ page }) => {
                 await page.goto('${url}', { waitUntil: 'networkidle0', timeout: 30000 });
-                ${actions.map((a: any) => {
-                  if (a.type === "click") return `await page.click('${a.selector}');`;
-                  if (a.type === "type") return `await page.type('${a.selector}', '${a.value}');`;
-                  if (a.type === "wait") return `await page.waitForSelector('${a.selector}', { timeout: ${a.timeout || 5000} });`;
-                  if (a.type === "screenshot") return `const screenshot = await page.screenshot({ encoding: 'base64' });`;
-                  return "";
-                }).join("\n")}
+                ${actions
+                  .map((a: any) => {
+                    if (a.type === "click") return `await page.click('${a.selector}');`;
+                    if (a.type === "type") return `await page.type('${a.selector}', '${a.value}');`;
+                    if (a.type === "wait")
+                      return `await page.waitForSelector('${a.selector}', { timeout: ${a.timeout || 5000} });`;
+                    if (a.type === "screenshot")
+                      return `const screenshot = await page.screenshot({ encoding: 'base64' });`;
+                    return "";
+                  })
+                  .join("\n")}
                 const content = await page.content();
                 return { content, url: page.url() };
               }`,
-              context: {},
-            }
-          : { url, waitFor: input.wait_for || 0 };
+                context: {},
+              }
+            : { url, waitFor: input.wait_for || 0 };
 
         const response = await fetch(endpoint, {
           method: "POST",
@@ -2908,7 +3249,9 @@ Contexto: ${input.context || "dados de negócio"}`,
         }
       }
 
-      throw new Error("Browser automation requires BROWSER_USE_API_KEY, BROWSERBASE_API_KEY or BROWSERLESS_API_KEY in tenant_secrets");
+      throw new Error(
+        "Browser automation requires BROWSER_USE_API_KEY, BROWSERBASE_API_KEY or BROWSERLESS_API_KEY in tenant_secrets",
+      );
     }
 
     // ═══════════════════════════════════════════════════════════
@@ -2939,8 +3282,14 @@ Contexto: ${input.context || "dados de negócio"}`,
         .order("created_at", { ascending: false })
         .limit(100);
 
-      const userHistory = (interactions || []).map(i => {
-        try { return JSON.parse(typeof i.step_output === "string" ? i.step_output : JSON.stringify(i.step_output)); } catch { return i.step_output; }
+      const userHistory = (interactions || []).map((i) => {
+        try {
+          return JSON.parse(
+            typeof i.step_output === "string" ? i.step_output : JSON.stringify(i.step_output),
+          );
+        } catch {
+          return i.step_output;
+        }
       });
 
       // Use LLM for semantic recommendation
@@ -2963,7 +3312,10 @@ Return a JSON array of recommendations:
 Return ONLY the JSON array, no markdown.`;
 
       const modelId = input.model_id;
-      if (!modelId) throw new Error("recommend_items requires 'model_id' in input. Configure the LLM model for this tool.");
+      if (!modelId)
+        throw new Error(
+          "recommend_items requires 'model_id' in input. Configure the LLM model for this tool.",
+        );
 
       const llmResult = await routeLLM({
         model_id: modelId,
@@ -2975,10 +3327,20 @@ Return ONLY the JSON array, no markdown.`;
       let recommendations: any[] = [];
       try {
         const content = llmResult.content || "";
-        const cleaned = content.replace(/```json?\n?/g, "").replace(/```/g, "").trim();
+        const cleaned = content
+          .replace(/```json?\n?/g, "")
+          .replace(/```/g, "")
+          .trim();
         recommendations = JSON.parse(cleaned);
       } catch {
-        recommendations = [{ item_id: "fallback", title: "Unable to parse recommendations", reason: "LLM response parsing failed", confidence: 0 }];
+        recommendations = [
+          {
+            item_id: "fallback",
+            title: "Unable to parse recommendations",
+            reason: "LLM response parsing failed",
+            confidence: 0,
+          },
+        ];
       }
 
       return {
@@ -3061,7 +3423,10 @@ Provide your analysis as JSON:
 Return ONLY the JSON, no markdown.`;
 
       const modelId = input.model_id;
-      if (!modelId) throw new Error("score_lead requires 'model_id' in input. Configure the LLM model for this tool.");
+      if (!modelId)
+        throw new Error(
+          "score_lead requires 'model_id' in input. Configure the LLM model for this tool.",
+        );
 
       const llmResult = await routeLLM({
         model_id: modelId,
@@ -3073,14 +3438,24 @@ Return ONLY the JSON, no markdown.`;
       let qualitative: any = {};
       try {
         const content = llmResult.content || "";
-        const cleaned = content.replace(/```json?\n?/g, "").replace(/```/g, "").trim();
+        const cleaned = content
+          .replace(/```json?\n?/g, "")
+          .replace(/```/g, "")
+          .trim();
         qualitative = JSON.parse(cleaned);
       } catch {
-        qualitative = { qualitative_score: behaviorScore, grade: behaviorScore > 70 ? "B" : "C", segment: "warm", reasoning: "LLM parsing failed, using behavioral score" };
+        qualitative = {
+          qualitative_score: behaviorScore,
+          grade: behaviorScore > 70 ? "B" : "C",
+          segment: "warm",
+          reasoning: "LLM parsing failed, using behavioral score",
+        };
       }
 
       // Final composite score
-      const compositeScore = Math.round(behaviorScore * 0.4 + (qualitative.qualitative_score || behaviorScore) * 0.6);
+      const compositeScore = Math.round(
+        behaviorScore * 0.4 + (qualitative.qualitative_score || behaviorScore) * 0.6,
+      );
 
       return {
         lead: { name: leadData.name, email: leadData.email },
@@ -3089,14 +3464,17 @@ Return ONLY the JSON, no markdown.`;
           qualitative: qualitative.qualitative_score || behaviorScore,
           composite: compositeScore,
         },
-        grade: qualitative.grade || (compositeScore > 80 ? "A" : compositeScore > 60 ? "B" : compositeScore > 40 ? "C" : "D"),
+        grade:
+          qualitative.grade ||
+          (compositeScore > 80 ? "A" : compositeScore > 60 ? "B" : compositeScore > 40 ? "C" : "D"),
         segment: qualitative.segment || "warm",
         buying_stage: qualitative.buying_stage || "consideration",
         key_strengths: qualitative.key_strengths || [],
         key_risks: qualitative.key_risks || [],
         recommended_action: qualitative.recommended_action || "Follow up within 48h",
         next_best_action: qualitative.next_best_action || "Send personalized email",
-        estimated_close_probability: qualitative.estimated_close_probability || compositeScore / 100,
+        estimated_close_probability:
+          qualitative.estimated_close_probability || compositeScore / 100,
         model: scoringModel,
         model_used: llmResult.provider || "unknown",
         scored_at: new Date().toISOString(),
@@ -3116,7 +3494,10 @@ Return ONLY the JSON, no markdown.`;
         throw new Error("Cart must have at least one item in cart.items[]");
       }
 
-      const totalValue = cartData.items.reduce((sum: number, item: any) => sum + (item.price || 0) * (item.quantity || 1), 0);
+      const totalValue = cartData.items.reduce(
+        (sum: number, item: any) => sum + (item.price || 0) * (item.quantity || 1),
+        0,
+      );
 
       const recoveryPrompt = `You are a conversion specialist. Generate a personalized cart recovery message.
 
@@ -3156,7 +3537,10 @@ Generate a JSON response:
 Return ONLY JSON, no markdown. Message in ${language}.`;
 
       const modelId = input.model_id;
-      if (!modelId) throw new Error("recover_cart requires 'model_id' in input. Configure the LLM model for this tool.");
+      if (!modelId)
+        throw new Error(
+          "recover_cart requires 'model_id' in input. Configure the LLM model for this tool.",
+        );
 
       const llmResult = await routeLLM({
         model_id: modelId,
@@ -3168,7 +3552,10 @@ Return ONLY JSON, no markdown. Message in ${language}.`;
       let recovery: any = {};
       try {
         const content = llmResult.content || "";
-        const cleaned = content.replace(/```json?\n?/g, "").replace(/```/g, "").trim();
+        const cleaned = content
+          .replace(/```json?\n?/g, "")
+          .replace(/```/g, "")
+          .trim();
         recovery = JSON.parse(cleaned);
       } catch {
         recovery = {
@@ -3185,12 +3572,13 @@ Return ONLY JSON, no markdown. Message in ${language}.`;
         cart_value: totalValue,
         items_count: cartData.items.length,
         discount_applied: discountPercent > 0 ? `${discountPercent}%` : null,
-        discount_value: discountPercent > 0 ? (totalValue * discountPercent / 100) : 0,
+        discount_value: discountPercent > 0 ? (totalValue * discountPercent) / 100 : 0,
         recovery_message: {
           subject: recovery.subject,
           message: recovery.message,
           cta_text: recovery.cta_text || "Finalizar Compra",
-          cta_url_params: recovery.cta_url_params || `?utm_source=cart_recovery&utm_medium=${channel}`,
+          cta_url_params:
+            recovery.cta_url_params || `?utm_source=cart_recovery&utm_medium=${channel}`,
         },
         personalization_tokens: recovery.personalization_tokens || [],
         estimated_recovery_rate: recovery.estimated_recovery_rate || 0.15,
@@ -3236,7 +3624,10 @@ Analyze and return JSON:
 Return ONLY JSON, no markdown.`;
 
       const modelId = input.model_id;
-      if (!modelId) throw new Error("churn_predict requires 'model_id' in input. Configure the LLM model for this tool.");
+      if (!modelId)
+        throw new Error(
+          "churn_predict requires 'model_id' in input. Configure the LLM model for this tool.",
+        );
 
       const llmResult = await routeLLM({
         model_id: modelId,
@@ -3248,17 +3639,24 @@ Return ONLY JSON, no markdown.`;
       let prediction: any = {};
       try {
         const content = llmResult.content || "";
-        const cleaned = content.replace(/```json?\n?/g, "").replace(/```/g, "").trim();
+        const cleaned = content
+          .replace(/```json?\n?/g, "")
+          .replace(/```/g, "")
+          .trim();
         prediction = JSON.parse(cleaned);
       } catch {
-        prediction = { churn_risk_score: 50, risk_level: "medium", reasoning: "LLM parsing failed" };
+        prediction = {
+          churn_risk_score: 50,
+          risk_level: "medium",
+          reasoning: "LLM parsing failed",
+        };
       }
 
       return {
         customer: { name: customerData.name, id: customerData.id },
         churn_risk_score: prediction.churn_risk_score || 50,
         risk_level: prediction.risk_level || "medium",
-        health_score: prediction.health_score || (100 - (prediction.churn_risk_score || 50)),
+        health_score: prediction.health_score || 100 - (prediction.churn_risk_score || 50),
         days_to_likely_churn: prediction.days_to_likely_churn,
         engagement_trend: prediction.engagement_trend || "stable",
         risk_factors: prediction.risk_factors || [],
@@ -3307,7 +3705,10 @@ Analyze and return JSON:
 Return ONLY JSON, no markdown.`;
 
       const modelId = input.model_id;
-      if (!modelId) throw new Error("dynamic_pricing requires 'model_id' in input. Configure the LLM model for this tool.");
+      if (!modelId)
+        throw new Error(
+          "dynamic_pricing requires 'model_id' in input. Configure the LLM model for this tool.",
+        );
 
       const llmResult = await routeLLM({
         model_id: modelId,
@@ -3319,10 +3720,17 @@ Return ONLY JSON, no markdown.`;
       let pricing: any = {};
       try {
         const content = llmResult.content || "";
-        const cleaned = content.replace(/```json?\n?/g, "").replace(/```/g, "").trim();
+        const cleaned = content
+          .replace(/```json?\n?/g, "")
+          .replace(/```/g, "")
+          .trim();
         pricing = JSON.parse(cleaned);
       } catch {
-        pricing = { recommended_price: product.current_price || 0, confidence: 0, reasoning: "LLM parsing failed" };
+        pricing = {
+          recommended_price: product.current_price || 0,
+          confidence: 0,
+          reasoning: "LLM parsing failed",
+        };
       }
 
       return {
@@ -3366,8 +3774,10 @@ async function withRetry<T>(
       lastError = err as Error;
       if (attempt < maxRetries) {
         const delay = baseDelayMs * Math.pow(2, attempt); // 1s, 2s, 4s
-        console.log(`[tool-executor] Retry ${attempt + 1}/${maxRetries} in ${delay}ms: ${lastError.message}`);
-        await new Promise(r => setTimeout(r, delay));
+        console.log(
+          `[tool-executor] Retry ${attempt + 1}/${maxRetries} in ${delay}ms: ${lastError.message}`,
+        );
+        await new Promise((r) => setTimeout(r, delay));
       }
     }
   }
@@ -3398,7 +3808,9 @@ export async function executeTool(req: ToolExecutionRequest): Promise<ToolExecut
   // 1. Lookup tool in registry
   const { data: tool, error: toolErr } = await supabase
     .from("tool_registry")
-    .select("name, display_name, executor_type, executor_config, input_schema, output_schema, required_secrets, requires_idempotency, circuit_breaker_threshold, circuit_breaker_timeout_seconds, rate_limit_per_minute, category, is_builtin")
+    .select(
+      "name, display_name, executor_type, executor_config, input_schema, output_schema, required_secrets, requires_idempotency, circuit_breaker_threshold, circuit_breaker_timeout_seconds, rate_limit_per_minute, category, is_builtin",
+    )
     .eq("name", req.tool_name)
     .eq("is_active", true)
     .maybeSingle();
@@ -3406,9 +3818,13 @@ export async function executeTool(req: ToolExecutionRequest): Promise<ToolExecut
   if (toolErr || !tool) {
     if (IMPLICIT_BUILTIN_TOOLS.has(req.tool_name)) {
       try {
-        const { result, retries } = await withRetry(async () => {
-          return executeBuiltinTool(req.tool_name, req.input_data, {}, req.tenant_id);
-        }, 3, 1000);
+        const { result, retries } = await withRetry(
+          async () => {
+            return executeBuiltinTool(req.tool_name, req.input_data, {}, req.tenant_id);
+          },
+          3,
+          1000,
+        );
         await recordSuccess(req.tool_name);
         return {
           tool_name: req.tool_name,
@@ -3488,15 +3904,25 @@ export async function executeTool(req: ToolExecutionRequest): Promise<ToolExecut
 
   // 5. Execute with retry
   try {
-    const { result, retries } = await withRetry(async () => {
-      if (registryTool.executor_type === "edge_function") {
-        return executeEdgeFunction(registryTool, req.input_data, secrets, req.tenant_id, req.timeout_ms);
-      }
-      if (registryTool.is_builtin) {
-        return executeBuiltinTool(req.tool_name, req.input_data, secrets, req.tenant_id);
-      }
-      return executeExternalTool(registryTool, req.input_data, secrets, req.timeout_ms);
-    }, 3, 1000);
+    const { result, retries } = await withRetry(
+      async () => {
+        if (registryTool.executor_type === "edge_function") {
+          return executeEdgeFunction(
+            registryTool,
+            req.input_data,
+            secrets,
+            req.tenant_id,
+            req.timeout_ms,
+          );
+        }
+        if (registryTool.is_builtin) {
+          return executeBuiltinTool(req.tool_name, req.input_data, secrets, req.tenant_id);
+        }
+        return executeExternalTool(registryTool, req.input_data, secrets, req.timeout_ms);
+      },
+      3,
+      1000,
+    );
 
     await recordSuccess(req.tool_name);
 
@@ -3582,7 +4008,9 @@ async function executeEdgeFunction(
     }
 
     if (!res.ok) {
-      throw new Error(`Edge function '${functionName}' HTTP ${res.status}: ${bodyText.substring(0, 200)}`);
+      throw new Error(
+        `Edge function '${functionName}' HTTP ${res.status}: ${bodyText.substring(0, 200)}`,
+      );
     }
 
     if (parsed?.status === "error" && parsed?.error) {
@@ -3643,9 +4071,7 @@ async function executeExternalTool(
 
     if (["POST", "PUT", "PATCH"].includes(method)) {
       // Apply input_mapping if configured
-      const body = config.input_mapping
-        ? applyMapping(config.input_mapping, input)
-        : input;
+      const body = config.input_mapping ? applyMapping(config.input_mapping, input) : input;
       fetchOpts.body = JSON.stringify(body);
     }
 
@@ -3654,7 +4080,11 @@ async function executeExternalTool(
 
     const bodyText = await res.text();
     let parsed: any;
-    try { parsed = JSON.parse(bodyText); } catch { parsed = { raw: bodyText }; }
+    try {
+      parsed = JSON.parse(bodyText);
+    } catch {
+      parsed = { raw: bodyText };
+    }
 
     if (!res.ok) {
       throw new Error(`HTTP ${res.status}: ${bodyText.substring(0, 200)}`);

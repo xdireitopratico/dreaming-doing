@@ -82,7 +82,9 @@ function buildContextMessage(ctx: {
   lines.push(`- Status: ${ctx.jobStatus}`);
   lines.push(`- Origem: ${ctx.ingestKind}`);
   lines.push(`- URLs: ${ctx.urls.join(", ") || "(nenhuma)"}`);
-  lines.push(`- Sandbox: ${ctx.previewUrl ?? "FECHADO (job completed, sandbox encerrado pela E2B)"}`);
+  lines.push(
+    `- Sandbox: ${ctx.previewUrl ?? "FECHADO (job completed, sandbox encerrado pela E2B)"}`,
+  );
   if (ctx.errors.length > 0) {
     lines.push(`- Erros: ${ctx.errors.join("; ")}`);
   }
@@ -194,20 +196,21 @@ Deno.serve(async (req: Request) => {
     let userId: string | null = null;
     let userEmail: string | null = null;
     if (!isServiceRole) {
-      const userClient: any = createClient(supabaseUrl, Deno.env.get("SUPABASE_ANON_KEY") ?? supabaseKey, {
-        global: { headers: { Authorization: auth } },
-      });
+      const userClient: any = createClient(
+        supabaseUrl,
+        Deno.env.get("SUPABASE_ANON_KEY") ?? supabaseKey,
+        {
+          global: { headers: { Authorization: auth } },
+        },
+      );
       const { data: userData } = await userClient.auth.getUser();
       userId = userData?.user?.id ?? null;
       userEmail = userData?.user?.email ?? null;
       if (!userId || userEmail?.toLowerCase() !== "xdireitopratico@gmail.com") {
-        return new Response(
-          JSON.stringify({ error: userId ? "Forbidden" : "Unauthorized" }),
-          {
-            status: userId ? 403 : 401,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          },
-        );
+        return new Response(JSON.stringify({ error: userId ? "Forbidden" : "Unauthorized" }), {
+          status: userId ? 403 : 401,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
       }
     }
 
@@ -220,12 +223,19 @@ Deno.serve(async (req: Request) => {
     }
 
     // Carrega contexto do job
-    const { data: job } = await supabase
+    const { data: job, error: jobFetchErr } = await supabase
       .from("design_dna_jobs")
       .select("id, status, urls, error, results, meta, current_url_index")
       .eq("id", input.jobId)
       .single();
 
+    if (jobFetchErr) {
+      console.error("[design-library-chat] job fetch failed:", jobFetchErr.message);
+      return new Response(JSON.stringify({ error: jobFetchErr.message }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
     if (!job) {
       return new Response(JSON.stringify({ error: "Job não encontrado" }), {
         status: 404,
@@ -233,22 +243,24 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    const { data: recentEvents } = await supabase
+    const { data: recentEvents, error: eventsErr } = await supabase
       .from("design_dna_events")
       .select("event_type, payload, created_at")
       .eq("job_id", input.jobId)
       .order("seq", { ascending: false })
       .limit(5);
+    if (eventsErr) console.warn("[design-library-chat] events fetch failed:", eventsErr.message);
 
     const jobMeta = (job.meta ?? {}) as { previewUrl?: string; ingestKind?: string };
     const ingestKind = jobMeta.ingestKind ?? "production";
 
-    const { data: libraryEntries } = await supabase
+    const { data: libraryEntries, error: libErr } = await supabase
       .from("design_system_library")
       .select("name, source_url, quality_score")
       .in("source_url", (job.urls as string[]) ?? [])
       .eq("ingest_kind", ingestKind)
       .limit(5);
+    if (libErr) console.warn("[design-library-chat] library entries fetch failed:", libErr.message);
 
     const ctx = {
       jobStatus: job.status,
@@ -259,23 +271,30 @@ Deno.serve(async (req: Request) => {
         .filter((r) => r && typeof r === "object" && "error" in (r as Record<string, unknown>))
         .map((r) => (r as { error: string }).error)
         .slice(0, 3),
-      recentEvents: (recentEvents ?? []).map((e: { event_type?: string; payload?: Record<string, unknown> }) => ({
-        type: e.event_type as string,
-        payload: (e.payload as Record<string, unknown>) ?? {},
-      })),
-      libraryEntries: (libraryEntries ?? []).map((e: { name?: string; source_url?: string; quality_score?: number }) => ({
-        name: e.name as string,
-        source_url: e.source_url as string,
-        quality_score: e.quality_score as number,
-      })),
+      recentEvents: (recentEvents ?? []).map(
+        (e: { event_type?: string; payload?: Record<string, unknown> }) => ({
+          type: e.event_type as string,
+          payload: (e.payload as Record<string, unknown>) ?? {},
+        }),
+      ),
+      libraryEntries: (libraryEntries ?? []).map(
+        (e: { name?: string; source_url?: string; quality_score?: number }) => ({
+          name: e.name as string,
+          source_url: e.source_url as string,
+          quality_score: e.quality_score as number,
+        }),
+      ),
     };
 
     // Garante sessão de chat (uma por job)
-    let { data: session } = await supabase
+    const { data: existingSession, error: sessFetchErr } = await supabase
       .from("design_library_chat_sessions")
       .select("id, title")
       .eq("job_id", input.jobId)
       .maybeSingle();
+    if (sessFetchErr)
+      console.warn("[design-library-chat] session fetch failed:", sessFetchErr.message);
+    let session = existingSession;
 
     if (!session) {
       const { data: newSession, error: sessErr } = await supabase
@@ -333,23 +352,31 @@ Deno.serve(async (req: Request) => {
     if (userMsgErr) console.error("user msg persist err:", userMsgErr);
 
     // Carrega histórico para contexto
-    const { data: history } = await supabase
+    const { data: history, error: histErr } = await supabase
       .from("design_library_chat_messages")
       .select("role, content, created_at")
       .eq("session_id", session.id)
       .order("created_at", { ascending: true })
       .limit(20);
+    if (histErr) console.warn("[design-library-chat] history fetch failed:", histErr.message);
 
     // Carrega BYOK do admin
     let targetUserId = userId;
     if (!targetUserId) {
       const { data: users } = await supabase.auth.admin.listUsers({ perPage: 500 });
       targetUserId =
-        users?.users?.find((u: { email?: string; id?: string }) => u.email?.toLowerCase() === "xdireitopratico@gmail.com")?.id ?? null;
+        users?.users?.find(
+          (u: { email?: string; id?: string }) =>
+            u.email?.toLowerCase() === "xdireitopratico@gmail.com",
+        )?.id ?? null;
     }
     if (!targetUserId) {
       return new Response(
-        JSON.stringify({ reply: "Admin user não encontrado.", sessionId: session.id, jobContext: ctx }),
+        JSON.stringify({
+          reply: "Admin user não encontrado.",
+          sessionId: session.id,
+          jobContext: ctx,
+        }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
@@ -365,10 +392,9 @@ Deno.serve(async (req: Request) => {
         role: "assistant",
         content: reply,
       });
-      return new Response(
-        JSON.stringify({ reply, sessionId: session.id, jobContext: ctx }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } },
-      );
+      return new Response(JSON.stringify({ reply, sessionId: session.id, jobContext: ctx }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     const contextMsg = buildContextMessage(ctx);
@@ -404,7 +430,9 @@ Deno.serve(async (req: Request) => {
 
     if (!response.ok) {
       const errText = await response.text();
-      throw new Error(`LLM API error (${llmConfig.label}): ${response.status} — ${errText.slice(0, 200)}`);
+      throw new Error(
+        `LLM API error (${llmConfig.label}): ${response.status} — ${errText.slice(0, 200)}`,
+      );
     }
 
     const data = await response.json();
@@ -419,12 +447,13 @@ Deno.serve(async (req: Request) => {
     }
 
     // Persiste resposta
-    await supabase.from("design_library_chat_messages").insert({
+    const { error: replyErr } = await supabase.from("design_library_chat_messages").insert({
       session_id: session.id,
       role: "assistant",
       content: result.reply,
       actions: result.actions ? (result.actions as unknown) : null,
     });
+    if (replyErr) console.warn("[design-library-chat] reply persist failed:", replyErr.message);
 
     return new Response(
       JSON.stringify({
