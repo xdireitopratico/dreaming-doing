@@ -1,0 +1,576 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FORGE Timeline Mockup</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #0b0c10;
+      --panel: #121418;
+      --panel-2: #1a1c22;
+      --border: #2a2d35;
+      --text: #f1f3f7;
+      --muted: #8b929e;
+      --brand: #f59e0b;
+      --done: #22c55e;
+      --failed: #ef4444;
+      --working: #3b82f6;
+      --line: #2a2d35;
+    }
+    * { font-family: 'Inter', sans-serif; }
+    body { background: var(--bg); color: var(--text); }
+    .forge-panel { background: var(--panel); border: 1px solid var(--border); }
+    .forge-panel-2 { background: var(--panel-2); border: 1px solid var(--border); }
+    .timeline-line {
+      position: absolute;
+      left: 15px;
+      top: 28px;
+      bottom: -16px;
+      width: 2px;
+      background: var(--line);
+    }
+    .timeline-line.active { background: linear-gradient(to bottom, var(--brand), transparent); }
+    .status-dot { width: 7px; height: 7px; border-radius: 50%; }
+    .status-dot.done { background: var(--done); }
+    .status-dot.failed { background: var(--failed); }
+    .status-dot.working { background: var(--working); box-shadow: 0 0 0 3px rgba(59,130,246,0.18); }
+    .status-dot.pending { background: transparent; border: 2px solid var(--border); }
+    .shimmer { background: linear-gradient(90deg, #1a1c22 25%, #25282f 50%, #1a1c22 75%); background-size: 200% 100%; animation: shimmer 1.6s infinite; }
+    @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+    .badge { font-size: 11px; padding: 2px 8px; border-radius: 999px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.02em; }
+    .badge.created { background: rgba(34,197,94,0.12); color: #86efac; }
+    .badge.edited { background: rgba(59,130,246,0.12); color: #93c5fd; }
+    .badge.running { background: rgba(245,158,11,0.12); color: #fcd34d; }
+    .badge.read { background: rgba(139,146,158,0.12); color: #d1d5db; }
+    .badge.listed { background: rgba(139,146,158,0.12); color: #d1d5db; }
+    .badge.result { background: rgba(34,197,94,0.12); color: #86efac; }
+    .badge.skill { background: rgba(168,85,247,0.12); color: #d8b4fe; }
+    .badge.warn { background: rgba(239,68,68,0.12); color: #fca5a5; }
+    .accordion-content { max-height: 0; overflow: hidden; transition: max-height 0.25s ease; }
+    .accordion-content.open { max-height: 500px; }
+    .plan-phase { border-left: 2px solid var(--border); padding-left: 12px; margin-left: 6px; }
+  </style>
+</head>
+<body class="min-h-screen p-8">
+
+  <!-- Header fake do inspector -->
+  <div class="max-w-5xl mx-auto mb-6 flex items-center justify-between">
+    <div class="flex items-center gap-2 text-sm text-[var(--muted)]">
+      <span class="hover:text-white cursor-pointer">Back to latest</span>
+    </div>
+    <div class="flex items-center gap-2 bg-[var(--panel)] border border-[var(--border)] rounded-lg p-1">
+      <button class="px-3 py-1.5 text-sm rounded-md bg-[var(--panel-2)] text-white">Details</button>
+      <button class="px-3 py-1.5 text-sm rounded-md text-[var(--muted)] hover:text-white">Timeline</button>
+      <button class="px-3 py-1.5 text-sm rounded-md text-[var(--muted)] hover:text-white">Changes</button>
+    </div>
+  </div>
+
+  <div class="max-w-5xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+    <!-- CENÁRIO 1: Design/extraction run -->
+    <div class="forge-panel rounded-2xl p-5">
+      <div class="flex items-center justify-between mb-5">
+        <h2 class="text-sm font-semibold text-white">Cenário 1 — Extração de design</h2>
+        <span class="text-xs text-[var(--muted)]">ao vivo</span>
+      </div>
+
+      <div class="relative pl-2">
+        <!-- THOUGHT: sempre collapsed -->
+        <div class="relative pb-5">
+          <div class="absolute left-[11px] top-[7px] bottom-[-8px] w-[2px] bg-[var(--line)]"></div>
+          <div class="flex items-start gap-3">
+            <div class="w-6 h-6 rounded-full border border-[var(--border)] bg-[var(--panel-2)] flex items-center justify-center shrink-0 z-10">
+              <i data-lucide="brain" class="w-3 h-3 text-[var(--muted)]"></i>
+            </div>
+            <button class="flex-1 text-left group" onclick="toggle(this)">
+              <div class="flex items-center gap-2">
+                <span class="text-xs text-[var(--muted)] group-hover:text-white transition-colors">Thought for 4s</span>
+                <i data-lucide="chevron-down" class="w-3 h-3 text-[var(--muted)] group-hover:text-white transition-transform"></i>
+              </div>
+              <div class="accordion-content text-xs text-[var(--muted)] mt-1.5 leading-relaxed">
+                Vou extrair o design system do site livekit.com antes de propor a estrutura. Preciso entender a paleta, tipografia, espaçamento e componentes visuais para replicar a identidade no projeto FORGE.
+              </div>
+            </button>
+          </div>
+        </div>
+
+        <!-- TOOL: read_design_library -->
+        <div class="relative pb-5">
+          <div class="absolute left-[11px] top-[7px] bottom-[-8px] w-[2px] bg-[var(--line)]"></div>
+          <div class="flex items-start gap-3">
+            <div class="w-6 h-6 rounded-full bg-[var(--panel-2)] border border-[var(--border)] flex items-center justify-center shrink-0 z-10">
+              <i data-lucide="book-open" class="w-3 h-3 text-[var(--muted)]"></i>
+            </div>
+            <div class="flex-1">
+              <div class="flex items-center gap-2">
+                <span class="badge read">Read</span>
+                <span class="text-xs text-white">Design library</span>
+              </div>
+              <p class="text-[11px] text-[var(--muted)] mt-1">https://livekit.com/</p>
+            </div>
+            <div class="status-dot done mt-1.5"></div>
+          </div>
+        </div>
+
+        <!-- TOOL: web_scrape -->
+        <div class="relative pb-5">
+          <div class="absolute left-[11px] top-[7px] bottom-[-8px] w-[2px] bg-[var(--line)]"></div>
+          <div class="flex items-start gap-3">
+            <div class="w-6 h-6 rounded-full bg-[var(--panel-2)] border border-[var(--border)] flex items-center justify-center shrink-0 z-10">
+              <i data-lucide="globe" class="w-3 h-3 text-[var(--muted)]"></i>
+            </div>
+            <div class="flex-1">
+              <div class="flex items-center gap-2">
+                <span class="badge read">Read</span>
+                <span class="text-xs text-white">Web page</span>
+              </div>
+              <p class="text-[11px] text-[var(--muted)] mt-1">/products/agent-assistant</p>
+            </div>
+            <div class="status-dot done mt-1.5"></div>
+          </div>
+        </div>
+
+        <!-- TOOL: extract_design_dna -->
+        <div class="relative pb-5">
+          <div class="absolute left-[11px] top-[7px] bottom-[-8px] w-[2px] bg-[var(--line)]"></div>
+          <div class="flex items-start gap-3">
+            <div class="w-6 h-6 rounded-full bg-[var(--panel-2)] border border-[var(--border)] flex items-center justify-center shrink-0 z-10">
+              <i data-lucide="palette" class="w-3 h-3 text-[var(--muted)]"></i>
+            </div>
+            <div class="flex-1">
+              <div class="flex items-center gap-2">
+                <span class="badge skill">Skill</span>
+                <span class="text-xs text-white">Extract design DNA</span>
+              </div>
+              <p class="text-[11px] text-[var(--muted)] mt-1">Paleta, tipografia, componentes</p>
+            </div>
+            <div class="status-dot done mt-1.5"></div>
+          </div>
+        </div>
+
+        <!-- TOOL: web_research -->
+        <div class="relative pb-5">
+          <div class="absolute left-[11px] top-[7px] bottom-[-8px] w-[2px] bg-[var(--line)]"></div>
+          <div class="flex items-start gap-3">
+            <div class="w-6 h-6 rounded-full bg-[var(--panel-2)] border border-[var(--border)] flex items-center justify-center shrink-0 z-10">
+              <i data-lucide="search" class="w-3 h-3 text-[var(--muted)]"></i>
+            </div>
+            <div class="flex-1">
+              <div class="flex items-center gap-2">
+                <span class="badge read">Research</span>
+                <span class="text-xs text-white">livekit.com design system UI components</span>
+              </div>
+              <p class="text-[11px] text-[var(--muted)] mt-1">5 resultados</p>
+            </div>
+            <div class="status-dot done mt-1.5"></div>
+          </div>
+        </div>
+
+        <!-- TASK/PLAN: proposta -->
+        <div class="relative pb-5">
+          <div class="absolute left-[11px] top-[7px] bottom-[-8px] w-[2px] bg-[var(--brand)] opacity-40"></div>
+          <div class="flex items-start gap-3">
+            <div class="w-6 h-6 rounded-full bg-[var(--brand)]/10 border border-[var(--brand)]/40 flex items-center justify-center shrink-0 z-10">
+              <i data-lucide="flag" class="w-3 h-3 text-[var(--brand)]"></i>
+            </div>
+            <div class="flex-1">
+              <div class="flex items-center gap-2 mb-2">
+                <span class="text-xs font-medium text-white">Plan proposed</span>
+                <span class="text-[11px] text-[var(--muted)]">2 fases · 6 steps</span>
+              </div>
+              <!-- plan card -->
+              <div class="forge-panel-2 rounded-xl p-4">
+                <div class="flex items-center gap-2 text-xs text-[var(--muted)] mb-3">
+                  <i data-lucide="play" class="w-3 h-3"></i>
+                  <span>Plan</span>
+                  <span class="ml-auto">2 fases · 6 steps</span>
+                </div>
+                <div class="space-y-4">
+                  <div>
+                    <div class="flex items-center gap-2 text-xs font-medium text-white mb-2">
+                      <span class="w-5 h-5 rounded bg-[var(--panel)] border border-[var(--border)] flex items-center justify-center text-[10px]">1</span>
+                      <span>Criação de arquivos</span>
+                    </div>
+                    <ul class="space-y-2 text-xs text-[var(--muted)] plan-phase">
+                      <li class="flex items-start gap-2"><i data-lucide="file-code" class="w-3.5 h-3.5 mt-0.5 text-[var(--muted)]"></i><span>Configurar tokens de design, paleta 'ocean' e layout base com navegação glassmorphism.</span></li>
+                      <li class="flex items-start gap-2"><i data-lucide="file-code" class="w-3.5 h-3.5 mt-0.5 text-[var(--muted)]"></i><span>Construir Landing Page cinematográfica com Hero interativo.</span></li>
+                      <li class="flex items-start gap-2"><i data-lucide="file-code" class="w-3.5 h-3.5 mt-0.5 text-[var(--muted)]"></i><span>Implementar Marketplace de agentes com grid de cards, filtros e páginas de detalhe.</span></li>
+                      <li class="flex items-start gap-2"><i data-lucide="file-code" class="w-3.5 h-3.5 mt-0.5 text-[var(--muted)]"></i><span>Desenvolver Hub de Educação (Academy) com trilhas de prompt engineering.</span></li>
+                      <li class="flex items-start gap-2"><i data-lucide="file-code" class="w-3.5 h-3.5 mt-0.5 text-[var(--muted)]"></i><span>Criar fluxo de onboarding para o serviço 'Zero Setup' e dashboard de acompanhamento.</span></li>
+                    </ul>
+                  </div>
+                  <div>
+                    <div class="flex items-center gap-2 text-xs font-medium text-white mb-2">
+                      <span class="w-5 h-5 rounded bg-[var(--panel)] border border-[var(--border)] flex items-center justify-center text-[10px]">2</span>
+                      <span>Execução de comandos</span>
+                    </div>
+                    <ul class="space-y-2 text-xs text-[var(--muted)] plan-phase">
+                      <li class="flex items-start gap-2"><i data-lucide="terminal" class="w-3.5 h-3.5 mt-0.5 text-[var(--muted)]"></i><span>Integrar Supabase (Auth/DB) e Stripe para transformar o frontend em produto funcional.</span></li>
+                    </ul>
+                  </div>
+                </div>
+                <div class="flex items-center justify-end gap-2 mt-4 pt-3 border-t border-[var(--border)]">
+                  <button class="px-3 py-1.5 text-xs rounded-lg border border-[var(--border)] text-[var(--muted)] hover:text-white">Editar</button>
+                  <button class="px-3 py-1.5 text-xs rounded-lg border border-red-500/30 text-red-400 hover:bg-red-500/10">Rejeitar</button>
+                  <button class="px-3 py-1.5 text-xs rounded-lg bg-[var(--brand)] text-black font-medium">Aprovar e construir</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- CENÁRIO 2: Build run -->
+    <div class="forge-panel rounded-2xl p-5">
+      <div class="flex items-center justify-between mb-5">
+        <h2 class="text-sm font-semibold text-white">Cenário 2 — Build executando</h2>
+        <span class="text-xs text-[var(--working)] flex items-center gap-1.5">
+          <span class="w-1.5 h-1.5 rounded-full bg-[var(--working)] animate-pulse"></span>
+          running
+        </span>
+      </div>
+
+      <div class="relative pl-2">
+        <!-- THOUGHT -->
+        <div class="relative pb-5">
+          <div class="absolute left-[11px] top-[7px] bottom-[-8px] w-[2px] bg-[var(--line)]"></div>
+          <div class="flex items-start gap-3">
+            <div class="w-6 h-6 rounded-full border border-[var(--border)] bg-[var(--panel-2)] flex items-center justify-center shrink-0 z-10">
+              <i data-lucide="brain" class="w-3 h-3 text-[var(--muted)]"></i>
+            </div>
+            <button class="flex-1 text-left group" onclick="toggle(this)">
+              <div class="flex items-center gap-2">
+                <span class="text-xs text-[var(--muted)] group-hover:text-white transition-colors">Thought for 2s</span>
+                <i data-lucide="chevron-down" class="w-3 h-3 text-[var(--muted)] group-hover:text-white transition-transform"></i>
+              </div>
+              <div class="accordion-content text-xs text-[var(--muted)] mt-1.5 leading-relaxed">
+                Vou começar pela landing page: criar o Hero, depois a seção de busca de advogados, depois o footer. Preciso verificar os componentes existentes em @forge/ui antes de escrever.
+              </div>
+            </button>
+          </div>
+        </div>
+
+        <!-- TOOL: fs_read @forge/ui -->
+        <div class="relative pb-5">
+          <div class="absolute left-[11px] top-[7px] bottom-[-8px] w-[2px] bg-[var(--line)]"></div>
+          <div class="flex items-start gap-3">
+            <div class="w-6 h-6 rounded-full bg-[var(--panel-2)] border border-[var(--border)] flex items-center justify-center shrink-0 z-10">
+              <i data-lucide="file-text" class="w-3 h-3 text-[var(--muted)]"></i>
+            </div>
+            <div class="flex-1">
+              <div class="flex items-center gap-2">
+                <span class="badge read">Read</span>
+                <span class="text-xs text-white">@forge/ui</span>
+              </div>
+              <p class="text-[11px] text-[var(--muted)] mt-1">Componentes de alta fidelidade</p>
+            </div>
+            <div class="status-dot done mt-1.5"></div>
+          </div>
+        </div>
+
+        <!-- TOOL: fs_list -->
+        <div class="relative pb-5">
+          <div class="absolute left-[11px] top-[7px] bottom-[-8px] w-[2px] bg-[var(--line)]"></div>
+          <div class="flex items-start gap-3">
+            <div class="w-6 h-6 rounded-full bg-[var(--panel-2)] border border-[var(--border)] flex items-center justify-center shrink-0 z-10">
+              <i data-lucide="folder-open" class="w-3 h-3 text-[var(--muted)]"></i>
+            </div>
+            <div class="flex-1">
+              <div class="flex items-center gap-2">
+                <span class="badge listed">Listed</span>
+                <span class="text-xs text-white">src/components</span>
+              </div>
+              <p class="text-[11px] text-[var(--muted)] mt-1">12 arquivos</p>
+            </div>
+            <div class="status-dot done mt-1.5"></div>
+          </div>
+        </div>
+
+        <!-- TOOL: fs_read landing -->
+        <div class="relative pb-5">
+          <div class="absolute left-[11px] top-[7px] bottom-[-8px] w-[2px] bg-[var(--line)]"></div>
+          <div class="flex items-start gap-3">
+            <div class="w-6 h-6 rounded-full bg-[var(--panel-2)] border border-[var(--border)] flex items-center justify-center shrink-0 z-10">
+              <i data-lucide="file-text" class="w-3 h-3 text-[var(--muted)]"></i>
+            </div>
+            <div class="flex-1">
+              <div class="flex items-center gap-2">
+                <span class="badge read">Read</span>
+                <span class="text-xs text-white">LandingPage.tsx</span>
+              </div>
+            </div>
+            <div class="status-dot done mt-1.5"></div>
+          </div>
+        </div>
+
+        <!-- TOOL: fs_edit Hero ativo -->
+        <div class="relative pb-5">
+          <div class="absolute left-[11px] top-[7px] bottom-[-8px] w-[2px] bg-gradient-to-b from-[var(--working)] to-transparent"></div>
+          <div class="flex items-start gap-3">
+            <div class="w-6 h-6 rounded-full bg-[var(--working)]/10 border border-[var(--working)]/40 flex items-center justify-center shrink-0 z-10">
+              <i data-lucide="loader-2" class="w-3 h-3 text-[var(--working)] animate-spin"></i>
+            </div>
+            <div class="flex-1">
+              <div class="flex items-center gap-2">
+                <span class="badge edited">Editing</span>
+                <span class="text-xs text-white">Hero.tsx</span>
+              </div>
+              <p class="text-[11px] text-[var(--muted)] mt-1">Adicionando animação de entrada e CTA principal</p>
+            </div>
+            <div class="status-dot working mt-1.5"></div>
+          </div>
+        </div>
+
+        <!-- TOOL: shell_exec build -->
+        <div class="relative pb-5">
+          <div class="absolute left-[11px] top-[7px] bottom-[-8px] w-[2px] bg-[var(--line)]"></div>
+          <div class="flex items-start gap-3">
+            <div class="w-6 h-6 rounded-full bg-[var(--panel-2)] border border-[var(--border)] flex items-center justify-center shrink-0 z-10">
+              <i data-lucide="terminal" class="w-3 h-3 text-[var(--muted)]"></i>
+            </div>
+            <div class="flex-1">
+              <div class="flex items-center gap-2">
+                <span class="badge running">Running</span>
+                <span class="text-xs text-white">npm run build</span>
+              </div>
+              <p class="text-[11px] text-[var(--muted)] mt-1">Aguardando resultado…</p>
+            </div>
+            <div class="status-dot pending mt-1.5"></div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- CENÁRIO 3: Erro + retry -->
+    <div class="forge-panel rounded-2xl p-5">
+      <div class="flex items-center justify-between mb-5">
+        <h2 class="text-sm font-semibold text-white">Cenário 3 — Falha e retry</h2>
+        <span class="text-xs text-[var(--failed)]">failed</span>
+      </div>
+
+      <div class="relative pl-2">
+        <!-- THOUGHT -->
+        <div class="relative pb-5">
+          <div class="absolute left-[11px] top-[7px] bottom-[-8px] w-[2px] bg-[var(--line)]"></div>
+          <div class="flex items-start gap-3">
+            <div class="w-6 h-6 rounded-full border border-[var(--border)] bg-[var(--panel-2)] flex items-center justify-center shrink-0 z-10">
+              <i data-lucide="brain" class="w-3 h-3 text-[var(--muted)]"></i>
+            </div>
+            <button class="flex-1 text-left group" onclick="toggle(this)">
+              <div class="flex items-center gap-2">
+                <span class="text-xs text-[var(--muted)] group-hover:text-white transition-colors">Thought for 6s</span>
+                <i data-lucide="chevron-down" class="w-3 h-3 text-[var(--muted)] group-hover:text-white transition-transform"></i>
+              </div>
+              <div class="accordion-content text-xs text-[var(--muted)] mt-1.5 leading-relaxed">
+                Build falhou por causa de um import não usado em Hero.tsx. Vou remover o import e reexecutar o build.
+              </div>
+            </button>
+          </div>
+        </div>
+
+        <!-- TOOL: shell_exec build -->
+        <div class="relative pb-5">
+          <div class="absolute left-[11px] top-[7px] bottom-[-8px] w-[2px] bg-[var(--line)]"></div>
+          <div class="flex items-start gap-3">
+            <div class="w-6 h-6 rounded-full bg-[var(--panel-2)] border border-[var(--border)] flex items-center justify-center shrink-0 z-10">
+              <i data-lucide="terminal" class="w-3 h-3 text-[var(--muted)]"></i>
+            </div>
+            <div class="flex-1">
+              <div class="flex items-center gap-2">
+                <span class="badge running">Running</span>
+                <span class="text-xs text-white">npm run build</span>
+              </div>
+            </div>
+            <div class="status-dot done mt-1.5"></div>
+          </div>
+        </div>
+
+        <!-- RESULT: build failed -->
+        <div class="relative pb-5">
+          <div class="absolute left-[11px] top-[7px] bottom-[-8px] w-[2px] bg-[var(--line)]"></div>
+          <div class="flex items-start gap-3">
+            <div class="w-6 h-6 rounded-full bg-[var(--failed)]/10 border border-[var(--failed)]/40 flex items-center justify-center shrink-0 z-10">
+              <i data-lucide="x" class="w-3 h-3 text-[var(--failed)]"></i>
+            </div>
+            <div class="flex-1">
+              <div class="flex items-center gap-2">
+                <span class="badge warn">Result</span>
+                <span class="text-xs text-white">Build failed</span>
+              </div>
+              <button class="text-[11px] text-[var(--muted)] hover:text-white mt-1 flex items-center gap-1" onclick="toggle(this.parentElement)">
+                <span>Ver 3 erros</span>
+                <i data-lucide="chevron-down" class="w-3 h-3"></i>
+              </button>
+              <div class="accordion-content mt-2">
+                <div class="forge-panel-2 rounded-lg p-3 text-[11px] font-mono text-[var(--muted)] leading-relaxed">
+                  src/pages/LandingPage.tsx:42:10 — 'motion' is defined but never used.<br/>
+                  src/components/Hero.tsx:18:23 — Cannot find module '@/lib/animations'.<br/>
+                  src/components/Hero.tsx:33:5 — Expected ',' or ']' after array element.
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- TASK: skill carregada -->
+        <div class="relative pb-5">
+          <div class="absolute left-[11px] top-[7px] bottom-[-8px] w-[2px] bg-[var(--line)]"></div>
+          <div class="flex items-start gap-3">
+            <div class="w-6 h-6 rounded-full bg-[var(--panel-2)] border border-[var(--border)] flex items-center justify-center shrink-0 z-10">
+              <i data-lucide="zap" class="w-3 h-3 text-[var(--muted)]"></i>
+            </div>
+            <div class="flex-1">
+              <div class="flex items-center gap-2">
+                <span class="badge skill">Skill</span>
+                <span class="text-xs text-white">Carregando skill debug-typescript</span>
+              </div>
+            </div>
+            <div class="status-dot done mt-1.5"></div>
+          </div>
+        </div>
+
+        <!-- EVENTO: rate limit -->
+        <div class="relative pb-5">
+          <div class="absolute left-[11px] top-[7px] bottom-[-8px] w-[2px] bg-[var(--line)]"></div>
+          <div class="flex items-start gap-3">
+            <div class="w-6 h-6 rounded-full bg-[var(--panel-2)] border border-[var(--border)] flex items-center justify-center shrink-0 z-10">
+              <i data-lucide="alert-triangle" class="w-3 h-3 text-yellow-500"></i>
+            </div>
+            <div class="flex-1">
+              <div class="flex items-center gap-2">
+                <span class="badge warn">Alert</span>
+                <span class="text-xs text-white">Rate limit atingido</span>
+              </div>
+              <p class="text-[11px] text-[var(--muted)] mt-1">Trocando para próxima chave em 3s…</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- RESULT: retry -->
+        <div class="relative pb-5">
+          <div class="absolute left-[11px] top-[7px] bottom-[-8px] w-[2px] bg-[var(--line)]"></div>
+          <div class="flex items-start gap-3">
+            <div class="w-6 h-6 rounded-full bg-[var(--done)]/10 border border-[var(--done)]/40 flex items-center justify-center shrink-0 z-10">
+              <i data-lucide="check" class="w-3 h-3 text-[var(--done)]"></i>
+            </div>
+            <div class="flex-1">
+              <div class="flex items-center gap-2">
+                <span class="badge result">Result</span>
+                <span class="text-xs text-white">Build passou após correção</span>
+              </div>
+              <p class="text-[11px] text-[var(--muted)] mt-1">Preview pronto para abrir</p>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- CENÁRIO 4: Diff + changes -->
+    <div class="forge-panel rounded-2xl p-5">
+      <div class="flex items-center justify-between mb-5">
+        <h2 class="text-sm font-semibold text-white">Cenário 4 — Changes / diff</h2>
+        <span class="text-xs text-[var(--done)]">done</span>
+      </div>
+
+      <div class="relative pl-2">
+        <!-- TOOL: fs_write landing -->
+        <div class="relative pb-5">
+          <div class="absolute left-[11px] top-[7px] bottom-[-8px] w-[2px] bg-[var(--line)]"></div>
+          <div class="flex items-start gap-3">
+            <div class="w-6 h-6 rounded-full bg-[var(--panel-2)] border border-[var(--border)] flex items-center justify-center shrink-0 z-10">
+              <i data-lucide="file-plus" class="w-3 h-3 text-[var(--muted)]"></i>
+            </div>
+            <div class="flex-1">
+              <div class="flex items-center gap-2">
+                <span class="badge created">Created</span>
+                <span class="text-xs text-white">LandingPage.tsx</span>
+              </div>
+            </div>
+            <div class="status-dot done mt-1.5"></div>
+          </div>
+        </div>
+
+        <!-- TOOL: fs_edit Hero -->
+        <div class="relative pb-5">
+          <div class="absolute left-[11px] top-[7px] bottom-[-8px] w-[2px] bg-[var(--line)]"></div>
+          <div class="flex items-start gap-3">
+            <div class="w-6 h-6 rounded-full bg-[var(--panel-2)] border border-[var(--border)] flex items-center justify-center shrink-0 z-10">
+              <i data-lucide="file-code" class="w-3 h-3 text-[var(--muted)]"></i>
+            </div>
+            <div class="flex-1">
+              <div class="flex items-center gap-2">
+                <span class="badge edited">Edited</span>
+                <span class="text-xs text-white">Hero.tsx</span>
+              </div>
+            </div>
+            <div class="status-dot done mt-1.5"></div>
+          </div>
+        </div>
+
+        <!-- DIFF card -->
+        <div class="relative pb-5">
+          <div class="absolute left-[11px] top-[7px] bottom-[-8px] w-[2px] bg-[var(--line)]"></div>
+          <div class="flex items-start gap-3">
+            <div class="w-6 h-6 rounded-full bg-[var(--working)]/10 border border-[var(--working)]/40 flex items-center justify-center shrink-0 z-10">
+              <i data-lucide="git-compare" class="w-3 h-3 text-[var(--working)]"></i>
+            </div>
+            <div class="flex-1">
+              <div class="flex items-center gap-2 mb-2">
+                <span class="badge edited">Diff</span>
+                <span class="text-xs text-white">Hero.tsx</span>
+              </div>
+              <div class="forge-panel-2 rounded-xl p-3 font-mono text-[11px] leading-relaxed overflow-hidden">
+                <div class="text-red-400">- import { motion } from "framer-motion";</div>
+                <div class="text-green-400">+ import { motion } from "framer-motion";</div>
+                <div class="text-green-400">+ import { Button } from "@forge/ui";</div>
+                <div class="text-[var(--muted)] mt-1">+12 / -1 linhas</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- RESULT: delivery -->
+        <div class="relative pb-5">
+          <div class="flex items-start gap-3">
+            <div class="w-6 h-6 rounded-full bg-[var(--done)]/10 border border-[var(--done)]/40 flex items-center justify-center shrink-0 z-10">
+              <i data-lucide="check" class="w-3 h-3 text-[var(--done)]"></i>
+            </div>
+            <div class="flex-1">
+              <div class="flex items-center gap-2">
+                <span class="badge result">Result</span>
+                <span class="text-xs text-white">2 arquivos entregues</span>
+              </div>
+              <div class="flex flex-wrap gap-1.5 mt-2">
+                <span class="px-2 py-0.5 rounded bg-[var(--panel-2)] border border-[var(--border)] text-[10px] text-[var(--muted)]">LandingPage.tsx</span>
+                <span class="px-2 py-0.5 rounded bg-[var(--panel-2)] border border-[var(--border)] text-[10px] text-[var(--muted)]">Hero.tsx</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    lucide.createIcons();
+    function toggle(el) {
+      const content = el.querySelector('.accordion-content') || el.parentElement.querySelector('.accordion-content');
+      const icon = el.querySelector('[data-lucide="chevron-down"]');
+      if (content) {
+        content.classList.toggle('open');
+        if (icon) icon.style.transform = content.classList.contains('open') ? 'rotate(180deg)' : 'rotate(0deg)';
+      }
+    }
+  </script>
+</body>
+</html>

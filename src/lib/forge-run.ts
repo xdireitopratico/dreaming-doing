@@ -1,8 +1,15 @@
 import type { AgentProgress, PendingPlan, PlanStep, SSEEvent } from "@/lib/agent-progress";
 import { lifecycleLabel, resolveAgentLifecycle } from "@/lib/agent-lifecycle";
 import { emitStreamingTelemetry } from "@/lib/streaming-telemetry";
-import { checkpointSummary, formatSkillInvocation, sanitizeRunText } from "@/lib/run-story-hygiene";
-import { isToolDoneEvent, isToolDoneOk, toolDoneName } from "@/lib/timeline-tool-events";
+import { sanitizeRunText } from "@/lib/run-story-hygiene";
+import {
+  buildForgeTimeline,
+  hasActiveJob as hasActiveJobInner,
+  timelineItemBriefing,
+  type ForgeTimelineItem,
+  type TimelineItemType,
+} from "@/lib/timeline-builder";
+
 
 export type MiniCardStatus = "thinking" | "working" | "done" | "failed";
 
@@ -48,40 +55,6 @@ export type ForgeMiniCardData = {
     ok?: boolean;
   } | null;
 };
-
-export type TimelineItemType = "TASK" | "THOUGHT" | "TOOL" | "RESULT" | "BRIEFING" | "DIFF" | "CLOSURE";
-
-export type ForgeTimelineItem =
-  | { type: "TASK"; id: string; label: string }
-  | {
-      type: "THOUGHT";
-      id: string;
-      durationMs: number;
-      text: string;
-      active?: boolean;
-      startedAtMs?: number;
-    }
-  | {
-      type: "TOOL";
-      id: string;
-      name: string;
-      path?: string;
-      detail?: string;
-      active?: boolean;
-      ok?: boolean;
-      intent?: string;
-    }
-  | { type: "RESULT"; id: string; ok: boolean; text: string; evidence?: string[] }
-  | { type: "BRIEFING"; id: string; text: string }
-  | {
-      type: "DIFF";
-      id: string;
-      path: string;
-      op: "write" | "edit";
-      before?: string;
-      after?: string;
-    }
-  | { type: "CLOSURE"; id: string; ok: boolean; text: string; canceled?: boolean };
 
 export type AgentRunView = {
   runId: string;
@@ -132,457 +105,14 @@ function normalizeProse(prose: string): string {
   return prose.trim();
 }
 
-export function buildForgeTimeline(timeline: SSEEvent[], running = false): ForgeTimelineItem[] {
-  const items: ForgeTimelineItem[] = [];
-  let thoughtId: string | null = null;
-  let thoughtStart = 0;
-  let thoughtText = "";
-  let lastThoughtTs = 0;
-  let lastThoughtText = "";
-  const hasThinkingText = timeline.some((ev) => ev.type === "thinking_text");
-
-  const flushThought = (endTs: number) => {
-    if (!thoughtId) return;
-    const durationMs = Math.max(1000, endTs - thoughtStart);
-    items.push({
-      type: "THOUGHT",
-      id: thoughtId,
-      durationMs,
-      text: normalizeProse(thoughtText),
-      startedAtMs: thoughtStart,
-    });
-    thoughtId = null;
-    thoughtText = "";
-    lastThoughtTs = 0;
-    lastThoughtText = "";
-  };
-
-  for (const ev of timeline) {
-    const data = ev.data ?? {};
-    const ts = ev.timestamp;
-
-    if (ev.type === "assistant_text" || ev.type === "thinking_text") {
-      const isThinkingText = ev.type === "thinking_text";
-      const isLegacyThought = ev.type === "assistant_text" && isInspectorThought(data);
-      if (isThinkingText || (!hasThinkingText && isLegacyThought)) {
-        const chunk = String(data.text ?? "");
-        if (!chunk) continue;
-        if (ts === lastThoughtTs && chunk === lastThoughtText) continue;
-        lastThoughtTs = ts;
-        lastThoughtText = chunk;
-
-        if (!thoughtId) {
-          thoughtId = `thought-${ts}`;
-          thoughtStart = ts;
-          thoughtText = chunk;
-        } else {
-          thoughtText += chunk;
-        }
-        continue;
-      }
-      // Briefing pro usuário durante o loop (assistant_text não-thinking, não-final, não-narration).
-      // O fechamento final (final/narration) vira CLOSURE em done/finish, não aqui.
-      if (
-        ev.type === "assistant_text" &&
-        !data.final &&
-        !data.narration &&
-        !data.thinking &&
-        !data.delta // delta = fragmento de stream, não briefing completo (critério 2: sem render absurdo)
-      ) {
-        const text = String(data.text ?? "").trim();
-        if (text) {
-          if (thoughtId) flushThought(ts);
-          items.push({ type: "BRIEFING", id: `briefing-${ts}`, text });
-        }
-      }
-      continue;
-    }
-
-    if (ev.type === "step_result") {
-      if (thoughtId) flushThought(ts);
-      const ok = data.ok !== false;
-      const text = typeof data.summary === "string" ? data.summary : ok ? "Concluído" : "Falhou";
-      const evidence = Array.isArray(data.evidence)
-        ? (data.evidence as string[]).filter((e) => typeof e === "string")
-        : undefined;
-      items.push({
-        type: "RESULT",
-        id: `result-${ts}`,
-        ok,
-        text,
-        evidence: evidence?.length ? evidence : undefined,
-      });
-      continue;
-    }
-
-    if (thoughtId) flushThought(ts);
-
-    if (ev.type === "explore") {
-      const label = sanitizeRunText(data.message);
-      if (label) {
-        items.push({ type: "TASK", id: `explore-${ts}`, label: truncate(label, 120) });
-      }
-      continue;
-    }
-
-    if (
-      ev.type === "timeout_warning" ||
-      ev.type === "heartbeat" ||
-      ev.type === "stuck" ||
-      ev.type === "error"
-    ) {
-      const label = sanitizeRunText(data.message) ?? sanitizeRunText(data.error);
-      if (label) {
-        items.push({ type: "TASK", id: `status-${ts}`, label: truncate(label, 120) });
-      }
-      continue;
-    }
-
-    if (ev.type === "phase" || ev.type === "memory") {
-      const phase = typeof data.phase === "string" ? data.phase : undefined;
-      const label = sanitizeRunText(data.message ?? data.phase);
-      if (!label || isInternalPhaseNoise(label, phase)) continue;
-      items.push({ type: "TASK", id: `task-${ts}`, label: truncate(label, 120) });
-      continue;
-    }
-
-    if (ev.type === "checkpoint_resume" || ev.type === "delivery_checkpoint_silent") {
-      continue;
-    }
-
-    if (ev.type === "tool_start" || ev.type === "tool_call") {
-      const name = String(data.name ?? data.tool ?? "tool");
-      const args = (data.args ?? data.input) as Record<string, unknown> | undefined;
-      const path = pathFromArgs(args);
-      const stepIntent =
-        typeof data.step_intent === "string" && data.step_intent.trim()
-          ? data.step_intent.trim()
-          : undefined;
-      items.push({
-        type: "TOOL",
-        id: `tool-${ts}`,
-        name,
-        path: path || undefined,
-        detail: undefined, // sem JSON hardcore — o label (toolBriefing) carrega o humano; tool_done preenche o resultado
-        active: running,
-        intent: stepIntent,
-      });
-      continue;
-    }
-
-    if (isToolDoneEvent(ev)) {
-      const ok = isToolDoneOk(data);
-      const toolName = toolDoneName(data);
-      const doneSummary =
-        typeof data.summary === "string" && data.summary.trim() ? data.summary.trim() : undefined;
-      const doneOutput =
-        typeof data.output === "string" && data.output.trim() ? data.output.trim() : undefined;
-      const doneError =
-        typeof data.error === "string" && data.error.trim() ? data.error.trim() : undefined;
-      for (let i = items.length - 1; i >= 0; i--) {
-        const item = items[i];
-        if (item?.type !== "TOOL") continue;
-        // Detalhe: prioriza summary > output > erro. Limita tamanho.
-        const detail = doneSummary ?? (ok ? doneOutput : doneError);
-        items[i] = {
-          ...item,
-          name: toolName,
-          active: false,
-          ok,
-          detail: item.detail ?? (detail ? truncate(detail, 400) : undefined),
-        };
-        break;
-      }
-      if (ev.type !== "tool_done") {
-        const text = doneSummary ?? (ok ? "Concluído" : doneError ?? "Erro");
-        items.push({ type: "RESULT", id: `result-${ts}`, ok, text });
-      }
-      continue;
-    }
-
-    if (ev.type === "delivery_checkpoint") {
-      const checkpoint = checkpointSummary(data);
-      if (!checkpoint) continue;
-      items.push({
-        type: "RESULT",
-        id: `result-${ts}`,
-        ok: true,
-        text: checkpoint.text,
-        evidence: checkpoint.files.map(fileBase),
-      });
-      continue;
-    }
-
-    if (ev.type === "error") {
-      items.push({
-        type: "RESULT",
-        id: `error-${ts}`,
-        ok: false,
-        text: typeof data.message === "string" ? data.message.slice(0, 200) : "Erro",
-      });
-      continue;
-    }
-
-    if (ev.type === "classify") {
-      continue;
-    }
-
-    if (ev.type === "skills") {
-      const label = formatSkillInvocation(data);
-      if (label) {
-        items.push({ type: "TASK", id: `skills-${ts}`, label });
-      }
-      continue;
-    }
-
-    if (ev.type === "build_log") {
-      const command = typeof data.command === "string" ? data.command : "build";
-      const ok = data.ok !== false;
-      items.push({
-        type: "RESULT",
-        id: `build-${ts}`,
-        ok,
-        text: `Build: ${ok ? "Ok" : "Erro"}`,
-      });
-      continue;
-    }
-
-    if (ev.type === "file_diff") {
-      const path = typeof data.path === "string" ? data.path : "";
-      const op = typeof data.op === "string" ? data.op : "edit";
-      if (path) {
-        const before = typeof data.before === "string" ? data.before : undefined;
-        const after = typeof data.after === "string" ? data.after : undefined;
-        items.push({
-          type: "DIFF",
-          id: `diff-${ts}`,
-          path,
-          op: op === "write" ? "write" : "edit",
-          before: before && before.trim() ? before : undefined,
-          after: after && after.trim() ? after : undefined,
-        });
-      }
-      continue;
-    }
-
-    if (ev.type === "typecheck_fail") {
-      const errors = Array.isArray(data.errors) ? data.errors : [];
-      items.push({
-        type: "RESULT",
-        id: `typecheck-${ts}`,
-        ok: false,
-        text: `TS: ${errors.length} erro(s)`,
-      });
-      continue;
-    }
-
-    if (ev.type === "fsm_transition") {
-      continue;
-    }
-
-    if (ev.type === "plan_proposed") {
-      const summary = typeof data.summary === "string" ? data.summary : "Plano";
-      items.push({ type: "TASK", id: `plan-${ts}`, label: truncate(summary, 120) });
-      continue;
-    }
-
-    if (ev.type === "gate_decision") {
-      const awaiting = data.awaiting === true;
-      items.push({
-        type: "TASK",
-        id: `gate-${ts}`,
-        label: awaiting ? "Aguardando" : "Decidido",
-      });
-      continue;
-    }
-
-    // ── Simulacro: atos de design serializados (backend ↔ frontend mesma língua) ──
-    if (ev.type === "gate") {
-      const dim = String(data.dimension ?? "gate");
-      const verdict = String(data.verdict ?? "?");
-      items.push({
-        type: "TASK",
-        id: `gate-v-${ts}`,
-        label: `⚖ ${dim} · ${verdict.toUpperCase()}`,
-      });
-      continue;
-    }
-    if (ev.type === "design_resolve") {
-      const voices = Array.isArray(data.voices) ? (data.voices as string[]).join(", ") : "";
-      const composite = String(data.composite ?? "");
-      items.push({
-        type: "BRIEFING",
-        id: `resolve-${ts}`,
-        text: `🎨 Paleta resolvida — vozes: ${voices} · gesto: ${truncate(composite, 140)}`,
-      });
-      continue;
-    }
-    if (ev.type === "directive") {
-      const gesture = String(data.gesture ?? "");
-      const brief = String(data.brief ?? "");
-      items.push({
-        type: "BRIEFING",
-        id: `directive-${ts}`,
-        text: `📋 Directive — gesto: ${truncate(gesture, 120)}${brief ? ` · ${truncate(brief, 100)}` : ""}`,
-      });
-      continue;
-    }
-    if (ev.type === "build_step") {
-      const section = String(data.section ?? "?");
-      const technique = String(data.technique ?? "");
-      const layer = data.layer ? ` · ${String(data.layer)}` : "";
-      items.push({
-        type: "TASK",
-        id: `build-${ts}`,
-        label: `🏗 ${section} · ${technique}${layer}`,
-      });
-      continue;
-    }
-    if (ev.type === "dna_ready") {
-      const sig = String(data.signature ?? "");
-      items.push({
-        type: "RESULT",
-        id: `dna-${ts}`,
-        ok: true,
-        text: `🧬 DNA pronto · ${truncate(sig, 120)}`,
-      });
-      continue;
-    }
-    if (ev.type === "background_wait") {
-      const eta = typeof data.etaSec === "number" ? data.etaSec : "?";
-      const url = String(data.source_url ?? "");
-      items.push({
-        type: "TASK",
-        id: `wait-${ts}`,
-        label: `⏸ Aguardando extração · ${eta}s · ${truncate(url, 60)}`,
-      });
-      continue;
-    }
-    if (ev.type === "background_resume") {
-      items.push({
-        type: "RESULT",
-        id: `resume-${ts}`,
-        ok: true,
-        text: "▶ Background concluído — retomando",
-      });
-      continue;
-    }
-
-    if (ev.type === "rate_limit") {
-      items.push({ type: "TASK", id: `rate-${ts}`, label: "Rate limit" });
-      continue;
-    }
-
-    if (ev.type === "robin_rotate") {
-      items.push({ type: "TASK", id: `robin-${ts}`, label: "Robin rotating API key" });
-      continue;
-    }
-
-    if (ev.type === "connection_retry") {
-      items.push({ type: "TASK", id: `retry-${ts}`, label: "Reconectando…" });
-      continue;
-    }
-
-    if (ev.type === "context_pressure") {
-      const message = sanitizeRunText(data.message);
-      if (message)
-        items.push({ type: "TASK", id: `pressure-${ts}`, label: truncate(message, 120) });
-      continue;
-    }
-
-    if (ev.type === "context_compress") {
-      continue;
-    }
-
-    if (ev.type === "start") {
-      continue;
-    }
-
-    if (ev.type === "resume") {
-      continue;
-    }
-
-    if (ev.type === "canceled") {
-      const message = typeof data.message === "string" ? data.message : "Cancelado";
-      items.push({
-        type: "CLOSURE",
-        id: `canceled-${ts}`,
-        ok: false,
-        canceled: true,
-        text: truncate(message, 200),
-      });
-      continue;
-    }
-
-    if (ev.type === "finish") {
-      if (thoughtId) flushThought(ts);
-      const ok = data.ok !== false && !data.canceled;
-      const summary = typeof data.summary === "string" && data.summary.trim()
-        ? data.summary.trim()
-        : ok
-          ? "Trabalho concluído"
-          : "Encerrado";
-      items.push({
-        type: "CLOSURE",
-        id: `finish-${ts}`,
-        ok,
-        canceled: data.canceled === true,
-        text: truncate(summary, 240),
-      });
-      continue;
-    }
-
-    if (ev.type === "done") {
-      const summary = typeof data.summary === "string" && data.summary.trim()
-        ? data.summary.trim()
-        : undefined;
-      // done sem summary: sinal operacional (tokens/cost) — não gera fechamento visual.
-      if (!summary) continue;
-      if (thoughtId) flushThought(ts);
-      items.push({
-        type: "CLOSURE",
-        id: `done-${ts}`,
-        ok: true,
-        text: truncate(summary, 240),
-      });
-      continue;
-    }
-
-    // Accountability (critério 1): evento sem mapeamento vira linha factual — nada cai no vazio.
-    items.push({ type: "TASK", id: `unknown-${ts}`, label: truncate(String(ev.type), 60) });
-  }
-
-  if (thoughtId) {
-    const lastEventTs = timeline.at(-1)?.timestamp ?? thoughtStart;
-    const staleMs = running ? Date.now() - lastEventTs : 0;
-    // Marcar ativo enquanto job "running" e não muito stale. Janela generosa para testes e
-    // casos de catch-up lento; prod atualiza timeline com novos eventos mantendo fresco.
-    const active = running && staleMs < 60_000;
-    const endTs = active ? Date.now() : Math.max(thoughtStart + 1000, lastEventTs);
-    const durationMs = Math.max(1000, endTs - thoughtStart);
-    items.push({
-      type: "THOUGHT",
-      id: thoughtId,
-      durationMs,
-      text: normalizeProse(thoughtText),
-      active,
-      startedAtMs: thoughtStart,
-    });
-  }
-
-  return items;
-}
+export { buildForgeTimeline } from "@/lib/timeline-builder";
 
 /** Job ativo confirmado — sem autoResuming nem flags stale. */
 export function hasActiveJob(
   progress: AgentProgress,
   opts?: { running?: boolean; slotActive?: boolean },
 ): boolean {
-  if (progress.finished || progress.canceled || progress.awaiting) return false;
-  if (progress.awaitingKind === "plan_approval" || progress.awaitingKind === "clarify") {
-    return false;
-  }
-  return !!(opts?.running && opts?.slotActive);
+  return hasActiveJobInner(progress, opts);
 }
 
 function deriveMiniCardStatus(progress: AgentProgress, jobActive: boolean): MiniCardStatus {
@@ -700,8 +230,28 @@ export function collectMiniCardBriefings(
       const line = normalizeMiniCardBriefing(item.text);
       if (line) return [line];
     }
-    if (item.type === "TOOL") {
-      const line = normalizeMiniCardBriefing(toolBriefing(item.name, item.path));
+    if (item.type === "READ" && item.path) {
+      const line = normalizeMiniCardBriefing(toolBriefing("fs_read", item.path));
+      if (line) return [line];
+    }
+    if (item.type === "LISTED" && item.path) {
+      const line = normalizeMiniCardBriefing(toolBriefing("fs_list", item.path));
+      if (line) return [line];
+    }
+    if (item.type === "CREATED" && item.path) {
+      const line = normalizeMiniCardBriefing(toolBriefing("fs_write", item.path));
+      if (line) return [line];
+    }
+    if (item.type === "EDITED" && item.path) {
+      const line = normalizeMiniCardBriefing(toolBriefing("fs_edit", item.path));
+      if (line) return [line];
+    }
+    if (item.type === "RUNNING" && item.command) {
+      const line = normalizeMiniCardBriefing(toolBriefing("shell_exec", item.command));
+      if (line) return [line];
+    }
+    if (item.type === "SKILL" && item.name) {
+      const line = normalizeMiniCardBriefing(item.name);
       if (line) return [line];
     }
     if (item.type === "TASK") {
@@ -778,15 +328,66 @@ export function collectMiniCardActivity(
       }
     }
 
-    if (item.type === "TOOL" && item.ok !== undefined) {
-      const label = normalizeMiniCardBriefing(toolBriefing(item.name, item.path));
+    if (
+      (item.type === "READ" ||
+        item.type === "LISTED" ||
+        item.type === "CREATED" ||
+        item.type === "EDITED" ||
+        item.type === "RUNNING" ||
+        item.type === "SKILL") &&
+      item.ok !== undefined
+    ) {
+      let label: string | null = null;
+      let description: string | undefined;
+      let toolName: string | undefined;
+      let path: string | undefined;
+      let detail: string | undefined;
+
+      switch (item.type) {
+        case "READ":
+          path = item.path;
+          detail = item.detail;
+          toolName = "fs_read";
+          label = normalizeMiniCardBriefing(toolBriefing("fs_read", item.path));
+          break;
+        case "LISTED":
+          path = item.path;
+          detail = item.detail;
+          toolName = "fs_list";
+          label = normalizeMiniCardBriefing(toolBriefing("fs_list", item.path));
+          break;
+        case "CREATED":
+          path = item.path;
+          detail = item.detail;
+          toolName = "fs_write";
+          label = normalizeMiniCardBriefing(toolBriefing("fs_write", item.path));
+          break;
+        case "EDITED":
+          path = item.path;
+          detail = item.detail;
+          toolName = "fs_edit";
+          label = normalizeMiniCardBriefing(toolBriefing("fs_edit", item.path));
+          break;
+        case "RUNNING":
+          path = item.command;
+          detail = item.detail;
+          toolName = "shell_exec";
+          label = normalizeMiniCardBriefing(toolBriefing("shell_exec", item.command));
+          break;
+        case "SKILL":
+          detail = item.detail;
+          toolName = item.name;
+          label = normalizeMiniCardBriefing(item.name);
+          break;
+      }
+
       if (label && !seenLabels.has(label)) {
         seenLabels.add(label);
         lines.push({
           id: item.id,
           label,
-          description: item.path && item.path.length > 30 ? item.path : item.detail || undefined,
-          toolName: item.name,
+          description: path && path.length > 30 ? path : detail || undefined,
+          toolName,
           status: item.ok === false ? "failed" : "done",
         });
         continue;
@@ -1059,14 +660,52 @@ export function buildAgentRunView(
     planDriven: !!jobPlan?.steps?.length,
   });
 
-  // Fase 2.2 — extrai o último TOOL executado (reverso do forgeTimeline) para
-  // action chips no mini card. Ignora TOOLs ativos (active=true) — só
+  // Fase 2.2 — extrai o último tool executado (reverso do forgeTimeline) para
+  // action chips no mini card. Ignora tools ativos (active=true) — só
   // mostramos chips para tools que terminaram.
-  const lastToolItem = [...forgeTimeline].reverse().find((t) => t.type === "TOOL" && !t.active) as
-    | Extract<ForgeTimelineItem, { type: "TOOL" }>
+  const lastToolItem = [...forgeTimeline]
+    .reverse()
+    .find(
+      (t) =>
+        (t.type === "READ" ||
+          t.type === "LISTED" ||
+          t.type === "CREATED" ||
+          t.type === "EDITED" ||
+          t.type === "RUNNING" ||
+          t.type === "SKILL") &&
+        !t.active,
+    ) as
+    | (Extract<ForgeTimelineItem, { type: "READ" }> & { active: false })
+    | (Extract<ForgeTimelineItem, { type: "LISTED" }> & { active: false })
+    | (Extract<ForgeTimelineItem, { type: "CREATED" }> & { active: false })
+    | (Extract<ForgeTimelineItem, { type: "EDITED" }> & { active: false })
+    | (Extract<ForgeTimelineItem, { type: "RUNNING" }> & { active: false })
+    | (Extract<ForgeTimelineItem, { type: "SKILL" }> & { active: false })
     | undefined;
   const lastTool = lastToolItem
-    ? { name: lastToolItem.name, path: lastToolItem.path, ok: true }
+    ? {
+        name:
+          lastToolItem.type === "READ"
+            ? "fs_read"
+            : lastToolItem.type === "LISTED"
+              ? "fs_list"
+              : lastToolItem.type === "CREATED"
+                ? "fs_write"
+                : lastToolItem.type === "EDITED"
+                  ? "fs_edit"
+                  : lastToolItem.type === "RUNNING"
+                    ? "shell_exec"
+                    : lastToolItem.type === "SKILL"
+                      ? lastToolItem.name
+                      : "tool",
+        path:
+          lastToolItem.type === "RUNNING"
+            ? lastToolItem.command
+            : "path" in lastToolItem
+              ? lastToolItem.path
+              : undefined,
+        ok: true,
+      }
     : null;
 
   return {

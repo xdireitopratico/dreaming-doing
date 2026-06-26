@@ -44,10 +44,9 @@ export class NarrationPhase {
   emitInspectorNote(message: string): void {
     const chunk = message.trim();
     if (!chunk) return;
-    this.emit("phase", {
-      phase: "checkpoint",
-      message: chunk,
-      task_title: chunk.slice(0, 120),
+    this.emit("agent_note", {
+      text: chunk,
+      title: chunk.slice(0, 80),
     });
   }
 

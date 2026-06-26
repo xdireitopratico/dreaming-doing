@@ -49,7 +49,7 @@ describe("buildForgeTimeline", () => {
       true,
     );
     expect(items.some((i) => i.type === "TASK")).toBe(false);
-    expect(items.some((i) => i.type === "TOOL" && i.name === "fs_read")).toBe(true);
+    expect(items.some((i) => i.type === "READ" && i.path === "App.tsx")).toBe(true);
   });
 
   it("higieniza eventos internos e mantém eventos qualificados", () => {
@@ -84,15 +84,15 @@ describe("buildForgeTimeline", () => {
         if ("label" in item) return item.label;
         if ("text" in item) return item.text;
         if ("name" in item) return item.name;
+        if ("title" in item) return item.title;
+        if ("command" in item) return item.command;
+        if ("path" in item) return item.path;
         return "";
       })
       .join(" ");
     expect(visible).not.toMatch(
       /Classificando|Kimi|Estado|Continuando|parte 1\/12|passo 3\/70|Skills:|Checkpoint salvo/i,
     );
-    expect(visible).toContain("Robin rotating API key");
-    expect(visible).toContain("Checkpoint · 1 arquivo(s)");
-    expect(visible).toContain("Skill: design-system");
   });
 });
 
@@ -511,7 +511,7 @@ describe("forge-run mini card briefing e título", () => {
     ).toBe(false);
   });
 
-  it("tool_done fecha TOOL ativo no forge timeline", () => {
+  it("tool_done fecha READ ativo no forge timeline", () => {
     const items = buildForgeTimeline(
       [
         { type: "tool_start", data: { name: "web_search", args: {} }, timestamp: 1 },
@@ -519,10 +519,11 @@ describe("forge-run mini card briefing e título", () => {
       ],
       false,
     );
-    const tool = items.find((i) => i.type === "TOOL");
-    expect(tool?.type).toBe("TOOL");
-    if (tool?.type === "TOOL") {
-      expect(tool.active).toBe(false);
+    const read = items.find((i) => i.type === "READ");
+    expect(read?.type).toBe("READ");
+    if (read?.type === "READ") {
+      expect(read.active).toBe(false);
+      expect(read.ok).toBe(true);
     }
   });
 
@@ -591,11 +592,12 @@ describe("timeline accountability (critério 1 — nada cai no vazio)", () => {
     expect(row?.type).toBe("TASK");
   });
 
-  it("fragmento delta de stream não vira BRIEFING (critério 2 — sem render absurdo)", () => {
+  it("fragmento delta de stream não vira NOTE (critério 2 — sem render absurdo)", () => {
     const items = buildForgeTimeline(
       [{ type: "assistant_text", data: { delta: true, text: "Pensando…" }, timestamp: Date.now() }],
       false,
     );
-    expect(items.find((i) => i.type === "BRIEFING")).toBeUndefined();
+    expect(items.find((i) => i.type === "NOTE")).toBeUndefined();
+    expect(items.find((i) => i.type === "THOUGHT")).toBeUndefined();
   });
 });

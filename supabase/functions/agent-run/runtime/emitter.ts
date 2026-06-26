@@ -14,35 +14,30 @@ export interface StreamTailEntry {
   timestamp: number;
 }
 
-/** Eventos que alimentam timeline / streamTail no checkpoint. */
+/** Eventos que alimentam timeline / streamTail no checkpoint.
+ *
+ * Regra: só entra na timeline o que é factual/intencional para o usuário.
+ * Ruído interno (phase, explore, classify, heartbeat, build_log bruto, etc.)
+ * fica fora — pode atualizar statusHint/telemetry, mas não a história canônica.
+ */
 export const TIMELINE_EVENT_TYPES: ReadonlySet<string> = new Set([
-  "phase",
-  "explore",
-  "memory",
-  "classify",
-  "skills",
+  "agent_note",
+  "alert",
+  "design",
+  "thinking_text",
   "tool_start",
   "tool_done",
   "step_result",
-  "assistant_text",
-  "thinking_text",
-  "validate_ok",
-  "validate_fail",
-  "gate",
-  "background_wait",
-  "background_resume",
-  "design_resolve",
-  "dna_ready",
-  "directive",
-  "build_step",
+  "step",
   "delivery_checkpoint",
   "file_diff",
+  "plan_proposed",
+  "gate_decision",
+  "skills",
   "done",
   "finish",
-  "timeout_warning",
-  "heartbeat",
+  "canceled",
   "error",
-  "stuck",
 ]);
 
 const CONTRACT_EVENT_TYPES = new Set<string>(AGENT_STREAM_EVENT_TYPES);
@@ -130,6 +125,160 @@ export class RuntimeEmitter {
                   : "Erro de compilação",
             ],
             ok: false,
+          },
+        });
+      }
+      if (type === "typecheck_fail") {
+        const errors = Array.isArray(d.errors) ? d.errors : [];
+        const files = Array.isArray(d.files) ? d.files : [];
+        this.onStream({
+          type: "step_result",
+          data: {
+            summary: `TypeScript: ${errors.length} erro(s) — corrigindo`,
+            evidence: files.length ? files.slice(0, 5) : undefined,
+            ok: false,
+          },
+        });
+      }
+
+      // ── Higienização de eventos internos → alert canônico na timeline ──
+      if (type === "rate_limit") {
+        this.onStream({
+          type: "alert",
+          data: {
+            level: "warn",
+            message: typeof d.message === "string" ? d.message : "Rate limit atingido — alternando chave…",
+            alertId: "rate_limit",
+          },
+        });
+      }
+      if (type === "connection_retry") {
+        this.onStream({
+          type: "alert",
+          data: {
+            level: "warn",
+            message: typeof d.message === "string" ? d.message : "Reconectando ao modelo…",
+            alertId: "connection_retry",
+          },
+        });
+      }
+      if (type === "timeout_warning") {
+        this.onStream({
+          type: "alert",
+          data: {
+            level: "warn",
+            message: typeof d.message === "string" ? d.message : "Budget de passos quase esgotado",
+            alertId: "timeout_warning",
+          },
+        });
+      }
+      if (type === "stuck") {
+        const reason = typeof d.reason === "string" ? d.reason : "";
+        const message = typeof d.message === "string" && d.message.trim() ? d.message : "Modelo preso — tentando destravar";
+        this.onStream({
+          type: "alert",
+          data: {
+            level: "error",
+            message: reason ? `${message} (${reason})` : message,
+            alertId: `stuck-${reason || "generic"}`,
+          },
+        });
+      }
+      if (type === "context_compress") {
+        this.onStream({
+          type: "alert",
+          data: {
+            level: "info",
+            message: typeof d.message === "string" ? d.message : "Compactando contexto — isso pode levar um minuto",
+            alertId: "context_compress",
+          },
+        });
+      }
+      if (type === "context_pressure") {
+        this.onStream({
+          type: "alert",
+          data: {
+            level: "info",
+            message: typeof d.message === "string" ? d.message : "Contexto grande — otimizando memória",
+            alertId: "context_pressure",
+          },
+        });
+      }
+      if (type === "background_wait") {
+        const eta = typeof d.etaSec === "number" ? d.etaSec : null;
+        const url = typeof d.source_url === "string" ? d.source_url : "";
+        const reason = typeof d.reason === "string" ? d.reason : "";
+        const etaText = eta !== null ? ` · ~${eta}s` : "";
+        this.onStream({
+          type: "alert",
+          data: {
+            level: "info",
+            message: `Extraindo conteúdo${url ? ` de ${url}` : ""}${etaText}${reason ? ` · ${reason}` : ""}`,
+            alertId: `background_wait-${url || "generic"}`,
+          },
+        });
+      }
+      if (type === "background_resume") {
+        const url = typeof d.source_url === "string" ? d.source_url : "";
+        this.onStream({
+          type: "alert",
+          data: {
+            level: "info",
+            message: url ? `Extração concluída · ${url}` : "Extração concluída — retomando",
+            alertId: `background_resume-${url || "generic"}`,
+          },
+        });
+      }
+
+      // ── Higienização de eventos de design → design canônico na timeline ──
+      if (type === "design_resolve") {
+        const voices = Array.isArray(d.voices) ? (d.voices as string[]) : [];
+        const techniques = Array.isArray(d.techniques) ? (d.techniques as string[]) : [];
+        const composite = typeof d.composite === "string" ? d.composite : "";
+        this.onStream({
+          type: "design",
+          data: {
+            kind: "resolve",
+            title: voices.length ? `Design system · ${voices.slice(0, 2).join(", ")}` : "Design system resolvido",
+            detail: composite ? composite.slice(0, 160) : techniques.slice(0, 3).join(", "),
+          },
+        });
+      }
+      if (type === "dna_ready") {
+        const url = typeof d.source_url === "string" ? d.source_url : "";
+        const sig = typeof d.signature === "string" ? d.signature : "";
+        this.onStream({
+          type: "design",
+          data: {
+            kind: "dna_ready",
+            title: url ? `Design DNA extraído de ${url}` : "Design DNA extraído",
+            detail: sig ? sig.slice(0, 160) : undefined,
+          },
+        });
+      }
+      if (type === "directive") {
+        const brief = typeof d.brief === "string" ? d.brief : "";
+        const gesture = typeof d.gesture === "string" ? d.gesture : "";
+        const techniques = Array.isArray(d.techniques) ? (d.techniques as string[]) : [];
+        this.onStream({
+          type: "design",
+          data: {
+            kind: "directive",
+            title: gesture ? `Diretriz de design · ${gesture}` : "Diretriz de design aplicada",
+            detail: techniques.slice(0, 3).join(", ") || brief.slice(0, 160) || undefined,
+          },
+        });
+      }
+      if (type === "build_step") {
+        const section = typeof d.section === "string" ? d.section : "";
+        const technique = typeof d.technique === "string" ? d.technique : "";
+        const layer = typeof d.layer === "string" ? d.layer : "";
+        this.onStream({
+          type: "design",
+          data: {
+            kind: "build_step",
+            title: section ? `Construindo ${section}` : "Passo de construção",
+            detail: [technique, layer].filter(Boolean).join(" · ") || undefined,
           },
         });
       }

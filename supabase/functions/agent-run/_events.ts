@@ -80,6 +80,26 @@ export type AgentStreamEventData =
     }
   | { type: "explore"; message?: string; paths?: string[] }
   | {
+      type: "agent_note";
+      text: string;
+      /** Título curto opcional — se omitido, o frontend usa "Note". */
+      title?: string;
+    }
+  | {
+      type: "alert";
+      level: "info" | "warn" | "error";
+      message: string;
+      /** Identificador do alerta para agrupamento/dedup. */
+      alertId?: string;
+    }
+  | {
+      type: "design";
+      kind: "resolve" | "dna_ready" | "directive" | "build_step";
+      title: string;
+      detail?: string;
+      references?: string[];
+    }
+  | {
       type: "step_result";
       summary?: string;
       evidence?: string[];
@@ -168,7 +188,6 @@ export type AgentStreamEventData =
       errors?: unknown;
     }
   | { type: "gate_decision"; awaiting: boolean; phase?: string; reason?: string }
-  | { type: "gate"; dimension: string; verdict: "pass" | "warn" | "fail"; reason: string }
   | {
       type: "done";
       summary?: string;
@@ -235,13 +254,7 @@ export type AgentStreamEventData =
       files?: string[];
       message?: string;
     }
-  | { type: "chunk_resume"; attempt: number; maxAttempts: number; reason?: string }
-  | { type: "background_wait"; jobId: string; source_url: string; etaSec: number; reason?: string }
-  | { type: "background_resume"; jobId: string; source_url: string; ready: boolean }
-  | { type: "design_resolve"; voices: string[]; mood: string; techniques: string[]; composite: string }
-  | { type: "dna_ready"; source_url: string; signature: string; layers?: string[] }
-  | { type: "directive"; brief: string; gesture: string; techniques: string[] }
-  | { type: "build_step"; section: string; technique: string; layer?: string };
+  | { type: "chunk_resume"; attempt: number; maxAttempts: number; reason?: string };
 
 // ─── Envelope do stream ────────────────────────────────────────────────────
 export interface AgentStreamEvent {
@@ -266,6 +279,9 @@ export const AGENT_STREAM_EVENT_TYPES: ReadonlyArray<AgentStreamEventType> = [
   "thinking_text",
   "phase",
   "explore",
+  "agent_note",
+  "alert",
+  "design",
   "step_result",
   "step",
   "context_pressure",
@@ -288,7 +304,6 @@ export const AGENT_STREAM_EVENT_TYPES: ReadonlyArray<AgentStreamEventType> = [
   "validate_ok",
   "validate_fail",
   "gate_decision",
-  "gate",
   "done",
   "plan_proposed",
   "error",
@@ -298,12 +313,6 @@ export const AGENT_STREAM_EVENT_TYPES: ReadonlyArray<AgentStreamEventType> = [
   "stuck",
   "typecheck_fail",
   "chunk_resume",
-  "background_wait",
-  "background_resume",
-  "design_resolve",
-  "dna_ready",
-  "directive",
-  "build_step",
 ];
 
 // ─── Eventos removidos do contrato (deprecated) ────────────────────────────

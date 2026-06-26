@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef } from "react";
-import { buildTimeline } from "@/lib/timeline-builder";
+import { buildForgeTimeline } from "@/lib/timeline-builder";
 import type { AgentProgress } from "@/lib/agent-progress";
 import { hasInspectorProgressContent } from "@/lib/assistant-run-progress";
 import { InspectorActivityFeed } from "@/components/editor/InspectorActivityFeed";
@@ -20,7 +20,7 @@ export function InspectorTimeline({
   const userScrolledRef = useRef(false);
 
   const timelineItems = useMemo(
-    () => buildTimeline(progress.timeline, running),
+    () => buildForgeTimeline(progress.timeline, running),
     [progress.timeline, running],
   );
 
@@ -64,7 +64,12 @@ export function InspectorTimeline({
             <span>Pensando…</span>
           </div>
         )}
-        <InspectorActivityFeed items={timelineItems} onOpenFile={onOpenFile} running={running} />
+        <InspectorActivityFeed
+          items={timelineItems}
+          plan={progress.pendingPlan}
+          onOpenFile={onOpenFile}
+          running={running}
+        />
       </div>
     </div>
   );

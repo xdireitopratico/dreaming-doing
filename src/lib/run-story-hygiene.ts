@@ -21,6 +21,8 @@ const INTERNAL_TEXT_PATTERNS = [
   /^\s*head\s+function\b/i,
   /^\s*max(?:imum)?\s+interactions\b/i,
   /^\s*maxSteps\b/i,
+  /^\s*conclu[íi]do\s*:/i,
+  /^\s*executando\s+passo\s+\d+/i,
 ];
 
 const INTERNAL_EVENT_TYPES = new Set([
@@ -31,6 +33,10 @@ const INTERNAL_EVENT_TYPES = new Set([
   "start",
   "resume",
   "context_compress",
+  "explore",
+  "memory",
+  "robin_rotate",
+  "skills",
 ]);
 
 const INTERNAL_PHASES = new Set([
@@ -65,9 +71,13 @@ export function sanitizeRunText(text: unknown, max = 120): string | null {
 
 export function isInternalRunEvent(type: string, data: Record<string, unknown> = {}): boolean {
   if (INTERNAL_EVENT_TYPES.has(type)) return true;
-  const phase = typeof data.phase === "string" ? data.phase.trim().toLowerCase() : "";
-  const message = typeof data.message === "string" ? data.message : "";
-  if (phase && INTERNAL_PHASES.has(phase) && isInternalRunText(message || phase)) return true;
+  if (type === "phase") {
+    const phase = typeof data.phase === "string" ? data.phase.trim().toLowerCase() : "";
+    const message = typeof data.message === "string" ? data.message : "";
+    if (phase && INTERNAL_PHASES.has(phase)) return true;
+    if (isInternalRunText(message)) return true;
+    return false;
+  }
   return false;
 }
 

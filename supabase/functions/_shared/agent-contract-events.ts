@@ -80,6 +80,26 @@ export type AgentStreamEventData =
     }
   | { type: "explore"; message?: string; paths?: string[] }
   | {
+      type: "agent_note";
+      text: string;
+      /** Título curto opcional — se omitido, o frontend usa "Note". */
+      title?: string;
+    }
+  | {
+      type: "alert";
+      level: "info" | "warn" | "error";
+      message: string;
+      /** Identificador do alerta para agrupamento/dedup. */
+      alertId?: string;
+    }
+  | {
+      type: "design";
+      kind: "resolve" | "dna_ready" | "directive" | "build_step";
+      title: string;
+      detail?: string;
+      references?: string[];
+    }
+  | {
       type: "step_result";
       summary?: string;
       evidence?: string[];
@@ -259,6 +279,9 @@ export const AGENT_STREAM_EVENT_TYPES: ReadonlyArray<AgentStreamEventType> = [
   "thinking_text",
   "phase",
   "explore",
+  "agent_note",
+  "alert",
+  "design",
   "step_result",
   "step",
   "context_pressure",

@@ -423,6 +423,23 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
       };
     }
 
+    case "agent_note": {
+      const text = (data.text as string) ?? "";
+      return {
+        ...prev,
+        privateThoughtText: prev.privateThoughtText,
+        // agent_note é comunicação intencional do LLM — fica na timeline, não no chat.
+        timeline: [...prev.timeline, event],
+      };
+    }
+
+    case "alert":
+    case "design":
+      return {
+        ...prev,
+        timeline: [...prev.timeline, event],
+      };
+
     case "step_result":
       return {
         ...prev,
