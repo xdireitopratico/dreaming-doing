@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { cn } from "@/lib/utils";
 import type { MiniCardData } from "@/lib/chat/types";
 import {
@@ -15,7 +16,6 @@ import {
   Terminal,
   X,
 } from "lucide-react";
-import { PlanPhaseListFromPlan } from "./PlanPhaseList";
 
 type ChatJobCardProps = {
   data: MiniCardData;
@@ -34,44 +34,17 @@ function parseEditedHeader(header: string): { edited: boolean; file: string | nu
   return { edited: true, file: match[1].trim() };
 }
 
-/** Ícone semântico por tipo de tool — não genérico check/loader. */
-function toolTypeIcon(toolName?: string): React.ReactNode {
-  switch (toolName) {
-    case "fs_read":
-    case "fs_list":
-    case "fs_read_many":
-      return <FileText className="size-3.5" />;
-    case "fs_write":
-    case "fs_edit":
-      return <FileCode className="size-3.5" />;
-    case "shell_exec":
-      return <Terminal className="size-3.5" />;
-    case "fs_search":
-    case "fs_glob":
-    case "web_search":
-      return <Search className="size-3.5" />;
-    case "web_fetch":
-    case "observe":
-      return <Globe className="size-3.5" />;
-    case "install_dep":
-    case "package_install":
-      return <Package className="size-3.5" />;
-    default:
-      return <Eye className="size-3.5" />;
-  }
-}
-
-/** Ícone de status overlay — pequeno, ao lado do ícone de tool type. */
-function statusDotIcon(status: MiniCardData["activity"][number]["status"]) {
+/** Ícone de status por estado da tarefa atômica. */
+function taskStatusIcon(status: "pending" | "active" | "done" | "failed"): React.ReactNode {
   switch (status) {
     case "done":
-      return <Check className="size-2.5 text-[var(--status-done)]" />;
+      return <Check className="size-3 text-[var(--status-done)]" />;
     case "active":
-      return <Loader2 className="size-2.5 animate-spin text-[var(--status-working)]" />;
+      return <Loader2 className="size-3 animate-spin text-[var(--status-working)]" />;
     case "failed":
-      return <X className="size-2.5 text-[var(--status-failed)]" />;
+      return <X className="size-3 text-[var(--status-failed)]" />;
     default:
-      return <Circle className="size-2.5 text-[var(--text-muted)]" />;
+      return <Circle className="size-3 text-[var(--text-muted)]" />;
   }
 }
 
@@ -86,12 +59,18 @@ export function ChatJobCard({
   onShowPreview,
 }: ChatJobCardProps) {
   const isLive = data.status === "working" || data.status === "thinking";
-  const latestBriefing = data.liveBriefings[0] ?? (data.subtitle || data.title);
-
-  const { edited, file } = parseEditedHeader(data.header);
-  const isRunningCommand = /^Running command$/i.test(data.header.trim());
   const isDone = data.status === "done";
   const isFailed = data.status === "failed";
+  const { edited, file } = parseEditedHeader(data.header);
+  const isRunningCommand = /^Running command$/i.test(data.header.trim());
+
+  // Checklist recolhível — mostra as 4 primeiras por padrão, botão expande o resto.
+  const [tasksExpanded, setTasksExpanded] = useState(false);
+  const TASKS_PREVIEW = 4;
+  const tasks = data.tasks ?? [];
+  const visibleTasks = tasksExpanded ? tasks : tasks.slice(0, TASKS_PREVIEW);
+  const hasMoreTasks = tasks.length > TASKS_PREVIEW;
+  const hiddenTasksCount = tasks.length - TASKS_PREVIEW;
 
   const hint = () => {
     if (isDone && data.fileCount) return `${data.fileCount} arquivos alterados →`;
@@ -154,10 +133,6 @@ export function ChatJobCard({
   ];
   const visibleChips = chips.filter((c) => c.visible);
 
-  // Activity stream — 5 itens com ícone semântico + subtítulo.
-  const hasActivity = data.activity.length > 0;
-  const visibleActivity = data.activity.slice(0, 5);
-
   const cardVariant =
     (isRunningCommand || edited) && isLive
       ? "forge-mini-card--running-command"
@@ -166,6 +141,16 @@ export function ChatJobCard({
         : isDone
           ? "forge-mini-card--done"
           : "";
+
+  const statusBadge = isLive
+    ? isDone || isFailed
+      ? isFailed ? "Failed" : "Done"
+      : "Working"
+    : isDone
+      ? "Done"
+      : isFailed
+        ? "Failed"
+        : "Working";
 
   return (
     <div
@@ -205,15 +190,12 @@ export function ChatJobCard({
           </div>
         )}
 
-        {/* Header live — badge compacto "Working" + briefing real como subtítulo.
-            Elimina a duplicação de duas linhas "Working" que existia antes. */}
+        {/* Linha viva única — estado atual do job (rotativo). */}
         {isLive && !edited && !isRunningCommand && !isDone && !isFailed && (
-          <div className="forge-mini-card-live-header">
+          <div className="forge-mini-card-live-header" data-testid="chat-mini-card-live-line">
             <span className="forge-mini-card-live-dot" aria-hidden />
-            <span className="forge-mini-card-live-badge">Working</span>
-            {latestBriefing && latestBriefing !== "Working" && (
-              <span className="forge-mini-card-live-subtitle">{latestBriefing}</span>
-            )}
+            <span className="forge-mini-card-live-badge">{statusBadge}</span>
+            <span className="forge-mini-card-live-line">{data.liveLine}</span>
           </div>
         )}
 
@@ -221,11 +203,45 @@ export function ChatJobCard({
           <p className="forge-mini-card-header-line">{data.header}</p>
         )}
 
-        {/* Sem activity: mostra briefing como título (fallback). */}
-        {!isLive && !hasActivity && (
-          <p className={cn("forge-mini-card-title")}>
-            {data.subtitle || data.title}
-          </p>
+        {/* Checklist de tarefas atômicas — recolhível (4 + botão Ver mais). */}
+        {tasks.length > 0 && (
+          <ul className="forge-mini-card-task-list" data-testid="chat-mini-card-task-list">
+            {visibleTasks.map((task, idx) => (
+              <li
+                key={task.id || idx}
+                className={cn(
+                  "forge-mini-card-task-item",
+                  `forge-mini-card-task-item--${task.status}`,
+                )}
+                data-status={task.status}
+              >
+                <span className="forge-mini-card-task-status" aria-hidden>
+                  {taskStatusIcon(task.status)}
+                </span>
+                <span className="forge-mini-card-task-body">
+                  <span className="forge-mini-card-task-label">{task.label}</span>
+                  {task.criteria && (
+                    <span className="forge-mini-card-task-criteria">{task.criteria}</span>
+                  )}
+                </span>
+              </li>
+            ))}
+            {hasMoreTasks && (
+              <li>
+                <button
+                  type="button"
+                  className="forge-mini-card-task-toggle"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setTasksExpanded((v) => !v);
+                  }}
+                  data-testid="chat-mini-card-task-toggle"
+                >
+                  {tasksExpanded ? "Ver menos" : `+${hiddenTasksCount} tarefas`}
+                </button>
+              </li>
+            )}
+          </ul>
         )}
 
         {visibleChips.length > 0 && (
@@ -243,49 +259,6 @@ export function ChatJobCard({
               </button>
             ))}
           </div>
-        )}
-
-        {/* Activity stream rica — ícone semântico + título + subtítulo + status visual.
-            Cada item mostra o que o agente FAZ em tempo real, não só um label flat. */}
-        {hasActivity ? (
-          <ul className="forge-mini-card-activity" data-testid="chat-mini-card-activity">
-            {visibleActivity.map((line) => (
-              <li
-                key={line.id}
-                className={cn(
-                  "forge-mini-card-activity-item",
-                  line.toolName && `forge-mini-card-activity-item--tool-${line.toolName}`,
-                  `forge-mini-card-activity-item--${line.status}`,
-                )}
-              >
-                <span className="forge-mini-card-activity-icon" aria-hidden>
-                  {line.toolName ? toolTypeIcon(line.toolName) : toolTypeIcon()}
-                </span>
-                <span className="forge-mini-card-activity-body">
-                  <span className="forge-mini-card-activity-label">{line.label}</span>
-                  {line.description && (
-                    <span className="forge-mini-card-activity-desc">{line.description}</span>
-                  )}
-                </span>
-                <span className="forge-mini-card-activity-status" aria-hidden>
-                  {statusDotIcon(line.status)}
-                </span>
-              </li>
-            ))}
-          </ul>
-        ) : null}
-
-        {!hasActivity && data.tasks && data.tasks.length > 0 && (
-          <ul className="forge-task-list">
-            {data.tasks.slice(0, 5).map((task, idx) => (
-              <li key={task.id || idx} className="forge-task-item" data-status={task.status}>
-                <span className="forge-task-icon">
-                  {task.status === 'done' ? '☑' : task.status === 'active' ? '◐' : '○'}
-                </span>
-                <span className="forge-task-label">{task.label}</span>
-              </li>
-            ))}
-          </ul>
         )}
 
         <p className="forge-mini-card-hint">{hint()}</p>

@@ -47,6 +47,7 @@ describe("assertAssistantTurnInvariant", () => {
           header: "Working",
           subtitle: "s",
           liveBriefings: ["s"],
+          liveLine: "s",
           status: "working",
           activity: [],
         },

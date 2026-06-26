@@ -92,6 +92,7 @@ describe("buildThreadScrollSignature", () => {
           header: "Edited",
           subtitle: "s",
           liveBriefings: [],
+          liveLine: "s",
           status: "working",
           activity: [],
         },

@@ -19,6 +19,17 @@ export interface PlanStep {
 
 export type AwaitingKind = "clarify" | "plan_approval" | null;
 
+/** Tarefa atômica declarada pelo LLM (build mode via declare_tasks tool) ou
+ *  derivada de PendingPlan.steps (plan mode). Estado para o mini-card checklist. */
+export type AgentTaskStatus = "pending" | "active" | "done" | "failed";
+
+export interface AgentTask {
+  id: string;
+  label: string;
+  criteria?: string;
+  status: AgentTaskStatus;
+}
+
 /** Rehydrate awaiting gate from agent_runs.meta.awaitingUser (post-F5 / catch-up). */
 export function awaitingKindFromRunMeta(
   meta: Record<string, unknown> | null | undefined,
@@ -152,6 +163,9 @@ export interface AgentProgress {
     multiple?: boolean;
     choices: Array<{ id: string; label: string; description?: string }>;
   }>;
+  /** Tarefas atômicas declaradas (build mode via declare_tasks, ou derivadas de plano aprovado).
+   *  Alimenta o checklist do mini-card. */
+  tasks?: AgentTask[];
 }
 
 export type AgentConnectOptions = {
@@ -196,6 +210,7 @@ export const initialAgentProgress: AgentProgress = {
   classifyComplexity: null,
   classifySummary: null,
   classifyRestored: false,
+  tasks: [],
 };
 
 const MODEL_COSTS: Record<string, number> = {
@@ -373,7 +388,9 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
       const opening = data.opening === true;
       const narration = data.narration === true || opening;
       const thinking = data.thinking === true;
-      const skipStream = narration || thinking || opening;
+      const isFinal = data.final === true;
+      // Fase 2.2 — fechamento final sempre vira streamText, nunca descartado.
+      const skipStream = !isFinal && (narration || thinking || opening);
       return {
         ...prev,
         streamText: skipStream
@@ -453,6 +470,31 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
         totalSteps: typeof data.total === "number" ? data.total : prev.totalSteps,
         timeline: [...prev.timeline, event],
       };
+
+    case "task": {
+      const id = String(data.id ?? "");
+      const label = String(data.label ?? "");
+      if (!id || !label) return { ...prev, timeline: [...prev.timeline, event] };
+      const status: AgentTaskStatus = data.failed === true
+        ? "failed"
+        : data.done === true
+          ? "done"
+          : data.active === true
+            ? "active"
+            : "pending";
+      const task: AgentTask = {
+        id,
+        label,
+        criteria: typeof data.criteria === "string" ? data.criteria : undefined,
+        status,
+      };
+      const existing = prev.tasks ?? [];
+      const idx = existing.findIndex((t) => t.id === id);
+      const tasks = idx >= 0
+        ? [...existing.slice(0, idx), task, ...existing.slice(idx + 1)]
+        : [...existing, task];
+      return { ...prev, tasks, timeline: [...prev.timeline, event] };
+    }
 
     case "context_pressure":
     case "context_compress":

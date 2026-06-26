@@ -350,6 +350,20 @@ export function buildForgeTimeline(timeline: SSEEvent[], running = false): Forge
       continue;
     }
 
+    if (ev.type === "task") {
+      const id = String(data.id ?? "");
+      const label = typeof data.label === "string" ? data.label.trim() : "";
+      if (id && label) {
+        items.push({
+          type: "TASK",
+          id: `task-${id}-${ts}`,
+          label: truncate(label, 120),
+          active: data.active === true,
+        });
+      }
+      continue;
+    }
+
     if (ev.type === "gate_decision") {
       const awaiting = data.awaiting === true;
       items.push({
