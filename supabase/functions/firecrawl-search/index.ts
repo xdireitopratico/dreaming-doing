@@ -13,6 +13,27 @@ Deno.serve(async (req) => {
   }
 
   try {
+    // Auth: require valid Supabase JWT
+    const auth = req.headers.get("Authorization");
+    if (!auth) {
+      return new Response(
+        JSON.stringify({ success: false, error: 'Authentication required' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+    const userClient = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_ANON_KEY")!,
+      { global: { headers: { Authorization: auth } } },
+    );
+    const { data: { user } } = await userClient.auth.getUser();
+    if (!user) {
+      return new Response(
+        JSON.stringify({ success: false, error: 'Invalid or expired token' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     const { query, options } = await req.json();
 
     if (!query) {

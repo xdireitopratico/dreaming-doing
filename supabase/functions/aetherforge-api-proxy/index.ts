@@ -88,18 +88,14 @@ Deno.serve(async (req: Request) => {
 
       let matchedTenantId: string | null = null;
       if (secrets) {
-        // Constant-time-ish comparison via subtle crypto
         const encoder = new TextEncoder();
         const keyBytes = encoder.encode(apiKey);
         for (const s of secrets) {
           const storedBytes = encoder.encode((s as any).secret_value || "");
-          if (keyBytes.length === storedBytes.length) {
-            let match = true;
-            for (let i = 0; i < keyBytes.length; i++) {
-              if (keyBytes[i] !== storedBytes[i]) match = false;
-            }
-            if (match) { matchedTenantId = (s as any).tenant_id; break; }
-          }
+          if (keyBytes.length !== storedBytes.length) continue;
+          let diff = 0;
+          for (let i = 0; i < keyBytes.length; i++) diff |= keyBytes[i] ^ storedBytes[i];
+          if (diff === 0) matchedTenantId = (s as any).tenant_id;
         }
       }
 
@@ -147,8 +143,13 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    // BUG 39 FIX: Use anon key for gateway call, not service role key
-    const anonKey = Deno.env.get("SUPABASE_ANON_KEY") || supabaseKey;
+    const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
+    if (!anonKey) {
+      console.error("[API Proxy] SUPABASE_ANON_KEY not set — refusing to fall back to service role key");
+      return new Response(JSON.stringify({ error: "Server misconfigured" }), {
+        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
     const gatewayResponse = await fetch(`${supabaseUrl}/functions/v1/aetherforge-gateway`, {
       method: "POST",
       headers: {
