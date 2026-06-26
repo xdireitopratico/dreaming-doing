@@ -39,8 +39,15 @@ export type ForgeMiniCardData = {
   /** Activity stream — últimos 3-4 itens da timeline com status visual.
    *  Substitui briefing único por janela de atividade real happening. */
   activity: ForgeActivityLine[];
-  /** Task list derivada do plano para checklist no mini-card do chat. */
-  tasks?: Array<{ id: string; label: string; status: 'pending' | 'active' | 'done' | 'failed' }>;
+  /** Task list derivada do plano ou declarada via declare_tasks para checklist no mini-card do chat. */
+  tasks?: Array<{
+    id: string;
+    label: string;
+    criteria?: string;
+    status: 'pending' | 'active' | 'done' | 'failed';
+  }>;
+  /** Linha viva única — estado atual do job (rotativo). */
+  liveLine?: string;
   editedFile?: string | null;
   fileCount?: number;
   hasPlan?: boolean;
@@ -569,6 +576,47 @@ export function shouldShowJobCard(opts: {
   return false;
 }
 
+/** Uma linha viva rotativa — o que o job está fazendo AGORA. Derivada da timeline
+ *  canônica + tasks declaradas + tools em execução. Nunca uma lista crua de tools. */
+export function collectMiniCardLiveLine(
+  progress: AgentProgress,
+  timeline: ForgeTimelineItem[],
+  jobActive: boolean,
+): string {
+  // Job finalizado — snapshot terminal honesto.
+  if (!jobActive) {
+    if (progress.lastFinishOk === false) return "Finalizado com falha";
+    if (progress.diffs.length > 0) return `${progress.diffs.length} arquivo(s) alterado(s)`;
+    if (progress.deliveryFiles?.length) return `${progress.deliveryFiles.length} arquivo(s) entregue(s)`;
+    return "Concluído";
+  }
+
+  // 1) Tool pendente (em execução) — prioridade máxima.
+  const pendingTool = [...progress.tools].reverse().find((t) => t.ok === undefined);
+  if (pendingTool) {
+    const path = pathFromArgs(pendingTool.args);
+    const line = normalizeMiniCardBriefing(
+      toolBriefing(pendingTool.name, path),
+    );
+    if (line) return line;
+  }
+
+  // 2) Tarefa atômica ativa declarada pelo LLM.
+  const activeTask = (progress.tasks ?? []).find((t) => t.status === "active");
+  if (activeTask) return activeTask.label;
+
+  // 3) Último item factual da timeline.
+  for (const item of [...timeline].reverse()) {
+    const brief = timelineItemBriefing(item);
+    if (brief) {
+      const normalized = normalizeMiniCardBriefing(brief);
+      if (normalized) return normalized;
+    }
+  }
+
+  return "Trabalhando…";
+}
+
 export function buildAgentRunView(
   runId: string,
   progress: AgentProgress,
@@ -599,21 +647,26 @@ export function buildAgentRunView(
         ? ["Executando plano"]
         : liveBriefings;
   const activity = collectMiniCardActivity(progress, forgeTimeline, jobActive);
+  const liveLine = collectMiniCardLiveLine(progress, forgeTimeline, jobActive);
 
-  // Compute tasks from plan for mini-card checklist (to match Lovable images 4-9)
-  const tasks = (jobPlan?.steps ?? []).map((step, index) => {
-    let status: 'pending' | 'active' | 'done' | 'failed' = 'pending';
-    if (progress.finished) {
-      status = progress.lastFinishOk === false ? 'failed' : 'done';
-    } else if (jobActive) {
-      status = index === 0 ? 'active' : 'pending';
-    }
-    return {
-      id: step.id || `plan-step-${index}`,
-      label: step.description,
-      status,
-    };
-  });
+  // Tasks checklist — prioriza tarefas declaradas pelo LLM (declare_tasks via reducer).
+  // Se não houver, deriva do plano aprovado (plan mode).
+  const declaredTasks = progress.tasks ?? [];
+  const tasks = declaredTasks.length > 0
+    ? declaredTasks
+    : (jobPlan?.steps ?? []).map((step, index) => {
+      let status: 'pending' | 'active' | 'done' | 'failed' = 'pending';
+      if (progress.finished) {
+        status = progress.lastFinishOk === false ? 'failed' : 'done';
+      } else if (jobActive) {
+        status = index === 0 ? 'active' : 'pending';
+      }
+      return {
+        id: step.id || `plan-step-${index}`,
+        label: step.description,
+        status,
+      };
+    });
 
   const streamBody = progress.streamText?.trim() || null;
   const narrationBody = progress.narrationText?.trim() || null;
@@ -715,6 +768,7 @@ export function buildAgentRunView(
       header,
       subtitle,
       liveBriefings: normalizedBriefings,
+      liveLine,
       status,
       activity,
       tasks,

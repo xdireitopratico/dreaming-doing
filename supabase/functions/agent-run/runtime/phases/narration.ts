@@ -115,4 +115,16 @@ export class NarrationPhase {
       chatVisible: !this.config.approvedPlanBuild && !this.config.buildFixResume,
     });
   }
+
+  /** Emite `assistant_text` final sem duplicar. Usado para fechamento forçado. */
+  emitFinalClosing(text: string): void {
+    const chunk = text.trim();
+    if (!chunk) return;
+    this.emit("assistant_text", { text: chunk, final: true, append: false });
+  }
+
+  /** Último texto de narração/abertura conhecido — útil para retry contextual. */
+  currentBuffer(): string {
+    return this.buffer.trim();
+  }
 }

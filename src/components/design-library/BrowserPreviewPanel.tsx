@@ -451,9 +451,19 @@ export function BrowserPreviewPanel({ jobId, onClose }: BrowserPreviewPanelProps
                       ? `Job ${jobStatus}. ${jobContext?.errors?.[0] ?? "Sem screenshots capturados."}`
                       : "Aguardando sandbox..."}
                 </p>
-                {!isTerminal && (
+                {!isTerminal && cdpStatus === "failed" && (
+                  <p className="text-[10px] text-amber-500/80 mt-2">
+                    CDP offline — sandbox sem Chromium ou template E2B não buildado
+                  </p>
+                )}
+                {!isTerminal && cdpStatus === "checking" && previewUrl && (
                   <p className="text-[10px] text-muted-foreground/60 mt-2">
-                    (Playwright ainda está configurando o Chromium — pode levar ~1 min)
+                    Verificando conexão com o sandbox...
+                  </p>
+                )}
+                {!isTerminal && cdpStatus === "checking" && !previewUrl && (
+                  <p className="text-[10px] text-muted-foreground/60 mt-2">
+                    Aguardando criação do sandbox E2B...
                   </p>
                 )}
               </div>

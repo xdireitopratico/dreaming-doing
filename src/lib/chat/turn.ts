@@ -39,6 +39,7 @@ function toMiniCard(runView: NonNullable<ReturnType<typeof buildAgentRunView>>):
     header: m.header,
     subtitle: m.subtitle,
     liveBriefings: m.liveBriefings.length > 0 ? m.liveBriefings : [m.subtitle || m.header],
+    liveLine: m.liveLine ?? (m.liveBriefings[0] ?? (m.subtitle || m.header)),
     status: m.status,
     activity: m.activity ?? [],
     tasks: m.tasks,

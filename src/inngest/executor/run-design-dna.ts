@@ -7,12 +7,14 @@ import {
   type DesignDnaExecuteResponse,
 } from "../functions/_shared-design-dna";
 import { extractDesignDnaForUrl } from "./design-dna-extraction.ts";
+import { connectToSandbox, waitForEnvdReady, runInSandbox } from "./e2b-client";
 
 const E2B_API_BASE = process.env.E2B_API_BASE || "https://api.e2b.app";
 const E2B_DOMAIN = process.env.E2B_DOMAIN || "e2b.app";
-// Template custom: vem com Chromium + Playwright + Chrome DevTools em 9222
-// Para buildar: cd e2b-template && npm run build:prod
-const E2B_TEMPLATE_ID = process.env.E2B_TEMPLATE || "dreaming-doing-chromium";
+// Template padrão code-interpreter-v1 (Node + npm). Playwright + Chromium são
+// instalados dinamicamente dentro do sandbox na primeira URL deep.
+// Otimização: usar imagem custom "dreaming-doing-chromium" via env E2B_TEMPLATE.
+const E2B_TEMPLATE_ID = process.env.E2B_TEMPLATE || "code-interpreter-v1";
 const LOOP_BUDGET_MS = 270_000;
 const CHROMIUM_DEBUG_PORT = 9222;
 
@@ -68,7 +70,7 @@ export async function executeDesignDnaJob(
   const isDeep = depth === "deep";
   let sandboxId = "";
   let previewUrl = "";
-  let sandboxExecUrl: string | undefined;
+  let sandboxAccessToken: string | null = null;
 
   if (isDeep) {
     const { data: connectors } = await serviceClient
@@ -111,6 +113,7 @@ export async function executeDesignDnaJob(
       const meta = (job.meta ?? {}) as Record<string, unknown>;
       previewUrl =
         (meta.previewUrl as string) ?? `https://${CHROMIUM_DEBUG_PORT}-${sandboxId}.${E2B_DOMAIN}`;
+      sandboxAccessToken = (meta.sandboxAccessToken as string) ?? null;
     } else {
       if (!e2bApiKey) {
         const msg = "Configure sua chave E2B em API Keys (/api)";
@@ -158,26 +161,43 @@ export async function executeDesignDnaJob(
 
       previewUrl = `https://${CHROMIUM_DEBUG_PORT}-${sandboxId}.${E2B_DOMAIN}`;
 
-      const connectResp = await fetch(`${E2B_API_BASE}/sandboxes/${sandboxId}/connect`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-API-Key": e2bApiKey },
-        body: JSON.stringify({ timeout: 3600 }),
+      const { accessToken } = await connectToSandbox(sandboxId, e2bApiKey);
+      sandboxAccessToken = accessToken;
+
+      await waitForEnvdReady(sandboxId, sandboxAccessToken).catch((err) => {
+        console.warn("[design-dna] envd not ready, continuing anyway:", err);
       });
-      if (!connectResp.ok) {
-        const raw = await connectResp.text().catch(() => "unknown");
-        console.warn("[design-dna] sandbox connect warning:", raw);
+
+      // One-time: install Playwright + Chromium no sandbox
+      await appendJobEvent(supabase, jobId, "sandbox_setup", { sandboxId, step: "installing-playwright" });
+      try {
+        const installResult = await runInSandbox(
+          sandboxId,
+          sandboxAccessToken,
+          "cd /tmp && npm install playwright@latest --no-audit --no-fund 2>&1 && npx playwright install chromium 2>&1",
+          { timeoutMs: 180000 },
+        );
+        if (installResult.exitCode === 0) {
+          console.log("[design-dna] Playwright+Chromium installed in sandbox");
+          await appendJobEvent(supabase, jobId, "sandbox_ready", {
+            sandboxId,
+            previewUrl,
+            chromium: "installed",
+          });
+        } else {
+          console.warn("[design-dna] Playwright install had issues:", installResult.stderr?.slice(0, 200));
+        }
+      } catch (pwErr) {
+        console.warn("[design-dna] Playwright install failed:", pwErr);
       }
 
       await supabase
         .from("design_dna_jobs")
-        .update({ sandbox_id: sandboxId, meta: { previewUrl } })
+        .update({ sandbox_id: sandboxId, meta: { previewUrl, sandboxAccessToken } })
         .eq("id", jobId);
     }
 
-    sandboxExecUrl = `${supabaseUrl}/functions/v1/prometheus-tool-executor`;
-
     // Verifica que Chromium está acessível via DevTools na porta 9222
-    // (template custom já tem Chromium rodando, então só pingamos o endpoint JSON)
     if (startIndex === 0) {
       await appendJobEvent(supabase, jobId, "sandbox_setup", { sandboxId });
       try {
@@ -245,8 +265,8 @@ export async function executeDesignDnaJob(
         depth,
         categories: categories as string[],
         userId,
-        sandboxExecUrl,
-        sandboxToken: isDeep ? serviceRoleKey : undefined,
+        sandboxId: isDeep ? sandboxId : undefined,
+        sandboxAccessToken: isDeep ? sandboxAccessToken : undefined,
       });
 
       if (dnaResult.dna) {

@@ -34,12 +34,19 @@ export type MiniCardData = {
   /** Subtitle rotativo — briefing da tarefa ativa. */
   subtitle: string;
   liveBriefings: string[];
+  /** Single rotating live line — what the job is doing right now. */
+  liveLine: string;
   status: MiniCardStatus;
   /** Activity stream humanizado — últimos 3-4 itens da timeline com status.
    *  Mostra trabalho happening em tempo real (vs briefing único raso). */
   activity: ActivityLine[];
-  /** Task list for plan-driven mini cards (to match Lovable screenshots). */
-  tasks?: Array<{ id: string; label: string; status: 'pending' | 'active' | 'done' | 'failed' }>;
+  /** Atomic task checklist — declaradas pelo LLM (declare_tasks) ou do plano aprovado. */
+  tasks?: Array<{
+    id: string;
+    label: string;
+    criteria?: string;
+    status: 'pending' | 'active' | 'done' | 'failed';
+  }>;
   editedFile?: string | null;
   fileCount?: number;
   hasPlan?: boolean;

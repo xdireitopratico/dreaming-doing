@@ -11,6 +11,7 @@ import {
 
 export const META_CLARIFY_KIND = "meta_clarify";
 export const META_PLAN_KIND = "meta_plan";
+export const META_DECLARE_TASKS_KIND = "meta_declare_tasks";
 
 const VALID_STEP_TYPES = new Set<PlanStepType>([
   "create_file",
@@ -183,8 +184,46 @@ export const CREATE_PLAN_TOOL: ToolDefinition = {
 export const MIN_PLAN_STEPS = 2;
 export const MAX_PLAN_STEPS = 7;
 
+export const DECLARE_TASKS_TOOL: ToolDefinition = {
+  name: "declare_tasks",
+  description:
+    "Declare as tarefas atômicas para este build. Chame UMA vez no início do modo Build, antes de executar qualquer ferramenta de mutação. " +
+    "Cada tarefa deve ter um label humano e um critério de sucesso opcional. " +
+    "O usuário vê essas tarefas no mini-card como checklist.",
+  parameters: {
+    type: "object",
+    properties: {
+      tasks: {
+        type: "array",
+        description: "Lista de tarefas atômicas a executar neste build.",
+        items: {
+          type: "object",
+          properties: {
+            id: {
+              type: "string",
+              description: "ID estável da tarefa (ex: 't1', 'backend-endpoint').",
+            },
+            label: {
+              type: "string",
+              description: "Descrição humana curta da tarefa (ex: 'Criar endpoint de cotações').",
+            },
+            criteria: {
+              type: "string",
+              description: "Critério de sucesso opcional (ex: 'GET /quotes retorna 200 com dados ordenados').",
+            },
+          },
+          required: ["id", "label"],
+        },
+      },
+    },
+    required: ["tasks"],
+  },
+};
+
 export function getMetaToolDefinitions(planMode: boolean): ToolDefinition[] {
-  return planMode ? [CLARIFY_TOOL, CREATE_PLAN_TOOL] : [CLARIFY_TOOL];
+  return planMode
+    ? [CLARIFY_TOOL, CREATE_PLAN_TOOL]
+    : [CLARIFY_TOOL, DECLARE_TASKS_TOOL];
 }
 
 /** Patch/mutação — ocultas em Plan mode (leitura + shell exploratório permanecem). */
@@ -194,21 +233,26 @@ export function isPlanModePatchTool(name: string): boolean {
   return PLAN_MODE_PATCH_TOOLS.has(name);
 }
 
-/** Build: registry completo + clarify. Plan: registry − patch + clarify + create_plan. */
+/** Build: registry completo + clarify + declare_tasks. Plan: registry − patch + clarify + create_plan. */
 export function mergeExecutionToolDefinitions(
   registryDefs: ToolDefinition[],
   planMode = false,
 ): ToolDefinition[] {
   if (planMode) return mergePlanModeToolDefinitions(registryDefs);
-  const filtered = registryDefs.filter((d) => d.name !== "clarify" && d.name !== "create_plan");
+  const filtered = registryDefs.filter(
+    (d) => d.name !== "clarify" && d.name !== "create_plan" && d.name !== "declare_tasks",
+  );
   return [...filtered, ...getMetaToolDefinitions(false)];
 }
 
-/** Plan mode — tudo exceto fs_write/fs_edit/fs_delete; shell_exec para grep/cat/ls. */
+/** Plan mode — tudo exceto fs_write/fs_edit/fs_delete + declare_tasks; shell_exec para grep/cat/ls. */
 export function mergePlanModeToolDefinitions(registryDefs: ToolDefinition[]): ToolDefinition[] {
   const filtered = registryDefs.filter(
     (d) =>
-      !PLAN_MODE_PATCH_TOOLS.has(d.name) && d.name !== "clarify" && d.name !== "create_plan",
+      !PLAN_MODE_PATCH_TOOLS.has(d.name) &&
+      d.name !== "clarify" &&
+      d.name !== "create_plan" &&
+      d.name !== "declare_tasks",
   );
   return [...filtered, ...getMetaToolDefinitions(true)];
 }
@@ -216,29 +260,37 @@ export function mergePlanModeToolDefinitions(registryDefs: ToolDefinition[]): To
 export function splitMetaToolCalls(toolCalls: ToolCall[]): {
   clarify: ToolCall | null;
   createPlan: ToolCall | null;
+  declareTasks: ToolCall | null;
   execution: ToolCall[];
 } {
   let clarify: ToolCall | null = null;
   let createPlan: ToolCall | null = null;
+  let declareTasks: ToolCall | null = null;
   const execution: ToolCall[] = [];
   for (const call of toolCalls) {
     if (call.name === "clarify") clarify = call;
     else if (call.name === "create_plan") createPlan = call;
+    else if (call.name === "declare_tasks") declareTasks = call;
     else execution.push(call);
   }
-  return { clarify, createPlan, execution };
+  return { clarify, createPlan, declareTasks, execution };
 }
 
 export function hasMixedMetaAndExecution(toolCalls: ToolCall[] | undefined): boolean {
   if (!toolCalls?.length) return false;
-  const { clarify, createPlan, execution } = splitMetaToolCalls(toolCalls);
-  return execution.length > 0 && (clarify !== null || createPlan !== null);
+  const { clarify, createPlan, declareTasks, execution } = splitMetaToolCalls(toolCalls);
+  return (
+    execution.length > 0 &&
+    (clarify !== null || createPlan !== null || declareTasks !== null)
+  );
 }
 
 export function registerMetaTools(reg: ToolRegistry, opts: { planMode: boolean }): void {
   reg.register(CLARIFY_TOOL, async (args) => metaClarifyHandler(args));
   if (opts.planMode) {
     reg.register(CREATE_PLAN_TOOL, async (args) => metaPlanHandler(args));
+  } else {
+    reg.register(DECLARE_TASKS_TOOL, async (args) => metaDeclareTasksHandler(args));
   }
 }
 
@@ -255,6 +307,14 @@ async function metaPlanHandler(args: Record<string, unknown>): Promise<ToolResul
     toolCallId: "",
     ok: true,
     output: { kind: META_PLAN_KIND, ...args },
+  };
+}
+
+async function metaDeclareTasksHandler(args: Record<string, unknown>): Promise<ToolResult> {
+  return {
+    toolCallId: "",
+    ok: true,
+    output: { kind: META_DECLARE_TASKS_KIND, ...args },
   };
 }
 
