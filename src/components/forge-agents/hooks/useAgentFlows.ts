@@ -1,6 +1,6 @@
 /**
  * useAgentFlows — Hook para CRUD de agent flows
- * Extraído de AdminAgentBuilderView (R57 Higiene Arquitetural)
+ * Extraído de FlowAgentBuilderView (R57 Higiene Arquitetural)
  */
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";

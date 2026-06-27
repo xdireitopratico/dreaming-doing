@@ -392,7 +392,816 @@ export class AgentLoop {
     return runAgentOrchestrator(buildOrchestratorDeps(this.orchestratorHost(), toolsUsed));
   }
 
+<<<<<<< Updated upstream
   private orchestratorHost() {
+=======
+      // Plan runs terminate after proposing (no in-memory decision wait).
+      // The plan is emitted to the client via Realtime; approval/rejection
+      // creates a new build run via the plan-decide server action.
+    } else {
+      if (
+        !this.resumeRun &&
+        !this.approvedPlanBuild &&
+        this.originalUserRequest &&
+        isConversationalTurnEarly(this.originalUserRequest)
+      ) {
+        return await this.runConversationalReply();
+      }
+
+      if (
+        !this.resumeRun &&
+        !this.approvedPlanBuild &&
+        this.planMode &&
+        this.originalUserRequest &&
+        isShowExistingPlanRequest(this.originalUserRequest)
+      ) {
+        const stored = findLatestStoredPlan(this.state.messages);
+        if (stored) {
+          const reopened: ProposedPlan = {
+            ...stored.plan,
+            planId: crypto.randomUUID(),
+            summary: sanitizePlanHeadline(
+              stored.plan.mission ?? stored.plan.summary,
+              "Plano proposto",
+            ),
+            proposedAt: new Date().toISOString(),
+            ttlMs: PLAN_APPROVAL_TTL_MS,
+          };
+          return await this.finishPlanProposal(reopened);
+        }
+        const reply =
+          "Ainda não há plano nesta conversa. Descreva o que quer construir e eu monto um para você revisar.";
+        this.emit("assistant_text", { text: reply, final: true });
+        await this.persistFinal(reply, { lastFinishOk: true, conversational: true });
+        await this.clearCheckpoint();
+        await this.markRunStatus("completed");
+        this.emit("done", { summary: reply, conversational: true });
+        return { ok: true, summary: reply, steps: 0, toolsUsed: [] };
+      }
+
+      if (this.resumeRun) {
+        this.appendResumeInstruction();
+        this.emit("phase", {
+          phase: "resume",
+          message: "Continuando execução…",
+        });
+      }
+
+      await this.gatherContext();
+      if (this.loopBudgetExceeded()) {
+        return this.returnResumableChunk(0, toolsUsed);
+      }
+      await this.saveCheckpoint(LoopPhase.GATHER_CONTEXT);
+
+      const isApprovedOrSkip = this.approvedPlanBuild || this.skipConversationalGate;
+      const userPrompt =
+        this.originalUserRequest?.trim() ||
+        (() => {
+          const last = this.state.messages.filter((m) => m.role === "user").pop()?.content;
+          return typeof last === "string" ? last.trim() : "";
+        })();
+
+      const classification: ClassificationResult = isApprovedOrSkip
+        ? {
+            complexity: (this.complexityScore || 3) as 1 | 2 | 3 | 4 | 5,
+            type: "modify",
+            summary: (userPrompt || "Executar plano aprovado").slice(0, 200),
+            needsBuild: true,
+            needsDeps: false,
+          }
+        : deriveClassificationFromPrompt(userPrompt, this.planMode);
+
+      if (this.loopBudgetExceeded()) {
+        return this.returnResumableChunk(0, toolsUsed);
+      }
+
+      this.complexityScore = classification.complexity;
+      this.state.intent = {
+        type: classification.type as IntentAnalysis["type"],
+        summary: classification.summary,
+        scope: [],
+        complexity: "medium",
+      };
+      this.maxStepsLimit = calculateMaxSteps(classification.complexity);
+      this.applyAutoModelForComplexity(classification.complexity);
+      executionModel = this.configuredModel();
+
+      if (this.fsmState.name === "idle") {
+        await this.emitTransition("send");
+      }
+      await this.emitTransition("classified", classification);
+
+      if (
+        !isApprovedOrSkip &&
+        this.originalUserRequest &&
+        isConversationalTurn(this.originalUserRequest, classification)
+      ) {
+        return await this.runConversationalReply();
+      }
+
+      // Inventário do projeto — responde com contexto real, sem fs_write.
+      if (
+        this.originalUserRequest &&
+        isAdvisoryQuestion(this.originalUserRequest) &&
+        !this.approvedPlanBuild
+      ) {
+        return await this.runAdvisoryReply();
+      }
+
+      if (
+        this.originalUserRequest &&
+        isProjectInventoryQuestion(this.originalUserRequest) &&
+        !this.planMode
+      ) {
+        const inv = (await this.runInventoryPhase(executionModel)).trim();
+        if (!inv) {
+          return {
+            ok: false,
+            error: "Não foi possível resumir o estado do projeto.",
+            steps: 0,
+            toolsUsed: [],
+          };
+        }
+        this.emit("assistant_text", { text: inv, final: true });
+        await this.persistFinal(inv);
+        await this.clearCheckpoint();
+        await this.markRunStatus("completed");
+        this.emit("done", { summary: inv, inventory: true });
+        return { ok: true, summary: inv, steps: 0, toolsUsed: [] };
+      }
+
+      if (this.planMode) {
+        return await this.runPlanModeAgentTurn(executionModel);
+      }
+
+      this.emit("phase", {
+        phase: "build",
+        message: "Implementando mudanças…",
+        intent: this.state.intent,
+      });
+
+      if (this.approvedPlanBuild) {
+        this.emit("phase", {
+          phase: "build",
+          message: "Executando plano aprovado…",
+        });
+      }
+
+      if (this.fsmState.name === "planning") {
+        await this.emitTransition("no_plan_needed");
+      }
+    }
+
+    if (this.planMode) {
+      await this.clearCheckpoint();
+      return {
+        ok: false,
+        error: "Plan mode não executa ferramentas — apenas propõe plano.",
+        steps: 0,
+        toolsUsed: [...toolsUsed],
+      };
+    }
+
+    await this.runDesignPreflightIfNeeded();
+
+    const step =
+      this.resumeRun && this.hasCheckpoint
+        ? resumeStepStart(this.resumePhase ?? this.state.phase, this.state.currentStepIndex)
+        : 0;
+
+    let buildAttempts = 0;
+    const maxRetries = 3;
+    let loopStep = step;
+    let finalGateOk = false;
+
+    while (!finalGateOk) {
+      while (loopStep < this.maxStepsLimit) {
+        if (this.loopBudgetExceeded()) {
+          return this.returnResumableChunk(loopStep, toolsUsed);
+        }
+
+        if (await this.isCanceled()) {
+          await this.persistFinal("Execução cancelada pelo usuário.");
+          this.emit("canceled", { message: "Cancelado pelo usuário" });
+          return {
+            ok: false,
+            error: "Cancelado",
+            steps: Math.max(0, loopStep),
+            canceled: true,
+            toolsUsed: [...toolsUsed],
+          };
+        }
+
+        loopStep++;
+        this.state.currentStepIndex = loopStep;
+    
+        this.state.phase = LoopPhase.EXECUTE_STEP;
+        await this.touchHeartbeat();
+        if (this.approvedPlanBuild) {
+          const enabled = this.enabledApprovedPlanSteps();
+          this.state.totalSteps = enabled.length;
+          this.emit("step", {
+            current: this.approvedPlanStepIndex,
+            total: enabled.length,
+          });
+          const activeStep = enabled[this.approvedPlanStepIndex];
+          const stepMessage = activeStep
+            ? activeStep.description.slice(0, 120)
+            : "Executando plano aprovado…";
+          if (stepMessage !== this.lastExecutePhaseMessage) {
+            this.emit("phase", {
+              phase: "execute",
+              message: stepMessage,
+            });
+            this.lastExecutePhaseMessage = stepMessage;
+          }
+        } else {
+          this.state.totalSteps = this.maxStepsLimit;
+          this.emit("step", { current: loopStep, total: this.maxStepsLimit });
+          this.emit("phase", {
+            phase: "execute",
+            message: "Executando…",
+          });
+        }
+
+        const compressed = await this.compression.compress(this.state.messages);
+        const executeInstruction = buildExecuteInstruction(this.originalUserRequest, {
+          loopStep,
+          buildFixResume: this.buildFixResume,
+        });
+        const actionableIntent =
+          this.state.intent?.type === "modify" ||
+          this.state.intent?.type === "new_project" ||
+          this.state.intent?.type === "fix" ||
+          this.state.intent?.type === "add_dep";
+        const forceTools =
+          this.forceToolsNext ||
+          (!this.toolsInvoked &&
+            actionableIntent &&
+            (this.approvedPlanBuild
+              ? loopStep >= 1
+              : loopStep >= 2 && loopStep <= 4));
+        const narrationOnlyStep =
+          !this.forceToolsNext &&
+          !this.toolsInvoked &&
+          loopStep === 1 &&
+          actionableIntent &&
+          !this.approvedPlanBuild;
+        let response: ChatResponse | null = null;
+        try {
+          this.maybeEmitSilenceHeartbeat();
+          await this.touchHeartbeat();
+          response = await this.llmChat(executionModel, executeInstruction, compressed, forceTools);
+        } catch (err: unknown) {
+          const message = err instanceof Error ? err.message : "Erro no modelo";
+          const retries = await this.bumpLlmRetries();
+          if (retries >= MAX_LLM_RETRIES) {
+            const failMsg = `Erro no modelo após ${retries} tentativas: ${message}`;
+            await this.persistFinal(failMsg, {
+              lastFinishOk: false,
+              buildFailed: true,
+            });
+            return {
+              ok: false,
+              error: failMsg,
+              steps: loopStep,
+              resumable: false,
+              toolsUsed: [...toolsUsed],
+            };
+          }
+          await this.saveCheckpoint(LoopPhase.ERROR, true);
+          this.notifyLoopStatus({
+            kind: "model_error",
+            errorDetail: message,
+          });
+          return this.returnResumableChunk(loopStep, toolsUsed);
+        }
+        if (!response) break;
+
+        await this.resetLlmRetries();
+        this.compression.recordUsage(response.usage);
+
+        const assistantText = (response.content ?? "").trim();
+
+        if (hasMixedMetaAndExecution(response.tool_calls)) {
+          this.state.messages.push({
+            role: "assistant",
+            content: response.content ?? assistantText,
+            tool_calls: response.tool_calls?.map((tc) => ({
+              id: tc.id,
+              type: "function" as const,
+              function: { name: tc.name, arguments: JSON.stringify(tc.arguments) },
+            })),
+          });
+          this.state.messages.push({
+            role: "user",
+            content:
+              "Não misture clarify/create_plan com ferramentas de execução no mesmo turno. " +
+              "Use só clarify (para perguntar) OU só fs_read/fs_write/fs_edit/shell_exec (para implementar).",
+          });
+          continue;
+        }
+
+        const { clarify: clarifyCall, createPlan: createPlanCall, execution: execCalls } =
+          splitMetaToolCalls(response.tool_calls ?? []);
+        if (createPlanCall) {
+          return {
+            ok: false,
+            error: "create_plan só é válido em modo Plan.",
+            summary: "create_plan só é válido em modo Plan.",
+            steps: loopStep,
+            toolsUsed: [...toolsUsed, "create_plan"],
+          };
+        }
+        if (clarifyCall && execCalls.length === 0) {
+          toolsUsed.add("clarify");
+          const clarifyMsg = formatClarifyMessage(clarifyCall.arguments);
+          const combined = [assistantText, clarifyMsg].filter(Boolean).join("\n\n").trim();
+          return await this.finishClarify(combined, 0, [...toolsUsed]);
+        }
+
+        // Sem tool_calls — enforcement mesmo quando thinking foi streamed (content vazio).
+        if (!response.tool_calls || response.tool_calls.length === 0) {
+          const shouldEnforce =
+            forceTools ||
+            narrationOnlyStep ||
+            this.llmResponseWasStreamed ||
+            this.approvedPlanBuild ||
+            (actionableIntent && !this.toolsInvoked);
+          if (shouldEnforce) {
+            const fail = this.applyNoToolCallsEnforcement(response, assistantText, loopStep);
+            if (fail) {
+              await this.persistFinal(TOOL_FAIL_USER_MESSAGE, { lastFinishOk: false });
+              await this.markRunStatus("failed");
+              this.emit("finish", {
+                ok: false,
+                resumable: false,
+                error: TOOL_FAIL_USER_MESSAGE,
+              });
+              return {
+                ok: false,
+                error: TOOL_FAIL_USER_MESSAGE,
+                steps: loopStep,
+                resumable: false,
+                toolsUsed: [...toolsUsed],
+              };
+            }
+            continue;
+          }
+          this.state.messages.push({
+            role: "assistant",
+            content: response.content ?? "Concluído.",
+          });
+          break;
+        }
+
+        this.toolMissCount = 0;
+        this.forceToolsNext = false;
+        this.toolsInvoked = true;
+
+        if (assistantText) {
+          this.emitAgentProse(assistantText);
+        }
+
+        this.emit("phase", {
+          phase: "execute",
+          toolCount: response.tool_calls.length,
+        });
+        await this.saveCheckpoint(LoopPhase.EXECUTE_STEP);
+
+        // Persiste tool_calls IMEDIATAMENTE para o chat ver via Realtime,
+        // enquanto eles ainda estão executando (com status pending).
+        const liveMsgId = await this.persistAssistantStep(response);
+
+        const execResults = await parallelExecute(response.tool_calls, async (call) => {
+          toolsUsed.add(call.name);
+
+          // ─── Captura o conteúdo ANTES (para diff) antes de mutações em arquivos ───
+          let preDiff: {
+            path: string;
+            before: string;
+            after: string;
+            op: "write" | "edit";
+          } | null = null;
+          if (call.name === "fs_write" || call.name === "fs_edit") {
+            const filePath = (call.arguments.path as string) ?? "";
+            if (filePath) {
+              try {
+                // Usa cache para evitar N+1 queries ao Supabase
+                const before = this.fileContentCache.get(filePath) ?? "";
+                let after = before;
+                if (call.name === "fs_write") {
+                  after = (call.arguments.content as string) ?? "";
+                } else {
+                  const oldText = (call.arguments.oldText as string) ?? "";
+                  const newText = (call.arguments.newText as string) ?? "";
+                  const replaceAll = call.arguments.replaceAll === true;
+                  // Validação: oldText vazio causaria estouro de memória
+                  if (!oldText) {
+                    after = before + newText; // Append como fallback seguro
+                  } else {
+                    after = replaceAll
+                      ? before.split(oldText).join(newText)
+                      : before.replace(oldText, newText);
+                  }
+                }
+                preDiff = {
+                  path: filePath,
+                  before,
+                  after,
+                  op: call.name === "fs_write" ? "write" : "edit",
+                };
+                // Atualiza cache com o novo conteúdo
+                this.fileContentCache.set(filePath, after);
+              } catch {
+                /* não bloqueia a execução — diff é best-effort */
+              }
+            }
+          }
+
+          this.emit("tool_start", { name: call.name, args: call.arguments });
+          const result = await this.reg.execute(call);
+          this.emit("tool_done", {
+            name: call.name,
+            ok: result.ok,
+            error: result.error,
+          });
+
+          if (call.name === "shell_exec" && isGradleCommand(String(call.arguments.command ?? ""))) {
+            const output =
+              typeof result.output === "string"
+                ? result.output
+                : result.output != null
+                  ? JSON.stringify(result.output)
+                  : (result.error ?? "");
+            this.emit("build_log", {
+              command: String(call.arguments.command ?? "").slice(0, 240),
+              lines: output
+                .split("\n")
+                .map((l) => l.trim())
+                .filter(Boolean)
+                .slice(-40),
+              ok: result.ok,
+              output: output.slice(0, 4000),
+            });
+          }
+
+          // ─── Emite o diff para o cliente APÓS tool_done (com o estado final já aplicado) ───
+          if (preDiff && result.ok) {
+            this.recordTouchedPath(preDiff.path);
+            this.emit("file_diff", preDiff);
+            const hasGradleScaffold = (this.state.context?.files ?? []).some((f) =>
+              /build\.gradle|settings\.gradle/i.test(f.path.replace(/^\//, "")),
+            );
+            if (
+              isAndroidNativePath(preDiff.path) &&
+              !hasGradleScaffold &&
+              (this.projectTemplate === "vite-react" || this.projectTemplate === "landing-page")
+            ) {
+              this.emit("stack_fork_suggested", {
+                path: preDiff.path,
+                suggestedStack: "android-native",
+                message:
+                  "Detectamos código **mobile nativo** neste projeto web. Quer criar um projeto Android dedicado? (O arquivo foi mantido — nada foi apagado.)",
+              });
+            }
+          }
+
+          if ((call.name === "fs_write" || call.name === "fs_edit") && result.ok) {
+            const pathArg = (call.arguments.path as string) ?? call.name;
+            this.emit("preview_sync", { path: pathArg, reason: "fs_change" });
+          }
+          return result;
+        });
+
+        // Git commit único por step (não por arquivo) — após todas as tools executarem
+        const modifiedPaths = execResults
+          .filter(({ call }) => call.name === "fs_write" || call.name === "fs_edit")
+          .map(({ call }) => (call.arguments.path as string) ?? call.name)
+          .filter(Boolean);
+        if (modifiedPaths.length > 0) {
+          const commitMsg =
+            modifiedPaths.length === 1
+              ? `${modifiedPaths[0]}: update`
+              : `update ${modifiedPaths.length} files`;
+          await this.reg.execute({
+            id: crypto.randomUUID(),
+            name: "shell_exec",
+            arguments: {
+              command: `cd /home/user && git add -A && git commit -m "${commitMsg}" 2>&1 || true`,
+            },
+          });
+          // unconditional preview_sync + tick drive on every successful fs_* (live during first-gen seed + follow-up edits)
+          this.emit("preview_sync", {
+            path: modifiedPaths[0],
+            reason: "fs_success",
+          });
+        }
+
+        const assistantMsg: ChatMessage = {
+          role: "assistant",
+          content: response.content ?? "",
+          tool_calls: response.tool_calls.map((tc) => ({
+            id: tc.id,
+            type: "function" as const,
+            function: {
+              name: tc.name,
+              arguments: JSON.stringify(tc.arguments),
+            },
+          })),
+        };
+        this.state.messages.push(assistantMsg);
+
+        for (const { call, result } of execResults) {
+          const raw = JSON.stringify(result);
+          let structured = raw;
+          if (!result.ok) {
+            const toolName = call.name;
+            const args = call.arguments;
+            const path = String(args.path ?? args.filePath ?? args.file ?? "");
+            const errorMsg = String(result.error ?? "unknown error");
+            const outputSample =
+              typeof result.output === "string"
+                ? result.output.slice(0, 200)
+                : typeof result.output === "object"
+                  ? JSON.stringify(result.output).slice(0, 200)
+                  : "";
+
+            const hints: string[] = [];
+            if (toolName === "fs_write" || toolName === "fs_edit") {
+              hints.push(
+                `Verifique se o diretório de ${path ? path.split("/").slice(0, -1).join("/") : "destino"} existe antes de escrever.`,
+              );
+              hints.push("Use shell_exec com `mkdir -p` ou `test -d` para garantir o caminho.");
+            } else if (toolName === "shell_exec") {
+              const cmd = String(args.command ?? "").slice(0, 120);
+              if (/npm (install|add)\b/.test(cmd))
+                hints.push(
+                  "Tente `npm install --legacy-peer-deps` ou limpe node_modules primeiro.",
+                );
+              if (/npx tsc/.test(cmd))
+                hints.push("Verifique se tsconfig.json está correto e os tipos estão instalados.");
+              if (/npm run build/.test(cmd) && outputSample)
+                hints.push(`Build falhou: ${outputSample.slice(0, 120)}`);
+              if (!outputSample)
+                hints.push("Comando não produziu saída — verifique se o binário existe.");
+            } else if (toolName === "fs_search" || toolName === "fs_read") {
+              hints.push(
+                `O caminho ${path || "<vazio>"} pode não existir. Verifique com shell_exec + test -e.`,
+              );
+            }
+
+            structured = JSON.stringify({
+              ok: false,
+              tool: toolName,
+              error: errorMsg,
+              ...(path ? { path } : {}),
+              ...(outputSample ? { output: outputSample.slice(0, 500) } : {}),
+              hint: hints.length > 0 ? hints.join(" ") : undefined,
+            });
+          }
+          this.state.messages.push({
+            role: "tool",
+            tool_call_id: call.id,
+            content: structured.slice(0, 8000),
+          });
+        }
+
+        this.notifyLoopStatus({
+          kind: "tool_batch",
+          tools: response.tool_calls.map((tc) => ({
+            name: tc.name,
+            arguments: tc.arguments,
+          })),
+          step: loopStep,
+          total: this.maxStepsLimit,
+          allOk: execResults.every(({ result }) => result.ok),
+        });
+
+        if (
+          this.approvedPlanBuild &&
+          execResults.every(({ result }) => result.ok) &&
+          this.approvedPlanStepIndex < this.enabledApprovedPlanSteps().length - 1
+        ) {
+          this.approvedPlanStepIndex++;
+          const enabled = this.enabledApprovedPlanSteps();
+          this.emit("step", {
+            current: this.approvedPlanStepIndex,
+            total: enabled.length,
+          });
+        }
+
+        // Extra cancel check after potentially long tool execution (shell, writes, observer).
+        // Combined with per-step check this makes stop responsive without full AbortSignal everywhere.
+        if (await this.isCanceled()) {
+          await this.persistFinal("Execução cancelada pelo usuário.");
+          this.emit("canceled", { message: "Cancelado pelo usuário" });
+          return {
+            ok: false,
+            error: "Cancelado",
+            steps: Math.max(0, loopStep),
+            canceled: true,
+            toolsUsed: [...toolsUsed],
+          };
+        }
+
+        const stepHash = hashToolBatch(
+          response.tool_calls
+            .filter((tc) => tc.name !== "fs_write" && tc.name !== "fs_edit")
+            .map((tc) => ({
+              name: tc.name,
+              arguments: tc.arguments,
+            })),
+        );
+        this.state.executionLog = appendExecutionLogEntry(this.state.executionLog, stepHash);
+
+        // Coleta arquivos modificados para type-check incremental
+        const modifiedFilePaths = response.tool_calls
+          .filter((t) => t.name === "fs_write" || t.name === "fs_edit")
+          .map((t) => t.arguments.path as string)
+          .filter(Boolean);
+
+        // Atualiza a mensagem persistida com o resultado (status, error, output curto)
+        if (liveMsgId) {
+          await this.updateAssistantStep(liveMsgId, response, execResults, loopStep);
+        }
+
+        // Quick TypeScript check incremental (rápido, apenas arquivos modificados)
+        if (modifiedFilePaths.length > 0) {
+          const typeCheck = await this.observer.quickTypeCheck(modifiedFilePaths);
+          if (!typeCheck.ok) {
+            this.notifyLoopStatus({ kind: "typecheck_fail" });
+            this.emit("typecheck_fail", {
+              errors: typeCheck.errors,
+              files: modifiedFilePaths,
+            });
+            this.state.messages.push({
+              role: "user",
+              content: `TYPECHECK FALHOU nos arquivos modificados:\n\n${typeCheck.errors
+                .map((e) => `${e.file}:${e.line}:${e.column} - ${e.code}: ${e.message}`)
+                .join("\n")}\n\nCorrija os erros acima com fs_edit antes de continuar.`,
+            });
+            continue;
+          }
+        }
+
+        const modifiedFiles = modifiedFilePaths.length > 0;
+        if (modifiedFiles && buildAttempts < maxRetries) {
+          this.state.phase = LoopPhase.VALIDATE_STEP;
+          this.notifyLoopStatus({ kind: "build_check" });
+          this.emit("phase", {
+            phase: "observe",
+            message: "Verificando build...",
+          });
+          await this.saveCheckpoint(LoopPhase.VALIDATE_STEP);
+          const observation = await this.observer.observe();
+          if (!observation.passed) {
+            buildAttempts++;
+            this.emit("validate_fail", {
+              attempt: buildAttempts,
+              checks: observation.checks.filter((c) => !c.ok).map((c) => c.name),
+              feedback: observation.feedback?.slice(0, 500),
+            });
+            this.state.messages.push({
+              role: "user",
+              content: `VERIFICAÇÃO FALHOU (${buildAttempts}/${maxRetries}). Analise e corrija:\n\n\`\`\`\n${observation.feedback?.slice(
+                0,
+                3000,
+              )}\n\`\`\`\n\nNÃO peça ajuda. Use fs_search/fs_edit para corrigir.`,
+            });
+            continue;
+          } else {
+            buildAttempts = 0;
+            this.notifyLoopStatus({ kind: "build_ok" });
+            this.emit("validate_ok", { message: "Build OK" });
+          }
+        }
+
+        if (isExecutionStuck(this.state.executionLog)) {
+          this.notifyLoopStatus({ kind: "stuck" });
+          this.emit("stuck", {
+            message: "Padrão repetitivo detectado — injetando instrução para nova abordagem",
+          });
+          this.state.messages.push({
+            role: "user",
+            content:
+              "ATENÇÃO: Você está repetindo as mesmas ferramentas. PARE e tente uma abordagem DIFERENTE. " +
+              "Use fs_search para entender o código atual, depois fs_edit para corrigir. Não repita fs_write no mesmo arquivo.",
+          });
+        }
+
+        await this.saveCheckpoint(LoopPhase.DECIDE_NEXT);
+      }
+
+      if (loopStep >= this.maxStepsLimit) {
+        await this.saveCheckpoint(LoopPhase.DECIDE_NEXT, true);
+        return this.returnResumableChunk(loopStep, toolsUsed, {
+          buildFix: this.requiresFinalBuildGate(),
+        });
+      }
+
+      if (!this.requiresFinalBuildGate()) {
+        finalGateOk = true;
+        continue;
+      }
+
+      this.state.phase = LoopPhase.VALIDATE_STEP;
+      this.emit("phase", {
+        phase: "observe",
+        message: "Verificação final de build...",
+      });
+      await this.saveCheckpoint(LoopPhase.VALIDATE_STEP);
+      const finalObservation = await this.observer.observe();
+      if (finalObservation.passed) {
+        this.notifyLoopStatus({ kind: "build_ok" });
+        this.emit("validate_ok", { message: "Build OK (gate final)" });
+        finalGateOk = true;
+        continue;
+      }
+
+      buildAttempts++;
+      this.emit("validate_fail", {
+        attempt: buildAttempts,
+        checks: finalObservation.checks.filter((c) => !c.ok).map((c) => c.name),
+        feedback: finalObservation.feedback?.slice(0, 500),
+        finalGate: true,
+      });
+
+      if (buildAttempts > maxRetries) {
+        const failMsg =
+          `Build não passou após ${maxRetries} tentativas.\n\n` +
+          `${finalObservation.feedback?.slice(0, 2000) ?? "Erros de compilação no sandbox."}`;
+        await this.persistFinal(failMsg, {
+          lastFinishOk: false,
+          buildFailed: true,
+        });
+        return {
+          ok: false,
+          error: failMsg,
+          steps: loopStep,
+          resumable: false,
+          toolsUsed: [...toolsUsed],
+        };
+      }
+
+      if (this.loopBudgetExceeded()) {
+        return this.returnResumableChunk(loopStep, toolsUsed, {
+          buildFix: true,
+        });
+      }
+
+      this.state.messages.push({
+        role: "user",
+        content:
+          `BUILD GATE FINAL FALHOU (${buildAttempts}/${maxRetries}). Corrija antes de finalizar:\n\n` +
+          `\`\`\`\n${finalObservation.feedback?.slice(0, 6000) ?? ""}\n\`\`\`\n\n` +
+          `Os erros reais de compilação estão acima — corrija cada um com fs_edit. Verifique imports, tipos e sintaxe.`,
+      });
+      this.notifyLoopStatus({ kind: "build_fix" });
+    }
+
+    this.state.phase = LoopPhase.SUMMARIZE;
+    await this.emitTransition("delivered");
+    this.emit("phase", { phase: "summarize", message: "Finalizando..." });
+    await this.saveCheckpoint(LoopPhase.SUMMARIZE, true);
+    const closingText = sanitizeUserFacingProse(
+      resolveClosureText({
+        messages: this.state.messages,
+        touchedPaths: [...this.touchedPaths],
+        userRequest: this.originalUserRequest ?? undefined,
+      }),
+    );
+
+    if (closingText) {
+      this.emit("assistant_text", {
+        text: closingText,
+        append: false,
+        final: true,
+      });
+    }
+
+    try {
+      await this.persistFinal(closingText || "Pronto.", {
+        lastFinishOk: true,
+      });
+    } catch (e) {
+      console.error("[loop] persistFinal failed", e);
+    }
+    try {
+      await this.clearCheckpoint();
+    } catch (e) {
+      console.error("[loop] clearCheckpoint failed", e);
+    }
+    const tokens = this.compression.getTotalTokens();
+    const costUsd = this.compression.getEstimatedCostUsd(this.router.mainCfg.model);
+    this.emit("done", {
+      summary: (closingText || "Pronto.").slice(0, 2000),
+      totalInputTokens: tokens.input,
+      totalOutputTokens: tokens.output,
+      totalTokens: tokens.total,
+      costUsd,
+    });
+>>>>>>> Stashed changes
     return {
       state: this.state,
       originalUserRequest: this.originalUserRequest,

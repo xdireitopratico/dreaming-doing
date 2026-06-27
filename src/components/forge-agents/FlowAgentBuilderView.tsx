@@ -1,5 +1,5 @@
 /**
- * AdminAgentBuilderView — Orchestrator with useReducer state machine
+ * FlowAgentBuilderView — Orchestrator with useReducer state machine
  * Phases: home → boardroom → architecture_brief → building → review → builder → monitoring
  * Onboarding removido — fluxo vai direto para boardroom (T30)
  */
@@ -106,7 +106,7 @@ function readBriefingQualityModel(flowDef: unknown): string {
 
 const DEFAULT_LAUNCH_QUALITY_MODEL = "google/gemini-2.5-flash";
 
-export interface AdminAgentBuilderViewProps {
+export interface FlowAgentBuilderViewProps {
   projectId: string;
   projectName?: string;
   /** De projects.meta.initialPrompt (dashboard / CreateAgentDialog). */
@@ -123,13 +123,13 @@ const IMMERSIVE_PHASES = new Set([
   "review",
 ]);
 
-export default function AdminAgentBuilderView({
+export default function FlowAgentBuilderView({
   projectId,
   projectName,
   initialPrompt,
   initialOpenFlow = false,
   onImmersiveChange,
-}: AdminAgentBuilderViewProps) {
+}: FlowAgentBuilderViewProps) {
   const {
     flows, loading,
     selectedFlowId, builderOpen,
@@ -750,6 +750,22 @@ export default function AdminAgentBuilderView({
       <div className={`${fullScreenClass} overflow-hidden`} data-prometheus-theme={prometheusTheme}>
         <Suspense fallback={loader}>
           <AgentMonitoringDashboard onBack={handleGoHome} />
+        </Suspense>
+      </div>
+    );
+  }
+
+  // Se o builder esta aberto (ex: veio do "Fluxo visual"), renderiza SO ele,
+  // sem o boardroom/phase-header por baixo. Resolve o duplo carregamento.
+  if (builderOpen && selectedFlowId) {
+    return (
+      <div className={fullScreenClass} data-prometheus-theme={prometheusTheme}>
+        <Suspense fallback={loader}>
+          <FlowBuilderDialog
+            flowId={selectedFlowId}
+            open={builderOpen}
+            onClose={handleBuilderClose}
+          />
         </Suspense>
       </div>
     );

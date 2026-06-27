@@ -7,8 +7,8 @@ import { ForgeIcon } from "@/components/icons/ForgeIcon";
 import { supabase } from "@/integrations/supabase/client";
 import { isAgentProject, type ProjectKind } from "@/lib/project-kind";
 
-const AdminAgentBuilderView = lazy(
-  () => import("@/components/forge-agents/AdminAgentBuilderView")
+const FlowAgentBuilderView = lazy(
+  () => import("@/components/forge-agents/FlowAgentBuilderView")
 );
 
 type AgentEditorSearch = {
@@ -107,7 +107,7 @@ function AgentEditorPage() {
                 </div>
               }
             >
-              <AdminAgentBuilderView
+              <FlowAgentBuilderView
                 projectId={agentId}
                 projectName={agent.name}
                 initialOpenFlow={open === "flow"}

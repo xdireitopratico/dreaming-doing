@@ -58,7 +58,7 @@ describe("applyAgentProgressEvent", () => {
     expect(next.error).toBeNull();
     expect(next.resumable).toBe(false);
     expect(next.finished).toBe(false);
-    expect(next.statusHint).toBe("Trabalhando no projeto…");
+    expect(next.statusHint).toBe("Iniciando…");
   });
 
   it("opening:true vai para narrationText, não streamText", () => {

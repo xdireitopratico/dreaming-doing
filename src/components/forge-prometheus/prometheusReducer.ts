@@ -1,5 +1,5 @@
 /**
- * prometheusReducer — Centralizes pipeline state for AdminAgentBuilderView.
+ * prometheusReducer — Centralizes pipeline state for FlowAgentBuilderView.
  * Phases: home → onboarding → boardroom → architecture_brief → building → review → builder → monitoring
  */
 import type { BoardroomMessage, BoardroomPhase } from "./PrometheusBoardroom";

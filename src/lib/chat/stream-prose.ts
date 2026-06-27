@@ -49,7 +49,10 @@ export function resolveClosingProse(
   const n = normalizeChatProse(narration);
   if (!n) return c;
   if (c === n) return null;
-  if (c.startsWith(n) && c.slice(n.length).trim().length < 24) return null;
+  if (c.startsWith(n)) {
+    const rest = c.slice(n.length).trim();
+    return rest || null;
+  }
   if (n.startsWith(c)) return null;
 
   return c;

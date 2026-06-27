@@ -50,7 +50,7 @@ export function AssistantTurn({
   const narrationStreaming = !!item.isActive && !!narrationText;
   const closingStreaming = !!item.isActive && !!item.streamText?.trim();
 
-  const showThinking = !!item.thinking;
+  const showThinking = !!item.thinking && item.isActive;
   const showNarration = !!narrationText;
   const showClosing = !!closingText;
 
