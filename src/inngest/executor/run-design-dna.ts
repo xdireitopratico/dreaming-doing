@@ -93,6 +93,26 @@ async function ensureDesignDnaSandbox(
     );
     if (installResult.exitCode === 0) {
       console.log("[design-dna] Playwright+Chromium installed in sandbox");
+
+      // Lança Chromium persistente em background com CDP na porta 9222
+      // (o iframe preview usa essa porta pra mostrar o browser ao vivo)
+      await runInSandbox(
+        sandboxId,
+        accessToken,
+        `cd /tmp && node -e "
+const { chromium } = require('playwright');
+(async () => {
+  const browser = await chromium.launch({
+    headless: true,
+    args: ['--no-sandbox', '--disable-gpu', '--disable-dev-shm-usage', '--remote-debugging-port=${CHROMIUM_DEBUG_PORT}']
+  });
+  console.log('CHROMIUM_PERSISTENT_READY');
+  await new Promise(() => {});
+})();
+"`,
+        { timeoutMs: 600_000, background: true },
+      );
+
       await appendJobEvent(supabase, jobId, "sandbox_ready", {
         sandboxId,
         previewUrl,
@@ -254,10 +274,22 @@ export async function executeDesignDnaJob(
       await appendJobEvent(supabase, jobId, "sandbox_setup", { sandboxId });
       try {
         const devtoolsVersionUrl = `${previewUrl}/json/version`;
-        const cdpResp = await fetch(devtoolsVersionUrl, {
-          signal: AbortSignal.timeout(10_000),
-        });
-        if (cdpResp.ok) {
+
+        // Aguarda até 20s pelo CDP ficar pronto (Chromium inicia em background)
+        let cdpResp: Response | null = null;
+        let cdpWait = 0;
+        while (cdpWait < 20_000) {
+          try {
+            cdpResp = await fetch(devtoolsVersionUrl, { signal: AbortSignal.timeout(3_000) });
+            if (cdpResp.ok) break;
+          } catch {
+            /* Chromium ainda iniciando */
+          }
+          await new Promise((r) => setTimeout(r, 1_500));
+          cdpWait += 1_500;
+        }
+
+        if (cdpResp?.ok) {
           const cdpData = await cdpResp.json().catch(() => ({}));
           console.log("[design-dna] CDP ready:", JSON.stringify(cdpData).slice(0, 200));
           await appendJobEvent(supabase, jobId, "sandbox_ready", {

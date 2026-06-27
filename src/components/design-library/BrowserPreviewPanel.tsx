@@ -187,30 +187,44 @@ export function BrowserPreviewPanel({ jobId, onClose }: BrowserPreviewPanelProps
   }, [events, autoScroll]);
 
   // CDP health check: verifica se Chrome DevTools responde no previewUrl
+  // Tenta até 3x com intervalo de 5s (Chromium inicia em background no sandbox)
   useEffect(() => {
     if (!previewUrl || isTerminal) {
       setCdpStatus("checking");
       return;
     }
     let cancelled = false;
+    let attempts = 0;
     setCdpStatus("checking");
-    fetch(`${previewUrl}/json/version`, { signal: AbortSignal.timeout(8000) })
-      .then(async (r) => {
-        if (cancelled) return;
-        if (r.ok) {
-          const data = await r.json().catch(() => ({}));
-          setCdpStatus("ok");
-          setCdpMessage(data.Browser ?? "");
-        } else {
-          setCdpStatus("failed");
-          setCdpMessage(`HTTP ${r.status}`);
-        }
-      })
-      .catch((e) => {
-        if (cancelled) return;
-        setCdpStatus("failed");
-        setCdpMessage(e instanceof Error ? e.message : "unreachable");
-      });
+
+    function checkCdp() {
+      if (cancelled) return;
+      attempts++;
+      fetch(`${previewUrl}/json/version`, { signal: AbortSignal.timeout(6000) })
+        .then(async (r) => {
+          if (cancelled) return;
+          if (r.ok) {
+            const data = await r.json().catch(() => ({}));
+            setCdpStatus("ok");
+            setCdpMessage(data.Browser ?? "");
+          } else if (attempts < 3) {
+            setTimeout(checkCdp, 5000);
+          } else {
+            setCdpStatus("failed");
+            setCdpMessage(`HTTP ${r.status}`);
+          }
+        })
+        .catch((e) => {
+          if (cancelled) return;
+          if (attempts < 3) {
+            setTimeout(checkCdp, 5000);
+          } else {
+            setCdpStatus("failed");
+            setCdpMessage(e instanceof Error ? e.message : "unreachable");
+          }
+        });
+    }
+    checkCdp();
     return () => {
       cancelled = true;
     };
@@ -459,21 +473,10 @@ export function BrowserPreviewPanel({ jobId, onClose }: BrowserPreviewPanelProps
                 <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-amber-500/10 flex items-center justify-center">
                   <Globe className="w-6 h-6 text-amber-500" />
                 </div>
-                <h3 className="text-sm font-medium mb-1">Sandbox sem Chrome DevTools</h3>
+                <h3 className="text-sm font-medium mb-1">Chrome DevTools indisponível</h3>
                 <p className="text-[11px] text-muted-foreground mb-2">
-                  O template E2B precisa ter Chromium rodando em :9222. Provavelmente você está
-                  usando o template genérico (code-interpreter-v1) sem Chromium.
-                </p>
-                <p className="text-[10px] text-muted-foreground/70">
-                  Para corrigir:{" "}
-                  <code className="px-1 py-0.5 rounded bg-surface-3">
-                    cd e2b-template && npm run build:prod
-                  </code>{" "}
-                  e defina{" "}
-                  <code className="px-1 py-0.5 rounded bg-surface-3">
-                    E2B_TEMPLATE=dreaming-doing-chromium
-                  </code>
-                  .
+                  O Chrome do sandbox pode estar iniciando ou a extração ainda não navegou.
+                  Se o erro persistir, confira se o template E2B tem Chromium instalado.
                 </p>
                 {latestScreenshot && (
                   <p className="text-[10px] text-amber-500 mt-3">
