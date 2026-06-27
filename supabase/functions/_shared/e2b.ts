@@ -116,6 +116,12 @@ export type E2bCreateOpts = {
   metadata?: Record<string, string>;
   /** E2B SDK v2+ usa secure por padrão — necessário para envdAccessToken e comandos. */
   secure?: boolean;
+  /** Auto-pausa no timeout (preserva filesystem + memória). */
+  autoPause?: boolean;
+  /** false = filesystem-only (cold boot no resume). Default true. */
+  autoPauseMemory?: boolean;
+  /** Resume automático quando chega atividade no sandbox pausado. */
+  autoResume?: { enabled: boolean };
 };
 
 /** Cria sandbox via REST (sem SDK pesado no cold start). */
@@ -138,6 +144,9 @@ export async function e2bCreateSandbox(
     timeout,
     allow_internet_access: true,
     secure: opts.secure ?? true,
+    autoPause: opts.autoPause ?? true,
+    autoPauseMemory: opts.autoPauseMemory ?? true,
+    autoResume: opts.autoResume ?? { enabled: true },
   };
   if (meta && Object.keys(meta).length > 0) body.metadata = meta;
 

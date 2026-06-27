@@ -125,6 +125,13 @@ export async function deleteEntry(id: string): Promise<void> {
   }
 }
 
+export async function cancelExtractionJob(jobId: string): Promise<void> {
+  const { error } = await supabase.functions.invoke("design-dna-scheduler", {
+    body: { action: "cancel", jobId },
+  });
+  if (error) throw new Error(error.message ?? "Failed to cancel extraction job");
+}
+
 export async function fetchJobDetails(jobId: string): Promise<DesignDnaJob | null> {
   const { data, error } = await supabase
     .from("design_dna_jobs")

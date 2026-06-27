@@ -10,13 +10,13 @@ import {
   DialogFooter,
   DialogClose,
 } from "@/components/ui/dialog";
-import { Plus, Loader2, LayoutGrid, List, Library, ChevronRight, Play } from "lucide-react";
+import { Plus, Loader2, LayoutGrid, List, Library, ChevronRight, Play, StopCircle, ChevronDown, ChevronUp, History } from "lucide-react";
 import { useLibrary, useJobs } from "./hooks";
 import { DesignLibraryFilters } from "./DesignLibraryFilters";
 import { DesignLibraryCard } from "./DesignLibraryCard";
 import { DesignLibraryDetail } from "./DesignLibraryDetail";
 import { BrowserPreviewPanel } from "./BrowserPreviewPanel";
-import { validateEntry, archiveEntry, deleteEntry, createExtractionJob } from "./api";
+import { validateEntry, archiveEntry, deleteEntry, createExtractionJob, cancelExtractionJob } from "./api";
 import { groupEntriesBySourceUrl } from "./grouping";
 import {
   JOB_STATUS_COLORS,
@@ -33,6 +33,7 @@ export function DesignLibraryPage() {
   const [selectedEntry, setSelectedEntry] = useState<LibraryEntry | null>(null);
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
+  const [showJobs, setShowJobs] = useState(true);
 
   const {
     entries,
@@ -164,69 +165,103 @@ export function DesignLibraryPage() {
         </div>
       )}
 
-      {/* Active Jobs Banner */}
-      {activeJobs.length > 0 && (
-        <div className="px-6 py-2 bg-blue-500/5 border-b border-blue-500/20">
-          <div className="flex items-center gap-2 text-xs">
-            <Loader2 className="size-3 animate-spin text-blue-500" />
-            <span className="font-medium text-blue-500">
-              {activeJobs.length} extração(ões) em andamento
-            </span>
-            {activeJobs.map((j) => (
-              <Button
-                key={j.id}
-                variant="outline"
-                size="sm"
-                onClick={() => setActiveJobId(j.id)}
-                className="h-6 text-[10px] border-blue-500/30 text-blue-500 hover:bg-blue-500/10"
-              >
-                <Play className="size-2.5 mr-1" />
-                {j.urls[0]?.slice(0, 30)}…
-                <ChevronRight className="size-2.5 ml-1" />
-              </Button>
-            ))}
+      {/* Extração Bar — consolida jobs ativos + recentes num bloco só */}
+      {jobs.length > 0 && (
+        <div className="px-6 pt-3">
+          <div className="rounded-lg border border-border bg-surface-1 overflow-hidden">
+            <button
+              onClick={() => setShowJobs(!showJobs)}
+              className="w-full flex items-center justify-between px-3 py-2 hover:bg-surface-2/50 transition-colors"
+            >
+              <div className="flex items-center gap-2 text-xs font-medium">
+                <History className="size-3.5 text-muted-foreground" />
+                Extrações
+                {activeJobs.length > 0 && (
+                  <span className="inline-flex items-center gap-1 text-[10px] text-blue-500">
+                    <Loader2 className="size-2.5 animate-spin" />
+                    {activeJobs.length} em andamento
+                  </span>
+                )}
+                {jobsLoading && <Loader2 className="size-3 animate-spin text-muted-foreground" />}
+              </div>
+              {showJobs ? <ChevronUp className="size-3.5 text-muted-foreground" /> : <ChevronDown className="size-3.5 text-muted-foreground" />}
+            </button>
+
+            {showJobs && (
+              <div className="px-3 pb-3 space-y-2">
+                {/* Active jobs inline */}
+                {activeJobs.length > 0 && (
+                  <div className="flex flex-wrap items-center gap-2 py-1.5 px-2 rounded bg-blue-500/5">
+                    {activeJobs.map((j) => (
+                      <div key={j.id} className="flex items-center gap-1">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setActiveJobId(j.id)}
+                          className="h-6 text-[10px] border-blue-500/30 text-blue-500 hover:bg-blue-500/10"
+                        >
+                          <Play className="size-2.5 mr-1" />
+                          {j.urls[0]?.slice(0, 25)}…
+                          <ChevronRight className="size-2.5 ml-1" />
+                        </Button>
+                        <button
+                          onClick={async () => {
+                            try {
+                              await cancelExtractionJob(j.id);
+                              toast.success("Extração cancelada");
+                              reloadJobs();
+                            } catch (err) {
+                              toast.error(err instanceof Error ? err.message : "Erro ao cancelar");
+                            }
+                          }}
+                          className="h-6 px-1.5 rounded text-[10px] border border-red-500/30 text-red-500 hover:bg-red-500/10 transition-colors"
+                          title="Cancelar extração"
+                        >
+                          <StopCircle className="size-3" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Recent jobs list */}
+                {recentJobs.length === 0 ? (
+                  <p className="text-[11px] text-muted-foreground px-1">
+                    Nenhum job ainda. Clique em &quot;Extrair URLs&quot; para começar.
+                  </p>
+                ) : (
+                  <div className="flex flex-wrap gap-2">
+                    {recentJobs.map((job) => (
+                      <button
+                        key={job.id}
+                        onClick={() => setActiveJobId(job.id)}
+                        className="text-left text-[10px] px-2 py-1 rounded border border-border bg-surface-2 hover:border-primary/30 transition-colors"
+                      >
+                        <div className="flex items-center gap-1.5">
+                          <Badge
+                            variant="outline"
+                            className={`text-[9px] px-1 py-0 ${JOB_STATUS_COLORS[job.status] ?? ""}`}
+                          >
+                            {job.status}
+                          </Badge>
+                          <span className="font-mono text-muted-foreground">{job.id.slice(0, 8)}</span>
+                        </div>
+                        <div className="text-muted-foreground mt-0.5 truncate max-w-[200px]">
+                          {job.urls[0] ?? "—"}
+                          {job.urls.length > 1 && ` +${job.urls.length - 1}`}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
       )}
 
       {/* Main Content */}
       <div className="flex-1 overflow-auto p-6 space-y-4">
-        {/* Recent Jobs — sempre visível */}
-        <div className="rounded-lg border border-border bg-surface-1 p-3">
-          <h2 className="text-xs font-medium mb-2 flex items-center gap-2">
-            Jobs recentes
-            {jobsLoading && <Loader2 className="size-3 animate-spin text-muted-foreground" />}
-          </h2>
-          {recentJobs.length === 0 ? (
-            <p className="text-[11px] text-muted-foreground">
-              Nenhum job ainda. Clique em &quot;Extrair URLs&quot; para começar.
-            </p>
-          ) : (
-            <div className="flex flex-wrap gap-2">
-              {recentJobs.map((job) => (
-                <button
-                  key={job.id}
-                  onClick={() => setActiveJobId(job.id)}
-                  className="text-left text-[10px] px-2 py-1 rounded border border-border bg-surface-2 hover:border-primary/30 transition-colors"
-                >
-                  <div className="flex items-center gap-1.5">
-                    <Badge
-                      variant="outline"
-                      className={`text-[9px] px-1 py-0 ${JOB_STATUS_COLORS[job.status] ?? ""}`}
-                    >
-                      {job.status}
-                    </Badge>
-                    <span className="font-mono text-muted-foreground">{job.id.slice(0, 8)}</span>
-                  </div>
-                  <div className="text-muted-foreground mt-0.5 truncate max-w-[200px]">
-                    {job.urls[0] ?? "—"}
-                    {job.urls.length > 1 && ` +${job.urls.length - 1}`}
-                  </div>
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
 
         {/* Filters */}
         <DesignLibraryFilters

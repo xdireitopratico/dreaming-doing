@@ -11,12 +11,95 @@ import { connectToSandbox, waitForEnvdReady, runInSandbox } from "./e2b-client";
 
 const E2B_API_BASE = process.env.E2B_API_BASE || "https://api.e2b.app";
 const E2B_DOMAIN = process.env.E2B_DOMAIN || "e2b.app";
-// Template padrão code-interpreter-v1 (Node + npm). Playwright + Chromium são
-// instalados dinamicamente dentro do sandbox na primeira URL deep.
-// Otimização: usar imagem custom "dreaming-doing-chromium" via env E2B_TEMPLATE.
 const E2B_TEMPLATE_ID = process.env.E2B_TEMPLATE || "code-interpreter-v1";
 const LOOP_BUDGET_MS = 270_000;
 const CHROMIUM_DEBUG_PORT = 9222;
+
+async function ensureDesignDnaSandbox(
+  supabase: SupabaseClient,
+  serviceClient: SupabaseClient,
+  userId: string,
+  e2bApiKey: string,
+  jobId: string,
+): Promise<{ sandboxId: string; accessToken: string | null; previewUrl: string }> {
+  // Tenta reusar sandbox existente de jobs anteriores
+  const { data: latestJob } = await serviceClient
+    .from("design_dna_jobs")
+    .select("sandbox_id")
+    .not("sandbox_id", "is", null)
+    .order("started_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (latestJob?.sandbox_id) {
+    try {
+      const { accessToken } = await connectToSandbox(latestJob.sandbox_id as string, e2bApiKey);
+      if (accessToken) {
+        return {
+          sandboxId: latestJob.sandbox_id as string,
+          accessToken,
+          previewUrl: `https://${CHROMIUM_DEBUG_PORT}-${latestJob.sandbox_id}.${E2B_DOMAIN}`,
+        };
+      }
+    } catch {
+      // 404 ou erro — sandbox morto, cria novo abaixo
+    }
+  }
+
+  // Cria novo sandbox com auto-pause de 15 min
+  const resp = await fetch(`${E2B_API_BASE}/sandboxes`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-API-Key": e2bApiKey },
+    body: JSON.stringify({
+      templateID: E2B_TEMPLATE_ID,
+      timeout: 900,
+      autoPause: true,
+      autoPauseMemory: true,
+      autoResume: { enabled: true },
+      metadata: { forge_app: "dreaming-doing", forge_job_id: jobId, forge_user_id: userId },
+    }),
+  });
+
+  const text = await resp.text();
+  if (!resp.ok) throw new Error(`E2B create ${resp.status}: ${text.slice(0, 400)}`);
+
+  const data = JSON.parse(text) as { sandboxID?: string; sandboxId?: string };
+  const sandboxId = data.sandboxID ?? data.sandboxId ?? "";
+  if (!sandboxId) throw new Error("E2B: no sandboxID in response");
+
+  const previewUrl = `https://${CHROMIUM_DEBUG_PORT}-${sandboxId}.${E2B_DOMAIN}`;
+
+  const { accessToken } = await connectToSandbox(sandboxId, e2bApiKey);
+
+  await waitForEnvdReady(sandboxId, accessToken).catch((err) => {
+    console.warn("[design-dna] envd not ready, continuing anyway:", err);
+  });
+
+  // Instala Playwright + Chromium (uma vez, persiste no pause/resume)
+  await appendJobEvent(supabase, jobId, "sandbox_setup", { sandboxId, step: "installing-playwright" });
+  try {
+    const installResult = await runInSandbox(
+      sandboxId,
+      accessToken,
+      "cd /tmp && npm install playwright@latest --no-audit --no-fund 2>&1 && npx playwright install chromium 2>&1",
+      { timeoutMs: 180000 },
+    );
+    if (installResult.exitCode === 0) {
+      console.log("[design-dna] Playwright+Chromium installed in sandbox");
+      await appendJobEvent(supabase, jobId, "sandbox_ready", {
+        sandboxId,
+        previewUrl,
+        chromium: "installed",
+      });
+    } else {
+      console.warn("[design-dna] Playwright install had issues:", installResult.stderr?.slice(0, 200));
+    }
+  } catch (pwErr) {
+    console.warn("[design-dna] Playwright install failed:", pwErr);
+  }
+
+  return { sandboxId, accessToken, previewUrl };
+}
 
 export async function executeDesignDnaJob(
   supabase: SupabaseClient,
@@ -108,94 +191,43 @@ export async function executeDesignDnaJob(
       }
     }
 
-    if (job?.sandbox_id) {
-      sandboxId = job.sandbox_id as string;
-      const meta = (job.meta ?? {}) as Record<string, unknown>;
-      previewUrl =
-        (meta.previewUrl as string) ?? `https://${CHROMIUM_DEBUG_PORT}-${sandboxId}.${E2B_DOMAIN}`;
-      sandboxAccessToken = (meta.sandboxAccessToken as string) ?? null;
-    } else {
-      if (!e2bApiKey) {
-        const msg = "Configure sua chave E2B em API Keys (/api)";
-        const errorRecord = { scope: "job", error: msg, code: "missing_e2b_key" };
-        errors.push(errorRecord);
-        await appendJobEvent(supabase, jobId, "url_error", errorRecord);
-        await supabase
-          .from("design_dna_jobs")
-          .update({
-            status: "failed",
-            error: msg,
-            results,
-            errors,
-            finished_at: new Date().toISOString(),
-          })
-          .eq("id", jobId);
-        return {
-          ok: false,
-          status: "failed",
-          jobId,
-          resumable: false,
-          canceled: false,
-          error: msg,
-          urlsCompleted: 0,
-          durationMs: Date.now() - startMs,
-        };
-      }
-
-      const resp = await fetch(`${E2B_API_BASE}/sandboxes`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-API-Key": e2bApiKey },
-        body: JSON.stringify({
-          templateID: E2B_TEMPLATE_ID,
-          timeout: 3600,
-          metadata: { forge_app: "dreaming-doing", forge_job_id: jobId, forge_user_id: userId },
-        }),
-      });
-
-      const text = await resp.text();
-      if (!resp.ok) throw new Error(`E2B create ${resp.status}: ${text.slice(0, 400)}`);
-
-      const data = JSON.parse(text) as { sandboxID?: string; sandboxId?: string };
-      sandboxId = data.sandboxID ?? data.sandboxId ?? "";
-      if (!sandboxId) throw new Error("E2B: no sandboxID in response");
-
-      previewUrl = `https://${CHROMIUM_DEBUG_PORT}-${sandboxId}.${E2B_DOMAIN}`;
-
-      const { accessToken } = await connectToSandbox(sandboxId, e2bApiKey);
-      sandboxAccessToken = accessToken;
-
-      await waitForEnvdReady(sandboxId, sandboxAccessToken).catch((err) => {
-        console.warn("[design-dna] envd not ready, continuing anyway:", err);
-      });
-
-      // One-time: install Playwright + Chromium no sandbox
-      await appendJobEvent(supabase, jobId, "sandbox_setup", { sandboxId, step: "installing-playwright" });
-      try {
-        const installResult = await runInSandbox(
-          sandboxId,
-          sandboxAccessToken,
-          "cd /tmp && npm install playwright@latest --no-audit --no-fund 2>&1 && npx playwright install chromium 2>&1",
-          { timeoutMs: 180000 },
-        );
-        if (installResult.exitCode === 0) {
-          console.log("[design-dna] Playwright+Chromium installed in sandbox");
-          await appendJobEvent(supabase, jobId, "sandbox_ready", {
-            sandboxId,
-            previewUrl,
-            chromium: "installed",
-          });
-        } else {
-          console.warn("[design-dna] Playwright install had issues:", installResult.stderr?.slice(0, 200));
-        }
-      } catch (pwErr) {
-        console.warn("[design-dna] Playwright install failed:", pwErr);
-      }
-
+    if (!e2bApiKey) {
+      const msg = "Configure sua chave E2B em API Keys (/api)";
+      const errorRecord = { scope: "job", error: msg, code: "missing_e2b_key" };
+      errors.push(errorRecord);
+      await appendJobEvent(supabase, jobId, "url_error", errorRecord);
       await supabase
         .from("design_dna_jobs")
-        .update({ sandbox_id: sandboxId, meta: { previewUrl, sandboxAccessToken } })
+        .update({
+          status: "failed",
+          error: msg,
+          results,
+          errors,
+          finished_at: new Date().toISOString(),
+        })
         .eq("id", jobId);
+      return {
+        ok: false,
+        status: "failed",
+        jobId,
+        resumable: false,
+        canceled: false,
+        error: msg,
+        urlsCompleted: 0,
+        durationMs: Date.now() - startMs,
+      };
     }
+
+    // Sandbox persistente com auto-pause/resume — E2B gerencia idle de 15 min
+    const sb = await ensureDesignDnaSandbox(supabase, serviceClient, userId, e2bApiKey, jobId);
+    sandboxId = sb.sandboxId;
+    sandboxAccessToken = sb.accessToken;
+    previewUrl = sb.previewUrl;
+
+    await supabase
+      .from("design_dna_jobs")
+      .update({ sandbox_id: sandboxId })
+      .eq("id", jobId);
 
     // Verifica que Chromium está acessível via DevTools na porta 9222
     if (startIndex === 0) {
@@ -266,7 +298,7 @@ export async function executeDesignDnaJob(
         categories: categories as string[],
         userId,
         sandboxId: isDeep ? sandboxId : undefined,
-        sandboxAccessToken: isDeep ? sandboxAccessToken : undefined,
+        sandboxAccessToken: isDeep ? (sandboxAccessToken ?? undefined) : undefined,
       });
 
       if (dnaResult.dna) {

@@ -66,6 +66,13 @@ Deno.serve(async (req) => {
     // Service-role client (for DB operations + Inngest calls)
     const supabase: any = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
 
+    // Auto-cleanup de jobs zumbis (roda silenciosamente em toda chamada)
+    try {
+      await supabase.rpc("cleanup_stale_design_dna_jobs");
+    } catch {
+      // cleanup function pode não existir ainda — ignorar
+    }
+
     // If there's a user token, also create a user-scoped client (for auth.getUser)
     // Use anon key + user JWT for proper user identification
     let userClient: any = null;
@@ -106,6 +113,8 @@ Deno.serve(async (req) => {
         return await handleContinueQueue(supabase);
       case "status":
         return await handleStatus(supabase, jobId);
+      case "cancel":
+        return await handleCancel(supabase, jobId);
       case "emit_event":
         return await handleEmitEvent(supabase, jobId, req);
       default:
@@ -147,6 +156,16 @@ async function handleSchedule(
   if (!isServiceRole && !isAdminEmail(userEmail)) {
     return json({ error: "Apenas administradores podem agendar extração de DesignDNA" }, 403);
   }
+
+  // Cancela jobs anteriores não-terminais para evitar acúmulo de zumbis
+  await supabase
+    .from("design_dna_jobs")
+    .update({
+      status: "canceled",
+      finished_at: new Date().toISOString(),
+      error: "Substituído por nova extração",
+    })
+    .in("status", ["pending", "running"]);
 
   // Cria job na tabela (via service_role client)
   const { data: job, error: insertError } = await supabase
@@ -259,6 +278,35 @@ async function handleContinueQueue(supabase: any): Promise<Response> {
     console.warn("[design-dna-scheduler] queue item delete failed:", deleteErr.message);
 
   return json({ continued: true, jobId: body.jobId });
+}
+
+async function handleCancel(supabase: any, jobId: string): Promise<Response> {
+  if (!jobId) return json({ error: "jobId required" }, 400);
+
+  const { data: job, error: fetchErr } = await supabase
+    .from("design_dna_jobs")
+    .select("id, status")
+    .eq("id", jobId)
+    .maybeSingle();
+  if (fetchErr) return json({ error: fetchErr.message }, 500);
+  if (!job) return json({ error: "Job not found" }, 404);
+
+  const status = (job as Record<string, unknown>)?.status as string;
+  if (["completed", "failed", "canceled", "blocked"].includes(status)) {
+    return json({ error: `Job já está em estado terminal: ${status}` }, 400);
+  }
+
+  const { error: updateErr } = await supabase
+    .from("design_dna_jobs")
+    .update({
+      status: "canceled",
+      finished_at: new Date().toISOString(),
+      error: "Cancelado pelo usuário",
+    })
+    .eq("id", jobId);
+  if (updateErr) return json({ error: updateErr.message }, 500);
+
+  return json({ ok: true, jobId });
 }
 
 async function handleStatus(supabase: any, jobId: string): Promise<Response> {

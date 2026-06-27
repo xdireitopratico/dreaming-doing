@@ -16,6 +16,21 @@ export const designDnaExtractFunction = inngest.createFunction(
     concurrency: { limit: 3 },
     timeouts: { finish: "14m" },
     triggers: [{ event: "design-dna/extract.requested" }],
+    onFailure: async ({ error, event }) => {
+      const sb = getSupabaseAdmin();
+      const failureData = event.data as Record<string, unknown>;
+      const originalEvent = failureData.event as Record<string, unknown> | undefined;
+      const originalData = originalEvent?.data as Record<string, unknown> | undefined;
+      const jobId = originalData?.jobId as string | undefined;
+      if (jobId) {
+        const errMsg = typeof error === "object" && error && "message" in error
+          ? (error as { message: string }).message
+          : String(error ?? "unknown");
+        await markJobFinal(sb, jobId, "failed", {
+          error: `Inngest crash: ${errMsg}`,
+        }).catch((e) => console.error("[onFailure] failed to mark job:", e));
+      }
+    },
   },
   async ({ event, step }) => {
     const payload = event.data as DesignDnaJobRequest;
@@ -55,6 +70,10 @@ export const designDnaExtractFunction = inngest.createFunction(
     let lastResult: DesignDnaExecuteResponse | null = null;
     let lastError: string | null = null;
     for (let i = 0; i < 3; i++) {
+      await step.run(`heartbeat-${i}`, async () => {
+        const sb = getSupabaseAdmin();
+        await sb.from("design_dna_jobs").update({ heartbeat_at: new Date().toISOString() }).eq("id", jobId);
+      });
       try {
         const result = await step.run(`extract-loop-${i}`, async () => {
           const { executeDesignDnaJob } = await import("../executor/run-design-dna.ts");

@@ -14,9 +14,8 @@ import {
 import { createValidatedE2bSandbox } from "./e2b-smoke.ts";
 import { e2bRestConnect, type E2bRestSandbox } from "./e2b-rest.ts";
 
-/** Alinhado ao timeout real da API E2B (30 min). */
-const SANDBOX_TIMEOUT_SEC = 30 * 60;
-const SANDBOX_LEASE_MS = SANDBOX_TIMEOUT_SEC * 1000;
+/** Timeout de idle: 15 min. Auto-pausa via lifecycle config. */
+const SANDBOX_TIMEOUT_SEC = 15 * 60;
 
 export type ProjectSandboxMeta = {
   previewSandboxId?: string;
@@ -144,26 +143,6 @@ export async function loadProjectMeta(
   return { existing, sm: readSandboxMeta(existing) };
 }
 
-async function touchSandboxLease(
-  supabase: SupabaseClient,
-  projectId: string,
-  existing: Record<string, unknown>,
-  sandboxId: string,
-  extra?: Partial<ProjectSandboxMeta>,
-): Promise<void> {
-  await supabase
-    .from("projects")
-    .update({
-      meta: {
-        ...existing,
-        ...extra,
-        previewSandboxId: sandboxId,
-        previewExpiresAt: new Date(Date.now() + SANDBOX_LEASE_MS).toISOString(),
-      },
-    })
-    .eq("id", projectId);
-}
-
 export type ConnectSandboxResult = {
   sandbox: E2bRestSandbox;
   sandboxId: string;
@@ -173,20 +152,31 @@ export type ConnectSandboxResult = {
 const NO_SANDBOX_MSG =
   "Ainda não há ambiente ao vivo. Envie um pedido ao agente para ele começar a programar.";
 
-/** Plan / reuso: reconecta sandbox existente — nunca cria um novo. */
+async function saveSandboxId(
+  supabase: SupabaseClient,
+  projectId: string,
+  existing: Record<string, unknown>,
+  sandboxId: string,
+): Promise<void> {
+  await supabase
+    .from("projects")
+    .update({ meta: { ...existing, previewSandboxId: sandboxId } })
+    .eq("id", projectId);
+}
+
+/** Reuso: reconecta sandbox existente — nunca cria um novo. */
 export async function connectExistingProjectSandbox(
   supabase: SupabaseClient,
   projectId: string,
   apiKey: string,
 ): Promise<ConnectSandboxResult> {
-  const { existing, sm } = await loadProjectMeta(supabase, projectId);
+  const { sm } = await loadProjectMeta(supabase, projectId);
   if (!sm.previewSandboxId) {
     throw new Error(
       "Sandbox E2B ainda não existe neste projeto — use modo Build para criar o ambiente.",
     );
   }
   const sandbox = await e2bRestConnect(apiKey, sm.previewSandboxId, SANDBOX_TIMEOUT_SEC);
-  await touchSandboxLease(supabase, projectId, existing, sandbox.sandboxId);
   return { sandbox, sandboxId: sandbox.sandboxId, reused: true };
 }
 
@@ -199,7 +189,7 @@ export async function ensureAgentProjectSandbox(
 ): Promise<ConnectSandboxResult> {
   const { existing, sm } = await loadProjectMeta(supabase, projectId);
 
-  // Circuit breaker: fail fast on repeated creation errors (prevents infinite creation loops)
+  // Circuit breaker: fail fast on repeated creation errors
   const circuit = isE2bCreationCoolingDown(sm);
   if (circuit.cooled) {
     const msg = `E2B creation circuit open (attempts=${circuit.attempts ?? 0}). ${circuit.lastError ?? ""} Cooldown until ${circuit.until}. Use a valid E2B key or wait.`;
@@ -211,75 +201,12 @@ export async function ensureAgentProjectSandbox(
   if (sm.previewSandboxId) {
     try {
       const sandbox = await e2bRestConnect(apiKey, sm.previewSandboxId, SANDBOX_TIMEOUT_SEC);
-      await touchSandboxLease(supabase, projectId, existing, sandbox.sandboxId);
       return { sandbox, sandboxId: sandbox.sandboxId, reused: true };
     } catch (e) {
-      console.warn("[project-sandbox] stale sandbox, recreating:", sm.previewSandboxId, e);
+      console.warn("[project-sandbox] sandbox unreachable, recreating:", sm.previewSandboxId, e);
       await killProjectSandbox(apiKey, sm.previewSandboxId);
-      const cleared = {
-        ...existing,
-        previewSandboxId: undefined,
-        previewUrl: undefined,
-        previewExpiresAt: undefined,
-        // also clear bad template if it was recorded
-        e2bTemplate: undefined,
-      };
-      await supabase.from("projects").update({ meta: cleared }).eq("id", projectId);
-      // fallthrough to (re)create below
+      await clearProjectSandboxMeta(supabase, projectId);
     }
-  }
-
-  // List-first: reuse any sandbox tagged with this project's metadata (idempotent, avoids duplicates on races/meta drift)
-  // Never reuse sandboxes that were created with a known-bad template (e.g. "base" without Node/envd).
-  const isBadTemplate = (tpl?: string) => {
-    const t = (tpl || "").toLowerCase().trim();
-    return !t || ["base", "minimal", "empty", "nodejs", "node"].includes(t);
-  };
-
-  try {
-    const listed = await e2bListSandboxes(apiKey, forgeSandboxMetadata(projectId));
-    if (listed.length > 0) {
-      // pick first (most recent from E2B side tends to be last created)
-      const candidate = listed[0];
-      if (isBadTemplate(candidate.templateID)) {
-        console.warn(
-          `[project-sandbox] listed sandbox has bad template ${candidate.templateID}, killing and recreating`,
-        );
-        await killProjectSandbox(apiKey, candidate.sandboxID);
-      } else {
-        try {
-          const sb = await e2bRestConnect(apiKey, candidate.sandboxID, SANDBOX_TIMEOUT_SEC);
-          await touchSandboxLease(supabase, projectId, existing, sb.sandboxId, {
-            e2bTemplate: candidate.templateID,
-          });
-          // success reuse also clears any prior circuit
-          await recordE2bCreationOutcome(supabase, projectId, existing, true);
-          console.log(`[project-sandbox] reused listed ${candidate.sandboxID}`);
-          return { sandbox: sb, sandboxId: sb.sandboxId, reused: true };
-        } catch (connErr) {
-          console.warn(
-            "[project-sandbox] listed sandbox connect failed, will create fresh:",
-            candidate.sandboxID,
-            connErr,
-          );
-          await killProjectSandbox(apiKey, candidate.sandboxID);
-        }
-      }
-    }
-  } catch (listErr) {
-    console.warn("[project-sandbox] list by metadata failed (proceeding to create):", listErr);
-  }
-
-  // If meta itself records a bad template, clear it so we don't keep trying to reconnect to ghosts.
-  if (isBadTemplate(sm.e2bTemplate) && sm.previewSandboxId) {
-    const cleared = {
-      ...existing,
-      previewSandboxId: undefined,
-      e2bTemplate: undefined,
-      previewUrl: undefined,
-      previewExpiresAt: undefined,
-    };
-    await supabase.from("projects").update({ meta: cleared }).eq("id", projectId);
   }
 
   let created: { sandbox: E2bRestSandbox; templateUsed: string } | null = null;
@@ -292,10 +219,7 @@ export async function ensureAgentProjectSandbox(
   }
 
   const { sandbox, templateUsed } = created;
-  await touchSandboxLease(supabase, projectId, existing, sandbox.sandboxId, {
-    previewUrl: undefined,
-    e2bTemplate: templateUsed,
-  });
+  await saveSandboxId(supabase, projectId, existing, sandbox.sandboxId);
   await recordE2bCreationOutcome(supabase, projectId, existing, true);
 
   const { data: files } = await supabase
@@ -316,9 +240,9 @@ export async function connectProjectSandboxForPreview(
   projectId: string,
   apiKey: string,
 ): Promise<ConnectSandboxResult> {
-  const { existing, sm } = await loadProjectMeta(supabase, projectId);
+  const { sm } = await loadProjectMeta(supabase, projectId);
 
-  // Circuit: same protection as agent path (preview often triggered independently)
+  // Circuit: same protection as agent path
   const circuit = isE2bCreationCoolingDown(sm);
   if (circuit.cooled) {
     const msg = `E2B creation circuit open (attempts=${circuit.attempts ?? 0}). ${circuit.lastError ?? ""} Cooldown until ${circuit.until}.`;
@@ -333,14 +257,12 @@ export async function connectProjectSandboxForPreview(
 
   try {
     const sandbox = await e2bRestConnect(apiKey, sm.previewSandboxId, SANDBOX_TIMEOUT_SEC);
-    await touchSandboxLease(supabase, projectId, existing, sandbox.sandboxId);
     return { sandbox, sandboxId: sandbox.sandboxId, reused: true };
   } catch (e) {
     console.warn("[project-sandbox] preview connect failed, recreating:", e);
     await killProjectSandbox(apiKey, sm.previewSandboxId);
-    // ensure will also check circuit + do list-first
+    await clearProjectSandboxMeta(supabase, projectId);
     const res = await ensureAgentProjectSandbox(supabase, projectId, apiKey);
-    // If we reached here via recreate, treat prior failure as recorded by ensure
     return res;
   }
 }
