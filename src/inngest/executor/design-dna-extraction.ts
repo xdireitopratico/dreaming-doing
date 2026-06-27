@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { errorMessage } from "@/lib/error-utils";
 import { cleanHtmlDocument, htmlToMarkdownDocument } from "@/lib/html-hygiene";
+import { normalizePresetId } from "@/lib/preset-contract";
 import { scrapeWebPage } from "../../../supabase/functions/_shared/web-research-providers.ts";
 import { BUILTIN_RUNTIME } from "../../../supabase/functions/_shared/provider-wire.ts";
 import { finalizeDocumentMarkdown } from "../../../supabase/functions/_shared/document-sanitize.ts";
@@ -360,14 +361,15 @@ async function resolveLLMConfig(
 
   const prefs = await loadAgentPreferences(supabase, userId);
 
-  // 1) preferences.mode === "fixed" → fixedPresetId (formato: "<provider>/<model>" ou "<model>")
+  // 1) preferences.mode === "fixed" → fixedPresetId (formato: "<provider>--<model>" ou "<provider>/<model>")
   if (prefs?.mode === "fixed") {
     const presetId =
       prefs.customModelId && prefs.useCustomModel ? prefs.customModelId : prefs.fixedPresetId;
     if (presetId) {
-      const envMatch = presetId.match(/^([^/]+)\/(.+)$/);
-      const env = envMatch ? envMatch[1] : presetId;
-      const model = envMatch ? envMatch[2] : presetId;
+      const normalized = normalizePresetId(presetId);
+      const sepIdx = normalized.indexOf("--");
+      const env = sepIdx !== -1 ? normalized.slice(0, sepIdx) : normalized;
+      const model = sepIdx !== -1 ? normalized.slice(sepIdx + 2) : normalized;
       const connector = findConnector(env as LlmKind);
       if (connector) {
         const cfg = buildLlmConfig(
@@ -395,15 +397,6 @@ async function resolveLLMConfig(
       );
       if (cfg) return cfg;
     }
-  }
-
-  // 3) Sem pref específica: usa o primeiro connector LLM com token (ordem updated_at desc)
-  for (const row of rows) {
-    const parsed = readConnectorProvider(row);
-    if (!parsed) continue;
-    if (parsed.provider === "e2b") continue; // E2B não é LLM
-    const cfg = buildLlmConfig(parsed.provider, parsed.token, metaOf(row));
-    if (cfg) return cfg;
   }
 
   return null;
