@@ -21,6 +21,15 @@ await esbuild.build({
     "@forge/agent-contract/events": resolve(root, "packages/agent-contract/src/events.ts"),
     "@forge/agent-contract": resolve(root, "packages/agent-contract/src/index.ts"),
   },
+  plugins: [{
+    name: "npm-protocol",
+    setup(build) {
+      build.onResolve({ filter: /^npm:/ }, (args) => {
+        const bare = args.path.replace(/^npm:(.+?)(@.+)?$/, "$1");
+        return { path: bare, external: true };
+      });
+    },
+  }],
   logLevel: "info",
 });
 

@@ -50,6 +50,7 @@ async function ensureDesignDnaSandbox(
   const resp = await fetch(`${E2B_API_BASE}/sandboxes`, {
     method: "POST",
     headers: { "Content-Type": "application/json", "X-API-Key": e2bApiKey },
+    signal: AbortSignal.timeout(30_000),
     body: JSON.stringify({
       templateID: E2B_TEMPLATE_ID,
       timeout: 900,
@@ -92,10 +93,19 @@ async function ensureDesignDnaSandbox(
         chromium: "installed",
       });
     } else {
-      console.warn("[design-dna] Playwright install had issues:", installResult.stderr?.slice(0, 200));
+      const errMsg = `Playwright install exited with code ${installResult.exitCode}: ${(installResult.stderr ?? "").slice(0, 400)}`;
+      await appendJobEvent(supabase, jobId, "url_error", {
+        scope: "sandbox",
+        error: errMsg,
+      });
+      throw new Error(errMsg);
     }
   } catch (pwErr) {
-    console.warn("[design-dna] Playwright install failed:", pwErr);
+    await appendJobEvent(supabase, jobId, "url_error", {
+      scope: "sandbox",
+      error: `Playwright install failed: ${errorMessage(pwErr)}`,
+    });
+    throw new Error(`Playwright/Chromium install failed: ${errorMessage(pwErr)}`);
   }
 
   return { sandboxId, accessToken, previewUrl };
@@ -141,10 +151,10 @@ export async function executeDesignDnaJob(
   });
 
   const { data: job } = await supabase
-    .from("design_dna_jobs")
-    .select("sandbox_id, meta")
-    .eq("id", jobId)
-    .single();
+      .from("design_dna_jobs")
+      .select("sandbox_id, meta")
+      .eq("id", jobId)
+      .single();
 
   const jobMeta = (job?.meta ?? {}) as Record<string, unknown>;
   const ingestKind = typeof jobMeta.ingestKind === "string" && jobMeta.ingestKind.trim()
@@ -226,7 +236,10 @@ export async function executeDesignDnaJob(
 
     await supabase
       .from("design_dna_jobs")
-      .update({ sandbox_id: sandboxId })
+      .update({
+        sandbox_id: sandboxId,
+        meta: { ...jobMeta, previewUrl },
+      })
       .eq("id", jobId);
 
     // Verifica que Chromium está acessível via DevTools na porta 9222
