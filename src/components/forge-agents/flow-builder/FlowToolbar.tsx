@@ -4,6 +4,7 @@
  */
 import { memo } from "react";
 import { PrometheusSessionList } from "@/components/forge-prometheus/PrometheusSessionList";
+import { PrometheusThemeToggle } from "@/components/forge-prometheus/PrometheusThemeToggle";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -143,7 +144,7 @@ export const FlowToolbar = memo(function FlowToolbar({
         <div className="w-px h-5" style={{ background: 'var(--ps-border)' }} />
 
         {/* Primary Actions */}
-        <Button variant="outline" size="sm" className="gap-1 h-7 text-xs border-none" onClick={onSave} disabled={saving} title="Salvar (Ctrl+S)" style={{ background: 'var(--ps-bg-surface-hover)', color: 'var(--ps-cream)' }}>
+        <Button variant="outline" size="sm" className="gap-1 h-7 text-xs border-none" onClick={onSave} disabled={saving} title="Salvar (Ctrl+S)" style={{ background: 'linear-gradient(135deg, #1a1e27, #0b0d12)', color: 'var(--ps-cream)' }}>
           <Save className="h-3.5 w-3.5" />
           Salvar
         </Button>
@@ -151,7 +152,7 @@ export const FlowToolbar = memo(function FlowToolbar({
           size="sm" className="gap-1 h-7 text-xs border-none"
           onClick={() => onTogglePanel("test")}
           title="Testar (1)"
-          style={{ background: activePanel === "test" ? 'var(--ps-accent)' : 'var(--ps-bg-surface-hover)', color: activePanel === "test" ? '#fff' : 'var(--ps-cream)' }}
+          style={{ background: activePanel === "test" ? 'var(--ps-accent)' : 'linear-gradient(135deg, #1a1e27, #0b0d12)', color: activePanel === "test" ? '#0b0d12' : 'var(--ps-cream)' }}
         >
           <Play className="h-3.5 w-3.5" />
           Testar
@@ -237,6 +238,8 @@ export const FlowToolbar = memo(function FlowToolbar({
         <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onClose} title="Fechar editor" style={{ color: 'var(--ps-cream-40)' }}>
           <X className="h-4 w-4" />
         </Button>
+
+        <PrometheusThemeToggle />
       </div>
     </div>
   );

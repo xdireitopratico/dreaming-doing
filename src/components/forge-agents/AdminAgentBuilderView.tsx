@@ -143,6 +143,16 @@ export default function AdminAgentBuilderView({
   purgeOrphanPrometheusStorageOnce();
 
   const [pipeline, dispatch] = useReducer(prometheusReducer, initialPrometheusPipelineState, (init) => {
+    // Se estamos abrindo direto pro FlowBuilder (initialOpenFlow=true),
+    // NAO restaurar fase salva do localStorage — isso causava duplo
+    // carregamento (boardroom + builder renderizavam juntos).
+    if (initialOpenFlow) {
+      try {
+        removePsPipelineField(projectId, "phase");
+        removePsPipelineField(projectId, "flow_id");
+      } catch {}
+      return init;
+    }
     try {
       const savedPhase = readPsPipelineField(projectId, "phase");
       const savedFlowId = readPsPipelineField(projectId, "flow_id");

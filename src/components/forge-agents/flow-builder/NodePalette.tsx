@@ -91,7 +91,7 @@ export function NodePalette({ onAddNode }: NodePaletteProps = {}) {
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Buscar nós..."
             className="h-7 text-[10px] pl-6 pr-2 border-none"
-            style={{ background: 'var(--ps-bg-surface)', color: 'var(--ps-cream)' }}
+            style={{ background: 'linear-gradient(135deg, #1a1e27, #0b0d12)', color: 'var(--ps-cream)' }}
           />
         </div>
         <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={() => setCollapsed(true)} title="Recolher" style={{ color: 'var(--ps-cream-40)' }}>

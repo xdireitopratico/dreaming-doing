@@ -7,6 +7,7 @@ import { Activity, RefreshCw, ArrowLeft, Bot, Filter } from "lucide-react";
 import { AgentListPanel } from "./AgentListPanel";
 import { AgentDetailPanel } from "./AgentDetailPanel";
 import { PrometheusParticles } from "@/components/forge-prometheus/PrometheusParticles";
+import { PrometheusThemeToggle } from "@/components/forge-prometheus/PrometheusThemeToggle";
 import { useAgentMonitoring } from "./useAgentMonitoring";
 import type { MonitoringData, StatusFilter, ChannelFilter } from "./monitoring-types";
 import "@/styles/forge-agents-theme.css";
@@ -162,6 +163,7 @@ export function AgentMonitoringDashboard({ onBack }: Props) {
               >
                 <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} style={{ color: "var(--ps-accent)" }} />
               </button>
+              <PrometheusThemeToggle />
             </div>
           </div>
 

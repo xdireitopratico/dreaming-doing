@@ -55,7 +55,7 @@ function FlowCanvasInternals({
 }
 
 const MINIMAP_COLORS: Record<string, string> = {
-  trigger: "#22c55e", llm: "#3b82f6", tool: "#eab308",
+  trigger: "#22c55e", llm: "#fbbf24", tool: "#eab308",
   condition: "#6b7280", output_guard: "#f59e0b", stt: "#a855f7",
   tts: "#f97316", rag_search: "#b45309", hitl: "#ef4444",
   loop: "#6b7280", switch: "#6366f1", memory: "#ec4899",
@@ -159,10 +159,10 @@ export const FlowCanvas = memo(function FlowCanvas({
           deleteKeyCode={["Backspace", "Delete"]}
         >
           <Background gap={20} size={1.5} color="rgba(255,255,255,0.10)" />
-          <Controls className="!bg-[hsl(225,30%,10%)] !border-white/10 !shadow-lg [&>button]:!bg-[hsl(225,30%,12%)] [&>button]:!border-white/10 [&>button]:!text-white/60 [&>button:hover]:!bg-[hsl(225,30%,16%)]" />
+          <Controls className="!bg-[var(--ps-bg-deep)] !border-[var(--ps-border)] !shadow-lg [&>button]:!bg-[var(--ps-bg-surface)] [&>button]:!border-[var(--ps-border)] [&>button]:!text-[var(--ps-cream-60)] [&>button:hover]:!bg-[var(--ps-bg-surface-hover)]" />
           <MiniMap
             nodeColor={(node: Node) => MINIMAP_COLORS[node.type || ""] || "#94a3b8"}
-            style={{ background: 'hsl(225, 30%, 8%)' }}
+            style={{ background: 'var(--ps-bg)' }}
             maskColor="rgba(0,0,0,0.6)"
           />
           <FlowCanvasInternals onRegisterFitView={onRegisterFitView} />

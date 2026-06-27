@@ -15,8 +15,8 @@ export function PrometheusLoadingSkeleton() {
         transition={{ repeat: Infinity, repeatType: "reverse", duration: 1.2, ease: "easeInOut" }}
         className="w-12 h-12 rounded-2xl flex items-center justify-center"
         style={{
-          background: "linear-gradient(135deg, rgba(59,130,246,0.15), rgba(139,92,246,0.1))",
-          border: "1px solid rgba(59,130,246,0.2)",
+          background: "linear-gradient(135deg, #1a1e27, #0b0d12)",
+          border: "1px solid rgba(251, 191, 36, 0.2)",
         }}
       >
         <div

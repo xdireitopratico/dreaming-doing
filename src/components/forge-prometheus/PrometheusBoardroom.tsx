@@ -10,6 +10,7 @@ import { PrometheusParticles } from "./PrometheusParticles";
 import { PrometheusBoardroomAgent } from "./PrometheusBoardroomAgent";
 import { PrometheusBoardroomTurn } from "./PrometheusBoardroomTurn";
 import { PrometheusBoardroomFeedbackBar } from "./PrometheusBoardroomFeedbackBar";
+import { PrometheusThemeToggle } from "./PrometheusThemeToggle";
 import "./prometheus-studio.css";
 
 export type BoardroomPhase =
@@ -138,6 +139,10 @@ export function PrometheusBoardroom({
           >
             <X className="h-4 w-4" />
           </button>
+
+          <div className="pointer-events-auto ml-auto flex items-center gap-2">
+            <PrometheusThemeToggle />
+          </div>
 
           <div className="pointer-events-none absolute left-1/2 top-3 flex -translate-x-1/2 gap-2 sm:top-4 sm:gap-3">
             {PROMETHEUS_AGENTS.map((agent) => (
