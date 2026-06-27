@@ -247,19 +247,31 @@ export default function FlowAgentBuilderView({
     onImmersiveChange?.(IMMERSIVE_PHASES.has(phase) || builderOpen);
   }, [phase, builderOpen, onImmersiveChange]);
 
-  // Dashboard Fluxo Visual → abre React Flow
+  // Dashboard Fluxo Visual → abre React Flow com draft NOVO vazio.
+  // NUNCA reaproveita o draft existente: o user abre agente antigo via
+  // dropdown "Meus agentes" (linha do FlowToolbar) se quiser.
+  const handleCreateEmpty = useCallback(async () => {
+    const { data: userData } = await supabase.auth.getUser();
+    if (!userData?.user) return;
+    const { flowId, error: upsertErr } = await upsertProjectDraftFlow(supabase, {
+      projectId,
+      userId: userData.user.id,
+      name: "Novo Agente",
+      description: "",
+    });
+    if (upsertErr || !flowId) {
+      console.error("[fluxo-visual] Falha ao criar draft vazio:", upsertErr);
+      return;
+    }
+    openBuilder(flowId);
+  }, [projectId, openBuilder]);
+
   useEffect(() => {
     if (!initialOpenFlow || loading || openFlowHandledRef.current) return;
     openFlowHandledRef.current = true;
     setAutoLaunching(false);
-
-    const draft = findProjectDraft(flows);
-    if (draft) {
-      openBuilder(draft.id);
-      return;
-    }
-    void handleCreate();
-  }, [initialOpenFlow, loading, flows, openBuilder, handleCreate]);
+    void handleCreateEmpty();
+  }, [initialOpenFlow, loading, handleCreateEmpty]);
 
   // Home sem prompt → redireciona para dashboard (protótipo arquivado)
   useEffect(() => {
