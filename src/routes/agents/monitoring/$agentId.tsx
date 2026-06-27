@@ -1,24 +1,32 @@
-import { lazy, Suspense, useState } from "react";
-import { Link, createFileRoute } from "@tanstack/react-router";
+/**
+ * /agents/monitoring/$agentId — Monitoring standalone (fora do boardroom).
+ *
+ * Renderiza direto <AgentMonitoringDashboard> sem passar pelo
+ * FlowAgentBuilderView. O Monitoring perdeu o caminho da pagina
+ * deprecada (home do /agents/$agentId) e virou rota independente.
+ */
+import { lazy, Suspense, useCallback } from "react";
+import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, Loader2 } from "lucide-react";
 import { DashboardShell } from "@/components/dashboard/DashboardShell";
 import { ForgeIcon } from "@/components/icons/ForgeIcon";
 import { supabase } from "@/integrations/supabase/client";
 import { isAgentProject, type ProjectKind } from "@/lib/project-kind";
+import { PrometheusLoadingSkeleton } from "@/components/forge-prometheus/PrometheusLoadingSkeleton";
 
-const FlowAgentBuilderView = lazy(
-  () => import("@/components/forge-agents/FlowAgentBuilderView")
+const AgentMonitoringDashboard = lazy(
+  () => import("@/components/forge-agents/monitoring/AgentMonitoringDashboard").then(m => ({ default: m.AgentMonitoringDashboard }))
 );
 
-export const Route = createFileRoute("/agents/$agentId/")({
-  component: AgentEditorPage,
+export const Route = createFileRoute("/agents/monitoring/$agentId")({
+  component: AgentMonitoringPage,
   ssr: false,
 });
 
-function AgentEditorPage() {
+function AgentMonitoringPage() {
   const { agentId } = Route.useParams();
-  const [immersiveActive, setImmersiveActive] = useState(false);
+  const navigate = useNavigate();
 
   const { data: agent, isLoading, error } = useQuery({
     queryKey: ["agent-project", agentId],
@@ -42,11 +50,14 @@ function AgentEditorPage() {
     },
   });
 
+  const handleBack = useCallback(() => {
+    void navigate({ to: "/agents" });
+  }, [navigate]);
+
   return (
-    <DashboardShell requireAuth activeNav="agents" immersive={immersiveActive}>
+    <DashboardShell requireAuth activeNav="agents">
       <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
-        {!immersiveActive && (
-          <header className="flex shrink-0 items-center gap-3 border-b border-[var(--forge-border)] px-4 py-3 md:px-6">
+        <header className="flex shrink-0 items-center gap-3 border-b border-[var(--forge-border)] px-4 py-3 md:px-6">
             <Link
               to="/agents"
               className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-sm text-[var(--forge-muted)] hover:bg-[var(--forge-surface-2)] hover:text-[var(--forge-text)]"
@@ -64,15 +75,8 @@ function AgentEditorPage() {
               )}
             </div>
           </header>
-        )}
 
-        <main
-          className={
-            immersiveActive
-              ? "h-full min-h-0 flex-1 overflow-hidden"
-              : "min-h-0 flex-1 overflow-hidden px-3 pb-3 pt-3 lg:px-6 lg:pb-6 lg:pt-3"
-          }
-        >
+        <main className="h-full min-h-0 flex-1 overflow-hidden">
           {isLoading && (
             <div className="grid h-full place-items-center">
               <Loader2 className="size-6 animate-spin text-[var(--forge-primary)]" />
@@ -91,23 +95,8 @@ function AgentEditorPage() {
             </div>
           )}
           {!isLoading && agent && (
-            <Suspense
-              fallback={
-                <div className="grid h-full place-items-center">
-                  <Loader2 className="size-6 animate-spin text-[var(--forge-primary)]" />
-                </div>
-              }
-            >
-              <FlowAgentBuilderView
-                projectId={agentId}
-                projectName={agent.name}
-                onImmersiveChange={setImmersiveActive}
-                initialPrompt={
-                  typeof (agent.meta as Record<string, unknown> | null)?.initialPrompt === "string"
-                    ? ((agent.meta as Record<string, unknown>).initialPrompt as string)
-                    : null
-                }
-              />
+            <Suspense fallback={<PrometheusLoadingSkeleton />}>
+              <AgentMonitoringDashboard onBack={handleBack} />
             </Suspense>
           )}
         </main>
