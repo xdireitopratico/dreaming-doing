@@ -2,10 +2,12 @@ import { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { X, Send, Globe, Loader2, ExternalLink, Paperclip, Square } from "lucide-react";
+import { X, Send, Globe, Loader2, ExternalLink, Paperclip, Square, StopCircle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useJobEvents, useJobPolling } from "./hooks";
+import { cancelExtractionJob } from "./api";
 import { JOB_STATUS_COLORS, JOB_TERMINAL_STATUSES, type RealtimeEvent } from "./types";
+import { toast } from "@/lib/toast";
 
 interface BrowserPreviewPanelProps {
   jobId: string | null;
@@ -125,6 +127,7 @@ export function BrowserPreviewPanel({ jobId, onClose }: BrowserPreviewPanelProps
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [jobContext, setJobContext] = useState<JobContext | null>(null);
   const [chatHistoryLoaded, setChatHistoryLoaded] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
   const [cdpStatus, setCdpStatus] = useState<"checking" | "ok" | "failed">("checking");
   const [cdpMessage, setCdpMessage] = useState<string>("");
 
@@ -294,6 +297,19 @@ export function BrowserPreviewPanel({ jobId, onClose }: BrowserPreviewPanelProps
     await callChat(userMsg.content);
   }, [chatInput, chatLoading, jobId, callChat]);
 
+  const handleCancel = useCallback(async () => {
+    if (!jobId || cancelling) return;
+    setCancelling(true);
+    try {
+      await cancelExtractionJob(jobId);
+      toast.success("Extração cancelada");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erro ao cancelar");
+    } finally {
+      setCancelling(false);
+    }
+  }, [jobId, cancelling]);
+
   // Se o LLM retornou ações, mostra como chips visuais (placeholder para execução futura)
   const lastAssistantMsg = [...chatMessages]
     .reverse()
@@ -358,6 +374,22 @@ export function BrowserPreviewPanel({ jobId, onClose }: BrowserPreviewPanelProps
             >
               Sandbox <ExternalLink className="size-3" />
             </a>
+          )}
+          {!isTerminal && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleCancel}
+              disabled={cancelling}
+              className="h-7 text-[11px] border-red-500/30 text-red-500 hover:bg-red-500/10"
+            >
+              {cancelling ? (
+                <Loader2 className="size-3 animate-spin" />
+              ) : (
+                <StopCircle className="size-3.5 mr-1" />
+              )}
+              Cancelar
+            </Button>
           )}
           <Button variant="ghost" size="sm" onClick={onClose} className="h-7">
             <X className="size-4" />
