@@ -40,6 +40,18 @@ const result = await esbuild.build({
         });
       },
     },
+    {
+      name: "npm-protocol",
+      setup(build) {
+        build.onResolve({ filter: /^npm:/ }, (args) => {
+          // Deno/Edge Functions usam npm:<pkg>@<version>. Para o bundle Node.js
+          // do Inngest, reescrevemos para o nome bare e marcamos como external
+          // para que o runtime Vercel resolva pelo node_modules.
+          const bare = args.path.replace(/^npm:(.+?)(@.+)?$/, "$1");
+          return { path: bare, external: true };
+        });
+      },
+    },
   ],
   banner: { js: denoShimBanner },
   logLevel: "info",
