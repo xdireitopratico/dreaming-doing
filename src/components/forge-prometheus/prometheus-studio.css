@@ -19,17 +19,17 @@
 .prometheus-studio {
   /* Superfícies (4 tokens dashboard + gradiente) */
   --ps-bg: #0b0d12;
-  --ps-bg-deep: #0b0d12;
+  --ps-bg-deep: #12151c;
   --ps-bg-surface: rgba(237, 239, 242, 0.02);
   --ps-bg-surface-hover: rgba(237, 239, 242, 0.05);
   --ps-bg-surface-active: rgba(251, 191, 36, 0.08);
   --ps-bg-glass: rgba(0, 0, 0, 0.4);
 
-  /* Accent (mantém azul para preservar identidade de agent types) */
-  --ps-accent: hsl(210 100% 60%);
-  --ps-accent-glow: rgba(59, 130, 246, 0.3);
-  --ps-accent-dim: rgba(59, 130, 246, 0.6);
-  --ps-accent-subtle: rgba(59, 130, 246, 0.08);
+  /* Accent — botão amarelo Vibecoding */
+  --ps-accent: #fbbf24;
+  --ps-accent-glow: rgba(251, 191, 36, 0.3);
+  --ps-accent-dim: rgba(251, 191, 36, 0.6);
+  --ps-accent-subtle: rgba(251, 191, 36, 0.08);
 
   /* Texto (mantém "cream" semântico mas aponta para texto Vibecoding) */
   --ps-cream: #e2e8f0;
@@ -43,8 +43,8 @@
   /* Borders translúcidos (mesma fórmula do Vibecoding) */
   --ps-border: rgba(237, 239, 242, 0.08);
   --ps-border-hover: rgba(237, 239, 242, 0.14);
-  --ps-border-accent: rgba(59, 130, 246, 0.4);
-  --ps-border-accent-dim: rgba(59, 130, 246, 0.2);
+  --ps-border-accent: rgba(251, 191, 36, 0.4);
+  --ps-border-accent-dim: rgba(251, 191, 36, 0.2);
 
   /* Cores semânticas (mantém) */
   --ps-green: hsl(142 70% 45%);

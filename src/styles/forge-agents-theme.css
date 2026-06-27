@@ -9,17 +9,17 @@
  */
 
 .prometheus-studio:not([data-prometheus-theme="legacy"]) {
-  --ps-bg: var(--forge-surface, #0b0d12);
-  --ps-bg-deep: var(--forge-surface, #0b0d12);
+  --ps-bg: #0b0d12;
+  --ps-bg-deep: #12151c;
   --ps-bg-surface: var(--forge-surface-2, #12151c);
   --ps-bg-surface-hover: var(--forge-surface-3, #16191f);
   --ps-bg-surface-active: color-mix(in srgb, var(--forge-primary, #ffb627) 12%, transparent);
   --ps-bg-glass: color-mix(in srgb, var(--forge-surface, #0b0d12) 75%, transparent);
 
-  --ps-accent: var(--forge-primary, #ffb627);
-  --ps-accent-glow: color-mix(in srgb, var(--forge-primary, #ffb627) 35%, transparent);
-  --ps-accent-dim: color-mix(in srgb, var(--forge-primary, #ffb627) 65%, transparent);
-  --ps-accent-subtle: color-mix(in srgb, var(--forge-primary, #ffb627) 10%, transparent);
+  --ps-accent: #fbbf24;
+  --ps-accent-glow: rgba(251, 191, 36, 0.3);
+  --ps-accent-dim: rgba(251, 191, 36, 0.6);
+  --ps-accent-subtle: rgba(251, 191, 36, 0.08);
 
   --ps-cream: var(--forge-text, #edeff2);
   --ps-cream-80: color-mix(in srgb, var(--forge-text, #edeff2) 80%, transparent);
@@ -35,15 +35,15 @@
   --ps-border-accent-dim: color-mix(in srgb, var(--forge-primary, #ffb627) 22%, transparent);
 
   --ps-green: #10b981;
-  --ps-blue: var(--forge-primary-hot, #ff7a1a);
+  --ps-blue: #f59e0b;
   --ps-purple: #a855f7;
-  --ps-orange: var(--forge-primary, #ffb627);
+  --ps-orange: #fbbf24;
   --ps-red: #ef4444;
 
   --ps-node-green: #10b981;
-  --ps-node-blue: var(--forge-primary-hot, #ff7a1a);
+  --ps-node-blue: #f59e0b;
   --ps-node-purple: #a855f7;
-  --ps-node-orange: var(--forge-primary, #ffb627);
+  --ps-node-orange: #fbbf24;
 
   color: var(--ps-cream);
   background: var(--ps-bg);
