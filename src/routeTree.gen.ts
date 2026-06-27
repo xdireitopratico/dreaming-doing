@@ -22,9 +22,11 @@ import { Route as ApiModelsRouteImport } from './routes/api-models'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ProjectsIndexRouteImport } from './routes/projects/index'
 import { Route as AgentsIndexRouteImport } from './routes/agents/index'
+import { Route as AgentsVisualRouteImport } from './routes/agents/visual'
 import { Route as ProjectsProjectIdIndexRouteImport } from './routes/projects/$projectId/index'
 import { Route as AgentsAgentIdIndexRouteImport } from './routes/agents/$agentId/index'
 import { Route as ProjectsProjectIdHistoryRouteImport } from './routes/projects/$projectId/history'
+import { Route as AgentsMonitoringAgentIdRouteImport } from './routes/agents/monitoring/$agentId'
 
 const SkillsRoute = SkillsRouteImport.update({
   id: '/skills',
@@ -91,6 +93,11 @@ const AgentsIndexRoute = AgentsIndexRouteImport.update({
   path: '/agents/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AgentsVisualRoute = AgentsVisualRouteImport.update({
+  id: '/agents/visual',
+  path: '/agents/visual',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ProjectsProjectIdIndexRoute = ProjectsProjectIdIndexRouteImport.update({
   id: '/projects/$projectId/',
   path: '/projects/$projectId/',
@@ -107,6 +114,11 @@ const ProjectsProjectIdHistoryRoute =
     path: '/projects/$projectId/history',
     getParentRoute: () => rootRouteImport,
   } as any)
+const AgentsMonitoringAgentIdRoute = AgentsMonitoringAgentIdRouteImport.update({
+  id: '/agents/monitoring/$agentId',
+  path: '/agents/monitoring/$agentId',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -120,8 +132,10 @@ export interface FileRoutesByFullPath {
   '/onboarding': typeof OnboardingRoute
   '/settings': typeof SettingsRoute
   '/skills': typeof SkillsRoute
+  '/agents/visual': typeof AgentsVisualRoute
   '/agents/': typeof AgentsIndexRoute
   '/projects/': typeof ProjectsIndexRoute
+  '/agents/monitoring/$agentId': typeof AgentsMonitoringAgentIdRoute
   '/projects/$projectId/history': typeof ProjectsProjectIdHistoryRoute
   '/agents/$agentId/': typeof AgentsAgentIdIndexRoute
   '/projects/$projectId/': typeof ProjectsProjectIdIndexRoute
@@ -138,8 +152,10 @@ export interface FileRoutesByTo {
   '/onboarding': typeof OnboardingRoute
   '/settings': typeof SettingsRoute
   '/skills': typeof SkillsRoute
+  '/agents/visual': typeof AgentsVisualRoute
   '/agents': typeof AgentsIndexRoute
   '/projects': typeof ProjectsIndexRoute
+  '/agents/monitoring/$agentId': typeof AgentsMonitoringAgentIdRoute
   '/projects/$projectId/history': typeof ProjectsProjectIdHistoryRoute
   '/agents/$agentId': typeof AgentsAgentIdIndexRoute
   '/projects/$projectId': typeof ProjectsProjectIdIndexRoute
@@ -157,8 +173,10 @@ export interface FileRoutesById {
   '/onboarding': typeof OnboardingRoute
   '/settings': typeof SettingsRoute
   '/skills': typeof SkillsRoute
+  '/agents/visual': typeof AgentsVisualRoute
   '/agents/': typeof AgentsIndexRoute
   '/projects/': typeof ProjectsIndexRoute
+  '/agents/monitoring/$agentId': typeof AgentsMonitoringAgentIdRoute
   '/projects/$projectId/history': typeof ProjectsProjectIdHistoryRoute
   '/agents/$agentId/': typeof AgentsAgentIdIndexRoute
   '/projects/$projectId/': typeof ProjectsProjectIdIndexRoute
@@ -177,8 +195,10 @@ export interface FileRouteTypes {
     | '/onboarding'
     | '/settings'
     | '/skills'
+    | '/agents/visual'
     | '/agents/'
     | '/projects/'
+    | '/agents/monitoring/$agentId'
     | '/projects/$projectId/history'
     | '/agents/$agentId/'
     | '/projects/$projectId/'
@@ -195,8 +215,10 @@ export interface FileRouteTypes {
     | '/onboarding'
     | '/settings'
     | '/skills'
+    | '/agents/visual'
     | '/agents'
     | '/projects'
+    | '/agents/monitoring/$agentId'
     | '/projects/$projectId/history'
     | '/agents/$agentId'
     | '/projects/$projectId'
@@ -213,8 +235,10 @@ export interface FileRouteTypes {
     | '/onboarding'
     | '/settings'
     | '/skills'
+    | '/agents/visual'
     | '/agents/'
     | '/projects/'
+    | '/agents/monitoring/$agentId'
     | '/projects/$projectId/history'
     | '/agents/$agentId/'
     | '/projects/$projectId/'
@@ -232,8 +256,10 @@ export interface RootRouteChildren {
   OnboardingRoute: typeof OnboardingRoute
   SettingsRoute: typeof SettingsRoute
   SkillsRoute: typeof SkillsRoute
+  AgentsVisualRoute: typeof AgentsVisualRoute
   AgentsIndexRoute: typeof AgentsIndexRoute
   ProjectsIndexRoute: typeof ProjectsIndexRoute
+  AgentsMonitoringAgentIdRoute: typeof AgentsMonitoringAgentIdRoute
   ProjectsProjectIdHistoryRoute: typeof ProjectsProjectIdHistoryRoute
   AgentsAgentIdIndexRoute: typeof AgentsAgentIdIndexRoute
   ProjectsProjectIdIndexRoute: typeof ProjectsProjectIdIndexRoute
@@ -332,6 +358,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AgentsIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/agents/visual': {
+      id: '/agents/visual'
+      path: '/agents/visual'
+      fullPath: '/agents/visual'
+      preLoaderRoute: typeof AgentsVisualRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/projects/$projectId/': {
       id: '/projects/$projectId/'
       path: '/projects/$projectId'
@@ -353,6 +386,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProjectsProjectIdHistoryRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/agents/monitoring/$agentId': {
+      id: '/agents/monitoring/$agentId'
+      path: '/agents/monitoring/$agentId'
+      fullPath: '/agents/monitoring/$agentId'
+      preLoaderRoute: typeof AgentsMonitoringAgentIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -368,8 +408,10 @@ const rootRouteChildren: RootRouteChildren = {
   OnboardingRoute: OnboardingRoute,
   SettingsRoute: SettingsRoute,
   SkillsRoute: SkillsRoute,
+  AgentsVisualRoute: AgentsVisualRoute,
   AgentsIndexRoute: AgentsIndexRoute,
   ProjectsIndexRoute: ProjectsIndexRoute,
+  AgentsMonitoringAgentIdRoute: AgentsMonitoringAgentIdRoute,
   ProjectsProjectIdHistoryRoute: ProjectsProjectIdHistoryRoute,
   AgentsAgentIdIndexRoute: AgentsAgentIdIndexRoute,
   ProjectsProjectIdIndexRoute: ProjectsProjectIdIndexRoute,
