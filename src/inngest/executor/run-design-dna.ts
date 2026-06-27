@@ -47,6 +47,8 @@ async function ensureDesignDnaSandbox(
   }
 
   // Cria novo sandbox com auto-pause de 15 min
+  await appendJobEvent(supabase, jobId, "sandbox_setup", { sandboxId: "pending", step: "creating" });
+
   const resp = await fetch(`${E2B_API_BASE}/sandboxes`, {
     method: "POST",
     headers: { "Content-Type": "application/json", "X-API-Key": e2bApiKey },
@@ -70,7 +72,11 @@ async function ensureDesignDnaSandbox(
 
   const previewUrl = `https://${CHROMIUM_DEBUG_PORT}-${sandboxId}.${E2B_DOMAIN}`;
 
+  await appendJobEvent(supabase, jobId, "sandbox_setup", { sandboxId, step: "connecting" });
+
   const { accessToken } = await connectToSandbox(sandboxId, e2bApiKey);
+
+  await appendJobEvent(supabase, jobId, "sandbox_setup", { sandboxId, step: "waiting-runtime" });
 
   await waitForEnvdReady(sandboxId, accessToken).catch((err) => {
     console.warn("[design-dna] envd not ready, continuing anyway:", err);
@@ -156,10 +162,11 @@ export async function executeDesignDnaJob(
       .eq("id", jobId)
       .single();
 
-  const jobMeta = (job?.meta ?? {}) as Record<string, unknown>;
-  const ingestKind = typeof jobMeta.ingestKind === "string" && jobMeta.ingestKind.trim()
-    ? jobMeta.ingestKind.trim()
+  const currentMeta = { ...((job?.meta ?? {}) as Record<string, unknown>) };
+  const ingestKind = typeof currentMeta.ingestKind === "string" && currentMeta.ingestKind.trim()
+    ? currentMeta.ingestKind.trim()
     : "production";
+  currentMeta.ingestKind = ingestKind;
   const isDeep = depth === "deep";
   let sandboxId = "";
   let previewUrl = "";
@@ -234,12 +241,12 @@ export async function executeDesignDnaJob(
     sandboxAccessToken = sb.accessToken;
     previewUrl = sb.previewUrl;
 
+    currentMeta.previewUrl = previewUrl;
+    currentMeta.progress = 15;
+
     await supabase
       .from("design_dna_jobs")
-      .update({
-        sandbox_id: sandboxId,
-        meta: { ...jobMeta, previewUrl },
-      })
+      .update({ sandbox_id: sandboxId, meta: currentMeta })
       .eq("id", jobId);
 
     // Verifica que Chromium está acessível via DevTools na porta 9222
@@ -277,6 +284,11 @@ export async function executeDesignDnaJob(
         });
       }
     }
+    currentMeta.progress = 20;
+    await supabase.from("design_dna_jobs").update({ meta: currentMeta }).eq("id", jobId);
+  } else {
+    currentMeta.progress = 20;
+    await supabase.from("design_dna_jobs").update({ meta: currentMeta }).eq("id", jobId);
   }
 
   for (let i = startIndex; i < urls.length; i++) {
@@ -372,12 +384,13 @@ export async function executeDesignDnaJob(
         }
       }
 
+      currentMeta.current_url_index = i + 1;
+      currentMeta.urls_completed = results.length;
+      currentMeta.previewUrl = previewUrl;
+      currentMeta.progress = Math.min(85, 25 + Math.round(((i + 1) / urls.length) * 60));
       await supabase
         .from("design_dna_jobs")
-        .update({
-          status: "running",
-          meta: { current_url_index: i + 1, urls_completed: results.length, previewUrl },
-        })
+        .update({ status: "running", meta: currentMeta })
         .eq("id", jobId);
 
       await appendJobEvent(supabase, jobId, "url_extracted", {
@@ -413,19 +426,14 @@ export async function executeDesignDnaJob(
         ? "partial"
         : "completed";
 
+  currentMeta.previewUrl = previewUrl;
+  currentMeta.current_url_index = urls.length;
+  currentMeta.urls_completed = completedCount;
+  currentMeta.blocked_urls = blockedCount;
+  currentMeta.progress = 100;
   await supabase
     .from("design_dna_jobs")
-    .update({
-      results,
-      errors,
-      meta: {
-        previewUrl,
-        ingestKind,
-        current_url_index: urls.length,
-        urls_completed: completedCount,
-        blocked_urls: blockedCount,
-      },
-    })
+    .update({ results, errors, meta: currentMeta })
     .eq("id", jobId);
 
   return {

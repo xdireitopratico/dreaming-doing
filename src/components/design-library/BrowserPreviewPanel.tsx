@@ -131,7 +131,8 @@ export function BrowserPreviewPanel({ jobId, onClose }: BrowserPreviewPanelProps
   const [cdpStatus, setCdpStatus] = useState<"checking" | "ok" | "failed">("checking");
   const [cdpMessage, setCdpMessage] = useState<string>("");
 
-  const previewUrl = job?.meta?.previewUrl;
+  const previewUrl = job?.meta?.previewUrl as string | undefined;
+  const progress = job?.meta?.progress as number | undefined;
   const latestScreenshot = useMemo(() => {
     const shots = events.filter((e) => e.event_type === "screenshot_taken");
     return shots.length > 0 ? shots[shots.length - 1] : null;
@@ -141,6 +142,42 @@ export function BrowserPreviewPanel({ jobId, onClose }: BrowserPreviewPanelProps
     const extracting = events.filter((e) => e.event_type === "url_extracting");
     return extracting.length > 0 ? extracting[extracting.length - 1] : null;
   }, [events]);
+
+  const lastSandboxSetup = useMemo(() => {
+    const setup = events.filter((e) => e.event_type === "sandbox_setup");
+    return setup.length > 0 ? setup[setup.length - 1] : null;
+  }, [events]);
+
+  const sandboxStep = lastSandboxSetup?.payload?.step as string | undefined;
+
+  const SANDBOX_STEP_LABELS: Record<string, string> = {
+    "creating": "Criando sandbox E2B...",
+    "connecting": "Conectando ao sandbox...",
+    "waiting-runtime": "Aguardando runtime do sandbox...",
+    "installing-playwright": "Instalando Chromium (~2min)...",
+  };
+
+  const hasReadyEvent = useMemo(() =>
+    events.some((e) => e.event_type === "sandbox_ready"),
+  [events]);
+
+  const hasLLMEvent = useMemo(() =>
+    events.some((e) => e.event_type === "llm_extracting"),
+  [events]);
+
+  const statusMessage = useMemo(() => {
+    if (!jobId) return "Selecione um job";
+    if (isTerminal) return `Job ${jobStatus}.`;
+    if (sandboxStep && SANDBOX_STEP_LABELS[sandboxStep]) return SANDBOX_STEP_LABELS[sandboxStep];
+    if (hasLLMEvent && progress) return `LLM extraindo DNA... ${progress}%`;
+    if (progress !== undefined && progress > 0 && progress < 100) {
+      const ue = currentUrlEvent;
+      if (ue) return `Processando ${ue.payload?.url ?? ""} (${ue.payload?.index ?? 0}/${ue.payload?.total ?? 0})`;
+      return `Extraindo design... ${progress}%`;
+    }
+    if (hasReadyEvent || previewUrl) return "Sandbox pronto — aguardando navegação...";
+    return "Aguardando sandbox...";
+  }, [jobId, isTerminal, sandboxStep, SANDBOX_STEP_LABELS, hasLLMEvent, progress, currentUrlEvent, hasReadyEvent, previewUrl, jobStatus]);
 
   // Auto-scroll timeline
   useEffect(() => {
@@ -397,6 +434,15 @@ export function BrowserPreviewPanel({ jobId, onClose }: BrowserPreviewPanelProps
         </div>
       </div>
 
+      {progress !== undefined && progress > 0 && progress < 100 && (
+        <div className="h-1 bg-surface-3">
+          <div
+            className="h-full bg-primary transition-all duration-500 ease-out"
+            style={{ width: `${progress}%` }}
+          />
+        </div>
+      )}
+
       <div className="flex-1 flex overflow-hidden">
         {/* Preview Panel — fallback gracioso quando iframe não disponível */}
         <div className="flex-1 flex flex-col border-r border-border min-w-0">
@@ -481,7 +527,7 @@ export function BrowserPreviewPanel({ jobId, onClose }: BrowserPreviewPanelProps
                     ? "Selecione um job"
                     : isTerminal
                       ? `Job ${jobStatus}. ${jobContext?.errors?.[0] ?? "Sem screenshots capturados."}`
-                      : "Aguardando sandbox..."}
+                      : statusMessage}
                 </p>
                 {!isTerminal && cdpStatus === "failed" && (
                   <p className="text-[10px] text-amber-500/80 mt-2">
@@ -495,7 +541,7 @@ export function BrowserPreviewPanel({ jobId, onClose }: BrowserPreviewPanelProps
                 )}
                 {!isTerminal && cdpStatus === "checking" && !previewUrl && (
                   <p className="text-[10px] text-muted-foreground/60 mt-2">
-                    Aguardando criação do sandbox E2B...
+                    {statusMessage}
                   </p>
                 )}
               </div>
