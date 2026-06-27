@@ -95,8 +95,20 @@ export function useJobs() {
 
   useEffect(() => {
     load();
-    const id = setInterval(load, 10000);
-    return () => clearInterval(id);
+
+    // Realtime: recarrega a lista apenas quando jobs são criados/atualizados.
+    const channel = supabase
+      .channel("design-dna-jobs-list")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "design_dna_jobs" },
+        () => load(),
+      )
+      .subscribe();
+
+    return () => {
+      void supabase.removeChannel(channel);
+    };
   }, [load]);
 
   return { jobs, loading, error, reload: load };
@@ -183,7 +195,6 @@ export function useJobPolling(jobId: string | null) {
     }
 
     let cancelled = false;
-    let interval: ReturnType<typeof setInterval> | null = null;
 
     const fetchJob = async () => {
       try {
@@ -197,11 +208,27 @@ export function useJobPolling(jobId: string | null) {
     };
 
     fetchJob();
-    interval = setInterval(fetchJob, 3000);
+
+    // Realtime: atualiza o job detalhado apenas quando a própria linha muda.
+    const channel = supabase
+      .channel(`design-dna-job-${jobId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "design_dna_jobs",
+          filter: `id=eq.${jobId}`,
+        },
+        (payload: { new?: unknown }) => {
+          if (!cancelled) setJob(payload.new as DesignDnaJob | null);
+        },
+      )
+      .subscribe();
 
     return () => {
       cancelled = true;
-      if (interval) clearInterval(interval);
+      void supabase.removeChannel(channel);
     };
   }, [jobId]);
 

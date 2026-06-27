@@ -233,7 +233,9 @@ export function useEditorPageHandlers({
       explicitAction?: TasteAction,
       explicitMode?: AgentRunMode,
     ): Promise<boolean> => {
-      if (!conversation || (isAgentBusy() && !agent.isPendingRun)) return false;
+      if (!conversation) return false;
+      if (isAgentConnectInFlight()) return false;
+      if (isAgentBusy() && !agent.isPendingRun) return false;
 
       const kind = explicitKind ?? resolveSessionKind(tasteQuota);
       const tasteAction: TasteAction | undefined =

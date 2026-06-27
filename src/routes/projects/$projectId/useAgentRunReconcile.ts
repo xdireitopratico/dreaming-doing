@@ -34,10 +34,14 @@ export function useAgentRunReconcile(
   conversationId: string | undefined,
   agent: AgentRun,
 ) {
-  const { watch, syncPendingCount, activeRunId, progress } = agent;
+  const { watch, syncPendingCount, activeRunId, progress, isPendingRun } = agent;
 
   useEffect(() => {
     if (!conversationId) return;
+    // Não compete com o envio otimista em andamento: se já existe um slot
+    // pendente ("Pensando…"), o reconcile deve ficar quieto e deixar o connect
+    // original assumir a run que será criada no DB.
+    if (isPendingRun) return;
 
     let cancelled = false;
     let channel: ReturnType<typeof supabase.channel> | null = null;
@@ -73,7 +77,7 @@ export function useAgentRunReconcile(
       cancelled = true;
       removeRealtimeChannel(channel);
     };
-  }, [projectId, conversationId, watch, activeRunId, progress.finished]);
+  }, [projectId, conversationId, watch, activeRunId, progress.finished, isPendingRun]);
 
   useEffect(() => {
     if (!conversationId) return;
