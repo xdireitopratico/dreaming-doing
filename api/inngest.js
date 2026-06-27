@@ -2,20 +2,24 @@ import { constants } from "node:fs";
 import { access } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 
-const DIST_HANDLER_URL = new URL("../dist/server/inngest-handler.js", import.meta.url);
-const SRC_HANDLER_URL = new URL("../src/inngest/handler.ts", import.meta.url);
+// Tries multiple paths for the handler bundle (Vercel includeFiles can be flaky)
+const CANDIDATE_PATHS = [
+  new URL("../dist/server/inngest-handler.js", import.meta.url),
+  new URL("./dist/server/inngest-handler.js", import.meta.url),
+  new URL("/var/task/dist/server/inngest-handler.js", import.meta.url),
+];
 
 let handlerPromise;
 
 async function resolveHandler() {
-  try {
-    await access(fileURLToPath(DIST_HANDLER_URL), constants.F_OK);
-    const mod = await import(/* @vite-ignore */ DIST_HANDLER_URL.href);
-    return mod.inngestHandler;
-  } catch {
-    const mod = await import(/* @vite-ignore */ SRC_HANDLER_URL.href);
-    return mod.inngestHandler;
+  for (const url of CANDIDATE_PATHS) {
+    try {
+      await access(fileURLToPath(url), constants.F_OK);
+      const mod = await import(/* @vite-ignore */ url.href);
+      return mod.inngestHandler;
+    } catch { /* try next */ }
   }
+  throw new Error("inngest-handler.js not found in any candidate path");
 }
 
 function getHandler() {
@@ -55,7 +59,6 @@ export default async function inngestHandler(req, res) {
     if (value == null) continue;
     headers.set(key, Array.isArray(value) ? value.join(", ") : String(value));
   }
-  // Inngest: new URL(req.url, `https://${host}`) — host vazio => base "https://" => crash
   headers.set("host", String(host).split(",")[0].trim());
 
   const request = new Request(url, {
@@ -79,10 +82,7 @@ export default async function inngestHandler(req, res) {
     const reader = response.body.getReader();
     const pump = async () => {
       const { done, value } = await reader.read();
-      if (done) {
-        res.end();
-        return;
-      }
+      if (done) { res.end(); return; }
       res.write(value);
       await pump();
     };

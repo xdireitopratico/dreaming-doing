@@ -11,7 +11,10 @@
       "includeFiles": "dist/server/**"
     },
     "api/inngest.js": {
-      "includeFiles": "dist/server/**",
+      "includeFiles": [
+        "dist/server/inngest-handler.js",
+        "dist/server/agent-executor.js"
+      ],
       "maxDuration": 300
     }
   }

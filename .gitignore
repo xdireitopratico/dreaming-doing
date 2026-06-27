@@ -60,3 +60,4 @@ deno.lock
 .cursor/
 .mimocode/
 .kimchi/
+.vercel

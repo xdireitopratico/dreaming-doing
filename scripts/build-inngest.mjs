@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 
 const root = resolve(process.cwd());
 
-const result = await esbuild.build({
+await esbuild.build({
   entryPoints: ["src/inngest/handler.ts"],
   outfile: "dist/server/inngest-handler.js",
   bundle: true,
@@ -17,18 +17,11 @@ const result = await esbuild.build({
   packages: "external",
   external: ["node:*", "./agent-executor.js", "inngest", "@supabase/supabase-js"],
   alias: {
-    "@forge/agent-contract/lifecycle": resolve(
-      root,
-      "packages/agent-contract/src/lifecycle.ts",
-    ),
+    "@forge/agent-contract/lifecycle": resolve(root, "packages/agent-contract/src/lifecycle.ts"),
     "@forge/agent-contract/events": resolve(root, "packages/agent-contract/src/events.ts"),
     "@forge/agent-contract": resolve(root, "packages/agent-contract/src/index.ts"),
   },
   logLevel: "info",
 });
 
-if (result.errors.length > 0) {
-  console.error("Inngest bundle failed:", result.errors);
-  process.exit(1);
-}
 console.log("✓ Inngest handler bundled: dist/server/inngest-handler.js");
