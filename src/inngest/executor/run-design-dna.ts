@@ -93,30 +93,9 @@ async function ensureDesignDnaSandbox(
     );
     if (installResult.exitCode === 0) {
       console.log("[design-dna] Playwright+Chromium installed in sandbox");
-
-      // Lança Chromium persistente em background com CDP na porta 9222
-      // (o iframe preview usa essa porta pra mostrar o browser ao vivo)
-      await runInSandbox(
-        sandboxId,
-        accessToken,
-        `cd /tmp && node -e "
-const { chromium } = require('playwright');
-(async () => {
-  const browser = await chromium.launch({
-    headless: true,
-    args: ['--no-sandbox', '--disable-gpu', '--disable-dev-shm-usage', '--remote-debugging-port=${CHROMIUM_DEBUG_PORT}']
-  });
-  console.log('CHROMIUM_PERSISTENT_READY');
-  await new Promise(() => {});
-})();
-"`,
-        { timeoutMs: 600_000, background: true },
-      );
-
       await appendJobEvent(supabase, jobId, "sandbox_ready", {
         sandboxId,
         previewUrl,
-        chromium: "installed",
       });
     } else {
       const errMsg = `Playwright install exited with code ${installResult.exitCode}: ${(installResult.stderr ?? "").slice(0, 400)}`;
@@ -269,51 +248,20 @@ export async function executeDesignDnaJob(
       .update({ sandbox_id: sandboxId, meta: currentMeta })
       .eq("id", jobId);
 
-    // Verifica que Chromium está acessível via DevTools na porta 9222
+    // Verifica CDP opcional — se falhar, não bloqueia (Chrome só é lançado por URL)
     if (startIndex === 0) {
       await appendJobEvent(supabase, jobId, "sandbox_setup", { sandboxId });
       try {
         const devtoolsVersionUrl = `${previewUrl}/json/version`;
-
-        // Aguarda até 20s pelo CDP ficar pronto (Chromium inicia em background)
-        let cdpResp: Response | null = null;
-        let cdpWait = 0;
-        while (cdpWait < 20_000) {
-          try {
-            cdpResp = await fetch(devtoolsVersionUrl, { signal: AbortSignal.timeout(3_000) });
-            if (cdpResp.ok) break;
-          } catch {
-            /* Chromium ainda iniciando */
-          }
-          await new Promise((r) => setTimeout(r, 1_500));
-          cdpWait += 1_500;
-        }
-
-        if (cdpResp?.ok) {
+        const cdpResp = await fetch(devtoolsVersionUrl, { signal: AbortSignal.timeout(5_000) });
+        if (cdpResp.ok) {
           const cdpData = await cdpResp.json().catch(() => ({}));
           console.log("[design-dna] CDP ready:", JSON.stringify(cdpData).slice(0, 200));
-          await appendJobEvent(supabase, jobId, "sandbox_ready", {
-            sandboxId,
-            previewUrl,
-            chromium: cdpData.Browser ?? "ready",
-          });
         } else {
-          console.warn(
-            `[design-dna] CDP not reachable at ${devtoolsVersionUrl}: HTTP ${cdpResp.status}`,
-          );
-          await appendJobEvent(supabase, jobId, "sandbox_ready", {
-            sandboxId,
-            previewUrl,
-            chromium: `CDP HTTP ${cdpResp.status} — preview iframe pode não funcionar`,
-          });
+          console.warn(`[design-dna] CDP not reachable (HTTP ${cdpResp.status}) — Chrome starts per-URL, not persistent`);
         }
-      } catch (cdpErr) {
-        console.warn("[design-dna] CDP check failed:", cdpErr);
-        await appendJobEvent(supabase, jobId, "sandbox_ready", {
-          sandboxId,
-          previewUrl,
-          chromium: `CDP unreachable: ${errorMessage(cdpErr, "unknown")}`,
-        });
+      } catch {
+        console.warn("[design-dna] CDP unreachable — Chrome starts per-URL via Playwright script");
       }
     }
     currentMeta.progress = 20;

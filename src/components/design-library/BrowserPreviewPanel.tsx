@@ -128,11 +128,13 @@ export function BrowserPreviewPanel({ jobId, onClose }: BrowserPreviewPanelProps
   const [jobContext, setJobContext] = useState<JobContext | null>(null);
   const [chatHistoryLoaded, setChatHistoryLoaded] = useState(false);
   const [cancelling, setCancelling] = useState(false);
-  const [cdpStatus, setCdpStatus] = useState<"checking" | "ok" | "failed">("checking");
-  const [cdpMessage, setCdpMessage] = useState<string>("");
 
   const previewUrl = job?.meta?.previewUrl as string | undefined;
   const progress = job?.meta?.progress as number | undefined;
+  // CDP não é verificado no frontend — Chrome só é lançado por URL via Playwright script.
+  // O preview iframe não fica disponível em tempo real; usamos screenshots capturados.
+  const cdpStatus = "unavailable" as const;
+
   const latestScreenshot = useMemo(() => {
     const shots = events.filter((e) => e.event_type === "screenshot_taken");
     return shots.length > 0 ? shots[shots.length - 1] : null;
@@ -186,49 +188,7 @@ export function BrowserPreviewPanel({ jobId, onClose }: BrowserPreviewPanelProps
     }
   }, [events, autoScroll]);
 
-  // CDP health check: verifica se Chrome DevTools responde no previewUrl
-  // Tenta até 3x com intervalo de 5s (Chromium inicia em background no sandbox)
-  useEffect(() => {
-    if (!previewUrl || isTerminal) {
-      setCdpStatus("checking");
-      return;
-    }
-    let cancelled = false;
-    let attempts = 0;
-    setCdpStatus("checking");
-
-    function checkCdp() {
-      if (cancelled) return;
-      attempts++;
-      fetch(`${previewUrl}/json/version`, { signal: AbortSignal.timeout(6000) })
-        .then(async (r) => {
-          if (cancelled) return;
-          if (r.ok) {
-            const data = await r.json().catch(() => ({}));
-            setCdpStatus("ok");
-            setCdpMessage(data.Browser ?? "");
-          } else if (attempts < 3) {
-            setTimeout(checkCdp, 5000);
-          } else {
-            setCdpStatus("failed");
-            setCdpMessage(`HTTP ${r.status}`);
-          }
-        })
-        .catch((e) => {
-          if (cancelled) return;
-          if (attempts < 3) {
-            setTimeout(checkCdp, 5000);
-          } else {
-            setCdpStatus("failed");
-            setCdpMessage(e instanceof Error ? e.message : "unreachable");
-          }
-        });
-    }
-    checkCdp();
-    return () => {
-      cancelled = true;
-    };
-  }, [previewUrl, isTerminal]);
+  // removed: CDP health check — Chrome só existe durante extração por URL, não há processo persistente
 
   const callChat = useCallback(
     async (message: string) => {
@@ -399,23 +359,6 @@ export function BrowserPreviewPanel({ jobId, onClose }: BrowserPreviewPanelProps
               Offline
             </span>
           )}
-          {previewUrl && !isTerminal && cdpStatus === "ok" && (
-            <span className="inline-flex items-center gap-1 text-[10px] text-green-500">
-              <Globe className="size-3" />
-              CDP {cdpMessage ? `(${cdpMessage.split(" ")[0]})` : "ready"}
-            </span>
-          )}
-          {previewUrl && !isTerminal && cdpStatus === "failed" && (
-            <span
-              className="inline-flex items-center gap-1 text-[10px] text-amber-500"
-              title={`Chrome DevTools não responde: ${cdpMessage}`}
-            >
-              <Globe className="size-3" />
-              CDP offline
-            </span>
-          )}
-        </div>
-        <div className="flex items-center gap-2">
           {previewUrl && !isTerminal && (
             <a
               href={previewUrl}
@@ -458,34 +401,9 @@ export function BrowserPreviewPanel({ jobId, onClose }: BrowserPreviewPanelProps
       )}
 
       <div className="flex-1 flex overflow-hidden">
-        {/* Preview Panel — fallback gracioso quando iframe não disponível */}
+        {/* Preview Panel — sem CDP/iframe (Chrome só roda por URL). Mostra screenshots capturados. */}
         <div className="flex-1 flex flex-col border-r border-border min-w-0">
-          {previewUrl && !isTerminal && cdpStatus === "ok" ? (
-            <iframe
-              src={previewUrl}
-              className="flex-1 w-full bg-white"
-              sandbox="allow-same-origin allow-scripts allow-forms allow-popups"
-              title="Browser Preview"
-            />
-          ) : previewUrl && !isTerminal && cdpStatus === "failed" ? (
-            <div className="flex-1 flex items-center justify-center bg-surface-2 p-6">
-              <div className="text-center max-w-md">
-                <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-amber-500/10 flex items-center justify-center">
-                  <Globe className="w-6 h-6 text-amber-500" />
-                </div>
-                <h3 className="text-sm font-medium mb-1">Chrome DevTools indisponível</h3>
-                <p className="text-[11px] text-muted-foreground mb-2">
-                  O Chrome do sandbox pode estar iniciando ou a extração ainda não navegou.
-                  Se o erro persistir, confira se o template E2B tem Chromium instalado.
-                </p>
-                {latestScreenshot && (
-                  <p className="text-[10px] text-amber-500 mt-3">
-                    Último screenshot capturado abaixo ↓
-                  </p>
-                )}
-              </div>
-            </div>
-          ) : latestScreenshot ? (
+          {latestScreenshot ? (
             <div className="flex-1 flex items-center justify-center bg-surface-2 p-4 overflow-auto">
               <div className="max-w-2xl w-full space-y-3">
                 {events
@@ -511,10 +429,7 @@ export function BrowserPreviewPanel({ jobId, onClose }: BrowserPreviewPanelProps
                   })}
                 {isTerminal && (
                   <p className="text-[10px] text-amber-500 text-center pt-2 border-t border-border/50">
-                    Sandbox E2B encerrado (job {jobStatus}). O iframe da sandbox E2B não fica
-                    disponível externamente — o live preview depende de um serviço de browser
-                    hospedado (ex: Browser-Use Cloud). Por ora, mostrando os últimos screenshots
-                    capturados.
+                    Extração encerrada (job {jobStatus}). Screenshots capturados durante a navegação.
                   </p>
                 )}
               </div>
@@ -532,21 +447,6 @@ export function BrowserPreviewPanel({ jobId, onClose }: BrowserPreviewPanelProps
                       ? `Job ${jobStatus}. ${jobContext?.errors?.[0] ?? "Sem screenshots capturados."}`
                       : statusMessage}
                 </p>
-                {!isTerminal && cdpStatus === "failed" && (
-                  <p className="text-[10px] text-amber-500/80 mt-2">
-                    CDP offline — sandbox sem Chromium ou template E2B não buildado
-                  </p>
-                )}
-                {!isTerminal && cdpStatus === "checking" && previewUrl && (
-                  <p className="text-[10px] text-muted-foreground/60 mt-2">
-                    Verificando conexão com o sandbox...
-                  </p>
-                )}
-                {!isTerminal && cdpStatus === "checking" && !previewUrl && (
-                  <p className="text-[10px] text-muted-foreground/60 mt-2">
-                    {statusMessage}
-                  </p>
-                )}
               </div>
             </div>
           )}

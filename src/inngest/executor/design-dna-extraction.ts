@@ -416,7 +416,7 @@ async function execPlaywrightInSandbox(
   page_height?: number;
 }> {
   const script = buildPlaywrightScript(url);
-  const result = await runInSandbox(sandboxId, accessToken, `node -e "${script.replace(/"/g, '\\"')}"`, {
+  const result = await runInSandbox(sandboxId, accessToken, `cd /tmp && node -e "${script.replace(/"/g, '\\"')}"`, {
     timeoutMs: 150000,
   });
 
