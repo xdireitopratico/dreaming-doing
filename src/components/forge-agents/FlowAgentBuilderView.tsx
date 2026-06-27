@@ -189,6 +189,10 @@ export default function FlowAgentBuilderView({
   // "Fluxo Visual" → editor vazio. NUNCA reaproveita flow existente.
   const [emptyBuilderOpen, setEmptyBuilderOpen] = useState(false);
   const [emptyBuilderFlowId, setEmptyBuilderFlowId] = useState<string | null>(null);
+  // Ref paralela: outros useEffects (ex: handleGoHome) precisam ver o valor
+  // atualizado imediatamente, sem o lag do useState. Sem isso, o handleGoHome
+  // dispara o redirect antes do setEmptyBuilderOpen propagar.
+  const emptyBuilderOpenRef = useRef(false);
 
   // Persist phase
   const setPhase = useCallback((p: PrometheusUIPhase) => {
@@ -257,11 +261,13 @@ export default function FlowAgentBuilderView({
   useEffect(() => {
     if (!initialOpenFlow || loading || autoLaunching) return;
     setEmptyBuilderOpen(true);
+    emptyBuilderOpenRef.current = true;
   }, [initialOpenFlow, loading, autoLaunching]);
 
   const handleEmptyBuilderClose = useCallback(() => {
     setEmptyBuilderOpen(false);
     setEmptyBuilderFlowId(null);
+    emptyBuilderOpenRef.current = false;
     setAutoLaunching(false);
     setPhase("home");
   }, [setPhase]);
@@ -275,10 +281,13 @@ export default function FlowAgentBuilderView({
   // Home sem prompt → redireciona para dashboard (protótipo arquivado)
   // IMPORTANTE: nao disparar quando "Fluxo Visual" esta ativo — senao
   // redireciona o user pra /agents antes do editor vazio montar.
+  // Usamos emptyBuilderOpenRef (sincrono) em vez de emptyBuilderOpen (state)
+  // porque useState tem lag de 1 render e o useEffect do initialOpenFlow
+  // pode nao ter propagado ainda.
   useEffect(() => {
     if (phase !== "home" || loading || autoLaunching || skipHomePrompt) return;
     if (initialOpenFlow) return;
-    if (emptyBuilderOpen) return;
+    if (emptyBuilderOpen || emptyBuilderOpenRef.current) return;
     handleGoHome();
   }, [phase, loading, autoLaunching, skipHomePrompt, initialOpenFlow, emptyBuilderOpen]);
 
