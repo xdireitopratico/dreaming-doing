@@ -4,6 +4,7 @@
  * Onboarding removido — fluxo vai direto para boardroom (T30)
  */
 import { lazy, Suspense, useCallback, useEffect, useReducer, useState, useMemo, useRef } from "react";
+import { useNavigate } from "@tanstack/react-router";
 
 import { PrometheusLoadingSkeleton } from "@/components/forge-prometheus/PrometheusLoadingSkeleton";
 import { PrometheusPhaseHeader } from "@/components/forge-prometheus/PrometheusPhaseHeader";
@@ -272,10 +273,14 @@ export default function FlowAgentBuilderView({
   }, []);
 
   // Home sem prompt → redireciona para dashboard (protótipo arquivado)
+  // IMPORTANTE: nao disparar quando "Fluxo Visual" esta ativo — senao
+  // redireciona o user pra /agents antes do editor vazio montar.
   useEffect(() => {
     if (phase !== "home" || loading || autoLaunching || skipHomePrompt) return;
+    if (initialOpenFlow) return;
+    if (emptyBuilderOpen) return;
     handleGoHome();
-  }, [phase, loading, autoLaunching, skipHomePrompt]);
+  }, [phase, loading, autoLaunching, skipHomePrompt, initialOpenFlow, emptyBuilderOpen]);
 
   // Dashboard prompt → boardroom direto (sem PrometheusHome duplicado)
   useEffect(() => {
@@ -481,9 +486,10 @@ export default function FlowAgentBuilderView({
     setPhase("monitoring");
   }, [setPhase]);
 
+  const navigate = useNavigate();
   const handleGoHome = useCallback(() => {
-    window.location.href = "/agents";
-  }, []);
+    void navigate({ to: "/agents" });
+  }, [navigate]);
 
   const handleBuilderClose = useCallback(() => {
     closeBuilder();
