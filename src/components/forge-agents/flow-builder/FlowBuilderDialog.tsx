@@ -1,8 +1,12 @@
 /**
  * FlowBuilderDialog — Orchestrator for the visual agent builder
  * Themed: Prometheus Deep Blue (prometheus-studio class)
+ *
+ * Aceita flowId: string | null.
+ *   - string: edicao de um flow existente (carrega do banco)
+ *   - null:   modo "novo" (editor virgem, sem persistir ate user clicar Salvar)
  */
-import { lazy, Suspense, useCallback, useMemo, useRef } from "react";
+import { lazy, Suspense, useCallback, useMemo, useRef, useState } from "react";
 import { type Node } from "@/types/xyflow-react-shim";
 import { useFlowShortcuts } from "./hooks/useFlowShortcuts";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
@@ -14,18 +18,35 @@ import { FlowCanvas } from "./FlowCanvas";
 import { FlowPanelRenderer } from "./FlowPanelRenderer";
 import { useFlowBuilderState } from "./hooks/useFlowBuilderState";
 import { useGraduationGate } from "./GraduationGate";
+import { CloseConfirmDialog } from "./CloseConfirmDialog";
 import "@/styles/forge-agents-theme.css";
 
 const CommandPalette = lazy(() => import("./CommandPalette").then(m => ({ default: m.CommandPalette })));
 
 interface FlowBuilderDialogProps {
-  flowId: string;
+  flowId: string | null;
+  projectId: string;
   open: boolean;
   onClose: () => void;
+  /**
+   * Notifica o pai quando o flowId muda (ex: depois de salvar um flow novo).
+   * O pai deve atualizar seu state para manter o editor aberto com o id real.
+   */
+  onFlowIdChange?: (newId: string) => void;
 }
 
-export function FlowBuilderDialog({ flowId, open, onClose }: FlowBuilderDialogProps) {
-  const s = useFlowBuilderState(flowId, open);
+export function FlowBuilderDialog({ flowId, projectId, open, onClose, onFlowIdChange }: FlowBuilderDialogProps) {
+  const s = useFlowBuilderState(flowId, open, projectId);
+
+  // Wrapper de save: depois de salvar um flow novo, propaga o id pro pai
+  // (e o hook ja marca skipNextLoadRef, entao nao recarregamos o estado).
+  const handleSaveAndPropagate = useCallback(async () => {
+    const newId = await s.handleSave();
+    if (newId && flowId === null && onFlowIdChange) {
+      onFlowIdChange(newId);
+    }
+  }, [s.handleSave, flowId, onFlowIdChange]);
+
   // M4 Fix: node/edge selection now works independently of panel state
 
   const fitViewCallbackRef = useRef<(() => void) | null>(null);
@@ -55,13 +76,38 @@ export function FlowBuilderDialog({ flowId, open, onClose }: FlowBuilderDialogPr
 
   // P3.5: Graduation Gate — intercept publish to verify credentials
   const { checkCredentials, GateDialog, checking: graduationChecking } = useGraduationGate({
-    flowId,
+    flowId: flowId ?? "",
     nodes: s.nodes,
     onProceed: s.handlePublish,
   });
 
+  // ═══ MODAL: confirmacao ao fechar com alteracoes nao salvas ═══
+  const [closeConfirmOpen, setCloseConfirmOpen] = useState(false);
+
+  const handleRequestClose = useCallback(() => {
+    if (s.hasUnsaved) {
+      setCloseConfirmOpen(true);
+    } else {
+      onClose();
+    }
+  }, [s.hasUnsaved, onClose]);
+
+  const handleConfirmClose = useCallback(async (action: "discard" | "save_and_close") => {
+    setCloseConfirmOpen(false);
+    if (action === "discard") {
+      onClose();
+      return;
+    }
+    // save_and_close
+    const newId = await s.handleSave();
+    if (newId) {
+      if (flowId === null && onFlowIdChange) onFlowIdChange(newId);
+      onClose();
+    }
+  }, [s.handleSave, flowId, onFlowIdChange, onClose]);
+
   const shortcutActions = useMemo(() => ({
-    onSave: s.handleSave,
+    onSave: handleSaveAndPropagate,
     onPublish: checkCredentials,
     onUndo: s.handleUndo,
     onRedo: s.handleRedo,
@@ -80,7 +126,7 @@ export function FlowBuilderDialog({ flowId, open, onClose }: FlowBuilderDialogPr
     onToggleDebug: () => s.togglePanel("debug"),
     onSelectAll: s.handleSelectAll,
     onFitView: () => fitViewCallbackRef.current?.(),
-  }), [s.handleSave, checkCredentials, s.handleUndo, s.handleRedo, s.handleDelete, s.closePanel, s.togglePanel, s.handleSelectAll, handleChatEscape]);
+  }), [handleSaveAndPropagate, checkCredentials, s.handleUndo, s.handleRedo, s.handleDelete, s.closePanel, s.togglePanel, s.handleSelectAll, handleChatEscape]);
 
   useFlowShortcuts({ enabled: open, actions: shortcutActions });
 
@@ -104,7 +150,7 @@ export function FlowBuilderDialog({ flowId, open, onClose }: FlowBuilderDialogPr
   }, [s.setNodes]);
 
   return (
-    <Dialog open={open} onOpenChange={() => onClose()}>
+    <Dialog open={open} onOpenChange={() => handleRequestClose()}>
       <DialogContent className="prometheus-studio max-w-[100vw] w-[100vw] h-[100vh] max-h-[100vh] p-0 gap-0 rounded-none border-none" style={{ background: 'linear-gradient(135deg, #1a1e27, #0b0d12)' }}>
         <FlowToolbar
           flowName={s.flowName}
@@ -116,8 +162,8 @@ export function FlowBuilderDialog({ flowId, open, onClose }: FlowBuilderDialogPr
           unreadNotifCount={s.unreadNotifCount}
           totalComments={s.totalComments}
           onFlowNameChange={s.setFlowName}
-          onClose={onClose}
-          onSave={s.handleSave}
+          onClose={handleRequestClose}
+          onSave={handleSaveAndPropagate}
           onPublish={checkCredentials}
           onUndo={s.handleUndo}
           onRedo={s.handleRedo}
@@ -139,7 +185,7 @@ export function FlowBuilderDialog({ flowId, open, onClose }: FlowBuilderDialogPr
             onEdgeClick={s.onEdgeClick}
             onPaneClick={s.onPaneClick}
             onRegisterFitView={(fn) => { fitViewCallbackRef.current = fn; }}
-            flowId={flowId}
+            flowId={flowId ?? undefined}
             chatEnabled={open}
             onApplyPatch={s.handleApplyPatch}
             onHighlightNodes={s.handleHighlightNodes}
@@ -153,7 +199,7 @@ export function FlowBuilderDialog({ flowId, open, onClose }: FlowBuilderDialogPr
 
           <FlowPanelRenderer
             activePanel={s.activePanel}
-            flowId={flowId}
+            flowId={flowId ?? ""}
             flowName={s.flowName}
             nodes={s.nodes}
             edges={s.edges}
@@ -175,13 +221,19 @@ export function FlowBuilderDialog({ flowId, open, onClose }: FlowBuilderDialogPr
 
       <GateDialog />
 
+      <CloseConfirmDialog
+        open={closeConfirmOpen}
+        onConfirm={handleConfirmClose}
+        onCancel={() => setCloseConfirmOpen(false)}
+      />
+
       <Suspense fallback={null}>
         {s.showCommandPalette && (
           <CommandPalette
             open={s.showCommandPalette}
             onClose={() => s.setShowCommandPalette(false)}
             onTogglePanel={s.togglePanel}
-            onSave={s.handleSave}
+            onSave={handleSaveAndPropagate}
             onPublish={s.handlePublish}
             onUndo={s.handleUndo}
             onRedo={s.handleRedo}
@@ -195,7 +247,7 @@ export function FlowBuilderDialog({ flowId, open, onClose }: FlowBuilderDialogPr
     if (!s.selectedNode) return null;
     return (
       <NodePropertiesPanel
-        flowId={flowId}
+        flowId={flowId ?? ""}
         node={s.selectedNode}
         onUpdate={s.handleNodeUpdate}
         onDelete={(nodeId) => {

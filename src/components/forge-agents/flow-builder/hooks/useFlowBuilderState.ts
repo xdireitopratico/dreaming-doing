@@ -9,7 +9,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { validateFlow } from "../utils/schema-validator";
 import type { PanelType } from "../flow-builder-types";
 
-export function useFlowBuilderState(flowId: string, open: boolean) {
+export function useFlowBuilderState(flowId: string | null, open: boolean, projectId: string) {
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const [flowName, setFlowName] = useState("Novo Agente");
@@ -46,32 +46,59 @@ export function useFlowBuilderState(flowId: string, open: boolean) {
   }, []);
 
   // Load flow
+  // skipNextLoadRef: quando o pai acaba de salvar (criou um flow novo
+  // e setou o flowId), NAO queremos recarregar do banco — o state ja
+  // esta correto com o que o user acabou de salvar.
+  const skipNextLoadRef = useRef(false);
   useEffect(() => {
-    const load = async () => {
-      const { data, error } = await (supabase as any)
-        .from("agent_flows")
-        .select("name, status, flow_definition")
-        .eq("id", flowId)
-        .single();
+    if (!open) return;
+    if (skipNextLoadRef.current) {
+      skipNextLoadRef.current = false;
+      return;
+    }
+    if (flowId) {
+      const load = async () => {
+        const { data, error } = await (supabase as any)
+          .from("agent_flows")
+          .select("name, status, flow_definition")
+          .eq("id", flowId)
+          .single();
 
-      if (error || !data) {
-        toast({ title: "Erro ao carregar flow", variant: "destructive" });
-        return;
-      }
+        if (error || !data) {
+          toast({ title: "Erro ao carregar flow", variant: "destructive" });
+          return;
+        }
 
-      const flowData = data as { name: string; status: string; flow_definition: { nodes?: Node[]; edges?: Edge[] } };
-      setFlowName(flowData.name);
-      setFlowStatus(flowData.status);
-      const def = flowData.flow_definition || { nodes: [], edges: [] };
-      setNodes(def.nodes || []);
-      setEdges(def.edges || []);
-      historyRef.current = [{ nodes: def.nodes || [], edges: def.edges || [] }];
+        const flowData = data as { name: string; status: string; flow_definition: { nodes?: Node[]; edges?: Edge[] } };
+        setFlowName(flowData.name);
+        setFlowStatus(flowData.status);
+        const def = flowData.flow_definition || { nodes: [], edges: [] };
+        setNodes(def.nodes || []);
+        setEdges(def.edges || []);
+        historyRef.current = [{ nodes: def.nodes || [], edges: def.edges || [] }];
+        historyIndexRef.current = 0;
+      };
+      void load();
+    } else {
+      // Modo "novo": editor virgem. Nao busca nada no banco.
+      setFlowName("Novo Agente");
+      setFlowStatus("draft");
+      setNodes([]);
+      setEdges([]);
+      historyRef.current = [{ nodes: [], edges: [] }];
       historyIndexRef.current = 0;
-    };
-    if (open && flowId) load();
+      setHasUnsaved(false);
+    }
   }, [open, flowId]);
 
-  useEffect(() => { setHasUnsaved(true); }, [nodes, edges]);
+  useEffect(() => {
+    // Em modo "novo", nodes/edges vazios NAO sao "alteracoes nao salvas".
+    if (flowId === null && nodes.length === 0 && edges.length === 0) {
+      setHasUnsaved(false);
+      return;
+    }
+    setHasUnsaved(true);
+  }, [nodes, edges, flowId]);
 
   useEffect(() => {
     const issues = validateFlow(nodes, edges);
@@ -82,57 +109,97 @@ export function useFlowBuilderState(flowId: string, open: boolean) {
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isSavingRef = useRef(false);
 
-  const handleSave = useCallback(async () => {
-    if (isSavingRef.current) return; // Prevent concurrent saves
+  const handleSave = useCallback(async (): Promise<string | null> => {
+    if (isSavingRef.current) return null;
     isSavingRef.current = true;
     setSaving(true);
 
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
 
-    // Phase 9: Create version snapshot before overwriting
-    try {
-      const { data: versionData } = await (supabase as any)
-        .from("agent_flow_versions")
-        .select("version")
-        .eq("flow_id", flowId)
-        .order("version", { ascending: false })
-        .limit(1);
-
-      const nextVersion = ((versionData as any)?.[0]?.version || 0) + 1;
-      const { data: userData } = await supabase.auth.getUser();
-
-      await (supabase as any).from("agent_flow_versions").insert({
-        flow_id: flowId,
-        version: nextVersion,
-        flow_definition: JSON.parse(JSON.stringify({ nodes, edges })),
-        flow_name: flowName,
-        created_by: userData?.user?.id || null,
-      });
-    } catch (vErr) {
-      console.warn("[FlowBuilder] Version snapshot failed:", vErr);
+    const { data: userData } = await supabase.auth.getUser();
+    if (!userData?.user) {
+      toast({ title: "Voce precisa estar autenticado", variant: "destructive" });
+      setSaving(false);
+      isSavingRef.current = false;
+      return null;
     }
 
-    const { error } = await (supabase as any)
-      .from("agent_flows")
-      .update({
-        name: flowName,
-        flow_definition: JSON.parse(JSON.stringify({ nodes, edges })),
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", flowId);
+    let currentFlowId = flowId;
+    const flowDefinition = JSON.parse(JSON.stringify({ nodes, edges }));
 
-    if (error) {
-      toast({ title: "Erro ao salvar", description: error.message, variant: "destructive" });
+    // Modo "novo": INSERT primeiro (cria o flow no banco e pega o id).
+    if (!currentFlowId) {
+      const { data: inserted, error: insertErr } = await (supabase as any)
+        .from("agent_flows")
+        .insert({
+          project_id: projectId,
+          user_id: userData.user.id,
+          name: flowName,
+          description: "",
+          flow_definition: flowDefinition,
+          status: "draft",
+          channels: [],
+        })
+        .select("id")
+        .single();
+
+      if (insertErr || !inserted) {
+        toast({ title: "Erro ao criar agente", description: insertErr?.message ?? "Tente novamente", variant: "destructive" });
+        setSaving(false);
+        isSavingRef.current = false;
+        return null;
+      }
+      currentFlowId = (inserted as { id: string }).id;
+      // Pula o proximo load: o state ja esta correto com o que salvamos.
+      skipNextLoadRef.current = true;
     } else {
-      toast({ title: "Flow salvo!" });
-      setHasUnsaved(false);
-      historyRef.current = historyRef.current.slice(0, historyIndexRef.current + 1);
-      historyRef.current.push({ nodes: [...nodes], edges: [...edges] });
-      historyIndexRef.current = historyRef.current.length - 1;
+      // Phase 9: Create version snapshot before overwriting
+      try {
+        const { data: versionData } = await (supabase as any)
+          .from("agent_flow_versions")
+          .select("version")
+          .eq("flow_id", currentFlowId)
+          .order("version", { ascending: false })
+          .limit(1);
+
+        const nextVersion = ((versionData as any)?.[0]?.version || 0) + 1;
+        await (supabase as any).from("agent_flow_versions").insert({
+          flow_id: currentFlowId,
+          version: nextVersion,
+          flow_definition: flowDefinition,
+          flow_name: flowName,
+          created_by: userData.user.id,
+        });
+      } catch (vErr) {
+        console.warn("[FlowBuilder] Version snapshot failed:", vErr);
+      }
+
+      const { error } = await (supabase as any)
+        .from("agent_flows")
+        .update({
+          name: flowName,
+          flow_definition: flowDefinition,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", currentFlowId);
+
+      if (error) {
+        toast({ title: "Erro ao salvar", description: error.message, variant: "destructive" });
+        setSaving(false);
+        isSavingRef.current = false;
+        return null;
+      }
     }
+
+    toast({ title: "Flow salvo!" });
+    setHasUnsaved(false);
+    historyRef.current = historyRef.current.slice(0, historyIndexRef.current + 1);
+    historyRef.current.push({ nodes: [...nodes], edges: [...edges] });
+    historyIndexRef.current = historyRef.current.length - 1;
     setSaving(false);
     isSavingRef.current = false;
-  }, [flowName, nodes, edges, flowId, toast]);
+    return currentFlowId;
+  }, [flowName, nodes, edges, flowId, projectId, toast]);
 
   // Publish
   const handlePublish = useCallback(async () => {
@@ -140,12 +207,13 @@ export function useFlowBuilderState(flowId: string, open: boolean) {
       toast({ title: "Corrija os erros antes de publicar", variant: "destructive" });
       return;
     }
-    await handleSave();
+    const savedId = await handleSave();
+    if (!savedId) return;
 
     const { data: versionData } = await (supabase as any)
       .from("agent_flow_versions")
       .select("version")
-      .eq("flow_id", flowId)
+      .eq("flow_id", savedId)
       .order("version", { ascending: false })
       .limit(1);
 
@@ -153,7 +221,7 @@ export function useFlowBuilderState(flowId: string, open: boolean) {
     const { data: userData } = await supabase.auth.getUser();
 
     await (supabase as any).from("agent_flow_versions").insert({
-      flow_id: flowId,
+      flow_id: savedId,
       version: nextVersion,
       flow_definition: JSON.parse(JSON.stringify({ nodes, edges })),
       flow_name: flowName,
@@ -163,13 +231,13 @@ export function useFlowBuilderState(flowId: string, open: boolean) {
     const { error } = await (supabase as any)
       .from("agent_flows")
       .update({ status: "published", published_at: new Date().toISOString(), version: nextVersion })
-      .eq("id", flowId);
+      .eq("id", savedId);
 
     if (!error) {
       setFlowStatus("published");
       toast({ title: `Agente publicado! (v${nextVersion})` });
     }
-  }, [validationErrors, handleSave, flowId, nodes, edges, flowName, toast]);
+  }, [validationErrors, handleSave, nodes, edges, flowName, toast]);
 
   // History
   const handleUndo = useCallback(() => {
@@ -272,7 +340,7 @@ export function useFlowBuilderState(flowId: string, open: boolean) {
   return {
     // Flow data
     nodes, edges, setNodes, setEdges, onNodesChange, onEdgesChange,
-    flowName, setFlowName, flowStatus, saving, hasUnsaved, validationErrors,
+    flowName, setFlowName, setFlowStatus, flowStatus, saving, hasUnsaved, validationErrors,
     // Selection
     selectedNode, setSelectedNode, selectedEdge, setSelectedEdge,
     // Panel
@@ -291,5 +359,9 @@ export function useFlowBuilderState(flowId: string, open: boolean) {
     handleDelete, handleSelectAll,
     onNodeClick, onEdgeClick, onPaneClick,
     handleNodeUpdate, handleEdgeUpdate,
+    // Controla o load automatico quando o flowId muda externamente.
+    // O pai deve chamar isso antes de mudar o flowId se quiser manter
+    // o state interno atual.
+    markSkipNextLoad: () => { skipNextLoadRef.current = true; },
   };
 }

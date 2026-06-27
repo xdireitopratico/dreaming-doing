@@ -183,8 +183,11 @@ export default function FlowAgentBuilderView({
 
   const skipHomePrompt = !!initialPrompt?.trim();
   const autoLaunchRef = useRef(false);
-  const openFlowHandledRef = useRef(false);
   const [autoLaunching, setAutoLaunching] = useState(skipHomePrompt);
+
+  // "Fluxo Visual" → editor vazio. NUNCA reaproveita flow existente.
+  const [emptyBuilderOpen, setEmptyBuilderOpen] = useState(false);
+  const [emptyBuilderFlowId, setEmptyBuilderFlowId] = useState<string | null>(null);
 
   // Persist phase
   const setPhase = useCallback((p: PrometheusUIPhase) => {
@@ -247,19 +250,26 @@ export default function FlowAgentBuilderView({
     onImmersiveChange?.(IMMERSIVE_PHASES.has(phase) || builderOpen);
   }, [phase, builderOpen, onImmersiveChange]);
 
-  // Dashboard Fluxo Visual → abre React Flow
+  // Dashboard Fluxo Visual → abre editor React Flow VIRGEM.
+  // NUNCA reaproveita o draft existente: o user abre agente antigo via
+  // dropdown "Meus agentes" no FlowToolbar se quiser.
   useEffect(() => {
-    if (!initialOpenFlow || loading || openFlowHandledRef.current) return;
-    openFlowHandledRef.current = true;
-    setAutoLaunching(false);
+    if (!initialOpenFlow || loading || autoLaunching) return;
+    setEmptyBuilderOpen(true);
+  }, [initialOpenFlow, loading, autoLaunching]);
 
-    const draft = findProjectDraft(flows);
-    if (draft) {
-      openBuilder(draft.id);
-      return;
-    }
-    void handleCreate();
-  }, [initialOpenFlow, loading, flows, openBuilder, handleCreate]);
+  const handleEmptyBuilderClose = useCallback(() => {
+    setEmptyBuilderOpen(false);
+    setEmptyBuilderFlowId(null);
+    setAutoLaunching(false);
+    setPhase("home");
+  }, [setPhase]);
+
+  const handleEmptyBuilderFlowIdChange = useCallback((newId: string) => {
+    // Apos salvar um flow novo, atualiza o id interno para que o editor
+    // continue exibindo o flow correto. Nao fecha o builder.
+    setEmptyBuilderFlowId(newId);
+  }, []);
 
   // Home sem prompt → redireciona para dashboard (protótipo arquivado)
   useEffect(() => {
@@ -755,14 +765,33 @@ export default function FlowAgentBuilderView({
     );
   }
 
-  // Se o builder esta aberto (ex: veio do "Fluxo visual"), renderiza SO ele,
-  // sem o boardroom/phase-header por baixo. Resolve o duplo carregamento.
+  // "Fluxo Visual" → editor vazio, sem boardroom/phase-header por baixo.
+  // Tem prioridade sobre o builder de edicao (selectedFlowId).
+  if (emptyBuilderOpen) {
+    return (
+      <div className={fullScreenClass} data-prometheus-theme={prometheusTheme}>
+        <Suspense fallback={loader}>
+          <FlowBuilderDialog
+            flowId={emptyBuilderFlowId}
+            projectId={projectId}
+            open={emptyBuilderOpen}
+            onClose={handleEmptyBuilderClose}
+            onFlowIdChange={handleEmptyBuilderFlowIdChange}
+          />
+        </Suspense>
+      </div>
+    );
+  }
+
+  // Se o builder esta aberto (ex: veio de fase de review), renderiza SO ele,
+  // sem o boardroom/phase-header por baixo.
   if (builderOpen && selectedFlowId) {
     return (
       <div className={fullScreenClass} data-prometheus-theme={prometheusTheme}>
         <Suspense fallback={loader}>
           <FlowBuilderDialog
             flowId={selectedFlowId}
+            projectId={projectId}
             open={builderOpen}
             onClose={handleBuilderClose}
           />
@@ -844,6 +873,7 @@ export default function FlowAgentBuilderView({
         {builderOpen && selectedFlowId && (
           <FlowBuilderDialog
             flowId={selectedFlowId}
+            projectId={projectId}
             open={builderOpen}
             onClose={handleBuilderClose}
           />
