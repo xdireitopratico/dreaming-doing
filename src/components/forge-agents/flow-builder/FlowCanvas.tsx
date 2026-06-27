@@ -3,6 +3,7 @@
  * Extraído de FlowBuilderDialog (Rodada auditoria)
  */
 import { memo, useCallback, useEffect, useMemo } from "react";
+import { injectN8nNodeAnimations } from "./nodes/BaseNode";
 import {
   ReactFlow, ReactFlowProvider, Background, Controls, MiniMap,
   useReactFlow, addEdge,
@@ -92,6 +93,9 @@ export const FlowCanvas = memo(function FlowCanvas({
   flowId, chatEnabled = false, onApplyPatch, onHighlightNodes,
   registerChatToggle, registerChatCollapse, onChatOpenChange,
 }: FlowCanvasProps) {
+  // Inject n8n node CSS animations once
+  useEffect(() => { injectN8nNodeAnimations(); }, []);
+
   const displayNodes = useMemo(() =>
     nodes.map((n) => ({
       ...n,

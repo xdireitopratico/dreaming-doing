@@ -1,84 +1,131 @@
 /**
- * BaseNode — Compact pill-style node wrapper (n8n-inspired)
- * All 17 node types use this for consistent, minimal canvas representation.
- * Layers: Visual (compact pill) → title tooltip (hover) → Properties panel (click)
+ * BaseNode — n8n-inspired canvas node card
+ *
+ * Card: 96×96px, border-radius 12px, dark bg (#1a1a2e), 1.5px border.
+ * Icon centered in card. Label + subtitle rendered BELOW card (absolute).
+ *
+ * States: idle | success | error | running | waiting | disabled | pinned
+ * Running/Waiting uses animated conic-gradient border via CSS @property.
+ *
+ * Card types:
+ *   "default" — 96×96 square, 12px radius (most nodes)
+ *   "trigger" — asymmetric (top-left 36px, rest 12px)
+ *   "configuration" — pill/capsule
  */
-import { Handle, Position } from "@/types/xyflow-react-shim";
+import { Handle, Position, type NodeProps } from "@/types/xyflow-react-shim";
+import { NodeIcon, type NodeIconSource } from "./NodeIcon";
+import { type NodeStatus, NodeStatusIcon } from "./CanvasNodeStatusIcons";
 
-const COLORS: Record<string, {
-  bg: string; border: string; borderActive: string; ring: string; handle: string;
-}> = {
-  trigger:       { bg: "bg-emerald-500", border: "border-emerald-500/50", borderActive: "border-emerald-500", ring: "ring-emerald-500/20", handle: "!bg-emerald-500" },
-  llm:           { bg: "bg-blue-500",    border: "border-blue-500/50",    borderActive: "border-blue-500",    ring: "ring-blue-500/20",    handle: "!bg-blue-500" },
-  tool:          { bg: "bg-yellow-500",  border: "border-yellow-500/50",  borderActive: "border-yellow-500",  ring: "ring-yellow-500/20",  handle: "!bg-yellow-500" },
-  condition:     { bg: "bg-gray-500",    border: "border-gray-500/50",    borderActive: "border-gray-500",    ring: "ring-gray-500/20",    handle: "!bg-gray-500" },
-  output_guard:  { bg: "bg-amber-500",   border: "border-amber-500/50",   borderActive: "border-amber-500",   ring: "ring-amber-500/20",   handle: "!bg-amber-500" },
-  stt:           { bg: "bg-purple-500",  border: "border-purple-500/50",  borderActive: "border-purple-500",  ring: "ring-purple-500/20",  handle: "!bg-purple-500" },
-  tts:           { bg: "bg-orange-500",  border: "border-orange-500/50",  borderActive: "border-orange-500",  ring: "ring-orange-500/20",  handle: "!bg-orange-500" },
-  rag_search:    { bg: "bg-amber-700",   border: "border-amber-700/50",   borderActive: "border-amber-700",   ring: "ring-amber-700/20",   handle: "!bg-amber-700" },
-  memory:        { bg: "bg-pink-500",    border: "border-pink-500/50",    borderActive: "border-pink-500",    ring: "ring-pink-500/20",    handle: "!bg-pink-500" },
-  hitl:          { bg: "bg-red-500",     border: "border-red-500/50",     borderActive: "border-red-500",     ring: "ring-red-500/20",     handle: "!bg-red-500" },
-  loop:          { bg: "bg-slate-500",   border: "border-slate-500/50",   borderActive: "border-slate-500",   ring: "ring-slate-500/20",   handle: "!bg-slate-500" },
-  sub_flow:      { bg: "bg-gray-800",    border: "border-gray-800/50",    borderActive: "border-gray-800",    ring: "ring-gray-800/20",    handle: "!bg-gray-800" },
-  delay:         { bg: "bg-gray-400",    border: "border-gray-400/50",    borderActive: "border-gray-400",    ring: "ring-gray-400/20",    handle: "!bg-gray-400" },
-  error_handler: { bg: "bg-red-600",     border: "border-red-600/50",     borderActive: "border-red-600",     ring: "ring-red-600/20",     handle: "!bg-red-600" },
-  switch:        { bg: "bg-indigo-500",  border: "border-indigo-500/50",  borderActive: "border-indigo-500",  ring: "ring-indigo-500/20",  handle: "!bg-indigo-500" },
-  transformer:   { bg: "bg-cyan-500",    border: "border-cyan-500/50",    borderActive: "border-cyan-500",    ring: "ring-cyan-500/20",    handle: "!bg-cyan-500" },
-  vision:        { bg: "bg-violet-600",  border: "border-violet-600/50",  borderActive: "border-violet-600",  ring: "ring-violet-600/20",  handle: "!bg-violet-600" },
-};
-
-export { COLORS as NODE_COLORS };
+export type CardType = "default" | "trigger" | "configuration" | "configurable";
 
 interface BaseNodeProps {
-  nodeType: string;
-  selected: boolean;
-  icon: React.ReactNode;
+  icon?: NodeIconSource;
   label: string;
   subtitle?: string;
-  badge?: React.ReactNode;
+  selected?: boolean;
+  status?: NodeStatus;
+  cardType?: CardType;
   showTarget?: boolean;
   showSource?: boolean;
   children?: React.ReactNode;
+  disabled?: boolean;
+  sourcePosition?: Position;
+  targetPosition?: Position;
 }
 
+const CARD_STYLES: Record<CardType, { shape: string; size: string }> = {
+  default: { shape: "rounded-xl", size: "w-24 h-24" },
+  trigger: { shape: "rounded-[36px_12px_12px_12px]", size: "w-24 h-24" },
+  configuration: { shape: "rounded-full", size: "w-28 h-10" },
+  configurable: { shape: "rounded-xl", size: "w-36 h-24" },
+};
+
 export function BaseNode({
-  nodeType, selected, icon, label, subtitle, badge,
-  showTarget = true, showSource = true, children,
+  icon, label, subtitle, selected, status = "idle", cardType = "default",
+  showTarget = true, showSource = true, children, disabled,
+  sourcePosition = Position.Bottom, targetPosition = Position.Top,
 }: BaseNodeProps) {
-  const c = COLORS[nodeType] || COLORS.trigger;
+  const cs = CARD_STYLES[cardType];
+  const hasStatus = status !== "idle";
+
+  const borderClass = selected
+    ? "border-[1.5px] border-white"
+    : status === "error" ? "border-[1.5px] border-red-500/60"
+    : status === "success" ? "border-[1.5px] border-green-500/60"
+    : status === "running" || status === "waiting"
+      ? "border-[1.5px] border-transparent animate-node-gradient"
+      : "border-[1.5px] border-[#2a2a4a]";
 
   return (
-    <div
-      className={`min-w-[120px] max-w-[200px] rounded-lg border shadow-sm transition-all hover:shadow-md ${
-        selected ? `${c.borderActive} ring-2 ${c.ring}` : c.border
-      }`}
-      style={{ background: 'var(--ps-bg, hsl(225 30% 6%))' }}
-      title={subtitle || label}
-    >
+    <div className={`relative ${disabled ? "pointer-events-none opacity-50" : ""}`}>
       {showTarget && (
-        <Handle type="target" position={Position.Top} className={`${c.handle} !w-2.5 !h-2.5`} />
+        <Handle type="target" position={targetPosition} className="!w-3 !h-3 !border-2 !border-[#1a1a2e] !bg-[#5555aa]" />
       )}
 
-      <div className="flex items-center gap-2 px-2.5 py-2">
-        <div className={`${c.bg} text-white p-1 rounded shrink-0`}>
-          {icon}
-        </div>
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-1">
-            <span className="text-[11px] font-medium truncate leading-tight" style={{ color: 'var(--ps-cream, #f0e6d7)' }}>{label}</span>
-            {badge}
+      <div
+        className={`relative flex items-center justify-center ${cs.size} ${cs.shape} ${borderClass} bg-[#1a1a2e] shadow-lg ${selected ? "shadow-white/10" : "shadow-black/30"} transition-shadow duration-150 hover:shadow-white/5`}
+        style={{ overflow: "hidden" }}
+        title={subtitle || label}
+      >
+        {(status === "running" || status === "waiting") && (
+          <div
+            className="absolute inset-0 rounded-[inherit]"
+            style={{
+              padding: "1.5px",
+              background: "conic-gradient(from var(--node-gradient-angle, 0deg), transparent 0deg, #5555aa 90deg, #8888ff 180deg, transparent 270deg, transparent 360deg)",
+              WebkitMask: "linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)",
+              WebkitMaskComposite: "xor",
+              maskComposite: "exclude",
+              animation: "node-gradient-rotate 3s linear infinite",
+            }}
+          />
+        )}
+
+        {icon && <NodeIcon source={icon} size={22} />}
+
+        {hasStatus && (
+          <div className="absolute -top-1 -right-1 z-10">
+            <NodeStatusIcon status={status} size={10} />
           </div>
-          {subtitle && (
-            <div className="text-[9px] truncate leading-tight mt-0.5" style={{ color: 'var(--ps-cream-40, rgba(240,230,215,0.4))' }}>{subtitle}</div>
-          )}
-        </div>
+        )}
       </div>
 
-      {children}
+      <div className="absolute left-1/2 -translate-x-1/2 text-center pointer-events-none" style={{ top: "calc(100% + 6px)", minWidth: "192px" }}>
+        <div className="text-[11px] font-medium leading-tight truncate" style={{ color: "var(--ps-cream, #f0e6d7)" }}>
+          {label}
+        </div>
+        {subtitle && (
+          <div className="text-[9px] leading-tight mt-0.5 truncate" style={{ color: "var(--ps-cream-40, rgba(240,230,215,0.4))" }}>
+            {subtitle}
+          </div>
+        )}
+      </div>
 
       {showSource && (
-        <Handle type="source" position={Position.Bottom} className={`${c.handle} !w-2.5 !h-2.5`} />
+        <Handle type="source" position={sourcePosition} className="!w-3 !h-3 !border-2 !border-[#1a1a2e] !bg-[#5555aa]" />
       )}
+
+      {children}
     </div>
   );
+}
+
+export function injectN8nNodeAnimations() {
+  if (typeof document === "undefined") return;
+  const id = "n8n-node-animations";
+  if (document.getElementById(id)) return;
+
+  const style = document.createElement("style");
+  style.id = id;
+  style.textContent = `
+    @property --node-gradient-angle {
+      syntax: "<angle>"; initial-value: 0deg; inherits: false;
+    }
+    @keyframes node-gradient-rotate {
+      from { --node-gradient-angle: 0deg; }
+      to { --node-gradient-angle: 360deg; }
+    }
+    .animate-node-gradient { animation: node-gradient-rotate 3s linear infinite; }
+  `;
+  document.head.appendChild(style);
 }
