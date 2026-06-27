@@ -365,13 +365,9 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
         error: null,
         finished: false,
         resumable: false,
-<<<<<<< Updated upstream
         statusHint: mode === "chat" ? "Respondendo…" : "Trabalhando no projeto…",
         conversational: mode === "chat" ? true : prev.conversational,
         mode,
-=======
-        statusHint: "Iniciando…",
->>>>>>> Stashed changes
         timeline: [event],
       };
     }
