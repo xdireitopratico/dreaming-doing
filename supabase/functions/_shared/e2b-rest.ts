@@ -13,7 +13,7 @@ import {
 
 const ENVD_PORT = 49983;
 const ENVD_RELAY = `https://sandbox.${E2B_DOMAIN}`;
-const DEFAULT_TIMEOUT_SEC = 1800;
+const DEFAULT_TIMEOUT_SEC = 900;
 const FILE_UPLOAD_CONCURRENCY = 5;
 const KEEPALIVE_PING_INTERVAL_SEC = 50;
 
