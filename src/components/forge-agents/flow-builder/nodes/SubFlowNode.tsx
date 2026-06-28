@@ -4,5 +4,5 @@ import { getNodeIconSource } from "./NodeIcon";
 
 export function SubFlowNode({ data, selected }: NodeProps) {
   const config = (data as Record<string, any>)?.config || {};
-  return <BaseNode selected={selected} status={resolveNodeStatus(data)} icon={getNodeIconSource("sub_flow")} label="Sub-Flow" subtitle={config.flow_name || "Selecionar..."} />;
+  return <BaseNode cardType="configurable" iconContext="canvas" selected={selected} status={resolveNodeStatus(data)} icon={getNodeIconSource("sub_flow")} label="Sub-Flow" subtitle={config.flow_name || "Selecionar..."} />;
 }

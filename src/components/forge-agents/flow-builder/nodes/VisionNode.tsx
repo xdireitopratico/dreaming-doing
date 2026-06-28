@@ -9,5 +9,5 @@ export function VisionNode({ data, selected }: NodeProps) {
   const model = findModel(modelId);
   const provider = model ? getProviderForModel(modelId) : null;
   const subtitle = model ? `${provider?.label || "—"} · ${model.label}` : "Selecionar modelo";
-  return <BaseNode selected={selected} status={resolveNodeStatus(data)} icon={getNodeIconSource("vision")} label="Vision" subtitle={subtitle} />;
+  return <BaseNode cardType="configurable" iconContext="canvas" selected={selected} status={resolveNodeStatus(data)} icon={getNodeIconSource("vision")} label="Vision" subtitle={subtitle} />;
 }

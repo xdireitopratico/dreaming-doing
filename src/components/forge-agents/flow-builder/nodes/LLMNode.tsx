@@ -13,7 +13,7 @@ export function LLMNode({ data, selected }: NodeProps) {
   const provider = model ? getProviderForModel(modelId) : null;
   const subtitle = model ? `${provider?.label || "—"} · ${model.label} · ${temp}` : "Selecionar modelo";
   return (
-    <BaseNode selected={selected} icon={getNodeIconSource("llm")} label="LLM" subtitle={subtitle}
+    <BaseNode cardType="configurable" iconContext="canvas" selected={selected} icon={getNodeIconSource("llm")} label="LLM" subtitle={subtitle}
       status={resolveNodeStatus(data)}>
       {isTrial && (
         <div className="absolute -top-1.5 -right-1.5 z-10">

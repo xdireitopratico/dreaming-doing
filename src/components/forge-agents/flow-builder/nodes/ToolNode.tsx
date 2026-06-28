@@ -9,7 +9,7 @@ export function ToolNode({ data, selected }: NodeProps) {
   const requiredSecrets: string[] = config.required_secrets || [];
   const hasSecretWarning = requiredSecrets.length > 0;
   return (
-    <BaseNode selected={selected} icon={getNodeIconSource("tool")} label="Tool" status={resolveNodeStatus(data)}
+    <BaseNode cardType="configurable" iconContext="canvas" selected={selected} icon={getNodeIconSource("tool")} label="Tool" status={resolveNodeStatus(data)}
       subtitle={config.tool_display_name || config.tool_name || "Selecionar..."}>
       {hasSecretWarning && (
         <div className="absolute top-full mt-8 left-1/2 -translate-x-1/2 w-40">

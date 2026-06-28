@@ -5,7 +5,7 @@ import { getNodeIconSource } from "./NodeIcon";
 export function ConditionNode({ data, selected }: NodeProps) {
   const config = (data as Record<string, any>)?.config || {};
   return (
-    <BaseNode selected={selected} icon={getNodeIconSource("condition")} label="Condição" status={resolveNodeStatus(data)}
+    <BaseNode cardType="configuration" iconContext="configuration" selected={selected} icon={getNodeIconSource("condition")} label="Condição" status={resolveNodeStatus(data)}
       subtitle={config.expression ? "✓ configurada" : "Definir..."} showSource={false}>
       <div className="absolute top-full mt-7 left-1/2 -translate-x-1/2 w-20 flex justify-between text-[9px]">
         <span className="text-emerald-500 font-medium">✓ true</span>

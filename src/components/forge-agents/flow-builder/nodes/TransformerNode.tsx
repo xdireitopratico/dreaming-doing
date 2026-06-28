@@ -5,5 +5,5 @@ import { getNodeIconSource } from "./NodeIcon";
 export function TransformerNode({ data, selected }: NodeProps) {
   const config = (data as Record<string, any>)?.config || {};
   const tmpl = config.template as string;
-  return <BaseNode selected={selected} status={resolveNodeStatus(data)} icon={getNodeIconSource("transformer")} label="Transformer" subtitle={tmpl ? tmpl.slice(0, 30) : "Definir template..."} />;
+  return <BaseNode cardType="configurable" iconContext="canvas" selected={selected} status={resolveNodeStatus(data)} icon={getNodeIconSource("transformer")} label="Transformer" subtitle={tmpl ? tmpl.slice(0, 30) : "Definir template..."} />;
 }
