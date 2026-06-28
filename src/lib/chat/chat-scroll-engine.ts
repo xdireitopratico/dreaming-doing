@@ -3,7 +3,8 @@ import { scrollOffsetToAlignUserMessage } from "@/lib/chat/user-message-anchor";
 
 export type ChatFollowMode = "manual" | "follow-bottom" | "follow-anchor";
 
-export const CHAT_SCROLL_MAX_STEP_PX = 8;
+export const CHAT_SCROLL_MIN_STEP_PX = 8;
+export const CHAT_SCROLL_MAX_STEP_PX = 96;
 export const CHAT_SCROLL_PIN_THRESHOLD_PX = 100;
 export const CHAT_SCROLL_ANCHOR_DRIFT_PX = 48;
 
@@ -23,11 +24,14 @@ export function computeBottomTarget(scrollHeight: number, clientHeight: number):
 export function computeSmoothScrollStep(
   current: number,
   target: number,
+  minStepPx: number,
   maxStepPx: number,
 ): number {
   const delta = target - current;
   if (Math.abs(delta) <= 0.5) return target;
-  return current + Math.max(-maxStepPx, Math.min(maxStepPx, delta));
+  const distance = Math.abs(delta);
+  const adaptiveStep = Math.min(maxStepPx, Math.max(minStepPx, distance * 0.12));
+  return current + Math.sign(delta) * Math.min(distance, adaptiveStep);
 }
 
 export function isNearBottom(

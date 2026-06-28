@@ -3,6 +3,7 @@ import {
   buildThreadScrollSignature,
   CHAT_SCROLL_ANCHOR_DRIFT_PX,
   CHAT_SCROLL_MAX_STEP_PX,
+  CHAT_SCROLL_MIN_STEP_PX,
   CHAT_SCROLL_PIN_THRESHOLD_PX,
   type ChatFollowMode,
   computeSmoothScrollStep,
@@ -118,7 +119,7 @@ export function useChatScroll({
       window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const next = prefersReducedMotion
       ? target
-      : computeSmoothScrollStep(el.scrollTop, target, CHAT_SCROLL_MAX_STEP_PX);
+      : computeSmoothScrollStep(el.scrollTop, target, CHAT_SCROLL_MIN_STEP_PX, CHAT_SCROLL_MAX_STEP_PX);
 
     if (Math.abs(next - el.scrollTop) > 0.5) {
       applyScrollTop(next);
