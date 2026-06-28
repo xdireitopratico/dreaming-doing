@@ -11,6 +11,7 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { X, Bug, Play, SkipForward, StopCircle, Zap, Wifi, WifiOff, AlertTriangle } from "lucide-react";
 import type { Node, Edge } from "@/types/xyflow-react-shim";
+import type { NodeStatus } from "./nodes/CanvasNodeStatusIcons";
 import type { BreakpointInfo } from "./debug/debug-types";
 import { useDebugExecution } from "./debug/useDebugExecution";
 import { DebugBreakpoints } from "./debug/DebugBreakpoints";
@@ -23,9 +24,10 @@ interface DebugPanelProps {
   flowId?: string;
   onHighlightNode: (nodeId: string | null) => void;
   onClose: () => void;
+  onNodeStatusChange?: (map: Record<string, NodeStatus>) => void;
 }
 
-export function DebugPanel({ nodes, edges, flowId, onHighlightNode, onClose }: DebugPanelProps) {
+export function DebugPanel({ nodes, edges, flowId, onHighlightNode, onClose, onNodeStatusChange }: DebugPanelProps) {
   const [breakpoints, setBreakpoints] = useState<Map<string, BreakpointInfo>>(new Map());
   const [tab, setTab] = useState<"breakpoints" | "variables" | "console">("breakpoints");
   const [inputMessage, setInputMessage] = useState("Olá, preciso de ajuda com meu contrato");

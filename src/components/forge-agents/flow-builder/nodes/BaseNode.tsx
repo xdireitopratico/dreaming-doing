@@ -36,8 +36,8 @@ interface BaseNodeProps {
   selected?: boolean;
   status?: NodeStatus;
   cardType?: CardType;
-  showTarget?: boolean;
-  showSource?: boolean;
+  showTarget?: boolean | number;
+  showSource?: boolean | number;
   children?: React.ReactNode;
   disabled?: boolean;
   /** Hint for icon sizing. */
@@ -131,6 +131,37 @@ function borderStyle(status: NodeStatus, selected: boolean): string {
   }
 }
 
+// ── Multi-handle renderer ──
+
+function renderHandles(
+  type: "target" | "source",
+  count: boolean | number,
+  mainPosition: Position,
+) {
+  const num = typeof count === "boolean" ? (count ? 1 : 0) : count;
+  if (num <= 0) return null;
+
+  const oppositePos = mainPosition === Position.Top ? Position.Bottom : Position.Top;
+  const style = "!w-3 !h-3 !border-2 !border-[#1a1a2e] !bg-[#5555aa]";
+
+  return (
+    <>
+      <Handle key={`${type}-main`} type={type} position={mainPosition} className={style} />
+      {num > 1 &&
+        Array.from({ length: num - 1 }, (_, i) => (
+          <Handle
+            key={`${type}-${i}`}
+            type={type}
+            position={oppositePos}
+            id={`${type}-${i}`}
+            className={style}
+            style={{ left: `${((i + 1) / num) * 100}%` }}
+          />
+        ))}
+    </>
+  );
+}
+
 // ── Component ──
 
 export function BaseNode({
@@ -165,13 +196,7 @@ export function BaseNode({
         readOnly={readOnly}
       />
 
-      {showTarget && (
-        <Handle
-          type="target"
-          position={targetPosition}
-          className="!w-3 !h-3 !border-2 !border-[#1a1a2e] !bg-[#5555aa]"
-        />
-      )}
+      {renderHandles("target", showTarget, targetPosition)}
 
       {/* Card */}
       <div
@@ -273,13 +298,7 @@ export function BaseNode({
         )}
       </div>
 
-      {showSource && (
-        <Handle
-          type="source"
-          position={sourcePosition}
-          className="!w-3 !h-3 !border-2 !border-[#1a1a2e] !bg-[#5555aa]"
-        />
-      )}
+      {renderHandles("source", showSource, sourcePosition)}
     </div>
   );
 }

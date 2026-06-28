@@ -4,6 +4,7 @@
  */
 import { useState, useCallback, useEffect, useRef } from "react";
 import { type Node, type Edge } from "@/types/xyflow-react-shim";
+import type { NodeStatus } from "./nodes/CanvasNodeStatusIcons";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -33,9 +34,10 @@ interface TestPanelProps {
   deploymentSlug?: string;
   onHighlightNode: (nodeId: string | null) => void;
   onClose: () => void;
+  onNodeStatusChange?: (map: Record<string, NodeStatus>) => void;
 }
 
-export function TestPanel({ nodes, edges, flowId, deploymentSlug, onHighlightNode, onClose }: TestPanelProps) {
+export function TestPanel({ nodes, edges, flowId, deploymentSlug, onHighlightNode, onClose, onNodeStatusChange }: TestPanelProps) {
   const [testMessage, setTestMessage] = useState("");
   const [isRunning, setIsRunning] = useState(false);
   const [steps, setSteps] = useState<ExecutionStep[]>([]);

@@ -87,6 +87,8 @@ interface FlowCanvasProps {
   onChatOpenChange?: (open: boolean) => void;
   /** Map of node ID → execution status (set externally from runtime) */
   nodeStatusMap?: Record<string, NodeStatus>;
+  /** Called when execution status changes (so panels can update the map) */
+  onNodeStatusChange?: (map: Record<string, NodeStatus>) => void;
 }
 
 export const FlowCanvas = memo(function FlowCanvas({
@@ -96,7 +98,7 @@ export const FlowCanvas = memo(function FlowCanvas({
   onRegisterFitView,
   flowId, chatEnabled = false, onApplyPatch, onHighlightNodes,
   registerChatToggle, registerChatCollapse, onChatOpenChange,
-  nodeStatusMap,
+  nodeStatusMap, onNodeStatusChange,
 }: FlowCanvasProps) {
   // Inject n8n node CSS animations once
   useEffect(() => { injectN8nNodeAnimations(); injectNodeToolbarStyles(); }, []);

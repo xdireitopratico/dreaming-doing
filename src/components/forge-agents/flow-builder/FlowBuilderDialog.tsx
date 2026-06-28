@@ -19,6 +19,7 @@ import { FlowPanelRenderer } from "./FlowPanelRenderer";
 import { useFlowBuilderState } from "./hooks/useFlowBuilderState";
 import { useGraduationGate } from "./GraduationGate";
 import { CloseConfirmDialog } from "./CloseConfirmDialog";
+import type { NodeStatus } from "./nodes/CanvasNodeStatusIcons";
 import "@/styles/forge-agents-theme.css";
 
 const CommandPalette = lazy(() => import("./CommandPalette").then(m => ({ default: m.CommandPalette })));
@@ -84,10 +85,14 @@ export function FlowBuilderDialog({ flowId, projectId, open, onClose, onFlowIdCh
   // ═══ MODAL: confirmacao ao fechar com alteracoes nao salvas ═══
   const [closeConfirmOpen, setCloseConfirmOpen] = useState(false);
 
+  // ═══ Execution status feedback (F2.1) ═══
+  const [nodeStatusMap, setNodeStatusMap] = useState<Record<string, NodeStatus>>({});
+
   const handleRequestClose = useCallback(() => {
     if (s.hasUnsaved) {
       setCloseConfirmOpen(true);
     } else {
+      setNodeStatusMap({});
       onClose();
     }
   }, [s.hasUnsaved, onClose]);
@@ -104,6 +109,7 @@ export function FlowBuilderDialog({ flowId, projectId, open, onClose, onFlowIdCh
       if (flowId === null && onFlowIdChange) onFlowIdChange(newId);
       onClose();
     }
+    setNodeStatusMap({});
   }, [s.handleSave, flowId, onFlowIdChange, onClose]);
 
   const shortcutActions = useMemo(() => ({
@@ -192,6 +198,8 @@ export function FlowBuilderDialog({ flowId, projectId, open, onClose, onFlowIdCh
             registerChatToggle={registerChatToggle}
             registerChatCollapse={registerChatCollapse}
             onChatOpenChange={handleChatOpenChange}
+            nodeStatusMap={nodeStatusMap}
+            onNodeStatusChange={setNodeStatusMap}
           />
 
           {selectedNode()}
@@ -215,6 +223,7 @@ export function FlowBuilderDialog({ flowId, projectId, open, onClose, onFlowIdCh
             onPrimaryLangChange={s.handlePrimaryLangChange}
             onSupportedLangsChange={s.setAgentSupportedLangs}
             onAutoDetectChange={s.setAgentAutoDetect}
+            onNodeStatusChange={setNodeStatusMap}
           />
         </div>
       </DialogContent>

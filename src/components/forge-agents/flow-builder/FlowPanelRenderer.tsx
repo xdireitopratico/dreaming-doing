@@ -6,6 +6,7 @@ import { lazy, Suspense, memo } from "react";
 import { Loader2 } from "lucide-react";
 import type { Node, Edge } from "@/types/xyflow-react-shim";
 import type { PanelType } from "./flow-builder-types";
+import type { NodeStatus } from "./nodes/CanvasNodeStatusIcons";
 
 // Lazy-loaded panels
 const TestPanel = lazy(() => import("./TestPanel").then(m => ({ default: m.TestPanel })));
@@ -63,6 +64,8 @@ interface FlowPanelRendererProps {
   onPrimaryLangChange: (lang: "pt-BR" | "en" | "es") => void;
   onSupportedLangsChange: (langs: ("pt-BR" | "en" | "es")[]) => void;
   onAutoDetectChange: (val: boolean) => void;
+  /** Execution status feedback — panels call this to update canvas node states */
+  onNodeStatusChange?: (map: Record<string, NodeStatus>) => void;
 }
 
 export const FlowPanelRenderer = memo(function FlowPanelRenderer({
@@ -71,13 +74,14 @@ export const FlowPanelRenderer = memo(function FlowPanelRenderer({
   onUnreadChange, onCommentCountChange,
   agentPrimaryLang, agentSupportedLangs, agentAutoDetect,
   onPrimaryLangChange, onSupportedLangsChange, onAutoDetectChange,
+  onNodeStatusChange,
 }: FlowPanelRendererProps) {
   if (!activePanel) return null;
 
   return (
     <Suspense fallback={<PanelLoader />}>
       {activePanel === "validation" && <ValidationPanel nodes={nodes} edges={edges} onHighlightNode={onHighlightNode} onClose={onClose} />}
-      {activePanel === "test" && <TestPanel nodes={nodes} edges={edges} flowId={flowId} onHighlightNode={onHighlightNode} onClose={onClose} />}
+      {activePanel === "test" && <TestPanel nodes={nodes} edges={edges} flowId={flowId} onHighlightNode={onHighlightNode} onClose={onClose} onNodeStatusChange={onNodeStatusChange} />}
       {activePanel === "logs" && <ExecutionLogPanel flowId={flowId} nodes={nodes} onHighlightNode={onHighlightNode} onClose={onClose} />}
       {activePanel === "eval" && <EvalPanel flowId={flowId} onClose={onClose} />}
       {activePanel === "deploy" && <DeployPanel flowId={flowId} flowName={flowName} onClose={onClose} />}
@@ -92,7 +96,7 @@ export const FlowPanelRenderer = memo(function FlowPanelRenderer({
       {activePanel === "market" && <MarketplacePanel flowId={flowId} currentNodes={nodes} currentEdges={edges} flowName={flowName} onInstall={onApplyTemplate} onClose={onClose} />}
       {activePanel === "secrets" && <SecretsPanel flowId={flowId} nodes={nodes} onClose={onClose} />}
       {activePanel === "notifications" && <NotificationsPanel flowId={flowId} onUnreadChange={onUnreadChange} onClose={onClose} />}
-      {activePanel === "debug" && <DebugPanel nodes={nodes} edges={edges} flowId={flowId} onHighlightNode={onHighlightNode} onClose={onClose} />}
+      {activePanel === "debug" && <DebugPanel nodes={nodes} edges={edges} flowId={flowId} onHighlightNode={onHighlightNode} onClose={onClose} onNodeStatusChange={onNodeStatusChange} />}
       {activePanel === "comments" && <CommentsPanel flowId={flowId} nodes={nodes} onHighlightNode={onHighlightNode} onCommentCountChange={onCommentCountChange} onClose={onClose} />}
       {activePanel === "exportimport" && <ExportImportPanel flowId={flowId} flowName={flowName} currentNodes={nodes} currentEdges={edges} onImport={onApplyTemplate} onClose={onClose} />}
       {activePanel === "language" && (
