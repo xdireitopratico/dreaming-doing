@@ -13,7 +13,7 @@ import {
   DropdownMenuTrigger, DropdownMenuLabel, DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import {
-  Save, Upload, Undo2, Redo2, CheckCircle2, AlertTriangle,
+  Save, X, Upload, Undo2, Redo2, CheckCircle2, AlertTriangle,
   Play, Wrench, Database, LayoutTemplate, Webhook, KeyRound, CalendarClock,
   Clock, Activity, BarChart3, Bug, History, Stethoscope,
   Users, MessageSquare, Bell,
@@ -31,6 +31,7 @@ interface FlowToolbarProps {
   unreadNotifCount: number;
   totalComments: number;
   onFlowNameChange: (name: string) => void;
+  onClose: () => void;
   onSave: () => void;
   onPublish: () => void;
   onUndo: () => void;
@@ -105,13 +106,20 @@ const ORDERED_MENU_GROUPS = MENU_GROUPS_ORDER
 export const FlowToolbar = memo(function FlowToolbar({
   flowName, flowStatus, hasUnsaved, saving, validationErrors,
   activePanel, unreadNotifCount, totalComments,
-  onFlowNameChange, onSave, onPublish, onUndo, onRedo, onTogglePanel,
+  onFlowNameChange, onClose, onSave, onPublish, onUndo, onRedo, onTogglePanel,
   onResumeSession, onOpenAgent,
 }: FlowToolbarProps) {
   return (
     <div className="h-12 border-b flex items-center justify-between px-3 gap-2 shrink-0 relative" style={{ background: 'var(--ps-bg)', borderColor: 'var(--ps-border)', color: 'var(--ps-cream)' }}>
-      {/* Left: Name + Status */}
+      {/* Left: Close + Name + Status */}
       <div className="flex items-center gap-2 min-w-0">
+        <Button
+          variant="ghost" size="icon" className="h-7 w-7 shrink-0"
+          onClick={onClose} title="Fechar editor"
+          style={{ color: 'var(--ps-cream-40)' }}
+        >
+          <X className="h-4 w-4" />
+        </Button>
         <Input
           value={flowName}
           onChange={(e) => onFlowNameChange(e.target.value)}
@@ -122,19 +130,8 @@ export const FlowToolbar = memo(function FlowToolbar({
         {hasUnsaved && <span className="text-[10px] shrink-0" style={{ color: 'var(--ps-orange)' }}>● Não salvo</span>}
       </div>
 
-      {/* Center: Undo / Redo (fixo no meio do header) */}
+      {/* Center: Validation + Undo / Redo (fixo no meio do header) */}
       <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center gap-1">
-        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onUndo} title="Desfazer (Ctrl+Z)">
-          <Undo2 className="h-3.5 w-3.5" />
-        </Button>
-        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onRedo} title="Refazer (Ctrl+Shift+Z)">
-          <Redo2 className="h-3.5 w-3.5" />
-        </Button>
-      </div>
-
-      {/* Right: Secondary icons + Primary actions (esquerda → direita: Validação, Tema, Menus, Salvar, Testar, Publicar) */}
-      <div className="flex items-center gap-1.5">
-        {/* Validation */}
         <Button
           variant={activePanel === "validation" ? "default" : "ghost"}
           size="sm" className="gap-1 h-7 px-2"

@@ -188,6 +188,7 @@ export function FlowBuilderDialog({ flowId, projectId, open, onClose, onFlowIdCh
           unreadNotifCount={s.unreadNotifCount}
           totalComments={s.totalComments}
           onFlowNameChange={s.setFlowName}
+          onClose={handleRequestClose}
           onSave={handleSaveAndPropagate}
           onPublish={checkCredentials}
           onUndo={s.handleUndo}
