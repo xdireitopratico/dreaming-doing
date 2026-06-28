@@ -202,7 +202,7 @@ async function scrapeViaJina(
       if (format === "html") headers["X-Return-Format"] = "html";
       if (apiKey) headers["Authorization"] = `Bearer ${apiKey}`;
 
-      const response = await fetch(jinaUrl, { headers, signal: AbortSignal.timeout(30000) });
+      const response = await fetch(jinaUrl, { headers, signal: AbortSignal.timeout(60000) });
       if (!response.ok) throw new Error(`Jina Reader failed: HTTP ${response.status}`);
 
       if (mode === "screenshot") {

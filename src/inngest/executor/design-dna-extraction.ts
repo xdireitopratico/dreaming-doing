@@ -757,44 +757,58 @@ export async function extractDesignDnaForUrl(
       ? "http"
       : "jina";
 
-  const markdownRes = await scrapeWebPage(
-    {
-      url: input.url,
-      format: "markdown",
-      mode: "read",
-      provider: scrapeProvider,
-      only_main_content: true,
-    },
-    webSecrets,
-    { primary: scrapeProvider, fallback: scrapeFallback },
-  );
-  providerTrace.push(
-    `markdown:${String(markdownRes.provider ?? "unknown")}${markdownRes.provider !== scrapeProvider ? `(fallback from ${scrapeProvider})` : ""}`,
-  );
-  if (markdownRes.provider && markdownRes.provider !== scrapeProvider) {
-    notes.push(
-      `⚠️ primary web_scrape '${scrapeProvider}' failed — fell back to '${markdownRes.provider}' (configured in /api-models).`,
+  let markdownRes: Record<string, unknown>;
+  try {
+    markdownRes = await scrapeWebPage(
+      {
+        url: input.url,
+        format: "markdown",
+        mode: "read",
+        provider: scrapeProvider,
+        only_main_content: true,
+      },
+      webSecrets,
+      { primary: scrapeProvider, fallback: scrapeFallback },
     );
+    providerTrace.push(
+      `markdown:${String(markdownRes.provider ?? "unknown")}${markdownRes.provider !== scrapeProvider ? `(fallback from ${scrapeProvider})` : ""}`,
+    );
+    if (markdownRes.provider && markdownRes.provider !== scrapeProvider) {
+      notes.push(
+        `⚠️ primary web_scrape '${scrapeProvider}' failed — fell back to '${markdownRes.provider}' (configured in /api-models).`,
+      );
+    }
+  } catch (scrapeErr) {
+    notes.push(`⚠️ markdown scrape failed: ${errorMessage(scrapeErr)} — continuing with empty content`);
+    providerTrace.push("markdown:error");
+    markdownRes = { content: "", provider: "" };
   }
 
-  const htmlRes = await scrapeWebPage(
-    {
-      url: input.url,
-      format: "html",
-      mode: "read",
-      provider: scrapeProvider,
-      only_main_content: false,
-    },
-    webSecrets,
-    { primary: scrapeProvider, fallback: scrapeFallback },
-  );
-  providerTrace.push(
-    `html:${String(htmlRes.provider ?? "unknown")}${htmlRes.provider !== scrapeProvider ? `(fallback from ${scrapeProvider})` : ""}`,
-  );
-  if (htmlRes.provider && htmlRes.provider !== scrapeProvider) {
-    notes.push(
-      `⚠️ primary web_scrape '${scrapeProvider}' failed for HTML — fell back to '${htmlRes.provider}'.`,
+  let htmlRes: Record<string, unknown>;
+  try {
+    htmlRes = await scrapeWebPage(
+      {
+        url: input.url,
+        format: "html",
+        mode: "read",
+        provider: scrapeProvider,
+        only_main_content: false,
+      },
+      webSecrets,
+      { primary: scrapeProvider, fallback: scrapeFallback },
     );
+    providerTrace.push(
+      `html:${String(htmlRes.provider ?? "unknown")}${htmlRes.provider !== scrapeProvider ? `(fallback from ${scrapeProvider})` : ""}`,
+    );
+    if (htmlRes.provider && htmlRes.provider !== scrapeProvider) {
+      notes.push(
+        `⚠️ primary web_scrape '${scrapeProvider}' failed for HTML — fell back to '${htmlRes.provider}'.`,
+      );
+    }
+  } catch (scrapeErr) {
+    notes.push(`⚠️ HTML scrape failed: ${errorMessage(scrapeErr)} — continuing with empty content`);
+    providerTrace.push("html:error");
+    htmlRes = { content: "", provider: "" };
   }
 
   const rawMarkdown = String(markdownRes.content ?? "").trim();
