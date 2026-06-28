@@ -41,7 +41,6 @@ export function useChatScroll({
   const rafRef = useRef(0);
   const resizeObserverRef = useRef<ResizeObserver | null>(null);
   const signatureAtManualRef = useRef<string | null>(null);
-  const threadLengthAtManualRef = useRef<number | null>(null);
   const threadSignature = buildThreadScrollSignature(thread);
   const [showPill, setShowPill] = useState(false);
 
@@ -79,15 +78,13 @@ export function useChatScroll({
     if (followModeRef.current === "manual") return;
     followModeRef.current = "manual";
     signatureAtManualRef.current = threadSignature;
-    threadLengthAtManualRef.current = thread.length;
     setShowPill(false);
-  }, [threadSignature, thread.length]);
+  }, [threadSignature]);
 
   const notifyUserSend = useCallback(() => {
     userJustSentRef.current = true;
     followModeRef.current = "follow-anchor";
     signatureAtManualRef.current = null;
-    threadLengthAtManualRef.current = null;
     setShowPill(false);
   }, []);
 
@@ -95,7 +92,6 @@ export function useChatScroll({
     followModeRef.current = "follow-bottom";
     anchoredUserIdRef.current = null;
     signatureAtManualRef.current = null;
-    threadLengthAtManualRef.current = null;
     setShowPill(false);
   }, []);
 
@@ -109,9 +105,8 @@ export function useChatScroll({
         mode,
         signature: threadSignature,
         signatureAtManual: signatureAtManualRef.current,
-        threadLength: thread.length,
-        manualThreadLength: threadLengthAtManualRef.current,
-        minNewItems: 2,
+        bottomGapPx: el.scrollHeight - el.scrollTop - el.clientHeight,
+        thresholdPx: 500,
       });
       setShowPill((prev) => (prev === show ? prev : show));
       return;
@@ -176,7 +171,6 @@ export function useChatScroll({
     userJustSentRef.current = false;
     anchoredUserIdRef.current = null;
     signatureAtManualRef.current = null;
-    threadLengthAtManualRef.current = null;
     followModeRef.current = "follow-bottom";
     setShowPill(false);
   }, [conversationId]);
@@ -209,7 +203,6 @@ export function useChatScroll({
     if (userJustSentRef.current) {
       userJustSentRef.current = false;
       signatureAtManualRef.current = null;
-      threadLengthAtManualRef.current = null;
     }
 
     const id = lastUserMessageId;

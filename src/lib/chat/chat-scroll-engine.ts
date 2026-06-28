@@ -90,15 +90,11 @@ export function shouldShowNewMessagesPill(opts: {
   mode: ChatFollowMode;
   signature: string;
   signatureAtManual: string | null;
-  threadLength: number;
-  manualThreadLength: number | null;
-  minNewItems?: number;
+  bottomGapPx: number;
+  thresholdPx?: number;
 }): boolean {
   if (opts.mode !== "manual") return false;
   if (!opts.signatureAtManual) return false;
   if (opts.signature === opts.signatureAtManual) return false;
-  const minNewItems = opts.minNewItems ?? 2;
-  const manualThreadLength = opts.manualThreadLength ?? 0;
-  if (opts.threadLength - manualThreadLength < minNewItems) return false;
-  return true;
+  return opts.bottomGapPx >= (opts.thresholdPx ?? 500);
 }
