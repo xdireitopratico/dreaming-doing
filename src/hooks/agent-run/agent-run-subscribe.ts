@@ -38,7 +38,9 @@ export type RunSubscriptionDeps = {
 };
 
 export function createRunSubscriptionHandlers(deps: RunSubscriptionDeps) {
-  const teardownChannels = () => {
+  let subscribeGeneration = 0;
+
+  const teardownChannels = async () => {
     if (deps.reconnectTimerRef.current) {
       clearTimeout(deps.reconnectTimerRef.current);
       deps.reconnectTimerRef.current = null;
@@ -47,14 +49,16 @@ export function createRunSubscriptionHandlers(deps: RunSubscriptionDeps) {
       clearInterval(deps.stalePollRef.current);
       deps.stalePollRef.current = null;
     }
+    const removals: Promise<unknown>[] = [];
     if (deps.eventChannelRef.current) {
-      void supabase.removeChannel(deps.eventChannelRef.current);
+      removals.push(supabase.removeChannel(deps.eventChannelRef.current));
       deps.eventChannelRef.current = null;
     }
     if (deps.statusChannelRef.current) {
-      void supabase.removeChannel(deps.statusChannelRef.current);
+      removals.push(supabase.removeChannel(deps.statusChannelRef.current));
       deps.statusChannelRef.current = null;
     }
+    if (removals.length > 0) await Promise.allSettled(removals);
     deps.setConnected(false);
   };
 
@@ -111,7 +115,7 @@ export function createRunSubscriptionHandlers(deps: RunSubscriptionDeps) {
       return freezeWorkingDuration(merged, deps.activeRunStartedAtMsRef.current);
     });
     deps.setActiveRunStartedAtMs(null);
-    teardownChannels();
+    void teardownChannels();
     deps.setConnected(false);
     deps.setProgress((p) => {
       if (!shouldRetainLiveRunSlot(p) && deps.runIdRef.current) {
@@ -188,7 +192,7 @@ export function createRunSubscriptionHandlers(deps: RunSubscriptionDeps) {
           timestamp: Date.now(),
         };
         deps.setProgress((p) => applyAgentProgressEvent(p, finishEvent));
-        teardownChannels();
+        void teardownChannels();
         deps.setConnected(false);
         deps.setProgress((p) => {
           if (!shouldRetainLiveRunSlot(p) && deps.runIdRef.current === runId) {
@@ -204,6 +208,8 @@ export function createRunSubscriptionHandlers(deps: RunSubscriptionDeps) {
   };
 
   const subscribeToRun = async (runId: string, opts?: { resetProgress?: boolean }) => {
+    const myGeneration = ++subscribeGeneration;
+    const isStale = () => myGeneration !== subscribeGeneration || deps.runIdRef.current !== runId;
     const isSame = deps.runIdRef.current === runId;
     if (isSame && deps.eventChannelRef.current) {
       deps.setConnected(true);
@@ -212,7 +218,7 @@ export function createRunSubscriptionHandlers(deps: RunSubscriptionDeps) {
     }
     if (!isSame) {
       deps.streamBufferRef.current = [];
-      teardownChannels();
+      void teardownChannels();
     }
     deps.runIdRef.current = runId;
     deps.setActiveRunId(runId);
@@ -230,7 +236,7 @@ export function createRunSubscriptionHandlers(deps: RunSubscriptionDeps) {
     deps.setConnected(true);
 
     const terminal = await catchUpRun(runId);
-    if (terminal) return;
+    if (terminal || isStale()) return;
 
     const eventChannel = supabase
       .channel(`agent-events-${runId}`)
@@ -246,7 +252,7 @@ export function createRunSubscriptionHandlers(deps: RunSubscriptionDeps) {
           if (deps.runIdRef.current !== runId) return;
           const row = payload.new as AgentStreamRow;
           if (deps.enqueueStreamRow(row)) {
-            teardownChannels();
+            void teardownChannels();
             deps.setConnected(false);
             deps.setProgress((p) => {
               if (!shouldRetainLiveRunSlot(p) && deps.runIdRef.current === runId) {
@@ -258,6 +264,7 @@ export function createRunSubscriptionHandlers(deps: RunSubscriptionDeps) {
         },
       )
       .subscribe((status: string) => {
+        if (isStale()) return;
         if (status === "SUBSCRIBED") {
           deps.reconnectAttemptsRef.current = 0;
           emitStreamingTelemetry("agent.realtime_reconnected", { runId: runId.slice(0, 8) });
@@ -293,22 +300,19 @@ export function createRunSubscriptionHandlers(deps: RunSubscriptionDeps) {
           if (deps.reconnectTimerRef.current) clearTimeout(deps.reconnectTimerRef.current);
           deps.reconnectTimerRef.current = setTimeout(() => {
             if (deps.runIdRef.current !== runId) return;
-            void catchUpRun(runId).then(() => {
+            void catchUpRun(runId).then(async () => {
               if (deps.runIdRef.current !== runId) return;
-              if (deps.eventChannelRef.current) {
-                void supabase.removeChannel(deps.eventChannelRef.current);
-                deps.eventChannelRef.current = null;
-              }
-              if (deps.statusChannelRef.current) {
-                void supabase.removeChannel(deps.statusChannelRef.current);
-                deps.statusChannelRef.current = null;
-              }
+              await teardownChannels();
               void subscribeToRun(runId, { resetProgress: false });
             });
           }, delay);
         }
       });
     deps.eventChannelRef.current = eventChannel;
+    if (isStale()) {
+      void teardownChannels();
+      return;
+    }
 
     const statusChannel = supabase
       .channel(`agent-status-${runId}`)
@@ -340,6 +344,10 @@ export function createRunSubscriptionHandlers(deps: RunSubscriptionDeps) {
       )
       .subscribe();
     deps.statusChannelRef.current = statusChannel;
+    if (isStale()) {
+      void teardownChannels();
+      return;
+    }
 
     if (deps.stalePollRef.current) clearInterval(deps.stalePollRef.current);
     deps.stalePollRef.current = setInterval(() => {

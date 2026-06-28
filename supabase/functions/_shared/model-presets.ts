@@ -89,13 +89,10 @@ function listAutoCandidates(
   userModels?: UserModelEntryPayload[],
 ): AutoCandidate[] {
   const allowlist = allowedPresetIds?.map(normalizePresetId).filter(Boolean) ?? [];
-  const ids =
-    allowlist.length > 0
-      ? allowlist
-      : Object.keys(PRESETS).filter((id) => metaForPresetId(id).tier !== "pool");
+  if (allowlist.length === 0) return [];
 
   const out: AutoCandidate[] = [];
-  for (const id of ids) {
+  for (const id of allowlist) {
     const wire = resolveWireFromPresetId(id, userModels) ?? getPresetWire(id);
     if (!wire) continue;
     const resolved = wireWithKey(wire, keys);
@@ -388,13 +385,9 @@ export function resolveModelFromPreferences(
 ): (PresetWire & { apiKey: string }) | null {
   const id = preferences?.fixedPresetId?.trim();
   if (id) {
-    const customWire = resolveWireFromPresetId(id, preferences?.userModelEntries);
-    if (customWire) {
-      const resolved = wireWithKey(customWire, keys);
-      if (resolved) return resolved;
-    }
-    const fromCatalog = resolveFixedFromKeys(id, keys);
-    if (fromCatalog) return fromCatalog;
+    const wire = resolveWireFromPresetId(id, preferences?.userModelEntries);
+    if (!wire) return null;
+    return wireWithKey(wire, keys);
   }
 
   const custom = preferences?.customModelId?.trim();
@@ -417,7 +410,7 @@ export function resolveModelFromPreferences(
       secretKey: "OPENROUTER_API_KEY",
     };
   }
-  return resolveFixedFromKeys(preferences?.fixedPresetId, keys);
+  return null;
 }
 
 export function defaultRobinModel(

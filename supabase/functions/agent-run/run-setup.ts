@@ -46,11 +46,13 @@ export function validateAgentPreferences(p?: AgentPreferencesPayload): string | 
   if (!p?.mode) {
     return "Setup obrigatório: configure modo e modelo em Api & Models (/api-models).";
   }
-  if (p.mode === "auto") return null;
+  if (p.mode === "auto") {
+    if ((p.autoAllowedPresetIds?.length ?? 0) > 0) return null;
+    return "Setup: configure ao menos um modelo do modo Auto em Api & Models (/api-models).";
+  }
   if (p.mode === "fixed") {
     if (p.fixedPresetId?.trim()) return null;
     if (p.useCustomModel && p.customModelId?.trim()) return null;
-    if ((p.userModelEntries?.length ?? 0) > 0) return null;
     return "Setup: selecione um modelo fixo em Api & Models (/api-models).";
   }
   if (isRobinMode(p) && !p.robinPoolModelId?.trim()) {
@@ -121,7 +123,37 @@ export async function resolveEffectiveAgentPreferences(
   userId: string,
   _runMeta?: Record<string, unknown> | null,
 ): Promise<AgentPreferencesPayload | undefined> {
-  return loadAgentPreferencesFromDb(supabase, userId);
+  const prefs = await loadAgentPreferencesFromDb(supabase, userId);
+  return sanitizeRuntimePreferences(prefs);
+}
+
+export function sanitizeRuntimePreferences(
+  prefs: AgentPreferencesPayload | undefined,
+): AgentPreferencesPayload | undefined {
+  if (!prefs?.mode) return prefs;
+  const next: AgentPreferencesPayload = { ...prefs };
+  if (prefs.mode === "auto") {
+    next.fixedPresetId = undefined;
+    next.robinPoolModelId = undefined;
+    next.poolProvider = undefined;
+    next.useCustomModel = undefined;
+    next.customModelId = undefined;
+    return next;
+  }
+  if (prefs.mode === "fixed") {
+    next.autoAllowedPresetIds = undefined;
+    next.robinPoolModelId = undefined;
+    next.poolProvider = undefined;
+    return next;
+  }
+  if (isRobinMode(prefs)) {
+    next.autoAllowedPresetIds = undefined;
+    next.fixedPresetId = undefined;
+    next.useCustomModel = undefined;
+    next.customModelId = undefined;
+    return next;
+  }
+  return next;
 }
 
 export function resolveExecuteIdList(
@@ -261,7 +293,7 @@ export async function resolveAgentProvider(
       throw new Error(
         allowlist.length > 0
           ? "Nenhum modelo marcado no Auto tem chave em /api. Adicione a chave ou marque outro modelo."
-          : "Modo Auto: cadastre pelo menos uma chave LLM em /api.",
+          : "Modo Auto: configure ao menos um modelo em /api-models.",
       );
     }
     mainCfg = finalizeProviderConfig({

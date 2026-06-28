@@ -35,6 +35,40 @@ Deno.test("resolveModelFromPreferences — fixed xai não usa OPENAI_API_KEY", (
   assertEquals(resolved?.secretKey, "XAI_API_KEY");
 });
 
+Deno.test("resolveModelFromPreferences — fixed aceita custom explícito", () => {
+  const resolved = resolveModelFromPreferences(
+    {
+      useCustomModel: true,
+      customModelId: "openrouter/deepseek-r1",
+      userModelEntries: [
+        { slug: "openrouter/deepseek-r1", env: "openrouter", label: "DeepSeek R1" },
+      ],
+    },
+    {
+      OPENROUTER_API_KEY: "sk-openrouter",
+    },
+  );
+  assertEquals(resolved?.model, "openrouter/deepseek-r1");
+  assertEquals(resolved?.provider, "openrouter");
+});
+
+Deno.test("resolveModelFromPreferences — fixed não cai de preset ausente para custom", () => {
+  const resolved = resolveModelFromPreferences(
+    {
+      fixedPresetId: "nonexistent-preset",
+      useCustomModel: true,
+      customModelId: "openrouter/deepseek-r1",
+      userModelEntries: [
+        { slug: "openrouter/deepseek-r1", env: "openrouter", label: "DeepSeek R1" },
+      ],
+    },
+    {
+      OPENROUTER_API_KEY: "sk-openrouter",
+    },
+  );
+  assertEquals(resolved, null);
+});
+
 Deno.test("wireFromUserEntry — custom-inception usa chave dedicada", () => {
   const wire = resolveWireFromPresetId("custom--custom-inception--mercury-2", [
     { slug: "custom-inception/mercury-2", env: "custom-inception", label: "Mercury 2" },
