@@ -508,14 +508,13 @@ function openAiChat(
       messages,
       max_tokens: 4096,
       temperature: 0.3,
-      response_format: { type: "json_object" },
     }),
-    signal: AbortSignal.timeout(60000),
+    signal: AbortSignal.timeout(120000),
   }).then(async (response) => {
     if (!response.ok) {
       const errText = await response.text().catch(() => "");
       throw new Error(
-        `LLM extraction failed (${cfg.label} /chat/completions): HTTP ${response.status} — ${errText.slice(0, 200)}`,
+        `LLM extraction failed (${cfg.label} /chat/completions): HTTP ${response.status} — ${errText.slice(0, 400)}`,
       );
     }
     const data = await response.json();
@@ -555,12 +554,12 @@ function anthropicChat(
       temperature: 0.3,
       messages: [{ role: "user", content: userBlocks }],
     }),
-    signal: AbortSignal.timeout(60000),
+    signal: AbortSignal.timeout(120000),
   }).then(async (response) => {
     if (!response.ok) {
       const errText = await response.text().catch(() => "");
       throw new Error(
-        `LLM extraction failed (${cfg.label} /messages): HTTP ${response.status} — ${errText.slice(0, 200)}`,
+        `LLM extraction failed (${cfg.label} /messages): HTTP ${response.status} — ${errText.slice(0, 400)}`,
       );
     }
     const data = await response.json();
@@ -601,12 +600,12 @@ function geminiChat(
         responseMimeType: "application/json",
       },
     }),
-    signal: AbortSignal.timeout(60000),
+    signal: AbortSignal.timeout(120000),
   }).then(async (response) => {
     if (!response.ok) {
       const errText = await response.text().catch(() => "");
       throw new Error(
-        `LLM extraction failed (${cfg.label} generateContent): HTTP ${response.status} — ${errText.slice(0, 200)}`,
+        `LLM extraction failed (${cfg.label} generateContent): HTTP ${response.status} — ${errText.slice(0, 400)}`,
       );
     }
     const data = await response.json();
@@ -674,8 +673,17 @@ Extraia o DesignDNA deste site.`;
   try {
     parsed = JSON.parse(rawContent);
   } catch {
-    const jsonMatch = rawContent.match(/\{[\s\S]*\}/);
-    parsed = jsonMatch ? JSON.parse(jsonMatch[0]) : {};
+    const codeMatch = rawContent.match(/```(?:json)?\s*({[\s\S]*?})\s*```/);
+    if (codeMatch) {
+      try { parsed = JSON.parse(codeMatch[1]); } catch { parsed = {}; }
+    } else {
+      const jsonMatch = rawContent.match(/\{[\s\S]*\}/);
+      parsed = jsonMatch ? JSON.parse(jsonMatch[0]) : {};
+    }
+  }
+  if (typeof parsed !== "object" || parsed === null || Object.keys(parsed).length === 0) {
+    console.warn("[llmExtractDNA] LLM returned empty/unparseable content, falling back to heuristic");
+    return null;
   }
   console.debug("[llmExtractDNA] keys received:", Object.keys(parsed), "quality_source:", parsed.quality_source);
 
