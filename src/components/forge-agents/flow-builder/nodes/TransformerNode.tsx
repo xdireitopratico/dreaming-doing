@@ -1,17 +1,9 @@
 import { type NodeProps } from "@/types/xyflow-react-shim";
-import { Settings } from "lucide-react";
 import { BaseNode } from "./BaseNode";
+import { getNodeIconSource } from "./NodeIcon";
 
 export function TransformerNode({ data, selected }: NodeProps) {
   const config = (data as Record<string, any>)?.config || {};
   const tmpl = config.template as string;
-  return (
-    <BaseNode
-      nodeType="transformer"
-      selected={selected}
-      icon={<Settings className="h-3 w-3" />}
-      label="Transformer"
-      subtitle={tmpl ? tmpl.slice(0, 30) : "Definir template..."}
-    />
-  );
+  return <BaseNode selected={selected} icon={getNodeIconSource("transformer")} label="Transformer" subtitle={tmpl ? tmpl.slice(0, 30) : "Definir template..."} />;
 }

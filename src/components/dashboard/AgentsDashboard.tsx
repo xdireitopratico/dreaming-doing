@@ -1,7 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
-import { ChevronDown, Plus, Trash2 } from "lucide-react";
+import { ChevronDown, MoreVertical, Plus, Trash2 } from "lucide-react";
 import { toast } from "@/lib/toast";
 import { deleteProject } from "@/lib/projects.functions";
 import { supabase } from "@/integrations/supabase/client";
@@ -11,6 +11,12 @@ import { ForgeIcon } from "@/components/icons/ForgeIcon";
 import { useAuth } from "@/lib/auth";
 import { removeRealtimeChannel, subscribePostgresChanges } from "@/lib/supabase-realtime";
 import { isAgentProject, type ProjectListRow } from "@/lib/project-kind";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 function formatRelative(dateStr: string | null) {
   if (!dateStr) return "—";
@@ -129,20 +135,12 @@ export function AgentsDashboard() {
                 : `${filtered.length} agente${filtered.length !== 1 ? "s" : ""}`}
             </p>
           </div>
-          {filtered[0] ? (
-            <Link
-              to="/agents/$agentId"
-              params={{ agentId: filtered[0].id }}
-              search={{ open: "flow" }}
-              className="dashboard-dock-browse"
-            >
-              Fluxo Visual
-            </Link>
-          ) : (
-            <a href="#dashboard-hero" className="dashboard-dock-browse">
-              Fluxo Visual
-            </a>
-          )}
+          <Link
+            to="/agents/visual"
+            className="dashboard-dock-browse"
+          >
+            Fluxo Visual
+          </Link>
         </div>
 
         <div className="dashboard-projects-row">
@@ -173,12 +171,7 @@ export function AgentsDashboard() {
           )}
 
           {filtered.map((p) => (
-            <Link
-              key={p.id}
-              to="/agents/$agentId"
-              params={{ agentId: p.id }}
-              className="dashboard-project-card group relative"
-            >
+            <div key={p.id} className="dashboard-project-card group relative">
               <button
                 type="button"
                 className="absolute right-2 top-2 z-10 grid size-8 place-items-center rounded-lg text-[var(--forge-muted)] opacity-0 transition-opacity hover:bg-[color-mix(in_srgb,var(--status-failed)_18%,transparent)] hover:text-[var(--status-failed)] group-hover:opacity-100"
@@ -188,16 +181,52 @@ export function AgentsDashboard() {
               >
                 <Trash2 className="size-4" />
               </button>
-              <div className="dashboard-project-thumb">
-                <ForgeIcon variant="agent" size={22} className="text-[var(--forge-ghost)]" />
-              </div>
-              <div className="dashboard-project-meta">
-                <p className="dashboard-project-name">{p.name}</p>
-                <p className="dashboard-project-date">
-                  Editado {formatRelative(p.updated_at ?? p.created_at)}
-                </p>
-              </div>
-            </Link>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    className="absolute right-10 top-2 z-10 grid size-8 place-items-center rounded-lg text-[var(--forge-muted)] opacity-0 transition-opacity hover:bg-[var(--forge-surface-2)] hover:text-[var(--forge-text)] group-hover:opacity-100"
+                    title="Abrir em..."
+                    aria-label={`Abrir ${p.name} em...`}
+                    onClick={(e) => e.preventDefault()}
+                  >
+                    <MoreVertical className="size-4" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem asChild>
+                    <Link to="/agents/$agentId" params={{ agentId: p.id }}>
+                      Boardroom
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link to="/agents/visual" params={{}}>
+                      Editor
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link to="/agents/monitoring/$agentId" params={{ agentId: p.id }}>
+                      Monitoring
+                    </Link>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+              <Link
+                to="/agents/$agentId"
+                params={{ agentId: p.id }}
+                className="block h-full w-full"
+              >
+                <div className="dashboard-project-thumb">
+                  <ForgeIcon variant="agent" size={22} className="text-[var(--forge-ghost)]" />
+                </div>
+                <div className="dashboard-project-meta">
+                  <p className="dashboard-project-name">{p.name}</p>
+                  <p className="dashboard-project-date">
+                    Editado {formatRelative(p.updated_at ?? p.created_at)}
+                  </p>
+                </div>
+              </Link>
+            </div>
           ))}
         </div>
       </section>

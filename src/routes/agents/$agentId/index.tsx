@@ -11,22 +11,13 @@ const FlowAgentBuilderView = lazy(
   () => import("@/components/forge-agents/FlowAgentBuilderView")
 );
 
-type AgentEditorSearch = {
-  open?: "flow";
-};
-
 export const Route = createFileRoute("/agents/$agentId/")({
   component: AgentEditorPage,
-  validateSearch: (search: Record<string, unknown>): AgentEditorSearch => {
-    const open = search.open === "flow" ? "flow" : undefined;
-    return open ? { open } : {};
-  },
   ssr: false,
 });
 
 function AgentEditorPage() {
   const { agentId } = Route.useParams();
-  const { open } = Route.useSearch();
   const [immersiveActive, setImmersiveActive] = useState(false);
 
   const { data: agent, isLoading, error } = useQuery({
@@ -110,7 +101,6 @@ function AgentEditorPage() {
               <FlowAgentBuilderView
                 projectId={agentId}
                 projectName={agent.name}
-                initialOpenFlow={open === "flow"}
                 onImmersiveChange={setImmersiveActive}
                 initialPrompt={
                   typeof (agent.meta as Record<string, unknown> | null)?.initialPrompt === "string"

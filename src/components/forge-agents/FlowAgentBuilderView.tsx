@@ -1,6 +1,6 @@
 /**
  * FlowAgentBuilderView — Orchestrator with useReducer state machine
- * Phases: home → boardroom → architecture_brief → building → review → builder → monitoring
+ * Phases: home → boardroom → architecture_brief → building → review → builder
  * Onboarding removido — fluxo vai direto para boardroom (T30)
  */
 import { lazy, Suspense, useCallback, useEffect, useReducer, useState, useMemo, useRef } from "react";
@@ -44,10 +44,6 @@ const PrometheusStreamingPage = lazy(() =>
 
 const PrometheusReview = lazy(() =>
   import("@/components/forge-prometheus/PrometheusReview").then(m => ({ default: m.PrometheusReview }))
-);
-
-const AgentMonitoringDashboard = lazy(() =>
-  import("./monitoring/AgentMonitoringDashboard").then(m => ({ default: m.AgentMonitoringDashboard }))
 );
 
 // ═══ HELPERS ═══
@@ -112,8 +108,6 @@ export interface FlowAgentBuilderViewProps {
   projectName?: string;
   /** De projects.meta.initialPrompt (dashboard / CreateAgentDialog). */
   initialPrompt?: string | null;
-  /** Dashboard link Fluxo Visual: abre React Flow ao entrar. */
-  initialOpenFlow?: boolean;
   onImmersiveChange?: (active: boolean) => void;
 }
 
@@ -128,7 +122,6 @@ export default function FlowAgentBuilderView({
   projectId,
   projectName,
   initialPrompt,
-  initialOpenFlow = false,
   onImmersiveChange,
 }: FlowAgentBuilderViewProps) {
   const {
@@ -144,16 +137,6 @@ export default function FlowAgentBuilderView({
   purgeOrphanPrometheusStorageOnce();
 
   const [pipeline, dispatch] = useReducer(prometheusReducer, initialPrometheusPipelineState, (init) => {
-    // Se estamos abrindo direto pro FlowBuilder (initialOpenFlow=true),
-    // NAO restaurar fase salva do localStorage — isso causava duplo
-    // carregamento (boardroom + builder renderizavam juntos).
-    if (initialOpenFlow) {
-      try {
-        removePsPipelineField(projectId, "phase");
-        removePsPipelineField(projectId, "flow_id");
-      } catch {}
-      return init;
-    }
     try {
       const savedPhase = readPsPipelineField(projectId, "phase");
       const savedFlowId = readPsPipelineField(projectId, "flow_id");
@@ -185,14 +168,6 @@ export default function FlowAgentBuilderView({
   const skipHomePrompt = !!initialPrompt?.trim();
   const autoLaunchRef = useRef(false);
   const [autoLaunching, setAutoLaunching] = useState(skipHomePrompt);
-
-  // "Fluxo Visual" → editor vazio. NUNCA reaproveita flow existente.
-  const [emptyBuilderOpen, setEmptyBuilderOpen] = useState(false);
-  const [emptyBuilderFlowId, setEmptyBuilderFlowId] = useState<string | null>(null);
-  // Ref paralela: outros useEffects (ex: handleGoHome) precisam ver o valor
-  // atualizado imediatamente, sem o lag do useState. Sem isso, o handleGoHome
-  // dispara o redirect antes do setEmptyBuilderOpen propagar.
-  const emptyBuilderOpenRef = useRef(false);
 
   // Persist phase
   const setPhase = useCallback((p: PrometheusUIPhase) => {
@@ -255,45 +230,14 @@ export default function FlowAgentBuilderView({
     onImmersiveChange?.(IMMERSIVE_PHASES.has(phase) || builderOpen);
   }, [phase, builderOpen, onImmersiveChange]);
 
-  // Dashboard Fluxo Visual → abre editor React Flow VIRGEM.
-  // NUNCA reaproveita o draft existente: o user abre agente antigo via
-  // dropdown "Meus agentes" no FlowToolbar se quiser.
-  useEffect(() => {
-    if (!initialOpenFlow || loading || autoLaunching) return;
-    setEmptyBuilderOpen(true);
-    emptyBuilderOpenRef.current = true;
-  }, [initialOpenFlow, loading, autoLaunching]);
-
-  const handleEmptyBuilderClose = useCallback(() => {
-    setEmptyBuilderOpen(false);
-    setEmptyBuilderFlowId(null);
-    emptyBuilderOpenRef.current = false;
-    setAutoLaunching(false);
-    setPhase("home");
-  }, [setPhase]);
-
-  const handleEmptyBuilderFlowIdChange = useCallback((newId: string) => {
-    // Apos salvar um flow novo, atualiza o id interno para que o editor
-    // continue exibindo o flow correto. Nao fecha o builder.
-    setEmptyBuilderFlowId(newId);
-  }, []);
-
   // Home sem prompt → redireciona para dashboard (protótipo arquivado)
-  // IMPORTANTE: nao disparar quando "Fluxo Visual" esta ativo — senao
-  // redireciona o user pra /agents antes do editor vazio montar.
-  // Usamos emptyBuilderOpenRef (sincrono) em vez de emptyBuilderOpen (state)
-  // porque useState tem lag de 1 render e o useEffect do initialOpenFlow
-  // pode nao ter propagado ainda.
   useEffect(() => {
     if (phase !== "home" || loading || autoLaunching || skipHomePrompt) return;
-    if (initialOpenFlow) return;
-    if (emptyBuilderOpen || emptyBuilderOpenRef.current) return;
     handleGoHome();
-  }, [phase, loading, autoLaunching, skipHomePrompt, initialOpenFlow, emptyBuilderOpen]);
+  }, [phase, loading, autoLaunching, skipHomePrompt]);
 
   // Dashboard prompt → boardroom direto (sem PrometheusHome duplicado)
   useEffect(() => {
-    if (initialOpenFlow) return;
     if (!skipHomePrompt || loading || autoLaunchRef.current || phase !== "home") return;
 
     const prompt = hydratedPrompt.trim();
@@ -489,11 +433,6 @@ export default function FlowAgentBuilderView({
 
     handleOpenBuilder();
   }, [pipeline.flowId, handleOpenBuilder]);
-
-  const handleOpenMonitoring = useCallback(() => {
-    setWorkflowPhase(undefined);
-    setPhase("monitoring");
-  }, [setPhase]);
 
   const navigate = useNavigate();
   const handleGoHome = useCallback(() => {
@@ -768,36 +707,10 @@ export default function FlowAgentBuilderView({
 
   // ═══ PHASE RENDERING ═══
 
-  const showPhaseHeader = !["home", "monitoring", "boardroom"].includes(phase);
-
-  if (phase === "monitoring") {
-    return (
-      <div className={`${fullScreenClass} overflow-hidden`} data-prometheus-theme={prometheusTheme}>
-        <Suspense fallback={loader}>
-          <AgentMonitoringDashboard onBack={handleGoHome} />
-        </Suspense>
-      </div>
-    );
-  }
+  const showPhaseHeader = !["home", "boardroom"].includes(phase);
 
   // "Fluxo Visual" → editor vazio, sem boardroom/phase-header por baixo.
   // Tem prioridade sobre o builder de edicao (selectedFlowId).
-  if (emptyBuilderOpen) {
-    return (
-      <div className={fullScreenClass} data-prometheus-theme={prometheusTheme}>
-        <Suspense fallback={loader}>
-          <FlowBuilderDialog
-            flowId={emptyBuilderFlowId}
-            projectId={projectId}
-            open={emptyBuilderOpen}
-            onClose={handleEmptyBuilderClose}
-            onFlowIdChange={handleEmptyBuilderFlowIdChange}
-          />
-        </Suspense>
-      </div>
-    );
-  }
-
   // Se o builder esta aberto (ex: veio de fase de review), renderiza SO ele,
   // sem o boardroom/phase-header por baixo.
   if (builderOpen && selectedFlowId) {

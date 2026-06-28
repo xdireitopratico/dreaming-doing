@@ -1,0 +1,89 @@
+/**
+ * /agents/monitoring/$agentId — Monitoring standalone (fora do boardroom).
+ *
+ * Renderiza direto <AgentMonitoringDashboard> sem passar pelo
+ * FlowAgentBuilderView. O Monitoring perdeu o caminho da pagina
+ * deprecada (home do /agents/$agentId) e virou rota independente.
+ *
+ * O header (Monitoramento + periodos) ja vem dentro do proprio
+ * AgentMonitoringDashboard, entao nao adicionamos outro aqui.
+ */
+import { lazy, Suspense, useCallback } from "react";
+import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
+import { useQuery } from "@tanstack/react-query";
+import { Loader2 } from "lucide-react";
+import { DashboardShell } from "@/components/dashboard/DashboardShell";
+import { supabase } from "@/integrations/supabase/client";
+import { isAgentProject, type ProjectKind } from "@/lib/project-kind";
+import { PrometheusLoadingSkeleton } from "@/components/forge-prometheus/PrometheusLoadingSkeleton";
+
+const AgentMonitoringDashboard = lazy(
+  () => import("@/components/forge-agents/monitoring/AgentMonitoringDashboard").then(m => ({ default: m.AgentMonitoringDashboard }))
+);
+
+export const Route = createFileRoute("/agents/monitoring/$agentId")({
+  component: AgentMonitoringPage,
+  ssr: false,
+});
+
+function AgentMonitoringPage() {
+  const { agentId } = Route.useParams();
+  const navigate = useNavigate();
+
+  const { data: agent, isLoading, error } = useQuery({
+    queryKey: ["agent-project", agentId],
+    queryFn: async () => {
+      const { data, error: qErr } = await supabase
+        .from("projects")
+        .select("id, name, description, kind, meta")
+        .eq("id", agentId)
+        .maybeSingle();
+      if (qErr) throw qErr;
+      if (
+        !data ||
+        !isAgentProject({
+          kind: data.kind as ProjectKind,
+          meta: data.meta as Record<string, unknown> | null,
+        })
+      ) {
+        return null;
+      }
+      return data;
+    },
+  });
+
+  const handleBack = useCallback(() => {
+    void navigate({ to: "/agents" });
+  }, [navigate]);
+
+  return (
+    <DashboardShell requireAuth activeNav="agents">
+      <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
+        <main className="h-full min-h-0 flex-1 overflow-hidden">
+          {isLoading && (
+            <div className="grid h-full place-items-center">
+              <Loader2 className="size-6 animate-spin text-[var(--forge-primary)]" />
+            </div>
+          )}
+          {!isLoading && (error || !agent) && (
+            <div className="grid h-full place-items-center p-6">
+              <div className="max-w-md text-center">
+                <p className="text-sm text-[var(--forge-muted)]">
+                  {error instanceof Error ? error.message : "Agente não encontrado."}
+                </p>
+                <Link to="/agents" className="mt-4 inline-block text-sm text-[var(--forge-primary)]">
+                  Voltar para AI Agents
+                </Link>
+              </div>
+            </div>
+          )}
+          {!isLoading && agent && (
+            <Suspense fallback={<PrometheusLoadingSkeleton />}>
+              <AgentMonitoringDashboard onBack={handleBack} />
+            </Suspense>
+          )}
+        </main>
+      </div>
+    </DashboardShell>
+  );
+}
