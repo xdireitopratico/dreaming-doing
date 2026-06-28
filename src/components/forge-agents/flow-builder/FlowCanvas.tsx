@@ -5,6 +5,7 @@
 import { memo, useCallback, useEffect, useMemo } from "react";
 import { injectN8nNodeAnimations } from "./nodes/BaseNode";
 import { injectNodeToolbarStyles } from "./nodes/NodeToolbar";
+import type { NodeStatus } from "./nodes/CanvasNodeStatusIcons";
 import {
   ReactFlow, ReactFlowProvider, Background, Controls, MiniMap,
   useReactFlow, addEdge,
@@ -84,6 +85,8 @@ interface FlowCanvasProps {
   registerChatToggle?: (fn: () => void) => void;
   registerChatCollapse?: (fn: () => void) => void;
   onChatOpenChange?: (open: boolean) => void;
+  /** Map of node ID → execution status (set externally from runtime) */
+  nodeStatusMap?: Record<string, NodeStatus>;
 }
 
 export const FlowCanvas = memo(function FlowCanvas({
@@ -93,16 +96,24 @@ export const FlowCanvas = memo(function FlowCanvas({
   onRegisterFitView,
   flowId, chatEnabled = false, onApplyPatch, onHighlightNodes,
   registerChatToggle, registerChatCollapse, onChatOpenChange,
+  nodeStatusMap,
 }: FlowCanvasProps) {
   // Inject n8n node CSS animations once
   useEffect(() => { injectN8nNodeAnimations(); injectNodeToolbarStyles(); }, []);
 
   const displayNodes = useMemo(() =>
-    nodes.map((n) => ({
-      ...n,
-      className: highlightedNodeId === n.id ? "ring-4 ring-primary ring-offset-2 rounded-lg" : "",
-    })),
-    [nodes, highlightedNodeId]
+    nodes.map((n) => {
+      const execStatus = nodeStatusMap?.[n.id] ?? (n.data as Record<string, unknown>)?.status as string | undefined;
+      return {
+        ...n,
+        data: {
+          ...n.data,
+          ...(execStatus ? { status: execStatus } : {}),
+        },
+        className: highlightedNodeId === n.id ? "ring-4 ring-primary ring-offset-2 rounded-lg" : "",
+      };
+    }),
+    [nodes, highlightedNodeId, nodeStatusMap]
   );
 
   const onConnect = useCallback((params: Connection) => {

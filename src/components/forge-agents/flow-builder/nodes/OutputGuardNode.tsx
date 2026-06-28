@@ -1,5 +1,5 @@
 import { type NodeProps } from "@/types/xyflow-react-shim";
-import { BaseNode } from "./BaseNode";
+import { BaseNode, resolveNodeStatus } from "./BaseNode";
 import { getNodeIconSource } from "./NodeIcon";
 
 const RULE_LABELS: Record<string, string> = {
@@ -16,7 +16,7 @@ export function OutputGuardNode({ data, selected }: NodeProps) {
     ? (typeof rules[0] === "string" ? (rules as string[]).map(r => ({ id: r, enabled: true })) : rules.filter(r => r.enabled))
     : [];
   return (
-    <BaseNode selected={selected} icon={getNodeIconSource("output_guard")} label="Output Guard"
+    <BaseNode selected={selected} icon={getNodeIconSource("output_guard")} label="Output Guard" status={resolveNodeStatus(data)}
       subtitle={`${enabledRules.length} regra(s) ativa(s)`}>
       {enabledRules.length > 0 && (
         <div className="absolute top-full mt-7 left-1/2 -translate-x-1/2 w-40 flex flex-wrap justify-center gap-0.5">

@@ -1,5 +1,5 @@
 import { type NodeProps } from "@/types/xyflow-react-shim";
-import { BaseNode } from "./BaseNode";
+import { BaseNode, resolveNodeStatus } from "./BaseNode";
 import { getNodeIconSource } from "./NodeIcon";
 
 export function TriggerNode({ data, selected }: NodeProps) {
@@ -8,6 +8,7 @@ export function TriggerNode({ data, selected }: NodeProps) {
   const cron = config.cron_expression;
   return (
     <BaseNode cardType="trigger" selected={selected} icon={getNodeIconSource("trigger")}
-      label="Trigger" subtitle={cron ? `${channel} · ⏱ ${cron}` : channel} showTarget={false} />
+      label="Trigger" subtitle={cron ? `${channel} · ⏱ ${cron}` : channel} showTarget={false}
+      status={resolveNodeStatus(data)} />
   );
 }

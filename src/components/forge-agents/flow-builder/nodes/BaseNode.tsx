@@ -19,6 +19,14 @@ import { type NodeStatus, NodeStatusIcon } from "./CanvasNodeStatusIcons";
 import { NodeToolbar } from "./NodeToolbar";
 import { SettingsIcons } from "./SettingsIcons";
 
+/** Extract status from a ReactFlow node's data (supports both camelCase status and runtime injection). */
+export function resolveNodeStatus(data: unknown): NodeStatus {
+  const d = data as Record<string, unknown> | undefined;
+  const raw = d?.status ?? d?.execution_status ?? "idle";
+  const allowed: NodeStatus[] = ["idle","success","error","running","waiting","disabled","pinned","warning"];
+  return allowed.includes(raw as NodeStatus) ? (raw as NodeStatus) : "idle";
+}
+
 export type CardType = "default" | "trigger" | "configuration" | "configurable" | "placeholder";
 
 interface BaseNodeProps {

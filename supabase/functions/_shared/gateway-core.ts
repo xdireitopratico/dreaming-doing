@@ -8,6 +8,7 @@ import { evaluateCondition, type ConditionConfig } from "./condition-evaluator.t
 import { applyOutputGuards, type GuardConfig } from "./output-guards.ts";
 import { checkAllProviders } from "./provider-health.ts";
 import { forgeOrigin } from "./cors.ts";
+import { validateNodeConfig } from "./node-schemas.ts";
 
 // Re-export executors from dedicated files
 export { executeLLMNode } from "./executor-llm.ts";
@@ -43,6 +44,21 @@ export class HITLPauseSignal extends Error {
 export function executeNodeInline(node: any, input: any, originalMessage: string): any {
   const config = node.data?.config || {};
   const nodeType = node.type;
+
+  // Validate config against shared schema before executing
+  const validation = validateNodeConfig(nodeType, config);
+  if (!validation.success) {
+    console.error(
+      `[Gateway] Config validation failed for node ${node.id} (type: ${nodeType}): ${validation.error.message}`,
+    );
+    return {
+      error: `Config validation failed: ${validation.error.message}`,
+      node_id: node.id,
+      node_type: nodeType,
+      status: "validation_error",
+      fallback: true,
+    };
+  }
 
   switch (nodeType) {
     case "trigger":
