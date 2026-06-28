@@ -45,7 +45,7 @@ export function WarningMark({ size = 16 }: StatusIconProps) {
 
 export function RunningSpinner({ size = 16 }: StatusIconProps) {
   return (
-      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" className="text-amber-500 animate-spin">
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" className="text-blue-500 animate-spin">
       <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" opacity="0.2" />
       <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
     </svg>
@@ -63,7 +63,7 @@ export function DisabledPower({ size = 16 }: StatusIconProps) {
 
 export function PinnedMark({ size = 16 }: StatusIconProps) {
   return (
-      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" className="text-amber-400">
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" className="text-blue-400">
       <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );

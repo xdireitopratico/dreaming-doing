@@ -21,8 +21,8 @@ export const SettingsIcons: FC<SettingsIconsProps> = ({
   alwaysOutputData, executeOnce, retryOnFail, continueOnError,
 }) => {
   const icons: Array<{ show?: boolean; color: string; title: string }> = [
-    { show: alwaysOutputData, color: "#fbbf24", title: "Sempre emitir dados" },
-    { show: executeOnce, color: "#fbbf24", title: "Executar uma vez" },
+    { show: alwaysOutputData, color: "#5555aa", title: "Sempre emitir dados" },
+    { show: executeOnce, color: "#3b82f6", title: "Executar uma vez" },
     { show: retryOnFail, color: "#f59e0b", title: "Retentar em falha" },
     { show: continueOnError, color: "#ef4444", title: "Continuar em erro" },
   ];

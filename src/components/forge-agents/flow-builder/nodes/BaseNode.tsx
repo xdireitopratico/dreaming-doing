@@ -119,7 +119,7 @@ function borderStyle(status: NodeStatus, selected: boolean): string {
   switch (status) {
     case "success": return "2px solid rgb(34 197 94)";
     case "error": return "1.5px solid rgb(239 68 68 / 0.6)";
-    case "pinned": return "2px solid #fbbf24";
+    case "pinned": return "2px solid #5555aa";
     case "warning": return "2px solid #f59e0b";
     case "running":
     case "waiting":
@@ -142,7 +142,7 @@ function renderHandles(
   if (num <= 0) return null;
 
   const oppositePos = mainPosition === Position.Top ? Position.Bottom : Position.Top;
-  const style = "!w-3 !h-3 !border-2 !border-[#1a1a2e] !bg-[var(--ps-accent,#fbbf24)]";
+  const style = "!w-3 !h-3 !border-2 !border-[#1a1a2e] !bg-[#5555aa]";
 
   return (
     <>
@@ -200,7 +200,7 @@ export function BaseNode({
 
       {/* Card */}
       <div
-        className={`relative flex items-center justify-center bg-[linear-gradient(135deg,#1a1e27,#0b0d12)] shadow-lg transition-shadow duration-150 hover:shadow-white/5 ${
+        className={`relative flex items-center justify-center bg-[#1a1a2e] shadow-lg transition-shadow duration-150 hover:shadow-white/5 ${
           cardType === "placeholder" ? "node-placeholder" : ""
         } ${selected ? "node-selected" : ""} ${
           status === "running" ? "node-running" : ""
@@ -225,7 +225,7 @@ export function BaseNode({
             style={{
               padding: "1.5px",
               borderRadius: radius,
-              background: `conic-gradient(from var(--node-gradient-angle, 0deg), transparent 0deg, #fbbf24 90deg, #f59e0b 180deg, transparent 270deg, transparent 360deg)`,
+              background: `conic-gradient(from var(--node-gradient-angle, 0deg), transparent 0deg, #5555aa 90deg, #8888ff 180deg, transparent 270deg, transparent 360deg)`,
               WebkitMask: "linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)",
               WebkitMaskComposite: "xor",
               maskComposite: "exclude",
@@ -333,16 +333,16 @@ export function injectN8nNodeAnimations() {
       box-shadow: 0 0 0 1px rgba(239,68,68,0.2);
     }
     .node-pinned {
-      box-shadow: 0 0 0 1px rgba(251,191,36,0.3);
+      box-shadow: 0 0 0 1px rgba(85,85,170,0.3);
     }
     .node-warning {
       box-shadow: 0 0 0 1px rgba(245,158,11,0.2);
     }
     .node-running {
-      box-shadow: 0 0 8px rgba(251,191,36,0.3);
+      box-shadow: 0 0 8px rgba(85,85,170,0.3);
     }
     .node-waiting {
-      box-shadow: 0 0 8px rgba(251,191,36,0.15);
+      box-shadow: 0 0 8px rgba(85,85,170,0.15);
     }
     .node-placeholder {
       border: 2px dashed rgba(255,255,255,0.15) !important;
@@ -350,7 +350,7 @@ export function injectN8nNodeAnimations() {
       cursor: pointer;
     }
     .node-placeholder:hover {
-      border-color: var(--ps-accent, #fbbf24) !important;
+      border-color: var(--ps-primary, #3b82f6) !important;
     }
     .node-placeholder:not(:hover) .node-icon-color {
       color: rgba(255,255,255,0.3);

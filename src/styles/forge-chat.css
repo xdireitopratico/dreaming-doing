@@ -179,13 +179,13 @@
   margin-bottom: 6px;
 }
 
-/* User message — bolha com degradê canônico Tema A */
+/* User message — bolha cinza arredondada (referência Lovable img 4/15) */
 .forge-msg-user {
   max-width: min(88%, 520px);
   padding: 10px 14px;
   border-radius: 12px 12px 12px 4px;
   border: 1px solid var(--forge-border, rgba(237, 239, 242, 0.08));
-  background: linear-gradient(135deg, #1a1e27, #0b0d12);
+  background: var(--forge-surface-2, #12151c);
   color: var(--text-primary);
   font-size: 14px;
   line-height: 1.5;

@@ -16,13 +16,13 @@ import { ForgeEdgeToolbar } from "./ForgeEdgeToolbar";
 import { useFlowCanvas } from "../FlowCanvasContext";
 
 const STATUS_COLORS: Record<string, string> = {
-  running: "#fbbf24",
+  running: "#3b82f6",
   success: "#22c55e",
   error: "#ef4444",
   waiting: "#f59e0b",
-  idle: "hsl(var(--ps-accent))",
+  idle: "hsl(var(--primary))",
 };
-const DEFAULT_COLOR = "hsl(var(--ps-accent))";
+const DEFAULT_COLOR = "hsl(var(--primary))";
 const HOVER_DELAY = 600;
 
 export const ForgeEdge: FC<EdgeProps> = ({
@@ -134,7 +134,7 @@ export const ForgeEdge: FC<EdgeProps> = ({
             <div
               className={`px-2 py-0.5 rounded-full text-[10px] font-medium border shadow-sm cursor-pointer transition-all ${
                 selected
-                  ? "ring-2 ring-amber-400/30 bg-background"
+                  ? "ring-2 ring-primary/30 bg-background"
                   : "bg-background/90 hover:bg-background"
               }`}
               style={{ borderColor: color, color }}
