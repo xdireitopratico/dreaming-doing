@@ -10,6 +10,8 @@ interface ShortcutActions {
   onUndo: () => void;
   onRedo: () => void;
   onDelete: () => void;
+  onCopy?: () => void;
+  onPaste?: () => void;
   onCommandPalette: () => void;
   onEscape: () => void;
   onToggleTest: () => void;
@@ -94,6 +96,20 @@ export function useFlowShortcuts({ enabled, actions }: UseFlowShortcutsOptions) 
       if (mod && e.shiftKey && e.key === "F") {
         e.preventDefault();
         actions.onFitView();
+        return;
+      }
+
+      // Copy — Ctrl/Cmd+C
+      if (mod && e.key === "c" && !e.shiftKey) {
+        e.preventDefault();
+        actions.onCopy?.();
+        return;
+      }
+
+      // Paste — Ctrl/Cmd+V
+      if (mod && e.key === "v" && !e.shiftKey) {
+        e.preventDefault();
+        actions.onPaste?.();
         return;
       }
 

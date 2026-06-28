@@ -94,6 +94,7 @@ export function FlowBuilderDialog({ flowId, projectId, open, onClose, onFlowIdCh
       case "delete": s.handleDelete(); break;
       case "select_all": s.handleSelectAll(); break;
       case "duplicate": s.handleDuplicate(); break;
+      case "copy": s.handleCopy(); break;
       case "toggle": s.handleToggleDisabled(); break;
       case "open":
         if (s.selectedNode) s.setSelectedNode(s.selectedNode);
@@ -146,7 +147,9 @@ export function FlowBuilderDialog({ flowId, projectId, open, onClose, onFlowIdCh
     onToggleDebug: () => s.togglePanel("debug"),
     onSelectAll: s.handleSelectAll,
     onFitView: () => fitViewCallbackRef.current?.(),
-  }), [handleSaveAndPropagate, checkCredentials, s.handleUndo, s.handleRedo, s.handleDelete, s.closePanel, s.togglePanel, s.handleSelectAll, handleChatEscape]);
+    onCopy: s.handleCopy,
+    onPaste: s.handlePaste,
+  }), [handleSaveAndPropagate, checkCredentials, s.handleUndo, s.handleRedo, s.handleDelete, s.closePanel, s.togglePanel, s.handleSelectAll, handleChatEscape, s.handleCopy, s.handlePaste]);
 
   useFlowShortcuts({ enabled: open, actions: shortcutActions });
 

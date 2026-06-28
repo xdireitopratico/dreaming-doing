@@ -361,6 +361,40 @@ export function useFlowBuilderState(flowId: string | null, open: boolean, projec
     ));
   }, [selectedNode, setNodes]);
 
+  const handleCopy = useCallback(async () => {
+    if (!selectedNode) return;
+    const payload = JSON.stringify({ type: "forge-flow-nodes", nodes: [selectedNode], edges: [] });
+    try {
+      await navigator.clipboard.writeText(payload);
+    } catch {
+      // Fallback for non-HTTPS environments
+      const ta = document.createElement("textarea");
+      ta.value = payload;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      document.body.removeChild(ta);
+    }
+  }, [selectedNode]);
+
+  const handlePaste = useCallback(async () => {
+    try {
+      const text = await navigator.clipboard.readText();
+      const data = JSON.parse(text);
+      if (data.type !== "forge-flow-nodes" || !data.nodes?.length) return;
+      const offset = { x: 80, y: 80 };
+      const newNodes = data.nodes.map((n: any) => ({
+        ...n,
+        id: `${n.type}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+        position: { x: n.position.x + offset.x, y: n.position.y + offset.y },
+        selected: true,
+      }));
+      setNodes((nds) => [...nds, ...newNodes]);
+    } catch {
+      // silent — not clipboard content or parse error
+    }
+  }, [setNodes]);
+
   return {
     // Flow data
     nodes, edges, setNodes, setEdges, onNodesChange, onEdgesChange,
@@ -381,6 +415,7 @@ export function useFlowBuilderState(flowId: string | null, open: boolean, projec
     handleSave, handlePublish, handleUndo, handleRedo,
     handleRollback, handleApplyTemplate, handleApplyPatch, handleHighlightNodes,
     handleDelete, handleSelectAll, handleDuplicate, handleToggleDisabled,
+    handleCopy, handlePaste,
     onNodeClick, onEdgeClick, onPaneClick,
     handleNodeUpdate, handleEdgeUpdate,
     // Controla o load automatico quando o flowId muda externamente.
