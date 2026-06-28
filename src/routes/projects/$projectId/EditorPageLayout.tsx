@@ -292,6 +292,11 @@ export function EditorPageLayout({
 
   const prevInspectorRunRef = useRef<string | null>(null);
   const autoOpenedInspectorRunRef = useRef<string | null>(null);
+  const inspectorLiveRunRef = useRef<{ runId: string | null; sawLive: boolean; startedAtMs: number | null }>({
+    runId: null,
+    sawLive: false,
+    startedAtMs: null,
+  });
 
   useEffect(() => {
     const rid = agent.activeRunId;
@@ -302,6 +307,19 @@ export function EditorPageLayout({
       prevInspectorRunRef.current = rid;
     }
   }, [agent.activeRunId, clearInspectorDismissed]);
+
+  useEffect(() => {
+    const runId = jobWorkspaceFocus?.runId ?? null;
+    if (inspectorLiveRunRef.current.runId !== runId) {
+      inspectorLiveRunRef.current = { runId, sawLive: false, startedAtMs: null };
+    }
+    if (runId && agent.activeRunId === runId) {
+      inspectorLiveRunRef.current.sawLive = true;
+      if (agent.activeRunStartedAtMs != null) {
+        inspectorLiveRunRef.current.startedAtMs = agent.activeRunStartedAtMs;
+      }
+    }
+  }, [jobWorkspaceFocus?.runId, agent.activeRunId, agent.activeRunStartedAtMs]);
 
   useEffect(() => {
     const runId = agent.activeRunId;
@@ -340,10 +358,13 @@ export function EditorPageLayout({
   const focusedJobProgress = useMemo((): AgentProgress | null => {
     if (!jobWorkspaceFocus) return null;
     const { runId } = jobWorkspaceFocus;
+    const runWasLive =
+      inspectorLiveRunRef.current.runId === runId && inspectorLiveRunRef.current.sawLive;
     return resolveInspectorRunProgress(runId, chatMessages, {
       activeRunId: agent.activeRunId,
       liveProgress: agent.progress,
       frozenProgress: agent.getFrozenRunProgress(runId),
+      runWasLive,
     });
   }, [
     jobWorkspaceFocus,
@@ -353,6 +374,28 @@ export function EditorPageLayout({
     agent.getFrozenRunProgress,
     agent.frozenProgressTick,
   ]);
+
+  const focusedJobRunning = useMemo(() => {
+    if (!jobWorkspaceFocus || !focusedJobProgress) return false;
+    if (agent.activeRunId === jobWorkspaceFocus.runId) return running;
+    return (
+      inspectorLiveRunRef.current.runId === jobWorkspaceFocus.runId &&
+      inspectorLiveRunRef.current.sawLive &&
+      !focusedJobProgress.finished
+    );
+  }, [agent.activeRunId, focusedJobProgress, jobWorkspaceFocus, running]);
+
+  const focusedJobRunStartedAtMs = useMemo(() => {
+    if (!jobWorkspaceFocus) return null;
+    if (agent.activeRunId === jobWorkspaceFocus.runId) return agent.activeRunStartedAtMs;
+    if (
+      inspectorLiveRunRef.current.runId === jobWorkspaceFocus.runId &&
+      inspectorLiveRunRef.current.sawLive
+    ) {
+      return inspectorLiveRunRef.current.startedAtMs;
+    }
+    return null;
+  }, [agent.activeRunId, agent.activeRunStartedAtMs, jobWorkspaceFocus]);
 
   const focusedInspectorPlan = useMemo(() => {
     if (!jobWorkspaceFocus) return null;
@@ -638,7 +681,7 @@ export function EditorPageLayout({
                             <JobInspector
                               run={focusedJobProgress}
                               runId={jobWorkspaceFocus.runId}
-                              running={running && agent.activeRunId === jobWorkspaceFocus.runId}
+                              running={focusedJobRunning}
                               activeTab={jobWorkspaceFocus.tab}
                               messages={chatMessages}
                               livePendingPlan={
@@ -672,11 +715,7 @@ export function EditorPageLayout({
                                   el?.focus();
                                 });
                               }}
-                              runStartedAtMs={
-                                agent.activeRunId === jobWorkspaceFocus.runId
-                                  ? agent.activeRunStartedAtMs
-                                  : null
-                              }
+                              runStartedAtMs={focusedJobRunStartedAtMs}
                               fullWidth
                             />
                           </div>

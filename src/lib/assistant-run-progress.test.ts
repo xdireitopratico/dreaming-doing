@@ -240,6 +240,40 @@ describe("assistant-run-progress", () => {
     expect(progressTimelineWeight(null)).toBe(0);
   });
 
+  it("resolveInspectorRunProgress mantém live enquanto o run foi vivo e ainda não terminou", () => {
+    const live = {
+      ...initialAgentProgress,
+      finished: false,
+      timeline: [{ type: "explore", data: { message: "Lendo arquivos" }, timestamp: 1 }],
+    };
+    const frozen = {
+      ...initialAgentProgress,
+      finished: true,
+      timeline: [{ type: "explore", data: { message: "Snapshot antigo" }, timestamp: 1 }],
+    };
+    const weakDbMsg: ChatMessage = {
+      id: "a1",
+      role: "assistant",
+      content: "Feito.",
+      timestamp: 0,
+      meta: {
+        runId: "run-stable",
+        partial: false,
+        finishedAt: "2026-01-01T00:00:00Z",
+        cardSnapshot: { timeline: [], tools: [], finished: true },
+      },
+    };
+
+    expect(
+      resolveInspectorRunProgress("run-stable", [weakDbMsg], {
+        activeRunId: null,
+        liveProgress: live,
+        frozenProgress: frozen,
+        runWasLive: true,
+      })?.timeline,
+    ).toHaveLength(1);
+  });
+
   it("inspectorProgressWeight considera tools quando timeline vazia", () => {
     const toolsOnly = {
       ...initialAgentProgress,

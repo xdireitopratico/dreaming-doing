@@ -408,6 +408,7 @@ export function useEditorPageHandlers({
           projectId,
           kind,
           agentBusy,
+          pendingTurnActive: agent.isPendingRun,
           queuePaused: agent.queuePaused,
         },
         {

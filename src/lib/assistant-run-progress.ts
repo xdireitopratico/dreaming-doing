@@ -148,9 +148,11 @@ export function resolveInspectorRunProgress(
     activeRunId: string | null;
     liveProgress: AgentProgress;
     frozenProgress?: AgentProgress | null;
+    runWasLive?: boolean;
   },
 ): AgentProgress | null {
   if (opts.activeRunId === runId) return opts.liveProgress;
+  if (opts.runWasLive === true && !opts.liveProgress.finished) return opts.liveProgress;
 
   const historical = resolveHistoricalRunProgress(runId, messages);
   const frozen = opts.frozenProgress ?? null;

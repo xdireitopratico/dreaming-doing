@@ -25,6 +25,7 @@ export type LifecycleHandlersDeps = {
   setActiveRunId: Dispatch<SetStateAction<string | null>>;
   setActiveRunStartedAtMs: Dispatch<SetStateAction<number | null>>;
   setQueueBlockingReason: Dispatch<SetStateAction<string | null>>;
+  clearPendingTurn: () => void;
   teardownChannels: () => void;
   subscribeToRun: (runId: string, opts?: { resetProgress?: boolean }) => Promise<void>;
 };
@@ -96,6 +97,7 @@ export function createLifecycleHandlers(deps: LifecycleHandlersDeps) {
 
       if (!res.ok) {
         const msg = await parseErrorResponse(res);
+        deps.clearPendingTurn();
         deps.setActiveRunStartedAtMs(null);
         deps.setActiveRunId((cur) => (cur === PENDING_RUN_ID ? null : cur));
         deps.setProgress((p) => ({ ...p, error: msg, finished: true }));
@@ -108,6 +110,7 @@ export function createLifecycleHandlers(deps: LifecycleHandlersDeps) {
       const busyInfo = parseAgentBusyResponse(body);
       if (busyInfo) {
         const msg = busyInfo.message ?? "Agente ocupado.";
+        deps.clearPendingTurn();
         deps.setProgress((p) => ({
           ...p,
           finished: true,
@@ -121,6 +124,7 @@ export function createLifecycleHandlers(deps: LifecycleHandlersDeps) {
       }
 
       if (body.queued) {
+        deps.clearPendingTurn();
         deps.setProgress((p) => ({
           ...p,
           finished: true,
@@ -140,6 +144,7 @@ export function createLifecycleHandlers(deps: LifecycleHandlersDeps) {
             dispatchTasteUiAction(action);
           }
         }
+        deps.clearPendingTurn();
         deps.runIdRef.current = null;
         deps.setActiveRunId(null);
         deps.setActiveRunStartedAtMs(null);
@@ -158,6 +163,7 @@ export function createLifecycleHandlers(deps: LifecycleHandlersDeps) {
       const runId = typeof body.runId === "string" ? body.runId : null;
       if (!runId) {
         const msg = "Resposta inválida do servidor";
+        deps.clearPendingTurn();
         deps.setProgress((p) => ({
           ...p,
           error: msg,
@@ -172,6 +178,7 @@ export function createLifecycleHandlers(deps: LifecycleHandlersDeps) {
       return { ok: true };
     } catch (e) {
       const msg = formatAgentFetchError(e);
+      deps.clearPendingTurn();
       deps.teardownChannels();
       deps.setProgress((p) => ({
         ...p,

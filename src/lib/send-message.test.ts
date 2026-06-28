@@ -91,6 +91,31 @@ describe("sendMessage", () => {
     expect(d.runAgent).toHaveBeenCalledWith("byok", "chat");
   });
 
+  it("não inicia novo envio quando já há turno pendente ativo", async () => {
+    const d = deps();
+    const onError = vi.fn();
+
+    await sendMessage(
+      {
+        text: "teste de duplicidade",
+        composerMode: "chat",
+        conversationId: "conv",
+        projectId: "proj",
+        kind: "byok",
+        agentBusy: false,
+        pendingTurnActive: true,
+      },
+      { ...d, onError },
+    );
+
+    expect(d.beginPendingTurn).not.toHaveBeenCalled();
+    expect(d.insertUserMessage).not.toHaveBeenCalled();
+    expect(d.runAgent).not.toHaveBeenCalled();
+    expect(onError).toHaveBeenCalledWith(
+      "Aguarde o turno atual terminar antes de enviar outra mensagem.",
+    );
+  });
+
   it("enfileira sem inserir no chat quando agentBusy", async () => {
     const d = deps();
 
