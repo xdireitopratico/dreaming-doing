@@ -13,6 +13,7 @@ import { ChatComposer } from "./ChatComposer";
 import { ChatQueueDock, type PendingQueueItem } from "./ChatQueueDock";
 import type { PlanStep } from "@/lib/agent-progress";
 import type { useAgentRun } from "@/hooks/useAgentRun";
+import { ChevronDown } from "lucide-react";
 
 type AgentRun = ReturnType<typeof useAgentRun>;
 
@@ -214,9 +215,10 @@ export function ChatPanel({
           <button
             type="button"
             className="forge-new-messages-pill"
+            aria-label="Novas mensagens"
             onClick={followToBottom}
           >
-            Novas mensagens
+            <ChevronDown className="size-4" aria-hidden />
           </button>
         )}
       </div>
