@@ -4,12 +4,12 @@ import { BaseNode, resolveNodeStatus } from "./BaseNode";
 import { getNodeIconSource } from "./NodeIcon";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
-export function ToolNode({ data, selected }: NodeProps) {
+export function ToolNode({ data, selected, id }: NodeProps) {
   const config = (data as Record<string, any>)?.config || {};
   const requiredSecrets: string[] = config.required_secrets || [];
   const hasSecretWarning = requiredSecrets.length > 0;
   return (
-    <BaseNode cardType="configurable" iconContext="canvas" selected={selected} icon={getNodeIconSource("tool")} label="Tool" status={resolveNodeStatus(data)}
+    <BaseNode id={id} cardType="configurable" iconContext="canvas" selected={selected} icon={getNodeIconSource("tool")} label="Tool" status={resolveNodeStatus(data)}
       subtitle={config.tool_display_name || config.tool_name || "Selecionar..."}>
       {hasSecretWarning && (
         <div className="absolute top-full mt-8 left-1/2 -translate-x-1/2 w-40">

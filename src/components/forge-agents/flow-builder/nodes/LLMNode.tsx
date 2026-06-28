@@ -4,7 +4,7 @@ import { BaseNode, resolveNodeStatus } from "./BaseNode";
 import { getNodeIconSource } from "./NodeIcon";
 import { findModel, getProviderForModel } from "../model-catalog-frontend";
 
-export function LLMNode({ data, selected }: NodeProps) {
+export function LLMNode({ data, selected, id }: NodeProps) {
   const config = (data as Record<string, any>)?.config || {};
   const modelId = config.model_id || config.model || "";
   const temp = (config.temperature ?? 0.7).toFixed(1);
@@ -13,7 +13,7 @@ export function LLMNode({ data, selected }: NodeProps) {
   const provider = model ? getProviderForModel(modelId) : null;
   const subtitle = model ? `${provider?.label || "—"} · ${model.label} · ${temp}` : "Selecionar modelo";
   return (
-    <BaseNode cardType="configurable" iconContext="canvas" selected={selected} icon={getNodeIconSource("llm")} label="LLM" subtitle={subtitle}
+    <BaseNode id={id} cardType="configurable" iconContext="canvas" selected={selected} icon={getNodeIconSource("llm")} label="LLM" subtitle={subtitle}
       status={resolveNodeStatus(data)}>
       {isTrial && (
         <div className="absolute -top-1.5 -right-1.5 z-10">

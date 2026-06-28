@@ -2,10 +2,10 @@ import { Handle, Position, type NodeProps } from "@/types/xyflow-react-shim";
 import { BaseNode, resolveNodeStatus } from "./BaseNode";
 import { getNodeIconSource } from "./NodeIcon";
 
-export function HITLNode({ data, selected }: NodeProps) {
+export function HITLNode({ data, selected, id }: NodeProps) {
   const config = (data as Record<string, any>)?.config || {};
   return (
-    <BaseNode cardType="configuration" iconContext="configuration" selected={selected} status={resolveNodeStatus(data)} icon={getNodeIconSource("hitl")} label="Aprovação"
+    <BaseNode id={id} cardType="configuration" iconContext="configuration" selected={selected} status={resolveNodeStatus(data)} icon={getNodeIconSource("hitl")} label="Aprovação"
       subtitle={`timeout: ${config.timeout_minutes ?? 60}min`} showSource={false}>
       <div className="absolute top-full mt-7 left-1/2 -translate-x-1/2 w-20 flex justify-between text-[9px]">
         <span className="text-emerald-500 font-medium">✓ aprovado</span>

@@ -2,11 +2,11 @@ import { Handle, Position, type NodeProps } from "@/types/xyflow-react-shim";
 import { BaseNode, resolveNodeStatus } from "./BaseNode";
 import { getNodeIconSource } from "./NodeIcon";
 
-export function SwitchNode({ data, selected }: NodeProps) {
+export function SwitchNode({ data, selected, id }: NodeProps) {
   const config = (data as Record<string, any>)?.config || {};
   const cases = config.cases || ["case_1", "case_2", "default"];
   return (
-    <BaseNode cardType="configuration" iconContext="configuration" selected={selected} status={resolveNodeStatus(data)} icon={getNodeIconSource("switch")} label="Switch"
+    <BaseNode id={id} cardType="configuration" iconContext="configuration" selected={selected} status={resolveNodeStatus(data)} icon={getNodeIconSource("switch")} label="Switch"
       subtitle={`${cases.length} caso(s)`} showSource={false}>
       <div className="absolute top-full mt-7 left-1/2 -translate-x-1/2 w-40 flex flex-wrap justify-center gap-0.5">
         {cases.map((c: string) => (

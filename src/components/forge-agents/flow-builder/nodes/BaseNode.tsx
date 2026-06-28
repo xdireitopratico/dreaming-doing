@@ -30,6 +30,7 @@ export function resolveNodeStatus(data: unknown): NodeStatus {
 export type CardType = "default" | "trigger" | "configuration" | "configurable" | "placeholder";
 
 interface BaseNodeProps {
+  id: string;
   icon?: NodeIconSource;
   label: string;
   subtitle?: string;
@@ -137,23 +138,24 @@ function renderHandles(
   type: "target" | "source",
   count: boolean | number,
   mainPosition: Position,
+  nodeId: string,
 ) {
   const num = typeof count === "boolean" ? (count ? 1 : 0) : count;
   if (num <= 0) return null;
 
   const oppositePos = mainPosition === Position.Top ? Position.Bottom : Position.Top;
-  const style = "!w-3 !h-3 !border-2 !border-[#1a1a2e] !bg-[var(--ps-accent,#5555aa)]";
+  const style = "!w-3 !h-3 !border-2 !border-[#1a1a2e] !bg-[var(--ps-accent,#fbbf24)]";
 
   return (
     <>
-      <Handle key={`${type}-main`} type={type} position={mainPosition} className={style} />
+      <Handle key={`${type}-main`} id={`${nodeId}-${type}-main`} type={type} position={mainPosition} className={style} />
       {num > 1 &&
         Array.from({ length: num - 1 }, (_, i) => (
           <Handle
             key={`${type}-${i}`}
+            id={`${nodeId}-${type}-${i}`}
             type={type}
             position={oppositePos}
-            id={`${type}-${i}`}
             className={style}
             style={{ left: `${((i + 1) / num) * 100}%` }}
           />
@@ -165,6 +167,7 @@ function renderHandles(
 // ── Component ──
 
 export function BaseNode({
+  id,
   icon, label, subtitle, selected = false, status = "idle", cardType = "default",
   showTarget = true, showSource = true, children, disabled = false,
   iconContext = "canvas",
@@ -196,7 +199,7 @@ export function BaseNode({
         readOnly={readOnly}
       />
 
-      {renderHandles("target", showTarget, targetPosition)}
+      {renderHandles("target", showTarget, targetPosition, id)}
 
       {/* Card */}
       <div
@@ -298,7 +301,7 @@ export function BaseNode({
         )}
       </div>
 
-      {renderHandles("source", showSource, sourcePosition)}
+      {renderHandles("source", showSource, sourcePosition, id)}
     </div>
   );
 }

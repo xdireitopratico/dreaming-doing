@@ -3,11 +3,11 @@ import { BaseNode, resolveNodeStatus } from "./BaseNode";
 import { getNodeIconSource } from "./NodeIcon";
 import { findModel, getProviderForModel } from "../model-catalog-frontend";
 
-export function VisionNode({ data, selected }: NodeProps) {
+export function VisionNode({ data, selected, id }: NodeProps) {
   const config = (data as Record<string, any>)?.config || {};
   const modelId = config.model_id || "";
   const model = findModel(modelId);
   const provider = model ? getProviderForModel(modelId) : null;
   const subtitle = model ? `${provider?.label || "—"} · ${model.label}` : "Selecionar modelo";
-  return <BaseNode cardType="configurable" iconContext="canvas" selected={selected} status={resolveNodeStatus(data)} icon={getNodeIconSource("vision")} label="Vision" subtitle={subtitle} />;
+  return <BaseNode id={id} cardType="configurable" iconContext="canvas" selected={selected} status={resolveNodeStatus(data)} icon={getNodeIconSource("vision")} label="Vision" subtitle={subtitle} />;
 }
