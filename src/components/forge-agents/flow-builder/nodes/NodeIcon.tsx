@@ -1,13 +1,72 @@
 /**
  * NodeIcon — n8n-style node icon renderer
- * Supports file: (SVG img), icon: (named fallback), and unknown types.
+ *
+ * Supports three source types:
+ *   "file"  → <img> with optional filter
+ *   "icon"  → inline SVG from NAMED_ICONS registry
+ *   "unknown" → fallback letter tile
+ *
+ * Context-based sizing (n8n-compatible):
+ *   canvas        → 48px
+ *   configuration → 36px
+ *   nodeList      → 24px
+ *   ndvHeader     → 24px
+ *
+ * Each source can carry an optional "badge" (sub-icon rendered top-right).
  */
 import { type FC } from "react";
 
-export type NodeIconSource =
+// ── Types ──
+
+type BaseNodeIconSource =
   | { type: "file"; src: string }
   | { type: "icon"; name: string; color: string }
   | { type: "unknown"; label: string };
+
+export type NodeIconSource = BaseNodeIconSource & {
+  badge?: BaseNodeIconSource;
+};
+
+export type NodeIconContext = "canvas" | "configuration" | "nodeList" | "ndvHeader";
+
+const ICON_SIZES: Record<NodeIconContext, number> = {
+  canvas: 48,
+  configuration: 36,
+  nodeList: 24,
+  ndvHeader: 24,
+};
+
+export function getNodeIconSize(context: NodeIconContext): number {
+  return ICON_SIZES[context];
+}
+
+// ── Theme-aware color ──
+const NODE_COLORS: Record<string, string> = {
+  trigger: "#34d399",
+  llm: "#3b82f6",
+  tool: "#eab308",
+  condition: "#6b7280",
+  output_guard: "#f59e0b",
+  stt: "#a855f7",
+  tts: "#f97316",
+  rag_search: "#b45309",
+  memory: "#ec4899",
+  hitl: "#ef4444",
+  loop: "#64748b",
+  sub_flow: "#1f2937",
+  delay: "#9ca3af",
+  error_handler: "#dc2626",
+  switch: "#6366f1",
+  transformer: "#06b6d4",
+  vision: "#7c3aed",
+};
+
+/** Node color for a given type — falls back to CSS var or hex. */
+export function getNodeIconColor(nodeType: string): string {
+  return NODE_COLORS[nodeType] ?? "#6b7280";
+}
+
+// ── Source resolver ──
 
 export function getNodeIconSource(nodeType: string): NodeIconSource {
   const map: Record<string, NodeIconSource> = {
@@ -32,28 +91,67 @@ export function getNodeIconSource(nodeType: string): NodeIconSource {
   return map[nodeType] || { type: "unknown", label: nodeType };
 }
 
+// ── Component ──
+
 interface NodeIconProps {
   source: NodeIconSource;
   size?: number;
+  /** If true, img icons get brightness(0) invert(1) filter (dark-bg optimised). */
+  invertDark?: boolean;
 }
 
-export function NodeIcon({ source, size = 20 }: NodeIconProps) {
-  if (source.type === "file") {
-    return (
-      <img src={source.src} alt="" width={size} height={size} className="shrink-0" style={{ filter: "brightness(0) invert(1)" }} />
-    );
-  }
-  if (source.type === "icon") {
-    return <NamedIcon name={source.name} color={source.color} size={size} />;
-  }
+export function NodeIcon({ source, size = 20, invertDark = true }: NodeIconProps) {
   return (
-    <div className="shrink-0 rounded flex items-center justify-center text-[9px] font-bold uppercase" style={{ width: size, height: size, background: "rgba(255,255,255,0.1)" }}>
-      {source.label.slice(0, 2)}
+    <div className="relative inline-flex shrink-0">
+      {source.type === "file" ? (
+        <img
+          src={source.src}
+          alt=""
+          width={size}
+          height={size}
+          className="shrink-0"
+          style={invertDark ? { filter: "brightness(0) invert(1)" } : undefined}
+        />
+      ) : source.type === "icon" ? (
+        <NamedIcon name={source.name} color={source.color} size={size} />
+      ) : (
+        <div
+          className="shrink-0 rounded flex items-center justify-center text-[9px] font-bold uppercase"
+          style={{
+            width: size,
+            height: size,
+            background: "rgba(255,255,255,0.1)",
+          }}
+        >
+          {source.label.slice(0, 2)}
+        </div>
+      )}
+
+      {/* Badge (sub-icon) — top-right 8px */}
+      {source.badge && (
+        <div className="absolute -top-1 -right-1 z-10">
+          {source.badge.type === "file" ? (
+            <img src={source.badge.src} alt="" width={10} height={10} className="rounded-sm" />
+          ) : "color" in source.badge ? (
+            <div
+              className="rounded-sm flex items-center justify-center text-[6px] font-bold"
+              style={{
+                width: 10,
+                height: 10,
+                background: `${source.badge.color}33`,
+                color: source.badge.color,
+              }}
+            >
+              {"name" in source.badge ? source.badge.name.slice(0, 1) : ""}
+            </div>
+          ) : null}
+        </div>
+      )}
     </div>
   );
 }
 
-/* ── Inline SVG named icons (n8n-style minimal) ── */
+// ── Inline SVG named icons (n8n-style minimal) ──
 
 const NAMED_ICONS: Record<string, FC<{ size: number }>> = {
   zap: ({ size }) => (
@@ -140,7 +238,10 @@ function NamedIcon({ name, color, size }: { name: string; color: string; size: n
   const IconComponent = NAMED_ICONS[name];
   if (!IconComponent) {
     return (
-      <div className="shrink-0 rounded flex items-center justify-center text-[9px] font-bold uppercase" style={{ width: size, height: size, background: `${color}33`, color }}>
+      <div
+        className="shrink-0 rounded flex items-center justify-center text-[9px] font-bold uppercase"
+        style={{ width: size, height: size, background: `${color}33`, color }}
+      >
         {name.slice(0, 2)}
       </div>
     );

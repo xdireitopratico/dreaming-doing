@@ -1,7 +1,17 @@
 /**
  * CanvasNodeStatusIcons — n8n-style status indicators for canvas nodes
+ *
+ * Priority (highest wins): error > warning > running > waiting > pinned > success > idle
  */
-export type NodeStatus = "idle" | "success" | "error" | "running" | "waiting" | "disabled" | "pinned";
+export type NodeStatus =
+  | "idle"
+  | "success"
+  | "error"
+  | "running"
+  | "waiting"
+  | "disabled"
+  | "pinned"
+  | "warning";
 
 interface StatusIconProps { size?: number }
 
@@ -59,14 +69,19 @@ export function PinnedMark({ size = 16 }: StatusIconProps) {
   );
 }
 
+/**
+ * Render the appropriate status icon.
+ * Priority: error > warning > running > waiting > pinned > success > idle
+ */
 export function NodeStatusIcon({ status, size = 16 }: { status: NodeStatus; size?: number }) {
   switch (status) {
-    case "success": return <SuccessMark size={size} />;
     case "error": return <ErrorMark size={size} />;
+    case "warning": return <WarningMark size={size} />;
     case "running": return <RunningSpinner size={size} />;
     case "waiting": return <RunningSpinner size={size} />;
-    case "disabled": return <DisabledPower size={size} />;
     case "pinned": return <PinnedMark size={size} />;
+    case "success": return <SuccessMark size={size} />;
+    case "disabled": return <DisabledPower size={size} />;
     default: return null;
   }
 }

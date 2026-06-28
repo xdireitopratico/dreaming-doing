@@ -7,7 +7,7 @@ import { ChevronRight, ChevronLeft, ChevronDown, Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { NodeIcon, getNodeIconSource, type NodeIconSource } from "./nodes/NodeIcon";
+import { NodeIcon, getNodeIconSource, getNodeIconSize, type NodeIconSource } from "./nodes/NodeIcon";
 
 interface PaletteItem {
   type: string;
@@ -126,7 +126,7 @@ function PaletteItemRow({ item, onDragStart, onClick }: { item: PaletteItem; onD
       className="flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer active:cursor-grabbing transition-colors hover:bg-white/5"
       title={`${item.description} — Clique ou arraste`}>
       <div className="shrink-0 flex items-center justify-center w-5 h-5">
-        <NodeIcon source={item.icon} size={14} />
+        <NodeIcon source={item.icon} size={getNodeIconSize("nodeList")} />
       </div>
       <div className="min-w-0 flex-1">
         <div className="text-[11px] font-medium truncate">{item.label}</div>
