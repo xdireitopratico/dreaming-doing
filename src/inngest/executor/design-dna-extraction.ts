@@ -71,7 +71,8 @@ function parseTokenField(tokenField: string | null | undefined): string[] {
   return [trimmed];
 }
 
-function buildFallbackDna(url: string, reason: string): Record<string, unknown> {
+function buildFallbackDna(url: string, reason: string, confidence?: number): Record<string, unknown> {
+  const score = Math.round(Math.min(10, Math.max(1, (confidence ?? 30) / 10)));
   return {
     name: url,
     source_url: url,
@@ -79,14 +80,14 @@ function buildFallbackDna(url: string, reason: string): Record<string, unknown> 
     serves_domains: [],
     compatible_languages: [],
     compatible_moods: [],
-    layout: { type: "unknown" },
+    layout: confidence && confidence >= 50 ? { type: "scraped" } : { type: "unknown" },
     color: null,
     typography: null,
     motion: null,
     interaction: null,
     component: null,
     implementation_notes: `Partial extraction — ${reason}`,
-    quality_score: 3,
+    quality_score: score,
     quality_source: `heuristic (${reason})`,
     extracted_at: new Date().toISOString(),
     validated: false,
@@ -191,6 +192,7 @@ async function loadAgentPreferences(
   fixedPresetId?: string;
   customModelId?: string;
   useCustomModel?: boolean;
+  userModelEntries?: Array<{ slug: string; env: string; label?: string }>;
   webScrapeProvider?: string;
   webScrapeFallback?: string;
   webSearchProvider?: string;
@@ -212,12 +214,25 @@ async function loadAgentPreferences(
     modeRaw === "auto" || modeRaw === "robin" || modeRaw === "fixed"
       ? (modeRaw as "auto" | "robin" | "fixed")
       : undefined;
+  const userModelEntries = Array.isArray(r.userModelEntries)
+    ? (r.userModelEntries as Array<Record<string, unknown>>)
+        .filter(
+          (e): e is { slug: string; env: string; label?: string } =>
+            !!e && typeof e.slug === "string" && typeof e.env === "string",
+        )
+        .map((e) => ({
+          slug: e.slug,
+          env: e.env,
+          label: typeof e.label === "string" ? e.label : undefined,
+        }))
+    : undefined;
   return {
     mode,
     poolProvider: typeof r.poolProvider === "string" ? r.poolProvider : undefined,
     fixedPresetId: typeof r.fixedPresetId === "string" ? r.fixedPresetId : undefined,
     customModelId: typeof r.customModelId === "string" ? r.customModelId : undefined,
     useCustomModel: r.useCustomModel === true,
+    userModelEntries: userModelEntries && userModelEntries.length > 0 ? userModelEntries : undefined,
     webScrapeProvider: typeof r.webScrapeProvider === "string" ? r.webScrapeProvider : undefined,
     webScrapeFallback: typeof r.webScrapeFallback === "string" ? r.webScrapeFallback : undefined,
     webSearchProvider: typeof r.webSearchProvider === "string" ? r.webSearchProvider : undefined,
@@ -380,6 +395,24 @@ async function resolveLLMConfig(
           "preferences.fixed",
         );
         if (cfg) return cfg;
+      }
+      // custom → resolved via userModelEntries
+      if (env === "custom") {
+        const slugToFind = model.replace(/--/g, "/");
+        const entry = prefs.userModelEntries?.find((e) => e.slug === slugToFind);
+        if (entry) {
+          const c = findConnector(entry.env as LlmKind);
+          if (c) {
+            const cfg = buildLlmConfig(
+              c.provider,
+              c.token,
+              { ...c.meta, defaultModel: entry.slug },
+              entry.slug,
+              "preferences.fixed.custom",
+            );
+            if (cfg) return cfg;
+          }
+        }
       }
     }
   }
@@ -644,6 +677,7 @@ Extraia o DesignDNA deste site.`;
     const jsonMatch = rawContent.match(/\{[\s\S]*\}/);
     parsed = jsonMatch ? JSON.parse(jsonMatch[0]) : {};
   }
+  console.debug("[llmExtractDNA] keys received:", Object.keys(parsed), "quality_source:", parsed.quality_source);
 
   return {
     name: url,
@@ -653,11 +687,11 @@ Extraia o DesignDNA deste site.`;
     compatible_languages: (parsed.compatible_languages as string[]) || [],
     compatible_moods: (parsed.compatible_moods as string[]) || [],
     layout: parsed.layout ?? null,
-    color: parsed.color ?? null,
+    color: parsed.color ?? parsed.color_application ?? null,
     typography: parsed.typography ?? null,
     motion: parsed.motion ?? null,
-    interaction: parsed.interaction ?? null,
-    component: parsed.component ?? null,
+    interaction: parsed.interaction ?? parsed.interactions ?? null,
+    component: parsed.component ?? parsed.component_patterns ?? null,
     implementation_notes: parsed.implementation_notes ?? null,
     quality_score: Math.min(10, Math.max(0, (parsed.quality_score as number) ?? (isDeep ? 7 : 5))),
     quality_source: isDeep ? "deep_extraction" : "shallow_extraction",
@@ -798,11 +832,9 @@ export async function extractDesignDnaForUrl(
       notes.push("deep sandbox extraction completed");
     } catch (err) {
       const msg = errorMessage(err);
-      notes.push(`deep sandbox extraction failed: ${msg}`);
+      notes.push(`⚠️ deep sandbox extraction failed — degraded to shallow: ${msg}`);
       providerTrace.push("sandbox:error");
-      if (!rawMarkdown.trim() && !cleanHtml.trim() && !cleanedMarkdown.trim()) {
-        blockedReason = msg;
-      }
+      blockedReason = msg;
     }
   } else if (input.depth === "deep") {
     notes.push("sandbox unavailable, deep request downgraded to web scrape");
@@ -840,7 +872,7 @@ export async function extractDesignDnaForUrl(
 
   const finalDna =
     dna ??
-    buildFallbackDna(input.url, llmConfig ? "LLM extraction unavailable" : "no LLM key available");
+    buildFallbackDna(input.url, llmConfig ? "LLM extraction unavailable" : "no LLM key available", confidence);
 
   if (!llmConfig) {
     notes.push("no LLM config available; using heuristic fallback");

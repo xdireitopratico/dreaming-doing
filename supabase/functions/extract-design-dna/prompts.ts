@@ -50,7 +50,7 @@ Analise o HTML/markdown fornecido e identifique:
 
 6. **layout.hierarchy_notes**: Como a hierarquia visual funciona? (headline domina? visual domina? proof strip?)
 
-7. **component_patterns**: Que componentes estão no hero?
+7. **component**: Que componentes estão no hero?
    Para cada: type, anatomy (partes), behavior, integration
 
 8. **implementation_notes**: Dicas técnicas (z-index layers, position sticky, overflow, etc)
@@ -72,7 +72,7 @@ Analise o HTML/markdown fornecido e identifique:
     "breakpoint_behavior": "...",
     "hierarchy_notes": "..."
   },
-  "component_patterns": [
+  "component": [
     { "type": "...", "anatomy": ["...", "..."], "behavior": "...", "integration": "..." }
   ],
   "implementation_notes": "..."
@@ -267,7 +267,7 @@ Estratégias que você sabe identificar:
 
 ## Formato de saída (JSON estrito)
 {
-  "color_application": {
+  "color": {
     "brand_application": "...",
     "surface_layering": "...",
     "gradient_usage": "...",
@@ -330,7 +330,7 @@ Para cada componente identificado no site:
 
 ## Formato de saída (JSON estrito)
 {
-  "component_patterns": [
+  "component": [
     {
       "type": "...",
       "anatomy": ["...", "..."],
@@ -395,7 +395,7 @@ Tipos de interação que você sabe identificar:
 
 ## Formato de saída (JSON estrito)
 {
-  "interactions": {
+  "interaction": {
     "types": ["..."],
     "effect_radius": 0,
     "hover_feedback": "...",
@@ -434,9 +434,9 @@ Para cada categoria solicitada, use o prompt especializado correspondente e reto
   "layout": { ... },
   "motion": { ... },
   "typography": { ... },
-  "color_application": { ... },
-  "component_patterns": [ ... ],
-  "interactions": { ... },
+  "color": { ... },
+  "component": [ ... ],
+  "interaction": { ... },
   "implementation_notes": "...",
   "quality_score": 0-10 (estimado pela riqueza de design),
   "quality_source": "heurístico (extração automática)"

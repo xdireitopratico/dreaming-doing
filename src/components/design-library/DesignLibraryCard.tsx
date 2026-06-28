@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -30,15 +31,17 @@ export function DesignLibraryCard({
   variantCount = 1,
   relatedKinds = [],
 }: DesignLibraryCardProps) {
+  const [imgError, setImgError] = useState(false);
   return (
     <Card className={`group overflow-hidden flex flex-col bg-surface-1 border-border hover:border-primary/30 transition-colors ${duplicateCount > 0 ? "ring-1 ring-amber-500/15" : ""}`}>
       <div className="relative aspect-video bg-surface-3 overflow-hidden">
-        {entry.screenshot_url ? (
+        {entry.screenshot_url && !imgError ? (
           <img
             src={entry.screenshot_url}
             alt={entry.name}
             className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
             loading="lazy"
+            onError={() => setImgError(true)}
           />
         ) : (
           <div className="w-full h-full bg-gradient-to-br from-primary/20 via-surface-3 to-accent/20 flex items-center justify-center">
