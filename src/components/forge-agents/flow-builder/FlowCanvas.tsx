@@ -32,6 +32,7 @@ import { ErrorHandlerNode } from "./nodes/ErrorHandlerNode";
 import { VisionNode } from "./nodes/VisionNode";
 import { StickyNote } from "./nodes/StickyNote";
 import { ForgeEdge } from "./edges/ForgeEdge";
+import { FlowCanvasProvider, useFlowCanvas } from "./FlowCanvasContext";
 import { NodeContextMenu } from "./NodeContextMenu";
 import type { ContextMenuAction } from "./NodeContextMenu";
 import { FlowBuilderChatDock } from "./FlowBuilderChatDock";
@@ -213,7 +214,105 @@ export const FlowCanvas = memo(function FlowCanvas({
     event.dataTransfer.dropEffect = "move";
   }, []);
 
+  // ── Add node between edges (3.6) ──
+  const [insertBetween, setInsertBetween] = useState<{
+    position: { x: number; y: number };
+    sourceId: string;
+    targetId: string;
+  } | null>(null);
+
+  const INSERTABLE_NODES: { type: string; label: string }[] = [
+    { type: "trigger", label: "Trigger" },
+    { type: "llm", label: "LLM" },
+    { type: "tool", label: "Tool" },
+    { type: "condition", label: "Condição" },
+    { type: "switch", label: "Switch" },
+    { type: "transformer", label: "Transformer" },
+    { type: "vision", label: "Vision" },
+    { type: "rag_search", label: "RAG Search" },
+    { type: "memory", label: "Memória" },
+    { type: "stt", label: "STT" },
+    { type: "tts", label: "TTS" },
+    { type: "hitl", label: "Aprovação" },
+    { type: "loop", label: "Loop" },
+    { type: "delay", label: "Delay" },
+    { type: "sub_flow", label: "Sub-Flow" },
+    { type: "error_handler", label: "Error Handler" },
+    { type: "output_guard", label: "Output Guard" },
+  ];
+  const getNodeColor = (type: string) => MINIMAP_COLORS[type] || "#94a3b8";
+
+  const openNodeCreator = useCallback(
+    (position: { x: number; y: number }, between?: { sourceId: string; targetId: string }) => {
+      if (between) {
+        setInsertBetween({ position, ...between });
+      }
+    },
+    [],
+  );
+
+  const handleInsertNode = useCallback(
+    (nodeType: string) => {
+      if (!insertBetween) return;
+      const newNodeId = `${nodeType}_${Date.now()}`;
+      // Convert screen position to flow position (approximate via viewport)
+      const reactFlowBounds = document.querySelector(".react-flow")?.getBoundingClientRect();
+      const flowPosition = reactFlowBounds
+        ? { x: insertBetween.position.x - reactFlowBounds.left - 75, y: insertBetween.position.y - reactFlowBounds.top - 25 }
+        : { x: 400, y: 300 };
+      const NODE_LABELS: Record<string, string> = {
+        trigger: "Trigger", llm: "LLM", tool: "Tool", condition: "Condição",
+        switch: "Switch", transformer: "Transformer", loop: "Loop",
+        rag_search: "RAG Search", memory: "Memória", stt: "STT", tts: "TTS",
+        vision: "Vision", delay: "Delay", error_handler: "Error Handler",
+        hitl: "Aprovação", sub_flow: "Sub-Flow", output_guard: "Output Guard",
+      };
+      // Remove the old edge and add node + 2 edges
+      onSetEdges((eds) => {
+        const filtered = eds.filter((e) => !(e.source === insertBetween.sourceId && e.target === insertBetween.targetId));
+        return [
+          ...filtered,
+          {
+            id: `${newNodeId}-in`,
+            source: insertBetween.sourceId,
+            target: newNodeId,
+            type: "default",
+            animated: true,
+            data: { label: "", condition: "", edge_type: "default", priority: 0 },
+            style: { stroke: "hsl(var(--primary))" },
+          } as Edge,
+          {
+            id: `${newNodeId}-out`,
+            source: newNodeId,
+            target: insertBetween.targetId,
+            type: "default",
+            animated: true,
+            data: { label: "", condition: "", edge_type: "default", priority: 0 },
+            style: { stroke: "hsl(var(--primary))" },
+          } as Edge,
+        ];
+      });
+      onSetNodes((nds) => [
+        ...nds,
+        {
+          id: newNodeId, type: nodeType, position: flowPosition,
+          data: { label: NODE_LABELS[nodeType] || nodeType, config: {} },
+        },
+      ]);
+      setInsertBetween(null);
+    },
+    [insertBetween, onSetEdges, onSetNodes],
+  );
+
+  const deleteEdge = useCallback(
+    (edgeId: string) => {
+      onSetEdges((eds) => eds.filter((e) => e.id !== edgeId));
+    },
+    [onSetEdges],
+  );
+
   return (
+    <FlowCanvasProvider value={{ openNodeCreator, deleteEdge }}>
     <div className="flex-1 relative">
       <ReactFlowProvider>
         <ReactFlow
@@ -322,6 +421,67 @@ export const FlowCanvas = memo(function FlowCanvas({
           </div>
         </div>
       )}
+
+      {/* Insert node between edges popup (3.6) */}
+      {insertBetween && (
+        <>
+          <div
+            className="fixed inset-0 z-50"
+            style={{ background: "rgba(0,0,0,0.4)" }}
+            onClick={() => setInsertBetween(null)}
+          />
+          <div
+            className="fixed z-50 left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"
+            style={{
+              background: "var(--ps-bg, #15171e)",
+              border: "1px solid var(--ps-border, #2a2d35)",
+              borderRadius: 12,
+              boxShadow: "0 25px 50px rgba(0,0,0,0.5)",
+              padding: 20,
+              maxWidth: 480,
+              width: "90vw",
+            }}
+          >
+            <h3 className="text-sm font-semibold mb-3" style={{ color: "var(--ps-cream-80)" }}>
+              Inserir nó entre conexões
+            </h3>
+            <div className="grid grid-cols-3 gap-2 max-h-80 overflow-y-auto">
+              {INSERTABLE_NODES.map((n) => (
+                <button
+                  key={n.type}
+                  onClick={() => handleInsertNode(n.type)}
+                  className="flex flex-col items-center gap-1.5 p-2.5 rounded-lg transition-all duration-100 cursor-pointer group"
+                  style={{
+                    background: "var(--ps-bg-surface, #1a1c22)",
+                    border: "1px solid var(--ps-border, #2a2d35)",
+                  }}
+                  onMouseEnter={(e) => {
+                    const el = e.currentTarget;
+                    el.style.borderColor = "var(--ps-accent, #f59e0b)";
+                    el.style.background = "var(--ps-bg-surface-hover, #25282f)";
+                  }}
+                  onMouseLeave={(e) => {
+                    const el = e.currentTarget;
+                    el.style.borderColor = "var(--ps-border, #2a2d35)";
+                    el.style.background = "var(--ps-bg-surface, #1a1c22)";
+                  }}
+                >
+                  <span
+                    className="w-6 h-6 rounded-md flex items-center justify-center text-[11px] font-bold"
+                    style={{ background: `${getNodeColor(n.type)}20`, color: getNodeColor(n.type) }}
+                  >
+                    {n.label.charAt(0)}
+                  </span>
+                  <span className="text-[10px] font-medium text-center leading-tight" style={{ color: "var(--ps-cream-60)" }}>
+                    {n.label}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
     </div>
+    </FlowCanvasProvider>
   );
 });

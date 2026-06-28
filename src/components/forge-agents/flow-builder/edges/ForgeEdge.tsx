@@ -13,6 +13,7 @@ import {
   type EdgeProps,
 } from "@/types/xyflow-react-shim";
 import { ForgeEdgeToolbar } from "./ForgeEdgeToolbar";
+import { useFlowCanvas } from "../FlowCanvasContext";
 
 const STATUS_COLORS: Record<string, string> = {
   running: "#3b82f6",
@@ -25,7 +26,7 @@ const DEFAULT_COLOR = "hsl(var(--primary))";
 const HOVER_DELAY = 600;
 
 export const ForgeEdge: FC<EdgeProps> = ({
-  id, sourceX, sourceY, targetX, targetY,
+  id, source, target, sourceX, sourceY, targetX, targetY,
   sourcePosition, targetPosition, data, selected, markerEnd,
 }) => {
   const edgeData = (data || {}) as Record<string, any>;
@@ -33,6 +34,8 @@ export const ForgeEdge: FC<EdgeProps> = ({
   const condition = edgeData.condition || "";
   const edgeType = edgeData.edge_type || "default";
   const status: string = edgeData.status || "idle";
+
+  const { openNodeCreator, deleteEdge } = useFlowCanvas();
 
   const [hovered, setHovered] = useState(false);
   const [showToolbar, setShowToolbar] = useState(false);
@@ -147,11 +150,11 @@ export const ForgeEdge: FC<EdgeProps> = ({
             labelX={labelX}
             labelY={labelY}
             onAdd={() => {
-              console.log("[ForgeEdge] add node between", id);
+              openNodeCreator?.({ x: labelX, y: labelY }, { sourceId: source, targetId: target });
               setShowToolbar(false);
             }}
             onDelete={() => {
-              console.log("[ForgeEdge] delete edge", id);
+              deleteEdge?.(id);
               setShowToolbar(false);
             }}
           />
