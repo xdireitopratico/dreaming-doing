@@ -87,6 +87,7 @@ export function FlowBuilderDialog({ flowId, projectId, open, onClose, onFlowIdCh
 
   // ═══ Execution status feedback (F2.1) ═══
   const [nodeStatusMap, setNodeStatusMap] = useState<Record<string, NodeStatus>>({});
+  const handleClearExecutionData = useCallback(() => setNodeStatusMap({}), []);
 
   const handleRequestClose = useCallback(() => {
     if (s.hasUnsaved) {
@@ -200,6 +201,8 @@ export function FlowBuilderDialog({ flowId, projectId, open, onClose, onFlowIdCh
             onChatOpenChange={handleChatOpenChange}
             nodeStatusMap={nodeStatusMap}
             onNodeStatusChange={setNodeStatusMap}
+            onUndo={s.handleUndo}
+            onClearExecutionData={handleClearExecutionData}
           />
 
           {selectedNode()}

@@ -5,9 +5,10 @@
 import { memo, useCallback, useEffect, useMemo } from "react";
 import { injectN8nNodeAnimations } from "./nodes/BaseNode";
 import { injectNodeToolbarStyles } from "./nodes/NodeToolbar";
+import { injectEdgeStyles } from "./edges/ForgeEdgeAnimations";
 import type { NodeStatus } from "./nodes/CanvasNodeStatusIcons";
 import {
-  ReactFlow, ReactFlowProvider, Background, Controls, MiniMap,
+  ReactFlow, ReactFlowProvider, Background, Controls, ControlButton, MiniMap,
   useReactFlow, addEdge,
   type Node, type Edge, type Connection, type OnNodesChange, type OnEdgesChange,
 } from "@/types/xyflow-react-shim";
@@ -29,7 +30,7 @@ import { SubFlowNode } from "./nodes/SubFlowNode";
 import { TransformerNode } from "./nodes/TransformerNode";
 import { ErrorHandlerNode } from "./nodes/ErrorHandlerNode";
 import { VisionNode } from "./nodes/VisionNode";
-import { ConditionalEdge } from "./edges/ConditionalEdge";
+import { ForgeEdge } from "./edges/ForgeEdge";
 import { FlowBuilderChatDock } from "./FlowBuilderChatDock";
 
 const nodeTypes = {
@@ -42,7 +43,7 @@ const nodeTypes = {
   vision: VisionNode,
 };
 
-const edgeTypes = { conditional: ConditionalEdge };
+const edgeTypes = { default: ForgeEdge, conditional: ForgeEdge };
 
 function FlowCanvasInternals({
   onRegisterFitView,
@@ -89,6 +90,10 @@ interface FlowCanvasProps {
   nodeStatusMap?: Record<string, NodeStatus>;
   /** Called when execution status changes (so panels can update the map) */
   onNodeStatusChange?: (map: Record<string, NodeStatus>) => void;
+  /** Undo handler for control button */
+  onUndo?: () => void;
+  /** Clear execution data from all nodes */
+  onClearExecutionData?: () => void;
 }
 
 export const FlowCanvas = memo(function FlowCanvas({
@@ -98,10 +103,10 @@ export const FlowCanvas = memo(function FlowCanvas({
   onRegisterFitView,
   flowId, chatEnabled = false, onApplyPatch, onHighlightNodes,
   registerChatToggle, registerChatCollapse, onChatOpenChange,
-  nodeStatusMap, onNodeStatusChange,
+  nodeStatusMap, onNodeStatusChange, onUndo, onClearExecutionData,
 }: FlowCanvasProps) {
   // Inject n8n node CSS animations once
-  useEffect(() => { injectN8nNodeAnimations(); injectNodeToolbarStyles(); }, []);
+  useEffect(() => { injectN8nNodeAnimations(); injectNodeToolbarStyles(); injectEdgeStyles(); }, []);
 
   const displayNodes = useMemo(() =>
     nodes.map((n) => {
@@ -171,13 +176,40 @@ export const FlowCanvas = memo(function FlowCanvas({
           onDragOver={onDragOver}
           nodeTypes={nodeTypes}
           edgeTypes={edgeTypes}
-          defaultEdgeOptions={{ type: "conditional", animated: true }}
+          defaultEdgeOptions={{ type: "default", animated: true }}
           fitView
           style={{ background: 'var(--ps-bg-deep, hsl(225 30% 4%))' }}
           deleteKeyCode={["Backspace", "Delete"]}
         >
           <Background gap={20} size={1.5} color="rgba(255,255,255,0.10)" />
-          <Controls className="!bg-[var(--ps-bg-deep)] !border-[var(--ps-border)] !shadow-lg [&>button]:!bg-[var(--ps-bg-surface)] [&>button]:!border-[var(--ps-border)] [&>button]:!text-[var(--ps-cream-60)] [&>button:hover]:!bg-[var(--ps-bg-surface-hover)]" />
+          <Controls className="!bg-[var(--ps-bg-deep)] !border-[var(--ps-border)] !shadow-lg [&>button]:!bg-[var(--ps-bg-surface)] [&>button]:!border-[var(--ps-border)] [&>button]:!text-[var(--ps-cream-60)] [&>button:hover]:!bg-[var(--ps-bg-surface-hover)]">
+            {onUndo && (
+              <ControlButton
+                onClick={onUndo}
+                title="Undo (Ctrl+Z)"
+                aria-label="Undo"
+                className="!text-[var(--ps-cream-60)] hover:!text-[var(--ps-cream)]"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="1 4 1 10 7 10" />
+                  <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
+                </svg>
+              </ControlButton>
+            )}
+            {onClearExecutionData && (
+              <ControlButton
+                onClick={onClearExecutionData}
+                title="Clear execution data"
+                aria-label="Clear execution data"
+                className="!text-[var(--ps-cream-60)] hover:!text-[var(--ps-cream)]"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="3 6 5 6 21 6" />
+                  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                </svg>
+              </ControlButton>
+            )}
+          </Controls>
           <MiniMap
             nodeColor={(node: Node) => MINIMAP_COLORS[node.type || ""] || "#94a3b8"}
             style={{ background: 'var(--ps-bg)' }}
