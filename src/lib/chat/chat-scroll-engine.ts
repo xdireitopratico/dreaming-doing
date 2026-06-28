@@ -88,13 +88,9 @@ export function resolveScrollTarget(opts: {
 
 export function shouldShowNewMessagesPill(opts: {
   mode: ChatFollowMode;
-  signature: string;
-  signatureAtManual: string | null;
   bottomGapPx: number;
   thresholdPx?: number;
 }): boolean {
   if (opts.mode !== "manual") return false;
-  if (!opts.signatureAtManual) return false;
-  if (opts.signature === opts.signatureAtManual) return false;
   return opts.bottomGapPx >= (opts.thresholdPx ?? 500);
 }
