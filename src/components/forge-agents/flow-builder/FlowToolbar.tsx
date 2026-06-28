@@ -130,8 +130,11 @@ export const FlowToolbar = memo(function FlowToolbar({
         {hasUnsaved && <span className="text-[10px] shrink-0" style={{ color: 'var(--ps-orange)' }}>● Não salvo</span>}
       </div>
 
-      {/* Center: Validation + Undo + Redo (preenche o meio, justify-center) */}
+      {/* Center: Undo + Validation + Redo (preenche o meio, justify-center) */}
       <div className="flex-1 flex items-center justify-center gap-1">
+        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onUndo} title="Desfazer (Ctrl+Z)">
+          <Undo2 className="h-3.5 w-3.5" />
+        </Button>
         <Button
           variant={activePanel === "validation" ? "default" : "ghost"}
           size="sm" className="gap-1 h-7 px-2"
@@ -142,9 +145,6 @@ export const FlowToolbar = memo(function FlowToolbar({
           ) : (
             <><AlertTriangle className="h-3 w-3 text-amber-500" /><span className="text-[10px]">{validationErrors.length}</span></>
           )}
-        </Button>
-        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onUndo} title="Desfazer (Ctrl+Z)">
-          <Undo2 className="h-3.5 w-3.5" />
         </Button>
         <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onRedo} title="Refazer (Ctrl+Shift+Z)">
           <Redo2 className="h-3.5 w-3.5" />

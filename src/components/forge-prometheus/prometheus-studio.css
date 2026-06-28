@@ -525,4 +525,10 @@
   display: none !important;
 }
 
+/* ConnectionLine (linha azul que aparece durante drag entre Handles) — segue o tema */
+.prometheus-studio .react-flow__connection-path {
+  stroke: var(--ps-accent) !important;
+  stroke-width: 2 !important;
+}
+
 

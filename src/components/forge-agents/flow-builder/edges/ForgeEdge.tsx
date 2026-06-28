@@ -16,13 +16,13 @@ import { ForgeEdgeToolbar } from "./ForgeEdgeToolbar";
 import { useFlowCanvas } from "../FlowCanvasContext";
 
 const STATUS_COLORS: Record<string, string> = {
-  running: "var(--ps-accent, #3b82f6)",
+  running: "var(--ps-accent)",
   success: "#22c55e",
   error: "#ef4444",
   waiting: "#f59e0b",
-  idle: "var(--ps-accent, #3b82f6)",
+  idle: "var(--ps-accent)",
 };
-const DEFAULT_COLOR = "var(--ps-accent, #3b82f6)";
+const DEFAULT_COLOR = "var(--ps-accent)";
 const HOVER_DELAY = 600;
 
 export const ForgeEdge: FC<EdgeProps> = ({
