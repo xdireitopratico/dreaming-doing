@@ -2,22 +2,28 @@ import { describe, expect, it } from "vitest";
 import { isAgentPreferencesConfigured } from "@/lib/agent-setup";
 
 describe("isAgentPreferencesConfigured", () => {
-  it("aceita fixed com customModelId (E2E OpenRouter)", () => {
+  it("auto só configura quando há pool explícito", () => {
     expect(
       isAgentPreferencesConfigured({
-        mode: "fixed",
-        useCustomModel: true,
-        customModelId: "nex-agi/nex-n2-pro:free",
+        mode: "auto",
+        autoAllowedPresetIds: [],
+      }),
+    ).toBe(false);
+    expect(
+      isAgentPreferencesConfigured({
+        mode: "auto",
+        autoAllowedPresetIds: ["google--gemini-3-1-pro"],
       }),
     ).toBe(true);
   });
 
-  it("aceita fixed com userModelEntries", () => {
+  it("fixo só configura com preset explícito", () => {
     expect(
       isAgentPreferencesConfigured({
         mode: "fixed",
-        userModelEntries: [{ slug: "nex-agi/nex-n2-pro:free", env: "openrouter" }],
+        fixedPresetId: "google--gemma-4-31b-it",
       }),
     ).toBe(true);
+    expect(isAgentPreferencesConfigured({ mode: "fixed" })).toBe(false);
   });
 });

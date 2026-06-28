@@ -48,7 +48,7 @@ export function validateAgentPreferences(p?: AgentPreferencesPayload): string | 
   }
   if (p.mode === "auto") {
     if ((p.autoAllowedPresetIds?.length ?? 0) > 0) return null;
-    return "Setup: configure ao menos um modelo do modo Auto em Api & Models (/api-models).";
+    return "Setup: selecione de 1 a 5 modelos para o modo Auto em Api & Models (/api-models).";
   }
   if (p.mode === "fixed") {
     if (p.fixedPresetId?.trim()) return null;
@@ -133,6 +133,7 @@ export function sanitizeRuntimePreferences(
   if (!prefs?.mode) return prefs;
   const next: AgentPreferencesPayload = { ...prefs };
   if (prefs.mode === "auto") {
+    next.autoAllowedPresetIds = (next.autoAllowedPresetIds ?? []).slice(0, 5);
     next.fixedPresetId = undefined;
     next.robinPoolModelId = undefined;
     next.poolProvider = undefined;
@@ -293,7 +294,7 @@ export async function resolveAgentProvider(
       throw new Error(
         allowlist.length > 0
           ? "Nenhum modelo marcado no Auto tem chave em /api. Adicione a chave ou marque outro modelo."
-          : "Modo Auto: configure ao menos um modelo em /api-models.",
+          : "Modo Auto: selecione de 1 a 5 modelos em /api-models.",
       );
     }
     mainCfg = finalizeProviderConfig({

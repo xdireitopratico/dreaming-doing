@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { motion } from "framer-motion";
+import { toast } from "@/lib/toast";
 import {
   Zap,
   Check,
@@ -29,6 +30,8 @@ import {
   getPresetById,
 } from "@/lib/model-catalog";
 import { isAgentPreferencesConfigured } from "@/lib/agent-setup";
+
+const AUTO_POOL_LIMIT = 5;
 
 const ENV_ICONS: Record<string, React.ReactNode> = {
   alibaba: <Globe className="size-4" />,
@@ -67,8 +70,8 @@ const MODES: { id: ModelPowerMode; title: string; hint: string }[] = [
 const MODE_GUIDE: Record<ModelPowerMode, { title: string; body: string; action: string }> = {
   auto: {
     title: "Modo automático",
-    body: "Marque um ou mais cards. Pode misturar providers.",
-    action: "Marque os modelos permitidos.",
+    body: "Selecione um pool explícito de até 5 modelos. O roteador escolhe entre eles conforme a tarefa e a complexidade. Sem pool configurado, o Auto não executa.",
+    action: "Marque os modelos que entram no pool automático.",
   },
   fixed: {
     title: "Modo fixo",
@@ -213,6 +216,13 @@ export function ModelEngineSection({
     () => new Set((prefs.autoAllowedPresetIds ?? []).map((id) => normalizePresetId(id))),
     [prefs.autoAllowedPresetIds],
   );
+  const autoPool = useMemo(
+    () =>
+      (prefs.autoAllowedPresetIds ?? [])
+        .map((id) => getPresetById(id, prefs.userModelEntries))
+        .filter((preset) => !!preset.id),
+    [prefs.autoAllowedPresetIds, prefs.userModelEntries],
+  );
   const [draftSlug, setDraftSlug] = useState("");
 
   const sttNeeds =
@@ -254,7 +264,11 @@ export function ModelEngineSection({
     const ids = envModels
       .filter((m) => connected[m.env] && (mode !== "robin" || providerById(m.env as AiProviderId)?.supportsPool))
       .map((m) => m.id);
-    onPatchPrefs({ mode: "auto", autoAllowedPresetIds: [...new Set([...autoAllowed, ...ids])] });
+    const merged = [...new Set([...autoAllowed, ...ids])].slice(0, AUTO_POOL_LIMIT);
+    if (merged.length === AUTO_POOL_LIMIT && merged.length < autoAllowed.size + ids.length) {
+      toast.error(`O Auto aceita no máximo ${AUTO_POOL_LIMIT} modelos.`);
+    }
+    onPatchPrefs({ mode: "auto", autoAllowedPresetIds: merged });
   };
 
   const clearAutoInEnv = () => {
@@ -312,10 +326,35 @@ export function ModelEngineSection({
             {modeGuide.body}
           </p>
           <p className="mt-2 font-mono text-[9px] text-[var(--foreground)]/80">→ {modeGuide.action}</p>
-          {mode === "auto" && autoAllowed.size > 0 && (
-            <p className="mt-2 font-mono text-[9px] text-emerald-400/90">
-              {autoAllowed.size} modelo(s) no automático
-            </p>
+          {mode === "auto" && (
+            <div className="mt-3 rounded-lg border border-emerald-400/20 bg-emerald-400/6 px-3 py-2">
+              <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-emerald-400/90">
+                Pool do Auto
+              </p>
+              <p className="mt-1 font-mono text-[10px] text-[var(--text-dim)] leading-relaxed">
+                Selecione de 1 a {AUTO_POOL_LIMIT} modelos. O sistema roteia entre eles conforme a
+                tarefa e a complexidade.
+              </p>
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                <span className="font-mono text-[8px] uppercase px-1.5 py-0.5 rounded bg-[var(--surface-2)] text-[var(--text-dim)]">
+                  {autoAllowed.size}/{AUTO_POOL_LIMIT} selecionados
+                </span>
+                {autoPool.length > 0 ? (
+                  autoPool.map((preset) => (
+                    <span
+                      key={preset.id}
+                      className="font-mono text-[8px] uppercase px-1.5 py-0.5 rounded bg-emerald-400/10 text-emerald-300"
+                    >
+                      {preset.label}
+                    </span>
+                  ))
+                ) : (
+                  <span className="font-mono text-[8px] uppercase px-1.5 py-0.5 rounded bg-amber-400/10 text-amber-300">
+                    Nenhum modelo selecionado
+                  </span>
+                )}
+              </div>
+            </div>
           )}
           {mode === "fixed" && prefs.fixedPresetId && (
             <p className="mt-2 font-mono text-[9px] text-emerald-400/90">
@@ -398,14 +437,14 @@ export function ModelEngineSection({
                   onClick={selectAllInEnv}
                   className="font-mono text-[9px] text-[var(--primary)] hover:underline"
                 >
-                  Marcar todos
+                  Marcar todos neste provedor
                 </button>
                 <button
                   type="button"
                   onClick={clearAutoInEnv}
                   className="font-mono text-[9px] text-[var(--text-dim)] hover:underline"
                 >
-                  Desmarcar
+                  Limpar neste provedor
                 </button>
               </>
             )}
@@ -427,12 +466,12 @@ export function ModelEngineSection({
             Adicione um modelo deste provider. No OpenRouter, cole o slug completo.
           </p>
           <div className="flex flex-wrap gap-2">
-            <input
-              type="text"
-              value={draftSlug}
-              onChange={(e) => setDraftSlug(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
+              <input
+                type="text"
+                value={draftSlug}
+                onChange={(e) => setDraftSlug(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
                   e.preventDefault();
                   onAddUserModel(draftSlug);
                   setDraftSlug("");
@@ -441,11 +480,11 @@ export function ModelEngineSection({
               placeholder="slug do modelo"
               className="flex-1 min-w-[200px] rounded-lg border border-[var(--border)] bg-[var(--surface-1)] px-3 py-2 font-mono text-[11px] text-[var(--foreground)]"
             />
-            <button
-              type="button"
-              onClick={() => {
-                onAddUserModel(draftSlug);
-                setDraftSlug("");
+              <button
+                type="button"
+                onClick={() => {
+                  onAddUserModel(draftSlug);
+                  setDraftSlug("");
               }}
               className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--primary)] bg-[var(--primary)]/15 px-4 py-2 font-mono text-[11px] text-[var(--foreground)] hover:bg-[var(--primary)]/25"
             >
@@ -470,6 +509,7 @@ export function ModelEngineSection({
                 m.tier,
                 m.recommended ? "recomendado" : "",
               ].filter(Boolean) as string[];
+              const autoLimitReached = mode === "auto" && !isModelActive(m.id) && autoAllowed.size >= AUTO_POOL_LIMIT;
               return (
                 <ModelCard
                   key={m.id}
@@ -477,8 +517,12 @@ export function ModelEngineSection({
                   label={m.label}
                   description={isCustom ? m.description : m.openRouterSlug}
                   badges={badges}
-                  disabled={disabled}
-                  disabledReason={reason}
+                  disabled={disabled || autoLimitReached}
+                  disabledReason={
+                    autoLimitReached
+                      ? `O Auto aceita no máximo ${AUTO_POOL_LIMIT} modelos. Remova um antes de adicionar outro.`
+                      : reason
+                  }
                   multi={mode === "auto"}
                   onClick={() => onSelectModel(m.id)}
                   onRemove={isCustom ? () => onRemoveUserModel(m.openRouterSlug) : undefined}

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { resolveStudioSelectedEnv } from "@/lib/model-catalog";
 
 describe("resolveStudioSelectedEnv", () => {
-  it("modo auto usa env do primeiro modelo permitido (não OpenRouter)", () => {
+  it("modo auto usa env do primeiro modelo do pool", () => {
     expect(
       resolveStudioSelectedEnv({
         mode: "auto",
@@ -11,12 +11,17 @@ describe("resolveStudioSelectedEnv", () => {
     ).toBe("gemini");
   });
 
-  it("modo fixed sem preset cai no primeiro provider conectado (exceto openrouter)", () => {
+  it("modo auto sem pool não adivinha provider conectado", () => {
     expect(
       resolveStudioSelectedEnv(
-        { mode: "fixed" },
-        { groq: true, openrouter: true },
+        { mode: "auto", autoAllowedPresetIds: [] },
       ),
+    ).toBe("groq");
+  });
+
+  it("modo fixed sem preset não usa provider conectado como fallback", () => {
+    expect(
+      resolveStudioSelectedEnv({ mode: "fixed" }),
     ).toBe("groq");
   });
 

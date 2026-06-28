@@ -392,13 +392,6 @@ export function resolveModelFromPreferences(
 
   const custom = preferences?.customModelId?.trim();
   if (preferences?.useCustomModel && custom) {
-    const env = custom.includes("/") ? custom.split("/")[0] : "openrouter";
-    const entry = { slug: custom, env };
-    const wire = wireFromUserEntry(entry);
-    if (wire) {
-      const resolved = wireWithKey(wire, keys);
-      if (resolved) return resolved;
-    }
     const orKey = keys.OPENROUTER_API_KEY;
     if (!orKey) return null;
     return {

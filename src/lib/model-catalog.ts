@@ -800,7 +800,6 @@ export function resolveStudioSelectedEnv(
     autoAllowedPresetIds?: string[];
     userModelEntries?: UserModelEntry[];
   },
-  connected?: Partial<Record<string, boolean>>,
 ): AiEnvId {
   const mode = prefs.mode ?? "fixed";
 
@@ -809,13 +808,13 @@ export function resolveStudioSelectedEnv(
     if (pool && isAiEnv(pool as ModelEnvId)) return pool as AiEnvId;
     const robin = getPresetById(prefs.robinPoolModelId, prefs.userModelEntries);
     if (robin.id && isAiEnv(robin.env)) return robin.env;
+    return DEFAULT_STUDIO_ENV;
   }
 
   if (mode === "fixed") {
     const fixed = getPresetById(prefs.fixedPresetId, prefs.userModelEntries);
     if (fixed.id && isAiEnv(fixed.env)) return fixed.env;
-    const custom = prefs.userModelEntries?.[0];
-    if (custom?.env && isAiEnv(custom.env as ModelEnvId)) return custom.env as AiEnvId;
+    return DEFAULT_STUDIO_ENV;
   }
 
   if (mode === "auto") {
@@ -823,15 +822,7 @@ export function resolveStudioSelectedEnv(
       const p = getPresetById(id, prefs.userModelEntries);
       if (p.id && isAiEnv(p.env)) return p.env;
     }
-  }
-
-  if (connected) {
-    for (const env of AI_ENVS_SORTED) {
-      if (env !== "openrouter" && connected[env]) return env;
-    }
-    for (const env of AI_ENVS_SORTED) {
-      if (connected[env]) return env;
-    }
+    return DEFAULT_STUDIO_ENV;
   }
 
   return DEFAULT_STUDIO_ENV;

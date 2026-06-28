@@ -51,6 +51,8 @@ import { isAgentPreferencesConfigured } from "@/lib/agent-setup";
 import { type ConnectorRow, connectedEnvsFromRows } from "@/lib/connector-env-status";
 import { providerById, type AiProviderId } from "@/lib/ai-provider-registry";
 
+const AUTO_POOL_LIMIT = 5;
+
 const ENV_ICONS: Record<AiEnvId, React.ReactNode> = {
   alibaba: <Globe className="size-4" />,
   anthropic: <Zap className="size-4" />,
@@ -88,8 +90,8 @@ const MODES: { id: ModelPowerMode; title: string; hint: string }[] = [
 const MODE_GUIDE: Record<ModelPowerMode, { title: string; body: string; action: string }> = {
   auto: {
     title: "Modo automático",
-    body: "Marque um ou mais cards (○ vira ●). Pode marcar modelos de OpenAI, Anthropic, Groq, etc. no mesmo modo. Se não marcar nenhum, o agente usa todas as chaves que você cadastrou em API.",
-    action: "Marque os modelos permitidos neste ambiente ou em vários ambientes.",
+    body: "Selecione um pool explícito de até 5 modelos. O roteador escolhe entre eles conforme a tarefa e a complexidade. Sem pool configurado, o Auto não executa.",
+    action: "Marque os modelos que entram no pool automático.",
   },
   fixed: {
     title: "Modo fixo",
@@ -206,14 +208,14 @@ export function AiModelStudio({ connectorRows, keysSectionHref = "/api" }: AiMod
   const userModels = prefs.userModelEntries;
   const mode = prefs.mode ?? "fixed";
   const [selectedEnv, setSelectedEnv] = useState<AiEnvId>(() =>
-    resolveStudioSelectedEnv(prefs, connected),
+    resolveStudioSelectedEnv(prefs),
   );
   const [draftModelSlug, setDraftModelSlug] = useState("");
   const autoAllowedKey = (prefs.autoAllowedPresetIds ?? []).join(",");
 
   useEffect(() => {
-    setSelectedEnv(resolveStudioSelectedEnv(prefs, connected));
-  }, [prefs.mode, prefs.fixedPresetId, prefs.robinPoolModelId, prefs.poolProvider, autoAllowedKey, connected, userModels]);
+    setSelectedEnv(resolveStudioSelectedEnv(prefs));
+  }, [prefs.mode, prefs.fixedPresetId, prefs.robinPoolModelId, prefs.poolProvider, autoAllowedKey, userModels]);
 
   const patch = (partial: Partial<AgentPreferences>) =>
     setPrefs((p) => {
@@ -269,7 +271,15 @@ export function AiModelStudio({ connectorRows, keysSectionHref = "/api" }: AiMod
     const entries = [...(userModels ?? []), entry];
     const nextAllowed =
       prefs.mode === "auto"
-        ? [...new Set([...(prefs.autoAllowedPresetIds ?? []).map(normalizePresetId), id])]
+        ? (() => {
+            const current = new Set((prefs.autoAllowedPresetIds ?? []).map(normalizePresetId));
+            if (current.size >= AUTO_POOL_LIMIT) {
+              toast.error(`O modo Auto aceita no máximo ${AUTO_POOL_LIMIT} modelos.`);
+              return prefs.autoAllowedPresetIds;
+            }
+            current.add(id);
+            return [...current];
+          })()
         : prefs.autoAllowedPresetIds;
     patch({
       userModelEntries: entries,
@@ -322,7 +332,10 @@ export function AiModelStudio({ connectorRows, keysSectionHref = "/api" }: AiMod
       const norm = normalizePresetId(presetId);
       const next = new Set(autoAllowed);
       if (next.has(norm)) next.delete(norm);
-      else next.add(norm);
+      else if (next.size >= AUTO_POOL_LIMIT) {
+        toast.error(`O modo Auto aceita no máximo ${AUTO_POOL_LIMIT} modelos.`);
+        return;
+      } else next.add(norm);
       patch({ mode: "auto", autoAllowedPresetIds: [...next] });
       return;
     }
@@ -361,7 +374,11 @@ export function AiModelStudio({ connectorRows, keysSectionHref = "/api" }: AiMod
     const ids = envModels
       .filter((m) => connected[m.env as string] && (prefs.mode !== "robin" || robinCanSelect(m)))
       .map((m) => m.id);
-    patch({ mode: "auto", autoAllowedPresetIds: [...new Set([...autoAllowed, ...ids])] });
+    const merged = [...new Set([...autoAllowed, ...ids])].slice(0, AUTO_POOL_LIMIT);
+    if (merged.length === AUTO_POOL_LIMIT && merged.length < autoAllowed.size + ids.length) {
+      toast.error(`O modo Auto aceita no máximo ${AUTO_POOL_LIMIT} modelos.`);
+    }
+    patch({ mode: "auto", autoAllowedPresetIds: merged });
   };
 
   const clearAutoInEnv = () => {
@@ -457,9 +474,9 @@ export function AiModelStudio({ connectorRows, keysSectionHref = "/api" }: AiMod
           <p className="mt-2 font-mono text-[9px] text-[var(--foreground)]/80">
             → {modeGuide.action}
           </p>
-          {prefs.mode === "auto" && autoAllowed.size > 0 && (
+          {prefs.mode === "auto" && (
             <p className="mt-2 font-mono text-[9px] text-emerald-400/90">
-              {autoAllowed.size} modelo(s) marcado(s) no automático
+              Auto: {autoAllowed.size}/{AUTO_POOL_LIMIT} modelos selecionados
             </p>
           )}
           {prefs.mode === "fixed" && prefs.fixedPresetId && (
@@ -571,7 +588,7 @@ export function AiModelStudio({ connectorRows, keysSectionHref = "/api" }: AiMod
                   onClick={selectAllInEnv}
                   className="font-mono text-[9px] text-[var(--primary)] hover:underline"
                 >
-                  Marcar todos (com chave)
+                  Marcar todos (até {AUTO_POOL_LIMIT})
                 </button>
                 <button
                   type="button"
@@ -737,7 +754,7 @@ export function AiModelStudioSummary() {
   const stt = sttProviderName(prefs.sttProvider ?? STT_DEFAULT_PROVIDER);
   const modeLabel =
     prefs.mode === "auto"
-      ? `auto${(prefs.autoAllowedPresetIds?.length ?? 0) > 0 ? `·${prefs.autoAllowedPresetIds!.length}` : ""}`
+      ? `auto${(prefs.autoAllowedPresetIds?.length ?? 0) > 0 ? `·${prefs.autoAllowedPresetIds!.length}/5` : ""}`
       : (prefs.mode ?? "setup");
 
   return (

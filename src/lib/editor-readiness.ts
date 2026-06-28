@@ -135,7 +135,7 @@ export function buildEditorReadiness(input: {
     items.push({
       level: "ok",
       label: "Modo Auto",
-      detail: "Router escolhe entre os modelos permitidos com chave ativa.",
+      detail: `Pool explícito configurado${(prefs.autoAllowedPresetIds?.length ?? 0) > 0 ? ` · ${(prefs.autoAllowedPresetIds ?? []).length} modelo(s)` : ""}. O roteador escolhe entre eles conforme a tarefa.`,
     });
   }
 

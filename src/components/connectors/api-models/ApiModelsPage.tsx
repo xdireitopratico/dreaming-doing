@@ -67,6 +67,8 @@ import { ProvidersKeysSection } from "./ProvidersKeysSection";
 import { InfraToolsSection } from "./InfraToolsSection";
 import { SessionKindBadge } from "./SessionKindBadge";
 
+const AUTO_POOL_LIMIT = 5;
+
 export interface ProviderUiState {
   id: AiProviderId;
   status: "available" | "connected";
@@ -278,8 +280,8 @@ export function ApiModelsPage() {
 
   useEffect(() => {
     if (!prefsLoaded) return;
-    setSelectedEnv(resolveStudioSelectedEnv(prefs, connected));
-  }, [prefsLoaded, prefs, autoAllowedKey, connected]);
+    setSelectedEnv(resolveStudioSelectedEnv(prefs));
+  }, [prefsLoaded, prefs, autoAllowedKey]);
 
   const patchPrefs = useCallback((partial: Partial<AgentPreferences>) => {
     setPrefs((p) => {
@@ -657,7 +659,10 @@ export function ApiModelsPage() {
         const norm = normalizePresetId(presetId);
         const current = new Set((prefs.autoAllowedPresetIds ?? []).map(normalizePresetId));
         if (current.has(norm)) current.delete(norm);
-        else current.add(norm);
+        else if (current.size >= AUTO_POOL_LIMIT) {
+          toast.error(`O modo Auto aceita no máximo ${AUTO_POOL_LIMIT} modelos.`);
+          return;
+        } else current.add(norm);
         patchPrefs({ autoAllowedPresetIds: [...current] });
         return;
       }
@@ -691,7 +696,15 @@ export function ApiModelsPage() {
       const entries = [...(prefs.userModelEntries ?? []), entry];
       const nextAllowed =
         mode === "auto"
-          ? [...new Set([...(prefs.autoAllowedPresetIds ?? []).map(normalizePresetId), id])]
+          ? (() => {
+              const current = new Set((prefs.autoAllowedPresetIds ?? []).map(normalizePresetId));
+              if (current.size >= AUTO_POOL_LIMIT) {
+                toast.error(`O modo Auto aceita no máximo ${AUTO_POOL_LIMIT} modelos.`);
+                return prefs.autoAllowedPresetIds;
+              }
+              current.add(id);
+              return [...current];
+            })()
           : prefs.autoAllowedPresetIds;
       patchPrefs({
         userModelEntries: entries,
