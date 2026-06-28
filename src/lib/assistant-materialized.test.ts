@@ -6,6 +6,7 @@ import {
   hasMaterializedCardSnapshot,
   isAssistantRunMaterialized,
   isTerminalAssistantMeta,
+  shouldAcknowledgeMaterializedRun,
 } from "@/lib/assistant-materialized";
 
 function msg(overrides: Partial<ChatMessage> = {}): ChatMessage {
@@ -59,6 +60,16 @@ describe("isAssistantRunMaterialized", () => {
     });
     expect(canReleaseLiveSlot(materialized)).toBe(true);
     expect(canReleaseLiveSlot(msg({ runId: "r1", content: "wip" }))).toBe(false);
+  });
+
+  it("só acknowledgeia materialização quando o progresso já terminou", () => {
+    const materialized = msg({
+      runId: "r1",
+      content: "Done.",
+      meta: { runId: "r1", finishedAt: "2026-06-08T00:00:00Z" },
+    });
+    expect(shouldAcknowledgeMaterializedRun(materialized, false)).toBe(false);
+    expect(shouldAcknowledgeMaterializedRun(materialized, true)).toBe(true);
   });
 
   it("rejeita checkpoint entre chunks mesmo com finishedAt", () => {

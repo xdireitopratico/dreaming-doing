@@ -38,6 +38,18 @@ export function canReleaseLiveSlot(message: ChatMessage): boolean {
   return isAssistantRunMaterialized(message);
 }
 
+/**
+ * Só solta o run ao materializar quando o progresso do agente já ficou terminal.
+ * Se o assistant materializa antes do fim do loop, mantemos o slot vivo para não
+ * trocar a timeline rica por um snapshot raso no meio da execução.
+ */
+export function shouldAcknowledgeMaterializedRun(
+  message: ChatMessage,
+  progressFinished: boolean,
+): boolean {
+  return progressFinished && canReleaseLiveSlot(message);
+}
+
 /** Só libera acknowledge/frozen quando a mensagem assistant é terminal no DB (finishedAt, não partial). */
 export function isAssistantRunMaterialized(message: ChatMessage): boolean {
   const meta = message.meta;

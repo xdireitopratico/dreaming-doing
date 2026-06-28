@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import type { AgentProgress } from "@/lib/agent-progress";
 import type { ChatMessage } from "@/lib/chat-types";
-import { canReleaseLiveSlot } from "@/lib/assistant-materialized";
+import { canReleaseLiveSlot, shouldAcknowledgeMaterializedRun } from "@/lib/assistant-materialized";
 import { hasInspectorReadySnapshot } from "@/lib/assistant-run-progress";
 import { buildChatThread } from "@/lib/chat";
 import { usePendingPlan } from "@/hooks/usePendingPlan";
@@ -73,13 +73,14 @@ export function useChat({
     for (const m of messages) {
       if (m.role !== "assistant" || !m.runId) continue;
       if (!canReleaseLiveSlot(m)) continue;
+      if (!shouldAcknowledgeMaterializedRun(m, agent.progress.finished)) continue;
       const rid = m.runId;
       if (hasInspectorReadySnapshot(m)) {
         agent.clearFrozenRunProgress(rid);
       }
       agent.acknowledgeMaterializedRun(rid);
     }
-  }, [messages, messagesLoading, agent]);
+  }, [messages, messagesLoading, agent, agent.progress.finished]);
 
   useEffect(() => {
     if (!agent.activeRunId || !agent.progress.finished) return;
