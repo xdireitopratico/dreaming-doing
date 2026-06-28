@@ -17,6 +17,16 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 function formatRelative(dateStr: string | null) {
   if (!dateStr) return "—";
@@ -34,6 +44,8 @@ export function AgentsDashboard() {
   const qc = useQueryClient();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [search, setSearch] = useState("");
+  const [pendingDelete, setPendingDelete] = useState<{ id: string; name: string } | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const { data: projects, isLoading } = useQuery({
     queryKey: ["projects-all"],
@@ -68,12 +80,20 @@ export function AgentsDashboard() {
   const handleDelete = async (e: React.MouseEvent, agentId: string, name: string) => {
     e.preventDefault();
     e.stopPropagation();
-    if (!confirm(`Excluir “${name}”? O fluxo deste agente será removido.`)) return;
+    setPendingDelete({ id: agentId, name });
+  };
+
+  const confirmDelete = async () => {
+    if (!pendingDelete || deleting) return;
+    setDeleting(true);
     try {
-      await deleteProject({ data: { projectId: agentId } });
+      await deleteProject({ data: { projectId: pendingDelete.id } });
       void qc.invalidateQueries({ queryKey: ["projects-all"] });
+      setPendingDelete(null);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Não foi possível excluir");
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -172,20 +192,11 @@ export function AgentsDashboard() {
 
           {filtered.map((p) => (
             <div key={p.id} className="dashboard-project-card group relative">
-              <button
-                type="button"
-                className="absolute right-2 top-2 z-10 grid size-8 place-items-center rounded-lg text-[var(--forge-muted)] opacity-0 transition-opacity hover:bg-[color-mix(in_srgb,var(--status-failed)_18%,transparent)] hover:text-[var(--status-failed)] group-hover:opacity-100"
-                title="Excluir agente"
-                aria-label={`Excluir ${p.name}`}
-                onClick={(e) => void handleDelete(e, p.id, p.name)}
-              >
-                <Trash2 className="size-4" />
-              </button>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <button
                     type="button"
-                    className="absolute right-10 top-2 z-10 grid size-8 place-items-center rounded-lg text-[var(--forge-muted)] opacity-0 transition-opacity hover:bg-[var(--forge-surface-2)] hover:text-[var(--forge-text)] group-hover:opacity-100"
+                    className="absolute right-2 top-2 z-10 grid size-8 place-items-center rounded-lg text-[var(--forge-muted)] opacity-0 transition-opacity hover:bg-[var(--forge-surface-2)] hover:text-[var(--forge-text)] group-hover:opacity-100"
                     title="Abrir em..."
                     aria-label={`Abrir ${p.name} em...`}
                     onClick={(e) => e.preventDefault()}
@@ -208,6 +219,16 @@ export function AgentsDashboard() {
                     <Link to="/agents/monitoring/$agentId" params={{ agentId: p.id }}>
                       Monitoring
                     </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onSelect={(e) => {
+                      e.preventDefault();
+                      handleDelete(e as unknown as React.MouseEvent, p.id, p.name);
+                    }}
+                    className="text-[var(--status-failed)] focus:text-[var(--status-failed)]"
+                  >
+                    <Trash2 className="size-4" />
+                    Excluir
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
@@ -232,6 +253,29 @@ export function AgentsDashboard() {
       </section>
 
       <CreateAgentDialog open={dialogOpen} onClose={() => setDialogOpen(false)} />
+
+      <AlertDialog open={pendingDelete !== null} onOpenChange={(open) => { if (!open) setPendingDelete(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir agente?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja excluir <strong>{pendingDelete?.name}</strong>?
+              O fluxo e todas as execuções, conversas e versões vinculadas serão removidos em cascata.
+              Esta ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => { e.preventDefault(); void confirmDelete(); }}
+              disabled={deleting}
+              className="bg-[var(--status-failed)] text-white hover:bg-[var(--status-failed)]/90"
+            >
+              {deleting ? "Excluindo…" : "Excluir"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
