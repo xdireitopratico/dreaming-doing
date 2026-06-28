@@ -245,11 +245,29 @@ export function createRunSubscriptionHandlers(deps: RunSubscriptionDeps) {
 
     deps.setConnected(true);
 
-    const terminal = await catchUpRun(runId);
-    if (terminal || isStale()) return;
-
     const eventChannel = supabase
       .channel(`agent-events-${runId}`)
+      .on(
+        "broadcast",
+        { event: "stream" },
+        (payload: { type: "broadcast"; event: string; payload?: AgentStreamRow }) => {
+          if (deps.runIdRef.current !== runId) return;
+          if (deps.closedRunIdRef.current === runId) return;
+          const row = payload.payload;
+          if (!row || typeof row.seq !== "number") return;
+          if (deps.enqueueStreamRow(row)) {
+            deps.closedRunIdRef.current = runId;
+            void teardownChannels();
+            deps.setConnected(false);
+            deps.setProgress((p) => {
+              if (!shouldRetainLiveRunSlot(p) && deps.runIdRef.current === runId) {
+                deps.releaseLiveRunSlot(runId);
+              }
+              return p;
+            });
+          }
+        },
+      )
       .on(
         "postgres_changes",
         {
@@ -363,6 +381,9 @@ export function createRunSubscriptionHandlers(deps: RunSubscriptionDeps) {
       void teardownChannels();
       return;
     }
+
+    const terminal = await catchUpRun(runId);
+    if (terminal || isStale()) return;
 
     if (deps.stalePollRef.current) clearInterval(deps.stalePollRef.current);
     deps.stalePollRef.current = setInterval(() => {

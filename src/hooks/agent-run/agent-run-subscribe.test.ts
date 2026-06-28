@@ -15,8 +15,8 @@ let agentRunsCallCount = 0;
 
 vi.mock("@/integrations/supabase/client", () => ({
   supabase: {
-    channel: (...args: unknown[]) => mockChannel(...args),
-    removeChannel: (...args: unknown[]) => mockRemoveChannel(...args),
+    channel: (...args: any[]) => mockChannel(...args),
+    removeChannel: (...args: any[]) => mockRemoveChannel(...args),
     from: (table: string) => {
       if (table === "agent_stream_events") {
         return {
@@ -115,7 +115,7 @@ describe("createRunSubscriptionHandlers", () => {
     await Promise.all([first, second]);
 
     expect(mockChannel).toHaveBeenCalledTimes(2);
-    expect(eventChannel.on).toHaveBeenCalledTimes(1);
+    expect(eventChannel.on).toHaveBeenCalledTimes(2);
     expect(statusChannel.on).toHaveBeenCalledTimes(1);
   });
 });
