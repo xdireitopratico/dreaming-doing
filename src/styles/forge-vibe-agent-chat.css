@@ -7,13 +7,13 @@
 .forge-vibe-agent-chat {
   /* Amarelo SOMENTE no botão enviar — igual Vibe Coder */
   --vibe-coder-send: #fbbf24;
-  /* Acentos do chat em azul — não competir com publish/draft (#ffb627) nem com o enviar */
-  --text-accent: #60a5fa;
-  --border-active: #3b82f6;
-  --bg-chat: #0a0a0f;
-  --bg-card: #13131f;
-  --bg-hover: #1a1a2e;
-  --bg-input: #1e1e2e;
+  /* Tokens reapontam dos ps-* (mudam com tema: amarelo em A, azul em B) */
+  --text-accent: var(--ps-accent, #60a5fa);
+  --border-active: var(--ps-accent, #3b82f6);
+  --bg-chat: var(--ps-bg-deep, #0a0a0f);
+  --bg-card: var(--ps-bg-surface, #13131f);
+  --bg-hover: var(--ps-bg-surface-hover, #1a1a2e);
+  --bg-input: var(--ps-bg, #1e1e2e);
   --text-primary: #e2e8f0;
   --text-secondary: #94a3b8;
   --text-muted: #64748b;
@@ -73,7 +73,7 @@
 .forge-vibe-agent-chat .forge-composer {
   margin: 0;
   border-radius: 16px;
-  background: color-mix(in srgb, var(--bg-input) 92%, var(--bg-card) 8%);
+  background: linear-gradient(135deg, var(--ps-card-bg-start, #1a1a2e), var(--ps-card-bg-end, #0a0a14));
   border: 1px solid color-mix(in srgb, var(--border-forge) 75%, #52525b 25%);
   box-shadow:
     0 0 0 1px rgba(255, 255, 255, 0.02) inset,
@@ -114,21 +114,21 @@
   padding: var(--chat-padding);
 }
 
-/* FAB: azul (como estava) — não amarelo */
+/* FAB: reaponta do tema (amarelo em A, azul em B) */
 .forge-vibe-agent-chat__fab {
-  background: rgba(30, 58, 138, 0.92);
-  color: #fff;
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: var(--ps-accent, rgba(30, 58, 138, 0.92));
+  color: var(--ps-bg, #fff);
+  border: 1px solid var(--ps-accent-glow, rgba(255, 255, 255, 0.15));
 }
 
 .forge-vibe-agent-chat__fab:hover {
-  background: rgba(37, 99, 235, 0.95);
+  filter: brightness(1.1);
 }
 
 .forge-vibe-agent-chat__fab--open {
-  background: #3b82f6;
-  color: #fff;
-  border-color: rgba(255, 255, 255, 0.2);
+  background: var(--ps-accent, #3b82f6);
+  color: var(--ps-bg, #fff);
+  border-color: var(--ps-accent-glow, rgba(255, 255, 255, 0.2));
 }
 
 .forge-vibe-agent-chat__history-item--active {

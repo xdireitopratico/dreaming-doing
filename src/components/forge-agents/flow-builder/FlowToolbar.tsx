@@ -109,7 +109,7 @@ export const FlowToolbar = memo(function FlowToolbar({
   onResumeSession, onOpenAgent,
 }: FlowToolbarProps) {
   return (
-    <div className="h-12 border-b flex items-center justify-between px-3 gap-2 shrink-0" style={{ background: 'var(--ps-bg)', borderColor: 'var(--ps-border)', color: 'var(--ps-cream)' }}>
+    <div className="h-12 border-b flex items-center justify-between px-3 gap-2 shrink-0 relative" style={{ background: 'var(--ps-bg)', borderColor: 'var(--ps-border)', color: 'var(--ps-cream)' }}>
       {/* Left: Name + Status */}
       <div className="flex items-center gap-2 min-w-0">
         <Input
@@ -122,7 +122,17 @@ export const FlowToolbar = memo(function FlowToolbar({
         {hasUnsaved && <span className="text-[10px] shrink-0" style={{ color: 'var(--ps-orange)' }}>● Não salvo</span>}
       </div>
 
-      {/* Right: Actions + Menus */}
+      {/* Center: Undo / Redo (fixo no meio do header) */}
+      <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center gap-1">
+        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onUndo} title="Desfazer (Ctrl+Z)">
+          <Undo2 className="h-3.5 w-3.5" />
+        </Button>
+        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onRedo} title="Refazer (Ctrl+Shift+Z)">
+          <Redo2 className="h-3.5 w-3.5" />
+        </Button>
+      </div>
+
+      {/* Right: Secondary icons + Primary actions (esquerda → direita: Validação, Tema, Menus, Salvar, Testar, Publicar) */}
       <div className="flex items-center gap-1.5">
         {/* Validation */}
         <Button
@@ -137,38 +147,7 @@ export const FlowToolbar = memo(function FlowToolbar({
           )}
         </Button>
 
-        {/* Undo/Redo */}
-        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onUndo} title="Desfazer (Ctrl+Z)">
-          <Undo2 className="h-3.5 w-3.5" />
-        </Button>
-        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onRedo} title="Refazer (Ctrl+Shift+Z)">
-          <Redo2 className="h-3.5 w-3.5" />
-        </Button>
-
-        <div className="w-px h-5" style={{ background: 'var(--ps-border)' }} />
-
-        {/* Primary Actions */}
-        <Button variant="outline" size="sm" className="gap-1 h-7 text-xs border-none" onClick={onSave} disabled={saving} title="Salvar (Ctrl+S)" style={{ background: 'linear-gradient(135deg, #1a1e27, #0b0d12)', color: 'var(--ps-cream)' }}>
-          <Save className="h-3.5 w-3.5" />
-          Salvar
-        </Button>
-        <Button
-          size="sm" className="gap-1 h-7 text-xs border-none"
-          onClick={() => onTogglePanel("test")}
-          title="Testar (1)"
-          style={{ background: activePanel === "test" ? 'var(--ps-accent)' : 'linear-gradient(135deg, #1a1e27, #0b0d12)', color: activePanel === "test" ? '#0b0d12' : 'var(--ps-cream)' }}
-        >
-          <Play className="h-3.5 w-3.5" />
-          Testar
-        </Button>
-        <Button size="sm" className="gap-1 h-7 text-xs" onClick={onPublish} title="Publicar (Ctrl+Shift+P)" style={{ background: 'var(--ps-accent)', border: 'none', color: '#0b0d12' }}>
-          <Upload className="h-3.5 w-3.5" />
-          Publicar
-        </Button>
-
-        <div className="w-px h-5" style={{ background: 'var(--ps-border)' }} />
-
-        {/* Ícones de menu: Tema → Ferramentas → Análise → Colaboração → Configuração → Meus Agentes */}
+        {/* Ícones de menu: Tema → Configuração → Colaboração → Análise → Ferramentas → Meus Agentes */}
         <div className="flex items-center gap-1">
           <PrometheusThemeToggle />
           {ORDERED_MENU_GROUPS.map((group) => {
@@ -235,6 +214,27 @@ export const FlowToolbar = memo(function FlowToolbar({
 
           <PrometheusSessionList onResumeSession={onResumeSession} onOpenAgent={onOpenAgent} />
         </div>
+
+        <div className="w-px h-5" style={{ background: 'var(--ps-border)' }} />
+
+        {/* Primary Actions: Salvar → Testar → Publicar (à direita, extremidade) */}
+        <Button variant="outline" size="sm" className="gap-1 h-7 text-xs border-none" onClick={onSave} disabled={saving} title="Salvar (Ctrl+S)" style={{ background: 'linear-gradient(135deg, #1a1e27, #0b0d12)', color: 'var(--ps-cream)' }}>
+          <Save className="h-3.5 w-3.5" />
+          Salvar
+        </Button>
+        <Button
+          size="sm" className="gap-1 h-7 text-xs border-none"
+          onClick={() => onTogglePanel("test")}
+          title="Testar (1)"
+          style={{ background: activePanel === "test" ? 'var(--ps-accent)' : 'linear-gradient(135deg, #1a1e27, #0b0d12)', color: activePanel === "test" ? '#0b0d12' : 'var(--ps-cream)' }}
+        >
+          <Play className="h-3.5 w-3.5" />
+          Testar
+        </Button>
+        <Button size="sm" className="gap-1 h-7 text-xs" onClick={onPublish} title="Publicar (Ctrl+Shift+P)" style={{ background: 'var(--ps-accent)', border: 'none', color: '#0b0d12' }}>
+          <Upload className="h-3.5 w-3.5" />
+          Publicar
+        </Button>
       </div>
     </div>
   );

@@ -27,9 +27,16 @@
 
   /* Accent — botão amarelo Vibecoding */
   --ps-accent: #fbbf24;
+  --ps-accent-strong: #f59e0b;
   --ps-accent-glow: rgba(251, 191, 36, 0.3);
   --ps-accent-dim: rgba(251, 191, 36, 0.6);
   --ps-accent-subtle: rgba(251, 191, 36, 0.08);
+
+  /* Card node (Tema A — degradê cinza) */
+  --ps-card-bg-start: #1a1e27;
+  --ps-card-bg-end: #0b0d12;
+  --ps-card-shadow: rgba(251, 191, 36, 0.3);
+  --ps-card-shadow-soft: rgba(251, 191, 36, 0.15);
 
   /* Texto (mantém "cream" semântico mas aponta para texto Vibecoding) */
   --ps-cream: #e2e8f0;
@@ -100,9 +107,16 @@
   --ps-bg-glass: rgba(0, 0, 0, 0.4);
 
   --ps-accent: hsl(210 100% 60%);
+  --ps-accent-strong: hsl(217 90% 60%);
   --ps-accent-glow: rgba(59, 130, 246, 0.3);
   --ps-accent-dim: rgba(59, 130, 246, 0.6);
   --ps-accent-subtle: rgba(59, 130, 246, 0.08);
+
+  /* Card node (Tema B — preserva azul-petróleo original) */
+  --ps-card-bg-start: #1a1a2e;
+  --ps-card-bg-end: #0a0a14;
+  --ps-card-shadow: rgba(85, 85, 170, 0.3);
+  --ps-card-shadow-soft: rgba(85, 85, 170, 0.15);
 
   --ps-cream: hsl(40 30% 92%);
   --ps-cream-80: rgba(240, 230, 215, 0.80);
