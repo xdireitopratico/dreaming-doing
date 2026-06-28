@@ -30,6 +30,7 @@ import { SubFlowNode } from "./nodes/SubFlowNode";
 import { TransformerNode } from "./nodes/TransformerNode";
 import { ErrorHandlerNode } from "./nodes/ErrorHandlerNode";
 import { VisionNode } from "./nodes/VisionNode";
+import { StickyNote } from "./nodes/StickyNote";
 import { ForgeEdge } from "./edges/ForgeEdge";
 import { NodeContextMenu } from "./NodeContextMenu";
 import type { ContextMenuAction } from "./NodeContextMenu";
@@ -42,7 +43,7 @@ const nodeTypes = {
   hitl: HITLNode, loop: LoopNode, switch: SwitchNode,
   memory: MemoryNode, delay: DelayNode, sub_flow: SubFlowNode,
   transformer: TransformerNode, error_handler: ErrorHandlerNode,
-  vision: VisionNode,
+  vision: VisionNode, sticky: StickyNote,
 };
 
 const edgeTypes = { default: ForgeEdge, conditional: ForgeEdge };
@@ -66,7 +67,7 @@ const MINIMAP_COLORS: Record<string, string> = {
   tts: "#f97316", rag_search: "#b45309", hitl: "#ef4444",
   loop: "#6b7280", switch: "#6366f1", memory: "#ec4899",
   delay: "#9ca3af", sub_flow: "#1f2937", transformer: "#06b6d4",
-  error_handler: "#dc2626", vision: "#7c3aed",
+  error_handler: "#dc2626", vision: "#7c3aed", sticky: "#eab308",
 };
 
 interface FlowCanvasProps {
@@ -128,17 +129,32 @@ export const FlowCanvas = memo(function FlowCanvas({
   );
 
   // ── Context menu state ──
-  const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; nodeId: string } | null>(null);
+  const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; nodeId?: string } | null>(null);
 
   const onNodeContextMenu = useCallback((event: React.MouseEvent, node: Node) => {
     event.preventDefault();
     setCtxMenu({ x: event.clientX, y: event.clientY, nodeId: node.id });
   }, []);
 
+  const onPaneContextMenu = useCallback((event: React.MouseEvent | MouseEvent) => {
+    event.preventDefault();
+    setCtxMenu({ x: (event as React.MouseEvent).clientX, y: (event as React.MouseEvent).clientY });
+  }, []);
+
   const handleCtxMenuAction = useCallback((actionId: string) => {
     setCtxMenu(null);
+    if (actionId === "add_sticky") {
+      const id = `sticky_${Date.now()}`;
+      const position = { x: ctxMenu?.x ? ctxMenu.x - 300 : 400, y: ctxMenu?.y ? ctxMenu.y - 100 : 200 };
+      onSetNodes((nds) => [...nds, {
+        id, type: "sticky",
+        position,
+        data: { label: "Sticky Note", text: "Escreva seu texto aqui...", color: "yellow" },
+      }]);
+      return;
+    }
     onContextMenuAction?.(actionId, ctxMenu?.nodeId ?? "");
-  }, [onContextMenuAction, ctxMenu]);
+  }, [onContextMenuAction, ctxMenu, onSetNodes]);
 
   const CONTEXT_MENU_ACTIONS: ContextMenuAction[] = [
     { id: "open", label: "Open", icon: "edit", shortcut: "↵" },
@@ -152,6 +168,12 @@ export const FlowCanvas = memo(function FlowCanvas({
     { id: "select_all", label: "Select All", icon: "select-all", shortcut: "Ctrl+A" },
     { id: "divider", label: "", divider: true },
     { id: "delete", label: "Delete", icon: "trash", shortcut: "Del", danger: true },
+  ];
+
+  // Pane context menu (no node selected) — show canvas-level actions
+  const PANE_CONTEXT_MENU_ACTIONS: ContextMenuAction[] = [
+    { id: "add_sticky", label: "Add Sticky Note", icon: "edit" },
+    { id: "select_all", label: "Select All", icon: "select-all", shortcut: "Ctrl+A" },
   ];
 
   const onConnect = useCallback((params: Connection) => {
@@ -204,6 +226,7 @@ export const FlowCanvas = memo(function FlowCanvas({
           onEdgeClick={onEdgeClick}
           onPaneClick={onPaneClick}
           onNodeContextMenu={onNodeContextMenu}
+          onPaneContextMenu={onPaneContextMenu}
           onDrop={onDrop}
           onDragOver={onDragOver}
           nodeTypes={nodeTypes}
@@ -212,6 +235,8 @@ export const FlowCanvas = memo(function FlowCanvas({
           fitView
           style={{ background: 'var(--ps-bg-deep, hsl(225 30% 4%))' }}
           deleteKeyCode={["Backspace", "Delete"]}
+          snapToGrid
+          snapGrid={[20, 20]}
         >
           <Background gap={20} size={1.5} color="rgba(255,255,255,0.10)" />
           <Controls className="!bg-[var(--ps-bg-deep)] !border-[var(--ps-border)] !shadow-lg [&>button]:!bg-[var(--ps-bg-surface)] [&>button]:!border-[var(--ps-border)] [&>button]:!text-[var(--ps-cream-60)] [&>button:hover]:!bg-[var(--ps-bg-surface-hover)]">
@@ -256,8 +281,8 @@ export const FlowCanvas = memo(function FlowCanvas({
         <NodeContextMenu
           x={ctxMenu.x}
           y={ctxMenu.y}
-          nodeId={ctxMenu.nodeId}
-          actions={CONTEXT_MENU_ACTIONS}
+          nodeId={ctxMenu.nodeId ?? ""}
+          actions={ctxMenu.nodeId ? CONTEXT_MENU_ACTIONS : PANE_CONTEXT_MENU_ACTIONS}
           onAction={handleCtxMenuAction}
           onClose={() => setCtxMenu(null)}
         />
