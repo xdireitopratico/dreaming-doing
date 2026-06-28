@@ -117,6 +117,8 @@ export function createRunActionHandlers(deps: RunActionHandlersDeps) {
       pendingPlan: null,
       awaiting: false,
       awaitingKind: null,
+      phase: null,
+      statusHint: null,
     }));
   };
 

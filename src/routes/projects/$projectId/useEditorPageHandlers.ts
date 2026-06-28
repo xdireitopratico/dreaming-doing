@@ -384,10 +384,13 @@ export function useEditorPageHandlers({
 
       if (planAwaiting && pp) {
         try {
+          agent.clearPendingPlan();
+          if (agent.activeRunId && !agent.progress.finished) {
+            await agent.stop();
+          }
           await planRejectFn({
             data: { runId: pp.runId, planId: pp.planId, graciosa: false },
           });
-          agent.clearPendingPlan();
           await qc.invalidateQueries({ queryKey: ["messages", conversation.id] });
         } catch (e) {
           toast.error((e as Error)?.message ?? "Falha ao dispensar plano");
@@ -742,10 +745,13 @@ export function useEditorPageHandlers({
       }
 
       try {
+        agent.clearPendingPlan();
+        if (agent.activeRunId && !agent.progress.finished) {
+          await agent.stop();
+        }
         await planRejectFn({
           data: { runId: pp.runId, planId: pp.planId, reason },
         });
-        agent.clearPendingPlan();
         await qc.invalidateQueries({ queryKey: ["messages", conversation?.id] });
         qc.invalidateQueries({ queryKey: ["conversation", projectId] });
         qc.invalidateQueries({ queryKey: ["agent-runs", projectId] });
