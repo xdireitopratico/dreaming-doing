@@ -89,6 +89,19 @@ export function FlowBuilderDialog({ flowId, projectId, open, onClose, onFlowIdCh
   const [nodeStatusMap, setNodeStatusMap] = useState<Record<string, NodeStatus>>({});
   const handleClearExecutionData = useCallback(() => setNodeStatusMap({}), []);
 
+  const handleContextMenuAction = useCallback((actionId: string, nodeId: string) => {
+    switch (actionId) {
+      case "delete": s.handleDelete(); break;
+      case "select_all": s.handleSelectAll(); break;
+      case "duplicate": s.handleDuplicate(); break;
+      case "toggle": s.handleToggleDisabled(); break;
+      case "open":
+        if (s.selectedNode) s.setSelectedNode(s.selectedNode);
+        break;
+      // copy, rename, execute are handled via shortcuts
+    }
+  }, [s]);
+
   const handleRequestClose = useCallback(() => {
     if (s.hasUnsaved) {
       setCloseConfirmOpen(true);
@@ -203,6 +216,7 @@ export function FlowBuilderDialog({ flowId, projectId, open, onClose, onFlowIdCh
             onNodeStatusChange={setNodeStatusMap}
             onUndo={s.handleUndo}
             onClearExecutionData={handleClearExecutionData}
+            onContextMenuAction={handleContextMenuAction}
           />
 
           {selectedNode()}

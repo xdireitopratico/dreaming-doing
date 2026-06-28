@@ -337,6 +337,30 @@ export function useFlowBuilderState(flowId: string | null, open: boolean, projec
     onNodesChange(nodes.map((n) => ({ id: n.id, type: "select" as const, selected: true })));
   }, [nodes, onNodesChange]);
 
+  const handleDuplicate = useCallback(() => {
+    if (!selectedNode) return;
+    const newNodeId = `${selectedNode.type}_${Date.now()}`;
+    const offset = { x: 80, y: 80 };
+    setNodes((nds) => [...nds, {
+      ...selectedNode,
+      id: newNodeId,
+      position: { x: selectedNode.position.x + offset.x, y: selectedNode.position.y + offset.y },
+      selected: false,
+      data: { ...selectedNode.data },
+    }]);
+    setEdges((eds) => [...eds]);
+    setSelectedNode(null);
+  }, [selectedNode, setNodes, setEdges]);
+
+  const handleToggleDisabled = useCallback(() => {
+    if (!selectedNode) return;
+    setNodes((nds) => nds.map((n) =>
+      n.id === selectedNode.id
+        ? { ...n, data: { ...n.data, disabled: !(n.data as Record<string, any>)?.disabled } }
+        : n
+    ));
+  }, [selectedNode, setNodes]);
+
   return {
     // Flow data
     nodes, edges, setNodes, setEdges, onNodesChange, onEdgesChange,
@@ -356,7 +380,7 @@ export function useFlowBuilderState(flowId: string | null, open: boolean, projec
     // Actions
     handleSave, handlePublish, handleUndo, handleRedo,
     handleRollback, handleApplyTemplate, handleApplyPatch, handleHighlightNodes,
-    handleDelete, handleSelectAll,
+    handleDelete, handleSelectAll, handleDuplicate, handleToggleDisabled,
     onNodeClick, onEdgeClick, onPaneClick,
     handleNodeUpdate, handleEdgeUpdate,
     // Controla o load automatico quando o flowId muda externamente.

@@ -2,7 +2,7 @@
  * FlowCanvas — ReactFlow canvas wrapper
  * Extraído de FlowBuilderDialog (Rodada auditoria)
  */
-import { memo, useCallback, useEffect, useMemo } from "react";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { injectN8nNodeAnimations } from "./nodes/BaseNode";
 import { injectNodeToolbarStyles } from "./nodes/NodeToolbar";
 import { injectEdgeStyles } from "./edges/ForgeEdgeAnimations";
@@ -31,6 +31,8 @@ import { TransformerNode } from "./nodes/TransformerNode";
 import { ErrorHandlerNode } from "./nodes/ErrorHandlerNode";
 import { VisionNode } from "./nodes/VisionNode";
 import { ForgeEdge } from "./edges/ForgeEdge";
+import { NodeContextMenu } from "./NodeContextMenu";
+import type { ContextMenuAction } from "./NodeContextMenu";
 import { FlowBuilderChatDock } from "./FlowBuilderChatDock";
 
 const nodeTypes = {
@@ -94,6 +96,8 @@ interface FlowCanvasProps {
   onUndo?: () => void;
   /** Clear execution data from all nodes */
   onClearExecutionData?: () => void;
+  /** Context menu action handler */
+  onContextMenuAction?: (actionId: string, nodeId: string) => void;
 }
 
 export const FlowCanvas = memo(function FlowCanvas({
@@ -103,7 +107,7 @@ export const FlowCanvas = memo(function FlowCanvas({
   onRegisterFitView,
   flowId, chatEnabled = false, onApplyPatch, onHighlightNodes,
   registerChatToggle, registerChatCollapse, onChatOpenChange,
-  nodeStatusMap, onNodeStatusChange, onUndo, onClearExecutionData,
+  nodeStatusMap, onNodeStatusChange, onUndo, onClearExecutionData, onContextMenuAction,
 }: FlowCanvasProps) {
   // Inject n8n node CSS animations once
   useEffect(() => { injectN8nNodeAnimations(); injectNodeToolbarStyles(); injectEdgeStyles(); }, []);
@@ -122,6 +126,33 @@ export const FlowCanvas = memo(function FlowCanvas({
     }),
     [nodes, highlightedNodeId, nodeStatusMap]
   );
+
+  // ── Context menu state ──
+  const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; nodeId: string } | null>(null);
+
+  const onNodeContextMenu = useCallback((event: React.MouseEvent, node: Node) => {
+    event.preventDefault();
+    setCtxMenu({ x: event.clientX, y: event.clientY, nodeId: node.id });
+  }, []);
+
+  const handleCtxMenuAction = useCallback((actionId: string) => {
+    setCtxMenu(null);
+    onContextMenuAction?.(actionId, ctxMenu?.nodeId ?? "");
+  }, [onContextMenuAction, ctxMenu]);
+
+  const CONTEXT_MENU_ACTIONS: ContextMenuAction[] = [
+    { id: "open", label: "Open", icon: "edit", shortcut: "↵" },
+    { id: "execute", label: "Execute", icon: "play", shortcut: "Ctrl+Enter" },
+    { id: "toggle", label: "Toggle Disabled", icon: "toggle", shortcut: "D" },
+    { id: "rename", label: "Rename", icon: "edit", shortcut: "F2" },
+    { id: "divider", label: "", divider: true },
+    { id: "copy", label: "Copy", icon: "copy", shortcut: "Ctrl+C" },
+    { id: "duplicate", label: "Duplicate", icon: "duplicate", shortcut: "Ctrl+D" },
+    { id: "divider", label: "", divider: true },
+    { id: "select_all", label: "Select All", icon: "select-all", shortcut: "Ctrl+A" },
+    { id: "divider", label: "", divider: true },
+    { id: "delete", label: "Delete", icon: "trash", shortcut: "Del", danger: true },
+  ];
 
   const onConnect = useCallback((params: Connection) => {
     onSetEdges((eds) => addEdge({
@@ -172,6 +203,7 @@ export const FlowCanvas = memo(function FlowCanvas({
           onNodeClick={onNodeClick}
           onEdgeClick={onEdgeClick}
           onPaneClick={onPaneClick}
+          onNodeContextMenu={onNodeContextMenu}
           onDrop={onDrop}
           onDragOver={onDragOver}
           nodeTypes={nodeTypes}
@@ -218,6 +250,18 @@ export const FlowCanvas = memo(function FlowCanvas({
           <FlowCanvasInternals onRegisterFitView={onRegisterFitView} />
         </ReactFlow>
       </ReactFlowProvider>
+
+      {/* Context menu */}
+      {ctxMenu && (
+        <NodeContextMenu
+          x={ctxMenu.x}
+          y={ctxMenu.y}
+          nodeId={ctxMenu.nodeId}
+          actions={CONTEXT_MENU_ACTIONS}
+          onAction={handleCtxMenuAction}
+          onClose={() => setCtxMenu(null)}
+        />
+      )}
 
       {flowId && onApplyPatch && (
         <FlowBuilderChatDock
