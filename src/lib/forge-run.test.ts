@@ -395,6 +395,22 @@ describe("forge-run terminal state", () => {
 
     expect(view.miniCard.status).toBe("done");
   });
+
+  it("jobPlan não vira checklist automaticamente no mini-card", () => {
+    const progress = {
+      ...initialAgentProgress,
+      finished: true,
+      lastFinishOk: true,
+    };
+
+    const view = buildAgentRunView("run-1", progress, {
+      running: false,
+      jobPlan: samplePlan,
+    });
+
+    expect(view.miniCard.hasPlan).toBe(true);
+    expect(view.miniCard.tasks).toHaveLength(0);
+  });
 });
 
 describe("forge-run mini card briefing e título", () => {

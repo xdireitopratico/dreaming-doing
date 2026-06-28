@@ -649,24 +649,10 @@ export function buildAgentRunView(
   const activity = collectMiniCardActivity(progress, forgeTimeline, jobActive);
   const liveLine = collectMiniCardLiveLine(progress, forgeTimeline, jobActive);
 
-  // Tasks checklist — prioriza tarefas declaradas pelo LLM (declare_tasks via reducer).
-  // Se não houver, deriva do plano aprovado (plan mode).
+  // Tasks checklist — só tarefas declaradas pelo LLM (declare_tasks via reducer).
+  // Plano pendente/aprovado não vira checklist automaticamente.
   const declaredTasks = progress.tasks ?? [];
-  const tasks = declaredTasks.length > 0
-    ? declaredTasks
-    : (jobPlan?.steps ?? []).map((step, index) => {
-      let status: 'pending' | 'active' | 'done' | 'failed' = 'pending';
-      if (progress.finished) {
-        status = progress.lastFinishOk === false ? 'failed' : 'done';
-      } else if (jobActive) {
-        status = index === 0 ? 'active' : 'pending';
-      }
-      return {
-        id: step.id || `plan-step-${index}`,
-        label: step.description,
-        status,
-      };
-    });
+  const tasks = declaredTasks;
 
   const streamBody = progress.streamText?.trim() || null;
   const narrationBody = progress.narrationText?.trim() || null;
