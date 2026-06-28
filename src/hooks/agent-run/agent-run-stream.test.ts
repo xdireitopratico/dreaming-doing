@@ -87,6 +87,25 @@ describe("createStreamRowHandlers", () => {
     expect(refs.lastSeqRef.current).toBe(2);
   });
 
+  it("prioriza live rows sobre replay quando ambos entram no buffer", () => {
+    const refs = makeRefs({ lastSeq: 0 });
+    const applied: Array<string> = [];
+    let progress = initialAgentProgress;
+    const { enqueueStreamRow } = createStreamRowHandlers(refs, (updater) => {
+      progress = typeof updater === "function" ? updater(progress) : updater;
+      applied.push(`${refs.lastSeqRef.current}:${progress.timeline.length}`);
+    });
+
+    refs.streamProcessingRef.current = true;
+    enqueueStreamRow({ ...startRow(2), source: "db" });
+    enqueueStreamRow({ ...startRow(1), source: "live" });
+    expect(refs.streamBufferRef.current[0]?.source).toBe("live");
+
+    refs.streamProcessingRef.current = false;
+    enqueueStreamRow(startRow(3));
+    expect(refs.lastSeqRef.current).toBe(3);
+  });
+
   it("reseta lastSeq em start de runId diferente", () => {
     const refs = makeRefs({ runId: "run-a", lastSeq: 10 });
     let progress = initialAgentProgress;

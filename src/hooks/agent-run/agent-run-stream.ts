@@ -100,7 +100,7 @@ export function createStreamRowHandlers(
   // e o seq-guard descartava os atrasados → raciocínio perdido. Buffer espera os ausentes
   // chegarem numa janela curta antes de aceitar o gap. Em-ordem aplica síncrono (sem latência).
   const REORDER_WINDOW_MS = 80;
-  const LIVE_REORDER_WINDOW_MS = 20;
+  const LIVE_REORDER_WINDOW_MS = 5;
   const reorderBuffer = new Map<number, AgentStreamRow>();
   let reorderTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -181,7 +181,11 @@ export function createStreamRowHandlers(
 
   const enqueueStreamRow = (row: AgentStreamRow): boolean => {
     if (refs.streamProcessingRef.current) {
-      refs.streamBufferRef.current.push(row);
+      if (row.source === "live") {
+        refs.streamBufferRef.current.unshift(row);
+      } else {
+        refs.streamBufferRef.current.push(row);
+      }
       return false;
     }
     refs.streamProcessingRef.current = true;
