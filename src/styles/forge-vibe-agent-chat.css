@@ -7,13 +7,13 @@
 .forge-vibe-agent-chat {
   /* Amarelo SOMENTE no botão enviar — igual Vibe Coder */
   --vibe-coder-send: #fbbf24;
-  /* Acentos do chat em azul — não competir com publish/draft (#ffb627) nem com o enviar */
-  --text-accent: #60a5fa;
-  --border-active: #3b82f6;
-  --bg-chat: #0a0a0f;
-  --bg-card: #13131f;
-  --bg-hover: #1a1a2e;
-  --bg-input: #1e1e2e;
+  /* Tema A (Vibecoding) — reaponta tokens azulados pros tokens ps-* */
+  --text-accent: #fbbf24;
+  --border-active: rgba(251, 191, 36, 0.4);
+  --bg-chat: var(--ps-bg-deep, #12151c);
+  --bg-card: var(--ps-bg-surface, rgba(237, 239, 242, 0.02));
+  --bg-hover: var(--ps-bg-surface-hover, rgba(237, 239, 242, 0.05));
+  --bg-input: var(--ps-bg, #0b0d12);
   --text-primary: #e2e8f0;
   --text-secondary: #94a3b8;
   --text-muted: #64748b;
@@ -73,7 +73,7 @@
 .forge-vibe-agent-chat .forge-composer {
   margin: 0;
   border-radius: 16px;
-  background: color-mix(in srgb, var(--bg-input) 92%, var(--bg-card) 8%);
+  background: linear-gradient(135deg, #1a1e27, #0b0d12);
   border: 1px solid color-mix(in srgb, var(--border-forge) 75%, #52525b 25%);
   box-shadow:
     0 0 0 1px rgba(255, 255, 255, 0.02) inset,
@@ -114,21 +114,21 @@
   padding: var(--chat-padding);
 }
 
-/* FAB: azul (como estava) — não amarelo */
+/* FAB: degradê amarelo Tema A (igual botão Publicar) */
 .forge-vibe-agent-chat__fab {
-  background: rgba(30, 58, 138, 0.92);
-  color: #fff;
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: linear-gradient(135deg, #fbbf24, #f59e0b);
+  color: #0b0d12;
+  border: 1px solid rgba(251, 191, 36, 0.4);
 }
 
 .forge-vibe-agent-chat__fab:hover {
-  background: rgba(37, 99, 235, 0.95);
+  background: linear-gradient(135deg, #fcd34d, #fbbf24);
 }
 
 .forge-vibe-agent-chat__fab--open {
-  background: #3b82f6;
-  color: #fff;
-  border-color: rgba(255, 255, 255, 0.2);
+  background: linear-gradient(135deg, #fbbf24, #f59e0b);
+  color: #0b0d12;
+  border-color: rgba(251, 191, 36, 0.4);
 }
 
 .forge-vibe-agent-chat__history-item--active {

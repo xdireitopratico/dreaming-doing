@@ -43,7 +43,7 @@ export function getNodeIconSize(context: NodeIconContext): number {
 // ── Theme-aware color ──
 const NODE_COLORS: Record<string, string> = {
   trigger: "#34d399",
-  llm: "#3b82f6",
+  llm: "#fbbf24",
   tool: "#eab308",
   condition: "#6b7280",
   output_guard: "#f59e0b",
@@ -71,7 +71,7 @@ export function getNodeIconColor(nodeType: string): string {
 export function getNodeIconSource(nodeType: string): NodeIconSource {
   const map: Record<string, NodeIconSource> = {
     trigger: { type: "icon", name: "zap", color: "#34d399" },
-    llm: { type: "icon", name: "bot", color: "#3b82f6" },
+    llm: { type: "icon", name: "bot", color: "#fbbf24" },
     tool: { type: "icon", name: "tool", color: "#eab308" },
     condition: { type: "icon", name: "git-branch", color: "#6b7280" },
     output_guard: { type: "icon", name: "shield", color: "#f59e0b" },

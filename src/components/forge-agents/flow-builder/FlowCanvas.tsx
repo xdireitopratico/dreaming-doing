@@ -182,7 +182,7 @@ export const FlowCanvas = memo(function FlowCanvas({
       ...params,
       type: "conditional", animated: true,
       data: { label: "", condition: "", edge_type: "default", priority: 0 },
-      style: { stroke: "hsl(var(--primary))" },
+      style: { stroke: "hsl(var(--ps-accent))" },
       source: params.source ?? "",
       target: params.target ?? "",
     }, eds));
@@ -279,7 +279,7 @@ export const FlowCanvas = memo(function FlowCanvas({
             type: "default",
             animated: true,
             data: { label: "", condition: "", edge_type: "default", priority: 0 },
-            style: { stroke: "hsl(var(--primary))" },
+            style: { stroke: "hsl(var(--ps-accent))" },
           } as Edge,
           {
             id: `${newNodeId}-out`,
@@ -288,7 +288,7 @@ export const FlowCanvas = memo(function FlowCanvas({
             type: "default",
             animated: true,
             data: { label: "", condition: "", edge_type: "default", priority: 0 },
-            style: { stroke: "hsl(var(--primary))" },
+            style: { stroke: "hsl(var(--ps-accent))" },
           } as Edge,
         ];
       });
@@ -411,7 +411,7 @@ export const FlowCanvas = memo(function FlowCanvas({
             </h3>
             <p className="text-[11px] leading-relaxed" style={{ color: 'var(--ps-cream-40)' }}>
               Arraste um <strong style={{ color: 'var(--ps-green)' }}>Trigger</strong> da barra lateral para iniciar seu fluxo.
-              Depois conecte nós como <strong style={{ color: 'var(--ps-blue)' }}>LLM</strong>, <strong style={{ color: 'var(--ps-orange)' }}>Tool</strong> e outros.
+              Depois conecte nós como <strong style={{ color: 'var(--ps-accent)' }}>LLM</strong>, <strong style={{ color: 'var(--ps-orange)' }}>Tool</strong> e outros.
             </p>
             <div className="flex flex-col gap-1.5 text-[10px]" style={{ color: 'var(--ps-cream-25)' }}>
               <span>⌨️ <strong>Ctrl+K</strong> — Paleta de comandos</span>
