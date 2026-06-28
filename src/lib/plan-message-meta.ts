@@ -188,6 +188,16 @@ export function resolveJobPlanForRun(
 
   for (let i = messages.length - 1; i >= 0; i--) {
     const msg = messages[i];
+    if (msg?.role !== "assistant") continue;
+    const meta = msg.meta as Record<string, unknown> | undefined;
+    if (meta?.buildRunId !== runId) continue;
+    const stored = storedPlanFromMessage(msg);
+    if (!stored?.plan.steps.length) continue;
+    return { ...stored.plan, runId };
+  }
+
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const msg = messages[i];
     if (msg?.role !== "user") continue;
     const meta = msg.meta as Record<string, unknown> | undefined;
     if (meta?.buildRunId !== runId) continue;

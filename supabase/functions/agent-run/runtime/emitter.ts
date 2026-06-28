@@ -114,10 +114,13 @@ export class RuntimeEmitter {
         });
       }
       if (type === "validate_fail") {
+        const isPreflight = d.preflight === true;
         this.onStream({
           type: "step_result",
           data: {
-            summary: "Build falhou — corrigindo antes de entregar",
+            summary: isPreflight
+              ? "Preflight falhou — preparando ambiente"
+              : "Build falhou — corrigindo antes de entregar",
             evidence: [
               typeof d.feedback === "string"
                 ? d.feedback.slice(0, 120)

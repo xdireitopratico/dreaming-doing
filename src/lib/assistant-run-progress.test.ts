@@ -274,6 +274,84 @@ describe("assistant-run-progress", () => {
     ).toHaveLength(1);
   });
 
+  it("resolveInspectorRunProgress prefere o frozen snapshot quando o run já foi vivo", () => {
+    const live = {
+      ...initialAgentProgress,
+      finished: true,
+      lastFinishOk: true,
+      timeline: [{ type: "explore", data: { message: "Lendo arquivos" }, timestamp: 1 }],
+    };
+    const frozen = {
+      ...initialAgentProgress,
+      finished: true,
+      timeline: [{ type: "explore", data: { message: "Frozen estável" }, timestamp: 1 }],
+    };
+    const richerDbMsg: ChatMessage = {
+      id: "a1",
+      role: "assistant",
+      content: "Feito.",
+      timestamp: 0,
+      meta: {
+        runId: "run-frozen",
+        partial: false,
+        finishedAt: "2026-01-01T00:00:00Z",
+        cardSnapshot: {
+          timeline: [
+            { type: "explore", data: { message: "DB rico 1" }, timestamp: 1 },
+            { type: "tool_start", data: { name: "fs_write", args: { path: "a.tsx" } }, timestamp: 2 },
+          ],
+          tools: [],
+          finished: true,
+        },
+      },
+    };
+
+    expect(
+      resolveInspectorRunProgress("run-frozen", [richerDbMsg], {
+        activeRunId: null,
+        liveProgress: live,
+        frozenProgress: frozen,
+        runWasLive: true,
+      })?.timeline,
+    ).toHaveLength(1);
+  });
+
+  it("resolveInspectorRunProgress mantém o live snapshot quando o run foi vivo e falhou", () => {
+    const live = {
+      ...initialAgentProgress,
+      finished: true,
+      lastFinishOk: false,
+      error: "Build falhou",
+      timeline: [{ type: "explore", data: { message: "Lendo arquivos" }, timestamp: 1 }],
+    };
+    const frozen = {
+      ...initialAgentProgress,
+      finished: true,
+      timeline: [{ type: "explore", data: { message: "Snapshot antigo" }, timestamp: 1 }],
+    };
+    const weakDbMsg: ChatMessage = {
+      id: "a1",
+      role: "assistant",
+      content: "Feito.",
+      timestamp: 0,
+      meta: {
+        runId: "run-failed",
+        partial: false,
+        finishedAt: "2026-01-01T00:00:00Z",
+        cardSnapshot: { timeline: [], tools: [], finished: true },
+      },
+    };
+
+    expect(
+      resolveInspectorRunProgress("run-failed", [weakDbMsg], {
+        activeRunId: null,
+        liveProgress: live,
+        frozenProgress: frozen,
+        runWasLive: true,
+      })?.timeline,
+    ).toHaveLength(1);
+  });
+
   it("inspectorProgressWeight considera tools quando timeline vazia", () => {
     const toolsOnly = {
       ...initialAgentProgress,

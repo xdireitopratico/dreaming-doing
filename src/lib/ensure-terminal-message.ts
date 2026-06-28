@@ -125,6 +125,7 @@ export function resolveTerminalDisplayText(opts: {
 }): string {
   const rows = opts.streamRows ?? [];
   let lastValidateFail = "";
+  let lastPreflightFail = "";
   let lastFinal = "";
   let thinking = "";
   let lastStreamError = "";
@@ -138,7 +139,10 @@ export function resolveTerminalDisplayText(opts: {
           : typeof ev.data.message === "string"
             ? ev.data.message
             : "";
-      if (fb.trim()) lastValidateFail = fb.trim();
+      if (fb.trim()) {
+        if (ev.data.preflight === true) lastPreflightFail = fb.trim();
+        else lastValidateFail = fb.trim();
+      }
     }
     if (ev.type === "assistant_text") {
       const text = typeof ev.data.text === "string" ? ev.data.text : "";
@@ -155,6 +159,9 @@ export function resolveTerminalDisplayText(opts: {
 
   if (lastValidateFail && (!err || GENERIC_FAILURE_RE.test(err))) {
     return `Build não foi concluído.\n\n${lastValidateFail.slice(0, 2000)}`;
+  }
+  if (lastPreflightFail && (!err || GENERIC_FAILURE_RE.test(err))) {
+    return `Preflight não foi concluído.\n\n${lastPreflightFail.slice(0, 2000)}`;
   }
   if (err && !GENERIC_FAILURE_RE.test(err)) return err;
   if (lastFinal) return lastFinal;

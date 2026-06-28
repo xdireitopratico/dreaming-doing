@@ -152,7 +152,15 @@ export function resolveInspectorRunProgress(
   },
 ): AgentProgress | null {
   if (opts.activeRunId === runId) return opts.liveProgress;
-  if (opts.runWasLive === true && !opts.liveProgress.finished) return opts.liveProgress;
+  if (
+    opts.runWasLive === true &&
+    (!opts.liveProgress.finished || opts.liveProgress.lastFinishOk === false)
+  ) {
+    return opts.liveProgress;
+  }
+  if (opts.runWasLive === true && opts.frozenProgress && inspectorProgressWeight(opts.frozenProgress) > 0) {
+    return opts.frozenProgress;
+  }
 
   const historical = resolveHistoricalRunProgress(runId, messages);
   const frozen = opts.frozenProgress ?? null;

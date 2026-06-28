@@ -93,6 +93,50 @@ function truncate(text: string, max = 72): string {
   return t.length > max ? `${t.slice(0, max - 1)}…` : t;
 }
 
+function derivePlanTasks(
+  jobPlan: PendingPlan | null | undefined,
+  progress: AgentProgress,
+  jobActive: boolean,
+): NonNullable<ForgeMiniCardData["tasks"]> {
+  if (!jobPlan?.steps?.length) return progress.tasks ?? [];
+
+  const currentStep = typeof progress.currentStep === "number" ? progress.currentStep : null;
+  const totalSteps = jobPlan.steps.length;
+  const finishedOk = progress.finished && progress.lastFinishOk !== false;
+  const failed = progress.finished && progress.lastFinishOk === false;
+
+  return jobPlan.steps.map((step, idx) => {
+    const stepNumber = idx + 1;
+    let status: "pending" | "active" | "done" | "failed" = "pending";
+    if (finishedOk) {
+      status = "done";
+    } else if (failed) {
+      if (currentStep != null && stepNumber < currentStep) status = "done";
+      else if (currentStep != null && stepNumber === currentStep) status = "failed";
+    } else if (currentStep != null) {
+      if (stepNumber < currentStep) status = "done";
+      else if (stepNumber === currentStep) status = "active";
+    } else if (jobActive && idx === 0) {
+      status = "active";
+    }
+
+    const rawLabel =
+      step.description?.trim() ||
+      step.filePath?.trim() ||
+      `Etapa ${stepNumber}/${totalSteps}`;
+    const rawCriteria =
+      step.filePath?.trim() ||
+      (step.enabled === false ? "Desativada" : undefined);
+
+    return {
+      id: step.id || `plan-step-${idx}`,
+      label: truncate(rawLabel, 96),
+      criteria: rawCriteria ? truncate(rawCriteria, 120) : undefined,
+      status,
+    };
+  });
+}
+
 /** Só raciocínio interno vai ao inspector — delta/final sem thinking ficam no chat. */
 function isInspectorThought(data: Record<string, unknown>): boolean {
   return data.thinking === true;
@@ -631,7 +675,8 @@ export function buildAgentRunView(
   const slotActive = !!opts?.running;
   const jobActive = hasActiveJob(progress, { running: true, slotActive });
   const jobPlan = opts?.jobPlan ?? progress.pendingPlan;
-  const forgeTimeline = buildForgeTimeline(progress.timeline, jobActive);
+  const preserveFailedTimeline = progress.finished && progress.lastFinishOk === false;
+  const forgeTimeline = buildForgeTimeline(progress.timeline, jobActive || preserveFailedTimeline);
 
   const status = deriveMiniCardStatus(progress, jobActive);
   const editedFile = lastEditedFile(progress);
@@ -649,10 +694,8 @@ export function buildAgentRunView(
   const activity = collectMiniCardActivity(progress, forgeTimeline, jobActive);
   const liveLine = collectMiniCardLiveLine(progress, forgeTimeline, jobActive);
 
-  // Tasks checklist — só tarefas declaradas pelo LLM (declare_tasks via reducer).
-  // Plano pendente/aprovado não vira checklist automaticamente.
-  const declaredTasks = progress.tasks ?? [];
-  const tasks = declaredTasks;
+  // Tasks checklist — plano aprovado vence; declare_tasks fica como fallback.
+  const tasks = derivePlanTasks(jobPlan, progress, jobActive);
 
   const streamBody = progress.streamText?.trim() || null;
   const narrationBody = progress.narrationText?.trim() || null;

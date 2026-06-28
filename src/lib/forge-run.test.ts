@@ -396,7 +396,7 @@ describe("forge-run terminal state", () => {
     expect(view.miniCard.status).toBe("done");
   });
 
-  it("jobPlan não vira checklist automaticamente no mini-card", () => {
+  it("jobPlan vira checklist compacto no mini-card", () => {
     const progress = {
       ...initialAgentProgress,
       finished: true,
@@ -409,7 +409,9 @@ describe("forge-run terminal state", () => {
     });
 
     expect(view.miniCard.hasPlan).toBe(true);
-    expect(view.miniCard.tasks).toHaveLength(0);
+    expect(view.miniCard.tasks).toHaveLength(3);
+    expect(view.miniCard.tasks?.every((task) => task.status === "done")).toBe(true);
+    expect(view.miniCard.tasks?.[0]?.label).toContain("Hero section");
   });
 });
 

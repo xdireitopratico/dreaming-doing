@@ -314,17 +314,22 @@ export function buildJobStreamTree(
 
     if (ev.type === "validate_fail") {
       if (lastResultTs > 0 && ts - lastResultTs < 50) continue;
+      const isPreflight = data.preflight === true;
       const feedback =
         typeof data.feedback === "string"
           ? data.feedback.slice(0, 120)
           : typeof data.message === "string"
             ? data.message.slice(0, 120)
-            : "Erro de compilação";
+            : isPreflight
+              ? "Preflight"
+              : "Erro de compilação";
       nodes.push({
         kind: "result",
         id: `result-${ts}`,
         ts,
-        summary: "Build falhou — corrigindo antes de entregar",
+        summary: isPreflight
+          ? "Preflight falhou — preparando ambiente"
+          : "Build falhou — corrigindo antes de entregar",
         evidence: [feedback],
         status: "failed",
       });

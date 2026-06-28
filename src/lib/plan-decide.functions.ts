@@ -138,7 +138,6 @@ type DecideResponse = {
   newRunId?: string;
   eventId?: string | null;
   graciosaMessageId?: string;
-  approveUserMessageId?: string;
 };
 
 const planApproveSchema = z
@@ -327,39 +326,8 @@ export const planApprove = createServerFn({ method: "POST" })
       const prev = (planMsg.meta ?? {}) as Record<string, unknown>;
       await supabase
         .from("messages")
-        .update({ meta: { ...prev, planStatus: "approved", planApprovedAt: now } })
+        .update({ meta: { ...prev, planStatus: "approved", planApprovedAt: now, buildRunId: newRun.id } })
         .eq("id", planMsg.id);
-    }
-
-    const stepLabels = (steps ?? [])
-      .map((s) =>
-        typeof s === "object" && s && "title" in s
-          ? String((s as { title?: string }).title ?? "")
-          : "",
-      )
-      .filter(Boolean);
-    const approveText =
-      stepLabels.length > 0
-        ? `[Plano aprovado] Plano aprovado — executar em modo Build:\n${stepLabels.map((t) => `• ${t}`).join("\n")}`
-        : `[Plano aprovado] Plano aprovado — executar em modo Build.`;
-
-    const { data: approveUserMsg, error: approveUserErr } = await supabase
-      .from("messages")
-      .insert({
-        conversation_id: run.conversation_id,
-        role: "user",
-        parts: [{ type: "text", text: approveText }],
-        meta: {
-          kind: "plan_approved",
-          planSourceRunId: runId,
-          planId,
-          buildRunId: newRun.id,
-        },
-      })
-      .select("id")
-      .single();
-    if (approveUserErr) {
-      throw new Error(`Falha ao registrar aprovação no chat: ${approveUserErr.message}`);
     }
 
     // Use hardened dispatch_build action in Edge (single owner of INNGEST_EVENT_KEY check+send).
@@ -390,6 +358,7 @@ export const planApprove = createServerFn({ method: "POST" })
     }
 
     const { awaitingUser: _awaitingUser, ...sourceMetaWithoutAwaiting } = sourceMeta;
+
     const closeResult = await transitionRun(
       runId,
       "completed",
@@ -414,7 +383,6 @@ export const planApprove = createServerFn({ method: "POST" })
       approvedRunId: runId,
       newRunId: newRun.id,
       eventId,
-      approveUserMessageId: approveUserMsg?.id,
     };
   });
 

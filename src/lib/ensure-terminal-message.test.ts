@@ -45,6 +45,24 @@ describe("resolveTerminalDisplayText", () => {
     expect(text).toContain("TS2304");
   });
 
+  it("usa texto de preflight quando validate_fail veio do smoke check", () => {
+    const text = resolveTerminalDisplayText({
+      error: "",
+      streamRows: [
+        {
+          event_type: "validate_fail",
+          payload: {
+            type: "validate_fail",
+            preflight: true,
+            feedback: "[build] npm run build failed",
+          },
+        },
+      ],
+    });
+    expect(text).toContain("Preflight não foi concluído");
+    expect(text).toContain("npm run build failed");
+  });
+
   it("prioriza erro explícito não genérico", () => {
     expect(
       resolveTerminalDisplayText({

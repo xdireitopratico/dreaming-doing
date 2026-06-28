@@ -116,17 +116,12 @@ describe("buildChatThread", () => {
         content: "Revise o plano.",
         timestamp: 0,
         runId: "run-plan",
-        meta: { runId: "run-plan", planId: "p1", planStatus: "approved" },
-      },
-      {
-        id: "u-approve",
-        role: "user",
-        content: "[Plano aprovado] Plano aprovado — executar em modo Build.",
-        timestamp: 0,
         meta: {
-          kind: "plan_approved",
+          runId: "run-plan",
+          planId: "p1",
+          planStatus: "approved",
+          planApprovedAt: "2026-01-01T00:00:00Z",
           buildRunId: "run-build",
-          planSourceRunId: "run-plan",
           planHeadline: "Landing viva",
           steps: [{ title: "Criar Hero" }, { title: "Adicionar CTA" }],
         },
@@ -139,10 +134,8 @@ describe("buildChatThread", () => {
       sessionProgress: progress,
     });
     const users = thread.filter((t) => t.kind === "user");
-    expect(users).toHaveLength(2);
+    expect(users).toHaveLength(1);
     expect(users[0].kind === "user" && users[0].message.content).toBe("landing viva");
-    const approveCard = users[1];
-    expect(approveCard.kind === "user" && approveCard.message.content).toContain("Plano aprovado");
     const buildSlot = thread.find((t) => t.kind === "assistant" && t.runId === "run-build");
     expect(buildSlot?.kind).toBe("assistant");
     if (buildSlot?.kind === "assistant") {

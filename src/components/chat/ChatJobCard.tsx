@@ -48,6 +48,12 @@ function taskStatusIcon(status: "pending" | "active" | "done" | "failed"): React
   }
 }
 
+function compactTaskText(task: { label: string; criteria?: string }, max = 120): string {
+  const text = [task.label.trim(), task.criteria?.trim()].filter(Boolean).join(" · ");
+  if (!text) return "";
+  return text.length > max ? `${text.slice(0, max - 1)}…` : text;
+}
+
 export function ChatJobCard({
   data,
   runId,
@@ -219,10 +225,12 @@ export function ChatJobCard({
                   {taskStatusIcon(task.status)}
                 </span>
                 <span className="forge-mini-card-task-body">
-                  <span className="forge-mini-card-task-label">{task.label}</span>
-                  {task.criteria && (
-                    <span className="forge-mini-card-task-criteria">{task.criteria}</span>
-                  )}
+                  <span
+                    className="forge-mini-card-task-label"
+                    title={[task.label, task.criteria].filter(Boolean).join(" · ")}
+                  >
+                    {compactTaskText(task)}
+                  </span>
                 </span>
               </li>
             ))}

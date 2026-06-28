@@ -124,16 +124,23 @@ function buildLines(timeline: SSEEvent[]): LogLine[] {
           ts,
         });
         break;
-      case "validate_fail":
+      case "validate_fail": {
+        const isPreflight = data.preflight === true;
         lines.push({
           id: `${ev.type}-${ts}-${lines.length}`,
-          kind: "fail",
-          icon: AlertCircle,
-          text: "Validação falhou",
-          detail: typeof data.message === "string" ? data.message : undefined,
+          kind: isPreflight ? "info" : "fail",
+          icon: isPreflight ? Loader2 : AlertCircle,
+          text: isPreflight ? "Preflight falhou" : "Validação falhou",
+          detail:
+            typeof data.feedback === "string"
+              ? data.feedback
+              : typeof data.message === "string"
+                ? data.message
+                : undefined,
           ts,
         });
         break;
+      }
       case "memory":
       case "context_pressure":
       case "context_compress":

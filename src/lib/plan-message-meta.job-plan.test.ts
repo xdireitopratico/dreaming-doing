@@ -20,23 +20,21 @@ describe("resolveJobPlanForRun", () => {
     },
   };
 
-  const approveUser: ChatMessage = {
-    id: "u-approve",
-    role: "user",
-    content: "Plano aprovado",
-    timestamp: 1,
+  const approvedPlanMsg: ChatMessage = {
+    ...planMsg,
     meta: {
-      kind: "plan_approved",
-      planSourceRunId: "plan-run",
-      planId: "p1",
+      ...planMsg.meta,
+      planStatus: "approved",
+      planApprovedAt: "2026-01-01T00:00:00Z",
       buildRunId: "build-run",
     },
   };
 
-  it("resolve plano do build run via mensagem de aprovação", () => {
-    const plan = resolveJobPlanForRun("build-run", [planMsg, approveUser]);
+  it("resolve plano do build run via meta do plano aprovado", () => {
+    const plan = resolveJobPlanForRun("build-run", [approvedPlanMsg]);
     expect(plan?.summary).toBe("Landing café");
     expect(plan?.steps).toHaveLength(2);
+    expect(plan?.runId).toBe("build-run");
   });
 
   it("prioriza livePlan quando runId coincide", () => {
@@ -49,7 +47,7 @@ describe("resolveJobPlanForRun", () => {
       runId: "build-run",
       projectId: "p1",
     };
-    const plan = resolveJobPlanForRun("build-run", [planMsg, approveUser], { livePlan: live });
+    const plan = resolveJobPlanForRun("build-run", [approvedPlanMsg], { livePlan: live });
     expect(plan?.summary).toBe("Live plan");
   });
 });
