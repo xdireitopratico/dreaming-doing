@@ -13,6 +13,7 @@ export type AgentStreamRow = {
   payload: Record<string, unknown>;
   created_at?: string;
   run_id?: string;
+  source?: "live" | "db";
 };
 
 export function freezeWorkingDuration(
@@ -99,6 +100,7 @@ export function createStreamRowHandlers(
   // e o seq-guard descartava os atrasados → raciocínio perdido. Buffer espera os ausentes
   // chegarem numa janela curta antes de aceitar o gap. Em-ordem aplica síncrono (sem latência).
   const REORDER_WINDOW_MS = 80;
+  const LIVE_REORDER_WINDOW_MS = 20;
   const reorderBuffer = new Map<number, AgentStreamRow>();
   let reorderTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -168,6 +170,11 @@ export function createStreamRowHandlers(
     }
     // gap não-terminal: buffer e espera os ausentes chegarem (janela de reordenação).
     reorderBuffer.set(row.seq, row);
+    if (row.source === "live") {
+      if (reorderTimer != null) return false;
+      reorderTimer = setTimeout(flushReorderBuffer, LIVE_REORDER_WINDOW_MS);
+      return false;
+    }
     scheduleReorderFlush();
     return false;
   };

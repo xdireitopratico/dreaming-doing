@@ -151,6 +151,7 @@ export function createRunSubscriptionHandlers(deps: RunSubscriptionDeps) {
           payload: (row.payload ?? {}) as Record<string, unknown>,
           created_at: row.created_at as string | undefined,
           run_id: runId,
+          source: "db",
         })
       ) {
         terminal = true;
@@ -253,7 +254,7 @@ export function createRunSubscriptionHandlers(deps: RunSubscriptionDeps) {
         (payload: { type: "broadcast"; event: string; payload?: AgentStreamRow }) => {
           if (deps.runIdRef.current !== runId) return;
           if (deps.closedRunIdRef.current === runId) return;
-          const row = payload.payload;
+          const row = payload.payload ? { ...payload.payload, source: "live" as const } : null;
           if (!row || typeof row.seq !== "number") return;
           if (deps.enqueueStreamRow(row)) {
             deps.closedRunIdRef.current = runId;
@@ -279,7 +280,7 @@ export function createRunSubscriptionHandlers(deps: RunSubscriptionDeps) {
         (payload: { new: AgentStreamRow }) => {
           if (deps.runIdRef.current !== runId) return;
           if (deps.closedRunIdRef.current === runId) return;
-          const row = payload.new as AgentStreamRow;
+          const row = { ...(payload.new as AgentStreamRow), source: "db" as const };
           if (deps.enqueueStreamRow(row)) {
             deps.closedRunIdRef.current = runId;
             void teardownChannels();

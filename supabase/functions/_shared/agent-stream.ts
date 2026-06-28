@@ -64,9 +64,8 @@ async function appendStreamEventInner(
     created_at: new Date().toISOString(),
   };
 
-  const broadcastPromise = broadcastStreamEvent(supabase, row);
+  void broadcastStreamEvent(supabase, row);
   const { error } = await supabase.from("agent_stream_events").insert(row);
-  await broadcastPromise;
   if (error) {
     logger.error("agent_stream.insert_failed", { runId, eventType, error: error.message });
   }
