@@ -3,8 +3,9 @@
 |> **Base de conhecimento para manter contexto entre sessões.**
 > Atualizado: 2026-06-26
 >
-> **Último commit:** `5b3e104` — feat(flow-canvas): add node between edges via context (FASE 3.6)
+> **Último commit:** `fff4a98` — feat(flow-canvas): node creator overlay with search + tabs (FASE 3.4)
 > **FASE 3:** ✅ 8/8 completo
+> **FASE 4:** ✅ 2/4 (4.2 Log Tree + 4.3 I/O Viewer)
 
 ---
 
@@ -152,14 +153,14 @@
 | 3.7 | Copy/Paste nós | ✅ `244a55f` | 2h |
 | 3.8 | Snap-to-grid | ✅ `8f1f12b` | 1h |
 
-### FASE 4 — Execution Display
+### FASE 4 — Execution Display (✅ 2/4)
 
-| Ordem | Item | Depende de | Esforço |
-|-------|------|-----------|---------|
-| 4.1 | Real-time Push (SSE) | G33 (persistence) | 6h |
-| 4.2 | Execution Log Tree (melhorias) | 4.1 | 4h |
-| 4.3 | Input/Output Viewer | 4.1 | 6h |
-| 4.4 | Execution History | G33 | 4h |
+| Ordem | Item | Status | Depende de | Esforço |
+|-------|------|--------|-----------|---------|
+| 4.1 | Real-time Push (SSE) | ❌ Pendente | G33 (persistence) | 6h |
+| 4.2 | Execution Log Tree (melhorias) | ✅ `fff4a98` | 4.1 | 4h |
+| 4.3 | Input/Output Viewer | ✅ `fff4a98` | 4.1 | 6h |
+| 4.4 | Execution History | ❌ Pendente | G33 | 4h |
 
 ### FASE 5 — NDV & Configuration
 
