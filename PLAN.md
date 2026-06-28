@@ -3,9 +3,10 @@
 |> **Base de conhecimento para manter contexto entre sessões.**
 > Atualizado: 2026-06-26
 >
-> **Último commit:** `fff4a98` — feat(flow-canvas): node creator overlay with search + tabs (FASE 3.4)
+> **Último commit:** `3774b47` — feat(flow-canvas): execution data viewer + enhanced log tree (FASE 4.2/4.3)
 > **FASE 3:** ✅ 8/8 completo
 > **FASE 4:** ✅ 2/4 (4.2 Log Tree + 4.3 I/O Viewer)
+> **FASE 5:** ✅ 1/4 (5.1 NDV Panel)
 
 ---
 
@@ -166,7 +167,7 @@
 
 | Ordem | Item | Depende de | Esforço |
 |-------|------|-----------|---------|
-| 5.1 | NDV Panel base | — | 6h |
+| 5.1 | NDV Panel base | ✅ `3774b47` | — | 6h |
 | 5.2 | Pinned Data | 4.3 | 2h |
 | 5.3 | Expression Editor | 5.1 | 8h |
 | 5.4 | Data Mapping | 5.1 + 5.3 | 4h |
