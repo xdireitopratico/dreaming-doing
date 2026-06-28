@@ -11,6 +11,7 @@ import { type Node } from "@/types/xyflow-react-shim";
 import { useFlowShortcuts } from "./hooks/useFlowShortcuts";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { NodePalette } from "./NodePalette";
+import { NodeCreator } from "./NodeCreator";
 import { NodePropertiesPanel } from "./NodePropertiesPanel";
 import { EdgePropertiesPanel } from "./EdgePropertiesPanel";
 import { FlowToolbar } from "./FlowToolbar";
@@ -84,6 +85,7 @@ export function FlowBuilderDialog({ flowId, projectId, open, onClose, onFlowIdCh
 
   // ═══ MODAL: confirmacao ao fechar com alteracoes nao salvas ═══
   const [closeConfirmOpen, setCloseConfirmOpen] = useState(false);
+  const [showNodeCreator, setShowNodeCreator] = useState(false);
 
   // ═══ Execution status feedback (F2.1) ═══
   const [nodeStatusMap, setNodeStatusMap] = useState<Record<string, NodeStatus>>({});
@@ -142,6 +144,7 @@ export function FlowBuilderDialog({ flowId, projectId, open, onClose, onFlowIdCh
       s.setShowCommandPalette(false);
     },
     onToggleChat: () => chatToggleRef.current?.(),
+    onToggleNodeCreator: () => setShowNodeCreator((prev) => !prev),
     onToggleTest: () => s.togglePanel("test"),
     onToggleDeploy: () => s.togglePanel("deploy"),
     onToggleDebug: () => s.togglePanel("debug"),
@@ -149,7 +152,7 @@ export function FlowBuilderDialog({ flowId, projectId, open, onClose, onFlowIdCh
     onFitView: () => fitViewCallbackRef.current?.(),
     onCopy: s.handleCopy,
     onPaste: s.handlePaste,
-  }), [handleSaveAndPropagate, checkCredentials, s.handleUndo, s.handleRedo, s.handleDelete, s.closePanel, s.togglePanel, s.handleSelectAll, handleChatEscape, s.handleCopy, s.handlePaste]);
+  }), [handleSaveAndPropagate, checkCredentials, s.handleUndo, s.handleRedo, s.handleDelete, s.closePanel, s.togglePanel, s.handleSelectAll, handleChatEscape, s.handleCopy, s.handlePaste, setShowNodeCreator]);
 
   useFlowShortcuts({ enabled: open, actions: shortcutActions });
 
@@ -269,6 +272,14 @@ export function FlowBuilderDialog({ flowId, projectId, open, onClose, onFlowIdCh
           />
         )}
       </Suspense>
+
+      {showNodeCreator && (
+        <NodeCreator
+          open={showNodeCreator}
+          onClose={() => setShowNodeCreator(false)}
+          onAddNode={handleAddNodeByClick}
+        />
+      )}
     </Dialog>
   );
 

@@ -19,6 +19,7 @@ interface ShortcutActions {
   onToggleDebug: () => void;
   onSelectAll: () => void;
   onFitView: () => void;
+  onToggleNodeCreator?: () => void;
   onToggleChat?: () => void;
 }
 
@@ -117,6 +118,13 @@ export function useFlowShortcuts({ enabled, actions }: UseFlowShortcutsOptions) 
       if (mod && e.shiftKey && (e.key === "L" || e.key === "l")) {
         e.preventDefault();
         actions.onToggleChat?.();
+        return;
+      }
+
+      // Node Creator — Tab (not in inputs)
+      if (e.key === "Tab" && !isInput) {
+        e.preventDefault();
+        actions.onToggleNodeCreator?.();
         return;
       }
 

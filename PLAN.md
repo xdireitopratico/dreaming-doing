@@ -1,7 +1,10 @@
 # FORGE Flow Canvas v2 — Plano de Desenvolvimento
 
-> **Base de conhecimento para manter contexto entre sessões.**
+|> **Base de conhecimento para manter contexto entre sessões.**
 > Atualizado: 2026-06-26
+>
+> **Último commit:** `5b3e104` — feat(flow-canvas): add node between edges via context (FASE 3.6)
+> **FASE 3:** ✅ 8/8 completo
 
 ---
 
@@ -136,16 +139,16 @@
 
 ## 4. Plano de Execução Priorizado
 
-### FASE 3 — Canvas UX Core (Em andamento ✅ 6/8)
+### FASE 3 — Canvas UX Core (✅ 8/8)
 
 | Ordem | Item | Status | Esforço |
 |-------|------|--------|---------|
 | 3.1 | Edge Toolbar + Animation | ✅ `6e29e1b` | 2h |
 | 3.2 | Control Buttons (zoom, fit, undo, clear) | ✅ `6e29e1b` | 1h |
 | 3.3 | Context Menu | ✅ `bfdc37f` | 3h |
-| 3.4 | Node Creator overlay + busca | ❌ Pendente | 6h |
+| 3.4 | Node Creator overlay + busca | ✅ `5b3e104` | 6h |
 | 3.5 | Sticky Notes | ✅ `8f1f12b` | 2h |
-| 3.6 | AddNodes (+) connector | ❌ Pendente | 1h |
+| 3.6 | AddNodes (+) connector | ✅ `5b3e104` | 1h |
 | 3.7 | Copy/Paste nós | ✅ `244a55f` | 2h |
 | 3.8 | Snap-to-grid | ✅ `8f1f12b` | 1h |
 
