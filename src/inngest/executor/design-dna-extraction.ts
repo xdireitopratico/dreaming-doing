@@ -71,6 +71,14 @@ function parseTokenField(tokenField: string | null | undefined): string[] {
   return [trimmed];
 }
 
+function safeJsonParse(text: string): Record<string, unknown> {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return {};
+  }
+}
+
 function buildFallbackDna(url: string, reason: string, confidence?: number): Record<string, unknown> {
   const score = Math.round(Math.min(10, Math.max(1, (confidence ?? 30) / 10)));
   return {
@@ -678,7 +686,7 @@ Extraia o DesignDNA deste site.`;
       try { parsed = JSON.parse(codeMatch[1]); } catch { parsed = {}; }
     } else {
       const jsonMatch = rawContent.match(/\{[\s\S]*\}/);
-      parsed = jsonMatch ? JSON.parse(jsonMatch[0]) : {};
+      parsed = jsonMatch ? safeJsonParse(jsonMatch[0]) : {};
     }
   }
   if (typeof parsed !== "object" || parsed === null || Object.keys(parsed).length === 0) {
