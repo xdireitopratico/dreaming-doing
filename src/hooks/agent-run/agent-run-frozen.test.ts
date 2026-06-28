@@ -14,9 +14,11 @@ describe("createFrozenProgressHandlers", () => {
     const frozenRunProgressRef = { current: new Map() };
     let tick = 0;
     let activeRunId: string | null = "run-1";
+    const closedRunIdRef = { current: null as string | null };
 
     const { freezeRunProgress, getFrozenRunProgress } = createFrozenProgressHandlers({
       runIdRef,
+      closedRunIdRef,
       progressRef,
       frozenRunProgressRef,
       setActiveRunId: (v) => {
@@ -48,9 +50,11 @@ describe("createFrozenProgressHandlers", () => {
     const frozenRunProgressRef = { current: new Map() };
     let activeRunId: string | null = "run-1";
     let startedAt: number | null = 1000;
+    const closedRunIdRef = { current: null as string | null };
 
     const { releaseLiveRunSlot } = createFrozenProgressHandlers({
       runIdRef,
+      closedRunIdRef,
       progressRef,
       frozenRunProgressRef,
       setActiveRunId: (v) => {

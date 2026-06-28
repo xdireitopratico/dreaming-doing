@@ -19,6 +19,7 @@ type RealtimeChannel = ReturnType<typeof supabase.channel>;
 
 export type RunSubscriptionDeps = {
   runIdRef: MutableRefObject<string | null>;
+  closedRunIdRef: MutableRefObject<string | null>;
   lastSeqRef: MutableRefObject<number>;
   pendingQueueCountRef: MutableRefObject<number>;
   activeRunStartedAtMsRef: MutableRefObject<number | null>;
@@ -63,11 +64,13 @@ export function createRunSubscriptionHandlers(deps: RunSubscriptionDeps) {
   };
 
   const syncRunStatus = (
+    runId: string,
     status: string,
     error: string | null,
     streamText?: string | null,
     runMeta?: Record<string, unknown> | null,
   ) => {
+    if (deps.closedRunIdRef.current === runId) return;
     deps.setProgress((p) => {
       let next: AgentProgress;
       if (status === "awaiting_user") {
@@ -123,9 +126,11 @@ export function createRunSubscriptionHandlers(deps: RunSubscriptionDeps) {
       }
       return p;
     });
+    deps.closedRunIdRef.current = runId;
   };
 
   const catchUpRun = async (runId: string): Promise<boolean> => {
+    if (deps.closedRunIdRef.current === runId) return true;
     const { data: rows, error } = await supabase
       .from("agent_stream_events")
       .select("seq, event_type, payload, created_at")
@@ -161,11 +166,13 @@ export function createRunSubscriptionHandlers(deps: RunSubscriptionDeps) {
     const runMeta = (run?.meta ?? null) as Record<string, unknown> | null;
 
     if (run?.canceled_at || run?.status === "canceled") {
-      syncRunStatus("canceled", run.error, undefined, runMeta);
+      syncRunStatus(runId, "canceled", run.error, undefined, runMeta);
+      deps.closedRunIdRef.current = runId;
       return true;
     }
     if (run?.status && TERMINAL_STATUSES.has(run.status)) {
-      syncRunStatus(run.status, run.error, undefined, runMeta);
+      syncRunStatus(runId, run.status, run.error, undefined, runMeta);
+      deps.closedRunIdRef.current = runId;
       return true;
     }
 
@@ -200,6 +207,7 @@ export function createRunSubscriptionHandlers(deps: RunSubscriptionDeps) {
           }
           return p;
         });
+        deps.closedRunIdRef.current = runId;
         return true;
       }
     }
@@ -212,11 +220,13 @@ export function createRunSubscriptionHandlers(deps: RunSubscriptionDeps) {
     const isStale = () => myGeneration !== subscribeGeneration || deps.runIdRef.current !== runId;
     const isSame = deps.runIdRef.current === runId;
     if (isSame && deps.eventChannelRef.current) {
+      if (deps.closedRunIdRef.current === runId) deps.closedRunIdRef.current = null;
       deps.setConnected(true);
       deps.setQueueBlockingReason(null);
       return;
     }
     if (!isSame) {
+      if (deps.closedRunIdRef.current !== runId) deps.closedRunIdRef.current = null;
       deps.streamBufferRef.current = [];
       void teardownChannels();
     }
@@ -250,8 +260,10 @@ export function createRunSubscriptionHandlers(deps: RunSubscriptionDeps) {
         },
         (payload: { new: AgentStreamRow }) => {
           if (deps.runIdRef.current !== runId) return;
+          if (deps.closedRunIdRef.current === runId) return;
           const row = payload.new as AgentStreamRow;
           if (deps.enqueueStreamRow(row)) {
+            deps.closedRunIdRef.current = runId;
             void teardownChannels();
             deps.setConnected(false);
             deps.setProgress((p) => {
@@ -326,6 +338,7 @@ export function createRunSubscriptionHandlers(deps: RunSubscriptionDeps) {
         },
         async (payload: { new: { status: string; error: string | null; canceled_at: string | null; meta?: Record<string, unknown> | null } }) => {
           if (deps.runIdRef.current !== runId) return;
+          if (deps.closedRunIdRef.current === runId) return;
           const row = payload.new as {
             status: string;
             error: string | null;
@@ -336,9 +349,11 @@ export function createRunSubscriptionHandlers(deps: RunSubscriptionDeps) {
           await catchUpRun(deps.runIdRef.current);
           const runMeta = (row.meta ?? null) as Record<string, unknown> | null;
           if (row.canceled_at || row.status === "canceled") {
-            syncRunStatus("canceled", row.error, undefined, runMeta);
+            syncRunStatus(runId, "canceled", row.error, undefined, runMeta);
+            deps.closedRunIdRef.current = runId;
           } else if (TERMINAL_STATUSES.has(row.status)) {
-            syncRunStatus(row.status, row.error, undefined, runMeta);
+            syncRunStatus(runId, row.status, row.error, undefined, runMeta);
+            deps.closedRunIdRef.current = runId;
           }
         },
       )

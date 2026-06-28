@@ -12,6 +12,7 @@ import {
 } from "@/lib/agent-progress";
 export type RunActionHandlersDeps = {
   runIdRef: MutableRefObject<string | null>;
+  closedRunIdRef: MutableRefObject<string | null>;
   lastSeqRef: MutableRefObject<number>;
   setProgress: Dispatch<SetStateAction<AgentProgress>>;
   setConnected: Dispatch<SetStateAction<boolean>>;
@@ -23,6 +24,7 @@ export type RunActionHandlersDeps = {
 export function createRunActionHandlers(deps: RunActionHandlersDeps) {
   const stop = async () => {
     const runId = deps.runIdRef.current;
+    if (runId) deps.closedRunIdRef.current = runId;
 
     deps.setProgress((p) => ({
       ...p,
@@ -62,6 +64,7 @@ export function createRunActionHandlers(deps: RunActionHandlersDeps) {
   };
 
   const disconnect = () => {
+    if (deps.runIdRef.current) deps.closedRunIdRef.current = deps.runIdRef.current;
     deps.runIdRef.current = null;
     deps.setActiveRunId(null);
     deps.teardownChannels();

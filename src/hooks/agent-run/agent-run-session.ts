@@ -14,6 +14,7 @@ export type SessionContext = { projectId: string; conversationId: string };
 
 export type SessionHandlersDeps = {
   runIdRef: MutableRefObject<string | null>;
+  closedRunIdRef: MutableRefObject<string | null>;
   lastSeqRef: MutableRefObject<number>;
   sessionContextRef: MutableRefObject<SessionContext | null>;
   frozenRunProgressRef: MutableRefObject<Map<string, AgentProgress>>;
@@ -36,6 +37,7 @@ export function createSessionHandlers(deps: SessionHandlersDeps) {
 
   const resetSession = () => {
     deps.runIdRef.current = null;
+    deps.closedRunIdRef.current = null;
     deps.setActiveRunId(null);
     deps.setActiveRunStartedAtMs(null);
     deps.setConnected(false);

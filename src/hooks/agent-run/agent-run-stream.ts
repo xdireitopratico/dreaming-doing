@@ -39,6 +39,7 @@ export function freezeWorkingDuration(
 
 export type StreamProcessorRefs = {
   runIdRef: MutableRefObject<string | null>;
+  closedRunIdRef: MutableRefObject<string | null>;
   lastSeqRef: MutableRefObject<number>;
   activeRunStartedAtMsRef: MutableRefObject<number | null>;
   streamProcessingRef: MutableRefObject<boolean>;
@@ -54,6 +55,14 @@ export function createStreamRowHandlers(
     const t = event.type;
     const rowRunId = row.run_id;
     const activeId = refs.runIdRef.current;
+    if (rowRunId && refs.closedRunIdRef.current === rowRunId) {
+      emitStreamingTelemetry("agent.stream_seq_dropped", {
+        seq: row.seq,
+        lastSeq: refs.lastSeqRef.current,
+        eventType: t,
+      });
+      return false;
+    }
     if (rowRunId && activeId && rowRunId !== activeId && t === "start") {
       refs.lastSeqRef.current = 0;
     }
@@ -138,6 +147,7 @@ export function createStreamRowHandlers(
     // Reset de run novo precisa ser ANTES do drop-check de seq (espelha applyStreamRow).
     const rowRunId = row.run_id;
     const activeId = refs.runIdRef.current;
+    if (rowRunId && refs.closedRunIdRef.current === rowRunId) return false;
     if (rowRunId && activeId && rowRunId !== activeId && row.event_type === "start") {
       refs.lastSeqRef.current = 0;
     }

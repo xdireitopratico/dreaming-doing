@@ -52,6 +52,7 @@ export function useAgentRun() {
   const [frozenProgressTick, setFrozenProgressTick] = useState(0);
 
   const runIdRef = useRef<string | null>(null);
+  const closedRunIdRef = useRef<string | null>(null);
   const activeRunStartedAtMsRef = useRef<number | null>(null);
   const pendingQueueCountRef = useRef(0);
   const progressRef = useRef<AgentProgress>(initialAgentProgress);
@@ -79,6 +80,7 @@ export function useAgentRun() {
     () =>
       createFrozenProgressHandlers({
         runIdRef,
+        closedRunIdRef,
         progressRef,
         frozenRunProgressRef,
         setActiveRunId,
@@ -93,6 +95,7 @@ export function useAgentRun() {
       createStreamRowHandlers(
         {
           runIdRef,
+          closedRunIdRef,
           lastSeqRef,
           activeRunStartedAtMsRef,
           streamProcessingRef,
@@ -107,6 +110,7 @@ export function useAgentRun() {
     () =>
       createRunSubscriptionHandlers({
         runIdRef,
+        closedRunIdRef,
         lastSeqRef,
         pendingQueueCountRef,
         activeRunStartedAtMsRef,
@@ -153,6 +157,7 @@ export function useAgentRun() {
     () =>
       createLifecycleHandlers({
         runIdRef,
+        closedRunIdRef,
         activeRunStartedAtMs,
         setProgress,
         setActiveRunId,
@@ -175,6 +180,7 @@ export function useAgentRun() {
     () =>
       createRunActionHandlers({
         runIdRef,
+        closedRunIdRef,
         lastSeqRef,
         setProgress,
         setConnected,
@@ -189,6 +195,7 @@ export function useAgentRun() {
     () =>
       createSessionHandlers({
         runIdRef,
+        closedRunIdRef,
         lastSeqRef,
         sessionContextRef,
         frozenRunProgressRef,

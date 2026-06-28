@@ -4,6 +4,7 @@ import { inspectorProgressWeight } from "@/lib/assistant-run-progress";
 
 export type FrozenProgressDeps = {
   runIdRef: MutableRefObject<string | null>;
+  closedRunIdRef: MutableRefObject<string | null>;
   progressRef: MutableRefObject<AgentProgress>;
   frozenRunProgressRef: MutableRefObject<Map<string, AgentProgress>>;
   setActiveRunId: Dispatch<SetStateAction<string | null>>;
@@ -39,6 +40,7 @@ export function createFrozenProgressHandlers(deps: FrozenProgressDeps) {
 
   const releaseLiveRunSlot = (runId: string) => {
     freezeRunProgress(runId);
+    deps.closedRunIdRef.current = runId;
     deps.runIdRef.current = null;
     deps.setActiveRunId(null);
     deps.setActiveRunStartedAtMs(null);

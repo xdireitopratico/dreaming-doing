@@ -20,6 +20,7 @@ export type AgentConnectResult = { ok: true } | { ok: false; error: string; busy
 
 export type LifecycleHandlersDeps = {
   runIdRef: MutableRefObject<string | null>;
+  closedRunIdRef: MutableRefObject<string | null>;
   activeRunStartedAtMs: number | null;
   setProgress: Dispatch<SetStateAction<AgentProgress>>;
   setActiveRunId: Dispatch<SetStateAction<string | null>>;
@@ -208,6 +209,7 @@ export function createLifecycleHandlers(deps: LifecycleHandlersDeps) {
       phase: null,
       finished: false,
     });
+    deps.closedRunIdRef.current = null;
     return startedAtMs;
   };
 
@@ -216,6 +218,7 @@ export function createLifecycleHandlers(deps: LifecycleHandlersDeps) {
     void conversationId;
     const isNew = deps.runIdRef.current !== runId;
     if (isNew) {
+      deps.closedRunIdRef.current = null;
       deps.setActiveRunId(runId);
       deps.setActiveRunStartedAtMs(Date.now());
       deps.setProgress({

@@ -83,6 +83,7 @@ describe("createRunSubscriptionHandlers", () => {
 
     const deps = {
       runIdRef: { current: null },
+      closedRunIdRef: { current: null as string | null },
       lastSeqRef: { current: 0 },
       pendingQueueCountRef: { current: 0 },
       activeRunStartedAtMsRef: { current: null },

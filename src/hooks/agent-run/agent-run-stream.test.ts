@@ -10,6 +10,7 @@ import {
 function makeRefs(overrides?: Partial<{ runId: string | null; lastSeq: number }>) {
   return {
     runIdRef: { current: overrides?.runId ?? "run-a" },
+    closedRunIdRef: { current: null as string | null },
     lastSeqRef: { current: overrides?.lastSeq ?? 0 },
     activeRunStartedAtMsRef: { current: Date.now() - 2000 },
     streamProcessingRef: { current: false },
@@ -138,5 +139,19 @@ describe("createStreamRowHandlers", () => {
     vi.advanceTimersByTime(80); // janela expira
     expect(refs.lastSeqRef.current).toBe(3); // aceita o gap
     vi.useRealTimers();
+  });
+
+  it("ignora rows atrasadas do run já encerrado", () => {
+    const refs = makeRefs({ lastSeq: 1 });
+    refs.closedRunIdRef.current = "run-a";
+    let progress = initialAgentProgress;
+    const { enqueueStreamRow } = createStreamRowHandlers(refs, (updater) => {
+      progress = typeof updater === "function" ? updater(progress) : updater;
+    });
+
+    const applied = enqueueStreamRow(startRow(2, "run-a"));
+    expect(applied).toBe(false);
+    expect(refs.lastSeqRef.current).toBe(1);
+    expect(progress.timeline).toHaveLength(0);
   });
 });
