@@ -13,7 +13,7 @@ import {
   DropdownMenuTrigger, DropdownMenuLabel, DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import {
-  Save, X, Upload, Undo2, Redo2, CheckCircle2, AlertTriangle,
+  Save, Upload, Undo2, Redo2, CheckCircle2, AlertTriangle,
   Play, Wrench, Database, LayoutTemplate, Webhook, KeyRound, CalendarClock,
   Clock, Activity, BarChart3, Bug, History, Stethoscope,
   Users, MessageSquare, Bell,
@@ -31,7 +31,6 @@ interface FlowToolbarProps {
   unreadNotifCount: number;
   totalComments: number;
   onFlowNameChange: (name: string) => void;
-  onClose: () => void;
   onSave: () => void;
   onPublish: () => void;
   onUndo: () => void;
@@ -98,10 +97,15 @@ const MENU_GROUPS: MenuGroup[] = [
   },
 ];
 
+const MENU_GROUPS_ORDER = ["Configuração", "Colaboração", "Análise", "Ferramentas"] as const;
+const ORDERED_MENU_GROUPS = MENU_GROUPS_ORDER
+  .map((label) => MENU_GROUPS.find((g) => g.label === label))
+  .filter((g): g is MenuGroup => Boolean(g));
+
 export const FlowToolbar = memo(function FlowToolbar({
   flowName, flowStatus, hasUnsaved, saving, validationErrors,
   activePanel, unreadNotifCount, totalComments,
-  onFlowNameChange, onClose, onSave, onPublish, onUndo, onRedo, onTogglePanel,
+  onFlowNameChange, onSave, onPublish, onUndo, onRedo, onTogglePanel,
   onResumeSession, onOpenAgent,
 }: FlowToolbarProps) {
   return (
@@ -157,89 +161,80 @@ export const FlowToolbar = memo(function FlowToolbar({
           <Play className="h-3.5 w-3.5" />
           Testar
         </Button>
-        <Button size="sm" className="gap-1 h-7 text-xs text-white" onClick={onPublish} title="Publicar (Ctrl+Shift+P)" style={{ background: 'var(--ps-accent)', border: 'none' }}>
+        <Button size="sm" className="gap-1 h-7 text-xs" onClick={onPublish} title="Publicar (Ctrl+Shift+P)" style={{ background: 'var(--ps-accent)', border: 'none', color: '#0b0d12' }}>
           <Upload className="h-3.5 w-3.5" />
           Publicar
         </Button>
 
         <div className="w-px h-5" style={{ background: 'var(--ps-border)' }} />
 
-        {/* Grouped Dropdown Menus */}
-        {MENU_GROUPS.map((group) => {
-          const GroupIcon = group.icon;
-          const hasActiveItem = group.items.some(i => activePanel === i.panel);
-          const badgeCount = group.items.reduce((sum, item) => {
-            if (item.panel === "notifications") return sum + unreadNotifCount;
-            if (item.panel === "comments") return sum + totalComments;
-            return sum;
-          }, 0);
+        {/* Ícones de menu: Tema → Ferramentas → Análise → Colaboração → Configuração → Meus Agentes */}
+        <div className="flex items-center gap-1">
+          <PrometheusThemeToggle />
+          {ORDERED_MENU_GROUPS.map((group) => {
+            const GroupIcon = group.icon;
+            const hasActiveItem = group.items.some(i => activePanel === i.panel);
+            const badgeCount = group.items.reduce((sum, item) => {
+              if (item.panel === "notifications") return sum + unreadNotifCount;
+              if (item.panel === "comments") return sum + totalComments;
+              return sum;
+            }, 0);
 
-          return (
-            <DropdownMenu key={group.label}>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant={hasActiveItem ? "default" : "ghost"}
-                  size="icon"
-                  className="h-7 w-7 relative"
-                  title={group.label}
-                  style={{ color: hasActiveItem ? '#fff' : 'var(--ps-cream-60)' }}
-                >
-                  <GroupIcon className="h-3.5 w-3.5" />
-                  {badgeCount > 0 && (
-                    <span className="absolute -top-1 -right-1 bg-destructive text-destructive-foreground text-[8px] rounded-full h-3.5 min-w-3.5 flex items-center justify-center px-0.5">
-                      {badgeCount}
-                    </span>
-                  )}
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-48" style={{ background: 'var(--ps-bg)', borderColor: 'var(--ps-border)', color: 'var(--ps-cream)' }}>
-                <DropdownMenuLabel className="text-[10px] uppercase tracking-wider" style={{ color: 'var(--ps-cream-40)' }}>
-                  {group.label}
-                </DropdownMenuLabel>
-                <DropdownMenuSeparator style={{ background: 'var(--ps-border)' }} />
-                {group.items.map((item) => {
-                  const ItemIcon = item.icon;
-                  const isActive = activePanel === item.panel;
-                  const itemBadge = item.panel === "notifications" ? unreadNotifCount
-                    : item.panel === "comments" ? totalComments : 0;
-                  return (
-                    <DropdownMenuItem
-                      key={item.panel}
-                      onClick={() => onTogglePanel(item.panel)}
-                      className="gap-2 text-xs"
-                      style={{
-                        color: isActive ? 'var(--ps-accent)' : 'var(--ps-cream-80)',
-                        background: isActive ? 'var(--ps-accent-subtle)' : undefined,
-                      }}
-                    >
-                      <ItemIcon className="h-3.5 w-3.5" />
-                      {item.label}
-                      {itemBadge > 0 && (
-                        <Badge variant="destructive" className="ml-auto text-[9px] px-1 py-0 h-4">
-                          {itemBadge}
-                        </Badge>
-                      )}
-                    </DropdownMenuItem>
-                  );
-                })}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          );
-        })}
+            return (
+              <DropdownMenu key={group.label}>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant={hasActiveItem ? "default" : "ghost"}
+                    size="icon"
+                    className="h-7 w-7 relative"
+                    title={group.label}
+                    style={{ color: hasActiveItem ? 'var(--ps-accent)' : 'var(--ps-cream-60)' }}
+                  >
+                    <GroupIcon className="h-3.5 w-3.5" />
+                    {badgeCount > 0 && (
+                      <span className="absolute -top-1 -right-1 bg-destructive text-destructive-foreground text-[8px] rounded-full h-3.5 min-w-3.5 flex items-center justify-center px-0.5">
+                        {badgeCount}
+                      </span>
+                    )}
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-48" style={{ background: 'var(--ps-bg)', borderColor: 'var(--ps-border)', color: 'var(--ps-cream)' }}>
+                  <DropdownMenuLabel className="text-[10px] uppercase tracking-wider" style={{ color: 'var(--ps-cream-40)' }}>
+                    {group.label}
+                  </DropdownMenuLabel>
+                  <DropdownMenuSeparator style={{ background: 'var(--ps-border)' }} />
+                  {group.items.map((item) => {
+                    const ItemIcon = item.icon;
+                    const isActive = activePanel === item.panel;
+                    const itemBadge = item.panel === "notifications" ? unreadNotifCount
+                      : item.panel === "comments" ? totalComments : 0;
+                    return (
+                      <DropdownMenuItem
+                        key={item.panel}
+                        onClick={() => onTogglePanel(item.panel)}
+                        className="gap-2 text-xs"
+                        style={{
+                          color: isActive ? 'var(--ps-accent)' : 'var(--ps-cream-80)',
+                          background: isActive ? 'var(--ps-accent-subtle)' : undefined,
+                        }}
+                      >
+                        <ItemIcon className="h-3.5 w-3.5" />
+                        {item.label}
+                        {itemBadge > 0 && (
+                          <Badge variant="destructive" className="ml-auto text-[9px] px-1 py-0 h-4">
+                            {itemBadge}
+                          </Badge>
+                        )}
+                      </DropdownMenuItem>
+                    );
+                  })}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            );
+          })}
 
-        <div className="w-px h-5" style={{ background: 'var(--ps-border)' }} />
-
-        {/* Meus Agentes */}
-        <PrometheusSessionList onResumeSession={onResumeSession} onOpenAgent={onOpenAgent} />
-
-        <div className="w-px h-5" style={{ background: 'var(--ps-border)' }} />
-
-        {/* Close button */}
-        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onClose} title="Fechar editor" style={{ color: 'var(--ps-cream-40)' }}>
-          <X className="h-4 w-4" />
-        </Button>
-
-        <PrometheusThemeToggle />
+          <PrometheusSessionList onResumeSession={onResumeSession} onOpenAgent={onOpenAgent} />
+        </div>
       </div>
     </div>
   );

@@ -14,18 +14,17 @@ export function PrometheusThemeToggle() {
     <button
       type="button"
       onClick={toggle}
-      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border transition-colors"
+      className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md transition-colors"
       style={{
-        borderColor: "var(--ps-border)",
-        background: "var(--ps-bg-surface)",
-        color: "var(--ps-cream-80)",
+        background: "transparent",
+        color: "var(--ps-cream-60)",
       }}
       title={theme === "default" ? "Trocar para tema legacy" : "Trocar para tema padrão (Vibecoding)"}
       aria-label="Alternar tema do editor"
       data-testid="prometheus-theme-toggle"
       data-theme-current={theme}
     >
-      {theme === "default" ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
+      {theme === "default" ? <Moon className="h-3.5 w-3.5" /> : <Sun className="h-3.5 w-3.5" />}
     </button>
   );
 }
