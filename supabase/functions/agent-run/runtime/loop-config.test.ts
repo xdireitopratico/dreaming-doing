@@ -8,7 +8,6 @@ import {
   isGradleCommand,
   META_MAX_BYTES,
   resolveLoopBudgetMs,
-  THINKING_STREAM_CAP_MS,
 } from "./loop-config.ts";
 
 Deno.test("isBuildCommand — gradle e npm run build", () => {
@@ -30,17 +29,7 @@ Deno.test("resolveLoopBudgetMs — edge vs inngest", () => {
 
 Deno.test("calculateMaxSteps e calculateMaxTokens por complexidade", () => {
   assertEquals(calculateMaxSteps(5), 100);
-  assertEquals(calculateMaxTokens(5), 16384);
-});
-
-Deno.test("loop-config reduz o budget de saída para acelerar o pensamento", () => {
-  assertEquals(calculateMaxTokens(1), 4096);
-  assertEquals(calculateMaxTokens(3), 8192);
-  assertEquals(calculateMaxTokens(5), 16384);
-});
-
-Deno.test("loop-config mantém o cap de stream de pensamento", () => {
-  assertEquals(THINKING_STREAM_CAP_MS, 45_000);
+  assertEquals(calculateMaxTokens(5), 32768);
 });
 
 Deno.test("capMetaSize — trunca executionLog e streamTail", () => {

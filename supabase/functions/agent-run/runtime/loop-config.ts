@@ -60,11 +60,11 @@ export function calculateMaxSteps(complexity: 1 | 2 | 3 | 4 | 5): number {
 
 export function calculateMaxTokens(complexity: 1 | 2 | 3 | 4 | 5): number {
   const limits: Record<1 | 2 | 3 | 4 | 5, number> = {
-    1: 4096,
-    2: 6144,
-    3: 8192,
-    4: 12288,
-    5: 16384,
+    1: 8192,
+    2: 12288,
+    3: 16384,
+    4: 24576,
+    5: 32768,
   };
   return limits[complexity] ?? 16384;
 }
