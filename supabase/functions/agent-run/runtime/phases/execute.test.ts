@@ -171,10 +171,10 @@ Deno.test("execute phase aborta antes do opening quando preflight falha", async 
   const events = (deps as unknown as { _events: () => { type: string; data: Record<string, unknown> }[] })._events();
 
   assertEquals(result.ok, false);
-  assertEquals(result.resumable, true);
-  assertEquals(result.buildFix, true);
-  assertEquals(result.error?.includes("resumable"), true);
-  assertEquals(persistSummary, "");
+  assertEquals(result.resumable, false);
+  assertEquals(result.buildFix, undefined);
+  assertEquals(result.error, "PREFLIGHT FALHOU:\n[build] erro TS2307");
+  assertEquals(persistSummary, "PREFLIGHT FALHOU:\n[build] erro TS2307");
   assert(events.some((e) => e.type === "assistant_text" && e.data.final === true));
   assertEquals(events.some((e) => e.type === "assistant_text" && e.data.opening === true), false);
 });

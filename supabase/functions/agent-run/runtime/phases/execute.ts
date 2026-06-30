@@ -309,7 +309,12 @@ export async function runBuildExecutePhase(
   if (preflight && !preflight.passed) {
     const err = preflight.feedback?.trim() || "PREFLIGHT FALHOU";
     deps.notifyLoopStatus({ kind: "build_fix" });
-    return emitRecoverableBuildChunk(deps, loopStep, err);
+    return emitClosingAndPersist(deps, loopStep, {
+      closing: err,
+      error: err,
+      ok: false,
+      buildFailed: true,
+    });
   }
 
   const compressedInitial = await deps.compression.compress(deps.state.messages);

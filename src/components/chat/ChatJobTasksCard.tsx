@@ -6,7 +6,7 @@ import type { MiniCardData, RunPhase } from "@/lib/chat/types";
 type ChatJobTasksCardProps = {
   data: MiniCardData;
   isFocused?: boolean;
-  phase?: RunPhase | null;
+  phase?: RunPhase | "preflight" | null;
 };
 
 function taskStatusIcon(status: "pending" | "active" | "done" | "failed"): React.ReactNode {
@@ -31,8 +31,9 @@ function compactTaskText(task: { label: string; criteria?: string }, max = 120):
 export function ChatJobTasksCard({ data, isFocused, phase }: ChatJobTasksCardProps) {
   const tasks = data.tasks ?? [];
   const isLive = data.status === "working" || data.status === "thinking";
-  if (phase === "plan") return null;
-  const showSkeleton = isLive && tasks.length === 0;
+  if (phase === "plan" || phase === "preflight") return null;
+  const materializingTasksPhase = phase === "build" || phase === "execute";
+  const showSkeleton = isLive && materializingTasksPhase && tasks.length === 0;
   const [tasksExpanded, setTasksExpanded] = useState(false);
   const TASKS_PREVIEW = 4;
   const visibleTasks = tasksExpanded ? tasks : tasks.slice(0, TASKS_PREVIEW);
