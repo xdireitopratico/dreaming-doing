@@ -24,18 +24,6 @@ export function InspectorTimeline({
     [progress.timeline, running],
   );
 
-  const liveThinkingPreview = useMemo(() => {
-    if (!running) return "";
-    if (timelineItems.some((item) => item.type === "THOUGHT")) return "";
-    return progress.timeline
-      .filter(
-        (ev) =>
-          ev.type === "assistant_text" && (ev.data as Record<string, unknown>)?.thinking === true,
-      )
-      .map((ev) => String((ev.data as Record<string, unknown>)?.text ?? ""))
-      .join("");
-  }, [progress.timeline, running, timelineItems]);
-
   const showThinkingHeader = running && timelineItems.length === 0;
 
   const handleUserScroll = useCallback(() => {
@@ -74,14 +62,6 @@ export function InspectorTimeline({
           <div className="forge-inspector-thinking-header" data-testid="inspector-thinking-header">
             <span className="forge-inspector-thinking-dot" aria-hidden />
             <span>Pensando…</span>
-          </div>
-        )}
-        {liveThinkingPreview.trim() && (
-          <div className="forge-details-thought" data-testid="inspector-live-thinking">
-            <div className="forge-details-thought-header">
-              <span className="forge-details-thought-label">Pensando…</span>
-            </div>
-            <p className="forge-details-thought-body">{liveThinkingPreview.trim()}</p>
           </div>
         )}
         <InspectorActivityFeed
