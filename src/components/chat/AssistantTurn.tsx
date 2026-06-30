@@ -123,7 +123,7 @@ export function AssistantTurn({
               onShowOutput={onShowOutput}
               onShowPreview={onShowPreview}
             />
-            <ChatJobTasksCard data={item.miniCard} isFocused={item.isFocused} />
+            <ChatJobTasksCard data={item.miniCard} isFocused={item.isFocused} phase={item.phase} />
           </>
         )}
 

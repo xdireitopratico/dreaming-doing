@@ -253,6 +253,7 @@ describe("Fase 2.2 — lastTool é extraído do timeline e exposto em MiniCardDa
     expect(src).not.toContain("chat-mini-card-task-list");
     expect(tasksCard).toContain("chat-job-tasks-card");
     expect(tasksCard).toContain("chat-job-tasks-list");
+    expect(tasksCard).toContain('phase === "plan"');
   });
 });
 

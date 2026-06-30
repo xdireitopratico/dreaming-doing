@@ -1,11 +1,12 @@
 import { useState } from "react";
 import { Check, Circle, Loader2, X } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { MiniCardData } from "@/lib/chat/types";
+import type { MiniCardData, RunPhase } from "@/lib/chat/types";
 
 type ChatJobTasksCardProps = {
   data: MiniCardData;
   isFocused?: boolean;
+  phase?: RunPhase | null;
 };
 
 function taskStatusIcon(status: "pending" | "active" | "done" | "failed"): React.ReactNode {
@@ -27,9 +28,10 @@ function compactTaskText(task: { label: string; criteria?: string }, max = 120):
   return text.length > max ? `${text.slice(0, max - 1)}…` : text;
 }
 
-export function ChatJobTasksCard({ data, isFocused }: ChatJobTasksCardProps) {
+export function ChatJobTasksCard({ data, isFocused, phase }: ChatJobTasksCardProps) {
   const tasks = data.tasks ?? [];
   const isLive = data.status === "working" || data.status === "thinking";
+  if (phase === "plan") return null;
   const showSkeleton = isLive && tasks.length === 0;
   const [tasksExpanded, setTasksExpanded] = useState(false);
   const TASKS_PREVIEW = 4;
