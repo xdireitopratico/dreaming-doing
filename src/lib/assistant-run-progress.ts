@@ -151,14 +151,17 @@ export function resolveInspectorRunProgress(
     runWasLive?: boolean;
   },
 ): AgentProgress | null {
-  if (opts.activeRunId === runId) return opts.liveProgress;
-  if (
-    opts.runWasLive === true &&
-    (!opts.liveProgress.finished || opts.liveProgress.lastFinishOk === false)
-  ) {
+  if (opts.runWasLive === true) {
+    if (!opts.liveProgress.finished || opts.liveProgress.lastFinishOk === false) {
+      return opts.liveProgress;
+    }
+    if (opts.frozenProgress && inspectorProgressWeight(opts.frozenProgress) > 0) {
+      return opts.frozenProgress;
+    }
     return opts.liveProgress;
   }
-  if (opts.runWasLive === true && opts.frozenProgress && inspectorProgressWeight(opts.frozenProgress) > 0) {
+  if (opts.activeRunId === runId) return opts.liveProgress;
+  if (opts.frozenProgress && inspectorProgressWeight(opts.frozenProgress) > 0) {
     return opts.frozenProgress;
   }
 

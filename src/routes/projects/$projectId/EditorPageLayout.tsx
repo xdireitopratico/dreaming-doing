@@ -284,12 +284,6 @@ export function EditorPageLayout({
     return () => window.removeEventListener(OPEN_CONNECTOR_EVENT, onOpenConnector);
   }, [openConnector]);
 
-  useEffect(() => {
-    if (!pendingPlan && jobWorkspaceFocus?.tab === "plan") {
-      setJobTab("timeline");
-    }
-  }, [pendingPlan, jobWorkspaceFocus?.tab, setJobTab]);
-
   const prevInspectorRunRef = useRef<string | null>(null);
   const autoOpenedInspectorRunRef = useRef<string | null>(null);
   const inspectorLiveRunRef = useRef<{ runId: string | null; sawLive: boolean; startedAtMs: number | null }>({

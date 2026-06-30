@@ -2,19 +2,10 @@ import { useState } from "react";
 import { cn } from "@/lib/utils";
 import type { MiniCardData } from "@/lib/chat/types";
 import {
-  Check,
-  Circle,
   ExternalLink,
-  Eye,
-  FileCode,
   FileText,
   GitCompareArrows,
-  Globe,
-  Loader2,
-  Package,
-  Search,
   Terminal,
-  X,
 } from "lucide-react";
 
 type ChatJobCardProps = {
@@ -34,26 +25,6 @@ function parseEditedHeader(header: string): { edited: boolean; file: string | nu
   return { edited: true, file: match[1].trim() };
 }
 
-/** Ícone de status por estado da tarefa atômica. */
-function taskStatusIcon(status: "pending" | "active" | "done" | "failed"): React.ReactNode {
-  switch (status) {
-    case "done":
-      return <Check className="size-3 text-[var(--status-done)]" />;
-    case "active":
-      return <Loader2 className="size-3 animate-spin text-[var(--status-working)]" />;
-    case "failed":
-      return <X className="size-3 text-[var(--status-failed)]" />;
-    default:
-      return <Circle className="size-3 text-[var(--text-muted)]" />;
-  }
-}
-
-function compactTaskText(task: { label: string; criteria?: string }, max = 120): string {
-  const text = [task.label.trim(), task.criteria?.trim()].filter(Boolean).join(" · ");
-  if (!text) return "";
-  return text.length > max ? `${text.slice(0, max - 1)}…` : text;
-}
-
 export function ChatJobCard({
   data,
   runId,
@@ -69,14 +40,6 @@ export function ChatJobCard({
   const isFailed = data.status === "failed";
   const { edited, file } = parseEditedHeader(data.header);
   const isRunningCommand = /^Running command$/i.test(data.header.trim());
-
-  // Checklist recolhível — mostra as 4 primeiras por padrão, botão expande o resto.
-  const [tasksExpanded, setTasksExpanded] = useState(false);
-  const TASKS_PREVIEW = 4;
-  const tasks = data.tasks ?? [];
-  const visibleTasks = tasksExpanded ? tasks : tasks.slice(0, TASKS_PREVIEW);
-  const hasMoreTasks = tasks.length > TASKS_PREVIEW;
-  const hiddenTasksCount = tasks.length - TASKS_PREVIEW;
 
   const hint = () => {
     if (isDone && data.fileCount) return `${data.fileCount} arquivos alterados →`;
@@ -207,49 +170,6 @@ export function ChatJobCard({
 
         {!isLive && !edited && !isRunningCommand && data.header && !isDone && !isFailed && (
           <p className="forge-mini-card-header-line">{data.header}</p>
-        )}
-
-        {/* Checklist de tarefas atômicas — recolhível (4 + botão Ver mais). */}
-        {tasks.length > 0 && (
-          <ul className="forge-mini-card-task-list" data-testid="chat-mini-card-task-list">
-            {visibleTasks.map((task, idx) => (
-              <li
-                key={task.id || idx}
-                className={cn(
-                  "forge-mini-card-task-item",
-                  `forge-mini-card-task-item--${task.status}`,
-                )}
-                data-status={task.status}
-              >
-                <span className="forge-mini-card-task-status" aria-hidden>
-                  {taskStatusIcon(task.status)}
-                </span>
-                <span className="forge-mini-card-task-body">
-                  <span
-                    className="forge-mini-card-task-label"
-                    title={[task.label, task.criteria].filter(Boolean).join(" · ")}
-                  >
-                    {compactTaskText(task)}
-                  </span>
-                </span>
-              </li>
-            ))}
-            {hasMoreTasks && (
-              <li>
-                <button
-                  type="button"
-                  className="forge-mini-card-task-toggle"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setTasksExpanded((v) => !v);
-                  }}
-                  data-testid="chat-mini-card-task-toggle"
-                >
-                  {tasksExpanded ? "Ver menos" : `+${hiddenTasksCount} tarefas`}
-                </button>
-              </li>
-            )}
-          </ul>
         )}
 
         {visibleChips.length > 0 && (

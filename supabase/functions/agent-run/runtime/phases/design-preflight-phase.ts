@@ -21,10 +21,19 @@ export type DesignPreflightDeps = {
   emit: (type: string, data: unknown) => void;
 };
 
-export async function runDesignPreflightIfNeeded(deps: DesignPreflightDeps): Promise<void> {
-  if (deps.planMode || deps.smokeRun || !needsDesignPreflight(deps.projectTemplate)) return;
-  if (deps.resumeRun && deps.touchedPaths.size > 0) return;
-  if (deps.loopBudgetExceeded()) return;
+export type DesignPreflightOutcome = {
+  passed: boolean;
+  feedback?: string;
+  checks: Array<{ name: string; ok: boolean; output: string }>;
+  availableComponents?: string;
+};
+
+export async function runDesignPreflightIfNeeded(
+  deps: DesignPreflightDeps,
+): Promise<DesignPreflightOutcome | null> {
+  if (deps.planMode || deps.smokeRun || !needsDesignPreflight(deps.projectTemplate)) return null;
+  if (deps.resumeRun && deps.touchedPaths.size > 0) return null;
+  if (deps.loopBudgetExceeded()) return null;
 
   if (!deps.state.context?.files?.length) {
     await deps.gatherContext();
@@ -64,4 +73,30 @@ export async function runDesignPreflightIfNeeded(deps: DesignPreflightDeps): Pro
       content: `PREFLIGHT FALHOU:\n${preflightErrors.join("\n")}\nCorrija antes de continuar.`,
     });
   }
+
+  return {
+    passed: preflightErrors.length === 0 && preflight.passed,
+    feedback:
+      preflightErrors.length > 0
+        ? `PREFLIGHT FALHOU:\n${preflightErrors.join("\n")}`
+        : undefined,
+    checks: [
+      ...preflight.checks,
+      ...(inventory.missing.length > 0 || inventory.warnings.length > 0
+        ? [
+            {
+              name: "inventory",
+              ok: inventory.ok,
+              output: [
+                inventory.missing.length > 0 ? `Faltam: ${inventory.missing.join(", ")}` : null,
+                inventory.warnings.length > 0 ? `Imports: ${inventory.warnings.slice(0, 3).join(", ")}` : null,
+              ]
+                .filter(Boolean)
+                .join(" | "),
+            },
+          ]
+        : []),
+    ],
+    availableComponents: manifest,
+  };
 }

@@ -10,6 +10,7 @@ import { llmErrorHint, staleStreamHint, timeoutHint, zombieRunHint } from "@/lib
 import { ForgeThinking } from "@/components/chat/ForgeThinking";
 import { ChatNarration } from "./ChatNarration";
 import { ChatJobCard } from "./ChatJobCard";
+import { ChatJobTasksCard } from "./ChatJobTasksCard";
 import { ChatToolbar } from "./ChatToolbar";
 
 type AssistantTurnProps = {
@@ -111,16 +112,19 @@ export function AssistantTurn({
         {showNarration && <ChatNarration text={narrationText!} streaming={narrationStreaming} />}
 
         {showJobCard && item.miniCard && (
-          <ChatJobCard
-            data={item.miniCard}
-            runId={item.runId}
-            isFocused={item.isFocused}
-            onClick={() => onOpenInspector?.(item.runId, "timeline")}
-            onOpenFile={onOpenFile}
-            onShowDiff={(rid) => onOpenInspector?.(rid, "changes")}
-            onShowOutput={onShowOutput}
-            onShowPreview={onShowPreview}
-          />
+          <>
+            <ChatJobCard
+              data={item.miniCard}
+              runId={item.runId}
+              isFocused={item.isFocused}
+              onClick={() => onOpenInspector?.(item.runId, "timeline")}
+              onOpenFile={onOpenFile}
+              onShowDiff={(rid) => onOpenInspector?.(rid, "changes")}
+              onShowOutput={onShowOutput}
+              onShowPreview={onShowPreview}
+            />
+            <ChatJobTasksCard data={item.miniCard} isFocused={item.isFocused} />
+          </>
         )}
 
         {showErrorHint && errorHint && (

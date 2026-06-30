@@ -97,7 +97,8 @@ export type BuildExecuteDeps = {
     toolsUsed: Set<string>,
     options?: { buildFix?: boolean },
   ) => Promise<PlanTurnRunResult>;
-  runDesignPreflightIfNeeded: () => Promise<void>;
+  runDesignPreflightIfNeeded: () =>
+    Promise<{ passed: boolean; feedback?: string; checks: Array<{ name: string; ok: boolean; output: string }> } | null>;
   requiresFinalBuildGate: () => boolean;
   enabledApprovedPlanSteps: () => PlanStep[];
   isCanceled: () => Promise<boolean>;
@@ -284,13 +285,24 @@ export async function runBuildExecutePhase(
   deps: BuildExecuteDeps,
   initialStep: number,
 ): Promise<PlanTurnRunResult> {
-  await deps.runDesignPreflightIfNeeded();
-
   let buildAttempts = 0;
   let finalGateAttempts = 0;
   let loopStep = initialStep;
   let finalGateOk = false;
   let agentTextComplete = false;
+
+  const preflight = await deps.runDesignPreflightIfNeeded();
+  if (preflight && !preflight.passed) {
+    const err = preflight.feedback?.trim() || "PREFLIGHT FALHOU";
+    await deps.persistFinal(err, { lastFinishOk: false, buildFailed: true });
+    return {
+      ok: false,
+      error: err,
+      steps: loopStep,
+      resumable: false,
+      toolsUsed: [...deps.toolsUsed],
+    };
+  }
 
   const compressedInitial = await deps.compression.compress(deps.state.messages);
   const initialInstruction = buildExecuteInstruction(deps.originalUserRequest, {

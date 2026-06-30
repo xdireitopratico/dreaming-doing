@@ -1001,6 +1001,49 @@
   color: var(--text-secondary);
 }
 
+.forge-job-tasks-dock {
+  flex-shrink: 0;
+  margin: 0 var(--chat-padding) var(--space-sm);
+}
+
+.forge-job-tasks-shell--ready {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.forge-job-tasks-shell--ready > .forge-job-tasks-list {
+  flex: 0 1 auto;
+  min-height: 0;
+  max-height: clamp(140px, 28vh, 280px);
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--border-forge) 65%, #52525b 35%) transparent;
+}
+
+.forge-job-tasks-shell--ready > .forge-job-tasks-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.forge-job-tasks-shell--ready > .forge-job-tasks-list::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--border-forge) 70%, #52525b 30%);
+  border-radius: 999px;
+}
+
+.forge-job-tasks-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-sm);
+}
+
+.forge-job-tasks-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
 @keyframes forge-plan-shimmer {
   0% {
     background-position: 100% 0;

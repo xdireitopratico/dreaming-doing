@@ -102,7 +102,7 @@ function buildStubbedExecuteDeps(overrides?: {
       resumable: true,
       toolsUsed: [],
     }),
-    runDesignPreflightIfNeeded: async () => {},
+    runDesignPreflightIfNeeded: async () => null,
     requiresFinalBuildGate: () => false,
     enabledApprovedPlanSteps: () => [],
     isCanceled: async () => false,
@@ -150,6 +150,27 @@ Deno.test("execute phase fails fast when LLM never emits opening", async () => {
   const result = await runBuildExecutePhase(deps, 0);
   assertEquals(result.ok, false);
   assertEquals(result.error, "O modelo não respondeu com a mensagem esperada.");
+});
+
+Deno.test("execute phase aborta antes do opening quando preflight falha", async () => {
+  const deps = buildStubbedExecuteDeps();
+  let persistSummary = "";
+  deps.runDesignPreflightIfNeeded = async () => ({
+    passed: false,
+    feedback: "PREFLIGHT FALHOU:\n[build] erro TS2307",
+    checks: [{ name: "build", ok: false, output: "erro TS2307" }],
+  });
+  deps.persistFinal = async (summary) => {
+    persistSummary = summary;
+  };
+
+  const result = await runBuildExecutePhase(deps, 0);
+  const events = (deps as unknown as { _events: () => { type: string; data: Record<string, unknown> }[] })._events();
+
+  assertEquals(result.ok, false);
+  assertEquals(result.error?.includes("PREFLIGHT FALHOU"), true);
+  assertEquals(persistSummary.includes("PREFLIGHT FALHOU"), true);
+  assertEquals(events.some((e) => e.type === "assistant_text" && e.data.opening === true), false);
 });
 
 Deno.test("execute success path emits final assistant_text", async () => {

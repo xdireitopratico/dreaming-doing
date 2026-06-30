@@ -241,11 +241,18 @@ describe("Fase 2.2 — lastTool é extraído do timeline e exposto em MiniCardDa
       resolve(import.meta.dirname, "../components/chat/ChatJobCard.tsx"),
       "utf8",
     );
+    const tasksCard = readFileSync(
+      resolve(import.meta.dirname, "../components/chat/ChatJobTasksCard.tsx"),
+      "utf8",
+    );
     // Existem os 4 chips canônicos
     expect(src).toContain('key: "show-file"');
     expect(src).toContain('key: "show-diff"');
     expect(src).toContain('key: "show-output"');
     expect(src).toContain('key: "show-preview"');
+    expect(src).not.toContain("chat-mini-card-task-list");
+    expect(tasksCard).toContain("chat-job-tasks-card");
+    expect(tasksCard).toContain("chat-job-tasks-list");
   });
 });
 
