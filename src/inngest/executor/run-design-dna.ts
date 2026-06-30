@@ -6,8 +6,8 @@ import {
   saveJobCheckpoint,
   type DesignDnaExecuteResponse,
 } from "../functions/_shared-design-dna";
-import { extractDesignDnaForUrl, ensurePythonAgentInSandbox, ensurePreviewServerInSandbox } from "./design-dna-extraction.ts";
-import { connectToSandbox, waitForEnvdReady } from "./e2b-client";
+import { extractDesignDnaForUrl, ensurePythonAgentInSandbox } from "./design-dna-extraction.ts";
+import { connectToSandbox, waitForEnvdReady, runInSandbox } from "./e2b-client";
 
 const E2B_API_BASE = process.env.E2B_API_BASE || "https://api.e2b.app";
 const E2B_DOMAIN = process.env.E2B_DOMAIN || "e2b.app";
@@ -96,21 +96,13 @@ async function ensureDesignDnaSandbox(
     throw new Error(msg);
   }
 
-  // Preview server na porta 3000 (serve screenshots ao vivo)
-  await ensurePreviewServerInSandbox(sandboxId, accessToken, jobId, supabase);
-  console.log("[design-dna] Preview server started on port 3000");
-
-  // Inicia Chrome com CDP na porta 9222 para deep mode
-  const chromeCmd = [
-    `chromium --remote-debugging-port=9222 --no-sandbox --headless --disable-gpu > /tmp/chrome.log 2>&1 &`,
-    `sleep 3`,
-    `curl -s http://127.0.0.1:9222/json/version || exit 1`,
-    `echo "CHROME_READY"`,
-  ].join("\n");
-
-  const chromeResult = await runInSandbox(sandboxId, accessToken, chromeCmd, { timeoutMs: 30_000 });
+  // Chrome CDP — o template já inicia Chromium via start-chromium.sh na porta 9222.
+  // Não tenta iniciar de novo (causaria conflito de porta).
+  // Apenas verifica se está respondendo.
+  const chromeCheck = `curl -s http://127.0.0.1:9222/json/version && echo "CHROME_READY" || echo "CHROME_NOT_READY"`;
+  const chromeResult = await runInSandbox(sandboxId, accessToken, chromeCheck, { timeoutMs: 10_000 });
   if (!chromeResult.stdout?.includes("CHROME_READY")) {
-    throw new Error(`Chrome CDP not ready: ${chromeResult.stderr?.slice(0, 200)}`);
+    throw new Error(`Chrome CDP not responding on port 9222 — template start-chromium.sh may have failed. Check E2B template build.`);
   }
 
   await appendJobEvent(supabase, jobId, "chrome_cdp_ready", { port: 9222 });

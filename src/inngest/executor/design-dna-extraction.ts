@@ -504,14 +504,16 @@ export async function ensurePythonAgentInSandbox(
   accessToken: string | null,
 ): Promise<void> {
   const script = `cat > /opt/forge/agent.py << 'PYEOF'
-import argparse, asyncio, base64, json, os, sys, traceback, httpx
-from playwright.async_api import async_playwright
+import argparse, asyncio, base64, json, os, sys, traceback, urllib.request, urllib.error
 
-async def get_ws_endpoint(cdp_port):
-    async with httpx.AsyncClient() as cl:
-        r = await cl.get(f"http://127.0.0.1:{cdp_port}/json/version", timeout=5)
-        r.raise_for_status()
-        return r.json()["webSocketDebuggerUrl"]
+def get_ws_endpoint(cdp_port):
+    url = f"http://127.0.0.1:{cdp_port}/json/version"
+    try:
+        resp = urllib.request.urlopen(url, timeout=5)
+        return json.loads(resp.read().decode())["webSocketDebuggerUrl"]
+    except Exception as e:
+        print(f"WARNING: failed to get CDP endpoint: {e}", file=sys.stderr)
+        return None
 
 def build_sampler_js():
     return '''() => {
@@ -560,7 +562,10 @@ async def extract_markdown(page):
 }''')
 
 async def extract(url, cdp_port, timeout):
-    ws = await get_ws_endpoint(cdp_port)
+    ws = get_ws_endpoint(cdp_port)
+    if not ws:
+        print(json.dumps({"status":"error","error":f"Cannot connect to Chrome CDP on port {cdp_port}"}), file=sys.stderr)
+        sys.exit(1)
     async with async_playwright() as pw:
         br = await pw.chromium.connect_over_cdp(ws)
         ctx = br.contexts[0] if br.contexts else await br.new_context(viewport={"width":1280,"height":720},device_scale_factor=2)
@@ -593,72 +598,6 @@ PYEOF`;
   if (result.exitCode !== 0) {
     throw new Error(`Failed to write Python agent: ${result.stderr || result.stdout?.slice(0, 200)}`);
   }
-
-  // Patch agent.py to save preview screenshots during extraction
-  const patchScript = `python3.11 -c "
-import re
-with open('/opt/forge/agent.py') as f:
-    c = f.read()
-# Add save_preview after extract_markdown call
-c = c.replace('md = await extract_markdown(pg)',
-    'md = await extract_markdown(pg)\\ntry:\\n    with open(\\\"/opt/forge/preview/screenshot.png\\\", \\\"wb\\\") as _f:\\n        _f.write(await pg.screenshot(full_page=False, type=\\\"png\\\"))\\nexcept Exception as _e:\\n    pass')
-with open('/opt/forge/agent.py', 'w') as f:
-    f.write(c)
-print('PATCH_OK')
-"`;
-  const patchResult = await runInSandbox(sandboxId, accessToken, patchScript, { timeoutMs: 10_000 });
-  if (!patchResult.stdout?.includes("PATCH_OK")) {
-    throw new Error(`Agent patch failed: ${patchResult.stderr?.slice(0, 200)}`);
-  }
-
-  // Verifica se screenshot foi salvo após primeira execução
-  const screenshotCheckCmd = `test -f /opt/forge/preview/screenshot.png && echo "EXISTS" || echo "MISSING"`;
-  const screenshotResult = await runInSandbox(sandboxId, accessToken, screenshotCheckCmd, { timeoutMs: 5_000 });
-  if (!screenshotResult.stdout?.includes("EXISTS")) {
-    console.warn("[design-dna] Screenshot not saved - preview will show placeholder");
-  } else {
-    console.log("[design-dna] Screenshot verified at /opt/forge/preview/screenshot.png");
-  }
-}
-
-export async function ensurePreviewServerInSandbox(
-  sandboxId: string,
-  accessToken: string | null,
-  jobId: string,
-  supabase: SupabaseClient,
-): Promise<void> {
-  // Cria diretório + index.html com auto-refresh
-  const setupCmd = [
-    `mkdir -p /opt/forge/preview`,
-    `cat > /opt/forge/preview/index.html << 'HTML'`,
-    `<!DOCTYPE html><html><head>`,
-    `<meta charset="utf-8">`,
-    `<title>Design DNA Preview</title>`,
-    `<meta http-equiv="refresh" content="3">`,
-    `<style>body{margin:0;background:#000}img{width:100%;height:auto;display:block}</style>`,
-    `</head><body>`,
-    `<img src="screenshot.png" alt="preview">`,
-    `</body></html>`,
-    `HTML`,
-    // Mata qualquer http.server anterior, sobe novo na 3000
-    `pkill -f "http.server 3000" 2>/dev/null; cd /opt/forge/preview && nohup python3.11 -m http.server 3000 > /tmp/preview.log 2>&1 &`,
-    `echo "PREVIEW_READY"`,
-  ].join("\n");
-
-  const result = await runInSandbox(sandboxId, accessToken, setupCmd, { timeoutMs: 15_000 });
-  if (!result.stdout?.includes("PREVIEW_READY")) {
-    throw new Error(`Preview server failed to start: ${result.stderr?.slice(0, 200)}`);
-  }
-
-  // Health check do preview server
-  const healthCheckCmd = `curl -s http://127.0.0.1:3000 || exit 1`;
-  const healthResult = await runInSandbox(sandboxId, accessToken, healthCheckCmd, { timeoutMs: 5_000 });
-  if (healthResult.exitCode !== 0) {
-    throw new Error(`Preview server health check failed: ${healthResult.stderr?.slice(0, 200)}`);
-  }
-
-  await appendJobEvent(supabase, jobId, "preview_server_ready", { port: 3000 });
-  console.log("[design-dna] Preview server ready on port 3000 with health check");
 }
 
 async function execPythonAgentInSandbox(
@@ -672,10 +611,6 @@ async function execPythonAgentInSandbox(
     `cd /opt/forge && python3.11 agent.py --url "${url.replace(/"/g, '\\"')}" --cdp-port 9222 --timeout 120`,
     { timeoutMs: 180_000 },
   );
-
-  if (result.exitCode !== 0 && result.exitCode !== undefined) {
-    throw new Error(`Python agent failed (exit ${result.exitCode}): ${result.stderr || result.stdout?.slice(0, 300)}`);
-  }
 
   const raw = result.stdout || result.stderr || "{}";
   let parsed: Record<string, unknown>;
@@ -860,7 +795,7 @@ async function llmExtractDNA(
 
   const systemPrompt = `${MASTER_EXTRACTION_PROMPT}
 
-## Modo: ${isDeep ? "DEEP (com CSS computado + motion traces)" : "SHALLOW (markdown + screenshot)"} 
+## Modo: ${isDeep ? "DEEP (com CSS computado + motion traces)" : "SHALLOW (markdown + screenshot)"}
 
 ## Categorias a extrair
 ${categoryInstructions}
@@ -911,7 +846,6 @@ Extraia o DesignDNA deste site.`;
     }
   }
   if (typeof parsed !== "object" || parsed === null || Object.keys(parsed).length === 0) {
-    console.warn("[llmExtractDNA] LLM returned empty/unparseable content, falling back to heuristic");
     return null;
   }
   console.debug("[llmExtractDNA] keys received:", Object.keys(parsed), "quality_source:", parsed.quality_source);
@@ -960,17 +894,13 @@ export async function extractDesignDnaForUrl(
   const providerTrace: string[] = [];
   const notes: string[] = [];
 
-  // T5: aviso se LLM não pôde ser resolvido
   if (!resolvedLlm) {
-    notes.push(
-      "⚠️ no LLM connector configured in /api-models — using heuristic DNA fallback (quality 3/10). Configure LLM to improve extraction.",
-    );
+    notes.push("⚠️ no LLM configured — configure LLM in /api-models for extraction");
   } else {
     providerTrace.push(`llm:${resolvedLlm.label} (${resolvedLlm.resolvedFrom})`);
   }
 
-  // T4: respeita a preferência de web_scrape do /api-models.
-  // Fallback: prefs.webScrapeProvider → connectorRows web_scrape → "jina"
+  // Respeita a preferência de web_scrape do /api-models.
   const scrapeProvider = prefs?.webScrapeProvider ?? "jina";
   const scrapeFallback = prefs?.webScrapeFallback;
 
@@ -1089,11 +1019,8 @@ export async function extractDesignDnaForUrl(
         : screenshotUrl;
       notes.push("deep sandbox extraction completed");
     } catch (err) {
-      const msg = `Deep sandbox extraction failed: ${errorMessage(err)}`;
-      throw new Error(msg);
+      throw new Error(`Deep sandbox extraction failed: ${errorMessage(err)}`);
     }
-  } else if (input.depth === "deep") {
-    throw new Error("Deep mode requested but sandbox unavailable. Configure E2B key em /api-models.");
   }
 
   if (!enrichedMarkdown.trim()) {
@@ -1120,13 +1047,11 @@ export async function extractDesignDnaForUrl(
   );
 
   if (!dna) {
-    throw new Error("LLM extraction failed - no DNA generated. Configure LLM em /api-models.");
+    throw new Error("LLM extraction failed — no DNA generated. Configure LLM in /api-models.");
   }
 
-  const finalDna = dna;
-
   return {
-    dna: finalDna,
+    dna,
     rawMarkdown,
     cleanMarkdown: cleanedMarkdown,
     rawHtml,
