@@ -5,7 +5,6 @@ import { normalizePresetId } from "@/lib/preset-contract";
 import { scrapeWebPage } from "../../../supabase/functions/_shared/web-research-providers.ts";
 import { BUILTIN_RUNTIME } from "../../../supabase/functions/_shared/provider-wire.ts";
 import { finalizeDocumentMarkdown } from "../../../supabase/functions/_shared/document-sanitize.ts";
-import { buildPlaywrightScript } from "../../../supabase/functions/extract-design-dna/playwright-automation.ts";
 import { runInSandbox } from "./e2b-client";
 import {
   CATEGORY_PROMPTS,
@@ -151,7 +150,7 @@ async function loadWebSecrets(supabase: SupabaseClient, userId: string): Promise
 
 type ResolvedLLM = LLMConfig & {
   /** Caminho usado para resolver (auditoria + aviso de fallback). */
-  resolvedFrom: "connectors" | "preferences.fixed" | "preferences.robin" | "env";
+  resolvedFrom: "connectors" | "preferences.fixed" | "preferences.robin" | "preferences.fixed.custom" | "env";
 };
 
 type LlmKind = string;
@@ -443,26 +442,131 @@ async function resolveLLMConfig(
   return null;
 }
 
-async function execPlaywrightInSandbox(
+export type PythonAgentResult = {
+  markdown: string;
+  colors: Record<string, unknown>;
+  typography: Record<string, unknown>;
+  spacing: Record<string, unknown>;
+  css_custom_properties: Record<string, string>;
+  animations: unknown[];
+  transitions: unknown[];
+  layout_classes: unknown[];
+  viewport: { width: number; height: number; devicePixelRatio: number; scrollHeight: number };
+  screenshot_base64: string;
+  screenshot_full_base64: string;
+  screenshots: string[];
+};
+
+export async function ensurePythonAgentInSandbox(
+  sandboxId: string,
+  accessToken: string | null,
+): Promise<void> {
+  const script = `cat > /opt/forge/agent.py << 'PYEOF'
+import argparse, asyncio, base64, json, os, sys, traceback, httpx
+from playwright.async_api import async_playwright
+
+async def get_ws_endpoint(cdp_port):
+    async with httpx.AsyncClient() as cl:
+        r = await cl.get(f"http://127.0.0.1:{cdp_port}/json/version", timeout=5)
+        r.raise_for_status()
+        return r.json()["webSocketDebuggerUrl"]
+
+def build_sampler_js():
+    return '''() => {
+  const r = { colors: {}, typography: {}, spacing: {}, css_custom_properties: {}, animations: [], transitions: [], layout_classes: [], viewport: { width: window.innerWidth, height: window.innerHeight, devicePixelRatio: window.devicePixelRatio, scrollHeight: document.documentElement.scrollHeight } };
+  const rs = getComputedStyle(document.documentElement);
+  for (let i = 0; i < rs.length; i++) { const n = rs[i]; if (n.startsWith("--")) r.css_custom_properties[n] = rs.getPropertyValue(n).trim(); }
+  for (const sel of ["h1","h2","h3","h4","h5","h6","p","a","button","nav","header","footer","section","main","[class*=\\"hero\\"]","[class*=\\"card\\"]","[class*=\\"container\\"]","input","ul","ol","li","blockquote","code","pre"]) {
+    for (const el of document.querySelectorAll(sel)) {
+      if (!el.isConnected) continue;
+      const cs = getComputedStyle(el); const t = el.tagName.toLowerCase();
+      if (!r.colors[t]) r.colors[t] = { color: cs.color, backgroundColor: cs.backgroundColor, borderColor: cs.borderColor };
+      if (!r.typography[t]) r.typography[t] = { fontFamily: cs.fontFamily, fontSize: cs.fontSize, fontWeight: cs.fontWeight, lineHeight: cs.lineHeight, letterSpacing: cs.letterSpacing, textTransform: cs.textTransform };
+      if (!r.spacing[t]) r.spacing[t] = { margin: cs.margin, padding: cs.padding, gap: cs.gap };
+    }
+  }
+  for (const el of document.querySelectorAll("body > *, main, section, div[class*=\\"grid\\"], div[class*=\\"flex\\"]")) {
+    const cs = getComputedStyle(el); r.layout_classes.push({ tag: el.tagName.toLowerCase(), classes: (el.className||"").slice(0,200), display: cs.display, gridTemplateColumns: cs.gridTemplateColumns, gap: cs.gap, flexDirection: cs.flexDirection, justifyContent: cs.justifyContent, alignItems: cs.alignItems, maxWidth: cs.maxWidth });
+  }
+  try { for (const s of document.styleSheets) { try { for (const rule of (s.cssRules||s.rules||[])) { if (rule.type === CSSRule.KEYFRAMES_RULE) r.animations.push({ name: rule.name, keyframes: Array.from(rule.cssRules).map(k=>({key:k.keyText,style:k.style.cssText})) }); if (rule.type === CSSRule.STYLE_RULE && rule.style) { const an = rule.style.animationName; const tr = rule.style.transitionProperty; if (an && an !== "none") r.animations.push({ selector: rule.selectorText, animationName: an, duration: rule.style.animationDuration, timing: rule.style.animationTimingFunction }); if (tr && tr !== "none") r.transitions.push({ selector: rule.selectorText, property: tr, duration: rule.style.transitionDuration, timing: rule.style.transitionTimingFunction }); } } } catch(e) {} } } catch(e) {}
+  return r;
+}'''
+
+async def extract_markdown(page):
+    return await page.evaluate('''() => {
+  function w(n,d) {
+    if (!n||n.nodeType===Node.COMMENT_NODE) return "";
+    if (n.nodeType===Node.TEXT_NODE) { const t=n.textContent.trim(); return t?t+" ":""; }
+    const tag=(n.tagName||"").toLowerCase();
+    if (["script","style","noscript"].includes(tag)) return "";
+    if (["br","hr"].includes(tag)) return "\\\\n";
+    if (n.hidden||(n.style&&(n.style.display==="none"||n.style.visibility==="hidden"))) return "";
+    let r="";
+    for (const c of n.childNodes) r+=w(c,d+1);
+    if (["h1","h2","h3","h4","h5","h6"].includes(tag)) return "\\\\n"+"#".repeat(parseInt(tag[1]))+" "+r.trim()+"\\\\n\\\\n";
+    if (tag==="p") return r.trim()+"\\\\n\\\\n";
+    if (tag==="li") return "- "+r.trim()+"\\\\n";
+    if (["ul","ol"].includes(tag)) return "\\\\n"+r+"\\\\n";
+    if (tag==="a") { const h=n.href||""; return h?"["+r.trim()+"]("+h+") ":r; }
+    if (tag==="img") { const a=n.alt||"",s=n.src||""; return s?"!["+a+"]("+s+") ":""; }
+    if (tag==="blockquote") return "> "+r.trim()+"\\\\n\\\\n";
+    if (tag==="code") return "\`"+r.trim()+"\`";
+    if (tag==="pre") return "\`\`\`\\\\n"+r.trim()+"\\\\n\`\`\`\\\\n\\\\n";
+    return r;
+  }
+  return w(document.body).replace(/\\\\n{3,}/g,"\\\\n\\\\n").trim();
+}''')
+
+async def extract(url, cdp_port, timeout):
+    ws = await get_ws_endpoint(cdp_port)
+    async with async_playwright() as pw:
+        br = await pw.chromium.connect_over_cdp(ws)
+        ctx = br.contexts[0] if br.contexts else await br.new_context(viewport={"width":1280,"height":720},device_scale_factor=2)
+        pg = ctx.pages[0] if ctx.pages else await ctx.new_page()
+        pg.set_default_timeout(timeout*1000)
+        await pg.goto(url, wait_until="networkidle", timeout=timeout*1000)
+        await pg.wait_for_load_state("domcontentloaded")
+        await pg.evaluate("document.fonts.ready")
+        await pg.evaluate("window.scrollTo(0,document.body.scrollHeight)"); await asyncio.sleep(1)
+        await pg.evaluate("window.scrollTo(0,0)"); await asyncio.sleep(0.5)
+        md = await extract_markdown(pg)
+        samples = await pg.evaluate(build_sampler_js())
+        sb64 = base64.b64encode(await pg.screenshot(full_page=False, type="png")).decode()
+        fb64 = base64.b64encode(await pg.screenshot(full_page=True, type="png")).decode()
+        vh = samples["viewport"]["height"]; sh = samples["viewport"]["scrollHeight"]
+        segs = []
+        for i in range(min(5, max(1, sh // vh))):
+            y = i * (sh // max(1, sh // vh))
+            await pg.evaluate(f"window.scrollTo(0,{y})"); await asyncio.sleep(0.3)
+            segs.append(base64.b64encode(await pg.screenshot(full_page=False, type="png")).decode())
+        return {"status":"ok","markdown":md,"colors":samples["colors"],"typography":samples["typography"],"spacing":samples["spacing"],"css_custom_properties":samples["css_custom_properties"],"animations":samples["animations"],"transitions":samples["transitions"],"layout_classes":samples["layout_classes"],"viewport":samples["viewport"],"screenshot_base64":sb64,"screenshot_full_base64":fb64,"screenshots":segs}
+
+if __name__=="__main__":
+    p=argparse.ArgumentParser(); p.add_argument("--url",required=True); p.add_argument("--cdp-port",type=int,default=9222); p.add_argument("--timeout",type=int,default=120); a=p.parse_args()
+    try: print(json.dumps(asyncio.run(extract(a.url,a.cdp_port,a.timeout)),ensure_ascii=False))
+    except Exception as e: print(json.dumps({"status":"error","error":str(e),"traceback":traceback.format_exc()}),file=sys.stderr); sys.exit(1)
+PYEOF`;
+
+  const result = await runInSandbox(sandboxId, accessToken, script, { timeoutMs: 15_000 });
+  if (result.exitCode !== 0) {
+    throw new Error(`Failed to write Python agent: ${result.stderr || result.stdout?.slice(0, 200)}`);
+  }
+}
+
+async function execPythonAgentInSandbox(
   url: string,
   sandboxId: string,
   accessToken: string | null,
-): Promise<{
-  markdown: string;
-  css_computed: string;
-  motion_traces: string;
-  color_scheme?: string;
-  screenshots?: string[];
-  screenshot_base64?: string;
-  page_height?: number;
-}> {
-  const script = buildPlaywrightScript(url);
-  const result = await runInSandbox(sandboxId, accessToken, `cd /tmp && node -e "${script.replace(/"/g, '\\"')}"`, {
-    timeoutMs: 150000,
-  });
+): Promise<PythonAgentResult> {
+  const result = await runInSandbox(
+    sandboxId,
+    accessToken,
+    `cd /opt/forge && python3.11 agent.py --url "${url.replace(/"/g, '\\"')}" --cdp-port 9222 --timeout 120`,
+    { timeoutMs: 180_000 },
+  );
 
   if (result.exitCode !== 0 && result.exitCode !== undefined) {
-    throw new Error(`Sandbox exec failed (exit ${result.exitCode}): ${result.stderr || result.stdout?.slice(0, 200)}`);
+    throw new Error(`Python agent failed (exit ${result.exitCode}): ${result.stderr || result.stdout?.slice(0, 300)}`);
   }
 
   const raw = result.stdout || result.stderr || "{}";
@@ -470,18 +574,27 @@ async function execPlaywrightInSandbox(
   try {
     parsed = JSON.parse(raw);
   } catch {
-    const jsonMatch = raw.match(/\{[\s\S]*\}/);
+    const jsonMatch = raw.match(/\{[\s\S]*\}/s);
     parsed = jsonMatch ? JSON.parse(jsonMatch[0]) : {};
+  }
+
+  if (parsed.status === "error") {
+    throw new Error(`Python agent error: ${(parsed.error as string) ?? "unknown"}`);
   }
 
   return {
     markdown: (parsed.markdown as string) ?? "",
-    css_computed: (parsed.css_computed as string) ?? "[]",
-    motion_traces: (parsed.motion_traces as string) ?? "[]",
-    color_scheme: (parsed.color_scheme as string) ?? "{}",
+    colors: (parsed.colors as Record<string, unknown>) ?? {},
+    typography: (parsed.typography as Record<string, unknown>) ?? {},
+    spacing: (parsed.spacing as Record<string, unknown>) ?? {},
+    css_custom_properties: (parsed.css_custom_properties as Record<string, string>) ?? {},
+    animations: (parsed.animations as unknown[]) ?? [],
+    transitions: (parsed.transitions as unknown[]) ?? [],
+    layout_classes: (parsed.layout_classes as unknown[]) ?? [],
+    viewport: (parsed.viewport as PythonAgentResult["viewport"]) ?? { width: 1280, height: 720, devicePixelRatio: 2, scrollHeight: 720 },
+    screenshot_base64: (parsed.screenshot_base64 as string) ?? "",
+    screenshot_full_base64: (parsed.screenshot_full_base64 as string) ?? "",
     screenshots: (parsed.screenshots as string[]) ?? [],
-    screenshot_base64: (parsed.screenshots as string[])?.[0],
-    page_height: parsed.page_height as number | undefined,
   };
 }
 
@@ -837,25 +950,37 @@ export async function extractDesignDnaForUrl(
 
   if (input.depth === "deep" && input.sandboxId) {
     try {
-      const playwrightData = await execPlaywrightInSandbox(
+      const agentData = await execPythonAgentInSandbox(
         input.url,
         input.sandboxId,
         input.sandboxAccessToken ?? null,
       );
-      providerTrace.push("sandbox:playwright");
+      providerTrace.push("sandbox:python-agent");
+
+      const colorsJson = JSON.stringify(agentData.colors);
+      const typographyJson = JSON.stringify(agentData.typography);
+      const animationsCount = agentData.animations.length;
+      const transitionsCount = agentData.transitions.length;
+
       enrichedMarkdown = [
-        playwrightData.markdown,
+        agentData.markdown,
         cleanedMarkdown,
-        `\n\n## CSS Computado (sections principais)\n${playwrightData.css_computed}`,
-        `\n\n## Motion Traces\n${playwrightData.motion_traces}`,
-        playwrightData.color_scheme ? `\n\n## Color Scheme\n${playwrightData.color_scheme}` : "",
-        playwrightData.page_height
-          ? `\n\n## Page Metrics\n- Full page height: ${playwrightData.page_height}px`
+        `\n\n## CSS Colors (by tag)\n${colorsJson}`,
+        `\n\n## Typography (by tag)\n${typographyJson}`,
+        animationsCount > 0
+          ? `\n\n## Animations (${animationsCount} found)\n${JSON.stringify(agentData.animations)}`
           : "",
+        transitionsCount > 0
+          ? `\n\n## CSS Transitions (${transitionsCount} found)\n${JSON.stringify(agentData.transitions)}`
+          : "",
+        Object.keys(agentData.css_custom_properties).length > 0
+          ? `\n\n## CSS Custom Properties\n${JSON.stringify(agentData.css_custom_properties)}`
+          : "",
+        `\n\n## Page Metrics\n- Viewport: ${agentData.viewport.width}x${agentData.viewport.height} @${agentData.viewport.devicePixelRatio}x\n- Full scroll height: ${agentData.viewport.scrollHeight}px`,
       ].join("");
 
-      screenshots = playwrightData.screenshots ?? [];
-      screenshotBase64 = screenshots[0] ?? playwrightData.screenshot_base64 ?? "";
+      screenshots = agentData.screenshots ?? [];
+      screenshotBase64 = agentData.screenshot_base64 ?? "";
       screenshotUrl = screenshotBase64
         ? `data:image/png;base64,${screenshotBase64}`
         : screenshotUrl;

@@ -6,12 +6,12 @@ import {
   saveJobCheckpoint,
   type DesignDnaExecuteResponse,
 } from "../functions/_shared-design-dna";
-import { extractDesignDnaForUrl } from "./design-dna-extraction.ts";
-import { connectToSandbox, waitForEnvdReady, runInSandbox } from "./e2b-client";
+import { extractDesignDnaForUrl, ensurePythonAgentInSandbox } from "./design-dna-extraction.ts";
+import { connectToSandbox, waitForEnvdReady } from "./e2b-client";
 
 const E2B_API_BASE = process.env.E2B_API_BASE || "https://api.e2b.app";
 const E2B_DOMAIN = process.env.E2B_DOMAIN || "e2b.app";
-const E2B_TEMPLATE_ID = process.env.E2B_TEMPLATE || "code-interpreter-v1";
+const E2B_TEMPLATE_ID = process.env.E2B_TEMPLATE || "dreaming-doing-chromium";
 const LOOP_BUDGET_MS = 270_000;
 const CHROMIUM_DEBUG_PORT = 9222;
 
@@ -66,9 +66,14 @@ async function ensureDesignDnaSandbox(
   const text = await resp.text();
   if (!resp.ok) throw new Error(`E2B create ${resp.status}: ${text.slice(0, 400)}`);
 
-  const data = JSON.parse(text) as { sandboxID?: string; sandboxId?: string };
+  const data = JSON.parse(text) as { sandboxID?: string; sandboxId?: string; templateID?: string };
   const sandboxId = data.sandboxID ?? data.sandboxId ?? "";
   if (!sandboxId) throw new Error("E2B: no sandboxID in response");
+
+  const sandboxTemplate = data.templateID ?? "";
+  if (sandboxTemplate && sandboxTemplate !== E2B_TEMPLATE_ID) {
+    console.warn(`[design-dna] Sandbox created with template ${sandboxTemplate}, expected ${E2B_TEMPLATE_ID}`);
+  }
 
   const previewUrl = `https://${CHROMIUM_DEBUG_PORT}-${sandboxId}.${E2B_DOMAIN}`;
 
@@ -82,35 +87,19 @@ async function ensureDesignDnaSandbox(
     console.warn("[design-dna] envd not ready, continuing anyway:", err);
   });
 
-  // Instala Playwright + Chromium (uma vez, persiste no pause/resume)
-  await appendJobEvent(supabase, jobId, "sandbox_setup", { sandboxId, step: "installing-playwright" });
+  // Upload do agente Python (uma vez, persiste no pause/resume)
+  await appendJobEvent(supabase, jobId, "sandbox_setup", { sandboxId, step: "uploading-python-agent" });
   try {
-    const installResult = await runInSandbox(
+    await ensurePythonAgentInSandbox(sandboxId, accessToken);
+    console.log("[design-dna] Python agent uploaded to sandbox");
+    await appendJobEvent(supabase, jobId, "sandbox_ready", {
       sandboxId,
-      accessToken,
-      "cd /tmp && npm install playwright@latest --no-audit --no-fund 2>&1 && npx playwright install chromium 2>&1",
-      { timeoutMs: 180000 },
-    );
-    if (installResult.exitCode === 0) {
-      console.log("[design-dna] Playwright+Chromium installed in sandbox");
-      await appendJobEvent(supabase, jobId, "sandbox_ready", {
-        sandboxId,
-        previewUrl,
-      });
-    } else {
-      const errMsg = `Playwright install exited with code ${installResult.exitCode}: ${(installResult.stderr ?? "").slice(0, 400)}`;
-      await appendJobEvent(supabase, jobId, "url_error", {
-        scope: "sandbox",
-        error: errMsg,
-      });
-      throw new Error(errMsg);
-    }
-  } catch (pwErr) {
-    await appendJobEvent(supabase, jobId, "url_error", {
-      scope: "sandbox",
-      error: `Playwright install failed: ${errorMessage(pwErr)}`,
+      previewUrl,
     });
-    throw new Error(`Playwright/Chromium install failed: ${errorMessage(pwErr)}`);
+  } catch (agentErr) {
+    const msg = `Python agent upload failed: ${errorMessage(agentErr)}`;
+    await appendJobEvent(supabase, jobId, "url_error", { scope: "sandbox", error: msg });
+    throw new Error(msg);
   }
 
   return { sandboxId, accessToken, previewUrl };
@@ -248,20 +237,20 @@ export async function executeDesignDnaJob(
       .update({ sandbox_id: sandboxId, meta: currentMeta })
       .eq("id", jobId);
 
-    // Verifica CDP opcional — se falhar, não bloqueia (Chrome só é lançado por URL)
+    // Verifica CDP persistente — Chrome já está rodando na 9222 (template dreaming-doing-chromium)
     if (startIndex === 0) {
       await appendJobEvent(supabase, jobId, "sandbox_setup", { sandboxId });
+      const devtoolsVersionUrl = `${previewUrl}/json/version`;
       try {
-        const devtoolsVersionUrl = `${previewUrl}/json/version`;
         const cdpResp = await fetch(devtoolsVersionUrl, { signal: AbortSignal.timeout(5_000) });
         if (cdpResp.ok) {
           const cdpData = await cdpResp.json().catch(() => ({}));
           console.log("[design-dna] CDP ready:", JSON.stringify(cdpData).slice(0, 200));
         } else {
-          console.warn(`[design-dna] CDP not reachable (HTTP ${cdpResp.status}) — Chrome starts per-URL, not persistent`);
+          console.warn(`[design-dna] CDP health check HTTP ${cdpResp.status}`);
         }
       } catch {
-        console.warn("[design-dna] CDP unreachable — Chrome starts per-URL via Playwright script");
+        console.warn("[design-dna] CDP unreachable on first check — may still become ready");
       }
     }
     currentMeta.progress = 20;

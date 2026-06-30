@@ -10,6 +10,18 @@ export type E2bCommandResult = {
   stderr?: string;
 };
 
+export type E2bBackgroundProcess = {
+  processId: string;
+  sandboxId: string;
+  accessToken: string | null;
+};
+
+export type E2bKillResult = {
+  ok: boolean;
+  exitCode?: number;
+  error?: string;
+};
+
 export type E2bRunOpts = {
   cwd?: string;
   timeoutMs?: number;
@@ -283,4 +295,74 @@ export async function runInSandbox(
   opts?: E2bRunOpts,
 ): Promise<E2bCommandResult> {
   return runProcess(sandboxId, accessToken, command, opts);
+}
+
+export async function startBackgroundProcess(
+  sandboxId: string,
+  accessToken: string | null,
+  command: string,
+  opts?: { cwd?: string },
+): Promise<E2bBackgroundProcess> {
+  const cwd = opts?.cwd ?? "/home/user";
+  const url = envdRelayPath("/process.Process/Start");
+
+  const requestJson = JSON.stringify({
+    process: {
+      cmd: "/bin/bash",
+      args: ["-l", "-c", command],
+      cwd,
+    },
+    stdin: false,
+  });
+  const body = encodeConnectEnvelope(requestJson);
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 15_000);
+
+  try {
+    const resp = await fetch(url, {
+      method: "POST",
+      headers: {
+        ...envdRelayHeaders(sandboxId, accessToken),
+        "Content-Type": "application/connect+json",
+        "Connect-Protocol-Version": "1",
+        "Connect-Timeout-Ms": String(30_000),
+        "Keepalive-Ping-Interval": String(15),
+      },
+      body: body as unknown as BodyInit,
+      signal: controller.signal,
+      redirect: "follow",
+    });
+
+    const bytes = new Uint8Array(await resp.arrayBuffer());
+    if (!resp.ok) {
+      const errText = new TextDecoder().decode(bytes).slice(0, 400);
+      throw new Error(`E2B background start ${resp.status}: ${errText}`);
+    }
+
+    const messages = decodeConnectJsonStream(bytes);
+    for (const msg of messages) {
+      const frame = JSON.parse(msg.trim()) as Record<string, unknown>;
+      const event = frame.event as Record<string, unknown> | undefined;
+      if (event?.start) {
+        const processId = String((event.start as Record<string, unknown>)?.processId ?? "");
+        if (processId) {
+          return { processId, sandboxId, accessToken };
+        }
+      }
+    }
+
+    return { processId: "", sandboxId, accessToken };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    throw new Error(`E2B background start failed: ${msg}`);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+export async function killProcess(
+  processId: string,
+): Promise<E2bKillResult> {
+  throw new Error("killProcess not implemented for Connect protocol");
 }
