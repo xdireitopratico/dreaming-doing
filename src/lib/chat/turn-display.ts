@@ -45,11 +45,7 @@ export function hasRenderedTurnContent(opts: {
 
 function hasThinkingTimeline(resolved: AgentProgress | null): boolean {
   if (!resolved?.timeline?.length) return false;
-  return resolved.timeline.some(
-    (ev) =>
-      ev.type === "thinking_text" ||
-      (ev.type === "assistant_text" && (ev.data as Record<string, unknown>)?.thinking === true),
-  );
+  return resolved.timeline.some((ev) => ev.type === "thinking_text");
 }
 
 /** Só duração congelada — nunca relógio ao vivo no render. */

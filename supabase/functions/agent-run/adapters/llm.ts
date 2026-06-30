@@ -23,7 +23,7 @@ function nvidiaNimChatExtras(model: string): Record<string, unknown> | undefined
   if (!/nemotron/i.test(model)) return undefined;
   return {
     chat_template_kwargs: { enable_thinking: true },
-    reasoning_budget: 4_096,
+    reasoning_budget: 16_384,
     top_p: 0.95,
     temperature: 1,
   };

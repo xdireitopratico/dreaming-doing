@@ -97,6 +97,19 @@ describe("resolveTurnThinkingLine", () => {
     expect(result).toEqual({ line: { status: "active" }, frozen: false });
   });
 
+  it("assistant_text thinking não vira linha histórica de raciocínio", () => {
+    const result = resolveTurnThinkingLine({
+      resolved: {
+        ...initialAgentProgress,
+        conversational: true,
+        finished: false,
+        timeline: [ev("assistant_text", { text: "Pensando...", thinking: true, append: true })],
+      },
+      slotActive: false,
+    });
+    expect(result).toEqual({ line: null, frozen: false });
+  });
+
   it("chat conversacional histórico: Pensou por Xs com thinking_text", () => {
     const result = resolveTurnThinkingLine({
       resolved: {

@@ -383,14 +383,15 @@ export function createRunSubscriptionHandlers(deps: RunSubscriptionDeps) {
       return;
     }
 
-    const terminal = await catchUpRun(runId);
-    if (terminal || isStale()) return;
+    void catchUpRun(runId).then((terminal) => {
+      if (terminal || isStale()) return;
 
-    if (deps.stalePollRef.current) clearInterval(deps.stalePollRef.current);
-    deps.stalePollRef.current = setInterval(() => {
-      if (!deps.runIdRef.current) return;
-      void catchUpRun(deps.runIdRef.current);
-    }, 12_000);
+      if (deps.stalePollRef.current) clearInterval(deps.stalePollRef.current);
+      deps.stalePollRef.current = setInterval(() => {
+        if (!deps.runIdRef.current) return;
+        void catchUpRun(deps.runIdRef.current);
+      }, 12_000);
+    });
   };
 
   return { teardownChannels, syncRunStatus, catchUpRun, subscribeToRun };

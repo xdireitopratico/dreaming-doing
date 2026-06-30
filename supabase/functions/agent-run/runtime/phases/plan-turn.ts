@@ -331,7 +331,6 @@ export async function chatPlanModeLlm(input: {
     tools: mergePlanModeToolDefinitions(input.toolDefinitions),
     tool_choice: "auto",
     max_tokens: calculateMaxTokens(input.complexityScore as 1 | 2 | 3 | 4 | 5),
-    reasoningEffort: "low",
     onTokenDelta: createPlanModeTokenHandler(input.streamState, input.emit, input.onActivity),
     onReasoningDelta: createPlanModeReasoningHandler(input.emit, input.onActivity),
   });
