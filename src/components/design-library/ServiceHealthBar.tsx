@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback } from "react";
-import { ChevronDown, ChevronRight } from "lucide-react";
 import {
   Brain,
   Globe,
@@ -9,9 +8,32 @@ import {
   Loader2,
   Activity,
 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  Popover,
+  PopoverTrigger,
+  PopoverContent,
+} from "@/components/ui/popover";
+import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import type { AgentPreferences } from "@/lib/agent-preferences";
 import { isAgentPreferencesConfigured } from "@/lib/agent-setup";
+
+/* ------------------------------------------------------------------ */
+/*  Known LLM provider IDs (mirrors ai-provider-registry + custom-*)   */
+/* ------------------------------------------------------------------ */
+
+const LLM_PROVIDER_IDS = new Set<string>([
+  "alibaba", "anthropic", "deepseek", "gemini", "groq",
+  "minimax", "moonshotai", "nvidia", "ollama", "openai",
+  "openrouter", "xai", "xiaomi",
+]);
+
+function isLlmProvider(provider: string): boolean {
+  if (LLM_PROVIDER_IDS.has(provider)) return true;
+  if (provider.startsWith("custom-")) return true;
+  return false;
+}
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -33,7 +55,6 @@ interface ServiceCheck {
 /* ------------------------------------------------------------------ */
 
 export function ServiceHealthBar() {
-  const [expanded, setExpanded] = useState(false);
   const [checks, setChecks] = useState<ServiceCheck[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -81,10 +102,21 @@ export function ServiceHealthBar() {
 
       const newChecks: ServiceCheck[] = [];
 
-      // LLM — precisa de mode configurado + pelo menos 1 connector LLM/agent
-      const hasLlmKey = hasKind("llm") || hasKind("agent");
+      // LLM — fix: check provider field instead of kind field.
+      // The user's connector (e.g. Mercury 2 / Inception) may have kind "openai"
+      // but its provider is the real identifier (e.g. "anthropic", "openrouter", etc.)
+      const hasLlmConnector = rows.some((r) => {
+        const p = String(r.provider ?? r.kind ?? "").trim();
+        return isLlmProvider(p);
+      });
       const prefsOk = isAgentPreferencesConfigured(prefs);
-      if (prefsOk && hasLlmKey) {
+      if (prefsOk && hasLlmConnector) {
+        // Find the actual LLM provider name for display
+        const llmRow = rows.find((r) => {
+          const p = String(r.provider ?? r.kind ?? "").trim();
+          return isLlmProvider(p);
+        });
+        const llmProvider = String(llmRow?.provider ?? llmRow?.kind ?? "configurado").trim();
         const modeLabel =
           prefs.mode === "auto"
             ? `Auto · ${(prefs.autoAllowedPresetIds?.length ?? 0)} modelo(s)`
@@ -98,7 +130,7 @@ export function ServiceHealthBar() {
           icon: <Brain className="size-3.5" />,
           label: "LLM",
           status: "ok",
-          detail: modeLabel,
+          detail: `${llmProvider}${modeLabel ? ` · ${modeLabel}` : ""}`,
         });
       } else {
         newChecks.push({
@@ -157,87 +189,49 @@ export function ServiceHealthBar() {
   const allOk = totalCount > 0 && okCount === totalCount;
   const anyMissing = checks.some((c) => c.status === "missing");
 
-  if (loading) {
-    return (
-      <div className="flex items-center gap-2 px-4 py-1.5 border-b border-border bg-surface-1">
-        <Loader2 className="size-3.5 text-muted-foreground animate-spin" />
-        <span className="text-[10px] text-muted-foreground">
-          Verificando serviços...
-        </span>
-      </div>
-    );
-  }
-
-  const Chevron = expanded ? ChevronDown : ChevronRight;
+  // Button icon based on overall status
+  const statusIcon = loading ? (
+    <Loader2 className="size-3 animate-spin" />
+  ) : allOk ? (
+    <ShieldCheck className="size-3 text-green-500" />
+  ) : anyMissing ? (
+    <ShieldAlert className="size-3 text-red-500" />
+  ) : (
+    <Activity className="size-3 text-muted-foreground" />
+  );
 
   return (
-    <div className="border-b border-border bg-surface-1">
-      {/* Collapsed summary row — always visible */}
-      <button
-        onClick={() => setExpanded(!expanded)}
-        className="w-full flex items-center gap-3 px-4 py-1.5 hover:bg-surface-2/50 transition-colors text-left"
-      >
-        <Chevron className="size-3 text-muted-foreground" />
-
-        <div className="flex items-center gap-1.5 shrink-0">
-          {allOk ? (
-            <ShieldCheck className="size-3.5 text-green-500" />
-          ) : anyMissing ? (
-            <ShieldAlert className="size-3.5 text-red-500" />
-          ) : (
-            <Activity className="size-3.5 text-muted-foreground" />
-          )}
-          <span className="text-[10px] font-medium text-muted-foreground">
-            Serviços
-          </span>
-        </div>
-
-        {/* Compact dots + labels */}
-        <div className="flex items-center gap-3 overflow-x-auto">
-          {checks.map((c) => (
-            <div key={c.key} className="flex items-center gap-1 shrink-0">
-              <span
-                className={`inline-block size-2 rounded-full ${
-                  c.status === "ok"
-                    ? "bg-green-500"
-                    : c.status === "missing"
-                      ? "bg-red-500"
-                      : "bg-muted-foreground/30"
-                }`}
-              />
-              <span
-                className={`text-[10px] ${
-                  c.status === "ok"
-                    ? "text-green-600"
-                    : c.status === "missing"
-                      ? "text-red-400"
-                      : "text-muted-foreground"
-                }`}
-              >
-                {c.label}
-              </span>
-            </div>
-          ))}
-        </div>
-
-        {/* Summary badge */}
-        <span
-          className={`ml-auto text-[10px] tabular-nums shrink-0 ${
-            allOk
-              ? "text-green-500"
-              : anyMissing
-                ? "text-red-400"
-                : "text-muted-foreground"
-          }`}
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-7 gap-1.5 text-[10px]"
+          title="Status dos serviços"
         >
-          {okCount}/{totalCount}
-        </span>
-      </button>
-
-      {/* Expanded detail rows */}
-      {expanded && (
-        <div className="border-t border-border px-4 py-2 space-y-1.5">
-          {checks.map((c) => (
+          {statusIcon}
+          {!loading && (
+            <span
+              className={`tabular-nums ${
+                allOk ? "text-green-500" : anyMissing ? "text-red-400" : "text-muted-foreground"
+              }`}
+            >
+              {okCount}/{totalCount}
+            </span>
+          )}
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-72 p-3 space-y-2" align="end">
+        <div className="text-xs font-medium text-muted-foreground mb-2">
+          Serviços
+        </div>
+        {loading ? (
+          <div className="flex items-center justify-center gap-2 py-3">
+            <Loader2 className="size-3.5 text-muted-foreground animate-spin" />
+            <span className="text-[10px] text-muted-foreground">Verificando...</span>
+          </div>
+        ) : (
+          checks.map((c) => (
             <div key={c.key} className="flex items-center gap-2.5">
               <span
                 className={`inline-flex items-center justify-center size-6 rounded-md ${
@@ -248,26 +242,24 @@ export function ServiceHealthBar() {
               >
                 {c.icon}
               </span>
-
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
                   <span className="text-xs font-medium">{c.label}</span>
-                  {c.status === "ok" && (
-                    <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-green-500/10 text-green-600 font-medium">
-                      OK
-                    </span>
-                  )}
-                  {c.status === "missing" && (
-                    <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-red-500/10 text-red-500 font-medium">
-                      FALTANDO
-                    </span>
-                  )}
+                  <Badge
+                    variant="outline"
+                    className={`text-[9px] px-1.5 py-0 ${
+                      c.status === "ok"
+                        ? "border-green-500/30 text-green-500"
+                        : "border-red-500/30 text-red-500"
+                    }`}
+                  >
+                    {c.status === "ok" ? "OK" : "FALTANDO"}
+                  </Badge>
                 </div>
                 <p className="text-[10px] text-muted-foreground truncate">
                   {c.detail}
                 </p>
               </div>
-
               {c.href && c.status === "missing" && (
                 <a
                   href={c.href}
@@ -277,9 +269,9 @@ export function ServiceHealthBar() {
                 </a>
               )}
             </div>
-          ))}
-        </div>
-      )}
-    </div>
+          ))
+        )}
+      </PopoverContent>
+    </Popover>
   );
 }

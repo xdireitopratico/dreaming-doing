@@ -35,9 +35,9 @@ export function DesignLibraryCard({
   return (
     <Card className={`group overflow-hidden flex flex-col bg-surface-1 border-border hover:border-primary/30 transition-colors ${duplicateCount > 0 ? "ring-1 ring-amber-500/15" : ""}`}>
       <div className="relative aspect-video bg-surface-3 overflow-hidden">
-        {entry.screenshot_url && !imgError ? (
+        {(entry.screenshot_url || entry.screenshot_base64) && !imgError ? (
           <img
-            src={entry.screenshot_url}
+            src={entry.screenshot_url || entry.screenshot_base64 || ""}
             alt={entry.name}
             className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
             loading="lazy"

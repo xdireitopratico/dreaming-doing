@@ -10,13 +10,12 @@ import {
   DialogFooter,
   DialogClose,
 } from "@/components/ui/dialog";
-import { Plus, Loader2, LayoutGrid, List, Library, ChevronRight, Play, StopCircle, ChevronDown, ChevronUp, History } from "lucide-react";
+import { Plus, Loader2, LayoutGrid, List, Library, ChevronRight, Play, StopCircle, ChevronDown, ChevronUp, History, Briefcase, FolderOpen, Star, CheckCircle, TrendingUp } from "lucide-react";
 import { useLibrary, useJobs } from "./hooks";
 import { DesignLibraryFilters } from "./DesignLibraryFilters";
 import { DesignLibraryCard } from "./DesignLibraryCard";
 import { DesignLibraryDetail } from "./DesignLibraryDetail";
 import { BrowserPreviewPanel } from "./BrowserPreviewPanel";
-import { UserMetricsBar } from "./UserMetricsBar";
 import { ServiceHealthBar } from "./ServiceHealthBar";
 import { validateEntry, archiveEntry, deleteEntry, createExtractionJob, cancelExtractionJob } from "./api";
 import { groupEntriesBySourceUrl } from "./grouping";
@@ -28,6 +27,30 @@ import {
   type ViewMode,
 } from "./types";
 import { toast } from "@/lib/toast";
+import { supabase } from "@/integrations/supabase/client";
+
+interface UserMetrics {
+  jobCount: number;
+  entryCount: number;
+  avgQuality: number;
+  validatedCount: number;
+  recentJobs: Array<{
+    id: string;
+    status: string;
+    categories: string[] | null;
+    created_at: string;
+    finished_at: string | null;
+    error: string | null;
+  }>;
+}
+
+const EMPTY_METRICS: UserMetrics = {
+  jobCount: 0,
+  entryCount: 0,
+  avgQuality: 0,
+  validatedCount: 0,
+  recentJobs: [],
+};
 
 export function DesignLibraryPage() {
   const [filters, setFilters] = useState<LibraryFilters>(DEFAULT_FILTERS);
@@ -36,6 +59,7 @@ export function DesignLibraryPage() {
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [showJobs, setShowJobs] = useState(true);
+  const [metrics, setMetrics] = useState<UserMetrics>(EMPTY_METRICS);
 
   const {
     entries,
@@ -52,6 +76,22 @@ export function DesignLibraryPage() {
     () => (selectedEntry ? entries.filter((entry) => entry.source_url === selectedEntry.source_url) : []),
     [entries, selectedEntry],
   );
+
+  // Load user metrics (was UserMetricsBar — now inline)
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data, error } = await supabase.rpc("design_library_user_metrics");
+        if (!cancelled && !error && data) {
+          setMetrics(data as unknown as UserMetrics);
+        }
+      } catch (err) {
+        console.warn("[DesignLibraryPage] failed to load user metrics:", err);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   const handleValidate = async (entry: LibraryEntry) => {
     try {
@@ -122,6 +162,7 @@ export function DesignLibraryPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <ServiceHealthBar />
           <Button
             variant="outline"
             size="sm"
@@ -148,6 +189,53 @@ export function DesignLibraryPage() {
               <Badge variant="outline">Manual {overview.manual_rows}</Badge>
               <Badge variant="outline">URLs únicas {overview.distinct_source_urls}</Badge>
               <Badge variant="outline">Duplicadas {overview.duplicate_groups}</Badge>
+
+              {/* User metrics — merged from former UserMetricsBar */}
+              <span className="text-border">│</span>
+              <span className="inline-flex items-center gap-1 text-blue-500">
+                <Briefcase className="size-3" />
+                <span className="font-semibold tabular-nums">{metrics.jobCount}</span>
+                <span className="text-muted-foreground">Jobs</span>
+              </span>
+              <span className="inline-flex items-center gap-1 text-green-500">
+                <FolderOpen className="size-3" />
+                <span className="font-semibold tabular-nums">{metrics.entryCount}</span>
+                <span className="text-muted-foreground">Entradas</span>
+              </span>
+              <span className="inline-flex items-center gap-1 text-amber-500">
+                <Star className="size-3" />
+                <span className="font-semibold tabular-nums">{metrics.avgQuality > 0 ? metrics.avgQuality.toFixed(1) : "—"}</span>
+                <span className="text-muted-foreground">Qualidade</span>
+              </span>
+              <span className="inline-flex items-center gap-1 text-purple-500">
+                <CheckCircle className="size-3" />
+                <span className="font-semibold tabular-nums">{metrics.validatedCount}</span>
+                <span className="text-muted-foreground">Validadas</span>
+              </span>
+              {metrics.recentJobs.length > 0 && (
+                <>
+                  <span className="text-border">│</span>
+                  <TrendingUp className="size-3 text-muted-foreground" />
+                  <span className="text-muted-foreground">Últimos:</span>
+                  {metrics.recentJobs.slice(0, 3).map((j) => (
+                    <Badge
+                      key={j.id}
+                      variant="outline"
+                      className={`text-[9px] px-1.5 py-0 ${
+                        j.status === "completed"
+                          ? "border-green-500/30 text-green-500"
+                          : j.status === "failed"
+                            ? "border-red-500/30 text-red-500"
+                            : j.status === "running"
+                              ? "border-yellow-500/30 text-yellow-500 animate-pulse"
+                              : "border-border text-muted-foreground"
+                      }`}
+                    >
+                      {j.status}
+                    </Badge>
+                  ))}
+                </>
+              )}
             </div>
             {(hasSmoke || hasDuplicates) && (
               <div className="flex flex-wrap items-center gap-2 text-[11px]">
@@ -166,12 +254,6 @@ export function DesignLibraryPage() {
           </div>
         </div>
       )}
-
-      {/* User Metrics */}
-      <UserMetricsBar />
-
-      {/* Service Health Checks */}
-      <ServiceHealthBar />
 
       {/* Extração Bar — consolida jobs ativos + recentes num bloco só */}
       {jobs.length > 0 && (
@@ -348,8 +430,8 @@ export function DesignLibraryPage() {
                       onClick={() => setSelectedEntry(entry)}
                     >
                       <div className="w-16 h-10 rounded bg-surface-3 overflow-hidden shrink-0">
-                        {entry.screenshot_url && (
-                          <img src={entry.screenshot_url} alt="" className="w-full h-full object-cover" />
+                        {(entry.screenshot_url || entry.screenshot_base64) && (
+                          <img src={entry.screenshot_url || entry.screenshot_base64 || ""} alt="" className="w-full h-full object-cover" />
                         )}
                       </div>
                       <div className="flex-1 min-w-0">
@@ -388,8 +470,8 @@ export function DesignLibraryPage() {
                     onClick={() => setSelectedEntry(entry)}
                   >
                     <div className="w-16 h-10 rounded bg-surface-3 overflow-hidden shrink-0">
-                      {entry.screenshot_url && (
-                        <img src={entry.screenshot_url} alt="" className="w-full h-full object-cover" />
+                      {(entry.screenshot_url || entry.screenshot_base64) && (
+                        <img src={entry.screenshot_url || entry.screenshot_base64 || ""} alt="" className="w-full h-full object-cover" />
                       )}
                     </div>
                     <div className="flex-1 min-w-0">

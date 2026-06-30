@@ -3,7 +3,6 @@ export { DesignLibraryFilters } from "./DesignLibraryFilters";
 export { DesignLibraryCard } from "./DesignLibraryCard";
 export { DesignLibraryDetail } from "./DesignLibraryDetail";
 export { BrowserPreviewPanel } from "./BrowserPreviewPanel";
-export { UserMetricsBar } from "./UserMetricsBar";
 export { ServiceHealthBar } from "./ServiceHealthBar";
 export { useLibrary, useJobs, useJobDetails, useJobEvents, useJobPolling } from "./hooks";
 export {
