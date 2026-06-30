@@ -357,20 +357,17 @@ export async function executeAgentJob(
   // Qualify/conversa pura NUNCA deve carregar chave nem criar container.
   let sandbox: { destroy: () => Promise<void>; kill: () => Promise<void> };
   if (allocateSandbox) {
-    // P4 fix: rejeitar allocateSandbox sem files ANTES de criar classe
-    // E2BSandbox. Antes: shellExecTool era registrado e o erro
-    // "Nenhum arquivo no projeto" só aparecia quando o LLM tentava
-    // shell_exec pela primeira vez (lazy). Agora: falha explícita
-    // no agent-run com mensagem clara.
+    // Build aprovado pode começar do zero. Se ainda não houver arquivos,
+    // seguimos com sandbox vazio em vez de abortar o run imediatamente.
     const { count: fileCountBeforeAlloc } = await supabase
       .from("project_files")
       .select("id", { count: "exact", head: true })
       .eq("project_id", projectId);
     if (!fileCountBeforeAlloc || fileCountBeforeAlloc === 0) {
-      throw new Error(
-        "Projeto sem arquivos — o agente ainda não gerou código. " +
-          "Sandbox não pode ser alocado.",
-      );
+      logger.warn("agent.run_job.sandbox_allocating_empty_project", {
+        runId: agentRunId ?? undefined,
+        projectId,
+      });
     }
     const e2bKey = await loadUserE2bApiKey(supabase, userId);
     if (!e2bKey?.trim()) throw new Error("Sandbox E2B não configurado");
