@@ -227,6 +227,7 @@ export function PreviewFrame({
         {view === "boot-spinner" && (
           <div
             className={surfaceClass(
+              "forge-preview-surface--center",
               "flex w-full flex-col items-center justify-center gap-3 bg-white",
             )}
           >
@@ -251,6 +252,7 @@ export function PreviewFrame({
         {view === "preview-idle" && (
           <div
             className={surfaceClass(
+              "forge-preview-surface--center",
               "flex flex-col items-center justify-center gap-3 bg-neutral-50 p-8 text-center",
             )}
           >
@@ -310,6 +312,7 @@ export function PreviewFrame({
         {view === "built-app-pending" && (
           <div
             className={surfaceClass(
+              "forge-preview-surface--center",
               "flex w-full flex-col items-center justify-center gap-4 bg-neutral-50 p-8 text-center",
             )}
           >
@@ -337,6 +340,7 @@ export function PreviewFrame({
         {view === "stale-reconnect" && (
           <div
             className={surfaceClass(
+              "forge-preview-surface--center",
               "flex flex-col items-center justify-center gap-3 bg-neutral-50 p-8 text-center",
             )}
           >

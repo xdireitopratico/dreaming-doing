@@ -899,6 +899,12 @@ body:has(.editor-workspace) {
   align-items: stretch;
 }
 
+.forge-preview-surface--center {
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
 .forge-preview-viewport[data-device="tablet"] .forge-preview-iframe-wrap,
 .forge-preview-viewport[data-device="mobile"] .forge-preview-iframe-wrap {
   flex: 1;
@@ -1435,5 +1441,4 @@ body:has(.editor-workspace) {
 .editor-workspace[data-theme="legacy"] .forge-mobile-code-bar {
   background: #14161c;
 }
-
 

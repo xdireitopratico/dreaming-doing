@@ -37,9 +37,9 @@ export function timelineFromExecutionLog(lines: string[]): SSEEvent[] {
       out.push({ type: "tool_done", timestamp: t + 1, data: { name: "fs_edit", ok: true } });
     } else {
       out.push({
-        type: "assistant_text",
+        type: "thinking_text",
         timestamp: t,
-        data: { text: trimmed, delta: true, thinking: true },
+        data: { text: trimmed, delta: true },
       });
     }
   }

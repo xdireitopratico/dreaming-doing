@@ -61,13 +61,12 @@ describe("execution-log-timeline", () => {
       expect(result[0].data.name).toBe("fs_edit");
     });
 
-    it("parses unknown lines as assistant_text thinking events", () => {
+    it("parses unknown lines as thinking_text events", () => {
       const result = timelineFromExecutionLog(["analyzing the codebase"]);
       expect(result).toHaveLength(1);
-      expect(result[0].type).toBe("assistant_text");
+      expect(result[0].type).toBe("thinking_text");
       expect(result[0].data.text).toBe("analyzing the codebase");
       expect(result[0].data.delta).toBe(true);
-      expect(result[0].data.thinking).toBe(true);
     });
 
     it("assigns monotonically increasing timestamps", () => {
@@ -84,7 +83,7 @@ describe("execution-log-timeline", () => {
       // 2 (read) + 1 (text) + 2 (edit) = 5 events
       expect(result).toHaveLength(5);
       expect(result[0].type).toBe("tool_start");
-      expect(result[2].type).toBe("assistant_text");
+      expect(result[2].type).toBe("thinking_text");
       expect(result[3].type).toBe("tool_start");
     });
   });

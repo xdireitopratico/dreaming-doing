@@ -321,14 +321,7 @@ export async function runBuildExecutePhase(
   const openingOk = await forceOpeningOrFail(deps, initialInstruction, compressedInitial);
   if (!openingOk) {
     const err = "O modelo não respondeu com a mensagem esperada.";
-    await deps.persistFinal(err, { lastFinishOk: false, buildFailed: true });
-    return {
-      ok: false,
-      error: err,
-      steps: loopStep,
-      resumable: false,
-      toolsUsed: [...deps.toolsUsed],
-    };
+    return emitRecoverableBuildChunk(deps, loopStep, err);
   }
 
   while (!finalGateOk) {
@@ -943,14 +936,7 @@ export async function runBuildExecutePhase(
   }
   if (!finalClosing) {
     const err = "O modelo não respondeu com a mensagem esperada.";
-    await deps.persistFinal(err, { lastFinishOk: false, buildFailed: true });
-    return {
-      ok: false,
-      error: err,
-      steps: loopStep,
-      resumable: false,
-      toolsUsed: [...deps.toolsUsed],
-    };
+    return emitRecoverableBuildChunk(deps, loopStep, err);
   }
   deps.emit("assistant_text", {
     text: finalClosing,
