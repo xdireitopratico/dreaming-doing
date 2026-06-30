@@ -217,22 +217,18 @@ export function buildForgeTimeline(timeline: SSEEvent[], running = false): Forge
       continue;
     }
 
-    if (ev.type === "thinking_text" || ev.type === "assistant_text") {
-      const isThinkingText = ev.type === "thinking_text";
-      const isLegacyThought = ev.type === "assistant_text" && data.thinking === true;
-      if (isThinkingText || (!hasThinkingText && isLegacyThought)) {
-        const chunk = String(data.text ?? "");
-        if (!chunk) continue;
-        if (ts === lastThoughtTs && chunk === lastThoughtText) continue;
-        lastThoughtTs = ts;
-        lastThoughtText = chunk;
-        if (!thoughtId) {
-          thoughtId = `thought-${ts}`;
-          thoughtStart = ts;
-          thoughtText = chunk;
-        } else {
-          thoughtText += chunk;
-        }
+    if (ev.type === "thinking_text") {
+      const chunk = String(data.text ?? "");
+      if (!chunk) continue;
+      if (ts === lastThoughtTs && chunk === lastThoughtText) continue;
+      lastThoughtTs = ts;
+      lastThoughtText = chunk;
+      if (!thoughtId) {
+        thoughtId = `thought-${ts}`;
+        thoughtStart = ts;
+        thoughtText = chunk;
+      } else {
+        thoughtText += chunk;
       }
       continue;
     }

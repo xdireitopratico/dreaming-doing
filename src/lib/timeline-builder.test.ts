@@ -33,8 +33,8 @@ describe("buildForgeTimeline thinking", () => {
     expect(thought.text).toBe("Vou verificar o container.");
   });
 
-  it("falls back to assistant_text thinking when thinking_text is absent", () => {
-    const thought = getThought([
+  it("ignores assistant_text thinking without thinking_text legacy fallback", () => {
+    const items = buildForgeTimeline([
       {
         type: "assistant_text",
         data: { text: "Vou", thinking: true, delta: true },
@@ -47,7 +47,7 @@ describe("buildForgeTimeline thinking", () => {
       },
     ]);
 
-    expect(thought.text).toBe("Vou verificar o container.");
+    expect(items.some((item) => item.type === "THOUGHT")).toBe(false);
   });
 });
 
