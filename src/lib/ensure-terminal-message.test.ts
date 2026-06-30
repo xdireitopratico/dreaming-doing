@@ -70,6 +70,23 @@ describe("resolveTerminalDisplayText", () => {
       }),
     ).toBe("NIM: system message invalid");
   });
+
+  it("usa thinking_text como fallback de terminal quando não há assistant_text final", () => {
+    const text = resolveTerminalDisplayText({
+      error: "",
+      streamRows: [
+        {
+          event_type: "thinking_text",
+          payload: {
+            type: "thinking_text",
+            text: "Rascunho do raciocínio.",
+            delta: true,
+          },
+        },
+      ],
+    });
+    expect(text).toContain("Rascunho do raciocínio.");
+  });
 });
 
 describe("buildTerminalMessageMeta", () => {

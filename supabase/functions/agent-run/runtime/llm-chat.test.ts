@@ -1,5 +1,10 @@
 import { assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
-import { buildBuildAgentSystemPrompt, buildBuildContextBlock } from "./llm-chat.ts";
+import {
+  buildBuildAgentSystemPrompt,
+  buildBuildContextBlock,
+  createBuildModeTokenHandler,
+  type BuildLlmStreamState,
+} from "./llm-chat.ts";
 import type { AgentContext } from "../types.ts";
 
 Deno.test("buildBuildContextBlock — projeto novo", () => {
@@ -32,4 +37,23 @@ Deno.test("buildBuildAgentSystemPrompt — modo build sem planMode", () => {
   assertEquals(prompt.length > 200, true);
   assertEquals(prompt.includes("## Execução Build"), true);
   assertEquals(prompt.includes("## Execução Plan"), false);
+});
+
+Deno.test("createBuildModeTokenHandler — não duplica pensamento", () => {
+  const events: Array<{ type: string; data: unknown }> = [];
+  const state: BuildLlmStreamState = {
+    llmResponseWasStreamed: false,
+    thinkingStreamStartedAt: null,
+  };
+  const handler = createBuildModeTokenHandler(
+    state,
+    (type, data) => events.push({ type, data }),
+    () => {},
+    () => {},
+  );
+
+  handler("vou pensar");
+
+  assertEquals(state.llmResponseWasStreamed, true);
+  assertEquals(events.length, 0);
 });

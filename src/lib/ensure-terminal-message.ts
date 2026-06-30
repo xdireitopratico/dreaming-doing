@@ -127,6 +127,7 @@ export function resolveTerminalDisplayText(opts: {
   let lastValidateFail = "";
   let lastPreflightFail = "";
   let lastFinal = "";
+  let lastThinking = "";
   let thinking = "";
   let lastStreamError = "";
 
@@ -149,6 +150,10 @@ export function resolveTerminalDisplayText(opts: {
       if (ev.data.final === true && text.trim()) lastFinal = text.trim();
       else if ((ev.data.thinking === true || ev.data.delta === true) && text) thinking += text;
     }
+    if (ev.type === "thinking_text") {
+      const text = typeof ev.data.text === "string" ? ev.data.text : "";
+      if ((ev.data.final === true || ev.data.delta === true) && text) lastThinking += text;
+    }
     if (ev.type === "error" && typeof ev.data.message === "string" && ev.data.message.trim()) {
       lastStreamError = ev.data.message.trim();
     }
@@ -166,6 +171,7 @@ export function resolveTerminalDisplayText(opts: {
   if (err && !GENERIC_FAILURE_RE.test(err)) return err;
   if (lastFinal) return lastFinal;
   if (sum) return sum;
+  if (lastThinking.trim()) return lastThinking.trim().slice(0, 8000);
   if (thinking.trim()) return thinking.trim().slice(0, 8000);
   if (lastStreamError) return lastStreamError;
   if (err) return err;

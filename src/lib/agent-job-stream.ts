@@ -198,14 +198,21 @@ export function buildJobStreamTree(
   const nodes: JobStreamNode[] = [];
   const running = opts?.running ?? false;
   let lastResultTs = 0;
+  let sawThinkingText = false;
 
   for (const ev of timeline) {
     const ts = ev.timestamp ?? Date.now();
     const data = ev.data ?? {};
 
+    if (ev.type === "thinking_text" && typeof data.text === "string") {
+      sawThinkingText = true;
+      pushThought(nodes, String(data.text), ts);
+      continue;
+    }
+
     if (ev.type === "assistant_text" && typeof data.text === "string") {
       if (isNarration(data)) continue;
-      if (isRealLlmThinking(data)) {
+      if (isRealLlmThinking(data) && !sawThinkingText) {
         pushThought(nodes, String(data.text), ts);
       }
       continue;

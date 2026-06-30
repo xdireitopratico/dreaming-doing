@@ -265,19 +265,6 @@ export function createPlanModeTokenHandler(
     if (elapsed > THINKING_STREAM_CAP_MS) return;
     streamState.llmResponseWasStreamed = true;
     onActivity();
-    emit("assistant_text", {
-      text: delta,
-      append: true,
-      delta: true,
-      final: false,
-      thinking: true,
-    });
-    emit("thinking_text", {
-      text: delta,
-      append: true,
-      delta: true,
-      final: false,
-    });
   };
 }
 
@@ -548,15 +535,13 @@ export async function runPlanModeAgentTurn(
       deps.emit("phase", { phase: "creating_plan", message: "" });
       const proposed = proposedPlanFromToolArgs(planCall.arguments);
       if (!proposed) {
-        // Guard-rail de loop: create_plan malformado (LLM fraco) NÃO é falha terminal — corrige e re-tenta.
-        // O loop `for (step < MAX_PLAN_EXPLORE)` borna as tentativas; qualquer LLM erra, o loop corrige.
-        deps.state.messages.push({
-          role: "user",
-          content:
-            "Seu create_plan está incompleto — faltam `summary` (string) e/ou `steps` (array de {title, file_path, description}). " +
-            "Reenvie um create_plan válido com AMBOS os campos preenchidos. Não use outras ferramentas antes disso.",
-        });
-        continue;
+        return await finishPlanModeFailure(
+          finishDeps,
+          "create_plan inválido — envie summary e steps válidos antes de continuar.",
+          step,
+          [...toolsUsed],
+          "create_plan_invalid",
+        );
       }
       const enriched = enrichProposedPlanDesign(
         proposed,

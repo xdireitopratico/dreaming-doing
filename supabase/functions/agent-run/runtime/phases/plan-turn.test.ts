@@ -4,7 +4,9 @@ import { proposedPlanFromToolArgs } from "../../tools/meta.ts";
 import {
   finishClarify,
   finishPlanModeFailure,
+  createPlanModeTokenHandler,
   resolvePlanModeNoToolsResponse,
+  type PlanModeStreamState,
   type PlanTurnFinishDeps,
 } from "./plan-turn.ts";
 
@@ -116,4 +118,18 @@ Deno.test("resolvePlanModeNoToolsResponse — stream_empty", () => {
     llmResponseWasStreamed: true,
   });
   assertEquals(resolution.kind, "stream_empty");
+});
+
+Deno.test("createPlanModeTokenHandler — não duplica pensamento", () => {
+  const events: Array<{ type: string; data: unknown }> = [];
+  const state: PlanModeStreamState = {
+    llmResponseWasStreamed: false,
+    thinkingStreamStartedAt: null,
+  };
+  const handler = createPlanModeTokenHandler(state, (type, data) => events.push({ type, data }), () => {});
+
+  handler("vou montar o plano");
+
+  assertEquals(state.llmResponseWasStreamed, true);
+  assertEquals(events.length, 0);
 });

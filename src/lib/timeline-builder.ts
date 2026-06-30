@@ -107,7 +107,6 @@ export function buildForgeTimeline(timeline: SSEEvent[], running = false): Forge
   let thoughtText = "";
   let lastThoughtTs = 0;
   let lastThoughtText = "";
-  const hasThinkingText = timeline.some((ev) => ev.type === "thinking_text");
 
   const flushThought = (endTs: number) => {
     if (!thoughtId) return;
