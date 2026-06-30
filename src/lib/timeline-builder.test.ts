@@ -104,4 +104,29 @@ describe("buildForgeTimeline hygiene", () => {
       /classif|State|Estado|Skills:|passo 3|parte 1\/12|0 file/i,
     );
   });
+
+  it("renderiza plan_proposed como bloco próprio e não duplica closure adjacente", () => {
+    const items = buildForgeTimeline([
+      {
+        type: "plan_proposed",
+        data: {
+          planId: "plan-1",
+          summary: "Extração e mapeamento do Design System",
+          mission: "Extração e mapeamento do Design System",
+          runId: "run-1",
+          projectId: "proj-1",
+          steps: [
+            { id: "s1", description: "Capturar HTML", type: "read", enabled: true },
+            { id: "s2", description: "Mapear componentes", type: "read", enabled: true },
+          ],
+        },
+        timestamp: 1,
+      },
+      { type: "done", data: { summary: "Extração e mapeamento do Design System", ok: true }, timestamp: 2 },
+      { type: "done", data: { summary: "Extração e mapeamento do Design System", ok: true }, timestamp: 3 },
+    ]);
+
+    expect(items.filter((item) => item.type === "PLAN")).toHaveLength(1);
+    expect(items.filter((item) => item.type === "CLOSURE")).toHaveLength(1);
+  });
 });

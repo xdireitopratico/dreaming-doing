@@ -1,6 +1,7 @@
 // src/lib/timeline-builder.ts — Construtor canônico da timeline do inspector (FORGE 2.2)
 // Regra: apenas eventos intencionais/factuals entram. Ruído interno é descartado.
 import type { SSEEvent } from "@/lib/agent-progress";
+import type { PendingPlan } from "@/lib/agent-progress";
 import {
   sanitizeRunText,
   checkpointSummary,
@@ -18,6 +19,7 @@ export type TimelineItemType =
   | "EDITED"
   | "RUNNING"
   | "SKILL"
+  | "PLAN"
   | "TASK"
   | "RESULT"
   | "ALERT"
@@ -34,6 +36,7 @@ export type ForgeTimelineItem =
   | { type: "EDITED"; id: string; path: string; detail?: string; active?: boolean; ok?: boolean }
   | { type: "RUNNING"; id: string; command: string; detail?: string; active?: boolean; ok?: boolean }
   | { type: "SKILL"; id: string; name: string; detail?: string; active?: boolean; ok?: boolean }
+  | { type: "PLAN"; id: string; plan: PendingPlan }
   | { type: "TASK"; id: string; label: string; active?: boolean }
   | { type: "RESULT"; id: string; ok: boolean; text: string; evidence?: string[] }
   | { type: "ALERT"; id: string; level: "info" | "warn" | "error"; message: string; alertId?: string }
@@ -100,6 +103,40 @@ function skillNameFromTool(name: string): string {
   return name;
 }
 
+function pendingPlanFromPayload(source: Record<string, unknown>): PendingPlan | null {
+  const nested =
+    source.plan && typeof source.plan === "object"
+      ? (source.plan as Record<string, unknown>)
+      : source;
+  const planId = typeof nested.planId === "string" ? nested.planId : null;
+  const steps = Array.isArray(nested.steps) ? (nested.steps as PendingPlan["steps"]) : [];
+  const runId = typeof nested.runId === "string" ? nested.runId : null;
+  const projectId = typeof nested.projectId === "string" ? nested.projectId : "";
+  if (!planId || !runId || !projectId || steps.length === 0) return null;
+  return {
+    planId,
+    summary: typeof nested.summary === "string" ? nested.summary : "Plano proposto",
+    rationale:
+      typeof nested.rationale === "string" && nested.rationale.trim()
+        ? nested.rationale.trim()
+        : undefined,
+    markdown:
+      typeof nested.markdown === "string" && nested.markdown.trim()
+        ? nested.markdown.trim()
+        : undefined,
+    mission: typeof nested.mission === "string" ? nested.mission : undefined,
+    objective: typeof nested.objective === "string" ? nested.objective : undefined,
+    steps,
+    ttlMs: typeof nested.ttlMs === "number" ? nested.ttlMs : 60_000,
+    proposedAt:
+      typeof nested.proposedAt === "string" && nested.proposedAt
+        ? Date.parse(nested.proposedAt) || Date.now()
+        : Date.now(),
+    runId,
+    projectId,
+  };
+}
+
 export function buildForgeTimeline(timeline: SSEEvent[], running = false): ForgeTimelineItem[] {
   const items: ForgeTimelineItem[] = [];
   let thoughtId: string | null = null;
@@ -107,6 +144,8 @@ export function buildForgeTimeline(timeline: SSEEvent[], running = false): Forge
   let thoughtText = "";
   let lastThoughtTs = 0;
   let lastThoughtText = "";
+  let lastPlanSig = "";
+  let lastClosureSig = "";
 
   const flushThought = (endTs: number) => {
     if (!thoughtId) return;
@@ -338,9 +377,22 @@ export function buildForgeTimeline(timeline: SSEEvent[], running = false): Forge
     }
 
     if (ev.type === "plan_proposed") {
-      const summary = typeof data.summary === "string" ? data.summary : "Plano";
-      if (summary.trim()) {
-        items.push({ type: "TASK", id: `plan-${ts}`, label: truncate(summary, 120) });
+      const plan = pendingPlanFromPayload(data);
+      if (plan) {
+        const sig = `${plan.planId}:${plan.summary}:${plan.steps.length}`;
+        if (sig !== lastPlanSig) {
+          items.push({ type: "PLAN", id: `plan-${plan.planId}-${ts}`, plan });
+          lastPlanSig = sig;
+        }
+      } else {
+        const summary = typeof data.summary === "string" ? data.summary : "Plano";
+        if (summary.trim()) {
+          const sig = `fallback:${summary.trim()}`;
+          if (sig !== lastPlanSig) {
+            items.push({ type: "TASK", id: `plan-${ts}`, label: truncate(summary, 120) });
+            lastPlanSig = sig;
+          }
+        }
       }
       continue;
     }
@@ -391,6 +443,9 @@ export function buildForgeTimeline(timeline: SSEEvent[], running = false): Forge
             : canceled
               ? "Cancelado"
               : "Encerrado";
+      const sig = `${ok ? "ok" : "fail"}:${canceled ? "canceled" : "open"}:${summary.trim()}`;
+      if (sig === lastClosureSig) continue;
+      lastClosureSig = sig;
       items.push({
         type: "CLOSURE",
         id: `closure-${ts}`,
@@ -487,6 +542,8 @@ export function timelineItemBriefing(item: ForgeTimelineItem): string | null {
       return item.command ? `Running ${item.command}` : "Running command";
     case "SKILL":
       return item.name;
+    case "PLAN":
+      return `${sanitizeRunText(item.plan.summary, 80)} · ${item.plan.steps.length} step(s)`;
     case "TASK":
       return sanitizeRunText(item.label, 80);
     case "RESULT":

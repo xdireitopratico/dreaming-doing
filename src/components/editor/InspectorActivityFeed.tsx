@@ -27,7 +27,6 @@ import type { PendingPlan, PlanStep } from "@/lib/agent-progress";
 
 type InspectorActivityFeedProps = {
   items: ForgeTimelineItem[];
-  plan?: PendingPlan | null;
   onOpenFile?: (path: string) => void;
   running?: boolean;
 };
@@ -54,6 +53,8 @@ function iconForItem(item: ForgeTimelineItem): TimelineIcon {
       if (/design/i.test(item.name)) return Palette;
       if (/search|research/i.test(item.name)) return Search;
       return Zap;
+    case "PLAN":
+      return BookOpen;
     case "TASK":
       return item.label?.toLowerCase().includes("plano") ? BookOpen : CircleDashed;
     case "RESULT":
@@ -85,6 +86,8 @@ function badgeForItem(item: ForgeTimelineItem): string | null {
       return "Running";
     case "SKILL":
       return "Skill";
+    case "PLAN":
+      return "Plan";
     case "RESULT":
       return "Result";
     case "ALERT":
@@ -112,6 +115,7 @@ function itemStatus(item: ForgeTimelineItem): "done" | "failed" | "working" | "p
   if (item.type === "CLOSURE") return item.canceled ? "failed" : item.ok ? "done" : "failed";
   if (item.type === "DIFF") return "done";
   if (item.type === "ALERT") return item.level === "error" ? "failed" : item.level === "warn" ? "pending" : null;
+  if (item.type === "PLAN") return "pending";
   return null;
 }
 
@@ -139,7 +143,7 @@ function TimelineShell({
   children: ReactNode;
 }) {
   const Icon = iconForItem(item);
-  const active = (item.type !== "NOTE" && item.type !== "TASK" && item.type !== "RESULT" && item.type !== "ALERT" && item.type !== "DESIGN" && item.type !== "DIFF" && item.type !== "CLOSURE" && item.active) || false;
+  const active = "active" in item ? item.active === true : false;
   const status = itemStatus(item);
   return (
     <div
@@ -272,14 +276,21 @@ function ToolishBlock({
   );
 }
 
-function TaskBlock({ item, index, total, plan }: { item: Extract<ForgeTimelineItem, { type: "TASK" }>; index: number; total: number; plan?: PendingPlan | null }) {
+function TaskBlock({ item, index, total }: { item: Extract<ForgeTimelineItem, { type: "TASK" }>; index: number; total: number }) {
   return (
     <TimelineShell item={item} index={index} total={total}>
       <div className="forge-timeline-task" data-testid="timeline-task">
         <span className="forge-timeline-task-label">{item.label}</span>
-        {plan && plan.steps.length > 0 && (
-          <PlanCard plan={plan} />
-        )}
+      </div>
+    </TimelineShell>
+  );
+}
+
+function PlanBlock({ item, index, total }: { item: Extract<ForgeTimelineItem, { type: "PLAN" }>; index: number; total: number }) {
+  return (
+    <TimelineShell item={item} index={index} total={total}>
+      <div className="forge-timeline-task forge-timeline-task--plan" data-testid="timeline-plan">
+        <PlanCard plan={item.plan} />
       </div>
     </TimelineShell>
   );
@@ -439,7 +450,7 @@ function ClosureBlock({ item, index, total }: { item: Extract<ForgeTimelineItem,
   );
 }
 
-export function InspectorActivityFeed({ items, plan, onOpenFile }: InspectorActivityFeedProps) {
+export function InspectorActivityFeed({ items, onOpenFile }: InspectorActivityFeedProps) {
   if (!items.length) return null;
 
   return (
@@ -459,7 +470,9 @@ export function InspectorActivityFeed({ items, plan, onOpenFile }: InspectorActi
           case "SKILL":
             return <ToolishBlock key={item.id} item={item} {...common} onOpenFile={onOpenFile} />;
           case "TASK":
-            return <TaskBlock key={item.id} item={item} {...common} plan={plan} />;
+            return <TaskBlock key={item.id} item={item} {...common} />;
+          case "PLAN":
+            return <PlanBlock key={item.id} item={item} {...common} />;
           case "RESULT":
             return <ResultBlock key={item.id} item={item} {...common} />;
           case "ALERT":

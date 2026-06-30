@@ -66,7 +66,6 @@ export function InspectorTimeline({
         )}
         <InspectorActivityFeed
           items={timelineItems}
-          plan={progress.pendingPlan}
           onOpenFile={onOpenFile}
           running={running}
         />
