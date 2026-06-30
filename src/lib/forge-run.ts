@@ -39,7 +39,7 @@ export type ForgeMiniCardData = {
   /** Activity stream — últimos 3-4 itens da timeline com status visual.
    *  Substitui briefing único por janela de atividade real happening. */
   activity: ForgeActivityLine[];
-  /** Task list derivada do plano ou declarada via declare_tasks para checklist no mini-card do chat. */
+  /** Task list visível apenas em build materializado ou quando o LLM declarou tasks. */
   tasks?: Array<{
     id: string;
     label: string;
@@ -98,7 +98,9 @@ function derivePlanTasks(
   progress: AgentProgress,
   jobActive: boolean,
 ): NonNullable<ForgeMiniCardData["tasks"]> {
-  if (!jobPlan?.steps?.length) return progress.tasks ?? [];
+  const declaredTasks = progress.tasks ?? [];
+  const canUsePlanSteps = progress.mode === "build" && !!jobPlan?.steps?.length;
+  if (!canUsePlanSteps) return declaredTasks;
 
   const currentStep = typeof progress.currentStep === "number" ? progress.currentStep : null;
   const totalSteps = jobPlan.steps.length;
@@ -694,7 +696,7 @@ export function buildAgentRunView(
   const activity = collectMiniCardActivity(progress, forgeTimeline, jobActive);
   const liveLine = collectMiniCardLiveLine(progress, forgeTimeline, jobActive);
 
-  // Tasks checklist — plano aprovado vence; declare_tasks fica como fallback.
+  // Tasks checklist — only build materialized flow or explicit declare_tasks.
   const tasks = derivePlanTasks(jobPlan, progress, jobActive);
 
   const streamBody = progress.streamText?.trim() || null;

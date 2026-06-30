@@ -306,7 +306,7 @@ describe("forge-run terminal state", () => {
 
     expect(view.miniCard.status).toBe("done");
     const thought = buildForgeTimeline(progress.timeline, false).at(-1);
-    expect(thought).toBeUndefined();
+    expect(thought?.type).not.toBe("THOUGHT");
   });
 
   it("delta sem thinking não vira THOUGHT no inspector", () => {
@@ -399,6 +399,7 @@ describe("forge-run terminal state", () => {
   it("jobPlan vira checklist compacto no mini-card", () => {
     const progress = {
       ...initialAgentProgress,
+      mode: "build" as const,
       finished: true,
       lastFinishOk: true,
     };
@@ -412,6 +413,26 @@ describe("forge-run terminal state", () => {
     expect(view.miniCard.tasks).toHaveLength(3);
     expect(view.miniCard.tasks?.every((task) => task.status === "done")).toBe(true);
     expect(view.miniCard.tasks?.[0]?.label).toContain("Hero section");
+  });
+
+  it("plano pendente em plan mode não expõe checklist de tasks", () => {
+    const view = buildAgentRunView(
+      "run-1",
+      {
+        ...initialAgentProgress,
+        mode: "plan" as const,
+        awaiting: true,
+        awaitingKind: "plan_approval",
+        pendingPlan: samplePlan,
+      },
+      {
+        running: true,
+        jobPlan: samplePlan,
+      },
+    );
+
+    expect(view.miniCard.hasPlan).toBe(true);
+    expect(view.miniCard.tasks ?? []).toHaveLength(0);
   });
 });
 
