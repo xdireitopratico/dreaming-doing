@@ -4,8 +4,6 @@ import {
   Brain,
   Globe,
   Box,
-  Search,
-  MonitorPlay,
   ShieldCheck,
   ShieldAlert,
   Loader2,
@@ -129,20 +127,6 @@ export function ServiceHealthBar() {
         href: hasScrape ? undefined : "/api-models",
       });
 
-      // Web Search
-      const hasSearch = hasKind("web_search");
-      const searchProvider = prefs.webSearchProvider || providerName("web_search");
-      newChecks.push({
-        key: "search",
-        icon: <Search className="size-3.5" />,
-        label: "Search",
-        status: hasSearch ? "ok" : "missing",
-        detail: hasSearch
-          ? `Provider: ${searchProvider ?? "configurado"}`
-          : "Nenhum connector de Web Search",
-        href: hasSearch ? undefined : "/api-models",
-      });
-
       // E2B Sandbox
       const hasE2b = hasKind("e2b");
       newChecks.push({
@@ -154,21 +138,6 @@ export function ServiceHealthBar() {
           ? "Sandbox conectada"
           : "Nenhuma chave E2B salva",
         href: hasE2b ? undefined : "/api-models",
-      });
-
-      // Browser Runtime
-      const hasBrowser = hasKind("browser_runtime");
-      const browserProvider =
-        prefs.browserRuntimeProvider || providerName("browser_runtime");
-      newChecks.push({
-        key: "browser",
-        icon: <MonitorPlay className="size-3.5" />,
-        label: "Browser",
-        status: hasBrowser ? "ok" : "missing",
-        detail: hasBrowser
-          ? `Provider: ${browserProvider ?? "configurado"}`
-          : "Nenhum connector de Browser Runtime",
-        href: hasBrowser ? undefined : "/api-models",
       });
 
       setChecks(newChecks);
