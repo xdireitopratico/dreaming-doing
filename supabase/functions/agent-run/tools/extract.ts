@@ -1,7 +1,7 @@
 // tools/extract.ts — Tool extract_design_dna para o agent-run.
 // Expõe ao LLM a capacidade de extrair DesignDNA estruturado de URLs.
 // Modo shallow (grátis, Plan mode) e deep (Playwright no sandbox, Build mode).
-// APENAS usuários admin podem extrair DesignDNA (uso de LLM custa créditos da plataforma).
+// Qualquer usuário autenticado pode usar (BYOK — chaves do próprio usuário).
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import type { ToolRegistry } from "../registry.ts";
 import { logger } from "../../_shared/logger.ts";
@@ -92,23 +92,6 @@ export function registerExtractTools(reg: ToolRegistry, ctx: ExtractToolsContext
             toolCallId: "",
             ok: false,
             error: "extract_design_dna aceita no máximo 5 URLs",
-            output: null,
-          };
-        }
-
-        // ── Admin gate ──────────────────────────────────────────
-        const { data: role } = await ctx.supabase
-          .from("user_roles")
-          .select("role")
-          .eq("user_id", ctx.userId)
-          .eq("role", "admin")
-          .maybeSingle();
-
-        if (!role) {
-          return {
-            toolCallId: "",
-            ok: false,
-            error: "Apenas administradores podem extrair DesignDNA (uso de LLM custa créditos da plataforma)",
             output: null,
           };
         }

@@ -2,6 +2,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { errorMessage } from "@/lib/error-utils";
 import { cleanHtmlDocument, htmlToMarkdownDocument } from "@/lib/html-hygiene";
 import { normalizePresetId } from "@/lib/preset-contract";
+import { getPresetById } from "@/lib/model-catalog";
+import type { ModelTier } from "@/lib/model-catalog";
 import { scrapeWebPage } from "../../../supabase/functions/_shared/web-research-providers.ts";
 import { BUILTIN_RUNTIME } from "../../../supabase/functions/_shared/provider-wire.ts";
 import { finalizeDocumentMarkdown } from "../../../supabase/functions/_shared/document-sanitize.ts";
@@ -178,6 +180,7 @@ async function loadAgentPreferences(
   fixedPresetId?: string;
   customModelId?: string;
   useCustomModel?: boolean;
+  autoAllowedPresetIds?: string[];
   userModelEntries?: Array<{ slug: string; env: string; label?: string }>;
   webScrapeProvider?: string;
   webScrapeFallback?: string;
@@ -218,6 +221,9 @@ async function loadAgentPreferences(
     fixedPresetId: typeof r.fixedPresetId === "string" ? r.fixedPresetId : undefined,
     customModelId: typeof r.customModelId === "string" ? r.customModelId : undefined,
     useCustomModel: r.useCustomModel === true,
+    autoAllowedPresetIds: Array.isArray(r.autoAllowedPresetIds)
+      ? (r.autoAllowedPresetIds as string[]).filter((id) => typeof id === "string" && id.trim().length > 0)
+      : undefined,
     userModelEntries: userModelEntries && userModelEntries.length > 0 ? userModelEntries : undefined,
     webScrapeProvider: typeof r.webScrapeProvider === "string" ? r.webScrapeProvider : undefined,
     webScrapeFallback: typeof r.webScrapeFallback === "string" ? r.webScrapeFallback : undefined,
@@ -313,18 +319,19 @@ function buildLlmConfig(
  * Resolve a config de LLM respeitando exclusivamente o que o usuário configurou
  * em /api-models (profiles.agent_preferences + connectors).
  *
- * Hierarquia:
- *   1. preferences.mode === "fixed" + fixedPresetId/customModelId  → esse provider
- *   2. preferences.mode === "robin"/"rob" + poolProvider           → esse provider
- *   3. Senão: primeiro connector LLM cadastrado (ordem updated_at desc)
+ * Hierarquia (sem fallback):
+ *   1. mode === "fixed"  → fixedPresetId ou customModelId
+ *   2. mode === "robin"  → poolProvider (groq/nvidia)
+ *   3. mode === "auto"   → autoAllowedPresetIds (1–5 presets), routing por complexidade
  *
- * FAIL-CLOSED: se nada bate, retorna null. NUNCA inventa combinação chave+endpoint.
- * Env vars só são usadas quando explicitamente salvas no connector — nunca
- * como fallback mágico cross-endpoint.
+ * FAIL-CLOSED: se a configuração do modo não resolver, retorna null.
+ * NUNCA inventa combinação chave+endpoint. NUNCA usa outro modelo sem
+ * conhecimento explícito do usuário. Se o LLM falhar, a operação falha.
  */
 async function resolveLLMConfig(
   supabase: SupabaseClient,
   userId: string,
+  complexity: "low" | "medium" | "high" = "medium",
 ): Promise<ResolvedLLM | null> {
   const { data } = await supabase
     .from("connectors")
@@ -362,7 +369,7 @@ async function resolveLLMConfig(
 
   const prefs = await loadAgentPreferences(supabase, userId);
 
-  // 1) preferences.mode === "fixed" → fixedPresetId (formato: "<provider>--<model>" ou "<provider>/<model>")
+  // 1) mode === "fixed" → fixedPresetId ou customModelId
   if (prefs?.mode === "fixed") {
     const presetId =
       prefs.customModelId && prefs.useCustomModel ? prefs.customModelId : prefs.fixedPresetId;
@@ -401,10 +408,13 @@ async function resolveLLMConfig(
         }
       }
     }
+    // FAIL-CLOSED: modo fixed sem preset configurado ou sem connector = null
+    return null;
   }
 
-  // 2) preferences.mode === "robin"/"rob" → poolProvider
-  if (prefs?.mode === "robin" && prefs.poolProvider) {
+  // 2) mode === "robin"/"rob" → poolProvider (groq, nvidia, etc.)
+  if (prefs?.mode === "robin") {
+    if (!prefs.poolProvider) return null;
     const connector = findConnector(prefs.poolProvider as LlmKind);
     if (connector) {
       const cfg = buildLlmConfig(
@@ -416,8 +426,61 @@ async function resolveLLMConfig(
       );
       if (cfg) return cfg;
     }
+    // FAIL-CLOSED: robin sem connector do pool = null
+    return null;
   }
 
+  // 3) mode === "auto" → autoAllowedPresetIds com routing por complexidade
+  if (prefs?.mode === "auto") {
+    const presetIds = prefs.autoAllowedPresetIds;
+    if (!presetIds || presetIds.length === 0) return null;
+
+    // Mapeia complexidade para tiers aceitáveis (ordem de preferência)
+    const tierPriority: Record<string, ModelTier[]> = {
+      high: ["frontier", "balanced", "fast", "pool"],
+      medium: ["balanced", "frontier", "fast", "pool"],
+      low: ["fast", "balanced", "frontier", "pool"],
+    };
+    const acceptableTiers = tierPriority[complexity];
+
+    // Resolve cada preset ID → preset do catálogo
+    const resolved = presetIds
+      .map((id) => {
+        const preset = getPresetById(id, prefs.userModelEntries);
+        return { id, preset };
+      })
+      .filter((r) => r.preset.id !== "" && r.preset.id !== undefined);
+
+    if (resolved.length === 0) return null;
+
+    // Ordena por tier priority (mais adequado primeiro)
+    resolved.sort((a, b) => {
+      const aIdx = acceptableTiers.indexOf(a.preset.tier);
+      const bIdx = acceptableTiers.indexOf(b.preset.tier);
+      return (aIdx === -1 ? 999 : aIdx) - (bIdx === -1 ? 999 : bIdx);
+    });
+
+    // Tenta o primeiro preset que tenha connector disponível
+    for (const { preset } of resolved) {
+      const env = preset.env as LlmKind;
+      const connector = findConnector(env);
+      if (connector) {
+        const model = preset.model || undefined;
+        const cfg = buildLlmConfig(
+          connector.provider,
+          connector.token,
+          { ...connector.meta, defaultModel: model },
+          model,
+          "preferences.auto",
+        );
+        if (cfg) return cfg;
+      }
+    }
+    // FAIL-CLOSED: nenhum dos presets selecionados pelo usuário tem connector
+    return null;
+  }
+
+  // Sem modo configurado → FAIL-CLOSED
   return null;
 }
 
@@ -878,9 +941,10 @@ export async function extractDesignDnaForUrl(
   supabase: SupabaseClient,
   input: DesignDnaExtractionInput,
 ): Promise<DesignDnaExtractionResult> {
+  const complexity: "low" | "high" = input.depth === "deep" ? "high" : "low";
   const [webSecrets, resolvedLlm, prefs] = await Promise.all([
     loadWebSecrets(supabase, input.userId),
-    resolveLLMConfig(supabase, input.userId),
+    resolveLLMConfig(supabase, input.userId, complexity),
     loadAgentPreferences(supabase, input.userId),
   ]);
   const llmConfig: LLMConfig | null = resolvedLlm

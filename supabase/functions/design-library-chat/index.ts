@@ -1,32 +1,32 @@
 /**
  * design-library-chat — Chat LLM com contexto real + persistência de histórico.
  *
- * Replica o padrão do agent-run:
- *  - Identifica user via JWT (service_role bypass via claim decode)
- *  - Carrega BYOK do admin (mesma ordem de prioridade do agent-run)
- *  - Lê contexto real do job (status, URLs, errors, eventos recentes)
- *  - Persiste mensagens em design_library_chat_sessions/messages
- *  - Retorna ações para controlar o browser (browser-use style)
+ * Suporta dois modos de resposta:
+ *   1. SSE Streaming (padrão): stream=true ou Accept: text/event-stream
+ *      - Emite eventos: thinking, delta, actions, done, error
+ *      - Permite "reality show" em tempo real no BrowserPreviewPanel
+ *   2. JSON (fallback): stream=false ou sem Accept header
+ *      - Retorna objeto JSON completo (compatível com versão anterior)
+ *
+ * BYOK: carrega chaves do próprio usuário autenticado (fallback: owner do job)
+ * Auth: qualquer usuário autenticado pode usar (sem gate admin)
  *
  * Body:
  *   {
  *     jobId: string,
  *     message: string,  // "" para abrir sessão e receber welcome message
- *     actions?: Array<{type, params}>  // ações do LLM a executar no sandbox
- *   }
- *
- * Response:
- *   {
- *     reply: string,
- *     actions?: Array<{type: string, params: object}>,
- *     sessionId: string,
- *     messages: ChatMessage[]  // histórico completo da sessão
+ *     stream?: boolean,  // true = SSE (padrão para mensagens não-vazias)
  *   }
  */
 
 import { createClient } from "npm:@supabase/supabase-js@2";
-import { loadConnectorKeys } from "../agent-run/connector-keys.ts";
+import { loadConnectorKeys, loadConnectorPools } from "../agent-run/connector-keys.ts";
 import { forgeOrigin } from "../_shared/cors.ts";
+import {
+  resolveAutoForComplexity,
+  resolveModelFromPreferences,
+  defaultRobinModel,
+} from "../_shared/model-presets.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": forgeOrigin(),
@@ -34,9 +34,21 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
+const sseHeaders = {
+  ...corsHeaders,
+  "Content-Type": "text/event-stream",
+  "Cache-Control": "no-cache",
+  Connection: "keep-alive",
+};
+
+function sseData(event: string, data: unknown): string {
+  return `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+}
+
 interface ChatRequest {
   jobId: string;
   message: string;
+  stream?: boolean;
 }
 
 interface LLMConfig {
@@ -105,63 +117,92 @@ function buildContextMessage(ctx: {
   return lines.join("\n");
 }
 
-function resolveLLMConfig(connectorKeys: Record<string, string>): LLMConfig | null {
-  if (connectorKeys.OPENROUTER_API_KEY) {
-    return {
-      apiKey: connectorKeys.OPENROUTER_API_KEY,
-      baseUrl: "https://openrouter.ai/api/v1",
-      model: "openai/gpt-4o-mini",
-      label: "OpenRouter",
-    };
+/**
+ * Resolve LLM config respeitando agent_preferences do usuário.
+ * FAIL-CLOSED: sem preferência configurada = null.
+ * NUNCA faz cascade heuristic entre providers.
+ */
+async function resolveLLMConfig(
+  supabase: any,
+  targetUserId: string,
+  connectorKeys: Record<string, string>,
+): Promise<LLMConfig | null> {
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("agent_preferences")
+    .eq("id", targetUserId)
+    .maybeSingle();
+  const raw = profile?.agent_preferences;
+  if (!raw || typeof raw !== "object") return null;
+  const prefs = raw as Record<string, unknown>;
+
+  const mode = prefs.mode === "rob" ? "robin" : prefs.mode;
+  const userModelEntries = Array.isArray(prefs.userModelEntries)
+    ? (prefs.userModelEntries as Array<{ slug: string; env: string; label?: string }>)
+    : undefined;
+
+  // FIXED mode → resolve from fixedPresetId or customModelId
+  if (mode === "fixed") {
+    const resolved = resolveModelFromPreferences(
+      {
+        fixedPresetId: typeof prefs.fixedPresetId === "string" ? prefs.fixedPresetId : undefined,
+        customModelId: typeof prefs.customModelId === "string" ? prefs.customModelId : undefined,
+        useCustomModel: prefs.useCustomModel === true,
+        userModelEntries,
+      },
+      connectorKeys,
+    );
+    if (resolved) {
+      return {
+        apiKey: resolved.apiKey,
+        baseUrl: resolved.baseUrl ?? "",
+        model: resolved.model,
+        label: `${resolved.label} (fixo)`,
+      };
+    }
+    return null;
   }
-  if (connectorKeys.GROQ_API_KEY) {
-    return {
-      apiKey: connectorKeys.GROQ_API_KEY,
-      baseUrl: "https://api.groq.com/openai/v1",
-      model: "llama-3.1-8b-instant",
-      label: "Groq",
-    };
+
+  // ROBIN mode → pool provider
+  if (mode === "robin") {
+    const poolProvider = typeof prefs.poolProvider === "string" ? prefs.poolProvider : undefined;
+    if (!poolProvider) return null;
+    try {
+      const poolKeys = await loadConnectorPools(supabase, targetUserId, poolProvider);
+      if (poolKeys.length === 0) return null;
+      const robinPresetId = typeof prefs.robinPoolModelId === "string" ? prefs.robinPoolModelId : undefined;
+      const wire = defaultRobinModel(poolProvider, robinPresetId);
+      const key = poolKeys[0]!;
+      return {
+        apiKey: key,
+        baseUrl: wire.baseUrl ?? "",
+        model: wire.model,
+        label: `ROBIN · ${wire.label}`,
+      };
+    } catch {
+      return null;
+    }
   }
-  if (connectorKeys.DEEPSEEK_API_KEY) {
-    return {
-      apiKey: connectorKeys.DEEPSEEK_API_KEY,
-      baseUrl: "https://api.deepseek.com/v1",
-      model: "deepseek-chat",
-      label: "DeepSeek",
-    };
+
+  // AUTO mode → autoAllowedPresetIds com routing por complexidade
+  if (mode === "auto") {
+    const allowlist = Array.isArray(prefs.autoAllowedPresetIds)
+      ? (prefs.autoAllowedPresetIds as string[]).filter((id) => typeof id === "string" && id.trim().length > 0)
+      : [];
+    if (allowlist.length === 0) return null;
+    const resolved = resolveAutoForComplexity(connectorKeys, 3, allowlist, userModelEntries);
+    if (resolved) {
+      return {
+        apiKey: resolved.apiKey,
+        baseUrl: resolved.baseUrl ?? "",
+        model: resolved.model,
+        label: `${resolved.label} (Auto)`,
+      };
+    }
+    return null;
   }
-  if (connectorKeys.XAI_API_KEY) {
-    return {
-      apiKey: connectorKeys.XAI_API_KEY,
-      baseUrl: "https://api.x.ai/v1",
-      model: "grok-2-latest",
-      label: "xAI",
-    };
-  }
-  if (connectorKeys.GEMINI_API_KEY) {
-    return {
-      apiKey: connectorKeys.GEMINI_API_KEY,
-      baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai",
-      model: "gemini-1.5-flash",
-      label: "Gemini",
-    };
-  }
-  if (connectorKeys.OPENAI_API_KEY) {
-    return {
-      apiKey: connectorKeys.OPENAI_API_KEY,
-      baseUrl: "https://api.openai.com/v1",
-      model: "gpt-4o-mini",
-      label: "OpenAI",
-    };
-  }
-  if (connectorKeys.OLLAMA_BASE_URL) {
-    return {
-      apiKey: "ollama",
-      baseUrl: connectorKeys.OLLAMA_BASE_URL,
-      model: connectorKeys.OLLAMA_MODEL ?? "llama3.1",
-      label: "Ollama",
-    };
-  }
+
+  // Sem modo configurado → FAIL-CLOSED
   return null;
 }
 
@@ -195,7 +236,6 @@ Deno.serve(async (req: Request) => {
     }
 
     let userId: string | null = null;
-    let userEmail: string | null = null;
     if (!isServiceRole) {
       const userClient: any = createClient(
         supabaseUrl,
@@ -206,10 +246,9 @@ Deno.serve(async (req: Request) => {
       );
       const { data: userData } = await userClient.auth.getUser();
       userId = userData?.user?.id ?? null;
-      userEmail = userData?.user?.email ?? null;
-      if (!userId || userEmail?.toLowerCase() !== "xdireitopratico@gmail.com") {
-        return new Response(JSON.stringify({ error: userId ? "Forbidden" : "Unauthorized" }), {
-          status: userId ? 403 : 401,
+      if (!userId) {
+        return new Response(JSON.stringify({ error: "Unauthorized" }), {
+          status: 401,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
@@ -226,7 +265,7 @@ Deno.serve(async (req: Request) => {
     // Carrega contexto do job
     const { data: job, error: jobFetchErr } = await supabase
       .from("design_dna_jobs")
-      .select("id, status, urls, error, results, meta, current_url_index")
+      .select("id, status, urls, error, results, meta, current_url_index, user_id")
       .eq("id", input.jobId)
       .single();
 
@@ -361,20 +400,12 @@ Deno.serve(async (req: Request) => {
       .limit(20);
     if (histErr) console.warn("[design-library-chat] history fetch failed:", histErr.message);
 
-    // Carrega BYOK do admin
-    let targetUserId = userId;
-    if (!targetUserId) {
-      const { data: users } = await supabase.auth.admin.listUsers({ perPage: 500 });
-      targetUserId =
-        users?.users?.find(
-          (u: { email?: string; id?: string }) =>
-            u.email?.toLowerCase() === "xdireitopratico@gmail.com",
-        )?.id ?? null;
-    }
+    // Carrega BYOK do próprio usuário (ou do owner do job como fallback)
+    let targetUserId = userId ?? (job.user_id as string | null);
     if (!targetUserId) {
       return new Response(
         JSON.stringify({
-          reply: "Admin user não encontrado.",
+          reply: "⚠️ Usuário não identificado. Não foi possível carregar chaves de API.",
           sessionId: session.id,
           jobContext: ctx,
         }),
@@ -383,11 +414,11 @@ Deno.serve(async (req: Request) => {
     }
 
     const connectorKeys = await loadConnectorKeys(supabase as any, targetUserId);
-    const llmConfig = resolveLLMConfig(connectorKeys);
+    const llmConfig = await resolveLLMConfig(supabase as any, targetUserId, connectorKeys);
 
     if (!llmConfig) {
       const reply =
-        "⚠️ Nenhuma chave LLM configurada. Adicione pelo menos uma em /api (OpenAI, Groq, OpenRouter, xAI, Gemini, DeepSeek ou Ollama).";
+        "⚠️ Nenhuma chave LLM configurada para o modelo selecionado. Configure seu modo (Auto, Fixo ou ROBIN) e as chaves correspondentes em /api-models.";
       await supabase.from("design_library_chat_messages").insert({
         session_id: session.id,
         role: "assistant",
@@ -414,6 +445,129 @@ Deno.serve(async (req: Request) => {
       messages.push({ role: "user", content: input.message });
     }
 
+    const wantsSSE = input.stream !== false &&
+      (input.stream === true || req.headers.get("Accept")?.includes("text/event-stream"));
+
+    // ── SSE Streaming ────────────────────────────────────────────────
+    if (wantsSSE) {
+      const encoder = new TextEncoder();
+      const stream = new ReadableStream({
+        async start(controller) {
+          try {
+            // Emit thinking start
+            controller.enqueue(encoder.encode(sseData("thinking", { started: true, model: llmConfig.model, label: llmConfig.label })));
+
+            const llmResponse = await fetch(`${llmConfig.baseUrl}/chat/completions`, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${llmConfig.apiKey}`,
+              },
+              body: JSON.stringify({
+                model: llmConfig.model,
+                messages,
+                max_tokens: 1024,
+                temperature: 0.7,
+                stream: true,
+              }),
+              signal: AbortSignal.timeout(60000),
+            });
+
+            if (!llmResponse.ok || !llmResponse.body) {
+              const errText = await llmResponse.text().catch(() => "");
+              controller.enqueue(encoder.encode(sseData("error", {
+                message: `LLM API error (${llmConfig.label}): ${llmResponse.status} — ${errText.slice(0, 200)}`,
+              })));
+              controller.enqueue(encoder.encode(sseData("done", {})));
+              controller.close();
+              return;
+            }
+
+            controller.enqueue(encoder.encode(sseData("thinking", { stopped: true })));
+
+            // Parse SSE stream from LLM
+            const reader = llmResponse.body.getReader();
+            let fullContent = "";
+            let buffer = "";
+
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
+
+              buffer += new TextDecoder().decode(value, { stream: true });
+              const lines = buffer.split("\n");
+              buffer = lines.pop() ?? "";
+
+              for (const line of lines) {
+                const trimmed = line.trim();
+                if (!trimmed || trimmed.startsWith(":")) continue;
+                if (!trimmed.startsWith("data: ")) continue;
+                const data = trimmed.slice(6);
+                if (data === "[DONE]") continue;
+
+                try {
+                  const parsed = JSON.parse(data);
+                  const delta = parsed.choices?.[0]?.delta?.content ?? "";
+                  if (delta) {
+                    fullContent += delta;
+                    controller.enqueue(encoder.encode(sseData("delta", { content: delta })));
+                  }
+                } catch {
+                  // Skip malformed chunks
+                }
+              }
+            }
+
+            // Parse for actions
+            let reply = fullContent;
+            let actions: unknown[] | undefined;
+            try {
+              const parsed = JSON.parse(fullContent);
+              reply = parsed.reply ?? fullContent;
+              actions = parsed.actions;
+            } catch {
+              // Plain text reply
+            }
+
+            if (actions?.length) {
+              controller.enqueue(encoder.encode(sseData("actions", { actions })));
+            }
+
+            // Persist full reply
+            try {
+              await supabase.from("design_library_chat_messages").insert({
+                session_id: session.id,
+                role: "assistant",
+                content: reply,
+                actions: actions ? (actions as unknown) : null,
+              });
+            } catch (persistErr) {
+              console.warn("[design-library-chat] SSE reply persist failed:", (persistErr as Error).message);
+            }
+
+            controller.enqueue(encoder.encode(sseData("done", {
+              reply,
+              sessionId: session.id,
+              jobContext: ctx,
+            })));
+          } catch (streamErr) {
+            console.error("[design-library-chat] SSE stream error:", streamErr);
+            try {
+              controller.enqueue(encoder.encode(sseData("error", {
+                message: (streamErr as Error).message,
+              })));
+              controller.enqueue(encoder.encode(sseData("done", {})));
+            } catch {
+              // Controller may already be closed
+            }
+          }
+        },
+      });
+
+      return new Response(stream, { headers: sseHeaders });
+    }
+
+    // ── JSON Fallback (non-streaming) ──────────────────────────────
     const response = await fetch(`${llmConfig.baseUrl}/chat/completions`, {
       method: "POST",
       headers: {

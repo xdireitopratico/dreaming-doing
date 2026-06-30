@@ -1,16 +1,10 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
-import { FORGE_ADMIN_EMAIL } from "../_shared/forge-admin.ts";
 import { forgeOrigin } from "../_shared/cors.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": forgeOrigin(),
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
-
-function isAdminEmail(email: string | null | undefined): boolean {
-  if (!email) return false;
-  return email.trim().toLowerCase() === FORGE_ADMIN_EMAIL.toLowerCase();
-}
 
 const INNGEST_EVENT_KEY = Deno.env.get("INNGEST_EVENT_KEY") ?? "";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
@@ -150,11 +144,11 @@ async function handleSchedule(
     userId = explicitUserId;
   }
 
+  // Qualquer usuário autenticado pode agendar extrações
   // service_role (Inngest/cron/tool interno) bypassa auth check
   const isServiceRole = !userClient;
-  // Admin: email check (mesma regra do frontend via isForgeAdminEmail)
-  if (!isServiceRole && !isAdminEmail(userEmail)) {
-    return json({ error: "Apenas administradores podem agendar extração de DesignDNA" }, 403);
+  if (!isServiceRole && !userId) {
+    return json({ error: "Usuário não autenticado" }, 401);
   }
 
   // Cancela jobs anteriores não-terminais para evitar acúmulo de zumbis

@@ -68,7 +68,7 @@ export async function loadConnectorPools(
 
   // Chave salva com «Salvar chave» (token único) — reutiliza como pool de 1
   const keys = await loadConnectorKeys(supabase, ownerId);
-  const fallback = keys[`${poolProvider.toUpperCase()}_API_KEY`] ?? keys.GROQ_API_KEY;
+  const fallback = keys[`${poolProvider.toUpperCase()}_API_KEY`];
   return fallback ? [fallback] : [];
 }
 

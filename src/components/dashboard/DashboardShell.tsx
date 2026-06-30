@@ -21,7 +21,6 @@ import { type ReactNode, useEffect, useState } from "react";
 import { ForgeLogoMark } from "@/components/editor/ForgeLogoMark";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { useAuth } from "@/lib/auth";
-import { useAdmin } from "@/lib/forge-admin";
 import { sanitizeNext } from "@/lib/sanitize-next";
 
 type NavId =
@@ -51,7 +50,6 @@ function DashboardSidebarPanel({
   onSignOut,
 }: DashboardSidebarPanelProps) {
   const navigate = useNavigate();
-  const { isAdmin } = useAdmin();
 
   const handleSearch = () => {
     document.getElementById("dashboard-search")?.focus();
@@ -146,6 +144,16 @@ function DashboardSidebarPanel({
           <Puzzle className="size-4 shrink-0" />
           MCP
         </Link>
+        <Link
+          to="/design-library"
+          className="dashboard-nav-item"
+          data-active={activeNav === "design-library" ? "true" : undefined}
+          title="Design Library — extração de DNA visual de sites"
+          onClick={onNavClick}
+        >
+          <Library className="size-4 shrink-0" />
+          Design Library
+        </Link>
 
         <span className="dashboard-nav-label">Projetos</span>
         <Link
@@ -163,18 +171,6 @@ function DashboardSidebarPanel({
           <span className="dashboard-nav-kbd">em breve</span>
         </span>
 
-        <AdminOnly>
-          <span className="dashboard-nav-label">Admin</span>
-          <Link
-            to="/design-library"
-            className="dashboard-nav-item"
-            data-active={activeNav === "design-library" ? "true" : undefined}
-            onClick={onNavClick}
-          >
-            <Library className="size-4 shrink-0" />
-            Design Library
-          </Link>
-        </AdminOnly>
       </nav>
 
       <div className="dashboard-sidebar-footer">
@@ -316,12 +312,6 @@ export function DashboardShell({
       )}
     </div>
   );
-}
-
-function AdminOnly({ children }: { children: ReactNode }) {
-  const { isAdmin } = useAdmin();
-  if (!isAdmin) return null;
-  return <>{children}</>;
 }
 
 function DashboardShellLoading({ immersive }: { immersive: boolean }) {

@@ -2,12 +2,31 @@ import { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { X, Send, Globe, Loader2, ExternalLink, Paperclip, Square, StopCircle } from "lucide-react";
+import {
+  X,
+  Send,
+  Globe,
+  Loader2,
+  ExternalLink,
+  Paperclip,
+  Square,
+  StopCircle,
+  Play,
+  MousePointer,
+  Eye,
+  Type,
+  Camera,
+  ArrowDown,
+  ArrowRight,
+} from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useJobEvents, useJobPolling } from "./hooks";
 import { cancelExtractionJob } from "./api";
 import { JOB_STATUS_COLORS, JOB_TERMINAL_STATUSES, type RealtimeEvent } from "./types";
 import { toast } from "@/lib/toast";
+import { getSupabaseEnv } from "@/lib/supabase-env";
+
+// ── Types ────────────────────────────────────────────────────────────
 
 interface BrowserPreviewPanelProps {
   jobId: string | null;
@@ -30,6 +49,15 @@ interface JobContext {
   recentEvents: { type: string; payload: Record<string, unknown> }[];
   libraryEntries: { name: string; source_url: string; quality_score: number }[];
 }
+
+interface ThinkingState {
+  active: boolean;
+  model?: string;
+  label?: string;
+  elapsed: number;
+}
+
+// ── Constants ────────────────────────────────────────────────────────
 
 const TERMINAL_STATUSES = new Set<string>(JOB_TERMINAL_STATUSES);
 
@@ -67,6 +95,34 @@ const EVENT_LABELS: Record<string, { icon: string; label: string; dotColor: stri
 function getEventConfig(eventType: string) {
   return EVENT_LABELS[eventType] ?? { icon: "•", label: eventType, dotColor: "bg-gray-500" };
 }
+
+/** Build the Supabase Function URL for direct fetch (needed for SSE). */
+function getFunctionUrl(name: string): string {
+  const { url } = getSupabaseEnv();
+  return `${url}/functions/v1/${name}`;
+}
+
+/** Get current auth token for direct fetch calls. */
+async function getAuthToken(): Promise<string | null> {
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  return session?.access_token ?? null;
+}
+
+// ── Action Icons ─────────────────────────────────────────────────────
+
+const ACTION_ICONS: Record<string, React.ReactNode> = {
+  navigate: <Globe className="size-3" />,
+  screenshot: <Camera className="size-3" />,
+  scroll: <ArrowDown className="size-3" />,
+  click: <MousePointer className="size-3" />,
+  analyze: <Eye className="size-3" />,
+  type: <Type className="size-3" />,
+  evaluate: <ArrowRight className="size-3" />,
+};
+
+// ── EventRow ─────────────────────────────────────────────────────────
 
 function EventRow({ event, isLatest }: { event: RealtimeEvent; isLatest: boolean }) {
   const [expanded, setExpanded] = useState(false);
@@ -114,17 +170,104 @@ function EventRow({ event, isLatest }: { event: RealtimeEvent; isLatest: boolean
   );
 }
 
+// ── Thinking Indicator ────────────────────────────────────────────────
+
+function ThinkingIndicator({ thinking }: { thinking: ThinkingState }) {
+  const timerRef = useRef<ReturnType<typeof setInterval>>();
+  const [elapsed, setElapsed] = useState(thinking.elapsed);
+
+  useEffect(() => {
+    if (thinking.active) {
+      timerRef.current = setInterval(() => {
+        setElapsed((prev) => prev + 1);
+      }, 1000);
+    } else {
+      if (timerRef.current) clearInterval(timerRef.current);
+      setElapsed(0);
+    }
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, [thinking.active]);
+
+  if (!thinking.active) return null;
+
+  const mins = Math.floor(elapsed / 60);
+  const secs = elapsed % 60;
+
+  return (
+    <div className="forge-chat-thought-line flex items-center gap-2 px-2 py-1.5">
+      <div className="flex gap-0.5">
+        <span className="h-1.5 w-1.5 rounded-full bg-primary/60 animate-bounce" style={{ animationDelay: "0ms" }} />
+        <span className="h-1.5 w-1.5 rounded-full bg-primary/60 animate-bounce" style={{ animationDelay: "150ms" }} />
+        <span className="h-1.5 w-1.5 rounded-full bg-primary/60 animate-bounce" style={{ animationDelay: "300ms" }} />
+      </div>
+      <span className="text-[11px] text-muted-foreground">
+        Thinking{thinking.label ? ` (${thinking.label})` : ""}...
+        <span className="ml-1 text-[10px] tabular-nums">{mins}:{String(secs).padStart(2, "0")}</span>
+      </span>
+    </div>
+  );
+}
+
+// ── ActionChip ────────────────────────────────────────────────────────
+
+function ActionChip({
+  action,
+  onExecute,
+  disabled,
+}: {
+  action: { type: string; params: Record<string, unknown> };
+  onExecute: (action: { type: string; params: Record<string, unknown> }) => void;
+  disabled: boolean;
+}) {
+  const [executing, setExecuting] = useState(false);
+
+  const handleClick = async () => {
+    setExecuting(true);
+    try {
+      await onExecute(action);
+    } finally {
+      setExecuting(false);
+    }
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={handleClick}
+      disabled={disabled || executing}
+      className="inline-flex items-center gap-1 text-[10px] px-2 py-1 rounded-md border border-primary/30 text-primary bg-primary/10 hover:bg-primary/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+    >
+      {executing ? (
+        <Loader2 className="size-3 animate-spin" />
+      ) : (
+        ACTION_ICONS[action.type] ?? <Play className="size-3" />
+      )}
+      <span>{action.type}</span>
+      {action.params?.url && (
+        <span className="text-[9px] text-muted-foreground truncate max-w-[120px]">
+          {String(action.params.url)}
+        </span>
+      )}
+    </button>
+  );
+}
+
+// ── Main Component ──────────────────────────────────────────────────
+
 export function BrowserPreviewPanel({ jobId, onClose }: BrowserPreviewPanelProps) {
-  // Polling e realtime param quando job chega a estado terminal
+  // ── Job state ─────────────────────────────────────────────────────
   const { job, loading: jobLoading } = useJobPolling(jobId);
   const jobStatus = job?.status;
   const isTerminal = jobStatus ? TERMINAL_STATUSES.has(jobStatus) : false;
-
   const { events, connected } = useJobEvents(isTerminal ? null : jobId);
   const timelineRef = useRef<HTMLDivElement>(null);
   const chatRef = useRef<HTMLDivElement>(null);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
   const [autoScroll, setAutoScroll] = useState(true);
 
+  // ── Chat state ───────────────────────────────────────────────────
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState("");
   const [chatLoading, setChatLoading] = useState(false);
@@ -133,14 +276,52 @@ export function BrowserPreviewPanel({ jobId, onClose }: BrowserPreviewPanelProps
   const [chatHistoryLoaded, setChatHistoryLoaded] = useState(false);
   const [cancelling, setCancelling] = useState(false);
 
+  // ── Thinking + streaming state ────────────────────────────────────
+  const [thinking, setThinking] = useState<ThinkingState>({ active: false, elapsed: 0 });
+  const [streamingContent, setStreamingContent] = useState("");
+
+  // ── Preview state ───────────────────────────────────────────────
   const previewUrl = job?.meta?.previewUrl as string | undefined;
   const progress = job?.meta?.progress as number | undefined;
 
-  const latestScreenshot = useMemo(() => {
-    const shots = events.filter((e) => e.event_type === "screenshot_taken");
-    return shots.length > 0 ? shots[shots.length - 1] : null;
-  }, [events]);
+  // ── Action execution ────────────────────────────────────────────
+  const executeAction = useCallback(
+    async (action: { type: string; params: Record<string, unknown> }) => {
+      if (!jobId) return;
+      try {
+        const token = await getAuthToken();
+        if (!token) throw new Error("Not authenticated");
 
+        const res = await fetch(getFunctionUrl("design-library-actions"), {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ jobId, action: action.type, params: action.params }),
+        });
+
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error ?? "Action failed");
+
+        // Handle navigate → refresh iframe
+        if (action.type === "navigate" && action.params?.url) {
+          setTimeout(() => {
+            if (iframeRef.current) {
+              iframeRef.current.src = String(action.params!.url);
+            }
+          }, 500);
+        }
+
+        toast.success(`${action.type} executado`);
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Erro ao executar ação");
+      }
+    },
+    [jobId],
+  );
+
+  // ── Computed ─────────────────────────────────────────────────────
   const currentUrlEvent = useMemo(() => {
     const extracting = events.filter((e) => e.event_type === "url_extracting");
     return extracting.length > 0 ? extracting[extracting.length - 1] : null;
@@ -154,76 +335,195 @@ export function BrowserPreviewPanel({ jobId, onClose }: BrowserPreviewPanelProps
   const sandboxStep = lastSandboxSetup?.payload?.step as string | undefined;
 
   const SANDBOX_STEP_LABELS: Record<string, string> = {
-    "creating": "Criando sandbox E2B...",
-    "connecting": "Conectando ao sandbox...",
+    creating: "Criando sandbox E2B...",
+    connecting: "Conectando ao sandbox...",
     "waiting-runtime": "Aguardando runtime do sandbox...",
     "installing-playwright": "Instalando Chromium (~2min)...",
   };
 
-  const hasReadyEvent = useMemo(() =>
-    events.some((e) => e.event_type === "sandbox_ready"),
-  [events]);
-
-  const hasLLMEvent = useMemo(() =>
-    events.some((e) => e.event_type === "llm_extracting"),
-  [events]);
+  const hasReadyEvent = useMemo(() => events.some((e) => e.event_type === "sandbox_ready"), [events]);
+  const hasLLMEvent = useMemo(() => events.some((e) => e.event_type === "llm_extracting"), [events]);
 
   const statusMessage = useMemo(() => {
     if (!jobId) return "Selecione um job";
     if (isTerminal) return `Job ${jobStatus}.`;
     if (sandboxStep && SANDBOX_STEP_LABELS[sandboxStep]) return SANDBOX_STEP_LABELS[sandboxStep];
-    if (events.some((e) => e.event_type === "chrome_cdp_ready")) return "Chrome CDP pronto — aguardando extração...";
-    if (events.some((e) => e.event_type === "preview_server_ready")) return "Preview pronto — aguardando Chrome...";
+    if (events.some((e) => e.event_type === "chrome_cdp_ready"))
+      return "Chrome CDP pronto — aguardando extração...";
+    if (events.some((e) => e.event_type === "preview_server_ready"))
+      return "Preview pronto — aguardando Chrome...";
     if (hasLLMEvent && progress) return `LLM extraindo DNA... ${progress}%`;
     if (progress !== undefined && progress > 0 && progress < 100) {
       const ue = currentUrlEvent;
-      if (ue) return `Processando ${ue.payload?.url ?? ""} (${ue.payload?.index ?? 0}/${ue.payload?.total ?? 0})`;
+      if (ue)
+        return `Processando ${ue.payload?.url ?? ""} (${ue.payload?.index ?? 0}/${ue.payload?.total ?? 0})`;
       return `Extraindo design... ${progress}%`;
     }
     if (hasReadyEvent) return "Sandbox pronto — iniciando serviços...";
     return "Aguardando sandbox...";
-  }, [jobId, isTerminal, sandboxStep, SANDBOX_STEP_LABELS, hasLLMEvent, progress, currentUrlEvent, hasReadyEvent, jobStatus, events]);
+  }, [
+    jobId,
+    isTerminal,
+    sandboxStep,
+    SANDBOX_STEP_LABELS,
+    hasLLMEvent,
+    progress,
+    currentUrlEvent,
+    hasReadyEvent,
+    jobStatus,
+    events,
+  ]);
 
-  // Auto-scroll timeline
+  // ── Auto-scroll timeline ─────────────────────────────────────────
   useEffect(() => {
     if (autoScroll && timelineRef.current) {
       timelineRef.current.scrollTop = timelineRef.current.scrollHeight;
     }
   }, [events, autoScroll]);
 
-  const callChat = useCallback(
+  // ── SSE Chat with streaming ──────────────────────────────────────
+  const callChatSSE = useCallback(
     async (message: string) => {
       if (!jobId) return;
       setChatLoading(true);
+      setStreamingContent("");
+      setThinking({ active: true, elapsed: 0 });
+
       try {
-        const { data, error } = await supabase.functions.invoke("design-library-chat", {
-          body: { jobId, message },
+        const token = await getAuthToken();
+        if (!token) throw new Error("Not authenticated");
+
+        const res = await fetch(getFunctionUrl("design-library-chat"), {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+            Accept: "text/event-stream",
+          },
+          body: JSON.stringify({ jobId, message, stream: true }),
         });
-        if (error) throw new Error(error.message);
 
-        setSessionId((data.sessionId as string) ?? null);
-        if (data.jobContext) setJobContext(data.jobContext as JobContext);
-
-        const newMsg: ChatMessage = {
-          id: crypto.randomUUID(),
-          role: "assistant",
-          content: (data.reply as string) ?? "",
-          timestamp: new Date().toISOString(),
-          actions: data.actions as ChatMessage["actions"],
-        };
-        setChatMessages((prev) => {
-          // Evita duplicar welcome (caso o histórico já tenha sido carregado depois)
-          if (
-            !message &&
-            prev.length > 0 &&
-            prev[prev.length - 1].role === "assistant" &&
-            prev[prev.length - 1].content === newMsg.content
-          ) {
-            return prev;
+        if (!res.ok) {
+          // Fallback to JSON for non-streaming responses (e.g., welcome message)
+          if (res.headers.get("content-type")?.includes("application/json")) {
+            const data = await res.json();
+            throw new Error(data.error ?? `HTTP ${res.status}`);
           }
-          return [...prev, newMsg];
-        });
+          throw new Error(`HTTP ${res.status}`);
+        }
+
+        // Check if it's SSE or JSON response
+        const contentType = res.headers.get("content-type") ?? "";
+        if (contentType.includes("application/json")) {
+          // JSON fallback (welcome messages, etc.)
+          const data = await res.json();
+          setThinking({ active: false, elapsed: 0 });
+          setSessionId((data.sessionId as string) ?? null);
+          if (data.jobContext) setJobContext(data.jobContext as JobContext);
+
+          const newMsg: ChatMessage = {
+            id: crypto.randomUUID(),
+            role: "assistant",
+            content: (data.reply as string) ?? "",
+            timestamp: new Date().toISOString(),
+            actions: data.actions as ChatMessage["actions"],
+          };
+          setChatMessages((prev) => [...prev, newMsg]);
+          return;
+        }
+
+        // SSE stream
+        const reader = res.body?.getReader();
+        if (!reader) throw new Error("No response body");
+
+        const decoder = new TextDecoder();
+        let fullContent = "";
+        let buffer = "";
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split("\n");
+          buffer = lines.pop() ?? "";
+
+          let eventType = "";
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (trimmed.startsWith("event: ")) {
+              eventType = trimmed.slice(7).trim();
+            } else if (trimmed.startsWith("data: ")) {
+              try {
+                const data = JSON.parse(trimmed.slice(6));
+
+                switch (eventType) {
+                  case "thinking":
+                    if (data.started) {
+                      setThinking((prev) => ({
+                        ...prev,
+                        active: true,
+                        model: data.model,
+                        label: data.label,
+                      }));
+                    }
+                    if (data.stopped) {
+                      setThinking({ active: false, elapsed: 0 });
+                    }
+                    break;
+
+                  case "delta":
+                    fullContent += data.content ?? "";
+                    setStreamingContent(fullContent);
+                    break;
+
+                  case "actions":
+                    // Actions will be attached to the final message
+                    break;
+
+                  case "done":
+                    setThinking({ active: false, elapsed: 0 });
+                    setStreamingContent("");
+
+                    // Final message with accumulated content
+                    const reply = data.reply ?? fullContent;
+                    const finalMsg: ChatMessage = {
+                      id: crypto.randomUUID(),
+                      role: "assistant",
+                      content: reply,
+                      timestamp: new Date().toISOString(),
+                      actions: data.actions
+                        ? (data.actions as ChatMessage["actions"])
+                        : undefined,
+                    };
+                    setChatMessages((prev) => [...prev, finalMsg]);
+
+                    if (data.sessionId) setSessionId(data.sessionId as string);
+                    if (data.jobContext) setJobContext(data.jobContext as JobContext);
+                    break;
+
+                  case "error":
+                    setThinking({ active: false, elapsed: 0 });
+                    setStreamingContent("");
+                    const errMsg: ChatMessage = {
+                      id: crypto.randomUUID(),
+                      role: "assistant",
+                      content: `⚠️ Erro: ${data.message ?? "desconhecido"}`,
+                      timestamp: new Date().toISOString(),
+                    };
+                    setChatMessages((prev) => [...prev, errMsg]);
+                    break;
+                }
+              } catch {
+                // Skip malformed SSE data
+              }
+              eventType = "";
+            }
+          }
+        }
       } catch (err) {
+        setThinking({ active: false, elapsed: 0 });
+        setStreamingContent("");
         const errorMsg: ChatMessage = {
           id: crypto.randomUUID(),
           role: "assistant",
@@ -238,12 +538,11 @@ export function BrowserPreviewPanel({ jobId, onClose }: BrowserPreviewPanelProps
     [jobId],
   );
 
-  // Carrega histórico de chat e abre sessão (welcome message) na primeira vez
+  // ── Load chat history on mount ───────────────────────────────────
   const loadChatHistory = useCallback(async () => {
     if (!jobId) return;
     setChatHistoryLoaded(false);
     try {
-      // 1) Carrega mensagens existentes do DB
       const { data: sessions } = await supabase
         .from("design_library_chat_sessions")
         .select("id")
@@ -273,29 +572,27 @@ export function BrowserPreviewPanel({ jobId, onClose }: BrowserPreviewPanelProps
           })),
         );
       } else {
-        // Sem sessão ainda — chama chat com message vazia para criar e receber welcome
-        await callChat("");
+        await callChatSSE("");
       }
     } catch (err) {
       console.error("loadChatHistory:", err);
     } finally {
       setChatHistoryLoaded(true);
     }
-  }, [jobId, callChat]);
+  }, [jobId, callChatSSE]);
 
   useEffect(() => {
-    if (jobId) {
-      void loadChatHistory();
-    }
+    if (jobId) void loadChatHistory();
   }, [jobId, loadChatHistory]);
 
-  // Auto-scroll chat
+  // ── Auto-scroll chat ─────────────────────────────────────────────
   useEffect(() => {
     if (chatRef.current) {
       chatRef.current.scrollTop = chatRef.current.scrollHeight;
     }
-  }, [chatMessages]);
+  }, [chatMessages, streamingContent]);
 
+  // ── Send message ────────────────────────────────────────────────
   const handleSendChat = useCallback(async () => {
     if (!chatInput.trim() || chatLoading || !jobId) return;
     const userMsg: ChatMessage = {
@@ -306,9 +603,10 @@ export function BrowserPreviewPanel({ jobId, onClose }: BrowserPreviewPanelProps
     };
     setChatMessages((prev) => [...prev, userMsg]);
     setChatInput("");
-    await callChat(userMsg.content);
-  }, [chatInput, chatLoading, jobId, callChat]);
+    await callChatSSE(userMsg.content);
+  }, [chatInput, chatLoading, jobId, callChatSSE]);
 
+  // ── Cancel job ───────────────────────────────────────────────────
   const handleCancel = useCallback(async () => {
     if (!jobId || cancelling) return;
     setCancelling(true);
@@ -322,16 +620,13 @@ export function BrowserPreviewPanel({ jobId, onClose }: BrowserPreviewPanelProps
     }
   }, [jobId, cancelling]);
 
-  // Se o LLM retornou ações, mostra como chips visuais (placeholder para execução futura)
-  const lastAssistantMsg = [...chatMessages]
-    .reverse()
-    .find((m) => m.role === "assistant" && m.actions && m.actions.length > 0);
-
+  // ── Render ──────────────────────────────────────────────────────
   return (
     <div className="fixed inset-0 z-50 bg-background/95 flex flex-col">
+      {/* Header */}
       <div className="flex items-center justify-between px-4 py-2.5 border-b border-border bg-surface-1">
         <div className="flex items-center gap-3">
-          <h2 className="text-sm font-semibold">Browser Preview</h2>
+          <h2 className="text-sm font-semibold">Reality Show</h2>
           {job && (
             <Badge
               variant="outline"
@@ -360,7 +655,7 @@ export function BrowserPreviewPanel({ jobId, onClose }: BrowserPreviewPanelProps
               Offline
             </span>
           )}
-          {previewUrl && !isTerminal && (
+          {previewUrl && (
             <a
               href={previewUrl}
               target="_blank"
@@ -392,6 +687,7 @@ export function BrowserPreviewPanel({ jobId, onClose }: BrowserPreviewPanelProps
         </div>
       </div>
 
+      {/* Progress bar */}
       {progress !== undefined && progress > 0 && progress < 100 && (
         <div className="h-1 bg-surface-3">
           <div
@@ -401,42 +697,21 @@ export function BrowserPreviewPanel({ jobId, onClose }: BrowserPreviewPanelProps
         </div>
       )}
 
+      {/* Main content: iframe + chat */}
       <div className="flex-1 flex overflow-hidden">
-        {/* Preview Panel — sem CDP/iframe (Chrome só roda por URL). Mostra screenshots capturados. */}
+        {/* ── Preview Panel — LIVE IFRAME (mandatory, zero fallback) ── */}
         <div className="flex-1 flex flex-col border-r border-border min-w-0">
-          {latestScreenshot ? (
-            <div className="flex-1 flex items-center justify-center bg-surface-2 p-4 overflow-auto">
-              <div className="max-w-2xl w-full space-y-3">
-                {events
-                  .filter((e) => e.event_type === "screenshot_taken")
-                  .slice(-3)
-                  .reverse()
-                  .map((ev, idx) => {
-                    const url = (ev.payload?.url as string) ?? currentUrlEvent?.payload?.url ?? "";
-                    return (
-                      <div key={ev.id}>
-                        <img
-                          src={(ev.payload?.screenshot_url as string) ?? ""}
-                          alt={`Screenshot ${idx + 1}`}
-                          className="w-full rounded-lg border border-border"
-                        />
-                        {url && (
-                          <p className="text-[10px] text-muted-foreground mt-1 truncate text-center">
-                            {url}
-                          </p>
-                        )}
-                      </div>
-                    );
-                  })}
-                {isTerminal && (
-                  <p className="text-[10px] text-amber-500 text-center pt-2 border-t border-border/50">
-                    Extração encerrada (job {jobStatus}). Screenshots capturados durante a navegação.
-                  </p>
-                )}
-              </div>
-            </div>
+          {previewUrl ? (
+            <iframe
+              ref={iframeRef}
+              src={previewUrl}
+              title="E2B Sandbox Preview"
+              className="flex-1 w-full border-0 bg-white"
+              sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+              loading="eager"
+            />
           ) : (
-            <div className="flex-1 flex items-center justify-center">
+            <div className="flex-1 flex items-center justify-center bg-surface-2">
               <div className="text-center p-6">
                 <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-surface-3 flex items-center justify-center">
                   <Globe className="w-6 h-6 text-muted-foreground" />
@@ -445,14 +720,14 @@ export function BrowserPreviewPanel({ jobId, onClose }: BrowserPreviewPanelProps
                   {!jobId
                     ? "Selecione um job"
                     : isTerminal
-                      ? `Job ${jobStatus}. ${jobContext?.errors?.[0] ?? "Sem screenshots capturados."}`
+                      ? `Job ${jobStatus}. Sandbox encerrado.`
                       : statusMessage}
                 </p>
               </div>
             </div>
           )}
 
-          {/* Timeline at bottom */}
+          {/* Timeline */}
           <div className="border-t border-border bg-surface-1 max-h-[160px] flex flex-col">
             <div className="flex items-center justify-between px-3 py-1.5 border-b border-border/50">
               <span className="text-[10px] font-medium">
@@ -488,7 +763,7 @@ export function BrowserPreviewPanel({ jobId, onClose }: BrowserPreviewPanelProps
           </div>
         </div>
 
-        {/* Chat Panel — estilo Vibe Code via classes forge-composer */}
+        {/* ── Chat Panel — SSE streaming + clickable actions ── */}
         <div className="w-[380px] flex flex-col bg-surface-1">
           <div ref={chatRef} className="flex-1 overflow-y-auto p-3 space-y-2">
             {!chatHistoryLoaded && (
@@ -514,36 +789,47 @@ export function BrowserPreviewPanel({ jobId, onClose }: BrowserPreviewPanelProps
                   }`}
                 >
                   <p className="whitespace-pre-wrap">{msg.content}</p>
+                  {/* Clickable LLM action chips */}
                   {msg.actions && msg.actions.length > 0 && (
-                    <div className="mt-1.5 flex flex-wrap gap-1">
+                    <div className="mt-2 flex flex-wrap gap-1.5">
                       {msg.actions.map((a, i) => (
-                        <span
-                          key={i}
-                          className="text-[9px] px-1.5 py-0.5 rounded border border-primary/30 text-primary bg-primary/10"
-                        >
-                          {a.type}
-                        </span>
+                        <ActionChip
+                          key={`${a.type}-${i}`}
+                          action={a}
+                          onExecute={executeAction}
+                          disabled={!previewUrl || isTerminal}
+                        />
                       ))}
                     </div>
                   )}
                 </div>
               </div>
             ))}
-            {chatLoading && (
+
+            {/* Streaming content (shows while LLM is generating) */}
+            {streamingContent && (
+              <div className="flex justify-start">
+                <div className="max-w-[90%] rounded-lg px-2.5 py-1.5 text-[11px] bg-surface-2 text-foreground border border-primary/20">
+                  <p className="whitespace-pre-wrap">{streamingContent}</p>
+                  <span className="inline-block w-1.5 h-3 bg-primary/60 animate-pulse ml-0.5" />
+                </div>
+              </div>
+            )}
+
+            {/* Thinking indicator */}
+            <ThinkingIndicator thinking={thinking} />
+
+            {/* Loading fallback (no thinking yet) */}
+            {chatLoading && !thinking.active && !streamingContent && (
               <div className="flex justify-start">
                 <div className="bg-surface-2 border border-border rounded-lg px-2.5 py-1.5">
                   <Loader2 className="size-3 animate-spin text-muted-foreground" />
                 </div>
               </div>
             )}
-            {lastAssistantMsg && (
-              <div className="text-[9px] text-muted-foreground/60 italic px-1">
-                Ações do LLM serão executadas no sandbox quando o preview estiver ativo.
-              </div>
-            )}
           </div>
 
-          {/* Composer — visual idêntico ao Vibe Code via forge-composer CSS */}
+          {/* Composer */}
           <div className="border-t border-border p-2">
             <div className="forge-composer" data-testid="chat-composer">
               <Textarea
@@ -587,7 +873,10 @@ export function BrowserPreviewPanel({ jobId, onClose }: BrowserPreviewPanelProps
                       title="Parar"
                       aria-label="Parar"
                       onClick={() => {
-                        /* sem cancel stream no MVP */
+                        // Abort controller could be used here in future
+                        setChatLoading(false);
+                        setThinking({ active: false, elapsed: 0 });
+                        setStreamingContent("");
                       }}
                     >
                       <Square className="size-3.5 fill-current" />

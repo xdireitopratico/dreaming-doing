@@ -16,6 +16,7 @@ import { DesignLibraryFilters } from "./DesignLibraryFilters";
 import { DesignLibraryCard } from "./DesignLibraryCard";
 import { DesignLibraryDetail } from "./DesignLibraryDetail";
 import { BrowserPreviewPanel } from "./BrowserPreviewPanel";
+import { UserMetricsBar } from "./UserMetricsBar";
 import { validateEntry, archiveEntry, deleteEntry, createExtractionJob, cancelExtractionJob } from "./api";
 import { groupEntriesBySourceUrl } from "./grouping";
 import {
@@ -164,6 +165,9 @@ export function DesignLibraryPage() {
           </div>
         </div>
       )}
+
+      {/* User Metrics */}
+      <UserMetricsBar />
 
       {/* Extração Bar — consolida jobs ativos + recentes num bloco só */}
       {jobs.length > 0 && (
