@@ -45,11 +45,13 @@ Deno.test("finishPlanModeFailure — emite assistant_text e ok:false", async () 
   assertEquals(deps.persisted[0], "Falhou");
 });
 
-Deno.test("finishClarify — rejeita mensagem vazia", async () => {
+Deno.test("finishClarify — usa fallback quando mensagem vem vazia", async () => {
   const deps = mockFinishDeps();
   const result = await finishClarify(deps, "  ", 1, []);
-  assertEquals(result.ok, false);
-  assertEquals(deps.events.length, 0);
+  assertEquals(result.ok, true);
+  assertEquals(result.awaiting, true);
+  assertEquals(result.awaitingUser?.type, "clarify");
+  assertEquals(deps.events[0].type, "assistant_text");
 });
 
 Deno.test("finishClarify — awaiting clarify", async () => {

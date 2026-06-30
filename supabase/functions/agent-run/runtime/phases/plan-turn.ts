@@ -127,15 +127,14 @@ export async function finishPlanProposal(
   proposedPlan: ProposedPlan,
   toolsUsed: string[] = [],
 ): Promise<PlanTurnRunResult> {
-  const planChatText = await generatePlanChatMessage(deps.configuredModel(), proposedPlan);
-  if (!planChatText) {
-    return {
-      ok: false,
-      summary: "Não foi possível gerar a mensagem do plano.",
-      steps: 0,
-      toolsUsed: [],
-    };
-  }
+  const generatedPlanChatText = await generatePlanChatMessage(
+    deps.configuredModel(),
+    proposedPlan,
+  );
+  const planChatText =
+    sanitizeUserFacingProse(
+      generatedPlanChatText || proposedPlan.summary || proposedPlan.mission || "Plano proposto.",
+    ).trim() || "Plano proposto.";
   deps.emit("assistant_text", { text: planChatText, final: true });
   deps.emit("plan_proposed", {
     planId: proposedPlan.planId,
@@ -189,15 +188,8 @@ export async function finishClarify(
     choices: Array<{ id: string; label: string; description?: string }>;
   }>,
 ): Promise<PlanTurnRunResult> {
-  const text = message.trim();
-  if (!text) {
-    return {
-      ok: false,
-      summary: "Não foi possível gerar a pergunta de esclarecimento.",
-      steps,
-      toolsUsed,
-    };
-  }
+  const text = sanitizeUserFacingProse(message || "Preciso de mais detalhes para continuar.").trim() ||
+    "Preciso de mais detalhes para continuar.";
   deps.emit("assistant_text", { text, final: true });
   deps.emit("gate_decision", {
     phase: "clarify",
@@ -503,20 +495,26 @@ export async function runPlanModeAgentTurn(
       });
       const message = friendlyLlmError(err, deps.robinActive);
       finishDeps.llmResponseWasStreamed = deps.getLlmResponseWasStreamed();
-      return await finishPlanModeFailure(finishDeps, message, step, [...toolsUsed], message);
+      return await returnRecoverablePlanChunk({
+        deps,
+        toolsUsed,
+        step,
+        message,
+        prompt: message,
+      });
     }
 
     deps.setLlmResponseWasStreamed(deps.streamState.llmResponseWasStreamed);
     finishDeps.llmResponseWasStreamed = deps.getLlmResponseWasStreamed();
 
     if (!response) {
-      return await finishPlanModeFailure(
-        finishDeps,
-        "Sem resposta do modelo.",
+      return await returnRecoverablePlanChunk({
+        deps,
+        toolsUsed,
         step,
-        [...toolsUsed],
-        "Sem resposta do modelo.",
-      );
+        message: "Sem resposta do modelo.",
+        prompt: "Sem resposta do modelo.",
+      });
     }
 
     logger.info("agent.plan_llm_response", {

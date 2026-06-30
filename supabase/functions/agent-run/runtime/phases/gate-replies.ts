@@ -54,6 +54,17 @@ export type GateReplyDeps = {
   originalUserRequest: string;
   planMode: boolean;
   emit: PlanTurnEmit;
+  returnResumableChunk: (
+    steps: number,
+    toolsUsed: Set<string>,
+  ) => Promise<{
+    ok: false;
+    error: string;
+    steps: number;
+    resumable: true;
+    buildFix?: boolean;
+    toolsUsed: string[];
+  }>;
   configuredModel: () => LLMProvider;
   persistFinal: (
     summary: string,
@@ -100,12 +111,10 @@ export async function runInventoryGate(
   }
 
   if (!inv) {
-    return {
-      ok: false,
-      error: "Não foi possível resumir o estado do projeto.",
-      steps: 0,
-      toolsUsed: [],
-    };
+    const message = "Não foi possível resumir o estado do projeto. Retomando automaticamente.";
+    deps.emit("assistant_text", { text: message, final: true });
+    const chunk = await deps.returnResumableChunk(0, new Set<string>());
+    return { ...chunk, summary: message, error: "Não foi possível resumir o estado do projeto." };
   }
   deps.emit("assistant_text", { text: inv, final: true });
   await deps.persistFinal(inv);

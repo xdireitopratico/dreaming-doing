@@ -3,6 +3,7 @@ import {
   appendResumeInstruction,
   buildApprovedClassification,
   resolveUserPrompt,
+  runInventoryGate,
   runShowExistingPlanGate,
 } from "./gate-replies.ts";
 import type { GateReplyDeps } from "./gate-replies.ts";
@@ -54,6 +55,36 @@ Deno.test("runShowExistingPlanGate — null quando não é pedido de plano", asy
   assertEquals(result, null);
 });
 
+Deno.test("runInventoryGate — resposta vazia retorna chunk resumível", async () => {
+  let chatCalls = 0;
+  const deps = mockGateDeps({
+    context: {
+      projectConfig: "cfg",
+      manifest: "manifest",
+    } as never,
+    returnResumableChunk: async (_steps, _toolsUsed) => ({
+      ok: false,
+      error: "Retomando automaticamente em novo chunk…",
+      steps: 0,
+      resumable: true,
+      toolsUsed: [],
+    }),
+  });
+  const model = {
+    chat: async () => {
+      chatCalls += 1;
+      return { content: "" };
+    },
+  } as never;
+
+  const result = await runInventoryGate(deps, model);
+
+  assertEquals(chatCalls, 2);
+  assertEquals(result.ok, false);
+  assertEquals(result.resumable, true);
+  assertEquals(result.summary, "Não foi possível resumir o estado do projeto. Retomando automaticamente.");
+});
+
 function mockGateDeps(overrides?: Partial<GateReplyDeps>): GateReplyDeps & {
   events: Array<{ type: string; data: unknown }>;
   persisted: string[];
@@ -80,6 +111,13 @@ function mockGateDeps(overrides?: Partial<GateReplyDeps>): GateReplyDeps & {
     originalUserRequest: "",
     planMode: false,
     emit: (type, data) => events.push({ type, data }),
+    returnResumableChunk: async () => ({
+      ok: false,
+      error: "Retomando automaticamente em novo chunk…",
+      steps: 0,
+      resumable: true,
+      toolsUsed: [],
+    }),
     configuredModel: () => {
       throw new Error("not used");
     },

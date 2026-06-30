@@ -18,6 +18,17 @@ export type ChatTurnDeps = PlanTurnFinishDeps & {
   messages: ChatMessage[];
   streamState: PlanModeStreamState;
   emit: PlanTurnEmit;
+  returnResumableChunk: (
+    steps: number,
+    toolsUsed: Set<string>,
+  ) => Promise<{
+    ok: false;
+    error: string;
+    steps: number;
+    resumable: true;
+    buildFix?: boolean;
+    toolsUsed: string[];
+  }>;
   onActivity: () => void;
 };
 
@@ -37,23 +48,16 @@ function buildChatUserPrompt(originalUserRequest: string, messages: ChatMessage[
   ].join("\n\n");
 }
 
-async function finishChatFailure(
-  deps: PlanTurnFinishDeps,
+async function returnRecoverableChatChunk(
+  deps: ChatTurnDeps,
   summary: string,
   error?: string,
 ): Promise<PlanTurnRunResult> {
   const message = summary.trim() || "Erro no modo Chat.";
   const err = (error ?? message).trim() || message;
   deps.emit("assistant_text", { text: message, final: true });
-  await deps.persistFinal(message, { lastFinishOk: false });
-  await deps.clearCheckpoint();
-  return {
-    ok: false,
-    summary: message,
-    steps: 0,
-    toolsUsed: [],
-    error: err,
-  };
+  const chunk = await deps.returnResumableChunk(0, new Set<string>());
+  return { ...chunk, summary: message, error: err };
 }
 
 function createSilentChatProgressHandler(
@@ -100,7 +104,7 @@ export async function runChatModeAgentTurn(
       errorMessage: (err as Error)?.message,
     });
     const message = friendlyLlmError(err, deps.robinActive);
-    return await finishChatFailure(deps, message, message);
+    return await returnRecoverableChatChunk(deps, message, message);
   }
 
   logger.info("agent.chat_llm_response", {
@@ -114,13 +118,17 @@ export async function runChatModeAgentTurn(
   const text = userText.trim();
   if (!text) {
     if (deps.streamState.llmResponseWasStreamed) {
-      return await finishChatFailure(
+      return await returnRecoverableChatChunk(
         deps,
         "O modelo respondeu sem texto final. Reformule ou troque o modelo.",
         "chat_stream_empty",
       );
     }
-    return await finishChatFailure(deps, "Resposta vazia do modelo.", "chat_empty_response");
+    return await returnRecoverableChatChunk(
+      deps,
+      "Resposta vazia do modelo.",
+      "chat_empty_response",
+    );
   }
 
   if (reasoningText?.trim()) {
