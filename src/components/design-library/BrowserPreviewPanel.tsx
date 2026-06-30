@@ -58,6 +58,10 @@ const EVENT_LABELS: Record<string, { icon: string; label: string; dotColor: stri
   job_failed: { icon: "💥", label: "Job falhou", dotColor: "bg-red-500" },
   sandbox_setup: { icon: "🔧", label: "Setup sandbox", dotColor: "bg-blue-500" },
   sandbox_ready: { icon: "✓", label: "Sandbox pronto", dotColor: "bg-green-500" },
+  preview_server_ready: { icon: "🖼️", label: "Preview pronto", dotColor: "bg-green-500" },
+  chrome_cdp_ready: { icon: "🌐", label: "Chrome CDP pronto", dotColor: "bg-green-500" },
+  quality_error: { icon: "⚠️", label: "Qualidade baixa", dotColor: "bg-amber-500" },
+  validation_error: { icon: "⚠️", label: "Campos faltando", dotColor: "bg-amber-500" },
 };
 
 function getEventConfig(eventType: string) {
@@ -131,9 +135,6 @@ export function BrowserPreviewPanel({ jobId, onClose }: BrowserPreviewPanelProps
 
   const previewUrl = job?.meta?.previewUrl as string | undefined;
   const progress = job?.meta?.progress as number | undefined;
-  // CDP não é verificado no frontend — Chrome só é lançado por URL via Playwright script.
-  // O preview iframe não fica disponível em tempo real; usamos screenshots capturados.
-  const cdpStatus = "unavailable" as const;
 
   const latestScreenshot = useMemo(() => {
     const shots = events.filter((e) => e.event_type === "screenshot_taken");
@@ -171,15 +172,17 @@ export function BrowserPreviewPanel({ jobId, onClose }: BrowserPreviewPanelProps
     if (!jobId) return "Selecione um job";
     if (isTerminal) return `Job ${jobStatus}.`;
     if (sandboxStep && SANDBOX_STEP_LABELS[sandboxStep]) return SANDBOX_STEP_LABELS[sandboxStep];
+    if (events.some((e) => e.event_type === "chrome_cdp_ready")) return "Chrome CDP pronto — aguardando extração...";
+    if (events.some((e) => e.event_type === "preview_server_ready")) return "Preview pronto — aguardando Chrome...";
     if (hasLLMEvent && progress) return `LLM extraindo DNA... ${progress}%`;
     if (progress !== undefined && progress > 0 && progress < 100) {
       const ue = currentUrlEvent;
       if (ue) return `Processando ${ue.payload?.url ?? ""} (${ue.payload?.index ?? 0}/${ue.payload?.total ?? 0})`;
       return `Extraindo design... ${progress}%`;
     }
-    if (hasReadyEvent || previewUrl) return "Sandbox pronto — aguardando navegação...";
+    if (hasReadyEvent) return "Sandbox pronto — iniciando serviços...";
     return "Aguardando sandbox...";
-  }, [jobId, isTerminal, sandboxStep, SANDBOX_STEP_LABELS, hasLLMEvent, progress, currentUrlEvent, hasReadyEvent, previewUrl, jobStatus]);
+  }, [jobId, isTerminal, sandboxStep, SANDBOX_STEP_LABELS, hasLLMEvent, progress, currentUrlEvent, hasReadyEvent, jobStatus, events]);
 
   // Auto-scroll timeline
   useEffect(() => {
@@ -187,8 +190,6 @@ export function BrowserPreviewPanel({ jobId, onClose }: BrowserPreviewPanelProps
       timelineRef.current.scrollTop = timelineRef.current.scrollHeight;
     }
   }, [events, autoScroll]);
-
-  // removed: CDP health check — Chrome só existe durante extração por URL, não há processo persistente
 
   const callChat = useCallback(
     async (message: string) => {
