@@ -476,7 +476,7 @@ def build_sampler_js():
   const r = { colors: {}, typography: {}, spacing: {}, css_custom_properties: {}, animations: [], transitions: [], layout_classes: [], viewport: { width: window.innerWidth, height: window.innerHeight, devicePixelRatio: window.devicePixelRatio, scrollHeight: document.documentElement.scrollHeight } };
   const rs = getComputedStyle(document.documentElement);
   for (let i = 0; i < rs.length; i++) { const n = rs[i]; if (n.startsWith("--")) r.css_custom_properties[n] = rs.getPropertyValue(n).trim(); }
-  for (const sel of ["h1","h2","h3","h4","h5","h6","p","a","button","nav","header","footer","section","main","[class*=\\"hero\\"]","[class*=\\"card\\"]","[class*=\\"container\\"]","input","ul","ol","li","blockquote","code","pre"]) {
+  for (const sel of ["h1","h2","h3","h4","h5","h6","p","a","button","nav","header","footer","section","main",'[class*="hero"]','[class*="card"]','[class*="container"]',"input","ul","ol","li","blockquote","code","pre"]) {
     for (const el of document.querySelectorAll(sel)) {
       if (!el.isConnected) continue;
       const cs = getComputedStyle(el); const t = el.tagName.toLowerCase();
@@ -485,7 +485,7 @@ def build_sampler_js():
       if (!r.spacing[t]) r.spacing[t] = { margin: cs.margin, padding: cs.padding, gap: cs.gap };
     }
   }
-  for (const el of document.querySelectorAll("body > *, main, section, div[class*=\\"grid\\"], div[class*=\\"flex\\"]")) {
+  for (const el of document.querySelectorAll("body > *, main, section, div[class*='grid'], div[class*='flex']")) {
     const cs = getComputedStyle(el); r.layout_classes.push({ tag: el.tagName.toLowerCase(), classes: (el.className||"").slice(0,200), display: cs.display, gridTemplateColumns: cs.gridTemplateColumns, gap: cs.gap, flexDirection: cs.flexDirection, justifyContent: cs.justifyContent, alignItems: cs.alignItems, maxWidth: cs.maxWidth });
   }
   try { for (const s of document.styleSheets) { try { for (const rule of (s.cssRules||s.rules||[])) { if (rule.type === CSSRule.KEYFRAMES_RULE) r.animations.push({ name: rule.name, keyframes: Array.from(rule.cssRules).map(k=>({key:k.keyText,style:k.style.cssText})) }); if (rule.type === CSSRule.STYLE_RULE && rule.style) { const an = rule.style.animationName; const tr = rule.style.transitionProperty; if (an && an !== "none") r.animations.push({ selector: rule.selectorText, animationName: an, duration: rule.style.animationDuration, timing: rule.style.animationTimingFunction }); if (tr && tr !== "none") r.transitions.push({ selector: rule.selectorText, property: tr, duration: rule.style.transitionDuration, timing: rule.style.transitionTimingFunction }); } } } catch(e) {} } } catch(e) {}
