@@ -41,6 +41,7 @@ export type DesignDnaExtractionResult = {
   providerTrace: string[];
   confidence: number;
   notes: string[];
+  blockedReason: string | null;
 };
 
 type LLMConfig = {
@@ -905,13 +906,9 @@ export async function extractDesignDnaForUrl(
   }
 
   // T4: respeita a preferência de web_scrape do /api-models.
-  // Sem pref explícita → erro (fail closed).
-  const scrapeProvider = prefs?.webScrapeProvider;
+  // Fallback: prefs.webScrapeProvider → connectorRows web_scrape → "jina"
+  const scrapeProvider = prefs?.webScrapeProvider ?? "jina";
   const scrapeFallback = prefs?.webScrapeFallback;
-
-  if (!scrapeProvider) {
-    throw new Error("Nenhum provedor de web scrape configurado em /api-models. Configure em /api-models para continuar.");
-  }
 
   let markdownRes: Record<string, unknown>;
   try {
@@ -935,7 +932,9 @@ export async function extractDesignDnaForUrl(
       );
     }
   } catch (scrapeErr) {
-    throw new Error(`Markdown scrape failed with provider '${scrapeProvider}': ${errorMessage(scrapeErr)}. Configure fallback em /api-models ou verifique API key.`);
+    notes.push(`⚠️ markdown scrape failed: ${errorMessage(scrapeErr)} — continuing with empty content`);
+    providerTrace.push("markdown:error");
+    markdownRes = { content: "", provider: "" };
   }
 
   let htmlRes: Record<string, unknown>;
@@ -960,7 +959,9 @@ export async function extractDesignDnaForUrl(
       );
     }
   } catch (scrapeErr) {
-    throw new Error(`HTML scrape failed with provider '${scrapeProvider}': ${errorMessage(scrapeErr)}. Configure fallback em /api-models ou verifique API key.`);
+    notes.push(`⚠️ HTML scrape failed: ${errorMessage(scrapeErr)} — continuing with empty content`);
+    providerTrace.push("html:error");
+    htmlRes = { content: "", provider: "" };
   }
 
   const rawMarkdown = String(markdownRes.content ?? "").trim();
@@ -1032,8 +1033,18 @@ export async function extractDesignDnaForUrl(
   }
 
   if (!enrichedMarkdown.trim()) {
-    throw new Error("Markdown empty after scrape - no content to analyze");
+    notes.push("markdown empty after scrape");
   }
+
+  const density = Math.min(
+    1,
+    (enrichedMarkdown.length + cleanHtml.length + cleanText.length + cleanedMarkdown.length) /
+      50000,
+  );
+  let confidence =
+    input.depth === "deep"
+      ? Math.round(60 + density * 35 + (screenshots.length > 0 ? 5 : 0))
+      : Math.round(35 + density * 35 + (screenshotBase64 ? 5 : 0));
 
   const dna = await llmExtractDNA(
     input.url,
@@ -1049,17 +1060,6 @@ export async function extractDesignDnaForUrl(
   }
 
   const finalDna = dna;
-
-  // Calculate confidence for metadata only
-  const density = Math.min(
-    1,
-    (enrichedMarkdown.length + cleanHtml.length + cleanText.length + cleanedMarkdown.length) /
-      50000,
-  );
-  const confidence =
-    input.depth === "deep"
-      ? Math.round(60 + density * 35 + (screenshots.length > 0 ? 5 : 0))
-      : Math.round(35 + density * 35 + (screenshotBase64 ? 5 : 0));
 
   return {
     dna: finalDna,

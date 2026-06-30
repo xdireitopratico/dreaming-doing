@@ -144,6 +144,7 @@ export async function executeDesignDnaJob(
   let startIndex = 0;
   const results: Record<string, unknown>[] = [];
   const errors: Record<string, unknown>[] = [];
+  let blockedCount = 0;
   if (resume && checkpoint) {
     startIndex = (checkpoint.currentUrlIndex as number) ?? 0;
     if (Array.isArray(checkpoint.results)) {
@@ -151,6 +152,9 @@ export async function executeDesignDnaJob(
     }
     if (Array.isArray(checkpoint.errors)) {
       errors.push(...(checkpoint.errors as Record<string, unknown>[]));
+    }
+    if (typeof checkpoint.blockedCount === "number") {
+      blockedCount = checkpoint.blockedCount;
     }
   }
 
@@ -261,7 +265,7 @@ export async function executeDesignDnaJob(
   for (let i = startIndex; i < urls.length; i++) {
     const budgetElapsed = Date.now() - startMs;
     if (budgetElapsed > LOOP_BUDGET_MS * 0.8) {
-      await saveJobCheckpoint(supabase, jobId, { currentUrlIndex: i, results, errors });
+      await saveJobCheckpoint(supabase, jobId, { currentUrlIndex: i, results, errors, blockedCount });
       return {
         ok: false,
         status: results.length > 0 ? "completed" : "failed",
@@ -294,6 +298,13 @@ export async function executeDesignDnaJob(
 
       if (dnaResult.dna) {
         const dna = dnaResult.dna as Record<string, unknown>;
+        
+        if (dnaResult.blockedReason) {
+          blockedCount += 1;
+          const blockedRec = { url, index: i, error: dnaResult.blockedReason, kind: "blocked" };
+          errors.push(blockedRec);
+          await appendJobEvent(supabase, jobId, "url_blocked", blockedRec);
+        }
         
         // Valida qualidade mínima antes de salvar
         const qualityScore = Number(dna.quality_score ?? 0);
@@ -334,6 +345,7 @@ export async function executeDesignDnaJob(
           screenshot_base64: dnaResult.screenshotBase64 ?? null,
           provider_trace: dnaResult.providerTrace,
           confidence: dnaResult.confidence,
+          blocked_reason: dnaResult.blockedReason,
           design_dna: {
             layout: dna.layout ?? null,
             color: dna.color ?? null,
@@ -401,12 +413,17 @@ export async function executeDesignDnaJob(
   }
 
   const completedCount = results.length;
-  const status = completedCount === 0 && errors.length > 0
-    ? "failed"
-    : "completed";
+  const status = blockedCount > 0 && blockedCount >= urls.length
+    ? "blocked"
+    : completedCount === 0 && errors.length > 0
+      ? "failed"
+      : errors.length > 0 || blockedCount > 0
+        ? "partial"
+        : "completed";
 
   currentMeta.current_url_index = urls.length;
   currentMeta.urls_completed = completedCount;
+  currentMeta.blocked_urls = blockedCount;
   currentMeta.progress = 100;
   await supabase
     .from("design_dna_jobs")
@@ -422,7 +439,7 @@ export async function executeDesignDnaJob(
     jobId,
     resumable: false,
     canceled: false,
-    error: firstError,
+    error: firstError ?? (status === "blocked" ? "Todos os sites retornaram blocked" : undefined),
     urlsCompleted: completedCount,
     durationMs: Date.now() - startMs,
   };
