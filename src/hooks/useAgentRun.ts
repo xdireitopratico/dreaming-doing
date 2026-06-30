@@ -165,8 +165,9 @@ export function useAgentRun() {
         setQueueBlockingReason,
         teardownChannels,
         subscribeToRun,
+        enqueueStreamRow,
       }),
-    [activeRunStartedAtMs, subscribeToRun, teardownChannels],
+    [activeRunStartedAtMs, subscribeToRun, teardownChannels, enqueueStreamRow],
   );
 
   const {

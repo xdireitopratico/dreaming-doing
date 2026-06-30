@@ -15,6 +15,7 @@ import {
 import { dispatchTasteUiAction, isTasteUiAction } from "@/lib/taste-ui-actions";
 import { PENDING_RUN_ID } from "@/lib/pending-run-id";
 import { parseErrorResponse, postAgentRun } from "@/hooks/agent-run/agent-run-connect";
+import type { AgentStreamRow } from "@/hooks/agent-run/agent-run-stream";
 
 export type AgentConnectResult = { ok: true } | { ok: false; error: string; busy?: AgentBusyInfo };
 
@@ -28,7 +29,58 @@ export type LifecycleHandlersDeps = {
   setQueueBlockingReason: Dispatch<SetStateAction<string | null>>;
   teardownChannels: () => void;
   subscribeToRun: (runId: string, opts?: { resetProgress?: boolean }) => Promise<void>;
+  enqueueStreamRow: (row: AgentStreamRow) => boolean;
 };
+
+type SseFrame = {
+  event: string | null;
+  data: string;
+};
+
+async function consumeSseResponse(
+  res: Response,
+  onFrame: (frame: SseFrame) => Promise<void> | void,
+): Promise<void> {
+  const reader = res.body?.getReader();
+  if (!reader) throw new Error("Stream indisponível na resposta do agente");
+
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  const flushBlock = async (block: string) => {
+    const lines = block.replace(/\r/g, "").split("\n");
+    let event: string | null = null;
+    const dataLines: string[] = [];
+    for (const line of lines) {
+      if (!line) continue;
+      if (line.startsWith("event:")) {
+        event = line.slice(6).trim() || null;
+        continue;
+      }
+      if (line.startsWith("data:")) {
+        dataLines.push(line.slice(5).trimStart());
+      }
+    }
+    if (dataLines.length === 0) return;
+    await onFrame({ event, data: dataLines.join("\n") });
+  };
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    let idx = buffer.indexOf("\n\n");
+    while (idx >= 0) {
+      const block = buffer.slice(0, idx);
+      buffer = buffer.slice(idx + 2);
+      await flushBlock(block);
+      idx = buffer.indexOf("\n\n");
+    }
+  }
+
+  const tail = buffer.trim();
+  if (tail) await flushBlock(tail);
+}
 
 export function createLifecycleHandlers(deps: LifecycleHandlersDeps) {
   const clearPendingTurn = () => {
@@ -101,7 +153,7 @@ export function createLifecycleHandlers(deps: LifecycleHandlersDeps) {
         autoResume: false,
         mode: options?.mode ?? "chat",
         ...loadAgentSessionExtensions(),
-      });
+      }, { stream: true });
 
       if (!res.ok) {
         const msg = await parseErrorResponse(res);
@@ -111,6 +163,64 @@ export function createLifecycleHandlers(deps: LifecycleHandlersDeps) {
         deps.setProgress((p) => ({ ...p, error: msg, finished: true }));
         releaseAgentConnect();
         return { ok: false, error: msg };
+      }
+
+      const contentType = res.headers.get("content-type") ?? "";
+      if (contentType.includes("text/event-stream")) {
+        let currentRunId: string | null = null;
+        let terminalSeen = false;
+        try {
+          await consumeSseResponse(res, async (frame) => {
+            if (!frame.event) return;
+            const payload = frame.data ? (JSON.parse(frame.data) as Record<string, unknown>) : {};
+            if (frame.event === "run") {
+              const runId = typeof payload.runId === "string" ? payload.runId : null;
+              if (runId) {
+                currentRunId = runId;
+                deps.runIdRef.current = runId;
+                deps.setActiveRunId(runId);
+                deps.setActiveRunStartedAtMs(Date.now());
+                deps.setProgress((p) => ({ ...p, statusHint: "Conectando ao agente…" }));
+              }
+              return;
+            }
+            if (frame.event === "stream") {
+              const row = payload as AgentStreamRow;
+              if (!row || typeof row.seq !== "number") return;
+              terminalSeen = deps.enqueueStreamRow({
+                ...row,
+                source: "live",
+              });
+              return;
+            }
+            if (frame.event === "error") {
+              const msg =
+                typeof payload.message === "string"
+                  ? payload.message
+                  : "Falha ao acompanhar o stream do agente";
+              clearPendingTurn();
+              deps.teardownChannels();
+              deps.setProgress((p) => ({ ...p, error: msg, finished: true }));
+              throw new Error(msg);
+            }
+          });
+        } catch (err) {
+          const msg = formatAgentFetchError(err);
+          clearPendingTurn();
+          deps.teardownChannels();
+          deps.setProgress((p) => ({ ...p, error: msg, finished: true }));
+          return { ok: false, error: msg };
+        } finally {
+          if (currentRunId && terminalSeen) {
+            deps.setActiveRunStartedAtMs(null);
+          }
+        }
+
+        if (!terminalSeen && currentRunId) {
+          await deps.subscribeToRun(currentRunId, { resetProgress: false });
+        }
+
+        return { ok: true };
       }
 
       const body = (await res.json()) as Record<string, unknown>;

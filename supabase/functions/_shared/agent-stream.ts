@@ -23,7 +23,7 @@ async function broadcastStreamEvent(
   row: LiveStreamRow,
 ): Promise<void> {
   try {
-    const channel = supabase.channel(liveStreamTopic(row.run_id));
+    const channel = supabase.channel(liveStreamTopic(row.run_id)) as any;
     try {
       const result = await channel.httpSend(LIVE_STREAM_EVENT, row, { timeout: 2500 });
       if (result !== "ok") {

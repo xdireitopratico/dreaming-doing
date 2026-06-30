@@ -1,5 +1,6 @@
 // index.ts — Edge Function agent-run (build: agentloop-only 2026-06-06).
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 
 import { type AgentPreferencesPayload } from "./connector-keys.ts";
 import { buildProvider, type ProviderConfig } from "./providers.ts";
@@ -25,7 +26,7 @@ import {
 } from "../_shared/logger.ts";
 import { restoreExecutionLogFromRows } from "./executionLogMeta.ts";
 import { loadCheckpoint } from "./checkpoint.ts";
-import { appendStreamEvent } from "../_shared/agent-stream.ts";
+import { appendStreamEvent, fetchStreamEventsSince } from "../_shared/agent-stream.ts";
 import { isServiceRoleRequest } from "../_shared/service-auth.ts";
 import { extractOriginalUserRequest, resolveAllocateSandbox } from "./run-context.ts";
 import { enqueueAgentJobOnDispatch } from "../_shared/agent-jobs.ts";
@@ -36,6 +37,12 @@ import type { AgentRunStatus } from "../_shared/agent-contract-events.ts";
 import { capMetaSize as capAgentRunMeta } from "./runtime/loop-config.ts";
 
 const corsHeaders = FORGE_CORS_HEADERS;
+const sseHeaders = {
+  ...corsHeaders,
+  "Content-Type": "text/event-stream",
+  "Cache-Control": "no-cache, no-transform",
+  Connection: "keep-alive",
+};
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -982,7 +989,7 @@ Deno.serve(async (req) => {
       );
 
       // Emit initial stream event so any reconnecting client sees the start.
-      await appendStreamEvent(supabase, agentRunId!, "start", {
+      const startSeq = await appendStreamEvent(supabase, agentRunId!, "start", {
         type: "start",
         runId: agentRunId,
         projectId,
@@ -998,6 +1005,18 @@ Deno.serve(async (req) => {
         mode: chatMode ? "chat" : planMode ? "plan" : "build",
         eventId: eventResult.ids?.[0] ?? null,
       });
+
+      if (body.stream === true || req.headers.get("Accept")?.includes("text/event-stream")) {
+        return createStreamResponse({
+          supabase,
+          runId: agentRunId!,
+          projectId,
+          conversationId,
+          mode: chatMode ? "chat" : planMode ? "plan" : "build",
+          eventId: eventResult.ids?.[0] ?? null,
+          startSeq,
+        });
+      }
 
       // Persiste meta.queued=false na última user message desta conversa
       // para que o badge "Na fila…" suma no client via Realtime UPDATE
@@ -1038,6 +1057,86 @@ function json(body: unknown, status = 200) {
       "X-Correlation-Id": currentCorrelationId() ?? "",
     },
   });
+}
+
+function sseData(event: string, data: unknown): string {
+  return `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+}
+
+function createStreamResponse(opts: {
+  supabase: SupabaseClient;
+  runId: string;
+  projectId: string;
+  conversationId: string;
+  mode: "chat" | "plan" | "build";
+  eventId: string | null;
+  startSeq: number;
+}) {
+  const encoder = new TextEncoder();
+  let cancelled = false;
+
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(
+        encoder.encode(
+          sseData("run", {
+            runId: opts.runId,
+            projectId: opts.projectId,
+            conversationId: opts.conversationId,
+            mode: opts.mode,
+            eventId: opts.eventId,
+          }),
+        ),
+      );
+
+      void (async () => {
+        let afterSeq = opts.startSeq;
+        let idleTicks = 0;
+
+        try {
+          while (!cancelled) {
+            const rows = await fetchStreamEventsSince(opts.supabase, opts.runId, afterSeq);
+            if (rows.length === 0) {
+              idleTicks += 1;
+              if (idleTicks > 7200) break;
+              await new Promise((resolve) => setTimeout(resolve, 100));
+              continue;
+            }
+
+            idleTicks = 0;
+            for (const row of rows) {
+              afterSeq = row.seq;
+              controller.enqueue(encoder.encode(sseData("stream", { ...row, run_id: opts.runId })));
+
+              const eventType = row.event_type;
+              if (eventType === "finish" || eventType === "done" || eventType === "canceled") {
+                controller.enqueue(encoder.encode(sseData("done", { ok: true, runId: opts.runId })));
+                controller.close();
+                return;
+              }
+            }
+          }
+        } catch (err) {
+          if (!cancelled) {
+            controller.enqueue(
+              encoder.encode(
+                sseData("error", {
+                  message: (err as Error)?.message ?? "Falha ao acompanhar o stream do agente",
+                }),
+              ),
+            );
+            controller.enqueue(encoder.encode(sseData("done", { ok: false, runId: opts.runId })));
+            controller.close();
+          }
+        }
+      })();
+    },
+    cancel() {
+      cancelled = true;
+    },
+  });
+
+  return new Response(stream, { headers: sseHeaders });
 }
 
 type InngestEventName =

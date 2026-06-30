@@ -36,7 +36,10 @@ export async function parseErrorResponse(res: Response): Promise<string> {
   }
 }
 
-export async function postAgentRun(body: Record<string, unknown>): Promise<Response> {
+export async function postAgentRun(
+  body: Record<string, unknown>,
+  opts?: { stream?: boolean },
+): Promise<Response> {
   const { url, publishableKey } = getSupabaseEnv();
   if (!url || !publishableKey) {
     throw new Error(
@@ -53,9 +56,10 @@ export async function postAgentRun(body: Record<string, unknown>): Promise<Respo
     method: "POST",
     headers: {
       "Content-Type": "application/json",
+      ...(opts?.stream ? { Accept: "text/event-stream" } : {}),
       Authorization: `Bearer ${accessToken}`,
       apikey: publishableKey,
     },
-    body: JSON.stringify(body),
+    body: JSON.stringify({ ...body, ...(opts?.stream ? { stream: true } : {}) }),
   });
 }
