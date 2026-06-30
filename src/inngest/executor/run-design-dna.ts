@@ -97,12 +97,24 @@ async function ensureDesignDnaSandbox(
   }
 
   // Preview server na porta 3000 (serve screenshots ao vivo)
-  try {
-    await ensurePreviewServerInSandbox(sandboxId, accessToken);
-    console.log("[design-dna] Preview server started on port 3000");
-  } catch (previewErr) {
-    console.warn("[design-dna] Preview server failed (non-fatal):", errorMessage(previewErr));
+  await ensurePreviewServerInSandbox(sandboxId, accessToken, jobId, supabase);
+  console.log("[design-dna] Preview server started on port 3000");
+
+  // Inicia Chrome com CDP na porta 9222 para deep mode
+  const chromeCmd = [
+    `chromium --remote-debugging-port=9222 --no-sandbox --headless --disable-gpu > /tmp/chrome.log 2>&1 &`,
+    `sleep 3`,
+    `curl -s http://127.0.0.1:9222/json/version || exit 1`,
+    `echo "CHROME_READY"`,
+  ].join("\n");
+
+  const chromeResult = await runInSandbox(sandboxId, accessToken, chromeCmd, { timeoutMs: 30_000 });
+  if (!chromeResult.stdout?.includes("CHROME_READY")) {
+    throw new Error(`Chrome CDP not ready: ${chromeResult.stderr?.slice(0, 200)}`);
   }
+
+  await appendJobEvent(supabase, jobId, "chrome_cdp_ready", { port: 9222 });
+  console.log("[design-dna] Chrome CDP ready on port 9222");
 
   const previewUrl = `https://${PREVIEW_PORT}-${sandboxId}.${E2B_DOMAIN}`;
   await appendJobEvent(supabase, jobId, "sandbox_ready", {
@@ -132,7 +144,6 @@ export async function executeDesignDnaJob(
   let startIndex = 0;
   const results: Record<string, unknown>[] = [];
   const errors: Record<string, unknown>[] = [];
-  let blockedCount = 0;
   if (resume && checkpoint) {
     startIndex = (checkpoint.currentUrlIndex as number) ?? 0;
     if (Array.isArray(checkpoint.results)) {
@@ -140,9 +151,6 @@ export async function executeDesignDnaJob(
     }
     if (Array.isArray(checkpoint.errors)) {
       errors.push(...(checkpoint.errors as Record<string, unknown>[]));
-    }
-    if (typeof checkpoint.blockedCount === "number") {
-      blockedCount = checkpoint.blockedCount;
     }
   }
 
@@ -253,14 +261,14 @@ export async function executeDesignDnaJob(
   for (let i = startIndex; i < urls.length; i++) {
     const budgetElapsed = Date.now() - startMs;
     if (budgetElapsed > LOOP_BUDGET_MS * 0.8) {
-      await saveJobCheckpoint(supabase, jobId, { currentUrlIndex: i, results, errors, blockedCount });
+      await saveJobCheckpoint(supabase, jobId, { currentUrlIndex: i, results, errors });
       return {
         ok: false,
-        status: results.length > 0 || blockedCount > 0 || errors.length > 0 ? "partial" : "blocked",
+        status: results.length > 0 ? "completed" : "failed",
         jobId,
         resumable: true,
         canceled: false,
-        error: "loop budget",
+        error: "loop budget exhausted",
         urlsCompleted: results.length,
         durationMs: Date.now() - startMs,
       };
@@ -286,13 +294,27 @@ export async function executeDesignDnaJob(
 
       if (dnaResult.dna) {
         const dna = dnaResult.dna as Record<string, unknown>;
-        results.push(dna);
-        if (dnaResult.blockedReason) {
-          blockedCount += 1;
-          const blockedRec = { url, index: i, error: dnaResult.blockedReason, kind: "blocked" };
-          errors.push(blockedRec);
-          await appendJobEvent(supabase, jobId, "url_blocked", blockedRec);
+        
+        // Valida qualidade mínima antes de salvar
+        const qualityScore = Number(dna.quality_score ?? 0);
+        if (qualityScore < 5) {
+          const msg = `DNA quality score ${qualityScore} below minimum threshold (5/10)`;
+          errors.push({ url, index: i, error: msg, kind: "quality_threshold" });
+          await appendJobEvent(supabase, jobId, "quality_error", { url, qualityScore, reason: msg });
+          continue; // Pula esta URL mas continua com outras
         }
+
+        // Valida campos obrigatórios
+        const requiredFields = ['layout', 'color', 'typography'];
+        const missingFields = requiredFields.filter(field => !dna[field]);
+        if (missingFields.length > 0) {
+          const msg = `DNA missing required fields: ${missingFields.join(', ')}`;
+          errors.push({ url, index: i, error: msg, kind: "missing_fields" });
+          await appendJobEvent(supabase, jobId, "validation_error", { url, missingFields });
+          continue; // Pula esta URL mas continua com outras
+        }
+
+        results.push(dna);
 
         const { error: insertError } = await supabase.from("design_system_library").upsert({
           name: (dna.name as string) || url,
@@ -312,7 +334,6 @@ export async function executeDesignDnaJob(
           screenshot_base64: dnaResult.screenshotBase64 ?? null,
           provider_trace: dnaResult.providerTrace,
           confidence: dnaResult.confidence,
-          blocked_reason: dnaResult.blockedReason,
           design_dna: {
             layout: dna.layout ?? null,
             color: dna.color ?? null,
@@ -380,17 +401,12 @@ export async function executeDesignDnaJob(
   }
 
   const completedCount = results.length;
-  const status = blockedCount > 0 && blockedCount >= urls.length
-    ? "blocked"
-    : completedCount === 0 && errors.length > 0
-      ? "failed"
-      : errors.length > 0 || blockedCount > 0
-        ? "partial"
-        : "completed";
+  const status = completedCount === 0 && errors.length > 0
+    ? "failed"
+    : "completed";
 
   currentMeta.current_url_index = urls.length;
   currentMeta.urls_completed = completedCount;
-  currentMeta.blocked_urls = blockedCount;
   currentMeta.progress = 100;
   await supabase
     .from("design_dna_jobs")
@@ -406,7 +422,7 @@ export async function executeDesignDnaJob(
     jobId,
     resumable: false,
     canceled: false,
-    error: firstError ?? (status === "blocked" ? "Todos os sites retornaram blocked" : undefined),
+    error: firstError,
     urlsCompleted: completedCount,
     durationMs: Date.now() - startMs,
   };

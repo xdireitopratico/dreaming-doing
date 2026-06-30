@@ -41,7 +41,6 @@ export type DesignDnaExtractionResult = {
   providerTrace: string[];
   confidence: number;
   notes: string[];
-  blockedReason: string | null;
 };
 
 type LLMConfig = {
@@ -78,28 +77,7 @@ function safeJsonParse(text: string): Record<string, unknown> {
   }
 }
 
-function buildFallbackDna(url: string, reason: string, confidence?: number): Record<string, unknown> {
-  const score = Math.round(Math.min(10, Math.max(1, (confidence ?? 30) / 10)));
-  return {
-    name: url,
-    source_url: url,
-    category: "full_page",
-    serves_domains: [],
-    compatible_languages: [],
-    compatible_moods: [],
-    layout: confidence && confidence >= 50 ? { type: "scraped" } : { type: "unknown" },
-    color: null,
-    typography: null,
-    motion: null,
-    interaction: null,
-    component: null,
-    implementation_notes: `Partial extraction — ${reason}`,
-    quality_score: score,
-    quality_source: `heuristic (${reason})`,
-    extracted_at: new Date().toISOString(),
-    validated: false,
-  };
-}
+
 
 async function loadWebSecrets(supabase: SupabaseClient, userId: string): Promise<WebSecrets> {
   const secrets: WebSecrets = {};
@@ -566,13 +544,24 @@ print('PATCH_OK')
 "`;
   const patchResult = await runInSandbox(sandboxId, accessToken, patchScript, { timeoutMs: 10_000 });
   if (!patchResult.stdout?.includes("PATCH_OK")) {
-    console.warn("[design-dna] Agent patch may have failed:", patchResult.stderr?.slice(0, 200));
+    throw new Error(`Agent patch failed: ${patchResult.stderr?.slice(0, 200)}`);
+  }
+
+  // Verifica se screenshot foi salvo após primeira execução
+  const screenshotCheckCmd = `test -f /opt/forge/preview/screenshot.png && echo "EXISTS" || echo "MISSING"`;
+  const screenshotResult = await runInSandbox(sandboxId, accessToken, screenshotCheckCmd, { timeoutMs: 5_000 });
+  if (!screenshotResult.stdout?.includes("EXISTS")) {
+    console.warn("[design-dna] Screenshot not saved - preview will show placeholder");
+  } else {
+    console.log("[design-dna] Screenshot verified at /opt/forge/preview/screenshot.png");
   }
 }
 
 export async function ensurePreviewServerInSandbox(
   sandboxId: string,
   accessToken: string | null,
+  jobId: string,
+  supabase: SupabaseClient,
 ): Promise<void> {
   // Cria diretório + index.html com auto-refresh
   const setupCmd = [
@@ -594,8 +583,18 @@ export async function ensurePreviewServerInSandbox(
 
   const result = await runInSandbox(sandboxId, accessToken, setupCmd, { timeoutMs: 15_000 });
   if (!result.stdout?.includes("PREVIEW_READY")) {
-    console.warn("[design-dna] Preview server may not have started:", result.stderr?.slice(0, 200));
+    throw new Error(`Preview server failed to start: ${result.stderr?.slice(0, 200)}`);
   }
+
+  // Health check do preview server
+  const healthCheckCmd = `curl -s http://127.0.0.1:3000 || exit 1`;
+  const healthResult = await runInSandbox(sandboxId, accessToken, healthCheckCmd, { timeoutMs: 5_000 });
+  if (healthResult.exitCode !== 0) {
+    throw new Error(`Preview server health check failed: ${healthResult.stderr?.slice(0, 200)}`);
+  }
+
+  await appendJobEvent(supabase, jobId, "preview_server_ready", { port: 3000 });
+  console.log("[design-dna] Preview server ready on port 3000 with health check");
 }
 
 async function execPythonAgentInSandbox(
@@ -906,14 +905,13 @@ export async function extractDesignDnaForUrl(
   }
 
   // T4: respeita a preferência de web_scrape do /api-models.
-  // Sem pref explícita + sem connector salvo, default é "jina" (free-by-default).
-  // Fallback default: se primário != jina, jina; se jina, http.
-  const scrapeProvider = prefs?.webScrapeProvider ?? "jina";
-  const scrapeFallback = prefs?.webScrapeFallback
-    ? prefs.webScrapeFallback
-    : scrapeProvider === "jina"
-      ? "http"
-      : "jina";
+  // Sem pref explícita → erro (fail closed).
+  const scrapeProvider = prefs?.webScrapeProvider;
+  const scrapeFallback = prefs?.webScrapeFallback;
+
+  if (!scrapeProvider) {
+    throw new Error("Nenhum provedor de web scrape configurado em /api-models. Configure em /api-models para continuar.");
+  }
 
   let markdownRes: Record<string, unknown>;
   try {
@@ -937,9 +935,7 @@ export async function extractDesignDnaForUrl(
       );
     }
   } catch (scrapeErr) {
-    notes.push(`⚠️ markdown scrape failed: ${errorMessage(scrapeErr)} — continuing with empty content`);
-    providerTrace.push("markdown:error");
-    markdownRes = { content: "", provider: "" };
+    throw new Error(`Markdown scrape failed with provider '${scrapeProvider}': ${errorMessage(scrapeErr)}. Configure fallback em /api-models ou verifique API key.`);
   }
 
   let htmlRes: Record<string, unknown>;
@@ -964,9 +960,7 @@ export async function extractDesignDnaForUrl(
       );
     }
   } catch (scrapeErr) {
-    notes.push(`⚠️ HTML scrape failed: ${errorMessage(scrapeErr)} — continuing with empty content`);
-    providerTrace.push("html:error");
-    htmlRes = { content: "", provider: "" };
+    throw new Error(`HTML scrape failed with provider '${scrapeProvider}': ${errorMessage(scrapeErr)}. Configure fallback em /api-models ou verifique API key.`);
   }
 
   const rawMarkdown = String(markdownRes.content ?? "").trim();
@@ -991,7 +985,6 @@ export async function extractDesignDnaForUrl(
   let screenshots: string[] = [];
   let screenshotBase64 = "";
   let screenshotUrl = `https://image.thum.io/get/width/1280/crop/720/fullpage/${encodeURIComponent(input.url)}`;
-  let blockedReason: string | null = null;
 
   if (input.depth === "deep" && input.sandboxId) {
     try {
@@ -1031,34 +1024,15 @@ export async function extractDesignDnaForUrl(
         : screenshotUrl;
       notes.push("deep sandbox extraction completed");
     } catch (err) {
-      const msg = errorMessage(err);
-      notes.push(`⚠️ deep sandbox extraction failed — degraded to shallow: ${msg}`);
-      providerTrace.push("sandbox:error");
-      blockedReason = msg;
+      const msg = `Deep sandbox extraction failed: ${errorMessage(err)}`;
+      throw new Error(msg);
     }
   } else if (input.depth === "deep") {
-    notes.push("sandbox unavailable, deep request downgraded to web scrape");
-    if (!rawMarkdown.trim() && !cleanHtml.trim() && !cleanedMarkdown.trim()) {
-      blockedReason = "sandbox unavailable for deep extraction";
-    }
+    throw new Error("Deep mode requested but sandbox unavailable. Configure E2B key em /api-models.");
   }
 
   if (!enrichedMarkdown.trim()) {
-    notes.push("markdown empty after scrape");
-  }
-
-  const density = Math.min(
-    1,
-    (enrichedMarkdown.length + cleanHtml.length + cleanText.length + cleanedMarkdown.length) /
-      50000,
-  );
-  let confidence =
-    input.depth === "deep"
-      ? Math.round(60 + density * 35 + (screenshots.length > 0 ? 5 : 0))
-      : Math.round(35 + density * 35 + (screenshotBase64 ? 5 : 0));
-
-  if (blockedReason) {
-    confidence = Math.min(confidence, 25);
+    throw new Error("Markdown empty after scrape - no content to analyze");
   }
 
   const dna = await llmExtractDNA(
@@ -1070,20 +1044,22 @@ export async function extractDesignDnaForUrl(
     llmConfig,
   );
 
-  const finalDna =
-    dna ??
-    buildFallbackDna(input.url, llmConfig ? "LLM extraction unavailable" : "no LLM key available", confidence);
-
-  if (!llmConfig) {
-    notes.push("no LLM config available; using heuristic fallback");
+  if (!dna) {
+    throw new Error("LLM extraction failed - no DNA generated. Configure LLM em /api-models.");
   }
 
-  if (
-    (finalDna.quality_score as number | undefined) !== undefined &&
-    (finalDna.quality_score as number) <= 3
-  ) {
-    notes.push("low-confidence output");
-  }
+  const finalDna = dna;
+
+  // Calculate confidence for metadata only
+  const density = Math.min(
+    1,
+    (enrichedMarkdown.length + cleanHtml.length + cleanText.length + cleanedMarkdown.length) /
+      50000,
+  );
+  const confidence =
+    input.depth === "deep"
+      ? Math.round(60 + density * 35 + (screenshots.length > 0 ? 5 : 0))
+      : Math.round(35 + density * 35 + (screenshotBase64 ? 5 : 0));
 
   return {
     dna: finalDna,
@@ -1098,6 +1074,6 @@ export async function extractDesignDnaForUrl(
     providerTrace,
     confidence,
     notes,
-    blockedReason,
+    blockedReason: null,
   };
 }

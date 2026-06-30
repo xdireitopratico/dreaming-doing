@@ -16,7 +16,7 @@ export type DesignDnaJobRequest = {
 export type DesignDnaExecuteResponse = {
   ok: boolean;
   jobId: string;
-  status?: "completed" | "partial" | "blocked" | "failed" | "canceled";
+  status?: "completed" | "failed" | "canceled";
   resumable: boolean;
   canceled: boolean;
   error?: string;
