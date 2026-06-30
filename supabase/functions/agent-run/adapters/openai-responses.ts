@@ -154,7 +154,9 @@ export async function chatOpenAiResponses(
     model,
     input,
     store: false,
-    reasoning: { effort: "medium" },
+    // Mantém o raciocínio enxuto para reduzir o tempo até o primeiro
+    // pensamento útil no inspector. O objetivo aqui é responsividade.
+    reasoning: { effort: "low" },
     max_output_tokens: params.max_tokens ?? 4096,
   };
   if (instructions) body.instructions = instructions;
