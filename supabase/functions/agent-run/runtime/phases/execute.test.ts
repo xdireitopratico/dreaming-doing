@@ -144,15 +144,15 @@ Deno.test("execute phase emits opening assistant_text before work", async () => 
   assert(firstOpening >= 0, "missing opening assistant_text");
 });
 
-Deno.test("execute phase keeps build resumable when LLM never emits opening", async () => {
+Deno.test("execute phase aborta em terminal quando LLM nunca emite opening", async () => {
   const deps = buildStubbedExecuteDeps({
     llmChat: async () => ({ role: "assistant" as const, content: "", tool_calls: [] }),
   });
   const result = await runBuildExecutePhase(deps, 0);
   assertEquals(result.ok, false);
-  assertEquals(result.resumable, true);
-  assertEquals(result.buildFix, true);
-  assertEquals(result.error, "resumable");
+  assertEquals(result.resumable, false);
+  assertEquals(result.buildFix, undefined);
+  assertEquals(result.error, "O modelo não respondeu com a mensagem esperada.");
 });
 
 Deno.test("execute phase aborta antes do opening quando preflight falha", async () => {

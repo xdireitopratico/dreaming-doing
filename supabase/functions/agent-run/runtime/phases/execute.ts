@@ -281,18 +281,24 @@ async function emitClosingAndPersist(
   };
 }
 
-async function emitRecoverableBuildChunk(
+async function emitTerminalBuildFailure(
   deps: BuildExecuteDeps,
   loopStep: number,
   message: string,
 ): Promise<PlanTurnRunResult> {
   const text = message.trim() || "Retomando em seguida.";
   deps.emit("assistant_text", { text, final: true, append: false });
-  deps.state.messages.push({
-    role: "user",
-    content: text,
+  await deps.persistFinal(text, {
+    lastFinishOk: false,
+    buildFailed: true,
   });
-  return deps.returnResumableChunk(loopStep, deps.toolsUsed, { buildFix: true });
+  return {
+    ok: false,
+    error: text,
+    steps: loopStep,
+    resumable: false,
+    toolsUsed: [...deps.toolsUsed],
+  };
 }
 
 export async function runBuildExecutePhase(
@@ -326,7 +332,7 @@ export async function runBuildExecutePhase(
   const openingOk = await forceOpeningOrFail(deps, initialInstruction, compressedInitial);
   if (!openingOk) {
     const err = "O modelo não respondeu com a mensagem esperada.";
-    return emitRecoverableBuildChunk(deps, loopStep, err);
+    return emitTerminalBuildFailure(deps, loopStep, err);
   }
 
   while (!finalGateOk) {
@@ -457,7 +463,7 @@ export async function runBuildExecutePhase(
             `Modelo preso em leitura por ${readOnlyUpdate.consecutive} passos sem produzir output`,
         });
         deps.notifyLoopStatus({ kind: "stuck" });
-        return emitRecoverableBuildChunk(
+        return emitTerminalBuildFailure(
           deps,
           loopStep,
           "Modelo sem resposta. Vou retomar com correção no próximo chunk.",
@@ -903,7 +909,7 @@ export async function runBuildExecutePhase(
         `${finalObservation.feedback?.slice(0, 2000) ?? "Erros de compilação no sandbox."}\n` +
         "Vou manter a sessão viva para nova correção.";
       deps.notifyLoopStatus({ kind: "build_fix" });
-      return emitRecoverableBuildChunk(deps, loopStep, failMsg);
+      return emitTerminalBuildFailure(deps, loopStep, failMsg);
     }
 
     if (deps.loopBudgetExceeded()) {
@@ -941,7 +947,7 @@ export async function runBuildExecutePhase(
   }
   if (!finalClosing) {
     const err = "O modelo não respondeu com a mensagem esperada.";
-    return emitRecoverableBuildChunk(deps, loopStep, err);
+    return emitTerminalBuildFailure(deps, loopStep, err);
   }
   deps.emit("assistant_text", {
     text: finalClosing,
