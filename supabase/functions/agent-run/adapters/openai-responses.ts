@@ -2,6 +2,7 @@
 import type { ChatMessage, ChatParams, ChatResponse, ToolCall } from "../types.ts";
 import { normalizeChatUsage } from "../token-usage.ts";
 import { formatLlmApiError } from "./api-error.ts";
+import { consumeSseFrames, safeJsonParse } from "./streaming.ts";
 
 function normalizeBaseUrl(baseUrl: string): string {
   return baseUrl.replace(/\/$/, "");
@@ -141,6 +142,181 @@ function parseResponsesOutput(data: Record<string, unknown>): ChatResponse {
   };
 }
 
+type ResponsesToolCallState = {
+  id: string;
+  name: string;
+  arguments: string;
+};
+
+type ResponsesStreamState = {
+  text: string;
+  toolCallsByKey: Map<string, ResponsesToolCallState>;
+  usage?: ChatResponse["usage"];
+  finalResponse: Record<string, unknown> | null;
+};
+
+function asString(value: unknown): string {
+  return typeof value === "string" ? value : "";
+}
+
+function normalizeResponsesToolCallState(
+  current: ResponsesToolCallState | undefined,
+  raw: Record<string, unknown>,
+): ResponsesToolCallState {
+  const next = current ?? {
+    id: String(raw.call_id ?? raw.item_id ?? raw.id ?? crypto.randomUUID()),
+    name: "",
+    arguments: "",
+  };
+
+  const id = raw.call_id ?? raw.item_id ?? raw.id;
+  if (typeof id === "string" && id) next.id = id;
+
+  const name =
+    raw.name ??
+    (raw.function && typeof raw.function === "object"
+      ? (raw.function as Record<string, unknown>).name
+      : undefined);
+  if (typeof name === "string" && name) next.name = name;
+
+  const args =
+    raw.arguments ??
+    raw.delta ??
+    (raw.function && typeof raw.function === "object"
+      ? (raw.function as Record<string, unknown>).arguments
+      : undefined);
+  if (typeof args === "string") {
+    next.arguments += args;
+  } else if (args && typeof args === "object") {
+    try {
+      next.arguments = JSON.stringify(args);
+    } catch {
+      next.arguments = "";
+    }
+  }
+
+  return next;
+}
+
+function toolCallStateToToolCall(tc: ResponsesToolCallState): ToolCall | null {
+  if (!tc.name) return null;
+  let args: Record<string, unknown> = {};
+  if (tc.arguments.trim()) {
+    try {
+      args = JSON.parse(tc.arguments) as Record<string, unknown>;
+    } catch {
+      args = { raw: tc.arguments };
+    }
+  }
+  return {
+    id: tc.id,
+    name: tc.name,
+    arguments: args,
+  };
+}
+
+function responsePayloadFromEvent(parsed: Record<string, unknown>): Record<string, unknown> | null {
+  if (parsed.response && typeof parsed.response === "object") {
+    return parsed.response as Record<string, unknown>;
+  }
+  if (parsed.type === "response.completed" || parsed.type === "response.output_text.done") {
+    return parsed;
+  }
+  return null;
+}
+
+function ingestResponsesStreamEvent(
+  parsed: Record<string, unknown>,
+  state: ResponsesStreamState,
+  params: ChatParams,
+): void {
+  const eventType = asString(parsed.type) || asString(parsed.event);
+
+  const delta = asString(parsed.delta) || asString(parsed.text);
+  if (eventType === "response.output_text.delta" && delta) {
+    state.text += delta;
+    params.onTokenDelta?.(delta);
+    return;
+  }
+
+  if (
+    eventType === "response.reasoning.delta" ||
+    eventType === "response.reasoning_text.delta" ||
+    eventType === "response.reasoning_summary.delta" ||
+    eventType === "response.reasoning_summary_text.delta"
+  ) {
+    const reasoningDelta =
+      delta ||
+      asString(parsed.summary_text) ||
+      asString(parsed.summary) ||
+      asString(parsed.content);
+    if (reasoningDelta) params.onReasoningDelta?.(reasoningDelta);
+    return;
+  }
+
+  if (
+    eventType === "response.function_call_arguments.delta" ||
+    eventType === "response.function_call_arguments.done"
+  ) {
+    const key = asString(parsed.call_id) || asString(parsed.item_id) || asString(parsed.id) || "0";
+    const current = state.toolCallsByKey.get(key);
+    state.toolCallsByKey.set(
+      key,
+      normalizeResponsesToolCallState(current, {
+        ...parsed,
+        arguments: asString(parsed.arguments) || asString(parsed.delta),
+      }),
+    );
+    return;
+  }
+
+  if (
+    eventType === "response.output_item.added" ||
+    eventType === "response.output_item.done"
+  ) {
+    const item = parsed.item;
+    if (item && typeof item === "object") {
+      const row = item as Record<string, unknown>;
+      const type = asString(row.type);
+      if (type === "function_call") {
+        const key = asString(row.call_id) || asString(row.id) || "0";
+        const current = state.toolCallsByKey.get(key);
+        state.toolCallsByKey.set(key, normalizeResponsesToolCallState(current, row));
+      }
+    }
+    return;
+  }
+
+  if (eventType === "response.completed") {
+    const payload = responsePayloadFromEvent(parsed);
+    if (payload) state.finalResponse = payload;
+    if (parsed.usage) state.usage = normalizeChatUsage(parsed.usage);
+    return;
+  }
+
+  if (eventType === "error") {
+    const message =
+      asString(parsed.message) ||
+      (parsed.error && typeof parsed.error === "object"
+        ? asString((parsed.error as Record<string, unknown>).message)
+        : "") ||
+      "OpenAI Responses streaming error";
+    throw new Error(message);
+  }
+}
+
+function mergeToolCalls(
+  streamed: ToolCall[],
+  parsed: ToolCall[],
+): ToolCall[] {
+  if (streamed.length === 0) return parsed;
+  if (parsed.length === 0) return streamed;
+  const byId = new Map<string, ToolCall>();
+  for (const tc of parsed) byId.set(tc.id, tc);
+  for (const tc of streamed) byId.set(tc.id, tc);
+  return [...byId.values()];
+}
+
 export async function chatOpenAiResponses(
   apiKey: string,
   baseUrl: string,
@@ -158,6 +334,8 @@ export async function chatOpenAiResponses(
     max_output_tokens: params.max_tokens ?? 4096,
   };
   if (instructions) body.instructions = instructions;
+  const useStream = Boolean(params.onTokenDelta || params.onReasoningDelta);
+  if (useStream) body.stream = true;
 
   if (params.tools?.length) {
     body.tools = params.tools.map((t) => ({
@@ -183,8 +361,47 @@ export async function chatOpenAiResponses(
     throw new Error(formatLlmApiError(baseUrl, resp.status, err));
   }
 
-  const data = (await resp.json()) as Record<string, unknown>;
-  return parseResponsesOutput(data);
+  if (!useStream) {
+    const data = (await resp.json()) as Record<string, unknown>;
+    return parseResponsesOutput(data);
+  }
+
+  const state: ResponsesStreamState = {
+    text: "",
+    toolCallsByKey: new Map(),
+    finalResponse: null,
+  };
+
+  await consumeSseFrames(resp, (frame) => {
+    if (!frame.data) return;
+    const parsed = safeJsonParse<Record<string, unknown>>(frame.data);
+    if (!parsed) return;
+    if (!parsed.type && frame.event) {
+      parsed.event = frame.event;
+    }
+    ingestResponsesStreamEvent(parsed, state, params);
+  });
+
+  const streamedToolCalls = [...state.toolCallsByKey.values()]
+    .map(toolCallStateToToolCall)
+    .filter((tc): tc is ToolCall => tc !== null);
+
+  const parsedFinal = state.finalResponse ? parseResponsesOutput(state.finalResponse) : null;
+  if (!parsedFinal) {
+    return {
+      role: "assistant",
+      content: state.text || null,
+      tool_calls: streamedToolCalls,
+      usage: state.usage,
+    };
+  }
+
+  return {
+    ...parsedFinal,
+    content: state.text || parsedFinal.content,
+    tool_calls: mergeToolCalls(streamedToolCalls, parsedFinal.tool_calls),
+    usage: state.usage ?? parsedFinal.usage,
+  };
 }
 
 export function isOpenAiModelNotFound(err: unknown): boolean {
