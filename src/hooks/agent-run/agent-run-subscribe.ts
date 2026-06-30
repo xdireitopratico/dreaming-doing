@@ -269,31 +269,6 @@ export function createRunSubscriptionHandlers(deps: RunSubscriptionDeps) {
           }
         },
       )
-      .on(
-        "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "agent_stream_events",
-          filter: `run_id=eq.${runId}`,
-        },
-        (payload: { new: AgentStreamRow }) => {
-          if (deps.runIdRef.current !== runId) return;
-          if (deps.closedRunIdRef.current === runId) return;
-          const row = { ...(payload.new as AgentStreamRow), source: "db" as const };
-          if (deps.enqueueStreamRow(row)) {
-            deps.closedRunIdRef.current = runId;
-            void teardownChannels();
-            deps.setConnected(false);
-            deps.setProgress((p) => {
-              if (!shouldRetainLiveRunSlot(p) && deps.runIdRef.current === runId) {
-                deps.releaseLiveRunSlot(runId);
-              }
-              return p;
-            });
-          }
-        },
-      )
       .subscribe((status: string) => {
         if (isStale()) return;
         if (status === "SUBSCRIBED") {

@@ -115,7 +115,7 @@ describe("createRunSubscriptionHandlers", () => {
     await Promise.all([first, second]);
 
     expect(mockChannel).toHaveBeenCalledTimes(2);
-    expect(eventChannel.on).toHaveBeenCalledTimes(2);
+    expect(eventChannel.on).toHaveBeenCalledTimes(1);
     expect(statusChannel.on).toHaveBeenCalledTimes(1);
   });
 });

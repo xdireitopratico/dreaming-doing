@@ -36,37 +36,6 @@ export function useAgentRealtime(
       },
     );
 
-    // agent_stream_events inserts (timeline, tool results, narration)
-    channel.on(
-      "postgres_changes",
-      { event: "INSERT", schema: "public", table: "agent_stream_events" },
-      (payload: { new: Record<string, unknown> }) => {
-        const row = payload.new as Record<string, unknown>;
-
-        if (onEvent) {
-          onEvent({
-            type: (row.event_type as string) ?? "unknown",
-            data: (row.payload as Record<string, unknown>) ?? {},
-            timestamp: Date.now(),
-          });
-        }
-
-        // file_diff or preview_sync → invalidate preview
-        const eventType = row.event_type as string;
-        if (eventType === "file_diff" || eventType === "preview_sync") {
-          queryClient.invalidateQueries({ queryKey: ["preview", projectId] });
-        }
-
-        // Terminal events → invalidate messages
-        if (eventType === "done" || eventType === "finish" || eventType === "canceled") {
-          if (conversationId) {
-            queryClient.invalidateQueries({ queryKey: ["messages", conversationId] });
-          }
-          queryClient.invalidateQueries({ queryKey: ["agent-runs", projectId] });
-        }
-      },
-    );
-
     // messages changes (assistant replies, plan proposals).
     // Filtra por role=assistant no server-side filter para não refetchar
     // a janela inteira a cada INSERT do user (que é otimista). Também evita
