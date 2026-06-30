@@ -132,6 +132,6 @@ Deno.test("createPlanModeTokenHandler — emite pensamento vivo sem duplicar can
 
   assertEquals(state.llmResponseWasStreamed, true);
   assertEquals(events.length, 1);
-  assertEquals(events[0]?.type, "assistant_text");
-  assertEquals((events[0]?.data as { thinking?: boolean })?.thinking, true);
+  assertEquals(events[0]?.type, "thinking_text");
+  assertEquals((events[0]?.data as { append?: boolean })?.append, true);
 });

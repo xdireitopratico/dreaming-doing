@@ -62,13 +62,9 @@ export function createBuildModeTokenHandler(
     }
     streamState.llmResponseWasStreamed = true;
     onActivity();
-    emit("assistant_text", {
-      text: delta,
-      append: true,
-      delta: true,
-      final: false,
-      thinking: true,
-    });
+    // Raciocínio streaming deve seguir só pelo canal canônico `thinking_text`.
+    // `assistant_text` fica reservado para abertura/fechamento visíveis do turno.
+    emit("thinking_text", { text: delta, append: true, delta: true, final: false });
   };
 }
 

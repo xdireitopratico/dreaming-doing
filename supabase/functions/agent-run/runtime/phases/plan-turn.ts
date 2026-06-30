@@ -265,13 +265,9 @@ export function createPlanModeTokenHandler(
     if (elapsed > THINKING_STREAM_CAP_MS) return;
     streamState.llmResponseWasStreamed = true;
     onActivity();
-    emit("assistant_text", {
-      text: delta,
-      append: true,
-      delta: true,
-      final: false,
-      thinking: true,
-    });
+    // Plan mode: o passo-a-passo interno usa `thinking_text`; `assistant_text`
+    // deve ficar para mensagens visíveis de abertura/fechamento.
+    emit("thinking_text", { text: delta, append: true, delta: true, final: false });
   };
 }
 
