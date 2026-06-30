@@ -189,9 +189,9 @@ export function DesignLibraryPage() {
               <Badge variant="outline">Manual {overview.manual_rows}</Badge>
               <Badge variant="outline">URLs únicas {overview.distinct_source_urls}</Badge>
               <Badge variant="outline">Duplicadas {overview.duplicate_groups}</Badge>
+            </div>
 
-              {/* User metrics — merged from former UserMetricsBar */}
-              <span className="text-border">│</span>
+            <div className="flex flex-wrap items-center gap-2 text-[11px]">
               <span className="inline-flex items-center gap-1 text-blue-500">
                 <Briefcase className="size-3" />
                 <span className="font-semibold tabular-nums">{metrics.jobCount}</span>
@@ -214,7 +214,7 @@ export function DesignLibraryPage() {
               </span>
               {metrics.recentJobs.length > 0 && (
                 <>
-                  <span className="text-border">│</span>
+                  <span className="text-border ml-1">│</span>
                   <TrendingUp className="size-3 text-muted-foreground" />
                   <span className="text-muted-foreground">Últimos:</span>
                   {metrics.recentJobs.slice(0, 3).map((j) => (
@@ -381,7 +381,7 @@ export function DesignLibraryPage() {
                 Atualizando biblioteca…
               </div>
             )}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 3xl:grid-cols-7 4xl:grid-cols-8 5xl:grid-cols-9 gap-2.5">
             {groupedMode
               ? (renderedGroups ?? []).map((cluster) => {
                   const entry = cluster.primary;
