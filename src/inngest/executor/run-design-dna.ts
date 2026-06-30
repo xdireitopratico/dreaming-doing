@@ -6,12 +6,14 @@ import {
   saveJobCheckpoint,
   type DesignDnaExecuteResponse,
 } from "../functions/_shared-design-dna";
-import { extractDesignDnaForUrl, ensurePythonAgentInSandbox } from "./design-dna-extraction.ts";
+import { extractDesignDnaForUrl, ensurePythonAgentInSandbox, ensurePreviewServerInSandbox } from "./design-dna-extraction.ts";
 import { connectToSandbox, waitForEnvdReady } from "./e2b-client";
 
 const E2B_API_BASE = process.env.E2B_API_BASE || "https://api.e2b.app";
+const E2B_DOMAIN = process.env.E2B_DOMAIN || "e2b.app";
 const E2B_TEMPLATE_ID = process.env.E2B_TEMPLATE || "dreaming-doing-chromium";
 const LOOP_BUDGET_MS = 270_000;
+const PREVIEW_PORT = 3000;
 
 async function ensureDesignDnaSandbox(
   supabase: SupabaseClient,
@@ -19,7 +21,7 @@ async function ensureDesignDnaSandbox(
   userId: string,
   e2bApiKey: string,
   jobId: string,
-): Promise<{ sandboxId: string; accessToken: string | null }> {
+): Promise<{ sandboxId: string; accessToken: string | null; previewUrl: string }> {
   // Tenta reusar sandbox existente de jobs anteriores
   const { data: latestJob } = await serviceClient
     .from("design_dna_jobs")
@@ -36,6 +38,7 @@ async function ensureDesignDnaSandbox(
         return {
           sandboxId: latestJob.sandbox_id as string,
           accessToken,
+          previewUrl: `https://${PREVIEW_PORT}-${latestJob.sandbox_id}.${E2B_DOMAIN}`,
         };
       }
     } catch {
@@ -87,16 +90,27 @@ async function ensureDesignDnaSandbox(
   try {
     await ensurePythonAgentInSandbox(sandboxId, accessToken);
     console.log("[design-dna] Python agent uploaded to sandbox");
-    await appendJobEvent(supabase, jobId, "sandbox_ready", {
-      sandboxId,
-    });
   } catch (agentErr) {
     const msg = `Python agent upload failed: ${errorMessage(agentErr)}`;
     await appendJobEvent(supabase, jobId, "url_error", { scope: "sandbox", error: msg });
     throw new Error(msg);
   }
 
-  return { sandboxId, accessToken };
+  // Preview server na porta 3000 (serve screenshots ao vivo)
+  try {
+    await ensurePreviewServerInSandbox(sandboxId, accessToken);
+    console.log("[design-dna] Preview server started on port 3000");
+  } catch (previewErr) {
+    console.warn("[design-dna] Preview server failed (non-fatal):", errorMessage(previewErr));
+  }
+
+  const previewUrl = `https://${PREVIEW_PORT}-${sandboxId}.${E2B_DOMAIN}`;
+  await appendJobEvent(supabase, jobId, "sandbox_ready", {
+    sandboxId,
+    previewUrl,
+  });
+
+  return { sandboxId, accessToken, previewUrl };
 }
 
 export async function executeDesignDnaJob(
@@ -220,6 +234,8 @@ export async function executeDesignDnaJob(
     const sb = await ensureDesignDnaSandbox(supabase, serviceClient, userId, e2bApiKey, jobId);
     sandboxId = sb.sandboxId;
     sandboxAccessToken = sb.accessToken;
+    const previewUrl = sb.previewUrl;
+    currentMeta.previewUrl = previewUrl;
 
     currentMeta.progress = 15;
 

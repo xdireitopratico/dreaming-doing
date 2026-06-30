@@ -551,6 +551,51 @@ PYEOF`;
   if (result.exitCode !== 0) {
     throw new Error(`Failed to write Python agent: ${result.stderr || result.stdout?.slice(0, 200)}`);
   }
+
+  // Patch agent.py to save preview screenshots during extraction
+  const patchScript = `python3.11 -c "
+import re
+with open('/opt/forge/agent.py') as f:
+    c = f.read()
+# Add save_preview after extract_markdown call
+c = c.replace('md = await extract_markdown(pg)',
+    'md = await extract_markdown(pg)\\ntry:\\n    with open(\\\"/opt/forge/preview/screenshot.png\\\", \\\"wb\\\") as _f:\\n        _f.write(await pg.screenshot(full_page=False, type=\\\"png\\\"))\\nexcept Exception as _e:\\n    pass')
+with open('/opt/forge/agent.py', 'w') as f:
+    f.write(c)
+print('PATCH_OK')
+"`;
+  const patchResult = await runInSandbox(sandboxId, accessToken, patchScript, { timeoutMs: 10_000 });
+  if (!patchResult.stdout?.includes("PATCH_OK")) {
+    console.warn("[design-dna] Agent patch may have failed:", patchResult.stderr?.slice(0, 200));
+  }
+}
+
+export async function ensurePreviewServerInSandbox(
+  sandboxId: string,
+  accessToken: string | null,
+): Promise<void> {
+  // Cria diretório + index.html com auto-refresh
+  const setupCmd = [
+    `mkdir -p /opt/forge/preview`,
+    `cat > /opt/forge/preview/index.html << 'HTML'`,
+    `<!DOCTYPE html><html><head>`,
+    `<meta charset="utf-8">`,
+    `<title>Design DNA Preview</title>`,
+    `<meta http-equiv="refresh" content="3">`,
+    `<style>body{margin:0;background:#000}img{width:100%;height:auto;display:block}</style>`,
+    `</head><body>`,
+    `<img src="screenshot.png" alt="preview">`,
+    `</body></html>`,
+    `HTML`,
+    // Mata qualquer http.server anterior, sobe novo na 3000
+    `pkill -f "http.server 3000" 2>/dev/null; cd /opt/forge/preview && nohup python3.11 -m http.server 3000 > /tmp/preview.log 2>&1 &`,
+    `echo "PREVIEW_READY"`,
+  ].join("\n");
+
+  const result = await runInSandbox(sandboxId, accessToken, setupCmd, { timeoutMs: 15_000 });
+  if (!result.stdout?.includes("PREVIEW_READY")) {
+    console.warn("[design-dna] Preview server may not have started:", result.stderr?.slice(0, 200));
+  }
 }
 
 async function execPythonAgentInSandbox(
