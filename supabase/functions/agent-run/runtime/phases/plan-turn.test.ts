@@ -69,14 +69,27 @@ Deno.test("resolvePlanModeNoToolsResponse — conversational", () => {
   }
 });
 
-Deno.test("resolvePlanModeNoToolsResponse — markdown de plano vira invalid_markdown", () => {
+Deno.test("resolvePlanModeNoToolsResponse — explicit plan without create_plan falha fechado", () => {
+  const resolution = resolvePlanModeNoToolsResponse({
+    assistantText: "Posso ajudar com isso.",
+    llmResponseWasStreamed: false,
+    mustUseCreatePlan: true,
+  });
+  assertEquals(resolution.kind, "hard_failure");
+  if (resolution.kind === "hard_failure") {
+    assert(resolution.error.includes("create_plan"));
+  }
+});
+
+Deno.test("resolvePlanModeNoToolsResponse — markdown de plano sem create_plan falha fechado", () => {
   const resolution = resolvePlanModeNoToolsResponse({
     assistantText:
       "## Missão\nConstruir uma landing page completa para uma padaria artesanal.\n\n" +
       "## Fases\n1. Explorar o projeto e o contexto atual.\n2. Propor a solução final.\n3. Validar a entrega com critérios objetivos.",
     llmResponseWasStreamed: false,
+    mustUseCreatePlan: true,
   });
-  assertEquals(resolution.kind, "invalid_markdown");
+  assertEquals(resolution.kind, "hard_failure");
 });
 
 Deno.test("plan-turn — create_plan UI sem design recebe enrich", () => {

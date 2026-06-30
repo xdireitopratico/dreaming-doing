@@ -2,8 +2,12 @@
 import { parallelExecute } from "../../compression.ts";
 import { buildForgeAgentSystemInput } from "../../agent-system-input.ts";
 import { friendlyLlmError } from "../../llm-errors.ts";
-import { generatePlanChatMessage, buildPlanModeTurnInstruction } from "../../plan-mode.ts";
-import { isPlanShapedMarkdown, planToolArgsFromMarkdown } from "../../plan-markdown-parse.ts";
+import {
+  generatePlanChatMessage,
+  buildPlanModeTurnInstruction,
+  isExplicitPlanProposalRequest,
+} from "../../plan-mode.ts";
+import { isPlanShapedMarkdown } from "../../plan-markdown-parse.ts";
 import { sanitizeUserFacingProse } from "../../sanitize-prose.ts";
 import {
   formatClarifyMessage,
@@ -349,9 +353,17 @@ export type PlanNoToolsResolution =
 export function resolvePlanModeNoToolsResponse(input: {
   assistantText: string;
   llmResponseWasStreamed: boolean;
+  mustUseCreatePlan?: boolean;
 }): PlanNoToolsResolution {
   const assistantText = input.assistantText.trim();
   if (assistantText) {
+    if (input.mustUseCreatePlan) {
+      return {
+        kind: "hard_failure",
+        message: "O modo Plan exige a tool create_plan. Reenvie o plano usando create_plan.",
+        error: "create_plan ausente no modo Plan",
+      };
+    }
     if (isPlanShapedMarkdown(assistantText)) {
       return { kind: "invalid_markdown" };
     }
@@ -430,6 +442,7 @@ export async function runPlanModeAgentTurn(
     tasteStart: deps.tasteStart,
     skillPrompt: deps.skillPrompt,
   });
+  const mustUseCreatePlan = isExplicitPlanProposalRequest(deps.originalUserRequest ?? "");
 
   for (let step = 0; step < MAX_PLAN_EXPLORE; step++) {
     if (deps.loopBudgetExceeded()) {
@@ -566,11 +579,17 @@ export async function runPlanModeAgentTurn(
       const resolution = resolvePlanModeNoToolsResponse({
         assistantText,
         llmResponseWasStreamed: deps.getLlmResponseWasStreamed(),
+        mustUseCreatePlan,
       });
 
-      if (resolution.kind === "proposal") {
-        deps.emit("phase", { phase: "creating_plan", message: "" });
-        return await finishPlanProposal(finishDeps, resolution.plan, [...toolsUsed]);
+      if (resolution.kind === "hard_failure") {
+        return await finishPlanModeFailure(
+          finishDeps,
+          resolution.message,
+          step,
+          [...toolsUsed],
+          resolution.error,
+        );
       }
       if (resolution.kind === "conversational" && resolution.text) {
         deps.emit("assistant_text", { text: resolution.text, final: true });
