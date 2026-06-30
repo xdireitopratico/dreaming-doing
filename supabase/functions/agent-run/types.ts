@@ -29,6 +29,7 @@ export interface ChatParams {
   tool_choice?: "auto" | "none" | string;
   max_tokens?: number;
   temperature?: number;
+  reasoningEffort?: "low" | "medium" | "high";
   response_format?: { type: "json_object" } | { type: "text" };
   /** Quando definido, adapters compatíveis emitem deltas de texto durante a geração. */
   onTokenDelta?: (delta: string) => void;

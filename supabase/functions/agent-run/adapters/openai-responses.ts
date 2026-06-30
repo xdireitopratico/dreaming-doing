@@ -330,7 +330,7 @@ export async function chatOpenAiResponses(
     model,
     input,
     store: false,
-    reasoning: { effort: "medium" },
+    reasoning: { effort: params.reasoningEffort ?? "low" },
     max_output_tokens: params.max_tokens ?? 4096,
   };
   if (instructions) body.instructions = instructions;

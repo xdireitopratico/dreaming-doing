@@ -98,3 +98,36 @@ Deno.test("chatOpenAiResponses — streama output_text e function_call_arguments
     globalThis.fetch = originalFetch;
   }
 });
+
+Deno.test("chatOpenAiResponses — usa reasoning low por padrão", async () => {
+  const seenBodies: Record<string, unknown>[] = [];
+  const originalFetch = globalThis.fetch;
+
+  try {
+    globalThis.fetch = (async (_url: string | URL, init?: RequestInit) => {
+      const body = init?.body ? JSON.parse(String(init.body)) as Record<string, unknown> : {};
+      seenBodies.push(body);
+      return new Response(
+        JSON.stringify({ output_text: "ok", usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2 } }),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        },
+      );
+    }) as typeof fetch;
+
+    const result = await chatOpenAiResponses(
+      "sk-test",
+      "https://api.openai.com/v1",
+      "gpt-5",
+      {
+        messages: [{ role: "user", content: "oi" }],
+      },
+    );
+
+    assertEquals(result.content, "ok");
+    assertEquals(seenBodies[0]?.reasoning, { effort: "low" });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});

@@ -118,6 +118,7 @@ export async function chatBuildModeLlm(input: {
       tools: input.tools ?? mergeExecutionToolDefinitions(input.toolDefinitions, false),
       tool_choice: input.forceTools ? "required" : "auto",
       max_tokens: calculateMaxTokens(input.complexityScore as 1 | 2 | 3 | 4 | 5),
+      reasoningEffort: "low",
       onTokenDelta: input.forceTools
         ? undefined
         : createBuildModeTokenHandler(
