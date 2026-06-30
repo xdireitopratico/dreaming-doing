@@ -10,10 +10,8 @@ import { extractDesignDnaForUrl, ensurePythonAgentInSandbox } from "./design-dna
 import { connectToSandbox, waitForEnvdReady } from "./e2b-client";
 
 const E2B_API_BASE = process.env.E2B_API_BASE || "https://api.e2b.app";
-const E2B_DOMAIN = process.env.E2B_DOMAIN || "e2b.app";
 const E2B_TEMPLATE_ID = process.env.E2B_TEMPLATE || "dreaming-doing-chromium";
 const LOOP_BUDGET_MS = 270_000;
-const CHROMIUM_DEBUG_PORT = 9222;
 
 async function ensureDesignDnaSandbox(
   supabase: SupabaseClient,
@@ -21,7 +19,7 @@ async function ensureDesignDnaSandbox(
   userId: string,
   e2bApiKey: string,
   jobId: string,
-): Promise<{ sandboxId: string; accessToken: string | null; previewUrl: string }> {
+): Promise<{ sandboxId: string; accessToken: string | null }> {
   // Tenta reusar sandbox existente de jobs anteriores
   const { data: latestJob } = await serviceClient
     .from("design_dna_jobs")
@@ -38,7 +36,6 @@ async function ensureDesignDnaSandbox(
         return {
           sandboxId: latestJob.sandbox_id as string,
           accessToken,
-          previewUrl: `https://${CHROMIUM_DEBUG_PORT}-${latestJob.sandbox_id}.${E2B_DOMAIN}`,
         };
       }
     } catch {
@@ -75,8 +72,6 @@ async function ensureDesignDnaSandbox(
     console.warn(`[design-dna] Sandbox created with template ${sandboxTemplate}, expected ${E2B_TEMPLATE_ID}`);
   }
 
-  const previewUrl = `https://${CHROMIUM_DEBUG_PORT}-${sandboxId}.${E2B_DOMAIN}`;
-
   await appendJobEvent(supabase, jobId, "sandbox_setup", { sandboxId, step: "connecting" });
 
   const { accessToken } = await connectToSandbox(sandboxId, e2bApiKey);
@@ -94,7 +89,6 @@ async function ensureDesignDnaSandbox(
     console.log("[design-dna] Python agent uploaded to sandbox");
     await appendJobEvent(supabase, jobId, "sandbox_ready", {
       sandboxId,
-      previewUrl,
     });
   } catch (agentErr) {
     const msg = `Python agent upload failed: ${errorMessage(agentErr)}`;
@@ -102,7 +96,7 @@ async function ensureDesignDnaSandbox(
     throw new Error(msg);
   }
 
-  return { sandboxId, accessToken, previewUrl };
+  return { sandboxId, accessToken };
 }
 
 export async function executeDesignDnaJob(
@@ -157,7 +151,6 @@ export async function executeDesignDnaJob(
   currentMeta.ingestKind = ingestKind;
   const isDeep = depth === "deep";
   let sandboxId = "";
-  let previewUrl = "";
   let sandboxAccessToken: string | null = null;
 
   if (isDeep) {
@@ -227,32 +220,13 @@ export async function executeDesignDnaJob(
     const sb = await ensureDesignDnaSandbox(supabase, serviceClient, userId, e2bApiKey, jobId);
     sandboxId = sb.sandboxId;
     sandboxAccessToken = sb.accessToken;
-    previewUrl = sb.previewUrl;
 
-    currentMeta.previewUrl = previewUrl;
     currentMeta.progress = 15;
 
     await supabase
       .from("design_dna_jobs")
       .update({ sandbox_id: sandboxId, meta: currentMeta })
       .eq("id", jobId);
-
-    // Verifica CDP persistente — Chrome já está rodando na 9222 (template dreaming-doing-chromium)
-    if (startIndex === 0) {
-      await appendJobEvent(supabase, jobId, "sandbox_setup", { sandboxId });
-      const devtoolsVersionUrl = `${previewUrl}/json/version`;
-      try {
-        const cdpResp = await fetch(devtoolsVersionUrl, { signal: AbortSignal.timeout(5_000) });
-        if (cdpResp.ok) {
-          const cdpData = await cdpResp.json().catch(() => ({}));
-          console.log("[design-dna] CDP ready:", JSON.stringify(cdpData).slice(0, 200));
-        } else {
-          console.warn(`[design-dna] CDP health check HTTP ${cdpResp.status}`);
-        }
-      } catch {
-        console.warn("[design-dna] CDP unreachable on first check — may still become ready");
-      }
-    }
     currentMeta.progress = 20;
     await supabase.from("design_dna_jobs").update({ meta: currentMeta }).eq("id", jobId);
   } else {
@@ -283,7 +257,6 @@ export async function executeDesignDnaJob(
         index: i,
         total: urls.length,
         sandboxId,
-        previewUrl,
       });
 
       const dnaResult = await extractDesignDnaForUrl(serviceClient, {
@@ -298,7 +271,12 @@ export async function executeDesignDnaJob(
       if (dnaResult.dna) {
         const dna = dnaResult.dna as Record<string, unknown>;
         results.push(dna);
-        if (dnaResult.blockedReason) blockedCount += 1;
+        if (dnaResult.blockedReason) {
+          blockedCount += 1;
+          const blockedRec = { url, index: i, error: dnaResult.blockedReason, kind: "blocked" };
+          errors.push(blockedRec);
+          await appendJobEvent(supabase, jobId, "url_blocked", blockedRec);
+        }
 
         const { error: insertError } = await supabase.from("design_system_library").upsert({
           name: (dna.name as string) || url,
@@ -355,7 +333,6 @@ export async function executeDesignDnaJob(
 
       currentMeta.current_url_index = i + 1;
       currentMeta.urls_completed = results.length;
-      currentMeta.previewUrl = previewUrl;
       currentMeta.progress = Math.min(85, 25 + Math.round(((i + 1) / urls.length) * 60));
       await supabase
         .from("design_dna_jobs")
@@ -395,7 +372,6 @@ export async function executeDesignDnaJob(
         ? "partial"
         : "completed";
 
-  currentMeta.previewUrl = previewUrl;
   currentMeta.current_url_index = urls.length;
   currentMeta.urls_completed = completedCount;
   currentMeta.blocked_urls = blockedCount;
@@ -405,12 +381,16 @@ export async function executeDesignDnaJob(
     .update({ results, errors, meta: currentMeta })
     .eq("id", jobId);
 
+  const firstError = errors.find((e) => typeof e.error === "string" && (e as Record<string, unknown>).error)
+    ?.error as string | undefined;
+
   return {
     ok: status === "completed",
     status,
     jobId,
     resumable: false,
     canceled: false,
+    error: firstError ?? (status === "blocked" ? "Todos os sites retornaram blocked" : undefined),
     urlsCompleted: completedCount,
     durationMs: Date.now() - startMs,
   };
