@@ -58,7 +58,7 @@ describe("applyAgentProgressEvent", () => {
     expect(next.error).toBeNull();
     expect(next.resumable).toBe(false);
     expect(next.finished).toBe(false);
-    expect(next.statusHint).toBe("Iniciando…");
+    expect(next.statusHint).toBe("Trabalhando no projeto…");
   });
 
   it("opening:true vai para narrationText, não streamText", () => {
@@ -135,7 +135,7 @@ describe("applyAgentProgressEvent", () => {
 
   it("done com planProposed hidrata pendingPlan do payload plan", () => {
     const done = applyAgentProgressEvent(
-      base,
+      { ...base, finished: false },
       ev("done", {
         planProposed: true,
         summary: "Landing page",
@@ -155,7 +155,7 @@ describe("applyAgentProgressEvent", () => {
 
   it("done com planProposed mantém pendingPlan e awaitingKind", () => {
     const withPlan = applyAgentProgressEvent(
-      base,
+      { ...base, finished: false },
       ev("plan_proposed", {
         planId: "p-123",
         summary: "Plano de teste",

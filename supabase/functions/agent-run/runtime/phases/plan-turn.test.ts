@@ -69,6 +69,16 @@ Deno.test("resolvePlanModeNoToolsResponse — conversational", () => {
   }
 });
 
+Deno.test("resolvePlanModeNoToolsResponse — markdown de plano vira invalid_markdown", () => {
+  const resolution = resolvePlanModeNoToolsResponse({
+    assistantText:
+      "## Missão\nConstruir uma landing page completa para uma padaria artesanal.\n\n" +
+      "## Fases\n1. Explorar o projeto e o contexto atual.\n2. Propor a solução final.\n3. Validar a entrega com critérios objetivos.",
+    llmResponseWasStreamed: false,
+  });
+  assertEquals(resolution.kind, "invalid_markdown");
+});
+
 Deno.test("plan-turn — create_plan UI sem design recebe enrich", () => {
   const proposed = proposedPlanFromToolArgs({
     summary: "Landing padaria artesanal",

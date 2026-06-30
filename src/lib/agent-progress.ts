@@ -712,8 +712,9 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
     }
 
     case "done": {
-      // Session 2.0: done deixa de ser terminal (só sumário + tokens + cost).
-      // O terminal canônico é o `finish` emitido pelo run-executor.
+      // Session 2.0: `finish` continua sendo o terminal canônico do stream.
+      // `done` materializa o estado de plan/clarify/conversational no cache local
+      // para a UI não ficar presa em "working" até o refresh/replay.
       const summary = (data.summary as string) ?? prev.summary;
       const summaryTrim = summary?.trim() ?? "";
       const summaryIsRobotic = /pronto!?\s*resumo do que fiz|nenhum arquivo foi alterado/i.test(
@@ -729,6 +730,12 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
       const pendingPlan = data.planRejected === true ? null : (prev.pendingPlan ?? planFromDone);
       const planAwaiting = data.planProposed === true && !!pendingPlan;
       const conversational = data.conversational === true;
+      const materializedTerminal =
+        conversational ||
+        data.planProposed === true ||
+        data.planRejected === true ||
+        data.awaiting === true ||
+        data.qualified === true;
       const totalInputTokens =
         typeof data.totalInputTokens === "number" ? data.totalInputTokens : prev.tokens?.input;
       const totalOutputTokens =
@@ -739,7 +746,7 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
       return {
         ...prev,
         summary,
-        // NÃO setar finished/lastFinishOk aqui — responsabilidade do finish.
+        finished: materializedTerminal || prev.finished,
         awaiting: conversational ? false : !!(data.awaiting || data.qualified) || planAwaiting,
         awaitingKind: conversational
           ? null

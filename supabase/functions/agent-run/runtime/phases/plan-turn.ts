@@ -353,9 +353,6 @@ export function resolvePlanModeNoToolsResponse(input: {
   const assistantText = input.assistantText.trim();
   if (assistantText) {
     if (isPlanShapedMarkdown(assistantText)) {
-      const toolArgs = planToolArgsFromMarkdown(assistantText);
-      const proposed = toolArgs ? proposedPlanFromToolArgs(toolArgs) : null;
-      if (proposed) return { kind: "proposal", plan: proposed };
       return { kind: "invalid_markdown" };
     }
     return { kind: "conversational", text: sanitizeUserFacingProse(assistantText) };
