@@ -62,6 +62,13 @@ export function createBuildModeTokenHandler(
     }
     streamState.llmResponseWasStreamed = true;
     onActivity();
+    emit("assistant_text", {
+      text: delta,
+      append: true,
+      delta: true,
+      final: false,
+      thinking: true,
+    });
   };
 }
 

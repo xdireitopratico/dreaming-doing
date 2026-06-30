@@ -120,7 +120,7 @@ Deno.test("resolvePlanModeNoToolsResponse — stream_empty", () => {
   assertEquals(resolution.kind, "stream_empty");
 });
 
-Deno.test("createPlanModeTokenHandler — não duplica pensamento", () => {
+Deno.test("createPlanModeTokenHandler — emite pensamento vivo sem duplicar canais", () => {
   const events: Array<{ type: string; data: unknown }> = [];
   const state: PlanModeStreamState = {
     llmResponseWasStreamed: false,
@@ -131,5 +131,7 @@ Deno.test("createPlanModeTokenHandler — não duplica pensamento", () => {
   handler("vou montar o plano");
 
   assertEquals(state.llmResponseWasStreamed, true);
-  assertEquals(events.length, 0);
+  assertEquals(events.length, 1);
+  assertEquals(events[0]?.type, "assistant_text");
+  assertEquals((events[0]?.data as { thinking?: boolean })?.thinking, true);
 });

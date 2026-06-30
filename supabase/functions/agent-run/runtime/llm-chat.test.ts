@@ -39,7 +39,7 @@ Deno.test("buildBuildAgentSystemPrompt — modo build sem planMode", () => {
   assertEquals(prompt.includes("## Execução Plan"), false);
 });
 
-Deno.test("createBuildModeTokenHandler — não duplica pensamento", () => {
+Deno.test("createBuildModeTokenHandler — emite pensamento vivo sem duplicar canais", () => {
   const events: Array<{ type: string; data: unknown }> = [];
   const state: BuildLlmStreamState = {
     llmResponseWasStreamed: false,
@@ -55,5 +55,7 @@ Deno.test("createBuildModeTokenHandler — não duplica pensamento", () => {
   handler("vou pensar");
 
   assertEquals(state.llmResponseWasStreamed, true);
-  assertEquals(events.length, 0);
+  assertEquals(events.length, 1);
+  assertEquals(events[0]?.type, "assistant_text");
+  assertEquals((events[0]?.data as { thinking?: boolean })?.thinking, true);
 });
