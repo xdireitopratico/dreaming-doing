@@ -125,6 +125,16 @@ function DashboardSidebarPanel({
 
         <span className="dashboard-nav-label">Agente</span>
         <Link
+          to="/design-library"
+          className="dashboard-nav-item"
+          data-active={activeNav === "design-library" ? "true" : undefined}
+          title="Design Library — extração de DNA visual de sites"
+          onClick={onNavClick}
+        >
+          <Library className="size-4 shrink-0" />
+          Design Library
+        </Link>
+        <Link
           to="/skills"
           className="dashboard-nav-item"
           data-active={activeNav === "skills" ? "true" : undefined}
@@ -143,16 +153,6 @@ function DashboardSidebarPanel({
         >
           <Puzzle className="size-4 shrink-0" />
           MCP
-        </Link>
-        <Link
-          to="/design-library"
-          className="dashboard-nav-item"
-          data-active={activeNav === "design-library" ? "true" : undefined}
-          title="Design Library — extração de DNA visual de sites"
-          onClick={onNavClick}
-        >
-          <Library className="size-4 shrink-0" />
-          Design Library
         </Link>
 
         <span className="dashboard-nav-label">Projetos</span>
