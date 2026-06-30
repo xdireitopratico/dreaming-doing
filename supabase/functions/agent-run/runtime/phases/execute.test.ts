@@ -95,11 +95,12 @@ function buildStubbedExecuteDeps(overrides?: {
     narrationBuffer: "",
     emit: (type, data) => events.push({ type, data: data as Record<string, unknown> }),
     loopBudgetExceeded: () => false,
-    returnResumableChunk: async (steps) => ({
+    returnResumableChunk: async (steps, _toolsUsed, options) => ({
       ok: false,
       error: "resumable",
       steps,
       resumable: true,
+      buildFix: options?.buildFix === true,
       toolsUsed: [],
     }),
     runDesignPreflightIfNeeded: async () => null,
@@ -168,8 +169,11 @@ Deno.test("execute phase aborta antes do opening quando preflight falha", async 
   const events = (deps as unknown as { _events: () => { type: string; data: Record<string, unknown> }[] })._events();
 
   assertEquals(result.ok, false);
-  assertEquals(result.error?.includes("PREFLIGHT FALHOU"), true);
-  assertEquals(persistSummary.includes("PREFLIGHT FALHOU"), true);
+  assertEquals(result.resumable, true);
+  assertEquals(result.buildFix, true);
+  assertEquals(result.error?.includes("resumable"), true);
+  assertEquals(persistSummary, "");
+  assert(events.some((e) => e.type === "assistant_text" && e.data.final === true));
   assertEquals(events.some((e) => e.type === "assistant_text" && e.data.opening === true), false);
 });
 

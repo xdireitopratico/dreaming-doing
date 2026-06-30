@@ -281,6 +281,20 @@ async function emitClosingAndPersist(
   };
 }
 
+async function emitRecoverableBuildChunk(
+  deps: BuildExecuteDeps,
+  loopStep: number,
+  message: string,
+): Promise<PlanTurnRunResult> {
+  const text = message.trim() || "Retomando em seguida.";
+  deps.emit("assistant_text", { text, final: true, append: false });
+  deps.state.messages.push({
+    role: "user",
+    content: text,
+  });
+  return deps.returnResumableChunk(loopStep, deps.toolsUsed, { buildFix: true });
+}
+
 export async function runBuildExecutePhase(
   deps: BuildExecuteDeps,
   initialStep: number,
@@ -294,14 +308,8 @@ export async function runBuildExecutePhase(
   const preflight = await deps.runDesignPreflightIfNeeded();
   if (preflight && !preflight.passed) {
     const err = preflight.feedback?.trim() || "PREFLIGHT FALHOU";
-    await deps.persistFinal(err, { lastFinishOk: false, buildFailed: true });
-    return {
-      ok: false,
-      error: err,
-      steps: loopStep,
-      resumable: false,
-      toolsUsed: [...deps.toolsUsed],
-    };
+    deps.notifyLoopStatus({ kind: "build_fix" });
+    return emitRecoverableBuildChunk(deps, loopStep, err);
   }
 
   const compressedInitial = await deps.compression.compress(deps.state.messages);
@@ -450,12 +458,12 @@ export async function runBuildExecutePhase(
           message:
             `Modelo preso em leitura por ${readOnlyUpdate.consecutive} passos sem produzir output`,
         });
-        return emitClosingAndPersist(deps, loopStep, {
-          closing: "Modelo sem resposta. Troque o modelo ou envie de novo.",
-          error: "Modelo sem resposta. Troque o modelo ou envie de novo.",
-          ok: false,
-          buildFailed: true,
-        });
+        deps.notifyLoopStatus({ kind: "stuck" });
+        return emitRecoverableBuildChunk(
+          deps,
+          loopStep,
+          "Modelo sem resposta. Vou retomar com correção no próximo chunk.",
+        );
       }
 
       if (readOnlyUpdate.shouldNudge) {
@@ -892,16 +900,12 @@ export async function runBuildExecutePhase(
     });
 
     if (finalGateAttempts > EXECUTE_MAX_RETRIES) {
-      const closing = await deps.attemptGracefulClosing("build_fail");
       const failMsg =
         `Build não passou após ${EXECUTE_MAX_RETRIES} tentativas.\n\n` +
-        `${finalObservation.feedback?.slice(0, 2000) ?? "Erros de compilação no sandbox."}`;
-      return emitClosingAndPersist(deps, loopStep, {
-        closing: closing ?? failMsg,
-        error: closing ?? failMsg,
-        ok: false,
-        buildFailed: true,
-      });
+        `${finalObservation.feedback?.slice(0, 2000) ?? "Erros de compilação no sandbox."}\n` +
+        "Vou manter a sessão viva para nova correção.";
+      deps.notifyLoopStatus({ kind: "build_fix" });
+      return emitRecoverableBuildChunk(deps, loopStep, failMsg);
     }
 
     if (deps.loopBudgetExceeded()) {

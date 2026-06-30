@@ -222,6 +222,31 @@ export async function finishClarify(
   };
 }
 
+async function returnRecoverablePlanChunk(input: {
+  deps: PlanTurnDeps;
+  toolsUsed: Set<string>;
+  step: number;
+  message: string;
+  prompt?: string;
+}): Promise<PlanTurnRunResult> {
+  const text = input.message.trim();
+  input.deps.emit("assistant_text", { text, final: true });
+  input.deps.state.messages.push({
+    role: "user",
+    content: input.prompt ?? text,
+  });
+  const chunk = await input.deps.returnResumableChunk(input.step, input.toolsUsed);
+  return {
+    ok: false,
+    summary: text,
+    steps: chunk.steps,
+    resumable: true,
+    toolsUsed: chunk.toolsUsed,
+    error: chunk.error,
+    buildFix: chunk.buildFix,
+  };
+}
+
 export type PlanModeStreamState = {
   llmResponseWasStreamed: boolean;
   thinkingStreamStartedAt: number | null;
@@ -533,19 +558,19 @@ export async function runPlanModeAgentTurn(
       execution: execCalls,
     } = splitMetaToolCalls(response.tool_calls ?? []);
 
-    if (planCall) {
-      toolsUsed.add("create_plan");
-      deps.emit("phase", { phase: "creating_plan", message: "" });
-      const proposed = proposedPlanFromToolArgs(planCall.arguments);
-      if (!proposed) {
-        return await finishPlanModeFailure(
-          finishDeps,
-          "create_plan inválido — envie summary e steps válidos antes de continuar.",
-          step,
-          [...toolsUsed],
-          "create_plan_invalid",
-        );
-      }
+      if (planCall) {
+        toolsUsed.add("create_plan");
+        deps.emit("phase", { phase: "creating_plan", message: "" });
+        const proposed = proposedPlanFromToolArgs(planCall.arguments);
+        if (!proposed) {
+          return await returnRecoverablePlanChunk({
+            deps,
+            toolsUsed,
+            step,
+            message: "create_plan inválido — envie summary e steps válidos antes de continuar.",
+            prompt: "create_plan inválido — envie summary e steps válidos antes de continuar.",
+          });
+        }
       const enriched = enrichProposedPlanDesign(
         proposed,
         deps.originalUserRequest || proposed.summary,
@@ -571,13 +596,13 @@ export async function runPlanModeAgentTurn(
       });
 
       if (resolution.kind === "hard_failure") {
-        return await finishPlanModeFailure(
-          finishDeps,
-          resolution.message,
+        return await returnRecoverablePlanChunk({
+          deps,
+          toolsUsed,
           step,
-          [...toolsUsed],
-          resolution.error,
-        );
+          message: resolution.message,
+          prompt: resolution.message,
+        });
       }
       if (resolution.kind === "conversational" && resolution.text) {
         deps.emit("assistant_text", { text: resolution.text, final: true });
@@ -587,22 +612,22 @@ export async function runPlanModeAgentTurn(
         return { ok: true, summary: resolution.text, steps: step, toolsUsed: [...toolsUsed] };
       }
       if (resolution.kind === "invalid_markdown") {
-        return await finishPlanModeFailure(
-          finishDeps,
-          "Plano no chat inválido — use create_plan com 2–7 passos.",
+        return await returnRecoverablePlanChunk({
+          deps,
+          toolsUsed,
           step,
-          [...toolsUsed],
-          "plan_markdown_invalid",
-        );
+          message: "Plano no chat inválido — use create_plan com 2–7 passos.",
+          prompt: "Plano no chat inválido — use create_plan com 2–7 passos.",
+        });
       }
       if (resolution.kind === "stream_empty") {
-        return await finishPlanModeFailure(
-          finishDeps,
-          "O modelo respondeu sem texto nem ferramentas. Reformule o pedido do plano.",
+        return await returnRecoverablePlanChunk({
+          deps,
+          toolsUsed,
           step,
-          [...toolsUsed],
-          "plan_stream_empty",
-        );
+          message: "O modelo respondeu sem texto nem ferramentas. Reformule o pedido do plano.",
+          prompt: "O modelo respondeu sem texto nem ferramentas. Reformule o pedido do plano.",
+        });
       }
       if (resolution.kind === "graceful_close") {
         logger.warn("agent.plan_empty_response", {
@@ -629,7 +654,13 @@ export async function runPlanModeAgentTurn(
       } else {
         done = "Não consegui sintetizar a resposta final agora. Reformule o pedido ou retome o agente.";
       }
-      return await finishPlanModeFailure(finishDeps, done, step, [...toolsUsed], "plan_stale_close");
+      return await returnRecoverablePlanChunk({
+        deps,
+        toolsUsed,
+        step,
+        message: done,
+        prompt: done,
+      });
     }
 
     const patchCalls = execCalls.filter((c) => isPlanModePatchTool(c.name));
@@ -697,13 +728,13 @@ export async function runPlanModeAgentTurn(
   if (closing) {
     return { ok: true, summary: closing, steps: MAX_PLAN_EXPLORE, toolsUsed: [...toolsUsed] };
   }
-  return await finishPlanModeFailure(
-    finishDeps,
-    "Limite de exploração no modo Plan — tente create_plan ou clarify.",
-    MAX_PLAN_EXPLORE,
-    [...toolsUsed],
-    "plan_explore_limit",
-  );
+  return await returnRecoverablePlanChunk({
+    deps,
+    toolsUsed,
+    step: MAX_PLAN_EXPLORE,
+    message: "Limite de exploração no modo Plan — tente create_plan ou clarify.",
+    prompt: "Limite de exploração no modo Plan — tente create_plan ou clarify.",
+  });
 }
 
 export async function attemptPlanStuckClosing(input: {
