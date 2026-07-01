@@ -13,7 +13,7 @@
  * Placeholder uses dashed border.
  */
 import { useMemo } from "react";
-import { Handle, Position, type NodeProps } from "@/types/xyflow-react-shim";
+import { Handle, Position, type NodeProps } from "@xyflow/react";
 import { NodeIcon, getNodeIconSize, type NodeIconSource, type NodeIconContext } from "./NodeIcon";
 import { type NodeStatus, NodeStatusIcon } from "./CanvasNodeStatusIcons";
 import { NodeToolbar } from "./NodeToolbar";

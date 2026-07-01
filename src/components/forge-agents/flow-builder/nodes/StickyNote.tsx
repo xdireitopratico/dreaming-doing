@@ -3,7 +3,7 @@
  * Editable content, color presets, resize handles
  */
 import { memo, useCallback, useRef, useState, type FC } from "react";
-import { Handle, Position, type NodeProps } from "@/types/xyflow-react-shim";
+import { Handle, Position, type NodeProps } from "@xyflow/react";
 
 const STICKY_COLORS = [
   { id: "yellow", bg: "#fef08a", text: "#854d0e", border: "#eab308" },

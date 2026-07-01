@@ -3,7 +3,7 @@
  * Extraído de FlowBuilderDialog (R57 Higiene Arquitetural)
  */
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
-import { useNodesState, useEdgesState, type Node, type Edge } from "@/types/xyflow-react-shim";
+import { useNodesState, useEdgesState, type Node, type Edge } from "@xyflow/react";
 import { toast } from "@/lib/toast";
 import { supabase } from "@/integrations/supabase/client";
 import { validateFlow } from "../utils/schema-validator";

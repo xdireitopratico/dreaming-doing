@@ -1,4 +1,4 @@
-import { Handle, Position, type NodeProps } from "@/types/xyflow-react-shim";
+import { Handle, Position, type NodeProps } from "@xyflow/react";
 import { BaseNode, resolveNodeStatus } from "./BaseNode";
 import { getNodeIconSource } from "./NodeIcon";
 

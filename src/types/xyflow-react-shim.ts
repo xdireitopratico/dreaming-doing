@@ -1,8 +1,17 @@
 /**
  * xyflow-react-shim
  *
- * Re-exporta tudo do @xyflow/react para que o restante do app use um único
- * ponto de entrada. Mantido como camada de compatibilidade/isolação; o runtime
- * e os tipos vêm diretamente do pacote real.
+ * Camada de compatibilidade apenas para tipos compartilhados.
+ * Runtime deve importar diretamente de `@xyflow/react` para evitar
+ * contratos ambíguos no bundle.
  */
-export * from "@xyflow/react";
+export type {
+  BackgroundVariant,
+  Connection,
+  Edge,
+  EdgeProps,
+  Node,
+  NodeProps,
+  OnEdgesChange,
+  OnNodesChange,
+} from "@xyflow/react";

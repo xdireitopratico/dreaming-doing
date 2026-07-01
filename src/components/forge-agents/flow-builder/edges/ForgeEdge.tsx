@@ -11,7 +11,7 @@ import { useState, useRef, useCallback, useEffect, type FC } from "react";
 import {
   BaseEdge, EdgeLabelRenderer, getBezierPath,
   type EdgeProps,
-} from "@/types/xyflow-react-shim";
+} from "@xyflow/react";
 import { ForgeEdgeToolbar } from "./ForgeEdgeToolbar";
 import { useFlowCanvas } from "../FlowCanvasContext";
 

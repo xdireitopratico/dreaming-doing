@@ -4,7 +4,7 @@
  * BUG 147 FIX: ReactFlowProvider moved outside the memo component
  */
 import { memo, useMemo } from "react";
-import { ReactFlow, ReactFlowProvider, Background, Controls, MiniMap, type Node, type Edge } from "@/types/xyflow-react-shim";
+import { ReactFlow, ReactFlowProvider, Background, Controls, MiniMap, type Node, type Edge } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { TriggerNode } from "../flow-builder/nodes/TriggerNode";
 import { LLMNode } from "../flow-builder/nodes/LLMNode";

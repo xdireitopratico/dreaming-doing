@@ -11,7 +11,7 @@ import {
   ReactFlow, ReactFlowProvider, Background, Controls, ControlButton, MiniMap,
   useReactFlow, addEdge,
   type Node, type Edge, type Connection, type OnNodesChange, type OnEdgesChange,
-} from "@/types/xyflow-react-shim";
+} from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { TriggerNode } from "./nodes/TriggerNode";
 import { LLMNode } from "./nodes/LLMNode";
