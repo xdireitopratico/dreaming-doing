@@ -296,6 +296,13 @@ export function buildJobStreamTree(
       continue;
     }
 
+    if (ev.type === "finish") {
+      const ok = data.ok !== false && data.lastFinishOk !== false;
+      const err = typeof data.error === "string" ? data.error : undefined;
+      closeActiveStep(nodes, ok, err);
+      continue;
+    }
+
     if (ev.type === "step_result") {
       const summary = String(data.summary ?? "Resultado");
       const evidence = Array.isArray(data.evidence) ? (data.evidence as string[]) : [];
@@ -329,21 +336,22 @@ export function buildJobStreamTree(
     if (ev.type === "validate_fail") {
       if (lastResultTs > 0 && ts - lastResultTs < 50) continue;
       const isPreflight = data.preflight === true;
-      const feedback =
-        typeof data.feedback === "string"
-          ? data.feedback.slice(0, 120)
-          : typeof data.message === "string"
-            ? data.message.slice(0, 120)
-            : isPreflight
-              ? "Preflight"
-              : "Erro de compilação";
+      let feedback = "Erro de compilação";
+      if (typeof data.feedback === "string") {
+        feedback = data.feedback.slice(0, 120);
+      } else if (typeof data.message === "string") {
+        feedback = data.message.slice(0, 120);
+      } else if (isPreflight) {
+        feedback = "Preflight";
+      }
+      const summary = isPreflight
+        ? "Preflight falhou"
+        : "Build falhou — corrigindo antes de entregar";
       nodes.push({
         kind: "result",
         id: `result-${ts}`,
         ts,
-        summary: isPreflight
-          ? "Preflight falhou"
-          : "Build falhou — corrigindo antes de entregar",
+        summary,
         evidence: [feedback],
         status: "failed",
       });
@@ -503,12 +511,9 @@ export function deriveCardView(
   } else if (hasFailedTerminal || progress.lastFinishOk === false) {
     cardStatus = "failed";
     headerBadge = "failed";
-  } else if (progress.finished && progress.lastFinishOk === true) {
+  } else if (progress.finished) {
     cardStatus = "done";
     headerBadge = null;
-  } else if (progress.finished && nodes.length > 0) {
-    cardStatus = "working";
-    headerBadge = "working";
   }
 
   const title = deriveMomentumTitle(nodes, progress, cardStatus, editedFile);

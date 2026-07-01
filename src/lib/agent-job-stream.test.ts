@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { buildJobStreamTree } from "@/lib/agent-job-stream";
+import { buildJobStreamTree, deriveCardView } from "@/lib/agent-job-stream";
+import { initialAgentProgress } from "@/lib/agent-progress";
 
 describe("buildJobStreamTree validate_fail hygiene", () => {
   it("colapsa validate_fail preflight repetido em um único resultado", () => {
@@ -28,5 +29,43 @@ describe("buildJobStreamTree validate_fail hygiene", () => {
       expect(results[0].status).toBe("failed");
       expect(results[0].summary).toBe("Preflight falhou");
     }
+  });
+});
+
+describe("buildJobStreamTree terminal close", () => {
+  it("fecha a última step ativa quando chega finish", () => {
+    const nodes = buildJobStreamTree([
+      {
+        type: "tool_start",
+        timestamp: 1,
+        data: {
+          name: "fs_read",
+          args: { path: "src/App.tsx" },
+          step_intent: "Ler App",
+        },
+      },
+      {
+        type: "finish",
+        timestamp: 2,
+        data: { ok: true },
+      },
+    ]);
+
+    const steps = nodes.filter((node) => node.kind === "step");
+    expect(steps).toHaveLength(1);
+    if (steps[0]?.kind === "step") {
+      expect(steps[0].status).toBe("done");
+    }
+  });
+});
+
+describe("deriveCardView terminal state", () => {
+  it("não mantém working quando finished=true e não há step ativa", () => {
+    const view = deriveCardView([], {
+      ...initialAgentProgress,
+      finished: true,
+      lastFinishOk: null,
+    });
+    expect(view.cardStatus).toBe("done");
   });
 });

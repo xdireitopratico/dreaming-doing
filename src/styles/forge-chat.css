@@ -1132,6 +1132,81 @@
   list-style: none;
 }
 
+.forge-job-tasks-list > li:not(.forge-mini-card-task-item) {
+  margin-top: var(--space-xs);
+}
+
+.forge-mini-card-task-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 11px 12px;
+  margin-bottom: 8px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02);
+}
+
+.forge-mini-card-task-item:last-child {
+  margin-bottom: 0;
+}
+
+.forge-mini-card-task-item--active {
+  background: color-mix(in srgb, var(--status-working) 10%, rgba(255, 255, 255, 0.04));
+  border-color: color-mix(in srgb, var(--status-working) 28%, rgba(255, 255, 255, 0.08));
+}
+
+.forge-mini-card-task-item--done {
+  background: color-mix(in srgb, var(--status-done) 8%, rgba(255, 255, 255, 0.03));
+}
+
+.forge-mini-card-task-item--failed {
+  background: color-mix(in srgb, var(--status-failed) 10%, rgba(255, 255, 255, 0.03));
+}
+
+.forge-mini-card-task-status {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  margin-top: 1px;
+}
+
+.forge-mini-card-task-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.forge-mini-card-task-label {
+  font: var(--font-task-label);
+  font-size: 13px;
+  line-height: 1.35;
+  color: var(--text-primary);
+  word-break: break-word;
+}
+
+.forge-mini-card-task-criteria {
+  font: var(--font-task-label);
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--text-secondary);
+  word-break: break-word;
+}
+
+.forge-mini-card-task-item--active .forge-mini-card-task-label {
+  color: var(--text-primary);
+}
+
+.forge-mini-card-task-item--failed .forge-mini-card-task-label {
+  color: color-mix(in srgb, var(--status-failed) 82%, var(--text-primary));
+}
+
 @keyframes forge-plan-shimmer {
   0% {
     background-position: 100% 0;

@@ -28,13 +28,17 @@ function compactTaskText(task: { label: string; criteria?: string }, max = 120):
   return text.length > max ? `${text.slice(0, max - 1)}…` : text;
 }
 
+function taskTitle(task: { label: string; criteria?: string }): string {
+  return [task.label.trim(), task.criteria?.trim()].filter(Boolean).join(" · ");
+}
+
 export function ChatJobTasksCard({ data, isFocused, phase }: ChatJobTasksCardProps) {
   const tasks = data.tasks ?? [];
   const isLive = data.status === "working" || data.status === "thinking";
+  const [tasksExpanded, setTasksExpanded] = useState(false);
   if (phase === "plan" || phase === "preflight") return null;
   const materializingTasksPhase = phase === "build" || phase === "execute";
   const showSkeleton = isLive && materializingTasksPhase && tasks.length === 0;
-  const [tasksExpanded, setTasksExpanded] = useState(false);
   const TASKS_PREVIEW = 4;
   const visibleTasks = tasksExpanded ? tasks : tasks.slice(0, TASKS_PREVIEW);
   const hasMoreTasks = tasks.length > TASKS_PREVIEW;
@@ -89,12 +93,14 @@ export function ChatJobTasksCard({ data, isFocused, phase }: ChatJobTasksCardPro
                     {taskStatusIcon(task.status)}
                   </span>
                   <span className="forge-mini-card-task-body">
-                    <span
-                      className="forge-mini-card-task-label"
-                      title={[task.label, task.criteria].filter(Boolean).join(" · ")}
-                    >
-                      {compactTaskText(task)}
+                    <span className="forge-mini-card-task-label" title={taskTitle(task)}>
+                      {compactTaskText({ label: task.label })}
                     </span>
+                    {task.criteria?.trim() ? (
+                      <span className="forge-mini-card-task-criteria" title={task.criteria.trim()}>
+                        {compactTaskText({ label: task.criteria }, 140)}
+                      </span>
+                    ) : null}
                   </span>
                 </li>
               ))}
