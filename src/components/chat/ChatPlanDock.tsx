@@ -4,6 +4,7 @@ import type { PendingPlan, PlanStep } from "@/lib/agent-progress";
 import { buildForgePlanMarkdown } from "@/lib/plan-document";
 import { enabledPlanSteps } from "@/lib/forge-run";
 import { planParagraphFromPlan, planPhasesFromPlan } from "@/lib/plan-message-meta";
+import { logEditorTelemetryEvent } from "@/lib/editor-telemetry";
 import { PlanPhaseList } from "./PlanPhaseList";
 import { PlanWaitingBanner } from "@/components/editor/PlanWaitingBanner";
 
@@ -30,6 +31,12 @@ export function ChatPlanDock({
     if (!pendingPlan || !onApprove) return;
     setBusy("approve");
     try {
+      logEditorTelemetryEvent(
+        "chat",
+        "plan_approve_click",
+        "info",
+        `${pendingPlan.runId.slice(0, 8)} ${pendingPlan.planId} steps=${pendingPlan.steps.length}`,
+      );
       const markdown =
         pendingPlan.markdown?.trim() ||
         buildForgePlanMarkdown({

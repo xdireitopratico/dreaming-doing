@@ -631,12 +631,24 @@ export function useEditorPageHandlers({
   const handlePlanApprove = useCallback(
     async (steps: { id: string; enabled: boolean }[], markdown?: string) => {
       const pp = getPendingPlan();
+      logEditorTelemetryEvent("agent", "plan_approve_handler_start", "info", {
+        runId: pp?.runId ?? null,
+        planId: pp?.planId ?? null,
+        steps: steps.length,
+      } as any);
       if (!pp) {
+        logEditorTelemetryEvent("agent", "plan_approve_handler_abort", "warn", "pending plan missing");
         toast.error("Plano não encontrado — gere um novo plano no modo Plan.");
         return;
       }
       const enabled = steps.filter((s) => s.enabled !== false);
       if (enabled.length === 0) {
+        logEditorTelemetryEvent(
+          "agent",
+          "plan_approve_handler_abort",
+          "warn",
+          `no enabled steps for run ${pp.runId.slice(0, 8)}`,
+        );
         toast.error("Selecione ao menos um passo para executar.");
         return;
       }
@@ -644,6 +656,12 @@ export function useEditorPageHandlers({
         .map((s) => pp.steps.find((p) => p.id === s.id))
         .filter((s): s is NonNullable<typeof s> => s != null);
       if (full.length === 0) {
+        logEditorTelemetryEvent(
+          "agent",
+          "plan_approve_handler_abort",
+          "warn",
+          `step id mismatch for run ${pp.runId.slice(0, 8)} plan ${pp.planId}`,
+        );
         toast.error("Passos selecionados não correspondem ao plano.");
         return;
       }
@@ -687,6 +705,12 @@ export function useEditorPageHandlers({
             enabledMcpIds,
           },
         });
+        logEditorTelemetryEvent(
+          "agent",
+          "plan_approve_handler_ok",
+          "ok",
+          `${pp.runId.slice(0, 8)} -> ${result.newRunId ?? "no-run"} steps=${full.length}`,
+        );
         setComposerMode("build");
         toast.success("Build iniciado — acompanhe o progresso no inspector.");
         await qc.invalidateQueries({ queryKey: ["conversation", projectId] });
@@ -709,6 +733,12 @@ export function useEditorPageHandlers({
           }
         }
       } catch (e) {
+        logEditorTelemetryEvent(
+          "agent",
+          "plan_approve_handler_fail",
+          "error",
+          e instanceof Error ? e.message.slice(0, 200) : String(e),
+        );
         agent.clearPendingTurn();
         if (conversationId) {
           qc.setQueryData(["messages", conversationId], (old: typeof chatMessages | undefined) => {
