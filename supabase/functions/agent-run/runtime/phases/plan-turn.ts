@@ -222,6 +222,7 @@ async function returnRecoverablePlanChunk(input: {
 }): Promise<PlanTurnRunResult> {
   const text = input.message.trim();
   input.deps.emit("assistant_text", { text, final: true });
+  await input.deps.persistFinal(text, { lastFinishOk: false });
   input.deps.state.messages.push({
     role: "user",
     content: input.prompt ?? text,
@@ -507,12 +508,13 @@ export async function runPlanModeAgentTurn(
     finishDeps.llmResponseWasStreamed = deps.getLlmResponseWasStreamed();
 
     if (!response) {
+      const safe = "O modelo não produziu resposta visível. Reformule o pedido ou retome o plano.";
       return await returnRecoverablePlanChunk({
         deps,
         toolsUsed,
         step,
-        message: "Sem resposta do modelo.",
-        prompt: "Sem resposta do modelo.",
+        message: safe,
+        prompt: safe,
       });
     }
 

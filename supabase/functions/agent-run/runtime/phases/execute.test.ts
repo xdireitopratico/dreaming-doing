@@ -248,17 +248,22 @@ Deno.test("execute phase with ALL empty LLM responses (content:null, no tools) s
 });
 
 Deno.test("execute early budget/maxstep paths emit prose before resumable (real entry)", async () => {
+  let persistArgs: any[] = [];
   const deps = buildStubbedExecuteDeps({
     llmChat: async () => ({ role: "assistant" as const, content: "step", tool_calls: [] }),
   });
   deps.requiresFinalBuildGate = () => false;
+  deps.persistFinal = async (summary: string, opts?: any) => { persistArgs.push({ summary, opts }); };
   // Force budget immediately to hit the early return path we fixed.
   let budgetHits = 0;
   deps.loopBudgetExceeded = () => { budgetHits++; return budgetHits > 0; };
   const result = await runBuildExecutePhase(deps, 0);
   const events = (deps as unknown as { _events: () => { type: string; data: Record<string, unknown> }[] })._events();
   const proseEmits = events.filter(e => e.type === "assistant_text" && typeof (e.data as any).text === "string");
+  const finalTrue = proseEmits.some(e => (e.data as any).final === true);
   assert(proseEmits.length > 0, "budget early return must have emitted prose");
+  assert(finalTrue, "early terminal prose should use final:true for UI");
+  assert(persistArgs.some(p => typeof p.summary === "string" && p.summary.trim().length > 5), "must call persistFinal for AC1");
   assert(result.resumable === true, "must be resumable");
   assert(!String(result.error || "").includes("O modelo não respondeu"));
 });
