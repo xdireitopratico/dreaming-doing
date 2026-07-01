@@ -63,7 +63,6 @@ export function useAgentRun() {
   const sessionContextRef = useRef<SessionContext | null>(null);
   const eventChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const statusChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
-  const stalePollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const reconnectAttemptsRef = useRef(0);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -117,7 +116,6 @@ export function useAgentRun() {
         streamBufferRef,
         eventChannelRef,
         statusChannelRef,
-        stalePollRef,
         reconnectAttemptsRef,
         reconnectTimerRef,
         setProgress,

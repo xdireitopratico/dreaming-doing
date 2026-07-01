@@ -26,7 +26,6 @@ export type RunSubscriptionDeps = {
   streamBufferRef: MutableRefObject<AgentStreamRow[]>;
   eventChannelRef: MutableRefObject<RealtimeChannel | null>;
   statusChannelRef: MutableRefObject<RealtimeChannel | null>;
-  stalePollRef: MutableRefObject<ReturnType<typeof setInterval> | null>;
   reconnectAttemptsRef: MutableRefObject<number>;
   reconnectTimerRef: MutableRefObject<ReturnType<typeof setTimeout> | null>;
   setProgress: Dispatch<SetStateAction<AgentProgress>>;
@@ -45,10 +44,6 @@ export function createRunSubscriptionHandlers(deps: RunSubscriptionDeps) {
     if (deps.reconnectTimerRef.current) {
       clearTimeout(deps.reconnectTimerRef.current);
       deps.reconnectTimerRef.current = null;
-    }
-    if (deps.stalePollRef.current) {
-      clearInterval(deps.stalePollRef.current);
-      deps.stalePollRef.current = null;
     }
     const removals: Promise<unknown>[] = [];
     if (deps.eventChannelRef.current) {
@@ -358,15 +353,7 @@ export function createRunSubscriptionHandlers(deps: RunSubscriptionDeps) {
       return;
     }
 
-    void catchUpRun(runId).then((terminal) => {
-      if (terminal || isStale()) return;
-
-      if (deps.stalePollRef.current) clearInterval(deps.stalePollRef.current);
-      deps.stalePollRef.current = setInterval(() => {
-        if (!deps.runIdRef.current) return;
-        void catchUpRun(deps.runIdRef.current);
-      }, 12_000);
-    });
+    void catchUpRun(runId);
   };
 
   return { teardownChannels, syncRunStatus, catchUpRun, subscribeToRun };

@@ -90,7 +90,6 @@ describe("createRunSubscriptionHandlers", () => {
       streamBufferRef: { current: [] },
       eventChannelRef: { current: null },
       statusChannelRef: { current: null },
-      stalePollRef: { current: null },
       reconnectAttemptsRef: { current: 0 },
       reconnectTimerRef: { current: null },
       setProgress: vi.fn(),

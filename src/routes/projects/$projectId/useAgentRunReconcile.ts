@@ -6,9 +6,6 @@ import type { useAgentRun } from "@/hooks/useAgentRun";
 
 type AgentRun = ReturnType<typeof useAgentRun>;
 
-const RECONCILE_POLL_MS = 500;
-const RECONCILE_WINDOW_MS = 5000;
-
 async function fetchLiveRunForConversation(
   projectId: string,
   conversationId: string,
@@ -27,7 +24,7 @@ async function fetchLiveRunForConversation(
 }
 
 /**
- * Reconcile DB agent_runs vs client UI + auto-watch após drain server-side da fila.
+ * Reconcile DB agent_runs vs client UI usando Realtime como gatilho.
  */
 export function useAgentRunReconcile(
   projectId: string,
@@ -43,26 +40,17 @@ export function useAgentRunReconcile(
     // original assumir a run que será criada no DB.
     if (isPendingRun) return;
 
-    let cancelled = false;
     let channel: ReturnType<typeof supabase.channel> | null = null;
 
     const tryAttach = async (): Promise<boolean> => {
       const runId = await fetchLiveRunForConversation(projectId, conversationId);
-      if (cancelled || !runId) return false;
+      if (!runId) return false;
       if (activeRunId === runId && !progress.finished) return true;
       if (!activeRunId || progress.finished) {
         await watch(projectId, conversationId, runId);
       }
       return true;
     };
-
-    void (async () => {
-      const deadline = Date.now() + RECONCILE_WINDOW_MS;
-      while (!cancelled && Date.now() < deadline) {
-        if (await tryAttach()) return;
-        await new Promise((resolve) => setTimeout(resolve, RECONCILE_POLL_MS));
-      }
-    })();
 
     channel = subscribePostgresChanges({
       channelName: `agent-runs-reconcile-${projectId}-${conversationId}`,
@@ -73,8 +61,9 @@ export function useAgentRunReconcile(
       },
     });
 
+    void tryAttach();
+
     return () => {
-      cancelled = true;
       removeRealtimeChannel(channel);
     };
   }, [projectId, conversationId, watch, activeRunId, progress.finished, isPendingRun]);
@@ -84,30 +73,14 @@ export function useAgentRunReconcile(
     if (!progress.finished) return;
     if ((progress.pendingQueueCount ?? 0) <= 0) return;
 
-    let cancelled = false;
-
     const attachQueuedRun = async () => {
-      if (cancelled) return;
       const runId = await fetchLiveRunForConversation(projectId, conversationId);
-      if (!runId || cancelled) return;
+      if (!runId) return;
       if (activeRunId === runId && !progress.finished) return;
       await watch(projectId, conversationId, runId);
       void syncPendingCount(projectId, conversationId);
     };
 
     void attachQueuedRun();
-    const interval = window.setInterval(() => void attachQueuedRun(), 2500);
-    return () => {
-      cancelled = true;
-      window.clearInterval(interval);
-    };
-  }, [
-    projectId,
-    conversationId,
-    progress.finished,
-    progress.pendingQueueCount,
-    activeRunId,
-    watch,
-    syncPendingCount,
-  ]);
+  }, [projectId, conversationId, progress.finished, progress.pendingQueueCount, activeRunId, watch, syncPendingCount]);
 }
