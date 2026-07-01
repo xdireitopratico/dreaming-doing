@@ -10,8 +10,7 @@ import {
   peekPendingAgentRun,
 } from "@/lib/agent-auto-run";
 import type { useAgentRun } from "@/hooks/useAgentRun";
-import { useAgentRunReconcile } from "./useAgentRunReconcile";
-
+import { supabase } from "@/integrations/supabase/client";
 type AgentRun = ReturnType<typeof useAgentRun>;
 
 type TasteQuota = {
@@ -33,8 +32,25 @@ type UseAgentSessionCoordinatorParams = {
   ) => Promise<boolean>;
 };
 
+async function fetchLiveRunForConversation(
+  projectId: string,
+  conversationId: string,
+): Promise<string | null> {
+  const { data: run } = await supabase
+    .from("agent_runs")
+    .select("id")
+    .eq("project_id", projectId)
+    .eq("conversation_id", conversationId)
+    .in("status", ["running", "pending"])
+    .order("started_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  return run?.id ?? null;
+}
+
 /**
- * Coordinator: sync fila no mount, reconcile DB↔UI, auto-run pós-dashboard.
+ * Coordinator: sync fila no mount, resync DB↔UI e auto-run pós-dashboard.
  */
 export function useAgentSessionCoordinator({
   projectId,
@@ -42,7 +58,7 @@ export function useAgentSessionCoordinator({
   agent,
   runAgent,
 }: UseAgentSessionCoordinatorParams) {
-  const { syncPendingCount, beginPendingTurn } = agent;
+  const { syncPendingCount, beginPendingTurn, watch, progress, activeRunId, isPendingRun } = agent;
   const autoRunStartedRef = useRef(false);
 
   useEffect(() => {
@@ -54,6 +70,54 @@ export function useAgentSessionCoordinator({
     if (!conversation?.id || !agent.progress.finished) return;
     void syncPendingCount(projectId, conversation.id);
   }, [agent.progress.finished, conversation?.id, projectId, syncPendingCount]);
+
+  useEffect(() => {
+    if (!conversation?.id) return;
+    if (isPendingRun) return;
+    let alive = true;
+
+    const tryAttach = async (): Promise<boolean> => {
+      if (!alive) return false;
+      const runId = await fetchLiveRunForConversation(projectId, conversation.id);
+      if (!alive) return false;
+      if (!runId) return false;
+      if (activeRunId === runId && !progress.finished) return true;
+      if (!activeRunId || progress.finished) {
+        await watch(projectId, conversation.id, runId);
+      }
+      return true;
+    };
+
+    void tryAttach();
+
+    return () => {
+      alive = false;
+    };
+  }, [projectId, conversation?.id, watch, activeRunId, progress.finished, isPendingRun]);
+
+  useEffect(() => {
+    if (!conversation?.id) return;
+    if (!progress.finished) return;
+    if ((progress.pendingQueueCount ?? 0) <= 0) return;
+
+    const attachQueuedRun = async () => {
+      const runId = await fetchLiveRunForConversation(projectId, conversation.id);
+      if (!runId) return;
+      if (activeRunId === runId && !progress.finished) return;
+      await watch(projectId, conversation.id, runId);
+      void syncPendingCount(projectId, conversation.id);
+    };
+
+    void attachQueuedRun();
+  }, [
+    projectId,
+    conversation?.id,
+    progress.finished,
+    progress.pendingQueueCount,
+    activeRunId,
+    watch,
+    syncPendingCount,
+  ]);
 
   useEffect(() => {
     const conversationId = conversation?.id;
@@ -81,5 +145,5 @@ export function useAgentSessionCoordinator({
     runAgent,
   ]);
 
-  useAgentRunReconcile(projectId, conversation?.id, agent);
+  // Reconcile logic now lives here as the single coordinator path.
 }

@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import { ArrowRight, Check, Loader2, Play, SkipForward } from "lucide-react";
+import { Check, Loader2, Play, SkipForward } from "lucide-react";
 import type { PendingPlan, PlanStep } from "@/lib/agent-progress";
 import { buildForgePlanMarkdown } from "@/lib/plan-document";
 import { enabledPlanSteps } from "@/lib/forge-run";
@@ -99,14 +99,6 @@ export function ChatPlanDock({
               {materializing ? "Plano aprovado" : "Ver plano completo"}
             </span>
             <span className="forge-plan-dock-title-headline">{pendingPlan.summary}</span>
-            <span className="forge-plan-dock-title-hint">
-              {materializing ? (
-                <Loader2 className="size-3.5 animate-spin" />
-              ) : (
-                <ArrowRight className="size-3.5" />
-              )}
-              {materializing ? "Build em andamento" : "Abrir no inspector"}
-            </span>
           </button>
 
           {hasPhases ? (
@@ -129,7 +121,6 @@ export function ChatPlanDock({
               className="forge-plan-dock-btn forge-plan-dock-btn--inspect"
               onClick={() => onReview?.(pendingPlan.runId)}
             >
-              <ArrowRight className="size-3.5" />
               Inspect
             </button>
           </div>
