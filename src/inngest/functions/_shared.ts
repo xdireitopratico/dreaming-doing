@@ -67,8 +67,6 @@ export function getSupabaseAdmin(): SupabaseClient {
   return adminClient;
 }
 
-import { runAgentLoop } from "../executor/run-agent-loop.ts";
-
 /** Chunks Inngest por invocação — cada um com budget ~270s; alinhado a resumeAttempts: 3. */
 export const MAX_LOOP_RESUME_STEPS = 3;
 
@@ -151,6 +149,7 @@ export async function runAgentLoopWithResume(
   payload: AgentRunRequest,
 ): Promise<ExecuteResponse> {
   const { maxLoopResumeStepsForRuntime } = await import("./agent-jobs.ts");
+  const { runAgentLoop } = await import("../executor/run-agent-loop.ts");
   const maxSteps = maxLoopResumeStepsForRuntime();
   let lastResult: ExecuteResponse | null = null;
 

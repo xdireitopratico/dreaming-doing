@@ -5,7 +5,7 @@ import {
   shouldSetFinishedAt,
   type AgentRunStatus,
 } from "@forge/agent-contract/lifecycle";
-import { getSupabaseAdmin } from "./_shared";
+import { getSupabaseAdmin } from "./supabase-admin";
 
 export { partitionRunExtras };
 

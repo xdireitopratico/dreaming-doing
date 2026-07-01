@@ -1,6 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import type { AgentRunRequest, ExecuteResponse } from "../functions/_shared.ts";
-import { requireEnv } from "../functions/_shared.ts";
+import { getSupabaseAdmin } from "../functions/supabase-admin.ts";
 
 const INNGEST_LOOP_BUDGET_MS = "270000";
 
@@ -42,10 +42,7 @@ export async function runAgentLoop(
 
   const { executeAgentRun } = await loadExecutor();
 
-  const { url, serviceKey } = requireEnv();
-  const supabase = createClient(url, serviceKey, {
-    auth: { autoRefreshToken: false, persistSession: false },
-  });
+  const supabase = getSupabaseAdmin();
 
   return await executeAgentRun(supabase as never, {
     runId: payload.runId,
