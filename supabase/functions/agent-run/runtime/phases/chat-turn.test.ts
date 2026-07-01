@@ -66,7 +66,7 @@ function mockChatTurnDeps(): ChatTurnDeps & {
     get returnResumableCalls() {
       return returnResumableCalls;
     },
-    returnResumableChunk: async (_steps: number, _toolsUsed: Set<string>) => {
+    returnResumableWithUserMessage: async (_steps: number, _toolsUsed: Set<string>, _opt?: unknown, prose?: string) => {
       returnResumableCalls += 1;
       return {
         ok: false,
@@ -74,6 +74,7 @@ function mockChatTurnDeps(): ChatTurnDeps & {
         steps: 0,
         resumable: true,
         toolsUsed: [],
+        summary: prose,
       };
     },
     onActivity: () => {},

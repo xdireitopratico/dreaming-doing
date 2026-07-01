@@ -188,6 +188,38 @@ Evidência:
 - GREEN: `npm run build:inngest` passou e gerou `dist/server/agent-executor.js` e `dist/server/inngest-handler.js`.
 - Decisão de contrato: import do executor é lazy; testes que só importam helpers Inngest não carregam artefato de produção antecipadamente.
 
+### Task 7: Terminal Contract AC1 (Choke Point Unificado)
+
+Status: `completed`
+
+Arquivos:
+
+- `supabase/functions/agent-run/runtime/terminal-user-message.ts`
+- `supabase/functions/agent-run/runtime/infra.ts`
+- `supabase/functions/agent-run/runtime/deps-factory.ts` (wire `returnResumableWithUserMessage` em `createDepsContext`)
+- `supabase/functions/agent-run/runtime/phases/execute.ts`
+- `supabase/functions/agent-run/runtime/phases/orchestrator.ts`
+- `supabase/functions/agent-run/runtime/loop-orchestrator-deps.ts`
+- `supabase/functions/_shared/ensure-terminal-message.ts`
+- `scripts/check-agent-run-terminal.mjs`
+- `docs/AGENT_RUN_STABILIZATION.md`
+
+Hipótese: o erro legado `"O modelo não respondeu com a mensagem esperada"` persistia por (1) `returnResumableWithUserMessage` **não wired** em `createDepsContext` (fallback silencioso para chunk sem prosa), (2) orchestrator com 3 saídas bare `returnResumableChunk`, (3) safety net `_shared/ensure-terminal-message` sem fallback absoluto.
+
+Critério de conclusão:
+
+- `npm run check:agent-run-terminal` passa.
+- `npm run test:agent-run` passa (21 testes).
+- `npm run build:inngest` passa.
+- Deploy Vercel (Inngest bundle) + `supabase functions deploy agent-run` pendente de push/CI.
+
+Evidência:
+
+- GREEN: `npm run check:agent-run-terminal` — OK.
+- GREEN: `npm run test:agent-run` — 21 passed, 0 failed.
+- GREEN: `npm run build:inngest` — `agent-executor.js` + `inngest-handler.js` gerados.
+- Fix crítico: `createDepsContext` agora expõe `returnResumableWithUserMessage` (antes undefined → phases caíam em chunk sem mensagem).
+
 ### Task 6: Typecheck Drift Inventory
 
 Status: `pending`
@@ -217,3 +249,4 @@ Evidência:
 - 2026-06-21: Task 3 concluída; retomada por checkpoint voltou a emitir `classify.restored=true` junto do FSM.
 - 2026-06-21: Task 4 concluída; contrato no-tool diferencia explicação textual de pedido acionável que precisa usar ferramentas.
 - 2026-06-21: Task 5 concluída; import do executor Inngest deixou de quebrar Vitest sem bundle.
+- 2026-07-01: Task 7 concluída; choke point terminal unificado (`ensureUserMessage` + `returnResumableWithUserMessage` wired); orchestrator e ensure-terminal-message alinhados; 21 testes Deno + guardrail `check:agent-run-terminal`.

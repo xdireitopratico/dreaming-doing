@@ -18,9 +18,11 @@ export type ChatTurnDeps = PlanTurnFinishDeps & {
   messages: ChatMessage[];
   streamState: PlanModeStreamState;
   emit: PlanTurnEmit;
-  returnResumableChunk: (
+  returnResumableWithUserMessage: (
     steps: number,
     toolsUsed: Set<string>,
+    options?: { buildFix?: boolean; errorMessage?: string },
+    prose?: string,
   ) => Promise<{
     ok: false;
     error: string;
@@ -56,7 +58,7 @@ async function returnRecoverableChatChunk(
   const message = summary.trim() || "Erro no modo Chat.";
   const err = (error ?? message).trim() || message;
   // Use wrapper (or fallback) to centralize prose+persistFinal for AC1.
-  const chunk = await (deps as any).returnResumableWithUserMessage?.(0, new Set<string>(), undefined, message) || await deps.returnResumableChunk(0, new Set<string>());
+  const chunk = await deps.returnResumableWithUserMessage(0, new Set<string>(), { errorMessage: err }, message);
   return { ...chunk, summary: message, error: err };
 }
 

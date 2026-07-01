@@ -1,6 +1,7 @@
 // runtime/infra.ts — Heartbeat, budget e resumable chunks (Fase 2.2)
-import type { LoopPhase } from "../types.ts";
+import type { ChatMessage, LoopPhase } from "../types.ts";
 import type { CanonicalBuildSession } from "./build-session.ts";
+import { ensureUserMessage } from "./terminal-user-message.ts";
 
 export const MAX_LLM_RETRIES = 3;
 export const SILENCE_HEARTBEAT_MS = 90_000;
@@ -14,6 +15,11 @@ export type ResumableChunkResult = {
   toolsUsed: string[];
 };
 
+export type ResumableExitOptions = {
+  buildFix?: boolean;
+  errorMessage?: string;
+};
+
 export type RunInfraDeps = {
   sb: any;
   runId: string | null;
@@ -23,6 +29,8 @@ export type RunInfraDeps = {
   setLastActivityAt: (ms: number) => void;
   getMaxStepsLimit: () => number;
   touchedPaths: Set<string>;
+  getMessages: () => ChatMessage[];
+  originalUserRequest: string;
   narrationTrim: () => string;
   narrationBuffer: string;
   emit: (type: string, data: unknown) => void;
@@ -134,7 +142,7 @@ export async function returnResumableChunk(
   deps: RunInfraDeps,
   steps: number,
   toolsUsed: Set<string>,
-  options?: { buildFix?: boolean },
+  options?: ResumableExitOptions,
 ): Promise<ResumableChunkResult> {
   await deps.saveCheckpoint(deps.getPhase(), true);
   emitDeliveryCheckpoint(deps, steps);
@@ -162,10 +170,15 @@ export async function returnResumableWithUserMessage(
   persistFinalFn: ((summary: string, opts?: any) => Promise<void>) | undefined,
   steps: number,
   toolsUsed: Set<string>,
-  options?: { buildFix?: boolean },
+  options?: ResumableExitOptions,
   explicitProse?: string,
 ): Promise<ResumableChunkResult> {
-  const prose = (explicitProse && explicitProse.trim()) || "Retomando o trabalho solicitado.";
+  const prose = (explicitProse && explicitProse.trim()) || ensureUserMessage(
+    infraDeps.getMessages(),
+    [...infraDeps.touchedPaths],
+    infraDeps.originalUserRequest,
+    options?.errorMessage,
+  );
   infraDeps.emit("assistant_text", { text: prose, final: true, append: false });
   if (persistFinalFn) {
     await persistFinalFn(prose, { lastFinishOk: false, finished: false });

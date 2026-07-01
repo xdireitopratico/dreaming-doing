@@ -218,6 +218,19 @@ export type AgentLoopDepsContext = {
     buildFix?: boolean;
     toolsUsed: string[];
   }>;
+  returnResumableWithUserMessage: (
+    steps: number,
+    toolsUsed: Set<string>,
+    options?: { buildFix?: boolean; errorMessage?: string },
+    prose?: string,
+  ) => Promise<{
+    ok: false;
+    error: string;
+    steps: number;
+    resumable: true;
+    buildFix?: boolean;
+    toolsUsed: string[];
+  }>;
   runDesignPreflightIfNeeded: () => Promise<unknown>;
   requiresFinalBuildGate: () => boolean;
   enabledApprovedPlanSteps: () => PlanStep[];
@@ -308,6 +321,8 @@ export function buildInfraDeps(
     setLastActivityAt: ctx.setLastActivityAt,
     getMaxStepsLimit: () => ctx.maxStepsLimit,
     touchedPaths: ctx.touchedPaths,
+    getMessages: () => ctx.state.messages,
+    originalUserRequest: ctx.originalUserRequest,
     narrationTrim: ctx.narrationTrim,
     narrationBuffer: ctx.narrationBuffer,
     emit: ctx.emit,
@@ -377,7 +392,6 @@ export function buildExecuteDeps(
     narrationBuffer: ctx.narrationBuffer,
     emit: ctx.emit,
     loopBudgetExceeded: ctx.loopBudgetExceeded,
-    returnResumableChunk: ctx.returnResumableChunk,
     returnResumableWithUserMessage: ctx.returnResumableWithUserMessage,
     runDesignPreflightIfNeeded: ctx.runDesignPreflightIfNeeded as BuildExecuteDeps["runDesignPreflightIfNeeded"],
     requiresFinalBuildGate: ctx.requiresFinalBuildGate,
@@ -423,7 +437,6 @@ export function buildPlanTurnDeps(
     streamState: ctx.planStreamState,
     compressMessages: ctx.compressMessages,
     loopBudgetExceeded: ctx.loopBudgetExceeded,
-    returnResumableChunk: ctx.returnResumableChunk,
     returnResumableWithUserMessage: ctx.returnResumableWithUserMessage,
     saveCheckpoint: (phase) => ctx.saveCheckpoint(phase),
     attemptGracefulClosing: (reason) => ctx.attemptGracefulClosing(reason),
@@ -482,6 +495,15 @@ export function createDepsContext(
       loopBudgetExceeded({ runStartTime: host.runStartTime, loopBudgetMs }),
     returnResumableChunk: (steps, used, options) =>
       returnResumableChunk(infraDeps(), steps, used, options),
+    returnResumableWithUserMessage: (steps, used, options, prose) =>
+      infraReturnResumableWithUserMessage(
+        infraDeps(),
+        (summary, opts) => persistFinal(persistDeps(), summary, opts),
+        steps,
+        used,
+        options,
+        prose,
+      ),
     runDesignPreflightIfNeeded: () => host.runDesignPreflightIfNeeded(),
     requiresFinalBuildGate: () => host.requiresFinalBuildGate(),
     enabledApprovedPlanSteps: () => host.enabledApprovedPlanSteps(),

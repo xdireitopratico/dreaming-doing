@@ -226,7 +226,7 @@ async function returnRecoverablePlanChunk(input: {
     content: input.prompt ?? text,
   });
   // Use wrapper: it emits the prose + persistFinal (central AC1), then returns chunk.
-  const chunk = await (input.deps.returnResumableWithUserMessage || input.deps.returnResumableChunk)(input.step, input.toolsUsed, undefined, text);
+  const chunk = await input.deps.returnResumableWithUserMessage(input.step, input.toolsUsed, undefined, text);
   return {
     ok: false,
     summary: text,
@@ -395,9 +395,11 @@ export type PlanTurnDeps = PlanTurnFinishDeps & {
   streamState: PlanModeStreamState;
   compressMessages: (messages: ChatMessage[]) => Promise<ChatMessage[]>;
   loopBudgetExceeded: () => boolean;
-  returnResumableChunk: (
+  returnResumableWithUserMessage: (
     steps: number,
     toolsUsed: Set<string>,
+    options?: { buildFix?: boolean; errorMessage?: string },
+    prose?: string,
   ) => Promise<{
     ok: false;
     error: string;
@@ -406,12 +408,6 @@ export type PlanTurnDeps = PlanTurnFinishDeps & {
     buildFix?: boolean;
     toolsUsed: string[];
   }>;
-  returnResumableWithUserMessage?: (
-    steps: number,
-    toolsUsed: Set<string>,
-    options?: any,
-    prose?: string,
-  ) => Promise<any>;
   saveCheckpoint: (phase: LoopPhase) => Promise<void>;
   attemptGracefulClosing: (reason: "plan_stuck") => Promise<string | null>;
   executeTool: (call: ToolCall) => Promise<ToolResult>;
@@ -458,7 +454,7 @@ export async function runPlanModeAgentTurn(
 
   for (let step = 0; step < MAX_PLAN_EXPLORE; step++) {
     if (deps.loopBudgetExceeded()) {
-      return (deps.returnResumableWithUserMessage || deps.returnResumableChunk)(step, toolsUsed, undefined, undefined);
+      return deps.returnResumableWithUserMessage(step, toolsUsed);
     }
 
     const compressed = await deps.compressMessages(deps.state.messages);

@@ -37,9 +37,15 @@ export function ensureUserMessage(
   return formatSafeFallback(touchedPaths, userRequest, errorMessage);
 }
 
+export type TerminalPersistOpts = {
+  lastFinishOk?: boolean;
+  finished?: boolean;
+  buildFailed?: boolean;
+};
+
 export type TerminalEmitDeps = {
   emit: (type: string, data: unknown) => void;
-  persistFinal: (summary: string, opts?: any) => Promise<void>;
+  persistFinal: (summary: string, opts?: TerminalPersistOpts) => Promise<void>;
 };
 
 /**
@@ -51,11 +57,16 @@ export async function emitTerminalUserMessage(
   prose: string,
   final: boolean = true,
   lastFinishOk: boolean = true,
-  finished: boolean = true
+  finished: boolean = true,
+  persistOpts?: TerminalPersistOpts,
 ): Promise<void> {
   const text = (prose || "").trim() || "Retomando o trabalho...";
   deps.emit("assistant_text", { text, final, append: false });
-  await deps.persistFinal(text, { lastFinishOk, finished });
+  await deps.persistFinal(text, {
+    lastFinishOk,
+    finished,
+    ...persistOpts,
+  });
 }
 
 /**

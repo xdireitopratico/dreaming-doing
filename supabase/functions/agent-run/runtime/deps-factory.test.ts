@@ -97,6 +97,13 @@ function mockDepsContext(overrides?: Partial<AgentLoopDepsContext>): AgentLoopDe
       resumable: true as const,
       toolsUsed: [],
     }),
+    returnResumableWithUserMessage: async () => ({
+      ok: false as const,
+      error: "chunk",
+      steps: 0,
+      resumable: true as const,
+      toolsUsed: [],
+    }),
     runDesignPreflightIfNeeded: async () => {},
     requiresFinalBuildGate: () => false,
     enabledApprovedPlanSteps: () => [],

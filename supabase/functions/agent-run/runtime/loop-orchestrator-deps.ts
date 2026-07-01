@@ -84,7 +84,8 @@ export function buildOrchestratorDeps(
         router: host.router,
       }),
     loopBudgetExceeded: () => host.loopBudgetExceeded(),
-    returnResumableChunk: (steps, used) => host.bindings.returnResumableChunk(steps, used),
+    returnResumableWithUserMessage: (steps, used, options, prose) =>
+      host.bindings.returnResumableWithUserMessage(steps, used, options, prose),
     gatherContext: () => host.gatherContext(),
     saveCheckpoint: (phase) => host.bindings.saveCheckpoint(phase),
     runChatModeAgentTurn: (model) => host.runChatModeAgentTurn(model),

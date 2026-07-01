@@ -36,9 +36,11 @@ export type OrchestratorDeps = GateReplyDeps & {
   applyAutoModelForComplexity: (complexity: number) => void;
   configuredModel: () => LLMProvider;
   loopBudgetExceeded: () => boolean;
-  returnResumableChunk: (
+  returnResumableWithUserMessage: (
     steps: number,
     toolsUsed: Set<string>,
+    options?: { buildFix?: boolean; errorMessage?: string },
+    prose?: string,
   ) => Promise<PlanTurnRunResult>;
   gatherContext: () => Promise<void>;
   saveCheckpoint: (phase: LoopPhaseEnum) => Promise<void>;
@@ -108,13 +110,13 @@ export async function runAgentOrchestrator(
     }
 
     if (deps.loopBudgetExceeded()) {
-      return deps.returnResumableChunk(0, deps.toolsUsed);
+      return deps.returnResumableWithUserMessage(0, deps.toolsUsed, undefined, "Retomando após análise inicial — continuo em seguida.");
     }
     deps.emit("phase", { phase: "gather", message: GATHER_PHASE_MESSAGE });
     deps.emit("explore", { message: GATHER_PHASE_MESSAGE, phase: "gather" });
     await deps.gatherContext();
     if (deps.loopBudgetExceeded()) {
-      return deps.returnResumableChunk(0, deps.toolsUsed);
+      return deps.returnResumableWithUserMessage(0, deps.toolsUsed, undefined, "Retomando após coleta de contexto — continuo em seguida.");
     }
     await deps.saveCheckpoint(LoopPhaseEnum.GATHER_CONTEXT);
 
@@ -126,7 +128,7 @@ export async function runAgentOrchestrator(
       : deriveClassificationFromPrompt(userPrompt, deps.planMode);
 
     if (deps.loopBudgetExceeded()) {
-      return deps.returnResumableChunk(0, deps.toolsUsed);
+      return deps.returnResumableWithUserMessage(0, deps.toolsUsed, undefined, "Retomando após classificação — continuo em seguida.");
     }
 
     deps.setComplexityScore(classification.complexity);

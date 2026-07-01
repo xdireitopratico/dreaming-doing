@@ -23,6 +23,8 @@ function mockInfraDeps(overrides?: Partial<RunInfraDeps>): RunInfraDeps & {
     },
     getMaxStepsLimit: () => 60,
     touchedPaths: new Set(),
+    getMessages: () => [],
+    originalUserRequest: "test",
     narrationTrim: () => "",
     narrationBuffer: "",
     emit: (type, data) => events.push({ type, data }),

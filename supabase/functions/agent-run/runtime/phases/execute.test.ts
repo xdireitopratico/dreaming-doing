@@ -101,17 +101,12 @@ function buildStubbedExecuteDeps(overrides?: {
     narrationBuffer: "",
     emit: (type, data) => events.push({ type, data: data as Record<string, unknown> }),
     loopBudgetExceeded: () => false,
-    returnResumableChunk: async (steps, _toolsUsed, options) => ({
-      ok: false,
-      error: "resumable",
-      steps,
-      resumable: true,
-      buildFix: options?.buildFix === true,
-      toolsUsed: [],
-    }),
     returnResumableWithUserMessage: async (steps, _toolsUsed, options, prose) => {
-      if (prose) events.push({ type: "assistant_text", data: { text: prose, final: true, append: false } as any });
-      if (typeof (deps as any).persistFinal === "function" && prose) await (deps as any).persistFinal(prose, { lastFinishOk: false, finished: false });
+      const text = (prose && prose.trim()) || "Retomando automaticamente o trabalho anterior.";
+      events.push({ type: "assistant_text", data: { text, final: true, append: false } as any });
+      if (typeof (deps as any).persistFinal === "function") {
+        await (deps as any).persistFinal(text, { lastFinishOk: false, finished: false });
+      }
       return {
         ok: false,
         error: "resumable",
@@ -151,14 +146,6 @@ function buildStubbedExecuteDeps(overrides?: {
   };
   (deps as unknown as { _events: () => typeof events })._events = () => events;
   (deps as unknown as { _narration: () => NarrationPhase })._narration = () => narration;
-  // Ensure the withUser method is always present on stub (for early/resumable paths).
-  if (!(deps as any).returnResumableWithUserMessage) {
-    (deps as any).returnResumableWithUserMessage = async (steps: number, _t: any, o?: any, prose?: string) => {
-      if (prose) events.push({ type: "assistant_text", data: { text: prose, final: true } as any });
-      if (typeof (deps as any).persistFinal === "function" && prose) await (deps as any).persistFinal(prose, { lastFinishOk: false, finished: false });
-      return { ok: false, error: "resumable", steps, resumable: true, buildFix: !!o?.buildFix, toolsUsed: [] };
-    };
-  }
   return deps;
 }
 

@@ -62,6 +62,11 @@ import {
   transitionBuildSession,
   type CanonicalBuildSession,
 } from "../build-session.ts";
+import {
+  ensureUserMessage,
+  emitTerminalUserMessage,
+} from "../terminal-user-message.ts";
+import type { ResumableExitOptions } from "../infra.ts";
 
 export type BuildExecuteDeps = {
   robinActive: boolean;
@@ -103,15 +108,10 @@ export type BuildExecuteDeps = {
   narrationBuffer: string;
   emit: PlanTurnEmit;
   loopBudgetExceeded: () => boolean;
-  returnResumableChunk: (
+  returnResumableWithUserMessage: (
     steps: number,
     toolsUsed: Set<string>,
-    options?: { buildFix?: boolean },
-  ) => Promise<PlanTurnRunResult>;
-  returnResumableWithUserMessage?: (
-    steps: number,
-    toolsUsed: Set<string>,
-    options?: { buildFix?: boolean },
+    options?: ResumableExitOptions,
     prose?: string,
   ) => Promise<PlanTurnRunResult>;
   runDesignPreflightIfNeeded: () =>
@@ -201,34 +201,21 @@ function applyNoToolCallsEnforcement(
   return false;
 }
 
-const CLOSING_SYSTEM_PROMPT =
-  "Você deve terminar esta interação com uma frase curta para o usuário (máximo 200 caracteres) explicando o resultado real: o que conseguiu, o que falhou, ou por que parou. Não invente sucesso. Seja específico.";
-
-/** Produz fechamento final garantido. Prefere prosa anterior / síntese; NUNCA retorna vazio.
- *  Determinístico + history-derived fallback assegura prose visível para o usuário. */
-async function forceFinalClosing(
+/** Produz fechamento final garantido via choke point central — NUNCA retorna vazio. */
+function forceFinalClosing(
   deps: BuildExecuteDeps,
   instruction: string,
   history: ChatMessage[],
-): Promise<string> {
-  // Reutiliza o resolvedor de fechamento que agora GARANTE não-vazio.
-  try {
-    const resolved = await resolveClosureText({
-      messages: history,
-      touchedPaths: [...(deps.touchedPaths ?? [])],
-      userRequest: instruction,
-      model: deps.executionModel,
-    });
-    if (resolved && resolved.trim()) {
-      deps.narrationPhase?.emitFinalClosing(resolved);
-      return resolved;
-    }
-  } catch {}
-  // Ultra-safe deterministic prose.
-  const touched = [...(deps.touchedPaths ?? [])];
-  const base = instruction ? instruction.slice(0, 80) : "o pedido";
-  const note = touched.length ? ` (${touched.length} arquivos)` : "";
-  return `Trabalho finalizado para ${base}${note}. Sessão disponível para próximos ajustes.`;
+  errorMessage?: string,
+): string {
+  const text = ensureUserMessage(
+    history,
+    [...deps.touchedPaths],
+    instruction,
+    errorMessage,
+  );
+  deps.narrationPhase?.emitFinalClosing(text);
+  return text;
 }
 
 /** Wrapper de saída: garante `assistant_text` final visível antes de persistir.
@@ -248,17 +235,12 @@ async function emitClosingAndPersist(
 ): Promise<PlanTurnRunResult> {
   const instruction = opts.instruction ?? deps.originalUserRequest;
   const history = deps.state.messages;
-  let finalText = (opts.closing ?? "").trim();
-  if (!finalText) {
-    finalText = await forceFinalClosing(deps, instruction, history);
-  }
-  // Garantia absoluta: se algo bizarro deixou vazio, usa fallback ultra-seguro.
-  if (!finalText || !finalText.trim()) {
-    finalText = "Trabalho finalizado. Sessão disponível para revisão ou continuação.";
-  }
-  // Sempre emitimos prose visível para o usuário (nunca o erro "não respondeu").
-  deps.emit("assistant_text", { text: finalText, final: true, append: false });
+  const finalText = (opts.closing ?? "").trim() ||
+    forceFinalClosing(deps, instruction, history, opts.error);
   const ok = opts.ok === true;
+  await emitTerminalUserMessage(deps, finalText, true, ok, true, {
+    buildFailed: opts.buildFailed,
+  });
   const session = deps.getBuildSession();
   if (session) {
     const withError =
@@ -272,10 +254,6 @@ async function emitClosingAndPersist(
         : session;
     deps.setBuildSession(finalizeBuildSession(withError, ok ? "ok" : "failed", finalText));
   }
-  await deps.persistFinal(finalText, {
-    lastFinishOk: ok,
-    buildFailed: opts.buildFailed,
-  });
   return {
     ok,
     error: opts.error,
@@ -291,8 +269,13 @@ async function emitTerminalBuildFailure(
   loopStep: number,
   message: string,
 ): Promise<PlanTurnRunResult> {
-  const text = message.trim() || "Retomando em seguida.";
-  deps.emit("assistant_text", { text, final: true, append: false });
+  const text = message.trim() || ensureUserMessage(
+    deps.state.messages,
+    [...deps.touchedPaths],
+    deps.originalUserRequest,
+    message,
+  );
+  await emitTerminalUserMessage(deps, text, true, false, true, { buildFailed: true });
   const session = deps.getBuildSession();
   if (session) {
     deps.setBuildSession(
@@ -308,10 +291,6 @@ async function emitTerminalBuildFailure(
       ),
     );
   }
-  await deps.persistFinal(text, {
-    lastFinishOk: false,
-    buildFailed: true,
-  });
   return {
     ok: false,
     error: text,
@@ -417,7 +396,7 @@ export async function runBuildExecutePhase(
           touchedPaths: [...deps.touchedPaths],
           userRequest: deps.originalUserRequest,
         }).catch(() => "");
-        return (deps.returnResumableWithUserMessage || deps.returnResumableChunk)(loopStep, deps.toolsUsed, undefined, prose || undefined);
+        return deps.returnResumableWithUserMessage(loopStep, deps.toolsUsed, undefined, prose || undefined);
       }
 
       if (await deps.isCanceled()) {
@@ -531,7 +510,9 @@ export async function runBuildExecutePhase(
         }
         await deps.saveCheckpoint(LoopPhaseEnum.ERROR, true);
         deps.notifyLoopStatus({ kind: "model_error", errorDetail: friendly });
-        return (deps.returnResumableWithUserMessage || deps.returnResumableChunk)(loopStep, deps.toolsUsed, undefined, undefined);
+        return deps.returnResumableWithUserMessage(loopStep, deps.toolsUsed, {
+          errorMessage: friendly,
+        });
       }
 
       if (!response) break;
@@ -1043,7 +1024,9 @@ export async function runBuildExecutePhase(
 
       if (loopStep >= deps.maxStepsLimit && !agentTextComplete) {
         await deps.saveCheckpoint(LoopPhaseEnum.DECIDE_NEXT, true);
-        return (deps.returnResumableWithUserMessage || deps.returnResumableChunk)(loopStep, deps.toolsUsed, { buildFix: deps.requiresFinalBuildGate() }, undefined);
+        return deps.returnResumableWithUserMessage(loopStep, deps.toolsUsed, {
+          buildFix: deps.requiresFinalBuildGate(),
+        });
       }
 
     if (!deps.requiresFinalBuildGate()) {
@@ -1123,7 +1106,7 @@ export async function runBuildExecutePhase(
     }
 
     if (deps.loopBudgetExceeded()) {
-      return (deps.returnResumableWithUserMessage || deps.returnResumableChunk)(loopStep, deps.toolsUsed, { buildFix: true }, undefined);
+      return deps.returnResumableWithUserMessage(loopStep, deps.toolsUsed, { buildFix: true });
     }
 
     deps.state.messages.push({
@@ -1151,7 +1134,7 @@ export async function runBuildExecutePhase(
   // Nunca mais o erro "O modelo não respondeu com a mensagem esperada".
   let finalClosing = (closingText || "").trim();
   if (!finalClosing) {
-    finalClosing = await forceFinalClosing(deps, deps.originalUserRequest, deps.state.messages);
+    finalClosing = forceFinalClosing(deps, deps.originalUserRequest, deps.state.messages);
   }
   deps.emit("assistant_text", {
     text: finalClosing,

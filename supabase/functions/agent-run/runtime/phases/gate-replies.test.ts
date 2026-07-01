@@ -62,12 +62,13 @@ Deno.test("runInventoryGate — resposta vazia retorna chunk resumível", async 
       projectConfig: "cfg",
       manifest: "manifest",
     } as never,
-    returnResumableChunk: async (_steps, _toolsUsed) => ({
+    returnResumableWithUserMessage: async (_steps, _toolsUsed, _options, prose) => ({
       ok: false,
       error: "Retomando automaticamente em novo chunk…",
       steps: 0,
       resumable: true,
       toolsUsed: [],
+      summary: prose,
     }),
   });
   const model = {
@@ -111,12 +112,13 @@ function mockGateDeps(overrides?: Partial<GateReplyDeps>): GateReplyDeps & {
     originalUserRequest: "",
     planMode: false,
     emit: (type, data) => events.push({ type, data }),
-    returnResumableChunk: async () => ({
+    returnResumableWithUserMessage: async (_steps, _toolsUsed, _options, prose) => ({
       ok: false,
       error: "Retomando automaticamente em novo chunk…",
       steps: 0,
       resumable: true,
       toolsUsed: [],
+      summary: prose,
     }),
     configuredModel: () => {
       throw new Error("not used");
