@@ -1,11 +1,52 @@
 import { supabase } from "@/integrations/supabase/client";
+import { getSupabaseEnv } from "@/lib/supabase-env";
 import type {
   LibraryEntry,
   DesignDnaJob,
   LibraryFilters,
   LibraryOverview,
   RealtimeEvent,
+  DesignDnaInstruction,
 } from "./types";
+
+export async function postInstruction(
+  jobId: string,
+  content: string,
+  role: "user" | "system" = "user",
+): Promise<void> {
+  const { url } = getSupabaseEnv();
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  const token = session?.access_token;
+  if (!token) throw new Error("Not authenticated");
+
+  const res = await fetch(`${url}/functions/v1/design-library-instructions`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ jobId, content, role }),
+  });
+
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error ?? `HTTP ${res.status}`);
+  }
+}
+
+export async function fetchInstructions(jobId: string): Promise<DesignDnaInstruction[]> {
+  const { data, error } = await supabase
+    .from("design_dna_instructions")
+    .select("*")
+    .eq("job_id", jobId)
+    .order("created_at", { ascending: true });
+
+  if (error) throw new Error(error.message);
+  return (data ?? []) as DesignDnaInstruction[];
+}
+
 
 export async function fetchLibraryEntries(filters: LibraryFilters): Promise<LibraryEntry[]> {
   let query = supabase

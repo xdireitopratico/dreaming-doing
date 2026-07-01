@@ -6,6 +6,8 @@ import {
   fetchJobHistory,
   fetchJobDetails,
   fetchJobEvents,
+  postInstruction,
+  fetchInstructions,
 } from "./api";
 import type {
   LibraryEntry,
@@ -13,7 +15,71 @@ import type {
   LibraryFilters,
   LibraryOverview,
   RealtimeEvent,
+  DesignDnaInstruction,
 } from "./types";
+
+export function usePostInstruction() {
+  const [posting, setPosting] = useState(false);
+
+  const post = useCallback(async (jobId: string, content: string, role: "user" | "system" = "user") => {
+    setPosting(true);
+    try {
+      await postInstruction(jobId, content, role);
+    } finally {
+      setPosting(false);
+    }
+  }, []);
+
+  return { post, posting };
+}
+
+export function useDesignDnaInstructions(jobId: string | null) {
+  const [instructions, setInstructions] = useState<DesignDnaInstruction[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!jobId) {
+      setInstructions([]);
+      return;
+    }
+    let cancelled = false;
+    setLoading(true);
+    fetchInstructions(jobId)
+      .then((data) => {
+        if (!cancelled) setInstructions(data);
+      })
+      .catch((err) => {
+        console.error("[useDesignDnaInstructions] fetch failed:", err);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    const channel = supabase
+      .channel(`design-dna-instructions-${jobId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "design_dna_instructions",
+          filter: `job_id=eq.${jobId}`,
+        },
+        (payload: { new?: unknown }) => {
+          setInstructions((prev) => [...prev, payload.new as DesignDnaInstruction]);
+        },
+      )
+      .subscribe();
+
+    return () => {
+      cancelled = true;
+      void supabase.removeChannel(channel);
+    };
+  }, [jobId]);
+
+  return { instructions, loading };
+}
+
 
 export function useLibrary(filters: LibraryFilters) {
   const [entries, setEntries] = useState<LibraryEntry[]>([]);

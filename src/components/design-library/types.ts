@@ -92,6 +92,24 @@ export interface RealtimeEvent {
   created_at: string;
 }
 
+export interface DesignDnaInstruction {
+  id: string;
+  job_id: string;
+  role: "user" | "system";
+  content: string;
+  status: "pending" | "consumed" | "canceled";
+  created_at: string;
+  consumed_at?: string | null;
+}
+
+export type AgentEventType =
+  | "agent_thought"
+  | "agent_action"
+  | "agent_observation"
+  | "agent_instruction_consumed"
+  | "agent_done"
+  | "agent_error";
+
 export const CATEGORIES = [
   "all",
   "hero",
