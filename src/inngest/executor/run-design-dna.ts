@@ -298,13 +298,13 @@ export async function executeDesignDnaJob(
           await appendJobEvent(supabase, jobId, "url_blocked", blockedRec);
         }
         
-        // Valida qualidade mínima antes de salvar
+        // Valida qualidade mínima — quality_score vem calibrado pelo DNA validator (Refero)
         const qualityScore = Number(dna.quality_score ?? 0);
-        if (qualityScore < 5) {
-          const msg = `DNA quality score ${qualityScore} below minimum threshold (5/10)`;
+        if (qualityScore < 4) {
+          const msg = `DNA quality score ${qualityScore}/10 below minimum threshold (4/10)`;
           errors.push({ url, index: i, error: msg, kind: "quality_threshold" });
           await appendJobEvent(supabase, jobId, "quality_error", { url, qualityScore, reason: msg });
-          continue; // Pula esta URL mas continua com outras
+          continue;
         }
 
         // Valida campos obrigatórios
@@ -314,7 +314,7 @@ export async function executeDesignDnaJob(
           const msg = `DNA missing required fields: ${missingFields.join(', ')}`;
           errors.push({ url, index: i, error: msg, kind: "missing_fields" });
           await appendJobEvent(supabase, jobId, "validation_error", { url, missingFields });
-          continue; // Pula esta URL mas continua com outras
+          continue;
         }
 
         results.push(dna);
