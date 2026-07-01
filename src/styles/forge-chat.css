@@ -842,8 +842,11 @@
 }
 
 .forge-plan-dock-shell {
+  display: flex;
+  flex-direction: column;
   width: 100%;
-  padding: 12px 14px 10px;
+  max-height: min(44vh, 420px);
+  padding: 10px 12px 10px;
   border-radius: var(--forge-radius-lg, 20px);
   background: linear-gradient(135deg, #1a1e27, #0b0d12);
   border: 1px solid var(--forge-border-strong, rgba(237, 239, 242, 0.14));
@@ -859,43 +862,59 @@
   display: flex;
   flex-direction: column;
   min-width: 0;
+  overflow: hidden;
 }
 
-.forge-plan-dock-shell--ready > .forge-plan-phases,
-.forge-plan-dock-shell--ready > .forge-plan-dock-inner {
-  flex: 0 1 auto;
+.forge-plan-dock-scroll {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1 1 auto;
   min-height: 0;
-  max-height: clamp(160px, 32vh, 340px);
   overflow-y: auto;
   overflow-x: hidden;
+  padding-right: 2px;
   scrollbar-width: thin;
   scrollbar-color: color-mix(in srgb, var(--border-forge) 65%, #52525b 35%) transparent;
 }
 
-.forge-plan-dock-shell--ready > .forge-plan-phases::-webkit-scrollbar,
-.forge-plan-dock-shell--ready > .forge-plan-dock-inner::-webkit-scrollbar {
+.forge-plan-dock-scroll::-webkit-scrollbar {
   width: 6px;
 }
 
-.forge-plan-dock-shell--ready > .forge-plan-phases::-webkit-scrollbar-thumb,
-.forge-plan-dock-shell--ready > .forge-plan-dock-inner::-webkit-scrollbar-thumb {
+.forge-plan-dock-scroll::-webkit-scrollbar-thumb {
   background: color-mix(in srgb, var(--border-forge) 70%, #52525b 30%);
   border-radius: 999px;
 }
 
 .forge-plan-dock-shell--ready > .forge-composer-row {
   flex-shrink: 0;
-  margin-top: 8px;
+  margin-top: 6px;
+}
+
+.forge-plan-dock .forge-plan-waiting-banner {
+  padding: 8px 10px;
+  border-radius: 10px;
+}
+
+.forge-plan-dock .forge-plan-waiting-banner-kicker {
+  font-size: 10px;
+}
+
+.forge-plan-dock .forge-plan-waiting-banner-headline {
+  margin-top: 3px;
+  font-size: 12px;
+  line-height: 1.35;
 }
 
 .forge-plan-dock-title-button {
   width: 100%;
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  margin: 10px 0 8px;
-  padding: 12px 14px;
-  border-radius: 14px;
+  gap: 3px;
+  margin: 8px 0 6px;
+  padding: 10px 12px;
+  border-radius: 12px;
   border: 1px solid color-mix(in srgb, var(--border-forge) 68%, transparent);
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(0, 0, 0, 0));
   text-align: left;
@@ -913,7 +932,7 @@
 }
 
 .forge-plan-dock-title-copy {
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -921,8 +940,8 @@
 }
 
 .forge-plan-dock-title-headline {
-  font-size: 14px;
-  line-height: 1.45;
+  font-size: 13px;
+  line-height: 1.35;
   color: var(--text-primary);
 }
 
@@ -930,7 +949,7 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-size: 11px;
+  font-size: 10px;
   color: var(--text-secondary);
 }
 
@@ -938,24 +957,24 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  min-height: 28px;
+  min-height: 24px;
   padding: 0 2px;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
   color: var(--status-done);
 }
 
 .forge-plan-dock-inner {
-  margin-bottom: 8px;
-  padding: var(--space-md) var(--space-lg);
-  border-radius: 12px;
+  margin-bottom: 6px;
+  padding: 10px 12px;
+  border-radius: 10px;
   background: var(--forge-preview, #0a0a0f);
   border: 1px solid color-mix(in srgb, var(--border-forge) 55%, transparent);
 }
 
 .forge-plan-dock-label {
   margin: 0 0 var(--space-xs);
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -971,8 +990,8 @@
 .forge-plan-dock-body {
   margin: 0;
   font: var(--font-chat);
-  font-size: 13px;
-  line-height: 1.55;
+  font-size: 12px;
+  line-height: 1.45;
   color: var(--text-primary);
 }
 
@@ -981,13 +1000,13 @@
   align-items: center;
   justify-content: center;
   gap: 6px;
-  height: 28px;
-  padding: 0 12px;
+  height: 26px;
+  padding: 0 10px;
   border-radius: var(--chat-cta-radius);
   border: 1px solid color-mix(in srgb, var(--border-forge) 80%, transparent);
   background: linear-gradient(135deg, #1a1e27, #0b0d12);
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 500;
   cursor: pointer;
   transition:

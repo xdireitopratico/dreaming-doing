@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import { ArrowRight, Check, Loader2, Play, SkipForward } from "lucide-react";
+import { Check, Loader2, Play, SkipForward } from "lucide-react";
 import type { PendingPlan, PlanStep } from "@/lib/agent-progress";
 import { buildForgePlanMarkdown } from "@/lib/plan-document";
 import { enabledPlanSteps } from "@/lib/forge-run";
@@ -84,57 +84,44 @@ export function ChatPlanDock({
   return (
     <div className="forge-plan-dock" data-testid="chat-plan-dock-ready">
       <div className="forge-plan-dock-shell forge-plan-dock-shell--ready">
-        <PlanWaitingBanner
-          variant={materializing ? "approved" : "waiting"}
-          headline={bannerHeadline}
-        />
+        <div className="forge-plan-dock-scroll">
+          <PlanWaitingBanner
+            variant={materializing ? "approved" : "waiting"}
+            headline={bannerHeadline}
+          />
 
-        <button
-          type="button"
-          className="forge-plan-dock-title-button"
-          onClick={() => onReview?.(pendingPlan.runId)}
-        >
-          <span className="forge-plan-dock-title-copy">
-            {materializing ? "Plano aprovado" : "Ver plano completo"}
-          </span>
-          <span className="forge-plan-dock-title-headline">{pendingPlan.summary}</span>
-          <span className="forge-plan-dock-title-hint">
+          <button
+            type="button"
+            className="forge-plan-dock-title-button"
+            onClick={() => onReview?.(pendingPlan.runId)}
+          >
+            <span className="forge-plan-dock-title-copy">
+              {materializing ? "Plano aprovado" : "Ver plano completo"}
+            </span>
+            <span className="forge-plan-dock-title-headline">{pendingPlan.summary}</span>
             {materializing ? (
-              <>
+              <span className="forge-plan-dock-title-hint">
                 <Loader2 className="size-3.5 animate-spin" />
                 Build em andamento
-              </>
-            ) : (
-              <>
-                <ArrowRight className="size-3.5" />
-                Abrir no inspector
-              </>
-            )}
-          </span>
-        </button>
+              </span>
+            ) : null}
+          </button>
 
-        {hasPhases ? (
-          <PlanPhaseList phases={phases} compact />
-        ) : (
-          <div className="forge-plan-dock-inner">
-            <p className="forge-plan-dock-label forge-plan-dock-label--icon">
-              <Play className="size-3" aria-hidden />
-              Plan
-            </p>
-            <p className="forge-plan-dock-body">{planParagraphFromPlan(pendingPlan)}</p>
-          </div>
-        )}
+          {hasPhases ? (
+            <PlanPhaseList phases={phases} compact />
+          ) : (
+            <div className="forge-plan-dock-inner">
+              <p className="forge-plan-dock-label forge-plan-dock-label--icon">
+                <Play className="size-3" aria-hidden />
+                Plan
+              </p>
+              <p className="forge-plan-dock-body">{planParagraphFromPlan(pendingPlan)}</p>
+            </div>
+          )}
+        </div>
 
         <div className="forge-composer-row">
-          <div className="forge-composer-row-start">
-            <button
-              type="button"
-              className="forge-plan-dock-btn"
-              onClick={() => onReview?.(pendingPlan.runId)}
-            >
-              Inspect
-            </button>
-          </div>
+          <div className="forge-composer-row-start" />
           <div className="forge-composer-spacer" aria-hidden />
           {awaitingApproval ? (
             <div className="forge-composer-row-end">
