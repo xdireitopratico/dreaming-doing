@@ -264,9 +264,6 @@ function buildRawThread(
     }
   }
 
-  // Posiciona o live run logo após o último user (para que turn[1] seja o live quando há user recente).
-  // Órfãos reorderáveis (Entendi sem run) ficam em suas posições relativas.
-  items = ensureLiveRunAfterLastUser(items, activeRunId);
   items = pruneOrphanAssistantsWhenLive(items, activeRunId, running);
 
   return items;
@@ -294,23 +291,6 @@ function pruneOrphanAssistantsWhenLive(
     if (it.kind !== "assistant" || i <= lastUser || i === liveIdx) return true;
     return !isReorderableOrphanAssistant(it);
   });
-}
-
-function ensureLiveRunAfterLastUser(
-  items: RawThreadItem[],
-  activeRunId?: string | null,
-): RawThreadItem[] {
-  if (!activeRunId) return items;
-  const liveIdx = items.findIndex(
-    (it) => it.kind === "assistant" && it.runId === activeRunId && (it.live || it.isActive),
-  );
-  if (liveIdx < 0) return items;
-  const lastUser = lastVisibleUserIndex(items);
-  if (liveIdx > lastUser + 1) {
-    const [liveItem] = items.splice(liveIdx, 1);
-    items.splice(lastUser + 1, 0, liveItem);
-  }
-  return items;
 }
 
 /**

@@ -299,6 +299,34 @@ describe("buildChatThread", () => {
     expect(asstIdx).toBeGreaterThan(userIdx);
   });
 
+  it("slot live não furta fila acima de assistant concluído anterior", () => {
+    const messages = [
+      msg("u0", "user", "pedido"),
+      {
+        id: "a0",
+        role: "assistant" as const,
+        content: "Plano aprovado",
+        timestamp: 0,
+        runId: "run-plan",
+        meta: { runId: "run-plan", finishedAt: "2026-01-01T00:00:00Z" },
+      },
+    ];
+    const progress = {
+      ...initialAgentProgress,
+      finished: false,
+      narrationText: "Executando build…",
+    };
+    const thread = buildChatThread(messages, progress, {
+      running: true,
+      activeRunId: "run-build",
+      sessionProgress: progress,
+    });
+    const assistantIds = thread
+      .filter((t) => t.kind === "assistant")
+      .map((t) => (t.kind === "assistant" ? t.runId : null));
+    expect(assistantIds).toEqual(["run-plan", "run-build"]);
+  });
+
   it("slot live sintético: intro sim, fechamento só após materializar no DB", () => {
     const messages = [msg("u1", "user", "novo projeto")];
     const progress = {
