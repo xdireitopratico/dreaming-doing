@@ -309,23 +309,18 @@ export function useEditorPageHandlers({
         return false;
       }
     },
-    [
-      conversation,
-      projectId,
-      isAgentBusy,
-      agent,
-      logPanelOpen,
-      qc,
-      agent.progress.resumable,
-      tasteQuota,
-      composerMode,
-      setLogs,
-      setLogPanelOpen,
-    ],
+    [conversation, projectId, isAgentBusy, agent, qc, tasteQuota, composerMode, setLogs],
   );
 
   const handleResumeAgent = useCallback(() => {
-    if (!conversation || isAgentBusy()) return;
+    const canResumeStalledRun =
+      agent.progress.resumable === true ||
+      agent.progress.lastFinishOk === false ||
+      agent.progress.connectionState === "disconnected" ||
+      agent.progress.connectionState === "reconnecting" ||
+      /stale|interromp|checkpoint|continuar|zumbi/i.test(agent.progress.error ?? "");
+
+    if (!conversation || (isAgentBusy() && !canResumeStalledRun)) return;
 
     const kind = resolveSessionKind(tasteQuota);
     const inTaste = kind === "taste";
@@ -354,17 +349,7 @@ export function useEditorPageHandlers({
         logEditorTelemetryEvent("agent", "resume_fail", "error", msg.slice(0, 200));
       }
     })();
-  }, [
-    conversation,
-    projectId,
-    isAgentBusy,
-    agent,
-    logPanelOpen,
-    qc,
-    tasteQuota,
-    setLogs,
-    setLogPanelOpen,
-  ]);
+  }, [conversation, projectId, isAgentBusy, agent, qc, tasteQuota, setLogs]);
 
   const handleSend = useCallback(
     async (text: string, mode?: AgentComposerMode, parts?: StoredMessagePart[]) => {
@@ -676,7 +661,11 @@ export function useEditorPageHandlers({
           "warn",
           `step id mismatch for run ${pp.runId.slice(0, 8)} plan ${pp.planId}; using approved payload fallback`,
         );
-        console.warn("[plan-approve] step id mismatch; using fallback payload", pp.runId, pp.planId);
+        console.warn(
+          "[plan-approve] step id mismatch; using fallback payload",
+          pp.runId,
+          pp.planId,
+        );
       }
 
       const prefs = await loadAgentPreferencesForAgentRun();
@@ -783,7 +772,6 @@ export function useEditorPageHandlers({
       setComposerMode,
       agent,
       tasteQuota,
-      chatMessages,
     ],
   );
 

@@ -135,7 +135,13 @@ export function AssistantTurn({
           <div className="forge-chat-error-hint" data-testid="assistant-error-hint">
             <ErrorHintCard
               hint={errorHint}
-              onAction={errorHint.link == null && onResume && item.resumable ? onResume : undefined}
+              onAction={
+                errorHint.link == null &&
+                onResume &&
+                (item.resumable || errorHint.code === "agent.stale_stream")
+                  ? onResume
+                  : undefined
+              }
             />
           </div>
         )}
