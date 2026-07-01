@@ -136,6 +136,29 @@ describe("sendMessage", () => {
     expect(d.runAgent).not.toHaveBeenCalled();
   });
 
+  it("enfileira follow-up mesmo com turno pendente quando agentBusy", async () => {
+    const d = deps();
+    const onError = vi.fn();
+
+    await sendMessage(
+      {
+        text: "próximo passo",
+        composerMode: "build",
+        conversationId: "conv",
+        projectId: "proj",
+        kind: "byok",
+        agentBusy: true,
+        pendingTurnActive: true,
+      },
+      { ...d, onError },
+    );
+
+    expect(d.queueMessage).toHaveBeenCalled();
+    expect(d.insertUserMessage).not.toHaveBeenCalled();
+    expect(d.runAgent).not.toHaveBeenCalled();
+    expect(onError).not.toHaveBeenCalled();
+  });
+
   it("fila pausada envia direto mesmo com agentBusy", async () => {
     const d = deps();
 

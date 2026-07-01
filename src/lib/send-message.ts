@@ -52,7 +52,12 @@ function messageParts(text: string, parts?: StoredMessagePart[]): StoredMessageP
  * Mensagens enfileiradas NÃO entram no chat (só no dock Q até o drain).
  */
 export async function sendMessage(input: SendMessageInput, deps: SendMessageDeps): Promise<void> {
-  if (sendMessageInFlight || input.pendingTurnActive === true || input.connectInFlight === true) {
+  const shouldQueue = input.agentBusy && !input.queuePaused;
+  if (
+    sendMessageInFlight ||
+    input.connectInFlight === true ||
+    (input.pendingTurnActive === true && !shouldQueue)
+  ) {
     logEditorTelemetryEvent("agent_run", "send_message_skipped_pending_turn", "warn");
     deps.onError?.("Aguarde o turno atual terminar antes de enviar outra mensagem.");
     return;
@@ -60,7 +65,6 @@ export async function sendMessage(input: SendMessageInput, deps: SendMessageDeps
 
   sendMessageInFlight = true;
   try {
-    const shouldQueue = input.agentBusy && !input.queuePaused;
     const parts = messageParts(input.text, input.parts);
     const intent = resolveTurnIntent({
       text: input.text,
