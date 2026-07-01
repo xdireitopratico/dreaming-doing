@@ -6,7 +6,13 @@ import { assistantTurnCopyText } from "@/lib/chat/assistant-turn-copy";
 import { resolveClosingProse, sanitizeChatProseForDisplay } from "@/lib/chat/stream-prose";
 import { loadAgentPreferences } from "@/lib/agent-preferences";
 
-import { llmErrorHint, staleStreamHint, timeoutHint, zombieRunHint } from "@/lib/llm-error-hints";
+import {
+  e2bErrorHint,
+  llmErrorHint,
+  staleStreamHint,
+  timeoutHint,
+  zombieRunHint,
+} from "@/lib/llm-error-hints";
 import { ForgeThinking } from "@/components/chat/ForgeThinking";
 import { ChatNarration } from "./ChatNarration";
 import { ChatJobCard } from "./ChatJobCard";
@@ -65,6 +71,9 @@ export function AssistantTurn({
     if (!err || item.isActive) return null;
     if (item.lastFinishOk !== false && !item.resumable) return null;
     const lower = err.toLowerCase();
+    if (/\be2b\b|e2b_/i.test(lower)) {
+      return e2bErrorHint(err);
+    }
     if (lower.startsWith("dispatch_failed")) {
       return {
         message: "Não foi possível iniciar o agente",

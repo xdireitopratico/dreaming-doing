@@ -34,7 +34,6 @@ function hintFromStatus(status: number | undefined, msg: string): ErrorHint | nu
       link: LINKS.apiModels,
       severity: "error",
       code: "auth.invalid_key",
-
     };
   }
   if (status === 403 || /forbidden|permission/i.test(lower)) {
@@ -73,11 +72,11 @@ export function llmErrorHint(err: unknown, robinActive: boolean): ErrorHint {
   ) {
     if (lower.includes("nvidia")) {
       return {
-      message: "Modelo NVIDIA 404.",
-      action: "→ /models",
-      link: LINKS.apiModels,
-      severity: "error",
-      code: "model.not_found.nvidia",
+        message: "Modelo NVIDIA 404.",
+        action: "→ /models",
+        link: LINKS.apiModels,
+        severity: "error",
+        code: "model.not_found.nvidia",
       };
     }
     return {
@@ -96,7 +95,6 @@ export function llmErrorHint(err: unknown, robinActive: boolean): ErrorHint {
       link: null,
       severity: "warning",
       code: "model.overloaded",
-
     };
   }
 
@@ -111,7 +109,6 @@ export function llmErrorHint(err: unknown, robinActive: boolean): ErrorHint {
         link: LINKS.apiModels,
         severity: "warning",
         code: "rate_limit.robin_rotating",
-
       };
     }
     return {
@@ -134,7 +131,6 @@ export function llmErrorHint(err: unknown, robinActive: boolean): ErrorHint {
       link: null,
       severity: "warning",
       code: "connection.unstable",
-
     };
   }
 
@@ -169,7 +165,6 @@ export function e2bErrorHint(err: unknown): ErrorHint {
       link: LINKS.onboarding,
       severity: "info",
       code: "e2b.not_configured",
-
     };
   }
 
@@ -190,7 +185,6 @@ export function e2bErrorHint(err: unknown): ErrorHint {
       link: null,
       severity: "warning",
       code: "e2b.template_fallback",
-
     };
   }
 
@@ -205,11 +199,12 @@ export function e2bErrorHint(err: unknown): ErrorHint {
   }
 
   return {
-    message: `Erro E2B: ${msg.slice(0, 250)}`,
-    action: "Reportar",
-    link: null,
+    message: "E2B falhou ao conectar ao sandbox.",
+    action: "Consertar E2B",
+    link: LINKS.apiModels,
     severity: "error",
-    code: "e2b.unknown",
+    code: "e2b.connection_failed",
+    tip: msg.slice(0, 250),
   };
 }
 
@@ -220,7 +215,6 @@ export function timeoutHint(): ErrorHint {
     link: null,
     severity: "warning",
     code: "agent.execution_window",
-
   };
 }
 
@@ -231,7 +225,6 @@ export function staleStreamHint(): ErrorHint {
     link: null,
     severity: "warning",
     code: "agent.stale_stream",
-
   };
 }
 
@@ -242,7 +235,6 @@ export function zombieRunHint(): ErrorHint {
     link: null,
     severity: "warning",
     code: "agent.zombie_run",
-
   };
 }
 
@@ -253,6 +245,5 @@ export function inngestQueueHint(): ErrorHint {
     link: null,
     severity: "error",
     code: "inngest.queue_failed",
-
   };
 }

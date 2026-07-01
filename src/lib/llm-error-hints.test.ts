@@ -98,6 +98,12 @@ describe("e2bErrorHint", () => {
     const hint = e2bErrorHint(new Error("sandbox killed (timeout)"));
     expect(hint.code).toBe("e2b.sandbox_dead");
   });
+
+  it("returns e2b.connection_failed for generic connect errors", () => {
+    const hint = e2bErrorHint(new Error("E2B connect failed: sandbox unavailable"));
+    expect(hint.code).toBe("e2b.connection_failed");
+    expect(hint.link).toBe("/api-models");
+  });
 });
 
 describe("timeoutHint", () => {
