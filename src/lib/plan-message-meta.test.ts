@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   awaitingKindFromMessageMeta,
   findAssistantMessageForPlan,
+  isPendingPlanMaterializing,
   messageMetaMatchesPlan,
   needsPlanApprovalNow,
   patchPlanMessageMetaRejected,
@@ -13,6 +14,7 @@ import {
 } from "@/lib/plan-message-meta";
 import type { PendingPlan } from "@/lib/agent-progress";
 import type { ChatMessage } from "@/lib/chat-types";
+import { PENDING_RUN_ID } from "@/lib/pending-run-id";
 
 describe("storedPlanFromMessage", () => {
   const base: ChatMessage = {
@@ -236,6 +238,21 @@ describe("storedPlanFromMessage", () => {
     expect(resolvePendingPlan(staleLive, [])).toBeNull();
     expect(needsPlanApprovalNow(staleLive, [])).toBe(false);
     expect(runBelongsToChatMessages("old-run", [])).toBe(false);
+  });
+
+  it("mantém o card do plano visível enquanto PENDING_RUN_ID materializa a build", () => {
+    const live: PendingPlan = {
+      planId: "live-plan",
+      summary: "Plano visível",
+      steps: [{ id: "s1", type: "custom", description: "Hero", enabled: true }],
+      ttlMs: 60_000,
+      proposedAt: Date.now(),
+      runId: "run-1",
+      projectId: "proj-1",
+    };
+    expect(isPendingPlanMaterializing(live, PENDING_RUN_ID)).toBe(true);
+    expect(isPendingPlanMaterializing(live, "run-2")).toBe(false);
+    expect(isPendingPlanMaterializing(null, PENDING_RUN_ID)).toBe(false);
   });
 });
 

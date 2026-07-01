@@ -672,6 +672,7 @@ export function useEditorPageHandlers({
       try {
         const planDocument = markdown?.trim() || pp.markdown?.trim() || pp.summary;
         const planHeadline = pp.mission?.trim() || pp.summary;
+        agent.beginPendingTurn();
         const result = await planApproveFn({
           data: {
             runId: pp.runId,
@@ -686,7 +687,6 @@ export function useEditorPageHandlers({
             enabledMcpIds,
           },
         });
-        agent.clearPendingPlan();
         setComposerMode("build");
         toast.success("Build iniciado — acompanhe o progresso no inspector.");
         await qc.invalidateQueries({ queryKey: ["conversation", projectId] });
@@ -697,6 +697,7 @@ export function useEditorPageHandlers({
           try {
             sessionStorage.setItem(pendingKey, result.newRunId);
             await agent.watch(projectId, conversation.id, result.newRunId);
+            agent.clearPendingPlan();
             sessionStorage.removeItem(pendingKey);
           } catch (watchErr) {
             logEditorTelemetryEvent(
@@ -708,6 +709,7 @@ export function useEditorPageHandlers({
           }
         }
       } catch (e) {
+        agent.clearPendingTurn();
         if (conversationId) {
           qc.setQueryData(["messages", conversationId], (old: typeof chatMessages | undefined) => {
             if (!old) return old;

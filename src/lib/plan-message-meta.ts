@@ -1,5 +1,6 @@
 import type { ChatMessage } from "@/lib/chat-types";
 import type { PendingPlan, PlanStep } from "@/lib/agent-progress";
+import { PENDING_RUN_ID } from "@/lib/pending-run-id";
 
 /** Run pertence ao histórico desta conversa (assistant ou buildRunId em user). */
 export function runBelongsToChatMessages(
@@ -44,6 +45,17 @@ export function resolvePendingPlan(
 ): PendingPlan | null {
   if (live && livePlanBelongsToSession(live, messages, activeRunId)) return live;
   return findPendingPlanFromMessages(messages);
+}
+
+/**
+ * Mantém o card do plano visível enquanto a aprovação já aconteceu, mas o novo
+ * build ainda está sendo materializado em `PENDING_RUN_ID`.
+ */
+export function isPendingPlanMaterializing(
+  live: PendingPlan | null | undefined,
+  activeRunId?: string | null,
+): boolean {
+  return !!live && activeRunId === PENDING_RUN_ID;
 }
 
 /**
