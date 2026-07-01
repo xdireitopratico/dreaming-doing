@@ -39,6 +39,9 @@ dist-ssr
 .vercel
 supabase/.temp
 
+# Isolated worktrees
+.worktrees/
+
 # Secrets locais
 .env
 .env.local
