@@ -28,8 +28,7 @@ export function freezeWorkingDuration(
     (next.timeline?.some((ev) => ev.type === "thinking_text") ?? false) ||
     next.timeline?.some(
       (ev) =>
-        ev.type === "assistant_text" &&
-        (ev.data as Record<string, unknown>)?.thinking === true,
+        ev.type === "assistant_text" && (ev.data as Record<string, unknown>)?.thinking === true,
     );
   if (!isTerminal && !hasTurnVisibleContent(next) && !hasThinking) return next;
   return {
@@ -96,6 +95,57 @@ export function createStreamRowHandlers(
     return terminal;
   };
 
+  // ── Batching de thinking_text: cada delta do LLM vira um evento Realtime separado.
+  // Aplicar um por um gera O(n) rebuilds da timeline a cada token → inspector hiper-lento.
+  // Coalescimos deltas consecutivos num único update React (~uma vez por frame), preservando
+  // seq/telemetry e acumulando privateThoughtText corretamente.
+  const THINKING_BATCH_MS = 8;
+  const thinkingBatch: AgentStreamRow[] = [];
+  let thinkingBatchTimer: ReturnType<typeof setTimeout> | null = null;
+
+  const flushThinkingBatch = (): boolean => {
+    if (thinkingBatchTimer != null) {
+      clearTimeout(thinkingBatchTimer);
+      thinkingBatchTimer = null;
+    }
+    const rows = thinkingBatch.splice(0, thinkingBatch.length);
+    if (rows.length === 0) return false;
+    if (rows.length === 1) {
+      const t = applyStreamRow(rows[0]);
+      drainReorderBuffer();
+      return t;
+    }
+    // Contabiliza seqs intermediários para telemetry e lastSeqRef ficarem consistentes.
+    for (const r of rows.slice(0, -1)) {
+      refs.lastSeqRef.current = r.seq;
+      emitStreamingTelemetry("agent.stream_seq_processed", {
+        seq: r.seq,
+        eventType: r.event_type,
+      });
+    }
+    const last = rows[rows.length - 1];
+    const mergedText = rows.map((r) => String(r.payload?.text ?? "")).join("");
+    const mergedRow: AgentStreamRow = {
+      ...last,
+      payload: {
+        ...last.payload,
+        text: mergedText,
+        append: true,
+        delta: true,
+      },
+    };
+    const t = applyStreamRow(mergedRow);
+    drainReorderBuffer();
+    return t;
+  };
+
+  const scheduleThinkingBatchFlush = () => {
+    if (thinkingBatchTimer != null) return;
+    thinkingBatchTimer = setTimeout(flushThinkingBatch, THINKING_BATCH_MS);
+  };
+
+  const isThinkingTextRow = (row: AgentStreamRow): boolean => row.event_type === "thinking_text";
+
   // ── Reordenação de stream: Realtime entrega thinking_text (alta frequência) fora de ordem,
   // e o seq-guard descartava os atrasados → raciocínio perdido. Buffer espera os ausentes
   // chegarem numa janela curta antes de aceitar o gap. Em-ordem aplica síncrono (sem latência).
@@ -119,7 +169,14 @@ export function createStreamRowHandlers(
     let r = reorderBuffer.get(refs.lastSeqRef.current + 1);
     while (r) {
       reorderBuffer.delete(r.seq);
-      applyStreamRow(r);
+      // thinking_text passa pelo batcher para não explodir updates do React.
+      if (isThinkingTextRow(r)) {
+        thinkingBatch.push(r);
+        scheduleThinkingBatchFlush();
+      } else {
+        flushThinkingBatch();
+        applyStreamRow(r);
+      }
       r = reorderBuffer.get(refs.lastSeqRef.current + 1);
     }
     if (reorderBuffer.size === 0 && reorderTimer != null) {
@@ -161,6 +218,15 @@ export function createStreamRowHandlers(
       });
       return false;
     }
+    // thinking_text de alta frequência é coalescido num único update React.
+    if (isThinkingTextRow(row) && !isTerminalEventType(row.event_type)) {
+      thinkingBatch.push(row);
+      scheduleThinkingBatchFlush();
+      return false;
+    }
+    // Qualquer evento não-thinking deve despejar o lote de thinking primeiro,
+    // senão lastSeq fica atrasado e o seq do novo evento pode parecer gap/duplicado.
+    flushThinkingBatch();
     // Terminal nunca bufferiza — aplica direto (mesmo com gap) pra não travar o fim do run.
     if (isTerminalEventType(row.event_type) || row.seq === refs.lastSeqRef.current + 1) {
       const t = applyStreamRow(row);

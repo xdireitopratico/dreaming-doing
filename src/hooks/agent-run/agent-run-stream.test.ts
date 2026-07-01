@@ -27,13 +27,19 @@ function startRow(seq: number, runId = "run-a"): AgentStreamRow {
   };
 }
 
+function thinkingRow(seq: number, text: string, runId = "run-a"): AgentStreamRow {
+  return {
+    seq,
+    event_type: "thinking_text",
+    payload: { text, append: true, delta: true, final: false },
+    run_id: runId,
+  };
+}
+
 describe("freezeWorkingDuration", () => {
   it("congela duração quando há conteúdo visível", () => {
     const started = Date.now() - 3000;
-    const next = freezeWorkingDuration(
-      { ...initialAgentProgress, streamText: "hello" },
-      started,
-    );
+    const next = freezeWorkingDuration({ ...initialAgentProgress, streamText: "hello" }, started);
     expect(next.workingDurationMs).toBeGreaterThanOrEqual(1000);
   });
 
@@ -172,5 +178,63 @@ describe("createStreamRowHandlers", () => {
     expect(applied).toBe(false);
     expect(refs.lastSeqRef.current).toBe(1);
     expect(progress.timeline).toHaveLength(0);
+  });
+
+  it("coalesc deltas thinking_text em poucos updates React", async () => {
+    vi.useFakeTimers();
+    const refs = makeRefs({ lastSeq: 0 });
+    let progress = initialAgentProgress;
+    const updates: number[] = [];
+    const { enqueueStreamRow } = createStreamRowHandlers(refs, (updater) => {
+      progress = typeof updater === "function" ? updater(progress) : updater;
+      updates.push(refs.lastSeqRef.current);
+    });
+
+    // start ocupa seq 1; thinking_text começa em seq 2.
+    enqueueStreamRow(startRow(1));
+    enqueueStreamRow(thinkingRow(2, "O"));
+    enqueueStreamRow(thinkingRow(3, "lá"));
+    for (let i = 4; i <= 50; i++) {
+      enqueueStreamRow(thinkingRow(i, ` ${i}`));
+    }
+
+    expect(refs.lastSeqRef.current).toBe(1); // ainda não aplicou nada do lote
+    expect(updates.length).toBe(1); // só o start
+
+    await vi.advanceTimersByTimeAsync(8);
+
+    expect(refs.lastSeqRef.current).toBe(50);
+    expect(progress.privateThoughtText).toBe(
+      "Olá" + Array.from({ length: 47 }, (_, i) => ` ${i + 4}`).join(""),
+    );
+    // start (1 update) + lote de thinking (1 update)
+    expect(updates.length).toBeLessThanOrEqual(2);
+    vi.useRealTimers();
+  });
+
+  it("despeja lote de thinking antes de evento não-thinking manter ordem", async () => {
+    vi.useFakeTimers();
+    const refs = makeRefs({ lastSeq: 1 });
+    let progress = initialAgentProgress;
+    const { enqueueStreamRow } = createStreamRowHandlers(refs, (updater) => {
+      progress = typeof updater === "function" ? updater(progress) : updater;
+    });
+
+    enqueueStreamRow(startRow(1));
+    enqueueStreamRow(thinkingRow(2, "pensando"));
+    enqueueStreamRow(thinkingRow(3, " mais"));
+    // Um step em seguida força flush imediato e mantém seqs corretas.
+    const stepApplied = enqueueStreamRow({
+      seq: 4,
+      event_type: "step",
+      payload: { current: 1, total: 3, label: "setup" },
+      run_id: "run-a",
+    });
+
+    expect(stepApplied).toBe(false);
+    expect(refs.lastSeqRef.current).toBe(4);
+    expect(progress.privateThoughtText).toBe("pensando mais");
+    expect(progress.timeline.some((e) => e.type === "step")).toBe(true);
+    vi.useRealTimers();
   });
 });

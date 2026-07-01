@@ -1,7 +1,6 @@
 import { useEffect } from "react";
 
 import { supabase } from "@/integrations/supabase/client";
-import { removeRealtimeChannel, subscribePostgresChanges } from "@/lib/supabase-realtime";
 import type { useAgentRun } from "@/hooks/useAgentRun";
 
 type AgentRun = ReturnType<typeof useAgentRun>;
@@ -39,11 +38,12 @@ export function useAgentRunReconcile(
     // pendente ("Pensando…"), o reconcile deve ficar quieto e deixar o connect
     // original assumir a run que será criada no DB.
     if (isPendingRun) return;
-
-    let channel: ReturnType<typeof supabase.channel> | null = null;
+    let alive = true;
 
     const tryAttach = async (): Promise<boolean> => {
+      if (!alive) return false;
       const runId = await fetchLiveRunForConversation(projectId, conversationId);
+      if (!alive) return false;
       if (!runId) return false;
       if (activeRunId === runId && !progress.finished) return true;
       if (!activeRunId || progress.finished) {
@@ -52,19 +52,10 @@ export function useAgentRunReconcile(
       return true;
     };
 
-    channel = subscribePostgresChanges({
-      channelName: `agent-runs-reconcile-${projectId}-${conversationId}`,
-      table: "agent_runs",
-      filter: `conversation_id=eq.${conversationId}`,
-      onChange: () => {
-        void tryAttach();
-      },
-    });
-
     void tryAttach();
 
     return () => {
-      removeRealtimeChannel(channel);
+      alive = false;
     };
   }, [projectId, conversationId, watch, activeRunId, progress.finished, isPendingRun]);
 
@@ -82,5 +73,13 @@ export function useAgentRunReconcile(
     };
 
     void attachQueuedRun();
-  }, [projectId, conversationId, progress.finished, progress.pendingQueueCount, activeRunId, watch, syncPendingCount]);
+  }, [
+    projectId,
+    conversationId,
+    progress.finished,
+    progress.pendingQueueCount,
+    activeRunId,
+    watch,
+    syncPendingCount,
+  ]);
 }

@@ -27,15 +27,6 @@ export function useAgentRealtime(
   useEffect(() => {
     const channel = supabase.channel(`agent-v2-${projectId}`);
 
-    // agent_runs updates (status, state, heartbeat)
-    channel.on(
-      "postgres_changes",
-      { event: "*", schema: "public", table: "agent_runs", filter: `project_id=eq.${projectId}` },
-      (_payload: unknown) => {
-        queryClient.invalidateQueries({ queryKey: ["agent-runs", projectId] });
-      },
-    );
-
     // messages changes (assistant replies, plan proposals).
     // Filtra por role=assistant no server-side filter para não refetchar
     // a janela inteira a cada INSERT do user (que é otimista). Também evita
