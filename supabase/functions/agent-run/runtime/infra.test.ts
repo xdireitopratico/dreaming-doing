@@ -29,6 +29,7 @@ function mockInfraDeps(overrides?: Partial<RunInfraDeps>): RunInfraDeps & {
     getPhase: () => LoopPhase.GATHER_CONTEXT,
     saveCheckpoint: async () => {},
     persistCheckpointChat: async () => {},
+    getBuildSession: () => null,
     events,
     ...overrides,
   };

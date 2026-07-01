@@ -7,6 +7,7 @@ import {
 } from "./persist.ts";
 import type { AgentState } from "../../types.ts";
 import { LoopPhase } from "../../types.ts";
+import { createCanonicalBuildSession } from "../build-session.ts";
 
 function mockPersistDeps(overrides?: Partial<AgentPersistDeps>): AgentPersistDeps & {
   upserts: unknown[];
@@ -69,6 +70,7 @@ function mockPersistDeps(overrides?: Partial<AgentPersistDeps>): AgentPersistDep
     setLastCheckpointStep: (step) => {
       lastCheckpointStep = step;
     },
+    getBuildSession: () => null,
     emit: () => {},
     loopBudgetMs: 600_000,
     upserts,
@@ -99,7 +101,9 @@ Deno.test("saveCheckpoint — grava com force=true", async () => {
 });
 
 Deno.test("persistFinal — insere mensagem quando não há run message existente", async () => {
-  const deps = mockPersistDeps();
+  const deps = mockPersistDeps({
+    getBuildSession: () => createCanonicalBuildSession("run-1", true),
+  });
   await persistFinal(deps, "Concluído!");
   assertEquals(deps.inserts.length, 1);
   assertEquals(deps.updates.length, 1);
@@ -107,4 +111,5 @@ Deno.test("persistFinal — insere mensagem quando não há run message existent
   assertEquals(row.parts[0].text, "Concluído!");
   assertEquals(row.meta.lastFinishOk, true);
   assertEquals(row.meta.partial, false);
+  assertEquals(typeof row.meta.buildSession, "object");
 });

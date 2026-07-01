@@ -78,7 +78,7 @@ Deno.test("runDesignPreflightIfNeeded — falha terminal não injeta pseudo-turn
     emit: (type, data) => events.push({ type, data }),
   });
 
-  assertEquals(outcome?.passed, false);
+  assertEquals(outcome?.status, "recoverable_fail");
   assertEquals(state.messages.length, 0);
-  assertEquals(events.some((e) => e.type === "validate_fail"), true);
+  assertEquals(events.some((e) => e.type === "validate_fail"), false);
 });

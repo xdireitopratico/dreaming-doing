@@ -1,5 +1,6 @@
 import { assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import { buildCardSnapshot, diffsFromTimeline, toolsFromTimeline } from "./snapshot.ts";
+import { createCanonicalBuildSession, finalizeBuildSession } from "../build-session.ts";
 
 Deno.test("toolsFromTimeline — pareia tool_start com tool_done", () => {
   const timeline = [
@@ -37,6 +38,7 @@ Deno.test("buildCardSnapshot — monta snapshot terminal", () => {
     projectId: "proj-1",
     currentStepIndex: 3,
     maxStepsLimit: 70,
+    buildSession: null,
     now: 7000,
     opts: {
       streamText: "Feito.",
@@ -50,4 +52,25 @@ Deno.test("buildCardSnapshot — monta snapshot terminal", () => {
   assertEquals(snapshot.currentStep, 3);
   assertEquals(snapshot.totalSteps, 70);
   assertEquals(snapshot.workingDurationMs, 2000);
+});
+
+Deno.test("buildCardSnapshot — inclui buildSession canônica no terminal", () => {
+  const session = finalizeBuildSession(createCanonicalBuildSession("run-1", true), "ok", "Feito.");
+  const snapshot = buildCardSnapshot({
+    timeline: [],
+    narrationBuffer: "",
+    runStartTime: 10,
+    runId: "run-1",
+    projectId: "proj-1",
+    currentStepIndex: 1,
+    maxStepsLimit: 5,
+    buildSession: session,
+    opts: {
+      streamText: "Feito.",
+      deliveryFiles: [],
+      finished: true,
+    },
+  });
+  assertEquals((snapshot.buildSession as { phase: string }).phase, "terminal_ok");
+  assertEquals(snapshot.terminalState, "terminal_ok");
 });

@@ -22,7 +22,7 @@ export type DesignPreflightDeps = {
 };
 
 export type DesignPreflightOutcome = {
-  passed: boolean;
+  status: "passed" | "recoverable_fail" | "terminal_fail";
   feedback?: string;
   checks: Array<{ name: string; ok: boolean; output: string }>;
   availableComponents?: string;
@@ -57,18 +57,22 @@ export async function runDesignPreflightIfNeeded(
   }
 
   if (!preflight.passed) {
-    const failed = preflight.checks.filter((c) => !c.ok).map((c) => c.name).join(", ");
-    deps.emit("validate_fail", {
-      attempt: 0,
-      checks: failed ? [failed] : ["preflight"],
-      feedback: preflight.feedback?.slice(0, 500),
-      preflight: true,
-    });
     preflightErrors.push(`Design system: ${preflight.feedback?.slice(0, 500) ?? "erro"}`);
   }
 
+  const hasContractFailure = inventory.missing.length > 0;
+  const hasRecoverableFailure = !preflight.passed;
+  const status =
+    preflightErrors.length === 0
+      ? "passed"
+      : hasContractFailure
+        ? "terminal_fail"
+        : hasRecoverableFailure
+          ? "recoverable_fail"
+          : "terminal_fail";
+
   return {
-    passed: preflightErrors.length === 0 && preflight.passed,
+    status,
     feedback:
       preflightErrors.length > 0
         ? `PREFLIGHT FALHOU:\n${preflightErrors.join("\n")}`

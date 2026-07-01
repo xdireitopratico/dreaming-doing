@@ -1,5 +1,6 @@
 // runtime/infra.ts — Heartbeat, budget e resumable chunks (Fase 2.2)
 import type { LoopPhase } from "../types.ts";
+import type { CanonicalBuildSession } from "./build-session.ts";
 
 export const MAX_LLM_RETRIES = 3;
 export const SILENCE_HEARTBEAT_MS = 90_000;
@@ -28,6 +29,7 @@ export type RunInfraDeps = {
   getPhase: () => LoopPhase;
   saveCheckpoint: (phase: LoopPhase, force?: boolean) => Promise<void>;
   persistCheckpointChat: (steps: number, buildFix?: boolean) => Promise<void>;
+  getBuildSession: () => CanonicalBuildSession | null;
 };
 
 export function loopBudgetExceeded(

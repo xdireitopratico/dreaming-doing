@@ -44,6 +44,7 @@ import type {
   PlanTurnRunResult,
 } from "./phases/plan-turn.ts";
 import type { AgentLoopMutableState } from "./loop-mutable-state.ts";
+import type { CanonicalBuildSession } from "./build-session.ts";
 
 function mutableAccessors(mutable: AgentLoopMutableState) {
   return {
@@ -84,6 +85,10 @@ function mutableAccessors(mutable: AgentLoopMutableState) {
     setLastActivityAt: (ms: number) => {
       mutable.lastActivityAt = ms;
     },
+    getBuildSession: () => mutable.buildSession,
+    setBuildSession: (session: CanonicalBuildSession | null) => {
+      mutable.buildSession = session;
+    },
   };
 }
 
@@ -122,7 +127,7 @@ export type AgentLoopHost = {
   emit: (type: string, data: unknown) => void;
   configuredModel: () => LLMProvider;
   gatherContext: () => Promise<void>;
-  runDesignPreflightIfNeeded: () => Promise<void>;
+  runDesignPreflightIfNeeded: () => Promise<unknown>;
   requiresFinalBuildGate: () => boolean;
   enabledApprovedPlanSteps: () => PlanStep[];
   isCanceled: () => Promise<boolean>;
@@ -190,6 +195,8 @@ export type AgentLoopDepsContext = {
   setLastRunMessageId: (id: string | null) => void;
   getLastActivityAt: () => number;
   setLastActivityAt: (ms: number) => void;
+  getBuildSession: () => CanonicalBuildSession | null;
+  setBuildSession: (session: CanonicalBuildSession | null) => void;
   narrationTrim: () => string;
   tailSlice: (count: number) => unknown[];
   getTimeline: () => Array<{ type: string; data: Record<string, unknown>; timestamp?: number }>;
@@ -210,7 +217,7 @@ export type AgentLoopDepsContext = {
     buildFix?: boolean;
     toolsUsed: string[];
   }>;
-  runDesignPreflightIfNeeded: () => Promise<void>;
+  runDesignPreflightIfNeeded: () => Promise<unknown>;
   requiresFinalBuildGate: () => boolean;
   enabledApprovedPlanSteps: () => PlanStep[];
   isCanceled: () => Promise<boolean>;
@@ -281,6 +288,7 @@ export function buildPersistDeps(
     runStartTime: ctx.runStartTime,
     getLastCheckpointStep: ctx.getLastCheckpointStep,
     setLastCheckpointStep: ctx.setLastCheckpointStep,
+    getBuildSession: ctx.getBuildSession,
     emit: ctx.emit,
     loopBudgetMs,
   };
@@ -305,6 +313,7 @@ export function buildInfraDeps(
     getPhase: () => ctx.state.phase,
     saveCheckpoint: ctx.saveCheckpoint,
     persistCheckpointChat: ctx.persistCheckpointChat,
+    getBuildSession: ctx.getBuildSession,
   };
 }
 
@@ -354,6 +363,8 @@ export function buildExecuteDeps(
     getLlmResponseWasStreamed: ctx.getLlmResponseWasStreamed,
     getLastExecutePhaseMessage: ctx.getLastExecutePhaseMessage,
     setLastExecutePhaseMessage: ctx.setLastExecutePhaseMessage,
+    getBuildSession: ctx.getBuildSession,
+    setBuildSession: ctx.setBuildSession,
     touchedPaths: ctx.touchedPaths,
     executionModel,
     reg: ctx.reg,
@@ -366,7 +377,7 @@ export function buildExecuteDeps(
     emit: ctx.emit,
     loopBudgetExceeded: ctx.loopBudgetExceeded,
     returnResumableChunk: ctx.returnResumableChunk,
-    runDesignPreflightIfNeeded: ctx.runDesignPreflightIfNeeded,
+    runDesignPreflightIfNeeded: ctx.runDesignPreflightIfNeeded as BuildExecuteDeps["runDesignPreflightIfNeeded"],
     requiresFinalBuildGate: ctx.requiresFinalBuildGate,
     enabledApprovedPlanSteps: ctx.enabledApprovedPlanSteps,
     isCanceled: ctx.isCanceled,

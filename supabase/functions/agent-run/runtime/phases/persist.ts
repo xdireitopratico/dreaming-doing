@@ -8,6 +8,7 @@ import {
   buildCardSnapshot,
   type BuildCardSnapshotOpts,
 } from "./snapshot.ts";
+import type { CanonicalBuildSession } from "../build-session.ts";
 import type {
   AgentState,
   ChatResponse,
@@ -50,6 +51,7 @@ export type AgentPersistDeps = {
   runStartTime: number;
   getLastCheckpointStep: () => number;
   setLastCheckpointStep: (step: number) => void;
+  getBuildSession: () => CanonicalBuildSession | null;
   emit: (type: string, data: unknown) => void;
   loopBudgetMs: number;
 };
@@ -66,6 +68,7 @@ function cardSnapshotForPersist(
     projectId: deps.state.projectId,
     currentStepIndex: deps.state.currentStepIndex,
     maxStepsLimit: deps.getMaxStepsLimit(),
+    buildSession: deps.getBuildSession(),
     opts,
   });
 }
@@ -222,6 +225,7 @@ export async function persistCheckpointChat(
     currentStep: steps,
     totalSteps: deps.getMaxStepsLimit(),
     streamTail: deps.tailSlice(120),
+    buildSession: deps.getBuildSession(),
     cardSnapshot,
     narrationText:
       typeof cardSnapshot.narrationText === "string" ? cardSnapshot.narrationText : undefined,
@@ -292,6 +296,7 @@ export async function persistFinal(
     lastFinishOk,
     buildFailed: opts?.buildFailed === true || lastFinishOk === false,
     streamTail: deps.tailSlice(120),
+    buildSession: deps.getBuildSession(),
     cardSnapshot,
     narrationText:
       typeof cardSnapshot.narrationText === "string" ? cardSnapshot.narrationText : undefined,
@@ -360,6 +365,7 @@ export async function persistPlanFinal(
     planSteps: plan.steps,
     design: plan.design ?? null,
     finishedAt: new Date().toISOString(),
+    buildSession: deps.getBuildSession(),
     cardSnapshot,
     narrationText:
       typeof cardSnapshot.narrationText === "string" ? cardSnapshot.narrationText : undefined,

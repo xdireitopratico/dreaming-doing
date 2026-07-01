@@ -52,6 +52,9 @@ import {
 import type { AgentLoopOptions } from "./runtime/loop-options.ts";
 import { runAgentOrchestrator } from "./runtime/phases/orchestrator.ts";
 import type { AgentLoopRunResult } from "./runtime/loop-result.ts";
+import {
+  createCanonicalBuildSession,
+} from "./runtime/build-session.ts";
 
 const LOOP_BUDGET_MS = readLoopBudgetMsFromRuntime();
 
@@ -206,6 +209,7 @@ export class AgentLoop {
       this.emitter.emit(type, data),
     );
     this.bindings = createLoopBindings(this.loopHost(), LOOP_BUDGET_MS);
+    this.mutable.buildSession = createCanonicalBuildSession(this.runId, this.approvedPlanBuild);
   }
 
   private loopHost(): AgentLoopHost {
@@ -299,8 +303,8 @@ export class AgentLoop {
     return this.touchedPaths.size > 0;
   }
 
-  private async runDesignPreflightIfNeeded(): Promise<void> {
-    await runDesignPreflightIfNeededPhase({
+  private async runDesignPreflightIfNeeded() {
+    return runDesignPreflightIfNeededPhase({
       planMode: this.planMode,
       smokeRun: this.smokeRun,
       projectTemplate: this.projectTemplate,
@@ -387,6 +391,7 @@ export class AgentLoop {
     }
     this.compression.reset();
     this.mutable.consecutiveNoContentReadSteps = 0;
+    this.mutable.buildSession = createCanonicalBuildSession(this.runId, this.approvedPlanBuild);
     const toolsUsed = new Set<string>();
 
     return runAgentOrchestrator(buildOrchestratorDeps(this.orchestratorHost(), toolsUsed));

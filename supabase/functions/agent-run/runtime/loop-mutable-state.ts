@@ -1,5 +1,7 @@
 // runtime/loop-mutable-state.ts — Estado mutável compartilhado do loop (Fase 2.2)
 
+import type { CanonicalBuildSession } from "./build-session.ts";
+
 export type AgentLoopMutableState = {
   lastCheckpointStep: number;
   approvedPlanStepIndex: number;
@@ -11,6 +13,7 @@ export type AgentLoopMutableState = {
   lastExecutePhaseMessage: string | null;
   lastRunMessageId: string | null;
   lastActivityAt: number;
+  buildSession: CanonicalBuildSession | null;
 };
 
 export function createAgentLoopMutableState(
@@ -27,5 +30,6 @@ export function createAgentLoopMutableState(
     lastExecutePhaseMessage: init?.lastExecutePhaseMessage ?? null,
     lastRunMessageId: init?.lastRunMessageId ?? null,
     lastActivityAt: init?.lastActivityAt ?? Date.now(),
+    buildSession: init?.buildSession ?? null,
   };
 }

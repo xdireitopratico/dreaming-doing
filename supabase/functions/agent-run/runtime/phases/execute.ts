@@ -53,6 +53,14 @@ import { friendlyLlmError, shouldFailFastLlmError } from "../../llm-errors.ts";
 import { designTelemetryEntry } from "../../design-telemetry.ts";
 import { signatureFromDesignField } from "../../design-plan-field.ts";
 import { NarrationPhase } from "./narration.ts";
+import {
+  appendBuildSessionLogs,
+  finalizeBuildSession,
+  recordBuildSessionChecks,
+  recordBuildSessionError,
+  transitionBuildSession,
+  type CanonicalBuildSession,
+} from "../build-session.ts";
 
 export type BuildExecuteDeps = {
   robinActive: boolean;
@@ -80,6 +88,8 @@ export type BuildExecuteDeps = {
   getLlmResponseWasStreamed: () => boolean;
   getLastExecutePhaseMessage: () => string | null;
   setLastExecutePhaseMessage: (value: string | null) => void;
+  getBuildSession: () => CanonicalBuildSession | null;
+  setBuildSession: (session: CanonicalBuildSession | null) => void;
   touchedPaths: Set<string>;
   executionModel: LLMProvider;
   reg: ToolRegistry;
@@ -98,7 +108,12 @@ export type BuildExecuteDeps = {
     options?: { buildFix?: boolean },
   ) => Promise<PlanTurnRunResult>;
   runDesignPreflightIfNeeded: () =>
-    Promise<{ passed: boolean; feedback?: string; checks: Array<{ name: string; ok: boolean; output: string }> } | null>;
+    Promise<{
+      status: "passed" | "recoverable_fail" | "terminal_fail";
+      feedback?: string;
+      checks: Array<{ name: string; ok: boolean; output: string }>;
+      availableComponents?: string;
+    } | null>;
   requiresFinalBuildGate: () => boolean;
   enabledApprovedPlanSteps: () => PlanStep[];
   isCanceled: () => Promise<boolean>;
@@ -254,6 +269,10 @@ async function emitClosingAndPersist(
   }
   if (!finalText) {
     const err = "O modelo não respondeu com a mensagem esperada.";
+    const session = deps.getBuildSession();
+    if (session) {
+      deps.setBuildSession(finalizeBuildSession(session, "failed", err));
+    }
     await deps.persistFinal(err, { lastFinishOk: false, buildFailed: true });
     return {
       ok: false,
@@ -267,6 +286,19 @@ async function emitClosingAndPersist(
   // graceful closing externo, garantimos o evento aqui sem duplicar (emit final é idempotente no reducer).
   deps.emit("assistant_text", { text: finalText, final: true, append: false });
   const ok = opts.ok === true;
+  const session = deps.getBuildSession();
+  if (session) {
+    const withError =
+      !ok && opts.error
+        ? recordBuildSessionError(session, {
+            kind: opts.canceled ? "canceled" : opts.buildFailed ? "build" : "contract",
+            message: opts.error,
+            recoverable: false,
+            phase: "terminal_failed",
+          })
+        : session;
+    deps.setBuildSession(finalizeBuildSession(withError, ok ? "ok" : "failed", finalText));
+  }
   await deps.persistFinal(finalText, {
     lastFinishOk: ok,
     buildFailed: opts.buildFailed,
@@ -288,6 +320,21 @@ async function emitTerminalBuildFailure(
 ): Promise<PlanTurnRunResult> {
   const text = message.trim() || "Retomando em seguida.";
   deps.emit("assistant_text", { text, final: true, append: false });
+  const session = deps.getBuildSession();
+  if (session) {
+    deps.setBuildSession(
+      finalizeBuildSession(
+        recordBuildSessionError(session, {
+          kind: "build",
+          message: text,
+          recoverable: false,
+          phase: "terminal_failed",
+        }),
+        "failed",
+        text,
+      ),
+    );
+  }
   await deps.persistFinal(text, {
     lastFinishOk: false,
     buildFailed: true,
@@ -311,15 +358,63 @@ export async function runBuildExecutePhase(
   let finalGateOk = false;
   let agentTextComplete = false;
 
+  const initialSession = deps.getBuildSession();
+  if (initialSession) {
+    deps.setBuildSession(
+      transitionBuildSession(initialSession, "sandbox_bootstrapping", {
+        reason: "canonical build session started",
+      }),
+    );
+  }
+
   const preflight = await deps.runDesignPreflightIfNeeded();
-  if (preflight && !preflight.passed) {
+  if (preflight) {
+    const session = deps.getBuildSession();
+    if (session) {
+      deps.setBuildSession(recordBuildSessionChecks(session, "preflight", preflight.checks));
+    }
+  }
+  if (preflight?.status === "terminal_fail") {
     const err = preflight.feedback?.trim() || "PREFLIGHT FALHOU";
-    deps.notifyLoopStatus({ kind: "build_fix" });
+    const session = deps.getBuildSession();
+    if (session) {
+      deps.setBuildSession(
+        recordBuildSessionError(session, {
+          kind: "environment",
+          message: err,
+          recoverable: false,
+          phase: "terminal_failed",
+        }),
+      );
+    }
     return emitClosingAndPersist(deps, loopStep, {
       closing: err,
       error: err,
       ok: false,
       buildFailed: true,
+    });
+  }
+  if (preflight?.status === "recoverable_fail") {
+    const err = preflight.feedback?.trim() || "PREFLIGHT FALHOU";
+    const session = deps.getBuildSession();
+    if (session) {
+      deps.setBuildSession(
+        recordBuildSessionError(session, {
+          kind: "recoverable",
+          message: err,
+          recoverable: true,
+          phase: "preflight_failed",
+          retryDelta: 1,
+        }),
+      );
+      deps.setBuildSession(
+        appendBuildSessionLogs(deps.getBuildSession() ?? session, [err]),
+      );
+    }
+    deps.notifyLoopStatus({ kind: "build_fix" });
+    deps.state.messages.push({
+      role: "user",
+      content: `${err}\nCorrija o ambiente e o código com fs_edit/shell_exec antes de seguir.`,
     });
   }
 
@@ -333,6 +428,15 @@ export async function runBuildExecutePhase(
   if (!openingOk) {
     const err = "O modelo não respondeu com a mensagem esperada.";
     return emitTerminalBuildFailure(deps, loopStep, err);
+  }
+
+  const sessionAfterOpening = deps.getBuildSession();
+  if (sessionAfterOpening) {
+    deps.setBuildSession(
+      transitionBuildSession(sessionAfterOpening, "build_running", {
+        reason: "opening emitted and build execution started",
+      }),
+    );
   }
 
   while (!finalGateOk) {
@@ -693,6 +797,14 @@ export async function runBuildExecutePhase(
             ok: result.ok,
             output: output.slice(0, 4000),
           });
+          const session = deps.getBuildSession();
+          if (session) {
+            deps.setBuildSession(
+              appendBuildSessionLogs(session, [
+                `${String(call.arguments.command ?? "").slice(0, 240)} :: ${output.slice(0, 1000)}`,
+              ]),
+            );
+          }
         }
 
         if (preDiff && result.ok) {
@@ -840,10 +952,37 @@ export async function runBuildExecutePhase(
         deps.state.phase = LoopPhaseEnum.VALIDATE_STEP;
         deps.notifyLoopStatus({ kind: "build_check" });
         deps.emit("phase", { phase: "observe", message: "" });
+        const session = deps.getBuildSession();
+        if (session) {
+          deps.setBuildSession(
+            transitionBuildSession(session, "validate_running", {
+              reason: "post-build validation running",
+            }),
+          );
+        }
         await deps.saveCheckpoint(LoopPhaseEnum.VALIDATE_STEP);
         const observation = await deps.observer.observe(() => deps.loopBudgetExceeded());
+        const sessionAfterObserve = deps.getBuildSession();
+        if (sessionAfterObserve) {
+          deps.setBuildSession(
+            recordBuildSessionChecks(sessionAfterObserve, "validate", observation.checks),
+          );
+        }
         if (!observation.passed) {
           buildAttempts++;
+          const failedMessage = observation.feedback?.slice(0, 500) ?? "validate failed";
+          const failingSession = deps.getBuildSession();
+          if (failingSession) {
+            deps.setBuildSession(
+              recordBuildSessionError(failingSession, {
+                kind: "build",
+                message: failedMessage,
+                recoverable: true,
+                phase: "validate_running",
+                retryDelta: 1,
+              }),
+            );
+          }
           deps.emit("validate_fail", {
             attempt: buildAttempts,
             checks: observation.checks.filter((c) => !c.ok).map((c) => c.name),
@@ -858,6 +997,14 @@ export async function runBuildExecutePhase(
         buildAttempts = 0;
         deps.notifyLoopStatus({ kind: "build_ok" });
         deps.emit("validate_ok", { message: "Build OK" });
+        const passedSession = deps.getBuildSession();
+        if (passedSession) {
+          deps.setBuildSession(
+            transitionBuildSession(passedSession, "build_running", {
+              reason: "validation passed",
+            }),
+          );
+        }
       }
 
       if (isExecutionStuck(deps.state.executionLog)) {
@@ -886,16 +1033,50 @@ export async function runBuildExecutePhase(
 
     deps.state.phase = LoopPhaseEnum.VALIDATE_STEP;
     deps.emit("phase", { phase: "observe", message: "" });
+    const session = deps.getBuildSession();
+    if (session) {
+      deps.setBuildSession(
+        transitionBuildSession(session, "validate_running", {
+          reason: "final gate validation running",
+        }),
+      );
+    }
     await deps.saveCheckpoint(LoopPhaseEnum.VALIDATE_STEP);
     const finalObservation = await deps.observer.observe(() => deps.loopBudgetExceeded());
+    const sessionAfterFinalObserve = deps.getBuildSession();
+    if (sessionAfterFinalObserve) {
+      deps.setBuildSession(
+        recordBuildSessionChecks(sessionAfterFinalObserve, "validate", finalObservation.checks),
+      );
+    }
     if (finalObservation.passed) {
       deps.notifyLoopStatus({ kind: "build_ok" });
       deps.emit("validate_ok", { message: "Build OK (gate final)" });
+      const passingSession = deps.getBuildSession();
+      if (passingSession) {
+        deps.setBuildSession(
+          transitionBuildSession(passingSession, "build_running", {
+            reason: "final gate passed",
+          }),
+        );
+      }
       finalGateOk = true;
       continue;
     }
 
     finalGateAttempts++;
+    const failedSession = deps.getBuildSession();
+    if (failedSession) {
+      deps.setBuildSession(
+        recordBuildSessionError(failedSession, {
+          kind: "build",
+          message: finalObservation.feedback?.slice(0, 500) ?? "final gate failed",
+          recoverable: finalGateAttempts <= EXECUTE_MAX_RETRIES,
+          phase: "validate_running",
+          retryDelta: 1,
+        }),
+      );
+    }
     deps.emit("validate_fail", {
       attempt: finalGateAttempts,
       checks: finalObservation.checks.filter((c) => !c.ok).map((c) => c.name),
@@ -954,6 +1135,10 @@ export async function runBuildExecutePhase(
     append: false,
     final: true,
   });
+  const terminalSession = deps.getBuildSession();
+  if (terminalSession) {
+    deps.setBuildSession(finalizeBuildSession(terminalSession, "ok", finalClosing));
+  }
   try {
     await deps.persistFinal(finalClosing, {
       lastFinishOk: true,

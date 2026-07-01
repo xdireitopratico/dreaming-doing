@@ -1,5 +1,6 @@
 // runtime/phases/snapshot.ts — Timeline → cardSnapshot (Fase 2.2)
 import type { ProposedPlan } from "../../types.ts";
+import type { CanonicalBuildSession } from "../build-session.ts";
 
 export type StreamTimelineEntry = {
   type: string;
@@ -102,6 +103,7 @@ export type BuildCardSnapshotContext = {
   projectId: string;
   currentStepIndex: number;
   maxStepsLimit: number;
+  buildSession: CanonicalBuildSession | null;
   opts: BuildCardSnapshotOpts;
   now?: number;
 };
@@ -139,6 +141,10 @@ export function buildCardSnapshot(ctx: BuildCardSnapshotContext): Record<string,
     awaitingKind: opts.awaitingKind ?? null,
     conversational: opts.conversational === true,
     clarifyQuestions: opts.clarifyQuestions ?? undefined,
+    buildSession: ctx.buildSession ?? undefined,
+    terminalState: ctx.buildSession?.phase ?? null,
+    checks: ctx.buildSession?.checks ?? [],
+    logs: ctx.buildSession?.logs ?? [],
   };
 
   if (opts.pendingPlan) {

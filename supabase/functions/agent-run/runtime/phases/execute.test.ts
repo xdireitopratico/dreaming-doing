@@ -7,6 +7,7 @@ import { runBuildExecutePhase, type BuildExecuteDeps } from "./execute.ts";
 import { NarrationPhase } from "./narration.ts";
 import type { AgentState, ChatMessage, ChatResponse, LLMProvider, PlanStep, ToolCall } from "../../types.ts";
 import { LoopPhase } from "../../types.ts";
+import { createCanonicalBuildSession, type CanonicalBuildSession } from "../build-session.ts";
 
 const minimalState = (): AgentState => ({
   projectId: "proj-1",
@@ -41,6 +42,7 @@ function buildStubbedExecuteDeps(overrides?: {
   );
   let step = 0;
   const state = minimalState();
+  let buildSession: CanonicalBuildSession | null = createCanonicalBuildSession("run-1", false);
 
   const model: LLMProvider = {
     chat: async () => ({ role: "assistant" as const, content: "", tool_calls: [] }),
@@ -71,6 +73,10 @@ function buildStubbedExecuteDeps(overrides?: {
     getLlmResponseWasStreamed: () => false,
     getLastExecutePhaseMessage: () => null,
     setLastExecutePhaseMessage: () => {},
+    getBuildSession: () => buildSession,
+    setBuildSession: (next) => {
+      buildSession = next;
+    },
     touchedPaths: new Set(),
     executionModel: model,
     reg: {
@@ -155,11 +161,11 @@ Deno.test("execute phase aborta em terminal quando LLM nunca emite opening", asy
   assertEquals(result.error, "O modelo não respondeu com a mensagem esperada.");
 });
 
-Deno.test("execute phase aborta antes do opening quando preflight falha", async () => {
+Deno.test("execute phase transforma preflight recuperavel em auto-repair sem terminal duplicado", async () => {
   const deps = buildStubbedExecuteDeps();
   let persistSummary = "";
   deps.runDesignPreflightIfNeeded = async () => ({
-    passed: false,
+    status: "recoverable_fail",
     feedback: "PREFLIGHT FALHOU:\n[build] erro TS2307",
     checks: [{ name: "build", ok: false, output: "erro TS2307" }],
   });
@@ -170,13 +176,10 @@ Deno.test("execute phase aborta antes do opening quando preflight falha", async 
   const result = await runBuildExecutePhase(deps, 0);
   const events = (deps as unknown as { _events: () => { type: string; data: Record<string, unknown> }[] })._events();
 
-  assertEquals(result.ok, false);
-  assertEquals(result.resumable, false);
-  assertEquals(result.buildFix, undefined);
-  assertEquals(result.error, "PREFLIGHT FALHOU:\n[build] erro TS2307");
-  assertEquals(persistSummary, "PREFLIGHT FALHOU:\n[build] erro TS2307");
+  assertEquals(result.ok, true);
+  assertEquals(persistSummary.length > 0, true);
   assert(events.some((e) => e.type === "assistant_text" && e.data.final === true));
-  assertEquals(events.some((e) => e.type === "assistant_text" && e.data.opening === true), false);
+  assertEquals(events.some((e) => e.type === "assistant_text" && e.data.opening === true), true);
 });
 
 Deno.test("execute success path emits final assistant_text", async () => {

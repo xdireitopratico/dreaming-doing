@@ -6,4 +6,5 @@ Deno.test("createAgentLoopMutableState — defaults e override", () => {
   assertEquals(m.toolMissCount, 2);
   assertEquals(m.forceToolsNext, true);
   assertEquals(m.lastCheckpointStep, 0);
+  assertEquals(m.buildSession, null);
 });
