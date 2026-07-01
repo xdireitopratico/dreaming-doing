@@ -248,7 +248,7 @@ Critério de conclusão:
 
 Evidência:
 
-- GREEN: `npm run test:agent-run` — 21 passed.
+- GREEN: `npm run test:agent-run` — 22 passed (incl. escalada read→write em approved build).
 - GREEN: `npm run build:inngest`.
 - GREEN: `npm run check:agent-run-terminal`.
 

@@ -5,7 +5,7 @@ import {
 } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import { runBuildExecutePhase, type BuildExecuteDeps } from "./execute.ts";
 import { NarrationPhase } from "./narration.ts";
-import type { AgentState, ChatMessage, ChatResponse, LLMProvider, PlanStep, ToolCall } from "../../types.ts";
+import type { AgentState, ChatMessage, ChatResponse, LLMProvider, PlanStep, ToolCall, ToolDefinition } from "../../types.ts";
 import { LoopPhase } from "../../types.ts";
 import { createCanonicalBuildSession, type CanonicalBuildSession } from "../build-session.ts";
 
@@ -33,6 +33,7 @@ function buildStubbedExecuteDeps(overrides?: {
     instruction: string,
     history: ChatMessage[],
     forceTools: boolean,
+    tools?: ToolDefinition[],
   ) => Promise<ChatResponse | null>;
 }): BuildExecuteDeps {
   const events: { type: string; data: Record<string, unknown> }[] = [];
@@ -264,6 +265,61 @@ Deno.test("execute phase with ALL empty LLM responses (content:null, no tools) s
   assertEquals(persistedGood, true);
   // success or clean resumable; never the terminal error status from the old path
   assert(result.ok === true || result.resumable === true || result.error === undefined || !String(result.error || "").includes("não respondeu"));
+});
+
+Deno.test("approved build — escala read-only para write tools e materializa arquivo", async () => {
+  let calls = 0;
+  const toolSets: string[][] = [];
+  const deps = buildStubbedExecuteDeps({
+    llmChat: async (_model, _instruction, _history, _forceTools, tools) => {
+      calls += 1;
+      toolSets.push((tools ?? []).map((t) => t.name).sort());
+      if (calls <= 2) {
+        return {
+          role: "assistant" as const,
+          content: "",
+          tool_calls: [{
+            id: `r${calls}`,
+            name: "fs_read_many",
+            arguments: { paths: ["src/App.tsx"] },
+          }],
+        };
+      }
+      return {
+        role: "assistant" as const,
+        content: "",
+        tool_calls: [{
+          id: "w1",
+          name: "fs_write",
+          arguments: { path: "src/App.tsx", content: "export default function App() { return <div />; }" },
+        }],
+      };
+    },
+  });
+  deps.approvedPlanBuild = true;
+  deps.requiresFinalBuildGate = () => false;
+  deps.recordTouchedPath = (path) => {
+    if (path) deps.touchedPaths.add(path);
+  };
+  deps.reg = {
+    execute: async () => mockToolResult,
+    getDefinitions: () => [
+      { name: "fs_read", description: "r", parameters: { type: "object", properties: {} } },
+      { name: "fs_read_many", description: "rm", parameters: { type: "object", properties: {} } },
+      { name: "fs_write", description: "w", parameters: { type: "object", properties: {} } },
+      { name: "fs_edit", description: "e", parameters: { type: "object", properties: {} } },
+      { name: "shell_exec", description: "s", parameters: { type: "object", properties: {} } },
+    ],
+  } as unknown as BuildExecuteDeps["reg"];
+
+  const result = await runBuildExecutePhase(deps, 0);
+  const writePhaseCall = toolSets.find((names) =>
+    names.length > 0 && names.every((n) => n === "fs_edit" || n === "fs_write" || n === "shell_exec")
+  );
+
+  assert(writePhaseCall, `expected write-only tools, got: ${JSON.stringify(toolSets)}`);
+  assert(deps.touchedPaths.size > 0, "approved build must materialize at least one file");
+  assert(result.ok === true || result.resumable === true);
 });
 
 Deno.test("execute early budget/maxstep paths emit prose before resumable (real entry)", async () => {
