@@ -21,7 +21,7 @@ import {
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useJobEvents, useJobPolling } from "./hooks";
-import { cancelExtractionJob } from "./api";
+import { cancelExtractionJob, postInstruction } from "./api";
 import { JOB_STATUS_COLORS, JOB_TERMINAL_STATUSES, type RealtimeEvent } from "./types";
 import { toast } from "@/lib/toast";
 import { getSupabaseEnv } from "@/lib/supabase-env";
@@ -58,6 +58,13 @@ interface ThinkingState {
 }
 
 // ── Constants ────────────────────────────────────────────────────────
+
+const QUICK_ACTIONS = [
+  { label: "Focar no hero", content: "Foca no hero e ignora o resto da página por enquanto." },
+  { label: "Capturar motion", content: "Prioriza capturar animações, transições e motion traces." },
+  { label: "Mais tipografia", content: "Aprofunda a análise de tipografia e hierarquia de texto." },
+  { label: "Sintetizar agora", content: "Você já tem evidências suficientes. Sintetize o Design DNA final." },
+];
 
 const TERMINAL_STATUSES = new Set<string>(JOB_TERMINAL_STATUSES);
 
@@ -122,14 +129,36 @@ const ACTION_ICONS: Record<string, React.ReactNode> = {
   evaluate: <ArrowRight className="size-3" />,
 };
 
+function getAgentEventDescription(event: RealtimeEvent): string {
+  const payload = event.payload ?? {};
+  switch (event.event_type) {
+    case "agent_thought":
+      return `💭 ${payload.thought ?? ""}`;
+    case "agent_action":
+      return `⚡ ${(payload.action as { type: string })?.type ?? ""}`;
+    case "agent_observation":
+      return `👁 ${(payload.observation as { type: string })?.type ?? ""}`;
+    case "agent_done":
+      return `✅ Agente concluiu`;
+    case "agent_error":
+      return `❌ Erro: ${payload.error ?? ""}`;
+    default:
+      return getEventConfig(event.event_type).label;
+  }
+}
+
 // ── EventRow ─────────────────────────────────────────────────────────
 
 function EventRow({ event, isLatest }: { event: RealtimeEvent; isLatest: boolean }) {
   const [expanded, setExpanded] = useState(false);
   const config = getEventConfig(event.event_type);
   const isLLM = event.event_type === "llm_extracting";
+  const isAgent = event.event_type.startsWith("agent_");
 
   const description = useMemo(() => {
+    if (isAgent) {
+      return getAgentEventDescription(event);
+    }
     if (event.event_type === "url_extracting") {
       return `${config.label} → ${(event.payload?.url as string) ?? ""}`;
     }
@@ -141,7 +170,7 @@ function EventRow({ event, isLatest }: { event: RealtimeEvent; isLatest: boolean
       return `${config.label}: ${(event.payload?.error as string) ?? ""}`;
     }
     return config.label;
-  }, [event, config.label]);
+  }, [event, config.label, isAgent]);
 
   return (
     <div
@@ -603,8 +632,29 @@ export function BrowserPreviewPanel({ jobId, onClose }: BrowserPreviewPanelProps
     };
     setChatMessages((prev) => [...prev, userMsg]);
     setChatInput("");
+
+    // If job is running, send as instruction to the agent loop
+    if (!isTerminal) {
+      try {
+        await postInstruction(jobId, userMsg.content, "user");
+        return;
+      } catch (err) {
+        console.error("[BrowserPreviewPanel] postInstruction failed:", err);
+        toast.error(err instanceof Error ? err.message : "Erro ao enviar instrução");
+      }
+    }
+
+    // Fallback: traditional SSE chat
     await callChatSSE(userMsg.content);
-  }, [chatInput, chatLoading, jobId, callChatSSE]);
+  }, [chatInput, chatLoading, jobId, isTerminal, callChatSSE]);
+
+  const handleSendChatWithText = useCallback(
+    async (text: string) => {
+      setChatInput(text);
+      await handleSendChat();
+    },
+    [handleSendChat],
+  );
 
   // ── Cancel job ───────────────────────────────────────────────────
   const handleCancel = useCallback(async () => {
@@ -828,6 +878,38 @@ export function BrowserPreviewPanel({ jobId, onClose }: BrowserPreviewPanelProps
               </div>
             )}
           </div>
+
+          {/* Quick actions */}
+          {!isTerminal && (
+            <div className="border-t border-border/50 px-3 py-2 flex flex-wrap gap-1.5">
+              {QUICK_ACTIONS.map((a) => (
+                <button
+                  key={a.label}
+                  type="button"
+                  onClick={() => void handleSendChatWithText(a.content)}
+                  className="text-[9px] px-2 py-1 rounded border border-border text-muted-foreground hover:bg-surface-2 transition-colors"
+                >
+                  {a.label}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Quick actions */}
+          {!isTerminal && (
+            <div className="border-t border-border/50 px-3 py-2 flex flex-wrap gap-1.5">
+              {QUICK_ACTIONS.map((a) => (
+                <button
+                  key={a.label}
+                  type="button"
+                  onClick={() => void handleSendChatWithText(a.content)}
+                  className="text-[9px] px-2 py-1 rounded border border-border text-muted-foreground hover:bg-surface-2 transition-colors"
+                >
+                  {a.label}
+                </button>
+              ))}
+            </div>
+          )}
 
           {/* Composer */}
           <div className="border-t border-border p-2">
