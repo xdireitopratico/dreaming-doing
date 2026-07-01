@@ -70,7 +70,7 @@ export const template = Template()
   .runCmd("cd /opt/forge && npx playwright install-deps chromium")
   // Browser Use + Playwright Python (sem langchain — Browser Use tem suporte a LLM nativo)
   .runCmd("python3.11 -m pip install --upgrade pip setuptools wheel")
-  .runCmd("python3.11 -m pip install playwright browser-use")
+  .runCmd("python3.11 -m pip install playwright browser-use beautifulsoup4 cssutils fonttools lxml")
   // Cria um wrapper para iniciar o Chromium headless com DevTools
   .runCmd(
     `cat > /usr/local/bin/start-chromium.sh << 'EOF'

@@ -147,9 +147,12 @@ export async function referoScrape(
       return await executeBrowserUseAI(input, webSecrets, prefs, startMs, trace);
 
     case "browserbase-stealth":
-      // Sprint 3 — for now, fall back to firecrawl-deep
-      trace.push("router: browserbase-stealth not yet implemented, falling back to firecrawl-deep");
-      return await executeFirecrawlDeep(input.url, webSecrets, prefs, startMs, trace);
+      // Cloud browser with anti-detect capabilities
+      if (!webSecrets.BROWSERBASE_API_KEY) {
+        trace.push("router: browserbase-stealth but no API key — falling back to firecrawl-deep");
+        return await executeFirecrawlDeep(input.url, webSecrets, prefs, startMs, trace);
+      }
+      return await executeBrowserbaseStealth(input.url, webSecrets.BROWSERBASE_API_KEY as string, startMs, trace);
 
     default:
       trace.push(`router: unknown strategy ${strategyId}, falling back`);
@@ -794,6 +797,214 @@ if __name__ == "__main__":
         print(json.dumps({"status":"error","error":str(e),"traceback":traceback.format_exc()}), file=sys.stderr)
         sys.exit(1)
 PYEOF`;
+}
+
+/**
+ * Browserbase Stealth — cloud browser with anti-detect capabilities.
+ *
+ * Uses Browserbase REST API to:
+ * 1. Create a browser session
+ * 2. Navigate to URL
+ * 3. Take screenshot + extract text content
+ * 4. Close session
+ *
+ * Browserbase's cloud Chrome has built-in anti-fingerprinting and
+ * residential proxy rotation, making it effective against Cloudflare,
+ * Akamai, DataDome, PerimeterX, and hCaptcha challenges.
+ *
+ * Falls back to firecrawl-deep on any failure.
+ */
+async function executeBrowserbaseStealth(
+  url: string,
+  apiKey: string,
+  startMs: number,
+  trace: string[],
+): Promise<ReferoScrapeResult> {
+  trace.push("browserbase: creating stealth session");
+
+  let sessionId: string;
+  let cdpUrl: string;
+
+  // Step 1: Create a Browserbase session via REST API
+  try {
+    const sessionResponse = await fetch("https://api.browserbase.com/sessions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": apiKey,
+      },
+      body: JSON.stringify({
+        browserSettings: {
+          fingerprint: {
+            browsers: ["chrome"],
+            devices: ["desktop"],
+            operatingSystems: ["macos"],
+          },
+          context: {
+            id: "design-dna-extraction",
+            persist: false,
+          },
+        },
+      }),
+      signal: AbortSignal.timeout(30000),
+    });
+
+    if (!sessionResponse.ok) {
+      const errText = await sessionResponse.text().catch(() => "unknown");
+      throw new Error(`Browserbase session creation failed: HTTP ${sessionResponse.status} — ${errText.slice(0, 200)}`);
+    }
+
+    const sessionData = await sessionResponse.json();
+    sessionId = sessionData.id;
+    const connectUrl = sessionData.connectUrl; // wss://connect.browserbase.com?sessionId=xxx
+
+    if (!sessionId || !connectUrl) {
+      throw new Error("Browserbase session created but missing id or connectUrl");
+    }
+
+    trace.push(`browserbase: session ${sessionId.slice(0, 8)} created`);
+    cdpUrl = connectUrl;
+  } catch (err) {
+    trace.push(`browserbase: session failed: ${errorMessage(err)} — falling back to firecrawl-deep`);
+    return executeFirecrawlDeep(url, {}, null, startMs, trace);
+  }
+
+  // Step 2: Use Browserbase's content API to extract page content
+  // Browserbase provides a /content endpoint for text extraction
+  let markdown = "";
+  let html = "";
+  let title = "";
+  let screenshotBase64 = "";
+
+  try {
+    // Navigate to URL
+    trace.push(`browserbase: navigating to ${url}`);
+    const navResponse = await fetch(`https://api.browserbase.com/sessions/${sessionId}/navigate`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": apiKey,
+      },
+      body: JSON.stringify({ url }),
+      signal: AbortSignal.timeout(30000),
+    });
+
+    if (navResponse.ok) {
+      const navData = await navResponse.json();
+      trace.push(`browserbase: navigation ${navData.status ?? "ok"}`);
+    }
+
+    // Wait for page to load
+    await new Promise((r) => setTimeout(r, 3000));
+
+    // Get page text content
+    try {
+      const textResponse = await fetch(`https://api.browserbase.com/sessions/${sessionId}/text`, {
+        method: "GET",
+        headers: { "x-api-key": apiKey },
+        signal: AbortSignal.timeout(15000),
+      });
+      if (textResponse.ok) {
+        const textData = await textResponse.json();
+        markdown = String(textData.text ?? textData.result ?? "");
+        trace.push(`browserbase: extracted ${markdown.length} chars of text`);
+      }
+    } catch (err) {
+      trace.push(`browserbase: text extraction failed: ${errorMessage(err)}`);
+    }
+
+    // Get page HTML
+    try {
+      const htmlResponse = await fetch(`https://api.browserbase.com/sessions/${sessionId}/html`, {
+        method: "GET",
+        headers: { "x-api-key": apiKey },
+        signal: AbortSignal.timeout(15000),
+      });
+      if (htmlResponse.ok) {
+        const htmlData = await htmlResponse.json();
+        html = String(htmlData.html ?? htmlData.result ?? "");
+        trace.push(`browserbase: extracted ${html.length} chars of HTML`);
+      }
+    } catch (err) {
+      trace.push(`browserbase: HTML extraction failed: ${errorMessage(err)}`);
+    }
+
+    // Get screenshot
+    try {
+      const screenshotResponse = await fetch(`https://api.browserbase.com/sessions/${sessionId}/screenshot`, {
+        method: "GET",
+        headers: { "Accept": "image/png", "x-api-key": apiKey },
+        signal: AbortSignal.timeout(15000),
+      });
+      if (screenshotResponse.ok) {
+        const screenshotBuffer = await screenshotResponse.arrayBuffer();
+        // Convert ArrayBuffer to base64
+        const bytes = new Uint8Array(screenshotBuffer);
+        let binary = "";
+        for (let i = 0; i < Math.min(bytes.length, 500000); i++) {
+          binary += String.fromCharCode(bytes[i]);
+        }
+        screenshotBase64 = btoa(binary);
+        trace.push(`browserbase: screenshot captured (${screenshotBase64.length} chars base64)`);
+      }
+    } catch (err) {
+      trace.push(`browserbase: screenshot failed: ${errorMessage(err)}`);
+    }
+
+    // Try to get title via evaluate
+    try {
+      const evalResponse = await fetch(`https://api.browserbase.com/sessions/${sessionId}/evaluate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-api-key": apiKey },
+        body: JSON.stringify({ expression: "document.title" }),
+        signal: AbortSignal.timeout(10000),
+      });
+      if (evalResponse.ok) {
+        const evalData = await evalResponse.json();
+        title = String(evalData.result ?? "");
+      }
+    } catch { /* title stays empty */ }
+
+  } catch (err) {
+    trace.push(`browserbase: extraction error: ${errorMessage(err)}`);
+  }
+
+  // Step 3: Close session (best-effort)
+  try {
+    await fetch(`https://api.browserbase.com/sessions/${sessionId}`, {
+      method: "DELETE",
+      headers: { "x-api-key": apiKey },
+      signal: AbortSignal.timeout(5000),
+    });
+    trace.push("browserbase: session closed");
+  } catch { /* best-effort close */ }
+
+  // If we got meaningful content, return it; otherwise fall back
+  if (markdown.length < 100 && html.length < 100) {
+    trace.push("browserbase: insufficient content extracted — falling back to firecrawl-deep");
+    return executeFirecrawlDeep(url, {}, null, startMs, trace);
+  }
+
+  return {
+    provider: "browserbase",
+    strategy: "browserbase-stealth",
+    markdown,
+    html,
+    title,
+    screenshots: [],
+    screenshotBase64,
+    screenshotFullBase64: "",
+    viewports: [],
+    cssData: { byTag: {}, gridSystems: [], flexPatterns: [], designTokens: {}, colorPalette: [] },
+    sections: [],
+    components: [],
+    fontFaces: [],
+    animations: [],
+    customProperties: {},
+    viewport: { width: 1280, height: 800, devicePixelRatio: 2, scrollHeight: 800 },
+    durationMs: Date.now() - startMs,
+    trace,
+  };
 }
 
 async function executeJinaFast(

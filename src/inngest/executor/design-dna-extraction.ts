@@ -92,6 +92,7 @@ async function loadWebSecrets(supabase: SupabaseClient, userId: string): Promise
   const envFallbacks: Record<string, string | undefined> = {
     FIRECRAWL_API_KEY: process.env.FIRECRAWL_API_KEY,
     BROWSERLESS_API_KEY: process.env.BROWSERLESS_API_KEY,
+    BROWSERBASE_API_KEY: process.env.BROWSERBASE_API_KEY,
     TAVILY_API_KEY: process.env.TAVILY_API_KEY,
     SERPER_API_KEY: process.env.SERPER_API_KEY,
     SERPER_KEY: process.env.SERPER_KEY,
@@ -116,6 +117,7 @@ async function loadWebSecrets(supabase: SupabaseClient, userId: string): Promise
     serper: "SERPER_API_KEY",
     firecrawl: "FIRECRAWL_API_KEY",
     browserless: "BROWSERLESS_API_KEY",
+    browserbase: "BROWSERBASE_API_KEY",
     exa: "EXA_API_KEY",
     parallel: "PARALLEL_API_KEY",
     crawl4ai: "CRAWL4AI_API_KEY",
@@ -1051,27 +1053,41 @@ export async function extractDesignDnaForUrl(
     notes.push("markdown empty after scrape");
   }
 
-  // ── Confidence score (enhanced with refero data) ──
-  const density = Math.min(
-    1,
-    (enrichedMarkdown.length + cleanHtml.length + cleanText.length + cleanedMarkdown.length) / 50000,
-  );
+  // ── Confidence score (weighted average of 6 real metrics) ──
   const hasMultiViewport = scrapeResult.viewports.length > 0;
   const hasCssData = scrapeResult.cssData.gridSystems.length > 0 || scrapeResult.cssData.flexPatterns.length > 0;
   const hasComponents = scrapeResult.components.length > 0;
   const hasSections = scrapeResult.sections.length > 0;
+  const hasScreenshot = !!screenshotBase64;
+  const contentDensity = Math.min(1, (enrichedMarkdown.length + cleanHtml.length) / 40000);
 
-  let confidence = Math.round(
-    (input.depth === "deep" ? 55 : 30) +
-    density * 20 +
-    (screenshots.length > 0 ? 5 : 0) +
-    (screenshotBase64 ? 5 : 0) +
-    (hasMultiViewport ? 5 : 0) +
-    (hasCssData ? 5 : 0) +
-    (hasComponents ? 5 : 0) +
-    (hasSections ? 5 : 0),
-  );
-  confidence = Math.min(99, confidence);
+  // 6 metrics, each scored 0-100:
+  const metrics = {
+    // M1: Content depth — how much raw material the LLM has to work with
+    contentDepth: Math.round(contentDensity * 100),
+    // M2: Visual evidence — screenshot available (binary but weighted high)
+    visualEvidence: hasScreenshot ? 80 : 10,
+    // M3: Structural data — CSS grid/flex/design tokens extracted
+    structuralData: hasCssData ? 90 : 15,
+    // M4: Component coverage — DOM components detected
+    componentCoverage: hasComponents ? Math.min(100, scrapeResult.components.length * 15) : 10,
+    // M5: Section mapping — page sections detected
+    sectionMapping: hasSections ? Math.min(100, scrapeResult.sections.length * 20) : 10,
+    // M6: Extraction mode — deep mode inherently has more signal
+    modeQuality: input.depth === "deep" ? 85 : 45,
+  };
+
+  // Weighted average: content (25%) + visual (15%) + structural (20%) + component (15%) + section (10%) + mode (15%)
+  const confidence = Math.min(99, Math.round(
+    metrics.contentDepth * 0.25 +
+    metrics.visualEvidence * 0.15 +
+    metrics.structuralData * 0.20 +
+    metrics.componentCoverage * 0.15 +
+    metrics.sectionMapping * 0.10 +
+    metrics.modeQuality * 0.15
+  ));
+
+  notes.push(`confidence: ${confidence}/99 (depth=${metrics.contentDepth}, visual=${metrics.visualEvidence}, struct=${metrics.structuralData}, comp=${metrics.componentCoverage}, sect=${metrics.sectionMapping}, mode=${metrics.modeQuality})`);
 
   // ── LLM Extraction: Multi-pass (5 specialized passes + synthesis) ──
   let dna: Record<string, unknown> | null = null;
