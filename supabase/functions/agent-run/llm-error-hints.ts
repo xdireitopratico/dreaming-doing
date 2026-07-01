@@ -135,11 +135,9 @@ export function llmErrorHint(err: unknown, robinActive: boolean): ErrorHint {
   if (isConnectionError(err)) {
     return {
       message: "Conexão com o modelo instável. O estado foi salvo.",
-      action: "Continuar run",
       link: null,
       severity: "warning",
       code: "connection.unstable",
-      tip: "O agente retoma exatamente de onde parou — sem perder trabalho.",
     };
   }
 

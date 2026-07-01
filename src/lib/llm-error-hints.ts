@@ -127,7 +127,6 @@ export function llmErrorHint(err: unknown, robinActive: boolean): ErrorHint {
   ) {
     return {
       message: "Conexão instável. Estado salvo.",
-      action: "→ Continuar",
       link: null,
       severity: "warning",
       code: "connection.unstable",
@@ -211,7 +210,6 @@ export function e2bErrorHint(err: unknown): ErrorHint {
 export function timeoutHint(): ErrorHint {
   return {
     message: "Timeout — progresso salvo.",
-    action: "→ Continuar",
     link: null,
     severity: "warning",
     code: "agent.execution_window",

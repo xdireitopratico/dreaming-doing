@@ -300,6 +300,29 @@ async function emitTerminalBuildFailure(
   };
 }
 
+function emitCanonicalPlanTasks(deps: BuildExecuteDeps): void {
+  if (!deps.approvedPlanBuild || deps.approvedPlanSteps.length === 0) return;
+
+  const total = deps.approvedPlanSteps.length;
+  for (let idx = 0; idx < deps.approvedPlanSteps.length; idx += 1) {
+    const step = deps.approvedPlanSteps[idx];
+    const label =
+      step.description?.trim() ||
+      step.filePath?.trim() ||
+      `Etapa ${idx + 1}/${total}`;
+    const criteria =
+      step.filePath?.trim() || (step.enabled === false ? "Desativada" : undefined);
+    deps.emit("task", {
+      id: step.id || `plan-step-${idx}`,
+      label,
+      criteria,
+      active: idx === 0,
+      done: false,
+      failed: false,
+    });
+  }
+}
+
 export async function runBuildExecutePhase(
   deps: BuildExecuteDeps,
   initialStep: number,
@@ -326,6 +349,8 @@ export async function runBuildExecutePhase(
       }),
     );
   }
+
+  emitCanonicalPlanTasks(deps);
 
   const preflight = await deps.runDesignPreflightIfNeeded();
   if (preflight) {
