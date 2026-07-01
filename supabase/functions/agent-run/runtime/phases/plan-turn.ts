@@ -35,7 +35,6 @@ import type {
   ToolResult,
 } from "../../types.ts";
 import { LoopPhase } from "../../types.ts";
-import { PLAN_OPENING_FALLBACK } from "../phase-messages.ts";
 import { enrichProposedPlanDesign } from "../../plan-design-enrich.ts";
 
 export const MAX_PLAN_EXPLORE = 10;
@@ -682,7 +681,7 @@ export async function runPlanModeAgentTurn(
     }
 
     deps.markToolsInvoked();
-    deps.ensureOpeningBeforeWork(assistantText || PLAN_OPENING_FALLBACK);
+    deps.ensureOpeningBeforeWork(assistantText);
     deps.emit("phase", { phase: "plan", message: "", toolCount: execCalls.length });
 
     const execResults = await parallelExecute(execCalls, async (call) => {

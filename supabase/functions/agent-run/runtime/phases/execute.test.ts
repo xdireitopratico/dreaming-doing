@@ -142,23 +142,34 @@ function buildStubbedExecuteDeps(overrides?: {
   return deps;
 }
 
-Deno.test("execute phase emits opening assistant_text before work", async () => {
+Deno.test("execute phase can start without mandatory opening assistant_text", async () => {
   const deps = buildStubbedExecuteDeps();
-  await runBuildExecutePhase(deps, 0);
+  const result = await runBuildExecutePhase(deps, 0);
   const events = (deps as unknown as { _events: () => { type: string; data: Record<string, unknown> }[] })._events();
   const firstOpening = events.findIndex((e) => e.type === "assistant_text" && e.data.opening === true);
-  assert(firstOpening >= 0, "missing opening assistant_text");
+  assertEquals(result.ok, true);
+  assertEquals(firstOpening, -1);
 });
 
-Deno.test("execute phase aborta em terminal quando LLM nunca emite opening", async () => {
+Deno.test("execute phase segue sem exigir opening obrigatório", async () => {
+  let calls = 0;
   const deps = buildStubbedExecuteDeps({
-    llmChat: async () => ({ role: "assistant" as const, content: "", tool_calls: [] }),
+    llmChat: async () => {
+      calls += 1;
+      if (calls === 1) {
+        return { role: "assistant" as const, content: "", tool_calls: [] };
+      }
+      return { role: "assistant" as const, content: "Terminei.", tool_calls: [] };
+    },
   });
   const result = await runBuildExecutePhase(deps, 0);
-  assertEquals(result.ok, false);
-  assertEquals(result.resumable, false);
+  const events = (deps as unknown as { _events: () => { type: string; data: Record<string, unknown> }[] })._events();
+
+  assertEquals(result.ok, true);
+  assertEquals(result.resumable, undefined);
   assertEquals(result.buildFix, undefined);
-  assertEquals(result.error, "O modelo não respondeu com a mensagem esperada.");
+  assertEquals(calls >= 2, true);
+  assertEquals(events.some((e) => e.type === "assistant_text" && e.data.opening === true), false);
 });
 
 Deno.test("execute phase transforma preflight recuperavel em auto-repair sem terminal duplicado", async () => {
@@ -179,7 +190,6 @@ Deno.test("execute phase transforma preflight recuperavel em auto-repair sem ter
   assertEquals(result.ok, true);
   assertEquals(persistSummary.length > 0, true);
   assert(events.some((e) => e.type === "assistant_text" && e.data.final === true));
-  assertEquals(events.some((e) => e.type === "assistant_text" && e.data.opening === true), true);
 });
 
 Deno.test("execute success path emits final assistant_text", async () => {

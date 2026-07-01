@@ -194,33 +194,8 @@ function applyNoToolCallsEnforcement(
   return false;
 }
 
-const OPENING_SYSTEM_PROMPT =
-  "Você precisa começar respondendo ao usuário com UMA frase curta (máximo 140 caracteres) explicando o que vai fazer, antes de usar ferramentas. Não use templates genéricos como 'Entendi:'. Seja específico ao pedido.";
-
 const CLOSING_SYSTEM_PROMPT =
   "Você deve terminar esta interação com uma frase curta para o usuário (máximo 200 caracteres) explicando o resultado real: o que conseguiu, o que falhou, ou por que parou. Não invente sucesso. Seja específico.";
-
-async function forceOpeningOrFail(
-  deps: BuildExecuteDeps,
-  instruction: string,
-  history: ChatMessage[],
-): Promise<boolean> {
-  for (let attempt = 0; attempt < 2; attempt++) {
-    if (deps.narrationPhase?.openingEmitted) return true;
-    const nudgeResponse = await deps.llmChat(
-      deps.executionModel,
-      instruction,
-      [...history, { role: "system", content: OPENING_SYSTEM_PROMPT }],
-      false,
-    );
-    const text = nudgeResponse?.content?.trim();
-    if (text && deps.narrationPhase) {
-      deps.narrationPhase.emitOpening(text);
-      if (deps.narrationPhase.openingEmitted) return true;
-    }
-  }
-  return false;
-}
 
 /** Força o LLM a emitir um fechamento honesto quando o caminho de saída não produziu um.
  *  Zero fallback hardcoded — se o LLM não responder, falha com erro técnico honesto. */
@@ -418,23 +393,11 @@ export async function runBuildExecutePhase(
     });
   }
 
-  const compressedInitial = await deps.compression.compress(deps.state.messages);
-  const initialInstruction = buildExecuteInstruction(deps.originalUserRequest, {
-    loopStep: 0,
-    buildFixResume: deps.buildFixResume,
-    design: deps.approvedPlanDesign,
-  });
-  const openingOk = await forceOpeningOrFail(deps, initialInstruction, compressedInitial);
-  if (!openingOk) {
-    const err = "O modelo não respondeu com a mensagem esperada.";
-    return emitTerminalBuildFailure(deps, loopStep, err);
-  }
-
-  const sessionAfterOpening = deps.getBuildSession();
-  if (sessionAfterOpening) {
+  const sessionBeforeBuild = deps.getBuildSession();
+  if (sessionBeforeBuild) {
     deps.setBuildSession(
-      transitionBuildSession(sessionAfterOpening, "build_running", {
-        reason: "opening emitted and build execution started",
+      transitionBuildSession(sessionBeforeBuild, "build_running", {
+        reason: "preflight complete and build execution started",
       }),
     );
   }
