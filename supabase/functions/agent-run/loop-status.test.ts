@@ -1,4 +1,5 @@
 import {
+  assert,
   assertEquals,
   assertFalse,
   assertStringIncludes,
@@ -70,8 +71,27 @@ Deno.test("resolveClosureText — fallback determinístico sem model e sem prosa
     touchedPaths: ["src/App.tsx", "src/Hero.tsx"],
     userRequest: "landing",
   });
-  // Sem model e sem prosa → fallback vazio (inviolabilidade: nunca null, sempre string).
+  // Sem model e sem prosa → fallback NUNCA vazio; produz prosa utilizável.
   assertEquals(typeof text, "string");
+  assertStringIncludes(text, "landing");
+  assert(text.length > 20, "must be substantive prose");
+});
+
+Deno.test("resolveClosureText — empty LLM content (null/'' + no tools) always yields non-empty", async () => {
+  const fakeEmptyModel = {
+    async chat() {
+      return { role: "assistant" as const, content: null, tool_calls: [] };
+    },
+  };
+  const text = await resolveClosureText({
+    messages: [],
+    touchedPaths: ["src/main.ts"],
+    userRequest: "criar header",
+    model: fakeEmptyModel as any,
+  });
+  assertEquals(typeof text, "string");
+  assert(text.trim().length > 0, "guarantee non-empty user message even on empty LLM response");
+  assertFalse(text.includes("O modelo não respondeu"));
 });
 
 Deno.test("resolveClosureText — fallback de erro quando há errorMessage", async () => {

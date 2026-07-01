@@ -51,6 +51,22 @@ function toToolCall(raw: any): ToolCall {
   return { id, name, arguments: argsRaw };
 }
 
+/** Adapter-level normalization: garante que ChatResponse tenha .content (string|null) ou tool_calls válidos.
+ *  Evita respostas "sem conteúdo e sem tools" vazias que cascateiam para erro terminal "modelo não respondeu".
+ *  Para streams parciais / reasoning / empty-content comuns, assegura forma bem definida. */
+function ensureResponseShape(resp: ChatResponse): ChatResponse {
+  const content = typeof resp.content === "string" ? resp.content : (resp.content == null ? null : String(resp.content));
+  const tool_calls = Array.isArray(resp.tool_calls) ? resp.tool_calls : [];
+  // Se não há prose e não há tools (caso vazio duro), deixamos content null (fechamentos downstream tratam via fallback).
+  // Mas garantimos que o objeto shape está completo.
+  return {
+    role: "assistant",
+    content,
+    tool_calls,
+    usage: resp.usage,
+  };
+}
+
 function parseXmlToolCalls(content: string): ToolCall[] {
   const calls: ToolCall[] = [];
   const toolCallRegex = /<tool_call>([\s\S]*?)<\/tool_call>/g;
@@ -151,12 +167,12 @@ class ClaudeAdapter implements LLMProvider {
       }
     }
 
-    return {
+    return ensureResponseShape({
       role: "assistant",
       content: text || null,
       tool_calls: toolCalls,
       usage: mapUsage(data.usage),
-    };
+    });
   }
 }
 
@@ -302,12 +318,12 @@ class OpenAIAdapter implements LLMProvider {
       toolCalls = parseXmlToolCalls(msg.content);
     }
 
-    return {
+    return ensureResponseShape({
       role: "assistant",
       content: msg?.content ?? null,
       tool_calls: toolCalls,
       usage: mapUsage(data.usage),
-    };
+    });
   }
 
   private async chatCompletionsStream(params: ChatParams): Promise<ChatResponse> {
@@ -525,12 +541,12 @@ class OpenAIAdapter implements LLMProvider {
       finalToolCalls = parseXmlToolCalls(text);
     }
 
-    return {
+    return ensureResponseShape({
       role: "assistant",
       content: text || null,
       tool_calls: finalToolCalls,
       usage,
-    };
+    });
   }
 }
 
@@ -637,12 +653,12 @@ class GeminiAdapter implements LLMProvider {
       }
     }
 
-    return {
+    return ensureResponseShape({
       role: "assistant",
       content: text || null,
       tool_calls: toolCalls,
       usage: mapUsage(data.usageMetadata),
-    };
+    });
   }
 }
 
@@ -706,12 +722,12 @@ class OpenRouterAdapter implements LLMProvider {
     const choice = data.choices?.[0];
     const msg = choice?.message;
 
-    return {
+    return ensureResponseShape({
       role: "assistant",
       content: msg?.content ?? null,
       tool_calls: (msg?.tool_calls ?? []).map(toToolCall),
       usage: mapUsage(data.usage),
-    };
+    });
   }
 }
 
@@ -758,11 +774,11 @@ class OllamaAdapter implements LLMProvider {
     const data = await resp.json();
     const msg = data.message;
 
-    return {
+    return ensureResponseShape({
       role: "assistant",
       content: msg?.content ?? null,
       tool_calls: (msg?.tool_calls ?? []).map(toToolCall),
-    };
+    });
   }
 }
 

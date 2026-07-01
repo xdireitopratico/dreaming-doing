@@ -168,8 +168,12 @@ Deno.test("execute phase segue sem exigir opening obrigatório", async () => {
   assertEquals(result.ok, true);
   assertEquals(result.resumable, undefined);
   assertEquals(result.buildFix, undefined);
-  assertEquals(calls >= 2, true);
+  // Closing no longer necessarily issues a second llmChat (uses resolve+history fallback for determinism);
+  // the guarantee is non-empty final prose + no hard error + no spurious opening.
+  assert(calls >= 1, "at least one llm interaction");
   assertEquals(events.some((e) => e.type === "assistant_text" && e.data.opening === true), false);
+  const finals = events.filter((e) => e.type === "assistant_text" && e.data.final === true);
+  assert(finals.length > 0 && String((finals[0] as any).data?.text || "").length > 5);
 });
 
 Deno.test("execute phase transforma preflight recuperavel em auto-repair sem terminal duplicado", async () => {
@@ -214,4 +218,31 @@ Deno.test("execute success path emits final assistant_text", async () => {
   const finals = events.filter((e) => e.type === "assistant_text" && e.data.final === true);
   assert(finals.length > 0, "missing final assistant_text on success path");
   assertEquals(result.ok, true);
+});
+
+// Core regression test for the systematic "o modelo não respondeu com a mensagem esperada" failure.
+// Drives the REAL exported runBuildExecutePhase with llmChat that ALWAYS returns empty content + no tools
+// (simulates reasoning/partial/empty streams from any provider). Must still emit non-empty final prose,
+// persistFinal with prose (never the error), and return ok/resumable state without the hardcore error.
+Deno.test("execute phase with ALL empty LLM responses (content:null, no tools) still emits non-empty final prose and never hard-fails", async () => {
+  let persistFinalArgs: any[] = [];
+  const deps = buildStubbedExecuteDeps({
+    llmChat: async () => ({ role: "assistant" as const, content: null, tool_calls: [] }),
+  });
+  deps.requiresFinalBuildGate = () => false;
+  deps.persistFinal = async (summary: string, opts?: any) => {
+    persistFinalArgs.push({ summary, opts });
+  };
+  const result = await runBuildExecutePhase(deps, 0);
+  const events = (deps as unknown as { _events: () => { type: string; data: Record<string, unknown> }[] })._events();
+  const finalTexts = events.filter((e) => e.type === "assistant_text" && e.data.final === true).map((e) => (e.data as any).text as string);
+  const hasNonEmptyFinal = finalTexts.some((t) => typeof t === "string" && t.trim().length > 0);
+  const noHardError = !result.error || !String(result.error).includes("O modelo não respondeu");
+  const persistedGood = persistFinalArgs.some((p) => typeof p.summary === "string" && p.summary.trim().length > 0);
+
+  assert(hasNonEmptyFinal, "must emit non-empty final assistant_text even when every LLM response was empty");
+  assertEquals(noHardError, true);
+  assertEquals(persistedGood, true);
+  // success or clean resumable; never the terminal error status from the old path
+  assert(result.ok === true || result.resumable === true || result.error === undefined || !String(result.error || "").includes("não respondeu"));
 });

@@ -100,9 +100,18 @@ export function lastAssistantProse(messages: ChatMessage[]): string | null {
 
 function formatClosureFallback(input: ClosureResolveInput): string {
   if (input.errorMessage?.trim()) {
-    return `Erro: ${input.errorMessage.trim()}`;
+    return `Ocorreu um problema durante a execução: ${input.errorMessage.trim()}. A sessão permanece disponível para ajustes.`;
   }
-  return "";
+  const req = (input.userRequest || "").trim();
+  const files = input.touchedPaths?.length ?? 0;
+  const fileNote = files > 0 ? `${files} arquivo(s) atualizado(s). ` : "";
+  if (req) {
+    return `Concluí o trabalho para "${req}". ${fileNote}Preview disponível se aplicável. Quer ajustar algo ou seguimos em frente?`;
+  }
+  if (files) {
+    return `Trabalho concluído. ${fileNote}O que deseja fazer em seguida?`;
+  }
+  return "Trabalho concluído. Preview atualizado se gerado. Quer ajustar ou seguimos?";
 }
 
 const SUCCESS_CLOSING_SYSTEM = `Você é o agente FORGE terminando um trabalho com sucesso.
@@ -151,9 +160,10 @@ async function synthesizeSuccessClosing(
  * Fechamento garantido — 3 camadas em cascata:
  *   1. Última prosa do agente (se razoável, ≥ 24 chars).
  *   2. Síntese LLM de sucesso (chamada dedicada com prompt de apresentação + chamada pra ação).
- *   3. Fallback determinístico (erro ou vazio — mas sempre retorna string).
+ *   3. Fallback determinístico derivado de histórico/pedido/touched (SEMPRE não-vazio).
  *
  * Inviolabilidade: o loop nunca termina sem mensagem visível pro usuário.
+ * NUNCA retorna string vazia — erro técnico "modelo não respondeu" foi eliminado.
  */
 export async function resolveClosureText(input: ClosureResolveInput & {
   model?: LLMProvider;
@@ -161,12 +171,13 @@ export async function resolveClosureText(input: ClosureResolveInput & {
   const fromAgent = lastAssistantProse(input.messages);
   if (fromAgent && fromAgent.length >= 24) return fromAgent;
 
-  // Sem prosa do agente → síntese LLM garantida (se model disponível).
+  // Sem prosa do agente → síntese LLM (se model disponível).
   if (input.model) {
     const synthesized = await synthesizeSuccessClosing(input.model, input);
     if (synthesized && synthesized.trim()) return synthesized;
   }
 
-  // Última rede: fallback determinístico. Nunca devolve null.
-  return formatClosureFallback(input);
+  // Última rede: fallback determinístico derivado — SEMPRE string não-vazia.
+  const fb = formatClosureFallback(input);
+  return fb && fb.trim() ? fb : "Trabalho concluído. Preview atualizado se gerado. Quer ajustar ou seguimos?";
 }

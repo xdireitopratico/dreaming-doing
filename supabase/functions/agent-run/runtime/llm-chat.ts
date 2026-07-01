@@ -137,7 +137,14 @@ export async function chatBuildModeLlm(input: {
       streamed: input.streamState.llmResponseWasStreamed,
       forceTools: input.forceTools,
     });
-    return response;
+    // llm-chat normalization: assegura forma ChatResponse com content (mesmo curto) ou tool_calls.
+    const normalized = {
+      role: "assistant" as const,
+      content: typeof response.content === "string" ? response.content : (response.content ?? null),
+      tool_calls: Array.isArray(response.tool_calls) ? response.tool_calls : [],
+      usage: response.usage,
+    };
+    return normalized;
   } catch (err: unknown) {
     logger.error("agent.build_llm_call_failed", {
       runId: input.runId ?? undefined,

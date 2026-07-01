@@ -134,10 +134,12 @@ function parseResponsesOutput(data: Record<string, unknown>): ChatResponse {
 
   const usage = normalizeChatUsage(data.usage);
 
+  const content = (text && text.trim()) ? text : null;
+  const toolCallsArr = Array.isArray(toolCalls) ? toolCalls : [];
   return {
     role: "assistant",
-    content: text || null,
-    tool_calls: toolCalls,
+    content,
+    tool_calls: toolCallsArr,
     usage,
   };
 }
