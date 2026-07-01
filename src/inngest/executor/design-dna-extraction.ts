@@ -1125,7 +1125,15 @@ export async function extractDesignDnaForUrl(
     }
 
     if (!dna) {
-      throw new Error("LLM extraction failed — no DNA generated (multi-pass). Configure LLM in /api-models.");
+      // Build a detailed error with per-pass failure reasons for diagnosis
+      const passErrors = mpResult.passes
+        .filter((p) => p.error)
+        .map((p) => `${p.category}: ${p.error}`)
+        .join("; ");
+      const detail = passErrors
+        ? `Pass errors: ${passErrors}. Mode: ${mpResult.mode}, OK: ${mpResult.succeededCount}, FAIL: ${mpResult.failedCount}, ${Math.round(mpResult.totalDurationMs / 1000)}s. LLM: ${llmConfig.label} (${llmConfig.protocol})`
+        : `All ${mpResult.passes.length} passes returned empty data. Mode: ${mpResult.mode}, LLM: ${llmConfig.label} (${llmConfig.protocol})`;
+      throw new Error(`LLM extraction failed — no DNA generated. ${detail}`);
     }
   } else {
     throw new Error("LLM extraction failed — no LLM configured. Configure LLM in /api-models.");
