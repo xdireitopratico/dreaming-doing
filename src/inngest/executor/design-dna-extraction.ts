@@ -16,7 +16,7 @@ import {
 import { referoScrape } from "./refero/refero-router.ts";
 import { validateDNA } from "./refero/dna-validator.ts";
 import type { ReferoScrapeResult } from "./refero/refero-types.ts";
-import { multiPassExtractDNA } from "./refero/llm-multi-pass.ts";
+import { multiPassExtractDNA, type LLmChatFn } from "./refero/llm-multi-pass.ts";
 
 export type DesignDnaExtractionInput = {
   url: string;
@@ -1093,8 +1093,18 @@ export async function extractDesignDnaForUrl(
   let dna: Record<string, unknown> | null = null;
 
   if (llmConfig) {
+    // Build a callLlm dispatcher that delegates to the proven 120s-timeout
+    // protocol-specific chat functions. This ensures multi-pass uses the
+    // EXACT same transport as the single-pass fallback path.
+    const callLlm: LLmChatFn = (systemPrompt, userContent, screenshot) => {
+      if (llmConfig.protocol === "anthropic") return anthropicChat(llmConfig, systemPrompt, userContent, screenshot);
+      if (llmConfig.protocol === "gemini") return geminiChat(llmConfig, systemPrompt, userContent, screenshot);
+      return openAiChat(llmConfig, systemPrompt, userContent, screenshot);
+    };
+
     const mpResult = await multiPassExtractDNA({
       llmConfig,
+      callLlm,
       url: input.url,
       markdown: enrichedMarkdown.slice(0, 30000),
       screenshot: screenshotUrl,

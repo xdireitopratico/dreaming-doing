@@ -13,7 +13,7 @@ const E2B_API_BASE = process.env.E2B_API_BASE || "https://api.e2b.app";
 const E2B_DOMAIN = process.env.E2B_DOMAIN || "e2b.app";
 const E2B_TEMPLATE_ID = process.env.E2B_TEMPLATE || "dreaming-doing-chromium";
 const LOOP_BUDGET_MS = 270_000;
-const PREVIEW_PORT = 3000;
+const PREVIEW_PORT = 9222;
 
 async function ensureDesignDnaSandbox(
   supabase: SupabaseClient,
