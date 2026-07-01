@@ -246,3 +246,19 @@ Deno.test("execute phase with ALL empty LLM responses (content:null, no tools) s
   // success or clean resumable; never the terminal error status from the old path
   assert(result.ok === true || result.resumable === true || result.error === undefined || !String(result.error || "").includes("não respondeu"));
 });
+
+Deno.test("execute early budget/maxstep paths emit prose before resumable (real entry)", async () => {
+  const deps = buildStubbedExecuteDeps({
+    llmChat: async () => ({ role: "assistant" as const, content: "step", tool_calls: [] }),
+  });
+  deps.requiresFinalBuildGate = () => false;
+  // Force budget immediately to hit the early return path we fixed.
+  let budgetHits = 0;
+  deps.loopBudgetExceeded = () => { budgetHits++; return budgetHits > 0; };
+  const result = await runBuildExecutePhase(deps, 0);
+  const events = (deps as unknown as { _events: () => { type: string; data: Record<string, unknown> }[] })._events();
+  const proseEmits = events.filter(e => e.type === "assistant_text" && typeof (e.data as any).text === "string");
+  assert(proseEmits.length > 0, "budget early return must have emitted prose");
+  assert(result.resumable === true, "must be resumable");
+  assert(!String(result.error || "").includes("O modelo não respondeu"));
+});

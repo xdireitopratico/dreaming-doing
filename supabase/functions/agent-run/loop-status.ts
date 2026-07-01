@@ -169,15 +169,22 @@ export async function resolveClosureText(input: ClosureResolveInput & {
   model?: LLMProvider;
 }): Promise<string> {
   const fromAgent = lastAssistantProse(input.messages);
-  if (fromAgent && fromAgent.length >= 24) return fromAgent;
+  if (fromAgent && fromAgent.length >= 20) return fromAgent;
 
-  // Sem prosa do agente → síntese LLM (se model disponível).
+  // Prefer deterministic history-derived fallback FIRST (per plan: avoid extra LLM at terminal close).
+  const fb = formatClosureFallback(input);
+  if (fb && fb.trim().length > 10) return fb;
+
+  // Only then (if still weak) try LLM synthesize as optional last resort.
   if (input.model) {
-    const synthesized = await synthesizeSuccessClosing(input.model, input);
-    if (synthesized && synthesized.trim()) return synthesized;
+    try {
+      const synthesized = await synthesizeSuccessClosing(input.model, input);
+      if (synthesized && synthesized.trim()) return synthesized;
+    } catch {
+      // fall through to safe deterministic
+    }
   }
 
-  // Última rede: fallback determinístico derivado — SEMPRE string não-vazia.
-  const fb = formatClosureFallback(input);
+  // Absolute guarantee.
   return fb && fb.trim() ? fb : "Trabalho concluído. Preview atualizado se gerado. Quer ajustar ou seguimos?";
 }

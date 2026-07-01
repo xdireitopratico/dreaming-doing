@@ -406,6 +406,9 @@ export async function runBuildExecutePhase(
     agentTextComplete = false;
     while (loopStep < deps.maxStepsLimit) {
       if (deps.loopBudgetExceeded()) {
+        // Guarantee prose emission even on budget yield (AC1).
+        const prose = await resolveClosureText({ messages: deps.state.messages, touchedPaths: [...deps.touchedPaths], userRequest: deps.originalUserRequest }).catch(() => "Retomando o trabalho...");
+        if (prose?.trim()) deps.emit("assistant_text", { text: prose, final: false, append: false });
         return deps.returnResumableChunk(loopStep, deps.toolsUsed);
       }
 
@@ -520,6 +523,8 @@ export async function runBuildExecutePhase(
         }
         await deps.saveCheckpoint(LoopPhaseEnum.ERROR, true);
         deps.notifyLoopStatus({ kind: "model_error", errorDetail: friendly });
+        const prose = await resolveClosureText({ messages: deps.state.messages, touchedPaths: [...deps.touchedPaths], userRequest: deps.originalUserRequest }).catch(() => "Erro temporário no modelo — retomando...");
+        if (prose?.trim()) deps.emit("assistant_text", { text: prose, final: false, append: false });
         return deps.returnResumableChunk(loopStep, deps.toolsUsed);
       }
 
@@ -1032,6 +1037,8 @@ export async function runBuildExecutePhase(
 
     if (loopStep >= deps.maxStepsLimit && !agentTextComplete) {
       await deps.saveCheckpoint(LoopPhaseEnum.DECIDE_NEXT, true);
+      const prose = await resolveClosureText({ messages: deps.state.messages, touchedPaths: [...deps.touchedPaths], userRequest: deps.originalUserRequest }).catch(() => "Limite de passos atingido — retomando para continuar.");
+      if (prose?.trim()) deps.emit("assistant_text", { text: prose, final: false, append: false });
       return deps.returnResumableChunk(loopStep, deps.toolsUsed, {
         buildFix: deps.requiresFinalBuildGate(),
       });
@@ -1114,6 +1121,8 @@ export async function runBuildExecutePhase(
     }
 
     if (deps.loopBudgetExceeded()) {
+      const prose = await resolveClosureText({ messages: deps.state.messages, touchedPaths: [...deps.touchedPaths], userRequest: deps.originalUserRequest }).catch(() => "Orçamento de loop excedido — retomando...");
+      if (prose?.trim()) deps.emit("assistant_text", { text: prose, final: false, append: false });
       return deps.returnResumableChunk(loopStep, deps.toolsUsed, { buildFix: true });
     }
 

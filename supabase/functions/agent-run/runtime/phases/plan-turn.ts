@@ -618,12 +618,14 @@ export async function runPlanModeAgentTurn(
         });
       }
       if (resolution.kind === "stream_empty") {
+        // Deterministic prose instead of hard error-like message; matches AC1/AC2 guarantee.
+        const safe = "O agente não produziu texto visível nesta tentativa. Reformule ou retome para continuar o plano.";
         return await returnRecoverablePlanChunk({
           deps,
           toolsUsed,
           step,
-          message: "O modelo respondeu sem texto nem ferramentas. Reformule o pedido do plano.",
-          prompt: "O modelo respondeu sem texto nem ferramentas. Reformule o pedido do plano.",
+          message: safe,
+          prompt: safe,
         });
       }
       if (resolution.kind === "graceful_close") {
