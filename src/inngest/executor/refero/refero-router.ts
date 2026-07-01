@@ -139,12 +139,12 @@ export async function referoScrape(
       return await executeMultiProvider(input.url, webSecrets, prefs, startMs, trace);
 
     case "browseruse-ai":
-      // Sprint 2 — for now, fall back to E2B full render
-      trace.push("router: browseruse-ai not yet implemented, falling back to e2b-full-render");
+      // Heuristic-guided browsing — auto-dismiss popups, scroll lazy content
       if (!input.sandboxId) {
+        trace.push("router: browseruse-ai but no sandbox — falling back to firecrawl-deep");
         return await executeFirecrawlDeep(input.url, webSecrets, prefs, startMs, trace);
       }
-      return await executeE2BFullRender(input, webSecrets, prefs, startMs, trace);
+      return await executeBrowserUseAI(input, webSecrets, prefs, startMs, trace);
 
     case "browserbase-stealth":
       // Sprint 3 — for now, fall back to firecrawl-deep
@@ -453,6 +453,347 @@ async function executeFirecrawlCrawl(
     durationMs: Date.now() - startMs,
     trace,
   };
+}
+
+/**
+ * BrowserUse AI strategy — heuristic-guided browsing.
+ *
+ * Uses Playwright to auto-dismiss cookie banners, close popups,
+ * accept consent dialogs, scroll lazy-loaded content, wait for
+ * skeleton loaders, then extract the full page content.
+ *
+ * This runs inside the E2B sandbox via Python + Playwright.
+ * It connects to Chrome CDP on port 9222 (same as the CSS scanner).
+ *
+ * Key advantage over raw scraping: handles sites with obstructions
+ * (cookie walls, GDPR banners, age gates, newsletter popups, etc.)
+ * that would otherwise yield empty or truncated content.
+ */
+async function executeBrowserUseAI(
+  input: ReferoRouterInput,
+  webSecrets: Record<string, unknown>,
+  _prefs: WebProviderPrefs | null,
+  startMs: number,
+  trace: string[],
+): Promise<ReferoScrapeResult> {
+  if (!input.sandboxId || !input.sandboxAccessToken) {
+    trace.push("browseruse-ai: no sandbox available — falling back to firecrawl-deep");
+    return executeFirecrawlDeep(input.url, webSecrets as Record<string, string>, _prefs, startMs, trace);
+  }
+
+  trace.push("browseruse-ai: starting heuristic-guided navigation");
+
+  const agentScript = buildBrowserUseAgentScript();
+
+  // Upload agent script to sandbox
+  try {
+    const writeResult = await runInSandbox(
+      input.sandboxAccessToken,
+      input.sandboxId,
+      "mkdir -p /opt/forge",
+    );
+    trace.push(`browseruse-ai: mkdir ${writeResult.stderr?.slice(0, 100) || "ok"}`);
+  } catch (err) {
+    trace.push(`browseruse-ai: mkdir failed: ${errorMessage(err)}`);
+  }
+
+  try {
+    const writeResult = await runInSandbox(
+      input.sandboxAccessToken,
+      input.sandboxId,
+      agentScript,
+    );
+    if (writeResult.exitCode !== 0) {
+      trace.push(`browseruse-ai: script write failed (exit ${writeResult.exitCode})`);
+    }
+  } catch (err) {
+    trace.push(`browseruse-ai: script write error: ${errorMessage(err)}`);
+  }
+
+  // Execute the browser-use agent
+  try {
+    const execCmd = `cd /opt/forge && python3.11 browseruse-agent.py --url "${input.url.replace(/"/g, '\\"')}" --cdp-port 9222 --timeout 90`;
+    trace.push(`browseruse-ai: executing agent`);
+    const agentResult = await runInSandbox(
+      input.sandboxAccessToken,
+      input.sandboxId,
+      execCmd,
+    );
+
+    if (agentResult.exitCode !== 0) {
+      trace.push(`browseruse-ai: agent failed (exit ${agentResult.exitCode}): ${agentResult.stderr?.slice(0, 200)}`);
+      // Fall back to firecrawl-deep
+      return executeFirecrawlDeep(input.url, webSecrets as Record<string, string>, _prefs, startMs, trace);
+    }
+
+    // Parse agent output
+    let parsed: Record<string, unknown>;
+    try {
+      parsed = JSON.parse(agentResult.stdout || "{}");
+    } catch {
+      trace.push(`browseruse-ai: agent output parse failed — using empty result`);
+      parsed = {};
+    }
+
+    const markdown = String(parsed.markdown ?? "");
+    const html = String(parsed.html ?? "");
+    const title = String(parsed.title ?? "");
+    const actionsLog = Array.isArray(parsed.actions) ? parsed.actions : [];
+
+    trace.push(`browseruse-ai: extraction complete (markdown=${markdown.length}, html=${html.length}, actions=${actionsLog.length})`);
+    if (actionsLog.length > 0) {
+      trace.push(`browseruse-ai: actions taken: ${actionsLog.slice(0, 5).join(", ")}`);
+    }
+
+    return {
+      provider: "browseruse-ai",
+      strategy: "browseruse-ai",
+      markdown,
+      html,
+      title,
+      screenshots: [],
+      screenshotBase64: String(parsed.screenshot_base64 ?? ""),
+      screenshotFullBase64: "",
+      viewports: [],
+      cssData: { byTag: {}, gridSystems: [], flexPatterns: [], designTokens: {}, colorPalette: [] },
+      sections: [],
+      components: [],
+      fontFaces: [],
+      animations: [],
+      customProperties: {},
+      viewport: { width: 1280, height: 800, devicePixelRatio: 2, scrollHeight: 800 },
+      durationMs: Date.now() - startMs,
+      trace,
+    };
+  } catch (err) {
+    trace.push(`browseruse-ai: sandbox execution failed: ${errorMessage(err)} — falling back to firecrawl-deep`);
+    return executeFirecrawlDeep(input.url, webSecrets as Record<string, string>, _prefs, startMs, trace);
+  }
+}
+
+/**
+ * BrowserUse AI agent — Python script for heuristic-guided browsing.
+ * Handles common web obstructions without needing an LLM API key.
+ */
+function buildBrowserUseAgentScript(): string {
+  return `cat > /opt/forge/browseruse-agent.py << 'PYEOF'
+import argparse, asyncio, base64, json, os, sys, traceback
+import urllib.request, urllib.error
+
+def get_ws_endpoint(cdp_port):
+    url = f"http://127.0.0.1:{cdp_port}/json/version"
+    try:
+        resp = urllib.request.urlopen(url, timeout=5)
+        data = json.loads(resp.read())
+        return data.get("webSocketDebuggerUrl", "")
+    except Exception as e:
+        return ""
+
+async def dismiss_popups(page, actions):
+    """Heuristic popup dismissal — cookie banners, modals, overlays."""
+    selectors_to_dismiss = [
+        "[class*='cookie'] button, [class*='consent'] button, [class*='gdpr'] button, [id*='cookie'] button",
+        "[class*='modal'] [class*='close'], [class*='dialog'] [class*='close'], [class*='popup'] [class*='close']",
+        "button[aria-label='Close'], button[aria-label='Accept'], button[aria-label='Dismiss']",
+        "[class*='newsletter'] [class*='close'], [class*='subscribe'] [class*='close']",
+        "[class*='overlay'] [class*='close'], [class*='lightbox'] [class*='close']",
+    ]
+    for selector in selectors_to_dismiss:
+        try:
+            elements = await page.query_selector_all(selector)
+            for el in elements[:3]:  # max 3 per selector
+                if await el.is_visible():
+                    await el.click()
+                    actions.append(f"dismissed: {selector}")
+                    await page.wait_for_timeout(500)
+        except Exception:
+            pass
+
+async def scroll_to_load(page, actions):
+    """Scroll through the page to trigger lazy-loaded content."""
+    prev_height = 0
+    scroll_attempts = 0
+    max_attempts = 8
+
+    while scroll_attempts < max_attempts:
+        await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+        await page.wait_for_timeout(1500)
+
+        current_height = await page.evaluate("document.body.scrollHeight")
+        if current_height == prev_height:
+            scroll_attempts += 1  # No change — try a few more times
+        else:
+            scroll_attempts = 0  # Content loaded — reset
+            prev_height = current_height
+
+        actions.append(f"scroll: height={current_height}")
+
+    # Scroll back to top
+    await page.evaluate("window.scrollTo(0, 0)")
+    await page.wait_for_timeout(500)
+
+async def wait_for_content(page, actions):
+    """Wait for skeleton loaders and dynamic content to resolve."""
+    skeleton_selectors = [
+        "[class*='skeleton']", "[class*='shimmer']", "[class*='placeholder']",
+        "[class*='loading']", "[class*='spinner']",
+    ]
+    for selector in skeleton_selectors:
+        try:
+            skeletons = await page.query_selector_all(selector)
+            if skeletons:
+                actions.append(f"waiting for {len(skeletons)} {selector} elements to resolve")
+                await page.wait_for_timeout(3000)
+                # Check again
+                remaining = await page.query_selector_all(selector)
+                if len(remaining) < len(skeletons):
+                    actions.append(f"resolved: {len(skeletons) - len(remaining)} {selector} removed")
+        except Exception:
+            pass
+
+async def handle_age_gate(page, actions):
+    """Auto-handle age gates (enter 25, click confirm)."""
+    age_selectors = [
+        "input[name*='age'], input[type='number'][placeholder*='age'], input[placeholder*='year']",
+        "select[name*='year'], select[name*='month'], select[name*='day']",
+    ]
+    for selector in age_selectors:
+        try:
+            el = await page.query_selector(selector)
+            if el and await el.is_visible():
+                tag = await el.evaluate("el => el.tagName.toLowerCase()")
+                if tag == "input":
+                    await el.fill("25")
+                elif tag == "select":
+                    await el.select_option(index=20)
+                actions.append(f"age_gate: filled {selector}")
+        except Exception:
+            pass
+
+    # Click confirm/enter buttons
+    confirm_selectors = [
+        "button[type='submit']", "button:has-text('Enter')", "button:has-text('Confirm')",
+        "button:has-text('I am')", "button:has-text('Yes')", "input[type='submit']",
+    ]
+    for selector in confirm_selectors:
+        try:
+            btn = await page.query_selector(selector)
+            if btn and await btn.is_visible():
+                await btn.click()
+                actions.append(f"age_gate: clicked {selector}")
+                await page.wait_for_timeout(2000)
+                break
+        except Exception:
+            pass
+
+def html_to_simple_markdown(page_content):
+    """Very basic HTML to markdown for extracted content."""
+    import re
+    text = page_content
+    # Remove scripts and styles
+    text = re.sub(r'<script[^>]*>.*?</script>', '', text, flags=re.DOTALL|re.IGNORECASE)
+    text = re.sub(r'<style[^>]*>.*?</style>', '', text, flags=re.DOTALL|re.IGNORECASE)
+    # Convert common tags
+    text = re.sub(r'<h[1-6][^>]*>(.*?)</h[1-6]>', lambda m: '\\n' + '#' * int(m.group(0)[2]) + ' ' + re.sub(r'<[^>]+>', '', m.group(1)).strip() + '\\n', text, flags=re.DOTALL)
+    text = re.sub(r'<p[^>]*>', '\\n', text)
+    text = re.sub(r'</p>', '\\n', text)
+    text = re.sub(r'<br[^>]*>', '\\n', text)
+    text = re.sub(r'<li[^>]*>', '- ', text)
+    text = re.sub(r'</li>', '\\n', text)
+    text = re.sub(r'<a[^>]*href="([^"]*)"[^>]*>(.*?)</a>', lambda m: f'[{re.sub(r"<[^>]+>","",m.group(2)).strip()}]({m.group(1)})', text)
+    text = re.sub(r'<img[^>]*alt="([^"]*)"[^>]*>', lambda m: f'![{m.group(1)}]', text)
+    text = re.sub(r'<[^>]+>', '', text)
+    text = re.sub(r'\\n{3,}', '\\n\\n', text)
+    return text.strip()
+
+async def extract(url, cdp_port, timeout):
+    ws_url = get_ws_endpoint(cdp_port)
+    if not ws_url:
+        print(json.dumps({"status":"error","error":f"Cannot connect to Chrome CDP on port {cdp_port}"}), file=sys.stderr)
+        sys.exit(1)
+
+    actions = []
+    from playwright.async_api import async_playwright
+
+    async with async_playwright() as pw:
+        browser = await pw.chromium.connect_over_cdp(ws_url)
+        context = await browser.new_context(
+            viewport={"width": 1280, "height": 800},
+            user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            locale="en-US",
+        )
+        page = await context.new_page()
+
+        try:
+            # Navigate with extended timeout
+            actions.append(f"navigate: {url}")
+            await page.goto(url, wait_until="domcontentloaded", timeout=timeout * 1000)
+            actions.append("navigation: domcontentloaded")
+
+            # Wait for network to settle
+            try:
+                await page.wait_for_load_state("networkidle", timeout=10000)
+                actions.append("navigation: networkidle")
+            except Exception:
+                actions.append("navigation: networkidle_timeout (proceeded)")
+
+            # Step 1: Handle age gates
+            await handle_age_gate(page, actions)
+
+            # Step 2: Dismiss popups, cookie banners, modals
+            await dismiss_popups(page, actions)
+
+            # Step 3: Wait for skeleton loaders
+            await wait_for_content(page, actions)
+
+            # Step 4: Scroll to load lazy content
+            await scroll_to_load(page, actions)
+
+            # Step 5: Dismiss any late-appearing popups after scroll
+            await dismiss_popups(page, actions)
+
+            # Step 6: Wait a final moment for any remaining content
+            await page.wait_for_timeout(2000)
+
+            # Extract content
+            title = await page.title()
+            html = await page.content()
+            markdown = html_to_simple_markdown(html)
+
+            # Screenshot
+            screenshot_b64 = await page.screenshot(type="png", full_page=False)
+
+            result = {
+                "status": "ok",
+                "title": title,
+                "markdown": markdown,
+                "html": html,
+                "screenshot_base64": base64.b64encode(screenshot_b64).decode(),
+                "url": url,
+                "actions": actions,
+                "content_length": len(markdown),
+                "html_length": len(html),
+            }
+            print(json.dumps(result, ensure_ascii=False))
+
+        except Exception as e:
+            print(json.dumps({"status":"error","error":str(e),"traceback":traceback.format_exc(),"actions":actions}), file=sys.stderr)
+            sys.exit(1)
+        finally:
+            await context.close()
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--url", required=True)
+    parser.add_argument("--cdp-port", type=int, default=9222)
+    parser.add_argument("--timeout", type=int, default=90)
+    args = parser.parse_args()
+    try:
+        print(json.dumps(asyncio.run(extract(args.url, args.cdp_port, args.timeout)), ensure_ascii=False))
+    except Exception as e:
+        print(json.dumps({"status":"error","error":str(e),"traceback":traceback.format_exc()}), file=sys.stderr)
+        sys.exit(1)
+PYEOF`;
 }
 
 async function executeJinaFast(
