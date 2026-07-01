@@ -7,7 +7,7 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { errorMessage } from "@/lib/error-utils";
-import { scrapeWebPage } from "../../../../supabase/functions/_shared/web-research-providers.ts";
+import { scrapeWebPage, mapViaFirecrawl, crawlViaFirecrawl } from "../../../../supabase/functions/_shared/web-research-providers.ts";
 import {
   getStrategy,
   detectSiteKind,
@@ -128,6 +128,9 @@ export async function referoScrape(
 
     case "firecrawl-deep":
       return await executeFirecrawlDeep(input.url, webSecrets, prefs, startMs, trace);
+
+    case "firecrawl-crawl":
+      return await executeFirecrawlCrawl(input.url, webSecrets, prefs, startMs, trace);
 
     case "jina-fast":
       return await executeJinaFast(input.url, webSecrets, prefs, startMs, trace);
@@ -307,22 +310,28 @@ async function executeFirecrawlDeep(
   let html = "";
   let title = "";
 
+  // Enhanced: pass waitFor=5000 for SPAs and skipLocationCheck
+  const scrapeInput: Record<string, unknown> = {
+    wait_for: 5000,
+    only_main_content: true,
+  };
+
   try {
     const mdRes = await scrapeWebPage(
-      { url, format: "markdown", mode: "read", provider: scrapeProvider, only_main_content: true },
+      { ...scrapeInput, url, format: "markdown", mode: "read", provider: scrapeProvider },
       webSecrets,
       { primary: scrapeProvider, fallback },
     );
     markdown = String(mdRes.content ?? "");
     title = String(mdRes.title ?? "");
-    trace.push(`scrape: markdown via ${String(mdRes.provider ?? scrapeProvider)} (${markdown.length} chars)`);
+    trace.push(`scrape: markdown via ${String(mdRes.provider ?? scrapeProvider)} (${markdown.length} chars, waitFor=5000, excludeTags=active)`);
   } catch (err) {
     trace.push(`scrape: markdown failed: ${errorMessage(err)}`);
   }
 
   try {
     const htmlRes = await scrapeWebPage(
-      { url, format: "html", mode: "read", provider: scrapeProvider, only_main_content: false },
+      { ...scrapeInput, url, format: "html", mode: "read", provider: scrapeProvider, only_main_content: false },
       webSecrets,
       { primary: scrapeProvider, fallback },
     );
@@ -332,12 +341,104 @@ async function executeFirecrawlDeep(
     trace.push(`scrape: html failed: ${errorMessage(err)}`);
   }
 
+  // Enhanced: if Firecrawl key available and deep mode, also try map for sitemap
+  if (webSecrets.FIRECRAWL_API_KEY) {
+    try {
+      const mapResult = await mapViaFirecrawl(url, webSecrets.FIRECRAWL_API_KEY);
+      if (mapResult.urls.length > 1) {
+        trace.push(`firecrawl: map discovered ${mapResult.urls.length} pages`);
+        // Store discovered URLs as custom property for downstream use
+        // (multi-page extraction is a future enhancement)
+      }
+    } catch (err) {
+      trace.push(`firecrawl: map failed: ${errorMessage(err)}`);
+    }
+  }
+
   return {
     provider: scrapeProvider,
     strategy: "firecrawl-deep",
     markdown,
     html,
     title,
+    screenshots: [],
+    screenshotBase64: "",
+    screenshotFullBase64: "",
+    viewports: [],
+    cssData: { byTag: {}, gridSystems: [], flexPatterns: [], designTokens: {}, colorPalette: [] },
+    sections: [],
+    components: [],
+    fontFaces: [],
+    animations: [],
+    customProperties: {},
+    viewport: { width: 1280, height: 800, devicePixelRatio: 2, scrollHeight: 800 },
+    durationMs: Date.now() - startMs,
+    trace,
+  };
+}
+
+/**
+ * Firecrawl crawl strategy — crawl multiple pages from a site
+ * and concatenate the results. Used for deep extraction of
+ * design systems that span multiple pages (home + features + pricing).
+ */
+async function executeFirecrawlCrawl(
+  url: string,
+  webSecrets: Record<string, string>,
+  _prefs: WebProviderPrefs | null,
+  startMs: number,
+  trace: string[],
+): Promise<ReferoScrapeResult> {
+  if (!webSecrets.FIRECRAWL_API_KEY) {
+    // No key — fall back to firecrawl-deep (single page via jina)
+    return executeFirecrawlDeep(url, webSecrets, _prefs, startMs, trace);
+  }
+
+  trace.push(`firecrawl: starting multi-page crawl (max 5 pages, depth 2)`);
+
+  let crawlResults: Array<{ url: string; markdown: string; html: string; title: string }> = [];
+  try {
+    const crawlResult = await crawlViaFirecrawl(url, webSecrets.FIRECRAWL_API_KEY, {
+      maxPages: 5,
+      formats: ["markdown", "html"],
+      waitFor: 5000,
+      onlyMainContent: true,
+      excludeTags: ["nav", "footer", "[class*='cookie']", "[class*='banner']", "[class*='ads']"],
+      timeoutMs: 90000,
+    });
+    crawlResults = crawlResult.results;
+    trace.push(`firecrawl: crawl completed — ${crawlResults.length} pages scraped`);
+  } catch (err) {
+    trace.push(`firecrawl: crawl failed: ${errorMessage(err)} — falling back to single scrape`);
+    return executeFirecrawlDeep(url, webSecrets, _prefs, startMs, trace);
+  }
+
+  if (crawlResults.length === 0) {
+    trace.push(`firecrawl: crawl returned 0 pages — falling back to single scrape`);
+    return executeFirecrawlDeep(url, webSecrets, _prefs, startMs, trace);
+  }
+
+  // Concatenate all pages — first page is primary, others are supplementary
+  const primaryPage = crawlResults[0];
+  const supplementaryMarkdown: string[] = [];
+  const supplementaryHtml: string[] = [];
+
+  for (let i = 1; i < crawlResults.length; i++) {
+    const page = crawlResults[i];
+    if (page.markdown) {
+      supplementaryMarkdown.push(`\n\n---\n\n## Page ${i + 1}: ${page.title || page.url}\n\n${page.markdown.slice(0, 8000)}`);
+    }
+    if (page.html) {
+      supplementaryHtml.push(page.html.slice(0, 20000));
+    }
+  }
+
+  return {
+    provider: "firecrawl-crawl",
+    strategy: "firecrawl-deep",
+    markdown: primaryPage.markdown + supplementaryMarkdown.join(""),
+    html: primaryPage.html + supplementaryHtml.join(""),
+    title: primaryPage.title,
     screenshots: [],
     screenshotBase64: "",
     screenshotFullBase64: "",

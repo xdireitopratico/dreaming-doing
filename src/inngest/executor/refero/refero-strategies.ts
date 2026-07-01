@@ -23,10 +23,19 @@ export const STRATEGIES: ExtractionStrategy[] = [
   {
     id: "firecrawl-deep",
     label: "Firecrawl Deep Scrape",
-    description: "Firecrawl API with waitFor for SPA rendering, clean markdown extraction, and optional screenshot. Good for JS-heavy sites.",
+    description: "Firecrawl API with waitFor for SPA rendering, clean markdown extraction, excludeTags noise removal, and optional sitemap map. Good for JS-heavy sites.",
     requires: { firecrawl: true },
     priority: 80,
     estimatedTimeSec: 15,
+    supportsDeep: true,
+  },
+  {
+    id: "firecrawl-crawl",
+    label: "Firecrawl Multi-Page Crawl",
+    description: "Firecrawl /v1/crawl for multi-page extraction (up to 5 pages, depth 2). Concatenates results for design systems spanning multiple pages. Falls back to firecrawl-deep on failure.",
+    requires: { firecrawl: true },
+    priority: 78,
+    estimatedTimeSec: 30,
     supportsDeep: true,
   },
   {
@@ -156,11 +165,11 @@ export function detectSiteKind(url: string): SiteKind {
  * based on what kind of site it's extracting.
  */
 const STRATEGY_AFFINITY: Record<SiteKind, ExtractionStrategyId[]> = {
-  landing_page: ["e2b-full-render", "firecrawl-deep", "browseruse-ai", "jina-fast"],
-  saas_app: ["browseruse-ai", "firecrawl-deep", "e2b-full-render", "browserbase-stealth"],
-  ecommerce: ["firecrawl-deep", "browserbase-stealth", "e2b-full-render", "multi-provider"],
+  landing_page: ["e2b-full-render", "firecrawl-crawl", "firecrawl-deep", "browseruse-ai", "jina-fast"],
+  saas_app: ["browseruse-ai", "firecrawl-crawl", "firecrawl-deep", "e2b-full-render", "browserbase-stealth"],
+  ecommerce: ["firecrawl-crawl", "firecrawl-deep", "browserbase-stealth", "e2b-full-render", "multi-provider"],
   portfolio: ["e2b-full-render", "firecrawl-deep", "jina-fast", "browseruse-ai"],
-  documentation: ["jina-fast", "firecrawl-deep", "multi-provider"],
+  documentation: ["firecrawl-crawl", "jina-fast", "firecrawl-deep", "multi-provider"],
   blog: ["jina-fast", "firecrawl-deep", "multi-provider"],
   news: ["jina-fast", "firecrawl-deep", "multi-provider"],
   unknown: ["firecrawl-deep", "e2b-full-render", "jina-fast", "multi-provider"],

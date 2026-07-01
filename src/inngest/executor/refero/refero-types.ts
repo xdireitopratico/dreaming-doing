@@ -19,6 +19,7 @@ export type SiteKind =
 
 export type ExtractionStrategyId =
   | "firecrawl-deep"
+  | "firecrawl-crawl"
   | "browserbase-stealth"
   | "browseruse-ai"
   | "jina-fast"

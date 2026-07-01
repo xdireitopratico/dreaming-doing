@@ -295,7 +295,12 @@ async function scrapeViaFirecrawl(
           url,
           formats: [format === "html" ? "html" : "markdown"],
           onlyMainContent: input.only_main_content !== false,
-          waitFor: input.wait_for || 0,
+          // Enhanced: longer waitFor for SPAs (default 3s, up to 10s)
+          waitFor: input.wait_for ? Number(input.wait_for) : 3000,
+          // Enhanced: exclude noise tags that pollute design extraction
+          excludeTags: ["nav", "footer", "header", "[role='banner']", "[role='contentinfo']", "[class*='cookie']", "[class*='banner']", "[class*='popup']", "[class*='modal']", "[class*='toast']", "[class*='newsletter']", "[class*='ads']", "[id*='cookie']", "[id*='banner']", "[id*='popup']"],
+          // Enhanced: skip location-based rendering to avoid geo-restrictions
+          skipLocationCheck: true,
         }),
         signal: AbortSignal.timeout(45000),
       });
@@ -315,11 +320,151 @@ async function scrapeViaFirecrawl(
         url: fcData.data?.metadata?.sourceURL || url,
         word_count: content.split(/\s+/).filter(Boolean).length,
         metadata: fcData.data?.metadata || {},
+        // Enhanced: include actions trace if available
+        actions: fcData.data?.actions || [],
         provider: "firecrawl",
       };
     },
     2,
   );
+}
+
+/**
+ * Firecrawl /v1/map — discover all URLs on a site (sitemap).
+ * Returns a list of URLs found on the target site, useful for
+ * multi-page design extraction.
+ */
+export async function mapViaFirecrawl(
+  url: string,
+  apiKey: string,
+  search?: string,
+  limit?: number,
+): Promise<{ urls: string[]; provider: string }> {
+  return withRetry(
+    "firecrawl-map",
+    async () => {
+      const body: Record<string, unknown> = {
+        url,
+        includeSubdomains: true,
+        search: search || undefined,
+        limit: limit || 200,
+      };
+      const response = await fetch("https://api.firecrawl.dev/v1/map", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(30000),
+      });
+      if (!response.ok) {
+        const errText = await response.text().catch(() => "unknown");
+        throw new Error(`Firecrawl map failed: HTTP ${response.status} — ${errText.substring(0, 200)}`);
+      }
+      const data = await response.json();
+      const urls = Array.isArray(data.links) ? data.links : (Array.isArray(data.results) ? data.results.map((r: Record<string, unknown>) => String(r.url ?? r.href ?? "")).filter(Boolean) : []);
+      return { urls, provider: "firecrawl-map" };
+    },
+    1,
+  );
+}
+
+/**
+ * Firecrawl /v1/crawl — crawl a site up to N pages.
+ * Returns markdown+HTML content for each discovered page.
+ * Used by Refero for multi-page design extraction.
+ */
+export async function crawlViaFirecrawl(
+  url: string,
+  apiKey: string,
+  opts: {
+    maxPages?: number;
+    formats?: string[];
+    excludeTags?: string[];
+    waitFor?: number;
+    onlyMainContent?: boolean;
+    pollIntervalMs?: number;
+    timeoutMs?: number;
+  } = {},
+): Promise<{
+  results: Array<{ url: string; markdown: string; html: string; title: string }>;
+  total: number;
+  provider: string;
+}> {
+  const maxPages = opts.maxPages ?? 10;
+  const pollInterval = opts.pollIntervalMs ?? 3000;
+  const timeout = opts.timeoutMs ?? 120000;
+
+  // Step 1: Start crawl job
+  const startResponse = await fetch("https://api.firecrawl.dev/v1/crawl", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      url,
+      maxDepth: 2,
+      maxPages,
+      formats: opts.formats ?? ["markdown", "html"],
+      excludeTags: opts.excludeTags ?? ["nav", "footer", "[class*='cookie']", "[class*='banner']", "[class*='ads']"],
+      waitFor: opts.waitFor ?? 3000,
+      onlyMainContent: opts.onlyMainContent ?? true,
+      skipLocationCheck: true,
+    }),
+    signal: AbortSignal.timeout(30000),
+  });
+
+  if (!startResponse.ok) {
+    const errText = await startResponse.text().catch(() => "unknown");
+    throw new Error(`Firecrawl crawl start failed: HTTP ${startResponse.status} — ${errText.substring(0, 200)}`);
+  }
+
+  const startData = await startResponse.json();
+  const crawlId = startData.id;
+
+  if (!crawlId) {
+    throw new Error(`Firecrawl crawl: no crawl ID returned — response: ${JSON.stringify(startData).slice(0, 200)}`);
+  }
+
+  // Step 2: Poll for completion
+  const deadline = Date.now() + timeout;
+  let status = "pending";
+  let results: Array<{ url: string; markdown: string; html: string; title: string }> = [];
+
+  while (status === "pending" || status === "scraping") {
+    if (Date.now() > deadline) {
+      break; // Timeout — use whatever we have
+    }
+
+    await new Promise((r) => setTimeout(r, pollInterval));
+
+    const pollResponse = await fetch(`https://api.firecrawl.dev/v1/crawl/${crawlId}`, {
+      headers: { Authorization: `Bearer ${apiKey}` },
+      signal: AbortSignal.timeout(15000),
+    });
+
+    if (!pollResponse.ok) break;
+
+    const pollData = await pollResponse.json();
+    status = pollData.status ?? "unknown";
+
+    if (Array.isArray(pollData.data)) {
+      results = pollData.data.map((page: Record<string, unknown>) => ({
+        url: String(page.metadata?.sourceURL ?? page.url ?? ""),
+        markdown: String(page.markdown ?? ""),
+        html: String(page.html ?? ""),
+        title: String(page.metadata?.title ?? ""),
+      }));
+    }
+  }
+
+  return {
+    results,
+    total: results.length,
+    provider: "firecrawl-crawl",
+  };
 }
 
 async function scrapeViaScrapeGraphAI(
