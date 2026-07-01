@@ -179,6 +179,7 @@ export const planApprove = createServerFn({ method: "POST" })
   .handler(async ({ data, context }): Promise<DecideResponse> => {
     const { supabase, userId } = context;
     const { runId, planId, steps } = data;
+    let stage = "start";
     logger.event("agent.plan_approve_started", {
       runId,
       planId,
@@ -219,6 +220,8 @@ export const planApprove = createServerFn({ method: "POST" })
       );
     }
 
+    stage = "load_run";
+    logger.event("agent.plan_approve_stage", { runId, planId, stage });
     const { data: run, error: rErr } = await supabase
       .from("agent_runs")
       .select("id, user_id, project_id, conversation_id, meta, status")
@@ -286,6 +289,8 @@ export const planApprove = createServerFn({ method: "POST" })
           })();
 
     const now = new Date().toISOString();
+    stage = "insert_build_run";
+    logger.event("agent.plan_approve_stage", { runId, planId, stage });
     const { data: newRun, error: insertErr } = await supabase
       .from("agent_runs")
       .insert({
@@ -331,6 +336,8 @@ export const planApprove = createServerFn({ method: "POST" })
     // check, o INSERT pode retornar sucesso mesmo se o JSONB meta for
     // parcialmente aplicado, e o inspector tab Plan fica vazio (sem pista).
     // Re-ler do banco e validar antes de despachar.
+    stage = "verify_build_run";
+    logger.event("agent.plan_approve_stage", { runId, planId, stage });
     const { data: verifyRow, error: verifyErr } = await supabase
       .from("agent_runs")
       .select("meta")
@@ -372,6 +379,8 @@ export const planApprove = createServerFn({ method: "POST" })
     // Use hardened dispatch_build action in Edge (single owner of INNGEST_EVENT_KEY check+send).
     // On failure the action appends "finish", deletes the pending run (no orphan pending-without-events),
     // and returns loud error. We keep defensive deletes here for invoke-level failures.
+    stage = "dispatch_build";
+    logger.event("agent.plan_approve_stage", { runId, planId, stage });
     const { data: dispatchResult, error: dispatchErr } = await supabase.functions.invoke(
       "agent-run",
       { body: { action: "dispatch_build", runId: newRun.id } },
@@ -404,6 +413,8 @@ export const planApprove = createServerFn({ method: "POST" })
 
     const { awaitingUser: _awaitingUser, ...sourceMetaWithoutAwaiting } = sourceMeta;
 
+    stage = "close_source_run";
+    logger.event("agent.plan_approve_stage", { runId, planId, stage });
     const closeResult = await transitionRun(
       runId,
       "completed",
