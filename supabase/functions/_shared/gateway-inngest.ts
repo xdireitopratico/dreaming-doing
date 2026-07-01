@@ -11,10 +11,14 @@ export async function sendGatewayInngestEvent(
     return { ok: false, error: "INNGEST_EVENT_KEY not configured" };
   }
 
+  const timeoutMs = 10_000;
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const res = await fetch(eventUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      signal: controller.signal,
       body: JSON.stringify({
         name: "aetherforge/flow.execute",
         data,
@@ -33,6 +37,13 @@ export async function sendGatewayInngestEvent(
     }
     return { ok: true, ids: body.ids };
   } catch (err) {
-    return { ok: false, error: (err as Error).message };
+    const msg = (err as Error).message;
+    const isAbort = (err as Error)?.name === "AbortError" || /aborted|timeout/i.test(msg);
+    return {
+      ok: false,
+      error: isAbort ? `Inngest dispatch timed out after ${timeoutMs / 1000}s` : msg,
+    };
+  } finally {
+    clearTimeout(timeoutId);
   }
 }

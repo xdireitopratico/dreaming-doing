@@ -1056,10 +1056,14 @@ async function sendInngestEvent(
   if (!eventUrl) {
     return { ok: false, error: "INNGEST_EVENT_KEY not configured" };
   }
+  const timeoutMs = 10_000;
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const res = await fetch(eventUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      signal: controller.signal,
       body: JSON.stringify({ name, data, ts: Date.now() }),
     });
     if (!res.ok) {
@@ -1069,7 +1073,7 @@ async function sendInngestEvent(
         status: res.status,
         text: text.slice(0, 200),
       });
-      return { ok: false, error: `Inngest returned ${res.status}` };
+      return { ok: false, error: `Inngest returned ${res.status}: ${text.slice(0, 200)}` };
     }
     const body = (await res.json()) as { ids?: string[] };
     if (!body.ids || body.ids.length === 0) {
@@ -1082,8 +1086,18 @@ async function sendInngestEvent(
     return { ok: true, ids: body.ids };
   } catch (e) {
     const msg = (e as Error)?.message ?? String(e);
-    logger.warn("inngest.send_exception", { name, error: msg });
-    return { ok: false, error: msg };
+    const isAbort = (e as Error)?.name === "AbortError" || /aborted|timeout/i.test(msg);
+    logger.warn(isAbort ? "inngest.send_timeout" : "inngest.send_exception", {
+      name,
+      error: msg,
+      timeoutMs,
+    });
+    return {
+      ok: false,
+      error: isAbort ? `Inngest dispatch timed out after ${timeoutMs / 1000}s` : msg,
+    };
+  } finally {
+    clearTimeout(timeoutId);
   }
 }
 

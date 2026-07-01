@@ -263,6 +263,7 @@ export type ContinueQueueResponse = {
  */
 export async function drainPendingQueue(payload: AgentRunRequest): Promise<ContinueQueueResponse> {
   const { url, serviceKey } = requireEnv();
+  const timeoutMs = 15_000;
   const response = await fetch(`${url}/functions/v1/agent-run`, {
     method: "POST",
     headers: {
@@ -270,6 +271,7 @@ export async function drainPendingQueue(payload: AgentRunRequest): Promise<Conti
       Authorization: `Bearer ${serviceKey}`,
       apikey: serviceKey,
     },
+    signal: AbortSignal.timeout(timeoutMs),
     body: JSON.stringify({
       action: "continue_queue",
       projectId: payload.projectId,

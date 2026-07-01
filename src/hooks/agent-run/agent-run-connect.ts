@@ -49,6 +49,7 @@ export async function postAgentRun(body: Record<string, unknown>): Promise<Respo
     throw new Error("Sessão expirada. Faça login novamente.");
   }
 
+  const timeoutMs = 15_000;
   return fetch(`${url}/functions/v1/agent-run`, {
     method: "POST",
     headers: {
@@ -56,6 +57,7 @@ export async function postAgentRun(body: Record<string, unknown>): Promise<Respo
       Authorization: `Bearer ${accessToken}`,
       apikey: publishableKey,
     },
+    signal: AbortSignal.timeout(timeoutMs),
     body: JSON.stringify(body),
   });
 }
