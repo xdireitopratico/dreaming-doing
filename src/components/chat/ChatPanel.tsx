@@ -191,32 +191,35 @@ export function ChatPanel({
   );
 
   const chatHydrating = chatLoading;
+  const showPlanFocus = !!pendingPlan;
 
   return (
     <div className="forge-chat-inner">
-      <div ref={scrollRef} className="forge-messages" onScroll={handleScroll} tabIndex={0}>
-        {!chatHydrating && (
-          <ChatThread
-            items={thread}
-            onOpenInspector={onOpenInspector}
-            onRollback={onRollbackMessage ? handleRollback : undefined}
-            onResume={onResume}
-            lastUserMessageId={lastUserMessageId}
-            lastAssistantMessageId={lastAssistantMessageId}
-          />
-        )}
+      {!showPlanFocus && (
+        <div ref={scrollRef} className="forge-messages" onScroll={handleScroll} tabIndex={0}>
+          {!chatHydrating && (
+            <ChatThread
+              items={thread}
+              onOpenInspector={onOpenInspector}
+              onRollback={onRollbackMessage ? handleRollback : undefined}
+              onResume={onResume}
+              lastUserMessageId={lastUserMessageId}
+              lastAssistantMessageId={lastAssistantMessageId}
+            />
+          )}
 
-        {showPill && (
-          <button
-            type="button"
-            className="forge-new-messages-pill"
-            aria-label="Novas mensagens"
-            onClick={followToBottom}
-          >
-            <ChevronDown className="size-4" aria-hidden />
-          </button>
-        )}
-      </div>
+          {showPill && (
+            <button
+              type="button"
+              className="forge-new-messages-pill"
+              aria-label="Novas mensagens"
+              onClick={followToBottom}
+            >
+              <ChevronDown className="size-4" aria-hidden />
+            </button>
+          )}
+        </div>
+      )}
 
       <ChatPlanDock
         pendingPlan={pendingPlan}
