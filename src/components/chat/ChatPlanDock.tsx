@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import { Check, Loader2, Play, SkipForward } from "lucide-react";
+import { ArrowRight, Check, Loader2, Play, SkipForward } from "lucide-react";
 import type { PendingPlan, PlanStep } from "@/lib/agent-progress";
 import { buildForgePlanMarkdown } from "@/lib/plan-document";
 import { enabledPlanSteps } from "@/lib/forge-run";
@@ -84,12 +84,12 @@ export function ChatPlanDock({
   return (
     <div className="forge-plan-dock" data-testid="chat-plan-dock-ready">
       <div className="forge-plan-dock-shell forge-plan-dock-shell--ready">
-        <div className="forge-plan-dock-scroll">
-          <PlanWaitingBanner
-            variant={materializing ? "approved" : "waiting"}
-            headline={bannerHeadline}
-          />
+        <PlanWaitingBanner
+          variant={materializing ? "approved" : "waiting"}
+          headline={bannerHeadline}
+        />
 
+        <div className="forge-plan-dock-scroll">
           <button
             type="button"
             className="forge-plan-dock-title-button"
@@ -99,12 +99,14 @@ export function ChatPlanDock({
               {materializing ? "Plano aprovado" : "Ver plano completo"}
             </span>
             <span className="forge-plan-dock-title-headline">{pendingPlan.summary}</span>
-            {materializing ? (
-              <span className="forge-plan-dock-title-hint">
+            <span className="forge-plan-dock-title-hint">
+              {materializing ? (
                 <Loader2 className="size-3.5 animate-spin" />
-                Build em andamento
-              </span>
-            ) : null}
+              ) : (
+                <ArrowRight className="size-3.5" />
+              )}
+              {materializing ? "Build em andamento" : "Abrir no inspector"}
+            </span>
           </button>
 
           {hasPhases ? (
@@ -121,7 +123,16 @@ export function ChatPlanDock({
         </div>
 
         <div className="forge-composer-row">
-          <div className="forge-composer-row-start" />
+          <div className="forge-composer-row-start">
+            <button
+              type="button"
+              className="forge-plan-dock-btn forge-plan-dock-btn--inspect"
+              onClick={() => onReview?.(pendingPlan.runId)}
+            >
+              <ArrowRight className="size-3.5" />
+              Inspect
+            </button>
+          </div>
           <div className="forge-composer-spacer" aria-hidden />
           {awaitingApproval ? (
             <div className="forge-composer-row-end">
