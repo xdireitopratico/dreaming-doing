@@ -59,6 +59,25 @@ describe("buildJobStreamTree terminal close", () => {
   });
 });
 
+describe("buildJobStreamTree task events", () => {
+  it("materializa eventos task como nós de tarefa no inspector", () => {
+    const nodes = buildJobStreamTree([
+      {
+        type: "task",
+        timestamp: 1,
+        data: { label: "Extrair hero", phase: "build" },
+      },
+    ]);
+
+    const tasks = nodes.filter((node) => node.kind === "task");
+    expect(tasks).toHaveLength(1);
+    if (tasks[0]?.kind === "task") {
+      expect(tasks[0].title).toBe("Extrair hero");
+      expect(tasks[0].phase).toBe("build");
+    }
+  });
+});
+
 describe("deriveCardView terminal state", () => {
   it("não mantém working quando finished=true e não há step ativa", () => {
     const view = deriveCardView([], {

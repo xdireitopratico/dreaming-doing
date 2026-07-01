@@ -244,6 +244,12 @@ export function buildJobStreamTree(
       continue;
     }
 
+    if (ev.type === "task" && typeof data.label === "string") {
+      const phase = typeof data.phase === "string" ? data.phase : undefined;
+      pushTask(nodes, data.label, ts, phase);
+      continue;
+    }
+
     if (nodes.length && nodes[nodes.length - 1]?.kind === "thought") {
       flushThought(nodes, ts);
     }

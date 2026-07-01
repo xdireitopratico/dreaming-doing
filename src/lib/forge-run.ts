@@ -99,7 +99,9 @@ function derivePlanTasks(
   jobActive: boolean,
 ): NonNullable<ForgeMiniCardData["tasks"]> {
   const declaredTasks = progress.tasks ?? [];
-  const canUsePlanSteps = progress.mode === "build" && !!jobPlan?.steps?.length;
+  const canUsePlanSteps =
+    !!jobPlan?.steps?.length &&
+    (progress.mode === "build" || progress.phase === "build" || progress.phase === "execute" || jobActive);
   if (!canUsePlanSteps) return declaredTasks;
 
   const currentStep = typeof progress.currentStep === "number" ? progress.currentStep : null;
