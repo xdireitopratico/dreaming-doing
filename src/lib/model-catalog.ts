@@ -813,20 +813,20 @@ export function resolveStudioSelectedEnv(
     const pool = prefs.poolProvider?.trim();
     if (pool && isAiEnv(pool as ModelEnvId)) return pool as AiEnvId;
     const robin = getPresetById(prefs.robinPoolModelId, prefs.userModelEntries);
-    if (robin.id && isAiEnv(robin.env)) return robin.env;
+    if (robin.id) return robin.env as AiEnvId;
     return DEFAULT_STUDIO_ENV;
   }
 
   if (mode === "fixed") {
     const fixed = getPresetById(prefs.fixedPresetId, prefs.userModelEntries);
-    if (fixed.id && isAiEnv(fixed.env)) return fixed.env;
+    if (fixed.id) return fixed.env as AiEnvId;
     return DEFAULT_STUDIO_ENV;
   }
 
   if (mode === "auto") {
     for (const id of prefs.autoAllowedPresetIds ?? []) {
       const p = getPresetById(id, prefs.userModelEntries);
-      if (p.id && isAiEnv(p.env)) return p.env;
+      if (p.id) return p.env as AiEnvId;
     }
     return DEFAULT_STUDIO_ENV;
   }

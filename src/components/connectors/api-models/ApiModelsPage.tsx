@@ -192,8 +192,9 @@ export function ApiModelsPage() {
   const [ollamaConnected, setOllamaConnected] = useState(false);
 
   const mode = prefs.mode ?? "fixed";
-  const [selectedEnv, setSelectedEnv] = useState<AiProviderId>(() =>
-    resolveStudioSelectedEnv(prefs),
+  const [selectedEnv, setSelectedEnv] = useState<AiProviderId>(
+    // Keep empty until prefs load — the useEffect below sets it once prefsLoaded is true
+    () => "" as AiProviderId,
   );
   const parserProvider = (prefs.parserProvider ?? "builtin") as ParserIndexProviderId;
   const resolvedPreset = useMemo(() => {
