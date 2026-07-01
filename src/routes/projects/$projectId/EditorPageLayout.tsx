@@ -286,7 +286,11 @@ export function EditorPageLayout({
 
   const prevInspectorRunRef = useRef<string | null>(null);
   const autoOpenedInspectorRunRef = useRef<string | null>(null);
-  const inspectorLiveRunRef = useRef<{ runId: string | null; sawLive: boolean; startedAtMs: number | null }>({
+  const inspectorLiveRunRef = useRef<{
+    runId: string | null;
+    sawLive: boolean;
+    startedAtMs: number | null;
+  }>({
     runId: null,
     sawLive: false,
     startedAtMs: null,
@@ -547,8 +551,8 @@ export function EditorPageLayout({
                   onStop={handleStop}
                   onResume={handleResumeAgent}
                   onOpenInspector={handleOpenInspector}
-                  onPlanApprove={(steps, markdown) => {
-                    handlePlanApprove(steps, markdown);
+                  onPlanApprove={async (steps, markdown) => {
+                    await handlePlanApprove(steps, markdown);
                     closeInspectorAndReturnToChat();
                   }}
                   onPlanReject={(reason) => {
@@ -688,8 +692,8 @@ export function EditorPageLayout({
                                 onMainViewChange("code");
                                 if (isMobile) onMobilePanelChange?.("code");
                               }}
-                              onPlanApprove={(steps, markdown) => {
-                                handlePlanApprove(steps, markdown);
+                              onPlanApprove={async (steps, markdown) => {
+                                await handlePlanApprove(steps, markdown);
                                 closeInspectorAndReturnToChat();
                               }}
                               onPlanReject={(reason) => {
