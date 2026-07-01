@@ -6,14 +6,17 @@ import {
   saveJobCheckpoint,
   type DesignDnaExecuteResponse,
 } from "../functions/_shared-design-dna";
-import { extractDesignDnaForUrl, ensurePythonAgentInSandbox, type LLMConfig } from "./design-dna-extraction.ts";
+import {
+  extractDesignDnaForUrl,
+  resolveLLMConfig,
+  type LLMConfig,
+} from "./design-dna-extraction.ts";
 import { connectToSandbox, waitForEnvdReady, runInSandbox } from "./e2b-client";
 import { createAgentContext } from "./browser-agent-state";
 import { runBrowserAgent, createDefaultCdpTools } from "./browser-agent-runner";
 import { runAgentPlanningStep } from "./browser-agent-llm";
 import { synthesizeDesignDNA } from "./browser-agent-synthesis";
 import type { BrowserAgentContext, BrowserAgentStep } from "./browser-agent-state";
-import { resolveLLMConfig } from "./design-dna-extraction.ts";
 
 const E2B_API_BASE = process.env.E2B_API_BASE || "https://api.e2b.app";
 const E2B_DOMAIN = process.env.E2B_DOMAIN || "e2b.app";
@@ -90,17 +93,6 @@ async function ensureDesignDnaSandbox(
   await waitForEnvdReady(sandboxId, accessToken).catch((err) => {
     console.warn("[design-dna] envd not ready, continuing anyway:", err);
   });
-
-  // Upload do agente Python (uma vez, persiste no pause/resume)
-  await appendJobEvent(supabase, jobId, "sandbox_setup", { sandboxId, step: "uploading-python-agent" });
-  try {
-    await ensurePythonAgentInSandbox(sandboxId, accessToken);
-    console.log("[design-dna] Python agent uploaded to sandbox");
-  } catch (agentErr) {
-    const msg = `Python agent upload failed: ${errorMessage(agentErr)}`;
-    await appendJobEvent(supabase, jobId, "url_error", { scope: "sandbox", error: msg });
-    throw new Error(msg);
-  }
 
   // Chrome CDP — o template já inicia Chromium via start-chromium.sh na porta 9222.
   // Não tenta iniciar de novo (causaria conflito de porta).
