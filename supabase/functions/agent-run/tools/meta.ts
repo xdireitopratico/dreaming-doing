@@ -245,6 +245,14 @@ export function mergeExecutionToolDefinitions(
   return [...filtered, ...getMetaToolDefinitions(false)];
 }
 
+/** Fase write do build — só materialização (sem reads). */
+export const WRITE_MODE_TOOL_NAMES = new Set(["fs_write", "fs_edit", "shell_exec"]);
+
+export function mergeWriteModeToolDefinitions(registryDefs: ToolDefinition[]): ToolDefinition[] {
+  const filtered = registryDefs.filter((d) => WRITE_MODE_TOOL_NAMES.has(d.name));
+  return filtered.length > 0 ? filtered : registryDefs.filter((d) => d.name === "fs_write" || d.name === "fs_edit");
+}
+
 /** Plan mode — tudo exceto fs_write/fs_edit/fs_delete + declare_tasks; shell_exec para grep/cat/ls. */
 export function mergePlanModeToolDefinitions(registryDefs: ToolDefinition[]): ToolDefinition[] {
   const filtered = registryDefs.filter(

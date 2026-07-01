@@ -220,6 +220,38 @@ Evidência:
 - GREEN: `npm run build:inngest` — `agent-executor.js` + `inngest-handler.js` gerados.
 - Fix crítico: `createDepsContext` agora expõe `returnResumableWithUserMessage` (antes undefined → phases caíam em chunk sem mensagem).
 
+### Task 8: Loop Materialization + UX Hygiene
+
+Status: `completed`
+
+Arquivos:
+
+- `supabase/functions/agent-run/runtime/phases/execute-helpers.ts`
+- `supabase/functions/agent-run/runtime/phases/execute.ts`
+- `supabase/functions/agent-run/tools/meta.ts`
+- `supabase/functions/agent-run/runtime/llm-chat.ts`
+- `supabase/functions/agent-run/runtime/loop-mutable-state.ts`
+- `supabase/functions/agent-run/runtime/emitter.ts`
+- `supabase/functions/agent-run/loop-status.ts`
+- `src/components/chat/AssistantTurn.tsx`
+- `src/routes/projects/$projectId/useEditorPageHandlers.ts`
+
+Hipótese: builds aprovados morriam em leitura (`tool_choice: required` + contador read-only) sem `fs_write`; UX exibia stuck/Feito/Continuar mentiroso.
+
+Critério de conclusão:
+
+- Fases `discovery` → `write` com `mergeWriteModeToolDefinitions` em approved plan build.
+- Sem terminal com `touchedPaths=0` antes de turno write forçado.
+- Sem alert error em `stuck`; `tool_batch` ok silencioso.
+- Continuar aciona `onResume` quando copy promete retomada.
+- `npm run test:agent-run` passa; `npm run build:inngest` passa.
+
+Evidência:
+
+- GREEN: `npm run test:agent-run` — 21 passed.
+- GREEN: `npm run build:inngest`.
+- GREEN: `npm run check:agent-run-terminal`.
+
 ### Task 6: Typecheck Drift Inventory
 
 Status: `pending`
@@ -250,3 +282,4 @@ Evidência:
 - 2026-06-21: Task 4 concluída; contrato no-tool diferencia explicação textual de pedido acionável que precisa usar ferramentas.
 - 2026-06-21: Task 5 concluída; import do executor Inngest deixou de quebrar Vitest sem bundle.
 - 2026-07-01: Task 7 concluída; choke point terminal unificado (`ensureUserMessage` + `returnResumableWithUserMessage` wired); orchestrator e ensure-terminal-message alinhados; 21 testes Deno + guardrail `check:agent-run-terminal`.
+- 2026-07-01: Task 8 concluída; materialização read→write em approved build, invariante zero-writes resumable, higiene stuck/Feito/Continuar.

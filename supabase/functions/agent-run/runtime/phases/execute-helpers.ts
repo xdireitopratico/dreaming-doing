@@ -9,10 +9,39 @@ export const READ_ONLY_TOOLS = [
   "fs_glob",
 ] as const;
 
-export const NO_CONTENT_HARD_STOP = 5;
-export const NO_CONTENT_NUDGE = 3;
+export const READ_ONLY_BATCH_ESCALATE = 2;
+export const WRITE_PHASE_MIN_STEP = 4;
 export const EXECUTE_MAX_RETRIES = 3;
 export const EXECUTE_MAX_LLM_RETRIES = 3;
+
+export type BuildToolPhase = "discovery" | "write";
+
+export function areReadPathsSatisfied(
+  readPaths: string[] | undefined,
+  readsDone: Set<string>,
+): boolean {
+  const required = (readPaths ?? []).map(normalizeDesignReadPath).filter(Boolean);
+  if (required.length === 0) return true;
+  return required.every((p) => readsDone.has(p));
+}
+
+export function resolveBuildToolPhase(input: {
+  touchedPathsCount: number;
+  readPathsSatisfied: boolean;
+  consecutiveReadOnlyBatches: number;
+  loopStep: number;
+  approvedPlanBuild: boolean;
+}): BuildToolPhase {
+  if (input.touchedPathsCount > 0) return "discovery";
+  if (!input.approvedPlanBuild) {
+    if (input.consecutiveReadOnlyBatches >= READ_ONLY_BATCH_ESCALATE) return "write";
+    return "discovery";
+  }
+  if (input.readPathsSatisfied) return "write";
+  if (input.consecutiveReadOnlyBatches >= READ_ONLY_BATCH_ESCALATE) return "write";
+  if (input.loopStep >= WRITE_PHASE_MIN_STEP) return "write";
+  return "discovery";
+}
 
 const UI_PATCH_RE = /\.(tsx|jsx|css)$/i;
 
@@ -109,15 +138,19 @@ export function computeNarrationOnlyStep(input: {
 
 export type ReadOnlyTrackerUpdate = {
   consecutive: number;
-  shouldNudge: boolean;
-  shouldHardStop: boolean;
 };
 
 export function updateReadOnlyTracker(
   consecutive: number,
   response: ChatResponse,
   assistantText: string,
+  toolPhase: BuildToolPhase,
+  hadThinkingActivity: boolean,
 ): ReadOnlyTrackerUpdate {
+  if (toolPhase === "write" || hadThinkingActivity) {
+    return { consecutive: 0 };
+  }
+
   const hasOnlyReadTools =
     response.tool_calls.length > 0 &&
     response.tool_calls.every((tc) =>
@@ -132,11 +165,7 @@ export function updateReadOnlyTracker(
     next = 0;
   }
 
-  return {
-    consecutive: next,
-    shouldNudge: next === NO_CONTENT_NUDGE,
-    shouldHardStop: next >= NO_CONTENT_HARD_STOP,
-  };
+  return { consecutive: next };
 }
 
 export type FilePreDiff = {

@@ -60,7 +60,7 @@ function formatToolBatch(ctx: LoopUpdateContext): string | null {
   const tools = ctx.tools ?? [];
   if (tools.length === 0) return null;
   const ok = ctx.allOk !== false;
-  return ok ? "Feito." : "Falhou — vou corrigir.";
+  return ok ? null : "Falhou — vou corrigir.";
 }
 
 /** Mensagem curta e factual para o chat — nunca inventa intenção do agente. */

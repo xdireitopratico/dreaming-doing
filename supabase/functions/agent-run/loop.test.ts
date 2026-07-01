@@ -862,8 +862,13 @@ Deno.test("7 stuck proativa", async () => {
     er("Corrigindo...", tc("t1", "shell_exec", { command: "echo stuck-test" })),
   );
   main.queue(tr("Pronto."));
-  await loop.run();
-  assert(ef(events, "stuck").length > 0, `Eventos: ${events.map((e) => e.type).join(",")}`);
+  const r = await loop.run();
+  const stuckAlerts = ef(events, "alert").filter((e) => {
+    const d = e.data as Record<string, unknown> | undefined;
+    return String(d?.alertId ?? "").startsWith("stuck");
+  });
+  assertEquals(stuckAlerts.length, 0);
+  assert(r.ok === true || r.resumable === true, `result: ${JSON.stringify(r)}`);
 });
 
 Deno.test("8 stuck unit tests", () => {

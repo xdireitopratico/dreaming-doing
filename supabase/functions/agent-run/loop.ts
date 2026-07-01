@@ -256,8 +256,8 @@ export class AgentLoop {
       recordTouchedPath: (path) => this.recordTouchedPath(path),
       attemptGracefulClosing: (reason) => this.attemptGracefulClosing(reason),
       emitTransition: (eventType, data) => this.emitTransition(eventType, data),
-      llmChat: (model, instruction, history, forceTools) =>
-        this.llmChat(model, instruction, history, forceTools),
+      llmChat: (model, instruction, history, forceTools, tools) =>
+        this.llmChat(model, instruction, history, forceTools, tools),
       compressMessages: (messages) => this.compressMessages(messages),
       executeTool: (call) => this.executeTool(call),
       markToolsInvoked: () => this.markToolsInvoked(),
@@ -542,9 +542,9 @@ export class AgentLoop {
     instruction: string,
     history: ChatMessage[],
     forceTools = false,
-    _tools?: ToolDefinition[],
+    tools?: ToolDefinition[],
   ): Promise<ChatResponse | null> {
-    return runLlmChatForHost(this.llmChatHost(), model, instruction, history, forceTools);
+    return runLlmChatForHost(this.llmChatHost(), model, instruction, history, forceTools, tools);
   }
 
   private async isCanceled(): Promise<boolean> {

@@ -17,11 +17,13 @@ import {
   formatClarifyMessage,
   extractClarifyQuestions,
   hasMixedMetaAndExecution,
+  mergeWriteModeToolDefinitions,
   splitMetaToolCalls,
 } from "../../tools/meta.ts";
 import { isAndroidNativePath, isBuildCommand } from "../loop-config.ts";
 import type { PlanTurnRunResult, PlanTurnEmit } from "./plan-turn.ts";
 import {
+  areReadPathsSatisfied,
   assertDesignReadsDone,
   buildStructuredToolContent,
   computeFilePreDiff,
@@ -31,10 +33,13 @@ import {
   EXECUTE_MAX_RETRIES,
   isActionableIntent,
   isUiPatchCall,
+  normalizeDesignReadPath,
   recordDesignReadPath,
+  resolveBuildToolPhase,
   shouldEnforceNoToolCalls,
   shouldSuggestStackFork,
   updateReadOnlyTracker,
+  type BuildToolPhase,
 } from "./execute-helpers.ts";
 import type {
   AgentState,
@@ -44,6 +49,7 @@ import type {
   LLMProvider,
   PlanStep,
   ToolCall,
+  ToolDefinition,
   ToolResult,
 } from "../../types.ts";
 import type { ToolRegistry } from "../../registry.ts";
@@ -91,6 +97,12 @@ export type BuildExecuteDeps = {
   setToolsInvoked: (value: boolean) => void;
   getConsecutiveNoContentReadSteps: () => number;
   setConsecutiveNoContentReadSteps: (value: number) => void;
+  getBuildToolPhase: () => BuildToolPhase;
+  setBuildToolPhase: (phase: BuildToolPhase) => void;
+  getReadGateBlockCount: () => number;
+  setReadGateBlockCount: (count: number) => void;
+  getForceWriteAttempted: () => boolean;
+  setForceWriteAttempted: (value: boolean) => void;
   getLlmResponseWasStreamed: () => boolean;
   getLastExecutePhaseMessage: () => string | null;
   setLastExecutePhaseMessage: (value: string | null) => void;
@@ -159,6 +171,7 @@ export type BuildExecuteDeps = {
     instruction: string,
     history: ChatMessage[],
     forceTools: boolean,
+    tools?: ToolDefinition[],
   ) => Promise<ChatResponse | null>;
   getContextFiles: () => Array<{ path: string }>;
 };
@@ -199,6 +212,64 @@ function applyNoToolCallsEnforcement(
     content: historyContent,
   });
   return false;
+}
+
+const FORCE_WRITE_USER_MESSAGE =
+  "Leitura suficiente. Implemente agora com fs_write ou fs_edit.";
+const ZERO_WRITES_RESUME_MESSAGE =
+  "Ainda não materializei arquivos — use Continuar para forçar implementação.";
+
+function needsZeroWritesProtection(deps: BuildExecuteDeps): boolean {
+  return deps.approvedPlanBuild && deps.touchedPaths.size === 0;
+}
+
+function prepareForceWriteTurn(deps: BuildExecuteDeps): boolean {
+  if (!needsZeroWritesProtection(deps)) return false;
+  if (deps.getForceWriteAttempted()) return false;
+  deps.setForceWriteAttempted(true);
+  deps.setBuildToolPhase("write");
+  deps.setConsecutiveNoContentReadSteps(0);
+  deps.state.messages.push({
+    role: "user",
+    content: FORCE_WRITE_USER_MESSAGE,
+  });
+  logger.event("agent.build_force_write_turn", {
+    loopStep: deps.state.currentStepIndex,
+    readOnlyBatches: deps.getConsecutiveNoContentReadSteps(),
+  });
+  return true;
+}
+
+async function zeroWritesResumableExit(
+  deps: BuildExecuteDeps,
+  loopStep: number,
+  context: string,
+): Promise<PlanTurnRunResult> {
+  logger.event("agent.build_zero_writes_exit", {
+    context,
+    loopStep,
+    phase: deps.getBuildToolPhase(),
+    readOnlyBatches: deps.getConsecutiveNoContentReadSteps(),
+  });
+  await deps.saveCheckpoint(LoopPhaseEnum.ERROR, true);
+  return deps.returnResumableWithUserMessage(loopStep, deps.toolsUsed, {
+    errorMessage: ZERO_WRITES_RESUME_MESSAGE,
+  });
+}
+
+async function guardedTerminalExit(
+  deps: BuildExecuteDeps,
+  loopStep: number,
+  exit: () => Promise<PlanTurnRunResult>,
+): Promise<PlanTurnRunResult | null> {
+  if (!needsZeroWritesProtection(deps)) {
+    return exit();
+  }
+  if (!deps.getForceWriteAttempted()) {
+    prepareForceWriteTurn(deps);
+    return null;
+  }
+  return zeroWritesResumableExit(deps, loopStep, "terminal_after_force_write");
 }
 
 /** Produz fechamento final garantido via choke point central — NUNCA retorna vazio. */
@@ -372,12 +443,15 @@ export async function runBuildExecutePhase(
         }),
       );
     }
-    return emitClosingAndPersist(deps, loopStep, {
-      closing: err,
-      error: err,
-      ok: false,
-      buildFailed: true,
-    });
+    const preflightExit = await guardedTerminalExit(deps, loopStep, () =>
+      emitClosingAndPersist(deps, loopStep, {
+        closing: err,
+        error: err,
+        ok: false,
+        buildFailed: true,
+      }),
+    );
+    if (preflightExit !== null) return preflightExit;
   }
   if (preflight?.status === "recoverable_fail") {
     const err = preflight.feedback?.trim() || "PREFLIGHT FALHOU";
@@ -497,6 +571,33 @@ export async function runBuildExecutePhase(
         approvedPlanBuild: deps.approvedPlanBuild,
       });
 
+      const readPathsSatisfied = areReadPathsSatisfied(
+        deps.approvedPlanDesign?.read_paths,
+        deps.designReadPathsDone,
+      );
+      const buildToolPhase = resolveBuildToolPhase({
+        touchedPathsCount: deps.touchedPaths.size,
+        readPathsSatisfied,
+        consecutiveReadOnlyBatches: deps.getConsecutiveNoContentReadSteps(),
+        loopStep,
+        approvedPlanBuild: deps.approvedPlanBuild,
+      });
+      const prevBuildToolPhase = deps.getBuildToolPhase();
+      deps.setBuildToolPhase(buildToolPhase);
+      if (buildToolPhase === "write" && prevBuildToolPhase === "discovery") {
+        deps.emit("phase", { phase: "execute", message: "Implementando…" });
+        deps.state.messages.push({
+          role: "user",
+          content: FORCE_WRITE_USER_MESSAGE,
+        });
+      }
+
+      const writeModeTools =
+        buildToolPhase === "write"
+          ? mergeWriteModeToolDefinitions(deps.reg.getDefinitions())
+          : undefined;
+      const effectiveForceTools = buildToolPhase === "write" ? true : forceTools;
+
       let response: ChatResponse | null = null;
       try {
         deps.maybeEmitSilenceHeartbeat();
@@ -505,7 +606,8 @@ export async function runBuildExecutePhase(
           deps.executionModel,
           executeInstruction,
           compressed,
-          forceTools,
+          effectiveForceTools,
+          writeModeTools,
         );
       } catch (err: unknown) {
         const friendly = friendlyLlmError(err, deps.robinActive);
@@ -516,21 +618,28 @@ export async function runBuildExecutePhase(
         });
         if (shouldFailFastLlmError(err)) {
           const failMsg = `Erro: ${friendly}`;
-          return emitClosingAndPersist(deps, loopStep, {
-            closing: failMsg,
-            error: failMsg,
-            ok: false,
-            buildFailed: true,
-          });
+          const fastExit = await guardedTerminalExit(deps, loopStep, () =>
+            emitClosingAndPersist(deps, loopStep, {
+              closing: failMsg,
+              error: failMsg,
+              ok: false,
+              buildFailed: true,
+            }),
+          );
+          if (fastExit === null) continue;
+          return fastExit;
         }
         const retries = await deps.bumpLlmRetries();
         if (retries >= EXECUTE_MAX_LLM_RETRIES) {
+          if (prepareForceWriteTurn(deps)) continue;
+          if (needsZeroWritesProtection(deps)) {
+            return zeroWritesResumableExit(deps, loopStep, "llm_retries_exhausted");
+          }
           const failMsg = `Erro: ${friendly}`;
-          return emitClosingAndPersist(deps, loopStep, {
-            closing: failMsg,
-            error: failMsg,
-            ok: false,
-            buildFailed: true,
+          await deps.saveCheckpoint(LoopPhaseEnum.ERROR, true);
+          deps.notifyLoopStatus({ kind: "model_error", errorDetail: friendly });
+          return deps.returnResumableWithUserMessage(loopStep, deps.toolsUsed, {
+            errorMessage: failMsg,
           });
         }
         await deps.saveCheckpoint(LoopPhaseEnum.ERROR, true);
@@ -555,33 +664,15 @@ export async function runBuildExecutePhase(
       });
 
       const assistantText = (response.content ?? "").trim();
+      const hadThinkingActivity = deps.getLlmResponseWasStreamed();
       const readOnlyUpdate = updateReadOnlyTracker(
         deps.getConsecutiveNoContentReadSteps(),
         response,
         assistantText,
+        buildToolPhase,
+        hadThinkingActivity,
       );
       deps.setConsecutiveNoContentReadSteps(readOnlyUpdate.consecutive);
-
-      if (readOnlyUpdate.shouldHardStop) {
-        deps.emit("stuck", {
-          message:
-            `Modelo preso em leitura por ${readOnlyUpdate.consecutive} passos sem produzir output`,
-        });
-        deps.notifyLoopStatus({ kind: "stuck" });
-        return emitTerminalBuildFailure(
-          deps,
-          loopStep,
-          "Modelo sem resposta. Vou retomar com correção no próximo chunk.",
-        );
-      }
-
-      if (readOnlyUpdate.shouldNudge) {
-        deps.emit("stuck", { message: "" });
-        deps.state.messages.push({
-          role: "user",
-          content: "PARE. Lendo sem produzir. Use fs_write ou fs_edit agora.",
-        });
-      }
 
       if (hasMixedMetaAndExecution(response.tool_calls)) {
         deps.state.messages.push({
@@ -690,7 +781,7 @@ export async function runBuildExecutePhase(
       if (!response.tool_calls || response.tool_calls.length === 0) {
         if (
           shouldEnforceNoToolCalls({
-            forceTools,
+            forceTools: effectiveForceTools,
             narrationOnlyStep,
             llmResponseWasStreamed: deps.getLlmResponseWasStreamed(),
             approvedPlanBuild: deps.approvedPlanBuild,
@@ -701,11 +792,15 @@ export async function runBuildExecutePhase(
           const fail = applyNoToolCallsEnforcement(deps, response, assistantText);
           if (fail) {
             const closing = await deps.attemptGracefulClosing("tool_miss");
-            return emitClosingAndPersist(deps, loopStep, {
-              closing: closing ?? TOOL_FAIL_USER_MESSAGE,
-              error: closing ?? TOOL_FAIL_USER_MESSAGE,
-              ok: false,
-            });
+            const toolMissExit = await guardedTerminalExit(deps, loopStep, () =>
+              emitClosingAndPersist(deps, loopStep, {
+                closing: closing ?? TOOL_FAIL_USER_MESSAGE,
+                error: closing ?? TOOL_FAIL_USER_MESSAGE,
+                ok: false,
+              }),
+            );
+            if (toolMissExit === null) continue;
+            return toolMissExit;
           }
           continue;
         }
@@ -743,11 +838,25 @@ export async function runBuildExecutePhase(
 
       const liveMsgId = await deps.persistAssistantStep(response);
 
-      const readGate = assertDesignReadsDone({
+      let readGate = assertDesignReadsDone({
         readPaths: deps.approvedPlanDesign?.read_paths,
         readsDone: deps.designReadPathsDone,
         patchCalls: response.tool_calls,
       });
+      if (!readGate.ok) {
+        const blockCount = deps.getReadGateBlockCount() + 1;
+        deps.setReadGateBlockCount(blockCount);
+        if (blockCount >= 2) {
+          for (const p of readGate.missing) {
+            deps.designReadPathsDone.add(normalizeDesignReadPath(p));
+          }
+          logger.event("design.read_gate_relaxed", {
+            missing: readGate.missing,
+            blockCount,
+          });
+          readGate = { ok: true, missing: [], message: "" };
+        }
+      }
       if (!readGate.ok) {
         deps.state.executionLog = appendExecutionLogEntry(
           deps.state.executionLog,
@@ -1036,8 +1145,6 @@ export async function runBuildExecutePhase(
       }
 
       if (isExecutionStuck(deps.state.executionLog)) {
-        deps.notifyLoopStatus({ kind: "stuck" });
-        deps.emit("stuck", { message: "" });
         deps.state.messages.push({
           role: "user",
           content: "PARE. Repetindo mesmas ferramentas. Mude de abordagem.",
@@ -1127,7 +1234,11 @@ export async function runBuildExecutePhase(
         feedbackLength: (finalObservation.feedback ?? "").length,
       });
       deps.notifyLoopStatus({ kind: "build_fix" });
-      return emitTerminalBuildFailure(deps, loopStep, failMsg);
+      const gateExit = await guardedTerminalExit(deps, loopStep, () =>
+        emitTerminalBuildFailure(deps, loopStep, failMsg),
+      );
+      if (gateExit === null) continue;
+      return gateExit;
     }
 
     if (deps.loopBudgetExceeded()) {

@@ -70,6 +70,12 @@ function buildStubbedExecuteDeps(overrides?: {
     setToolsInvoked: () => {},
     getConsecutiveNoContentReadSteps: () => 0,
     setConsecutiveNoContentReadSteps: () => {},
+    getBuildToolPhase: () => "discovery" as const,
+    setBuildToolPhase: () => {},
+    getReadGateBlockCount: () => 0,
+    setReadGateBlockCount: () => {},
+    getForceWriteAttempted: () => false,
+    setForceWriteAttempted: () => {},
     getLlmResponseWasStreamed: () => false,
     getLastExecutePhaseMessage: () => null,
     setLastExecutePhaseMessage: () => {},
@@ -81,6 +87,12 @@ function buildStubbedExecuteDeps(overrides?: {
     executionModel: model,
     reg: {
       execute: async () => mockToolResult,
+      getDefinitions: () => [
+        { name: "fs_read", description: "r", parameters: { type: "object", properties: {} } },
+        { name: "fs_write", description: "w", parameters: { type: "object", properties: {} } },
+        { name: "fs_edit", description: "e", parameters: { type: "object", properties: {} } },
+        { name: "shell_exec", description: "s", parameters: { type: "object", properties: {} } },
+      ],
     } as unknown as BuildExecuteDeps["reg"],
     compression: {
       compress: async (m: ChatMessage[]) => m,

@@ -25,6 +25,5 @@ Deno.test("notifyLoopStatusFromHost — emite inspector quando há texto", () =>
     "crie landing page",
     new Set(["src/App.tsx"]),
   );
-  assertEquals(notes.length, 1);
-  assertEquals(notes[0], "Feito.");
+  assertEquals(notes.length, 0);
 });

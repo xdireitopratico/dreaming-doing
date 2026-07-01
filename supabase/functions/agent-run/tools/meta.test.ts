@@ -4,6 +4,7 @@ import {
   getMetaToolDefinitions,
   hasMixedMetaAndExecution,
   mergeExecutionToolDefinitions,
+  mergeWriteModeToolDefinitions,
   mergePlanModeToolDefinitions,
   PLAN_MODE_PATCH_TOOLS,
   META_CLARIFY_KIND,
@@ -174,6 +175,16 @@ Deno.test("CREATE_PLAN_TOOL schema expõe design", () => {
   const createPlan = defs.find((d) => d.name === "create_plan");
   const props = (createPlan?.parameters as { properties?: Record<string, unknown> })?.properties;
   assertEquals(typeof props?.design, "object");
+});
+
+Deno.test("mergeWriteModeToolDefinitions — só patch e shell", () => {
+  const merged = mergeWriteModeToolDefinitions([
+    { name: "fs_read", description: "r", parameters: { type: "object", properties: {} } },
+    { name: "fs_write", description: "w", parameters: { type: "object", properties: {} } },
+    { name: "fs_edit", description: "e", parameters: { type: "object", properties: {} } },
+    { name: "shell_exec", description: "s", parameters: { type: "object", properties: {} } },
+  ]);
+  assertEquals(merged.map((d) => d.name).sort(), ["fs_edit", "fs_write", "shell_exec"]);
 });
 
 Deno.test("mergeExecutionToolDefinitions deduplica meta tools", () => {

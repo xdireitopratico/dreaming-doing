@@ -147,7 +147,9 @@ export function AssistantTurn({
               onAction={
                 errorHint.link == null &&
                 onResume &&
-                (item.resumable || errorHint.code === "agent.stale_stream")
+                (item.resumable ||
+                  errorHint.code === "agent.stale_stream" ||
+                  errorHint.action === "Continuar execução")
                   ? onResume
                   : undefined
               }

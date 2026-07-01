@@ -320,7 +320,14 @@ export function useEditorPageHandlers({
       agent.progress.connectionState === "reconnecting" ||
       /stale|interromp|checkpoint|continuar|zumbi/i.test(agent.progress.error ?? "");
 
-    if (!conversation || (isAgentBusy() && !canResumeStalledRun)) return;
+    if (!conversation) {
+      toast.error("Conversa ainda carregando — tente de novo em instantes.");
+      return;
+    }
+    if (isAgentBusy() && !canResumeStalledRun) {
+      toast.error("Agente ainda ocupado — aguarde ou cancele a execução atual.");
+      return;
+    }
 
     const kind = resolveSessionKind(tasteQuota);
     const inTaste = kind === "taste";
@@ -343,9 +350,14 @@ export function useEditorPageHandlers({
 
     void (async () => {
       try {
-        await agent.connect(projectId, conversation.id, kind, { resume: true });
+        const result = await agent.connect(projectId, conversation.id, kind, { resume: true });
+        if (!result.ok) {
+          toast.error(result.error);
+          logEditorTelemetryEvent("agent", "resume_fail", "error", result.error.slice(0, 200));
+        }
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : "Erro ao retomar agente";
+        toast.error(msg);
         logEditorTelemetryEvent("agent", "resume_fail", "error", msg.slice(0, 200));
       }
     })();

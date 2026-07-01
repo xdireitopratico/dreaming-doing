@@ -264,6 +264,7 @@ export async function runLlmChatForHost(
   instruction: string,
   history: ChatMessage[],
   forceTools = false,
+  tools?: ToolDefinition[],
 ): Promise<ChatResponse | null> {
   const skillPrompt = host.state.context
     ? host.skills.buildSkillPrompt(host.state.context.files)
@@ -273,6 +274,7 @@ export async function runLlmChatForHost(
     instruction,
     history,
     forceTools,
+    tools,
     context: host.state.context,
     projectTemplate: host.projectTemplate,
     stackAddon: host.stackAddon,

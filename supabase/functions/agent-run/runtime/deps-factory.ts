@@ -12,6 +12,7 @@ import type {
   PlanStep,
   ProposedPlan,
   ToolCall,
+  ToolDefinition,
   ToolResult,
 } from "../types.ts";
 import { LoopPhase } from "../types.ts";
@@ -35,7 +36,7 @@ import {
 } from "./phases/persist.ts";
 import { finishClarify } from "./phases/plan-turn.ts";
 import type { RunInfraDeps } from "./infra.ts";
-import { returnResumableChunk, returnResumableWithUserMessage as infraReturnResumableWithUserMessage } from "./infra.ts";
+import { returnResumableWithUserMessage as infraReturnResumableWithUserMessage } from "./infra.ts";
 import type { AgentPersistDeps, PersistFinalOpts } from "./phases/persist.ts";
 import type { BuildExecuteDeps } from "./phases/execute.ts";
 import type {
@@ -72,6 +73,18 @@ function mutableAccessors(mutable: AgentLoopMutableState) {
     getConsecutiveNoContentReadSteps: () => mutable.consecutiveNoContentReadSteps,
     setConsecutiveNoContentReadSteps: (value: number) => {
       mutable.consecutiveNoContentReadSteps = value;
+    },
+    getBuildToolPhase: () => mutable.buildToolPhase,
+    setBuildToolPhase: (phase: AgentLoopMutableState["buildToolPhase"]) => {
+      mutable.buildToolPhase = phase;
+    },
+    getReadGateBlockCount: () => mutable.readGateBlockCount,
+    setReadGateBlockCount: (count: number) => {
+      mutable.readGateBlockCount = count;
+    },
+    getForceWriteAttempted: () => mutable.forceWriteAttempted,
+    setForceWriteAttempted: (value: boolean) => {
+      mutable.forceWriteAttempted = value;
     },
     getLlmResponseWasStreamed: () => mutable.llmResponseWasStreamed,
     getLastExecutePhaseMessage: () => mutable.lastExecutePhaseMessage,
@@ -143,6 +156,7 @@ export type AgentLoopHost = {
     instruction: string,
     history: ChatMessage[],
     forceTools: boolean,
+    tools?: ToolDefinition[],
   ) => Promise<ChatResponse | null>;
   compressMessages: (messages: ChatMessage[]) => Promise<ChatMessage[]>;
   executeTool: (call: ToolCall) => Promise<ToolResult>;
@@ -189,6 +203,12 @@ export type AgentLoopDepsContext = {
   setToolsInvoked: (value: boolean) => void;
   getConsecutiveNoContentReadSteps: () => number;
   setConsecutiveNoContentReadSteps: (value: number) => void;
+  getBuildToolPhase: () => import("./loop-mutable-state.ts").BuildToolPhase;
+  setBuildToolPhase: (phase: import("./loop-mutable-state.ts").BuildToolPhase) => void;
+  getReadGateBlockCount: () => number;
+  setReadGateBlockCount: (count: number) => void;
+  getForceWriteAttempted: () => boolean;
+  setForceWriteAttempted: (value: boolean) => void;
   getLlmResponseWasStreamed: () => boolean;
   getLastExecutePhaseMessage: () => string | null;
   setLastExecutePhaseMessage: (value: string | null) => void;
@@ -274,6 +294,7 @@ export type AgentLoopDepsContext = {
     instruction: string,
     history: ChatMessage[],
     forceTools: boolean,
+    tools?: ToolDefinition[],
   ) => Promise<ChatResponse | null>;
   compressMessages: (messages: ChatMessage[]) => Promise<ChatMessage[]>;
   executeTool: (call: ToolCall) => Promise<ToolResult>;
@@ -376,6 +397,12 @@ export function buildExecuteDeps(
     setToolsInvoked: ctx.setToolsInvoked,
     getConsecutiveNoContentReadSteps: ctx.getConsecutiveNoContentReadSteps,
     setConsecutiveNoContentReadSteps: ctx.setConsecutiveNoContentReadSteps,
+    getBuildToolPhase: ctx.getBuildToolPhase,
+    setBuildToolPhase: ctx.setBuildToolPhase,
+    getReadGateBlockCount: ctx.getReadGateBlockCount,
+    setReadGateBlockCount: ctx.setReadGateBlockCount,
+    getForceWriteAttempted: ctx.getForceWriteAttempted,
+    setForceWriteAttempted: ctx.setForceWriteAttempted,
     getLlmResponseWasStreamed: ctx.getLlmResponseWasStreamed,
     getLastExecutePhaseMessage: ctx.getLastExecutePhaseMessage,
     setLastExecutePhaseMessage: ctx.setLastExecutePhaseMessage,
@@ -527,8 +554,8 @@ export function createDepsContext(
       finishClarify(buildPlanTurnFinishDeps(ctx), message, steps, used, clarifyQuestions),
     attemptGracefulClosing: (reason) => host.attemptGracefulClosing(reason),
     emitTransition: (eventType, data) => host.emitTransition(eventType, data),
-    llmChat: (model, instruction, history, forceTools) =>
-      host.llmChat(model, instruction, history, forceTools),
+    llmChat: (model, instruction, history, forceTools, tools) =>
+      host.llmChat(model, instruction, history, forceTools, tools),
     compressMessages: (messages) => host.compressMessages(messages),
     executeTool: (call) => host.executeTool(call),
     markToolsInvoked: () => host.markToolsInvoked(),

@@ -6,7 +6,9 @@ import {
   computeFilePreDiff,
   isActionableIntent,
   isUiPatchCall,
+  READ_ONLY_BATCH_ESCALATE,
   recordDesignReadPath,
+  resolveBuildToolPhase,
   shouldEnforceNoToolCalls,
   updateReadOnlyTracker,
 } from "./execute-helpers.ts";
@@ -58,15 +60,60 @@ Deno.test("computeForceTools — approved plan no step 1", () => {
   );
 });
 
-Deno.test("updateReadOnlyTracker — hard stop após 5 leituras vazias", () => {
+Deno.test("updateReadOnlyTracker — discovery incrementa leituras vazias", () => {
   const response = {
     role: "assistant" as const,
     content: "",
     tool_calls: [{ id: "1", name: "fs_read", arguments: { path: "a.ts" } }],
   } as ChatResponse;
-  const update = updateReadOnlyTracker(4, response, "");
+  const update = updateReadOnlyTracker(4, response, "", "discovery", false);
   assertEquals(update.consecutive, 5);
-  assertEquals(update.shouldHardStop, true);
+});
+
+Deno.test("updateReadOnlyTracker — write phase zera contador", () => {
+  const response = {
+    role: "assistant" as const,
+    content: "",
+    tool_calls: [{ id: "1", name: "fs_read", arguments: { path: "a.ts" } }],
+  } as ChatResponse;
+  const update = updateReadOnlyTracker(4, response, "", "write", false);
+  assertEquals(update.consecutive, 0);
+});
+
+Deno.test("updateReadOnlyTracker — thinking reseta contador em discovery", () => {
+  const response = {
+    role: "assistant" as const,
+    content: "",
+    tool_calls: [{ id: "1", name: "fs_read_many", arguments: { paths: ["a.ts"] } }],
+  } as ChatResponse;
+  const update = updateReadOnlyTracker(3, response, "", "discovery", true);
+  assertEquals(update.consecutive, 0);
+});
+
+Deno.test("resolveBuildToolPhase — approved build escala para write", () => {
+  assertEquals(
+    resolveBuildToolPhase({
+      touchedPathsCount: 0,
+      readPathsSatisfied: false,
+      consecutiveReadOnlyBatches: READ_ONLY_BATCH_ESCALATE,
+      loopStep: 2,
+      approvedPlanBuild: true,
+    }),
+    "write",
+  );
+});
+
+Deno.test("resolveBuildToolPhase — build comum permanece discovery no step 4", () => {
+  assertEquals(
+    resolveBuildToolPhase({
+      touchedPathsCount: 0,
+      readPathsSatisfied: false,
+      consecutiveReadOnlyBatches: 0,
+      loopStep: 4,
+      approvedPlanBuild: false,
+    }),
+    "discovery",
+  );
 });
 
 Deno.test("computeFilePreDiff — fs_write atualiza cache", () => {

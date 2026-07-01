@@ -148,15 +148,13 @@ export class RuntimeEmitter {
         });
       }
       if (type === "stuck") {
-        const reason = typeof d.reason === "string" ? d.reason : "";
-        const message = typeof d.message === "string" && d.message.trim() ? d.message : "Modelo preso — tentando destravar";
+        const message =
+          typeof d.message === "string" && d.message.trim()
+            ? d.message
+            : "Processamento demorado — ainda trabalhando…";
         this.onStream({
-          type: "alert",
-          data: {
-            level: "error",
-            message: reason ? `${message} (${reason})` : message,
-            alertId: `stuck-${reason || "generic"}`,
-          },
+          type: "explore",
+          data: { message, phase: "execute" },
         });
       }
       if (type === "context_compress") {

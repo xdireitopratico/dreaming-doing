@@ -18,8 +18,7 @@ Deno.test("formatLoopStatus — lote de tools", () => {
     step: 2,
     total: 8,
   });
-  assertEquals(text, "Feito.");
-  assertFalse(text!.includes("passo 2/8"));
+  assertEquals(text, null);
 });
 
 Deno.test("formatLoopStatus — resume comum não vaza passo interno", () => {
