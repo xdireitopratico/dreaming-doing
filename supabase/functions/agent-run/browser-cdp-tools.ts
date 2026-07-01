@@ -6,7 +6,10 @@
  *          analyzeElement, getUrl, clickElement, typeText.
  */
 
-const E2B_DOMAIN = Deno.env.get("E2B_DOMAIN") || "e2b.app";
+const E2B_DOMAIN =
+  (typeof Deno !== "undefined" ? Deno.env.get("E2B_DOMAIN") : undefined) ||
+  (typeof process !== "undefined" ? process.env.E2B_DOMAIN : undefined) ||
+  "e2b.app";
 const CDP_PORT = 9222;
 
 export type CdpRelayFn = (
