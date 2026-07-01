@@ -108,6 +108,12 @@ export type BuildExecuteDeps = {
     toolsUsed: Set<string>,
     options?: { buildFix?: boolean },
   ) => Promise<PlanTurnRunResult>;
+  returnResumableWithUserMessage?: (
+    steps: number,
+    toolsUsed: Set<string>,
+    options?: { buildFix?: boolean },
+    prose?: string,
+  ) => Promise<PlanTurnRunResult>;
   runDesignPreflightIfNeeded: () =>
     Promise<{
       status: "passed" | "recoverable_fail" | "terminal_fail";
@@ -406,12 +412,12 @@ export async function runBuildExecutePhase(
     agentTextComplete = false;
     while (loopStep < deps.maxStepsLimit) {
       if (deps.loopBudgetExceeded()) {
-        const prose = await resolveClosureText({ messages: deps.state.messages, touchedPaths: [...deps.touchedPaths], userRequest: deps.originalUserRequest }).catch(() => "Retomando o trabalho...");
-        if (prose?.trim()) {
-          deps.emit("assistant_text", { text: prose, final: true, append: false });
-          await deps.persistFinal(prose, { lastFinishOk: false });
-        }
-        return deps.returnResumableChunk(loopStep, deps.toolsUsed);
+        const prose = await resolveClosureText({
+          messages: deps.state.messages,
+          touchedPaths: [...deps.touchedPaths],
+          userRequest: deps.originalUserRequest,
+        }).catch(() => "");
+        return deps.returnResumableWithUserMessage(loopStep, deps.toolsUsed, undefined, prose || undefined);
       }
 
       if (await deps.isCanceled()) {
@@ -525,12 +531,7 @@ export async function runBuildExecutePhase(
         }
         await deps.saveCheckpoint(LoopPhaseEnum.ERROR, true);
         deps.notifyLoopStatus({ kind: "model_error", errorDetail: friendly });
-        const prose = await resolveClosureText({ messages: deps.state.messages, touchedPaths: [...deps.touchedPaths], userRequest: deps.originalUserRequest }).catch(() => "Erro temporário no modelo — retomando...");
-        if (prose?.trim()) {
-          deps.emit("assistant_text", { text: prose, final: true, append: false });
-          await deps.persistFinal(prose, { lastFinishOk: false });
-        }
-        return deps.returnResumableChunk(loopStep, deps.toolsUsed);
+        return deps.returnResumableWithUserMessage(loopStep, deps.toolsUsed, undefined, undefined);
       }
 
       if (!response) break;
@@ -1040,17 +1041,10 @@ export async function runBuildExecutePhase(
       await deps.saveCheckpoint(LoopPhaseEnum.DECIDE_NEXT);
     }
 
-    if (loopStep >= deps.maxStepsLimit && !agentTextComplete) {
-      await deps.saveCheckpoint(LoopPhaseEnum.DECIDE_NEXT, true);
-      const prose = await resolveClosureText({ messages: deps.state.messages, touchedPaths: [...deps.touchedPaths], userRequest: deps.originalUserRequest }).catch(() => "Limite de passos atingido — retomando para continuar.");
-      if (prose?.trim()) {
-        deps.emit("assistant_text", { text: prose, final: true, append: false });
-        await deps.persistFinal(prose, { lastFinishOk: false });
+      if (loopStep >= deps.maxStepsLimit && !agentTextComplete) {
+        await deps.saveCheckpoint(LoopPhaseEnum.DECIDE_NEXT, true);
+        return deps.returnResumableWithUserMessage(loopStep, deps.toolsUsed, { buildFix: deps.requiresFinalBuildGate() }, undefined);
       }
-      return deps.returnResumableChunk(loopStep, deps.toolsUsed, {
-        buildFix: deps.requiresFinalBuildGate(),
-      });
-    }
 
     if (!deps.requiresFinalBuildGate()) {
       finalGateOk = true;
@@ -1129,12 +1123,7 @@ export async function runBuildExecutePhase(
     }
 
     if (deps.loopBudgetExceeded()) {
-      const prose = await resolveClosureText({ messages: deps.state.messages, touchedPaths: [...deps.touchedPaths], userRequest: deps.originalUserRequest }).catch(() => "Orçamento de loop excedido — retomando...");
-      if (prose?.trim()) {
-        deps.emit("assistant_text", { text: prose, final: true, append: false });
-        await deps.persistFinal(prose, { lastFinishOk: false });
-      }
-      return deps.returnResumableChunk(loopStep, deps.toolsUsed, { buildFix: true });
+      return deps.returnResumableWithUserMessage(loopStep, deps.toolsUsed, { buildFix: true }, undefined);
     }
 
     deps.state.messages.push({
@@ -1163,9 +1152,6 @@ export async function runBuildExecutePhase(
   let finalClosing = (closingText || "").trim();
   if (!finalClosing) {
     finalClosing = await forceFinalClosing(deps, deps.originalUserRequest, deps.state.messages);
-  }
-  if (!finalClosing || !finalClosing.trim()) {
-    finalClosing = "Trabalho concluído com sucesso. Ajustes adicionais podem ser solicitados.";
   }
   deps.emit("assistant_text", {
     text: finalClosing,
