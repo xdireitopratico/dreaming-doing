@@ -827,8 +827,8 @@ def build_markdown_extractor_js():
     if (tag==="a") { const h=n.href||""; return h?"["+r.trim()+"]("+h+") ":r; }
     if (tag==="img") { const a=n.alt||"",s=n.src||""; return s?"!["+a+"]("+s+") ":""; }
     if (tag==="blockquote") return "> "+r.trim()+"\\n\\n";
-    if (tag==="code") return "`"+r.trim()+"`";
-    if (tag==="pre") return "```\\n"+r.trim()+"\\n```\\n\\n";
+    if (tag==="code") return "\x60"+r.trim()+"\x60";
+    if (tag==="pre") return "\x60\x60\x60\\n"+r.trim()+"\\n\x60\x60\x60\\n\\n";
     return r;
   }
   return w(document.body).replace(/\\n{3,}/g,"\\n\\n").trim();

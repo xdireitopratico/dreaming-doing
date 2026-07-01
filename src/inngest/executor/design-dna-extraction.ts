@@ -16,6 +16,7 @@ import {
 import { referoScrape } from "./refero/refero-router.ts";
 import { validateDNA } from "./refero/dna-validator.ts";
 import type { ReferoScrapeResult } from "./refero/refero-types.ts";
+import { multiPassExtractDNA } from "./refero/llm-multi-pass.ts";
 
 export type DesignDnaExtractionInput = {
   url: string;
@@ -1072,18 +1073,36 @@ export async function extractDesignDnaForUrl(
   );
   confidence = Math.min(99, confidence);
 
-  // ── LLM Extraction ──
-  const dna = await llmExtractDNA(
-    input.url,
-    enrichedMarkdown.slice(0, 30000),
-    screenshotUrl,
-    input.categories,
-    input.depth === "deep" && screenshots.length > 0,
-    llmConfig,
-  );
+  // ── LLM Extraction: Multi-pass (5 specialized passes + synthesis) ──
+  let dna: Record<string, unknown> | null = null;
 
-  if (!dna) {
-    throw new Error("LLM extraction failed — no DNA generated. Configure LLM in /api-models.");
+  if (llmConfig) {
+    const mpResult = await multiPassExtractDNA({
+      llmConfig,
+      url: input.url,
+      markdown: enrichedMarkdown.slice(0, 30000),
+      screenshot: screenshotUrl,
+      categories: input.categories,
+      isDeep: input.depth === "deep" && screenshots.length > 0,
+    });
+
+    dna = mpResult.dna;
+
+    // Add multi-pass trace info
+    providerTrace.push(`llm: multi-pass mode=${mpResult.mode}, ${mpResult.succeededCount} ok, ${mpResult.failedCount} fail, ${Math.round(mpResult.totalDurationMs / 1000)}s`);
+
+    if (mpResult.passes.length > 0) {
+      for (const p of mpResult.passes) {
+        const status = p.error ? `FAIL (${p.error.slice(0, 60)})` : `OK (${Object.keys(p.data).length} fields, ${p.durationMs}ms)`;
+        providerTrace.push(`llm: pass[${p.category}] ${status}`);
+      }
+    }
+
+    if (!dna) {
+      throw new Error("LLM extraction failed — no DNA generated (multi-pass). Configure LLM in /api-models.");
+    }
+  } else {
+    throw new Error("LLM extraction failed — no LLM configured. Configure LLM in /api-models.");
   }
 
   // ── DNA Validation ──
