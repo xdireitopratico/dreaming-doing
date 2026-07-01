@@ -19,7 +19,7 @@ import {
   clickElement,
   typeText,
   evaluateJs,
-} from "../../../supabase/functions/agent-run/browser-cdp-tools.ts";
+} from "./browser-cdp-tools";
 
 export type CdpTools = {
   takeScreenshot: typeof takeScreenshot;
