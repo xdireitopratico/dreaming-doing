@@ -276,12 +276,12 @@ export function ApiModelsPage() {
 
   const connected = useMemo(() => connectedEnvsFromRows(connectorRows), [connectorRows]);
 
-  const autoAllowedKey = (prefs.autoAllowedPresetIds ?? []).join(",");
-
+  // Only sync selectedEnv from prefs on initial load — don't override user's manual selection
   useEffect(() => {
     if (!prefsLoaded) return;
     setSelectedEnv(resolveStudioSelectedEnv(prefs));
-  }, [prefsLoaded, prefs, autoAllowedKey]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prefsLoaded]);
 
   const patchPrefs = useCallback((partial: Partial<AgentPreferences>) => {
     setPrefs((p) => {
@@ -683,7 +683,12 @@ export function ApiModelsPage() {
         toast.error("Digite o ID do modelo.");
         return;
       }
-      const slug = raw.includes("/") ? raw : `${selectedEnv}/${raw}`;
+      // For custom providers, the slug must be just the model name (e.g. "mercury-2"),
+      // NOT "custom-inception/mercury-2". The env field already stores the provider.
+      // For built-in providers, keep the full slug format "provider/model".
+      const slug = raw.includes("/") || selectedEnv.startsWith("custom-")
+        ? raw
+        : `${selectedEnv}/${raw}`;
       const entry: UserModelEntry = {
         slug,
         env: selectedEnv as UserModelEntry["env"],

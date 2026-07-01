@@ -231,16 +231,22 @@ export function inferEnvFromSlug(slug: string): AiEnvId {
 }
 
 export function buildUserModelPreset(entry: UserModelEntry): ForgeModelPreset {
+  // For custom providers, the slug is just the model name (e.g. "mercury-2").
+  // For built-in providers, the slug includes the provider prefix (e.g. "anthropic/claude-opus-4-8").
   const slug = entry.slug.includes("/") ? entry.slug : `${entry.env}/${entry.slug}`;
   const env = entry.env;
   const wire = wireForEnv(env);
+  // apiModelForEnv strips the provider prefix for custom providers, returning just the model name.
+  const model = typeof env === "string" && env.startsWith("custom-")
+    ? entry.slug  // Already the bare model name for custom providers
+    : apiModelForEnv(env, slug);
   return {
-    id: userModelPresetId(slug),
+    id: userModelPresetId(entry.slug),
     env,
-    model: apiModelForEnv(env, slug),
-    openRouterSlug: slug,
-    label: entry.label?.trim() || slug.split("/").pop() || slug,
-    description: `Você adicionou · ${slug}`,
+    model,
+    openRouterSlug: entry.slug,
+    label: entry.label?.trim() || entry.slug,
+    description: `Você adicionou · ${entry.slug}`,
     tier: "balanced",
     brand: "Custom",
     rank: 5000,
