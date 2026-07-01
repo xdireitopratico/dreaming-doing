@@ -121,6 +121,24 @@ Escreva a mensagem final pro usuário em português, direto e caloroso. Estrutur
 3. Pergunta aberta sobre o próximo passo (1 frase — ex: "Quer ajustar algo ou seguimos em frente?").
 Sem botões, sem listas longas, sem jargão. Sem repetir o que já disse.`;
 
+const SUCCESS_CLOSING_TIMEOUT_MS = 20_000;
+
+async function withSuccessClosingTimeout<T>(promise: Promise<T>): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_, reject) => {
+        timer = setTimeout(() => {
+          reject(new Error(`success closing timeout after ${SUCCESS_CLOSING_TIMEOUT_MS / 1000}s`));
+        }, SUCCESS_CLOSING_TIMEOUT_MS);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 /** Síntese LLM de sucesso quando o agente não fechou sozinho. Garante arremate. */
 async function synthesizeSuccessClosing(
   model: LLMProvider,
@@ -138,16 +156,18 @@ async function synthesizeSuccessClosing(
     .join("\n");
 
   try {
-    const response = await model.chat({
-      messages: [
-        { role: "system", content: SUCCESS_CLOSING_SYSTEM },
-        { role: "user", content: userPrompt },
-      ],
-      tool_choice: "none",
-      tools: [],
-      max_tokens: 400,
-      temperature: 0.6,
-    });
+    const response = await withSuccessClosingTimeout(
+      model.chat({
+        messages: [
+          { role: "system", content: SUCCESS_CLOSING_SYSTEM },
+          { role: "user", content: userPrompt },
+        ],
+        tool_choice: "none",
+        tools: [],
+        max_tokens: 400,
+        temperature: 0.6,
+      }),
+    );
     const text = (response.content ?? "").trim();
     if (!text) return null;
     return sanitizeUserFacingProse(text);

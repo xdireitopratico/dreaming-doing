@@ -20,6 +20,24 @@ export type BuildLlmStreamState = {
   thinkingStreamStartedAt: number | null;
 };
 
+const MODEL_CHAT_TIMEOUT_MS = 90_000;
+
+async function withModelChatTimeout<T>(promise: Promise<T>, label: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_, reject) => {
+        timer = setTimeout(() => {
+          reject(new Error(`${label} timeout after ${MODEL_CHAT_TIMEOUT_MS / 1000}s`));
+        }, MODEL_CHAT_TIMEOUT_MS);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 export function buildBuildContextBlock(context: AgentContext | null): string {
   return context
     ? `## Contexto do Projeto\n${context.projectConfig}\n\n## Arquivos\n${context.manifest}`
@@ -109,21 +127,24 @@ export async function chatBuildModeLlm(input: {
 
   const buildModeStartedAt = Date.now();
   try {
-    const response = await input.model.chat({
-      messages,
-      tools: input.tools ?? mergeExecutionToolDefinitions(input.toolDefinitions, false),
-      tool_choice: input.forceTools ? "required" : "auto",
-      max_tokens: calculateMaxTokens(input.complexityScore as 1 | 2 | 3 | 4 | 5),
-      onTokenDelta: input.forceTools
-        ? undefined
-        : createBuildModeTokenHandler(
-          input.streamState,
-          input.emit,
-          input.onActivity,
-          input.onThinkingCapExceeded,
-        ),
-      onReasoningDelta: createBuildModeReasoningHandler(input.emit, input.onActivity),
-    });
+    const response = await withModelChatTimeout(
+      input.model.chat({
+        messages,
+        tools: input.tools ?? mergeExecutionToolDefinitions(input.toolDefinitions, false),
+        tool_choice: input.forceTools ? "required" : "auto",
+        max_tokens: calculateMaxTokens(input.complexityScore as 1 | 2 | 3 | 4 | 5),
+        onTokenDelta: input.forceTools
+          ? undefined
+          : createBuildModeTokenHandler(
+              input.streamState,
+              input.emit,
+              input.onActivity,
+              input.onThinkingCapExceeded,
+            ),
+        onReasoningDelta: createBuildModeReasoningHandler(input.emit, input.onActivity),
+      }),
+      "LLM chat",
+    );
 
     logger.info("agent.build_llm_response", {
       runId: input.runId ?? undefined,
