@@ -631,13 +631,25 @@ export function useEditorPageHandlers({
   const handlePlanApprove = useCallback(
     async (steps: { id: string; enabled: boolean }[], markdown?: string) => {
       const pp = getPendingPlan();
-      logEditorTelemetryEvent("agent", "plan_approve_handler_start", "info", {
+      logEditorTelemetryEvent(
+        "agent",
+        "plan_approve_handler_start",
+        "info",
+        `run=${pp?.runId ?? "none"} plan=${pp?.planId ?? "none"} steps=${steps.length}`,
+      );
+      console.info("[plan-approve] handler start", {
         runId: pp?.runId ?? null,
         planId: pp?.planId ?? null,
         steps: steps.length,
-      } as any);
+      });
       if (!pp) {
-        logEditorTelemetryEvent("agent", "plan_approve_handler_abort", "warn", "pending plan missing");
+        logEditorTelemetryEvent(
+          "agent",
+          "plan_approve_handler_abort",
+          "warn",
+          "pending plan missing",
+        );
+        console.warn("[plan-approve] abort", "pending plan missing");
         toast.error("Plano não encontrado — gere um novo plano no modo Plan.");
         return;
       }
@@ -649,21 +661,22 @@ export function useEditorPageHandlers({
           "warn",
           `no enabled steps for run ${pp.runId.slice(0, 8)}`,
         );
+        console.warn("[plan-approve] abort", "no enabled steps", pp.runId);
         toast.error("Selecione ao menos um passo para executar.");
         return;
       }
       const full = enabled
         .map((s) => pp.steps.find((p) => p.id === s.id))
         .filter((s): s is NonNullable<typeof s> => s != null);
+      const approvedSteps = (full.length > 0 ? full : enabled) as typeof pp.steps;
       if (full.length === 0) {
         logEditorTelemetryEvent(
           "agent",
-          "plan_approve_handler_abort",
+          "plan_approve_handler_warn",
           "warn",
-          `step id mismatch for run ${pp.runId.slice(0, 8)} plan ${pp.planId}`,
+          `step id mismatch for run ${pp.runId.slice(0, 8)} plan ${pp.planId}; using approved payload fallback`,
         );
-        toast.error("Passos selecionados não correspondem ao plano.");
-        return;
+        console.warn("[plan-approve] step id mismatch; using fallback payload", pp.runId, pp.planId);
       }
 
       const prefs = await loadAgentPreferencesForAgentRun();
@@ -698,7 +711,7 @@ export function useEditorPageHandlers({
             planHeadline,
             planDocument,
             plan: planDocument,
-            steps: full,
+            steps: approvedSteps,
             preferences: prefs,
             sessionKind,
             enabledSkillIds,
@@ -709,8 +722,13 @@ export function useEditorPageHandlers({
           "agent",
           "plan_approve_handler_ok",
           "ok",
-          `${pp.runId.slice(0, 8)} -> ${result.newRunId ?? "no-run"} steps=${full.length}`,
+          `${pp.runId.slice(0, 8)} -> ${result.newRunId ?? "no-run"} steps=${approvedSteps.length}`,
         );
+        console.info("[plan-approve] handler ok", {
+          sourceRunId: pp.runId,
+          newRunId: result.newRunId ?? null,
+          stepCount: approvedSteps.length,
+        });
         setComposerMode("build");
         toast.success("Build iniciado — acompanhe o progresso no inspector.");
         await qc.invalidateQueries({ queryKey: ["conversation", projectId] });
@@ -739,6 +757,7 @@ export function useEditorPageHandlers({
           "error",
           e instanceof Error ? e.message.slice(0, 200) : String(e),
         );
+        console.error("[plan-approve] handler fail", e);
         agent.clearPendingTurn();
         if (conversationId) {
           qc.setQueryData(["messages", conversationId], (old: typeof chatMessages | undefined) => {

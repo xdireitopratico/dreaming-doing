@@ -37,6 +37,12 @@ export function ChatPlanDock({
         "info",
         `${pendingPlan.runId.slice(0, 8)} ${pendingPlan.planId} steps=${pendingPlan.steps.length}`,
       );
+      console.info(
+        "[plan-approve] click",
+        pendingPlan.runId,
+        pendingPlan.planId,
+        pendingPlan.steps.length,
+      );
       const markdown =
         pendingPlan.markdown?.trim() ||
         buildForgePlanMarkdown({

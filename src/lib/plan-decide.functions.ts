@@ -20,10 +20,7 @@ import type { Json } from "@/integrations/supabase/types";
 import type { AgentPreferences } from "@/lib/agent-preferences";
 import type { ForgeSessionKind } from "@/lib/taste";
 import { transitionRun } from "@/inngest/functions/run-lifecycle";
-import {
-  findAssistantMessageForPlan,
-  patchPlanMessageMetaRejected,
-} from "@/lib/plan-message-meta";
+import { findAssistantMessageForPlan, patchPlanMessageMetaRejected } from "@/lib/plan-message-meta";
 import type { AgentRunStatus } from "@forge/agent-contract/events";
 import { canTransitionRunStatus } from "@forge/agent-contract/lifecycle";
 import { logger } from "../../supabase/functions/_shared/logger.ts";
@@ -182,9 +179,19 @@ export const planApprove = createServerFn({ method: "POST" })
   .handler(async ({ data, context }): Promise<DecideResponse> => {
     const { supabase, userId } = context;
     const { runId, planId, steps } = data;
+    logger.event("agent.plan_approve_started", {
+      runId,
+      planId,
+      stepCount: steps?.length ?? 0,
+    });
     const planDocument = (data.planDocument ?? data.plan ?? "").trim();
     const planHeadline = (data.planHeadline?.trim() || planDocument.slice(0, 120)).trim();
     if (!planDocument) {
+      logger.event("agent.plan_approve_failed", {
+        runId,
+        planId,
+        reason: "empty_plan_document",
+      });
       throw new Error("Documento do plano vazio — gere ou edite o plano antes de aprovar.");
     }
 
@@ -202,6 +209,11 @@ export const planApprove = createServerFn({ method: "POST" })
       stepDescriptions.length > 0 &&
       stepDescriptions.every((d) => !isActionableStepDescription(d))
     ) {
+      logger.event("agent.plan_approve_failed", {
+        runId,
+        planId,
+        reason: "non_actionable_steps",
+      });
       throw new Error(
         "Todos os passos são apenas conversacionais (ex.: pedir plano ao usuário). Edite o plano com ações concretas antes de aprovar.",
       );
@@ -213,6 +225,11 @@ export const planApprove = createServerFn({ method: "POST" })
       .eq("id", runId)
       .single();
     if (rErr || !run || run.user_id !== userId) {
+      logger.event("agent.plan_approve_failed", {
+        runId,
+        planId,
+        reason: "run_not_found",
+      });
       throw new Error("Run não encontrada");
     }
     if (
@@ -221,6 +238,11 @@ export const planApprove = createServerFn({ method: "POST" })
       run.status !== "pending" &&
       run.status !== "running"
     ) {
+      logger.event("agent.plan_approve_failed", {
+        runId,
+        planId,
+        reason: `invalid_status:${run.status}`,
+      });
       throw new Error(`Run em status inválido: ${run.status}`);
     }
 
@@ -258,7 +280,9 @@ export const planApprove = createServerFn({ method: "POST" })
         : (() => {
             const card = planMsgMeta.cardSnapshot as Record<string, unknown> | undefined;
             const pending = card?.pendingPlan as Record<string, unknown> | undefined;
-            return pending?.design && typeof pending.design === "object" ? pending.design : undefined;
+            return pending?.design && typeof pending.design === "object"
+              ? pending.design
+              : undefined;
           })();
 
     const now = new Date().toISOString();
@@ -288,6 +312,11 @@ export const planApprove = createServerFn({ method: "POST" })
       .select("id")
       .single();
     if (insertErr || !newRun) {
+      logger.event("agent.plan_approve_failed", {
+        runId,
+        planId,
+        reason: `insert_failed:${insertErr?.message ?? "unknown"}`,
+      });
       throw new Error(`Falha ao criar run de build: ${insertErr?.message ?? "unknown"}`);
     }
     logger.event("agent.plan_approved_build_run_created", {
@@ -334,7 +363,9 @@ export const planApprove = createServerFn({ method: "POST" })
       const prev = (planMsg.meta ?? {}) as Record<string, unknown>;
       await supabase
         .from("messages")
-        .update({ meta: { ...prev, planStatus: "approved", planApprovedAt: now, buildRunId: newRun.id } })
+        .update({
+          meta: { ...prev, planStatus: "approved", planApprovedAt: now, buildRunId: newRun.id },
+        })
         .eq("id", planMsg.id);
     }
 
@@ -432,12 +463,7 @@ export const planReject = createServerFn({ method: "POST" })
       rejectedPlanId: planId,
     };
 
-    await persistPlanRejectOnRun(
-      supabase,
-      runId,
-      rejectMeta,
-      run.status as AgentRunStatus,
-    );
+    await persistPlanRejectOnRun(supabase, runId, rejectMeta, run.status as AgentRunStatus);
 
     const planMsg = await resolvePlanAssistantMessage(
       supabase,
