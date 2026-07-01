@@ -67,13 +67,6 @@ export async function runDesignPreflightIfNeeded(
     preflightErrors.push(`Design system: ${preflight.feedback?.slice(0, 500) ?? "erro"}`);
   }
 
-  if (preflightErrors.length > 0) {
-    deps.state.messages.push({
-      role: "user",
-      content: `PREFLIGHT FALHOU:\n${preflightErrors.join("\n")}\nCorrija antes de continuar.`,
-    });
-  }
-
   return {
     passed: preflightErrors.length === 0 && preflight.passed,
     feedback:

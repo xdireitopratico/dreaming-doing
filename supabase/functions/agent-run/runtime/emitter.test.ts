@@ -20,7 +20,7 @@ Deno.test("phase — enriquece task_title quando ausente", () => {
   assertEquals(events.length, 1);
   const data = events[0].data as Record<string, unknown>;
   assertEquals(data.task_title, "Entender o que já existe no projeto");
-  assertEquals(emitter.getTailBuffer().length, 1);
+  assertEquals(emitter.getTailBuffer().length, 0);
 });
 
 Deno.test("phase — preserva task_title explícito", () => {
@@ -46,28 +46,25 @@ Deno.test("tool_start — enriquece step_intent, task_phase e file_paths", () =>
   assertEquals(data.file_paths, ["src/App.tsx"]);
 });
 
-Deno.test("validate_ok — emite step_result derivado antes do evento principal", () => {
+Deno.test("validate_ok — apenas emite o evento canônico", () => {
   const { emitter, events } = captureEmitter();
   emitter.emit("validate_ok", { message: "Tudo certo" });
-  assertEquals(events.length, 2);
-  assertEquals(events[0].type, "step_result");
-  assertEquals((events[0].data as Record<string, unknown>).ok, true);
-  assertEquals(events[1].type, "validate_ok");
+  assertEquals(events.length, 1);
+  assertEquals(events[0].type, "validate_ok");
 });
 
-Deno.test("validate_fail — emite step_result com ok=false", () => {
+Deno.test("validate_fail — apenas emite o evento canônico", () => {
   const { emitter, events } = captureEmitter();
   emitter.emit("validate_fail", { feedback: "TS2304: cannot find name" });
-  assertEquals(events[0].type, "step_result");
-  assertEquals((events[0].data as Record<string, unknown>).ok, false);
-  assertEquals(events[1].type, "validate_fail");
+  assertEquals(events.length, 1);
+  assertEquals(events[0].type, "validate_fail");
 });
 
 Deno.test("timeline — bufferiza apenas tipos de TIMELINE_EVENT_TYPES", () => {
   const { emitter } = captureEmitter();
   emitter.emit("fsm_transition", { from: "idle", to: "running" });
   assertEquals(emitter.getTailBuffer().length, 0);
-  emitter.emit("assistant_text", { text: "Olá", final: false });
+  emitter.emit("step_result", { summary: "ok", ok: true });
   assertEquals(emitter.getTailBuffer().length, 1);
 });
 
@@ -75,22 +72,22 @@ Deno.test("timeline — cap em 200 entradas (ring buffer)", () => {
   const { emitter } = captureEmitter();
   const small = new RuntimeEmitter(() => {}, { tailCap: 3 });
   for (let i = 0; i < 5; i++) {
-    small.emit("heartbeat", { message: `tick-${i}` });
+    small.emit("step_result", { summary: `tick-${i}`, ok: true });
   }
   const tail = small.getTailBuffer();
   assertEquals(tail.length, 3);
-  assertEquals((tail[0].data as Record<string, unknown>).message, "tick-2");
-  assertEquals((tail[2].data as Record<string, unknown>).message, "tick-4");
+  assertEquals((tail[0].data as Record<string, unknown>).summary, "tick-2");
+  assertEquals((tail[2].data as Record<string, unknown>).summary, "tick-4");
 });
 
 Deno.test("tailSlice — retorna últimos N eventos", () => {
   const { emitter } = captureEmitter();
   for (let i = 0; i < 10; i++) {
-    emitter.emit("heartbeat", { message: String(i) });
+    emitter.emit("step_result", { summary: String(i), ok: true });
   }
   const slice = emitter.tailSlice(3);
   assertEquals(slice.length, 3);
-  assertEquals((slice[0].data as Record<string, unknown>).message, "7");
+  assertEquals((slice[0].data as Record<string, unknown>).summary, "7");
 });
 
 Deno.test("contrato — TIMELINE_EVENT_TYPES ⊆ AGENT_STREAM_EVENT_TYPES (exceto memory)", () => {

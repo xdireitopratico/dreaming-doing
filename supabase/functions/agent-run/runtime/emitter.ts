@@ -103,35 +103,6 @@ export class RuntimeEmitter {
         d.file_paths = d.file_paths ?? extractStepFilePaths(String(d.name), args);
         payload = d;
       }
-      if (type === "validate_ok") {
-        this.onStream({
-          type: "step_result",
-          data: {
-            summary: typeof d.message === "string" ? d.message : "Build passou",
-            evidence: ["Compilação OK", "Preview pronto para abrir"],
-            ok: true,
-          },
-        });
-      }
-      if (type === "validate_fail") {
-        const isPreflight = d.preflight === true;
-        this.onStream({
-          type: "step_result",
-          data: {
-            summary: isPreflight
-              ? "Preflight falhou — preparando ambiente"
-              : "Build falhou — corrigindo antes de entregar",
-            evidence: [
-              typeof d.feedback === "string"
-                ? d.feedback.slice(0, 120)
-                : typeof d.message === "string"
-                  ? d.message.slice(0, 120)
-                  : "Erro de compilação",
-            ],
-            ok: false,
-          },
-        });
-      }
       if (type === "typecheck_fail") {
         const errors = Array.isArray(d.errors) ? d.errors : [];
         const files = Array.isArray(d.files) ? d.files : [];
