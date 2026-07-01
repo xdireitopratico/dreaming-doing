@@ -55,6 +55,7 @@ import type { AgentLoopRunResult } from "./runtime/loop-result.ts";
 import {
   createCanonicalBuildSession,
 } from "./runtime/build-session.ts";
+import { logger } from "../_shared/logger.ts";
 
 const LOOP_BUDGET_MS = readLoopBudgetMsFromRuntime();
 
@@ -377,6 +378,12 @@ export class AgentLoop {
   }
 
   private async emitTransition(eventType: string, data?: unknown): Promise<void> {
+    logger.event("agent.loop_transition", {
+      runId: this.runId ?? undefined,
+      eventType,
+      data: typeof data === "object" && data !== null ? data : undefined,
+      phase: this.state.phase,
+    });
     this.fsmState = await emitLoopFsmTransition(
       this.fsmState,
       eventType,
@@ -392,6 +399,13 @@ export class AgentLoop {
     this.compression.reset();
     this.mutable.consecutiveNoContentReadSteps = 0;
     this.mutable.buildSession = createCanonicalBuildSession(this.runId, this.approvedPlanBuild);
+    logger.event("agent.loop_started", {
+      runId: this.runId ?? undefined,
+      approvedPlanBuild: this.approvedPlanBuild,
+      planMode: this.planMode,
+      chatMode: this.chatMode,
+      resumeRun: this.resumeRun,
+    });
     const toolsUsed = new Set<string>();
 
     return runAgentOrchestrator(buildOrchestratorDeps(this.orchestratorHost(), toolsUsed));

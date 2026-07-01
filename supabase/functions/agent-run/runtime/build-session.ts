@@ -1,3 +1,5 @@
+import { logger } from "../../../../supabase/functions/_shared/logger.ts";
+
 export type CanonicalBuildPhase =
   | "planning"
   | "plan_approved"
@@ -71,11 +73,32 @@ function nowIso(): string {
   return new Date().toISOString();
 }
 
+function logTransition(
+  runId: string | null,
+  from: CanonicalBuildPhase,
+  to: CanonicalBuildPhase,
+  options: TransitionOptions = {},
+): void {
+  logger.event("agent.build_session_transition", {
+    runId: runId ?? undefined,
+    from,
+    to,
+    reason: options.reason,
+    recoverable: options.recoverable === true,
+    retryDelta: options.retryDelta ?? 0,
+  });
+}
+
 export function createCanonicalBuildSession(
   runId: string | null,
   approvedPlanBuild: boolean,
 ): CanonicalBuildSession {
   const phase: CanonicalBuildPhase = approvedPlanBuild ? "plan_approved" : "planning";
+  logger.event("agent.build_session_created", {
+    runId: runId ?? undefined,
+    phase,
+    approvedPlanBuild,
+  });
   return {
     schemaVersion: 1,
     runId,
@@ -98,6 +121,7 @@ export function transitionBuildSession(
   if (session.phase === phase && !options.reason && !options.recoverable && !options.retryDelta) {
     return session;
   }
+  logTransition(session.runId, session.phase, phase, options);
   return {
     ...session,
     phase,
@@ -119,6 +143,12 @@ export function recordBuildSessionChecks(
   scope: BuildSessionCheck["scope"],
   checks: Array<{ name: string; ok: boolean; output: string }>,
 ): CanonicalBuildSession {
+  logger.event("agent.build_session_checks", {
+    runId: session.runId ?? undefined,
+    scope,
+    okCount: checks.filter((check) => check.ok).length,
+    failCount: checks.filter((check) => !check.ok).length,
+  });
   return {
     ...session,
     checks: [
@@ -147,6 +177,13 @@ export function recordBuildSessionError(
   session: CanonicalBuildSession,
   options: ErrorOptions,
 ): CanonicalBuildSession {
+  logger.event("agent.build_session_error", {
+    runId: session.runId ?? undefined,
+    phase: options.phase ?? (options.recoverable ? "preflight_failed" : "terminal_failed"),
+    kind: options.kind,
+    recoverable: options.recoverable,
+    message: options.message,
+  });
   const nextPhase = options.phase ?? (options.recoverable ? "preflight_failed" : "terminal_failed");
   const transitioned = transitionBuildSession(session, nextPhase, {
     reason: options.reason ?? options.message,
@@ -170,6 +207,12 @@ export function finalizeBuildSession(
   summary: string,
 ): CanonicalBuildSession {
   const phase: CanonicalBuildPhase = status === "ok" ? "terminal_ok" : "terminal_failed";
+  logger.event("agent.build_session_terminal", {
+    runId: session.runId ?? undefined,
+    status,
+    phase,
+    summary: summary.slice(0, 400),
+  });
   const transitioned = transitionBuildSession(session, phase, { reason: summary });
   return {
     ...transitioned,

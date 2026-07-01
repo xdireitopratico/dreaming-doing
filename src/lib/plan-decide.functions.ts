@@ -26,6 +26,7 @@ import {
 } from "@/lib/plan-message-meta";
 import type { AgentRunStatus } from "@forge/agent-contract/events";
 import { canTransitionRunStatus } from "@forge/agent-contract/lifecycle";
+import { logger } from "../../supabase/functions/_shared/logger.ts";
 
 async function persistPlanRejectOnRun(
   supabase: SupabaseClient,
@@ -289,6 +290,13 @@ export const planApprove = createServerFn({ method: "POST" })
     if (insertErr || !newRun) {
       throw new Error(`Falha ao criar run de build: ${insertErr?.message ?? "unknown"}`);
     }
+    logger.event("agent.plan_approved_build_run_created", {
+      sourceRunId: runId,
+      buildRunId: newRun.id,
+      planId,
+      conversationId: run.conversation_id,
+      projectId: run.project_id,
+    });
 
     // Fase 1.7 — fail-loud se planSourceRunId não foi persistido. Sem este
     // check, o INSERT pode retornar sucesso mesmo se o JSONB meta for
@@ -349,6 +357,12 @@ export const planApprove = createServerFn({ method: "POST" })
     }
 
     const eventId = dispatchBody.eventId ?? null;
+    logger.event("agent.plan_approved_build_dispatched", {
+      sourceRunId: runId,
+      buildRunId: newRun.id,
+      eventId,
+      planId,
+    });
     // ensure !eventId throws loud (no silent ok path) — required by hardened central dispatch contract
     if (!eventId) {
       await supabase.from("agent_runs").delete().eq("id", newRun.id);
@@ -377,6 +391,11 @@ export const planApprove = createServerFn({ method: "POST" })
         `Falha ao encerrar run do plano: transição inválida ${closeResult.from ?? "?"}→completed`,
       );
     }
+    logger.event("agent.plan_approved_completed", {
+      sourceRunId: runId,
+      buildRunId: newRun.id,
+      planId,
+    });
 
     return {
       ok: true,
