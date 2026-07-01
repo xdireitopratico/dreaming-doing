@@ -1,14 +1,16 @@
 import { useCallback, useState } from "react";
-import { Check, Loader2, Play, SkipForward } from "lucide-react";
+import { ArrowRight, Check, Loader2, Play, SkipForward } from "lucide-react";
 import type { PendingPlan, PlanStep } from "@/lib/agent-progress";
 import { buildForgePlanMarkdown } from "@/lib/plan-document";
 import { enabledPlanSteps } from "@/lib/forge-run";
 import { planParagraphFromPlan, planPhasesFromPlan } from "@/lib/plan-message-meta";
 import { PlanPhaseList } from "./PlanPhaseList";
+import { PlanWaitingBanner } from "@/components/editor/PlanWaitingBanner";
 
 export type ChatPlanDockProps = {
   pendingPlan: PendingPlan | null;
   creating: boolean;
+  materializing?: boolean;
   onReview?: (runId: string) => void;
   onApprove?: (steps: PlanStep[], markdown?: string) => void | Promise<void>;
   onReject?: (reason?: string) => void | Promise<void>;
@@ -17,6 +19,7 @@ export type ChatPlanDockProps = {
 export function ChatPlanDock({
   pendingPlan,
   creating,
+  materializing = false,
   onReview,
   onApprove,
   onReject,
@@ -75,15 +78,44 @@ export function ChatPlanDock({
   /* ─── Ready plan — structured phases or markdown fallback ──────── */
   const phases = planPhasesFromPlan(pendingPlan);
   const hasPhases = phases.length > 0;
+  const awaitingApproval = !materializing;
+  const bannerHeadline = materializing ? "Build iniciando agora" : "Plano aguardando aprovação";
 
   return (
     <div className="forge-plan-dock" data-testid="chat-plan-dock-ready">
       <div className="forge-plan-dock-shell forge-plan-dock-shell--ready">
+        <PlanWaitingBanner
+          variant={materializing ? "approved" : "waiting"}
+          headline={bannerHeadline}
+        />
+
+        <button
+          type="button"
+          className="forge-plan-dock-title-button"
+          onClick={() => onReview?.(pendingPlan.runId)}
+        >
+          <span className="forge-plan-dock-title-copy">
+            {materializing ? "Plano aprovado" : "Ver plano completo"}
+          </span>
+          <span className="forge-plan-dock-title-headline">{pendingPlan.summary}</span>
+          <span className="forge-plan-dock-title-hint">
+            {materializing ? (
+              <>
+                <Loader2 className="size-3.5 animate-spin" />
+                Build em andamento
+              </>
+            ) : (
+              <>
+                <ArrowRight className="size-3.5" />
+                Abrir no inspector
+              </>
+            )}
+          </span>
+        </button>
+
         {hasPhases ? (
-          /* Structured plan — PlanPhaseList renders directly (no inner-dark panel) */
-          <PlanPhaseList phases={phases} />
+          <PlanPhaseList phases={phases} compact />
         ) : (
-          /* Markdown fallback — inner-dark panel is correct here */
           <div className="forge-plan-dock-inner">
             <p className="forge-plan-dock-label forge-plan-dock-label--icon">
               <Play className="size-3" aria-hidden />
@@ -100,38 +132,47 @@ export function ChatPlanDock({
               className="forge-plan-dock-btn"
               onClick={() => onReview?.(pendingPlan.runId)}
             >
-              Review
+              Inspect
             </button>
           </div>
           <div className="forge-composer-spacer" aria-hidden />
-          <div className="forge-composer-row-end">
-            <button
-              type="button"
-              className="forge-plan-dock-btn"
-              disabled={busy !== null}
-              onClick={handleReject}
-            >
-              {busy === "reject" ? (
+          {awaitingApproval ? (
+            <div className="forge-composer-row-end">
+              <button
+                type="button"
+                className="forge-plan-dock-btn"
+                disabled={busy !== null}
+                onClick={handleReject}
+              >
+                {busy === "reject" ? (
+                  <Loader2 className="size-3.5 animate-spin" />
+                ) : (
+                  <SkipForward className="size-3.5" />
+                )}
+                Skip
+              </button>
+              <button
+                type="button"
+                className="forge-plan-dock-btn forge-plan-dock-btn--approve"
+                disabled={busy !== null}
+                onClick={handleApprove}
+              >
+                {busy === "approve" ? (
+                  <Loader2 className="size-3.5 animate-spin" />
+                ) : (
+                  <Check className="size-3.5" />
+                )}
+                Approve
+              </button>
+            </div>
+          ) : (
+            <div className="forge-composer-row-end">
+              <span className="forge-plan-dock-live-state">
                 <Loader2 className="size-3.5 animate-spin" />
-              ) : (
-                <SkipForward className="size-3.5" />
-              )}
-              Skip
-            </button>
-            <button
-              type="button"
-              className="forge-plan-dock-btn forge-plan-dock-btn--approve"
-              disabled={busy !== null}
-              onClick={handleApprove}
-            >
-              {busy === "approve" ? (
-                <Loader2 className="size-3.5 animate-spin" />
-              ) : (
-                <Check className="size-3.5" />
-              )}
-              Approve
-            </button>
-          </div>
+                Build materializando
+              </span>
+            </div>
+          )}
         </div>
       </div>
     </div>

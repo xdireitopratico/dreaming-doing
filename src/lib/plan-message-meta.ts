@@ -273,9 +273,11 @@ export function messageMetaMatchesPlan(
 
 /** Atualiza meta da mensagem assistant ao rejeitar (inclui cardSnapshot-only). */
 /** Localiza mensagem assistant do plano (topo ou cardSnapshot). */
-export function findAssistantMessageForPlan<
-  T extends { id: string; meta?: unknown },
->(messages: T[], runId: string, planId: string): T | null {
+export function findAssistantMessageForPlan<T extends { id: string; meta?: unknown }>(
+  messages: T[],
+  runId: string,
+  planId: string,
+): T | null {
   for (let i = messages.length - 1; i >= 0; i--) {
     const m = messages[i];
     if (!m) continue;

@@ -144,9 +144,7 @@ export function ChatPanel({
       const lines = answers.map((ans, idx) => {
         if (ans.text?.trim()) return `${idx + 1}. ${ans.text.trim()}`;
         if (ans.choices && ans.choices.length > 0) {
-          return `${idx + 1}. ${ans.choices
-            .map((c) => formatClarifyChoiceReply(c))
-            .join("; ")}`;
+          return `${idx + 1}. ${ans.choices.map((c) => formatClarifyChoiceReply(c)).join("; ")}`;
         }
         if (ans.choice) return `${idx + 1}. ${formatClarifyChoiceReply(ans.choice)}`;
         return `${idx + 1}. Pular`;
@@ -157,13 +155,10 @@ export function ChatPanel({
     [notifyUserSend, onSend, composerMode],
   );
 
-  const handleClarifySkip = useCallback(
-    () => {
-      notifyUserSend();
-      onSend("/skip", composerMode);
-    },
-    [notifyUserSend, onSend, composerMode],
-  );
+  const handleClarifySkip = useCallback(() => {
+    notifyUserSend();
+    onSend("/skip", composerMode);
+  }, [notifyUserSend, onSend, composerMode]);
 
   /** Extract last clarify prompt from the thread (docked at composer level). */
   const activeClarify: ClarifyPrompt | null = useMemo(() => {
@@ -226,6 +221,7 @@ export function ChatPanel({
       <ChatPlanDock
         pendingPlan={pendingPlan}
         creating={running && agent.progress.phase === "creating_plan" && !pendingPlan}
+        materializing={agent.isPendingRun && !!pendingPlan}
         onReview={(runId) => onOpenInspector?.(runId, "plan")}
         onApprove={onPlanApprove}
         onReject={onPlanReject}

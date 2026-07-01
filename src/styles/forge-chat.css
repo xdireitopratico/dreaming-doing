@@ -888,6 +888,63 @@
   margin-top: 8px;
 }
 
+.forge-plan-dock-title-button {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 10px 0 8px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--border-forge) 68%, transparent);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(0, 0, 0, 0));
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 0.15s,
+    transform 0.15s,
+    background 0.15s;
+}
+
+.forge-plan-dock-title-button:hover {
+  border-color: color-mix(in srgb, var(--text-accent) 55%, var(--border-forge));
+  transform: translateY(-1px);
+  background: linear-gradient(180deg, rgba(255, 182, 39, 0.08), rgba(0, 0, 0, 0));
+}
+
+.forge-plan-dock-title-copy {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.forge-plan-dock-title-headline {
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--text-primary);
+}
+
+.forge-plan-dock-title-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.forge-plan-dock-live-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 28px;
+  padding: 0 2px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--status-done);
+}
+
 .forge-plan-dock-inner {
   margin-bottom: 8px;
   padding: var(--space-md) var(--space-lg);
